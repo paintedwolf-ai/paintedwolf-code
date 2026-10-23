@@ -64,6 +64,20 @@ class Preparation(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "model-specific renderer"):
                 prepare(self.fixture(root, [value]), root / "out", Tokenizer(), 500, {})
 
+    def test_known_template_mismatch_excludes_the_whole_row(self):
+        class MismatchTokenizer(Tokenizer):
+            def apply_chat_template(self, messages, *, add_generation_prompt, **kwargs):
+                text = super().apply_chat_template(messages, add_generation_prompt=add_generation_prompt, **kwargs)
+                if not add_generation_prompt and any(m["content"].startswith("mismatch") for m in messages):
+                    return "changed previous turn" + text
+                return text
+        with tempfile.TemporaryDirectory() as directory, patch("prepare.load_split", self.read):
+            root = Path(directory)
+            report = prepare(self.fixture(root, [row("train"), row("mismatch")]), root / "out", MismatchTokenizer(), 500, {})
+            self.assertTrue(report["ready"])
+            self.assertEqual(report["excluded"], [{"split": "train", "request_sha256": "mismatch", "reason": "generation_prefix_mismatch"}])
+            self.assertEqual(json.loads((root / "out/train.jsonl").read_text()), row("train"))
+
     def test_changed_checkpoint_cannot_publish_a_ready_manifest(self):
         with tempfile.TemporaryDirectory() as directory, patch("prepare.load_split", self.read):
             root = Path(directory)

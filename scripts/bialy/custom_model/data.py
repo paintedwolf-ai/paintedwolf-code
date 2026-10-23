@@ -5,10 +5,17 @@ from common import digest, read_rows
 from jsonschema import Draft202012Validator
 
 
-class OversizeRow(ValueError):
+class EncodingExclusion(ValueError):
+    """A complete row that cannot preserve the pinned serving representation."""
+    def __init__(self, reason, message, **details):
+        self.reason, self.details = reason, details
+        super().__init__(message)
+
+
+class OversizeRow(EncodingExclusion):
     def __init__(self, tokens, limit):
         self.tokens, self.limit = tokens, limit
-        super().__init__("oversize row; truncation is forbidden")
+        super().__init__("oversize", "oversize row; truncation is forbidden", tokens=tokens, limit=limit)
 
 
 def check_row(row):
@@ -81,13 +88,13 @@ def encode(tokenizer, row, target, max_length):
     prompt = tokenizer.apply_chat_template(row["prompt"], add_generation_prompt=True, **kwargs)
     full = tokenizer.apply_chat_template(row["prompt"] + [assistant(target)], add_generation_prompt=False, **kwargs)
     if not full.startswith(prompt):
-        raise ValueError("chat template does not preserve the exact generation prefix")
+        raise EncodingExclusion("generation_prefix_mismatch", "chat template does not preserve the exact generation prefix")
     if target["text"] and target["text"] not in full[len(prompt):]:
-        raise ValueError("template modified assistant content")
+        raise EncodingExclusion("assistant_content_modified", "template modified assistant content")
     prefix = tokenizer(prompt, add_special_tokens=False)["input_ids"]
     ids = tokenizer(full, add_special_tokens=False)["input_ids"]
     if ids[:len(prefix)] != prefix or len(ids) <= len(prefix):
-        raise ValueError("token boundary crosses prompt/response; no guessed loss mask")
+        raise EncodingExclusion("token_boundary_mismatch", "token boundary crosses prompt/response; no guessed loss mask")
     if len(ids) > max_length:
         raise OversizeRow(len(ids), max_length)
     return {"input_ids": ids, "labels": [-100] * len(prefix) + ids[len(prefix):]}
