@@ -66,6 +66,9 @@ class Pipe:
         except (ValueError, UnicodeError):
             raise ValueError('private actor metadata has an invalid fixed shape') from None
 
+    def send_fixture_value(self, value):
+        self.write(password_wire.frame(password_wire.private_secret(value).encode('ascii'), 128))
+
     def receive_fixture_value(self):
         size = password_wire.frame_size(self.read(4), 128)
         try:

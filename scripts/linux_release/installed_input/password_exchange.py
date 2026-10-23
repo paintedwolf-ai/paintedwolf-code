@@ -50,3 +50,31 @@ def exchange(actor, pending, pipe):
         raise
     finally:
         value = None
+
+
+def witness(channel, pending, private_value, focus, vm_id):
+    """The case alone observes its target; the actor alone performs physical keys."""
+    password_wire.request(pending, pending['binding'])
+    try:
+        channel.check()
+        if focus.observe() != pending['target']:
+            raise ValueError('private fixture changed target before its private handoff')
+        channel.send_metadata({'request': pending})
+        channel.send_fixture_value(private_value)
+        private_value = None
+        for ordinal in range(password_wire.SECRET_BYTES + 1):
+            for operation in ('observe-before', 'observe-after'):
+                if channel.receive_metadata() != {'operation': operation, 'ordinal': ordinal}:
+                    raise ValueError('private fixture physical sequence changed or replayed')
+                channel.check()
+                if focus.observe() != pending['target']:
+                    raise ValueError('private fixture target changed across physical input')
+                channel.send_metadata(observed(ordinal, pending))
+        finished = channel.receive_metadata()
+        if not isinstance(finished, dict) or set(finished) != {'operation', 'delivery'} or finished['operation'] != 'finished':
+            raise ValueError('private fixture omitted its bounded completion')
+        delivery = password_wire.completed(finished['delivery'], pending, vm_id)
+        channel.send_metadata({'operation': 'accepted', 'transaction_id': pending['transaction_id']})
+        return {'request': copy.deepcopy(pending), 'delivery': delivery, 'guest_confirmed': True}
+    finally:
+        private_value = None
