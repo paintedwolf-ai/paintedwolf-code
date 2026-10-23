@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/url"
 	"os"
@@ -129,10 +130,14 @@ func startDesktopProcess(t *testing.T, cmd *exec.Cmd, logPath string) func() {
 	t.Helper()
 	log, err := os.Create(logPath)
 	testutil.FailErr(t, "owned process log", err)
-	cmd.Stderr = log
+	// A writer-backed transport makes exec.Cmd own and drain journal-like pipes;
+	// regular inherited files are intentionally nulled by the bootstrap policy.
+	sink := io.MultiWriter(log)
+	cmd.Stderr = sink
 	if cmd.Stdout == nil {
-		cmd.Stdout = log
+		cmd.Stdout = sink
 	}
+	cmd.WaitDelay = 10 * time.Second
 	testutil.FailErr(t, "start owned desktop fixture process", cmd.Start())
 	stopped := false
 	return func() {
@@ -142,7 +147,12 @@ func startDesktopProcess(t *testing.T, cmd *exec.Cmd, logPath string) func() {
 		stopped = true
 		_ = cmd.Process.Signal(syscall.SIGTERM)
 		done := make(chan struct{})
-		go func() { _ = cmd.Wait(); close(done) }()
+		go func() {
+			if err := cmd.Wait(); errors.Is(err, exec.ErrWaitDelay) {
+				t.Errorf("owned process output did not settle: %s", logPath)
+			}
+			close(done)
+		}()
 		select {
 		case <-done:
 		case <-time.After(10 * time.Second):
