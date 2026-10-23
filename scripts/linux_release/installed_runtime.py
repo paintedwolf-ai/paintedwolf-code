@@ -206,14 +206,25 @@ def bind(final: dict, source: str, artifact_id: str, file_root: Path, install_ro
         header = launcher_image.pop("header")
         if launcher_image["mode"] & 0o111 == 0 or launcher_image["mode"] & 0o7000 or not header.startswith((b"#!", b"\x7fELF")):
             raise ValueError("final Nix output has no ordinary public application launcher")
-    return {"format_version": 1, "source_commit": source, "artifact": artifact,
+    package_images = images['images']
+    selected = None
+    if identity['kind'] == 'file':
+        from .installed_generation import bind as bind_generation
+        selected = bind_generation(root, package_images, entries)
+        if selected is not None:
+            images = {**images, 'images': selected['images']}
+            launcher, launcher_image = SETUID_LAUNCHER, selected['images'][str(SETUID_LAUNCHER)]
+    result = {"format_version": 1, "source_commit": source, "artifact": artifact,
             "install_root": str(root), "payload": payload, "launcher": {"path": str(launcher), **launcher_image}, **images}
+    if selected is not None:
+        result.update(package_images=package_images, selected_generation=selected)
+    return result
 
 
 def unchanged(binding: dict, role: str) -> Path:
     if role not in ROLES:
         raise ValueError("native probe requested an unknown executable role")
     path = Path(binding["install_root"]) / "bin" / role
-    if elf(path, binding["artifact"]["architecture"]) != binding["images"][str(path)]:
+    if elf(path, binding["artifact"]["architecture"]) != binding.get("package_images", binding["images"])[str(path)]:
         raise ValueError("installed executable changed since its final artifact was verified")
     return path

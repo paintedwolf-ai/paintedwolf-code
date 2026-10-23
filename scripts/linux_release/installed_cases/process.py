@@ -32,7 +32,7 @@ def probe_path(binding: dict, role: str) -> Path:
     if role not in RESOURCE_ROLES:
         return unchanged(binding, role)
     path = Path(binding['install_root']) / RESOURCE_ROLES[role]
-    expected = binding['images'].get(str(path))
+    expected = binding.get('package_images', binding['images']).get(str(path))
     if expected is None:
         raise CaseUnavailable('selected installed manifest has no sealed resource observer image')
     actual = file_identity(path)
@@ -50,7 +50,7 @@ def run(binding: dict, role: str, arguments: list[str], *, timeout=120) -> dict:
     process = None
     try:
         info = os.fstat(descriptor)
-        expected = binding["images"][str(path)]
+        expected = binding.get("package_images", binding["images"])[str(path)]
         digest = hashlib.sha256()
         while block := os.read(descriptor, 1 << 20):
             digest.update(block)

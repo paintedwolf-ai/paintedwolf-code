@@ -169,6 +169,8 @@ class InstalledApp:
     def launch(self):
         if self.process is not None:
             raise ValueError("installed application was already launched")
+        from ..installed_generation import require_current
+        require_current(self.binding)
         require_owned_guest(self.binding)
         session = graphical_session()
         environment = session_environment(session)
