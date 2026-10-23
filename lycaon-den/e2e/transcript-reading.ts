@@ -82,7 +82,12 @@ export async function readTranscriptBackTo(page: Page, step: number) {
   const deadline = Date.now() + 120_000;
   while (Date.now() < deadline) {
     await wheelTranscript(page, -3_000);
-    const steps = await visibleTranscriptSteps(page);
+    // Backward seeks can enter unloaded history before its page arrives.
+    let steps: number[] = [];
+    await expect.poll(async () => {
+      steps = await visibleTranscriptSteps(page);
+      return steps.length;
+    }, { timeout: 10_000, intervals: [16, 32, 64] }).toBeGreaterThan(0);
     expectContiguousSteps(steps);
     if (Math.min(...steps) <= step) return;
   }
