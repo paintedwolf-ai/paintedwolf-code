@@ -40,6 +40,8 @@ func TestProtectedLaunchFixture(t *testing.T) {
 	switch mode {
 	case "install":
 		err = installFixture(dir, strings.Split(os.Getenv(fixtureBinsEnv), ":"))
+	case "nested-generation":
+		err = nestFixtureGenerationStore(dir)
 	case "upgrade":
 		err = stageFixtureGeneration(dir, "1.0.1", strings.Split(os.Getenv(fixtureBinsEnv), ":"), []byte("generation-1.0.1\n"))
 	case "vault-server":
@@ -351,4 +353,29 @@ func installLaunchFixture(t *testing.T) launchFixture {
 	digest, err := os.ReadFile(filepath.Join(dir, "digest"))
 	testutil.FailErr(t, "fixture digest", err)
 	return launchFixture{dir: dir, bootstrap: filepath.Join(dir, "pw-launch"), digest: string(digest), install: filepath.Join(dir, "install"), binaries: binaries}
+}
+
+func nestFixtureGenerationStore(dir string) error {
+	raw, err := os.ReadFile(filepath.Join(dir, "launch.json"))
+	if err != nil {
+		return err
+	}
+	var policy GenerationPolicy
+	if err := json.Unmarshal(raw, &policy); err != nil {
+		return err
+	}
+	source := filepath.Join(dir, "generations")
+	if filepath.Dir(policy.GenerationRoot) != source {
+		return errors.New("fixture generation is outside selected store")
+	}
+	target := filepath.Join(policy.LogicalInstallRoot, "generations")
+	if err := os.Rename(source, target); err != nil {
+		return err
+	}
+	policy.GenerationRoot = filepath.Join(target, filepath.Base(policy.GenerationRoot))
+	raw, err = json.Marshal(policy)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, "launch.json"), raw, 0644)
 }

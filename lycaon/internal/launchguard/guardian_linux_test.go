@@ -97,3 +97,13 @@ func TestGuardianRegisteredExitCannotBeReplacedByReusedPID(t *testing.T) {
 		t.Fatal("expected retirement of helper roots changed normal desktop outcome")
 	}
 }
+
+func TestGuardianRealLaunchWithStoreInsideLogicalInstallRoot(t *testing.T) {
+	fixture := installLaunchFixture(t)
+	testutil.FailErr(t, "place native-style generation store beneath logical root", sudoFixture(t, "nested-generation", fixture.dir))
+	command := exec.Command(fixture.bootstrap, "--exit-status", "0")
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("native nested generation launch: %v\n%s", err, output)
+	}
+	testutil.FailErr(t, "nested generation launch fully settled", sudoFixture(t, "lock-free", fixture.dir, fixtureHash+"="+fixture.digest))
+}

@@ -19,7 +19,9 @@ func structuralMounts(policy GenerationPolicy, image *os.File, entries []mountEn
 		return nil, err
 	}
 	selected := make(map[int]bool)
-	paths := append(moduleRoots(policy, interpreter), policy.GenerationRoot, policy.LogicalInstallRoot, "/")
+	// The held generation is already bound at its logical root. Its store
+	// path can be hidden beneath that bind when the store lives inside it.
+	paths := append(moduleRoots(policy, interpreter), policy.LogicalInstallRoot, "/")
 	for _, name := range paths {
 		if err := selectStructuralObject(name, 0, selected); err != nil {
 			return nil, err
