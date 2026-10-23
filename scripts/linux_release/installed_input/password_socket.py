@@ -95,13 +95,16 @@ class Listener:
             raise ValueError('private fixture actor differs from its owned guest account')
         self.path = mailbox.path / NAME
         self.stream, self.connection, self.created = None, None, None
-        self.directory = None
+        self.directory, self.directory_fd = None, None
 
     def __enter__(self):
         self.mailbox.attach()
         self.directory = _file(self.mailbox._directory())[:4]
+        self.directory_fd = os.open(self.mailbox.path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         self.stream = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         try:
+            if self.directory != _file(os.fstat(self.directory_fd))[:4]:
+                raise ValueError('private fixture directory changed before socket creation')
             # bind refuses an existing endpoint; no stale or public socket is reused.
             self.stream.bind(str(self.path))
             self.created = _file(self.path.lstat())
@@ -118,7 +121,8 @@ class Listener:
         actual = self.path.lstat()
         if (self.created != _file(actual) or not stat.S_ISSOCK(actual.st_mode)
                 or actual.st_uid != os.getuid() or stat.S_IMODE(actual.st_mode) != 0o600
-                or self.directory != _file(self.mailbox._directory())[:4]):
+                or self.directory != _file(self.mailbox._directory())[:4]
+                or self.directory != _file(os.fstat(self.directory_fd))[:4]):
             raise ValueError('private fixture endpoint changed its physical identity')
 
     def accept(self, deadline):
@@ -136,12 +140,19 @@ class Listener:
             self.connection.close()
         if self.stream is not None:
             self.stream.close()
-        if self.created is not None:
-            if (self.created != _file(self.path.lstat())
-                    or self.directory != _file(self.mailbox._directory())[:4]):
-                raise ValueError('private fixture endpoint replacement is preserved for recovery')
-            self.path.unlink()
-            self.created = None
+        try:
+            if self.created is not None:
+                actual = os.stat(NAME, dir_fd=self.directory_fd, follow_symlinks=False)
+                if (self.created != _file(actual)
+                        or self.directory != _file(self.mailbox._directory())[:4]
+                        or self.directory != _file(os.fstat(self.directory_fd))[:4]):
+                    raise ValueError('private fixture endpoint replacement is preserved for recovery')
+                os.unlink(NAME, dir_fd=self.directory_fd)
+                self.created = None
+        finally:
+            if self.directory_fd is not None:
+                os.close(self.directory_fd)
+                self.directory_fd = None
 
     def __exit__(self, *error):
         self.close()
