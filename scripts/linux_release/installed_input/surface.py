@@ -7,7 +7,7 @@ import time
 
 from ..installed_cases.app import process_identity
 from ..installed_cases.records import CaseFailed, CaseUnavailable
-from . import lineage, surface_wire as wire
+from . import accessibility, lineage, surface_wire as wire
 
 
 class FrameObserver:
@@ -62,8 +62,9 @@ class FrameObserver:
                 raise CaseFailed('captured frame transition runtime identity changed')
 
     def _identity(self, node):
-        process = process_identity(node.get_process_id())
-        identity = wire.object_identity({'bus_name': node.app.bus_name, 'object_path': node.path,
+        native = accessibility.identity(node)
+        process = process_identity(native['pid'])
+        identity = wire.object_identity({'bus_name': native['bus_name'], 'object_path': native['path'],
             'process': process, 'lineage': lineage.capture(self.launch, process)}, self.launch)
         if hasattr(self, 'main') and process != self.main['process']:
             raise CaseFailed('accessible surface changed its captured native UI process')
