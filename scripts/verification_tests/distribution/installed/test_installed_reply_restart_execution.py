@@ -162,35 +162,34 @@ class ReplyRestartTests(unittest.TestCase):
             app.streams.return_value = {}
         if launch_error is not None:
             apps[0].__enter__.side_effect = ValueError(launch_error)
-        fixture, ui = MagicMock(), MagicMock()
+        fixture, submission = MagicMock(), MagicMock()
         fixture.__enter__.return_value = fixture
         fixture.observations = [{'completed': completed}]
         fixture.discovery_observations = fixture.transport_observations = []
         fixture.transport_clipped = False
-        ui.__enter__.return_value = ui
         with ExitStack() as stack:
             for name, value in [('protected_launcher', {}), ('interactive_window', {}),
-                    ('configure_provider', {'provider_id': 'fixture'}), ('physical_input', {}),
+                    ('configure_provider', {'provider_id': 'fixture'}),
                     ('run', {'exit_code': 0, 'timed_out': False, 'output_limit': False})]:
                 stack.enter_context(patch.object(owner, name, return_value=value))
             app_constructor = stack.enter_context(patch.object(owner, 'InstalledApp', autospec=True, side_effect=apps))
             stack.enter_context(patch.object(owner.ProviderFixture, 'gui', return_value=fixture))
-            stack.enter_context(patch.object(owner, 'DesktopUI', return_value=ui))
+            stack.enter_context(patch.object(owner, 'submit_project_turn', submission))
             stack.enter_context(patch.object(owner, 'await_reply', side_effect=[before, after or before]))
             retained = stack.enter_context(patch.object(owner, 'retain', side_effect=lambda *args: args))
             owner.execute({}, 'conversation', 'restart-and-reconnect', root)
             self.assertEqual([call.args for call in app_constructor.call_args_list],
                              [({'launcher': {}},), ({'launcher': {}},)])
-        return retained.call_args.args, apps, ui
+        return retained.call_args.args, apps, submission
 
     def test_restart_requires_same_reply_and_a_new_captured_engine(self):
         with tempfile.TemporaryDirectory() as directory:
-            result, apps, ui = self.execute(Path(directory))
+            result, apps, submission = self.execute(Path(directory))
             self.assertEqual(result[4], 'passed')
             self.assertEqual(result[5]['reply_before'], result[5]['reply_after'])
             for app in apps:
                 app.__exit__.assert_called_once()
-            ui.click.assert_called_once_with('Send message')
+            submission.assert_called_once_with(apps[0])
         for changes in ({'after': {'session_id': SESSION, 'content_blob_sha256': 'b' * 64}},
                         {'completed': False}, {'same_engine': True}):
             with self.subTest(changes=changes), tempfile.TemporaryDirectory() as directory:

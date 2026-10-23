@@ -6,13 +6,14 @@ import tempfile
 import time
 
 from .app import InstalledApp
-from .desktop_ui import DesktopUI, interactive_window
+from .desktop_ui import interactive_window
 from .process import run
 from .profile_observer import invocations, project_for_owned_root, sessions_for_project
 from .provider import MODEL, ProviderFixture
 from .records import CaseFailed, CaseUnavailable, retain
 from .desktop_launch import protected_launcher
-from .provider_setup import configure_provider, physical_input
+from .provider_setup import configure_provider
+from .desktop_turn import submit_project_turn
 from .reply_observer import committed_reply
 from .provider_recovery import load as load_provider_recovery
 
@@ -64,9 +65,7 @@ def execute(binding, capability, case, root):
                 opened = run(binding, 'pw', ['open', str(project)], timeout=30)
                 if opened['exit_code'] or opened['timed_out'] or opened['output_limit']:
                     raise ValueError('installed CLI refused the fixed reply project')
-                with DesktopUI(app) as ui:
-                    physical_input(app, ui, 'What would you like to work on?', 'reply-fixture-prompt-v1')
-                    ui.click('Send message')
+                submit_project_turn(app)
                 before = await_reply(app, project, provider['provider_id'])
                 if not any(row['completed'] for row in fixture.observations):
                     raise ValueError('fixture never completed the full engine turn')
