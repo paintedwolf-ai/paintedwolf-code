@@ -29,9 +29,9 @@ func TestStorePolicyRequiresAnExplicitImmutableClosure(t *testing.T) {
 		}
 		return value, nil
 	}
-	testutil.FailErr(t, "verify selected library", policy.verifyMapping(stat, mapping{17, image}))
+	testutil.FailErr(t, "verify selected library", policy.verifyMapping(stat, mapping{inode: 17, path: image}))
 	for _, path := range []string{store, store + "/unselected/lib.so", "/usr/lib/libc.so", output + "-other/lib.so", output + "/../generation/lib.so"} {
-		if policy.verifyMapping(stat, mapping{17, path}) == nil {
+		if policy.verifyMapping(stat, mapping{inode: 17, path: path}) == nil {
 			t.Fatalf("accepted %s", path)
 		}
 	}
@@ -41,6 +41,7 @@ func TestStorePolicyRequiresAnExplicitImmutableClosure(t *testing.T) {
 	}{
 		{image, fileFacts{inode: 17, mode: 0o755}},
 		{image, fileFacts{inode: 18, mode: 0o555}},
+		{image, fileFacts{device: 1, inode: 17, mode: 0o555}},
 		{image, fileFacts{inode: 17, uid: 1000, mode: 0o555}},
 		{image, fileFacts{inode: 17, mode: fs.ModeSymlink | 0o555}},
 		{output, fileFacts{mode: fs.ModeDir | 0o755}},
@@ -51,7 +52,7 @@ func TestStorePolicyRequiresAnExplicitImmutableClosure(t *testing.T) {
 	} {
 		original := facts[changed.path]
 		facts[changed.path] = changed.facts
-		if policy.verifyMapping(stat, mapping{17, image}) == nil {
+		if policy.verifyMapping(stat, mapping{inode: 17, path: image}) == nil {
 			t.Fatalf("accepted modified %s: %+v", changed.path, changed.facts)
 		}
 		facts[changed.path] = original
