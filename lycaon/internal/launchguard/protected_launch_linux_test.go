@@ -119,6 +119,7 @@ type runningLaunch struct {
 	reader *bufio.Reader
 	facts  protectedFacts
 	result *launchWaitResult
+	stderr *strings.Builder
 }
 
 type launchWaitResult struct {
@@ -174,7 +175,7 @@ func startLaunch(t *testing.T, f launchFixture, env []string, args ...string) ru
 	if err := json.Unmarshal([]byte(line), &facts); err != nil {
 		t.Fatalf("decode desktop report %q: %v; bootstrap stderr: %s", line, err, stderr.String())
 	}
-	return runningLaunch{cmd: cmd, stdin: stdin, reader: reader, facts: facts, result: result}
+	return runningLaunch{cmd: cmd, stdin: stdin, reader: reader, facts: facts, result: result, stderr: &stderr}
 }
 
 func refusedLaunch(t *testing.T, cmd *exec.Cmd, want string) {
@@ -296,7 +297,7 @@ func TestProtectedLaunchSealsTheDesktopInARootOwnedNamespace(t *testing.T) {
 		t.Fatal("the generation lifetime lock was free while the desktop ran")
 	}
 	testutil.FailErr(t, "close desktop input", launch.stdin.Close())
-	waitLaunchEnd(t, launch.cmd)
+	waitLaunchEnd(t, launch)
 	testutil.FailErr(t, "generation lock released after the tree ended", sudoFixture(t, "lock-free", f.dir, fixtureHash+"="+f.digest))
 	if _, err := os.Stat(fmt.Sprintf("/proc/%d", facts.DetachedPID)); err != nil {
 		t.Fatalf("detached background process %d did not survive desktop exit: %v", facts.DetachedPID, err)
@@ -481,13 +482,13 @@ func TestProtectedLaunchRefusesAGenerationThePolicyDoesNotName(t *testing.T) {
 
 // waitLaunchEnd requires the supervisor to exit once the launch's last
 // process has ended, broker agent included.
-func waitLaunchEnd(t *testing.T, cmd *exec.Cmd) {
+func waitLaunchEnd(t *testing.T, launch runningLaunch) {
 	t.Helper()
-	done := make(chan error, 1)
-	go func() { done <- cmd.Wait() }()
 	select {
-	case err := <-done:
-		testutil.FailErr(t, "supervisor exit", err)
+	case <-launch.result.done:
+		if err := launch.result.err; err != nil {
+			t.Fatalf("supervisor exit: %v; stderr: %s", err, launch.stderr.String())
+		}
 	case <-time.After(20 * time.Second):
 		t.Fatal("the supervisor outlived the launch's processes")
 	}
@@ -538,7 +539,7 @@ func TestProtectedLaunchRoutesEngineLaunchesThroughTheBroker(t *testing.T) {
 		t.Fatalf("killing the protected engine did not end the brokered browser: %s", probe.BrowserEngineLossError)
 	}
 	testutil.FailErr(t, "close desktop input", launch.stdin.Close())
-	waitLaunchEnd(t, launch.cmd)
+	waitLaunchEnd(t, launch)
 }
 
 func assertBootstrapSupervisorProfile(t *testing.T, pid int) {
