@@ -8,7 +8,6 @@ import shutil
 import subprocess
 import tarfile
 import tempfile
-import tomllib
 import unittest
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -41,7 +40,10 @@ class MLXOfflineSource(unittest.TestCase):
             {"name": "mlx", "archive": archive.name, "sha256": hashlib.sha256(archive.read_bytes()).hexdigest(),
              "directory": "mlx-source", "tag": "v0.32.2"}]}
         self.script = self.root / "check.cmake"
-        self.script.write_text(f'include("{toolchain}")\n'
+        self.script.write_text(f'set(CMAKE_CURRENT_SOURCE_DIR "{self.source}")\n'
+                               f'set(CMAKE_BINARY_DIR "{self.root / "build"}")\n'
+                               'set(CMAKE_HOST_APPLE "${PW_TEST_APPLE}")\n'
+                               f'include("{toolchain}")\n'
                                'if(CMAKE_HOST_APPLE)\n'
                                '  if(NOT FETCHCONTENT_FULLY_DISCONNECTED OR NOT EXISTS "${FETCHCONTENT_SOURCE_DIR_MLX}/CMakeLists.txt")\n'
                                '    message(FATAL_ERROR "offline source was not selected")\n'
@@ -50,7 +52,7 @@ class MLXOfflineSource(unittest.TestCase):
 
     def run_cmake(self, apple=True):
         (self.vendor / "pin.json").write_text(json.dumps(self.pin))
-        return subprocess.run(["cmake", f"-DCMAKE_HOST_APPLE={'ON' if apple else 'OFF'}",
+        return subprocess.run(["cmake", f"-DPW_TEST_APPLE={'ON' if apple else 'OFF'}",
                                f"-DCMAKE_CURRENT_SOURCE_DIR={self.source}",
                                f"-DCMAKE_BINARY_DIR={self.root / 'build'}", "-P", str(self.script)],
                               text=True, capture_output=True, timeout=30)
@@ -89,9 +91,10 @@ class MLXOfflineSource(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_ordinary_cargo_builds_select_same_toolchain(self):
-        config = tomllib.loads((ROOT / ".cargo/config.toml").read_text())
-        setting = config["env"]["CMAKE_TOOLCHAIN_FILE"]
-        self.assertEqual(setting, {"value": "scripts/toolchain/mlx-offline.cmake", "relative": True, "force": True})
+        config = (ROOT / ".cargo/config.toml").read_text()
+        self.assertIn('[env]\n', config)
+        self.assertIn('CMAKE_TOOLCHAIN_FILE = { value = "scripts/toolchain/mlx-offline.cmake", '
+                      'relative = true, force = true }', config)
         pin = json.loads((ROOT / "third_party/mlx/pin.json").read_text())
         for source in pin["sources"]:
             archive = ROOT / "third_party/mlx" / source["archive"]
