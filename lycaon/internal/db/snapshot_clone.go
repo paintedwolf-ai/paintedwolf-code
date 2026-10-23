@@ -12,7 +12,7 @@ import (
 // CloneSnapshot publishes a verified snapshot of a quiescent store as a
 // file-system clone, which shares the store's blocks until either side
 // changes them. It reports false, leaving nothing behind, where the volume
-// cannot clone; the caller then takes an online backup. No writer may have
+// cannot clone; the caller can checkpoint and stream a copy. No writer may have
 // the store open.
 func CloneSnapshot(ctx context.Context, sqlDB DBTX, storePath, destPath string) (bool, error) {
 	if sqlDB == nil {
@@ -36,29 +36,50 @@ func CloneSnapshot(ctx context.Context, sqlDB DBTX, storePath, destPath string) 
 		if cloned, err := fileclone.Clone(storePath+"-wal", tmpPath+"-wal"); err != nil || !cloned {
 			return false, err
 		}
-		if err := checkpointClone(ctx, tmpPath); err != nil {
+		if err := checkpointSnapshot(ctx, tmpPath); err != nil {
 			return false, err
 		}
 	case err != nil && !os.IsNotExist(err):
 		return false, err
 	}
-	return true, installSnapshot(ctx, tmpPath, destPath, version)
+	return true, installQuiescentSnapshot(ctx, tmpPath, destPath, version)
 }
 
-// checkpointClone folds a cloned log's committed frames into the clone so
-// the snapshot is one self-contained file.
-func checkpointClone(ctx context.Context, path string) error {
+// checkpointSnapshot folds committed frames into a quiescent database file.
+func checkpointSnapshot(ctx context.Context, path string) error {
 	clone, err := sql.Open("sqlite", fileDSN(path, "_pragma=busy_timeout(10000)"))
 	if err != nil {
-		return fmt.Errorf("clone snapshot: open clone: %w", err)
+		return fmt.Errorf("snapshot checkpoint: open source: %w", err)
 	}
 	defer func() { _ = clone.Close() }()
 	result, err := checkpointDatabase(ctx, clone, WALCheckpointTruncate)
 	if err != nil {
-		return fmt.Errorf("clone snapshot: %w", err)
+		return fmt.Errorf("snapshot checkpoint: %w", err)
 	}
 	if !result.Complete() {
-		return fmt.Errorf("clone snapshot: checkpoint left %d of %d frames", result.PinnedFrames(), result.LogFrames)
+		return fmt.Errorf("snapshot checkpoint left %d of %d frames", result.PinnedFrames(), result.LogFrames)
 	}
 	return clone.Close()
+}
+
+// A quiescent image preserves the checkpointed source bytes. Its recovery
+// manifest verifies hashes and shape; the migration verifies final integrity
+// before commit, without scanning obsolete source indexes twice.
+func installQuiescentSnapshot(ctx context.Context, path, destination string, version int) error {
+	snapshot, err := openReader(ctx, path)
+	if err != nil {
+		return err
+	}
+	actual, err := ReadUserVersion(ctx, snapshot)
+	closeErr := snapshot.Close()
+	if err != nil {
+		return err
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	if actual != version {
+		return fmt.Errorf("snapshot revision %d, want %d", actual, version)
+	}
+	return publishSnapshot(path, destination)
 }

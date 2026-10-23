@@ -142,6 +142,10 @@ func installSnapshot(ctx context.Context, tmpPath, destPath string, version int)
 	if err := verifySnapshot(ctx, tmpPath, version); err != nil {
 		return err
 	}
+	return publishSnapshot(tmpPath, destPath)
+}
+
+func publishSnapshot(tmpPath, destPath string) error {
 	if err := os.Chmod(tmpPath, defaultDBFileMode); err != nil {
 		return fmt.Errorf("create snapshot: chmod: %w", err)
 	}

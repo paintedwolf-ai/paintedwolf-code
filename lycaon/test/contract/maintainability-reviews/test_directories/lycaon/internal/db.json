@@ -4,13 +4,13 @@
   "kind": "test_suite",
   "workstream": "store-health",
   "disposition": "retain",
-  "reason": "Private schema and recovery seams require real SQLite fixtures in this package. The added snapshot-clone and operational failure contracts belong beside upgrade tests; retain this exact membership and renew review on further growth or replacement.",
-  "reviewed_commit": "fedf80ee7b88765c50c795dd50c8db432ae2c0d9",
+  "reason": "Private schema and recovery seams require real SQLite fixtures in this package. The snapshot suite now verifies checkpointed WAL preservation, copy digests, cancellation and absent-source refusal without machine-speed assertions. Retain the existing 42-file membership beside upgrade and operational-failure contracts.",
+  "reviewed_commit": "5077ef8c0266d5751d1cbf55dcf76aebc2f09d0d",
   "ceiling": 42,
   "boundaries": {
     "lycaon/internal/db/upgrade_test.go": "7367c61132e25abac613ae98babf0135f22c2996f6c4629806d33bb51be3da4a",
     "lycaon/internal/db/store_health_test.go": "92c4618f1000c816c07679d028b8228157e86e00067d5424bed10f4e74c723e5",
-    "lycaon/internal/db/snapshot_clone_test.go": "54ff57ce4820f78ba5b78bc9287190ea9f87f8803e5ed7f7a7ec3ed66feb5ada"
+    "lycaon/internal/db/snapshot_clone_test.go": "31d05f2b18b5184a718f39beae7abb5f72e1efc3d2430c7f4c087f2cb6f004d1"
   },
   "reviewed_shape": "a8a13e67cb1b6712db61fb8cd3ce8334e96987365f341edd72e57315359c6a22"
 }

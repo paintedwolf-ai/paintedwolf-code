@@ -36,6 +36,7 @@ func captureRecoveryDirectory(ctx context.Context, opts CreateOpts, destination 
 	storePath := filepath.Join(destination, storeRelPath)
 	// The upgrade captures before any writer opens, so the store can be cloned.
 	cloned := false
+	var snapshotSHA string
 	if opts.DBPath != "" {
 		var err error
 		if cloned, err = db.CloneSnapshot(ctx, opts.SQLDB, opts.DBPath, storePath); err != nil {
@@ -43,7 +44,13 @@ func captureRecoveryDirectory(ctx context.Context, opts CreateOpts, destination 
 		}
 	}
 	if !cloned {
-		if err := db.CreateSnapshot(ctx, opts.SQLDB, storePath); err != nil {
+		var err error
+		if opts.DBPath != "" {
+			snapshotSHA, err = db.CopyQuiescentSnapshot(ctx, opts.SQLDB, opts.DBPath, storePath)
+		} else {
+			err = db.CreateSnapshot(ctx, opts.SQLDB, storePath)
+		}
+		if err != nil {
 			return Manifest{}, usage, err
 		}
 	}
@@ -114,6 +121,9 @@ func captureRecoveryDirectory(ctx context.Context, opts CreateOpts, destination 
 			return Manifest{}, usage, err
 		}
 		if rel == storeRelPath {
+			if snapshotSHA != "" && sum != snapshotSHA {
+				return Manifest{}, usage, fmt.Errorf("snapshot bytes differ from the checkpointed source")
+			}
 			usage.DatabaseBytes = size
 		}
 		manifest.Files = append(manifest.Files, FileEntry{RelPath: rel, Kind: file.kind, Mode: uint32(file.mode.Perm()), Size: size, SHA256: sum})
