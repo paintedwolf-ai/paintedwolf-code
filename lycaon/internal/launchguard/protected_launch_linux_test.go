@@ -279,6 +279,8 @@ func TestProtectedLaunchSealsTheDesktopInARootOwnedNamespace(t *testing.T) {
 	if facts.BrokerUserExec != "brokered-user-program" {
 		t.Fatalf("brokered program from the caller's files: %q", facts.BrokerUserExec)
 	}
+	finishObservation := observeFixtureLifecycle(t, f, launch)
+	defer finishObservation()
 	testutil.FailErr(t, "post-launch host mounts arrive noexec in the module view", sudoFixture(t, "module-view", f.dir, fmt.Sprintf("%s=%d", fixtureDesktopPIDEnv, facts.PID)))
 	if facts.InstallWrite != "EROFS" || facts.Remount != "EPERM" {
 		t.Fatalf("generation mount is not sealed: write %s, remount %s", facts.InstallWrite, facts.Remount)
@@ -296,7 +298,9 @@ func TestProtectedLaunchSealsTheDesktopInARootOwnedNamespace(t *testing.T) {
 	if err := sudoFixture(t, "lock-free", f.dir, fixtureHash+"="+f.digest); err == nil {
 		t.Fatal("the generation lifetime lock was free while the desktop ran")
 	}
+	t.Logf("desktop_input_close_begin_monotonic_ns=%d", lifecycleMonotonicNS())
 	testutil.FailErr(t, "close desktop input", launch.stdin.Close())
+	t.Logf("desktop_input_close_end_monotonic_ns=%d", lifecycleMonotonicNS())
 	waitLaunchEnd(t, launch)
 	testutil.FailErr(t, "generation lock released after the tree ended", sudoFixture(t, "lock-free", f.dir, fixtureHash+"="+f.digest))
 	if _, err := os.Stat(fmt.Sprintf("/proc/%d", facts.DetachedPID)); err != nil {
