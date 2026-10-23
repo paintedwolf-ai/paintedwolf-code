@@ -84,6 +84,7 @@ type SessionOwners interface {
 // programRun is one invocation's frozen frame, surface and ledger bindings.
 type programRun struct {
 	externalHidden bool
+	retainOutput   func(context.Context, string, string, []byte, bool) error
 	executor       *toolexecution.Executor
 	registry       *tools.DefaultRegistry
 	recorder       *invocation.SQLRecorder
@@ -211,6 +212,13 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	if err != nil {
 		return "", err
 	}
+	// A validation run's source identity is captured before anything runs.
+	var verification func() commandSourceIdentity
+	if tc.Execution.VerificationCheck {
+		_, reader := commandSourceReaders(ctx, tc, paths.Cwd().Abs)
+		identity := reader()
+		verification = func() commandSourceIdentity { return identity }
+	}
 	var owners ProgramOwners
 	if r.Owners != nil {
 		if owners, err = r.Owners(tc, paths); err != nil {
@@ -241,6 +249,17 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	screening := captureprojection.StreamOptions{WorkingMemory: memory, Bounds: secretmatch.StreamBounds{InputBytes: 1 << 20, OutputBytes: 1 << 20, MemoryBytes: 32 << 20, DetectorWork: 1 << 30}}
 	run.executor, run.registry, run.recorder, run.supervisor, run.progress = r.Executor, r.Registry, r.Recorder, r.Supervisor, r.Progress
 	run.externalHidden = r.ExternalHidden
+	run.retainOutput = func(ctx context.Context, executionID, stream string, data []byte, complete bool) error {
+		spill, redacted, err := r.retainScreened(ctx, memory, executionID+":"+stream, data, scope, screening)
+		if err != nil {
+			return err
+		}
+		output := invocation.RetainedOutput{ExecutionID: executionID, Stream: stream, Reference: "output:" + executionID + ":" + stream, Complete: complete && spill.Complete, Redacted: redacted}
+		if err := outputs.Attach(ctx, root.Identity.ProgramID, output, spill); err != nil {
+			return errors.Join(err, spill.Close())
+		}
+		return nil
+	}
 	run.frame, run.surface, run.memory, run.tc, run.root, run.parentReceipt, run.source = frame, surface, memory, tc, root, tc.Invocation.ID, source
 	run.capture = invocation.ProgramInputCapture{State: memory, Outputs: outputs, Projector: r.Projector, ProgramID: root.Identity.ProgramID, Scope: scope, Screening: screening, MaximumNodes: 1024, MaximumDepth: 64}
 	if err := r.beginProgram(ctx, run, outputs, snapshot.Plan, scope, screening); err != nil {
@@ -299,8 +318,10 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 		lifetime.settled()
 	})
 	var settleErr error
+	settledNow := false
 	select {
 	case settleErr = <-settled:
+		settledNow = true
 	default:
 		// & jobs still run under supervision; the program settles when they end.
 	}
@@ -315,6 +336,9 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	}
 	if refusal != nil {
 		outcome.Refusal = &ProgramRefusal{Code: refusal.Code, Feedback: feedback.Error()}
+	}
+	if settledNow {
+		stampProgramRun(tc, source, paths.Cwd(), outcome, verification)
 	}
 	out, err := surveyjson.Marshal(outcome)
 	if err != nil {
@@ -693,4 +717,54 @@ func (r *programRun) launchArguments(line, cwd string) map[string]any {
 		arguments[field] = value
 	}
 	return arguments
+}
+
+// childOutputBytes bounds each child stream the output store retains.
+const childOutputBytes = 64 << 10
+
+// childOutputs tees a child's stdout and stderr into bounded buffers and
+// returns the streams to use and a function that retains what was written.
+func (r *programRun) childOutputs(request commandprogram.OperationRequest, streams commandprogram.Streams) (commandprogram.Streams, func(context.Context)) {
+	if r.retainOutput == nil {
+		return streams, func(context.Context) {}
+	}
+	stdout, stderr := &boundedBuffer{limit: childOutputBytes}, &boundedBuffer{limit: childOutputBytes}
+	teed := streams
+	teed.Output = io.MultiWriter(nonNilWriter(streams.Output), stdout)
+	teed.Error = io.MultiWriter(nonNilWriter(streams.Error), stderr)
+	execution := request.Invocation.Identity.ExecutionID
+	return teed, func(ctx context.Context) {
+		for _, stream := range []struct {
+			name   string
+			buffer *boundedBuffer
+		}{{"stdout", stdout}, {"stderr", stderr}} {
+			if data := stream.buffer.Bytes(); len(data) > 0 {
+				// Retention is evidence for previews; a failure here never
+				// changes the child's settled outcome.
+				_ = r.retainOutput(context.WithoutCancel(ctx), execution, stream.name, data, !stream.buffer.truncated)
+			}
+		}
+	}
+}
+
+// stampProgramRun states the settled program's run for verification evidence:
+// passed on status 0, failed otherwise, unverifiable when the host stopped it.
+// A program whose jobs still run states nothing.
+func stampProgramRun(tc tools.ToolContext, source string, cwd projectpaths.Resolved, outcome ProgramOutcome, verification func() commandSourceIdentity) {
+	if tc.Effects.Out == nil {
+		return
+	}
+	verdict := api.SourceVerdictPassed
+	switch {
+	case outcome.Refusal != nil || outcome.State == "interrupted":
+		verdict = api.SourceVerdictUnverifiable
+	case outcome.Status != 0:
+		verdict = api.SourceVerdictFailed
+	}
+	run := &tools.SourceRunCapture{CheckID: tc.Identity.ToolCallID, IsCheck: tc.Execution.VerificationCheck, Command: source, ExitCode: outcome.Status, Verdict: verdict, Cwd: cwd.DisplayPath}
+	if tc.Execution.VerificationCheck && verification != nil {
+		identity := verification()
+		run.SourceRevision, run.SourceRootDigest = identity.Revision, identity.Root
+	}
+	tc.Effects.Out.SourceRun = run
 }

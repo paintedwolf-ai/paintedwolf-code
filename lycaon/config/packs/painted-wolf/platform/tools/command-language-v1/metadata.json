@@ -147,7 +147,7 @@
       ],
       "example": {
         "program": "ls -1 -- ./empty",
-        "stdout": "",
+        "stdout": "./empty\n",
         "status": 0,
         "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
         "setup": {
@@ -202,6 +202,7 @@
     {
       "name": "stat",
       "aliases": [],
+      "default_format": "  File: %N\n  Size: %-10s\tBlocks: %-10b IO Block: %-6o %F\nDevice: %Dh/%dd\tInode: %-11i Links: %h\nAccess: (%04a/%10.10A)  Uid: (%5u/%8U)   Gid: (%5g/%8G)\nAccess: %x\nModify: %y\nChange: %z\n Birth: %w",
       "family": "metadata",
       "owner": "filesystem",
       "argv": "stat [-L] [-c GNU_FORMAT|-f BSD_FORMAT|--file-system] [--] PATH ...",
@@ -301,7 +302,7 @@
           }
         }
       },
-      "notes": "Default lstat, -L follows after authority. GNU %n %s %a %A %F %Y %u %g %i; BSD %N %z %Lp %Sp %HT %m %u %g %i; %% literal. Unknown directives reject. -f always BSD metadata, never OS-dependent filesystem mode. --file-system explicitly requests filesystem metadata and may return capability unavailable.",
+      "notes": "Default lstat, -L follows after authority. Without -c or -f prints default_format, GNU's multi-line description, in UTC. GNU %n %N %s %b %o %a %A %F %h %i %u %U %g %G %D %d %x %X %y %Y %z %Z %w %W with %[-0][WIDTH][.PRECISION]; BSD %N %z %Lp %Sp %HT %m %u %g %i; %% literal. Birth time is reported unknown (- and 0). Unknown directives reject. -f always BSD metadata, never OS-dependent filesystem mode. --file-system explicitly requests filesystem metadata and may return capability unavailable.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/survey/stat.go",
         "tests": [

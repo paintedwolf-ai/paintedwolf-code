@@ -162,7 +162,7 @@ func TestCommandVisualGuidanceUsesOfferedCaptureRoutes(t *testing.T) {
 			prompts.MergeVisualShowVars(tc.tools, nil, vars)
 			for key, want := range map[string]bool{
 				"visual_show_available": tc.page || tc.terminal,
-				"visual_show_page": tc.page, "visual_show_terminal": tc.terminal,
+				"visual_show_page":      tc.page, "visual_show_terminal": tc.terminal,
 				"profile_has_terminal_open": tc.open, "profile_has_terminal_read": tc.read,
 				"profile_has_terminal_send": tc.send, "profile_has_terminal_snapshot": tc.snapshot,
 				"profile_has_terminal_capture": tc.capture,

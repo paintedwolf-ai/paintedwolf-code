@@ -212,3 +212,58 @@ func TestCommandProgramRedirectIntoCredentialFileAsksAsProtectedWrite(t *testing
 		})
 	}
 }
+
+// An invented capability_request key is typed argument feedback, never
+// silently dropped.
+func TestCommandProgramRefusesUnknownCapabilityRequestKeys(t *testing.T) {
+	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{
+		Pattern:      "run the program",
+		ToolCalls:    []llm.MockToolCall{{ID: "program-1", Name: "command", Args: map[string]any{"command": "go version", "capability_request": map[string]any{"network": true}}}},
+		FollowUpText: "Program finished.",
+	}}})
+	h := BuildForTest(t, WithLLMClient(mock))
+	sess, err := h.CreateHarnessSession(t, wire.CreateSessionRequest{}, t.TempDir())
+	testutil.FailErr(t, "create session", err)
+	testutil.FailErr(t, "set agent type", h.Sessions.Manager.Chats.SetAgentType(t.Context(), sess.ID, "implementer"))
+	_, err = h.Sessions.Manager.Submissions.Prompt(t.Context(), sess.ID, "run the program")
+	testutil.FailErr(t, "prompt", err)
+	msgs, err := h.Store.GetMessages(t.Context(), sess.ID)
+	testutil.FailErr(t, "read transcript", err)
+	for _, raw := range msgs {
+		content, _, err := messageview.RetainedContent(raw, "tool_output", "program-1")
+		if err != nil {
+			continue
+		}
+		if !strings.Contains(content, "TOOL_ARGS_INVALID") || !strings.Contains(content, "network") {
+			t.Fatalf("unknown capability key result: %s", content)
+		}
+		return
+	}
+	t.Fatal("no command result delivered")
+}
+
+// Child receipts carry the started job's handle, a stale destination's
+// revision conflict and screened previews of each child's output.
+func TestCommandProgramReceiptsCarryJobsConflictsAndPreviews(t *testing.T) {
+	s := newCommandProgramSession(t, `head -n 1 notes.txt; sleep 30 & kill %1; printf 'old\n' > target.txt; sh -c 'printf changed > target.txt; printf produced' > target.txt`, "")
+	testutil.FailErr(t, "prompt", s.prompt(t.Context()))
+	result := s.result(t)
+	if !strings.Contains(result, "COMMAND_REVISION_CONFLICT") || !strings.Contains(result, "first note") {
+		t.Fatalf("conflict program result = %q", result)
+	}
+	var path, expected, observed string
+	testutil.FailErr(t, "read conflict receipt", s.h.DB.QueryRowContext(t.Context(), `SELECT conflict_path, conflict_expected_revision, conflict_observed_revision FROM invocation_program_executions WHERE conflict_path != ''`).Scan(&path, &expected, &observed))
+	if !strings.HasSuffix(path, "target.txt") || expected == "" || observed == "" || expected == observed {
+		t.Fatalf("revision conflict receipt %q %q %q", path, expected, observed)
+	}
+	var handle string
+	testutil.FailErr(t, "read job receipt", s.h.DB.QueryRowContext(t.Context(), `SELECT job_handle FROM invocation_program_executions WHERE job_handle != ''`).Scan(&handle))
+	if handle == "" {
+		t.Fatal("background child has no job handle")
+	}
+	var preview string
+	testutil.FailErr(t, "read output preview", s.h.DB.QueryRowContext(t.Context(), `SELECT preview FROM invocation_program_outputs WHERE stream = 'stdout' AND preview LIKE 'first note%'`).Scan(&preview))
+	if preview != "first note\n" {
+		t.Fatalf("stdout preview %q", preview)
+	}
+}

@@ -49,8 +49,10 @@ type LanguageDiagnostic struct {
 
 // CommandSpecification is the common source for parser admission and option help.
 type CommandSpecification struct {
-	Name                 string              `json:"name"`
-	OperandsEndOptions   bool                `json:"operands_end_options,omitempty"`
+	Name               string `json:"name"`
+	OperandsEndOptions bool   `json:"operands_end_options,omitempty"`
+	// DefaultFormat is the output format used when no format option is given.
+	DefaultFormat        string              `json:"default_format,omitempty"`
 	Aliases              []string            `json:"aliases"`
 	Family               string              `json:"family"`
 	Owner                string              `json:"owner"`

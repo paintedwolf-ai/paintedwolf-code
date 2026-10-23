@@ -73,7 +73,8 @@ func (p BoundPath) Child(name string) BoundPath {
 	return child
 }
 
-// Readlink reads a link entry's target without authorizing access to it.
+// Readlink reads a link entry's target text, admitted at the entry itself, without
+// authorizing or following the target.
 func (p BoundPath) Readlink() (string, error) {
 	if p.Null {
 		return "", invalidOperand(p.Resolved.DisplayPath, "null device is not a directory entry")
@@ -83,6 +84,6 @@ func (p BoundPath) Readlink() (string, error) {
 		return "", PathOperationError(p.Resolved.DisplayPath, err)
 	}
 	defer root.Close()
-	target, err := root.Readlink(p.exactRelative, p.admitRead)
+	target, err := root.Readlink(p.exactRelative, p.admitEntry)
 	return target, PathOperationError(p.Resolved.DisplayPath, err)
 }

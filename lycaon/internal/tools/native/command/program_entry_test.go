@@ -22,6 +22,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type programFixture struct{ *programtest.Fixture }
@@ -414,5 +415,25 @@ func TestProgramEntryHiddenExternalSelectorRefusesButGapsRun(t *testing.T) {
 	}
 	if !strings.Contains(outcome.Stderr, "external: not supported here [COMMAND_EXTERNAL_HIDDEN]") {
 		t.Fatalf("hidden external stderr %q", outcome.Stderr)
+	}
+}
+
+// A settled program states its run for verification evidence: passed on
+// status 0, failed otherwise; a program whose job still runs states nothing.
+func TestProgramEntryStatesTheSettledRun(t *testing.T) {
+	for _, c := range []struct {
+		program, verdict string
+	}{{"true", api.SourceVerdictPassed}, {"false", api.SourceVerdictFailed}, {"sleep 5 &", ""}} {
+		f := newProgramFixture(t)
+		out := &tools.ToolInvocationOut{}
+		f.Context = func(_ string, tc *tools.ToolContext) { tc.Effects.Out = out }
+		_, err := f.call(t, t.Context(), c.program)
+		testutil.FailErr(t, "run "+c.program, err)
+		switch {
+		case c.verdict == "" && out.SourceRun != nil:
+			t.Fatalf("%s with a running job stated %+v", c.program, out.SourceRun)
+		case c.verdict != "" && (out.SourceRun == nil || out.SourceRun.Verdict != c.verdict || out.SourceRun.Command != c.program):
+			t.Fatalf("%s stated %+v, want %s", c.program, out.SourceRun, c.verdict)
+		}
 	}
 }

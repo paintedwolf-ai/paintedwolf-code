@@ -58,7 +58,7 @@ type Fixture struct {
 	Session    string
 	Dir        string
 	Background *bgprocess.Registry
-	context    func(string, *tools.ToolContext)
+	Context    func(string, *tools.ToolContext)
 	calls      int
 }
 
@@ -118,7 +118,7 @@ func New(t *testing.T, options Options) *Fixture {
 	if options.Owners != nil {
 		runtime.Owners = options.Owners(OwnerPorts{Dir: dir, Recorder: recorder, Boundary: boundary})
 	}
-	return &Fixture{Runtime: runtime, Recorder: recorder, Database: database, Session: session, Dir: dir, Background: background, context: options.Context}
+	return &Fixture{Runtime: runtime, Recorder: recorder, Database: database, Session: session, Dir: dir, Background: background, Context: options.Context}
 }
 
 // Call opens a real model receipt for one command call and runs the entry.
@@ -133,8 +133,8 @@ func (f *Fixture) Call(t *testing.T, ctx context.Context, source string) (string
 	tc := tools.ToolContext{Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: f.Dir, IsPrimary: true}}, ActiveRootID: "r1", SourceWorkspaceKind: api.SourceWorkspaceKindProject}}
 	tc.Identity.Agent, tc.Identity.ProjectID, tc.Identity.SessionID, tc.Identity.ToolCallID = "fixture", testdbseed.DefaultProjectID, f.Session, callID
 	tc.Invocation.ID = parent.ID
-	if f.context != nil {
-		f.context(f.Dir, &tc)
+	if f.Context != nil {
+		f.Context(f.Dir, &tc)
 	}
 	return f.Runtime.Run(ctx, args, tc)
 }
