@@ -18,7 +18,7 @@ func upgradeStagedStore(ctx context.Context, root string, manifest *Manifest, fi
 	}
 	plan, err := db.PlanUpgrade(ctx, source)
 	if err == nil && plan.Required() {
-		err = preflightUpgrade(ctx, CreateOpts{ConfigDir: root, DBPath: path, SQLDB: source}, plan.ScratchBytes(), false)
+		err = preflightUpgrade(ctx, CreateOpts{ConfigDir: root, DBPath: path, SQLDB: source}, plan, false)
 	}
 	_ = source.Close()
 	if err != nil {

@@ -51,7 +51,11 @@ components:
           enum:
           - integrity_failed
           - schema_mismatch
-          description: Closed reason the store cannot be served. Present when status is recovery.
+          - insufficient_space
+          description: >-
+            Closed reason the store cannot be served. Present when status is
+            recovery. insufficient_space leaves the store untouched; it serves
+            again once space is freed and the engine restarts.
         recovery_detail:
           type: string
           description: Human-readable sentence matching the recovery reason. Present when status is recovery.
@@ -61,6 +65,20 @@ components:
             Whether a local recovery snapshot has valid metadata and a
             supported schema upgrade route. Restore verifies all payload
             hashes before use. Always false on ordinary health.
+        recovery_space_needed_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: >-
+            Free bytes the upgrade and its recovery point need. Present when
+            recovery_reason is insufficient_space.
+        recovery_space_available_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: >-
+            Free bytes the volume held when the upgrade was refused. Present
+            when recovery_reason is insufficient_space.
         recovery_snapshot_at:
           type: string
           format: date-time

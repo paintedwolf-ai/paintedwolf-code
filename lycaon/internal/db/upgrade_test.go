@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -188,5 +189,27 @@ func TestUpgradeRefusesAlteredAppliedMigration(t *testing.T) {
 	testutil.FailErr(t, "close altered ledger", w.Close())
 	if err := upgradeExistingUsing(t.Context(), path, UpgradeHooks{}, true, registry); !errors.Is(err, ErrStoreIncompatible) {
 		t.Fatalf("altered ledger error = %v", err)
+	}
+}
+
+// A volume too full for the upgrade is its own refusal: the store is
+// untouched and the numbers travel with it.
+func TestUpgradeRefusesAFullVolumeWithoutTouchingTheStore(t *testing.T) {
+	path, registry, _ := upgradeFixture(t)
+	before, err := os.ReadFile(path)
+	testutil.FailErr(t, "read initial bytes", err)
+	space := &InsufficientSpaceError{NeededBytes: 3 << 30, AvailableBytes: 1 << 30}
+	hooks := UpgradeHooks{Before: func(context.Context, *sql.DB, migrations.Plan) error {
+		return fmt.Errorf("capture: %w", space)
+	}}
+	err = upgradeExistingUsing(t.Context(), path, hooks, false, registry)
+	var refused *StoreIncompatibleError
+	if !errors.As(err, &refused) || refused.Reason != RecoveryReasonInsufficientSpace || refused.Space != space {
+		t.Fatalf("upgrade error = %v, want an insufficient-space refusal carrying its numbers", err)
+	}
+	after, err := os.ReadFile(path)
+	testutil.FailErr(t, "read refused bytes", err)
+	if !reflect.DeepEqual(before, after) {
+		t.Fatal("refused upgrade changed source bytes")
 	}
 }

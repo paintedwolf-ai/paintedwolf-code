@@ -388,6 +388,31 @@ describe("createCriticalStop", () => {
     });
   });
 
+  it("retries a refused upgrade after space is freed, and never offers a fresh start", async () => {
+    noteHealthResponse({
+      ...recoveryHealth,
+      recovery_reason: "insufficient_space",
+      recovery_space_needed_bytes: 3 * 1024 ** 3,
+      recovery_space_available_bytes: 1024 ** 3,
+    });
+    restartAppBackend.mockImplementation(async () => {
+      noteHealthResponse(readyHealth);
+    });
+    const { appStore, rendered } = mount();
+    appStore.actions.setSidecarStatus("connected");
+
+    const root = rendered.baseElement as HTMLElement;
+    const action = await findByTestId(root, "critical-stop-primary");
+    expect(action.textContent).toContain("Try again");
+    expect(root.querySelector('[data-testid="critical-stop-secondary"]')).toBeNull();
+    action.click();
+
+    await waitFor(() => {
+      expect(restartAppBackend).toHaveBeenCalledOnce();
+      expect(root.querySelector('[data-testid="critical-stop"]')).toBeNull();
+    });
+  });
+
   it("stages the recovery snapshot, restarts, and clears the stop", async () => {
     noteHealthResponse(recoveryHealth);
     recoveryClient = { restoreRecoverySnapshot, resetStore };

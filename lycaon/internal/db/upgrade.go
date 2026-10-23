@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/lycaon/lycaon/internal/db/migrations"
@@ -128,6 +129,13 @@ func upgradeExistingUsing(ctx context.Context, path string, hooks UpgradeHooks, 
 			hooks.Progress(migrations.Snapshotting)
 		}
 		if err := hooks.Before(ctx, reader, plan); err != nil {
+			var space *InsufficientSpaceError
+			if errors.As(err, &space) {
+				return &StoreIncompatibleError{
+					Reason: RecoveryReasonInsufficientSpace, StoreSchemaVersion: plan.Source.Revision,
+					Detail: space.Error(), Space: space,
+				}
+			}
 			return storeIncompatible(RecoveryReasonIntegrityFailed, plan.Source.Revision, fmt.Sprintf("capture upgrade recovery: %v", err))
 		}
 	}

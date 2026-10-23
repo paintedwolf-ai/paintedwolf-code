@@ -12,7 +12,12 @@ import (
 	"github.com/lycaon/lycaon/internal/localdata"
 )
 
-func preflightUpgrade(ctx context.Context, opts CreateOpts, scratch uint64, capture bool) error {
+// preflightUpgrade refuses an upgrade the volume cannot finish. The route
+// writes its pages to the WAL and, where they are new, grows the store by as
+// much again; scratch is the steps' working space. Before capture it also
+// needs the recovery point: a clone diverges only by what the upgrade writes
+// and the log it folds in, while a copy costs the whole store.
+func preflightUpgrade(ctx context.Context, opts CreateOpts, plan migrations.Plan, capture bool) error {
 	available, known, err := availableUpgradeBytes(opts.ConfigDir)
 	if err != nil {
 		return fmt.Errorf("inspect upgrade disk space: %w", err)
@@ -31,7 +36,11 @@ func preflightUpgrade(ctx context.Context, opts CreateOpts, scratch uint64, capt
 		return fmt.Errorf("invalid store size for upgrade")
 	}
 	databaseBytes := pages * pageBytes
-	needed, err := sumSpace(databaseBytes, databaseBytes, scratch)
+	writes, err := plan.WriteBytes(ctx, opts.SQLDB, databaseBytes)
+	if err != nil {
+		return err
+	}
+	needed, err := sumSpace(writes, writes, plan.ScratchBytes())
 	if err != nil {
 		return err
 	}
@@ -50,7 +59,7 @@ func preflightUpgrade(ctx context.Context, opts CreateOpts, scratch uint64, capt
 		}
 		snapshotBytes := payload
 		if cloned {
-			snapshotBytes, err = sumSpace(databaseBytes, metadata)
+			snapshotBytes, err = sumSpace(writes, walBytes(opts.DBPath), metadata)
 			if err != nil {
 				return err
 			}
@@ -61,6 +70,19 @@ func preflightUpgrade(ctx context.Context, opts CreateOpts, scratch uint64, capt
 		}
 	}
 	return requireUpgradeSpace(needed, available)
+}
+
+// walBytes is the size of the store's log, which a cloned recovery point
+// folds into itself.
+func walBytes(dbPath string) uint64 {
+	if dbPath == "" {
+		return 0
+	}
+	info, err := os.Stat(dbPath + "-wal")
+	if err != nil || info.Size() < 0 {
+		return 0
+	}
+	return uint64(info.Size())
 }
 
 func preflightRestore(ctx context.Context, opts StageOpts, manifest Manifest, localSnapshot bool) error {
@@ -144,7 +166,7 @@ func sumSpace(values ...uint64) (uint64, error) {
 
 func requireUpgradeSpace(needed, available uint64) error {
 	if available < needed {
-		return fmt.Errorf("recovery and database work need approximately %.1f GiB free; %.1f GiB is available", float64(needed)/(1<<30), float64(available)/(1<<30))
+		return &db.InsufficientSpaceError{NeededBytes: needed, AvailableBytes: available}
 	}
 	return nil
 }

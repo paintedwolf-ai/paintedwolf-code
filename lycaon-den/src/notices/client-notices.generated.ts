@@ -51,6 +51,7 @@ export type ClientNoticeKind =
   | "store_incompatible_schema"
   | "store_incompatible_schema_no_snapshot"
   | "store_incompatible_snapshot_incompatible"
+  | "store_insufficient_space"
   | "transcript_row_gone"
   | "unexpected_client_error"
   | "update_available"
@@ -248,6 +249,12 @@ export const CLIENT_NOTICES: Readonly<Record<ClientNoticeKind, ClientNoticeCopy>
   store_incompatible_snapshot_incompatible: {
     title: "That snapshot cannot be restored",
     message: "The recovery snapshot uses a different data format. Restore a compatible backup instead.",
+    scope: "app",
+  },
+  store_insufficient_space: {
+    title: "Not enough free space to update",
+    message: "Updating your data safely needs about {needed} free on this disk, and {available} is free. Your data has not been changed. Free up space, then try again.",
+    suggestedAction: "There is still not enough free space. Free up more space, then try again.",
     scope: "app",
   },
   transcript_row_gone: {
