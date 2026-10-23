@@ -8,6 +8,7 @@ import re
 import subprocess
 
 from .profile_observer import _database, identifier, physical, profile, rows
+from .package_payload import stable
 from .provider import MODEL
 from .records import CaseUnavailable
 
@@ -46,7 +47,8 @@ def committed_reply(app, project_id, session_id, provider_id):
         before = physical(path)
         descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
         with os.fdopen(descriptor, 'rb') as stream:
-            if os.fstat(stream.fileno()).st_size != stored_size:
+            opened = os.fstat(stream.fileno())
+            if opened.st_size != stored_size:
                 raise ValueError('committed fixture object size differs from metadata')
             try:
                 child = subprocess.Popen(['zstd', '--decompress', '--stdout', '--quiet'], stdin=stream,
@@ -64,6 +66,8 @@ def committed_reply(app, project_id, session_id, provider_id):
                     child.kill()
                     child.wait()
                 child.stdout.close()
+            if stable(opened) != stable(os.fstat(stream.fileno())) or stable(opened) != stable(path.lstat()):
+                raise ValueError('committed fixture object changed during decompression')
         if physical(path) != before:
             raise ValueError('committed fixture object changed during observation')
     return {'project_id': project_id, 'session_id': session_id, 'output_id': output_id,
