@@ -23,9 +23,10 @@ const requestDeadline = 30 * time.Second
 
 // Server answers identity requests for verified engines.
 type Server struct {
-	Store    *Store
-	Verifier launchverify.Verifier
-	PeerOf   func(net.Conn) (Peer, error)
+	Store       *Store
+	Verifier    launchverify.Verifier
+	TrustPolicy string
+	PeerOf      func(net.Conn) (Peer, error)
 	// IdleExit ends Serve after this long without a connection; the socket
 	// unit starts the service again on demand. Zero serves until ctx ends.
 	IdleExit time.Duration
@@ -64,7 +65,7 @@ func (s *Server) Serve(ctx context.Context, listener net.Listener) error {
 		go func() {
 			defer s.wg.Done()
 			defer s.active.Add(-1)
-			s.serveConn(conn)
+			s.serveConn(ctx, conn)
 		}()
 	}
 }
@@ -105,16 +106,34 @@ type connection struct {
 	chain launchverify.Chain
 }
 
-func (s *Server) serveConn(conn net.Conn) {
+func (s *Server) serveConn(ctx context.Context, conn net.Conn) {
 	defer func() { _ = conn.Close() }()
+	stopClosing := context.AfterFunc(ctx, func() { _ = conn.Close() })
+	defer stopClosing()
 	peer, err := s.PeerOf(conn)
 	if err != nil {
-		s.Log.Warn("vault identity peer credentials unavailable", "error", err)
+		s.Log.WarnContext(ctx, "vault identity peer credentials unavailable", "error", err)
 		return
 	}
-	chain, err := s.Verifier.VerifyChain(peer.PID, peer.UID)
+	verifiers, resp := s.verifiersFor()
+	if resp != nil {
+		s.answer(conn, *resp)
+		return
+	}
+	var chain launchverify.Chain
+	var verifier launchverify.Verifier
+	for _, candidate := range verifiers {
+		chain, err = candidate.VerifyChain(peer.PID, peer.UID)
+		if err == nil {
+			verifier = candidate
+			break
+		}
+		if launchverify.CodeOf(err) != launchverify.CodeExecutableMismatch {
+			break
+		}
+	}
 	if err != nil {
-		s.Log.Warn("vault identity caller refused", "uid", peer.UID, "pid", peer.PID, "code", launchverify.CodeOf(err), "error", err)
+		s.Log.WarnContext(ctx, "vault identity caller refused", "uid", peer.UID, "pid", peer.PID, "code", launchverify.CodeOf(err), "error", err)
 		s.answer(conn, refusal(err))
 		return
 	}
@@ -126,23 +145,37 @@ func (s *Server) serveConn(conn net.Conn) {
 			return
 		}
 		// The verified process must still be the one connected.
-		if err := s.Verifier.Recheck(chain); err != nil {
-			s.Log.Warn("vault identity caller changed", "uid", peer.UID, "pid", peer.PID, "code", launchverify.CodeOf(err))
+		if err := verifier.Recheck(chain); err != nil {
+			s.Log.WarnContext(ctx, "vault identity caller changed", "uid", peer.UID, "pid", peer.PID, "code", launchverify.CodeOf(err))
 			s.answer(conn, refusal(err))
 			return
 		}
 		resp := s.handle(caller, req)
 		// Handling may wait on storage. Reverify before releasing its response.
-		if err := s.Verifier.Recheck(chain); err != nil {
+		if err := verifier.Recheck(chain); err != nil {
 			s.answer(conn, refusal(err))
 			return
 		}
 		// Accounts are configuration-root digests, never secrets.
-		s.Log.Info("vault identity request", "op", req.Op, "account", req.Account, "status", resp.Status, "uid", peer.UID, "pid", peer.PID)
+		s.Log.InfoContext(ctx, "vault identity request", "op", req.Op, "account", req.Account, "status", resp.Status, "uid", peer.UID, "pid", peer.PID)
 		if !s.answer(conn, resp) {
 			return
 		}
 	}
+}
+
+// verifiersFor loads explicit trust for one connection; policy changes restart
+// the NixOS unit, terminating connections that used its previous policy.
+func (s *Server) verifiersFor() ([]launchverify.Verifier, *vaultidentity.Response) {
+	if s.TrustPolicy != "" {
+		verifiers, err := loadTrustPolicy(s.TrustPolicy, s.Verifier)
+		if err == nil {
+			return verifiers, nil
+		}
+		s.Log.Error("vault identity trust policy unreadable", "error", err)
+		return nil, &vaultidentity.Response{Status: vaultidentity.StatusUnavailable, Code: string(launchverify.CodeManifestUnreadable), Message: "the administrator-selected custody policy is unavailable"}
+	}
+	return []launchverify.Verifier{s.Verifier}, nil
 }
 
 func refusal(err error) vaultidentity.Response {

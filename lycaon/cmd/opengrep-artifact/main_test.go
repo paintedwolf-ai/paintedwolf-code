@@ -3,9 +3,11 @@ package main
 import (
 	"flag"
 	"os"
+	"os/exec"
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/scan/bundled"
 )
 
@@ -77,5 +79,33 @@ func TestReleaseCommandsRequireExplicitAuthority(t *testing.T) {
 	t.Setenv(bundled.EnvOpenGrepCandidate, "/candidate")
 	if err := (options{mode: "fetch", cacheRoot: "/cache"}).validate(); err == nil {
 		t.Fatal("candidate combined with pinned release fetch")
+	}
+}
+
+func TestArtifactCLIRequiresConfinement(t *testing.T) {
+	if os.Getenv("PW_ARTIFACT_POLICY_CHILD") != "1" {
+		cmd := exec.Command(os.Args[0], "-test.run=^TestArtifactCLIRequiresConfinement$")
+		cmd.Env = append(os.Environ(), "PW_ARTIFACT_POLICY_CHILD=1")
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("fresh CLI process: %v\n%s", err, output)
+		}
+		return
+	}
+	previousFlags, previousArgs := flag.CommandLine, os.Args
+	t.Cleanup(func() { flag.CommandLine, os.Args = previousFlags, previousArgs })
+	flag.CommandLine = flag.NewFlagSet("opengrep-artifact", flag.ContinueOnError)
+	os.Args = []string{"opengrep-artifact", "-mode", "invalid"}
+	t.Setenv("LYCAON_SANDBOX", "")
+	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
+	_, _ = run()
+	if confine.Enforcing() != confine.Available() {
+		t.Fatal("CLI did not require the actual available confinement boundary")
+	}
+	if err := confine.RequireApplied(false); err == nil {
+		t.Fatal("CLI admitted a missing required boundary")
+	}
+	t.Setenv("LYCAON_SANDBOX", "off")
+	if confine.Enforcing() {
+		t.Fatal("explicitly disabled confinement was reported applied")
 	}
 }

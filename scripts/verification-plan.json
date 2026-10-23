@@ -14,7 +14,10 @@
       "test:short",
       "test:contract",
       "coverage:changes",
-      "licenses:notices"
+      "licenses:notices",
+      "comments:check",
+      "test:fail-messages:check",
+      "docs:links"
     ],
     "oar:verify": [
       "test:oar",
@@ -348,6 +351,9 @@
     "licenses:notices": [
       "licenses:notices"
     ],
+    "test:linux:installed": [
+      "test:linux:installed"
+    ],
     "release:rehearse:linux-signing": [
       "release:rehearse:linux-signing"
     ]
@@ -375,7 +381,8 @@
     "den:webkit:atspi": "passthrough",
     "test:confine:linux": "passthrough",
     "release:rehearse:linux-signing": "passthrough",
-    "den:test:rust": "fixed:desktop-settings-observer"
+    "den:test:rust": "fixed:desktop-settings-observer",
+    "test:linux:installed": "passthrough"
   },
   "resources": {
     "den:harness:test": {
@@ -695,6 +702,10 @@
       ],
       "workers": 1
     },
+    "test:linux:installed": {
+      "locks": [],
+      "workers": 1
+    },
     "release:rehearse:linux-signing": {
       "locks": [
         "linux-signing-fixture"
@@ -757,7 +768,12 @@
         "lint:full",
         "budgets",
         "den:typecheck",
-        "den:lint"
+        "den:lint",
+        "coverage:changes",
+        "comments:check",
+        "test:fail-messages:check",
+        "docs:links",
+        "den:test:fast"
       ],
       "minutes": 120,
       "profiles": [
@@ -768,9 +784,7 @@
       "preflight": [
         "test:contract",
         "--",
-        "./test/contract/hosted",
-        "./test/contract/runner",
-        "./test/contract/evidence"
+        "./test/contract/..."
       ]
     },
     "limits": {
@@ -1060,6 +1074,7 @@
         "build",
         "licenses:notices"
       ],
+      "timing_source": "build",
       "minutes": 120,
       "profiles": [
         "integration"
