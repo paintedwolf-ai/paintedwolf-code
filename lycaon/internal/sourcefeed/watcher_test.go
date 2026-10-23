@@ -3,7 +3,6 @@ package sourcefeed
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/workscope"
 	"os"
 	"path/filepath"
 	"slices"
@@ -15,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/watchfd"
+	"github.com/lycaon/lycaon/internal/workscope"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
