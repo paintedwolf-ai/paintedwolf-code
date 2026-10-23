@@ -78,7 +78,7 @@ static int chooser_read(GtkWidget *chooser, const char *payload, int protected) 
         while (g_main_context_iteration(NULL,FALSE)) {}
         g_free(selected);
         selected = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(chooser));
-        if (selected && strcmp(selected,payload) == 0 && gtk_widget_get_mapped(chooser)) break;
+        if (selected && strcmp(selected,payload) == 0 && gtk_widget_get_mapped(chooser) && g_file_test(payload,G_FILE_TEST_IS_REGULAR)) break;
         g_usleep(1000);
     }
     int valid = selected && strcmp(selected,payload) == 0 && gtk_widget_get_mapped(chooser) && read_volume(selected,protected);
