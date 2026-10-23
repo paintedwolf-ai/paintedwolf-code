@@ -4,9 +4,9 @@
   "kind": "test_suite",
   "workstream": "linux-protected-mount-lifecycle",
   "disposition": "retain",
-  "reason": "Retain the bounded shared real-launch suite at 502 code-bearing lines after the authenticated generation-frame assertions and single Wait-owner repair. Namespace credentials, broker identity, generation custody and the normal protected shutdown are one end-to-end launch contract; narrower transport, GTK and fatal-worker scenarios stay in their existing suites. Every started command is waited once and all consumers read that recorded outcome. Future growth above 502 requires another cohesion review.",
+  "reason": "Retain the bounded shared real-launch suite at 503 code-bearing lines after the authenticated generation-frame assertions and single Wait-owner repair. Namespace credentials, broker identity, generation custody and the normal protected shutdown are one end-to-end launch contract; narrower transport, GTK and fatal-worker scenarios stay in their existing suites. Every started command is waited once and all consumers read that recorded outcome. Future growth above 503 requires another cohesion review. The measured extra line retains stderr on the existing launch result so diagnostics are read only after its sole Wait completes; it does not add another fixture role.",
   "reviewed_commit": "3e89dc173aa9de7829f873d4f778416eed055dda",
-  "ceiling": 502,
+  "ceiling": 503,
   "boundaries": {
     "lycaon/internal/launchguard/protected_launch_linux_test.go": "3fee33cb24c5fb9eb02e261e9e4d27583b9a32ba9dcf9e563982e2041d5fb8c8",
     "lycaon/internal/launchguard/protected_launch_fixture_linux_test.go": "7f30d39e7bc65a2aca45b4f14cdb99383811838cb94be060bd93a2ecaeb623b9",
