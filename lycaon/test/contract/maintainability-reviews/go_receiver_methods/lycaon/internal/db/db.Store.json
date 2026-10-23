@@ -4,13 +4,13 @@
   "kind": "runtime_service",
   "workstream": "database-integrity",
   "disposition": "retain",
-  "reason": "Retain the 19 methods as one SQLite handle lifetime: writer admission, read-pool access, transactions, shutdown, maintenance signals, and integrity quarantine. The file-bound failure record is a free function in the database health boundary, not another service or writer. Quarantine still refuses retained statements and notifies the existing host before active transactions drain. Focused database, host, and API contracts protect those guarantees. The added log/slog dependency reports quarantine-publication failure; it adds no write authority or separate lifecycle. The same free health check discards stale evidence once the store it names is replaced or removed, so the handle gains no cleanup method. Startup, writer-quarantine, host shutdown, physical-store replacement, and orphan-record contracts passed before recording this structural decision.",
-  "reviewed_commit": "8a6c98e4cd20e6cc887151ef8debe4a16b6f928d",
+  "reason": "Retain the 19 methods as one SQLite handle lifetime: writer admission, read-pool access, transactions, shutdown, maintenance signals, and integrity quarantine. The file-bound failure record is a free function in the database health boundary, not another service or writer. Quarantine still refuses retained statements and notifies the existing host before active transactions drain. Focused database, host, and API contracts protect those guarantees. The added log/slog dependency reports quarantine-publication failure; it adds no write authority or separate lifecycle. The same free health check discards stale evidence once the store it names is replaced or removed, so the handle gains no cleanup method. Startup, writer-quarantine, host shutdown, physical-store replacement, and orphan-record contracts passed before recording this structural decision. The audit controller adds one store-lifetime cancellation boundary tied to measured pinned WAL frames; it owns no writer or separate database lifetime. Completed checks and pending work stay with the audit runner. Focused real-WAL and health tests prove reader release, retry, confirmed-damage quarantine during cancellation, and truthful completion when stamp clearing fails.",
+  "reviewed_commit": "5a04749985dcdb1ca1c6953b7998b34ebfee5633",
   "ceiling": 19,
-  "reviewed_shape": "5c2cb606fae4fc787c3fda41b989809ce20b4300d4dde4f4e668b70ea2a8e297",
+  "reviewed_shape": "9c591b118b358f8e34f0fbd42f95f84e04ffd250d35b1e0382225934ccb61aa2",
   "boundaries": {
-    "lycaon/internal/db/store_health_test.go": "0d6bf328fac5946722b15aadfcec3a6ead8dd785da92194e8b05229954e2f95f",
+    "lycaon/internal/db/store_health_test.go": "ddaa3c974a9dad3183c295ee88946ecb04ad70687b6359481cc78f5d751c76a8",
     "lycaon/internal/app/store_health_test.go": "45ea772b7a1e835cafec50b1b0eb376388b5bb8b0c6152b16638700a49bcffda",
-    "lycaon/internal/api/recovery_snapshot_baseline_test.go": "e67ff1ea26b3ddc90766cdc214ac951c462d73a8fccdb52c12cf7b5610b1cb72"
+    "lycaon/internal/api/recovery_snapshot_baseline_test.go": "6847fa54387be63c8442a8994644f99f25e272205d7abd626453c485b183235c"
   }
 }
