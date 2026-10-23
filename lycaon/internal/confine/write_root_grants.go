@@ -31,12 +31,10 @@ func grantedWriteRoots(projectID string) []string {
 
 // Write-root validation codes are shared by every entry point.
 const (
-	WriteRootCodeFilesystemRoot = "write_root_is_filesystem_root"
-	WriteRootCodeHome           = "write_root_is_home"
-	WriteRootCodeNotAbsolute    = "write_root_not_absolute"
-	WriteRootCodeSecretStore    = "write_root_under_secret_store"
-	WriteRootCodeControlPlane   = "write_root_under_control_plane"
-	WriteRootCodeContainsState  = "write_root_contains_control_plane"
+	WriteRootCodeNotAbsolute   = "write_root_not_absolute"
+	WriteRootCodeSecretStore   = "write_root_under_secret_store"
+	WriteRootCodeControlPlane  = "write_root_under_control_plane"
+	WriteRootCodeContainsState = "write_root_contains_control_plane"
 )
 
 // ControlPlaneTree reports whether path lies in the host's own state tree,
