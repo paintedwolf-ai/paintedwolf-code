@@ -8,7 +8,7 @@ import time
 from .app import InstalledApp
 from .desktop_ui import DesktopUI, interactive_window
 from .process import run
-from .profile_observer import project_for_owned_root, sessions_for_project
+from .profile_observer import invocations, project_for_owned_root, sessions_for_project
 from .profile_providers import find_gui_provider
 from .protected_launch import applicability
 from .provider import MODEL, ProviderFixture
@@ -61,7 +61,11 @@ def await_reply(app, project, provider_id, *, selected_session=None):
                     raise ValueError('protected mock turn failed before its durable reply')
                 result = committed_reply(app, witness['project_id'], session['id'], provider_id)
                 if result is not None:
-                    return result
+                    calls = invocations(app, session['id'], ['command'])
+                    matching = [row for row in calls if row['tool_call_id'] == 'qualification-0']
+                    if len(matching) != 1 or matching[0]['outcome'] != 'completed':
+                        raise ValueError('fixed command fixture did not complete successfully')
+                    return {**result, 'tool_message_id': matching[0]['message_id']}
         time.sleep(0.1)
     raise CaseUnavailable('protected-mock-reply-or-restart-witness-timeout')
 
