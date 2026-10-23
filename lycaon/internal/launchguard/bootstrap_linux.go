@@ -134,19 +134,19 @@ func RunBootstrap(arguments []string) (int, error) {
 	defer func() { _ = stagePin.Close(); _ = stage.Process.Release() }()
 	if err := awaitGuardianHandoff(handoff[0], stage.Process.Pid, stagePIDFD, caller, origin); err != nil {
 		_ = unix.Shutdown(int(handoff[0].Fd()), unix.SHUT_RDWR)
-		retireBootstrapSetup(stagePIDFD, children, proc, caller)
+		retireBootstrapSetup(stagePIDFD, children, proc, caller, generation.MountTransition)
 		_ = broker.Close()
 		return fail(err)
 	}
 	if err := dropBootstrapSupervisor(caller); err != nil {
 		_ = unix.Shutdown(int(handoff[0].Fd()), unix.SHUT_RDWR)
-		retireBootstrapSetup(stagePIDFD, children, proc, caller)
+		retireBootstrapSetup(stagePIDFD, children, proc, caller, generation.MountTransition)
 		_ = broker.Close()
 		return fail(err)
 	}
 	if err := unix.Prctl(unix.PR_SET_CHILD_SUBREAPER, 0, 0, 0, 0); err != nil {
 		_ = unix.Shutdown(int(handoff[0].Fd()), unix.SHUT_RDWR)
-		retireBootstrapSetup(stagePIDFD, children, proc, caller)
+		retireBootstrapSetup(stagePIDFD, children, proc, caller, generation.MountTransition)
 		_ = broker.Close()
 		return 1, err
 	}

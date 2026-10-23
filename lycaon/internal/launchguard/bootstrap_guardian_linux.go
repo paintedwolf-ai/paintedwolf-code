@@ -58,10 +58,16 @@ func awaitGuardianHandoff(control *os.File, stagePID int, stageFD int, caller Id
 // UI admission has not occurred, so this subreaper owns only fixed setup
 // roles. Stop the sole creator first; after it exits all remaining children
 // are directly owned. No ordinary broker request could have run behind it.
-func retireBootstrapSetup(stageFD int, children, proc *os.File, caller Identity) {
+func retireBootstrapSetup(stageFD int, children, proc *os.File, caller Identity, transition *os.File) {
+	noticePID, notice, _ := startBootstrapNotice(transition, caller)
+	noticeDeadline := time.Now().Add(time.Second)
+	if notice != nil {
+		defer func() { _ = notice.Close() }()
+	}
 	_ = unix.PidfdSendSignal(stageFD, unix.SIGKILL, nil, 0)
 	stageExited := false
 	for {
+		expireBootstrapNotice(notice, noticeDeadline)
 		polls := []unix.PollFd{{Fd: int32(stageFD), Events: unix.POLLIN}}
 		if _, err := unix.Poll(polls, 0); err == nil && polls[0].Revents&unix.POLLIN != 0 {
 			stageExited = true
@@ -69,6 +75,9 @@ func retireBootstrapSetup(stageFD int, children, proc *os.File, caller Identity)
 		if stageExited {
 			if pids, err := guardianDirectChildren(children); err == nil {
 				for _, pid := range pids {
+					if pid == noticePID && time.Now().Before(noticeDeadline) {
+						continue
+					}
 					_ = terminateOwnedLaunchChild(proc, pid, []uint32{0, caller.UID})
 				}
 			}

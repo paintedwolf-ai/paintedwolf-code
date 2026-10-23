@@ -124,6 +124,7 @@ static void pw_identity_map(const char *name) {
 }
 
 #include "guardian.h"
+#include "notice.h"
 
 __attribute__((noreturn)) void pw_mount_transition(const unsigned long *stack) {
     pw_signals();
@@ -132,6 +133,8 @@ __attribute__((noreturn)) void pw_mount_transition(const unsigned long *stack) {
      * guardian transition. Low-FD intake never inherits these slots. */
     unsigned int ids[3];
     pw_require(PW_CALL(__NR_getresuid,&ids[0],&ids[1],&ids[2],0,0,0) == 0 && ids[0] == 0 && ids[1] == 0 && ids[2] == 0);
+    long notice_seals = PW_CALL(__NR_fcntl,20,PW_GET_SEALS,0,0,0,0);
+    if (notice_seals != -9) pw_setup_notice();
     long guardian_seals = PW_CALL(__NR_fcntl,85,PW_GET_SEALS,0,0,0,0);
     if (guardian_seals != -9) {
         pw_sealed(85);
