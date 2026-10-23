@@ -1,4 +1,4 @@
-"""Observe only the source-fixed keyless GUI fixture in its owned provider catalog."""
+"""Observe only the source-fixed credentialed GUI fixture in its owned provider catalog."""
 from __future__ import annotations
 
 import os
@@ -63,7 +63,7 @@ def selected(rows, endpoint: str):
     row = matches[0]
     if (row.get('kind') != GUI_KIND or row.get('base_url') != endpoint
             or row.get('requires_api_key') is not True or row.get('api_key_env', '') not in {'', 'LITELLM_MASTER_KEY'}
-            or row.get('ambient_auth', '') != ''):
+            or row.get('ambient_auth') not in (None, '')):
         raise ValueError('owned GUI provider differs from its fixed local credential transport')
     models = row.get('models', [])
     if (not isinstance(models, list) or len(models) > 256 or any(not isinstance(model, dict)
@@ -73,7 +73,7 @@ def selected(rows, endpoint: str):
     if len(set(identifiers)) != len(identifiers) or any(value != MODEL for value in identifiers):
         raise ValueError('owned GUI provider model identities are ambiguous')
     return {'provider_id': row['id'], 'kind': GUI_KIND, 'requires_api_key': True,
-            'models': identifiers, 'observer': 'owned-provider-YAML'}
+            'configured_models': identifiers, 'observer': 'owned-provider-YAML'}
 
 
 def find_gui_provider(app, endpoint: str):
