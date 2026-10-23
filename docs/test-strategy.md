@@ -1092,6 +1092,23 @@ lane durations, and unsuccessful merge-group runs. Three distinct runs sharing
 one failure signature appear in the report without opening issues. Missing artifacts
 remain a coverage gap; cancellation is reported separately from an attributed test failure.
 
+### Reusing completed source verification
+
+Qualification reuses complete source lanes from successful merge-group CI runs
+whose Git tree exactly matches the selected landed source. Each compact proof
+binds repository, source commit and tree, workflow run and attempt, lane recipe,
+runner label, shard, and successful full-scope execution. The lookup considers
+up to twenty successful merge-group runs within fourteen days. PR-only results,
+partial package selections, missing evidence, and failed runs grant no reuse.
+
+All shards of a lane must have matching proofs from one run attempt. Qualification
+retains its own plan listing every reused proof and every lane it executes.
+Change-relative budget and coverage reports always execute against the current
+qualification context. Platform, end-to-end, signed-package, and upgrade checks
+retain their separate gates. Pinned source and toolchains define source-lane
+identity; hosted image versions are recorded as provenance. Native platform
+qualification continues to exercise the current hosted environment.
+
 ### Browser qualification capacity
 
 Web qualification partitions the complete suite across two hosted jobs with two
