@@ -87,7 +87,10 @@ func (b *WriteRootCheckpointBroker) Authorize(ctx context.Context, in command.Sa
 		roots = []string{projectDir}
 	}
 	// Effective roots include durable and chat-scoped grants.
-	writeRoots := confine.WriteRootsForBoundary(in.ProjectID, roots, nil, in.SessionScratchRoot)
+	writeRoots, err := confine.WriteRootsForBoundary(in.ProjectID, roots, nil, in.SessionScratchRoot)
+	if err != nil {
+		return out, err
+	}
 	writeRoots = append(writeRoots, b.Runtime.SessionWriteRoots(rootSessionID)...)
 	inRoots := confine.PathWithinWriteRoots(proposed, writeRoots)
 	if subject.Kind == confine.WriteSubjectOrdinary {

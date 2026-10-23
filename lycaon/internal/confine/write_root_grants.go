@@ -36,6 +36,7 @@ const (
 	WriteRootCodeNotAbsolute    = "write_root_not_absolute"
 	WriteRootCodeSecretStore    = "write_root_under_secret_store"
 	WriteRootCodeControlPlane   = "write_root_under_control_plane"
+	WriteRootCodeContainsState  = "write_root_contains_control_plane"
 )
 
 // ControlPlaneTree reports whether path lies in the host's own state tree,
@@ -58,6 +59,9 @@ func ControlPlaneTree(path string) bool {
 // sessionScratch is the invocation's own scratch root; like the confinement floor,
 // the verdict leaves it to the invocation and still denies every other session's.
 func ControlPlanePathDenied(path string, write bool, sessionScratch string) bool {
+	if write && writeRootContainsStateTree(fspath.CanonicalPath(path)) {
+		return true
+	}
 	if WithinSessionScratch(path, sessionScratch) {
 		return false
 	}
@@ -116,6 +120,9 @@ func AttachedWriteRootRefused(root string) (refused bool, code string) {
 	if attachedWriteRootForbidden(resolved) {
 		return true, WriteRootCodeSecretStore
 	}
+	if writeRootContainsStateTree(resolved) {
+		return true, WriteRootCodeContainsState
+	}
 	return false, ""
 }
 
@@ -131,6 +138,9 @@ func GrantedWriteRootRefused(root string) (refused bool, code string) {
 	}
 	if ClassifyBlockedWrite(resolved).Kind != WriteSubjectOrdinary {
 		return true, WriteRootCodeSecretStore
+	}
+	if writeRootContainsStateTree(resolved) {
+		return true, WriteRootCodeContainsState
 	}
 	return false, ""
 }
