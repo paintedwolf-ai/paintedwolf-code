@@ -15,9 +15,9 @@ let
   };
 in
 assert pkgs.dns-root-data.version == "2025-04-14";
-assert builtins.hasAttr hints.drvPath context;
-assert builtins.hasAttr (toString (recipeFile "root.key")) context;
-assert builtins.hasAttr (toString (recipeFile "root.ds")) context;
+assert builtins.hasAttr (builtins.unsafeDiscardStringContext hints.drvPath) context;
+assert builtins.hasAttr (builtins.unsafeDiscardStringContext (toString (recipeFile "root.key"))) context;
+assert builtins.hasAttr (builtins.unsafeDiscardStringContext (toString (recipeFile "root.ds"))) context;
 [
   { store_path = builtins.unsafeDiscardStringContext nixpkgs.outPath;
     urls = [ "https://github.com/NixOS/nixpkgs/archive/${nixpkgs.rev}.tar.gz" ];
