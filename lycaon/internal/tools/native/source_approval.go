@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/sourceledger"
@@ -37,6 +38,19 @@ func reviewAgentMutation(ctx context.Context, tc tools.ToolContext, m agentMutat
 func verifyMutationSnapshot(ctx context.Context, location fseffect.Location, expected string, directory bool) error {
 	current, err := captureAgentFileAt(location, ctx, nil, false)
 	return snapshotMatches(location, current, err, expected, directory)
+}
+
+// The staged replacement has already revalidated its reviewed parent before
+// this check. Read the actual target beneath that held descriptor.
+func verifyHeldMutationSnapshot(ctx context.Context, location fseffect.Location, target fseffect.Target, expected string) error {
+	file, err := target.Open()
+	var current agentFileEvidence
+	if err == nil {
+		current, err = captureAgentFile(ctx, file, nil, false)
+	} else if os.IsNotExist(err) {
+		err = nil
+	}
+	return snapshotMatches(location, current, err, expected, false)
 }
 
 func verifyEntrySnapshot(ctx context.Context, location fseffect.Location, expected string, directory bool) error {

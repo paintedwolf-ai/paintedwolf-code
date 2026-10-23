@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/commandsurface"
@@ -184,5 +185,31 @@ func TestFileReviewCancellationStopsTheFollowingSnapshot(t *testing.T) {
 	testutil.FailErr(t, "read canceled review target", err)
 	if !bytes.Equal(got, before) {
 		t.Fatalf("canceled review changed bytes=%q", got)
+	}
+}
+
+func TestStagedStreamRechecksActualEntryBeforePublication(t *testing.T) {
+	for _, before := range []string{"", "before"} {
+		t.Run(map[bool]string{true: "missing", false: "existing"}[before == ""], func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "copy")
+			if before != "" {
+				testutil.FailErr(t, "seed original", os.WriteFile(path, []byte(before), 0o644))
+			}
+			tc := nativefixture.Context(dir)
+			stage, _, err := stageAgentStream(t.Context(), tc, agentStreamRequest{Target: testMutationTarget(path), Source: strings.NewReader("new bytes")})
+			testutil.FailErr(t, "stage reviewed stream", err)
+			defer stage.Close()
+			testutil.FailErr(t, "race destination after review", os.WriteFile(path, []byte("raced"), 0o644))
+			result, err := stage.Commit(t.Context(), tc)
+			if !errors.Is(err, errMutationSnapshotMoved) || result.Publication.Committed() {
+				t.Fatalf("changed entry published: result=%+v error=%v", result, err)
+			}
+			raw, err := os.ReadFile(path)
+			testutil.FailErr(t, "read preserved racing bytes", err)
+			if string(raw) != "raced" {
+				t.Fatalf("changed entry overwritten: %q", raw)
+			}
+		})
 	}
 }

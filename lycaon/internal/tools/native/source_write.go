@@ -202,7 +202,7 @@ func stageAgentStream(ctx context.Context, tctx tools.ToolContext, req agentStre
 			if err := ensureIgnoreOverlayFormat(req.Target.Location); err != nil {
 				return err
 			}
-			if err := verifyMutationSnapshot(ctx, req.Target.Location, mutation.BeforeSHA256, false); err != nil {
+			if err := verifyHeldMutationSnapshot(ctx, req.Target.Location, target, mutation.BeforeSHA256); err != nil {
 				return err
 			}
 			if err := setAsideUnversionedFile(ctx, tctx, req.Target, mutation); err != nil {
@@ -553,6 +553,11 @@ func captureAgentFileAt(loc fseffect.Location, ctx context.Context, memory *tool
 	if err != nil {
 		return agentFileEvidence{}, err
 	}
+	return captureAgentFile(ctx, f, memory, retainBody)
+}
+
+// captureAgentFile owns one already-open descriptor and its admitted snapshot.
+func captureAgentFile(ctx context.Context, f *os.File, memory *toolcontract.ProgramMemory, retainBody bool) (agentFileEvidence, error) {
 	defer func() { _ = f.Close() }()
 	info, err := f.Stat()
 	if err != nil {
