@@ -86,6 +86,20 @@ class ReplyObserverTests(unittest.TestCase):
 
 
 class ReplyRestartTests(unittest.TestCase):
+    def test_settled_reply_requires_the_exact_successful_tool_call(self):
+        session = {'id': SESSION, 'provider_id': 'fixture', 'model': owner.MODEL, 'status': 'idle'}
+        invocation = {'tool_call_id': 'qualification-0', 'outcome': 'completed', 'message_id': MESSAGE}
+        with patch.object(owner, 'project_for_owned_root', return_value={'project_id': PROJECT}), patch.object(
+                owner, 'sessions_for_project', return_value=[session]), patch.object(
+                owner, 'committed_reply', return_value={'session_id': SESSION}), patch.object(
+                owner, 'invocations', return_value=[invocation]) as observed:
+            self.assertEqual(owner.await_reply(None, None, 'fixture')['tool_message_id'], MESSAGE)
+            for calls in ([], [dict(invocation, outcome='error')], [invocation, invocation],
+                          [dict(invocation, tool_call_id='foreign')]):
+                observed.return_value = calls
+                with self.assertRaisesRegex(ValueError, 'did not complete'):
+                    owner.await_reply(None, None, 'fixture')
+
     def test_registry_and_physical_operation_are_fixed(self):
         self.assertEqual(installed_execution.case_family('conversation', 'restart-and-reconnect', 'deb'), 'reply_restart')
         self.assertEqual(steps('reply-fixture-prompt-v1')[0], ('ctrl', 'a'))
