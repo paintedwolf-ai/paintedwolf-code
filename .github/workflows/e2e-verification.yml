@@ -49,8 +49,23 @@ jobs:
         working-directory: lycaon-den
         run: bun install --frozen-lockfile
 
-      # Browser system packages come from the distribution mirror, whose speed
-      # varies by minutes; this step's time stays out of the test budget.
+      - name: Use canonical Ubuntu archives for browser packages
+        timeout-minutes: 2
+        shell: bash
+        run: |
+          sudo python3 - <<'PYTHON'
+          from pathlib import Path
+          paths = [Path("/etc/apt/sources.list"), Path("/etc/apt/apt-mirrors.txt")]
+          paths += list(Path("/etc/apt/sources.list.d").glob("*.sources"))
+          paths += list(Path("/etc/apt/sources.list.d").glob("*.list"))
+          for path in paths:
+              if path.is_file():
+                  text = path.read_text()
+                  replacement = text.replace("http://azure.archive.ubuntu.com/ubuntu", "https://archive.ubuntu.com/ubuntu")
+                  if replacement != text:
+                      path.write_text(replacement)
+          PYTHON
+
       - name: Install Playwright browsers
         working-directory: lycaon-den
         timeout-minutes: 20
