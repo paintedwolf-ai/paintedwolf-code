@@ -7,7 +7,7 @@ let
     free = value.free or null;
     redistributable = value.redistributable or null;
   };
-  sourceOf = drv: let src = (drv.drvAttrs or drv).src or null; in
+  sourceOf = drv: let src = (drv.drvAttrs or drv).src or (drv.src or null); in
     if src == null || !(lib.isDerivation src) then null else {
       store_path = builtins.unsafeDiscardStringContext src.outPath;
       urls = src.urls or (lib.optional (src ? url) src.url);

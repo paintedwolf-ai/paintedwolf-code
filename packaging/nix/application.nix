@@ -73,6 +73,7 @@ stdenvNoCC.mkDerivation {
         -I ${apparmor-profiles}/etc/apparmor.d "$profile"
     done
   '';
+  passthru.noticeRuntimeInputs = [ mesa nix ];
   meta = {
     description = "Painted Wolf Code desktop application and complete immutable runtime resources";
     license = lib.licenses.asl20;
