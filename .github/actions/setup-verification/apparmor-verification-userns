@@ -10,3 +10,7 @@ profile paintedwolf-go-test /tmp/paintedwolf-test-runs-*/**/*.test flags=(unconf
 profile paintedwolf-smoke /tmp/paintedwolf-test-runs-*/**/lycaon-smoke-bin-*/lycaon flags=(unconfined) {
   userns,
 }
+
+profile paintedwolf-e2e-container /tmp/lycaon flags=(unconfined) {
+  userns,
+}

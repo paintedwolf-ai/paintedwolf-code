@@ -82,6 +82,8 @@ The host serves its owner over loopback. Loopback prevents ordinary LAN access b
 
 The host trusts the installed binary and its shipped catalogs, the operating system's enforcement primitives, protected credential storage, and explicit human decisions over host-authored plans.
 
+Linux native presence also requires an observed active graphical session with an unlocked state. Screen lock, suspend and lock-observer loss invalidate in-flight native confirmations; the host invalidates pending challenges and rejects delayed unlock commits from before that boundary.
+
 Primary risks are unauthorized local API use, path escape, subprocess boundary failure, unmediated egress, secret disclosure, runaway work, and treating untrusted content as authority.
 
 ---
@@ -256,6 +258,18 @@ The Linux floor is a kernel with Landlock ABI 3 (6.2) and unprivileged user name
 Namespace creation failures distinguish exhausted per-user quotas (`namespace_limit_reached`, `review_namespace_limits`) from a host-policy denial (`user_namespaces_denied`, `review_host_policy`). Inspect the reported quota or host policy before choosing a narrowly scoped repair. Only a directly observed disabled namespace sysctl carries `enable_user_namespaces`; a permission error alone does not establish that cause. AppArmor-restricted hosts continue to name the packaged profile and its installation remedy. These diagnostics never retry the launch unconfined or change host policy.
 
 Individual read-denied files use empty, unreadable, read-only file mounts. The helper prepares their shared inode inside its private mount namespace, removes the temporary writable source before applying the filesystem plan, and clones subsequent masks from the first sealed file mount. This also supports kernels that cannot clone a file from a detached filesystem. Preparation or cleanup failure refuses the target; the original host files remain unchanged.
+
+On NixOS, the [declarative module](../packaging/nix/nixos.nix) adds an exact
+engine attachment only when AppArmor is already enabled. The selected `package`
+and explicitly retained `additionalTrustedPackages` each receive a literal
+immutable engine path verified against that generation's final manifest. A
+system switch updates those attachments; retain a running previous generation
+explicitly during a transition, or restart the desktop into the selected one.
+Removing a retained generation or disabling the module removes its attachment
+on the next system switch. Re-select the required generation and rebuild the
+system to recover a missing attachment. The module does not enable AppArmor,
+relax namespace sysctls, admit arbitrary store executables or grant vault trust
+through an AppArmor profile. Missing kernel capabilities still fail closed.
 
 What the Linux adapter cannot express yet, and what it expresses differently, is bounded:
 

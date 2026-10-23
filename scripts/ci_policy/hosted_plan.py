@@ -33,8 +33,14 @@ def lanes():
         if not re.fullmatch(r"[a-z][a-z0-9-]*", name):
             raise ValueError(f"invalid CI lane: {name}")
         if set(lane) - {"targets", "minutes", "profiles", "suite", "setup", "runner", "workers", "shards", "first",
-                        "platform", "preflight", "timing_source"}:
+                        "platform", "preflight", "timing_source", "early_targets", "contract_first"}:
             raise ValueError(f"unknown CI lane fields: {name}")
+        early = lane.get("early_targets", [])
+        if (not isinstance(early, list) or len(set(early)) != len(early)
+                or not set(early).issubset(lane["targets"])):
+            raise ValueError(f"CI lane {name} early targets must partition its declared targets")
+        if "contract_first" in lane and (lane["contract_first"] is not True or lane["targets"] != ["test:full"]):
+            raise ValueError(f"CI lane {name} contract ordering requires the complete Go recipe")
         if lane.get("first", True) is not True:
             raise ValueError(f"CI lane {name} marks itself first or leaves the field out")
         if not lane["targets"] or not set(lane["targets"]).issubset(targets):
@@ -71,8 +77,10 @@ def lanes():
             if (lane["profiles"] != ["fast"] or lane.get("shards", 1) != 1
                     or not isinstance(command, list) or len(command) < 3
                     or command[:2] != ["test:contract", "--"]
-                    or any(not isinstance(package, str) or not re.fullmatch(r"\./test/contract/[a-z][a-z0-9_]*", package)
-                           or not (ROOT / "lycaon" / package).is_dir() for package in command[2:])
+                    or (command != ["test:contract", "--", "./test/contract/..."]
+                        and any(not isinstance(package, str)
+                                or not re.fullmatch(r"\./test/contract/[a-z][a-z0-9_]*", package)
+                                or not (ROOT / "lycaon" / package).is_dir() for package in command[2:]))
                     or len(set(command[2:])) != len(command[2:])):
                 raise ValueError(f"CI lane {name} requires scoped admission contracts")
     fast = Counter(stage["name"] for lane in values.values() if "fast" in lane["profiles"]
