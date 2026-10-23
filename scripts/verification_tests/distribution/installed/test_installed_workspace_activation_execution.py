@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 import subprocess
 import tempfile
-from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
@@ -91,6 +90,11 @@ class WorkspaceTests(unittest.TestCase):
             records, declared = controller.delivery_records(root)
             self.assertEqual(records, providers + transitions)
             self.assertEqual(declared[-7:], operations)
+            path.write_text(json.dumps({'observations': {'launch': {'fixed_input': providers[:2]},
+                'native_input': providers[2]}}))
+            records, declared = controller.delivery_records(root)
+            self.assertEqual(records, providers[:3])
+            self.assertEqual(declared[-1], 'provider-fixture-credential-v1')
             write(providers[:3], transitions[:1])
             with self.assertRaises(ValueError):
                 controller.delivery_records(root)
