@@ -101,14 +101,11 @@ class Channel:
         return bytes(chunks)
 
     def _receive(self, maximum):
-        size, = struct.unpack('!I', self._read(4))
-        if not 0 < size <= maximum:
-            raise ValueError('private fixture frame exceeded its fixed bound')
-        return self._read(size)
+        return self._read(password_wire.frame_size(self._read(4), maximum))
 
     def _send(self, raw):
         self.check()
-        self.stream.sendall(struct.pack('!I', len(raw)) + raw)
+        self.stream.sendall(password_wire.frame(raw, protocol.MAX_DOCUMENT))
         self.check()
 
     def receive_metadata(self):
