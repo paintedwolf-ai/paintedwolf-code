@@ -33,7 +33,7 @@ class PresencePrerequisiteTests(unittest.TestCase):
             'resolve': Mock(return_value=self.storage), 'graphical_session': Mock(return_value={}),
             'session_environment': Mock(return_value={}), 'Reservation': Mock(return_value=self.reservation),
             'InstalledApp': Mock(return_value=self.app), 'PresencePolicy': Mock(return_value=self.policy),
-            'DesktopUI': Mock(return_value=self.ui), 'configure_provider': Mock(), 'physical_input': Mock(),
+            'DesktopUI': Mock(return_value=self.ui), 'activate_visible_frame': Mock(return_value={'same_frame_active': True}), 'configure_provider': Mock(), 'physical_input': Mock(),
             'alerts': Mock(return_value=[]), 'await_alert': Mock(return_value={'attributes': ['xml-roles:alert']}),
             'run': Mock(return_value={'exit_code': 0, 'timed_out': False, 'output_limit': False})}
         self.values = values
@@ -72,6 +72,17 @@ class PresencePrerequisiteTests(unittest.TestCase):
         self.values['PresencePolicy'].assert_not_called()
         self.app.stop.assert_called_once()
         self.assertEqual(failed.exception.observations['fresh_storage'], {'retained': True})
+
+    def test_native_activation_refusal_never_uses_a_password_or_entry_fallback(self):
+        self.values['activate_visible_frame'].side_effect = CaseUnavailable('same frame inactive')
+        with self.assertRaises(CaseUnavailable) as refused:
+            presence.unchallenged_presence({})
+        self.values['configure_provider'].assert_not_called()
+        self.values['physical_input'].assert_not_called()
+        self.values['PresencePolicy'].assert_not_called()
+        self.app.start.assert_not_called()
+        self.app.stop.assert_called_once()
+        self.assertFalse(refused.exception.observations['password_fallback_verified'])
 
     def test_normal_project_open_refusal_is_unverified_and_preserves_fresh_state(self):
         self.values['run'].return_value = {'exit_code': 1, 'timed_out': False, 'output_limit': False}

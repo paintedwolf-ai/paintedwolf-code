@@ -6,7 +6,7 @@ import tempfile
 import time
 
 from .app import InstalledApp, session_environment
-from .desktop_launch import protected_launcher
+from .desktop_launch import protected_launcher, activate_visible_frame
 from .desktop_ui import DesktopUI
 from .fresh_profile import Reservation
 from .polkit_policy import PresencePolicy
@@ -34,6 +34,9 @@ def unchallenged_presence(binding):
             app.launch()
             app.wait_ready()
             reservation.check_launch(app)
+            with DesktopUI(app) as ui:
+                observations['initial_activation'] = activate_visible_frame(app, ui)
+                reservation.check_launch(app)
             with ProviderFixture.gui([{'name': 'command', 'arguments': {'command': '/usr/bin/true'}}]) as fixture:
                 configure_provider(app, fixture)
                 reservation.check_launch(app)
