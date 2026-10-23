@@ -57,7 +57,7 @@ func TestProtectedLaunchFixture(t *testing.T) {
 		tampered := strings.Replace(mustRead(filepath.Join(dir, "launch.json")), digest, `"manifest_sha256":"`+strings.Repeat("0", 64)+`"`, 1)
 		err = os.WriteFile(filepath.Join(dir, "launch.json"), []byte(tampered), 0o644)
 	case "mount-source":
-		err = checkMountSourceRole(dir, os.Getenv(fixtureUIDEnv), os.Getenv(fixtureGIDEnv))
+		err = checkMountSourceRole(dir, os.Getenv(fixtureUIDEnv), os.Getenv(fixtureGIDEnv), os.Getenv(fixtureSourcePathEnv))
 	case "module-view":
 		err = verifyModuleViewIsolation(dir, os.Getenv(fixtureDesktopPIDEnv))
 	default:

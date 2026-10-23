@@ -27,7 +27,12 @@ func TestMountSourcePrivilegedRoleDropsEveryThreadBeforeOpening(t *testing.T) {
 		fixtureUIDEnv+"="+strconv.Itoa(os.Getuid()), fixtureGIDEnv+"="+strconv.Itoa(os.Getgid())))
 }
 
-func checkMountSourceRole(directory, uidText, gidText string) error {
+const fixtureSourcePathEnv = "PW_MOUNT_SOURCE_PATH"
+
+func checkMountSourceRole(directory, uidText, gidText, sourcePath string) error {
+	if sourcePath == "" {
+		sourcePath = "/"
+	}
 	runtime.LockOSThread()
 	uid, uidErr := strconv.ParseUint(uidText, 10, 32)
 	gid, gidErr := strconv.ParseUint(gidText, 10, 32)
@@ -79,7 +84,7 @@ func checkMountSourceRole(directory, uidText, gidText string) error {
 	defer opener.close()
 	root, found := mountEntry{}, false
 	for _, entry := range entries {
-		if entry.mountPoint == "/" {
+		if entry.mountPoint == sourcePath {
 			root, found = entry, true
 		}
 	}
