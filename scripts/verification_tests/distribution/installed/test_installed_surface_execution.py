@@ -11,7 +11,7 @@ class SurfaceTests(unittest.TestCase):
     def setUp(self):
         self.launch = {'pid': 123, 'parent_pid': 1, 'start_time_ticks': 42}
         self.engine = {'pid': 124, 'parent_pid': 123, 'start_time_ticks': 43}
-        self.main = {'bus_name': ':1.37', 'object_path': '/org/a11y/atspi/accessible/1', 'process': self.launch}
+        self.main = {'bus_name': ':1.37', 'object_path': '/org/a11y/atspi/accessible/1', 'process': self.launch, 'lineage': [self.launch]}
         self.peer = {**self.main, 'object_path': '/org/a11y/atspi/accessible/2'}
         self.dialog = {**self.main, 'object_path': '/org/a11y/atspi/accessible/3'}
         self.proof = {'control': None, 'launch': self.launch, 'engine': self.engine, 'main': self.main,
@@ -63,6 +63,24 @@ class SurfaceTests(unittest.TestCase):
         changed = {**closed, 'surfaces': [self.row(self.main, active=False),
             closed['surfaces'][1], self.row(self.peer)]}
         self.assertFalse(surface_wire.finished('workspace-cancel-quit-v1', shown, changed))
+
+    def test_quit_approval_requires_focused_native_button_and_all_three_owned_exits(self):
+        dialog = self.row(self.dialog, kind='quit-dialog', modal=True, parent=self.main)
+        shown = {**self.proof, 'surfaces': [self.row(self.main, active=False), dialog]}
+        with self.assertRaises(ValueError):
+            surface_wire.before('workspace-approve-quit-v1', shown)
+        control = {'identity': {**self.main, 'object_path': '/org/a11y/atspi/accessible/4'},
+                   'kind': 'quit-button', 'parent': self.dialog, 'focused': True}
+        shown = {**shown, 'control': control}
+        surface_wire.before('workspace-approve-quit-v1', shown)
+        exited = {'launch': self.launch, 'engine': self.engine, 'main': self.main,
+                  'exited': {'launch': True, 'engine': True, 'frame': True}, 'exit_code': 0}
+        self.assertTrue(surface_wire.finished('workspace-approve-quit-v1', shown, exited))
+        for changed in ({**exited, 'exit_code': 137},
+                        {**exited, 'exited': {'launch': True, 'engine': False, 'frame': True}},
+                        {**exited, 'exited': {'launch': 1, 'engine': 1, 'frame': 1}}):
+            with self.assertRaises(ValueError):
+                surface_wire.finished('workspace-approve-quit-v1', shown, changed)
 
     def test_entry_and_surface_request_authorities_cannot_be_swapped(self):
         pending = {'format_version': 1, 'binding': self.execution, 'transaction_id': 'd' * 32,
@@ -136,8 +154,8 @@ class FrameObserverTests(unittest.TestCase):
         def identity(pid):
             return self.identity.copy() if pid == 123 else self.engine.copy()
         self.identities = self.context.enter_context(patch.object(surface, 'process_identity', side_effect=identity))
-        self.context.enter_context(patch.object(surface, 'owned_process', return_value=True))
-        self.context.enter_context(patch.object(surface.os, 'pidfd_open', side_effect=[101, 102], create=True))
+        self.context.enter_context(patch.object(surface.lineage, 'process_identity', side_effect=identity))
+        self.context.enter_context(patch.object(surface.os, 'pidfd_open', side_effect=[101, 102, 103], create=True))
         self.close_fd = self.context.enter_context(patch.object(surface.os, 'close'))
         self.observer = surface.FrameObserver(self.app, self.ui)
         self.addCleanup(self.observer.close)
@@ -200,5 +218,26 @@ class FrameObserverTests(unittest.TestCase):
         self.app.process.poll.return_value = 0
         with patch.object(self.surface.select, 'poll', return_value=poll):
             after = self.observer.settle('workspace-approve-quit-v1', before)
-        self.assertEqual(after['exited'], {'launch': True, 'engine': True})
+        self.assertEqual(after['exited'], {'launch': True, 'engine': True, 'frame': True})
         self.assertEqual(after['exit_code'], 0)
+
+    def test_distinct_native_frame_binds_exactly_to_bootstrap_and_refuses_reparenting(self):
+        from unittest.mock import patch
+        frame = {'pid': 125, 'parent_pid': 123, 'start_time_ticks': 44}
+        mapping = {123: self.identity, 124: self.engine, 125: frame}
+        observe = lambda pid: mapping[pid].copy()
+        self.identities.side_effect = observe
+        native = self.node('/org/a11y/atspi/accessible/9', self.ui.api.ROLE_FRAME)
+        native.get_process_id.return_value = 125
+        native.getState().contains.side_effect = lambda state: state == self.ui.api.STATE_ACTIVE
+        self.visible = [native]
+        with patch.object(self.surface.lineage, 'process_identity', side_effect=observe), \
+                patch.object(self.surface.os, 'pidfd_open', return_value=801, create=True):
+            with self.surface.FrameObserver(self.app, self.ui) as observer:
+                proof = observer.observe()
+                self.assertEqual(proof['main']['process'], frame)
+                self.assertNotEqual(proof['main']['process'], proof['launch'])
+                self.assertEqual(proof['main']['lineage'], [frame, self.identity])
+                mapping[125] = {**frame, 'parent_pid': 1}
+                with self.assertRaisesRegex(ValueError, 'identity changed'):
+                    observer.observe()
