@@ -49,14 +49,14 @@ func TestCommandJqReadsSavedDisk(t *testing.T) {
 		commandprogram.Streams{Input: io.NopCloser(strings.NewReader("")), Output: &out, Error: io.Discard})
 	testutil.FailErr(t, "jq over draft", err)
 	if out.String() != "1\n" || result.Status != 0 {
-		t.Fatalf("jq read %q %+v, want the accepted draft", out.String(), result)
+		t.Fatalf("jq read %q %+v, want saved disk", out.String(), result)
 	}
 	requireDiskPin(t, f)
 }
 
-// TestCommandAwkRecordsReadTheAcceptedDocument: a field and record query on
+// TestCommandAwkRecordsReadSavedDisk: a field and record query on
 // the shared awk owner reads disk and pins the published revision.
-func TestCommandAwkRecordsReadTheAcceptedDocument(t *testing.T) {
+func TestCommandAwkRecordsReadSavedDisk(t *testing.T) {
 	f := newRevisionFixture(t, map[string]string{"load.csv": "api,1\ndb,2\n"})
 	ctx := t.Context()
 	f.personTypes(t, ctx, "load.csv", "api,1\ndb,2\nweb,4\n")
@@ -73,7 +73,7 @@ func TestCommandAwkRecordsReadTheAcceptedDocument(t *testing.T) {
 		commandprogram.Streams{Input: io.NopCloser(strings.NewReader("")), Output: &out, Error: io.Discard})
 	testutil.FailErr(t, "awk over draft", err)
 	if out.String() != "2 3\n" || result.Status != 0 {
-		t.Fatalf("awk read %q %+v, want the accepted draft", out.String(), result)
+		t.Fatalf("awk read %q %+v, want saved disk", out.String(), result)
 	}
 	if f.disk(t, "load.csv") != "api,1\ndb,2\n" {
 		t.Fatal("record query published the draft")
