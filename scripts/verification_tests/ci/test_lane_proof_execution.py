@@ -1,5 +1,4 @@
 """Only complete exact-source merge executions supply reusable lane evidence."""
-import copy
 import io
 import json
 import os
@@ -119,3 +118,33 @@ class LaneProofTests(unittest.TestCase):
                 patch.object(proof_reuse, "decode", return_value={"proof": True}):
             self.assertEqual(proof_reuse.read_proofs("org/repo", self.run), [{"proof": True}])
         self.assertEqual(fetch.call_count, 1)
+
+    def test_cli_preserves_matrix_json_and_retains_coverage_audit(self):
+        import contextlib
+        with tempfile.TemporaryDirectory() as directory:
+            audit_path = Path(directory) / "audit.json"
+            summary = Path(directory) / "summary.md"
+            audit = {"reused": [self.proof("lint", "")]}
+            arguments = ["reuse", "--source", "a" * 40, "--matrix", json.dumps(self.rows), "--output", str(audit_path)]
+            with patch.object(proof_reuse.sys, "argv", arguments), \
+                    patch.dict(os.environ, {"GITHUB_REPOSITORY": "org/repo", "GITHUB_STEP_SUMMARY": str(summary)}), \
+                    patch.object(proof_reuse.subprocess, "check_output", side_effect=["a" * 40, self.tree]), \
+                    patch.object(proof_reuse, "resolve", return_value=(self.rows, audit)), contextlib.redirect_stdout(io.StringIO()) as output:
+                proof_reuse.main()
+            self.assertEqual(json.loads(output.getvalue()), self.rows)
+            self.assertEqual(json.loads(audit_path.read_text()), audit)
+            self.assertIn("/actions/runs/42", summary.read_text())
+            with patch.object(proof_reuse.sys, "argv", arguments), \
+                    patch.object(proof_reuse.subprocess, "check_output", return_value="other"), self.assertRaises(ValueError):
+                proof_reuse.main()
+
+    def test_workflow_records_proof_only_after_success_and_keeps_reuse_in_qualification(self):
+        root = Path(__file__).resolve().parents[3]
+        workflow = (root / ".github/workflows/verification.yml").read_text()
+        self.assertIn("if: success() && github.event_name == 'merge_group'", workflow)
+        self.assertLess(workflow.index("Run verification"), workflow.index("Seal complete merge-group lane proof"))
+        self.assertIn('[[ "$PROFILE" == check && "$AFFECTED" != true && "$PLATFORM" != true ]]', workflow)
+        self.assertIn("if-no-files-found: error", workflow.split("Retain qualification coverage sources", 1)[1])
+        qualification = (root / ".github/workflows/qualification.yml").read_text()
+        self.assertEqual(qualification.count("reuse-merge-proof: true"), 1)
+        self.assertNotIn("reuse-merge-proof", (root / ".github/workflows/ci.yml").read_text())
