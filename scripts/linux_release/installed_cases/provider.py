@@ -21,7 +21,7 @@ def gui_endpoint(port: int) -> str:
 
 
 class ProviderFixture:
-    def __init__(self, calls: list[dict]):
+    def __init__(self, calls: list[dict], *, response_barrier=None):
         if not calls or len(calls) > 16:
             raise ValueError('fixture requires one to sixteen tool calls')
         for call in calls:
@@ -35,10 +35,11 @@ class ProviderFixture:
         self.server = None
         self.thread = None
         self.gui_purpose = False
+        self.response_barrier = response_barrier
 
     @classmethod
-    def gui(cls, calls: list[dict]):
-        fixture = cls(calls)
+    def gui(cls, calls: list[dict], *, response_barrier=None):
+        fixture = cls(calls, response_barrier=response_barrier)
         fixture.gui_purpose = True
         return fixture
 
@@ -112,6 +113,8 @@ class ProviderFixture:
 
             def do_POST(self):
                 self.connection.settimeout(10)
+                lease, written = None, False
+                barrier = fixture.response_barrier
                 try:
                     length = int(self.headers.get('Content-Length', '0'))
                     if self.path != '/v1/chat/completions' or not 0 < length <= LIMIT:
@@ -123,8 +126,14 @@ class ProviderFixture:
                         raise ValueError('fixture request was truncated')
                     request = json.loads(raw)
                     completion = fixture.completion(request)
+                    if barrier is not None:
+                        lease = barrier.capture(self.connection, raw)
+                        if lease is not None and not barrier.wait(lease):
+                            return
                     if not request.get('stream', False):
-                        return self.respond(200, completion)
+                        self.respond(200, completion)
+                        written = True
+                        return
                     choice = completion['choices'][0]
                     delta = choice['message'].copy()
                     if 'tool_calls' in delta:
@@ -137,8 +146,13 @@ class ProviderFixture:
                     self.send_header('Content-Length', str(len(raw)))
                     self.end_headers()
                     self.wfile.write(raw)
+                    written = True
                 except (ValueError, TypeError, OSError):
-                    self.respond(400, {'error': 'fixture-request-refused'})
+                    if lease is None:
+                        self.respond(400, {'error': 'fixture-request-refused'})
+                finally:
+                    if lease is not None:
+                        barrier.finish(lease, written)
 
         # The kernel picks a free loopback port; the GUI case types the bound
         # endpoint, so no fixed port can collide with another listener.
@@ -150,8 +164,12 @@ class ProviderFixture:
         return self
 
     def __exit__(self, kind, value, traceback):
-        self.server.shutdown()
-        self.server.server_close()
-        self.thread.join(timeout=5)
-        if self.thread.is_alive():
-            raise RuntimeError('fixture provider failed to stop')
+        try:
+            if self.response_barrier is not None:
+                self.response_barrier.close()
+        finally:
+            self.server.shutdown()
+            self.server.server_close()
+            self.thread.join(timeout=5)
+            if self.thread.is_alive():
+                raise RuntimeError('fixture provider failed to stop')
