@@ -31,6 +31,10 @@ const (
 	CodeNoParent Code = "no_parent"
 	// CodeProcessChanged: the pid or its parent changed during verification.
 	CodeProcessChanged Code = "process_changed"
+	// CodeProcessTraced: a debugger already controls a verified process.
+	CodeProcessTraced Code = "process_traced"
+	// CodeNamespaceInvalid: the process did not retain the protected bootstrap boundary.
+	CodeNamespaceInvalid Code = "namespace_invalid"
 )
 
 // Refusal is a structured verification failure.
@@ -61,18 +65,31 @@ func CodeOf(err error) Code {
 	return ""
 }
 
-// Verifier checks processes under ProcRoot against Manifest.
+// Verifier checks processes under ProcRoot against the peer's running package generation.
 type Verifier struct {
 	ProcRoot string
 	Manifest *pkgmanifest.Manifest
+	// GenerationsDir, PolicyPath, LocksDir, TrustAnchor and TrustedOwner
+	// configure generation resolution; zero values use the installed layout.
+	GenerationsDir string
+	PolicyPath     string
+	LocksDir       string
+	TrustAnchor    string
+	TrustedOwner   uint32
+	// NamespaceReader supplies kernel namespace facts; nil uses procfs.
+	NamespaceReader func(string, int) (NamespaceFacts, error)
 	// statFile replaces the filesystem in tests of the mapping check.
 	statFile func(string) (fileFacts, error)
 }
 
 // Chain is a verified engine and the desktop app that started it.
 type Chain struct {
-	Engine   Snapshot
-	Launcher Snapshot
+	Engine     Snapshot
+	Launcher   Snapshot
+	Namespace  NamespaceFacts
+	Generation string
+	Manifest   *pkgmanifest.Manifest
+	roles      map[string]fileFacts
 }
 
 // VerifyChain proves that pid is the installed engine owned by uid and that
@@ -83,8 +100,11 @@ func (v Verifier) VerifyChain(pid, uid int) (Chain, error) {
 	if err != nil {
 		return Chain{}, refuse(CodeProcessGone, RoleEngine, pid, err.Error())
 	}
-	if engine.UID != uid || engine.EUID != uid {
-		return Chain{}, refuse(CodeUIDMismatch, RoleEngine, pid, fmt.Sprintf("uid %d/%d, caller %d", engine.UID, engine.EUID, uid))
+	if engine.TracerPID != 0 {
+		return Chain{}, refuse(CodeProcessTraced, RoleEngine, pid, "")
+	}
+	if !engine.matchesUID(uid) {
+		return Chain{}, refuse(CodeUIDMismatch, RoleEngine, pid, fmt.Sprintf("uids %v, caller %d", engine.UIDs, uid))
 	}
 	if engine.PPID <= 1 {
 		return Chain{}, refuse(CodeNoParent, RoleEngine, pid, "")
@@ -93,22 +113,28 @@ func (v Verifier) VerifyChain(pid, uid int) (Chain, error) {
 	if err != nil {
 		return Chain{}, refuse(CodeProcessGone, RoleDesktopApp, engine.PPID, err.Error())
 	}
-	if launcher.UID != uid || launcher.EUID != uid {
-		return Chain{}, refuse(CodeUIDMismatch, RoleDesktopApp, launcher.PID, fmt.Sprintf("uid %d/%d, caller %d", launcher.UID, launcher.EUID, uid))
+	if launcher.TracerPID != 0 {
+		return Chain{}, refuse(CodeProcessTraced, RoleDesktopApp, launcher.PID, "")
 	}
-	if err := v.VerifyExecutable(pid, RoleEngine); err != nil {
+	if !launcher.matchesUID(uid) {
+		return Chain{}, refuse(CodeUIDMismatch, RoleDesktopApp, launcher.PID, fmt.Sprintf("uids %v, caller %d", launcher.UIDs, uid))
+	}
+	namespace, err := v.protectedNamespace(engine.PID, launcher.PID)
+	if err != nil {
 		return Chain{}, err
 	}
-	if err := v.VerifyExecutable(launcher.PID, RoleDesktopApp); err != nil {
+	gen, err := v.layout().resolve(engine.PID, launcher.PID)
+	if err != nil {
 		return Chain{}, err
 	}
-	if err := v.VerifyMappings(pid, RoleEngine); err != nil {
-		return Chain{}, err
+	chain := Chain{
+		Engine:     engine,
+		Launcher:   launcher,
+		Namespace:  namespace,
+		Generation: gen.sha,
+		Manifest:   gen.manifest,
+		roles:      gen.roles,
 	}
-	if err := v.VerifyMappings(launcher.PID, RoleDesktopApp); err != nil {
-		return Chain{}, err
-	}
-	chain := Chain{Engine: engine, Launcher: launcher}
 	if err := v.Recheck(chain); err != nil {
 		return Chain{}, err
 	}
@@ -119,28 +145,75 @@ func (v Verifier) VerifyChain(pid, uid int) (Chain, error) {
 // ones verified: a pid reused by another process has a new start time, and
 // a parent that exited reparents the engine.
 func (v Verifier) Recheck(chain Chain) error {
-	engine, err := v.snapshot(chain.Engine.PID)
+	if err := v.unchangedNamespace(chain); err != nil {
+		return err
+	}
+	if err := v.layout().unchanged(chain); err != nil {
+		return err
+	}
+	for _, process := range []struct {
+		snapshot Snapshot
+		role     string
+	}{
+		{chain.Engine, RoleEngine}, {chain.Launcher, RoleDesktopApp},
+	} {
+		if err := v.unchangedUntraced(process.snapshot, process.role); err != nil {
+			return err
+		}
+		if err := v.verifyChainExecutable(process.snapshot.PID, process.role, chain); err != nil {
+			return err
+		}
+		if err := v.VerifyMappings(process.snapshot.PID, process.role); err != nil {
+			return err
+		}
+	}
+	// Rebind both identities after reading both images and mapping views.
+	if err := v.unchangedUntraced(chain.Engine, RoleEngine); err != nil {
+		return err
+	}
+	if err := v.unchangedUntraced(chain.Launcher, RoleDesktopApp); err != nil {
+		return err
+	}
+	return v.unchangedNamespace(chain)
+}
+
+func (v Verifier) unchangedUntraced(expected Snapshot, role string) error {
+	actual, err := v.snapshot(expected.PID)
 	if err != nil {
-		return refuse(CodeProcessGone, RoleEngine, chain.Engine.PID, err.Error())
+		return refuse(CodeProcessGone, role, expected.PID, err.Error())
 	}
-	if !engine.Same(chain.Engine) {
-		return refuse(CodeProcessChanged, RoleEngine, chain.Engine.PID, "")
+	if actual.TracerPID != 0 {
+		return refuse(CodeProcessTraced, role, expected.PID, "")
 	}
-	launcher, err := v.snapshot(chain.Launcher.PID)
-	if err != nil {
-		return refuse(CodeProcessGone, RoleDesktopApp, chain.Launcher.PID, err.Error())
-	}
-	if !launcher.Same(chain.Launcher) {
-		return refuse(CodeProcessChanged, RoleDesktopApp, chain.Launcher.PID, "")
+	if !actual.Same(expected) {
+		return refuse(CodeProcessChanged, role, expected.PID, "")
 	}
 	return nil
+}
+
+func (v Verifier) verifyChainExecutable(pid int, role string, chain Chain) error {
+	manifest := chain.Manifest
+	if manifest == nil {
+		manifest = v.Manifest
+	}
+	var wantInode *fileFacts
+	if chain.roles != nil {
+		if facts, ok := chain.roles[role]; ok {
+			wantInode = &facts
+		}
+	}
+	return v.verifyExecutableAgainst(pid, role, manifest, wantInode)
 }
 
 // VerifyExecutable hashes the image pid is running, through the exe link
 // opened as a descriptor, and compares it with the manifest's entry for the
 // role's installed path.
 func (v Verifier) VerifyExecutable(pid int, role string) error {
-	want, size, ok := expected(v.Manifest, role)
+	return v.verifyExecutableAgainst(pid, role, v.Manifest, nil)
+}
+
+func (v Verifier) verifyExecutableAgainst(pid int, role string, manifest *pkgmanifest.Manifest, wantInode *fileFacts) error {
+	want, size, ok := expected(manifest, role)
 	if !ok {
 		return refuse(CodeManifestUnreadable, role, pid, "the manifest lists no such executable")
 	}
@@ -149,6 +222,19 @@ func (v Verifier) VerifyExecutable(pid int, role string) error {
 		return refuse(CodeExecutableUnreadable, role, pid, err.Error())
 	}
 	defer func() { _ = file.Close() }()
+	if wantInode != nil {
+		info, err := file.Stat()
+		if err != nil {
+			return refuse(CodeExecutableUnreadable, role, pid, err.Error())
+		}
+		actual, err := factsOf(info)
+		if err != nil {
+			return refuse(CodeExecutableUnreadable, role, pid, err.Error())
+		}
+		if !sameInode(actual, *wantInode) {
+			return refuse(CodeExecutableMismatch, role, pid, "executable is not the generation image")
+		}
+	}
 	hash := sha256.New()
 	n, err := io.Copy(hash, file)
 	if err != nil {

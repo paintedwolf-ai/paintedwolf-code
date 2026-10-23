@@ -172,7 +172,7 @@ case "${GOOS}" in
       APP_ID="$(jq -r .identifier "${ROOT}/lycaon-den/src-tauri/tauri.conf.json")"
       DESKTOP_ENTRY="${tree}/usr/share/applications/${APP_ID}.desktop"
       [[ -f "${DESKTOP_ENTRY}" ]] || { echo "error: ${PLATFORM} ${label} has no ${APP_ID} desktop entry" >&2; exit 1; }
-      grep -Fxq "StartupWMClass=${APP_ID}" "${DESKTOP_ENTRY}" && grep -Fxq "Exec=/${LINUX_INSTALL_ROOT}/bin/${LINUX_PACKAGE_NAME} %U" "${DESKTOP_ENTRY}" || {
+      grep -Fxq "StartupWMClass=${APP_ID}" "${DESKTOP_ENTRY}" && grep -Fxq "Exec=/usr/libexec/painted-wolf-code/pw-launch %U" "${DESKTOP_ENTRY}" || {
         echo "error: ${PLATFORM} ${label} desktop entry lacks the window class or exec line" >&2
         exit 1
       }
@@ -208,6 +208,7 @@ case "${GOOS}" in
         exit 1
       }
       python3 "${ROOT}/scripts/linux-package-manifest.py" verify-tree --tree "${tree}" --version "${VERSION}" --architecture "${ARCH}"
+      python3 "${ROOT}/scripts/linux_release/build_paths.py" --tree "${tree}" --source "${ROOT}"
       LINUX_OPENGREP="$(verify_opengrep "${root}/engine-root" "${ENGINE}")"
       assert_native_arch "${label} bundled OpenGrep" "${LINUX_OPENGREP}"
       GIT_ENGINE_LINK="${root}/engine-root/gitengine/bin/git"
@@ -224,8 +225,13 @@ case "${GOOS}" in
           assert_native_arch "packaged native payload" "${payload}"
         fi
       done < <(find "${tree}" -type f -print0)
-      # Nothing the package installs may be writable by other users or carry setuid bits.
-      [[ -z "$(find "${tree}" -type f \( -perm -o+w -o -perm -4000 -o -perm -2000 \) -print -quit)" ]] || {
+      # Nothing the package installs may be writable by other users or carry setuid
+      # bits, except the protected launch's bootstrap, which must be exactly 4755.
+      [[ "$(stat -c %a "${tree}/usr/libexec/painted-wolf-code/pw-launch" 2>/dev/null)" == 4755 ]] || {
+        echo "error: ${PLATFORM} ${label} does not install the protected launch bootstrap setuid 4755" >&2
+        exit 1
+      }
+      [[ -z "$(find "${tree}" -type f \( -perm -o+w -o -perm -4000 -o -perm -2000 \) ! -path "${tree}/usr/libexec/painted-wolf-code/pw-launch" -print -quit)" ]] || {
         echo "error: ${PLATFORM} ${label} installs world-writable or setuid files" >&2
         exit 1
       }

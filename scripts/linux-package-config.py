@@ -3,7 +3,7 @@
 
 The fragment carries the `files` map that places the engine payload under the
 package install root and wires the optional packaging fragments other
-subsystems ship (polkit, systemd, AppArmor, SELinux). Tauri stages that tree
+subsystems ship (polkit, systemd and AppArmor). Tauri stages that tree
 through its .deb target; linux-package-assemble.py builds both families from it
 with dependencies rendered here from the catalog and the measured floor.
 Missing optional directories are tolerated; required payloads are not.
@@ -16,13 +16,17 @@ import json
 from pathlib import Path
 import sys
 
+from linux_release.payload import load as load_payload
+from linux_release.protected_launch import CATALOG as LAUNCH_CATALOG, PAYLOAD_NAME as LAUNCH_PAYLOAD, load as load_launch
+
+PAYLOAD = load_payload()
+
 INSTALL_ROOT = "/opt/painted-wolf-code"
 PACKAGE_NAME = "painted-wolf-code"
 APP_ID = "dev.paintedwolf.code"
-HELPERS = ("pw", "pw-logs", "pw-document-core", "bialy")
-# Shipped when the build stages it; staging requires it once a unit runs it.
-OPTIONAL_HELPERS = ("pw-vault-identity",)
-ENTRY_POINTS = ("pw", "pw-logs")
+HELPERS = tuple(PAYLOAD["helpers"])
+ENTRY_POINTS = tuple(PAYLOAD["entry_points"])
+BOOTSTRAP = PAYLOAD["setuid_bootstrap"]
 
 # Optional packaging fragments: repository directory -> (destination directory,
 # accepted suffixes, package families).
@@ -30,7 +34,6 @@ OPTIONAL_FRAGMENTS = {
     "polkit": ("/usr/share/polkit-1/actions", (".policy",), ("deb", "rpm")),
     "systemd": ("/usr/lib/systemd/system", (".service", ".socket", ".timer"), ("deb", "rpm")),
     "apparmor": ("/etc/apparmor.d", ("",), ("deb",)),
-    "selinux": ("/usr/share/selinux/packages", (".pp",), ("rpm",)),
 }
 
 
@@ -66,14 +69,15 @@ def required_files(root: Path, tauri_dir: Path, target: str, manifest: Path) -> 
     files: dict[str, Path] = {}
     for helper in HELPERS:
         files[f"{INSTALL_ROOT}/bin/{helper}"] = tauri_dir / "binaries" / f"{helper}-{target}"
-    for helper in OPTIONAL_HELPERS:
-        source = tauri_dir / "binaries" / f"{helper}-{target}"
-        if source.exists():
-            files[f"{INSTALL_ROOT}/bin/{helper}"] = source
     files[f"{INSTALL_ROOT}/engine-root"] = tauri_dir / "engine-root"
     files[f"{INSTALL_ROOT}/release-version"] = root / "VERSION"
     files[f"{INSTALL_ROOT}/THIRD-PARTY-NOTICES.md"] = tauri_dir / "THIRD-PARTY-NOTICES.md"
     files[f"{INSTALL_ROOT}/manifest.json"] = manifest
+    # The protected launch's catalog is sealed payload; its setuid bootstrap is
+    # installed outside the payload, whose modes never carry setuid.
+    load_launch(LAUNCH_CATALOG)
+    files[f"{INSTALL_ROOT}/{LAUNCH_PAYLOAD}"] = LAUNCH_CATALOG
+    files[BOOTSTRAP["path"]] = tauri_dir / "binaries" / f"{BOOTSTRAP['name']}-{target}"
     for entry in ENTRY_POINTS:
         files[f"/usr/bin/{entry}"] = root / "packaging" / "linux" / "bin" / entry
     files[f"/usr/share/applications/{APP_ID}.desktop"] = root / "packaging" / "linux" / f"{APP_ID}.desktop"

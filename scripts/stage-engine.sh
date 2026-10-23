@@ -11,6 +11,16 @@ LOGS_NAME="pw-logs"
 VAULT_IDENTITY_NAME="pw-vault-identity"
 DECIDE_NAME="bialy"
 DOCUMENT_CORE_NAME="pw-document-core"
+DESKTOP_SETTINGS_NAME="pw-desktop-settings"
+
+# OCR staging can qualify pinned resources without rebuilding unrelated engines.
+if [[ "${1:-}" == --minimal && "${2:-}" == --ocr-only ]]; then
+  shift 2
+  exec bash "${ROOT}/scripts/ocrengine-fetch.sh" "$@"
+elif [[ "${1:-}" == --ocr-only ]]; then
+  shift
+  exec bash "${ROOT}/scripts/ocrengine-fetch.sh" "$@"
+fi
 
 MODE="full"
 RELEASE_BUILD=0
@@ -52,6 +62,9 @@ esac
 SIDECAR_BIN="${BINARIES_DIR}/${SIDECAR_NAME}-${TARGET}${EXE_SUFFIX}"
 LOGS_BIN="${BINARIES_DIR}/${LOGS_NAME}-${TARGET}${EXE_SUFFIX}"
 VAULT_IDENTITY_BIN="${BINARIES_DIR}/${VAULT_IDENTITY_NAME}-${TARGET}${EXE_SUFFIX}"
+LAUNCH_BIN="${BINARIES_DIR}/pw-launch-${TARGET}${EXE_SUFFIX}"
+LAUNCH_ENTRY_BIN="${BINARIES_DIR}/pw-launch-entry-${TARGET}${EXE_SUFFIX}"
+GENERATIONS_BIN="${BINARIES_DIR}/pw-generations-${TARGET}${EXE_SUFFIX}"
 DECIDE_BIN="${BINARIES_DIR}/${DECIDE_NAME}-${TARGET}${EXE_SUFFIX}"
 DOCUMENT_CORE_BIN="${BINARIES_DIR}/${DOCUMENT_CORE_NAME}-${TARGET}${EXE_SUFFIX}"
 
@@ -131,14 +144,32 @@ echo "stage-engine — building Go sidecar + logs sibling for ${TARGET} (version
   go build "${BUILD_ARGS[@]}" -o "${LOGS_BIN}" ./cmd/pw-logs
   if [[ "${HOST_KIND}" == "linux" ]]; then
     go build "${BUILD_ARGS[@]}" -o "${VAULT_IDENTITY_BIN}" ./cmd/pw-vault-identity
+    # The protected launch: setuid bootstrap, in-namespace entry and the
+    # maintainer scripts' generation owner (docs/security.md).
+    go build "${BUILD_ARGS[@]}" -o "${LAUNCH_BIN}" ./cmd/pw-launch
+    go build "${BUILD_ARGS[@]}" -o "${LAUNCH_ENTRY_BIN}" ./cmd/pw-launch-entry
+    go build "${BUILD_ARGS[@]}" -o "${GENERATIONS_BIN}" ./cmd/pw-generations
   fi
 )
 chmod +x "${SIDECAR_BIN}" "${LOGS_BIN}"
 assert_static "${SIDECAR_BIN}"
 assert_static "${LOGS_BIN}"
 if [[ "${HOST_KIND}" == "linux" ]]; then
-  chmod +x "${VAULT_IDENTITY_BIN}"
-  assert_static "${VAULT_IDENTITY_BIN}"
+  chmod +x "${VAULT_IDENTITY_BIN}" "${LAUNCH_BIN}" "${LAUNCH_ENTRY_BIN}" "${GENERATIONS_BIN}"
+  for bin in "${VAULT_IDENTITY_BIN}" "${LAUNCH_BIN}" "${LAUNCH_ENTRY_BIN}" "${GENERATIONS_BIN}"; do
+    assert_static "${bin}"
+  done
+fi
+
+if [[ "${HOST_KIND}" == "linux" ]]; then
+  echo "stage-engine — building the desktop settings observer for ${TARGET}" >&2
+  (
+    cd "${TAURI_DIR}"
+    cargo build --locked --release --target "${TARGET}" --target-dir "${TAURI_DIR}/target" \
+      -p desktop-settings-observer --bin pw-desktop-settings
+  )
+  install -m 0755 "${TAURI_DIR}/target/${TARGET}/release/${DESKTOP_SETTINGS_NAME}" \
+    "${BINARIES_DIR}/${DESKTOP_SETTINGS_NAME}-${TARGET}"
 fi
 
 echo "stage-engine — building the document core for ${TARGET}" >&2
