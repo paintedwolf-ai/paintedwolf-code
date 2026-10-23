@@ -130,3 +130,31 @@ class CaseTests(unittest.TestCase):
             self.assertEqual((config / "api.token").read_text(), "desktop-bearer-token")
             self.assertEqual((config / "api.token").stat().st_mode & 0o777, 0o600)
             self.assertEqual(calls.call_count, 2)
+
+
+    def test_next_launch_probe_keeps_its_result_separate_and_always_stops(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            work = root / "work"
+            work.mkdir()
+            (work / "Product.app").mkdir()
+            installation = Mock()
+            installation.healthy.return_value = {"health": {"version": "1.1.0", "status": "ok"}}
+            case = {"source_version": "1.0.2"}
+            plan = {"candidate": {"version": "1.1.0"}}
+            with patch.object(driver, "read_json", return_value={"phase": "committed"}), \
+                 patch.object(driver, "Installation", return_value=installation), \
+                 patch.object(driver, "confirmed", return_value=True), \
+                 patch.object(driver, "verify_semantics") as semantics, \
+                 patch.object(driver, "finish_case") as finish:
+                result = driver.probe_committed_recovery(case, plan, root, work, root / "config", root / "success")
+                self.assertEqual(result["trigger"], "explicit_next_launch")
+                self.assertEqual(result["result"], "passed")
+                semantics.assert_called_once()
+                finish.assert_called_once()
+                installation.healthy.side_effect = TimeoutError("still broken")
+                result = driver.probe_committed_recovery(case, plan, root, work, root / "config", root / "failure")
+                self.assertEqual(result, {"result": "failed", "error": "still broken"})
+                self.assertEqual(finish.call_count, 2)
+            with patch.object(driver, "read_json", return_value=None):
+                self.assertEqual(driver.probe_committed_recovery(case, plan, root, work, root / "config", root / "absent")["result"], "not_applicable")
