@@ -129,3 +129,34 @@ func TestRetainedCopyRefusesExistingDestination(t *testing.T) {
 		t.Fatal("refused destination changed")
 	}
 }
+
+func TestRetainedCopyReadsPrimaryRowsWhenCoveringIndexIsDamaged(t *testing.T) {
+	source := filepath.Join(t.TempDir(), "source.db")
+	database, err := sql.Open("sqlite", source)
+	testutil.FailErr(t, "open source", err)
+	_, err = database.Exec(`CREATE TABLE retained(value TEXT); CREATE INDEX retained_values ON retained(value); INSERT INTO retained VALUES('first'),('second')`)
+	testutil.FailErr(t, "seed retained rows and covering index", err)
+	var page, pageSize int64
+	testutil.FailErr(t, "locate covering index", database.QueryRow(`SELECT rootpage FROM sqlite_schema WHERE name='retained_values'`).Scan(&page))
+	testutil.FailErr(t, "read source page size", database.QueryRow(`PRAGMA page_size`).Scan(&pageSize))
+	testutil.FailErr(t, "close source", database.Close())
+	file, err := os.OpenFile(source, os.O_RDWR, 0)
+	testutil.FailErr(t, "open index bytes", err)
+	_, err = file.WriteAt(make([]byte, pageSize), (page-1)*pageSize)
+	testutil.FailErr(t, "damage covering index", err)
+	testutil.FailErr(t, "close index bytes", file.Close())
+	destination, err := sql.Open("sqlite", ":memory:")
+	testutil.FailErr(t, "open replacement", err)
+	defer destination.Close()
+	_, err = destination.Exec(`CREATE TABLE retained(value TEXT); ATTACH DATABASE ? AS original`, fileDSN(source, "mode=ro"))
+	testutil.FailErr(t, "attach damaged source", err)
+	tx, err := destination.BeginTx(t.Context(), nil)
+	testutil.FailErr(t, "begin retained copy", err)
+	defer tx.Rollback()
+	testutil.FailErr(t, "copy primary rows", copyRebuildTable(t.Context(), tx, rebuildObject{name: "retained"}, ""))
+	var count int
+	testutil.FailErr(t, "verify preserved rows", tx.QueryRow(`SELECT COUNT(*) FROM main.retained WHERE (rowid=1 AND value='first') OR (rowid=2 AND value='second')`).Scan(&count))
+	if count != 2 {
+		t.Fatalf("retained rows copied=%d", count)
+	}
+}

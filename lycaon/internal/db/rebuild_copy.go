@@ -133,7 +133,7 @@ func copyRebuildTable(ctx context.Context, tx *sql.Tx, object rebuildObject, fro
 		selected = append(selected, "e."+column)
 	}
 	if from == "" {
-		from = "FROM original." + rebuildIdentifier(object.name) + " e"
+		from = "FROM original." + rebuildIdentifier(object.name) + " e NOT INDEXED"
 	}
 	// FTS creation seeds shadow rows. Replace them with the exact source rows;
 	// copying the virtual table itself would rebuild a potentially different index.

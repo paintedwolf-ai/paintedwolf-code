@@ -5,11 +5,11 @@
   "workstream": "store-health",
   "disposition": "retain",
   "reason": "Retain the database lifecycle as one authority. Retained-copy selection belongs to the migration registry, while copy construction, capacity accounting, and journaled publication are distinct implementation files. Moving publication outside db would split the pre-open recovery boundary. Review renewed at 28 files.",
-  "reviewed_commit": "d6b555e58b7e69deb24e08e00ea819e17bf1460d",
+  "reviewed_commit": "6d0b48607e54267e394b1ac0f572f8de715ee787",
   "ceiling": 28,
   "boundaries": {
-    "lycaon/internal/db/rebuild_copy.go": "ee51acb2cf82a8c5f2931b912ccbcc84210e68540872a2eb57867459b77bcd64",
-    "lycaon/internal/db/rebuild_journal.go": "03129805702f1c209e2df5f8916cf08fdc04faefc864af874968df39a16941d5",
+    "lycaon/internal/db/rebuild_copy.go": "1b275f054f70d6d6239fcc53a73b898faf96bebcdc279c70b90376d26a6a80a1",
+    "lycaon/internal/db/rebuild_journal.go": "c020e48be11495799e731f30fe9174b2658b3e2b74f63552a6fccac708d837e4",
     "lycaon/internal/db/rebuild_upgrade.go": "32bad9e88a5381211e0b0f611fd55d68cbe7545f9fe9da3a7794992ca5b8888d"
   },
   "reviewed_shape": "9f37ba7bd4f22a7a546881e6bcd323d3fe4d608ddd76dee3d5225ee46c753fc2"

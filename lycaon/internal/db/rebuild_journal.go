@@ -92,7 +92,8 @@ func readRebuildJournal(path string) (rebuildJournal, error) {
 
 // ResumeStoreUpgrade runs under the installation lease, before restore, fresh
 // initialization, or any SQLite connection. No elapsed-time limit changes its decision.
-func ResumeStoreUpgrade(path string) error {
+func ResumeStoreUpgrade(path string) (err error) {
+	defer func() { err = classifyStoreOpenFailure(err) }()
 	record, err := readRebuildJournal(path)
 	if os.IsNotExist(err) {
 		return nil
