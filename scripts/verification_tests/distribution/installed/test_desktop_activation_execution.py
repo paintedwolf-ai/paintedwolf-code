@@ -54,20 +54,47 @@ class VisibleActivationTests(unittest.TestCase):
         def replace_frame(app):
             self.frame.path = '/org/a11y/replacement'
             self.active = True
-        with patch.object(owner, 'activate', side_effect=replace_frame), self.assertRaises(ValueError):
+            return {'exit_code': 0}
+        with patch.object(owner, 'activate', side_effect=replace_frame), self.assertRaises(ValueError) as refused:
             owner.activate_visible_frame(self.app, self.ui)
+        facts = refused.exception.observations['public_activation']
+        self.assertEqual((facts['phase'], facts['failure_type']), ('compare', 'identity-refused'))
+        self.assertEqual(facts['before']['frame']['object_path'], '/org/a11y/frame')
+        self.assertEqual(facts['after']['frame']['object_path'], '/org/a11y/replacement')
+        self.assertEqual(facts['public_launcher'], {'exit_code': 0})
         self.frame.path = '/org/a11y/frame'
         def replace_engine(app):
             app.observations['engine_identity'] = {**ENGINE, 'start_time_ticks': 34}
-        with patch.object(owner, 'activate', side_effect=replace_engine), self.assertRaises(ValueError):
+            return {'exit_code': 0}
+        with patch.object(owner, 'activate', side_effect=replace_engine), self.assertRaises(ValueError) as refused:
             owner.activate_visible_frame(self.app, self.ui)
+        facts = refused.exception.observations['public_activation']
+        self.assertEqual((facts['phase'], facts['failure_type']), ('observe', 'identity-refused'))
+        self.assertEqual(facts['before']['engine'], ENGINE)
+        self.assertIsNone(facts['after'])
+        self.assertFalse(facts['verified'])
+
+    def test_native_error_retains_last_complete_witness_without_raw_error_payload(self):
+        import json
+        before = owner._visible_native_frame(self.app, self.ui, 20)
+        error = RuntimeError('untrusted native payload must not be retained')
+        with patch.object(owner, '_visible_native_frame', side_effect=[before, before, error]), \
+                patch.object(owner, 'activate', return_value={'exit_code': 0}), patch.object(owner.time, 'sleep'):
+            with self.assertRaises(CaseUnavailable) as refused:
+                owner.activate_visible_frame(self.app, self.ui)
+        facts = refused.exception.observations['public_activation']
+        self.assertEqual((facts['before'], facts['after']), (before, before))
+        self.assertEqual((facts['phase'], facts['failure_type']), ('observe', 'native-observation-error'))
+        self.assertNotIn('untrusted', json.dumps(facts))
+        self.assertNotIn('untrusted', str(refused.exception))
 
     def test_inactive_or_hidden_after_launch_never_authorizes_native_input(self):
         with patch.object(owner, 'activate', return_value={'exit_code': 0}), \
                 patch.object(owner.time, 'monotonic', side_effect=[0, 1, 16]), patch.object(owner.time, 'sleep'):
             with self.assertRaises(CaseUnavailable) as refused:
                 owner.activate_visible_frame(self.app, self.ui)
-        self.assertFalse(refused.exception.observations['public_activation']['same_frame_active'])
+        self.assertFalse(refused.exception.observations['public_activation']['verified'])
+        self.assertFalse(refused.exception.observations['public_activation']['after']['active'])
         self.ui.visible.return_value = False
         with patch.object(owner, 'activate') as launch, self.assertRaises(ValueError):
             owner.activate_visible_frame(self.app, self.ui)
