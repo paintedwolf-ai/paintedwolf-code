@@ -14,16 +14,17 @@ import (
 )
 
 type pendingRestore struct {
-	markerPath       string
-	marker           PendingMarker
-	pendingSet       map[string]struct{}
-	stagedFiles      map[string]string
-	applied          []string
-	appliedSet       map[string]struct{}
-	progressFiles    int
-	progressBytes    int64
-	progressIdentity string
-	completed        int
+	markerPath          string
+	marker              PendingMarker
+	pendingSet          map[string]struct{}
+	stagedFiles         map[string]string
+	applied             []string
+	appliedSet          map[string]struct{}
+	progressFiles       int
+	progressBytes       int64
+	progressIdentity    string
+	progressUnavailable bool
+	completed           int
 }
 
 // ApplyPending resumes a staged restore before the store opens.

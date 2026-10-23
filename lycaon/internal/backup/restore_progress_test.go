@@ -67,7 +67,7 @@ func TestRestoreReplaysUncheckpointedDurableFiles(t *testing.T) {
 }
 
 func TestRestoreCompletesWithUnusableProgress(t *testing.T) {
-	for _, damage := range []string{"cursor", "destination"} {
+	for _, damage := range []string{"cursor", "destination", "directory"} {
 		t.Run(damage, func(t *testing.T) { testRestoreReplayPrefix(t, restoreProgressFiles+1, damage) })
 	}
 }
@@ -96,6 +96,10 @@ func testRestoreReplayPrefix(t *testing.T, prefix int, damage string) {
 	testutil.FailErr(t, "install interrupted batch", restore.installFiles(t.Context(), root))
 	if damage == "cursor" {
 		testutil.FailErr(t, "damage optional cursor", os.WriteFile(filepath.Join(restore.marker.StagingDir, restoreProgressName), []byte("{bad"), 0600))
+	} else if damage == "directory" {
+		progress := filepath.Join(restore.marker.StagingDir, restoreProgressName)
+		testutil.FailErr(t, "remove cursor fixture", os.Remove(progress))
+		testutil.FailErr(t, "replace cursor with unexpected directory", os.Mkdir(progress, 0700))
 	} else if damage == "destination" {
 		testutil.FailErr(t, "change checkpointed destination", os.WriteFile(filepath.Join(root, restore.marker.Files[0].RelPath), []byte("wrong"), 0600))
 	}

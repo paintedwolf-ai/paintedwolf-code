@@ -26,6 +26,9 @@ type restoreProgress struct {
 // Progress is an optional, versioned cursor bound to the immutable decision.
 // Older binaries safely replay files if they do not understand this hint.
 func (r *pendingRestore) checkpointProgress() error {
+	if r.progressUnavailable {
+		return nil
+	}
 	identity, err := r.progressBinding()
 	if err != nil {
 		return err
@@ -76,7 +79,13 @@ func (r *pendingRestore) readProgress() error {
 	if err != nil {
 		return err
 	}
-	if !info.Mode().IsRegular() || info.Size() > 4096 {
+	if !info.Mode().IsRegular() {
+		// Do not replace an unexpected object just to persist an optional hint.
+		// The immutable decision can still replay every payload on interruption.
+		r.progressUnavailable = true
+		return errInvalidRestoreProgress
+	}
+	if info.Size() > 4096 {
 		return fmt.Errorf("invalid restore progress file: %w", errInvalidRestoreProgress)
 	}
 	raw, err := os.ReadFile(path)
