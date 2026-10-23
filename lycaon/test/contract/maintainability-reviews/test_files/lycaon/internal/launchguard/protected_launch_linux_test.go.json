@@ -1,0 +1,15 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/internal/launchguard/protected_launch_linux_test.go",
+  "kind": "test_suite",
+  "workstream": "linux-protected-mount-lifecycle",
+  "disposition": "retain",
+  "reason": "Retain 492 code-bearing lines at a 492-line ceiling. Shared installed-fixture facts and the single actual command Wait owner support normal launch, credential sealing, generation lifetime and refusal assertions. Per-feature source access, GTK, transition and fatal-lineage scenarios remain in their own suites; a larger catch-all fixture is not authorized by this decision.",
+  "reviewed_commit": "5533743f2f7fcab5d8c237ebc72d5c0606ffb76d",
+  "ceiling": 492,
+  "boundaries": {
+    "lycaon/internal/launchguard/protected_launch_linux_test.go": "094b455615bdf360f43cae6e26709e3ffa3cfc7372cc5e2e1493ac36f7fa1bce",
+    "lycaon/internal/launchguard/protected_launch_fixture_linux_test.go": "7f30d39e7bc65a2aca45b4f14cdb99383811838cb94be060bd93a2ecaeb623b9",
+    "lycaon/internal/launchguard/testdata/protecteddesktop/main.go": "f1d667264e2c713648bf11bd6b3b5411a8710b7085e1b6a9301505c9f510acf0"
+  }
+}

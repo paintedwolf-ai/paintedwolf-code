@@ -1,0 +1,17 @@
+{
+  "category": "source_directories",
+  "artifact": "lycaon/internal/launchguard",
+  "kind": "module",
+  "workstream": "linux-protected-mount-lifecycle",
+  "disposition": "retain",
+  "reason": "Retain fifty immediate production files as the private protected-launch authority owner. Files follow actual phases: retained generation selection, root-sealed frames, fixed namespace transitions, bounded mount intake and attachment, and protected-only lifecycle settlement. Those phases share unexported descriptor and ownership contracts; extracting an exported relay API would not remove that authority coupling. New membership requires renewed review at a fifty-file ceiling.",
+  "reviewed_commit": "5533743f2f7fcab5d8c237ebc72d5c0606ffb76d",
+  "ceiling": 50,
+  "boundaries": {
+    "lycaon/internal/launchguard/mount_plan_linux_test.go": "4f6ab78b6ccea7864bc814b6075a1c653e9cf522024aab33c1fdb801e1fa26c1",
+    "lycaon/internal/launchguard/mount_pipeline_linux_test.go": "a1b48da3048683d0bc6cafe8b5f1cfb3a2955c07479a2a11b5e62d306eb45383",
+    "lycaon/internal/launchguard/guardian_lineage_linux_test.go": "6e69889d4730d8ee4e0efe4654bf3b1f316b2d5b902b36a5284df9fe8773009d",
+    "lycaon/internal/launchguard/guardian_exec_failure_linux_test.go": "ad04f3fc26a6894ed4bd2da24506576ac8c1f7855694f3686d3a50db2ca3630b"
+  },
+  "reviewed_shape": "c84d58b679d5ce23fd3800dbfe6aa794356e128d2e8fab05e677aecfa09f846b"
+}

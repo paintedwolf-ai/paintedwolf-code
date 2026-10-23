@@ -1,0 +1,17 @@
+{
+  "category": "test_directories",
+  "artifact": "lycaon/internal/launchguard",
+  "kind": "module",
+  "workstream": "linux-protected-mount-lifecycle",
+  "disposition": "retain",
+  "reason": "Retain thirty-two immediate test files grouped by kernel topology, transport, source access, static transition and real-launch lifecycle contracts. Native GTK and fatal-lineage controls use explicit owned fixtures; they do not become production helpers. The thirty-two-file ceiling and membership signature require another review before adding a test family.",
+  "reviewed_commit": "5533743f2f7fcab5d8c237ebc72d5c0606ffb76d",
+  "ceiling": 32,
+  "boundaries": {
+    "lycaon/internal/launchguard/protected_launch_fixture_linux_test.go": "7f30d39e7bc65a2aca45b4f14cdb99383811838cb94be060bd93a2ecaeb623b9",
+    "lycaon/internal/launchguard/guardian_c_linux_test.go": "f20ab553133afa1c8acd7cab89d3687a44b83b5929e4b241aac12666d3d70ec1",
+    "lycaon/internal/launchguard/mount_gtk_linux_test.go": "85849d2e782f8fb3b70d020fc6985650963124a260a23e0083d0885e8a6b04b0",
+    "lycaon/internal/launchguard/guardian_lineage_linux_test.go": "6e69889d4730d8ee4e0efe4654bf3b1f316b2d5b902b36a5284df9fe8773009d"
+  },
+  "reviewed_shape": "fdcf1bcd973233c9e3ab9239f7402304454fd25f0b8c18c8f933066b30a5e021"
+}
