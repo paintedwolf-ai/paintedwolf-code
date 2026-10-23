@@ -4,6 +4,7 @@ import contextlib
 import importlib.util
 import json
 import os
+import select
 from pathlib import Path
 import signal
 import subprocess
@@ -262,6 +263,95 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual(record["owner"], "exited")
         self.assertEqual([(held["pid"], held["signal"]) for held in record["reclaimed"]], [(orphan, "SIGKILL")])
         self.assertEqual(self.queue.status()["runs"], [])
+
+    def descendant_fixture(self, mode):
+        """Keep an owned descendant observable without its caretaker retaining the lease."""
+        ready, stop = self.root / "descendant-ready", self.root / "descendant-stop"
+        caretaker = (
+            "import json, os, time; from pathlib import Path\n"
+            f"stop = Path({str(stop)!r}); ready = Path({str(ready)!r})\n"
+            "descriptor = int(os.environ['PW_TEST_EXECUTION_FD'])\n"
+            "child = os.fork()\n"
+            "if child == 0:\n"
+            + ("    os._exit(0)\n" if mode == "zombie" else
+               "    deadline = time.monotonic() + 20\n"
+               "    while not stop.exists() and time.monotonic() < deadline: time.sleep(.01)\n"
+               "    os._exit(0)\n")
+            + "os.close(descriptor)\n"
+            "def facts(pid):\n"
+            "    fields = Path(f'/proc/{pid}/stat').read_text().rsplit(')', 1)[1].split()\n"
+            "    return {'pid': pid, 'state': fields[0], 'start': fields[19]}\n"
+            + ("while facts(child)['state'] != 'Z': time.sleep(.01)\n" if mode == "zombie" else "")
+            + "temporary = ready.with_suffix('.tmp')\n"
+            "temporary.write_text(json.dumps({'caretaker': facts(os.getpid()), 'child': facts(child)}))\n"
+            "temporary.replace(ready)\n"
+            "deadline = time.monotonic() + 20\n"
+            "while not stop.exists() and time.monotonic() < deadline: time.sleep(.01)\n"
+            "os.waitpid(child, 0)\n"
+        )
+        running = self.start("descendant fixture",
+                             "import os, subprocess, sys, time\n"
+                             "descriptor = int(os.environ['PW_TEST_EXECUTION_FD'])\n"
+                             f"subprocess.Popen([sys.executable, '-c', {caretaker!r}], pass_fds=(descriptor,),\n"
+                             "                 start_new_session=True, stdin=subprocess.DEVNULL,\n"
+                             "                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)\n"
+                             "while True: time.sleep(.01)")
+        self.addCleanup(stop.touch)
+        self.await_state(ready.exists)
+        observed = json.loads(ready.read_text())
+        pins = []
+        def settle_descendants():
+            stop.touch()
+            for pin in pins:
+                poll = select.poll()
+                poll.register(pin, select.POLLIN)
+                if not poll.poll(5000):
+                    try:
+                        signal.pidfd_send_signal(pin, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                    self.assertTrue(poll.poll(5000), "owned fixture descendant did not exit")
+            for pin in pins:
+                os.close(pin)
+
+        self.addCleanup(settle_descendants)
+        for record in observed.values():
+            pin = os.pidfd_open(record["pid"])
+            pins.append(pin)
+            fields = Path(f"/proc/{record['pid']}/stat").read_text().rsplit(")", 1)[1].split()
+            self.assertEqual(fields[19], record["start"], "descendant changed during pidfd capture")
+        return running, observed, stop
+
+    @unittest.skipUnless(sys.platform == "linux", "requires Linux pidfds and observable zombie state")
+    def test_cancellation_releases_lease_while_unreaped_zombie_remains(self):
+        running, observed, _ = self.descendant_fixture("zombie")
+        zombie = observed["child"]["pid"]
+        self.assertEqual(observed["child"]["state"], "Z")
+        self.assertEqual(list(Path(f"/proc/{zombie}/fd").iterdir()), [])
+        ticket = self.queue.status()["runs"][0]["ticket"]
+        result = self.invoke(ticket, "--reason", "owned zombie has closed its lease", "--force")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(json.loads(result.stdout)["released"])
+        running.wait(timeout=10)
+        # The caretaker has deliberately not reaped it: release follows the kernel lock,
+        # not disappearance of the numeric PID or a fabricated process sample.
+        fields = Path(f"/proc/{zombie}/stat").read_text().rsplit(")", 1)[1].split()
+        self.assertEqual(fields[0], "Z")
+        self.assertEqual(fields[19], observed["child"]["start"])
+        self.assertEqual(self.queue.status()["runs"], [])
+
+    @unittest.skipUnless(sys.platform == "linux", "requires Linux pidfds and inherited flock custody")
+    def test_live_descendant_keeps_lease_after_supervisor_exit(self):
+        running, observed, stop = self.descendant_fixture("live")
+        holder = observed["child"]["pid"]
+        ticket = self.queue.status()["runs"][0]["ticket"]
+        running.terminate()
+        running.wait(timeout=10)
+        lease = self.queue.root / (ticket + ".lease")
+        self.await_state(lambda: cancel.lease_holders(lease) == {holder})
+        self.assertFalse(cancel.released(self.queue, ticket), "live inherited holder lost admission")
+        stop.touch()
+        self.await_state(lambda: cancel.released(self.queue, ticket))
 
     def test_an_unknown_ticket_changes_nothing(self):
         result = self.invoke("00000000000000000999", "--reason", "nothing to cancel")
