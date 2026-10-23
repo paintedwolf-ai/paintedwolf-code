@@ -25,6 +25,6 @@ let
     startSet = map node (lib.concatMap selected roots);
     operator = item: map node (lib.concatMap selected (inputsOf item.drv));
   };
-  describe = import ./closure-output.nix { inherit lib; };
+  describe = import ./closure-output.nix { inherit lib runtimeEdges; };
 in
 map (item: describe item.drv (item.drv.outputName or "out")) reachable

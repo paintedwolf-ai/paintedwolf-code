@@ -1,6 +1,6 @@
 # Pinned producers embed these dependencies in scripts, flags, or patches rather
 # than input lists. Keys are exact derivations, never store-name guesses.
-{ pkgs, source }:
+{ pkgs, source, nixpkgs }:
 let
   inherit (pkgs) lib;
   nixComponents = pkgs.nixVersions.nixComponents_2_34;
@@ -19,5 +19,8 @@ assert nixComponents.version == pkgs.nix.version;
   { package = pkgs.libpciaccess; inputs = [ pkgs.hwdata ]; }
   { package = pkgs.alsa-lib; inputs = [ pkgs.alsa-ucm-conf pkgs.alsa-topology-conf ]; }
   { package = pkgs.gnutls; inputs = [ pkgs.dns-root-data ]; }
+  { package = pkgs.dns-root-data; inputs = [ ];
+    sources = import ./closure-dns-sources.nix { inherit pkgs nixpkgs; };
+  }
   { package = tools.go; inputs = [ pkgs.iana-etc pkgs.mailcap ]; }
 ]

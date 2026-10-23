@@ -10,7 +10,7 @@ let
     inherit runtimeEdges;
   };
   catalog = builtins.toFile "painted-wolf-code-closure-catalog.json" (builtins.toJSON {
-    format_version = 1;
+    format_version = 2;
     nixpkgs_revision = nixpkgsRevision;
     application = builtins.unsafeDiscardStringContext application.outPath;
     source_commit = source.rev or null;

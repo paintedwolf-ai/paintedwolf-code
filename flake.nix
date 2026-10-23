@@ -35,7 +35,7 @@
       packages = eachSystem (system:
         let
           pkgs = packagesFor system;
-          runtimeEdges = import ./packaging/nix/closure-runtime-edges.nix { inherit pkgs; source = self; };
+          runtimeEdges = import ./packaging/nix/closure-runtime-edges.nix { inherit pkgs nixpkgs; source = self; };
           noticesOutputsValid = import ./packaging/nix/closure-notices-check.nix {
             inherit pkgs runtimeEdges;
             nixpkgsRevision = nixpkgs.rev;
