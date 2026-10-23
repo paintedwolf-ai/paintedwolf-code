@@ -309,7 +309,7 @@ func TestProtectedLaunchSealsTheDesktopInARootOwnedNamespace(t *testing.T) {
 		t.Fatalf("opening protected memory: %v, want EACCES", err)
 	}
 	if err := sudoFixture(t, "lock-free", f.dir, fixtureHash+"="+f.digest); err == nil {
-		t.Fatal("the generation lifetime lock was free while the desktop ran")
+		t.Error("the generation lifetime lock was free while the desktop ran")
 	}
 	t.Logf("desktop_input_close_begin_monotonic_ns=%d", lifecycleMonotonicNS())
 	if err := launch.stdin.Close(); err != nil {

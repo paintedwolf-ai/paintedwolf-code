@@ -68,37 +68,10 @@ func TestTopologyCaptureDuringOwnedPrivateMountChurn(t *testing.T) {
 
 func captureOwnedTopologyChurn() (facts topologyChurnFacts, err error) {
 	facts.Predicate = -1
-	runtime.LockOSThread()
-	host, err := os.Stat("/proc/thread-self/ns/mnt")
-	if err != nil {
+	if err := enterOwnedPrivateTopologyNamespace(); err != nil {
 		return facts, err
 	}
-	if os.Geteuid() != 0 {
-		return facts, errors.New("owned topology churn requires initial root")
-	}
-	if err := unix.Unshare(unix.CLONE_FS | unix.CLONE_NEWNS); err != nil {
-		return facts, err
-	}
-	if err := unix.Mount("", "/", "", unix.MS_REC|unix.MS_PRIVATE, ""); err != nil {
-		return facts, err
-	}
-	private, err := os.Stat("/proc/thread-self/ns/mnt")
-	if err != nil {
-		return facts, err
-	}
-	_, isolated, err := readCurrentMountTopology()
-	if err != nil {
-		return facts, err
-	}
-	facts.PrivateNamespace = !os.SameFile(host, private)
-	for _, entry := range isolated {
-		if entry.shared != 0 || entry.master != 0 || entry.propagateFrom != 0 {
-			facts.PrivateNamespace = false
-		}
-	}
-	if !facts.PrivateNamespace {
-		return facts, errors.New("owned topology churn namespace is not private")
-	}
+	facts.PrivateNamespace = true
 	root, err := os.MkdirTemp("", "pw-owned-topology-churn-")
 	if err != nil {
 		return facts, err
@@ -208,6 +181,42 @@ func mutateOwnedTopology(namespace *os.File, target string, start <-chan struct{
 		if err := unix.Unmount(target, 0); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// The short-lived fixture thread remains locked in its own private namespace.
+func enterOwnedPrivateTopologyNamespace() error {
+	runtime.LockOSThread()
+	host, err := os.Stat("/proc/thread-self/ns/mnt")
+	if err != nil {
+		return err
+	}
+	if os.Geteuid() != 0 {
+		return errors.New("owned topology churn requires initial root")
+	}
+	if err := unix.Unshare(unix.CLONE_FS | unix.CLONE_NEWNS); err != nil {
+		return err
+	}
+	if err := unix.Mount("", "/", "", unix.MS_REC|unix.MS_PRIVATE, ""); err != nil {
+		return err
+	}
+	private, err := os.Stat("/proc/thread-self/ns/mnt")
+	if err != nil {
+		return err
+	}
+	_, isolated, err := readCurrentMountTopology()
+	if err != nil {
+		return err
+	}
+	isolatedNamespace := !os.SameFile(host, private)
+	for _, entry := range isolated {
+		if entry.shared != 0 || entry.master != 0 || entry.propagateFrom != 0 {
+			isolatedNamespace = false
+		}
+	}
+	if !isolatedNamespace {
+		return errors.New("owned topology churn namespace is not private")
 	}
 	return nil
 }
