@@ -99,8 +99,9 @@ func validateStoreIntegrity(ctx context.Context, sqlDB *sql.DB) error {
 
 // auditTables checks one table at a time, its b-tree and indexes and then
 // its foreign keys, each in a read of its own, so an audit running beside
-// live work never holds the one snapshot that keeps the WAL from
-// checkpointing. Whole-file page accounting is left to validateStoreIntegrity;
+// live work releases its read snapshot between tables. A large table can
+// still pin the WAL while its check runs. Whole-file page accounting is left
+// to validateStoreIntegrity;
 // a damaged free list surfaces as corruption when its pages are reused.
 func auditTables(ctx context.Context, sqlDB *sql.DB, audited func(string)) error {
 	tables, err := auditableTables(ctx, sqlDB)
