@@ -15,7 +15,6 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
-	"github.com/lycaon/lycaon/internal/tools/readcaps"
 )
 
 // PinRecorder retains the revisions one execution captured
@@ -161,14 +160,14 @@ func (o *Owners) readBytes() int64 {
 	if o.ReadBytes > 0 {
 		return o.ReadBytes
 	}
-	return readcaps.MaxFileBytes
+	return o.limit("whole_file_bytes")
 }
 
 func (o *Owners) streamBytes() int64 {
 	if o.StreamBytes > 0 {
 		return o.StreamBytes
 	}
-	return o.limit("stream_bytes")
+	return o.limit("stream_throughput_bytes")
 }
 
 func (o *Owners) limit(id string) int64 {

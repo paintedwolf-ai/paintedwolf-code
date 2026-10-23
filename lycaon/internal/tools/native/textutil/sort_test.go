@@ -83,8 +83,10 @@ func TestSortSpillBoundaries(t *testing.T) {
 	input := strings.Repeat("abcdefghij\n", 100)
 	h.quota.maximum = 0
 	var exhausted *toolcontract.ProgramMemoryLimitError
-	if r := h.run("sort", input); !asMemoryLimit(r.err, &exhausted) || r.result.Terminal != toolcontract.ProducerFailed || exhausted.Account != "session_spill_bytes" {
-		t.Fatalf("spill quota: %+v %v", r.result, r.err)
+	quotaRun := h.run("sort", input)
+	quota := quotaRun.expectRefusal(t, "session spill quota", "COMMAND_LIMIT_EXCEEDED")
+	if !asMemoryLimit(quotaRun.err, &exhausted) || exhausted.Account != "session_spill_bytes" || quota.Data["limit_id"] != exhausted.Account || quota.Data["maximum"] != exhausted.Maximum || quota.Data["observed"] != exhausted.Observed {
+		t.Fatalf("spill quota facts: %+v %v", quota, quotaRun.err)
 	}
 	h.quota.maximum = 1 << 30
 	h.owners.limits["spill_bytes"] = 64
@@ -118,12 +120,12 @@ func TestRecordBytesBoundary(t *testing.T) {
 	h.run("uniq", at+"a").expectRefusal(t, "uniq record over limit", "COMMAND_LIMIT_EXCEEDED")
 }
 
-func TestStreamBytesBoundary(t *testing.T) {
+func TestStreamThroughputBoundary(t *testing.T) {
 	h := newHarness(t)
-	h.owners.limits["stream_bytes"] = 6
+	h.owners.limits["stream_throughput_bytes"] = 6
 	h.run("echo abcde", "").expectOutput(t, "stdout at limit", "abcde\n", 0)
 	reject := h.run("echo abcdef", "").expectRefusal(t, "stdout over limit", "COMMAND_LIMIT_EXCEEDED")
-	if reject.Data["limit_id"] != "stream_bytes" || reject.Data["observed"] != int64(7) {
+	if reject.Data["limit_id"] != "stream_throughput_bytes" || reject.Data["observed"] != int64(7) {
 		t.Fatalf("limit %+v", reject.Data)
 	}
 }

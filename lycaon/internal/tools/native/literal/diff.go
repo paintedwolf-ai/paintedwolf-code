@@ -143,10 +143,18 @@ func (inv *invocation) diffFiles(left, right diffSide, opts diffOptions, tree bo
 		inv.status = max(inv.status, 1)
 		return inv.out.text(fmt.Sprintf("Binary files %s and %s differ\n", left.label, right.label))
 	}
+	if opts.brief && !opts.allSpace && !opts.spaceChange && !opts.blankLines {
+		inv.status = max(inv.status, 1)
+		return inv.out.text(fmt.Sprintf("Files %s and %s differ\n", left.label, right.label))
+	}
 	oldLines, newLines := diffLines(a.data), diffLines(b.data)
 	ops, err := sourceview.DiffScript(oldLines, newLines, opts.equal(), opts.maxCells)
 	if errors.Is(err, sourceview.ErrDiffTooLarge) {
-		return limitExceeded("evaluation_memory_bytes", opts.maxCells*4, int64(len(oldLines)+1)*int64(len(newLines)+1)*4)
+		var capacity *sourceview.DiffLimitError
+		if errors.As(err, &capacity) {
+			return limitExceeded("evaluation_memory_bytes", capacity.MaximumCells*4, capacity.ObservedCells*4)
+		}
+		return err
 	}
 	if err != nil {
 		return err

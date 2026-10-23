@@ -85,7 +85,7 @@ func NewOwners(revisions native.ExecutionRevisions, pins PinRecorder) (*Owners, 
 	for _, limit := range catalog.Language.Limits {
 		o.limits[limit.ID] = limit.Maximum
 	}
-	for _, id := range []string{"stream_bytes", "record_bytes", "sort_memory_bytes", "sort_merge_fan_in", "spill_bytes", "argv_bytes", "argument_bytes", "expanded_fields", "child_executions", "query_work_steps", "evaluation_memory_bytes"} {
+	for _, id := range []string{"stream_throughput_bytes", "whole_file_bytes", "stream_bytes", "record_bytes", "sort_memory_bytes", "sort_merge_fan_in", "spill_bytes", "argv_bytes", "argument_bytes", "expanded_fields", "child_executions", "query_work_steps", "evaluation_memory_bytes"} {
 		if o.limits[id] < 1 {
 			return nil, fmt.Errorf("language catalog is missing %s", id)
 		}
@@ -260,8 +260,14 @@ func (p Prepared) InvokeOwner(ctx context.Context, ports Ports, streams commandp
 	if inv.errors.Len() > 0 && streams.Error != nil {
 		_, _ = io.WriteString(streams.Error, inv.errors.String())
 	}
+	err = nativeutility.ResourceRejection(err)
 	result := nativeutility.Settle(err, inv.status, false)
 	if (p.Mode == "-i" || p.Mode == "w-files" || p.Mode == "-o" || p.Mode == "OUTPUT-supplied") && result.Terminal == toolcontract.ProducerCompleted && inv.status == 0 {
+		result.EffectCertainty = toolcontract.EffectCompleted
+	}
+	if inv.uncertain {
+		result.EffectCertainty = toolcontract.EffectUnknown
+	} else if inv.published {
 		result.EffectCertainty = toolcontract.EffectCompleted
 	}
 	return result, err

@@ -78,7 +78,7 @@ func TestJqRejectsDecodedInputBeforeQueryPagination(t *testing.T) {
 
 func TestJqSlicesLargeRetainedStringsWithinTheSpillBound(t *testing.T) {
 	dir, host := t.TempDir(), t.TempDir()
-	body := `{"value":"` + strings.Repeat("x", int(safecmd.JQCaps().InputBytes)) + `original tail"}`
+	body := `{"value":"` + strings.Repeat("x", int(safecmd.JQCaps().InputBytes)-(1<<20)) + `original tail"}`
 	spill := tooloutput.SpillWholeToolOutput(host, tooloutput.Screened(body), 0)
 	if spill.SpillPath == "" {
 		t.Fatal("failed to retain large structured observation")
@@ -96,9 +96,9 @@ func TestJqSlicesLargeRetainedStringsWithinTheSpillBound(t *testing.T) {
 		}
 	}
 	writeJSONFile(t, dir, "ordinary.json", body)
-	_, err := tool.Run(t.Context(), map[string]any{"path": "ordinary.json", "query": ".value[-13:]"}, ctx)
-	var reject *toolrejection.ToolReject
-	if !errors.As(err, &reject) || reject.Code != "JQ_INPUT_TOO_LARGE" || reject.Data["max_bytes"] != safecmd.JQCaps().InputBytes {
-		t.Fatalf("spill allowance leaked into project query: %v", err)
+	out, err := tool.Run(t.Context(), map[string]any{"path": "ordinary.json", "query": ".value[-13:]"}, ctx)
+	testutil.FailErr(t, "slice ordinary input within shared input bound", err)
+	if values := parseResponse(t, out).Values; len(values) != 1 || string(values[0]) != `"original tail"` {
+		t.Fatalf("ordinary input lost retained substring: %s", out)
 	}
 }

@@ -530,8 +530,8 @@ func runGzip(inv *invocation) error {
 }
 
 func runGunzip(inv *invocation) error {
-	if len(inv.operands()) == 0 {
-		return inv.usage(inv.name(), "at least one PATH")
+	if len(inv.operands()) == 0 || inv.flag("-c") {
+		return runZcat(inv)
 	}
 	return inv.each(inv.operands(), func(operand string) (int, error) {
 		output, ok := strings.CutSuffix(operand, ".gz")

@@ -33,7 +33,7 @@ type jqRun struct {
 	program *nativejq.Program
 	stream  *inputs
 	emitter *emitter
-	ctx     context.Context
+	elapsed time.Duration
 	// exitStatus is -e; ret and last follow jq's process/last_result.
 	exitStatus bool
 	ret, last  int
@@ -47,7 +47,8 @@ type jqDialect struct {
 	// with "...".
 	pythonYAML bool
 	// files replaces the operand files (python yq -i runs one at a time).
-	files []string
+	files    []string
+	captured *source
 }
 
 // runJq compiles QUERY once and evaluates it over the input stream
@@ -84,7 +85,8 @@ func runJqProgram(inv *invocation, dialect jqDialect) error {
 	if err != nil {
 		return err
 	}
-	stream := &inputs{inv: inv, operands: args.files, raw: inv.flag("-R"), yaml: dialect.yamlInput || inv.flag("--yaml-input"), limit: safecmd.JQCaps().InputBytes}
+	stream := &inputs{inv: inv, operands: args.files, raw: inv.flag("-R"), yaml: dialect.yamlInput || inv.flag("--yaml-input"), limit: safecmd.JQCaps().InputBytes, captured: dialect.captured}
+	defer stream.close()
 	if inv.flag("--stream") {
 		events, err := nativejq.CompileProgram("tostream", nativejq.ProgramOptions{})
 		if err != nil {
@@ -106,10 +108,7 @@ func runJqProgram(inv *invocation, dialect jqDialect) error {
 		inv.status = jqCompile
 		return nil
 	}
-	budget := time.Duration(inv.owners.limit("query_cpu_ms")) * time.Millisecond
-	ctx, cancel := context.WithTimeout(inv.ctx, budget)
-	defer cancel()
-	run := &jqRun{inv: inv, program: program, stream: stream, ctx: ctx, exitStatus: inv.flag("-e"), ret: jqOK, last: jqLastUnseen,
+	run := &jqRun{inv: inv, program: program, stream: stream, exitStatus: inv.flag("-e"), ret: jqOK, last: jqLastUnseen,
 		emitter: &emitter{inv: inv, layout: layout, maxOutputs: inv.owners.limit("query_outputs"), maxValue: inv.owners.limit("query_value_bytes")}}
 	if err := run.evaluateAll(); err != nil {
 		return err
@@ -160,7 +159,18 @@ func (r *jqRun) evaluateAll() error {
 // false when a halt ends the run.
 func (r *jqRun) evaluate(input any, positioned bool) (bool, error) {
 	r.emitter.produced = false
-	halt, err := r.program.Run(r.ctx, input, r.emitter.emit)
+	maximum := time.Duration(r.inv.owners.limit("query_elapsed_ms")) * time.Millisecond
+	// Only evaluation enters this cumulative clock. Reached-input preparation
+	// happens before evaluate; input/output callbacks invoked by the VM remain
+	// part of evaluation. Cancellation is cooperative at the existing VM boundary.
+	started := time.Now()
+	ctx, cancel := context.WithDeadline(r.inv.ctx, started.Add(max(time.Duration(0), maximum-r.elapsed)))
+	halt, err := r.program.Run(ctx, input, r.emitter.emit)
+	r.elapsed += time.Since(started)
+	cancel()
+	if err == nil && r.elapsed > maximum {
+		err = context.DeadlineExceeded
+	}
 	var queryErr *nativejq.QueryError
 	switch {
 	case errors.As(err, &queryErr):
@@ -168,8 +178,8 @@ func (r *jqRun) evaluate(input any, positioned bool) (bool, error) {
 		r.ret = jqRuntime
 		return true, nil
 	case errors.Is(err, context.DeadlineExceeded) && r.inv.ctx.Err() == nil:
-		maximum := r.inv.owners.limit("query_cpu_ms")
-		return false, limitExceeded("query_cpu_ms", maximum, maximum+1)
+		maximum := r.inv.owners.limit("query_elapsed_ms")
+		return false, limitExceeded("query_elapsed_ms", maximum, int64((r.elapsed+time.Millisecond-1)/time.Millisecond))
 	case err != nil:
 		return false, err
 	case halt != nil:

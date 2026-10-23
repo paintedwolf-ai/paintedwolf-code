@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
 	"github.com/lycaon/lycaon/internal/tools/native/textutil/sedscript"
 )
@@ -23,7 +24,7 @@ func (r *sedRun) openWrites() (map[string]io.Writer, error) {
 			return nil, err
 		}
 		r.stages[name] = stage
-		writers[name] = nativeutility.NewOutput(r.inv.ctx, stage, r.inv.limit("stream_bytes"))
+		writers[name] = nativeutility.NewOutput(r.inv.ctx, stage, "stream_bytes", r.inv.limit("stream_bytes"))
 	}
 	return writers, nil
 }
@@ -32,7 +33,7 @@ func (r *sedRun) openWrites() (map[string]io.Writer, error) {
 func (r *sedRun) settleWrites(err error) error {
 	for _, name := range r.program.WriteFiles() {
 		if stage, ok := r.stages[name]; ok {
-			err = settleStage(r.inv.ctx, stage, err)
+			err = r.inv.settleStage(stage, err)
 		}
 	}
 	return err
@@ -58,12 +59,13 @@ func (r *sedRun) readFiles() (map[string][]byte, error) {
 			}
 			return nil, pathRejection(err, word)
 		}
-		content, err := io.ReadAll(reader)
+		captured, err := r.inv.owners.Revisions.ReadWholeInput(r.inv.ctx, reader, r.inv.limit("whole_file_bytes"))
 		_ = reader.Close()
 		if err != nil {
 			return nil, err
 		}
-		files[name] = content
+		r.inv.releases = append(r.inv.releases, func() { _ = captured.Close() })
+		files[name] = captured.Bytes
 	}
 	return files, nil
 }
@@ -115,27 +117,30 @@ func (r *sedRun) editFile(operand commandprogram.Field, reader io.ReadCloser, st
 	var err error
 	if suffix != "" {
 		var original []byte
-		if original, err = io.ReadAll(reader); err == nil {
-			err = inv.reserve(int64(len(original)))
+		var captured *native.BufferedBytes
+		captured, err = inv.owners.Revisions.ReadWholeInput(inv.ctx, reader, inv.limit("whole_file_bytes"))
+		if err == nil {
+			defer captured.Close()
+			original = captured.Bytes
 		}
 		if err == nil {
 			backup, err = inv.openDestination(commandprogram.Field{Value: backupName(operand.Value, suffix), Span: operand.Span})
 		}
 		if err == nil {
-			_, err = nativeutility.NewOutput(inv.ctx, backup, inv.limit("stream_bytes")).Write(original)
+			_, err = nativeutility.NewOutput(inv.ctx, backup, "stream_bytes", inv.limit("stream_bytes")).Write(original)
 		}
 		reader = io.NopCloser(bytes.NewReader(original))
 	}
 	quit := false
 	if err == nil {
-		out := nativeutility.NewOutput(inv.ctx, stage, inv.limit("stream_bytes"))
+		out := nativeutility.NewOutput(inv.ctx, stage, "stream_bytes", inv.limit("stream_bytes"))
 		quit, err = r.machine.Stream(r.input([]source{{name: operand.Value, reader: reader}}), out)
 		err = r.failure(err)
 	}
 	if backup != nil {
-		err = settleStage(inv.ctx, backup, err)
+		err = inv.settleStage(backup, err)
 	}
-	return quit, settleStage(inv.ctx, stage, err)
+	return quit, inv.settleStage(stage, err)
 }
 
 // backupName follows GNU sed: SUFFIX is appended, or each * in it is the
@@ -181,6 +186,8 @@ func (s *sedInput) Next() (sedscript.Record, error) {
 		}
 		text, terminated, err := s.records.nextTerminated()
 		if errors.Is(err, io.EOF) {
+			_ = s.sources[0].reader.Close()
+			s.records.Close()
 			s.records, s.sources = nil, s.sources[1:]
 			continue
 		}

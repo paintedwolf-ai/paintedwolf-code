@@ -2,6 +2,7 @@ package toolhost
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/tooloutput"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
@@ -11,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	reposurvey "github.com/lycaon/lycaon/internal/survey"
 	"github.com/lycaon/lycaon/internal/textsearch"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
@@ -39,7 +41,7 @@ type programOwnerTools struct {
 
 // compose builds the literal and mutation owners once and returns the
 // per-program factory: one publication barrier and redirect owner per program.
-func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools.ToolContext, *projectpaths.ProgramPaths) (command.ProgramOwners, error), error) {
+func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools.ToolContext, *projectpaths.ProgramPaths, *toolcontract.ProgramMemory, tooloutput.SpillAdmission) (command.ProgramOwners, error), error) {
 	revisions := native.ExecutionRevisions{Boundary: t.boundary}
 	literalOwners, err := literal.NewOwners(revisions, recorder, literal.DomainOwners{Summarize: t.summarize, Repo: t.repo})
 	if err != nil {
@@ -73,7 +75,15 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 	if err != nil {
 		return nil, err
 	}
-	return func(tc tools.ToolContext, paths *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
+	return func(tc tools.ToolContext, paths *projectpaths.ProgramPaths, memory *toolcontract.ProgramMemory, admission tooloutput.SpillAdmission) (command.ProgramOwners, error) {
+		literalProgram, searchProgram, queryProgram, mutationProgram, textProgram := *literalOwners, *searchOwners, *queryOwners, *mutationOwners, *textOwners
+		literalProgram.Revisions.Memory = memory
+		searchProgram.Revisions.Memory = memory
+		searchProgram.Admission = admission
+		queryProgram.Revisions.Memory = memory
+		mutationProgram.Revisions.Memory = memory
+		textProgram.Revisions.Memory = memory
+		literalOwners, searchOwners, queryOwners, mutationOwners, textOwners := &literalProgram, &searchProgram, &queryProgram, &mutationProgram, &textProgram
 		barrier := &native.PublicationBarrier{}
 		program := mutation.Program{Paths: paths, Barrier: barrier}
 		owners := command.ProgramOwners{

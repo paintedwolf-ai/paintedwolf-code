@@ -260,7 +260,7 @@ func TestInPlacePublicationConflictIsTyped(t *testing.T) {
 	h.seed("f", "moved\n")
 	_, err = stage.Write([]byte("b\n"))
 	testutil.FailErr(t, "stage", err)
-	err = settleStage(t.Context(), stage, nil)
+	err = inv.settleStage(stage, nil)
 	if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != "COMMAND_REVISION_CONFLICT" {
 		t.Fatalf("err = %v", err)
 	}
@@ -275,4 +275,21 @@ func TestInPlacePublicationConflictIsTyped(t *testing.T) {
 
 func commandprogramRequest(execution string) commandprogram.OperationRequest {
 	return commandprogram.OperationRequest{Invocation: toolcontract.OperationInvocation{Identity: toolcontract.ExecutionIdentity{ExecutionID: execution}, Span: toolcontract.SourceSpan{Line: 1, Column: 1}}}
+}
+
+func TestSedInPlaceRecordRefusalPreservesEarlierPublishedEffect(t *testing.T) {
+	h := newHarness(t)
+	h.seed("first", "a\n")
+	h.seed("large", strings.Repeat("a", (4<<20)+1))
+	result := h.run("sed -i s/a/b/ first large", "")
+	result.expectRefusal(t, "later record limit", "COMMAND_LIMIT_EXCEEDED")
+	if h.read("first") != "b\n" || h.read("large") != strings.Repeat("a", (4<<20)+1) {
+		t.Fatal("earlier publication lost or refused file changed")
+	}
+	if result.result.EffectCertainty != toolcontract.EffectCompleted {
+		t.Fatalf("earlier effect erased %+v", result.result)
+	}
+	if held := h.memory.InUse(); held != (toolcontract.ProgramMemoryUsage{}) {
+		t.Fatalf("leases remain %+v", held)
+	}
 }

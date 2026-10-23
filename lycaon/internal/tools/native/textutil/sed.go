@@ -3,7 +3,6 @@ package textutil
 import (
 	"context"
 	"errors"
-	"io"
 	"strconv"
 	"strings"
 
@@ -233,8 +232,15 @@ func readScriptFile(inv *invocation, word commandprogram.Field) (string, error) 
 		return "", pathRejection(err, word)
 	}
 	defer reader.Close()
-	text, err := io.ReadAll(reader)
-	return string(text), err
+	captured, err := inv.owners.Revisions.ReadWholeInput(inv.ctx, reader, inv.limit("whole_file_bytes"))
+	if err != nil {
+		return "", err
+	}
+	defer captured.Close()
+	if err := inv.reserve(int64(len(captured.Bytes))); err != nil {
+		return "", err
+	}
+	return string(captured.Bytes), nil
 }
 
 func sedRefusal(inv *invocation, word commandprogram.Field, err error) error {

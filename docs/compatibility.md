@@ -67,6 +67,21 @@ Deleting bytes must produce an explainable unavailable state, not make a durable
 
 P03 introduces internal compiled declarations and consumer ports only. It adds no database columns, wire fields, output stores or public tool names. The existing command model call remains the aggregate receipt; child identities are host operations, never invented model calls. The introducing producer must implement the following classification, migrations and generated consumers in the same PR. P24 audits these contracts rather than supplying deferred upgrades.
 
+P21 classifies command limit identifiers as `agent-public` vocabulary.
+`regex_cpu_ms` is retired: it measured elapsed wall time rather than CPU time.
+Its named successor is the existing `regex_work_steps`, enforced by the selected
+bounded parser and VM together with caller cancellation and allocation admission.
+No CPU-time guarantee remains. Historical receipts retain their original limit
+identifier and meaning; no persisted records or wire shapes change.
+`query_cpu_ms` is also retired because its clock measured elapsed time, including
+input preparation. Its named successor `query_elapsed_ms` keeps the same numeric
+ceiling but accumulates only time inside compiled jq evaluation, including its
+input/output callbacks. Reached-input preparation between evaluations is outside
+the clock. Cancellation remains cooperative at existing VM boundaries; this is
+neither CPU accounting nor a hard wall-time upper bound. Elapsed milliseconds in
+new refusals round the measured total up rather than inventing a fixed overage.
+
+
 | Artifact | Class and retention | Introducing responsibility |
 |---|---|---|
 | Immutable language/operation version, identity and catalog digest | Internal compiled facts; snapshot frozen for each invocation. Public operation/rejection meanings are `agent-public` and cannot be reused. | P03 definitions; utility producers bind actual typed operations |

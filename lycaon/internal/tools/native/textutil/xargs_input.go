@@ -45,8 +45,8 @@ func (in *xargsInput) readByte() (byte, error) {
 	b, err := in.reader.ReadByte()
 	if err == nil {
 		in.read++
-		if maximum := in.inv.limit("stream_bytes"); in.read > maximum {
-			return 0, nativeutility.LimitExceeded("stream_bytes", maximum, in.read)
+		if maximum := in.inv.limit("stream_throughput_bytes"); in.read > maximum {
+			return 0, nativeutility.LimitExceeded("stream_throughput_bytes", maximum, in.read)
 		}
 	}
 	return b, err

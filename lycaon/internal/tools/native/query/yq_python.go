@@ -1,12 +1,5 @@
 package query
 
-import (
-	"bytes"
-
-	"github.com/lycaon/lycaon/internal/toolcontract"
-	"github.com/lycaon/lycaon/internal/tools/native"
-)
-
 // pythonYqFlags are spellings only python yq (jq over YAML) has. Any of them
 // selects that dialect; every other yq invocation is mikefarah yq v4. The
 // spellings both share (-e, -n, -r, -i, --indent) mean the same in each.
@@ -56,21 +49,19 @@ func runPythonYq(inv *invocation) error {
 		if err := inv.recordPin(destination); err != nil {
 			return err
 		}
-		var result bytes.Buffer
-		inv.out = &output{ctx: inv.ctx, w: &result, maximum: inv.owners.limit("stream_bytes")}
-		if err := runJqLanguage(inv, jqDialect{yamlInput: true, pythonYAML: true, files: []string{file}}); err != nil || inv.status != 0 {
-			return err
-		}
-		if result.String() == source.text {
-			continue
-		}
-		written, err := inv.owners.Write.Apply(inv.ctx, native.WriteInput{Path: bound.Resolved.Abs, Content: result.String(),
-			Admission: native.WriteExecutionPinned, Destination: destination, Sources: []toolcontract.ExecutionRevision{source.revision}}, inv.tc)
+		result, err := inv.owners.Revisions.NewBufferedBytes(inv.ctx, inv.owners.limit("whole_file_bytes"), "whole_file_bytes")
 		if err != nil {
 			return err
 		}
-		inv.published = inv.published || written.Accepted || written.Saved
-		if err := inv.barrier.Track(written); err != nil {
+		defer result.Close()
+		inv.out = &output{ctx: inv.ctx, w: result, maximum: inv.owners.limit("whole_file_bytes"), limitID: "whole_file_bytes"}
+		if err := runJqLanguage(inv, jqDialect{yamlInput: true, pythonYAML: true, files: []string{file}, captured: source}); err != nil || inv.status != 0 {
+			return err
+		}
+		if string(result.Bytes) == source.text {
+			continue
+		}
+		if err := inv.publishBytes(source, destination, result.Bytes); err != nil {
 			return err
 		}
 	}

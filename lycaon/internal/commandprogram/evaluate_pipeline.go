@@ -63,7 +63,7 @@ func (f *frame) pipeline(ctx context.Context, s commandsurface.Statement, c comm
 		}
 	}()
 	for i := range pipes {
-		budget, err := NewByteBudget("stream_bytes", f.e.limits["stream_bytes"])
+		budget, err := NewByteBudget("stream_throughput_bytes", f.e.limits["stream_throughput_bytes"])
 		if err == nil {
 			pipes[i], err = NewBytePipe(pctx, budget)
 		}

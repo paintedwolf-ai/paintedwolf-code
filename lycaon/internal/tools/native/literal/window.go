@@ -175,7 +175,7 @@ func runTail(inv *invocation) error {
 	operands := inv.operandsOrStdin()
 	labels := newHeaders(inv, len(operands))
 	for _, operand := range operands {
-		in, err := inv.open(operand, true)
+		in, err := inv.open(operand, false)
 		if err != nil {
 			return err
 		}
@@ -185,8 +185,7 @@ func runTail(inv *invocation) error {
 		if err := labels.write(in.label); err != nil {
 			return err
 		}
-		start := tailStart(in.data, w)
-		if err := inv.out.literal(in, in.data[start:], start); err != nil {
+		if err := tailInput(inv, in, w); err != nil {
 			return err
 		}
 	}

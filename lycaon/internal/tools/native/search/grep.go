@@ -415,11 +415,7 @@ func (r *grepRun) searchStdin() error {
 	}
 	var err error
 	if r.tabs {
-		var data []byte
-		data, err = r.inv.readAll(r.inv.input)
-		if err == nil {
-			err = r.searchContent("(standard input)", data, nil, r.forcedNames(false))
-		}
+		err = r.searchAlignedStdin()
 	} else {
 		err = r.searchStream("(standard input)", r.inv.input, r.inv.owners.streamBytes(), 0, -1, nil, r.forcedNames(false))
 	}

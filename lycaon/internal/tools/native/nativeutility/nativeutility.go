@@ -81,10 +81,10 @@ func LimitExceeded(id string, maximum, observed int64) error {
 
 const outputChunkBytes = 32 * 1024
 
-// WriteChunked meters writes against stream_bytes and flushes in 32 KiB chunks.
-func WriteChunked(ctx context.Context, w io.Writer, maximum int64, written *int64, p []byte) (int, error) {
+// WriteChunked meters writes against the named catalog limit and flushes in 32 KiB chunks.
+func WriteChunked(ctx context.Context, w io.Writer, limitID string, maximum int64, written *int64, p []byte) (int, error) {
 	if maximum > 0 && *written+int64(len(p)) > maximum {
-		return 0, LimitExceeded("stream_bytes", maximum, *written+int64(len(p)))
+		return 0, LimitExceeded(limitID, maximum, *written+int64(len(p)))
 	}
 	sent := 0
 	for len(p) > 0 {
@@ -123,13 +123,14 @@ type Output struct {
 	ctx              context.Context
 	w                io.Writer
 	maximum, written int64
+	limitID          string
 }
 
-func NewOutput(ctx context.Context, w io.Writer, maximum int64) *Output {
+func NewOutput(ctx context.Context, w io.Writer, limitID string, maximum int64) *Output {
 	if w == nil {
 		w = io.Discard
 	}
-	return &Output{ctx: ctx, w: w, maximum: maximum}
+	return &Output{ctx: ctx, w: w, limitID: limitID, maximum: maximum}
 }
 
 func (o *Output) Write(p []byte) (int, error) {
@@ -137,7 +138,7 @@ func (o *Output) Write(p []byte) (int, error) {
 		return 0, err
 	}
 	if o.written+int64(len(p)) > o.maximum {
-		return 0, LimitExceeded("stream_bytes", o.maximum, o.written+int64(len(p)))
+		return 0, LimitExceeded(o.limitID, o.maximum, o.written+int64(len(p)))
 	}
 	n, err := o.w.Write(p)
 	o.written += int64(n)

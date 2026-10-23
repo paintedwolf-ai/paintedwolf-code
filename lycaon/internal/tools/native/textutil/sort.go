@@ -45,11 +45,11 @@ func runSort(inv *invocation) error {
 	if err != nil {
 		return err
 	}
-	err = sortInto(inv, order, delimiter, nativeutility.NewOutput(inv.ctx, stage, inv.limit("stream_bytes")))
+	err = sortInto(inv, order, delimiter, nativeutility.NewOutput(inv.ctx, stage, "stream_bytes", inv.limit("stream_bytes")))
 	if errors.Is(err, errMissingInput) {
 		return stage.Abandon(context.WithoutCancel(inv.ctx))
 	}
-	return settleStage(inv.ctx, stage, err)
+	return inv.settleStage(stage, err)
 }
 
 func sortInto(inv *invocation, order sortOrder, delimiter byte, out io.Writer) error {
@@ -67,6 +67,10 @@ func sortInto(inv *invocation, order sortOrder, delimiter byte, out io.Writer) e
 	for _, source := range sources {
 		if err := s.read(source.reader); err != nil {
 			return err
+		}
+		if inv.status != 0 {
+			inv.status = 2
+			return errMissingInput
 		}
 	}
 	if len(s.runs) == 0 {

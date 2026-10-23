@@ -270,7 +270,7 @@ func runTee(inv *invocation) error {
 		target.append = appendMode
 		targets = append(targets, target)
 	}
-	maximum := inv.owners.limit("stream_bytes")
+	maximum := inv.owners.limit("stream_throughput_bytes")
 	var data []byte
 	var total int64
 	buf := make([]byte, 32*1024)
@@ -282,7 +282,7 @@ func runTee(inv *invocation) error {
 		if n > 0 {
 			total += int64(n)
 			if total > maximum {
-				return &commandprogram.StreamLimitError{Limit: "stream_bytes", Maximum: maximum, Observed: total}
+				return &commandprogram.StreamLimitError{Limit: "stream_throughput_bytes", Maximum: maximum, Observed: total}
 			}
 			chunk := buf[:n]
 			if len(targets) > 0 {

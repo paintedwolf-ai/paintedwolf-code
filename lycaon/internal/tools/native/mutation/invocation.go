@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
 	"io"
 	"os"
 	"path/filepath"
@@ -130,6 +131,7 @@ func ordinary(err error) (string, bool) {
 
 // settle turns the utility's ordinary status or stop into one producer result.
 func (inv *invocation) settle(err error) (toolcontract.ProducerResult, error) {
+	err = nativeutility.ResourceRejection(err)
 	certainty := toolcontract.NoEffect
 	if inv.effects > 0 {
 		certainty = toolcontract.EffectCompleted

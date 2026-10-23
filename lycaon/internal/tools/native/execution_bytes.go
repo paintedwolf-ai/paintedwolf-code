@@ -3,8 +3,6 @@ package native
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -19,7 +17,6 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
-	"github.com/lycaon/lycaon/internal/tools/readcaps"
 )
 
 // ExecutionStream is one pinned input opened for streaming without loading the
@@ -37,6 +34,7 @@ type ExecutionBytes struct {
 	Path     string
 	Bytes    []byte
 	Revision toolcontract.ExecutionRevision
+	release  func()
 }
 
 // CaptureBytes pins one literal byte input before the utility reads it. The
@@ -48,102 +46,81 @@ func (e ExecutionRevisions) CaptureBytes(ctx context.Context, tctx tools.ToolCon
 	if err != nil {
 		return ExecutionBytes{}, err
 	}
-	content, revision, err := captureBytes(ctx, tctx, resolved, maxBytes)
+	content, revision, release, err := e.captureBytes(ctx, tctx, resolved, maxBytes)
 	if errors.Is(err, fs.ErrNotExist) {
 		return ExecutionBytes{}, sourceview.PathNotFound("read", resolved.DisplayPath, resolved.Abs)
 	}
 	if err != nil {
 		return ExecutionBytes{}, err
 	}
-	return ExecutionBytes{Path: resolved.DisplayPath, Bytes: content, Revision: revision}, nil
+	return ExecutionBytes{Path: resolved.DisplayPath, Bytes: content, Revision: revision, release: release}, nil
 }
 
-func captureBytes(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved, maxBytes int64) ([]byte, toolcontract.ExecutionRevision, error) {
+func (e ExecutionRevisions) captureBytes(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved, maxBytes int64) ([]byte, toolcontract.ExecutionRevision, func(), error) {
 	root, rel := revisionLocation(resolved)
 	revision := toolcontract.ExecutionRevision{Role: toolcontract.SourceRevision, Basis: toolcontract.CapturedRevision, RootID: root, Path: rel, Representation: toolcontract.OriginalEncodedBytes}
 	doc, open, err := sourceview.OpenDocument(ctx, tctx, resolved)
 	if err != nil {
-		return nil, revision, err
+		return nil, revision, nil, err
 	}
 	var content []byte
+	var release func()
 	if open {
-		if content, err = sourceview.DocumentBytes(doc, resolved, maxBytes); err != nil {
-			return nil, revision, err
+		release, err = e.reserveCapture(ctx, 4*int64(len(doc.Text))+(64<<10))
+		if err == nil {
+			content, err = sourceview.DocumentBytes(doc, resolved, maxBytes)
 		}
 		revision.Mode, revision.DocumentID, revision.DocumentRevision, revision.DiskSHA256 = toolcontract.AcceptedDocumentRevision, doc.ID, doc.Revision, doc.BaseSHA256
-		revision.ContentSHA256 = textfile.SHA256(content)
 	} else {
-		content, err = sourceview.ReadContentCapped("read", sourceview.AccessRead, resolved.EffectLocation(), resolved.DisplayPath, resolved.Compressed, maxBytes)
-		if os.IsNotExist(err) {
-			return nil, revision, fs.ErrNotExist
-		}
-		if err != nil {
-			return nil, revision, err
-		}
+		content, release, err = e.readCapturedBytes(ctx, resolved, maxBytes)
 		revision.Mode = toolcontract.PublishedDiskRevision
 		revision.DiskSHA256 = textfile.SHA256(content)
-		revision.ContentSHA256 = revision.DiskSHA256
 	}
-	revision.ContentBytes = int64(len(content))
-	return content, revision, revision.Validate()
+	if err != nil {
+		if release != nil {
+			release()
+		}
+		return nil, revision, nil, err
+	}
+	revision.ContentSHA256, revision.ContentBytes = textfile.SHA256(content), int64(len(content))
+	if err = revision.Validate(); err != nil {
+		release()
+		return nil, revision, nil, err
+	}
+	return content, revision, release, nil
 }
 
 // recaptureBytes reads a literal pin's current state for Verify.
-func recaptureBytes(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved) (toolcontract.ExecutionRevision, error) {
-	_, revision, err := captureBytes(ctx, tctx, resolved, readcaps.MaxFileBytes)
-	return revision, err
+func (e ExecutionRevisions) recaptureBytes(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved) (toolcontract.ExecutionRevision, error) {
+	stream, err := e.OpenStream(ctx, tctx, resolved.Abs, 0)
+	if err != nil {
+		return toolcontract.ExecutionRevision{}, err
+	}
+	return stream.Revision, stream.Reader.Close()
 }
 
 // PinOpened identifies the published bytes of a file another owner has just
 // opened, hashing through the held descriptor without moving its offset, so
 // the pin names exactly the object that owner reads.
-func (e ExecutionRevisions) PinOpened(resolved projectpaths.Resolved, file *os.File) (toolcontract.ExecutionRevision, bool, error) {
-	revision, _, ok, err := e.pinOpened(resolved, file)
-	return revision, ok, err
-}
-
-func (e ExecutionRevisions) pinOpened(resolved projectpaths.Resolved, file *os.File) (toolcontract.ExecutionRevision, int, bool, error) {
+func (e ExecutionRevisions) PinOpened(ctx context.Context, resolved projectpaths.Resolved, file *os.File) (toolcontract.ExecutionRevision, bool, error) {
 	info, err := file.Stat()
+	if err != nil || !info.Mode().IsRegular() {
+		return toolcontract.ExecutionRevision{}, false, err
+	}
+	captured, err := e.scanSource(ctx, resolved, io.NewSectionReader(file, 0, info.Size()), false)
 	if err != nil {
-		return toolcontract.ExecutionRevision{}, -1, false, err
+		return toolcontract.ExecutionRevision{}, false, err
 	}
-	if !info.Mode().IsRegular() {
-		return toolcontract.ExecutionRevision{}, -1, false, nil
+	defer captured.Close()
+	if err = captured.checkFile(file, info); err != nil {
+		return toolcontract.ExecutionRevision{}, false, err
 	}
-	h := sha256.New()
-	sr := io.NewSectionReader(file, 0, info.Size())
-	buf := make([]byte, 32*1024)
-	var size int64
-	firstNull := -1
-	for {
-		n, rerr := sr.Read(buf)
-		if n > 0 {
-			chunk := buf[:n]
-			_, _ = h.Write(chunk)
-			if firstNull < 0 {
-				if idx := bytes.IndexByte(chunk, 0); idx >= 0 {
-					firstNull = int(size) + idx
-				}
-			}
-			size += int64(n)
-		}
-		if errors.Is(rerr, io.EOF) {
-			break
-		}
-		if rerr != nil {
-			return toolcontract.ExecutionRevision{}, -1, false, rerr
-		}
-	}
-	digest := hex.EncodeToString(h.Sum(nil))
-	root, rel := revisionLocation(resolved)
-	revision := toolcontract.ExecutionRevision{Role: toolcontract.SourceRevision, Mode: toolcontract.PublishedDiskRevision, Basis: toolcontract.CapturedRevision,
-		RootID: root, Path: rel, DiskSHA256: digest, Representation: toolcontract.OriginalEncodedBytes, ContentSHA256: digest, ContentBytes: size}
-	return revision, firstNull, true, revision.Validate()
+	return captured.revision, true, nil
 }
 
-// OpenStream pins one input before streaming its bytes. Open editor drafts,
-// compressed files and credential files materialize through CaptureBytes;
-// regular disk files stream through their pinned descriptor.
+// OpenStream pins one input before streaming its bytes. Open editor drafts
+// and credential files materialize through CaptureBytes; regular and compressed
+// disk inputs verify captured block hashes before delivering bytes.
 func (e ExecutionRevisions) OpenStream(ctx context.Context, tctx tools.ToolContext, path string, maxBytes int64) (ExecutionStream, error) {
 	resolved, err := projectpaths.ResolveRead(ctx, e.Boundary, tctx, path)
 	if err != nil {
@@ -157,8 +134,11 @@ func (e ExecutionRevisions) OpenStream(ctx context.Context, tctx tools.ToolConte
 	if _, rel, ok := tctx.SourceLocation(resolved.Abs); ok {
 		classified = rel
 	}
-	if open || resolved.Compressed || (tctx.Effects.CredentialFiles != nil && protectedpath.IsCredentialFile(classified)) {
+	if open || (tctx.Effects.CredentialFiles != nil && protectedpath.IsCredentialFile(classified)) {
 		return e.captureStream(ctx, tctx, resolved, maxBytes)
+	}
+	if resolved.Compressed {
+		return e.openCompressedStream(ctx, tctx, resolved)
 	}
 	file, err := fseffect.OpenRead(resolved.EffectLocation())
 	if err != nil {
@@ -184,24 +164,30 @@ func (e ExecutionRevisions) OpenStream(ctx context.Context, tctx tools.ToolConte
 		_ = file.Close()
 		return ExecutionStream{}, sourceview.AccessRead.SizeReject("read", resolved.DisplayPath, info.Size(), maxBytes)
 	}
-	revision, firstNull, _, err := e.pinOpened(resolved, file)
+	captured, err := e.scanSource(ctx, resolved, io.NewSectionReader(file, 0, info.Size()), true)
+	if err == nil {
+		err = captured.checkFile(file, info)
+	}
 	if err != nil {
+		if captured != nil {
+			_ = captured.Close()
+		}
 		_ = file.Close()
 		return ExecutionStream{}, err
 	}
 	return ExecutionStream{
 		Path:            resolved.DisplayPath,
-		Reader:          &sectionReadCloser{SectionReader: io.NewSectionReader(file, 0, revision.ContentBytes), closer: file},
-		Revision:        revision,
-		FirstNullOffset: firstNull,
+		Reader:          &verifiedSeekReader{verifiedSource: captured, file: file},
+		Revision:        captured.revision,
+		FirstNullOffset: captured.firstNull,
 	}, nil
 }
 
 func (e ExecutionRevisions) captureStream(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved, maxBytes int64) (ExecutionStream, error) {
 	if maxBytes <= 0 {
-		maxBytes = readcaps.MaxFileBytes
+		maxBytes = sourceview.AccessCommand.MaxBytes()
 	}
-	content, revision, err := captureBytes(ctx, tctx, resolved, maxBytes)
+	content, revision, release, err := e.captureBytes(ctx, tctx, resolved, maxBytes)
 	if errors.Is(err, fs.ErrNotExist) {
 		return ExecutionStream{}, sourceview.PathNotFound("read", resolved.DisplayPath, resolved.Abs)
 	}
@@ -209,26 +195,43 @@ func (e ExecutionRevisions) captureStream(ctx context.Context, tctx tools.ToolCo
 		return ExecutionStream{}, err
 	}
 	if err := tctx.ObserveCredentialRead(ctx, resolved.Abs, resolved.DisplayPath, string(content)); err != nil {
+		release()
 		return ExecutionStream{}, fmt.Errorf("record credential file read: %w", err)
 	}
 	return ExecutionStream{
 		Path:            resolved.DisplayPath,
-		Reader:          io.NopCloser(bytes.NewReader(content)),
+		Reader:          &captureReadCloser{reader: bytes.NewReader(content), release: release},
 		Revision:        revision,
 		FirstNullOffset: bytes.IndexByte(content, 0),
 	}, nil
 }
 
-type sectionReadCloser struct {
-	*io.SectionReader
-	closer io.Closer
+func (b *ExecutionBytes) Close() error {
+	if b.release != nil {
+		b.release()
+		b.release = nil
+	}
+	b.Bytes = nil
+	return nil
 }
 
-func (s *sectionReadCloser) Close() error {
-	if s.closer == nil {
-		return nil
+type captureReadCloser struct {
+	reader  io.Reader
+	release func()
+}
+
+func (r *captureReadCloser) Read(p []byte) (int, error) {
+	if r.reader == nil {
+		return 0, io.ErrClosedPipe
 	}
-	err := s.closer.Close()
-	s.closer = nil
-	return err
+	return r.reader.Read(p)
+}
+
+func (r *captureReadCloser) Close() error {
+	r.reader = nil
+	if r.release != nil {
+		r.release()
+		r.release = nil
+	}
+	return nil
 }

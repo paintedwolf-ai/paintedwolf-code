@@ -1,7 +1,6 @@
 package query
 
 import (
-	"bytes"
 	"container/list"
 	"context"
 	"errors"
@@ -14,9 +13,7 @@ import (
 	"github.com/mikefarah/yq/v4/pkg/yqlib"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
-	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
-	"github.com/lycaon/lycaon/internal/tools/native"
 )
 
 // yqlib keeps its preferences, expression parser and filename state in
@@ -354,22 +351,20 @@ func (r *yqRun) inPlace() error {
 	if err := r.inv.recordPin(destination); err != nil {
 		return err
 	}
-	var result bytes.Buffer
-	printer, err := r.printer(&output{ctx: r.inv.ctx, w: &result, maximum: r.inv.owners.limit("stream_bytes")})
+	result, err := r.inv.owners.Revisions.NewBufferedBytes(r.inv.ctx, r.inv.owners.limit("whole_file_bytes"), "whole_file_bytes")
+	if err != nil {
+		return err
+	}
+	defer result.Close()
+	printer, err := r.printer(result)
 	if err != nil {
 		return r.fail(err)
 	}
 	if err := r.evaluate(printer); err != nil {
 		return r.fail(err)
 	}
-	if result.String() == source.text {
+	if string(result.Bytes) == source.text {
 		return nil
 	}
-	written, err := r.inv.owners.Write.Apply(r.inv.ctx, native.WriteInput{Path: bound.Resolved.Abs, Content: result.String(),
-		Admission: native.WriteExecutionPinned, Destination: destination, Sources: []toolcontract.ExecutionRevision{source.revision}}, r.inv.tc)
-	if err != nil {
-		return err
-	}
-	r.inv.published = written.Accepted || written.Saved
-	return r.inv.barrier.Track(written)
+	return r.inv.publishBytes(source, destination, result.Bytes)
 }

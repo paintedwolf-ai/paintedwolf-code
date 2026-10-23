@@ -132,7 +132,7 @@ func TestPOSIXEngineRefusesAndMeters(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := re.Find(t.Context(), []byte(strings.Repeat("a", 40)), 0); budgetResource(t, err) != "regex_work_steps" && budgetResource(t, err) != "regex_cpu_ms" {
+	if _, err := re.Find(t.Context(), []byte(strings.Repeat("a", 40)), 0); budgetResource(t, err) != "regex_work_steps" {
 		t.Fatalf("catastrophic: %v", err)
 	}
 	small := engine

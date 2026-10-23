@@ -51,7 +51,7 @@ type ProgramRuntime struct {
 	// Builtins supplies host utilities for one invocation; nested runs their command operands.
 	Builtins func(tools.ToolContext, commandprogram.NestedCommand, NativeBindings) map[string]commandprogram.OperationDispatcher
 	// Owners composes one program's host owner set from its root directory frame.
-	Owners func(tools.ToolContext, *projectpaths.ProgramPaths) (ProgramOwners, error)
+	Owners func(tools.ToolContext, *projectpaths.ProgramPaths, *toolcontract.ProgramMemory, tooloutput.SpillAdmission) (ProgramOwners, error)
 	// Listeners observes session-owned listeners; nil uses process lineage.
 	Listeners SessionListeners
 	// ExternalHidden refuses the explicit `external --` selector; native gap
@@ -220,7 +220,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	}
 	var owners ProgramOwners
 	if r.Owners != nil {
-		if owners, err = r.Owners(tc, paths); err != nil {
+		if owners, err = r.Owners(tc, paths, memory, r.sessionResources(tc.Identity.SessionID)); err != nil {
 			return "", err
 		}
 	}

@@ -75,7 +75,7 @@ func TestXargsEarlyConsumerClosesBlockedInputAndActiveChildren(t *testing.T) {
 			defer cancel()
 			inv := &invocation{ctx: ctx, owners: h.owners, ports: h.ports(), request: commandprogram.OperationRequest{Argv: commandprogram.Fields{{Value: "xargs"}}}, streams: commandprogram.Streams{Input: input, Error: io.Discard}}
 			inv.ports.Nested = children
-			inv.out = nativeutility.NewOutput(ctx, closedXargsOutput{}, inv.limit("stream_bytes"))
+			inv.out = nativeutility.NewOutput(ctx, closedXargsOutput{}, "stream_throughput_bytes", inv.limit("stream_throughput_bytes"))
 			plan := xargsPlan{count: 1, parallel: parallel, maxChars: inv.limit("argv_bytes")}
 			parser := &xargsInput{inv: inv, ctx: ctx, reader: bufio.NewReaderSize(input, 64<<10)}
 			done := make(chan error, 1)
