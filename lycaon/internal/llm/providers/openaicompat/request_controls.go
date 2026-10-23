@@ -73,9 +73,15 @@ func (p *Provider) resolveRequestControls(req modelcall.CompletionRequest, model
 			out.Thinking = &thinkingTypeWire{Type: typ}
 		}
 	case modelinfo.ThinkStyleEffortLevels:
-		// Structured utility calls omit disabled effort.
-		if lvl == modelcall.ThinkOff && req.ResponseFormat != nil && !mt.AlwaysOn {
-			break
+		// Use the declared transport opt-out before falling back to minimum effort.
+		if lvl == modelcall.ThinkOff && !mt.AlwaysOn {
+			if p.profile.ReasoningEffortOff != "" {
+				out.ReasoningEffort = p.profile.ReasoningEffortOff
+				break
+			}
+			if req.ResponseFormat != nil {
+				break
+			}
 		}
 		if effort, send := mt.EffortString(lvl); send {
 			out.ReasoningEffort = effort
@@ -137,7 +143,7 @@ func (p *Provider) reasoningActive(mt modelcall.ModelThinking, controls requestC
 func (p *Provider) finishRequestBudget(req modelcall.CompletionRequest, model string, opts controlOpts, out *requestControls) {
 	entry, _ := p.ModelEntry(model)
 	level := modelcall.ResolveThinkLevel(req, entry.ReasoningEffort, opts.strictRetry || req.StrictOutputBudget())
-	reasoning := out.ReasoningEffort != "" || out.Thinking != nil && out.Thinking.Type == "enabled" || out.Reasoning != nil && !out.Reasoning.Disables()
+	reasoning := out.ReasoningEffort != "" && out.ReasoningEffort != p.profile.ReasoningEffortOff || out.Thinking != nil && out.Thinking.Type == "enabled" || out.Reasoning != nil && !out.Reasoning.Disables()
 	budgetReq := req
 	budgetReq.StrictBudget = budgetReq.StrictBudget || opts.strictRetry
 	// Native fixed efforts are not ordered by the host ladder. Reserve the
