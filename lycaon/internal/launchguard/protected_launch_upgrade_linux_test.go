@@ -155,7 +155,7 @@ func TestProtectedLaunchUpgradePreservesVaultIdentityCustody(t *testing.T) {
 
 	// Closing session A releases generation A's lifetime lock while session B continues.
 	testutil.FailErr(t, "close session A", launchA.stdin.Close())
-	testutil.FailErr(t, "wait session A", launchA.cmd.Wait())
+	testutil.FailErr(t, "wait session A", launchA.wait())
 	testutil.FailErr(t, "generation A lock released after session A exit", sudoFixture(t, "lock-free", f.dir, fixtureHash+"="+digestA))
 }
 

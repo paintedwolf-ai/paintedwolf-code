@@ -30,6 +30,7 @@ import (
 
 // Facts mirrors the test's decoding of this report.
 type Facts struct {
+	LineagePIDs     []int                       `json:"lineage_pids,omitempty"`
 	PID             int                         `json:"pid"`
 	UIDs            [3]int                      `json:"uids"`
 	GIDs            [3]int                      `json:"gids"`
@@ -65,6 +66,9 @@ type vaultCommand struct {
 }
 
 func main() {
+	if lineageRole() {
+		return
+	}
 	if len(os.Args) == 3 && os.Args[1] == "--exit-status" {
 		code, err := strconv.ParseUint(os.Args[2], 10, 8)
 		if err != nil {
@@ -131,6 +135,13 @@ func main() {
 	for _, arg := range os.Args[1:] {
 		if arg == "--broker-probe" {
 			brokerProbe(&facts)
+		}
+		if arg == "--lineage-probe" {
+			var err error
+			facts.LineagePIDs, err = lineageProbe()
+			if err != nil {
+				facts.ReadError = err.Error()
+			}
 		}
 		if arg == "--exec-probe" {
 			scratch, err := os.MkdirTemp("", "pw-protected-exec-")

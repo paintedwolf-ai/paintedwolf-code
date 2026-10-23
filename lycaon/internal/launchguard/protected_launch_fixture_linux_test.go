@@ -56,6 +56,8 @@ func TestProtectedLaunchFixture(t *testing.T) {
 		digest := `"manifest_sha256":"` + os.Getenv(fixtureHash) + `"`
 		tampered := strings.Replace(mustRead(filepath.Join(dir, "launch.json")), digest, `"manifest_sha256":"`+strings.Repeat("0", 64)+`"`, 1)
 		err = os.WriteFile(filepath.Join(dir, "launch.json"), []byte(tampered), 0o644)
+	case "fail-mount-role":
+		err = failFixtureMountRole(dir, os.Getenv(fixtureDesktopPIDEnv), os.Getenv(fixtureFailedRoleEnv))
 	case "setup-notice":
 		err = checkBootstrapNotice(dir, os.Getenv(fixtureUIDEnv), os.Getenv(fixtureGIDEnv))
 	case "mount-pipeline":

@@ -43,6 +43,7 @@ const (
 
 // protectedFacts is the fixture desktop's report.
 type protectedFacts struct {
+	LineagePIDs     []int                       `json:"lineage_pids,omitempty"`
 	PID             int                         `json:"pid"`
 	UIDs            [3]int                      `json:"uids"`
 	GIDs            [3]int                      `json:"gids"`
@@ -113,7 +114,15 @@ type runningLaunch struct {
 	stdin  io.WriteCloser
 	reader *bufio.Reader
 	facts  protectedFacts
+	result *launchWaitResult
 }
+
+type launchWaitResult struct {
+	done chan struct{}
+	err  error
+}
+
+func (launch runningLaunch) wait() error { <-launch.result.done; return launch.result.err }
 
 func startLaunch(t *testing.T, f launchFixture, env []string, args ...string) runningLaunch {
 	t.Helper()
@@ -130,14 +139,15 @@ func startLaunch(t *testing.T, f launchFixture, env []string, args ...string) ru
 	probeErr := make(chan error, 1)
 	go probeEarlyBrokerAgent(stopProbe, probeErr)
 	testutil.FailErr(t, "start bootstrap", cmd.Start())
+	result := &launchWaitResult{done: make(chan struct{})}
+	go func() { result.err = cmd.Wait(); close(result.done) }()
 	t.Cleanup(func() {
 		_ = stdin.Close()
-		done := make(chan struct{})
-		go func() { _ = cmd.Wait(); close(done) }()
 		select {
-		case <-done:
+		case <-result.done:
 		case <-time.After(10 * time.Second):
 			_ = cmd.Process.Kill()
+			<-result.done
 		}
 	})
 	lines := make(chan string, 1)
@@ -160,7 +170,7 @@ func startLaunch(t *testing.T, f launchFixture, env []string, args ...string) ru
 	if err := json.Unmarshal([]byte(line), &facts); err != nil {
 		t.Fatalf("decode desktop report %q: %v; bootstrap stderr: %s", line, err, stderr.String())
 	}
-	return runningLaunch{cmd: cmd, stdin: stdin, reader: reader, facts: facts}
+	return runningLaunch{cmd: cmd, stdin: stdin, reader: reader, facts: facts, result: result}
 }
 
 func refusedLaunch(t *testing.T, cmd *exec.Cmd, want string) {
