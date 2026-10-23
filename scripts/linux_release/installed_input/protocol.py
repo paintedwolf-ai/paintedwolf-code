@@ -7,6 +7,7 @@ import re
 
 from ..installed_evidence import IDENTIFIER
 from ..installed_cases.provider import GUI_LABEL, GUI_API_KEY, gui_endpoint
+from . import lineage
 
 EDITOR_TEXT = 'Installed editor fixture changed through the native UI.\nFind the qualification needle.\n'
 MAX_TRANSACTIONS = 128
@@ -103,21 +104,14 @@ def binding(value: dict) -> dict:
     return value
 
 
-def process_identity(value: dict) -> dict:
-    if (not isinstance(value, dict) or set(value) != {'pid', 'parent_pid', 'start_time_ticks'}
-            or any(type(number) is not int for number in value.values())
-            or value['pid'] <= 1 or value['parent_pid'] < 1 or value['start_time_ticks'] <= 0):
-        raise ValueError('native input process identity is invalid')
-    return value
-
-
 def focus(value: dict) -> dict:
-    fields = {'launch', 'entry', 'frame', 'entry_focused', 'frame_active', 'frame_visible'}
+    fields = {'launch', 'entry', 'frame', 'frame_lineage', 'entry_focused', 'frame_active', 'frame_visible'}
     if not isinstance(value, dict) or set(value) != fields:
         raise ValueError('native input focus proof has an unknown shape')
     for name in ('launch', 'entry', 'frame'):
-        process_identity(value[name])
-    if value['frame'] != value['launch'] or any(value[name] is not True
+        lineage.identity(value[name])
+    lineage.validate(value['frame_lineage'], value['launch'], value['frame'])
+    if any(value[name] is not True
             for name in ('entry_focused', 'frame_active', 'frame_visible')):
         raise ValueError('native input requires its focused entry and active captured frame')
     return value
