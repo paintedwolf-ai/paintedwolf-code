@@ -2,14 +2,16 @@
   "category": "test_directories",
   "artifact": "lycaon/internal/tools/native",
   "kind": "test_suite",
-  "workstream": "tool-domains",
+  "workstream": "portable-command-streaming-inputs",
   "disposition": "retain",
-  "reason": "The 73 native test files retain operation-adjacent contracts for the host-coupled write door and existing native families. P03 adds a focused shared structured/typed entry fixture rather than duplicate mutation algorithms. Keep these tests beside the operation they exercise at this measured ceiling; real write/refusal fixtures passed and broader native failures were limited to absent bundled Git.",
-  "reviewed_commit": "f66017977c2500399b4e4ca07e6fff3ee8c3ca76",
-  "ceiling": 73,
+  "reason": "Retain the measured78 operation-adjacent native test members. Shared capture fixtures prove exact binary identity, actual100MB reader retention, per-block refusal after same-inode rewrites with restored metadata, seeks, partial blocks, capacity admission and cleanup. Existing source-write and editor-owner tests remain beside the same publication owner. These tests exercise bytes, effects and authority rather than prompt wording. Keeping them with the host-coupled owner preserves one contract suite; further growth or changed membership requires review.",
+  "reviewed_commit": "b49f967c1f5c0a7ceafa99228d14771f56550cbe",
+  "ceiling": 78,
   "boundaries": {
-    "lycaon/internal/tools/native/source_write_contract_test.go": "9787a70ac8836316cc9692eace9f647a1c78ba3d2eaf09c31175fe2a0c87a2a6",
-    "lycaon/internal/tools/native/write_operation_test.go": "ff658d65608cdaf3f50ce3990a5b98bc8c60158c94ab410b946f78a7ab826805"
+    "lycaon/internal/tools/native/source_write_contract_test.go": "e25407bbbbbf15a1b1eb9ee5806fa504a534ab2ab55f5adeec869c15af06efda",
+    "lycaon/internal/tools/native/write_operation_test.go": "4f8318b91bfb4f42ecdeda7586024f1f08311a1f325be95a149cbe877cf4b753",
+    "lycaon/internal/tools/native/execution_capture_test.go": "8a8bc6b53b189b270e0092828c743c3bdfbce55c14dcf3ea4edee688ff659420",
+    "lycaon/internal/tools/native/execution_stream_blocks_test.go": "2ce11ab72aa45467a4f8e61ff8deca5bd34c15ebf9c0d87fcc41e74ef91bf9f4"
   },
-  "reviewed_shape": "376839041673f016de2e3ef3b35f4083ca1f44726101eda9c5ca26ffc6c3e07d"
+  "reviewed_shape": "37b5c79f08b86b47f0d66fab0117dc87f77fe47fbf90a2f5150baa56055474b5"
 }

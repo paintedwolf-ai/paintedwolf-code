@@ -2,14 +2,16 @@
   "category": "source_directories",
   "artifact": "lycaon/internal/tools/native",
   "kind": "module",
-  "workstream": "tool-domains",
+  "workstream": "portable-command-streaming-inputs",
   "disposition": "retain",
-  "reason": "The native hub retains host-coupled reads and its single complete source write door. P03 extracts the existing write algorithm into write_operation.go so structured and typed entry points share admission, review, retry, attribution and publication. Retain the measured 47 source files; moving this operation into a child package would invert the existing effect boundary. Real native write/refusal and mixed editor-owner fixtures passed. Future growth needs a fresh cohesion review.",
-  "reviewed_commit": "f66017977c2500399b4e4ca07e6fff3ee8c3ca76",
-  "ceiling": 47,
+  "reason": "Retain the measured57 native source members after reviewing shared input capture and publication ownership. ExecutionRevisions keeps path/editor selection, exact representations, bounded whole capture, revision checks and streaming block proofs in one existing owner. Working and retained capacity use the invoking ProgramMemory; original descriptors and revision identities survive streaming and seeks. Source publication, append staging, recovery and editor conflicts still use the single native write door. Files divide these actual lifecycle concerns without adding a second reader, quota owner or durable store. Focused exact-byte, restored-metadata mutation, partial-block/tail-seek, admission/release, whole-capacity and source-write contracts support this measured boundary. Further growth or changed membership requires review.",
+  "reviewed_commit": "b49f967c1f5c0a7ceafa99228d14771f56550cbe",
+  "ceiling": 57,
   "boundaries": {
-    "lycaon/internal/tools/native/source_write_contract_test.go": "9787a70ac8836316cc9692eace9f647a1c78ba3d2eaf09c31175fe2a0c87a2a6",
-    "lycaon/internal/tools/native/write_operation_test.go": "ff658d65608cdaf3f50ce3990a5b98bc8c60158c94ab410b946f78a7ab826805"
+    "lycaon/internal/tools/native/source_write_contract_test.go": "e25407bbbbbf15a1b1eb9ee5806fa504a534ab2ab55f5adeec869c15af06efda",
+    "lycaon/internal/tools/native/write_operation_test.go": "4f8318b91bfb4f42ecdeda7586024f1f08311a1f325be95a149cbe877cf4b753",
+    "lycaon/internal/tools/native/execution_capture_test.go": "8a8bc6b53b189b270e0092828c743c3bdfbce55c14dcf3ea4edee688ff659420",
+    "lycaon/internal/tools/native/execution_stream_blocks_test.go": "2ce11ab72aa45467a4f8e61ff8deca5bd34c15ebf9c0d87fcc41e74ef91bf9f4"
   },
-  "reviewed_shape": "4611bb71cb1f5aea7c7dd6e03ad4e786690aa14b804a78ea2921d44ff81d73d1"
+  "reviewed_shape": "f7b084fdb6296e6fe8372cc9684abcc38d6e978fb543d2a7f55f2cfda16fe1ec"
 }
