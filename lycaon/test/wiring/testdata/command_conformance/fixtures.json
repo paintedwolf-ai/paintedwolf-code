@@ -1674,11 +1674,12 @@
         "stdout": ""
       },
       "bsd": {
-        "status": 127,
-        "stdout": "",
-        "stderr": "/opt/homebrew/bin/bash: line 3: yq: command not found\n",
+        "status": 0,
+        "stdout": "1\n",
+        "stderr": "",
         "files": {}
-      }
+      },
+      "reference_provenance": "The BSD snapshot uses the installed Python yq wrapper with jq on macOS. The older GNU snapshot did not have yq installed."
     },
     {
       "id": "git-read-and-mutation-subcommands",

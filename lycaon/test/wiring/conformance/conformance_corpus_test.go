@@ -10,10 +10,12 @@ import (
 )
 
 type v1SpecificExpectation struct {
-	ExpectedStatus   int
-	ExpectedStdout   string
-	AllowExternal    bool
-	ExpectedFiles    map[string]*string
+	Validate       func(*testing.T, runtimeObservation)
+	ExpectedStderr string
+	ExpectedStatus int
+	ExpectedStdout string
+	AllowExternal  bool
+	ExpectedFiles  map[string]*string
 }
 
 func strPtr(s string) *string { return &s }
@@ -21,6 +23,14 @@ func strPtr(s string) *string { return &s }
 // v1SpecificCases are corpus entries that intentionally exercise Painted Wolf v1
 // language or built-in contracts that do not exist in POSIX/GNU/BSD bash.
 var v1SpecificCases = map[string]v1SpecificExpectation{
+	"inspect-domain-builtins": {ExpectedStatus: 0, Validate: verifyInspectDomainOutputs},
+	"query-jq-options-and-transform": {
+		ExpectedStatus: 0,
+		ExpectedStdout: "a\nb\n{\"greeting\":7}\n5\njq_e=1\n{\"enabled\":true,\"version\":1,\"items\":[\"a\",\"b\"]}\n",
+		ExpectedFiles:  map[string]*string{"config.json": strPtr("{\"enabled\":true,\"version\":1,\"items\":[\"a\",\"b\"]}\n")},
+	},
+	"git-diff-separated-u-flag": {ExpectedStatus: 0, ExpectedStdout: "diff --git a/sub/a.txt b/sub/a.txt\nindex 66a52ee..48f6562 100644\n--- a/sub/a.txt\n+++ b/sub/a.txt\n@@ -2 +2,2 @@ first\n second\n+modified\n", ExpectedFiles: map[string]*string{"sub/a.txt": strPtr("first\nsecond\nmodified\n")}},
+
 	"lang-same-file-redirect-publish": {
 		ExpectedStatus: 0,
 		ExpectedStdout: "FIRST\nSECOND\n",
@@ -109,10 +119,15 @@ func verifyV1SpecificExpectation(t *testing.T, c fixtureCase, obs runtimeObserva
 	if !exp.AllowExternal && obs.Outcome.NativeGaps > 0 {
 		t.Fatalf("case %s unexpected native_gaps=%d", c.ID, obs.Outcome.NativeGaps)
 	}
-	if obs.Outcome.Status != exp.ExpectedStatus {
+	if obs.Outcome.State != "completed" || obs.Outcome.Status != exp.ExpectedStatus {
 		t.Fatalf("case %s status = %d, want %d (stdout=%q stderr=%q)", c.ID, obs.Outcome.Status, exp.ExpectedStatus, obs.Outcome.Stdout, obs.Outcome.Stderr)
 	}
-	if obs.Outcome.Stdout != exp.ExpectedStdout {
+	if obs.Outcome.Stderr != exp.ExpectedStderr {
+		t.Fatalf("case %s stderr = %q, want %q", c.ID, obs.Outcome.Stderr, exp.ExpectedStderr)
+	}
+	if exp.Validate != nil {
+		exp.Validate(t, obs)
+	} else if obs.Outcome.Stdout != exp.ExpectedStdout {
 		t.Fatalf("case %s stdout = %q, want %q", c.ID, obs.Outcome.Stdout, exp.ExpectedStdout)
 	}
 	if exp.ExpectedFiles != nil && !filesEqual(obs.Files, exp.ExpectedFiles) {

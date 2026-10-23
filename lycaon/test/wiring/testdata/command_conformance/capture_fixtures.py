@@ -750,7 +750,7 @@ def run_case(case: dict[str, Any], bash_bin: str, path_env: str) -> dict[str, An
 def capture_suite(mode: str) -> dict[str, dict[str, Any]]:
     if mode == "bsd":
         bash_bin = "/opt/homebrew/bin/bash" if Path("/opt/homebrew/bin/bash").exists() else "/bin/bash"
-        path_env = "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin"
+        path_env = str(Path.home() / ".local" / "bin") + ":/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin"
     else:
         bash_bin = "/bin/bash"
         path_env = "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
@@ -770,7 +770,7 @@ def capture_gnu_in_docker(script_path: Path) -> dict[str, dict[str, Any]]:
         (
             "apt-get update -qq && "
             "apt-get install -y -qq --no-install-recommends "
-            "file xxd bsdextrautils zip unzip bzip2 curl ripgrep gawk procps lsof >/dev/null 2>&1 && "
+            "file xxd bsdextrautils zip unzip bzip2 curl ripgrep gawk procps lsof yq >/dev/null 2>&1 && "
             "python3 /work/capture_fixtures.py --mode gnu-inner"
         ),
     ]
