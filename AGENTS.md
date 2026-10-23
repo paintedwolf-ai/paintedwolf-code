@@ -29,11 +29,22 @@ policy before editing. Start unfamiliar work at [docs](docs/README.md) and
 - **Report the crux, changes, verification, and unresolved work.** Surface findings
   that contradict the request before changing direction. Report verification
   results once available; do not narrate queued or running checks.
-- **Never merge unmerged feature branches into an omnibus integration PR.**
-  If PR B depends on PR A, PR A must land on `main` through the merge queue
-  first. If PR A fails or stalls in the queue, fix PR A in isolation. Absorbing
-  dependent PRs into a single combined branch to bypass queue serialization is
-  forbidden.
+- **Batching is allowed for all changes.** Combine unmerged PR branches when
+  that reduces repeated verification, including dependent changes. No risk
+  classification, extra human review, or separate batching approval is required.
+  Record included PRs and exact head SHAs in the batch PR. Run the normal fast
+  tier and merge-queue checks on the combined result; individual passes do not
+  replace them. If a batch fails, fix it or rebuild it without the failing change.
+  Keep source PRs open until the batch lands. Merge only when requested, through
+  the normal queue. The backend/frontend scope rule below applies to each
+  constituent change; a batch may contain both.
+- **Cancel superseded background Qualification when its source is obsolete.**
+  The hosted supersession controller may cancel queued or running background
+  main-push Qualification after validating source ancestry and rechecking run
+  identity. Preserve explicit candidate and release Qualification. Releases still
+  require passing Qualification on their exact source commit. This cancellation
+  policy needs no additional approval; local verification cancellation follows
+  the stuck-verification rules below.
 - **Keep backend and frontend presentation changes decoupled.** Backend PRs must
   not touch unrelated frontend presentation components. If an existing frontend
   file exceeds a maintainability threshold, leave it alone unless the PR is

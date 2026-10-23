@@ -127,7 +127,7 @@ class HostedPlanTests(unittest.TestCase):
         # The WebKit harness builds without the shell, so the lane skips its packaging inputs.
         nightly = {row["lane"]: row["setup"] for row in ci.matrix("nightly", "e2e")["include"]}
         self.assertEqual(nightly["webkit"], "harness")
-        self.assertEqual({setup for lane, setup in setups.items() if lane not in {"native", "webkit", "frontend"}},
+        self.assertEqual({setup for lane, setup in setups.items() if lane not in {"native", "webkit", "frontend", "lint", "vulnerabilities"}},
                          {"verification"})
         for mutation in ("unknown", "missing", "boolean"):
             with self.subTest(mutation=mutation):

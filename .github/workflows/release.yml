@@ -195,10 +195,10 @@ jobs:
           name: release-compatibility-${{ github.run_attempt }}
           status: ${{ job.status }}
 
-  preflight:
+  validate-source:
     needs: [classify, compatibility]
     runs-on: macos-15
-    timeout-minutes: 90
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -225,17 +225,6 @@ jobs:
           name: release-preflight-${{ github.run_attempt }}
           status: ${{ job.status }}
 
-  upgrade:
-    needs: [classify, preflight]
-    runs-on: macos-15
-    timeout-minutes: 150
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ needs.classify.outputs.source_sha }}
-          fetch-depth: 0
-      - uses: ./.github/actions/setup-verification
-      - uses: ./.github/actions/setup-bialy
       - name: Install the public feed verifier
         timeout-minutes: 5
         run: HOMEBREW_NO_AUTO_UPDATE=1 brew install minisign
@@ -255,7 +244,7 @@ jobs:
   ship-gates:
     # Judges failed and timed-out jobs, but a cancelled run must not wait for a runner to do so.
     if: ${{ !cancelled() }}
-    needs: [classify, preflight, upgrade]
+    needs: [classify, validate-source]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -272,7 +261,7 @@ jobs:
     needs: [classify, compatibility]
     strategy:
       fail-fast: false
-      # Beside preflight and the upgrade rehearsal, a release holds two macOS runners.
+      # Source validation and packaging share the two-runner release budget.
       max-parallel: 1
       matrix: ${{ fromJSON(needs.classify.outputs.matrix) }}
     runs-on: ${{ matrix.runner }}
