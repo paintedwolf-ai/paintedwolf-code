@@ -108,6 +108,27 @@ class NativeModuleAuditTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             INTEGRITY.describe(preinit, self.guard)
 
+    def test_loader_selected_dynamic_table_and_external_code_tags(self):
+        image = INTEGRITY.ELF(self.auditor)
+        dynamic = next(row for row in image.segments if row[0] == 2)
+        for tag in (1, 0x7fffffff, 0x7ffffffd, 0x6ffffefc, 0x6ffffefb):
+            mutated = bytearray(image.raw)
+            struct.pack_into("<QQ", mutated, dynamic[2], tag, 1)
+            candidate = self.root / ("external-tag-" + str(tag) + ".so")
+            candidate.write_bytes(mutated)
+            with self.assertRaises(ValueError):
+                INTEGRITY.ELF(candidate)
+        header = struct.unpack_from("<16sHHIQQQIHHHHHH", image.raw)
+        index = next(i for i, row in enumerate(image.segments) if row[0] == 2)
+        for field, value in ((8, dynamic[2] + 16), (16, dynamic[3] + 16),
+                             (40, dynamic[5] - 1)):
+            mutated = bytearray(image.raw)
+            struct.pack_into("<Q", mutated, header[5] + index * 56 + field, value)
+            candidate = self.root / ("dynamic-mismatch-" + str(field) + ".so")
+            candidate.write_bytes(mutated)
+            with self.assertRaises(ValueError):
+                INTEGRITY.ELF(candidate)
+
     def test_policy_keeps_exact_selected_guard_and_roots(self):
         nonce = bytes(range(32))
         raw = INTEGRITY.policy_bytes(["/usr/lib", "/opt/painted-wolf-code"],

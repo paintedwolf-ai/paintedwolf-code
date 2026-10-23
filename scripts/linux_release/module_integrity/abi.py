@@ -63,6 +63,13 @@ class ELF:
         dynamic = [row for row in self.segments if row[0] == 2]
         if len(dynamic) != 1 or dynamic[0][5] > LIMIT or dynamic[0][5] % 16:
             raise ValueError("DSO must have one bounded dynamic table")
+        selected = dynamic[0]
+        mapped = self.contains(1, selected[3], selected[5])
+        if (len(mapped) != 1 or selected[5] != selected[6] or not selected[1] & 4
+                or selected[1] & ~mapped[0][1]
+                or selected[3] + selected[5] > mapped[0][3] + mapped[0][5]
+                or selected[2] != mapped[0][2] + selected[3] - mapped[0][3]):
+            raise ValueError("dynamic table must match loader-selected file bytes")
         self.tags = []
         for offset in range(dynamic[0][2], dynamic[0][2] + dynamic[0][5], 16):
             tag, value = self.unpack("QQ", offset)
@@ -71,8 +78,9 @@ class ELF:
             self.tags.append((tag, value))
         else:
             raise ValueError("dynamic table must terminate")
-        if any(tag == 1 for tag, _ in self.tags):
-            raise ValueError("module must have no DT_NEEDED dependencies")
+        if any(tag in (1, 0x7fffffff, 0x7ffffffd, 0x6ffffefc, 0x6ffffefb)
+               for tag, _ in self.tags):
+            raise ValueError("module must have no external-code loader dependencies")
 
     def unpack(self, shape, offset):
         size = struct.calcsize("<" + shape)
