@@ -3,10 +3,14 @@ package main
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/configdir"
 )
 
 func healthyReport() report {
@@ -95,5 +99,43 @@ func TestUnknownResourceBudgetCannotPassAsZero(t *testing.T) {
 	violations := evaluateBudgets(value)
 	if len(violations) != 1 || !strings.Contains(violations[0], "has no measurement") {
 		t.Fatalf("unknown resource violations = %v", violations)
+	}
+}
+
+func TestInstalledRunsAreHeldToReleaseValidBudgets(t *testing.T) {
+	value := healthyReport()
+	value.Mode, value.Prompts = "installed", 0
+	value.Correctness = correctnessSummary{SQLiteQuickCheck: "ok"}
+	value.Budgets.LatencyP95MS["prompt.settle"] = 100
+	if got := evaluateBudgets(value); len(got) != 0 {
+		t.Fatalf("installed violations = %v", got)
+	}
+	delete(value.Metrics, "startup.ready")
+	if got := evaluateBudgets(value); len(got) != 1 || got[0] != "startup.ready was not measured" {
+		t.Fatalf("installed run without startup = %v", got)
+	}
+	value = healthyReport()
+	value.Budgets.LatencyP95MS["prompt.settle"] = 100
+	if got := evaluateBudgets(value); len(got) != 1 || got[0] != "prompt.settle was not measured" {
+		t.Fatalf("sidecar run without prompts = %v", got)
+	}
+	value.Correctness.EventCount = 0
+	if got := evaluateBudgets(value); len(got) != 2 {
+		t.Fatalf("sidecar run without events = %v", got)
+	}
+}
+
+func TestInstalledModeRequiresAnAccountWithoutReleaseConfiguration(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	root, err := installedConfigRoot()
+	if err != nil || root != filepath.Join(home, ".config", configdir.DirNameProd) {
+		t.Fatalf("fresh account = %q, %v", root, err)
+	}
+	if err := os.MkdirAll(root, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := installedConfigRoot(); err == nil || !strings.Contains(err.Error(), "disposable account") {
+		t.Fatalf("existing configuration = %v", err)
 	}
 }
