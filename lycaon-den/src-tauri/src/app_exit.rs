@@ -5,6 +5,8 @@ use std::sync::Mutex;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 
+mod confirmation;
+
 const REQUEST: &str = "app-exit-requested";
 const CANCEL: &str = "app-exit-cancelled";
 
@@ -21,6 +23,7 @@ struct ExitState {
     approved: bool,
     committing: bool,
     opening: usize,
+    confirming: bool,
 }
 
 impl ExitState {
@@ -46,9 +49,8 @@ impl ExitState {
     }
 
     fn acknowledge(&mut self, label: &str, request_id: u64) {
-        if self
-            .pending
-            .is_some_and(|request| request.request_id == request_id)
+        if !self.confirming
+            && self.pending.is_some_and(|request| request.request_id == request_id)
         {
             self.ready.insert(label.into());
         }
@@ -60,12 +62,25 @@ impl ExitState {
     }
 
     fn preserving(&mut self, request_id: u64, labels: &BTreeSet<String>) -> bool {
-        !self.committing
+        !self.confirming
+            && !self.committing
             && !self.approved
             && self
                 .pending
                 .is_some_and(|pending| pending.request_id == request_id)
             && (self.opening > 0 || !self.missing(labels).is_empty())
+    }
+
+    fn preservation_request(&self) -> Option<ExitRequest> {
+        self.pending.filter(|_| !self.confirming)
+    }
+
+    fn confirm(&mut self, request_id: u64) -> bool {
+        if !self.confirming || !self.pending.is_some_and(|request| request.request_id == request_id) {
+            return false;
+        }
+        self.confirming = false;
+        true
     }
 
     fn cancel(&mut self, request_id: u64) -> bool {
@@ -76,6 +91,7 @@ impl ExitState {
             return false;
         }
         self.pending = None;
+        self.confirming = false;
         self.committing = false;
         self.ready.clear();
         true
@@ -119,6 +135,18 @@ pub struct PreparedExit {
 }
 
 impl PreparedExit {
+    async fn confirm_quit(&self) -> Result<(), String> {
+        let facts = confirmation::active_work(&self.app).await;
+        if !confirmation::approve(facts).await {
+            return Err("Application exit was cancelled.".into());
+        }
+        if !self.app.state::<ExitCoordinator>().0.lock()
+            .map_err(|_| "Application preservation lock failed.")?.confirm(self.request.request_id) {
+            return Err("Application exit request changed.".into());
+        }
+        Ok(())
+    }
+
     async fn wait(&self, prompt: bool) -> Result<(), String> {
         let app = self.app.clone();
         let request = self.request;
@@ -184,7 +212,7 @@ impl PreparedExit {
             .lock()
             .map_err(|_| "Application preservation lock failed.")?;
         if !state
-            .pending
+            .preservation_request()
             .is_some_and(|request| request.request_id == self.request.request_id)
         {
             return Err("Application exit was cancelled.".into());
@@ -199,7 +227,7 @@ impl PreparedExit {
             .lock()
             .map_err(|_| "Application preservation lock failed.")?;
         if !state
-            .pending
+            .preservation_request()
             .is_some_and(|request| request.request_id == self.request.request_id)
         {
             return Err("Application preservation request changed.".into());
@@ -222,23 +250,22 @@ impl Drop for PreparedExit {
             return;
         }
         let coordinator = self.app.state::<ExitCoordinator>();
-        let cancelled = coordinator
-            .0
-            .lock()
+        let cancelled = coordinator.0.lock()
             .is_ok_and(|mut state| state.cancel(self.request.request_id));
         if cancelled {
             let _ = self.app.emit(CANCEL, self.request);
+            crate::windows::workspace_lifecycle::exit_cancelled(&self.app);
         }
     }
 }
 
-fn begin(app: &AppHandle) -> Result<Option<PreparedExit>, String> {
-    let request = app
-        .state::<ExitCoordinator>()
-        .0
-        .lock()
-        .map_err(|_| "Application preservation lock failed.")?
-        .begin();
+fn begin(app: &AppHandle, confirming: bool) -> Result<Option<PreparedExit>, String> {
+    let coordinator = app.state::<ExitCoordinator>();
+    let mut state = coordinator.0.lock().map_err(|_| "Application preservation lock failed.")?;
+    let request = state.begin();
+    if request.is_some() {
+        state.confirming = confirming;
+    }
     Ok(request.map(|request| PreparedExit {
         app: app.clone(),
         request,
@@ -255,7 +282,7 @@ pub async fn install_update(
     if expected.is_none() && !app.state::<UpdateService>().automatic_install_ready().await {
         return Ok(false);
     }
-    let prepared = begin(app)
+    let prepared = begin(app, false)
         .map_err(|e| UpdateError::new(UpdateErrorCode::StateUnavailable, e))?
         .ok_or(UpdateError::from(UpdateErrorCode::InvalidTransition))?;
     let wait = async {
@@ -324,8 +351,11 @@ fn cancel_app_exit(app: AppHandle, request_id: u64) -> Result<(), String> {
         .0
         .lock()
         .map_err(|_| "Application preservation lock failed.")?;
-    if !state.approved && !state.committing && state.cancel(request_id) {
+    let cancelled = !state.approved && !state.committing && state.cancel(request_id);
+    drop(state);
+    if cancelled {
         let _ = app.emit(CANCEL, ExitRequest { request_id });
+        crate::windows::workspace_lifecycle::exit_cancelled(&app);
     }
     Ok(())
 }
@@ -339,9 +369,9 @@ pub fn allow_exit(app: &AppHandle, code: Option<i32>) -> bool {
     {
         return true;
     }
-    if let Ok(Some(prepared)) = begin(app) {
+    if let Ok(Some(prepared)) = begin(app, true) {
         tauri::async_runtime::spawn(async move {
-            if prepared.wait(true).await.is_err() {
+            if prepared.confirm_quit().await.is_err() || prepared.wait(true).await.is_err() {
                 return;
             }
             match crate::update_service::transaction::prepare_exit(&prepared.app, None, false).await
@@ -378,7 +408,7 @@ pub fn pending_app_exit(app: AppHandle) -> Result<Option<ExitRequest>, String> {
         .0
         .lock()
         .map_err(|_| "Application preservation lock failed.")?;
-    Ok(state.pending)
+    Ok(state.preservation_request())
 }
 
 #[tauri::command]
@@ -398,6 +428,41 @@ pub fn acknowledge_app_exit(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn quit_choice_precedes_preservation_and_cannot_reuse_a_cancelled_request() {
+        let mut state = ExitState::default();
+        let first = state.begin().unwrap();
+        state.confirming = true;
+        assert!(state.begin().is_none());
+        assert!(!state.start_window());
+        assert!(state.preservation_request().is_none());
+        let labels = BTreeSet::from(["main".into()]);
+        assert!(!state.preserving(first.request_id, &labels));
+        state.acknowledge("main", first.request_id);
+        assert!(state.ready.is_empty());
+        assert!(state.cancel(first.request_id));
+        assert!(state.start_window());
+        state.opening -= 1;
+        let next = state.begin().unwrap();
+        state.confirming = true;
+        assert!(!state.confirm(first.request_id));
+        assert!(state.preservation_request().is_none());
+        assert!(state.confirm(next.request_id));
+        assert!(!state.confirm(next.request_id));
+        assert_eq!(state.preservation_request().unwrap().request_id, next.request_id);
+        assert!(state.preserving(next.request_id, &labels));
+        state.acknowledge("main", next.request_id);
+        assert!(!state.preserving(next.request_id, &labels));
+    }
+
+    #[test]
+    fn installation_starts_preservation_without_an_explicit_quit_choice() {
+        let mut state = ExitState::default();
+        let request = state.begin().unwrap();
+        assert_eq!(state.preservation_request().unwrap().request_id, request.request_id);
+        assert!(!state.confirm(request.request_id));
+    }
 
     #[test]
     fn preservation_prompt_stops_after_acknowledgements_and_ignores_old_requests() {
