@@ -13,7 +13,7 @@
     "lycaon/internal/backup/upgrade_recovery_test.go": "c9a2ec60b31d7e989002dab7833470881f83d6bcbe11a9ee8f55c7bf028af80f",
     "lycaon/internal/backup/reasoning_retention_test.go": "708e2bb19d53d71f00754dcb9be34c85a897bc772b9b0726bff6810f8b02e06c",
     "lycaon/internal/backup/editor_outbox_test.go": "e7ab2c1eacf397d612cb7b918a6ce0dfc189069c09a1f04ed71f9b6279a71b84",
-    "lycaon/internal/backup/restore_progress_test.go": "fa098ad8d59a060bf9eb1a17e1f40dea23842d9ad555af4b1df430e4e2695a50",
+    "lycaon/internal/backup/restore_progress_test.go": "bd05e74c3ec7d51a32cf72b7332a9471e900d53316db620b48e800541eb6772a",
     "lycaon/internal/backup/stage_upgrade_test.go": "ab011a4912370818788309e470d1036983735d28dd70b55d7118a31a0b5b2419"
   },
   "reviewed_shape": "0c6f43d6407887c28c5b6b6daea9ea043dd08a22a0465b78ddf4539468ee8472"

@@ -99,6 +99,9 @@ func (r *pendingRestore) loadProgress() error {
 		} else {
 			rel = r.marker.DeleteRelPaths[index-len(r.marker.Files)]
 			if _, err := os.Lstat(filepath.Join(filepath.Dir(r.markerPath), filepath.FromSlash(rel))); !os.IsNotExist(err) {
+				if err != nil {
+					return fmt.Errorf("inspect checkpointed deletion: %w", err)
+				}
 				return fmt.Errorf("checkpointed deletion is not complete")
 			}
 		}

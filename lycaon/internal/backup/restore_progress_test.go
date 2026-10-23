@@ -166,3 +166,14 @@ func TestRestoreProgressChecksCheckpointedDeletion(t *testing.T) {
 		t.Fatal("completed deletion not resumed")
 	}
 }
+
+func TestRestoreProgressPreservesDeletionInspectionError(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "not-a-directory")
+	testutil.FailErr(t, "seed invalid destination parent", os.WriteFile(root, []byte("kept"), 0o600))
+	restore := &pendingRestore{markerPath: filepath.Join(root, "pending.json"), marker: PendingMarker{StagingDir: t.TempDir(), DeleteRelPaths: []string{"approvals.yaml"}}, appliedSet: map[string]struct{}{}, completed: 1}
+	testutil.FailErr(t, "checkpoint deletion", restore.checkpointProgress())
+	var pathError *os.PathError
+	if err := restore.loadProgress(); !errors.As(err, &pathError) {
+		t.Fatalf("lost deletion inspection cause: %v", err)
+	}
+}
