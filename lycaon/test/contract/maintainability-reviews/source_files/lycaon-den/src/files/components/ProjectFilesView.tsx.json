@@ -1,0 +1,13 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon-den/src/files/components/ProjectFilesView.tsx",
+  "kind": "projection",
+  "workstream": "project-deletion-progress",
+  "disposition": "retain",
+  "reason": "The existing project files composition wires one typed lifecycle-wait signal into its presentation. This adds no dependencies or source lines to the 524-line, 41-dependency module and retains the shipped editor surfaces. A larger composition refactor is outside this focused presentation change.",
+  "reviewed_commit": "3dd818c9a09ce5aed671a3d2071ced0607f7f974",
+  "ceiling": 524,
+  "boundaries": {
+    "lycaon-den/src/files/components/ProjectFilesView.workspace-fault.test.tsx": "eebc5f5871d95e108a3258e4cdb9a4fff1b648de7900d5223b88953064820e45"
+  }
+}

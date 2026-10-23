@@ -881,7 +881,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Delete a project and settle reviewed optional extension cleanup */
+        /** Accept project deletion and reviewed optional extension cleanup */
         post: operations["createProjectRemoval"];
         delete?: never;
         options?: never;
@@ -896,7 +896,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Read the recorded project removal outcome */
+        /** Read live progress or the recorded project removal outcome */
         get: operations["getProjectRemoval"];
         put?: never;
         post?: never;
@@ -18498,7 +18498,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Host-owned removal evidence or outcome */
+            /** @description Durably accepted operation with live progress, or its settled outcome */
             202: {
                 headers: {
                     [name: string]: unknown;

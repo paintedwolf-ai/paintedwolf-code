@@ -104,7 +104,7 @@ describe("project removal controller",()=>{
 
 it("polls an accepted operation until settlement without retiring early", async () => {
   const f = setup();
-  const running = { ...result, project_state: "unknown", progress: { phase: "chats" as const, completed: 1, total: 3 } };
+  const running: ProjectRemovalResult = { ...result, project_state: "unknown", progress: { phase: "chats" as const, completed: 1, total: 3 } };
   f.client.createProjectRemoval.mockResolvedValueOnce(running);
   f.client.getProjectRemoval.mockResolvedValueOnce(running).mockResolvedValueOnce(result);
   f.pause.mockImplementation(async () => { expect(f.retire).not.toHaveBeenCalled(); });

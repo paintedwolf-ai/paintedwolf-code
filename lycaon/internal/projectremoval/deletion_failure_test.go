@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
+	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestFailedDeletionReportsObservedProjectState(t *testing.T) {
