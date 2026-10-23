@@ -9,6 +9,7 @@ from .desktop_launch import activate, protected_launcher
 from .process import run
 from .profile_observer import project_for_owned_root, sessions_for_project
 from .provider import MODEL, ProviderFixture
+from .provider_barrier import ResponseBarrier
 from .provider_setup import configure_provider, physical_input
 from .records import CaseFailed, CaseUnavailable, retain
 from ..installed_input.surface import FrameObserver
@@ -54,13 +55,14 @@ def reopen(app, observer):
 def execute(binding, capability, case, root):
     launch_binding = {**binding, 'launcher': protected_launcher(binding)}
     project = Path(tempfile.mkdtemp(prefix='workspace-project-', dir=root))
-    app, observations, streams = None, {}, {}
+    app, observations, streams, barrier = None, {}, {}, None
     try:
-        # A real fixed command keeps the ordinary GUI turn busy. Do not extend
-        # it or fabricate a prompt if it finishes before the required Quit steps.
-        calls = [{'name': 'command', 'arguments': {'command': '/usr/bin/sleep 120',
-                  'wait_ms': 30000, 'timeout_ms': 120000}}]
-        with ProviderFixture.gui(calls) as fixture:
+        # The normal GUI sends a real request to the fixed local provider.
+        # Transport latency is controlled independently; product activity still
+        # requires the captured engine's typed busy session facts below.
+        calls = [{'name': 'command', 'arguments': {'command': '/usr/bin/true'}}]
+        barrier = ResponseBarrier()
+        with ProviderFixture.gui(calls, response_barrier=barrier) as fixture:
             app = InstalledApp(launch_binding)
             with app:
                 observations['launch'] = app.observations
@@ -77,6 +79,7 @@ def execute(binding, capability, case, root):
                         if time.monotonic() >= deadline:
                             raise CaseUnavailable('normal-workspace-fixture-did-not-start')
                         time.sleep(0.05)
+                    observations['provider_held_before'] = barrier.await_held()
                     active = require_active(app, project, provider['provider_id'])
                     if not any(row['completed'] is False for row in fixture.observations):
                         raise CaseUnavailable('workspace-active-turn-has-no-fixed-provider-request')
@@ -94,16 +97,22 @@ def execute(binding, capability, case, root):
                         observations['reopen_hidden'] = reopen(app, observer)
                         observations['repeated_activation'] = reopen(app, observer)
                         require_active(app, project, provider['provider_id'], active)
+                        barrier.require_held()
                         transition('workspace-request-quit-v1')
                         transition('workspace-cancel-quit-v1')
                         observations['active_after_cancel'] = require_active(app, project, provider['provider_id'], active)
+                        observations['provider_held_after_cancel'] = barrier.require_held()
                         transition('workspace-request-quit-v1')
                         transition('workspace-focus-quit-v1')
                         require_active(app, project, provider['provider_id'], active)
+                        barrier.require_held()
                         transition('workspace-approve-quit-v1')
+                        observations['provider_cancelled_by_quit'] = barrier.await_peer_cancellation()
                 observations['provider_requests'] = list(fixture.observations)
             streams = app.streams()
     except (OSError, ValueError, TypeError) as error:
+        if barrier is not None:
+            observations['provider_response_control'] = barrier.snapshot()
         if app is not None:
             observations['launch'] = app.observations
             streams = app.streams()

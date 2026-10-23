@@ -18,6 +18,9 @@ class InstalledInputProtocolTests(unittest.TestCase):
                    'focus': {'launch': identity, 'frame': dict(identity),
                              'entry': {'pid': 101, 'parent_pid': 100, 'start_time_ticks': 43},
                              'frame_lineage': [dict(identity)],
+                             'entry_lineage': [{'pid': 101, 'parent_pid': 100, 'start_time_ticks': 43}, identity],
+                             'accessible_chain': [{'bus_name': ':1.3', 'path': '/entry', 'pid': 101},
+                                                  {'bus_name': ':1.2', 'path': '/frame', 'pid': 100}],
                              'entry_focused': True, 'frame_active': True, 'frame_visible': True}}
         delivery = {'format_version': 1, 'execution_nonce': 'a' * 32, 'vm_id': 'owned-fedora',
                     'transaction_id': 'd' * 32, 'operation': request['operation'], 'ordinal': 0,
