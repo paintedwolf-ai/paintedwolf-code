@@ -1,4 +1,7 @@
 """Cache admission reserves space without touching unknown families or branch caches."""
+import json
+import os
+from unittest.mock import patch
 from pathlib import Path
 import tempfile
 import unittest
@@ -79,3 +82,24 @@ class CacheBudgetTests(unittest.TestCase):
         result = budget.plan(rows, "go-Linux-X64-new", 10, limit=3 * 2**20)
         self.assertEqual(result["delete"], [1])
         self.assertEqual(result["retire_after_save"], [2])
+
+    def test_publication_confirmation_deletes_only_confirmed_prior_generation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            key = "go-Linux-X64-new"
+            record = root / "record.json"
+            record.write_text(json.dumps({"key": key, "allowed": True, "retire_after_save": [1],
+                                          "measured_compressed_bytes": 10, "reserved_bytes": 100}))
+            env = {"GITHUB_REF": "refs/heads/main", "GITHUB_ACTIONS": "true",
+                   "RUNNER_ENVIRONMENT": "github-hosted", "CACHE_KEY": key,
+                   "GITHUB_REPOSITORY": "owner/repo", "CACHE_RECORD": str(record),
+                   "GITHUB_STEP_SUMMARY": str(root / "summary")}
+            inventory = [row(1, "go-Linux-X64-old", 20), row(2, key, 12)]
+            with patch.dict(os.environ, env, clear=True), patch.object(budget, "pages", return_value=inventory), \
+                    patch.object(budget, "api") as api:
+                budget.main()
+            api.assert_called_once_with("repos/owner/repo/actions/caches/1", "DELETE")
+            self.assertIn('"stored_compressed_bytes": 12', (root / "summary").read_text())
+            with patch.dict(os.environ, {**env, "GITHUB_REF": "refs/pull/1/merge"}, clear=True), \
+                    self.assertRaises(ValueError):
+                budget.main()
