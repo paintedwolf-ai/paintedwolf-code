@@ -1049,6 +1049,8 @@ Installed GUI qualification is a local pre-release lane on the native qualificat
 
 Each case runs within its own time budget, 900 seconds unless its driver family declares `TIME_BUDGET_SECONDS`. A case past its budget fails, and the campaign continues with the next case.
 
+The `accessibility/protected-desktop-appearance` case checks the Settings observer of a protected install from both sides. Route: the running `pw-desktop-settings` is in the session's own user namespace and is not the shell's child, so the launch broker started it. Effect: flipping one observed setting (GNOME high contrast, Plasma accent) changes the text colours Den reports through AT-SPI, and restoring the setting returns them. An install without the protected launch is unverified, not passed.
+
 The dispatch-only `Linux installed desktop rehearsal` workflow exercises the same case runner on a GitHub-hosted Ubuntu desktop for amd64 or arm64. Its candidate is chosen through dispatch inputs; nothing is pinned in the repository. It fails unless the retained campaign is accepted, or, for partial diagnostic packages, unless the first-launch diagnosis passed. It grants no qualification or publication authority. Confinement boundaries have one installed smoke each; the confinement contract itself is `./task test:confine:linux`.
 
 Release consumption of the retained campaign, architecture-specific performance limits (#455) and the full matrix (#456) remain tracked there; the campaign closes only after its required rows pass.
