@@ -37,7 +37,7 @@ func TestRequestPlanningPreservesFrozenThinkingBudget(t *testing.T) {
 		Configured: map[string]bool{"p": true},
 	}))
 	ctx := WithThinkingPolicy(t.Context(), ModelPolicy{ThinkingOverrides: []modelcall.ThinkingOverride{{ProviderID: "p", Model: "m", Mode: "fixed", BudgetTokens: new(4096)}}})
-	_, err := (&thinkingPolicyProvider{Provider: capture, registry: reg}).prepare(ctx, modelcall.CompletionRequest{Model: "m"})
+	_, err := (&thinkingPolicyProvider{Provider: capture, registry: reg}).prepare(ctx, modelcall.CompletionRequest{Model: "m"}, nil)
 	testutil.FailErr(t, "resolve frozen thinking allocation", err)
 	budget := reg.RequestBudget(ctx, "p", modelcall.CompletionRequest{Model: "m"})
 	if budget.MinimumOutput != 4097 || len(capture.calls) != 0 {
