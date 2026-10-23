@@ -659,10 +659,8 @@ func agentCommitInputs(tctx tools.ToolContext, m agentMutation) (sourceledger.Re
 		Turn:         tctx.Identity.UserTurn,
 		BeforeSHA256: m.BeforeSHA256, AfterSHA256: m.AfterSHA256, Before: m.Before, After: m.After,
 		BeforeSize: max(m.BeforeSize, int64(len(m.Before))), AfterSize: max(m.AfterSize, int64(len(m.After)))}
-	var isDir *bool
+	isDir := m.IsDir
 	if m.IsDir {
-		value := true
-		isDir = &value
 		in.EntryKind = sourceledger.EntryKindDirectory
 	}
 	change := sourcefeed.Change{
@@ -679,7 +677,7 @@ func agentCommitInputs(tctx tools.ToolContext, m agentMutation) (sourceledger.Re
 		ToolCallID:    tctx.Identity.ToolCallID,
 		Turn:          tctx.Identity.UserTurn,
 		AfterSHA256:   m.AfterSHA256,
-		IsDir:         isDir,
+		IsDir:         &isDir,
 		AbsPath:       m.AbsPath,
 		FromAbsPath:   m.FromAbsPath,
 	}
