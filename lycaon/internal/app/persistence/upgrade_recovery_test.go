@@ -1,6 +1,8 @@
 package persistence
 
 import (
+	"context"
+	"database/sql"
 	"errors"
 	"log/slog"
 	"os"
@@ -10,6 +12,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/backup"
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/db/migrations"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/version"
 )
@@ -109,4 +112,26 @@ func TestStoreOpenDetachesEmbeddedRecoveryBeforeWritersStart(t *testing.T) {
 	_, err = os.Stat(filepath.Join(root, db.UpgradeRecoveryDirName, record.Snapshot+".json"))
 	testutil.FailErr(t, "find detached recovery metadata before writers start", err)
 	testutil.FailErr(t, "complete application readiness", restarted.UpgradeReady())
+}
+
+// An application update the volume cannot hold is refused for space, not as
+// a failed integrity check.
+func TestApplicationUpdateRefusesAFullVolumeForSpace(t *testing.T) {
+	root := t.TempDir()
+	dbPath := filepath.Join(root, "store.db")
+	database, err := db.Open(dbPath)
+	testutil.FailErr(t, "open source", err)
+	testutil.FailErr(t, "stamp older application", db.New(database).UpsertStoreMeta(t.Context(), db.UpsertStoreMetaParams{Key: "app_version", Value: "0.0.1"}))
+	testutil.FailErr(t, "close source", database.Close())
+	space := &db.InsufficientSpaceError{NeededBytes: 2 << 30, AvailableBytes: 1 << 30}
+	hooks := db.UpgradeHooks{
+		Before:   func(context.Context, *sql.DB, migrations.Plan) error { return space },
+		Progress: func(migrations.Phase) {},
+	}
+	builder := &Runtime{logger: slog.Default()}
+	err = builder.captureVersionRecovery(t.Context(), dbPath, hooks)
+	var refused *db.StoreIncompatibleError
+	if !errors.As(err, &refused) || refused.Reason != db.RecoveryReasonInsufficientSpace || refused.Space != space {
+		t.Fatalf("capture error = %v, want an insufficient-space refusal", err)
+	}
 }

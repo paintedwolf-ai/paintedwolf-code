@@ -113,6 +113,11 @@ func (b *Runtime) captureVersionRecovery(ctx context.Context, path string, hooks
 	}
 	hooks.Progress(migrations.Snapshotting)
 	if err := hooks.Before(ctx, source, plan); err != nil {
+		var space *db.InsufficientSpaceError
+		if errors.As(err, &space) {
+			return &db.StoreIncompatibleError{Reason: db.RecoveryReasonInsufficientSpace,
+				StoreSchemaVersion: plan.Source.Revision, Detail: space.Error(), Space: space}
+		}
 		return errors.Join(&db.StoreIncompatibleError{Reason: db.RecoveryReasonIntegrityFailed,
 			StoreSchemaVersion: plan.Source.Revision, Detail: "Could not preserve history before the application update."}, err)
 	}
