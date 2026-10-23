@@ -47,7 +47,9 @@ class ProducerReaderContractTests(unittest.TestCase):
                         elif mutation == 'missing seal':
                             del bad['payload']
                         else:
-                            engine.write_bytes(data + b'changed')
+                            changed = bytearray(data)
+                            changed[32] ^= 1
+                            engine.write_bytes(changed)
                         path.write_text(json.dumps(bad))
                         with self.assertRaises(ValueError):
                             APPARMOR.profile(package)

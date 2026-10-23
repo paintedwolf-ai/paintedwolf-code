@@ -56,7 +56,11 @@ fn shared_producer_manifest_opens_the_observer_and_rejects_changed_identity() {
         match mutation {
             "unknown version" => bad["format_version"] = serde_json::json!(99),
             "missing seal" => { bad.as_object_mut().unwrap().remove("payload"); }
-            _ => { fs::write(&observer, b"changed").unwrap(); }
+            _ => {
+                let mut changed = bytes.clone();
+                changed[32] ^= 1;
+                fs::write(&observer, changed).unwrap();
+            }
         }
         fs::write(&manifest_path, serde_json::to_vec(&bad).unwrap()).unwrap();
         assert!(Image::open_at(&shell, &directory.0, owner).is_err(), "{mutation}");
