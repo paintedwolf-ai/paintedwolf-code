@@ -3,6 +3,8 @@ import json
 import os
 from pathlib import Path
 import tempfile
+import subprocess
+import sys
 import unittest
 from unittest import mock
 
@@ -46,6 +48,7 @@ class RuleLeaseTests(unittest.TestCase):
 
     def test_preexisting_same_name_is_never_overwritten_or_removed(self):
         self.path.write_bytes(b'// another campaign\n')
+        self.path.chmod(0o644)
         lease = rule.RuleLease(self.descriptor, 'a' * 32, 'campaign-user')
         with self.assertRaises(FileExistsError):
             lease.install()
@@ -143,3 +146,35 @@ class RuleLeaseTests(unittest.TestCase):
                 with mock.patch.dict(rule.os.environ, {'SUDO_UID': value}):
                     with self.assertRaises(ValueError):
                         rule._campaign_account()
+
+    def test_termination_during_a_write_defers_until_cleanup_knows_the_exact_object(self):
+        code = """
+import importlib.util, os, signal, sys
+spec = importlib.util.spec_from_file_location('owned_rule_fixture', sys.argv[1])
+rule = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(rule)
+directory = rule._directory(rule.Path(sys.argv[2]))
+lease = rule.RuleLease(directory, 'c' * 32, 'campaign-user')
+original_write = os.write
+def interrupted_write(descriptor, raw):
+    written = original_write(descriptor, raw)
+    os.kill(os.getpid(), signal.SIGTERM)
+    return written
+signal.signal(signal.SIGTERM, rule._interrupted)
+os.write = interrupted_write
+try:
+    try:
+        lease.install()
+    except InterruptedError:
+        pass
+    else:
+        raise AssertionError('pending termination was not delivered')
+finally:
+    os.write = original_write
+    assert lease.remove()['restored'] is True
+    os.close(directory)
+"""
+        result = subprocess.run([sys.executable, '-I', '-c', code, str(Path(rule.__file__).resolve()),
+                                 str(self.directory)], capture_output=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr.decode(errors='replace'))
+        self.assertFalse((self.directory / ('00-paintedwolf-qualification-' + 'c' * 32 + '.rules')).exists())
