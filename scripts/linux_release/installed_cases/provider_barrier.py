@@ -109,8 +109,12 @@ class ResponseBarrier:
     def require_held(self):
         with self.lock:
             row = self.record
-            if row is None or row['state'] != 'held' or time.monotonic() >= row['deadline']:
+            if self.cleanup or row is None or row['state'] != 'held' or time.monotonic() >= row['deadline']:
                 raise CaseUnavailable('fixed-provider-request-is-not-independently-held')
+            info = os.fstat(self.connection.fileno())
+            if (info.st_dev, info.st_ino) != (row['socket']['device'], row['socket']['inode']):
+                self._cancel('connection-identity-changed')
+                raise CaseUnavailable('fixed-provider-request-connection-identity-changed')
             poll = select.poll()
             poll.register(self.connection, select.POLLIN | select.POLLHUP | select.POLLERR | select.POLLRDHUP)
             events = poll.poll(0)
