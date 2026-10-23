@@ -101,19 +101,18 @@ class NativeInputMailboxTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             selected = mailbox.Mailbox(self.execution, 'owned-fedora')
             selected.path = Path(directory) / 'mailbox'
-            selected.path.mkdir(mode=0o700)
             def publish():
                 selected.write('binding.json', {'format_version': 1,
                     'binding': self.execution, 'vm_id': 'owned-fedora'})
             output = SimpleNamespace(buffer=io.BytesIO())
             with patch.object(mailbox, 'Mailbox', return_value=selected), \
-                    patch.object(mailbox.sys, 'stdin', Input([lambda: None, publish,
+                    patch.object(mailbox.sys, 'stdin', Input([lambda: None, lambda: selected.path.mkdir(mode=0o700), publish,
                         lambda: (selected.path / 'binding.json').unlink()])), \
                     patch.object(mailbox.sys, 'stdout', output):
                 with self.assertRaises(ValueError):
                     mailbox.serve(self.execution, 'owned-fedora')
             self.assertEqual([mailbox.decode(row) for row in output.buffer.getvalue().splitlines()],
-                             [{'state': 'waiting'}, {'state': 'waiting'}])
+                             [{'state': 'waiting'}, {'state': 'waiting'}, {'state': 'waiting'}])
 
     def test_present_wrong_binding_and_replaced_publication_are_refused(self):
         class Input:
@@ -144,6 +143,16 @@ class NativeInputMailboxTests(unittest.TestCase):
                         patch.object(mailbox.sys, 'stdout', SimpleNamespace(buffer=io.BytesIO())):
                     with self.assertRaises(ValueError):
                         mailbox.serve(self.execution, 'owned-fedora')
+
+    def test_acknowledgment_cannot_precede_valid_attachment(self):
+        with tempfile.TemporaryDirectory() as directory:
+            selected = self.selected(directory)
+            source = io.BytesIO(b'{"operation":"ack","acknowledgment":{}}\n')
+            with patch.object(mailbox, 'Mailbox', return_value=selected), \
+                    patch.object(mailbox.sys, 'stdin', SimpleNamespace(buffer=source)), \
+                    patch.object(mailbox.sys, 'stdout', SimpleNamespace(buffer=io.BytesIO())):
+                with self.assertRaisesRegex(ValueError, 'attached publication'):
+                    mailbox.serve(self.execution, 'owned-fedora')
 
 
 if __name__ == '__main__':
