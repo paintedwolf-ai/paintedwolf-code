@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+
 import os
 from pathlib import Path
 import re
@@ -11,6 +12,7 @@ from .profile_observer import _database, identifier, physical, profile, rows
 from .package_payload import stable
 from .provider import MODEL
 from .records import CaseUnavailable
+from .provider_acquisition import LOAD_ID, loaded_command, object_json
 
 REPLY = b'{"content":"Fixture complete."}'
 DIGEST = hashlib.sha256(REPLY).hexdigest()
@@ -73,3 +75,40 @@ def committed_reply(app, project_id, session_id, provider_id):
     return {'project_id': project_id, 'session_id': session_id, 'output_id': output_id,
             'message_id': message_id, 'content_blob_sha256': digest, 'byte_size': byte_size,
             'stored_size': stored_size, 'fixed_reply_verified': True}
+
+
+def committed_fixed_tool(app, session_id, tool):
+    identifier(session_id)
+    declarations = {'request_tools': (LOAD_ID, 'tool_surface', {'need': 'command'}),
+                    'command': ('qualification-0', 'processes', {'command': '/usr/bin/true'})}
+    if not isinstance(tool, str) or tool not in declarations:
+        raise ValueError('reply tool witness requires its fixed declared tool')
+    call_id, owner, arguments = declarations[tool]
+    safe = "CASE WHEN length(CAST(tool_result_json AS BLOB))<=1048576 THEN tool_result_json ELSE '{}' END"
+    fields = ('tool_call_id', 'tool', 'outcome', 'invocation.id', 'invocation.tool',
+              'invocation.tool_call_id', 'invocation.owner', 'invocation.status', 'tool_args')
+    projection = ','.join("json_extract(" + safe + ",'$." + name + "')" for name in fields)
+    with _database(app) as connection:
+        found = rows(connection.execute('SELECT id,length(CAST(tool_result_json AS BLOB)),' + projection +
+            ",json_type(" + safe + ",'$.invocation.invoked'),CASE WHEN json_extract(" + safe +
+            ",'$.tool')='request_tools' THEN json_extract(" + safe + ",'$.content') ELSE NULL END "
+            "FROM messages WHERE session_id=? AND role='tool' AND tool_result_json IS NOT NULL "
+            "AND tool_result_json!='' ORDER BY id LIMIT 257", (session_id,)))
+    if any(type(row[1]) is not int or row[1] > 1 << 20 for row in found):
+        raise ValueError('fixed tool witness exceeds its bounded result contract')
+    selected = [row for row in found if row[2] == call_id]
+    if not selected:
+        return None
+    if len(selected) != 1:
+        raise ValueError('fixed tool call has ambiguous durable receipts')
+    (message_id, _, _, actual_tool, outcome, receipt_id, receipt_tool, receipt_call,
+     receipt_owner, status, raw_arguments, invoked_type, content) = selected[0]
+    if (actual_tool != tool or outcome != 'completed' or receipt_tool != tool
+            or receipt_call != call_id or receipt_owner != owner or status != 'completed'
+            or invoked_type != 'true' or object_json(raw_arguments) != arguments):
+        raise ValueError('fixed tool has no exact successful invoked durable receipt')
+    if tool == 'request_tools':
+        loaded_command(object_json(content))
+    return {'message_id': identifier(message_id), 'invocation_id': identifier(receipt_id),
+            'tool_call_id': call_id, 'tool': tool, 'owner': owner,
+            'status': 'completed', 'invoked': True, 'arguments': arguments}

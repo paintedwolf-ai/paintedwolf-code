@@ -104,15 +104,14 @@ class ReplyRestartTests(unittest.TestCase):
 
     def test_settled_reply_requires_the_exact_successful_tool_call(self):
         session = {'id': SESSION, 'provider_id': 'fixture', 'model': owner.MODEL, 'status': 'idle'}
-        invocation = {'tool_call_id': 'qualification-0', 'outcome': 'completed', 'message_id': MESSAGE}
+        proof = {'message_id': MESSAGE, 'invocation_id': OUTPUT}
         with patch.object(owner, 'project_for_owned_root', return_value={'project_id': PROJECT}), patch.object(
                 owner, 'sessions_for_project', return_value=[session]), patch.object(
                 owner, 'committed_reply', return_value={'session_id': SESSION}), patch.object(
-                owner, 'invocations', return_value=[invocation]) as observed:
+                owner, 'committed_fixed_tool', return_value=proof) as observed:
             self.assertEqual(owner.await_reply(None, None, 'fixture')['tool_message_id'], MESSAGE)
-            for calls in ([], [dict(invocation, outcome='error')], [invocation, invocation],
-                          [dict(invocation, tool_call_id='foreign')]):
-                observed.return_value = calls
+            for missing in ('request_tools', 'command'):
+                observed.side_effect = lambda app, session, tool: None if tool == missing else proof
                 with self.assertRaisesRegex(ValueError, 'did not complete'):
                     owner.await_reply(None, None, 'fixture')
 
@@ -154,7 +153,8 @@ class ReplyRestartTests(unittest.TestCase):
             provider_setup.physical_input(SimpleNamespace(binding={}), None, 'Describe your idea', 'reply-fixture-prompt-v1')
 
     def execute(self, root, *, after=None, completed=True, same_engine=False, launch_error=None):
-        before = {'session_id': SESSION, 'content_blob_sha256': observer.DIGEST}
+        before = {'session_id': SESSION, 'content_blob_sha256': observer.DIGEST,
+                  'schema_acquisition': {'invocation_id': OUTPUT}}
         apps = [MagicMock(), MagicMock()]
         for i, app in enumerate(apps):
             app.__enter__.return_value = app
@@ -165,6 +165,7 @@ class ReplyRestartTests(unittest.TestCase):
         fixture, submission = MagicMock(), MagicMock()
         fixture.__enter__.return_value = fixture
         fixture.observations = [{'completed': completed}]
+        fixture.acquisition.witness = {'invocation_id': OUTPUT}
         fixture.discovery_observations = fixture.transport_observations = []
         fixture.transport_clipped = False
         with ExitStack() as stack:

@@ -8,6 +8,7 @@ import re
 import threading
 
 from ..installed_evidence import IDENTIFIER
+from .provider_acquisition import AcquisitionRefusal, CommandAcquisition
 
 MODEL = 'installed-qualification'
 LIMIT = 2 << 20
@@ -92,11 +93,18 @@ class ProviderFixture:
         self.thread = None
         self.gui_purpose = False
         self.port = 0
+        self.acquisition = None
 
     @classmethod
-    def gui(cls, calls: list[dict], *, endpoint: str | None = None):
+    def gui(cls, calls: list[dict], *, endpoint: str | None = None, acquire_command: bool = False):
         fixture = cls(calls)
         fixture.gui_purpose = True
+        if type(acquire_command) is not bool:
+            raise ValueError('GUI acquisition mode must be explicit')
+        if acquire_command:
+            if calls != [{'name': 'command', 'arguments': {'command': '/usr/bin/true'}}]:
+                raise ValueError('GUI acquisition requires the fixed protected command fixture')
+            fixture.acquisition = CommandAcquisition()
         if endpoint is not None:
             match = re.fullmatch(r'http://127\.0\.0\.1:([0-9]{4,5})/v1', endpoint)
             if match is None or gui_endpoint(int(match.group(1))) != endpoint:
@@ -122,7 +130,12 @@ class ProviderFixture:
         expected = {f'qualification-{i}' for i in range(len(self.calls))}
         finished = expected.issubset(results)
         message = {'role': 'assistant', 'content': 'Fixture complete.' if finished else None}
-        if not finished:
+        acquisition = self.acquisition.advance(messages, available) if self.acquisition is not None else None
+        if acquisition is not None:
+            if finished:
+                raise AcquisitionRefusal('acquisition-result-invalid')
+            message['tool_calls'] = [acquisition]
+        elif not finished:
             if not all(call['name'] in available for call in self.calls):
                 raise FixtureRefusal('required-tools-missing')
             message['tool_calls'] = [
@@ -133,7 +146,10 @@ class ProviderFixture:
             if len(self.observations) >= 64:
                 raise FixtureRefusal('request-count-bound')
             self.observations.append({'model': MODEL, 'roles': [row['role'] for row in messages],
-                                      'tools': sorted(available), 'completed': finished})
+                                      'tools': sorted(available), 'completed': finished,
+                                      **({'schema_acquisition': self.acquisition.witness,
+                                          'acquisition_requested': acquisition is not None}
+                                         if self.acquisition is not None else {})})
         return {'id': 'qualification-completion', 'object': 'chat.completion', 'created': 1,
                 'model': MODEL, 'choices': [{'index': 0, 'message': message,
                 'finish_reason': 'stop' if finished else 'tool_calls'}],
@@ -212,7 +228,7 @@ class ProviderFixture:
                     self.end_headers()
                     self.wfile.write(raw)
                 except (ValueError, TypeError, OSError) as error:
-                    code = error.code if isinstance(error, FixtureRefusal) else 'request-invalid'
+                    code = error.code if isinstance(error, (FixtureRefusal, AcquisitionRefusal)) else 'request-invalid'
                     self.respond(400, {'error': 'fixture-request-refused'}, refusal=code, shape=shape)
 
         # Fresh fixtures use a kernel-selected port. Recovery exclusively binds
