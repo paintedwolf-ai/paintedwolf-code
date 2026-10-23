@@ -18,6 +18,8 @@ def nar_digest(value: str) -> str:
     decoded = base64.b64decode(value[7:], validate=True)
     if len(decoded) != 32:
         raise ValueError("closure NAR identity has an invalid digest length")
+    if base64.b64encode(decoded).decode() != value[7:]:
+        raise ValueError("closure NAR identity must use canonical base64")
     return decoded.hex()
 
 

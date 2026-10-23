@@ -4,7 +4,7 @@ import base64
 from copy import deepcopy
 import unittest
 
-from linux_release.nix_closure import bind, describe
+from linux_release.nix_closure import bind, describe, nar_digest
 
 OUTPUT = "/nix/store/" + "0" * 32 + "-painted-wolf-code"
 LIBRARY = "/nix/store/" + "1" * 32 + "-runtime"
@@ -13,6 +13,21 @@ HASH = "sha256-" + base64.b64encode(bytes(range(32))).decode()
 
 
 class NixClosureTests(unittest.TestCase):
+    def test_nar_identity_accepts_only_canonical_sha256_sri(self):
+        for digest in [bytes(32), bytes(range(32)), b"\xff" * 32]:
+            encoded = "sha256-" + base64.b64encode(digest).decode()
+            with self.subTest(encoded=encoded):
+                self.assertEqual(nar_digest(encoded), digest.hex())
+        invalid = [None, b"sha256-", True, 7, {}, "sha512-" + HASH[7:],
+                   "sha256-", HASH + "\n", HASH + "=", HASH[:-1],
+                   "sha256-" + "!" * 43 + "=",
+                   "sha256-" + base64.b64encode(bytes(31)).decode(),
+                   "sha256-" + base64.b64encode(bytes(33)).decode(),
+                   "sha256-" + "A" * 42 + "B="]
+        for value in invalid:
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                nar_digest(value)
+
     def info(self):
         return {OUTPUT: {"narHash": HASH, "narSize": 123, "references": [LIBRARY], "deriver": DERIVER},
                 LIBRARY: {"narHash": HASH, "narSize": 456, "references": []}}
@@ -39,7 +54,8 @@ class NixClosureTests(unittest.TestCase):
             describe(info, [OUTPUT], "a" * 40, "b" * 64)
 
     def test_invalid_nar_path_size_references_and_deriver_fail_closed(self):
-        for field, value in [("narHash", "sha256-invalid"), ("narSize", True),
+        for field, value in [("narHash", "sha256-invalid"),
+                             ("narHash", "sha256-" + "A" * 42 + "B="), ("narSize", True),
                              ("references", [LIBRARY, LIBRARY]), ("references", ["/tmp/runtime"]),
                              ("deriver", "unknown-deriver"), ("valid", False), ("path", LIBRARY)]:
             info = self.info()
