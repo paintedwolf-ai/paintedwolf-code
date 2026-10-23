@@ -108,13 +108,14 @@ func monitorModuleIntake(spec EntrySpec, plan moduleViewPlan, socket, lifetime i
 			return &intakeMonitorFailure{intakeFailureControl, errors.New("unsolicited intake control or writer closure")}
 		}
 		if fds[0].Revents != 0 || pending {
-			raw, err := readMountInfo(int(info.Fd()), nil)
+			var changed bool
+			current, changed, err = readIntakeMountTopology(int(info.Fd()), readMountInfo)
 			if err != nil {
-				return &intakeMonitorFailure{intakeFailureMountInfo, err}
+				return err
 			}
-			current, err = parseMountTopology(raw)
-			if err != nil {
-				return &intakeMonitorFailure{intakeFailureTopology, err}
+			if changed {
+				pending = true
+				continue
 			}
 			pending, err = intake.reconcile(current, structural, structuralFacts)
 			if errors.Is(err, errIntakeEpochChanged) {

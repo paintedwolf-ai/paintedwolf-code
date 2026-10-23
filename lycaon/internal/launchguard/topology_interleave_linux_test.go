@@ -28,6 +28,7 @@ type topologyInterleaveFacts struct {
 	Predicate        int    `json:"predicate"`
 	RefusedID        int    `json:"refused_id"`
 	FreshValid       bool   `json:"fresh_capture_valid"`
+	Discarded        bool   `json:"changed_capture_discarded_before_admission"`
 }
 
 func TestTopologyOwnedInterleaveFixture(t *testing.T) {
@@ -60,7 +61,7 @@ func TestTopologySplitReadAcrossOwnedMountReplacement(t *testing.T) {
 		t.Fatalf("split-read fixture lost isolation, bounded control or settled validity: %+v", facts)
 	}
 	if facts.Reproduced && (facts.OldID != facts.NewID || facts.RefusedID != int(facts.OldID) ||
-		facts.Predicate != int(topologyDuplicateIdentity) || !facts.PollChanged || facts.FurtherRows == 0) {
+		facts.Predicate != int(topologyDuplicateIdentity) || !facts.PollChanged || !facts.Discarded || facts.FurtherRows == 0) {
 		t.Fatalf("duplicate reproduction lost its actual identity/epoch binding: %+v", facts)
 	}
 	t.Logf("actual owned split-read identity and epoch facts: %s", out)
@@ -107,88 +108,87 @@ func captureOwnedTopologyInterleave() (facts topologyInterleaveFacts, err error)
 		return facts, err
 	}
 	defer info.Close()
-	before := []unix.PollFd{{Fd: int32(info.Fd()), Events: unix.POLLPRI | unix.POLLERR}}
-	if _, err := unix.Poll(before, 0); err != nil {
-		return facts, err
-	}
-	// Stop only after the exact owned mount's complete structured row. Bytes
-	// already returned from this seq-file remain part of this same observation.
 	var raw []byte
-	lineStart := 0
-	for len(raw) < maxMountTopologyBytes {
-		var one [1]byte
-		n, err := unix.Read(int(info.Fd()), one[:])
-		if errors.Is(err, unix.EINTR) {
-			continue
+	entries, changed, captureErr := readIntakeMountTopology(int(info.Fd()), func(_ int, _ []byte) ([]byte, error) {
+		// Stop only after the exact owned mount's complete structured row. Bytes
+		// already returned from this seq-file remain part of this same observation.
+		lineStart := 0
+		for len(raw) < maxMountTopologyBytes {
+			var one [1]byte
+			n, err := unix.Read(int(info.Fd()), one[:])
+			if errors.Is(err, unix.EINTR) {
+				continue
+			}
+			if err != nil {
+				return nil, err
+			}
+			if n == 0 {
+				return nil, errors.New("owned selected row absent from stable seq prefix")
+			}
+			raw = append(raw, one[0])
+			if one[0] != '\n' {
+				continue
+			}
+			entry, ok := parseMountInfoLine(string(raw[lineStart : len(raw)-1]))
+			if !ok {
+				return nil, errors.New("stable seq prefix contains an invalid record")
+			}
+			lineStart = len(raw)
+			if uint64(entry.id) == facts.OldID && entry.mountPoint == target {
+				break
+			}
 		}
-		if err != nil {
-			return facts, err
+		if len(raw) == maxMountTopologyBytes {
+			return nil, errors.New("owned seq prefix exceeded topology bound")
 		}
-		if n == 0 {
-			return facts, errors.New("owned selected row absent from stable seq prefix")
+		facts.PrefixBytes = len(raw)
+		for replacement := range 8 {
+			if err := unix.Unmount(target, 0); err != nil {
+				return nil, err
+			}
+			if err := mount(target); err != nil {
+				return nil, err
+			}
+			facts.Replacements = replacement + 1
+			facts.NewID, facts.NewInode, err = ownedTopologyMountIdentity(target)
+			if err != nil {
+				return nil, err
+			}
+			if facts.NewID == facts.OldID {
+				break
+			}
 		}
-		raw = append(raw, one[0])
-		if one[0] != '\n' {
-			continue
+		// Finish this FD without seek/reopen; this is an explicitly controlled
+		// kernel seq-file experiment, not an alternate production capture path.
+		var block [4096]byte
+		for len(raw) <= maxMountTopologyBytes {
+			n, err := unix.Read(int(info.Fd()), block[:])
+			if errors.Is(err, unix.EINTR) {
+				continue
+			}
+			if err != nil {
+				return nil, err
+			}
+			if n == 0 {
+				break
+			}
+			raw = append(raw, block[:n]...)
 		}
-		entry, ok := parseMountInfoLine(string(raw[lineStart : len(raw)-1]))
-		if !ok {
-			return facts, errors.New("stable seq prefix contains an invalid record")
+		if len(raw) > maxMountTopologyBytes {
+			return nil, errors.New("owned seq tail exceeded topology bound")
 		}
-		lineStart = len(raw)
-		if uint64(entry.id) == facts.OldID && entry.mountPoint == target {
-			break
+		for _, value := range raw[facts.PrefixBytes:] {
+			if value == '\n' {
+				facts.FurtherRows++
+			}
 		}
+		return raw, nil
+	})
+	if captureErr != nil {
+		return facts, captureErr
 	}
-	if len(raw) == maxMountTopologyBytes {
-		return facts, errors.New("owned seq prefix exceeded topology bound")
-	}
-	facts.PrefixBytes = len(raw)
-	for replacement := range 8 {
-		if err := unix.Unmount(target, 0); err != nil {
-			return facts, err
-		}
-		if err := mount(target); err != nil {
-			return facts, err
-		}
-		facts.Replacements = replacement + 1
-		facts.NewID, facts.NewInode, err = ownedTopologyMountIdentity(target)
-		if err != nil {
-			return facts, err
-		}
-		if facts.NewID == facts.OldID {
-			break
-		}
-	}
-	// Finish this FD without seek/reopen; this is an explicitly controlled
-	// kernel seq-file experiment, not an alternate production capture path.
-	var block [4096]byte
-	for len(raw) <= maxMountTopologyBytes {
-		n, err := unix.Read(int(info.Fd()), block[:])
-		if errors.Is(err, unix.EINTR) {
-			continue
-		}
-		if err != nil {
-			return facts, err
-		}
-		if n == 0 {
-			break
-		}
-		raw = append(raw, block[:n]...)
-	}
-	if len(raw) > maxMountTopologyBytes {
-		return facts, errors.New("owned seq tail exceeded topology bound")
-	}
-	for _, value := range raw[facts.PrefixBytes:] {
-		if value == '\n' {
-			facts.FurtherRows++
-		}
-	}
-	after := []unix.PollFd{{Fd: int32(info.Fd()), Events: unix.POLLPRI | unix.POLLERR}}
-	if _, err := unix.Poll(after, 0); err != nil {
-		return facts, err
-	}
-	facts.PollChanged = after[0].Revents&(unix.POLLPRI|unix.POLLERR) != 0
+	facts.PollChanged = changed
+	facts.Discarded = changed && len(entries) == 0
 	_, parseErr := parseMountTopology(raw)
 	var refusal *mountTopologyRefusal
 	if errors.As(parseErr, &refusal) {
@@ -200,7 +200,7 @@ func captureOwnedTopologyInterleave() (facts topologyInterleaveFacts, err error)
 		return facts, freshErr
 	}
 	facts.Reproduced = facts.OldID == facts.NewID && facts.Predicate == int(topologyDuplicateIdentity) &&
-		facts.RefusedID == int(facts.OldID) && facts.PollChanged && facts.FurtherRows > 0
+		facts.RefusedID == int(facts.OldID) && facts.PollChanged && facts.Discarded && facts.FurtherRows > 0
 	return facts, nil
 }
 
