@@ -163,7 +163,7 @@ func (t programOwnerTools) compose(services ProgramServices) (func(tools.ToolCon
 			owners.Natives["git"] = gitNative
 		}
 		if curlOwners != nil {
-			tool, _ := curlOwners.Operation("curl")
+			tool := curlOwners.Operation()
 			owners.Natives["curl"] = command.NativeOperation{Tool: tool, Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
 				prepared, err := curlOwners.Prepare(mutation.Program{Paths: frame, Barrier: barrier}, request)
 				if err != nil {
