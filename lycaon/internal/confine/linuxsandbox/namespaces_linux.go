@@ -81,10 +81,20 @@ func applyFilesystem(fs Filesystem) error {
 		ops = append(ops, mountOp{path: p, kind: opRestored, clone: fd})
 	}
 	sort.SliceStable(ops, func(i, j int) bool { return ops[i].path < ops[j].path })
-	hiddenFile := -1
+	var hiddenFiles *hiddenFileMask
+	for _, op := range ops {
+		if op.kind == opHidden && !isDir(op.path) {
+			var err error
+			hiddenFiles, err = newHiddenFileMask()
+			if err != nil {
+				return mountFailure("prepare private file mask", err)
+			}
+			break
+		}
+	}
 	defer func() {
-		if hiddenFile >= 0 {
-			_ = unix.Close(hiddenFile)
+		if hiddenFiles != nil {
+			_ = hiddenFiles.close()
 		}
 	}()
 	for _, op := range ops {
@@ -94,12 +104,10 @@ func applyFilesystem(fs Filesystem) error {
 			if isDir(op.path) {
 				err = hideDirectory(op.path)
 			} else {
-				if hiddenFile < 0 {
-					hiddenFile, err = newTmpfs("0755", maskTmpfsSize)
+				if hiddenFiles == nil {
+					return mountFailure(op.path, errors.New("filesystem entry changed kind during setup"))
 				}
-				if err == nil {
-					err = hideFile(hiddenFile, op.path)
-				}
+				err = hiddenFiles.hide(op.path)
 			}
 		case opReadOnly:
 			err = bindReadOnly(op.path)
@@ -109,6 +117,13 @@ func applyFilesystem(fs Filesystem) error {
 		}
 		if err != nil {
 			return mountFailure(op.path, err)
+		}
+	}
+	if hiddenFiles != nil {
+		err := hiddenFiles.close()
+		hiddenFiles = nil
+		if err != nil {
+			return mountFailure("close private file-mask descriptor", err)
 		}
 	}
 	// Hidden directories become read-only only after anything restored beneath
@@ -137,27 +152,6 @@ func hideDirectory(path string) error {
 	}
 	defer func() { _ = unix.Close(fd) }()
 	return unix.MoveMount(fd, "", unix.AT_FDCWD, path, unix.MOVE_MOUNT_F_EMPTY_PATH)
-}
-
-// hideFile replaces a file with an empty, unreadable file from the shared tmpfs.
-func hideFile(tmpfs int, path string) error {
-	name := "hidden"
-	fd, err := unix.Openat(tmpfs, name, unix.O_CREAT|unix.O_WRONLY|unix.O_CLOEXEC, 0)
-	if err != nil && !errors.Is(err, unix.EEXIST) {
-		return err
-	}
-	if err == nil {
-		_ = unix.Close(fd)
-	}
-	clone, err := unix.OpenTree(tmpfs, name, unix.OPEN_TREE_CLONE|unix.O_CLOEXEC)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = unix.Close(clone) }()
-	if err := unix.MountSetattr(clone, "", unix.AT_EMPTY_PATH, &unix.MountAttr{Attr_set: unix.MOUNT_ATTR_RDONLY}); err != nil {
-		return err
-	}
-	return unix.MoveMount(clone, "", unix.AT_FDCWD, path, unix.MOVE_MOUNT_F_EMPTY_PATH)
 }
 
 // bindReadOnly covers a path with a read-only copy of itself.

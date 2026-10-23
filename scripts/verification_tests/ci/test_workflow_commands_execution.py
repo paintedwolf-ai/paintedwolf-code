@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 import unittest
 
 
@@ -32,3 +33,17 @@ class WorkflowCommandTests(unittest.TestCase):
         draft = self.command('gate', '--skipped', 'platform', '--draft', 'true', NEEDS_JSON=results)
         self.assertNotEqual(draft.returncode, 0)
         self.assertIn('draft pull requests are not verified', draft.stderr)
+
+    def test_schedule_summary_preserves_matrix_json_output(self):
+        with tempfile.TemporaryDirectory() as directory:
+            summary = Path(directory) / "summary.md"
+            measured = Path(directory) / "timings.json"
+            measured.write_text(json.dumps({"runs": [42], "lanes": {"ready": 250}}))
+            result = self.command('matrix', 'fast', '--timings', str(measured),
+                                  GITHUB_STEP_SUMMARY=str(summary))
+            self.assertEqual(result.returncode, 0, result.stderr)
+            rows = json.loads(result.stdout)['include']
+            self.assertEqual(rows[0]['timing_basis'], 'measured')
+            self.assertEqual(rows[0]['expected_seconds'], 250)
+            self.assertIn('Estimate basis: `measured`', summary.read_text())
+            self.assertIn('Qualification timing sources: 42', summary.read_text())
