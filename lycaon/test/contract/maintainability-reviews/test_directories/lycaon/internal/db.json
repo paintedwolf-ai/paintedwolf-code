@@ -4,13 +4,13 @@
   "kind": "test_suite",
   "workstream": "database-integrity",
   "disposition": "retain",
-  "reason": "Retain these 41 immediate database test files: private schema, migration, transaction, storage, and recovery fixtures belong beside the store implementation. Startup scalability and physical-store quarantine tests extend the existing health suite without introducing another test file. Bounded admission is proved by opening a fixture that a whole-store quick_check rejects, then confirming background quarantine and restart refusal. The subprocess fixture verifies committed WAL recovery and unfinished-transaction rollback. Stale-record discard for replaced and absent stores and the upgrade-path refusal of a recorded diagnosis were added to the existing health and upgrade suites. Reconsider membership on additions or replacements.",
-  "reviewed_commit": "d5c864fc49ef77ce1a86ddaa28c584fda59cecb3",
-  "ceiling": 41,
+  "reason": "Retain these 42 immediate database test files: private schema, migration, transaction, storage, and recovery fixtures belong beside the store implementation. Startup scalability and physical-store quarantine tests extend the existing health suite within the existing health suite. Bounded admission is proved by opening a fixture that a whole-store quick_check rejects, then confirming background quarantine and restart refusal. The subprocess fixture verifies committed WAL recovery and unfinished-transaction rollback. Stale-record discard for replaced and absent stores and the upgrade-path refusal of a recorded diagnosis were added to the existing health and upgrade suites. Reconsider membership on additions or replacements. Retain 42 immediate files after adding the focused real-WAL pressure fixture. Its separate connection and checkpoint lifecycle belong beside private database audit state, rather than in API or host suites. Nine focused audit/health tests and subtests passed, including pressure release and cancellation diagnosis. Reconsider any further membership growth.",
+  "reviewed_commit": "5a04749985dcdb1ca1c6953b7998b34ebfee5633",
+  "ceiling": 42,
   "boundaries": {
     "lycaon/internal/db/schema_integrity_test.go": "40c3f6ae2cd2be3bd8b16dd852636611406d18ed9f737912351307f0b6169dbe",
     "lycaon/internal/db/schema_index_integrity_test.go": "fa12ca9706074beda8b7bbd08726d68b2b9eb65bd03525fe58e9b4d52f742281",
-    "lycaon/internal/db/store_health_test.go": "97835afd62a6df6ea3775e1d9c5bcbfb7ae33d3fa8c2a7b03425c5db135139c2"
+    "lycaon/internal/db/store_health_test.go": "ddaa3c974a9dad3183c295ee88946ecb04ad70687b6359481cc78f5d751c76a8"
   },
-  "reviewed_shape": "502d42396659e753f8d65d0088a1d165e7860330b199e6374a1c0651aa36d01c"
+  "reviewed_shape": "ac7c72f554031af706c235f180d11ca00778fbce98793c0d355c48f85204f07a"
 }
