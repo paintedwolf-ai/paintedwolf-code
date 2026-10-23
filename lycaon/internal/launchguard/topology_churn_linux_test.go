@@ -16,15 +16,17 @@ import (
 )
 
 type topologyChurnFacts struct {
-	Predicate   int  `json:"predicate"`
-	Bytes       int  `json:"bytes"`
-	Rows        int  `json:"rows"`
-	ID          int  `json:"id"`
-	Parent      int  `json:"parent"`
-	Roots       int  `json:"roots"`
-	PollChanged bool `json:"poll_changed_during_capture"`
-	FreshValid  bool `json:"fresh_capture_valid_after_worker"`
-	Iterations  int  `json:"iterations"`
+	Reproduced       bool `json:"reproduced"`
+	PrivateNamespace bool `json:"private_namespace_verified"`
+	Predicate        int  `json:"predicate"`
+	Bytes            int  `json:"bytes"`
+	Rows             int  `json:"rows"`
+	ID               int  `json:"id"`
+	Parent           int  `json:"parent"`
+	Roots            int  `json:"roots"`
+	PollChanged      bool `json:"poll_changed_during_capture"`
+	FreshValid       bool `json:"fresh_capture_valid_after_worker"`
+	Iterations       int  `json:"iterations"`
 }
 
 func TestTopologyOwnedChurnFixture(t *testing.T) {
@@ -52,8 +54,14 @@ func TestTopologyCaptureDuringOwnedPrivateMountChurn(t *testing.T) {
 	if err := json.Unmarshal(out, &facts); err != nil {
 		t.Fatal(err)
 	}
-	if facts.Predicate < 0 || facts.Predicate > int(topologyCycle) || !facts.PollChanged || !facts.FreshValid || facts.Bytes <= 0 {
-		t.Fatalf("fixture did not establish an actual changed seq-file capture and valid settled topology: %+v", facts)
+	if !facts.PrivateNamespace || !facts.FreshValid || facts.Iterations < 1 || facts.Iterations > 1024 {
+		t.Fatalf("fixture lost owned isolation, bounded capture or valid settled topology: %+v", facts)
+	}
+	if facts.Reproduced && (facts.Predicate < 0 || facts.Predicate > int(topologyCycle) || facts.Bytes <= 0 || facts.Rows < 0) {
+		t.Fatalf("reproduced refusal lost its exact bounded scalar shape: %+v", facts)
+	}
+	if !facts.Reproduced && facts.Predicate != -1 {
+		t.Fatalf("absent reproduction gained a fabricated predicate: %+v", facts)
 	}
 	t.Logf("actual owned mount churn scalar facts: %s", out)
 }
@@ -61,6 +69,10 @@ func TestTopologyCaptureDuringOwnedPrivateMountChurn(t *testing.T) {
 func captureOwnedTopologyChurn() (facts topologyChurnFacts, err error) {
 	facts.Predicate = -1
 	runtime.LockOSThread()
+	host, err := os.Stat("/proc/thread-self/ns/mnt")
+	if err != nil {
+		return facts, err
+	}
 	if os.Geteuid() != 0 {
 		return facts, errors.New("owned topology churn requires initial root")
 	}
@@ -69,6 +81,23 @@ func captureOwnedTopologyChurn() (facts topologyChurnFacts, err error) {
 	}
 	if err := unix.Mount("", "/", "", unix.MS_REC|unix.MS_PRIVATE, ""); err != nil {
 		return facts, err
+	}
+	private, err := os.Stat("/proc/thread-self/ns/mnt")
+	if err != nil {
+		return facts, err
+	}
+	_, isolated, err := readCurrentMountTopology()
+	if err != nil {
+		return facts, err
+	}
+	facts.PrivateNamespace = !os.SameFile(host, private)
+	for _, entry := range isolated {
+		if entry.shared != 0 || entry.master != 0 || entry.propagateFrom != 0 {
+			facts.PrivateNamespace = false
+		}
+	}
+	if !facts.PrivateNamespace {
+		return facts, errors.New("owned topology churn namespace is not private")
 	}
 	root, err := os.MkdirTemp("", "pw-owned-topology-churn-")
 	if err != nil {
@@ -124,11 +153,15 @@ func captureOwnedTopologyChurn() (facts topologyChurnFacts, err error) {
 		if _, err := unix.Poll(after, 0); err != nil {
 			return facts, err
 		}
-		_, parseErr := parseMountTopology(raw)
+		entries, parseErr := parseMountTopology(raw)
+		facts.Iterations = iteration + 1
+		facts.Bytes, facts.Rows = len(raw), len(entries)
 		var refusal *mountTopologyRefusal
 		if errors.As(parseErr, &refusal) {
-			facts = topologyChurnFacts{int(refusal.predicate), refusal.bytes, refusal.rows, refusal.id, refusal.parent, refusal.roots,
-				after[0].Revents&(unix.POLLPRI|unix.POLLERR) != 0, false, iteration + 1}
+			facts.Reproduced = true
+			facts.Predicate = int(refusal.predicate)
+			facts.Bytes, facts.Rows, facts.ID, facts.Parent, facts.Roots = refusal.bytes, refusal.rows, refusal.id, refusal.parent, refusal.roots
+			facts.PollChanged = after[0].Revents&(unix.POLLPRI|unix.POLLERR) != 0
 			break
 		}
 	}
@@ -142,9 +175,6 @@ func captureOwnedTopologyChurn() (facts topologyChurnFacts, err error) {
 	if freshErr != nil {
 		return facts, freshErr
 	}
-	if facts.Predicate < 0 {
-		return facts, errors.New("bounded owned churn produced no refused capture")
-	}
 	return facts, nil
 }
 
@@ -157,6 +187,17 @@ func mutateOwnedTopology(namespace *os.File, target string, start <-chan struct{
 	}
 	if err := unix.Setns(int(namespace.Fd()), unix.CLONE_NEWNS); err != nil {
 		return err
+	}
+	actual, err := os.Stat("/proc/thread-self/ns/mnt")
+	if err != nil {
+		return err
+	}
+	expected, err := namespace.Stat()
+	if err != nil {
+		return err
+	}
+	if !os.SameFile(actual, expected) {
+		return errors.New("owned churn worker entered another namespace")
 	}
 	<-start
 	defer unix.Unmount(target, unix.MNT_DETACH)
