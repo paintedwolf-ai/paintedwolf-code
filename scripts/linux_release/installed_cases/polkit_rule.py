@@ -85,28 +85,34 @@ class RuleLease:
         self.before = _inventory(directory)
 
     def install(self):
-        descriptor = os.open(self.name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
-                             0o644, dir_fd=self.directory)
+        # A handled signal must not separate a filesystem mutation from its
+        # recorded identity; unmask only after the exact created state is known.
+        previous = signal.pthread_sigmask(signal.SIG_BLOCK, {signal.SIGTERM, signal.SIGINT, signal.SIGHUP})
         try:
-            # Remember the exclusive creation before writing, including partial-write failure.
-            self.created = {**_identity(os.fstat(descriptor)), 'sha256': hashlib.sha256(b'').hexdigest()}
-            os.fchmod(descriptor, 0o644)
-            self.created = {**_identity(os.fstat(descriptor)), 'sha256': hashlib.sha256(b'').hexdigest()}
-            offset = 0
-            while offset < len(self.body):
-                written = os.write(descriptor, self.body[offset:])
-                if written <= 0:
-                    raise OSError('presence rule write did not advance')
-                offset += written
-                self.created = {**_identity(os.fstat(descriptor)),
-                                'sha256': hashlib.sha256(self.body[:offset]).hexdigest()}
-            os.fsync(descriptor)
-            if _file(self.directory, self.name) != self.created:
-                raise ValueError('exclusive presence rule changed during installation')
-            return {'name': self.name, 'action_id': ACTION, 'object': self.created,
-                    'before': self.before}
+            descriptor = os.open(self.name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                                 0o644, dir_fd=self.directory)
+            try:
+                # Remember the exclusive creation before writing, including partial-write failure.
+                self.created = {**_identity(os.fstat(descriptor)), 'sha256': hashlib.sha256(b'').hexdigest()}
+                os.fchmod(descriptor, 0o644)
+                self.created = {**_identity(os.fstat(descriptor)), 'sha256': hashlib.sha256(b'').hexdigest()}
+                offset = 0
+                while offset < len(self.body):
+                    written = os.write(descriptor, self.body[offset:])
+                    if written <= 0:
+                        raise OSError('presence rule write did not advance')
+                    offset += written
+                    self.created = {**_identity(os.fstat(descriptor)),
+                                    'sha256': hashlib.sha256(self.body[:offset]).hexdigest()}
+                os.fsync(descriptor)
+                if _file(self.directory, self.name) != self.created:
+                    raise ValueError('exclusive presence rule changed during installation')
+                return {'name': self.name, 'action_id': ACTION, 'object': self.created,
+                        'before': self.before}
+            finally:
+                os.close(descriptor)
         finally:
-            os.close(descriptor)
+            signal.pthread_sigmask(signal.SIG_SETMASK, previous)
 
     def remove(self):
         if self.created is None:
