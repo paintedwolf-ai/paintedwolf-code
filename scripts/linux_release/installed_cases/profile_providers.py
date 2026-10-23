@@ -1,4 +1,4 @@
-"""Observe only the source-fixed keyless GUI fixture in its owned provider catalog."""
+"""Observe only the source-fixed credentialed GUI fixture in its owned provider catalog."""
 from __future__ import annotations
 
 import os
@@ -73,7 +73,7 @@ def selected(rows, endpoint: str):
     if len(set(identifiers)) != len(identifiers) or any(value != MODEL for value in identifiers):
         raise ValueError('owned GUI provider model identities are ambiguous')
     return {'provider_id': row['id'], 'kind': GUI_KIND, 'requires_api_key': True,
-            'models': identifiers, 'observer': 'owned-provider-YAML'}
+            'configured_models': identifiers, 'observer': 'owned-provider-YAML'}
 
 
 def find_gui_provider(app, endpoint: str):
