@@ -21,6 +21,7 @@ from .crash import detached_cleanup, host_execution_lifetime
 from .kernel import private_shared_memory, restricted_namespaces, helper_boundary
 from .process import run
 from .terminal import terminal_interaction
+from .presence import unchallenged_presence
 from .browser import browser_sandbox
 from .browser_network import denied_local_services, allowed_local_server
 from .products import require_owned_guest
@@ -204,7 +205,8 @@ def wrong_launcher_memory(binding: dict) -> tuple[str, dict, dict]:
         raise
 
 
-PROBES = {('browser', 'denied-local-services'): denied_local_services,
+PROBES = {('vault', 'presence-cancel-and-expiry'): unchallenged_presence,
+          ('browser', 'denied-local-services'): denied_local_services,
           ('browser', 'allowed-local-server'): allowed_local_server,
           ('browser', 'browser-sandbox-composition'): browser_sandbox,
           ('processes', 'terminal-interaction'): terminal_interaction,

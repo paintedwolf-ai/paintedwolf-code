@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 from linux_release.installed_cases import desktop_ui as ui
 from linux_release.installed_cases.records import CaseFailed, CaseUnavailable
 
-API = SimpleNamespace(ROLE_FRAME=1, ROLE_DIALOG=2, ROLE_PUSH_BUTTON=3, ROLE_ENTRY=4, ROLE_PASSWORD_TEXT=5,
+API = SimpleNamespace(ROLE_FRAME=1, ROLE_DIALOG=2, ROLE_PUSH_BUTTON=3, ROLE_ENTRY=4, ROLE_PASSWORD_TEXT=5, ROLE_PAGE_TAB=6,
                       STATE_DEFUNCT=10, STATE_SHOWING=11, STATE_SENSITIVE=12, STATE_ENABLED=13)
 IDENTITY = {'pid': 123, 'parent_pid': 100, 'start_time_ticks': 42}
 
@@ -42,6 +42,21 @@ def surface(children):
 
 
 class DesktopUIOwnershipTests(unittest.TestCase):
+    def test_page_tab_is_an_explicit_role_and_uses_the_same_unique_action(self):
+        tab = Node(API.ROLE_PAGE_TAB, 'Secrets')
+        button = Node(API.ROLE_PUSH_BUTTON, 'Secrets')
+        api, _ = surface([tab, button])
+        with ui.DesktopUI(self.app, api) as actor:
+            actor.click('Secrets', tab=True)
+            tab.action.doAction.assert_called_once_with(0)
+            button.action.doAction.assert_not_called()
+            with self.assertRaises(ValueError):
+                actor.click('Secrets', tab=1)
+            tab.action.nActions = 2
+            with self.assertRaises(CaseUnavailable):
+                actor.click('Secrets', tab=True)
+        self.assertEqual(tab.action.doAction.call_count, 1)
+
     def test_interactive_retry_requires_same_owned_identity_and_one_deadline(self):
         api, _ = surface([Node(API.ROLE_PUSH_BUTTON, 'Send')])
         witness = {'normal_actionable_control': True}
