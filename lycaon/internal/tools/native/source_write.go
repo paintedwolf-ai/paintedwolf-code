@@ -754,19 +754,20 @@ func recordAgentMutationPaths(tctx tools.ToolContext, m agentMutation) {
 
 // publishAgentStreams closes the durable-intent transaction before touching any
 // destination. Each held replacement still revalidates its own target at commit.
-func publishAgentStreams(ctx context.Context, tc tools.ToolContext, streams []*agentStreamStage) ([]sourceeffect.Completion, error) {
+func publishAgentStreams(ctx context.Context, tc tools.ToolContext, memory *toolcontract.ProgramMemory, streams []*agentStreamStage) ([]sourceeffect.Completion, sourceeffect.PendingEffects, error) {
 	plans := make([]sourceeffect.Plan, 0, len(streams))
 	for _, stream := range streams {
 		record, change, ok := agentCommitInputs(tc, stream.mutation)
 		if tc.Source.SourceMutations == nil || !ok {
-			return publishIndividualStreams(ctx, tc, streams)
+			completions, err := publishIndividualStreams(ctx, tc, streams)
+			return completions, nil, err
 		}
 		plans = append(plans, sourceeffect.Plan{Record: record, Change: change, Target: stream.request.Target.Location})
 	}
 	completions := make([]sourceeffect.Completion, len(streams))
-	pending, err := tc.Source.SourceMutations.PrepareEffects(ctx, plans)
+	pending, err := tc.Source.SourceMutations.PrepareEffects(ctx, memory, plans)
 	if err != nil {
-		return completions, err
+		return completions, nil, err
 	}
 	ids := pending.IDs()
 	var publicationErr error
@@ -782,14 +783,18 @@ func publishAgentStreams(ctx context.Context, tc tools.ToolContext, streams []*a
 			break
 		}
 	}
-	err = pending.Finish(ctx, completions)
+	err = pending.Record(ctx, completions)
+	if err != nil {
+		pending.Close()
+		pending = nil
+	}
 	for i, completion := range completions {
 		if completion.Result.Publication.Committed() {
 			recordAgentMutationPaths(tc, streams[i].mutation)
 			tc.RecordModelAuthoredCredentials(ctx, streams[i].mutation.AbsPath, streams[i].mutation.After)
 		}
 	}
-	return completions, errors.Join(publicationErr, err)
+	return completions, pending, errors.Join(publicationErr, err)
 }
 
 // Mixed attribution scopes keep the existing individual-effect owner. This

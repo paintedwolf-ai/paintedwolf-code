@@ -6,11 +6,17 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/lycaon/lycaon/internal/sourceeffect"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 const copyPageEntries = 64
+
+const (
+	copySettlementRecords = 512
+	copySettlementBytes   = 1 << 20
+)
 
 type copyPageEntry struct {
 	pair   FilePair
@@ -107,11 +113,30 @@ func (p *copyPage) Flush() error {
 		return nil
 	}
 	defer p.clear()
+	var retainedBytes int64
+	for _, entry := range p.entries {
+		retainedBytes += int64(len(entry.stage.mutation.Before) + len(entry.stage.mutation.After))
+	}
+	if err := p.operation.beforePublication(p.ctx, p.tc, len(p.entries), retainedBytes); err != nil {
+		return err
+	}
 	streams := make([]*agentStreamStage, len(p.entries))
 	for i, entry := range p.entries {
 		streams[i] = entry.stage
 	}
-	completions, err := publishAgentStreams(p.ctx, p.tc, streams)
+	completions, pending, err := publishAgentStreams(p.ctx, p.tc, p.operation.memory, streams)
+	if pending != nil {
+		p.operation.pending = append(p.operation.pending, pending)
+		p.operation.pendingRecords += len(p.entries)
+		p.operation.pendingBytes += retainedBytes
+	}
+	for _, entry := range p.entries {
+		entry.stage.Close()
+	}
+	// Metadata effects need the same path reservation after content settlement.
+	if p.operation.input.Preserve || p.operation.pendingRecords >= copySettlementRecords || p.operation.pendingBytes >= copySettlementBytes || err != nil {
+		err = errors.Join(err, p.operation.settlePending(p.ctx, p.tc))
+	}
 	for i, completion := range completions {
 		if !completion.Result.Publication.Committed() {
 			continue
@@ -127,6 +152,38 @@ func (p *copyPage) Flush() error {
 		}
 	}
 	return err
+}
+
+func (op *CopyOperation) beforePublication(ctx context.Context, tc tools.ToolContext, records int, bytes int64) error {
+	if len(op.pending) > 0 && (op.pendingRecords+records > copySettlementRecords || op.pendingBytes+bytes > copySettlementBytes) {
+		if err := op.settlePending(ctx, tc); err != nil {
+			return err
+		}
+	}
+	if op.pendingRelease == nil {
+		release, err := op.memory.ReserveProgramState(ctx, copySettlementRecords*32)
+		if err != nil {
+			return err
+		}
+		op.pendingRelease = release
+		op.pending = make([]sourceeffect.PendingEffects, 0, copySettlementRecords)
+	}
+	return nil
+}
+
+func (op *CopyOperation) settlePending(ctx context.Context, tc tools.ToolContext) error {
+	if len(op.pending) == 0 {
+		return nil
+	}
+	defer func() {
+		for i, pending := range op.pending {
+			pending.Close()
+			op.pending[i] = nil
+		}
+		op.pending = op.pending[:0]
+		op.pendingRecords, op.pendingBytes = 0, 0
+	}()
+	return tc.Source.SourceMutations.SettleEffects(context.WithoutCancel(ctx), op.pending)
 }
 
 func (p *copyPage) clear() {

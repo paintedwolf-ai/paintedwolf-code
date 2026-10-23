@@ -24,11 +24,12 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/extpackstest"
+	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 )
 
-func composedMutationEntry(t *testing.T) (*programtest.Fixture, *projectsource.SourceMutationService, *project.Project) {
+func composedMutationEntry(t *testing.T) (*programtest.Fixture, *projectsource.SourceMutationService, *project.Project, *sourceledger.Store) {
 	t.Helper()
 	fixture := programtest.New(t, programtest.Options{})
 	root, err := filepath.EvalSymlinks(fixture.Dir)
@@ -61,12 +62,12 @@ func composedMutationEntry(t *testing.T) (*programtest.Fixture, *projectsource.S
 		tc.Files.FileChangeReview = func(context.Context, []tools.FileChange) error { return nil }
 	}
 	p := &project.Project{ID: testdbseed.DefaultProjectID, Roots: []project.Root{{ID: "r1", ProjectID: testdbseed.DefaultProjectID, Path: root, IsPrimary: true}}}
-	return fixture, service, p
+	return fixture, service, p, ledger
 }
 
 func runMutationEntryTree(t *testing.T, total int) (copyElapsed, removeElapsed time.Duration) {
 	t.Helper()
-	fixture, service, p := composedMutationEntry(t)
+	fixture, service, p, _ := composedMutationEntry(t)
 	const buckets = 100
 	for i := range total {
 		dir := filepath.Join(fixture.Dir, "source", fmt.Sprintf("b%02d", i%buckets))
@@ -133,7 +134,7 @@ func TestComposedMutationEntryCopyRemoveUndo(t *testing.T) {
 }
 
 func TestComposedRecursiveRemovalPreservesPolicyWithoutReviewer(t *testing.T) {
-	fixture, _, _ := composedMutationEntry(t)
+	fixture, _, _, _ := composedMutationEntry(t)
 	setup := fixture.Configure
 	fixture.Configure = func(tc *tools.ToolContext) { setup(tc); tc.Files.FileChangeReview = nil }
 	testutil.FailErr(t, "create instruction directory", os.Mkdir(filepath.Join(fixture.Dir, "tree"), 0o755))
@@ -154,5 +155,82 @@ func TestComposedRecursiveRemovalPreservesPolicyWithoutReviewer(t *testing.T) {
 	testutil.FailErr(t, "read protected instructions", err)
 	if string(content) != "instructions" {
 		t.Fatalf("instructions changed: %q", content)
+	}
+}
+
+func TestComposedCopySettlementFailureRetainsEveryAppliedPageAndUndo(t *testing.T) {
+	fixture, service, p, ledger := composedMutationEntry(t)
+	const total = 130
+	const body = "original"
+	testutil.FailErr(t, "create source", os.Mkdir(filepath.Join(fixture.Dir, "source"), 0o755))
+	for i := range total {
+		testutil.FailErr(t, "seed source", os.WriteFile(filepath.Join(fixture.Dir, "source", fmt.Sprintf("f%03d", i)), []byte(body), 0o644))
+	}
+	_, err := fixture.Database.ExecContext(t.Context(), `CREATE TRIGGER reject_later_copy_effect BEFORE INSERT ON source_effects
+WHEN NEW.entry_kind='file' AND NEW.path LIKE 'copied/%' AND EXISTS(SELECT 1 FROM source_effects WHERE entry_kind='file' AND path LIKE 'copied/%')
+BEGIN SELECT RAISE(ABORT,'recording unavailable'); END`)
+	testutil.FailErr(t, "inject partial ledger failure", err)
+	raw, err := fixture.Call(t, t.Context(), "cp -r source copied")
+	testutil.FailErr(t, "run production copy entry", err)
+	var outcome command.ProgramOutcome
+	testutil.FailErr(t, "decode copy result", json.Unmarshal([]byte(raw), &outcome))
+	// The projection counts completed command children; file facts are checked below.
+	if outcome.Status == 0 || outcome.CompletedEffects != 1 || outcome.UncertainEffects != 0 {
+		t.Fatalf("settlement failure lost actual publications: %+v", outcome)
+	}
+	var applied, attributed int
+	testutil.FailErr(t, "count durable applied facts", fixture.Database.QueryRowContext(t.Context(), `SELECT count(*) FROM source_mutations WHERE status='file_applied'`).Scan(&applied))
+	testutil.FailErr(t, "count rolled-back file attribution", fixture.Database.QueryRowContext(t.Context(), `SELECT count(*) FROM source_effects WHERE entry_kind='file' AND path LIKE 'copied/%'`).Scan(&attributed))
+	if applied != total || attributed != 0 {
+		t.Fatalf("applied=%d attributed=%d", applied, attributed)
+	}
+	for i := range total {
+		content, err := os.ReadFile(filepath.Join(fixture.Dir, "copied", fmt.Sprintf("f%03d", i)))
+		testutil.FailErr(t, "read actual publication", err)
+		if string(content) != body {
+			t.Fatalf("published body=%q", content)
+		}
+	}
+	later := filepath.Join(fixture.Dir, "copied", "f000")
+	testutil.FailErr(t, "make post-publication edit", os.WriteFile(later, []byte("later"), 0o644))
+	_, err = fixture.Database.ExecContext(t.Context(), `DROP TRIGGER reject_later_copy_effect`)
+	testutil.FailErr(t, "restore ledger", err)
+	restarted := projectsource.NewSourceMutationService(fixture.Database, ledger)
+	t.Cleanup(func() { testutil.FailErr(t, "close restarted source service", restarted.Close()) })
+	testutil.FailErr(t, "recover actual applied pages", restarted.Recover(t.Context()))
+	testutil.FailErr(t, "count recovered attribution", fixture.Database.QueryRowContext(t.Context(), `SELECT count(*) FROM source_effects WHERE entry_kind='file' AND path LIKE 'copied/%'`).Scan(&attributed))
+	var originalVersions int
+	testutil.FailErr(t, "count exact original versions", fixture.Database.QueryRowContext(t.Context(), `SELECT count(*) FROM source_versions WHERE state='content' AND content_sha256=?`, textfile.SHA256([]byte(body))).Scan(&originalVersions))
+	if attributed != total || originalVersions != total {
+		t.Fatalf("recovered effects=%d original versions=%d", attributed, originalVersions)
+	}
+	content, err := os.ReadFile(later)
+	testutil.FailErr(t, "read later edit", err)
+	if string(content) != "later" {
+		t.Fatalf("recovery replayed filesystem publication: %q", content)
+	}
+	raw, err = fixture.Call(t, t.Context(), "rm -rf copied")
+	testutil.FailErr(t, "remove recovered tree", err)
+	testutil.FailErr(t, "decode removal", json.Unmarshal([]byte(raw), &outcome))
+	if outcome.Status != 0 {
+		t.Fatalf("removal after recovery failed: %s", raw)
+	}
+	state, err := service.History.State(t.Context(), p.ID)
+	testutil.FailErr(t, "read actual Undo", err)
+	if state.Undo == nil {
+		t.Fatal("recovered copy removal has no Undo")
+	}
+	_, err = service.Undo(t.Context(), uuid.NewString(), p, projectsource.SourceHistoryMutationRequest{ExpectedEntryID: state.Undo.ID})
+	testutil.FailErr(t, "Undo recovered tree removal", err)
+	for i := range total {
+		want := body
+		if i == 0 {
+			want = "later"
+		}
+		content, err := os.ReadFile(filepath.Join(fixture.Dir, "copied", fmt.Sprintf("f%03d", i)))
+		testutil.FailErr(t, "read restored exact body", err)
+		if string(content) != want {
+			t.Fatalf("restored file %d=%q want=%q", i, content, want)
+		}
 	}
 }

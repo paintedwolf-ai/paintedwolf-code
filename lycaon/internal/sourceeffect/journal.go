@@ -23,7 +23,8 @@ type Journal interface {
 	RecoveryQuotaBytes() int64
 	InspectRemoval(context.Context, fseffect.Location, Memory) (RemovalSnapshot, error)
 	PrepareEffect(context.Context, Plan) (Pending, error)
-	PrepareEffects(context.Context, []Plan) (PendingEffects, error)
+	PrepareEffects(context.Context, Memory, []Plan) (PendingEffects, error)
+	SettleEffects(context.Context, []PendingEffects) error
 	// RemoveEntry retains an entry for Undo before removing its original path.
 	// It returns the operation identity.
 	RemoveEntry(context.Context, Removal) (string, error)
@@ -109,9 +110,12 @@ type Completion struct {
 	Err       error
 }
 
-// PendingEffects holds a bounded page of individually identified intents.
-// Finish must follow every publication or abandonment, including cancellation.
+// PendingEffects holds individually identified intents and their completion facts.
+// Record follows publication or abandonment, including cancellation. Settlement
+// follows a successful Record before the caller returns. Close releases leases;
+// durable applied markers remain recoverable if settlement fails.
 type PendingEffects interface {
 	IDs() []string
-	Finish(context.Context, []Completion) error
+	Record(context.Context, []Completion) error
+	Close()
 }

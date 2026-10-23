@@ -3,6 +3,7 @@ package mutation
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sourceeffect"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/tools/native"
 )
 
 type observedCopyJournal struct {
@@ -18,8 +20,8 @@ type observedCopyJournal struct {
 	afterPrepare func(sourceeffect.PendingEffects, []sourceeffect.Plan)
 }
 
-func (j observedCopyJournal) PrepareEffects(ctx context.Context, plans []sourceeffect.Plan) (sourceeffect.PendingEffects, error) {
-	pending, err := j.Journal.PrepareEffects(ctx, plans)
+func (j observedCopyJournal) PrepareEffects(ctx context.Context, memory sourceeffect.Memory, plans []sourceeffect.Plan) (sourceeffect.PendingEffects, error) {
+	pending, err := j.Journal.PrepareEffects(ctx, memory, plans)
 	if err == nil {
 		j.afterPrepare(pending, plans)
 	}
@@ -210,5 +212,58 @@ func TestMkdirPreservesObservedCreationAfterSettlementFailure(t *testing.T) {
 	testutil.FailErr(t, "inspect created directory", err)
 	if !info.IsDir() {
 		t.Fatal("directory missing")
+	}
+}
+
+func TestRecursiveCopyCancellationSettlesEarlierPublicationPages(t *testing.T) {
+	files := make(map[string]string, 70)
+	for i := range 70 {
+		files[fmt.Sprintf("tree/f%03d", i)] = "original"
+	}
+	h := newHarness(t, files)
+	memory := h.program.Memory
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	var pages [][]string
+	h.tc.Source.SourceMutations = observedCopyJournal{Journal: h.service, afterPrepare: func(pending sourceeffect.PendingEffects, _ []sourceeffect.Plan) {
+		pages = append(pages, pending.IDs())
+		if len(pages) == 2 {
+			cancel()
+		}
+	}}
+	op, err := h.owners.Operations.Copy.Begin(native.CopyInput{Recursive: true}, memory)
+	testutil.FailErr(t, "begin actual shared copy", err)
+	result, err := op.CopyPair(ctx, native.FilePair{From: h.path("tree"), To: h.path("copy")}, h.tc)
+	op.Close()
+	if !errors.Is(err, context.Canceled) || len(pages) != 2 || len(pages[0]) != 64 || len(pages[1]) != 6 || result.Effects != 65 {
+		t.Fatalf("canceled page result=%+v err=%v pages=%v", result, err, pages)
+	}
+	for page, ids := range pages {
+		for _, id := range ids {
+			var status string
+			var count int
+			testutil.FailErr(t, "read settled publication", h.db.QueryRowContext(t.Context(), `SELECT status FROM source_mutations WHERE id=?`, id).Scan(&status))
+			testutil.FailErr(t, "count definite attribution", h.db.QueryRowContext(t.Context(), `SELECT count(*) FROM source_operations WHERE operation_key=?`, id).Scan(&count))
+			wantStatus, wantCount := "committed", 1
+			if page == 1 {
+				wantStatus, wantCount = "failed", 0
+			}
+			if status != wantStatus || count != wantCount {
+				t.Fatalf("page=%d journal=%s attributed=%d", page, status, count)
+			}
+		}
+	}
+	entries, err := os.ReadDir(h.path("copy"))
+	testutil.FailErr(t, "read actual partial destination", err)
+	if len(entries) != 64 || len(result.Copied) != 64 {
+		t.Fatalf("actual files=%d copied receipts=%d", len(entries), len(result.Copied))
+	}
+	for _, entry := range entries {
+		if got := h.read("copy/" + entry.Name()); got != "original" {
+			t.Fatalf("partial publication bytes=%q", got)
+		}
+	}
+	if used := memory.InUse(); used != (toolcontract.ProgramMemoryUsage{}) {
+		t.Fatalf("canceled copy retained memory: %+v", used)
 	}
 }

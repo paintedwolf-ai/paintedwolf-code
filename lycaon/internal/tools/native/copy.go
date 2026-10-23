@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/contextio"
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/sourceeffect"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -94,6 +95,10 @@ type CopyOperation struct {
 	caps, used     RecursiveCaps
 	maxFileBytes   int64
 	resultReleases []func()
+	pending        []sourceeffect.PendingEffects
+	pendingRecords int
+	pendingBytes   int64
+	pendingRelease func()
 }
 
 func (t *CopyTool) Begin(in CopyInput, memory *toolcontract.ProgramMemory) (*CopyOperation, error) {
@@ -144,8 +149,10 @@ func (t *CopyTool) Copy(ctx context.Context, in CopyInput, tctx tools.ToolContex
 }
 
 // CopyPair retains operation use while the caller handles utility diagnostics.
-func (op *CopyOperation) CopyPair(ctx context.Context, pair FilePair, tctx tools.ToolContext) (CopyResult, error) {
-	var result CopyResult
+func (op *CopyOperation) CopyPair(ctx context.Context, pair FilePair, tctx tools.ToolContext) (result CopyResult, resultErr error) {
+	defer func() {
+		resultErr = errors.Join(resultErr, op.settlePending(ctx, tctx))
+	}()
 	if err := ctx.Err(); err != nil {
 		return result, err
 	}
@@ -318,6 +325,15 @@ func (op *CopyOperation) retainResult(ctx context.Context, pair FilePair) error 
 
 // Close returns retained result storage after the caller consumes the result.
 func (op *CopyOperation) Close() {
+	for _, pending := range op.pending {
+		pending.Close()
+	}
+	op.pending = nil
+	if op.pendingRelease != nil {
+		op.pendingRelease()
+		op.pendingRelease = nil
+	}
+	op.pendingRecords, op.pendingBytes = 0, 0
 	if op.reads != nil {
 		op.reads.Close()
 		op.reads = nil

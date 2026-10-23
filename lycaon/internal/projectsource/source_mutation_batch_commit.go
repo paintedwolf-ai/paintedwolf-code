@@ -32,15 +32,30 @@ func (s *sourceSettlement) commitRows(ctx context.Context, rows []*sourceMutatio
 }
 
 func (s *sourceSettlement) commitRowsOnce(ctx context.Context, rows []*sourceMutationRow) ([]*sourcefeed.StagedDelivery, error) {
+	prepared, err := s.prepareRows(ctx, rows)
+	if err != nil {
+		return nil, err
+	}
+	defer closePreparedSettlements(prepared)
+	return s.commitPreparedRows(ctx, prepared)
+}
+
+func closePreparedSettlements(prepared []preparedSettlement) {
+	for _, item := range prepared {
+		if item.recording != nil {
+			item.recording.Close()
+		}
+	}
+}
+
+func (s *sourceSettlement) prepareRows(ctx context.Context, rows []*sourceMutationRow) (out []preparedSettlement, result error) {
 	if len(rows) == 0 {
 		return nil, nil
 	}
 	prepared := make([]preparedSettlement, 0, len(rows))
 	defer func() {
-		for _, item := range prepared {
-			if item.recording != nil {
-				item.recording.Close()
-			}
+		if result != nil {
+			closePreparedSettlements(prepared)
 		}
 	}()
 	for _, row := range rows {
@@ -56,6 +71,13 @@ func (s *sourceSettlement) commitRowsOnce(ctx context.Context, rows []*sourceMut
 			}
 		}
 		prepared = append(prepared, item)
+	}
+	return prepared, nil
+}
+
+func (s *sourceSettlement) commitPreparedRows(ctx context.Context, prepared []preparedSettlement) ([]*sourcefeed.StagedDelivery, error) {
+	if len(prepared) == 0 {
+		return nil, nil
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
