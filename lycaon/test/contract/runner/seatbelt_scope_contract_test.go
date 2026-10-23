@@ -5,11 +5,11 @@ package contract
 import (
 	"encoding/json"
 	"go/ast"
-	"regexp"
 	"go/parser"
 	"go/token"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -220,10 +220,10 @@ func seatbeltCatalogScopes(t *testing.T, root string) []goTestScope {
 	t.Helper()
 	var catalog struct {
 		Groups map[string][]string `json:"groups"`
-		Go map[string]struct {
-			Options []string `json:"options"`
+		Go     map[string]struct {
+			Options  []string `json:"options"`
 			Packages []string `json:"packages"`
-			Flags []string `json:"flags"`
+			Flags    []string `json:"flags"`
 		} `json:"go"`
 	}
 	data := contractcheck.ReadRepoFile(t, root, "scripts/verification-plan.json")
