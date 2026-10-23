@@ -1,0 +1,13 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/db/retention.go",
+  "kind": "module",
+  "workstream": "store-health",
+  "disposition": "retain",
+  "reason": "Retention policy and its bounded cleanup runner share the database write boundary. Keep vacuum continuation with the runner so idle reclamation and checkpoint cadence remain explicit; the retained contracts cover history preservation and multi-pass reclamation without application writes. No new subsystem or authority is introduced.",
+  "reviewed_commit": "c9b43f7a18e3ba8a85afbc9b39d280e03858bad3",
+  "ceiling": 505,
+  "boundaries": {
+    "lycaon/internal/db/retention_test.go": "5eb9c1e0d33c5926d727a0f037f2011f853bc223e1b983acd95fc451d183eea0"
+  }
+}

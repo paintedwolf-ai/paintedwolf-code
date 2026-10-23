@@ -41,7 +41,7 @@ func DefaultRetention() RetentionConfig {
 	}
 }
 
-// RunMaintenance performs bounded cleanup under write pressure.
+// RunMaintenance drains cleanup work in bounded passes after each wake.
 func RunMaintenance(ctx context.Context, sqlDB *Store, cfg RetentionConfig) error {
 	if sqlDB == nil || !cfg.Enabled {
 		return nil
@@ -57,10 +57,17 @@ func RunMaintenance(ctx context.Context, sqlDB *Store, cfg RetentionConfig) erro
 			if err != nil {
 				return err
 			}
-			if report.TotalDeleted() == 0 {
+			if report.IncrementalVacuumed {
+				if _, err := CheckpointWAL(ctx, sqlDB); err != nil {
+					return err
+				}
+			}
+			if report.TotalDeleted() == 0 && !report.IncrementalVacuumed {
 				break
 			}
-			slog.InfoContext(ctx, "store maintenance batch complete", "deleted", report.TotalDeleted())
+			if report.TotalDeleted() > 0 {
+				slog.InfoContext(ctx, "store maintenance batch complete", "deleted", report.TotalDeleted())
+			}
 		}
 	}
 }
@@ -168,6 +175,13 @@ func runIncrementalVacuum(ctx context.Context, sqlDB Handle, minFreelistPages in
 		}
 		if _, err := sqlDB.ExecContext(ctx, fmt.Sprintf(`PRAGMA incremental_vacuum(%d)`, vacuumSlicePages)); err != nil {
 			return vacuumed, fmt.Errorf("incremental vacuum store: %w", err)
+		}
+		var remaining int64
+		if err := sqlDB.QueryRowContext(ctx, `PRAGMA freelist_count`).Scan(&remaining); err != nil {
+			return vacuumed, fmt.Errorf("read remaining freelist: %w", err)
+		}
+		if remaining >= freePages {
+			return vacuumed, nil
 		}
 		vacuumed = true
 	}

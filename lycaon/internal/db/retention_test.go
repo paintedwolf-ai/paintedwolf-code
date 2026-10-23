@@ -2,6 +2,8 @@ package db
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"path/filepath"
 	"testing"
 	"time"
@@ -308,5 +310,54 @@ func TestRetentionReturnsPagesItDidNotFree(t *testing.T) {
 	}
 	if after := freelist(); after >= DefaultRetention().IncrementalVacuumMinFreelistPages {
 		t.Fatalf("freelist after maintenance = %d, was %d", after, before)
+	}
+}
+
+// A single wake must reclaim more than one pass even without application writes.
+func TestMaintenanceDrainsIdleFreelist(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	path := filepath.Join(t.TempDir(), "small-pages.db")
+	writer, err := sql.Open("sqlite", fileDSN(path, writerDSNQuery))
+	testutil.FailErr(t, "open fixture writer", err)
+	t.Cleanup(func() { _ = writer.Close() })
+	writer.SetMaxOpenConns(1)
+	_, err = writer.ExecContext(ctx, `PRAGMA page_size=512; PRAGMA auto_vacuum=INCREMENTAL; PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL`)
+	testutil.FailErr(t, "configure small fixture pages", err)
+	testutil.FailErr(t, "create fixture schema", prepareStoreSchema(ctx, writer, true))
+	reader, err := openReader(ctx, path)
+	testutil.FailErr(t, "open fixture reader", err)
+	database := newStore(writer, reader)
+	t.Cleanup(func() { _ = database.Close() })
+	_, err = database.ExecContext(ctx, `CREATE TABLE freed_elsewhere(body BLOB NOT NULL);
+WITH RECURSIVE rows(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM rows WHERE n<70000)
+INSERT INTO freed_elsewhere SELECT zeroblob(400) FROM rows;
+DROP TABLE freed_elsewhere`)
+	testutil.FailErr(t, "free more than one vacuum pass", err)
+	var before int64
+	testutil.FailErr(t, "read initial freelist", database.QueryRowContext(ctx, `PRAGMA freelist_count`).Scan(&before))
+	if before <= vacuumSlicePages*vacuumSlicesPerPass {
+		t.Fatalf("freelist=%d, need more than one pass", before)
+	}
+	done := make(chan error, 1)
+	go func() { done <- RunMaintenance(ctx, database, DefaultRetention()) }()
+	t.Cleanup(func() { cancel(); <-done })
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		var remaining int64
+		testutil.FailErr(t, "read remaining freelist", database.QueryRowContext(ctx, `PRAGMA freelist_count`).Scan(&remaining))
+		if remaining < DefaultRetention().IncrementalVacuumMinFreelistPages {
+			return
+		}
+		select {
+		case err := <-done:
+			done <- err
+			if errors.Is(err, context.DeadlineExceeded) {
+				t.Fatalf("idle maintenance left %d of %d free pages", remaining, before)
+			}
+			t.Fatalf("maintenance exited before reclaim completed: %v", err)
+		case <-ticker.C:
+		}
 	}
 }
