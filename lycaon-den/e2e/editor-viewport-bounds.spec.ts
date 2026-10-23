@@ -13,7 +13,7 @@ modelIndependentWebE2e("a long editor keeps its native scroll viewport inside it
   const host = page.getByTestId("files-editor-host").filter({ visible: true });
   await expect(host.locator(".cm-content")).toContainText("Line 1");
   const scroller = host.locator(".cm-scroller");
-  for (const [width, height] of [[1280, 900], [1100, 740], [1440, 960]]) {
+  for (const [width, height] of [[1280, 900], [1100, 740], [1440, 960]] as const) {
     await page.setViewportSize({ width, height });
     await expect.poll(() => scroller.evaluate(element => {
       const frame = element.closest<HTMLElement>('[data-testid="files-editor-host"]')!;
