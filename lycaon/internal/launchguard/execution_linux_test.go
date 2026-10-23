@@ -8,14 +8,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"syscall"
 	"testing"
 
 	"golang.org/x/sys/unix"
 
-	"github.com/lycaon/lycaon/internal/blobstore"
-	"github.com/lycaon/lycaon/internal/bytebound"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -25,7 +22,10 @@ import (
 func TestExecutionRestrictionPreservesDataReparenting(t *testing.T) {
 	const childEnv = "PW_LAUNCH_EXECUTION_TEST"
 	if os.Getenv(childEnv) != "1" {
-		out, err := exec.Command("sudo", "-n", "env", childEnv+"=1", os.Args[0],
+		blobFixture := filepath.Join(t.TempDir(), "blob-commit")
+		goBuild(t, blobFixture, "./testdata/blobcommit", "")
+		testutil.FailErr(t, "make blob fixture readable", os.Chmod(filepath.Dir(blobFixture), 0o755))
+		out, err := exec.Command("sudo", "-n", "env", childEnv+"=1", "PW_BLOB_FIXTURE="+blobFixture, os.Args[0],
 			"-test.run=^TestExecutionRestrictionPreservesDataReparenting$", "-test.v").CombinedOutput()
 		if err != nil {
 			t.Fatalf("execution restriction child: %v\n%s", err, out)
@@ -49,6 +49,15 @@ func TestExecutionRestrictionPreservesDataReparenting(t *testing.T) {
 	_, err = io.Copy(copy, image)
 	testutil.FailErr(t, "copy closure image", err)
 	testutil.FailErr(t, "close closure image", copy.Close())
+	blobProgram := filepath.Join(closure, "blob-commit")
+	blobInput, err := os.Open(os.Getenv("PW_BLOB_FIXTURE"))
+	testutil.FailErr(t, "open blob fixture", err)
+	blobOutput, err := os.OpenFile(blobProgram, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o755)
+	testutil.FailErr(t, "install blob fixture", err)
+	_, err = io.Copy(blobOutput, blobInput)
+	testutil.FailErr(t, "copy blob fixture", err)
+	testutil.FailErr(t, "close blob fixture input", blobInput.Close())
+	testutil.FailErr(t, "close blob fixture output", blobOutput.Close())
 	source := filepath.Join(from, "source")
 	testutil.FailErr(t, "write data", os.WriteFile(source, []byte("data"), 0o755))
 	// These same directory pairs permit moves and links before restriction.
@@ -98,21 +107,8 @@ func TestExecutionRestrictionPreservesDataReparenting(t *testing.T) {
 		}
 	})
 	t.Run("engine blob commit", func(t *testing.T) {
-		store := blobstore.Store{Root: base, Dir: "model-content"}
-		blob, err := store.Put("reply.txt", strings.NewReader("stored model reply"), bytebound.Materialization(1024))
-		testutil.FailErr(t, "commit model output blob", err)
-		// Re-open through a fresh store to verify the durable committed body.
-		reopened := blobstore.Store{Root: base, Dir: "model-content"}
-		resolved, err := reopened.Resolve(blob.ID)
-		testutil.FailErr(t, "resolve committed model output", err)
-		reader, err := reopened.Open(resolved)
-		testutil.FailErr(t, "open committed model output", err)
-		defer func() { _ = reader.Close() }()
-		body, err := io.ReadAll(reader)
-		testutil.FailErr(t, "read committed model output", err)
-		if string(body) != "stored model reply" {
-			t.Fatalf("committed model output = %q", body)
+		if out, err := exec.Command(blobProgram, base).CombinedOutput(); err != nil {
+			t.Fatalf("commit model output blob under execution restriction: %v\n%s", err, out)
 		}
 	})
 }
-
