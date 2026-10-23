@@ -4,6 +4,7 @@ import time
 from .desktop_ui import DesktopUI
 from .app import process_identity
 from .profile_providers import find_gui_provider
+from .profile_setup import state as setup_state
 from .provider import MODEL, GUI_LABEL
 from .records import CaseUnavailable
 from ..installed_input.focus import EntryFocus
@@ -75,6 +76,12 @@ def select_default_model(app, ui):
 def configure_provider(app, fixture):
     # Existing configured fixtures must keep their exact admitted endpoint and credential transport.
     existing = find_gui_provider(app, fixture.base_url)
+    configured = setup_state(app)
+    if configured['onboarding_completed']:
+        if existing is None or configured['coordinator'] != {'provider_id': existing['provider_id'], 'model': MODEL}:
+            raise CaseUnavailable('configured-profile-does-not-select-the-fixed-provider-model')
+        app.observations['provider_setup_state'] = configured
+        return await_discovery(app, fixture)
     with DesktopUI(app) as ui:
         if existing is None:
             ui.click('Add AI provider')
