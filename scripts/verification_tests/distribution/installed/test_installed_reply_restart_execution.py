@@ -128,7 +128,8 @@ class ReplyRestartTests(unittest.TestCase):
         fixture = SimpleNamespace(server=SimpleNamespace(server_port=12345), base_url='http://127.0.0.1:12345/v1',
             discovery_observations=[{'path': '/v1/model/info', 'model': provider_setup.MODEL, 'fixture_credential_observed': True}])
         ui.__enter__.return_value = ui
-        with patch.object(provider_setup, 'DesktopUI', return_value=ui), patch.object(provider_setup, 'physical_input') as physical, patch.object(provider_setup, 'select_default_model') as select_model, patch.object(
+        with patch.object(provider_setup, 'DesktopUI', return_value=ui), patch.object(
+                provider_setup, 'setup_state', return_value={'onboarding_completed': False}), patch.object(provider_setup, 'physical_input') as physical, patch.object(provider_setup, 'select_default_model') as select_model, patch.object(
                 provider_setup, 'find_gui_provider', side_effect=[None, {'provider_id': 'fixture', 'configured_models': [provider_setup.MODEL]}]):
             self.assertEqual(provider_setup.configure_provider(app, fixture)['provider_id'], 'fixture')
         self.assertEqual([call.args[0] for call in ui.click.call_args_list],
@@ -189,7 +190,7 @@ class ReplyRestartTests(unittest.TestCase):
             self.assertEqual(result[5]['reply_before'], result[5]['reply_after'])
             for app in apps:
                 app.__exit__.assert_called_once()
-            ui.click.assert_called_once_with('Start')
+            ui.click.assert_called_once_with('Send message')
         for changes in ({'after': {'session_id': SESSION, 'content_blob_sha256': 'b' * 64}},
                         {'completed': False}, {'same_engine': True}):
             with self.subTest(changes=changes), tempfile.TemporaryDirectory() as directory:
