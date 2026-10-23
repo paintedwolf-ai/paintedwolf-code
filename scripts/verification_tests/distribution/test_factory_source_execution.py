@@ -1,8 +1,10 @@
 """Image factories retain independent host pins and the unchanged application graph."""
 
+import hashlib
 import json
 from pathlib import Path
 import tempfile
+import subprocess
 import unittest
 from unittest.mock import patch
 
@@ -62,3 +64,37 @@ class FactorySourceExecutionTests(unittest.TestCase):
         self.assertEqual(command[-1], source + '#packages.aarch64-linux.nixos-plasma-vm')
         self.assertIn('sandbox', command)
         self.assertIn('--no-write-lock-file', command)
+
+    def test_lock_preparation_stages_the_complete_factory_source_without_mutating_pins(self):
+        root = Path(__file__).resolve().parents[3]
+        source = root / 'packaging/nix/qualification-factories'
+        for channel in factory.CHANNELS:
+            with self.subTest(channel=channel), tempfile.TemporaryDirectory() as artifacts:
+                descriptor = json.loads((source / channel / 'factory-inputs.json').read_text())
+                lock = (source / channel / 'flake.lock').read_bytes()
+                pins = {name: (source / channel / name).read_bytes()
+                        for name in ('flake.lock', 'factory-inputs.json')}
+                report = {'factory': descriptor.copy()}
+                def committed(_root, _commit, path):
+                    return (root / path).read_bytes()
+                def lock_factory(command, **_kwargs):
+                    candidate = Path(command[-1])
+                    self.assertEqual((candidate.parent / 'factory.nix').read_bytes(),
+                                     (source / 'factory.nix').read_bytes())
+                    self.assertEqual((candidate / 'factory-inputs.json').read_bytes(),
+                                     pins['factory-inputs.json'])
+                    self.assertFalse((candidate / 'flake.lock').exists())
+                    (candidate / 'flake.lock').write_bytes(lock)
+                    return subprocess.CompletedProcess(command, 0)
+                with patch.object(factory, 'committed', side_effect=committed), \
+                        patch.object(nix, 'artifact_root', return_value=Path(artifacts)), \
+                        patch.object(nix.subprocess, 'run', side_effect=lock_factory), \
+                        patch.object(factory, 'validate_lock', return_value={
+                            'lock_sha256': hashlib.sha256(lock).hexdigest()}) as validate:
+                    self.assertEqual(nix.prepare_lock(root, root, 'c' * 40,
+                        {'subdirectory': 'packaging/nix/qualification-factories/' + channel,
+                         **descriptor}, {}, report), 0)
+                validate.assert_called_once_with(root, {'subdirectory':
+                    'packaging/nix/qualification-factories/' + channel, **descriptor}, lock)
+                for name, value in pins.items():
+                    self.assertEqual((source / channel / name).read_bytes(), value)

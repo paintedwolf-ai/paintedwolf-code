@@ -166,7 +166,13 @@ def prepare_lock(root, factory_root, commit, role, environment, report):
     directory = artifact_root(root) / "nix" / ("factory-lock-" + str(time.time_ns()))
     directory.mkdir(parents=True)
     with tempfile.TemporaryDirectory(prefix="factory-lock-") as temporary:
-        candidate = Path(temporary)
+        staging = Path(temporary)
+        candidate = staging / role["channel"]
+        candidate.mkdir()
+        (staging / "factory.nix").write_bytes(factory_source.committed(
+            factory_root, commit, "packaging/nix/qualification-factories/factory.nix"))
+        (candidate / "factory-inputs.json").write_bytes(factory_source.committed(
+            factory_root, commit, role["subdirectory"] + "/factory-inputs.json"))
         (candidate / "flake.nix").write_bytes(factory_source.committed(
             factory_root, commit, role["subdirectory"] + "/flake.nix"))
         result = subprocess.run(NIX + ["flake", "lock", str(candidate)], env=environment)
