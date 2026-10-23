@@ -281,7 +281,10 @@ func TestProtectedLaunchSealsTheDesktopInARootOwnedNamespace(t *testing.T) {
 	}
 	finishObservation, checkpointObservation := observeFixtureLifecycle(t, f, launch)
 	defer finishObservation()
-	mountErr := sudoFixture(t, "module-view", f.dir, fmt.Sprintf("%s=%d", fixtureDesktopPIDEnv, facts.PID))
+	mountErr := sudoFixture(t, "module-view", f.dir, fmt.Sprintf("%s=%d", fixtureDesktopPIDEnv, facts.PID),
+		fixtureUIDEnv+"="+strconv.Itoa(os.Getuid()),
+		"PW_FIXTURE_DESKTOP_START="+strconv.FormatUint(facts.ProcessStarts[facts.PID], 10),
+		"PW_FIXTURE_BOOTSTRAP_PID="+strconv.Itoa(launch.cmd.Process.Pid))
 	checkpointObservation()
 	if mountErr != nil {
 		t.Errorf("post-launch host mounts arrive noexec in the module view: %v", mountErr)

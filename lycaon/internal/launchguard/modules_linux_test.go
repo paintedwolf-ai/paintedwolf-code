@@ -122,6 +122,9 @@ func checkLiveDesktopMountIsolation(dir, rawPID string) error {
 		return fmt.Errorf("enter live desktop mount namespace: %w", err)
 	}
 	checkErr := assertMediatedNoexecView(lateDir, lateFile, underlying, existing, mountedAt)
+	if errors.Is(checkErr, errFixtureMountVisibilityDeadline) {
+		recordMountVisibilityTimeout(hostNS, lateDir, lateFile)
+	}
 	if restoreErr := unix.Setns(int(hostNS.Fd()), unix.CLONE_NEWNS); restoreErr != nil && checkErr == nil {
 		checkErr = restoreErr
 	}
@@ -195,7 +198,7 @@ func assertMediatedNoexecView(lateDir, lateFile, underlying, existing string, mo
 		}
 		remaining := time.Until(deadline)
 		if remaining <= 0 {
-			return fmt.Errorf("safe volume did not become visible before the %s setup lifetime", mountSourceSetupLimit)
+			return fmt.Errorf("%w before the %s setup lifetime", errFixtureMountVisibilityDeadline, mountSourceSetupLimit)
 		}
 		fds := []unix.PollFd{{Fd: int32(info.Fd()), Events: unix.POLLPRI | unix.POLLERR}}
 		if _, err := unix.Poll(fds, max(1, int(remaining/time.Millisecond))); err != nil && !errors.Is(err, unix.EINTR) {
