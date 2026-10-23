@@ -1128,6 +1128,17 @@ save step alone never permits retiring the prior cache because upload failures
 can be reported as warnings.
 Consumers remain read-only and rebuild safely on a miss.
 
+Each platform warmer keeps preparation, compilation, and publication in one
+runner. The macOS warmer compiles release Go inputs before publishing the shared
+Go cache, alongside its native release cache. Cache hits skip unchanged compiler
+families; publication still requires successful preparation and storage admission.
+
+The document core retains Cargo intermediates in the checkout compiler cache.
+Every build asks Cargo to validate its current inputs and stages a separate
+executable under a publication lock. Hosted lanes restore the bounded document
+compiler family; only the main warmer publishes it. Source changes invalidate
+workspace compilation without discarding dependency builds.
+
 Go analysis lanes provision only the pinned Go module graphs and their selected
 analyzers. They do not restore native compiler caches, install frontend packages,
 or download runtime engines. The lane catalog rejects runtime checks assigned
@@ -1162,7 +1173,7 @@ budgets for the whole selected matrix. Runner caps do not depend on timing data.
 | Class | Workflows | One run at a time | Runners (macOS) |
 |---|---|---|---|
 | Qualification | `qualification.yml` | `qualification` | 3 (1): the `check` profile capped at three, then platform's two jobs beside the `release` platform lanes one at a time, then two browser shards beside the desktop journey |
-| Cache warming | `build-caches.yml` | `build-caches` | 1 (1): Linux, macOS, then the release compile |
+| Cache warming | `build-caches.yml` | `build-caches` | 1 (1): Linux, then macOS including release compilation |
 | Nightly | `nightly.yml` | `nightly` | 2 (1): the `nightly` profile capped at two, then one browser shard beside the desktop journey, then the upgrade rehearsal beside quarantine observation |
 | Releases | `release.yml`, `release-halt.yml` | `release-static-update` | 2 (2): source validation beside one signed build; later desktop rehearsal or protected fixture preparation beside Linux packaging |
 | DCO certification | `dco.yml` | `dco-certification` | 1 |

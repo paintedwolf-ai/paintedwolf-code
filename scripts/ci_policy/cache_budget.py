@@ -12,7 +12,7 @@ from ci_policy.cache_payload import compressed_size
 
 LIMIT = 8 * 1024**3
 GO_BUILD_LIMIT = 1024**3
-FAMILY = re.compile(r"^(go(?:-v[0-9]+)?|decide-v[0-9]+|den-rust-v[0-9]+|release-build)-(Linux|macOS)-(X64|ARM64)-")
+FAMILY = re.compile(r"^(go(?:-v[0-9]+)?|decide-v[0-9]+|den-rust-v[0-9]+|release-build|document-core-v[0-9]+)-(Linux|macOS)-(X64|ARM64)-")
 
 
 def family(key):

@@ -29,6 +29,9 @@ outputs:
   decide-cache-hit:
     description: Whether the decision engine's exact build cache was restored
     value: ${{ steps.decide.outputs.cache-hit }}
+  document-cache-hit:
+    description: Whether the document compiler cache was restored
+    value: ${{ steps.document.outputs.cache-hit }}
   artifact-root:
     description: Checkout artifact directory
     value: ${{ steps.paths.outputs.artifact-root }}
@@ -96,6 +99,9 @@ runs:
       uses: ./.github/actions/setup-linux-native
       with:
         save: ${{ inputs.save-caches }}
+
+    - uses: ./.github/actions/cache-document-core
+      id: document
 
     - uses: ./.github/actions/cache-rust
       id: rust

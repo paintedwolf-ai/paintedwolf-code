@@ -205,6 +205,7 @@ jobs:
           ref: ${{ needs.classify.outputs.source_sha }}
           fetch-depth: 0
       - uses: ./.github/actions/setup-verification
+      - uses: ./.github/actions/cache-decide
       - uses: ./.github/actions/setup-bialy
       - name: Validate release inputs
         timeout-minutes: 60
@@ -355,6 +356,13 @@ jobs:
       - name: Restore the decision engine build
         if: ${{ matrix.goos == 'darwin' }}
         uses: ./.github/actions/cache-decide
+
+      - uses: ./.github/actions/cache-go
+        if: ${{ matrix.goos == 'darwin' }}
+      - uses: ./.github/actions/cache-notices-tools
+        if: ${{ matrix.goos == 'darwin' }}
+      - uses: ./.github/actions/cache-document-core
+        if: ${{ matrix.goos == 'darwin' }}
 
       - name: Restore the release build warmed on main
         if: ${{ matrix.goos == 'darwin' }}
