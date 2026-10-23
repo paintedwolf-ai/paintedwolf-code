@@ -126,15 +126,13 @@ func OpenHandler(bg *bgprocess.Registry) tools.ToolHandler {
 		hostRunner := hostcmd.NewRunner()
 		launch := lycexec.AgentLaunch(lycexec.LaunchAgentCommand, "terminal_open", confinement)
 		launch.CurrentAuthority = tools.AgentLaunchAuthority(tctx, confinement, egressLease, egress)
-		if tctx.Files.PackageExecution != nil {
-			launch = launch.WithReducedEnvironment()
-		}
 		req := hostcmd.Request{
 			Launch:     launch,
 			ProjectDir: cwd,
 			ProfileID:  profile,
 			Stages:     stages,
 			IOParams:   hostcmd.IOParams{InlineEnv: in.Env},
+			PathExtra:  append([]string(nil), tctx.Host.HostResourcePathExtra...),
 		}
 		facts := confine.SpawnFacts{Report: report, Network: egressLease.ObservedHosts}
 		if err := tctx.Effects.Secrets.HandOff(ctx, nil); err != nil {

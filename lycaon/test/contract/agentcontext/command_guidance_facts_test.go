@@ -108,6 +108,8 @@ func TestCommandGuidanceFactsMatchExecutionSurface(t *testing.T) {
 			contractcheck.FailErr(t, "render runner-operating-procedure", err)
 			hostRunnerUnit, err := engine.Render(context.Background(), "units/coordinator-host-runner.md", vars)
 			contractcheck.FailErr(t, "render coordinator-host-runner", err)
+			visualUnit, err := engine.Render(context.Background(), "units/visual-show-the-design.md", vars)
+			contractcheck.FailErr(t, "render visual-show-the-design", err)
 
 			switch tc.name {
 			case "implement_investigate/ext_hidden/balanced/two_folders/darwin",
@@ -115,6 +117,7 @@ func TestCommandGuidanceFactsMatchExecutionSurface(t *testing.T) {
 				"implement_investigate/ext_shown/strict/no_folders/darwin":
 				t.Logf("RENDER_SAMPLE [%s]\n--- command-surface.md ---\n%s\n--- runner-operating-procedure.md ---\n%s\n--- coordinator-host-runner.md ---\n%s\n--- sandbox-confinement.md ---\n%s",
 					tc.name, strings.TrimSpace(cmdSurface), strings.TrimSpace(runnerUnit), strings.TrimSpace(hostRunnerUnit), strings.TrimSpace(sandboxConfinement))
+				t.Logf("--- visual-show-the-design.md ---\n%s", strings.TrimSpace(visualUnit))
 			}
 
 			facts := prompts.ExtractCommandGuidanceFacts(vars)
@@ -131,6 +134,46 @@ func TestCommandGuidanceFactsMatchExecutionSurface(t *testing.T) {
 			if got := facts["root_count"]; got != len(tc.roots) {
 				t.Errorf("root_count = %#v, want %d", got, len(tc.roots))
 			}
+		})
+	}
+}
+
+func TestCommandVisualGuidanceUsesOfferedCaptureRoutes(t *testing.T) {
+	t.Parallel()
+	engine := contractcheck.BundledPromptEngineForRoot(t)
+	for _, tc := range []struct {
+		name              string
+		tools             []string
+		page, terminal    bool
+		open, read, send  bool
+		snapshot, capture bool
+	}{
+		{name: "none"},
+		{name: "command", tools: []string{"command"}, terminal: true, capture: true},
+		{name: "page", tools: []string{"capture_page"}, page: true},
+		{name: "open only", tools: []string{"terminal_open"}, open: true},
+		{name: "snapshot only", tools: []string{"terminal_snapshot"}, terminal: true, snapshot: true},
+		{name: "held terminal", tools: []string{"terminal_open", "terminal_read", "terminal_send", "terminal_snapshot"}, terminal: true, open: true, read: true, send: true, snapshot: true},
+		{name: "partial terminal", tools: []string{"terminal_open", "terminal_snapshot"}, terminal: true, open: true, snapshot: true},
+		{name: "all routes", tools: []string{"command", "capture_page", "terminal_open", "terminal_read", "terminal_send", "terminal_snapshot"}, page: true, terminal: true, open: true, read: true, send: true, snapshot: true, capture: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			vars := prompts.VisibleToolsNativePartialVars(tc.tools)
+			prompts.MergeVisualShowVars(tc.tools, nil, vars)
+			for key, want := range map[string]bool{
+				"visual_show_available": tc.page || tc.terminal,
+				"visual_show_page": tc.page, "visual_show_terminal": tc.terminal,
+				"profile_has_terminal_open": tc.open, "profile_has_terminal_read": tc.read,
+				"profile_has_terminal_send": tc.send, "profile_has_terminal_snapshot": tc.snapshot,
+				"profile_has_terminal_capture": tc.capture,
+			} {
+				if got, ok := vars[key].(bool); !ok || got != want {
+					t.Errorf("offered route %s=%#v, want %t", key, vars[key], want)
+				}
+			}
+			rendered, err := engine.Render(t.Context(), "units/visual-show-the-design.md", vars)
+			contractcheck.FailErr(t, "render offered visual routes", err)
+			t.Logf("VISUAL_ROUTE_SAMPLE [%s]\n%s", tc.name, rendered)
 		})
 	}
 }
