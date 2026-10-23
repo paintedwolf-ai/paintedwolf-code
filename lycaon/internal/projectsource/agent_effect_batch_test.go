@@ -73,3 +73,44 @@ func TestAgentEffectBatchRetainsIndividualIntentAndDefiniteNonEffects(t *testing
 		t.Fatal("batch settled twice")
 	}
 }
+
+func TestAgentEffectBatchAppliedFailureRecoversWithoutReplayingFiles(t *testing.T) {
+	service, p, root, _ := sourceMutationFixture(t)
+	effect := sourceeffect.Plan{
+		Record: sourceledger.RecordInput{RecordLocation: sourceledger.RecordLocation{RootID: p.Roots[0].ID, Path: "file", EntryKind: sourceledger.EntryKindFile}, ProjectID: p.ID, Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginAgent, After: []byte("original"), AfterSHA256: textfile.SHA256([]byte("original"))},
+		Change: sourcefeed.Change{ProjectID: p.ID, RootID: p.Roots[0].ID, Path: "file", WorkspaceID: p.WorkspaceID(), WorkspaceKind: api.SourceWorkspaceKindProject, Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginAgent, AbsPath: filepath.Join(root, "file")},
+		Target: fseffect.Location{Root: root, Rel: "file"},
+	}
+	batch, err := service.PrepareEffects(t.Context(), []sourceeffect.Plan{effect})
+	testutil.FailErr(t, "prepare page", err)
+	ids := batch.IDs()
+	result, err := fseffect.Replace(fseffect.ReplaceRequest{Location: effect.Target, Source: strings.NewReader("original"), Mode: 0o644})
+	testutil.FailErr(t, "publish source", err)
+	_, err = service.Journal.db.ExecContext(t.Context(), `CREATE TRIGGER reject_batch_record BEFORE INSERT ON source_operations BEGIN SELECT RAISE(ABORT,'recording unavailable'); END`)
+	testutil.FailErr(t, "inject recording failure", err)
+	err = batch.Finish(t.Context(), []sourceeffect.Completion{{Attempted: true, Result: result}})
+	var applied *sourceeffect.AppliedError
+	if !errors.As(err, &applied) || applied.OperationID != ids[0] {
+		t.Fatalf("applied failure=%v", err)
+	}
+	row, _, err := service.Journal.load(t.Context(), ids[0])
+	testutil.FailErr(t, "read applied intent", err)
+	if row.Status != sourceMutationFileApplied {
+		t.Fatalf("failed settlement status=%s", row.Status)
+	}
+	testutil.FailErr(t, "make later edit", os.WriteFile(filepath.Join(root, "file"), []byte("later"), 0o644))
+	_, err = service.Journal.db.ExecContext(t.Context(), `DROP TRIGGER reject_batch_record`)
+	testutil.FailErr(t, "restore recording", err)
+	restarted := NewSourceMutationService(service.Journal.db, service.settlement.recorder.(*sourceledger.Store))
+	testutil.FailErr(t, "recover applied page", restarted.Recover(t.Context()))
+	got, err := os.ReadFile(filepath.Join(root, "file"))
+	testutil.FailErr(t, "read later edit", err)
+	if string(got) != "later" {
+		t.Fatalf("recovery replayed filesystem effect: %q", got)
+	}
+	var sha string
+	testutil.FailErr(t, "read exact original attribution", service.Journal.db.QueryRowContext(t.Context(), `SELECT content_sha256 FROM source_versions WHERE operation_id=(SELECT id FROM source_operations WHERE operation_key=?) AND state='content' ORDER BY seq DESC LIMIT 1`, ids[0]).Scan(&sha))
+	if sha != effect.Record.AfterSHA256 {
+		t.Fatalf("recovery attributed later content: %s", sha)
+	}
+}

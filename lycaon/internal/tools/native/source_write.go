@@ -126,7 +126,7 @@ func applyAgentStream(ctx context.Context, tctx tools.ToolContext, req agentStre
 func stageAgentStream(ctx context.Context, tctx tools.ToolContext, req agentStreamRequest) (*agentStreamStage, fseffect.Result, error) {
 	stage := &agentStreamStage{request: req}
 	if req.Memory != nil {
-		release, err := req.Memory.Reserve(ctx, 32<<10)
+		release, err := req.Memory.Reserve(ctx, 64<<10)
 		if err != nil {
 			return nil, fseffect.Result{}, err
 		}
@@ -140,7 +140,7 @@ func stageAgentStream(ctx context.Context, tctx tools.ToolContext, req agentStre
 		}
 	}()
 
-	before, err := captureAgentFileAt(req.Target.Location, ctx, req.Memory)
+	before, err := captureAgentFileAt(req.Target.Location, ctx, req.Memory, true)
 	if err != nil {
 		return nil, fseffect.Result{}, err
 	}
@@ -346,7 +346,7 @@ func renameAgentPath(ctx context.Context, tctx tools.ToolContext, from, to mutat
 	if filepath.Clean(from.Location.Root) != filepath.Clean(to.Location.Root) {
 		return fmt.Errorf("rename crosses filesystem effect roots")
 	}
-	after, err := captureAgentFileAt(from.Location, ctx, nil)
+	after, err := captureAgentFileAt(from.Location, ctx, nil, true)
 	if err != nil {
 		return err
 	}
@@ -396,7 +396,7 @@ func captureRemovedEntry(loc fseffect.Location) (agentFileEvidence, error) {
 	if info.Mode()&os.ModeSymlink != 0 {
 		return agentFileEvidence{exists: true}, nil
 	}
-	return captureAgentFileAt(loc, context.Background(), nil)
+	return captureAgentFileAt(loc, context.Background(), nil, true)
 }
 
 // recoverableRemoval is the attributed removal of an entry in an attached
@@ -462,7 +462,7 @@ func chownAgentPath(ctx context.Context, tctx tools.ToolContext, target mutation
 }
 
 func applyAgentMetadataChange(ctx context.Context, tctx tools.ToolContext, target mutationTarget, metadataChange string, apply func() error) error {
-	evidence, err := captureAgentFileAt(target.Location, ctx, nil)
+	evidence, err := captureAgentFileAt(target.Location, ctx, nil, true)
 	if err != nil {
 		return err
 	}
@@ -539,7 +539,7 @@ type agentFileEvidence struct {
 	size    int64
 }
 
-func captureAgentFileAt(loc fseffect.Location, ctx context.Context, memory *toolcontract.ProgramMemory) (agentFileEvidence, error) {
+func captureAgentFileAt(loc fseffect.Location, ctx context.Context, memory *toolcontract.ProgramMemory, retainBody bool) (agentFileEvidence, error) {
 	f, err := fseffect.OpenRead(loc)
 	if os.IsNotExist(err) || errors.Is(err, os.ErrNotExist) {
 		return agentFileEvidence{}, nil
@@ -557,12 +557,26 @@ func captureAgentFileAt(loc fseffect.Location, ctx context.Context, memory *tool
 	}
 	h := sha256.New()
 	captured := revisionCapture{ctx: ctx, memory: memory}
-	size, err := io.Copy(io.MultiWriter(h, &captured), f)
+	var output io.Writer = h
+	if retainBody {
+		output = io.MultiWriter(h, &captured)
+	}
+	release, err := (ExecutionRevisions{Memory: memory}).reserveWorking(ctx, 32<<10)
+	if err != nil {
+		return agentFileEvidence{}, err
+	}
+	defer release()
+	scratch := make([]byte, 32<<10)
+	size, err := io.CopyBuffer(output, struct{ io.Reader }{f}, scratch)
 	if err != nil {
 		captured.Close()
 		return agentFileEvidence{}, err
 	}
-	return agentFileEvidence{release: captured.Close, exists: true, content: captured.bytes(), sha256: hex.EncodeToString(h.Sum(nil)), size: size}, nil
+	var content []byte
+	if retainBody {
+		content = captured.bytes()
+	}
+	return agentFileEvidence{release: captured.Close, exists: true, content: content, sha256: hex.EncodeToString(h.Sum(nil)), size: size}, nil
 }
 
 func hashExistingBytes(content []byte) string {

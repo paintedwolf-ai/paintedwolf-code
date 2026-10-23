@@ -296,9 +296,10 @@ func copyFileWithinLimit(ctx context.Context, tc tools.ToolContext, source, targ
 }
 
 // retainResult admits result backing overlap and retained path bytes before the
-// effect that will append them. The invocation owns these leases until Close.
+// effect that will append them. Slice growth copies headers, not string backing
+// bytes. The invocation owns these leases until Close.
 func (op *CopyOperation) retainResult(ctx context.Context, pair FilePair) error {
-	bound := int64(3*(48+len(pair.From)+len(pair.To)) + 128)
+	bound := int64(3*48 + len(pair.From) + len(pair.To) + 128)
 	release, err := op.memory.ReserveProgramState(ctx, bound)
 	if err != nil {
 		return err

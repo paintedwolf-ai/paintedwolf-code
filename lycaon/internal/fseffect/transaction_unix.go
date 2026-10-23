@@ -363,7 +363,7 @@ func verifyTarget(target Target, want Result, buffer []byte) error {
 	}
 	defer func() { _ = f.Close() }()
 	hasher := sha256.New()
-	n, err := io.CopyBuffer(hasher, f, buffer)
+	n, err := io.CopyBuffer(hasher, struct{ io.Reader }{f}, buffer)
 	if err != nil {
 		return fmt.Errorf("%w: read destination: %w", ErrPostcondition, err)
 	}

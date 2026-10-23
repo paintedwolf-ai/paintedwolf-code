@@ -430,7 +430,7 @@ func verifyWindowsTarget(target windowsTarget, want Result, buffer []byte) error
 	}
 	defer func() { _ = f.Close() }()
 	hasher := sha256.New()
-	n, err := io.CopyBuffer(hasher, f, buffer)
+	n, err := io.CopyBuffer(hasher, struct{ io.Reader }{f}, buffer)
 	if err != nil || n != want.Bytes || hex.EncodeToString(hasher.Sum(nil)) != want.SHA256 {
 		return fmt.Errorf("%w: destination bytes differ", ErrPostcondition)
 	}

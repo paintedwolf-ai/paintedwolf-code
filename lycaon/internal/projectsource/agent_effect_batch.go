@@ -77,7 +77,7 @@ func (b *agentEffectBatch) IDs() []string {
 
 // Finish records definite non-effects separately from applied or uncertain
 // publications. Matching pre-existing bytes never make an unattempted write.
-func (b *agentEffectBatch) Finish(ctx context.Context, completions []sourceeffect.Completion) error {
+func (b *agentEffectBatch) Finish(ctx context.Context, completions []sourceeffect.Completion) (resultErr error) {
 	if b.finished {
 		return fmt.Errorf("source effect batch already completed")
 	}
@@ -86,16 +86,23 @@ func (b *agentEffectBatch) Finish(ctx context.Context, completions []sourceeffec
 	if len(completions) != len(b.pending) {
 		return fmt.Errorf("source effect completion count differs from intents")
 	}
+	var appliedID string
+	defer func() {
+		if resultErr != nil && appliedID != "" {
+			var applied *sourceeffect.AppliedError
+			if !errors.As(resultErr, &applied) {
+				resultErr = &sourceeffect.AppliedError{OperationID: appliedID, Cause: resultErr}
+			}
+		}
+	}()
 	ctx = context.WithoutCancel(ctx)
 	applied := make([]*sourceMutationRow, 0, len(completions))
 	var outcome error
-	tx, err := b.service.Journal.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
 	for i, completion := range completions {
 		row := b.pending[i].row
+		if appliedID == "" && completion.Attempted && completion.Result.Publication.Committed() {
+			appliedID = row.ID
+		}
 		row.Error = ""
 		if completion.Err != nil {
 			row.Error = completion.Err.Error()
@@ -111,7 +118,14 @@ func (b *agentEffectBatch) Finish(ctx context.Context, completions []sourceeffec
 			row.Error = ""
 			applied = append(applied, row)
 		}
-		if err := updateSourceMutation(ctx, tx, row); err != nil {
+	}
+	tx, err := b.service.Journal.db.BeginTx(ctx, nil)
+	if err != nil {
+		return errors.Join(outcome, err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	for _, pending := range b.pending {
+		if err := updateSourceMutation(ctx, tx, pending.row); err != nil {
 			return errors.Join(outcome, err)
 		}
 	}

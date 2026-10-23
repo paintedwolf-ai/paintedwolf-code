@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/textfile"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -94,7 +95,7 @@ func TestLargeStreamRecordsDigestAndSizeWithoutRetainingBody(t *testing.T) {
 	if hash != textfile.SHA256(body) || size != int64(len(body)) || capture != "metadata_only" {
 		t.Fatalf("large revision = hash %s, size %d, capture %s", hash, size, capture)
 	}
-	evidence, err := captureAgentFileAt(testMutationTarget(path).Location, t.Context(), nil)
+	evidence, err := captureAgentFileAt(testMutationTarget(path).Location, t.Context(), nil, true)
 	testutil.FailErr(t, "capture large source", err)
 	if evidence.content != nil || evidence.size != size || evidence.sha256 != hash {
 		t.Fatalf("large source capture = %d retained bytes, size %d, hash %s", len(evidence.content), evidence.size, evidence.sha256)
@@ -186,5 +187,27 @@ func TestAgentMutationReturnsLedgerFailureAfterLandedWrite(t *testing.T) {
 	}
 	if _, statErr := os.Stat(path); statErr != nil {
 		testutil.FailErr(t, "landed write missing", statErr)
+	}
+}
+
+func TestAgentFileFingerprintDoesNotRetainContent(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "source")
+	content := bytes.Repeat([]byte{0, 255, 1}, (4<<20)/3+1)
+	testutil.FailErr(t, "seed binary source", os.WriteFile(path, content, 0o644))
+	memory, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: 32 << 10, State: 1})
+	testutil.FailErr(t, "create metadata-only memory", err)
+	evidence, err := captureAgentFileAt(testMutationTarget(path).Location, t.Context(), memory, false)
+	testutil.FailErr(t, "fingerprint without body storage", err)
+	if evidence.release != nil {
+		defer evidence.release()
+	}
+	if !evidence.exists || evidence.content != nil || evidence.size != int64(len(content)) || evidence.sha256 != textfile.SHA256(content) {
+		t.Fatalf("metadata-only evidence=%+v", evidence)
+	}
+	if peak := memory.Peak(); peak.State != 0 || peak.Working != 32<<10 {
+		t.Fatalf("fingerprint admission=%+v", peak)
+	}
+	if used := memory.InUse(); used.State != 0 || used.Working != 0 {
+		t.Fatalf("fingerprint leaked admission=%+v", used)
 	}
 }

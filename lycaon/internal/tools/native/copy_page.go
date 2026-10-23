@@ -75,7 +75,7 @@ func (p *copyPage) Add(pair FilePair, maximum int64) error {
 	}
 	p.entries = append(p.entries, copyPageEntry{pair: pair, source: from.Abs, stage: staged, bytes: result.Bytes})
 	p.bytes += result.Bytes
-	if len(p.entries) == copyPageEntries {
+	if len(p.entries) == copyPageEntries || p.bytes >= 1<<20 {
 		return p.Flush()
 	}
 	return nil

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/sourceeffect"
@@ -77,5 +78,57 @@ func TestRecursiveCopyPageAdmitsIntentBeforeEffectsAndSettlesPartialPublication(
 	}
 	if used := memory.InUse(); used.Working != 0 || used.State != 0 {
 		t.Fatalf("copy leaked memory leases: %+v", used)
+	}
+}
+
+func TestCopyAdmissionRefusesBeforeUnadmittedStorageOrPublication(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		limits toolcontract.ProgramMemoryLimits
+		argv   []string
+	}{
+		{"result", toolcontract.ProgramMemoryLimits{Working: 32 << 20, State: 1}, []string{"cp", "source.txt", "target"}},
+		{"traversal", toolcontract.ProgramMemoryLimits{Working: 32 << 20, State: 1}, []string{"cp", "-r", "tree", "target"}},
+		{"stream", toolcontract.ProgramMemoryLimits{Working: 1, State: 64 << 20}, []string{"cp", "source.txt", "target"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newHarness(t, map[string]string{"source.txt": "data", "tree/a": "first"})
+			memory, err := toolcontract.NewProgramMemory(tc.limits)
+			testutil.FailErr(t, "create constrained program memory", err)
+			h.program.Memory = memory
+			result := h.run("", tc.argv...)
+			var limit *toolcontract.ProgramMemoryLimitError
+			if !errors.As(result.err, &limit) {
+				t.Fatalf("admission outcome=%+v error=%v", result.result, result.err)
+			}
+			if !h.absent("target") {
+				t.Fatal("unadmitted copy published a destination")
+			}
+			if usage := memory.InUse(); usage.Working != 0 || usage.State != 0 {
+				t.Fatalf("refused copy leaked admissions: %+v", usage)
+			}
+		})
+	}
+}
+
+func TestRecursiveCopyFlushesRetainedBodiesBeforeTheNextLargeFile(t *testing.T) {
+	payload := strings.Repeat("x", 2<<20)
+	h := newHarness(t, map[string]string{"tree/a": payload, "tree/b": payload, "tree/c": payload, "tree/d": payload, "tree/e": payload})
+	limits, err := toolcontract.CatalogProgramMemoryLimits()
+	testutil.FailErr(t, "load program memory", err)
+	memory, err := toolcontract.NewProgramMemory(limits)
+	testutil.FailErr(t, "create program memory", err)
+	h.program.Memory = memory
+	result := h.run("", "cp", "-r", "tree", "copy")
+	if result.err != nil || result.result.Status != 0 {
+		t.Fatalf("large copy=%+v error=%v", result.result, result.err)
+	}
+	for _, name := range []string{"a", "b", "c", "d", "e"} {
+		if got := h.read("copy/" + name); got != payload {
+			t.Fatalf("large file %s changed", name)
+		}
+	}
+	if usage := memory.InUse(); usage.State != 0 || usage.Working != 0 {
+		t.Fatalf("large copy leaked admission=%+v", usage)
 	}
 }
