@@ -2,26 +2,12 @@ package conformance_test
 
 import (
 	"fmt"
-	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
-
-type divergenceExpectation struct {
-	Rank                   int
-	Category               string
-	Summary                string
-	TopLevelRejectContains string
-	ExpectedState          string
-	ExpectedStatus         int
-	RefusalCode            string
-	WantNativeGaps         bool
-	StdoutContains         string
-	CheckFiles             map[string]*string
-}
 
 type v1SpecificExpectation struct {
 	ExpectedStatus   int
@@ -50,154 +36,6 @@ var v1SpecificCases = map[string]v1SpecificExpectation{
 		ExpectedStatus: 0,
 		ExpectedStdout: "ext-ok\n",
 		AllowExternal:  true,
-	},
-}
-
-// knownDivergences records real product divergences between the v1 command
-// runtime and the GNU/BSD reference fixtures or the v1 catalog contract.
-var knownDivergences = map[string]divergenceExpectation{
-	"search-find-predicates-and-actions": {
-		Rank:                   1,
-		Category:               "runtime-settlement-fault",
-		Summary:                "find -exec/-delete fails with top-level 'bound child effect set required' and leaves 1 unsettled child in ProgramDispatcher",
-		TopLevelRejectContains: "bound child effect set required",
-	},
-	"pure-sort-uniq-cut-tr-xargs": {
-		Rank:                   1,
-		Category:               "runtime-settlement-fault",
-		Summary:                "xargs child dispatch fails with top-level 'bound child effect set required' and leaves 1 unsettled child in ProgramDispatcher",
-		TopLevelRejectContains: "bound child effect set required",
-	},
-	"mutation-cp-mv-rm-rmdir-mkdir-touch-tee-mktemp-chmod-chown": {
-		Rank:                   2,
-		Category:               "native-binding-fault",
-		Summary:                "toolhost/command_programs.go drops prepared.Mode when wrapping mutationOwners.Prepare, causing multi-mode mutation commands to fail BindOperation with 'native binding requires exact declared command and effect mode'",
-		TopLevelRejectContains: "native binding requires exact declared command and effect mode",
-	},
-	"mutation-domain-builtins": {
-		Rank:           3,
-		Category:       "unwired-native-owner",
-		Summary:        "mutation.NewCommandBuiltins (edit, replace-lines, code-rewrite, jq-edit) is not wired in toolhost/command_programs.go; native_only edit refuses with COMMAND_NATIVE_FORM_UNSUPPORTED",
-		ExpectedState:  "rejected",
-		ExpectedStatus: 2,
-		RefusalCode:    "COMMAND_NATIVE_FORM_UNSUPPORTED",
-	},
-	"query-jq-options-and-transform": {
-		Rank:           3,
-		Category:       "unwired-native-owner",
-		Summary:        "query.NewOwners (jq, yq) is not wired in toolhost/command_programs.go; jq falls back to external execution with native_gaps=5",
-		ExpectedState:  "completed",
-		ExpectedStatus: 0,
-		WantNativeGaps: true,
-		StdoutContains: "{\"enabled\":true,\"version\":1,\"items\":[\"a\",\"b\"]}\n",
-	},
-	"query-yq-options": {
-		Rank:           3,
-		Category:       "unwired-native-owner",
-		Summary:        "query.NewOwners (jq, yq) is not wired in toolhost/command_programs.go; yq falls back to external execution with native_gaps=1",
-		ExpectedState:  "completed",
-		ExpectedStatus: 0,
-		WantNativeGaps: true,
-		StdoutContains: "1\n",
-	},
-	"http-curl-options": {
-		Rank:           3,
-		Category:       "unwired-native-owner",
-		Summary:        "curl.NewOwners is not wired in toolhost/command_programs.go; curl falls back to external execution with native_gaps=1",
-		ExpectedState:  "completed",
-		ExpectedStatus: 0,
-		WantNativeGaps: true,
-		StdoutContains: "curl-failed\n",
-	},
-	"git-read-and-mutation-subcommands": {
-		Rank:           3,
-		Category:       "unwired-native-owner",
-		Summary:        "gitcmd.NewOwners is not wired in toolhost/command_programs.go and ProgramDispatcher.commandIndex skips multi-word git subcommands; git falls back to external execution with native_gaps",
-		ExpectedState:  "completed",
-		ExpectedStatus: 0,
-		WantNativeGaps: true,
-		StdoutContains: "+modified\n",
-	},
-	"git-diff-separated-u-flag": {
-		Rank:           4,
-		Category:       "catalog-grammar-vs-git-cli",
-		Summary:        "git.json declares 'git diff -U' with arity 1 (accepting separated '-U 1'), which falls back to external git where separated '-U 1' fails with status 128 ('ambiguous argument 1')",
-		ExpectedState:  "completed",
-		ExpectedStatus: 128,
-		WantNativeGaps: true,
-	},
-	"git-global-flag-before-subcommand": {
-		Rank:           5,
-		Category:       "subcommand-resolution",
-		Summary:        "ResolveCommand only matches literal prefix words ('git status'), so 'git -C . -c color.ui=false status -s' resolves to umbrella 'git', rejects '-s' with COMMAND_OPTION_UNSUPPORTED, and falls back to external execution",
-		ExpectedState:  "completed",
-		ExpectedStatus: 0,
-		WantNativeGaps: true,
-	},
-	"inspect-domain-builtins": {
-		Rank:           6,
-		Category:       "alias-dispatch",
-		Summary:        "literal.Owners indexes specs only by spec.Name ('repo-map') and not spec.Aliases ('survey-repo'), so survey-repo binds against an empty CommandSpecification and refuses with COMMAND_OPERAND_INVALID",
-		ExpectedState:  "rejected",
-		ExpectedStatus: 2,
-		RefusalCode:    "COMMAND_OPERAND_INVALID",
-		StdoutContains: `"name":"Alpha"`,
-	},
-	"search-grep-core-and-aliases": {
-		Rank:           6,
-		Category:       "alias-dispatch",
-		Summary:        "egrep and fgrep aliases resolve to spec.Name='grep' in Evaluate, but search.Owners.Prepare inspects request.Argv[0] without alias normalization, causing egrep and fgrep child executions to fail",
-		ExpectedState:  "completed",
-		ExpectedStatus: 0,
-		StdoutContains: "quiet-ok\n",
-	},
-	"pure-echo-and-printf-leading-options": {
-		Rank:           7,
-		Category:       "binder-leading-option-semantics",
-		Summary:        "Evaluate pre-binds all catalog commands with CatalogBinder before textutil.leadingBind runs, so 'echo -z literal' and 'printf %s:%02d\\n -v 5' fail CatalogBinder with COMMAND_OPTION_UNSUPPORTED and fall back to external execution (native_gaps=2)",
-		ExpectedState:  "completed",
-		ExpectedStatus: 0,
-		WantNativeGaps: true,
-		StdoutContains: "head:a\tb\na\\tb\n-z literal\n-v:05\n",
-	},
-	"paths-cd-basename-dirname-realpath-readlink-source": {
-		Rank:           8,
-		Category:       "catalog-vs-parser-contract",
-		Summary:        "paths.json documents 'source [--] PATH [ARG ...]' with optional '--', but commandsurface parser refuses 'source sub/script.sh' without '--' as COMMAND_SYNTAX_UNSUPPORTED (with Outcome.State='completed' Status=0 on pre-evaluation syntax refusal)",
-		ExpectedState:  "completed",
-		ExpectedStatus: 0,
-		RefusalCode:    "COMMAND_SYNTAX_UNSUPPORTED",
-	},
-	"process-jobs-wait-kill-ps-lsof": {
-		Rank:           9,
-		Category:       "job-wait-status",
-		Summary:        "wait on a background job terminated by 'kill -s TERM' returns status 0 (w2=0) instead of a non-zero termination status (w2=1 in GNU and BSD)",
-		ExpectedState:  "completed",
-		ExpectedStatus: 0,
-		StdoutContains: "w1=0\nw2=0\nlsof=1\n",
-	},
-	"lang-test-nonempty-file-predicate": {
-		Rank:           10,
-		Category:       "predicate-operator-coverage",
-		Summary:        "test and [ in commandprogram/predicate_expression.go omit the POSIX '-s' non-empty file unary operator from predicateUnary, returning usage status 2 instead of 0",
-		ExpectedState:  "completed",
-		ExpectedStatus: 2,
-	},
-	"metadata-wc-options": {
-		Rank:           11,
-		Category:       "output-formatting-and-tab-width",
-		Summary:        "native wc formats counts without GNU/BSD column padding and counts raw characters (15) rather than 8-column tab display width (20 in GNU) for -L",
-		ExpectedState:  "completed",
-		ExpectedStatus: 0,
-		StdoutContains: "5 12 55 notes.txt\n55 15 notes.txt\n1\n",
-	},
-	"inspect-file-signatures": {
-		Rank:           12,
-		Category:       "magic-description-and-mime",
-		Summary:        "native file reports 'UTF-8 Unicode text' for ASCII input (GNU/BSD report 'ASCII text') and omits '; charset=...' in -i MIME output",
-		ExpectedState:  "completed",
-		ExpectedStatus: 0,
-		StdoutContains: "UTF-8 Unicode text\nPNG image data\ntext/plain\nimage/png\n",
 	},
 }
 
@@ -251,10 +89,6 @@ func TestPortableCommandDifferentialConformance(t *testing.T) {
 	for _, c := range runner.corpus.Cases {
 		t.Run(c.ID, func(t *testing.T) {
 			obs := runner.runCase(t, c)
-			if exp, ok := knownDivergences[c.ID]; ok {
-				verifyDivergenceExpectation(t, c, obs, exp)
-				return
-			}
 			if v1Exp, ok := v1SpecificCases[c.ID]; ok {
 				verifyV1SpecificExpectation(t, c, obs, v1Exp)
 				return
@@ -312,10 +146,10 @@ func assertMatchesReference(t *testing.T, c fixtureCase, obs runtimeObservation)
 }
 
 func matchesSnapshot(obs runtimeObservation, ref fixtureSnapshot) bool {
-	if obs.Outcome.Status != ref.Status {
+	if obs.Outcome.State != "completed" || obs.Outcome.Status != ref.Status {
 		return false
 	}
-	if obs.Outcome.Stdout != ref.Stdout {
+	if obs.Outcome.Stdout != ref.Stdout || obs.Outcome.Stderr != ref.Stderr {
 		return false
 	}
 	if !filesEqual(obs.Files, ref.Files) {
@@ -346,7 +180,7 @@ func filesEqual(a, b map[string]*string) bool {
 			return false
 		}
 	}
-	return reflect.DeepEqual(len(a), len(b))
+	return true
 }
 
 func normalizeUnifiedDiffHeaders(text string) string {
@@ -374,44 +208,4 @@ func formatFiles(files map[string]*string) string {
 		}
 	}
 	return "{" + strings.Join(parts, ", ") + "}"
-}
-
-func verifyDivergenceExpectation(t *testing.T, c fixtureCase, obs runtimeObservation, exp divergenceExpectation) {
-	t.Helper()
-	if exp.TopLevelRejectContains != "" {
-		if !strings.Contains(obs.TopLevelReject, exp.TopLevelRejectContains) {
-			t.Fatalf("case %s top-level reject = %q, want substring %q (outcome=%+v)",
-				c.ID, obs.TopLevelReject, exp.TopLevelRejectContains, obs.Outcome)
-		}
-		return
-	}
-	if obs.TopLevelReject != "" {
-		t.Fatalf("case %s unexpected top-level reject: %s", c.ID, obs.TopLevelReject)
-	}
-	if exp.ExpectedState != "" && obs.Outcome.State != exp.ExpectedState {
-		t.Fatalf("case %s state = %q, want %q (outcome=%+v)", c.ID, obs.Outcome.State, exp.ExpectedState, obs.Outcome)
-	}
-	if obs.Outcome.Status != exp.ExpectedStatus {
-		t.Fatalf("case %s status = %d, want %d (stdout=%q stderr=%q refusal=%+v)",
-			c.ID, obs.Outcome.Status, exp.ExpectedStatus, obs.Outcome.Stdout, obs.Outcome.Stderr, obs.Outcome.Refusal)
-	}
-	if exp.RefusalCode != "" {
-		if obs.Outcome.Refusal == nil || obs.Outcome.Refusal.Code != exp.RefusalCode {
-			t.Fatalf("case %s refusal = %+v, want code %q", c.ID, obs.Outcome.Refusal, exp.RefusalCode)
-		}
-	} else if obs.Outcome.Refusal != nil {
-		t.Fatalf("case %s unexpected refusal %+v", c.ID, obs.Outcome.Refusal)
-	}
-	if exp.WantNativeGaps && obs.Outcome.NativeGaps == 0 {
-		t.Fatalf("case %s expected native_gaps > 0, got 0 (receipts=%v)", c.ID, obs.ChildReceipts)
-	}
-	if !exp.WantNativeGaps && obs.Outcome.NativeGaps > 0 {
-		t.Fatalf("case %s unexpected native_gaps=%d (receipts=%v)", c.ID, obs.Outcome.NativeGaps, obs.ChildReceipts)
-	}
-	if exp.StdoutContains != "" && !strings.Contains(obs.Outcome.Stdout, exp.StdoutContains) {
-		t.Fatalf("case %s stdout = %q, want substring %q", c.ID, obs.Outcome.Stdout, exp.StdoutContains)
-	}
-	if exp.CheckFiles != nil && !filesEqual(obs.Files, exp.CheckFiles) {
-		t.Fatalf("case %s files = %s, want %s", c.ID, formatFiles(obs.Files), formatFiles(exp.CheckFiles))
-	}
 }

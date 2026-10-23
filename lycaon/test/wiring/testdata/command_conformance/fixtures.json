@@ -1937,6 +1937,199 @@
         "stderr": "",
         "files": {}
       }
+    },
+    {
+      "id": "natural-find-xargs",
+      "category": "natural-programs",
+      "description": "Find files with zero-delimited names and feed them to xargs.",
+      "commands": [
+        "find",
+        "xargs",
+        "cat",
+        "sort"
+      ],
+      "forms": [
+        "find:-type",
+        "find:-name",
+        "find:-print0",
+        "xargs:-0"
+      ],
+      "program": "find sub -type f -name '*.txt' -print0 | xargs -0 cat | sort",
+      "tracked_files": [],
+      "gnu": {
+        "status": 0,
+        "stdout": "first\nfirst\nsecond\nthird\n",
+        "stderr": "",
+        "files": {}
+      },
+      "bsd": {
+        "status": 0,
+        "stdout": "first\nfirst\nsecond\nthird\n",
+        "stderr": "",
+        "files": {}
+      },
+      "reference_provenance": "Captured on macOS with GNU-prefixed Homebrew utilities and BSD system utilities; jq and Git are shared reference binaries."
+    },
+    {
+      "id": "natural-while-read",
+      "category": "natural-programs",
+      "description": "Read each complete line from redirected input.",
+      "commands": [
+        "read",
+        "printf"
+      ],
+      "forms": [
+        "read:-r"
+      ],
+      "program": "while IFS= read -r line; do printf '<%s>\\n' \"$line\"; done < sub/a.txt",
+      "tracked_files": [],
+      "gnu": {
+        "status": 0,
+        "stdout": "<first>\n<second>\n",
+        "stderr": "",
+        "files": {}
+      },
+      "bsd": {
+        "status": 0,
+        "stdout": "<first>\n<second>\n",
+        "stderr": "",
+        "files": {}
+      },
+      "reference_provenance": "Captured on macOS with GNU-prefixed Homebrew utilities and BSD system utilities; jq and Git are shared reference binaries."
+    },
+    {
+      "id": "natural-sed-hold-space",
+      "category": "natural-programs",
+      "description": "Accumulate lines in sed hold space and print the result.",
+      "commands": [
+        "sed"
+      ],
+      "forms": [
+        "sed:-n"
+      ],
+      "program": "sed -n '1h;2H;${g;p;}' sub/a.txt",
+      "tracked_files": [],
+      "gnu": {
+        "status": 0,
+        "stdout": "first\nsecond\n",
+        "stderr": "",
+        "files": {}
+      },
+      "bsd": {
+        "status": 0,
+        "stdout": "first\nsecond\n",
+        "stderr": "",
+        "files": {}
+      },
+      "reference_provenance": "Captured on macOS with GNU-prefixed Homebrew utilities and BSD system utilities; jq and Git are shared reference binaries."
+    },
+    {
+      "id": "natural-sort-key",
+      "category": "natural-programs",
+      "description": "Order records by a numeric field using attached key spelling.",
+      "commands": [
+        "sort"
+      ],
+      "forms": [
+        "sort:-k",
+        "sort:-n",
+        "sort:-r"
+      ],
+      "program": "sort -k3,3nr table.tsv",
+      "tracked_files": [],
+      "gnu": {
+        "status": 0,
+        "stdout": "3\tgamma\t30\n2\tbeta\t20\n1\talpha\t10\nid\tname\tcount\n",
+        "stderr": "",
+        "files": {}
+      },
+      "bsd": {
+        "status": 0,
+        "stdout": "3\tgamma\t30\n2\tbeta\t20\n1\talpha\t10\nid\tname\tcount\n",
+        "stderr": "",
+        "files": {}
+      },
+      "reference_provenance": "Captured on macOS with GNU-prefixed Homebrew utilities and BSD system utilities; jq and Git are shared reference binaries."
+    },
+    {
+      "id": "natural-awk-field-sum",
+      "category": "natural-programs",
+      "description": "Sum a numeric column while omitting its header.",
+      "commands": [
+        "awk"
+      ],
+      "forms": [
+        "awk:-F"
+      ],
+      "program": "awk -F '\\t' 'NR > 1 { sum += $3 } END { print sum }' table.tsv",
+      "tracked_files": [],
+      "gnu": {
+        "status": 0,
+        "stdout": "60\n",
+        "stderr": "",
+        "files": {}
+      },
+      "bsd": {
+        "status": 0,
+        "stdout": "60\n",
+        "stderr": "",
+        "files": {}
+      },
+      "reference_provenance": "Captured on macOS with GNU-prefixed Homebrew utilities and BSD system utilities; jq and Git are shared reference binaries."
+    },
+    {
+      "id": "natural-jq-pipeline",
+      "category": "natural-programs",
+      "description": "Read JSON from a pipe and apply a filter pipeline.",
+      "commands": [
+        "cat",
+        "jq"
+      ],
+      "forms": [
+        "jq:-r"
+      ],
+      "program": "cat config.json | jq -r '.items | map(ascii_upcase) | join(\",\")'",
+      "tracked_files": [],
+      "gnu": {
+        "status": 0,
+        "stdout": "A,B\n",
+        "stderr": "",
+        "files": {}
+      },
+      "bsd": {
+        "status": 0,
+        "stdout": "A,B\n",
+        "stderr": "",
+        "files": {}
+      },
+      "reference_provenance": "Captured on macOS with GNU-prefixed Homebrew utilities and BSD system utilities; jq and Git are shared reference binaries."
+    },
+    {
+      "id": "natural-git-log-oneline",
+      "category": "natural-programs",
+      "description": "Show the checked-in fixture commit on one line.",
+      "commands": [
+        "git log"
+      ],
+      "forms": [
+        "git log:--oneline"
+      ],
+      "program": "git log --oneline",
+      "tracked_files": [],
+      "needs_git": true,
+      "gnu": {
+        "status": 0,
+        "stdout": "1152b28 initial fixture commit\n",
+        "stderr": "",
+        "files": {}
+      },
+      "bsd": {
+        "status": 0,
+        "stdout": "1152b28 initial fixture commit\n",
+        "stderr": "",
+        "files": {}
+      },
+      "reference_provenance": "Captured on macOS with GNU-prefixed Homebrew utilities and BSD system utilities; jq and Git are shared reference binaries."
     }
   ]
 }
