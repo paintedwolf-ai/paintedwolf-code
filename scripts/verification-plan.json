@@ -210,7 +210,9 @@
     },
     "seatbelt:gated": {
       "options": [
-        "--full"
+        "--full",
+        "--tags",
+        "integration"
       ],
       "packages": [
         "./cmd/opengrep-artifact",
