@@ -51,7 +51,8 @@ func parseMountInfoLine(line string) (mountEntry, bool) {
 	}
 	id, errID := strconv.Atoi(fields[0])
 	parent, errParent := strconv.Atoi(fields[1])
-	root, rootOK := decodeMountInfoPath(fields[3])
+	// A kernel root identity need not be a pathname: nsfs emits net:[inode].
+	root, rootOK := decodeMountInfoField(fields[3])
 	point, pointOK := decodeMountInfoPath(fields[4])
 	if errID != nil || errParent != nil || id <= 0 || parent <= 0 || !rootOK || !pointOK || !validMountDevice(fields[2]) || !validMountOptions(fields[5]) {
 		return mountEntry{}, false

@@ -72,3 +72,15 @@ func TestMountTopologyDeepChainAndAdmissionBounds(t *testing.T) {
 		t.Fatal("accepted a deep cycle")
 	}
 }
+
+func TestMountTopologyPreservesSyntheticKernelRoots(t *testing.T) {
+	raw := "20 1 8:1 / / rw - ext4 /dev/root rw\n21 20 0:4 net:[4026531993] /namespace-handle rw - nsfs nsfs rw\n"
+	entries, err := parseMountTopology([]byte(raw))
+	testutil.FailErr(t, "decode an nsfs namespace bind", err)
+	if entries[1].root != "net:[4026531993]" || entries[1].mountPoint != "/namespace-handle" {
+		t.Fatalf("synthetic root identity changed: %+v", entries[1])
+	}
+	if _, err := parseMountTopology([]byte(strings.Replace(raw, "/namespace-handle", "namespace-handle", 1))); err == nil {
+		t.Fatal("accepted a relative attachment point")
+	}
+}
