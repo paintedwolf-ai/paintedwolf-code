@@ -113,10 +113,12 @@ class ProviderRecoveryTests(unittest.TestCase):
         fixture = SimpleNamespace(base_url='http://127.0.0.1:41234/v1', discovery_observations=[{
             'path': '/v1/model/info', 'model': MODEL, 'fixture_credential_observed': True}])
         with patch.object(provider_setup, 'DesktopUI', return_value=ui), patch.object(
-                provider_setup, 'find_gui_provider', return_value=witness), patch.object(provider_setup, 'physical_input') as physical:
+                provider_setup, 'find_gui_provider', return_value=witness), patch.object(provider_setup, 'physical_input') as physical, patch.object(
+                provider_setup, 'select_default_model') as select_model:
             self.assertEqual(provider_setup.configure_provider(app, fixture), witness)
         physical.assert_not_called()
-        self.assertEqual([call.args[0] for call in ui.click.call_args_list], ['Default model', MODEL, 'Skip'])
+        self.assertEqual([call.args[0] for call in ui.click.call_args_list], ['Skip'])
+        select_model.assert_called_once_with(app, ui)
         fixture.discovery_observations = []
         with patch.object(provider_setup, 'find_gui_provider', return_value=witness), patch.object(
                 provider_setup.time, 'monotonic', side_effect=[0, 1, 91]), patch.object(provider_setup.time, 'sleep'):
