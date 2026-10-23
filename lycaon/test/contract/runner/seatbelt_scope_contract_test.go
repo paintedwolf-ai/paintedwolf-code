@@ -3,11 +3,13 @@ package contract
 // OS-confinement tests require a matching CI scope.
 
 import (
+	"encoding/json"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -52,7 +54,7 @@ func TestSeatbeltGatedTestsAreCoveredByAGate(t *testing.T) {
 	}
 	contractcheck.FailViolations(t, "tests engage OS confinement but no CI scope runs them — off a "+
 		"sandboxed host they skip, and a skip is indistinguishable from a pass. Add each to "+
-		"the test:seatbelt -run filter in Taskfile.yml (or to the confinement job's browser step in "+
+		"the seatbelt:gated recipe in scripts/verification-plan.json (or to the confinement job's browser step in "+
 		".github/workflows/platform-verification.yml for browser tests, which is the only leg that stages a browser)",
 		uncovered)
 }
@@ -75,10 +77,12 @@ func TestSeatbeltTaskRunsFull(t *testing.T) {
 	if body == "" {
 		t.Fatal("Taskfile.yml has no test:seatbelt task")
 	}
-	for _, scope := range parseGoTestScopes("Taskfile.yml test:seatbelt", body) {
+	if !strings.Contains(body, "test-execution.py plan -- test:seatbelt") {
+		t.Fatal("test:seatbelt must execute its catalog plan")
+	}
+	for _, scope := range seatbeltCatalogScopes(t, contractcheck.RepoRoot(t)) {
 		if !strings.Contains(scope.Command, "--full") {
-			t.Fatalf("test:seatbelt leg runs without --full, so testing.Short() skips the "+
-				"confinement tests it exists to run:\n  %s", strings.TrimSpace(scope.Command))
+			t.Errorf("%s must run with --full", scope.Source)
 		}
 	}
 }
@@ -197,7 +201,7 @@ func seatbeltDeclaredScopes(t *testing.T, root string) []goTestScope {
 	if body == "" {
 		t.Fatal("Taskfile.yml has no test:seatbelt task")
 	}
-	scopes = append(scopes, parseGoTestScopes("Taskfile.yml test:seatbelt", body)...)
+	scopes = append(scopes, seatbeltCatalogScopes(t, root)...)
 
 	job := extractYAMLJob(contractcheck.ReadRepoFile(t, root, ".github/workflows/platform-verification.yml"), "confinement")
 	if job == "" {
@@ -208,6 +212,41 @@ func seatbeltDeclaredScopes(t *testing.T, root string) []goTestScope {
 
 	if len(scopes) == 0 {
 		t.Fatal("parsed no run scopes from the seatbelt task or the confinement job")
+	}
+	return scopes
+}
+
+func seatbeltCatalogScopes(t *testing.T, root string) []goTestScope {
+	t.Helper()
+	var catalog struct {
+		Groups map[string][]string `json:"groups"`
+		Go     map[string]struct {
+			Options  []string `json:"options"`
+			Packages []string `json:"packages"`
+			Flags    []string `json:"flags"`
+		} `json:"go"`
+	}
+	data := contractcheck.ReadRepoFile(t, root, "scripts/verification-plan.json")
+	contractcheck.FailErr(t, "decode Seatbelt recipes", json.Unmarshal([]byte(data), &catalog))
+	legs := catalog.Groups["test:seatbelt"]
+	if len(legs) == 0 {
+		t.Fatal("Seatbelt verification has no catalog stages")
+	}
+	var scopes []goTestScope
+	for _, name := range legs {
+		recipe, ok := catalog.Go[name]
+		if !ok || len(recipe.Packages) == 0 {
+			t.Fatalf("Seatbelt stage %s has no Go recipe", name)
+		}
+		scope := goTestScope{Source: "verification-plan.json " + name, Packages: recipe.Packages,
+			Command: strings.Join(append(recipe.Options, recipe.Flags...), " ")}
+		for _, flag := range recipe.Flags {
+			if run, ok := strings.CutPrefix(flag, "-run="); ok {
+				scope.RunSource = run
+				scope.Run = regexp.MustCompile(run)
+			}
+		}
+		scopes = append(scopes, scope)
 	}
 	return scopes
 }
