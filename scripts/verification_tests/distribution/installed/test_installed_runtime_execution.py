@@ -215,6 +215,32 @@ class InstalledRuntimeTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "public application launcher"):
                 bind(final, source, artifact["id"], Path("/files"), root)
 
+    def test_protected_native_binding_keeps_package_facts_and_selects_bootstrap_runtime(self):
+        root = Path('/opt/painted-wolf-code')
+        launcher = str(root / 'bin/painted-wolf-code')
+        source = 'a' * 40
+        artifact = {'id': 'native.deb', 'installation': 'deb', 'architecture': 'amd64',
+                    'source_commit': source, 'identity': {'kind': 'file', 'sha256': 'b' * 64}}
+        final = {'format_version': 1, 'source_commit': source, 'artifacts': [artifact]}
+        entries = {str((root / 'bin' / role).relative_to('/')): {} for role in ROLES}
+        entries[str((root / 'manifest.json').relative_to('/'))] = {}
+        package_images = {launcher: {'inode': 10}}
+        runtime_images = {launcher: {'inode': 20}, str(SETUID_LAUNCHER): {'inode': 30, 'mode': 0o4755}}
+        selected = {'root': str(root / 'generations' / ('c' * 64)), 'images': runtime_images}
+        with patch('scripts.linux_release.installed_runtime.platform.system', return_value='Linux'), \
+                patch('scripts.linux_release.installed_runtime.platform.machine', return_value='x86_64'), \
+                patch.object(Path, 'resolve', lambda path, **kwargs: path), \
+                patch('scripts.linux_release.installed_runtime.inspect', return_value=entries), \
+                patch('scripts.linux_release.installed_runtime.verify', return_value={'status': 'passed'}), \
+                patch('scripts.linux_release.installed_runtime.manifest', return_value={'version': '1.0.2', 'images': package_images}), \
+                patch('scripts.linux_release.installed_generation.bind', return_value=selected) as generation:
+            result = bind(final, source, artifact['id'], Path('/files'), root)
+        generation.assert_called_once_with(root, package_images, entries)
+        self.assertIs(result['package_images'], package_images)
+        self.assertIs(result['images'], runtime_images)
+        self.assertEqual(result['launcher'], {'path': str(SETUID_LAUNCHER), **runtime_images[str(SETUID_LAUNCHER)]})
+        self.assertEqual(result['selected_generation'], selected)
+
     def test_nix_output_hash_and_native_architecture_are_checked_before_cases(self):
         output = "/nix/store/" + "0" * 32 + "-application"
         source = "a" * 40
