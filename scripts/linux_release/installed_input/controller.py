@@ -41,7 +41,8 @@ def delivery_records(directory, execution, vm_id):
     import json
     records, operations = [], []
     cases = [('conversation/restart-and-reconnect', 'reply'), ('files/edit-search-review', 'editor'),
-             ('windowing/workspace-activation-and-exit', 'workspace')]
+             ('windowing/workspace-activation-and-exit', 'workspace'),
+             ('vault/presence-cancel-and-expiry', 'presence')]
     for case, kind in cases:
         leaf = directory / ('leaf/evidence/' + case + '/execution.json')
         if not leaf.exists():
@@ -50,7 +51,29 @@ def delivery_records(directory, execution, vm_id):
             raise ValueError('native input guest observations exceed their case bound')
         document = json.loads(leaf.read_bytes())
         observations = document['observations']
-        if kind in {'reply', 'workspace'}:
+        if kind == 'presence':
+            from .presence_fixture import FIELDS
+            selected = observations.get('launch', {}).get('fixed_input', [])
+            if not isinstance(selected, list):
+                raise ValueError('presence input requires its fixed transaction list')
+            partial = observations.get('native_input')
+            if partial is not None:
+                selected = [*selected, partial]
+            expected = ('provider-name-v1', None, 'provider-fixture-credential-v1',
+                        *(operation for _, operation, _, _ in FIELDS))
+            if len(selected) > len(expected):
+                raise ValueError('presence input exceeds its declared physical sequence')
+            for index, record in enumerate(selected):
+                operation = expected[index]
+                if operation is None:
+                    operation = record.get('operation') if isinstance(record, dict) else None
+                    if not isinstance(operation, str) or not re.fullmatch(r'provider-endpoint-v1-[0-9]{4,5}', operation):
+                        raise ValueError('presence input has no fixed loopback endpoint operation')
+                    protocol.steps(operation)
+                records.append(record)
+                operations.append(operation)
+        elif kind in {'reply', 'workspace'}:
+
             launch = 'launch_before' if kind == 'reply' else 'launch'
             selected = observations.get(launch, {}).get('fixed_input', [])
             recovery = observations.get('provider_recovery')
