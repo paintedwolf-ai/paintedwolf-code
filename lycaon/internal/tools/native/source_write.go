@@ -120,12 +120,11 @@ func applyAgentStream(ctx context.Context, tctx tools.ToolContext, req agentStre
 		return result, err
 	}
 	defer stage.Close()
-	result, err = stage.replacement.Commit()
-	return result, finishAgentMutation(ctx, tctx, stage.mutation, stage.journal, err)
+	return stage.Commit(ctx, tctx)
 }
 
 func stageAgentStream(ctx context.Context, tctx tools.ToolContext, req agentStreamRequest) (*agentStreamStage, fseffect.Result, error) {
-	stage := &agentStreamStage{ctx: ctx, tc: tctx, request: req}
+	stage := &agentStreamStage{request: req}
 	if req.Memory != nil {
 		release, err := req.Memory.Reserve(ctx, 32<<10)
 		if err != nil {
@@ -169,6 +168,16 @@ func stageAgentStream(ctx context.Context, tctx tools.ToolContext, req agentStre
 			}
 			mutation.AfterSHA256, mutation.AfterSize = staged.SHA256, staged.Bytes
 			mutation.After = captured.bytes()
+			if req.Memory != nil {
+				// Bound review strings, JSON staging, retained plans and ledger clones
+				// while the captured backing capacity remains separately charged.
+				reserved := int64(16<<10) + 6*int64(len(mutation.Before)+len(mutation.After)) + 8*int64(len(req.Target.Abs)+len(req.Target.Location.Root)+len(req.Target.Location.Rel))
+				release, err := req.Memory.ReserveProgramState(ctx, reserved)
+				if err != nil {
+					return err
+				}
+				stage.releasePlan = release
+			}
 			operation := api.AgentIntentOperationWrite
 			if mutation.Op == api.SourceChangeOpCreate {
 				operation = api.AgentIntentOperationCreate
@@ -702,49 +711,64 @@ func recordAgentMutationPaths(tctx tools.ToolContext, m agentMutation) {
 	}
 }
 
-// A revision body is retained only if the entire stream fits the capture limit.
-type revisionCapture struct {
-	buffer   *BufferedBytes
-	ctx      context.Context
-	memory   *toolcontract.ProgramMemory
-	overflow bool
-}
-
-func (c *revisionCapture) Write(raw []byte) (int, error) {
-	if c.overflow {
-		return len(raw), nil
-	}
-	if c.buffer == nil {
-		ctx := c.ctx
-		if ctx == nil {
-			ctx = context.Background()
+// publishAgentStreams closes the durable-intent transaction before touching any
+// destination. Each held replacement still revalidates its own target at commit.
+func publishAgentStreams(ctx context.Context, tc tools.ToolContext, streams []*agentStreamStage) ([]sourceeffect.Completion, error) {
+	plans := make([]sourceeffect.Plan, 0, len(streams))
+	for _, stream := range streams {
+		record, change, ok := agentCommitInputs(tc, stream.mutation)
+		if tc.Source.SourceMutations == nil || !ok {
+			return publishIndividualStreams(ctx, tc, streams)
 		}
-		buffer, err := (ExecutionRevisions{Memory: c.memory}).NewBufferedBytes(ctx, sourceledger.MaxRevisionContentBytes, "source_revision_bytes")
-		if err != nil {
-			return 0, err
+		plans = append(plans, sourceeffect.Plan{Record: record, Change: change, Target: stream.request.Target.Location})
+	}
+	completions := make([]sourceeffect.Completion, len(streams))
+	pending, err := tc.Source.SourceMutations.PrepareEffects(ctx, plans)
+	if err != nil {
+		return completions, err
+	}
+	ids := pending.IDs()
+	var publicationErr error
+	for i, stream := range streams {
+		stream.batchPrepared = true
+		if tc.Effects.Out != nil {
+			tc.Effects.Out.OwnerRef = ids[i]
 		}
-		c.buffer = buffer
+		completions[i].Attempted = true
+		completions[i].Result, completions[i].Err = stream.replacement.Commit()
+		if completions[i].Err != nil {
+			publicationErr = completions[i].Err
+			break
+		}
 	}
-	if len(c.buffer.Bytes)+len(raw) > sourceledger.MaxRevisionContentBytes {
-		c.overflow = true
-		_ = c.buffer.Close()
-		return len(raw), nil
+	err = pending.Finish(ctx, completions)
+	for i, completion := range completions {
+		if completion.Result.Publication.Committed() {
+			recordAgentMutationPaths(tc, streams[i].mutation)
+			tc.RecordModelAuthoredCredentials(ctx, streams[i].mutation.AbsPath, streams[i].mutation.After)
+		}
 	}
-	return c.buffer.Write(raw)
+	return completions, errors.Join(publicationErr, err)
 }
 
-func (c *revisionCapture) bytes() []byte {
-	if c.overflow {
-		return nil
+// Mixed attribution scopes keep the existing individual-effect owner. This
+// path does not add durable history or recovery to an unattached scope.
+func publishIndividualStreams(ctx context.Context, tc tools.ToolContext, streams []*agentStreamStage) ([]sourceeffect.Completion, error) {
+	completions := make([]sourceeffect.Completion, len(streams))
+	for i, stream := range streams {
+		completions[i].Attempted = true
+		result, err := stream.replacement.Commit()
+		completions[i].Result = result
+		completions[i].Err = finishAgentMutation(ctx, tc, stream.mutation, stream.journal, err)
+		if completions[i].Err != nil {
+			return completions, completions[i].Err
+		}
 	}
-	if c.buffer == nil || c.buffer.Bytes == nil {
-		return []byte{}
-	}
-	return c.buffer.Bytes
+	return completions, nil
 }
 
-func (c *revisionCapture) Close() {
-	if c.buffer != nil {
-		_ = c.buffer.Close()
-	}
+// Commit publishes and settles through the same attributed write owner.
+func (s *agentStreamStage) Commit(ctx context.Context, tc tools.ToolContext) (fseffect.Result, error) {
+	result, err := s.replacement.Commit()
+	return result, finishAgentMutation(ctx, tc, s.mutation, s.journal, err)
 }

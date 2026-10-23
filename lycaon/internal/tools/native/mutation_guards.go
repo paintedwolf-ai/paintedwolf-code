@@ -422,14 +422,11 @@ func assertWritePath(
 		return projectpaths.Resolved{}, deny(filepath.ToSlash(relPath))
 	}
 	relSlash := filepath.ToSlash(relPath)
-	// Credential and git-internals paths are refused by the mutation floor in
-	// projectpaths.ResolveWrite, which both calls below cross; this guard adds
-	// only profile scope.
-	if err := assertProfileWriteScope(ctx, boundary, tctx, relPath, tool); err != nil {
-		return projectpaths.Resolved{}, writePathReject(ctx, boundary, relSlash, profileID, tool, err, deny)
-	}
 	resolved, err := projectpaths.ResolveWrite(ctx, boundary, tctx, relPath)
 	if err != nil {
+		return projectpaths.Resolved{}, writePathReject(ctx, boundary, relSlash, profileID, tool, err, deny)
+	}
+	if err := assertResolvedProfileWriteScope(ctx, boundary, tctx, resolved, relPath, tool); err != nil {
 		return projectpaths.Resolved{}, writePathReject(ctx, boundary, relSlash, profileID, tool, err, deny)
 	}
 	return resolved, nil

@@ -17,7 +17,8 @@ import (
 // copyTree preflights without retaining a tree-sized plan, then routes every
 // entry through the same mutation owners as a single-file copy. The second
 // pass measures actual streamed bytes so growth cannot exceed admission.
-func (t *CopyTool) copyTree(ctx context.Context, tc tools.ToolContext, source projectpaths.Resolved, pair FilePair, in CopyInput, caps RecursiveCaps, used *RecursiveCaps, result *CopyResult, memory *toolcontract.ProgramMemory) error {
+func (op *CopyOperation) copyTree(ctx context.Context, tc tools.ToolContext, source projectpaths.Resolved, pair FilePair, result *CopyResult) error {
+	t, in, caps, used, memory := op.tool, op.input, op.caps, &op.used, op.memory
 	destination, err := assertCopyWritePath(ctx, t.Boundary, tc, pair.To, tc.ProfileID())
 	if err != nil {
 		return err
@@ -36,11 +37,9 @@ func (t *CopyTool) copyTree(ctx context.Context, tc tools.ToolContext, source pr
 		if _, err := assertCopyWritePath(ctx, t.Boundary, tc, filepath.Join(pair.To, rel), tc.ProfileID()); err != nil {
 			return err
 		}
-		if _, err := assertCopyWritePath(ctx, t.Boundary, tc, filepath.Join(pair.From, rel), tc.ProfileID()); err != nil {
-			return err
-		}
 		if info.IsDir() {
-			return nil
+			_, err := assertCopyWritePath(ctx, t.Boundary, tc, filepath.Join(pair.From, rel), tc.ProfileID())
+			return err
 		}
 		from, err := assertMutationFileSource(ctx, t.Boundary, tc, filepath.Join(pair.From, rel), tc.ProfileID(), "copy", "COPY_NOT_FOUND", "COPY_IS_DIRECTORY", "COPY_SYMLINK_ESCAPE", assertCopyWritePath)
 		if err != nil {
@@ -59,15 +58,23 @@ func (t *CopyTool) copyTree(ctx context.Context, tc tools.ToolContext, source pr
 		bytes += observed.Size()
 		return copyTreeWithinCaps(files, bytes, caps, filepath.ToSlash(pair.From))
 	}
-	if err := walkCopyTree(ctx, root, base, ".", inspect, nil); err != nil {
+	if err := walkCopyTree(ctx, root, base, ".", inspect, nil, memory); err != nil {
 		return err
 	}
 	if err := mkdirAgentPath(ctx, tc, resolvedMutationTarget(destination), 0o755); err != nil {
 		return err
 	}
+	page, err := newCopyPage(ctx, tc, op, result)
+	if err != nil {
+		return err
+	}
+	defer page.Close()
 	copyEntry := func(rel string, info os.FileInfo) error {
 		to := filepath.Join(pair.To, rel)
 		if info.IsDir() {
+			if err := page.Flush(); err != nil {
+				return err
+			}
 			target, err := assertCopyWritePath(ctx, t.Boundary, tc, to, tc.ProfileID())
 			if err != nil {
 				return err
@@ -78,18 +85,16 @@ func (t *CopyTool) copyTree(ctx context.Context, tc tools.ToolContext, source pr
 		if err := copyTreeWithinCaps(used.Files, used.Bytes, caps, filepath.ToSlash(pair.From)); err != nil {
 			return err
 		}
-		remaining := caps.Bytes - used.Bytes
+		remaining := caps.Bytes - used.Bytes - page.bytes
 		if in.MaxFileBytes > 0 {
 			remaining = min(remaining, in.MaxFileBytes)
 		}
-		before := len(result.Copied)
-		err := t.copyFile(ctx, tc, FilePair{From: filepath.Join(pair.From, rel), To: to}, in, remaining, result, memory)
-		if len(result.Copied) > before {
-			used.Bytes += result.Copied[len(result.Copied)-1].Bytes
-		}
-		return err
+		return page.Add(FilePair{From: filepath.Join(pair.From, rel), To: to}, remaining)
 	}
 	finishDir := func(rel string, _ os.FileInfo) error {
+		if err := page.Flush(); err != nil {
+			return err
+		}
 		if !in.Preserve {
 			return nil
 		}
@@ -99,7 +104,8 @@ func (t *CopyTool) copyTree(ctx context.Context, tc tools.ToolContext, source pr
 		}
 		return preserveMetadata(ctx, tc, filepath.Join(pair.From, rel), resolvedMutationTarget(target))
 	}
-	return walkCopyTree(ctx, root, base, ".", copyEntry, finishDir)
+	err = walkCopyTree(ctx, root, base, ".", copyEntry, finishDir, memory)
+	return errors.Join(err, page.Flush())
 }
 
 func copyTreeWithinCaps(files, bytes int64, caps RecursiveCaps, path string) error {
@@ -114,7 +120,14 @@ func copyTreeWithinCaps(files, bytes int64, caps RecursiveCaps, path string) err
 
 // Each active directory retains at most one page; empty directories do not
 // accumulate in a plan. Descriptor-relative reads keep traversal in its root.
-func walkCopyTree(ctx context.Context, root *fseffect.ReadRoot, base, rel string, visit, after func(string, os.FileInfo) error) error {
+func walkCopyTree(ctx context.Context, root *fseffect.ReadRoot, base, rel string, visit, after func(string, os.FileInfo) error, memory *toolcontract.ProgramMemory) error {
+	// Retain the current page, its replacement page, entry metadata and recursive
+	// frame before ReadDir allocates. The enclosing program bounds total depth.
+	release, err := memory.ReserveProgramState(ctx, 2*128*int64(1024+len(base)+len(rel)))
+	if err != nil {
+		return err
+	}
+	defer release()
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -145,7 +158,7 @@ func walkCopyTree(ctx context.Context, root *fseffect.ReadRoot, base, rel string
 			}
 			child := filepath.Join(rel, entry.Name())
 			if info.IsDir() {
-				if err := walkCopyTree(ctx, root, base, child, visit, after); err != nil {
+				if err := walkCopyTree(ctx, root, base, child, visit, after, memory); err != nil {
 					return err
 				}
 			} else if err := visit(child, info); err != nil {
