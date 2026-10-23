@@ -28,6 +28,7 @@ type protectedGuardian struct {
 	failed                                                        bool
 	failureNotified                                               bool
 	status                                                        int
+	diagnosticBirths                                              [4]int64
 	nextHealth                                                    uint64
 	lastHealth                                                    time.Time
 }
@@ -86,6 +87,7 @@ func RunGuardian() (int, error) {
 		children: os.NewFile(13, "protected-lineage-children"), proc: os.NewFile(14, "protected-process-directory"),
 		control: os.NewFile(12, "guardian-bootstrap"), health: os.NewFile(7, "mount-view-health"),
 		lifetime: os.NewFile(6, "generation-lifetime"), viewLifetime: os.NewFile(18, "mount-view-lifetime"), gate: os.NewFile(19, "desktop-admission"), nextHealth: roots.sequence, lastHealth: time.Now()}
+	state.diagnosticBirths = state.captureDiagnosticBirths()
 	return state.run(), nil
 }
 
@@ -106,12 +108,14 @@ func (state *protectedGuardian) run() int {
 	signal.Notify(signals, unix.SIGTERM, unix.SIGINT, unix.SIGHUP)
 	defer signal.Stop(signals)
 	if err := state.admit(); err != nil {
+		state.writeRetirement(os.Stderr, guardianRetirement{Cause: guardianAdmissionFailed, RoleIndex: -1})
 		state.retired = true
 		state.failed = true
 	}
 	for {
 		noChildren, err := state.reap()
 		if err != nil {
+			state.writeRetirement(os.Stderr, guardianRetirement{Cause: guardianWaitFailed, RoleIndex: -1})
 			state.retired = true
 			state.failed = true
 		}
@@ -124,11 +128,15 @@ func (state *protectedGuardian) run() int {
 				return state.status
 			}
 			// ECHILD alone is insufficient if any authenticated role still lives.
+			state.writeRetirement(os.Stderr, guardianRetirement{Cause: guardianUnsettledChildren, RoleIndex: -1})
 			state.retired = true
 			state.failed = true
 		}
 		select {
-		case <-signals:
+		case signal := <-signals:
+			if number, ok := signal.(unix.Signal); ok {
+				state.writeRetirement(os.Stderr, guardianRetirement{Cause: guardianSignalReceived, RoleIndex: -1, Signal: int(number)})
+			}
 			state.retired = true
 			state.failed = true
 		default:
@@ -156,7 +164,8 @@ func (state *protectedGuardian) run() int {
 			time.Sleep(10 * time.Millisecond)
 			continue
 		}
-		if err := state.observe(); err != nil {
+		if observation, err := state.observe(); err != nil {
+			state.writeRetirement(os.Stderr, guardianRetirement{Cause: observation.Cause, RoleIndex: observation.RoleIndex, Observation: &observation})
 			state.retired = true
 			if !errors.Is(err, errProtectedDesktopEnded) {
 				state.failed = true
@@ -220,42 +229,56 @@ func (state *protectedGuardian) admit() error {
 	}
 }
 
-func (state *protectedGuardian) observe() error {
+func (state *protectedGuardian) observe() (guardianObservation, error) {
+	observation := guardianObservation{Cause: guardianPollFailed, RoleIndex: -1}
 	polls := []unix.PollFd{{Fd: int32(state.health.Fd()), Events: unix.POLLIN}}
 	for fd := 15; fd <= 17; fd++ {
 		polls = append(polls, unix.PollFd{Fd: int32(fd), Events: unix.POLLIN})
 	}
 	_, err := unix.Poll(polls, 100)
+	for index, poll := range polls {
+		observation.Poll[index] = poll.Revents
+	}
 	if errors.Is(err, unix.EINTR) {
-		return nil
+		return observation, nil
 	}
 	if err != nil {
-		return err
+		return observation, err
 	}
 	for index, poll := range polls {
 		if poll.Revents == 0 {
 			continue
 		}
 		if index == 1 && poll.Revents&unix.POLLIN != 0 {
-			return errProtectedDesktopEnded
+			observation.Cause, observation.RoleIndex = guardianDesktopReady, 0
+			return observation, errProtectedDesktopEnded
 		}
 		if index != 0 || poll.Revents&(unix.POLLHUP|unix.POLLERR|unix.POLLNVAL) != 0 {
-			return errors.New("protected role or health channel ended")
+			observation.Cause = guardianHealthEnded
+			if index != 0 {
+				observation.Cause, observation.RoleIndex = guardianRoleReady, index-1
+			}
+			return observation, errors.New("protected role or health channel ended")
 		}
 		message, fd, err := receiveMountTransfer(int(state.health.Fd()))
+		if err == nil {
+			observation.Frame = &guardianHealthFact{Kind: message.kind, Sequence: message.sequence, Descriptor: fd >= 0}
+		}
 		if fd >= 0 {
 			_ = unix.Close(fd)
 		}
 		if err != nil || fd >= 0 || message != (mountTransfer{kind: mountTransferReady, sequence: state.nextHealth}) || state.nextHealth == ^uint64(0) {
-			return errors.New("invalid private mount health sequence")
+			observation.Cause = guardianHealthRejected
+			return observation, errors.New("invalid private mount health sequence")
 		}
 		state.nextHealth++
 		state.lastHealth = time.Now()
 	}
 	if time.Since(state.lastHealth) > mountSourceSetupLimit {
-		return errors.New("private mount health deadline exceeded")
+		observation.Cause = guardianHealthExpired
+		return observation, errors.New("private mount health deadline exceeded")
 	}
-	return nil
+	return observation, nil
 }
 
 func (state *protectedGuardian) reap() (bool, error) {
@@ -286,6 +309,8 @@ func (state *protectedGuardian) recordExit(pid int, status unix.WaitStatus) {
 			continue
 		}
 		state.reaped[index] = true
+		waitStatus := uint32(status)
+		state.writeRetirement(os.Stderr, guardianRetirement{Cause: guardianRootExited, RoleIndex: index, WaitStatus: &waitStatus})
 		if index != 0 && !state.retired {
 			state.failed = true
 		}

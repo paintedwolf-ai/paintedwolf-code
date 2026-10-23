@@ -31,8 +31,15 @@ type lifecycleRole struct {
 }
 
 type lifecycleSample struct {
-	MonotonicNS int64   `json:"monotonic_ns"`
-	Ready       [3]bool `json:"ready"`
+	MonotonicNS    int64               `json:"monotonic_ns"`
+	Ready          [3]bool             `json:"ready"`
+	DesktopRecheck *lifecycleReadiness `json:"desktop_recheck,omitempty"`
+}
+
+type lifecycleReadiness struct {
+	BeginNS int64 `json:"begin_ns"`
+	EndNS   int64 `json:"end_ns"`
+	Ready   bool  `json:"ready"`
 }
 
 type lifecycleObservation struct {
@@ -259,7 +266,21 @@ func runLifecycleObserver() error {
 			}
 		}
 		if ready != previous {
-			result.Samples = append(result.Samples, lifecycleSample{MonotonicNS: lifecycleMonotonicNS(), Ready: ready})
+			sample := lifecycleSample{MonotonicNS: lifecycleMonotonicNS(), Ready: ready}
+			if !ready[0] && ((ready[1] && !previous[1]) || (ready[2] && !previous[2])) {
+				check := &lifecycleReadiness{BeginNS: lifecycleMonotonicNS()}
+				desktop := []unix.PollFd{{Fd: int32(pins[0]), Events: unix.POLLIN}}
+				if _, err := unix.Poll(desktop, 0); err != nil {
+					return err
+				}
+				check.EndNS = lifecycleMonotonicNS()
+				if desktop[0].Revents & ^int16(unix.POLLIN) != 0 {
+					return errors.New("desktop recheck returned an unexpected pidfd event")
+				}
+				check.Ready = desktop[0].Revents&unix.POLLIN != 0
+				sample.DesktopRecheck = check
+			}
+			result.Samples = append(result.Samples, sample)
 			previous = ready
 		}
 		if ready == [3]bool{true, true, true} {
