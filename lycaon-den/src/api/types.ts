@@ -11634,7 +11634,15 @@ export interface components {
             remove_extensions: string[];
             force: boolean;
         };
+        /** @description Live host-owned progress; absent once the recorded operation settles. */
+        ProjectRemovalProgress: {
+            /** @enum {string} */
+            phase: "preparing" | "chats" | "project_data" | "files" | "extensions";
+            completed: number;
+            total: number;
+        };
         ProjectRemovalResult: {
+            progress?: components["schemas"]["ProjectRemovalProgress"] | null;
             assessment?: components["schemas"]["ProjectRemovalAssessment"] | null;
             /** Format: uuid */
             operation_id: string;
@@ -29910,6 +29918,7 @@ export type ProjectRemovalReason = components["schemas"]["ProjectRemovalReason"]
 export type ProjectRemovalExtension = components["schemas"]["ProjectRemovalExtension"];
 export type ProjectRemovalAssessment = components["schemas"]["ProjectRemovalAssessment"];
 export type ProjectRemovalRequest = components["schemas"]["ProjectRemovalRequest"];
+export type ProjectRemovalProgress = components["schemas"]["ProjectRemovalProgress"];
 export type ProjectRemovalResult = components["schemas"]["ProjectRemovalResult"];
 export type AgentContextInstruction = components["schemas"]["AgentContextInstruction"];
 export type AgentContextSkill = components["schemas"]["AgentContextSkill"];

@@ -27,3 +27,13 @@ export function workspaceFaultMessage(err: unknown): string {
   }
   return WORKSPACE_FAULT_GENERIC;
 }
+
+export function workspaceProjectMutation(err: unknown): boolean {
+  return err instanceof LycaonApiError && err.code === "project_mutation_in_progress";
+}
+
+export function workspaceRetryMessage(err: unknown): string {
+  return workspaceProjectMutation(err)
+    ? "Project changes are still in progress — waiting…"
+    : WORKSPACE_SYNC_RETRYING;
+}

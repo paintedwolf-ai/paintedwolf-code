@@ -14,7 +14,7 @@ import { createFilesWorkspace } from "../source/files-workspace.ts";
 import type { FilesScope } from "./files-scope.ts";
 
 type WorkspacePresentation = Pick<ReturnType<typeof createFilesWorkspace>,
-  "workspaceFault" | "workspaceError" | "workspaceSettled" | "treeSettled" | "filesWorkspaceId"> &
+  "projectMutationPending" | "workspaceFault" | "workspaceError" | "workspaceSettled" | "treeSettled" | "filesWorkspaceId"> &
   Pick<FilesScope, "state" | "activeBuffer" | "aimedKey"> & {
     projectId: string;
     projectName: () => string | undefined;
@@ -23,7 +23,7 @@ type WorkspacePresentation = Pick<ReturnType<typeof createFilesWorkspace>,
 
 export function createFilesWorkspacePresentation(options: WorkspacePresentation) {
   const { projectId, projectName, document, state, activeBuffer, aimedKey,
-    workspaceFault, workspaceError, workspaceSettled, treeSettled, filesWorkspaceId } = options;
+    workspaceFault, workspaceError, projectMutationPending, workspaceSettled, treeSettled, filesWorkspaceId } = options;
   const holdLabel = () => {
     const target = document();
     return target ? basenameOfPath(target.path) : projectName();
@@ -41,7 +41,7 @@ export function createFilesWorkspacePresentation(options: WorkspacePresentation)
       title: "Editor sync is unavailable",
       suggestedAction: "Files keep retrying on their own; if it persists, check the connection to the host.",
     },
-    workspaceError,
+    () => projectMutationPending() ? null : workspaceError(),
     () => projectId,
   );
   const holdHint = () => holdNotice()?.message;

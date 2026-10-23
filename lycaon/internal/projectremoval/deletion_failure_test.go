@@ -16,7 +16,7 @@ func TestFailedDeletionReportsObservedProjectState(t *testing.T) {
 			o, reg, id := fixture(t)
 			install(t, o, id, "acme/one")
 			req := review(t, o, id, "acme/one")
-			o.Delete = func(context.Context, string, bool) error {
+			o.Delete = func(context.Context, string, bool, func(wire.ProjectRemovalProgress)) error {
 				switch state {
 				case "deleted":
 					delete(reg.rows, id)

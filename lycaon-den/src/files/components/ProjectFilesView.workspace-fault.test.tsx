@@ -22,7 +22,7 @@ import {
   WORKSPACE_FAULT_GENERIC,
   WORKSPACE_FAULT_IDENTITY_UNSTABLE,
   WORKSPACE_IDENTITY_RECONCILE_LIMIT,
-  WORKSPACE_SYNC_RETRYING,
+  workspaceRetryMessage,
 } from "../source/files-workspace-fault.ts";
 import type { ProjectRoot } from "../../api/types.ts";
 
@@ -144,13 +144,13 @@ describe("ProjectFilesView workspace lookup faults", () => {
 
     const hold = screen.getByTestId("project-loading-stage");
     await waitFor(() => {
-      expect(hold.textContent).toContain(WORKSPACE_SYNC_RETRYING);
+      expect(hold.textContent).toContain(workspaceRetryMessage(failure()));
     });
     expect(hold.querySelector('[role="alert"]')).toBeNull();
     // The hold stays and carries its account to the shell veil.
     expect(!preparation.ready()).toBe(true);
     expect(preparation.notice()).toEqual({
-      message: WORKSPACE_SYNC_RETRYING,
+      message: workspaceRetryMessage(failure()),
       tone: "waiting",
     });
 

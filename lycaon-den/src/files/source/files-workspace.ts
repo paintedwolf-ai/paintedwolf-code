@@ -16,6 +16,8 @@ import {
   WORKSPACE_SYNC_RETRYING,
   workspaceFaultMessage,
   workspaceLookupRetryable,
+  workspaceProjectMutation,
+  workspaceRetryMessage,
 } from "./files-workspace-fault.ts";
 import { isComposedBufferKind } from "../documents/project-files-buffer-kind.ts";
 import { dropFilesBuffersForRoot, switchFilesRootBranches } from "../documents/project-files-buffers.ts";
@@ -83,6 +85,7 @@ export function createFilesWorkspace(options: {
   });
   const filesRoots = () =>
     displayedWorkspace()?.roots ?? (chatSessionId() ? [] : options.roots());
+  const [projectMutationPending, setProjectMutationPending] = createSignal(false);
   const [workspaceError, setWorkspaceError] = createSignal<string | null>(null);
   const [workspaceFault, setWorkspaceFault] = createSignal<string | null>(null);
   const [workspaceSettled, setWorkspaceSettled] = createSignal(false);
@@ -130,6 +133,7 @@ export function createFilesWorkspace(options: {
     if (filesWorkspaceId() === nextWorkspace) return false;
     workspaceRequest += 1;
     setWorkspaceError(null);
+    setProjectMutationPending(false);
     setTreeSettled(false);
     setWorkspaceSettled(false);
     setWorkspaceRefreshRevision((revision) => revision + 1);
@@ -233,6 +237,7 @@ export function createFilesWorkspace(options: {
             // A tree settles itself once its first rows or a preparing view paint; no roots means no tree.
             batch(() => {
               setWorkspaceError(null);
+              setProjectMutationPending(false);
               setWorkspaceFault(null);
               if (resolvedRoots.length === 0) setTreeSettled(true);
               if (options.restoreHotExit() !== false && !hotExitRestored) {
@@ -254,7 +259,8 @@ export function createFilesWorkspace(options: {
               return;
             }
             if (workspaceLookupRetryable(err)) {
-              setWorkspaceError(WORKSPACE_SYNC_RETRYING);
+              setProjectMutationPending(workspaceProjectMutation(err));
+              setWorkspaceError(workspaceRetryMessage(err));
               retryTimer = setTimeout(
                 () => resolveWorkspace(attempt + 1),
                 Math.min(15_000, 1000 * 2 ** Math.min(attempt, 4)),
@@ -262,6 +268,7 @@ export function createFilesWorkspace(options: {
               return;
             }
             setWorkspaceError(null);
+            setProjectMutationPending(false);
             setWorkspaceFault(workspaceFaultMessage(err));
             reportProjectNoticeError(err, options.projectId);
           });
@@ -310,7 +317,7 @@ export function createFilesWorkspace(options: {
   const confirmDirectoryChange = (change: SourceChange) => listingConnection()?.confirm(change);
 
   return {
-    directoryEntries, confirmDirectoryChange, observeDirectory, filesWorkspaceId, filesSourceAddress, filesRoots, workspaceError, workspaceFault, workspaceSettled,
+    directoryEntries, confirmDirectoryChange, observeDirectory, projectMutationPending, filesWorkspaceId, filesSourceAddress, filesRoots, workspaceError, workspaceFault, workspaceSettled,
     treeSettled, setTreeSettled, refreshProjectWorkspace, refreshWatchCoverage, observationNoticeFor
   };
 }

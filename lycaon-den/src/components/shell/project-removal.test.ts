@@ -17,8 +17,10 @@ function setup() {
   const report = vi.fn();
   const notify = vi.fn();
   const extensionsChanged = vi.fn();
-  const remove = createProjectRemoval({client:()=>client,confirm,review,prepare,retire,report,notify,extensionsChanged,operationId:()=>`op-${++id}`});
-  return {client,confirm,review,prepare,retire,report,notify,extensionsChanged,remove};
+  const progress = vi.fn();
+  const pause = vi.fn(async () => {});
+  const remove = createProjectRemoval({client:()=>client,confirm,review,prepare,retire,report,notify,extensionsChanged,progress,pause,operationId:()=>`op-${++id}`});
+  return {client,confirm,review,prepare,retire,report,notify,extensionsChanged,progress,pause,remove};
 }
 describe("project removal controller",()=>{
   it("serializes bulk reviews and shares completion for duplicate requests", async () => {
@@ -98,4 +100,30 @@ describe("project removal controller",()=>{
     const f=setup();f.client.createProjectRemoval.mockRejectedValueOnce(new LycaonApiError("stale",409,"project_removal_assessment_changed"));await f.remove("p");await f.remove("p");
     expect(f.client.assessProjectRemoval).toHaveBeenCalledTimes(2);expect(f.client.getProjectRemoval).not.toHaveBeenCalled();
   });
+});
+
+it("polls an accepted operation until settlement without retiring early", async () => {
+  const f = setup();
+  const running = { ...result, project_state: "unknown", progress: { phase: "chats" as const, completed: 1, total: 3 } };
+  f.client.createProjectRemoval.mockResolvedValueOnce(running);
+  f.client.getProjectRemoval.mockResolvedValueOnce(running).mockResolvedValueOnce(result);
+  f.pause.mockImplementation(async () => { expect(f.retire).not.toHaveBeenCalled(); });
+  await f.remove("p");
+  expect(f.client.createProjectRemoval).toHaveBeenCalledOnce();
+  expect(f.client.getProjectRemoval).toHaveBeenCalledTimes(2);
+  expect(f.client.getProjectRemoval).toHaveBeenLastCalledWith("p", "op-1");
+  expect(f.progress.mock.calls).toEqual([["p", running.progress], ["p", null]]);
+  expect(f.retire).toHaveBeenCalledOnce();
+  expect(f.notify).not.toHaveBeenCalled();
+});
+it("keeps the accepted operation identity when status becomes unreachable", async () => {
+  const f = setup();
+  f.client.createProjectRemoval.mockResolvedValueOnce({ ...result, project_state: "unknown", progress: { phase: "preparing", completed: 0, total: 0 } });
+  f.client.getProjectRemoval.mockRejectedValueOnce(new Error("offline"));
+  await f.remove("p");
+  expect(f.retire).not.toHaveBeenCalled();
+  expect(f.progress).toHaveBeenLastCalledWith("p", null);
+  await f.remove("p");
+  expect(f.client.createProjectRemoval.mock.calls[0]).toEqual(f.client.createProjectRemoval.mock.calls[1]);
+  expect(f.report).toHaveBeenCalledOnce();
 });

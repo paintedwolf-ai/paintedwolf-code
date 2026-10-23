@@ -166,6 +166,10 @@ Project deletion with optional extension cleanup is settled by `internal/project
 
 Den shows this evidence and defaults to keeping every extension. A submitted selection carries the host's assessment token and a UUID operation id. The host rejects changed evidence, runs the ordinary lifecycle checks, deletes the project, and only then attempts cleanup, which revalidates the references and commits the selected set in one extension transaction. Deletion and cleanup have separate outcomes: a failed or declined deletion removes no extensions, and a cleanup failure does not undo or misreport a committed deletion.
 
+The removal request durably accepts the operation and returns without waiting for deletion. The existing server task group tracks the work through shutdown. While it runs, the result endpoint answers from live progress without waiting for database writes: preparation, completed chat counts, project data, managed files, and optional extensions. Chat selection pages project summaries and indexed tree identities instead of hydrating every chat in the store. Physical history deletion still scales with retained data; counts advance after each complete chat tree, not after each database page.
+
+Den polls the accepted operation and updates the existing app notice rail. Opening a project during its lifecycle transition shows a project change wait in the existing editor opening surface. No separate notification system is introduced. Live progress is ephemeral and is never written into the durable receipt. The additive progress field belongs to the co-versioned bundle wire; the persisted journal shape is unchanged.
+
 Receipts retain the reviewed assessment and exact request independently of the deleted project. An exact retry returns the recorded outcome; reusing an id with different input is refused. A process interruption leaves an explicit interrupted outcome, and the host never repeats destructive work on its own. Settled receipts follow the operation-journal retention period; unsettled ones are kept.
 
 ### Idle storage tiering

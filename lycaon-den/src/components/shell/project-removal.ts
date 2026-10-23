@@ -3,6 +3,7 @@ import { LycaonApiError, isApiErrorCode } from "../../api/http.ts";
 import type {
   ProjectRemovalAssessment,
   ProjectRemovalRequest,
+  ProjectRemovalProgress,
   ProjectRemovalResult,
 } from "../../api/types.ts";
 import type { ConfirmDestructivePresenter } from "../../platform/interaction/confirm-dialog.ts";
@@ -45,6 +46,8 @@ export function createProjectRemoval(options: {
   report: (error: unknown) => void;
   notify: (notice: NoticeInput) => void;
   extensionsChanged: () => void;
+  progress?: (projectId: string, progress: ProjectRemovalProgress | null) => void;
+  pause?: () => Promise<void>;
   operationId?: () => string;
 }) {
   const active = new Map<string, Promise<void>>();
@@ -104,6 +107,25 @@ export function createProjectRemoval(options: {
     }
   };
 
+  const settle = async (client: RemovalClient, projectId: string, req: ProjectRemovalRequest) => {
+    let result = await execute(client, projectId, req);
+    let lastProgress = "";
+    while (result.progress) {
+      const current = JSON.stringify(result.progress);
+      if (current !== lastProgress) options.progress?.(projectId, result.progress);
+      lastProgress = current;
+      await (options.pause?.() ?? new Promise<void>((resolve) => setTimeout(resolve, 1000)));
+      try {
+        result = await client.getProjectRemoval(projectId, req.operation_id);
+      } catch (cause) {
+        const error = clientNoticeError("project_removal_unconfirmed");
+        error.cause = cause;
+        throw error;
+      }
+    }
+    return result;
+  };
+
   const remove = async (
     projectId: string,
     opts?: ProjectRemovalOptions,
@@ -119,7 +141,7 @@ export function createProjectRemoval(options: {
         await options.prepare(projectId);
         request = await review(client, projectId, opts);
       }
-      let result = await execute(client, projectId, request);
+      let result = await settle(client, projectId, request);
       if (result.failure_code === "root_busy") {
         pending.delete(projectId);
         const force = await options.confirm({
@@ -129,7 +151,7 @@ export function createProjectRemoval(options: {
         });
         if (!force) return;
         request = { ...request, force: true, operation_id: newID() };
-        result = await execute(client, projectId, request);
+        result = await settle(client, projectId, request);
       }
       pending.delete(projectId);
       if (["removed", "interrupted", "failed"].includes(result.cleanup_state)) {
@@ -153,6 +175,8 @@ export function createProjectRemoval(options: {
       }
     } catch (error) {
       if (!(error instanceof RemovalCancelled)) options.report(error);
+    } finally {
+      options.progress?.(projectId, null);
     }
   };
 

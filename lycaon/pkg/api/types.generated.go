@@ -4605,6 +4605,13 @@ type ProjectRemovalExtension struct {
 	Reasons     []ProjectRemovalReason `json:"reasons"`
 }
 
+// ProjectRemovalProgress Live host-owned progress; absent once the recorded operation settles.
+type ProjectRemovalProgress struct {
+	Phase     string `json:"phase"`
+	Completed int    `json:"completed"`
+	Total     int    `json:"total"`
+}
+
 // ProjectRemovalReason
 type ProjectRemovalReason struct {
 	Code      string `json:"code"`
@@ -4621,6 +4628,7 @@ type ProjectRemovalRequest struct {
 
 // ProjectRemovalResult
 type ProjectRemovalResult struct {
+	Progress     *ProjectRemovalProgress   `json:"progress,omitempty"`
 	Assessment   *ProjectRemovalAssessment `json:"assessment,omitempty"`
 	OperationID  string                    `json:"operation_id"`
 	ProjectID    string                    `json:"project_id"`
