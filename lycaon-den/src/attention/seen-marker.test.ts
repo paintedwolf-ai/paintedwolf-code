@@ -152,3 +152,14 @@ describe("createSeenMarker", () => {
     expect(h.mark).toHaveBeenCalledOnce();
   });
 });
+
+it("releases a synchronously failed stamp for the next revision", async () => {
+  const [readable] = createSignal<string | null>("s1");
+  const [revision, setRevision] = createSignal("idle:1");
+  const mark = vi.fn((): Promise<void> => { throw new Error("offline"); });
+  const dispose = createSeenMarker({ readable, revision, mark });
+  await settle();
+  setRevision("idle:2");
+  expect(mark).toHaveBeenCalledTimes(2);
+  dispose();
+});
