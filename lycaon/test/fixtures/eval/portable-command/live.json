@@ -1,0 +1,68 @@
+{
+  "version": 1,
+  "attempts_per_task_model_arm": 5,
+  "arms": [
+    "real-shell-reference",
+    "production-native"
+  ],
+  "qualification": "Preparation contract only. P31 requires explicit authorization and resolved source/backend/model/hardware identities. No installed model availability is asserted.",
+  "models": [
+    {
+      "role": "small",
+      "selection": "Ministral 3:3B",
+      "backend_requirement": "configured supported Ollama backend; exact installed artifact required"
+    },
+    {
+      "role": "medium",
+      "selection": "Gemma 4 31B IT",
+      "resolved_id": "google/gemma-4-31B-it",
+      "backend_requirement": "configured supported backend from coordinator roster"
+    },
+    {
+      "role": "large",
+      "selection": "GLM-5.3 Flash",
+      "resolved_id": "zai-org/GLM-5.3-Flash",
+      "backend_requirement": "configured supported backend from coordinator roster"
+    }
+  ],
+  "preferred_development_selection": {
+    "selection": "GLM Flash Latest",
+    "requires_resolved_identity": true,
+    "release_denominator": false
+  },
+  "roster_source": "lycaon/test/fixtures/eval/coordinator-roster.json",
+  "tasks": [
+    "first-mutation",
+    "same-file-transform",
+    "draft-read-transform",
+    "git-concurrent-index",
+    "fractional-logstat",
+    "wordle-explicit-history",
+    "oar-option-correction",
+    "oar-unavailable-remedy",
+    "partial-write-unknown-http",
+    "browser-obligation"
+  ],
+  "budgets": {
+    "model_responses": 256,
+    "wall_ms": 600000,
+    "tokens": 131072,
+    "interventions": 8,
+    "attempts": 5
+  },
+  "protocol": {
+    "order": "alternate arm order by attempt; all five attempts frozen in advance",
+    "repair": "New source/configuration/head gets new plan and affected evidence; retain every old attempt. No success-only reruns or extra outcome-dependent budgets.",
+    "reference": "Reference shell/prototype observations never qualify native authority, document semantics or installed execution. Record intentional differences separately.",
+    "live": "Use existing immutable source/provider/harness preflight and restricted raw capture storage; this module never calls providers.",
+    "privacy": "Keep account, endpoint, hardware and credential details in restricted evidence; publish digests and synthetic fixture paths only.",
+    "usage": "Agent stream and auxiliary/title calls, cache/input/output tokens, latency and cost are separate; missing pricing is unpriced, not zero.",
+    "grading": "Artifact correctness, delivered tests, receipt-backed authority, recovery, browser obligations and honest closeout are separate frozen dimensions."
+  },
+  "external_prerequisites": [
+    "P23 matching Bialy release/vocabulary",
+    "P28 native deterministic workflow acceptance",
+    "P31 explicit isolated live host/model/cost authorization",
+    "private verified application/provider/model/hardware binding"
+  ]
+}

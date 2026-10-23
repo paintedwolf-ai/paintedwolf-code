@@ -155,8 +155,9 @@ func TestCheckFastGateMembership(t *testing.T) {
 		t.Fatal("check-fast:workspace must reject an unpinned source tree")
 	}
 	plan := verificationCatalog(t)
-	want := []string{"build", "lint:fast", "budgets", "den:typecheck", "den:lint", "den:test:fast", "den:coverage:changes",
-		"test:short", "test:contract", "coverage:changes", "licenses:notices"}
+	want := []string{"build", "lint:full", "budgets", "den:typecheck", "den:lint", "den:test:fast", "den:coverage:changes",
+		"test:short", "test:contract", "coverage:changes", "licenses:notices", "comments:check",
+		"test:fail-messages:check", "docs:links"}
 	if !slices.Equal(plan.Groups["check-fast"], want) {
 		t.Fatalf("check-fast stages = %v, want %v", plan.Groups["check-fast"], want)
 	}
@@ -225,6 +226,9 @@ func TestVitestFastHasAnExplicitBoundary(t *testing.T) {
 		t.Fatal("fast Vitest canaries must not be empty")
 	}
 
+	if !slices.Contains(got, "src/platform/connection/tauri-ipc-parity.contract.test.ts") {
+		t.Fatal("admission canaries must verify native IPC registration parity")
+	}
 	seenTS, seenTSX := false, false
 	for _, rel := range got {
 		if !strings.HasPrefix(rel, "src/") || strings.Contains(rel, "..") || strings.ContainsAny(rel, "*?{[") || strings.Contains(rel, ".perf.test.") {

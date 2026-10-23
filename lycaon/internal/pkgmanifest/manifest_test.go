@@ -29,6 +29,10 @@ func fixture(t *testing.T, mutate func(m map[string]any)) (manifestPath, exePath
 		"version":        "1.0.2",
 		"architecture":   "x86_64",
 		"install_root":   root,
+		"payload": []map[string]any{
+			{"path": "bin", "kind": "directory", "mode": 0755, "sha256": nil, "size": nil, "target": nil},
+			{"path": "bin/pw", "kind": "file", "mode": 0755, "sha256": hex.EncodeToString(sum[:]), "size": len(content), "target": nil},
+		},
 		"executables": []map[string]any{
 			{"path": exePath, "sha256": hex.EncodeToString(sum[:]), "size": len(content)},
 		},
@@ -135,7 +139,10 @@ func TestVerifyReportsTamperingAndUnlistedPaths(t *testing.T) {
 	m, err := pkgmanifest.Load(manifestPath)
 	testutil.FailErr(t, "load manifest", err)
 
-	testutil.FailErr(t, "tamper with executable", os.WriteFile(exePath, []byte("#!/bin/sh\necho replaced\n"), 0o755))
+	image, err := os.ReadFile(exePath)
+	testutil.FailErr(t, "read executable fixture", err)
+	image[0] ^= 1
+	testutil.FailErr(t, "tamper with same-size executable", os.WriteFile(exePath, image, 0o755))
 	var mismatch *pkgmanifest.MismatchError
 	if err := m.Verify(exePath); !errors.As(err, &mismatch) {
 		t.Fatalf("Verify(tampered) = %v, want *MismatchError", err)
@@ -156,12 +163,12 @@ func TestVerifyReportsTamperingAndUnlistedPaths(t *testing.T) {
 	}
 }
 
-func TestVerifyTreatsASizeChangeWithTheSameDigestClaimAsMismatch(t *testing.T) {
-	manifestPath, exePath := fixture(t, func(m map[string]any) { executables(m)[0]["size"] = 1 })
+func TestVerifyReportsWrongRecordedSize(t *testing.T) {
+	manifestPath, exePath := fixture(t, func(m map[string]any) { executables(m)[0]["size"] = 1; m["payload"].([]map[string]any)[1]["size"] = 1 })
 	m, err := pkgmanifest.Load(manifestPath)
 	testutil.FailErr(t, "load manifest", err)
-	var mismatch *pkgmanifest.MismatchError
+	var mismatch *pkgmanifest.SizeMismatchError
 	if err := m.Verify(exePath); !errors.As(err, &mismatch) {
-		t.Fatalf("Verify with a wrong recorded size = %v, want *MismatchError", err)
+		t.Fatalf("Verify with a wrong recorded size = %v, want *SizeMismatchError", err)
 	}
 }
