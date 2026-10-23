@@ -30,8 +30,8 @@ class Reader:
             raise CaseUnavailable('typed-native-session-bus-unavailable') from None
         self.user = None
 
-    def call(self, path, interface, method, args, signature, *, user=False):
-        destination = 'org.freedesktop.systemd1' if user else LOGIN
+    def call(self, path, interface, method, args, signature, *, user=False, destination=None):
+        destination = destination or ('org.freedesktop.systemd1' if user else LOGIN)
         parameters = self.glib.Variant(*args) if args else None
         try:
             if user and self.user is None:

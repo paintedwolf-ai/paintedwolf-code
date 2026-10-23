@@ -1,0 +1,128 @@
+import os
+import unittest
+
+from scripts.linux_release.installed_cases.native_session import NativeSessionObserver
+from scripts.linux_release.installed_cases.records import CaseUnavailable
+
+
+class Variant:
+    def __init__(self, value, signature=None):
+        self.value, self.signature = value, signature
+
+    def unpack(self):
+        return self.value
+
+    def get_child_value(self, index):
+        return self.value[index]
+
+    def get_variant(self):
+        return self
+
+    def get_type_string(self):
+        return self.signature
+
+
+class NativeReader:
+    def __init__(self):
+        self.names = {'org.freedesktop.login1': ':1.1', 'org.gnome.ScreenSaver': ':1.2'}
+        self.pids = {':1.1': 100, ':1.2': 200}
+        self.properties = {'Id': ('s', '7'), 'User': ('(uo)', (os.getuid(), '/user')),
+            'Seat': ('(so)', ('seat0', '/seat')), 'Type': ('s', 'wayland'),
+            'Remote': ('b', False), 'Active': ('b', True), 'LockedHint': ('b', False)}
+        self.locked = False
+        self.rows = [('sleep', 'private diagnostic', 'private diagnostic', 'block', os.getuid(), 300)]
+        self.calls = []
+
+    def call(self, path, interface, method, args, signature, *, user=False, destination=None):
+        self.calls.append((destination, method, user))
+        if method == 'GetNameOwner':
+            return Variant((self.names[args[1][0]],))
+        if method == 'GetConnectionUnixProcessID':
+            return Variant((self.pids[args[1][0]],))
+        if method == 'GetSession':
+            return Variant(('/org/freedesktop/login1/session/_7',))
+        if method == 'Get':
+            kind, value = self.properties[args[1][1]]
+            return Variant((Variant(value, kind),))
+        if method == 'GetActive':
+            return Variant((self.locked,))
+        if method == 'ListInhibitors':
+            return Variant((self.rows,))
+        raise AssertionError(method)
+
+
+class NativeSessionTests(unittest.TestCase):
+    def setUp(self):
+        self.reader = NativeReader()
+        self.session = {'id': '7', 'User': str(os.getuid()), 'Type': 'wayland',
+            'Active': 'yes', 'Remote': 'no', 'Seat': 'seat0', 'Desktop': 'GNOME'}
+        self.births = {100: 10, 200: 20, 300: 30}
+
+    def owner(self, pid, uid):
+        return {'pid': pid, 'parent_pid': 1, 'start_time_ticks': self.births[pid], 'uid': uid}
+
+    def observer(self):
+        return NativeSessionObserver(self.session, reader=self.reader, owner=self.owner)
+
+    def test_independent_session_locker_and_kernel_inhibitor_facts(self):
+        observer = self.observer()
+        self.reader.locked = True
+        self.reader.properties['LockedHint'] = ('b', True)
+        result = observer.inhibitors()
+        self.assertTrue(result['native_session']['locker_active'])
+        self.assertTrue(result['native_session']['locked_hint'])
+        self.assertEqual(result['inhibitors'], [{'what': 'sleep', 'mode': 'block',
+            'owner': self.owner(300, os.getuid())}])
+        self.assertNotIn('private diagnostic', repr(result))
+        self.assertIn((':1.1', 'ListInhibitors', False), self.reader.calls)
+        self.assertIn((':1.2', 'GetActive', True), self.reader.calls)
+
+    def test_replaced_bus_owner_or_reused_pid_refuses(self):
+        for change in ('bus', 'birth'):
+            with self.subTest(change=change):
+                self.setUp()
+                observer = self.observer()
+                if change == 'bus':
+                    self.reader.names['org.gnome.ScreenSaver'] = ':1.3'
+                    self.reader.pids[':1.3'] = 200
+                else:
+                    self.births[200] += 1
+                with self.assertRaises(ValueError):
+                    observer.observe()
+
+    def test_session_reassignment_and_malformed_types_refuse(self):
+        for name, value in [('Seat', ('(so)', ('seat1', '/seat'))),
+                            ('User', ('(uo)', (os.getuid() + 1, '/user'))),
+                            ('Active', ('b', False)), ('LockedHint', ('s', 'true'))]:
+            with self.subTest(name=name):
+                self.setUp()
+                observer = self.observer()
+                self.reader.properties[name] = value
+                with self.assertRaises(ValueError):
+                    observer.observe()
+
+    def test_unverified_native_adapter_is_explicit(self):
+        self.session['Desktop'] = 'KDE'
+        with self.assertRaises(CaseUnavailable):
+            self.observer()
+
+    def test_inhibitor_shapes_and_owner_disappearance_refuse(self):
+        observer = self.observer()
+        for rows in [[('sleep', '', '', 'block', True, 300)], [()] , self.reader.rows * 257]:
+            self.reader.rows = rows
+            with self.assertRaises(ValueError):
+                observer.inhibitors()
+        self.reader.rows = [('sleep', '', '', 'block', os.getuid(), 999)]
+        with self.assertRaises(KeyError):
+            observer.inhibitors()
+
+    def test_observation_cannot_mutate_captured_session_authority(self):
+        observer = self.observer()
+        result = observer.observe()
+        result['session']['id'] = '8'
+        result['authorities']['locker']['process']['start_time_ticks'] = 1
+        self.assertEqual(observer.observe()['session']['id'], '7')
+
+
+if __name__ == '__main__':
+    unittest.main()
