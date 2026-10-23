@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"github.com/lycaon/lycaon/internal/tools"
 	"io"
 	"slices"
 
@@ -156,7 +157,7 @@ func (s *sorter) spill() error {
 		return nil
 	}
 	if s.inv.ports.Spills == nil || s.inv.ports.Admission == nil {
-		return nativeutility.LimitExceeded("sort_memory_bytes", s.inv.limit("sort_memory_bytes"), s.chunkBytes)
+		return tools.CommandLimitExceeded("sort_memory_bytes", s.inv.limit("sort_memory_bytes"), s.chunkBytes)
 	}
 	slices.SortStableFunc(s.chunk, s.order.compare)
 	var size int64
@@ -187,7 +188,7 @@ func (s *sorter) spill() error {
 // run keeps admission bookkeeping independent of its number of records.
 func (s *sorter) newRun(size int64) (SpillRun, error) {
 	if limit := s.inv.limit("spill_bytes"); s.spilled+size > limit {
-		return nil, nativeutility.LimitExceeded("spill_bytes", limit, s.spilled+size)
+		return nil, tools.CommandLimitExceeded("spill_bytes", limit, s.spilled+size)
 	}
 	release, err := s.inv.ports.Admission.ReserveSpill(s.inv.ctx, size)
 	if err != nil {

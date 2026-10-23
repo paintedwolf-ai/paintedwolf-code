@@ -13,7 +13,6 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
@@ -113,11 +112,6 @@ func (inv *invocation) usage(word, reason string) error {
 	}}
 }
 
-// limitExceeded refuses work above a frozen catalog limit; nothing is truncated.
-func limitExceeded(id string, maximum, observed int64) error {
-	return &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"limit_id": id, "resource_unit": nativeutility.ResourceUnit(id), "maximum": maximum, "observed": observed}}
-}
-
 // pinOpened records the published revision of a file a domain owner opens.
 func (inv *invocation) pinOpened(resolved projectpaths.Resolved, file *os.File) error {
 	revision, ok, err := inv.owners.Revisions.PinOpened(inv.ctx, resolved, file)
@@ -160,7 +154,7 @@ func ordinary(err error) (string, bool) {
 
 // settle projects the run onto the producer contract.
 func (inv *invocation) settle(err error) (toolcontract.ProducerResult, error) {
-	err = nativeutility.ResourceRejection(err)
+	err = tools.CommandResourceRejection(err)
 	err = projectpaths.WithPathRejection(err, inv.request.Invocation.Span)
 	if err != nil {
 		result := toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}

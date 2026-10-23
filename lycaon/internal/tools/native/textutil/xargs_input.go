@@ -4,10 +4,9 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/tools"
 	"io"
 	"strings"
-
-	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
 )
 
 // xargsInput keeps one bounded item and the quoting state between reads.
@@ -46,7 +45,7 @@ func (in *xargsInput) readByte() (byte, error) {
 	if err == nil {
 		in.read++
 		if maximum := in.inv.limit("stream_throughput_bytes"); in.read > maximum {
-			return 0, nativeutility.LimitExceeded("stream_throughput_bytes", maximum, in.read)
+			return 0, tools.CommandLimitExceeded("stream_throughput_bytes", maximum, in.read)
 		}
 	}
 	return b, err
@@ -118,7 +117,7 @@ func (in *xargsInput) next() (xargsItem, error) {
 			}
 		}
 		if maximum := in.inv.limit("argument_bytes"); int64(item.Len()+1) > maximum {
-			return xargsItem{}, nativeutility.LimitExceeded("argument_bytes", maximum, int64(item.Len()+1))
+			return xargsItem{}, tools.CommandLimitExceeded("argument_bytes", maximum, int64(item.Len()+1))
 		}
 		item.WriteByte(b)
 		present, in.blankEnd = true, false

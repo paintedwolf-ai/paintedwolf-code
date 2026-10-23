@@ -3,11 +3,11 @@ package native
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/tools"
 	"io"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/toolrejection"
-	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
 	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/internal/zstdcodec"
@@ -95,7 +95,7 @@ func (b *BufferedBytes) Write(p []byte) (int, error) {
 		return 0, err
 	}
 	if int64(len(p)) > b.buffer.maximum-int64(len(b.Bytes)) {
-		return 0, nativeutility.LimitExceeded(b.limitID, b.buffer.maximum, int64(len(b.Bytes))+int64(len(p)))
+		return 0, tools.CommandLimitExceeded(b.limitID, b.buffer.maximum, int64(len(b.Bytes))+int64(len(p)))
 	}
 	if err := b.buffer.Append(p); err != nil {
 		return 0, err

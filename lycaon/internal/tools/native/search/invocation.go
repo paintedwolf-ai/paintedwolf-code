@@ -102,11 +102,6 @@ func (inv *invocation) usage(word, reason string) error {
 	}}
 }
 
-// limitExceeded refuses work above a frozen catalog limit; nothing is truncated.
-func limitExceeded(id string, maximum, observed int64) error {
-	return &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"limit_id": id, "resource_unit": nativeutility.ResourceUnit(id), "maximum": maximum, "observed": observed}}
-}
-
 // ordinary classifies an input failure the utility reports on stderr and
 // survives. Authority, budget and platform refusals stay typed stops.
 func ordinary(err error) (string, bool) {
@@ -216,7 +211,7 @@ func (inv *invocation) readAll(r io.Reader) ([]byte, error) {
 
 // settle projects the run onto the producer contract.
 func (inv *invocation) settle(err error) (toolcontract.ProducerResult, error) {
-	err = nativeutility.ResourceRejection(err)
+	err = tools.CommandResourceRejection(err)
 	err = projectpaths.WithPathRejection(patternRejection(err), inv.request.Invocation.Span)
 	if err != nil {
 		result := toolcontract.ProducerResult{Status: inv.failure, Terminal: toolcontract.ProducerFailed, EffectCertainty: inv.effects}

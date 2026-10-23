@@ -3,7 +3,7 @@ package textutil
 import (
 	"bufio"
 	"errors"
-	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
+	"github.com/lycaon/lycaon/internal/tools"
 	"io"
 )
 
@@ -56,7 +56,7 @@ func (r *records) nextTerminated() ([]byte, bool, error) {
 		}
 		chunk, err := r.reader.ReadSlice(r.delimiter)
 		if int64(len(r.buffer)+len(chunk)) > r.maximum+1 {
-			return nil, false, nativeutility.LimitExceeded("record_bytes", r.maximum, int64(len(r.buffer)+len(chunk)))
+			return nil, false, tools.CommandLimitExceeded("record_bytes", r.maximum, int64(len(r.buffer)+len(chunk)))
 		}
 		if cap(r.buffer) < len(r.buffer)+len(chunk) {
 			capacity := min(int(r.maximum+1), max(len(r.buffer)+len(chunk), 2*cap(r.buffer)))
@@ -76,7 +76,7 @@ func (r *records) nextTerminated() ([]byte, bool, error) {
 		case err == nil:
 			record := r.buffer[:len(r.buffer)-1]
 			if int64(len(record)) > r.maximum {
-				return nil, false, nativeutility.LimitExceeded("record_bytes", r.maximum, int64(len(record)))
+				return nil, false, tools.CommandLimitExceeded("record_bytes", r.maximum, int64(len(record)))
 			}
 			return record, true, nil
 		case errors.Is(err, bufio.ErrBufferFull):
@@ -87,7 +87,7 @@ func (r *records) nextTerminated() ([]byte, bool, error) {
 				return nil, false, io.EOF
 			}
 			if int64(len(r.buffer)) > r.maximum {
-				return nil, false, nativeutility.LimitExceeded("record_bytes", r.maximum, int64(len(r.buffer)))
+				return nil, false, tools.CommandLimitExceeded("record_bytes", r.maximum, int64(len(r.buffer)))
 			}
 			return r.buffer, false, nil
 		default:

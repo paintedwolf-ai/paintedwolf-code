@@ -3,6 +3,7 @@ package search
 import (
 	"bytes"
 	"errors"
+	"github.com/lycaon/lycaon/internal/tools"
 	"io"
 
 	"github.com/lycaon/lycaon/internal/scratch"
@@ -44,7 +45,7 @@ func (r *grepRun) searchAlignedStdin() error {
 		n, err := inv.input.Read(chunk[:])
 		if n > 0 {
 			if int64(n) > maximum-size {
-				return limitExceeded("spill_bytes", maximum, size+int64(n))
+				return tools.CommandLimitExceeded("spill_bytes", maximum, size+int64(n))
 			}
 			if firstNull < 0 {
 				if at := bytes.IndexByte(chunk[:n], 0); at >= 0 {

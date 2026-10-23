@@ -3,12 +3,12 @@ package textutil
 import (
 	"bytes"
 	"context"
+	"github.com/lycaon/lycaon/internal/tools"
 	"io"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/toolcontract"
-	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
 )
 
 // batchStop ends xargs with the outcome of a batch that hit a host stop.
@@ -37,13 +37,13 @@ func (plan xargsPlan) replaced(inv *invocation, command commandprogram.Fields, l
 		for _, word := range command[1:] {
 			value := strings.ReplaceAll(word.Value, placeholder, item)
 			if int64(len(value)) > argumentLimit {
-				return nil, nativeutility.LimitExceeded("argument_bytes", argumentLimit, int64(len(value)))
+				return nil, tools.CommandLimitExceeded("argument_bytes", argumentLimit, int64(len(value)))
 			}
 			size += int64(len(value))
 			argv = append(argv, commandprogram.Field{Value: value, Span: word.Span})
 		}
 		if size > argvLimit {
-			return nil, nativeutility.LimitExceeded("argv_bytes", argvLimit, size)
+			return nil, tools.CommandLimitExceeded("argv_bytes", argvLimit, size)
 		}
 		out = append(out, argv)
 	}
@@ -120,7 +120,7 @@ func newMeteredBuffer(inv *invocation) *meteredBuffer {
 func (b *meteredBuffer) Write(p []byte) (int, error) {
 	size := int64(b.buffer.Len() + len(p))
 	if size > b.maximum {
-		return 0, nativeutility.LimitExceeded("stream_bytes", b.maximum, size)
+		return 0, tools.CommandLimitExceeded("stream_bytes", b.maximum, size)
 	}
 	if size > b.reserved {
 		grow := max(size-b.reserved, 32<<10)

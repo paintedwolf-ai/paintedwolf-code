@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/tools"
 	"io"
 	"strconv"
 	"strings"
@@ -179,7 +180,7 @@ func (r *jqRun) evaluate(input any, positioned bool) (bool, error) {
 		return true, nil
 	case errors.Is(err, context.DeadlineExceeded) && r.inv.ctx.Err() == nil:
 		maximum := r.inv.owners.limit("query_elapsed_ms")
-		return false, limitExceeded("query_elapsed_ms", maximum, int64((r.elapsed+time.Millisecond-1)/time.Millisecond))
+		return false, tools.CommandLimitExceeded("query_elapsed_ms", maximum, int64((r.elapsed+time.Millisecond-1)/time.Millisecond))
 	case err != nil:
 		return false, err
 	case halt != nil:
@@ -450,7 +451,7 @@ type emitter struct {
 func (e *emitter) emit(v any) error {
 	e.count++
 	if e.maxOutputs > 0 && e.count > e.maxOutputs {
-		return limitExceeded("query_outputs", e.maxOutputs, e.count)
+		return tools.CommandLimitExceeded("query_outputs", e.maxOutputs, e.count)
 	}
 	e.produced, e.last = true, v
 	encoded, err := e.encode(v)
@@ -458,7 +459,7 @@ func (e *emitter) emit(v any) error {
 		return err
 	}
 	if e.maxValue > 0 && int64(len(encoded)) > e.maxValue {
-		return limitExceeded("query_value_bytes", e.maxValue, int64(len(encoded)))
+		return tools.CommandLimitExceeded("query_value_bytes", e.maxValue, int64(len(encoded)))
 	}
 	_, err = e.inv.out.Write(encoded)
 	return err

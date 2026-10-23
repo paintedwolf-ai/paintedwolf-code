@@ -81,6 +81,16 @@ the clock. Cancellation remains cooperative at existing VM boundaries; this is
 neither CPU accounting nor a hard wall-time upper bound. Elapsed milliseconds in
 new refusals round the measured total up rather than inventing a fixed overage.
 
+The handwritten `command` result uses `refusal.code`, `refusal.feedback` and
+optional `refusal.details` from the actual screened typed rejection, including
+reached limit and source coordinates. This co-shipped `bundle` tool-result shape
+has `agent-public` fact meanings; the generic API tool-result payload has no
+dedicated command-refusal OpenAPI schema. Both native and evaluator feedback
+keep their projection admission through serialization. A frame prepays one
+bounded feedback allowance before effects. An optional `refusal.delivery_failure`
+records capacity, cancellation or unavailable rendering with typed capacity facts
+when present; its feedback and details remain empty. Authority failures propagate
+as errors rather than publishing a result under a changed frame.
 
 | Artifact | Class and retention | Introducing responsibility |
 |---|---|---|

@@ -2,12 +2,11 @@ package textutil
 
 import (
 	"fmt"
+	"github.com/lycaon/lycaon/internal/tools"
 	"io"
 	"math"
 	"strconv"
 	"strings"
-
-	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
 )
 
 // pad emits arbitrary text widths in bounded chunks and stops on the first
@@ -63,7 +62,7 @@ func writeNumber(inv *invocation, out io.Writer, d directive, verb string, value
 			if err != nil {
 				observed = 1 << 62
 			}
-			return nativeutility.LimitExceeded("record_bytes", maximum, observed)
+			return tools.CommandLimitExceeded("record_bytes", maximum, observed)
 		}
 		precision = n
 	}
@@ -74,7 +73,7 @@ func writeNumber(inv *invocation, out io.Writer, d directive, verb string, value
 	defer release()
 	text := fmt.Sprintf("%"+d.flags+d.precision+verb, value)
 	if int64(len(text)) > maximum {
-		return nativeutility.LimitExceeded("record_bytes", maximum, int64(len(text)))
+		return tools.CommandLimitExceeded("record_bytes", maximum, int64(len(text)))
 	}
 	zero := strings.Contains(d.flags, "0") && !strings.Contains(d.flags, "-")
 	if strings.ContainsRune("diouxX", rune(d.verb)) && d.precision != "" {

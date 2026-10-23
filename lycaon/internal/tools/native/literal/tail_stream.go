@@ -3,6 +3,7 @@ package literal
 import (
 	"context"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/tools"
 	"io"
 )
 
@@ -174,7 +175,7 @@ func (t *tailWindow) append(p []byte, w window) error {
 					t.firstBreak = 0
 				}
 				if int64(len(t.data)+len(p))+8*int64(len(t.breaks)+1) > t.maximum {
-					return limitExceeded("stream_bytes", t.maximum, int64(len(t.data)+len(p))+8*int64(len(t.breaks)+1))
+					return tools.CommandLimitExceeded("stream_bytes", t.maximum, int64(len(t.data)+len(p))+8*int64(len(t.breaks)+1))
 				}
 				if len(t.breaks) == cap(t.breaks) {
 					capacity := max(16, 2*cap(t.breaks))
@@ -194,7 +195,7 @@ func (t *tailWindow) append(p []byte, w window) error {
 		}
 	}
 	if int64(len(t.data)+len(p)) > t.maximum {
-		return limitExceeded("stream_bytes", t.maximum, int64(len(t.data)+len(p)))
+		return tools.CommandLimitExceeded("stream_bytes", t.maximum, int64(len(t.data)+len(p)))
 	}
 	if len(t.data)+len(p) > cap(t.data) {
 		capacity := min(t.maximum, max(int64(len(t.data)+len(p)), 2*int64(cap(t.data))))

@@ -3,13 +3,13 @@ package textutil
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/tools"
 	"strconv"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/textsearch"
 	"github.com/lycaon/lycaon/internal/toolrejection"
-	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
 	"github.com/lycaon/lycaon/internal/tools/native/textutil/sedscript"
 )
 
@@ -131,9 +131,9 @@ func (r *sedRun) failure(err error) error {
 	case err == nil:
 		return nil
 	case errors.As(err, &limit):
-		return errors.Join(err, nativeutility.LimitExceeded(limit.Resource, limit.Maximum, limit.Observed))
+		return errors.Join(err, tools.CommandLimitExceeded(limit.Resource, limit.Maximum, limit.Observed))
 	case errors.As(err, &budget):
-		return errors.Join(err, nativeutility.LimitExceeded(budget.Resource, budget.Maximum, budget.Observed))
+		return errors.Join(err, tools.CommandLimitExceeded(budget.Resource, budget.Maximum, budget.Observed))
 	case errors.As(err, &runtime):
 		return errors.Join(err, r.inv.usage(r.word, runtime.Reason))
 	}

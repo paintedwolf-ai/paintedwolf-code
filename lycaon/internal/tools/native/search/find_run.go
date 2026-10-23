@@ -2,6 +2,7 @@ package search
 
 import (
 	"errors"
+	"github.com/lycaon/lycaon/internal/tools"
 	"strings"
 	"time"
 
@@ -224,7 +225,7 @@ func (r *findRun) dispatch(argv commandprogram.Fields) (toolcontract.ProducerRes
 	inv := r.inv
 	r.children++
 	if maximum := inv.owners.limit("child_executions"); maximum > 0 && r.children > maximum {
-		return toolcontract.ProducerResult{}, limitExceeded("child_executions", maximum, r.children)
+		return toolcontract.ProducerResult{}, tools.CommandLimitExceeded("child_executions", maximum, r.children)
 	}
 	spec, native, err := commandprogram.ResolveCommand(argv)
 	if err != nil {

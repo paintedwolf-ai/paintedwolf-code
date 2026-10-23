@@ -12,15 +12,15 @@ import (
 func TestProgramFrameRetainsActualModelArgumentsAndSharedLifetime(t *testing.T) {
 	parent, tc := frameFixture(t)
 	memory := stageMemory(t, 64<<20)
-	submitted := map[string]any{"script": "cat 'original'", "progress_update": map[string]any{"content": "- [ ] Actual submitted work"}}
+	submitted := map[string]any{"command": "cat 'original'", "progress_update": map[string]any{"content": "- [ ] Actual submitted work"}}
 	frame, err := FreezeProgramFrame(t.Context(), parent, tc, ProgramModelInvocation{ToolName: "command", Arguments: submitted}, memory)
 	testutil.FailErr(t, "capture actual model invocation", err)
 	defer frame.Close()
-	submitted["script"] = "caller changed"
+	submitted["command"] = "caller changed"
 	submitted["progress_update"].(map[string]any)["content"] = "caller changed"
 	observed, err := frame.ModelInvocation(t.Context())
 	testutil.FailErr(t, "observe submitted input", err)
-	if observed.ToolName != "command" || observed.ToolCallID != tc.Identity.ToolCallID || observed.CanonicalArguments != `{"progress_update":{"content":"- [ ] Actual submitted work"},"script":"cat 'original'"}` || memory.InUse().State == 0 {
+	if observed.ToolName != "command" || observed.ToolCallID != tc.Identity.ToolCallID || observed.CanonicalArguments != `{"command":"cat 'original'","progress_update":{"content":"- [ ] Actual submitted work"}}` || memory.InUse().State == 0 {
 		t.Fatalf("actual model observation lost: %+v", observed)
 	}
 	copied := frame
@@ -43,7 +43,7 @@ func TestProgramFrameRetainsActualModelArgumentsAndSharedLifetime(t *testing.T) 
 func TestProgramFrameModelCaptureRefusesBeforeRetention(t *testing.T) {
 	parent, tc := frameFixture(t)
 	memory := stageMemory(t, 64<<20)
-	model := ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"script": "true"}}
+	model := ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"command": "true"}}
 	fill := exhaustState(t, memory, 64<<20)
 	if _, err := FreezeProgramFrame(t.Context(), parent, tc, model, memory); !stateRefusal(err) {
 		t.Fatalf("admission refusal lost: %v", err)
@@ -71,7 +71,7 @@ func TestProgramFrameModelCaptureRefusesBeforeRetention(t *testing.T) {
 func TestProgramFrameCloseWaitsForAdmittedUseBeforeClearingFacts(t *testing.T) {
 	parent, tc := frameFixture(t)
 	memory := stageMemory(t, 64<<20)
-	frame, err := FreezeProgramFrame(t.Context(), parent, tc, ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"script": "true"}}, memory)
+	frame, err := FreezeProgramFrame(t.Context(), parent, tc, ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"command": "true"}}, memory)
 	testutil.FailErr(t, "capture frame", err)
 	end, err := frame.beginUse()
 	testutil.FailErr(t, "hold actual owner lifetime", err)
@@ -94,13 +94,13 @@ func TestProgramFrameCloseWaitsForAdmittedUseBeforeClearingFacts(t *testing.T) {
 func TestProgramPolicyObservationDefersIntrinsicRejectionUntilSettlement(t *testing.T) {
 	parent, tc := frameFixture(t)
 	memory := stageMemory(t, 64<<20)
-	frame, err := FreezeProgramFrame(t.Context(), parent, tc, ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"script": "cat input"}}, memory)
+	frame, err := FreezeProgramFrame(t.Context(), parent, tc, ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"command": "cat input"}}, memory)
 	testutil.FailErr(t, "freeze actual command", err)
 	defer frame.Close()
 	baseline := memory.InUse().State
 	ctx, observation, release, err := prepareProgramPolicyObservation(t.Context(), frame, memory, tc, nil)
 	testutil.FailErr(t, "admit actual policy observation", err)
-	if observation.submitted["script"] != "cat input" || memory.InUse().State <= baseline {
+	if observation.submitted["command"] != "cat input" || memory.InUse().State <= baseline {
 		t.Fatal("policy observation lost actual envelope or decoded-state admission")
 	}
 	cause := &toolrejection.ToolReject{Code: "READ_PATH_DENIED", Data: map[string]any{"path": "input"}}
@@ -124,7 +124,7 @@ func TestProgramPolicyObservationDefersIntrinsicRejectionUntilSettlement(t *test
 func TestProgramFrameRetainsSupplementalFactsOnCapturedLedger(t *testing.T) {
 	parent, tc := frameFixture(t)
 	memory := stageMemory(t, 64<<20)
-	frame, err := FreezeProgramFrame(t.Context(), parent, tc, ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"script": "true"}}, memory)
+	frame, err := FreezeProgramFrame(t.Context(), parent, tc, ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"command": "true"}}, memory)
 	testutil.FailErr(t, "capture retained ledger", err)
 	defer frame.Close()
 	end, err := frame.beginUse()

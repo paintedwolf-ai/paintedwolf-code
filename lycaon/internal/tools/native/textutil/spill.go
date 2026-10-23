@@ -5,11 +5,11 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"github.com/lycaon/lycaon/internal/tools"
 	"io"
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/scratch"
-	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
 )
 
 // SpillStorage creates operation-private sort runs. Runs are never published
@@ -137,7 +137,7 @@ func (r *fileRunReader) Next() ([]byte, error) {
 		return nil, err
 	}
 	if size > uint64(r.maximum) {
-		return nil, nativeutility.LimitExceeded("record_bytes", r.maximum, int64(min(size, 1<<62)))
+		return nil, tools.CommandLimitExceeded("record_bytes", r.maximum, int64(min(size, 1<<62)))
 	}
 	if uint64(cap(r.record)) < size {
 		if err := r.grow(int64(size)); err != nil {

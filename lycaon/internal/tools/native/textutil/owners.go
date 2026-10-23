@@ -260,7 +260,7 @@ func (p Prepared) InvokeOwner(ctx context.Context, ports Ports, streams commandp
 	if inv.errors.Len() > 0 && streams.Error != nil {
 		_, _ = io.WriteString(streams.Error, inv.errors.String())
 	}
-	err = nativeutility.ResourceRejection(err)
+	err = tools.CommandResourceRejection(err)
 	result := nativeutility.Settle(err, inv.status, false)
 	if (p.Mode == "-i" || p.Mode == "w-files" || p.Mode == "-o" || p.Mode == "OUTPUT-supplied") && result.Terminal == toolcontract.ProducerCompleted && inv.status == 0 {
 		result.EffectCertainty = toolcontract.EffectCompleted

@@ -1,6 +1,7 @@
 package search
 
 import (
+	"github.com/lycaon/lycaon/internal/tools"
 	"io/fs"
 	"strings"
 
@@ -44,7 +45,7 @@ func newWalker(inv *invocation) *walker {
 func (w *walker) visit() error {
 	w.visited++
 	if w.maximum > 0 && w.visited > w.maximum {
-		return limitExceeded("traversal_visits", w.maximum, w.visited)
+		return tools.CommandLimitExceeded("traversal_visits", w.maximum, w.visited)
 	}
 	return nil
 }

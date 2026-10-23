@@ -12,7 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
-	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/internal/tools/safecmd"
 )
@@ -70,11 +69,6 @@ func (inv *invocation) value(key string) (string, bool) {
 func (inv *invocation) usage(word, reason string) error {
 	return &toolrejection.ToolReject{Code: "COMMAND_OPERAND_INVALID", Data: map[string]any{
 		"command": inv.name(), "word": word, "expected": reason, "reason": reason, "expected_form": inv.spec.Argv}}
-}
-
-// limitExceeded refuses work above a frozen catalog limit; nothing is truncated.
-func limitExceeded(id string, maximum, observed int64) error {
-	return &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"limit_id": id, "resource_unit": nativeutility.ResourceUnit(id), "maximum": maximum, "observed": observed}}
 }
 
 // fail reports an ordinary input or query failure on stderr: jq's status 2.
@@ -175,7 +169,7 @@ func (inv *invocation) recordPin(revision toolcontract.ExecutionRevision) error 
 // settle projects the run onto the producer contract. A published edit is a
 // completed effect even when a later step stops the run.
 func (inv *invocation) settle(err error) (toolcontract.ProducerResult, error) {
-	err = nativeutility.ResourceRejection(err)
+	err = tools.CommandResourceRejection(err)
 	certainty := toolcontract.NoEffect
 	if inv.published {
 		certainty = toolcontract.EffectCompleted
@@ -213,7 +207,7 @@ func (o *output) Write(p []byte) (int, error) {
 		if id == "" {
 			id = "stream_bytes"
 		}
-		return 0, limitExceeded(id, o.maximum, o.written+int64(len(p)))
+		return 0, tools.CommandLimitExceeded(id, o.maximum, o.written+int64(len(p)))
 	}
 	n, err := o.w.Write(p)
 	o.written += int64(n)

@@ -11,6 +11,11 @@ requires:
   facts:
   - paintedwolf.operation
   - paintedwolf.rejection_code
+  - paintedwolf.limit_id
+  - paintedwolf.maximum
+  - paintedwolf.observed
+  - paintedwolf.grep_nested_repeat
+  - paintedwolf.max_len
 when: paintedwolf.rejection_code == "GREP_MATCH_BUDGET"
 effect: block
 copy:

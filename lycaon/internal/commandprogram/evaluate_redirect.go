@@ -150,7 +150,7 @@ func (g *frame) redirectFailure(child *childRun, operator, target string, err er
 }
 
 func writeRedirectRefusal(w io.Writer, operator, target, code string) {
-	if w == nil || code == "" {
+	if w == nil || code == "" || code == codeLimitExceeded {
 		return
 	}
 	detail := "not supported here"

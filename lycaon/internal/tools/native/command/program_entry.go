@@ -132,8 +132,10 @@ type ProgramOutcome struct {
 // ProgramRefusal is a typed host refusal at the program's stop point with its
 // rendered feedback.
 type ProgramRefusal struct {
-	Code     string `json:"code"`
-	Feedback string `json:"feedback"`
+	Code            string                                       `json:"code"`
+	Feedback        string                                       `json:"feedback"`
+	Details         map[string]any                               `json:"details,omitempty"`
+	DeliveryFailure *toolexecution.ProgramRefusalDeliveryFailure `json:"delivery_failure,omitempty"`
 }
 
 const programOutputBytes = 64 << 10
@@ -333,18 +335,18 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	default:
 		// & jobs still run under supervision; the program settles when they end.
 	}
-	feedback := r.feedback(ctx, run, dispatcher, result.StopCode, evalErr)
-	refusal := toolrejection.AsToolReject(feedback)
-	if (feedback != nil && refusal == nil) || settleErr != nil {
-		return "", errors.Join(feedback, settleErr)
+	refusal, releaseFeedback, feedbackErr := r.feedback(ctx, run, dispatcher, evalErr)
+	defer releaseFeedback()
+	if feedbackErr != nil || settleErr != nil {
+		return "", errors.Join(feedbackErr, settleErr)
 	}
-	outcome, err := r.outcome(ctx, run, result, stdout, stderr, scope, screening)
+	// Settlement and bounded result projection survive cancellation; they cannot
+	// start another program operation.
+	outcome, err := r.outcome(context.WithoutCancel(ctx), run, result, stdout, stderr, scope, screening)
 	if err != nil {
-		return "", errors.Join(feedback, err)
+		return "", err
 	}
-	if refusal != nil {
-		outcome.Refusal = &ProgramRefusal{Code: refusal.Code, Feedback: feedback.Error()}
-	}
+	outcome.Refusal = refusal
 	if settledNow {
 		stampProgramRun(tc, source, paths.Cwd(), outcome, verification)
 	}
@@ -428,48 +430,77 @@ func evaluatedResult(outcome commandprogram.ProgramOutcome) toolcontract.Produce
 
 // feedback renders the first native owner rejection through the program
 // feedback boundary, with the program's completed and uncertain effects.
-func (r *ProgramRuntime) feedback(ctx context.Context, run *programRun, dispatcher *ProgramDispatcher, stopCode string, evalErr error) error {
+func (r *ProgramRuntime) feedback(ctx context.Context, run *programRun, dispatcher *ProgramDispatcher, evalErr error) (refusal *ProgramRefusal, release func(), err error) {
+	defer func() {
+		if release == nil {
+			release = func() {}
+		}
+	}()
 	rejection := dispatcher.firstRejection()
+
 	if rejection == nil {
-		var refusal *commandprogram.EvaluationRefusal
-		if errors.As(evalErr, &refusal) {
-			span := refusal.Node.Span
-			data := map[string]any{"tool": "command", "source_start_byte": span.StartByte, "source_end_byte": span.EndByte, "source_line": span.Line, "source_column": span.Column, "expected": refusal.Expected, "expected_form": refusal.Expected, "reason": refusal.Expected}
-			if refusal.Command != "" {
-				data["command"], data["word"], data["expected_form"] = refusal.Command, refusal.Option, refusal.Form
+		var rejection *toolrejection.ToolReject
+		var evaluationRefusal *commandprogram.EvaluationRefusal
+		if errors.As(evalErr, &evaluationRefusal) {
+			span := evaluationRefusal.Node.Span
+			data := map[string]any{"tool": "command", "source_start_byte": span.StartByte, "source_end_byte": span.EndByte, "source_line": span.Line, "source_column": span.Column, "expected": evaluationRefusal.Expected, "expected_form": evaluationRefusal.Expected, "reason": evaluationRefusal.Expected}
+			if evaluationRefusal.Command != "" {
+				data["command"], data["word"], data["expected_form"] = evaluationRefusal.Command, evaluationRefusal.Option, evaluationRefusal.Form
 			}
-			reject := toolrejection.RejectInvalidArguments(refusal.Code, data)
-			enrichProgramReject(reject, refusal.Command, span)
-			return ensureProgramRefusalText(toolrejection.RenderReject(reject, nil), reject)
-		}
-		if reject := toolrejection.AsToolReject(evalErr); reject != nil {
-			enrichProgramReject(reject, "", run.root.Span)
-			return ensureProgramRefusalText(toolrejection.RenderReject(reject, nil), reject)
-		}
-		if evalErr != nil && !errors.Is(evalErr, context.Canceled) && !errors.Is(evalErr, context.DeadlineExceeded) {
-			code := stopCode
-			if code == "" {
-				code = toolrejection.ToolOwnerFailedCode
+			rejection = toolrejection.RejectInvalidArguments(evaluationRefusal.Code, data)
+			original := toolrejection.AsToolReject(tools.CommandResourceRejection(evaluationRefusal.Cause))
+			if original != nil && original.Code == evaluationRefusal.Code {
+				copy := *original
+				copy.Data = data
+				for key, value := range original.Data {
+					copy.Data[key] = value
+				}
+				rejection = &copy
 			}
-			reject := &toolrejection.ToolReject{Code: code, FailureClass: "owner_error", Data: map[string]any{"tool": "command", "reason": evalErr.Error()}}
-			enrichProgramReject(reject, "command", run.root.Span)
-			return errors.Join(evalErr, ensureProgramRefusalText(toolrejection.RenderReject(reject, nil), reject))
+			enrichProgramReject(rejection, evaluationRefusal.Command, span)
+		} else if rejection = toolrejection.AsToolReject(evalErr); rejection != nil {
+			enrichProgramReject(rejection, "", run.root.Span)
+		} else {
+			return nil, nil, evalErr
 		}
-		// A host stop without a typed rejection is a host failure, never success.
-		return evalErr
+		delivery, err := run.executor.Rejections.RenderProgramRefusal(ctx, run.frame, run.memory, run.capture, run.tc, errors.Join(rejection, evalErr), nil)
+		if err != nil {
+			return nil, nil, errors.Join(evalErr, err)
+		}
+		refusal = &ProgramRefusal{Code: delivery.Code, Details: delivery.Details, DeliveryFailure: delivery.Failure}
+		if delivery.Feedback != nil {
+			refusal.Feedback = ensureProgramRefusalText(delivery.Feedback, toolrejection.AsToolReject(delivery.Feedback)).Error()
+		}
+		return refusal, delivery.Close, nil
 	}
+
 	reject := toolrejection.AsToolReject(rejection.cause)
 	enrichProgramReject(reject, rejection.operation.Command(), rejection.operation.Invocation().Span)
-	prepared, err := toolexecution.PrepareProgramFailure(ctx, run.recorder, run.memory, run.capture, run.tc, rejection.operation, rejection.cause)
-	if err != nil || prepared == nil {
-		return errors.Join(ensureProgramRefusalText(toolrejection.RenderReject(reject, nil), reject), err)
+	failedDelivery := func(cause error) (*ProgramRefusal, func(), error) {
+		var capacity *toolcontract.ProgramMemoryLimitError
+		if !errors.As(cause, &capacity) && !errors.Is(cause, context.Canceled) && !errors.Is(cause, context.DeadlineExceeded) {
+			return nil, nil, errors.Join(rejection.cause, cause)
+		}
+		delivery, err := run.executor.Rejections.RenderProgramRefusal(ctx, run.frame, run.memory, run.capture, run.tc, rejection.cause, cause)
+		if err != nil {
+			return nil, nil, errors.Join(rejection.cause, err)
+		}
+		return &ProgramRefusal{Code: delivery.Code, DeliveryFailure: delivery.Failure}, delivery.Close, nil
 	}
-	defer prepared.Close()
+	prepared, err := toolexecution.PrepareProgramFailure(ctx, run.frame, run.recorder, run.memory, run.capture, run.tc, rejection.operation, rejection.cause)
+	if err != nil {
+		return failedDelivery(err)
+	}
+	if prepared == nil {
+		return nil, nil, rejection.cause
+	}
+	release = prepared.Close
 	rendered := run.executor.Rejections.RenderProgramFailure(ctx, run.frame, run.tc, prepared)
 	if rendered != nil && toolrejection.AsToolReject(rendered) == nil {
-		return errors.Join(ensureProgramRefusalText(toolrejection.RenderReject(reject, nil), reject), rendered)
+		prepared.Close()
+		return failedDelivery(rendered)
 	}
-	return ensureProgramRefusalText(rendered, reject)
+	return &ProgramRefusal{Code: reject.Code, Feedback: ensureProgramRefusalText(rendered, prepared.Rejection).Error(), Details: prepared.Rejection.Data}, release, nil
 }
 
 func (r *ProgramRuntime) outcome(ctx context.Context, run *programRun, result toolcontract.ProducerResult, stdout, stderr *boundedBuffer, scope captureprojection.Scope, screening captureprojection.StreamOptions) (ProgramOutcome, error) {

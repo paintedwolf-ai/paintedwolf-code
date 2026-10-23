@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/tools"
 	"io"
 	"strconv"
 	"strings"
@@ -62,7 +63,7 @@ func (r *grepRun) searchStream(label string, reader io.Reader, maxBytes int64, t
 		scan.Before, scan.After = 0, 0
 	}
 	onExceed := func(maximum, observed int64) error {
-		return limitExceeded("stream_throughput_bytes", maximum, observed)
+		return tools.CommandLimitExceeded("stream_throughput_bytes", maximum, observed)
 	}
 	n, err := textsearch.ScanReader(inv.ctx, reader, maxBytes, onExceed, r.matcher, scan, func(line textsearch.Line) error {
 		if line.Kind == textsearch.SelectedLine {

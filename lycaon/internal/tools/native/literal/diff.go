@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/tools"
 	"io/fs"
 	"path"
 	"strconv"
@@ -152,7 +153,7 @@ func (inv *invocation) diffFiles(left, right diffSide, opts diffOptions, tree bo
 	if errors.Is(err, sourceview.ErrDiffTooLarge) {
 		var capacity *sourceview.DiffLimitError
 		if errors.As(err, &capacity) {
-			return limitExceeded("evaluation_memory_bytes", capacity.MaximumCells*4, capacity.ObservedCells*4)
+			return tools.CommandLimitExceeded("evaluation_memory_bytes", capacity.MaximumCells*4, capacity.ObservedCells*4)
 		}
 		return err
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/tools"
 	"io"
 	"io/fs"
 	"path"
@@ -15,7 +16,6 @@ import (
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
-	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
@@ -88,12 +88,12 @@ func runAwk(inv *invocation) error {
 	}
 	var record *interp.RecordLimitError
 	if errors.As(err, &record) {
-		return nativeutility.LimitExceeded("record_bytes", int64(record.Maximum), int64(record.Observed))
+		return tools.CommandLimitExceeded("record_bytes", int64(record.Maximum), int64(record.Observed))
 	}
 	var limit *awkLimit
 	switch {
 	case errors.As(err, &limit):
-		return nativeutility.LimitExceeded(limit.id, limit.maximum, limit.maximum+1)
+		return tools.CommandLimitExceeded(limit.id, limit.maximum, limit.maximum+1)
 	case inv.ctx.Err() != nil:
 		return inv.ctx.Err()
 	case err != nil:

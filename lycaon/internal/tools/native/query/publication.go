@@ -3,6 +3,7 @@ package query
 import (
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/readcaps"
 )
@@ -52,7 +53,7 @@ func (inv *invocation) publishBytes(source *source, destination toolcontract.Exe
 func (inv *invocation) publishText(source *source, destination toolcontract.ExecutionRevision, text string, work *queryWorking) error {
 	maximum := inv.owners.limit("whole_file_bytes")
 	if int64(len(text)) > maximum {
-		return limitExceeded("whole_file_bytes", maximum, int64(len(text)))
+		return tools.CommandLimitExceeded("whole_file_bytes", maximum, int64(len(text)))
 	}
 	if err := work.resize(int64(len(text))); err != nil {
 		return err
@@ -73,7 +74,7 @@ func (inv *invocation) publishText(source *source, destination toolcontract.Exec
 			return err
 		}
 		if encodedBound > maximum {
-			return limitExceeded("whole_file_bytes", maximum, encodedBound)
+			return tools.CommandLimitExceeded("whole_file_bytes", maximum, encodedBound)
 		}
 		release := func() {}
 		if memory := inv.owners.Revisions.Memory; memory != nil {

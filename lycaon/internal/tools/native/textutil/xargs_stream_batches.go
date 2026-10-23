@@ -2,11 +2,11 @@ package textutil
 
 import (
 	"errors"
+	"github.com/lycaon/lycaon/internal/tools"
 	"io"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
-	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
 )
 
 // xargsBatcher retains only the current argv, not the complete input plan.
@@ -75,13 +75,13 @@ func (b *xargsBatcher) next() (commandprogram.Fields, error) {
 			tooLarge := b.size+next > b.plan.maxChars || int64(len(b.command)+len(b.items)+1) > b.inv.limit("expanded_fields")
 			if tooLarge && len(b.items) > 0 {
 				if b.plan.count > 0 && b.plan.exact {
-					return nil, nativeutility.LimitExceeded("argv_bytes", b.plan.maxChars, b.size+next)
+					return nil, tools.CommandLimitExceeded("argv_bytes", b.plan.maxChars, b.size+next)
 				}
 				b.pending = &item
 				return b.flush()
 			}
 			if tooLarge {
-				return nil, nativeutility.LimitExceeded("argv_bytes", b.plan.maxChars, b.size+next)
+				return nil, tools.CommandLimitExceeded("argv_bytes", b.plan.maxChars, b.size+next)
 			}
 			b.items = append(b.items, commandprogram.Field{Value: item.value, Span: b.inv.request.Invocation.Span})
 			b.size += next
@@ -119,7 +119,7 @@ func (b *xargsBatcher) flush() (commandprogram.Fields, error) {
 func (b *xargsBatcher) accept(argv commandprogram.Fields) (commandprogram.Fields, error) {
 	b.batches++
 	if maximum := b.inv.limit("child_executions"); b.batches > maximum {
-		return nil, nativeutility.LimitExceeded("child_executions", maximum, b.batches)
+		return nil, tools.CommandLimitExceeded("child_executions", maximum, b.batches)
 	}
 	return argv, nil
 }

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/tools"
 	"io"
 	"strings"
 
@@ -305,7 +306,7 @@ func lineColumn(data []byte, offset int64) (int, int) {
 // admit bounds one input value's nesting by query_depth.
 func (in *inputs) admit(v any) bool {
 	if maximum := in.inv.owners.limit("query_depth"); int64(nativejq.ValueDepth(v)) > maximum {
-		in.stop = limitExceeded("query_depth", maximum, int64(nativejq.ValueDepth(v)))
+		in.stop = tools.CommandLimitExceeded("query_depth", maximum, int64(nativejq.ValueDepth(v)))
 		return false
 	}
 	return true
