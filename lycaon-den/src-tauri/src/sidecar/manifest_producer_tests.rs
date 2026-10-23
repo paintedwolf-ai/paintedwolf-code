@@ -1,4 +1,4 @@
-use super::manifest::{Manifest, MANIFEST_LIMIT};
+use super::{Manifest, MANIFEST_LIMIT};
 use std::{io::Cursor, path::Path};
 
 #[test]
