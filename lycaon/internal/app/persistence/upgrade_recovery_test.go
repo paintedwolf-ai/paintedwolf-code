@@ -130,18 +130,23 @@ func TestApplicationUpdateRefusesAFullVolumeForSpace(t *testing.T) {
 		Progress: func(migrations.Phase) {},
 	}
 	builder := &Runtime{logger: slog.Default()}
-	err = builder.captureVersionRecovery(t.Context(), dbPath, hooks)
+	source, err := db.OpenReadOnly(t.Context(), dbPath)
+	testutil.FailErr(t, "inspect application update source", err)
+	defer func() { _ = source.Close() }()
+	plan, err := db.PlanUpgrade(t.Context(), source)
+	testutil.FailErr(t, "plan application update", err)
+	err = builder.captureVersionRecovery(t.Context(), source, plan, hooks)
 	var refused *db.StoreIncompatibleError
 	if !errors.As(err, &refused) || refused.Reason != db.RecoveryReasonInsufficientSpace || refused.Space != space {
 		t.Fatalf("capture error = %v, want an insufficient-space refusal", err)
 	}
 	hooks.Before = func(context.Context, *sql.DB, migrations.Plan) error { return os.ErrPermission }
-	err = builder.captureVersionRecovery(t.Context(), dbPath, hooks)
+	err = builder.captureVersionRecovery(t.Context(), source, plan, hooks)
 	if !errors.As(err, &refused) || refused.Reason != db.RecoveryReasonStorageUnavailable {
 		t.Fatalf("permission error = %v, want unavailable storage", err)
 	}
 	hooks.Before = func(context.Context, *sql.DB, migrations.Plan) error { return context.Canceled }
-	if err = builder.captureVersionRecovery(t.Context(), dbPath, hooks); !errors.Is(err, context.Canceled) {
+	if err = builder.captureVersionRecovery(t.Context(), source, plan, hooks); !errors.Is(err, context.Canceled) {
 		t.Fatalf("capture cancellation = %v, want cancellation", err)
 	}
 }

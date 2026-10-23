@@ -16,9 +16,11 @@ var releasedBaselinesJSON []byte
 
 // Before captures recovery data; After records the upgrade commit.
 type UpgradeHooks struct {
-	Before   func(context.Context, *sql.DB, migrations.Plan) error
-	After    func(context.Context, migrations.Plan) error
-	Progress func(migrations.Phase)
+	Before func(context.Context, *sql.DB, migrations.Plan) error
+	// BeforeCurrentOpen captures application-version recovery using the existing reader.
+	BeforeCurrentOpen func(context.Context, *sql.DB, migrations.Plan) error
+	After             func(context.Context, migrations.Plan) error
+	Progress          func(migrations.Phase)
 }
 
 func schemaRegistry(ctx context.Context) (*migrations.Registry, error) {
@@ -116,7 +118,13 @@ func upgradeExistingUsing(ctx context.Context, path string, hooks UpgradeHooks, 
 		return err
 	}
 	if !plan.Required() {
-		return prepareIntegrity(ctx, reader)
+		if err := prepareIntegrity(ctx, reader); err != nil {
+			return err
+		}
+		if hooks.BeforeCurrentOpen != nil {
+			return hooks.BeforeCurrentOpen(ctx, reader, plan)
+		}
+		return nil
 	}
 	if err := validateStoreIntegrity(ctx, reader); err != nil {
 		return err
@@ -131,9 +139,6 @@ func upgradeExistingUsing(ctx context.Context, path string, hooks UpgradeHooks, 
 		if err := hooks.Before(ctx, reader, plan); err != nil {
 			return upgradeOperationError(err, RecoveryReasonStorageUnavailable, plan.Source.Revision, "capture upgrade recovery")
 		}
-	}
-	if err := reader.Close(); err != nil {
-		return err
 	}
 	if err := executeUpgrade(ctx, path, plan, hooks.Progress, registry); err != nil {
 		return upgradeOperationError(err, RecoveryReasonSchemaMismatch, plan.Source.Revision, "migrate store")

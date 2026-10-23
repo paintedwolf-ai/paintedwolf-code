@@ -44,12 +44,8 @@ func (b *Runtime) openUpgradeableStore(ctx context.Context, path string) (*db.St
 			_ = b.startup.Phase(stage)
 		},
 	}
-	if _, err := os.Stat(path); err == nil {
-		if err := b.captureVersionRecovery(ctx, path, hooks); err != nil {
-			return nil, err
-		}
-	} else if !os.IsNotExist(err) {
-		return nil, err
+	hooks.BeforeCurrentOpen = func(ctx context.Context, source *sql.DB, plan migrations.Plan) error {
+		return b.captureVersionRecovery(ctx, source, plan, hooks)
 	}
 	database, err := db.OpenWithOptions(ctx, path, hooks, db.StoreOptions{})
 	if err != nil {
@@ -92,17 +88,7 @@ func (b *Runtime) prepareUpgradeReadiness(ctx context.Context, database *db.Stor
 	return nil
 }
 
-func (b *Runtime) captureVersionRecovery(ctx context.Context, path string, hooks db.UpgradeHooks) error {
-	source, err := db.OpenReadOnly(ctx, path)
-	if err != nil {
-		// OpenWithOptions classifies corrupt and incompatible stores.
-		return nil
-	}
-	defer func() { _ = source.Close() }()
-	plan, err := db.PlanUpgrade(ctx, source)
-	if err != nil || plan.Required() {
-		return nil
-	}
+func (b *Runtime) captureVersionRecovery(ctx context.Context, source *sql.DB, plan migrations.Plan, hooks db.UpgradeHooks) error {
 	previous, found, err := db.ReadAppVersion(ctx, source)
 	if err != nil || !found || previous == version.Version {
 		return err
