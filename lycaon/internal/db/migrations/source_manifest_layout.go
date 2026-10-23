@@ -35,6 +35,21 @@ type layoutChunk struct {
 	entries, totalBytes, hashed int64
 }
 
+func retainedManifestCopy() *RetainedCopy {
+	return &RetainedCopy{
+		Sources: map[string]string{
+			"source_manifest_chunks": `FROM (SELECT DISTINCT chunk_id FROM original.source_snapshot_chunks) c
+CROSS JOIN original.source_manifest_chunks e ON e.id = c.chunk_id`,
+			"source_manifest_entries": `FROM (SELECT DISTINCT chunk_id FROM original.source_snapshot_chunks) c
+CROSS JOIN original.source_manifest_entries e ON e.chunk_id = c.chunk_id`,
+			"source_manifest_staging": `FROM original.source_manifest_staging e WHERE 0`,
+		},
+		// Reclamation checks surviving references independently. Reading every
+		// discarded entry just to discover candidates would defeat the rebuild.
+		After: []string{`INSERT OR IGNORE INTO source_blob_reclaim_queue SELECT sha256 FROM source_blob_objects`},
+	}
+}
+
 func migrateManifestLayout(ctx context.Context, tx *sql.Tx) error {
 	if _, err := tx.ExecContext(ctx, string(manifestLayoutSchema)); err != nil {
 		return err

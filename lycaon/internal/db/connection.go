@@ -67,6 +67,9 @@ func OpenWithOptions(ctx context.Context, dbPath string, hooks UpgradeHooks, opt
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, fmt.Errorf("create db directory: %w", err)
 	}
+	if err := ResumeStoreUpgrade(dbPath); err != nil {
+		return nil, classifyStoreOpenFailure(err)
+	}
 
 	created := false
 	if info, err := os.Stat(dbPath); err != nil {

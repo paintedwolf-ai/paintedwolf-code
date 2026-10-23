@@ -28,9 +28,27 @@ type Step struct {
 	To           Baseline
 	Apply        func(context.Context, *sql.Tx) error
 	Validate     func(context.Context, *sql.Tx) error
+	RetainedCopy *RetainedCopy
 	// Writes bounds the bytes the step writes to the store being upgraded.
 	// A step without it may rewrite the whole store.
 	Writes func(ctx context.Context, store DBTX, storeBytes uint64) (uint64, error)
+}
+
+// RetainedCopy selects source rows for a new file before an expensive retirement.
+// Sources are SQL FROM clauses using the read-only original schema and alias e.
+// Unlisted tables are copied completely. After runs before indexes and triggers.
+type RetainedCopy struct {
+	Sources map[string]string
+	After   []string
+}
+
+// CopyPlan is available only when the first registered step defines retention
+// for the exact source shape. Other released routes keep their executor.
+func (p Plan) CopyPlan() *RetainedCopy {
+	if len(p.steps) == 0 {
+		return nil
+	}
+	return p.steps[0].RetainedCopy
 }
 
 // Plan contains a complete route; callers cannot replace its registered steps.

@@ -101,6 +101,9 @@ func upgradeExisting(ctx context.Context, path string, hooks UpgradeHooks, stage
 }
 
 func upgradeExistingUsing(ctx context.Context, path string, hooks UpgradeHooks, staged bool, registry *migrations.Registry) (err error) {
+	if err := ResumeStoreUpgrade(path); err != nil {
+		return err
+	}
 	if hooks.Progress != nil {
 		hooks.Progress(migrations.Inspecting)
 		defer func() {
@@ -124,6 +127,15 @@ func upgradeExistingUsing(ctx context.Context, path string, hooks UpgradeHooks, 
 	if err := refuseRecordedUpgradeDamage(ctx, reader); err != nil {
 		return err
 	}
+	if plan.CopyPlan() != nil {
+		if err := upgradeRetained(ctx, path, reader, plan, hooks, staged, registry); err != nil {
+			return classifyUpgradeFailure(err, plan.Source.Revision)
+		}
+		if hooks.After != nil {
+			return hooks.After(ctx, plan)
+		}
+		return nil
+	}
 	if !staged {
 		if hooks.Before == nil {
 			return storeIncompatible(RecoveryReasonSchemaMismatch, plan.Source.Revision, "schema upgrade requires installation recovery capture")
@@ -139,14 +151,7 @@ func upgradeExistingUsing(ctx context.Context, path string, hooks UpgradeHooks, 
 		return err
 	}
 	if err := executeUpgrade(ctx, path, plan, hooks.Progress, registry); err != nil {
-		if errors.Is(err, migrations.ErrIntegrity) {
-			return storeIncompatible(RecoveryReasonIntegrityFailed, plan.Source.Revision, err.Error())
-		}
-		var damaged *StoreIncompatibleError
-		if classified := integrityCheckError(err, "migrate store"); errors.As(classified, &damaged) {
-			return classified
-		}
-		return storeIncompatible(RecoveryReasonSchemaMismatch, plan.Source.Revision, err.Error())
+		return classifyUpgradeFailure(err, plan.Source.Revision)
 	}
 	if hooks.After != nil {
 		if err := hooks.After(ctx, plan); err != nil {
@@ -154,6 +159,20 @@ func upgradeExistingUsing(ctx context.Context, path string, hooks UpgradeHooks, 
 		}
 	}
 	return nil
+}
+
+func classifyUpgradeFailure(err error, revision int) error {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+	if errors.Is(err, migrations.ErrIntegrity) {
+		return storeIncompatible(RecoveryReasonIntegrityFailed, revision, err.Error())
+	}
+	var damaged *StoreIncompatibleError
+	if classified := integrityCheckError(err, "migrate store"); errors.As(classified, &damaged) {
+		return classified
+	}
+	return storeIncompatible(RecoveryReasonSchemaMismatch, revision, err.Error())
 }
 
 func executeUpgrade(ctx context.Context, path string, plan migrations.Plan, progress func(migrations.Phase), registry *migrations.Registry) error {
