@@ -60,6 +60,8 @@ class ELF:
         self.sections = [self.unpack("IIQQQQIIQQ", shoff + i * 64) for i in range(header[12])]
         if any(row[0] == 3 for row in self.segments):
             raise ValueError("DSO must not have an ELF interpreter")
+        if any(row[0] == 7 for row in self.segments):
+            raise ValueError("module must not have a TLS segment")
         dynamic = [row for row in self.segments if row[0] == 2]
         if len(dynamic) != 1 or dynamic[0][5] > LIMIT or dynamic[0][5] % 16:
             raise ValueError("DSO must have one bounded dynamic table")
@@ -85,10 +87,10 @@ class ELF:
             raise ValueError("ELF bytes exceed file")
         return self.raw[offset:offset + count]
 
-    def symbols(self):
+    def symbols(self, *, include_static=False):
         symbols = []
         for row in self.sections:
-            if row[1] != 11:
+            if row[1] != 11 and not (include_static and row[1] == 2):
                 continue
             if row[9] != 24 or row[5] % 24 or row[6] >= len(self.sections):
                 raise ValueError("invalid dynamic symbol table")
@@ -121,8 +123,12 @@ def describe(auditor: Path, guard: Path) -> dict:
     exports = {row[0] for row in audit.symbols() if row[1] >> 4 == 1 and row[1] & 15 == 2}
     if not {"la_version", "la_objsearch", "la_objopen"}.issubset(exports):
         raise ValueError("auditor callbacks missing")
-    if any(tag in (12, 25) and value for tag, value in audit.tags):
+    if any(tag in (12, 25, 27, 32, 33) and value for tag, value in audit.tags):
         raise ValueError("auditor must not have initialization callbacks")
+    forbidden = {"malloc", "calloc", "realloc", "free", "__rust_alloc", "__rust_realloc",
+                 "__rust_alloc_zeroed", "getauxval", "__getauxval"}
+    if any(row[0] in forbidden or row[1] & 15 == 10 for row in audit.symbols(include_static=True)):
+        raise ValueError("auditor must not contain allocator, feature-probe or IFUNC symbols")
     flags = [value for tag, value in gate.tags if tag == 0x6ffffffb]
     if len(flags) != 1 or not flags[0] & 0x20:
         raise ValueError("guard requires DF_1_INITFIRST")

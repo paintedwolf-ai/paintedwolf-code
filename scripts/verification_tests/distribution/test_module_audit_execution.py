@@ -6,6 +6,7 @@ import shutil
 import uuid
 from pathlib import Path
 import subprocess
+import struct
 import tempfile
 import unittest
 from linux_release.module_integrity import abi as INTEGRITY
@@ -78,6 +79,34 @@ class NativeModuleAuditTests(unittest.TestCase):
         self.assertEqual(self.abi["guard_sha256"], hashlib.sha256(self.guard.read_bytes()).hexdigest())
         with self.assertRaises(ValueError):
             INTEGRITY.describe(self.guard, self.auditor)
+
+    def test_tls_ifunc_and_preinit_are_not_dependency_free_admission(self):
+        source = self.root / "tls.c"
+        source.write_text("__thread int value; int read_value(void){return value;}\n")
+        tls = self.root / "tls.so"
+        subprocess.run(["cc", "-shared", "-fPIC", "-nostdlib", "-ftls-model=initial-exec",
+                        str(source), "-o", str(tls)], check=True)
+        with self.assertRaises(ValueError):
+            INTEGRITY.ELF(tls)
+        source = self.root / "ifunc.c"
+        source.write_text('static void implementation(void){}\n'
+                          'static void *resolve(void){return implementation;}\n'
+                          'void indirect(void) __attribute__((ifunc("resolve")));\n')
+        ifunc = self.root / "ifunc.so"
+        subprocess.run(["cc", "-shared", "-fPIC", "-nostdlib", "-ffreestanding", "-fno-builtin",
+                        "-fno-stack-protector", "-O2", str(SOURCE / "audit.c"), str(source),
+                        str(self.digest), "-Wl,--exclude-libs,ALL,-Bsymbolic", "-o", str(ifunc)], check=True)
+        with self.assertRaises(ValueError):
+            INTEGRITY.describe(ifunc, self.guard)
+        image = INTEGRITY.ELF(self.auditor)
+        dynamic = next(row for row in image.segments if row[0] == 2)
+        mutated = bytearray(image.raw)
+        # Reader-level malformed metadata: declare PREINIT without executing it.
+        struct.pack_into("<QQ", mutated, dynamic[2], 32, 1)
+        preinit = self.root / "preinit.so"
+        preinit.write_bytes(mutated)
+        with self.assertRaises(ValueError):
+            INTEGRITY.describe(preinit, self.guard)
 
     def test_policy_keeps_exact_selected_guard_and_roots(self):
         nonce = bytes(range(32))
