@@ -917,34 +917,40 @@ request CI, which runs unreviewed code, keeps a read-only token. Queue-to-merge
 time and lane durations are measured service objectives, not claims
 established by timeout settings.
 
-#### Batched changes
+#### Automatic queue batching
 
-All change types may share a batch, including dependent changes. Batching adds
-no risk classification or human review requirement. Each constituent keeps its
-scope; the batch can contain backend, frontend, platform, security, migration,
-and release changes together. Required checks on the combined source decide
-whether it can enter and pass the merge queue.
+Use the merge queue normally. The hosted `Automatic queue batching` controller
+runs after CI, source changes, no-combine label changes, and every five minutes. It
+reserves the first two queue positions for existing cumulative groups, then
+combines up to four consecutive waiting entries in their existing priority
+order. Campaign exclusions live in `.github/queue-batching.json`; Linux and
+portable-command work are held. No opt-in label or routine approval is needed.
 
-Run `PYTHONPATH=scripts python3 -m ci_policy.batch_prs 123 124 125` from the
-repository root, listing PRs in dependency order. The command creates an
-isolated worktree and branch from current main, merges exact source heads, and
-opens one batch PR with their numbers and SHAs. Conflicts or changed heads stop
-preparation before a push. After opening the batch it disables auto-merge on
-the original PRs and removes any that are already queued. A batch of ready PRs becomes ready automatically; any draft
-source keeps the batch draft until implementation is complete. It never enables
-auto-merge or merges without the existing authorization. After the batch lands, close source PRs whose heads still match the manifest;
-leave later source commits open. A failing batch can be fixed in its
-retained worktree or rebuilt without the failing change.
+`no-combine` is an optional escape hatch: the controller keeps the PR on its
+individual testing and merge path and dissolves any batch containing it. It does
+not disable the original PR’s auto-merge. The existing queue admission remains
+the authorization.
 
-This creates one combined PR for CI. [GitHub's merge limits](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue)
-do not combine separate PR builds, so changing that number alone would
-not remove repeated verification. Existing required checks, affected-scope
-selection, platform triggers, and exact-commit release qualification apply to
-batches unchanged.
+The controller runs only trusted main-branch code. It merges immutable source
+heads without executing their contents, records them in a structured PR manifest,
+and explicitly dispatches normal CI and original-commit certification because
+GitHub's workflow token does not trigger ordinary PR workflows. A successful
+combined admission enables auto-merge; the normal merge queue verifies the exact
+landing result. Existing groups are never withdrawn to make room for a batch.
+The workflow token requires repository permission to create pull requests; its
+job has no approval step and cannot bypass rulesets or required checks.
+
+Source changes, draft decisions, no-combine labels, failed combined checks, or closed
+batches restore unchanged eligible originals to individual admission. Failed
+source identities are excluded from further automatic batching in retained batch
+history, preventing a retry loop. Conflicting combinations leave originals alone.
+A human draft decision on the batch stops automatic promotion. On landing,
+originals close only if their heads still match the manifest. Later heads stay
+open. Agents do not manually assemble batches.
 
 #### Throughput choices
 
-Prefer batching and cancellation of obsolete background work before adding
+Prefer automatic queue batching and cancellation of obsolete background work before adding
 runner capacity. Keep current runner caps; purchase capacity only against a
 measured runner wait or execution bottleneck and an agreed budget. There is no
 new paid runner requirement.
@@ -1179,7 +1185,7 @@ budgets for the whole selected matrix. Runner caps do not depend on timing data.
 | Releases | `release.yml`, `release-halt.yml` | `release-static-update` | 2 (2): source validation beside one signed build; later desktop rehearsal or protected fixture preparation beside Linux packaging |
 | DCO certification | `dco.yml` | `dco-certification` | 1 |
 | Maintainability tracking | `maintainability-issues.yml` | `maintainability-issues` | 1 |
-| Maintenance | Qualification supersession, Linux candidate requests, dependency inventory, release-system live test, queue health, issue staleness, the issue sweep, release secrets check | `maintenance`, shared | 1 |
+| Maintenance | Qualification supersession, Linux candidate requests, dependency inventory, release-system live test, queue health, automatic queue batching, issue staleness, the issue sweep, release secrets check | `maintenance`, shared | 1 |
 | Merge queue | CI of merge groups | one run per group, two groups at once | 8: two groups × the `integration` cap of four |
 | Ready pull requests | CI of pull requests | one run per pull request; a newer push cancels it | 1 per pull request, with a two-hour execution ceiling |
 

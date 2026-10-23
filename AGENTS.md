@@ -29,15 +29,15 @@ policy before editing. Start unfamiliar work at [docs](docs/README.md) and
 - **Report the crux, changes, verification, and unresolved work.** Surface findings
   that contradict the request before changing direction. Report verification
   results once available; do not narrate queued or running checks.
-- **Batching is allowed for all changes.** Combine unmerged PR branches when
-  that reduces repeated verification, including dependent changes. No risk
-  classification, extra human review, or separate batching approval is required.
-  Record included PRs and exact head SHAs in the batch PR. Run the normal fast
-  tier and merge-queue checks on the combined result; individual passes do not
-  replace them. If a batch fails, fix it or rebuild it without the failing change.
-  Keep source PRs open until the batch lands. Merge only when requested, through
-  the normal queue. The backend/frontend scope rule below applies to each
-  constituent change; a batch may contain both.
+- **Keep PRs separate; automatic queue batching is the exception.** Do not
+  manually assemble omnibus PRs. The hosted queue coordinator may batch already
+  admitted waiting PRs in queue order, preserving active groups and explicit
+  campaign holds. Combined admission and merge-group checks remain required.
+  The `no-combine` label excludes a PR from batches while preserving its normal
+  tests and merge eligibility. Source head changes and draft decisions
+  invalidate a batch; failed batches fall back to individual checks. Keep the
+  originals open until the exact recorded heads land. A human draft decision
+  remains a handoff; never undo it automatically.
 - **Cancel superseded background Qualification when its source is obsolete.**
   The hosted supersession controller may cancel queued or running background
   main-push Qualification after validating source ancestry and rechecking run
