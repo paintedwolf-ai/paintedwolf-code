@@ -3,204 +3,136 @@ package sourcesnapshot
 import (
 	"context"
 	"crypto/sha256"
-	"database/sql"
 	"encoding/hex"
-	"errors"
-	"fmt"
+	"hash/fnv"
 	"sort"
 	"strconv"
-	"strings"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
 )
 
-// Manifests share unchanged chunks across 256 content-addressed buckets.
+// A manifest is one root's entries in path order, cut into chunks where a
+// path's own hash says so. Cuts depend only on the paths around them, so an
+// edit rewrites the chunk that holds it and a rename or a new file moves at
+// most the cuts beside it.
+const (
+	chunkMinEntries = 128
+	chunkMaxEntries = 4096
+	// chunkCutMask gives a cut after one path in 512 on average.
+	chunkCutMask = 511
+	// stagingPage bounds one read of a survey's staged entries.
+	stagingPage = 2048
+)
 
-type bucketChunk struct {
-	bucket     byte
+// manifestChunk is one run of a manifest as its layout names it.
+type manifestChunk struct {
+	firstPath  string
+	id         string
+	entryCount int64
+	totalBytes int64
+	hashed     int64
+}
+
+// rootManifest is a built manifest whose chunks and row are written.
+type rootManifest struct {
 	id         string
 	entryCount int64
 	totalBytes int64
 }
 
-func (s *Store) publish(ctx context.Context, req Request, candidates []*rootCandidate, boundaries []Boundary, quality CaptureQuality, admissionMode AdmissionMode) (Snapshot, error) {
-	boundaries = append([]Boundary(nil), boundaries...)
-	sort.Slice(boundaries, func(i, j int) bool {
-		if boundaries[i].RootPath != boundaries[j].RootPath {
-			return boundaries[i].RootPath < boundaries[j].RootPath
+// cutAfter reports whether a chunk of n entries ends at path.
+func cutAfter(path string, n int) bool {
+	if n >= chunkMaxEntries {
+		return true
+	}
+	if n < chunkMinEntries {
+		return false
+	}
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(path))
+	return h.Sum64()&chunkCutMask == 0
+}
+
+// manifestBuilder streams entries in path order into chunks and records the
+// layout. Every chunk it writes or reuses stays pinned until the caller
+// releases the pin, so a sweep cannot remove it before a manifest names it.
+type manifestBuilder struct {
+	store   *Store
+	pin     *pin
+	pending []Entry
+	chunks  []manifestChunk
+}
+
+func (s *Store) newManifestBuilder(held *pin) *manifestBuilder {
+	return &manifestBuilder{store: s, pin: held}
+}
+
+func (b *manifestBuilder) add(ctx context.Context, entry Entry) error {
+	b.pending = append(b.pending, entry)
+	if cutAfter(entry.Path, len(b.pending)) {
+		return b.cut(ctx)
+	}
+	return nil
+}
+
+// aligned reports whether the stream sits at a cut, where an unchanged base
+// chunk can follow as it is.
+func (b *manifestBuilder) aligned() bool { return len(b.pending) == 0 }
+
+func (b *manifestBuilder) reuse(chunk manifestChunk) { b.chunks = append(b.chunks, chunk) }
+
+func (b *manifestBuilder) cut(ctx context.Context) error {
+	if len(b.pending) == 0 {
+		return nil
+	}
+	chunk := manifestChunk{firstPath: b.pending[0].Path, id: chunkHash(b.pending), entryCount: int64(len(b.pending))}
+	for _, entry := range b.pending {
+		chunk.totalBytes += entry.Size
+		if entry.Identity == IdentityHashed {
+			chunk.hashed++
 		}
-		return boundaries[i].Path < boundaries[j].Path
+	}
+	b.pin.addChunk(chunk.id)
+	if err := b.store.insertChunk(ctx, chunk, b.pending); err != nil {
+		return err
+	}
+	b.chunks = append(b.chunks, chunk)
+	b.pending = b.pending[:0]
+	return nil
+}
+
+// finish writes the last chunk and the manifest row with its layout.
+func (b *manifestBuilder) finish(ctx context.Context) (rootManifest, error) {
+	if err := b.cut(ctx); err != nil {
+		return rootManifest{}, err
+	}
+	out := rootManifest{id: manifestHash(b.chunks)}
+	for _, chunk := range b.chunks {
+		out.entryCount += chunk.entryCount
+		out.totalBytes += chunk.totalBytes
+	}
+	b.pin.addManifest(out.id)
+	return out, b.store.insertManifest(ctx, out, b.chunks)
+}
+
+// insertChunk writes one chunk and its entries in one transaction unless the
+// store already holds it.
+func (s *Store) insertChunk(ctx context.Context, chunk manifestChunk, entries []Entry) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	q := s.queries.WithTx(tx)
+	inserted, err := q.InsertSourceManifestChunk(ctx, db.InsertSourceManifestChunkParams{
+		ID: chunk.id, EntryCount: chunk.entryCount, TotalBytes: chunk.totalBytes, HashedCount: chunk.hashed,
 	})
-	out := Snapshot{
-		RootsKey: rootsKey(req.Roots), Quality: quality.Normalized(),
-		AdmissionMode: AdmissionMode(strings.TrimSpace(string(admissionMode))),
-		CreatedAt:     time.Now().UTC(), Roots: append([]Root(nil), req.Roots...),
-		Boundaries: boundaries,
-	}
-	for _, c := range candidates {
-		if err := c.flushStaging(ctx, s); err != nil {
-			return Snapshot{}, err
-		}
-	}
-	// Chunks commit independently; failed publications leave unreferenced chunks for collection.
-	chunks, err := s.buildChunks(ctx, req, candidates)
-	if err != nil {
-		return Snapshot{}, err
-	}
-	for _, chunk := range chunks {
-		out.FileCount += int(chunk.entryCount)
-		out.TotalBytes += chunk.totalBytes
-	}
-
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return Snapshot{}, err
-	}
-	defer func() { _ = tx.Rollback() }()
-	q := s.queries.WithTx(tx)
-	out.MerkleSHA256 = manifestHash(out.Roots, chunks)
-	out.ID = out.MerkleSHA256
-	if err := q.UpsertSourceSnapshot(ctx, db.UpsertSourceSnapshotParams{
-		ID: out.ID, RootsKey: out.RootsKey, MerkleSha256: out.MerkleSHA256,
-		FileCount: int64(out.FileCount), TotalBytes: out.TotalBytes,
-		CaptureQuality: string(out.Quality), CreatedTs: db.FormatTime(out.CreatedAt),
-	}); err != nil {
-		return Snapshot{}, err
-	}
-	for ordinal, root := range out.Roots {
-		if err := q.InsertSourceSnapshotRoot(ctx, db.InsertSourceSnapshotRootParams{
-			SnapshotID: out.ID, RootPath: root.Path, Ordinal: int64(ordinal),
-		}); err != nil {
-			return Snapshot{}, err
-		}
-	}
-	for _, chunk := range chunks {
-		if err := q.InsertSourceSnapshotChunk(ctx, db.InsertSourceSnapshotChunkParams{
-			SnapshotID: out.ID, Bucket: int64(chunk.bucket), ChunkID: chunk.id,
-		}); err != nil {
-			return Snapshot{}, err
-		}
-	}
-	for _, b := range out.Boundaries {
-		if err := q.InsertSourceSnapshotBoundary(ctx, db.InsertSourceSnapshotBoundaryParams{
-			SnapshotID: out.ID, RootPath: b.RootPath, Path: b.Path,
-			Reason: b.Reason, Detail: b.Detail, Entries: int64(b.Entries),
-		}); err != nil {
-			return Snapshot{}, err
-		}
-	}
-	if err := q.UpsertSourceSnapshotHead(ctx, db.UpsertSourceSnapshotHeadParams{
-		RootsKey: out.RootsKey, SnapshotID: out.ID,
-		PublishedTs: db.FormatTime(time.Now().UTC()),
-	}); err != nil {
-		return Snapshot{}, err
-	}
-	return out, tx.Commit()
-}
-
-// buildChunks reuses untouched buckets when the base has identical roots.
-func (s *Store) buildChunks(ctx context.Context, req Request, candidates []*rootCandidate) ([]bucketChunk, error) {
-	base, baseChunks, err := s.sharedBase(ctx, req, candidates)
-	if err != nil {
-		return nil, err
-	}
-	chunks := make([]bucketChunk, 0, 256)
-	for bucket := range 256 {
-		b := byte(bucket)
-		if base != "" && !anyTouched(candidates, b) {
-			id, ok := baseChunks[b]
-			if !ok {
-				continue
-			}
-			row, err := s.queries.GetSourceManifestChunk(ctx, id)
-			if err != nil {
-				return nil, err
-			}
-			chunks = append(chunks, bucketChunk{bucket: b, id: id, entryCount: row.EntryCount, totalBytes: row.TotalBytes})
-			continue
-		}
-		var entries []Entry
-		for _, c := range candidates {
-			part, err := c.bucketEntries(ctx, s.queries, b)
-			if err != nil {
-				return nil, err
-			}
-			entries = append(entries, part...)
-		}
-		if len(entries) == 0 {
-			continue
-		}
-		sortEntries(entries)
-		chunk := bucketChunk{bucket: b, id: manifestChunkHash(b, entries), entryCount: int64(len(entries))}
-		for _, entry := range entries {
-			chunk.totalBytes += entry.Size
-		}
-		if err := s.insertChunk(ctx, chunk, entries); err != nil {
-			return nil, err
-		}
-		chunks = append(chunks, chunk)
-	}
-	return chunks, nil
-}
-
-// sharedBase requires every candidate to share a base with identical roots.
-func (s *Store) sharedBase(ctx context.Context, req Request, candidates []*rootCandidate) (string, map[byte]string, error) {
-	q := s.queries
-	if len(candidates) == 0 {
-		return "", nil, nil
-	}
-	base := candidates[0].base
-	for _, c := range candidates {
-		if !c.isDelta() || c.base != base {
-			return "", nil, nil
-		}
-	}
-	roots, err := q.ListSourceSnapshotRoots(ctx, base)
-	if err != nil {
-		return "", nil, err
-	}
-	if len(roots) != len(req.Roots) {
-		return "", nil, nil
-	}
-	for i, root := range roots {
-		if root.RootPath != req.Roots[i].Path {
-			return "", nil, nil
-		}
-	}
-	return base, candidates[0].baseChunks, nil
-}
-
-func anyTouched(candidates []*rootCandidate, bucket byte) bool {
-	for _, c := range candidates {
-		if c.touched(bucket) {
-			return true
-		}
-	}
-	return false
-}
-
-// insertChunk stores one chunk's content in its own transaction, unless
-// the store already holds it.
-func (s *Store) insertChunk(ctx context.Context, chunk bucketChunk, entries []Entry) error {
-	exists, err := s.queries.SourceManifestChunkExists(ctx, chunk.id)
-	if err != nil || exists != 0 {
+	if err != nil || inserted == 0 {
 		return err
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
-	q := s.queries.WithTx(tx)
-	if err := q.InsertSourceManifestChunk(ctx, db.InsertSourceManifestChunkParams{
-		ID: chunk.id, EntryCount: chunk.entryCount, TotalBytes: chunk.totalBytes,
-	}); err != nil {
-		return err
-	}
-	for ordinal, entry := range entries {
+	for _, entry := range entries {
 		if err := q.InsertSourceManifestEntry(ctx, db.InsertSourceManifestEntryParams{
-			ChunkID: chunk.id, Ordinal: int64(ordinal), RootPath: entry.RootPath, Path: entry.Path,
+			ChunkID: chunk.id, Path: entry.Path,
 			Sha256: entry.SHA256, GitOid: entry.GitOID, Identity: string(entry.Identity),
 			Size: entry.Size, Mode: int64(entry.Mode), ModifiedNs: entry.ModifiedNS,
 		}); err != nil {
@@ -210,307 +142,159 @@ func (s *Store) insertChunk(ctx context.Context, chunk bucketChunk, entries []En
 	return tx.Commit()
 }
 
-func manifestChunkHash(bucket byte, entries []Entry) string {
-	hash := sha256.New()
-	_, _ = hash.Write([]byte("painted-wolf-source-manifest-chunk-v2\x00"))
-	_, _ = hash.Write([]byte{bucket})
+func (s *Store) insertManifest(ctx context.Context, manifest rootManifest, chunks []manifestChunk) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	q := s.queries.WithTx(tx)
+	inserted, err := q.InsertSourceManifest(ctx, db.InsertSourceManifestParams{
+		ID: manifest.id, EntryCount: manifest.entryCount, TotalBytes: manifest.totalBytes,
+	})
+	if err != nil || inserted == 0 {
+		return err
+	}
+	for _, chunk := range chunks {
+		if err := q.InsertSourceManifestLayout(ctx, db.InsertSourceManifestLayoutParams{
+			ManifestID: manifest.id, FirstPath: chunk.firstPath, ChunkID: chunk.id,
+		}); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// buildFromStaging folds a survey's staged entries into a manifest a page
+// at a time, so neither memory nor any one read spans the survey.
+func (b *manifestBuilder) buildFromStaging(ctx context.Context, build string) (rootManifest, error) {
+	after := ""
+	for {
+		rows, err := b.store.queries.ListSourceManifestStagingPage(ctx, db.ListSourceManifestStagingPageParams{
+			BuildID: build, After: after, PageSize: stagingPage,
+		})
+		if err != nil {
+			return rootManifest{}, err
+		}
+		for _, row := range rows {
+			entry, err := entryFrom("", row.Path, row.Sha256, row.GitOid, row.Identity, row.Size, row.Mode, row.ModifiedNs)
+			if err != nil {
+				return rootManifest{}, err
+			}
+			if err := b.add(ctx, entry); err != nil {
+				return rootManifest{}, err
+			}
+		}
+		if len(rows) < stagingPage {
+			return b.finish(ctx)
+		}
+		after = rows[len(rows)-1].Path
+	}
+}
+
+// buildFromBase applies path overrides to a base manifest. It re-chunks
+// from the first chunk an override touches and reuses base chunks again as
+// soon as the stream returns to a cut the base also made, which yields the
+// same chunks a full build of the new entries would. A nil override removes
+// its path.
+func (b *manifestBuilder) buildFromBase(ctx context.Context, base []manifestChunk, overrides map[string]*Entry) (rootManifest, error) {
+	paths := make([]string, 0, len(overrides))
+	for path := range overrides {
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+	if len(base) == 0 {
+		for _, path := range paths {
+			if entry := overrides[path]; entry != nil {
+				if err := b.add(ctx, *entry); err != nil {
+					return rootManifest{}, err
+				}
+			}
+		}
+		return b.finish(ctx)
+	}
+	touched := make(map[int][]string)
+	for _, path := range paths {
+		i := sort.Search(len(base), func(i int) bool { return base[i].firstPath > path }) - 1
+		touched[max(i, 0)] = append(touched[max(i, 0)], path)
+	}
+	for i, chunk := range base {
+		changed := touched[i]
+		if len(changed) == 0 && b.aligned() {
+			b.reuse(chunk)
+			continue
+		}
+		entries, err := b.store.chunkEntries(ctx, chunk.id, "")
+		if err != nil {
+			return rootManifest{}, err
+		}
+		if err := b.merge(ctx, entries, changed, overrides); err != nil {
+			return rootManifest{}, err
+		}
+	}
+	return b.finish(ctx)
+}
+
+// merge streams one base chunk with the overrides that fall in it.
+func (b *manifestBuilder) merge(ctx context.Context, entries []Entry, changed []string, overrides map[string]*Entry) error {
+	j := 0
 	for _, entry := range entries {
-		_, _ = hash.Write([]byte(entry.RootPath + "\x00" + entry.Path + "\x00" + entry.contentKey() + "\x00"))
+		for j < len(changed) && changed[j] < entry.Path {
+			if err := b.addOverride(ctx, overrides[changed[j]]); err != nil {
+				return err
+			}
+			j++
+		}
+		if j < len(changed) && changed[j] == entry.Path {
+			if err := b.addOverride(ctx, overrides[changed[j]]); err != nil {
+				return err
+			}
+			j++
+			continue
+		}
+		if err := b.add(ctx, entry); err != nil {
+			return err
+		}
+	}
+	for ; j < len(changed); j++ {
+		if err := b.addOverride(ctx, overrides[changed[j]]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (b *manifestBuilder) addOverride(ctx context.Context, entry *Entry) error {
+	if entry == nil {
+		return nil
+	}
+	return b.add(ctx, *entry)
+}
+
+func chunkHash(entries []Entry) string {
+	hash := sha256.New()
+	_, _ = hash.Write([]byte("painted-wolf-source-manifest-chunk-v3\x00"))
+	for _, entry := range entries {
+		_, _ = hash.Write([]byte(entry.Path + "\x00" + entry.contentKey() + "\x00"))
 		_, _ = hash.Write([]byte(strconv.FormatInt(entry.Size, 10) + "\x00" + strconv.FormatUint(uint64(entry.Mode), 10) + "\x00"))
 	}
 	return hex.EncodeToString(hash.Sum(nil))
 }
 
-func manifestHash(roots []Root, chunks []bucketChunk) string {
+func manifestHash(chunks []manifestChunk) string {
 	hash := sha256.New()
-	_, _ = hash.Write([]byte("painted-wolf-source-snapshot-v2\x00"))
-	for _, root := range roots {
-		_, _ = hash.Write([]byte(root.Path + "\x00"))
-	}
+	_, _ = hash.Write([]byte("painted-wolf-source-manifest-v1\x00"))
 	for _, chunk := range chunks {
-		_, _ = hash.Write([]byte{chunk.bucket})
 		_, _ = hash.Write([]byte(chunk.id + "\x00"))
 	}
 	return hex.EncodeToString(hash.Sum(nil))
 }
 
-// ErrSnapshotNotFound means the identity is not resident in this store.
-var ErrSnapshotNotFound = errors.New("source snapshot not found")
-
-func snapshotError(id string, err error) error {
-	if errors.Is(err, sql.ErrNoRows) {
-		return fmt.Errorf("%w: %s", ErrSnapshotNotFound, id)
+func snapshotHash(roots []Root, manifests []string) string {
+	hash := sha256.New()
+	_, _ = hash.Write([]byte("painted-wolf-source-snapshot-v3\x00"))
+	for i, root := range roots {
+		_, _ = hash.Write([]byte(root.Path + "\x00" + manifests[i] + "\x00"))
 	}
-	return err
-}
-
-// Get loads snapshot metadata; entries are read separately.
-func (s *Store) Get(ctx context.Context, id string) (Snapshot, error) {
-	row, err := s.queries.GetSourceSnapshot(ctx, id)
-	if err != nil {
-		return Snapshot{}, snapshotError(id, err)
-	}
-	roots, err := s.queries.ListSourceSnapshotRoots(ctx, row.ID)
-	if err != nil {
-		return Snapshot{}, err
-	}
-	out := Snapshot{
-		ID: row.ID, RootsKey: row.RootsKey, MerkleSHA256: row.MerkleSha256,
-		FileCount: int(row.FileCount), TotalBytes: row.TotalBytes,
-		Quality: CaptureQuality(row.CaptureQuality).Normalized(),
-		Roots:   make([]Root, 0, len(roots)),
-	}
-	out.CreatedAt, _ = db.ParseTime(row.CreatedTs)
-	for _, root := range roots {
-		out.Roots = append(out.Roots, Root{Path: root.RootPath})
-	}
-	boundaries, err := s.queries.ListSourceSnapshotBoundaries(ctx, row.ID)
-	if err != nil {
-		return Snapshot{}, err
-	}
-	for _, b := range boundaries {
-		out.Boundaries = append(out.Boundaries, Boundary{
-			RootPath: b.RootPath, Path: b.Path, Reason: b.Reason, Detail: b.Detail, Entries: int(b.Entries),
-		})
-		if (Boundary{Reason: b.Reason}).Budgeted() {
-			out.AdmissionMode = AdmissionScopeBounded
-		}
-	}
-	if out.AdmissionMode == "" {
-		out.AdmissionMode = AdmissionScope
-	}
-	return out, nil
-}
-
-// Lookup returns one admitted file of a snapshot, or false when the
-// generation does not hold the path.
-func (s *Store) Lookup(ctx context.Context, id, rootPath, rel string) (Entry, bool, error) {
-	row, err := s.queries.GetSourceSnapshotEntry(ctx, db.GetSourceSnapshotEntryParams{
-		SnapshotID: id, RootPath: rootPath, Path: rel,
-	})
-	if errors.Is(err, sql.ErrNoRows) {
-		return Entry{}, false, nil
-	}
-	if err != nil {
-		return Entry{}, false, err
-	}
-	entry, err := entryFrom(row.RootPath, row.Path, row.Sha256, row.GitOid, row.Identity, row.Size, row.Mode, row.ModifiedNs)
-	return entry, err == nil, err
-}
-
-// EntriesUnder lists the admitted files at or below one root-relative
-// path; "." names the whole root. A file path lists itself.
-func (s *Store) EntriesUnder(ctx context.Context, id, rootPath, dir string) ([]Entry, error) {
-	dir = cleanRelDir(dir)
-	if dir == "." {
-		rows, err := s.queries.ListSourceSnapshotRootEntries(ctx, db.ListSourceSnapshotRootEntriesParams{
-			SnapshotID: id, RootPath: rootPath,
-		})
-		if err != nil {
-			return nil, err
-		}
-		return entriesFromRootRows(rows)
-	}
-	var out []Entry
-	if exact, ok, err := s.Lookup(ctx, id, rootPath, dir); err != nil {
-		return nil, err
-	} else if ok {
-		out = append(out, exact)
-	}
-	low, high := pathBounds(dir)
-	rows, err := s.queries.ListSourceSnapshotEntriesBelow(ctx, db.ListSourceSnapshotEntriesBelowParams{
-		SnapshotID: id, RootPath: rootPath, Low: low, High: high,
-	})
-	if err != nil {
-		return nil, err
-	}
-	for _, row := range rows {
-		entry, err := entryFrom(row.RootPath, row.Path, row.Sha256, row.GitOid, row.Identity, row.Size, row.Mode, row.ModifiedNs)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, entry)
-	}
-	return out, nil
-}
-
-func entriesFromRootRows(rows []db.ListSourceSnapshotRootEntriesRow) ([]Entry, error) {
-	out := make([]Entry, 0, len(rows))
-	for _, row := range rows {
-		entry, err := entryFrom(row.RootPath, row.Path, row.Sha256, row.GitOid, row.Identity, row.Size, row.Mode, row.ModifiedNs)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, entry)
-	}
-	return out, nil
-}
-
-// HashedEntries lists files whose bytes need explicit retention, bounded by size and count.
-func (s *Store) HashedEntries(ctx context.Context, id string, maxSize int64, limit int) ([]Entry, error) {
-	rows, err := s.queries.ListSourceSnapshotHashedEntries(ctx, db.ListSourceSnapshotHashedEntriesParams{
-		SnapshotID: id, MaxSize: maxSize, RowLimit: int64(limit),
-	})
-	if err != nil {
-		return nil, err
-	}
-	out := make([]Entry, 0, len(rows))
-	for _, row := range rows {
-		entry, err := entryFrom(row.RootPath, row.Path, row.Sha256, row.GitOid, row.Identity, row.Size, row.Mode, row.ModifiedNs)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, entry)
-	}
-	return out, nil
-}
-
-// HasPath reports whether a snapshot holds rel as a file or as a directory
-// with an admitted file below it.
-func (s *Store) HasPath(ctx context.Context, id, rootPath, rel string) (bool, error) {
-	rel = cleanRelDir(rel)
-	if rel == "." {
-		held, err := s.queries.SourceSnapshotHoldsRoot(ctx, db.SourceSnapshotHoldsRootParams{SnapshotID: id, RootPath: rootPath})
-		return held != 0, err
-	}
-	if _, ok, err := s.Lookup(ctx, id, rootPath, rel); err != nil || ok {
-		return ok, err
-	}
-	low, high := pathBounds(rel)
-	held, err := s.queries.SourceSnapshotHoldsBelow(ctx, db.SourceSnapshotHoldsBelowParams{
-		SnapshotID: id, RootPath: rootPath, Low: low, High: high,
-	})
-	return held != 0, err
-}
-
-// ForEachEntry streams admitted files in root and path order, one bucket at a time.
-func (s *Store) ForEachEntry(ctx context.Context, id string, fn func(Entry) error) error {
-	rows, err := s.db.QueryContext(ctx, `
-SELECT e.root_path, e.path, e.sha256, e.git_oid, e.identity, e.size, e.mode, e.modified_ns
-FROM source_snapshot_chunks c
-JOIN source_manifest_entries e ON e.chunk_id = c.chunk_id
-WHERE c.snapshot_id = ?
-ORDER BY e.root_path, e.path`, id)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = rows.Close() }()
-	for rows.Next() {
-		var rootPath, path, sha, oid, identity string
-		var size, mode, modifiedNS int64
-		if err := rows.Scan(&rootPath, &path, &sha, &oid, &identity, &size, &mode, &modifiedNS); err != nil {
-			return err
-		}
-		entry, err := entryFrom(rootPath, path, sha, oid, identity, size, mode, modifiedNS)
-		if err != nil {
-			return err
-		}
-		if err := fn(entry); err != nil {
-			return err
-		}
-	}
-	return rows.Err()
-}
-
-// Diff reports every path that differs between two generations, reading
-// only the buckets whose chunks differ. An empty previous id makes every
-// entry of current an addition.
-func (s *Store) Diff(ctx context.Context, previousID, currentID string, fn func(Change) error) error {
-	previous, err := s.chunkMap(ctx, previousID)
-	if err != nil {
-		return err
-	}
-	current, err := s.chunkMap(ctx, currentID)
-	if err != nil {
-		return err
-	}
-	for bucket := range 256 {
-		b := byte(bucket)
-		before, after := previous[b], current[b]
-		if before == after {
-			continue
-		}
-		beforeEntries, err := s.chunkEntries(ctx, before)
-		if err != nil {
-			return err
-		}
-		afterEntries, err := s.chunkEntries(ctx, after)
-		if err != nil {
-			return err
-		}
-		if err := diffBucket(beforeEntries, afterEntries, fn); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func diffBucket(before, after []Entry, fn func(Change) error) error {
-	held := make(map[string]int, len(before))
-	for i, entry := range before {
-		held[entry.RootPath+"\x00"+entry.Path] = i
-	}
-	seen := make(map[int]struct{}, len(after))
-	for i := range after {
-		entry := after[i]
-		j, ok := held[entry.RootPath+"\x00"+entry.Path]
-		if !ok {
-			if err := fn(Change{After: &entry}); err != nil {
-				return err
-			}
-			continue
-		}
-		seen[j] = struct{}{}
-		if !before[j].SameContent(entry) || before[j].Mode != entry.Mode {
-			if err := fn(Change{Before: &before[j], After: &entry}); err != nil {
-				return err
-			}
-		}
-	}
-	for i := range before {
-		if _, ok := seen[i]; ok {
-			continue
-		}
-		if err := fn(Change{Before: &before[i]}); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (s *Store) chunkMap(ctx context.Context, id string) (map[byte]string, error) {
-	out := make(map[byte]string)
-	if id == "" {
-		return out, nil
-	}
-	rows, err := s.queries.ListSourceSnapshotChunks(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	for _, row := range rows {
-		if row.Bucket < 0 || row.Bucket > 255 {
-			return nil, fmt.Errorf("snapshot %s names bucket %d", id, row.Bucket)
-		}
-		out[byte(row.Bucket)] = row.ChunkID
-	}
-	return out, nil
-}
-
-func (s *Store) chunkEntries(ctx context.Context, chunkID string) ([]Entry, error) {
-	if chunkID == "" {
-		return nil, nil
-	}
-	rows, err := s.queries.ListSourceManifestChunkEntries(ctx, chunkID)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]Entry, 0, len(rows))
-	for _, row := range rows {
-		entry, err := entryFrom(row.RootPath, row.Path, row.Sha256, row.GitOid, row.Identity, row.Size, row.Mode, row.ModifiedNs)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, entry)
-	}
-	return out, nil
+	return hex.EncodeToString(hash.Sum(nil))
 }
