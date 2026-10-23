@@ -20,7 +20,7 @@ def process(identity, namespaces, image, **changes):
     row = {'identity': identity, 'exe': '/opt/painted-wolf-code/bin/fixture', 'image': image,
            'namespaces': namespaces, 'user_namespace_owner': 1000, 'uid_map': [[0, 1000, 1]], 'gid_map': [[0, 1000, 1]],
            'uids': [1000] * 4, 'no_new_privs': 1, 'seccomp': 2,
-           'capabilities': {name: 0 for name in process_tree.CAPABILITIES}}
+           'capabilities': {name: 0 for name in process_tree.CAPABILITIES}, 'capability_bounding_set': 0}
     row.update(changes)
     return row
 
