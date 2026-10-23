@@ -9,6 +9,14 @@ import {
   transcriptMessages,
 } from "./helpers.ts";
 
+import {
+  expectContiguousSteps,
+  readTranscriptBackTo,
+  readTranscriptForward,
+  visibleTranscriptSteps,
+  wheelTranscript,
+} from "./transcript-reading.ts";
+
 const SCROLLER = ".den-chat-stream";
 const ROWS = 900;
 
@@ -71,21 +79,6 @@ function onePagePdf(): Buffer {
 
 const scroller = (page: Page) => liveChatStage(page).locator(SCROLLER);
 
-/** Step numbers of the rows the scrollport shows, in order. */
-async function visibleSteps(page: Page): Promise<number[]> {
-  return scroller(page).evaluate((host) => {
-    const view = host.getBoundingClientRect();
-    return [...host.querySelectorAll<HTMLElement>(".transcript-viewport-row[data-msg-id]")]
-      .filter((row) => {
-        const box = row.getBoundingClientRect();
-        return box.bottom > view.top && box.top < view.bottom;
-      })
-      .map((row) => Number(row.textContent?.match(/Step (\d+)\./)?.[1] ?? Number.NaN))
-      .filter((step) => Number.isFinite(step))
-      .sort((a, b) => a - b);
-  });
-}
-
 /** The first row under the scrollport top and where it sits. */
 async function readingRow(page: Page): Promise<{ key: string; top: number }> {
   return scroller(page).evaluate((host) => {
@@ -105,41 +98,6 @@ async function rowTop(page: Page, key: string): Promise<number | undefined> {
   }, key);
 }
 
-async function wheel(page: Page, deltaY: number) {
-  const box = await scroller(page).boundingBox();
-  if (!box) throw new Error("chat scroller is missing");
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  await page.mouse.wheel(0, deltaY);
-  await page.waitForTimeout(120);
-}
-
-function expectContiguous(steps: readonly number[]) {
-  for (let i = 1; i < steps.length; i++) expect(steps[i], `rows ${steps.join(",")}`).toBe((steps[i - 1] ?? 0) + 1);
-}
-
-/** Wheel into history until the scrollport shows rows at or before `step`. */
-async function readBackTo(page: Page, step: number) {
-  await expect(async () => {
-    await wheel(page, -3_000);
-    expect(Math.min(...(await visibleSteps(page)))).toBeLessThanOrEqual(step);
-  }).toPass({ timeout: 120_000 });
-}
-
-/** Wheel down, proving each screen continues the one before it. */
-async function readForward(page: Page, until: () => Promise<boolean>) {
-  let previous = await visibleSteps(page);
-  await expect(async () => {
-    await wheel(page, 500);
-    const steps = await visibleSteps(page);
-    expectContiguous(steps);
-    // Reading down never skips a row the reader has not seen.
-    expect(Math.min(...steps)).toBeLessThanOrEqual(Math.max(...previous) + 1);
-    previous = steps;
-    const done = await until();
-    expect(done).toBe(true);
-  }).toPass({ timeout: 180_000 });
-}
-
 modelIndependentWebE2e("reading down from deep history reaches the live tail without skipping rows", async ({ page }) => {
   modelIndependentWebE2e.setTimeout(600_000);
   await bootstrapChatSession(page);
@@ -151,8 +109,8 @@ modelIndependentWebE2e("reading down from deep history reaches the live tail wit
   await expect(liveChatStage(page).getByText(`Step ${ROWS}.`, { exact: true })).toBeVisible({ timeout: 30_000 });
 
   // Six hundred rows fit resident at once; reading back seven hundred fifty cuts history off from the tail.
-  await readBackTo(page, 150);
-  expectContiguous(await visibleSteps(page));
+  await readTranscriptBackTo(page, 150);
+  expectContiguousSteps(await visibleTranscriptSteps(page));
 
   // Hold the page that leads back toward the tail to inspect the end of presented history.
   const newerPage = (url: URL) =>
@@ -165,7 +123,7 @@ modelIndependentWebE2e("reading down from deep history reaches the live tail wit
     await new Promise<void>((release) => { releaseHeld = release; });
     await route.continue();
   });
-  await readForward(page, async () => held);
+  await readTranscriptForward(page, async () => held);
   // The end of history before the gap is not the latest message.
   await expect(page.getByTestId("stream-scroll-jump")).toHaveAttribute("aria-hidden", "false");
   const before = await readingRow(page);
@@ -178,16 +136,16 @@ modelIndependentWebE2e("reading down from deep history reaches the live tail wit
   expect(Math.abs((after ?? 0) - before.top)).toBeLessThanOrEqual(2);
   await page.unroute(newerPage);
 
-  await readForward(page, async () => (await visibleSteps(page)).includes(ROWS));
-  expectContiguous(await visibleSteps(page));
+  await readTranscriptForward(page, async () => (await visibleTranscriptSteps(page)).includes(ROWS));
+  expectContiguousSteps(await visibleTranscriptSteps(page));
 
   // Jumping to latest from deep history drops the cut-off pages and lands on the tail.
-  await readBackTo(page, 150);
+  await readTranscriptBackTo(page, 150);
   await page.getByTestId("stream-scroll-jump").click();
   await expect(liveChatStage(page).getByText(`Step ${ROWS}.`, { exact: true })).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId("stream-scroll-jump")).toHaveAttribute("aria-hidden", "true");
-  const tail = await visibleSteps(page);
-  expectContiguous(tail);
+  const tail = await visibleTranscriptSteps(page);
+  expectContiguousSteps(tail);
   expect(Math.max(...tail)).toBe(ROWS);
 });
 
@@ -232,8 +190,8 @@ modelIndependentWebE2e("PDF chips predict visible geometry and preserve cold-cac
     expect(Math.abs(geometry.estimate - geometry.rendered)).toBeLessThan(Math.max(12, geometry.rendered * 0.25));
   }
 
-  await readBackTo(page, 150);
-  await readForward(page, async () => (await visibleSteps(page)).includes(ROWS));
+  await readTranscriptBackTo(page, 150);
+  await readTranscriptForward(page, async () => (await visibleTranscriptSteps(page)).includes(ROWS));
   await expect(row).toBeVisible();
 });
 
@@ -285,7 +243,7 @@ modelIndependentWebE2e("prepending an older page into an expanded activity span 
 
   const spanRow = scroller(page).locator(`.transcript-viewport-row[data-msg-id="${leadKeyBefore}"]`);
   await expect(async () => {
-    if (!(await spanRow.isVisible())) await wheel(page, -1_500);
+    if (!(await spanRow.isVisible())) await wheelTranscript(page, -1_500);
     expect(olderHeld).toBe(true);
     await expect(spanRow).toBeVisible({ timeout: 500 });
   }).toPass({ timeout: 60_000 });
