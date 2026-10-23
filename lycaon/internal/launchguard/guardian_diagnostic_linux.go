@@ -32,6 +32,7 @@ type guardianObservation struct {
 	RoleIndex int                     `json:"role_index"`
 	Poll      [4]int16                `json:"poll"`
 	Frame     *guardianHealthFact     `json:"frame,omitempty"`
+	Exit      *guardianExitFact       `json:"exit,omitempty"`
 }
 
 type guardianHealthFact struct {
@@ -175,6 +176,11 @@ func (sink guardianDiagnosticControl) Write(raw []byte) (int, error) {
 
 func (state *protectedGuardian) reportRetirement(event guardianRetirement) {
 	if state.control != nil {
+		if event.Observation != nil && event.RoleIndex >= 0 && event.RoleIndex < len(state.roots.pids) {
+			observation := *event.Observation
+			observation.Exit = observeGuardianExit(15+event.RoleIndex, state.roots.pids[event.RoleIndex], state.caller.UID)
+			event.Observation = &observation
+		}
 		state.writeRetirement(guardianDiagnosticControl{int(state.control.Fd())}, event)
 	}
 }
@@ -227,6 +233,13 @@ func validGuardianRetirement(event guardianRetirement, pid int) bool {
 		if event.WaitStatus != nil || event.Signal != 0 || event.Observation == nil || event.Observation.Cause != event.Cause || event.Observation.RoleIndex != event.RoleIndex {
 			return false
 		}
+		if event.Observation.Exit != nil {
+			fact := event.Observation.Exit
+			status, ok := guardianExitStatus(fact.Code, fact.Status)
+			if event.RoleIndex < 0 || !ok || fact.WaitStatus != status {
+				return false
+			}
+		}
 		if event.Cause == guardianDesktopReady {
 			return event.RoleIndex == 0
 		}
@@ -237,4 +250,30 @@ func validGuardianRetirement(event guardianRetirement, pid int) bool {
 	default:
 		return false
 	}
+}
+
+// si_code and si_status are retained directly. Linux encodes only these exited
+// child variants as the corresponding Wait4 status; other codes stay unknown.
+type guardianExitFact struct {
+	Code       int32  `json:"code"`
+	Status     int32  `json:"status"`
+	WaitStatus uint32 `json:"wait_status"`
+}
+
+func guardianExitStatus(code, status int32) (uint32, bool) {
+	switch code {
+	case 1: // CLD_EXITED
+		if status >= 0 && status <= 255 {
+			return uint32(status) << 8, true
+		}
+	case 2, 3: // CLD_KILLED, CLD_DUMPED
+		if status > 0 && status <= 64 {
+			raw := uint32(status)
+			if code == 3 {
+				raw |= 0x80
+			}
+			return raw, true
+		}
+	}
+	return 0, false
 }

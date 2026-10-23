@@ -52,7 +52,7 @@ func receiveGuardianPacket(fd int, pid int, caller Identity, limit int) ([]byte,
 	raw := make([]byte, limit+1)
 	control := make([]byte, unix.CmsgSpace(unix.SizeofUcred))
 	for {
-		n, oobn, flags, _, err := unix.Recvmsg(fd, raw[:], control, unix.MSG_CMSG_CLOEXEC)
+		n, oobn, flags, _, err := unix.Recvmsg(fd, raw[:], control, unix.MSG_CMSG_CLOEXEC|unix.MSG_DONTWAIT)
 		if errors.Is(err, unix.EINTR) {
 			continue
 		}

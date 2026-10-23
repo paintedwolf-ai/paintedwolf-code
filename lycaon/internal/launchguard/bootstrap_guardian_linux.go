@@ -116,56 +116,75 @@ func dropBootstrapSupervisor(caller Identity) error {
 	return prctlAllThreads(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0)
 }
 
+type guardianSupervisorReports struct {
+	settled, notified, controlClosed bool
+	status                           int
+}
+
+// One first diagnostic, optional failure and settlement form the bounded
+// post-admission sequence. Only the original lifecycle notices change state.
+func (reports *guardianSupervisorReports) drain(control *os.File, stagePID, stageFD int, caller Identity) {
+	if reports.controlClosed || reports.settled {
+		return
+	}
+	for count := 0; count < 3; count++ {
+		report, err := receiveGuardianReport(int(control.Fd()), stagePID, caller)
+		if err != nil {
+			if !errors.Is(err, unix.EAGAIN) {
+				reports.notified = notifyGuardianFailure(reports.notified)
+				reports.controlClosed = true
+				_ = unix.PidfdSendSignal(stageFD, unix.SIGTERM, nil, 0)
+			}
+			return
+		}
+		if report.diagnostic != nil {
+			_, _ = (guardianDiagnosticStderr{}).Write(report.diagnostic)
+			continue
+		}
+		switch report.notice.phase {
+		case guardianFailed:
+			reports.notified = notifyGuardianFailure(reports.notified)
+		case guardianSettled:
+			reports.settled, reports.status = true, int(report.notice.status)
+			return
+		default:
+			reports.notified = notifyGuardianFailure(reports.notified)
+			_ = unix.PidfdSendSignal(stageFD, unix.SIGTERM, nil, 0)
+		}
+	}
+}
+
+func (reports *guardianSupervisorReports) guardianExited(control *os.File, stagePID, stageFD int, caller Identity) {
+	// Reaping the exact sender closes the initial EAGAIN-to-death race: its
+	// final queued reports are now complete, without a grace period or new sends.
+	reports.drain(control, stagePID, stageFD, caller)
+	if !reports.settled {
+		reports.notified = notifyGuardianFailure(reports.notified)
+	}
+}
+
 // After handoff this supervisor has no privilege. Only an authenticated
 // settled notice plus actual child reaping releases generation custody.
 // Unexpected guardian death is visible but cannot prove escaped descendants
 // settled; custody stays held instead of treating its exit as successful cleanup.
 func superviseGuardianLaunch(lifetime, control *os.File, stagePID int, stageFD int, caller Identity) int {
-	settled, stageExited, noChildren, notified := false, false, false, false
-	controlClosed := false
-	status := 0
+	stageExited, noChildren := false, false
+	reports := guardianSupervisorReports{}
 	for {
 		socket := int32(control.Fd())
-		if controlClosed {
+		if reports.controlClosed {
 			socket = -1
 		}
 		polls := []unix.PollFd{{Fd: socket, Events: unix.POLLIN}}
 		_, pollErr := unix.Poll(polls, 100)
 		if pollErr != nil && !errors.Is(pollErr, unix.EINTR) {
-			notified = notifyGuardianFailure(notified)
+			reports.notified = notifyGuardianFailure(reports.notified)
 		}
-		// One first diagnostic, optional failure and settlement may already be
-		// queued when the guardian exits. Consume that bounded sequence before
-		// deciding its death lacked settlement; diagnostics cannot create a warning.
-	reports:
-		for count := 0; polls[0].Revents&unix.POLLIN != 0 && count < 3; count++ {
-			report, err := receiveGuardianReport(int(control.Fd()), stagePID, caller)
-			if err != nil {
-				if !errors.Is(err, unix.EAGAIN) {
-					notified = notifyGuardianFailure(notified)
-					controlClosed = true
-					_ = unix.PidfdSendSignal(stageFD, unix.SIGTERM, nil, 0)
-				}
-				break reports
-			} else if report.diagnostic != nil {
-				_, _ = (guardianDiagnosticStderr{}).Write(report.diagnostic)
-			} else {
-				notice := report.notice
-				switch notice.phase {
-				case guardianFailed:
-					notified = notifyGuardianFailure(notified)
-				case guardianSettled:
-					settled = true
-					status = int(notice.status)
-					break reports
-				default:
-					notified = notifyGuardianFailure(notified)
-					_ = unix.PidfdSendSignal(stageFD, unix.SIGTERM, nil, 0)
-				}
-			}
+		if polls[0].Revents&unix.POLLIN != 0 {
+			reports.drain(control, stagePID, stageFD, caller)
 		}
 		if polls[0].Revents&(unix.POLLHUP|unix.POLLERR|unix.POLLNVAL) != 0 && polls[0].Revents&unix.POLLIN == 0 {
-			controlClosed = true
+			reports.controlClosed = true
 		}
 		for {
 			var wait unix.WaitStatus
@@ -178,7 +197,7 @@ func superviseGuardianLaunch(lifetime, control *os.File, stagePID int, stageFD i
 				break
 			}
 			if err != nil {
-				notified = notifyGuardianFailure(notified)
+				reports.notified = notifyGuardianFailure(reports.notified)
 				break
 			}
 			if pid == 0 {
@@ -188,13 +207,13 @@ func superviseGuardianLaunch(lifetime, control *os.File, stagePID int, stageFD i
 				stageExited = true
 			}
 		}
-		if stageExited && !settled {
-			notified = notifyGuardianFailure(notified)
+		if stageExited {
+			reports.guardianExited(control, stagePID, stageFD, caller)
 		}
-		if settled && stageExited && noChildren {
+		if reports.settled && stageExited && noChildren {
 			_ = lifetime.Close()
 			_ = control.Close()
-			return status
+			return reports.status
 		}
 	}
 }
