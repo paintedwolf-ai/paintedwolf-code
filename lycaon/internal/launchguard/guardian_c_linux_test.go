@@ -26,6 +26,13 @@ const fixtureGuardianProbe = "PW_GUARDIAN_C_PROBE"
 
 func TestGuardianStaticTransitionAuthenticatesRootRoles(t *testing.T) {
 	fixture := installLaunchFixture(t)
+	probe := buildGuardianCProbe(t)
+	testutil.FailErr(t, "exercise actual compiled C with root-selected roles", sudoFixture(t, "guardian-c", fixture.dir, fixtureGuardianProbe+"="+probe, fixtureUIDEnv+"="+strconv.Itoa(os.Getuid()), fixtureGIDEnv+"="+strconv.Itoa(os.Getgid())))
+	testutil.FailErr(t, "C fixture released generation lifetime", sudoFixture(t, "lock-free", fixture.dir, fixtureHash+"="+fixture.digest))
+}
+
+func buildGuardianCProbe(t *testing.T) string {
+	t.Helper()
 	probe := filepath.Join(t.TempDir(), "guardian-probe")
 	source := filepath.Join("..", "..", "..", "packaging", "linux", "mount-intake")
 	command := exec.Command("cc", "-O2", "-std=c11", "-ffreestanding", "-fno-builtin", "-fno-stack-protector", "-fno-pie", "-fno-tree-vectorize", "-nostdlib", "-static", "-no-pie", "-Wl,--no-undefined", "-Wl,-z,noexecstack", "-s", "-I", source, filepath.Join("testdata", "guardianprobe", "main.c"), filepath.Join(source, "entry.S"), "-o", probe)
@@ -33,8 +40,7 @@ func TestGuardianStaticTransitionAuthenticatesRootRoles(t *testing.T) {
 		t.Fatalf("compile fixed C boundary probe: %v\n%s", err, output)
 	}
 	testutil.FailErr(t, "make own probe readable to root fixture", os.Chmod(filepath.Dir(probe), 0755))
-	testutil.FailErr(t, "exercise actual compiled C with root-selected roles", sudoFixture(t, "guardian-c", fixture.dir, fixtureGuardianProbe+"="+probe, fixtureUIDEnv+"="+strconv.Itoa(os.Getuid()), fixtureGIDEnv+"="+strconv.Itoa(os.Getgid())))
-	testutil.FailErr(t, "C fixture released generation lifetime", sudoFixture(t, "lock-free", fixture.dir, fixtureHash+"="+fixture.digest))
+	return probe
 }
 
 type guardianCFixture struct {

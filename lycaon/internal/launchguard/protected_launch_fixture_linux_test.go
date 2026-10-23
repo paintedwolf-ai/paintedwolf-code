@@ -40,6 +40,8 @@ func TestProtectedLaunchFixture(t *testing.T) {
 	switch mode {
 	case "install":
 		err = installFixture(dir, strings.Split(os.Getenv(fixtureBinsEnv), ":"))
+	case "guardian-exec-failure":
+		err = checkGuardianExecFailure(dir, os.Getenv(fixtureGuardianProbe), os.Getenv(fixtureUIDEnv), os.Getenv(fixtureGIDEnv), os.Getenv(fixtureFaultHOME), os.Getenv(fixtureHash))
 	case "guardian-c":
 		err = checkGuardianCTransition(dir, os.Getenv(fixtureGuardianProbe), os.Getenv(fixtureUIDEnv), os.Getenv(fixtureGIDEnv))
 	case "nested-generation":

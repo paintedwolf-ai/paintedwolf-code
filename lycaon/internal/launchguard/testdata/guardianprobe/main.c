@@ -1,4 +1,7 @@
 #include <linux/stat.h>
+#include <linux/filter.h>
+#include <linux/seccomp.h>
+#include <linux/audit.h>
 #include "syscall.h"
 
 static int text(const char *a, const char *b) {
@@ -108,8 +111,50 @@ static void descriptor_report(unsigned char *report) {
     pw_require(PW_CALL(__NR_close, ns, 0, 0, 0, 0, 0) == 0);
 }
 
+// The fixed test prelude changes only the final guardian entry syscall.
+// It installs no host policy and does not change no_new_privs or system state.
+static void bootstrap_fault(unsigned int uid, unsigned int gid, const char *mode, const char **environment) {
+    pw_require(uid > 0 && PW_CALL(__NR_geteuid, 0, 0, 0, 0, 0, 0) == 0);
+    int deny = text(mode, "deny");
+    pw_require(deny || text(mode, "allow"));
+#if defined(__x86_64__)
+    const unsigned int architecture = AUDIT_ARCH_X86_64;
+#elif defined(__aarch64__)
+    const unsigned int architecture = AUDIT_ARCH_AARCH64;
+#else
+#error Unsupported fixed test architecture
+#endif
+    struct sock_filter code[] = {
+        BPF_STMT(BPF_LD | BPF_W | BPF_ABS, 4),
+        BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, architecture, 1, 0),
+        BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_KILL_PROCESS),
+        BPF_STMT(BPF_LD | BPF_W | BPF_ABS, 0),
+        BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_execveat, 0, 3),
+        BPF_STMT(BPF_LD | BPF_W | BPF_ABS, 16),
+        BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, 8, 0, 1),
+        BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
+        BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
+    };
+    if (deny) code[7].k = SECCOMP_RET_ERRNO | 1;
+    struct sock_fprog program = {sizeof(code) / sizeof(code[0]), code};
+    pw_require(PW_CALL(__NR_prctl, 22, 2, &program, 0, 0, 0) == 0);
+    unsigned char armed = deny ? 2 : 1;
+    pw_require(PW_CALL(__NR_write, 4, &armed, 1, 0, 0, 0) == 1);
+    pw_require(PW_CALL(__NR_close, 4, 0, 0, 0, 0, 0) == 0);
+    pw_require(PW_CALL(__NR_setgroups, 1, &gid, 0, 0, 0, 0) == 0);
+    pw_require(PW_CALL(__NR_setresgid, gid, gid, gid, 0, 0, 0) == 0);
+    pw_require(PW_CALL(__NR_setresuid, uid, 0, 0, 0, 0, 0) == 0);
+    const char *arguments[] = {"pw-launch", 0};
+    // The root driver supplies only the caller-owned HOME and fixed PATH.
+    PW_CALL(__NR_execveat, 3, "", arguments, environment, 0x1000, 0);
+    pw_refuse();
+}
+
 __attribute__((noreturn)) void pw_mount_transition(const unsigned long *stack) {
     const char **args = (const char **)(stack + 1);
+    if (stack[0] == 5 && text(args[1], "--bootstrap-fault")) {
+        bootstrap_fault(number(args[2]), number(args[3]), args[4], args + stack[0] + 1);
+    }
     if (stack[0] == 4 && text(args[1], "--namespace-factory")) {
         namespace_factory(number(args[2]), number(args[3]));
     }
