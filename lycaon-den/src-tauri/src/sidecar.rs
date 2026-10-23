@@ -26,6 +26,8 @@ mod diagnostics;
 pub(crate) mod layout;
 mod logging;
 pub(crate) mod manifest;
+#[cfg(test)]
+mod manifest_producer_tests;
 mod process;
 mod startup;
 pub(crate) mod supervisor;
