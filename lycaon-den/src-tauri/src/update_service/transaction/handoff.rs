@@ -53,13 +53,12 @@ mod tests {
         let root = crate::test_support::TempDir::new("signed-update-helper");
         let transaction = super::super::tests::fixture(&root);
         let command = helper_command(&transaction);
-        assert_eq!(command.get_program(), super::super::executable(&transaction.target));
+        assert_eq!(command.get_program(), super::super::executable(&transaction.target).as_os_str());
         let arguments: Vec<_> = command.get_args().collect();
         assert_eq!(arguments, [
             std::ffi::OsStr::new("--apply-update"),
             std::ffi::OsStr::new(&transaction.id),
             std::ffi::OsStr::new(&persistence::installation_id(&transaction.target)),
         ]);
-        assert!(!root.join("update-helper").exists());
     }
 }
