@@ -105,6 +105,9 @@ class InstalledWorkspaceTests(unittest.TestCase):
         identity = {'pid': 123, 'parent_pid': 1, 'start_time_ticks': 42}
         ui, node, frame = MagicMock(), MagicMock(), MagicMock()
         ui.find.return_value = node
+        node.app.bus_name, node.path = ':1.3', '/entry'
+        frame.app.bus_name, frame.path = ':1.2', '/frame'
+        ui.windows.side_effect = lambda: iter([(identity, frame)])
         node.get_process_id.return_value = 123
         node.queryComponent.return_value.grabFocus.return_value = True
         node.getState.return_value.contains.return_value = True
@@ -147,7 +150,9 @@ class InstalledWorkspaceTests(unittest.TestCase):
             node.get_process_id.return_value = 456
             child = {'pid': 456, 'parent_pid': 123, 'start_time_ticks': 43}
             native.generate_keyboard_event.side_effect = None
-            with patch.object(focus_owner, 'process_identity', side_effect=lambda pid: child if pid == 456 else identity):
+            facts = lambda pid: child if pid == 456 else identity
+            with patch.object(focus_owner, 'process_identity', side_effect=facts), \
+                    patch.object(focus_owner.lineage, 'process_identity', side_effect=facts):
                 result = workspace.fixed_editor_keyboard(app, ui, Path('/owned/fixture'), native)
             self.assertEqual(result['ui_identity'], child)
             self.assertEqual(native.generate_keyboard_event.call_count, 7)
@@ -157,6 +162,10 @@ class InstalledWorkspaceTests(unittest.TestCase):
         ui, original, replacement, frame = MagicMock(), MagicMock(), MagicMock(), MagicMock()
         ui.api.ROLE_FRAME, ui.api.ROLE_DIALOG = 23, 16
         ui.find.side_effect = [original, replacement]
+        original.app.bus_name = replacement.app.bus_name = ':1.3'
+        original.path = replacement.path = '/entry'
+        frame.app.bus_name, frame.path = ':1.2', '/frame'
+        ui.windows.side_effect = lambda: iter([(identity, frame)])
         original.get_process_id.return_value = replacement.get_process_id.return_value = 123
         original.queryComponent.return_value.grabFocus.return_value = True
         original.getState.return_value.contains.return_value = False
