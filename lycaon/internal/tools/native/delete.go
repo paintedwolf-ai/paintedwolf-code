@@ -111,7 +111,7 @@ func (t *DeleteTool) Delete(ctx context.Context, in DeleteInput, tctx tools.Tool
 				return result, &toolrejection.ToolReject{Code: "DELETE_IS_DIRECTORY", Data: map[string]any{"path": relSlash}}
 			}
 			if !in.Recursive {
-				children, readErr := countMutationChildren(ctx, resolved.Abs, in.Memory)
+				children, readErr := countMutationChildren(ctx, resolved.EffectLocation(), in.Memory)
 				if readErr != nil {
 					return result, fmt.Errorf("delete %s: %w", relSlash, readErr)
 				}
@@ -197,13 +197,13 @@ func inspectDeleteTree(ctx context.Context, b *sandbox.Boundary, tctx tools.Tool
 	return summary, err
 }
 
-func countMutationChildren(ctx context.Context, path string, memory *toolcontract.ProgramMemory) (int, error) {
-	release, err := memory.ReserveProgramState(ctx, 2*128*int64(2048+len(path)))
+func countMutationChildren(ctx context.Context, location fseffect.Location, memory *toolcontract.ProgramMemory) (int, error) {
+	release, err := memory.ReserveProgramState(ctx, 2*128*int64(2048+len(location.Root)+len(location.Rel)))
 	if err != nil {
 		return 0, err
 	}
 	defer release()
-	dir, err := os.Open(path)
+	dir, err := fseffect.OpenRead(location)
 	if err != nil {
 		return 0, err
 	}
