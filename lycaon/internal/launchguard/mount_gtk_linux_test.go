@@ -354,9 +354,10 @@ func TestMountGTKChooserReadsVolumeAttachedAfterReadiness(t *testing.T) {
 	read := func(prefix string, target any) {
 		t.Helper()
 		line, err := reader.ReadString('\n')
+		t.Logf("late-volume protocol: %s", line)
 		if err != nil {
 			raw, _ := os.ReadFile(diagnostic.Name())
-			t.Fatalf("late-volume report: %v diagnostics=%s", err, raw)
+			t.Fatalf("late-volume report %q: %v diagnostics=%s", prefix, err, raw)
 		}
 		raw, ok := strings.CutPrefix(line, prefix)
 		if !ok {
