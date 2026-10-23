@@ -18,6 +18,10 @@ mod open_external;
 mod open_third_party_notices;
 mod presence;
 #[cfg(unix)]
+#[path = "protected_launch.rs"]
+mod protected_launch;
+#[cfg(not(unix))]
+#[path = "protected_launch/none.rs"]
 mod protected_launch;
 mod shell_command;
 mod sidecar;
