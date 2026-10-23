@@ -43,8 +43,11 @@ class Channel:
         remaining = self.deadline - time.monotonic()
         if remaining <= 0:
             raise ValueError('private fixture stream expired')
-        self.stream.settimeout(remaining)
         peer(self.stream, self.expected)
+        remaining = self.deadline - time.monotonic()
+        if remaining <= 0:
+            raise ValueError('private fixture stream expired')
+        self.stream.settimeout(remaining)
 
     def _read(self, count):
         chunks = bytearray()
@@ -101,8 +104,8 @@ class Listener:
         self.mailbox.attach()
         self.directory = _file(self.mailbox._directory())[:4]
         self.directory_fd = os.open(self.mailbox.path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-        self.stream = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         try:
+            self.stream = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
             if self.directory != _file(os.fstat(self.directory_fd))[:4]:
                 raise ValueError('private fixture directory changed before socket creation')
             # bind refuses an existing endpoint; no stale or public socket is reused.
@@ -163,17 +166,24 @@ def connect(mailbox, expected_case, deadline):
     """The authenticated SSH endpoint connects to the captured case's listener."""
     mailbox.attach()
     directory = _file(mailbox._directory())[:4]
-    path = mailbox.path / NAME
-    before = path.lstat()
-    if (not stat.S_ISSOCK(before.st_mode) or before.st_uid != os.getuid()
-            or stat.S_IMODE(before.st_mode) != 0o600 or path.resolve(strict=True) != path):
-        raise ValueError('private fixture case has no controlled physical endpoint')
-    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as stream:
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            raise ValueError('private fixture connection expired')
-        stream.settimeout(remaining)
-        stream.connect(str(path))
-        if (_file(path.lstat()) != _file(before) or directory != _file(mailbox._directory())[:4]):
-            raise ValueError('private fixture endpoint changed during connection')
-        yield Channel(stream, expected_case, deadline)
+    descriptor = os.open(mailbox.path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        if directory != _file(os.fstat(descriptor))[:4]:
+            raise ValueError('private fixture case directory changed before connection')
+        path = mailbox.path / NAME
+        before = path.lstat()
+        if (not stat.S_ISSOCK(before.st_mode) or before.st_uid != os.getuid()
+                or stat.S_IMODE(before.st_mode) != 0o600 or path.resolve(strict=True) != path):
+            raise ValueError('private fixture case has no controlled physical endpoint')
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as stream:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise ValueError('private fixture connection expired')
+            stream.settimeout(remaining)
+            stream.connect(str(path))
+            if (_file(path.lstat()) != _file(before) or directory != _file(mailbox._directory())[:4]
+                    or directory != _file(os.fstat(descriptor))[:4]):
+                raise ValueError('private fixture endpoint changed during connection')
+            yield Channel(stream, expected_case, deadline)
+    finally:
+        os.close(descriptor)
