@@ -90,6 +90,7 @@ def await_reply(app, project, provider_id, *, selected_session=None):
 
 def execute(binding, capability, case, root):
     launcher = protected_launcher(binding)
+    launch_binding = {**binding, 'launcher': launcher}
     observations, streams = {}, {}
     # This case changes only its disposable guest profile via normal UI actions.
     # Preserve the fixture project so a failed restart remains diagnosable.
@@ -97,7 +98,7 @@ def execute(binding, capability, case, root):
     app = restarted = None
     try:
         with ProviderFixture.gui([{'name': 'command', 'arguments': {'command': '/usr/bin/true'}}]) as fixture:
-            with InstalledApp(binding, launcher=launcher) as app:
+            with InstalledApp(launch_binding) as app:
                 observations['launch_before'] = app.observations
                 observations['interactive'] = interactive_window(app)
                 provider = configure_provider(app, fixture)
@@ -112,7 +113,7 @@ def execute(binding, capability, case, root):
                     raise ValueError('fixture never completed the full engine turn')
                 observations.update(reply_before=before, launch_before=app.observations)
             streams.update({'before-' + key: value for key, value in app.streams().items()})
-            with InstalledApp(binding, launcher=launcher) as restarted:
+            with InstalledApp(launch_binding) as restarted:
                 after = await_reply(restarted, project, provider['provider_id'], selected_session=before['session_id'])
                 if after != before or restarted.observations['engine_identity'] == app.observations['engine_identity']:
                     raise ValueError('restart changed the fixed reply or reused the previous engine')
