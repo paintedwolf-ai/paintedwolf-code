@@ -9,7 +9,7 @@ import tempfile
 from urllib.parse import urlsplit
 
 from .openpgp import selection
-from .repository_publication import configuration
+from .repository_native import configuration
 from .repository_setup_identity import package_identity
 from .repository_setup_archives import deb, rpm
 from .signing import digest, verify
