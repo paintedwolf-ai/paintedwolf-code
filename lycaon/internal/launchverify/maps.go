@@ -70,7 +70,13 @@ func (v Verifier) VerifyMappings(pid int, role string) error {
 		if checked[m] {
 			continue
 		}
-		if err := systemObject(stat, m); err != nil {
+		var err error
+		if v.StorePolicy != nil {
+			err = v.StorePolicy.verifyMapping(stat, m)
+		} else {
+			err = systemObject(stat, m)
+		}
+		if err != nil {
 			return refuse(CodeForeignObject, role, pid, err.Error())
 		}
 		checked[m] = true
