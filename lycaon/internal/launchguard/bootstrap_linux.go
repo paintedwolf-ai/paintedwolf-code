@@ -45,12 +45,20 @@ func RunBootstrap(arguments []string) (int, error) {
 		_ = DropPrivilegesForError()
 		return 1, err
 	}
+	var streamReplacements []standardStreamReplacement
 	fail := func(err error) (int, error) {
-		_ = dropPrivileges(caller)
+		if dropPrivileges(caller) == nil {
+			reportStandardStreamReplacements(streamReplacements)
+		}
 		return 1, err
 	}
 	if unix.Gettid() != os.Getpid() {
 		return fail(errors.New("bootstrap must run on the original process leader"))
+	}
+	streamReplacements, err = sanitizeStandardStreams()
+	if err != nil {
+		return fail(err)
+
 	}
 	if err := sanitizeProcess(); err != nil {
 		return fail(err)
@@ -161,6 +169,7 @@ func RunBootstrap(arguments []string) (int, error) {
 	_ = origin.Close()
 	_ = self.Close()
 	_ = broker.Close()
+	reportStandardStreamReplacements(streamReplacements)
 	return superviseGuardianLaunch(lifetime, handoff[0], stage.Process.Pid, stagePIDFD, caller), nil
 }
 

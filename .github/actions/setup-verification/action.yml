@@ -46,7 +46,7 @@ runs:
       shell: bash
       run: echo "artifact-root=$(python3 scripts/artifact_paths.py artifacts "$GITHUB_WORKSPACE")" >> "$GITHUB_OUTPUT"
 
-    - uses: actions/setup-go@5064d95ba18d4a9dda7c4cc67adeb03aea1a2a14 # v7.0.0
+    - uses: actions/setup-go@90ad2b35f69faf97585ad74d28fa006d2739b7af # v7.0.0
       with:
         go-version-file: lycaon/go.mod
         cache: false
@@ -72,30 +72,26 @@ runs:
       shell: bash
       run: rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal
 
-    - name: Allow Go test binaries to create user namespaces
+    - name: Allow verification engines to create user namespaces
       if: runner.os == 'Linux'
       shell: bash
       run: |
         if [[ "$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null)" == 1 ]]; then
-          sudo install -m 0644 "$GITHUB_ACTION_PATH/apparmor-go-test-userns" /etc/apparmor.d/paintedwolf-go-test
-          sudo apparmor_parser -r /etc/apparmor.d/paintedwolf-go-test
+          profile="$RUNNER_TEMP/paintedwolf-verification"
+          {
+            cat "$GITHUB_ACTION_PATH/apparmor-verification-userns"
+            printf '\nprofile paintedwolf-verification-sidecar "%s/lycaon-dev" flags=(unconfined) {\n  userns,\n}\n' \
+              "$(python3 scripts/artifact_paths.py build "$GITHUB_WORKSPACE")"
+          } > "$profile"
+          sudo install -m 0644 "$profile" /etc/apparmor.d/paintedwolf-verification
+          sudo apparmor_parser -r /etc/apparmor.d/paintedwolf-verification
         fi
 
-    - name: Install Tauri Linux build dependencies
+    - name: Provision Linux native test dependencies
       if: runner.os == 'Linux' && inputs.setup == 'shell'
-      shell: bash
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y --no-install-recommends \
-          libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev xvfb \
-          libjavascriptcoregtk-4.1-dev librsvg2-dev patchelf \
-          sway wl-clipboard wtype xclip
-
-    # Lavapipe gives the decision engine's Vulkan parity tests a device on GPU-less runners.
-    - name: Install Mesa's Vulkan drivers
-      if: runner.os == 'Linux' && inputs.setup == 'shell'
-      shell: bash
-      run: sudo apt-get install -y --no-install-recommends mesa-vulkan-drivers libvulkan1
+      uses: ./.github/actions/setup-linux-native
+      with:
+        save: ${{ inputs.save-caches }}
 
     - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       id: rust

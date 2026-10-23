@@ -44,6 +44,8 @@ type Facts struct {
 	BrokerPeerPID   int                         `json:"broker_peer_pid"`
 	BrokerPeerUID   int                         `json:"broker_peer_uid"`
 	BrokerType      int                         `json:"broker_type"`
+	ProtectedLaunch string                      `json:"protected_launch"`
+	GenerationFrame json.RawMessage             `json:"generation_frame"`
 	LifetimeRegular bool                        `json:"lifetime_regular"`
 	OpenBeyond      []int                       `json:"open_beyond"`
 	InstallWrite    string                      `json:"install_write"`
@@ -89,6 +91,10 @@ func main() {
 		runEngineVault(os.Args[2])
 		return
 	}
+	// Consume the same sealed startup frame the desktop claims before threads.
+	frame := os.NewFile(4, "selected-generation")
+	frameRaw, _ := io.ReadAll(io.NewSectionReader(frame, 0, 128<<10))
+	_ = frame.Close()
 	ready := make(chan struct{}, 4)
 	for range 4 {
 		go func() {
@@ -101,6 +107,8 @@ func main() {
 		<-ready
 	}
 	var facts Facts
+	facts.GenerationFrame = frameRaw
+	facts.ProtectedLaunch = os.Getenv("PW_PROTECTED_LAUNCH")
 	facts.PID = os.Getpid()
 	facts.ProcessStarts = map[int]uint64{}
 	self, err := lineageProcessBirth(os.Getpid(), 0)

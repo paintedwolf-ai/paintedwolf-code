@@ -26,6 +26,7 @@ import {
   lastSidecarStartFailure,
   provideCredentialVaultPassword,
   resetCredentialVault,
+  quitDesktopForRestart,
 } from "../platform/connection/backend.ts";
 import { engineState } from "../platform/connection/engine-supervision.ts";
 import { lastSeenHealth } from "../platform/connection/health.ts";
@@ -103,6 +104,8 @@ export function createCriticalStop(appStore: AppStore): CriticalStopHandle {
 
   const recoveryInFlightLabel = (recovery: CriticalStopRecovery): string => {
     switch (recovery) {
+      case "quit_desktop":
+        return "Quitting…";
       case "reconnect":
       case "recheck":
         return "Checking…";
@@ -151,6 +154,10 @@ export function createCriticalStop(appStore: AppStore): CriticalStopHandle {
   };
 
   const attempt = (stop: CriticalStopSpec): void => {
+    if (stop.recovery === "quit_desktop") {
+      void quitDesktopForRestart().catch(() => setAttemptError(stop.retryFailed));
+      return;
+    }
     if (stop.recovery === "reset_credential_vault") {
       void resetVault(stop);
       return;

@@ -41,6 +41,7 @@ func run(args []string) error {
 	state := fs.String("state", os.Getenv("STATE_DIRECTORY"), "directory holding per-user identities")
 	generations := fs.String("generations", launchverify.DefaultGenerationsDir, "installed payload generations directory")
 	policy := fs.String("policy", launchverify.DefaultPolicyPath, "installed launch policy path")
+	trustPolicy := fs.String("trust-policy", "", "root-controlled policy selecting exact package generations and executable closures")
 	locks := fs.String("locks", launchverify.DefaultLocksDir, "generation lifetime locks directory")
 	procRoot := fs.String("proc", "/proc", "process filesystem root")
 	if err := fs.Parse(args); err != nil {
@@ -67,9 +68,10 @@ func run(args []string) error {
 			PolicyPath:     *policy,
 			LocksDir:       *locks,
 		},
-		PeerOf:   peerCredentials,
-		IdleExit: idleExit,
-		Log:      slog.New(slog.NewTextHandler(os.Stderr, nil)),
+		TrustPolicy: *trustPolicy,
+		PeerOf:      peerCredentials,
+		IdleExit:    idleExit,
+		Log:         slog.New(slog.NewTextHandler(os.Stderr, nil)),
 	}
 	return server.Serve(ctx, listener)
 }

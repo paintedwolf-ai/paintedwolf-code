@@ -21,13 +21,14 @@ import (
 
 // Descriptors the privileged stage hands the unprivileged entry.
 const (
-	entryImageFD    = 3
-	entrySpecFD     = 4
-	entryOriginFD   = 5
-	entryBrokerFD   = 6
-	entryLifetimeFD = 7
-	maxEntryBytes   = 128 << 10
-	entrySeals      = unix.F_SEAL_WRITE | unix.F_SEAL_GROW | unix.F_SEAL_SHRINK | unix.F_SEAL_SEAL
+	entryImageFD       = 3
+	entrySpecFD        = 4
+	entryOriginFD      = 5
+	entryBrokerFD      = 6
+	entryLifetimeFD    = 7
+	protectedLaunchEnv = "PW_PROTECTED_LAUNCH"
+	maxEntryBytes      = 128 << 10
+	entrySeals         = unix.F_SEAL_WRITE | unix.F_SEAL_GROW | unix.F_SEAL_SHRINK | unix.F_SEAL_SEAL
 )
 
 // EntrySpec is carried only by a sealed, root-created descriptor. It never
@@ -90,13 +91,13 @@ func enterDesktop(image, frame, origin *os.File, brokerFD int, lifetime, gate *o
 		return err
 	}
 	// Validate caller-owned paths such as HOME only after privilege drop.
-	env := DesktopEnvironment(spec.Environment, spec.UID)
-	// Bootstrap descriptors must not reach the desktop. The broker and the
-	// generation's lifetime lock stay open for it to claim.
+	env := append(DesktopEnvironment(spec.Environment, spec.UID), protectedLaunchEnv+"=1")
+	// The desktop consumes the authenticated selection before starting threads.
+	// Only its sealed frame, broker and generation lifetime lock survive exec.
 	if err := unix.CloseRange(entryImageFD+1, ^uint(0), unix.CLOSE_RANGE_CLOEXEC); err != nil {
 		return err
 	}
-	for _, fd := range []int{brokerFD, int(lifetime.Fd())} {
+	for _, fd := range []int{int(frame.Fd()), brokerFD, int(lifetime.Fd())} {
 		if _, err := unix.FcntlInt(uintptr(fd), unix.F_SETFD, 0); err != nil {
 			return err
 		}
