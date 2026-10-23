@@ -136,8 +136,9 @@ pub struct PreparedExit {
 
 impl PreparedExit {
     async fn confirm_quit(&self) -> Result<(), String> {
+        let parent = confirmation::parent_window(&self.app);
         let facts = confirmation::active_work(&self.app).await;
-        if !confirmation::approve(facts).await {
+        if !confirmation::approve(parent, facts).await {
             return Err("Application exit was cancelled.".into());
         }
         if !self.app.state::<ExitCoordinator>().0.lock()

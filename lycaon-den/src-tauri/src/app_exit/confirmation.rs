@@ -1,7 +1,21 @@
 //! Read shared host work facts before the explicit user exit transaction preserves resources.
-use tauri::{AppHandle, Manager};
-use std::time::Duration;
+use tauri::{AppHandle, Manager, WebviewWindow};
 use serde::Deserialize;
+use std::time::Duration;
+
+#[cfg(target_os = "linux")]
+#[path = "confirmation/linux.rs"]
+mod dialog;
+#[cfg(not(target_os = "linux"))]
+#[path = "confirmation/native.rs"]
+mod dialog;
+
+pub(super) const TITLE: &str = "Quit Painted Wolf Code?";
+pub(super) const QUIT: &str = "Quit";
+pub(super) const KEEP_WORKING: &str = "Keep working";
+
+#[derive(Debug, PartialEq)]
+pub(super) enum Choice { Quit, KeepWorking }
 
 #[derive(Deserialize)]
 struct WorkFacts {
@@ -46,12 +60,31 @@ fn description(facts: Result<u64, ()>) -> Option<&'static str> {
     }
 }
 
-pub(super) async fn approve(facts: Result<u64, ()>) -> bool {
+fn parent_label(windows: &[(String, bool)]) -> Option<&str> {
+    let focused: Vec<_> = windows.iter().filter(|(_, focused)| *focused).collect();
+    match focused.as_slice() {
+        [window] => Some(window.0.as_str()),
+        [] => windows.iter().find(|(label, _)| label == "main").map(|(label, _)| label.as_str()),
+        _ => None,
+    }
+}
+
+pub(super) fn parent_window(app: &AppHandle) -> Option<WebviewWindow> {
+    let windows = app.webview_windows();
+    let facts: Vec<_> = windows.iter().map(|(label, window)|
+        (label.clone(), window.is_focused().unwrap_or(false))).collect();
+    parent_label(&facts).and_then(|label| windows.get(label).cloned())
+}
+
+pub(super) async fn approve(parent: Option<WebviewWindow>, facts: Result<u64, ()>) -> bool {
     let Some(description) = description(facts) else { return true; };
-    rfd::AsyncMessageDialog::new().set_title("Quit Painted Wolf Code?")
-        .set_description(description)
-        .set_buttons(rfd::MessageButtons::OkCancelCustom("Quit".into(), "Keep working".into()))
-        .show().await == rfd::MessageDialogResult::Custom("Quit".into())
+    let Some(parent) = parent else { return false; };
+    if parent.show().is_err() { return false; }
+    match dialog::show(&parent, description).await {
+        Ok(Choice::Quit) => true,
+        Ok(Choice::KeepWorking) => false,
+        Err(error) => { eprintln!("Application exit confirmation could not open: {error}"); false }
+    }
 }
 
 #[cfg(test)]
@@ -90,6 +123,16 @@ mod tests {
             assert_eq!(fetch(&info).await, expected);
             server.join().unwrap();
         }
+    }
+
+    #[test]
+    fn parent_is_the_initiating_owned_window_or_the_retained_main() {
+        let windows = vec![("main".into(), false), ("peer".into(), true)];
+        assert_eq!(parent_label(&windows), Some("peer"));
+        assert_eq!(parent_label(&[("main".into(), false), ("peer".into(), false)]), Some("main"));
+        assert_eq!(parent_label(&[("main".into(), true), ("peer".into(), true)]), None);
+        assert_eq!(parent_label(&[("peer".into(), false)]), None);
+        assert_eq!(parent_label(&[]), None);
     }
 
     #[test]
