@@ -58,7 +58,6 @@ func RunBootstrap(arguments []string) (int, error) {
 	streamReplacements, err = sanitizeStandardStreams()
 	if err != nil {
 		return fail(err)
-
 	}
 	if err := sanitizeProcess(); err != nil {
 		return fail(err)

@@ -71,10 +71,11 @@ static int hold_volume(const char *payload) {
 }
 
 static int chooser_read(GtkWidget *chooser, const char *payload, int protected) {
-    gtk_file_chooser_set_filename(GTK_FILE_CHOOSER(chooser),payload);
     gint64 deadline = g_get_monotonic_time()+2*G_TIME_SPAN_SECOND;
     gchar *selected = NULL;
     while (g_get_monotonic_time() < deadline) {
+        if (g_file_test(payload,G_FILE_TEST_IS_REGULAR) && (!selected || strcmp(selected,payload) != 0))
+            gtk_file_chooser_set_filename(GTK_FILE_CHOOSER(chooser),payload);
         while (g_main_context_iteration(NULL,FALSE)) {}
         g_free(selected);
         selected = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(chooser));
