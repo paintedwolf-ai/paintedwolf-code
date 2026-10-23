@@ -161,12 +161,14 @@ class ReplyRestartTests(unittest.TestCase):
                     ('configure_provider', {'provider_id': 'fixture'}), ('physical_input', {}),
                     ('run', {'exit_code': 0, 'timed_out': False, 'output_limit': False})]:
                 stack.enter_context(patch.object(owner, name, return_value=value))
-            stack.enter_context(patch.object(owner, 'InstalledApp', side_effect=apps))
+            app_constructor = stack.enter_context(patch.object(owner, 'InstalledApp', autospec=True, side_effect=apps))
             stack.enter_context(patch.object(owner.ProviderFixture, 'gui', return_value=fixture))
             stack.enter_context(patch.object(owner, 'DesktopUI', return_value=ui))
             stack.enter_context(patch.object(owner, 'await_reply', side_effect=[before, after or before]))
             retained = stack.enter_context(patch.object(owner, 'retain', side_effect=lambda *args: args))
             owner.execute({}, 'conversation', 'restart-and-reconnect', root)
+            self.assertEqual([call.args for call in app_constructor.call_args_list],
+                             [({'launcher': {}},), ({'launcher': {}},)])
         return retained.call_args.args, apps, ui
 
     def test_restart_requires_same_reply_and_a_new_captured_engine(self):
