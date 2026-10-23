@@ -1,6 +1,7 @@
 import type {
   Message,
   BlueprintSummary,
+  QueueDraft,
   Session,
   TurnClock,
   TurnLoad,
@@ -21,6 +22,7 @@ export type SessionChatSnapshot = {
   scope: SessionChatScope;
   touchedAt: number;
   session: Session;
+  queueDraft?: QueueDraft;
   /** Sparse transcript window used to restore resident rows. */
   transcript: TranscriptWindow;
   /** Resident rows materialized from transcript. */

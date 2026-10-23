@@ -120,6 +120,15 @@ describe("session-chat-persist", () => {
     ).toBeNull();
   });
 
+  it("ignores malformed cached queues and retains valid ones", () => {
+    const persisted = trimSnapshotForPersist(sampleSnapshot());
+    const queue = { revision: 2, queue_items: [{ id: "q1", submitted_by: "person", text: "queued", created_at: "t" }], hold: false, sending: false };
+    expect(parsePersistedSessionSnapshot({ ...persisted, queueDraft: queue })?.queueDraft).toEqual(queue);
+    for (const queueDraft of [{}, { ...queue, revision: NaN }, { ...queue, queue_items: [{}] }]) {
+      expect(parsePersistedSessionSnapshot({ ...persisted, queueDraft })?.queueDraft).toBeUndefined();
+    }
+  });
+
   it("parses persisted snapshots and matches revision", () => {
     const persisted = trimSnapshotForPersist(sampleSnapshot());
     expect(parsePersistedSessionSnapshot(persisted)?.scope.sessionId).toBe("s1");

@@ -46,4 +46,29 @@ describe("session view snapshot ordering", () => {
     expect(store.state.currentSession?.id).toBe("s1");
     expect(store.state.progress?.revision).toBe(2);
   });
+
+  it("retains queueDrafts across session switch and invalidateSessionViewRequests", () => {
+    const store = fixture();
+    const queue = { revision: 1, queue_items: [{ id: "q1", text: "first", submitted_by: "person", created_at: "t" }], hold: false, sending: false };
+    store.actions.setQueueDraft("s1", store.state.sessionViewEpoch, queue);
+    expect(store.state.queueDraft?.queue_items[0]?.text).toBe("first");
+
+    store.actions.setCurrentSession({ id: "s2", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "p2", posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t" });
+    expect(store.state.queueDraft).toBeUndefined();
+    store.actions.invalidateSessionViewRequests();
+
+    store.actions.setCurrentSession({ id: "s1", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "p1", posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t" });
+    expect(store.state.queueDraft?.queue_items[0]?.text).toBe("first");
+  });
+  it("rejects stale queue replies after reconnect even when their revision is higher", () => {
+    const store = fixture();
+    const oldEpoch = store.state.sessionViewEpoch;
+    const queue = (revision: number) => ({ revision, queue_items: [], hold: false, sending: false });
+    store.actions.setQueueDraft("s1", oldEpoch, queue(100));
+    store.actions.invalidateSessionViewRequests();
+    expect(store.actions.setQueueDraft("s1", store.state.sessionViewEpoch, queue(1))).toBe(true);
+    expect(store.actions.setQueueDraft("s1", oldEpoch, queue(101))).toBe(false);
+    expect(store.state.queueDraft?.revision).toBe(1);
+  });
+
 });
