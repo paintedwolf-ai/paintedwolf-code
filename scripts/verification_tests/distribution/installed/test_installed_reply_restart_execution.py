@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 
 from linux_release.installed_cases import reply_observer as observer, reply_restart as owner
 from linux_release import installed_execution
+from linux_release.installed_cases import desktop_launch, provider_setup
 from linux_release.installed_input.protocol import steps
 
 PROJECT = '10000000-0000-4000-8000-000000000001'
@@ -90,16 +91,16 @@ class ReplyRestartTests(unittest.TestCase):
         bootstrap = {'mode': 0o4755, 'sha256': 'a' * 64}
         binding = {'install_root': '/opt/painted-wolf-code', 'artifact': {'architecture': 'amd64'},
                    'images': {'/opt/painted-wolf-code/bin/pw-launch-entry': {'mode': 0o755},
-                              str(owner.SETUID_LAUNCHER): bootstrap}}
-        with patch.object(owner, 'elf', return_value=bootstrap) as observed:
-            self.assertEqual(owner.protected_launcher(binding)['mode'], 0o4755)
-            observed.assert_called_once_with(owner.SETUID_LAUNCHER, 'amd64', setuid=True)
+                              str(desktop_launch.SETUID_LAUNCHER): bootstrap}}
+        with patch.object(desktop_launch, 'elf', return_value=bootstrap) as observed:
+            self.assertEqual(desktop_launch.protected_launcher(binding)['mode'], 0o4755)
+            observed.assert_called_once_with(desktop_launch.SETUID_LAUNCHER, 'amd64', setuid=True)
             observed.return_value = dict(bootstrap, sha256='b' * 64)
             with self.assertRaisesRegex(ValueError, 'selected final bytes'):
-                owner.protected_launcher(binding)
-            del binding['images'][str(owner.SETUID_LAUNCHER)]
-            with self.assertRaises(owner.CaseUnavailable):
-                owner.protected_launcher(binding)
+                desktop_launch.protected_launcher(binding)
+            del binding['images'][str(desktop_launch.SETUID_LAUNCHER)]
+            with self.assertRaises(desktop_launch.CaseUnavailable):
+                desktop_launch.protected_launcher(binding)
 
     def test_settled_reply_requires_the_exact_successful_tool_call(self):
         session = {'id': SESSION, 'provider_id': 'fixture', 'model': owner.MODEL, 'status': 'idle'}
@@ -126,11 +127,11 @@ class ReplyRestartTests(unittest.TestCase):
         app, ui = MagicMock(), MagicMock()
         fixture = SimpleNamespace(server=SimpleNamespace(server_port=12345), base_url='http://127.0.0.1:12345/v1')
         ui.__enter__.return_value = ui
-        with patch.object(owner, 'DesktopUI', return_value=ui), patch.object(owner, 'physical_input') as physical, patch.object(
-                owner, 'find_gui_provider', return_value={'provider_id': 'fixture', 'models': [owner.MODEL]}):
-            self.assertEqual(owner.configure_provider(app, fixture)['provider_id'], 'fixture')
+        with patch.object(provider_setup, 'DesktopUI', return_value=ui), patch.object(provider_setup, 'physical_input') as physical, patch.object(
+                owner, 'find_gui_provider', return_value={'provider_id': 'fixture', 'models': [provider_setup.MODEL]}):
+            self.assertEqual(provider_setup.configure_provider(app, fixture)['provider_id'], 'fixture')
         self.assertEqual([call.args[0] for call in ui.click.call_args_list],
-                         ['Add AI provider', 'LiteLLM', 'Add AI provider', 'Default model', owner.MODEL, 'Skip'])
+                         ['Add AI provider', 'LiteLLM', 'Add AI provider', 'Default model', provider_setup.MODEL, 'Skip'])
         self.assertEqual([call.args[3] for call in physical.call_args_list],
                          ['provider-name-v1', 'provider-endpoint-v1-12345', 'provider-fixture-credential-v1'])
         self.assertEqual([call.args[2] for call in physical.call_args_list],
@@ -141,13 +142,13 @@ class ReplyRestartTests(unittest.TestCase):
     def test_physical_input_retains_exact_guest_delivery_records(self):
         app = SimpleNamespace(binding={'native_input': {'binding': 'binding', 'vm_id': 'owned'}}, observations={})
         record = {'transaction_id': 'a' * 32, 'operation': 'reply-fixture-prompt-v1', 'events': []}
-        with patch.object(owner, 'EntryFocus'), patch.object(owner, 'perform', return_value=record):
-            self.assertIs(owner.physical_input(app, None, 'Describe your idea', 'reply-fixture-prompt-v1'), record)
+        with patch.object(provider_setup, 'EntryFocus'), patch.object(provider_setup, 'perform', return_value=record):
+            self.assertIs(provider_setup.physical_input(app, None, 'Describe your idea', 'reply-fixture-prompt-v1'), record)
         self.assertEqual(app.observations['fixed_input'], [record])
 
     def test_input_without_independently_bound_physical_actor_is_unverified(self):
-        with self.assertRaises(owner.CaseUnavailable):
-            owner.physical_input(SimpleNamespace(binding={}), None, 'Describe your idea', 'reply-fixture-prompt-v1')
+        with self.assertRaises(provider_setup.CaseUnavailable):
+            provider_setup.physical_input(SimpleNamespace(binding={}), None, 'Describe your idea', 'reply-fixture-prompt-v1')
 
     def execute(self, root, *, after=None, completed=True, same_engine=False, launch_error=None):
         before = {'session_id': SESSION, 'content_blob_sha256': observer.DIGEST}
