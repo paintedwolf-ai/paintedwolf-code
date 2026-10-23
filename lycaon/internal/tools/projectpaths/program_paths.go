@@ -171,8 +171,8 @@ func (p *ProgramPaths) Bind(ctx context.Context, operand string, write bool) (Bo
 		if err != nil {
 			return BoundPath{}, err
 		}
-		held.Close()
-		if !filepath.IsAbs(operand) && !strings.HasPrefix(operand, "@") {
+		_ = held.Close()
+		if !filepath.IsAbs(operand) {
 			addressed = p.cwd.Resolved.Abs + string(filepath.Separator) + operand
 		}
 	}
@@ -325,6 +325,14 @@ func (p *ProgramPaths) NativePaths(ctx context.Context, operands []string, nul b
 }
 
 func (p *ProgramPaths) nativePath(ctx context.Context, operand string, nul bool) (string, error) {
+	// Explicit conversion accepts addressed text, including computed values.
+	if _, addressed := rootLabel(operand); addressed {
+		resolved, err := ResolveRead(ctx, p.boundary, p.context, operand)
+		if err != nil {
+			return "", err
+		}
+		operand = resolved.Abs
+	}
 	bound, err := p.Bind(ctx, operand, false)
 	if err != nil {
 		return "", err
@@ -360,7 +368,7 @@ func (p *ProgramPaths) TemporaryDirectory(ctx context.Context) (string, error) {
 	if p.context.Host.SessionScratchDir == "" {
 		return "", tools.ErrSessionScratchUnavailable
 	}
-	bound, err := p.Bind(ctx, "@scratch", false)
+	bound, err := p.Bind(ctx, p.context.Host.SessionScratchDir, false)
 	if err != nil {
 		return "", err
 	}

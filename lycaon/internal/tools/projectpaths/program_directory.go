@@ -11,7 +11,6 @@ import (
 	"syscall"
 
 	"github.com/lycaon/lycaon/internal/fspath"
-	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 )
 
@@ -53,15 +52,15 @@ func (p *ProgramPaths) Address(ctx context.Context, label string) (string, bool,
 	if err := ctx.Err(); err != nil {
 		return "", false, err
 	}
-	if projectroot.IsVirtualRootLabel(label) {
-		dir, err := p.TemporaryDirectory(ctx)
+	resolved, err := ResolveRead(ctx, nil, p.context, "@"+label)
+	if err == nil {
+		bound, err := p.Bind(ctx, resolved.Abs, false)
 		if err != nil {
 			return "", false, err
 		}
-		return dir, true, nil
-	}
-	bound, err := p.Bind(ctx, "@"+label, false)
-	if err == nil {
+		if _, err := directoryInfo(bound); err != nil {
+			return "", false, err
+		}
 		return filepath.Clean(bound.Resolved.Abs), true, nil
 	}
 	if reject := toolrejection.AsToolReject(err); reject != nil && reject.Code == "UNKNOWN_ROOT_LABEL" {
@@ -123,7 +122,7 @@ func (p *ProgramPaths) changeDirectory(ctx context.Context, operand string, phys
 // inspection. A logical change cleans the addressed text first.
 func (p *ProgramPaths) Chdir(ctx context.Context, operand string, physical bool) error {
 	target := operand
-	if !physical && !strings.HasPrefix(operand, "@") {
+	if !physical {
 		if !filepath.IsAbs(target) && p.cwd.Resolved.Abs != "" {
 			target = p.cwd.Resolved.Abs + string(filepath.Separator) + target
 		}

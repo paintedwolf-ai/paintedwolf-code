@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"sort"
+	"strings"
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -34,7 +36,7 @@ type programDocuments struct {
 func newProgramDocuments(ctx context.Context, tc tools.ToolContext, memory *toolcontract.ProgramMemory) (*programDocuments, error) {
 	// Joining notices copies at most the existing bounded stderr window. Notice
 	// text and JSON growth are admitted per entry before any producer reads it.
-	release, err := memory.ReserveProgramState(ctx, programOutputBytes)
+	release, err := memory.ReserveProgramState(ctx, int64(CommandOutputBudget(tc.Host.ModelContextWindow)))
 	if err != nil {
 		return nil, commandDocumentBudgetError(err)
 	}
@@ -124,4 +126,61 @@ func commandDocumentBudgetError(err error) error {
 		return toolrejection.RejectInvalidArguments("COMMAND_LIMIT_EXCEEDED", map[string]any{"limit_id": "program_state_bytes", "resource_unit": "bytes", "maximum": limit.Maximum, "observed": limit.Observed})
 	}
 	return err
+}
+
+func (d *programDocuments) appendNotes(stderr string) string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	keys := make([]string, 0, len(d.notes))
+	length := len(stderr)
+	for key, note := range d.notes {
+		if !note.delivered {
+			keys = append(keys, key)
+			length += len(note.text) + 1
+		}
+	}
+	if len(keys) == 0 {
+		return stderr
+	}
+	sort.Strings(keys)
+	// The initial window and each notice's projection envelope remain held.
+	var out strings.Builder
+	out.Grow(length + 1)
+	out.WriteString(stderr)
+	if stderr != "" && stderr[len(stderr)-1] != '\n' {
+		out.WriteByte('\n')
+	}
+	for _, key := range keys {
+		note := d.notes[key]
+		note.delivered = true
+		out.WriteString(note.text)
+		out.WriteByte('\n')
+	}
+	return out.String()
+}
+
+// takePaths retains the existing notice admission through completion consumption,
+// even after the background job releases its last program hold.
+func (d *programDocuments) takePaths() ([]string, func()) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	count := 0
+	for _, note := range d.notes {
+		if !note.delivered {
+			count++
+		}
+	}
+	if count == 0 {
+		return nil, nil
+	}
+	paths := make([]string, 0, count)
+	for _, note := range d.notes {
+		if !note.delivered {
+			paths = append(paths, note.path)
+			note.delivered = true
+		}
+	}
+	sort.Strings(paths)
+	d.transfers++
+	return paths, sync.OnceFunc(d.releaseTransfer)
 }

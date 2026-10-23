@@ -54,7 +54,7 @@ func (r *programRun) controlDefinitions() (map[string]toolcontract.OperationDefi
 
 // InvokeEvaluator admits the evaluator's local owner under its real execution
 // identity. It does not create a model tool call or grant child effects.
-func (d *ProgramDispatcher) InvokeEvaluator(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams, body func(context.Context, commandprogram.Streams) (toolcontract.ProducerResult, error)) (toolcontract.ProducerResult, error) {
+func (d *ProgramDispatcher) InvokeEvaluator(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams, body func(context.Context, commandprogram.Streams) (toolcontract.ProducerResult, error)) (result toolcontract.ProducerResult, err error) {
 	return d.invokeHost(ctx, request, streams, func(ctx context.Context, _ tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 		return body(ctx, streams)
 	})
@@ -102,7 +102,7 @@ func (d *ProgramDispatcher) invokeHost(ctx context.Context, request commandprogr
 
 // runProducer opens the evaluator's descriptor scope only after reached-owner
 // admission and accepted-draft preparation. Capture then owns the actual streams.
-func (d *ProgramDispatcher) runProducer(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams, body func(context.Context, commandprogram.Streams) (toolcontract.ProducerResult, error)) (toolcontract.ProducerResult, error) {
+func (d *ProgramDispatcher) runProducer(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams, body func(context.Context, commandprogram.Streams) (toolcontract.ProducerResult, error)) (result toolcontract.ProducerResult, err error) {
 	if err := d.publishAcceptedDocuments(ctx, request.Invocation); err != nil {
 		result := ownerFailure(err)
 		// Preparation has its own child receipt; this producer never ran.
@@ -117,7 +117,7 @@ func (d *ProgramDispatcher) runProducer(ctx context.Context, request commandprog
 		}
 	}
 	streams, retain := d.run.childOutputs(request, streams)
-	defer retain(ctx)
+	defer func() { retain(ctx, result, err) }()
 	return body(ctx, streams)
 }
 

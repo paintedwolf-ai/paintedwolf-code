@@ -429,7 +429,8 @@ Multi-root calls use explicit root addressing when a relative path is ambiguous.
 `@scratch/<path>` addresses the invoking session's private scratch folder, a host namespace no attached root may share, and `@label/<path>` an attached folder. One grammar resolves them for native tools, `cwd` and redirects. In a `command` program an unquoted leading `@label` or `@scratch` expands to the folder's absolute path in every argument and assignment value, external programs included; a quoted one stays literal, and a label no folder carries stays literal for the program to read. Expansion grants nothing; the operation or launch that uses the path checks it. `native_path` converts a computed path explicitly. `TMPDIR`, `TMP`, `TEMP` and `SCRATCH_DIR` name the same folder for native utilities and processes, and `mktemp` creates there; literal `/tmp` keeps its OS meaning. `pwd` and `$PWD` are absolute, and the command guidance lists each folder's label and absolute path with the scratch path ([paths in command programs](projects.md#paths-in-command-programs)). A path or label of a folder that was removed, moved or renamed refuses with `ROOT_NOT_ATTACHED` and lists the current folders ([root changes](projects.md#root-changes-during-a-session)). A worker's scratch is its own, so a worker returns findings in its result rather than as a scratch path.
 
 `@output/<program>.stdout` and `.stderr` address the invoking chat's retained
-command output copies. The host prepares this folder under its own state,
+command output copies. Unquoted addresses expand to absolute paths; quoted
+addresses remain literal. The host prepares this folder under its own state,
 outside writable scratch. Sandboxed commands receive read access through the
 standard read-root rules; native writes refuse this read namespace. The command
 result and receipt carry an `output_path` for each retained stream. Head and tail

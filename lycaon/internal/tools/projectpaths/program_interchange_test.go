@@ -29,7 +29,7 @@ func TestProgramPathSharesActualTemporaryBytesWithAProcess(t *testing.T) {
 	tc, scratch, _ := scratchToolContext(t)
 	p, err := projectpaths.NewProgramPaths(t.Context(), nil, tc, "")
 	testutil.FailErr(t, "bind invocation", err)
-	native, err := p.Bind(t.Context(), "@scratch/native file\n", true)
+	native, err := p.Bind(t.Context(), filepath.Join(scratch, "native file\n"), true)
 	testutil.FailErr(t, "bind native destination", err)
 	target, err := native.MutationTarget()
 	testutil.FailErr(t, "admit actual native fixture destination", err)
@@ -45,7 +45,7 @@ func TestProgramPathSharesActualTemporaryBytesWithAProcess(t *testing.T) {
 	if code != 0 || string(output) != "native bytes" {
 		t.Fatalf("process code=%d output=%q", code, output)
 	}
-	bound, err := p.Bind(t.Context(), "@scratch/external file", false)
+	bound, err := p.Bind(t.Context(), filepath.Join(scratch, "external file"), false)
 	testutil.FailErr(t, "bind process-produced file", err)
 	file, err := bound.Open()
 	testutil.FailErr(t, "open process-produced bytes natively", err)

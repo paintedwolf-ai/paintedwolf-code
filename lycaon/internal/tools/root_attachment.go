@@ -14,12 +14,15 @@ const RootNotAttachedCode = "ROOT_NOT_ATTACHED"
 // AttachedFolders lists the call's folders as "label → path" lines, then
 // session scratch, for refusals that name what the model can use instead.
 func AttachedFolders(tctx ToolContext) []string {
-	out := make([]string, 0, len(tctx.Source.Roots)+1)
+	out := make([]string, 0, len(tctx.Source.Roots)+2)
 	for _, r := range tctx.Source.Roots {
 		out = append(out, r.Label+" → "+filepath.Clean(r.Path))
 	}
 	if dir := tctx.Host.SessionScratchDir; dir != "" {
 		out = append(out, projectroot.VirtualScratchLabel+" → "+filepath.Clean(dir))
+	}
+	if dir := tctx.Host.SessionOutputDir; dir != "" {
+		out = append(out, projectroot.VirtualOutputLabel+" → "+filepath.Clean(dir))
 	}
 	return out
 }

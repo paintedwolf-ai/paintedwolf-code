@@ -35,7 +35,7 @@ func TestSessionOutputReadsItsOwnHostFolderAndRefusesNativeWrites(t *testing.T) 
 		if !resolved.ToolOutput || resolved.Root.ID != projectroot.VirtualOutputLabel || resolved.DisplayPath != "@output/program.stdout" {
 			t.Fatalf("resolved=%+v", resolved)
 		}
-		file, err := reads.Open(resolved)
+		file, err := reads.Open(t.Context(), resolved)
 		testutil.FailErr(t, "open output", err)
 		bytes, err := io.ReadAll(file)
 		file.Close()

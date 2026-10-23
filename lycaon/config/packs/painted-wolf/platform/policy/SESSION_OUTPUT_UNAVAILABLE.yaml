@@ -23,3 +23,4 @@ x-paintedwolf-scenarios:
       tool: read
     expect_contains:
       - 'Code: SESSION_OUTPUT_UNAVAILABLE'
+      - '@output/program.stdout'

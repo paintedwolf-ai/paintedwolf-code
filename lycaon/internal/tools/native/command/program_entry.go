@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 	"io"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -221,6 +222,9 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	}
 	releasePlan := release
 	release = func() { frame.Close(); releasePlan() }
+	if strings.TrimSpace(tc.Host.SessionOutputDir) == "" {
+		return "", toolrejection.RejectInvalidArguments(tools.SessionOutputUnavailableCode, map[string]any{"path": "@output"})
+	}
 	documents, err := newProgramDocuments(ctx, tc, memory)
 	if err != nil {
 		return "", err
@@ -400,8 +404,6 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	if err != nil {
 		return "", errors.Join(feedback, err)
 	}
-	stdout.delivered(ctx, tc, outcome.Stdout)
-	stderr.delivered(ctx, tc, outcome.Stderr)
 	outcome.Stderr = documents.appendNotes(outcome.Stderr)
 	if refusal != nil {
 		outcome.Refusal = &ProgramRefusal{Code: refusal.Code, Feedback: feedback.Error()}

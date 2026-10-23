@@ -16,13 +16,13 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-// The folder exists before the process starts; its copy is published only after
-// the child announces it has entered the already-compiled ordinary profile.
+// New copies are published after the process enters its profile. The alias
+// case instead keeps a previously published inode through a later launch.
 func sessionOutputKernelProof(t *testing.T, helper string) {
-	for _, mode := range []string{"cat", "sed", "chmod", "unlink", "overwrite", "replace", "rename-output-parent", "symlink-overwrite", "hardlink", "reviewed-parent-rename", "process-control-chmod", "temporary-state-chmod"} {
+	for _, mode := range []string{"cat", "sed", "chmod", "unlink", "overwrite", "replace", "rename-output-parent", "symlink-overwrite", "hardlink", "reviewed-parent-rename", "process-control-chmod", "temporary-state-chmod", "temporary-state-ancestor-rename", "host-execution-chmod", "preexisting-hardlink-overwrite"} {
 		t.Run(mode, func(t *testing.T) {
 			base := outsideTemporaryWriteRoots(t)
-			if mode == "temporary-state-chmod" {
+			if mode == "temporary-state-chmod" || mode == "temporary-state-ancestor-rename" {
 				base = t.TempDir()
 			}
 			host := filepath.Join(base, "host")
@@ -32,13 +32,21 @@ func sessionOutputKernelProof(t *testing.T, helper string) {
 			t.Setenv("LYCAON_SANDBOX_DENY_READ", "")
 			dirs, err := scratch.New(cfg).Ensure("chat")
 			testutil.FailErr(t, "prepare session folders", err)
-			project := t.TempDir()
+			project := filepath.Join(base, "project")
+			testutil.FailErr(t, "create writable project", os.Mkdir(project, 0700))
 			target := filepath.Join(dirs.Output, "program.stdout")
 			staged := filepath.Join(project, "replacement")
 			testutil.FailErr(t, "replacement bytes", os.WriteFile(staged, []byte("changed\n"), 0600))
 			alias := filepath.Join(project, "alias")
 			testutil.FailErr(t, "source alias", os.Symlink(target, alias))
+			if mode == "preexisting-hardlink-overwrite" {
+				testutil.FailErr(t, "publish before later alias launch", scratch.PublishCommandOutput(dirs.Output, "program", "stdout", strings.NewReader("one\ntwo\n")))
+				testutil.FailErr(t, "plant prior outside inode alias", os.Link(target, filepath.Join(project, "prior-link")))
+			}
 			c := confine.Confinement{Roots: []string{project}, SessionScratchRoot: dirs.Scratch, ReadRoots: []string{dirs.Output}, Network: confine.NetworkDeny}
+			if mode == "host-execution-chmod" {
+				c.HostExecution = true
+			}
 			if mode == "process-control-chmod" {
 				c.ProcessControl = true
 			}
@@ -51,7 +59,7 @@ func sessionOutputKernelProof(t *testing.T, helper string) {
 			switch mode {
 			case "sed":
 				mutation = `/usr/bin/sed -n '2p' "$1"`
-			case "chmod", "process-control-chmod", "temporary-state-chmod":
+			case "chmod", "process-control-chmod", "temporary-state-chmod", "host-execution-chmod":
 				mutation = `/bin/chmod u+w "$1"`
 			case "unlink":
 				mutation = `/bin/rm "$1"`
@@ -63,9 +71,11 @@ func sessionOutputKernelProof(t *testing.T, helper string) {
 				mutation = `/bin/mv "$3" "$3-moved"`
 			case "symlink-overwrite":
 				mutation = `printf changed > "$2/alias"`
+			case "preexisting-hardlink-overwrite":
+				mutation = `/bin/chmod u+w "$2/prior-link" && printf changed > "$2/prior-link"`
 			case "hardlink":
 				mutation = `/bin/ln "$1" "$2/hardlink"`
-			case "reviewed-parent-rename":
+			case "reviewed-parent-rename", "temporary-state-ancestor-rename":
 				mutation = `/bin/mv "$4" "$5"`
 			}
 			// Keep the protocol and success controls independent of diagnostic wording.
@@ -88,10 +98,17 @@ func sessionOutputKernelProof(t *testing.T, helper string) {
 			if ready != "ready\n" {
 				t.Fatalf("child protocol=%q", ready)
 			}
-			if _, err := os.Stat(target); !os.IsNotExist(err) {
-				t.Fatalf("copy existed before host publication: %v", err)
+			if mode != "preexisting-hardlink-overwrite" {
+				if _, err := os.Stat(target); !os.IsNotExist(err) {
+					t.Fatalf("copy existed before host publication: %v", err)
+				}
+				testutil.FailErr(t, "publish after process start", scratch.PublishCommandOutput(dirs.Output, "program", "stdout", strings.NewReader("one\ntwo\n")))
 			}
-			testutil.FailErr(t, "publish after process start", scratch.PublishCommandOutput(dirs.Output, "program", "stdout", strings.NewReader("one\ntwo\n")))
+			if mode == "hardlink" {
+				control := filepath.Join(project, "host-link-control")
+				testutil.FailErr(t, "host link control on same filesystem", os.Link(target, control))
+				testutil.FailErr(t, "remove control link before attempt", os.Remove(control))
+			}
 			_, err = io.WriteString(input, "continue\n")
 			testutil.FailErr(t, "release child", err)
 			input.Close()

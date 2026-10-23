@@ -1,13 +1,11 @@
 //go:build unix
 
-package command_test
+package toolhost
 
 import (
-	"bytes"
 	"context"
 	"flag"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -21,7 +19,9 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
+	"github.com/lycaon/lycaon/internal/tools/native/mutation"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
@@ -108,115 +108,45 @@ func newPathsFixture(t *testing.T) *pathsFixture {
 	return f
 }
 
-// owners binds cat, mktemp, head and redirects over the frame's ProgramPaths.
+// owners uses the production owner set. The observation hooks place a root
+// change during an actual reached owner; its result and refusal stay untouched.
 func (f *pathsFixture) owners() func(programtest.OwnerPorts) func(tools.ToolContext, *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
-	return func(programtest.OwnerPorts) func(tools.ToolContext, *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
-		return func(_ tools.ToolContext, paths *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
-			root := frameRedirections{paths: paths}
-			owners := command.ProgramOwners{
-				Natives:     map[string]command.NativeOperation{},
-				Publication: root,
-				Input:       root,
-				Redirections: func(frame *projectpaths.ProgramPaths) (commandprogram.InputRedirection, commandprogram.OutputPublication) {
-					r := frameRedirections{paths: frame}
-					return r, r
-				},
+	return func(ports programtest.OwnerPorts) func(tools.ToolContext, *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
+		factory, initErr := (programOwnerTools{boundary: ports.Boundary, operations: mutation.Operations{
+			Write: &native.WriteTool{Boundary: ports.Boundary}, Delete: &native.DeleteTool{Boundary: ports.Boundary}, Move: &native.MoveTool{Boundary: ports.Boundary}, Copy: &native.CopyTool{Boundary: ports.Boundary}, Mkdir: &native.MkdirTool{Boundary: ports.Boundary}, Chmod: &native.ChmodTool{Boundary: ports.Boundary}, Chown: &native.ChownTool{Boundary: ports.Boundary}, Times: &native.TimesTool{Boundary: ports.Boundary}, Extract: &native.ExtractArchiveTool{Boundary: ports.Boundary},
+		}}).compose(ports.Recorder)
+		return func(tc tools.ToolContext, paths *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
+			if initErr != nil {
+				return command.ProgramOwners{}, initErr
 			}
-			owners.Natives["cat"] = command.NativeOperation{Tool: "read", Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
-				bound, err := commandprogram.CatalogBinder{}.Bind(catalogSpec("cat"), request.Argv)
-				if err != nil {
-					return command.NativePrepared{}, err
+			owners, err := factory(tc, paths)
+			if err != nil {
+				return command.ProgramOwners{}, err
+			}
+			for name, observe := range map[string]func(){"cat": func() { f.catRuns++ }, "head": func() {
+				if f.onHead != nil {
+					f.onHead()
 				}
-				return command.NativePrepared{Review: bound.Review("read"), Invoke: func(ctx context.Context, _ tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-					f.catRuns++
-					for _, operand := range bound.Operands() {
-						target, err := frame.Bind(ctx, operand.Value, true)
-						if err != nil {
-							return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, err
-						}
-						data, err := os.ReadFile(target.Resolved.Abs)
-						if err == nil {
-							_, err = streams.Output.Write(data)
-						}
-						if err != nil {
-							return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, err
-						}
-					}
-					return toolcontract.ProducerResult{Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.NoEffect}, nil
-				}}, nil
-			}}
-			owners.Natives["mktemp"] = command.NativeOperation{Tool: "write", Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
-				bound, err := commandprogram.CatalogBinder{}.Bind(catalogSpec("mktemp"), request.Argv)
-				if err != nil {
-					return command.NativePrepared{}, err
-				}
-				return command.NativePrepared{Review: bound.Review("write"), Invoke: func(ctx context.Context, _ tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-					dir, err := frame.TemporaryDirectory(ctx)
+			}} {
+				owner := owners.Natives[name]
+				original := owner.Prepare
+				owner.Prepare = func(ctx context.Context, frame *projectpaths.ProgramPaths, dispatch commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
+					prepared, err := original(ctx, frame, dispatch, request)
 					if err != nil {
-						return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, err
+						return command.NativePrepared{}, err
 					}
-					file, err := os.CreateTemp(dir, "tmp.*")
-					if err != nil {
-						return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, err
+					invoke := prepared.Invoke
+					prepared.Invoke = func(ctx context.Context, tc tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+						observe()
+						return invoke(ctx, tc, streams)
 					}
-					_ = file.Close()
-					_, _ = io.WriteString(streams.Output, file.Name()+"\n")
-					return toolcontract.ProducerResult{Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.EffectCompleted}, nil
-				}}, nil
-			}}
-			owners.Natives["head"] = command.NativeOperation{Tool: "read", Prepare: func(_ context.Context, _ *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
-				bound, err := commandprogram.CatalogBinder{}.Bind(catalogSpec("head"), request.Argv)
-				if err != nil {
-					return command.NativePrepared{}, err
+					return prepared, nil
 				}
-				return command.NativePrepared{Review: bound.Review("read"), Invoke: func(context.Context, tools.ToolContext, commandprogram.Streams) (toolcontract.ProducerResult, error) {
-					if f.onHead != nil {
-						f.onHead()
-					}
-					return toolcontract.ProducerResult{Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.NoEffect}, nil
-				}}, nil
-			}}
+				owners.Natives[name] = owner
+			}
 			return owners, nil
 		}
 	}
-}
-
-type frameRedirections struct{ paths *projectpaths.ProgramPaths }
-
-func (r frameRedirections) Open(ctx context.Context, destination commandprogram.OutputDestination) (commandprogram.StagedOutput, error) {
-	bound, err := r.paths.Bind(ctx, destination.Target.Value, true)
-	if err != nil {
-		return nil, err
-	}
-	return &stagedFile{bound: bound}, nil
-}
-
-func (r frameRedirections) OpenInput(ctx context.Context, destination commandprogram.InputDestination) (io.ReadCloser, error) {
-	bound, err := r.paths.Bind(ctx, destination.Target.Value, false)
-	if err != nil {
-		return nil, err
-	}
-	if bound.Null {
-		return commandprogram.NullInput(), nil
-	}
-	return os.Open(bound.Resolved.Abs)
-}
-
-type stagedFile struct {
-	bound  projectpaths.BoundPath
-	buffer bytes.Buffer
-}
-
-func (s *stagedFile) Write(b []byte) (int, error)   { return s.buffer.Write(b) }
-func (s *stagedFile) Abandon(context.Context) error { return nil }
-func (s *stagedFile) Publish(context.Context) (commandprogram.OutputPublished, error) {
-	if s.bound.Null {
-		return commandprogram.OutputPublished{}, nil
-	}
-	if err := os.WriteFile(s.bound.Resolved.Abs, s.buffer.Bytes(), 0o600); err != nil {
-		return commandprogram.OutputPublished{}, err
-	}
-	return commandprogram.OutputPublished{PublishedRevision: "fixture"}, nil
 }
 
 // echo launches the helper as an external program with words as its argv.
@@ -228,7 +158,7 @@ func (f *pathsFixture) stdout(t *testing.T, source string) string {
 	t.Helper()
 	out, err := f.Call(t, t.Context(), source)
 	testutil.FailErr(t, "run program", err)
-	outcome := decodeOutcome(t, out)
+	outcome := decodeProgramOutcome(t, out)
 	if outcome.Status != 0 || outcome.Refusal != nil {
 		t.Fatalf("program status %d stderr %q", outcome.Status, outcome.Stderr)
 	}
@@ -242,7 +172,7 @@ func (f *pathsFixture) refused(t *testing.T, source, code string) command.Progra
 	t.Helper()
 	out, err := f.Call(t, t.Context(), source)
 	testutil.FailErr(t, "run refused program", err)
-	outcome := decodeOutcome(t, out)
+	outcome := decodeProgramOutcome(t, out)
 	if outcome.Refusal == nil || outcome.Refusal.Code != code || !strings.Contains(outcome.Refusal.Feedback, code) {
 		t.Fatalf("%s: refusal = %+v stderr %q, want %s", source, outcome.Refusal, outcome.Stderr, code)
 	}
@@ -303,7 +233,11 @@ cat "$SCRATCH_DIR/copy-name" | `+f.echo(`read /dev/stdin`))
 
 func TestUnknownAndStaleLabelsAtEntry(t *testing.T) {
 	f := newPathsFixture(t)
-	f.refused(t, "cat @missing/file", "UNKNOWN_ROOT_LABEL")
+	testutil.FailErr(t, "literal directory", os.Mkdir(filepath.Join(f.api.Path, "@missing"), 0700))
+	testutil.FailErr(t, "literal file", os.WriteFile(filepath.Join(f.api.Path, "@missing", "file"), []byte("literal\n"), 0600))
+	if out := f.stdout(t, "cat @missing/file"); out != "literal\n" {
+		t.Fatalf("unattached literal=%q", out)
+	}
 	// The web folder is removed between turns.
 	f.history.Record(testdbseed.DefaultProjectID, f.roots, []projectroot.RootRef{f.api})
 	f.roots = []projectroot.RootRef{f.api}

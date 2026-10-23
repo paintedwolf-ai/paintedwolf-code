@@ -329,8 +329,8 @@ func (f *frame) stateRefusal(loc commandsurface.SyntaxLocation, err error) error
 		if address.Span != (toolcontract.SourceSpan{}) {
 			loc.Span = address.Span
 		}
-		if f.streams.Error != nil {
-			_, _ = fmt.Fprintf(f.streams.Error, "@%s: not attached here [%s]\n", address.Label, coded.MachineErrorCode())
+		if f.io.streams.Error != nil {
+			_, _ = fmt.Fprintf(f.io.streams.Error, "@%s: not attached here [%s]\n", address.Label, coded.MachineErrorCode())
 		}
 		return f.refuse(loc, coded.MachineErrorCode(), "an attached folder label", err)
 	}

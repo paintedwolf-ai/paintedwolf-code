@@ -72,8 +72,6 @@ type inputState struct {
 	terminated bool
 	replaced   bool
 	steps      int64
-	pin        *toolcontract.SourcePin
-	offset     int64
 }
 
 // spaces are pattern and hold space and the memory reserved for them.

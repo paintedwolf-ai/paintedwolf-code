@@ -41,7 +41,7 @@ func documentProgram(t *testing.T) (*programtest.Fixture, *editordoc.Service, *p
 	ledger := sourceledger.New(f.Database, "")
 	service := editordoc.New(editordoc.NewStore(f.Database), ledger, ledger.History, adapterRoots{p: p})
 	t.Cleanup(func() { _ = service.Close(context.Background()) })
-	f.Configure = func(tc *tools.ToolContext) {
+	f.Context = func(_ string, tc *tools.ToolContext) {
 		tc.Source.EditorDocuments = editorDocumentsAdapter{service: service}
 		tc.Source.SourceLedger = ledger
 	}

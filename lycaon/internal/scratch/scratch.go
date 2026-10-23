@@ -18,21 +18,21 @@ import (
 )
 
 // ErrInvalidSessionID marks a session id that cannot name one folder.
-var ErrInvalidSessionID = errors.New("invalid session id for scratch")
+var ErrInvalidSessionID = errors.New("invalid session id")
 
-// Folders locates, creates, measures, and removes session scratch folders
+// Folders locates, creates, measures, and removes both session work areas
 // under one engine state root.
 type Folders struct {
 	stateRoot string
 }
 
-// New returns the scratch folders under stateRoot.
+// New locates session work areas under stateRoot.
 func New(stateRoot string) *Folders {
 	return &Folders{stateRoot: filepath.Clean(strings.TrimSpace(stateRoot))}
 }
 
-// Directories carries the two distinct session capabilities. Output is never
-// a command write root; host publication alone writes its retained copies.
+// Directories carries distinct scratch and output capabilities. Preparing
+// Output adds no command write authority.
 type Directories struct{ Scratch, Output string }
 
 // Ensure prepares both folders beneath the host state root without following
@@ -69,7 +69,7 @@ func (f *Folders) Remove(sessionIDs ...string) error {
 	return errors.Join(errs...)
 }
 
-// Hold claims a session so its scratch can be removed. It reports false while
+// Hold claims a session so its work areas can be removed. It reports false while
 // the session is in use; release ends the claim.
 type Hold func(sessionID string) (release func(), ok bool)
 
@@ -120,7 +120,7 @@ func (f *Folders) Reclaim(ctx context.Context, hold Hold) ([]string, error) {
 	return kept, errors.Join(errs...)
 }
 
-// Inventory reports whether any session scratch holds a file and the bytes
+// Inventory reports whether any session work area holds a file and the bytes
 // its files occupy. Empty folders are not content.
 func (f *Folders) Inventory(ctx context.Context) (present bool, bytes int64, err error) {
 	for _, root := range []string{enginepaths.ScratchRootUnder(f.stateRoot), enginepaths.SessionOutputRootUnder(f.stateRoot)} {

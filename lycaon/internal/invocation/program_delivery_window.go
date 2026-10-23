@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 
@@ -28,7 +29,7 @@ func deliveryWindowReference(program, stream string) string {
 // AttachDeliveryWindow retains a bounded presentation descriptor through P10's
 // existing detail-body lifecycle. Its preview contains the complete descriptor,
 // never execution authority or bytes to feed back into a program.
-func (r *ProgramOutputRetention) AttachDeliveryWindow(ctx context.Context, program string, window api.CommandProgramOutputWindow) error {
+func (r *ProgramOutputRetention) AttachDeliveryWindow(ctx context.Context, program string, window api.CommandProgramOutputWindow) (err error) {
 	if err := validateDeliveryWindow(program, window); err != nil {
 		return err
 	}
@@ -47,7 +48,7 @@ func (r *ProgramOutputRetention) AttachDeliveryWindow(ctx context.Context, progr
 	if err != nil {
 		return err
 	}
-	defer spill.Close()
+	defer func() { err = errors.Join(err, spill.Close()) }()
 	_, err = r.Attach(ctx, program, RetainedOutput{Stream: "detail", Reference: reference, Complete: true}, spill)
 	return err
 }
@@ -70,7 +71,7 @@ func readDeliveryWindows(ctx context.Context, tx *sql.Tx, program string) ([]api
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []api.CommandProgramOutputWindow
 	for rows.Next() {
 		var reference, preview, fullReference string
@@ -102,5 +103,11 @@ func readDeliveryWindows(ctx context.Context, tx *sql.Tx, program string) ([]api
 		}
 		out = append(out, descriptor.Window)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
