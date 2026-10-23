@@ -48,11 +48,12 @@ func drainMaintenance(ctx context.Context, sqlDB *Store, cfg RetentionConfig, tu
 }
 
 // This is pacing, not an operation deadline: unfinished cleanup retains its
-// wake until the foreground writer has a quiet interval or the host stops.
+// wake. Busy writers may defer a turn only a bounded number of times.
 func waitForMaintenanceTurn(ctx context.Context, store *Store) error {
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 	writes := store.writeCount.Load()
+	busyTurns := 0
 	for {
 		select {
 		case <-ctx.Done():
@@ -61,7 +62,8 @@ func waitForMaintenanceTurn(ctx context.Context, store *Store) error {
 			current := store.writeCount.Load()
 			quiet := current == writes && store.writer.Stats().InUse == 0
 			writes = current
-			if quiet {
+			busyTurns++
+			if quiet || busyTurns >= 10 {
 				return nil
 			}
 		}
