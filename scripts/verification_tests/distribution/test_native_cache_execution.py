@@ -25,7 +25,7 @@ class NativeCacheTests(unittest.TestCase):
             source = Path(__file__).resolve().parents[2]
             scripts = root / "scripts"
             (scripts / "toolchain").mkdir(parents=True)
-            for name in ("build-decide.sh", "decide-test.sh", "artifact-paths.sh", "artifact_paths.py", "digest-run-lock.sh"):
+            for name in ("build-decide.sh", "artifact-paths.sh", "artifact_paths.py", "digest-run-lock.sh"):
                 shutil.copyfile(source / name, scripts / name)
             shutil.copytree(source / "toolchain", scripts / "toolchain", dirs_exist_ok=True)
             floor = root / "lycaon/internal/platformfloor/macos_floor.txt"
@@ -67,7 +67,7 @@ target.mkdir(parents=True, exist_ok=True)
                                 for record in records))
             self.assertFalse((root / "tauri").exists())
             for arguments in (["--no-run"], ["--quiet"]):
-                result = subprocess.run(["bash", str(scripts / "decide-test.sh"), *arguments],
+                result = subprocess.run(["bash", str(scripts / "toolchain/decide-test.sh"), *arguments],
                                         env=env, capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
             prepared = [json.loads(line) for line in calls.read_text().splitlines()]

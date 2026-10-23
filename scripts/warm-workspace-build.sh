@@ -10,7 +10,7 @@ if [[ ! -f "${ROOT}/lycaon-den/src-tauri/THIRD-PARTY-NOTICES.md" ]]; then
   bash "${ROOT}/scripts/licenses-notices.sh"
 fi
 bash "${ROOT}/scripts/ensure-tauri-binaries.sh"
-bash "${ROOT}/scripts/decide-test.sh" --no-run
+bash "${ROOT}/scripts/toolchain/decide-test.sh" --no-run
 bash "${ROOT}/scripts/build-decide.sh"
 cd "${ROOT}/lycaon-den/src-tauri"
 cargo test --locked --workspace --all-targets --no-run

@@ -658,7 +658,7 @@ tasks:
         msg: cargo required — install rustup from https://rustup.rs; rust-toolchain.toml selects the version
     cmds:
       # Parity tests use the shipped binary's features.
-      - bash {{.SCRIPTS_DIR}}/decide-test.sh --quiet
+      - bash {{.SCRIPTS_DIR}}/toolchain/decide-test.sh --quiet
 
   den:test:coverage:
     desc: Frontend Vitest with v8 coverage report
