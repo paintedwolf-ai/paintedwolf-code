@@ -4,8 +4,8 @@
   "kind": "module",
   "workstream": "backup-process-lifecycle",
   "disposition": "retain",
-  "reason": "Retain 31 phase files under one backup and restore transaction authority. Capacity planning, snapshot publication, and the bounded restore progress cursor have separate cohesive implementations; splitting their lifecycle into another service would divide admission, pre-image custody, and restart recovery. Cursor-size and interrupted-replay contracts cover the new boundary.",
-  "reviewed_commit": "1a92b164ed01b588ec7304043a8575ad9487b86e",
+  "reason": "Retain 31 phase files under one backup and restore transaction authority. Capacity planning, snapshot publication, and the bounded restore progress cursor have separate cohesive implementations; splitting their lifecycle into another service would divide admission, pre-image custody, and restart recovery. Cursor-size and interrupted-replay contracts cover the new boundary. Unusable optional progress now replays the validated decision; full restore integration tests cover corrupt cursors and changed destinations without a new recovery authority.",
+  "reviewed_commit": "1867083839095d1ba75ef8de91a1a26ff5702728",
   "ceiling": 31,
   "boundaries": {
     "lycaon/internal/backup/restore_transaction_test.go": "186747724478720db309f06469fddcfb1f52292ff82f5e7200edc6276e78d445",
@@ -13,7 +13,7 @@
     "lycaon/internal/backup/upgrade_recovery_test.go": "c9a2ec60b31d7e989002dab7833470881f83d6bcbe11a9ee8f55c7bf028af80f",
     "lycaon/internal/backup/reasoning_retention_test.go": "708e2bb19d53d71f00754dcb9be34c85a897bc772b9b0726bff6810f8b02e06c",
     "lycaon/internal/backup/editor_outbox_test.go": "e7ab2c1eacf397d612cb7b918a6ce0dfc189069c09a1f04ed71f9b6279a71b84",
-    "lycaon/internal/backup/restore_progress_test.go": "bd05e74c3ec7d51a32cf72b7332a9471e900d53316db620b48e800541eb6772a",
+    "lycaon/internal/backup/restore_progress_test.go": "4d4c3cce13da14e8d1ed301622ee80659a0728aa1c90beebb2f3f7827705a779",
     "lycaon/internal/backup/stage_upgrade_test.go": "ab011a4912370818788309e470d1036983735d28dd70b55d7118a31a0b5b2419"
   },
   "reviewed_shape": "0c6f43d6407887c28c5b6b6daea9ea043dd08a22a0465b78ddf4539468ee8472"

@@ -219,7 +219,7 @@ export const CLIENT_NOTICES: Readonly<Record<ClientNoticeKind, ClientNoticeCopy>
   },
   store_incompatible_integrity: {
     title: "Your data needs attention",
-    message: "Your conversation history did not pass its integrity check. Restoring the recovery snapshot from {time} is the safe way forward.",
+    message: "Your conversation history did not pass its integrity check. A recovery snapshot from {time} is available. We will verify it before restoring your data.",
     scope: "app",
   },
   store_incompatible_integrity_no_snapshot: {
@@ -240,7 +240,7 @@ export const CLIENT_NOTICES: Readonly<Record<ClientNoticeKind, ClientNoticeCopy>
   },
   store_incompatible_schema: {
     title: "This app can't open your data",
-    message: "Your conversation history uses a different data format. A recovery snapshot from {time} is available to restore.",
+    message: "Your conversation history uses a different data format. A recovery snapshot from {time} is available. We will verify it before restoring your data.",
     scope: "app",
   },
   store_incompatible_schema_no_snapshot: {

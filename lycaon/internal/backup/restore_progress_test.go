@@ -62,11 +62,17 @@ func TestRestoreProgressBoundsRepeatedFilesAndBytes(t *testing.T) {
 
 func TestRestoreReplaysUncheckpointedDurableFiles(t *testing.T) {
 	for _, prefix := range []int{restoreProgressFiles - 1, restoreProgressFiles + 1} {
-		t.Run(fmt.Sprint(prefix), func(t *testing.T) { testRestoreReplayPrefix(t, prefix) })
+		t.Run(fmt.Sprint(prefix), func(t *testing.T) { testRestoreReplayPrefix(t, prefix, "") })
 	}
 }
 
-func testRestoreReplayPrefix(t *testing.T, prefix int) {
+func TestRestoreCompletesWithUnusableProgress(t *testing.T) {
+	for _, damage := range []string{"cursor", "destination"} {
+		t.Run(damage, func(t *testing.T) { testRestoreReplayPrefix(t, restoreProgressFiles+1, damage) })
+	}
+}
+
+func testRestoreReplayPrefix(t *testing.T, prefix int, damage string) {
 	t.Helper()
 	root := t.TempDir()
 	path := filepath.Join(root, storeRelPath)
@@ -88,10 +94,19 @@ func testRestoreReplayPrefix(t *testing.T, prefix int) {
 	testutil.FailErr(t, "bind complete restore decision", err)
 	restore.marker.Files = restore.marker.Files[:prefix]
 	testutil.FailErr(t, "install interrupted batch", restore.installFiles(t.Context(), root))
+	if damage == "cursor" {
+		testutil.FailErr(t, "damage optional cursor", os.WriteFile(filepath.Join(restore.marker.StagingDir, restoreProgressName), []byte("{bad"), 0600))
+	} else if damage == "destination" {
+		testutil.FailErr(t, "change checkpointed destination", os.WriteFile(filepath.Join(root, restore.marker.Files[0].RelPath), []byte("wrong"), 0600))
+	}
 	// Discard all in-memory progress as a process interruption would.
 	resumed, err := loadPendingRestore(root)
 	testutil.FailErr(t, "reload original decision", err)
-	if len(resumed.applied) != (prefix/restoreProgressFiles)*restoreProgressFiles {
+	expected := (prefix / restoreProgressFiles) * restoreProgressFiles
+	if damage != "" {
+		expected = 0
+	}
+	if len(resumed.applied) != expected {
 		t.Fatal("durable cursor did not preserve exactly the checkpointed prefix")
 	}
 	testutil.FailErr(t, "replay durable files and complete", ApplyPending(t.Context(), root))
@@ -126,8 +141,8 @@ func TestRestoreProgressCursorSizeIndependentOfInventory(t *testing.T) {
 	}
 }
 
-func TestRestoreProgressRefusesUnboundOrImpossibleCursor(t *testing.T) {
-	for _, invalid := range []string{"identity", "count", "version", "absent"} {
+func TestRestoreProgressReplaysUnusableCursor(t *testing.T) {
+	for _, invalid := range []string{"identity", "count", "version", "absent", "json"} {
 		t.Run(invalid, func(t *testing.T) {
 			restore := &pendingRestore{marker: PendingMarker{StagingDir: t.TempDir(), Files: []PendingFile{{RelPath: "drafts/body"}}}, appliedSet: map[string]struct{}{}}
 			identity, err := restore.progressBinding()
@@ -143,8 +158,11 @@ func TestRestoreProgressRefusesUnboundOrImpossibleCursor(t *testing.T) {
 			}
 			raw, err := json.Marshal(progress)
 			testutil.FailErr(t, "encode invalid cursor", err)
+			if invalid == "json" {
+				raw = []byte("{broken")
+			}
 			testutil.FailErr(t, "seed invalid cursor", os.WriteFile(filepath.Join(restore.marker.StagingDir, restoreProgressName), raw, 0o600))
-			if err := restore.loadProgress(); err == nil || len(restore.applied) != 0 {
+			if err := restore.loadProgress(); err != nil || len(restore.applied) != 0 {
 				t.Fatal("invalid cursor skipped work")
 			}
 		})
@@ -157,8 +175,8 @@ func TestRestoreProgressChecksCheckpointedDeletion(t *testing.T) {
 	testutil.FailErr(t, "checkpoint deletion", restore.checkpointProgress())
 	path := filepath.Join(root, "approvals.yaml")
 	testutil.FailErr(t, "seed incomplete deletion", os.WriteFile(path, []byte("retained"), 0o600))
-	if err := restore.loadProgress(); err == nil {
-		t.Fatal("cursor skipped a deletion still present")
+	if err := restore.loadProgress(); err != nil || len(restore.applied) != 0 {
+		t.Fatal("cursor prevented replay of a deletion still present")
 	}
 	testutil.FailErr(t, "finish deletion", os.Remove(path))
 	testutil.FailErr(t, "resume completed deletion", restore.loadProgress())

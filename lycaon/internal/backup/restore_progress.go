@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -11,6 +12,8 @@ import (
 
 	"github.com/lycaon/lycaon/internal/fseffect"
 )
+
+var errInvalidRestoreProgress = errors.New("restore progress is not usable")
 
 const restoreProgressName = ".restore-progress.json"
 
@@ -52,6 +55,19 @@ func (r *pendingRestore) progressBinding() (string, error) {
 }
 
 func (r *pendingRestore) loadProgress() error {
+	err := r.readProgress()
+	if errors.Is(err, errInvalidRestoreProgress) {
+		// The decision and staged payloads remain authoritative. A hint cannot
+		// prevent their idempotent replay or leave a partially trusted prefix.
+		r.applied = nil
+		r.appliedSet = make(map[string]struct{})
+		r.completed = 0
+		return nil
+	}
+	return err
+}
+
+func (r *pendingRestore) readProgress() error {
 	path := filepath.Join(r.marker.StagingDir, restoreProgressName)
 	info, err := os.Lstat(path)
 	if os.IsNotExist(err) {
@@ -61,7 +77,7 @@ func (r *pendingRestore) loadProgress() error {
 		return err
 	}
 	if !info.Mode().IsRegular() || info.Size() > 4096 {
-		return fmt.Errorf("invalid restore progress file")
+		return fmt.Errorf("invalid restore progress file: %w", errInvalidRestoreProgress)
 	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -71,17 +87,17 @@ func (r *pendingRestore) loadProgress() error {
 	decoder.DisallowUnknownFields()
 	var progress restoreProgress
 	if err := decoder.Decode(&progress); err != nil {
-		return err
+		return fmt.Errorf("decode progress: %w", errInvalidRestoreProgress)
 	}
 	if err := decoder.Decode(new(any)); err != io.EOF {
-		return fmt.Errorf("ambiguous restore progress")
+		return fmt.Errorf("ambiguous restore progress: %w", errInvalidRestoreProgress)
 	}
 	identity, err := r.progressBinding()
 	if err != nil {
 		return err
 	}
 	if progress.Version != 1 || progress.Identity != identity || progress.Completed < 0 || progress.Completed > len(r.marker.Files)+len(r.marker.DeleteRelPaths) {
-		return fmt.Errorf("restore progress does not match its decision")
+		return fmt.Errorf("restore progress does not match its decision: %w", errInvalidRestoreProgress)
 	}
 	for index := range progress.Completed {
 		var rel string
@@ -90,11 +106,14 @@ func (r *pendingRestore) loadProgress() error {
 			rel = entry.RelPath
 			destination := filepath.Join(filepath.Dir(r.markerPath), filepath.FromSlash(r.marker.liveRelPath(rel)))
 			sum, size, err := installedDigest(destination, entry.Kind)
+			if os.IsNotExist(err) {
+				return errInvalidRestoreProgress
+			}
 			if err != nil {
 				return fmt.Errorf("verify checkpointed file: %w", err)
 			}
 			if sum != entry.SHA256 || size != entry.Size {
-				return fmt.Errorf("checkpointed file does not match restore decision")
+				return fmt.Errorf("checkpointed file does not match restore decision: %w", errInvalidRestoreProgress)
 			}
 		} else {
 			rel = r.marker.DeleteRelPaths[index-len(r.marker.Files)]
@@ -102,7 +121,7 @@ func (r *pendingRestore) loadProgress() error {
 				if err != nil {
 					return fmt.Errorf("inspect checkpointed deletion: %w", err)
 				}
-				return fmt.Errorf("checkpointed deletion is not complete")
+				return fmt.Errorf("checkpointed deletion is not complete: %w", errInvalidRestoreProgress)
 			}
 		}
 		if _, found := r.appliedSet[rel]; !found {
