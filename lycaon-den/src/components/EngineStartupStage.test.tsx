@@ -108,28 +108,6 @@ describe("EngineStartupStage", () => {
     expect(screen.queryByTestId("engine-startup-stop")).toBeNull();
   });
 
-  it("explains recovery and stays responsive through a long check", () => {
-    noteEngineStartupProgress({ ...base, phase: "recovery_structure", elapsed_ms: 175_000 });
-    render(() => <EngineStartupStage />);
-    const stage = screen.getByTestId("engine-startup");
-    expect(stage.textContent).toContain("Recovering local data");
-    expect(stage.textContent).toContain("Large histories can take several minutes");
-    expect(stage.textContent).toContain("175 seconds elapsed · Engine responding");
-    const indicator = screen.getByRole("progressbar", { name: "Local data recovery" });
-    expect(indicator.hasAttribute("aria-valuenow")).toBe(false);
-    expect(indicator.getAttribute("aria-valuetext")).toBe("In progress");
-    noteEngineStartupProgress({ ...base, phase: "recovery_structure", sequence: 5, elapsed_ms: 176_000 });
-    expect(stage.textContent).toContain("176 seconds elapsed · Engine responding");
-    noteEngineStartupProgress({ ...base, phase: "recovery_references", sequence: 6 });
-    expect(screen.getByTestId("engine-startup-phase").textContent).toBe("Checking links between records");
-    noteEngineStartupProgress({ ...base, phase: "recovery_references", sequence: 6, status: "stalled", silence_ms: 5_000 });
-    expect(stage.textContent).not.toContain("Engine responding");
-    expect(indicator.getAttribute("aria-valuetext")).toBe("Waiting for the engine");
-    noteEngineStartupProgress({ ...base, sequence: 7 });
-    expect(stage.textContent).toContain("Starting Painted Wolf Code");
-    expect(stage.textContent).not.toContain("Recovering local data");
-  });
-
   it("drags the window from the startup copy while its controls stay clickable", () => {
     noteEngineStartupProgress({ ...base, elapsed_ms: 30_000 });
     render(() => <EngineStartupStage />);

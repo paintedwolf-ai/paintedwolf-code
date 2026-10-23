@@ -27,9 +27,6 @@ describe("engine startup state", () => {
   });
 
   it.each([
-    ["recovery_structure", "Checking database structure"],
-    ["recovery_indexes", "Checking database structure and indexes"],
-    ["recovery_references", "Checking links between records"],
     ["upgrade_snapshot", "Saving recovery data before updating"],
     ["schema_upgrade", "Updating local data"],
     ["upgrade_validation", "Verifying updated local data"],

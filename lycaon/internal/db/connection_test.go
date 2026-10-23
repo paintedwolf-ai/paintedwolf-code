@@ -198,9 +198,8 @@ func TestOpenTracksShutdownState(t *testing.T) {
 	}
 }
 
-// An unclean shutdown costs the boot path a structural quick_check, not a
-// whole-store scan. The whole-store audit runs behind serving; damage it finds
-// is stamped so the next boot runs the full check synchronously and refuses.
+// An unclean shutdown schedules a background audit. Confirmed damage closes
+// the store and makes the next open refuse before writing or scanning history.
 func TestUncleanShutdownAuditsBehindBootAndRefusesNextOpen(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "store.db")
 	store, err := Open(dbPath)
@@ -248,7 +247,8 @@ func TestCleanAuditClearsStampAndCleanShutdownOwesNoAudit(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "store.db")
 	store, err := Open(dbPath)
 	testutil.FailErr(t, "open store", err)
-	testutil.FailErr(t, "stamp a stale failure", stampIntegrityAuditFailed(t.Context(), store.writer, errors.New("stale")))
+	_, err = store.writer.ExecContext(t.Context(), `INSERT INTO store_meta(key,value) VALUES(?,?)`, integrityAuditFailedMetaKey, "stale")
+	testutil.FailErr(t, "stamp a stale failure", err)
 	testutil.FailErr(t, "audit healthy store", AuditIntegrity(t.Context(), store))
 	stamped, err := integrityAuditFailed(t.Context(), store.writer)
 	testutil.FailErr(t, "read stamp", err)

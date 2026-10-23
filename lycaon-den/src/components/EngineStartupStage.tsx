@@ -44,15 +44,9 @@ export function EngineStartupStage(): JSX.Element {
     return state.status === "idle" ? undefined : state;
   };
 
-  const recovering = () => {
-    const phase = progress()?.phase;
-    return phase === "recovery_structure" || phase === "recovery_indexes" || phase === "recovery_references";
-  };
-
   const title = () => {
     const state = progress();
     if (state?.status === "stalled") return "Startup needs attention";
-    if (recovering()) return "Recovering local data";
     return "Starting Painted Wolf Code";
   };
 
@@ -60,9 +54,6 @@ export function EngineStartupStage(): JSX.Element {
     const state = progress();
     if (state?.status === "stalled") {
       return "The engine is still running, but it stopped reporting progress. Waiting will continue until you choose to stop it.";
-    }
-    if (recovering()) {
-      return "Checking local data after an interrupted shutdown or unfinished check. Large histories can take several minutes. You can leave this window open.";
     }
     return "The local engine is making progress. You can leave this window open.";
   };
@@ -137,12 +128,7 @@ export function EngineStartupStage(): JSX.Element {
             // The card sits above the host drag layer; buttons still click.
             {...tauriDragRegionProps({ deep: true })}
           >
-            <div
-              class="den-engine-startup__pulse"
-              role="progressbar"
-              aria-label={recovering() ? "Local data recovery" : "Engine startup"}
-              aria-valuetext={state().status === "stalled" ? "Waiting for the engine" : "In progress"}
-            />
+            <div class="den-engine-startup__pulse" aria-hidden="true" />
             <p class="den-engine-startup__title">{title()}</p>
             <p class="den-engine-startup__message">{message()}</p>
             <p
@@ -156,9 +142,6 @@ export function EngineStartupStage(): JSX.Element {
             </p>
             <p class="den-engine-startup__elapsed" aria-live="off">
               {durationLabel(state().elapsed_ms)}
-              <Show when={recovering() && state().status === "starting"}>
-                {" · Engine responding"}
-              </Show>
               <Show when={state().status === "stalled" && state().silence_ms > 0}>
                 {` · ${Math.round(state().silence_ms / 1_000)} seconds since the last update`}
               </Show>
