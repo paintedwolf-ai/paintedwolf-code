@@ -87,6 +87,23 @@ export function createProjectRemoval(options: {
     };
   };
 
+  const readStatus = async (client: RemovalClient, projectId: string, operationId: string) => {
+    let unanswered = 0;
+    for (;;) {
+      try {
+        return await client.getProjectRemoval(projectId, operationId);
+      } catch (cause) {
+        if (cause instanceof BackendTransportError && ++unanswered < STATUS_TRANSPORT_RETRIES) {
+          await (options.pause ?? statusPause)(unanswered);
+          continue;
+        }
+        const error = clientNoticeError("project_removal_unconfirmed");
+        error.cause = cause;
+        throw error;
+      }
+    }
+  };
+
   const execute = async (
     client: RemovalClient,
     projectId: string,
@@ -104,36 +121,20 @@ export function createProjectRemoval(options: {
         pending.delete(projectId);
         throw error;
       }
-      // The host may have settled after the response was lost.
-      try {
-        return await client.getProjectRemoval(projectId, req.operation_id);
-      } catch {
-        const notice = clientNoticeError("project_removal_unconfirmed");
-        notice.cause = error;
-        throw notice;
-      }
+      // A lost acceptance response gets the same bounded status recovery as accepted work.
+      return readStatus(client, projectId, req.operation_id);
     }
   };
 
   const settle = async (client: RemovalClient, projectId: string, req: ProjectRemovalRequest) => {
     let result = await execute(client, projectId, req);
     let lastProgress = "";
-    let unanswered = 0;
     while (result.progress) {
       const current = JSON.stringify(result.progress);
       if (current !== lastProgress) options.progress?.(projectId, result.progress);
       lastProgress = current;
-      await (options.pause ?? statusPause)(unanswered);
-      try {
-        result = await client.getProjectRemoval(projectId, req.operation_id);
-        unanswered = 0;
-      } catch (cause) {
-        // The host owns accepted work; a transport gap only delays the next status read.
-        if (cause instanceof BackendTransportError && ++unanswered < STATUS_TRANSPORT_RETRIES) continue;
-        const error = clientNoticeError("project_removal_unconfirmed");
-        error.cause = cause;
-        throw error;
-      }
+      await (options.pause ?? statusPause)(0);
+      result = await readStatus(client, projectId, req.operation_id);
     }
     return result;
   };

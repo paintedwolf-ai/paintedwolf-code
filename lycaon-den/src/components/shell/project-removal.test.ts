@@ -153,3 +153,29 @@ it("reports an unconfirmed outcome once status stays unanswered", async () => {
   expect(f.report).toHaveBeenCalledOnce();
   expect(f.progress).toHaveBeenLastCalledWith("p", null);
 });
+
+it("recovers through transport gaps before the first status response", async () => {
+  const f = setup();
+  const offline = new BackendTransportError(new TypeError("Failed to fetch"), "reachable");
+  f.client.createProjectRemoval.mockRejectedValueOnce(offline);
+  f.client.getProjectRemoval.mockRejectedValueOnce(offline).mockRejectedValueOnce(offline).mockResolvedValueOnce(result);
+  await f.remove("p");
+  expect(f.client.createProjectRemoval).toHaveBeenCalledOnce();
+  expect(f.client.getProjectRemoval.mock.calls).toEqual([["p", "op-1"], ["p", "op-1"], ["p", "op-1"]]);
+  expect(f.pause.mock.calls).toEqual([[1], [2]]);
+  expect(f.retire).toHaveBeenCalledOnce();
+  expect(f.report).not.toHaveBeenCalled();
+});
+it("bounds initial status recovery and preserves the exact request for retry", async () => {
+  const f = setup();
+  const offline = new BackendTransportError(new TypeError("Failed to fetch"), "reachable");
+  f.client.createProjectRemoval.mockRejectedValueOnce(offline);
+  f.client.getProjectRemoval.mockRejectedValue(offline);
+  await f.remove("p");
+  expect(f.client.getProjectRemoval).toHaveBeenCalledTimes(8);
+  expect(f.report).toHaveBeenCalledOnce();
+  expect(f.retire).not.toHaveBeenCalled();
+  await f.remove("p");
+  expect(f.client.createProjectRemoval.mock.calls[0]).toEqual(f.client.createProjectRemoval.mock.calls[1]);
+  expect(f.retire).toHaveBeenCalledOnce();
+});
