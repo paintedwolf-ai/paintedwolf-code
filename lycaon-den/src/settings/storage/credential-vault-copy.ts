@@ -10,6 +10,8 @@ export const CREDENTIAL_VAULT_COPY = {
     keychain:
       "The macOS Keychain holds the key to your saved credentials, and only the signed app can read it.",
     development: "This development build keeps the vault key in a local file.",
+    restart_required:
+      "The installed package changed while this desktop was running. Quit Painted Wolf Code, finish any package operation, then open it from the installed desktop launcher. Your saved credentials are preserved.",
     unavailable:
       "The vault custodian is unavailable. Your encrypted credentials are preserved. Restore the identity service and open the installed desktop app. An app password requires a previously exported key.",
     refused:
@@ -40,6 +42,8 @@ export const CREDENTIAL_VAULT_COPY = {
     password_required: "Enter your app password.",
     password_invalid: "Use an app password of at least 12 bytes.",
     unchanged: "The key is already there.",
+    desktop_restart_required:
+      "The installed package changed. Quit Painted Wolf Code and reopen the installed desktop app. Your running engine and credentials are preserved.",
     service_unavailable:
       "The vault identity service is not available to this app. Nothing changed.",
     failed: "The vault key could not be moved.",

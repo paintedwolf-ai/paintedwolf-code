@@ -11,7 +11,7 @@ import (
 func TestHostedCacheWritesRequireTheTrustedMainRef(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	for _, name := range []string{"cache-go", "cache-decide", "cache-notices-tools", "cache-release-build", "cache-analysis-tools", "cache-lint-diagnostics", "setup-opengrep", "setup-verification", "setup-webkit-atspi-images"} {
+	for _, name := range []string{"cache-go", "cache-decide", "cache-notices-tools", "cache-release-build", "cache-analysis-tools", "cache-lint-diagnostics", "setup-opengrep", "setup-verification", "setup-linux-native", "setup-webkit-atspi-images"} {
 		var action struct {
 			Runs struct {
 				Steps []struct {

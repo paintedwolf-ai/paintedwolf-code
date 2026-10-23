@@ -24,7 +24,7 @@ var doorExemptions = map[string]string{
 	"lycaon/internal/extpacks/meta_install.go":         "directory promotion with backup and rollback",
 	"lycaon/internal/extpacks/meta_transaction.go":     "recoverable directory promotion with backup and rollback",
 	"lycaon/internal/extpacks/package_transaction.go":  "directory promotion of a staged package tree",
-	"lycaon/internal/packagegeneration/materialize.go": "directory promotion of a staged package generation tree",
+	"lycaon/internal/packagegeneration/materialize.go": "directory promotion of a verified package generation tree",
 	"lycaon/internal/project/promotion_engine.go":      "reservation-based promotion: renames are the transaction, not a write",
 	"lycaon/internal/workspace/seed.go":                "directory promotion of a fully materialized seed tree",
 

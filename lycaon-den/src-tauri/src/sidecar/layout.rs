@@ -63,8 +63,33 @@ pub(super) fn linux_package_engine_layout(install_root: &Path) -> Option<Bundled
     })
 }
 
-pub(crate) fn setup_bundled_engine_layout(app: &tauri::AppHandle) {
-    let layout = if crate::linux_install::installed().is_some() {
+pub(crate) fn setup_bundled_engine_layout(
+    app: &tauri::AppHandle,
+) -> Result<(), crate::protected_launch::GenerationError> {
+    let layout = select_layout(crate::protected_launch::generation(), || {
+        unprotected_engine_layout(app)
+    })?;
+    let _ = BUNDLED_ENGINE_LAYOUT.set(layout);
+    Ok(())
+}
+
+fn select_layout(
+    generation: Result<
+        Option<crate::protected_launch::Generation>,
+        crate::protected_launch::GenerationError,
+    >,
+    unprotected: impl FnOnce() -> Option<BundledEngineLayout>,
+) -> Result<Option<BundledEngineLayout>, crate::protected_launch::GenerationError> {
+    match generation? {
+        Some(generation) => linux_package_engine_layout(&generation.logical_root)
+            .map(Some)
+            .ok_or(crate::protected_launch::GenerationError::LayoutUnavailable),
+        None => Ok(unprotected()),
+    }
+}
+
+fn unprotected_engine_layout(app: &tauri::AppHandle) -> Option<BundledEngineLayout> {
+    if crate::linux_install::installed().is_some() {
         linux_package_engine_layout(Path::new(crate::linux_install::INSTALL_ROOT))
     } else {
         std::env::current_exe()
@@ -78,8 +103,7 @@ pub(crate) fn setup_bundled_engine_layout(app: &tauri::AppHandle) {
             .and_then(|(exe, resources)| {
                 bundled_engine_layout_from(&exe, &resources, std::env::consts::OS)
             })
-    };
-    let _ = BUNDLED_ENGINE_LAYOUT.set(layout);
+    }
 }
 
 pub(super) fn bundled_engine_layout() -> Option<BundledEngineLayout> {
@@ -104,4 +128,66 @@ pub(super) fn resolve_lycaon_binary() -> Result<PathBuf, String> {
         }
     }
     Err("bundled engine helper not found in the app".into())
+}
+
+#[cfg(test)]
+mod protected_tests {
+    use super::*;
+    use crate::protected_launch::{Generation, GenerationError};
+
+    #[test]
+    fn protected_layout_uses_selected_generation_without_package_discovery() {
+        let root = crate::test_support::TempDir::new("protected-engine-layout");
+        std::fs::create_dir_all(root.join("bin")).unwrap();
+        std::fs::create_dir_all(root.join("engine-root/schemas/oar")).unwrap();
+        for path in [
+            "bin/pw",
+            "bin/pw-logs",
+            "engine-root/schemas/oar/oar.schema.json",
+        ] {
+            std::fs::write(root.join(path), b"fixture").unwrap();
+        }
+        let selected = Generation {
+            logical_root: root.to_path_buf(),
+        };
+        let layout = select_layout(Ok(Some(selected)), || panic!("package discovery ran"))
+            .unwrap()
+            .unwrap();
+        assert_eq!(layout.binary, root.join("bin/pw"));
+        assert_eq!(layout.engine_root, root.join("engine-root"));
+    }
+
+    #[test]
+    fn protected_refusal_never_tries_resources_or_development_discovery() {
+        assert!(matches!(
+            select_layout(Err(GenerationError::FrameUnavailable), || panic!(
+                "fallback ran"
+            )),
+            Err(GenerationError::FrameUnavailable)
+        ));
+        let root = crate::test_support::TempDir::new("missing-protected-engine");
+        assert!(matches!(
+            select_layout(
+                Ok(Some(Generation {
+                    logical_root: root.to_path_buf()
+                })),
+                || panic!("fallback ran")
+            ),
+            Err(GenerationError::LayoutUnavailable)
+        ));
+    }
+
+    #[test]
+    fn unprotected_launch_keeps_existing_discovery_result() {
+        let layout = select_layout(Ok(None), || {
+            Some(BundledEngineLayout {
+                binary: "/development/pw".into(),
+                engine_root: "/development/engine-root".into(),
+            })
+        })
+        .unwrap()
+        .unwrap();
+        assert_eq!(layout.binary, Path::new("/development/pw"));
+        assert!(select_layout(Ok(None), || None).unwrap().is_none());
+    }
 }

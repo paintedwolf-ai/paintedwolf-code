@@ -41,9 +41,16 @@ func RunBootstrap(arguments []string) (int, error) {
 		_ = DropPrivilegesForError()
 		return 1, err
 	}
+	var streamReplacements []standardStreamReplacement
 	fail := func(err error) (int, error) {
-		_ = dropPrivileges(caller)
+		if dropPrivileges(caller) == nil {
+			reportStandardStreamReplacements(streamReplacements)
+		}
 		return 1, err
+	}
+	streamReplacements, err = sanitizeStandardStreams()
+	if err != nil {
+		return fail(err)
 	}
 	if err := sanitizeProcess(); err != nil {
 		return fail(err)
@@ -113,6 +120,7 @@ func RunBootstrap(arguments []string) (int, error) {
 		_ = lifetime.Close()
 		return 1, err
 	}
+	reportStandardStreamReplacements(streamReplacements)
 	return superviseLaunch(lifetime), nil
 }
 

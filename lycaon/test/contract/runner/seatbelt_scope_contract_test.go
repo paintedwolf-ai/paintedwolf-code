@@ -204,6 +204,7 @@ func seatbeltDeclaredScopes(t *testing.T, root string) []goTestScope {
 		t.Fatal(".github/workflows/platform-verification.yml has no confinement job")
 	}
 	scopes = append(scopes, parseGoTestScopes("platform-verification.yml confinement", job)...)
+	scopes = append(scopes, linuxConfineScopes(t, root)...)
 
 	if len(scopes) == 0 {
 		t.Fatal("parsed no run scopes from the seatbelt task or the confinement job")
