@@ -92,13 +92,14 @@ function mountedMessages() {
   vi.stubGlobal("cancelAnimationFrame", vi.fn());
   const viewport = document.createElement("div");
   viewport.tabIndex = -1;
-  const rows = ["first", "last"].map(key => {
+  const message = (key: string) => {
     const row = document.createElement("div");
     row.className = "transcript-viewport-row";
     row.dataset.msgId = key;
     viewport.append(row);
     return row;
-  });
+  };
+  const rows = [message("first"), message("last")] as const;
   document.body.append(viewport);
   const reveal = vi.fn();
   createRoot(stop => {
