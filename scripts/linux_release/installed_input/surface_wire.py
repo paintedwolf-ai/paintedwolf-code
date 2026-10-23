@@ -9,6 +9,7 @@ OPERATIONS = {
     'workspace-hide-main-v1': (('ctrl', 'shift', 'w'),),
     'workspace-request-quit-v1': (('ctrl', 'q'),),
     'workspace-cancel-quit-v1': (('esc',),),
+    'workspace-focus-quit-v1': (('shift', 'tab'),),
     'workspace-approve-quit-v1': (('ret',),),
     'presence-cancel-v1': (('esc',),),
 }
@@ -60,7 +61,7 @@ def proof(value):
     control = value['control']
     if control is not None:
         if (not isinstance(control, dict) or set(control) != {'identity', 'kind', 'parent', 'focused'}
-                or control['kind'] != 'quit-button' or control['focused'] is not True):
+                or control['kind'] not in {'quit-button', 'keep-working-button'} or control['focused'] is not True):
             raise ValueError('surface input has an unknown focused control')
         object_identity(control['identity'], value['launch'])
         if (control['identity']['process'] != value['main']['process']
@@ -92,12 +93,14 @@ def before(operation, value):
     if len(selected) != 1:
         raise ValueError('surface input requires exactly one owned active visible frame')
     row = selected[0]
-    if operation in {'workspace-cancel-quit-v1', 'workspace-approve-quit-v1', 'presence-cancel-v1'}:
+    if operation in {'workspace-cancel-quit-v1', 'workspace-focus-quit-v1', 'workspace-approve-quit-v1', 'presence-cancel-v1'}:
         expected = 'presence-dialog' if operation == 'presence-cancel-v1' else 'quit-dialog'
         if row['kind'] != expected:
             raise ValueError('dialog input requires the actual selected owned modal dialog')
-        if operation == 'workspace-approve-quit-v1' and value['control'] is None:
-            raise ValueError('Quit approval requires its actual focused Quit button')
+        if operation in {'workspace-focus-quit-v1', 'workspace-approve-quit-v1'}:
+            kind = 'quit-button' if operation == 'workspace-approve-quit-v1' else 'keep-working-button'
+            if value['control'] is None or value['control']['kind'] != kind:
+                raise ValueError('Quit input requires its actual declared focused native button')
     elif operation in OPERATIONS:
         if row['kind'] != 'frame' or row['identity'] != value['main']:
             raise ValueError('workspace input requires its captured original main frame')
@@ -132,6 +135,8 @@ def finished(operation, old, new):
         return not main['visible'] and not main['defunct'] and any(
             row['kind'] == 'frame' and row['identity'] != new['main'] and active(row)
             for row in new['surfaces'])
+    if operation == 'workspace-focus-quit-v1':
+        return new['control'] is not None and new['control']['kind'] == 'quit-button'
     if operation == 'workspace-request-quit-v1':
         return any(row['kind'] == 'quit-dialog' and active(row) for row in new['surfaces'])
     if operation in {'workspace-cancel-quit-v1', 'presence-cancel-v1'}:
