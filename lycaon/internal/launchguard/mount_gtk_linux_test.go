@@ -200,14 +200,18 @@ func assertGTKVolumeHold(t *testing.T, bootstrap string, environment []string, p
 	command.Env = environment
 	input, err := command.StdinPipe()
 	testutil.FailErr(t, "prepare held-file control", err)
-	output, err := command.StdoutPipe()
-	testutil.FailErr(t, "prepare held-file report", err)
+	output, reportWriter, err := os.Pipe()
+	testutil.FailErr(t, "prepare owned held-file report pipe", err)
+	defer output.Close()
+	defer reportWriter.Close()
+	command.Stdout = reportWriter
 	diagnostic, err := os.Create(filepath.Join(t.TempDir(), "gtk-held-stderr.log"))
 	testutil.FailErr(t, "retain held-file diagnostics", err)
 	defer diagnostic.Close()
 	command.Stderr = diagnostic
 	diagnostics := func() string { raw, _ := os.ReadFile(diagnostic.Name()); return string(raw) }
 	testutil.FailErr(t, "start selected-generation GTK held-file lane", command.Start())
+	_ = reportWriter.Close()
 	done := make(chan error, 1)
 	go func() { done <- command.Wait() }()
 	waited := false
