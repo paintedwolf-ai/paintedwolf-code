@@ -1050,6 +1050,10 @@ This is write admission, not a storage reservation or a pinned cache.
 The publisher trims its ephemeral Go build cache to 1 GiB before measuring the
 combined module/build payload. The desktop warmer removes workspace package
 outputs with Cargo's package-scoped cleanup, retaining dependency builds.
+Decision-engine preparation and tests share the deployment floor, Metal kernel
+path, and Rust/native path mappings. Checkout and captured-source builds map
+the snapshot parent consistently, so changing capture slots does not invalidate
+dependency fingerprints. Cargo still validates the current source.
 Hosted development Rust profiles are configured explicitly by setup and the
 calling workflows; cache restore and save do not change compiler settings.
 Development builds omit debug data,

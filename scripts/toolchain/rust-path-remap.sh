@@ -1,13 +1,8 @@
 #!/usr/bin/env bash
-# Shipped Rust binaries must not carry the builder's home, toolchain or checkout
-# paths in panic locations and debug strings. Sourced by every Rust build entry
-# point; it extends CARGO_ENCODED_RUSTFLAGS, which cargo prefers over RUSTFLAGS,
-# so paths containing spaces stay single arguments. C and C++ that build scripts
-# compile through cc receive the same maps as -ffile-prefix-map.
-#
-#   rust_path_remap ROOT
+# Keep builder paths out of Rust and native dependency binaries.
 rust_path_remap() {
-  local root="$1"
+  local root="${PW_SOURCE_ROOT_ORIGINAL:-$1}"
+  local snapshots="${PW_TEST_SNAPSHOT_ROOT:-/tmp/paintedwolf-source-snapshots-${UID}}"
   local separator=$'\x1f'
   local flags="${CARGO_ENCODED_RUSTFLAGS:-}"
   if [[ -z "${flags}" && -n "${RUSTFLAGS:-}" ]]; then
@@ -25,7 +20,7 @@ rust_path_remap() {
   fi
   # rustc applies the last matching prefix, so broader directories come first.
   local mapping
-  for mapping in "${home}=/build-home" "${rustup%/}=/rustup" "${cargo%/}=/cargo" "${root%/}=/source"; do
+  for mapping in "${home}=/build-home" "${rustup%/}=/rustup" "${cargo%/}=/cargo" "${snapshots%/}=/source-snapshots" "${root%/}=/source"; do
     [[ "${mapping%%=*}" == /?* ]] || continue
     case "${separator}${flags}${separator}" in
       *"${separator}--remap-path-prefix=${mapping}${separator}"*) continue ;;
