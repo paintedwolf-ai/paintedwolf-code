@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/repochange"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -38,16 +39,18 @@ func TestProjectRemovalStopsWatchBeforeDeletionAndRestartsOnFailure(t *testing.T
 		}
 		t.Run(name, func(t *testing.T) {
 			root := t.TempDir()
-			registry := project.NewMemoryRegistry()
+			database := testdbfixture.Open(t, "removal-watch.db")
+			registry := project.NewSQLRegistry(database)
 			p, err := registry.Create(t.Context(), project.CreateParams{Roots: []project.AttachRootParams{{Path: root}}})
 			testutil.FailErr(t, "create project", err)
+			root = p.Roots[0].Path
 			stopped := make(chan bool, 1)
 			wrapped := removalWatchRegistry{Registry: registry, beforeDelete: func() { stopped <- !repochange.Coverage(root).Watching }}
 			if fail {
 				wrapped.failure = errors.New("deletion failed")
 			}
 			server := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{
-				Core:    hostapi.CoreDependencies{Store: sessionstore.NewMemory(), Projects: wrapped},
+				Core:    hostapi.CoreDependencies{Database: database, Store: sessionstore.NewSQL(database), Projects: wrapped},
 				Storage: hostapi.StorageDependencies{DataDir: t.TempDir(), WorkerSeedRoot: t.TempDir()},
 			}), nil, hostapi.TestAPIToken)
 			sourcefeed.EnsureProjectWatch(t.Context(), nil, p.ID, "", []sourcefeed.RootSpec{{ID: p.Roots[0].ID, WorkspaceID: p.WorkspaceID(), Path: root}}, nil)

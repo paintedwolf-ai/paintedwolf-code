@@ -72,13 +72,7 @@ func (s *Watch) ensureWorkspaceWatch(ctx context.Context, p *project.Project) bo
 		return false
 	}
 	defer finish()
-	roots := make([]sourcefeed.RootSpec, 0, len(p.Roots))
-	for _, r := range p.Roots {
-		roots = append(roots, sourcefeed.RootSpec{ID: r.ID, WorkspaceID: p.WorkspaceID(), Path: r.Path})
-	}
-	bound := sourcefeed.EnsureProjectWatch(ctx, &s.watches, p.ID, p.SourceBranch.String(), roots, func(ctx context.Context, _ string, batch sourcefeed.ExternalBatch) {
-		s.observeWorkspaceChanges(ctx, p, batch)
-	})
+	bound := s.bindWorkspaceWatch(ctx, p)
 	if bound {
 		s.scheduleWorkspaceInventory(ctx, p)
 	}

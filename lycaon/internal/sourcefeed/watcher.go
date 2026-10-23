@@ -11,6 +11,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/gitrepo"
 	"github.com/lycaon/lycaon/internal/repochange"
+	"github.com/lycaon/lycaon/internal/workscope"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -46,6 +47,7 @@ type ExternalBatch struct {
 type ExternalObserver func(ctx context.Context, projectID string, batch ExternalBatch)
 
 type projectWatch struct {
+	callbacks workscope.Group
 	projectID string
 	roots     []RootSpec
 	lifetime  *WatchLifetime
@@ -93,30 +95,6 @@ func SeedProjectWatch(ctx context.Context, projectID string, seeds []RootSeed) {
 			continue
 		}
 		repochange.SeedWatch(ctx, root.Path, directories)
-	}
-}
-
-// StopProjectWatch removes project routing.
-func StopProjectWatch(ctx context.Context, projectID string) {
-	watchRegMu.Lock()
-	var removed []*projectWatch
-	for key, watch := range watchers {
-		if key.projectID == strings.TrimSpace(projectID) {
-			removed = append(removed, watch)
-			delete(watchers, key)
-		}
-	}
-	var unused []string
-	for _, watch := range removed {
-		unused = append(unused, unusedWatchRootsLocked(watch)...)
-	}
-	watchRegMu.Unlock()
-	for _, watch := range removed {
-		watch.unbind()
-		watch.changes.close(ctx)
-	}
-	for _, root := range unused {
-		repochange.CloseRoot(root)
 	}
 }
 
@@ -191,6 +169,12 @@ func (w *projectWatch) flushExternalChanges(ctx context.Context, pending pending
 	if w == nil || (len(pending.changes) == 0 && !pending.resync && !pending.headMoved) {
 		return
 	}
+	activeCtx, finishCallback, err := w.callbacks.Begin(ctx)
+	if err != nil {
+		return
+	}
+	defer finishCallback()
+	ctx = activeCtx
 	watchRegMu.Lock()
 	lifetime, external := w.lifetime, w.external
 	watchRegMu.Unlock()
@@ -217,7 +201,6 @@ func (w *projectWatch) flushExternalChanges(ctx context.Context, pending pending
 	if ctx.Err() != nil {
 		return
 	}
-	var err error
 	if len(batch.Changes) == 0 {
 		err = emitProjectSignal(ctx, w.projectID, w.roots[0].WorkspaceID, batch.Resync, batch.HeadMoved)
 	} else {

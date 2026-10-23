@@ -7,7 +7,6 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectremoval"
 	"github.com/lycaon/lycaon/internal/session/projectcontrol"
-	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/workspace"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -46,13 +45,17 @@ func (s *Removal) deleteProject(ctx context.Context, id string, force bool, repo
 	} else if !s.MutationGate.MutationDrained(id) {
 		return project.ErrProjectBusy
 	}
-	sourcefeed.StopProjectWatch(ctx, id)
+	resumeWatch, err := s.sourceWatch.SuspendProjectWatch(ctx, id)
 	deleted := false
 	defer func() {
+		resumeWatch()
 		if !deleted {
 			s.sourceWatch.ScheduleSourceWatch(context.WithoutCancel(ctx), id)
 		}
 	}()
+	if err != nil {
+		return err
+	}
 	if err := s.Sessions.Chats.RetireForProjectDelete(ctx, id, func(completed, total int) {
 		report(wire.ProjectRemovalProgress{Phase: "chats", Completed: completed, Total: total})
 	}); err != nil {
