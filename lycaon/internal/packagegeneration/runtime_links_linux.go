@@ -7,103 +7,164 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 
 	"golang.org/x/sys/unix"
 )
 
-// Resolve a source link through authenticated descriptor-relative components.
-// External alternatives directories are provenance, never projection authority.
+type runtimeResolvedDirectory struct {
+	file *os.File
+	path string
+}
+type runtimeResolvedObject struct {
+	file        *os.File
+	path        string
+	directories []runtimeResolvedDirectory
+}
+
+type runtimeLinkWalk struct {
+	layout   layout
+	origin   RuntimeOrigin
+	snapshot *runtimeSnapshot
+	anchor   runtimeResolvedDirectory
+	opened   []*os.File
+	followed int
+}
+
+// Resolve raw path components in kernel order: a preceding symlink expands
+// before '..'. Lexical cleaning of an unwalked target would select wrong bytes.
 func (l layout) resolveRuntimeLink(name string, origin RuntimeOrigin, snapshot *runtimeSnapshot) (string, error) {
-	pending := name
-	seen := map[string]bool{}
-	var links []RuntimeLink
-	for {
-		relative, err := filepath.Rel(l.anchor, pending)
-		if err != nil || relative == ".." || strings.HasPrefix(relative, "../") {
-			return "", errors.New("runtime capture: link outside trust anchor")
+	anchor, err := l.runtimeSourceDirectory(l.anchor, snapshot.Custody)
+	if err != nil {
+		return "", err
+	}
+	walk := runtimeLinkWalk{layout: l, origin: origin, snapshot: snapshot, anchor: runtimeResolvedDirectory{file: anchor, path: l.anchor}, opened: []*os.File{anchor}}
+	defer func() {
+		for _, file := range walk.opened {
+			_ = file.Close()
 		}
-		current, err := l.runtimeSourceDirectory(l.anchor, snapshot.Custody)
-		if err != nil {
-			return "", err
-		}
-		parts := strings.Split(relative, string(os.PathSeparator))
-		physical := l.anchor
-		restarted := false
-		for index, component := range parts {
-			child, err := openRuntimeAt(current, component, unix.O_PATH)
-			if err != nil {
-				_ = current.Close()
-				return "", err
-			}
-			physical = filepath.Join(physical, component)
-			if err := l.recordRuntimeCustody(physical, child, snapshot.Custody); err != nil {
-				_ = child.Close()
-				_ = current.Close()
-				return "", err
-			}
-			info, err := child.Stat()
-			if err != nil {
-				_ = child.Close()
-				_ = current.Close()
-				return "", err
-			}
-			if info.Mode()&os.ModeSymlink != 0 {
-				if seen[physical] || len(seen) >= 40 {
-					_ = child.Close()
-					_ = current.Close()
-					return "", errors.New("runtime capture: cyclic or overlong kernel link chain")
+	}()
+	parts, err := walk.absoluteParts(name)
+	if err != nil {
+		return "", err
+	}
+	selected, err := walk.resolve([]runtimeResolvedDirectory{walk.anchor}, parts)
+	if err != nil {
+		return "", err
+	}
+	if !walk.selected(selected.path) {
+		return "", errors.New("runtime capture: link target leaves explicit selected root")
+	}
+	return selected.path, nil
+}
+
+func (w *runtimeLinkWalk) selected(name string) bool {
+	return name == w.origin.SelectedRoot || strings.HasPrefix(name, w.origin.SelectedRoot+"/")
+}
+
+func (w *runtimeLinkWalk) absoluteParts(name string) ([]string, error) {
+	if !filepath.IsAbs(name) {
+		return nil, errors.New("runtime capture: expected absolute link path")
+	}
+	relative := ""
+	if w.layout.anchor == "/" {
+		relative = strings.TrimPrefix(name, "/")
+	} else if name == w.layout.anchor {
+		relative = ""
+	} else if strings.HasPrefix(name, w.layout.anchor+"/") {
+		relative = strings.TrimPrefix(name, w.layout.anchor+"/")
+	} else {
+		return nil, errors.New("runtime capture: link outside trust anchor")
+	}
+	return strings.Split(relative, "/"), nil
+}
+
+func (w *runtimeLinkWalk) resolve(stack []runtimeResolvedDirectory, parts []string) (runtimeResolvedObject, error) {
+	stack = slices.Clone(stack)
+	for index, component := range parts {
+		switch component {
+		case "", ".":
+			continue
+		case "..":
+			if len(stack) == 1 {
+				if w.layout.anchor != "/" {
+					return runtimeResolvedObject{}, errors.New("runtime capture: link escapes trust anchor")
 				}
-				seen[physical] = true
-				target, err := runtimeReadlink(child)
-				_ = child.Close()
-				_ = current.Close()
-				if err != nil {
-					return "", err
-				}
-				facts := snapshot.Custody[physical]
-				links = append(links, RuntimeLink{Path: physical, Target: target, Origin: origin, Observation: &facts})
-				if filepath.IsAbs(target) {
-					pending = target
-				} else {
-					pending = filepath.Join(filepath.Dir(physical), target)
-				}
-				if index+1 < len(parts) {
-					pending = filepath.Join(pending, filepath.Join(parts[index+1:]...))
-				}
-				pending = filepath.Clean(pending)
-				restarted = true
-				break
+			} else {
+				stack = stack[:len(stack)-1]
 			}
-			_ = current.Close()
-			current = child
-			if index+1 < len(parts) && !info.IsDir() {
-				_ = current.Close()
-				return "", errors.New("runtime capture: source link crosses non-directory")
-			}
-		}
-		if restarted {
 			continue
 		}
-		info, err := current.Stat()
-		_ = current.Close()
+		parent := stack[len(stack)-1]
+		child, err := openRuntimeAt(parent.file, component, unix.O_PATH)
 		if err != nil {
-			return "", err
+			return runtimeResolvedObject{}, err
 		}
-		if !info.IsDir() && !info.Mode().IsRegular() {
-			return "", errors.New("runtime capture: link target is not retained code or resources")
+		w.opened = append(w.opened, child)
+		physical := filepath.Join(parent.path, component)
+		if len(w.snapshot.Custody) >= RuntimeSealMaxEntries {
+			return runtimeResolvedObject{}, errors.New("runtime capture: link custody exceeds format ceiling")
 		}
-		if physical != origin.SelectedRoot && !strings.HasPrefix(physical, origin.SelectedRoot+"/") {
-			return "", errors.New("runtime capture: link target leaves explicit selected root")
+		if err := w.layout.recordRuntimeCustody(physical, child, w.snapshot.Custody); err != nil {
+			return runtimeResolvedObject{}, err
 		}
-		for _, link := range links {
-			link.ResolvedPath = physical
-			link.CapturedPath = runtimeViewPath(physical)
-			if previous, exists := snapshot.Links[link.Path]; exists && !reflect.DeepEqual(previous, link) {
-				return "", errors.New("runtime capture: conflicting source link provenance")
+		info, err := child.Stat()
+		if err != nil {
+			return runtimeResolvedObject{}, err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			// Linux pathname lookup follows at most forty links per resolution.
+			w.followed++
+			if w.followed > 40 {
+				return runtimeResolvedObject{}, errors.New("runtime capture: cyclic or overlong kernel link chain")
 			}
-			snapshot.Links[link.Path] = link
+			target, err := runtimeReadlink(child)
+			if err != nil {
+				return runtimeResolvedObject{}, err
+			}
+			start, targetParts := stack, strings.Split(target, "/")
+			if filepath.IsAbs(target) {
+				start = []runtimeResolvedDirectory{w.anchor}
+				targetParts, err = w.absoluteParts(target)
+				if err != nil {
+					return runtimeResolvedObject{}, err
+				}
+			}
+			resolved, err := w.resolve(start, targetParts)
+			if err != nil {
+				return runtimeResolvedObject{}, err
+			}
+			if !w.selected(resolved.path) {
+				return runtimeResolvedObject{}, errors.New("runtime capture: link referent leaves explicit selected root")
+			}
+			facts := w.snapshot.Custody[physical]
+			link := RuntimeLink{Path: physical, Target: target, ResolvedPath: resolved.path, CapturedPath: runtimeViewPath(resolved.path), Origin: w.origin, Observation: &facts}
+			if previous, exists := w.snapshot.Links[physical]; exists && !reflect.DeepEqual(previous, link) {
+				return runtimeResolvedObject{}, errors.New("runtime capture: conflicting source link provenance")
+			}
+			w.snapshot.Links[physical] = link
+			if index+1 == len(parts) {
+				return resolved, nil
+			}
+			resolvedInfo, err := resolved.file.Stat()
+			if err != nil {
+				return runtimeResolvedObject{}, err
+			}
+			if !resolvedInfo.IsDir() {
+				return runtimeResolvedObject{}, errors.New("runtime capture: source link crosses non-directory")
+			}
+			return w.resolve(resolved.directories, parts[index+1:])
 		}
-		return physical, nil
+		if info.IsDir() {
+			stack = append(stack, runtimeResolvedDirectory{file: child, path: physical})
+			continue
+		}
+		if !info.Mode().IsRegular() || index+1 < len(parts) {
+			return runtimeResolvedObject{}, errors.New("runtime capture: source link crosses unsupported object")
+		}
+		return runtimeResolvedObject{file: child, path: physical}, nil
 	}
+	directory := stack[len(stack)-1]
+	return runtimeResolvedObject{file: directory.file, path: directory.path, directories: stack}, nil
 }

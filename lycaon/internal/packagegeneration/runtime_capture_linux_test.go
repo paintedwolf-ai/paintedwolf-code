@@ -258,3 +258,48 @@ func TestRuntimeCaptureBoundsDirectoryBeforeCollectingIt(t *testing.T) {
 		t.Fatal("collected directory beyond remaining ceiling")
 	}
 }
+
+func TestRuntimeCaptureResolvesSymlinkBeforeFollowingDotDot(t *testing.T) {
+	l, source, target := runtimeCaptureFixture(t)
+	deep := filepath.Join(source, "other", "deep")
+	if err := os.MkdirAll(deep, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "payload"), []byte("lexical decoy"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "other", "payload"), []byte("kernel selection"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("other/deep", filepath.Join(source, "dirlink")); err != nil {
+		t.Fatal(err)
+	}
+	alias := filepath.Join(source, "ordered.so")
+	original := "dirlink/../payload"
+	if err := os.Symlink(original, alias); err != nil {
+		t.Fatal(err)
+	}
+	opened, err := os.ReadFile(alias)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(opened) != "kernel selection" {
+		t.Fatalf("unexpected kernel lookup=%q", opened)
+	}
+	captured, err := l.captureRuntime([]RuntimeOrigin{{Kind: "native", SelectedRoot: source}}, target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	retained, err := target.ReadFile(runtimeViewPath(alias))
+	if err != nil || string(retained) != string(opened) {
+		t.Fatalf("retained=%q kernel=%q err=%v", retained, opened, err)
+	}
+	for _, link := range captured.Links {
+		if link.Path == alias && (link.Target != original || link.ResolvedPath != filepath.Join(source, "other", "payload")) {
+			t.Fatalf("lost ordered provenance=%+v", link)
+		}
+		if link.Path == filepath.Join(source, "dirlink") && link.ResolvedPath != deep {
+			t.Fatalf("directory link refers to caller suffix=%+v", link)
+		}
+	}
+}
