@@ -82,6 +82,22 @@ class SurfaceTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 surface_wire.finished('workspace-approve-quit-v1', shown, changed)
 
+    def test_quit_focus_move_requires_safe_button_then_observed_quit_focus(self):
+        dialog = self.row(self.dialog, kind='quit-dialog', modal=True, parent=self.main)
+        shown = {**self.proof, 'surfaces': [self.row(self.main, active=False), dialog]}
+        control = {'identity': self.button, 'kind': 'keep-working-button',
+                   'parent': self.dialog, 'focused': True}
+        safe = {**shown, 'control': control}
+        surface_wire.before('workspace-focus-quit-v1', safe)
+        with self.assertRaises(ValueError):
+            surface_wire.before('workspace-approve-quit-v1', safe)
+        self.assertFalse(surface_wire.finished('workspace-focus-quit-v1', safe, safe))
+        moved = {**shown, 'control': {**control, 'kind': 'quit-button'}}
+        self.assertTrue(surface_wire.finished('workspace-focus-quit-v1', safe, moved))
+        with self.assertRaises(ValueError):
+            surface_wire.before('workspace-focus-quit-v1', moved)
+        surface_wire.before('workspace-approve-quit-v1', moved)
+
     def test_entry_and_surface_request_authorities_cannot_be_swapped(self):
         pending = {'format_version': 1, 'binding': self.execution, 'transaction_id': 'd' * 32,
                    'operation': 'workspace-request-quit-v1', 'ordinal': 0, 'surface': self.proof}
