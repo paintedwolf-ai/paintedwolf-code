@@ -18,12 +18,12 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
-func (r *ProgramRuntime) resolveScratchMappings(ctx context.Context, run *programRun, mappings []toolcontract.StreamSourceMapping, streamLen int64) *sourceMappingBuffer {
+func (r *ProgramRuntime) resolveOutputMappings(ctx context.Context, run *programRun, mappings []toolcontract.StreamSourceMapping, streamLen int64) *sourceMappingBuffer {
 	out := newSourceMappingBuffer(ctx, run.memory)
 	if len(mappings) == 0 || streamLen <= 0 {
 		return out
 	}
-	scratchDir := strings.TrimSpace(run.tc.Host.SessionScratchDir)
+	outputDir := strings.TrimSpace(run.tc.Host.SessionOutputDir)
 	appendCoalesced := func(m toolcontract.StreamSourceMapping) {
 		if m.OutputStartByte < 0 {
 			m.SourceStartByte += -m.OutputStartByte
@@ -45,7 +45,7 @@ func (r *ProgramRuntime) resolveScratchMappings(ctx context.Context, run *progra
 		if out.disabled {
 			break
 		}
-		if prevProg, prevStream, ok := parseScratchOutputSource(m.Source.SourceID, scratchDir); ok && r.Recorder != nil {
+		if prevProg, prevStream, ok := parseOutputSource(m.Source.SourceID, outputDir); ok && r.Recorder != nil {
 			prevRef := "output:program:" + prevProg + ":" + prevStream
 			previous, err := r.Recorder.ReadProgramOutputMappings(ctx, run.tc.Identity.SessionID, prevProg, prevRef, run.memory)
 			if err == nil && len(previous.Mappings) > 0 && m.Source.EndByte == previous.Blob.Size && previous.Blob.MatchesContentDigest(m.Source.SHA256) {
@@ -69,20 +69,20 @@ func (r *ProgramRuntime) resolveScratchMappings(ctx context.Context, run *progra
 	return out
 }
 
-func parseScratchOutputSource(sourceID, scratchDir string) (programID, stream string, ok bool) {
+func parseOutputSource(sourceID, outputDir string) (programID, stream string, ok bool) {
 	if !strings.HasPrefix(sourceID, "disk:") {
 		return "", "", false
 	}
 	rest := strings.TrimPrefix(sourceID, "disk:")
 	trimmed := strings.TrimPrefix(rest, "/")
 	var base string
-	if strings.HasPrefix(trimmed, "@scratch/output/") {
-		base = strings.TrimPrefix(trimmed, "@scratch/output/")
-	} else if scratchDir != "" {
+	if strings.HasPrefix(trimmed, "@output/") {
+		base = strings.TrimPrefix(trimmed, "@output/")
+	} else if outputDir != "" {
 		cleanPath := filepath.Clean(rest)
 		dir := filepath.Dir(cleanPath)
-		wantDir := filepath.Clean(filepath.Join(scratchDir, "output"))
-		canonDir := filepath.Clean(filepath.Join(fspath.CanonicalPath(scratchDir), "output"))
+		wantDir := filepath.Clean(outputDir)
+		canonDir := filepath.Clean(fspath.CanonicalPath(outputDir))
 		if dir == wantDir || dir == canonDir {
 			base = filepath.Base(cleanPath)
 		}

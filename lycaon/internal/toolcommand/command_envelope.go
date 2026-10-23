@@ -96,11 +96,11 @@ func ParseEnvelope(args map[string]any) (Envelope, bool) {
 }
 
 // replacements checks filesystem operands in the declared working directory.
-func (env Envelope) Replacements(ctx context.Context, activeDir, sessionScratch string) ([]ReplacementCall, bool) {
+func (env Envelope) Replacements(ctx context.Context, activeDir, sessionScratch, sessionOutput string) ([]ReplacementCall, bool) {
 	if env.cwd != "" && !filepath.IsAbs(env.cwd) && !projectRelativePath(env.cwd) {
 		return nil, false
 	}
-	calls, ok := ExactCommandReplacement(ctx, env.Command, joinCommandCwd(activeDir, env.cwd), sessionScratch)
+	calls, ok := ExactCommandReplacement(ctx, env.Command, joinCommandCwd(activeDir, env.cwd), sessionScratch, sessionOutput)
 	if !ok {
 		return nil, false
 	}

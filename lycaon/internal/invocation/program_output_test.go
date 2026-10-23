@@ -125,7 +125,7 @@ func TestIncompleteDeliveryWindowSurvivesReopenWithoutChangingExecution(t *testi
 	ref := "output:program:" + f.program + ":stdout"
 	_, err = lifetime.Attach(t.Context(), f.program, invocation.RetainedOutput{Stream: "stdout", Reference: ref, Complete: false}, spill)
 	testutil.FailErr(t, "attach incomplete output", err)
-	window := wire.CommandProgramOutputWindow{Stream: "stdout", Ref: ref, ScratchPath: "@scratch/output/" + f.program + ".stdout", TotalBytes: 7, TotalLines: 1, Complete: false, InlineBudgetBytes: 12 << 10, Limit: &wire.CommandProgramOutputLimit{Code: "COMMAND_LIMIT_EXCEEDED", LimitID: failure.Account, Maximum: failure.Maximum, Observed: failure.Observed}}
+	window := wire.CommandProgramOutputWindow{Stream: "stdout", Ref: ref, OutputPath: "@output/" + f.program + ".stdout", TotalBytes: 7, TotalLines: 1, Complete: false, InlineBudgetBytes: 12 << 10, Limit: &wire.CommandProgramOutputLimit{Code: "COMMAND_LIMIT_EXCEEDED", LimitID: failure.Account, Maximum: failure.Maximum, Observed: failure.Observed}}
 	testutil.FailErr(t, "attach partial delivery facts", lifetime.AttachDeliveryWindow(t.Context(), f.program, window))
 	reopened := invocation.NewSQLRecorder(f.database)
 	after, err := reopened.ReadProgramPage(t.Context(), f.session, f.program, "", 10)

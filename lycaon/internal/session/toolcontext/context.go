@@ -81,7 +81,8 @@ func (m *Service) Build(ctx context.Context, sess *api.Session, profileID string
 		tctx.Source.SourceMutations = m.sourceMutations
 		tctx.Source.EditorDocuments = m.editorDocuments
 		tctx.Effects.CredentialFiles = m.credentialFiles
-		tctx.Host.SessionScratchDir = m.execution.ScratchDir(ctx, sess)
+		directories := m.execution.SessionDirectories(ctx, sess)
+		tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir = directories.Scratch, directories.Output
 	}
 	m.attachRepoSizeFact(ctx, &tctx)
 	m.AttachSkillReadRoots(ctx, sess, profileID, machine, &tctx)

@@ -84,7 +84,7 @@ func TestOutputDeliveryHeadTailNoticeAndSedNextLines(t *testing.T) {
 		t.Fatalf("expected truncated output window, got %+v", out)
 	}
 	win := out.Outputs[0]
-	if win.Stream != "stdout" || win.Ref != out.StdoutRef || win.ScratchPath != "@scratch/output/"+out.ProgramID+".stdout" {
+	if win.Stream != "stdout" || win.Ref != out.StdoutRef || win.OutputPath != "@output/"+out.ProgramID+".stdout" {
 		t.Fatalf("unexpected window metadata: %+v", win)
 	}
 	if !strings.HasPrefix(out.Stdout, "line-0001: ") || !strings.HasSuffix(out.Stdout, "line-0500: the quick brown fox jumps over the lazy dog\n") {
@@ -114,7 +114,7 @@ func TestOutputDeliveryHeadTailNoticeAndSedNextLines(t *testing.T) {
 	}
 
 	noticeLine := lines[noticeIdx]
-	re := regexp.MustCompile(`\(sed -n '(\d+),(\d+)p' (@scratch/output/[^)]+)\)`)
+	re := regexp.MustCompile(`\(sed -n '(\d+),(\d+)p' (@output/[^)]+)\)`)
 	m := re.FindStringSubmatch(noticeLine)
 	if m == nil {
 		t.Fatalf("notice line did not match expected sed pattern: %q", noticeLine)
@@ -123,61 +123,61 @@ func TestOutputDeliveryHeadTailNoticeAndSedNextLines(t *testing.T) {
 	wantNextLine := fmt.Sprintf("line-%04d: the quick brown fox jumps over the lazy dog\n", win.HeadEndLine+1)
 
 	sedRaw, err := f.Call(t, t.Context(), sedCmd)
-	testutil.FailErr(t, "call sed on scratch output", err)
+	testutil.FailErr(t, "call sed on output copy", err)
 	sedOut := decodeProgramOutcome(t, sedRaw)
 	if !strings.HasPrefix(sedOut.Stdout, wantNextLine) {
 		t.Fatalf("sed output did not start with exact next line %q; got %q", wantNextLine, sedOut.Stdout[:min(len(sedOut.Stdout), 100)])
 	}
 
-	grepRaw, err := f.Call(t, t.Context(), fmt.Sprintf("grep 'line-%04d:' %s", win.HeadEndLine+2, win.ScratchPath))
-	testutil.FailErr(t, "call grep on scratch output", err)
+	grepRaw, err := f.Call(t, t.Context(), fmt.Sprintf("grep 'line-%04d:' %s", win.HeadEndLine+2, win.OutputPath))
+	testutil.FailErr(t, "call grep on output copy", err)
 	grepOut := decodeProgramOutcome(t, grepRaw)
 	if !strings.HasPrefix(grepOut.Stdout, fmt.Sprintf("line-%04d:", win.HeadEndLine+2)) {
 		t.Fatalf("grep output = %q", grepOut.Stdout)
 	}
 
-	tailRaw, err := f.Call(t, t.Context(), "tail -n 2 "+win.ScratchPath)
-	testutil.FailErr(t, "call tail on scratch output", err)
+	tailRaw, err := f.Call(t, t.Context(), "tail -n 2 "+win.OutputPath)
+	testutil.FailErr(t, "call tail on output copy", err)
 	tailOut := decodeProgramOutcome(t, tailRaw)
 	if !strings.Contains(tailOut.Stdout, "line-0499:") || !strings.Contains(tailOut.Stdout, "line-0500:") {
 		t.Fatalf("tail output = %q", tailOut.Stdout)
 	}
 }
 
-func TestScratchOutputIsReadOnlyAndRefusesMutation(t *testing.T) {
+func TestOutputCopyIsReadOnlyAndRefusesMutation(t *testing.T) {
 	f := newOutputDeliveryFixture(t)
 	raw, err := f.Call(t, t.Context(), "printf 'hello world\n'")
 	testutil.FailErr(t, "call printf", err)
 	out := decodeProgramOutcome(t, raw)
 
-	diskPath := filepath.Join(f.ScratchDir, "output", out.ProgramID+".stdout")
+	diskPath := filepath.Join(f.OutputDir, out.ProgramID+".stdout")
 	info, err := os.Stat(diskPath)
-	testutil.FailErr(t, "stat scratch output", err)
+	testutil.FailErr(t, "stat output copy", err)
 	if info.Mode().Perm() != 0o444 {
-		t.Fatalf("scratch output mode = %o, want 0444", info.Mode().Perm())
+		t.Fatalf("output copy mode = %o, want 0444", info.Mode().Perm())
 	}
 
-	scratchRef := "@scratch/output/" + out.ProgramID + ".stdout"
-	redirectRaw, redirectErr := f.Call(t, t.Context(), "echo overwrite > "+scratchRef)
+	outputRef := "@output/" + out.ProgramID + ".stdout"
+	redirectRaw, redirectErr := f.Call(t, t.Context(), "echo overwrite > "+outputRef)
 	if redirectErr == nil {
 		redirectOut := decodeProgramOutcome(t, redirectRaw)
 		if redirectOut.Status == 0 && redirectOut.Refusal == nil {
-			t.Fatalf("expected > on %s to be refused, got %+v", scratchRef, redirectOut)
+			t.Fatalf("expected > on %s to be refused, got %+v", outputRef, redirectOut)
 		}
 	}
 
-	rmRaw, rmErr := f.Call(t, t.Context(), "rm "+scratchRef)
+	rmRaw, rmErr := f.Call(t, t.Context(), "rm "+outputRef)
 	if rmErr == nil {
 		rmOut := decodeProgramOutcome(t, rmRaw)
 		if rmOut.Status == 0 && rmOut.Refusal == nil {
-			t.Fatalf("expected rm on %s to be refused, got %+v", scratchRef, rmOut)
+			t.Fatalf("expected rm on %s to be refused, got %+v", outputRef, rmOut)
 		}
 	}
 
 	after, err := os.ReadFile(diskPath)
-	testutil.FailErr(t, "read scratch output after refused mutations", err)
+	testutil.FailErr(t, "read output copy after refused mutations", err)
 	if string(after) != "hello world\n" {
-		t.Fatalf("scratch output mutated: %q", string(after))
+		t.Fatalf("output copy mutated: %q", string(after))
 	}
 }
 
@@ -219,14 +219,14 @@ func TestGoTest200kLinesSummarySurvives(t *testing.T) {
 		t.Fatal("oversized optional source capture acquired read credit")
 	}
 
-	re := regexp.MustCompile(`\(sed -n '(\d+),(\d+)p' (@scratch/output/[^)]+)\)`)
+	re := regexp.MustCompile(`\(sed -n '(\d+),(\d+)p' (@output/[^)]+)\)`)
 	m := re.FindStringSubmatch(out.Stdout)
 	if m == nil {
 		t.Fatalf("omitted notice missing sed command in 200k-line output")
 	}
 	sedCmd := fmt.Sprintf("sed -n '%s,%sp' %s", m[1], m[2], m[3])
 	sedRaw, err := f.Call(t, t.Context(), sedCmd)
-	testutil.FailErr(t, "call sed on 200k-line scratch output", err)
+	testutil.FailErr(t, "call sed on 200k-line output copy", err)
 	sedOut := decodeProgramOutcome(t, sedRaw)
 
 	nextLineNum := win.HeadEndLine + 1
@@ -381,22 +381,22 @@ func TestSourceMappingsConfirmHeadAndTailAndMapScratchReadsBackToSource(t *testi
 
 	midStart := win.HeadEndLine + 1
 	midEnd := midStart + 24
-	sedCmd := fmt.Sprintf("sed -n '%d,%dp' %s", midStart, midEnd, win.ScratchPath)
+	sedCmd := fmt.Sprintf("sed -n '%d,%dp' %s", midStart, midEnd, win.OutputPath)
 	_, err = f.Call(t, t.Context(), sedCmd)
-	testutil.FailErr(t, "sed middle lines from scratch output", err)
+	testutil.FailErr(t, "sed middle lines from output copy", err)
 
 	deliveredAfter := f.Delivered()
 	if len(deliveredAfter) != 3 {
-		t.Fatalf("expected 3rd delivered source evidence record after reading @scratch/output with sed -n, got %d", len(deliveredAfter))
+		t.Fatalf("expected 3rd delivered source evidence record after reading @output with sed -n, got %d", len(deliveredAfter))
 	}
 	midRec := deliveredAfter[2]
 	if midRec.Path != "tracked.txt" || midRec.SourceDelivery.StartLine != midStart || midRec.SourceDelivery.EndLine != midEnd {
-		t.Fatalf("expected middle read of @scratch/output to map back to tracked.txt lines %d..%d, got path=%q delivery=%+v",
+		t.Fatalf("expected middle read of @output to map back to tracked.txt lines %d..%d, got path=%q delivery=%+v",
 			midStart, midEnd, midRec.Path, midRec.SourceDelivery)
 	}
 }
 
-func TestScreenedSecretsAreRedactedOnceAndMatchScratchOutput(t *testing.T) {
+func TestScreenedSecretsAreRedactedOnceAndMatchOutputCopy(t *testing.T) {
 	f := newOutputDeliveryFixture(t)
 	secret := "sk-live-super-secret-value-1234567890"
 	var harvestCalls atomic.Int32
@@ -431,10 +431,10 @@ func TestScreenedSecretsAreRedactedOnceAndMatchScratchOutput(t *testing.T) {
 	if strings.Contains(out.Stdout, secret) {
 		t.Fatalf("secret leaked in stdout: %q", out.Stdout)
 	}
-	scratchBytes, err := os.ReadFile(filepath.Join(f.ScratchDir, "output", out.ProgramID+".stdout"))
+	copyBytes, err := os.ReadFile(filepath.Join(f.OutputDir, out.ProgramID+".stdout"))
 	testutil.FailErr(t, "read scratch copy", err)
-	if string(scratchBytes) != out.Stdout {
-		t.Fatalf("scratch output %q != delivered stdout %q", string(scratchBytes), out.Stdout)
+	if string(copyBytes) != out.Stdout {
+		t.Fatalf("output copy %q != delivered stdout %q", string(copyBytes), out.Stdout)
 	}
 	if diff := secretCalls - emptyCalls; diff != 1 {
 		t.Fatalf("expected non-empty stdout to add exactly 1 ScreenStream call over empty stdout, got %d (empty=%d, secret=%d)", diff, emptyCalls, secretCalls)
@@ -473,10 +473,10 @@ func TestChangedScratchCopyCannotReuseOriginalMappings(t *testing.T) {
 	testutil.FailErr(t, "produce mapped copy", err)
 	out := decodeProgramOutcome(t, raw)
 	before := len(f.Delivered())
-	copyPath := filepath.Join(f.ScratchDir, "output", out.ProgramID+".stdout")
+	copyPath := filepath.Join(f.OutputDir, out.ProgramID+".stdout")
 	testutil.FailErr(t, "simulate external permission change", os.Chmod(copyPath, 0600))
 	testutil.FailErr(t, "simulate equal-size external replacement", os.WriteFile(copyPath, []byte("modified source\n"), 0600))
-	_, err = f.Call(t, t.Context(), "cat "+out.Outputs[0].ScratchPath)
+	_, err = f.Call(t, t.Context(), "cat "+out.Outputs[0].OutputPath)
 	testutil.FailErr(t, "read changed scratch copy", err)
 	if after := len(f.Delivered()); after != before {
 		t.Fatalf("changed copy reused source mappings: before=%d after=%d", before, after)
@@ -503,7 +503,7 @@ func TestScreeningExpansionKeepsFullCopyBeyondRawByteCount(t *testing.T) {
 	if out.Status != 0 || len(out.Outputs) != 1 || !out.Outputs[0].Complete || out.Outputs[0].Limit != nil || out.Outputs[0].TotalBytes != int64(len(want)) {
 		t.Fatalf("expanding outcome=%+v", out)
 	}
-	copyBytes, err := os.ReadFile(filepath.Join(f.ScratchDir, "output", out.ProgramID+".stdout"))
+	copyBytes, err := os.ReadFile(filepath.Join(f.OutputDir, out.ProgramID+".stdout"))
 	testutil.FailErr(t, "read expanded copy", err)
 	limits, err := toolcontract.CatalogProgramMemoryLimits()
 	testutil.FailErr(t, "load mapping read limits", err)
@@ -542,7 +542,7 @@ func TestScreeningLimitKeepsExecutionOutcomeAndIncompleteReceipt(t *testing.T) {
 	if window.Complete || window.Limit == nil || window.Limit.Code != "COMMAND_LIMIT_EXCEEDED" || window.Limit.LimitID != "screen_memory_bytes" || window.Limit.Maximum != 32<<20 || window.Limit.Observed <= window.Limit.Maximum {
 		t.Fatalf("partial delivery=%+v", window)
 	}
-	copyBytes, err := os.ReadFile(filepath.Join(f.ScratchDir, "output", out.ProgramID+".stdout"))
+	copyBytes, err := os.ReadFile(filepath.Join(f.OutputDir, out.ProgramID+".stdout"))
 	testutil.FailErr(t, "read saved prefix", err)
 	if int64(len(copyBytes)) != window.TotalBytes || len(f.Delivered()) != 0 || bytes.Contains(copyBytes, []byte("tiny-key")) {
 		t.Fatal("partial copy totals or source credit are false")

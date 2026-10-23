@@ -3,7 +3,6 @@ package projectpaths
 import (
 	"context"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 
@@ -103,12 +102,8 @@ func (s *ReadSession) hostAddressed(modelPath string) bool {
 			return true
 		}
 	}
-	if _, ok := projectroot.ScratchAddress(modelPath); ok {
-		return true
-	}
-	scratch := filepath.Clean(strings.TrimSpace(s.tctx.Host.SessionScratchDir))
-	path := filepath.Clean(modelPath)
-	return scratch != "." && filepath.IsAbs(path) && (path == scratch || strings.HasPrefix(path, scratch+string(filepath.Separator)))
+	_, _, _, ok := sessionRel(s.tctx, modelPath)
+	return ok
 }
 
 // Open opens a path Resolve returned relative to its root's held descriptor,

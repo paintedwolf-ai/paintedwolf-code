@@ -53,7 +53,7 @@ func (r *ProgramOutputRetention) AttachDeliveryWindow(ctx context.Context, progr
 }
 
 func validateDeliveryWindow(program string, w api.CommandProgramOutputWindow) error {
-	if (w.Stream != "stdout" && w.Stream != "stderr") || w.Ref != "output:program:"+program+":"+w.Stream || w.ScratchPath != "@scratch/output/"+program+"."+w.Stream || w.TotalBytes < 0 || w.TotalLines < 0 || w.InlineBudgetBytes < 1 || w.HeadEndByte < 0 || w.TailStartByte < 0 || w.HeadEndLine < 0 || w.TailStartLine < 0 || w.OmittedBytes < 0 || w.OmittedLines < 0 {
+	if (w.Stream != "stdout" && w.Stream != "stderr") || w.Ref != "output:program:"+program+":"+w.Stream || w.OutputPath != "@output/"+program+"."+w.Stream || w.TotalBytes < 0 || w.TotalLines < 0 || w.InlineBudgetBytes < 1 || w.HeadEndByte < 0 || w.TailStartByte < 0 || w.HeadEndLine < 0 || w.TailStartLine < 0 || w.OmittedBytes < 0 || w.OmittedLines < 0 {
 		return fmt.Errorf("invalid delivery window identity or bounds")
 	}
 	if w.Truncated && (w.TailStartByte < w.HeadEndByte || w.TailStartByte > w.TotalBytes || w.OmittedBytes != w.TailStartByte-w.HeadEndByte || w.OmittedLines > w.TotalLines) {

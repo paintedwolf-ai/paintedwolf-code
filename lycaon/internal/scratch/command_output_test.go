@@ -3,7 +3,6 @@ package scratch_test
 import (
 	"errors"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -21,7 +20,8 @@ func TestCommandOutputRejectsInvalidDestinationsWithoutCreatingFiles(t *testing.
 	if err := scratch.PublishCommandOutput(root, "program", "../../escape", strings.NewReader("bytes")); !errors.Is(err, fseffect.ErrInvalidPath) {
 		t.Fatalf("invalid stream: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(root, "output")); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("invalid destination created output directory: %v", err)
+	entries, err := os.ReadDir(root)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("invalid destination created entries: %v, %v", entries, err)
 	}
 }

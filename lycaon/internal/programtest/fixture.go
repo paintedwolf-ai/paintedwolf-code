@@ -47,6 +47,7 @@ type Fixture struct {
 	Session    string
 	Dir        string
 	ScratchDir string
+	OutputDir  string
 	Background *bgprocess.Registry
 	// Configure adjusts each call's tool context before the entry runs.
 	Configure func(*tools.ToolContext)
@@ -117,7 +118,7 @@ func New(t *testing.T, options Options) *Fixture {
 		natives = options.Natives(dir)
 	}
 	scratchDir := t.TempDir()
-	f := &Fixture{Recorder: recorder, Database: database, Session: session, Dir: dir, ScratchDir: scratchDir, Background: background}
+	f := &Fixture{Recorder: recorder, Database: database, Session: session, Dir: dir, ScratchDir: scratchDir, OutputDir: t.TempDir(), Background: background}
 	runtime := &command.ProgramRuntime{
 		Executor: executor, Registry: registry, Recorder: recorder, Blobs: blobstore.Store{Root: t.TempDir()},
 		Projector: captureprojection.New(secretmatch.NewInertMatcher(), nil), Boundary: boundary,
@@ -143,7 +144,7 @@ func (f *Fixture) Call(t *testing.T, ctx context.Context, source string) (string
 	tc := tools.ToolContext{Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: f.Dir, IsPrimary: true}}, ActiveRootID: "r1", SourceWorkspaceKind: api.SourceWorkspaceKindProject}}
 	tc.Identity.Agent, tc.Identity.ProjectID, tc.Identity.SessionID, tc.Identity.ToolCallID = "fixture", testdbseed.DefaultProjectID, f.Session, callID
 	tc.Invocation.ID = parent.ID
-	tc.Host.SessionScratchDir = f.ScratchDir
+	tc.Host.SessionScratchDir, tc.Host.SessionOutputDir = f.ScratchDir, f.OutputDir
 	if f.Configure != nil {
 		f.Configure(&tc)
 	}

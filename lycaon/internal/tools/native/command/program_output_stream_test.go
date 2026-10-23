@@ -5,14 +5,11 @@ import (
 	"context"
 	"errors"
 	"io"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
-	"github.com/lycaon/lycaon/internal/scratch"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -67,22 +64,11 @@ func TestProgramStreamHardLimitRetainsExactPrefix(t *testing.T) {
 	}
 }
 
-func TestScratchOutputRejectsSymlinkParents(t *testing.T) {
-	scratchDir, outside := t.TempDir(), t.TempDir()
-	testutil.FailErr(t, "plant output link", os.Symlink(outside, filepath.Join(scratchDir, "output")))
-	if err := scratch.PublishCommandOutput(scratchDir, "program", "stdout", strings.NewReader("safe\n")); err == nil {
-		t.Fatal("output writer traversed symlink")
-	}
-	if _, err := os.Stat(filepath.Join(outside, "program.stdout")); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("wrote outside scratch: %v", err)
-	}
-}
-
 func TestOutputWindowDoesNotSplitLongLinesAndNamesIncompleteCopy(t *testing.T) {
 	data := strings.Repeat("x", 20000) + "\nsummary\n"
 	sample, err := sampleOutput(strings.NewReader(data), 12<<10)
 	testutil.FailErr(t, "sample long line", err)
-	rendered, window, parts, err := sample.window(t.Context(), "stdout", "output:fixture", "@scratch/output/fixture.stdout", false)
+	rendered, window, parts, err := sample.window(t.Context(), "stdout", "output:fixture", "@output/fixture.stdout", false)
 	testutil.FailErr(t, "render long line", err)
 	if window.HeadEndByte != 0 || window.TailStartLine != 2 || window.OmittedLines != 1 || window.Complete || !strings.HasSuffix(rendered, "summary\n") || strings.Contains(rendered, "full output:") {
 		t.Fatalf("window=%+v rendered=%q", window, rendered)
@@ -150,7 +136,7 @@ func TestNoticeReportsExactWindowAndContinuation(t *testing.T) {
 	for _, complete := range []bool{false, true} {
 		sample, err := sampleOutput(strings.NewReader("one\ntwo\nthree\nfour\n"), 12)
 		testutil.FailErr(t, "sample notice fixture", err)
-		rendered, window, _, err := sample.window(t.Context(), "stdout", "output:fixture", "@scratch/output/fixture.stdout", complete)
+		rendered, window, _, err := sample.window(t.Context(), "stdout", "output:fixture", "@output/fixture.stdout", complete)
 		testutil.FailErr(t, "render notice fixture", err)
 		label := "full output:"
 		if !complete {
@@ -160,7 +146,7 @@ func TestNoticeReportsExactWindowAndContinuation(t *testing.T) {
 		if !complete {
 			total = "saved " + total
 		}
-		want := "one\n... 2 lines (10 bytes) omitted from " + total + label + " @scratch/output/fixture.stdout (sed -n '2,3p' @scratch/output/fixture.stdout) ...\nfour\n"
+		want := "one\n... 2 lines (10 bytes) omitted from " + total + label + " @output/fixture.stdout (sed -n '2,3p' @output/fixture.stdout) ...\nfour\n"
 		if rendered != want || window.HeadEndLine != 1 || window.TailStartLine != 4 || window.OmittedBytes != 10 || window.Complete != complete {
 			t.Fatalf("output=%q window=%+v", rendered, window)
 		}

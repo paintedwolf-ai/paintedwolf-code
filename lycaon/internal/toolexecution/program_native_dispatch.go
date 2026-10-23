@@ -308,7 +308,7 @@ func validateNativeArguments(facts toolcontract.OperationFacts, argv *commandpro
 		}
 		return nil
 	}
-	if reject := tools.ValidateCapabilityPathAuthority(values, tc.Host.SessionScratchDir); reject != nil {
+	if reject := tools.ValidateCapabilityPathAuthority(values, tc.Host.SessionScratchDir, tc.Host.SessionOutputDir); reject != nil {
 		return reject
 	}
 	var schema map[string]any

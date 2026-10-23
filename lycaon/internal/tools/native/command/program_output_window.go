@@ -123,7 +123,7 @@ func sampleOutput(reader io.Reader, budget int) (outputSample, error) {
 }
 
 func (s outputSample) window(ctx context.Context, stream, ref, path string, complete bool) (string, api.CommandProgramOutputWindow, []deliveredOutputPart, error) {
-	window := api.CommandProgramOutputWindow{Stream: stream, Ref: ref, ScratchPath: path, TotalBytes: s.total, TotalLines: s.lines, Complete: complete, InlineBudgetBytes: s.budget}
+	window := api.CommandProgramOutputWindow{Stream: stream, Ref: ref, OutputPath: path, TotalBytes: s.total, TotalLines: s.lines, Complete: complete, InlineBudgetBytes: s.budget}
 	if s.total <= int64(s.budget) {
 		return string(s.head), window, []deliveredOutputPart{{0, s.head}}, nil
 	}

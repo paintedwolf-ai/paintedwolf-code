@@ -51,8 +51,8 @@ func TestWindowStreamOutputSnapsToLineBoundariesAndRendersNotice(t *testing.T) {
 		fmt.Fprintf(&b, "line-%04d: abcdefghijklmnopqrstuvwxyz0123456789\n", i)
 	}
 	data := []byte(b.String())
-	scratchPath := "@scratch/output/prog-1.stdout"
-	delivered, win, ranges, err := windowStreamOutput(t.Context(), data, 12<<10, "stdout", "output:program:prog-1:stdout", scratchPath)
+	outputPath := "@output/prog-1.stdout"
+	delivered, win, ranges, err := windowStreamOutput(t.Context(), data, 12<<10, "stdout", "output:program:prog-1:stdout", outputPath)
 	testutil.FailErr(t, "windowStreamOutput", err)
 
 	if !win.Truncated || len(ranges) != 2 {
@@ -61,39 +61,39 @@ func TestWindowStreamOutputSnapsToLineBoundariesAndRendersNotice(t *testing.T) {
 	if data[win.HeadEndByte-1] != '\n' || data[win.TailStartByte-1] != '\n' {
 		t.Fatalf("head/tail did not snap to newline boundary: headEnd=%d tailStart=%d", win.HeadEndByte, win.TailStartByte)
 	}
-	wantNoticeSub := fmt.Sprintf("(sed -n '%d,%dp' %s) ...", win.HeadEndLine+1, win.HeadEndLine+150, scratchPath)
+	wantNoticeSub := fmt.Sprintf("(sed -n '%d,%dp' %s) ...", win.HeadEndLine+1, win.HeadEndLine+150, outputPath)
 	if !strings.Contains(delivered, wantNoticeSub) {
 		t.Fatalf("delivered output missing expected notice %q:\n%s", wantNoticeSub, delivered)
 	}
 }
 
-func TestWriteReadOnlyScratchOutputAndParseScratchSource(t *testing.T) {
-	scratchDir := t.TempDir()
-	testutil.FailErr(t, "writeReadOnlyScratchOutput", scratch.PublishCommandOutput(scratchDir, "prog-42", "stdout", strings.NewReader("alpha\nbeta\n")))
-	target := filepath.Join(scratchDir, "output", "prog-42.stdout")
+func TestPublishOutputAndParseSource(t *testing.T) {
+	outputDir := t.TempDir()
+	testutil.FailErr(t, "publishOutputCopy", scratch.PublishCommandOutput(outputDir, "prog-42", "stdout", strings.NewReader("alpha\nbeta\n")))
+	target := filepath.Join(outputDir, "prog-42.stdout")
 	info, err := os.Stat(target)
-	testutil.FailErr(t, "stat scratch file", err)
+	testutil.FailErr(t, "stat output copy", err)
 	if info.Mode().Perm() != 0o444 {
 		t.Fatalf("mode = %o, want 0444", info.Mode().Perm())
 	}
 
-	prog, stream, ok := parseScratchOutputSource("disk:"+target, scratchDir)
+	prog, stream, ok := parseOutputSource("disk:"+target, outputDir)
 	if !ok || prog != "prog-42" || stream != "stdout" {
-		t.Fatalf("parseScratchOutputSource(%q) = (%q, %q, %v)", target, prog, stream, ok)
+		t.Fatalf("parseOutputSource(%q) = (%q, %q, %v)", target, prog, stream, ok)
 	}
-	prog2, stream2, ok2 := parseScratchOutputSource("disk:/@scratch/output/prog-42.stderr", scratchDir)
+	prog2, stream2, ok2 := parseOutputSource("disk:/@output/prog-42.stderr", outputDir)
 	if !ok2 || prog2 != "prog-42" || stream2 != "stderr" {
-		t.Fatalf("parseScratchOutputSource(@scratch) = (%q, %q, %v)", prog2, stream2, ok2)
+		t.Fatalf("parseOutputSource(@output) = (%q, %q, %v)", prog2, stream2, ok2)
 	}
 
 }
 
-func windowStreamOutput(ctx context.Context, data []byte, budget int, streamName, ref, scratchPath string) (string, api.CommandProgramOutputWindow, [][2]int64, error) {
+func windowStreamOutput(ctx context.Context, data []byte, budget int, streamName, ref, outputPath string) (string, api.CommandProgramOutputWindow, [][2]int64, error) {
 	sample, err := sampleOutput(bytes.NewReader(data), budget)
 	if err != nil {
 		return "", api.CommandProgramOutputWindow{}, nil, err
 	}
-	delivered, window, parts, err := sample.window(ctx, streamName, ref, scratchPath, true)
+	delivered, window, parts, err := sample.window(ctx, streamName, ref, outputPath, true)
 	var ranges [][2]int64
 	for _, part := range parts {
 		if len(part.data) > 0 {

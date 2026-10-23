@@ -20,7 +20,7 @@ func scratchStages(t *testing.T, line string) []exec.Stage {
 	return plan.Stages
 }
 
-func TestResolveScratchOperandsGivesProgramsRealPaths(t *testing.T) {
+func TestResolveSessionOperandsGivesProgramsRealPaths(t *testing.T) {
 	scratchDir := filepath.FromSlash("/state/scratch/chat-1")
 	cases := []struct {
 		line string
@@ -36,7 +36,7 @@ func TestResolveScratchOperandsGivesProgramsRealPaths(t *testing.T) {
 		{line: "grep -e x@scratch/y z", want: []string{"-e", "x@scratch/y", "z"}},
 	}
 	for _, tc := range cases {
-		stages, _, err := commandsurface.ResolveScratchOperands(scratchStages(t, tc.line), scratchDir)
+		stages, _, err := commandsurface.ResolveSessionOperands(scratchStages(t, tc.line), scratchDir, "")
 		testutil.FailErr(t, "resolve "+tc.line, err)
 		if !reflect.DeepEqual(stages[0].Args, tc.want) {
 			t.Errorf("%q resolved to %q, want %q", tc.line, stages[0].Args, tc.want)
@@ -44,10 +44,10 @@ func TestResolveScratchOperandsGivesProgramsRealPaths(t *testing.T) {
 	}
 }
 
-func TestResolveScratchOperandsCoversEveryStage(t *testing.T) {
+func TestResolveSessionOperandsCoversEveryStage(t *testing.T) {
 	scratchDir := filepath.FromSlash("/state/scratch/chat-1")
-	stages, changed, err := commandsurface.ResolveScratchOperands(
-		scratchStages(t, "sort @scratch/a.txt | uniq && wc -l @scratch/a.txt"), scratchDir)
+	stages, changed, err := commandsurface.ResolveSessionOperands(
+		scratchStages(t, "sort @scratch/a.txt | uniq && wc -l @scratch/a.txt"), scratchDir, "")
 	testutil.FailErr(t, "resolve", err)
 	want := filepath.Join(scratchDir, "a.txt")
 	if !changed || stages[0].Args[0] != want || stages[2].Args[1] != want {
@@ -55,17 +55,17 @@ func TestResolveScratchOperandsCoversEveryStage(t *testing.T) {
 	}
 }
 
-func TestResolveScratchOperandsRefusesWhatCannotResolve(t *testing.T) {
-	_, _, err := commandsurface.ResolveScratchOperands(scratchStages(t, "cat @scratch/a.txt"), "")
-	var operandErr *commandsurface.ScratchOperandError
-	if !errors.Is(err, commandsurface.ErrScratchUnavailable) || !errors.As(err, &operandErr) || operandErr.Operand != "@scratch/a.txt" {
+func TestResolveSessionOperandsRefusesWhatCannotResolve(t *testing.T) {
+	_, _, err := commandsurface.ResolveSessionOperands(scratchStages(t, "cat @scratch/a.txt"), "", "")
+	var operandErr *commandsurface.SessionOperandError
+	if !errors.Is(err, commandsurface.ErrSessionUnavailable) || !errors.As(err, &operandErr) || operandErr.Operand != "@scratch/a.txt" {
 		t.Fatalf("no scratch folder: err = %v", err)
 	}
-	_, _, err = commandsurface.ResolveScratchOperands(scratchStages(t, "cat @scratch/../other/a.txt"), "/state/scratch/chat-1")
+	_, _, err = commandsurface.ResolveSessionOperands(scratchStages(t, "cat @scratch/../other/a.txt"), "/state/scratch/chat-1", "")
 	if !errors.Is(err, projectroot.ErrPathEscape) {
 		t.Fatalf("escape: err = %v, want ErrPathEscape", err)
 	}
-	_, changed, err := commandsurface.ResolveScratchOperands(scratchStages(t, "echo @types/node"), "")
+	_, changed, err := commandsurface.ResolveSessionOperands(scratchStages(t, "echo @types/node"), "", "")
 	if err != nil || changed {
 		t.Fatalf("a non-scratch address needs no folder: changed=%v err=%v", changed, err)
 	}
@@ -73,7 +73,7 @@ func TestResolveScratchOperandsRefusesWhatCannotResolve(t *testing.T) {
 
 func TestScratchGlobExpandsInTheFolder(t *testing.T) {
 	scratchDir := globTree(t, "a.log", "b.log", "c.txt")
-	stages, _, err := commandsurface.ResolveScratchOperands(scratchStages(t, "cat @scratch/*.log"), scratchDir)
+	stages, _, err := commandsurface.ResolveSessionOperands(scratchStages(t, "cat @scratch/*.log"), scratchDir, "")
 	testutil.FailErr(t, "resolve", err)
 	expanded, changed, err := commandsurface.ExpandGlobs(context.Background(), stages, commandsurface.GlobScope{Dir: t.TempDir()})
 	testutil.FailErr(t, "expand", err)
@@ -85,8 +85,8 @@ func TestScratchGlobExpandsInTheFolder(t *testing.T) {
 
 func TestRenderedStagesKeepLiteralAddressesLiteral(t *testing.T) {
 	root := globTree(t, "x.go")
-	stages, _, err := commandsurface.ResolveScratchOperands(
-		scratchStages(t, "tool '@scratch/keep' @types/node *.go"), filepath.FromSlash("/state/scratch/chat-1"))
+	stages, _, err := commandsurface.ResolveSessionOperands(
+		scratchStages(t, "tool '@scratch/keep' @types/node *.go"), filepath.FromSlash("/state/scratch/chat-1"), "")
 	testutil.FailErr(t, "resolve", err)
 	stages, _, err = commandsurface.ExpandGlobs(context.Background(), stages, commandsurface.GlobScope{Dir: root})
 	testutil.FailErr(t, "expand", err)
@@ -97,5 +97,23 @@ func TestRenderedStagesKeepLiteralAddressesLiteral(t *testing.T) {
 	}
 	if !reflect.DeepEqual(again[0].Addressed, []bool{false, true, false}) {
 		t.Fatalf("rendered %q reparsed with address marks %v, want [false true false]", rendered, again[0].Addressed)
+	}
+}
+
+func TestOutputOperandsUseTheirOwnHostDirectory(t *testing.T) {
+	dir := filepath.FromSlash("/state/session-output/chat")
+	stages, changed, err := commandsurface.ResolveSessionOperands(scratchStages(t, "cat @output/program.stdout"), "", dir)
+	testutil.FailErr(t, "resolve output operand", err)
+	if !changed || len(stages) != 1 || len(stages[0].Args) != 1 || stages[0].Args[0] != filepath.Join(dir, "program.stdout") {
+		t.Fatalf("stages=%+v", stages)
+	}
+	_, _, err = commandsurface.ResolveSessionOperands(scratchStages(t, "cat @output/program.stdout"), "/state/scratch/chat", "")
+	var operand *commandsurface.SessionOperandError
+	if !errors.Is(err, commandsurface.ErrSessionUnavailable) || !errors.As(err, &operand) || operand.Area != projectroot.VirtualOutputLabel {
+		t.Fatalf("missing output capability=%v", err)
+	}
+	_, _, err = commandsurface.ResolveSessionOperands(scratchStages(t, "cat @output/../other/file"), "", dir)
+	if !errors.Is(err, projectroot.ErrPathEscape) {
+		t.Fatalf("escaped output capability=%v", err)
 	}
 }

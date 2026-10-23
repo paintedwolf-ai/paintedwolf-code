@@ -30,11 +30,11 @@ components:
       x-go-generate: true
       type: object
       additionalProperties: false
-      required: [stream, ref, scratch_path, total_bytes, total_lines, complete, truncated, head_end_byte, head_end_line, tail_start_byte, tail_start_line, omitted_bytes, omitted_lines, inline_budget_bytes]
+      required: [stream, ref, output_path, total_bytes, total_lines, complete, truncated, head_end_byte, head_end_line, tail_start_byte, tail_start_line, omitted_bytes, omitted_lines, inline_budget_bytes]
       properties:
         stream: {type: string, enum: [stdout, stderr]}
         ref: {type: string}
-        scratch_path: {type: string}
+        output_path: {type: string, description: Session output address of the retained stream copy.}
         total_bytes: {type: integer, format: int64, minimum: 0, description: Bytes in the saved stream. For an incomplete stream the final total is unknown.}
         total_lines: {type: integer, minimum: 0, description: Lines in the saved stream. For an incomplete stream the final total is unknown.}
         complete: {type: boolean}

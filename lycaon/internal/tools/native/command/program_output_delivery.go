@@ -145,12 +145,12 @@ func (r *ProgramRuntime) deliverProgramStream(ctx context.Context, run *programR
 	defer spill.Close()
 	program := run.root.Identity.ProgramID
 	reference := "output:program:" + program + ":" + name
-	scratchPath := "@scratch/output/" + program + "." + name
+	outputPath := "@output/" + program + "." + name
 	body, err := spill.Open(ctx)
 	if err != nil {
 		return "", api.CommandProgramOutputWindow{}, err
 	}
-	err = scratch.PublishCommandOutput(run.tc.Host.SessionScratchDir, program, name, body)
+	err = scratch.PublishCommandOutput(run.tc.Host.SessionOutputDir, program, name, body)
 	closeErr := body.Close()
 	if err != nil || closeErr != nil {
 		return "", api.CommandProgramOutputWindow{}, errors.Join(err, closeErr)
@@ -170,7 +170,7 @@ func (r *ProgramRuntime) deliverProgramStream(ctx context.Context, run *programR
 	if err != nil || closeErr != nil {
 		return "", api.CommandProgramOutputWindow{}, errors.Join(err, closeErr)
 	}
-	delivered, window, ranges, err := sample.window(ctx, name, reference, scratchPath, !stream.truncated && spill.Complete)
+	delivered, window, ranges, err := sample.window(ctx, name, reference, outputPath, !stream.truncated && spill.Complete)
 	if err != nil {
 		return "", api.CommandProgramOutputWindow{}, err
 	}
@@ -179,7 +179,7 @@ func (r *ProgramRuntime) deliverProgramStream(ctx context.Context, run *programR
 	if !redacted && !stream.truncated && spill.Complete {
 		snapshot, err := stream.snapshotMappings(ctx, spill.Blob.Size)
 		if err == nil && snapshot != nil {
-			resolved := r.resolveScratchMappings(ctx, run, snapshot.Mappings, spill.Blob.Size)
+			resolved := r.resolveOutputMappings(ctx, run, snapshot.Mappings, spill.Blob.Size)
 			_ = snapshot.Close()
 			defer resolved.Close()
 			mappings = resolved.values

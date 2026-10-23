@@ -50,13 +50,13 @@ func RenderCatalog(ctx context.Context, ref string, data map[string]any) (string
 }
 
 // RenderCommandOutputOmitted renders the terminal-style omission notice for bounded command output.
-func RenderCommandOutputOmitted(ctx context.Context, omittedLines, omittedSize, scratchPath string, nextLine, endLine, totalLines int, totalBytes int64, complete bool) (string, error) {
+func RenderCommandOutputOmitted(ctx context.Context, omittedLines, omittedSize, outputPath string, nextLine, endLine, totalLines int, totalBytes int64, complete bool) (string, error) {
 	data := map[string]any{
 		"omitted_lines": omittedLines,
 		"complete":      complete,
 		"total_lines":   totalLines, "total_bytes": totalBytes,
 		"omitted_size": omittedSize,
-		"scratch_path": scratchPath,
+		"output_path":  outputPath,
 		"next_line":    nextLine,
 		"end_line":     endLine,
 	}

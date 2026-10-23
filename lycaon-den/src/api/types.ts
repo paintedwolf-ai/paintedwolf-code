@@ -10576,7 +10576,8 @@ export interface components {
             /** @enum {string} */
             stream: "stdout" | "stderr";
             ref: string;
-            scratch_path: string;
+            /** @description Session output address of the retained stream copy. */
+            output_path: string;
             /**
              * Format: int64
              * @description Bytes in the saved stream. For an incomplete stream the final total is unknown.

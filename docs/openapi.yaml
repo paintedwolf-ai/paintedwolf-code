@@ -27323,7 +27323,7 @@ components:
       required:
         - stream
         - ref
-        - scratch_path
+        - output_path
         - total_bytes
         - total_lines
         - complete
@@ -27343,8 +27343,9 @@ components:
             - stderr
         ref:
           type: string
-        scratch_path:
+        output_path:
           type: string
+          description: Session output address of the retained stream copy.
         total_bytes:
           type: integer
           format: int64

@@ -404,6 +404,16 @@ Multi-root calls use explicit root addressing when a relative path is ambiguous.
 
 `@scratch/<path>` addresses the invoking session's private scratch folder, a host namespace no attached root may share. One grammar resolves it for native tools, `cwd`, stream redirects, and unquoted `command` and `verify` arguments, which reach the program as absolute paths; a quoted `@scratch/...` stays literal. Processes also receive the folder as `SCRATCH_DIR`. A worker's scratch is its own, so a worker returns findings in its result rather than as a scratch path.
 
+`@output/<program>.stdout` and `.stderr` address the invoking chat's retained
+command output copies. The host prepares this folder under its own state,
+outside writable scratch. Sandboxed commands receive read access through the
+standard read-root rules; native writes refuse this read namespace. The command
+result and receipt carry an `output_path` for each retained stream. Head and tail
+windows keep the start and summary visible, and their notice gives the exact next
+line to read with `sed -n`. Source mappings from later reads still refer to the
+original delivered file spans. Copies follow the session cleanup lifetime.
+
+
 Recovery reads and structured queries of retained tool output use the session's spill byte bound (64 MiB by default), including decompression. Ordinary project files keep the 8 MiB read bound (`read`, `summarize`, and `diff`; `grep` searches the leading 8 MiB) and the 20 MiB `jq` input bound. Native edits (`edit`, `replace_lines`, `code_rewrite`, `jq_edit`, `write`, and `restore_version`) have a lower 4 MiB bound, the size that version history and pre-turn checkpoints retain in full: a file or open document above it, or new content that would exceed it, rejects with `EDIT_FILE_TOO_LARGE` before any review or write, so every state a native edit replaces stays restorable. Removal and replacement follow the same promise without the bound: `delete`, `move` onto an existing file, and a `copy`, redirect, or extracted entry overwriting a file above it set the old entry aside in lifecycle recovery first ([Files live](files-live.md)). `command` has no such bound. The host's resolved path classification selects the bound; a similarly named project directory cannot widen it. Line and output limits still bound the returned page. A single long JSON string can be recovered in bounded substrings with `jq`.
 
 Scope is rechecked where the effect occurs. A model-visible schema, prompt instruction, or earlier path classification never authorizes a later write.

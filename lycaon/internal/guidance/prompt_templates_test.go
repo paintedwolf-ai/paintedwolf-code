@@ -71,7 +71,7 @@ func TestRenderCatalogUtilityAndSurvey(t *testing.T) {
 			"goal": "ship", "tool": "command", "command": "ls",
 			"user_intent": "ship the feature", "gated_action": "command ls",
 			"omitted_lines": "4,182", "omitted_size": "184 KB",
-			"scratch_path": "@scratch/output/prog.stdout", "next_line": 251, "end_line": 400,
+			"output_path": "@output/prog.stdout", "next_line": 251, "end_line": 400,
 		})
 		testutil.FailErr(t, "RenderCatalog "+ref, err)
 		if strings.TrimSpace(out) == "" {

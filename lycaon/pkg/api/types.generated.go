@@ -1405,9 +1405,10 @@ type CommandProgramOutputLimit struct {
 
 // CommandProgramOutputWindow
 type CommandProgramOutputWindow struct {
-	Stream      string `json:"stream"`
-	Ref         string `json:"ref"`
-	ScratchPath string `json:"scratch_path"`
+	Stream string `json:"stream"`
+	Ref    string `json:"ref"`
+	// Session output address of the retained stream copy.
+	OutputPath string `json:"output_path"`
 	// Bytes in the saved stream. For an incomplete stream the final total is unknown.
 	TotalBytes int64 `json:"total_bytes"`
 	// Lines in the saved stream. For an incomplete stream the final total is unknown.
