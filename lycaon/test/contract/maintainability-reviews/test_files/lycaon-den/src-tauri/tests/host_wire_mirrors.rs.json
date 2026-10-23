@@ -1,0 +1,14 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon-den/src-tauri/tests/host_wire_mirrors.rs",
+  "kind": "test_suite",
+  "workstream": "workspace-activation-exit",
+  "disposition": "retain",
+  "reason": "Retain the 733-line cross-language mirror contract suite: one source discovery, explicit typed registry and Go-generated fixture comparison prevent undeclared Rust host mirrors. The new work-fact binding uses that existing registry and documents ignored sleep-only facts. Splitting the registry away from its discovery and checking rules would obscure this single parity contract. Native workspace checks and the actual Go fixture generation passed at the reviewed commit.",
+  "reviewed_commit": "178f38032a1880aedc89a92af927c51074e78cc1",
+  "ceiling": 733,
+  "boundaries": {
+    "lycaon-den/src-tauri/tests/host_wire_mirrors.rs": "bd9eb3ba77ca11dbe0b72a9dd64de1625239cd571f34a85bf3dcfe54543185db",
+    "lycaon/test/contract/wire/rust_host_wire_fixtures_contract_test.go": "8d838394cb330085096406eae2df649d59b8e5f8e8af43961674184be76ce033"
+  }
+}

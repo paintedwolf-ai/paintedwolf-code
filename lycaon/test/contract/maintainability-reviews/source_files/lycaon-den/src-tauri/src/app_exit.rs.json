@@ -1,0 +1,14 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon-den/src-tauri/src/app_exit.rs",
+  "kind": "runtime_service",
+  "workstream": "workspace-activation-exit",
+  "disposition": "retain",
+  "reason": "Retain the cohesive 495-line shared exit transaction: request identity, confirmation, preservation acknowledgements, update preparation, commitment and rollback have one state lifetime. Authenticated active-work observation and the ordinary confirmation dialog reside in a separate domain module. Inline coordinator tests and bounded loopback/typed-fact contracts passed the native Rust workspace at the reviewed commit. Any change to the inline state contracts renews this decision.",
+  "reviewed_commit": "178f38032a1880aedc89a92af927c51074e78cc1",
+  "ceiling": 495,
+  "boundaries": {
+    "lycaon-den/src-tauri/src/app_exit.rs": "9444e5b054f760b7ba425dad350832f71860298f82e2b047016399c7c6728bf3",
+    "lycaon-den/src-tauri/src/app_exit/confirmation.rs": "dc89aeae6946f5b2f9a719d3394a80ceb7fc78d8c9281217f616b86248f93869"
+  }
+}
