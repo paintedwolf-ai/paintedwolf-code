@@ -43,13 +43,14 @@ type lifecycleReadiness struct {
 }
 
 type lifecycleObservation struct {
-	Roles   []lifecycleRole   `json:"roles"`
-	Samples []lifecycleSample `json:"samples"`
+	Roles      []lifecycleRole   `json:"roles"`
+	Samples    []lifecycleSample `json:"samples"`
+	Checkpoint bool              `json:"checkpoint,omitempty"`
 }
 
 // The observer retains pidfds only. Retaining a health/lifetime/socket endpoint
 // would change peer EOF and contaminate the teardown being measured.
-func observeFixtureLifecycle(t *testing.T, fixture launchFixture, launch runningLaunch) func() {
+func observeFixtureLifecycle(t *testing.T, fixture launchFixture, launch runningLaunch) (func(), func()) {
 	t.Helper()
 	args := []string{"-n", "env", lifecycleObserverEnv + "=1", fixtureDirEnv + "=" + fixture.dir,
 		fixtureUIDEnv + "=" + strconv.Itoa(os.Getuid()), fixtureDesktopPIDEnv + "=" + strconv.Itoa(launch.facts.PID),
@@ -57,12 +58,14 @@ func observeFixtureLifecycle(t *testing.T, fixture launchFixture, launch running
 		"PW_FIXTURE_BOOTSTRAP_PID=" + strconv.Itoa(launch.cmd.Process.Pid), os.Args[0],
 		"-test.run=^TestProtectedLaunchLifecycleObserver$"}
 	cmd := exec.Command("sudo", args...)
+	control, err := cmd.StdinPipe()
+	testutil.FailErr(t, "open owned observer checkpoint control", err)
 	stdout, err := cmd.StdoutPipe()
 	testutil.FailErr(t, "open lifecycle observer report", err)
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
 	testutil.FailErr(t, "start owned lifecycle observer", cmd.Start())
-	lines := make(chan []byte, 2)
+	lines := make(chan []byte, 3)
 	done := make(chan struct{})
 	var waitErr error
 	go func() {
@@ -75,6 +78,7 @@ func observeFixtureLifecycle(t *testing.T, fixture launchFixture, launch running
 		close(done)
 	}()
 	t.Cleanup(func() {
+		_ = control.Close()
 		select {
 		case <-done:
 		default:
@@ -91,20 +95,45 @@ func observeFixtureLifecycle(t *testing.T, fixture launchFixture, launch running
 	case <-time.After(mountSourceSetupLimit):
 		t.Fatal("owned lifecycle observer did not authenticate before setup deadline")
 	}
-	return func() {
-		select {
-		case line := <-lines:
-			var result lifecycleObservation
-			testutil.FailErr(t, "decode exact-role lifecycle observation", json.Unmarshal(line, &result))
-			t.Logf("registered role lifecycle observation: %s", line)
-		case <-time.After(20 * time.Second):
-			t.Error("registered role lifecycle observation did not settle within launch exit bound")
+	finalConsumed := false
+	finish := func() {
+		if !finalConsumed {
+			select {
+			case line := <-lines:
+				var result lifecycleObservation
+				testutil.FailErr(t, "decode exact-role lifecycle observation", json.Unmarshal(line, &result))
+				t.Logf("registered role lifecycle observation: %s", line)
+			case <-time.After(20 * time.Second):
+				t.Error("registered role lifecycle observation did not settle within launch exit bound")
+			}
 		}
 		<-done
+		for line := range lines {
+			t.Logf("remaining bounded lifecycle observation: %s", line)
+		}
 		if waitErr != nil {
 			t.Errorf("lifecycle observation unavailable: %v; %s", waitErr, stderr.String())
 		}
 	}
+	checkpoint := func() {
+		if _, err := control.Write([]byte{'s'}); err != nil {
+			t.Errorf("request pre-close lifecycle checkpoint: %v", err)
+			return
+		}
+		select {
+		case line := <-lines:
+			var result lifecycleObservation
+			if err := json.Unmarshal(line, &result); err != nil {
+				t.Errorf("pre-close lifecycle checkpoint unavailable: %s (%v)", line, err)
+			} else {
+				t.Logf("pre-close exact-role lifecycle checkpoint: %s", line)
+				finalConsumed = !result.Checkpoint
+			}
+		case <-time.After(5 * time.Second):
+			t.Error("pre-close lifecycle checkpoint did not arrive within observation lifetime")
+		}
+	}
+	return finish, checkpoint
 }
 
 func TestProtectedLaunchLifecycleObserver(t *testing.T) {
@@ -228,14 +257,15 @@ func runLifecycleObserver() error {
 	generation.Close()
 	began := time.Now()
 	previous := [3]bool{}
-	polls := make([]unix.PollFd, 3)
+	polls := make([]unix.PollFd, 4)
 	for index, pin := range pins {
 		polls[index] = unix.PollFd{Fd: int32(pin), Events: unix.POLLIN}
 	}
-	if _, err := unix.Poll(polls, 0); err != nil {
+	polls[3] = unix.PollFd{Fd: 0, Events: unix.POLLIN}
+	if _, err := unix.Poll(polls[:3], 0); err != nil {
 		return err
 	}
-	for _, poll := range polls {
+	for _, poll := range polls[:3] {
 		if poll.Revents != 0 {
 			return errors.New("registered role ended before observation admission")
 		}
@@ -253,7 +283,7 @@ func runLifecycleObserver() error {
 			return err
 		}
 		ready := previous
-		for index, poll := range polls {
+		for index, poll := range polls[:3] {
 			if poll.Fd < 0 {
 				continue
 			}
@@ -265,7 +295,18 @@ func runLifecycleObserver() error {
 				polls[index].Fd = -1 // Process death is irreversible for this retained pidfd.
 			}
 		}
-		if ready != previous {
+		checkpoint := polls[3].Revents&unix.POLLIN != 0
+		if checkpoint {
+			var request [1]byte
+			n, err := unix.Read(0, request[:])
+			if err != nil || n != 1 || request[0] != 's' {
+				return errors.New("invalid owned lifecycle checkpoint request")
+			}
+			polls[3].Fd = -1 // Exactly one bounded pre-cleanup checkpoint.
+		} else if polls[3].Revents != 0 {
+			return errors.New("owned lifecycle checkpoint control closed")
+		}
+		if ready != previous || checkpoint {
 			sample := lifecycleSample{MonotonicNS: lifecycleMonotonicNS(), Ready: ready}
 			if !ready[0] && ((ready[1] && !previous[1]) || (ready[2] && !previous[2])) {
 				check := &lifecycleReadiness{BeginNS: lifecycleMonotonicNS()}
@@ -282,6 +323,13 @@ func runLifecycleObserver() error {
 			}
 			result.Samples = append(result.Samples, sample)
 			previous = ready
+		}
+		if checkpoint {
+			partial := result
+			partial.Checkpoint = true
+			if err := json.NewEncoder(os.Stdout).Encode(partial); err != nil {
+				return err
+			}
 		}
 		if ready == [3]bool{true, true, true} {
 			return json.NewEncoder(os.Stdout).Encode(result)

@@ -279,9 +279,19 @@ func TestProtectedLaunchSealsTheDesktopInARootOwnedNamespace(t *testing.T) {
 	if facts.BrokerUserExec != "brokered-user-program" {
 		t.Fatalf("brokered program from the caller's files: %q", facts.BrokerUserExec)
 	}
-	finishObservation := observeFixtureLifecycle(t, f, launch)
+	finishObservation, checkpointObservation := observeFixtureLifecycle(t, f, launch)
 	defer finishObservation()
-	testutil.FailErr(t, "post-launch host mounts arrive noexec in the module view", sudoFixture(t, "module-view", f.dir, fmt.Sprintf("%s=%d", fixtureDesktopPIDEnv, facts.PID)))
+	mountErr := sudoFixture(t, "module-view", f.dir, fmt.Sprintf("%s=%d", fixtureDesktopPIDEnv, facts.PID))
+	checkpointObservation()
+	if mountErr != nil {
+		t.Errorf("post-launch host mounts arrive noexec in the module view: %v", mountErr)
+		t.Logf("failed_setup_cleanup_stdin_close_begin_monotonic_ns=%d", lifecycleMonotonicNS())
+		_ = launch.stdin.Close()
+		t.Logf("failed_setup_cleanup_stdin_close_end_monotonic_ns=%d", lifecycleMonotonicNS())
+		waitLaunchEnd(t, launch)
+		t.Logf("settled failed-setup bootstrap stderr: %s", launch.stderr.String())
+		return
+	}
 	if facts.InstallWrite != "EROFS" || facts.Remount != "EPERM" {
 		t.Fatalf("generation mount is not sealed: write %s, remount %s", facts.InstallWrite, facts.Remount)
 	}
