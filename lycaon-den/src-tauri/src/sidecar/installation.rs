@@ -1,8 +1,6 @@
-//! Refuse fresh child work after a mutable native package replaces this desktop.
-//! Under protected launch (#1118), `/opt/painted-wolf-code` in the desktop's
-//! private mount namespace is bind-mounted read-only to the immutable launched
-//! generation, so `/opt/painted-wolf-code/manifest.json` and `/proc/self/exe`
-//! remain pinned to that generation across host package upgrades.
+//! Protected startup authenticates and pins the generation for engine admission.
+//! Unprotected native packages refuse fresh child work when package replacement
+//! changes the running desktop's installation.
 
 use super::manifest::{Manifest, VerifyError, MANIFEST_LIMIT};
 use std::io::Read;
@@ -30,16 +28,29 @@ impl RestartReason {
     }
 }
 
-/// This is an admission refusal for mutable native packages, never launcher trust.
-/// Under protected launch, `/opt/painted-wolf-code` inside the desktop's mount
-/// namespace is the immutable running generation; Nix closures use their resolved
-/// generation facts rather than this native root.
+/// Use the selected protected generation, or verify a mutable native package
+/// against the running desktop before admitting child work.
 pub(super) fn ensure_current() -> Result<(), RestartReason> {
-    if cfg!(target_os = "linux") && crate::linux_install::installed().is_some() {
-        let root = Path::new(crate::linux_install::INSTALL_ROOT);
-        return verify_root(root, Path::new("/proc/self/exe"));
+    selected_generation_current(crate::protected_launch::generation(), || {
+        if cfg!(target_os = "linux") && crate::linux_install::installed().is_some() {
+            let root = Path::new(crate::linux_install::INSTALL_ROOT);
+            return verify_root(root, Path::new("/proc/self/exe"));
+        }
+        Ok(())
+    })
+}
+
+fn selected_generation_current(
+    generation: Result<
+        Option<crate::protected_launch::Generation>,
+        crate::protected_launch::GenerationError,
+    >,
+    mutable_package: impl FnOnce() -> Result<(), RestartReason>,
+) -> Result<(), RestartReason> {
+    match generation.map_err(|_| RestartReason::RunningImageUnavailable)? {
+        Some(_) => Ok(()),
+        None => mutable_package(),
     }
-    Ok(())
 }
 
 fn verify_root(root: &Path, running_exe: &Path) -> Result<(), RestartReason> {
@@ -75,6 +86,33 @@ mod tests {
     use super::*;
     use crate::sidecar::manifest::fixture_json;
 
+    #[test]
+    fn selected_protected_generation_never_uses_package_ownership_for_admission() {
+        let generation = crate::protected_launch::Generation {
+            logical_root: "/opt/selected-generation".into(),
+        };
+        assert_eq!(
+            selected_generation_current(Ok(Some(generation)), || panic!("package query ran")),
+            Ok(())
+        );
+        assert_eq!(
+            selected_generation_current(
+                Err(crate::protected_launch::GenerationError::FrameUnavailable),
+                || panic!("package fallback ran")
+            ),
+            Err(RestartReason::RunningImageUnavailable)
+        );
+    }
+
+    #[test]
+    fn unprotected_admission_preserves_mutable_package_refusals() {
+        assert_eq!(selected_generation_current(Ok(None), || Ok(())), Ok(()));
+        assert_eq!(
+            selected_generation_current(Ok(None), || Err(RestartReason::DesktopIdentityChanged)),
+            Err(RestartReason::DesktopIdentityChanged)
+        );
+    }
+
     fn manifest_for(root: &Path, image: &[u8]) -> Vec<u8> {
         let desktop = root.join("bin/painted-wolf-code");
         serde_json::to_vec(&fixture_json(
@@ -106,11 +144,19 @@ mod tests {
 
         let root = Path::new("/opt/painted-wolf-code");
         let desktop_path = root.join("bin/painted-wolf-code");
-        let mut v1 = fixture_json(root, std::env::consts::ARCH, &[(&desktop_path, b"desktop v1")], &[]);
+        let mut v1 = fixture_json(
+            root,
+            std::env::consts::ARCH,
+            &[(&desktop_path, b"desktop v1")],
+            &[],
+        );
         v1["format_version"] = serde_json::json!(1);
         v1.as_object_mut().unwrap().remove("payload");
         let raw = serde_json::to_vec(&v1).unwrap();
-        assert_eq!(verify_current(root, raw.as_slice(), b"desktop v1".as_slice()), Ok(()));
+        assert_eq!(
+            verify_current(root, raw.as_slice(), b"desktop v1".as_slice()),
+            Ok(())
+        );
     }
 
     #[test]
