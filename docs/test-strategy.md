@@ -1092,7 +1092,7 @@ budgets for the whole selected matrix. Runner caps do not depend on timing data.
 | Qualification | `qualification.yml` | `qualification` | 3 (1): the `check` profile capped at three, then platform's two jobs beside the `release` platform lanes one at a time, then two browser shards beside the desktop journey |
 | Cache warming | `build-caches.yml` | `build-caches` | 1 (1): Linux, macOS, then the release compile |
 | Nightly | `nightly.yml` | `nightly` | 2 (1): the `nightly` profile capped at two, then one browser shard beside the desktop journey, then the upgrade rehearsal beside quarantine observation |
-| Releases | `release.yml`, `release-halt.yml` | `release-static-update` | 2 (2): preflight or the upgrade rehearsal beside one signed build; later desktop rehearsal or protected fixture preparation beside Linux packaging |
+| Releases | `release.yml`, `release-halt.yml` | `release-static-update` | 2 (2): source validation beside one signed build; later desktop rehearsal or protected fixture preparation beside Linux packaging |
 | DCO certification | `dco.yml` | `dco-certification` | 1 |
 | Maintainability tracking | `maintainability-issues.yml` | `maintainability-issues` | 1 |
 | Maintenance | Linux candidate requests, dependency inventory, release-system live test, queue health, issue staleness, the issue sweep, release secrets check | `maintenance`, shared | 1 |
@@ -1148,6 +1148,12 @@ at its queue settings, and one pull request's CI run to fit the plan together,
 and a pull request's run to hold one runner.
 
 ### Upgrade rehearsal preparation and startup evidence
+
+Release source validation runs preflight and the store upgrade rehearsal in one
+checkout on one runner. Both managed targets retain their build validation;
+unchanged compiler inputs and development outputs stay available between them.
+Each phase retains its own evidence, and either failure blocks publication.
+Signing remains isolated in its protected packaging job.
 
 Nightly upgrade rehearsal uses the shared verification setup for the pinned
 Node/Bun runtimes and frontend semantic fixture dependencies, then installs the

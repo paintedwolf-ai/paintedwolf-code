@@ -195,7 +195,7 @@ func TestReleaseCompatibilityCannotBeSkippedForEitherChannel(t *testing.T) {
 			}
 		}
 	}
-	for _, step := range jobs["preflight"].Steps {
+	for _, step := range jobs["validate-source"].Steps {
 		if strings.Contains(step.Run, "release:preflight") {
 			if step.Env["BASELINE_SHA"] != "${{ needs.classify.outputs.baseline_sha }}" || strings.Count(step.Run, `--baseline-ref "${BASELINE_SHA}"`) < 2 {
 				t.Fatal("preflight does not pass pinned baseline_sha to both publish and dry-run paths")
@@ -203,7 +203,7 @@ func TestReleaseCompatibilityCannotBeSkippedForEitherChannel(t *testing.T) {
 			corpus = corpus || strings.Contains(step.Run, "--require-corpus")
 		}
 	}
-	for _, job := range []string{"preflight", "build-release"} {
+	for _, job := range []string{"validate-source", "build-release"} {
 		if !slices.Contains(hostedNeeds(t, jobs[job]), "compatibility") {
 			t.Fatalf("%s can start before cheap compatibility checks", job)
 		}
@@ -216,7 +216,19 @@ func TestReleaseCompatibilityCannotBeSkippedForEitherChannel(t *testing.T) {
 	if !stable || !guard || !corpus || !wire {
 		t.Fatalf("release assurance missing: stable=%v guard=%v corpus=%v wire=%v", stable, guard, corpus, wire)
 	}
-	if !slices.Contains(hostedNeeds(t, jobs["upgrade"]), "preflight") {
-		t.Fatal("upgrade rehearsal bypasses compatibility preflight")
+	preflightAt, upgradeAt := -1, -1
+	for i, step := range jobs["validate-source"].Steps {
+		if strings.Contains(step.Run, "release:preflight") {
+			preflightAt = i
+		}
+		if strings.Contains(step.Run, "upgrade:rehearse") {
+			upgradeAt = i
+			if step.If != "" || step.Continue {
+				t.Fatal("store rehearsal must require successful preflight")
+			}
+		}
+	}
+	if preflightAt < 0 || upgradeAt <= preflightAt {
+		t.Fatal("source validation must rehearse upgrades after preflight in the same checkout")
 	}
 }
