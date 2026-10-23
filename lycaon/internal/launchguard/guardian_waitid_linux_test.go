@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"reflect"
+	"strconv"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -100,5 +101,42 @@ func TestGuardianWaitidRejectsUnsupportedChildStatusEncoding(t *testing.T) {
 	}
 	if observeGuardianExit(-1, os.Getpid(), uint32(os.Getuid())) != nil {
 		t.Fatal("invalid pidfd fabricated status")
+	}
+}
+
+func TestGuardianWaitidRetainsActualIntakeFailurePhase(t *testing.T) {
+	for _, code := range []int{80, 81, 82, 83, 84, 85, 86} {
+		t.Run(strconv.Itoa(code), func(t *testing.T) {
+			command := exec.Command(os.Args[0], "-test.run=^TestIntakeMonitorStatusFixture$")
+			command.Env = append(os.Environ(), "PW_INTAKE_MONITOR_STATUS_FIXTURE="+strconv.Itoa(code))
+			testutil.FailErr(t, "start owned intake phase child", command.Start())
+			waited := false
+			defer func() {
+				if !waited {
+					_ = command.Process.Kill()
+					_ = command.Wait()
+				}
+			}()
+			pin, err := unix.PidfdOpen(command.Process.Pid, 0)
+			testutil.FailErr(t, "pin exact intake phase child", err)
+			defer unix.Close(pin)
+			polls := []unix.PollFd{{Fd: int32(pin), Events: unix.POLLIN}}
+			_, err = unix.Poll(polls, 5000)
+			testutil.FailErr(t, "observe owned intake child exit", err)
+			if polls[0].Revents&unix.POLLIN == 0 {
+				t.Fatal("owned intake child did not exit")
+			}
+			expected := &guardianExitFact{Code: 1, Status: int32(code), WaitStatus: uint32(code << 8)}
+			for range 2 {
+				if actual := observeGuardianExit(pin, command.Process.Pid, uint32(os.Getuid())); !reflect.DeepEqual(actual, expected) {
+					t.Fatalf("intake failure phase lost in actual nonconsuming waitid: got=%+v want=%+v", actual, expected)
+				}
+			}
+			err = command.Wait()
+			waited = true
+			if err == nil || command.ProcessState.ExitCode() != code {
+				t.Fatalf("diagnostic changed original child exit: state=%v error=%v", command.ProcessState, err)
+			}
+		})
 	}
 }

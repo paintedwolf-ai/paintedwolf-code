@@ -16,7 +16,7 @@ import (
 // intake. Its writer observes EOF and the launch lifecycle handles failure.
 // No source mount descriptor remains pinned while waiting for another event.
 func monitorModuleIntake(spec EntrySpec, plan moduleViewPlan, socket, lifetime int) error {
-	watchdog := time.AfterFunc(mountSourceSetupLimit, func() { os.Exit(1) })
+	watchdog := time.AfterFunc(mountSourceSetupLimit, func() { os.Exit(int(intakeFailureWatchdog)) })
 	defer watchdog.Stop()
 	info, err := os.Open("/proc/thread-self/mountinfo")
 	if err != nil {
@@ -99,22 +99,22 @@ func monitorModuleIntake(spec EntrySpec, plan moduleViewPlan, socket, lifetime i
 			if errors.Is(err, unix.EINTR) {
 				continue
 			}
-			return err
+			return &intakeMonitorFailure{intakeFailurePoll, err}
 		}
 		if fds[1].Revents != 0 {
 			return nil
 		}
 		if fds[2].Revents != 0 {
-			return errors.New("unsolicited intake control or writer closure")
+			return &intakeMonitorFailure{intakeFailureControl, errors.New("unsolicited intake control or writer closure")}
 		}
 		if fds[0].Revents != 0 || pending {
 			raw, err := readMountInfo(int(info.Fd()), nil)
 			if err != nil {
-				return err
+				return &intakeMonitorFailure{intakeFailureMountInfo, err}
 			}
 			current, err = parseMountTopology(raw)
 			if err != nil {
-				return err
+				return &intakeMonitorFailure{intakeFailureTopology, err}
 			}
 			pending, err = intake.reconcile(current, structural, structuralFacts)
 			if errors.Is(err, errIntakeEpochChanged) {
@@ -122,12 +122,12 @@ func monitorModuleIntake(spec EntrySpec, plan moduleViewPlan, socket, lifetime i
 				continue
 			}
 			if err != nil {
-				return err
+				return &intakeMonitorFailure{intakeFailureReconcile, err}
 			}
 		}
 		if time.Since(lastHeartbeat) >= time.Second {
 			if err := intake.exchange(mountTransferReady, 0, "", -1); err != nil {
-				return err
+				return &intakeMonitorFailure{intakeFailureHeartbeat, err}
 			}
 			lastHeartbeat = time.Now()
 		}
@@ -154,4 +154,43 @@ func (intake *moduleIntake) reconcile(current []mountEntry, structural map[int]b
 		return false, err
 	}
 	return intake.importArrivals(current, structural)
+}
+
+// These statuses describe only the private intake monitor's actual failure
+// phase. Every failure remains fatal; they grant no retry or lifecycle authority.
+type intakeFailurePhase uint8
+
+const (
+	intakeFailurePoll intakeFailurePhase = 80 + iota
+	intakeFailureControl
+	intakeFailureMountInfo
+	intakeFailureTopology
+	intakeFailureReconcile
+	intakeFailureHeartbeat
+	intakeFailureWatchdog
+)
+
+type intakeMonitorFailure struct {
+	phase intakeFailurePhase
+	cause error
+}
+
+func (failure *intakeMonitorFailure) Error() string { return failure.cause.Error() }
+func (failure *intakeMonitorFailure) Unwrap() error { return failure.cause }
+
+// MountIntakeExitStatus is used only for the selected private intake role.
+// Normal and unclassified outcomes preserve their existing zero/one statuses.
+func MountIntakeExitStatus(err error) int {
+	if err == nil {
+		return 0
+	}
+	var failure *intakeMonitorFailure
+	if errors.As(err, &failure) {
+		switch failure.phase {
+		case intakeFailurePoll, intakeFailureControl, intakeFailureMountInfo, intakeFailureTopology,
+			intakeFailureReconcile, intakeFailureHeartbeat, intakeFailureWatchdog:
+			return int(failure.phase)
+		}
+	}
+	return 1
 }
