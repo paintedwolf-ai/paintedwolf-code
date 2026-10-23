@@ -436,6 +436,10 @@ func (r *ProgramRuntime) feedback(ctx context.Context, run *programRun, dispatch
 		if errors.As(evalErr, &refusal) {
 			span := refusal.Node.Span
 			data := map[string]any{"tool": "command", "source_start_byte": span.StartByte, "source_end_byte": span.EndByte, "source_line": span.Line, "source_column": span.Column, "expected": refusal.Expected, "expected_form": refusal.Expected, "reason": refusal.Expected}
+			var expansion *commandprogram.ExpansionError
+			if errors.As(refusal.Cause, &expansion) && expansion.Limit != "" {
+				data["limit_id"], data["maximum"], data["observed"] = expansion.Limit, expansion.Maximum, expansion.ObservedValue()
+			}
 			if refusal.Command != "" {
 				data["command"], data["word"], data["expected_form"] = refusal.Command, refusal.Option, refusal.Form
 			}

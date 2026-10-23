@@ -108,3 +108,12 @@ func TestComposedProgramIdiomsHaveExactBytesAndStatuses(t *testing.T) {
 		})
 	}
 }
+
+func TestComposedProgramArrayOverflowRendersTypedRefusal(t *testing.T) {
+	f := newComposedProgramFixture(t)
+	outcome := callComposedProgram(t, f, `printf 'before\n'; a[9223372036854775807]=last; a+=(more); printf 'unreached\n'`)
+	if outcome.Refusal == nil || outcome.Refusal.Code != "COMMAND_OPERAND_INVALID" || outcome.Refusal.Feedback == "" || outcome.Status != 2 || outcome.Stdout != "before\n" {
+		t.Fatalf("array overflow outcome: %+v", outcome)
+	}
+	t.Logf("Rendered array overflow refusal:\n%s", outcome.Refusal.Feedback)
+}

@@ -31,9 +31,18 @@ type ExpansionError struct {
 
 func (e *ExpansionError) Error() string {
 	if e.Limit != "" {
-		return fmt.Sprintf("%s at %d:%d: %s %d > %d %s", e.Code, e.Span.Line, e.Span.Column, e.Limit, e.Observed, e.Maximum, e.Unit)
+		return fmt.Sprintf("%s at %d:%d: %s %d > %d %s", e.Code, e.Span.Line, e.Span.Column, e.Limit, e.ObservedValue(), e.Maximum, e.Unit)
 	}
 	return fmt.Sprintf("%s at %d:%d: %s", e.Code, e.Span.Line, e.Span.Column, e.Expected)
+}
+
+// ObservedValue preserves an exact positive index beyond signed arithmetic's
+// range while existing resource counters retain their signed representation.
+func (e *ExpansionError) ObservedValue() any {
+	if e.UnsignedObserved != 0 {
+		return e.UnsignedObserved
+	}
+	return e.Observed
 }
 
 // SubstitutionError is a reached substitution that failed: its port refused or

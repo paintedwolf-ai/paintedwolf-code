@@ -165,5 +165,5 @@ func indexedVariable(elements map[int64]string, exported bool) variable {
 }
 
 func (v *Variables) arrayIndexOverflow(observed uint64) *ExpansionError {
-	return &ExpansionError{Code: codeOperandInvalid, Expected: v.bounds.arrayIndexRule, Maximum: math.MaxInt64, UnsignedObserved: observed}
+	return &ExpansionError{Code: codeOperandInvalid, Expected: v.bounds.arrayIndexRule, Limit: "array_index", Unit: "index", Maximum: math.MaxInt64, UnsignedObserved: observed}
 }

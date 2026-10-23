@@ -46,7 +46,7 @@ func TestArrayAssignmentsAdmitBeforeCopyAndKeepOldState(t *testing.T) {
 	}
 	testutil.FailErr(t, "set maximum index", vars.AssignIndex(t.Context(), "a", math.MaxInt64, "last", false))
 	var overflow *ExpansionError
-	if err := vars.AssignArray(t.Context(), "a", []string{"overflow"}, true); !errors.As(err, &overflow) || overflow.Maximum != math.MaxInt64 || overflow.UnsignedObserved != uint64(math.MaxInt64)+1 {
+	if err := vars.AssignArray(t.Context(), "a", []string{"overflow"}, true); !errors.As(err, &overflow) || overflow.Limit != "array_index" || overflow.Maximum != math.MaxInt64 || overflow.ObservedValue() != uint64(math.MaxInt64)+1 {
 		t.Fatalf("append overflow facts: %+v, error=%v", overflow, err)
 	}
 	testutil.FailErr(t, "empty append at maximum index", vars.AssignArray(t.Context(), "a", nil, true))
