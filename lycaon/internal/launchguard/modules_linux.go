@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 
 	"golang.org/x/sys/unix"
@@ -214,13 +213,6 @@ func readMountInfo(fd int, buf []byte) ([]byte, error) {
 	}
 }
 
-type mountEntry struct {
-	id         int
-	parent     int
-	mountPoint string
-	options    string
-}
-
 func baselineExemptMounts(entries []mountEntry, installRoot string, roots []string) map[int]bool {
 	exempt := make(map[int]bool, len(entries))
 	prefix := strings.TrimRight(installRoot, "/") + "/"
@@ -293,55 +285,4 @@ func hasMountOption(options, want string) bool {
 		options = rest
 	}
 	return false
-}
-
-func parseMountInfo(raw []byte) []mountEntry {
-	var entries []mountEntry
-	for line := range strings.SplitSeq(string(raw), "\n") {
-		if entry, ok := parseMountInfoLine(line); ok {
-			entries = append(entries, entry)
-		}
-	}
-	return entries
-}
-
-func parseMountInfoLine(line string) (mountEntry, bool) {
-	var fields [6]string
-	rest := line
-	for i := range fields {
-		field, next, ok := strings.Cut(rest, " ")
-		if !ok {
-			return mountEntry{}, false
-		}
-		fields[i], rest = field, next
-	}
-	id, err1 := strconv.Atoi(fields[0])
-	parent, err2 := strconv.Atoi(fields[1])
-	mountPoint := unescapeMountPath(fields[4])
-	hasSep := strings.HasPrefix(rest, "- ") || strings.Contains(rest, " - ")
-	if err1 != nil || err2 != nil || !strings.ContainsRune(fields[2], ':') || !strings.HasPrefix(fields[3], "/") || !strings.HasPrefix(mountPoint, "/") || strings.ContainsRune(mountPoint, 0) || fields[5] == "" || !hasSep {
-		return mountEntry{}, false
-	}
-	return mountEntry{id: id, parent: parent, mountPoint: mountPoint, options: fields[5]}, true
-}
-
-func unescapeMountPath(raw string) string {
-	if !strings.ContainsRune(raw, '\\') {
-		return raw
-	}
-	var out strings.Builder
-	out.Grow(len(raw))
-	for i := 0; i < len(raw); i++ {
-		if raw[i] == '\\' && i+3 < len(raw) && raw[i+1] >= '0' && raw[i+1] <= '3' && isOctal(raw[i+2]) && isOctal(raw[i+3]) {
-			out.WriteByte(((raw[i+1] - '0') << 6) | ((raw[i+2] - '0') << 3) | (raw[i+3] - '0'))
-			i += 3
-			continue
-		}
-		out.WriteByte(raw[i])
-	}
-	return out.String()
-}
-
-func isOctal(b byte) bool {
-	return b >= '0' && b <= '7'
 }

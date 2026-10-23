@@ -1,0 +1,50 @@
+//go:build linux
+
+package launchguard
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
+)
+
+func TestMountTopologyKeepsKernelIdentityAndRejectsIncompleteGraphs(t *testing.T) {
+	const root = "20 1 8:1 / / rw,noexec,relatime shared:4 - ext4 /dev/root rw\n"
+	const volume = "21 20 0:25 /subtree /media/USB\\040Drive\\012line rw,nosuid master:5 propagate_from:3 - fuse.test source\\040name rw,user_id=1000\n"
+	entries, err := parseMountTopology([]byte(root + volume))
+	testutil.FailErr(t, "decode complete kernel topology", err)
+	got := entries[1]
+	if got.id != 21 || got.parent != 20 || got.device != "0:25" || got.root != "/subtree" || got.mountPoint != "/media/USB Drive\nline" || got.filesystem != "fuse.test" || got.source != "source name" || got.master != 5 || got.propagateFrom != 3 || got.superOptions != "rw,user_id=1000" {
+		t.Fatalf("lost mount facts: %+v", got)
+	}
+	for name, raw := range map[string]string{
+		"truncated":             strings.TrimSuffix(root, "\n"),
+		"malformed":             root + "bad line\n",
+		"duplicate":             root + volume + volume,
+		"missing parent":        root + strings.Replace(volume, "21 20", "21 99", 1),
+		"cycle":                 root + strings.Replace(volume, "21 20", "21 21", 1),
+		"unknown propagation":   root + strings.Replace(volume, "master:5", "other:5", 1),
+		"duplicate propagation": root + strings.Replace(volume, "master:5", "master:5 master:5", 1),
+		"malformed escape":      root + strings.Replace(volume, "USB\\040", "USB\\400", 1),
+		"embedded nul":          root + strings.Replace(volume, "USB\\040", "USB\\000", 1),
+		"duplicate options":     strings.Replace(root, "rw,noexec", "rw,rw,noexec", 1),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := parseMountTopology([]byte(raw)); err == nil {
+				t.Fatal("accepted incomplete or ambiguous mount topology")
+			}
+		})
+	}
+	snapshot := &mountSnapshot{entries: entries}
+	private, err := parseMountTopology([]byte(strings.ReplaceAll(root+volume, " shared:4", "")))
+	testutil.FailErr(t, "decode privatized topology", err)
+	private[1].master, private[1].propagateFrom = 0, 0
+	if !snapshot.unchanged(private) {
+		t.Fatal("privatization alone changed mount identity")
+	}
+	private[1].root = "/replacement"
+	if snapshot.unchanged(private) {
+		t.Fatal("changed source root was accepted as unchanged")
+	}
+}
