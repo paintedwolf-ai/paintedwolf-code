@@ -61,3 +61,16 @@ func TestReasoningOffPolicyAndBudget(t *testing.T) {
 		})
 	}
 }
+
+func TestConfiguredHybridCanDisableOnGenericTransport(t *testing.T) {
+	p := New("fixture", "https://example.invalid", "", []modelinfo.Entry{{ID: "hybrid", Thinking: &modelinfo.ThinkingCapabilities{State: "supported", CanDisable: true}}})
+	req := modelcall.CompletionRequest{Model: "hybrid", Think: modelcall.ThinkOff, ResponseFormat: &modelcall.ResponseFormat{Type: modelcall.ResponseFormatJSONObject}}
+	if got := p.resolveRequestControls(req, "hybrid", controlOpts{}).ReasoningEffort; got != "none" {
+		t.Fatalf("declared disable capability lost: %q", got)
+	}
+	off := false
+	req.ThinkingOverride = &modelcall.ThinkingOverride{Mode: "fixed", Enabled: &off}
+	if got := p.resolveRequestControls(req, "hybrid", controlOpts{}).ReasoningEffort; got != "none" {
+		t.Fatalf("fixed disable capability lost: %q", got)
+	}
+}

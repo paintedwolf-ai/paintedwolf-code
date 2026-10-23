@@ -3,7 +3,6 @@ package openaicompat
 import (
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
-	"github.com/lycaon/lycaon/internal/llm/providerprofile"
 )
 
 type controlOpts struct {
@@ -46,7 +45,7 @@ func (p *Provider) resolveRequestControls(req modelcall.CompletionRequest, model
 		if req.ThinkingOverrideStyle != "" {
 			mt.Style = req.ThinkingOverrideStyle
 		}
-		applyFixedOpenAIThinking(&out, mt, p.profile, *req.ThinkingOverride)
+		applyFixedOpenAIThinking(&out, mt, *req.ThinkingOverride)
 		return out
 	}
 	fallback := p.reasoningFallbackFor(model, opts)
@@ -55,10 +54,10 @@ func (p *Provider) resolveRequestControls(req modelcall.CompletionRequest, model
 	}
 	if fallback == reasoningFallbackOff {
 		// Only effort levels declare an explicit off token.
-		if mt.AlwaysOn || mt.Style != modelinfo.ThinkStyleEffortLevels || p.profile.ReasoningEffortOff == "" {
+		if mt.AlwaysOn || mt.Style != modelinfo.ThinkStyleEffortLevels || mt.EffortOff == "" {
 			return out
 		}
-		out.ReasoningEffort = p.profile.ReasoningEffortOff
+		out.ReasoningEffort = mt.EffortOff
 		return out
 	}
 
@@ -75,8 +74,8 @@ func (p *Provider) resolveRequestControls(req modelcall.CompletionRequest, model
 	case modelinfo.ThinkStyleEffortLevels:
 		// Use the declared transport opt-out before falling back to minimum effort.
 		if lvl == modelcall.ThinkOff && !mt.AlwaysOn {
-			if p.profile.ReasoningEffortOff != "" {
-				out.ReasoningEffort = p.profile.ReasoningEffortOff
+			if mt.EffortOff != "" {
+				out.ReasoningEffort = mt.EffortOff
 				break
 			}
 			if req.ResponseFormat != nil {
@@ -142,8 +141,9 @@ func (p *Provider) reasoningActive(mt modelcall.ModelThinking, controls requestC
 
 func (p *Provider) finishRequestBudget(req modelcall.CompletionRequest, model string, opts controlOpts, out *requestControls) {
 	entry, _ := p.ModelEntry(model)
+	mt := p.modelThinking(model)
 	level := modelcall.ResolveThinkLevel(req, entry.ReasoningEffort, opts.strictRetry || req.StrictOutputBudget())
-	reasoning := out.ReasoningEffort != "" && out.ReasoningEffort != p.profile.ReasoningEffortOff || out.Thinking != nil && out.Thinking.Type == "enabled" || out.Reasoning != nil && !out.Reasoning.Disables()
+	reasoning := out.ReasoningEffort != "" && out.ReasoningEffort != mt.EffortOff || out.Thinking != nil && out.Thinking.Type == "enabled" || out.Reasoning != nil && !out.Reasoning.Disables()
 	budgetReq := req
 	budgetReq.StrictBudget = budgetReq.StrictBudget || opts.strictRetry
 	// Native fixed efforts are not ordered by the host ladder. Reserve the
@@ -163,20 +163,19 @@ func (p *Provider) finishRequestBudget(req modelcall.CompletionRequest, model st
 	current.MaxTokens, reduced.MaxTokens = 0, 0
 	current.Temperature, reduced.Temperature = nil, nil
 	req.RecordBudget(out.MaxTokens, current, reduced)
-	mt := p.modelThinking(model)
 	if mt.AlwaysOn && (mt.Style == modelinfo.ThinkStyleThinkingType || mt.Style == modelinfo.ThinkStyleReasoningToggle || mt.Style == modelinfo.ThinkStyleReasoningObject && reduced.Reasoning == nil) {
 		req.AttemptBudget.CanReduceReasoning = false
 	}
 }
 
-func applyFixedOpenAIThinking(out *requestControls, mt modelcall.ModelThinking, profile providerprofile.Profile, override modelcall.ThinkingOverride) {
+func applyFixedOpenAIThinking(out *requestControls, mt modelcall.ModelThinking, override modelcall.ThinkingOverride) {
 	enabled := override.Enabled == nil || *override.Enabled
 	switch mt.Style {
 	case modelinfo.ThinkStyleEffortLevels:
 		if enabled {
 			out.ReasoningEffort = override.Effort
 		} else {
-			out.ReasoningEffort = profile.ReasoningEffortOff
+			out.ReasoningEffort = mt.EffortOff
 		}
 	case modelinfo.ThinkStyleThinkingType:
 		typ := "disabled"
