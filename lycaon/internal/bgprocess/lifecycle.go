@@ -165,6 +165,7 @@ func (r *ProcessLifecycle) DisposeSession(ctx context.Context, sessionID string)
 		if err := r.awaitSettled(ctx, proc); err != nil {
 			return err
 		}
+		r.releaseProgramNotices(proc)
 	}
 	return nil
 }
@@ -209,6 +210,7 @@ func (r *ProcessLifecycle) Close(ctx context.Context) error {
 		if err := r.awaitSettled(ctx, proc); err != nil {
 			return err
 		}
+		r.releaseProgramNotices(proc)
 	}
 	return nil
 }
@@ -234,7 +236,16 @@ func (r *Output) publishTerminal(ctx context.Context, proc *Process) {
 		return
 	}
 	r.jobs.mu.Lock()
-	if proc.silent || proc.discarded || !proc.hasExit || proc.terminalPublished {
+	if proc.discarded {
+		release := proc.releaseNotices
+		proc.releaseNotices, proc.unsavedDocumentPaths = nil, nil
+		r.jobs.mu.Unlock()
+		if release != nil {
+			release()
+		}
+		return
+	}
+	if proc.silent || !proc.hasExit || proc.terminalPublished {
 		r.jobs.mu.Unlock()
 		return
 	}
@@ -248,6 +259,8 @@ func (r *Output) publishTerminal(ctx context.Context, proc *Process) {
 		TerminationReason: proc.reason, ExitCode: proc.exitCode, Failure: proc.failure,
 		Stages: append([]hostcmd.StageResult(nil), proc.Stages...),
 	}
+	completion.UnsavedDocumentPaths, completion.ReleaseNotices = proc.unsavedDocumentPaths, proc.releaseNotices
+	proc.unsavedDocumentPaths, proc.releaseNotices = nil, nil
 	completion.IndexWatch = proc.indexWatch
 	proc.indexWatch = indexwatch.Snapshot{}
 	exitCode := proc.exitCode
@@ -281,6 +294,9 @@ func (r *Output) publishTerminal(ctx context.Context, proc *Process) {
 		return
 	}
 	completion.IndexWatch.Release()
+	if completion.ReleaseNotices != nil {
+		completion.ReleaseNotices()
+	}
 }
 
 func trim(s string) string {

@@ -240,6 +240,10 @@ func compileFilesystemPlan(rules FilesystemRules) (linuxsandbox.Filesystem, erro
 			if err := pc.writeRule(rule); err != nil {
 				return linuxsandbox.Filesystem{}, err
 			}
+		case opWriteRemove:
+			if len(rule.matches) > 0 {
+				return linuxsandbox.Filesystem{}, &WriteExclusionUnavailableError{Path: rule.matches[0].literal, Reason: exclusionAncestorRemovalUnsupported}
+			}
 		case opReadMetadata:
 			// A placeholder's own directories carry traversal into a restored path.
 		}

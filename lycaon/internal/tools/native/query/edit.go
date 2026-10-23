@@ -55,5 +55,5 @@ func runJqEdit(inv *invocation) error {
 		return err
 	}
 	inv.published = result.Accepted || result.Saved
-	return inv.barrier.Track(result)
+	return nil
 }

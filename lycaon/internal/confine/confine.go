@@ -136,6 +136,8 @@ type Confinement struct {
 	SessionScratchRoot string
 	// ReadRoots are read-only carve-outs.
 	ReadRoots []string
+	// WriteDenyPaths are host-owned exclusions that remain read-only under all grants.
+	WriteDenyPaths []string
 	// ReadDenyPaths are per-action read exclusions.
 	ReadDenyPaths []string
 	// EgressOff records the observed deny cause.
@@ -508,6 +510,9 @@ func filesystemRules(c Confinement) (FilesystemRules, error) {
 		{regex: "^/dev/disk", layer: FloorControlPlane},
 		{regex: "^/dev/rdisk", layer: FloorControlPlane},
 	}})
+	if err := writeExclusions(&rules, c.WriteDenyPaths); err != nil {
+		return rules, err
+	}
 	if err := rules.checkStringLengths(); err != nil {
 		return rules, err
 	}

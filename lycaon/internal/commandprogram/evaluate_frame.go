@@ -38,7 +38,8 @@ type frame struct {
 	state      *frameState
 	parent     toolcontract.OperationInvocation
 	unit       string
-	streams    Streams
+	io         descriptorFrame
+	activeHost *childRun
 	publish    *eligibility
 	positional []string
 	// prefix holds a function call's NAME=value prefixes: visible to the body
@@ -102,7 +103,7 @@ func (e *evaluation) rootFrame(ctx context.Context) (*frame, func(), error) {
 		return nil, nil, err
 	}
 	state := &frameState{vars: vars, functions: map[string]commandsurface.FunctionDeclaration{}, latch: latch, control: control, dispatch: e.ports.Dispatch}
-	f := &frame{e: e, state: state, parent: e.ports.Invocation, unit: e.programName, streams: e.ports.Streams.withDefaults(), publish: newEligibility()}
+	f := &frame{e: e, state: state, parent: e.ports.Invocation, unit: e.programName, io: descriptorFrame{streams: e.ports.Streams.withDefaults()}, publish: newEligibility()}
 	return f, vars.Close, nil
 }
 

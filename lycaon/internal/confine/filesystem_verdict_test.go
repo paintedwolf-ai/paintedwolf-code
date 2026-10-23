@@ -127,12 +127,11 @@ func TestBrowserProfileKeepsTheFloors(t *testing.T) {
 	}
 }
 
-// Only the control plane is system-terminal; every other deny names the
-// capability whose declaration asks.
+// Control-plane and invocation write exclusions cannot be opened by approval.
 func TestFloorLayersDeclareTheirAskRoute(t *testing.T) {
 	for _, layer := range confine.FloorLayers() {
 		recovery := layer.Recovery()
-		terminal := layer == confine.FloorControlPlane || layer == confine.FloorReadControlPlane
+		terminal := layer == confine.FloorControlPlane || layer == confine.FloorReadControlPlane || layer == confine.FloorWriteConfigured
 		if recovery.Terminal() != terminal {
 			t.Errorf("%s terminal = %v, want %v", layer, recovery.Terminal(), terminal)
 		}

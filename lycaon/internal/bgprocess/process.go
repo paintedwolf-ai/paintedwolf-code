@@ -76,6 +76,9 @@ type Process struct {
 	indexWatch indexwatch.Snapshot
 	// failure is the run error the exit status does not carry.
 	failure *hostcmd.ExecFailure
+	// unsavedDocumentPaths transfers host notice facts to terminal completion.
+	unsavedDocumentPaths []string
+	releaseNotices       func()
 
 	// publishMu keeps screening and publication in one order.
 	publishMu     sync.Mutex

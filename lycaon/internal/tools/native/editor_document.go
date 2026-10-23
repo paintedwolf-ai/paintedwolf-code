@@ -34,6 +34,9 @@ func loadAgentSourceText(ctx context.Context, tool string, tctx tools.ToolContex
 	if err != nil && base.ID == "" {
 		return sourceview.Text{}, err
 	}
+	if !base.ReadWhole && tool != "edit" && tool != "replace_lines" {
+		return sourceview.Text{}, &toolrejection.ToolReject{Code: "EDITOR_DOCUMENT_READ_REQUIRED", Data: map[string]any{"path": resolved.DisplayPath, "document_id": base.ID}}
+	}
 	return sourceview.Text{Content: base.Text, Editor: &base}, nil
 }
 
@@ -89,7 +92,10 @@ func (l landing) publicationNote() string {
 // landEditedText updates the source document or file. It is the final
 // content guard: review gates can change the text a tool proposed.
 // A changed document returns ErrEditorDocumentMoved before writing.
-func landEditedText(ctx context.Context, tctx tools.ToolContext, tool string, resolved projectpaths.Resolved, st sourceview.Text, newContent string) (landing, error) {
+type editorTextProposal struct{ Authored, Reviewed string }
+
+func landEditedText(ctx context.Context, tctx tools.ToolContext, tool string, resolved projectpaths.Resolved, st sourceview.Text, proposal editorTextProposal) (landing, error) {
+	newContent := proposal.Reviewed
 	if err := guardMutationContent(tool, resolved.DisplayPath, newContent); err != nil {
 		return landing{}, err
 	}
@@ -140,7 +146,14 @@ func landEditedText(ctx context.Context, tctx tools.ToolContext, tool string, re
 	if err != nil {
 		return landing{}, err
 	}
-	documents.AdvanceAgentRead(tctx.Identity.ProjectID, tctx.Identity.SessionID, tctx.Source.EditorReadBases, edit, applied.Document)
+	applied.Document.ReadWhole = true
+	if tool != "write" {
+		applied.Document.ReadWhole = st.Editor.ReadWhole
+		applied.Document.ReadSpans = st.Editor.ReadSpans
+	}
+	readEdit := edit
+	readEdit.Content = proposal.Authored
+	documents.AdvanceAgentRead(tctx.Identity.ProjectID, tctx.Identity.SessionID, tctx.Source.EditorReadBases, readEdit, applied.Document)
 	tctx.RecordModelAuthoredCredentials(ctx, resolved.Abs, []byte(newContent))
 	reportLanded(tctx, applied.Document)
 	reportLandedEditorConfig(ctx, tctx, resolved, st, newContent)

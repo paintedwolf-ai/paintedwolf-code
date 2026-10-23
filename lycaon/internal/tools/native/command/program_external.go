@@ -23,6 +23,7 @@ type ExternalStages struct {
 	ToolContext     tools.ToolContext
 	Dir             string
 	ExtraWriteRoots []string
+	Memory          *toolcontract.ProgramMemory
 }
 
 var _ commandprogram.ExternalLauncher = ExternalStages{}
@@ -46,8 +47,21 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		return refusedResult("COMMAND_OPERAND_INVALID"), err
 	}
 	commandLine := (lycexec.Stage{Name: argv[0], Args: argv[1:]}).CommandLine()
-	bound, err := bindCommandForegroundConfine(ctx, tctx, l.ExtraWriteRoots, commandLine, "command", true)
+	drafts, releaseDrafts, err := commandDraftPaths(ctx, tctx, l.Memory)
 	if err != nil {
+		if reject := toolrejection.AsToolReject(err); reject != nil {
+			return refusedResult(reject.Code), err
+		}
+		return refusedResult(toolrejection.ToolOwnerFailedCode), err
+	}
+	defer releaseDrafts()
+	bound, err := bindCommandForegroundConfine(ctx, tctx, l.ExtraWriteRoots, commandLine, "command", true, drafts)
+	if err != nil {
+		var unavailable *confine.WriteExclusionUnavailableError
+		if errors.As(err, &unavailable) {
+			reject := commandProtectionReject(unavailable.Path, unavailable.Reason)
+			return refusedResult(reject.Code), reject
+		}
 		if ctx.Err() != nil {
 			return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.NoEffect}, errors.Join(ctx.Err(), err)
 		}
@@ -93,6 +107,11 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 	}
 	// An external process may have done anything it was confined to do.
 	result := toolcontract.ProducerResult{Status: status, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: status == 0, EffectCertainty: toolcontract.EffectAttempted}
+	if path := deniedCommandDraft(bound.lease.SettledRefusals(context.WithoutCancel(ctx)), drafts); path != "" {
+		reject := &toolrejection.ToolReject{Code: "COMMAND_REVISION_CONFLICT", Data: map[string]any{"path": path, "unsaved_draft": true}}
+		result.Terminal, result.StopCode, result.PublicationEligible = toolcontract.ProducerRefused, reject.Code, false
+		return result, errors.Join(waitErr, reject)
+	}
 	if len(run.Stages) == 1 && run.Stages[0].ExpectedConsumerClosure() {
 		// The executor's own SIGPIPE classification travels to pipeline settlement.
 		return result, errors.Join(waitErr, launchClosure{run.Stages[0]})

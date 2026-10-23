@@ -74,7 +74,7 @@ func runCommandTerminalCapture(
 	if err := runner.ValidateStages(ctx, stages); err != nil {
 		return RunOutcome{}, err
 	}
-	bound, err := bindCommandForegroundConfine(ctx, tctx, extraWriteRoots, commandLine, toolName, true)
+	bound, err := bindCommandForegroundConfine(ctx, tctx, extraWriteRoots, commandLine, toolName, true, nil)
 	if err != nil {
 		return RunOutcome{}, err
 	}

@@ -206,7 +206,7 @@ func runCommandForeground(
 	if err := runner.ValidateStages(ctx, stages); err != nil {
 		return RunOutcome{}, err
 	}
-	bound, err := bindCommandForegroundConfine(ctx, tctx, extraWriteRoots, cmdKey, toolName, confineJob)
+	bound, err := bindCommandForegroundConfine(ctx, tctx, extraWriteRoots, cmdKey, toolName, confineJob, nil)
 	if err != nil {
 		return RunOutcome{}, err
 	}
@@ -405,6 +405,7 @@ func bindCommandForegroundConfine(
 	cmdKey string,
 	toolName string,
 	confineJob bool,
+	writeDenyPaths []string,
 ) (commandForegroundConfine, error) {
 	bound := commandForegroundConfine{}
 	if confineJob {
@@ -414,6 +415,15 @@ func bindCommandForegroundConfine(
 			return commandForegroundConfine{}, tr
 		}
 		resolved, applied := confine.DefaultConfinement(confReq)
+		if len(writeDenyPaths) > 0 {
+			if resolved == nil || resolved.HostExecution {
+				return bound, &confine.WriteExclusionUnavailableError{Path: writeDenyPaths[0], Reason: "host_execution"}
+			}
+			if err := confine.ValidateWriteExclusions(writeDenyPaths); err != nil {
+				return bound, err
+			}
+			resolved.WriteDenyPaths = append(resolved.WriteDenyPaths, writeDenyPaths...)
+		}
 		bound.confinement = resolved
 		if err := confine.RequireApplied(applied); err != nil {
 			return commandForegroundConfine{}, err

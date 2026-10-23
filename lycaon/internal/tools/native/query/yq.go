@@ -392,5 +392,5 @@ func (r *yqRun) inPlace() error {
 		return err
 	}
 	r.inv.published = written.Accepted || written.Saved
-	return r.inv.barrier.Track(written)
+	return nil
 }
