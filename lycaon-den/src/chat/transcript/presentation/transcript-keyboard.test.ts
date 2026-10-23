@@ -85,3 +85,65 @@ it("loads the history leading to the live tail before choosing the next row", as
   expect(later).toHaveBeenCalledWith(false);
   expect(reveal).toHaveBeenCalledWith(1);
 });
+
+function mountedMessages() {
+  const frames: FrameRequestCallback[] = [];
+  vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => { frames.push(callback); return frames.length; });
+  vi.stubGlobal("cancelAnimationFrame", vi.fn());
+  const viewport = document.createElement("div");
+  viewport.tabIndex = -1;
+  const rows = ["first", "last"].map(key => {
+    const row = document.createElement("div");
+    row.className = "transcript-viewport-row";
+    row.dataset.msgId = key;
+    viewport.append(row);
+    return row;
+  });
+  document.body.append(viewport);
+  const reveal = vi.fn();
+  createRoot(stop => {
+    dispose = stop;
+    const keyboard = createTranscriptKeyboard({ active: () => true,
+      rows: () => [{ key: "first", kind: "user" }, { key: "last", kind: "assistant" }],
+      root: () => viewport, viewport: () => viewport, reveal,
+      loadEarlier: async () => {}, loadLater: async () => {}, reportError: error => { throw error; } });
+    for (const row of rows) keyboard.bindRow(row, row.dataset.msgId!);
+  });
+  const arrow = (row: HTMLElement, key = "ArrowDown") => {
+    const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
+    row.dispatchEvent(event);
+    return event;
+  };
+  return { viewport, rows, reveal, frames, arrow };
+}
+
+it("leaves arrows on a pointer-focused message to native reading scroll", () => {
+  const { rows, reveal, arrow } = mountedMessages();
+  rows[0].dispatchEvent(new Event("pointerdown", { bubbles: true }));
+  rows[0].focus();
+  expect(arrow(rows[0]).defaultPrevented).toBe(false);
+  expect(arrow(rows[0], "ArrowUp").defaultPrevented).toBe(false);
+  expect(reveal).not.toHaveBeenCalled();
+});
+
+it("keeps arrows navigating messages after an explicit message command", () => {
+  const { viewport, rows, frames, reveal, arrow } = mountedMessages();
+  viewport.focus();
+  invokeCommand("chat.nextMessage");
+  frames.shift()!(0);
+  expect(document.activeElement).toBe(rows[0]);
+  expect(arrow(rows[0]).defaultPrevented).toBe(true);
+  expect(reveal).toHaveBeenLastCalledWith(1);
+});
+
+it.each(["wheel", "pointerdown", "touchstart", "PageUp"])("returns to reading scroll after %s", input => {
+  const { viewport, rows, frames, reveal, arrow } = mountedMessages();
+  viewport.focus();
+  invokeCommand("chat.nextMessage");
+  frames.shift()!(0);
+  if (input === "PageUp") arrow(rows[0], input);
+  else rows[0].dispatchEvent(new Event(input, { bubbles: true }));
+  reveal.mockClear();
+  expect(arrow(rows[0]).defaultPrevented).toBe(false);
+  expect(reveal).not.toHaveBeenCalled();
+});
