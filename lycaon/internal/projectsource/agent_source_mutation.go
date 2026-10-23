@@ -30,6 +30,24 @@ func (m *agentSourceMutation) ID() string { return m.row.ID }
 
 // PrepareEffect records intent before the caller applies the file change.
 func (s *SourceMutationService) PrepareEffect(ctx context.Context, effect sourceeffect.Plan) (sourceeffect.Pending, error) {
+	pending, err := s.prepareAgentEffect(ctx, effect)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.Journal.insert(ctx, pending.row); err != nil {
+		pending.release()
+		return nil, fmt.Errorf("prepare file change journal: %w", err)
+	}
+	notePreparedAgentEffect(pending.row)
+	return pending, nil
+}
+
+func notePreparedAgentEffect(row *sourceMutationRow) {
+	sourcefeed.NoteHostWrite(row.Plan.AgentEffect.Change.AbsPath)
+	sourcefeed.NoteHostWrite(row.Plan.AgentEffect.Change.FromAbsPath)
+}
+
+func (s *SourceMutationService) prepareAgentEffect(ctx context.Context, effect sourceeffect.Plan) (*agentSourceMutation, error) {
 	if s == nil || s.Journal.db == nil || s.recorder == nil || effect.Record.ProjectID == "" {
 		return nil, fmt.Errorf("durable source mutation service required")
 	}
@@ -108,12 +126,6 @@ func (s *SourceMutationService) PrepareEffect(ctx context.Context, effect source
 	row := &sourceMutationRow{ID: id, ProjectID: plan.ProjectID, Kind: kind,
 		InputDigest: hex.EncodeToString(digest[:]), Plan: plan, Status: sourceMutationPrepared,
 		CreatedAt: now, UpdatedAt: now}
-	if err := s.Journal.insert(ctx, row); err != nil {
-		return nil, fmt.Errorf("prepare file change journal: %w", err)
-	}
-	// Watchers can see the file effect before its attribution transaction.
-	sourcefeed.NoteHostWrite(effect.Change.AbsPath)
-	sourcefeed.NoteHostWrite(effect.Change.FromAbsPath)
 	retained = true
 	return &agentSourceMutation{service: s, row: row, release: release}, nil
 }

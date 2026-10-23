@@ -17,6 +17,7 @@ type Journal interface {
 	RecoveryQuotaBytes() int64
 	InspectRemoval(context.Context, fseffect.Location) (RemovalSnapshot, error)
 	PrepareEffect(context.Context, Plan) (Pending, error)
+	PrepareEffects(context.Context, []Plan) (PendingEffects, error)
 	// RemoveEntry retains an entry for Undo before removing its original path.
 	// It returns the operation identity.
 	RemoveEntry(context.Context, Removal) (string, error)
@@ -92,3 +93,18 @@ func (e *AppliedError) Error() string {
 }
 
 func (e *AppliedError) Unwrap() error { return e.Cause }
+
+// Completion describes an actual publication attempt. An unattempted entry or
+// PublicationNotCommitted cannot establish an effect by comparing destination bytes.
+type Completion struct {
+	Attempted bool
+	Result    fseffect.Result
+	Err       error
+}
+
+// PendingEffects holds a bounded page of individually identified intents.
+// Finish must follow every publication or abandonment, including cancellation.
+type PendingEffects interface {
+	IDs() []string
+	Finish(context.Context, []Completion) error
+}

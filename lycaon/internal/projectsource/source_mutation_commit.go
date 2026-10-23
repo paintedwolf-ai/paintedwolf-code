@@ -38,34 +38,11 @@ func (s *sourceSettlement) commit(ctx context.Context, row *sourceMutationRow) e
 
 // commitOnce closes its transaction before failure tracking.
 func (s *sourceSettlement) commitOnce(ctx context.Context, row *sourceMutationRow) (*sourcefeed.StagedDelivery, error) {
-	history, err := s.History.buildSourceHistoryEntry(ctx, row.ID, &row.Plan)
+	deliveries, err := s.commitRowsOnce(ctx, []*sourceMutationRow{row})
 	if err != nil {
 		return nil, err
 	}
-	var prepared sourceledger.PreparedRecording
-	if row.Plan.Changed && s.recorder != nil {
-		prepared, err = s.recorder.Prepare(ctx, row.Plan.ledgerInputs(row.ID))
-		if err != nil {
-			return nil, err
-		}
-		defer prepared.Close()
-	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = tx.Rollback() }()
-	response := append(json.RawMessage(nil), row.Plan.Response...)
-	updatedAt := time.Now().UTC()
-	delivery, err := commitSourceMutationTx(ctx, tx, row, response, updatedAt, history, s.History.recoveryQuotaBytes(), prepared)
-	if err != nil {
-		return nil, err
-	}
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
-	row.Status, row.Response, row.Error, row.UpdatedAt = sourceMutationCommitted, response, "", updatedAt
-	return delivery, nil
+	return deliveries[0], nil
 }
 
 func commitSourceMutationTx(ctx context.Context, tx *sql.Tx, row *sourceMutationRow, response json.RawMessage, updatedAt time.Time, history *sourceHistoryEntry, quotaBytes int64, prepared sourceledger.PreparedRecording) (*sourcefeed.StagedDelivery, error) {
