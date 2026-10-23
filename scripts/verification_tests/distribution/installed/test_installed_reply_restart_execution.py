@@ -128,11 +128,12 @@ class ReplyRestartTests(unittest.TestCase):
         fixture = SimpleNamespace(server=SimpleNamespace(server_port=12345), base_url='http://127.0.0.1:12345/v1',
             discovery_observations=[{'path': '/v1/model/info', 'model': provider_setup.MODEL, 'fixture_credential_observed': True}])
         ui.__enter__.return_value = ui
-        with patch.object(provider_setup, 'DesktopUI', return_value=ui), patch.object(provider_setup, 'physical_input') as physical, patch.object(
+        with patch.object(provider_setup, 'DesktopUI', return_value=ui), patch.object(provider_setup, 'physical_input') as physical, patch.object(provider_setup, 'select_default_model') as select_model, patch.object(
                 provider_setup, 'find_gui_provider', side_effect=[None, {'provider_id': 'fixture', 'configured_models': [provider_setup.MODEL]}]):
             self.assertEqual(provider_setup.configure_provider(app, fixture)['provider_id'], 'fixture')
         self.assertEqual([call.args[0] for call in ui.click.call_args_list],
-                         ['Add AI provider', 'LiteLLM', 'Add AI provider', 'Default model', provider_setup.MODEL, 'Skip'])
+                         ['Add AI provider', 'LiteLLM', 'Add AI provider', 'Skip'])
+        select_model.assert_called_once_with(app, ui)
         self.assertEqual([call.args[3] for call in physical.call_args_list],
                          ['provider-name-v1', 'provider-endpoint-v1-12345', 'provider-fixture-credential-v1'])
         self.assertEqual([call.args[2] for call in physical.call_args_list],
