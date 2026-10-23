@@ -160,6 +160,7 @@ func (state *protectedGuardian) run() int {
 			state.retired = true
 			if !errors.Is(err, errProtectedDesktopEnded) {
 				state.failed = true
+				_, _ = fmt.Fprintf(os.Stderr, "Painted Wolf Code: protected launch guardian stopped: %v\n", err)
 			}
 		}
 	}
