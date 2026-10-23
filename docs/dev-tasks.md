@@ -117,6 +117,66 @@ selection and staging recheck the archive. Isolated test checkouts reuse this
 cache while keeping their own release selection. Download failures can be
 retried normally and never start an engine source build.
 
+`pw scan engines verify-installed --root /absolute/engine-root` checks the
+packaged payload against the executable's embedded identity, then runs native
+and embedded-source positive cases plus ignored/comment-only controls through
+the product driver under required confinement. It emits JSON with the exact
+binary identity, capability facts, case results, and a structured failure code.
+Missing, changed, or wrong-architecture resources fail; this command never
+repairs the installation, downloads an engine, or searches a host-tool fallback.
+Run it from each installed package with its explicit resource root. A checkout
+probe does not establish an installed-package result.
+
+The selected producer qualification binds the original scanner bytes. Changing
+the ELF loader for Nix changes those bytes and requires a separate consumer
+finalization identity and qualification. The artifact build tool supports
+`-mode finalize-consumer -artifact-directory ORIGINAL -root FINAL_ROOT
+-consumer-recipe RECIPE.json -evidence-root SCANNER_CONFIG -audit-output AUDIT.json`.
+It emits the final base64 build identity only after the required product cases
+pass under confinement. The recipe is one closed JSON object with
+`schema_version: 1`, `kind: "nix-elf-relocation"`, the full `source_commit`,
+`flake_lock_sha256`, absolute `tool_path`, `tool_sha256`, and an `arguments`
+array. Declared inputs and observed ELF loader, dependencies, and RPATHs remain
+separate fields in the consumer record.
+
+The existing managed preparation entry point forwards these explicit build
+modes to that same tool:
+
+```sh
+./task scan:opengrep:stage -- --finalize-consumer -artifact-directory "$ORIGINAL" -root "$FINAL_ENGINE_ROOT" -consumer-recipe "$RECIPE" -evidence-root "$SCANNER_CONFIG" -audit-output "$AUDIT"
+./task scan:opengrep:stage -- --relocate-consumer -artifact-directory "$ORIGINAL" -root "$FINAL_ENGINE_ROOT" -consumer-recipe "$RECIPE" -evidence-root "$SCANNER_CONFIG" -audit-output "$AUDIT"
+./task scan:opengrep:stage -- --audit-consumer -artifact-directory "$ORIGINAL" -packaged-directory "$FINAL_ARTIFACT_DIRECTORY" -consumer-identity-file "$IDENTITY" -evidence-root "$SCANNER_CONFIG" -audit-output "$AUDIT"
+```
+
+These modes refuse development overrides and do not fetch or repair resources.
+The Nix build graph uses the built artifact command as a derivation dependency;
+it performs the same offline admission before compiling the engine.
+
+For the pinned Linux Nuitka onefile scanner, use `--relocate-consumer` with
+`kind: "nix-nuitka-relocation"` and exactly four `arguments` entries:
+`["--set-interpreter", "/nix/store/…/lib/ld-linux-….so", "--set-rpath", "/nix/store/…-glibc/lib:/nix/store/…-libgcc/lib"]`.
+Start with an exact staged producer copy. The build tool patches its separated
+launcher and embedded ELF images, retains safe relative library paths, and
+rebuilds per-file checksums, compression, and the attached-data trailer. Each
+native dependency must have a declared payload or Nix store provider; host
+library fallback is refused. Ordinary `patchelf` on the complete scanner breaks
+its attached-data layout. Relocation alone grants no qualification authority;
+the same invocation runs the product cases before emitting an identity.
+
+The native consumer integration uses the existing scoped digest with
+`-tags integration,consumer_scanners -run '^TestConsumerFinalizationNativeScanner$'`
+for `./cmd/opengrep-artifact`. It requires `PW_SCANNER_CONSUMER_RECIPE` and
+`PW_SCANNER_PRODUCER_DIRECTORY`; absent inputs fail that selected campaign.
+Ordinary scanner tests continue to qualify unchanged producer resources.
+
+Package assembly must transform its own writable staged copy first, run this
+native finalizer, inject the emitted identity into the engine build, and then
+preserve every finalized resource byte. A later audit uses the original
+`-artifact-directory`, final `-packaged-directory`, and
+`-consumer-identity-file IDENTITY.txt` together. The original pinned archive
+and selection evidence remain required. Nix package caller integration and
+installed qualification for both architectures are tracked under #49 and #927.
+
 Development executables run under the hardened runtime releases ship with:
 `scripts/sign-dev-binary.sh` signs them with the stable development identity
 when it is provisioned and ad hoc otherwise, always with `--options runtime`.
@@ -571,7 +631,7 @@ Gate composition lives in `scripts/verification-plan.json`.
 
 | Task | Composition |
 |------|-------------|
-| `check-fast` | Local handoff gate on one stable source snapshot: `build`, `lint:full`, `budgets`, `den:typecheck`, `den:lint`, `den:test:fast`, `den:coverage:changes`, `test:short`, `test:contract`, and `coverage:changes`, each starting once its declared resources allow. CI's `fast` profile, the ready pull request tier, runs a subset of these stages |
+| `check-fast` | Local handoff gate on one stable source snapshot: `build`, `lint:full`, `budgets`, `den:typecheck`, `den:lint`, `den:test:fast`, `den:coverage:changes`, `test:short`, `test:contract`, `coverage:changes`, `licenses:notices`, `comments:check`, `test:fail-messages:check`, and `docs:links`, each starting once its declared resources allow. CI's `fast` profile, the ready pull request tier, runs a subset of these stages |
 | `check` | Full local and qualification gate on one stable source snapshot, run exactly by CI's `check` profile: `build`, `build:cross`, `check:drift`, `openapi:lint`, `validate:workflows`, `oar:verify` (`test:oar` and `oar:conformance`), the runtime checks (`test:runner`, `test:full` including required bundled scanners, `den:typecheck`, `den:lint`, `den:test`, `den:test:rust`), `test:fail-messages:check`, `comments:check`, `lint:full`, `budgets`, `coverage:changes`, `den:coverage:changes`, and `lint:vuln`. Stages start as their declared resources allow, longest expected first, and the first failure ends the gate. Active fuzzing, transcript performance, stress, race, and coverage sweeps run separately in `nightly.yml` and the release workflow; ordinary Go tests still execute saved fuzz cases |
 | `check:drift` | Internal to `check`: every `codegen:*:check`, `openapi:bundle:check`, `db:sqlc:check`, `db:sqlc:vet`, the vendored-corpus checks (`oar:vendor:check`, `scan:rules:vendor:check`, `secret-mint:vendor:check`, `lint:vuln:vendor:check`), and `docs:links`. A stale generated surface fails here, not at compile time |
 | `check:digest` | Summarized local pass — build, `lint:fast`, unit/component Go tests, `den:test:fast`, and the harness canary. `FULL=1` delegates to `test:full`, including integration tags and required bundled scanners |
@@ -923,6 +983,63 @@ Linux ships as native packages only: a `.deb` for Debian and Ubuntu families and
 `lycaon-den/src-tauri/tauri.linux.conf.json` restricts the bundle target to the `.deb` stage, disables updater artifacts, and drops Tauri's `externalBin` and `resources` placement so nothing lands in `/usr/lib`; `scripts/linux-package-config.py` renders the `files` map and the dependency constraints from [`packaging/linux/dependencies.json`](../packaging/linux/dependencies.json) and the measured floor in `lycaon/internal/platformfloor/linux_floor.txt` (kernel 6.2, glibc 2.35, WebKitGTK 2.44, GTK 3.24.41 for Wayland activation). GTK, WebKitGTK, libsoup and the C library are distribution dependencies; staging refuses a package that bundles them. Optional fragments other subsystems ship are wired when present: `packaging/linux/polkit/*.policy`, `systemd/*.{service,socket}`, `apparmor/*` (deb only). Maintainer scripts in `packaging/linux/{deb,rpm}/` do exactly: enable `paintedwolf-vault-identity.socket` when it is packaged and restart its service on upgrade, refresh desktop and icon caches, load the AppArmor profile when shipped; on removal they stop the unit and remove empty package directories. They never touch user files or add repositories. No SELinux module ships, and packaging has no module-installation or removal path. The app runs as an ordinary user program, which the targeted policy leaves unconfined. The vault identity service runs under a systemd `DynamicUser` rather than an account the package creates. A Fedora install with SELinux enforcing showed no denials from the app or the service. Installed-package qualification keeps an enforcing Fedora run so a denial introduced by a later change fails release rather than reaching users ([#456](https://github.com/paintedwolf-ai/paintedwolf-code/issues/456)). Package versions follow each family's grammar through `release-metadata.py`'s `linux_package_version` (`1.0.2-rc.1` becomes `1.0.2~rc.1`).
 
 The staging script extracts both packages, verifies the manifest against the extracted bytes, checks every ELF payload is native, compares metadata and dependencies with the catalog, requires the maintainer scripts and that they enable every packaged socket, requires every packaged service to run a manifest-listed helper under `/opt/painted-wolf-code/bin/`, runs `lintian --fail-on error` and `rpmlint` when installed, and refuses anything other than exactly `deb,rpm`. The Linux updater adapter is check-only (see [Updates](#updates)).
+
+#### Nix installations
+
+Nix package sources and the NixOS module are versioned with this repository. Consume an exact release source commit from `paintedwolf-ai/paintedwolf-code`, including its committed `flake.lock`; a nixpkgs submission is not required. The flake exposes `packages.x86_64-linux.default`, `packages.aarch64-linux.default` and `nixosModules.default`. The package version comes from the same `VERSION` as the other platforms. These interfaces are being implemented in [#927](https://github.com/paintedwolf-ai/paintedwolf-code/issues/927) and [#929](https://github.com/paintedwolf-ai/paintedwolf-code/issues/929); use a release that contains them. Publication of the first such exact release pin remains pending those changes.
+
+These recipes require a working Nix installation. The official Nix 2.35.3 installer [refuses enforcing SELinux hosts](https://github.com/NixOS/nix/blob/2.35.3/scripts/install-multi-user.sh#L724), as confirmed during Fedora 44 fixture preparation. Qualification keeps SELinux enforcing and records that installer route as unavailable. Another installation and policy combination needs independent native qualification.
+
+Replace `<source-commit>` with the full source commit named by the selected release. Check its release/tag provenance and review the source and lock changes before changing your pin. `flake.lock` records dependency revisions and NAR hashes; language lock files and the derivations' fixed-output dependency hashes describe the remaining fetched inputs. A hash detects a changed input; it does not identify a publisher or authorize unattended vault access. The package manifest describes final installed ELF bytes after Nix fixups; [custody trust](secrets.md#credential-vault) is an explicit administrator decision about that generation.
+
+The following examples require Nix's `nix-command` and `flakes` features. Set `PW_NIX_SOURCE` to `github:paintedwolf-ai/paintedwolf-code/<source-commit>`. A read-only source inspection and a package build do not select an installation owner:
+
+```sh
+nix flake metadata "$PW_NIX_SOURCE"
+nix build --no-link --no-write-lock-file "$PW_NIX_SOURCE#default"
+```
+
+Choose the configuration that already owns the installation. Do not create a second owner merely because the upstream feed reports a newer version.
+
+| Owner | Install and update | Rollback and remove |
+|---|---|---|
+| NixOS system | Add a pinned `painted-wolf-code` flake input, import its `nixosModules.default` and enable `services.painted-wolf-code`. Review the input/lock change and switch through the system's existing rebuild procedure. A package-only `environment.systemPackages` entry does not register custody. | Select a retained system generation through the administrator's normal rollback procedure. Before disabling custody, move service-held identities to an app password, or restore the service later to access its retained state. Removing the module/package does not erase credentials. |
+| Home Manager | Add the pinned input's `packages.${pkgs.stdenv.hostPlatform.system}.default` to `home.packages`, then use the existing Home Manager activation procedure. Update that input explicitly; do not replace its pin from the app. | Select the intended retained Home Manager generation or restore the prior input and activate. Remove the package from the same `home.packages`. System custody still needs an administrator's NixOS module; a standalone Home Manager activation does not install it. |
+| User profile | Choose the actual profile, inspect it with `nix profile list --profile "$PW_NIX_PROFILE"`, and add the selected source with `nix profile add --profile "$PW_NIX_PROFILE" "$PW_NIX_SOURCE#default"`. An exact commit remains pinned. To replace it, record `nix profile history`, remove the observed element name, then add the reviewed new source to that same profile. | Use `nix profile rollback` with that profile and the intended retained generation. Remove the observed element using `nix profile remove`; never guess an element name or profile path. |
+| Temporary build | Use `nix build --out-link "$PW_NIX_OUTPUT" "$PW_NIX_SOURCE#default"` with a chosen output link, then launch its `bin/painted-wolf-code`. A temporary build has no profile to upgrade. | Choose another exact source/output and relaunch when ready. Removing the chosen output link releases that root; Nix garbage collection owns unused outputs. |
+| Unknown | Find the configuration/profile where the package was selected, or ask its administrator. The running executable identifies a Nix generation and layout; it does not identify NixOS, Home Manager, a profile or an intentional pin. | Do not guess an upgrade, rollback, removal command or configuration path. |
+
+A configuration without a top-level flake can consume the same pinned package through [`builtins.getFlake`](https://nix.dev/manual/nix/2.35/language/builtins.html#builtins-getFlake). This still requires the flakes feature; use a locked commit reference rather than a mutable branch:
+
+```nix
+let
+  paintedWolf = builtins.getFlake "github:paintedwolf-ai/paintedwolf-code/<source-commit>";
+in paintedWolf.packages.${pkgs.stdenv.hostPlatform.system}.default
+```
+
+Use that expression in the existing `home.packages` or `environment.systemPackages`. For protected system custody, import `paintedWolf.nixosModules.default` in the administrator's NixOS configuration and set `services.painted-wolf-code.enable = true`. Neither recipe needs a global registry entry, a guessed configuration file path, a broad Nix `trusted-users` grant or a permissive polkit rule.
+
+The app's update check reads the signed upstream release feed only. Its native package facts report source availability as `not_checked`, and Nix ownership and pin state as unknown. The selected source may deliberately retain an older version, lack the announced release, or be unavailable. Stable/preview selection changes the upstream feed, not a Nix input or lock file. A failed check labels a retained offer as previously seen; withdrawal removes the current offer without modifying an installed output. No check changes a profile, switches a system generation, edits a lock file, modifies the store or restarts the desktop.
+
+The optional product binary cache is owned by [#945](https://github.com/paintedwolf-ai/paintedwolf-code/issues/945). Its endpoint and separate Nix public key must be published before it can be configured; existing feed and package signing keys are not Nix cache keys. Administrators explicitly add the published endpoint to `extra-substituters` and its reviewed Nix key to `extra-trusted-public-keys`; selecting a cache changes neither source pins nor custody trust. Keep a source-build path with the product cache absent. Rotation publishes the replacement key before switching signatures, then withdraws the retired key after the announced overlap; revoke a compromised key and substituter from the owning configuration and rebuild from reviewed sources. Cache substitution, rotation and source-build qualification remain tracked in #945 and #932.
+
+Removing an offered release or cache object cannot revoke a pinned source or an already retained closure. Review withdrawal notices, select a supported replacement explicitly and retain any generation needed for recovery. Running desktops retain their own Nix generation until they exit; switching a profile does not change their engine/helper identity. The system custodian accepts only its explicitly selected generations, so a switch can require a full desktop restart or a deliberate administrator-selected transition.
+
+A Nix generation rollback changes application/package files, not the live database or vault. A newer or unknown database schema is refused without mutation; [compatibility](compatibility.md#main-store-durable-db) requires a verified recovery snapshot before migration. Restore a selected compatible snapshot explicitly through the existing recovery flow; history returns to its capture point. Keep device credentials and service identities intact. A pinned old closure is not a database recovery point.
+
+See the [update qualification matrix](operations/update-qualification.md#nix-owner-and-recovery-qualification) for owner-specific installed checks. The recipes above describe the package contract; the first released-pin, owner switching and both-architecture qualification remain pending the package/cache foundation.
+
+### Installed Linux result admission
+
+The shared [`support-matrix.json`](../packaging/linux/support-matrix.json) defines required environment/installation/architecture/capability rows. `scripts.linux_release.installed_results` admits a collector campaign against that catalog, an exact source commit, and the final artifact manifest supplied by the release owner. It emits JSON with `accepted`, every row's `passed`/`failed`/`unverified` outcome, errors and a checklist for native observations. Missing rows or cases, unknown/duplicate identities, skipped results, stale source/artifact identities and emulation of native-only tiers refuse admission. A file digest checks retained evidence bytes; the collector still owns the truth of each observation.
+
+The format-1 artifact manifest has `source_commit` and `artifacts`. Each artifact carries `id`, `installation`, `architecture`, `source_commit` and `identity`. File identity is `{ "kind": "file", "sha256": "<final payload digest>" }`. Nix identity is `{ "kind": "nix-closure", "sha256": "<NAR digest>", "store_path": "<exact output>", "lock_sha256": "<lock digest>" }`. Digests are lowercase SHA-256 hex; source commits are full lowercase Git SHAs. The campaign repeats the exact final manifest and adds `results`.
+
+Each result carries `row_id`, `source_commit`, `artifact_id`, `tier`, `execution` (`native` or `emulated`), `status` (`passed`, `failed`, `skipped` or `unverified`), `environment_facts` and `cases`. Facts contain exactly the catalog's `recorded_environment_facts` keys with recorded nonempty values. Every required case carries `id`, `status` and `evidence`; passing cases need retained `{ "path": "relative/file", "sha256": "<digest>" }` records. Paths must stay inside the evidence directory, including after symlink resolution. `variants` lists every release and scale variant the row's environment declares for that capability, each with `id`, `status` and `observed`: `os_id`, `version_id`, the typed `snapshot` (`kind`, `value`, `channel`), `display_protocol` and `scales_percent`. Admission compares each observation with its declared release, display protocol and scales. A missing, non-passing or mismatched variant leaves the row unverified, and a failed variant fails it. So a run on one release never covers another declared release, and two declared releases cannot share one observed snapshot. All final artifacts require installed results. A report about pre-signing or different bytes cannot certify the final set.
+
+`./task test:linux:installed -- --source-commit SHA --campaign FILE --final-artifacts FILE --evidence-root DIRECTORY` runs installed campaign admission through the normal queue. It retains a machine-readable report under the checkout's artifacts and prints the report as JSON, including every missing or unverified required row and the native/manual checklist. Optional `--report FILE` selects a fresh report path and `--catalog FILE` selects a scoped contract fixture. A report cannot replace an input, retained evidence or an existing report. Case drivers must still produce actual observations against the selected installed artifacts; invoking admission does not execute or certify missing cases.
+
+The admission module is a foundation for the installed campaign, not an installed test runner or a release gate by itself. Collectors, managed `test:linux:installed` orchestration and release consumption remain tracked in #456; the campaign closes only after its required rows pass. Architecture-specific performance limits and actual results remain #455, and native arm64 desktop/performance capacity is still required.
 
 ### Updates
 
