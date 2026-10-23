@@ -220,3 +220,33 @@ func TestUpgradeRefusesRecordedDamageButAllowsPendingAudit(t *testing.T) {
 		})
 	}
 }
+
+func TestUpgradeClassifiesSQLiteDamageDuringMigration(t *testing.T) {
+	path, _, plan := upgradeFixture(t)
+	damagedPath := filepath.Join(t.TempDir(), "damaged.db")
+	testutil.FailErr(t, "seed invalid SQLite header", os.WriteFile(damagedPath, []byte("this is not a SQLite database and cannot be read"), 0600))
+	source := []byte("attach damaged database")
+	sum := sha256.Sum256(source)
+	target := migrations.Baseline{Revision: plan.Source.Revision + 1, Shape: plan.Source.Shape}
+	registry, err := migrations.New(target, []migrations.Baseline{plan.Source}, []migrations.Step{{
+		ID: "damaged-source", Source: source, Checksum: hex.EncodeToString(sum[:]), From: plan.Source, To: target,
+		Apply: func(ctx context.Context, tx *sql.Tx) error {
+			_, err := tx.ExecContext(ctx, `ATTACH DATABASE ? AS damaged`, damagedPath)
+			return err
+		},
+	}})
+	testutil.FailErr(t, "register failing migration", err)
+	err = upgradeExistingUsing(t.Context(), path, UpgradeHooks{}, true, registry)
+	var failure *StoreIncompatibleError
+	if !errors.As(err, &failure) || failure.Reason != RecoveryReasonIntegrityFailed {
+		t.Fatalf("SQLite damage was not classified as integrity failure: %v", err)
+	}
+	reader, err := openReader(t.Context(), path)
+	testutil.FailErr(t, "open rolled back source", err)
+	defer func() { _ = reader.Close() }()
+	actual, err := inspectSchema(t.Context(), reader)
+	testutil.FailErr(t, "inspect rolled back source", err)
+	if actual != plan.Source {
+		t.Fatal("failed migration changed source schema")
+	}
+}

@@ -142,6 +142,10 @@ func upgradeExistingUsing(ctx context.Context, path string, hooks UpgradeHooks, 
 		if errors.Is(err, migrations.ErrIntegrity) {
 			return storeIncompatible(RecoveryReasonIntegrityFailed, plan.Source.Revision, err.Error())
 		}
+		var damaged *StoreIncompatibleError
+		if classified := integrityCheckError(err, "migrate store"); errors.As(classified, &damaged) {
+			return classified
+		}
 		return storeIncompatible(RecoveryReasonSchemaMismatch, plan.Source.Revision, err.Error())
 	}
 	if hooks.After != nil {
