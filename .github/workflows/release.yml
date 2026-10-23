@@ -160,7 +160,7 @@ jobs:
           path: .release-controller
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-go@5064d95ba18d4a9dda7c4cc67adeb03aea1a2a14 # v7.0.0
+      - uses: actions/setup-go@90ad2b35f69faf97585ad74d28fa006d2739b7af # v7.0.0
         with:
           go-version-file: .release-controller/lycaon/go.mod
           cache: false
@@ -292,7 +292,7 @@ jobs:
           path: .release-controller
           persist-credentials: false
 
-      - uses: actions/setup-go@5064d95ba18d4a9dda7c4cc67adeb03aea1a2a14 # v7.0.0
+      - uses: actions/setup-go@90ad2b35f69faf97585ad74d28fa006d2739b7af # v7.0.0
         with:
           go-version-file: lycaon/go.mod
           cache: false
@@ -577,7 +577,7 @@ jobs:
           ref: ${{ github.workflow_sha }}
           path: .release-controller
           persist-credentials: false
-      - uses: actions/setup-go@5064d95ba18d4a9dda7c4cc67adeb03aea1a2a14 # v7.0.0
+      - uses: actions/setup-go@90ad2b35f69faf97585ad74d28fa006d2739b7af # v7.0.0
         with:
           go-version-file: .release-controller/lycaon/go.mod
           cache: false
@@ -640,7 +640,7 @@ jobs:
         with:
           ref: ${{ github.workflow_sha }}
           persist-credentials: false
-      - uses: actions/setup-go@5064d95ba18d4a9dda7c4cc67adeb03aea1a2a14 # v7.0.0
+      - uses: actions/setup-go@90ad2b35f69faf97585ad74d28fa006d2739b7af # v7.0.0
         with:
           go-version-file: lycaon/go.mod
           cache: false
