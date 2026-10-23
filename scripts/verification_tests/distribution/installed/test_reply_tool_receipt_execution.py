@@ -6,7 +6,6 @@ import unittest
 from unittest.mock import patch
 
 from linux_release.installed_cases import reply_observer as owner
-from linux_release.installed_cases.provider_acquisition import LOAD_ID
 
 SESSION = '10000000-0000-4000-8000-000000000001'
 MESSAGE = '10000000-0000-4000-8000-000000000002'
@@ -15,8 +14,8 @@ RECEIPT = '10000000-0000-4000-8000-000000000003'
 
 class ReplyToolReceiptTests(unittest.TestCase):
     def fixture(self, tool='request_tools'):
-        call, subsystem, args = ((LOAD_ID, 'tool_surface', {'need': 'command'}) if tool == 'request_tools'
-                                else ('qualification-0', 'processes', {'command': '/usr/bin/true'}))
+        call, subsystem, args = (('call_1234abcd', 'tool_surface', {'need': 'command'}) if tool == 'request_tools'
+                                else ('call_abcd1234', 'processes', {'command': '/usr/bin/true'}))
         return {'tool': tool, 'tool_call_id': call, 'outcome': 'completed', 'tool_args': args,
             'content': json.dumps({'need': 'command', 'loaded': ['command']}),
             'invocation': {'id': RECEIPT, 'tool': tool, 'tool_call_id': call,
@@ -31,7 +30,7 @@ class ReplyToolReceiptTests(unittest.TestCase):
                 database.execute('INSERT INTO messages VALUES(?,?,?,?)',
                                  (RECEIPT, SESSION, 'tool', json.dumps(result)))
             with patch.object(owner, '_database', return_value=nullcontext(database)):
-                return owner.committed_fixed_tool(None, SESSION, tool)
+                return owner.committed_fixed_tool(None, SESSION, tool, 'call_1234abcd' if tool == 'request_tools' else 'call_abcd1234')
 
     def test_actual_successful_receipts_and_fixed_args_are_required(self):
         for tool in ('request_tools', 'command'):

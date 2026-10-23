@@ -8,11 +8,14 @@ from linux_release.installed_cases.provider_acquisition import (
     AcquisitionRefusal, CommandAcquisition, LOAD_ID, result_payload)
 from linux_release.installed_cases.provider import GUI_API_KEY, MODEL, ProviderFixture
 
+HOST_LOAD = 'call_1234abcd'
+HOST_COMMAND = 'call_abcd1234'
+COMMAND_RECEIPT = '20000000-0000-4000-8000-000000000006'
 RECEIPT = '10000000-0000-4000-8000-000000000006'
 
 
 def receipt(**changes):
-    return {'id': RECEIPT, 'tool': 'request_tools', 'tool_call_id': LOAD_ID,
+    return {'id': RECEIPT, 'tool': 'request_tools', 'tool_call_id': HOST_LOAD,
             'status': 'completed', 'invoked': True, **changes}
 
 
@@ -34,14 +37,15 @@ class ProviderAcquisitionTests(unittest.TestCase):
         self.assertEqual(call['id'], LOAD_ID)
         self.assertEqual(call['function']['name'], 'request_tools')
         self.assertEqual(json.loads(call['function']['arguments']), {'need': 'command'})
+        call['id'] = HOST_LOAD
         history += [{'role': 'assistant', 'tool_calls': [call]},
-                    {'role': 'tool', 'tool_call_id': LOAD_ID, 'content': framed()}]
+                    {'role': 'tool', 'tool_call_id': HOST_LOAD, 'content': framed()}]
         return phase, history
 
     def test_exactly_once_acquisition_requires_receipt_and_actual_command_surface(self):
         phase, history = self.acquired()
         self.assertIsNone(phase.advance(history, {'command'}))
-        self.assertEqual(phase.witness, {'need': 'command', 'loaded': True, 'invocation_id': RECEIPT})
+        self.assertEqual(phase.witness, {'need': 'command', 'loaded': True, 'invocation_id': RECEIPT, 'tool_call_id': HOST_LOAD})
         with self.assertRaises(AcquisitionRefusal):
             phase.advance(initial(), {'request_tools'})
         for tools in ({'command'}, set()):
@@ -79,9 +83,31 @@ class ProviderAcquisitionTests(unittest.TestCase):
                         valid.replace('\"need\": \"command\"', '\"need\":\"command\",\"note\":NaN'),
                         valid.replace('"need": "command"', '"need":"command","need":"command"')):
             with self.subTest(length=len(content)), self.assertRaises(ValueError):
-                result_payload(content)
+                result_payload(content, 'request_tools', HOST_LOAD)
         self.assertEqual(result_payload(framed(payload={'need': 'command', 'loaded': None,
-            'already_loaded': ['command']}))['invocation_id'], RECEIPT)
+            'already_loaded': ['command']}), 'request_tools', HOST_LOAD)['invocation_id'], RECEIPT)
+
+    def test_host_pairing_refuses_duplicate_foreign_replayed_and_unissued_calls(self):
+        for mutation in (
+                lambda h: h.append(dict(h[-1])),
+                lambda h: h[-2]['tool_calls'].append(dict(h[-2]['tool_calls'][0])),
+                lambda h: h[-2]['tool_calls'][0].update(id=LOAD_ID),
+                lambda h: h[-2]['tool_calls'][0].update(id=HOST_COMMAND),
+                lambda h: h[-1].pop('tool_call_id')):
+            phase, history = self.acquired()
+            mutation(history)
+            with self.assertRaises(AcquisitionRefusal):
+                phase.advance(history, {'command'})
+        phase, history = self.acquired()
+        with self.assertRaises(AcquisitionRefusal):
+            CommandAcquisition().advance(history, {'request_tools'})
+        phase.advance(history, {'command'})
+        # The issued command cannot be emitted twice while its result is absent.
+        with self.assertRaises(AcquisitionRefusal):
+            phase.advance(history, {'command'})
+        history[-1]['content'] = framed(invocation=receipt(id=COMMAND_RECEIPT))
+        with self.assertRaises(AcquisitionRefusal):
+            phase.advance(history, {'command'})
 
     def test_actual_http_acquires_then_runs_command_then_completes(self):
         calls = [{'name': 'command', 'arguments': {'command': '/usr/bin/true'}}]
@@ -104,11 +130,14 @@ class ProviderAcquisitionTests(unittest.TestCase):
             first = request(['request_tools'])
             load, = first['message']['tool_calls']
             self.assertEqual(load['function']['name'], 'request_tools')
-            history += [first['message'], {'role': 'tool', 'tool_call_id': LOAD_ID, 'content': framed()}]
+            first['message']['tool_calls'][0]['id'] = HOST_LOAD
+            history += [first['message'], {'role': 'tool', 'tool_call_id': HOST_LOAD, 'content': framed()}]
             command = request(['request_tools', 'command'])
             self.assertEqual(command['message']['tool_calls'][0]['function']['name'], 'command')
-            history += [command['message'], {'role': 'tool', 'tool_call_id': 'qualification-0',
-                                            'content': 'PRIVATE RESULT'}]
+            command['message']['tool_calls'][0]['id'] = HOST_COMMAND
+            history += [command['message'], {'role': 'tool', 'tool_call_id': HOST_COMMAND,
+                'content': framed(payload={'exit_code': 0}, invocation=receipt(id=COMMAND_RECEIPT,
+                    tool='command', tool_call_id=HOST_COMMAND))}]
             final = request(['command'])
             self.assertEqual(final['finish_reason'], 'stop')
             self.assertEqual(final['message']['content'], 'Fixture complete.')
@@ -119,6 +148,6 @@ class ProviderAcquisitionTests(unittest.TestCase):
             with self.assertRaises(urllib.error.HTTPError) as refused:
                 request([])
             self.assertEqual(refused.exception.code, 400)
-            self.assertEqual(fixture.transport_observations[-1]['refusal_code'], 'acquisition-result-missing')
+            self.assertEqual(fixture.transport_observations[-1]['refusal_code'], 'acquisition-result-invalid')
         with self.assertRaises(ValueError):
             ProviderFixture.gui([{'name': 'read', 'arguments': {}}], acquire_command=True)

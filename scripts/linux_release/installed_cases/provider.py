@@ -131,6 +131,9 @@ class ProviderFixture:
         finished = expected.issubset(results)
         message = {'role': 'assistant', 'content': 'Fixture complete.' if finished else None}
         acquisition = self.acquisition.advance(messages, available) if self.acquisition is not None else None
+        if self.acquisition is not None:
+            finished = self.acquisition.completed
+            message['content'] = 'Fixture complete.' if finished else None
         if acquisition is not None:
             if finished:
                 raise AcquisitionRefusal('acquisition-result-invalid')
