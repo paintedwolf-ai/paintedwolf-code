@@ -18,5 +18,22 @@
       "percent": 70,
       "grace": 5
     }
+  },
+  "python": {
+    "changed": {
+      "percent": 70,
+      "grace": 5
+    },
+    "suites": {
+      "test:runner": {
+        "start": "scripts",
+        "pattern": "test_*execution.py"
+      },
+      "coordinator benchmark": {
+        "start": "scripts/coordinator-benchmark",
+        "pattern": "test_*.py",
+        "requirements": "scripts/coordinator-benchmark/requirements.txt"
+      }
+    }
   }
 }

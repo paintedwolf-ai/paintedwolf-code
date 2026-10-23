@@ -382,9 +382,10 @@ cycles at compile time, and `funlen` in `lycaon/.golangci.yml` stays in force.
 
 ### Changed coverage
 
-`./task coverage:changes` (Go) and `./task den:coverage:changes` (Den) measure
-the statements a change adds or modifies. A unit (a Go package or a Den file)
-fails when more than the policy's grace count of its changed statements are
+`./task coverage:changes` (Go), `./task den:coverage:changes` (Den), and
+`./task scripts:coverage:changes` (Python under `scripts/`) measure the
+statements a change adds or modifies. A unit (a Go package, or a Den or Python
+file) fails when more than the policy's grace count of its changed statements are
 uncovered and fewer than its percentage are covered. Code a change does not
 touch never fails it, and floors live in
 [`coverage-policy.json`](../scripts/coverage-policy.json).
@@ -400,6 +401,17 @@ touch never fails it, and floors live in
 - **Den** runs the Vitest tests related to the changed files and measures
   coverage of those files. Tests, mocks, declarations, and generated files are
   skipped.
+- **Python** runs each suite `coverage-policy.json` declares whose tree holds a
+  changed script — `test:runner`'s discovery, and the coordinator benchmark's
+  own tests for its directory — under the pinned coverage.py. Suites run in a
+  disposable virtual environment whose startup hook measures every interpreter
+  it launches, so subprocess fixtures count even with a cleared environment or
+  `-I`, and a script a fixture copies into a disposable `scripts/` tree is
+  credited to its source. Statements are coverage.py's, with no exclusion
+  pragmas. Test code (`test_*.py` and the directories the size inventory
+  treats as tests, such as `verification_tests/`) is skipped. A child that
+  runs a different interpreter is not measured; launch fixtures with
+  `sys.executable` or `python3` from `PATH`.
 
 Aggregate floors (`check:coverage`, `den:coverage-check`) read the same policy
 and run nightly.
@@ -643,7 +655,7 @@ Run every task from the repository root through `./task`.
 | `./task perf:sidecar` | Representative isolated sidecar workload with enforced latency/resource/correctness budgets |
 | `./task perf:soak` | Long mixed workload with graceful restart, task recovery, SSE cursor reset, and leak checks |
 | `./task budgets` | Prompt and code size budgets for what the change touches |
-| `./task coverage:changes` / `./task den:coverage:changes` | Coverage of the Go and Den statements a change adds or modifies |
+| `./task coverage:changes` / `./task den:coverage:changes` / `./task scripts:coverage:changes` | Coverage of the Go, Den, and scripts Python statements a change adds or modifies |
 | `./task check-fast` | Local handoff gate: build, lint:full, size budgets, unit/component Go suite, repository contracts, Den typecheck, lint, den:test:fast, changed coverage, notices, comment and failure-message checks, and documentation links |
 | `./task check` | Full local and qualification gate: cross-compile, drift, complete Go and scanner suites, full Den and Rust correctness suites, size budgets, changed coverage, lint, and vulnerability checks |
 

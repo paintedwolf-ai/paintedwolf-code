@@ -61,6 +61,19 @@ rows:
     notes: |
       Reports breaking wire changes for release review (`./task openapi:diff`).
 
+  - id: coverage-py
+    name: coverage.py
+    pins:
+      - file scripts/python_coverage/requirements.txt
+    upstream:
+      - github-release nedbat/coveragepy
+    urgency: low
+    friction: low
+    notes: |
+      Measures `scripts:coverage:changes`; never shipped. `./task setup-dev -- --ci-inputs` installs it
+      per interpreter before offline lanes. Keep a release that supports the oldest `python3` in use
+      (3.9 on macOS); run `./task scripts:coverage:changes` after a bump.
+
   - id: go-licenses
     name: go-licenses
     pins:

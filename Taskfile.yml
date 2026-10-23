@@ -275,6 +275,11 @@ tasks:
     cmds:
       - python3 {{.SCRIPTS_DIR}}/coverage_changes.py go
 
+  scripts:coverage:changes:
+    desc: Scripts Python statements the change adds or modifies must be tested, subprocesses included (floors and suites in scripts/coverage-policy.json)
+    cmds:
+      - python3 {{.SCRIPTS_DIR}}/coverage_changes.py python
+
   check:coverage:
     desc: Minimum statement coverage on internal/* (default 62%% floor)
     sources:

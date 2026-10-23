@@ -14,6 +14,7 @@
       "test:short",
       "test:contract",
       "coverage:changes",
+      "scripts:coverage:changes",
       "licenses:notices",
       "comments:check",
       "test:fail-messages:check",
@@ -37,6 +38,7 @@
       "budgets",
       "coverage:changes",
       "den:coverage:changes",
+      "scripts:coverage:changes",
       "lint:vuln",
       "licenses:notices"
     ],
@@ -212,6 +214,9 @@
     ],
     "den:coverage:changes": [
       "den:coverage:changes"
+    ],
+    "scripts:coverage:changes": [
+      "scripts:coverage:changes"
     ],
     "codegen:approval-explanations:check": [
       "codegen:approval-explanations:check"
@@ -498,6 +503,12 @@
       "workers": "shared"
     },
     "test:runner": {
+      "locks": [
+        "runner"
+      ],
+      "workers": 1
+    },
+    "scripts:coverage:changes": {
       "locks": [
         "runner"
       ],
@@ -792,7 +803,8 @@
       "targets": [
         "budgets",
         "coverage:changes",
-        "den:coverage:changes"
+        "den:coverage:changes",
+        "scripts:coverage:changes"
       ],
       "minutes": 45,
       "profiles": [
