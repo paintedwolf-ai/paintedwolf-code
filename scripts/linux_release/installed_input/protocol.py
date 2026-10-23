@@ -7,7 +7,7 @@ import re
 
 from ..installed_evidence import IDENTIFIER
 from ..installed_cases.provider import GUI_LABEL, GUI_API_KEY, gui_endpoint
-from . import lineage
+from . import accessibility, lineage
 
 EDITOR_TEXT = 'Installed editor fixture changed through the native UI.\nFind the qualification needle.\n'
 MAX_TRANSACTIONS = 128
@@ -105,12 +105,14 @@ def binding(value: dict) -> dict:
 
 
 def focus(value: dict) -> dict:
-    fields = {'launch', 'entry', 'frame', 'frame_lineage', 'entry_focused', 'frame_active', 'frame_visible'}
+    fields = {'launch', 'entry', 'frame', 'frame_lineage', 'entry_lineage', 'accessible_chain', 'entry_focused', 'frame_active', 'frame_visible'}
     if not isinstance(value, dict) or set(value) != fields:
         raise ValueError('native input focus proof has an unknown shape')
     for name in ('launch', 'entry', 'frame'):
         lineage.identity(value[name])
     lineage.validate(value['frame_lineage'], value['launch'], value['frame'])
+    lineage.validate(value['entry_lineage'], value['frame'], value['entry'])
+    accessibility.validate(value['accessible_chain'], value['entry']['pid'], value['frame']['pid'])
     if any(value[name] is not True
             for name in ('entry_focused', 'frame_active', 'frame_visible')):
         raise ValueError('native input requires its focused entry and active captured frame')
