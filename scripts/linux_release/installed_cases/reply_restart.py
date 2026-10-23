@@ -11,7 +11,7 @@ from .process import run
 from .profile_observer import invocations, project_for_owned_root, sessions_for_project
 from .profile_providers import find_gui_provider
 from .provider import MODEL, ProviderFixture
-from .records import CaseUnavailable, retain
+from .records import CaseFailed, CaseUnavailable, retain
 from .reply_observer import committed_reply
 from ..installed_runtime import SETUID_LAUNCHER, elf
 from ..installed_input.focus import EntryFocus
@@ -38,7 +38,9 @@ def physical_input(app, ui, label, operation, *, password=False):
     native = app.binding.get('native_input')
     if not isinstance(native, dict):
         raise CaseUnavailable('protected-reply-requires-fixed-physical-input')
-    return perform(native['binding'], native['vm_id'], EntryFocus(app, ui, label, password=password), operation=operation)
+    record = perform(native['binding'], native['vm_id'], EntryFocus(app, ui, label, password=password), operation=operation)
+    app.observations.setdefault('fixed_input', []).append(record)
+    return record
 
 
 def configure_provider(app, fixture):
@@ -92,26 +94,38 @@ def execute(binding, capability, case, root):
     # This case changes only its disposable guest profile via normal UI actions.
     # Preserve the fixture project so a failed restart remains diagnosable.
     project = Path(tempfile.mkdtemp(prefix='reply-project-', dir=root))
-    with ProviderFixture.gui([{'name': 'command', 'arguments': {'command': '/usr/bin/true'}}]) as fixture:
-        with InstalledApp(binding, launcher=launcher) as app:
-            observations['interactive'] = interactive_window(app)
-            provider = configure_provider(app, fixture)
-            opened = run(binding, 'pw', ['open', str(project)], timeout=30)
-            if opened['exit_code'] or opened['timed_out'] or opened['output_limit']:
-                raise ValueError('installed CLI refused the fixed reply project')
-            with DesktopUI(app) as ui:
-                physical_input(app, ui, 'Describe your idea', 'reply-fixture-prompt-v1')
-                ui.click('Start')
-            before = await_reply(app, project, provider['provider_id'])
-            if not any(row['completed'] for row in fixture.observations):
-                raise ValueError('fixture never completed the full engine turn')
-            observations.update(reply_before=before, launch_before=app.observations)
-        streams.update({'before-' + key: value for key, value in app.streams().items()})
-        with InstalledApp(binding, launcher=launcher) as restarted:
-            after = await_reply(restarted, project, provider['provider_id'], selected_session=before['session_id'])
-            if after != before or restarted.observations['engine_identity'] == app.observations['engine_identity']:
-                raise ValueError('restart changed the fixed reply or reused the previous engine')
-            observations.update(reply_after=after, launch_after=restarted.observations,
-                                provider_requests=list(fixture.observations), durable_reply=True)
-        streams.update({'after-' + key: value for key, value in restarted.streams().items()})
+    app = restarted = None
+    try:
+        with ProviderFixture.gui([{'name': 'command', 'arguments': {'command': '/usr/bin/true'}}]) as fixture:
+            with InstalledApp(binding, launcher=launcher) as app:
+                observations['launch_before'] = app.observations
+                observations['interactive'] = interactive_window(app)
+                provider = configure_provider(app, fixture)
+                opened = run(binding, 'pw', ['open', str(project)], timeout=30)
+                if opened['exit_code'] or opened['timed_out'] or opened['output_limit']:
+                    raise ValueError('installed CLI refused the fixed reply project')
+                with DesktopUI(app) as ui:
+                    physical_input(app, ui, 'Describe your idea', 'reply-fixture-prompt-v1')
+                    ui.click('Start')
+                before = await_reply(app, project, provider['provider_id'])
+                if not any(row['completed'] for row in fixture.observations):
+                    raise ValueError('fixture never completed the full engine turn')
+                observations.update(reply_before=before, launch_before=app.observations)
+            streams.update({'before-' + key: value for key, value in app.streams().items()})
+            with InstalledApp(binding, launcher=launcher) as restarted:
+                after = await_reply(restarted, project, provider['provider_id'], selected_session=before['session_id'])
+                if after != before or restarted.observations['engine_identity'] == app.observations['engine_identity']:
+                    raise ValueError('restart changed the fixed reply or reused the previous engine')
+                observations.update(reply_after=after, launch_after=restarted.observations,
+                                    provider_requests=list(fixture.observations), durable_reply=True)
+            streams.update({'after-' + key: value for key, value in restarted.streams().items()})
+    except (OSError, ValueError, TypeError) as error:
+        for label, instance in (('before', app), ('after', restarted)):
+            if instance is not None:
+                streams.update({label + '-' + key: value for key, value in instance.streams().items()})
+        failure = error if isinstance(error, CaseUnavailable) else CaseFailed('protected reply or restart did not complete')
+        failure.observations = {**observations, **getattr(error, 'observations', {}),
+                                'failure_type': type(error).__name__}
+        failure.streams = streams
+        raise failure from None
     return retain(binding, capability, case, root, 'passed', observations, streams)

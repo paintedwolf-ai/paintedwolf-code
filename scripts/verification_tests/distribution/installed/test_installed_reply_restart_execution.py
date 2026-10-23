@@ -134,6 +134,13 @@ class ReplyRestartTests(unittest.TestCase):
         self.assertEqual([call.args[3] for call in physical.call_args_list],
                          ['provider-name-v1', 'provider-endpoint-v1-12345', 'provider-fixture-credential-v1'])
 
+    def test_physical_input_retains_exact_guest_delivery_records(self):
+        app = SimpleNamespace(binding={'native_input': {'binding': 'binding', 'vm_id': 'owned'}}, observations={})
+        record = {'transaction_id': 'a' * 32, 'operation': 'reply-fixture-prompt-v1', 'events': []}
+        with patch.object(owner, 'EntryFocus'), patch.object(owner, 'perform', return_value=record):
+            self.assertIs(owner.physical_input(app, None, 'Describe your idea', 'reply-fixture-prompt-v1'), record)
+        self.assertEqual(app.observations['fixed_input'], [record])
+
     def test_input_without_independently_bound_physical_actor_is_unverified(self):
         with self.assertRaises(owner.CaseUnavailable):
             owner.physical_input(SimpleNamespace(binding={}), None, 'Describe your idea', 'reply-fixture-prompt-v1')
