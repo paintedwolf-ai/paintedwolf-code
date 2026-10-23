@@ -218,7 +218,8 @@
         "client-and-server-decorations",
         "tiling-and-multi-window",
         "mixed-scale-monitors",
-        "geometry-recovery"
+        "geometry-recovery",
+        "file-tab-tear-off"
       ]
     },
     {
