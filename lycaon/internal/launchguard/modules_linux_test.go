@@ -120,7 +120,7 @@ func checkLiveDesktopMountIsolation(dir, rawPID string) error {
 	if err := unix.Setns(int(desktopNS.Fd()), unix.CLONE_NEWNS); err != nil {
 		return fmt.Errorf("enter live desktop mount namespace: %w", err)
 	}
-	checkErr := assertScrubbedNoexecView(lateDir, lateFile, underlying, existing)
+	checkErr := assertMediatedNoexecView(lateDir, lateFile, underlying, existing)
 	if restoreErr := unix.Setns(int(hostNS.Fd()), unix.CLONE_NEWNS); restoreErr != nil && checkErr == nil {
 		checkErr = restoreErr
 	}
@@ -155,7 +155,7 @@ func mountExecutableTmpfs(lateDir, lateFile string) error {
 	return os.WriteFile(lateFile, []byte("late-module"), 0o755)
 }
 
-func assertScrubbedNoexecView(lateDir, lateFile, underlying, existing string) error {
+func assertMediatedNoexecView(lateDir, lateFile, underlying, existing string) error {
 	if err := canMapExecutable(existing); !errors.Is(err, unix.EPERM) {
 		return fmt.Errorf("existing module mapped executable: %v", err)
 	}

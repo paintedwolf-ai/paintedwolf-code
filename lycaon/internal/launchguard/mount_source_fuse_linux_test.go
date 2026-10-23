@@ -39,7 +39,7 @@ func startSourceFUSE(t *testing.T, volume string) {
 	pair, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_STREAM|unix.SOCK_CLOEXEC, 0)
 	testutil.FailErr(t, "create FUSE descriptor transport", err)
 	parent, child := os.NewFile(uintptr(pair[0]), "fuse-parent"), os.NewFile(uintptr(pair[1]), "fuse-child")
-	defer func() { _ = parent.Close() }()
+	defer func() { _ = parent.Close(); _ = child.Close() }()
 	command := exec.Command("fusermount3", "-o", "ro,nosuid,nodev,fsname=pw-mount-fixture,subtype=pw_mount_fixture", "--", volume)
 	command.Env = append(os.Environ(), "_FUSE_COMMFD=3")
 	command.ExtraFiles = []*os.File{child}
@@ -50,32 +50,52 @@ func startSourceFUSE(t *testing.T, volume string) {
 	data, control := make([]byte, 1), make([]byte, unix.CmsgSpace(4))
 	_, n, flags, _, receiveErr := unix.Recvmsg(pair[0], data, control, unix.MSG_CMSG_CLOEXEC)
 	var fd = -1
-	if receiveErr == nil && flags&(unix.MSG_CTRUNC|unix.MSG_TRUNC) == 0 {
-		messages, parseErr := unix.ParseSocketControlMessage(control[:n])
-		if parseErr == nil && len(messages) == 1 {
-			rights, rightsErr := unix.ParseUnixRights(&messages[0])
-			if rightsErr == nil && len(rights) == 1 {
-				fd = rights[0]
+	messages, parseErr := unix.ParseSocketControlMessage(control[:n])
+	var received []int
+	for _, message := range messages {
+		if message.Header.Level == unix.SOL_SOCKET && message.Header.Type == unix.SCM_RIGHTS {
+			rights, err := unix.ParseUnixRights(&message)
+			if err == nil {
+				received = append(received, rights...)
+			} else {
+				parseErr = err
 			}
+		}
+	}
+	if receiveErr == nil && parseErr == nil && flags&(unix.MSG_CTRUNC|unix.MSG_TRUNC) == 0 && len(messages) == 1 && len(received) == 1 {
+		fd = received[0]
+	}
+	for _, right := range received {
+		if right != fd {
+			_ = unix.Close(right)
 		}
 	}
 	if fd < 0 {
 		_ = command.Wait()
 		t.Fatalf("FUSE mount did not return a device: %v %s", receiveErr, output.String())
 	}
+	device := os.NewFile(uintptr(fd), "owned-fuse-device")
+	defer device.Close()
+	server := exec.Command(os.Args[0], "-test.run=^TestSourceFUSEServerProcess$")
+	server.Env = append(os.Environ(), "PW_FUSE_FIXTURE_SERVER=1")
+	server.ExtraFiles = []*os.File{device}
+	server.Stderr = os.Stderr
+	testutil.FailErr(t, "start separate owned FUSE daemon", server.Start())
+	_ = device.Close()
 	done := make(chan error, 1)
-	go func() { done <- serveSourceFUSE(fd, uint32(os.Getuid()), uint32(os.Getgid())) }()
+	go func() { done <- server.Wait() }()
 	t.Cleanup(func() {
 		if out, err := exec.Command("fusermount3", "-u", "-z", "--", volume).CombinedOutput(); err != nil {
 			t.Errorf("remove own FUSE mount: %v %s", err, out)
 		}
-		_ = unix.Close(fd)
 		select {
 		case err := <-done:
 			if err != nil {
 				t.Errorf("FUSE fixture protocol: %v", err)
 			}
 		case <-time.After(2 * time.Second):
+			_ = server.Process.Kill()
+			_ = <-done
 			t.Error("own FUSE server did not settle after unmount")
 		}
 	})
@@ -98,6 +118,20 @@ func startSourceFUSE(t *testing.T, volume string) {
 		}
 	}
 	t.Fatal("own FUSE mount is absent from kernel topology")
+}
+
+// The client can enter epoll_ctl while opening its FUSE payload. Its daemon
+// must run in another process, so answering that callback never depends on
+// the client's runtime poller lock or available Go scheduling processor.
+func TestSourceFUSEServerProcess(t *testing.T) {
+	if os.Getenv("PW_FUSE_FIXTURE_SERVER") != "1" {
+		return
+	}
+	if err := serveSourceFUSE(3, uint32(os.Getuid()), uint32(os.Getgid())); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	os.Exit(0)
 }
 
 func serveSourceFUSE(fd int, uid, gid uint32) error {

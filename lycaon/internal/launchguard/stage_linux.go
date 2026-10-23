@@ -27,14 +27,14 @@ func RunStage() error {
 	if err := initialUserNamespace(); err != nil {
 		return err
 	}
-	if unix.Gettid() != os.Getpid() {
-		return errors.New("protected stage must run on the original process leader")
-	}
 	if uid, effective, saved := unix.Getresuid(); uid != 0 || effective != 0 || saved != 0 {
 		return errors.New("protected stage requires the bootstrap's administrator identity")
 	}
 	if gid, effective, saved := unix.Getresgid(); gid != 0 || effective != 0 || saved != 0 {
 		return errors.New("protected stage requires the bootstrap's administrator group identity")
+	}
+	if unix.Gettid() != os.Getpid() {
+		return errors.New("protected stage must run on the original process leader")
 	}
 	if err := unix.Prctl(unix.PR_SET_DUMPABLE, 0, 0, 0, 0); err != nil {
 		return err
