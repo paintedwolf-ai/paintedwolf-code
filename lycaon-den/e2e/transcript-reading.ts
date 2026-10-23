@@ -86,7 +86,7 @@ export async function readTranscriptBackTo(page: Page, step: number) {
   throw new Error(`Transcript did not reach history row ${step}`);
 }
 
-export async function readTranscriptForward(page: Page, until: () => Promise<boolean>) {
+export async function readTranscriptForward(page: Page, until: (steps: readonly number[]) => boolean | Promise<boolean>) {
   const deadline = Date.now() + 180_000;
   let previous = await visibleTranscriptSteps(page);
   expectContiguousSteps(previous);
@@ -97,7 +97,7 @@ export async function readTranscriptForward(page: Page, until: () => Promise<boo
     // Every newly presented screen must overlap the reader's previous position.
     expect(Math.min(...steps), "reading forward cannot skip unseen rows").toBeLessThanOrEqual(Math.max(...previous) + 1);
     previous = steps;
-    if (await until()) return;
+    if (await until(steps)) return;
   }
   throw new Error("Transcript did not reach the requested reading position");
 }

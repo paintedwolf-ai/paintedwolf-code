@@ -123,7 +123,7 @@ modelIndependentWebE2e("reading down from deep history reaches the live tail wit
     await new Promise<void>((release) => { releaseHeld = release; });
     await route.continue();
   });
-  await readTranscriptForward(page, async () => held);
+  await readTranscriptForward(page, () => held);
   // The end of history before the gap is not the latest message.
   await expect(page.getByTestId("stream-scroll-jump")).toHaveAttribute("aria-hidden", "false");
   const before = await readingRow(page);
@@ -136,7 +136,7 @@ modelIndependentWebE2e("reading down from deep history reaches the live tail wit
   expect(Math.abs((after ?? 0) - before.top)).toBeLessThanOrEqual(2);
   await page.unroute(newerPage);
 
-  await readTranscriptForward(page, async () => (await visibleTranscriptSteps(page)).includes(ROWS));
+  await readTranscriptForward(page, (steps) => steps.includes(ROWS));
   expectContiguousSteps(await visibleTranscriptSteps(page));
 
   // Jumping to latest from deep history drops the cut-off pages and lands on the tail.
@@ -191,7 +191,7 @@ modelIndependentWebE2e("PDF chips predict visible geometry and preserve cold-cac
   }
 
   await readTranscriptBackTo(page, 150);
-  await readTranscriptForward(page, async () => (await visibleTranscriptSteps(page)).includes(ROWS));
+  await readTranscriptForward(page, (steps) => steps.includes(ROWS));
   await expect(row).toBeVisible();
 });
 
