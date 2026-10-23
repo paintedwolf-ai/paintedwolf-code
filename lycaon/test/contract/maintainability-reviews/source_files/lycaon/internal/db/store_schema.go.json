@@ -4,11 +4,10 @@
   "kind": "module",
   "workstream": "store-health",
   "disposition": "retain",
-  "reason": "Fresh schema installation and snapshot publication retain their transactional boundaries. The shared synced-publication step now serves online exports and quiescent recovery images; copying and validation policies remain in their respective modules. Retain this lifecycle boundary at 368 measured lines, supported by snapshot and committed-WAL/cancellation contracts.",
-  "reviewed_commit": "5077ef8c0266d5751d1cbf55dcf76aebc2f09d0d",
-  "ceiling": 368,
+  "reason": "Schema identity inspection and verified snapshot publication are existing database contracts. This branch changes only the target schema revision here; retain the current file while migration implementation remains under migrations.",
+  "reviewed_commit": "1715fadedd158a5e720a137d0e4c243e95685783",
+  "ceiling": 355,
   "boundaries": {
-    "lycaon/internal/db/snapshot_test.go": "f457a7a23091216af145d2796d3eda9b256acf5f5bf5eb53da9704b965a942e3",
-    "lycaon/internal/db/snapshot_clone_test.go": "31d05f2b18b5184a718f39beae7abb5f72e1efc3d2430c7f4c087f2cb6f004d1"
+    "lycaon/internal/db/source_manifest_layout_upgrade_test.go": "33f4f955096fd7e9681766f9b6ef851410e60a506403aa0a96e7138e6672fc31"
   }
 }
