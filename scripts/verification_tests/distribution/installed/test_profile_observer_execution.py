@@ -97,9 +97,49 @@ class ProfileObserverTests(unittest.TestCase):
     def test_missing_sidecar_is_not_created_by_observer(self):
         sidecar = Path(str(self.path) + '-shm')
         sidecar.rename(sidecar.with_suffix('.held'))
-        with self.assertRaises(FileNotFoundError):
+        with self.assertRaises(observer.CaseUnavailable):
             observer.sessions_for_project(self.app, PROJECT)
         self.assertFalse(sidecar.exists())
+
+    def test_private_parent_allows_only_declared_sidecar_modes(self):
+        sidecar = Path(str(self.path) + '-wal')
+        sidecar.chmod(0o644)
+        self.assertEqual(len(observer.sessions_for_project(self.app, PROJECT)), 1)
+        for mode in (0o640, 0o664, 0o700):
+            with self.subTest(mode=mode):
+                sidecar.chmod(mode)
+                with self.assertRaises(observer.CaseUnavailable):
+                    observer.sessions_for_project(self.app, PROJECT)
+        sidecar.chmod(0o600)
+        self.profile.chmod(0o710)
+        with self.assertRaises(ValueError):
+            observer.sessions_for_project(self.app, PROJECT)
+
+    def test_sidecar_replacement_disappearance_mode_and_links_refuse(self):
+        sidecar = Path(str(self.path) + '-shm')
+        with self.assertRaises(observer.CaseUnavailable):
+            with observer.sqlite_sidecars(self.path):
+                sidecar.rename(sidecar.with_suffix('.held'))
+                sidecar.write_bytes(b'')
+                sidecar.chmod(0o600)
+        with self.assertRaises(observer.CaseUnavailable):
+            with observer.sqlite_sidecars(self.path):
+                sidecar.unlink()
+        sidecar.write_bytes(b'')
+        sidecar.chmod(0o600)
+        with self.assertRaises(observer.CaseUnavailable):
+            with observer.sqlite_sidecars(self.path):
+                sidecar.chmod(0o664)
+        sidecar.chmod(0o600)
+        os.link(sidecar, sidecar.with_suffix('.link'))
+        with self.assertRaises(observer.CaseUnavailable):
+            with observer.sqlite_sidecars(self.path):
+                self.fail('multiply linked sidecar admitted')
+
+    def test_sidecar_descriptor_custody_survives_live_growth(self):
+        with observer.sqlite_sidecars(self.path):
+            self.writer.execute('INSERT INTO projects VALUES(?)', ('another-project',))
+            self.writer.commit()
 
     def test_row_overflow_and_undeclared_tools_fail_closed(self):
         self.writer.executemany('INSERT INTO sessions VALUES(?,?,?,?,?)',
