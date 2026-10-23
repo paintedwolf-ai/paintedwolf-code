@@ -15,11 +15,13 @@ var (
 	selectorFactTypes    map[string]string
 	declaredFactTypes    map[string]string
 	declaredFactTiers    map[string]FactTier
+	bareFactTiers        map[string]FactTier
 	declaredFactProfiles map[string]string
 )
 
 func init() {
 	catalogueFacts = buildCatalogueFacts()
+	bareFactTiers = make(map[string]FactTier, len(factDecls)+len(occurrenceFactDecls)+len(observationFns))
 	publishedFacts = make(map[string]struct{}, len(factDecls)+len(occurrenceFactDecls)+len(observationFns))
 	selectorFactTypes = make(map[string]string, len(factDecls))
 	declaredFactTypes = make(map[string]string, len(factDecls)+len(occurrenceFactDecls))
@@ -29,6 +31,7 @@ func init() {
 		selectorFactTypes[publishedName(d.name, d.tier)] = factTypeString(d.typ)
 	}
 	eachDeclaredFact(func(d factDecl) {
+		bareFactTiers[d.name] = d.tier
 		name := publishedName(d.name, d.tier)
 		publishedFacts[name] = struct{}{}
 		declaredFactTypes[name] = factTypeString(d.typ)
@@ -36,6 +39,7 @@ func init() {
 		declaredFactProfiles[name] = d.profile
 	})
 	for _, f := range observationFns {
+		bareFactTiers[f.name] = f.tier
 		name := publishedName(f.name, f.tier)
 		publishedFacts[name] = struct{}{}
 		declaredFactTiers[name] = f.tier

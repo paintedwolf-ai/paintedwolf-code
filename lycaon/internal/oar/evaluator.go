@@ -6,11 +6,10 @@ package oar
 // value appears in it ([OAR-SEL-1], [OAR-SEL-2]).
 //
 // An unknown clause never reaches here: the loader rejects it ([OAR-SEL-3]).
-func selectorMatches(sel Selector, gc *GuardContext) bool {
+func selectorMatches(sel Selector, values map[string]any) bool {
 	if len(sel) == 0 {
 		return true
 	}
-	values := activation(gc)
 	for _, clause := range sel.Clauses() {
 		want := sel[clause]
 		if len(want) == 0 {
@@ -52,9 +51,33 @@ func containsExact(list []string, want string) bool {
 	return false
 }
 
-func ruleSelectorMatches(r *Rule, gc *GuardContext) (bool, error) {
-	if r.document != nil {
-		return r.document.MatchSelector(activation(gc))
+// selectorFacts belongs to one selection pass; providers may change its source.
+type selectorFacts struct {
+	context *GuardContext
+	values map[string]any
+	computed int
+}
+
+func (s *selectorFacts) match(r *Rule) (bool, error) {
+	if err := AssembleFacts(s.context, r.Selector.Clauses()); err != nil {
+		return false, err
 	}
-	return selectorMatches(r.Selector, gc), nil
+	if len(r.Selector) == 0 {
+		return true, nil
+	}
+	computed := 0
+	if s.context != nil {
+		s.context.lazy.mu.Lock()
+		computed = len(s.context.lazy.computed)
+		s.context.lazy.mu.Unlock()
+	}
+	// A completed provider can publish several facts, including after an error.
+	if s.values == nil || s.computed != computed {
+		s.values = activation(s.context)
+		s.computed = computed
+	}
+	if r.document != nil {
+		return r.document.MatchSelector(s.values)
+	}
+	return selectorMatches(r.Selector, s.values), nil
 }
