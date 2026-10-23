@@ -2,8 +2,14 @@
 # Populate pinned compiler/generator inputs before the offline lane starts.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+case "${1:-verification}" in
+  verification|analysis) ;;
+  *) echo "error: unknown CI input profile: $1" >&2; exit 2 ;;
+esac
+[[ $# -le 1 ]] || { echo "error: expected one CI input profile" >&2; exit 2; }
 (cd "$ROOT/lycaon" && go mod download)
 (cd "$ROOT/scripts/commentlint" && go mod download)
+[[ "${1:-verification}" != analysis ]] || exit 0
 # Lanes cannot reach the module proxy, so pinned tools are built here, not by `go run`.
 python3 "$ROOT/scripts/analysis_tools.py" ensure sqlc
 # Changed scripts coverage runs its suites under the pinned coverage.py.

@@ -1061,6 +1061,11 @@ save step alone never permits retiring the prior cache because upload failures
 can be reported as warnings.
 Consumers remain read-only and rebuild safely on a miss.
 
+Go analysis lanes provision only the pinned Go module graphs and their selected
+analyzers. They do not restore native compiler caches, install frontend packages,
+or download runtime engines. The lane catalog rejects runtime checks assigned
+to this setup; admission and behavioral lanes retain their complete inputs.
+
 Linux native setup resolves archives from signed APT indexes, verifies each size
 and SHA-256 digest, and bounds package-manager calls and downloads. Four transfers
 share a four-minute deadline, with a 30-second origin budget and a canonical

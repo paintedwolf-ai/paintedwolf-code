@@ -95,7 +95,13 @@ jobs:
 
       - uses: ./.github/actions/merge-group-watch
 
+      - uses: ./.github/actions/setup-analysis
+        if: matrix.setup == 'analysis'
+        with:
+          analysis: ${{ matrix.analysis }}
+
       - uses: ./.github/actions/setup-verification
+        if: matrix.setup != 'analysis'
         with:
           setup: ${{ matrix.setup }}
           notices: ${{ matrix.notices }}

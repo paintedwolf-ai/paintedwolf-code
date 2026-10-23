@@ -5,7 +5,8 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "${ROOT}"
 
 if [[ "${1:-}" == "--ci-inputs" ]]; then
-  exec bash "$ROOT/scripts/ci_policy/provision.sh"
+  shift
+  exec bash "$ROOT/scripts/ci_policy/provision.sh" "$@"
 fi
 
 if [[ "${1:-}" == "--frontend" ]]; then

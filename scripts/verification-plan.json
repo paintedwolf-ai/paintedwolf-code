@@ -856,7 +856,7 @@
         "integration"
       ],
       "suite": "all",
-      "setup": "verification",
+      "setup": "analysis",
       "first": true,
       "early_targets": [
         "comments:check",
@@ -874,7 +874,7 @@
         "integration"
       ],
       "suite": "all",
-      "setup": "verification"
+      "setup": "analysis"
     },
     "runner": {
       "targets": [
@@ -1051,7 +1051,7 @@
         "nightly"
       ],
       "suite": "all",
-      "setup": "verification"
+      "setup": "analysis"
     },
     "benchmarks": {
       "targets": [
