@@ -113,6 +113,7 @@ class ProviderRecoveryTests(unittest.TestCase):
         fixture = SimpleNamespace(base_url='http://127.0.0.1:41234/v1', discovery_observations=[{
             'path': '/v1/model/info', 'model': MODEL, 'fixture_credential_observed': True}])
         with patch.object(provider_setup, 'DesktopUI', return_value=ui), patch.object(
+                provider_setup, 'setup_state', return_value={'onboarding_completed': False}), patch.object(
                 provider_setup, 'find_gui_provider', return_value=witness), patch.object(provider_setup, 'physical_input') as physical, patch.object(
                 provider_setup, 'select_default_model') as select_model:
             self.assertEqual(provider_setup.configure_provider(app, fixture), witness)

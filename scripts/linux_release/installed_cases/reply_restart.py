@@ -65,8 +65,8 @@ def execute(binding, capability, case, root):
                 if opened['exit_code'] or opened['timed_out'] or opened['output_limit']:
                     raise ValueError('installed CLI refused the fixed reply project')
                 with DesktopUI(app) as ui:
-                    physical_input(app, ui, 'Describe your idea', 'reply-fixture-prompt-v1')
-                    ui.click('Start')
+                    physical_input(app, ui, 'What would you like to work on?', 'reply-fixture-prompt-v1')
+                    ui.click('Send message')
                 before = await_reply(app, project, provider['provider_id'])
                 if not any(row['completed'] for row in fixture.observations):
                     raise ValueError('fixture never completed the full engine turn')

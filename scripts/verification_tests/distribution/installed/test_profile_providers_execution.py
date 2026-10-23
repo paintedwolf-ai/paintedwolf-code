@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
-from linux_release.installed_cases import profile_observer, profile_providers as observer
+from linux_release.installed_cases import profile_observer, profile_providers as observer, profile_documents
 from linux_release.installed_cases.provider import ProviderFixture, GUI_LABEL, GUI_KIND, MODEL, gui_endpoint
 
 ENDPOINT = gui_endpoint(41234)
@@ -43,7 +43,7 @@ class ProfileProviderTests(unittest.TestCase):
         self.assertFalse(self.path.exists())
         self.write([{'id': 'other', 'label': 'SECRET OTHER PROVIDER', 'api_key_env': 'SECRET_ENV'}, self.row])
         before = self.path.read_bytes()
-        with patch.object(observer.os, 'open', wraps=os.open) as opened:
+        with patch.object(profile_documents.os, 'open', wraps=os.open) as opened:
             observed = observer.find_gui_provider(self.app, ENDPOINT)
         self.assertEqual(observed, {'provider_id': 'owned-fixture-1', 'kind': GUI_KIND,
             'requires_api_key': True, 'configured_models': [MODEL], 'observer': 'owned-provider-YAML'})
@@ -54,7 +54,7 @@ class ProfileProviderTests(unittest.TestCase):
 
     def test_yaml_duplicates_aliases_excess_and_diagnostic_prose_are_refused(self):
         for raw in [b'providers: []\nproviders: []', b'providers: &a [*a]', b'unknown: []',
-                    b'providers: !!python/object/apply:SECRET []', b'providers: [SECRET', b'x' * (observer.LIMIT + 1)]:
+                    b'providers: !!python/object/apply:SECRET []', b'providers: [SECRET', b'x' * (profile_documents.LIMIT + 1)]:
             with self.subTest(length=len(raw)), self.assertRaises(ValueError) as refusal:
                 observer.document(raw)
             self.assertNotIn('SECRET', str(refusal.exception))
