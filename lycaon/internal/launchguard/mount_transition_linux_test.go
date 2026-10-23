@@ -4,6 +4,7 @@ package launchguard
 
 import (
 	"debug/elf"
+	"encoding/binary"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -38,6 +39,24 @@ func TestMountTransitionBuildIsFreestandingAndRefusesUnprivilegedInputs(t *testi
 			t.Fatalf("transition uses runtime segment %s", program.Type)
 		}
 	}
+	raw, err := os.ReadFile(image)
+	testutil.FailErr(t, "read compiled transition", err)
+	badMachine := append([]byte(nil), raw...)
+	binary.LittleEndian.PutUint16(badMachine[18:], uint16(elf.EM_NONE))
+	badTable := append([]byte(nil), raw...)
+	binary.LittleEndian.PutUint64(badTable[40:], uint64(len(raw)-1))
+	for name, content := range map[string][]byte{"wrong machine": badMachine, "truncated section table": badTable} {
+		t.Run(name, func(t *testing.T) {
+			invalid := filepath.Join(t.TempDir(), "invalid-elf")
+			testutil.FailErr(t, "write invalid transition", os.WriteFile(invalid, content, 0o600))
+			command := exec.Command("python3", "-c", "from pathlib import Path; import sys; from scripts.linux_release.mount_intake import inspect; inspect(Path(sys.argv[1]).read_bytes(),sys.argv[2])", invalid, runtime.GOARCH)
+			command.Dir = filepath.Join("..", "..", "..")
+			if _, err := command.CombinedOutput(); err == nil {
+				t.Fatal("accepted invalid native transition metadata")
+			}
+		})
+	}
+
 	file, err := os.Open(image)
 	testutil.FailErr(t, "retain fixed transition", err)
 	defer func() { _ = file.Close() }()
@@ -49,7 +68,7 @@ func TestMountTransitionBuildIsFreestandingAndRefusesUnprivilegedInputs(t *testi
 				command.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: 1000, Gid: 1000}}
 			}
 			out, err := command.CombinedOutput()
-			if err == nil || command.ProcessState.ExitCode() != 125 || len(out) != 0 {
+			if err == nil || command.ProcessState == nil || command.ProcessState.ExitCode() != 125 || len(out) != 0 {
 				t.Fatalf("unprivileged transition: state=%v err=%v output=%q", command.ProcessState, err, out)
 			}
 		})

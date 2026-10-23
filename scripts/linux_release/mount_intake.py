@@ -42,14 +42,14 @@ def inspect(raw, architecture):
                 raise ValueError("intake transition requires an executable stack")
     if not executable_entry or not stack:
         raise ValueError("intake transition has no bounded executable entry/stack")
-    name_row = struct.unpack_from("<II8Q", raw, shoff + shnames * shsize)
+    name_row = struct.unpack_from("<II4QII2Q", raw, shoff + shnames * shsize)
     name_offset, name_size = name_row[4], name_row[5]
     if name_offset + name_size > len(raw):
         raise ValueError("intake transition section names are truncated")
     names = raw[name_offset:name_offset + name_size]
     for index in range(shnum):
         name, kind, _, _, offset, size, *_ = struct.unpack_from(
-            "<II8Q", raw, shoff + index * shsize)
+            "<II4QII2Q", raw, shoff + index * shsize)
         if kind != 8 and offset + size > len(raw):
             raise ValueError("intake transition section is truncated")
         if name >= len(names) or b"\0" not in names[name:]:
