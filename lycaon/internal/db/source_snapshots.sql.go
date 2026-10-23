@@ -34,55 +34,56 @@ func (q *Queries) DeleteExpiredSourceSnapshotHeads(ctx context.Context, arg Dele
 
 const deleteSourceManifestStagingBelow = `-- name: DeleteSourceManifestStagingBelow :exec
 DELETE FROM source_manifest_staging
-WHERE build_id = ?1 AND root_path = ?2
-  AND path > ?3 AND path < ?4
+WHERE build_id = ?1 AND path > ?2 AND path < ?3
 `
 
 type DeleteSourceManifestStagingBelowParams struct {
-	BuildID  string `json:"build_id"`
-	RootPath string `json:"root_path"`
-	Low      string `json:"low"`
-	High     string `json:"high"`
+	BuildID string `json:"build_id"`
+	Low     string `json:"low"`
+	High    string `json:"high"`
 }
 
 func (q *Queries) DeleteSourceManifestStagingBelow(ctx context.Context, arg DeleteSourceManifestStagingBelowParams) error {
-	_, err := q.db.ExecContext(ctx, deleteSourceManifestStagingBelow,
-		arg.BuildID,
-		arg.RootPath,
-		arg.Low,
-		arg.High,
-	)
+	_, err := q.db.ExecContext(ctx, deleteSourceManifestStagingBelow, arg.BuildID, arg.Low, arg.High)
 	return err
 }
 
-const deleteSourceManifestStagingBucket = `-- name: DeleteSourceManifestStagingBucket :exec
-DELETE FROM source_manifest_staging WHERE build_id = ? AND bucket = ?
+const deleteSourceManifestStagingPage = `-- name: DeleteSourceManifestStagingPage :execrows
+DELETE FROM source_manifest_staging
+WHERE source_manifest_staging.build_id = ?1 AND source_manifest_staging.path IN (
+    SELECT s.path FROM source_manifest_staging s
+    WHERE s.build_id = ?1
+    ORDER BY s.path
+    LIMIT ?2
+)
 `
 
-type DeleteSourceManifestStagingBucketParams struct {
-	BuildID string `json:"build_id"`
-	Bucket  int64  `json:"bucket"`
+type DeleteSourceManifestStagingPageParams struct {
+	BuildID  string `json:"build_id"`
+	PageSize int64  `json:"page_size"`
 }
 
-// A build is released one bucket at a time so no single delete holds the
-// writer for a whole manifest.
-func (q *Queries) DeleteSourceManifestStagingBucket(ctx context.Context, arg DeleteSourceManifestStagingBucketParams) error {
-	_, err := q.db.ExecContext(ctx, deleteSourceManifestStagingBucket, arg.BuildID, arg.Bucket)
-	return err
+// A build is released a page at a time so no single delete holds the writer
+// for a whole survey.
+func (q *Queries) DeleteSourceManifestStagingPage(ctx context.Context, arg DeleteSourceManifestStagingPageParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteSourceManifestStagingPage, arg.BuildID, arg.PageSize)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const deleteSourceManifestStagingPath = `-- name: DeleteSourceManifestStagingPath :exec
-DELETE FROM source_manifest_staging WHERE build_id = ? AND root_path = ? AND path = ?
+DELETE FROM source_manifest_staging WHERE build_id = ? AND path = ?
 `
 
 type DeleteSourceManifestStagingPathParams struct {
-	BuildID  string `json:"build_id"`
-	RootPath string `json:"root_path"`
-	Path     string `json:"path"`
+	BuildID string `json:"build_id"`
+	Path    string `json:"path"`
 }
 
 func (q *Queries) DeleteSourceManifestStagingPath(ctx context.Context, arg DeleteSourceManifestStagingPathParams) error {
-	_, err := q.db.ExecContext(ctx, deleteSourceManifestStagingPath, arg.BuildID, arg.RootPath, arg.Path)
+	_, err := q.db.ExecContext(ctx, deleteSourceManifestStagingPath, arg.BuildID, arg.Path)
 	return err
 }
 
@@ -100,35 +101,28 @@ func (q *Queries) DeleteSourceSnapshotHeadForRootsKey(ctx context.Context, roots
 	return result.RowsAffected()
 }
 
-const deleteStaleSourceManifestStaging = `-- name: DeleteStaleSourceManifestStaging :execrows
-DELETE FROM source_manifest_staging
-WHERE substr(build_id, 1, length(?1)) != ?1
+const deleteUnreferencedSourceManifest = `-- name: DeleteUnreferencedSourceManifest :execrows
+DELETE FROM source_manifests
+WHERE id = ?
+  AND NOT EXISTS (SELECT 1 FROM source_snapshot_roots r WHERE r.manifest_id = source_manifests.id)
 `
 
-// Builds of an earlier process never complete; the prefix names this one.
-func (q *Queries) DeleteStaleSourceManifestStaging(ctx context.Context, prefix interface{}) (int64, error) {
-	result, err := q.db.ExecContext(ctx, deleteStaleSourceManifestStaging, prefix)
+func (q *Queries) DeleteUnreferencedSourceManifest(ctx context.Context, id string) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteUnreferencedSourceManifest, id)
 	if err != nil {
 		return 0, err
 	}
 	return result.RowsAffected()
 }
 
-const deleteUnreferencedSourceManifestChunks = `-- name: DeleteUnreferencedSourceManifestChunks :execrows
+const deleteUnreferencedSourceManifestChunk = `-- name: DeleteUnreferencedSourceManifestChunk :execrows
 DELETE FROM source_manifest_chunks
-WHERE id IN (
-    SELECT manifest.id FROM source_manifest_chunks manifest
-    WHERE NOT EXISTS (
-        SELECT 1 FROM source_snapshot_chunks snapshot
-        WHERE snapshot.chunk_id = manifest.id
-    )
-    ORDER BY manifest.id
-    LIMIT ?
-)
+WHERE id = ?
+  AND NOT EXISTS (SELECT 1 FROM source_manifest_layout l WHERE l.chunk_id = source_manifest_chunks.id)
 `
 
-func (q *Queries) DeleteUnreferencedSourceManifestChunks(ctx context.Context, limit int64) (int64, error) {
-	result, err := q.db.ExecContext(ctx, deleteUnreferencedSourceManifestChunks, limit)
+func (q *Queries) DeleteUnreferencedSourceManifestChunk(ctx context.Context, id string) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteUnreferencedSourceManifestChunk, id)
 	if err != nil {
 		return 0, err
 	}
@@ -213,14 +207,54 @@ func (q *Queries) DeleteUnreferencedSourceSnapshotsForRootsKey(ctx context.Conte
 	return result.RowsAffected()
 }
 
-const getSourceManifestChunk = `-- name: GetSourceManifestChunk :one
-SELECT id, entry_count, total_bytes FROM source_manifest_chunks WHERE id = ?
+const getSourceManifest = `-- name: GetSourceManifest :one
+SELECT id, entry_count, total_bytes FROM source_manifests WHERE id = ?
 `
 
-func (q *Queries) GetSourceManifestChunk(ctx context.Context, id string) (SourceManifestChunks, error) {
-	row := q.db.QueryRowContext(ctx, getSourceManifestChunk, id)
-	var i SourceManifestChunks
+func (q *Queries) GetSourceManifest(ctx context.Context, id string) (SourceManifests, error) {
+	row := q.db.QueryRowContext(ctx, getSourceManifest, id)
+	var i SourceManifests
 	err := row.Scan(&i.ID, &i.EntryCount, &i.TotalBytes)
+	return i, err
+}
+
+const getSourceManifestEntry = `-- name: GetSourceManifestEntry :one
+SELECT e.path, e.sha256, e.git_oid, e.identity, e.size, e.mode, e.modified_ns
+FROM source_manifest_entries e
+WHERE e.chunk_id = (
+    SELECT l.chunk_id FROM source_manifest_layout l
+    WHERE l.manifest_id = ?1 AND l.first_path <= ?2
+    ORDER BY l.first_path DESC LIMIT 1)
+  AND e.path = ?2
+`
+
+type GetSourceManifestEntryParams struct {
+	ManifestID string `json:"manifest_id"`
+	Path       string `json:"path"`
+}
+
+type GetSourceManifestEntryRow struct {
+	Path       string `json:"path"`
+	Sha256     string `json:"sha256"`
+	GitOid     string `json:"git_oid"`
+	Identity   string `json:"identity"`
+	Size       int64  `json:"size"`
+	Mode       int64  `json:"mode"`
+	ModifiedNs int64  `json:"modified_ns"`
+}
+
+func (q *Queries) GetSourceManifestEntry(ctx context.Context, arg GetSourceManifestEntryParams) (GetSourceManifestEntryRow, error) {
+	row := q.db.QueryRowContext(ctx, getSourceManifestEntry, arg.ManifestID, arg.Path)
+	var i GetSourceManifestEntryRow
+	err := row.Scan(
+		&i.Path,
+		&i.Sha256,
+		&i.GitOid,
+		&i.Identity,
+		&i.Size,
+		&i.Mode,
+		&i.ModifiedNs,
+	)
 	return i, err
 }
 
@@ -245,46 +279,6 @@ func (q *Queries) GetSourceSnapshot(ctx context.Context, id string) (SourceSnaps
 	return i, err
 }
 
-const getSourceSnapshotEntry = `-- name: GetSourceSnapshotEntry :one
-SELECT e.root_path, e.path, e.sha256, e.git_oid, e.identity, e.size, e.mode, e.modified_ns
-FROM source_snapshot_chunks c
-JOIN source_manifest_entries e ON e.chunk_id = c.chunk_id
-WHERE c.snapshot_id = ? AND e.root_path = ? AND e.path = ?
-`
-
-type GetSourceSnapshotEntryParams struct {
-	SnapshotID string `json:"snapshot_id"`
-	RootPath   string `json:"root_path"`
-	Path       string `json:"path"`
-}
-
-type GetSourceSnapshotEntryRow struct {
-	RootPath   string `json:"root_path"`
-	Path       string `json:"path"`
-	Sha256     string `json:"sha256"`
-	GitOid     string `json:"git_oid"`
-	Identity   string `json:"identity"`
-	Size       int64  `json:"size"`
-	Mode       int64  `json:"mode"`
-	ModifiedNs int64  `json:"modified_ns"`
-}
-
-func (q *Queries) GetSourceSnapshotEntry(ctx context.Context, arg GetSourceSnapshotEntryParams) (GetSourceSnapshotEntryRow, error) {
-	row := q.db.QueryRowContext(ctx, getSourceSnapshotEntry, arg.SnapshotID, arg.RootPath, arg.Path)
-	var i GetSourceSnapshotEntryRow
-	err := row.Scan(
-		&i.RootPath,
-		&i.Path,
-		&i.Sha256,
-		&i.GitOid,
-		&i.Identity,
-		&i.Size,
-		&i.Mode,
-		&i.ModifiedNs,
-	)
-	return i, err
-}
-
 const getSourceSnapshotHeadID = `-- name: GetSourceSnapshotHeadID :one
 SELECT snapshot_id FROM source_snapshot_heads WHERE roots_key = ?
 `
@@ -296,34 +290,60 @@ func (q *Queries) GetSourceSnapshotHeadID(ctx context.Context, rootsKey string) 
 	return snapshot_id, err
 }
 
-const insertSourceManifestChunk = `-- name: InsertSourceManifestChunk :exec
-INSERT INTO source_manifest_chunks (id, entry_count, total_bytes)
+const insertSourceManifest = `-- name: InsertSourceManifest :execrows
+INSERT INTO source_manifests (id, entry_count, total_bytes)
 VALUES (?, ?, ?)
 ON CONFLICT(id) DO NOTHING
 `
 
-type InsertSourceManifestChunkParams struct {
+type InsertSourceManifestParams struct {
 	ID         string `json:"id"`
 	EntryCount int64  `json:"entry_count"`
 	TotalBytes int64  `json:"total_bytes"`
 }
 
-func (q *Queries) InsertSourceManifestChunk(ctx context.Context, arg InsertSourceManifestChunkParams) error {
-	_, err := q.db.ExecContext(ctx, insertSourceManifestChunk, arg.ID, arg.EntryCount, arg.TotalBytes)
-	return err
+func (q *Queries) InsertSourceManifest(ctx context.Context, arg InsertSourceManifestParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, insertSourceManifest, arg.ID, arg.EntryCount, arg.TotalBytes)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const insertSourceManifestChunk = `-- name: InsertSourceManifestChunk :execrows
+INSERT INTO source_manifest_chunks (id, entry_count, total_bytes, hashed_count)
+VALUES (?, ?, ?, ?)
+ON CONFLICT(id) DO NOTHING
+`
+
+type InsertSourceManifestChunkParams struct {
+	ID          string `json:"id"`
+	EntryCount  int64  `json:"entry_count"`
+	TotalBytes  int64  `json:"total_bytes"`
+	HashedCount int64  `json:"hashed_count"`
+}
+
+func (q *Queries) InsertSourceManifestChunk(ctx context.Context, arg InsertSourceManifestChunkParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, insertSourceManifestChunk,
+		arg.ID,
+		arg.EntryCount,
+		arg.TotalBytes,
+		arg.HashedCount,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const insertSourceManifestEntry = `-- name: InsertSourceManifestEntry :exec
 INSERT INTO source_manifest_entries (
-    chunk_id, ordinal, root_path, path, sha256, git_oid, identity, size, mode, modified_ns
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-ON CONFLICT(chunk_id, ordinal) DO NOTHING
+    chunk_id, path, sha256, git_oid, identity, size, mode, modified_ns
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type InsertSourceManifestEntryParams struct {
 	ChunkID    string `json:"chunk_id"`
-	Ordinal    int64  `json:"ordinal"`
-	RootPath   string `json:"root_path"`
 	Path       string `json:"path"`
 	Sha256     string `json:"sha256"`
 	GitOid     string `json:"git_oid"`
@@ -336,8 +356,6 @@ type InsertSourceManifestEntryParams struct {
 func (q *Queries) InsertSourceManifestEntry(ctx context.Context, arg InsertSourceManifestEntryParams) error {
 	_, err := q.db.ExecContext(ctx, insertSourceManifestEntry,
 		arg.ChunkID,
-		arg.Ordinal,
-		arg.RootPath,
 		arg.Path,
 		arg.Sha256,
 		arg.GitOid,
@@ -349,19 +367,33 @@ func (q *Queries) InsertSourceManifestEntry(ctx context.Context, arg InsertSourc
 	return err
 }
 
+const insertSourceManifestLayout = `-- name: InsertSourceManifestLayout :exec
+INSERT INTO source_manifest_layout (manifest_id, first_path, chunk_id)
+VALUES (?, ?, ?)
+`
+
+type InsertSourceManifestLayoutParams struct {
+	ManifestID string `json:"manifest_id"`
+	FirstPath  string `json:"first_path"`
+	ChunkID    string `json:"chunk_id"`
+}
+
+func (q *Queries) InsertSourceManifestLayout(ctx context.Context, arg InsertSourceManifestLayoutParams) error {
+	_, err := q.db.ExecContext(ctx, insertSourceManifestLayout, arg.ManifestID, arg.FirstPath, arg.ChunkID)
+	return err
+}
+
 const insertSourceManifestStaging = `-- name: InsertSourceManifestStaging :exec
 INSERT INTO source_manifest_staging (
-    build_id, bucket, root_path, path, sha256, git_oid, identity, size, mode, modified_ns
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-ON CONFLICT(build_id, bucket, root_path, path) DO UPDATE SET
+    build_id, path, sha256, git_oid, identity, size, mode, modified_ns
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(build_id, path) DO UPDATE SET
     sha256 = excluded.sha256, git_oid = excluded.git_oid, identity = excluded.identity,
     size = excluded.size, mode = excluded.mode, modified_ns = excluded.modified_ns
 `
 
 type InsertSourceManifestStagingParams struct {
 	BuildID    string `json:"build_id"`
-	Bucket     int64  `json:"bucket"`
-	RootPath   string `json:"root_path"`
 	Path       string `json:"path"`
 	Sha256     string `json:"sha256"`
 	GitOid     string `json:"git_oid"`
@@ -374,8 +406,6 @@ type InsertSourceManifestStagingParams struct {
 func (q *Queries) InsertSourceManifestStaging(ctx context.Context, arg InsertSourceManifestStagingParams) error {
 	_, err := q.db.ExecContext(ctx, insertSourceManifestStaging,
 		arg.BuildID,
-		arg.Bucket,
-		arg.RootPath,
 		arg.Path,
 		arg.Sha256,
 		arg.GitOid,
@@ -414,26 +444,9 @@ func (q *Queries) InsertSourceSnapshotBoundary(ctx context.Context, arg InsertSo
 	return err
 }
 
-const insertSourceSnapshotChunk = `-- name: InsertSourceSnapshotChunk :exec
-INSERT INTO source_snapshot_chunks (snapshot_id, bucket, chunk_id)
-VALUES (?, ?, ?)
-ON CONFLICT(snapshot_id, bucket) DO NOTHING
-`
-
-type InsertSourceSnapshotChunkParams struct {
-	SnapshotID string `json:"snapshot_id"`
-	Bucket     int64  `json:"bucket"`
-	ChunkID    string `json:"chunk_id"`
-}
-
-func (q *Queries) InsertSourceSnapshotChunk(ctx context.Context, arg InsertSourceSnapshotChunkParams) error {
-	_, err := q.db.ExecContext(ctx, insertSourceSnapshotChunk, arg.SnapshotID, arg.Bucket, arg.ChunkID)
-	return err
-}
-
 const insertSourceSnapshotRoot = `-- name: InsertSourceSnapshotRoot :exec
-INSERT INTO source_snapshot_roots (snapshot_id, root_path, ordinal)
-VALUES (?, ?, ?)
+INSERT INTO source_snapshot_roots (snapshot_id, root_path, ordinal, manifest_id)
+VALUES (?, ?, ?, ?)
 ON CONFLICT(snapshot_id, root_path) DO NOTHING
 `
 
@@ -441,22 +454,27 @@ type InsertSourceSnapshotRootParams struct {
 	SnapshotID string `json:"snapshot_id"`
 	RootPath   string `json:"root_path"`
 	Ordinal    int64  `json:"ordinal"`
+	ManifestID string `json:"manifest_id"`
 }
 
 func (q *Queries) InsertSourceSnapshotRoot(ctx context.Context, arg InsertSourceSnapshotRootParams) error {
-	_, err := q.db.ExecContext(ctx, insertSourceSnapshotRoot, arg.SnapshotID, arg.RootPath, arg.Ordinal)
+	_, err := q.db.ExecContext(ctx, insertSourceSnapshotRoot,
+		arg.SnapshotID,
+		arg.RootPath,
+		arg.Ordinal,
+		arg.ManifestID,
+	)
 	return err
 }
 
 const listSourceManifestChunkEntries = `-- name: ListSourceManifestChunkEntries :many
-SELECT root_path, path, sha256, git_oid, identity, size, mode, modified_ns
+SELECT path, sha256, git_oid, identity, size, mode, modified_ns
 FROM source_manifest_entries
 WHERE chunk_id = ?
-ORDER BY ordinal
+ORDER BY path
 `
 
 type ListSourceManifestChunkEntriesRow struct {
-	RootPath   string `json:"root_path"`
 	Path       string `json:"path"`
 	Sha256     string `json:"sha256"`
 	GitOid     string `json:"git_oid"`
@@ -466,7 +484,6 @@ type ListSourceManifestChunkEntriesRow struct {
 	ModifiedNs int64  `json:"modified_ns"`
 }
 
-// One chunk's entries in manifest order.
 func (q *Queries) ListSourceManifestChunkEntries(ctx context.Context, chunkID string) ([]ListSourceManifestChunkEntriesRow, error) {
 	rows, err := q.db.QueryContext(ctx, listSourceManifestChunkEntries, chunkID)
 	if err != nil {
@@ -477,7 +494,6 @@ func (q *Queries) ListSourceManifestChunkEntries(ctx context.Context, chunkID st
 	for rows.Next() {
 		var i ListSourceManifestChunkEntriesRow
 		if err := rows.Scan(
-			&i.RootPath,
 			&i.Path,
 			&i.Sha256,
 			&i.GitOid,
@@ -499,20 +515,20 @@ func (q *Queries) ListSourceManifestChunkEntries(ctx context.Context, chunkID st
 	return items, nil
 }
 
-const listSourceManifestStagingBucket = `-- name: ListSourceManifestStagingBucket :many
-SELECT root_path, path, sha256, git_oid, identity, size, mode, modified_ns
-FROM source_manifest_staging
-WHERE build_id = ? AND bucket = ?
-ORDER BY root_path, path
+const listSourceManifestChunkEntriesBetween = `-- name: ListSourceManifestChunkEntriesBetween :many
+SELECT path, sha256, git_oid, identity, size, mode, modified_ns
+FROM source_manifest_entries
+WHERE chunk_id = ?1 AND path > ?2 AND path < ?3
+ORDER BY path
 `
 
-type ListSourceManifestStagingBucketParams struct {
-	BuildID string `json:"build_id"`
-	Bucket  int64  `json:"bucket"`
+type ListSourceManifestChunkEntriesBetweenParams struct {
+	ChunkID string `json:"chunk_id"`
+	Low     string `json:"low"`
+	High    string `json:"high"`
 }
 
-type ListSourceManifestStagingBucketRow struct {
-	RootPath   string `json:"root_path"`
+type ListSourceManifestChunkEntriesBetweenRow struct {
 	Path       string `json:"path"`
 	Sha256     string `json:"sha256"`
 	GitOid     string `json:"git_oid"`
@@ -522,17 +538,224 @@ type ListSourceManifestStagingBucketRow struct {
 	ModifiedNs int64  `json:"modified_ns"`
 }
 
-func (q *Queries) ListSourceManifestStagingBucket(ctx context.Context, arg ListSourceManifestStagingBucketParams) ([]ListSourceManifestStagingBucketRow, error) {
-	rows, err := q.db.QueryContext(ctx, listSourceManifestStagingBucket, arg.BuildID, arg.Bucket)
+func (q *Queries) ListSourceManifestChunkEntriesBetween(ctx context.Context, arg ListSourceManifestChunkEntriesBetweenParams) ([]ListSourceManifestChunkEntriesBetweenRow, error) {
+	rows, err := q.db.QueryContext(ctx, listSourceManifestChunkEntriesBetween, arg.ChunkID, arg.Low, arg.High)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListSourceManifestStagingBucketRow
+	var items []ListSourceManifestChunkEntriesBetweenRow
 	for rows.Next() {
-		var i ListSourceManifestStagingBucketRow
+		var i ListSourceManifestChunkEntriesBetweenRow
 		if err := rows.Scan(
-			&i.RootPath,
+			&i.Path,
+			&i.Sha256,
+			&i.GitOid,
+			&i.Identity,
+			&i.Size,
+			&i.Mode,
+			&i.ModifiedNs,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSourceManifestHashedEntries = `-- name: ListSourceManifestHashedEntries :many
+SELECT e.path, e.sha256, e.git_oid, e.identity, e.size, e.mode, e.modified_ns
+FROM source_manifest_layout l
+CROSS JOIN source_manifest_chunks c ON c.id = l.chunk_id
+CROSS JOIN source_manifest_entries e ON e.chunk_id = l.chunk_id
+WHERE l.manifest_id = ?1 AND c.hashed_count > 0
+  AND e.identity = 'hashed' AND e.size <= ?2
+ORDER BY l.first_path, e.path
+LIMIT ?3
+`
+
+type ListSourceManifestHashedEntriesParams struct {
+	ManifestID string `json:"manifest_id"`
+	MaxSize    int64  `json:"max_size"`
+	RowLimit   int64  `json:"row_limit"`
+}
+
+type ListSourceManifestHashedEntriesRow struct {
+	Path       string `json:"path"`
+	Sha256     string `json:"sha256"`
+	GitOid     string `json:"git_oid"`
+	Identity   string `json:"identity"`
+	Size       int64  `json:"size"`
+	Mode       int64  `json:"mode"`
+	ModifiedNs int64  `json:"modified_ns"`
+}
+
+// Files the host read to identify, up to a size, in path order: the ones
+// git's object store cannot answer for. Chunk counts skip the runs that
+// hold none.
+func (q *Queries) ListSourceManifestHashedEntries(ctx context.Context, arg ListSourceManifestHashedEntriesParams) ([]ListSourceManifestHashedEntriesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listSourceManifestHashedEntries, arg.ManifestID, arg.MaxSize, arg.RowLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSourceManifestHashedEntriesRow
+	for rows.Next() {
+		var i ListSourceManifestHashedEntriesRow
+		if err := rows.Scan(
+			&i.Path,
+			&i.Sha256,
+			&i.GitOid,
+			&i.Identity,
+			&i.Size,
+			&i.Mode,
+			&i.ModifiedNs,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSourceManifestLayout = `-- name: ListSourceManifestLayout :many
+SELECT l.first_path, l.chunk_id, c.entry_count, c.total_bytes, c.hashed_count
+FROM source_manifest_layout l
+CROSS JOIN source_manifest_chunks c ON c.id = l.chunk_id
+WHERE l.manifest_id = ?
+ORDER BY l.first_path
+`
+
+type ListSourceManifestLayoutRow struct {
+	FirstPath   string `json:"first_path"`
+	ChunkID     string `json:"chunk_id"`
+	EntryCount  int64  `json:"entry_count"`
+	TotalBytes  int64  `json:"total_bytes"`
+	HashedCount int64  `json:"hashed_count"`
+}
+
+func (q *Queries) ListSourceManifestLayout(ctx context.Context, manifestID string) ([]ListSourceManifestLayoutRow, error) {
+	rows, err := q.db.QueryContext(ctx, listSourceManifestLayout, manifestID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSourceManifestLayoutRow
+	for rows.Next() {
+		var i ListSourceManifestLayoutRow
+		if err := rows.Scan(
+			&i.FirstPath,
+			&i.ChunkID,
+			&i.EntryCount,
+			&i.TotalBytes,
+			&i.HashedCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSourceManifestLayoutBetween = `-- name: ListSourceManifestLayoutBetween :many
+SELECT l.first_path, l.chunk_id FROM source_manifest_layout l
+WHERE l.manifest_id = ?1
+  AND l.first_path >= COALESCE((
+      SELECT s.first_path FROM source_manifest_layout s
+      WHERE s.manifest_id = ?1 AND s.first_path <= ?2
+      ORDER BY s.first_path DESC LIMIT 1), '')
+  AND l.first_path < ?3
+ORDER BY l.first_path
+`
+
+type ListSourceManifestLayoutBetweenParams struct {
+	ManifestID string `json:"manifest_id"`
+	Low        string `json:"low"`
+	High       string `json:"high"`
+}
+
+type ListSourceManifestLayoutBetweenRow struct {
+	FirstPath string `json:"first_path"`
+	ChunkID   string `json:"chunk_id"`
+}
+
+// The chunks that can hold a path in (low, high): the one whose range
+// starts at or before low, and every one that starts inside the range.
+func (q *Queries) ListSourceManifestLayoutBetween(ctx context.Context, arg ListSourceManifestLayoutBetweenParams) ([]ListSourceManifestLayoutBetweenRow, error) {
+	rows, err := q.db.QueryContext(ctx, listSourceManifestLayoutBetween, arg.ManifestID, arg.Low, arg.High)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSourceManifestLayoutBetweenRow
+	for rows.Next() {
+		var i ListSourceManifestLayoutBetweenRow
+		if err := rows.Scan(&i.FirstPath, &i.ChunkID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSourceManifestStagingPage = `-- name: ListSourceManifestStagingPage :many
+SELECT path, sha256, git_oid, identity, size, mode, modified_ns
+FROM source_manifest_staging
+WHERE build_id = ?1 AND path > ?2
+ORDER BY path
+LIMIT ?3
+`
+
+type ListSourceManifestStagingPageParams struct {
+	BuildID  string `json:"build_id"`
+	After    string `json:"after"`
+	PageSize int64  `json:"page_size"`
+}
+
+type ListSourceManifestStagingPageRow struct {
+	Path       string `json:"path"`
+	Sha256     string `json:"sha256"`
+	GitOid     string `json:"git_oid"`
+	Identity   string `json:"identity"`
+	Size       int64  `json:"size"`
+	Mode       int64  `json:"mode"`
+	ModifiedNs int64  `json:"modified_ns"`
+}
+
+func (q *Queries) ListSourceManifestStagingPage(ctx context.Context, arg ListSourceManifestStagingPageParams) ([]ListSourceManifestStagingPageRow, error) {
+	rows, err := q.db.QueryContext(ctx, listSourceManifestStagingPage, arg.BuildID, arg.After, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSourceManifestStagingPageRow
+	for rows.Next() {
+		var i ListSourceManifestStagingPageRow
+		if err := rows.Scan(
 			&i.Path,
 			&i.Sha256,
 			&i.GitOid,
@@ -556,25 +779,18 @@ func (q *Queries) ListSourceManifestStagingBucket(ctx context.Context, arg ListS
 
 const listSourceManifestStagingPathsBelow = `-- name: ListSourceManifestStagingPathsBelow :many
 SELECT path FROM source_manifest_staging
-WHERE build_id = ?1 AND root_path = ?2
-  AND path > ?3 AND path < ?4
+WHERE build_id = ?1 AND path > ?2 AND path < ?3
 ORDER BY path
 `
 
 type ListSourceManifestStagingPathsBelowParams struct {
-	BuildID  string `json:"build_id"`
-	RootPath string `json:"root_path"`
-	Low      string `json:"low"`
-	High     string `json:"high"`
+	BuildID string `json:"build_id"`
+	Low     string `json:"low"`
+	High    string `json:"high"`
 }
 
 func (q *Queries) ListSourceManifestStagingPathsBelow(ctx context.Context, arg ListSourceManifestStagingPathsBelowParams) ([]string, error) {
-	rows, err := q.db.QueryContext(ctx, listSourceManifestStagingPathsBelow,
-		arg.BuildID,
-		arg.RootPath,
-		arg.Low,
-		arg.High,
-	)
+	rows, err := q.db.QueryContext(ctx, listSourceManifestStagingPathsBelow, arg.BuildID, arg.Low, arg.High)
 	if err != nil {
 		return nil, err
 	}
@@ -640,174 +856,13 @@ func (q *Queries) ListSourceSnapshotBoundaries(ctx context.Context, snapshotID s
 	return items, nil
 }
 
-const listSourceSnapshotChunks = `-- name: ListSourceSnapshotChunks :many
-SELECT bucket, chunk_id
-FROM source_snapshot_chunks
-WHERE snapshot_id = ?
-ORDER BY bucket
-`
-
-type ListSourceSnapshotChunksRow struct {
-	Bucket  int64  `json:"bucket"`
-	ChunkID string `json:"chunk_id"`
-}
-
-func (q *Queries) ListSourceSnapshotChunks(ctx context.Context, snapshotID string) ([]ListSourceSnapshotChunksRow, error) {
-	rows, err := q.db.QueryContext(ctx, listSourceSnapshotChunks, snapshotID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListSourceSnapshotChunksRow
-	for rows.Next() {
-		var i ListSourceSnapshotChunksRow
-		if err := rows.Scan(&i.Bucket, &i.ChunkID); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listSourceSnapshotEntriesBelow = `-- name: ListSourceSnapshotEntriesBelow :many
-SELECT e.root_path, e.path, e.sha256, e.git_oid, e.identity, e.size, e.mode, e.modified_ns
-FROM source_snapshot_chunks c
-JOIN source_manifest_entries e ON e.chunk_id = c.chunk_id
-WHERE c.snapshot_id = ?1 AND e.root_path = ?2
-  AND e.path > ?3 AND e.path < ?4
-ORDER BY e.root_path, e.path
-`
-
-type ListSourceSnapshotEntriesBelowParams struct {
-	SnapshotID string `json:"snapshot_id"`
-	RootPath   string `json:"root_path"`
-	Low        string `json:"low"`
-	High       string `json:"high"`
-}
-
-type ListSourceSnapshotEntriesBelowRow struct {
-	RootPath   string `json:"root_path"`
-	Path       string `json:"path"`
-	Sha256     string `json:"sha256"`
-	GitOid     string `json:"git_oid"`
-	Identity   string `json:"identity"`
-	Size       int64  `json:"size"`
-	Mode       int64  `json:"mode"`
-	ModifiedNs int64  `json:"modified_ns"`
-}
-
-// Entries strictly below one directory: the caller passes the bounds
-// dir/ and dir0 so the path index answers the range.
-func (q *Queries) ListSourceSnapshotEntriesBelow(ctx context.Context, arg ListSourceSnapshotEntriesBelowParams) ([]ListSourceSnapshotEntriesBelowRow, error) {
-	rows, err := q.db.QueryContext(ctx, listSourceSnapshotEntriesBelow,
-		arg.SnapshotID,
-		arg.RootPath,
-		arg.Low,
-		arg.High,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListSourceSnapshotEntriesBelowRow
-	for rows.Next() {
-		var i ListSourceSnapshotEntriesBelowRow
-		if err := rows.Scan(
-			&i.RootPath,
-			&i.Path,
-			&i.Sha256,
-			&i.GitOid,
-			&i.Identity,
-			&i.Size,
-			&i.Mode,
-			&i.ModifiedNs,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listSourceSnapshotHashedEntries = `-- name: ListSourceSnapshotHashedEntries :many
-SELECT e.root_path, e.path, e.sha256, e.git_oid, e.identity, e.size, e.mode, e.modified_ns
-FROM source_snapshot_chunks c
-JOIN source_manifest_entries e INDEXED BY idx_source_manifest_entries_hashed ON e.chunk_id = c.chunk_id
-WHERE c.snapshot_id = ?1 AND e.identity = 'hashed' AND e.size <= ?2
-ORDER BY e.root_path, e.path
-LIMIT ?3
-`
-
-type ListSourceSnapshotHashedEntriesParams struct {
-	SnapshotID string `json:"snapshot_id"`
-	MaxSize    int64  `json:"max_size"`
-	RowLimit   int64  `json:"row_limit"`
-}
-
-type ListSourceSnapshotHashedEntriesRow struct {
-	RootPath   string `json:"root_path"`
-	Path       string `json:"path"`
-	Sha256     string `json:"sha256"`
-	GitOid     string `json:"git_oid"`
-	Identity   string `json:"identity"`
-	Size       int64  `json:"size"`
-	Mode       int64  `json:"mode"`
-	ModifiedNs int64  `json:"modified_ns"`
-}
-
-// Files the host read to identify, up to a size, in path order: the ones
-// git's object store cannot answer for. The partial index keeps this
-// proportional to those files rather than to the manifest.
-func (q *Queries) ListSourceSnapshotHashedEntries(ctx context.Context, arg ListSourceSnapshotHashedEntriesParams) ([]ListSourceSnapshotHashedEntriesRow, error) {
-	rows, err := q.db.QueryContext(ctx, listSourceSnapshotHashedEntries, arg.SnapshotID, arg.MaxSize, arg.RowLimit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListSourceSnapshotHashedEntriesRow
-	for rows.Next() {
-		var i ListSourceSnapshotHashedEntriesRow
-		if err := rows.Scan(
-			&i.RootPath,
-			&i.Path,
-			&i.Sha256,
-			&i.GitOid,
-			&i.Identity,
-			&i.Size,
-			&i.Mode,
-			&i.ModifiedNs,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listSourceSnapshotRootEntries = `-- name: ListSourceSnapshotRootEntries :many
-SELECT e.root_path, e.path, e.sha256, e.git_oid, e.identity, e.size, e.mode, e.modified_ns
-FROM source_snapshot_chunks c
-JOIN source_manifest_entries e ON e.chunk_id = c.chunk_id
-WHERE c.snapshot_id = ? AND e.root_path = ?
-ORDER BY e.root_path, e.path
+SELECT e.path, e.sha256, e.git_oid, e.identity, e.size, e.mode, e.modified_ns
+FROM source_snapshot_roots r
+CROSS JOIN source_manifest_layout l ON l.manifest_id = r.manifest_id
+CROSS JOIN source_manifest_entries e ON e.chunk_id = l.chunk_id
+WHERE r.snapshot_id = ? AND r.root_path = ?
+ORDER BY l.first_path, e.path
 `
 
 type ListSourceSnapshotRootEntriesParams struct {
@@ -816,7 +871,6 @@ type ListSourceSnapshotRootEntriesParams struct {
 }
 
 type ListSourceSnapshotRootEntriesRow struct {
-	RootPath   string `json:"root_path"`
 	Path       string `json:"path"`
 	Sha256     string `json:"sha256"`
 	GitOid     string `json:"git_oid"`
@@ -826,6 +880,8 @@ type ListSourceSnapshotRootEntriesRow struct {
 	ModifiedNs int64  `json:"modified_ns"`
 }
 
+// One root's admitted files in path order, for readers outside the store
+// that inspect a whole small generation at once.
 func (q *Queries) ListSourceSnapshotRootEntries(ctx context.Context, arg ListSourceSnapshotRootEntriesParams) ([]ListSourceSnapshotRootEntriesRow, error) {
 	rows, err := q.db.QueryContext(ctx, listSourceSnapshotRootEntries, arg.SnapshotID, arg.RootPath)
 	if err != nil {
@@ -836,7 +892,6 @@ func (q *Queries) ListSourceSnapshotRootEntries(ctx context.Context, arg ListSou
 	for rows.Next() {
 		var i ListSourceSnapshotRootEntriesRow
 		if err := rows.Scan(
-			&i.RootPath,
 			&i.Path,
 			&i.Sha256,
 			&i.GitOid,
@@ -859,7 +914,7 @@ func (q *Queries) ListSourceSnapshotRootEntries(ctx context.Context, arg ListSou
 }
 
 const listSourceSnapshotRoots = `-- name: ListSourceSnapshotRoots :many
-SELECT snapshot_id, root_path, ordinal
+SELECT snapshot_id, root_path, ordinal, manifest_id
 FROM source_snapshot_roots
 WHERE snapshot_id = ?
 ORDER BY ordinal
@@ -874,7 +929,12 @@ func (q *Queries) ListSourceSnapshotRoots(ctx context.Context, snapshotID string
 	var items []SourceSnapshotRoots
 	for rows.Next() {
 		var i SourceSnapshotRoots
-		if err := rows.Scan(&i.SnapshotID, &i.RootPath, &i.Ordinal); err != nil {
+		if err := rows.Scan(
+			&i.SnapshotID,
+			&i.RootPath,
+			&i.Ordinal,
+			&i.ManifestID,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -888,77 +948,158 @@ func (q *Queries) ListSourceSnapshotRoots(ctx context.Context, snapshotID string
 	return items, nil
 }
 
-const sourceManifestChunkExists = `-- name: SourceManifestChunkExists :one
-SELECT EXISTS(SELECT 1 FROM source_manifest_chunks WHERE id = ?)
+const listStaleSourceManifestBuilds = `-- name: ListStaleSourceManifestBuilds :many
+SELECT DISTINCT build_id FROM source_manifest_staging
+WHERE build_id < CAST(?1 AS TEXT) || '-'
+   OR build_id >= CAST(?1 AS TEXT) || '.'
+LIMIT ?2
 `
 
-func (q *Queries) SourceManifestChunkExists(ctx context.Context, id string) (int64, error) {
-	row := q.db.QueryRowContext(ctx, sourceManifestChunkExists, id)
+type ListStaleSourceManifestBuildsParams struct {
+	Prefix     string `json:"prefix"`
+	BuildLimit int64  `json:"build_limit"`
+}
+
+// Builds of an earlier process never complete. This process's builds sort
+// between prefix || '-' and prefix || '.', since '.' follows '-'.
+func (q *Queries) ListStaleSourceManifestBuilds(ctx context.Context, arg ListStaleSourceManifestBuildsParams) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listStaleSourceManifestBuilds, arg.Prefix, arg.BuildLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var build_id string
+		if err := rows.Scan(&build_id); err != nil {
+			return nil, err
+		}
+		items = append(items, build_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUnreferencedSourceManifestChunks = `-- name: ListUnreferencedSourceManifestChunks :many
+SELECT c.id, c.entry_count FROM source_manifest_chunks c
+WHERE c.id > ?1
+  AND NOT EXISTS (SELECT 1 FROM source_manifest_layout l WHERE l.chunk_id = c.id)
+ORDER BY c.id
+LIMIT ?2
+`
+
+type ListUnreferencedSourceManifestChunksParams struct {
+	After      string `json:"after"`
+	BatchLimit int64  `json:"batch_limit"`
+}
+
+type ListUnreferencedSourceManifestChunksRow struct {
+	ID         string `json:"id"`
+	EntryCount int64  `json:"entry_count"`
+}
+
+func (q *Queries) ListUnreferencedSourceManifestChunks(ctx context.Context, arg ListUnreferencedSourceManifestChunksParams) ([]ListUnreferencedSourceManifestChunksRow, error) {
+	rows, err := q.db.QueryContext(ctx, listUnreferencedSourceManifestChunks, arg.After, arg.BatchLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUnreferencedSourceManifestChunksRow
+	for rows.Next() {
+		var i ListUnreferencedSourceManifestChunksRow
+		if err := rows.Scan(&i.ID, &i.EntryCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUnreferencedSourceManifests = `-- name: ListUnreferencedSourceManifests :many
+SELECT m.id FROM source_manifests m
+WHERE m.id > ?1
+  AND NOT EXISTS (SELECT 1 FROM source_snapshot_roots r WHERE r.manifest_id = m.id)
+ORDER BY m.id
+LIMIT ?2
+`
+
+type ListUnreferencedSourceManifestsParams struct {
+	After      string `json:"after"`
+	BatchLimit int64  `json:"batch_limit"`
+}
+
+func (q *Queries) ListUnreferencedSourceManifests(ctx context.Context, arg ListUnreferencedSourceManifestsParams) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listUnreferencedSourceManifests, arg.After, arg.BatchLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const sourceManifestHoldsBetween = `-- name: SourceManifestHoldsBetween :one
+SELECT EXISTS(
+    SELECT 1 FROM source_manifest_layout l
+    CROSS JOIN source_manifest_entries e ON e.chunk_id = l.chunk_id
+    WHERE l.manifest_id = ?1
+      AND l.first_path >= COALESCE((
+          SELECT s.first_path FROM source_manifest_layout s
+          WHERE s.manifest_id = ?1 AND s.first_path <= ?2
+          ORDER BY s.first_path DESC LIMIT 1), '')
+      AND l.first_path < ?3
+      AND e.path > ?2 AND e.path < ?3
+)
+`
+
+type SourceManifestHoldsBetweenParams struct {
+	ManifestID string `json:"manifest_id"`
+	Low        string `json:"low"`
+	High       string `json:"high"`
+}
+
+func (q *Queries) SourceManifestHoldsBetween(ctx context.Context, arg SourceManifestHoldsBetweenParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, sourceManifestHoldsBetween, arg.ManifestID, arg.Low, arg.High)
 	var column_1 int64
 	err := row.Scan(&column_1)
 	return column_1, err
 }
 
 const sourceManifestStagingHoldsPath = `-- name: SourceManifestStagingHoldsPath :one
-SELECT EXISTS(SELECT 1 FROM source_manifest_staging WHERE build_id = ? AND root_path = ? AND path = ?)
+SELECT EXISTS(SELECT 1 FROM source_manifest_staging WHERE build_id = ? AND path = ?)
 `
 
 type SourceManifestStagingHoldsPathParams struct {
-	BuildID  string `json:"build_id"`
-	RootPath string `json:"root_path"`
-	Path     string `json:"path"`
+	BuildID string `json:"build_id"`
+	Path    string `json:"path"`
 }
 
 func (q *Queries) SourceManifestStagingHoldsPath(ctx context.Context, arg SourceManifestStagingHoldsPathParams) (int64, error) {
-	row := q.db.QueryRowContext(ctx, sourceManifestStagingHoldsPath, arg.BuildID, arg.RootPath, arg.Path)
-	var column_1 int64
-	err := row.Scan(&column_1)
-	return column_1, err
-}
-
-const sourceSnapshotHoldsBelow = `-- name: SourceSnapshotHoldsBelow :one
-SELECT EXISTS(
-    SELECT 1 FROM source_snapshot_chunks c
-    JOIN source_manifest_entries e ON e.chunk_id = c.chunk_id
-    WHERE c.snapshot_id = ?1 AND e.root_path = ?2
-      AND e.path > ?3 AND e.path < ?4
-)
-`
-
-type SourceSnapshotHoldsBelowParams struct {
-	SnapshotID string `json:"snapshot_id"`
-	RootPath   string `json:"root_path"`
-	Low        string `json:"low"`
-	High       string `json:"high"`
-}
-
-func (q *Queries) SourceSnapshotHoldsBelow(ctx context.Context, arg SourceSnapshotHoldsBelowParams) (int64, error) {
-	row := q.db.QueryRowContext(ctx, sourceSnapshotHoldsBelow,
-		arg.SnapshotID,
-		arg.RootPath,
-		arg.Low,
-		arg.High,
-	)
-	var column_1 int64
-	err := row.Scan(&column_1)
-	return column_1, err
-}
-
-const sourceSnapshotHoldsRoot = `-- name: SourceSnapshotHoldsRoot :one
-SELECT EXISTS(
-    SELECT 1 FROM source_snapshot_chunks c
-    JOIN source_manifest_entries e ON e.chunk_id = c.chunk_id
-    WHERE c.snapshot_id = ? AND e.root_path = ?
-)
-`
-
-type SourceSnapshotHoldsRootParams struct {
-	SnapshotID string `json:"snapshot_id"`
-	RootPath   string `json:"root_path"`
-}
-
-func (q *Queries) SourceSnapshotHoldsRoot(ctx context.Context, arg SourceSnapshotHoldsRootParams) (int64, error) {
-	row := q.db.QueryRowContext(ctx, sourceSnapshotHoldsRoot, arg.SnapshotID, arg.RootPath)
+	row := q.db.QueryRowContext(ctx, sourceManifestStagingHoldsPath, arg.BuildID, arg.Path)
 	var column_1 int64
 	err := row.Scan(&column_1)
 	return column_1, err
