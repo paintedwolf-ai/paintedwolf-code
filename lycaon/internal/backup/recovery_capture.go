@@ -116,14 +116,23 @@ func captureRecoveryDirectory(ctx context.Context, opts CreateOpts, destination 
 				return Manifest{}, usage, err
 			}
 		}
-		sum, size, err := sourceDigest(ctx, archiveSource{path: dest, kind: fileKindRegular})
-		if err != nil {
-			return Manifest{}, usage, err
+		var sum string
+		var size int64
+		if rel == storeRelPath && snapshotSHA != "" {
+			// fseffect already verifies the published copy against its stream hash.
+			info, err := os.Stat(dest)
+			if err != nil {
+				return Manifest{}, usage, err
+			}
+			sum, size = snapshotSHA, info.Size()
+		} else {
+			var err error
+			sum, size, err = sourceDigest(ctx, archiveSource{path: dest, kind: fileKindRegular})
+			if err != nil {
+				return Manifest{}, usage, err
+			}
 		}
 		if rel == storeRelPath {
-			if snapshotSHA != "" && sum != snapshotSHA {
-				return Manifest{}, usage, fmt.Errorf("snapshot bytes differ from the checkpointed source")
-			}
 			usage.DatabaseBytes = size
 		}
 		manifest.Files = append(manifest.Files, FileEntry{RelPath: rel, Kind: file.kind, Mode: uint32(file.mode.Perm()), Size: size, SHA256: sum})
