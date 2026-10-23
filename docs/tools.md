@@ -905,23 +905,23 @@ Search results are untrusted inbound content. Provider text is normalized at one
 
 ### Shared operation invocation contracts
 
-The registry publishes one immutable operation declaration with the existing schema, owner/lifecycle contract, OAR identity/rejection contract and selected command forms. Lookup is discovery, not permission: the evaluator binding checks the invocation's frozen offered definition digest before invoking the complete typed owner API. Each child still requires its own host effect admission; an outer command permit is insufficient. This contract is preparatory until P09 binds production admission. P08 supplies the shared status/control and complete-producer publication decision; P16 supplies staged destination publication.
+The registry publishes one immutable operation declaration with the existing schema, owner/lifecycle contract, OAR identity/rejection contract and selected command forms. Lookup is discovery, not permission: the evaluator binding checks the invocation's frozen offered definition digest before invoking the complete typed owner API. Each child still requires its own host effect admission; an outer command permit is insufficient. The evaluator settles each producer independently and publishes staged destinations only from complete eligible results.
 
 Program, static node and dynamic execution identity are distinct. Loops allocate fresh execution ids, held approvals retain their exact execution and prepared input, and a new invocation allocates new ids. Actor, session, addressed scope, source unit/span and catalog digest are explicit. Source pins describe computation inputs. Delivery mappings describe exact source ranges represented in a response actually delivered; one cannot substitute for the other.
 
-Producer results separate ordinary status, typed terminal/host-stop facts, completeness and publication eligibility. Status one from complete grep/diff can be eligible; status zero with partial output cannot. Accepted document edits expose saved publication and publication errors separately. Progress, child effects and process aggregate settle independently. Workflow and grounding project remaining obligations from authoritative facts. [Record classification and retention](compatibility.md#portable-command-records) precede future persistence and wire producers.
+Producer results separate ordinary status, typed terminal/host-stop facts, completeness and publication eligibility. Status one from complete grep/diff can be eligible; status zero with partial output cannot. Accepted document edits expose saved publication and publication errors separately. Progress, child effects and process aggregate settle independently. Workflow and grounding project remaining obligations from authoritative facts. [Record classification and retention](compatibility.md#portable-command-records) govern persistence and wire producers.
 
-### Command schema, guidance, and floor cutover
+### Command schema and guidance
 
-`command` is offered on the routine floor across coordinator surfaces and bundled profiles (`read_only` on read-only profiles and surfaces), replacing `read`, `grep`, `find`, `list_dir`, and `jq` on the floor while keeping `survey_repo`, `summarize`, `edit`, `replace_lines`, `code_rewrite`, and `jq_edit` loadable. Any catalog utility invoked as `CMD --help` prints its catalog help (`CommandSpecification.Help`) in-process without external execution or `COMMAND_OPTION_UNSUPPORTED`.
+`command` is offered on the routine floor across coordinator surfaces and bundled profiles. Read-only surfaces declare `command_effects: [read_only]` and admit read-only native utilities and pipelines. Specialized source tools remain loadable where the profile offers them. Native `CMD --help` runs through the admitted owner and returns the catalog's `CommandSpecification.Help`.
 
-| Surface / artifact | Cutover action |
-|--------------------|----------------|
-| `platform/tools/schemas/command.yaml` | Rewritten for ordinary bash programs (pipelines, loops, variables, functions, `$(...)`, here-documents, redirects, background `&` jobs), native GNU/BSD utilities, `CMD --help`, direct external toolchains, and real `capability_request` keys |
-| `platform/shared/partials/command-surface.md` | Rewritten from `argv host runner` (`COMMAND_NOT_ARGV`, no here-docs/`$()`) to portable command language v1 with `{{ command_roots_listing }}` slot |
-| `platform/shared/units/native-{read,grep,find,list-dir,jq}-tool.md` | Removed |
-| `USE_*_NATIVE` policy redirects & `tool-command-equivalence.yaml` | Removed (`USE_READ_NATIVE`, `USE_GREP_REGEX`, `USE_FIND_NOT_COMMAND`, `USE_LIST_DIR_NATIVE`, `USE_JQ_NATIVE`, `USE_STAT_NATIVE`, `USE_WC_NATIVE`, `USE_WRITE_NATIVE`, `USE_CHMOD_NATIVE`, `USE_CHOWN_NATIVE`, `USE_COPY_NATIVE`, `USE_DELETE_NATIVE`, `USE_MKDIR_NATIVE`, `USE_MOVE_NATIVE`, `USE_GIT_STATUS_NATIVE`, `USE_GIT_DIFF_NATIVE`, `USE_HTTP_REQUEST_NATIVE`, `USE_NATIVE_TOOL`); OAR rules route by `paintedwolf.operation` selector |
-| `platform/host/coordinator-surfaces.yaml` & `platform/tools/profiles/*.yaml` | `command` promoted to floor/sticky (`command_effects: [read_only]` on read-only surfaces/profiles); `read`, `grep`, `find`, `list_dir`, and `jq` removed from floors and demoted from sticky |
-| `platform/shared/units/{runner-operating-procedure,secure-by-default-read,native-edit-tool,native-summarize-tool,survey-first-pass}.md` | Updated to attach to and teach `command` (`cat`, `sed -n`, `grep -n`, `find`, `ls`, `jq`) instead of argv-only restrictions or routine floor tools |
-| `platform/shared/partials/{workspace-roots,coordinator-turn-recipe,multi-root-addressing,coordinator-synthesis-wrapup,coordinator-tool-discipline,coordinator-floor}.md` & `implement/shared/partials/implementer-scoped-file.md` | Updated to teach `command` for routine file reads, directory listings, and searches |
-| `platform/agents/prompts/{code-reviewer,coordinator-surface-build}.md`, `implement/agents/prompts/coordinator-mode-implement-routing.md`, `recon-pack/agents/{repo-researcher.yaml,prompts/path-explorer.md}`, and skills | Updated to reference `command` utilities instead of routine `read`/`grep`/`find`/`list_dir`/`jq` schemas |
+The schema describes ordinary bash programs, including pipes, loops, variables, functions, command substitutions, here-documents, redirects and background jobs. Native utility grammars accept their declared GNU and BSD forms. External toolchains use the process launch and confinement owners. Per-call guidance renders attached roots, the current directory, available effects and output delivery from structured host facts.
+
+| Surface | Source |
+|---|---|
+| Tool arguments and capability requests | `platform/tools/schemas/command.yaml` |
+| Syntax, utility forms, help and limits | `platform/tools/command-language-v1/*.json` and their generated catalog |
+| Per-call guidance | `platform/shared/partials/command-surface.md` |
+| Available command effects | `platform/host/coordinator-surfaces.yaml` and `platform/tools/profiles/*.yaml` |
+
+OAR policies select the actual operation and typed rejection facts. A host refusal preserves the results already produced and identifies the stopped execution. Source pins describe computation inputs; only confirmed delivery of mapped source bytes establishes observation evidence.
