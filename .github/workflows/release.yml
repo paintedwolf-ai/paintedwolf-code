@@ -205,6 +205,7 @@ jobs:
           ref: ${{ needs.classify.outputs.source_sha }}
           fetch-depth: 0
       - uses: ./.github/actions/setup-verification
+      - uses: ./.github/actions/cache-decide
       - uses: ./.github/actions/setup-bialy
       - name: Validate release inputs
         timeout-minutes: 60
