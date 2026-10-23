@@ -20,6 +20,8 @@ func TestProjectWatchStopReportsUndrainedCallbackAndSealsCopies(t *testing.T) {
 	watchRegMu.Unlock()
 	go func() { defer close(done); watch.flushExternalChanges(t.Context(), pendingExternalBatch{resync: true}) }()
 	<-entered
+	// Replace the root binding while its old callback is still active.
+	EnsureProjectWatch(t.Context(), nil, projectID, "", []RootSpec{{ID: "new-root", WorkspaceID: "workspace", Path: t.TempDir()}}, nil)
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	if err := StopProjectWatch(ctx, projectID); !errors.Is(err, context.Canceled) {

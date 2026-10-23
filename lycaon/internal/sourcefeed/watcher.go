@@ -47,13 +47,14 @@ type ExternalBatch struct {
 type ExternalObserver func(ctx context.Context, projectID string, batch ExternalBatch)
 
 type projectWatch struct {
-	callbacks workscope.Group
-	projectID string
-	roots     []RootSpec
-	lifetime  *WatchLifetime
-	external  ExternalObserver
-	changes   *changeConverger
-	unbind    func()
+	callbacks    *workscope.Group
+	drainCleanup sync.Once
+	projectID    string
+	roots        []RootSpec
+	lifetime     *WatchLifetime
+	external     ExternalObserver
+	changes      *changeConverger
+	unbind       func()
 }
 
 type watchKey struct{ projectID, scopeID string }

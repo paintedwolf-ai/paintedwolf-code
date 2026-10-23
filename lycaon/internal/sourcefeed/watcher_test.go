@@ -3,6 +3,7 @@ package sourcefeed
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/workscope"
 	"os"
 	"path/filepath"
 	"slices"
@@ -23,7 +24,7 @@ func TestProjectWatchOverflowPublishesOneInvalidation(t *testing.T) {
 	root := RootSpec{ID: "r1", WorkspaceID: "ws", Path: t.TempDir()}
 	var mu sync.Mutex
 	var observed []ExternalBatch
-	w := &projectWatch{projectID: "project-overflow", roots: []RootSpec{root}, external: func(_ context.Context, _ string, batch ExternalBatch) {
+	w := &projectWatch{callbacks: &workscope.Group{}, projectID: "project-overflow", roots: []RootSpec{root}, external: func(_ context.Context, _ string, batch ExternalBatch) {
 		mu.Lock()
 		observed = append(observed, batch)
 		mu.Unlock()
@@ -141,7 +142,7 @@ func TestProjectWatchFiltersHostWriteAtFlush(t *testing.T) {
 	target := filepath.Join(root.Path, "changed.go")
 	testutil.FailErr(t, "write changed file", os.WriteFile(target, []byte("package changed"), 0o644))
 	var reconciles atomic.Int32
-	w := &projectWatch{projectID: "project-host-write", external: func(context.Context, string, ExternalBatch) {
+	w := &projectWatch{callbacks: &workscope.Group{}, projectID: "project-host-write", external: func(context.Context, string, ExternalBatch) {
 		reconciles.Add(1)
 	}}
 	NoteHostWrite(target)
@@ -160,7 +161,7 @@ func TestProjectWatchResyncDoesNotMisattributeHostWrite(t *testing.T) {
 	target := filepath.Join(root.Path, "changed.go")
 	testutil.FailErr(t, "write changed file", os.WriteFile(target, []byte("package changed"), 0o644))
 	var reconciles atomic.Int32
-	w := &projectWatch{projectID: "project-host-resync", roots: []RootSpec{root}, external: func(context.Context, string, ExternalBatch) {
+	w := &projectWatch{callbacks: &workscope.Group{}, projectID: "project-host-resync", roots: []RootSpec{root}, external: func(context.Context, string, ExternalBatch) {
 		reconciles.Add(1)
 	}}
 	NoteHostWrite(target)
@@ -182,7 +183,7 @@ func TestProjectWatchPublishesWatcherResyncWithoutPaths(t *testing.T) {
 	t.Cleanup(Bind(cap))
 	root := t.TempDir()
 	var reconciles atomic.Int32
-	w := &projectWatch{
+	w := &projectWatch{callbacks: &workscope.Group{},
 		projectID: "project-resync",
 		roots:     []RootSpec{{ID: "r1", WorkspaceID: "ws", Path: root}},
 		external:  func(context.Context, string, ExternalBatch) { reconciles.Add(1) },
@@ -207,7 +208,7 @@ func TestProjectWatchIndexChangeRefreshesWithoutFileOrHeadEvents(t *testing.T) {
 	cap := &capturePub{}
 	t.Cleanup(Bind(cap))
 	root := t.TempDir()
-	w := &projectWatch{projectID: "index-refresh", roots: []RootSpec{{ID: "r1", WorkspaceID: "ws", Path: root}}}
+	w := &projectWatch{callbacks: &workscope.Group{}, projectID: "index-refresh", roots: []RootSpec{{ID: "r1", WorkspaceID: "ws", Path: root}}}
 	w.changes = newChangeConverger(10*time.Millisecond, 50*time.Millisecond, w.flushExternalChanges)
 	t.Cleanup(func() { w.changes.close(t.Context()) })
 	w.observe(t.Context(), repochange.Event{ProjectDir: root, Kind: repochange.IndexChanged, Source: repochange.SourceWatcher})
@@ -222,7 +223,7 @@ func TestProjectWatchFiltersGitMetadataSegments(t *testing.T) {
 	cap := &capturePub{}
 	t.Cleanup(Bind(cap))
 	root := t.TempDir()
-	w := &projectWatch{projectID: "metadata-filter", roots: []RootSpec{{ID: "r1", WorkspaceID: "ws", Path: root}}}
+	w := &projectWatch{callbacks: &workscope.Group{}, projectID: "metadata-filter", roots: []RootSpec{{ID: "r1", WorkspaceID: "ws", Path: root}}}
 	w.changes = newChangeConverger(time.Hour, time.Hour, w.flushExternalChanges)
 	t.Cleanup(func() { w.changes.close(t.Context()) })
 	w.observe(t.Context(), repochange.Event{
@@ -244,7 +245,7 @@ func TestProjectWatchSuppressesPublishedWriteEcho(t *testing.T) {
 	cap := &capturePub{}
 	t.Cleanup(Bind(cap))
 	root := RootSpec{ID: "r1", WorkspaceID: "ws", Path: t.TempDir()}
-	w := &projectWatch{projectID: "write-echo", roots: []RootSpec{root}}
+	w := &projectWatch{callbacks: &workscope.Group{}, projectID: "write-echo", roots: []RootSpec{root}}
 	w.changes = newChangeConverger(time.Hour, time.Hour, w.flushExternalChanges)
 	t.Cleanup(func() { w.changes.close(t.Context()) })
 	for _, name := range []string{"host.txt", "external.txt"} {
