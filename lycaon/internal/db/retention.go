@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"os"
 	"strings"
 	"time"
@@ -38,44 +37,6 @@ func DefaultRetention() RetentionConfig {
 		BlobFindings:                      DefaultBlobFindingsRetention,
 		IncrementalVacuumMinFreelistPages: 256,
 		BatchSize:                         DefaultRetentionBatchSize,
-	}
-}
-
-// RunMaintenance drains cleanup work in bounded passes after each wake.
-func RunMaintenance(ctx context.Context, sqlDB *Store, cfg RetentionConfig) error {
-	if sqlDB == nil || !cfg.Enabled {
-		return nil
-	}
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-sqlDB.maintenanceSignals():
-		}
-		if err := drainMaintenance(ctx, sqlDB, cfg); err != nil {
-			return err
-		}
-	}
-}
-
-// drainMaintenance completes one wake's bounded passes without needing another write.
-func drainMaintenance(ctx context.Context, sqlDB *Store, cfg RetentionConfig) error {
-	for {
-		report, err := RunRetention(ctx, sqlDB, cfg)
-		if err != nil {
-			return err
-		}
-		if report.IncrementalVacuumed {
-			if _, err := CheckpointWAL(ctx, sqlDB); err != nil {
-				return err
-			}
-		}
-		if report.TotalDeleted() == 0 && !report.IncrementalVacuumed {
-			return nil
-		}
-		if report.TotalDeleted() > 0 {
-			slog.InfoContext(ctx, "store maintenance batch complete", "deleted", report.TotalDeleted())
-		}
 	}
 }
 
@@ -156,10 +117,10 @@ func RunRetention(ctx context.Context, sqlDB Handle, cfg RetentionConfig) (Reten
 	return rep, nil
 }
 
-// Each vacuum slice is its own write, so a large freelist drains over a few
-// passes without holding the writer for long.
+// Each slice moves at most 128 pages before releasing the single writer.
+// The maintenance runner admits another pass only after foreground writes quiet.
 const (
-	vacuumSlicePages    = 4096
+	vacuumSlicePages    = 128
 	vacuumSlicesPerPass = 16
 )
 

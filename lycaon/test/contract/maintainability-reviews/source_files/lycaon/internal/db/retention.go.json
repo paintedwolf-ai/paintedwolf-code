@@ -4,10 +4,10 @@
   "kind": "module",
   "workstream": "store-health",
   "disposition": "retain",
-  "reason": "Retention policy and bounded cleanup share the database write boundary. The wake drain is one explicit operation, reused by the signal runner and deterministic multi-pass reclamation tests; its completion depends on progress rather than machine speed. Retain this cohesive unit at its measured ceiling without a second cleanup authority.",
-  "reviewed_commit": "43ebab6bda4b80a641faf5d39d9dd633358013c3",
-  "ceiling": 510,
+  "reason": "Retention policy and bounded database cleanup retain one write authority. Runner admission and progress draining now live in maintenance.go, while retention.go owns deletion policy and vacuum slices. Retain the measured policy unit; focused contracts cover external frees, multi-pass reclamation, WAL release, and quiet-write admission without machine-speed assertions.",
+  "reviewed_commit": "a1873b22570e2e76fbac02e0d413efb6188c0bfb",
+  "ceiling": 475,
   "boundaries": {
-    "lycaon/internal/db/retention_test.go": "beca41e31b51be9da43102f16502ce3cfaf6b96cde555c11c98c232ad7f77ef0"
+    "lycaon/internal/db/retention_test.go": "5ad1b08f51a715f672677f12deb034e60ceec75f38ad946d6e6515cd232c1c2d"
   }
 }
