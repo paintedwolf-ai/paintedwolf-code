@@ -86,6 +86,21 @@ class ReplyObserverTests(unittest.TestCase):
 
 
 class ReplyRestartTests(unittest.TestCase):
+    def test_launcher_requires_sealed_setuid_image_and_current_native_bytes(self):
+        bootstrap = {'mode': 0o4755, 'sha256': 'a' * 64}
+        binding = {'install_root': '/opt/painted-wolf-code', 'artifact': {'architecture': 'amd64'},
+                   'images': {'/opt/painted-wolf-code/bin/pw-launch-entry': {'mode': 0o755},
+                              str(owner.SETUID_LAUNCHER): bootstrap}}
+        with patch.object(owner, 'elf', return_value=bootstrap) as observed:
+            self.assertEqual(owner.protected_launcher(binding)['mode'], 0o4755)
+            observed.assert_called_once_with(owner.SETUID_LAUNCHER, 'amd64', setuid=True)
+            observed.return_value = dict(bootstrap, sha256='b' * 64)
+            with self.assertRaisesRegex(ValueError, 'selected final bytes'):
+                owner.protected_launcher(binding)
+            del binding['images'][str(owner.SETUID_LAUNCHER)]
+            with self.assertRaises(owner.CaseUnavailable):
+                owner.protected_launcher(binding)
+
     def test_settled_reply_requires_the_exact_successful_tool_call(self):
         session = {'id': SESSION, 'provider_id': 'fixture', 'model': owner.MODEL, 'status': 'idle'}
         invocation = {'tool_call_id': 'qualification-0', 'outcome': 'completed', 'message_id': MESSAGE}
@@ -135,7 +150,7 @@ class ReplyRestartTests(unittest.TestCase):
         fixture.observations = [{'completed': completed}]
         ui.__enter__.return_value = ui
         with ExitStack() as stack:
-            for name, value in [('applicability', ({'bootstrap': {}}, None)), ('interactive_window', {}),
+            for name, value in [('protected_launcher', {}), ('interactive_window', {}),
                     ('configure_provider', {'provider_id': 'fixture'}), ('physical_input', {}),
                     ('run', {'exit_code': 0, 'timed_out': False, 'output_limit': False})]:
                 stack.enter_context(patch.object(owner, name, return_value=value))

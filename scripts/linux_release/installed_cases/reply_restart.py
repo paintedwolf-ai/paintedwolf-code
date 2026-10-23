@@ -10,13 +10,29 @@ from .desktop_ui import DesktopUI, interactive_window
 from .process import run
 from .profile_observer import invocations, project_for_owned_root, sessions_for_project
 from .profile_providers import find_gui_provider
-from .protected_launch import applicability
 from .provider import MODEL, ProviderFixture
 from .records import CaseUnavailable, retain
 from .reply_observer import committed_reply
+from ..installed_runtime import SETUID_LAUNCHER, elf
 from ..installed_input.focus import EntryFocus
 from ..installed_input.guest import perform
 from ..installed_input.protocol import endpoint_operation
+
+def protected_launcher(binding):
+    # Select only the setuid image bound to these final package bytes. Its actual
+    # execution performs the production policy and namespace admission.
+    root = Path(binding['install_root'])
+    entry = binding['images'].get(str(root / 'bin/pw-launch-entry'))
+    expected = binding['images'].get(str(SETUID_LAUNCHER))
+    if entry is None or expected is None:
+        raise CaseUnavailable('protected-reply-requires-sealed-bootstrap-and-entry')
+    if entry['mode'] != 0o755:
+        raise ValueError('protected reply launch entry has the wrong mode')
+    actual = elf(SETUID_LAUNCHER, binding['artifact']['architecture'], setuid=True)
+    if actual != expected:
+        raise ValueError('protected reply bootstrap differs from selected final bytes')
+    return {'path': str(SETUID_LAUNCHER), **actual}
+
 
 def physical_input(app, ui, label, operation, *, password=False):
     native = app.binding.get('native_input')
@@ -71,15 +87,13 @@ def await_reply(app, project, provider_id, *, selected_session=None):
 
 
 def execute(binding, capability, case, root):
-    selected, reason = applicability(binding)
-    if reason is not None:
-        return retain(binding, capability, case, root, 'unverified', {'reason': reason})
+    launcher = protected_launcher(binding)
     observations, streams = {}, {}
     # This case changes only its disposable guest profile via normal UI actions.
     # Preserve the fixture project so a failed restart remains diagnosable.
     project = Path(tempfile.mkdtemp(prefix='reply-project-', dir=root))
     with ProviderFixture.gui([{'name': 'command', 'arguments': {'command': '/usr/bin/true'}}]) as fixture:
-        with InstalledApp(binding, launcher=selected['bootstrap']) as app:
+        with InstalledApp(binding, launcher=launcher) as app:
             observations['interactive'] = interactive_window(app)
             provider = configure_provider(app, fixture)
             opened = run(binding, 'pw', ['open', str(project)], timeout=30)
@@ -93,7 +107,7 @@ def execute(binding, capability, case, root):
                 raise ValueError('fixture never completed the full engine turn')
             observations.update(reply_before=before, launch_before=app.observations)
         streams.update({'before-' + key: value for key, value in app.streams().items()})
-        with InstalledApp(binding, launcher=selected['bootstrap']) as restarted:
+        with InstalledApp(binding, launcher=launcher) as restarted:
             after = await_reply(restarted, project, provider['provider_id'], selected_session=before['session_id'])
             if after != before or restarted.observations['engine_identity'] == app.observations['engine_identity']:
                 raise ValueError('restart changed the fixed reply or reused the previous engine')
