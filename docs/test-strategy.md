@@ -1006,6 +1006,8 @@ serve no later run while it evicted main's under the repository's 10 GB limit.
 Pull request, merge-queue, nightly, and tag runs therefore restore without
 saving. Keys follow toolchains and dependency locks, so main saves once per
 dependency change, and the workflow's summary reports total cache usage.
+Decision-engine cache identity includes Xcode only on macOS; Linux keys use
+only their own platform and compiler inputs.
 A running warmer finishes before the next push starts warming, so frequent
 merges cannot repeatedly cancel cold preparation before it saves; a newer push
 replaces a warmer still pending, so only main's newest commit waits to warm.
@@ -1031,6 +1033,41 @@ never labels an unexplained failure flaky or quarantines it automatically.
 lane durations, and unsuccessful merge-group runs. Three distinct runs sharing
 one failure signature appear in the report without opening issues. Missing artifacts
 remain a coverage gap; cancellation is reported separately from an attributed test failure.
+
+### Compiler cache storage admission
+
+Only the serialized main warmer publishes compiler caches. Each publication
+measures a tar payload compressed with zstd and reserves that size plus 5% and
+1 MiB for archive variance against an 8 GiB repository budget. Superseded platform
+entries remain available until GitHub's inventory confirms the new cache. Only
+when required to fit the upload does admission retire entries first, preferring
+superseded generations and then the least recently used owned compiler entries; it never deletes another ref or an unknown family. Oversized
+payloads are reported and left unpublished. The remaining allowance leaves
+headroom for tool caches; concurrent writes and GitHub eviction can still
+displace entries.
+This is write admission, not a storage reservation or a pinned cache.
+
+The publisher trims its ephemeral Go build cache to 1 GiB before measuring the
+combined module/build payload. The desktop warmer removes workspace package
+outputs with Cargo's package-scoped cleanup, retaining dependency builds.
+Hosted development Rust profiles are configured explicitly by setup and the
+calling workflows; cache restore and save do not change compiler settings.
+Development builds omit debug data,
+and desktop/decision-engine keys retain Xcode identity only on macOS. Go, desktop Rust,
+decision-engine, and release caches publish explicitly after successful warming;
+publication summaries record uncompressed bytes, measured compressed bytes,
+confirmed GitHub storage bytes, retired entry IDs, and skipped writes. A successful
+save step alone never permits retiring the prior cache because upload failures
+can be reported as warnings.
+Consumers remain read-only and rebuild safely on a miss.
+
+Linux native setup resolves archives from signed APT indexes, verifies each size
+and SHA-256 digest, and bounds package-manager calls and downloads. Four transfers
+share a four-minute deadline, with a 30-second origin budget and a canonical
+Ubuntu fallback for recognized Ubuntu package paths. Each origin is attempted
+at most twice within that shared deadline. Installation uses only the
+verified local archives. The step summary separates restored and downloaded
+archives and records download time.
 
 ### Runner capacity
 
