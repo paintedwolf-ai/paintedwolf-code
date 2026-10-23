@@ -25,6 +25,7 @@ mod sidecar;
 mod test_support;
 pub mod update_service;
 mod diagnostic_log;
+mod process_protection;
 mod vault_lock;
 pub mod webkit_features;
 mod webview_policy;
@@ -35,11 +36,13 @@ use tauri::{Manager, RunEvent};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Before any thread or child exists that could inherit the launch's
-    // broker and lifetime descriptors.
+    // Claim descriptors before any thread or child can inherit them.
     #[cfg(unix)]
     protected_launch::claim();
-    harden_process();
+    if let Err(error) = process_protection::harden_release() {
+        eprintln!("Could not protect desktop process memory: {error}");
+        std::process::exit(1);
+    }
     let context = tauri::generate_context!();
     // GTK 3 names the Wayland toplevel and the X11 window class after the program
     // name, which must be the identifier the desktop entry is named after.
@@ -160,6 +163,7 @@ pub fn run() {
             windows::window_backdrop::den_set_window_backdrop,
             app_menu::set_app_menu,
             app_menu::request_quit,
+            vault_lock::vault_lock_status,
             windows::linux_decorations::linux_decoration_layout,
             windows::linux_titlebar::linux_titlebar_action,
             windows::linux_frame::linux_window_frame,
@@ -220,20 +224,6 @@ pub fn run() {
         });
 }
 
-
-/// The shell holds the vault password and the presence signing key, so on
-/// Linux it is non-dumpable: no same-user process can ptrace it or read its
-/// memory through the process filesystem. Debug builds stay debuggable.
-fn harden_process() {
-    #[cfg(all(target_os = "linux", not(debug_assertions)))]
-    {
-        // SAFETY: PR_SET_DUMPABLE takes one integer argument and touches no memory.
-        let status = unsafe { libc::prctl(libc::PR_SET_DUMPABLE, 0) };
-        if status != 0 {
-            eprintln!("Could not make the shell non-dumpable: {}", std::io::Error::last_os_error());
-        }
-    }
-}
 
 /// The installer mode never initializes windows, tools, or the engine.
 pub fn run_update_helper(id: &str, installation: &str) -> Result<(), String> {

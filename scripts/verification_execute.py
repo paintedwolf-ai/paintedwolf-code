@@ -301,7 +301,7 @@ class Executor:
                     reservation.entry["child_identity"] = identity(child.pid)
                     reservation.entry["activity_paths"] = [str(path) for path in
                         (log, errors, env.get("PW_TEST_STAGE_RAW"), env.get("PW_TEST_STAGE_RESULT"),
-                         env.get("PW_TEST_STAGE_EVENTS")) if path]
+                         env.get("PW_TEST_STAGE_EVENTS"), env.get("PW_TEST_STAGE_PROGRESS")) if path]
                     reservation.write()
                     self.operation_pid(log.stem, child.pid)
                 while child.poll() is None:
@@ -455,7 +455,11 @@ class Executor:
         events = self.directory / (stage_id + "-events.jsonl")
         command = task_command(first) if first["kind"] == "task" else digest_command(
             first, self.ordered_packages(first, packages))
-        env = {k: v for k, v in os.environ.items() if k not in {"PW_TEST_STAGE_RESULT", "PW_TEST_STAGE_RAW"}}
+        spec = profile(first, self.catalog)
+        env = {k: v for k, v in os.environ.items()
+               if k not in {"PW_TEST_STAGE_RESULT", "PW_TEST_STAGE_RAW", "PW_TEST_STAGE_PROGRESS"}}
+        if spec.get("progress"):
+            env["PW_TEST_STAGE_PROGRESS"] = str(self.directory / (stage_id + "-progress.log"))
         artifacts = None
         if first["name"] == "den:harness:test":
             artifacts = str(self.directory / (stage_id + "-browser"))
@@ -474,7 +478,7 @@ class Executor:
         names = sorted({s["name"] for _, s, _, _ in peers})
         print(f"test execution: {stage_id}: {', '.join(names)} ({len(consumers)} requests); log {log}", flush=True)
         reservation = Reservation(self.queue, self.queue.lock_file, self.plan["batch"]["ticket"],
-                                  ", ".join(names), profile(first, self.catalog), self.plan["batch"]["workers"],
+                                  ", ".join(names), spec, self.plan["batch"]["workers"],
                                   self.arrival(consumers))
         reservation.__enter__()
         try:

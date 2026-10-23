@@ -41,15 +41,19 @@ def main():
             with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as summary:
                 summary.write("### Change scope\n\n```json\n" + json.dumps(scope, indent=2) + "\n```\n")
         measured = json.loads(args.timings.read_text()) if args.timings else None
-        print(json.dumps(hosted_plan.matrix(args.profile, args.suite, scope, args.platform, measured),
-                         separators=(",", ":")))
+        matrix = hosted_plan.matrix(args.profile, args.suite, scope, args.platform, measured)
+        if os.environ.get("GITHUB_STEP_SUMMARY"):
+            from ci_policy.hosted_schedule import summarize
+            with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as summary:
+                summary.write(summarize(matrix, measured))
+        print(json.dumps(matrix, separators=(",", ":")))
     elif args.command == "timings":
         from ci_policy import timings
         print(json.dumps(timings.resolve(os.environ["GITHUB_REPOSITORY"]), separators=(",", ":")))
     elif args.command == "max-parallel":
         print(hosted_plan.max_parallel(args.profile))
     elif args.command == "run":
-        return hosted_execution.run_lane(args.lane, args.shard)
+        return hosted_execution.run_lane(args.lane, args.shard, os.environ.get("GITHUB_EVENT_NAME") == "merge_group")
     elif args.command == "gate":
         verification_verdict.require_success(json.loads(os.environ["NEEDS_JSON"]), args.skipped, args.draft == "true")
     elif args.command == "verified":

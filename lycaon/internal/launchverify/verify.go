@@ -69,6 +69,9 @@ func CodeOf(err error) Code {
 type Verifier struct {
 	ProcRoot string
 	Manifest *pkgmanifest.Manifest
+	// These select an explicit administrator-controlled immutable closure.
+	InstallRoot string
+	StorePolicy *StorePolicy
 	// GenerationsDir, PolicyPath, LocksDir, TrustAnchor and TrustedOwner
 	// configure generation resolution; zero values use the installed layout.
 	GenerationsDir string
@@ -123,17 +126,18 @@ func (v Verifier) VerifyChain(pid, uid int) (Chain, error) {
 	if err != nil {
 		return Chain{}, err
 	}
-	gen, err := v.layout().resolve(engine.PID, launcher.PID)
-	if err != nil {
-		return Chain{}, err
-	}
-	chain := Chain{
-		Engine:     engine,
-		Launcher:   launcher,
-		Namespace:  namespace,
-		Generation: gen.sha,
-		Manifest:   gen.manifest,
-		roles:      gen.roles,
+	chain := Chain{Engine: engine, Launcher: launcher, Namespace: namespace}
+	if v.StorePolicy != nil {
+		if err := v.guardStorePolicy(pid, RoleEngine); err != nil {
+			return Chain{}, err
+		}
+		chain.Manifest = v.Manifest
+	} else {
+		gen, err := v.layout().resolve(engine.PID, launcher.PID)
+		if err != nil {
+			return Chain{}, err
+		}
+		chain.Generation, chain.Manifest, chain.roles = gen.sha, gen.manifest, gen.roles
 	}
 	if err := v.Recheck(chain); err != nil {
 		return Chain{}, err
@@ -213,7 +217,14 @@ func (v Verifier) VerifyExecutable(pid int, role string) error {
 }
 
 func (v Verifier) verifyExecutableAgainst(pid int, role string, manifest *pkgmanifest.Manifest, wantInode *fileFacts) error {
-	want, size, ok := expected(manifest, role)
+	if err := v.guardStorePolicy(pid, role); err != nil {
+		return err
+	}
+	root := v.InstallRoot
+	if wantInode != nil && manifest != nil {
+		root = manifest.InstallRoot
+	}
+	want, size, ok := expected(manifest, role, root)
 	if !ok {
 		return refuse(CodeManifestUnreadable, role, pid, "the manifest lists no such executable")
 	}
@@ -235,6 +246,13 @@ func (v Verifier) verifyExecutableAgainst(pid int, role string, manifest *pkgman
 			return refuse(CodeExecutableMismatch, role, pid, "executable is not the generation image")
 		}
 	}
+	if v.StorePolicy != nil {
+		actual, err := file.Stat()
+		installed, installedErr := os.Stat(rolePath(role, v.InstallRoot))
+		if err != nil || installedErr != nil || !os.SameFile(actual, installed) {
+			return refuse(CodeExecutableMismatch, role, pid, "the running image is not the selected generation's executable inode")
+		}
+	}
 	hash := sha256.New()
 	n, err := io.Copy(hash, file)
 	if err != nil {
@@ -242,6 +260,14 @@ func (v Verifier) verifyExecutableAgainst(pid int, role string, manifest *pkgman
 	}
 	if n != size || subtle.ConstantTimeCompare(hash.Sum(nil), want) != 1 {
 		return refuse(CodeExecutableMismatch, role, pid, "")
+	}
+	return nil
+}
+
+func (v Verifier) guardStorePolicy(pid int, role string) error {
+	if v.StorePolicy != nil && (v.Manifest == nil || !cleanAbsolute(v.InstallRoot) || v.InstallRoot == "/" ||
+		v.Manifest.InstallRoot != v.InstallRoot || !v.StorePolicy.contains(v.InstallRoot)) {
+		return refuse(CodeManifestUnreadable, role, pid, "a selected closure requires its exact installation root and manifest")
 	}
 	return nil
 }

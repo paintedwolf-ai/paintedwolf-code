@@ -218,7 +218,7 @@ func (g generationLayout) loadGeneration(sha string) (resolvedGeneration, error)
 	}
 	roles := make(map[string]fileFacts, 2)
 	for _, role := range []string{RoleEngine, RoleDesktopApp} {
-		if _, _, ok := expected(manifest, role); !ok {
+		if _, _, ok := expected(manifest, role, manifest.InstallRoot); !ok {
 			return resolvedGeneration{}, fmt.Errorf("generation manifest lacks %s", role)
 		}
 		info, err := root.Lstat(roleRelativePath(role))

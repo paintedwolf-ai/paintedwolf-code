@@ -160,7 +160,7 @@ jobs:
           path: .release-controller
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-go@5064d95ba18d4a9dda7c4cc67adeb03aea1a2a14 # v7.0.0
+      - uses: actions/setup-go@90ad2b35f69faf97585ad74d28fa006d2739b7af # v7.0.0
         with:
           go-version-file: .release-controller/lycaon/go.mod
           cache: false
@@ -233,10 +233,8 @@ jobs:
           fetch-depth: 0
       - uses: ./.github/actions/setup-verification
       - uses: ./.github/actions/setup-bialy
-      - name: Build candidate sidecar
-        timeout-minutes: 60
-        run: ./task build:lycaon-dev
       - name: Install the public feed verifier
+        timeout-minutes: 5
         run: HOMEBREW_NO_AUTO_UPDATE=1 brew install minisign
       - name: Rehearse the prior-release upgrade
         timeout-minutes: 90
@@ -294,7 +292,7 @@ jobs:
           path: .release-controller
           persist-credentials: false
 
-      - uses: actions/setup-go@5064d95ba18d4a9dda7c4cc67adeb03aea1a2a14 # v7.0.0
+      - uses: actions/setup-go@90ad2b35f69faf97585ad74d28fa006d2739b7af # v7.0.0
         with:
           go-version-file: lycaon/go.mod
           cache: false
@@ -579,7 +577,7 @@ jobs:
           ref: ${{ github.workflow_sha }}
           path: .release-controller
           persist-credentials: false
-      - uses: actions/setup-go@5064d95ba18d4a9dda7c4cc67adeb03aea1a2a14 # v7.0.0
+      - uses: actions/setup-go@90ad2b35f69faf97585ad74d28fa006d2739b7af # v7.0.0
         with:
           go-version-file: .release-controller/lycaon/go.mod
           cache: false
@@ -642,10 +640,11 @@ jobs:
         with:
           ref: ${{ github.workflow_sha }}
           persist-credentials: false
-      - uses: actions/setup-go@5064d95ba18d4a9dda7c4cc67adeb03aea1a2a14 # v7.0.0
+      - uses: actions/setup-go@90ad2b35f69faf97585ad74d28fa006d2739b7af # v7.0.0
         with:
           go-version-file: lycaon/go.mod
           cache: false
+      - uses: ./.github/actions/cache-go
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version-file: .bun-version

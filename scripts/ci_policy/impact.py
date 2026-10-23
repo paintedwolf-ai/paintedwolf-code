@@ -15,7 +15,7 @@ from ci_policy.native_impact import dependencies as native_dependencies
 
 ROOT = Path(__file__).resolve().parents[2]
 SHARED = (".github/", "scripts/", "dependencies/", "schemas/", "docs/openapi",
-          "lycaon/config/", "lycaon/pkg/", "lycaon/test/contract/", "lycaon/vulndb")
+          "lycaon/config/", "lycaon/pkg/", "lycaon/vulndb")
 # Prose that no build, fixture, or prompt reads; the repository contracts every scope runs check it.
 # CHANGELOG.md is not among them: Den embeds it.
 PROSE = {"AGENTS.md", "CODE_OF_CONDUCT.md", "CONTRIBUTING.md", "README.md", "REPORTING.md", "SECURITY.md",
@@ -54,10 +54,24 @@ def prose(path):
     return path in PROSE or path.startswith("docs/") and path.endswith(".md") and not path.startswith(SHARED)
 
 
+def main_module_go(path):
+    """Go source the module's import graph can resolve: not in a directory Go ignores or a nested module.
+
+    Fixture programs, such as the harness projects, are read by other lanes rather than compiled here.
+    """
+    if not path.startswith(("lycaon/internal/", "lycaon/cmd/", "lycaon/test/")) or not path.endswith(".go"):
+        return False
+    directories = Path(path).parent.relative_to("lycaon").parts
+    if any(part == "testdata" or part.startswith(("_", ".")) for part in directories):
+        return False
+    return not any((ROOT / "lycaon" / Path(*directories[:depth]) / "go.mod").exists()
+                   for depth in range(1, len(directories) + 1))
+
+
 def broad_scope(paths):
     reasons = []
     for path in paths:
-        ordinary = (path.startswith("lycaon/internal/") and path.endswith(".go")
+        ordinary = (main_module_go(path)
                     or path.startswith("lycaon-den/src/") and path.endswith((".ts", ".tsx", ".css"))
                     or prose(path) or native_dependencies(path) is not None)
         if path.startswith(SHARED) or not ordinary:

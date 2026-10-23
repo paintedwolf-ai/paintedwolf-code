@@ -33,24 +33,26 @@ func roleRelativePath(role string) string {
 	}
 }
 
-func rolePath(manifest *pkgmanifest.Manifest, role string) string {
-	rel := roleRelativePath(role)
-	if rel == "" {
+func rolePath(role, root string) string {
+	relative := roleRelativePath(role)
+	if relative == "" {
 		return ""
 	}
-	root := DefaultInstallRoot
-	if manifest != nil && manifest.InstallRoot != "" {
-		root = manifest.InstallRoot
+	if root == "" {
+		root = DefaultInstallRoot
 	}
-	return filepath.Join(root, rel)
+	return filepath.Join(root, relative)
 }
 
 // expected returns the digest and size the manifest records for role.
-func expected(manifest *pkgmanifest.Manifest, role string) ([]byte, int64, bool) {
+func expected(manifest *pkgmanifest.Manifest, role, root string) ([]byte, int64, bool) {
 	if manifest == nil {
 		return nil, 0, false
 	}
-	entry, ok := manifest.Lookup(rolePath(manifest, role))
+	if root != "" && (!cleanAbsolute(root) || manifest.InstallRoot != root) {
+		return nil, 0, false
+	}
+	entry, ok := manifest.Lookup(rolePath(role, root))
 	if !ok {
 		return nil, 0, false
 	}

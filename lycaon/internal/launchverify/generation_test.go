@@ -101,7 +101,7 @@ func TestGenerationPolicyAndLockValidation(t *testing.T) {
 	if layout.procRoot != "/proc" || layout.generationsDir != DefaultGenerationsDir || layout.policyPath != DefaultPolicyPath || layout.locksDir != DefaultLocksDir || layout.anchor != "/" {
 		t.Fatal("default verifier paths differ from installed layout")
 	}
-	if rolePath(nil, "unknown") != "" {
+	if rolePath("unknown", "") != "" {
 		t.Fatal("unknown role resolved a path")
 	}
 

@@ -14,7 +14,11 @@
       "test:short",
       "test:contract",
       "coverage:changes",
-      "licenses:notices"
+      "scripts:coverage:changes",
+      "licenses:notices",
+      "comments:check",
+      "test:fail-messages:check",
+      "docs:links"
     ],
     "oar:verify": [
       "test:oar",
@@ -34,6 +38,7 @@
       "budgets",
       "coverage:changes",
       "den:coverage:changes",
+      "scripts:coverage:changes",
       "lint:vuln",
       "licenses:notices"
     ],
@@ -210,6 +215,9 @@
     "den:coverage:changes": [
       "den:coverage:changes"
     ],
+    "scripts:coverage:changes": [
+      "scripts:coverage:changes"
+    ],
     "codegen:approval-explanations:check": [
       "codegen:approval-explanations:check"
     ],
@@ -348,6 +356,9 @@
     "licenses:notices": [
       "licenses:notices"
     ],
+    "test:linux:installed": [
+      "test:linux:installed"
+    ],
     "release:rehearse:linux-signing": [
       "release:rehearse:linux-signing"
     ]
@@ -375,7 +386,8 @@
     "den:webkit:atspi": "passthrough",
     "test:confine:linux": "passthrough",
     "release:rehearse:linux-signing": "passthrough",
-    "den:test:rust": "fixed:desktop-settings-observer"
+    "den:test:rust": "fixed:desktop-settings-observer",
+    "test:linux:installed": "passthrough"
   },
   "resources": {
     "den:harness:test": {
@@ -491,6 +503,12 @@
       "workers": "shared"
     },
     "test:runner": {
+      "locks": [
+        "runner"
+      ],
+      "workers": 1
+    },
+    "scripts:coverage:changes": {
       "locks": [
         "runner"
       ],
@@ -660,6 +678,7 @@
       "locks": [
         "harness"
       ],
+      "progress": "log",
       "workers": 1
     },
     "test:confine:linux": {
@@ -693,6 +712,10 @@
       "locks": [
         "notices"
       ],
+      "workers": 1
+    },
+    "test:linux:installed": {
+      "locks": [],
       "workers": 1
     },
     "release:rehearse:linux-signing": {
@@ -757,7 +780,12 @@
         "lint:full",
         "budgets",
         "den:typecheck",
-        "den:lint"
+        "den:lint",
+        "coverage:changes",
+        "comments:check",
+        "test:fail-messages:check",
+        "docs:links",
+        "den:test:fast"
       ],
       "minutes": 120,
       "profiles": [
@@ -768,16 +796,15 @@
       "preflight": [
         "test:contract",
         "--",
-        "./test/contract/hosted",
-        "./test/contract/runner",
-        "./test/contract/evidence"
+        "./test/contract/..."
       ]
     },
     "limits": {
       "targets": [
         "budgets",
         "coverage:changes",
-        "den:coverage:changes"
+        "den:coverage:changes",
+        "scripts:coverage:changes"
       ],
       "minutes": 45,
       "profiles": [
@@ -831,7 +858,11 @@
       ],
       "suite": "all",
       "setup": "verification",
-      "first": true
+      "first": true,
+      "early_targets": [
+        "comments:check",
+        "test:fail-messages:check"
+      ]
     },
     "vulnerabilities": {
       "targets": [
@@ -872,7 +903,8 @@
       "suite": "behavior",
       "setup": "verification",
       "workers": 3,
-      "shards": 2
+      "shards": 2,
+      "contract_first": true
     },
     "frontend": {
       "targets": [
@@ -1060,6 +1092,7 @@
         "build",
         "licenses:notices"
       ],
+      "timing_source": "build",
       "minutes": 120,
       "profiles": [
         "integration"
@@ -1084,7 +1117,7 @@
       "build-caches.yml": 1,
       "nightly.yml": 2,
       "release.yml": 2,
-      "linux-candidates.yml": 1,
+      "linux-candidate-requests.yml": 1,
       "release-halt.yml": 1,
       "release-secrets-check.yml": 1,
       "release-staple-probe.yml": 1,

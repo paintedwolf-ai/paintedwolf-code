@@ -37,7 +37,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-go@5064d95ba18d4a9dda7c4cc67adeb03aea1a2a14 # v7.0.0
+      - uses: actions/setup-go@90ad2b35f69faf97585ad74d28fa006d2739b7af # v7.0.0
         with:
           go-version-file: lycaon/go.mod
           cache: false
@@ -124,13 +124,7 @@ jobs:
         if: steps.setup.outputs.rust-cache-hit != 'true' || steps.setup.outputs.decide-cache-hit != 'true'
         run: ./task setup-dev -- --workspace-cache
 
-      # Lint lanes run on Linux. Findings on main do not stop warming; qualification reports them.
-      - name: Record lint diagnostics
-        if: runner.os == 'Linux'
-        continue-on-error: true
-        run: ./task lint:full
-
-      # Resolve paths at publication time instead of relying on nested post-job contexts.
+      # Inline saves resolve cache paths before lint without nested post-job contexts.
       - name: Publish prepared Go caches
         if: github.ref == 'refs/heads/main' && steps.setup.outputs.go-cache-hit != 'true'
         uses: ./.github/actions/cache-go
@@ -156,16 +150,22 @@ jobs:
           tools: all
           save: 'true'
 
-      - name: Publish lint diagnostics
-        if: runner.os == 'Linux' && github.ref == 'refs/heads/main'
-        uses: ./.github/actions/cache-lint-diagnostics
-        with:
-          save: 'true'
-
       # Offline merge-queue lanes restore these rather than build each WebKitGTK release's image.
       - name: Publish WebKitGTK accessibility images
         if: runner.os == 'Linux' && github.ref == 'refs/heads/main'
         uses: ./.github/actions/setup-webkit-atspi-images
+        with:
+          save: 'true'
+
+      # Lint lanes run on Linux. Findings on main do not stop warming; qualification reports them.
+      - name: Record lint diagnostics
+        if: runner.os == 'Linux'
+        continue-on-error: true
+        run: ./task lint:full
+
+      - name: Publish lint diagnostics
+        if: runner.os == 'Linux' && github.ref == 'refs/heads/main'
+        uses: ./.github/actions/cache-lint-diagnostics
         with:
           save: 'true'
 
@@ -186,7 +186,7 @@ jobs:
           {
             echo '### Repository caches'
             gh api "repos/${REPO}/actions/cache/usage" \
-              --jq '"\(.active_caches_count) caches, \(.active_caches_size_in_bytes / 1048576 | floor) MiB of the 10 GiB limit"'
+              --jq '"\(.active_caches_count) caches, \(.active_caches_size_in_bytes / 1048576 | floor) MiB stored"'
             echo
             echo '| Ref | MiB | Key |'
             echo '|---|---|---|'
