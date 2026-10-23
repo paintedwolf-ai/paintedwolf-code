@@ -11,6 +11,9 @@ func TestSignalVocabularyIsExact(t *testing.T) {
 		}
 		seen[kind] = true
 	}
+	if len(signalNames) != len(seen) {
+		t.Fatalf("signal vocabulary has %d names, want %d", len(signalNames), len(seen))
+	}
 	for _, name := range []string{"", "term", "SIGTERM", "9", "0", "QUIT", " TERM", "TERM\x00"} {
 		if kind, err := parseSignal(name); err == nil || kind != 0 {
 			t.Fatalf("accepted unsupported signal %q as %d: %v", name, kind, err)

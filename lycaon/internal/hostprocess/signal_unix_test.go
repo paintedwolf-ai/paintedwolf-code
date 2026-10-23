@@ -34,7 +34,10 @@ func TestServiceRefusesUnsupportedSignalForCurrentInstance(t *testing.T) {
 	if err != nil {
 		t.Fatalf("inspect current instance: %v", err)
 	}
-	if err := (&Service{}).Signal(t.Context(), process, "SIGTERM"); err == nil || errors.Is(err, ErrStale) {
+	service := &Service{members: func(string) (map[int]struct{}, error) {
+		return map[int]struct{}{process.PID: {}}, nil
+	}}
+	if err := service.Signal(t.Context(), "task", process, "SIGTERM"); err == nil || errors.Is(err, ErrStale) || errors.Is(err, ErrNotOwned) {
 		t.Fatalf("unsupported signal was not refused after identity verification: %v", err)
 	}
 }
