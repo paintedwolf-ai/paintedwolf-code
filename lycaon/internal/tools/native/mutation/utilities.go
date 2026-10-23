@@ -122,7 +122,7 @@ func runCp(inv *invocation) error {
 			return 0, err
 		}
 		result, err := operation.CopyPair(inv.ctx, native.FilePair{From: source.Resolved.Abs, To: to}, inv.tc)
-		return len(result.Copied), err
+		return result.Effects, err
 	})
 }
 
@@ -155,7 +155,7 @@ func runMkdir(inv *invocation) error {
 			}
 		}
 		created, err := inv.owners.Operations.Mkdir.Mkdir(inv.ctx, native.MkdirInput{Paths: []string{bound.Resolved.Abs}, Mode: mode}, inv.tc)
-		return len(created), err
+		return created.Effects, err
 	})
 }
 
@@ -327,7 +327,7 @@ func runMktemp(inv *invocation) error {
 	abs := filepath.Join(dir, name)
 	if inv.flag("-d") {
 		created, err := inv.owners.Operations.Mkdir.Mkdir(inv.ctx, native.MkdirInput{Paths: []string{abs}, Mode: 0o700}, inv.tc)
-		inv.effects += len(created)
+		inv.effects += created.Effects
 		if err != nil {
 			return err
 		}

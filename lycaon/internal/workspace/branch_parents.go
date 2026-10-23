@@ -28,5 +28,6 @@ func EnsureParents(branchRoot, rel string) error {
 	if parent == "." || parent == string(filepath.Separator) {
 		return nil
 	}
-	return fseffect.MkdirAll(fseffect.Location{Root: branchRoot, Rel: parent}, 0o750)
+	_, err := fseffect.MkdirAll(fseffect.Location{Root: branchRoot, Rel: parent}, 0o750)
+	return err
 }

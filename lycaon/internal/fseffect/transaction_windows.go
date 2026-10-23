@@ -584,18 +584,18 @@ func platformChown(Location, int, int) error { return ErrUnsupported }
 func platformTimes(Location, *time.Time, *time.Time) error { return ErrUnsupported }
 
 // MkdirAll creates and flushes directories through held handles.
-func MkdirAll(loc Location, _ os.FileMode) error {
+func MkdirAll(loc Location, _ os.FileMode) (createdCount int, err error) {
 	clean, err := cleanLocation(loc)
 	if err != nil {
-		return err
+		return createdCount, err
 	}
 	root, err := filepath.EvalSymlinks(clean.Root)
 	if err != nil {
-		return err
+		return createdCount, err
 	}
 	handle, err := openWindowsRoot(root, true)
 	if err != nil {
-		return err
+		return createdCount, err
 	}
 	defer func() { _ = windows.CloseHandle(handle) }()
 	anyCreated := false
@@ -609,24 +609,27 @@ func MkdirAll(loc Location, _ os.FileMode) error {
 				windows.FILE_GENERIC_READ|windows.FILE_GENERIC_WRITE,
 				windows.FILE_CREATE, windows.FILE_DIRECTORY_FILE|windows.FILE_WRITE_THROUGH)
 			created = err == nil
+			if created {
+				createdCount++
+			}
 		}
 		if err != nil {
-			return err
+			return createdCount, err
 		}
 		if created {
 			anyCreated = true
 			if err := flushHandle(handle); err != nil {
 				_ = windows.CloseHandle(next)
-				return err
+				return createdCount, err
 			}
 		}
 		_ = windows.CloseHandle(handle)
 		handle = next
 	}
 	if !anyCreated {
-		return nil
+		return createdCount, nil
 	}
-	return flushHandle(handle)
+	return createdCount, flushHandle(handle)
 }
 
 func platformAccessTime(os.FileInfo) (time.Time, bool) { return time.Time{}, false }

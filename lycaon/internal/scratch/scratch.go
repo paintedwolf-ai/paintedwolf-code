@@ -46,7 +46,7 @@ func (f *Folders) Ensure(sessionID string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := fseffect.MkdirAll(fseffect.Location{Root: f.stateRoot, Rel: rel}, 0o700); err != nil {
+	if _, err := fseffect.MkdirAll(fseffect.Location{Root: f.stateRoot, Rel: rel}, 0o700); err != nil {
 		return "", fmt.Errorf("prepare session scratch %q: %w", sessionID, err)
 	}
 	return filepath.Join(fspath.CanonicalPath(f.stateRoot), rel), nil

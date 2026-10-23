@@ -462,3 +462,18 @@ func TestOpenReadAcceptsCapabilityRoot(t *testing.T) {
 		t.Fatalf("capability root mode = %v", info.Mode())
 	}
 }
+
+func TestMkdirAllCountsOnlyObservedCreations(t *testing.T) {
+	root := t.TempDir()
+	loc := fseffect.Location{Root: root, Rel: "a/b"}
+	count, err := fseffect.MkdirAll(loc, 0o755)
+	testutil.FailErr(t, "create nested directories", err)
+	if count != 2 {
+		t.Fatalf("created=%d want=2", count)
+	}
+	count, err = fseffect.MkdirAll(loc, 0o755)
+	testutil.FailErr(t, "reuse directories", err)
+	if count != 0 {
+		t.Fatalf("existing directories counted as effects: %d", count)
+	}
+}

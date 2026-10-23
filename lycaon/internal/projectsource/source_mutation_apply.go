@@ -163,12 +163,13 @@ func applySourceCreate(plan *sourceMutationPlan) error {
 		return err
 	}
 	if plan.EntryKind == SourceEntryFolder {
-		return fseffect.MkdirAll(fseffect.Location{Root: plan.RootPath, Rel: filepath.FromSlash(plan.Path)}, sourceCreateDirMode)
+		_, err := fseffect.MkdirAll(fseffect.Location{Root: plan.RootPath, Rel: filepath.FromSlash(plan.Path)}, sourceCreateDirMode)
+		return err
 	}
 	if plan.CreateParents {
 		parent := filepath.Dir(filepath.FromSlash(plan.Path))
 		if parent != "." {
-			if err := fseffect.MkdirAll(fseffect.Location{Root: plan.RootPath, Rel: parent}, sourceCreateDirMode); err != nil {
+			if _, err := fseffect.MkdirAll(fseffect.Location{Root: plan.RootPath, Rel: parent}, sourceCreateDirMode); err != nil {
 				return err
 			}
 		}

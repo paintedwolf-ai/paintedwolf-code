@@ -44,7 +44,7 @@ func (s *SourceEffects) applySourceMove(ctx context.Context, row *sourceMutation
 	}
 	parent := filepath.Dir(filepath.FromSlash(plan.ToPath))
 	if parent != "." {
-		if err := fseffect.MkdirAll(fseffect.Location{Root: plan.RootPath, Rel: parent}, sourceCreateDirMode); err != nil {
+		if _, err := fseffect.MkdirAll(fseffect.Location{Root: plan.RootPath, Rel: parent}, sourceCreateDirMode); err != nil {
 			return err
 		}
 	}

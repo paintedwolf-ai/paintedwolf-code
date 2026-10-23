@@ -132,3 +132,83 @@ func TestRecursiveCopyFlushesRetainedBodiesBeforeTheNextLargeFile(t *testing.T) 
 		t.Fatalf("large copy leaked admission=%+v", usage)
 	}
 }
+
+func TestCopyDirectoryCreationRemainsAnEffectAfterMemoryRefusal(t *testing.T) {
+	h := newHarness(t, map[string]string{"tree/": ""})
+	memory, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: 1 << 20, State: int64(2*128*(1024+len("tree")+len(".")) + 100)})
+	testutil.FailErr(t, "create constrained memory", err)
+	h.program.Memory = memory
+	r := h.run("", "cp", "-r", "tree", "target")
+	var limit *toolcontract.ProgramMemoryLimitError
+	if !errors.As(r.err, &limit) || r.result.EffectCertainty != toolcontract.EffectCompleted {
+		t.Fatalf("post-mkdir refusal lost effect: result=%+v error=%v", r.result, r.err)
+	}
+	info, err := os.Stat(h.path("target"))
+	testutil.FailErr(t, "inspect actual created directory", err)
+	if !info.IsDir() {
+		t.Fatal("target is not a directory")
+	}
+	if use := memory.InUse(); use.State != 0 || use.Working != 0 {
+		t.Fatalf("admission leaked: %+v", use)
+	}
+}
+
+func TestCopyEmptyTreeReportsActualDirectoryEffect(t *testing.T) {
+	h := newHarness(t, map[string]string{"tree/empty/": ""})
+	r := h.run("", "cp", "-r", "tree", "target")
+	if r.err != nil || r.result.Status != 0 || r.result.EffectCertainty != toolcontract.EffectCompleted {
+		t.Fatalf("empty tree copy result=%+v error=%v", r.result, r.err)
+	}
+	info, err := os.Stat(h.path("target/empty"))
+	testutil.FailErr(t, "inspect copied empty directory", err)
+	if !info.IsDir() {
+		t.Fatal("empty directory missing")
+	}
+}
+
+type failedCopySettlement struct{ sourceeffect.Journal }
+type failedCopyPending struct{ sourceeffect.Pending }
+
+func (j failedCopySettlement) PrepareEffect(ctx context.Context, plan sourceeffect.Plan) (sourceeffect.Pending, error) {
+	pending, err := j.Journal.PrepareEffect(ctx, plan)
+	if err != nil {
+		return nil, err
+	}
+	return failedCopyPending{pending}, nil
+}
+func (p failedCopyPending) Finish(ctx context.Context, err error) error {
+	return errors.Join(p.Pending.Finish(ctx, err), errors.New("settlement failure"))
+}
+
+func TestCopyScalarPreservesCommittedEffectOnSettlementFailure(t *testing.T) {
+	for _, recursive := range []bool{false, true} {
+		t.Run(map[bool]string{false: "scalar", true: "existing_tree_file"}[recursive], func(t *testing.T) {
+			h := newHarness(t, map[string]string{"source": "new bytes", "tree/a": "new bytes", "target": "old", "dest/tree/a": "old"})
+			h.tc.Source.SourceMutations = failedCopySettlement{h.service}
+			args := []string{"cp", "source", "target"}
+			path := "target"
+			if recursive {
+				args = []string{"cp", "-r", "tree", "dest"}
+				path = "dest/tree/a"
+			}
+			r := h.run("", args...)
+			if r.err == nil || r.result.EffectCertainty != toolcontract.EffectCompleted || h.read(path) != "new bytes" {
+				t.Fatalf("committed copy result=%+v error=%v", r.result, r.err)
+			}
+		})
+	}
+}
+
+func TestMkdirPreservesObservedCreationAfterSettlementFailure(t *testing.T) {
+	h := newHarness(t, nil)
+	h.tc.Source.SourceMutations = failedCopySettlement{h.service}
+	r := h.run("", "mkdir", "-p", "new/child")
+	if r.err == nil || r.result.EffectCertainty != toolcontract.EffectCompleted {
+		t.Fatalf("created directory lost on settlement failure: %+v error=%v", r.result, r.err)
+	}
+	info, err := os.Stat(h.path("new/child"))
+	testutil.FailErr(t, "inspect created directory", err)
+	if !info.IsDir() {
+		t.Fatal("directory missing")
+	}
+}

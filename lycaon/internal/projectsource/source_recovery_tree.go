@@ -76,7 +76,7 @@ func (s *sourceRecovery) canRetainTree(location fseffect.Location, sameFilesyste
 	if err != nil {
 		return false, err
 	}
-	if err := fseffect.MkdirAll(fseffect.Location{Root: filepath.Dir(filepath.Dir(target.Root)), Rel: filepath.Join(filepath.Base(filepath.Dir(target.Root)), filepath.Base(target.Root))}, 0o700); err != nil {
+	if _, err := fseffect.MkdirAll(fseffect.Location{Root: filepath.Dir(filepath.Dir(target.Root)), Rel: filepath.Join(filepath.Base(filepath.Dir(target.Root)), filepath.Base(target.Root))}, 0o700); err != nil {
 		return false, err
 	}
 	return sameFilesystem(filepath.Join(location.Root, location.Rel), target.Root)

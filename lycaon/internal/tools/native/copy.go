@@ -51,6 +51,8 @@ type CopyInput struct {
 // CopyResult lists written files in order, including those already written
 // when a later entry fails.
 type CopyResult struct {
+	// Effects counts observed file publications and directory creations, even on error.
+	Effects int
 	Copied  []copyResult
 	Skipped []FilePair
 }
@@ -129,6 +131,7 @@ func (t *CopyTool) Copy(ctx context.Context, in CopyInput, tctx tools.ToolContex
 	defer op.Close()
 	for _, pair := range in.Pairs {
 		copied, err := op.CopyPair(ctx, pair, tctx)
+		result.Effects += copied.Effects
 		result.Copied = append(result.Copied, copied.Copied...)
 		result.Skipped = append(result.Skipped, copied.Skipped...)
 		if err != nil {
@@ -195,7 +198,12 @@ func (op *CopyOperation) copyFile(ctx context.Context, tctx tools.ToolContext, p
 	if err := op.retainResult(ctx, pair); err != nil {
 		return err
 	}
-	n, err := copyFileWithinLimit(ctx, tctx, resolvedMutationTarget(srcResolved), resolvedMutationTarget(dstResolved), maxBytes, memory)
+	publication, err := copyFileWithinLimit(ctx, tctx, resolvedMutationTarget(srcResolved), resolvedMutationTarget(dstResolved), maxBytes, memory)
+	if publication.Publication.Committed() {
+		result.Effects++
+		result.Copied = append(result.Copied, copyResult{From: fromSlash, To: toSlash, Bytes: publication.Bytes})
+		afterSuccessfulMutation(ctx, tctx, toSlash)
+	}
 	if err != nil {
 		reject := &toolrejection.ToolReject{}
 		if errors.As(err, &reject) {
@@ -203,8 +211,6 @@ func (op *CopyOperation) copyFile(ctx context.Context, tctx tools.ToolContext, p
 		}
 		return fmt.Errorf("copy %s -> %s: %w", pair.From, pair.To, err)
 	}
-	result.Copied = append(result.Copied, copyResult{From: fromSlash, To: toSlash, Bytes: n})
-	afterSuccessfulMutation(ctx, tctx, toSlash)
 	if in.Preserve {
 		return preserveMetadata(ctx, tctx, srcResolved.Abs, resolvedMutationTarget(dstResolved))
 	}
@@ -282,17 +288,13 @@ func stageCopyFileWithinLimit(ctx context.Context, tctx tools.ToolContext, sourc
 	return stage, result, nil
 }
 
-func copyFileWithinLimit(ctx context.Context, tc tools.ToolContext, source, target mutationTarget, maximum int64, memory *toolcontract.ProgramMemory) (int64, error) {
+func copyFileWithinLimit(ctx context.Context, tc tools.ToolContext, source, target mutationTarget, maximum int64, memory *toolcontract.ProgramMemory) (fseffect.Result, error) {
 	staged, result, err := stageCopyFileWithinLimit(ctx, tc, source, target, maximum, memory)
 	if err != nil {
-		return 0, err
+		return result, err
 	}
 	defer staged.Close()
-	result, err = staged.Commit(ctx, tc)
-	if err != nil {
-		return 0, err
-	}
-	return result.Bytes, nil
+	return staged.Commit(ctx, tc)
 }
 
 // retainResult admits result backing overlap and retained path bytes before the

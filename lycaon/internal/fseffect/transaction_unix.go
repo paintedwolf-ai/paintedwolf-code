@@ -616,19 +616,19 @@ func platformTimes(loc Location, access, modify *time.Time) error {
 }
 
 // MkdirAll creates every missing component without traversing symlinks.
-func MkdirAll(loc Location, mode os.FileMode) error {
+func MkdirAll(loc Location, mode os.FileMode) (createdCount int, err error) {
 	clean, err := cleanLocation(loc)
 	if err != nil {
-		return err
+		return createdCount, err
 	}
 	root, err := openRoot(clean.Root)
 	if err != nil {
-		return err
+		return createdCount, err
 	}
 	defer root.close()
 	fd, err := unix.Dup(int(root.file.Fd()))
 	if err != nil {
-		return err
+		return createdCount, err
 	}
 	current := os.NewFile(uintptr(fd), root.path)
 	defer func() { _ = current.Close() }()
@@ -641,30 +641,31 @@ func MkdirAll(loc Location, mode os.FileMode) error {
 			mkdirErr := unix.Mkdirat(int(current.Fd()), component, uint32(mode.Perm()))
 			if mkdirErr == nil {
 				created = true
+				createdCount++
 			} else if !errors.Is(mkdirErr, unix.EEXIST) {
-				return mkdirErr
+				return createdCount, mkdirErr
 			}
 			next, openErr = unix.Openat(int(current.Fd()), component,
 				unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
 		}
 		if openErr != nil {
 			if errors.Is(openErr, unix.ELOOP) || errors.Is(openErr, unix.ENOTDIR) {
-				return fmt.Errorf("%w: %q", ErrSymlink, component)
+				return createdCount, fmt.Errorf("%w: %q", ErrSymlink, component)
 			}
-			return openErr
+			return createdCount, openErr
 		}
 		if created {
 			anyCreated = true
 			if err := fsyncFD(int(current.Fd())); err != nil {
 				_ = unix.Close(next)
-				return err
+				return createdCount, err
 			}
 		}
 		_ = current.Close()
 		current = os.NewFile(uintptr(next), component)
 	}
 	if !anyCreated {
-		return nil
+		return createdCount, nil
 	}
-	return fsyncFD(int(current.Fd()))
+	return createdCount, fsyncFD(int(current.Fd()))
 }

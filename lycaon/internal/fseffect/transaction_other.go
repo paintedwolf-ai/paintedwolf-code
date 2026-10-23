@@ -13,9 +13,9 @@ func OpenWrite(Location, bool, os.FileMode) (*os.File, error) { return nil, ErrU
 func stageReplace(ReplaceRequest, func(stage) error) (*Replacement, Result, error) {
 	return nil, Result{}, ErrUnsupported
 }
-func Remove(RemoveRequest) error           { return ErrUnsupported }
-func Rename(string, string, string) error  { return ErrUnsupported }
-func MkdirAll(Location, os.FileMode) error { return ErrUnsupported }
+func Remove(RemoveRequest) error                  { return ErrUnsupported }
+func Rename(string, string, string) error         { return ErrUnsupported }
+func MkdirAll(Location, os.FileMode) (int, error) { return 0, ErrUnsupported }
 func UpdateMode(ModeUpdateRequest) (ModeUpdateResult, error) {
 	return ModeUpdateResult{}, ErrUnsupported
 }

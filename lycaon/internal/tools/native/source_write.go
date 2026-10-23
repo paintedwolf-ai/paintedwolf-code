@@ -125,13 +125,17 @@ func applyAgentStream(ctx context.Context, tctx tools.ToolContext, req agentStre
 }
 
 func stageAgentStream(ctx context.Context, tctx tools.ToolContext, req agentStreamRequest) (*agentStreamStage, fseffect.Result, error) {
-	stage := &agentStreamStage{request: req}
+	var releaseWorking func()
 	if req.Memory != nil {
-		release, err := req.Memory.Reserve(ctx, 64<<10)
+		release, err := req.Memory.Reserve(ctx, 72<<10)
 		if err != nil {
 			return nil, fseffect.Result{}, err
 		}
-		stage.releaseWorking = release
+		releaseWorking = release
+	}
+	// Admit fixed stage metadata plus overlapping copy and verification scratch.
+	stage := &agentStreamStage{request: req, releaseWorking: releaseWorking}
+	if req.Memory != nil {
 		stage.copyBuffer = make([]byte, 32<<10)
 	}
 	ready := false
@@ -324,23 +328,24 @@ func discardAgentEntry(ctx context.Context, tctx tools.ToolContext, target mutat
 	return finishAgentMutation(ctx, tctx, mutation, journal, fseffect.Remove(remove))
 }
 
-func mkdirAgentPath(ctx context.Context, tctx tools.ToolContext, target mutationTarget, mode os.FileMode) error {
+func mkdirAgentPath(ctx context.Context, tctx tools.ToolContext, target mutationTarget, mode os.FileMode) (int, error) {
 	_, statErr := os.Lstat(target.Abs)
 	if statErr == nil {
 		return fseffect.MkdirAll(target.Location, mode)
 	}
 	if !os.IsNotExist(statErr) {
-		return statErr
+		return 0, statErr
 	}
 	mutation := agentMutation{Op: api.SourceChangeOpCreate, AbsPath: target.Abs, IsDir: true}
 	if err := reviewAgentMutation(ctx, tctx, mutation, target.Location, fseffect.Location{}, false); err != nil {
-		return err
+		return 0, err
 	}
 	journal, err := prepareAgentMutation(ctx, tctx, mutation, target.Location, fseffect.Location{}, false)
 	if err != nil {
-		return err
+		return 0, err
 	}
-	return finishAgentMutation(ctx, tctx, mutation, journal, fseffect.MkdirAll(target.Location, mode))
+	created, effectErr := fseffect.MkdirAll(target.Location, mode)
+	return created, finishAgentMutation(ctx, tctx, mutation, journal, effectErr)
 }
 
 func renameAgentPath(ctx context.Context, tctx tools.ToolContext, from, to mutationTarget) error {
@@ -556,17 +561,17 @@ func captureAgentFileAt(loc fseffect.Location, ctx context.Context, memory *tool
 	if !info.Mode().IsRegular() {
 		return agentFileEvidence{exists: true, isDir: info.IsDir()}, nil
 	}
+	release, err := (ExecutionRevisions{Memory: memory}).reserveWorking(ctx, 36<<10)
+	if err != nil {
+		return agentFileEvidence{}, err
+	}
+	defer release()
 	h := sha256.New()
 	captured := revisionCapture{ctx: ctx, memory: memory}
 	var output io.Writer = h
 	if retainBody {
 		output = io.MultiWriter(h, &captured)
 	}
-	release, err := (ExecutionRevisions{Memory: memory}).reserveWorking(ctx, 32<<10)
-	if err != nil {
-		return agentFileEvidence{}, err
-	}
-	defer release()
 	scratch := make([]byte, 32<<10)
 	size, err := io.CopyBuffer(output, contextio.Reader{Context: ctx, Source: f}, scratch)
 	if err != nil {

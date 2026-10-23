@@ -95,6 +95,7 @@ func (p *copyPage) Flush() error {
 		if !completion.Result.Publication.Committed() {
 			continue
 		}
+		p.result.Effects++
 		entry := p.entries[i]
 		p.result.Copied = append(p.result.Copied, copyResult{From: filepath.ToSlash(entry.pair.From), To: filepath.ToSlash(entry.pair.To), Bytes: entry.bytes})
 		p.operation.used.Bytes += entry.bytes

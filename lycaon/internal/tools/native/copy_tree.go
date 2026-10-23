@@ -61,7 +61,9 @@ func (op *CopyOperation) copyTree(ctx context.Context, tc tools.ToolContext, sou
 	if err := walkCopyTree(ctx, root, base, ".", inspect, nil, memory); err != nil {
 		return err
 	}
-	if err := mkdirAgentPath(ctx, tc, resolvedMutationTarget(destination), 0o755); err != nil {
+	created, err := mkdirAgentPath(ctx, tc, resolvedMutationTarget(destination), 0o755)
+	result.Effects += created
+	if err != nil {
 		return err
 	}
 	page, err := newCopyPage(ctx, tc, op, result)
@@ -79,7 +81,9 @@ func (op *CopyOperation) copyTree(ctx context.Context, tc tools.ToolContext, sou
 			if err != nil {
 				return err
 			}
-			return mkdirAgentPath(ctx, tc, resolvedMutationTarget(target), 0o755)
+			created, err := mkdirAgentPath(ctx, tc, resolvedMutationTarget(target), 0o755)
+			result.Effects += created
+			return err
 		}
 		used.Files++
 		if err := copyTreeWithinCaps(used.Files, used.Bytes, caps, filepath.ToSlash(pair.From)); err != nil {

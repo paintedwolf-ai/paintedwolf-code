@@ -116,7 +116,7 @@ func (s *SourceEffects) openSourceStage(ctx context.Context, row *sourceMutation
 	plan := &row.Plan
 	parent := filepath.Dir(plan.Path)
 	if parent != "." {
-		if err := fseffect.MkdirAll(fseffect.Location{Root: plan.RootPath, Rel: parent}, sourceCreateDirMode); err != nil {
+		if _, err := fseffect.MkdirAll(fseffect.Location{Root: plan.RootPath, Rel: parent}, sourceCreateDirMode); err != nil {
 			return nil, err
 		}
 	}
