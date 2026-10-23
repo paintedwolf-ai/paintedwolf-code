@@ -80,19 +80,21 @@ class ProviderRecoveryTests(unittest.TestCase):
         witness = {**recovery.registered(document, binding, str(os.getuid())),
                    'prior_execution_sha256': hashlib.sha256(raw).hexdigest()}
         current = {'operation': 'reply-fixture-prompt-v1', 'completed': False, 'events': []}
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            leaf = root / 'leaf/evidence/conversation/restart-and-reconnect'
-            leaf.mkdir(parents=True)
-            (leaf / 'provider-registration.bin').write_bytes(raw)
-            (leaf / 'execution.json').write_text(json.dumps({'artifact': binding['artifact'], 'observations': {
-                'provider_recovery': witness, 'launch_before': {'session': {'User': str(os.getuid())},
-                                                               'fixed_input': [current]}}}))
-            records, operations = controller.delivery_records(root, binding['native_input']['binding'], 'owned')
-            self.assertEqual((records, operations), ([current], ['reply-fixture-prompt-v1']))
-            (leaf / 'provider-registration.bin').write_bytes(raw + b' ')
-            with self.assertRaises(ValueError):
-                controller.delivery_records(root, binding['native_input']['binding'], 'owned')
+        for case, launch in [('conversation/restart-and-reconnect', 'launch_before'),
+                             ('windowing/workspace-activation-and-exit', 'launch')]:
+            with tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                leaf = root / ('leaf/evidence/' + case)
+                leaf.mkdir(parents=True)
+                (leaf / 'provider-registration.bin').write_bytes(raw)
+                (leaf / 'execution.json').write_text(json.dumps({'artifact': binding['artifact'], 'observations': {
+                    'provider_recovery': witness, launch: {'session': {'User': str(os.getuid())},
+                                                                   'fixed_input': [current]}}}))
+                records, operations = controller.delivery_records(root, binding['native_input']['binding'], 'owned')
+                self.assertEqual((records, operations), ([current], ['reply-fixture-prompt-v1']))
+                (leaf / 'provider-registration.bin').write_bytes(raw + b' ')
+                with self.assertRaises(ValueError):
+                    controller.delivery_records(root, binding['native_input']['binding'], 'owned')
 
     def test_recovery_server_exclusively_binds_only_canonical_loopback(self):
         calls = [{'name': 'command', 'arguments': {'command': '/usr/bin/true'}}]

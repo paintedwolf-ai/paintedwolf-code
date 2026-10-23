@@ -74,9 +74,20 @@ class BarrierTests(unittest.TestCase):
             expired.require_held()
 
     def test_real_authenticated_http_request_is_held_then_written_on_release(self):
+        self.http_barrier()
+        calls = [{'name': 'command', 'arguments': {'command': '/usr/bin/true'}}]
+        with ProviderFixture.gui(calls) as previous:
+            endpoint = previous.base_url
+        # The same canonical endpoint and the response barrier must coexist;
+        # recovery cannot silently choose another port or bypass real transport.
+        self.http_barrier(endpoint)
+
+    def http_barrier(self, endpoint=None):
         barrier = ResponseBarrier()
         calls = [{'name': 'command', 'arguments': {'command': '/usr/bin/true'}}]
-        with ProviderFixture.gui(calls, response_barrier=barrier) as fixture:
+        with ProviderFixture.gui(calls, endpoint=endpoint, response_barrier=barrier) as fixture:
+            if endpoint is not None:
+                self.assertEqual(fixture.base_url, endpoint)
             request = {'model': MODEL, 'messages': [{'role': 'user', 'content': 'fixed fixture'}],
                 'tools': [{'type': 'function', 'function': {'name': 'command'}}]}
             results, errors = [], []
