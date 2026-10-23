@@ -96,7 +96,7 @@ reachable device and keeps the fastest that meets `engine.reference_ms`
 ship as `engine-root/decide/mlx.metallib` (about 136 MB, the framework's
 whole kernel library); the host passes that path as `--metallib`, and the
 engine also finds a copy beside its own executable. Building the engine on a
-Mac compiles MLX from source once (CMake, network for the framework
+Mac compiles MLX from pinned offline source archives (CMake, no framework
 checkout, and Xcode's Metal toolchain: `xcodebuild -downloadComponent
 MetalToolchain` when the build says it cannot execute `metal`). The engine
 caps MLX's allocator cache at 512 MB when it loads: every request has its own

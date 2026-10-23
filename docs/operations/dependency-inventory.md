@@ -188,3 +188,9 @@ successful upstream refresh. After Go bumps, refresh the vendored database befor
   each patch that upstream has absorbed.
 * **Charm v2, `ureq` 3, and TypeScript 7:** keep the current majors until the migration is
   scheduled as its own work.
+
+### Offline MLX source updates
+
+Apple silicon builds read `third_party/mlx/pin.json` and its compressed source archives through the repository's Cargo CMake toolchain setting. MLX 0.32.2 and its required Metal C++, fmt, JSON and gguflib sources occupy about 9 MiB compressed. Keeping the exact upstream archives in the existing third-party source tree makes a fresh checkout build offline; the archives retain upstream licence files, and shipped notices remain in `licensing/texts/mlx-compiled-notices.md`. Linux builds do not select these sources.
+
+When updating `mlx-rs` or `mlx-sys`, inspect the pinned crate's mlx-c CMake declarations and MLX's nested dependencies. Resolve each Git tag to its full commit, download its source archive, record its SHA-256 and archive root in `third_party/mlx/pin.json`, and update the crate version there. For Metal C++, retain the exact versioned Apple archive URL and checksum. Review licence and compiled-notice changes together. A missing archive, digest mismatch, changed crate version or requested MLX tag fails before FetchContent can download anything; `FETCHCONTENT_FULLY_DISCONNECTED` stays enabled. Run `./task test:runner`, then a cold `./task den:test:rust` on Apple silicon and another captured-source run to confirm cache reuse.

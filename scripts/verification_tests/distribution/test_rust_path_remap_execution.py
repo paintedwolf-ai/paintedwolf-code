@@ -55,6 +55,14 @@ class RustPathRemap(unittest.TestCase):
         self.assertEqual(flags[-1], "--remap-path-prefix=/home/builder/my work=/source")
         self.assertNotIn("my work", cflags)
 
+    def test_snapshot_slots_keep_identical_compiler_flags(self):
+        environment = {**self.environment, "PW_SOURCE_SNAPSHOT_COMMIT": "captured"}
+        first = remapped(environment, "/tmp/source-snapshots/repo-0")
+        second = remapped(environment, "/tmp/source-snapshots/repo-1")
+        self.assertEqual(first, second)
+        self.assertEqual(first[0][-1], "--remap-path-prefix=/tmp/source-snapshots=/source")
+        self.assertNotIn("repo-0", first[2])
+
     def test_unset_toolchain_homes_default_beneath_home(self):
         flags, *_ = remapped({"HOME": "/home/builder"}, "/src")
         self.assertIn("--remap-path-prefix=/home/builder/.cargo=/cargo", flags)
