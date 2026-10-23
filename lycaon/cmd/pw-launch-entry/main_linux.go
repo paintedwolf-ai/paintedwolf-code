@@ -26,6 +26,8 @@ func run(args []string, stderr io.Writer) int {
 	switch {
 	case len(args) == 1:
 		err = launchguard.EnterDesktop()
+	case len(args) == 2 && args[1] == launchguard.MountSourceArgument:
+		err = launchguard.RunMountSource()
 	case len(args) == 2 && args[1] == launchguard.BrokerAgentArgument:
 		err = launchguard.RunBrokerAgent()
 	default:

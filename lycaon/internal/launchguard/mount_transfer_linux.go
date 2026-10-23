@@ -23,6 +23,7 @@ const (
 	mountTransferAdopt  = 3
 	mountTransferReady  = 4
 	mountTransferAck    = 5
+	mountTransferOpen   = 6
 )
 
 type mountTransfer struct {
@@ -37,7 +38,7 @@ func (message mountTransfer) validate() error {
 		return errors.New("invalid mount transfer sequence")
 	}
 	switch message.kind {
-	case mountTransferAdd, mountTransferRemove, mountTransferAdopt:
+	case mountTransferAdd, mountTransferRemove, mountTransferAdopt, mountTransferOpen:
 		if message.id == 0 || len(message.path) > mountTransferPath || !filepath.IsAbs(message.path) || filepath.Clean(message.path) != message.path || strings.ContainsRune(message.path, 0) {
 			return errors.New("invalid mount transfer identity or path")
 		}

@@ -152,8 +152,8 @@ func decodeMountInfoField(raw string) (string, bool) {
 	return value, !strings.ContainsRune(value, 0)
 }
 
-// New startup admission consumes the complete topology. Unlike the historical
-// diagnostic parser above, one malformed record refuses the entire snapshot.
+// Complete-topology admission refuses the entire snapshot on any malformed,
+// oversized, cyclic or incomplete record set.
 func parseMountTopology(raw []byte) ([]mountEntry, error) {
 	if len(raw) == 0 || len(raw) > maxMountTopologyBytes || raw[len(raw)-1] != '\n' {
 		return nil, errors.New("truncated mount topology")
