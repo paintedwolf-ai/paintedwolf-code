@@ -1,0 +1,15 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/api/sourceapi/sourceapi.Watch",
+  "kind": "runtime_service",
+  "workstream": "store-health",
+  "disposition": "retain",
+  "reason": "Watch binding, inventory scheduling, and callback lifetime share the host watch lifecycle. Suspension adds admission fencing at that boundary, with no new external dependency. Retain 16 methods and 14 fields; further growth requires renewed review.",
+  "reviewed_commit": "d343c29b138815e0e1f8332fb8fb8ee1dfca57f1",
+  "ceiling": 14,
+  "boundaries": {
+    "lycaon/internal/api/sourceapi/source_watch_suspension_test.go": "31f261fb567c7745fa4e3bdb76f029c0295f16ca95c0dde210ea04be05c0bccc",
+    "lycaon/internal/sourcefeed/watch_drain_test.go": "8e686eb77518ed8aa50ca466528554ca63d99e8c54a5eab0b348379eaa00ceeb"
+  },
+  "reviewed_shape": "9813579dc09e6da8a83e7e67d388c1eb950fae6838dd5cf64c3258fb303cfd7e"
+}
