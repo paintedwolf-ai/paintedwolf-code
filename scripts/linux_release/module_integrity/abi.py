@@ -11,6 +11,39 @@ MACHINES = {62: "x86_64", 183: "aarch64"}
 WITNESS = "pw_module_guard_witness_v2"
 
 
+def build_digest(directory: Path) -> Path:
+    """Build preparation only; privileged generation publication never runs tools."""
+    import shutil
+    import subprocess
+    import os
+    root = Path(__file__).resolve().parents[3]
+    source = root / "packaging/linux/module-audit/digest"
+    crate = directory / "crate"
+    crate.mkdir(parents=True, exist_ok=False)
+    shutil.copyfile(source / "Cargo.toml", crate / "Cargo.toml")
+    shutil.copytree(source / "src", crate / "src")
+    locked = source / "Cargo.lock"
+    shutil.copyfile(locked if locked.exists() else root / "lycaon-den/src-tauri/Cargo.lock", crate / "Cargo.lock")
+    command = ["cargo", "rustc", "--offline", "--release", "--manifest-path", str(crate / "Cargo.toml"),
+               "--target-dir", str(directory / "target")]
+    if locked.exists():
+        command.append("--locked")
+    environment = dict(os.environ)
+    environment["RUSTFLAGS"] = environment.get("RUSTFLAGS", "") + " -C relocation-model=pic"
+    subprocess.run(command, check=True, env=environment)
+    if artifact_root := os.environ.get("PW_ARTIFACT_ROOT"):
+        import uuid
+        retained = Path(artifact_root) / "module-digest-preparation" / uuid.uuid4().hex
+        retained.mkdir(parents=True, exist_ok=False)
+        shutil.copyfile(crate / "Cargo.lock", retained / "Cargo.lock")
+        (retained / "inputs.json").write_text(json.dumps({
+            "manifest_sha256": hashlib.sha256((source / "Cargo.toml").read_bytes()).hexdigest(),
+            "source_sha256": hashlib.sha256((source / "src/lib.rs").read_bytes()).hexdigest(),
+            "archive_sha256": hashlib.sha256((directory / "target/release/libpw_module_digest.a").read_bytes()).hexdigest(),
+        }, indent=2) + "\n")
+    return directory / "target/release/libpw_module_digest.a"
+
+
 class ELF:
     def __init__(self, path: Path):
         if path.is_symlink() or not path.is_file() or path.stat().st_size > LIMIT:
@@ -142,10 +175,18 @@ def policy_bytes(roots: list[str], guard: str, offset: int, nonce: bytes) -> byt
 def main():
     import argparse
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--auditor", type=Path, required=True)
-    parser.add_argument("--guard", type=Path, required=True)
+    parser.add_argument("--auditor", type=Path)
+    parser.add_argument("--guard", type=Path)
+    parser.add_argument("--build-digest", action="store_true")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
+    if args.build_digest:
+        if args.auditor or args.guard:
+            parser.error("digest preparation does not accept module inputs")
+        print(build_digest(args.output))
+        return
+    if not args.auditor or not args.guard:
+        parser.error("auditor and guard are required for ABI metadata")
     if args.output.resolve() in (args.auditor.resolve(), args.guard.resolve()):
         parser.error("ABI output must not replace either module")
     report = describe(args.auditor, args.guard)

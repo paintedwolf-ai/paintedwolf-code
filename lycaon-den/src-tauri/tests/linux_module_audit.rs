@@ -23,10 +23,23 @@ fn run(program: &str, args: &[&str]) -> String {
 }
 
 fn freestanding(source: &Path, output: &Path, extra: &[&str]) {
+    static DIGEST: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+    let digest = DIGEST.get_or_init(|| {
+        let root = sources().parent().unwrap().parent().unwrap().parent().unwrap().to_path_buf();
+        let directory = std::env::var_os("PW_ARTIFACT_ROOT").map(PathBuf::from)
+            .unwrap_or_else(std::env::temp_dir).join(format!("module-digest-{}", std::process::id()));
+        let archive = run("python3", &[root.join("scripts/linux_release/module_integrity/abi.py").to_str().unwrap(),
+            "--build-digest", "--output", directory.to_str().unwrap()]);
+        PathBuf::from(archive.trim())
+    });
     let mut args = vec!["-shared", "-fPIC", "-nostdlib", "-ffreestanding", "-fno-builtin",
         "-fno-stack-protector", "-O2", "-Wall", "-Wextra", "-Werror"];
     args.extend_from_slice(extra);
-    args.extend_from_slice(&[source.to_str().unwrap(), "-o", output.to_str().unwrap()]);
+    args.push(source.to_str().unwrap());
+    if source.file_name().unwrap() == "audit.c" {
+        args.extend_from_slice(&[digest.to_str().unwrap(), "-Wl,--exclude-libs,ALL,-Bsymbolic"]);
+    }
+    args.extend_from_slice(&["-o", output.to_str().unwrap()]);
     run("cc", &args);
 }
 
@@ -133,7 +146,7 @@ impl Fixture {
         run("cc", &["-shared", "-fPIC", "-Wl,-soname,module-ctor.so", constructor.to_str().unwrap(),
             "-o", build.join("module-ctor.so").to_str().unwrap()]);
         let probe = build.join("probe.c");
-        fs::write(&probe, "#include <dlfcn.h>\n#include <unistd.h>\nint main(int n,char**v){if(n==2&&!dlopen(v[1],RTLD_NOW))return 42;write(1,\"M\",1);return 0;}\n").unwrap();
+        fs::write(&probe, "#define _GNU_SOURCE\n#include <dlfcn.h>\n#include <unistd.h>\nint main(int n,char**v){if(n==2&&!(v[1][0]=='@'?dlmopen(LM_ID_NEWLM,v[1]+1,RTLD_NOW):dlopen(v[1],RTLD_NOW)))return 42;write(1,\"M\",1);return 0;}\n").unwrap();
         run("cc", &[probe.to_str().unwrap(), "-Wl,--no-as-needed", guard.to_str().unwrap(),
             build.join("module-ctor.so").to_str().unwrap(), "-Wl,-rpath,/usr/lib",
             "-o", build.join("probe").to_str().unwrap()]);
@@ -159,6 +172,18 @@ impl Fixture {
         place(&auditor, "/audit/pw-module-audit.so");
         place(&program, "/bin/probe");
         place(&build.join("launcher"), "/bin/launcher");
+        let sibling = build.join("sibling.c");
+        fs::write(&sibling, "int sibling(void){return 42;}\n").unwrap();
+        let sibling_so = build.join("liborigin-sibling.so");
+        run("cc", &["-shared", "-fPIC", "-Wl,-soname,liborigin-sibling.so", sibling.to_str().unwrap(),
+            "-o", sibling_so.to_str().unwrap()]);
+        let origin = build.join("origin.c");
+        fs::write(&origin, "#include <unistd.h>\nextern int sibling(void);\nstatic void __attribute__((constructor)) c(void){if(sibling()==42)write(1,\"O\",1);}\n").unwrap();
+        let origin_so = build.join("origin.so");
+        run("cc", &["-shared", "-fPIC", origin.to_str().unwrap(), "-L", build.to_str().unwrap(),
+            "-lorigin-sibling", "-Wl,-rpath,$ORIGIN", "-o", origin_so.to_str().unwrap()]);
+        place(&sibling_so, "/usr/lib/origin/liborigin-sibling.so");
+        place(&origin_so, "/usr/lib/origin/origin.so");
         fs::create_dir(tree.join("proc")).unwrap();
         for directory in walk(&tree) {
             fs::set_permissions(&directory, fs::Permissions::from_mode(0o755)).unwrap();
@@ -222,6 +247,35 @@ impl Fixture {
         let mut selected = vec![loader.clone()];
         selected.extend(roots.iter().map(|root| root.to_string()).filter(|root| *root != loader));
         self.write_policy(&selected.iter().map(String::as_str).collect::<Vec<_>>());
+    }
+
+    fn bind_inventory(&self) {
+        let root = sources().parent().unwrap().parent().unwrap().parent().unwrap().to_path_buf();
+        let build = self._directory.path().join("build");
+        let code = r#"
+import hashlib, pathlib, shutil, sys
+repo, tree, build = map(pathlib.Path, sys.argv[1:4])
+sys.path.insert(0, str(repo / 'scripts'))
+from linux_release.module_integrity import abi, binding, inventory
+audit, guard = build / 'pw-module-audit.so', build / 'pw-module-guard.so'
+meta = abi.describe(audit, guard)
+digest_offset = next(row[4] for row in abi.ELF(guard).symbols() if row[0] == 'pw_module_inventory_digest_v1')
+selected = {'/' + p.relative_to(tree).as_posix(): p for p in (tree / 'usr/lib').rglob('*')
+            if p.is_file() and p.name != 'pw-module-guard.so'}
+loader = sys.argv[4]
+selected[loader] = tree / loader.lstrip('/')
+rows = [{'path': name, 'size': p.stat().st_size, 'sha256': hashlib.sha256(p.read_bytes()).hexdigest()}
+        for name, p in selected.items()]
+raw = inventory.encode(rows, '/usr/lib/pw-module-guard.so', meta['guard_witness_offset'], digest_offset, meta['architecture'])
+out = build / 'bound'
+out.mkdir()
+binding.bind(audit, guard, raw, out)
+shutil.copyfile(out / 'pw-module-audit.so', tree / 'audit/pw-module-audit.so')
+shutil.copyfile(out / 'pw-module-guard.so', tree / 'usr/lib/pw-module-guard.so')
+"#;
+        let loader = interpreter(&self.tree.join("bin/probe"));
+        run("python3", &["-c", code, root.to_str().unwrap(), self.tree.to_str().unwrap(),
+            build.to_str().unwrap(), &loader]);
     }
 }
 
@@ -319,4 +373,24 @@ fn the_guard_refuses_without_the_auditor_or_its_sealed_policy() {
         let output = fixture.launch(&[mode, audit, "/bin/probe"]);
         assert_eq!(outcome(&output), (Some(125), String::new()), "{mode} {audit} reached a constructor");
     }
+}
+
+#[test]
+fn bound_module_bytes_preserve_origin_in_existing_and_new_loader_namespaces() {
+    let fixture = Fixture::new();
+    fixture.selected(&["/usr/lib"]);
+    fixture.bind_inventory();
+    for path in ["/usr/lib/origin/origin.so", "@/usr/lib/origin/origin.so"] {
+        let output = fixture.launch(&["sealed", "audit", "/bin/probe", path]);
+        assert_eq!(outcome(&output), (Some(0), "COM".to_owned()), "{}", String::from_utf8_lossy(&output.stderr));
+    }
+    let output = fixture.launch(&["sealed", "audit", "/bin/probe", "/foreign/module-ctor.so"]);
+    assert_eq!(outcome(&output), (Some(125), "C".to_owned()));
+    let guard = fixture.tree.join("usr/lib/pw-module-guard.so");
+    let mut bytes = fs::read(&guard).unwrap();
+    let last = bytes.len() - 1;
+    bytes[last] ^= 1;
+    fs::write(&guard, bytes).unwrap();
+    let output = fixture.launch(&["sealed", "audit", "/bin/probe"]);
+    assert_eq!(outcome(&output), (Some(125), String::new()), "an altered anchor was accepted");
 }

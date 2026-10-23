@@ -8,7 +8,10 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
-import linux_module_integrity as INTEGRITY
+from linux_release.module_integrity import abi as INTEGRITY
+from linux_release.module_integrity import binding as BINDING
+from linux_release.module_integrity import inventory as INVENTORY
+from linux_release.payload_inventory import tree as payload_tree
 
 ROOT = Path(__file__).resolve().parents[3]
 SOURCE = ROOT / "packaging/linux/module-audit"
@@ -20,11 +23,12 @@ class NativeModuleAuditTests(unittest.TestCase):
     def setUpClass(cls):
         cls.directory = tempfile.TemporaryDirectory(prefix="paintedwolf-audit-contract-")
         cls.root = Path(cls.directory.name)
+        cls.digest = INTEGRITY.build_digest(cls.root / "digest")
         cls.auditor = cls.root / "module-audit.so"
         compiled = subprocess.run([
             "cc", "-shared", "-fPIC", "-nostdlib", "-ffreestanding", "-fno-builtin",
             "-fno-stack-protector", "-O2", "-Wall", "-Wextra", "-Werror",
-            str(SOURCE / "audit.c"), "-o", str(cls.auditor),
+            str(SOURCE / "audit.c"), str(cls.digest), "-Wl,--exclude-libs,ALL,-Bsymbolic", "-o", str(cls.auditor),
         ], capture_output=True, text=True)
         if compiled.returncode:
             raise RuntimeError(compiled.stderr)
@@ -91,3 +95,62 @@ class NativeModuleAuditTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             INTEGRITY.policy_bytes(["/" + str(i) + "/" + "a" * 4000 for i in range(20)],
                                    "/0/" + "a" * 4000 + "/guard.so", 16056, nonce)
+
+    def test_embedded_inventory_precedes_final_payload_seal(self):
+        with tempfile.TemporaryDirectory(prefix="paintedwolf-bound-modules-") as scratch:
+            output = Path(scratch)
+            gate = INTEGRITY.ELF(self.guard)
+            offset = next(row[4] for row in gate.symbols() if row[0] == "pw_module_inventory_digest_v1")
+            raw = INVENTORY.encode([{"path": "/usr/lib/module.so", "size": 1, "sha256": "a" * 64}],
+                                   "/usr/lib/pw-module-guard.so", self.abi["guard_witness_offset"],
+                                   offset, self.abi["architecture"])
+            result = BINDING.bind(self.auditor, self.guard, raw, output)
+            self.assertEqual(result["input_auditor_sha256"], self.abi["auditor_sha256"])
+            self.assertNotEqual(result["final_abi"]["auditor_sha256"], self.abi["auditor_sha256"])
+            self.assertNotEqual(result["final_abi"]["guard_sha256"], self.abi["guard_sha256"])
+            rows = {row["path"]: row for row in payload_tree(output)}
+            self.assertEqual(rows["pw-module-audit.so"]["sha256"], result["final_abi"]["auditor_sha256"])
+            self.assertEqual(rows["pw-module-guard.so"]["sha256"], result["final_abi"]["guard_sha256"])
+            self.assertEqual(rows["module-inventory.bin"]["sha256"], result["inventory_sha256"])
+            self.assertEqual(INTEGRITY.describe(self.auditor, self.guard), self.abi)
+            with self.assertRaises(ValueError):
+                BINDING.bind(self.auditor, self.guard, raw, output)
+
+    def test_vetted_digest_vectors_and_fd_contract(self):
+        source = self.root / "digest-probe.c"
+        source.write_text(r'''
+#include <fcntl.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+extern int pw_sha256_bytes(const unsigned char *, size_t, unsigned char *);
+extern int pw_sha256_fd(int, uint64_t, unsigned char *);
+int main(int argc, char **argv) {
+ if(argc!=3)return 2;
+ unsigned char digest[32];
+ if(pw_sha256_bytes((const unsigned char *)"abc",3,digest))return 3;
+ for(unsigned i=0;i<32;++i)printf("%02x",digest[i]);
+ puts("");
+ int fd=open(argv[1],O_RDONLY);uint64_t size=strtoull(argv[2],0,10);
+ if(fd<0||lseek(fd,3,SEEK_SET)!=3||pw_sha256_fd(fd,size,digest)||lseek(fd,0,SEEK_CUR)!=3)return 4;
+ for(unsigned i=0;i<32;++i)printf("%02x",digest[i]);
+ puts("");
+ for(unsigned i=0;i<32;++i)digest[i]=0xa5;
+ if(pw_sha256_fd(fd,size+1,digest)!=-1)return 5;
+ for(unsigned i=0;i<32;++i)if(digest[i]!=0xa5)return 6;
+ if(size&&pw_sha256_fd(fd,size-1,digest)!=-1)return 7;
+ return close(fd)!=0;
+}
+''')
+        program = self.root / "digest-probe"
+        subprocess.run(["cc", str(source), str(self.digest), "-o", str(program)], check=True)
+        for data in (b"", b"abc", b"a" * 1000000):
+            module = self.root / "digest-input"
+            module.write_bytes(data)
+            output = subprocess.run([str(program), str(module), str(len(data))], check=True,
+                                    capture_output=True, text=True)
+            self.assertEqual(output.stdout.splitlines(), [
+                "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+                hashlib.sha256(data).hexdigest(),
+            ])

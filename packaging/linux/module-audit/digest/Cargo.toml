@@ -1,0 +1,16 @@
+[package]
+name = "pw-module-digest"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+sha2 = { version = "=0.10.9", default-features = false, features = ["force-soft"] }
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+opt-level = 2

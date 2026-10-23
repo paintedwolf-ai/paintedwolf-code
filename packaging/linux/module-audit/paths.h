@@ -1,6 +1,6 @@
 #ifndef PW_MODULE_PATHS_H
 #define PW_MODULE_PATHS_H
-#include "policy.h"
+#include "inventory.h"
 #define PW_NAME_LIMIT 1024
 static char pw_names[PW_NAME_LIMIT][PW_PATH_LIMIT];
 static unsigned pw_next_name;
@@ -33,11 +33,12 @@ static int pw_physical_chain(const char *path,const struct statx *selected) {
 static char *pw_selected_name(const char *name) {
  size_t n=pw_length(name,PW_PATH_LIMIT);
  if(n==0||n>=PW_PATH_LIMIT)pw_refuse();
- int fd=(int)pw_call(PW_OPENAT,AT_FDCWD,(long)name,O_PATH|O_CLOEXEC,0,0,0);
+ int fd=(int)pw_call(PW_OPENAT,AT_FDCWD,(long)name,(pw_inventory_ready?O_RDONLY:O_PATH)|O_CLOEXEC,0,0,0);
  if(fd==-2||fd==-20)return NULL; /* Candidate absent; the loader may search the next root. */
  if(fd<0)pw_refuse();
  struct statx facts;
- if(pw_stat(fd,&facts)!=0||!pw_root_controlled(&facts,0)){pw_close(fd);pw_refuse();}
+ if(pw_stat(fd,&facts)!=0||!pw_stat_complete(&facts)||(facts.stx_mode&0170000)!=0100000
+    ||(!pw_inventory_ready&&!pw_root_controlled(&facts,0))){pw_close(fd);pw_refuse();}
  char link[64]="/proc/self/fd/";size_t length=14;unsigned value=(unsigned)fd;
  char digits[16];size_t count=0;
  do{digits[count++]=(char)('0'+value%10);value/=10;}while(value);
@@ -47,11 +48,15 @@ static char *pw_selected_name(const char *name) {
  long size=pw_call(PW_READLINKAT,AT_FDCWD,(long)link,(long)physical,PW_PATH_LIMIT-1,0,0);
  if(size<=0||size>=PW_PATH_LIMIT-1){pw_close(fd);pw_refuse();}
  physical[size]=0;
- if(!pw_canonical(physical,(size_t)size)||!pw_in_policy(physical,(size_t)size)||!pw_physical_chain(physical,&facts)){
+ if(!pw_canonical(physical,(size_t)size)
+    ||(pw_inventory_ready?!pw_inventory_module(fd,physical,(size_t)size,&facts)
+       :(!pw_in_policy(physical,(size_t)size)||!pw_physical_chain(physical,&facts)))){
   pw_close(fd);pw_refuse();
  }
  pw_close(fd);
- /* The rtld lock serializes object searches; names remain valid for every namespace. */
+ /* The launch pins a read-only private runtime projection before rtld starts.
+  * Keep its real alias: proc-fd names change $ORIGIN and plugin lookup semantics.
+  * The rtld lock serializes searches; names remain valid for every namespace. */
  for(unsigned i=0;i<pw_next_name;++i)
   if(pw_equal(pw_names[i],physical,(size_t)size+1))return pw_names[i];
  if(pw_next_name==PW_NAME_LIMIT)pw_refuse();

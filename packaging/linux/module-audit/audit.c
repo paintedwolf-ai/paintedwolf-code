@@ -13,7 +13,13 @@ static int handshake_pipe(void) {
 }
 unsigned int la_version(unsigned int version) {
  if(version<LAV_CURRENT)pw_refuse();
- pw_load_policy();
+ int bound=pw_load_inventory();
+ if(!bound)pw_load_policy();
+ if(bound&&handshake_pipe()) {
+  const char *guard=pw_guard_path;uint16_t size=pw_guard_size;uint64_t offset=pw_guard_offset;
+  pw_load_policy();
+  if(pw_guard_size!=size||pw_guard_offset!=offset||!pw_equal(pw_guard_path,guard,size))pw_refuse();
+ }
  unsigned char frame[40];
  for(size_t i=0;i<8;++i)frame[i]=(unsigned char)"PWAUD01\0"[i];
  for(size_t i=0;i<32;++i)frame[8+i]=pw_policy[16+i];
@@ -43,7 +49,7 @@ unsigned int la_objopen(struct link_map *map,Lmid_t namespace,uintptr_t *cookie)
      ||header->e_ident[EI_DATA]!=ELFDATA2LSB||header->e_phnum>64||header->e_phentsize!=sizeof(Elf64_Phdr)
      ||header->e_phoff>65536)pw_refuse();
   const Elf64_Phdr *segments=(const Elf64_Phdr *)(map->l_addr+header->e_phoff);
-  int writable=0,relro=0;
+  int writable=0,relro=0,digest=0;
   for(unsigned i=0;i<header->e_phnum;++i) {
    uint64_t start=segments[i].p_vaddr,bytes=segments[i].p_memsz;
    if(pw_guard_offset<start||bytes<8||pw_guard_offset-start>bytes-8)continue;
@@ -51,6 +57,17 @@ unsigned int la_objopen(struct link_map *map,Lmid_t namespace,uintptr_t *cookie)
    if(segments[i].p_type==PT_GNU_RELRO)relro=1;
   }
   if(!writable||!relro||map->l_addr+pw_guard_offset<map->l_addr)pw_refuse();
+  if(pw_inventory_ready) {
+   for(unsigned i=0;i<header->e_phnum;++i) {
+    uint64_t start=segments[i].p_vaddr,bytes=segments[i].p_memsz;
+    if(segments[i].p_type==PT_LOAD&&!(segments[i].p_flags&PF_W)&&bytes>=48
+       &&pw_guard_inventory_offset>=start&&pw_guard_inventory_offset-start<=bytes-48)digest=1;
+   }
+   if(!digest||map->l_addr+pw_guard_inventory_offset<map->l_addr)pw_refuse();
+   const unsigned char *binding=(const unsigned char *)(map->l_addr+pw_guard_inventory_offset);
+   if(!pw_equal((const char *)binding,"PW-HASH-SLOT-V1\0",16)
+      ||!pw_equal((const char *)binding+16,(const char *)pw_inventory_digest,32))pw_refuse();
+  }
   *(volatile uint64_t *)(map->l_addr+pw_guard_offset)=PW_GUARD_WITNESS;
  }
  return 0;
