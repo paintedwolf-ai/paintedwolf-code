@@ -1,6 +1,8 @@
 """Observe retained AT-SPI objects across closed app-frame transitions."""
 from __future__ import annotations
 
+import os
+import select
 import time
 
 from ..installed_cases.app import process_identity
@@ -14,15 +16,33 @@ class FrameObserver:
         self.app, self.ui = app, ui
         self.launch = dict(app.observations['launch_identity'])
         self.engine = dict(app.observations['engine_identity'])
-        self.nodes = {}
-        self._runtime()
-        frames = [node for _, node in ui.windows() if node.getRole() == ui.api.ROLE_FRAME
-                  and node.getState().contains(ui.api.STATE_ACTIVE)]
-        if len(frames) != 1:
-            raise CaseUnavailable('owned-original-active-frame-is-missing-or-ambiguous')
-        self.main = self._identity(frames[0])
-        self.nodes[self._key(self.main)] = frames[0]
-        self.observe()
+        self.nodes, self.pins = {}, {}
+        try:
+            self._runtime()
+            for name, identity in (('launch', self.launch), ('engine', self.engine)):
+                self.pins[name] = os.pidfd_open(identity['pid'])
+            self._runtime()
+            frames = [node for _, node in ui.windows() if node.getRole() == ui.api.ROLE_FRAME
+                      and node.getState().contains(ui.api.STATE_ACTIVE)]
+            if len(frames) != 1:
+                raise CaseUnavailable('owned-original-active-frame-is-missing-or-ambiguous')
+            self.main = self._identity(frames[0])
+            self._capture(frames[0])
+            self.observe()
+        except BaseException:
+            self.close()
+            raise
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, kind, value, traceback):
+        self.close()
+
+    def close(self):
+        for descriptor in self.pins.values():
+            os.close(descriptor)
+        self.pins.clear()
 
     @staticmethod
     def _key(identity):
@@ -46,8 +66,7 @@ class FrameObserver:
         return identity
 
     def _parent(self, node):
-        matches = []
-        relations = node.getRelationSet()
+        matches, relations = [], node.getRelationSet()
         if len(relations) > 32:
             raise ValueError('native surface relation inventory exceeds its bound')
         for relation in relations:
@@ -60,46 +79,89 @@ class FrameObserver:
             raise CaseUnavailable('native-dialog-has-no-observed-original-frame-parent')
         return matches[0]
 
+    def _capture(self, node):
+        identity, role = self._identity(node), node.getRole()
+        kind, parent = 'frame', None
+        if role == self.ui.api.ROLE_DIALOG:
+            if node.name not in {"Quit Painted Wolf Code?", "Confirm it's you"}:
+                raise CaseUnavailable('unexpected-owned-native-dialog-during-frame-transition')
+            kind = 'quit-dialog' if node.name == 'Quit Painted Wolf Code?' else 'presence-dialog'
+            parent = self._parent(node)
+        elif role != self.ui.api.ROLE_FRAME:
+            raise CaseUnavailable('retained-object-is-no-longer-an-owned-frame')
+        metadata = {'identity': identity, 'kind': kind, 'parent': parent}
+        marker = self._key(identity)
+        if marker in self.nodes and self.nodes[marker][1] != metadata:
+            raise CaseFailed('retained accessible object identity or parent changed')
+        self.nodes[marker] = node, metadata
+
+    def _quit_control(self, surfaces):
+        matches = []
+        for row in surfaces:
+            if row['kind'] != 'quit-dialog' or not wire.active(row):
+                continue
+            node = self.nodes[self._key(row['identity'])][0]
+            for control in self.ui.descendants(node):
+                if (control.getRole() == self.ui.api.ROLE_PUSH_BUTTON and control.name == 'Quit'
+                        and self.ui.visible(control) and control.getState().contains(self.ui.api.STATE_FOCUSED)):
+                    matches.append({'identity': self._identity(control), 'kind': 'quit-button',
+                                    'parent': row['identity'], 'focused': True})
+        if len(matches) > 1:
+            raise CaseUnavailable('native-quit-control-focus-is-ambiguous')
+        return matches[0] if matches else None
+
     def observe(self):
         self._runtime()
         for _, node in self.ui.windows():
-            identity = self._identity(node)
-            self.nodes[self._key(identity)] = node
+            self._capture(node)
         if len(self.nodes) > 16:
             raise ValueError('captured app surface inventory exceeds its bound')
         surfaces = []
-        for marker, node in sorted(self.nodes.items()):
-            identity = self._identity(node)
-            if marker != self._key(identity):
-                raise CaseFailed('retained accessible object identity changed')
-            state, role = node.getState(), node.getRole()
+        for marker, (node, metadata) in sorted(self.nodes.items()):
+            if marker != (node.app.bus_name, node.path):
+                raise CaseFailed('retained accessible object address changed')
+            state = node.getState()
             defunct = bool(state.contains(self.ui.api.STATE_DEFUNCT))
-            kind, parent = 'frame', None
-            if role == self.ui.api.ROLE_DIALOG:
-                if node.name not in {"Quit Painted Wolf Code?", "Confirm it's you"}:
-                    raise CaseUnavailable('unexpected-owned-native-dialog-during-frame-transition')
-                kind = 'quit-dialog' if node.name == 'Quit Painted Wolf Code?' else 'presence-dialog'
-                parent = self._parent(node)
-            elif role != self.ui.api.ROLE_FRAME:
-                raise CaseUnavailable('retained-object-is-no-longer-an-owned-frame')
-            surfaces.append({'identity': identity, 'kind': kind,
-                'visible': bool(self.ui.visible(node)), 'active': bool(state.contains(self.ui.api.STATE_ACTIVE)),
-                'defunct': defunct, 'modal': bool(state.contains(self.ui.api.STATE_MODAL)), 'parent': parent})
+            if not defunct:
+                self._capture(node)
+            # A defunct retained object keeps its previously verified identity and
+            # parent; it cannot authorize input or stand in for a replacement frame.
+            surfaces.append({**metadata, 'visible': not defunct and bool(self.ui.visible(node)),
+                'active': not defunct and bool(state.contains(self.ui.api.STATE_ACTIVE)),
+                'defunct': defunct, 'modal': not defunct and bool(state.contains(self.ui.api.STATE_MODAL))})
         self._runtime()
-        return wire.proof({'launch': self.launch, 'engine': self.engine,
-                           'main': self.main, 'surfaces': surfaces})
+        return wire.proof({'launch': self.launch, 'engine': self.engine, 'main': self.main,
+                           'surfaces': surfaces, 'control': self._quit_control(surfaces)})
 
     def prepare(self, operation):
         return wire.before(operation, self.observe())
 
-    def during(self, before):
-        wire.same_runtime(before, self.observe())
+    def _exited(self):
+        result = {}
+        for name, descriptor in self.pins.items():
+            poll = select.poll()
+            poll.register(descriptor, select.POLLIN)
+            result[name] = bool(poll.poll(0))
+        return result
+
+    def during(self, operation, before):
+        if operation == 'workspace-approve-quit-v1':
+            self._exited()
+        else:
+            wire.same_runtime(before, self.observe())
 
     def settle(self, operation, before):
         deadline = time.monotonic() + 15
+        after = None
         while True:
-            after = self.observe()
-            if wire.finished(operation, before, after):
+            if operation == 'workspace-approve-quit-v1':
+                code, exited = self.app.process.poll(), self._exited()
+                if all(exited.values()) and len(exited) == 2 and code is not None:
+                    after = {'launch': self.launch, 'engine': self.engine, 'main': self.main,
+                             'exited': exited, 'exit_code': code}
+            else:
+                after = self.observe()
+            if after is not None and wire.finished(operation, before, after):
                 return after
             if time.monotonic() >= deadline:
                 error = CaseUnavailable('owned-frame-transition-did-not-reach-its-declared-state')

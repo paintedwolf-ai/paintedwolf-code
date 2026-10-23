@@ -123,7 +123,8 @@ def verify_deliveries(directory, execution, selected):
                     or event['request'] != pending or event['delivery'] != delivered):
                 raise ValueError('native input host and guest focus or physical delivery differ')
             if surface:
-                surface_wire.same_runtime(pending['surface'], event['surface_after'])
+                if operation != 'workspace-approve-quit-v1':
+                    surface_wire.same_runtime(pending['surface'], event['surface_after'])
                 if record['completed'] and ordinal == len(events) - 1 and not surface_wire.finished(
                         operation, events[0]['request']['surface'], event['surface_after']):
                     raise ValueError('native input has no observed declared surface transition')

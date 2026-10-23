@@ -8,6 +8,8 @@ OPERATIONS = {
     'workspace-hide-main-v1': (('ctrl', 'shift', 'w'),),
     'workspace-request-quit-v1': (('ctrl', 'q'),),
     'workspace-cancel-quit-v1': (('esc',),),
+    'workspace-approve-quit-v1': (('ret',),),
+    'presence-cancel-v1': (('esc',),),
 }
 
 
@@ -26,7 +28,7 @@ def object_identity(value):
 
 def proof(value):
     from .protocol import process_identity
-    if not isinstance(value, dict) or set(value) != {'launch', 'engine', 'main', 'surfaces'}:
+    if not isinstance(value, dict) or set(value) != {'launch', 'engine', 'main', 'surfaces', 'control'}:
         raise ValueError('surface proof has an unknown shape')
     for key in ('launch', 'engine'):
         process_identity(value[key])
@@ -49,17 +51,31 @@ def proof(value):
         seen.add(marker)
         if row['parent'] is not None:
             object_identity(row['parent'])
-        if row['kind'] != 'frame' and (not row['modal'] or row['parent'] != value['main']):
+        if row['kind'] != 'frame' and (row['parent'] != value['main']
+                or not row['defunct'] and not row['modal']):
             raise ValueError('native dialog omitted its captured modal parent')
     if value['main'] not in [row['identity'] for row in surfaces]:
         raise ValueError('surface proof lost its captured original frame')
+    control = value['control']
+    if control is not None:
+        if (not isinstance(control, dict) or set(control) != {'identity', 'kind', 'parent', 'focused'}
+                or control['kind'] != 'quit-button' or control['focused'] is not True):
+            raise ValueError('surface input has an unknown focused control')
+        object_identity(control['identity'])
+        if control['identity']['process'] != value['launch'] or not any(
+                row['identity'] == control['parent'] and row['kind'] == 'quit-dialog' and active(row)
+                for row in surfaces):
+            raise ValueError('focused Quit control escaped its owned active native dialog')
     return value
 
 
 def same_runtime(before, after):
     proof(before)
     proof(after)
-    if any(before[key] != after[key] for key in ('launch', 'engine', 'main')):
+    old_objects = [row['identity'] for row in before['surfaces']]
+    new_objects = [row['identity'] for row in after['surfaces']]
+    if (any(before[key] != after[key] for key in ('launch', 'engine', 'main'))
+            or any(identity not in new_objects for identity in old_objects)):
         raise ValueError('surface transition replaced its captured runtime or original frame')
 
 
@@ -73,9 +89,12 @@ def before(operation, value):
     if len(selected) != 1:
         raise ValueError('surface input requires exactly one owned active visible frame')
     row = selected[0]
-    if operation == 'workspace-cancel-quit-v1':
-        if row['kind'] != 'quit-dialog':
-            raise ValueError('Quit cancellation requires the actual owned modal dialog')
+    if operation in {'workspace-cancel-quit-v1', 'workspace-approve-quit-v1', 'presence-cancel-v1'}:
+        expected = 'presence-dialog' if operation == 'presence-cancel-v1' else 'quit-dialog'
+        if row['kind'] != expected:
+            raise ValueError('dialog input requires the actual selected owned modal dialog')
+        if operation == 'workspace-approve-quit-v1' and value['control'] is None:
+            raise ValueError('Quit approval requires its actual focused Quit button')
     elif operation in OPERATIONS:
         if row['kind'] != 'frame' or row['identity'] != value['main']:
             raise ValueError('workspace input requires its captured original main frame')
@@ -89,20 +108,31 @@ def before(operation, value):
 
 
 def finished(operation, old, new):
+    if operation == 'workspace-approve-quit-v1':
+        proof(old)
+        if (not isinstance(new, dict) or set(new) != {'launch', 'engine', 'main', 'exited', 'exit_code'}
+                or any(new[key] != old[key] for key in ('launch', 'engine', 'main'))
+                or new['exited'] != {'launch': True, 'engine': True}
+                or any(type(value) is not bool for value in new['exited'].values())
+                or type(new['exit_code']) is not int or new['exit_code'] != 0):
+            raise ValueError('Quit approval requires independent owned-process exit observations')
+        return True
     same_runtime(old, new)
     main = next(row for row in new['surfaces'] if row['identity'] == new['main'])
     if operation == 'workspace-open-peer-v1':
         previous = [row['identity'] for row in old['surfaces']]
-        return main['visible'] and not main['defunct'] and any(
-            row['kind'] == 'frame' and row['identity'] not in previous and active(row)
-            for row in new['surfaces'])
+        created = [row for row in new['surfaces'] if row['kind'] == 'frame'
+                   and row['identity'] not in previous]
+        return (main['visible'] and not main['defunct'] and len(created) == 1
+                and active(created[0]))
     if operation == 'workspace-hide-main-v1':
         return not main['visible'] and not main['defunct'] and any(
             row['kind'] == 'frame' and row['identity'] != new['main'] and active(row)
             for row in new['surfaces'])
     if operation == 'workspace-request-quit-v1':
         return any(row['kind'] == 'quit-dialog' and active(row) for row in new['surfaces'])
-    if operation == 'workspace-cancel-quit-v1':
-        return active(main) and not any(row['kind'] == 'quit-dialog' and row['visible']
+    if operation in {'workspace-cancel-quit-v1', 'presence-cancel-v1'}:
+        kind = 'presence-dialog' if operation == 'presence-cancel-v1' else 'quit-dialog'
+        return active(main) and not any(row['kind'] == kind and row['visible']
                                        for row in new['surfaces'])
     raise ValueError('surface input requires a fixed declared operation')
