@@ -5,7 +5,6 @@ import json
 import os
 from pathlib import Path
 
-from ..installed_storage import resolve as storage_for_launch
 import stat
 import re
 import subprocess
@@ -13,6 +12,7 @@ import threading
 import time
 import urllib.parse
 
+from ..installed_storage import Storage, resolve as storage_for_launch
 from .app_api import EngineAPI
 from .products import require_owned_guest
 from .records import CaseUnavailable, CaseFailed
@@ -128,6 +128,7 @@ class InstalledApp:
             if not path.is_absolute() or not path.exists() or parsed.scheme not in {"", "file"}:
                 raise ValueError("installed launcher argument is not an existing absolute fixture path")
         self.process = None
+        self.storage = None
         self.api = None
         self.observations = {"artifact": binding["artifact"], "source_commit": binding["source_commit"]}
         self._streams = {"app-stdout": bytearray(), "app-stderr": bytearray()}
@@ -172,6 +173,7 @@ class InstalledApp:
         current.pop("header")
         if current != launcher:
             raise ValueError("installed application launcher changed since final artifact binding")
+        self.storage = storage
         self.process = subprocess.Popen([str(path), *self.arguments], env=environment,
             stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
         self.observations.update({"launcher": self.binding["launcher"], "session": session,
@@ -222,12 +224,20 @@ class InstalledApp:
         error.observations, error.streams = self.observations, self.streams()
         raise error
 
+    def selected_storage(self):
+        storage = self.storage
+        if (not isinstance(storage, Storage) or type(storage.uid) is not int
+                or self.observations.get('storage') != storage.facts()
+                or storage_for_launch({'HOME': str(storage.home)}) != storage):
+            raise ValueError('captured installed launch storage changed its selected account or facts')
+        return storage
+
     def try_ready(self) -> bool:
         if self.process is None:
             return False
         self.require_running()
         self.require_engine()
-        config = storage_for_launch({"HOME": str(Path.home())}).config
+        config = self.selected_storage().config
         try:
             return self._bind_engine(private_json(config / "daemon.json"), config)
         except (FileNotFoundError, ProcessLookupError):
