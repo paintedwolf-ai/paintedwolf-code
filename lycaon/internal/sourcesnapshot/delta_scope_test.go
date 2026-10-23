@@ -142,3 +142,31 @@ func TestFoldKeepsTheLatestSequencePerDirectory(t *testing.T) {
 		t.Fatalf("folded sequences = %v, want each directory's latest", d.paths)
 	}
 }
+
+func TestOverflowDropsPathsAndPreservesLaterInvalidation(t *testing.T) {
+	tracker := newDeltaTracker()
+	tracker.pathLimit = 2
+	root := t.TempDir()
+	observe := func(paths ...string) {
+		tracker.observe(t.Context(), repochange.Event{ProjectDir: root, Kind: repochange.WorktreeChanged, Paths: paths})
+	}
+	observe("a.go", "b.go", "c.go")
+	before := tracker.sequence()
+	observe("d.go", "e.go")
+	d := tracker.roots[root]
+	if !d.overflow || len(d.paths) != 0 || d.overflowAt <= before {
+		t.Fatalf("overflow retained paths or lost a later change: %+v", d)
+	}
+	tracker.coveredBy(root, "old", "scope", before, true)
+	if !d.overflow {
+		t.Fatal("an earlier publication cleared a later overflow")
+	}
+	plan := tracker.pending(root, deltaPlan{upTo: before})
+	if !plan.overflow || d.overflow || len(d.paths) != 0 {
+		t.Fatalf("pending plan did not consume overflow: %+v, %+v", plan, d)
+	}
+	observe("fresh.go")
+	if len(d.paths) != 1 {
+		t.Fatalf("tracking did not resume after overflow: %+v", d)
+	}
+}

@@ -86,7 +86,9 @@ func (t *deltaTracker) observe(ctx context.Context, ev repochange.Event) {
 	}
 	for _, rel := range rels {
 		t.seq++
-		d.paths[rel] = t.seq
+		if !d.overflow {
+			d.paths[rel] = t.seq
+		}
 	}
 	if rescoped {
 		d.rescopedAt = t.seq
@@ -95,6 +97,10 @@ func (t *deltaTracker) observe(ctx context.Context, ev repochange.Event) {
 		d.paths = folded
 	} else {
 		d.overflow = true
+		d.overflowAt = t.seq
+	}
+	if d.overflow {
+		clear(d.paths)
 		d.overflowAt = t.seq
 	}
 }
