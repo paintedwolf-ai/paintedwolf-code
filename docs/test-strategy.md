@@ -1113,6 +1113,10 @@ compiler-only payload. Go modules are downloaded during online provisioning
 before offline verification. Expanded sources and their duplicate archives do
 not compete with native compiler intermediates for repository storage. The desktop warmer removes workspace package
 outputs with Cargo's package-scoped cleanup, retaining dependency builds.
+Decision-engine preparation and tests share the deployment floor, Metal kernel
+path, and Rust/native path mappings. Checkout and captured-source builds map
+the snapshot parent consistently, so changing capture slots does not invalidate
+dependency fingerprints. Cargo still validates the current source.
 Hosted development Rust profiles are configured explicitly by setup and the
 calling workflows; cache restore and save do not change compiler settings.
 Development builds omit debug data,

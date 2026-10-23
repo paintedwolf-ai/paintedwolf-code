@@ -27,7 +27,10 @@ class NativeCacheTests(unittest.TestCase):
             (scripts / "toolchain").mkdir(parents=True)
             for name in ("build-decide.sh", "artifact-paths.sh", "artifact_paths.py", "digest-run-lock.sh"):
                 shutil.copyfile(source / name, scripts / name)
-            shutil.copyfile(source / "toolchain/rust-path-remap.sh", scripts / "toolchain/rust-path-remap.sh")
+            shutil.copytree(source / "toolchain", scripts / "toolchain", dirs_exist_ok=True)
+            floor = root / "lycaon/internal/platformfloor/macos_floor.txt"
+            floor.parent.mkdir(parents=True)
+            floor.write_text("14.0\n")
             (scripts / "decide-features.sh").write_text("#!/bin/bash\necho cpu\n")
             tools = root / "tools"
             tools.mkdir()
@@ -35,8 +38,9 @@ class NativeCacheTests(unittest.TestCase):
             cargo.write_text('''#!/usr/bin/env python3
 import json, os, pathlib, sys
 with open(os.environ['NATIVE_CALLS'], 'a') as output:
-    output.write(json.dumps({'arguments': sys.argv[1:], 'target': os.environ['CARGO_TARGET_DIR']}) + '\\n')
-assert (pathlib.Path(os.environ['PW_COMPILER_CACHE_DIR']) / 'decide-build.lockdir').is_dir()
+    output.write(json.dumps({'arguments': sys.argv[1:], 'target': os.environ['CARGO_TARGET_DIR'], 'flags': os.environ['CARGO_ENCODED_RUSTFLAGS'], 'metal': os.environ['MLX_RS_METAL_PATH'], 'floor': os.environ.get('MACOSX_DEPLOYMENT_TARGET')}) + '\\n')
+if sys.argv[1] == 'build':
+    assert (pathlib.Path(os.environ['PW_COMPILER_CACHE_DIR']) / 'decide-build.lockdir').is_dir()
 if os.environ.get('NATIVE_FAIL'):
     sys.exit(19)
 target = pathlib.Path(os.environ['CARGO_TARGET_DIR']) / 'release'
@@ -62,6 +66,16 @@ target.mkdir(parents=True, exist_ok=True)
             self.assertTrue(all("--locked" in record["arguments"] and "--release" in record["arguments"]
                                 for record in records))
             self.assertFalse((root / "tauri").exists())
+            for arguments in (["--no-run"], ["--quiet"]):
+                result = subprocess.run(["bash", str(scripts / "toolchain/decide-test.sh"), *arguments],
+                                        env=env, capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+            prepared = [json.loads(line) for line in calls.read_text().splitlines()]
+            for record in prepared:
+                self.assertEqual({k: v for k, v in record.items() if k != "arguments"},
+                                 {k: v for k, v in prepared[0].items() if k != "arguments"})
+            self.assertIn("--no-run", prepared[-2]["arguments"])
+            self.assertNotIn("--no-run", prepared[-1]["arguments"])
 
             failed = subprocess.run(["bash", str(scripts / "build-decide.sh")],
                                     env={**env, "PW_BUILD_DIR": str(root / "failed"), "NATIVE_FAIL": "1"},

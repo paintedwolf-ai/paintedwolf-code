@@ -37,6 +37,8 @@ class ShellResourcesTests(unittest.TestCase):
             (scripts / "artifact-paths.sh").write_text(
                 'export PW_COMPILER_CACHE_DIR="' + str(root / "compiler") + '"\n')
             (scripts / "decide-features.sh").write_text("#!/bin/bash\necho cpu\n")
+            (scripts / "toolchain").mkdir(exist_ok=True)
+            (scripts / "toolchain/decide-test.sh").write_text("#!/bin/bash\nexit 0\n")
             (scripts / "build-decide.sh").write_text("#!/bin/bash\nexit 0\n")
             binary = root / "bin"
             binary.mkdir()
