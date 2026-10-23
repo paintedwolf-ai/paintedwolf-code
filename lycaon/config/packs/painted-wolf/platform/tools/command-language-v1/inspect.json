@@ -613,7 +613,7 @@
       ],
       "example": {
         "program": "file -b -- ./input",
-        "stdout": "UTF-8 Unicode text\n",
+        "stdout": "ASCII text\n",
         "status": 0,
         "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
         "setup": {

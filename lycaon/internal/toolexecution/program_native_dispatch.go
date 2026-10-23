@@ -5,13 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/hitl"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/approvaloutcome"
 	"github.com/lycaon/lycaon/internal/capabilityrequest"
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -206,9 +206,6 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	if rejected := toolrejection.AsToolReject(err); rejected != nil && (!ownerStarted || result.Producer.Terminal == toolcontract.ProducerRefused) {
 		rejected = toolrejection.CompleteFailureMetadata(rejected, facts.Identity, facts.Contract.Owner)
 		err = e.Rejections.settleReject(ctx, facts.Identity, surface.profile, canonical, rejected)
-	}
-	if ownerStarted && result.Producer.Terminal == toolcontract.ProducerFailed && result.Producer.StopCode == "" {
-		err = nil
 	}
 	result.OutputPublishable = err == nil && result.HostStopCode == "" && result.Producer.PublicationEligible
 	return result, err

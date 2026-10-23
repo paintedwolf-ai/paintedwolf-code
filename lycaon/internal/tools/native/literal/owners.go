@@ -123,13 +123,10 @@ func (o *Owners) Prepare(paths *projectpaths.ProgramPaths, request commandprogra
 	if err := request.Validate(); err != nil {
 		return Prepared{}, err
 	}
-	command := request.Argv[0].Value
+	command := request.OperationID
 	spec, ok := o.specs[command]
 	if !ok || paths == nil {
 		return Prepared{}, fmt.Errorf("%s is not a literal content command", command)
-	}
-	if request.OperationID != command {
-		return Prepared{}, fmt.Errorf("request names operation %s, not command %s", request.OperationID, command)
 	}
 	bound, err := commandprogram.CatalogBinder{}.Bind(spec, request.Argv)
 	if err != nil {

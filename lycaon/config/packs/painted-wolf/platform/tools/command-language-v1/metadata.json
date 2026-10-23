@@ -644,7 +644,7 @@
           }
         }
       },
-      "notes": "Default lines words bytes. -l counts LF bytes; -c same captured bytes, including recorded BOM. -w ASCII space/tab/LF/CR/VT/FF separators; -m decoded Unicode scalar count, invalid encoding rejects; -L max Unicode scalar line length excluding LF/CRLF. Single stdin scalar unpadded integer LF; multi values separated single space. Intentionally replaces existing CountLines/disk-size mixed representation.",
+      "notes": "GNU column widths use input byte sizes; unknown-size input uses seven columns when multiple counts are selected. -L counts display columns with eight-column tab stops. All counts come from the same captured representation.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/survey/wc.go",
         "tests": [

@@ -13,7 +13,7 @@ import (
 // formFiles is the fixture tree every form case runs against. Expected bytes
 // were observed from GNU coreutils 8.32, diffutils 3.8, xxd and util-linux
 // hexdump over the same files, except where the catalog fixes a different
-// representation (wc separators, file's corpus, malformed manifests).
+// representation (file's corpus and malformed manifests).
 var formFiles = map[string]string{
 	"input": "alpha\nbeta", "lines": "a\nb\n\n\n\nc\td\x01\x7f\xc3\xa9\xff\n", "crlf": "one\r\ntwo\r\n",
 	"empty": "", "same-a": "same\n", "same-b": "same\n",
@@ -83,18 +83,18 @@ var formCases = []formCase{
 	{argv: "nl -ba -v 5 -w 3 -s : lines", stdout: "  5:a\n  6:b\n  7:\n  8:\n  9:\n 10:c\td\x01\x7f\xc3\xa9\xff\n"},
 	{argv: "nl input", stdout: "     1\talpha\n     2\tbeta\n"},
 	{argv: "wc -l input", stdout: "1 input\n"},
-	{argv: "wc input", stdout: "1 2 10 input\n"},
+	{argv: "wc input", stdout: " 1  2 10 input\n"},
 	{argv: "wc -l crlf", stdout: "2 crlf\n"},
 	{argv: "wc -w words", stdout: "4 words\n"},
 	{argv: "wc -c utf8", stdout: "17 utf8\n"},
 	{argv: "wc -m utf8", stdout: "14 utf8\n"},
 	{argv: "wc -L utf8", stdout: "11 utf8\n"},
 	{argv: "wc -L crlf", stdout: "3 crlf\n"},
-	{argv: "wc -lwc input crlf", stdout: "1 2 10 input\n2 2 10 crlf\n3 4 20 total\n"},
+	{argv: "wc -lwc input crlf", stdout: " 1  2 10 input\n 2  2 10 crlf\n 3  4 20 total\n"},
 	{argv: "wc -l input ten", stdout: " 1 input\n15 ten\n16 total\n"},
 	{argv: "wc input ten", stdout: " 1  2 10 input\n15 15 36 ten\n16 17 46 total\n"},
 	{argv: "wc -l", stdin: "a\nb", stdout: "1\n"},
-	{argv: "wc missing input", stdout: "1 2 10 input\n1 2 10 total\n", stderr: "wc: missing: No such file or directory\n", status: 1},
+	{argv: "wc missing input", stdout: " 1  2 10 input\n 1  2 10 total\n", stderr: "wc: missing: No such file or directory\n", status: 1},
 	{argv: "wc -m lines", stdout: "", stderr: "wc: lines: invalid UTF-8 encoding\n", status: 1},
 	{argv: "ls dir", stdout: "a\nb\nexe\nlink\n"},
 	{argv: "ls -a dir", stdout: ".\n..\n.h\n.hidden-dir\na\nb\nexe\nlink\n"},
@@ -162,11 +162,11 @@ var formCases = []formCase{
 	{argv: "diff -q tree-a tree-b", status: 1, stdout: "Only in tree-b: extra\nFiles tree-a/f and tree-b/f differ\nOnly in tree-a: only-a\nCommon subdirectories: tree-a/sub and tree-b/sub\n"},
 	{argv: "diff -q old tree-a", status: 2, stderr: "diff: tree-a/old: No such file or directory\n"},
 	{argv: "file -b empty", stdout: "empty\n"},
-	{argv: "file input", stdout: "input: UTF-8 Unicode text\n"},
-	{argv: "file -b -i input", stdout: "text/plain\n"},
-	{argv: "file --mime input", stdout: "input: text/plain\n"},
+	{argv: "file input", stdout: "input: ASCII text\n"},
+	{argv: "file -b -i input", stdout: "text/plain; charset=us-ascii\n"},
+	{argv: "file --mime input", stdout: "input: text/plain; charset=us-ascii\n"},
 	{argv: "file dir", stdout: "dir: directory\n"},
-	{argv: "file -i dir", stdout: "dir: inode/directory\n"},
+	{argv: "file -i dir", stdout: "dir: inode/directory; charset=binary\n"},
 	{argv: "file link", stdout: "link: symbolic link to input\n"},
 	{argv: "file -b bin-a", stdout: "data\n"},
 	{argv: "file -b lines", stdout: "data\n"},

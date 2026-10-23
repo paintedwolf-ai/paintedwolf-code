@@ -25,7 +25,7 @@ func TestPredicateFilesUsesAdmittedReadAuthority(t *testing.T) {
 	defer reads.Close()
 	invocation := toolcontract.OperationInvocation{Kind: toolcontract.StructuredToolInvocation, ModelToolCallID: "fixture-call", ActorID: "fixture-actor", SessionID: "fixture-session", Scope: toolcontract.OperationScope{Kind: toolcontract.ProjectOperationScope, ProjectID: "fixture-project"}, CatalogDigest: toolcontract.LanguageCatalogDigest()}
 	port := PredicateFiles{Reads: reads, Invocation: invocation}
-	for _, op := range []string{"-e", "-f", "-r", "-w"} {
+	for _, op := range []string{"-e", "-f", "-r", "-w", "-s"} {
 		value, err := port.TestPath(t.Context(), invocation, op, "allowed/file")
 		testutil.FailErr(t, "authority-backed predicate", err)
 		if !value {

@@ -16,7 +16,7 @@ import (
 // authority and never open/create/truncate a target for writing.
 func (r *ReadRoot) TestPath(rel, operator string) (bool, error) {
 	switch operator {
-	case "-e", "-f", "-d", "-L", "-r", "-w", "-x":
+	case "-e", "-f", "-d", "-L", "-r", "-w", "-x", "-s":
 	default:
 		return false, ErrInvalidPath
 	}
@@ -36,6 +36,8 @@ func (r *ReadRoot) TestPath(rel, operator string) (bool, error) {
 			result = true
 		case "-f":
 			result = mode == unix.S_IFREG
+		case "-s":
+			result = st.Size > 0
 		case "-d":
 			result = mode == unix.S_IFDIR
 		case "-L":

@@ -29,7 +29,7 @@ func (r *ReadRoot) TestPath(rel, operator string) (bool, error) {
 		access |= windows.FILE_WRITE_DATA
 	case "-x":
 		access |= windows.FILE_EXECUTE
-	case "-e", "-f", "-d", "-L":
+	case "-e", "-f", "-d", "-L", "-s":
 	default:
 		return false, ErrInvalidPath
 	}
@@ -71,6 +71,8 @@ func (r *ReadRoot) TestPath(rel, operator string) (bool, error) {
 		return false, nil
 	}
 	switch operator {
+	case "-s":
+		return info.Size() > 0, nil
 	case "-f":
 		return info.Mode().IsRegular(), nil
 	case "-d":

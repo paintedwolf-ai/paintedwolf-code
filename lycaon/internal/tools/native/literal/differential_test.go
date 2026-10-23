@@ -22,8 +22,8 @@ var referenceFamily = map[string]string{
 }
 
 // differentialCases are forms whose catalog contract is the reference's own
-// output. Forms the catalog deliberately defines differently (wc column
-// separators, file's corpus, malformed manifests, long listings without
+// output. Forms the catalog deliberately defines differently (file's corpus,
+// malformed manifests, long listings without
 // block totals) are fixed by the exact fixtures instead.
 var differentialCases = []struct {
 	argv, stdin string
