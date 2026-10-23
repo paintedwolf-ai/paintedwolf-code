@@ -82,7 +82,7 @@ func (s *SourceEffects) applySourceDelete(ctx context.Context, row *sourceMutati
 		return ErrSourceMutationDiverged
 	}
 	if plan.TreeSHA != "" {
-		if err := requireSourceFingerprint(ctx, plan.AbsPath, plan.TreeSHA); err != nil {
+		if err := requireSourceFingerprint(ctx, plan.AbsPath, plan.TreeSHA, row.memory); err != nil {
 			return err
 		}
 	}
@@ -99,7 +99,7 @@ func (s *SourceEffects) applySourceDelete(ctx context.Context, row *sourceMutati
 		return err
 	}
 	if plan.TreeSHA != "" {
-		if err := requireSourceFingerprint(ctx, plan.AbsPath, plan.TreeSHA); err != nil {
+		if err := requireSourceFingerprint(ctx, plan.AbsPath, plan.TreeSHA, row.memory); err != nil {
 			return err
 		}
 	}

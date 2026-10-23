@@ -114,6 +114,7 @@ type sourceMutationPlan struct {
 }
 
 type sourceMutationRow struct {
+	memory                           sourceeffect.Memory
 	ID, ProjectID, Kind, InputDigest string
 	Plan                             sourceMutationPlan
 	Status                           sourceMutationStatus

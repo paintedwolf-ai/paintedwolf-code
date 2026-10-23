@@ -130,7 +130,7 @@ func (t *DeleteTool) Delete(ctx context.Context, in DeleteInput, tctx tools.Tool
 				} else if resolved.ScopeRel != "" {
 					displayPath = filepath.ToSlash(resolved.ScopeRel)
 				}
-				if err := removeAgentTree(ctx, tctx, resolvedMutationTarget(resolved), displayPath, summary.bytes, func() error {
+				if err := removeAgentTree(ctx, tctx, resolvedMutationTarget(resolved), displayPath, summary.bytes, in.Memory, func() error {
 					_, err := inspectDeleteTree(ctx, t.Boundary, tctx, resolved, prof, in.Memory, func(target projectpaths.Resolved) error {
 						return reviewAgentTreePolicyRemoval(ctx, tctx, target, in.Memory)
 					})
@@ -198,7 +198,7 @@ func inspectDeleteTree(ctx context.Context, b *sandbox.Boundary, tctx tools.Tool
 }
 
 func countMutationChildren(ctx context.Context, path string, memory *toolcontract.ProgramMemory) (int, error) {
-	release, err := memory.ReserveProgramState(ctx, 2*128*int64(1024+len(path)))
+	release, err := memory.ReserveProgramState(ctx, 2*128*int64(2048+len(path)))
 	if err != nil {
 		return 0, err
 	}

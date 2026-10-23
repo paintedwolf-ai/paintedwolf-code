@@ -135,7 +135,7 @@ func TestRecursiveCopyFlushesRetainedBodiesBeforeTheNextLargeFile(t *testing.T) 
 
 func TestCopyDirectoryCreationRemainsAnEffectAfterMemoryRefusal(t *testing.T) {
 	h := newHarness(t, map[string]string{"tree/": ""})
-	memory, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: 1 << 20, State: int64(2*128*(1024+len("tree")+len(".")) + 100)})
+	memory, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: 1 << 20, State: int64(2*128*(2048+len("tree")+len(".")) + 100)})
 	testutil.FailErr(t, "create constrained memory", err)
 	h.program.Memory = memory
 	r := h.run("", "cp", "-r", "tree", "target")

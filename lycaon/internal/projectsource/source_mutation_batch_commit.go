@@ -44,7 +44,7 @@ func (s *sourceSettlement) commitRowsOnce(ctx context.Context, rows []*sourceMut
 		}
 	}()
 	for _, row := range rows {
-		history, err := s.History.buildSourceHistoryEntry(ctx, row.ID, &row.Plan)
+		history, err := s.History.buildSourceHistoryEntry(ctx, row.ID, &row.Plan, row.memory)
 		if err != nil {
 			return nil, err
 		}

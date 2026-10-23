@@ -118,6 +118,7 @@ type agentStreamRequest struct {
 }
 
 func applyAgentStream(ctx context.Context, tctx tools.ToolContext, req agentStreamRequest) (fseffect.Result, error) {
+
 	stage, result, err := stageAgentStream(ctx, tctx, req)
 	if err != nil {
 		return result, err
@@ -160,7 +161,7 @@ func stageAgentStream(ctx context.Context, tctx tools.ToolContext, req agentStre
 		op = api.SourceChangeOpCreate
 	}
 	stage.releaseBefore = before.release
-	stage.mutation = agentMutation{Op: op, AbsPath: req.Target.Abs,
+	stage.mutation = agentMutation{Memory: req.Memory, Op: op, AbsPath: req.Target.Abs,
 		Before: before.content, BeforeSHA256: before.sha256, BeforeSize: before.size}
 	mutation := &stage.mutation
 	stage.captured = revisionCapture{ctx: ctx, memory: req.Memory}
@@ -240,7 +241,7 @@ func setAsideUnversionedFile(ctx context.Context, tctx tools.ToolContext, target
 	if info, err := os.Lstat(target.Abs); err != nil || !info.Mode().IsRegular() {
 		return err
 	}
-	replaced := agentMutation{Op: api.SourceChangeOpDelete, AbsPath: target.Abs,
+	replaced := agentMutation{Memory: mutation.Memory, Op: api.SourceChangeOpDelete, AbsPath: target.Abs,
 		BeforeSHA256: mutation.BeforeSHA256, BeforeSize: mutation.BeforeSize}
 	if _, ok := recoverableRemoval(tctx, replaced); !ok {
 		return nil
@@ -268,7 +269,7 @@ func removeAgentPath(ctx context.Context, tctx tools.ToolContext, target mutatio
 	if before.release != nil {
 		defer before.release()
 	}
-	mutation := agentMutation{Op: api.SourceChangeOpDelete, AbsPath: target.Abs,
+	mutation := agentMutation{Memory: memory, Op: api.SourceChangeOpDelete, AbsPath: target.Abs,
 		Before: before.content, BeforeSHA256: before.sha256, BeforeSize: before.size, IsDir: before.isDir}
 	if err := measureAgentRemoval(ctx, tctx, target, &mutation, target.Location.Rel); err != nil {
 		return err
@@ -357,19 +358,25 @@ func mkdirAgentPath(ctx context.Context, tctx tools.ToolContext, target mutation
 	return created, finishAgentMutation(ctx, tctx, mutation, journal, effectErr)
 }
 
-func renameAgentPath(ctx context.Context, tctx tools.ToolContext, from, to mutationTarget) error {
+func renameAgentPath(ctx context.Context, tctx tools.ToolContext, from, to mutationTarget, memory *toolcontract.ProgramMemory) error {
 	if filepath.Clean(from.Location.Root) != filepath.Clean(to.Location.Root) {
 		return fmt.Errorf("rename crosses filesystem effect roots")
 	}
-	after, err := captureAgentFileAt(from.Location, ctx, nil, true)
+	after, err := captureAgentFileAt(from.Location, ctx, memory, true)
 	if err != nil {
 		return err
 	}
-	before, err := captureRemovedEntry(ctx, to.Location, nil, true)
+	if after.release != nil {
+		defer after.release()
+	}
+	before, err := captureRemovedEntry(ctx, to.Location, memory, true)
 	if err != nil {
 		return err
 	}
-	mutation := agentMutation{Op: api.SourceChangeOpRename, AbsPath: to.Abs, FromAbsPath: from.Abs,
+	if before.release != nil {
+		defer before.release()
+	}
+	mutation := agentMutation{Memory: memory, Op: api.SourceChangeOpRename, AbsPath: to.Abs, FromAbsPath: from.Abs,
 		Before: before.content, BeforeSHA256: before.sha256, BeforeSize: before.size,
 		After: after.content, AfterSHA256: after.sha256, AfterSize: after.size, IsDir: after.isDir}
 	reportMutationIntent(tctx, mutation, to.Location, from.Location, api.AgentIntentOperationMove)
@@ -380,7 +387,7 @@ func renameAgentPath(ctx context.Context, tctx tools.ToolContext, from, to mutat
 	if before.exists && !before.isDir {
 		// The review above showed the replaced file; set it aside recoverably
 		// so the move never destroys the only copy.
-		displaced := agentMutation{Op: api.SourceChangeOpDelete, AbsPath: to.Abs,
+		displaced := agentMutation{Memory: memory, Op: api.SourceChangeOpDelete, AbsPath: to.Abs,
 			Before: before.content, BeforeSHA256: before.sha256, BeforeSize: before.size}
 		if _, ok := recoverableRemoval(tctx, displaced); ok {
 			if err := discardAgentEntry(ctx, tctx, to, displaced); err != nil {
@@ -430,6 +437,7 @@ func recoverableRemoval(tctx tools.ToolContext, m agentMutation) (sourceeffect.R
 		return sourceeffect.Removal{}, false
 	}
 	return sourceeffect.Removal{
+		Memory:           m.Memory,
 		Record:           in,
 		Change:           change,
 		RootPath:         root.Path,
@@ -529,6 +537,7 @@ func finishAgentMutation(ctx context.Context, tctx tools.ToolContext, mutation a
 }
 
 type agentMutation struct {
+	Memory          *toolcontract.ProgramMemory
 	MetadataChange  string
 	Op              api.SourceChangeOp
 	AbsPath         string

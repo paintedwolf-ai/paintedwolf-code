@@ -28,7 +28,7 @@ func TestAgentTreeRemovalRenamesAndRestoresItsOriginalEntries(t *testing.T) {
 	testutil.FailErr(t, "track child identity", err)
 	identity, err := fspath.EntryIdentity(path)
 	testutil.FailErr(t, "identify tree", err)
-	removal := agentRemoval(project, "tree", "")
+	removal := agentRemoval(t, project, "tree", "")
 	removal.Recursive = true
 	id, err := service.RemoveEntry(t.Context(), removal)
 	testutil.FailErr(t, "remove tree", err)
@@ -87,7 +87,7 @@ func TestRetainedTreeRenameFailureDistinguishesPublication(t *testing.T) {
 				}
 				return syscall.EIO
 			}
-			removal := agentRemoval(project, "tree", "")
+			removal := agentRemoval(t, project, "tree", "")
 			removal.Recursive = true
 			id, err := service.RemoveEntry(t.Context(), removal)
 			row, found, loadErr := service.Journal.load(t.Context(), id)
@@ -128,7 +128,7 @@ func TestRetainedTreeRevalidatesAfterEffectAdmission(t *testing.T) {
 	ctx := WithSourceEffect(t.Context(), func() error {
 		return os.WriteFile(filepath.Join(root, "tree", "file"), []byte("changed after admission"), 0o600)
 	})
-	removal := agentRemoval(project, "tree", "")
+	removal := agentRemoval(t, project, "tree", "")
 	removal.Recursive = true
 	id, err := service.RemoveEntry(ctx, removal)
 	if !errors.Is(err, ErrSourceMutationDiverged) {
@@ -156,14 +156,14 @@ func TestRetainedTreeQuotaPhysicallyPrunesEvictedEntries(t *testing.T) {
 				testutil.FailErr(t, "seed tree", os.Mkdir(filepath.Join(root, name), 0o750))
 				testutil.FailErr(t, "seed file", os.WriteFile(filepath.Join(root, name, "file"), []byte("ok"), 0o600))
 				if i == 0 {
-					_, measured, err := sourceTreeFingerprint(t.Context(), filepath.Join(root, name))
+					_, measured, err := sourceTreeFingerprint(t.Context(), filepath.Join(root, name), testSourceOperationMemory(t))
 					testutil.FailErr(t, "measure allocated storage", err)
 					if !measured.AllocationKnown || measured.AllocatedBytes == 0 {
 						t.Fatal("allocation fact unavailable")
 					}
 					service.History.SetRecoveryQuotaBytes(2 * measured.AllocatedBytes)
 				}
-				removal := agentRemoval(project, name, "")
+				removal := agentRemoval(t, project, name, "")
 				removal.Recursive = true
 				id, err := service.RemoveEntry(t.Context(), removal)
 				testutil.FailErr(t, "remove tree", err)
@@ -188,7 +188,7 @@ func TestRetainedTreeUnavailableDoesNotCapturePerFile(t *testing.T) {
 	service.Effects.sameFilesystem = func(string, string) (bool, error) { return false, nil }
 	testutil.FailErr(t, "seed tree", os.Mkdir(filepath.Join(root, "tree"), 0o750))
 	testutil.FailErr(t, "seed file", os.WriteFile(filepath.Join(root, "tree", "file"), []byte("ok"), 0o600))
-	removal := agentRemoval(project, "tree", "")
+	removal := agentRemoval(t, project, "tree", "")
 	removal.Recursive = true
 	_, err := service.RemoveEntry(t.Context(), removal)
 	var unavailable *sourceeffect.RecoveryUnavailableError

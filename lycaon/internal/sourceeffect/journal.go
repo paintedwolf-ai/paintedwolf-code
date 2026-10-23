@@ -10,12 +10,18 @@ import (
 	"github.com/lycaon/lycaon/internal/sourceledger"
 )
 
+// Memory admits operation scratch and retained traversal state without granting access.
+type Memory interface {
+	Reserve(context.Context, int64) (func(), error)
+	ReserveProgramState(context.Context, int64) (func(), error)
+}
+
 // Journal records intent and attribution before a file effect.
 type Journal interface {
 	// RecoveryQuotaBytes bounds recovery representation charges per project.
 	// Manifest content and retained tree allocation keep their own byte facts.
 	RecoveryQuotaBytes() int64
-	InspectRemoval(context.Context, fseffect.Location) (RemovalSnapshot, error)
+	InspectRemoval(context.Context, fseffect.Location, Memory) (RemovalSnapshot, error)
 	PrepareEffect(context.Context, Plan) (Pending, error)
 	PrepareEffects(context.Context, []Plan) (PendingEffects, error)
 	// RemoveEntry retains an entry for Undo before removing its original path.
@@ -49,6 +55,7 @@ func (e *RecoveryUnavailableError) Unwrap() error { return e.Cause }
 
 // Removal is an entry the agent reviewed for removal from an attached root.
 type Removal struct {
+	Memory Memory `json:"-"`
 	// Record carries the attribution and root-relative path; its Op is delete.
 	Record sourceledger.RecordInput `json:"record"`
 	Change sourcefeed.Change        `json:"change"`

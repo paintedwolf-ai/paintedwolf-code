@@ -25,7 +25,7 @@ func TestMemoryRecoveryQuotaPrunesActualCapturedContent(t *testing.T) {
 	for i, body := range []string{"aa", "bb", "cc"} {
 		name := fmt.Sprintf("file-%d", i)
 		testutil.FailErr(t, "seed", os.WriteFile(filepath.Join(root, name), []byte(body), 0o600))
-		id, err := service.RemoveEntry(t.Context(), agentRemoval(project, name, textfile.SHA256([]byte(body))))
+		id, err := service.RemoveEntry(t.Context(), agentRemoval(t, project, name, textfile.SHA256([]byte(body))))
 		testutil.FailErr(t, "remove", err)
 		latest = id
 	}
@@ -46,7 +46,7 @@ func TestRecoveryAdmissionRejectsOversizeBeforeEffect(t *testing.T) {
 			}
 			service.History.SetRecoveryQuotaBytes(2)
 			testutil.FailErr(t, "seed", os.WriteFile(filepath.Join(root, "file"), []byte("body"), 0o600))
-			_, err := service.RemoveEntry(t.Context(), agentRemoval(project, "file", textfile.SHA256([]byte("body"))))
+			_, err := service.RemoveEntry(t.Context(), agentRemoval(t, project, "file", textfile.SHA256([]byte("body"))))
 			if !errors.Is(err, ErrSourceRecoveryQuota) {
 				t.Fatalf("oversize capture = %v", err)
 			}
@@ -71,7 +71,7 @@ func TestMemoryRecoveryQuotaConcurrentPublication(t *testing.T) {
 		name := fmt.Sprintf("file-%d", i)
 		testutil.FailErr(t, "seed", os.WriteFile(filepath.Join(root, name), []byte(body), 0o600))
 		wg.Go(func() {
-			_, err := service.RemoveEntry(t.Context(), agentRemoval(project, name, textfile.SHA256([]byte(body))))
+			_, err := service.RemoveEntry(t.Context(), agentRemoval(t, project, name, textfile.SHA256([]byte(body))))
 			failures <- err
 		})
 	}
@@ -107,9 +107,9 @@ func TestPermanentRemovalRevalidatesPreparedContentBeforeDisposal(t *testing.T) 
 	service, project, root, _ := sourceMutationFixture(t)
 	testutil.FailErr(t, "seed", os.Mkdir(filepath.Join(root, "tree"), 0o700))
 	testutil.FailErr(t, "seed entry", os.WriteFile(filepath.Join(root, "tree", "file"), []byte("before"), 0o600))
-	removal := agentRemoval(project, "tree", "")
+	removal := agentRemoval(t, project, "tree", "")
 	removal.Recursive, removal.Unrecoverable = true, true
-	snapshot, err := service.InspectRemoval(t.Context(), fseffect.Location{Root: root, Rel: "tree"})
+	snapshot, err := service.InspectRemoval(t.Context(), fseffect.Location{Root: root, Rel: "tree"}, testSourceOperationMemory(t))
 	testutil.FailErr(t, "measure reviewed snapshot", err)
 	removal.ReviewedSnapshot = &snapshot
 	ctx := WithSourceEffect(t.Context(), func() error {
@@ -134,7 +134,7 @@ func TestQuotaChangesWaitForAcceptedRemoval(t *testing.T) {
 	ctx := WithSourceEffect(t.Context(), func() error { close(reached); <-release; return nil })
 	removed := make(chan error, 1)
 	go func() {
-		_, err := service.RemoveEntry(ctx, agentRemoval(project, "file", textfile.SHA256([]byte("body"))))
+		_, err := service.RemoveEntry(ctx, agentRemoval(t, project, "file", textfile.SHA256([]byte("body"))))
 		removed <- err
 	}()
 	select {
@@ -164,7 +164,7 @@ func TestAppliedRecoveryKeepsUndoWhenRestartQuotaIsLower(t *testing.T) {
 	service, project, root, _ := sourceMutationFixture(t)
 	ledger := service.settlement.recorder.(*sourceledger.Store)
 	testutil.FailErr(t, "seed", os.WriteFile(filepath.Join(root, "file"), []byte("body"), 0o600))
-	removal := agentRemoval(project, "file", textfile.SHA256([]byte("body")))
+	removal := agentRemoval(t, project, "file", textfile.SHA256([]byte("body")))
 	removal.Record.OperationID = uuid.NewString()
 	interrupted := errors.New("pause before effect")
 	func() {
@@ -180,6 +180,7 @@ func TestAppliedRecoveryKeepsUndoWhenRestartQuotaIsLower(t *testing.T) {
 	if !found {
 		t.Fatal("prepared receipt missing")
 	}
+	row.memory = removal.Memory
 	testutil.FailErr(t, "apply without settlement", service.Effects.applyMutation(t.Context(), row))
 	row.Status = sourceMutationFileApplied
 	testutil.FailErr(t, "record interrupted settlement", service.Journal.update(t.Context(), row))

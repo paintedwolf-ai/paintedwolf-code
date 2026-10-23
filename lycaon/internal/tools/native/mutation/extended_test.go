@@ -355,7 +355,7 @@ func TestRecursiveMutationCapsAtBoundaryAndOnePast(t *testing.T) {
 				h := newHarness(t, tree(c.files, c.size))
 				h.owners.Operations.Copy.Caps = caps
 				if command[0] == "rm" {
-					measured, err := h.service.InspectRemoval(t.Context(), fseffect.Location{Root: h.root, Rel: "tree"})
+					measured, err := h.service.InspectRemoval(t.Context(), fseffect.Location{Root: h.root, Rel: "tree"}, h.program.Memory)
 					testutil.FailErr(t, "measure recovery charge", err)
 					if !measured.RecoverySizeKnown || measured.RecoveryBytes < 2 {
 						t.Fatalf("unavailable recovery charge: %+v", measured)

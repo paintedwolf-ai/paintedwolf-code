@@ -43,15 +43,20 @@ func (op *CopyOperation) copyTree(ctx context.Context, tc tools.ToolContext, sou
 		if err != nil {
 			return err
 		}
-		held, err := op.reads.Open(from)
-		if err != nil {
-			return err
+		observed := info
+		if !info.Mode().IsRegular() {
+			held, err := op.reads.Open(from)
+			if err != nil {
+				return err
+			}
+			current, statErr := held.Stat()
+			closeErr := held.Close()
+			if err := errors.Join(statErr, closeErr); err != nil {
+				return err
+			}
+			observed = current
 		}
-		observed, statErr := held.Stat()
-		closeErr := held.Close()
-		if err := errors.Join(statErr, closeErr); err != nil {
-			return err
-		}
+
 		files++
 		bytes += observed.Size()
 		return copyTreeWithinCaps(files, bytes, caps, filepath.ToSlash(pair.From))

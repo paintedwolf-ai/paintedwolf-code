@@ -17,7 +17,7 @@ func TestRetainedTreeBackupRejectsUnavailableCustodyAndUnadmittedStorage(t *test
 			service, project, root, _ := sourceMutationFixture(t)
 			testutil.FailErr(t, "seed tree", os.Mkdir(filepath.Join(root, "tree"), 0o700))
 			testutil.FailErr(t, "seed content", os.WriteFile(filepath.Join(root, "tree", "file"), []byte("original"), 0o600))
-			removal := agentRemoval(project, "tree", "")
+			removal := agentRemoval(t, project, "tree", "")
 			removal.Recursive = true
 			id, err := service.RemoveEntry(t.Context(), removal)
 			testutil.FailErr(t, "remove tree", err)

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
@@ -32,6 +33,7 @@ type moveResponse struct {
 // sources, renamed whole within one root onto an absent destination; the
 // rename is journaled like a file rename, so Files history can undo it.
 type MoveInput struct {
+	Memory      *toolcontract.ProgramMemory `json:"-"`
 	Pairs       []FilePair
 	NoClobber   bool
 	Directories bool
@@ -72,6 +74,17 @@ func (t *MoveTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 // Move renames each pair within one root under scope, review and recovery.
 func (t *MoveTool) Move(ctx context.Context, in MoveInput, tctx tools.ToolContext) (MoveResult, error) {
 	var result MoveResult
+	if in.Memory == nil {
+		limits, err := toolcontract.CatalogProgramMemoryLimits()
+		if err != nil {
+			return result, err
+		}
+		memory, err := toolcontract.NewProgramMemory(limits)
+		if err != nil {
+			return result, err
+		}
+		in.Memory = memory
+	}
 	prof := tctx.ProfileID()
 	for _, pair := range in.Pairs {
 		if err := ctx.Err(); err != nil {
@@ -96,7 +109,7 @@ func (t *MoveTool) Move(ctx context.Context, in MoveInput, tctx tools.ToolContex
 				continue
 			}
 		}
-		if err := renameAgentPath(ctx, tctx, resolvedMutationTarget(srcResolved), resolvedMutationTarget(dstResolved)); err != nil {
+		if err := renameAgentPath(ctx, tctx, resolvedMutationTarget(srcResolved), resolvedMutationTarget(dstResolved), in.Memory); err != nil {
 			return result, fmt.Errorf("move %s -> %s: %w", pair.From, pair.To, err)
 		}
 		result.Moved = append(result.Moved, FilePair{From: fromSlash, To: toSlash})

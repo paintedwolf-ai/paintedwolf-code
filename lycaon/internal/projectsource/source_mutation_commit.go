@@ -82,7 +82,7 @@ func (s *sourceSettlement) noteCommitFailure(ctx context.Context, row *sourceMut
 
 // commitWithoutStore orders writes for the in-memory service.
 func (s *sourceSettlement) commitWithoutStore(ctx context.Context, row *sourceMutationRow) error {
-	history, err := s.History.buildSourceHistoryEntry(ctx, row.ID, &row.Plan)
+	history, err := s.History.buildSourceHistoryEntry(ctx, row.ID, &row.Plan, row.memory)
 	if err != nil {
 		return err
 	}

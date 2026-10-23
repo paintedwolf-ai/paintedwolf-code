@@ -9,15 +9,18 @@ import (
 	"math"
 
 	"github.com/lycaon/lycaon/internal/fspath"
+	"github.com/lycaon/lycaon/internal/sourceeffect"
 )
 
 // Only multi-link entries need an exact set. SQLite keeps that set on private
 // temporary storage with a fixed cache, independently of the durable journal.
 type sourceTreeAllocation struct {
-	bytes int64
-	known bool
-	db    *sql.DB
-	tx    *sql.Tx
+	memory        sourceeffect.Memory
+	releaseMemory func()
+	bytes         int64
+	known         bool
+	db            *sql.DB
+	tx            *sql.Tx
 }
 
 func (s *sourceTreeAllocation) observe(ctx context.Context, info fs.FileInfo) error {
@@ -33,6 +36,13 @@ func (s *sourceTreeAllocation) observe(ctx context.Context, info fs.FileInfo) er
 		return nil
 	}
 	if !info.IsDir() && facts.Links > 1 {
+		if s.releaseMemory == nil {
+			release, err := s.memory.Reserve(ctx, (1<<20)+(64<<10))
+			if err != nil {
+				return err
+			}
+			s.releaseMemory = release
+		}
 		inserted, err := s.observeLink(ctx, facts.Identity)
 		if err != nil {
 			if ctx.Err() != nil {
@@ -84,6 +94,10 @@ CREATE TABLE linked_entries (identity BLOB PRIMARY KEY) WITHOUT ROWID;`)
 }
 
 func (s *sourceTreeAllocation) close() error {
+	if s.releaseMemory != nil {
+		defer s.releaseMemory()
+		s.releaseMemory = nil
+	}
 	var rollback error
 	if s.tx != nil {
 		rollback = s.tx.Rollback()

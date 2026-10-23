@@ -33,7 +33,7 @@ func TestHistoryQuotaAccountsForRetainedCopiesAndNativeReceipts(t *testing.T) {
 				identity, err := fspath.EntryIdentity(fromAbs)
 				testutil.FailErr(t, "read source identity", err)
 				id := uuid.NewString()
-				_, err = service.execute(t.Context(), id, project.ID, id, func() (*sourceMutationPlan, error) {
+				_, err = service.execute(t.Context(), id, project.ID, id, testSourceOperationMemory(t), func() (*sourceMutationPlan, error) {
 					return &sourceMutationPlan{
 						sourceMutationPublication: sourceMutationPublication{EntryIdentity: identity},
 						sourceMutationAttribution: sourceMutationAttribution{ProjectID: project.ID, WorkspaceID: project.WorkspaceID()},

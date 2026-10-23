@@ -29,7 +29,7 @@ func TestTreeAllocationChargesDirectoriesAndHardLinkedStorageOnce(t *testing.T) 
 		}
 		expected += facts.Bytes
 	}
-	_, size, err := sourceTreeFingerprint(t.Context(), root)
+	_, size, err := sourceTreeFingerprint(t.Context(), root, testSourceOperationMemory(t))
 	testutil.FailErr(t, "measure tree", err)
 	if !size.AllocationKnown || size.AllocatedBytes != expected || size.Bytes != 2*int64(len("payload")) || size.Files != 2 {
 		t.Fatalf("measurement=%+v expected allocation=%d", size, expected)
@@ -47,12 +47,12 @@ func TestAllocationUnavailableAndCancellationDoNotEstimateOrLeak(t *testing.T) {
 	testutil.FailErr(t, "link payload", os.Link(file, filepath.Join(root, "link")))
 	info, err := os.Lstat(file)
 	testutil.FailErr(t, "observe file", err)
-	unknown := &sourceTreeAllocation{known: true}
+	unknown := &sourceTreeAllocation{known: true, memory: testSourceOperationMemory(t)}
 	testutil.FailErr(t, "observe missing storage metadata", unknown.observe(t.Context(), unobservedAllocationInfo{info}))
 	if unknown.known || unknown.bytes != 0 || unknown.db != nil {
 		t.Fatalf("guessed allocation: %+v", unknown)
 	}
-	measure := &sourceTreeAllocation{known: true}
+	measure := &sourceTreeAllocation{known: true, memory: testSourceOperationMemory(t)}
 	testutil.FailErr(t, "open exact link set", measure.observe(t.Context(), info))
 	if measure.db == nil {
 		t.Fatal("linked-entry set was not opened")

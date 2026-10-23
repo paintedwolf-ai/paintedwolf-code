@@ -57,7 +57,7 @@ func TestDirectoryDeletesRespectQuotaAndPruneRetainedTrees(t *testing.T) {
 			testutil.FailErr(t, "write "+full, os.WriteFile(full, []byte(chunk), 0o644))
 		}
 		if round == 0 {
-			measured, err := h.service.InspectRemoval(t.Context(), fseffect.Location{Root: h.root, Rel: "node_modules"})
+			measured, err := h.service.InspectRemoval(t.Context(), fseffect.Location{Root: h.root, Rel: "node_modules"}, h.program.Memory)
 			testutil.FailErr(t, "measure retained tree allocation", err)
 			if !measured.RecoverySizeKnown || measured.RecoveryBytes < 1 {
 				t.Fatalf("unavailable fixture allocation: %+v", measured)
@@ -216,7 +216,7 @@ func TestRecursiveRemovalTraversalUsesInvocationState(t *testing.T) {
 			}
 			testutil.FailErr(t, "seed directories", os.MkdirAll(h.path(path), 0o755))
 			testutil.FailErr(t, "seed leaf", os.WriteFile(h.path(filepath.Join(path, "leaf")), []byte("body"), 0o644))
-			memory, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: 32 << 20, State: 512 << 10})
+			memory, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: 32 << 20, State: 768 << 10})
 			testutil.FailErr(t, "create invocation budget", err)
 			h.program.Memory = memory
 			result := h.run("", "rm", "-rf", "tree")
@@ -238,5 +238,23 @@ func TestRecursiveRemovalTraversalUsesInvocationState(t *testing.T) {
 				t.Fatalf("traversal leaked: %+v", use)
 			}
 		})
+	}
+}
+
+func TestMoveReleasesSourceSnapshotWhenDestinationAdmissionFails(t *testing.T) {
+	h := newHarness(t, map[string]string{"source": "new", "destination": "old"})
+	memory, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: 128 << 10, State: 64 << 10})
+	testutil.FailErr(t, "bound move snapshots", err)
+	h.program.Memory = memory
+	result := h.run("", "mv", "source", "destination")
+	var limit *toolcontract.ProgramMemoryLimitError
+	if !errors.As(result.err, &limit) || limit.Account != "state" {
+		t.Fatalf("unadmitted move: %+v error=%v", result.result, result.err)
+	}
+	if h.read("source") != "new" || h.read("destination") != "old" {
+		t.Fatal("refused move changed files")
+	}
+	if use := memory.InUse(); use.Working != 0 || use.State != 0 {
+		t.Fatalf("move retained source after refusal: %+v", use)
 	}
 }

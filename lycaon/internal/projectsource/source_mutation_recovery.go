@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/sourceeffect"
 	"os"
 	"path/filepath"
 
@@ -12,6 +13,11 @@ import (
 
 // Recover completes pending filesystem and ledger phases before requests are served.
 func (s *SourceMutationService) Recover(ctx context.Context) error {
+	memory, err := newSourceOperationMemory()
+	if err != nil {
+		return err
+	}
+
 	if s == nil {
 		return nil
 	}
@@ -21,14 +27,14 @@ func (s *SourceMutationService) Recover(ctx context.Context) error {
 	}
 	var recoveryErr error
 	for _, row := range rows {
-		if err := s.recoverOne(ctx, row); err != nil {
+		if err := s.recoverOne(ctx, row, memory); err != nil {
 			recoveryErr = errors.Join(recoveryErr, fmt.Errorf("recover source mutation %s: %w", row.ID, err))
 		}
 	}
 	return recoveryErr
 }
 
-func (s *SourceMutationService) recoverOne(ctx context.Context, row *sourceMutationRow) error {
+func (s *SourceMutationService) recoverOne(ctx context.Context, row *sourceMutationRow, memory sourceeffect.Memory) error {
 	s.History.policyMu.RLock()
 	defer s.History.policyMu.RUnlock()
 	unlock, err := s.operationLocks.Acquire(ctx, row.ID)
@@ -49,6 +55,7 @@ func (s *SourceMutationService) recoverOne(ctx context.Context, row *sourceMutat
 	if !found || (current.Status != sourceMutationPrepared && current.Status != sourceMutationFileApplied) {
 		return nil
 	}
+	current.memory = memory
 	if current.Plan.AgentEffect != nil {
 		return s.recoverAgentEffect(ctx, current)
 	}
@@ -63,7 +70,7 @@ func (s *SourceMutationService) recoverOne(ctx context.Context, row *sourceMutat
 		}
 	}
 	if current.Status == sourceMutationPrepared && sourceLifecycleKind(current.Plan.Kind) {
-		applied := current.Plan.EffectStarted && verifySourceMutationApplied(ctx, &current.Plan) == nil
+		applied := current.Plan.EffectStarted && verifySourceMutationApplied(ctx, &current.Plan, memory) == nil
 		if current.Plan.Kind == "delete" {
 			identity, statErr := fspath.EntryIdentity(current.Plan.AbsPath)
 			applied = current.Plan.DeleteStarted && (os.IsNotExist(statErr) || (statErr == nil && identity != current.Plan.DeleteIdentity))

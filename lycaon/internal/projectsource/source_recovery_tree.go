@@ -120,7 +120,7 @@ func (s *SourceEffects) retainSourceTree(ctx context.Context, row *sourceMutatio
 	if err := s.Journal.update(ctx, row); err != nil {
 		return err
 	}
-	sha, size, err := sourceTreeFingerprint(ctx, plan.AbsPath)
+	sha, size, err := sourceTreeFingerprint(ctx, plan.AbsPath, row.memory)
 	if err != nil {
 		return err
 	}
@@ -178,14 +178,14 @@ func (s *SourceEffects) restoreSourceTree(ctx context.Context, row *sourceMutati
 	if err := requireSourceIdentity(held, binding.Identity); err != nil {
 		return err
 	}
-	if err := requireSourceFingerprint(ctx, held, plan.TreeSHA); err != nil {
+	if err := requireSourceFingerprint(ctx, held, plan.TreeSHA, row.memory); err != nil {
 		return err
 	}
 	plan.DestinationIdentity = binding.Identity
 	if err := s.startSourceEffect(ctx, row); err != nil {
 		return err
 	}
-	if err := requireSourceFingerprint(ctx, held, plan.TreeSHA); err != nil {
+	if err := requireSourceFingerprint(ctx, held, plan.TreeSHA, row.memory); err != nil {
 		return err
 	}
 	return s.relocateRecoveryTree(ctx, row.ID, source, fseffect.Location{Root: plan.RootPath, Rel: plan.Path}, binding.Identity)

@@ -60,7 +60,10 @@ func NewSourceMutationService(database db.Handle, ledger *sourceledger.Store) *S
 	return service
 }
 
-func (s *SourceMutationService) execute(ctx context.Context, operationID, projectID, inputDigest string, prepare func() (*sourceMutationPlan, error)) (json.RawMessage, error) {
+func (s *SourceMutationService) execute(ctx context.Context, operationID, projectID, inputDigest string, memory sourceeffect.Memory, prepare func() (*sourceMutationPlan, error)) (json.RawMessage, error) {
+	if memory == nil {
+		return nil, fmt.Errorf("source operation memory is required")
+	}
 	if s == nil || strings.TrimSpace(operationID) == "" {
 		return nil, fmt.Errorf("source mutation operation id required")
 	}
@@ -81,6 +84,9 @@ func (s *SourceMutationService) execute(ctx context.Context, operationID, projec
 		defer release()
 	}
 	row, err := s.prepareExecution(ctx, operationID, projectID, inputDigest, prepare)
+	if row != nil {
+		row.memory = memory
+	}
 	var release func()
 	if err == nil && row.Status != sourceMutationCommitted {
 		release, err = s.Paths.reserveSourcePlan(row.Plan)
@@ -192,7 +198,7 @@ func (s *SourceMutationService) resume(ctx context.Context, row *sourceMutationR
 	// Copy and restore carry their stage validation through native publication.
 	needsVerification := !appliedNow || (row.Plan.Kind != "copy" && row.Plan.Kind != "restore")
 	if row.Status == sourceMutationFileApplied && needsVerification {
-		if err := verifySourceMutationApplied(ctx, &row.Plan); err != nil {
+		if err := verifySourceMutationApplied(ctx, &row.Plan, row.memory); err != nil {
 			if applyErr := s.Effects.applyMutation(ctx, row); applyErr != nil {
 				if isSourceDivergence(applyErr) {
 					row.Status, row.Error = sourceMutationDiverged, applyErr.Error()
@@ -201,7 +207,7 @@ func (s *SourceMutationService) resume(ctx context.Context, row *sourceMutationR
 				}
 				return nil, applyErr
 			}
-			if verifyErr := verifySourceMutationApplied(ctx, &row.Plan); verifyErr != nil {
+			if verifyErr := verifySourceMutationApplied(ctx, &row.Plan, row.memory); verifyErr != nil {
 				row.Status, row.Error = sourceMutationDiverged, verifyErr.Error()
 				_ = s.Journal.update(ctx, row)
 				return nil, fmt.Errorf("%w: %w", ErrSourceMutationDiverged, verifyErr)

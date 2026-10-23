@@ -17,7 +17,7 @@ import (
 )
 
 // InspectRemoval measures content and kernel entry identity without changing it.
-func (s *SourceMutationService) InspectRemoval(ctx context.Context, location fseffect.Location) (sourceeffect.RemovalSnapshot, error) {
+func (s *SourceMutationService) InspectRemoval(ctx context.Context, location fseffect.Location, memory sourceeffect.Memory) (sourceeffect.RemovalSnapshot, error) {
 	abs, _, err := resolveLifecyclePath(location.Root, location.Rel)
 	if err != nil {
 		return sourceeffect.RemovalSnapshot{}, err
@@ -26,7 +26,7 @@ func (s *SourceMutationService) InspectRemoval(ctx context.Context, location fse
 	if err != nil {
 		return sourceeffect.RemovalSnapshot{}, err
 	}
-	sha, size, err := sourceTreeFingerprint(ctx, abs)
+	sha, size, err := sourceTreeFingerprint(ctx, abs, memory)
 	if err != nil {
 		return sourceeffect.RemovalSnapshot{}, err
 	}
@@ -58,6 +58,9 @@ func (s *SourceMutationService) InspectRemoval(ctx context.Context, location fse
 
 // RemoveEntry records an undoable agent deletion without using system Trash.
 func (s *SourceMutationService) RemoveEntry(ctx context.Context, removal sourceeffect.Removal) (string, error) {
+	if removal.Memory == nil {
+		return "", fmt.Errorf("agent removal memory is required")
+	}
 	record := removal.Record
 	if s == nil || record.ProjectID == "" || record.Op != api.SourceChangeOpDelete || strings.TrimSpace(removal.RootPath) == "" {
 		return "", fmt.Errorf("agent removal requires a project, a root, and a delete operation")
@@ -85,7 +88,7 @@ func (s *SourceMutationService) RemoveEntry(ctx context.Context, removal sourcee
 	if err != nil {
 		return "", err
 	}
-	_, err = s.execute(ctx, operationID, record.ProjectID, digest, func() (*sourceMutationPlan, error) {
+	_, err = s.execute(ctx, operationID, record.ProjectID, digest, removal.Memory, func() (*sourceMutationPlan, error) {
 		return s.prepareAgentRemoval(ctx, operationID, removal)
 	})
 	return operationID, err
@@ -120,7 +123,7 @@ func (s *SourceMutationService) prepareAgentRemoval(ctx context.Context, operati
 		}
 	}
 	if removal.ReviewedSnapshot != nil {
-		current, err := s.InspectRemoval(ctx, fseffect.Location{Root: removal.RootPath, Rel: rel})
+		current, err := s.InspectRemoval(ctx, fseffect.Location{Root: removal.RootPath, Rel: rel}, removal.Memory)
 		if err != nil {
 			return nil, err
 		}
@@ -154,7 +157,7 @@ func (s *SourceMutationService) prepareAgentRemoval(ctx context.Context, operati
 	if info.IsDir() && !removal.Unrecoverable {
 		snapshot := removal.ReviewedSnapshot
 		if snapshot == nil {
-			measured, err := s.InspectRemoval(ctx, fseffect.Location{Root: removal.RootPath, Rel: rel})
+			measured, err := s.InspectRemoval(ctx, fseffect.Location{Root: removal.RootPath, Rel: rel}, removal.Memory)
 			if err != nil {
 				return nil, err
 			}

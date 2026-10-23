@@ -18,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -38,7 +39,11 @@ func TestRetainedTreeBackupRestoresExistingManifestFormat(t *testing.T) {
 			testutil.FailErr(t, "seed link", os.Symlink("file", filepath.Join(tree, "link")))
 			tracked, err := ledger.TrackFile(t.Context(), sourceledger.TrackInput{ProjectID: project.ID, RootID: rootID, Path: "tree/file", Content: []byte{0, 255, 42}})
 			testutil.FailErr(t, "track child history", err)
-			id, err := service.RemoveEntry(t.Context(), sourceeffect.Removal{
+			limits, err := toolcontract.CatalogProgramMemoryLimits()
+			testutil.FailErr(t, "read program limits", err)
+			memory, err := toolcontract.NewProgramMemory(limits)
+			testutil.FailErr(t, "create operation memory", err)
+			id, err := service.RemoveEntry(t.Context(), sourceeffect.Removal{Memory: memory,
 				Record: sourceledger.RecordInput{RecordLocation: sourceledger.RecordLocation{RootID: rootID, Path: "tree"}, ProjectID: project.ID, Op: api.SourceChangeOpDelete, Origin: api.SourceChangeOriginAgent}, RootPath: root, Recursive: true,
 				Change: sourcefeed.Change{ProjectID: project.ID, WorkspaceID: project.WorkspaceID(), WorkspaceKind: api.SourceWorkspaceKindProject},
 			})

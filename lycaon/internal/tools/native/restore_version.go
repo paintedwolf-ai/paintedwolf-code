@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourceledger"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/toolkit"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
@@ -222,7 +223,15 @@ func restoreAbsentVersion(
 		return "", fmt.Errorf("read failed: %w", err)
 	}
 
-	if err := removeAgentPath(ctx, tctx, resolvedMutationTarget(resolved), nil); err != nil {
+	limits, err := toolcontract.CatalogProgramMemoryLimits()
+	if err != nil {
+		return "", err
+	}
+	memory, err := toolcontract.NewProgramMemory(limits)
+	if err != nil {
+		return "", err
+	}
+	if err := removeAgentPath(ctx, tctx, resolvedMutationTarget(resolved), memory); err != nil {
 		return "", fmt.Errorf("restore absent state for %s: %w", path, err)
 	}
 	captureFileEdit(tctx, path, "", before)

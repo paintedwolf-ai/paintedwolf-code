@@ -113,7 +113,11 @@ func newHarness(t *testing.T, files map[string]string) *harness {
 	paths, err := projectpaths.NewProgramPaths(t.Context(), boundary, tc, "")
 	testutil.FailErr(t, "bind program paths", err)
 	p := &project.Project{ID: "p1", Roots: []project.Root{{ID: "r1", ProjectID: "p1", Path: root, IsPrimary: true}}}
-	return &harness{t: t, db: sqlDB, root: root, tc: tc, owners: owners, pins: pins, program: Program{Paths: paths, Barrier: &native.PublicationBarrier{}}, service: service, project: p}
+	limits, memoryErr := toolcontract.CatalogProgramMemoryLimits()
+	testutil.FailErr(t, "load program memory limits", memoryErr)
+	memory, memoryErr := toolcontract.NewProgramMemory(limits)
+	testutil.FailErr(t, "create program memory", memoryErr)
+	return &harness{t: t, db: sqlDB, root: root, tc: tc, owners: owners, pins: pins, program: Program{Memory: memory, Paths: paths, Barrier: &native.PublicationBarrier{}}, service: service, project: p}
 }
 
 // mutationBoundary admits every operation the frontend reaches for the default

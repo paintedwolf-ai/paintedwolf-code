@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/sourceeffect"
 	"io"
 	"io/fs"
 	"os"
@@ -37,7 +38,7 @@ var ErrSourceRecoveryFailed = errors.New("could not preserve file recovery data"
 
 // captureRecovery keeps exact entries, including ignored files and empty folders.
 // Unsupported special files stop the operation before any entry moves.
-func (s *sourceRecovery) captureRecovery(ctx context.Context, plan *sourceMutationPlan, abs string) error {
+func (s *sourceRecovery) captureRecovery(ctx context.Context, plan *sourceMutationPlan, abs string, memory sourceeffect.Memory) error {
 	rel, err := sourceRelativePath(plan.RootPath, abs)
 	if err != nil || !filepath.IsLocal(rel) {
 		return ErrSourcePathDenied
@@ -53,18 +54,11 @@ func (s *sourceRecovery) captureRecovery(ctx context.Context, plan *sourceMutati
 	}
 	defer retained.close()
 
-	capture := func(current string, _ fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
+	capture := func(current string, info fs.FileInfo) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 		rel, err := filepath.Rel(base, filepath.FromSlash(current))
-		if err != nil {
-			return err
-		}
-		info, err := scope.Lstat(current)
 		if err != nil {
 			return err
 		}
@@ -87,9 +81,13 @@ func (s *sourceRecovery) captureRecovery(ctx context.Context, plan *sourceMutati
 		return nil
 	}
 	if base == "." {
-		err = fs.WalkDir(scope.FS(), ".", capture)
+		err = walkSourceTree(ctx, scope, ".", memory, capture)
 	} else {
-		err = capture(base, nil, nil)
+		info, statErr := scope.Lstat(base)
+		if statErr != nil {
+			return statErr
+		}
+		err = capture(base, info)
 	}
 
 	if err == nil {
@@ -130,7 +128,7 @@ func (s *SourceEffects) applySourceRestore(ctx context.Context, row *sourceMutat
 		if err := requireSourceIdentity(plan.AbsPath, plan.DestinationIdentity); err != nil {
 			return err
 		}
-		return requireSourceFingerprint(ctx, plan.AbsPath, plan.TreeSHA)
+		return requireSourceFingerprint(ctx, plan.AbsPath, plan.TreeSHA, row.memory)
 	}
 	if plan.RecoveryCount == 0 {
 		return ErrSourceRecoveryFailed
@@ -145,7 +143,7 @@ func (s *SourceEffects) applySourceRestore(ctx context.Context, row *sourceMutat
 		return fmt.Errorf("%w: %w", ErrSourceRecoveryFailed, err)
 	}
 	reportSourceProgress(ctx, "verifying", plan.RecoveryCount, 0)
-	if err := requireSourceFingerprint(ctx, target, plan.TreeSHA); err != nil {
+	if err := requireSourceFingerprint(ctx, target, plan.TreeSHA, row.memory); err != nil {
 		return err
 	}
 	plan.DestinationIdentity, err = fspath.EntryIdentity(target)

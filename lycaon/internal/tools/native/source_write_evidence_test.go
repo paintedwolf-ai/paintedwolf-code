@@ -116,7 +116,7 @@ func TestDeleteRecordsPreImageAndRenameRecordsTip(t *testing.T) {
 
 	deleted := filepath.Join(dir, "deleted.txt")
 	testutil.FailErr(t, "seed deletion", os.WriteFile(deleted, []byte("gone\n"), 0o644))
-	testutil.FailErr(t, "delete", removeAgentPath(t.Context(), tctx, testMutationTarget(deleted), nil))
+	testutil.FailErr(t, "delete", removeAgentPath(t.Context(), tctx, testMutationTarget(deleted), programDoorMemory(t)))
 	deletedChanges, err := st.Walk.QueryWalk(t.Context(), "p1",
 		sourceledger.Baseline{Kind: sourceledger.BaselineSession, SessionID: "s1"},
 		10, 0, sourceledger.CommitLens{})
@@ -130,7 +130,7 @@ func TestDeleteRecordsPreImageAndRenameRecordsTip(t *testing.T) {
 	from := filepath.Join(dir, "from.txt")
 	to := filepath.Join(dir, "to.txt")
 	testutil.FailErr(t, "seed rename", os.WriteFile(from, []byte("moved\n"), 0o644))
-	testutil.FailErr(t, "rename", renameAgentPath(t.Context(), tctx, testMutationTarget(from), testMutationTarget(to)))
+	testutil.FailErr(t, "rename", renameAgentPath(t.Context(), tctx, testMutationTarget(from), testMutationTarget(to), programDoorMemory(t)))
 	res, err := st.Walk.QueryWalk(t.Context(), "p1",
 		sourceledger.Baseline{Kind: sourceledger.BaselineSession, SessionID: "s1"},
 		10, 0, sourceledger.CommitLens{})
@@ -194,7 +194,7 @@ func TestAgentFileFingerprintDoesNotRetainContent(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "source")
 	content := bytes.Repeat([]byte{0, 255, 1}, (4<<20)/3+1)
 	testutil.FailErr(t, "seed binary source", os.WriteFile(path, content, 0o644))
-	memory, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: 32 << 10, State: 1})
+	memory, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: 36 << 10, State: 1})
 	testutil.FailErr(t, "create metadata-only memory", err)
 	evidence, err := captureAgentFileAt(testMutationTarget(path).Location, t.Context(), memory, false)
 	testutil.FailErr(t, "fingerprint without body storage", err)
@@ -204,7 +204,7 @@ func TestAgentFileFingerprintDoesNotRetainContent(t *testing.T) {
 	if !evidence.exists || evidence.content != nil || evidence.size != int64(len(content)) || evidence.sha256 != textfile.SHA256(content) {
 		t.Fatalf("metadata-only evidence=%+v", evidence)
 	}
-	if peak := memory.Peak(); peak.State != 0 || peak.Working != 32<<10 {
+	if peak := memory.Peak(); peak.State != 0 || peak.Working != 36<<10 {
 		t.Fatalf("fingerprint admission=%+v", peak)
 	}
 	if used := memory.InUse(); used.State != 0 || used.Working != 0 {

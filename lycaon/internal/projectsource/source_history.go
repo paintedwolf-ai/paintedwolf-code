@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/sourceeffect"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -121,6 +122,11 @@ func (s *SourceMutationService) Redo(ctx context.Context, operationID string, p 
 }
 
 func (s *SourceMutationService) applyHistory(ctx context.Context, operationID string, p ProjectSource, req SourceHistoryMutationRequest, direction string) (*SourceHistoryMutationResult, error) {
+	memory, err := newSourceOperationMemory()
+	if err != nil {
+		return nil, err
+	}
+
 	if p == nil || len(p.SourceRoots()) == 0 {
 		return nil, ErrSourceNoRoot
 	}
@@ -143,7 +149,7 @@ func (s *SourceMutationService) applyHistory(ctx context.Context, operationID st
 	if err := s.validatePendingHistoryHead(ctx, operationID, p.SourceID(), expectedEntryID, direction, digest); err != nil {
 		return nil, err
 	}
-	encoded, err := s.execute(ctx, operationID, p.SourceID(), digest, func() (*sourceMutationPlan, error) {
+	encoded, err := s.execute(ctx, operationID, p.SourceID(), digest, memory, func() (*sourceMutationPlan, error) {
 		state, order := "applied", "DESC"
 		if direction == "redo" {
 			state, order = "undone", "ASC"
@@ -268,14 +274,14 @@ func (s *SourceMutationService) validatePendingHistoryHead(ctx context.Context, 
 	return nil
 }
 
-func (s *SourceHistory) buildSourceHistoryEntry(ctx context.Context, operationID string, plan *sourceMutationPlan) (*sourceHistoryEntry, error) {
+func (s *SourceHistory) buildSourceHistoryEntry(ctx context.Context, operationID string, plan *sourceMutationPlan, memory sourceeffect.Memory) (*sourceHistoryEntry, error) {
 	if plan == nil || plan.AgentEffect != nil || plan.HistoryEntryID != "" || !plan.Changed || plan.Unrecoverable {
 		return nil, nil
 	}
 	if plan.Kind != "create" && plan.Kind != "rename" && plan.Kind != "copy" && plan.Kind != "delete" {
 		return nil, nil
 	}
-	plans, err := s.planSourceHistory(ctx, operationID, *plan)
+	plans, err := s.planSourceHistory(ctx, operationID, *plan, memory)
 	if err != nil {
 		return nil, err
 	}
@@ -292,7 +298,7 @@ type sourceHistoryPlans struct {
 	kind, undoLabel, redoLabel string
 }
 
-func (s *SourceHistory) planSourceHistory(ctx context.Context, operationID string, original sourceMutationPlan) (sourceHistoryPlans, error) {
+func (s *SourceHistory) planSourceHistory(ctx context.Context, operationID string, original sourceMutationPlan, memory sourceeffect.Memory) (sourceHistoryPlans, error) {
 	name := filepath.Base(filepath.FromSlash(original.Path))
 	switch original.Kind {
 	case "rename":
@@ -322,14 +328,14 @@ func (s *SourceHistory) planSourceHistory(ctx context.Context, operationID strin
 		fingerprint := original.TreeSHA
 		if fingerprint == "" {
 			var err error
-			fingerprint, _, err = sourceTreeFingerprint(ctx, targetAbs)
+			fingerprint, _, err = sourceTreeFingerprint(ctx, targetAbs, memory)
 			if err != nil {
 				return sourceHistoryPlans{}, err
 			}
 		}
 		original.RecoveryID, original.TreeSHA = operationID, fingerprint
 		if original.RecoveryCount == 0 {
-			if err := s.recovery.captureRecovery(ctx, &original, targetAbs); err != nil {
+			if err := s.recovery.captureRecovery(ctx, &original, targetAbs, memory); err != nil {
 				return sourceHistoryPlans{}, err
 			}
 		}

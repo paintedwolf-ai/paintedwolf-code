@@ -18,7 +18,7 @@ func TestRecoveryRetentionFollowsHistoryAcrossRestartAndBranching(t *testing.T) 
 			service, project, root, _ := sourceMutationFixture(t)
 			ledger := service.settlement.recorder.(*sourceledger.Store)
 			verify, reviewed := seedRetainedEntry(t, root, kind)
-			id, err := service.RemoveEntry(t.Context(), agentRemoval(project, "entry", reviewed))
+			id, err := service.RemoveEntry(t.Context(), agentRemoval(t, project, "entry", reviewed))
 			testutil.FailErr(t, "remove retained entry", err)
 			for cycle := 0; cycle < 3; cycle++ {
 				service = recoverWithMaintenance(t, service, ledger)

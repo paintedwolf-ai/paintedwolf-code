@@ -17,7 +17,7 @@ func measureAgentRemoval(ctx context.Context, tc tools.ToolContext, target mutat
 	if _, ok := recoverableRemoval(tc, *mutation); !ok {
 		return nil
 	}
-	snapshot, err := tc.Source.SourceMutations.InspectRemoval(ctx, target.Location)
+	snapshot, err := tc.Source.SourceMutations.InspectRemoval(ctx, target.Location, mutation.Memory)
 	if err != nil {
 		return err
 	}
@@ -41,7 +41,7 @@ func permanentRemovalNote(ctx context.Context, display string, mutation *agentMu
 // the selected content, then use the same explicit recovery-loss review.
 func reviewUnavailableRemoval(ctx context.Context, tc tools.ToolContext, target mutationTarget, mutation *agentMutation) error {
 	before := mutation.RemovalSnapshot
-	current, err := tc.Source.SourceMutations.InspectRemoval(ctx, target.Location)
+	current, err := tc.Source.SourceMutations.InspectRemoval(ctx, target.Location, mutation.Memory)
 	if err != nil {
 		return err
 	}
@@ -56,8 +56,8 @@ func reviewUnavailableRemoval(ctx context.Context, tc tools.ToolContext, target 
 	return reviewAgentMutation(ctx, tc, *mutation, target.Location, fseffect.Location{}, true)
 }
 
-func removeAgentTree(ctx context.Context, tc tools.ToolContext, target mutationTarget, display string, bytes int64, recheck func() error) error {
-	mutation := agentMutation{Op: api.SourceChangeOpDelete, AbsPath: target.Abs, BeforeSize: bytes, IsDir: true, Recursive: true}
+func removeAgentTree(ctx context.Context, tc tools.ToolContext, target mutationTarget, display string, bytes int64, memory *toolcontract.ProgramMemory, recheck func() error) error {
+	mutation := agentMutation{Memory: memory, Op: api.SourceChangeOpDelete, AbsPath: target.Abs, BeforeSize: bytes, IsDir: true, Recursive: true}
 	if err := measureAgentRemoval(ctx, tc, target, &mutation, display); err != nil {
 		return err
 	}
@@ -94,7 +94,7 @@ func reviewAgentTreePolicyRemoval(ctx context.Context, tc tools.ToolContext, tar
 		return err
 	}
 	defer working()
-	mutation := agentMutation{Op: api.SourceChangeOpDelete, AbsPath: target.Abs, Before: before.content, BeforeSHA256: before.sha256, BeforeSize: before.size, IsDir: before.isDir}
+	mutation := agentMutation{Memory: memory, Op: api.SourceChangeOpDelete, AbsPath: target.Abs, Before: before.content, BeforeSHA256: before.sha256, BeforeSize: before.size, IsDir: before.isDir}
 	return reviewAgentMutation(ctx, tc, mutation, target.EffectLocation(), fseffect.Location{}, false)
 }
 

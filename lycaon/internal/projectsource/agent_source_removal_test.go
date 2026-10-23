@@ -18,8 +18,8 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func agentRemoval(p *Project, path, reviewed string) sourceeffect.Removal {
-	return sourceeffect.Removal{
+func agentRemoval(t *testing.T, p *Project, path, reviewed string) sourceeffect.Removal {
+	return sourceeffect.Removal{Memory: testSourceOperationMemory(t),
 		Record: sourceledger.RecordInput{
 			RecordLocation: sourceledger.RecordLocation{RootID: p.Roots[0].ID, Path: path},
 			ProjectID:      p.ID, Op: api.SourceChangeOpDelete,
@@ -48,7 +48,7 @@ func TestAgentRemovalKeepsWhatHistoryCannotAndSkipsTrash(t *testing.T) {
 	body := bytes.Repeat([]byte{0, 1, 2, 255}, sourceledger.MaxRevisionContentBytes/2)
 	testutil.FailErr(t, "seed large executable", os.WriteFile(filepath.Join(root, "tool.bin"), body, 0o750))
 
-	id, err := service.RemoveEntry(t.Context(), agentRemoval(p, "tool.bin", textfile.SHA256(body)))
+	id, err := service.RemoveEntry(t.Context(), agentRemoval(t, p, "tool.bin", textfile.SHA256(body)))
 	testutil.FailErr(t, "remove entry", err)
 	if _, err := os.Lstat(filepath.Join(root, "tool.bin")); !os.IsNotExist(err) {
 		t.Fatalf("removed file remains: %v", err)
@@ -78,7 +78,7 @@ func TestAgentRemovalIsAttributedToTheToolCall(t *testing.T) {
 	service, p, root, _ := sourceMutationFixture(t)
 	refuseTrash(t, service)
 	testutil.FailErr(t, "seed", os.WriteFile(filepath.Join(root, "note.txt"), []byte("note"), 0o600))
-	_, err := service.RemoveEntry(t.Context(), agentRemoval(p, "note.txt", textfile.SHA256([]byte("note"))))
+	_, err := service.RemoveEntry(t.Context(), agentRemoval(t, p, "note.txt", textfile.SHA256([]byte("note"))))
 	testutil.FailErr(t, "remove entry", err)
 	var origin, session, toolCall, tool string
 	var person any
@@ -95,7 +95,7 @@ func TestAgentRemovalRefusesAFileChangedAfterReview(t *testing.T) {
 	service, p, root, _ := sourceMutationFixture(t)
 	refuseTrash(t, service)
 	testutil.FailErr(t, "seed", os.WriteFile(filepath.Join(root, "note.txt"), []byte("changed"), 0o600))
-	_, err := service.RemoveEntry(t.Context(), agentRemoval(p, "note.txt", textfile.SHA256([]byte("reviewed"))))
+	_, err := service.RemoveEntry(t.Context(), agentRemoval(t, p, "note.txt", textfile.SHA256([]byte("reviewed"))))
 	if !errors.Is(err, ErrSourceWriteConflict) {
 		t.Fatalf("remove changed file = %v", err)
 	}
@@ -108,7 +108,7 @@ func TestAgentRemovalRefusesAFolderWithContents(t *testing.T) {
 	refuseTrash(t, service)
 	testutil.FailErr(t, "seed folder", os.MkdirAll(filepath.Join(root, "dir"), 0o750))
 	testutil.FailErr(t, "seed child", os.WriteFile(filepath.Join(root, "dir", "child"), []byte("x"), 0o600))
-	if _, err := service.RemoveEntry(t.Context(), agentRemoval(p, "dir", "")); !errors.Is(err, ErrSourceNotEmpty) {
+	if _, err := service.RemoveEntry(t.Context(), agentRemoval(t, p, "dir", "")); !errors.Is(err, ErrSourceNotEmpty) {
 		t.Fatalf("remove folder with contents = %v", err)
 	}
 	assertSourceHistoryFile(t, root, "dir/child", "x")
@@ -120,7 +120,7 @@ func TestAgentRemovalOfALinkKeepsItsTarget(t *testing.T) {
 	refuseTrash(t, service)
 	testutil.FailErr(t, "seed target", os.WriteFile(filepath.Join(root, "target.txt"), []byte("target"), 0o600))
 	testutil.FailErr(t, "seed link", os.Symlink("target.txt", filepath.Join(root, "link")))
-	id, err := service.RemoveEntry(t.Context(), agentRemoval(p, "link", ""))
+	id, err := service.RemoveEntry(t.Context(), agentRemoval(t, p, "link", ""))
 	testutil.FailErr(t, "remove link", err)
 	assertSourceHistoryFile(t, root, "target.txt", "target")
 	undoHistoryHead(t, service, p, id)
@@ -135,7 +135,7 @@ func TestAgentRemovalOfALinkKeepsItsTarget(t *testing.T) {
 func TestAgentRemovalRefusesAWorkerBranch(t *testing.T) {
 	service, p, root, _ := sourceMutationFixture(t)
 	testutil.FailErr(t, "seed", os.WriteFile(filepath.Join(root, "note.txt"), []byte("note"), 0o600))
-	removal := agentRemoval(p, "note.txt", textfile.SHA256([]byte("note")))
+	removal := agentRemoval(t, p, "note.txt", textfile.SHA256([]byte("note")))
 	worker, err := sourcebranch.ForWorker("job-1")
 	testutil.FailErr(t, "worker branch", err)
 	removal.Record.BranchID = worker

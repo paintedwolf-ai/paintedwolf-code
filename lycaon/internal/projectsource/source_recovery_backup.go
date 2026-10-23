@@ -18,6 +18,11 @@ import (
 // capture. The archive keeps the existing blob-manifest representation; original
 // retained entries, live journal rows and live history are never changed here.
 func MaterializeRecoveryBackup(ctx context.Context, captured db.Handle, liveContent, capturedContent string, admit func(int64, int64) error) (err error) {
+	memory, err := newSourceOperationMemory()
+	if err != nil {
+		return err
+	}
+
 	ledger := sourceledger.New(captured, capturedContent)
 	defer func() { err = errors.Join(err, ledger.Snapshots.Close()) }()
 	recovery := &sourceRecovery{db: captured, objects: ledger.Retention}
@@ -44,7 +49,7 @@ func MaterializeRecoveryBackup(ctx context.Context, captured db.Handle, liveCont
 			if err := requireSourceIdentity(path, plan.RetainedTree.Identity); err != nil {
 				return &sourceeffect.RecoveryUnavailableError{Cause: ErrSourceMutationDiverged}
 			}
-			if err := requireSourceFingerprint(ctx, path, plan.TreeSHA); err != nil {
+			if err := requireSourceFingerprint(ctx, path, plan.TreeSHA, memory); err != nil {
 				if errors.Is(err, ErrSourceMutationDiverged) || os.IsNotExist(err) {
 					return &sourceeffect.RecoveryUnavailableError{Cause: ErrSourceMutationDiverged}
 				}
@@ -65,7 +70,7 @@ func MaterializeRecoveryBackup(ctx context.Context, captured db.Handle, liveCont
 			copy := *plan
 			copy.Kind, copy.RootPath, copy.Path, copy.AbsPath = "delete", filepath.Dir(path), filepath.Base(path), path
 			recovery.quota = func() int64 { return contentBytes }
-			if err := recovery.captureRecovery(ctx, &copy, path); err != nil {
+			if err := recovery.captureRecovery(ctx, &copy, path, memory); err != nil {
 				return err
 			}
 			if err := requireSourceIdentity(path, plan.RetainedTree.Identity); err != nil {

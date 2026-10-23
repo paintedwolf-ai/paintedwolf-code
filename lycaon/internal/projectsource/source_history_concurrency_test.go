@@ -20,7 +20,7 @@ func TestNativeRemovalOrdersAfterAnInFlightUndo(t *testing.T) {
 	for _, name := range []string{"a", "b"} {
 		testutil.FailErr(t, "seed", os.WriteFile(filepath.Join(root, name), []byte(name), 0o600))
 	}
-	first, err := service.RemoveEntry(t.Context(), agentRemoval(project, "a", textfile.SHA256([]byte("a"))))
+	first, err := service.RemoveEntry(t.Context(), agentRemoval(t, project, "a", textfile.SHA256([]byte("a"))))
 	testutil.FailErr(t, "first removal", err)
 	reached, release := make(chan struct{}), make(chan struct{})
 	unblock := sync.OnceFunc(func() { close(release) })
@@ -38,7 +38,7 @@ func TestNativeRemovalOrdersAfterAnInFlightUndo(t *testing.T) {
 	}
 	removed := make(chan error, 1)
 	go func() {
-		_, err := service.RemoveEntry(t.Context(), agentRemoval(project, "b", textfile.SHA256([]byte("b"))))
+		_, err := service.RemoveEntry(t.Context(), agentRemoval(t, project, "b", textfile.SHA256([]byte("b"))))
 		removed <- err
 	}()
 	select {
@@ -84,7 +84,7 @@ func TestMemoryRecoveryQuotaKeepsOtherProjectsActiveCapture(t *testing.T) {
 		})
 		done := make(chan error, 1)
 		go func() {
-			_, err := service.RemoveEntry(ctx, agentRemoval(project, "file", textfile.SHA256([]byte(body))))
+			_, err := service.RemoveEntry(ctx, agentRemoval(t, project, "file", textfile.SHA256([]byte(body))))
 			done <- err
 		}()
 		runs = append(runs, removalRun{project: project, root: root, body: body, reached: reached, release: release, unblock: unblock, done: done})

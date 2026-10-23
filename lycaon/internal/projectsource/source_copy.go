@@ -24,7 +24,7 @@ func (s *SourceEffects) applySourceCopy(ctx context.Context, row *sourceMutation
 		if err := requireSourceIdentity(plan.ToAbs, plan.DestinationIdentity); err != nil {
 			return err
 		}
-		return requireSourceFingerprint(ctx, plan.ToAbs, plan.TreeSHA)
+		return requireSourceFingerprint(ctx, plan.ToAbs, plan.TreeSHA, row.memory)
 	}
 	if err := requireSourceIdentity(plan.FromAbs, plan.EntryIdentity); err != nil {
 		return err
@@ -88,13 +88,13 @@ func (s *SourceEffects) prepareSourceCopy(ctx context.Context, row *sourceMutati
 	}
 	transfer.progress.report(true)
 	if plan.Kind == "copy" {
-		if err := requireSourceFingerprint(ctx, filepath.Join(plan.StageAbs, "entry"), plan.TreeSHA); err != nil {
+		if err := requireSourceFingerprint(ctx, filepath.Join(plan.StageAbs, "entry"), plan.TreeSHA, row.memory); err != nil {
 			return err
 		}
 		if err := requireSourceIdentity(plan.FromAbs, plan.EntryIdentity); err != nil {
 			return err
 		}
-		if err := requireSourceFingerprint(ctx, plan.FromAbs, plan.TreeSHA); err != nil {
+		if err := requireSourceFingerprint(ctx, plan.FromAbs, plan.TreeSHA, row.memory); err != nil {
 			return err
 		}
 	}
@@ -175,7 +175,7 @@ func (s *SourceEffects) prepareSourceContents(ctx context.Context, row *sourceMu
 			return err
 		}
 	}
-	if err := s.recovery.captureRecovery(ctx, plan, plan.AbsPath); err != nil {
+	if err := s.recovery.captureRecovery(ctx, plan, plan.AbsPath, row.memory); err != nil {
 		return err
 	}
 	return s.Journal.update(ctx, row)

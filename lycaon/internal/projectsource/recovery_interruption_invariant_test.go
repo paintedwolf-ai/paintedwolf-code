@@ -15,7 +15,7 @@ func TestRecoveryRetentionSurvivesEveryDeletionSettlementBoundary(t *testing.T) 
 			service, project, root, _ := sourceMutationFixture(t)
 			ledger := service.settlement.recorder.(*sourceledger.Store)
 			verify, reviewed := seedRetainedEntry(t, root, "binary")
-			removal := agentRemoval(project, "entry", reviewed)
+			removal := agentRemoval(t, project, "entry", reviewed)
 			removal.Record.OperationID = uuid.NewString()
 			interrupted := errors.New("interrupted before deletion")
 			ctx := WithSourceEffect(t.Context(), func() error { panic(interrupted) })
@@ -34,6 +34,7 @@ func TestRecoveryRetentionSurvivesEveryDeletionSettlementBoundary(t *testing.T) 
 				t.Fatalf("deletion lacks durable recovery: %+v", row)
 			}
 			testutil.FailErr(t, "collect prepared recovery", ledger.Retention.SweepBlobs(t.Context()))
+			row.memory = removal.Memory
 			if boundary != "prepared" {
 				testutil.FailErr(t, "apply deletion without settlement", service.Effects.applyMutation(t.Context(), row))
 				if boundary == "receipt applied" {

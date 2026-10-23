@@ -92,7 +92,7 @@ func runMv(inv *invocation) error {
 		if err != nil {
 			return 0, err
 		}
-		result, err := inv.owners.Operations.Move.Move(inv.ctx, native.MoveInput{Pairs: []native.FilePair{{From: source.Resolved.Abs, To: to}}, NoClobber: noClobber, Directories: true}, inv.tc)
+		result, err := inv.owners.Operations.Move.Move(inv.ctx, native.MoveInput{Memory: inv.memory, Pairs: []native.FilePair{{From: source.Resolved.Abs, To: to}}, NoClobber: noClobber, Directories: true}, inv.tc)
 		return len(result.Moved), err
 	})
 }

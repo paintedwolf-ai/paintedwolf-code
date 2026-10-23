@@ -17,7 +17,7 @@ import (
 func walkMutationTree(ctx context.Context, root *fseffect.ReadRoot, base, rel string, visit, after func(string, os.FileInfo) error, memory *toolcontract.ProgramMemory) error {
 	// Retain the current page, its replacement page, entry metadata and recursive
 	// frame before ReadDir allocates. The enclosing program bounds total depth.
-	release, err := memory.ReserveProgramState(ctx, 2*128*int64(1024+len(base)+len(rel)))
+	release, err := memory.ReserveProgramState(ctx, 2*128*int64(2048+len(base)+len(rel)))
 	if err != nil {
 		return err
 	}
