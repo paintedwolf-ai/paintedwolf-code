@@ -143,3 +143,20 @@ func TestSourceManifestLayoutMigrationKeepsRetainedSnapshots(t *testing.T) {
 		t.Fatalf("migration left %d legacy schema objects", legacy)
 	}
 }
+
+// The conversion's write bound follows what it retains, not the store size.
+func TestSourceManifestLayoutBoundsItsWrites(t *testing.T) {
+	path, _ := seedLegacyManifestStore(t, t.TempDir(), map[string]int{"/work/a": 900, "/work/b": 40})
+	source, err := sql.Open("sqlite", path)
+	testutil.FailErr(t, "open seeded store", err)
+	defer func() { _ = source.Close() }()
+	released, err := inspectSchema(t.Context(), source)
+	testutil.FailErr(t, "inspect seeded store", err)
+	step := migrations.SourceManifestLayout(released)
+	const storeBytes = 40 << 30
+	writes, err := step.Writes(t.Context(), source, storeBytes)
+	testutil.FailErr(t, "estimate writes", err)
+	if writes >= storeBytes/32 || writes < (900+900+40)*1024 {
+		t.Fatalf("write bound = %d for a %d-byte store", writes, uint64(storeBytes))
+	}
+}
