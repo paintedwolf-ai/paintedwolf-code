@@ -98,6 +98,10 @@ func TestSelectedGenerationBindsTheRunningInodeAndManifestRoot(t *testing.T) {
 	if err := verifier.VerifyExecutable(301, RoleEngine); CodeOf(err) != CodeManifestUnreadable {
 		t.Fatalf("wrong root: %v", err)
 	}
+	verifier.Manifest.InstallRoot, verifier.InstallRoot = root+"/..", root+"/.."
+	if err := verifier.VerifyExecutable(301, RoleEngine); CodeOf(err) != CodeManifestUnreadable {
+		t.Fatalf("unclean selected root: %v", err)
+	}
 	verifier.InstallRoot = ""
 	if err := verifier.VerifyExecutable(301, RoleEngine); CodeOf(err) != CodeManifestUnreadable {
 		t.Fatalf("unspecified root: %v", err)

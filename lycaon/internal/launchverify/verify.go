@@ -217,7 +217,7 @@ func (v Verifier) VerifyExecutable(pid int, role string) error {
 }
 
 func (v Verifier) verifyExecutableAgainst(pid int, role string, manifest *pkgmanifest.Manifest, wantInode *fileFacts) error {
-	if v.StorePolicy != nil && (v.InstallRoot == "" || manifest == nil || manifest.InstallRoot != v.InstallRoot) {
+	if v.StorePolicy != nil && (!cleanAbsolute(v.InstallRoot) || manifest == nil || manifest.InstallRoot != v.InstallRoot) {
 		return refuse(CodeManifestUnreadable, role, pid, "selected manifest does not match its installation root")
 	}
 	want, size, ok := expected(manifest, role)
