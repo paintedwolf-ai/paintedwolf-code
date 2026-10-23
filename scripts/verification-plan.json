@@ -846,7 +846,11 @@
       ],
       "suite": "all",
       "setup": "verification",
-      "first": true
+      "first": true,
+      "early_targets": [
+        "comments:check",
+        "test:fail-messages:check"
+      ]
     },
     "vulnerabilities": {
       "targets": [
@@ -887,7 +891,8 @@
       "suite": "behavior",
       "setup": "verification",
       "workers": 3,
-      "shards": 2
+      "shards": 2,
+      "contract_first": true
     },
     "frontend": {
       "targets": [

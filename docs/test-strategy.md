@@ -931,6 +931,22 @@ prints the proposed ruleset while preserving unrelated protections. Add `--apply
 to apply that reviewed configuration. This is an administrative rollout step,
 not something feature CI performs.
 
+### Merge-group early checks and throughput
+
+The first four integration slots run limits, lint, and the two Go behavior shards.
+On the exact merge-group source, lint completes comment and failure-message checks
+before analysis. Each Go shard runs repository contracts with the full integration
+recipe before its remaining affected packages. The two phases are disjoint and
+retain the same shard, worker cap, and package measurements. A failed first phase
+never starts its second phase; the matrix cancels siblings on failure. Other
+profiles keep their complete recipes.
+
+Queue health counts actual pull requests merged to main per observation hour.
+It reports success, failure, and cancellation separately, the fraction of decided
+groups that failed, creation-to-failure latency, and observed job minutes including
+retries. Missing job completion timestamps are counted explicitly. These measure
+the observation window; a successful group is not itself evidence of a main merge.
+
 #### Failure evidence and recovery
 
 Every lane retains compact JSON receipts separately from large diagnostic logs.
@@ -943,7 +959,10 @@ do not authorize retry. Recovery does not retry pull request artifacts with a
 privileged token.
 
 [`verification-recovery.yml`](../.github/workflows/verification-recovery.yml)
-runs code from main, parses bounded JSON without extracting or executing
+runs only for failed push, merge-group, or manual CI/qualification runs whose
+head repository is this repository. Other events skip runner allocation. The
+controller checks eligibility again before downloading receipts. It runs code
+from main, parses bounded JSON without extracting or executing
 artifacts, and recovers measured runner faults. Failure details remain in run
 annotations, summaries, and retained evidence. It
 proposes a draft revert only for a source failure on the current main tip with

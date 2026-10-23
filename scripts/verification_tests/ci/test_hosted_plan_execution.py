@@ -230,7 +230,9 @@ class HostedPlanTests(unittest.TestCase):
         self.assertEqual([row["lane"] for row in rows[2:4]], ["behavior", "behavior"])
         for profile in ci.PROFILES:
             with self.subTest(profile=profile):
-                order = [(not lanes[row["lane"]].get("first"), -row["minutes"]) for row in ci.matrix(profile)["include"]]
+                order = [(0 if lanes[row["lane"]].get("first") else
+                          1 if lanes[row["lane"]].get("contract_first") else 2, -row["minutes"])
+                         for row in ci.matrix(profile)["include"]]
                 self.assertEqual(order, sorted(order))
         data = copy.deepcopy(planning.catalog())
         data["ci"]["limits"]["first"] = False
