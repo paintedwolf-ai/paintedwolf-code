@@ -4,10 +4,10 @@
   "kind": "module",
   "workstream": "store-health",
   "disposition": "retain",
-  "reason": "Retention policy and its bounded cleanup runner share the database write boundary. Keep vacuum continuation with the runner so idle reclamation and checkpoint cadence remain explicit; the retained contracts cover history preservation and multi-pass reclamation without application writes. No new subsystem or authority is introduced.",
-  "reviewed_commit": "c9b43f7a18e3ba8a85afbc9b39d280e03858bad3",
-  "ceiling": 505,
+  "reason": "Retention policy and bounded cleanup share the database write boundary. The wake drain is one explicit operation, reused by the signal runner and deterministic multi-pass reclamation tests; its completion depends on progress rather than machine speed. Retain this cohesive unit at its measured ceiling without a second cleanup authority.",
+  "reviewed_commit": "43ebab6bda4b80a641faf5d39d9dd633358013c3",
+  "ceiling": 510,
   "boundaries": {
-    "lycaon/internal/db/retention_test.go": "5eb9c1e0d33c5926d727a0f037f2011f853bc223e1b983acd95fc451d183eea0"
+    "lycaon/internal/db/retention_test.go": "beca41e31b51be9da43102f16502ce3cfaf6b96cde555c11c98c232ad7f77ef0"
   }
 }
