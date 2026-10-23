@@ -14,12 +14,12 @@ func upgradeStagedStore(ctx context.Context, root string, manifest *Manifest, fi
 	path := filepath.Join(root, storeRelPath)
 	source, err := db.OpenReadOnly(ctx, path)
 	if err != nil {
-		return &InvalidError{Detail: "store.db is unreadable"}
+		return stagedInspectionFailure(err, manifest, "open extracted history")
 	}
 	plan, err := db.PlanUpgrade(ctx, source)
 	defer func() { _ = source.Close() }()
 	if err != nil {
-		return &BaselineMismatchError{ArchiveVersion: manifest.SchemaUserVersion, BinaryVersion: db.SchemaVersion, ShapeDetail: err.Error()}
+		return stagedInspectionFailure(err, manifest, "inspect extracted history")
 	}
 	if plan.Required() {
 		if err := preflightUpgrade(ctx, CreateOpts{ConfigDir: root, DBPath: path, SQLDB: source}, plan, false); err != nil {
@@ -56,4 +56,18 @@ func upgradeStagedStore(ctx context.Context, root string, manifest *Manifest, fi
 	}
 	manifest.SchemaUserVersion, manifest.SchemaShapeDigest = plan.Target.Revision, plan.Target.Shape
 	return nil
+}
+
+func stagedInspectionFailure(err error, manifest *Manifest, operation string) error {
+	classified := db.ClassifyStoreFailure(err)
+	var failure *db.StoreIncompatibleError
+	if errors.As(classified, &failure) {
+		switch failure.Reason {
+		case db.RecoveryReasonIntegrityFailed:
+			return &InvalidError{Detail: "store.db is not a readable SQLite database"}
+		case db.RecoveryReasonSchemaMismatch:
+			return &BaselineMismatchError{ArchiveVersion: manifest.SchemaUserVersion, BinaryVersion: db.SchemaVersion, ShapeDetail: failure.Detail}
+		}
+	}
+	return fmt.Errorf("%s: %w", operation, classified)
 }
