@@ -109,6 +109,34 @@ class ProviderAcquisitionTests(unittest.TestCase):
         with self.assertRaises(AcquisitionRefusal):
             phase.advance(history, {'command'})
 
+    def test_result_order_and_command_emission_phase_are_authoritative(self):
+        phase, history = self.acquired()
+        history[-2:] = list(reversed(history[-2:]))
+        with self.assertRaises(AcquisitionRefusal):
+            phase.advance(history, {'command'})
+        command = {'role': 'assistant', 'tool_calls': [{'id': HOST_COMMAND, 'type': 'function',
+            'function': {'name': 'command', 'arguments': '{"command":"/usr/bin/true"}'}}]}
+        result = {'role': 'tool', 'tool_call_id': HOST_COMMAND,
+                  'content': framed(payload={'exit_code': 0}, invocation=receipt(
+                      id=COMMAND_RECEIPT, tool='command', tool_call_id=HOST_COMMAND))}
+        phase, history = self.acquired()
+        history.extend([command, result])
+        with self.assertRaises(AcquisitionRefusal):
+            phase.advance(history, {'command'})
+        self.assertFalse(phase.command_issued)
+        phase, history = self.acquired()
+        phase.advance(history, {'command'})
+        history.extend([result, command])
+        with self.assertRaises(AcquisitionRefusal):
+            phase.advance(history, {'command'})
+        phase, history = self.acquired()
+        phase.advance(history, {'command'})
+        history.extend([command, result])
+        phase.advance(history, {'command'})
+        self.assertTrue(phase.completed)
+        with self.assertRaises(AcquisitionRefusal):
+            phase.advance(history, {'command'})
+
     def test_actual_http_acquires_then_runs_command_then_completes(self):
         calls = [{'name': 'command', 'arguments': {'command': '/usr/bin/true'}}]
         with ProviderFixture.gui(calls, acquire_command=True) as fixture:
