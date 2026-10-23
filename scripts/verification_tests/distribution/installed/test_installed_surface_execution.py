@@ -85,14 +85,15 @@ class SurfaceTests(unittest.TestCase):
     def test_quit_focus_move_requires_safe_button_then_observed_quit_focus(self):
         dialog = self.row(self.dialog, kind='quit-dialog', modal=True, parent=self.main)
         shown = {**self.proof, 'surfaces': [self.row(self.main, active=False), dialog]}
-        control = {'identity': self.button, 'kind': 'keep-working-button',
+        control = {'identity': {**self.main, 'object_path': '/org/a11y/atspi/accessible/4'}, 'kind': 'keep-working-button',
                    'parent': self.dialog, 'focused': True}
         safe = {**shown, 'control': control}
         surface_wire.before('workspace-focus-quit-v1', safe)
         with self.assertRaises(ValueError):
             surface_wire.before('workspace-approve-quit-v1', safe)
         self.assertFalse(surface_wire.finished('workspace-focus-quit-v1', safe, safe))
-        moved = {**shown, 'control': {**control, 'kind': 'quit-button'}}
+        moved = {**shown, 'control': {**control, 'kind': 'quit-button',
+            'identity': {**self.main, 'object_path': '/org/a11y/atspi/accessible/5'}}}
         self.assertTrue(surface_wire.finished('workspace-focus-quit-v1', safe, moved))
         with self.assertRaises(ValueError):
             surface_wire.before('workspace-focus-quit-v1', moved)
