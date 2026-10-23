@@ -6,9 +6,9 @@ import (
 )
 
 func TestActionLaunchIdentityRetainsExactTypedFacts(t *testing.T) {
-	for _, field := range []string{"boundary slice", "write exclusions", "action slice", "rule pointer", "raw command", "raw boundary"} {
+	for _, field := range []string{"boundary slice", "action slice", "rule pointer", "raw command", "raw boundary"} {
 		t.Run(field, func(t *testing.T) {
-			boundary := &Confinement{HostExecution: true, WriteDenyPaths: []string{"/synthetic-draft"}, Roots: []string{"/synthetic-root"}, ProjectID: "\xff"}
+			boundary := &Confinement{HostExecution: true, Roots: []string{"/synthetic-root"}, ProjectID: "\xff"}
 			identity := EgressCommand{SessionID: "synthetic-session", CommandLine: "\xff", DeclaredHosts: []string{"fixture.invalid"}, UserRule: &EgressUserRule{Pattern: "exact"}}
 			lease, err := BindAction(boundary, identity)
 			if err != nil {
@@ -21,8 +21,6 @@ func TestActionLaunchIdentityRetainsExactTypedFacts(t *testing.T) {
 			switch field {
 			case "boundary slice":
 				boundary.Roots[0] = "/different-root"
-			case "write exclusions":
-				boundary.WriteDenyPaths[0] = "/different-draft"
 			case "action slice":
 				identity.DeclaredHosts[0] = "different.invalid"
 			case "rule pointer":

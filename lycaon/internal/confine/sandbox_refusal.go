@@ -166,7 +166,7 @@ func routeOperation(rules FilesystemRules, operation, target string) SandboxRefu
 
 func routeFilesystemRefusal(rules FilesystemRules, r SandboxRefusal, access FilesystemAccess) SandboxRefusal {
 	r.Recovery = RecoverNone
-	verdict := rules.verdict(access, r.Target, r.Operation == "file-write-unlink")
+	verdict := rules.Verdict(access, r.Target)
 	if verdict.Allowed {
 		// The rendered rules admit the path, so no grant would change the answer.
 		return r

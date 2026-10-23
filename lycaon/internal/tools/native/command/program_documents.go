@@ -3,11 +3,9 @@ package command
 import (
 	"context"
 	"errors"
-	"fmt"
 	"path/filepath"
 	"sync"
 
-	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -22,7 +20,7 @@ type documentNotice struct {
 
 type programDocumentsKey struct{}
 
-// programDocuments coalesces observed/protected unsaved paths outside command bytes.
+// programDocuments coalesces observed unsaved paths outside command bytes.
 type programDocuments struct {
 	tc        tools.ToolContext
 	memory    *toolcontract.ProgramMemory
@@ -118,73 +116,6 @@ func (d *programDocuments) releaseIfIdle() {
 	}
 	d.releases = nil
 	d.notes = nil
-}
-
-// commandDraftPaths supplies exact read-only exclusions for arbitrary external
-// processes; script arguments cannot describe their eventual write set.
-func commandDraftPaths(ctx context.Context, tc tools.ToolContext, memory *toolcontract.ProgramMemory) ([]string, func(), error) {
-	var releases []func()
-	release := func() {
-		for _, done := range releases {
-			done()
-		}
-	}
-	documents, ok := tools.ProjectDocuments(tc)
-	if !ok {
-		return nil, release, nil
-	}
-	var paths []string
-	seen := map[string]bool{}
-	for _, root := range tc.Source.Roots {
-		branch, err := tc.SourceBranch(root.ID)
-		if err != nil {
-			release()
-			return nil, nil, err
-		}
-		err = documents.VisitUnsavedDocuments(ctx, tc.Identity.ProjectID, branch, root.ID, "", true, func(doc tools.EditorDocumentState) error {
-			path := filepath.Join(root.Path, filepath.FromSlash(doc.Path))
-			if seen[path] {
-				return nil
-			}
-			if memory == nil {
-				return fmt.Errorf("command document protection requires program memory")
-			}
-			done, err := memory.ReserveProgramState(ctx, 1024+int64(4*len(path)))
-			if err != nil {
-				return commandDocumentBudgetError(err)
-			}
-			releases = append(releases, done)
-			if err := tools.ObserveCommandFileRead(ctx, root.ID, doc.Path); err != nil {
-				return err
-			}
-			paths = append(paths, path)
-			seen[path] = true
-			return nil
-		})
-		if err != nil {
-			release()
-			return nil, nil, err
-		}
-	}
-	return paths, release, nil
-}
-
-func commandProtectionReject(path, reason string) *toolrejection.ToolReject {
-	return &toolrejection.ToolReject{Code: "COMMAND_REVISION_CONFLICT", Data: map[string]any{"path": path, "write_protection_unavailable": true, "write_protection_has_aliases": reason == "hard_link_aliases"}}
-}
-
-func deniedCommandDraft(refusals confine.SandboxRefusals, drafts []string) string {
-	for _, denied := range refusals.Paths(confine.AccessWrite) {
-		if denied.Layer != confine.FloorWriteConfigured {
-			continue
-		}
-		for _, draft := range drafts {
-			if confine.PathAtOrUnder(denied.Path, draft) || confine.PathAtOrUnder(draft, denied.Path) {
-				return draft
-			}
-		}
-	}
-	return ""
 }
 
 func commandDocumentBudgetError(err error) error {

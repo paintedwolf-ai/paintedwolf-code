@@ -1246,10 +1246,6 @@ host_facts:
    type: string
  - name: paintedwolf.unsaved_draft
    type: bool
- - name: paintedwolf.write_protection_unavailable
-   type: bool
- - name: paintedwolf.write_protection_has_aliases
-   type: bool
  - name: paintedwolf.pending
    type: string
  - name: paintedwolf.period

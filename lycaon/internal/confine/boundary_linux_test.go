@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"slices"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine/linuxsandbox"
@@ -172,29 +171,21 @@ func containsPath(list []string, want string) bool {
 	return false
 }
 
-func TestWriteExclusionsRefuseUnsupportedLinuxAncestorProtection(t *testing.T) {
+// A draft is editor state; an ordinary Linux launch retains its declared roots.
+func TestLinuxDraftFileKeepsOrdinaryWriteRoot(t *testing.T) {
 	root := t.TempDir()
-	path := filepath.Join(root, "draft.txt")
-	testutil.FailErr(t, "seed", os.WriteFile(path, []byte("saved\n"), 0o644))
-	for _, protected := range []string{path, filepath.Join(root, "absent.txt")} {
-		_, err := filesystemRules(Confinement{Roots: []string{root}, WriteDenyPaths: []string{protected}})
-		var unavailable *WriteExclusionUnavailableError
-		if !errors.As(err, &unavailable) || unavailable.Path != protected || unavailable.Reason != exclusionAncestorRemovalUnsupported {
-			t.Fatalf("protected=%s err=%v", protected, err)
+	testutil.FailErr(t, "saved draft base", os.WriteFile(filepath.Join(root, "draft.txt"), []byte("one\ntwo\n"), 0600))
+	rules, err := filesystemRules(Confinement{Roots: []string{root}})
+	testutil.FailErr(t, "ordinary draft-path rules", err)
+	plan, err := compileFilesystemPlan(rules)
+	testutil.FailErr(t, "ordinary Linux launch plan", err)
+	found := false
+	for _, path := range plan.WriteRoots {
+		if path == root {
+			found = true
 		}
 	}
-	var rules FilesystemRules
-	rules.add(fsRule{op: opWriteRemove, matches: literalMatches([]string{root}, FloorWriteConfigured)})
-	_, err := compileFilesystemPlan(rules)
-	var unavailable *WriteExclusionUnavailableError
-	if !errors.As(err, &unavailable) || unavailable.Reason != exclusionAncestorRemovalUnsupported {
-		t.Fatalf("compiler silently dropped ancestor protection: %v", err)
-	}
-	ordinary, err := filesystemRules(Confinement{Roots: []string{root}})
-	testutil.FailErr(t, "ordinary rules", err)
-	plan, err := compileFilesystemPlan(ordinary)
-	testutil.FailErr(t, "ordinary plan", err)
-	if !slices.Contains(plan.WriteRoots, root) {
-		t.Fatalf("ordinary write grant lost: %+v", plan)
+	if !found {
+		t.Fatalf("project write root lost: %+v", plan)
 	}
 }

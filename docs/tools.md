@@ -303,23 +303,13 @@ destination capture happen after accepted-draft preparation settles. Earlier
 admitted operations may already have published when a later operation is refused.
 
 The initial response includes one note per affected path observed by native
-reads. External launches announce protected dirty paths because their eventual
-read set is not observable. These notes state that commands read the saved file.
-Notices first discovered by a background child reach its completion report;
-paths already reported in the initial response are not repeated. Native writes
-refuse dirty destinations with `COMMAND_REVISION_CONFLICT`. macOS confinement
-protects both each declared leaf namespace and its canonical target against
-writes, ancestor renames and new hard links. Existing hard-link aliases or host
-execution that cannot enforce this protection refuse before launch. Linux
-launches requiring protected paths refuse: the current read-only leaf mounts
-cannot preserve a protected path when a writable ancestor moves. Unprotected
-Linux launches retain their existing behavior.
-Dirty paths are sampled at each launch; later editor changes do not alter an
-already running process’s profile. An older process can retain earlier write
-authority, including creating aliases after validation; these exclusions do not
-claim to protect against every concurrent writer. Kernel-observed denied writes carry the
-same typed conflict; missing kernel observations never imply that a write was
-allowed.
+reads, stating that commands read the saved file. Notices first discovered by
+a background child reach its completion report; paths already reported in the
+initial response are not repeated. Native writes refuse dirty destinations with
+`COMMAND_REVISION_CONFLICT`. External programs retain ordinary sandbox write
+roots. Their outside saves merge with accepted and pending typing through the
+editor's existing filesystem-replica transition against the saved checkpoint.
+The editor's typing stays in the document even when a program changes disk.
 
 Each destination's revision or absence is captured before preparing its change.
 A `WriteExecutionPinned` write rechecks the destination in the document owner or

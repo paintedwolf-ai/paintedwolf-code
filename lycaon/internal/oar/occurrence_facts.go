@@ -381,8 +381,6 @@ var occurrenceFactDecls = []factDecl{
 	{"patterns_list", oarcore.TypeString, FactTierHost, ""},
 	{"pending", oarcore.TypeString, FactTierHost, ""},
 	{"unsaved_draft", oarcore.TypeBool, FactTierHost, ""},
-	{"write_protection_unavailable", oarcore.TypeBool, FactTierHost, ""},
-	{"write_protection_has_aliases", oarcore.TypeBool, FactTierHost, ""},
 	{"pending_count", oarcore.TypeString, FactTierHost, ""},
 	{"period", oarcore.TypeString, FactTierHost, ""},
 	{"prior_job_id", oarcore.TypeString, FactTierHost, ""},

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -146,13 +145,10 @@ func TestProgramHumanDraftKeepsOneSavedFileViewAndReadNote(t *testing.T) {
 	testutil.FailErr(t, "human types", err)
 	result := callDocumentProgram(t, f, `cat a.txt; python3 -c 'from pathlib import Path; print(Path("a.txt").read_text(),end="")'; cat a.txt`)
 	expected := fmt.Sprintf("command: %s has unsaved changes in the editor; commands read the saved file.\n", filepath.Join(f.Dir, "a.txt"))
-	if runtime.GOOS == "linux" {
-		if result.StopCode != "COMMAND_REVISION_CONFLICT" || result.Stdout != "saved\n" || result.CompletedEffects != 0 {
-			t.Fatalf("unsupported external protection=%+v", result)
-		}
-	} else if result.Status != 0 || result.Stdout != "saved\nsaved\nsaved\n" || result.Stderr != expected {
+	if result.Status != 0 || result.Stdout != "saved\nsaved\nsaved\n" || result.Stderr != expected {
 		t.Fatalf("human draft=%+v", result)
 	}
+
 	nativeWrite := callDocumentProgram(t, f, "cat a.txt > a.txt")
 	if nativeWrite.StopCode != "COMMAND_REVISION_CONFLICT" || nativeWrite.CompletedEffects != 0 {
 		t.Fatalf("native draft write=%+v", nativeWrite)
@@ -168,12 +164,8 @@ func TestProgramHumanDraftKeepsOneSavedFileViewAndReadNote(t *testing.T) {
 	if refusedWrite != 1 {
 		t.Fatalf("refused writes=%d executions=%+v", refusedWrite, page.Executions)
 	}
-	externalWrite := callDocumentProgram(t, f, `python3 -c 'from pathlib import Path; Path("a.txt").write_text("overwritten")'`)
-	if externalWrite.Status == 0 {
-		t.Fatalf("external draft write=%+v", externalWrite)
-	}
 	saved, err := os.ReadFile(filepath.Join(f.Dir, "a.txt"))
-	testutil.FailErr(t, "saved file after refused writes", err)
+	testutil.FailErr(t, "saved file after refused native write", err)
 	if string(saved) != "saved\n" {
 		t.Fatalf("draft path overwritten: %q", saved)
 	}

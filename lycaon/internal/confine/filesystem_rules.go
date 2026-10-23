@@ -34,8 +34,6 @@ const (
 	FloorAgentPolicy FloorLayer = "agent_policy"
 	// FloorControlPlane protects the launcher, the host state tree, and raw devices.
 	FloorControlPlane FloorLayer = "control_plane"
-	// FloorWriteConfigured protects host-owned per-action write exclusions.
-	FloorWriteConfigured FloorLayer = "write_configured"
 	// FloorReadConfigured holds per-action and operator read exclusions.
 	FloorReadConfigured FloorLayer = "read_configured"
 	// FloorReadKeyMaterial holds the key-material read floor.
@@ -78,7 +76,7 @@ func (r FloorRecovery) Terminal() bool { return r.Capability == "" }
 func FloorLayers() []FloorLayer {
 	return []FloorLayer{
 		FloorOutsideWriteRoots, FloorBaseline, FloorProtected, FloorAgentPolicy, FloorControlPlane,
-		FloorReadConfigured, FloorReadKeyMaterial, FloorReadControlPlane, FloorWriteConfigured,
+		FloorReadConfigured, FloorReadKeyMaterial, FloorReadControlPlane,
 	}
 }
 
@@ -127,7 +125,6 @@ const (
 	opRead fsOperation = iota
 	opReadMetadata
 	opWrite
-	opWriteRemove
 )
 
 func (op fsOperation) sbpl() string {
@@ -136,8 +133,6 @@ func (op fsOperation) sbpl() string {
 		return "file-read*"
 	case opReadMetadata:
 		return "file-read-metadata"
-	case opWriteRemove:
-		return "file-write-unlink"
 	default:
 		return "file-write*"
 	}
@@ -248,10 +243,6 @@ func (m fsMatch) render(b *strings.Builder) {
 // Verdict answers whether the boundary permits access to path, reading the
 // rules in profile order so the last matching block decides.
 func (r FilesystemRules) Verdict(access FilesystemAccess, path string) FloorVerdict {
-	return r.verdict(access, path, false)
-}
-
-func (r FilesystemRules) verdict(access FilesystemAccess, path string, removing bool) FloorVerdict {
 	path = fspath.CanonicalPath(strings.TrimSpace(path))
 	if path == "" || !filepath.IsAbs(path) {
 		return FloorVerdict{Allowed: true}
@@ -263,7 +254,7 @@ func (r FilesystemRules) verdict(access FilesystemAccess, path string, removing 
 		verdict = FloorVerdict{Layer: FloorOutsideWriteRoots}
 	}
 	for _, rule := range r.rules {
-		if rule.op != op && !(removing && rule.op == opWriteRemove) {
+		if rule.op != op {
 			continue
 		}
 		if rule.everywhere {

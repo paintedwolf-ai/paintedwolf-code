@@ -228,7 +228,7 @@ func (d *ProgramDispatcher) invokeExternal(ctx context.Context, request commandp
 		PrepareReviewed: func(context.Context, map[string]any, tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
 			return toolexecution.PreparedNativeEffect{Operation: bound, InvokeOwner: func(ctx context.Context, admitted tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 				return d.runProducer(ctx, request, streams, func(ctx context.Context, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-					return ExternalStages{ToolContext: admitted, Dir: cwd, Memory: d.run.memory}.Launch(ctx, request, streams)
+					return ExternalStages{ToolContext: admitted, Dir: cwd}.Launch(ctx, request, streams)
 				})
 			}}, nil
 		},
