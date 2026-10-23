@@ -52,8 +52,11 @@ def delivery_records(directory):
             selected = observations.get(launch, {}).get('fixed_input', [])
             if not isinstance(selected, list) or len(selected) > 4:
                 raise ValueError('reply input exceeds its fixed transaction count')
-            if kind == 'reply' and observations.get('native_input') is not None:
-                selected = [*selected, observations['native_input']]
+            partial = observations.get('native_input')
+            provider_partial = (kind == 'workspace' and partial is not None
+                and len(selected) < 4 and not observations.get('transitions'))
+            if partial is not None and (kind == 'reply' or provider_partial):
+                selected = [*selected, partial]
             if len(selected) > 4:
                 raise ValueError('reply input exceeds its fixed transaction count')
             for index, record in enumerate(selected):
@@ -69,8 +72,8 @@ def delivery_records(directory):
                 transitions = observations.get('transitions', [])
                 if not isinstance(transitions, list):
                     raise ValueError('workspace input requires its fixed transition list')
-                if observations.get('native_input') is not None:
-                    transitions = [*transitions, observations['native_input']]
+                if partial is not None and not provider_partial:
+                    transitions = [*transitions, partial]
                 expected = ('workspace-open-peer-v1', 'workspace-hide-main-v1',
                     'workspace-request-quit-v1', 'workspace-cancel-quit-v1',
                     'workspace-request-quit-v1', 'workspace-focus-quit-v1', 'workspace-approve-quit-v1')
