@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/discovery"
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
+	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/internal/llm/providerretry"
 	"github.com/lycaon/lycaon/internal/llm/providers/openaicompat"
 	"github.com/lycaon/lycaon/internal/llm/transcript"
@@ -254,11 +255,11 @@ func (r *Registry) RenderRequest(ctx context.Context, providerID, model string, 
 	if !ok {
 		return "", nil, fmt.Errorf("render request: provider %q is not configured", providerID)
 	}
-	body, err := renderWithEntry(ctx, entry, model, req)
+	body, err := r.renderWithEntry(ctx, entry, model, req)
 	return entry.Kind, body, err
 }
 
-func renderWithEntry(ctx context.Context, entry CatalogEntry, model string, req modelcall.CompletionRequest) ([]byte, error) {
+func (r *Registry) renderWithEntry(ctx context.Context, entry CatalogEntry, model string, req modelcall.CompletionRequest) ([]byte, error) {
 	driver, err := driverFactories.Build(ctx, entry.Kind, providerBuild{entry: entry, resolved: ResolveProvider(entry, "")})
 	if err != nil {
 		return nil, fmt.Errorf("render request for %s: %w", entry.ID, err)
@@ -271,6 +272,17 @@ func renderWithEntry(ctx context.Context, entry CatalogEntry, model string, req 
 		return nil, fmt.Errorf("render request: provider kind %q has no offline request serializer", entry.Kind)
 	}
 	req.Model, req.ControlCapture = model, nil
+	var declared modelinfo.Entry
+	for _, candidate := range entry.Models {
+		if candidate.ID == model {
+			declared = candidate
+			break
+		}
+	}
+	req, err = (&thinkingPolicyProvider{Provider: driver, registry: r}).prepare(ctx, req, &declared)
+	if err != nil {
+		return nil, err
+	}
 	return renderer.RenderRequest(ctx, req)
 }
 
