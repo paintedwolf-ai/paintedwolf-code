@@ -115,7 +115,13 @@ func upgradeExistingUsing(ctx context.Context, path string, hooks UpgradeHooks, 
 		return err
 	}
 	if !plan.Required() {
-		return prepareIntegrity(ctx, reader)
+		if err := prepareIntegrity(ctx, reader); err != nil {
+			return err
+		}
+		if staged {
+			return validateStoreIntegrity(ctx, reader)
+		}
+		return nil
 	}
 	if err := validateStoreIntegrity(ctx, reader); err != nil {
 		return err

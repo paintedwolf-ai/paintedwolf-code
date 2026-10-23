@@ -10,7 +10,7 @@
   "boundaries": {
     "lycaon/internal/db/schema_integrity_test.go": "40c3f6ae2cd2be3bd8b16dd852636611406d18ed9f737912351307f0b6169dbe",
     "lycaon/internal/db/schema_index_integrity_test.go": "fa12ca9706074beda8b7bbd08726d68b2b9eb65bd03525fe58e9b4d52f742281",
-    "lycaon/internal/db/store_health_test.go": "cb4fa50a6b94f639017d7a6d73f0dbbf5d94946ab97c716839c6c4699959f225"
+    "lycaon/internal/db/store_health_test.go": "8e3740217d4827e34231b8ad6dba42b6855ce59646b899fd1cbe7590b72f747f"
   },
   "reviewed_shape": "502d42396659e753f8d65d0088a1d165e7860330b199e6374a1c0651aa36d01c"
 }
