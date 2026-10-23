@@ -6,9 +6,8 @@ import select
 import time
 
 from ..installed_cases.app import process_identity
-from ..installed_cases.desktop_ui import owned_process
 from ..installed_cases.records import CaseFailed, CaseUnavailable
-from . import surface_wire as wire
+from . import lineage, surface_wire as wire
 
 
 class FrameObserver:
@@ -27,6 +26,7 @@ class FrameObserver:
             if len(frames) != 1:
                 raise CaseUnavailable('owned-original-active-frame-is-missing-or-ambiguous')
             self.main = self._identity(frames[0])
+            self.pins['frame'] = os.pidfd_open(self.main['process']['pid'])
             self._capture(frames[0])
             self.observe()
         except BaseException:
@@ -50,7 +50,10 @@ class FrameObserver:
 
     def _runtime(self):
         self.app.require_running()
-        for expected in (self.launch, self.engine):
+        selected = [self.launch, self.engine]
+        if hasattr(self, 'main'):
+            selected.append(self.main['process'])
+        for expected in selected:
             try:
                 actual = process_identity(expected['pid'])
             except (FileNotFoundError, ProcessLookupError):
@@ -59,10 +62,11 @@ class FrameObserver:
                 raise CaseFailed('captured frame transition runtime identity changed')
 
     def _identity(self, node):
+        process = process_identity(node.get_process_id())
         identity = wire.object_identity({'bus_name': node.app.bus_name, 'object_path': node.path,
-                                         'process': process_identity(node.get_process_id())})
-        if identity['process'] != self.launch or not owned_process(identity['process']['pid'], self.app):
-            raise CaseFailed('accessible surface does not belong to the captured desktop')
+            'process': process, 'lineage': lineage.capture(self.launch, process)}, self.launch)
+        if hasattr(self, 'main') and process != self.main['process']:
+            raise CaseFailed('accessible surface changed its captured native UI process')
         return identity
 
     def _parent(self, node):
@@ -156,7 +160,7 @@ class FrameObserver:
         while True:
             if operation == 'workspace-approve-quit-v1':
                 code, exited = self.app.process.poll(), self._exited()
-                if all(exited.values()) and len(exited) == 2 and code is not None:
+                if all(exited.values()) and len(exited) == 3 and code is not None:
                     after = {'launch': self.launch, 'engine': self.engine, 'main': self.main,
                              'exited': exited, 'exit_code': code}
             else:

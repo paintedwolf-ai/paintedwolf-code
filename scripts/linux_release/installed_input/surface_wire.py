@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+from . import lineage
 
 OPERATIONS = {
     'workspace-open-peer-v1': (('ctrl', 'shift', 'semicolon'), ('n',)),
@@ -13,16 +14,15 @@ OPERATIONS = {
 }
 
 
-def object_identity(value):
-    if (not isinstance(value, dict) or set(value) != {'bus_name', 'object_path', 'process'}
+def object_identity(value, root):
+    if (not isinstance(value, dict) or set(value) != {'bus_name', 'object_path', 'process', 'lineage'}
             or not isinstance(value['bus_name'], str)
             or not re.fullmatch(r':[0-9]+\.[0-9]+', value['bus_name'])
             or len(value['bus_name']) > 255
             or not isinstance(value['object_path'], str) or len(value['object_path']) > 512
             or not re.fullmatch(r'/(?:[A-Za-z0-9_]+/)*[A-Za-z0-9_]+', value['object_path'])):
         raise ValueError('surface proof requires its actual unique bus and object path')
-    from .protocol import process_identity
-    process_identity(value['process'])
+    lineage.validate(value['lineage'], root, value['process'])
     return value
 
 
@@ -32,7 +32,7 @@ def proof(value):
         raise ValueError('surface proof has an unknown shape')
     for key in ('launch', 'engine'):
         process_identity(value[key])
-    object_identity(value['main'])
+    object_identity(value['main'], value['launch'])
     surfaces = value['surfaces']
     if not isinstance(surfaces, list) or not 1 <= len(surfaces) <= 16:
         raise ValueError('surface proof exceeds its fixed frame inventory')
@@ -42,15 +42,15 @@ def proof(value):
                 or row['kind'] not in {'frame', 'quit-dialog', 'presence-dialog'}
                 or any(type(row[key]) is not bool for key in ('visible', 'active', 'defunct', 'modal'))):
             raise ValueError('surface observation has an unknown shape')
-        identity = object_identity(row['identity'])
-        if identity['process'] != value['launch']:
+        identity = object_identity(row['identity'], value['launch'])
+        if identity['process'] != value['main']['process']:
             raise ValueError('surface proof escaped its captured desktop process')
         marker = identity['bus_name'], identity['object_path']
         if marker in seen:
             raise ValueError('surface proof repeats an accessible object')
         seen.add(marker)
         if row['parent'] is not None:
-            object_identity(row['parent'])
+            object_identity(row['parent'], value['launch'])
         if row['kind'] != 'frame' and (row['parent'] != value['main']
                 or not row['defunct'] and not row['modal']):
             raise ValueError('native dialog omitted its captured modal parent')
@@ -61,8 +61,8 @@ def proof(value):
         if (not isinstance(control, dict) or set(control) != {'identity', 'kind', 'parent', 'focused'}
                 or control['kind'] != 'quit-button' or control['focused'] is not True):
             raise ValueError('surface input has an unknown focused control')
-        object_identity(control['identity'])
-        if control['identity']['process'] != value['launch'] or not any(
+        object_identity(control['identity'], value['launch'])
+        if control['identity']['process'] != value['main']['process'] or not any(
                 row['identity'] == control['parent'] and row['kind'] == 'quit-dialog' and active(row)
                 for row in surfaces):
             raise ValueError('focused Quit control escaped its owned active native dialog')
@@ -112,7 +112,7 @@ def finished(operation, old, new):
         proof(old)
         if (not isinstance(new, dict) or set(new) != {'launch', 'engine', 'main', 'exited', 'exit_code'}
                 or any(new[key] != old[key] for key in ('launch', 'engine', 'main'))
-                or new['exited'] != {'launch': True, 'engine': True}
+                or new['exited'] != {'launch': True, 'engine': True, 'frame': True}
                 or any(type(value) is not bool for value in new['exited'].values())
                 or type(new['exit_code']) is not int or new['exit_code'] != 0):
             raise ValueError('Quit approval requires independent owned-process exit observations')
