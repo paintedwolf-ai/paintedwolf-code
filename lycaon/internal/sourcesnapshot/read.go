@@ -52,11 +52,23 @@ func (s *Store) open(ctx context.Context, id string) (*snapshotView, error) {
 }
 
 func (s *Store) load(ctx context.Context, id string) (Snapshot, []string, error) {
-	row, err := s.queries.GetSourceSnapshot(ctx, id)
+	var tx *sql.Tx
+	var err error
+	if reader, ok := s.db.(db.ReadHandle); ok {
+		tx, err = reader.BeginReadTx(ctx)
+	} else {
+		tx, err = s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	}
+	if err != nil {
+		return Snapshot{}, nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	q := s.queries.WithTx(tx)
+	row, err := q.GetSourceSnapshot(ctx, id)
 	if err != nil {
 		return Snapshot{}, nil, snapshotError(id, err)
 	}
-	roots, err := s.queries.ListSourceSnapshotRoots(ctx, row.ID)
+	roots, err := q.ListSourceSnapshotRoots(ctx, row.ID)
 	if err != nil {
 		return Snapshot{}, nil, err
 	}
@@ -72,7 +84,7 @@ func (s *Store) load(ctx context.Context, id string) (Snapshot, []string, error)
 		out.Roots = append(out.Roots, Root{Path: root.RootPath})
 		manifests = append(manifests, root.ManifestID)
 	}
-	boundaries, err := s.queries.ListSourceSnapshotBoundaries(ctx, row.ID)
+	boundaries, err := q.ListSourceSnapshotBoundaries(ctx, row.ID)
 	if err != nil {
 		return Snapshot{}, nil, err
 	}
@@ -87,7 +99,7 @@ func (s *Store) load(ctx context.Context, id string) (Snapshot, []string, error)
 	if out.AdmissionMode == "" {
 		out.AdmissionMode = AdmissionScope
 	}
-	return out, manifests, nil
+	return out, manifests, tx.Commit()
 }
 
 // Get loads snapshot metadata; entries are read separately.
