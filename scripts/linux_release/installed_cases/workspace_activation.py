@@ -4,13 +4,14 @@ import tempfile
 import time
 
 from .app import InstalledApp
-from .desktop_ui import DesktopUI, interactive_window
+from .desktop_ui import interactive_window
 from .desktop_launch import activate, protected_launcher
 from .process import run
 from .profile_observer import project_for_owned_root, sessions_for_project
 from .provider import MODEL, ProviderFixture
 from .provider_barrier import ResponseBarrier
-from .provider_setup import configure_provider, physical_input
+from .provider_setup import configure_provider
+from .desktop_turn import submit_project_turn
 from .provider_recovery import load as load_provider_recovery
 from .records import CaseFailed, CaseUnavailable, retain
 from ..installed_input.surface import FrameObserver
@@ -76,9 +77,7 @@ def execute(binding, capability, case, root):
                 opened = run(binding, 'pw', ['open', str(project)], timeout=30)
                 if opened['exit_code'] or opened['timed_out'] or opened['output_limit']:
                     raise ValueError('installed CLI refused the owned workspace project')
-                with DesktopUI(app) as ui:
-                    physical_input(app, ui, 'Describe your idea', 'reply-fixture-prompt-v1')
-                    ui.click('Start')
+                submit_project_turn(app)
                     deadline = time.monotonic() + 30
                     while active_session(app, project, provider['provider_id']) is None:
                         if time.monotonic() >= deadline:
