@@ -69,6 +69,9 @@ func OpenWithOptions(ctx context.Context, dbPath string, hooks UpgradeHooks, opt
 	if err := os.MkdirAll(dir, 0o700); err != nil { // #nosec G703 -- local SQLite store dir
 		return nil, fmt.Errorf("create db directory: %w", err)
 	}
+	if err := ResumeStoreUpgrade(dbPath); err != nil {
+		return nil, classifyStoreOpenFailure(err)
+	}
 
 	if err := CheckStoreHealth(dbPath); err != nil {
 		return nil, err

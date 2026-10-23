@@ -4,13 +4,15 @@
   "kind": "test_suite",
   "workstream": "store-health",
   "disposition": "retain",
-  "reason": "Private schema, migration, and recovery seams require package-level database fixtures. The new manifest conversion tests verify retained rows and observation evidence against the released corpus. Retain the expanded suite at 42 files; new membership requires another review.",
-  "reviewed_commit": "1715fadedd158a5e720a137d0e4c243e95685783",
-  "ceiling": 42,
+  "reason": "Private database fixtures exercise schema identity, migration, and recovery under the same transaction authority. Retain 44 test files, including retained-row equivalence and every durable publication prefix; a separate package would expose private recovery seams merely to move tests.",
+  "reviewed_commit": "d6b555e58b7e69deb24e08e00ea819e17bf1460d",
+  "ceiling": 44,
   "boundaries": {
     "lycaon/internal/db/source_manifest_layout_upgrade_test.go": "33f4f955096fd7e9681766f9b6ef851410e60a506403aa0a96e7138e6672fc31",
     "lycaon/internal/db/schema_integrity_test.go": "40c3f6ae2cd2be3bd8b16dd852636611406d18ed9f737912351307f0b6169dbe",
-    "lycaon/internal/db/schema_index_integrity_test.go": "fa12ca9706074beda8b7bbd08726d68b2b9eb65bd03525fe58e9b4d52f742281"
+    "lycaon/internal/db/schema_index_integrity_test.go": "fa12ca9706074beda8b7bbd08726d68b2b9eb65bd03525fe58e9b4d52f742281",
+    "lycaon/internal/db/rebuild_copy_test.go": "1d07b4c0959eba01210cb0753af3d71094143662cb328c1f572f734ac2c27d89",
+    "lycaon/internal/db/rebuild_journal_test.go": "46ef36ff444075d81b6e9a18477d6de726093bc96a3c28c16cf20d7d25fe239c"
   },
-  "reviewed_shape": "f9c3350b26b39f2020feb266e87e08a1b0bd9bb147aed68da97b53e830e3e639"
+  "reviewed_shape": "7ea9466c048c141c0777b4b7d24678165378ad148e79c88889e4f1b18eba2591"
 }

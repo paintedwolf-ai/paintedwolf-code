@@ -2,14 +2,15 @@
   "category": "source_directories",
   "artifact": "lycaon/internal/db",
   "kind": "module",
-  "workstream": "database-integrity",
+  "workstream": "store-health",
   "disposition": "retain",
-  "reason": "Retain the 30-file database lifecycle as one authority. Platform capacity sampling, whole-snapshot audit scheduling, and background maintenance admission remain private parts of the same store lifetime alongside store-space bounds. No separate writer or persistence owner is introduced. Real WAL reuse, zero-budget quiet completion, and audit/maintenance/foreground-write contracts passed; native combined-source startup also completed the pending audit. The capacity-failure regression verifies the same audit authority completes with a conservative fallback; no new subsystem, save gate, or retained ceiling is introduced.",
-  "reviewed_commit": "938578fd9ee0bf26659f9c393da43eeafef76299",
-  "ceiling": 30,
+  "reason": "Retain the database lifecycle as one authority. Retained-copy selection belongs to the migration registry, while copy construction, capacity accounting, and journaled publication are distinct implementation files. Moving publication outside db would split the pre-open recovery boundary. Review renewed at 28 files.",
+  "reviewed_commit": "d6b555e58b7e69deb24e08e00ea819e17bf1460d",
+  "ceiling": 28,
   "boundaries": {
-    "lycaon/internal/db/integrity_audit_wal_test.go": "cac14114d7f1746d9a2d8112584371ad58e13beecc2000f94ffb2d8a17febe04",
-    "lycaon/internal/db/integrity_schedule_test.go": "e80a1de9f5ceadca290f48bc286f7d734113db78eb956bc9279e4a223a2828ca"
+    "lycaon/internal/db/rebuild_copy.go": "ee51acb2cf82a8c5f2931b912ccbcc84210e68540872a2eb57867459b77bcd64",
+    "lycaon/internal/db/rebuild_journal.go": "03129805702f1c209e2df5f8916cf08fdc04faefc864af874968df39a16941d5",
+    "lycaon/internal/db/rebuild_upgrade.go": "32bad9e88a5381211e0b0f611fd55d68cbe7545f9fe9da3a7794992ca5b8888d"
   },
-  "reviewed_shape": "05cf5c08f4c39ac58e3aeeb8d16aea088e902abf5edf0bf5b8c271b0720f372e"
+  "reviewed_shape": "9f37ba7bd4f22a7a546881e6bcd323d3fe4d608ddd76dee3d5225ee46c753fc2"
 }
