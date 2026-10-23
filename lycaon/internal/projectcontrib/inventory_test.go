@@ -301,3 +301,23 @@ func TestInventoryFoldsAWideBurstIntoItsDirectory(t *testing.T) {
 		t.Fatalf("walks = %v, want the cold walk and one walk below the root", walked)
 	}
 }
+
+func TestInventoryDropsDirtyPathsWhenFullWalkIsRequired(t *testing.T) {
+	root := t.TempDir()
+	i := NewInventory()
+	t.Cleanup(i.Close)
+	entry := &inventoryRoot{dirty: make(map[string]struct{})}
+	i.roots[root] = entry
+	paths := make([]string, inventoryPaths+1)
+	for n := range paths {
+		paths[n] = fmt.Sprintf("file-%d.go", n)
+	}
+	i.changed(t.Context(), repochange.Event{ProjectDir: root, Kind: repochange.WorktreeChanged, Paths: paths})
+	if !entry.full || len(entry.dirty) != 0 {
+		t.Fatalf("unfoldable burst retained %d paths, full=%v", len(entry.dirty), entry.full)
+	}
+	i.changed(t.Context(), repochange.Event{ProjectDir: root, Kind: repochange.WorktreeChanged, Paths: []string{"later.go"}})
+	if len(entry.dirty) != 0 {
+		t.Fatal("pending full walk accumulated more paths")
+	}
+}

@@ -129,8 +129,9 @@ func (i *Inventory) changed(_ context.Context, ev repochange.Event) {
 		if !rootInsideEvent && !eventInsideRoot {
 			continue
 		}
-		if len(ev.Paths) == 0 || ev.Kind == repochange.HeadMoved {
+		if entry.full || len(ev.Paths) == 0 || ev.Kind == repochange.HeadMoved {
 			entry.full = true
+			clear(entry.dirty)
 			continue
 		}
 		for _, path := range ev.Paths {
@@ -153,6 +154,9 @@ func (i *Inventory) changed(_ context.Context, ev repochange.Event) {
 			entry.dirty = folded
 		} else {
 			entry.full = true
+		}
+		if entry.full {
+			clear(entry.dirty)
 		}
 	}
 }
