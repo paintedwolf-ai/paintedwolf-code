@@ -46,13 +46,13 @@ func ResolveCommand(argv Fields) (toolcontract.CommandSpecification, bool, error
 		if len(names) == 0 || len(names) > len(argv) || len(names) <= words || !commandWord(spec, names[0], argv[0].Value) {
 			continue
 		}
-		match := true
-		for i := 1; i < len(names); i++ {
-			match = match && argv[i].Value == names[i]
+		if len(names) > 1 {
+			b := argvBinding{spec: spec, argv: argv, index: 1, bound: &BoundArgv{}}
+			if b.global(names[1:]) != nil {
+				continue
+			}
 		}
-		if match {
-			best, words = spec, len(names)
-		}
+		best, words = spec, len(names)
 	}
 	return best, words > 0, nil
 }

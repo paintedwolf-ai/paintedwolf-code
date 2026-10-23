@@ -244,6 +244,9 @@ func validateGitEnvironment(spec toolcontract.CommandSpecification, entries []st
 			continue
 		}
 		trimmed := strings.TrimSpace(name)
+		if strings.EqualFold(trimmed, "PATH") {
+			continue
+		}
 		if blockedGitEnvKeys[strings.ToUpper(trimmed)] {
 			return operandInvalid(spec, entry, "an environment without SSH transport override variables")
 		}

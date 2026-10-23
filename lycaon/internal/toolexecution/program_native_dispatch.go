@@ -78,7 +78,9 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	boundaryStarted := false
 	ownerStarted := false
 	defer func() {
-		completeNativeRejection(bound, err)
+		if !ownerStarted || result.Producer.Terminal == toolcontract.ProducerRefused {
+			completeNativeRejection(bound, err)
+		}
 		if !ownerStarted {
 			certainty := toolcontract.NoEffect
 			if boundaryStarted {
@@ -93,7 +95,7 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	if err = surface.ValidateOperation(bound); err != nil {
 		return result, err
 	}
-	if effect.Stage.ExecutionID != invocation.Identity.ExecutionID || effect.Stage.OperationID != facts.Identity || len(effect.Stage.Argv) == 0 || !stageMatchesCommand(bound.Command(), effect.Stage.Argv) {
+	if effect.Stage.ExecutionID != invocation.Identity.ExecutionID || effect.Stage.OperationID != facts.Identity || len(effect.Stage.Argv) == 0 || !stageMatchesCommand(bound.Command(), facts.Commands, effect.Stage.Argv) {
 		return result, fmt.Errorf("native stage does not match bound operation")
 	}
 	tc, err = frame.ChildContext(ctx, definition, invocation, tc)
@@ -201,9 +203,12 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 		result.HostStopCode = approvaloutcome.CodeApprovalDenied
 		err = errors.Join(err, e.Approvals.approvalRefusal(approvaloutcome.CodeApprovalDenied))
 	}
-	if rejected := toolrejection.AsToolReject(err); rejected != nil {
+	if rejected := toolrejection.AsToolReject(err); rejected != nil && (!ownerStarted || result.Producer.Terminal == toolcontract.ProducerRefused) {
 		rejected = toolrejection.CompleteFailureMetadata(rejected, facts.Identity, facts.Contract.Owner)
 		err = e.Rejections.settleReject(ctx, facts.Identity, surface.profile, canonical, rejected)
+	}
+	if ownerStarted && result.Producer.Terminal == toolcontract.ProducerFailed && result.Producer.StopCode == "" {
+		err = nil
 	}
 	result.OutputPublishable = err == nil && result.HostStopCode == "" && result.Producer.PublicationEligible
 	return result, err
@@ -237,11 +242,24 @@ func nativeAdmissionFailure(err error, certainty toolcontract.EffectCertainty) t
 // stageMatchesCommand checks the stage against its catalog command. A confined
 // external launch runs the launched program's own argv, so its stage starts
 // with that program rather than the external selector.
-func stageMatchesCommand(command string, argv []string) bool {
+func stageMatchesCommand(command string, commands []toolcontract.CommandSpecification, argv []string) bool {
 	if command == "external" {
 		return len(argv) > 0 && argv[0] != ""
 	}
-	return nativeCommandPrefix(command, argv)
+	if nativeCommandPrefix(command, argv) {
+		return true
+	}
+	for _, spec := range commands {
+		if spec.Name != command {
+			continue
+		}
+		for _, alias := range spec.Aliases {
+			if nativeCommandPrefix(alias, argv) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // Command prefixes come from the immutable catalog, never parsed command prose.

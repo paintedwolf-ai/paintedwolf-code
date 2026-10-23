@@ -5,16 +5,18 @@ import (
 	"errors"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/git"
-	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	reposurvey "github.com/lycaon/lycaon/internal/survey"
 	"github.com/lycaon/lycaon/internal/textsearch"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
+	"github.com/lycaon/lycaon/internal/tools/native/curl"
 	"github.com/lycaon/lycaon/internal/tools/native/gitcmd"
 	"github.com/lycaon/lycaon/internal/tools/native/hostenv"
 	"github.com/lycaon/lycaon/internal/tools/native/literal"
@@ -25,6 +27,12 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/native/textutil"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
+
+type curlScreenMemory struct{}
+
+func (curlScreenMemory) ReserveWorking(context.Context, int64) (func(), error) {
+	return func() {}, nil
+}
 
 // programOwnerTools are the structured tools the command program owners share.
 type programOwnerTools struct {
@@ -40,7 +48,8 @@ type programOwnerTools struct {
 
 // compose builds the literal and mutation owners once and returns the
 // per-program factory: one publication barrier and redirect owner per program.
-func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools.ToolContext, *projectpaths.ProgramPaths) (command.ProgramOwners, error), error) {
+func (t programOwnerTools) compose(services ProgramServices) (func(tools.ToolContext, *projectpaths.ProgramPaths) (command.ProgramOwners, error), error) {
+	recorder := services.Recorder
 	revisions := native.ExecutionRevisions{Boundary: t.boundary}
 	literalOwners, err := literal.NewOwners(revisions, recorder, literal.DomainOwners{Summarize: t.summarize, Repo: t.repo})
 	if err != nil {
@@ -73,6 +82,25 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 	gitNative, err := t.gitOperation()
 	if err != nil {
 		return nil, err
+	}
+	var curlOwners *curl.Owners
+	if services.Projector != nil {
+		httpDeps := services.HTTP
+		if httpDeps.Boundary == nil {
+			httpDeps.Boundary = t.boundary
+		}
+		curlOwners, err = curl.NewOwners(revisions, recorder, t.operations.Write, httpDeps, curl.Screening{
+			Projector: services.Projector,
+			Options: func(tools.ToolContext) captureprojection.StreamOptions {
+				return captureprojection.StreamOptions{
+					WorkingMemory: curlScreenMemory{},
+					Bounds:        secretmatch.StreamBounds{InputBytes: 64 << 20, OutputBytes: 64 << 20, MemoryBytes: 64 << 20, DetectorWork: 1 << 30},
+				}
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
 	}
 	return func(tc tools.ToolContext, paths *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
 		barrier := &native.PublicationBarrier{}
@@ -152,6 +180,16 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 		}
 		if gitNative.Prepare != nil {
 			owners.Natives["git"] = gitNative
+		}
+		if curlOwners != nil {
+			tool, _ := curlOwners.Operation("curl")
+			owners.Natives["curl"] = command.NativeOperation{Tool: tool, Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
+				prepared, err := curlOwners.Prepare(curl.Program{Paths: frame, Barrier: barrier}, request)
+				if err != nil {
+					return command.NativePrepared{}, err
+				}
+				return command.NativePrepared{Mode: prepared.Mode, Review: prepared.Review, Invoke: prepared.InvokeOwner}, nil
+			}}
 		}
 		return owners, nil
 	}, nil

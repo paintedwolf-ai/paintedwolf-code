@@ -1,6 +1,7 @@
 package conformance_test
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"os"
@@ -94,6 +95,9 @@ func newConformanceRunner(t *testing.T) *conformanceRunner {
 		Posture:  gate.PostureLight,
 		NeverAsk: &neverAsk,
 	}))
+	h.Execution.Host.Executor.Boundary.SetSessionLoopbackGrant(func(context.Context, string, string) (bool, []uint16) {
+		return true, nil
+	})
 	m, err := h.Workflows.Manager.Resolver.ForSession(t.Context(), "", "", "implement", "1.0.0")
 	testutil.FailErr(t, "resolve implement manifest", err)
 	m.Controls.ContentReview = nil
