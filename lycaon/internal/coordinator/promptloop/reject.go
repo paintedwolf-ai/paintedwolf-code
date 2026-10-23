@@ -85,6 +85,9 @@ func (l *toolInvocations) tryRejectNoToolTurn(
 		return nil, reject, false, err
 	}
 	if errors.Is(reject, guidance.ErrCloseoutStopped) {
+		if errors.Is(reject, guidance.ErrCloseoutNeedsRepairTurn) {
+			return history, reject, true, &closeoutRepairNeeded{refusal: reject, messageID: assistantMessageID}
+		}
 		return history, reject, true, reject
 	}
 	return history, reject, true, nil

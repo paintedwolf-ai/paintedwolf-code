@@ -2,14 +2,17 @@
   "category": "go_receiver_lines",
   "artifact": "lycaon/internal/coordinator/promptloop/promptloop.toolInvocations",
   "kind": "runtime_service",
-  "workstream": "tool-prerequisite-recovery",
+  "workstream": "workflow-closeout-repair",
   "disposition": "retain",
-  "reason": "The 751-line invocation service retains frozen plan, roster, rejection identity and receipt settlement in one lifecycle. The added task recovery projection uses those existing facts without creating an independent operation authority; the production rejection matrix checks reachable remedies.",
-  "reviewed_commit": "9be7f9794800e4f970243604590b355a30677c75",
-  "ceiling": 751,
+  "reason": "Retain the current 784-line invocation lifecycle within 790 lines. Gate rejection adds only an occurrence-bound marker after the existing retraction, without a new dependency or invocation path. Frozen plan, roster and receipt settlement remain together; production invocation and bounded repair contracts constrain them.",
+  "reviewed_commit": "523225a96c92addace7f2f0d6e05d34f4b53a365",
+  "ceiling": 790,
   "boundaries": {
     "lycaon/internal/coordinator/promptloop/prompt_loop_tool_execution_internal_test.go": "d75ec21ca63f24e833cec15e1519c167321bb71289ea9f2d42e13124489afab3",
-    "lycaon/internal/coordinator/promptloop/host_answered_receipt_test.go": "232b19eb8e5b04ad28f5a87a5fee606a891dcfa505e714629f85bc202d20b532"
+    "lycaon/internal/coordinator/promptloop/host_answered_receipt_test.go": "232b19eb8e5b04ad28f5a87a5fee606a891dcfa505e714629f85bc202d20b532",
+    "lycaon/internal/coordinator/promptloop/prose_reject_loop_test.go": "814d434fca9059c66275eb65e99907c7b919b033844bb8978e2523e8332d2ea9",
+    "lycaon/internal/coordinator/promptloop/completion_barrier_test.go": "2227b197a748cb370e64a243674362cb595c60d58d0595c55a721e2419d2c2ef",
+    "lycaon/internal/session/closeout_gate_guard_test.go": "a1094802f6537cea0822414ba7ee6c09cb791774626ca2f784318cdb0e4678c3"
   },
-  "reviewed_shape": "bd42935f91f5dff687b4b282464eb26ab6087b9e400128ff81daef89f5e67627"
+  "reviewed_shape": "49ab85929de65c09c2a3c52e9a6581b2ea54f90cceeddf1829eb3f4faa433118"
 }
