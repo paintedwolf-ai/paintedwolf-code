@@ -212,7 +212,7 @@ func (f *frame) dispatch(ctx context.Context, s commandsurface.Statement, fields
 				child.close()
 				return err
 			}
-			gap = f.nativeGap(spec, argv, fields, assigns)
+			gap = f.nativeGap(ctx, spec, argv, fields, assigns)
 			if gap == nil {
 				f.hostRefusal(spec.Name, argv.Word, argv.Expected, argv.Code)
 				child.settle(toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerRefused, StopCode: argv.Code, EffectCertainty: toolcontract.NoEffect}, err)
@@ -222,11 +222,12 @@ func (f *frame) dispatch(ctx context.Context, s commandsurface.Statement, fields
 			}
 		}
 	}
-	environment, err := f.environment(assigns)
+	environment, releaseEnvironment, err := f.environment(ctx, assigns)
 	if err != nil {
 		child.close()
 		return f.expansionRefusal(s.SyntaxLocation, err)
 	}
+	defer releaseEnvironment()
 	request := OperationRequest{Invocation: child.inv, OperationID: operation, Statement: s, Argv: fields, Environment: environment, EffectMode: effectMode(spec, native), Gap: gap}
 	var result toolcontract.ProducerResult
 	if native && spec.Name != "external" && gap == nil {
@@ -461,7 +462,7 @@ func (f *frame) setOptions(s commandsurface.Statement, fields Fields) error {
 
 // nativeGap is the gap an unsupported native form becomes when dispatch can
 // run the installed program instead; nil keeps the refusal.
-func (f *frame) nativeGap(spec toolcontract.CommandSpecification, argv *ArgvError, fields Fields, assigns []assignment) *toolcontract.NativeGap {
+func (f *frame) nativeGap(ctx context.Context, spec toolcontract.CommandSpecification, argv *ArgvError, fields Fields, assigns []assignment) *toolcontract.NativeGap {
 	if argv.Code != argvOptionUnsupported && argv.Code != "COMMAND_NATIVE_FORM_UNSUPPORTED" {
 		return nil
 	}
@@ -469,10 +470,11 @@ func (f *frame) nativeGap(spec toolcontract.CommandSpecification, argv *ArgvErro
 	if !ok {
 		return nil
 	}
-	environment, err := f.environment(assigns)
+	environment, releaseEnvironment, err := f.environment(ctx, assigns)
 	if err != nil {
 		return nil
 	}
+	defer releaseEnvironment()
 	gap := &toolcontract.NativeGap{Command: spec.Name, Code: argv.Code, Form: argv.Word}
 	if !gaps.GapLaunchable(OperationRequest{OperationID: "external", Argv: fields, Environment: environment, Gap: gap}) {
 		return nil

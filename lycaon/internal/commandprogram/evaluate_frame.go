@@ -156,11 +156,11 @@ func (f *frame) Variable(name string) (string, bool) {
 }
 func (f *frame) ProgramName() string  { return f.unit }
 func (f *frame) Nounset() bool        { return f.state.options.nounset }
-func (f *frame) Positional() []string { return append([]string(nil), f.positional...) }
+func (f *frame) Positional() []string { return f.positional }
 func (f *frame) LastStatus() int      { return f.state.control.Status() }
 func (f *frame) PipeStatus() []int {
 	if len(f.state.pipeStatus) > 0 {
-		return append([]int(nil), f.state.pipeStatus...)
+		return f.state.pipeStatus
 	}
 	return []int{f.state.control.Status()}
 }
@@ -171,7 +171,12 @@ func (f *frame) LastBackground() (string, bool) {
 // environment is the exported NAME=value list for one dispatch, with this
 // frame's function prefixes and the statement's own prefixes applied to that
 // dispatch only.
-func (f *frame) environment(prefix []assignment) ([]string, error) {
+func (f *frame) environment(ctx context.Context, prefix []assignment) ([]string, func(), error) {
+	release, err := f.e.ports.Memory.Reserve(ctx, int64(len(f.prefix)+len(prefix))*64)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer release()
 	overrides := make(map[string]string, len(f.prefix)+len(prefix))
 	for name, value := range f.prefix {
 		overrides[name] = value
@@ -179,7 +184,7 @@ func (f *frame) environment(prefix []assignment) ([]string, error) {
 	for _, a := range prefix {
 		overrides[a.name] = a.value
 	}
-	return f.state.vars.Environment(overrides)
+	return f.state.vars.Environment(ctx, overrides)
 }
 
 type assignment struct {

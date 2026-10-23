@@ -133,6 +133,7 @@ type ExpansionScope interface {
 	Variable(name string) (value string, set bool)
 	// ProgramName is $0, the program or sourced unit identity.
 	ProgramName() string
+	// Positional borrows immutable values from the invocation frame.
 	Positional() []string
 	LastStatus() int
 	LastBackground() (job string, set bool)

@@ -19,20 +19,22 @@ const variableBytes = 96
 // invocation, and IFS is fixed: an environment IFS is inert data. Refusals
 // carry no source span; the evaluator locates them at the assignment.
 type Variables struct {
-	memory     *toolcontract.ProgramMemory
-	bounds     catalogBounds
-	values     map[string]variable
-	program    string
-	positional []string
-	status     int
-	pipeStatus []int
-	background string
-	hasJob     bool
+	memory            *toolcontract.ProgramMemory
+	bounds            catalogBounds
+	values            map[string]variable
+	program           string
+	positional        []string
+	positionalRelease func()
+	status            int
+	pipeStatus        []int
+	background        string
+	hasJob            bool
 }
 
 type variable struct {
 	value    string
 	elements map[int64]string
+	ordered  []string
 	array    bool
 	set      bool
 	exported bool
@@ -51,7 +53,10 @@ func NewVariables(ctx context.Context, memory *toolcontract.ProgramMemory, progr
 	if err != nil {
 		return nil, err
 	}
-	v := &Variables{memory: memory, bounds: bounds, values: map[string]variable{}, program: program, positional: append([]string(nil), positional...)}
+	v := &Variables{memory: memory, bounds: bounds, values: map[string]variable{}, program: program}
+	if err := v.SetPositional(ctx, positional); err != nil {
+		return nil, err
+	}
 	for _, entry := range environment {
 		name, value, ok := strings.Cut(entry, "=")
 		if !ok || name == "" {
@@ -88,76 +93,6 @@ func (v *Variables) Assign(ctx context.Context, name, value string) error {
 	return v.store(ctx, name, variable{value: value, set: true, exported: v.values[name].exported})
 }
 
-// AssignScalar sets or appends a scalar variable in this frame.
-func (v *Variables) AssignScalar(ctx context.Context, name, value string, appendMode bool) error {
-	current := v.values[name]
-	if appendMode && current.array {
-		return v.AssignIndex(ctx, name, 0, value, true)
-	}
-	if appendMode && current.set {
-		value = current.value + value
-	}
-	return v.Assign(ctx, name, value)
-}
-
-// AssignIndex sets or appends element index of an indexed array variable.
-func (v *Variables) AssignIndex(ctx context.Context, name string, index int64, value string, appendMode bool) error {
-	if index < 0 {
-		return invalidValue(toolcontract.SourceSpan{}, "a non-negative array subscript")
-	}
-	current := v.values[name]
-	elements := copyElements(current)
-	if appendMode {
-		value = elements[index] + value
-	}
-	if err := assignable(v.bounds, name, value); err != nil {
-		return err
-	}
-	elements[index] = value
-	return v.store(ctx, name, variable{elements: elements, array: true, set: true, exported: current.exported})
-}
-
-// AssignArray sets or appends an indexed array variable from items.
-func (v *Variables) AssignArray(ctx context.Context, name string, items []string, appendMode bool) error {
-	if err := assignable(v.bounds, name, ""); err != nil {
-		return err
-	}
-	current := v.values[name]
-	var elements map[int64]string
-	var start int64
-	if appendMode {
-		elements = copyElements(current)
-		for k := range elements {
-			if k >= start {
-				start = k + 1
-			}
-		}
-	} else {
-		elements = make(map[int64]string, len(items))
-	}
-	for i, item := range items {
-		if err := assignable(v.bounds, name, item); err != nil {
-			return err
-		}
-		elements[start+int64(i)] = item
-	}
-	return v.store(ctx, name, variable{elements: elements, array: true, set: true, exported: current.exported})
-}
-
-func copyElements(current variable) map[int64]string {
-	if current.array {
-		out := make(map[int64]string, len(current.elements))
-		for k, v := range current.elements {
-			out[k] = v
-		}
-		return out
-	}
-	if current.set {
-		return map[int64]string{0: current.value}
-	}
-	return map[int64]string{}
-}
-
 // Export marks a variable for child environments; an unset name stays unset.
 func (v *Variables) Export(ctx context.Context, name string) error {
 	if err := assignable(v.bounds, name, ""); err != nil {
@@ -178,44 +113,67 @@ func (v *Variables) Unset(name string) {
 
 // Environment is the exported, set variables sorted by name, with overrides
 // (a NAME=value prefix of one dispatch) applied without changing the frame.
-func (v *Variables) Environment(overrides map[string]string) ([]string, error) {
-	names := make([]string, 0, len(v.values)+len(overrides))
+func (v *Variables) Environment(ctx context.Context, overrides map[string]string) ([]string, func(), error) {
+	var count, size int64
+	for name, entry := range v.values {
+		if _, overridden := overrides[name]; entry.exported && entry.set && !overridden {
+			count++
+			size += int64(len(name) + len(entry.value) + 1)
+		}
+	}
+	for name, value := range overrides {
+		if err := assignable(v.bounds, name, value); err != nil {
+			return nil, nil, err
+		}
+		count++
+		size += int64(len(name) + len(value) + 1)
+	}
+	if size > v.bounds.maximum["environment_bytes"] {
+		return nil, nil, v.bounds.exceeded("environment_bytes", size, toolcontract.SourceSpan{})
+	}
+	// Names, output string headers and NAME=value text coexist with the frame.
+	release, err := v.memory.Reserve(ctx, count*32+size)
+	if err != nil {
+		return nil, nil, err
+	}
+	names := make([]string, 0, count)
 	for name, entry := range v.values {
 		if _, overridden := overrides[name]; entry.exported && entry.set && !overridden {
 			names = append(names, name)
 		}
 	}
-	for name, value := range overrides {
-		if err := assignable(v.bounds, name, value); err != nil {
-			return nil, err
-		}
+	for name := range overrides {
 		names = append(names, name)
 	}
 	sort.Strings(names)
 	out := make([]string, 0, len(names))
-	var size int64
 	for _, name := range names {
 		value, overridden := overrides[name]
 		if !overridden {
 			value = v.values[name].value
 		}
-		if size += int64(len(name) + len(value) + 1); size > v.bounds.maximum["environment_bytes"] {
-			return nil, v.bounds.exceeded("environment_bytes", size, toolcontract.SourceSpan{})
-		}
 		out = append(out, name+"="+value)
 	}
-	return out, nil
+	return out, release, nil
 }
 
 // Clone copies the frame for an isolated group or substitution unit.
 func (v *Variables) Clone(ctx context.Context) (*Variables, error) {
-	clone := &Variables{memory: v.memory, bounds: v.bounds, values: map[string]variable{}, program: v.program, positional: append([]string(nil), v.positional...), status: v.status, pipeStatus: append([]int(nil), v.pipeStatus...), background: v.background, hasJob: v.hasJob}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	clone := &Variables{memory: v.memory, bounds: v.bounds, values: map[string]variable{}, program: v.program, status: v.status, pipeStatus: v.pipeStatus, background: v.background, hasJob: v.hasJob}
+	if err := clone.SetPositional(ctx, v.positional); err != nil {
+		return nil, err
+	}
 	for name, entry := range v.values {
-		copied := entry
-		if entry.array {
-			copied.elements = copyElements(entry)
-		}
-		if err := clone.store(ctx, name, copied); err != nil {
+		if err := clone.replace(ctx, name, variableSize(name, entry), func() variable {
+			copied := entry
+			if entry.array {
+				copied = indexedVariable(copyElements(entry), entry.exported)
+			}
+			return copied
+		}); err != nil {
 			clone.Close()
 			return nil, err
 		}
@@ -225,17 +183,35 @@ func (v *Variables) Clone(ctx context.Context) (*Variables, error) {
 
 // Close releases the frame's retained state.
 func (v *Variables) Close() {
+	if v.positionalRelease != nil {
+		v.positionalRelease()
+		v.positionalRelease = nil
+	}
 	for name := range v.values {
 		v.Unset(name)
 	}
 }
 
-func (v *Variables) SetPositional(positional []string) {
-	v.positional = append([]string(nil), positional...)
+func (v *Variables) SetPositional(ctx context.Context, positional []string) error {
+	var size int64
+	for _, value := range positional {
+		size += int64(len(value) + 16)
+	}
+	release, err := v.memory.ReserveProgramState(ctx, size)
+	if err != nil {
+		return err
+	}
+	values := append([]string(nil), positional...)
+	if v.positionalRelease != nil {
+		v.positionalRelease()
+	}
+	v.positional, v.positionalRelease = values, release
+	return nil
 }
 func (v *Variables) SetStatus(status int) { v.status = status }
 func (v *Variables) SetPipeStatus(statuses []int) {
-	v.pipeStatus = append([]int(nil), statuses...)
+	// Callers hand over an immutable status vector already owned by the frame.
+	v.pipeStatus = statuses
 }
 func (v *Variables) SetBackground(job string) {
 	v.background, v.hasJob = job, true
@@ -272,6 +248,7 @@ func (v *Variables) VariableElement(name string, index int64) (string, bool) {
 	return "", false
 }
 
+// VariableElements borrows a read-only projection retained with the variable.
 func (v *Variables) VariableElements(name string) ([]string, bool) {
 	if name == "PIPESTATUS" {
 		statuses := v.PipeStatus()
@@ -288,16 +265,7 @@ func (v *Variables) VariableElements(name string) ([]string, bool) {
 	if !entry.array {
 		return []string{entry.value}, true
 	}
-	keys := make([]int64, 0, len(entry.elements))
-	for k := range entry.elements {
-		keys = append(keys, k)
-	}
-	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
-	out := make([]string, len(keys))
-	for i, k := range keys {
-		out[i] = entry.elements[k]
-	}
-	return out, true
+	return entry.ordered, true
 }
 
 func itoaStatus(n int) string {
@@ -315,12 +283,12 @@ func itoaStatus(n int) string {
 }
 func (v *Variables) ProgramName() string { return v.program }
 func (v *Variables) Positional() []string {
-	return append([]string(nil), v.positional...)
+	return v.positional
 }
 func (v *Variables) LastStatus() int { return v.status }
 func (v *Variables) PipeStatus() []int {
 	if len(v.pipeStatus) > 0 {
-		return append([]int(nil), v.pipeStatus...)
+		return v.pipeStatus
 	}
 	return []int{v.status}
 }
@@ -344,21 +312,31 @@ func assignable(bounds catalogBounds, name, value string) error {
 	return nil
 }
 
-// store reserves the new entry before releasing the one it replaces, so old
-// and new values are both charged while they coexist.
+// store charges already-owned text and metadata before retaining another entry.
 func (v *Variables) store(ctx context.Context, name string, entry variable) error {
+	return v.replace(ctx, name, variableSize(name, entry), func() variable { return entry })
+}
+
+func variableSize(name string, entry variable) int64 {
+	bytes := int64(len(name) + len(entry.value) + variableBytes)
+	for _, elem := range entry.elements {
+		bytes += int64(len(elem) + arrayElementBytes)
+	}
+	return bytes
+}
+
+// replace admits the replacement before constructing it. Both generations stay
+// charged until the new value is installed; refusal leaves the old value intact.
+func (v *Variables) replace(ctx context.Context, name string, bytes int64, build func() variable) error {
 	previous, replacing := v.values[name]
 	if count := int64(len(v.values) + 1); !replacing && count > v.bounds.maximum["variable_count"] {
 		return v.bounds.exceeded("variable_count", count, toolcontract.SourceSpan{})
-	}
-	bytes := int64(len(name) + len(entry.value) + variableBytes)
-	for _, elem := range entry.elements {
-		bytes += int64(len(elem) + 32)
 	}
 	release, err := v.memory.ReserveProgramState(ctx, bytes)
 	if err != nil {
 		return err
 	}
+	entry := build()
 	entry.release = release
 	v.values[name] = entry
 	if replacing {
