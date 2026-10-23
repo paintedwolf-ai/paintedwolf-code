@@ -484,19 +484,6 @@ func (d *ProgramDispatcher) prepareInvocation(ctx context.Context, definition to
 	return programChild{id: invocation.Identity.ExecutionID, reference: reference, review: review, release: release}, nil
 }
 
-type admissionMarker struct {
-	invocation.ProgramAdmissionRecorder
-	started bool
-}
-
-func (m *admissionMarker) BeforeNativeOwner(ctx context.Context, operation toolcontract.BoundOperation, toolCallID string, reviewed toolcontract.ReviewedOperationInputs) error {
-	if err := m.ProgramAdmissionRecorder.BeforeNativeOwner(ctx, operation, toolCallID, reviewed); err != nil {
-		return err
-	}
-	m.started = true
-	return nil
-}
-
 // start commits the durable owner-start marker for a host-run child.
 func (d *ProgramDispatcher) start(ctx context.Context, child programChild) error {
 	marker := invocation.ProgramAdmissionRecorder{Recorder: d.run.recorder, Inputs: d.run.capture}
