@@ -118,6 +118,9 @@ func finishRebuildPublication(path string, record rebuildJournal, afterMove func
 	if err := requireRebuildIdentity(work, record.DirectoryIdentity); err != nil {
 		return err
 	}
+	if err := preserveEmptyRebuildOccupant(path, record); err != nil {
+		return err
+	}
 	for _, file := range record.Original {
 		from := record.Database + file.Suffix
 		to := filepath.Join(record.Directory, "original.db"+file.Suffix)

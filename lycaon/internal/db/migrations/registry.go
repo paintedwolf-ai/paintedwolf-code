@@ -38,17 +38,28 @@ type Step struct {
 // Sources are SQL FROM clauses using the read-only original schema and alias e.
 // Unlisted tables are copied completely. After runs before indexes and triggers.
 type RetainedCopy struct {
-	Sources map[string]string
-	After   []string
+	Sources      map[string]string
+	SourceShapes []string
+	ExpectedRows map[string]string
+	After        []string
 }
 
-// CopyPlan is available only when the first registered step defines retention
-// for the exact source shape. Other released routes keep their executor.
+// CopyPlan may precede earlier migrations only for explicitly reviewed source
+// shapes sharing the retained tables. The full registered route still executes.
 func (p Plan) CopyPlan() *RetainedCopy {
-	if len(p.steps) == 0 {
-		return nil
+	for _, step := range p.steps {
+		if copy := step.RetainedCopy; copy != nil {
+			if step.From == p.Source {
+				return copy
+			}
+			for _, shape := range copy.SourceShapes {
+				if shape == p.Source.Shape {
+					return copy
+				}
+			}
+		}
 	}
-	return p.steps[0].RetainedCopy
+	return nil
 }
 
 // Plan contains a complete route; callers cannot replace its registered steps.
