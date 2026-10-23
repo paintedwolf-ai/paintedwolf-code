@@ -153,5 +153,8 @@ func checkInitialMountPreparation(directory, uidText, gidText string) error {
 	if _, err := os.Stat(filepath.Join(root, "hidden")); !errors.Is(err, os.ErrNotExist) {
 		return errors.New("hidden underlay became visible after preparation")
 	}
-	return checkAttachmentRollbackOwnership(directory)
+	if err := checkAttachmentRollbackOwnership(directory); err != nil {
+		return err
+	}
+	return checkAdministrativePruning()
 }

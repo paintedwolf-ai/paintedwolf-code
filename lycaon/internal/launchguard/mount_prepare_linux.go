@@ -137,6 +137,22 @@ func (view *preparedModuleView) prepareInitialLeases(opener *mountSourceOpener, 
 	removed := make(map[int]bool)
 	for _, mount := range volumeDetachOrder(staging, structural) {
 		fd, err := opener.open(mount)
+		if errors.Is(err, unix.EACCES) {
+			_, current, readErr := readCurrentMountTopology()
+			if readErr != nil || !sameMountEpoch(staging, current, removed) {
+				return errors.New("initial mount topology changed before administrative pruning")
+			}
+			err = pruneAdministrativeMount(mount, current)
+			if err != nil {
+				return fmt.Errorf("prune administrative mount: %w", err)
+			}
+			removed[mount.id] = true
+			_, after, readErr := readCurrentMountTopology()
+			if readErr != nil || !sameMountEpoch(staging, after, removed) {
+				return errors.New("administrative pruning changed unexpected topology")
+			}
+			continue
+		}
 		if err != nil {
 			return fmt.Errorf("open initial mount %q (%d) for private view: %w", mount.mountPoint, mount.id, err)
 		}
