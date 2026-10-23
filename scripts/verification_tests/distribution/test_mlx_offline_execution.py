@@ -90,9 +90,31 @@ class MLXOfflineSource(unittest.TestCase):
         result = self.run_cmake(apple=False)
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_persistent_source_and_toolchain_use_explicit_current_repository_inputs(self):
+        self.assertEqual(self.run_cmake().returncode, 0)
+        original = self.root / 'scripts/toolchain/mlx-offline.cmake'
+        persistent = self.root / 'persistent'
+        persistent.mkdir()
+        toolchain = persistent / 'mlx-offline.cmake'
+        shutil.copyfile(original, toolchain)
+        original.unlink()
+        source = persistent / 'mlx-c'
+        shutil.move(self.source, source)
+        script = self.script.read_text().replace(str(original), str(toolchain)).replace(str(self.source), str(source))
+        self.script.write_text(f'set(PW_MLX_VENDOR_ROOT "{self.vendor}")\n'
+                               f'set(PW_MLX_SYS_MANIFEST "{self.crate / "Cargo.toml"}")\n' + script)
+        result = self.run_cmake()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.pin['mlx_sys_version'] = '0.7.0'
+        rejected = self.run_cmake()
+        self.assertNotEqual(rejected.returncode, 0)
+        self.assertIn('MLX_SOURCE_PIN_MISMATCH', rejected.stderr)
+
     def test_ordinary_cargo_builds_select_same_toolchain(self):
         config = (ROOT / ".cargo/config.toml").read_text()
         self.assertIn('[env]\n', config)
+        manifest = (ROOT / 'lycaon/internal/decide/native/Cargo.toml').read_text()
+        self.assertIn('mlx-sys = { path = "vendor/mlx-sys" }', manifest)
         self.assertIn('CMAKE_TOOLCHAIN_FILE = { value = "scripts/toolchain/mlx-offline.cmake", '
                       'relative = true, force = true }', config)
         pin = json.loads((ROOT / "third_party/mlx/pin.json").read_text())
