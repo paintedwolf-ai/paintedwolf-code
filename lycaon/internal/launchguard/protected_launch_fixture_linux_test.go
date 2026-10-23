@@ -307,6 +307,9 @@ func sudoFixture(t *testing.T, mode, dir string, extra ...string) error {
 	if err != nil {
 		return fmt.Errorf("%s fixture: %w: %s", mode, err, out)
 	}
+	if mode == "module-view" {
+		t.Logf("mediated mount visibility observation: %s", out)
+	}
 	return nil
 }
 

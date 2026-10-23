@@ -97,6 +97,7 @@ func checkLiveDesktopMountIsolation(dir, rawPID string) error {
 	if err != nil {
 		return err
 	}
+	mountedAt := time.Now()
 	if err := mountExecutableTmpfs(lateDir, lateFile); err != nil {
 		return err
 	}
@@ -120,7 +121,7 @@ func checkLiveDesktopMountIsolation(dir, rawPID string) error {
 	if err := unix.Setns(int(desktopNS.Fd()), unix.CLONE_NEWNS); err != nil {
 		return fmt.Errorf("enter live desktop mount namespace: %w", err)
 	}
-	checkErr := assertMediatedNoexecView(lateDir, lateFile, underlying, existing)
+	checkErr := assertMediatedNoexecView(lateDir, lateFile, underlying, existing, mountedAt)
 	if restoreErr := unix.Setns(int(hostNS.Fd()), unix.CLONE_NEWNS); restoreErr != nil && checkErr == nil {
 		checkErr = restoreErr
 	}
@@ -155,13 +156,22 @@ func mountExecutableTmpfs(lateDir, lateFile string) error {
 	return os.WriteFile(lateFile, []byte("late-module"), 0o755)
 }
 
-func assertMediatedNoexecView(lateDir, lateFile, underlying, existing string) error {
+func assertMediatedNoexecView(lateDir, lateFile, underlying, existing string, mountedAt time.Time) error {
 	if err := canMapExecutable(existing); !errors.Is(err, unix.EPERM) {
 		return fmt.Errorf("existing module mapped executable: %v", err)
 	}
-	const bound = 100 * time.Millisecond
-	deadline := time.Now().Add(bound)
+	// Temporary absence is allowed until mediation completes. The setup lifetime
+	// bounds the event wait; the first visible mount must already be safe.
+	info, err := os.Open("/proc/thread-self/mountinfo")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = info.Close() }()
+	deadline := mountedAt.Add(mountSourceSetupLimit)
 	for {
+		if _, err := readMountInfo(int(info.Fd()), nil); err != nil {
+			return err
+		}
 		content, err := os.ReadFile(lateFile)
 		if err == nil {
 			if !bytes.Equal(content, []byte("late-module")) {
@@ -177,15 +187,23 @@ func assertMediatedNoexecView(lateDir, lateFile, underlying, existing string) er
 			if !errors.Is(mapErr, unix.EPERM) || statErr != nil || stat.Flags&flags != flags {
 				return fmt.Errorf("visible volume was not already safe: map=%v stat=%v flags=%#x", mapErr, statErr, stat.Flags)
 			}
+			fmt.Printf("PW_MOUNT_VISIBILITY01 {\"observed_latency_ns\":%d,\"flags\":%d,\"executable_mapping_denied\":true}\n", time.Since(mountedAt).Nanoseconds(), stat.Flags)
 			return nil
 		}
 		if !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
-		if !time.Now().Before(deadline) {
-			return fmt.Errorf("safe volume was not attached within %s", bound)
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			return fmt.Errorf("safe volume did not become visible before the %s setup lifetime", mountSourceSetupLimit)
 		}
-		time.Sleep(50 * time.Microsecond)
+		fds := []unix.PollFd{{Fd: int32(info.Fd()), Events: unix.POLLPRI | unix.POLLERR}}
+		if _, err := unix.Poll(fds, max(1, int(remaining/time.Millisecond))); err != nil && !errors.Is(err, unix.EINTR) {
+			return err
+		}
+		if fds[0].Revents&unix.POLLNVAL != 0 {
+			return errors.New("protected namespace mount observation ended")
+		}
 	}
 }
 
