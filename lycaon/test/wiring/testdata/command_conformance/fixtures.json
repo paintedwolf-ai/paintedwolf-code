@@ -1937,6 +1937,13 @@
         "stdout": "curl-failed\n",
         "stderr": "",
         "files": {}
+      },
+      "capability_request": {
+        "loopback_connect": {
+          "ports": [
+            1
+          ]
+        }
       }
     },
     {

@@ -32,16 +32,17 @@ type fixtureCorpus struct {
 }
 
 type fixtureCase struct {
-	ID           string          `json:"id"`
-	Category     string          `json:"category"`
-	Description  string          `json:"description"`
-	Commands     []string        `json:"commands"`
-	Forms        []string        `json:"forms"`
-	Program      string          `json:"program"`
-	TrackedFiles []string        `json:"tracked_files"`
-	NeedsGit     bool            `json:"needs_git"`
-	GNU          fixtureSnapshot `json:"gnu"`
-	BSD          fixtureSnapshot `json:"bsd"`
+	CapabilityRequest map[string]any  `json:"capability_request,omitempty"`
+	ID                string          `json:"id"`
+	Category          string          `json:"category"`
+	Description       string          `json:"description"`
+	Commands          []string        `json:"commands"`
+	Forms             []string        `json:"forms"`
+	Program           string          `json:"program"`
+	TrackedFiles      []string        `json:"tracked_files"`
+	NeedsGit          bool            `json:"needs_git"`
+	GNU               fixtureSnapshot `json:"gnu"`
+	BSD               fixtureSnapshot `json:"bsd"`
 }
 
 type fixtureSnapshot struct {
@@ -81,9 +82,13 @@ func newConformanceRunner(t *testing.T) *conformanceRunner {
 	corpus := loadFixtureCorpus(t)
 	entries := make([]llm.MockResponseEntry, 0, len(corpus.Cases))
 	for _, c := range corpus.Cases {
+		args := map[string]any{"command": c.Program}
+		if c.CapabilityRequest != nil {
+			args["capability_request"] = c.CapabilityRequest
+		}
 		entries = append(entries, llm.MockResponseEntry{
 			Pattern:      "run case " + c.ID,
-			ToolCalls:    []llm.MockToolCall{{ID: "call-" + c.ID, Name: "command", Args: map[string]any{"command": c.Program}}},
+			ToolCalls:    []llm.MockToolCall{{ID: "call-" + c.ID, Name: "command", Args: args}},
 			FollowUpText: "Case finished.",
 		})
 	}

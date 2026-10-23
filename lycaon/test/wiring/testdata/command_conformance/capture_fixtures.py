@@ -660,6 +660,7 @@ def corpus_cases() -> list[dict[str, Any]]:
         # --- HTTP utility (http.json) ---
         {
             "id": "http-curl-options",
+            "capability_request": {"loopback_connect": {"ports": [1]}},
             "category": "http",
             "description": "curl catalogued options over unreachable loopback port",
             "commands": ["curl"],
