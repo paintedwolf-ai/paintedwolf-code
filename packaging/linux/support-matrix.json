@@ -379,7 +379,7 @@
         928,
         940,
         941,
-        1312
+        1145
       ],
       "cases": [
         "clean-install-and-launch",
@@ -393,8 +393,7 @@
         "residuals": [
           "User configuration may select an unneeded root-installed library; macOS similarly admits unneeded Apple-signed libraries.",
           "Code already running in a protected process can load code from memory; preserve process and sandbox authority separation."
-        ],
-        "post_release_issue": 1312
+        ]
       }
     },
     {
