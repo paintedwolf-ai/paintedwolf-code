@@ -375,7 +375,7 @@
   background: var(--den-background);
 }
 .tabs__panel-clip > .den-scrollport__viewport {
-  overscroll-behavior: contain;
+  overscroll-behavior: none;
 }
 /* Split view caps panel height against the window. */
 .den-shell-stage-host--split .den-split-col--chat .tabs__panel-clip {

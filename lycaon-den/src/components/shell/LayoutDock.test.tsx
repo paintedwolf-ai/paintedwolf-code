@@ -336,7 +336,7 @@ describe("tab panel cap CSS", () => {
     const clipRule = text.match(/\.tabs__panel-clip\s*\{([^}]*)\}/)?.[1];
     expect(clipRule).toBeTruthy();
     expect(clipRule).toMatch(/overflow:\s*hidden/);
-    expect(text).toMatch(/\.tabs__panel-clip > \.den-scrollport__viewport\s*\{[^}]*overscroll-behavior:\s*contain/);
+    expect(text).toMatch(/\.tabs__panel-clip > \.den-scrollport__viewport\s*\{[^}]*overscroll-behavior:\s*none/);
   });
 });
 
