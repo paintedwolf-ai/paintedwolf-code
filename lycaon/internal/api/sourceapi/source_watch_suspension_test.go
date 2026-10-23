@@ -1,6 +1,8 @@
 package sourceapi
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/project"
@@ -22,10 +24,15 @@ func TestSuspendedAndDeletedProjectsCannotRebindCopiedWatch(t *testing.T) {
 	if server.Watch.ensureWorkspaceWatch(t.Context(), p) || repochange.Coverage(p.Roots[0].Path).Watching {
 		t.Fatal("suspended project rebound")
 	}
+	beforeGap := repochange.CurrentEpoch(p.Roots[0].Path)
+	testutil.FailErr(t, "edit while watch is suspended", os.WriteFile(filepath.Join(p.Roots[0].Path, "missed.txt"), []byte("changed during removal"), 0600))
 	resume()
 	resume()
 	if !server.Watch.ensureWorkspaceWatch(t.Context(), p) {
 		t.Fatal("resumed project did not bind")
+	}
+	if repochange.EpochCurrent(p.Roots[0].Path, beforeGap) {
+		t.Fatal("rebound watch trusted inventory from before the observation gap")
 	}
 	resume, err = server.Watch.SuspendProjectWatch(t.Context(), p.ID)
 	testutil.FailErr(t, "suspend before deletion", err)

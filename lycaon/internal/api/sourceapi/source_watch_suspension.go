@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
 )
 
@@ -45,4 +46,14 @@ func (s *Watch) SuspendProjectWatch(ctx context.Context, projectID string) (func
 		}
 	})
 	return resume, sourcefeed.StopProjectWatch(ctx, projectID)
+}
+
+// A newly bound stream cannot account for edits made while it was absent.
+func resyncWorkspaceWatch(ctx context.Context, p *project.Project) {
+	for _, root := range p.Roots {
+		repochange.Notify(ctx, repochange.Event{
+			ProjectDir: root.Path, Kind: repochange.WorktreeChanged, Source: repochange.SourceWatcher,
+			Changes: []repochange.WorktreeChange{{Path: ".", Kind: repochange.WorktreeChangeResync}},
+		})
+	}
 }

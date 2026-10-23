@@ -3,6 +3,8 @@ package hostcontracts
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/google/uuid"
@@ -45,7 +47,14 @@ func TestProjectRemovalStopsWatchBeforeDeletionAndRestartsOnFailure(t *testing.T
 			testutil.FailErr(t, "create project", err)
 			root = p.Roots[0].Path
 			stopped := make(chan bool, 1)
-			wrapped := removalWatchRegistry{Registry: registry, beforeDelete: func() { stopped <- !repochange.Coverage(root).Watching }}
+			wrapped := removalWatchRegistry{Registry: registry, beforeDelete: func() {
+				stopped <- !repochange.Coverage(root).Watching
+				if fail {
+					if err := os.WriteFile(filepath.Join(root, "missed.txt"), []byte("edit during failed removal"), 0600); err != nil {
+						t.Errorf("edit during watch gap: %v", err)
+					}
+				}
+			}}
 			if fail {
 				wrapped.failure = errors.New("deletion failed")
 			}
@@ -58,6 +67,7 @@ func TestProjectRemovalStopsWatchBeforeDeletionAndRestartsOnFailure(t *testing.T
 			if !repochange.Coverage(root).Watching {
 				t.Fatal("fixture did not bind a watch")
 			}
+			beforeGap := repochange.CurrentEpoch(root)
 			_, err = server.Admin.Project.Removal.Owner.Remove(t.Context(), p.ID, wire.ProjectRemovalRequest{OperationID: uuid.NewString()})
 			testutil.FailErr(t, "accept removal", err)
 			contractfixture.DrainBackground(t, server)
@@ -68,6 +78,9 @@ func TestProjectRemovalStopsWatchBeforeDeletionAndRestartsOnFailure(t *testing.T
 				}
 			default:
 				t.Fatal("removal never reached project deletion")
+			}
+			if fail && repochange.EpochCurrent(root, beforeGap) {
+				t.Fatal("failed removal rebound without invalidating pre-gap inventory")
 			}
 			if watching := repochange.Coverage(root).Watching; watching != fail {
 				t.Fatalf("watching after removal = %v, want %v", watching, fail)
