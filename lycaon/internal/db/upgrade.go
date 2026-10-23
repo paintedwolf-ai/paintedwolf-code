@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/lycaon/lycaon/internal/db/migrations"
@@ -120,7 +121,7 @@ func upgradeExistingUsing(ctx context.Context, path string, hooks UpgradeHooks, 
 	if !plan.Required() {
 		return prepareIntegrity(ctx, reader)
 	}
-	if err := validateStoreIntegrity(ctx, reader); err != nil {
+	if err := refuseRecordedUpgradeDamage(ctx, reader); err != nil {
 		return err
 	}
 	if !staged {
@@ -138,6 +139,9 @@ func upgradeExistingUsing(ctx context.Context, path string, hooks UpgradeHooks, 
 		return err
 	}
 	if err := executeUpgrade(ctx, path, plan, hooks.Progress, registry); err != nil {
+		if errors.Is(err, migrations.ErrIntegrity) {
+			return storeIncompatible(RecoveryReasonIntegrityFailed, plan.Source.Revision, err.Error())
+		}
 		return storeIncompatible(RecoveryReasonSchemaMismatch, plan.Source.Revision, err.Error())
 	}
 	if hooks.After != nil {
@@ -155,4 +159,22 @@ func executeUpgrade(ctx context.Context, path string, plan migrations.Plan, prog
 	}
 	defer func() { _ = writer.Close() }()
 	return registry.Execute(ctx, writer, plan, inspectSchema, progress)
+}
+
+// A pending audit is work to complete, not evidence that the source is damaged.
+// Whole-file verification runs against the migrated state before commit.
+func refuseRecordedUpgradeDamage(ctx context.Context, reader *sql.DB) error {
+	var value string
+	err := reader.QueryRowContext(ctx, `SELECT value FROM store_meta WHERE key = ?`, integrityAuditFailedMetaKey).Scan(&value)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if value != "" && value != "integrity audit pending" {
+		version, _ := ReadUserVersion(ctx, reader)
+		return storeIncompatible(RecoveryReasonIntegrityFailed, version, value)
+	}
+	return nil
 }

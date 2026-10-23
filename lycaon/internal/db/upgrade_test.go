@@ -190,3 +190,33 @@ func TestUpgradeRefusesAlteredAppliedMigration(t *testing.T) {
 		t.Fatalf("altered ledger error = %v", err)
 	}
 }
+
+func TestUpgradeRefusesRecordedDamageButAllowsPendingAudit(t *testing.T) {
+	for _, value := range []string{"confirmed damage", "integrity audit pending"} {
+		t.Run(value, func(t *testing.T) {
+			path, registry, plan := upgradeFixture(t)
+			writer, err := openWriter(t.Context(), path, StoreOptions{})
+			testutil.FailErr(t, "open audit fixture", err)
+			_, err = writer.Exec(`INSERT INTO store_meta(key, value) VALUES(?,?)`, integrityAuditFailedMetaKey, value)
+			testutil.FailErr(t, "record audit state", err)
+			testutil.FailErr(t, "close audit fixture", writer.Close())
+			err = upgradeExistingUsing(t.Context(), path, UpgradeHooks{}, true, registry)
+			if value == "integrity audit pending" {
+				testutil.FailErr(t, "upgrade pending audit", err)
+				return
+			}
+			var failure *StoreIncompatibleError
+			if !errors.As(err, &failure) || failure.Reason != RecoveryReasonIntegrityFailed {
+				t.Fatalf("recorded damage error = %v", err)
+			}
+			reader, err := openReader(t.Context(), path)
+			testutil.FailErr(t, "read refused source", err)
+			defer func() { _ = reader.Close() }()
+			actual, err := inspectSchema(t.Context(), reader)
+			testutil.FailErr(t, "inspect refused source", err)
+			if actual != plan.Source {
+				t.Fatal("recorded damage was migrated")
+			}
+		})
+	}
+}
