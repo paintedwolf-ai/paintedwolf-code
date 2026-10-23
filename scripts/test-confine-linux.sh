@@ -10,6 +10,7 @@ source "${ROOT}/scripts/artifact-paths.sh"
 BROWSER_CACHE="${PW_BIN_DIR}/confine-browser"
 
 LEGS=(sandbox supervisor launch browser)
+AVAILABLE_LEGS=("${LEGS[@]}" launch-desktop)
 # --prepare provisions the pinned browser and runs nothing, for a lane that later runs offline.
 PREPARE=0
 if [[ "${1:-}" == "--prepare" ]]; then
@@ -18,7 +19,7 @@ if [[ "${1:-}" == "--prepare" ]]; then
 fi
 if (($#)); then
   for leg in "$@"; do
-    [[ " ${LEGS[*]} " == *" ${leg} "* ]] || { echo "error: unknown leg ${leg}; known: ${LEGS[*]}" >&2; exit 2; }
+    [[ " ${AVAILABLE_LEGS[*]} " == *" ${leg} "* ]] || { echo "error: unknown leg ${leg}; known: ${AVAILABLE_LEGS[*]}" >&2; exit 2; }
   done
   LEGS=("$@")
 fi
@@ -58,13 +59,20 @@ run_leg() {
     launch)
       bash "${ROOT}/scripts/go-test-digest.sh" --full --name test:confine:linux-launch -- ./internal/launchguard/... ./internal/launchverify/... ./cmd/pw-launch/... ./cmd/pw-launch-entry/... ./cmd/pw-vault-identity/... -count=1
       ;;
+    launch-desktop)
+      if [[ -z "${PW_LAUNCH_DESKTOP_ARTIFACT:-}" || ! -f "${PW_LAUNCH_DESKTOP_ARTIFACT}" ]]; then
+        echo "test:confine:linux: unverified: launch-desktop requires PW_LAUNCH_DESKTOP_ARTIFACT evidence" >&2
+        return 2
+      fi
+      bash "${ROOT}/scripts/go-test-digest.sh" --full --name test:confine:linux-launch-desktop -- ./internal/launchguard/... -tags=protected_desktop_artifact -run '^TestProtectedLaunchActualDesktop$' -count=1
+      ;;
     browser)
       if ! browser="$(browser_path)"; then
         echo "test:confine:linux: unverified: the pinned browser could not be provisioned" >&2
         return 2
       fi
       # A browser is provisioned, so a skip would be a green leg covering nothing.
-      LYCAON_BROWSER_BIN="${browser}" LYCAON_BROWSER_REQUIRED=1 bash "${ROOT}/scripts/go-test-digest.sh" --full --name test:confine:linux-browser -- ./internal/browser -run '^(TestHeadlessLauncherPinsSubprocessPath|TestHeadlessLauncherKeepsItsSandboxWithoutTheBoundary|TestLaunchHeadlessUnderBrowserConfinement|TestProbeUsabilityUnderBrowserConfinement|TestPoolNewPageUnderBrowserConfinement|TestConfinedBrowserFloorReachesHostLoopback|TestConfinedBrowserCannotReadDeniedFiles|TestBrowserBoundaryRefusesWhenConfinementCannotBeBuilt|TestLaunchHeadlessRefusesUnsafeCacheDir)$' -count=1
+      LYCAON_BROWSER_BIN="${browser}" LYCAON_BROWSER_REQUIRED=1 bash "${ROOT}/scripts/go-test-digest.sh" --full --name test:confine:linux-browser -- ./internal/browser -run '^(TestHeadlessLauncherPinsSubprocessPath|TestHeadlessLauncherKeepsItsSandboxWithoutTheBoundary|TestLaunchHeadlessUnderBrowserConfinement|TestProbeUsabilityUnderBrowserConfinement|TestPoolNewPageUnderBrowserConfinement|TestConfinedBrowserFloorReachesHostLoopback|TestConfinedBrowserCannotReadDeniedFiles|TestBrowserBoundaryRefusesWhenConfinementCannotBeBuilt|TestBrowserUnavailableLinuxBoundaryDoesNotLaunch|TestLaunchHeadlessRefusesUnsafeCacheDir)$' -count=1
       ;;
   esac
 }

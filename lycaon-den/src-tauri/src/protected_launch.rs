@@ -1,10 +1,18 @@
-//! The protected Linux launch hands the desktop two descriptors: the broker
-//! that starts programs outside the protected namespace (6) and the selected
-//! generation's lifetime lock (7). The desktop claims them before anything can
-//! inherit them, keeps the lock for its lifetime, and passes the broker only
-//! to the engine it starts.
+//! Protected Linux startup consumes the sealed generation selection (4), claims
+//! the outside-namespace broker (6) and retains the generation lifetime lock (7).
+//! Only the engine receives the broker; startup authority never reaches children.
 
 use std::sync::OnceLock;
+
+#[path = "protected_launch/generation.rs"]
+mod generation;
+pub(crate) use generation::{Generation, GenerationError};
+
+static GENERATION: OnceLock<Result<Option<Generation>, GenerationError>> = OnceLock::new();
+
+pub(crate) fn generation() -> Result<Option<Generation>, GenerationError> {
+    GENERATION.get().cloned().unwrap_or(Ok(None))
+}
 
 /// Descriptor numbers the protected entry leaves open for the desktop.
 pub(crate) const BROKER_FD: i32 = 6;
@@ -24,17 +32,42 @@ pub(crate) fn is_launch_broker(socket_type: i32, peer_uid: u32) -> bool {
 
 /// Claims the launch descriptors once, at startup, before any thread or child
 /// exists to inherit them.
-pub(crate) fn claim() {
+pub(crate) fn claim() -> Result<(), GenerationError> {
     BROKER.get_or_init(|| {
         #[cfg(target_os = "linux")]
-        {
-            claim_linux()
-        }
+        let launch = claim_linux();
         #[cfg(not(target_os = "linux"))]
-        {
-            None
-        }
+        let launch: Option<(i32, Result<Generation, GenerationError>)> = None;
+        let (broker, selected) = match launch {
+            Some((broker, selected)) => (Some(broker), selected.map(Some)),
+            None => (None, Ok(None)),
+        };
+        #[cfg(target_os = "linux")]
+        let marker = std::env::var_os("PW_PROTECTED_LAUNCH");
+        #[cfg(not(target_os = "linux"))]
+        let marker: Option<std::ffi::OsString> = None;
+        let _ = GENERATION.set(selected_launch(
+            marker.as_deref(),
+            broker.is_some(),
+            selected,
+        ));
+        broker
     });
+    generation().map(|_| ())
+}
+
+// This marker can only tighten admission. A caller can forge it in an ordinary
+// launch, which refuses that launch; it never supplies broker or generation facts.
+fn selected_launch(
+    marker: Option<&std::ffi::OsStr>,
+    broker: bool,
+    selected: Result<Option<Generation>, GenerationError>,
+) -> Result<Option<Generation>, GenerationError> {
+    match marker {
+        Some(value) if value != "1" => Err(GenerationError::InvalidFrame),
+        Some(_) if !broker => Err(GenerationError::BrokerMismatch),
+        _ => selected,
+    }
 }
 
 /// The claimed broker, when this desktop runs under the protected launch.
@@ -43,7 +76,8 @@ pub(crate) fn broker() -> Option<i32> {
 }
 
 #[cfg(target_os = "linux")]
-fn claim_linux() -> Option<i32> {
+fn claim_linux() -> Option<(i32, Result<Generation, GenerationError>)> {
+    let mut descriptor_error = false;
     // SAFETY: fcntl and getsockopt only read descriptor state into locals.
     unsafe {
         let mut kind: libc::c_int = 0;
@@ -75,12 +109,22 @@ fn claim_linux() -> Option<i32> {
         }
         for fd in [BROKER_FD, LIFETIME_FD] {
             let flags = libc::fcntl(fd, libc::F_GETFD);
-            if flags >= 0 {
-                libc::fcntl(fd, libc::F_SETFD, flags | libc::FD_CLOEXEC);
+            if flags < 0 || libc::fcntl(fd, libc::F_SETFD, flags | libc::FD_CLOEXEC) < 0 {
+                descriptor_error = true;
             }
         }
     }
-    Some(BROKER_FD)
+    // A root broker establishes protected launch even when its frame is invalid:
+    // retain the refusal so layout discovery cannot fall through to dev paths.
+    let selected = generation::read(4, BROKER_FD);
+    Some((
+        BROKER_FD,
+        if descriptor_error {
+            Err(GenerationError::FrameUnavailable)
+        } else {
+            selected
+        },
+    ))
 }
 
 /// Gives the engine the broker at its fixed number, inheritable across exec,
@@ -110,6 +154,35 @@ pub(crate) fn hand_broker_to(cmd: &mut std::process::Command) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn entry_marker_only_tightens_admission_for_missing_launch_facts() {
+        use std::ffi::OsStr;
+        assert_eq!(selected_launch(None, false, Ok(None)), Ok(None));
+        assert_eq!(
+            selected_launch(Some(OsStr::new("1")), false, Ok(None)),
+            Err(GenerationError::BrokerMismatch)
+        );
+        assert_eq!(
+            selected_launch(
+                Some(OsStr::new("1")),
+                true,
+                Err(GenerationError::FrameUnavailable)
+            ),
+            Err(GenerationError::FrameUnavailable)
+        );
+        assert_eq!(
+            selected_launch(Some(OsStr::new("forged")), false, Ok(None)),
+            Err(GenerationError::InvalidFrame)
+        );
+        let selected = Some(Generation {
+            logical_root: "/opt/painted-wolf-code".into(),
+        });
+        assert_eq!(
+            selected_launch(Some(OsStr::new("1")), true, Ok(selected.clone())),
+            Ok(selected)
+        );
+    }
 
     #[test]
     fn only_a_root_created_packet_pair_is_the_launch_broker() {

@@ -158,7 +158,7 @@ func TestBootstrapMountAndExecutionHelpersInProcess(t *testing.T) {
 	ruleset, _, errno := unix.Syscall(unix.SYS_LANDLOCK_CREATE_RULESET, uintptr(unsafe.Pointer(&attr)), unsafe.Offsetof(attr.Handled_access_net), 0)
 	if errno == 0 {
 		defer func() { _ = unix.Close(int(ruleset)) }()
-		testutil.FailErr(t, "allowExecution dir", allowExecution(int(ruleset), base))
-		testutil.FailErr(t, "allowExecution file", allowExecution(int(ruleset), f1Path))
+		testutil.FailErr(t, "allowExecution dir", allowExecutionRule(int(ruleset), base, unix.LANDLOCK_ACCESS_FS_EXECUTE))
+		testutil.FailErr(t, "allowExecution file", allowExecutionRule(int(ruleset), f1Path, unix.LANDLOCK_ACCESS_FS_EXECUTE))
 	}
 }

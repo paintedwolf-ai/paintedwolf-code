@@ -67,6 +67,9 @@ func filterSessionEnvironment(environment []string) []string {
 		if !ok || key == "" || seen[key] || strings.ContainsRune(entry, 0) {
 			continue
 		}
+		if key == protectedLaunchEnv {
+			continue // Only the verified entry may add the refusal-only launch marker.
+		}
 		if !desktopEnvironmentKeys[key] && !strings.HasPrefix(key, "LC_") {
 			continue
 		}

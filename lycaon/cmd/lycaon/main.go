@@ -38,6 +38,12 @@ func main() {
 
 // runCLI manages the signal-aware process context.
 func runCLI(args []string) int {
+	if !configdir.IsDevelopmentBuild() {
+		if err := osprocess.DisableDumps(); err != nil {
+			fmt.Fprintf(os.Stderr, "pw: protect process memory: %v\n", err)
+			return 1
+		}
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -90,7 +96,7 @@ func run(ctx context.Context, args []string) error {
 		if len(rest) < 1 || rest[0] != "engines" {
 			return fmt.Errorf("usage: pw scan engines {list|check|validate} [--project DIR]")
 		}
-		return runScanEngines(rest[1:])
+		return runScanEngines(ctx, rest[1:])
 	case "internal-scan-worker":
 		return scanworker.Serve(ctx, os.Stdin, os.Stdout)
 	case "workflow":
@@ -134,13 +140,6 @@ func parseServeDBFlag(args []string) (string, error) {
 // in-flight children and stops between steps; once serving, Run drains.
 func runServe(signals context.Context, dbPath string) error {
 	defer observability.FlushConsole() //nolint:contextcheck // flushing must outlive the serve context
-	// The serving engine holds the decrypted vault; development builds stay
-	// debuggable.
-	if !configdir.IsDevelopmentBuild() {
-		if err := osprocess.DisableDumps(); err != nil {
-			return fmt.Errorf("disable process dumps: %w", err)
-		}
-	}
 	ctx, cancel := context.WithCancel(signals)
 	defer cancel()
 	startReaper() //nolint:contextcheck // the reaper outlives the serve context
