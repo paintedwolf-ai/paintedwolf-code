@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 from pathlib import Path
 
 from linux_release.module_integrity.abi import ELF, describe
@@ -63,6 +64,7 @@ def bind(auditor: Path, guard: Path, inventory: bytes, output: Path) -> dict:
     for name, data in (("auditor", bound_audit), ("guard", bound_guard), ("inventory", inventory)):
         with paths[name].open("xb") as handle:
             handle.write(data)
+            os.fchmod(handle.fileno(), 0o444)
     final = describe(paths["auditor"], paths["guard"])
     return {"format_version": 1, "inventory_sha256": selected["sha256"],
             "input_auditor_sha256": original["auditor_sha256"],

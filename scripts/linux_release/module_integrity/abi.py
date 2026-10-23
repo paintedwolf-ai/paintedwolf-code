@@ -23,11 +23,9 @@ def build_digest(directory: Path) -> Path:
     shutil.copyfile(source / "Cargo.toml", crate / "Cargo.toml")
     shutil.copytree(source / "src", crate / "src")
     locked = source / "Cargo.lock"
-    shutil.copyfile(locked if locked.exists() else root / "lycaon-den/src-tauri/Cargo.lock", crate / "Cargo.lock")
-    command = ["cargo", "rustc", "--offline", "--release", "--manifest-path", str(crate / "Cargo.toml"),
+    shutil.copyfile(locked, crate / "Cargo.lock")
+    command = ["cargo", "rustc", "--offline", "--locked", "--release", "--manifest-path", str(crate / "Cargo.toml"),
                "--target-dir", str(directory / "target")]
-    if locked.exists():
-        command.append("--locked")
     environment = dict(os.environ)
     environment["RUSTFLAGS"] = environment.get("RUSTFLAGS", "") + " -C relocation-model=pic"
     subprocess.run(command, check=True, env=environment)

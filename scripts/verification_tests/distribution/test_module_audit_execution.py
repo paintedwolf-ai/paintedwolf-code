@@ -133,7 +133,11 @@ class NativeModuleAuditTests(unittest.TestCase):
             raw = INVENTORY.encode([{"path": "/usr/lib/module.so", "size": 1, "sha256": "a" * 64}],
                                    "/usr/lib/pw-module-guard.so", self.abi["guard_witness_offset"],
                                    offset, self.abi["architecture"])
+            source_modes = (self.auditor.stat().st_mode, self.guard.stat().st_mode)
             result = BINDING.bind(self.auditor, self.guard, raw, output)
+            for prepared in output.iterdir():
+                self.assertEqual(prepared.stat().st_mode & 0o7777, 0o444)
+            self.assertEqual((self.auditor.stat().st_mode, self.guard.stat().st_mode), source_modes)
             self.assertEqual(result["input_auditor_sha256"], self.abi["auditor_sha256"])
             self.assertNotEqual(result["final_abi"]["auditor_sha256"], self.abi["auditor_sha256"])
             self.assertNotEqual(result["final_abi"]["guard_sha256"], self.abi["guard_sha256"])
