@@ -17,8 +17,8 @@ modelIndependentWebE2e("plain arrows scroll a focused conversation row normally"
   const stream = liveChatStage(page).locator(".den-chat-stream");
   const rows = stream.locator(".transcript-viewport-row[data-msg-id]");
   await expect(rows.first()).toBeAttached();
-  await stream.focus();
-  await page.keyboard.press("Home");
+  await stream.hover();
+  await page.mouse.wheel(0, -100_000);
   await expect.poll(() => stream.evaluate(element => element.scrollTop)).toBeLessThan(2);
   await expect(rows.first()).toBeVisible();
   // Message rows are accessibility focus targets. Exercise native keyboard
