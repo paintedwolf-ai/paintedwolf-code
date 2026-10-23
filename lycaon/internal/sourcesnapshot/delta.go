@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/lycaon/lycaon/internal/pathfold"
 	"github.com/lycaon/lycaon/internal/repochange"
 )
 
@@ -90,35 +91,16 @@ func (t *deltaTracker) observe(ctx context.Context, ev repochange.Event) {
 	if rescoped {
 		d.rescopedAt = t.seq
 	}
-	if len(d.paths) > t.pathLimit && !d.fold(t.pathLimit) {
+	if folded, ok := pathfold.Fold(d.paths, t.pathLimit, laterSequence); ok {
+		d.paths = folded
+	} else {
 		d.overflow = true
 		d.overflowAt = t.seq
 	}
 }
 
-// fold replaces the deepest paths with their parent directories until the
-// set fits, keeping each directory's latest sequence. It reports false when
-// fitting would need the root itself.
-func (d *rootDelta) fold(limit int) bool {
-	for len(d.paths) > limit {
-		deepest := 0
-		for rel := range d.paths {
-			deepest = max(deepest, strings.Count(rel, "/"))
-		}
-		if deepest == 0 {
-			return false
-		}
-		folded := make(map[string]uint64, len(d.paths))
-		for rel, seq := range d.paths {
-			if strings.Count(rel, "/") == deepest {
-				rel = rel[:strings.LastIndex(rel, "/")]
-			}
-			folded[rel] = max(folded[rel], seq)
-		}
-		d.paths = folded
-	}
-	return true
-}
+// laterSequence keeps the newest change a folded directory stands for.
+func laterSequence(a, b uint64) uint64 { return max(a, b) }
 
 func (t *deltaTracker) root(root string) *rootDelta {
 	d := t.roots[root]
