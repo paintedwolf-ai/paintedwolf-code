@@ -8,7 +8,7 @@ import {
   onNotificationActivated,
   sendNotification,
 } from "../platform/desktop/notifications.ts";
-import { focusAppWindow, windowFocused } from "../platform/windows/window-chrome.ts";
+import { windowFocused } from "../platform/windows/window-chrome.ts";
 import { setWaitingBadge } from "../platform/desktop/badge.ts";
 import { isTauriRuntime } from "../platform/runtime.ts";
 import {
@@ -119,7 +119,6 @@ export function mountNotificationService(
     });
 
     const unsubClick = onNotificationActivated((sessionId) => {
-      void focusAppWindow();
       openSessionFromNotification(sessionId);
     });
 

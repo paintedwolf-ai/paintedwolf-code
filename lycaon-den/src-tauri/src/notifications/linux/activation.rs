@@ -1,5 +1,6 @@
 use gtk::{glib::prelude::*, prelude::*};
 use tauri::{AppHandle, Emitter, Manager};
+use super::super::{ActivatedPayload, PresentationOwner, ACTIVATED_EVENT};
 
 const WAYLAND_DISPLAY_TYPE: &str = "GdkWaylandDisplay";
 
@@ -23,11 +24,6 @@ fn raise(wayland: bool, token: bool) -> Raise {
 }
 
 pub(super) fn activate(app: &AppHandle, session_id: Option<String>, token: Option<String>) {
-    #[derive(Clone, serde::Serialize)]
-    #[serde(rename_all = "camelCase")]
-    struct Activated {
-        session_id: Option<String>,
-    }
     let target = app.clone();
     let _ = app.run_on_main_thread(move || {
         if target
@@ -37,31 +33,41 @@ pub(super) fn activate(app: &AppHandle, session_id: Option<String>, token: Optio
             return;
         }
         if let Some(window) = target.get_webview_window("main") {
-            if let Ok(native) = window.gtk_window() {
-                let wayland = native.display().type_().name() == WAYLAND_DISPLAY_TYPE;
-                // A closed workspace is hidden, not destroyed; the token set
-                // before mapping activates it as it is shown.
-                match raise(wayland, token.is_some()) {
-                    Raise::Token => {
-                        native.set_startup_id(token.as_deref().unwrap_or_default());
-                        if !native.is_visible() {
-                            let _ = window.show();
-                        }
-                    }
-                    Raise::TokenThenPresent => {
-                        native.set_startup_id(token.as_deref().unwrap_or_default());
-                        native.present();
-                    }
-                    Raise::Present => native.present(),
-                }
-            }
+            let presentation = if present_native(&window, token.as_deref()).is_ok() {
+                PresentationOwner::Native
+            } else {
+                PresentationOwner::Renderer
+            };
             let _ = target.emit_to(
                 "main",
-                "notifications://activated",
-                Activated { session_id },
+                ACTIVATED_EVENT,
+                ActivatedPayload {
+                    session_id,
+                    presentation,
+                },
             );
         }
     });
+}
+
+fn present_native(window: &tauri::WebviewWindow, token: Option<&str>) -> Result<(), String> {
+    let native = window.gtk_window().map_err(|error| error.to_string())?;
+    let wayland = native.display().type_().name() == WAYLAND_DISPLAY_TYPE;
+    // A closed workspace is hidden, not destroyed; set the token before mapping.
+    match raise(wayland, token.is_some()) {
+        Raise::Token => {
+            native.set_startup_id(token.unwrap_or_default());
+            if !native.is_visible() {
+                window.show().map_err(|error| error.to_string())?;
+            }
+        }
+        Raise::TokenThenPresent => {
+            native.set_startup_id(token.unwrap_or_default());
+            native.present();
+        }
+        Raise::Present => native.present(),
+    }
+    Ok(())
 }
 
 #[cfg(test)]
