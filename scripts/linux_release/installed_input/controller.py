@@ -38,7 +38,8 @@ def run_managed(bridge, command, output):
 def delivery_records(directory):
     import json
     records, operations = [], []
-    cases = [('conversation/restart-and-reconnect', 'reply'), ('files/edit-search-review', 'editor')]
+    cases = [('conversation/restart-and-reconnect', 'reply'), ('files/edit-search-review', 'editor'),
+             ('windowing/workspace-activation-and-exit', 'workspace')]
     for case, kind in cases:
         leaf = directory / ('leaf/evidence/' + case + '/execution.json')
         if not leaf.exists():
@@ -46,11 +47,12 @@ def delivery_records(directory):
         if leaf.stat().st_size > 1 << 20:
             raise ValueError('native input guest observations exceed their case bound')
         observations = json.loads(leaf.read_bytes())['observations']
-        if kind == 'reply':
-            selected = observations.get('launch_before', {}).get('fixed_input', [])
+        if kind in {'reply', 'workspace'}:
+            launch = 'launch_before' if kind == 'reply' else 'launch'
+            selected = observations.get(launch, {}).get('fixed_input', [])
             if not isinstance(selected, list) or len(selected) > 4:
                 raise ValueError('reply input exceeds its fixed transaction count')
-            if observations.get('native_input') is not None:
+            if kind == 'reply' and observations.get('native_input') is not None:
                 selected = [*selected, observations['native_input']]
             if len(selected) > 4:
                 raise ValueError('reply input exceeds its fixed transaction count')
@@ -63,6 +65,19 @@ def delivery_records(directory):
                     protocol.steps(operation)
                 operations.append(operation)
                 records.append(record)
+            if kind == 'workspace':
+                transitions = observations.get('transitions', [])
+                if not isinstance(transitions, list):
+                    raise ValueError('workspace input requires its fixed transition list')
+                if observations.get('native_input') is not None:
+                    transitions = [*transitions, observations['native_input']]
+                expected = ('workspace-open-peer-v1', 'workspace-hide-main-v1',
+                    'workspace-request-quit-v1', 'workspace-cancel-quit-v1',
+                    'workspace-request-quit-v1', 'workspace-focus-quit-v1', 'workspace-approve-quit-v1')
+                if len(transitions) > len(expected) or transitions and len(selected) != 4:
+                    raise ValueError('workspace input exceeds or precedes its declared physical sequence')
+                records.extend(transitions)
+                operations.extend(expected[:len(transitions)])
         else:
             selected = []
             for key in ('editor_keyboard', 'editor_search_keyboard'):
