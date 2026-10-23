@@ -53,10 +53,11 @@ func RunBrokerAgent() error {
 	return runBrokerAgent(
 		os.NewFile(agentSpecFD, "sealed-entry-spec"),
 		os.NewFile(agentBrokerFD, "launch-broker"),
+		os.NewFile(agentSelfFD+1, "broker-caller-readiness"),
 	)
 }
 
-func runBrokerAgent(frame, broker *os.File) error {
+func runBrokerAgent(frame, broker, ready *os.File) error {
 	if err := unix.Prctl(unix.PR_SET_DUMPABLE, 0, 0, 0, 0); err != nil {
 		return err
 	}
@@ -79,6 +80,17 @@ func runBrokerAgent(frame, broker *os.File) error {
 		return errors.New("broker agent socket is not the launch supervisor")
 	}
 	unix.CloseOnExec(int(broker.Fd()))
+	if ready == nil {
+		return errors.New("broker agent lacks caller readiness pipe")
+	}
+	var readyStat unix.Stat_t
+	if err := unix.Fstat(int(ready.Fd()), &readyStat); err != nil || readyStat.Mode&unix.S_IFMT != unix.S_IFIFO || readyStat.Uid != trustedOwner {
+		return errors.New("broker readiness is not the stage pipe")
+	}
+	if _, err := ready.Write([]byte{1}); err != nil {
+		return err
+	}
+	_ = ready.Close()
 	agent := &brokerAgent{calls: map[int]*brokerCall{}}
 	agent.serve(broker)
 	return nil

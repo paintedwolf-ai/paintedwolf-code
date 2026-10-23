@@ -65,6 +65,17 @@ type vaultCommand struct {
 }
 
 func main() {
+	if len(os.Args) == 3 && os.Args[1] == "--exit-status" {
+		code, err := strconv.ParseUint(os.Args[2], 10, 8)
+		if err != nil {
+			os.Exit(254)
+		}
+		os.Exit(int(code))
+	}
+	if len(os.Args) == 2 && os.Args[1] == "--self-sigkill" {
+		_ = unix.Kill(os.Getpid(), unix.SIGKILL)
+		os.Exit(254)
+	}
 	if len(os.Args) == 5 && os.Args[1] == "--browser-engine-victim" {
 		os.Exit(runBrowserEngineVictim(os.Args[2], os.Args[3], os.Args[4]))
 	}

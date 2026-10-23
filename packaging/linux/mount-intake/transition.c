@@ -123,9 +123,26 @@ static void pw_identity_map(const char *name) {
     pw_require(cursor == count);
 }
 
+#include "guardian.h"
+
 __attribute__((noreturn)) void pw_mount_transition(const unsigned long *stack) {
     pw_signals();
     pw_require(stack[0] == 1 && stack[1] != 0 && stack[2] == 0 && stack[3] == 0);
+    /* A distinct root-sealed high-FD contract selects the same-PID
+     * guardian transition. Low-FD intake never inherits these slots. */
+    unsigned int ids[3];
+    pw_require(PW_CALL(__NR_getresuid,&ids[0],&ids[1],&ids[2],0,0,0) == 0 && ids[0] == 0 && ids[1] == 0 && ids[2] == 0);
+    long guardian_seals = PW_CALL(__NR_fcntl,85,PW_GET_SEALS,0,0,0,0);
+    if (guardian_seals != -9) {
+        pw_sealed(85);
+        for (int i = 0; i < PW_GUARD_ROLES; i++) {
+            int target = i < 7 ? i+3 : i+4;
+            pw_require(PW_CALL(__NR_dup3,target+61,target,0,0,0,0) == target);
+        }
+        pw_require(PW_CALL(__NR_dup3,85,10,0,0,0,0) == 10);
+        pw_require(PW_CALL(__NR_close_range,20,~0U,0,0,0,0) == 0);
+        pw_guard_transition();
+    }
     pw_authenticate();
     pw_require(PW_CALL(__NR_close_range,0,2,0,0,0,0) == 0);
     pw_require(PW_CALL(__NR_close_range,11,~0U,0,0,0,0) == 0);

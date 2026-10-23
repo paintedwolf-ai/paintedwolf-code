@@ -9,11 +9,13 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 
 	"github.com/lycaon/lycaon/internal/launchguard"
 )
 
 func init() {
+	runtime.LockOSThread()
 	launchguard.ScrubBootstrapEnvironment()
 }
 
@@ -24,6 +26,12 @@ func main() {
 func run(args []string, stderr io.Writer) int {
 	var err error
 	switch {
+	case len(args) == 2 && args[1] == launchguard.GuardianArgument:
+		status, guardianErr := launchguard.RunGuardian()
+		if guardianErr != nil {
+			return 1
+		}
+		return status
 	case len(args) == 1:
 		err = launchguard.EnterDesktop()
 	case len(args) == 2 && args[1] == launchguard.MountIntakeArgument:

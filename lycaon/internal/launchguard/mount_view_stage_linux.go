@@ -20,6 +20,7 @@ type privateModuleView struct {
 	health    *os.File
 	namespace *os.File
 	setup     *mountViewSetup
+	pidfds    [2]*os.File
 }
 
 // The stage authenticates both fixed images and prepares every descriptor.
@@ -57,10 +58,13 @@ func startPrivateModuleView(frame, entry, origin, transition *os.File, prepared 
 	}
 	view.setup = newMountViewSetup(int(stagePair[0].Fd()))
 	defer func() { err = errors.Join(err, view.setup.stop()) }()
+	watcherPIDFD := -1
+	intakePIDFD := -1
 	view.watcher = &exec.Cmd{
 		Path: "/proc/self/fd/" + strconv.Itoa(viewSelfFD), Args: []string{"pw-launch-entry", MountViewArgument}, Env: []string{},
 		ExtraFiles: []*os.File{frame, lifeR, stagePair[1], entry, plan, intakePair[0], origin},
 		SysProcAttr: &syscall.SysProcAttr{
+			PidFD:                      &watcherPIDFD,
 			Cloneflags:                 unix.CLONE_NEWUSER | unix.CLONE_NEWNS,
 			UidMappings:                []syscall.SysProcIDMap{{ContainerID: 0, HostID: 0, Size: int(^uint32(0))}},
 			GidMappings:                []syscall.SysProcIDMap{{ContainerID: 0, HostID: 0, Size: int(^uint32(0))}},
@@ -70,6 +74,7 @@ func startPrivateModuleView(frame, entry, origin, transition *os.File, prepared 
 	if err := view.setup.start(view.watcher); err != nil {
 		return nil, fmt.Errorf("start private module writer: %w", err)
 	}
+	view.pidfds[0] = os.NewFile(uintptr(watcherPIDFD), "mount-writer-pidfd")
 	_ = stagePair[1].Close()
 	if err := transferInitialMountLeases(int(stagePair[0].Fd()), prepared); err != nil {
 		return nil, err
@@ -95,10 +100,11 @@ func startPrivateModuleView(frame, entry, origin, transition *os.File, prepared 
 	defer func() { _ = proof.Close() }()
 	files := append([]*os.File{}, roles[:]...)
 	files = append(files, proof, transition)
-	view.intake = &exec.Cmd{Path: "/proc/self/fd/11", Args: []string{"pw-mount-intake-transition"}, Env: []string{}, ExtraFiles: files}
+	view.intake = &exec.Cmd{Path: "/proc/self/fd/11", Args: []string{"pw-mount-intake-transition"}, Env: []string{}, ExtraFiles: files, SysProcAttr: &syscall.SysProcAttr{PidFD: &intakePIDFD}}
 	if err := view.setup.start(view.intake); err != nil {
 		return nil, fmt.Errorf("start fixed module intake: %w", err)
 	}
+	view.pidfds[1] = os.NewFile(uintptr(intakePIDFD), "mount-intake-pidfd")
 	_ = intakePair[1].Close()
 	_ = intakePair[0].Close()
 	if err := expectMountViewReady(int(stagePair[0].Fd()), stageSequence+1); err != nil {
@@ -127,6 +133,13 @@ func expectMountViewReady(socket int, sequence uint64) error {
 }
 
 func (view *privateModuleView) abort() {
+	defer func() {
+		for _, file := range view.pidfds {
+			if file != nil {
+				_ = file.Close()
+			}
+		}
+	}()
 	if view.lifetime != nil {
 		_ = view.lifetime.Close()
 	}

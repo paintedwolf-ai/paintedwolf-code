@@ -14,12 +14,17 @@ import (
 // preparedModuleView owns only detached initial leases and the original
 // receive-only namespace handle. No source mount pins survive preparation.
 type preparedModuleView struct {
-	source *os.File
-	plan   moduleViewPlan
-	trees  []*os.File
+	source   *os.File
+	guardian *os.File
+	plan     moduleViewPlan
+	trees    []*os.File
 }
 
 func (view *preparedModuleView) close() {
+	if view.guardian != nil {
+		_ = view.guardian.Close()
+		view.guardian = nil
+	}
 	if view.source != nil {
 		_ = view.source.Close()
 		view.source = nil
@@ -110,6 +115,10 @@ func prepareModuleView(spec EntrySpec, frame, origin, entry, desktop *os.File) (
 	}
 	defer opener.close()
 	if err = view.prepareInitialLeases(opener, staging, structural); err != nil {
+		return nil, err
+	}
+	view.guardian, err = opener.guardianNamespace(origin)
+	if err != nil {
 		return nil, err
 	}
 	if err = opener.finish(); err != nil {
