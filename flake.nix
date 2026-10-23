@@ -35,7 +35,13 @@
       packages = eachSystem (system:
         let
           pkgs = packagesFor system;
-          noticesOutputsValid = import ./packaging/nix/closure-notices-check.nix { inherit pkgs; };
+          runtimeEdges = import ./packaging/nix/closure-runtime-edges.nix { inherit pkgs; source = self; };
+          noticesOutputsValid = import ./packaging/nix/closure-notices-check.nix {
+            inherit pkgs runtimeEdges;
+            nixpkgsRevision = nixpkgs.rev;
+            roots = [ application shell bound-engine bialy document-core resources frontend ]
+              ++ application.noticeRuntimeInputs;
+          };
           converter = bun2nix.packages.${system}.default;
           frontend = pkgs.callPackage ./packaging/nix/frontend.nix {
             source = self;
@@ -63,7 +69,7 @@
           default = application;
           closure-notices = pkgs.callPackage ./packaging/nix/closure-notices.nix {
             source = self;
-            inherit application;
+            inherit application runtimeEdges;
             components = [ shell bound-engine bialy document-core resources frontend ];
             nixpkgsRevision = nixpkgs.rev;
           };
