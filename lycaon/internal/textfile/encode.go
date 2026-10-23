@@ -104,18 +104,18 @@ func encodeUTF16(content string, bigEndian, bom bool) []byte {
 	}
 	unit := func(value uint16) {
 		if bigEndian {
-			out = append(out, byte(value>>8), byte(value))
+			out = append(out, byte(value>>8), byte(value&0xff))
 		} else {
-			out = append(out, byte(value), byte(value>>8))
+			out = append(out, byte(value&0xff), byte(value>>8))
 		}
 	}
 	for _, r := range content {
 		if r <= 0xffff {
-			unit(uint16(r))
+			unit(uint16(r & 0xffff))
 		} else {
 			first, second := utf16.EncodeRune(r)
-			unit(uint16(first))
-			unit(uint16(second))
+			unit(uint16(first & 0xffff))
+			unit(uint16(second & 0xffff))
 		}
 	}
 	return out

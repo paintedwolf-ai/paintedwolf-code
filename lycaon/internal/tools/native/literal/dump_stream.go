@@ -1,6 +1,7 @@
 package literal
 
 import (
+	"errors"
 	"io"
 )
 
@@ -20,7 +21,7 @@ func (inv *invocation) dumpRange(reader io.Reader, size int64, lengthKey string,
 	}
 	read, err := io.CopyN(io.Discard, reader, start)
 	if err != nil {
-		if err != io.EOF {
+		if !errors.Is(err, io.EOF) {
 			return nil, 0, err
 		}
 		return io.LimitReader(reader, 0), read, nil

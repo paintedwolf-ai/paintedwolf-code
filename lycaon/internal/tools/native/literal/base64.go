@@ -51,7 +51,7 @@ func runBase64(inv *invocation) error {
 	if _, err = io.CopyBuffer(encoder, in.reader(), chunk[:]); err != nil {
 		return err
 	}
-	if err = encoder.Close(); err != nil {
+	if err := encoder.Close(); err != nil {
 		return err
 	}
 	if width > 0 && wrapped.column > 0 {

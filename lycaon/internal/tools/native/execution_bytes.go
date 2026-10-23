@@ -112,7 +112,7 @@ func (e ExecutionRevisions) PinOpened(ctx context.Context, resolved projectpaths
 		return toolcontract.ExecutionRevision{}, false, err
 	}
 	defer captured.Close()
-	if err = captured.checkFile(file, info); err != nil {
+	if err := captured.checkFile(file, info); err != nil {
 		return toolcontract.ExecutionRevision{}, false, err
 	}
 	return captured.revision, true, nil

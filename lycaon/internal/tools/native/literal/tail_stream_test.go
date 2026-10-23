@@ -58,3 +58,19 @@ func TestTailStartBeyondWrappedEOFCompletesAndReleases(t *testing.T) {
 		t.Fatalf("remaining=%d stdout=%q stderr=%q result=%+v memory=%+v", input.Len(), stdout.String(), stderr.String(), result, memory.InUse())
 	}
 }
+
+func TestDumpStartBeyondWrappedEOFCompletesAndReleases(t *testing.T) {
+	h := formHarness(t)
+	limits, err := toolcontract.CatalogProgramMemoryLimits()
+	testutil.FailErr(t, "load program limits", err)
+	memory, err := toolcontract.NewProgramMemory(limits)
+	testutil.FailErr(t, "admit program memory", err)
+	h.owners.Revisions.Memory = memory
+	var stdout, stderr bytes.Buffer
+	input := wrappedEOFTailInput{Reader: strings.NewReader("abc")}
+	result, err := h.owners.Invoke(t.Context(), h.tc, mustPaths(t, h), requestFor(h, "xxd", "-s", "8"), commandprogram.Streams{Input: io.NopCloser(input), Output: &stdout, Error: &stderr})
+	testutil.FailErr(t, "read dump beyond exhausted source", err)
+	if input.Len() != 0 || stdout.Len() != 0 || stderr.Len() != 0 || result.Status != 0 || !result.Complete || !result.PublicationEligible || result.EffectCertainty != toolcontract.NoEffect || memory.InUse() != (toolcontract.ProgramMemoryUsage{}) {
+		t.Fatalf("remaining=%d stdout=%q stderr=%q result=%+v memory=%+v", input.Len(), stdout.String(), stderr.String(), result, memory.InUse())
+	}
+}

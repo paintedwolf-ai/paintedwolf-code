@@ -89,10 +89,10 @@ func PrepareProgramFailure(ctx context.Context, frame ProgramFrame, ledger Progr
 	if ctx == nil || ledger == nil || memory == nil || screen == nil || tc.Identity.ToolCallID == "" || tc.Identity.SessionID != inv.SessionID {
 		return nil, fmt.Errorf("program feedback requires actual parent, ledger, diagnostic screening and memory admission")
 	}
-	if err = inv.Validate(); err != nil {
+	if err := inv.Validate(); err != nil {
 		return nil, err
 	}
-	if err = operation.Definition().ValidateNativeCommands(); err != nil {
+	if err := operation.Definition().ValidateNativeCommands(); err != nil {
 		return nil, err
 	}
 	end, err := frame.beginUse()
@@ -188,7 +188,7 @@ func PrepareProgramFailure(ctx context.Context, frame ProgramFrame, ledger Progr
 		return nil, fmt.Errorf("program feedback rejection does not match settled execution")
 	}
 	projection := retained.Projection
-	if err = validateProgramFeedbackBinding(tc, operation, retained.Binding, projection); err != nil {
+	if err := validateProgramFeedbackBinding(tc, operation, retained.Binding, projection); err != nil {
 		return nil, err
 	}
 	facts, err := programOutcomeFacts(projection)

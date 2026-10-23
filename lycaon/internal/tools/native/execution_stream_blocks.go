@@ -47,7 +47,7 @@ func (e ExecutionRevisions) scanSource(ctx context.Context, resolved projectpath
 	hash := sha256.New()
 	var total int64
 	for {
-		if err = ctx.Err(); err != nil {
+		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
 		n, readErr := io.ReadFull(input, capture.buffer)
@@ -89,7 +89,7 @@ func (e ExecutionRevisions) scanSource(ctx context.Context, resolved projectpath
 	root, rel := revisionLocation(resolved)
 	digest := hex.EncodeToString(hash.Sum(nil))
 	capture.revision = toolcontract.ExecutionRevision{Role: toolcontract.SourceRevision, Mode: toolcontract.PublishedDiskRevision, Basis: toolcontract.CapturedRevision, RootID: root, Path: rel, DiskSHA256: digest, Representation: toolcontract.OriginalEncodedBytes, ContentSHA256: digest, ContentBytes: total}
-	if err = capture.revision.Validate(); err != nil {
+	if err := capture.revision.Validate(); err != nil {
 		return nil, err
 	}
 	return capture, nil

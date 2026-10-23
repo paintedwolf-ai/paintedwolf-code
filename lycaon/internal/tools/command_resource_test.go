@@ -19,12 +19,12 @@ func TestResourceRejectionPreservesActualAdmissionAndExistingCause(t *testing.T)
 		}
 		existing := &toolrejection.ToolReject{Code: "EXACT_OWNER_REFUSAL"}
 		wrapped := errors.Join(existing, original)
-		if CommandResourceRejection(wrapped) != wrapped {
+		if !errors.Is(CommandResourceRejection(wrapped), wrapped) {
 			t.Fatal("existing refusal replaced")
 		}
 	}
 	unknown := &toolcontract.ProgramMemoryLimitError{Account: "unknown", Maximum: 1, Observed: 2}
-	if CommandResourceRejection(unknown) != unknown {
+	if !errors.Is(CommandResourceRejection(unknown), unknown) {
 		t.Fatal("invented a catalog limit for unknown account")
 	}
 }

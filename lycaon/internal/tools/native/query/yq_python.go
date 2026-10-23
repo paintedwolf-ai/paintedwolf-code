@@ -28,42 +28,50 @@ func runPythonYq(inv *invocation) error {
 	if err != nil || args == nil {
 		return err
 	}
+	for _, file := range args.files {
+		if err := inv.rewritePythonYq(file); err != nil || inv.status != 0 {
+			return err
+		}
+	}
+	return nil
+}
+
+// rewritePythonYq holds one file's output through its pinned publication.
+func (inv *invocation) rewritePythonYq(file string) error {
 	stdout := inv.out
 	defer func() { inv.out = stdout }()
-	for _, file := range args.files {
-		if file == "-" {
-			return inv.usage(file, "a FILE for -i")
-		}
-		bound, err := inv.paths.Bind(inv.ctx, file, true)
-		if err != nil {
-			return err
-		}
-		source, err := inv.captureSource(file)
-		if err != nil {
-			return err
-		}
-		destination, err := inv.owners.Revisions.CaptureDestination(inv.ctx, inv.tc, bound.Resolved.Abs)
-		if err != nil {
-			return err
-		}
-		if err := inv.recordPin(destination); err != nil {
-			return err
-		}
-		result, err := inv.owners.Revisions.NewBufferedBytes(inv.ctx, inv.owners.limit("whole_file_bytes"), "whole_file_bytes")
-		if err != nil {
-			return err
-		}
-		defer result.Close()
-		inv.out = &output{ctx: inv.ctx, w: result, maximum: inv.owners.limit("whole_file_bytes"), limitID: "whole_file_bytes"}
-		if err := runJqLanguage(inv, jqDialect{yamlInput: true, pythonYAML: true, files: []string{file}, captured: source}); err != nil || inv.status != 0 {
-			return err
-		}
-		if string(result.Bytes) == source.text {
-			continue
-		}
-		if err := inv.publishBytes(source, destination, result.Bytes); err != nil {
-			return err
-		}
+	if file == "-" {
+		return inv.usage(file, "a FILE for -i")
+	}
+	bound, err := inv.paths.Bind(inv.ctx, file, true)
+	if err != nil {
+		return err
+	}
+	source, err := inv.captureSource(file)
+	if err != nil {
+		return err
+	}
+	destination, err := inv.owners.Revisions.CaptureDestination(inv.ctx, inv.tc, bound.Resolved.Abs)
+	if err != nil {
+		return err
+	}
+	if err := inv.recordPin(destination); err != nil {
+		return err
+	}
+	result, err := inv.owners.Revisions.NewBufferedBytes(inv.ctx, inv.owners.limit("whole_file_bytes"), "whole_file_bytes")
+	if err != nil {
+		return err
+	}
+	defer result.Close()
+	inv.out = &output{ctx: inv.ctx, w: result, maximum: inv.owners.limit("whole_file_bytes"), limitID: "whole_file_bytes"}
+	if err := runJqLanguage(inv, jqDialect{yamlInput: true, pythonYAML: true, files: []string{file}, captured: source}); err != nil || inv.status != 0 {
+		return err
+	}
+	if string(result.Bytes) == source.text {
+		return nil
+	}
+	if err := inv.publishBytes(source, destination, result.Bytes); err != nil {
+		return err
 	}
 	return nil
 }

@@ -43,7 +43,7 @@ func (in *inputs) rawLine() (string, error) {
 		if !read && errors.Is(failure, io.EOF) {
 			return "", io.EOF
 		}
-		if err = in.rawWork.resize(int64(len(buffer.Bytes))); err != nil {
+		if err := in.rawWork.resize(int64(len(buffer.Bytes))); err != nil {
 			return "", err
 		}
 		return string(buffer.Bytes), nil

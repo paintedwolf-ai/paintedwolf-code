@@ -2,6 +2,7 @@ package native
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/tools"
 	"io"
@@ -30,7 +31,7 @@ func (e ExecutionRevisions) reserveWorking(ctx context.Context, n int64) (func()
 
 // readCapturedBytes owns whole-input capacity before allocation and preserves
 // one descriptor, decoder and capture lifetime for every command caller.
-func (e ExecutionRevisions) readCapturedBytes(ctx context.Context, resolved projectpaths.Resolved, maximum int64) ([]byte, func(), error) {
+func (e ExecutionRevisions) readCapturedBytes(ctx context.Context, resolved projectpaths.Resolved, maximum int64) (data []byte, release func(), finalErr error) {
 	if maximum <= 0 {
 		return nil, nil, fmt.Errorf("whole input capture requires a positive bound")
 	}
@@ -38,7 +39,19 @@ func (e ExecutionRevisions) readCapturedBytes(ctx context.Context, resolved proj
 	if err != nil {
 		return nil, nil, err
 	}
-	defer file.Close()
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			if release != nil {
+				release()
+				data, release = nil, nil
+			}
+			if finalErr == nil {
+				finalErr = closeErr
+			} else {
+				finalErr = errors.Join(finalErr, closeErr)
+			}
+		}
+	}()
 	info, err := file.Stat()
 	if err != nil {
 		return nil, nil, err

@@ -29,8 +29,7 @@ func budgetError(err error) error {
 	if !errors.As(err, &stopped) {
 		return err
 	}
-	switch stopped.Resource {
-	case "steps":
+	if stopped.Resource == "steps" {
 		return &BudgetError{Resource: "regex_work_steps", Maximum: stopped.Maximum, Observed: stopped.Observed}
 	}
 	return &BudgetError{Resource: "evaluation_memory_bytes", Maximum: stopped.Maximum, Observed: stopped.Observed}

@@ -95,7 +95,8 @@ func TestPOSIXEngineSubstitutesGlobally(t *testing.T) {
 		if m == nil {
 			break
 		}
-		if m[0] == m[1] && m[0] == previous {
+		empty := m[0] == m[1]
+		if empty && m[0] == previous {
 			from = m[0] + 1
 			continue
 		}

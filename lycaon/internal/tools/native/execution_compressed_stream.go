@@ -91,7 +91,7 @@ func (r *compressedExecutionReader) Read(p []byte) (int, error) {
 	if info.Size() != r.originalSize {
 		return 0, r.conflict(nil)
 	}
-	if err = r.ctx.Err(); err != nil {
+	if err := r.ctx.Err(); err != nil {
 		return 0, err
 	}
 	if r.position >= r.revision.ContentBytes && !r.checkedEnd {

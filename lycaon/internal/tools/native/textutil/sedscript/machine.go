@@ -47,6 +47,7 @@ type Machine struct {
 	stream  inputState
 	space   spaces
 	appends []appendItem
+	listing []byte
 	last    Regex
 	cursors map[string]int
 	status  int
@@ -65,12 +66,6 @@ type inputState struct {
 	terminated bool
 	replaced   bool
 	steps      int64
-}
-
-// spaces are pattern and hold space and the memory reserved for them.
-type spaces struct {
-	pattern, hold []byte
-	reserved      int64
 }
 
 // output is one destination; pending records that the last record written
@@ -103,7 +98,7 @@ func NewMachine(ctx context.Context, program *Program, config Config) (*Machine,
 	if config.Stderr == nil {
 		config.Stderr = io.Discard
 	}
-	m := &Machine{ctx: ctx, program: program, config: config, outputs: map[string]*output{}, cursors: map[string]int{}}
+	m := &Machine{ctx: ctx, program: program, config: config, space: spaces{limit: config.SpaceLimit, reserve: config.Reserve}, outputs: map[string]*output{}, cursors: map[string]int{}}
 	m.outputs[Stdout] = &output{w: config.Stdout}
 	m.outputs[Stderr] = &output{w: config.Stderr}
 	for _, name := range program.writes {
@@ -195,17 +190,18 @@ func (m *Machine) next(appending bool) (bool, error) {
 		return false, err
 	}
 	record := m.stream.ahead
+	var err error
 	if appending {
-		m.space.pattern = append(append(m.space.pattern, m.config.Delimiter), record.Text...)
+		err = m.space.join(&m.space.pattern, m.config.Delimiter, record.Text)
 	} else {
-		m.space.pattern = append(m.space.pattern[:0], record.Text...)
+		err = m.space.assign(&m.space.pattern, record.Text)
+	}
+	if err != nil {
+		return false, err
 	}
 	m.stream.terminated, m.stream.source = record.Terminated, record.Source
 	m.stream.line++
 	m.stream.replaced, m.stream.steps = false, 0
-	if err := m.space.account(m.config.SpaceLimit, m.config.Reserve); err != nil {
-		return false, err
-	}
 	return true, m.stream.fill()
 }
 
@@ -220,24 +216,6 @@ func (s *inputState) step(ctx context.Context, limit int64) error {
 	if limit > 0 && s.steps > limit {
 		return &LimitError{Resource: "query_work_steps", Maximum: limit, Observed: s.steps}
 	}
-	return nil
-}
-
-// account bounds pattern and hold space and reserves their growth.
-func (s *spaces) account(limit int64, reserve func(int64) error) error {
-	for _, space := range [][]byte{s.pattern, s.hold} {
-		if limit > 0 && int64(len(space)) > limit {
-			return &LimitError{Resource: "record_bytes", Maximum: limit, Observed: int64(len(space))}
-		}
-	}
-	total := int64(cap(s.pattern) + cap(s.hold))
-	if total <= s.reserved || reserve == nil {
-		return nil
-	}
-	if err := reserve(total - s.reserved); err != nil {
-		return err
-	}
-	s.reserved = total
 	return nil
 }
 
@@ -289,6 +267,7 @@ func (m *Machine) dumpAppends() error {
 			return err
 		}
 	}
+	clear(m.appends)
 	m.appends = m.appends[:0]
 	return nil
 }
