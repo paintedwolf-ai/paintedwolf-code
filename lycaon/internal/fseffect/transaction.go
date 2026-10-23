@@ -172,7 +172,7 @@ func lockTarget(loc Location) func() {
 
 // Replace atomically commits a stream through one held parent.
 func Replace(req ReplaceRequest) (Result, error) {
-	return platformReplace(req)
+	return replace(req, nil)
 }
 
 // PathLocation scopes an effect to a file's immediate parent.

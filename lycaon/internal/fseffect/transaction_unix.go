@@ -186,114 +186,122 @@ func OpenWrite(loc Location, appendMode bool, mode os.FileMode) (*os.File, error
 	return os.NewFile(uintptr(fd), filepath.Join(parent.root.path, parent.rel, parent.name)), nil
 }
 
-func platformReplace(req ReplaceRequest) (Result, error) {
-	return replace(req, nil)
-}
-
-func replace(req ReplaceRequest, inject func(stage) error) (Result, error) {
+func stageReplace(req ReplaceRequest, inject func(stage) error) (*Replacement, Result, error) {
 	if req.Source == nil {
-		return Result{}, fmt.Errorf("atomic filesystem effect request is incomplete")
+		return nil, Result{}, fmt.Errorf("atomic filesystem effect request is incomplete")
 	}
 	parent, err := openParent(req.Location, true, req.dirMode())
 	if err != nil {
-		return Result{}, err
+		return nil, Result{}, err
 	}
-	defer parent.close()
 	tmpName, tmp, held, err := createTempAt(parent, 0o600)
 	if err != nil {
-		return Result{}, err
+		parent.close()
+		return nil, Result{}, err
 	}
-	defer held.retire()
 	closed := false
 	committed := false
-	defer func() {
+	cleanup := func() {
 		if !closed {
 			_ = tmp.Close()
 		}
 		if !committed {
 			_ = unix.Unlinkat(int(parent.file.Fd()), tmpName, 0)
 		}
+		held.retire()
+		parent.close()
+	}
+	ready := false
+	defer func() {
+		if !ready {
+			cleanup()
+		}
 	}()
 	if err := injectAt(inject, stageCreated); err != nil {
-		return Result{}, err
+		return nil, Result{}, err
 	}
 	hasher := sha256.New()
 	n, err := io.Copy(io.MultiWriter(tmp, hasher), req.Source)
 	result := Result{Bytes: n, SHA256: hex.EncodeToString(hasher.Sum(nil))}
 	if err != nil {
-		return result, fmt.Errorf("write replacement: %w", err)
+		return nil, result, fmt.Errorf("write replacement: %w", err)
 	}
 	if err := injectAt(inject, stageWritten); err != nil {
-		return result, err
+		return nil, result, err
 	}
 	if req.ReviewStaged != nil {
 		if err := req.ReviewStaged(targetAt{parent: parent}, result); err != nil {
+			return nil, result, err
+		}
+	}
+	ready = true
+	staged := &Replacement{result: result, close: cleanup}
+	staged.publish = func() (Result, error) {
+		unlock := lockTarget(req.Location)
+		defer unlock()
+		if req.ReviewStaged != nil {
+			if err := verifyReviewedParent(req.Location, parent); err != nil {
+				return result, err
+			}
+		}
+		mode, err := req.resolvedMode(targetAt{parent: parent})
+		if err != nil {
 			return result, err
 		}
-	}
-	unlock := lockTarget(req.Location)
-	defer unlock()
-	if req.ReviewStaged != nil {
-		if err := verifyReviewedParent(req.Location, parent); err != nil {
+		if err := tmp.Chmod(chmodMode(mode)); err != nil {
+			return result, fmt.Errorf("chmod replacement: %w", err)
+		}
+		if err := injectAt(inject, stageModeSet); err != nil {
 			return result, err
 		}
-	}
-	mode, err := req.resolvedMode(targetAt{parent: parent})
-	if err != nil {
-		return result, err
-	}
-	if err := tmp.Chmod(chmodMode(mode)); err != nil {
-		return result, fmt.Errorf("chmod replacement: %w", err)
-	}
-	if err := injectAt(inject, stageModeSet); err != nil {
-		return result, err
-	}
-	if err := fssync.File(tmp); err != nil {
-		return result, fmt.Errorf("sync replacement: %w", err)
-	}
-	if err := injectAt(inject, stageFileSynced); err != nil {
-		return result, err
-	}
-	if err := tmp.Close(); err != nil {
-		return result, fmt.Errorf("close replacement: %w", err)
-	}
-	closed = true
-	if err := injectAt(inject, stageFileClosed); err != nil {
-		return result, err
-	}
-	if err := req.precondition(targetAt{parent: parent}, result); err != nil {
-		return result, err
-	}
-	if err := injectAt(inject, stageValidated); err != nil {
-		return result, err
-	}
-	if req.ReviewStaged != nil {
-		stagedParent := *parent
-		stagedParent.name = tmpName
-		if err := verifyTarget(targetAt{parent: &stagedParent}, result); err != nil {
-			return result, fmt.Errorf("reviewed staging changed: %w", err)
+		if err := fssync.File(tmp); err != nil {
+			return result, fmt.Errorf("sync replacement: %w", err)
 		}
+		if err := injectAt(inject, stageFileSynced); err != nil {
+			return result, err
+		}
+		if err := tmp.Close(); err != nil {
+			return result, fmt.Errorf("close replacement: %w", err)
+		}
+		closed = true
+		if err := injectAt(inject, stageFileClosed); err != nil {
+			return result, err
+		}
+		if err := req.precondition(targetAt{parent: parent}, result); err != nil {
+			return result, err
+		}
+		if err := injectAt(inject, stageValidated); err != nil {
+			return result, err
+		}
+		if req.ReviewStaged != nil {
+			stagedParent := *parent
+			stagedParent.name = tmpName
+			if err := verifyTarget(targetAt{parent: &stagedParent}, result); err != nil {
+				return result, fmt.Errorf("reviewed staging changed: %w", err)
+			}
+		}
+		if err := unix.Renameat(int(parent.file.Fd()), tmpName, int(parent.file.Fd()), parent.name); err != nil {
+			return result, fmt.Errorf("commit replacement: %w", err)
+		}
+		committed = true
+		result.Publication = PublicationReplaced
+		if err := injectAt(inject, stageRenamed); err != nil {
+			return result, err
+		}
+		if err := fsyncFD(int(parent.file.Fd())); err != nil {
+			return result, fmt.Errorf("sync replacement directory: %w", err)
+		}
+		result.Publication = PublicationDurable
+		if err := injectAt(inject, stageDirSynced); err != nil {
+			return result, err
+		}
+		if err := verifyTarget(targetAt{parent: parent}, result); err != nil {
+			return result, err
+		}
+		result.Publication = PublicationVerified
+		return result, injectAt(inject, stageVerified)
 	}
-	if err := unix.Renameat(int(parent.file.Fd()), tmpName, int(parent.file.Fd()), parent.name); err != nil {
-		return result, fmt.Errorf("commit replacement: %w", err)
-	}
-	committed = true
-	result.Publication = PublicationReplaced
-	if err := injectAt(inject, stageRenamed); err != nil {
-		return result, err
-	}
-	if err := fsyncFD(int(parent.file.Fd())); err != nil {
-		return result, fmt.Errorf("sync replacement directory: %w", err)
-	}
-	result.Publication = PublicationDurable
-	if err := injectAt(inject, stageDirSynced); err != nil {
-		return result, err
-	}
-	if err := verifyTarget(targetAt{parent: parent}, result); err != nil {
-		return result, err
-	}
-	result.Publication = PublicationVerified
-	return result, injectAt(inject, stageVerified)
+	return staged, result, nil
 }
 
 func verifyReviewedParent(location Location, held *openedParent) error {
