@@ -7,6 +7,10 @@ on:
         description: Exact source commit; blank uses the calling workflow commit
         type: string
         default: ''
+      reuse-merge-proof:
+        description: Reuse complete merge-group lanes for the selected source tree
+        type: boolean
+        default: false
       profile:
         description: Catalog profile (fast, integration, check, nightly, or release)
         required: true
@@ -49,6 +53,8 @@ jobs:
         id: plan
         env:
           PROFILE: ${{ inputs.profile }}
+          REUSE: ${{ inputs.reuse-merge-proof }}
+          SOURCE_SHA: ${{ inputs.source-sha || github.sha }}
           SUITE: ${{ inputs.suite }}
           AFFECTED: ${{ inputs.affected }}
           PLATFORM: ${{ inputs.platform }}
@@ -65,8 +71,21 @@ jobs:
             echo "package-timings=$(jq -c '.packages // {}' "$RUNNER_TEMP/timings.json")" >> "$GITHUB_OUTPUT"
           fi
           matrix="$(python3 scripts/ci_verification.py matrix "$PROFILE" --suite "$SUITE" "${args[@]}")"
+          if [[ "$REUSE" == true ]]; then
+            [[ "$PROFILE" == check && "$AFFECTED" != true && "$PLATFORM" != true ]]
+            matrix="$(PYTHONPATH=scripts python3 -m ci_policy.proof_reuse --matrix "$matrix" --source "$SOURCE_SHA" --output "$RUNNER_TEMP/qualification-reuse.json")"
+          fi
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
           echo "max-parallel=$(python3 scripts/ci_verification.py max-parallel "$PROFILE")" >> "$GITHUB_OUTPUT"
+
+      - name: Retain qualification coverage sources
+        if: inputs.reuse-merge-proof
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: qualification-reuse-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/qualification-reuse.json
+          if-no-files-found: error
+          retention-days: 90
 
   verify:
     name: ${{ matrix.lane }}${{ matrix.shard != '' && format(' ({0})', matrix.shard) || '' }}
@@ -131,3 +150,18 @@ jobs:
         with:
           name: verification-${{ inputs.profile }}-${{ matrix.lane }}${{ matrix.shard != '' && format('-{0}', strategy.job-index) || '' }}-${{ github.run_attempt }}
           status: ${{ job.status }}
+
+      - name: Seal complete merge-group lane proof
+        if: success() && github.event_name == 'merge_group'
+        env:
+          PYTHONPATH: scripts
+        run: python3 -m ci_policy.lane_proof
+
+      - name: Retain complete merge-group lane proof
+        if: success() && github.event_name == 'merge_group'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: lane-proof-${{ matrix.lane }}-${{ strategy.job-index }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/lane-proof.json
+          if-no-files-found: ignore
+          retention-days: 14
