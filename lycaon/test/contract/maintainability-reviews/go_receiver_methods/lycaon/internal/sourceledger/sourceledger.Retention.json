@@ -4,13 +4,13 @@
   "kind": "runtime_service",
   "workstream": "source-mutations",
   "disposition": "retain",
-  "reason": "Sixteen methods retain the existing source-content maintenance lifecycle: capture/maintenance leases, exact live recovery claims, bounded candidate retirement, blob references and physical reclamation. The existing transaction now retires at most256 manifest rows/candidates while reading one identity at a time; no retained vector, changed trigger, second queue or new maintenance service is introduced. The private candidate phase consumes only that actual writer transaction and remaining row budget. Claim preservation, bounded empty-candidate progress, whole-page rollback after an earlier candidate and normal recovery suites support retention at this measured shape and ceiling. Growth requires renewed review.",
-  "reviewed_commit": "100a649f5c827c330358dd3bdad41b5310a88951",
+  "reason": "Retain sixteen methods in the existing capture/maintenance/claim/reclamation lifecycle. The actual writer transaction uses a bounded256-key SQLite window before empty filtering, then original individual nonempty-candidate claim and row reclamation within the remaining256-row budget. Go retains one candidate, not a whole queue; the SQLite window is explicitly bounded rather than claimed allocation-free. Actual claimed-window preservation,513-empty progress, manifest and earlier-candidate rollback contracts plus194 sourceledger tests support this exact shape. No trigger or durable queue representation changes. Growth requires renewed review.",
+  "reviewed_commit": "bf9c3ccddaf7e836691d7ef7035ccf5481c9166c",
   "ceiling": 16,
   "boundaries": {
-    "lycaon/internal/sourceledger/recovery_retention_test.go": "dfaea4eb437bfa38dcd9d679a179452fbc5bd6e3aa1f627ec45c9c67c15c784d",
-    "lycaon/internal/sourceledger/recovery_claim_release_test.go": "82d3525842d1a04a69624461b9e37667662b42d988b5de1fdd93ec3f75c90e84",
-    "lycaon/internal/sourceledger/recovery_retention.go": "053ff57811cb8fb16d3ad6180764065d4319ffc342fc2577ab22818164acccd1"
+    "lycaon/internal/sourceledger/recovery_retention.go": "d4eff529dc084e40aa897fda233d2d3a6c554421c3072af66385c496719f7308",
+    "lycaon/internal/sourceledger/recovery_retention_test.go": "de9d516868f9862b80191db2723183a39b7222a6daba1bb569a86085e9e8caaf",
+    "lycaon/internal/sourceledger/recovery_claim_release_test.go": "82d3525842d1a04a69624461b9e37667662b42d988b5de1fdd93ec3f75c90e84"
   },
   "reviewed_shape": "47c7855cb2e4f91ef8201426085aa2b738ade9c89d7c90d29659fea6437bcf08"
 }
