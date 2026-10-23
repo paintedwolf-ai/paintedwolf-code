@@ -51,9 +51,6 @@ func RunMountSource() error {
 	}
 	origin := os.NewFile(sourceOriginFD, "initial-user-namespace")
 	defer func() { _ = origin.Close() }()
-	if err := sourceNamespaces(origin); err != nil {
-		return err
-	}
 	peer, err := launchbroker.CheckSocket(sourceSocketFD)
 	if err != nil || peer.Uid != 0 || int(peer.Pid) != os.Getppid() {
 		return errors.New("mount source socket is not the privileged stage")
@@ -63,9 +60,12 @@ func RunMountSource() error {
 		return errors.New("invalid mount source lifetime")
 	}
 	topology := os.NewFile(sourceTopologyFD, "sealed-source-topology")
-	entries, err := readSourceTopology(topology)
+	entries, namespace, err := readSourceTopology(topology)
 	_ = topology.Close()
 	if err != nil {
+		return err
+	}
+	if err := sourceNamespaces(origin, namespace); err != nil {
 		return err
 	}
 	_ = unix.Close(sourceSelfFD)
@@ -77,7 +77,7 @@ func RunMountSource() error {
 	return serveMountSource(entries, sourceSocketFD, sourceLifetimeFD)
 }
 
-func sourceNamespaces(origin *os.File) error {
+func sourceNamespaces(origin *os.File, selected sourceNamespaceIdentity) error {
 	var initial unix.Stat_t
 	if err := unix.Fstat(int(origin.Fd()), &initial); err != nil || initial.Ino != 0xEFFFFFFD {
 		return errors.New("mount source lacks the initial user namespace")
@@ -90,14 +90,12 @@ func sourceNamespaces(origin *os.File) error {
 		return err
 	}
 	defer func() { _ = mounts.Close() }()
-	owner, err := unix.IoctlRetInt(int(mounts.Fd()), unix.NS_GET_USERNS)
-	if err != nil {
-		return err
+	if kind, err := unix.IoctlRetInt(int(mounts.Fd()), unix.NS_GET_NSTYPE); err != nil || kind != unix.CLONE_NEWNS {
+		return errors.New("mount source current namespace is not a mount namespace")
 	}
-	defer func() { _ = unix.Close(owner) }()
 	var actual unix.Stat_t
-	if err := unix.Fstat(owner, &actual); err != nil || actual.Dev != initial.Dev || actual.Ino != initial.Ino {
-		return errors.New("mount source must inherit initial-owned staging mounts")
+	if err := unix.Fstat(int(mounts.Fd()), &actual); err != nil || uint64(actual.Dev) != selected.device || actual.Ino != selected.inode {
+		return errors.New("mount source staging namespace differs from the sealed selection")
 	}
 	return nil
 }
@@ -115,21 +113,6 @@ func sealMountSource(spec EntrySpec) error {
 		return err
 	}
 	return prctlAllThreads(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0)
-}
-
-func readSourceTopology(file *os.File) ([]mountEntry, error) {
-	if err := rootRegular(file); err != nil {
-		return nil, err
-	}
-	seals, err := unix.FcntlInt(file.Fd(), unix.F_GET_SEALS, 0)
-	if err != nil || seals&entrySeals != entrySeals {
-		return nil, errors.New("mount source topology is not sealed")
-	}
-	raw, err := io.ReadAll(io.NewSectionReader(file, 0, maxMountTopologyBytes+1))
-	if err != nil {
-		return nil, err
-	}
-	return parseMountTopology(raw)
 }
 
 func serveMountSource(entries []mountEntry, socket, lifetime int) error {

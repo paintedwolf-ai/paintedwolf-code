@@ -84,27 +84,6 @@ func startMountSource(frame, origin, entry *os.File, topology []byte) (_ *mountS
 	return opener, nil
 }
 
-func sealSourceTopology(raw []byte) (_ *os.File, err error) {
-	fd, err := unix.MemfdCreate("painted-wolf-source-topology", unix.MFD_CLOEXEC|unix.MFD_ALLOW_SEALING)
-	if err != nil {
-		return nil, err
-	}
-	file := os.NewFile(uintptr(fd), "sealed-source-topology")
-	defer func() {
-		if err != nil {
-			_ = file.Close()
-		}
-	}()
-	if _, err = file.Write(raw); err != nil {
-		return nil, err
-	}
-	if err = file.Chmod(0o400); err != nil {
-		return nil, err
-	}
-	_, err = unix.FcntlInt(file.Fd(), unix.F_ADD_SEALS, entrySeals)
-	return file, err
-}
-
 func (opener *mountSourceOpener) open(entry mountEntry) (int, error) {
 	if err := opener.boundIO(); err != nil {
 		return -1, err

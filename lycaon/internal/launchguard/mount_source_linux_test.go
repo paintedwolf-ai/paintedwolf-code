@@ -3,6 +3,7 @@
 package launchguard
 
 import (
+	"encoding/binary"
 	"os"
 	"os/exec"
 	"testing"
@@ -132,5 +133,30 @@ func TestMountSourceDeadlineAbortsReceiveAndOnlyItsOwnedChild(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("deadline did not terminate its owned child")
+	}
+}
+
+func TestMountSourceTopologyBindsTheExactStagingNamespace(t *testing.T) {
+	raw := make([]byte, sourceTopologyHeader)
+	copy(raw, sourceTopologyMagic[:])
+	binary.LittleEndian.PutUint32(raw[8:], 1)
+	binary.LittleEndian.PutUint64(raw[16:], 4)
+	binary.LittleEndian.PutUint64(raw[24:], 12345)
+	raw = append(raw, []byte("2 1 8:1 / / rw - ext4 /dev/root rw\n")...)
+	entries, identity, err := decodeSourceTopology(raw)
+	testutil.FailErr(t, "decode bound staging topology", err)
+	if len(entries) != 1 || identity.device != 4 || identity.inode != 12345 {
+		t.Fatal("staging namespace selection changed")
+	}
+	for _, offset := range []int{0, 8, 12, 16, 24} {
+		bad := append([]byte(nil), raw...)
+		if offset == 0 || offset == 8 || offset == 12 {
+			bad[offset] ^= 3
+		} else {
+			binary.LittleEndian.PutUint64(bad[offset:], 0)
+		}
+		if _, _, err := decodeSourceTopology(bad); err == nil {
+			t.Fatalf("accepted malformed staging identity at byte %d", offset)
+		}
 	}
 }
