@@ -1,5 +1,5 @@
 name: Cache Go builds
-description: Restore the module and build caches that main warms for verification
+description: Restore bounded compiler outputs that main warms for verification
 inputs:
   save:
     description: Publish prepared caches (main only); the default restores without saving
@@ -21,8 +21,7 @@ runs:
         set -euo pipefail
         {
           printf 'gocache=%s\n' "$(go env GOCACHE)"
-          printf 'gomodcache=%s\n' "$(go env GOMODCACHE)"
-          printf 'key_prefix=go-v2-%s-%s-%s-%s-\n' "${RUNNER_OS}" "${RUNNER_ARCH}" "${ImageOS:-}" "$(go env GOVERSION)"
+          printf 'key_prefix=go-v4-%s-%s-%s-%s-\n' "${RUNNER_OS}" "${RUNNER_ARCH}" "${ImageOS:-}" "$(go env GOVERSION)"
         } >> "${GITHUB_OUTPUT}"
 
     # Main publishes one trimmed payload per module graph.
@@ -32,7 +31,6 @@ runs:
       with:
         path: |
           ${{ steps.paths.outputs.gocache }}
-          ${{ steps.paths.outputs.gomodcache }}
         key: ${{ steps.paths.outputs.key_prefix }}${{ hashFiles('lycaon/go.mod', 'lycaon/go.sum', 'scripts/commentlint/go.mod', 'scripts/commentlint/go.sum') }}
     - if: ${{ inputs.save == 'true' && github.ref == 'refs/heads/main' && steps.budget.outputs.allowed == 'true' }}
       id: save
@@ -40,7 +38,6 @@ runs:
       with:
         path: |
           ${{ steps.paths.outputs.gocache }}
-          ${{ steps.paths.outputs.gomodcache }}
         key: ${{ steps.paths.outputs.key_prefix }}${{ hashFiles('lycaon/go.mod', 'lycaon/go.sum', 'scripts/commentlint/go.mod', 'scripts/commentlint/go.sum') }}
     - if: ${{ inputs.save == 'true' && github.ref == 'refs/heads/main' && steps.budget.outputs.allowed == 'true' }}
       uses: ./.github/actions/cache-budget
@@ -54,6 +51,5 @@ runs:
       with:
         path: |
           ${{ steps.paths.outputs.gocache }}
-          ${{ steps.paths.outputs.gomodcache }}
         key: ${{ steps.paths.outputs.key_prefix }}${{ hashFiles('lycaon/go.mod', 'lycaon/go.sum', 'scripts/commentlint/go.mod', 'scripts/commentlint/go.sum') }}
         restore-keys: ${{ inputs.exact != 'true' && steps.paths.outputs.key_prefix || '' }}
