@@ -37,17 +37,7 @@ func TestMountTopologyKeepsKernelIdentityAndRejectsIncompleteGraphs(t *testing.T
 			}
 		})
 	}
-	snapshot := &mountSnapshot{entries: entries}
-	private, err := parseMountTopology([]byte(strings.ReplaceAll(root+volume, " shared:4", "")))
-	testutil.FailErr(t, "decode privatized topology", err)
-	private[1].master, private[1].propagateFrom = 0, 0
-	if !snapshot.unchanged(private) {
-		t.Fatal("privatization alone changed mount identity")
-	}
-	private[1].root = "/replacement"
-	if snapshot.unchanged(private) {
-		t.Fatal("changed source root was accepted as unchanged")
-	}
+
 }
 
 func TestMountTopologyDeepChainAndAdmissionBounds(t *testing.T) {

@@ -5,7 +5,6 @@ package launchguard
 import (
 	"errors"
 	"os"
-	"runtime"
 	"syscall"
 	"unsafe"
 
@@ -17,35 +16,23 @@ import (
 // BrokerAgentArgument selects the entry image's broker agent mode.
 const BrokerAgentArgument = "--broker-agent"
 
-// Descriptors the privileged stage hands the broker agent and module-view watcher.
+// Fixed descriptors the privileged stage hands the ordinary broker agent.
 const (
-	agentSpecFD       = 3
-	agentBrokerFD     = 4
-	agentWatchFD      = 5
-	watcherLifetimeFD = 4
-	watcherReadyFD    = 5
-	watcherSelfFD     = 6
+	agentSpecFD   = 3
+	agentBrokerFD = 4
+	agentWatchFD  = 5
 )
 
 // RunBrokerAgent serves the launch broker: the caller's identity in the
 // initial user namespace, inside the launch's mount namespace, non-dumpable
 // from execve through shutdown and with no no_new_privs, so brokered programs
 // keep every ordinary user facility, set-ID programs included, and see the
-// running generation at the logical installation root. Started as uid 0 inside
-// the module view, it runs the module-view mount watcher instead.
+// running generation at the logical installation root.
 func RunBrokerAgent() error {
 	if err := unix.Prctl(unix.PR_SET_DUMPABLE, 0, 0, 0, 0); err != nil {
 		return err
 	}
-	if isModuleViewWatcher() {
-		frame := os.NewFile(agentSpecFD, "sealed-entry-spec")
-		spec, err := readEntry(frame)
-		_ = frame.Close()
-		if err != nil {
-			return err
-		}
-		return runModuleViewWatcher(spec)
-	}
+
 	unix.CloseOnExec(agentWatchFD)
 	if err := unix.CloseRange(agentWatchFD+1, ^uint(0), unix.CLOSE_RANGE_CLOEXEC); err != nil {
 		return err
@@ -122,52 +109,7 @@ func sealBrokerAgentIdentity(spec EntrySpec) error {
 	return sameIdentity(spec)
 }
 
-// runModuleViewWatcher runs inside the module view in the root-owned user
-// namespace that owns M_view as the caller's identity with only
-// CAP_SYS_ADMIN and CAP_DAC_READ_SEARCH retained in that namespace (and none
-// in the initial user namespace), marking every mount propagated into the view
-// after launch noexec, nosuid and nodev until the launch ends.
-func runModuleViewWatcher(spec EntrySpec) error {
-	runtime.LockOSThread()
-	if gid, egid, sgid := unix.Getresgid(); gid != 0 || egid != 0 || sgid != 0 {
-		return errors.New("module view watcher requires administrator group identity")
-	}
-	if err := watcherUserNamespace(); err != nil {
-		return err
-	}
-	for _, fd := range []int{watcherLifetimeFD, watcherReadyFD} {
-		var stat unix.Stat_t
-		if err := unix.Fstat(fd, &stat); err != nil || stat.Mode&unix.S_IFMT != unix.S_IFIFO {
-			return errors.New("invalid module view watcher pipe")
-		}
-		unix.CloseOnExec(fd)
-	}
-	_ = unix.Close(watcherSelfFD)
-	roots, err := allowedModuleMountPoints(spec.Generation)
-	if err != nil {
-		return err
-	}
-	mountinfo, err := os.Open("/proc/thread-self/mountinfo")
-	if err != nil {
-		return err
-	}
-	defer func() { _ = mountinfo.Close() }()
-	if err := sealModuleWatcher(Identity{UID: spec.UID, GID: spec.GID, Groups: spec.Groups}); err != nil {
-		return err
-	}
-	return watchModuleMounts(int(mountinfo.Fd()), watcherLifetimeFD, watcherReadyFD, spec.Generation.LogicalInstallRoot, roots)
-}
-
 const watcherCapabilityMask = (uint32(1) << unix.CAP_SYS_ADMIN) | (uint32(1) << unix.CAP_DAC_READ_SEARCH)
-
-func isModuleViewWatcher() bool {
-	uid, euid, suid := unix.Getresuid()
-	if uid != 0 || euid != 0 || suid != 0 || initialUserNamespace() == nil {
-		return false
-	}
-	var stat unix.Stat_t
-	return unix.Fstat(watcherLifetimeFD, &stat) == nil && stat.Mode&unix.S_IFMT == unix.S_IFIFO
-}
 
 func watcherUserNamespace() error {
 	own, err := os.Open("/proc/self/ns/user")

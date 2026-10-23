@@ -49,19 +49,20 @@ func exerciseBootstrapNotice(image *os.File, caller Identity, blocked bool) erro
 	}
 	defer reader.Close()
 	defer writer.Close()
+	writerFD := int(writer.Fd())
 	if blocked {
-		if err := unix.SetNonblock(int(writer.Fd()), true); err != nil {
+		if err := unix.SetNonblock(writerFD, true); err != nil {
 			return err
 		}
 		var fill [4096]byte
 		for {
-			if _, err := unix.Write(int(writer.Fd()), fill[:]); errors.Is(err, unix.EAGAIN) {
+			if _, err := unix.Write(writerFD, fill[:]); errors.Is(err, unix.EAGAIN) {
 				break
 			} else if err != nil {
 				return err
 			}
 		}
-		if err := unix.SetNonblock(int(writer.Fd()), false); err != nil {
+		if err := unix.SetNonblock(writerFD, false); err != nil {
 			return err
 		}
 	}
@@ -118,7 +119,7 @@ func exerciseBootstrapNotice(image *os.File, caller Identity, blocked bool) erro
 		return err
 	}
 	reaped = true
-	flags, err := unix.FcntlInt(writer.Fd(), unix.F_GETFL, 0)
+	flags, err := unix.FcntlInt(uintptr(writerFD), unix.F_GETFL, 0)
 	if err != nil || flags&unix.O_NONBLOCK != 0 {
 		return errors.New("diagnostic altered shared stream flags")
 	}

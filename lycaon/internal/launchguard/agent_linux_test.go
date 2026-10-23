@@ -24,12 +24,6 @@ import (
 const wantWatcherCapHex = "0000000000200004"
 const wantZeroCapHex = "0000000000000000"
 
-func TestIsModuleViewWatcherRequiresRootAndPipe(t *testing.T) {
-	if os.Getuid() != 0 && isModuleViewWatcher() {
-		t.Fatal("isModuleViewWatcher accepted an unprivileged caller")
-	}
-}
-
 func TestProtectedLaunchBinariesBuildWithoutCgo(t *testing.T) {
 	t.Parallel()
 	stageScript, err := os.ReadFile(filepath.Join("..", "..", "..", "scripts", "stage-engine.sh"))
@@ -93,7 +87,7 @@ func TestProtectedLaunchBinariesBuildWithoutCgo(t *testing.T) {
 	}
 }
 
-func checkScrubSingleMountRejectsSymlinksAndMagiclinks(t *testing.T) {
+func checkMountTargetRejectsSymlinksAndMagiclinks(t *testing.T) {
 	t.Helper()
 	tmp := t.TempDir()
 	realDir := filepath.Join(tmp, "real", "sub")
@@ -105,13 +99,13 @@ func checkScrubSingleMountRejectsSymlinksAndMagiclinks(t *testing.T) {
 		t.Fatalf("symlink parent: %v", err)
 	}
 	for _, bad := range []string{"relative/path", "/mnt/nul\x00byte"} {
-		if err := scrubSingleMount(bad); !errors.Is(err, unix.EINVAL) {
-			t.Fatalf("scrubSingleMount(%q) = %v, want EINVAL", bad, err)
+		if err := tightenFixtureMount(bad); !errors.Is(err, unix.EINVAL) {
+			t.Fatalf("tightenFixtureMount(%q) = %v, want EINVAL", bad, err)
 		}
 	}
 	for _, linkPath := range []string{filepath.Join(symParent, "sub"), symParent, "/proc/self/root"} {
-		if err := scrubSingleMount(linkPath); !errors.Is(err, unix.ELOOP) {
-			t.Fatalf("scrubSingleMount(%q) = %v, want ELOOP", linkPath, err)
+		if err := tightenFixtureMount(linkPath); !errors.Is(err, unix.ELOOP) {
+			t.Fatalf("tightenFixtureMount(%q) = %v, want ELOOP", linkPath, err)
 		}
 	}
 }
@@ -140,7 +134,7 @@ func verifyLiveWatcherProcess(desktopPID int) error {
 			continue
 		}
 		cmdline, err := os.ReadFile(fmt.Sprintf("/proc/%d/cmdline", pid))
-		if err != nil || !bytes.Equal(cmdline, []byte("pw-launch-entry\x00--broker-agent\x00")) {
+		if err != nil || !bytes.Equal(cmdline, []byte("pw-launch-entry\x00"+MountViewArgument+"\x00")) {
 			continue
 		}
 		if mnt, err := os.Readlink(fmt.Sprintf("/proc/%d/ns/mnt", pid)); err == nil && mnt == desktopMnt {
@@ -297,8 +291,8 @@ func checkModuleWatcherSeal() error {
 	if dumpable, err := unix.PrctlRetInt(unix.PR_GET_DUMPABLE, 0, 0, 0, 0); err != nil || dumpable != 0 {
 		return fmt.Errorf("sealed watcher dumpable = %d (%v), want 0", dumpable, err)
 	}
-	if err := scrubSingleMount(probeDir); err != nil {
-		return fmt.Errorf("sealed watcher scrubSingleMount in initial user namespace: %w", err)
+	if err := tightenFixtureMount(probeDir); err != nil {
+		return fmt.Errorf("sealed watcher mount flags in initial user namespace: %w", err)
 	}
 	var st unix.Statfs_t
 	const wantFlags = unix.ST_NOEXEC | unix.ST_NOSUID | unix.ST_NODEV
@@ -336,8 +330,8 @@ func TestChildUserNamespaceMountSetattrRefused(t *testing.T) {
 	// Before unsharing M_view, mountPoint is owned by init_user_ns: the child
 	// user namespace has zero capabilities in init_user_ns, so mount_setattr
 	// is refused with EPERM even as uid 0 in the child user namespace.
-	if err := scrubSingleMount(mountPoint); !errors.Is(err, unix.EPERM) {
-		t.Fatalf("scrubSingleMount(%q) on init_user_ns mount from child userns = %v, want EPERM", mountPoint, err)
+	if err := tightenFixtureMount(mountPoint); !errors.Is(err, unix.EPERM) {
+		t.Fatalf("tightenFixtureMount(%q) on init_user_ns mount from child userns = %v, want EPERM", mountPoint, err)
 	}
 	// Unshare M_view inside the child user namespace so this userns owns M_view.
 	if err := unix.Unshare(unix.CLONE_NEWNS); err != nil {
@@ -351,8 +345,8 @@ func TestChildUserNamespaceMountSetattrRefused(t *testing.T) {
 		t.Fatalf("sealModuleWatcher in (U_view, M_view): %v", err)
 	}
 	// Inside M_view (owned by U_view), the sealed watcher can add NOEXEC|NOSUID|NODEV.
-	if err := scrubSingleMount(mountPoint); err != nil {
-		t.Fatalf("scrubSingleMount(%q) in watcher-owned M_view: %v", mountPoint, err)
+	if err := tightenFixtureMount(mountPoint); err != nil {
+		t.Fatalf("tightenFixtureMount(%q) in watcher-owned M_view: %v", mountPoint, err)
 	}
 	var st unix.Statfs_t
 	const wantFlags = unix.ST_NOEXEC | unix.ST_NOSUID | unix.ST_NODEV
@@ -383,4 +377,14 @@ func startLockedWorkerThreads(count int) func() {
 			<-done
 		}
 	}
+}
+
+// Exercise the production target resolver and flag primitive on a fixture mount.
+func tightenFixtureMount(name string) error {
+	fd, err := openMountPoint(name)
+	if err != nil {
+		return err
+	}
+	defer unix.Close(fd)
+	return lockDetachedMount(fd)
 }

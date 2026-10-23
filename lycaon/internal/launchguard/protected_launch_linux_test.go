@@ -225,7 +225,7 @@ func TestProtectedLaunchSealsTheDesktopInARootOwnedNamespace(t *testing.T) {
 	if len(facts.OpenBeyond) != 0 {
 		t.Fatalf("bootstrap descriptors reached the desktop: %v", facts.OpenBeyond)
 	}
-	assertProcessThreadCredentials(t, launch.cmd.Process.Pid, "0", 1)
+	assertBootstrapSupervisorProfile(t, launch.cmd.Process.Pid)
 	agentPID := findBrokerAgentPID(t)
 	assertProcessThreadCredentials(t, agentPID, "0", 1)
 	assertBrokerAgentSealed(t, agentPID)
@@ -517,4 +517,24 @@ func TestProtectedLaunchRoutesEngineLaunchesThroughTheBroker(t *testing.T) {
 	}
 	testutil.FailErr(t, "close desktop input", launch.stdin.Close())
 	waitLaunchEnd(t, launch.cmd)
+}
+
+func assertBootstrapSupervisorProfile(t *testing.T, pid int) {
+	t.Helper()
+	groups, err := os.Getgroups()
+	testutil.FailErr(t, "capture supervisor caller groups", err)
+	caller := Identity{UID: uint32(os.Getuid()), GID: uint32(os.Getgid())}
+	for _, group := range groups {
+		caller.Groups = append(caller.Groups, uint32(group))
+	}
+	tasks, err := os.ReadDir(fmt.Sprintf("/proc/%d/task", pid))
+	testutil.FailErr(t, "read live caller supervisor threads", err)
+	if len(tasks) == 0 {
+		t.Fatal("caller supervisor has no threads")
+	}
+	for _, task := range tasks {
+		raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/task/%s/status", pid, task.Name()))
+		testutil.FailErr(t, "read caller supervisor authority", err)
+		testutil.FailErr(t, "caller supervisor fully dropped capabilities and bounding set", guardianThreadProfile(raw, caller))
+	}
 }

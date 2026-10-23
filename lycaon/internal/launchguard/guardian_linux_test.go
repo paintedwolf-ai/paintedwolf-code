@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
+	"golang.org/x/sys/unix"
 )
 
 func TestGuardianRootsRejectsAmbiguousLifecycleAuthority(t *testing.T) {
@@ -80,5 +81,19 @@ func TestGuardianRealLaunchPreservesDesktopExitStatus(t *testing.T) {
 				t.Fatalf("settled real guardian retained generation lock: %v", err)
 			}
 		})
+	}
+}
+
+func TestGuardianRegisteredExitCannotBeReplacedByReusedPID(t *testing.T) {
+	state := protectedGuardian{roots: guardianRoots{pids: [3]int{101, 102, 103}}}
+	state.recordExit(101, unix.WaitStatus(3<<8))
+	state.recordExit(101, unix.WaitStatus(9))
+	if state.status != 3 || !state.retired || !state.reaped[0] {
+		t.Fatalf("reused adopted PID changed registered desktop result: %+v", state)
+	}
+	state.recordExit(102, unix.WaitStatus(0))
+	state.recordExit(103, unix.WaitStatus(0))
+	if state.failed {
+		t.Fatal("expected retirement of helper roots changed normal desktop outcome")
 	}
 }

@@ -20,6 +20,7 @@ var errProtectedDesktopEnded = errors.New("protected desktop ended")
 
 type protectedGuardian struct {
 	roots                                                         guardianRoots
+	reaped                                                        [3]bool
 	supervisor                                                    int
 	caller                                                        Identity
 	children, proc, control, health, lifetime, viewLifetime, gate *os.File
@@ -272,19 +273,26 @@ func (state *protectedGuardian) reap() (bool, error) {
 		if pid == 0 {
 			return false, nil
 		}
-		for index, root := range state.roots.pids {
-			if pid != root {
-				continue
-			}
-			if index != 0 && !state.retired {
-				state.failed = true
-			}
-			state.retired = true
-			if index == 0 && status.Exited() {
-				state.status = status.ExitStatus()
-			} else if index == 0 && status.Signaled() {
-				state.status = 128 + int(status.Signal())
-			}
+		state.recordExit(pid, status)
+	}
+}
+
+// A pidfd retains the registered task, not its numeric PID allocation. Once
+// its wait result is consumed, a later adopted child can reuse that number.
+func (state *protectedGuardian) recordExit(pid int, status unix.WaitStatus) {
+	for index, root := range state.roots.pids {
+		if pid != root || state.reaped[index] {
+			continue
+		}
+		state.reaped[index] = true
+		if index != 0 && !state.retired {
+			state.failed = true
+		}
+		state.retired = true
+		if index == 0 && status.Exited() {
+			state.status = status.ExitStatus()
+		} else if index == 0 && status.Signaled() {
+			state.status = 128 + int(status.Signal())
 		}
 	}
 }

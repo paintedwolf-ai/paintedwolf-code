@@ -29,16 +29,6 @@ type mountEntry struct {
 	unbindable    bool
 }
 
-func parseMountInfo(raw []byte) []mountEntry {
-	var entries []mountEntry
-	for line := range strings.SplitSeq(string(raw), "\n") {
-		if entry, ok := parseMountInfoLine(line); ok {
-			entries = append(entries, entry)
-		}
-	}
-	return entries
-}
-
 func parseMountInfoLine(line string) (mountEntry, bool) {
 	var fields [6]string
 	rest := line
