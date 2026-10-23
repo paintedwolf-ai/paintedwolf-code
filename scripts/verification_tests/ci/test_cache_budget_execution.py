@@ -14,6 +14,13 @@ def row(identifier, key, size, ref="refs/heads/main"):
 
 
 class CacheBudgetTests(unittest.TestCase):
+    def test_document_compiler_family_shares_the_existing_storage_budget(self):
+        self.assertEqual(budget.family("document-core-v1-macOS-ARM64-tools"), ("document-core", "macOS", "ARM64"))
+        rows = [row(1, "document-core-v1-macOS-ARM64-old", 10), row(2, "document-core-v1-Linux-X64-old", 10)]
+        planned = budget.plan(rows, "document-core-v1-macOS-ARM64-new", 10)
+        self.assertEqual(planned["retire_after_save"], [1])
+        self.assertEqual(planned["limit_bytes"], 8 * 1024**3)
+
     def test_generations_replace_only_the_same_platform_family(self):
         rows = [row(1, "go-Linux-X64-old", 2), row(2, "go-macOS-ARM64-old", 2),
                 row(3, "go-Linux-X64-branch", 2, "refs/pull/1/merge"), row(4, "unknown", 2)]

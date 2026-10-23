@@ -367,6 +367,13 @@ jobs:
         if: ${{ matrix.goos == 'darwin' }}
         uses: ./.github/actions/cache-decide
 
+      - uses: ./.github/actions/cache-go
+        if: ${{ matrix.goos == 'darwin' }}
+      - uses: ./.github/actions/cache-notices-tools
+        if: ${{ matrix.goos == 'darwin' }}
+      - uses: ./.github/actions/cache-document-core
+        if: ${{ matrix.goos == 'darwin' }}
+
       - name: Restore the release build warmed on main
         if: ${{ matrix.goos == 'darwin' }}
         uses: ./.github/actions/cache-release-build

@@ -20,16 +20,6 @@ runs:
           printf 'build_key=release-build-%s-%s-%s-\n' "${RUNNER_OS}" "${RUNNER_ARCH}" "${DEVELOPER_DIR:-}"
         } >> "${GITHUB_OUTPUT}"
 
-    # Go compiler entries validate their inputs across verification and release.
-    - if: inputs.save != 'true'
-      uses: ./.github/actions/cache-go
-
-    - if: inputs.save != 'true'
-      uses: ./.github/actions/cache-document-core
-
-    - if: inputs.save != 'true'
-      uses: ./.github/actions/cache-notices-tools
-
     # Cargo validates compiler inputs restored from an earlier lockfile generation.
     - if: ${{ inputs.save == 'true' && github.ref == 'refs/heads/main' }}
       id: budget

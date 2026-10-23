@@ -62,3 +62,26 @@ func TestPreparedCachesPublishBeforeLintDiagnostics(t *testing.T) {
 		t.Error("cache warming requires preparation and diagnostics phases")
 	}
 }
+
+func TestReleaseCompilerPreparationPrecedesSharedCachePublication(t *testing.T) {
+	t.Parallel()
+	jobs := hostedJobs(t, "build-caches")
+	if _, separate := jobs["release"]; separate {
+		t.Fatal("release compilation must retain the platform warmer's compiler inputs")
+	}
+	prepared := false
+	for _, step := range jobs["verification"].Steps {
+		if step.Run == "./task setup-dev -- --release-cache" {
+			prepared = true
+			if !strings.Contains(step.If, "runner.os == 'macOS'") || !strings.Contains(step.If, "steps.setup.outputs.go-cache-hit") {
+				t.Fatal("release warming must cover missing Go inputs on macOS")
+			}
+		}
+		if step.Uses == "./.github/actions/cache-go" && step.With["save"] == "true" && !prepared {
+			t.Fatal("Go cache publication precedes release compilation")
+		}
+	}
+	if !prepared {
+		t.Fatal("platform warmer does not prepare release compilation")
+	}
+}

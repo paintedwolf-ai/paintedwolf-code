@@ -40,8 +40,14 @@ func TestHostedCacheWritesRequireTheTrustedMainRef(t *testing.T) {
 func TestReleaseBuildReusesTheSharedGoCache(t *testing.T) {
 	t.Parallel()
 	data := contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), ".github/actions/cache-release-build/action.yml")
-	if !strings.Contains(data, "uses: ./.github/actions/cache-go") {
-		t.Fatal("release builds must restore the shared Go compiler cache")
+	restored := map[string]bool{}
+	for _, step := range hostedJobs(t, "release")["build-release"].Steps {
+		restored[step.Uses] = true
+	}
+	for _, name := range []string{"cache-go", "cache-document-core", "cache-notices-tools", "cache-release-build"} {
+		if !restored["./.github/actions/"+name] {
+			t.Errorf("release builds must restore %s", name)
+		}
 	}
 	if strings.Contains(data, "gocache") || strings.Contains(data, "gomodcache") {
 		t.Fatal("release cache must not duplicate the shared Go payload")
