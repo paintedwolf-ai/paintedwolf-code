@@ -20,32 +20,32 @@ GLIBC = {"name": "glibc", "version": "2.42", "outputs": [store("glibc-2.42", "1"
          "licenses": [{"spdx": "LGPL-2.1-or-later", "name": "GNU Lesser General Public License v2.1 or later",
                        "free": True, "redistributable": True}],
          "homepage": "https://www.gnu.org/software/libc/",
-         "source": {"store_path": store("glibc-2.42.tar.xz", "3"), "urls": ["mirror://gnu/glibc/glibc-2.42.tar.xz"],
-                    "output_hash": "sha256-AAAA"},
+         "sources": [{"store_path": store("glibc-2.42.tar.xz", "3"), "urls": ["mirror://gnu/glibc/glibc-2.42.tar.xz"],
+                    "output_hash": "sha256-AAAA"}],
          "nixpkgs_position": "pkgs/development/libraries/glibc/common.nix:1"}
 APPLICATION = {"name": "painted-wolf-code", "version": "1.0.2", "outputs": [store("painted-wolf-code-1.0.2", "4")],
                "licenses": [{"spdx": "Apache-2.0", "name": "Apache License 2.0", "free": True, "redistributable": True}],
-               "homepage": None, "source": None, "nixpkgs_position": None}
+               "homepage": None, "sources": [], "nixpkgs_position": None}
 
 
 class ClosureNoticeTests(unittest.TestCase):
     def catalog(self, *packages):
-        return {"format_version": 1, "nixpkgs_revision": "f" * 40, "application": APPLICATION["outputs"][0],
+        return {"format_version": 2, "nixpkgs_revision": "f" * 40, "application": APPLICATION["outputs"][0],
                 "source_commit": "a" * 40, "packages": list(packages)}
 
     def test_each_path_has_its_licence_and_copyleft_paths_their_fixed_source(self):
         result = notices.attribute(self.catalog(GLIBC, APPLICATION),
                                    [APPLICATION["outputs"][0], GLIBC["outputs"][1]])
         by_path = {entry["store_path"]: entry for entry in result["paths"]}
-        self.assertEqual(by_path[GLIBC["outputs"][1]]["corresponding_source"], GLIBC["source"])
-        self.assertIsNone(by_path[APPLICATION["outputs"][0]]["corresponding_source"])
+        self.assertEqual(by_path[GLIBC["outputs"][1]]["corresponding_sources"], GLIBC["sources"])
+        self.assertEqual(by_path[APPLICATION["outputs"][0]]["corresponding_sources"], [])
         self.assertEqual(result["nixpkgs_revision"], "f" * 40)
 
     def test_unknown_unlicensed_unfree_or_sourceless_copyleft_paths_refuse(self):
         unlicensed = {**GLIBC, "licenses": []}
         unfree = {**APPLICATION, "licenses": [{"spdx": None, "name": "Unfree", "free": False, "redistributable": False}]}
-        sourceless = {**GLIBC, "source": None}
-        unhashed = {**GLIBC, "source": {**GLIBC["source"], "output_hash": None}}
+        sourceless = {**GLIBC, "sources": []}
+        unhashed = {**GLIBC, "sources": [{**GLIBC["sources"][0], "output_hash": None}]}
         for packages, paths, message in (
                 ((APPLICATION,), [GLIBC["outputs"][0]], "no described package"),
                 ((unlicensed,), [GLIBC["outputs"][0]], "no licence"),
@@ -56,6 +56,20 @@ class ClosureNoticeTests(unittest.TestCase):
             with self.subTest(message=message), self.assertRaisesRegex(ValueError, message):
                 notices.attribute(self.catalog(*packages), paths)
 
+    def test_generated_data_retains_each_fixed_source(self):
+        generated = {**GLIBC, "name": "generated-data", "sources": [*GLIBC["sources"],
+                     {"store_path": store("pinned-recipes", "6"), "output_hash": "sha256-BBBB", "urls": []}]}
+        result = notices.attribute(self.catalog(generated), generated["outputs"])
+        self.assertEqual(result["paths"][0]["corresponding_sources"], generated["sources"])
+        rendered = notices.markdown(result)
+        for source in generated["sources"]:
+            self.assertIn(source["store_path"], rendered)
+        for invalid in (None, {}, [None], [{"store_path": None, "output_hash": "fixed"}],
+                        [{"store_path": "/tmp/source", "output_hash": "fixed"}],
+                        [*generated["sources"], {"store_path": store("unfixed"), "output_hash": None}]):
+            with self.subTest(invalid=invalid), self.assertRaisesRegex(ValueError, "corresponding source"):
+                notices.attribute(self.catalog({**generated, "sources": invalid}), generated["outputs"])
+
     def test_unfree_but_redistributable_packages_are_attributed(self):
         firmware = {**APPLICATION, "name": "firmware", "outputs": [store("firmware", "5")],
                     "licenses": [{"spdx": None, "name": "Redistributable firmware", "free": False,
@@ -65,11 +79,14 @@ class ClosureNoticeTests(unittest.TestCase):
     def test_command_writes_json_markdown_and_the_source_list(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / "catalog.json").write_text(json.dumps(self.catalog(GLIBC, APPLICATION)))
+            generated = {**GLIBC, "sources": [*GLIBC["sources"],
+                         {"store_path": store("pinned-recipes", "6"), "output_hash": "sha256-BBBB"}]}
+            (root / "catalog.json").write_text(json.dumps(self.catalog(generated, APPLICATION)))
             (root / "store-paths").write_text("\n".join([APPLICATION["outputs"][0], *GLIBC["outputs"]]) + "\n")
             subprocess.run([sys.executable, "-I", str(SCRIPT), "--catalog", str(root / "catalog.json"),
                             "--store-paths", str(root / "store-paths"), "--out", str(root / "out")], check=True)
-            self.assertEqual((root / "out/corresponding-sources").read_text(), GLIBC["source"]["store_path"] + "\n")
+            self.assertEqual((root / "out/corresponding-sources").read_text(),
+                             "".join(source["store_path"] + "\n" for source in generated["sources"]))
             self.assertIn("LGPL-2.1-or-later", (root / "out/CLOSURE-NOTICES.md").read_text())
             self.assertEqual(len(json.loads((root / "out/closure-notices.json").read_text())["paths"]), 3)
             (root / "store-paths").write_text(store("unknown") + "\n")
@@ -85,7 +102,7 @@ class ClosureNoticeCommandTests(unittest.TestCase):
         from unittest.mock import patch
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            catalog = {"format_version": 1, "nixpkgs_revision": "f" * 40, "application": APPLICATION["outputs"][0],
+            catalog = {"format_version": 2, "nixpkgs_revision": "f" * 40, "application": APPLICATION["outputs"][0],
                        "source_commit": None, "packages": [GLIBC, APPLICATION]}
             (root / "catalog.json").write_text(json.dumps(catalog))
             (root / "paths").write_text(GLIBC["outputs"][0] + "\n")
@@ -98,7 +115,7 @@ class ClosureNoticeCommandTests(unittest.TestCase):
                 self.assertEqual(notices.main(), 1)
             self.assertFalse((root / "refused").exists())
         with self.assertRaisesRegex(ValueError, "unsupported format"):
-            notices.attribute({"format_version": 2, "packages": []}, [])
+            notices.attribute({"format_version": 3, "packages": []}, [])
 
 
 if __name__ == "__main__":

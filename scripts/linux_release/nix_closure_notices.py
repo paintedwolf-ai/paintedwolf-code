@@ -19,7 +19,7 @@ def copyleft(licence: dict) -> bool:
 
 def attribute(catalog: dict, store_paths: list[str]) -> dict:
     """Map each closure path to exactly one described package; unknown or unfree paths refuse."""
-    if catalog.get("format_version") != 1 or not isinstance(catalog.get("packages"), list):
+    if catalog.get("format_version") != 2 or not isinstance(catalog.get("packages"), list):
         raise ValueError("closure catalog has an unsupported format")
     owners = {}
     for package in catalog["packages"]:
@@ -38,17 +38,20 @@ def attribute(catalog: dict, store_paths: list[str]) -> dict:
             raise ValueError(f"{package['name']} ({path}) declares no licence")
         if any(licence.get("free") is False and licence.get("redistributable") is not True for licence in licences):
             raise ValueError(f"{package['name']} ({path}) is not redistributable")
-        source = package.get("source")
+        sources = package.get("sources", [])
         obligated = any(copyleft(licence) for licence in licences)
-        if obligated and not (source and source.get("store_path") and source.get("output_hash")):
+        if obligated and not (isinstance(sources, list) and sources and all(
+                isinstance(source, dict) and isinstance(source.get("store_path"), str)
+                and STORE_PATH.fullmatch(source["store_path"])
+                and isinstance(source.get("output_hash"), str) and source["output_hash"] for source in sources)):
             raise ValueError(f"{package['name']} ({path}) is copyleft without a fixed corresponding source")
         entries.append({"store_path": path, "name": package["name"], "version": package.get("version"),
                         "licenses": licences, "homepage": package.get("homepage"),
-                        "corresponding_source": source if obligated else None,
+                        "corresponding_sources": sources if obligated else [],
                         "nixpkgs_position": package.get("nixpkgs_position")})
     if unknown:
         raise ValueError("closure paths have no described package: " + ", ".join(sorted(unknown)))
-    return {"format_version": 1, "application": catalog["application"],
+    return {"format_version": 2, "application": catalog["application"],
             "nixpkgs_revision": catalog["nixpkgs_revision"], "source_commit": catalog.get("source_commit"),
             "paths": entries}
 
@@ -61,8 +64,8 @@ def markdown(notices: dict) -> str:
              "| Store path | Package | Licences | Corresponding source |", "|---|---|---|---|"]
     for entry in notices["paths"]:
         names = ", ".join(licence.get("spdx") or licence.get("name") or "unknown" for licence in entry["licenses"])
-        source = entry["corresponding_source"]
-        offered = f"`{source['store_path']}` ({source['output_hash']})" if source else ""
+        offered = ", ".join(f"`{source['store_path']}` ({source['output_hash']})"
+                            for source in entry["corresponding_sources"])
         version = f" {entry['version']}" if entry["version"] else ""
         lines.append(f"| `{entry['store_path']}` | {entry['name']}{version} | {names} | {offered} |")
     return "\n".join(lines) + "\n"
@@ -82,8 +85,8 @@ def main() -> int:
     args.out.mkdir(parents=True)
     (args.out / "closure-notices.json").write_text(json.dumps(notices, indent=2) + "\n")
     (args.out / "CLOSURE-NOTICES.md").write_text(markdown(notices))
-    sources = sorted({entry["corresponding_source"]["store_path"] for entry in notices["paths"]
-                      if entry["corresponding_source"]})
+    sources = sorted({source["store_path"] for entry in notices["paths"]
+                      for source in entry["corresponding_sources"]})
     (args.out / "corresponding-sources").write_text("".join(path + "\n" for path in sources))
     return 0
 
