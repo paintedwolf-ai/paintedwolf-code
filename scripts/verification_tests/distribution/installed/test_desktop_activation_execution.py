@@ -25,7 +25,7 @@ class VisibleActivationTests(unittest.TestCase):
         self.process = patch.object(owner, 'process_identity', side_effect=lambda pid: identities[pid])
         self.process.start()
         self.addCleanup(self.process.stop)
-        self.lineage = patch('linux_release.installed_input.lineage.capture', return_value=[ROOT, FRAME])
+        self.lineage = patch('linux_release.installed_input.lineage.capture', return_value=[FRAME, ROOT])
         self.lineage.start()
         self.addCleanup(self.lineage.stop)
 
