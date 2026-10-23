@@ -3,6 +3,7 @@ package projectcontrib
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -257,5 +258,46 @@ func TestInventoryDiscoveryUsesOwnerLifetime(t *testing.T) {
 	i.Close()
 	if err := <-done; !errors.Is(err, context.Canceled) {
 		t.Fatalf("close discovery: %v", err)
+	}
+}
+
+// A burst wider than the dirty set holds is re-read by the directory that
+// contains it, not by walking the whole root again.
+func TestInventoryFoldsAWideBurstIntoItsDirectory(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	testutil.FailErr(t, "canonical root", err)
+	i := NewInventory()
+	t.Cleanup(i.Close)
+	var mu sync.Mutex
+	var walked []string
+	i.walk = func(ctx context.Context, dir string) ([]governance.ResolvedAgentsMD, error) {
+		mu.Lock()
+		walked = append(walked, dir)
+		mu.Unlock()
+		return governance.ListIndex(ctx, dir)
+	}
+	testutil.FailErr(t, "write root guidance", os.WriteFile(filepath.Join(root, "AGENTS.md"), []byte("root"), 0o600))
+	_, err = i.Scan(t.Context(), []string{root})
+	testutil.FailErr(t, "cold scan", err)
+
+	burst := filepath.Join(root, "pkg", "gen")
+	testutil.FailErr(t, "mkdir burst", os.MkdirAll(filepath.Join(burst, "out"), 0o755))
+	testutil.FailErr(t, "write nested guidance", os.WriteFile(filepath.Join(burst, "AGENTS.md"), []byte("nested"), 0o600))
+	paths := make([]string, 0, inventoryPaths+100)
+	for n := range inventoryPaths + 100 {
+		paths = append(paths, filepath.Join("pkg", "gen", "out", fmt.Sprintf("file-%04d.go", n)))
+	}
+	paths = append(paths, filepath.Join("pkg", "gen", "AGENTS.md"))
+	i.changed(t.Context(), repochange.Event{ProjectDir: root, Kind: repochange.WorktreeChanged, Paths: paths})
+	manifest, err := i.Scan(t.Context(), []string{root})
+	testutil.FailErr(t, "scan after burst", err)
+	surface, _ := manifest.Surface(SurfaceAgentsMD)
+	if surface.Count != 2 {
+		t.Fatalf("guidance found = %d, want the burst's new file too", surface.Count)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(walked) != 2 || walked[0] != root || walked[1] == root {
+		t.Fatalf("walks = %v, want the cold walk and one walk below the root", walked)
 	}
 }

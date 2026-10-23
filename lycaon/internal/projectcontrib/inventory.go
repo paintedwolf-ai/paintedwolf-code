@@ -12,6 +12,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/governance"
+	"github.com/lycaon/lycaon/internal/pathfold"
 	"github.com/lycaon/lycaon/internal/protectedpath"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -145,14 +146,18 @@ func (i *Inventory) changed(_ context.Context, ev repochange.Event) {
 				}
 				continue
 			}
-			if len(entry.dirty) >= inventoryPaths {
-				entry.full = true
-				break
-			}
 			entry.dirty[filepath.ToSlash(rel)] = struct{}{}
+		}
+		// A wide burst is re-read by the directories that hold it.
+		if folded, ok := pathfold.Fold(entry.dirty, inventoryPaths, keepEither); ok {
+			entry.dirty = folded
+		} else {
+			entry.full = true
 		}
 	}
 }
+
+func keepEither(a, _ struct{}) struct{} { return a }
 
 func (i *Inventory) read(ctx context.Context, root string, maxAge time.Duration) ([]governance.ResolvedAgentsMD, error) {
 	if err := ctx.Err(); err != nil {
