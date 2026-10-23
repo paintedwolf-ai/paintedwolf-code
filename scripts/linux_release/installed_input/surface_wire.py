@@ -27,11 +27,10 @@ def object_identity(value, root):
 
 
 def proof(value):
-    from .protocol import process_identity
     if not isinstance(value, dict) or set(value) != {'launch', 'engine', 'main', 'surfaces', 'control'}:
         raise ValueError('surface proof has an unknown shape')
     for key in ('launch', 'engine'):
-        process_identity(value[key])
+        lineage.identity(value[key])
     object_identity(value['main'], value['launch'])
     surfaces = value['surfaces']
     if not isinstance(surfaces, list) or not 1 <= len(surfaces) <= 16:
