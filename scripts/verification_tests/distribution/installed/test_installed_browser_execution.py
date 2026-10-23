@@ -69,7 +69,7 @@ class InstalledBrowserTests(unittest.TestCase):
                               {'identity': ENGINE, 'image': [4, 5, 6]}, row]}
         def identity(pid):
             return {5: LAUNCH, 10: ENGINE}[pid]
-        with patch.object(browser_boundary, 'probe_path', return_value=path) as probe, \
+        with patch.object(browser_boundary, 'runtime_image', return_value=(path, {'device': 1, 'inode': 2, 'bytes': 3})) as probe, \
                 patch.object(browser_boundary, 'process_identity', side_effect=identity), \
                 patch.object(browser_boundary.process_tree, 'observe', return_value=tree) as observe:
             self.assertEqual(browser_boundary.observe(binding, ENGINE, LAUNCH), witness())
@@ -81,7 +81,7 @@ class InstalledBrowserTests(unittest.TestCase):
                     mutate()
                     with self.assertRaises(ValueError):
                         browser_boundary.observe(binding, ENGINE, LAUNCH)
-        with patch.object(browser_boundary, 'probe_path', return_value=path), \
+        with patch.object(browser_boundary, 'runtime_image', return_value=(path, {'device': 1, 'inode': 2, 'bytes': 3})), \
                 patch.object(browser_boundary, 'process_identity', return_value=dict(ENGINE, start_time_ticks=31)), \
                 patch.object(browser_boundary.process_tree, 'observe') as observe, self.assertRaises(ValueError):
             browser_boundary.observe(binding, ENGINE, LAUNCH)

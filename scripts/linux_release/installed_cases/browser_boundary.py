@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from . import process_tree
 from .app import process_identity
-from .process import probe_path
+from ..installed_generation import image as runtime_image
 
 NAMES = {'user', 'mnt', 'pid', 'net'}
 CAPS = {'CapInh', 'CapPrm', 'CapEff', 'CapBnd', 'CapAmb'}
@@ -53,8 +53,7 @@ def validate(document: dict, engine: dict, launch: dict, namespaces: dict, uid: 
 
 
 def observe(binding: dict, engine: dict, launch: dict) -> dict:
-    image = probe_path(binding, 'browser-observer')
-    expected = binding['images'][str(image)]
+    _, expected = runtime_image(binding, 'engine-root/browser/chrome-headless-shell')
     if process_identity(engine['pid']) != engine or process_identity(launch['pid']) != launch:
         raise ValueError('browser observation lost its engine or launch identity')
     tree = process_tree.observe(launch)
@@ -89,5 +88,5 @@ def observe(binding: dict, engine: dict, launch: dict) -> dict:
             'capabilities': {**row['capabilities'], 'CapBnd': row['capability_bounding_set']}})
     if process_identity(engine['pid']) != engine or process_identity(launch['pid']) != launch:
         raise ValueError('browser observation changed its engine or launch identity')
-    probe_path(binding, 'browser-observer')
+    runtime_image(binding, 'engine-root/browser/chrome-headless-shell')
     return document
