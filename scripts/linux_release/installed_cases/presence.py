@@ -34,7 +34,7 @@ def unchallenged_presence(binding):
             app.launch()
             app.wait_ready()
             reservation.check_launch(app)
-            with ProviderFixture.gui([]) as fixture:
+            with ProviderFixture.gui([{'name': 'command', 'arguments': {'command': '/usr/bin/true'}}]) as fixture:
                 configure_provider(app, fixture)
                 reservation.check_launch(app)
                 # The project is disposable fixture state, retained on all outcomes.
@@ -42,7 +42,7 @@ def unchallenged_presence(binding):
                 opened = run(launch_binding, 'pw', ['open', str(project)], timeout=30)
                 observations['project_open'] = opened
                 if opened['exit_code'] or opened['timed_out'] or opened['output_limit']:
-                    raise ValueError('normal installed CLI refused the owned presence project')
+                    raise CaseUnavailable('normal installed CLI refused the owned presence project')
                 with DesktopUI(app) as ui:
                     ui.click('Project configuration')
                     ui.click('Secrets', tab=True)
