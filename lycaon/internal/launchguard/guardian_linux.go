@@ -108,14 +108,14 @@ func (state *protectedGuardian) run() int {
 	signal.Notify(signals, unix.SIGTERM, unix.SIGINT, unix.SIGHUP)
 	defer signal.Stop(signals)
 	if err := state.admit(); err != nil {
-		state.writeRetirement(os.Stderr, guardianRetirement{Cause: guardianAdmissionFailed, RoleIndex: -1})
+		state.writeRetirement(guardianDiagnosticStderr{}, guardianRetirement{Cause: guardianAdmissionFailed, RoleIndex: -1})
 		state.retired = true
 		state.failed = true
 	}
 	for {
 		noChildren, err := state.reap()
 		if err != nil {
-			state.writeRetirement(os.Stderr, guardianRetirement{Cause: guardianWaitFailed, RoleIndex: -1})
+			state.writeRetirement(guardianDiagnosticStderr{}, guardianRetirement{Cause: guardianWaitFailed, RoleIndex: -1})
 			state.retired = true
 			state.failed = true
 		}
@@ -128,14 +128,14 @@ func (state *protectedGuardian) run() int {
 				return state.status
 			}
 			// ECHILD alone is insufficient if any authenticated role still lives.
-			state.writeRetirement(os.Stderr, guardianRetirement{Cause: guardianUnsettledChildren, RoleIndex: -1})
+			state.writeRetirement(guardianDiagnosticStderr{}, guardianRetirement{Cause: guardianUnsettledChildren, RoleIndex: -1})
 			state.retired = true
 			state.failed = true
 		}
 		select {
 		case signal := <-signals:
 			if number, ok := signal.(unix.Signal); ok {
-				state.writeRetirement(os.Stderr, guardianRetirement{Cause: guardianSignalReceived, RoleIndex: -1, Signal: int(number)})
+				state.writeRetirement(guardianDiagnosticStderr{}, guardianRetirement{Cause: guardianSignalReceived, RoleIndex: -1, Signal: int(number)})
 			}
 			state.retired = true
 			state.failed = true
@@ -165,7 +165,7 @@ func (state *protectedGuardian) run() int {
 			continue
 		}
 		if observation, err := state.observe(); err != nil {
-			state.writeRetirement(os.Stderr, guardianRetirement{Cause: observation.Cause, RoleIndex: observation.RoleIndex, Observation: &observation})
+			state.writeRetirement(guardianDiagnosticStderr{}, guardianRetirement{Cause: observation.Cause, RoleIndex: observation.RoleIndex, Observation: &observation})
 			state.retired = true
 			if !errors.Is(err, errProtectedDesktopEnded) {
 				state.failed = true
@@ -310,7 +310,7 @@ func (state *protectedGuardian) recordExit(pid int, status unix.WaitStatus) {
 		}
 		state.reaped[index] = true
 		waitStatus := uint32(status)
-		state.writeRetirement(os.Stderr, guardianRetirement{Cause: guardianRootExited, RoleIndex: index, WaitStatus: &waitStatus})
+		state.writeRetirement(guardianDiagnosticStderr{}, guardianRetirement{Cause: guardianRootExited, RoleIndex: index, WaitStatus: &waitStatus})
 		if index != 0 && !state.retired {
 			state.failed = true
 		}

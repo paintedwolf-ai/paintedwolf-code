@@ -4,10 +4,14 @@ package launchguard
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"os/exec"
 	"reflect"
 	"testing"
+	"time"
 
 	"golang.org/x/sys/unix"
 
@@ -82,5 +86,79 @@ func TestGuardianDiagnosticRefusesUnknownOrUnavailableMetadata(t *testing.T) {
 	state.writeRetirement(&output, guardianRetirement{Cause: guardianRootExited, RoleIndex: 2})
 	if output.Len() != 0 || state.retired || state.failed || state.status != 0 {
 		t.Fatal("invalid diagnostic metadata was fabricated or changed lifecycle")
+	}
+}
+
+func TestGuardianDiagnosticSinkFixture(t *testing.T) {
+	if os.Getenv("PW_GUARDIAN_DIAGNOSTIC_SINK_FIXTURE") == "" {
+		return
+	}
+	before, err := unix.FcntlInt(2, unix.F_GETFL, 0)
+	if err != nil {
+		os.Exit(2)
+	}
+	state := diagnosticGuardianFixture()
+	state.recordExit(42, unix.WaitStatus(3<<8))
+	state.recordExit(43, unix.WaitStatus(0))
+	state.recordExit(44, unix.WaitStatus(0))
+	after, err := unix.FcntlInt(2, unix.F_GETFL, 0)
+	if err != nil || before != after || before&unix.O_NONBLOCK != 0 || !state.retired || state.failed || state.status != 3 || state.reaped != [3]bool{true, true, true} {
+		os.Exit(3)
+	}
+	_, _ = os.Stdout.Write([]byte("cleanup-completed\n"))
+	os.Exit(0)
+}
+
+func TestGuardianDiagnosticBrokenOrFullBlockingStderrDoesNotPreventCleanup(t *testing.T) {
+	for _, mode := range []string{"closed", "full", "regular-append"} {
+		t.Run(mode, func(t *testing.T) {
+			var stderr *os.File
+			var regular string
+			if mode == "regular-append" {
+				file, err := os.CreateTemp(t.TempDir(), "diagnostic-")
+				testutil.FailErr(t, "create owned diagnostic file", err)
+				_, err = file.WriteString("existing diagnostic prefix\n")
+				testutil.FailErr(t, "seed diagnostic file", err)
+				_, err = file.Seek(0, 0)
+				testutil.FailErr(t, "position inherited file before existing content", err)
+				stderr, regular = file, file.Name()
+			} else {
+				read, write, err := os.Pipe()
+				testutil.FailErr(t, "create owned stderr pipe", err)
+				t.Cleanup(func() { _ = read.Close() })
+				stderr = write
+				if mode == "closed" {
+					testutil.FailErr(t, "close only the fixture pipe reader", read.Close())
+				} else {
+					pipeFD := int(write.Fd())
+					testutil.FailErr(t, "fill only the fixture pipe without blocking", unix.SetNonblock(pipeFD, true))
+					for {
+						_, err := unix.Write(pipeFD, make([]byte, 4096))
+						if errors.Is(err, unix.EAGAIN) {
+							break
+						}
+						testutil.FailErr(t, "fill bounded fixture stderr pipe", err)
+					}
+					testutil.FailErr(t, "restore inherited blocking stderr before launch", unix.SetNonblock(pipeFD, false))
+				}
+			}
+			t.Cleanup(func() { _ = stderr.Close() })
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestGuardianDiagnosticSinkFixture$")
+			cmd.Env = append(os.Environ(), "PW_GUARDIAN_DIAGNOSTIC_SINK_FIXTURE=1")
+			cmd.Stderr = stderr
+			out, err := cmd.Output()
+			if err != nil || string(out) != "cleanup-completed\n" {
+				t.Fatalf("%s stderr prevented unchanged retirement cleanup: %v %s", mode, err, out)
+			}
+			if regular != "" {
+				raw, err := os.ReadFile(regular)
+				testutil.FailErr(t, "read append-only diagnostic result", err)
+				if !bytes.HasPrefix(raw, []byte("existing diagnostic prefix\n")) || bytes.Count(raw, []byte(`"version":1`)) != 1 {
+					t.Fatalf("diagnostic overwrote content or repeated retirement: %s", raw)
+				}
+			}
+		})
 	}
 }

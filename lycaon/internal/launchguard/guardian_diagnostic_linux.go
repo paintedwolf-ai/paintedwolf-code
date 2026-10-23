@@ -112,3 +112,37 @@ func (state *protectedGuardian) writeRetirement(writer io.Writer, event guardian
 	}
 	_, _ = writer.Write(append(encoded, '\n'))
 }
+
+// Reopening proc-fd creates a separate file description: nonblocking and append
+// flags cannot change another process's inherited stderr. Raw write avoids the
+// os package's special SIGPIPE exit policy for standard streams.
+type guardianDiagnosticStderr struct{}
+
+func (guardianDiagnosticStderr) Write(data []byte) (int, error) {
+	var before, opened, after unix.Stat_t
+	if err := unix.Fstat(2, &before); err != nil {
+		return 0, err
+	}
+	fd, err := unix.Open("/proc/self/fd/2", unix.O_WRONLY|unix.O_APPEND|unix.O_NONBLOCK|unix.O_CLOEXEC, 0)
+	if err != nil {
+		return 0, err
+	}
+	defer unix.Close(fd)
+	if err := unix.Fstat(fd, &opened); err != nil {
+		return 0, err
+	}
+	if err := unix.Fstat(2, &after); err != nil {
+		return 0, err
+	}
+	same := func(left, right unix.Stat_t) bool {
+		return left.Dev == right.Dev && left.Ino == right.Ino && left.Mode == right.Mode && left.Rdev == right.Rdev
+	}
+	if !same(before, opened) || !same(opened, after) {
+		return 0, unix.ESTALE
+	}
+	count, err := unix.Write(fd, data)
+	if count < 0 {
+		count = 0
+	}
+	return count, err
+}
