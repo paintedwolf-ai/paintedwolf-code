@@ -251,6 +251,14 @@ func sourceFUSEReply(opcode uint32, node uint64, input []byte, uid, gid uint32, 
 		}
 		end := min(uint64(len(content)), offset+uint64(binary.LittleEndian.Uint32(input[16:])))
 		return content[offset:end], 0
+	case 17: // STATFS: read-only fixture capacity; mount flags come from the kernel.
+		out := make([]byte, 80)
+		binary.LittleEndian.PutUint64(out, 256)
+		binary.LittleEndian.PutUint64(out[24:], 4)
+		binary.LittleEndian.PutUint32(out[40:], 4096)
+		binary.LittleEndian.PutUint32(out[44:], 255)
+		binary.LittleEndian.PutUint32(out[48:], 4096)
+		return out, 0
 	case 28: // READDIR; the chooser enumerates the real volume directory.
 		if node != 1 || len(input) < 20 {
 			return nil, unix.EINVAL

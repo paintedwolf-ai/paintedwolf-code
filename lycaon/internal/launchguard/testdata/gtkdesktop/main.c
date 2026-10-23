@@ -9,10 +9,10 @@ static int read_volume(const char *path, int require_safe) {
     gchar *content = NULL;
     gsize size = 0;
     struct statvfs facts;
-    if (!g_file_get_contents(path,&content,&size,NULL)) return 0;
+    if (!g_file_get_contents(path,&content,&size,NULL)) { fprintf(stderr,"volume read failed: %s\n",path); return 0; }
     int valid = size == strlen("caller-owned-volume\n") && memcmp(content,"caller-owned-volume\n",size) == 0;
     g_free(content);
-    if (statvfs(path,&facts) != 0) return 0;
+    if (statvfs(path,&facts) != 0) { perror("volume statvfs"); return 0; }
     if (require_safe && (facts.f_flag&(ST_NOEXEC|ST_NOSUID|ST_NODEV)) != (ST_NOEXEC|ST_NOSUID|ST_NODEV)) return 0;
     return valid;
 }
