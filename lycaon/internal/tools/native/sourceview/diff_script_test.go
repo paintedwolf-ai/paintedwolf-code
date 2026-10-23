@@ -24,8 +24,7 @@ func TestDiffScriptComparesTransformedLinesAndBoundsItsStorage(t *testing.T) {
 	if tags.String() != " -+  +" {
 		t.Fatalf("script = %q %+v", tags.String(), ops)
 	}
-	fold := func(a, b string) bool { return strings.EqualFold(a, b) }
-	folded, err := DiffScript(oldLines, newLines, fold, 0)
+	folded, err := DiffScript(oldLines, newLines, strings.EqualFold, 0)
 	if err != nil || len(folded) != 5 || folded[1].Tag != ' ' || folded[1].Old != 1 || folded[1].New != 1 {
 		t.Fatalf("folded = %+v %v", folded, err)
 	}
