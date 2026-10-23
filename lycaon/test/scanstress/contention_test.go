@@ -10,6 +10,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/scan"
 	scancatalog "github.com/lycaon/lycaon/internal/scan/catalog"
+	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -38,6 +39,7 @@ func TestConcurrentScansStayBounded(t *testing.T) {
 	obs := startObserver(t, 250*time.Millisecond)
 	latencies := make([]time.Duration, n)
 	findings := make([]int, n)
+	results := make([]*scanoutput.Result, n)
 	errs := make([]error, n)
 	var wg sync.WaitGroup
 	wallStart := time.Now()
@@ -52,10 +54,7 @@ func TestConcurrentScansStayBounded(t *testing.T) {
 			})
 			latencies[i] = time.Since(start)
 			errs[i] = err
-			if err == nil {
-				requireResourceFindings(t, res, files, matches)
-				findings[i] = res.FindingsCount
-			}
+			results[i] = res
 		}(i)
 	}
 	wg.Wait()
@@ -70,6 +69,8 @@ func TestConcurrentScansStayBounded(t *testing.T) {
 			t.Errorf("concurrent scan %d failed: %v", i, errs[i])
 			continue
 		}
+		requireResourceFindings(t, results[i], files, matches)
+		findings[i] = results[i].FindingsCount
 		if min == 0 || latencies[i] < min {
 			min = latencies[i]
 		}
