@@ -31,7 +31,7 @@ type layoutEntry struct {
 }
 
 type layoutChunk struct {
-	firstPath, id               string
+	firstPath, id, contentID    string
 	entries, totalBytes, hashed int64
 }
 
@@ -153,9 +153,15 @@ func writeLayoutChunk(ctx context.Context, tx *sql.Tx, entries []layoutEntry) (l
 			chunk.hashed++
 		}
 	}
+	chunk.contentID = hex.EncodeToString(hash.Sum(nil))
+	hash.Reset()
+	_, _ = hash.Write([]byte("painted-wolf-source-stored-chunk-v1\x00" + chunk.contentID + "\x00"))
+	for _, entry := range entries {
+		_, _ = hash.Write([]byte(entry.sha256 + "\x00" + entry.gitOID + "\x00" + entry.identity + "\x00" + strconv.FormatInt(entry.modifiedNS, 10) + "\x00"))
+	}
 	chunk.id = hex.EncodeToString(hash.Sum(nil))
-	result, err := tx.ExecContext(ctx, `INSERT INTO source_manifest_chunks (id, entry_count, total_bytes, hashed_count)
-VALUES (?, ?, ?, ?) ON CONFLICT(id) DO NOTHING`, chunk.id, chunk.entries, chunk.totalBytes, chunk.hashed)
+	result, err := tx.ExecContext(ctx, `INSERT INTO source_manifest_chunks (id, content_id, entry_count, total_bytes, hashed_count)
+VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING`, chunk.id, chunk.contentID, chunk.entries, chunk.totalBytes, chunk.hashed)
 	if err != nil {
 		return layoutChunk{}, err
 	}

@@ -24,7 +24,7 @@ VALUES (?, ?, ?);
 SELECT id, entry_count, total_bytes FROM source_manifests WHERE id = ?;
 
 -- name: ListSourceManifestLayout :many
-SELECT l.first_path, l.chunk_id, c.entry_count, c.total_bytes, c.hashed_count
+SELECT l.first_path, l.chunk_id, c.entry_count, c.total_bytes, c.hashed_count, c.content_id
 FROM source_manifest_layout l
 CROSS JOIN source_manifest_chunks c ON c.id = l.chunk_id
 WHERE l.manifest_id = ?
@@ -43,8 +43,8 @@ WHERE l.manifest_id = sqlc.arg(manifest_id)
 ORDER BY l.first_path;
 
 -- name: InsertSourceManifestChunk :execrows
-INSERT INTO source_manifest_chunks (id, entry_count, total_bytes, hashed_count)
-VALUES (?, ?, ?, ?)
+INSERT INTO source_manifest_chunks (id, content_id, entry_count, total_bytes, hashed_count)
+VALUES (?, ?, ?, ?, ?)
 ON CONFLICT(id) DO NOTHING;
 
 -- name: InsertSourceManifestEntry :exec

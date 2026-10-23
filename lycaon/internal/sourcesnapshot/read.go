@@ -300,7 +300,7 @@ func (s *Store) manifestLayout(ctx context.Context, manifest string) ([]manifest
 	out := make([]manifestChunk, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, manifestChunk{
-			firstPath: row.FirstPath, id: row.ChunkID,
+			firstPath: row.FirstPath, id: row.ChunkID, contentID: row.ContentID,
 			entryCount: row.EntryCount, totalBytes: row.TotalBytes, hashed: row.HashedCount,
 		})
 	}

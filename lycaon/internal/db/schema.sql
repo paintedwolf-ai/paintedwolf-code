@@ -3443,6 +3443,7 @@ CREATE INDEX IF NOT EXISTS idx_source_snapshot_roots_manifest
 -- rather than a share of the whole tree.
 CREATE TABLE IF NOT EXISTS source_manifest_chunks (
     id TEXT PRIMARY KEY,
+    content_id TEXT NOT NULL,
     entry_count INTEGER NOT NULL CHECK (entry_count > 0),
     total_bytes INTEGER NOT NULL CHECK (total_bytes >= 0),
     hashed_count INTEGER NOT NULL CHECK (hashed_count >= 0 AND hashed_count <= entry_count)

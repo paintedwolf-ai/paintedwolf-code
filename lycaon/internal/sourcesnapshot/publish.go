@@ -25,8 +25,10 @@ func (s *Store) publish(ctx context.Context, req Request, roots []publishedRoot,
 		CreatedAt:     time.Now().UTC(), Roots: append([]Root(nil), req.Roots...),
 	}
 	manifests := make([]string, len(roots))
+	contentIDs := make([]string, len(roots))
 	for i, root := range roots {
 		manifests[i] = root.manifest.id
+		contentIDs[i] = root.manifest.contentID
 		out.FileCount += int(root.manifest.entryCount)
 		out.TotalBytes += root.manifest.totalBytes
 		out.Boundaries = append(out.Boundaries, root.boundaries...)
@@ -37,7 +39,7 @@ func (s *Store) publish(ctx context.Context, req Request, roots []publishedRoot,
 		}
 		return out.Boundaries[i].Path < out.Boundaries[j].Path
 	})
-	out.MerkleSHA256 = snapshotHash(out.Roots, manifests)
+	out.MerkleSHA256 = snapshotHash(out.Roots, contentIDs)
 	out.ID = out.MerkleSHA256
 
 	tx, err := s.db.BeginTx(ctx, nil)
