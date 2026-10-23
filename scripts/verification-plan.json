@@ -1113,6 +1113,7 @@
     "footprints": {
       "ci.yml": 1,
       "qualification.yml": 3,
+      "qualification-supersession.yml": 1,
       "build-caches.yml": 1,
       "nightly.yml": 2,
       "release.yml": 2,
