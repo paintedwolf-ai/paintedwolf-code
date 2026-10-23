@@ -33,13 +33,18 @@ func TestTopologyRefusalKeepsExactClosedPredicateAndPrivateStatus(t *testing.T) 
 		if status := MountIntakeExitStatus(&intakeMonitorFailure{intakeFailureTopology, err}); status != 100+int(test.predicate) {
 			t.Fatalf("private topology status lost predicate: %d", status)
 		}
-		if MountIntakeExitStatus(err) != 1 || MountIntakeExitStatus(&intakeMonitorFailure{intakeFailureReconcile, err}) != 84 {
+		if MountIntakeExitStatus(err) != 1 || MountIntakeExitStatus(&intakeMonitorFailure{intakeFailureReconcile, err}) != 110+int(test.predicate) ||
+			MountIntakeExitStatus(&intakeMonitorFailure{intakeFailureHeartbeat, err}) != 85 {
 			t.Fatal("parser diagnostic changed another role or failure phase")
 		}
 	}
 	if MountIntakeExitStatus(&intakeMonitorFailure{intakeFailureTopology, unix.EIO}) != 83 ||
 		MountIntakeExitStatus(&intakeMonitorFailure{intakeFailureTopology, &mountTopologyRefusal{predicate: 255}}) != 83 {
 		t.Fatal("unknown topology cause gained a fabricated subtype")
+	}
+	if MountIntakeExitStatus(&intakeMonitorFailure{intakeFailureReconcile, unix.EIO}) != 84 ||
+		MountIntakeExitStatus(&intakeMonitorFailure{intakeFailureReconcile, &mountTopologyRefusal{predicate: 255}}) != 84 {
+		t.Fatal("unknown reconcile cause gained a fabricated topology subtype")
 	}
 	if _, err := parseMountTopology([]byte(root)); err != nil {
 		t.Fatalf("valid complete topology changed admission: %v", err)

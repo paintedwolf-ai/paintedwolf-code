@@ -312,7 +312,9 @@ func TestProtectedLaunchSealsTheDesktopInARootOwnedNamespace(t *testing.T) {
 		t.Fatal("the generation lifetime lock was free while the desktop ran")
 	}
 	t.Logf("desktop_input_close_begin_monotonic_ns=%d", lifecycleMonotonicNS())
-	testutil.FailErr(t, "close desktop input", launch.stdin.Close())
+	if err := launch.stdin.Close(); err != nil {
+		t.Errorf("close desktop input: %v", err)
+	}
 	t.Logf("desktop_input_close_end_monotonic_ns=%d", lifecycleMonotonicNS())
 	waitLaunchEnd(t, launch)
 	testutil.FailErr(t, "generation lock released after the tree ended", sudoFixture(t, "lock-free", f.dir, fixtureHash+"="+f.digest))

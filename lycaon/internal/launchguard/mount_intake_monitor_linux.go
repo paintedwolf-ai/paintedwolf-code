@@ -187,8 +187,13 @@ func MountIntakeExitStatus(err error) int {
 	var failure *intakeMonitorFailure
 	if errors.As(err, &failure) {
 		var topology *mountTopologyRefusal
-		if failure.phase == intakeFailureTopology && errors.As(failure.cause, &topology) && topology.predicate <= topologyCycle {
-			return 100 + int(topology.predicate)
+		if errors.As(failure.cause, &topology) && topology.predicate <= topologyCycle {
+			switch failure.phase {
+			case intakeFailureTopology:
+				return 100 + int(topology.predicate)
+			case intakeFailureReconcile:
+				return 110 + int(topology.predicate)
+			}
 		}
 		switch failure.phase {
 		case intakeFailurePoll, intakeFailureControl, intakeFailureMountInfo, intakeFailureTopology,
