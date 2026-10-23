@@ -1125,6 +1125,7 @@
       "dependency-inventory.yml": 1,
       "release-system-live-test.yml": 1,
       "queue-health.yml": 1,
+      "queue-batching.yml": 1,
       "issue-stale.yml": 1,
       "issue-sweep.yml": 1,
       "issue-intake.yml": 1,
