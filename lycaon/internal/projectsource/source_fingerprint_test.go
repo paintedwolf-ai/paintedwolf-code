@@ -81,14 +81,24 @@ func TestSourceFingerprintRejectsReplacedEntryBeforeReading(t *testing.T) {
 	testutil.FailErr(t, "seed replacement", os.WriteFile(replacement, []byte("must not be read"), 0o640))
 	info, err := os.Lstat(path)
 	testutil.FailErr(t, "stat original", err)
+	memory := testSourceOperationMemory(t)
+	releaseWorking, err := memory.Reserve(t.Context(), 36<<10)
+	testutil.FailErr(t, "admit actual read arena", err)
+	defer releaseWorking()
 	var output bytes.Buffer
-	err = fingerprintSourceEntry(t.Context(), &output, ".", info,
-		func() (*os.File, error) { return os.Open(replacement) },
-		func() (string, error) { t.Fatal("regular file read as symlink"); return "", nil }, newSourceWorkProgress(t.Context(), "verifying"), &sourceTreeAllocation{known: true, memory: testSourceOperationMemory(t)}, make([]byte, 32<<10))
+	page, err := newSourceFingerprintPage(t.Context(), &output,
+		func(string) (*os.File, error) { return os.Open(replacement) },
+		func(string) (string, error) { t.Fatal("regular file read as symlink"); return "", nil }, newSourceWorkProgress(t.Context(), "verifying"), &sourceTreeAllocation{known: true, memory: memory}, make([]byte, 32<<10))
+	testutil.FailErr(t, "construct actual fingerprint page", err)
+	defer page.Close()
+	err = page.Add(".", info)
+	if err == nil {
+		err = page.Flush()
+	}
 	if !errors.Is(err, ErrSourceMutationDiverged) {
 		t.Fatalf("replacement error = %v", err)
 	}
-	if bytes.Contains(output.Bytes(), []byte("must not be read")) {
-		t.Fatal("fingerprint read replacement content")
+	if output.Len() != 0 {
+		t.Fatal("fingerprint published replacement evidence")
 	}
 }

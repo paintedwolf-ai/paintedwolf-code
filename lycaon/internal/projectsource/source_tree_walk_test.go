@@ -28,8 +28,12 @@ func TestBoundedSourceWalkKeepsFingerprintAndManifestBytes(t *testing.T) {
 	for _, name := range []string{"a", "a-", "é", "é/nested", "empty"} {
 		testutil.FailErr(t, "seed directory", os.MkdirAll(filepath.Join(root, name), 0o750))
 	}
-	for _, name := range []string{"a/z", "a-/first", "a0", "é/nested/file", "é0", strings.Repeat("é", 120), strings.Repeat("🐺", 60)} {
-		testutil.FailErr(t, "seed binary", os.WriteFile(filepath.Join(root, name), []byte{0, 255, 42}, 0o640))
+	for i, name := range []string{"a/z", "a-/first", "a0", "é/nested/file", "é0", strings.Repeat("é", 120), strings.Repeat("🐺", 60)} {
+		body := []byte{0, 255, 42}
+		if i%3 == 1 {
+			body = bytes.Repeat(body, 16384)
+		}
+		testutil.FailErr(t, "seed mixed-size binary", os.WriteFile(filepath.Join(root, name), body, 0o640))
 	}
 	testutil.FailErr(t, "seed link", os.Symlink("../a0", filepath.Join(root, "a", "link")))
 	var expected []sourceledger.RecoveryEntry

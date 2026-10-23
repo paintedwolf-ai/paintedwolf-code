@@ -11,7 +11,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/contextio"
 	"github.com/lycaon/lycaon/internal/sourceeffect"
-	"github.com/lycaon/lycaon/internal/sourceledger"
 )
 
 type sourceTreeSize struct {
@@ -45,9 +44,17 @@ func sourceTreeFingerprint(ctx context.Context, path string, memory sourceeffect
 	if info.IsDir() {
 		err = fingerprintSourceDirectory(ctx, hash, path, info, progress, allocation, scratch)
 	} else {
-		err = fingerprintSourceEntry(ctx, hash, ".", info,
-			func() (*os.File, error) { return os.Open(path) },
-			func() (string, error) { return os.Readlink(path) }, progress, allocation, scratch)
+		var page *sourceFingerprintPage
+		page, err = newSourceFingerprintPage(ctx, hash,
+			func(string) (*os.File, error) { return os.Open(path) },
+			func(string) (string, error) { return os.Readlink(path) }, progress, allocation, scratch)
+		if err == nil {
+			defer page.Close()
+			err = page.Add(".", info)
+			if err == nil {
+				err = page.Flush()
+			}
+		}
 	}
 	if err != nil {
 		return "", sourceTreeSize{}, err
@@ -68,39 +75,15 @@ func fingerprintSourceDirectory(ctx context.Context, hash io.Writer, path string
 	if !os.SameFile(info, opened) {
 		return ErrSourceMutationDiverged
 	}
-	return walkSourceTree(ctx, root, ".", allocation.memory, func(current string, entry fs.FileInfo) error {
-		return fingerprintSourceEntry(ctx, hash, current, entry,
-			func() (*os.File, error) { return root.Open(current) },
-			func() (string, error) { return root.Readlink(current) }, progress, allocation, scratch)
-	})
-}
-
-func fingerprintSourceEntry(ctx context.Context, hash io.Writer, rel string, info fs.FileInfo, open func() (*os.File, error), readlink func() (string, error), progress *sourceWorkProgress, allocation *sourceTreeAllocation, scratch []byte) error {
-	if err := allocation.observe(ctx, info); err != nil {
+	page, err := newSourceFingerprintPage(ctx, hash, root.Open, root.Readlink, progress, allocation, scratch)
+	if err != nil {
 		return err
 	}
-	entry := sourceledger.RecoveryEntry{Path: rel, Mode: uint32(info.Mode())}
-	if !info.IsDir() {
-		progress.files++
-	}
-	if info.Mode()&os.ModeSymlink != 0 {
-		target, err := readlink()
-		if err != nil {
-			return err
-		}
-		entry.Link = target
-	} else if info.Mode().IsRegular() {
-		sha, err := fingerprintSourceFile(ctx, info, open, progress, scratch)
-		if err != nil {
-			return err
-		}
-		entry.SHA = sha
-	}
-	if err := writeSourceTreeEntry(hash, entry); err != nil {
+	defer page.Close()
+	if err := walkSourceTree(ctx, root, ".", allocation.memory, page.Add); err != nil {
 		return err
 	}
-	progress.entry()
-	return nil
+	return page.Flush()
 }
 
 func fingerprintSourceFile(ctx context.Context, info fs.FileInfo, open func() (*os.File, error), progress *sourceWorkProgress, scratch []byte) (string, error) {
