@@ -3,7 +3,6 @@ package tools
 import (
 	"context"
 	"crypto/sha256"
-	"fmt"
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/fspath"
@@ -44,7 +43,7 @@ func (tc ToolContext) ReviewFileChanges(ctx context.Context, changes ...FileChan
 		}
 		for _, path := range []string{change.Path, change.FromPath} {
 			if _, policy := tc.AgentPolicyTarget(path); policy {
-				return fmt.Errorf("file change approval is not configured")
+				return &toolrejection.ToolReject{Code: "FILE_CHANGE_APPROVAL_UNAVAILABLE", Data: map[string]any{"path": path}}
 			}
 		}
 	}

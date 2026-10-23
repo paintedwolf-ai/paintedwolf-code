@@ -10,8 +10,10 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
+	"github.com/lycaon/lycaon/internal/sourceeffect"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 )
@@ -96,5 +98,110 @@ func TestOversizeDeleteWithoutReviewerLeavesTreeIntact(t *testing.T) {
 	reject := toolrejection.AsToolReject(r.err)
 	if reject == nil || reject.Code != "SOURCE_RECOVERY_APPROVAL_UNAVAILABLE" || h.absent("tree/a") {
 		t.Fatalf("permanent removal escaped review: result=%+v error=%v", r.result, r.err)
+	}
+}
+
+func TestRecursiveRemoveWithoutPolicyReviewerKeepsNestedInstructions(t *testing.T) {
+	h := newHarness(t, map[string]string{"tree/AGENTS.md": "instructions", "tree/ordinary": "data"})
+	h.tc.Files.FileChangeReview = nil
+	r := h.run("", "rm", "-rf", "tree")
+	var reject *toolrejection.ToolReject
+	if !errors.As(r.err, &reject) || reject.Code != "FILE_CHANGE_APPROVAL_UNAVAILABLE" || r.result.Terminal != toolcontract.ProducerRefused || r.result.EffectCertainty != toolcontract.NoEffect || h.absent("tree") {
+		t.Fatalf("nested instructions removed without policy review: result=%+v error=%v", r.result, r.err)
+	}
+	if got := h.read("tree/AGENTS.md"); got != "instructions" {
+		t.Fatalf("instructions changed: %q", got)
+	}
+}
+
+func TestRecursiveRemoveReviewsNestedInstructionsAndKeepsOneUndo(t *testing.T) {
+	for _, deny := range []bool{false, true} {
+		t.Run(map[bool]string{false: "approved", true: "declined"}[deny], func(t *testing.T) {
+			h := newHarness(t, map[string]string{"tree/AGENTS.md": "instructions", "tree/ordinary": "data"})
+			reviewed := false
+			declined := errors.New("person declined the instruction change")
+			h.tc.Files.FileChangeReview = func(_ context.Context, changes []tools.FileChange) error {
+				for _, change := range changes {
+					if change.Path != h.path("tree/AGENTS.md") {
+						continue
+					}
+					reviewed = true
+					if change.Preview.Operation != "delete" || change.Preview.Before != "instructions" || change.Preview.BeforeBytes != 12 {
+						t.Fatalf("instruction review did not carry actual deletion: %+v", change)
+					}
+					if deny {
+						return declined
+					}
+				}
+				return nil
+			}
+			result := h.run("", "rm", "-rf", "tree")
+			if !reviewed {
+				t.Fatal("instruction change was not reviewed")
+			}
+			if deny {
+				if !errors.Is(result.err, declined) || h.absent("tree") {
+					t.Fatalf("declined tree removed: %+v error=%v", result.result, result.err)
+				}
+				return
+			}
+			if result.err != nil || result.result.Status != 0 || !h.absent("tree") {
+				t.Fatalf("approved removal=%+v error=%v", result.result, result.err)
+			}
+			h.undoAll(1)
+			if h.read("tree/AGENTS.md") != "instructions" || h.read("tree/ordinary") != "data" {
+				t.Fatal("one undo did not restore reviewed tree")
+			}
+		})
+	}
+}
+
+type policyChangeBeforeRemoval struct {
+	sourceeffect.Journal
+	change func()
+}
+
+func (j policyChangeBeforeRemoval) RemoveEntry(ctx context.Context, removal sourceeffect.Removal) (string, error) {
+	j.change()
+	return j.Journal.RemoveEntry(ctx, removal)
+}
+
+func TestRecursiveRemoveRevalidatesInstructionsAfterReview(t *testing.T) {
+	h := newHarness(t, map[string]string{"tree/AGENTS.md": "instructions", "tree/ordinary": "data"})
+	reviewed := false
+	h.tc.Files.FileChangeReview = func(_ context.Context, changes []tools.FileChange) error {
+		for _, change := range changes {
+			if change.Path == h.path("tree/AGENTS.md") {
+				reviewed = true
+			}
+		}
+		return nil
+	}
+	h.tc.Source.SourceMutations = policyChangeBeforeRemoval{Journal: h.service, change: func() {
+		if !reviewed {
+			t.Fatal("removal started before instruction review")
+		}
+		testutil.FailErr(t, "edit instructions after approval", os.WriteFile(h.path("tree/AGENTS.md"), []byte("later edit"), 0o644))
+	}}
+	result := h.run("", "rm", "-rf", "tree")
+	if result.err == nil || h.absent("tree") || h.read("tree/AGENTS.md") != "later edit" {
+		t.Fatalf("stale instruction approval removed changed tree: %+v error=%v", result.result, result.err)
+	}
+}
+
+func TestRecursivePolicyReviewUsesAndReleasesInvocationMemory(t *testing.T) {
+	for _, limits := range []toolcontract.ProgramMemoryLimits{{Working: 1, State: 64 << 20}, {Working: 32 << 20, State: 1}} {
+		h := newHarness(t, map[string]string{"tree/AGENTS.md": "instructions"})
+		memory, err := toolcontract.NewProgramMemory(limits)
+		testutil.FailErr(t, "constrain invocation memory", err)
+		h.program.Memory = memory
+		result := h.run("", "rm", "-rf", "tree")
+		var limit *toolcontract.ProgramMemoryLimitError
+		if !errors.As(result.err, &limit) || h.absent("tree") {
+			t.Fatalf("unadmitted policy capture: %+v error=%v", result.result, result.err)
+		}
+		if use := memory.InUse(); use.Working != 0 || use.State != 0 {
+			t.Fatalf("policy review leaked admission: %+v", use)
+		}
 	}
 }

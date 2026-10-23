@@ -45,7 +45,7 @@ func runRm(inv *invocation) error {
 		if err != nil {
 			return 0, err
 		}
-		result, err := inv.owners.Operations.Delete.Delete(inv.ctx, native.DeleteInput{Paths: []string{bound.Resolved.Abs}, FilesOnly: !recursive, Recursive: recursive, Force: force}, inv.tc)
+		result, err := inv.owners.Operations.Delete.Delete(inv.ctx, native.DeleteInput{Memory: inv.memory, Paths: []string{bound.Resolved.Abs}, FilesOnly: !recursive, Recursive: recursive, Force: force}, inv.tc)
 		return len(result.Deleted), err
 	})
 }
@@ -63,7 +63,7 @@ func runRmdir(inv *invocation) error {
 			inv.fail(operand, "Not a directory")
 			return 0, nil
 		}
-		result, err := inv.owners.Operations.Delete.Delete(inv.ctx, native.DeleteInput{Paths: []string{bound.Resolved.Abs}}, inv.tc)
+		result, err := inv.owners.Operations.Delete.Delete(inv.ctx, native.DeleteInput{Memory: inv.memory, Paths: []string{bound.Resolved.Abs}}, inv.tc)
 		return len(result.Deleted), err
 	})
 }

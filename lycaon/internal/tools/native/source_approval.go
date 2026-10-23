@@ -54,7 +54,7 @@ func verifyHeldMutationSnapshot(ctx context.Context, location fseffect.Location,
 }
 
 func verifyEntrySnapshot(ctx context.Context, location fseffect.Location, expected string, directory bool) error {
-	current, err := captureRemovedEntry(ctx, location, false)
+	current, err := captureRemovedEntry(ctx, location, nil, false)
 	return snapshotMatches(location, current, err, expected, directory)
 }
 

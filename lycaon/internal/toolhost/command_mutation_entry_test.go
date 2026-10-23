@@ -15,9 +15,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectsource"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -34,6 +36,10 @@ func composedMutationEntry(t *testing.T) (*programtest.Fixture, *projectsource.S
 	fixture.Dir = root
 	runtime, err := NewRuntime(RuntimeConfig{ConfigRoot: configlayout.FindModuleRoot(), Catalog: extpackstest.StockCatalog(t)})
 	testutil.FailErr(t, "compose production tool host", err)
+	hints, err := guidance.LoadHintConfigStock()
+	testutil.FailErr(t, "load stock rejection guidance", err)
+	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
+	runtime.Authority.ApplyGuidanceRejects(guidance.NewStaticRejectFormatter(hints))
 	original := fixture.Runtime
 	testutil.FailErr(t, "compose production program services", runtime.Commands.SetProgramServices(ProgramServices{Recorder: fixture.Recorder, Blobs: original.Blobs, Projector: original.Projector, Progress: original.Progress, Sessions: original.Sessions}))
 	runtime.Commands.SetBackgroundRegistry(fixture.Background)
@@ -124,4 +130,29 @@ func runMutationEntryTree(t *testing.T, total int) (copyElapsed, removeElapsed t
 
 func TestComposedMutationEntryCopyRemoveUndo(t *testing.T) {
 	runMutationEntryTree(t, 10)
+}
+
+func TestComposedRecursiveRemovalPreservesPolicyWithoutReviewer(t *testing.T) {
+	fixture, _, _ := composedMutationEntry(t)
+	setup := fixture.Configure
+	fixture.Configure = func(tc *tools.ToolContext) { setup(tc); tc.Files.FileChangeReview = nil }
+	testutil.FailErr(t, "create instruction directory", os.Mkdir(filepath.Join(fixture.Dir, "tree"), 0o755))
+	path := filepath.Join(fixture.Dir, "tree", "AGENTS.md")
+	testutil.FailErr(t, "seed instructions", os.WriteFile(path, []byte("instructions"), 0o644))
+	raw, err := fixture.Call(t, t.Context(), "rm -rf tree")
+	testutil.FailErr(t, "run actual command entry", err)
+	var outcome command.ProgramOutcome
+	testutil.FailErr(t, "decode command outcome", json.Unmarshal([]byte(raw), &outcome))
+	if outcome.StopCode != "FILE_CHANGE_APPROVAL_UNAVAILABLE" || outcome.CompletedEffects != 0 {
+		t.Fatalf("policy refusal lost: %+v", outcome)
+	}
+	if outcome.Refusal == nil || outcome.Refusal.Code != outcome.StopCode || outcome.Refusal.Feedback == "" {
+		t.Fatalf("rendered policy refusal missing: %+v", outcome.Refusal)
+	}
+	t.Logf("rendered policy refusal: %s", outcome.Refusal.Feedback)
+	content, err := os.ReadFile(path)
+	testutil.FailErr(t, "read protected instructions", err)
+	if string(content) != "instructions" {
+		t.Fatalf("instructions changed: %q", content)
+	}
 }

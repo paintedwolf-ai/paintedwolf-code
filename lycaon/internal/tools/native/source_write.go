@@ -260,10 +260,13 @@ func setAsideUnversionedFile(ctx context.Context, tctx tools.ToolContext, target
 	return nil
 }
 
-func removeAgentPath(ctx context.Context, tctx tools.ToolContext, target mutationTarget) error {
-	before, err := captureRemovedEntry(ctx, target.Location, true)
+func removeAgentPath(ctx context.Context, tctx tools.ToolContext, target mutationTarget, memory *toolcontract.ProgramMemory) error {
+	before, err := captureRemovedEntry(ctx, target.Location, memory, true)
 	if err != nil {
 		return err
+	}
+	if before.release != nil {
+		defer before.release()
 	}
 	mutation := agentMutation{Op: api.SourceChangeOpDelete, AbsPath: target.Abs,
 		Before: before.content, BeforeSHA256: before.sha256, BeforeSize: before.size, IsDir: before.isDir}
@@ -362,7 +365,7 @@ func renameAgentPath(ctx context.Context, tctx tools.ToolContext, from, to mutat
 	if err != nil {
 		return err
 	}
-	before, err := captureRemovedEntry(ctx, to.Location, true)
+	before, err := captureRemovedEntry(ctx, to.Location, nil, true)
 	if err != nil {
 		return err
 	}
@@ -397,7 +400,7 @@ func renameAgentPath(ctx context.Context, tctx tools.ToolContext, from, to mutat
 
 // captureRemovedEntry reads the entry itself: a symbolic link is removed as a
 // link, so it carries no content of its own.
-func captureRemovedEntry(ctx context.Context, loc fseffect.Location, retainBody bool) (agentFileEvidence, error) {
+func captureRemovedEntry(ctx context.Context, loc fseffect.Location, memory *toolcontract.ProgramMemory, retainBody bool) (agentFileEvidence, error) {
 	info, err := os.Lstat(filepath.Join(loc.Root, loc.Rel))
 	if os.IsNotExist(err) {
 		return agentFileEvidence{}, nil
@@ -408,7 +411,7 @@ func captureRemovedEntry(ctx context.Context, loc fseffect.Location, retainBody 
 	if info.Mode()&os.ModeSymlink != 0 {
 		return agentFileEvidence{exists: true}, nil
 	}
-	return captureAgentFileAt(loc, ctx, nil, retainBody)
+	return captureAgentFileAt(loc, ctx, memory, retainBody)
 }
 
 // recoverableRemoval is the attributed removal of an entry in an attached

@@ -116,7 +116,7 @@ func TestDeleteRecordsPreImageAndRenameRecordsTip(t *testing.T) {
 
 	deleted := filepath.Join(dir, "deleted.txt")
 	testutil.FailErr(t, "seed deletion", os.WriteFile(deleted, []byte("gone\n"), 0o644))
-	testutil.FailErr(t, "delete", removeAgentPath(t.Context(), tctx, testMutationTarget(deleted)))
+	testutil.FailErr(t, "delete", removeAgentPath(t.Context(), tctx, testMutationTarget(deleted), nil))
 	deletedChanges, err := st.Walk.QueryWalk(t.Context(), "p1",
 		sourceledger.Baseline{Kind: sourceledger.BaselineSession, SessionID: "s1"},
 		10, 0, sourceledger.CommitLens{})

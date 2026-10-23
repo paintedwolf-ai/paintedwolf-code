@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -29,6 +30,7 @@ type deleteResponse struct {
 // as one reviewed, recoverable operation. A tree exceeding the history
 // owner's recovery byte quota requires explicit permanent-removal review. Force skips operands that do not exist.
 type DeleteInput struct {
+	Memory    *toolcontract.ProgramMemory `json:"-"`
 	Paths     []string
 	FilesOnly bool
 	Recursive bool
@@ -71,6 +73,16 @@ func (t *DeleteTool) Run(ctx context.Context, args map[string]any, tctx tools.To
 // Delete performs the complete removal under scope, review and recovery.
 func (t *DeleteTool) Delete(ctx context.Context, in DeleteInput, tctx tools.ToolContext) (DeleteResult, error) {
 	var result DeleteResult
+	if in.Memory == nil {
+		limits, err := toolcontract.CatalogProgramMemoryLimits()
+		if err != nil {
+			return result, err
+		}
+		in.Memory, err = toolcontract.NewProgramMemory(limits)
+		if err != nil {
+			return result, err
+		}
+	}
 	prof := tctx.ProfileID()
 	for _, path := range in.Paths {
 		if err := ctx.Err(); err != nil {
@@ -103,7 +115,7 @@ func (t *DeleteTool) Delete(ctx context.Context, in DeleteInput, tctx tools.Tool
 				return result, &toolrejection.ToolReject{Code: "DELETE_NOT_EMPTY", Data: map[string]any{"path": relSlash, "entries": len(children)}}
 			}
 			if len(children) > 0 {
-				summary, inspectErr := inspectDeleteTree(ctx, t.Boundary, tctx, resolved, prof)
+				summary, inspectErr := inspectDeleteTree(ctx, t.Boundary, tctx, resolved, prof, nil)
 				if inspectErr != nil {
 					return result, inspectErr
 				}
@@ -114,7 +126,9 @@ func (t *DeleteTool) Delete(ctx context.Context, in DeleteInput, tctx tools.Tool
 					displayPath = filepath.ToSlash(resolved.ScopeRel)
 				}
 				if err := removeAgentTree(ctx, tctx, resolvedMutationTarget(resolved), displayPath, summary.bytes, func() error {
-					_, err := inspectDeleteTree(ctx, t.Boundary, tctx, resolved, prof)
+					_, err := inspectDeleteTree(ctx, t.Boundary, tctx, resolved, prof, func(target projectpaths.Resolved) error {
+						return reviewAgentTreePolicyRemoval(ctx, tctx, target, in.Memory)
+					})
 					return err
 				}); err != nil {
 					return result, fmt.Errorf("delete %s: %w", relSlash, err)
@@ -124,7 +138,7 @@ func (t *DeleteTool) Delete(ctx context.Context, in DeleteInput, tctx tools.Tool
 				continue
 			}
 		}
-		if err := removeAgentPath(ctx, tctx, resolvedMutationTarget(resolved)); err != nil {
+		if err := removeAgentPath(ctx, tctx, resolvedMutationTarget(resolved), in.Memory); err != nil {
 			return result, fmt.Errorf("delete %s: %w", relSlash, err)
 		}
 		result.Deleted = append(result.Deleted, relSlash)
@@ -138,9 +152,10 @@ type deleteTreeSummary struct {
 	bytes int64
 }
 
-func inspectDeleteTree(ctx context.Context, b *sandbox.Boundary, tctx tools.ToolContext, root projectpaths.Resolved, prof string) (deleteTreeSummary, error) {
+func inspectDeleteTree(ctx context.Context, b *sandbox.Boundary, tctx tools.ToolContext, root projectpaths.Resolved, prof string, reviewPolicy func(projectpaths.Resolved) error) (deleteTreeSummary, error) {
 	var summary deleteTreeSummary
 	checkPins := len(tctx.Turn.TurnWritePinGlobs) > 0
+	classifyPolicy := confine.AgentPolicyClassifier(tools.ConfineRootsForAction(tctx)...)
 	var walk func(absDir, relDir string) error
 	walk = func(absDir, relDir string) error {
 		if err := ctx.Err(); err != nil {
@@ -160,11 +175,17 @@ func inspectDeleteTree(ctx context.Context, b *sandbox.Boundary, tctx tools.Tool
 					return err
 				}
 			}
-			_, policy := tctx.AgentPolicyTarget(full)
+			_, policy := classifyPolicy(full)
 			_, deniedGit := tools.IsGitInternalsWritePath(childRel)
 			if checkPins || policy || deniedGit || tools.IsSensitivePath(childRel) {
-				if _, err := assertDeleteWritePath(ctx, b, tctx, full, prof); err != nil {
+				target, err := assertDeleteWritePath(ctx, b, tctx, full, prof)
+				if err != nil {
 					return err
+				}
+				if policy && reviewPolicy != nil {
+					if err := reviewPolicy(target); err != nil {
+						return err
+					}
 				}
 			}
 			if info.IsDir() {

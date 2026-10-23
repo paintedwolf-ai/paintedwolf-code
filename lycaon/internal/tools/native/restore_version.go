@@ -222,7 +222,7 @@ func restoreAbsentVersion(
 		return "", fmt.Errorf("read failed: %w", err)
 	}
 
-	if err := removeAgentPath(ctx, tctx, resolvedMutationTarget(resolved)); err != nil {
+	if err := removeAgentPath(ctx, tctx, resolvedMutationTarget(resolved), nil); err != nil {
 		return "", fmt.Errorf("restore absent state for %s: %w", path, err)
 	}
 	captureFileEdit(tctx, path, "", before)
