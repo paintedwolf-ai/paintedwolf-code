@@ -91,7 +91,11 @@ func monitorModuleIntake(spec EntrySpec, plan moduleViewPlan, socket, lifetime i
 	for {
 		watchdog.Reset(mountSourceSetupLimit)
 		fds := []unix.PollFd{{Fd: int32(info.Fd()), Events: unix.POLLPRI | unix.POLLERR}, {Fd: int32(lifetime), Events: unix.POLLIN | unix.POLLHUP | unix.POLLERR}, {Fd: int32(socket), Events: unix.POLLIN}}
-		if _, err := unix.Poll(fds, 100); err != nil {
+		pollWait := 100
+		if pending {
+			pollWait = 0 // An observed topology change already requires reconciliation.
+		}
+		if _, err := unix.Poll(fds, pollWait); err != nil {
 			if errors.Is(err, unix.EINTR) {
 				continue
 			}
