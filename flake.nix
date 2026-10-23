@@ -35,6 +35,7 @@
       packages = eachSystem (system:
         let
           pkgs = packagesFor system;
+          noticesOutputsValid = import ./packaging/nix/closure-notices-check.nix { inherit pkgs; };
           converter = bun2nix.packages.${system}.default;
           frontend = pkgs.callPackage ./packaging/nix/frontend.nix {
             source = self;
@@ -54,7 +55,7 @@
             engine = bound-engine;
             inherit shell bialy document-core resources;
           };
-        in {
+        in assert noticesOutputsValid; {
           engine = pkgs.callPackage ./packaging/nix/engine.nix {
             source = self;
           };
