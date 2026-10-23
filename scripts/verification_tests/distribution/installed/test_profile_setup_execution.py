@@ -92,23 +92,25 @@ class ProfileSetupTests(unittest.TestCase):
 
     def test_explicit_completed_matching_profile_skips_setup_and_requires_fresh_catalog(self):
         app = SimpleNamespace(observations={})
+        fixture = SimpleNamespace(base_url='http://127.0.0.1:41234/v1')
         witness = {'provider_id': 'fixed'}
         state = {'onboarding_completed': True, 'coordinator': REF}
         with patch.object(provider_setup, 'find_gui_provider', return_value=witness), patch.object(
                 provider_setup, 'setup_state', return_value=state), patch.object(
                 provider_setup, 'await_discovery', return_value=witness) as discovery, patch.object(
                 provider_setup, 'DesktopUI') as desktop:
-            self.assertEqual(provider_setup.configure_provider(app, None), witness)
-        discovery.assert_called_once_with(app, None)
+            self.assertEqual(provider_setup.configure_provider(app, fixture), witness)
+        discovery.assert_called_once_with(app, fixture)
         desktop.assert_not_called()
         self.assertEqual(app.observations['provider_setup_state'], state)
 
     def test_completed_foreign_default_is_not_reconfigured_or_treated_as_ready(self):
+        fixture = SimpleNamespace(base_url='http://127.0.0.1:41234/v1')
         for existing, coordinator in ((None, REF), ({'provider_id': 'fixed'}, dict(REF, model='foreign'))):
             with patch.object(provider_setup, 'find_gui_provider', return_value=existing), patch.object(
                     provider_setup, 'setup_state', return_value={'onboarding_completed': True, 'coordinator': coordinator}), patch.object(
                     provider_setup, 'DesktopUI') as desktop, patch.object(provider_setup, 'await_discovery') as discovery:
                 with self.assertRaises(CaseUnavailable):
-                    provider_setup.configure_provider(SimpleNamespace(observations={}), None)
+                    provider_setup.configure_provider(SimpleNamespace(observations={}), fixture)
             desktop.assert_not_called()
             discovery.assert_not_called()
