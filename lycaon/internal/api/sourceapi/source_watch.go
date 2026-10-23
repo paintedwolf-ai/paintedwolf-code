@@ -74,6 +74,7 @@ func (s *Watch) ensureWorkspaceWatch(ctx context.Context, p *project.Project) bo
 	defer finish()
 	bound := s.bindWorkspaceWatch(ctx, p)
 	if bound {
+		resyncWorkspaceWatch(ctx, p)
 		s.scheduleWorkspaceInventory(ctx, p)
 	}
 	s.seedSourceWatch(ctx, p)

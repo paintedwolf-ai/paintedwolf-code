@@ -16,7 +16,17 @@ func (s *Removal) deleteProject(ctx context.Context, id string, force bool, repo
 	if err != nil {
 		return err
 	}
-	defer release()
+	var resumeWatch func()
+	deleted := false
+	defer func() {
+		if resumeWatch != nil {
+			resumeWatch()
+		}
+		release()
+		if resumeWatch != nil && !deleted {
+			s.sourceWatch.ScheduleSourceWatch(context.WithoutCancel(ctx), id)
+		}
+	}()
 	p, err := s.Registry.Get(ctx, id)
 	if err != nil {
 		return err
@@ -45,14 +55,7 @@ func (s *Removal) deleteProject(ctx context.Context, id string, force bool, repo
 	} else if !s.MutationGate.MutationDrained(id) {
 		return project.ErrProjectBusy
 	}
-	resumeWatch, err := s.sourceWatch.SuspendProjectWatch(ctx, id)
-	deleted := false
-	defer func() {
-		resumeWatch()
-		if !deleted {
-			s.sourceWatch.ScheduleSourceWatch(context.WithoutCancel(ctx), id)
-		}
-	}()
+	resumeWatch, err = s.sourceWatch.SuspendProjectWatch(ctx, id)
 	if err != nil {
 		return err
 	}
