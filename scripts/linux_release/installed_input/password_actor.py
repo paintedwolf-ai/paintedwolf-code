@@ -9,12 +9,22 @@ from . import password_wire
 
 class Fixture:
     def __init__(self, actor, pending, private_value):
-        password_wire.request(pending, pending['binding'])
-        if pending['binding']['execution_nonce'] != actor.nonce:
-            raise ValueError('private fixture differs from the captured physical actor execution')
-        self.actor, self.pending = actor, copy.deepcopy(pending)
-        self._value = password_wire.private_secret(private_value)
+        self.actor, self._value = actor, None
+        try:
+            password_wire.request(pending, pending['binding'])
+            if pending['binding']['execution_nonce'] != actor.nonce:
+                raise ValueError('private fixture differs from the captured physical actor execution')
+            self.pending = copy.deepcopy(pending)
+            self._value = password_wire.private_secret(private_value)
+        except BaseException:
+            actor.failed = True
+            raise
         self.count, self.finished, self.entered, self.uncertain = 0, False, False, False
+
+    def _refuse(self):
+        self.actor.failed = True
+        self._value = None
+        raise ValueError('private fixture rejected input and cannot resume')
 
     def __enter__(self):
         self.actor.lock.acquire()
@@ -36,9 +46,10 @@ class Fixture:
             raise
 
     def deliver(self, ordinal):
-        if (not self.entered or self.finished or type(ordinal) is not int
-                or ordinal != self.count or not 0 <= ordinal <= password_wire.SECRET_BYTES):
-            raise ValueError('private fixture delivery is outside its captured one-use ordinal')
+        if (not self.entered or self.finished or self.actor.failed or self.actor.closed
+                or type(ordinal) is not int or ordinal != self.count
+                or not 0 <= ordinal <= password_wire.SECRET_BYTES):
+            self._refuse()
         try:
             self.actor._reserve(password_wire.OPERATION + ':' + self.pending['stage'], ordinal,
                                 password_wire.SECRET_BYTES + 1, self.pending['transaction_id'])
@@ -55,9 +66,15 @@ class Fixture:
             raise
 
     def finish(self):
-        if not self.entered or self.finished or self.count != password_wire.SECRET_BYTES + 1:
-            raise ValueError('private fixture did not complete its fixed physical sequence')
-        self.actor._bounded()
+        if (not self.entered or self.finished or self.actor.failed or self.actor.closed
+                or self.uncertain or self.count != password_wire.SECRET_BYTES + 1):
+            self._refuse()
+        try:
+            self.actor._bounded()
+        except BaseException:
+            self.actor.failed = True
+            self._value = None
+            raise
         self.finished = True
         return self.outcome()
 

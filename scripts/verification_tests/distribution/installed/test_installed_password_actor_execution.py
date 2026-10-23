@@ -74,6 +74,22 @@ class PrivateActorTests(unittest.TestCase):
         self.assertTrue(self.actor.lock.acquire(blocking=False))
         self.actor.lock.release()
 
+    def test_catching_invalid_ordinal_cannot_resume_or_finish_the_transaction(self):
+        fixture = password_actor.Fixture(self.actor, self.pending, self.secret)
+        with self.assertRaises(ValueError):
+            with fixture:
+                fixture.deliver(0)
+                with self.assertRaises(ValueError):
+                    fixture.deliver(0)
+                self.assertTrue(self.actor.failed)
+                self.assertIsNone(fixture._value)
+                with self.assertRaises(ValueError):
+                    fixture.deliver(1)
+                with self.assertRaises(ValueError):
+                    fixture.finish()
+        self.assertEqual(self.actor.command.call_count, 2)
+        self.assertFalse(fixture.outcome()['completed'])
+
     def test_failed_qmp_ack_retains_only_partial_count_and_never_retries_mutation(self):
         self.actor.command.side_effect = [{'id': 3, 'return': {'running': True, 'status': 'running'}},
                                           TimeoutError('fixture acknowledgment unavailable')]
