@@ -100,9 +100,15 @@ func (r *ProgramOutputRetention) Attach(ctx context.Context, program string, out
 	return mappings, nil
 }
 
+// ProgramOutputRead holds the actual scoped reader and its retained byte identity.
+type ProgramOutputRead struct {
+	Reader io.ReadCloser
+	Blob   blobstore.Blob
+}
+
 // Open names an actual durable reference in this session/program. It neither
 // establishes delivered-source evidence nor treats readable bytes as completion.
-func (r *ProgramOutputRetention) Open(ctx context.Context, session, program, reference string) (io.ReadCloser, error) {
+func (r *ProgramOutputRetention) Open(ctx context.Context, session, program, reference string) (*ProgramOutputRead, error) {
 	if r == nil || ctx == nil || session != r.sessionID {
 		return nil, fmt.Errorf("output read requires actual session scope")
 	}
@@ -151,7 +157,11 @@ func (r *ProgramOutputRetention) Open(ctx context.Context, session, program, ref
 	if err = tx.Commit(); err != nil {
 		return nil, err
 	}
-	return entry.body.Open(ctx)
+	reader, err := entry.body.Open(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &ProgramOutputRead{Reader: reader, Blob: entry.reference.Blob}, nil
 }
 
 // Collect rechecks durable references before touching claims. It never closes a

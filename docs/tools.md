@@ -431,7 +431,11 @@ Multi-root calls use explicit root addressing when a relative path is ambiguous.
 `@output/<program>.stdout` and `.stderr` address the invoking chat's retained
 command output copies. Unquoted addresses expand to absolute paths; quoted
 addresses remain literal. The host prepares this folder under its own state,
-outside writable scratch. Sandboxed commands receive read access through the
+outside writable scratch and standard temporary roots. These files are views,
+not authoritative output: retained screened blobs and their size and SHA-256
+identify the bytes. A host `read` repairs a missing or changed view and serves
+the retained bytes. Commands read the current file; changed bytes cannot reuse
+the original source mappings. Sandboxed commands receive read access through the
 standard read-root rules; native writes refuse this read namespace. The command
 result and receipt carry an `output_path` for each retained stream. Head and tail
 windows keep the start and summary visible, and their notice gives the exact next

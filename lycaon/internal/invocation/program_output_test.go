@@ -196,9 +196,9 @@ func TestProgramOutputOmitsUnadmittedMappingsAndKeepsCompleteBody(t *testing.T) 
 				quota.maximum = 1 << 30
 				reader, err := lifetime.Open(t.Context(), f.session, f.program, ref)
 				testutil.FailErr(t, "reopen complete retained body", err)
-				actual, err := io.ReadAll(reader)
+				actual, err := io.ReadAll(reader.Reader)
 				testutil.FailErr(t, "read retained body", err)
-				testutil.FailErr(t, "close retained body", reader.Close())
+				testutil.FailErr(t, "close retained body", reader.Reader.Close())
 				if string(actual) != body {
 					t.Fatal("optional attribution changed bytes")
 				}

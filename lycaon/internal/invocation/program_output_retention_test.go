@@ -43,9 +43,9 @@ func TestProgramOutputLifetimeReconstructsActualClaimsAndKeepsReachableBodies(t 
 	testutil.FailErr(t, "close empty separate session lifetime", foreign.Close(t.Context()))
 	reader, err := lifetime.Open(t.Context(), f.session, f.program, output.Reference)
 	testutil.FailErr(t, "open actual scoped durable output", err)
-	got, err := io.ReadAll(reader)
+	got, err := io.ReadAll(reader.Reader)
 	testutil.FailErr(t, "read complete output beyond preview", err)
-	testutil.FailErr(t, "close actual output reader", reader.Close())
+	testutil.FailErr(t, "close actual output reader", reader.Reader.Close())
 	if string(got) != "screened complete output" {
 		t.Fatal("preview substituted for retained stream")
 	}
@@ -68,7 +68,7 @@ func TestProgramOutputLifetimeReconstructsActualClaimsAndKeepsReachableBodies(t 
 	testutil.FailErr(t, "restore actual durable body and quota", recovered.Restore(t.Context()))
 	reader, err = recovered.Open(t.Context(), f.session, f.program, output.Reference)
 	testutil.FailErr(t, "open exact recovered output", err)
-	testutil.FailErr(t, "close recovered reader", reader.Close())
+	testutil.FailErr(t, "close recovered reader", reader.Reader.Close())
 	_, err = f.database.ExecContext(t.Context(), `DELETE FROM invocation_programs WHERE id=?`, f.program)
 	testutil.FailErr(t, "release actual durable fixture references", err)
 	testutil.FailErr(t, "collect recovered physical body before quota", recovered.Close(t.Context()))
