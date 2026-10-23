@@ -13,7 +13,7 @@ import (
 
 // Source traversal starts at the fixed trust anchor. Every component is opened
 // without following links, checked, and retained until its child is opened.
-func (l layout) runtimeSourceDirectory(name string, custody map[string]KernelObservation) (*os.File, error) {
+func (l layout) runtimeSourceDirectory(name string, snapshot *runtimeSnapshot) (*os.File, error) {
 	relative, err := filepath.Rel(l.anchor, name)
 	if err != nil || relative == ".." || strings.HasPrefix(relative, "../") {
 		return nil, errors.New("runtime capture: source outside trust anchor")
@@ -22,7 +22,7 @@ func (l layout) runtimeSourceDirectory(name string, custody map[string]KernelObs
 	if err != nil {
 		return nil, err
 	}
-	if err := l.recordRuntimeCustody(l.anchor, current, custody); err != nil {
+	if err := l.recordRuntimeCustody(l.anchor, current, snapshot); err != nil {
 		_ = current.Close()
 		return nil, err
 	}
@@ -37,7 +37,7 @@ func (l layout) runtimeSourceDirectory(name string, custody map[string]KernelObs
 			return nil, err
 		}
 		physical = filepath.Join(physical, component)
-		if err := l.recordRuntimeCustody(physical, next, custody); err != nil {
+		if err := l.recordRuntimeCustody(physical, next, snapshot); err != nil {
 			_ = next.Close()
 			_ = current.Close()
 			return nil, err
@@ -59,7 +59,7 @@ func openRuntimeAt(root *os.File, relative string, flags int) (*os.File, error) 
 	return os.NewFile(uintptr(fd), relative), nil
 }
 
-func (l layout) recordRuntimeCustody(name string, file *os.File, custody map[string]KernelObservation) error {
+func (l layout) recordRuntimeCustody(name string, file *os.File, snapshot *runtimeSnapshot) error {
 	info, err := file.Stat()
 	if err != nil {
 		return err
@@ -71,10 +71,15 @@ func (l layout) recordRuntimeCustody(name string, file *os.File, custody map[str
 	if err != nil {
 		return err
 	}
-	if previous, exists := custody[name]; exists && previous != facts {
+	if previous, exists := snapshot.Custody[name]; exists && previous != facts {
 		return errors.New("runtime capture: source ancestry changed during observation")
 	}
-	custody[name] = facts
+	if _, exists := snapshot.Custody[name]; !exists {
+		if err := snapshot.observationRoom(1); err != nil {
+			return err
+		}
+	}
+	snapshot.Custody[name] = facts
 	return nil
 }
 

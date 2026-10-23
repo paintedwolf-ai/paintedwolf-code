@@ -33,10 +33,21 @@ func (l layout) captureRuntime(origins []RuntimeOrigin, target *os.Root) (*captu
 		return nil, err
 	}
 	defer before.Close()
+	selectedBytes, err := admitRuntimeRows(before, len(origins))
+	if err != nil {
+		return nil, err
+	}
+	if target == nil {
+		return nil, errors.New("runtime capture: missing private candidate")
+	}
+	if err := admitRuntimeSpace(target, selectedBytes); err != nil {
+		return nil, err
+	}
 	captured, err := l.copyRuntimeInputs(before, target)
 	if err != nil {
 		return nil, err
 	}
+	before.Close() // Keep facts, release pinned handles before the second walk.
 	after, err := l.observeRuntime(origins)
 	if err != nil {
 		return nil, err
@@ -138,7 +149,7 @@ func (l layout) copyRuntimeInputs(snapshot *runtimeSnapshot, target *os.Root) (*
 }
 
 func (l layout) copyRuntimeFile(name, relative string, input runtimeInput, target *os.Root) (RuntimeSource, error) {
-	source, err := openRuntimeAt(input.root, input.relative, unix.O_RDONLY)
+	source, err := openRuntimeAt(input.root, input.relative, unix.O_RDONLY|unix.O_NONBLOCK|unix.O_NOCTTY)
 	if err != nil {
 		return RuntimeSource{}, err
 	}
@@ -151,7 +162,7 @@ func (l layout) copyRuntimeFile(name, relative string, input runtimeInput, targe
 	if err != nil {
 		return RuntimeSource{}, err
 	}
-	if !opened.Mode().IsRegular() || opened.Size() < 0 || opened.Size() == 1<<63-1 || facts != input.Facts {
+	if !opened.Mode().IsRegular() || opened.Size() < 0 || opened.Size() == 1<<63-1 || opened.Size() != input.Size || facts != input.Facts {
 		return RuntimeSource{}, errors.New("runtime capture: source changed while opening")
 	}
 	output, err := target.OpenFile(relative, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)

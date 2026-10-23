@@ -35,9 +35,13 @@ type runtimeLinkWalk struct {
 // Resolve raw path components in kernel order: a preceding symlink expands
 // before '..'. Lexical cleaning of an unwalked target would select wrong bytes.
 func (l layout) resolveRuntimeLink(name string, origin RuntimeOrigin, snapshot *runtimeSnapshot) (string, error) {
-	anchor, err := l.runtimeSourceDirectory(l.anchor, snapshot.Custody)
+	anchor, err := l.runtimeSourceDirectory(l.anchor, snapshot)
 	if err != nil {
 		return "", err
+	}
+	if len(snapshot.roots)+1 > snapshot.handleLimit {
+		_ = anchor.Close()
+		return "", errors.New("runtime capture: insufficient link-walk descriptor headroom")
 	}
 	walk := runtimeLinkWalk{layout: l, origin: origin, snapshot: snapshot, anchor: runtimeResolvedDirectory{file: anchor, path: l.anchor}, opened: []*os.File{anchor}}
 	defer func() {
@@ -101,12 +105,16 @@ func (w *runtimeLinkWalk) resolve(stack []runtimeResolvedDirectory, parts []stri
 		if err != nil {
 			return runtimeResolvedObject{}, err
 		}
+		if len(w.opened)+len(w.snapshot.roots) >= w.snapshot.handleLimit {
+			_ = child.Close()
+			return runtimeResolvedObject{}, errors.New("runtime capture: link walk exceeds descriptor headroom")
+		}
 		w.opened = append(w.opened, child)
 		physical := filepath.Join(parent.path, component)
 		if len(w.snapshot.Custody) >= RuntimeSealMaxEntries {
 			return runtimeResolvedObject{}, errors.New("runtime capture: link custody exceeds format ceiling")
 		}
-		if err := w.layout.recordRuntimeCustody(physical, child, w.snapshot.Custody); err != nil {
+		if err := w.layout.recordRuntimeCustody(physical, child, w.snapshot); err != nil {
 			return runtimeResolvedObject{}, err
 		}
 		info, err := child.Stat()
@@ -142,6 +150,11 @@ func (w *runtimeLinkWalk) resolve(stack []runtimeResolvedDirectory, parts []stri
 			link := RuntimeLink{Path: physical, Target: target, ResolvedPath: resolved.path, CapturedPath: runtimeViewPath(resolved.path), Origin: w.origin, Observation: &facts}
 			if previous, exists := w.snapshot.Links[physical]; exists && !reflect.DeepEqual(previous, link) {
 				return runtimeResolvedObject{}, errors.New("runtime capture: conflicting source link provenance")
+			}
+			if _, exists := w.snapshot.Links[physical]; !exists {
+				if err := w.snapshot.observationRoom(1); err != nil {
+					return runtimeResolvedObject{}, err
+				}
 			}
 			w.snapshot.Links[physical] = link
 			if index+1 == len(parts) {

@@ -18,15 +18,17 @@ import (
 // Compare the entire selected set before and after copying. This is a bounded
 // package-update consistency check, not an atomic host filesystem snapshot.
 type runtimeSnapshot struct {
-	Inputs  map[string]runtimeInput
-	Custody map[string]KernelObservation
-	Links   map[string]RuntimeLink
-	roots   []*os.File
+	Inputs      map[string]runtimeInput
+	Custody     map[string]KernelObservation
+	Links       map[string]RuntimeLink
+	roots       []*os.File
+	handleLimit int
 }
 
 type runtimeInput struct {
 	Origin                 RuntimeOrigin
 	Facts                  KernelObservation
+	Size                   int64
 	Kind, Target, Resolved string
 	Children               []string
 	root                   *os.File
@@ -37,6 +39,7 @@ func (s *runtimeSnapshot) Close() {
 	for _, root := range s.roots {
 		_ = root.Close()
 	}
+	s.roots = nil
 }
 
 func runtimeFacts(info os.FileInfo) (KernelObservation, error) {
@@ -48,24 +51,40 @@ func runtimeFacts(info os.FileInfo) (KernelObservation, error) {
 }
 
 func (l layout) observeRuntime(origins []RuntimeOrigin) (*runtimeSnapshot, error) {
-	snapshot := &runtimeSnapshot{Inputs: map[string]runtimeInput{}, Custody: map[string]KernelObservation{}, Links: map[string]RuntimeLink{}}
+	if len(origins) > RuntimeSealMaxEntries {
+		return nil, errors.New("runtime capture: too many selected roots")
+	}
+	handleLimit, err := runtimeDescriptorAdmission()
+	if err != nil {
+		return nil, err
+	}
+	snapshot := &runtimeSnapshot{handleLimit: handleLimit, Inputs: map[string]runtimeInput{}, Custody: map[string]KernelObservation{}, Links: map[string]RuntimeLink{}}
 	complete := false
 	defer func() {
 		if !complete {
 			snapshot.Close()
 		}
 	}()
+	seen := map[string]bool{}
+	for _, origin := range origins {
+		if seen[origin.SelectedRoot] {
+			return nil, errors.New("runtime capture: duplicate selected root")
+		}
+		seen[origin.SelectedRoot] = true
+	}
 	for _, origin := range origins {
 		// Nix requires explicit store-root custody and immutable-output proof, never
 		// a reinterpretation of generic provenance as native root authority.
 		if origin.Kind != "native" || origin.StoreRoot != "" || origin.OutputPath != "" || !runtimeAbsolute(origin.SelectedRoot) {
 			return nil, errors.New("runtime capture: unsupported native source authority")
 		}
-		parent, err := l.runtimeSourceDirectory(filepath.Dir(origin.SelectedRoot), snapshot.Custody)
+		parent, err := l.runtimeSourceDirectory(filepath.Dir(origin.SelectedRoot), snapshot)
 		if err != nil {
 			return nil, err
 		}
-		snapshot.roots = append(snapshot.roots, parent)
+		if err := snapshot.retainDirectory(parent); err != nil {
+			return nil, err
+		}
 		if err := l.observeRuntimePath(origin.SelectedRoot, filepath.Base(origin.SelectedRoot), parent, origin, snapshot); err != nil {
 			return nil, err
 		}
@@ -101,7 +120,7 @@ func (l layout) observeRuntimePath(name, relative string, root *os.File, origin 
 		return err
 	}
 	defer func() { _ = selected.Close() }()
-	if err := l.recordRuntimeCustody(name, selected, snapshot.Custody); err != nil {
+	if err := l.recordRuntimeCustody(name, selected, snapshot); err != nil {
 		return err
 	}
 	info, err := selected.Stat()
@@ -112,7 +131,7 @@ func (l layout) observeRuntimePath(name, relative string, root *os.File, origin 
 	if err != nil {
 		return err
 	}
-	item := runtimeInput{Origin: origin, Facts: facts, root: root, relative: relative}
+	item := runtimeInput{Origin: origin, Facts: facts, Size: info.Size(), root: root, relative: relative}
 	switch {
 	case info.IsDir():
 		item.Kind = "directory"
@@ -129,13 +148,19 @@ func (l layout) observeRuntimePath(name, relative string, root *os.File, origin 
 			_ = directory.Close()
 			return errors.New("runtime capture: selected directory changed while opening")
 		}
+		_ = selected.Close() // The retained readable directory now carries custody.
 		// Retaining each opened directory binds every child to the validated walk.
-		snapshot.roots = append(snapshot.roots, directory)
+		if err := snapshot.retainDirectory(directory); err != nil {
+			return err
+		}
 		children, err := readRuntimeChildren(directory, RuntimeSealMaxEntries-len(snapshot.Inputs)-1)
 		if err != nil {
 			return err
 		}
 		item.Children = children
+		if err := snapshot.observationRoom(1); err != nil {
+			return err
+		}
 		snapshot.Inputs[name] = item
 		for _, child := range children {
 			if err := l.observeRuntimePath(filepath.Join(name, child), child, directory, origin, snapshot); err != nil {
@@ -160,6 +185,9 @@ func (l layout) observeRuntimePath(name, relative string, root *os.File, origin 
 		}
 	default:
 		return fmt.Errorf("runtime capture: unsupported source object %q", name)
+	}
+	if err := snapshot.observationRoom(1); err != nil {
+		return err
 	}
 	snapshot.Inputs[name] = item
 	return nil
