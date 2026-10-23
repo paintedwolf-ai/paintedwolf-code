@@ -131,7 +131,8 @@ func RunRetention(ctx context.Context, sqlDB Handle, cfg RetentionConfig) (Reten
 	}
 	rep.BlobFindings = n
 
-	if rep.TotalDeleted() > 0 && cfg.IncrementalVacuumMinFreelistPages > 0 {
+	// Pages freed by any owner, retention or not, are returned to the file system.
+	if cfg.IncrementalVacuumMinFreelistPages > 0 {
 		vacuumed, err := runIncrementalVacuum(ctx, sqlDB, cfg.IncrementalVacuumMinFreelistPages)
 		if err != nil {
 			return rep, err
@@ -141,6 +142,13 @@ func RunRetention(ctx context.Context, sqlDB Handle, cfg RetentionConfig) (Reten
 	return rep, nil
 }
 
+// Each vacuum slice is its own write, so a large freelist drains over a few
+// passes without holding the writer for long.
+const (
+	vacuumSlicePages    = 4096
+	vacuumSlicesPerPass = 16
+)
+
 func runIncrementalVacuum(ctx context.Context, sqlDB Handle, minFreelistPages int64) (bool, error) {
 	var mode int
 	if err := sqlDB.QueryRowContext(ctx, `PRAGMA auto_vacuum`).Scan(&mode); err != nil {
@@ -149,17 +157,21 @@ func runIncrementalVacuum(ctx context.Context, sqlDB Handle, minFreelistPages in
 	if mode != 2 { // SQLite INCREMENTAL mode.
 		return false, nil
 	}
-	var freePages int64
-	if err := sqlDB.QueryRowContext(ctx, `PRAGMA freelist_count`).Scan(&freePages); err != nil {
-		return false, fmt.Errorf("read freelist count: %w", err)
+	vacuumed := false
+	for range vacuumSlicesPerPass {
+		var freePages int64
+		if err := sqlDB.QueryRowContext(ctx, `PRAGMA freelist_count`).Scan(&freePages); err != nil {
+			return vacuumed, fmt.Errorf("read freelist count: %w", err)
+		}
+		if freePages < minFreelistPages {
+			return vacuumed, nil
+		}
+		if _, err := sqlDB.ExecContext(ctx, fmt.Sprintf(`PRAGMA incremental_vacuum(%d)`, vacuumSlicePages)); err != nil {
+			return vacuumed, fmt.Errorf("incremental vacuum store: %w", err)
+		}
+		vacuumed = true
 	}
-	if freePages < minFreelistPages {
-		return false, nil
-	}
-	if _, err := sqlDB.ExecContext(ctx, `PRAGMA incremental_vacuum(1024)`); err != nil {
-		return false, fmt.Errorf("incremental vacuum store: %w", err)
-	}
-	return true, nil
+	return vacuumed, nil
 }
 
 func retentionDisabledByEnv() bool {
