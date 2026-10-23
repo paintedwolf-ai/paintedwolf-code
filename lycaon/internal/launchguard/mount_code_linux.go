@@ -14,6 +14,7 @@ import (
 type moduleCodeRoot struct {
 	path   string
 	object *os.File
+	tree   *os.File
 }
 
 // Retain each exact policy object before projection. A later parent overlay
@@ -51,6 +52,9 @@ func captureModuleCodeRoots(policy GenerationPolicy, desktop *os.File) (_ []modu
 			return nil, fmt.Errorf("retain module policy object: %w", openErr)
 		}
 		roots = append(roots, moduleCodeRoot{path: name, object: object})
+		if err := roots[len(roots)-1].captureTree(); err != nil {
+			return nil, err
+		}
 	}
 	sort.Slice(roots, func(a, b int) bool { return roots[a].path < roots[b].path })
 	generation, err := openRootControlled(policy.LogicalInstallRoot, true)
@@ -59,12 +63,29 @@ func captureModuleCodeRoots(policy GenerationPolicy, desktop *os.File) (_ []modu
 	}
 	// Restore the held generation after any containing library projection.
 	roots = append(roots, moduleCodeRoot{path: policy.LogicalInstallRoot, object: generation})
+	if err := roots[len(roots)-1].captureTree(); err != nil {
+		return nil, err
+	}
 	return roots, nil
+}
+
+// Clone while the selected object still belongs to the current namespace.
+// The detached tree can then be moved after private staging is established.
+func (root *moduleCodeRoot) captureTree() error {
+	tree, err := unix.OpenTree(int(root.object.Fd()), "", unix.OPEN_TREE_CLONE|unix.OPEN_TREE_CLOEXEC|unix.AT_EMPTY_PATH)
+	if err != nil {
+		return fmt.Errorf("clone selected module object %q: %w", root.path, err)
+	}
+	root.tree = os.NewFile(uintptr(tree), "selected-module-projection")
+	return nil
 }
 
 func closeModuleCodeRoots(roots []moduleCodeRoot) {
 	for _, root := range roots {
 		_ = root.object.Close()
+		if root.tree != nil {
+			_ = root.tree.Close()
+		}
 	}
 }
 
@@ -83,11 +104,7 @@ func projectModuleCodeRoots(roots []moduleCodeRoot) error {
 func projectModuleCodeRoot(root moduleCodeRoot) error {
 	// Single-mount cloning preserves the selected object and omits every
 	// descendant mount. Initial volumes have their own detached safe leases.
-	tree, err := unix.OpenTree(int(root.object.Fd()), "", unix.OPEN_TREE_CLONE|unix.OPEN_TREE_CLOEXEC|unix.AT_EMPTY_PATH)
-	if err != nil {
-		return fmt.Errorf("clone selected object: %w", err)
-	}
-	defer func() { _ = unix.Close(tree) }()
+	tree := int(root.tree.Fd())
 	if err := unix.MountSetattr(tree, "", unix.AT_EMPTY_PATH, &unix.MountAttr{Attr_clr: unix.MOUNT_ATTR_NOEXEC, Propagation: unix.MS_PRIVATE}); err != nil {
 		return fmt.Errorf("prepare executable projection: %w", err)
 	}
