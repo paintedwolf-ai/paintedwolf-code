@@ -134,7 +134,11 @@ func superviseGuardianLaunch(lifetime, control *os.File, stagePID int, stageFD i
 		if pollErr != nil && !errors.Is(pollErr, unix.EINTR) {
 			notified = notifyGuardianFailure(notified)
 		}
-		if polls[0].Revents&unix.POLLIN != 0 {
+		// One first diagnostic, optional failure and settlement may already be
+		// queued when the guardian exits. Consume that bounded sequence before
+		// deciding its death lacked settlement; diagnostics cannot create a warning.
+	reports:
+		for count := 0; polls[0].Revents&unix.POLLIN != 0 && count < 3; count++ {
 			report, err := receiveGuardianReport(int(control.Fd()), stagePID, caller)
 			if err != nil {
 				if !errors.Is(err, unix.EAGAIN) {
@@ -142,6 +146,7 @@ func superviseGuardianLaunch(lifetime, control *os.File, stagePID int, stageFD i
 					controlClosed = true
 					_ = unix.PidfdSendSignal(stageFD, unix.SIGTERM, nil, 0)
 				}
+				break reports
 			} else if report.diagnostic != nil {
 				_, _ = (guardianDiagnosticStderr{}).Write(report.diagnostic)
 			} else {
@@ -152,6 +157,7 @@ func superviseGuardianLaunch(lifetime, control *os.File, stagePID int, stageFD i
 				case guardianSettled:
 					settled = true
 					status = int(notice.status)
+					break reports
 				default:
 					notified = notifyGuardianFailure(notified)
 					_ = unix.PidfdSendSignal(stageFD, unix.SIGTERM, nil, 0)
