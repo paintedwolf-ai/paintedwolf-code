@@ -4,6 +4,8 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+
+from ..installed_storage import resolve as storage_for_launch
 import stat
 import re
 import subprocess
@@ -156,7 +158,8 @@ class InstalledApp:
         require_owned_guest(self.binding)
         session = graphical_session()
         environment = session_environment(session)
-        config = Path.home() / ".config/paintedwolf"
+        storage = storage_for_launch(environment)
+        config = storage.config
         daemon = config / "daemon.json"
         if daemon.exists():
             previous = private_json(daemon)
@@ -172,7 +175,7 @@ class InstalledApp:
         self.process = subprocess.Popen([str(path), *self.arguments], env=environment,
             stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
         self.observations.update({"launcher": self.binding["launcher"], "session": session,
-                                  "launch_identity": process_identity(self.process.pid)})
+                                  "launch_identity": process_identity(self.process.pid), "storage": storage.facts()})
 
         def capture(name, stream):
             with stream:
@@ -224,7 +227,7 @@ class InstalledApp:
             return False
         self.require_running()
         self.require_engine()
-        config = Path.home() / ".config/paintedwolf"
+        config = storage_for_launch({"HOME": str(Path.home())}).config
         try:
             return self._bind_engine(private_json(config / "daemon.json"), config)
         except (FileNotFoundError, ProcessLookupError):

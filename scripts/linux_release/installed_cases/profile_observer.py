@@ -4,6 +4,8 @@ from __future__ import annotations
 from contextlib import contextmanager
 import os
 from pathlib import Path
+
+from ..installed_storage import resolve as storage_for_launch
 import re
 import sqlite3
 import stat
@@ -63,7 +65,7 @@ def profile(app):
     image = expected['device'], expected['inode'], expected['bytes']
     if engine_image(engine['pid']) != image:
         raise ValueError('profile observer engine image differs from the installed artifact')
-    directory = Path.home() / '.config/paintedwolf'
+    directory = storage_for_launch({"HOME": str(Path.home())}).config
     for ancestor in (directory.parent, directory.parent.parent):
         info = ancestor.lstat()
         if (not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o022
