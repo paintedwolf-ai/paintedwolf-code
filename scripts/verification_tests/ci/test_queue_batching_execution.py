@@ -219,3 +219,56 @@ class LifecycleTests(unittest.TestCase):
         dispatches = [call for call in api.call_args_list if call.args[0].endswith('/dispatches')]
         self.assertEqual(len(dispatches), 1)
         self.assertIn('/ci.yml/', dispatches[0].args[0])
+
+
+class GitHubBoundaryTests(unittest.TestCase):
+    def test_queue_snapshot_retains_states_and_structured_labels(self):
+        result = {'data': {'repository': {'mergeQueue': {'entries': {'nodes': [
+            {'state': 'QUEUED', 'position': 3, 'pullRequest': {'number': 3, 'labels': {'nodes': [{'name': s.HOLD}]}}}
+        ]}}}}}
+        with patch.object(gh, 'api', return_value=result):
+            self.assertEqual(gh.queue('o/r')[0]['pullRequest']['labels'], [s.HOLD])
+        with patch.object(gh, 'api', return_value={'errors': [{'message': 'denied'}]}):
+            with self.assertRaisesRegex(ValueError, 'denied'):
+                gh.queue('o/r')
+            with self.assertRaisesRegex(ValueError, 'denied'):
+                gh.mutation('enablePullRequestAutoMerge', {})
+
+    def test_batch_discovery_ignores_foreign_repositories_and_noncontroller_authors(self):
+        pull = {'head': {'ref': s.PREFIX + 'id', 'repo': {'full_name': 'o/r'}},
+                'base': {'ref': 'main'}, 'user': {'login': 'github-actions[bot]'}}
+        foreign = deepcopy(pull)
+        foreign['head']['repo']['full_name'] = 'attacker/r'
+        human = deepcopy(pull)
+        human['user']['login'] = 'human'
+        with patch.object(gh, 'pages', return_value=[pull, foreign, human]), patch.object(gh, 'api', return_value=[]):
+            self.assertEqual(gh.batches('o/r'), [pull])
+
+    def test_graphql_mutations_use_structured_inputs_and_capacity_comes_from_the_queue(self):
+        with patch.object(gh, 'api', return_value={}) as api:
+            gh.mutation('markPullRequestReadyForReview', {'pullRequestId': 'id'})
+            self.assertEqual(api.call_args.args[2]['variables']['input'], {'pullRequestId': 'id'})
+        with patch.object(gh, 'graphql', return_value={'mergeQueue': {'configuration': {'maximumEntriesToBuild': 4}}}):
+            self.assertEqual(gh.build_window('o/r'), 4)
+        with patch.object(gh, 'pages', return_value=[{'event': 'removed_from_merge_queue'}]):
+            self.assertTrue(gh.ejected('o/r', 3))
+
+    def test_restore_is_idempotent_for_existing_admission_and_withdrawal_checks_the_head(self):
+        with patch.object(gh, 'api', return_value={'auto_merge': {'enabledAt': 'now'}}), patch.object(gh, 'mutation') as mutation:
+            gh.restore('o/r', row(3))
+            mutation.assert_not_called()
+        with patch('ci_policy.batch_prs.source', return_value={**row(3), 'headRefOid': OTHER}), \
+             patch('ci_policy.batch_prs.withdraw') as withdraw:
+            with self.assertRaisesRegex(ValueError, 'source changed'):
+                gh.withdraw('o/r', row(3))
+            withdraw.assert_not_called()
+        with patch('ci_policy.batch_prs.source', return_value=row(3)), patch('ci_policy.batch_prs.withdraw') as withdraw:
+            gh.withdraw('o/r', row(3))
+            withdraw.assert_called_once_with('o/r', row(3))
+
+    def test_pending_certification_cannot_admit_a_batch(self):
+        runs = [{'name': 'check', 'id': 1, 'status': 'completed', 'conclusion': 'success'}]
+        with patch.object(gh, 'pages', return_value=runs), patch.object(gh, 'api', return_value={'statuses': []}):
+            self.assertEqual(gh.checks('o/r', SHA), 'pending')
+        with patch.object(gh, 'pages', return_value=runs), patch.object(gh, 'api', return_value={'statuses': [{'context': 'DCO-owned', 'state': 'failure'}]}):
+            self.assertEqual(gh.checks('o/r', SHA), 'failed')
