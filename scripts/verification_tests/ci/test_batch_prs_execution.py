@@ -109,7 +109,9 @@ class BatchTests(unittest.TestCase):
         with patch.object(batch, "source", side_effect=[queued, waiting]), patch.object(batch, "api") as api:
             batch.withdraw("owner/repo", ROWS[0])
             self.assertEqual(api.call_count, 2)
-            self.assertIn("dequeuePullRequest", api.call_args_list[0].args[2]["query"])
+            dequeue = api.call_args_list[0].args[2]
+            self.assertIn("dequeuePullRequest(input: {id: $id})", dequeue["query"])
+            self.assertEqual(dequeue["variables"], {"id": queued["id"]})
             self.assertIn("disablePullRequestAutoMerge", api.call_args_list[1].args[2]["query"])
         with patch.object(batch, "source", return_value=ROWS[0]), patch.object(batch, "api") as api:
             batch.withdraw("owner/repo", ROWS[0])

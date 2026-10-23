@@ -39,7 +39,7 @@ def withdraw(repository, row):
         raise ValueError(f"PR #{row['number']} changed before queue withdrawal; batch remains draft")
     if current["mergeQueueEntry"] is not None:
         api("graphql", "POST", {"query": """mutation($id: ID!) {
-          dequeuePullRequest(input: {pullRequestId: $id}) { clientMutationId }
+          dequeuePullRequest(input: {id: $id}) { clientMutationId }
         }""", "variables": {"id": current["id"]}})
         current = source(repository, row["number"])
     if current["autoMergeRequest"] is not None:
