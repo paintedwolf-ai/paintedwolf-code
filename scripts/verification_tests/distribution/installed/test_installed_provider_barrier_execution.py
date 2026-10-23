@@ -11,7 +11,7 @@ from linux_release.installed_cases.records import CaseUnavailable
 
 
 class BarrierTests(unittest.TestCase):
-    def start(self, barrier):
+    def start(self, barrier, *, write_success=True):
         server, peer = socket.socketpair()
         self.addCleanup(server.close)
         self.addCleanup(peer.close)
@@ -20,7 +20,7 @@ class BarrierTests(unittest.TestCase):
         def wait():
             released = barrier.wait(lease)
             results.append(released)
-            barrier.finish(lease, released)
+            barrier.finish(lease, released and write_success)
         thread = threading.Thread(target=wait)
         thread.start()
         def stop():
@@ -74,9 +74,20 @@ class BarrierTests(unittest.TestCase):
             expired.require_held()
 
     def test_real_authenticated_http_request_is_held_then_written_on_release(self):
+        self.http_barrier()
+        calls = [{'name': 'command', 'arguments': {'command': '/usr/bin/true'}}]
+        with ProviderFixture.gui(calls) as previous:
+            endpoint = previous.base_url
+        # The same canonical endpoint and the response barrier must coexist;
+        # recovery cannot silently choose another port or bypass real transport.
+        self.http_barrier(endpoint)
+
+    def http_barrier(self, endpoint=None):
         barrier = ResponseBarrier()
         calls = [{'name': 'command', 'arguments': {'command': '/usr/bin/true'}}]
-        with ProviderFixture.gui(calls, response_barrier=barrier) as fixture:
+        with ProviderFixture.gui(calls, endpoint=endpoint, response_barrier=barrier) as fixture:
+            if endpoint is not None:
+                self.assertEqual(fixture.base_url, endpoint)
             request = {'model': MODEL, 'messages': [{'role': 'user', 'content': 'fixed fixture'}],
                 'tools': [{'type': 'function', 'function': {'name': 'command'}}]}
             results, errors = [], []
@@ -100,6 +111,23 @@ class BarrierTests(unittest.TestCase):
             self.assertEqual(errors, [])
             self.assertEqual(results[0]['choices'][0]['finish_reason'], 'tool_calls')
             self.assertTrue(barrier.await_response_written()['response_written'])
+
+    def test_extra_connection_input_and_failed_response_never_certify_release(self):
+        barrier = ResponseBarrier()
+        _, peer, _, thread = self.start(barrier)
+        peer.sendall(b'extra request bytes')
+        self.assertTrue(barrier.done.wait(2))
+        thread.join(timeout=2)
+        self.assertEqual(barrier.snapshot()['cancellation'], 'unexpected-connection-input')
+        with self.assertRaises(CaseUnavailable):
+            barrier.await_response_written()
+        failed = ResponseBarrier()
+        _, _, _, thread = self.start(failed, write_success=False)
+        failed.release()
+        thread.join(timeout=2)
+        self.assertEqual(failed.snapshot()['cancellation'], 'response-write-failed')
+        with self.assertRaises(CaseUnavailable):
+            failed.await_response_written()
 
     def test_invalid_deadlines_and_uncaptured_holds_refuse(self):
         for value in (0, -1, 181, True, float('nan')):

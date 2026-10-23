@@ -6,14 +6,16 @@ import tempfile
 import time
 
 from .app import InstalledApp
-from .desktop_ui import DesktopUI, interactive_window
+from .desktop_ui import interactive_window
 from .process import run
 from .profile_observer import invocations, project_for_owned_root, sessions_for_project
 from .provider import MODEL, ProviderFixture
 from .records import CaseFailed, CaseUnavailable, retain
 from .desktop_launch import protected_launcher
-from .provider_setup import configure_provider, physical_input
+from .provider_setup import configure_provider
+from .desktop_turn import submit_project_turn
 from .reply_observer import committed_reply
+from .provider_recovery import load as load_provider_recovery
 
 def await_reply(app, project, provider_id, *, selected_session=None):
     deadline = time.monotonic() + 90
@@ -48,9 +50,13 @@ def execute(binding, capability, case, root):
     # This case changes only its disposable guest profile via normal UI actions.
     # Preserve the fixture project so a failed restart remains diagnosable.
     project = Path(tempfile.mkdtemp(prefix='reply-project-', dir=root))
-    app = restarted = None
+    app = restarted = fixture = None
     try:
-        with ProviderFixture.gui([{'name': 'command', 'arguments': {'command': '/usr/bin/true'}}]) as fixture:
+        recovery = load_provider_recovery(binding)
+        if recovery is not None:
+            observations['provider_recovery'], streams['provider-registration'] = recovery
+        with ProviderFixture.gui([{'name': 'command', 'arguments': {'command': '/usr/bin/true'}}],
+                                 endpoint=recovery[0]['endpoint'] if recovery is not None else None) as fixture:
             app = InstalledApp(launch_binding)
             with app:
                 observations['launch_before'] = app.observations
@@ -59,9 +65,7 @@ def execute(binding, capability, case, root):
                 opened = run(binding, 'pw', ['open', str(project)], timeout=30)
                 if opened['exit_code'] or opened['timed_out'] or opened['output_limit']:
                     raise ValueError('installed CLI refused the fixed reply project')
-                with DesktopUI(app) as ui:
-                    physical_input(app, ui, 'Describe your idea', 'reply-fixture-prompt-v1')
-                    ui.click('Start')
+                submit_project_turn(app)
                 before = await_reply(app, project, provider['provider_id'])
                 if not any(row['completed'] for row in fixture.observations):
                     raise ValueError('fixture never completed the full engine turn')
@@ -73,9 +77,17 @@ def execute(binding, capability, case, root):
                 if after != before or restarted.observations['engine_identity'] == app.observations['engine_identity']:
                     raise ValueError('restart changed the fixed reply or reused the previous engine')
                 observations.update(reply_after=after, launch_after=restarted.observations,
-                                    provider_requests=list(fixture.observations), durable_reply=True)
+                                    provider_requests=list(fixture.observations), durable_reply=True,
+                                    provider_discovery=list(fixture.discovery_observations),
+                                    provider_transport={'requests': list(fixture.transport_observations),
+                                                        'clipped': fixture.transport_clipped})
             streams.update({'after-' + key: value for key, value in restarted.streams().items()})
     except (OSError, ValueError, TypeError) as error:
+        if fixture is not None:
+            observations['provider_discovery'] = list(fixture.discovery_observations)
+            observations['provider_transport'] = {'requests': list(fixture.transport_observations),
+                                                  'clipped': fixture.transport_clipped}
+            observations['provider_requests'] = list(fixture.observations)
         for label, instance in (('before', app), ('after', restarted)):
             if instance is not None:
                 observations['launch_' + label] = instance.observations

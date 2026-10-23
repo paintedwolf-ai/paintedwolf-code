@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import hashlib
 import re
 from pathlib import Path
 import selectors
@@ -36,7 +37,7 @@ def run_managed(bridge, command, output):
     return process.returncode
 
 
-def delivery_records(directory):
+def delivery_records(directory, execution, vm_id):
     import json
     records, operations = [], []
     cases = [('conversation/restart-and-reconnect', 'reply'), ('files/edit-search-review', 'editor'),
@@ -47,21 +48,38 @@ def delivery_records(directory):
             continue
         if leaf.stat().st_size > 1 << 20:
             raise ValueError('native input guest observations exceed their case bound')
-        observations = json.loads(leaf.read_bytes())['observations']
+        document = json.loads(leaf.read_bytes())
+        observations = document['observations']
         if kind in {'reply', 'workspace'}:
             launch = 'launch_before' if kind == 'reply' else 'launch'
             selected = observations.get(launch, {}).get('fixed_input', [])
-            if not isinstance(selected, list) or len(selected) > 4:
+            recovery = observations.get('provider_recovery')
+            input_limit = 1 if recovery is not None else 4
+            if not isinstance(selected, list) or len(selected) > input_limit:
                 raise ValueError('reply input exceeds its fixed transaction count')
             partial = observations.get('native_input')
             provider_partial = (kind == 'workspace' and partial is not None
-                and len(selected) < 4 and not observations.get('transitions'))
+                and len(selected) < input_limit and not observations.get('transitions'))
             if partial is not None and (kind == 'reply' or provider_partial):
                 selected = [*selected, partial]
-            if len(selected) > 4:
+            if len(selected) > input_limit:
                 raise ValueError('reply input exceeds its fixed transaction count')
+            order = ('provider-name-v1', None, 'provider-fixture-credential-v1', 'reply-fixture-prompt-v1')
+            if recovery is not None:
+                from ..installed_cases.provider_recovery import registered
+                prior = leaf.with_name('provider-registration.bin')
+                if prior.stat().st_size > 1 << 20:
+                    raise ValueError('provider registration recovery exceeds its retained bound')
+                raw = prior.read_bytes()
+                binding = {'artifact': document['artifact'], 'source_commit': execution['source_commit'],
+                           'native_input': {'binding': execution, 'vm_id': vm_id}}
+                account = observations.get(launch, {}).get('session', {}).get('User')
+                admitted = registered(json.loads(raw), binding, account)
+                if recovery != {**admitted, 'prior_execution_sha256': hashlib.sha256(raw).hexdigest()} or len(selected) > 1:
+                    raise ValueError('provider recovery differs from its retained registration and fixed input order')
+                order = ('reply-fixture-prompt-v1',)
             for index, record in enumerate(selected):
-                operation = ('provider-name-v1', None, 'provider-fixture-credential-v1', 'reply-fixture-prompt-v1')[index]
+                operation = order[index]
                 if operation is None:
                     operation = record.get('operation') if isinstance(record, dict) else None
                     if not isinstance(operation, str) or not re.fullmatch(r'provider-endpoint-v1-[0-9]{4,5}', operation):
@@ -78,7 +96,7 @@ def delivery_records(directory):
                 expected = ('workspace-open-peer-v1', 'workspace-hide-main-v1',
                     'workspace-request-quit-v1', 'workspace-cancel-quit-v1',
                     'workspace-request-quit-v1', 'workspace-focus-quit-v1', 'workspace-approve-quit-v1')
-                if len(transitions) > len(expected) or transitions and len(selected) != 4:
+                if len(transitions) > len(expected) or transitions and len(selected) != input_limit:
                     raise ValueError('workspace input exceeds or precedes its declared physical sequence')
                 records.extend(transitions)
                 operations.extend(expected[:len(transitions)])
@@ -107,7 +125,7 @@ def verify_deliveries(directory, execution, selected):
     if path.stat().st_size > MAX_LOG:
         raise ValueError('native input delivery log exceeds its bound')
     rows = [decode(raw) for raw in path.read_bytes().splitlines()]
-    records, operations = delivery_records(directory)
+    records, operations = delivery_records(directory, execution, selected['vm_id'])
     if len(records) != len(operations) or any(not isinstance(record, dict) for record in records):
         raise ValueError('native input has unexpected fixed transactions')
     if sum(len(record.get('events', [])) for record in records) != len(rows):

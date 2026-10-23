@@ -10,7 +10,9 @@ from .process import run
 from .profile_observer import project_for_owned_root, sessions_for_project
 from .provider import MODEL, ProviderFixture
 from .provider_barrier import ResponseBarrier
-from .provider_setup import configure_provider, physical_input
+from .provider_setup import configure_provider
+from .desktop_turn import submit_project_turn
+from .provider_recovery import load as load_provider_recovery
 from .records import CaseFailed, CaseUnavailable, retain
 from ..installed_input.surface import FrameObserver
 from ..installed_input.surface_guest import perform_transition
@@ -61,8 +63,12 @@ def execute(binding, capability, case, root):
         # Transport latency is controlled independently; product activity still
         # requires the captured engine's typed busy session facts below.
         calls = [{'name': 'command', 'arguments': {'command': '/usr/bin/true'}}]
+        recovery = load_provider_recovery(binding)
+        if recovery is not None:
+            observations['provider_recovery'], streams['provider-registration'] = recovery
         barrier = ResponseBarrier()
-        with ProviderFixture.gui(calls, response_barrier=barrier) as fixture:
+        with ProviderFixture.gui(calls, response_barrier=barrier,
+                endpoint=recovery[0]['endpoint'] if recovery is not None else None) as fixture:
             app = InstalledApp(launch_binding)
             with app:
                 observations['launch'] = app.observations
@@ -71,9 +77,8 @@ def execute(binding, capability, case, root):
                 opened = run(binding, 'pw', ['open', str(project)], timeout=30)
                 if opened['exit_code'] or opened['timed_out'] or opened['output_limit']:
                     raise ValueError('installed CLI refused the owned workspace project')
+                submit_project_turn(app)
                 with DesktopUI(app) as ui:
-                    physical_input(app, ui, 'Describe your idea', 'reply-fixture-prompt-v1')
-                    ui.click('Start')
                     deadline = time.monotonic() + 30
                     while active_session(app, project, provider['provider_id']) is None:
                         if time.monotonic() >= deadline:
@@ -109,13 +114,13 @@ def execute(binding, capability, case, root):
                         transition('workspace-approve-quit-v1')
                         observations['provider_cancelled_by_quit'] = barrier.await_peer_cancellation()
                 observations['provider_requests'] = list(fixture.observations)
-            streams = app.streams()
+            streams.update(app.streams())
     except (OSError, ValueError, TypeError) as error:
         if barrier is not None:
             observations['provider_response_control'] = barrier.snapshot()
         if app is not None:
             observations['launch'] = app.observations
-            streams = app.streams()
+            streams.update(app.streams())
         failure = error if isinstance(error, CaseUnavailable) else CaseFailed('normal workspace activation or Quit failed')
         failure.observations = {**observations, **getattr(error, 'observations', {}),
             'failure_type': type(error).__name__, 'failure_detail': str(error)[:512]}
