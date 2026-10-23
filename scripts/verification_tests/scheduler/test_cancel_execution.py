@@ -281,7 +281,11 @@ class LifecycleTests(unittest.TestCase):
             "def facts(pid):\n"
             "    fields = Path(f'/proc/{pid}/stat').read_text().rsplit(')', 1)[1].split()\n"
             "    return {'pid': pid, 'state': fields[0], 'start': fields[19]}\n"
-            + ("while facts(child)['state'] != 'Z': time.sleep(.01)\n" if mode == "zombie" else "")
+            + ("deadline = time.monotonic() + 20\n"
+               "while facts(child)['state'] != 'Z':\n"
+               "    if stop.exists() or time.monotonic() >= deadline:\n"
+               "        os.kill(child, 9); os.waitpid(child, 0); os._exit(1)\n"
+               "    time.sleep(.01)\n" if mode == "zombie" else "")
             + "temporary = ready.with_suffix('.tmp')\n"
             "temporary.write_text(json.dumps({'caretaker': facts(os.getpid()), 'child': facts(child)}))\n"
             "temporary.replace(ready)\n"
@@ -302,24 +306,36 @@ class LifecycleTests(unittest.TestCase):
         pins = []
         def settle_descendants():
             stop.touch()
-            for pin in pins:
-                poll = select.poll()
-                poll.register(pin, select.POLLIN)
-                if not poll.poll(5000):
-                    try:
-                        signal.pidfd_send_signal(pin, signal.SIGKILL)
-                    except ProcessLookupError:
-                        pass
-                    self.assertTrue(poll.poll(5000), "owned fixture descendant did not exit")
-            for pin in pins:
-                os.close(pin)
+            try:
+                for pin in pins:
+                    poll = select.poll()
+                    poll.register(pin, select.POLLIN)
+                    if not poll.poll(5000):
+                        try:
+                            signal.pidfd_send_signal(pin, signal.SIGKILL)
+                        except ProcessLookupError:
+                            pass
+                        self.assertTrue(poll.poll(5000), "owned fixture descendant did not exit")
+            finally:
+                for pin in pins:
+                    os.close(pin)
 
         self.addCleanup(settle_descendants)
         for record in observed.values():
-            pin = os.pidfd_open(record["pid"])
-            pins.append(pin)
-            fields = Path(f"/proc/{record['pid']}/stat").read_text().rsplit(")", 1)[1].split()
-            self.assertEqual(fields[19], record["start"], "descendant changed during pidfd capture")
+            directory = os.open(f"/proc/{record['pid']}", os.O_RDONLY | os.O_DIRECTORY)
+            pin = None
+            try:
+                pin = os.pidfd_open(record["pid"])
+                descriptor = os.open("stat", os.O_RDONLY, dir_fd=directory)
+                with os.fdopen(descriptor) as stream:
+                    fields = stream.read().rsplit(")", 1)[1].split()
+                self.assertEqual(fields[19], record["start"], "descendant changed during pidfd capture")
+                pins.append(pin)
+                pin = None
+            finally:
+                if pin is not None:
+                    os.close(pin)
+                os.close(directory)
         return running, observed, stop
 
     @unittest.skipUnless(sys.platform == "linux", "requires Linux pidfds and observable zombie state")
@@ -327,7 +343,13 @@ class LifecycleTests(unittest.TestCase):
         running, observed, _ = self.descendant_fixture("zombie")
         zombie = observed["child"]["pid"]
         self.assertEqual(observed["child"]["state"], "Z")
-        self.assertEqual(list(Path(f"/proc/{zombie}/fd").iterdir()), [])
+        exited = select.poll()
+        pin = os.pidfd_open(zombie)
+        try:
+            exited.register(pin, select.POLLIN)
+            self.assertTrue(exited.poll(0), "zombie thread group has not finished exiting")
+        finally:
+            os.close(pin)
         ticket = self.queue.status()["runs"][0]["ticket"]
         result = self.invoke(ticket, "--reason", "owned zombie has closed its lease", "--force")
         self.assertEqual(result.returncode, 0, result.stderr)
