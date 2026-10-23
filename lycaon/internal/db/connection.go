@@ -110,7 +110,7 @@ func OpenWithOptions(ctx context.Context, dbPath string, hooks UpgradeHooks, opt
 		auditDue = !clean
 		if err := prepareAuditState(ctx, writer, auditDue); err != nil {
 			_ = writer.Close()
-			return nil, storeIncompatible(RecoveryReasonIntegrityFailed, SchemaVersion, err.Error())
+			return nil, ClassifyStoreFailure(err)
 		}
 	}
 	if err := markShutdownState(ctx, writer, false); err != nil {

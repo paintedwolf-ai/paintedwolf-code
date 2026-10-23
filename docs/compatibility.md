@@ -43,7 +43,7 @@ The SQL registry transforms database contents only. Archive manifests, local rec
 
 Release rehearsal requires a healthy candidate whose semantic content survives ordinary APIs, a second startup, and restoration of the released archive into another configuration root. The retained-history fixture covers transcript content, preferences, a durable approval grant, artifact media, source versions, checkpoint pre-images, a completed worker's baseline and overlay, and collaborative editing state (host draft and saved base, CRDT checkpoint and pending update, undo/redo, authorship, save receipts and reservations), which both the host and the shipped editor codecs read. An incompatible released fixture entering recovery fails the gate; separate tests prove non-destructive refusal of unsupported or corrupt stores, and synthetic migrations exercise skipped revisions, snapshot failure, cancellation, and rollback without adding obsolete production readers.
 
-A store this build cannot open at all — damaged bytes, an unreadable journal, a permission or IO failure — is refused into the same recovery surface rather than returned as a plain start failure, because restore and start fresh are the actions that resolve it.
+Confirmed damage offers recovery actions. Capacity, permission, and I/O failures offer retry without suggesting that the user discard or restore intact history.
 
 Recovery details are in [SQL persistence](sql-persistence.md).
 
