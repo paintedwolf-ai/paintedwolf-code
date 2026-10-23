@@ -10,7 +10,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-const copyPageEntries = 32
+const copyPageEntries = 64
 
 type copyPageEntry struct {
 	pair   FilePair
