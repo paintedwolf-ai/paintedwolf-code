@@ -145,13 +145,15 @@ class ReplyRestartTests(unittest.TestCase):
         with self.assertRaises(owner.CaseUnavailable):
             owner.physical_input(SimpleNamespace(binding={}), None, 'Describe your idea', 'reply-fixture-prompt-v1')
 
-    def execute(self, root, *, after=None, completed=True, same_engine=False):
+    def execute(self, root, *, after=None, completed=True, same_engine=False, launch_error=None):
         before = {'session_id': SESSION, 'content_blob_sha256': observer.DIGEST}
         apps = [MagicMock(), MagicMock()]
         for i, app in enumerate(apps):
             app.__enter__.return_value = app
             app.observations = {'engine_identity': {'pid': 1 if same_engine else i + 1}}
             app.streams.return_value = {}
+        if launch_error is not None:
+            apps[0].__enter__.side_effect = ValueError(launch_error)
         fixture, ui = MagicMock(), MagicMock()
         fixture.__enter__.return_value = fixture
         fixture.observations = [{'completed': completed}]
@@ -184,3 +186,10 @@ class ReplyRestartTests(unittest.TestCase):
             with self.subTest(changes=changes), tempfile.TemporaryDirectory() as directory:
                 with self.assertRaises(ValueError):
                     self.execute(Path(directory), **changes)
+
+    def test_failed_context_entry_retains_partial_launch_and_diagnostic(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaises(owner.CaseFailed) as failed:
+                self.execute(Path(directory), launch_error='fixed launch admission failed')
+        self.assertEqual(failed.exception.observations['failure_detail'], 'fixed launch admission failed')
+        self.assertEqual(failed.exception.observations['launch_before']['engine_identity'], {'pid': 1})

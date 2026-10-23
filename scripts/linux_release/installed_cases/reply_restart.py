@@ -98,7 +98,8 @@ def execute(binding, capability, case, root):
     app = restarted = None
     try:
         with ProviderFixture.gui([{'name': 'command', 'arguments': {'command': '/usr/bin/true'}}]) as fixture:
-            with InstalledApp(launch_binding) as app:
+            app = InstalledApp(launch_binding)
+            with app:
                 observations['launch_before'] = app.observations
                 observations['interactive'] = interactive_window(app)
                 provider = configure_provider(app, fixture)
@@ -113,7 +114,8 @@ def execute(binding, capability, case, root):
                     raise ValueError('fixture never completed the full engine turn')
                 observations.update(reply_before=before, launch_before=app.observations)
             streams.update({'before-' + key: value for key, value in app.streams().items()})
-            with InstalledApp(launch_binding) as restarted:
+            restarted = InstalledApp(launch_binding)
+            with restarted:
                 after = await_reply(restarted, project, provider['provider_id'], selected_session=before['session_id'])
                 if after != before or restarted.observations['engine_identity'] == app.observations['engine_identity']:
                     raise ValueError('restart changed the fixed reply or reused the previous engine')
@@ -123,10 +125,11 @@ def execute(binding, capability, case, root):
     except (OSError, ValueError, TypeError) as error:
         for label, instance in (('before', app), ('after', restarted)):
             if instance is not None:
+                observations['launch_' + label] = instance.observations
                 streams.update({label + '-' + key: value for key, value in instance.streams().items()})
         failure = error if isinstance(error, CaseUnavailable) else CaseFailed('protected reply or restart did not complete')
         failure.observations = {**observations, **getattr(error, 'observations', {}),
-                                'failure_type': type(error).__name__}
+                                'failure_type': type(error).__name__, 'failure_detail': str(error)[:512]}
         failure.streams = streams
         raise failure from None
     return retain(binding, capability, case, root, 'passed', observations, streams)

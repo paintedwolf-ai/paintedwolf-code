@@ -87,6 +87,64 @@ class NativeInputMailboxTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     mailbox.serve(self.execution, 'owned-fedora')
 
+    def test_server_waits_only_for_initial_atomic_binding_publication(self):
+        class Input:
+            def __init__(self, actions):
+                self.buffer = self
+                self.actions = iter(actions)
+            def readline(self, _limit):
+                action = next(self.actions, None)
+                if action is None:
+                    return b''
+                action()
+                return b'{"operation":"poll"}\n'
+        with tempfile.TemporaryDirectory() as directory:
+            selected = mailbox.Mailbox(self.execution, 'owned-fedora')
+            selected.path = Path(directory) / 'mailbox'
+            selected.path.mkdir(mode=0o700)
+            def publish():
+                selected.write('binding.json', {'format_version': 1,
+                    'binding': self.execution, 'vm_id': 'owned-fedora'})
+            output = SimpleNamespace(buffer=io.BytesIO())
+            with patch.object(mailbox, 'Mailbox', return_value=selected), \
+                    patch.object(mailbox.sys, 'stdin', Input([lambda: None, publish,
+                        lambda: (selected.path / 'binding.json').unlink()])), \
+                    patch.object(mailbox.sys, 'stdout', output):
+                with self.assertRaises(ValueError):
+                    mailbox.serve(self.execution, 'owned-fedora')
+            self.assertEqual([mailbox.decode(row) for row in output.buffer.getvalue().splitlines()],
+                             [{'state': 'waiting'}, {'state': 'waiting'}])
+
+    def test_present_wrong_binding_and_replaced_publication_are_refused(self):
+        class Input:
+            def __init__(self, actions):
+                self.buffer = self
+                self.actions = iter(actions)
+            def readline(self, _limit):
+                action = next(self.actions, None)
+                if action is None:
+                    return b''
+                action()
+                return b'{"operation":"poll"}\n'
+        for replacement in ('wrong-binding', 'binding-inode', 'directory-inode'):
+            with self.subTest(replacement=replacement), tempfile.TemporaryDirectory() as directory:
+                selected = self.selected(directory)
+                binding = {'format_version': 1, 'binding': self.execution, 'vm_id': 'owned-fedora'}
+                def replace():
+                    if replacement == 'directory-inode':
+                        selected.path.rename(Path(directory) / 'old')
+                        selected.path.mkdir(mode=0o700)
+                    else:
+                        (selected.path / 'binding.json').unlink()
+                    value = binding if replacement != 'wrong-binding' else {**binding, 'vm_id': 'foreign'}
+                    selected.write('binding.json', value)
+                actions = [replace] if replacement == 'wrong-binding' else [lambda: None, replace]
+                with patch.object(mailbox, 'Mailbox', return_value=selected), \
+                        patch.object(mailbox.sys, 'stdin', Input(actions)), \
+                        patch.object(mailbox.sys, 'stdout', SimpleNamespace(buffer=io.BytesIO())):
+                    with self.assertRaises(ValueError):
+                        mailbox.serve(self.execution, 'owned-fedora')
+
 
 if __name__ == '__main__':
     unittest.main()
