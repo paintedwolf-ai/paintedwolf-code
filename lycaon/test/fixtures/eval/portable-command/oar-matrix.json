@@ -1,0 +1,104 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "case_id": "syntax-with-progress",
+      "cause": "syntax",
+      "zero_program_effects": true,
+      "whole_program_resubmit_allowed": false,
+      "automatic_execution": false,
+      "remedy": "focused_syntax_help",
+      "effect_certainty_required": true,
+      "source_span_required": true,
+      "owner_code": "COMMAND_SYNTAX_INVALID"
+    },
+    {
+      "case_id": "native-option-no-fallback",
+      "cause": "option",
+      "zero_program_effects": true,
+      "whole_program_resubmit_allowed": true,
+      "automatic_execution": false,
+      "remedy": "focused_command_help",
+      "effect_certainty_required": true,
+      "source_span_required": true,
+      "owner_code": "COMMAND_OPTION_UNSUPPORTED"
+    },
+    {
+      "case_id": "oar-option-correction",
+      "cause": "option",
+      "zero_program_effects": true,
+      "whole_program_resubmit_allowed": true,
+      "automatic_execution": false,
+      "remedy": "explicit_fresh_command",
+      "effect_certainty_required": true,
+      "source_span_required": true,
+      "owner_code": "COMMAND_OPTION_UNSUPPORTED"
+    },
+    {
+      "case_id": "first-mutation-missing-progress",
+      "cause": "missing_progress",
+      "zero_program_effects": true,
+      "whole_program_resubmit_allowed": true,
+      "automatic_execution": false,
+      "remedy": "update_progress",
+      "effect_certainty_required": true,
+      "source_span_required": false,
+      "owner_code": "PROGRESS_MISSING"
+    },
+    {
+      "case_id": "progress-then-denial",
+      "cause": "scope_denial",
+      "zero_program_effects": true,
+      "whole_program_resubmit_allowed": false,
+      "automatic_execution": false,
+      "remedy": "named_capability_limitation",
+      "effect_certainty_required": true,
+      "source_span_required": true,
+      "owner_code": "WRITE_SCOPE_DENIED"
+    },
+    {
+      "case_id": "read-only-dynamic-refusal",
+      "cause": "readonly_profile",
+      "zero_program_effects": false,
+      "whole_program_resubmit_allowed": false,
+      "automatic_execution": false,
+      "remedy": "readonly_or_closeout",
+      "effect_certainty_required": true,
+      "source_span_required": true,
+      "code_binding": "P32 must bind this typed cause to its declared owner/surface code without reusing retired meanings"
+    },
+    {
+      "case_id": "stale-approval",
+      "cause": "stale_revision",
+      "zero_program_effects": false,
+      "whole_program_resubmit_allowed": false,
+      "automatic_execution": false,
+      "remedy": "fresh_read_and_preparation",
+      "effect_certainty_required": true,
+      "source_span_required": true,
+      "code_binding": "P32 must bind this typed cause to its declared owner/surface code without reusing retired meanings"
+    },
+    {
+      "case_id": "oar-unavailable-remedy",
+      "cause": "unavailable_remedy",
+      "zero_program_effects": true,
+      "whole_program_resubmit_allowed": false,
+      "automatic_execution": false,
+      "remedy": "honest_blocked_closeout",
+      "effect_certainty_required": true,
+      "source_span_required": false,
+      "code_binding": "P32 must bind this typed cause to its declared owner/surface code without reusing retired meanings"
+    },
+    {
+      "case_id": "partial-write-unknown-http",
+      "cause": "partial_unknown",
+      "zero_program_effects": false,
+      "whole_program_resubmit_allowed": false,
+      "automatic_execution": false,
+      "remedy": "specific_remaining_status_action",
+      "effect_certainty_required": true,
+      "source_span_required": false,
+      "code_binding": "P32 must bind this typed cause to its declared owner/surface code without reusing retired meanings"
+    }
+  ]
+}

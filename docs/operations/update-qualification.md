@@ -92,3 +92,13 @@ and exact-source release qualification must all have explicit results. Treat
 missing evidence as unverified. Do not infer updater success from a healthy
 manually installed candidate, a successful migration rehearsal, or a published
 feed alone.
+
+## Nix owner and recovery qualification
+
+[Nix consumer instructions](../dev-tasks.md#nix-installations) separate the running package, upstream feed, selected source, installation owner and pin. Source availability remains `not_checked`; neither a store path nor a user-profile target establishes ownership. Signed cache configuration uses its own published Nix key and stays optional.
+
+For each supported CPU architecture, exercise an exact released source with the product cache absent and with explicitly configured signed substitution. Record the source commit/lock and installed output. Independently use a NixOS configuration, Home Manager configuration, chosen user profile and temporary output link; also launch an output without owner metadata and preserve the unknown state. Test an intentional old pin, a missing source, stable/preview offers, rejected or stale feed metadata and release withdrawal. Update checks must not change the owning configuration, pin, store, profile or running process.
+
+For each actual owner, switch N → N+1 through that owner's tools, preserve a running generation until exit and relaunch the selected output. NixOS custody must refuse unselected/stale generations and modified images, manifests or executable mappings; intentional overlap lists exact generations. Disable/re-enable and rollback must retain service state and credentials. Missing service/agent cases retain the documented password or recovery path.
+
+Capture a recovery snapshot before a live schema migration. A package rollback against a newer/unknown database must refuse mutation; explicitly restore the chosen compatible snapshot and verify retained history and device credentials. Package generation history never substitutes for data recovery. Cache tampering, wrong signatures, key rotation/withdrawal and cold substitution are #945's cache checks. Package construction is #927, generation layout #928, system integration #929 and installed qualification #932/#457. These remaining checks are not implied by focused native or UI tests.

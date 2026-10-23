@@ -53,7 +53,7 @@ func (t *JqEditTool) Run(ctx context.Context, args map[string]any, tctx tools.To
 			return "", err
 		}
 	}
-	return retryEditorDocument(ctx, target.DisplayPath, func() (string, error) {
+	return retryEditorOperation(ctx, target.DisplayPath, func() (string, error) {
 		src, err := t.loadSource(ctx, tctx, source, dest != "")
 		if err != nil {
 			return "", err

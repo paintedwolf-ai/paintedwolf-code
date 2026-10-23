@@ -1178,9 +1178,9 @@
       }
     },
     {
-      "id": "artix-openrc",
+      "id": "artix-openrc-plasma-wayland",
       "distribution": "Artix",
-      "release": "rolling; pin OpenRC and elogind repositories",
+      "release": "rolling Plasma 6.8 or newer; pin OpenRC, elogind and package inventory",
       "architectures": [
         "amd64"
       ],
@@ -1192,9 +1192,86 @@
         "nix-run"
       ],
       "desktop": "Plasma",
-      "display": "X11",
+      "display": "Wayland",
       "session": "OpenRC with elogind",
       "portal": "KDE",
+      "security": "protected OpenRC vault service state",
+      "scaling": "100%, 150% and 200%; mixed-scale monitors for windowing",
+      "coverage": "native interaction for this protocol class; functional scenarios may use emulation",
+      "issues": [
+        733,
+        941,
+        943
+      ],
+      "qualification": {
+        "releases": [
+          {
+            "id": "rolling",
+            "os_ids": [
+              "artix"
+            ],
+            "version_id": null,
+            "snapshot_kind": "package-inventory",
+            "channel": null
+          }
+        ],
+        "display": {
+          "protocol": "wayland",
+          "xwayland": "permitted",
+          "clipboard_manager": "permitted"
+        },
+        "scaling": {
+          "uniform_percent": [
+            100,
+            150,
+            200
+          ],
+          "mixed_percent": [
+            100,
+            150
+          ],
+          "mixed_capabilities": [
+            "windowing"
+          ],
+          "uniform_capabilities": [
+            "installation",
+            "conversation",
+            "git",
+            "files",
+            "external-files",
+            "clipboard",
+            "input",
+            "windowing",
+            "accessibility",
+            "notifications",
+            "networking",
+            "recovery",
+            "performance",
+            "browser",
+            "session",
+            "updates"
+          ]
+        }
+      }
+    },
+    {
+      "id": "artix-openrc-xfce-x11",
+      "distribution": "Artix",
+      "release": "rolling Xfce 4.20 or newer; pin OpenRC, elogind and package inventory",
+      "architectures": [
+        "amd64"
+      ],
+      "installations": [
+        "pacman",
+        "nix-package",
+        "nix-profile",
+        "home-manager",
+        "nix-run"
+      ],
+      "desktop": "Xfce",
+      "display": "X11",
+      "session": "OpenRC with elogind",
+      "portal": "GTK",
       "security": "protected OpenRC vault service state",
       "scaling": "100%, 150% and 200%; mixed-scale monitors for windowing",
       "coverage": "native interaction for this protocol class; functional scenarios may use emulation",
