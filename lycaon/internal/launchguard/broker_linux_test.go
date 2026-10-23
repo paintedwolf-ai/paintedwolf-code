@@ -5,7 +5,6 @@ package launchguard
 import (
 	"io"
 	"os"
-	"os/exec"
 	"strconv"
 	"strings"
 	"syscall"
