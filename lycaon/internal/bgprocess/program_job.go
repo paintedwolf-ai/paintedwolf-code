@@ -83,8 +83,8 @@ func (r *Registry) StartProgram(ctx context.Context, spec ProgramJobSpec) (strin
 		cancel()
 		r.jobs.mu.Lock()
 		proc.running, proc.hasExit, proc.exitCode = false, true, exitCode
-		proc.unsavedDocumentPaths = settled.UnsavedDocumentPaths
-		proc.releaseNotices = settled.ReleaseNotices
+		proc.resources.unsavedDocumentPaths = settled.UnsavedDocumentPaths
+		proc.resources.releaseNotices = settled.ReleaseNotices
 		proc.Stages[0].ExitCode, proc.Stages[0].Failed = &exitCode, exitCode != 0
 		proc.failure = hostcmd.ExecFailureOf(err)
 		proc.finishedAt = time.Now().UTC()
@@ -114,13 +114,10 @@ func (r *ProcessLifecycle) Wait(ctx context.Context, sessionID, handle string) (
 	return proc.exitCode, proc.stopped, nil
 }
 
-// releaseProgramNotices reclaims a discarded completion's owned admission.
-func (r *ProcessLifecycle) releaseProgramNotices(proc *Process) {
+// releaseCompletionResources reclaims an untransferred completion's resources.
+func (r *ProcessLifecycle) releaseCompletionResources(proc *Process) {
 	r.jobs.mu.Lock()
-	release := proc.releaseNotices
-	proc.releaseNotices, proc.unsavedDocumentPaths = nil, nil
+	owned := proc.resources.take()
 	r.jobs.mu.Unlock()
-	if release != nil {
-		release()
-	}
+	owned.release()
 }
