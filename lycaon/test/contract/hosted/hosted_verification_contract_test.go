@@ -74,11 +74,19 @@ func requireHostedGate(t *testing.T, jobs map[string]hostedJob, gate string, dep
 	got := hostedNeeds(t, job)
 	slices.Sort(got)
 	slices.Sort(dependencies)
-	if !slices.Equal(got, dependencies) || job.If != "${{ !cancelled() }}" {
+	expectedCondition := "${{ !cancelled() }}"
+	if gate == "qualification" {
+		expectedCondition = "${{ !cancelled() && needs.select.outputs.admitted == 'true' }}"
+	}
+	if !slices.Equal(got, dependencies) || job.If != expectedCondition {
 		t.Fatalf("%s must judge every dependency unless the run is cancelled: got %v (%s), want %v", gate, got, job.If, dependencies)
 	}
 	for _, step := range job.Steps {
-		if strings.HasPrefix(step.Run, "python3 scripts/ci_verification.py gate") && step.Env["NEEDS_JSON"] == "${{ toJSON(needs) }}" {
+		command := "python3 scripts/ci_verification.py gate"
+		if gate == "qualification" {
+			command = "python3 -m ci_policy.qualification_receipt"
+		}
+		if strings.HasPrefix(step.Run, command) && step.Env["NEEDS_JSON"] == "${{ toJSON(needs) }}" {
 			return
 		}
 	}
@@ -130,10 +138,10 @@ func TestReusableVerificationFailsWithItsPlanOrAnyMatrixJob(t *testing.T) {
 func TestReleaseGatesPrecedePublication(t *testing.T) {
 	t.Parallel()
 	jobs := hostedJobs(t, "release")
-	requireHostedGate(t, jobs, "ship-gates", []string{"classify", "preflight", "upgrade"})
+	requireHostedGate(t, jobs, "ship-gates", []string{"classify", "validate-source"})
 	for name, dependencies := range map[string][]string{
-		"compatibility": {"classify"}, "preflight": {"classify", "compatibility"},
-		"upgrade": {"classify", "preflight"}, "build-release": {"classify", "compatibility"},
+		"compatibility": {"classify"}, "validate-source": {"classify", "compatibility"},
+		"build-release": {"classify", "compatibility"},
 	} {
 		if !slices.Equal(hostedNeeds(t, jobs[name]), dependencies) || jobs[name].If != "" {
 			t.Errorf("%s must require successful %v before running", name, dependencies)
@@ -269,7 +277,7 @@ func TestHostedProfilesAndSetupAreReachable(t *testing.T) {
 	if hostedJobs(t, "nightly")["verification"].With["profile"] != "nightly" {
 		t.Error("nightly must invoke the nightly catalog profile")
 	}
-	for workflow, job := range map[string]string{"verification": "verify", "e2e-verification": "playwright-desktop", "release": "preflight"} {
+	for workflow, job := range map[string]string{"verification": "verify", "e2e-verification": "playwright-desktop", "release": "validate-source"} {
 		setup := false
 		for _, step := range hostedJobs(t, workflow)[job].Steps {
 			setup = setup || step.Uses == "./.github/actions/setup-verification"

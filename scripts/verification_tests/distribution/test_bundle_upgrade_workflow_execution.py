@@ -64,3 +64,26 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("aggregate-release, bundle-upgrade]", publication)
         self.assertIn("ref: ${{ github.workflow_sha }}", prepare)
         self.assertIn("if: always()", execution)
+
+    def test_nightly_installs_the_same_rehearsal_dependencies_before_execution(self):
+        workflow = (ROOT / ".github/workflows/nightly.yml").read_text()
+        upgrade = workflow.split("  upgrade-path:\n", 1)[1].split("  quarantine:\n", 1)[0]
+        self.assertLess(upgrade.index("uses: ./.github/actions/setup-verification"), upgrade.index("run: ./task upgrade:rehearse"))
+        self.assertLess(upgrade.index("brew install minisign"), upgrade.index("run: ./task upgrade:rehearse"))
+        self.assertNotIn("run: ./task build:lycaon-dev", upgrade)
+
+    def test_release_rehearsal_builds_its_candidate_only_inside_the_managed_target(self):
+        workflow = (ROOT / ".github/workflows/release.yml").read_text()
+        upgrade = workflow.split("  validate-source:\n", 1)[1].split("  ship-gates:\n", 1)[0]
+        self.assertIn("run: ./task upgrade:rehearse", upgrade)
+        self.assertNotIn("run: ./task build:lycaon-dev", upgrade)
+
+    def test_source_validation_reuses_setup_and_retains_each_gate_evidence(self):
+        workflow = (ROOT / ".github/workflows/release.yml").read_text()
+        validation = workflow.split("  validate-source:\n", 1)[1].split("  ship-gates:\n", 1)[0]
+        self.assertEqual(validation.count("uses: actions/checkout@"), 1)
+        self.assertEqual(validation.count("uses: ./.github/actions/setup-verification"), 1)
+        self.assertLess(validation.index("./task release:preflight"), validation.index("./task upgrade:rehearse"))
+        self.assertIn("name: release-preflight-${{ github.run_attempt }}", validation)
+        self.assertIn("name: release-upgrade-${{ github.run_attempt }}", validation)
+        self.assertNotIn("continue-on-error", validation)

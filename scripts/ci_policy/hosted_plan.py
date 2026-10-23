@@ -12,7 +12,7 @@ PROFILES = {"fast", "check", "nightly", "release", "integration"}
 GATE = "check"
 FAST_GATE = "check-fast"
 SUITES = {"all", "behavior", "race", "coverage", "performance", "fuzz", "e2e"}
-SETUPS = {"verification", "shell", "harness", "frontend"}
+SETUPS = {"verification", "shell", "harness", "frontend", "analysis"}
 # A platform lane runs a check that only its platform can run, so the cross-platform check gate,
 # which every development host runs, leaves it out; the merge queue runs it beside that gate.
 # Each platform names the runners it may use: architecture-specific code needs each architecture.
@@ -33,11 +33,18 @@ def lanes():
         if not re.fullmatch(r"[a-z][a-z0-9-]*", name):
             raise ValueError(f"invalid CI lane: {name}")
         if set(lane) - {"targets", "minutes", "profiles", "suite", "setup", "runner", "workers", "shards", "first",
-                        "platform", "arguments", "preflight", "timing_source"}:
+                        "platform", "arguments", "preflight", "timing_source", "early_targets", "contract_first"}:
             raise ValueError(f"unknown CI lane fields: {name}")
         if "arguments" in lane and (len(lane["targets"]) != 1 or not lane["arguments"]
                                     or not all(isinstance(value, str) and value for value in lane["arguments"])):
             raise ValueError(f"CI lane {name} arguments belong to exactly one target")
+        early = lane.get("early_targets", [])
+        if (not isinstance(early, list) or len(set(early)) != len(early)
+                or not set(early).issubset(lane["targets"])):
+            raise ValueError(f"CI lane {name} early targets must partition its declared targets")
+        if "contract_first" in lane and (lane["contract_first"] is not True or lane["targets"] != ["test:full"]):
+            raise ValueError(f"CI lane {name} contract ordering requires the complete Go recipe")
+
         if lane.get("first", True) is not True:
             raise ValueError(f"CI lane {name} marks itself first or leaves the field out")
         if not lane["targets"] or not set(lane["targets"]).issubset(targets):
@@ -50,6 +57,9 @@ def lanes():
             raise ValueError(f"invalid CI setup or suite: {name}")
         if lane["setup"] == "frontend" and not set(lane["targets"]).issubset({"den:typecheck", "den:lint", "den:test"}):
             raise ValueError(f"CI lane {name} requires toolchains outside frontend setup")
+        if lane["setup"] == "analysis" and not set(lane["targets"]).issubset({
+                "lint:fast", "lint:full", "lint:vuln", "lint:vuln:fresh", "comments:check", "test:fail-messages:check"}):
+            raise ValueError(f"CI lane {name} requires inputs outside Go analysis setup")
         # Only a platform lane runs on its platform's other runners.
         if lane.get("runner", "macos-15") not in {"macos-15", "ubuntu-latest"} | PLATFORMS.get(lane.get("platform"), set()):
             raise ValueError(f"unsupported CI runner: {name}")
@@ -74,8 +84,10 @@ def lanes():
             if (lane["profiles"] != ["fast"] or lane.get("shards", 1) != 1
                     or not isinstance(command, list) or len(command) < 3
                     or command[:2] != ["test:contract", "--"]
-                    or any(not isinstance(package, str) or not re.fullmatch(r"\./test/contract/[a-z][a-z0-9_]*", package)
-                           or not (ROOT / "lycaon" / package).is_dir() for package in command[2:])
+                    or (command != ["test:contract", "--", "./test/contract/..."]
+                        and any(not isinstance(package, str)
+                                or not re.fullmatch(r"\./test/contract/[a-z][a-z0-9_]*", package)
+                                or not (ROOT / "lycaon" / package).is_dir() for package in command[2:]))
                     or len(set(command[2:])) != len(command[2:])):
                 raise ValueError(f"CI lane {name} requires scoped admission contracts")
     fast = Counter(stage["name"] for lane in values.values() if "fast" in lane["profiles"]
