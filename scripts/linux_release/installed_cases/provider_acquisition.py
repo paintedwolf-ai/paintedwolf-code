@@ -98,25 +98,42 @@ def result_payload(content, tool, call_id):
             **({'need': 'command', 'loaded': True} if tool == 'request_tools' else {})}
 
 
-def paired_result(messages, tool, arguments, expected=None):
+def fixed_history(messages):
     last_user = max((i for i, row in enumerate(messages) if row['role'] == 'user'), default=-1)
     history = messages[last_user + 1:]
-    calls = [call for row in history if row['role'] == 'assistant'
-             for call in row.get('tool_calls', []) if isinstance(call, dict)
-             and call.get('function', {}).get('name') == tool]
+    calls = [(ordinal, call) for ordinal, row in enumerate(history) if row['role'] == 'assistant'
+             for call in row.get('tool_calls', [])]
+    identifiers = []
+    for _, call in calls:
+        if (not isinstance(call, dict) or call.get('type') != 'function'
+                or not isinstance(call.get('function'), dict)
+                or call['function'].get('name') not in {'request_tools', 'command'}):
+            raise AcquisitionRefusal('acquisition-result-invalid')
+        try:
+            identifiers.append(host_call_id(call.get('id')))
+        except ValueError:
+            raise AcquisitionRefusal('acquisition-result-invalid') from None
+    if len(set(identifiers)) != len(identifiers):
+        raise AcquisitionRefusal('acquisition-result-invalid')
+    return history, calls
+
+
+def paired_result(messages, tool, arguments, expected=None):
+    history, all_calls = fixed_history(messages)
+    calls = [(ordinal, call) for ordinal, call in all_calls if call['function']['name'] == tool]
     if len(calls) != 1:
         raise AcquisitionRefusal('acquisition-result-missing')
-    call = calls[0]
+    assistant_ordinal, call = calls[0]
     try:
         identifier = host_call_id(call.get('id'))
         if (call.get('type') != 'function' or object_json(call['function']['arguments']) != arguments
                 or expected is not None and identifier != expected):
             raise ValueError('fixture originating call differs from its declared phase')
-        results = [row for row in history if row['role'] == 'tool'
+        results = [(ordinal, row) for ordinal, row in enumerate(history) if row['role'] == 'tool'
                    and row.get('tool_call_id') == identifier]
-        if len(results) != 1:
+        if len(results) != 1 or results[0][0] <= assistant_ordinal:
             raise ValueError('fixture call has no unique paired result')
-        return result_payload(results[0].get('content'), tool, identifier)
+        return result_payload(results[0][1].get('content'), tool, identifier)
     except (ValueError, TypeError, KeyError, AttributeError):
         raise AcquisitionRefusal('acquisition-result-invalid') from None
 
@@ -139,6 +156,10 @@ class CommandAcquisition:
                 self.issued = True
                 return {'id': LOAD_ID, 'type': 'function', 'function': {
                     'name': 'request_tools', 'arguments': json.dumps({'need': 'command'})}}
+            history, calls = fixed_history(messages)
+            if not self.command_issued and (any(call['function']['name'] == 'command' for _, call in calls)
+                    or len([row for row in history if row['role'] == 'tool']) != 1):
+                raise AcquisitionRefusal('acquisition-result-invalid')
             witness = paired_result(messages, 'request_tools', {'need': 'command'},
                                     self.witness['tool_call_id'] if self.witness else None)
             if 'command' not in available:
@@ -148,6 +169,11 @@ class CommandAcquisition:
             self.witness = witness
             if self.command_issued:
                 self.command_witness = paired_result(messages, 'command', {'command': '/usr/bin/true'})
+                load_result = next(i for i, row in enumerate(history) if row['role'] == 'tool'
+                                   and row.get('tool_call_id') == witness['tool_call_id'])
+                command_call = next(i for i, call in calls if call['function']['name'] == 'command')
+                if load_result >= command_call or len([row for row in history if row['role'] == 'tool']) != 2:
+                    raise AcquisitionRefusal('acquisition-result-invalid')
                 if self.command_witness['tool_call_id'] == witness['tool_call_id']:
                     raise AcquisitionRefusal('acquisition-result-invalid')
                 self.completed = True
