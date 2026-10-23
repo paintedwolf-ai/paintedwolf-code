@@ -42,7 +42,9 @@ class ProcessTests(unittest.TestCase):
         installation = self.installation()
         with patch.object(process.subprocess, "run") as run:
             installation.launch()
-        self.assertEqual(run.call_args.args[0], ["/usr/bin/open", "-n", "-j", "--env", "LYCAON_LLM_MOCK=1", str(installation.app)])
+        self.assertEqual(run.call_args.args[0], ["/usr/bin/open", "-n", "-j", "--env", "LYCAON_LLM_MOCK=1",
+            "--stdout", str(installation.config / "desktop-launch.log"),
+            "--stderr", str(installation.config / "desktop-launch.log"), str(installation.app)])
 
     def test_process_ownership_uses_exact_executable_paths(self):
         installation = self.installation()
@@ -117,3 +119,16 @@ class ProcessTests(unittest.TestCase):
             self.assertIsNone(installation.observe("1.1.0"))
         self.assertEqual(installation.last_observation["state"], "daemon_missing")
         self.assertEqual(installation.last_observation["owned"][10], {"identity": "app", "kind": 1})
+
+    def test_startup_sampling_does_not_inspect_a_reused_pid_or_an_engine(self):
+        import tempfile
+        installation = self.installation()
+        installation.owned = {10: ("app", 1), 11: ("old app", 1), 12: ("engine", 2)}
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.object(installation, "capture_owned"), \
+             patch.object(process, "process_identity", side_effect=lambda pid: {10: "app", 11: "foreign"}.get(pid)), \
+             patch.object(process.subprocess, "run", return_value=unittest.mock.Mock(returncode=0)) as run:
+            installation.sample_startup(Path(directory))
+            self.assertEqual(run.call_count, 1)
+            self.assertEqual(run.call_args.args[0][:4], ["/usr/bin/sample", "10", "1", "1"])
+            self.assertTrue((Path(directory) / "startup-process-10-status.json").exists())

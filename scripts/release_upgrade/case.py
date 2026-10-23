@@ -177,6 +177,7 @@ def finish_case(installation, config, records, evidence, primary_error):
     actions = (
         ("write startup observation", lambda: (evidence / "startup-observation.json").write_text(
             json.dumps(installation.last_observation, indent=2) + "\n")),
+        ("sample failed startup", lambda: installation.sample_startup(evidence) if primary_error else None),
         ("stop installation", installation.stop),
         ("retain installation state", lambda: retain_state(config, records, evidence)),
     )
@@ -196,6 +197,6 @@ def retain_state(config, records, evidence):
     for name in ("ready.json", "rejected.json", "transaction.json"):
         if (records / name).is_file():
             shutil.copyfile(records / name, evidence / ("final-" + name))
-    for name in ("engine.log", "engine.log.1", "updates.log", "updates.log.1"):
+    for name in ("engine.log", "engine.log.1", "updates.log", "updates.log.1", "desktop-launch.log"):
         if (config / name).is_file():
             shutil.copyfile(config / name, evidence / name)
