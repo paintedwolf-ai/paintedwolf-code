@@ -22,7 +22,7 @@ def collect(fleets, identity, catalog, out, quality=()):
         quality_by_key[key] = item
     paths = sorted(p for root in fleets for p in Path(root).glob("shards/*/training-captures/*.json"))
     stores = {p.parent.parent / "store.db" for p in paths}
-    inputs = set(paths) | stores | {p.with_name(p.name + "-wal") for p in stores if p.with_name(p.name + "-wal").exists()}
+    inputs = set(paths) | stores | {p.with_name(p.name + "-wal") for p in stores if p.with_name(p.name + "-wal").exists() and p.with_name(p.name + "-wal").stat().st_size > 0}
     before = {str(p): file_digest(p) for p in sorted(inputs)}
     records, commits = [], {}
     for path in paths:
@@ -54,7 +54,7 @@ def collect(fleets, identity, catalog, out, quality=()):
                 counts["accepted_by:" + report["acceptance"]] += 1
             except (ValueError, KeyError, TypeError) as exc:
                 counts["excluded:" + str(exc)] += 1
-    after_inputs = set(paths) | stores | {p.with_name(p.name + "-wal") for p in stores if p.with_name(p.name + "-wal").exists()}
+    after_inputs = set(paths) | stores | {p.with_name(p.name + "-wal") for p in stores if p.with_name(p.name + "-wal").exists() and p.with_name(p.name + "-wal").stat().st_size > 0}
     after = {str(p): file_digest(p) for p in sorted(after_inputs)}
     if before != after or paths != sorted(p for root in fleets for p in Path(root).glob("shards/*/training-captures/*.json")):
         raise ValueError("collection changed during export")
