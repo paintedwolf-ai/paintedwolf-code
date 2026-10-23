@@ -12,7 +12,7 @@ PROFILES = {"fast", "check", "nightly", "release", "integration"}
 GATE = "check"
 FAST_GATE = "check-fast"
 SUITES = {"all", "behavior", "race", "coverage", "performance", "fuzz", "e2e"}
-SETUPS = {"verification", "shell", "harness", "frontend"}
+SETUPS = {"verification", "shell", "harness", "frontend", "analysis"}
 # A platform lane runs a check that only its platform can run, so the cross-platform check gate,
 # which every development host runs, leaves it out; the merge queue runs it beside that gate.
 # Each platform names the runners it may use: architecture-specific code needs each architecture.
@@ -53,6 +53,9 @@ def lanes():
             raise ValueError(f"invalid CI setup or suite: {name}")
         if lane["setup"] == "frontend" and not set(lane["targets"]).issubset({"den:typecheck", "den:lint", "den:test"}):
             raise ValueError(f"CI lane {name} requires toolchains outside frontend setup")
+        if lane["setup"] == "analysis" and not set(lane["targets"]).issubset({
+                "lint:fast", "lint:full", "lint:vuln", "lint:vuln:fresh", "comments:check", "test:fail-messages:check"}):
+            raise ValueError(f"CI lane {name} requires inputs outside Go analysis setup")
         # Only a platform lane runs on its platform's other runners.
         if lane.get("runner", "macos-15") not in {"macos-15", "ubuntu-latest"} | PLATFORMS.get(lane.get("platform"), set()):
             raise ValueError(f"unsupported CI runner: {name}")
