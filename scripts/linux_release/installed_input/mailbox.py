@@ -8,6 +8,7 @@ from pathlib import Path
 import stat
 import sys
 import tempfile
+import secrets
 
 from . import protocol
 
@@ -132,6 +133,9 @@ def serve(execution: dict, vm_id: str):
     mailbox = Mailbox(execution, vm_id)
     acknowledged = None
     publication = None
+    from ..installed_cases.app import process_identity
+    from . import password_wire
+    identified = False
 
     def attached_publication():
         mailbox.attach()
@@ -147,7 +151,14 @@ def serve(execution: dict, vm_id: str):
         command = decode(raw)
         if command == {'operation': 'close'}:
             return
-        if command == {'operation': 'poll'}:
+        if command == {'operation': 'identify-password-fixture-actor', 'binding': execution, 'vm_id': vm_id}:
+            if identified:
+                raise ValueError('password fixture SSH actor identity cannot be replayed')
+            identified = True
+            private_actor = password_wire.actor({'process': process_identity(os.getpid()), 'uid': os.getuid(),
+                                                 'session_nonce': secrets.token_hex(16)})
+            result = {'state': 'password-fixture-actor', 'actor': private_actor}
+        elif command == {'operation': 'poll'}:
             if publication is None and not mailbox.path.exists():
                 result = {'state': 'waiting'}
             elif publication is None and mailbox.read('binding.json') is None:

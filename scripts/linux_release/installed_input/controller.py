@@ -9,7 +9,7 @@ import subprocess
 import threading
 import time
 
-from . import protocol, surface_wire
+from . import protocol, surface_wire, password_wire
 from .mailbox import decode
 from .qemu import open_lease
 
@@ -181,12 +181,40 @@ class Bridge:
                                             stderr=self.errors, start_new_session=True)
             self.selector = selectors.DefaultSelector()
             self.selector.register(self.process.stdout, selectors.EVENT_READ)
+            selected = self.exchange({'operation': 'identify-password-fixture-actor',
+                'binding': self.execution, 'vm_id': self.selected['vm_id']})
+            if not isinstance(selected, dict) or set(selected) != {'state', 'actor'} or selected['state'] != 'password-fixture-actor':
+                raise ValueError('private SSH transport omitted its password fixture actor identity')
+            self.fixture_actor = password_wire.actor(selected['actor'])
             self.thread = threading.Thread(target=self._run, name='fixed-native-input', daemon=True)
             self.thread.start()
         except BaseException:
-            self.lease.__exit__(None, None, None)
+            try:
+                self._close_transport()
+            finally:
+                self.lease.__exit__(None, None, None)
             raise
         return self
+
+    def _close_transport(self):
+        process = getattr(self, 'process', None)
+        if process is not None:
+            if process.poll() is None:
+                process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=5)
+            process.stdin.close()
+            process.stdout.close()
+        selector = getattr(self, 'selector', None)
+        if selector is not None:
+            selector.close()
+        for name in ('log', 'errors'):
+            stream = getattr(self, name, None)
+            if stream is not None:
+                stream.close()
 
     def exchange(self, document):
         self.process.stdin.write(protocol.canonical(document))
@@ -241,19 +269,8 @@ class Bridge:
     def __exit__(self, *error):
         self.stop.set()
         self.thread.join(6)
-        if self.process.poll() is None:
-            self.process.terminate()
-        try:
-            self.process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            self.process.kill()
-            self.process.wait(timeout=5)
+        self._close_transport()
         self.thread.join(1)
-        self.selector.close()
-        self.process.stdin.close()
-        self.process.stdout.close()
-        self.log.close()
-        self.errors.close()
         self.lease.__exit__(*error)
         if not any(error):
             self.require_healthy()
