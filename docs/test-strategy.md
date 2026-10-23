@@ -829,11 +829,16 @@ commit status on the dispatched commit. [`qualification.yml`](../.github/workflo
 runs the complete check, then platform confinement and upgrade corpus beside
 the `release` profile's platform lanes, then browser and desktop journeys on
 main. One qualification runs at a time. Its `queue: max` concurrency queue
-retains up to 100 pending requests without canceling a running qualification.
-When a push reaches the executor, source selection cancels that request if main
-has advanced. Current main and explicit candidates retain their queue order.
-Cancellation does not spend verification runners or produce qualification
-evidence. The queue limit is a bound, not a reservation: GitHub cancels additional requests when it is full.
+retains up to 100 pending requests and preserves explicit candidate runs.
+[`qualification-supersession.yml`](../.github/workflows/qualification-supersession.yml)
+uses the existing maintenance runner reservation to cancel queued or running
+background push qualifications superseded by newer main. It reads live main,
+requires the old source to be an ancestor, and rechecks each run before
+cancellation. Manual candidate requests are never canceled by this controller.
+If maintenance is busy or its pending request is replaced, cancellation can be
+delayed until a later push; selection still drops obsolete pushes at admission.
+Canceled runs produce no qualification evidence. The executor queue limit is a
+bound, not a reservation: GitHub cancels additional requests when it is full.
 
 A manual request selects a full `source-sha` from main's history, or the dispatch
 commit when omitted. The main workflow remains the controller; each verification,
@@ -910,6 +915,51 @@ Merge-group CI is the only CI granted `actions: write`, for that call; pull
 request CI, which runs unreviewed code, keeps a read-only token. Queue-to-merge
 time and lane durations are measured service objectives, not claims
 established by timeout settings.
+
+#### Batched changes
+
+All change types may share a batch, including dependent changes. Batching adds
+no risk classification or human review requirement. Each constituent keeps its
+scope; the batch can contain backend, frontend, platform, security, migration,
+and release changes together. Required checks on the combined source decide
+whether it can enter and pass the merge queue.
+
+Run `PYTHONPATH=scripts python3 -m ci_policy.batch_prs 123 124 125` from the
+repository root, listing PRs in dependency order. The command creates an
+isolated worktree and branch from current main, merges exact source heads, and
+opens one batch PR with their numbers and SHAs. Conflicts or changed heads stop
+preparation before a push. After opening the batch it disables auto-merge on
+the original PRs and removes any that are already queued. A batch of ready PRs becomes ready automatically; any draft
+source keeps the batch draft until implementation is complete. It never enables
+auto-merge or merges without the existing authorization. After the batch lands, close source PRs whose heads still match the manifest;
+leave later source commits open. A failing batch can be fixed in its
+retained worktree or rebuilt without the failing change.
+
+This creates one combined PR for CI. [GitHub's merge limits](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue)
+do not combine separate PR builds, so changing that number alone would
+not remove repeated verification. Existing required checks, affected-scope
+selection, platform triggers, and exact-commit release qualification apply to
+batches unchanged.
+
+#### Throughput choices
+
+Prefer batching and cancellation of obsolete background work before adding
+runner capacity. Keep current runner caps; purchase capacity only against a
+measured runner wait or execution bottleneck and an agreed budget. There is no
+new paid runner requirement.
+
+Keep affected correctness checks before merge and the full platform matrix in
+main qualification. Platform-sensitive changes still select their relevant
+platform checks immediately. Do not remove architecture or data-integrity
+coverage to shorten admission.
+
+Local Go result reuse already binds to build dependencies, observed inputs,
+toolchain, test options, and declared environment. Extending that reuse to
+hosted or native test results needs equally complete input accounting; compiler
+cache hits alone do not establish a test pass. Existing recovery retains first
+failures and retries only demonstrated infrastructure faults. Product assertions
+and races remain blocking; there is no new automatic quarantine or assertion
+retry policy.
 
 ##### Integration capacity experiment
 
@@ -1095,16 +1145,16 @@ budgets for the whole selected matrix. Runner caps do not depend on timing data.
 | Releases | `release.yml`, `release-halt.yml` | `release-static-update` | 2 (2): preflight or the upgrade rehearsal beside one signed build; later desktop rehearsal or protected fixture preparation beside Linux packaging |
 | DCO certification | `dco.yml` | `dco-certification` | 1 |
 | Maintainability tracking | `maintainability-issues.yml` | `maintainability-issues` | 1 |
-| Maintenance | Linux candidate requests, dependency inventory, release-system live test, queue health, issue staleness, the issue sweep, release secrets check | `maintenance`, shared | 1 |
+| Maintenance | Qualification supersession, Linux candidate requests, dependency inventory, release-system live test, queue health, issue staleness, the issue sweep, release secrets check | `maintenance`, shared | 1 |
 | Merge queue | CI of merge groups | one run per group, two groups at once | 8: two groups × the `integration` cap of four |
 | Ready pull requests | CI of pull requests | one run per pull request; a newer push cancels it | 1 per pull request, with a two-hour execution ceiling |
 
 Nightly replaces its pending snapshot while a started run finishes. Qualification
-retains explicit requests and drops superseded pushes at admission; both run
-one executor at a time. The maintenance workflows
-share one group across workflows; their schedules are staggered so that no two
-are pending at once, and a scheduled run replaced by a manual one returns at
-its next schedule. Issue intake, an issue's lifecycle nudge, and verification
+retains explicit requests, drops superseded pushes at admission, and permits
+maintenance to cancel obsolete background runs; both use one executor at a time. The maintenance workflows
+share one group across workflows; their schedules are staggered. Push-triggered qualification supersession may
+replace a pending maintenance request; scheduled work returns at its next
+schedule, and an explicit dispatch restores a needed candidate. Issue intake, an issue's lifecycle nudge, and verification
 recovery handle one event per run instead: each run is a single job bounded to
 fifteen minutes.
 
