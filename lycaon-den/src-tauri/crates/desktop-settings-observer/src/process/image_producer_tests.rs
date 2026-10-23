@@ -3,6 +3,7 @@ use serde_json::Value;
 use std::{
     fs,
     os::unix::fs::PermissionsExt,
+    path::PathBuf,
     sync::atomic::{AtomicU64, Ordering},
 };
 
