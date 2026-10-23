@@ -33,7 +33,7 @@ func TestPreparedCachesPublishBeforeLintDiagnostics(t *testing.T) {
 			if !step.Continue || step.If != "runner.os == 'Linux'" || step.Run != "./task lint:full" {
 				t.Error("lint diagnostics must remain optional and Linux-only")
 			}
-			for _, name := range []string{"cache-go", "cache-decide", "cache-notices-tools", "cache-analysis-tools", "setup-webkit-atspi-images"} {
+			for _, name := range []string{"cache-go", "cache-decide", "cache-document-core", "cache-notices-tools", "cache-analysis-tools", "setup-webkit-atspi-images"} {
 				if !published["./.github/actions/"+name] {
 					t.Errorf("%s is not published before lint diagnostics", name)
 				}

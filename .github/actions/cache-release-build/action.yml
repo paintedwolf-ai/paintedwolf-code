@@ -25,6 +25,9 @@ runs:
       uses: ./.github/actions/cache-go
 
     - if: inputs.save != 'true'
+      uses: ./.github/actions/cache-document-core
+
+    - if: inputs.save != 'true'
       uses: ./.github/actions/cache-notices-tools
 
     # Cargo validates compiler inputs restored from an earlier lockfile generation.

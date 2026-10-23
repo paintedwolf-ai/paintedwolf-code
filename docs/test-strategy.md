@@ -1061,6 +1061,12 @@ save step alone never permits retiring the prior cache because upload failures
 can be reported as warnings.
 Consumers remain read-only and rebuild safely on a miss.
 
+The document core retains Cargo intermediates in the checkout compiler cache.
+Every build asks Cargo to validate its current inputs and stages a separate
+executable under a publication lock. Hosted lanes restore the bounded document
+compiler family; only the main warmer publishes it. Source changes invalidate
+workspace compilation without discarding dependency builds.
+
 Linux native setup resolves archives from signed APT indexes, verifies each size
 and SHA-256 digest, and bounds package-manager calls and downloads. Four transfers
 share a four-minute deadline, with a 30-second origin budget and a canonical

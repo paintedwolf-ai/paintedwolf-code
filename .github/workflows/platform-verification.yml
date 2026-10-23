@@ -97,6 +97,8 @@ jobs:
 
       - uses: ./.github/actions/cache-decide
 
+      - uses: ./.github/actions/cache-document-core
+
       - name: Fetch pinned git engine
         run: ./task gitengine:fetch
 

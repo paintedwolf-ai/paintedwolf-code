@@ -129,6 +129,10 @@ jobs:
         if: runner.os == 'Linux' && steps.setup.outputs.decide-cache-hit != 'true'
         run: ./task build:decide
 
+      - name: Warm document compiler inputs
+        if: steps.setup.outputs.document-cache-hit != 'true'
+        run: ./task build:document-core
+
       - name: Warm desktop workspace builds
         if: steps.setup.outputs.rust-cache-hit != 'true' || steps.setup.outputs.decide-cache-hit != 'true'
         run: ./task setup-dev -- --workspace-cache
@@ -136,6 +140,12 @@ jobs:
       - name: Publish prepared desktop compiler cache
         if: github.ref == 'refs/heads/main' && steps.setup.outputs.rust-cache-hit != 'true'
         uses: ./.github/actions/cache-rust
+        with:
+          save: 'true'
+
+      - name: Publish prepared document compiler cache
+        if: github.ref == 'refs/heads/main' && steps.setup.outputs.document-cache-hit != 'true'
+        uses: ./.github/actions/cache-document-core
         with:
           save: 'true'
 
