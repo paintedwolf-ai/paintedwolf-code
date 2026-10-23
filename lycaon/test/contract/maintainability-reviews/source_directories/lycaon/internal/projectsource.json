@@ -1,0 +1,16 @@
+{
+  "category": "source_directories",
+  "artifact": "lycaon/internal/projectsource",
+  "kind": "module",
+  "workstream": "source-mutations",
+  "disposition": "retain",
+  "reason": "Fifty-eight immediate source files retain one durable journal/path/history/recovery/settlement graph. Whole-tree custody and bounded individual copy intents remain adjacent to replay, backup and pruning under existing collaborators. Recovery, lexical fingerprint and partial-ledger restart contracts support exact current membership; a new lifecycle or growth requires renewed review.",
+  "reviewed_commit": "e292264fa558da02022694dc86ffb2556f278f52",
+  "ceiling": 58,
+  "boundaries": {
+    "lycaon/internal/projectsource/agent_effect_batch_test.go": "f099695df91542d83d69f640651fa62788458f0af6d6bc6aa3b6e0f3b0467f54",
+    "lycaon/internal/projectsource/source_recovery_tree_test.go": "27e58737c400ad7411496bf1548290d46ce64c1b4e392babd4ca6459ac764386",
+    "lycaon/internal/projectsource/source_tree_walk_test.go": "7e4e91a9402b4d1e309332808ed735cc43c25fa184e978d3b3909335870d235d"
+  },
+  "reviewed_shape": "81f59f13f8a9d7f99b92b2b8aafa088e5c7dbced00894be09e4f4bfa2bd9ee92"
+}

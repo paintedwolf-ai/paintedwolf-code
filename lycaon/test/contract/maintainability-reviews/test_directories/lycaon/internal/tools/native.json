@@ -2,14 +2,15 @@
   "category": "test_directories",
   "artifact": "lycaon/internal/tools/native",
   "kind": "test_suite",
-  "workstream": "tool-domains",
+  "workstream": "source-mutations",
   "disposition": "retain",
-  "reason": "The 73 native test files retain operation-adjacent contracts for the host-coupled write door and existing native families. P03 adds a focused shared structured/typed entry fixture rather than duplicate mutation algorithms. Keep these tests beside the operation they exercise at this measured ceiling; real write/refusal fixtures passed and broader native failures were limited to absent bundled Git.",
-  "reviewed_commit": "f66017977c2500399b4e4ca07e6fff3ee8c3ca76",
-  "ceiling": 73,
+  "reason": "Seventy-six immediate tests keep publication, attribution, revision and host-coupled tool contracts beside their owners. Source-write and copy fixtures prove actual effects and failures through shared constructors. This retention covers exact suite membership, not descendant packages or unrelated legacy warnings; renew upon growth.",
+  "reviewed_commit": "e292264fa558da02022694dc86ffb2556f278f52",
+  "ceiling": 76,
   "boundaries": {
-    "lycaon/internal/tools/native/source_write_contract_test.go": "9787a70ac8836316cc9692eace9f647a1c78ba3d2eaf09c31175fe2a0c87a2a6",
-    "lycaon/internal/tools/native/write_operation_test.go": "ff658d65608cdaf3f50ce3990a5b98bc8c60158c94ab410b946f78a7ab826805"
+    "lycaon/internal/tools/native/source_write_contract_test.go": "ebec17ac79abd8b6a04bcd774ea13f5ec81a0cb624967bf0e6c8cd6c0c223858",
+    "lycaon/internal/tools/native/source_write_evidence_test.go": "07cb5c1f59afd8c929fe6ce7724641bd3a8a3a342a002df6072713982af296de",
+    "lycaon/internal/tools/native/mutation/copy_batch_test.go": "7667086cbfb76723dce85396f1367e4bd428dbfe4155f538e701bfc1419b0452"
   },
-  "reviewed_shape": "376839041673f016de2e3ef3b35f4083ca1f44726101eda9c5ca26ffc6c3e07d"
+  "reviewed_shape": "bdd93ebf723840a27a2cd3f994a9d6e296b473181e81884441ba7297ac9d2700"
 }

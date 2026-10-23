@@ -1,0 +1,16 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/projectsource/projectsource.sourceMutationPlan",
+  "kind": "data_record",
+  "workstream": "source-mutations",
+  "disposition": "retain",
+  "reason": "The persisted flat JSON plan has twenty-two direct fields plus the full embedded content, publication, recovery and attribution groups; this review acknowledges that complete semantic shape. Kind-specific pointers and stage/hold/delete identities are restart evidence, while recovery key/custody and individual agent intent stay on the same journal row. Independent plan stores or dual reads would break replay. New fields, kinds or flattened format changes require compatibility review and renewed retention.",
+  "reviewed_commit": "e292264fa558da02022694dc86ffb2556f278f52",
+  "ceiling": 22,
+  "boundaries": {
+    "lycaon/internal/projectsource/source_recovery_tree_test.go": "27e58737c400ad7411496bf1548290d46ce64c1b4e392babd4ca6459ac764386",
+    "lycaon/internal/projectsource/source_mutation_commit_failure_test.go": "31cf2f967c622b4cd63ea98d16cff21f86cd70ff7f27cc65232a32f839b51916",
+    "lycaon/internal/projectsource/agent_effect_batch_test.go": "f099695df91542d83d69f640651fa62788458f0af6d6bc6aa3b6e0f3b0467f54"
+  },
+  "reviewed_shape": "b3ecae6b45be3147a71cdb9604daa6e85bede8f7a8b5dc996233987e86236c7b"
+}

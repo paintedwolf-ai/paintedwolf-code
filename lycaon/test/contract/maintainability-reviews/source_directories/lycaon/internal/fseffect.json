@@ -1,0 +1,14 @@
+{
+  "category": "source_directories",
+  "artifact": "lycaon/internal/fseffect",
+  "kind": "module",
+  "workstream": "source-mutations",
+  "disposition": "retain",
+  "reason": "Thirty-four immediate source files implement one checked descriptor-relative filesystem effect boundary across platform implementations of the same operations. Replacement owns held staging through one commit/abandon, rather than an alternate write path. The transaction lifecycle contracts support retention of exact current membership; growth requires fresh review. Automated qualification is scoped to the current host.",
+  "reviewed_commit": "e292264fa558da02022694dc86ffb2556f278f52",
+  "ceiling": 34,
+  "boundaries": {
+    "lycaon/internal/fseffect/transaction_test.go": "79f21372451b86f114c6c7c7a7122d45c663facb4493d2e2eb079dfe1cbbc291"
+  },
+  "reviewed_shape": "63bed3f09d349e3239c8e19a8eec0b9c92eff20cc095d1f088343788d9aa8dc9"
+}

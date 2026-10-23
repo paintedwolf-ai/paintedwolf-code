@@ -1,0 +1,16 @@
+{
+  "category": "test_directories",
+  "artifact": "lycaon/internal/projectsource",
+  "kind": "test_suite",
+  "workstream": "source-mutations",
+  "disposition": "retain",
+  "reason": "Fifty-three immediate tests remain beside the source operation owners. Recovery identity, quota, cancellation, restart and immutable attribution fixtures exercise actual storage and filesystem boundaries; the reviewed broader projectsource suite passes433 tests. Retain exact current membership and renew upon growth or a new lifecycle.",
+  "reviewed_commit": "e292264fa558da02022694dc86ffb2556f278f52",
+  "ceiling": 53,
+  "boundaries": {
+    "lycaon/internal/projectsource/agent_effect_batch_test.go": "f099695df91542d83d69f640651fa62788458f0af6d6bc6aa3b6e0f3b0467f54",
+    "lycaon/internal/projectsource/source_recovery_tree_test.go": "27e58737c400ad7411496bf1548290d46ce64c1b4e392babd4ca6459ac764386",
+    "lycaon/internal/projectsource/source_tree_walk_test.go": "7e4e91a9402b4d1e309332808ed735cc43c25fa184e978d3b3909335870d235d"
+  },
+  "reviewed_shape": "210db8f16cea4fad05eab58ff28063864300ca711c4aad6627f07487e442d1e0"
+}

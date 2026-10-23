@@ -2,14 +2,15 @@
   "category": "source_directories",
   "artifact": "lycaon/internal/tools/native",
   "kind": "module",
-  "workstream": "tool-domains",
+  "workstream": "source-mutations",
   "disposition": "retain",
-  "reason": "The native hub retains host-coupled reads and its single complete source write door. P03 extracts the existing write algorithm into write_operation.go so structured and typed entry points share admission, review, retry, attribution and publication. Retain the measured 47 source files; moving this operation into a child package would invert the existing effect boundary. Real native write/refusal and mixed editor-owner fixtures passed. Future growth needs a fresh cohesion review.",
-  "reviewed_commit": "f66017977c2500399b4e4ca07e6fff3ee8c3ca76",
-  "ceiling": 47,
+  "reason": "Fifty-seven immediate source files retain host tool composition and shared source read/write doors. Copy tree/page, source stream stage, execution capture and removal files divide actual operation lifetimes under existing authority rather than adding services. Focused publication and attribution contracts support exact current membership; growth requires renewed review and scale timings remain separately unqualified.",
+  "reviewed_commit": "e292264fa558da02022694dc86ffb2556f278f52",
+  "ceiling": 57,
   "boundaries": {
-    "lycaon/internal/tools/native/source_write_contract_test.go": "9787a70ac8836316cc9692eace9f647a1c78ba3d2eaf09c31175fe2a0c87a2a6",
-    "lycaon/internal/tools/native/write_operation_test.go": "ff658d65608cdaf3f50ce3990a5b98bc8c60158c94ab410b946f78a7ab826805"
+    "lycaon/internal/tools/native/source_write_contract_test.go": "ebec17ac79abd8b6a04bcd774ea13f5ec81a0cb624967bf0e6c8cd6c0c223858",
+    "lycaon/internal/tools/native/source_write_evidence_test.go": "07cb5c1f59afd8c929fe6ce7724641bd3a8a3a342a002df6072713982af296de",
+    "lycaon/internal/tools/native/mutation/copy_batch_test.go": "7667086cbfb76723dce85396f1367e4bd428dbfe4155f538e701bfc1419b0452"
   },
-  "reviewed_shape": "4611bb71cb1f5aea7c7dd6e03ad4e786690aa14b804a78ea2921d44ff81d73d1"
+  "reviewed_shape": "44383cacf917ab1db84e86db56b846d08f4f468cb195e30cf58a24cb16eb2240"
 }
