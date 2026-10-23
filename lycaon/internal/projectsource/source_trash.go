@@ -18,6 +18,7 @@ type SourceEffects struct {
 	recovery       *sourceRecovery
 	trash          func(context.Context, string) (desktoptrash.Receipt, error)
 	sameFilesystem func(string, string) (bool, error)
+	relocate       func(fseffect.Location, fseffect.Location, string) error
 }
 
 // SetTrashMover installs the platform adapter before the service starts.
@@ -51,6 +52,9 @@ func (s *SourceEffects) applyMutation(ctx context.Context, row *sourceMutationRo
 // applySourceDelete selects native recovery or the retained recovery promised by the plan.
 func (s *SourceEffects) applySourceDelete(ctx context.Context, row *sourceMutationRow) error {
 	plan := &row.Plan
+	if plan.RetainedTree != nil {
+		return s.retainSourceTree(ctx, row)
+	}
 	if plan.NativeTrash != nil {
 		return s.applyNativeTrash(ctx, row)
 	}

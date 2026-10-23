@@ -23,6 +23,9 @@ func TestOversizeDeleteRejectionLeavesTreeIntact(t *testing.T) {
 	var notes []string
 	h.tc.Files.FileChangeReview = func(_ context.Context, changes []tools.FileChange) error {
 		for _, ch := range changes {
+			if !ch.RecoveryLoss || ch.Preview.BeforeBytes != 64 {
+				t.Fatalf("inaccurate permanent removal facts: %+v", ch)
+			}
 			notes = append(notes, ch.Preview.PreviewNote)
 			t.Logf("permanent-removal preview: %s", ch.Preview.PreviewNote)
 		}
@@ -32,8 +35,8 @@ func TestOversizeDeleteRejectionLeavesTreeIntact(t *testing.T) {
 	if r.err == nil || h.absent("oversize/a.txt") || h.absent("oversize/b.txt") {
 		t.Fatalf("declined oversize delete should leave tree intact: %+v %v", r.result, r.err)
 	}
-	if len(notes) != 1 || notes[0] != "Delete oversize (64 B, 2 files) permanently without recovery." {
-		t.Fatalf("unexpected approval copy: %v", notes)
+	if len(notes) != 1 {
+		t.Fatalf("expected one permanent-removal review, got %d", len(notes))
 	}
 }
 

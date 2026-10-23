@@ -227,6 +227,17 @@ func discardAgentEntry(ctx context.Context, tctx tools.ToolContext, target mutat
 		if tctx.Effects.Out != nil && operationID != "" {
 			tctx.Effects.Out.OwnerRef = operationID
 		}
+		var unavailable *sourceeffect.RecoveryUnavailableError
+		if !mutation.Unrecoverable && errors.As(err, &unavailable) {
+			if reviewErr := reviewUnavailableRemoval(ctx, tctx, target, &mutation); reviewErr != nil {
+				return reviewErr
+			}
+			removal, _ = recoverableRemoval(tctx, mutation)
+			operationID, err = tctx.Source.SourceMutations.RemoveEntry(ctx, removal)
+		}
+		if tctx.Effects.Out != nil && operationID != "" {
+			tctx.Effects.Out.OwnerRef = operationID
+		}
 		if err == nil {
 			recordAgentMutationPaths(tctx, mutation)
 		}

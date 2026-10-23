@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"math"
 	"sort"
+
+	"github.com/lycaon/lycaon/internal/sourceledger"
 )
 
 // A history entry can retain two different snapshots. A shared recovery ID is
@@ -17,6 +19,9 @@ type historyRecoveryUsage struct {
 func recoveryUsage(plan sourceMutationPlan) historyRecoveryUsage {
 	if plan.NativeTrash != nil || plan.RecoveryCount == 0 {
 		return historyRecoveryUsage{}
+	}
+	if plan.RetainedTree != nil {
+		return historyRecoveryUsage{id: plan.RecoveryID, bytes: plan.RetainedTree.AllocatedBytes}
 	}
 	return historyRecoveryUsage{id: plan.RecoveryID, bytes: max(plan.BeforeSize, plan.AfterSize)}
 }
@@ -43,9 +48,9 @@ func pruneSourceHistoryRecoveryQuotaTx(ctx context.Context, tx *sql.Tx, projectI
 	}
 	rows, err := tx.QueryContext(ctx, `SELECT id,
  COALESCE(json_extract(undo_plan_json,'$.recovery_id'),''),
- CASE WHEN COALESCE(json_type(undo_plan_json,'$.native_trash'),'null')='null' AND COALESCE(json_extract(undo_plan_json,'$.recovery_count'),0)>0 THEN MAX(COALESCE(json_extract(undo_plan_json,'$.before_size'),0),COALESCE(json_extract(undo_plan_json,'$.after_size'),0)) ELSE 0 END,
+ CASE WHEN COALESCE(json_type(undo_plan_json,'$.native_trash'),'null')='null' AND COALESCE(json_extract(undo_plan_json,'$.recovery_count'),0)>0 THEN COALESCE(json_extract(undo_plan_json,'$.retained_tree.allocated_bytes'),MAX(COALESCE(json_extract(undo_plan_json,'$.before_size'),0),COALESCE(json_extract(undo_plan_json,'$.after_size'),0))) ELSE 0 END,
  COALESCE(json_extract(redo_plan_json,'$.recovery_id'),''),
- CASE WHEN COALESCE(json_type(redo_plan_json,'$.native_trash'),'null')='null' AND COALESCE(json_extract(redo_plan_json,'$.recovery_count'),0)>0 THEN MAX(COALESCE(json_extract(redo_plan_json,'$.before_size'),0),COALESCE(json_extract(redo_plan_json,'$.after_size'),0)) ELSE 0 END
+ CASE WHEN COALESCE(json_type(redo_plan_json,'$.native_trash'),'null')='null' AND COALESCE(json_extract(redo_plan_json,'$.recovery_count'),0)>0 THEN COALESCE(json_extract(redo_plan_json,'$.retained_tree.allocated_bytes'),MAX(COALESCE(json_extract(redo_plan_json,'$.before_size'),0),COALESCE(json_extract(redo_plan_json,'$.after_size'),0))) ELSE 0 END
  FROM source_history_entries WHERE project_id=? ORDER BY seq DESC`, projectID)
 	if err != nil {
 		return err
@@ -111,9 +116,9 @@ func (s *SourceHistory) pruneSourceHistoryMemory(projectID string) {
 
 // Memory reclamation observes history and pending receipts only after all
 // captures have published or released their references.
-func (s *SourceMutationService) reclaimMemoryRecovery() {
+func (s *SourceMutationService) reclaimMemoryRecovery(ctx context.Context) error {
 	if !s.recovery.lifecycle.TryLock() {
-		return
+		return nil
 	}
 	defer s.recovery.lifecycle.Unlock()
 	retained := map[string]bool{}
@@ -131,6 +136,16 @@ func (s *SourceMutationService) reclaimMemoryRecovery() {
 	s.Journal.stateMu.Unlock()
 	s.recovery.stateMu.Lock()
 	defer s.recovery.stateMu.Unlock()
+	if s.recovery.treeRoot != "" {
+		names := make(map[string]bool, len(retained))
+		for id := range retained {
+			names[sourceledger.RecoveryTreeName(id)] = true
+		}
+		// The lifecycle write lease excludes preparation and publication.
+		if err := sourceledger.PruneRecoveryTrees(ctx, s.recovery.treeRoot, names); err != nil {
+			return err
+		}
+	}
 	objects := map[string]bool{}
 	for id, entries := range s.recovery.recoveryEntries {
 		if !retained[id] {
@@ -146,4 +161,5 @@ func (s *SourceMutationService) reclaimMemoryRecovery() {
 			delete(s.recovery.recoveryBytes, sha)
 		}
 	}
+	return nil
 }

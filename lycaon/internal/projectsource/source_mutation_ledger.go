@@ -26,6 +26,8 @@ func (p sourceMutationPlan) ledgerInput(operationID string) sourceledger.RecordI
 	}
 	if p.NativeTrash != nil && (p.Kind == "delete" || p.Kind == "restore") {
 		in.NativeRecovery = &sourceledger.NativeRecoveryBinding{Key: p.NativeTrash.RecoveryKey, Restore: p.Kind == "restore"}
+	} else if p.EntryRecoveryKey != "" && (p.Kind == "delete" || p.Kind == "restore") {
+		in.NativeRecovery = &sourceledger.NativeRecoveryBinding{Key: p.EntryRecoveryKey, Restore: p.Kind == "restore"}
 	}
 	switch p.Kind {
 	case "write":

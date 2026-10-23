@@ -84,7 +84,7 @@ func TestSourceFingerprintRejectsReplacedEntryBeforeReading(t *testing.T) {
 	var output bytes.Buffer
 	err = fingerprintSourceEntry(t.Context(), &output, ".", info,
 		func() (*os.File, error) { return os.Open(replacement) },
-		func() (string, error) { t.Fatal("regular file read as symlink"); return "", nil }, newSourceWorkProgress(t.Context(), "verifying"))
+		func() (string, error) { t.Fatal("regular file read as symlink"); return "", nil }, newSourceWorkProgress(t.Context(), "verifying"), &sourceTreeAllocation{known: true})
 	if !errors.Is(err, ErrSourceMutationDiverged) {
 		t.Fatalf("replacement error = %v", err)
 	}

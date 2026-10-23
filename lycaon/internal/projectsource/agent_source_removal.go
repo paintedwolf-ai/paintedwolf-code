@@ -3,7 +3,9 @@ package projectsource
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 
@@ -31,7 +33,27 @@ func (s *SourceMutationService) InspectRemoval(ctx context.Context, location fse
 	if err := requireSourceIdentity(abs, identity); err != nil {
 		return sourceeffect.RemovalSnapshot{}, err
 	}
-	return sourceeffect.RemovalSnapshot{Identity: identity, TreeSHA: sha, Bytes: size.Bytes, Files: size.Files}, nil
+	available := true
+	recoveryBytes := size.Bytes
+	recoveryKnown := true
+	info, err := os.Lstat(abs)
+	if err != nil {
+		return sourceeffect.RemovalSnapshot{}, err
+	}
+	if info.IsDir() {
+		available, err = s.recovery.canRetainTree(location, s.Effects.sameFilesystem)
+		available = available && size.AllocationKnown
+		recoveryBytes = size.AllocatedBytes
+		recoveryKnown = size.AllocationKnown
+		if err != nil {
+			if ctx.Err() != nil {
+				return sourceeffect.RemovalSnapshot{}, ctx.Err()
+			}
+			slog.WarnContext(ctx, "recovery capability unavailable", "error", err)
+			available = false
+		}
+	}
+	return sourceeffect.RemovalSnapshot{Identity: identity, TreeSHA: sha, Bytes: size.Bytes, Files: size.Files, RecoveryAvailable: available, RecoveryBytes: recoveryBytes, RecoverySizeKnown: recoveryKnown}, nil
 }
 
 // RemoveEntry records an undoable agent deletion without using system Trash.
@@ -128,6 +150,26 @@ func (s *SourceMutationService) prepareAgentRemoval(ctx context.Context, operati
 	}
 	if snapshot := removal.ReviewedSnapshot; snapshot != nil {
 		pub.EntryIdentity, recovery.TreeSHA, beforeSize = snapshot.Identity, snapshot.TreeSHA, snapshot.Bytes
+	}
+	if info.IsDir() && !removal.Unrecoverable {
+		snapshot := removal.ReviewedSnapshot
+		if snapshot == nil {
+			measured, err := s.InspectRemoval(ctx, fseffect.Location{Root: removal.RootPath, Rel: rel})
+			if err != nil {
+				return nil, err
+			}
+			snapshot = &measured
+		}
+		if snapshot.RecoveryBytes > s.RecoveryQuotaBytes() {
+			return nil, ErrSourceRecoveryQuota
+		}
+		if !snapshot.RecoveryAvailable {
+			return nil, &sourceeffect.RecoveryUnavailableError{Cause: errors.ErrUnsupported}
+		}
+		recovery.EntryRecoveryKey = operationID
+		recovery.RetainedTree = &sourceRecoveryTree{Version: 1, Identity: snapshot.Identity, AllocatedBytes: snapshot.RecoveryBytes}
+		recovery.RecoveryCount, recovery.TreeSHA = 1, snapshot.TreeSHA
+		pub.EntryIdentity, beforeSize = snapshot.Identity, snapshot.Bytes
 	}
 	return &sourceMutationPlan{
 		sourceMutationContent:     sourceMutationContent{Before: evidence.content, BaseSHA256: evidence.sha256, BeforeSize: beforeSize},

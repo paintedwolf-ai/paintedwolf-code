@@ -26,6 +26,7 @@ type sourceRecovery struct {
 	stateMu         sync.Mutex
 	lifecycle       sync.RWMutex
 	quota           func() int64
+	treeRoot        string
 	recoveryBytes   map[string][]byte
 	recoveryEntries map[string][]sourceledger.RecoveryEntry
 }
@@ -115,6 +116,9 @@ func (s *sourceRecovery) copyRecoveryFile(ctx context.Context, sha string, dst i
 }
 
 func (s *SourceEffects) applySourceRestore(ctx context.Context, row *sourceMutationRow) error {
+	if row.Plan.RetainedTree != nil {
+		return s.restoreSourceTree(ctx, row)
+	}
 	if row.Plan.NativeTrash != nil {
 		return s.restoreNativeTrash(ctx, row)
 	}

@@ -29,10 +29,11 @@ const (
 	DefaultSourceHistoryRecoveryQuotaBytes = 256 << 20 // 256 MiB
 )
 
-// SetRecoveryQuotaBytes overrides the logical retained content quota per project.
+// SetRecoveryQuotaBytes overrides the retained representation quota per project.
 // Nonpositive values restore the default; they never disable recovery admission.
 // Changes wait for accepted source operations to finish. Compression and
-// deduplication do not change this history policy.
+// deduplication do not change manifest charges. Retained trees use measured
+// allocated storage, including directories and unique hard-linked entries.
 func (s *SourceHistory) SetRecoveryQuotaBytes(quota int64) {
 	if s == nil {
 		return
@@ -364,7 +365,7 @@ func (s *SourceHistory) planSourceHistory(ctx context.Context, operationID strin
 	case "delete":
 		undo := sourceMutationPlan{
 			sourceMutationContent:     sourceMutationContent{After: original.Before, AfterSHA: original.BaseSHA256, AfterSize: original.BeforeSize},
-			sourceMutationRecovery:    sourceMutationRecovery{NativeTrash: original.NativeTrash, RecoveryID: original.RecoveryID, RecoveryCount: original.RecoveryCount, TreeSHA: original.TreeSHA},
+			sourceMutationRecovery:    sourceMutationRecovery{EntryRecoveryKey: original.EntryRecoveryKey, RetainedTree: original.RetainedTree, NativeTrash: original.NativeTrash, RecoveryID: original.RecoveryID, RecoveryCount: original.RecoveryCount, TreeSHA: original.TreeSHA},
 			sourceMutationAttribution: sourceMutationAttribution{ProjectID: original.ProjectID, WorkspaceID: original.WorkspaceID, BranchID: original.BranchID},
 			Kind:                      "restore",
 			RootID:                    original.RootID,
@@ -390,6 +391,10 @@ func (s *SourceHistory) planSourceHistory(ctx context.Context, operationID strin
 }
 
 func historyPlan(plan sourceMutationPlan) sourceMutationPlan {
+	if plan.RetainedTree != nil {
+		copy := *plan.RetainedTree
+		plan.RetainedTree = &copy
+	}
 	if plan.NativeTrash != nil {
 		copy := *plan.NativeTrash
 		plan.NativeTrash = &copy

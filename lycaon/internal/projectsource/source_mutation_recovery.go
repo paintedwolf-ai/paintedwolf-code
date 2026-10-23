@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/lycaon/lycaon/internal/fspath"
 )
@@ -66,6 +67,13 @@ func (s *SourceMutationService) recoverOne(ctx context.Context, row *sourceMutat
 		if current.Plan.Kind == "delete" {
 			identity, statErr := fspath.EntryIdentity(current.Plan.AbsPath)
 			applied = current.Plan.DeleteStarted && (os.IsNotExist(statErr) || (statErr == nil && identity != current.Plan.DeleteIdentity))
+			if applied && current.Plan.RetainedTree != nil {
+				location, locateErr := s.recovery.treeLocation(current.Plan.RecoveryID)
+				if locateErr != nil {
+					return locateErr
+				}
+				applied = current.Plan.RetainedTree.Version == 1 && requireSourceIdentity(filepath.Join(location.Root, location.Rel), current.Plan.RetainedTree.Identity) == nil
+			}
 		}
 		if applied && (current.Plan.Kind == "delete" || current.Plan.Kind == "restore") && current.Plan.NativeTrash != nil && !nativeTrashReceiptRecorded(&current.Plan) {
 			current.Status, current.Error = sourceMutationFailed, "Native Trash did not acknowledge a recovery receipt before interruption. Automatic Undo is unavailable; recover the item through system Trash."

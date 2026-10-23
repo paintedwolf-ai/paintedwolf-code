@@ -11,9 +11,11 @@ import (
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/desktoptrash"
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/keylock"
 	"github.com/lycaon/lycaon/internal/people/peoplestore"
+	"github.com/lycaon/lycaon/internal/sourceeffect"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 )
 
@@ -48,7 +50,7 @@ func NewSourceMutationService(database db.Handle, ledger *sourceledger.Store) *S
 	recovery.quota = history.recoveryQuotaBytes
 	service := &SourceMutationService{
 		recorder: recorder, Journal: journal, Paths: &SourcePaths{}, History: history, recovery: recovery,
-		Effects:    &SourceEffects{Journal: journal, recovery: recovery, trash: desktoptrash.Move, sameFilesystem: fspath.SameFilesystem},
+		Effects:    &SourceEffects{Journal: journal, recovery: recovery, trash: desktoptrash.Move, sameFilesystem: fspath.SameFilesystem, relocate: fseffect.RelocateGuarded},
 		settlement: &sourceSettlement{db: database, recorder: recorder, Journal: journal, History: history},
 	}
 	service.Versions = &SourceVersions{heads: heads, recorder: recorder, recovery: recovery, execute: service.execute}
@@ -154,6 +156,15 @@ func (s *SourceMutationService) resume(ctx context.Context, row *sourceMutationR
 	}
 	if row.Status == sourceMutationPrepared {
 		if err := s.Effects.applyMutation(ctx, row); err != nil {
+			var applied *sourceeffect.AppliedError
+			if errors.As(err, &applied) {
+				settled := context.WithoutCancel(ctx)
+				row.Status, row.Error = sourceMutationFileApplied, err.Error()
+				if updateErr := s.Journal.update(settled, row); updateErr != nil {
+					return nil, errors.Join(err, updateErr)
+				}
+				return nil, errors.Join(err, s.settlement.commit(settled, row))
+			}
 			err = s.finishSourcePreparationFailure(ctx, row, err)
 			if row.Plan.CrossVolume && row.Plan.HoldStarted {
 				row.Status, row.Error = sourceMutationFailed, err.Error()

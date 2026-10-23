@@ -12,23 +12,39 @@ import (
 
 // Journal records intent and attribution before a file effect.
 type Journal interface {
-	// RecoveryQuotaBytes bounds logical retained recovery content per project.
-	// Physical compression and deduplication belong to the blob store.
+	// RecoveryQuotaBytes bounds recovery representation charges per project.
+	// Manifest content and retained tree allocation keep their own byte facts.
 	RecoveryQuotaBytes() int64
 	InspectRemoval(context.Context, fseffect.Location) (RemovalSnapshot, error)
 	PrepareEffect(context.Context, Plan) (Pending, error)
-	// RemoveEntry keeps a complete recovery copy of an entry, then removes it,
-	// so the removal can be undone. It returns the operation identity.
+	// RemoveEntry retains an entry for Undo before removing its original path.
+	// It returns the operation identity.
 	RemoveEntry(context.Context, Removal) (string, error)
 }
 
 // RemovalSnapshot names the exact tree measured before removal review.
 type RemovalSnapshot struct {
-	Identity string `json:"identity"`
-	TreeSHA  string `json:"tree_sha256"`
-	Bytes    int64  `json:"bytes"`
-	Files    int64  `json:"files"`
+	Identity          string `json:"identity"`
+	TreeSHA           string `json:"tree_sha256"`
+	Bytes             int64  `json:"bytes"`
+	Files             int64  `json:"files"`
+	RecoverySizeKnown bool   `json:"recovery_size_known"`
+	RecoveryBytes     int64  `json:"recovery_bytes"`
+	RecoveryAvailable bool   `json:"recovery_available"`
 }
+
+// RecoveryUnavailableError carries a failed recovery capability, without
+// authorizing disposal. Only the caller's permanent-removal review can do that.
+type RecoveryUnavailableError struct{ Cause error }
+
+func (e *RecoveryUnavailableError) Error() string {
+	if e.Cause == nil {
+		return ""
+	}
+	return e.Cause.Error()
+}
+
+func (e *RecoveryUnavailableError) Unwrap() error { return e.Cause }
 
 // Removal is an entry the agent reviewed for removal from an attached root.
 type Removal struct {

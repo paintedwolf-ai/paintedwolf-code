@@ -75,7 +75,9 @@ func commitSourceHistoryTx(ctx context.Context, tx *sql.Tx, plan sourceMutationP
 
 func (s *SourceMutationService) reclaimEvictedRecovery(ctx context.Context) {
 	if s.recovery.objects == nil {
-		s.reclaimMemoryRecovery()
+		if err := s.reclaimMemoryRecovery(context.WithoutCancel(ctx)); err != nil {
+			slog.WarnContext(ctx, "source recovery reclamation", "error", err)
+		}
 		return
 	}
 	if s.recovery.objects != nil {
