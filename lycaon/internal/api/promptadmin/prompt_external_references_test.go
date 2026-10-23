@@ -102,6 +102,16 @@ func TestPromptAdmissionWithExternalReferencesGrantsAccessAndPerceivesImages(t *
 		t.Fatalf("visual mime = %q want image/png", res.Meta().Mime)
 	}
 
+	linked := false
+	for _, part := range prepared.input.ContentParts {
+		if part.Path == extImg && part.ArtifactID == artID {
+			linked = true
+		}
+	}
+	if !linked {
+		t.Fatal("image artifact is not bound to its source reference")
+	}
+
 	// Verify content parts contains references
 	if len(prepared.input.ContentParts) == 0 {
 		t.Fatalf("expected ContentParts to be populated")

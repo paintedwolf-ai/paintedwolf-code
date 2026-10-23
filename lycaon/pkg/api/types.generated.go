@@ -4060,6 +4060,8 @@ type MessageContentPart struct {
 	Source string `json:"source,omitempty"`
 	// Optional MIME type for this text projection.
 	MediaType string `json:"media_type,omitempty"`
+	// Host-stamped visual derived from this attachment or path reference. Edit restoration keeps the original source part instead of relinking this derived image again.
+	ArtifactID string `json:"artifact_id,omitempty"`
 	// Stable blob ID for a payload attachment, used to restage Edit/rewind.
 	BlobID string `json:"blob_id,omitempty"`
 	// Host-stamped locator the agent can open. Payload attachments use a host-data-relative path (`prompt-attachments/{blob_id}/{name}`). path_file / path_folder retrieval parts use the path relative to `root_id`, qualified with `@label/` when that root is not primary. Absent when the part has no openable body (search_hit, user prose, host notices).

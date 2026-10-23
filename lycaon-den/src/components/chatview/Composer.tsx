@@ -222,7 +222,7 @@ function rejectChipFor(name: string): ComposerPendingAttachment {
 
 function chipTitle(att: ComposerPendingAttachment): string {
   if (att.kind === "reject") return att.rejectMessage || att.name;
-  if (att.kind === "path-file" || att.kind === "path-folder") {
+  if (att.kind === "path-file" || att.kind === "path-folder" || att.kind === "external-file" || att.kind === "external-folder") {
     return `${attachmentChipLabel(att)} · ${att.path}`;
   }
   if (att.kind === "artifact") return att.name;
@@ -539,7 +539,7 @@ export function Composer(props: Props) {
     setActiveSlashSuggestion((index) => Math.min(index, count - 1));
   });
 
-  const imageCount = () => attachments().filter((a) => countsAsImage(a.kind)).length;
+  const imageCount = () => attachments().filter((a) => countsAsImage(a)).length;
   const byteAttachmentCount = () =>
     attachments().filter((a) => isByteAttachmentKind(a.kind)).length;
   const hasByteAttachments = () => attachments().some(isPayloadAttachment);
@@ -1033,7 +1033,7 @@ export function Composer(props: Props) {
                 >
                   <Show
                     when={
-                      (att.kind === "image" || att.kind === "artifact") && att.previewUrl
+                      "previewUrl" in att && att.previewUrl
                         ? att.previewUrl
                         : undefined
                     }
