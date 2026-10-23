@@ -1,9 +1,12 @@
 package launchverify
 
 import (
+	"bytes"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/pkgmanifest"
@@ -78,7 +81,9 @@ func TestSelectedGenerationBindsTheRunningInodeAndManifestRoot(t *testing.T) {
 	root := filepath.Join(output, "lib", "painted-wolf-code")
 	image := filepath.Join(root, "bin", "pw")
 	testutil.FailErr(t, "create private bin", os.MkdirAll(filepath.Dir(image), 0o755))
-	testutil.FailErr(t, "link actual image", os.Link(filepath.Join(proc.root, "images", "301"), image))
+	actualImage, err := os.Readlink(filepath.Join(proc.root, "301", "exe"))
+	testutil.FailErr(t, "resolve actual image", err)
+	testutil.FailErr(t, "link actual image", os.Link(actualImage, image))
 	policy, err := NewStorePolicy(filepath.Dir(output), []string{output})
 	testutil.FailErr(t, "select generation", err)
 	verifier.StorePolicy, verifier.InstallRoot = policy, root
@@ -96,5 +101,59 @@ func TestSelectedGenerationBindsTheRunningInodeAndManifestRoot(t *testing.T) {
 	verifier.InstallRoot = ""
 	if err := verifier.VerifyExecutable(301, RoleEngine); CodeOf(err) != CodeManifestUnreadable {
 		t.Fatalf("unspecified root: %v", err)
+	}
+}
+
+func TestSelectedClosureChainKeepsNamespaceAndPeerChecks(t *testing.T) {
+	proc, verifier := newFixture(t)
+	proc.add(fakeProcess{pid: 300, ppid: 1, uid: 1000, euid: 1000, start: 10, image: desktopImage})
+	proc.add(fakeProcess{pid: 301, ppid: 300, uid: 1000, euid: 1000, start: 20, image: engineImage})
+	output := filepath.Join(t.TempDir(), "generation")
+	root := filepath.Join(output, "lib", "painted-wolf-code")
+	testutil.FailErr(t, "create selected root", os.MkdirAll(filepath.Join(root, "bin"), 0o755))
+	verifier.Manifest = &pkgmanifest.Manifest{InstallRoot: root}
+	for _, role := range []struct {
+		pid   int
+		name  string
+		image []byte
+	}{
+		{300, "painted-wolf-code", desktopImage}, {301, "pw", engineImage},
+	} {
+		path := filepath.Join(root, "bin", role.name)
+		target, err := os.Readlink(filepath.Join(proc.root, strconv.Itoa(role.pid), "exe"))
+		testutil.FailErr(t, "resolve running image", err)
+		testutil.FailErr(t, "link selected image", os.Link(target, path))
+		verifier.Manifest.Executables = append(verifier.Manifest.Executables, entryOf(path, role.image))
+		testutil.FailErr(t, "write selected maps", os.WriteFile(filepath.Join(proc.root, strconv.Itoa(role.pid), "maps"), []byte(fmt.Sprintf("00400000-00500000 r-xp 00000000 fd:01 %d %s\n", role.pid, path)), 0o644))
+		proc.files[path] = fileFacts{device: 0xfd01, inode: uint64(role.pid), mode: 0o555}
+		for dir := filepath.Dir(path); ; dir = filepath.Dir(dir) {
+			proc.files[dir] = fileFacts{mode: fs.ModeDir | 0o555}
+			if dir == "/" {
+				break
+			}
+		}
+	}
+	policy, err := NewStorePolicy(filepath.Dir(output), []string{output})
+	testutil.FailErr(t, "select closure", err)
+	verifier.StorePolicy, verifier.InstallRoot = policy, root
+	// Explicit selected closures do not consult the native generation policy.
+	testutil.FailErr(t, "withdraw native policy", os.Remove(proc.policyPath))
+	chain, err := verifier.VerifyChain(301, 1000)
+	testutil.FailErr(t, "verify selected closure chain", err)
+	if chain.Generation != "" || chain.Manifest != verifier.Manifest {
+		t.Fatalf("selected chain = %+v", chain)
+	}
+	testutil.FailErr(t, "recheck selected chain", verifier.Recheck(chain))
+	status := filepath.Join(proc.root, "301", "status")
+	raw, err := os.ReadFile(status)
+	testutil.FailErr(t, "read peer status", err)
+	testutil.FailErr(t, "attach peer tracer", os.WriteFile(status, bytes.Replace(raw, []byte("TracerPid:\t0"), []byte("TracerPid:\t7"), 1), 0o644))
+	if err := verifier.Recheck(chain); CodeOf(err) != CodeProcessTraced {
+		t.Fatalf("traced selected peer: %v", err)
+	}
+	testutil.FailErr(t, "clear tracer", os.WriteFile(status, raw, 0o644))
+	verifier.NamespaceReader = func(string, int) (NamespaceFacts, error) { return NamespaceFacts{}, nil }
+	if _, err := verifier.VerifyChain(301, 1000); err == nil {
+		t.Fatal("selected closure bypassed protected namespace")
 	}
 }
