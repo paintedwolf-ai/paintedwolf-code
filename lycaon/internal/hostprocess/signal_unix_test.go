@@ -3,6 +3,8 @@
 package hostprocess
 
 import (
+	"errors"
+	"os"
 	"syscall"
 	"testing"
 )
@@ -21,5 +23,18 @@ func TestAcceptedSignalsHaveNativeDelivery(t *testing.T) {
 	}
 	if _, ok := nativeSignal(0); ok {
 		t.Fatal("invalid signal kind has a native delivery")
+	}
+	if err := signalInstance(Process{}, 0); !errors.Is(err, ErrUnsupported) {
+		t.Fatalf("invalid signal kind reached process delivery: %v", err)
+	}
+}
+
+func TestServiceRefusesUnsupportedSignalForCurrentInstance(t *testing.T) {
+	process, err := inspect(os.Getpid())
+	if err != nil {
+		t.Fatalf("inspect current instance: %v", err)
+	}
+	if err := (&Service{}).Signal(t.Context(), process, "SIGTERM"); err == nil || errors.Is(err, ErrStale) {
+		t.Fatalf("unsupported signal was not refused after identity verification: %v", err)
 	}
 }
