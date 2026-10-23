@@ -4,6 +4,7 @@ from __future__ import annotations
 import copy
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
+import re
 import threading
 
 MODEL = 'installed-qualification'
@@ -20,6 +21,11 @@ def gui_endpoint(port: int) -> str:
     return f'http://127.0.0.1:{port}/v1'
 
 
+class _FixtureServer(ThreadingHTTPServer):
+    allow_reuse_address = False
+    allow_reuse_port = False
+
+
 class ProviderFixture:
     def __init__(self, calls: list[dict]):
         if not calls or len(calls) > 16:
@@ -31,15 +37,24 @@ class ProviderFixture:
         self.calls = copy.deepcopy(calls)
         self.observations = []
         self.discovery_observations = []
+        self.transport_observations = []
+        self.transport_clipped = False
+        self.transport_lock = threading.Lock()
         self.lock = threading.Lock()
         self.server = None
         self.thread = None
         self.gui_purpose = False
+        self.port = 0
 
     @classmethod
-    def gui(cls, calls: list[dict]):
+    def gui(cls, calls: list[dict], *, endpoint: str | None = None):
         fixture = cls(calls)
         fixture.gui_purpose = True
+        if endpoint is not None:
+            match = re.fullmatch(r'http://127\.0\.0\.1:([0-9]{4,5})/v1', endpoint)
+            if match is None or gui_endpoint(int(match.group(1))) != endpoint:
+                raise ValueError('GUI fixture recovery requires its canonical loopback endpoint')
+            fixture.port = int(match.group(1))
         return fixture
 
     def completion(self, request: dict) -> dict:
@@ -85,6 +100,13 @@ class ProviderFixture:
                 pass
 
             def respond(self, status, value):
+                with fixture.transport_lock:
+                    if len(fixture.transport_observations) < 64:
+                        fixture.transport_observations.append({'method': self.command,
+                            'path': self.path if self.path in {'/v1/model/info', '/v1/models', '/v1/chat/completions'} else 'other',
+                            'status': status, 'fixture_credential_observed': self.headers.get('Authorization') == 'Bearer ' + GUI_API_KEY})
+                    else:
+                        fixture.transport_clipped = True
                 raw = json.dumps(value).encode()
                 self.send_response(status)
                 self.send_header('Content-Type', 'application/json')
@@ -140,9 +162,9 @@ class ProviderFixture:
                 except (ValueError, TypeError, OSError):
                     self.respond(400, {'error': 'fixture-request-refused'})
 
-        # The kernel picks a free loopback port; the GUI case types the bound
-        # endpoint, so no fixed port can collide with another listener.
-        self.server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+        # Fresh fixtures use a kernel-selected port. Recovery exclusively binds
+        # the exact prior admitted endpoint; an occupied port refuses without interference.
+        self.server = _FixtureServer(('127.0.0.1', self.port), Handler)
         self.server.daemon_threads = True
         self.base_url = gui_endpoint(self.server.server_port)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
