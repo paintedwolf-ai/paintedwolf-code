@@ -90,12 +90,12 @@ func enterDesktop(image, frame, origin *os.File, brokerFD int, lifetime *os.File
 	}
 	// Validate caller-owned paths such as HOME only after privilege drop.
 	env := DesktopEnvironment(spec.Environment, spec.UID)
-	// Bootstrap descriptors must not reach the desktop. The broker and the
-	// generation's lifetime lock stay open for it to claim.
+	// The desktop consumes the authenticated selection before starting threads.
+	// Only its sealed frame, broker and generation lifetime lock survive exec.
 	if err := unix.CloseRange(entryImageFD+1, ^uint(0), unix.CLOSE_RANGE_CLOEXEC); err != nil {
 		return err
 	}
-	for _, fd := range []int{brokerFD, int(lifetime.Fd())} {
+	for _, fd := range []int{int(frame.Fd()), brokerFD, int(lifetime.Fd())} {
 		if _, err := unix.FcntlInt(uintptr(fd), unix.F_SETFD, 0); err != nil {
 			return err
 		}

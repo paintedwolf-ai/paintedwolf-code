@@ -1,10 +1,17 @@
-//! The protected Linux launch hands the desktop two descriptors: the broker
-//! that starts programs outside the protected namespace (6) and the selected
-//! generation's lifetime lock (7). The desktop claims them before anything can
-//! inherit them, keeps the lock for its lifetime, and passes the broker only
-//! to the engine it starts.
+//! Protected Linux startup consumes the sealed generation selection (4), claims
+//! the outside-namespace broker (6) and retains the generation lifetime lock (7).
+//! Only the engine receives the broker; startup authority never reaches children.
 
 use std::sync::OnceLock;
+
+mod generation;
+pub(crate) use generation::{Generation, GenerationError};
+
+static GENERATION: OnceLock<Result<Option<Generation>, GenerationError>> = OnceLock::new();
+
+pub(crate) fn generation() -> Result<Option<Generation>, GenerationError> {
+    GENERATION.get().cloned().unwrap_or(Ok(None))
+}
 
 /// Descriptor numbers the protected entry leaves open for the desktop.
 pub(crate) const BROKER_FD: i32 = 6;
@@ -44,6 +51,7 @@ pub(crate) fn broker() -> Option<i32> {
 
 #[cfg(target_os = "linux")]
 fn claim_linux() -> Option<i32> {
+    let mut descriptor_error = false;
     // SAFETY: fcntl and getsockopt only read descriptor state into locals.
     unsafe {
         let mut kind: libc::c_int = 0;
@@ -75,11 +83,19 @@ fn claim_linux() -> Option<i32> {
         }
         for fd in [BROKER_FD, LIFETIME_FD] {
             let flags = libc::fcntl(fd, libc::F_GETFD);
-            if flags >= 0 {
-                libc::fcntl(fd, libc::F_SETFD, flags | libc::FD_CLOEXEC);
+            if flags < 0 || libc::fcntl(fd, libc::F_SETFD, flags | libc::FD_CLOEXEC) < 0 {
+                descriptor_error = true;
             }
         }
     }
+    // A root broker establishes protected launch even when its frame is invalid:
+    // retain the refusal so layout discovery cannot fall through to dev paths.
+    let selected = generation::read(4, BROKER_FD).map(Some);
+    let _ = GENERATION.set(if descriptor_error {
+        Err(GenerationError::FrameUnavailable)
+    } else {
+        selected
+    });
     Some(BROKER_FD)
 }
 

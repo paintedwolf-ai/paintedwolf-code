@@ -54,6 +54,7 @@ type protectedFacts struct {
 	BrokerPeerPID   int                         `json:"broker_peer_pid"`
 	BrokerPeerUID   int                         `json:"broker_peer_uid"`
 	BrokerType      int                         `json:"broker_type"`
+	GenerationFrame json.RawMessage             `json:"generation_frame"`
 	LifetimeRegular bool                        `json:"lifetime_regular"`
 	OpenBeyond      []int                       `json:"open_beyond"`
 	InstallWrite    string                      `json:"install_write"`
@@ -218,6 +219,11 @@ func TestProtectedLaunchSealsTheDesktopInARootOwnedNamespace(t *testing.T) {
 	// privileged and now holds only the caller's identity.
 	if facts.BrokerPeerPID != launch.cmd.Process.Pid || facts.BrokerPeerUID != 0 || facts.BrokerType != unix.SOCK_SEQPACKET || !facts.LifetimeRegular {
 		t.Fatalf("broker or lifetime descriptor not inherited from the supervisor: %+v", facts)
+	}
+	selection, err := decodeEntry(facts.GenerationFrame)
+	testutil.FailErr(t, "desktop generation selection", err)
+	if selection.SupervisorPID != facts.BrokerPeerPID || selection.UID != uint32(uid) || selection.GID != uint32(gid) || selection.Generation.LogicalInstallRoot != f.install {
+		t.Fatalf("desktop received a different authenticated selection: %+v", selection)
 	}
 	if len(facts.OpenBeyond) != 0 {
 		t.Fatalf("bootstrap descriptors reached the desktop: %v", facts.OpenBeyond)

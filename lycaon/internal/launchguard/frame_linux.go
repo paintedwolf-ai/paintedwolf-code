@@ -12,7 +12,8 @@ import (
 )
 
 // CreateEntryFrame seals the selected image and original caller into a
-// root-created memfd. Only the static entry consumes this descriptor.
+// root-created memfd. The static entry verifies it and the desktop consumes
+// its authenticated generation selection before starting children.
 func CreateEntryFrame(generation *Generation, caller Identity, arguments, environment []string) (*os.File, error) {
 	if os.Geteuid() != 0 || generation == nil || generation.Desktop == nil || generation.Entry == nil || generation.Lifetime == nil {
 		return nil, errors.New("entry frame requires retained privileged generation authority")

@@ -175,7 +175,7 @@ pub fn run() {
         .setup(|app| {
             backup_transfer::journal::cleanup_on_launch();
             app_state::document_outbox::reconcile_windows(app.handle(), None);
-            sidecar::layout::setup_bundled_engine_layout(app.handle());
+            sidecar::layout::setup_bundled_engine_layout(app.handle())?;
             sidecar::setup_supervision(app.handle());
             webkit_features::create_main_window(app.handle())?;
             windows::window_appearance::setup(app.handle());
