@@ -61,7 +61,7 @@ static int hold_volume(const char *payload) {
         if (command == 'c' && fd >= 0) {
             if (close(fd) != 0) return 6;
             fd = -1;
-        } else if (command != 's' || fd < 0 || fcntl(fd,F_GETFD) < 0) {
+        } else if (command != 's' || (fd >= 0 && fcntl(fd,F_GETFD) < 0)) {
             if (fd >= 0) close(fd);
             return 6;
         }

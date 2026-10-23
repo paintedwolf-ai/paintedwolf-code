@@ -260,6 +260,13 @@ func assertGTKVolumeHold(t *testing.T, bootstrap string, environment []string, p
 	if closed.Held || closed.FD != -1 || closed.PID != held.PID || closed.Inode != held.Inode || closed.Device != held.Device {
 		t.Fatalf("GTK held descriptor was not explicitly released: %+v", closed)
 	}
+	_, err = input.Write([]byte{'s'})
+	testutil.FailErr(t, "query explicit closed state while GUI remains alive", err)
+	var stillClosed gtkHeldFile
+	read("PWGTKHOLD01 ", &stillClosed)
+	if stillClosed != closed {
+		t.Fatalf("closed-file component state changed: %+v -> %+v", closed, stillClosed)
+	}
 	_, err = input.Write([]byte{'q'})
 	testutil.FailErr(t, "end held-file component", err)
 	err = <-done
