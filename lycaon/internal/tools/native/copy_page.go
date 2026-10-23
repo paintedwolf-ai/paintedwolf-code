@@ -61,7 +61,7 @@ func (p *copyPage) Add(pair FilePair, maximum int64) error {
 	} else if !os.IsNotExist(err) {
 		return err
 	}
-	staged, result, err := stageCopyFileWithinLimit(p.ctx, p.tc, resolvedMutationTarget(from), resolvedMutationTarget(to), maximum, p.operation.memory)
+	staged, result, err := p.operation.stageCopyFileWithinLimit(p.ctx, p.tc, from, resolvedMutationTarget(to), maximum)
 	if err != nil {
 		return err
 	}

@@ -45,7 +45,7 @@ func (op *CopyOperation) copyTree(ctx context.Context, tc tools.ToolContext, sou
 		if err != nil {
 			return err
 		}
-		held, err := fseffect.OpenRead(from.EffectLocation())
+		held, err := op.reads.Open(from)
 		if err != nil {
 			return err
 		}

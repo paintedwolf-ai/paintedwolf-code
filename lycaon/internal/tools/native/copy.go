@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 )
 
@@ -87,6 +88,7 @@ func (t *CopyTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 // invocation, including sources handled after an ordinary operand failure.
 type CopyOperation struct {
 	memory         *toolcontract.ProgramMemory
+	reads          *projectpaths.ReadSession
 	tool           *CopyTool
 	input          CopyInput
 	caps, used     RecursiveCaps
@@ -147,6 +149,10 @@ func (op *CopyOperation) CopyPair(ctx context.Context, pair FilePair, tctx tools
 	if err := ctx.Err(); err != nil {
 		return result, err
 	}
+	if op.reads == nil {
+		// Mutation scope still resolves every source; only its held read root is reused.
+		op.reads = projectpaths.NewReadSession(nil, tctx)
+	}
 	in, t := op.input, op.tool
 	if in.Recursive {
 		source, err := assertCopyWritePath(ctx, t.Boundary, tctx, pair.From, tctx.ProfileID())
@@ -174,7 +180,7 @@ func (op *CopyOperation) CopyPair(ctx context.Context, pair FilePair, tctx tools
 }
 
 func (op *CopyOperation) copyFile(ctx context.Context, tctx tools.ToolContext, pair FilePair, maxBytes int64, result *CopyResult) error {
-	t, in, memory := op.tool, op.input, op.memory
+	t, in := op.tool, op.input
 	prof := tctx.ProfileID()
 	fromSlash, toSlash := filepath.ToSlash(pair.From), filepath.ToSlash(pair.To)
 	srcResolved, err := assertMutationFileSource(ctx, t.Boundary, tctx, pair.From, prof, "copy",
@@ -198,7 +204,7 @@ func (op *CopyOperation) copyFile(ctx context.Context, tctx tools.ToolContext, p
 	if err := op.retainResult(ctx, pair); err != nil {
 		return err
 	}
-	publication, err := copyFileWithinLimit(ctx, tctx, resolvedMutationTarget(srcResolved), resolvedMutationTarget(dstResolved), maxBytes, memory)
+	publication, err := op.copyFileWithinLimit(ctx, tctx, srcResolved, resolvedMutationTarget(dstResolved), maxBytes)
 	if publication.Publication.Committed() {
 		result.Effects++
 		result.Copied = append(result.Copied, copyResult{From: fromSlash, To: toSlash, Bytes: publication.Bytes})
@@ -242,8 +248,8 @@ func preserveMetadata(ctx context.Context, tctx tools.ToolContext, source string
 	return nil
 }
 
-func stageCopyFileWithinLimit(ctx context.Context, tctx tools.ToolContext, source, target mutationTarget, maxBytes int64, memory *toolcontract.ProgramMemory) (*agentStreamStage, fseffect.Result, error) {
-	in, err := fseffect.OpenRead(source.Location)
+func (op *CopyOperation) stageCopyFileWithinLimit(ctx context.Context, tctx tools.ToolContext, source projectpaths.Resolved, target mutationTarget, maxBytes int64) (*agentStreamStage, fseffect.Result, error) {
+	in, err := op.reads.Open(source)
 	if err != nil {
 		return nil, fseffect.Result{}, err
 	}
@@ -267,7 +273,7 @@ func stageCopyFileWithinLimit(ctx context.Context, tctx tools.ToolContext, sourc
 	}
 	mode := info.Mode().Perm()
 	stage, result, err := stageAgentStream(ctx, tctx, agentStreamRequest{
-		Mode: &mode, Memory: memory,
+		Mode: &mode, Memory: op.memory,
 		Target: target, Source: contextio.Reader{Context: ctx, Source: io.LimitReader(in, readLimit)},
 		BeforeCommit: func(_ fseffect.Target, staged fseffect.Result) error {
 			if staged.Bytes <= maxBytes {
@@ -288,8 +294,8 @@ func stageCopyFileWithinLimit(ctx context.Context, tctx tools.ToolContext, sourc
 	return stage, result, nil
 }
 
-func copyFileWithinLimit(ctx context.Context, tc tools.ToolContext, source, target mutationTarget, maximum int64, memory *toolcontract.ProgramMemory) (fseffect.Result, error) {
-	staged, result, err := stageCopyFileWithinLimit(ctx, tc, source, target, maximum, memory)
+func (op *CopyOperation) copyFileWithinLimit(ctx context.Context, tc tools.ToolContext, source projectpaths.Resolved, target mutationTarget, maximum int64) (fseffect.Result, error) {
+	staged, result, err := op.stageCopyFileWithinLimit(ctx, tc, source, target, maximum)
 	if err != nil {
 		return result, err
 	}
@@ -312,6 +318,10 @@ func (op *CopyOperation) retainResult(ctx context.Context, pair FilePair) error 
 
 // Close returns retained result storage after the caller consumes the result.
 func (op *CopyOperation) Close() {
+	if op.reads != nil {
+		op.reads.Close()
+		op.reads = nil
+	}
 	for _, release := range op.resultReleases {
 		release()
 	}
