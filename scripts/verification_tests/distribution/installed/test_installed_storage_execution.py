@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from linux_release import installed_storage
 
@@ -53,3 +53,40 @@ class InstalledStorageTests(unittest.TestCase):
                     installed_storage.resolve({'HOME': str(home)})
             with patch.object(Path, 'home', return_value=link), self.assertRaises(ValueError):
                 installed_storage.resolve({'HOME': str(link)})
+
+    def test_captured_launch_storage_never_switches_to_a_changed_ambient_home(self):
+        from linux_release.installed_cases import app as owner, profile_observer as observer
+        from types import SimpleNamespace
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary).resolve()
+            first, second = base / 'first', base / 'second'
+            for home in (first, second):
+                (home / '.config/paintedwolf').mkdir(parents=True, mode=0o700)
+                (home / '.config').chmod(0o700)
+                home.chmod(0o700)
+            current = [first]
+            with patch.object(Path, 'home', side_effect=lambda: current[0]):
+                binding = {'artifact': {}, 'source_commit': 'a' * 40, 'install_root': '/owned',
+                           'images': {'/owned/bin/pw': {'device': 1, 'inode': 2, 'bytes': 3}}}
+                app = owner.InstalledApp(binding)
+                app.storage = installed_storage.resolve({'HOME': str(first)})
+                selected = app.storage
+                app.observations.update(storage=selected.facts(), engine_identity={'pid': 123})
+                app.process = SimpleNamespace(poll=lambda: None)
+                app.require_running, app.require_engine = Mock(), Mock()
+                with patch.object(owner, 'private_json') as read:
+                    current[0] = second
+                    with self.assertRaises(ValueError):
+                        app.try_ready()
+                    read.assert_not_called()
+                with patch.object(observer, 'require_owned_guest'), patch.object(observer, 'engine_image', return_value=(1, 2, 3)):
+                    with self.assertRaises(ValueError):
+                        with observer.profile(app):
+                            self.fail('drifted storage must not expose any profile')
+                    current[0] = first
+                    with self.assertRaises(ValueError):
+                        with observer.profile(app) as directory:
+                            self.assertEqual(directory, selected.config)
+                            current[0] = second
+                self.assertIs(app.storage, selected)
+                self.assertEqual(app.observations['storage'], selected.facts())

@@ -16,7 +16,8 @@ def identity(info):
 
 class Reservation:
     def __init__(self, binding, storage):
-        if not isinstance(storage, Storage) or storage != resolve({'HOME': str(storage.home)}):
+        if (not isinstance(storage, Storage) or type(storage.uid) is not int
+                or storage != resolve({'HOME': str(storage.home)})):
             raise ValueError('fresh reservation requires the shared normal launch storage facts')
         self.binding, self.storage = binding, storage
         self.parents, self.created = {}, []
@@ -99,6 +100,13 @@ class Reservation:
                 raise CaseUnavailable('fresh product storage changed its pinned leaf identity')
             if empty and os.listdir(descriptor):
                 raise CaseUnavailable('fresh product storage was populated before the owned launch')
+
+    def check_launch(self, app):
+        self.check()
+        app.require_running()
+        app.require_engine()
+        if app.binding != self.binding or app.selected_storage() != self.storage:
+            raise CaseUnavailable('fresh reservation differs from actual selected installed launch storage')
 
     def facts(self):
         created = []
