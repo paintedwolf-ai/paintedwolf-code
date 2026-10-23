@@ -1034,6 +1034,15 @@ lane durations, and unsuccessful merge-group runs. Three distinct runs sharing
 one failure signature appear in the report without opening issues. Missing artifacts
 remain a coverage gap; cancellation is reported separately from an attributed test failure.
 
+### Browser qualification capacity
+
+Web qualification partitions the complete suite across two hosted jobs with two
+isolated local shards each. The two available web slots execute one wave;
+nightly observation can serialize the same jobs within its smaller budget.
+Shared test-location groups stay together, and every selected test belongs to
+one shard. Per-job concurrency does not increase. The execution deadline allows
+60 minutes for each larger slice, with separate setup and cleanup allowance.
+
 ### Compiler cache storage admission
 
 Only the serialized main warmer publishes compiler caches. Each publication
