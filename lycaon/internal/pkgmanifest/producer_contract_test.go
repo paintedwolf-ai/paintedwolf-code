@@ -1,3 +1,5 @@
+//go:build darwin || linux
+
 package pkgmanifest_test
 
 import (
@@ -10,6 +12,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/pkgmanifest"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"golang.org/x/sys/unix"
 )
 
 func TestSharedPackagingProducerManifestContract(t *testing.T) {
@@ -30,6 +33,17 @@ func TestSharedPackagingProducerManifestContract(t *testing.T) {
 					err = os.MkdirAll(path, os.FileMode(entry.Mode))
 				case "symlink":
 					err = os.Symlink(*entry.Target, path)
+					if err == nil {
+						info, statErr := os.Lstat(path)
+						if statErr != nil {
+							testutil.FailErr(t, "stat shared symlink", statErr)
+						}
+						// Darwin applies the umask to symlinks; materialize the sealed Linux mode
+						// without following the link or changing the production verifier.
+						if uint32(info.Mode().Perm()) != entry.Mode {
+							err = unix.Fchmodat(unix.AT_FDCWD, path, entry.Mode, unix.AT_SYMLINK_NOFOLLOW)
+						}
+					}
 				case "file":
 					data := elf
 					if !strings.HasPrefix(entry.Path, "bin/") {

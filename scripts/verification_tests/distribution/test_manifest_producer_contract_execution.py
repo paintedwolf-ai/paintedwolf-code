@@ -5,7 +5,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from verification_tests.distribution.manifest_fixture import ARCHITECTURES, FIXTURE, generate, relocate
+from verification_tests.distribution.manifest_fixture import ARCHITECTURES, FIXTURE, ROOT, PRODUCER, generate, relocate
 from verification_tests.distribution.test_nixos_apparmor_execution import OWNER as APPARMOR
 
 
@@ -14,6 +14,11 @@ class ProducerReaderContractTests(unittest.TestCase):
         for architecture in ARCHITECTURES:
             with self.subTest(architecture=architecture), tempfile.TemporaryDirectory() as temporary:
                 actual = generate(Path(temporary), architecture)
+                schema = json.loads((ROOT / 'packaging/linux/manifest/manifest.schema.json').read_bytes())
+                document = json.loads(actual)
+                self.assertEqual(schema['properties']['format_version']['const'], PRODUCER.FORMAT_VERSION)
+                self.assertEqual(set(document), set(schema['required']))
+                self.assertEqual(document['format_version'], schema['properties']['format_version']['const'])
                 path = FIXTURE / (architecture + '.json')
                 self.assertTrue(path.is_file(), 'Producer fixture to retain: ' + architecture + ':' + base64.b64encode(actual).decode())
                 self.assertEqual(path.read_bytes(), actual, 'Regenerate the shared corpus after producer or format changes')
