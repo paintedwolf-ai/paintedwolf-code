@@ -135,6 +135,8 @@ class Actor:
                 raise ValueError('QMP connection is not the leased process')
 
     def _bounded(self, minimum=0):
+        if self.failed or self.closed:
+            raise ValueError('physical input actor is unavailable')
         if self.deadline is not None:
             remaining = self.deadline - time.monotonic()
             if remaining <= minimum:

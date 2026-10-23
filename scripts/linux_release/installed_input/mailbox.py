@@ -120,6 +120,13 @@ class Mailbox:
         finally:
             Path(temporary).unlink()
 
+    def clear_private(self, pending: dict):
+        from . import password_wire
+        password_wire.request(pending, self.execution)
+        if self.read('request.json') != pending or self.read('ack.json') is not None:
+            raise ValueError('private fixture publication changed before completion')
+        (self.path / 'request.json').unlink()
+
     def clear_completed(self, pending: dict):
         if self.read('request.json') != pending:
             raise ValueError('native input pending request changed before completion')
@@ -173,9 +180,30 @@ def serve(execution: dict, vm_id: str):
                     acknowledged = None
                     result = {'state': 'waiting'}
                 else:
-                    protocol.request(pending, execution)
+                    private = pending.get('operation') == password_wire.OPERATION
+                    if private:
+                        password_wire.request(pending, execution)
+                        if not identified or pending['actor'] != private_actor:
+                            raise ValueError('private fixture requires its independently selected SSH actor')
+                    else:
+                        protocol.request(pending, execution)
                     digest = protocol.request_sha256(pending)
-                    result = {'state': 'acknowledged'} if digest == acknowledged else {'state': 'request', 'request': pending}
+                    result = ({'state': 'acknowledged'} if digest == acknowledged else
+                              {'state': 'private-request' if private else 'request', 'request': pending})
+        elif set(command) == {'operation', 'transaction_id'} and command['operation'] == 'open-password-fixture':
+            if not identified or publication is None or attached_publication() != publication:
+                raise ValueError('private fixture requires its captured mailbox publication')
+            pending = mailbox.read('request.json')
+            password_wire.request(pending, execution)
+            digest = protocol.request_sha256(pending)
+            if (pending['actor'] != private_actor or command['transaction_id'] != pending['transaction_id']
+                    or acknowledged == digest or mailbox.read('ack.json') is not None):
+                raise ValueError('private fixture opening changed or replayed its selected transaction')
+            from .password_endpoint import serve as serve_private
+            if not serve_private(mailbox, pending, private_actor):
+                raise SystemExit(1)
+            acknowledged = digest
+            continue
         elif set(command) == {'operation', 'acknowledgment'} and command['operation'] == 'ack':
             if publication is None or attached_publication() != publication:
                 raise ValueError('native input acknowledgment requires its attached publication')

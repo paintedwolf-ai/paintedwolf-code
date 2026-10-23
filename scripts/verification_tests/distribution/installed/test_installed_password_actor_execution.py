@@ -154,3 +154,16 @@ class PrivateQmpDeadlineTests(unittest.TestCase):
             first.close()
             second.close()
         self.assertFalse(worker.is_alive())
+
+    def test_cancellation_during_query_status_prevents_the_following_key_mutation(self):
+        def query(name, arguments=None):
+            self.assertEqual(name, 'query-status')
+            self.actor.failed = True
+            return {'id': 3, 'return': {'running': True, 'status': 'running'}}
+        self.actor.command.side_effect = query
+        with self.assertRaises(ValueError):
+            with password_actor.Fixture(self.actor, self.pending, self.secret) as fixture:
+                fixture.deliver(0)
+        self.assertEqual(self.actor.command.call_count, 1)
+        self.assertTrue(self.actor.failed)
+        self.assertIsNone(fixture._value)
