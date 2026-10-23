@@ -2,7 +2,9 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"errors"
+	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -135,5 +137,54 @@ func TestRealCheckpointPressureInterruptsAuditAndThenCompletes(t *testing.T) {
 	testutil.FailErr(t, "read final audit state", err)
 	if state != "" || store.Failure() != nil {
 		t.Fatalf("audit failed to complete: state=%q failure=%v", state, store.Failure())
+	}
+}
+
+func TestAuditCannotClearBeforeWholeFileCoverage(t *testing.T) {
+	_, store := uncleanAuditStore(t)
+	globalAttempts, waits := 0, 0
+	err := auditTables(t.Context(), store.reader, nil, func(ctx context.Context, table string) error {
+		if table == "" {
+			globalAttempts++
+			if globalAttempts == 1 {
+				return errAuditDeferred
+			}
+		}
+		return auditTable(ctx, store.reader, table)
+	}, func(ctx context.Context) error {
+		waits++
+		state, err := integrityAuditState(ctx, store.reader)
+		testutil.FailErr(t, "read outstanding global obligation", err)
+		if state != integrityAuditPendingValue {
+			t.Fatal("partial coverage cleared audit obligation")
+		}
+		return nil
+	})
+	testutil.FailErr(t, "complete whole-file audit", err)
+	if globalAttempts != 2 || waits != 1 {
+		t.Fatalf("global attempts=%d waits=%d", globalAttempts, waits)
+	}
+}
+
+func TestWholeFileAuditDetectsSharedTablePages(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "aliased.db")
+	writer, err := sql.Open("sqlite", path)
+	testutil.FailErr(t, "open page ownership fixture", err)
+	_, err = writer.Exec(`CREATE TABLE first(value TEXT); CREATE TABLE second(value TEXT);
+ INSERT INTO first VALUES('retained'); INSERT INTO second VALUES('other');
+ PRAGMA writable_schema=ON;
+ UPDATE sqlite_schema SET rootpage=(SELECT rootpage FROM sqlite_schema WHERE name='first') WHERE name='second';
+ PRAGMA writable_schema=OFF`)
+	testutil.FailErr(t, "alias table roots", err)
+	testutil.FailErr(t, "close fixture writer", writer.Close())
+	reader, err := sql.Open("sqlite", fileDSN(path, "mode=ro"))
+	testutil.FailErr(t, "open page ownership reader", err)
+	defer reader.Close()
+	for _, table := range []string{"first", "second"} {
+		testutil.FailErr(t, "partial check cannot detect cross-table alias", auditTable(t.Context(), reader, table))
+	}
+	var damage *StoreIncompatibleError
+	if err := auditTable(t.Context(), reader, ""); !errors.As(err, &damage) || damage.Reason != RecoveryReasonIntegrityFailed {
+		t.Fatalf("whole-file page alias diagnosis = %v", err)
 	}
 }
