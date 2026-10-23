@@ -3,7 +3,6 @@
 package launchguard
 
 import (
-	"errors"
 	"strconv"
 	"strings"
 )
@@ -147,17 +146,17 @@ func decodeMountInfoField(raw string) (string, bool) {
 // oversized, cyclic or incomplete record set.
 func parseMountTopology(raw []byte) ([]mountEntry, error) {
 	if len(raw) == 0 || len(raw) > maxMountTopologyBytes || raw[len(raw)-1] != '\n' {
-		return nil, errors.New("truncated mount topology")
+		return nil, &mountTopologyRefusal{predicate: topologyTruncated, bytes: len(raw)}
 	}
 	var entries []mountEntry
 	byID := map[int]mountEntry{}
 	for line := range strings.SplitSeq(string(raw[:len(raw)-1]), "\n") {
 		entry, ok := parseMountInfoLine(line)
 		if !ok || len(entries) == maxMountTopologyEntries {
-			return nil, errors.New("invalid mount topology record")
+			return nil, &mountTopologyRefusal{predicate: topologyInvalidRecord, bytes: len(raw), rows: len(entries)}
 		}
 		if _, exists := byID[entry.id]; exists {
-			return nil, errors.New("duplicate mount topology identity")
+			return nil, &mountTopologyRefusal{predicate: topologyDuplicateIdentity, bytes: len(raw), rows: len(entries), id: entry.id, parent: entry.parent}
 		}
 		byID[entry.id] = entry
 		entries = append(entries, entry)
@@ -166,13 +165,13 @@ func parseMountTopology(raw []byte) ([]mountEntry, error) {
 	for _, entry := range entries {
 		if _, exists := byID[entry.parent]; !exists {
 			if entry.mountPoint != "/" {
-				return nil, errors.New("missing mount topology parent")
+				return nil, &mountTopologyRefusal{predicate: topologyMissingParent, bytes: len(raw), rows: len(entries), id: entry.id, parent: entry.parent}
 			}
 			roots++
 		}
 	}
 	if roots != 1 {
-		return nil, errors.New("ambiguous mount topology root")
+		return nil, &mountTopologyRefusal{predicate: topologyAmbiguousRoot, bytes: len(raw), rows: len(entries), roots: roots}
 	}
 	// Each identity moves unseen → visiting → complete exactly once. A deep
 	// caller-created topology must not repeat an ancestor walk for every row.
@@ -187,7 +186,7 @@ func parseMountTopology(raw []byte) ([]mountEntry, error) {
 				break
 			}
 			if state[current.id] == 1 {
-				return nil, errors.New("mount topology cycle")
+				return nil, &mountTopologyRefusal{predicate: topologyCycle, bytes: len(raw), rows: len(entries), id: current.id, parent: current.parent}
 			}
 			state[current.id] = 1
 			chain = append(chain, current.id)
@@ -218,4 +217,41 @@ func unescapeMountPath(raw string) string {
 
 func isOctal(b byte) bool {
 	return b >= '0' && b <= '7'
+}
+
+// Diagnostic predicates retain the parser's existing complete-snapshot refusal.
+// Scalar facts contain no mount paths and grant no retry or admission authority.
+type topologyPredicate uint8
+
+const (
+	topologyTruncated topologyPredicate = iota
+	topologyInvalidRecord
+	topologyDuplicateIdentity
+	topologyMissingParent
+	topologyAmbiguousRoot
+	topologyCycle
+)
+
+type mountTopologyRefusal struct {
+	predicate                      topologyPredicate
+	bytes, rows, id, parent, roots int
+}
+
+func (refusal *mountTopologyRefusal) Error() string {
+	switch refusal.predicate {
+	case topologyTruncated:
+		return "truncated mount topology"
+	case topologyInvalidRecord:
+		return "invalid mount topology record"
+	case topologyDuplicateIdentity:
+		return "duplicate mount topology identity"
+	case topologyMissingParent:
+		return "missing mount topology parent"
+	case topologyAmbiguousRoot:
+		return "ambiguous mount topology root"
+	case topologyCycle:
+		return "mount topology cycle"
+	default:
+		return "mount topology refused"
+	}
 }

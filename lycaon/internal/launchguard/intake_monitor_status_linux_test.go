@@ -36,11 +36,15 @@ func TestIntakeMonitorStatusFixture(t *testing.T) {
 	if err != nil {
 		os.Exit(2)
 	}
-	os.Exit(MountIntakeExitStatus(&intakeMonitorFailure{intakeFailurePhase(phase), unix.EIO}))
+	failure := &intakeMonitorFailure{intakeFailurePhase(phase), unix.EIO}
+	if phase >= 100 && phase <= 105 {
+		failure = &intakeMonitorFailure{intakeFailureTopology, &mountTopologyRefusal{predicate: topologyPredicate(phase - 100)}}
+	}
+	os.Exit(MountIntakeExitStatus(failure))
 }
 
 func TestIntakeMonitorStatusesRemainActualNonzeroChildExits(t *testing.T) {
-	for _, code := range []int{80, 81, 82, 83, 84, 85, 86} {
+	for _, code := range []int{80, 81, 82, 83, 84, 85, 86, 100, 101, 102, 103, 104, 105} {
 		command := exec.Command(os.Args[0], "-test.run=^TestIntakeMonitorStatusFixture$")
 		command.Env = append(os.Environ(), "PW_INTAKE_MONITOR_STATUS_FIXTURE="+strconv.Itoa(code))
 		testutil.FailErr(t, "start only owned private-status child", command.Start())
