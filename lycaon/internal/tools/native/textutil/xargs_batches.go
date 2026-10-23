@@ -11,21 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
-// batchStop ends xargs with the outcome of a batch that hit a host stop.
-type batchStop struct {
-	result toolcontract.ProducerResult
-	cause  error
-}
-
-func (s *batchStop) Error() string {
-	if s.cause != nil {
-		return "xargs batch stopped: " + s.cause.Error()
-	}
-	return "xargs batch stopped: " + string(s.result.Terminal) + " " + s.result.StopCode
-}
-
-func (s *batchStop) Unwrap() error { return s.cause }
-
 func (plan xargsPlan) replaced(inv *invocation, command commandprogram.Fields, lines [][]string) ([]commandprogram.Fields, error) {
 	placeholder := plan.placeholder.Value
 	argumentLimit, argvLimit := inv.limit("argument_bytes"), inv.limit("argv_bytes")
@@ -71,7 +56,8 @@ func (x xargsRun) deliver(run *batchRun) error {
 func (x xargsRun) settle(run *batchRun) (bool, error) {
 	result := run.result
 	if run.failure != nil || result.Terminal != toolcontract.ProducerCompleted || result.StopCode != "" {
-		return true, &batchStop{result: result, cause: run.failure}
+		x.inv.stoppedBatch = &result
+		return true, run.failure
 	}
 	switch status := result.Status; {
 	case status == 255:

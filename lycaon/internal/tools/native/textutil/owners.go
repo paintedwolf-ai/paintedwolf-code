@@ -134,15 +134,15 @@ type dispatcher struct {
 }
 
 func (d dispatcher) Invoke(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-	prepared, err := d.owners.Prepare(request)
+	prepared, err := d.owners.Prepare(ctx, request)
 	if err != nil {
 		return nativeutility.Settle(err, 0, false), err
 	}
 	return prepared.InvokeOwner(ctx, d.ports, streams)
 }
 
-func (d dispatcher) EffectMode(request commandprogram.OperationRequest) string {
-	prepared, err := d.owners.Prepare(request)
+func (d dispatcher) EffectMode(ctx context.Context, request commandprogram.OperationRequest) string {
+	prepared, err := d.owners.Prepare(ctx, request)
 	if err != nil {
 		return ""
 	}
@@ -163,7 +163,7 @@ type Prepared struct {
 }
 
 // Prepare binds a reached command. The operation identity is the command name.
-func (o *Owners) Prepare(request commandprogram.OperationRequest) (Prepared, error) {
+func (o *Owners) Prepare(ctx context.Context, request commandprogram.OperationRequest) (Prepared, error) {
 	if err := request.Validate(); err != nil {
 		return Prepared{}, err
 	}
@@ -182,7 +182,7 @@ func (o *Owners) Prepare(request commandprogram.OperationRequest) (Prepared, err
 	} else if bound, err = (commandprogram.CatalogBinder{}).Bind(spec, numericOperands(command, request.Argv)); err != nil {
 		return Prepared{}, nativeutility.ArgvRejection(err, spec)
 	}
-	return Prepared{Argv: bound, Review: bound.Review(spec.Name), Mode: o.effectMode(bound), owners: o, request: request, spec: spec, run: utilities[command]}, nil
+	return Prepared{Argv: bound, Review: bound.Review(spec.Name), Mode: o.effectMode(ctx, bound), owners: o, request: request, spec: spec, run: utilities[command]}, nil
 }
 
 // leadingBind binds only leading words made entirely of declared boolean
@@ -246,16 +246,15 @@ func (p Prepared) InvokeOwner(ctx context.Context, ports Ports, streams commandp
 	}
 	inv := newInvocation(ctx, p, ports, streams)
 	err := p.run(inv)
-	if err == nil {
+	if err == nil && inv.stoppedBatch == nil {
 		err = ctx.Err()
 	}
 	inv.close()
 	if streams.Input != nil {
 		_ = streams.Input.Close()
 	}
-	var stopped *batchStop
-	if errors.As(err, &stopped) {
-		return stopped.result, err
+	if inv.stoppedBatch != nil {
+		return *inv.stoppedBatch, err
 	}
 	if inv.errors.Len() > 0 && streams.Error != nil {
 		_, _ = io.WriteString(streams.Error, inv.errors.String())

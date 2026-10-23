@@ -53,7 +53,7 @@ func (p *inputPositions) Write(data []byte) (int, error) {
 	return len(data), nil
 }
 
-func (p *inputPositions) close() { _ = p.buffer.Close() }
+func (p *inputPositions) close() { p.buffer.Close() }
 
 // rank counts complete newline positions before offset. Decoding advances
 // monotonically; a diagnostic looking backwards resets the small rank cursor.

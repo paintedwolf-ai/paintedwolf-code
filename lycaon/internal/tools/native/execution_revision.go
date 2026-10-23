@@ -96,9 +96,8 @@ func (e ExecutionRevisions) CaptureSource(ctx context.Context, tctx tools.ToolCo
 	if err != nil {
 		return ExecutionSource{}, &toolrejection.ToolReject{Code: "READ_BINARY_DENIED", Data: map[string]any{"path": resolved.DisplayPath, "bytes": len(raw), "reason": err.Error()}}
 	}
-	// The decoded representation remains admitted in Working. Drop every raw
-	// capture reference before transferring its surviving string to State.
-	raw = nil
+	// Working covers the decoded representation while the surviving string
+	// transfers to State; the raw capture lease is no longer needed.
 	release()
 	retainedBytes := int64(len(content))
 	if detection.Encoding == textfile.UTF8BOM {
@@ -303,11 +302,10 @@ func (e ExecutionRevisions) captureDestinationBytes(ctx context.Context, tctx to
 	return st, revision, raw, release, nil
 }
 
-func (s *ExecutionSource) Close() error {
+func (s *ExecutionSource) Close() {
 	if s.release != nil {
 		s.release()
 		s.release = nil
 	}
 	s.Content = ""
-	return nil
 }

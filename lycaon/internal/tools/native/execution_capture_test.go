@@ -28,7 +28,7 @@ func TestBufferedBytesAdmitsCapacityBeforeGrowthAndReleases(t *testing.T) {
 	if _, err = buffer.Write([]byte{'b'}); err == nil || len(buffer.Bytes) != 4096 {
 		t.Fatalf("overflow changed body: %v bytes %d", err, len(buffer.Bytes))
 	}
-	_ = buffer.Close()
+	buffer.Close()
 	if memory.InUse() != (toolcontract.ProgramMemoryUsage{}) {
 		t.Fatalf("buffer reservations remain %+v", memory.InUse())
 	}
@@ -49,7 +49,7 @@ func TestExecutionSourceVerifyStreamsEncodedIdentityAndRefusesFalseTextPin(t *te
 			t.Fatal(err)
 		}
 		pin := source.Revision
-		_ = source.Close()
+		source.Close()
 		if err = f.revisions.Verify(t.Context(), f.tctx, pin); err != nil {
 			t.Fatalf("%s %v", encoding, err)
 		}
@@ -68,7 +68,7 @@ func TestExecutionSourceVerifyStreamsEncodedIdentityAndRefusesFalseTextPin(t *te
 		t.Fatal(err)
 	}
 	pin := captured.Revision
-	_ = captured.Close()
+	captured.Close()
 	pin.Representation = toolcontract.UTF8SourceBytes
 	var conflict *ExecutionRevisionConflict
 	if err = f.revisions.Verify(t.Context(), f.tctx, pin); !errors.As(err, &conflict) {
@@ -94,7 +94,7 @@ func TestBufferedBytesRefusesGrowthWithoutLosingPriorBody(t *testing.T) {
 	if !errors.As(err, &limit) || !bytes.Equal(buffer.Bytes, original) || memory.InUse().State != 64<<10 {
 		t.Fatalf("growth refusal %v held %+v body %d", err, memory.InUse(), len(buffer.Bytes))
 	}
-	_ = buffer.Close()
+	buffer.Close()
 	if memory.InUse() != (toolcontract.ProgramMemoryUsage{}) {
 		t.Fatalf("growth leak %+v", memory.InUse())
 	}
@@ -120,9 +120,7 @@ func TestBufferedBytesResetReusesOnlyAdmittedCapacity(t *testing.T) {
 			t.Fatalf("record %q memory %+v", buffer.Bytes, memory.InUse())
 		}
 	}
-	if err := buffer.Close(); err != nil {
-		t.Fatal(err)
-	}
+	buffer.Close()
 	if !errors.Is(buffer.Reset(), io.ErrClosedPipe) || memory.InUse() != (toolcontract.ProgramMemoryUsage{}) {
 		t.Fatalf("closed buffer retains memory %+v", memory.InUse())
 	}

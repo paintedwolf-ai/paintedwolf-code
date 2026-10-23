@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
 )
@@ -32,10 +33,6 @@ func (r *heldXargsInput) Read(p []byte) (int, error) {
 	return 0, io.ErrClosedPipe
 }
 func (r *heldXargsInput) Close() error { r.closeOnce.Do(func() { close(r.closed) }); return nil }
-
-type closedXargsOutput struct{}
-
-func (closedXargsOutput) Write([]byte) (int, error) { return 0, commandprogram.ErrConsumerClosed }
 
 type heldXargsChildren struct {
 	input                        *heldXargsInput
@@ -75,7 +72,12 @@ func TestXargsEarlyConsumerClosesBlockedInputAndActiveChildren(t *testing.T) {
 			defer cancel()
 			inv := &invocation{ctx: ctx, owners: h.owners, ports: h.ports(), request: commandprogram.OperationRequest{Argv: commandprogram.Fields{{Value: "xargs"}}}, streams: commandprogram.Streams{Input: input, Error: io.Discard}}
 			inv.ports.Nested = children
-			inv.out = nativeutility.NewOutput(ctx, closedXargsOutput{}, "stream_throughput_bytes", inv.limit("stream_throughput_bytes"))
+			budget, err := commandprogram.NewByteBudget("fixture", 1024)
+			testutil.FailErr(t, "open actual output endpoint", err)
+			output, err := commandprogram.NewBytePipe(ctx, budget)
+			testutil.FailErr(t, "open actual output endpoint", err)
+			testutil.FailErr(t, "close satisfied output consumer", output.CloseConsumer())
+			inv.out = nativeutility.NewOutput(ctx, output, "stream_throughput_bytes", inv.limit("stream_throughput_bytes"))
 			plan := xargsPlan{count: 1, parallel: parallel, maxChars: inv.limit("argv_bytes")}
 			parser := &xargsInput{inv: inv, ctx: ctx, reader: bufio.NewReaderSize(input, 64<<10)}
 			done := make(chan error, 1)

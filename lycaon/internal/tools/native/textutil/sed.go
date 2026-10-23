@@ -216,7 +216,7 @@ func (o *Owners) bsdSuffix(ctx context.Context, argv commandprogram.BoundArgv, o
 }
 
 // readScriptFile reads one -f script through the pinned capture of any input.
-func readScriptFile(inv *invocation, word commandprogram.Field) (string, error) {
+func readScriptFile(inv *invocation, word commandprogram.Field) (script string, finalErr error) {
 	if word.Value == "-" {
 		return "", inv.usage(word, "a script file; standard input is the data")
 	}
@@ -231,7 +231,15 @@ func readScriptFile(inv *invocation, word commandprogram.Field) (string, error) 
 		}
 		return "", pathRejection(err, word)
 	}
-	defer reader.Close()
+	defer func() {
+		if closeErr := reader.Close(); closeErr != nil {
+			if finalErr == nil {
+				finalErr = closeErr
+			} else {
+				finalErr = errors.Join(finalErr, closeErr)
+			}
+		}
+	}()
 	captured, err := inv.owners.Revisions.ReadWholeInput(inv.ctx, reader, inv.limit("whole_file_bytes"))
 	if err != nil {
 		return "", err

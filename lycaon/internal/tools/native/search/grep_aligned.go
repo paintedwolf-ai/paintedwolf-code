@@ -12,7 +12,7 @@ import (
 // -T needs the final input size to align numeric prefixes. A non-seekable
 // input uses one anonymous, quota-admitted spool; file inputs already have the
 // captured descriptor's exact byte count and never enter this path.
-func (r *grepRun) searchAlignedStdin() error {
+func (r *grepRun) searchAlignedStdin() (finalErr error) {
 	inv := r.inv
 	if inv.owners.Admission == nil {
 		return errors.New("aligned stdin requires program spill admission")
@@ -34,7 +34,15 @@ func (r *grepRun) searchAlignedStdin() error {
 	if err != nil {
 		return err
 	}
-	defer spool.Close()
+	defer func() {
+		if closeErr := spool.Close(); closeErr != nil {
+			if finalErr == nil {
+				finalErr = closeErr
+			} else {
+				finalErr = errors.Join(finalErr, closeErr)
+			}
+		}
+	}()
 	var chunk [64 << 10]byte
 	var size int64
 	firstNull := -1
@@ -61,7 +69,7 @@ func (r *grepRun) searchAlignedStdin() error {
 			}
 			size += int64(n)
 		}
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {

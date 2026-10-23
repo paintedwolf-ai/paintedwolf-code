@@ -32,7 +32,7 @@ type invocation struct {
 	// comparison marks diff's complete status-one result as publishable.
 	comparison    bool
 	diffVisits    int64
-	closers       []io.Closer
+	releases      []func()
 	currentStream io.Closer
 	pinMu         sync.Mutex
 	pins          revisionIndex
@@ -48,10 +48,10 @@ func (inv *invocation) closeCurrentStream() {
 func (inv *invocation) closeInputs() {
 	inv.pins.close()
 	inv.closeCurrentStream()
-	for _, c := range inv.closers {
-		_ = c.Close()
+	for _, release := range inv.releases {
+		release()
 	}
-	inv.closers = nil
+	inv.releases = nil
 }
 
 func newInvocation(ctx context.Context, p Prepared, tc tools.ToolContext, streams commandprogram.Streams) *invocation {

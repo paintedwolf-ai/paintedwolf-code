@@ -27,6 +27,8 @@ type invocation struct {
 	published bool
 	uncertain bool
 	releases  []func()
+	// The ordered xargs settlement loop owns the first stopped child outcome.
+	stoppedBatch *toolcontract.ProducerResult
 }
 
 func newInvocation(ctx context.Context, p Prepared, ports Ports, streams commandprogram.Streams) *invocation {

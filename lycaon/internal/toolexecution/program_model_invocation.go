@@ -7,7 +7,7 @@ import (
 	"sync"
 	"unicode/utf8"
 
-	"github.com/lycaon/lycaon/internal/authzcontext"
+	"github.com/lycaon/lycaon/internal/jsonvalue"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 )
@@ -96,7 +96,7 @@ func captureProgramModel(ctx context.Context, parent toolcontract.OperationInvoc
 		lifetime.close()
 		return nil, fmt.Errorf("submitted model arguments require valid JSON text strings")
 	}
-	canonical, err := authzcontext.CanonicalJSON(snapshot.values)
+	canonical, err := jsonvalue.CanonicalJSON(snapshot.values)
 	if err != nil {
 		lifetime.close()
 		return nil, err

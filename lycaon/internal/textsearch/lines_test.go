@@ -71,7 +71,7 @@ func (f failingSelector) Select(context.Context, []byte) (Span, bool, error) {
 	return Span{}, false, f.err
 }
 
-func TestScanReaderStopsOnRecordErrorsAndStopScan(t *testing.T) {
+func TestScanReaderStopsOnRecordErrorsAndErrStopScan(t *testing.T) {
 	budget := &BudgetError{Resource: "regex_work_steps", Maximum: 1, Observed: 2}
 	if _, err := ScanReader(t.Context(), strings.NewReader("a\n"), 0, nil, failingSelector{budget}, ScanOptions{MaxSelected: -1}, func(Line) error { return nil }); !errors.Is(err, budget) {
 		t.Fatalf("record error: %v", err)
@@ -83,7 +83,7 @@ func TestScanReaderStopsOnRecordErrorsAndStopScan(t *testing.T) {
 	seen := 0
 	n, err := ScanReader(t.Context(), strings.NewReader("a\na\na\n"), 0, nil, m, ScanOptions{MaxSelected: -1}, func(Line) error {
 		seen++
-		return StopScan
+		return ErrStopScan
 	})
 	if err != nil || n != 1 || seen != 1 {
 		t.Fatalf("stop: n=%d seen=%d err=%v", n, seen, err)

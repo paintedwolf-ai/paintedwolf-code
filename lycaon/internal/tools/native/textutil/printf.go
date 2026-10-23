@@ -3,6 +3,7 @@ package textutil
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"strconv"
 	"strings"
@@ -20,7 +21,8 @@ func runPrintf(inv *invocation) error {
 	}
 	format, release, err := parseFormat(inv.ctx, inv.ports.Memory, operands[0].Value)
 	if err != nil {
-		if _, invalid := err.(formatError); invalid {
+		var invalid formatError
+		if errors.As(err, &invalid) {
 			return inv.usage(operands[0], err.Error())
 		}
 		return err

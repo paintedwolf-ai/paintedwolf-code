@@ -170,7 +170,7 @@ func (e ExecutionRevisions) OpenStream(ctx context.Context, tctx tools.ToolConte
 	}
 	if err != nil {
 		if captured != nil {
-			_ = captured.Close()
+			captured.Close()
 		}
 		_ = file.Close()
 		return ExecutionStream{}, err
@@ -206,13 +206,12 @@ func (e ExecutionRevisions) captureStream(ctx context.Context, tctx tools.ToolCo
 	}, nil
 }
 
-func (b *ExecutionBytes) Close() error {
+func (b *ExecutionBytes) Close() {
 	if b.release != nil {
 		b.release()
 		b.release = nil
 	}
 	b.Bytes = nil
-	return nil
 }
 
 type captureReadCloser struct {

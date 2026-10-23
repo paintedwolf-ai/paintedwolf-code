@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -211,7 +212,7 @@ func (inv *invocation) identifyOperand(operand string) (identification, bool, er
 	header := make([]byte, headerBytes+1)
 	n, err := io.ReadFull(in.reader(), header)
 	header = header[:n]
-	complete := err == io.EOF || err == io.ErrUnexpectedEOF
+	complete := errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF)
 	if complete {
 		err = nil
 	}

@@ -64,7 +64,7 @@ func (r *sedRun) readFiles() (map[string][]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		r.inv.releases = append(r.inv.releases, func() { _ = captured.Close() })
+		r.inv.releases = append(r.inv.releases, captured.Close)
 		files[name] = captured.Bytes
 	}
 	return files, nil
@@ -110,9 +110,18 @@ func (r *sedRun) inPlace(files commandprogram.Fields, suffix string) error {
 	return nil
 }
 
-func (r *sedRun) editFile(operand commandprogram.Field, reader io.ReadCloser, stage commandprogram.StagedOutput, suffix string) (bool, error) {
+func (r *sedRun) editFile(operand commandprogram.Field, reader io.ReadCloser, stage commandprogram.StagedOutput, suffix string) (quit bool, finalErr error) {
 	inv := r.inv
-	defer reader.Close()
+	originalReader := reader
+	defer func() {
+		if closeErr := originalReader.Close(); closeErr != nil {
+			if finalErr == nil {
+				finalErr = closeErr
+			} else {
+				finalErr = errors.Join(finalErr, closeErr)
+			}
+		}
+	}()
 	var backup commandprogram.StagedOutput
 	var err error
 	if suffix != "" {
@@ -131,7 +140,7 @@ func (r *sedRun) editFile(operand commandprogram.Field, reader io.ReadCloser, st
 		}
 		reader = io.NopCloser(bytes.NewReader(original))
 	}
-	quit := false
+	quit = false
 	if err == nil {
 		out := nativeutility.NewOutput(inv.ctx, stage, "stream_bytes", inv.limit("stream_bytes"))
 		quit, err = r.machine.Stream(r.input([]source{{name: operand.Value, reader: reader}}), out)

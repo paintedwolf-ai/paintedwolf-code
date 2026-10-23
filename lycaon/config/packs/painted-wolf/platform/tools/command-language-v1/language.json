@@ -1019,8 +1019,7 @@
   },
   "compatibility": {
     "class": "agent-public vocabulary when offered; additive pre-activation version 1 contract",
-    "durable_changes": "none in P01; introducing producers must migrate records and generate consumers",
-    "history": "retired public names retain original meaning and named successor; regex_cpu_ms retired in P21 because elapsed wall time was not CPU time; regex_work_steps is its deterministic work successor, with caller cancellation and allocation admission; no CPU-time guarantee; query_cpu_ms retired in P21 with query_elapsed_ms as its explicitly elapsed, cumulative evaluation successor, excluding reached-input preparation"
+    "durable_changes": "introducing producers must migrate records and generate consumers"
   },
   "retention": "Screen source/output before retention. Active journal, review, held-effect and retained receipt references pin required bytes; expiry never authorizes collecting recovery inputs. No interpreter checkpoints.",
   "platforms": {

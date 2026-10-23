@@ -178,9 +178,9 @@ func (d *ProgramDispatcher) Invoke(ctx context.Context, request commandprogram.O
 func (d *ProgramDispatcher) invokeBuiltin(ctx context.Context, spec toolcontract.CommandSpecification, builtin commandprogram.OperationDispatcher, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 	if request.EffectMode == "" {
 		if m, ok := builtin.(interface {
-			EffectMode(commandprogram.OperationRequest) string
+			EffectMode(context.Context, commandprogram.OperationRequest) string
 		}); ok {
-			request.EffectMode = m.EffectMode(request)
+			request.EffectMode = m.EffectMode(ctx, request)
 		}
 	}
 	child, err := d.prepare(ctx, spec, request, nil)
@@ -190,7 +190,7 @@ func (d *ProgramDispatcher) invokeBuiltin(ctx context.Context, spec toolcontract
 	defer child.release()
 	if err := d.start(ctx, child); err != nil {
 		result := ownerFailure(err)
-		return result, errors.Join(err, d.settle(ctx, child, result, false, ""))
+		return result, joinSettle(err, d.settle(ctx, child, result, false, ""))
 	}
 	tracker := &trackingWriter{w: nonNilWriter(streams.Error)}
 	runStreams := streams
@@ -209,7 +209,7 @@ func (d *ProgramDispatcher) invokeBuiltin(ctx context.Context, spec toolcontract
 		}
 		d.shared.mu.Unlock()
 	}
-	return result, errors.Join(runErr, d.settle(ctx, child, result, true, ""))
+	return result, joinSettle(runErr, d.settle(ctx, child, result, true, ""))
 }
 
 // invokeExternal admits one confined launch as its own child through the
@@ -245,7 +245,7 @@ func (d *ProgramDispatcher) invokeExternal(ctx context.Context, request commandp
 		}
 		d.shared.mu.Unlock()
 		result := refusedResult("COMMAND_EXTERNAL_HIDDEN")
-		return result, errors.Join(reject, d.settle(ctx, child, result, false, ""))
+		return result, joinSettle(reject, d.settle(ctx, child, result, false, ""))
 	}
 	if reject := desktopCaptureRefusal(argv[0], line); reject != nil {
 		d.shared.mu.Lock()
@@ -254,7 +254,7 @@ func (d *ProgramDispatcher) invokeExternal(ctx context.Context, request commandp
 		}
 		d.shared.mu.Unlock()
 		result := refusedResult("DESKTOP_CAPTURE_DISALLOWED")
-		return result, errors.Join(reject, d.settle(ctx, child, result, false, ""))
+		return result, joinSettle(reject, d.settle(ctx, child, result, false, ""))
 	}
 	effect := toolexecution.NativeEffect{
 		Operation: bound, Streams: streams, Inspection: d.run.capture,
@@ -276,7 +276,7 @@ func (d *ProgramDispatcher) invokeExternal(ctx context.Context, request commandp
 		}
 		d.shared.mu.Unlock()
 	}
-	return launched.Producer, errors.Join(runErr, d.settle(ctx, child, launched.Producer, launched.OwnerInvoked || marker.started, launched.HostStopCode))
+	return launched.Producer, joinSettle(runErr, d.settle(ctx, child, launched.Producer, launched.OwnerInvoked || marker.started, launched.HostStopCode))
 }
 
 // refuseUnimplemented runs a catalogued name with no host owner here as its
@@ -290,7 +290,7 @@ func (d *ProgramDispatcher) refuseUnimplemented(ctx context.Context, spec toolco
 	cause := toolrejection.RejectInvalidArguments("COMMAND_NATIVE_FORM_UNSUPPORTED", map[string]any{"command": spec.Name, "source_start_byte": request.Invocation.Span.StartByte, "source_end_byte": request.Invocation.Span.EndByte, "source_line": request.Invocation.Span.Line, "source_column": request.Invocation.Span.Column})
 	child, err := d.prepare(ctx, spec, request, nil)
 	if err != nil {
-		return refusedResult("COMMAND_NATIVE_FORM_UNSUPPORTED"), errors.Join(cause, err)
+		return refusedResult("COMMAND_NATIVE_FORM_UNSUPPORTED"), joinSettle(cause, err)
 	}
 	defer child.release()
 	result := refusedResult("COMMAND_NATIVE_FORM_UNSUPPORTED")
@@ -300,7 +300,7 @@ func (d *ProgramDispatcher) refuseUnimplemented(ctx context.Context, spec toolco
 		d.shared.rejected = &nativeRejection{operation: child.bound, cause: cause}
 	}
 	d.shared.mu.Unlock()
-	return result, errors.Join(cause, settleErr)
+	return result, joinSettle(cause, settleErr)
 }
 
 func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.CommandSpecification, operation NativeOperation, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
@@ -369,7 +369,7 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 		}
 		d.shared.mu.Unlock()
 	}
-	return native.Producer, errors.Join(runErr, d.settleWith(ctx, child, toolcontract.ProgramChildSettlement{Result: native.Producer, OwnerInvoked: native.OwnerInvoked || marker.started, HostStopCode: native.HostStopCode, Conflict: revisionConflict(runErr)}))
+	return native.Producer, joinSettle(runErr, d.settleWith(ctx, child, toolcontract.ProgramChildSettlement{Result: native.Producer, OwnerInvoked: native.OwnerInvoked || marker.started, HostStopCode: native.HostStopCode, Conflict: revisionConflict(runErr)}))
 }
 
 // invokeHosted runs an owner whose bound form has no structured tool as the
@@ -386,7 +386,7 @@ func (d *ProgramDispatcher) invokeHosted(ctx context.Context, spec toolcontract.
 	defer child.release()
 	if err := d.start(ctx, child); err != nil {
 		result := ownerFailure(err)
-		return result, errors.Join(err, d.settle(ctx, child, result, false, ""))
+		return result, joinSettle(err, d.settle(ctx, child, result, false, ""))
 	}
 	tracker := &trackingWriter{w: nonNilWriter(streams.Error)}
 	runStreams := streams
@@ -405,7 +405,7 @@ func (d *ProgramDispatcher) invokeHosted(ctx context.Context, spec toolcontract.
 		}
 		d.shared.mu.Unlock()
 	}
-	return result, errors.Join(runErr, d.settle(ctx, child, result, true, ""))
+	return result, joinSettle(runErr, d.settle(ctx, child, result, true, ""))
 }
 
 func (d *ProgramDispatcher) refuseArgv(ctx context.Context, spec toolcontract.CommandSpecification, request commandprogram.OperationRequest, cause error, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
@@ -415,7 +415,7 @@ func (d *ProgramDispatcher) refuseArgv(ctx context.Context, spec toolcontract.Co
 	result := refusedResult(reject.Code)
 	child, err := d.prepare(ctx, spec, request, nil)
 	if err != nil {
-		return result, errors.Join(rejection, err)
+		return result, joinSettle(rejection, err)
 	}
 	defer child.release()
 	settleErr := d.settle(ctx, child, result, false, "")
@@ -424,7 +424,7 @@ func (d *ProgramDispatcher) refuseArgv(ctx context.Context, spec toolcontract.Co
 		d.shared.rejected = &nativeRejection{operation: child.bound, cause: rejection}
 	}
 	d.shared.mu.Unlock()
-	return result, errors.Join(rejection, settleErr)
+	return result, joinSettle(rejection, settleErr)
 }
 
 type programChild struct {

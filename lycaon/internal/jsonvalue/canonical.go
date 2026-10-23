@@ -1,4 +1,4 @@
-package authzcontext
+package jsonvalue
 
 import (
 	"bytes"

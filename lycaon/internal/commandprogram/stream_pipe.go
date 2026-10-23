@@ -14,14 +14,32 @@ import (
 // failure. The evaluator still settles the producer independently of this pipe.
 var ErrConsumerClosed error = consumerClosedError{}
 
-type consumerClosedError struct{}
+// consumerClosureWitness is sealed to the byte endpoint owner. Only an
+// immediate error carrying this exact pipe may justify early completion.
+type consumerClosureWitness interface {
+	consumerClosedEndpoint() *consumerEndpointIdentity
+}
 
-func (consumerClosedError) Error() string        { return "command stream consumer closed" }
-func (consumerClosedError) ConsumerClosed() bool { return true }
+// Nonzero size guarantees distinct endpoint identities without retaining a pipe.
+type consumerEndpointIdentity struct{ marker byte }
+
+type consumerClosedError struct{ endpoint *consumerEndpointIdentity }
+
+func (consumerClosedError) Error() string                                       { return "command stream consumer closed" }
+func (consumerClosedError) ConsumerClosed() bool                                { return true }
+func (e consumerClosedError) consumerClosedEndpoint() *consumerEndpointIdentity { return e.endpoint }
+
+// The sentinel supports diagnostic classification; it carries no endpoint
+// identity and cannot authorize pipeline publication.
+func (consumerClosedError) Is(target error) bool {
+	witness, ok := target.(consumerClosureWitness)
+	return ok && witness.consumerClosedEndpoint() == nil
+}
 
 // BytePipe carries exact producer bytes without a display projection or an
 // intermediate buffer. io.Pipe provides backpressure even for slow consumers.
 type BytePipe struct {
+	identity      *consumerEndpointIdentity
 	reader        *io.PipeReader
 	writer        *io.PipeWriter
 	budget        *ByteBudget
@@ -39,7 +57,7 @@ func NewBytePipe(ctx context.Context, budget *ByteBudget) (*BytePipe, error) {
 		return nil, errors.New("byte pipe requires context and ingress budget")
 	}
 	r, w := io.Pipe()
-	p := &BytePipe{reader: r, writer: w, budget: budget, done: make(chan struct{}), digest: sha256.New(), completion: StreamCompletion{Termination: StreamOpen}}
+	p := &BytePipe{identity: &consumerEndpointIdentity{marker: 1}, reader: r, writer: w, budget: budget, done: make(chan struct{}), digest: sha256.New(), completion: StreamCompletion{Termination: StreamOpen}}
 	go func() {
 		select {
 		case <-ctx.Done():
@@ -115,7 +133,7 @@ func (p *BytePipe) CloseProducer(err error) error {
 }
 
 func (p *BytePipe) CloseConsumer() error {
-	p.finish(StreamConsumerClosed, ErrConsumerClosed)
+	p.finish(StreamConsumerClosed, consumerClosedError{endpoint: p.identity})
 	return nil
 }
 

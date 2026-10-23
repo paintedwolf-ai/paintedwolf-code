@@ -38,7 +38,7 @@ type invocation struct {
 	noMatchPublishes bool
 	effects          toolcontract.EffectCertainty
 	pinCount         int
-	captures         []io.Closer
+	releases         []func()
 }
 
 func newInvocation(ctx context.Context, p Prepared, tc tools.ToolContext, streams commandprogram.Streams) *invocation {
@@ -169,7 +169,7 @@ func (inv *invocation) capturePinned(bound projectpaths.BoundPath) ([]byte, *too
 	if err != nil {
 		return nil, nil, err
 	}
-	inv.captures = append(inv.captures, &captured)
+	inv.releases = append(inv.releases, captured.Close)
 	// A credential file's bytes reach no stream until their exposure is recorded.
 	if err := inv.tc.ObserveCredentialRead(inv.ctx, bound.Resolved.Abs, captured.Path, string(captured.Bytes)); err != nil {
 		return nil, nil, fmt.Errorf("record credential file read: %w", err)
@@ -199,13 +199,13 @@ func (inv *invocation) openPinnedStream(bound projectpaths.BoundPath) (native.Ex
 	return streamed, nil, nil
 }
 
-// readAll captures a pattern program from stdin through the shared whole-input owner.
+// readAll releases a pattern program from stdin through the shared whole-input owner.
 func (inv *invocation) readAll(r io.Reader) ([]byte, error) {
 	buffer, err := inv.owners.Revisions.ReadWholeInput(inv.ctx, r, inv.owners.limit("whole_file_bytes"))
 	if err != nil {
 		return nil, err
 	}
-	inv.captures = append(inv.captures, buffer)
+	inv.releases = append(inv.releases, buffer.Close)
 	return buffer.Bytes, nil
 }
 

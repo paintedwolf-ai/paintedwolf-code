@@ -19,7 +19,7 @@ func TestRE2ValidatedVMKeepsCaptureAndScalarSemantics(t *testing.T) {
 			t.Fatal(err)
 		}
 		for _, input := range []string{"", "ab aaa", "aa\na", "Kk K", "éaaaé", string(rune(0x10fff4)) + "a"} {
-			want := reference.FindAllSubmatchIndex([]byte(input), -1)
+			want := reference.FindAllStringSubmatchIndex(input, -1)
 			want = slices.DeleteFunc(want, func(g []int) bool { return g[0] == g[1] })
 			var got [][]int
 			err := matcher.Groups(t.Context(), []byte(input), func(g []int) error { got = append(got, slices.Clone(g)); return nil })

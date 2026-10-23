@@ -32,7 +32,7 @@ type invocation struct {
 	status  int
 	// published reports that a write reached the destination owner.
 	published bool
-	captures  []io.Closer
+	releases  []func()
 }
 
 func newInvocation(ctx context.Context, p Prepared, tc tools.ToolContext, streams commandprogram.Streams) *invocation {
@@ -143,7 +143,7 @@ func (inv *invocation) captureSource(operand string) (*source, error) {
 		}
 		return nil, err
 	}
-	inv.captures = append(inv.captures, &captured)
+	inv.releases = append(inv.releases, captured.Close)
 	if maximum := safecmd.JQCaps().InputBytes; int64(len(captured.Content)) > maximum {
 		return nil, safecmd.Reject("JQ_INPUT_TOO_LARGE", map[string]any{"path": captured.Path, "max_bytes": maximum})
 	}

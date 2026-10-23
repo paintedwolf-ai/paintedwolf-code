@@ -30,12 +30,11 @@ func (w *queryWorking) resize(n int64) error {
 	w.bytes = n
 	return w.inv.ctx.Err()
 }
-func (w *queryWorking) Close() error {
+func (w *queryWorking) Close() {
 	if memory := w.inv.owners.Revisions.Memory; memory != nil {
 		memory.ReleaseBytes(w.bytes)
 	}
 	w.bytes = 0
-	return nil
 }
 
 func (inv *invocation) publishBytes(source *source, destination toolcontract.ExecutionRevision, data []byte) error {

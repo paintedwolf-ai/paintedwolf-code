@@ -2,6 +2,7 @@ package native
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 
@@ -45,8 +46,8 @@ func (r textStreamReader) Read(p []byte) (int, error) {
 		return 0, err
 	}
 	n, err := r.reader.Read(p)
-	if err != nil && err != io.EOF && r.ctx.Err() == nil {
-		if err == textfile.ErrBinary || err == textfile.ErrUnsupported {
+	if err != nil && !errors.Is(err, io.EOF) && r.ctx.Err() == nil {
+		if errors.Is(err, textfile.ErrBinary) || errors.Is(err, textfile.ErrUnsupported) {
 			err = &toolrejection.ToolReject{Code: "READ_BINARY_DENIED", Data: map[string]any{"path": r.path, "reason": fmt.Sprint(err)}}
 		}
 	}

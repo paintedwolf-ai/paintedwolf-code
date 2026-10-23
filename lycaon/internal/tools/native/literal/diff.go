@@ -116,15 +116,15 @@ func (inv *invocation) diffSide(operand string) (diffSide, bool, error) {
 	}
 	err = projectpaths.PathOperationError(operand, err)
 	reason, ok := ordinary(err)
-	switch {
-	case !ok:
+	if !ok {
 		return side, false, err
-	case errors.Is(err, fs.ErrNotExist) || toolrejection.AsToolReject(err) != nil:
-		// Capture decides: an open unsaved document has no file to stat.
-		return side, true, nil
 	}
-	inv.fail(2, operand, reason)
-	return side, false, nil
+	// Capture decides whether an absent published path is an unsaved document.
+	capture := errors.Is(err, fs.ErrNotExist) || toolrejection.AsToolReject(err) != nil
+	if !capture {
+		inv.fail(2, operand, reason)
+	}
+	return side, capture, nil
 }
 
 // diffFiles compares two captured files and reports their difference.
@@ -178,7 +178,7 @@ func (inv *invocation) diffFiles(left, right diffSide, opts diffOptions, tree bo
 	for _, h := range hunks {
 		out.WriteString("@@ -" + diffRange(h.OldStart, h.OldCount) + " +" + diffRange(h.NewStart, h.NewCount) + " @@\n")
 		for _, op := range ops[h.StartOp:h.EndOp] {
-			line := ""
+			var line string
 			if op.Tag == '+' {
 				line = newLines[op.New]
 			} else {
@@ -269,7 +269,7 @@ func (o diffOptions) changed(ops []sourceview.DiffOp, oldLines, newLines []strin
 			}
 			end, blank := start, true
 			for ; end < len(ops) && ops[end].Tag != ' '; end++ {
-				line := ""
+				var line string
 				if ops[end].Tag == '+' {
 					line = newLines[ops[end].New]
 				} else {

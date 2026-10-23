@@ -254,14 +254,35 @@ func (s *sorter) merge() error {
 	})
 }
 
-func (s *sorter) mergeRuns(runs []SpillRun, visit func([]byte) error) error {
+func (s *sorter) mergeRuns(runs []SpillRun, visit func([]byte) error) (finalErr error) {
+	maximum := s.inv.limit("sort_merge_fan_in")
+	if int64(len(runs)) > maximum {
+		return tools.CommandLimitExceeded("sort_merge_fan_in", maximum, int64(len(runs)))
+	}
+	release, err := s.inv.ports.Memory.Reserve(s.inv.ctx, int64(len(runs))*16)
+	if err != nil {
+		return err
+	}
+	defer release()
+	readers := make([]RunReader, 0, len(runs))
+	defer func() {
+		for _, reader := range readers {
+			if closeErr := reader.Close(); closeErr != nil {
+				if finalErr == nil {
+					finalErr = closeErr
+				} else {
+					finalErr = errors.Join(finalErr, closeErr)
+				}
+			}
+		}
+	}()
 	h := &mergeHeap{order: s.order}
 	for index, run := range runs {
 		reader, err := run.Open(s.inv.limit("record_bytes"), s.inv.reserve)
 		if err != nil {
 			return err
 		}
-		defer reader.Close()
+		readers = append(readers, reader)
 		cursor := &mergeCursor{reader: reader, index: index}
 		if ok, err := cursor.advance(); err != nil {
 			return err

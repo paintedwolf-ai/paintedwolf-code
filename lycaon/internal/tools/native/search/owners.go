@@ -215,8 +215,8 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 	}
 	inv := newInvocation(ctx, p, tc, streams)
 	defer func() {
-		for _, capture := range inv.captures {
-			_ = capture.Close()
+		for _, release := range inv.releases {
+			release()
 		}
 	}()
 	err := p.run(inv)

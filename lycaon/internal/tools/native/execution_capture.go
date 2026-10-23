@@ -118,13 +118,12 @@ func (b *BufferedBytes) Reset() error {
 	return nil
 }
 
-func (b *BufferedBytes) Close() error {
+func (b *BufferedBytes) Close() {
 	if !b.closed {
 		b.closed = true
 		b.buffer.Close()
 		b.Bytes = nil
 	}
-	return nil
 }
 
 // ReadWholeInput gathers a genuinely buffered operand using the same capacity
@@ -140,14 +139,14 @@ func (e ExecutionRevisions) readBufferedBytes(ctx context.Context, reader io.Rea
 	}
 	release, err := e.reserveWorking(ctx, 32<<10)
 	if err != nil {
-		_ = buffer.Close()
+		buffer.Close()
 		return nil, err
 	}
 	defer release()
 	var chunk [32 << 10]byte
 	_, err = io.CopyBuffer(buffer, io.LimitReader(reader, maximum+1), chunk[:])
 	if err != nil {
-		_ = buffer.Close()
+		buffer.Close()
 		return nil, err
 	}
 	return buffer, nil
@@ -161,7 +160,7 @@ func (e ExecutionRevisions) readWholeInput(ctx context.Context, reader io.Reader
 		}
 		return nil, nil, err
 	}
-	return buffer.Bytes, func() { _ = buffer.Close() }, nil
+	return buffer.Bytes, buffer.Close, nil
 }
 
 type captureBuffer struct {

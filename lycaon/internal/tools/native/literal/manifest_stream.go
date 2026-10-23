@@ -2,12 +2,13 @@ package literal
 
 import (
 	"bufio"
+	"errors"
 	"io"
 )
 
 // manifestRecords keeps the original manifest stream open while each named
 // target acquires and releases its own capture. It never recaptures the manifest.
-func (inv *invocation) manifestRecords(operand string, consume func(int, string) error) error {
+func (inv *invocation) manifestRecords(operand string, consume func(int, string) error) (finalErr error) {
 	in, err := inv.open(operand, false)
 	if err != nil || in == nil {
 		return err
@@ -15,7 +16,15 @@ func (inv *invocation) manifestRecords(operand string, consume func(int, string)
 	manifest := inv.currentStream
 	inv.currentStream = nil
 	if manifest != nil {
-		defer manifest.Close()
+		defer func() {
+			if closeErr := manifest.Close(); closeErr != nil {
+				if finalErr == nil {
+					finalErr = closeErr
+				} else {
+					finalErr = errors.Join(finalErr, closeErr)
+				}
+			}
+		}()
 	}
 	defer inv.closeCurrentStream()
 	if memory := inv.owners.Revisions.Memory; memory != nil {
@@ -46,13 +55,13 @@ func (inv *invocation) manifestRecords(operand string, consume func(int, string)
 			if _, failure = buffer.Write(chunk); failure != nil {
 				return failure
 			}
-			if err == bufio.ErrBufferFull {
+			if errors.Is(err, bufio.ErrBufferFull) {
 				continue
 			}
 			failure = err
 			break
 		}
-		if failure != nil && failure != io.EOF {
+		if failure != nil && !errors.Is(failure, io.EOF) {
 			return failure
 		}
 		if !any {
@@ -71,7 +80,7 @@ func (inv *invocation) manifestRecords(operand string, consume func(int, string)
 		if err != nil {
 			return err
 		}
-		if failure == io.EOF {
+		if errors.Is(failure, io.EOF) {
 			return nil
 		}
 	}

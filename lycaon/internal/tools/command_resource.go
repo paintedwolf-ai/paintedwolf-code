@@ -43,7 +43,7 @@ func CommandResourceRejection(err error) error {
 	if !errors.As(err, &memory) {
 		return err
 	}
-	id := ""
+	var id string
 	switch memory.Account {
 	case "working":
 		id = "evaluation_memory_bytes"

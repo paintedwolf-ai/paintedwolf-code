@@ -198,7 +198,7 @@ func (f *frame) inProcess(ctx context.Context, s commandsurface.Statement, name 
 	if err != nil && result.Validate() != nil {
 		result = ownerResult(err)
 	}
-	return f.settle(child, result, err)
+	return f.settle(ctx, child, result, err)
 }
 
 // dispatch hands one bound native operation, or a confined external program,
@@ -221,14 +221,14 @@ func (f *frame) dispatch(ctx context.Context, s commandsurface.Statement, fields
 		if _, err := f.e.ports.Binder.Bind(spec, fields); err != nil {
 			var argv *ArgvError
 			if !errors.As(err, &argv) {
-				child.close()
+				child.close(ctx)
 				return err
 			}
 			gap = f.nativeGap(spec, argv, fields, assigns)
 			if gap == nil {
 				f.hostRefusal(spec.Name, argv.Word, argv.Expected, argv.Code)
-				child.settle(toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerRefused, StopCode: argv.Code, EffectCertainty: toolcontract.NoEffect}, err)
-				refusal := f.refuse(s.SyntaxLocation, argv.Code, argv.Expected, err).(*EvaluationRefusal)
+				child.settle(ctx, toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerRefused, StopCode: argv.Code, EffectCertainty: toolcontract.NoEffect}, err)
+				refusal := f.refuse(s.SyntaxLocation, argv.Code, argv.Expected, err)
 				refusal.Command, refusal.Option, refusal.Form = spec.Name, argv.Word, spec.Argv
 				return refusal
 			}
@@ -236,7 +236,7 @@ func (f *frame) dispatch(ctx context.Context, s commandsurface.Statement, fields
 	}
 	environment, err := f.environment(assigns)
 	if err != nil {
-		child.close()
+		child.close(ctx)
 		return f.expansionRefusal(s.SyntaxLocation, err)
 	}
 	request := OperationRequest{Invocation: child.inv, OperationID: operation, Statement: s, Argv: fields, Environment: environment, EffectMode: effectMode(spec, native), Gap: gap}
@@ -245,13 +245,13 @@ func (f *frame) dispatch(ctx context.Context, s commandsurface.Statement, fields
 		result, err = f.state.dispatch.Invoke(ctx, request, f.streams)
 	} else {
 		if err := f.e.charge(f, s.SyntaxLocation, "concurrent_processes", 1); err != nil {
-			child.close()
+			child.close(ctx)
 			return err
 		}
 		result, err = f.state.dispatch.Launch(ctx, request, f.streams)
 		f.e.release("concurrent_processes", 1)
 	}
-	return f.settle(child, result, err)
+	return f.settle(ctx, child, result, err)
 }
 
 // effectMode names the catalog mode when the command has exactly one; otherwise
@@ -266,13 +266,13 @@ func effectMode(spec toolcontract.CommandSpecification, native bool) string {
 // settle records an owner's result. An ordinary failure with a diagnostic stays
 // handleable; refusal, interruption, owner stops and invalid results latch and
 // return the owner's own error so its rejection code reaches feedback.
-func (f *frame) settle(child *childRun, result toolcontract.ProducerResult, err error) error {
+func (f *frame) settle(ctx context.Context, child *childRun, result toolcontract.ProducerResult, err error) error {
 	if invalid := result.Validate(); invalid != nil {
-		child.settle(result, errors.Join(err, invalid))
+		child.settle(ctx, result, errors.Join(err, invalid))
 		_ = f.state.latch.Record(child.inv.Identity.ExecutionID, result, true)
 		return errors.Join(err, invalid)
 	}
-	child.settle(result, err)
+	child.settle(ctx, result, err)
 	f.publish.mark(result.PublicationEligible)
 	f.state.pipeStatus = []int{result.Status}
 	f.state.vars.SetPipeStatus(f.state.pipeStatus)
@@ -408,7 +408,7 @@ func (f *frame) call(ctx context.Context, s commandsurface.Statement, decl comma
 	if err != nil {
 		return err
 	}
-	defer child.close()
+	defer child.close(ctx)
 	g := *f
 	g.parent, g.positional, g.functions, g.loops, g.returnable = child.inv, fields.Values()[1:], f.functions+1, 0, true
 	if len(assigns) > 0 {
@@ -425,7 +425,7 @@ func (f *frame) call(ctx context.Context, s commandsurface.Statement, decl comma
 	if stop, ok := f.state.latch.Stop(); ok {
 		result = stop.Result
 	}
-	child.settle(result, err)
+	child.settle(ctx, result, err)
 	return err
 }
 

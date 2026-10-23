@@ -256,7 +256,7 @@ func (r *Rejections) RenderProgramRefusal(ctx context.Context, frame ProgramFram
 	if !ok {
 		return delivery, fmt.Errorf("program refusal formatter returned no configured feedback")
 	}
-	refusal.WithCause(errors.Join(&clone, cause))
+	rendered = refusal.WithCause(errors.Join(&clone, cause))
 	delivery.Feedback, delivery.Details = rendered, clone.Data
 	return delivery, nil
 }

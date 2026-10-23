@@ -16,6 +16,7 @@ import (
 func TestPipeSemanticsIncrementalNativeConsumers(t *testing.T) {
 	for _, tc := range []struct{ name, program, output string }{
 		{"xargs", "yes hello | xargs -n1 echo | head -1", "hello\n"},
+		{"parallel xargs", "yes hello | xargs -P2 -n1 echo | head -1", "hello\n"},
 		{"tee", "yes hello | tee | head -1", "hello\n"},
 		{"yq", `yes '{"value":1}' | yq -p json -o json -I0 . | head -1`, "{\"value\":1}\n"},
 		{"sed", "yes hello | sed -n '1p;1q'", "hello\n"},

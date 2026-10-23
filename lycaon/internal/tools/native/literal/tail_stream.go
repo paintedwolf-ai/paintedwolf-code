@@ -2,6 +2,7 @@ package literal
 
 import (
 	"context"
+	"errors"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 	"io"
@@ -40,7 +41,7 @@ func tailInput(inv *invocation, in *input, w window) error {
 				return err
 			}
 		}
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
@@ -107,7 +108,7 @@ func copyLiteral(inv *invocation, in *input, reader io.Reader, offset int64) err
 			}
 			offset += int64(n)
 		}
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return nil
 		}
 		if err != nil {
@@ -119,7 +120,7 @@ func copyLiteral(inv *invocation, in *input, reader io.Reader, offset int64) err
 func tailFromStart(inv *invocation, in *input, w window) error {
 	if w.bytes {
 		skipped, err := io.CopyN(io.Discard, in.reader(), max(0, w.count-1))
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return nil
 		}
 		if err != nil {

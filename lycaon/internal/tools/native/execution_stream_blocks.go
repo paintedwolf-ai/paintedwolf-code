@@ -41,7 +41,7 @@ func (e ExecutionRevisions) scanSource(ctx context.Context, resolved projectpath
 	capture := &verifiedSource{ctx: ctx, path: resolved.DisplayPath, firstNull: -1, buffer: make([]byte, sourceBlockBytes), working: release, cached: -1}
 	defer func() {
 		if err != nil {
-			_ = capture.Close()
+			capture.Close()
 		}
 	}()
 	hash := sha256.New()
@@ -143,7 +143,7 @@ func (r *verifiedSource) read(p []byte, load func(int64, []byte) (int, error)) (
 	return n, nil
 }
 
-func (r *verifiedSource) Close() error {
+func (r *verifiedSource) Close() {
 	if !r.closed {
 		r.closed = true
 		r.blocks, r.buffer = nil, nil
@@ -156,7 +156,6 @@ func (r *verifiedSource) Close() error {
 			r.working = nil
 		}
 	}
-	return nil
 }
 
 type verifiedSeekReader struct {
@@ -202,6 +201,6 @@ func (r *verifiedSeekReader) Close() error {
 	if r.closed {
 		return nil
 	}
-	_ = r.verifiedSource.Close()
+	r.verifiedSource.Close()
 	return r.file.Close()
 }

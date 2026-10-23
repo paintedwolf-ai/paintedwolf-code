@@ -3,7 +3,10 @@
 package textutil
 
 import (
+	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/commandprogram"
+	"io"
 	"slices"
 	"strings"
 	"testing"
@@ -157,4 +160,59 @@ func TestSpillsReleaseInterruptedRunsAndRefuseAfterClose(t *testing.T) {
 		t.Fatal("closed run accepted a reader")
 	}
 	testutil.FailErr(t, "close again", spills.Close())
+}
+
+// The merge owns the opened readers and must not turn a successful close into
+// another wrapper around the actual output endpoint failure.
+type mergeCloseRun struct {
+	SpillRun
+	reader *mergeCloseReader
+}
+
+func (r mergeCloseRun) Open(int64, func(int64) error) (RunReader, error) { return r.reader, nil }
+
+type mergeCloseReader struct {
+	emitted bool
+	closes  int
+	failure error
+}
+
+func (r *mergeCloseReader) Next() ([]byte, error) {
+	if r.emitted {
+		return nil, io.EOF
+	}
+	r.emitted = true
+	return []byte("record"), nil
+}
+func (r *mergeCloseReader) Close() error { r.closes++; return r.failure }
+func TestSortMergePreservesEndpointAndIndependentCloseFailure(t *testing.T) {
+	for _, failedClose := range []bool{false, true} {
+		t.Run(fmt.Sprint(failedClose), func(t *testing.T) {
+			h := newHarness(t)
+			inv := &invocation{ctx: t.Context(), owners: h.owners, ports: h.ports()}
+			budget, err := commandprogram.NewByteBudget("fixture", 1024)
+			testutil.FailErr(t, "admit byte stream", err)
+			output, err := commandprogram.NewBytePipe(t.Context(), budget)
+			testutil.FailErr(t, "open byte stream", err)
+			testutil.FailErr(t, "close satisfied consumer", output.CloseConsumer())
+			reader := &mergeCloseReader{}
+			if failedClose {
+				reader.failure = errors.New("spill reader close failed")
+			}
+			before := inv.ports.Memory.InUse()
+			err = (&sorter{inv: inv}).mergeRuns([]SpillRun{mergeCloseRun{reader: reader}}, func(record []byte) error { _, failure := output.Write(record); return failure })
+			if !errors.Is(err, commandprogram.ErrConsumerClosed) || (failedClose && !errors.Is(err, reader.failure)) || reader.closes != 1 || inv.ports.Memory.InUse() != before {
+				t.Fatalf("cause=%v closes=%d memory=%+v", err, reader.closes, inv.ports.Memory.InUse())
+			}
+			stages := []commandprogram.PipelineStageOutcome{
+				{ExecutionID: "sort", Result: toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, RequiredInputComplete: true, Closure: commandprogram.NativeConsumerClosure(output, err, "sort", "head")},
+				{ExecutionID: "head", Result: toolcontract.ProducerResult{Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.NoEffect}, RequiredInputComplete: true},
+			}
+			result, err := commandprogram.SettlePipeline("merge", stages, &commandprogram.OutcomeLatch{})
+			testutil.FailErr(t, "settle merged stream", err)
+			if result.Complete == failedClose || result.PublicationEligible == failedClose {
+				t.Fatalf("close failed=%t result=%+v", failedClose, result)
+			}
+		})
+	}
 }

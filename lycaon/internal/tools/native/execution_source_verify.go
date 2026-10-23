@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"io"
 
 	"github.com/lycaon/lycaon/internal/textfile"
@@ -15,17 +16,28 @@ import (
 // recaptureSource validates and hashes the source representation through the
 // existing held stream and text decoder. UTF-16 without a BOM keeps the complete
 // classifier because a prefix cannot establish its encoding reliably.
-func (e ExecutionRevisions) recaptureSource(ctx context.Context, tc tools.ToolContext, resolved projectpaths.Resolved) (toolcontract.ExecutionRevision, error) {
+func (e ExecutionRevisions) recaptureSource(ctx context.Context, tc tools.ToolContext, resolved projectpaths.Resolved) (revision toolcontract.ExecutionRevision, finalErr error) {
 	stream, err := e.OpenStream(ctx, tc, resolved.Abs, 0)
 	if err != nil {
 		return toolcontract.ExecutionRevision{}, err
 	}
-	defer stream.Reader.Close()
+	defer func() {
+		if closeErr := stream.Reader.Close(); closeErr != nil {
+			if finalErr == nil {
+				finalErr = closeErr
+			} else {
+				finalErr = errors.Join(finalErr, closeErr)
+			}
+		}
+	}()
 	fallback := func() (toolcontract.ExecutionRevision, error) {
-		_ = stream.Reader.Close()
+		if err := stream.Reader.Close(); err != nil {
+			return toolcontract.ExecutionRevision{}, err
+		}
 		source, err := e.CaptureSource(ctx, tc, resolved.Abs)
-		defer source.Close()
-		return source.Revision, err
+		revision := source.Revision
+		source.Close()
+		return revision, err
 	}
 	if stream.Revision.Mode != toolcontract.PublishedDiskRevision {
 		return fallback()

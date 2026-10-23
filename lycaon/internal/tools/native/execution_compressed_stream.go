@@ -71,7 +71,7 @@ func (r *compressedExecutionReader) Close() error {
 		return nil
 	}
 	if r.verifiedSource != nil {
-		_ = r.verifiedSource.Close()
+		r.verifiedSource.Close()
 	}
 	r.decoder.Close()
 	err := r.file.Close()

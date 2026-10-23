@@ -64,7 +64,7 @@ func (in *inputs) slurpRaw() (string, bool) {
 		in.stop = err
 		return "", false
 	}
-	in.inv.captures = append(in.inv.captures, work)
+	in.inv.releases = append(in.inv.releases, work.Close)
 	var chunk [32 << 10]byte
 	for len(in.operands) > 0 && in.stop == nil {
 		operand := in.operands[0]

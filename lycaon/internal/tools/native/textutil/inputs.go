@@ -34,7 +34,7 @@ func (inv *invocation) openInputs(operands commandprogram.Fields) ([]source, err
 	}
 	out := make([]source, 0, len(operands))
 	for _, operand := range operands {
-		var reader io.ReadCloser = io.NopCloser(inv.streams.Input)
+		reader := io.NopCloser(inv.streams.Input)
 		if operand.Value != "-" {
 			reader = &operandReader{inv: inv, paths: paths, operand: operand}
 		}

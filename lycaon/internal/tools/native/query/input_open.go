@@ -12,7 +12,7 @@ import (
 
 func (in *inputs) close() {
 	if in.rawWork != nil {
-		_ = in.rawWork.Close()
+		in.rawWork.Close()
 		in.rawWork = nil
 	}
 	if in.currentCloser != nil {
@@ -28,7 +28,7 @@ func (in *inputs) close() {
 // openStream binds exactly the reached operand and delegates its physical read,
 // revision pin and representation to the existing native capture owner.
 func (in *inputs) openStream(operand string) {
-	var reader io.Reader = in.inv.input
+	reader := in.inv.input
 	if operand == "-" {
 		in.label = "<stdin>"
 	} else {

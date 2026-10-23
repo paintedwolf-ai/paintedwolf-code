@@ -198,6 +198,10 @@ func (c *command) selects(m *Machine) (selected, ends bool, err error) {
 			return c.startRange(m)
 		}
 		closes = closes || m.stream.line == end
+	case addrLast:
+		// The shared last-line check above closes this range.
+	case addrZero, addrStep:
+		// The parser excludes these as second addresses.
 	case addrMultiple:
 		closes = closes || second.step <= 0 || m.stream.line%second.step == 0
 	}
@@ -212,6 +216,10 @@ func (c *command) startRange(m *Machine) (bool, bool, error) {
 	}
 	active := true
 	switch second := c.second; second.kind {
+	case addrRegex, addrLast:
+		// These ranges include their first matching line.
+	case addrZero, addrStep:
+		// The parser excludes these as second addresses.
 	case addrLine:
 		active = second.line > m.stream.line
 	case addrRelative:
@@ -227,6 +235,8 @@ func (c *command) startRange(m *Machine) (bool, bool, error) {
 func (a *address) matches(m *Machine) (bool, error) {
 	line := m.stream.line
 	switch a.kind {
+	case addrZero, addrRelative, addrMultiple:
+		return false, nil
 	case addrLine:
 		return line == a.line, nil
 	case addrLast:

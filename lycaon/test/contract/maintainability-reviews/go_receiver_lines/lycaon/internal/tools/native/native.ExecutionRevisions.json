@@ -4,14 +4,14 @@
   "kind": "runtime_service",
   "workstream": "portable-command-streaming-inputs",
   "disposition": "retain",
-  "reason": "Retain the measured 537 receiver lines and 22 methods of ExecutionRevisions as the single native capture/revision owner. Its two ports are the existing path boundary and invoking ProgramMemory. Whole captures, representation conversion, raw/compressed streaming proofs, verification and publication pins share exact identities and admission lifetimes; a separate reader or accountant would split that contract. Proof vectors reserve retained capacity before growth, one admitted block buffer survives to Close, and source bytes are verified before delivery. Exact 100 MB retention, mutation/seek, cancellation/refusal/release, encoded identity and source-write fixtures support this ceiling. Method, dependency or size changes require renewed review.",
-  "reviewed_commit": "f7f1dde9351a9f226c4f039113759baccab3c42d",
-  "ceiling": 537,
+  "reason": "Retain the measured 547 receiver lines and 22 methods as one native capture/revision owner over its existing path boundary and invoking ProgramMemory. Whole captures, representation conversion, raw/compressed streaming block proofs, verification and publication pins share exact identities and admission lifetimes. Splitting a reader or accountant would divide that contract. Proof vectors admit retained capacity before growth and verify source blocks before delivering bytes. The recapture return shape preserves physical source Close failures and its explicit sole-cause branches avoid wrapping an unchanged failure when Close succeeds; pure captured-byte lease releases are void and remain separate from physical stream I/O. Fallback revision metadata detaches before its captured-source lease is released immediately. These changes add no path, execution or publication authority. Actual 100 MB streaming, revision mutation/seek, cancellation/refusal/release, encoded identity and source-write contracts support this bounded concentration. Further dependency, signature or measured growth requires renewed review.",
+  "reviewed_commit": "65c5651c89b4444fcda787a453d4c07899d68a2a",
+  "ceiling": 547,
   "boundaries": {
     "lycaon/internal/tools/native/source_write_contract_test.go": "e25407bbbbbf15a1b1eb9ee5806fa504a534ab2ab55f5adeec869c15af06efda",
     "lycaon/internal/tools/native/write_operation_test.go": "4f8318b91bfb4f42ecdeda7586024f1f08311a1f325be95a149cbe877cf4b753",
-    "lycaon/internal/tools/native/execution_capture_test.go": "8a8bc6b53b189b270e0092828c743c3bdfbce55c14dcf3ea4edee688ff659420",
+    "lycaon/internal/tools/native/execution_capture_test.go": "23b52f46b43df239ad7a25bfbf52920ef5d9517b0ec9ef22411eb26a21e7d2b9",
     "lycaon/internal/tools/native/execution_stream_blocks_test.go": "d3a6c13411439fff8c3cbcc9d7638adcdd72ba23c764bbf012d867230b5374e1"
   },
-  "reviewed_shape": "a638377370c4cccf88d0f97c7516c5904c46cec0ef2a40acde7adcde3af15718"
+  "reviewed_shape": "a05504eadd1d41b14fc67893d321230cf824246b3967c103e0655132d3aaf408"
 }
