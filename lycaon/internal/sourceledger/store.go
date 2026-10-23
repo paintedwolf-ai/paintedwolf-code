@@ -402,6 +402,7 @@ func nullableString(value string) sql.NullString {
 	return sql.NullString{String: value, Valid: value != ""}
 }
 
+// Ordered opaque keys keep successive row inserts close in their indexes.
 func newID() string {
-	return uuid.NewString()
+	return uuid.Must(uuid.NewV7()).String()
 }

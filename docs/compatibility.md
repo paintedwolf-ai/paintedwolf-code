@@ -27,6 +27,8 @@ Native agent directory removal adds a versioned `retained_tree` binding and an `
 
 ## Main store (`durable-db`)
 
+New source-ledger row identities use time-ordered UUIDs in the existing opaque string columns. Stored identities and causal operation keys keep their exact values. Readers take history order, timestamps, authorization and ownership from their recorded facts, without inferring them from identifiers. This changes neither the stored shape nor existing references.
+
 The main store persists sessions, messages, workflows, evidence, authorization history, project records, and other facts that users expect to survive an application update.
 
 `schema.sql` is the current fresh-install target at `SchemaVersion` (`internal/db`). Released revisions cannot be redefined, and development shapes have no reader or conversion. Only stores written by a released build are upgrade sources; preview builds that preceded 1.0.0 are not released baselines. Startup refuses any other store's unknown shape into recovery without opening a writer.
