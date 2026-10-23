@@ -67,6 +67,9 @@ func (e *evaluation) ProcessSubstitute(ctx context.Context, scope ExpansionScope
 	g.streams.SetWriter(1, writer)
 	g.streams.SetWriter(2, f.streams.Error)
 	_, err = g.statements(ctx, part.Statements)
+	if trapErr := runExitTrap(ctx, g, err); trapErr != nil && err == nil {
+		err = trapErr
+	}
 	closeErr := file.Close()
 	if err == nil && writer.err != nil {
 		err = writer.err
@@ -157,6 +160,9 @@ func (s *procSubstScope) runConsumer(ctx context.Context, f *frame, consumer pro
 	g.streams.SetWriter(1, f.streams.Output)
 	g.streams.SetWriter(2, f.streams.Error)
 	_, err = g.statements(ctx, part.Statements)
+	if trapErr := runExitTrap(ctx, g, err); trapErr != nil && err == nil {
+		err = trapErr
+	}
 	result := ordinaryResult(g.state.control.Status())
 	if stop, ok := g.state.latch.Stop(); ok {
 		result = stop.Result

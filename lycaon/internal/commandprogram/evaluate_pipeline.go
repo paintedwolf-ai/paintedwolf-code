@@ -170,6 +170,9 @@ func (f *frame) settlePipeline(run *childRun, stages []commandsurface.Statement,
 // aggregation-only record of that status (exit, negation, bookkeeping).
 func (g *frame) stage(ctx context.Context, s commandsurface.Statement) stageResult {
 	_, err := g.statement(ctx, s)
+	if trapErr := runExitTrap(ctx, g, err); trapErr != nil && err == nil {
+		err = trapErr
+	}
 	out := stageResult{err: err}
 	_, stopped := g.state.latch.Stop()
 	if last := g.state.last; last != nil && (stopped || last.Result.Status == g.state.control.Status()) {

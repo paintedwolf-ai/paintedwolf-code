@@ -40,6 +40,9 @@ func (e *evaluation) Substitute(ctx context.Context, scope ExpansionScope, reque
 	g.streams.SetWriter(1, stdout)
 	g.streams.SetWriter(2, f.streams.Error)
 	_, err = g.statements(ctx, part.Statements)
+	if trapErr := runExitTrap(ctx, g, err); trapErr != nil && err == nil {
+		err = trapErr
+	}
 	result := ordinaryResult(g.state.control.Status())
 	if stop, ok := g.state.latch.Stop(); ok {
 		result = stop.Result
@@ -162,6 +165,9 @@ func (f *frame) background(ctx context.Context, s commandsurface.Statement) erro
 		defer release()
 		job.streams = streams.withDefaults()
 		_, err := job.statement(jobCtx, statement)
+		if trapErr := runExitTrap(jobCtx, job, err); trapErr != nil && err == nil {
+			err = trapErr
+		}
 		result := ordinaryResult(job.state.control.Status())
 		if stop, ok := job.state.latch.Stop(); ok {
 			result = stop.Result
