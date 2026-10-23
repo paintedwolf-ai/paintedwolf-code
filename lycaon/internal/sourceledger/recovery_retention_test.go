@@ -35,18 +35,13 @@ func TestRecoveryReclamationBoundsEachWriterTransaction(t *testing.T) {
 		testutil.FailErr(t, "reclaim recovery page", err)
 		want := int64(blobMaintenanceBatchSize)
 		if pass == 3 {
-			want = 1
+			want = 2 // the final manifest row and its now-empty candidate
 		}
 		if n != want {
 			t.Fatalf("pass %d reclaimed %d, want %d", pass, n, want)
 		}
 	}
 	n, err := s.Retention.reclaimRecoveryBatch(ctx)
-	testutil.FailErr(t, "retire drained candidate", err)
-	if n != 1 {
-		t.Fatalf("candidate not retired: %d", n)
-	}
-	n, err = s.Retention.reclaimRecoveryBatch(ctx)
 	testutil.FailErr(t, "repeat maintenance", err)
 	if n != 0 {
 		t.Fatalf("empty queue did work: %d", n)
@@ -132,5 +127,32 @@ func TestRecoveryClaimLookupsUseExactIdentityIndexes(t *testing.T) {
 	testutil.FailErr(t, "finish query plan", rows.Err())
 	if lookups != 4 {
 		t.Fatalf("references lookups=%d, want 4", lookups)
+	}
+}
+
+func TestRecoveryReclamationBatchesEmptyCandidatesWithinTheSameBound(t *testing.T) {
+	s, ctx := openLedger(t)
+	const total = 2*blobMaintenanceBatchSize + 1
+	tx, err := s.sqlDB.BeginTx(ctx, nil)
+	testutil.FailErr(t, "begin candidate fixture", err)
+	defer func() { _ = tx.Rollback() }()
+	for i := range total {
+		_, err := tx.ExecContext(ctx, `INSERT INTO source_recovery_reclaim_queue(project_id,recovery_id) VALUES('p1',?)`, fmt.Sprintf("empty-%04d", i))
+		testutil.FailErr(t, "queue empty recovery candidate", err)
+	}
+	testutil.FailErr(t, "commit candidate fixture", tx.Commit())
+	remaining := total
+	for _, want := range []int64{blobMaintenanceBatchSize, blobMaintenanceBatchSize, 1, 0} {
+		n, err := s.Retention.reclaimRecoveryBatch(ctx)
+		testutil.FailErr(t, "retire bounded candidates", err)
+		if n != want {
+			t.Fatalf("candidate work=%d want=%d", n, want)
+		}
+		remaining -= int(n)
+		var actual int
+		testutil.FailErr(t, "count retained candidates", s.sqlDB.QueryRowContext(ctx, `SELECT count(*) FROM source_recovery_reclaim_queue`).Scan(&actual))
+		if actual != remaining {
+			t.Fatalf("remaining candidates=%d want=%d", actual, remaining)
+		}
 	}
 }

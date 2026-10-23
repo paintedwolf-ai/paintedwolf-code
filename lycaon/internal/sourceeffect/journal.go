@@ -16,7 +16,7 @@ type Memory interface {
 	ReserveProgramState(context.Context, int64) (func(), error)
 }
 
-// Journal records intent and attribution before a file effect.
+// Journal records intent, observed completion and source attribution for file effects.
 type Journal interface {
 	// RecoveryQuotaBytes bounds recovery representation charges per project.
 	// Manifest content and retained tree allocation keep their own byte facts.
