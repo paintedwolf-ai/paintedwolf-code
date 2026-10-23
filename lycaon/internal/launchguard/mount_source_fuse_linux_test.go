@@ -46,6 +46,33 @@ func startSourceFUSE(t *testing.T, volume string) {
 	var output strings.Builder
 	command.Stdout, command.Stderr = &output, &output
 	testutil.FailErr(t, "start own FUSE mount", command.Start())
+	mountWaited := false
+	defer func() {
+		if !mountWaited {
+			_ = command.Process.Kill()
+			_ = command.Wait()
+		}
+	}()
+	var server *exec.Cmd
+	var done chan error
+	t.Cleanup(func() {
+		if out, err := exec.Command("fusermount3", "-u", "-z", "--", volume).CombinedOutput(); err != nil {
+			t.Errorf("remove own FUSE mount: %v %s", err, out)
+		}
+		if done == nil {
+			return
+		}
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Errorf("FUSE fixture protocol: %v", err)
+			}
+		case <-time.After(2 * time.Second):
+			_ = server.Process.Kill()
+			_ = <-done
+			t.Error("own FUSE server did not settle after unmount")
+		}
+	})
 	_ = child.Close()
 	data, control := make([]byte, 1), make([]byte, unix.CmsgSpace(4))
 	_, n, flags, _, receiveErr := unix.Recvmsg(pair[0], data, control, unix.MSG_CMSG_CLOEXEC)
@@ -72,34 +99,23 @@ func startSourceFUSE(t *testing.T, volume string) {
 	}
 	if fd < 0 {
 		_ = command.Wait()
+		mountWaited = true
 		t.Fatalf("FUSE mount did not return a device: %v %s", receiveErr, output.String())
 	}
 	device := os.NewFile(uintptr(fd), "owned-fuse-device")
 	defer device.Close()
-	server := exec.Command(os.Args[0], "-test.run=^TestSourceFUSEServerProcess$")
+	server = exec.Command(os.Args[0], "-test.run=^TestSourceFUSEServerProcess$")
 	server.Env = append(os.Environ(), "PW_FUSE_FIXTURE_SERVER=1")
 	server.ExtraFiles = []*os.File{device}
 	server.Stderr = os.Stderr
 	testutil.FailErr(t, "start separate owned FUSE daemon", server.Start())
 	_ = device.Close()
-	done := make(chan error, 1)
+	done = make(chan error, 1)
 	go func() { done <- server.Wait() }()
-	t.Cleanup(func() {
-		if out, err := exec.Command("fusermount3", "-u", "-z", "--", volume).CombinedOutput(); err != nil {
-			t.Errorf("remove own FUSE mount: %v %s", err, out)
-		}
-		select {
-		case err := <-done:
-			if err != nil {
-				t.Errorf("FUSE fixture protocol: %v", err)
-			}
-		case <-time.After(2 * time.Second):
-			_ = server.Process.Kill()
-			_ = <-done
-			t.Error("own FUSE server did not settle after unmount")
-		}
-	})
-	if err := command.Wait(); err != nil {
+
+	mountErr := command.Wait()
+	mountWaited = true
+	if err := mountErr; err != nil {
 		t.Fatalf("FUSE mount failed: %v %s", err, output.String())
 	}
 	info, err := os.Open("/proc/thread-self/mountinfo")
