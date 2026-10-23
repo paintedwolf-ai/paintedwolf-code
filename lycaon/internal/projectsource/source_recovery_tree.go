@@ -82,7 +82,7 @@ func (s *sourceRecovery) canRetainTree(location fseffect.Location, sameFilesyste
 	return sameFilesystem(filepath.Join(location.Root, location.Rel), target.Root)
 }
 
-func (s *SourceEffects) retainSourceTree(ctx context.Context, row *sourceMutationRow) error {
+func (s *SourceEffects) retainSourceTree(ctx context.Context, row *sourceMutationRow) (result error) {
 	plan := &row.Plan
 	binding := plan.RetainedTree
 	if binding == nil || binding.Version != 1 || binding.Identity == "" || plan.EntryRecoveryKey != plan.RecoveryID {
@@ -102,6 +102,14 @@ func (s *SourceEffects) retainSourceTree(ctx context.Context, row *sourceMutatio
 	if sourceMutationPathExists(held) {
 		return ErrSourceMutationDiverged
 	}
+	attempted := false
+	defer func() {
+		if result != nil && !attempted {
+			// No rename was attempted and custody was absent at admission. The
+			// failed row cannot promise a retained entry or block backup capture.
+			plan.RetainedTree, plan.EntryRecoveryKey, plan.RecoveryID, plan.RecoveryCount = nil, "", "", 0
+		}
+	}()
 	if err := requireSourceIdentity(plan.AbsPath, binding.Identity); err != nil {
 		return err
 	}
@@ -119,6 +127,7 @@ func (s *SourceEffects) retainSourceTree(ctx context.Context, row *sourceMutatio
 	if sha != plan.TreeSHA || !size.AllocationKnown || size.AllocatedBytes != binding.AllocatedBytes {
 		return ErrSourceMutationDiverged
 	}
+	attempted = true
 	err = s.relocateRecoveryTree(ctx, row.ID, fseffect.Location{Root: plan.RootPath, Rel: plan.Path}, target, binding.Identity)
 	var unavailable *sourceeffect.RecoveryUnavailableError
 	if errors.As(err, &unavailable) {
@@ -142,7 +151,7 @@ func (s *SourceEffects) relocateRecoveryTree(ctx context.Context, operationID st
 	}
 	if currentErr == nil && current == identity && os.IsNotExist(publishedErr) && !errors.Is(moveErr, fseffect.ErrPostcondition) && !os.IsExist(moveErr) {
 		if ctx.Err() != nil {
-			return ctx.Err()
+			return &sourceeffect.RecoveryUnavailableError{Cause: ctx.Err()}
 		}
 		return &sourceeffect.RecoveryUnavailableError{Cause: moveErr}
 	}

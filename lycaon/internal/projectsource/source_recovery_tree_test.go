@@ -130,9 +130,14 @@ func TestRetainedTreeRevalidatesAfterEffectAdmission(t *testing.T) {
 	})
 	removal := agentRemoval(project, "tree", "")
 	removal.Recursive = true
-	_, err := service.RemoveEntry(ctx, removal)
+	id, err := service.RemoveEntry(ctx, removal)
 	if !errors.Is(err, ErrSourceMutationDiverged) {
 		t.Fatalf("changed tree was accepted: %v", err)
+	}
+	row, found, loadErr := service.Journal.load(t.Context(), id)
+	testutil.FailErr(t, "load unperformed attempt", loadErr)
+	if !found || row.Plan.RetainedTree != nil || row.Plan.RecoveryID != "" {
+		t.Fatalf("unperformed attempt kept custody claim: %+v", row)
 	}
 	assertSourceHistoryFile(t, root, "tree/file", "changed after admission")
 }

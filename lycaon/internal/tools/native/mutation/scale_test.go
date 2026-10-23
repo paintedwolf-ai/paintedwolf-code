@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/fseffect"
+	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -40,11 +42,10 @@ func TestOversizeDeleteRejectionLeavesTreeIntact(t *testing.T) {
 	}
 }
 
-func TestDirectoryDeletesRespectQuotaAndEvictBlobs(t *testing.T) {
+func TestDirectoryDeletesRespectQuotaAndPruneRetainedTrees(t *testing.T) {
 	h := newHarness(t, nil)
-	// Set a 4 KiB recovery quota so repeated recoverable deletes of ordinary
-	// directories must evict older history entries and sweep their blobs.
-	h.service.History.SetRecoveryQuotaBytes(4096)
+	// Measure the real filesystem allocation before setting this fixture
+	// quota. Retained trees must be reclaimed without per-file blob capture.
 
 	for round := 0; round < 5; round++ {
 		chunk := fmt.Sprintf("round %d\n", round) + strings.Repeat("retained-build-artifact-line\n", 48)
@@ -52,6 +53,14 @@ func TestDirectoryDeletesRespectQuotaAndEvictBlobs(t *testing.T) {
 			full := h.path(filepath.Join(dir, fmt.Sprintf("bundle-%d.js", round)))
 			testutil.FailErr(t, "mkdir "+dir, os.MkdirAll(filepath.Dir(full), 0o755))
 			testutil.FailErr(t, "write "+full, os.WriteFile(full, []byte(chunk), 0o644))
+		}
+		if round == 0 {
+			measured, err := h.service.InspectRemoval(t.Context(), fseffect.Location{Root: h.root, Rel: "node_modules"})
+			testutil.FailErr(t, "measure retained tree allocation", err)
+			if !measured.RecoverySizeKnown || measured.RecoveryBytes < 1 {
+				t.Fatalf("unavailable fixture allocation: %+v", measured)
+			}
+			h.service.History.SetRecoveryQuotaBytes(2 * measured.RecoveryBytes)
 		}
 		if r := h.run("", "rm", "-rf", "node_modules"); r.err != nil || r.result.Status != 0 || !h.absent("node_modules") {
 			t.Fatalf("round %d rm node_modules: %+v %v", round, r.result, r.err)
@@ -68,8 +77,14 @@ func TestDirectoryDeletesRespectQuotaAndEvictBlobs(t *testing.T) {
 	}
 	var totalRecoveryBytes int64
 	testutil.FailErr(t, "sum recovery bytes", h.db.QueryRowContext(t.Context(), `SELECT COALESCE(SUM(size), 0) FROM source_blob_objects`).Scan(&totalRecoveryBytes))
-	if totalRecoveryBytes > 4096 {
-		t.Fatalf("recovery blobs exceeded 4096-byte quota: %d bytes", totalRecoveryBytes)
+	if totalRecoveryBytes != 0 {
+		t.Fatalf("tree removal captured per-file blobs: %d bytes", totalRecoveryBytes)
+	}
+	ledger := h.tc.Source.SourceLedger.(*sourceledger.Store)
+	slots, err := os.ReadDir(ledger.Retention.RecoveryTreeRoot())
+	testutil.FailErr(t, "inspect retained recovery slots", err)
+	if len(slots) != historyCount {
+		t.Fatalf("physical custody not reclaimed with history: slots=%d history=%d", len(slots), historyCount)
 	}
 }
 

@@ -18,6 +18,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -353,7 +354,18 @@ func TestRecursiveMutationCapsAtBoundaryAndOnePast(t *testing.T) {
 			t.Run(c.name+" "+command[0], func(t *testing.T) {
 				h := newHarness(t, tree(c.files, c.size))
 				h.owners.Operations.Copy.Caps = caps
-				h.service.History.SetRecoveryQuotaBytes(caps.Bytes)
+				if command[0] == "rm" {
+					measured, err := h.service.InspectRemoval(t.Context(), fseffect.Location{Root: h.root, Rel: "tree"})
+					testutil.FailErr(t, "measure recovery charge", err)
+					if !measured.RecoverySizeKnown || measured.RecoveryBytes < 2 {
+						t.Fatalf("unavailable recovery charge: %+v", measured)
+					}
+					quota := measured.RecoveryBytes
+					if c.limit == "recursive_mutation_bytes" {
+						quota--
+					}
+					h.service.History.SetRecoveryQuotaBytes(quota)
+				}
 				var reviewed []tools.FileChange
 				h.tc.Files.FileChangeReview = func(_ context.Context, changes []tools.FileChange) error {
 					reviewed = append(reviewed, changes...)
