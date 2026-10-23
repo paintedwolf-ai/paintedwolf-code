@@ -1122,14 +1122,13 @@ export function Composer(props: Props) {
           </AnchoredSurface>
         </Show>
         <div class="den-composer-row">
-          <Scrollport
+          <Scrollport class="den-composer-scroll"
             ref={(el) => {
               scrollRef = el;
             }}
             viewportRef={(el) => {
               viewportRef = el;
             }}
-            class="den-composer-scroll"
           >
             <textarea
               ref={(el) => {
