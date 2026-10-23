@@ -89,6 +89,15 @@ with no symlinks, remote model downloads, or remote-code execution. Pin the mode
 and tokenizer by complete file inventories. Start with SFT; DPO starts from the
 merged SFT checkpoint and uses that identical frozen reference.
 
+Before allocating training resources, run `prepare.py --model MODEL --train TRAIN
+--validation VALIDATION --holdout HOLDOUT --out NEW_DIRECTORY --max-length LIMIT`
+with the same local tokenizer and token limit as training. It checks receipt and
+quality admission and split separation, then encodes every complete request and
+target. Its manifest records input and output hashes, token lengths, and whole
+rows excluded for exceeding the limit. No request or target is truncated.
+Unsupported controls and other invalid inputs remain errors. Every split must
+retain at least one row. Train from the three JSONL files in that output directory.
+
 A bounded pilot command, after qualified datasets and local model files exist:
 
 ```sh
@@ -108,7 +117,8 @@ only at positions that predict a completion token (`logits_to_keep`); a
 full-vocabulary log-softmax over 8,192 positions of a 262,144-token vocabulary
 would need about 21 GB by itself. Do not shorten an accepted request to fit.
 The tokenizer must preserve the full generation prefix and every target;
-oversize or unsupported rows stop preparation with an error. Prompt tokens are
+training rejects oversize or unsupported rows; the explicit preparation stage
+counts and excludes whole oversize rows before training. Prompt tokens are
 masked. DPO uses summed completion log likelihoods with a frozen reference;
 the optional chosen NLL anchor is token-normalized.
 
