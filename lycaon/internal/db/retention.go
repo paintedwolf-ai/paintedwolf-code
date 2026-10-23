@@ -52,22 +52,29 @@ func RunMaintenance(ctx context.Context, sqlDB *Store, cfg RetentionConfig) erro
 			return ctx.Err()
 		case <-sqlDB.maintenanceSignals():
 		}
-		for {
-			report, err := RunRetention(ctx, sqlDB, cfg)
-			if err != nil {
+		if err := drainMaintenance(ctx, sqlDB, cfg); err != nil {
+			return err
+		}
+	}
+}
+
+// drainMaintenance completes one wake's bounded passes without needing another write.
+func drainMaintenance(ctx context.Context, sqlDB *Store, cfg RetentionConfig) error {
+	for {
+		report, err := RunRetention(ctx, sqlDB, cfg)
+		if err != nil {
+			return err
+		}
+		if report.IncrementalVacuumed {
+			if _, err := CheckpointWAL(ctx, sqlDB); err != nil {
 				return err
 			}
-			if report.IncrementalVacuumed {
-				if _, err := CheckpointWAL(ctx, sqlDB); err != nil {
-					return err
-				}
-			}
-			if report.TotalDeleted() == 0 && !report.IncrementalVacuumed {
-				break
-			}
-			if report.TotalDeleted() > 0 {
-				slog.InfoContext(ctx, "store maintenance batch complete", "deleted", report.TotalDeleted())
-			}
+		}
+		if report.TotalDeleted() == 0 && !report.IncrementalVacuumed {
+			return nil
+		}
+		if report.TotalDeleted() > 0 {
+			slog.InfoContext(ctx, "store maintenance batch complete", "deleted", report.TotalDeleted())
 		}
 	}
 }

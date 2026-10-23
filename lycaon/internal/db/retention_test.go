@@ -3,7 +3,6 @@ package db
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"path/filepath"
 	"testing"
 	"time"
@@ -315,8 +314,7 @@ func TestRetentionReturnsPagesItDidNotFree(t *testing.T) {
 
 // A single wake must reclaim more than one pass even without application writes.
 func TestMaintenanceDrainsIdleFreelist(t *testing.T) {
-	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	defer cancel()
+	ctx := t.Context()
 	path := filepath.Join(t.TempDir(), "small-pages.db")
 	writer, err := sql.Open("sqlite", fileDSN(path, writerDSNQuery))
 	testutil.FailErr(t, "open fixture writer", err)
@@ -339,25 +337,10 @@ DROP TABLE freed_elsewhere`)
 	if before <= vacuumSlicePages*vacuumSlicesPerPass {
 		t.Fatalf("freelist=%d, need more than one pass", before)
 	}
-	done := make(chan error, 1)
-	go func() { done <- RunMaintenance(ctx, database, DefaultRetention()) }()
-	t.Cleanup(func() { cancel(); <-done })
-	ticker := time.NewTicker(10 * time.Millisecond)
-	defer ticker.Stop()
-	for {
-		var remaining int64
-		testutil.FailErr(t, "read remaining freelist", database.QueryRowContext(ctx, `PRAGMA freelist_count`).Scan(&remaining))
-		if remaining < DefaultRetention().IncrementalVacuumMinFreelistPages {
-			return
-		}
-		select {
-		case err := <-done:
-			done <- err
-			if errors.Is(err, context.DeadlineExceeded) {
-				t.Fatalf("idle maintenance left %d of %d free pages", remaining, before)
-			}
-			t.Fatalf("maintenance exited before reclaim completed: %v", err)
-		case <-ticker.C:
-		}
+	testutil.FailErr(t, "drain one maintenance wake", drainMaintenance(ctx, database, DefaultRetention()))
+	var remaining int64
+	testutil.FailErr(t, "read drained freelist", database.QueryRowContext(ctx, `PRAGMA freelist_count`).Scan(&remaining))
+	if remaining >= DefaultRetention().IncrementalVacuumMinFreelistPages {
+		t.Fatalf("one wake left %d of %d free pages", remaining, before)
 	}
 }
