@@ -43,7 +43,9 @@ class Installation:
         self.last_observation = {"state": "not_observed"}
 
     def launch(self):
-        subprocess.run(["/usr/bin/open", "-n", "-j", "--env", "LYCAON_LLM_MOCK=1", str(self.app)], check=True, timeout=30)
+        subprocess.run(["/usr/bin/open", "-n", "-j", "--env", "LYCAON_LLM_MOCK=1",
+                        "--stdout", str(self.config / "desktop-launch.log"),
+                        "--stderr", str(self.config / "desktop-launch.log"), str(self.app)], check=True, timeout=30)
 
     def capture_owned(self):
         helpers = self.config.glob("updates/installations/*/staging/*/update-helper")
@@ -113,6 +115,18 @@ class Installation:
             return wait_for(f"installed app {version} never reached healthy startup", lambda: self.observe(version))
         except TimeoutError as error:
             raise TimeoutError(f"{error}; last observation: {json.dumps(self.last_observation, sort_keys=True)}") from error
+
+    def sample_startup(self, evidence):
+        """Capture blocked native stacks before retiring only this installation's processes."""
+        self.capture_owned()
+        for pid, (identity, kind) in list(self.owned.items())[:10]:
+            if kind not in (0, 1) or process_identity(pid) != identity:
+                continue
+            result = subprocess.run(["/usr/bin/sample", str(pid), "1", "1", "-file",
+                                     str(evidence / f"startup-process-{pid}.txt")],
+                                    capture_output=True, text=True, timeout=15)
+            (evidence / f"startup-process-{pid}-status.json").write_text(
+                json.dumps({"pid": pid, "identity": identity, "returncode": result.returncode}) + "\n")
 
     def stop(self, crash_app=False):
         self.capture_owned()
