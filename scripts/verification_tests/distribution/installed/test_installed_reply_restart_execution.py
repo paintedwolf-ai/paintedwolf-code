@@ -133,6 +133,10 @@ class ReplyRestartTests(unittest.TestCase):
                          ['Add AI provider', 'LiteLLM', 'Add AI provider', 'Default model', owner.MODEL, 'Skip'])
         self.assertEqual([call.args[3] for call in physical.call_args_list],
                          ['provider-name-v1', 'provider-endpoint-v1-12345', 'provider-fixture-credential-v1'])
+        self.assertEqual([call.args[2] for call in physical.call_args_list],
+                         ['Name (optional) e.g. GPU box, Work account',
+                          'Endpoint URL http://localhost:4000/v1', 'API key Paste your API key…'])
+        self.assertEqual(physical.call_args_list[-1].kwargs, {'password': True})
 
     def test_physical_input_retains_exact_guest_delivery_records(self):
         app = SimpleNamespace(binding={'native_input': {'binding': 'binding', 'vm_id': 'owned'}}, observations={})
