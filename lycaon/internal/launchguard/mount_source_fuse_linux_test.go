@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -35,7 +36,7 @@ func TestMountSourceOpensCallerFUSEWithoutAllowOther(t *testing.T) {
 // A small read-only filesystem speaks the installed Linux fuse.h v7.31 ABI.
 // It is an actual unprivileged fusermount mount, without allow_other; no
 // external FUSE library, user daemon or desktop service is reused.
-func startSourceFUSE(t *testing.T, volume string, module []byte) {
+func startSourceFUSE(t *testing.T, volume string, module []byte) func() {
 	t.Helper()
 	pair, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_STREAM|unix.SOCK_CLOEXEC, 0)
 	testutil.FailErr(t, "create FUSE descriptor transport", err)
@@ -56,24 +57,28 @@ func startSourceFUSE(t *testing.T, volume string, module []byte) {
 	}()
 	var server *exec.Cmd
 	var done chan error
-	t.Cleanup(func() {
-		if out, err := exec.Command("fusermount3", "-u", "-z", "--", volume).CombinedOutput(); err != nil {
-			t.Errorf("remove own FUSE mount: %v %s", err, out)
-		}
-		if done == nil {
-			return
-		}
-		select {
-		case err := <-done:
-			if err != nil {
-				t.Errorf("FUSE fixture protocol: %v", err)
+	var stopped sync.Once
+	stop := func() {
+		stopped.Do(func() {
+			if out, err := exec.Command("fusermount3", "-u", "-z", "--", volume).CombinedOutput(); err != nil {
+				t.Errorf("remove own FUSE mount: %v %s", err, out)
 			}
-		case <-time.After(2 * time.Second):
-			_ = server.Process.Kill()
-			_ = <-done
-			t.Error("own FUSE server did not settle after unmount")
-		}
-	})
+			if done == nil {
+				return
+			}
+			select {
+			case err := <-done:
+				if err != nil {
+					t.Errorf("FUSE fixture protocol: %v", err)
+				}
+			case <-time.After(2 * time.Second):
+				_ = server.Process.Kill()
+				_ = <-done
+				t.Error("own FUSE server did not settle after unmount")
+			}
+		})
+	}
+	t.Cleanup(stop)
 	_ = child.Close()
 	data, control := make([]byte, 1), make([]byte, unix.CmsgSpace(4))
 	_, n, flags, _, receiveErr := unix.Recvmsg(pair[0], data, control, unix.MSG_CMSG_CLOEXEC)
@@ -140,10 +145,11 @@ func startSourceFUSE(t *testing.T, volume string, module []byte) {
 			if entry.filesystem != "fuse.pw_mount_fixture" || hasMountOption(entry.superOptions, "allow_other") || !hasMountOption(entry.superOptions, "user_id="+strconv.Itoa(os.Getuid())) {
 				t.Fatalf("FUSE ownership/access facts differ: %+v", entry)
 			}
-			return
+			return stop
 		}
 	}
 	t.Fatal("own FUSE mount is absent from kernel topology")
+	return stop
 }
 
 // The client can enter epoll_ctl while opening its FUSE payload. Its daemon
