@@ -160,11 +160,12 @@ merge after an interrupted reload or publication. Existing stock weights remain
 untouched.
 
 `gguf_export.py --merge MERGED_DIRECTORY --llama-cpp PINNED_CHECKOUT --revision
-FULL_COMMIT --quantizer ABSOLUTE_BINARY --loader ABSOLUTE_LLAMA_CLI --out
+FULL_COMMIT --quantizer ABSOLUTE_BINARY --loader ABSOLUTE_LLAMA_COMPLETION --out
 NEW_DIRECTORY` converts to F16 and then Q4_K_M. Both artifacts are inventoried by
 tensor name, shape, type, range and content hash. Tokenizer/template metadata and
-unquantized tensor bytes must survive quantization. A load-only probe generates
-zero tokens. Use `--resume` to reuse verified conversion/quantization stages
+unquantized tensor bytes must survive quantization. Build `llama-quantize` and the raw `llama-completion` executable at that
+pinned revision. The load-only probe uses `llama-completion` to generate zero
+tokens with conversation mode disabled. Use `--resume` to reuse verified conversion/quantization stages
 following an interruption. Completed exports are immutable; corruption requires
 a new output directory. Build/binary identities are recorded; endpoint readiness
 or a binary filename alone does not prove build provenance.
