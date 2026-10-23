@@ -204,6 +204,10 @@ func TestLegacyAuditState(t *testing.T) {
 					}
 					t.Fatalf("open = %v", err)
 				}
+				var incompatible *StoreIncompatibleError
+				if !errors.As(err, &incompatible) || !strings.Contains(incompatible.Detail, tc.value) {
+					t.Fatalf("refusal dropped the recorded diagnosis: %v", err)
+				}
 				return
 			}
 			testutil.FailErr(t, "open unfinished audit", err)
@@ -248,6 +252,24 @@ func TestQuarantineIsBoundToPhysicalStore(t *testing.T) {
 	healthy, err = Open(path)
 	testutil.FailErr(t, "open replaced store despite old quarantine", err)
 	testutil.FailErr(t, "close replaced store", healthy.Close())
+	if _, err := os.Stat(path + IntegrityFailureSuffix); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("stale quarantine kept beside replaced store: %v", err)
+	}
+}
+
+func TestStaleQuarantineIsDiscardedWhenStoreIsAbsent(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "store.db")
+	record := `{"version":1,"identity":"gone:1:0:0","detail":"integrity_check failed: removed store"}`
+	testutil.FailErr(t, "leave orphan quarantine", os.WriteFile(path+IntegrityFailureSuffix, []byte(record), 0o600))
+	store, err := Open(path)
+	testutil.FailErr(t, "create store beside orphan quarantine", err)
+	testutil.FailErr(t, "close created store", store.Close())
+	if _, err := os.Stat(path + IntegrityFailureSuffix); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("orphan quarantine kept: %v", err)
+	}
+	store, err = Open(path)
+	testutil.FailErr(t, "reopen created store", err)
+	testutil.FailErr(t, "close reopened store", store.Close())
 }
 
 func TestQuarantineRecordRefusesInvalidOrUnreadableEvidence(t *testing.T) {

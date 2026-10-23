@@ -250,9 +250,9 @@ func TestCleanAuditClearsStampAndCleanShutdownOwesNoAudit(t *testing.T) {
 	_, err = store.writer.ExecContext(t.Context(), `INSERT INTO store_meta(key,value) VALUES(?,?)`, integrityAuditFailedMetaKey, "stale")
 	testutil.FailErr(t, "stamp a stale failure", err)
 	testutil.FailErr(t, "audit healthy store", AuditIntegrity(t.Context(), store))
-	stamped, err := integrityAuditFailed(t.Context(), store.writer)
+	stamped, err := integrityAuditState(t.Context(), store.writer)
 	testutil.FailErr(t, "read stamp", err)
-	if stamped {
+	if stamped != "" {
 		t.Fatal("a clean audit must clear the failure stamp")
 	}
 	testutil.FailErr(t, "close store", store.Close())

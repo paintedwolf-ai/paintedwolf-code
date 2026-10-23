@@ -21,14 +21,15 @@ const (
 // SQLite recovers its WAL; unclean shutdowns and unfinished audits are verified
 // asynchronously after serving starts.
 func prepareIntegrity(ctx context.Context, sqlDB *sql.DB) error {
-	failed, err := integrityAuditFailed(ctx, sqlDB)
+	value, err := integrityAuditState(ctx, sqlDB)
 	if err != nil {
 		return fmt.Errorf("read integrity audit state: %w", err)
 	}
-	if failed {
-		return storeIncompatible(RecoveryReasonIntegrityFailed, SchemaVersion, "A previous integrity audit confirmed damage.")
+	if value == "" || value == integrityAuditPendingValue {
+		return nil
 	}
-	return nil
+	ver, _ := ReadUserVersion(ctx, sqlDB)
+	return storeIncompatible(RecoveryReasonIntegrityFailed, ver, "A previous integrity audit confirmed damage: "+value)
 }
 
 // IntegrityAuditDue reports an unclean shutdown or an unfinished background audit.
@@ -80,11 +81,6 @@ func integrityAuditState(ctx context.Context, sqlDB DBTX) (string, error) {
 		return "", nil
 	}
 	return value, err
-}
-
-func integrityAuditFailed(ctx context.Context, sqlDB DBTX) (bool, error) {
-	value, err := integrityAuditState(ctx, sqlDB)
-	return value != "" && value != integrityAuditPendingValue, err
 }
 
 func clearIntegrityAuditFailed(ctx context.Context, sqlDB DBTX) error {
