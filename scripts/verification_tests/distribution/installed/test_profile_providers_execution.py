@@ -46,7 +46,7 @@ class ProfileProviderTests(unittest.TestCase):
         with patch.object(observer.os, 'open', wraps=os.open) as opened:
             observed = observer.find_gui_provider(self.app, ENDPOINT)
         self.assertEqual(observed, {'provider_id': 'owned-fixture-1', 'kind': GUI_KIND,
-            'requires_api_key': True, 'models': [MODEL], 'observer': 'owned-provider-YAML'})
+            'requires_api_key': True, 'configured_models': [MODEL], 'observer': 'owned-provider-YAML'})
         self.assertNotIn('SECRET', json.dumps(observed))
         self.assertEqual(self.path.read_bytes(), before)
         self.assertFalse(opened.call_args.args[1] & (os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC))
@@ -117,6 +117,9 @@ class ProfileProviderTests(unittest.TestCase):
         for port in (0, 80, 1023, 65536, True):
             with self.subTest(port=port), self.assertRaises(ValueError):
                 gui_endpoint(port)
+
+    def test_null_ambient_auth_is_the_declared_absent_transport(self):
+        self.assertEqual(observer.selected([{**self.row, 'ambient_auth': None}], ENDPOINT)['kind'], 'litellm-proxy')
 
     def test_a_registration_for_another_endpoint_is_refused(self):
         with self.assertRaisesRegex(ValueError, 'fixed local credential transport'):

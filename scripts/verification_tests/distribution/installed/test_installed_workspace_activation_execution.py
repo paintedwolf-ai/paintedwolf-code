@@ -87,20 +87,20 @@ class WorkspaceTests(unittest.TestCase):
             def write(fixed, selected):
                 path.write_text(json.dumps({'observations': {'launch': {'fixed_input': fixed}, 'transitions': selected}}))
             write(providers, transitions)
-            records, declared = controller.delivery_records(root)
+            records, declared = controller.delivery_records(root, {}, 'owned')
             self.assertEqual(records, providers + transitions)
             self.assertEqual(declared[-7:], operations)
             path.write_text(json.dumps({'observations': {'launch': {'fixed_input': providers[:2]},
                 'native_input': providers[2]}}))
-            records, declared = controller.delivery_records(root)
+            records, declared = controller.delivery_records(root, {}, 'owned')
             self.assertEqual(records, providers[:3])
             self.assertEqual(declared[-1], 'provider-fixture-credential-v1')
             write(providers[:3], transitions[:1])
             with self.assertRaises(ValueError):
-                controller.delivery_records(root)
+                controller.delivery_records(root, {}, 'owned')
             write(providers, transitions + transitions[:1])
             with self.assertRaises(ValueError):
-                controller.delivery_records(root)
+                controller.delivery_records(root, {}, 'owned')
 
     def test_reactivation_requires_original_visible_and_no_new_duplicate_frame(self):
         process = {'pid': 123, 'parent_pid': 1, 'start_time_ticks': 42}

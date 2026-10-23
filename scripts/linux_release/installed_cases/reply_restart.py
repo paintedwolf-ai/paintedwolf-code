@@ -14,6 +14,7 @@ from .records import CaseFailed, CaseUnavailable, retain
 from .desktop_launch import protected_launcher
 from .provider_setup import configure_provider, physical_input
 from .reply_observer import committed_reply
+from .provider_recovery import load as load_provider_recovery
 
 def await_reply(app, project, provider_id, *, selected_session=None):
     deadline = time.monotonic() + 90
@@ -48,9 +49,13 @@ def execute(binding, capability, case, root):
     # This case changes only its disposable guest profile via normal UI actions.
     # Preserve the fixture project so a failed restart remains diagnosable.
     project = Path(tempfile.mkdtemp(prefix='reply-project-', dir=root))
-    app = restarted = None
+    app = restarted = fixture = None
     try:
-        with ProviderFixture.gui([{'name': 'command', 'arguments': {'command': '/usr/bin/true'}}]) as fixture:
+        recovery = load_provider_recovery(binding)
+        if recovery is not None:
+            observations['provider_recovery'], streams['provider-registration'] = recovery
+        with ProviderFixture.gui([{'name': 'command', 'arguments': {'command': '/usr/bin/true'}}],
+                                 endpoint=recovery[0]['endpoint'] if recovery is not None else None) as fixture:
             app = InstalledApp(launch_binding)
             with app:
                 observations['launch_before'] = app.observations
@@ -73,9 +78,17 @@ def execute(binding, capability, case, root):
                 if after != before or restarted.observations['engine_identity'] == app.observations['engine_identity']:
                     raise ValueError('restart changed the fixed reply or reused the previous engine')
                 observations.update(reply_after=after, launch_after=restarted.observations,
-                                    provider_requests=list(fixture.observations), durable_reply=True)
+                                    provider_requests=list(fixture.observations), durable_reply=True,
+                                    provider_discovery=list(fixture.discovery_observations),
+                                    provider_transport={'requests': list(fixture.transport_observations),
+                                                        'clipped': fixture.transport_clipped})
             streams.update({'after-' + key: value for key, value in restarted.streams().items()})
     except (OSError, ValueError, TypeError) as error:
+        if fixture is not None:
+            observations['provider_discovery'] = list(fixture.discovery_observations)
+            observations['provider_transport'] = {'requests': list(fixture.transport_observations),
+                                                  'clipped': fixture.transport_clipped}
+            observations['provider_requests'] = list(fixture.observations)
         for label, instance in (('before', app), ('after', restarted)):
             if instance is not None:
                 observations['launch_' + label] = instance.observations
