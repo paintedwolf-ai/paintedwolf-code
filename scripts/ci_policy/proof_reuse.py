@@ -60,7 +60,7 @@ def candidates(repository, tree):
     for run in runs:
         if (run.get("event") != "merge_group" or run.get("conclusion") != "success"
                 or run.get("path") != ".github/workflows/ci.yml"
-                or run.get("head_repository", {}).get("full_name") != repository):
+                or (run.get("head_repository") or {}).get("full_name") != repository):
             continue
         commit = api(f"repos/{repository}/git/commits/{run['head_sha']}")
         if commit["tree"]["sha"] == tree:
