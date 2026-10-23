@@ -5,6 +5,12 @@ from common import digest, read_rows
 from jsonschema import Draft202012Validator
 
 
+class OversizeRow(ValueError):
+    def __init__(self, tokens, limit):
+        self.tokens, self.limit = tokens, limit
+        super().__init__("oversize row; truncation is forbidden")
+
+
 def check_row(row):
     capture, validation = row["request_capture"], row["validation"]
     if capture.get("schema") not in ("pw-model-request-capture/1", "pw-model-request-capture/2") or validation.get("schema") != "pw-training-validation/1":
@@ -83,7 +89,7 @@ def encode(tokenizer, row, target, max_length):
     if ids[:len(prefix)] != prefix or len(ids) <= len(prefix):
         raise ValueError("token boundary crosses prompt/response; no guessed loss mask")
     if len(ids) > max_length:
-        raise ValueError("oversize row; truncation is forbidden")
+        raise OversizeRow(len(ids), max_length)
     return {"input_ids": ids, "labels": [-100] * len(prefix) + ids[len(prefix):]}
 
 
