@@ -63,7 +63,7 @@ def selected(rows, endpoint: str):
     row = matches[0]
     if (row.get('kind') != GUI_KIND or row.get('base_url') != endpoint
             or row.get('requires_api_key') is not True or row.get('api_key_env', '') not in {'', 'LITELLM_MASTER_KEY'}
-            or row.get('ambient_auth', '') != ''):
+            or row.get('ambient_auth') not in (None, '')):
         raise ValueError('owned GUI provider differs from its fixed local credential transport')
     models = row.get('models', [])
     if (not isinstance(models, list) or len(models) > 256 or any(not isinstance(model, dict)

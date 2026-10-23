@@ -118,6 +118,9 @@ class ProfileProviderTests(unittest.TestCase):
             with self.subTest(port=port), self.assertRaises(ValueError):
                 gui_endpoint(port)
 
+    def test_null_ambient_auth_is_the_declared_absent_transport(self):
+        self.assertEqual(observer.selected([{**self.row, 'ambient_auth': None}], ENDPOINT)['kind'], 'litellm-proxy')
+
     def test_a_registration_for_another_endpoint_is_refused(self):
         with self.assertRaisesRegex(ValueError, 'fixed local credential transport'):
             observer.selected([self.row], gui_endpoint(41235))
