@@ -4,6 +4,7 @@
 
 use std::sync::OnceLock;
 
+#[path = "protected_launch/generation.rs"]
 mod generation;
 pub(crate) use generation::{Generation, GenerationError};
 
