@@ -1,5 +1,6 @@
 """Frame transitions retain actual object identity without weakening focused editor input."""
 import copy
+from contextlib import ExitStack
 import unittest
 from unittest.mock import Mock
 
@@ -115,6 +116,8 @@ class FrameObserverTests(unittest.TestCase):
         from unittest.mock import patch
         from linux_release.installed_input import surface
         self.surface = surface
+        self.context = ExitStack()
+        self.addCleanup(self.context.close)
         self.identity = {'pid': 123, 'parent_pid': 1, 'start_time_ticks': 42}
         self.engine = {'pid': 124, 'parent_pid': 123, 'start_time_ticks': 43}
         api = SimpleNamespace(ROLE_FRAME=1, ROLE_DIALOG=2, ROLE_PUSH_BUTTON=3,
@@ -132,10 +135,10 @@ class FrameObserverTests(unittest.TestCase):
         self.ui.descendants.return_value = []
         def identity(pid):
             return self.identity.copy() if pid == 123 else self.engine.copy()
-        self.identities = self.enterContext(patch.object(surface, 'process_identity', side_effect=identity))
-        self.enterContext(patch.object(surface, 'owned_process', return_value=True))
-        self.enterContext(patch.object(surface.os, 'pidfd_open', side_effect=[101, 102], create=True))
-        self.close_fd = self.enterContext(patch.object(surface.os, 'close'))
+        self.identities = self.context.enter_context(patch.object(surface, 'process_identity', side_effect=identity))
+        self.context.enter_context(patch.object(surface, 'owned_process', return_value=True))
+        self.context.enter_context(patch.object(surface.os, 'pidfd_open', side_effect=[101, 102], create=True))
+        self.close_fd = self.context.enter_context(patch.object(surface.os, 'close'))
         self.observer = surface.FrameObserver(self.app, self.ui)
         self.addCleanup(self.observer.close)
 
