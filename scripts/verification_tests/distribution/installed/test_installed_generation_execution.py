@@ -48,6 +48,10 @@ class InstalledGenerationTests(unittest.TestCase):
             target = selected / name
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(root / name, target)
+        # Fixture authority must not inherit a group-writable host umask.
+        for path in [root, *root.rglob('*')]:
+            if path.is_dir():
+                path.chmod(0o755)
         policy = Path(directory).resolve() / 'policy.json'
         policy.write_text(json.dumps({'version': 1, 'logical_install_root': str(root),
                                      'generation_root': str(selected), 'manifest_sha256': digest}))
@@ -75,6 +79,7 @@ class InstalledGenerationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             fixture = self.fixture(directory)
             root, images, _, _, selected, _ = fixture
+            self.assertEqual(stat.S_IMODE(selected.stat().st_mode), 0o755)
             result = self.bind(fixture)
             for name in ('bin/pw', 'bin/painted-wolf-code', 'engine-root/browser/chrome-headless-shell'):
                 before, after = images[str(root / name)], result['images'][str(root / name)]
