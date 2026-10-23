@@ -7,7 +7,7 @@ import (
 )
 
 // catalogueFacts is the closed set of fact names a rule may reference, keyed by
-// the published name: bare for core and profile facts, lycaon.<fact> for host
+// the published name: bare for core and profile facts, paintedwolf.<fact> for host
 // facts ([OAR-FACT-18]). Built from the declaration table.
 var (
 	catalogueFacts       map[string]struct{}
