@@ -70,7 +70,7 @@ static int hold_volume(const char *payload) {
     return 6;
 }
 
-static int chooser_read(GtkWidget *chooser, const char *payload, int protected) {
+static int chooser_read(GtkWidget *chooser, const char *payload, int protected, const char *image) {
     gint64 deadline = g_get_monotonic_time()+2*G_TIME_SPAN_SECOND;
     gchar *selected = NULL;
     while (g_get_monotonic_time() < deadline) {
@@ -87,9 +87,10 @@ static int chooser_read(GtkWidget *chooser, const char *payload, int protected) 
     if (!valid) return 3;
     if (protected) {
         char executable[4096];
-        ssize_t length = readlink("/proc/self/exe",executable,sizeof(executable)-1);
-        if (length < 1 || (size_t)length >= sizeof(executable)-1) return 4;
-        executable[length] = 0;
+        // The protected entry writes argv[0] from its authenticated logical root.
+        // The physical proc-exe alias can be hidden by the selected-root bind.
+        if (image[0] != '/' || strlen(image) >= sizeof(executable)) return 4;
+        strcpy(executable,image);
         char *slash = strrchr(executable,'/');
         if (!slash || (size_t)(slash-executable)+4 >= sizeof(executable)) return 4;
         strcpy(slash+1,"pw");
@@ -103,7 +104,7 @@ static int chooser_read(GtkWidget *chooser, const char *payload, int protected) 
 }
 
 // Start with no volume, then perform chooser reads only on explicit commands.
-static int watch_volume(GtkWidget *chooser, const char *payload) {
+static int watch_volume(GtkWidget *chooser, const char *payload, const char *image) {
     gint64 deadline = g_get_monotonic_time()+2*G_TIME_SPAN_SECOND;
     while (!gtk_widget_get_mapped(chooser) && g_get_monotonic_time() < deadline) {
         while (g_main_context_iteration(NULL,FALSE)) {}
@@ -116,7 +117,7 @@ static int watch_volume(GtkWidget *chooser, const char *payload) {
         int command = hold_command();
         if (command == EOF || command == 'q') return 0;
         if (command != 'r' && command != 'h') return 7;
-        int result = chooser_read(chooser,payload,1);
+        int result = chooser_read(chooser,payload,1,image);
         if (result != 0) return result;
         if (command == 'h') return hold_volume(payload);
     }
@@ -134,7 +135,7 @@ int main(int argc, char **argv) {
     gtk_init(NULL,NULL);
     GtkWidget *chooser = gtk_file_chooser_dialog_new("Volume fixture",NULL,GTK_FILE_CHOOSER_ACTION_OPEN,"Open",GTK_RESPONSE_ACCEPT,NULL);
     gtk_widget_show_all(chooser);
-    int result = watch ? watch_volume(chooser,payload) : chooser_read(chooser,payload,protected);
+    int result = watch ? watch_volume(chooser,payload,argv[0]) : chooser_read(chooser,payload,protected,argv[0]);
     if (!watch && result == 0 && hold) result = hold_volume(payload);
     gtk_widget_destroy(chooser);
     return result;

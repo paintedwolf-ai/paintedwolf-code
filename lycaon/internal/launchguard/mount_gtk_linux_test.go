@@ -322,6 +322,7 @@ func TestMountGTKChooserReadsVolumeAttachedAfterReadiness(t *testing.T) {
 	binaries := append([]string(nil), fixture.binaries...)
 	binaries[2] = desktop
 	testutil.FailErr(t, "stage late-volume GTK desktop", sudoFixture(t, "upgrade", fixture.dir, fixtureBinsEnv+"="+strings.Join(binaries, ":")))
+	testutil.FailErr(t, "exercise native nested generation store", sudoFixture(t, "nested-generation", fixture.dir))
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	command := exec.CommandContext(ctx, fixture.bootstrap, "--protected-watch", payload)
