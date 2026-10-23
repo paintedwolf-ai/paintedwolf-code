@@ -14,6 +14,7 @@ def select(run_id, release_tag):
     run = api(f"{repo}/actions/runs/{run_id}")
     if (run.get("path") != ".github/workflows/release.yml"
             or run.get("status") != "completed"
+            or not (run.get("head_branch") == "main" or re.fullmatch(r"v[0-9][0-9A-Za-z.+-]*", run.get("head_branch", "")))
             or run.get("event") not in {"push", "workflow_dispatch"}
             or run.get("head_repository", {}).get("full_name") != os.environ["GITHUB_REPOSITORY"]):
         raise ValueError("fixtures require a completed release run in this repository")

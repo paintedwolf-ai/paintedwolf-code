@@ -1227,6 +1227,8 @@ and updater logs and transaction records remain attached. Missing startup is a
 failed gate; these observations distinguish rejection reasons without weakening
 ownership, health, schema, activation, or restart requirements.
 
+Release upgrade diagnostics can replay retained, authenticated fixtures through the existing release workflow: select `rehearsal_run_id` and an exact `rehearsal_case`, leaving `release_tag` empty. Replay accepts only a completed release run from this repository with successful fixture preparation in the selected attempt. It downloads that exact artifact, verifies its inventory, and exercises the signed installed upgrade without rebuilding or publishing. Replay evidence diagnoses the selected source and artifacts; it does not substitute for release admission or authorize publication.
+
 ## Released-version compatibility
 
 These suites hold the current host to what releases shipped:
@@ -1270,5 +1272,3 @@ Fixtures are deterministic, repository-local, and safe to run without credential
 The paid coordinator benchmark drives the real application with candidate
 models and grades environment outcomes, not transcripts. It is opt-in, never
 part of `check` or CI, and has its own page: [Coordinator benchmark](coordinator-benchmark.md).
-
-Release upgrade diagnostics can replay retained, authenticated fixtures through the existing release workflow: select `rehearsal_run_id` and an exact `rehearsal_case`, leaving `release_tag` empty. Replay accepts only a completed release run from this repository with successful fixture preparation in the selected attempt. It downloads that exact artifact, verifies its inventory, and exercises the signed installed upgrade without rebuilding or publishing. Replay evidence diagnoses the selected source and artifacts; it does not substitute for release admission or authorize publication.

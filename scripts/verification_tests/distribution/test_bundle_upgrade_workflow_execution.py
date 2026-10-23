@@ -105,7 +105,7 @@ class ReplayTests(unittest.TestCase):
         from unittest.mock import patch
         from release_upgrade import replay
         run = {"path": ".github/workflows/release.yml", "status": "completed", "event": "push",
-               "head_repository": {"full_name": "owner/repo"}, "run_attempt": 2, "head_sha": "a" * 40}
+               "head_repository": {"full_name": "owner/repo"}, "head_branch": "v1.0.3-rc1", "run_attempt": 2, "head_sha": "a" * 40}
         def rows(path, key):
             if key == "jobs":
                 self.assertIn("/attempts/2/jobs", path)
@@ -114,7 +114,7 @@ class ReplayTests(unittest.TestCase):
                     {"name": "bundle-upgrade-fixtures-2", "expired": False, "id": 2}]
         with patch.dict(os.environ, GITHUB_REPOSITORY="owner/repo"), patch.object(replay, "api", return_value=run), patch.object(replay, "pages", side_effect=rows):
             self.assertEqual(replay.select("123", "")["artifact_id"], 2)
-            for field, value in (("status", "in_progress"), ("path", "ci.yml"), ("head_repository", {"full_name": "foreign/repo"})):
+            for field, value in (("status", "in_progress"), ("path", "ci.yml"), ("head_branch", "unmerged-feature"), ("head_repository", {"full_name": "foreign/repo"})):
                 with patch.dict(run, {field: value}), self.assertRaises(ValueError):
                     replay.select("123", "")
             with patch.object(replay, "pages", return_value=[]), self.assertRaises(ValueError):
