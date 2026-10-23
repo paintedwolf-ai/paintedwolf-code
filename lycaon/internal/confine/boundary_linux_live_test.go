@@ -144,43 +144,10 @@ func runLinuxProbe(mode string) int {
 		_, err = unix.Socketpair(unix.AF_UNIX, unix.SOCK_DGRAM|unix.SOCK_CLOEXEC, 0)
 		fmt.Println("datagram socketpair:", errnoName(err))
 		return 0
+	case "floors":
+		return floorsProbe()
 	case "interrupted":
-		// Interrupt notified calls while they wait for the supervisor, the
-		// way Go's preemption signal does in a busy toolchain, then confirm
-		// the supervisor still answers.
-		stop := make(chan struct{})
-		go func() {
-			for {
-				select {
-				case <-stop:
-					return
-				case <-time.After(200 * time.Microsecond):
-					_ = unix.Kill(os.Getpid(), unix.SIGURG)
-				}
-			}
-		}()
-		refusedConnect := func() error {
-			fd, err := unix.Socket(unix.AF_UNIX, unix.SOCK_STREAM|unix.SOCK_CLOEXEC, 0)
-			if err != nil {
-				return err
-			}
-			defer func() { _ = unix.Close(fd) }()
-			return unix.Connect(fd, &unix.SockaddrUnix{Name: "/run/pw-interrupted-probe.sock"})
-		}
-		var wg sync.WaitGroup
-		for worker := 0; worker < 4; worker++ {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				for i := 0; i < 300; i++ {
-					_ = refusedConnect()
-				}
-			}()
-		}
-		wg.Wait()
-		close(stop)
-		fmt.Println("after interruptions:", errnoName(refusedConnect()))
-		return 0
+		return interruptedProbe()
 	case "iouring":
 		params := make([]byte, 120)
 		_, _, errno := unix.Syscall(unix.SYS_IO_URING_SETUP, 1, uintptr(unsafe.Pointer(&params[0])), 0)
@@ -209,6 +176,45 @@ func runLinuxProbe(mode string) int {
 		return 0
 	}
 	return 9
+}
+
+func interruptedProbe() int {
+	// Interrupt notified calls while they wait for the supervisor, the
+	// way Go's preemption signal does in a busy toolchain, then confirm
+	// the supervisor still answers.
+	stop := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-stop:
+				return
+			case <-time.After(200 * time.Microsecond):
+				_ = unix.Kill(os.Getpid(), unix.SIGURG)
+			}
+		}
+	}()
+	refusedConnect := func() error {
+		fd, err := unix.Socket(unix.AF_UNIX, unix.SOCK_STREAM|unix.SOCK_CLOEXEC, 0)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = unix.Close(fd) }()
+		return unix.Connect(fd, &unix.SockaddrUnix{Name: "/run/pw-interrupted-probe.sock"})
+	}
+	var wg sync.WaitGroup
+	for worker := 0; worker < 4; worker++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 300; i++ {
+				_ = refusedConnect()
+			}
+		}()
+	}
+	wg.Wait()
+	close(stop)
+	fmt.Println("after interruptions:", errnoName(refusedConnect()))
+	return 0
 }
 
 // requireLinuxSandbox fails, rather than skips, when the host cannot confine:

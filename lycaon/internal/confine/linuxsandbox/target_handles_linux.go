@@ -1,0 +1,201 @@
+//go:build linux
+
+package linuxsandbox
+
+import (
+	"errors"
+	"io"
+	"os"
+	"strconv"
+	"sync"
+
+	"golang.org/x/sys/unix"
+)
+
+// maxCachedTargets bounds the processes whose handles the supervisor keeps.
+const maxCachedTargets = 256
+
+// processHandles are one sandbox process's pidfd and memory, kept across its
+// notified calls: opening both again for every create cost more than the
+// create. A pidfd names one process for its whole life, so a live one cannot
+// stand for another that reused its number. A memory handle reads the address
+// space it was opened on; after an exec that space has no users and reads
+// return nothing, which reopens it.
+type processHandles struct {
+	pidfd int
+	mu    sync.Mutex
+	mem   *os.File
+	// users counts calls holding the handles; an evicted entry closes when
+	// the last one ends.
+	users   int
+	evicted bool
+}
+
+// targetHandles caches processHandles by thread group id.
+type targetHandles struct {
+	mu      sync.Mutex
+	byGroup map[int]*processHandles
+}
+
+func newTargetHandles() *targetHandles {
+	return &targetHandles{byGroup: map[int]*processHandles{}}
+}
+
+// acquire returns live handles for tgid, opening them when none are cached or
+// the cached process has exited.
+func (c *targetHandles) acquire(tgid int) (*processHandles, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if h, ok := c.byGroup[tgid]; ok {
+		if unix.PidfdSendSignal(h.pidfd, 0, nil, 0) == nil {
+			h.users++
+			return h, nil
+		}
+		c.evictLocked(tgid, h)
+	}
+	if len(c.byGroup) >= maxCachedTargets {
+		c.sweepLocked()
+	}
+	pidfd, err := unix.PidfdOpen(tgid, 0)
+	if err != nil {
+		return nil, err
+	}
+	mem, err := os.Open("/proc/" + strconv.Itoa(tgid) + "/mem")
+	if err != nil {
+		_ = unix.Close(pidfd)
+		return nil, err
+	}
+	h := &processHandles{pidfd: pidfd, mem: mem, users: 1}
+	c.byGroup[tgid] = h
+	return h, nil
+}
+
+// release ends one call's use of h.
+func (c *targetHandles) release(h *processHandles) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	h.users--
+	if h.evicted && h.users == 0 {
+		h.closeLocked()
+	}
+}
+
+// sweepLocked evicts exited processes, and everything when all still live.
+func (c *targetHandles) sweepLocked() {
+	for tgid, h := range c.byGroup {
+		if unix.PidfdSendSignal(h.pidfd, 0, nil, 0) != nil {
+			c.evictLocked(tgid, h)
+		}
+	}
+	if len(c.byGroup) >= maxCachedTargets {
+		for tgid, h := range c.byGroup {
+			c.evictLocked(tgid, h)
+		}
+	}
+}
+
+func (c *targetHandles) evictLocked(tgid int, h *processHandles) {
+	delete(c.byGroup, tgid)
+	h.evicted = true
+	if h.users == 0 {
+		h.closeLocked()
+	}
+}
+
+func (h *processHandles) closeLocked() {
+	_ = unix.Close(h.pidfd)
+	h.mu.Lock()
+	if h.mem != nil {
+		_ = h.mem.Close()
+		h.mem = nil
+	}
+	h.mu.Unlock()
+}
+
+// readAt reads the process's memory, reopening it once if the cached handle
+// names an address space the process left by exec.
+func (h *processHandles) readAt(tgid int, buf []byte, addr int64) (int, error) {
+	h.mu.Lock()
+	mem := h.mem
+	h.mu.Unlock()
+	n, err := mem.ReadAt(buf, addr)
+	if n > 0 || (err != nil && !isEmptyRead(err)) {
+		return n, err
+	}
+	fresh, openErr := os.Open("/proc/" + strconv.Itoa(tgid) + "/mem")
+	if openErr != nil {
+		return n, err
+	}
+	h.mu.Lock()
+	if h.mem == mem {
+		h.mem = fresh
+		_ = mem.Close()
+	} else {
+		_ = fresh.Close()
+	}
+	mem = h.mem
+	h.mu.Unlock()
+	return mem.ReadAt(buf, addr)
+}
+
+func isEmptyRead(err error) bool { return errors.Is(err, io.EOF) }
+
+// maxCachedThreads bounds the threads whose status files stay open.
+const maxCachedThreads = 1024
+
+// statusFiles keeps each calling thread's status file open across its calls:
+// the kernel regenerates the record on every read from its start, and a file
+// whose thread has exited reads nothing, so it cannot answer for a later
+// thread that reused the number.
+type statusFiles struct {
+	mu    sync.Mutex
+	byTID map[int]*os.File
+}
+
+func newStatusFiles() *statusFiles { return &statusFiles{byTID: map[int]*os.File{}} }
+
+// facts reads tid's status through its cached file, opening it once.
+func (c *statusFiles) facts(tid int) (callerFacts, error) {
+	buf := make([]byte, 4096)
+	for attempt := 0; attempt < 2; attempt++ {
+		file, err := c.open(tid)
+		if err != nil {
+			return callerFacts{umask: 0o777}, err
+		}
+		n, err := file.ReadAt(buf, 0)
+		if n > 0 && (err == nil || errors.Is(err, io.EOF)) && n < len(buf) {
+			return parseCallerFacts(buf[:n])
+		}
+		c.drop(tid, file)
+	}
+	return callerFactsOf(tid)
+}
+
+func (c *statusFiles) open(tid int) (*os.File, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if file, ok := c.byTID[tid]; ok {
+		return file, nil
+	}
+	if len(c.byTID) >= maxCachedThreads {
+		for t, file := range c.byTID {
+			_ = file.Close()
+			delete(c.byTID, t)
+		}
+	}
+	file, err := os.Open("/proc/" + strconv.Itoa(tid) + "/status")
+	if err != nil {
+		return nil, err
+	}
+	c.byTID[tid] = file
+	return file, nil
+}
+
+func (c *statusFiles) drop(tid int, file *os.File) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.byTID[tid] == file {
+		delete(c.byTID, tid)
+	}
+	_ = file.Close()
+}

@@ -64,6 +64,13 @@ func (s *supervisor) serveNotifications(listener int) {
 			}
 			return
 		}
+		// The performer serves one name-creating call at a time, so answering
+		// those here costs no concurrency and saves waking another thread;
+		// socket calls, which can wait on the network, run beside the loop.
+		if isPathCall(n.Nr) {
+			s.answer(listener, n)
+			continue
+		}
 		go s.answer(listener, n)
 	}
 }
@@ -74,6 +81,9 @@ func (s *supervisor) answer(listener int, n seccompNotif) {
 	result, errno, examined := s.perform(listener, n)
 	if !examined {
 		s.refusals.report(Refusal{Unexamined: true})
+	}
+	if errno == errAnswered {
+		return
 	}
 	resp := seccompNotifResp{ID: n.ID, Val: result}
 	if errno != 0 {
@@ -86,11 +96,14 @@ func (s *supervisor) answer(listener int, n seccompNotif) {
 // the supervisor could examine the call at all. A call that ended before it
 // was examined is not reported.
 func (s *supervisor) perform(listener int, n seccompNotif) (int64, unix.Errno, bool) {
-	target, err := openTarget(listener, n)
+	target, err := s.openTarget(listener, n)
 	if err != nil {
 		return 0, unix.EACCES, errors.Is(err, unix.ESRCH)
 	}
 	defer target.close()
+	if isPathCall(n.Nr) {
+		return s.performPath(target, n)
+	}
 	fd := int(int32(n.Args[0]))
 	sock, err := unix.PidfdGetfd(target.pidfd, fd, 0)
 	if err != nil {
@@ -375,49 +388,32 @@ type targetProcess struct {
 	id       uint64
 	pid      int
 	pidfd    int
-	mem      *os.File
+	handles  *processHandles
+	cache    *targetHandles
+	// caller is what the calling thread's status said when it was opened.
+	caller callerFacts
 }
 
-func openTarget(listener int, n seccompNotif) (*targetProcess, error) {
+func (s *supervisor) openTarget(listener int, n seccompNotif) (*targetProcess, error) {
 	// The notification names the calling thread; descriptors and memory
 	// belong to its thread group.
-	tgid, err := threadGroup(int(n.PID))
+	caller, err := s.statuses.facts(int(n.PID))
 	if err != nil {
 		return nil, err
 	}
-	t := &targetProcess{listener: listener, id: n.ID, pid: tgid, pidfd: -1}
-	fd, err := unix.PidfdOpen(t.pid, 0)
+	handles, err := s.targets.acquire(caller.tgid)
 	if err != nil {
 		return nil, err
 	}
-	t.pidfd = fd
-	mem, err := os.Open("/proc/" + strconv.Itoa(t.pid) + "/mem")
-	if err != nil {
-		t.close()
-		return nil, err
-	}
-	t.mem = mem
-	// Both handles were opened while the call was still pending, so they name
-	// the process that made it, not a later one with its number.
+	t := &targetProcess{listener: listener, id: n.ID, pid: caller.tgid, pidfd: handles.pidfd, handles: handles, cache: s.targets, caller: caller}
+	// The pidfd is live, so it names this thread group's process and not an
+	// earlier one with its number, and the call is still pending, so the
+	// thread whose status named that group is still in it.
 	if !t.valid() {
 		t.close()
 		return nil, unix.ESRCH
 	}
 	return t, nil
-}
-
-// threadGroup reads the thread group a thread belongs to.
-func threadGroup(tid int) (int, error) {
-	raw, err := os.ReadFile("/proc/" + strconv.Itoa(tid) + "/status")
-	if err != nil {
-		return 0, err
-	}
-	for _, line := range strings.Split(string(raw), "\n") {
-		if value, ok := strings.CutPrefix(line, "Tgid:"); ok {
-			return strconv.Atoi(strings.TrimSpace(value))
-		}
-	}
-	return 0, unix.ESRCH
 }
 
 func (t *targetProcess) valid() bool {
@@ -429,7 +425,7 @@ func (t *targetProcess) read(addr uint64, into []byte) error {
 	if len(into) == 0 {
 		return nil
 	}
-	n, err := t.mem.ReadAt(into, int64(addr))
+	n, err := t.handles.readAt(t.pid, into, int64(addr))
 	if err != nil || n != len(into) {
 		return errors.New("short read of the target's memory")
 	}
@@ -464,11 +460,9 @@ func (t *targetProcess) fdFlags(fd int) uint32 {
 }
 
 func (t *targetProcess) close() {
-	if t.mem != nil {
-		_ = t.mem.Close()
-	}
-	if t.pidfd >= 0 {
-		_ = unix.Close(t.pidfd)
+	if t.handles != nil {
+		t.cache.release(t.handles)
+		t.handles = nil
 	}
 }
 
