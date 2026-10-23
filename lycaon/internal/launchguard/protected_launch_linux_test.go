@@ -43,6 +43,8 @@ const (
 
 // protectedFacts is the fixture desktop's report.
 type protectedFacts struct {
+	ProcessStarts   map[int]uint64              `json:"process_starts"`
+	DetachedStart   uint64                      `json:"detached_start"`
 	LineagePIDs     []int                       `json:"lineage_pids,omitempty"`
 	PID             int                         `json:"pid"`
 	UIDs            [3]int                      `json:"uids"`
