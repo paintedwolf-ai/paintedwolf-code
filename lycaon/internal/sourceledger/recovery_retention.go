@@ -33,7 +33,25 @@ func (s *Retention) reclaimRecoveryBatch(ctx context.Context) (int64, error) {
 		return 0, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	var reclaimed int64
+	// Empty candidates have no manifest bytes to release. Insert triggers queue
+	// any later capture, including one whose operation identity is already live.
+	result, err := tx.ExecContext(ctx, `WITH candidates AS MATERIALIZED (
+		SELECT project_id,recovery_id FROM source_recovery_reclaim_queue
+		ORDER BY project_id,recovery_id LIMIT ?
+	)
+	DELETE FROM source_recovery_reclaim_queue
+	WHERE (project_id,recovery_id) IN (
+		SELECT c.project_id,c.recovery_id FROM candidates c
+		WHERE NOT EXISTS (SELECT 1 FROM source_recovery_entries e WHERE e.project_id=c.project_id AND e.recovery_id=c.recovery_id)
+		AND NOT EXISTS (SELECT 1 FROM source_recovery_objects o WHERE o.project_id=c.project_id AND o.recovery_id=c.recovery_id)
+	)`, blobMaintenanceBatchSize)
+	if err != nil {
+		return 0, err
+	}
+	reclaimed, err := result.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
 	for reclaimed < blobMaintenanceBatchSize {
 		if err := ctx.Err(); err != nil {
 			return 0, err
