@@ -4,8 +4,8 @@
   "kind": "runtime_service",
   "workstream": "portable-command-streaming-inputs",
   "disposition": "retain",
-  "reason": "Retain the measured 547 receiver lines and 22 methods as one native capture/revision owner over its existing path boundary and invoking ProgramMemory. Whole captures, representation conversion, raw/compressed streaming block proofs, verification and publication pins share exact identities and admission lifetimes. Splitting a reader or accountant would divide that contract. Proof vectors admit retained capacity before growth and verify source blocks before delivering bytes. The recapture return shape preserves physical source Close failures and its explicit sole-cause branches avoid wrapping an unchanged failure when Close succeeds; pure captured-byte lease releases are void and remain separate from physical stream I/O. Fallback revision metadata detaches before its captured-source lease is released immediately. These changes add no path, execution or publication authority. Actual 100 MB streaming, revision mutation/seek, cancellation/refusal/release, encoded identity and source-write contracts support this bounded concentration. Further dependency, signature or measured growth requires renewed review.",
-  "reviewed_commit": "65c5651c89b4444fcda787a453d4c07899d68a2a",
+  "reason": "Retain the measured 559 receiver lines and 22 methods as one native capture/revision owner over its existing path boundary and invoking ProgramMemory. Whole captures, representation conversion, raw/compressed streaming block proofs, verification and publication pins share exact identities and admission lifetimes. Physical whole-input close failure releases the captured body before returning the error; a successful close preserves the original cause. Pure captured-byte lease release remains separate from physical stream I/O. Splitting a reader or accountant would divide this contract. Actual 100 MB streaming proof storage, restored-metadata mutation and tail seeks, cancellation/refusal/release, encoded identity, capacity growth and source-write contracts support this bounded concentration. Further dependency, signature or measured growth requires renewed review.",
+  "reviewed_commit": "cd89253086b6716de34843ecd06c1a3d516b24e3",
   "ceiling": 22,
   "boundaries": {
     "lycaon/internal/tools/native/source_write_contract_test.go": "e25407bbbbbf15a1b1eb9ee5806fa504a534ab2ab55f5adeec869c15af06efda",
@@ -13,5 +13,5 @@
     "lycaon/internal/tools/native/execution_capture_test.go": "23b52f46b43df239ad7a25bfbf52920ef5d9517b0ec9ef22411eb26a21e7d2b9",
     "lycaon/internal/tools/native/execution_stream_blocks_test.go": "d3a6c13411439fff8c3cbcc9d7638adcdd72ba23c764bbf012d867230b5374e1"
   },
-  "reviewed_shape": "a05504eadd1d41b14fc67893d321230cf824246b3967c103e0655132d3aaf408"
+  "reviewed_shape": "90d8fd2e78cd6866068ae2cc23f058fd5054bdeec0a8f987e1927b85c95d7f03"
 }
