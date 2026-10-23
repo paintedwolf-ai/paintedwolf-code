@@ -47,7 +47,7 @@ func attachPreparedMount(lease uint64, name string, tree int) (_ *mountedVolume,
 	}
 	target, err := openMountPoint(name)
 	if err != nil {
-		return nil, err
+		return nil, &mountDestinationError{err: err}
 	}
 	defer func() { _ = unix.Close(target) }()
 	id, err := mountID(tree)
@@ -57,13 +57,19 @@ func attachPreparedMount(lease uint64, name string, tree int) (_ *mountedVolume,
 	if err := unix.MoveMount(tree, "", target, "", unix.MOVE_MOUNT_F_EMPTY_PATH|unix.MOVE_MOUNT_T_EMPTY_PATH); err != nil {
 		return nil, err
 	}
+	return confirmMountAttachment(lease, name, tree, id)
+}
+
+// Confirmation owns rollback after the move, but its caller retains the tree
+// descriptor on failure. On success the returned volume owns it until detach.
+func confirmMountAttachment(lease uint64, name string, tree int, id uint64) (_ *mountedVolume, err error) {
 	mounted := &mountedVolume{lease: lease, path: name, tree: tree, mountID: id}
 	defer func() {
 		if err != nil {
 			// The startup stage and the watcher never mutate M_view at the
 			// same time. Even on refusal, check the exact visible mount before
 			// unmounting; a proc-fd pathname alone is not mount authority.
-			err = errors.Join(err, mounted.detach())
+			err = errors.Join(err, mounted.unmount())
 		}
 	}()
 	// A pinned target can be renamed during lookup. Never claim that a stale
@@ -84,6 +90,20 @@ func mountDescriptorPath(fd int) string {
 // the retained root is no longer visible. Its current kernel-reported alias,
 // rather than its original name, follows ordinary directory renames.
 func (volume *mountedVolume) detach() error {
+	fd := volume.tree
+	if err := volume.unmount(); err != nil {
+		return err
+	}
+	if fd >= 0 {
+		volume.tree = -1
+		_ = unix.Close(fd)
+	}
+	return nil
+}
+
+// Failure before attachment returns ownership of the descriptor to its caller.
+// Post-move refusal unmounts the tree without closing that caller-owned FD.
+func (volume *mountedVolume) unmount() error {
 	if volume.tree < 0 {
 		return nil
 	}
@@ -108,7 +128,14 @@ func (volume *mountedVolume) detach() error {
 	if err := unix.Unmount(mountDescriptorPath(fd), unix.MNT_DETACH); err != nil {
 		return fmt.Errorf("detach retained volume: %w", err)
 	}
-	volume.tree = -1
-	_ = unix.Close(fd)
 	return nil
 }
+
+// A failed target lookup changes no namespace state and permits only refusal,
+// never a fallback path. Other attachment/identity errors remain fatal.
+type mountDestinationError struct{ err error }
+
+func (failure *mountDestinationError) Error() string {
+	return "module mount destination is unavailable: " + failure.err.Error()
+}
+func (failure *mountDestinationError) Unwrap() error { return failure.err }

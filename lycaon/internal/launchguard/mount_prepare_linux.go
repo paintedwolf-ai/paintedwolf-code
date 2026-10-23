@@ -51,9 +51,22 @@ func prepareModuleView(spec EntrySpec, frame, origin, entry, desktop *os.File) (
 	if err := initialUserNamespace(); err != nil {
 		return nil, err
 	}
-	sourceRaw, _, err := readCurrentMountTopology()
+	sourceRaw, sourceEntries, err := readCurrentMountTopology()
 	if err != nil {
 		return nil, err
+	}
+	sourceStructural, err := structuralMounts(spec.Generation, desktop, sourceEntries)
+	if err != nil {
+		return nil, err
+	}
+	code, err := captureModuleCodeRoots(spec.Generation, desktop)
+	if err != nil {
+		return nil, err
+	}
+	defer closeModuleCodeRoots(code)
+	_, sourceAfter, err := readCurrentMountTopology()
+	if err != nil || !sameMountEpoch(sourceEntries, sourceAfter, nil) {
+		return nil, errors.New("source topology changed during structural selection")
 	}
 	source, err := os.Open("/proc/thread-self/ns/mnt")
 	if err != nil {
@@ -79,24 +92,18 @@ func prepareModuleView(spec EntrySpec, frame, origin, entry, desktop *os.File) (
 	if err != nil {
 		return nil, err
 	}
-	// Select source roles independently in their original namespace later;
-	// correspondence alone never promotes a filesystem to structural custody.
-	sourceEntries, err := parseMountTopology(sourceRaw)
-	if err != nil {
-		return nil, err
-	}
-	selected := make([]int, 0, len(structural))
-	for id := range structural {
+	selected := make([]int, 0, len(sourceStructural))
+	for id := range sourceStructural {
 		selected = append(selected, id)
 	}
-	sourceStructural, err := correlateStructuralMounts(staging, selected, sourceEntries)
-	if err != nil {
+	mapped, err := correlateStructuralMounts(sourceEntries, selected, staging)
+	if err != nil || !sameStructuralSelection(mapped, structural) {
+		return nil, errors.New("selected structural objects changed across staging clone")
+	}
+	if err := verifyModuleCodeRoots(code); err != nil {
 		return nil, err
 	}
-	view.plan = moduleViewPlan{source: sourceRaw, staging: stagingRaw}
-	for id := range sourceStructural {
-		view.plan.structural = append(view.plan.structural, id)
-	}
+	view.plan = moduleViewPlan{source: sourceRaw, staging: stagingRaw, structural: selected}
 	opener, err := startMountSource(frame, origin, entry, stagingRaw)
 	if err != nil {
 		return nil, err
@@ -106,6 +113,9 @@ func prepareModuleView(spec EntrySpec, frame, origin, entry, desktop *os.File) (
 		return nil, err
 	}
 	if err = opener.finish(); err != nil {
+		return nil, err
+	}
+	if err = projectModuleCodeRoots(code); err != nil {
 		return nil, err
 	}
 	// Preparation prunes children first; attachment restores parents first.
@@ -128,7 +138,7 @@ func (view *preparedModuleView) prepareInitialLeases(opener *mountSourceOpener, 
 	for _, mount := range volumeDetachOrder(staging, structural) {
 		fd, err := opener.open(mount)
 		if err != nil {
-			return fmt.Errorf("open initial mount for private view: %w", err)
+			return fmt.Errorf("open initial mount %q (%d) for private view: %w", mount.mountPoint, mount.id, err)
 		}
 		if err := view.prepareInitialLease(fd, mount, !covered[mount.id]); err != nil {
 			_ = unix.Close(fd)
@@ -175,4 +185,16 @@ func (view *preparedModuleView) prepareInitialLease(fd int, mount mountEntry, vi
 	view.plan.initial = append(view.plan.initial, initialMountLease{lease: lease, mountID: mount.id, inode: inode})
 	view.trees = append(view.trees, os.NewFile(uintptr(tree), "prepared-initial-volume"))
 	return nil
+}
+
+func sameStructuralSelection(a, b map[int]bool) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for id := range a {
+		if !b[id] {
+			return false
+		}
+	}
+	return true
 }

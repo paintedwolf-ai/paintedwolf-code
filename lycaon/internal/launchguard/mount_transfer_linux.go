@@ -25,6 +25,7 @@ const (
 	mountTransferAck    = 5
 	mountTransferOpen   = 6
 	mountTransferDenied = 7
+	mountTransferPlan   = 8
 )
 
 type mountTransfer struct {
@@ -43,7 +44,7 @@ func (message mountTransfer) validate() error {
 		if message.id == 0 || len(message.path) > mountTransferPath || !filepath.IsAbs(message.path) || filepath.Clean(message.path) != message.path || strings.ContainsRune(message.path, 0) {
 			return errors.New("invalid mount transfer identity or path")
 		}
-	case mountTransferReady, mountTransferAck:
+	case mountTransferReady, mountTransferAck, mountTransferPlan:
 		if message.id != 0 || message.path != "" {
 			return errors.New("invalid mount transfer control")
 		}
@@ -57,7 +58,7 @@ func sendMountTransfer(socket int, message mountTransfer, tree int) error {
 	if err := message.validate(); err != nil {
 		return err
 	}
-	needsFD := message.kind == mountTransferAdd || message.kind == mountTransferAdopt
+	needsFD := message.kind == mountTransferAdd || message.kind == mountTransferAdopt || message.kind == mountTransferPlan
 	if needsFD != (tree >= 0) {
 		return errors.New("mount transfer descriptor count differs")
 	}
@@ -129,7 +130,7 @@ func receiveMountTransfer(socket int) (message mountTransfer, tree int, err erro
 		return message, -1, err
 	}
 	wantFD := 0
-	if message.kind == mountTransferAdd || message.kind == mountTransferAdopt {
+	if message.kind == mountTransferAdd || message.kind == mountTransferAdopt || message.kind == mountTransferPlan {
 		wantFD = 1
 	}
 	if len(descriptors) != wantFD {

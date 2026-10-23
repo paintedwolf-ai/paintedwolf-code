@@ -1,0 +1,153 @@
+//go:build linux
+
+package launchguard
+
+import (
+	"errors"
+	"os"
+	"path/filepath"
+	"time"
+
+	"github.com/lycaon/lycaon/internal/pkgmanifest"
+	"golang.org/x/sys/unix"
+)
+
+// A stalled caller filesystem can only terminate this fixed, unprivileged
+// intake. Its writer observes EOF and the launch lifecycle handles failure.
+// No source mount descriptor remains pinned while waiting for another event.
+func monitorModuleIntake(spec EntrySpec, plan moduleViewPlan, socket, lifetime int) error {
+	watchdog := time.AfterFunc(mountSourceSetupLimit, func() { os.Exit(1) })
+	defer watchdog.Stop()
+	info, err := os.Open("/proc/thread-self/mountinfo")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = info.Close() }()
+	_, current, err := readCurrentMountTopology()
+	if err != nil {
+		return err
+	}
+	source, err := parseMountTopology(plan.source)
+	if err != nil {
+		return err
+	}
+	structural, err := correlateStructuralMounts(source, plan.structural, current)
+	if err != nil {
+		return err
+	}
+	// Repeat actual closed-role custody in M_intake after the full caller
+	// identity seal; matching mountinfo text alone never grants an exemption.
+	desktop, err := openRootControlled(filepath.Join(spec.Generation.LogicalInstallRoot, "bin/painted-wolf-code"), false)
+	if err != nil {
+		return err
+	}
+	if err = pkgmanifest.VerifyOpened(desktop, spec.Image); err != nil {
+		_ = desktop.Close()
+		return err
+	}
+	actual, err := structuralMounts(spec.Generation, desktop, current)
+	_ = desktop.Close()
+	if err != nil || !sameStructuralSelection(actual, structural) {
+		return errors.New("intake structural custody differs from sealed selection")
+	}
+	intake := &moduleIntake{socket: socket, sequence: uint64(len(plan.initial))}
+	for {
+		_, current, err = readCurrentMountTopology()
+		if err != nil {
+			return err
+		}
+		if err = intake.adoptInitial(plan, current); errors.Is(err, errIntakeEpochChanged) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		break
+	}
+	structuralFacts := make(map[int]mountEntry, len(structural))
+	for _, entry := range current {
+		if structural[entry.id] {
+			structuralFacts[entry.id] = entry
+		}
+	}
+	pending, err := intake.reconcile(current, structural, structuralFacts)
+	if err != nil && !errors.Is(err, errIntakeEpochChanged) {
+		return err
+	}
+	for errors.Is(err, errIntakeEpochChanged) {
+		_, current, err = readCurrentMountTopology()
+		if err != nil {
+			return err
+		}
+		pending, err = intake.reconcile(current, structural, structuralFacts)
+	}
+	if err != nil {
+		return err
+	}
+	if err := intake.exchange(mountTransferReady, 0, "", -1); err != nil {
+		return err
+	}
+	lastHeartbeat := time.Now()
+	for {
+		watchdog.Reset(mountSourceSetupLimit)
+		fds := []unix.PollFd{{Fd: int32(info.Fd()), Events: unix.POLLPRI | unix.POLLERR}, {Fd: int32(lifetime), Events: unix.POLLIN | unix.POLLHUP | unix.POLLERR}, {Fd: int32(socket), Events: unix.POLLIN}}
+		if _, err := unix.Poll(fds, 100); err != nil {
+			if errors.Is(err, unix.EINTR) {
+				continue
+			}
+			return err
+		}
+		if fds[1].Revents != 0 {
+			return nil
+		}
+		if fds[2].Revents != 0 {
+			return errors.New("unsolicited intake control or writer closure")
+		}
+		if fds[0].Revents != 0 || pending {
+			raw, err := readMountInfo(int(info.Fd()), nil)
+			if err != nil {
+				return err
+			}
+			current, err = parseMountTopology(raw)
+			if err != nil {
+				return err
+			}
+			pending, err = intake.reconcile(current, structural, structuralFacts)
+			if errors.Is(err, errIntakeEpochChanged) {
+				pending = true
+				continue
+			}
+			if err != nil {
+				return err
+			}
+		}
+		if time.Since(lastHeartbeat) >= time.Second {
+			if err := intake.exchange(mountTransferReady, 0, "", -1); err != nil {
+				return err
+			}
+			lastHeartbeat = time.Now()
+		}
+	}
+}
+
+func (intake *moduleIntake) reconcile(current []mountEntry, structural map[int]bool, facts map[int]mountEntry) (bool, error) {
+	remaining := make(map[int]mountEntry, len(facts))
+	for id, entry := range facts {
+		remaining[id] = entry
+	}
+	for _, entry := range current {
+		if expected, exists := remaining[entry.id]; exists {
+			if expected != entry {
+				return false, errors.New("intake structural source changed")
+			}
+			delete(remaining, entry.id)
+		}
+	}
+	if len(remaining) > 0 {
+		return false, errors.New("intake structural source disappeared")
+	}
+	if err := intake.retireChanged(current); err != nil {
+		return false, err
+	}
+	return intake.importArrivals(current, structural)
+}
