@@ -311,13 +311,14 @@ func (q *Queries) InsertSourceManifest(ctx context.Context, arg InsertSourceMani
 }
 
 const insertSourceManifestChunk = `-- name: InsertSourceManifestChunk :execrows
-INSERT INTO source_manifest_chunks (id, entry_count, total_bytes, hashed_count)
-VALUES (?, ?, ?, ?)
+INSERT INTO source_manifest_chunks (id, content_id, entry_count, total_bytes, hashed_count)
+VALUES (?, ?, ?, ?, ?)
 ON CONFLICT(id) DO NOTHING
 `
 
 type InsertSourceManifestChunkParams struct {
 	ID          string `json:"id"`
+	ContentID   string `json:"content_id"`
 	EntryCount  int64  `json:"entry_count"`
 	TotalBytes  int64  `json:"total_bytes"`
 	HashedCount int64  `json:"hashed_count"`
@@ -326,6 +327,7 @@ type InsertSourceManifestChunkParams struct {
 func (q *Queries) InsertSourceManifestChunk(ctx context.Context, arg InsertSourceManifestChunkParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, insertSourceManifestChunk,
 		arg.ID,
+		arg.ContentID,
 		arg.EntryCount,
 		arg.TotalBytes,
 		arg.HashedCount,
@@ -631,7 +633,7 @@ func (q *Queries) ListSourceManifestHashedEntries(ctx context.Context, arg ListS
 }
 
 const listSourceManifestLayout = `-- name: ListSourceManifestLayout :many
-SELECT l.first_path, l.chunk_id, c.entry_count, c.total_bytes, c.hashed_count
+SELECT l.first_path, l.chunk_id, c.entry_count, c.total_bytes, c.hashed_count, c.content_id
 FROM source_manifest_layout l
 CROSS JOIN source_manifest_chunks c ON c.id = l.chunk_id
 WHERE l.manifest_id = ?
@@ -644,6 +646,7 @@ type ListSourceManifestLayoutRow struct {
 	EntryCount  int64  `json:"entry_count"`
 	TotalBytes  int64  `json:"total_bytes"`
 	HashedCount int64  `json:"hashed_count"`
+	ContentID   string `json:"content_id"`
 }
 
 func (q *Queries) ListSourceManifestLayout(ctx context.Context, manifestID string) ([]ListSourceManifestLayoutRow, error) {
@@ -661,6 +664,7 @@ func (q *Queries) ListSourceManifestLayout(ctx context.Context, manifestID strin
 			&i.EntryCount,
 			&i.TotalBytes,
 			&i.HashedCount,
+			&i.ContentID,
 		); err != nil {
 			return nil, err
 		}

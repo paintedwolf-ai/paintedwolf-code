@@ -1636,6 +1636,7 @@ type SourceLineAttr struct {
 
 type SourceManifestChunks struct {
 	ID          string `json:"id"`
+	ContentID   string `json:"content_id"`
 	EntryCount  int64  `json:"entry_count"`
 	TotalBytes  int64  `json:"total_bytes"`
 	HashedCount int64  `json:"hashed_count"`

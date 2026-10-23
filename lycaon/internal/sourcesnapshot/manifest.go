@@ -28,6 +28,7 @@ const (
 type manifestChunk struct {
 	firstPath  string
 	id         string
+	contentID  string
 	entryCount int64
 	totalBytes int64
 	hashed     int64
@@ -36,6 +37,7 @@ type manifestChunk struct {
 // rootManifest is a built manifest whose chunks and row are written.
 type rootManifest struct {
 	id         string
+	contentID  string
 	entryCount int64
 	totalBytes int64
 }
@@ -85,7 +87,7 @@ func (b *manifestBuilder) cut(ctx context.Context) error {
 	if len(b.pending) == 0 {
 		return nil
 	}
-	chunk := manifestChunk{firstPath: b.pending[0].Path, id: chunkHash(b.pending), entryCount: int64(len(b.pending))}
+	chunk := manifestChunk{firstPath: b.pending[0].Path, id: chunkHash(b.pending), contentID: chunkContentHash(b.pending), entryCount: int64(len(b.pending))}
 	for _, entry := range b.pending {
 		chunk.totalBytes += entry.Size
 		if entry.Identity == IdentityHashed {
@@ -106,7 +108,7 @@ func (b *manifestBuilder) finish(ctx context.Context) (rootManifest, error) {
 	if err := b.cut(ctx); err != nil {
 		return rootManifest{}, err
 	}
-	out := rootManifest{id: manifestHash(b.chunks)}
+	out := rootManifest{id: manifestHash(b.chunks), contentID: manifestContentHash(b.chunks)}
 	for _, chunk := range b.chunks {
 		out.entryCount += chunk.entryCount
 		out.totalBytes += chunk.totalBytes
@@ -125,7 +127,7 @@ func (s *Store) insertChunk(ctx context.Context, chunk manifestChunk, entries []
 	defer func() { _ = tx.Rollback() }()
 	q := s.queries.WithTx(tx)
 	inserted, err := q.InsertSourceManifestChunk(ctx, db.InsertSourceManifestChunkParams{
-		ID: chunk.id, EntryCount: chunk.entryCount, TotalBytes: chunk.totalBytes, HashedCount: chunk.hashed,
+		ID: chunk.id, ContentID: chunk.contentID, EntryCount: chunk.entryCount, TotalBytes: chunk.totalBytes, HashedCount: chunk.hashed,
 	})
 	if err != nil || inserted == 0 {
 		return err
@@ -271,12 +273,31 @@ func (b *manifestBuilder) addOverride(ctx context.Context, entry *Entry) error {
 	return b.add(ctx, *entry)
 }
 
-func chunkHash(entries []Entry) string {
+func chunkContentHash(entries []Entry) string {
 	hash := sha256.New()
 	_, _ = hash.Write([]byte("painted-wolf-source-manifest-chunk-v3\x00"))
 	for _, entry := range entries {
 		_, _ = hash.Write([]byte(entry.Path + "\x00" + entry.contentKey() + "\x00"))
 		_, _ = hash.Write([]byte(strconv.FormatInt(entry.Size, 10) + "\x00" + strconv.FormatUint(uint64(entry.Mode), 10) + "\x00"))
+	}
+	return hex.EncodeToString(hash.Sum(nil))
+}
+
+// Stored chunks preserve every observation field, independently of content identity.
+func chunkHash(entries []Entry) string {
+	hash := sha256.New()
+	_, _ = hash.Write([]byte("painted-wolf-source-stored-chunk-v1\x00" + chunkContentHash(entries) + "\x00"))
+	for _, entry := range entries {
+		_, _ = hash.Write([]byte(entry.SHA256 + "\x00" + entry.GitOID + "\x00" + string(entry.Identity) + "\x00" + strconv.FormatInt(entry.ModifiedNS, 10) + "\x00"))
+	}
+	return hex.EncodeToString(hash.Sum(nil))
+}
+
+func manifestContentHash(chunks []manifestChunk) string {
+	hash := sha256.New()
+	_, _ = hash.Write([]byte("painted-wolf-source-manifest-v1\x00"))
+	for _, chunk := range chunks {
+		_, _ = hash.Write([]byte(chunk.contentID + "\x00"))
 	}
 	return hex.EncodeToString(hash.Sum(nil))
 }

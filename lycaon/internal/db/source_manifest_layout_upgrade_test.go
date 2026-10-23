@@ -160,3 +160,30 @@ func TestSourceManifestLayoutBoundsItsWrites(t *testing.T) {
 		t.Fatalf("write bound = %d for a %d-byte store", writes, uint64(storeBytes))
 	}
 }
+
+func TestSourceManifestLayoutPreservesDistinctObservationRows(t *testing.T) {
+	path, _ := seedLegacyManifestStore(t, t.TempDir(), map[string]int{"/work/a": 1, "/work/b": 1})
+	source, err := sql.Open("sqlite", path)
+	testutil.FailErr(t, "open source", err)
+	_, err = source.Exec(`UPDATE source_manifest_entries SET git_oid='shared', sha256='', identity='index', modified_ns=1 WHERE chunk_id='snapshot-one-bucket-0'`)
+	testutil.FailErr(t, "seed indexed observation", err)
+	_, err = source.Exec(`UPDATE source_manifest_entries SET git_oid='shared', sha256=?, identity='hashed', modified_ns=2 WHERE chunk_id='snapshot-two-bucket-0'`, orphanBlob)
+	testutil.FailErr(t, "seed retained observation", err)
+	testutil.FailErr(t, "close source", source.Close())
+	testutil.FailErr(t, "upgrade observations", UpgradeStaged(t.Context(), path))
+	upgraded, err := sql.Open("sqlite", path)
+	testutil.FailErr(t, "open upgraded observations", err)
+	defer func() { _ = upgraded.Close() }()
+	for _, id := range []string{"snapshot-one", "snapshot-two"} {
+		var sha, identity string
+		var modified int64
+		err := upgraded.QueryRow(`SELECT e.sha256, e.identity, e.modified_ns FROM source_snapshot_roots r JOIN source_manifest_layout l ON l.manifest_id=r.manifest_id JOIN source_manifest_entries e ON e.chunk_id=l.chunk_id WHERE r.snapshot_id=? AND r.root_path='/work/a'`, id).Scan(&sha, &identity, &modified)
+		testutil.FailErr(t, "read migrated observation", err)
+		if id == "snapshot-one" && (sha != "" || identity != "index" || modified != 1) {
+			t.Fatalf("indexed observation changed: %q %s %d", sha, identity, modified)
+		}
+		if id == "snapshot-two" && (sha != orphanBlob || identity != "hashed" || modified != 2) {
+			t.Fatalf("retained observation changed: %q %s %d", sha, identity, modified)
+		}
+	}
+}

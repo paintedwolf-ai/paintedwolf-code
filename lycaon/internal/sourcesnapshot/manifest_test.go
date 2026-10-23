@@ -224,3 +224,23 @@ func TestManifestReadsStayWithinTheirManifest(t *testing.T) {
 		}
 	}
 }
+
+func TestSharedContentKeepsEachRootsRetentionEvidence(t *testing.T) {
+	store := openSnapshotStore(t)
+	indexed := Entry{Path: "same.go", GitOID: "shared-git-object", Identity: IdentityIndex, Size: 7, Mode: 0o644, ModifiedNS: 1}
+	hashed := indexed
+	hashed.SHA256, hashed.Identity, hashed.ModifiedNS = "retained-content-digest", IdentityHashed, 2
+	first, _ := buildEntries(t, store, []Entry{indexed})
+	second, _ := buildEntries(t, store, []Entry{hashed})
+	if first.id == second.id {
+		t.Fatal("distinct retention evidence reused stored rows")
+	}
+	if first.contentID != second.contentID {
+		t.Fatal("identical bytes have different content identities")
+	}
+	got, ok, err := store.manifestLookup(t.Context(), second.id, "/other/root", hashed.Path)
+	testutil.FailErr(t, "read retained entry", err)
+	if !ok || got.SHA256 != hashed.SHA256 || got.Identity != IdentityHashed || got.ModifiedNS != hashed.ModifiedNS {
+		t.Fatalf("shared content lost retention evidence: %+v", got)
+	}
+}
