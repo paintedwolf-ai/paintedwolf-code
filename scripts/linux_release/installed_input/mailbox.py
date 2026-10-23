@@ -131,6 +131,13 @@ class Mailbox:
 def serve(execution: dict, vm_id: str):
     mailbox = Mailbox(execution, vm_id)
     acknowledged = None
+    publication = None
+
+    def attached_publication():
+        mailbox.attach()
+        return tuple((info.st_dev, info.st_ino) for info in
+                     (mailbox.path.lstat(), (mailbox.path / 'binding.json').lstat()))
+
     for _ in range(protocol.MAX_TRANSACTIONS * 256 * 20):
         raw = sys.stdin.buffer.readline(protocol.MAX_DOCUMENT + 1)
         if not raw:
@@ -139,10 +146,15 @@ def serve(execution: dict, vm_id: str):
         if command == {'operation': 'close'}:
             return
         if command == {'operation': 'poll'}:
-            if not mailbox.path.exists():
+            if publication is None and not mailbox.path.exists():
+                result = {'state': 'waiting'}
+            elif publication is None and mailbox.read('binding.json') is None:
                 result = {'state': 'waiting'}
             else:
-                mailbox.attach()
+                current = attached_publication()
+                if publication is not None and current != publication:
+                    raise ValueError('native input mailbox publication changed after attachment')
+                publication = current
                 pending = mailbox.read('request.json')
                 if pending is None:
                     acknowledged = None
@@ -152,7 +164,8 @@ def serve(execution: dict, vm_id: str):
                     digest = protocol.request_sha256(pending)
                     result = {'state': 'acknowledged'} if digest == acknowledged else {'state': 'request', 'request': pending}
         elif set(command) == {'operation', 'acknowledgment'} and command['operation'] == 'ack':
-            mailbox.attach()
+            if publication is None or attached_publication() != publication:
+                raise ValueError('native input acknowledgment requires its attached publication')
             pending = mailbox.read('request.json')
             protocol.request(pending, execution)
             protocol.acknowledgment(command['acknowledgment'], pending, vm_id)
