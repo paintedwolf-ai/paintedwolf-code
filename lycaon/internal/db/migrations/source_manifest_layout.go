@@ -168,9 +168,14 @@ VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING`, chunk.id, chunk.contentID, c
 	if inserted, err := result.RowsAffected(); err != nil || inserted == 0 {
 		return chunk, err
 	}
+	statement, err := tx.PrepareContext(ctx, `INSERT INTO source_manifest_entries
+(chunk_id, path, sha256, git_oid, identity, size, mode, modified_ns) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return layoutChunk{}, err
+	}
+	defer func() { _ = statement.Close() }()
 	for _, entry := range entries {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO source_manifest_entries
-(chunk_id, path, sha256, git_oid, identity, size, mode, modified_ns) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		if _, err := statement.ExecContext(ctx,
 			chunk.id, entry.path, entry.sha256, entry.gitOID, entry.identity, entry.size, entry.mode, entry.modifiedNS); err != nil {
 			return layoutChunk{}, err
 		}
