@@ -192,6 +192,9 @@ func TestStartupDefersWholeStoreScan(t *testing.T) {
 	_, err = file.WriteAt([]byte{0}, (page-1)*pageSize)
 	testutil.FailErr(t, "damage unused data page", err)
 	testutil.FailErr(t, "close corruption fixture", file.Close())
+	if err := UpgradeStaged(t.Context(), path); !errors.Is(err, ErrStoreIncompatible) {
+		t.Fatalf("staged restore admitted damaged bytes: %v", err)
+	}
 	store, err = Open(path)
 	testutil.FailErr(t, "open without whole-store check", err)
 	t.Cleanup(func() { _ = store.Close() })

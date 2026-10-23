@@ -121,6 +121,9 @@ func upgradeExistingUsing(ctx context.Context, path string, hooks UpgradeHooks, 
 		if err := prepareIntegrity(ctx, reader); err != nil {
 			return err
 		}
+		if staged {
+			return validateStoreIntegrity(ctx, reader)
+		}
 		if hooks.BeforeCurrentOpen != nil {
 			return hooks.BeforeCurrentOpen(ctx, reader, plan)
 		}
