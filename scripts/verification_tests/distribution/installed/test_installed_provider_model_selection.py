@@ -23,6 +23,7 @@ class ModelPickerTests(TestCase):
             node.queryAction.return_value.getName.return_value = 'select'
             node.queryAction.return_value.doAction.return_value = True
         self.ui = Mock(api=SimpleNamespace(ROLE_COMBO_BOX=11, ROLE_TOGGLE_BUTTON=62))
+        self.ui.windows.return_value = []
         self.ui.find.side_effect = self.nodes
         self.chain = [{'bus_name': ':1.2', 'path': '/control', 'pid': 12},
                       {'bus_name': ':1.1', 'path': '/frame', 'pid': 11}]
