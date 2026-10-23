@@ -74,6 +74,16 @@ class WorkflowTests(unittest.TestCase):
 
     def test_release_rehearsal_builds_its_candidate_only_inside_the_managed_target(self):
         workflow = (ROOT / ".github/workflows/release.yml").read_text()
-        upgrade = workflow.split("  upgrade:\n", 1)[1].split("  ship-gates:\n", 1)[0]
+        upgrade = workflow.split("  validate-source:\n", 1)[1].split("  ship-gates:\n", 1)[0]
         self.assertIn("run: ./task upgrade:rehearse", upgrade)
         self.assertNotIn("run: ./task build:lycaon-dev", upgrade)
+
+    def test_source_validation_reuses_setup_and_retains_each_gate_evidence(self):
+        workflow = (ROOT / ".github/workflows/release.yml").read_text()
+        validation = workflow.split("  validate-source:\n", 1)[1].split("  ship-gates:\n", 1)[0]
+        self.assertEqual(validation.count("uses: actions/checkout@"), 1)
+        self.assertEqual(validation.count("uses: ./.github/actions/setup-verification"), 1)
+        self.assertLess(validation.index("./task release:preflight"), validation.index("./task upgrade:rehearse"))
+        self.assertIn("name: release-preflight-${{ github.run_attempt }}", validation)
+        self.assertIn("name: release-upgrade-${{ github.run_attempt }}", validation)
+        self.assertNotIn("continue-on-error", validation)
