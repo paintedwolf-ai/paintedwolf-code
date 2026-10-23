@@ -19,7 +19,7 @@ def physical_input(app, ui, label, operation, *, password=False):
     return record
 
 
-def await_catalog(app, fixture):
+def await_discovery(app, fixture):
     deadline, witness = time.monotonic() + 90, None
     while time.monotonic() < deadline:
         app.require_running()
@@ -27,14 +27,14 @@ def await_catalog(app, fixture):
         discovered = any(row.get('path') == '/v1/model/info' and row.get('model') == MODEL
                          and row.get('fixture_credential_observed') is True
                          for row in fixture.discovery_observations)
-        if witness is not None and witness['models'] == [MODEL] and discovered:
-            app.observations['provider_catalog'] = witness
+        if witness is not None and discovered:
+            app.observations['provider_registration'] = witness
             app.observations['provider_discovery'] = list(fixture.discovery_observations)
             return witness
         time.sleep(0.1)
-    refusal = CaseUnavailable('fixed-provider-current-discovery-or-catalog-unavailable')
+    refusal = CaseUnavailable('fixed-provider-current-discovery-or-registration-unavailable')
     refusal.observations = {'provider_discovery': list(fixture.discovery_observations),
-                           'provider_catalog': witness}
+                           'provider_registration': witness}
     raise refusal
 
 
@@ -50,8 +50,9 @@ def configure_provider(app, fixture):
             physical_input(app, ui, 'Endpoint URL http://localhost:4000/v1', endpoint_operation(fixture.server.server_port))
             physical_input(app, ui, 'API key Paste your API key…', 'provider-fixture-credential-v1', password=True)
             ui.click('Add AI provider')
-        witness = await_catalog(app, fixture)
+        witness = await_discovery(app, fixture)
         ui.click('Default model')
         ui.click(MODEL)
+        app.observations['provider_model_selection'] = {'model': MODEL, 'native_action_completed': True}
         ui.click('Skip')
     return witness

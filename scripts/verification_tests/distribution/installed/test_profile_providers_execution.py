@@ -46,7 +46,7 @@ class ProfileProviderTests(unittest.TestCase):
         with patch.object(observer.os, 'open', wraps=os.open) as opened:
             observed = observer.find_gui_provider(self.app, ENDPOINT)
         self.assertEqual(observed, {'provider_id': 'owned-fixture-1', 'kind': GUI_KIND,
-            'requires_api_key': True, 'models': [MODEL], 'observer': 'owned-provider-YAML'})
+            'requires_api_key': True, 'configured_models': [MODEL], 'observer': 'owned-provider-YAML'})
         self.assertNotIn('SECRET', json.dumps(observed))
         self.assertEqual(self.path.read_bytes(), before)
         self.assertFalse(opened.call_args.args[1] & (os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC))

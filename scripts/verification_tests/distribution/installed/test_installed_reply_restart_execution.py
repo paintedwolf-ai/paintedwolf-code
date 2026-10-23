@@ -129,7 +129,7 @@ class ReplyRestartTests(unittest.TestCase):
             discovery_observations=[{'path': '/v1/model/info', 'model': provider_setup.MODEL, 'fixture_credential_observed': True}])
         ui.__enter__.return_value = ui
         with patch.object(provider_setup, 'DesktopUI', return_value=ui), patch.object(provider_setup, 'physical_input') as physical, patch.object(
-                provider_setup, 'find_gui_provider', side_effect=[None, {'provider_id': 'fixture', 'models': [provider_setup.MODEL]}]):
+                provider_setup, 'find_gui_provider', side_effect=[None, {'provider_id': 'fixture', 'configured_models': [provider_setup.MODEL]}]):
             self.assertEqual(provider_setup.configure_provider(app, fixture)['provider_id'], 'fixture')
         self.assertEqual([call.args[0] for call in ui.click.call_args_list],
                          ['Add AI provider', 'LiteLLM', 'Add AI provider', 'Default model', provider_setup.MODEL, 'Skip'])

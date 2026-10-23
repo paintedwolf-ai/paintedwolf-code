@@ -47,7 +47,7 @@ class ProviderRecoveryTests(unittest.TestCase):
         self.assertEqual(recovery.registered(document, binding, str(os.getuid()))['endpoint'], 'http://127.0.0.1:41234/v1')
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'execution.json'
-            raw = json.dumps(document).encode();path.write_bytes(raw)
+            raw = json.dumps(document).encode();path.write_bytes(raw);path.chmod(0o600)
             binding['case_inputs'] = {'desktop': {'format_version': 1, 'provider_recovery': {
                 'prior_execution': str(path), 'sha256': hashlib.sha256(raw).hexdigest()}}}
             self.assertEqual(recovery.load(binding)[0]['endpoint'], 'http://127.0.0.1:41234/v1')
@@ -109,7 +109,7 @@ class ProviderRecoveryTests(unittest.TestCase):
     def test_existing_provider_is_not_created_or_retyped_and_needs_current_discovery(self):
         app, ui = SimpleNamespace(observations={}, require_running=lambda: None), MagicMock()
         ui.__enter__.return_value = ui
-        witness = {'provider_id': 'fixture', 'models': [MODEL]}
+        witness = {'provider_id': 'fixture', 'configured_models': [MODEL]}
         fixture = SimpleNamespace(base_url='http://127.0.0.1:41234/v1', discovery_observations=[{
             'path': '/v1/model/info', 'model': MODEL, 'fixture_credential_observed': True}])
         with patch.object(provider_setup, 'DesktopUI', return_value=ui), patch.object(
@@ -120,4 +120,4 @@ class ProviderRecoveryTests(unittest.TestCase):
         fixture.discovery_observations = []
         with patch.object(provider_setup, 'find_gui_provider', return_value=witness), patch.object(
                 provider_setup.time, 'monotonic', side_effect=[0, 1, 91]), patch.object(provider_setup.time, 'sleep'):
-            with self.assertRaises(provider_setup.CaseUnavailable): provider_setup.await_catalog(app, fixture)
+            with self.assertRaises(provider_setup.CaseUnavailable): provider_setup.await_discovery(app, fixture)
