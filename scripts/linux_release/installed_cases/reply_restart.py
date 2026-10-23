@@ -35,7 +35,9 @@ def configure_provider(app, fixture):
         ui.click('Add AI provider')
         ui.click('Default model')
         ui.click(MODEL)
-        ui.click('Continue')
+        # Optional setup can finish without a separate provider test request;
+        # the required physical turn below proves the selected provider itself.
+        ui.click('Skip')
     witness = find_gui_provider(app, fixture.base_url)
     if witness is None or witness['models'] != [MODEL]:
         raise ValueError('normal GUI did not register the selected fixed provider and model')

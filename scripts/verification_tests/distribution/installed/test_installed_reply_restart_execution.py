@@ -93,6 +93,18 @@ class ReplyRestartTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             steps('reply-fixture-prompt-v1-arbitrary')
 
+    def test_gui_setup_selects_model_then_finishes_optional_setup_before_turn(self):
+        app, ui = MagicMock(), MagicMock()
+        fixture = SimpleNamespace(server=SimpleNamespace(server_port=12345), base_url='http://127.0.0.1:12345/v1')
+        ui.__enter__.return_value = ui
+        with patch.object(owner, 'DesktopUI', return_value=ui), patch.object(owner, 'physical_input') as physical, patch.object(
+                owner, 'find_gui_provider', return_value={'provider_id': 'fixture', 'models': [owner.MODEL]}):
+            self.assertEqual(owner.configure_provider(app, fixture)['provider_id'], 'fixture')
+        self.assertEqual([call.args[0] for call in ui.click.call_args_list],
+                         ['Add AI provider', 'LiteLLM', 'Add AI provider', 'Default model', owner.MODEL, 'Skip'])
+        self.assertEqual([call.args[3] for call in physical.call_args_list],
+                         ['provider-name-v1', 'provider-endpoint-v1-12345', 'provider-fixture-credential-v1'])
+
     def test_input_without_independently_bound_physical_actor_is_unverified(self):
         with self.assertRaises(owner.CaseUnavailable):
             owner.physical_input(SimpleNamespace(binding={}), None, 'Describe your idea', 'reply-fixture-prompt-v1')
