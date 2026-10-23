@@ -4,11 +4,11 @@
   "kind": "runtime_service",
   "workstream": "store-health",
   "disposition": "retain",
-  "reason": "The removal route composes existing lifecycle services. The watch fence and drain stay inside the project mutation lifetime, and failure restores watch admission. Retain the existing 16 dependencies without a parallel deletion controller.",
-  "reviewed_commit": "d343c29b138815e0e1f8332fb8fb8ee1dfca57f1",
+  "reason": "The removal route composes existing lifecycle services. The watch fence and drain stay inside the project mutation lifetime, and failure restores watch admission. Retain the existing 16 dependencies without a parallel deletion controller. The final rebind emits a full-root resync after releasing removal admission; focused source-watch and composed removal contracts verify that missed edits invalidate the previous epoch. The measured size and dependency shape remain unchanged.",
+  "reviewed_commit": "13d9d4c0d9183cc535b349d947b84ec996446bc6",
   "ceiling": 16,
   "boundaries": {
-    "lycaon/internal/api/hostcontracts/project_removal_watch_test.go": "b96df4e312f8e5d50247af3b1d878798dcc048d083fb5ce0bd275967caf9634e"
+    "lycaon/internal/api/hostcontracts/project_removal_watch_test.go": "4ba5f6a51106f5626815f4bb919a3eb41339bda832786d648f5db98410994b96"
   },
   "reviewed_shape": "f2a5527c93ee42e1bb6e5359243204c98593c73891915de198d6b9ad483da792"
 }

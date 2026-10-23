@@ -4,11 +4,11 @@
   "kind": "module",
   "workstream": "store-health",
   "disposition": "retain",
-  "reason": "Source adapters share private view descriptors, access checks, and watch lifecycle. The added suspension file defines the watch admission boundary; retain the package at 53 source files rather than export that internal protocol.",
-  "reviewed_commit": "d343c29b138815e0e1f8332fb8fb8ee1dfca57f1",
+  "reason": "Source adapters share private view descriptors, access checks, and watch lifecycle. The added suspension file defines the watch admission boundary; retain the package at 53 source files rather than export that internal protocol. The final rebind emits a full-root resync after releasing removal admission; focused source-watch and composed removal contracts verify that missed edits invalidate the previous epoch. The measured size and dependency shape remain unchanged.",
+  "reviewed_commit": "13d9d4c0d9183cc535b349d947b84ec996446bc6",
   "ceiling": 53,
   "boundaries": {
-    "lycaon/internal/api/sourceapi/source_watch_suspension_test.go": "31f261fb567c7745fa4e3bdb76f029c0295f16ca95c0dde210ea04be05c0bccc"
+    "lycaon/internal/api/sourceapi/source_watch_suspension_test.go": "d53aff101dd692305a14cc16251884087d3dca1abc2328e734d032be89253c0b"
   },
   "reviewed_shape": "e3051a0f86168946f153a07f8e61afde79c4604117617d7d4aabd37b6efc2a62"
 }

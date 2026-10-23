@@ -4,11 +4,11 @@
   "kind": "test_suite",
   "workstream": "store-health",
   "disposition": "retain",
-  "reason": "These package-level host composition tests exercise real lifecycle collaborators. The new removal-watch regression requires that shared setup to verify deletion ordering and restoration after failure. Retain the suite at 70 files.",
-  "reviewed_commit": "d343c29b138815e0e1f8332fb8fb8ee1dfca57f1",
+  "reason": "These package-level host composition tests exercise real lifecycle collaborators. The new removal-watch regression requires that shared setup to verify deletion ordering and restoration after failure. Retain the suite at 70 files. The final rebind emits a full-root resync after releasing removal admission; focused source-watch and composed removal contracts verify that missed edits invalidate the previous epoch. The measured size and dependency shape remain unchanged.",
+  "reviewed_commit": "13d9d4c0d9183cc535b349d947b84ec996446bc6",
   "ceiling": 70,
   "boundaries": {
-    "lycaon/internal/api/hostcontracts/project_removal_watch_test.go": "b96df4e312f8e5d50247af3b1d878798dcc048d083fb5ce0bd275967caf9634e"
+    "lycaon/internal/api/hostcontracts/project_removal_watch_test.go": "4ba5f6a51106f5626815f4bb919a3eb41339bda832786d648f5db98410994b96"
   },
   "reviewed_shape": "1d7a6a86e9770b97f391821949bb53994c68015c7577445e0aee5d20bd3904ca"
 }

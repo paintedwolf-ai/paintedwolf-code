@@ -43,7 +43,8 @@ func StopProjectWatch(ctx context.Context, projectID string) error {
 	for _, watch := range draining {
 		if err := watch.callbacks.Wait(ctx); err != nil {
 			drainErr = errors.Join(drainErr, err)
-			watch.drainCleanup.Do(func() { go forgetDrainedWatch(watch) })
+			detached := context.WithoutCancel(ctx)
+			watch.drainCleanup.Do(func() { go forgetDrainedWatch(detached, watch) })
 			continue
 		}
 		watchRegMu.Lock()
@@ -57,8 +58,8 @@ func StopProjectWatch(ctx context.Context, projectID string) error {
 }
 
 // A canceled waiter does not keep a completed callback and its host alive.
-func forgetDrainedWatch(watch *projectWatch) {
-	_ = watch.callbacks.Wait(context.Background())
+func forgetDrainedWatch(ctx context.Context, watch *projectWatch) {
+	_ = watch.callbacks.Wait(ctx)
 	watchRegMu.Lock()
 	delete(drainingWatches, watch)
 	watchRegMu.Unlock()
