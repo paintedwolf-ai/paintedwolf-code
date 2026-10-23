@@ -205,3 +205,38 @@ func TestRecursivePolicyReviewUsesAndReleasesInvocationMemory(t *testing.T) {
 		}
 	}
 }
+
+func TestRecursiveRemovalTraversalUsesInvocationState(t *testing.T) {
+	for _, depth := range []int{0, 4} {
+		t.Run(fmt.Sprint(depth), func(t *testing.T) {
+			h := newHarness(t, nil)
+			path := "tree"
+			for range depth {
+				path = filepath.Join(path, "nested")
+			}
+			testutil.FailErr(t, "seed directories", os.MkdirAll(h.path(path), 0o755))
+			testutil.FailErr(t, "seed leaf", os.WriteFile(h.path(filepath.Join(path, "leaf")), []byte("body"), 0o644))
+			memory, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: 32 << 20, State: 512 << 10})
+			testutil.FailErr(t, "create invocation budget", err)
+			h.program.Memory = memory
+			result := h.run("", "rm", "-rf", "tree")
+			if depth == 0 {
+				if result.err != nil || !h.absent("tree") {
+					t.Fatalf("narrow removal: %+v error=%v", result.result, result.err)
+				}
+				h.undoAll(1)
+			} else {
+				var limit *toolcontract.ProgramMemoryLimitError
+				if !errors.As(result.err, &limit) || limit.Account != "state" || h.absent("tree") {
+					t.Fatalf("unadmitted depth changed tree: %+v error=%v", result.result, result.err)
+				}
+			}
+			if h.read(filepath.Join(path, "leaf")) != "body" {
+				t.Fatal("leaf bytes changed")
+			}
+			if use := memory.InUse(); use.Working != 0 || use.State != 0 {
+				t.Fatalf("traversal leaked: %+v", use)
+			}
+		})
+	}
+}

@@ -2,11 +2,14 @@ package native
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -107,15 +110,17 @@ func (t *DeleteTool) Delete(ctx context.Context, in DeleteInput, tctx tools.Tool
 			if in.FilesOnly {
 				return result, &toolrejection.ToolReject{Code: "DELETE_IS_DIRECTORY", Data: map[string]any{"path": relSlash}}
 			}
-			children, readErr := os.ReadDir(resolved.Abs)
-			if readErr != nil {
-				return result, fmt.Errorf("delete %s: %w", relSlash, readErr)
+			if !in.Recursive {
+				children, readErr := countMutationChildren(ctx, resolved.Abs, in.Memory)
+				if readErr != nil {
+					return result, fmt.Errorf("delete %s: %w", relSlash, readErr)
+				}
+				if children > 0 {
+					return result, &toolrejection.ToolReject{Code: "DELETE_NOT_EMPTY", Data: map[string]any{"path": relSlash, "entries": children}}
+				}
 			}
-			if len(children) > 0 && !in.Recursive {
-				return result, &toolrejection.ToolReject{Code: "DELETE_NOT_EMPTY", Data: map[string]any{"path": relSlash, "entries": len(children)}}
-			}
-			if len(children) > 0 {
-				summary, inspectErr := inspectDeleteTree(ctx, t.Boundary, tctx, resolved, prof, nil)
+			if in.Recursive {
+				summary, inspectErr := inspectDeleteTree(ctx, t.Boundary, tctx, resolved, prof, in.Memory, nil)
 				if inspectErr != nil {
 					return result, inspectErr
 				}
@@ -126,7 +131,7 @@ func (t *DeleteTool) Delete(ctx context.Context, in DeleteInput, tctx tools.Tool
 					displayPath = filepath.ToSlash(resolved.ScopeRel)
 				}
 				if err := removeAgentTree(ctx, tctx, resolvedMutationTarget(resolved), displayPath, summary.bytes, func() error {
-					_, err := inspectDeleteTree(ctx, t.Boundary, tctx, resolved, prof, func(target projectpaths.Resolved) error {
+					_, err := inspectDeleteTree(ctx, t.Boundary, tctx, resolved, prof, in.Memory, func(target projectpaths.Resolved) error {
 						return reviewAgentTreePolicyRemoval(ctx, tctx, target, in.Memory)
 					})
 					return err
@@ -152,48 +157,35 @@ type deleteTreeSummary struct {
 	bytes int64
 }
 
-func inspectDeleteTree(ctx context.Context, b *sandbox.Boundary, tctx tools.ToolContext, root projectpaths.Resolved, prof string, reviewPolicy func(projectpaths.Resolved) error) (deleteTreeSummary, error) {
+func inspectDeleteTree(ctx context.Context, b *sandbox.Boundary, tctx tools.ToolContext, selected projectpaths.Resolved, prof string, memory *toolcontract.ProgramMemory, reviewPolicy func(projectpaths.Resolved) error) (deleteTreeSummary, error) {
 	var summary deleteTreeSummary
 	checkPins := len(tctx.Turn.TurnWritePinGlobs) > 0
 	classifyPolicy := confine.AgentPolicyClassifier(tools.ConfineRootsForAction(tctx)...)
-	var walk func(absDir, relDir string) error
-	walk = func(absDir, relDir string) error {
-		if err := ctx.Err(); err != nil {
-			return err
+	root, err := fseffect.OpenReadRoot(selected.EffectLocation().Root)
+	if err != nil {
+		return summary, err
+	}
+	defer func() { _ = root.Close() }()
+	visit := func(rel string, info os.FileInfo) error {
+		if rel == "." {
+			return nil
 		}
-		children, err := os.ReadDir(absDir)
-		if err != nil {
-			return err
-		}
-		for _, child := range children {
-			full := filepath.Join(absDir, child.Name())
-			childRel := filepath.ToSlash(filepath.Join(relDir, child.Name()))
-			info, err := child.Info()
+		full := filepath.Join(selected.Abs, rel)
+		childRel := filepath.ToSlash(filepath.Join(selected.ScopeRel, rel))
+		_, policy := classifyPolicy(full)
+		_, deniedGit := tools.IsGitInternalsWritePath(childRel)
+		if checkPins || policy || deniedGit || tools.IsSensitivePath(childRel) {
+			target, err := assertDeleteWritePath(ctx, b, tctx, full, prof)
 			if err != nil {
-				info, err = os.Lstat(full)
-				if err != nil {
+				return err
+			}
+			if policy && reviewPolicy != nil {
+				if err := reviewPolicy(target); err != nil {
 					return err
 				}
 			}
-			_, policy := classifyPolicy(full)
-			_, deniedGit := tools.IsGitInternalsWritePath(childRel)
-			if checkPins || policy || deniedGit || tools.IsSensitivePath(childRel) {
-				target, err := assertDeleteWritePath(ctx, b, tctx, full, prof)
-				if err != nil {
-					return err
-				}
-				if policy && reviewPolicy != nil {
-					if err := reviewPolicy(target); err != nil {
-						return err
-					}
-				}
-			}
-			if info.IsDir() {
-				if err := walk(full, childRel); err != nil {
-					return err
-				}
-				continue
-			}
+		}
+		if !info.IsDir() {
 			summary.files++
 			if info.Mode().IsRegular() {
 				summary.bytes += info.Size()
@@ -201,8 +193,35 @@ func inspectDeleteTree(ctx context.Context, b *sandbox.Boundary, tctx tools.Tool
 		}
 		return nil
 	}
-	err := walk(root.Abs, filepath.ToSlash(root.ScopeRel))
+	err = walkMutationTree(ctx, root, selected.EffectLocation().Rel, ".", visit, nil, memory)
 	return summary, err
+}
+
+func countMutationChildren(ctx context.Context, path string, memory *toolcontract.ProgramMemory) (int, error) {
+	release, err := memory.ReserveProgramState(ctx, 2*128*int64(1024+len(path)))
+	if err != nil {
+		return 0, err
+	}
+	defer release()
+	dir, err := os.Open(path)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = dir.Close() }()
+	count := 0
+	for {
+		if err := ctx.Err(); err != nil {
+			return 0, err
+		}
+		entries, err := dir.ReadDir(128)
+		count += len(entries)
+		if errors.Is(err, io.EOF) {
+			return count, nil
+		}
+		if err != nil {
+			return 0, err
+		}
+	}
 }
 
 // RecursiveCaps bound one recursive mutation's files and regular-file bytes so
