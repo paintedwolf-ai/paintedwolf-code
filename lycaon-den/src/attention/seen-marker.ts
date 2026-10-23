@@ -37,8 +37,9 @@ export function createSeenMarker(deps: SeenMarkerDeps): () => void {
       let pending: Promise<unknown>;
       try {
         pending = Promise.resolve(deps.mark(sessionId));
-      } catch (err) {
-        pending = Promise.reject(err);
+      } catch {
+        // A synchronous failure follows the same completion path as a rejected post.
+        pending = Promise.resolve();
       }
       void pending
         .catch(() => undefined)

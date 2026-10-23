@@ -287,7 +287,7 @@ describe("connection invalidation", () => {
     settings.actions.setPricing(pricing(true));
     const costs = createCostStore();
     const getCostSummary = vi.fn().mockResolvedValue(undefined);
-    await costs.refreshSession({ getCostSummary } as unknown as LycaonClient, "session-b");
+    await costs.refreshSession(stubClient({ getCostSummary }), "session-b");
     const refreshSession = vi.spyOn(costs, "refreshSession").mockResolvedValue(undefined);
     const invalidated = vi.fn();
     costs.onInvalidated(invalidated);
