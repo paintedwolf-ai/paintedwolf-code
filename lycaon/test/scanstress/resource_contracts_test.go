@@ -32,8 +32,11 @@ func writeResourceCorpus(t *testing.T, files, matches int) string {
 
 func requireResourceFindings(t *testing.T, result *scanoutput.Result, files, matches int) {
 	t.Helper()
-	if result == nil || result.FindingsCount != files*matches || len(result.Findings) != files*matches {
-		t.Fatalf("resource scan must return %d declared findings; result=%+v", files*matches, result)
+	if result == nil {
+		t.Fatal("resource scan returned no result")
+	}
+	if result.FindingsCount != files*matches || len(result.Findings) != files*matches {
+		t.Fatalf("resource scan returned %d findings and %d entries, want %d", result.FindingsCount, len(result.Findings), files*matches)
 	}
 	if len(result.ScannedPaths) != files || len(result.Warnings) != 0 {
 		t.Fatalf("resource scan covered %d of %d paths with warnings: %+v", len(result.ScannedPaths), files, result.Warnings)
