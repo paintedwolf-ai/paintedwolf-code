@@ -98,20 +98,26 @@ def activate_visible_frame(app, ui):
     """Activate one already visible native frame and witness that exact frame becoming active."""
     deadline = time.monotonic() + 15
     before = _visible_native_frame(app, ui, deadline)
+    launched, after, phase = None, None, 'launch'
     try:
         launched = activate(app)
-    except (OSError, ValueError) as error:
-        error.observations = {**getattr(error, 'observations', {}), 'public_activation': {'before': before}}
-        raise
-    after = None
-    while time.monotonic() < deadline:
-        after = _visible_native_frame(app, ui, deadline)
-        if any(after[name] != before[name] for name in ('launch', 'engine', 'frame')):
-            raise ValueError('public activation replaced its pinned visible frame or runtime')
-        if after['active']:
-            return {'before': before, 'after': after, 'public_launcher': launched}
-        time.sleep(0.05)
-    refusal = CaseUnavailable('public-activation-same-visible-frame-did-not-become-active')
-    refusal.observations = {'public_activation': {'before': before, 'public_launcher': launched,
-                                                  'after': after, 'same_frame_active': False}}
-    raise refusal
+        phase = 'observe'
+        while time.monotonic() < deadline:
+            after = _visible_native_frame(app, ui, deadline)
+            phase = 'compare'
+            if any(after[name] != before[name] for name in ('launch', 'engine', 'frame')):
+                raise ValueError('public activation replaced its pinned visible frame or runtime')
+            if after['active']:
+                return {'before': before, 'after': after, 'public_launcher': launched, 'verified': True}
+            time.sleep(0.05)
+            phase = 'observe'
+        phase = 'deadline'
+        raise CaseUnavailable('public-activation-same-visible-frame-did-not-become-active')
+    except Exception as error:
+        failure_type = ('unavailable' if isinstance(error, CaseUnavailable) else
+            'identity-refused' if isinstance(error, (ValueError, TypeError, KeyError)) else
+            'operating-system-error' if isinstance(error, OSError) else 'native-observation-error')
+        failure = error if isinstance(error, (ValueError, TypeError, KeyError, OSError)) else CaseUnavailable('public-activation-native-observation-unavailable')
+        failure.observations = {'public_activation': {'before': before, 'public_launcher': launched,
+            'after': after, 'phase': phase, 'failure_type': failure_type, 'verified': False}}
+        raise failure from None
