@@ -1095,6 +1095,23 @@ Shared test-location groups stay together, and every selected test belongs to
 one shard. Per-job concurrency does not increase. The execution deadline allows
 60 minutes for each larger slice, with separate setup and cleanup allowance.
 
+### Reusing completed source verification
+
+Qualification reuses complete source lanes from successful merge-group CI runs
+whose Git tree exactly matches the selected landed source. Each compact proof
+binds repository, source commit and tree, workflow run and attempt, lane recipe,
+runner label, shard, and successful full-scope execution. The lookup considers
+up to twenty successful merge-group runs within fourteen days. PR-only results,
+partial package selections, missing evidence, and failed runs grant no reuse.
+
+All shards of a lane must have matching proofs from one run attempt. Qualification
+retains its own plan listing every reused proof and every lane it executes.
+Change-relative budget and coverage reports always execute against the current
+qualification context. Platform, end-to-end, signed-package, and upgrade checks
+retain their separate gates. Pinned source and toolchains define source-lane
+identity; hosted image versions are recorded as provenance. Native platform
+qualification continues to exercise the current hosted environment.
+
 ### Compiler cache storage admission
 
 Only the serialized main warmer publishes compiler caches. Each publication
