@@ -47,6 +47,15 @@ vi.mock("../../chat/composer/chat-attachment-drag.ts", () => ({
   updatePointerChatAttachmentDrag: () => false,
 }));
 
+function deferred<T>() {
+  let resolve: ((value: T) => void) | undefined;
+  const promise = new Promise<T>((accept) => { resolve = accept; });
+  return { promise, resolve(value: T) {
+    if (!resolve) throw new Error("Deferred promise was not initialized");
+    resolve(value);
+  } };
+}
+
 const PROJECT = "handoff-project";
 function fixture() {
   const key = openFilesBuffer(PROJECT, { rootId: "root", rootLabel: "Root", path: "draft.txt", intent: "permanent" });
@@ -76,7 +85,7 @@ afterEach(() => {
 describe("compositor tab handoff", () => {
   it("publishes the debounced draft before ready and releases only after the shell commits", async () => {
     const f = fixture();
-    const publication = Promise.withResolvers<boolean>();
+    const publication = deferred<boolean>();
     effects.publish.mockImplementationOnce(async () => {
       expect(filesBufferText(required(projectFilesState(PROJECT).byKey[f.key]))).toBe("latest draft");
       return publication.promise;
@@ -141,8 +150,8 @@ function coordinateDrag(f: ReturnType<typeof fixture>, controller: FileTabWindow
 describe("coordinate tab handoff", () => {
   it("waits for publication and outstanding movement before committing and releasing", async () => {
     const f = fixture();
-    const publication = Promise.withResolvers<boolean>();
-    const movement = Promise.withResolvers<boolean>();
+    const publication = deferred<boolean>();
+    const movement = deferred<boolean>();
     const controller = { begin: vi.fn(async () => "window"), move: vi.fn(() => movement.promise), finish: vi.fn(async () => true), cancel: vi.fn(async () => true) };
     effects.publish.mockImplementationOnce(async () => {
       expect(filesBufferText(required(projectFilesState(PROJECT).byKey[f.key]))).toBe("latest draft");
