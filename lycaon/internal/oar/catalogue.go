@@ -425,6 +425,15 @@ var standardProfileFacts = map[string][]string{
 	},
 }
 
+func buildFactTiers() map[string]FactTier {
+	out := make(map[string]FactTier, len(factDecls)+len(occurrenceFactDecls)+len(observationFns))
+	eachDeclaredFact(func(d factDecl) { out[d.name] = d.tier })
+	for _, f := range observationFns {
+		out[f.name] = f.tier
+	}
+	return out
+}
+
 // PublishedFactName namespaces host facts and leaves standard names bare ([OAR-FACT-18]).
 func PublishedFactName(name string) string {
 	if published := publishedHostName(name, bareFactTiers[name]); published != "" {

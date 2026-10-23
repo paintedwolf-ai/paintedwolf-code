@@ -88,4 +88,3 @@ func TestOccurrenceFactDeclsPublishedInActivation(t *testing.T) {
 		t.Fatalf("paintedwolf.worker_leg = %v, want true", act["paintedwolf.worker_leg"])
 	}
 }
-

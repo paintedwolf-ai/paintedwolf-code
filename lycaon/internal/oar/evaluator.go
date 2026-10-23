@@ -53,8 +53,8 @@ func containsExact(list []string, want string) bool {
 
 // selectorFacts belongs to one selection pass; providers may change its source.
 type selectorFacts struct {
-	context *GuardContext
-	values map[string]any
+	context  *GuardContext
+	values   map[string]any
 	computed int
 }
 
