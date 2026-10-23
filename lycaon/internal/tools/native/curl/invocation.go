@@ -3,13 +3,14 @@ package curl
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/httpaction"
 	"github.com/lycaon/lycaon/internal/outboundhttp"
@@ -19,8 +20,7 @@ import (
 )
 
 // Transfer is one completed exchange's identity: the bytes the server sent
-// and the bytes handed downstream after screening, which differ only when
-// screening replaced a protected value.
+// and the response body handed downstream, after any requested decompression.
 type Transfer struct {
 	Status         int
 	FinalURL       string
@@ -28,7 +28,6 @@ type Transfer struct {
 	ReceivedSHA256 string
 	EmittedBytes   int64
 	EmittedSHA256  string
-	Redacted       bool
 }
 
 // invocation is one curl run: its options, streams, captured destinations
@@ -106,10 +105,10 @@ func (inv *invocation) run() error {
 		return err
 	}
 	resp := ex.Response
-	inv.transfer = Transfer{Status: resp.Status, FinalURL: ex.FinalURL, ReceivedBytes: resp.Bytes, ReceivedSHA256: ex.ReceivedSHA256}
+	inv.transfer = Transfer{Status: resp.Status, FinalURL: ex.FinalURL, ReceivedBytes: resp.Bytes, ReceivedSHA256: resp.SHA256}
 	// curl writes every followed hop's header block, then the final one.
 	// Cleartext responses keep received order and spelling; TLS responses
-	// present the owner's normalized order. Set-Cookie stays withheld.
+	// present the owner's normalized order.
 	var blocks strings.Builder
 	for _, hop := range ex.Redirects {
 		blocks.WriteString(presentedBlock(hop.StatusLine, hop.Headers, hop.Wire))
@@ -138,9 +137,9 @@ func (inv *invocation) run() error {
 	if inv.opts.include || inv.opts.head {
 		body.WriteString(headers)
 	}
-	if err := inv.screen(received, &body); err != nil {
-		return err
-	}
+	body.Write(received)
+	sum := sha256.Sum256(received)
+	inv.transfer.EmittedBytes, inv.transfer.EmittedSHA256 = int64(len(received)), hex.EncodeToString(sum[:])
 	if output != nil {
 		if err := inv.dests.Publish(inv.ctx, *output, body.Bytes()); err != nil {
 			return err
@@ -154,31 +153,6 @@ func (inv *invocation) run() error {
 		}
 	}
 	return inv.writeOut(resp.Status, resp.Bytes, ex.FinalURL)
-}
-
-// screen passes the owner's emitted body through the capture owner's
-// response screening and records both identities.
-func (inv *invocation) screen(body []byte, dst *bytes.Buffer) error {
-	budget, err := commandprogram.NewByteBudget("stream_bytes", inv.owners.limits["stream_bytes"])
-	if err != nil {
-		return err
-	}
-	scope := captureprojection.ScopeFor(inv.tc.Identity.ProjectID, inv.tc.ChatSessionID(), inv.tc.Identity.SessionID)
-	pipe, err := commandprogram.NewScreenedPipe(inv.ctx, inv.owners.Screening.Projector, scope, "curl response", io.NopCloser(bytes.NewReader(body)), inv.owners.Screening.Options, budget)
-	if err != nil {
-		return err
-	}
-	_, copyErr := io.Copy(dst, pipe)
-	_ = pipe.Close()
-	metadata, err := pipe.Wait(inv.ctx)
-	if copyErr != nil {
-		return copyErr
-	}
-	if err != nil {
-		return err
-	}
-	inv.transfer.EmittedBytes, inv.transfer.EmittedSHA256, inv.transfer.Redacted = metadata.EmittedBytes, metadata.EmittedSHA256, metadata.Redacted
-	return nil
 }
 
 // writeOut renders -w after the transfer; a failed transfer reports 000.
@@ -207,7 +181,7 @@ func (inv *invocation) writeOut(status int, size int64, finalURL string) error {
 
 func presentedBlock(statusLine string, headers []outboundhttp.Header, wire *outboundhttp.WireHeaders) string {
 	if wire != nil {
-		return headerBlock(wire.StatusLine, wire.Headers)
+		return wire.Raw
 	}
 	return headerBlock(statusLine, headers)
 }

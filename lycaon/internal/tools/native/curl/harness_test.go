@@ -10,12 +10,10 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/httpaction"
 	"github.com/lycaon/lycaon/internal/sandbox"
-	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolprofiles"
@@ -25,9 +23,6 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/native/mutation"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
-
-// protectedValue is a managed secret the capture owner screens from output.
-const protectedValue = "curl-fixture-protected-response-value"
 
 type pinLog struct {
 	mu   sync.Mutex
@@ -43,11 +38,6 @@ func (l *pinLog) AppendRevisionPin(_ context.Context, execution string, pin tool
 	l.pins[execution] = append(l.pins[execution], pin)
 	return nil
 }
-
-type screenMemory struct{}
-
-func (screenMemory) ReserveBytes(ctx context.Context, _ int64) error { return ctx.Err() }
-func (screenMemory) ReleaseBytes(int64)                              {}
 
 type harness struct {
 	t       *testing.T
@@ -76,13 +66,7 @@ func newHarness(t *testing.T) *harness {
 		Copy: &native.CopyTool{Boundary: boundary}, Mkdir: &native.MkdirTool{Boundary: boundary}, Chmod: &native.ChmodTool{Boundary: boundary},
 		Chown: &native.ChownTool{Boundary: boundary}, Times: &native.TimesTool{Boundary: boundary}, Extract: &native.ExtractArchiveTool{Boundary: boundary}})
 	testutil.FailErr(t, "mutation owners", err)
-	matcher := secretmatch.NewInertMatcher()
-	matcher.SetHarvestSource(func(context.Context) []secretmatch.HarvestedValue {
-		return []secretmatch.HarvestedValue{{Secret: protectedValue, RuleID: secretmatch.ManagedRuleID, NonDisclosable: true}}
-	})
-	screening := Screening{Projector: captureprojection.New(matcher, nil), Options: captureprojection.StreamOptions{WorkingMemory: screenMemory{},
-		Bounds: secretmatch.StreamBounds{InputBytes: 64 << 20, OutputBytes: 64 << 20, MemoryBytes: 32 << 20, DetectorWork: 1 << 40}}}
-	owners, err := NewOwners(httpaction.Deps{Boundary: boundary}, mutations, screening)
+	owners, err := NewOwners(httpaction.Deps{Boundary: boundary}, mutations)
 	testutil.FailErr(t, "curl owners", err)
 	paths, err := projectpaths.NewProgramPaths(t.Context(), boundary, tc, "")
 	testutil.FailErr(t, "program paths", err)
@@ -90,6 +74,7 @@ func newHarness(t *testing.T) *harness {
 }
 
 type run struct {
+	mode           string
 	stdout, stderr string
 	result         toolcontract.ProducerResult
 	err            error
@@ -116,7 +101,7 @@ func (h *harness) curl(ctx context.Context, words ...string) run {
 	if validErr := result.Validate(); validErr != nil {
 		h.t.Fatalf("curl %v produced an invalid result %+v: %v", words, result, validErr)
 	}
-	return run{stdout: stdout.String(), stderr: stderr.String(), result: result, err: err, execution: inv.Identity.ExecutionID, transfer: prepared.Transfer()}
+	return run{mode: prepared.Mode, stdout: stdout.String(), stderr: stderr.String(), result: result, err: err, execution: inv.Identity.ExecutionID, transfer: prepared.Transfer()}
 }
 
 func (h *harness) path(rel string) string { return filepath.Join(h.root, filepath.FromSlash(rel)) }

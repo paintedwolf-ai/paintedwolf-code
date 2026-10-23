@@ -354,6 +354,9 @@
         },
         {
           "requires": [
+            "read-request-inputs",
+            "egress",
+            "secret-disclosure",
             "write",
             "review",
             "revision",
@@ -395,7 +398,7 @@
           }
         }
       },
-      "notes": "Existing HTTP owner, ordered repeated headers, body/redirect/cookie/screens. -s suppress progress (no routine progress output), -S keeps error, -sS bundle. -i/-D raw screened status+headers CRLF; -w only %{http_code},%{size_download},%{url_effective},%{time_total},%% and escaped LF/tab. -D - stdout; -o /dev/null typed sink. -b name=value or jar path, -c jar staged. URLencode variants name=value/name@path/@path/=value and multipart @path read through authority. -k/--insecure refuses with COMMAND_TLS_VERIFICATION_REQUIRED: the egress policy has no unverified TLS mode. --compressed requests deflate, gzip and decodes the body; -i/-D keep the received Content-Encoding. -A sets User-Agent. -G sends data parts as the query of a GET. --json sends concatenated JSON with application/json Content-Type and Accept unless set. -f is --fail. No automatic HTTP retry or replay; non-idempotent unknown stays unknown. Loopback requires actual owned live listener or explicit current authority.",
+      "notes": "Existing HTTP owner, ordered repeated headers, body/redirect/cookie/screens. -s suppress progress (no routine progress output), -S keeps error, -sS bundle. -i/-D received status+headers CRLF; -w only %{http_code},%{size_download},%{url_effective},%{time_total},%% and escaped LF/tab. -D - stdout; -o /dev/null typed sink. -b name=value or jar path, -c jar staged. URLencode variants name=value/name@path/@path/=value and multipart @path read through authority. -k/--insecure refuses with COMMAND_TLS_VERIFICATION_REQUIRED: the egress policy has no unverified TLS mode. --compressed requests deflate, gzip and decodes the body; -i/-D keep the received Content-Encoding. -A sets User-Agent. -G sends data parts as the query of a GET. --json sends concatenated JSON with application/json Content-Type and Accept unless set. -f is --fail. No automatic HTTP retry or replay; non-idempotent unknown stays unknown. Loopback requires actual owned live listener or explicit current authority.",
       "reuse": {
         "implementation": "lycaon/internal/httpaction/tool.go",
         "tests": [

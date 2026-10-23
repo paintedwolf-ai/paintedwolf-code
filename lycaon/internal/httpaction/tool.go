@@ -5,8 +5,6 @@ import (
 	"github.com/lycaon/lycaon/internal/capabilityrequest"
 
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -101,7 +99,7 @@ func Register(reg *tools.DefaultRegistry, deps Deps) error {
 		return fmt.Errorf("registry and sandbox boundary required")
 	}
 	return reg.Register("http_request", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-		ex, err := exchange(ctx, deps, args, tctx, ExchangeOptions{})
+		ex, err := exchange(ctx, deps, args, tctx, ExchangeOptions{}, modelResponse)
 		var transport *TransportFailure
 		if errors.As(err, &transport) {
 			return "", transport.Reject
@@ -137,7 +135,7 @@ func Register(reg *tools.DefaultRegistry, deps Deps) error {
 
 // ExchangeOptions select a typed frontend's response handling. Jar replaces
 // a named cookie jar with a frontend-owned one; MaxBodyBytes keeps the whole
-// scrubbed body in Exchange.Response.Body up to that bound; RedirectLimit
+// received body in Exchange.Response.Body up to that bound; RedirectLimit
 // bounds followed redirects within the owner's maximum; ConnectTimeout bounds
 // each hop's connection separately from the exchange timeout.
 type ExchangeOptions struct {
@@ -145,23 +143,17 @@ type ExchangeOptions struct {
 	MaxBodyBytes   int64
 	RedirectLimit  int
 	ConnectTimeout time.Duration
-	// WireHeaders keeps a cleartext final response's header block as received.
+	// WireHeaders keeps complete headers and any observable cleartext block.
 	WireHeaders bool
 }
 
-// Exchange is one completed request through this owner, typed for frontends
-// that present it themselves. Response.Body holds the emitted bytes: after
-// the owner scrubbed any echoed protected value. ReceivedSHA256 identifies
-// the bytes the server sent; EmittedSHA256 the bytes handed on.
+// Exchange is a command frontend's unmodified response. Presentation and
+// screening belong to the command's model-delivery boundary.
 type Exchange struct {
-	Response outboundhttp.Response
-	FinalURL string
-	// Redirects are the followed hops with their presented response headers.
-	Redirects      []outboundhttp.Hop
-	SentHeaders    []outboundhttp.Header
-	ReceivedSHA256 string
-	EmittedSHA256  string
-	BodyRedacted   bool
+	Response    outboundhttp.Response
+	FinalURL    string
+	Redirects   []outboundhttp.Hop
+	SentHeaders []outboundhttp.Header
 }
 
 // Perform runs one request with the same screening, approval, secret,
@@ -177,13 +169,11 @@ func Perform(ctx context.Context, deps Deps, args map[string]any, tctx tools.Too
 			return Exchange{}, invalid(fmt.Errorf("a frontend cookie jar replaces cookie_jar"))
 		}
 	}
-	ex, err := exchange(ctx, deps, args, tctx, opts)
+	ex, err := exchange(ctx, deps, args, tctx, opts, commandResponse)
 	if err != nil {
 		return Exchange{}, err
 	}
-	sum := sha256.Sum256(ex.resp.Body)
-	return Exchange{Response: ex.resp, FinalURL: ex.finalURL, Redirects: ex.redirects, SentHeaders: ex.sentHeaders, ReceivedSHA256: ex.receivedSHA256,
-		EmittedSHA256: hex.EncodeToString(sum[:]), BodyRedacted: ex.bodyRedacted}, nil
+	return Exchange{Response: ex.resp, FinalURL: ex.finalURL, Redirects: ex.redirects, SentHeaders: ex.sentHeaders}, nil
 }
 
 // TransportFailure is a request the owner started that failed in transport.
@@ -199,21 +189,27 @@ func (f *TransportFailure) Error() string   { return f.Reject.Error() }
 func (f *TransportFailure) Unwrap() []error { return []error{f.Reject, f.Cause} }
 
 type exchanged struct {
-	spec           requestSpec
-	outbound       outboundRequest
-	resp           outboundhttp.Response
-	landed         *inboundwrite.Receipt
-	finalURL       string
-	redirects      []outboundhttp.Hop
-	sentHeaders    []outboundhttp.Header
-	tokens         *tokenReceipt
-	cookies        *cookieReceipt
-	receivedSHA256 string
-	bodyRedacted   bool
+	spec         requestSpec
+	outbound     outboundRequest
+	resp         outboundhttp.Response
+	landed       *inboundwrite.Receipt
+	finalURL     string
+	redirects    []outboundhttp.Hop
+	sentHeaders  []outboundhttp.Header
+	tokens       *tokenReceipt
+	cookies      *cookieReceipt
+	bodyRedacted bool
 }
 
+type responseUse uint8
+
+const (
+	modelResponse responseUse = iota
+	commandResponse
+)
+
 // exchange is the owner's complete request lifecycle up to presentation.
-func exchange(ctx context.Context, deps Deps, args map[string]any, tctx tools.ToolContext, opts ExchangeOptions) (exchanged, error) {
+func exchange(ctx context.Context, deps Deps, args map[string]any, tctx tools.ToolContext, opts ExchangeOptions, use responseUse) (exchanged, error) {
 	ctx = withRequestFiles(ctx)
 	spec, err := parseRequestSpec(ctx, deps.Boundary, tctx, args)
 	if err != nil {
@@ -291,9 +287,12 @@ func exchange(ctx context.Context, deps Deps, args map[string]any, tctx tools.To
 	if tokenReject != nil {
 		return exchanged{}, tokenReject
 	}
-	received := resp.SHA256
-	// The response is scrubbed before it is placed, landed, or spilled.
-	resp, bodyRedacted := scrubResponse(resp, tokenJar, tctx.Effects.Secrets)
+	bodyRedacted := false
+	finalURL, redirects := resp.FinalURL, resp.Redirects
+	if use == modelResponse {
+		resp, bodyRedacted = scrubResponse(resp, tokenJar, tctx.Effects.Secrets)
+		finalURL, redirects = observedURLs(tctx.Effects.Secrets, resp.FinalURL, resp.Redirects)
+	}
 	if bufferedBody != nil {
 		receipt, err := inboundwrite.Write(ctx, deps.Boundary, tctx, spec.disposition.path, resp.Body, "HTTP_REQUEST_RESPONSE_PATH_DENIED")
 		if err != nil {
@@ -301,10 +300,9 @@ func exchange(ctx context.Context, deps Deps, args map[string]any, tctx tools.To
 		}
 		landed = &receipt
 	}
-	finalURL, redirects := observedURLs(tctx.Effects.Secrets, resp.FinalURL, resp.Redirects)
 	return exchanged{spec: spec, outbound: outbound, resp: resp, landed: landed, finalURL: finalURL, redirects: redirects,
 		sentHeaders: sentHeaders(spec, statedHeaders(tctx, args, screened)), tokens: tokenRec,
-		cookies: saveCookieJar(ctx, deps, jarReq, jar), receivedSHA256: received, bodyRedacted: bodyRedacted}, nil
+		cookies: saveCookieJar(ctx, deps, jarReq, jar), bodyRedacted: bodyRedacted}, nil
 }
 
 // parseRequestSpec validates declared fields before screening or transport.

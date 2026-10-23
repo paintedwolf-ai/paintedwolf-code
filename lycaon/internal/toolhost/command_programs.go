@@ -5,11 +5,9 @@ import (
 	"errors"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/sandbox"
-	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	reposurvey "github.com/lycaon/lycaon/internal/survey"
 	"github.com/lycaon/lycaon/internal/textsearch"
@@ -27,12 +25,6 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/native/textutil"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
-
-type curlScreenMemory struct{}
-
-func (curlScreenMemory) ReserveWorking(context.Context, int64) (func(), error) {
-	return func() {}, nil
-}
 
 // programOwnerTools are the structured tools the command program owners share.
 type programOwnerTools struct {
@@ -83,24 +75,13 @@ func (t programOwnerTools) compose(services ProgramServices) (func(tools.ToolCon
 	if err != nil {
 		return nil, err
 	}
-	var curlOwners *curl.Owners
-	if services.Projector != nil {
-		httpDeps := services.HTTP
-		if httpDeps.Boundary == nil {
-			httpDeps.Boundary = t.boundary
-		}
-		curlOwners, err = curl.NewOwners(revisions, recorder, t.operations.Write, httpDeps, curl.Screening{
-			Projector: services.Projector,
-			Options: func(tools.ToolContext) captureprojection.StreamOptions {
-				return captureprojection.StreamOptions{
-					WorkingMemory: curlScreenMemory{},
-					Bounds:        secretmatch.StreamBounds{InputBytes: 64 << 20, OutputBytes: 64 << 20, MemoryBytes: 64 << 20, DetectorWork: 1 << 30},
-				}
-			},
-		})
-		if err != nil {
-			return nil, err
-		}
+	httpDeps := services.HTTP
+	if httpDeps.Boundary == nil {
+		httpDeps.Boundary = t.boundary
+	}
+	curlOwners, err := curl.NewOwners(httpDeps, mutationOwners)
+	if err != nil {
+		return nil, err
 	}
 	return func(tc tools.ToolContext, paths *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
 		barrier := &native.PublicationBarrier{}
@@ -184,7 +165,7 @@ func (t programOwnerTools) compose(services ProgramServices) (func(tools.ToolCon
 		if curlOwners != nil {
 			tool, _ := curlOwners.Operation("curl")
 			owners.Natives["curl"] = command.NativeOperation{Tool: tool, Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
-				prepared, err := curlOwners.Prepare(curl.Program{Paths: frame, Barrier: barrier}, request)
+				prepared, err := curlOwners.Prepare(mutation.Program{Paths: frame, Barrier: barrier}, request)
 				if err != nil {
 					return command.NativePrepared{}, err
 				}
