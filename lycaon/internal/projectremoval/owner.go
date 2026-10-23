@@ -131,6 +131,10 @@ func (o *Owner) accept(ctx context.Context, projectID string, req wire.ProjectRe
 		replay, err := o.replay(ctx, row)
 		return acceptedRemoval{result: replay}, err
 	}
+	// A running operation keeps the project's lifecycle; a new id is refused, not recorded as a failure.
+	if o.liveForProject(projectID) {
+		return acceptedRemoval{}, fmt.Errorf("project removal already running: %w", project.ErrProjectBusy)
+	}
 	assessment, err := o.reviewSelection(ctx, projectID, req)
 	if err != nil {
 		return acceptedRemoval{}, err
@@ -147,22 +151,24 @@ func (o *Owner) accept(ctx context.Context, projectID string, req wire.ProjectRe
 }
 
 func (o *Owner) execute(ctx context.Context, projectID string, req wire.ProjectRemovalRequest, assessment wire.ProjectRemovalAssessment, result wire.ProjectRemovalResult) (wire.ProjectRemovalResult, error) {
+	// Receipts outlive runner cancellation: a run stopped by shutdown still records the observed state.
+	receiptCtx := context.WithoutCancel(ctx)
 	if err := o.Delete(ctx, projectID, req.Force, func(progress wire.ProjectRemovalProgress) { o.progress(req.OperationID, progress) }); err != nil {
 		slog.WarnContext(ctx, "project removal did not complete", "project_id", projectID, "operation_id", req.OperationID, "err", err)
-		result = o.deletionFailure(ctx, result, err)
-		return result, o.Store.save(ctx, result, true)
+		result = o.deletionFailure(receiptCtx, result, err)
+		return result, o.Store.save(receiptCtx, result, true)
 	}
 	result.ProjectState = "deleted"
 	if len(req.RemoveExtensions) == 0 {
-		return result, o.Store.save(ctx, result, true)
+		return result, o.Store.save(receiptCtx, result, true)
 	}
 	result.CleanupState = "interrupted"
-	if err := o.Store.save(ctx, result, false); err != nil {
+	if err := o.Store.save(receiptCtx, result, false); err != nil {
 		return result, err
 	}
 	o.progress(req.OperationID, wire.ProjectRemovalProgress{Phase: "extensions"})
 	result = o.cleanup(ctx, assessment, req, result)
-	return result, o.Store.save(ctx, result, true)
+	return result, o.Store.save(receiptCtx, result, true)
 }
 
 func (o *Owner) deletionFailure(ctx context.Context, result wire.ProjectRemovalResult, cause error) wire.ProjectRemovalResult {

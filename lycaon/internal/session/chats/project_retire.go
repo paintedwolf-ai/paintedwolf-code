@@ -24,16 +24,15 @@ func (m *Service) RetireForProjectDelete(ctx context.Context, projectID string, 
 		return err
 	}
 	completed := 0
-	if progress != nil {
-		progress(0, plan.total)
-	}
-	for _, root := range plan.roots {
-		if err := m.retireSessionForProjectDelete(ctx, root); err != nil {
-			return err
-		}
-		completed += len(root.tree)
+	report := func() {
 		if progress != nil {
 			progress(completed, plan.total)
+		}
+	}
+	report()
+	for _, root := range plan.roots {
+		if err := m.retireSessionForProjectDelete(ctx, root, func() { completed++; report() }); err != nil {
+			return err
 		}
 	}
 	if m.events != nil && !m.store.MutationEventsOutboxed() {
@@ -42,15 +41,22 @@ func (m *Service) RetireForProjectDelete(ctx context.Context, projectID string, 
 	return nil
 }
 
+// retireSessionForProjectDelete releases one root tree; retired reports each
+// chat whose runtime is gone, so a single large tree still shows movement.
 func (m *Service) retireSessionForProjectDelete(
 	ctx context.Context,
 	root retirementRoot,
+	retired func(),
 ) error {
 	sess, tree := root.session, root.tree
 	var deleted []*wire.Session
 	if !m.store.MutationEventsOutboxed() {
 		for _, id := range tree {
 			session, err := m.store.Get(ctx, id)
+			if errors.Is(err, store.ErrSessionNotFound) {
+				// Already gone since planning; nothing is left to announce.
+				continue
+			}
 			if err != nil {
 				return err
 			}
@@ -68,6 +74,7 @@ func (m *Service) retireSessionForProjectDelete(
 		if err := m.DisposeRuntime(ctx, id); err != nil {
 			return fmt.Errorf("dispose session runtime: %w", err)
 		}
+		retired()
 	}
 	if err := m.store.Delete(ctx, sess.ID); err != nil && !errors.Is(err, store.ErrSessionNotFound) {
 		return err

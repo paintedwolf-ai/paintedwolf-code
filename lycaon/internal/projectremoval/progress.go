@@ -9,6 +9,18 @@ func (o *Owner) live(projectID, operationID string) (wire.ProjectRemovalResult, 
 	return result, ok && result.ProjectID == projectID
 }
 
+// liveForProject reports whether any accepted operation for the project is still running.
+func (o *Owner) liveForProject(projectID string) bool {
+	o.activeMu.RLock()
+	defer o.activeMu.RUnlock()
+	for _, result := range o.active {
+		if result.ProjectID == projectID {
+			return true
+		}
+	}
+	return false
+}
+
 func (o *Owner) track(result wire.ProjectRemovalResult) {
 	o.activeMu.Lock()
 	defer o.activeMu.Unlock()

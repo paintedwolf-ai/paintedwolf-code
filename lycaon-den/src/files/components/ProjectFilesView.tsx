@@ -54,7 +54,7 @@ export function ProjectFilesView(props: ProjectFilesViewProps) {
   });
   /** Requests name the chat selected when they run; nothing observes it. */
   const sourceSessionId = () => untrack(chatSessionId);
-  const { filesWorkspaceId, filesSourceAddress, filesRoots, projectMutationPending, workspaceError, workspaceFault, workspaceSettled,
+  const { filesWorkspaceId, filesSourceAddress, filesRoots, workspaceError, workspaceFault, workspaceSettled,
     treeSettled, setTreeSettled, refreshProjectWorkspace, refreshWatchCoverage, observationNoticeFor, directoryEntries, confirmDirectoryChange, observeDirectory,
   } = createFilesWorkspace({
     projectId: props.projectId, roots: () => props.roots, client, chatSessionId,
@@ -80,7 +80,7 @@ export function ProjectFilesView(props: ProjectFilesViewProps) {
   const presentation = createFilesWorkspacePresentation({
     projectId: props.projectId, projectName: () => props.projectName,
     document: () => props.document, state, activeBuffer, aimedKey,
-    workspaceFault, workspaceError, projectMutationPending, workspaceSettled, treeSettled, filesWorkspaceId,
+    workspaceFault, workspaceError, workspaceSettled, treeSettled, filesWorkspaceId,
   });
   const { holdLabel, holdHint, holdTone, treeWorkspaceId, stageReady,
     retainedWorkspacePending, showRetainedWorkspaceWait, displayedPane, setDisplayedPane,

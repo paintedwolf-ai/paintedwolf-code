@@ -1,5 +1,6 @@
 import type { LycaonClient } from "../../api/client.ts";
 import { LycaonApiError, isApiErrorCode } from "../../api/http.ts";
+import { BackendTransportError } from "../../platform/connection/request-connectivity.ts";
 import type {
   ProjectRemovalAssessment,
   ProjectRemovalRequest,
@@ -13,6 +14,12 @@ import type { NoticeInput } from "../../notices/notice-model.ts";
 
 /** Failures after which the removal may still have settled on the host. */
 const OUTCOME_UNKNOWN_CODES = ["internal_error", "host_fault"] as const;
+
+/** Consecutive unanswered status reads before the outcome is reported as unconfirmed. */
+const STATUS_TRANSPORT_RETRIES = 8;
+
+const statusPause = (unanswered: number) =>
+  new Promise<void>((resolve) => setTimeout(resolve, Math.min(15_000, 1000 * 2 ** Math.min(unanswered, 4))));
 
 type RemovalClient = Pick<
   LycaonClient,
@@ -47,7 +54,8 @@ export function createProjectRemoval(options: {
   notify: (notice: NoticeInput) => void;
   extensionsChanged: () => void;
   progress?: (projectId: string, progress: ProjectRemovalProgress | null) => void;
-  pause?: () => Promise<void>;
+  /** Waits before the next status read; `unanswered` counts consecutive transport gaps. */
+  pause?: (unanswered: number) => Promise<void>;
   operationId?: () => string;
 }) {
   const active = new Map<string, Promise<void>>();
@@ -110,14 +118,18 @@ export function createProjectRemoval(options: {
   const settle = async (client: RemovalClient, projectId: string, req: ProjectRemovalRequest) => {
     let result = await execute(client, projectId, req);
     let lastProgress = "";
+    let unanswered = 0;
     while (result.progress) {
       const current = JSON.stringify(result.progress);
       if (current !== lastProgress) options.progress?.(projectId, result.progress);
       lastProgress = current;
-      await (options.pause?.() ?? new Promise<void>((resolve) => setTimeout(resolve, 1000)));
+      await (options.pause ?? statusPause)(unanswered);
       try {
         result = await client.getProjectRemoval(projectId, req.operation_id);
+        unanswered = 0;
       } catch (cause) {
+        // The host owns accepted work; a transport gap only delays the next status read.
+        if (cause instanceof BackendTransportError && ++unanswered < STATUS_TRANSPORT_RETRIES) continue;
         const error = clientNoticeError("project_removal_unconfirmed");
         error.cause = cause;
         throw error;

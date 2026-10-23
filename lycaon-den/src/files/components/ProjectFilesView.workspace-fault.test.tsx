@@ -7,6 +7,8 @@ import type { LycaonClient } from "../../api/client.ts";
 import { LycaonApiError } from "../../api/http.ts";
 import { BackendTransportError } from "../../platform/connection/request-connectivity.ts";
 import { getLycaonClient } from "../../platform/connection/app-connection.ts";
+import { createNoticeStore, registerNoticePublisher } from "../../notices/notice-store.ts";
+import { selectProjectNoticeGroups } from "../../notices/notice-select.ts";
 import { createAppStore } from "../../store/app-state.ts";
 import { createPreparation } from "../../ui/presentation.ts";
 import { PresentationProvider } from "../../ui/presentation-context.tsx";
@@ -45,7 +47,7 @@ function renderFilesView(client: LycaonClient, roots: ProjectRoot[] = []) {
 
 describe("ProjectFilesView workspace lookup faults", () => {
   beforeEach(resetProjectFilesViewTest);
-  afterEach(() => vi.useRealTimers());
+  afterEach(() => { registerNoticePublisher(null); vi.useRealTimers(); });
 
   it("faults instead of spinning when listings keep naming another workspace", async () => {
     const base = getLycaonClient()!;
@@ -128,10 +130,12 @@ describe("ProjectFilesView workspace lookup faults", () => {
   });
 
   it.each([
-    ["a missing HTTP response", () => new BackendTransportError(new TypeError("Failed to fetch"), "reachable")],
-    ["an active root transition", () => new LycaonApiError("Project is changing", 409, "project_mutation_in_progress")],
-  ])("recovers from %s and reports the wait on the veil", async (_label, failure) => {
+    ["a missing HTTP response", () => new BackendTransportError(new TypeError("Failed to fetch"), "reachable"), true],
+    ["an active root transition", () => new LycaonApiError("Project is changing", 409, "project_mutation_in_progress"), false],
+  ])("recovers from %s and reports the wait on the veil", async (_label, failure, syncFailureReported) => {
     const base = getLycaonClient()!;
+    const notices = createNoticeStore();
+    registerNoticePublisher(notices);
     let calls = 0;
     const getSourceWorkspace = vi.fn(async () => {
       calls += 1;
@@ -153,6 +157,10 @@ describe("ProjectFilesView workspace lookup faults", () => {
       message: workspaceRetryMessage(failure()),
       tone: "waiting",
     });
+    // A transport gap is an editor sync failure; the host's own lifecycle wait is not.
+    const reportedCodes = selectProjectNoticeGroups(notices.index())
+      .flatMap((group) => group.notices.map((notice) => notice.code));
+    expect(reportedCodes.includes("files_workspace_syncing")).toBe(syncFailureReported);
 
     const boundary = screen.getByTestId("project-files-stage-boundary");
     await waitFor(

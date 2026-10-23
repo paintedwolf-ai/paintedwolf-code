@@ -11,10 +11,11 @@ import { useSurfaceReveal } from "../../ui/surface-reveal.ts";
 import { filesPaneKey, parseFilesPaneKey } from "./files-pane-key.ts";
 import { selectedFileVersion } from "../history/files-version-selection.ts";
 import { createFilesWorkspace } from "../source/files-workspace.ts";
+import { WORKSPACE_PROJECT_MUTATION_WAITING } from "../source/files-workspace-fault.ts";
 import type { FilesScope } from "./files-scope.ts";
 
 type WorkspacePresentation = Pick<ReturnType<typeof createFilesWorkspace>,
-  "projectMutationPending" | "workspaceFault" | "workspaceError" | "workspaceSettled" | "treeSettled" | "filesWorkspaceId"> &
+  "workspaceFault" | "workspaceError" | "workspaceSettled" | "treeSettled" | "filesWorkspaceId"> &
   Pick<FilesScope, "state" | "activeBuffer" | "aimedKey"> & {
     projectId: string;
     projectName: () => string | undefined;
@@ -23,7 +24,7 @@ type WorkspacePresentation = Pick<ReturnType<typeof createFilesWorkspace>,
 
 export function createFilesWorkspacePresentation(options: WorkspacePresentation) {
   const { projectId, projectName, document, state, activeBuffer, aimedKey,
-    workspaceFault, workspaceError, projectMutationPending, workspaceSettled, treeSettled, filesWorkspaceId } = options;
+    workspaceFault, workspaceError, workspaceSettled, treeSettled, filesWorkspaceId } = options;
   const holdLabel = () => {
     const target = document();
     return target ? basenameOfPath(target.path) : projectName();
@@ -41,7 +42,11 @@ export function createFilesWorkspacePresentation(options: WorkspacePresentation)
       title: "Editor sync is unavailable",
       suggestedAction: "Files keep retrying on their own; if it persists, check the connection to the host.",
     },
-    () => projectMutationPending() ? null : workspaceError(),
+    // A lifecycle wait is the host's own transition, not an editor sync failure.
+    () => {
+      const retrying = workspaceError();
+      return retrying === WORKSPACE_PROJECT_MUTATION_WAITING ? null : retrying;
+    },
     () => projectId,
   );
   const holdHint = () => holdNotice()?.message;

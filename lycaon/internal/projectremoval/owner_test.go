@@ -316,3 +316,38 @@ func TestDuplicateConcurrentRequestExecutesOnce(t *testing.T) {
 		t.Fatalf("deletion count = %d", calls)
 	}
 }
+
+func TestSecondOperationWhileRunningIsRefused(t *testing.T) {
+	o, reg, id := fixture(t)
+	entered, release, done := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	o.Run = func(ctx context.Context, work func(context.Context)) {
+		go func() { defer close(done); work(context.WithoutCancel(ctx)) }()
+	}
+	o.Delete = func(context.Context, string, bool, func(wire.ProjectRemovalProgress)) error {
+		close(entered)
+		<-release
+		delete(reg.rows, id)
+		return nil
+	}
+	first := wire.ProjectRemovalRequest{OperationID: uuid.NewString()}
+	accepted, err := o.Remove(t.Context(), id, first)
+	testutil.FailErr(t, "accept first operation", err)
+	if accepted.Progress == nil {
+		t.Fatalf("accepted = %+v", accepted)
+	}
+	<-entered
+	second := wire.ProjectRemovalRequest{OperationID: uuid.NewString()}
+	if _, err := o.Remove(t.Context(), id, second); !errors.Is(err, project.ErrProjectBusy) {
+		t.Fatalf("second operation error = %v, want project busy", err)
+	}
+	if _, found, err := o.Store.read(t.Context(), second.OperationID); err != nil || found {
+		t.Fatalf("refused operation journaled: found = %v, err = %v", found, err)
+	}
+	close(release)
+	<-done
+	settled, err := o.Result(t.Context(), id, first.OperationID)
+	testutil.FailErr(t, "settled first operation", err)
+	if settled.ProjectState != "deleted" || settled.Progress != nil {
+		t.Fatalf("settled = %+v", settled)
+	}
+}

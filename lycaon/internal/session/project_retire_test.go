@@ -50,7 +50,7 @@ func TestRetireForProjectDeleteRemovesSessionsAndAttention(t *testing.T) {
 
 	var progress [][2]int
 	testutil.FailErr(t, "retire", mgr.Chats.RetireForProjectDelete(ctx, p.ID, func(done, total int) { progress = append(progress, [2]int{done, total}) }))
-	if !reflect.DeepEqual(progress, [][2]int{{0, 3}, {2, 3}, {3, 3}}) {
+	if !reflect.DeepEqual(progress, [][2]int{{0, 3}, {1, 3}, {2, 3}, {3, 3}}) {
 		t.Fatalf("chat progress = %v", progress)
 	}
 	if _, err := mem.Get(ctx, archived.ID); !errors.Is(err, store.ErrSessionNotFound) {

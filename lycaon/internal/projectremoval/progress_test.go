@@ -70,3 +70,32 @@ func TestRunningRemovalDoesNotBlockStatusOrReplayEffects(t *testing.T) {
 		t.Fatalf("settled = %+v", settled)
 	}
 }
+
+func TestShutdownRecordsObservedOutcome(t *testing.T) {
+	o, _, projectID := fixture(t)
+	group := &taskgroup.Group{}
+	o.Run = group.Go
+	started := make(chan struct{})
+	o.Delete = func(ctx context.Context, _ string, _ bool, _ func(wire.ProjectRemovalProgress)) error {
+		close(started)
+		<-ctx.Done()
+		return ctx.Err()
+	}
+	req := wire.ProjectRemovalRequest{OperationID: uuid.NewString()}
+	_, err := o.Remove(t.Context(), projectID, req)
+	testutil.FailErr(t, "accept removal", err)
+	<-started
+	group.Stop()
+	group.Wait(t.Context())
+	// The runner's cancellation stops the work, not the receipt that records what it observed.
+	settled, err := o.Result(t.Context(), projectID, req.OperationID)
+	testutil.FailErr(t, "settled outcome", err)
+	if settled.Progress != nil || settled.ProjectState != "retained" || settled.FailureCode != "project_removal_failed" {
+		t.Fatalf("settled = %+v", settled)
+	}
+	row, found, err := o.Store.read(t.Context(), req.OperationID)
+	testutil.FailErr(t, "read journal", err)
+	if !found || !row.Settled {
+		t.Fatalf("shutdown left the receipt unsettled: %+v", row)
+	}
+}
