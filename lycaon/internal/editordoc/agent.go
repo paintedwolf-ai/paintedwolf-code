@@ -60,7 +60,7 @@ func (s *Service) OpenText(ctx context.Context, projectID string, branch sourceb
 	return d, true, nil
 }
 
-// DirtyDocuments lists the documents holding unsaved edits for files that exist.
+// DirtyDocuments lists documents holding unsaved edits, including deleted files.
 func (s *Service) DirtyDocuments(ctx context.Context, projectID string, branch sourcebranch.ID) ([]*Document, error) {
 	if s == nil || s.store == nil {
 		return nil, nil
@@ -69,7 +69,7 @@ func (s *Service) DirtyDocuments(ctx context.Context, projectID string, branch s
 	if err != nil {
 		return nil, err
 	}
-	documents, err := s.store.queryDocuments(ctx, `SELECT `+documentColumns+` FROM editor_documents WHERE project_id=? AND dirty=1 AND absent=0 ORDER BY path,id`, p.ID)
+	documents, err := s.store.queryDocuments(ctx, `SELECT `+documentColumns+` FROM editor_documents WHERE project_id=? AND dirty=1 ORDER BY path,id`, p.ID)
 	if err != nil {
 		return nil, err
 	}

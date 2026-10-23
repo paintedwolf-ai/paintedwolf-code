@@ -160,6 +160,7 @@ type sedInput struct {
 	sources   []source
 	delimiter byte
 	records   *records
+	offset    int64
 }
 
 func (r *sedRun) input(sources []source) *sedInput {
@@ -181,13 +182,18 @@ func (s *sedInput) Next() (sedscript.Record, error) {
 		}
 		text, terminated, err := s.records.nextTerminated()
 		if errors.Is(err, io.EOF) {
-			s.records, s.sources = nil, s.sources[1:]
+			s.records, s.sources, s.offset = nil, s.sources[1:], 0
 			continue
 		}
 		if err != nil {
 			return sedscript.Record{}, err
 		}
-		return sedscript.Record{Text: text, Terminated: terminated, Source: s.sources[0].name}, nil
+		recOffset := s.offset
+		s.offset += int64(len(text))
+		if terminated {
+			s.offset++
+		}
+		return sedscript.Record{Text: text, Terminated: terminated, Source: s.sources[0].name, Pin: s.sources[0].pin, Offset: recOffset}, nil
 	}
 	return sedscript.Record{}, io.EOF
 }

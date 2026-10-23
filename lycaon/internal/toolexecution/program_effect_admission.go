@@ -20,6 +20,12 @@ type ProgramSurface struct {
 	profile   string
 }
 
+// AllowsEffects reports the frozen profile and surface restriction only.
+// Reached operations still require full native admission.
+func (s ProgramSurface) AllowsEffects(effects toolcontract.CommandEffects) bool {
+	return s.allowed.Allows(effects)
+}
+
 // ValidateOperation admits already compiled immutable effect metadata. It is
 // also the static-unit check; callers run it for every known prohibited effect
 // before starting any program operation. It invokes no authority or owner.
@@ -29,7 +35,7 @@ func (s ProgramSurface) ValidateOperation(bound toolcontract.BoundOperation) err
 		return err
 	}
 	facts := definition.Facts()
-	if s.selection.denied[facts.Identity][bound.Command()] {
+	if s.selection.identityDenied[facts.Identity] || bound.Publication() == toolcontract.NoPublication && s.selection.denied[facts.Identity][bound.Command()] {
 		return s.profileReject("COMMAND_OPERATION_NOT_ALLOWED", facts, invocation)
 	}
 	if !s.allowed.Allows(bound.Effects()) {

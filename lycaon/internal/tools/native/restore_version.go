@@ -261,7 +261,7 @@ func (t *RestoreVersionTool) restoreContent(
 			}
 		}
 
-		landed, err := landEditedText(ctx, tctx, "restore_version", resolved, st, finalContent)
+		landed, err := landEditedText(ctx, tctx, "restore_version", resolved, st, editorTextProposal{Authored: targetContent, Reviewed: finalContent})
 		if err != nil {
 			return "", err
 		}

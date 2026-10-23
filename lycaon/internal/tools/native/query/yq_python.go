@@ -70,9 +70,6 @@ func runPythonYq(inv *invocation) error {
 			return err
 		}
 		inv.published = inv.published || written.Accepted || written.Saved
-		if err := inv.barrier.Track(written); err != nil {
-			return err
-		}
 	}
 	return nil
 }

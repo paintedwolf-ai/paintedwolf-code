@@ -41,9 +41,9 @@ explicit bounded contract; P13 selects and qualifies an engine rather than
 calling RE2 full PCRE. File signatures name format-identification evidence,
 not archive/database trust.
 
-Native document streams encode accepted text with the captured encoding, BOM
-and newline policy. A checksum and byte count cover that same representation;
-disk provenance remains separate. Exact delivered literal source windows may
+Native byte streams preserve the saved file representation, including its
+encoding, BOM and newline policy. Checksums and byte counts cover those saved
+bytes; decoded transforms retain explicit source mappings. Exact delivered literal source windows may
 qualify conversational edit evidence, while internal execution reads do not.
 This deliberately replaces the old mixed editor-line/disk-byte wc projection
 for command output. Diff reuses the existing engine; complete stream bounds
@@ -292,21 +292,46 @@ Unix fixtures and unsupported results do not qualify those capabilities. The
 same native macOS/Linux runtime and installed-platform qualification obligations
 remain; individual adapter tests do not qualify the complete command evaluator.
 
-Program operations pin execution revisions instead of conversational read bases.
-`native.ExecutionRevisions` captures each native input from the accepted shared
-document when one exists, otherwise from published disk, and captures each
-destination's revision or absence before the transform is prepared. A
-`WriteExecutionPinned` write rechecks the destination exactly in the document
-owner (or the write door's base check), rechecks its sources after review, and
-refuses with `COMMAND_REVISION_CONFLICT` when either moved; it never anchors,
-rebases, retries or reruns. External processes read published disk: their
-inputs are declared at launch as disk identities, not as observed reads. A
-`PublicationBarrier` refuses a dependent launch with
-`COMMAND_PUBLICATION_PENDING` while an accepted write is unsaved; the accepted
-state stays held and no other draft is saved. Each operation pins its own
-inputs, so a later statement captures newer revisions and sees earlier
-published writes; there is no whole-program snapshot. Program receipts retain
-the pins per execution.
+Program operations pin execution revisions from published disk. Native utilities,
+input redirections, Git, and external programs all read the saved file. After a
+reached operation is admitted, accepted changes authored only by that chat can
+publish through separate write admission, current review and the editor save
+path. Each preparation write has its own receipt. Read-only profiles read saved
+bytes without publishing drafts. Human and other chats' drafts stay unsaved.
+Redirects contribute their mutation effects before admission; input opening and
+destination capture happen after accepted-draft preparation settles. Earlier
+admitted operations may already have published when a later operation is refused.
+
+The initial response includes one note per affected path observed by native
+reads, stating that commands read the saved file. Notices first discovered by
+a background child reach its completion report; paths already reported in the
+initial response are not repeated. Native writes refuse dirty destinations with
+`COMMAND_REVISION_CONFLICT`. External programs retain ordinary sandbox write
+roots. Their outside saves merge with accepted and pending typing through the
+editor's existing filesystem-replica transition against the saved checkpoint.
+The editor's typing stays in the document even when a program changes disk.
+
+Each destination's revision or absence is captured before preparing its change.
+A `WriteExecutionPinned` write rechecks the destination in the document owner or
+write door and rechecks sources after review. Movement refuses with
+`COMMAND_REVISION_CONFLICT`, without refreshing or rerunning the operation. If an
+editor accepts a command's write but cannot save it, that exact write stops with
+`COMMAND_PUBLICATION_PENDING`. Its accepted revision and held recovery version
+remain in the receipt; later children do not run. There is no dependent-launch
+barrier or draft substitution.
+
+Each operation captures its own inputs, so later statements see earlier saved
+writes rather than a whole-program snapshot. Internal captures, pipes and
+external printed paths grant no editor read basis. Exact source mappings credit
+only complete source lines actually delivered to the model, at the matching
+saved revision. Omitted, changed or partial-line bytes grant none. A later
+structured `edit` or `replace_lines` may change those seen lines; other lines
+still require a read. Read scopes stay frozen with both their revision and line
+coverage for each model response. The current inline delivery withholds credit
+when top-level output writers overlap or pass through nested tees rather than
+assigning ambiguous source positions. Optional editor credit reserves bounded
+snapshot and encoding capacity before opening the document; if that capacity is
+unavailable, output remains delivered and a later edit needs a fresh read.
 
 ### Literal content and metadata commands
 
@@ -316,9 +341,8 @@ outline, summarize and repo-map built-ins. Argv binds through the catalog
 binder; each command runs under its catalog operation identity (`read`, `wc`,
 `list_dir`, `stat`, `diff`, `summarize`, `survey_repo`) over the same typed
 operations as the structured tools. `ExecutionRevisions.CaptureBytes` captures
-each file as exact stream bytes before any output: the accepted document encoded
-in its recorded encoding, BOM and newline policy, or the published file. The pin
-names that representation separately from disk. An input above the read budget,
+each file as exact published stream bytes before any output, retaining its
+encoding, BOM and newline policy. The pin names that exact representation. An input above the read budget,
 or output above the stream ceiling, refuses; nothing is truncated or summarized
 in its place.
 
@@ -637,12 +661,12 @@ Results count searched text files, binary skips, unreadable files, byte-capped f
 
 ## The open document is the file
 
-A file the person has open in the editor is its editor document, for the agent as for the person. Tool reads of that path serve the document's draft, unsaved edits included; tool writes land in the document and save it. There is one text per open file, and it is the one the person is looking at.
+A file the person has open in the editor is its editor document, for the agent as for the person. Conversational structured reads of that path serve the document's draft, unsaved edits included; structured writes land in the document and save it. The `command` tool follows the saved-file rules above. There is one text per open file, and it is the one the person is looking at.
 
 | Tool | With an open document |
 |------|-----------------------|
-| `read`, `diff` | Serve the draft. The receipt's `source.editor` carries the document revision and `dirty`; an unsaved draft is `recorded: false` with a note, because the ledger records saves, not keystrokes |
-| `grep`, `wc` | Search or count the unsaved text for open dirty files; `files_from_editor` and `in_editor` say how many were served that way |
+| Structured `read`, `diff` | Serve the draft. The receipt's `source.editor` carries the document revision and `dirty`; an unsaved draft is `recorded: false` with a note, because the ledger records saves, not keystrokes |
+| Structured `grep`, `wc` | Search or count the unsaved text for open dirty files; `files_from_editor` and `in_editor` say how many were served that way |
 | `write`, `edit`, `replace_lines`, `code_rewrite`, `jq_edit`, `restore_version` | Compute against the draft, land in the document, and save through the person's own journaled save door, recorded as the agent's write. One save publishes every contribution the draft holds, the person's unsaved typing included, and the ledger records each contributor, so such a publication reads as mixed authorship rather than the agent's alone. `EDITOR_DOCUMENT_CHANGING` rejects a document that kept moving under the write. A document diverged from disk, or a publication that fails after acceptance, holds the edit unsaved in the document: the receipt says the file was not written and why, that the disk still holds its earlier bytes for commands and tests, and names the retained state |
 | `command`, `verify`, processes | See disk. An agent write saves, so the files it touched are current for them |
 

@@ -102,6 +102,7 @@ func (inv *invocation) fail(status int, operand, reason string) {
 type source struct {
 	name   string
 	reader io.ReadCloser
+	pin    *toolcontract.SourcePin
 }
 
 // openInputs opens each PATH operand ("-" is standard input), or standard
@@ -127,7 +128,7 @@ func (inv *invocation) openInputs(operands commandprogram.Fields) ([]source, err
 				return nil, err
 			}
 		}
-		reader, _, err := inv.capture(paths, operand)
+		reader, rev, err := inv.capture(paths, operand)
 		if err != nil {
 			if reason, ok := ordinary(err); ok {
 				inv.fail(1, operand.Value, reason)
@@ -136,7 +137,13 @@ func (inv *invocation) openInputs(operands commandprogram.Fields) ([]source, err
 			closeSources(out)
 			return nil, pathRejection(err, operand)
 		}
-		out = append(out, source{name: operand.Value, reader: reader})
+		var pin *toolcontract.SourcePin
+		if rev != nil {
+			if sp, ok := rev.SourcePin(); ok {
+				pin = &sp
+			}
+		}
+		out = append(out, source{name: operand.Value, reader: reader, pin: pin})
 	}
 	return out, nil
 }
