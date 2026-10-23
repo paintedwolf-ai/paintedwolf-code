@@ -70,6 +70,10 @@ func OpenWithOptions(ctx context.Context, dbPath string, hooks UpgradeHooks, opt
 		return nil, fmt.Errorf("create db directory: %w", err)
 	}
 
+	if err := CheckStoreHealth(dbPath); err != nil {
+		return nil, err
+	}
+
 	created := false
 	if info, err := os.Stat(dbPath); err != nil {
 		if !os.IsNotExist(err) {
@@ -103,12 +107,11 @@ func OpenWithOptions(ctx context.Context, dbPath string, hooks UpgradeHooks, opt
 
 	auditDue := false
 	if !created {
-		clean, err := lastShutdownWasClean(ctx, writer)
+		auditDue, err = integrityAuditNeeded(ctx, writer)
 		if err != nil {
 			_ = writer.Close()
-			return nil, fmt.Errorf("read shutdown state: %w", err)
+			return nil, fmt.Errorf("read integrity audit obligation: %w", err)
 		}
-		auditDue = !clean
 		if err := prepareAuditState(ctx, writer, auditDue); err != nil {
 			_ = writer.Close()
 			return nil, ClassifyStoreFailure(err)
@@ -138,6 +141,11 @@ func OpenWithOptions(ctx context.Context, dbPath string, hooks UpgradeHooks, opt
 		return nil, ClassifyStoreFailure(err)
 	}
 	store := newStore(writer, reader)
+	if err := bindStoreHealth(store, dbPath); err != nil {
+		_ = reader.Close()
+		_ = writer.Close()
+		return nil, classifyStoreOpenFailure(err)
+	}
 	if filepath.IsAbs(dbPath) {
 		store.dataDir = filepath.Dir(dbPath)
 	}

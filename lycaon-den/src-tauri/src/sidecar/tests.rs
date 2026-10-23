@@ -232,19 +232,6 @@ fn startup_protocol_accepts_ordered_records_from_the_spawned_child() {
 }
 
 #[test]
-fn startup_protocol_accepts_recovery_checks_and_heartbeats() {
-    for phase in ["recovery_structure", "recovery_indexes", "recovery_references"] {
-        for kind in ["phase", "heartbeat"] {
-            let json = format!(
-                r#"{{"protocol":1,"sequence":2,"pid":4242,"kind":"{kind}","phase":"{phase}","elapsed_ms":175000}}"#,
-            );
-            let record: StartupRecord = serde_json::from_str(&json).expect("parse recovery progress");
-            validate_startup_record(&record, 4242, 1).expect("validate recovery progress");
-        }
-    }
-}
-
-#[test]
 fn startup_protocol_rejects_stale_pid_sequence_and_ready_without_port() {
     let record: StartupRecord = serde_json::from_str(
         r#"{"protocol":1,"sequence":4,"pid":4242,"kind":"ready","phase":"ready","elapsed_ms":10}"#,

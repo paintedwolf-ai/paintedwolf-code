@@ -274,7 +274,7 @@ func prepareStoreSchema(ctx context.Context, sqlDB *sql.DB, created bool) error 
 	if err := CheckBaseline(ctx, sqlDB); err != nil {
 		return err
 	}
-	return prepareIntegrity(ctx, sqlDB, nil)
+	return prepareIntegrity(ctx, sqlDB)
 }
 
 // referenceShape reads schema.sql into an in-memory store.
