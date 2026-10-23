@@ -247,6 +247,9 @@ func (p Prepared) InvokeOwner(ctx context.Context, ports Ports, streams commandp
 	inv := newInvocation(ctx, p, ports, streams)
 	err := p.run(inv)
 	if err == nil {
+		err = inv.out.Flush()
+	}
+	if err == nil {
 		err = ctx.Err()
 	}
 	inv.close()

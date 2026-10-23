@@ -45,6 +45,9 @@ func runRm(inv *invocation) error {
 		if err != nil {
 			return 0, err
 		}
+		if err := inv.owners.Revisions.CheckUnsavedDraft(inv.ctx, inv.tc, bound.Resolved.Abs, true); err != nil {
+			return 0, err
+		}
 		result, err := inv.owners.Operations.Delete.Delete(inv.ctx, native.DeleteInput{Paths: []string{bound.Resolved.Abs}, FilesOnly: !recursive, Recursive: recursive, Force: force}, inv.tc)
 		return len(result.Deleted), err
 	})
@@ -62,6 +65,9 @@ func runRmdir(inv *invocation) error {
 		if info, err := os.Lstat(bound.Resolved.Abs); err == nil && !info.IsDir() {
 			inv.fail(operand, "Not a directory")
 			return 0, nil
+		}
+		if err := inv.owners.Revisions.CheckUnsavedDraft(inv.ctx, inv.tc, bound.Resolved.Abs, true); err != nil {
+			return 0, err
 		}
 		result, err := inv.owners.Operations.Delete.Delete(inv.ctx, native.DeleteInput{Paths: []string{bound.Resolved.Abs}}, inv.tc)
 		return len(result.Deleted), err
@@ -88,6 +94,9 @@ func runMv(inv *invocation) error {
 		if err != nil {
 			return 0, err
 		}
+		if err := inv.owners.Revisions.CheckUnsavedDraft(inv.ctx, inv.tc, source.Resolved.Abs, true); err != nil {
+			return 0, err
+		}
 		to, err := inv.destinationEntry(dest, source.Resolved.Abs, len(sources) > 1)
 		if err != nil {
 			return 0, err
@@ -111,6 +120,9 @@ func runCp(inv *invocation) error {
 		if info, err := os.Lstat(source.Resolved.Abs); err == nil && info.IsDir() && !recursive {
 			inv.fail(operand, "-r not specified; omitting directory")
 			return 0, nil
+		}
+		if pin, pinErr := inv.owners.Revisions.DeclareLaunchInput(inv.ctx, inv.tc, source.Resolved.Abs); pinErr == nil && pin.Mode == toolcontract.PublishedDiskRevision {
+			_ = inv.recordPin(pin)
 		}
 		to, err := inv.destinationEntry(dest, source.Resolved.Abs, len(sources) > 1)
 		if err != nil {
@@ -203,7 +215,7 @@ func runTouch(inv *invocation) error {
 		if err != nil {
 			return 0, err
 		}
-		if _, err := inv.owners.publish(inv.ctx, inv.tc, inv.barrier, target, []byte{}); err != nil {
+		if _, err := inv.owners.publish(inv.ctx, inv.tc, target, []byte{}); err != nil {
 			return 0, err
 		}
 		return 1, nil
@@ -281,7 +293,7 @@ func runTee(inv *invocation) error {
 		return err
 	}
 	for _, target := range targets {
-		if _, err := inv.owners.publish(inv.ctx, inv.tc, inv.barrier, target, data); err != nil {
+		if _, err := inv.owners.publish(inv.ctx, inv.tc, target, data); err != nil {
 			return err
 		}
 		inv.effects++
@@ -335,7 +347,7 @@ func runMktemp(inv *invocation) error {
 		if target.pin.Mode != toolcontract.AbsentRevision {
 			return inv.usage(name, "an unused temporary name")
 		}
-		if _, err := inv.owners.publish(inv.ctx, inv.tc, inv.barrier, target, []byte{}); err != nil {
+		if _, err := inv.owners.publish(inv.ctx, inv.tc, target, []byte{}); err != nil {
 			return err
 		}
 		inv.effects++

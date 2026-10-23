@@ -54,7 +54,26 @@ func (f *frame) statement(ctx context.Context, s commandsurface.Statement) (sign
 	}
 	inner := *f
 	inner.errexitIgnored = f.errexitIgnored || s.Negated
-	sig, err := inner.redirected(ctx, s, func(g *frame) (signal, error) { return g.command(ctx, s) })
+	var descriptors *descriptorScope
+	if len(s.Redirects) > 0 {
+		descriptors = &descriptorScope{}
+		prevented, err := descriptors.prepare(ctx, &inner, s)
+		if prevented || err != nil {
+			return signal{}, err
+		}
+	}
+	sig, err := inner.command(ctx, s)
+	if descriptors != nil {
+		if !descriptors.opened.Load() && !descriptors.prevented && err == nil {
+			_, err = (&evaluatorOperation{frame: &inner, statement: s, fields: Fields{{Value: ":", Span: s.Span}}}).invoke(ctx)
+		}
+		_, stopped := f.state.latch.Stop()
+		eligible := err == nil && !stopped && inner.publish.eligible()
+		f.publish.mark(eligible)
+		if finishErr := descriptors.finish(ctx, eligible); finishErr != nil && err == nil {
+			err = finishErr
+		}
+	}
 	if err == nil && s.Negated {
 		f.state.control.Negate()
 	}
@@ -81,7 +100,7 @@ func (f *frame) command(ctx context.Context, s commandsurface.Statement) (signal
 	case commandsurface.SimpleCommand:
 		return f.simple(ctx, s, c)
 	case commandsurface.EnvironmentDeclaration:
-		return signal{}, f.exportDeclaration(ctx, s, c)
+		return (&evaluatorOperation{frame: f, statement: s, fields: Fields{{Value: "export", Span: s.Span}}, body: func(ctx context.Context, g *frame) (signal, error) { return signal{}, g.exportDeclaration(ctx, s, c) }}).invoke(ctx)
 	case commandsurface.StatementGroup:
 		if !c.Isolated {
 			return f.statements(ctx, c.Statements)
@@ -101,7 +120,7 @@ func (f *frame) command(ctx context.Context, s commandsurface.Statement) (signal
 		f.state.functions[c.Name] = c
 		return signal{}, f.builtinStatus(s.SyntaxLocation, "function", 0)
 	case commandsurface.TestExpression:
-		return signal{}, f.testExpression(ctx, s, c)
+		return (&evaluatorOperation{frame: f, statement: s, fields: Fields{{Value: "[[", Span: s.Span}}, body: func(ctx context.Context, g *frame) (signal, error) { return signal{}, g.testExpression(ctx, s, c) }}).invoke(ctx)
 	case nil:
 		return signal{}, nil
 	default:

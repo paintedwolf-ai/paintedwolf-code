@@ -11,7 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/litprefilter"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/textsearch"
-	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
 )
 
 type grepMode int
@@ -46,10 +45,8 @@ type grepRun struct {
 	selection    selection
 	searchBinary bool
 	walker       *walker
-	// prune holds the index requirement when acceleration applies; drafts
-	// are the unsaved documents the index cannot speak for.
+	// prune holds the index requirement when acceleration applies.
 	prune    litprefilter.Requirement
-	drafts   sourceview.DraftOverlay
 	pruned   int
 	selected bool
 	stopped  bool
@@ -549,19 +546,13 @@ func (r *grepRun) indexAcceleration() {
 		return
 	}
 	r.prune = r.matcher.Requirement()
-	if !r.prune.Empty() {
-		r.drafts = sourceview.DraftsFor(r.inv.ctx, r.inv.tc)
-	}
 }
 
 // indexProvesNoMatch asks the source catalog about one walked file. The
 // cached filter speaks only for the exact size, mode and mtime it was built
-// under, and never for an unsaved draft.
+// under.
 func (r *grepRun) indexProvesNoMatch(e entry) bool {
 	if r.prune.Empty() || e.depth == 0 || e.link || e.bound.Resolved.External {
-		return false
-	}
-	if _, draft := r.drafts.Lookup(e.bound.Resolved.Abs); draft {
 		return false
 	}
 	return r.inv.owners.Catalog.Literals.CanPrune(e.bound.Resolved.Root.Path, r.prune, sourcecatalog.Entry{

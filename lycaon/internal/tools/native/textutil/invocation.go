@@ -138,9 +138,9 @@ func (inv *invocation) openInputs(operands commandprogram.Fields) ([]source, err
 			return nil, pathRejection(err, operand)
 		}
 		var pin *toolcontract.SourcePin
-		if rev != nil && (rev.Mode == toolcontract.AcceptedDocumentRevision || rev.ContentSHA256 == rev.DiskSHA256) {
-			if p, ok := rev.SourcePin(); ok {
-				pin = &p
+		if rev != nil {
+			if sp, ok := rev.SourcePin(); ok {
+				pin = &sp
 			}
 		}
 		out = append(out, source{name: operand.Value, reader: reader, pin: pin})

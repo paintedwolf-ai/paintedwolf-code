@@ -83,7 +83,7 @@ func (j *SessionJobs) start(ctx context.Context, commandLine string, run func(co
 	handle, err = j.Registry.StartProgram(ctx, bgprocess.ProgramJobSpec{
 		SessionID: j.SessionID, RootSessionID: j.RootSessionID, ProjectID: j.ProjectID,
 		CommandLine: commandLine, OriginTool: "command", ToolCallID: j.ToolCallID,
-		Run: func(stopCtx context.Context, stdout, stderr io.Writer) (int, error) {
+		Run: func(stopCtx context.Context, stdout, stderr io.Writer) (bgprocess.ProgramJobResult, error) {
 			defer release()
 			<-ready
 			ctx, cancel := context.WithCancel(jobCtx)
@@ -96,7 +96,11 @@ func (j *SessionJobs) start(ctx context.Context, commandLine string, run func(co
 				result = toolcontract.ProducerResult{Status: status, Terminal: toolcontract.ProducerInterrupted, StopCode: toolrejection.ToolOwnerInterruptedCode, EffectCertainty: toolcontract.EffectUnknown}
 			}
 			j.record(handle, result, err)
-			return result.Status, err
+			settled := bgprocess.ProgramJobResult{ExitCode: result.Status}
+			if documents, ok := ctx.Value(programDocumentsKey{}).(*programDocuments); ok {
+				settled.UnsavedDocumentPaths, settled.ReleaseNotices = documents.takePaths()
+			}
+			return settled, err
 		},
 	})
 	if err != nil {

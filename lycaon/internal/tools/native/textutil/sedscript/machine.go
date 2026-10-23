@@ -67,6 +67,8 @@ type inputState struct {
 	aheadOK    bool
 	line       int
 	source     string
+	pin        *toolcontract.SourcePin
+	offset     int64
 	terminated bool
 	replaced   bool
 	steps      int64

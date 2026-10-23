@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/tools"
 )
 
 func (r *ProgramRuntime) resolveOutputMappings(ctx context.Context, run *programRun, mappings []toolcontract.StreamSourceMapping, streamLen int64) *sourceMappingBuffer {
@@ -113,7 +114,7 @@ func (r *ProgramRuntime) sourceObserver() invocation.ProgramSourceObserver {
 
 func (r *ProgramRuntime) commitStreamSourceDeliveries(ctx context.Context, run *programRun, programID, ref string, screenedBytes []byte, mappings []toolcontract.StreamSourceMapping, ranges [][2]int64) {
 	observer := r.sourceObserver()
-	if observer == nil || r.Recorder == nil {
+	if r.Recorder == nil {
 		return
 	}
 	responseID := run.parentReceipt
@@ -150,14 +151,17 @@ func (r *ProgramRuntime) commitStreamSourceDeliveries(ctx context.Context, run *
 				release()
 				continue
 			}
-			_, _ = r.Recorder.CommitProgramSourceDelivery(ctx, invocation.ProgramSourceDelivery{
-				SessionID:       run.tc.Identity.SessionID,
-				ProgramID:       programID,
-				OutputReference: ref,
-				OutputStartByte: streamStart,
-				OutputEndByte:   streamEnd,
-				Observation:     obs,
-			}, observer, admission)
+			tools.RememberCommandSourceDelivery(ctx, run.tc, run.memory, local, deliveredSlice)
+			if observer != nil {
+				_, _ = r.Recorder.CommitProgramSourceDelivery(ctx, invocation.ProgramSourceDelivery{
+					SessionID:       run.tc.Identity.SessionID,
+					ProgramID:       programID,
+					OutputReference: ref,
+					OutputStartByte: streamStart,
+					OutputEndByte:   streamEnd,
+					Observation:     obs,
+				}, observer, admission)
+			}
 			release()
 		}
 		_ = proj.Close()

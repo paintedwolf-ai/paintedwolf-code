@@ -12,7 +12,7 @@ import (
 func (l *LifecycleService) Statuses(ctx context.Context, projectID string, ids []string) (api.EditorDocumentStatuses, error) {
 	s := l.s
 	result := api.EditorDocumentStatuses{Documents: []api.EditorDocumentStatus{}, Missing: []string{}}
-	if len(ids) == 0 || len(ids) > 64 {
+	if len(ids) == 0 || len(ids) > documentStatusPageSize {
 		return result, errors.New("document status reads require between 1 and 64 identities")
 	}
 	raw, err := json.Marshal(ids)

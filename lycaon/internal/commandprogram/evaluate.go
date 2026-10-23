@@ -31,6 +31,7 @@ type EvaluationPorts struct {
 	// operations are recorded by their owners. Nil records none.
 	Executions ExecutionRecorder
 	Streams    Streams
+	Refusals   RefusalWriter
 	// Environment is the captured child environment; its entries start exported.
 	Environment []string
 }

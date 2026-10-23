@@ -23,9 +23,10 @@ import (
 // are staged outside the destination and published only through the pinned
 // write door at that capture. Nothing is truncated early and nothing reruns.
 type Publication struct {
-	Owners  *Owners
-	Program Program
-	Tools   tools.ToolContext
+	Owners    *Owners
+	Program   Program
+	Tools     tools.ToolContext
+	Admission tools.CommandOutputAdmission
 }
 
 var (
@@ -43,16 +44,24 @@ func (p *Publication) Open(ctx context.Context, destination commandprogram.Outpu
 	if bound.Null {
 		return &nullStage{}, nil
 	}
+	if p.Admission == nil {
+		return nil, errors.New("redirect publication admission required")
+	}
+	admission, err := p.Admission(ctx, destination, bound.Resolved.Abs)
+	if err != nil {
+		return nil, err
+	}
 	target, err := p.Owners.captureDestination(ctx, p.Tools, destination.Invocation.Identity.ExecutionID, bound.Resolved.Abs)
 	if err != nil {
+		_ = admission.Abandon(ctx, err)
 		return nil, redirectError(destination.Redirect.Operator, destination.Target, err)
 	}
 	target.append = strings.HasSuffix(destination.Redirect.Operator, ">>")
-	return &fileStage{owners: p.Owners, tools: p.Tools, barrier: p.Program.Barrier, target: target, operator: destination.Redirect.Operator, field: destination.Target, maximum: p.Owners.limit("stream_bytes")}, nil
+	return &fileStage{owners: p.Owners, target: target, admission: admission, operator: destination.Redirect.Operator, field: destination.Target, maximum: p.Owners.limit("stream_bytes")}, nil
 }
 
-// OpenInput serves a < operand from its pinned capture: the accepted document
-// when one is open, otherwise published disk. The pin is recorded first.
+// OpenInput serves a < operand from its pinned published-disk capture. The
+// pin is recorded first.
 func (p *Publication) OpenInput(ctx context.Context, destination commandprogram.InputDestination) (io.ReadCloser, error) {
 	bound, err := p.Program.Paths.Bind(ctx, destination.Target.Value, false)
 	if err != nil {
@@ -124,29 +133,24 @@ func (o *Owners) captureDestination(ctx context.Context, tc tools.ToolContext, e
 }
 
 // publish lands content byte for byte at the captured revision through the
-// shared write operation and tracks it on the program's publication barrier. A moved
-// destination is COMMAND_REVISION_CONFLICT; nothing is refreshed or retried.
-func (o *Owners) publish(ctx context.Context, tc tools.ToolContext, barrier *native.PublicationBarrier, target pinnedTarget, content []byte) (native.WriteResult, error) {
+// shared write operation. A moved destination is COMMAND_REVISION_CONFLICT;
+// nothing is refreshed or retried.
+func (o *Owners) publish(ctx context.Context, tc tools.ToolContext, target pinnedTarget, content []byte) (native.WriteResult, error) {
 	// Appending to a captured absence creates the file from the new bytes.
 	appendBytes := target.append && target.pin.Mode != toolcontract.AbsentRevision
-	result, err := o.Operations.Write.Apply(ctx, native.WriteInput{Path: target.abs, Exact: true, Bytes: content, Append: appendBytes,
+	return o.Operations.Write.Apply(ctx, native.WriteInput{Path: target.abs, Exact: true, Bytes: content, Append: appendBytes,
 		Admission: native.WriteExecutionPinned, Destination: target.pin}, tc)
-	if err != nil {
-		return result, err
-	}
-	return result, barrier.Track(result)
 }
 
 // fileStage holds one destination's bytes until the evaluator publishes or
 // abandons them. Staging is bounded by stream_bytes and never touches the file.
 type fileStage struct {
-	owners   *Owners
-	tools    tools.ToolContext
-	barrier  *native.PublicationBarrier
-	target   pinnedTarget
-	operator string
-	field    commandprogram.Field
-	maximum  int64
+	owners    *Owners
+	target    pinnedTarget
+	operator  string
+	field     commandprogram.Field
+	maximum   int64
+	admission tools.CommandOutputWrite
 
 	mu      sync.Mutex
 	buffer  bytes.Buffer
@@ -175,23 +179,29 @@ func (s *fileStage) Publish(ctx context.Context) (commandprogram.OutputPublished
 	content := bytes.Clone(s.buffer.Bytes())
 	s.buffer.Reset()
 	s.mu.Unlock()
-	result, err := s.owners.publish(ctx, s.tools, s.barrier, s.target, content)
+	published, err := s.admission.Publish(ctx, func(ctx context.Context, tc tools.ToolContext) (commandprogram.OutputPublished, error) {
+		result, err := s.owners.publish(ctx, tc, s.target, content)
+		if err != nil {
+			return commandprogram.OutputPublished{}, err
+		}
+		published := commandprogram.OutputPublished{PublishedRevision: result.PublishedSHA256}
+		if result.AcceptedRevision > 0 {
+			published.AcceptedRevision = strconv.FormatInt(result.AcceptedRevision, 10)
+		}
+		return published, nil
+	})
 	if err != nil {
 		return commandprogram.OutputPublished{}, redirectError(s.operator, s.field, err)
-	}
-	published := commandprogram.OutputPublished{PublishedRevision: result.PublishedSHA256}
-	if result.AcceptedRevision > 0 {
-		published.AcceptedRevision = strconv.FormatInt(result.AcceptedRevision, 10)
 	}
 	return published, nil
 }
 
-func (s *fileStage) Abandon(context.Context) error {
+func (s *fileStage) Abandon(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.settled = true
 	s.buffer.Reset()
-	return nil
+	return s.admission.Abandon(ctx, nil)
 }
 
 // nullStage is the virtual null device: writes are discarded, nothing publishes.
