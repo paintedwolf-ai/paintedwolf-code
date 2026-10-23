@@ -135,6 +135,9 @@ func (s *Store) recordEffect(ctx context.Context, q *db.Queries, operationID str
 		head, headErr = q.GetSourceBranchHeadByFile(ctx, db.GetSourceBranchHeadByFileParams{
 			ProjectID: in.ProjectID, BranchID: in.BranchID.String(), FileID: in.FileID,
 		})
+	} else if in.Op == api.SourceChangeOpCreate {
+		// A published creation has a new identity unless recovery named the original.
+		headErr = sql.ErrNoRows
 	} else {
 		head, headErr = q.GetSourceBranchHeadByPath(ctx, db.GetSourceBranchHeadByPathParams{
 			ProjectID: in.ProjectID, BranchID: in.BranchID.String(), RootID: in.RootID, Path: lookupPath,
@@ -142,10 +145,6 @@ func (s *Store) recordEffect(ctx context.Context, q *db.Queries, operationID str
 	}
 	if headErr != nil && !errors.Is(headErr, sql.ErrNoRows) {
 		return headErr
-	}
-	// A published creation is a new identity unless recovery names the original.
-	if in.Op == api.SourceChangeOpCreate && in.FileID == "" {
-		headErr = sql.ErrNoRows
 	}
 	if errors.Is(headErr, sql.ErrNoRows) && in.FileID == "" && in.BranchID.IsWorker() {
 		trunk, err := q.GetTrunkSourceHeadByPath(ctx, db.GetTrunkSourceHeadByPathParams{
