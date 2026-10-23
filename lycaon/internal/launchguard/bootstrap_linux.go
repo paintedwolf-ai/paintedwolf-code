@@ -190,7 +190,7 @@ func dropPrivileges(caller Identity) error {
 	for i, group := range caller.Groups {
 		groups[i] = int(group)
 	}
-	if err := unix.Setgroups(groups); err != nil {
+	if err := syscall.Setgroups(groups); err != nil {
 		return err
 	}
 	if err := unix.Setresgid(int(caller.GID), int(caller.GID), int(caller.GID)); err != nil {
