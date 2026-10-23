@@ -7,11 +7,58 @@ import json
 import re
 import threading
 
+from ..installed_evidence import IDENTIFIER
+
 MODEL = 'installed-qualification'
 LIMIT = 2 << 20
 GUI_LABEL = 'Installed UI qualification'
 GUI_KIND = 'litellm-proxy'
 GUI_API_KEY = 'installed-local-fixture-key'
+
+
+REFUSALS = frozenset({'foreign-model', 'messages-or-tools-shape', 'message-role-shape',
+                      'required-tools-missing', 'request-count-bound', 'request-boundary',
+                      'request-truncated', 'request-invalid'})
+
+
+class FixtureRefusal(ValueError):
+    def __init__(self, code):
+        if code not in REFUSALS:
+            raise ValueError('fixture refusal code is not declared')
+        self.code = code
+        super().__init__(code)
+
+
+def request_shape(request):
+    if not isinstance(request, dict):
+        return {'request_type': json_type(request)}
+    result = {'field_types': {name: json_type(request.get(name)) for name in ('model', 'messages', 'tools')},
+              'expected_model': request.get('model') == MODEL}
+    messages, tools = request.get('messages'), request.get('tools')
+    if isinstance(messages, list):
+        counts = dict.fromkeys(('system', 'developer', 'user', 'assistant', 'tool', 'function', 'unknown_count'), 0)
+        for row in messages[:256]:
+            role = row.get('role') if isinstance(row, dict) else None
+            key = role if isinstance(role, str) and role in counts and role != 'unknown_count' else 'unknown_count'
+            counts[key] += 1
+        result.update(message_count=len(messages), role_counts=counts, messages_clipped=len(messages) > 256)
+    if isinstance(tools, list):
+        names, invalid = set(), 0
+        for row in tools[:64]:
+            function = row.get('function') if isinstance(row, dict) and row.get('type') == 'function' else None
+            name = function.get('name') if isinstance(function, dict) else None
+            if isinstance(name, str) and 1 <= len(name) <= 128 and IDENTIFIER.fullmatch(name):
+                names.add(name)
+            else:
+                invalid += 1
+        result.update(tool_count=len(tools), offered_tools=sorted(names),
+                      invalid_tool_identifiers=invalid, tools_clipped=len(tools) > 64)
+    return result
+
+
+def json_type(value):
+    return {dict: 'object', list: 'array', str: 'string', int: 'number', float: 'number',
+            bool: 'boolean', type(None): 'null'}.get(type(value), 'other')
 
 
 def gui_endpoint(port: int) -> str:
@@ -59,12 +106,12 @@ class ProviderFixture:
 
     def completion(self, request: dict) -> dict:
         if not isinstance(request, dict) or request.get('model') != MODEL:
-            raise ValueError('fixture received a foreign model request')
+            raise FixtureRefusal('foreign-model')
         messages, tools = request.get('messages'), request.get('tools', [])
         if not isinstance(messages, list) or not messages or not isinstance(tools, list):
-            raise ValueError('fixture requires structured chat messages and tools')
+            raise FixtureRefusal('messages-or-tools-shape')
         if any(not isinstance(row, dict) or not isinstance(row.get('role'), str) for row in messages):
-            raise ValueError('fixture received malformed chat messages')
+            raise FixtureRefusal('message-role-shape')
         available = {row['function']['name'] for row in tools
                      if isinstance(row, dict) and row.get('type') == 'function'
                      and isinstance(row.get('function'), dict)
@@ -77,14 +124,14 @@ class ProviderFixture:
         message = {'role': 'assistant', 'content': 'Fixture complete.' if finished else None}
         if not finished:
             if not all(call['name'] in available for call in self.calls):
-                raise ValueError('required fixture tools were not offered by the installed host')
+                raise FixtureRefusal('required-tools-missing')
             message['tool_calls'] = [
                 {'id': f'qualification-{i}', 'type': 'function', 'function': {
                     'name': call['name'], 'arguments': json.dumps(call['arguments'])}}
                 for i, call in enumerate(self.calls)]
         with self.lock:
             if len(self.observations) >= 64:
-                raise ValueError('fixture request bound exceeded')
+                raise FixtureRefusal('request-count-bound')
             self.observations.append({'model': MODEL, 'roles': [row['role'] for row in messages],
                                       'tools': sorted(available), 'completed': finished})
         return {'id': 'qualification-completion', 'object': 'chat.completion', 'created': 1,
@@ -99,12 +146,15 @@ class ProviderFixture:
             def log_message(self, *args):
                 pass
 
-            def respond(self, status, value):
+            def respond(self, status, value, *, refusal=None, shape=None):
                 with fixture.transport_lock:
                     if len(fixture.transport_observations) < 64:
-                        fixture.transport_observations.append({'method': self.command,
+                        record = {'method': self.command,
                             'path': self.path if self.path in {'/v1/model/info', '/v1/models', '/v1/chat/completions'} else 'other',
-                            'status': status, 'fixture_credential_observed': self.headers.get('Authorization') == 'Bearer ' + GUI_API_KEY})
+                            'status': status, 'fixture_credential_observed': self.headers.get('Authorization') == 'Bearer ' + GUI_API_KEY}
+                        if refusal is not None:
+                            record.update(refusal_code=refusal, request_shape=shape)
+                        fixture.transport_observations.append(record)
                     else:
                         fixture.transport_clipped = True
                 raw = json.dumps(value).encode()
@@ -134,16 +184,18 @@ class ProviderFixture:
 
             def do_POST(self):
                 self.connection.settimeout(10)
+                shape = None
                 try:
                     length = int(self.headers.get('Content-Length', '0'))
                     if self.path != '/v1/chat/completions' or not 0 < length <= LIMIT:
-                        raise ValueError('fixture request boundary refused')
+                        raise FixtureRefusal('request-boundary')
                     if fixture.gui_purpose and self.headers.get('Authorization') != 'Bearer ' + GUI_API_KEY:
                         return self.respond(401, {'error': 'fixture-credential-required'})
                     raw = self.rfile.read(length)
                     if len(raw) != length:
-                        raise ValueError('fixture request was truncated')
+                        raise FixtureRefusal('request-truncated')
                     request = json.loads(raw)
+                    shape = request_shape(request)
                     completion = fixture.completion(request)
                     if not request.get('stream', False):
                         return self.respond(200, completion)
@@ -159,8 +211,9 @@ class ProviderFixture:
                     self.send_header('Content-Length', str(len(raw)))
                     self.end_headers()
                     self.wfile.write(raw)
-                except (ValueError, TypeError, OSError):
-                    self.respond(400, {'error': 'fixture-request-refused'})
+                except (ValueError, TypeError, OSError) as error:
+                    code = error.code if isinstance(error, FixtureRefusal) else 'request-invalid'
+                    self.respond(400, {'error': 'fixture-request-refused'}, refusal=code, shape=shape)
 
         # Fresh fixtures use a kernel-selected port. Recovery exclusively binds
         # the exact prior admitted endpoint; an occupied port refuses without interference.
