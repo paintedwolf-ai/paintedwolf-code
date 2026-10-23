@@ -103,7 +103,11 @@ static int chooser_read(GtkWidget *chooser, const char *payload, int protected) 
 
 // Start with no volume, then perform chooser reads only on explicit commands.
 static int watch_volume(GtkWidget *chooser, const char *payload) {
-    while (g_main_context_iteration(NULL,FALSE)) {}
+    gint64 deadline = g_get_monotonic_time()+2*G_TIME_SPAN_SECOND;
+    while (!gtk_widget_get_mapped(chooser) && g_get_monotonic_time() < deadline) {
+        while (g_main_context_iteration(NULL,FALSE)) {}
+        g_usleep(1000);
+    }
     if (!gtk_widget_get_mapped(chooser)) return 7;
     printf("PWGTKREADY01 {\"gtk_initialized\":true,\"pid\":%ld}\n",(long)getpid());
     fflush(stdout);
