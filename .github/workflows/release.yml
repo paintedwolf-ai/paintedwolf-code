@@ -303,7 +303,7 @@ jobs:
 
   ship-gates:
     # Judges failed and timed-out jobs, but a cancelled run must not wait for a runner to do so.
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && inputs.rehearsal_run_id == '' }}
     needs: [classify, validate-source]
     runs-on: ubuntu-latest
     timeout-minutes: 5
