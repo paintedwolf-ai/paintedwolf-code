@@ -66,14 +66,17 @@ export function createAppStore(
   );
   let progressRevisionEpoch = initial.sessionViewEpoch;
   let findingsRevisionEpoch = initial.sessionViewEpoch;
+  const freshQueueSessions = new Set<string>();
   const queueDrafts = new Map<string, QueueDraft>();
   if (initial.currentSession && initial.queueDraft) {
     queueDrafts.set(initial.currentSession.id.trim(), initial.queueDraft);
+    freshQueueSessions.add(initial.currentSession.id.trim());
   }
 
-  const rememberQueueDraft = (sessionId: string, draft: QueueDraft): QueueDraft => {
+  const rememberQueueDraft = (sessionId: string, draft: QueueDraft, authoritative = true): QueueDraft => {
     const current = queueDrafts.get(sessionId);
-    if (current && current.revision >= draft.revision) return current;
+    if (current && (!authoritative || (freshQueueSessions.has(sessionId) && current.revision >= draft.revision))) return current;
+    if (authoritative) freshQueueSessions.add(sessionId);
     queueDrafts.set(sessionId, draft);
     return draft;
   };
@@ -246,8 +249,8 @@ export function createAppStore(
       return workerRetention.retain(workerId);
     },
     invalidateSessionViewRequests() {
+      freshQueueSessions.clear();
       setState("sessionViewEpoch", state.sessionViewEpoch + 1);
-      queueDrafts.clear();
     },
     noteSessionSeen(session) {
       setState(
@@ -767,6 +770,11 @@ export function createAppStore(
       setState(
         produce((draft) => {
           draft.currentSession = snapshot.session;
+          if (snapshot.queueDraft) {
+            draft.queueDraft = rememberQueueDraft(sessionId, snapshot.queueDraft, false);
+          } else {
+            draft.queueDraft = queueDrafts.get(sessionId);
+          }
           draft.transcript = transcript;
           draft.messages = messages;
           draft.transcriptSessionId = sessionId;
