@@ -303,6 +303,7 @@ class RepositoryPublicationTests(unittest.TestCase):
             self.publish(self.first)
         package.write_bytes(package.read_bytes()[:-len(b"changed")])
         for url in ["http://repository.example.invalid", "https://user@repository.example.invalid",
+                    "https://:fixture@repository.example.invalid", "https://@repository.example.invalid",
                     "https://repository.example.invalid/?q=1", "file:///srv/repository"]:
             with self.subTest(url=url), self.assertRaisesRegex(ValueError, "HTTPS URL"):
                 self.publish(self.first, base_url=url)

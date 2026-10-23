@@ -30,7 +30,8 @@ def publish(receipt: dict, directory: Path, store: Path, base_url: str, catalog:
             expected: str | None, rehearsal=False, operation="publish") -> dict:
     """One lock owns immutable upload, compare-and-select, and recovery on a local origin."""
     url = urlsplit(base_url)
-    if url.scheme != "https" or not url.netloc or url.query or url.fragment or url.username:
+    if (url.scheme != "https" or not url.netloc or url.query or url.fragment
+            or url.username is not None):
         raise ValueError("repository origin requires an HTTPS URL without credentials or query")
     admit(receipt, directory, catalog, rehearsal)
     key, public = selection(catalog, rehearsal)
