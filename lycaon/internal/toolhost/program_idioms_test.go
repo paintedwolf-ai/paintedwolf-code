@@ -73,6 +73,8 @@ func TestComposedProgramIdiomsHaveExactBytesAndStatuses(t *testing.T) {
 		status                       int
 	}{
 		{"replacement and trimming", `s=a/b/c; printf '%s\n' "${s//\//-}" "${s#*/}" "${s%/*}"`, "a-b-c\nb/c\na/b\n", "", 0},
+		{"anchored replacement", `s=abc; e=; printf '%s\n' "${s/#a/x}" "${s/%c/y}" "${e/#*/x}" "${e/%*/y}"`, "xbc\naby\nx\ny\n", "", 0},
+		{"shortest and longest trimming", `s=abcbcd; printf '%s\n' "${s#a*c}" "${s##a*c}" "${s%b*d}" "${s%%b*d}"`, "bcd\nd\nabc\na\n", "", 0},
 		{"unicode slices", `s='aβ🙂z'; printf '%s\n' "${s:1:2}" "${s: -1}" "${s:1:-1}"`, "β🙂\nz\nβ🙂\n", "", 0},
 		{"arrays", `a=(first 'second third'); a+=(fourth); a[4]=fifth; a[0]+=!; printf '%s\n' "${a[@]}" "${#a[@]}" "${a[@]:1:2}"`, "first!\nsecond third\nfourth\nfifth\n4\nsecond third\nfourth\n", "", 0},
 		{"arithmetic", `((i=0)); while ((i<3)); do printf '%d\n' "$i"; ((i++)); done; ((0)); printf 'status=%d\n' "$?"`, "0\n1\n2\nstatus=1\n", "", 0},
