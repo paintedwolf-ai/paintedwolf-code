@@ -20,6 +20,7 @@ from .installed_runtime import bind
 from .support_matrix import CATALOG, expand
 from .installed_variants import requirements, observe, observed
 from .installed_monitors import prepare as prepare_monitors
+from .installed_case_selection import selected_cases
 
 # Each case runs within its own time budget; a driver family may declare a
 # longer one as TIME_BUDGET_SECONDS. A case past its budget fails and the
@@ -139,9 +140,10 @@ def execute(catalog: dict, final: dict, source: str, artifact_id: str, file_root
         raise ValueError("installed driver source differs from the independently selected tree")
     guest = require_owned_guest({"install_root": str(install_root), "artifact": artifact})
     if case_inputs is not None and (not isinstance(case_inputs, dict)
-            or set(case_inputs) - {"native_packages", "nix", "security", "desktop"}
+            or set(case_inputs) - {"native_packages", "nix", "security", "desktop", "case_selection"}
             or any(not isinstance(value, dict) for value in case_inputs.values())):
         raise ValueError("installed case inputs require known typed driver-family objects")
+    selection = selected_cases((case_inputs or {}).get('case_selection'), rows)
     output.mkdir(parents=True, mode=0o700, exist_ok=False)
     retained = output / "evidence"
     retained.mkdir()
@@ -184,8 +186,11 @@ def execute(catalog: dict, final: dict, source: str, artifact_id: str, file_root
         cases = []
         for case in row["cases"]:
             try:
-                result = (retain(binding, row["capability"], case, retained, "unverified", {"reason": variant_error})
-                          if variant_error else execute_case(binding, row["capability"], case, retained))
+                if selection is not None and (row['capability'], case) not in selection:
+                    result = retain(binding, row['capability'], case, retained, 'unverified', {'reason': 'case-not-selected'})
+                else:
+                    result = (retain(binding, row["capability"], case, retained, "unverified", {"reason": variant_error})
+                              if variant_error else execute_case(binding, row["capability"], case, retained))
             except CaseTimeBudgetExceeded as error:
                 result = retain(binding, row["capability"], case, retained, "failed",
                                 {"reason": "case-time-budget-exceeded", "budget_seconds": error.budget})

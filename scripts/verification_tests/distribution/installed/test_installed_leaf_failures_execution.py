@@ -134,3 +134,34 @@ class InstalledLeafFailureTests(unittest.TestCase):
             stack.enter_context(patch.object(leaf, 'execute_case', side_effect=case))
             self.invoke(Path(directory) / 'leaf')
         self.assertEqual(events, ['install', 'bind', 'first-launch', 'environment', 'case'])
+
+    def test_scoped_case_pass_keeps_omitted_cases_and_campaign_unverified(self):
+        with tempfile.TemporaryDirectory() as directory, ExitStack() as stack:
+            self.fixture(stack, lambda *args: None)
+            row = {'environment': 'guest', 'installation': 'deb', 'architecture': 'amd64',
+                   'capability': 'conversation', 'cases': ['chat-and-workflow', 'restart-and-reconnect'],
+                   'id': 'row', 'tier': 'supported'}
+            stack.enter_context(patch.object(leaf, 'expand', return_value=[row]))
+            driver = stack.enter_context(patch.object(leaf, 'execute_case', side_effect=lambda binding, cap, case, root:
+                retain(binding, cap, case, root, 'passed', {'actual_fixture': True})))
+            output = Path(directory) / 'leaf'
+            result = self.invoke(output, case_inputs={'case_selection': {'format_version': 1, 'cases': [
+                {'capability': 'conversation', 'case': 'restart-and-reconnect'}]}})
+            self.assertEqual(driver.call_count, 1)
+            self.assertEqual(driver.call_args.args[2], 'restart-and-reconnect')
+            row = result['results'][0]
+            self.assertEqual(row['status'], 'unverified')
+            self.assertEqual([(case['id'], case['status']) for case in row['cases']],
+                             [('chat-and-workflow', 'unverified'), ('restart-and-reconnect', 'passed')])
+            record = row['cases'][0]['evidence'][0]
+            observed = json.loads((output / 'evidence' / record['path']).read_text())
+            self.assertEqual(observed['observations'], {'reason': 'case-not-selected'})
+
+    def test_invalid_case_selection_never_reaches_installation(self):
+        with tempfile.TemporaryDirectory() as directory, ExitStack() as stack:
+            self.fixture(stack, lambda *args: self.fail('invalid case selection reached installer'))
+            output = Path(directory) / 'leaf'
+            with self.assertRaises(ValueError):
+                self.invoke(output, case_inputs={'case_selection': {'format_version': 1, 'cases': [
+                    {'capability': 'conversation', 'case': 'undeclared'}]}})
+            self.assertFalse(output.exists())
