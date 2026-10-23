@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import threading
 import uuid
 
@@ -58,9 +59,15 @@ def loaded_command(payload):
     return True
 
 
-def projected_receipt(value):
-    if (not isinstance(value, dict) or value.get('tool') != 'request_tools'
-            or value.get('tool_call_id') != LOAD_ID or value.get('status') != 'completed'
+def host_call_id(value):
+    if not isinstance(value, str) or not re.fullmatch(r'call_[0-9a-f]{8}', value):
+        raise ValueError('fixture requires the declared canonical host call identity')
+    return value
+
+
+def projected_receipt(value, tool, call_id):
+    if (not isinstance(value, dict) or value.get('tool') != tool
+            or value.get('tool_call_id') != call_id or value.get('status') != 'completed'
             or value.get('invoked') is not True or value.get('code', '') != ''):
         raise ValueError('acquisition has no matching successful invoked receipt')
     identifier = value.get('id')
@@ -69,7 +76,8 @@ def projected_receipt(value):
     return identifier
 
 
-def result_payload(content):
+def result_payload(content, tool, call_id):
+    host_call_id(call_id)
     if not isinstance(content, str) or not 0 < len(content.encode()) <= 32768:
         raise ValueError('projected acquisition result exceeds its bound')
     parts = content.split('\n\n')
@@ -82,45 +90,67 @@ def result_payload(content):
             raise ValueError('acquisition result has an unknown host-written marker')
         decoded.append(object_json(lines[1][len('⟦D⟧'):]))
     payload, feedback = decoded
-    loaded_command(payload)
+    if tool == 'request_tools':
+        loaded_command(payload)
     if set(feedback) != {'invocation'}:
         raise ValueError('acquisition receipt projection is missing or truncated')
-    return {'need': 'command', 'loaded': True, 'invocation_id': projected_receipt(feedback['invocation'])}
+    return {'tool_call_id': call_id, 'invocation_id': projected_receipt(feedback['invocation'], tool, call_id),
+            **({'need': 'command', 'loaded': True} if tool == 'request_tools' else {})}
+
+
+def paired_result(messages, tool, arguments, expected=None):
+    last_user = max((i for i, row in enumerate(messages) if row['role'] == 'user'), default=-1)
+    history = messages[last_user + 1:]
+    calls = [call for row in history if row['role'] == 'assistant'
+             for call in row.get('tool_calls', []) if isinstance(call, dict)
+             and call.get('function', {}).get('name') == tool]
+    if len(calls) != 1:
+        raise AcquisitionRefusal('acquisition-result-missing')
+    call = calls[0]
+    try:
+        identifier = host_call_id(call.get('id'))
+        if (call.get('type') != 'function' or object_json(call['function']['arguments']) != arguments
+                or expected is not None and identifier != expected):
+            raise ValueError('fixture originating call differs from its declared phase')
+        results = [row for row in history if row['role'] == 'tool'
+                   and row.get('tool_call_id') == identifier]
+        if len(results) != 1:
+            raise ValueError('fixture call has no unique paired result')
+        return result_payload(results[0].get('content'), tool, identifier)
+    except (ValueError, TypeError, KeyError, AttributeError):
+        raise AcquisitionRefusal('acquisition-result-invalid') from None
 
 
 class CommandAcquisition:
-    """Exactly one explicit schema request, before the existing fixed command."""
+    """Fixed emissions bind their subsequent host-issued call/result identities."""
     def __init__(self):
         self.lock = threading.Lock()
-        self.issued = False
-        self.witness = None
+        self.issued = self.command_issued = self.completed = False
+        self.witness = self.command_witness = None
 
     def advance(self, messages, available):
         with self.lock:
-            last_user = max((i for i, row in enumerate(messages) if row['role'] == 'user'), default=-1)
-            results = [row for row in messages[last_user + 1:]
-                       if row['role'] == 'tool' and row.get('tool_call_id') == LOAD_ID]
+            if self.completed:
+                raise AcquisitionRefusal('acquisition-result-invalid')
             if not self.issued:
-                if results or 'command' in available or 'request_tools' not in available:
+                if ('command' in available or 'request_tools' not in available
+                        or any(row['role'] in {'assistant', 'tool'} for row in messages)):
                     raise AcquisitionRefusal('acquisition-surface-invalid')
                 self.issued = True
                 return {'id': LOAD_ID, 'type': 'function', 'function': {
                     'name': 'request_tools', 'arguments': json.dumps({'need': 'command'})}}
-            if len(results) != 1:
-                raise AcquisitionRefusal('acquisition-result-missing')
-            try:
-                calls = [call for row in messages[last_user + 1:] if row['role'] == 'assistant'
-                         for call in row.get('tool_calls', []) if isinstance(call, dict) and call.get('id') == LOAD_ID]
-                if (len(calls) != 1 or calls[0].get('type') != 'function'
-                        or calls[0].get('function', {}).get('name') != 'request_tools'
-                        or object_json(calls[0]['function']['arguments']) != {'need': 'command'}):
-                    raise ValueError('acquisition result has no exact originating call')
-                witness = result_payload(results[0].get('content'))
-            except (ValueError, TypeError, KeyError, AttributeError):
-                raise AcquisitionRefusal('acquisition-result-invalid') from None
+            witness = paired_result(messages, 'request_tools', {'need': 'command'},
+                                    self.witness['tool_call_id'] if self.witness else None)
             if 'command' not in available:
                 raise AcquisitionRefusal('acquisition-command-not-offered')
             if self.witness is not None and self.witness != witness:
                 raise AcquisitionRefusal('acquisition-result-invalid')
             self.witness = witness
+            if self.command_issued:
+                self.command_witness = paired_result(messages, 'command', {'command': '/usr/bin/true'})
+                if self.command_witness['tool_call_id'] == witness['tool_call_id']:
+                    raise AcquisitionRefusal('acquisition-result-invalid')
+                self.completed = True
+            else:
+                self.command_issued = True
             return None

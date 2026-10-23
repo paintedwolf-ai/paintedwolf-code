@@ -12,7 +12,7 @@ from .profile_observer import _database, identifier, physical, profile, rows
 from .package_payload import stable
 from .provider import MODEL
 from .records import CaseUnavailable
-from .provider_acquisition import LOAD_ID, loaded_command, object_json
+from .provider_acquisition import host_call_id, loaded_command, object_json
 
 REPLY = b'{"content":"Fixture complete."}'
 DIGEST = hashlib.sha256(REPLY).hexdigest()
@@ -77,13 +77,14 @@ def committed_reply(app, project_id, session_id, provider_id):
             'stored_size': stored_size, 'fixed_reply_verified': True}
 
 
-def committed_fixed_tool(app, session_id, tool):
+def committed_fixed_tool(app, session_id, tool, call_id):
     identifier(session_id)
-    declarations = {'request_tools': (LOAD_ID, 'tool_surface', {'need': 'command'}),
-                    'command': ('qualification-0', 'processes', {'command': '/usr/bin/true'})}
+    host_call_id(call_id)
+    declarations = {'request_tools': ('tool_surface', {'need': 'command'}),
+                    'command': ('processes', {'command': '/usr/bin/true'})}
     if not isinstance(tool, str) or tool not in declarations:
         raise ValueError('reply tool witness requires its fixed declared tool')
-    call_id, owner, arguments = declarations[tool]
+    owner, arguments = declarations[tool]
     safe = "CASE WHEN length(CAST(tool_result_json AS BLOB))<=1048576 THEN tool_result_json ELSE '{}' END"
     fields = ('tool_call_id', 'tool', 'outcome', 'invocation.id', 'invocation.tool',
               'invocation.tool_call_id', 'invocation.owner', 'invocation.status', 'tool_args')
