@@ -4,17 +4,19 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/desktoptrash"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/desktoptrash"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourceeffect"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/textfile"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -143,4 +145,38 @@ func TestAgentRemovalRefusesAWorkerBranch(t *testing.T) {
 		t.Fatal("worker-branch removal accepted")
 	}
 	assertSourceHistoryFile(t, root, "note.txt", "note")
+}
+
+func TestAgentRemovalDirectoryEmptinessUsesBoundedAdmittedRead(t *testing.T) {
+	service, p, root, _ := sourceMutationFixture(t)
+	testutil.FailErr(t, "seed directory", os.Mkdir(filepath.Join(root, "wide"), 0o750))
+	for i := range 300 {
+		testutil.FailErr(t, "seed unreviewed child", os.WriteFile(filepath.Join(root, "wide", fmt.Sprintf("f%03d", i)), []byte("unchanged"), 0o600))
+	}
+	for _, state := range []int64{1, 32 << 10} {
+		memory, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: 32 << 20, State: state})
+		testutil.FailErr(t, "create actual removal memory", err)
+		removal := agentRemoval(t, p, "wide", "")
+		removal.Memory = memory
+		_, err = service.RemoveEntry(t.Context(), removal)
+		if state == 1 {
+			var limit *toolcontract.ProgramMemoryLimitError
+			if !errors.As(err, &limit) || limit.Account != "state" {
+				t.Fatalf("unadmitted directory read error=%v", err)
+			}
+		} else if !errors.Is(err, ErrSourceNotEmpty) {
+			t.Fatalf("bounded observed child error=%v", err)
+		}
+		if used := memory.InUse(); used != (toolcontract.ProgramMemoryUsage{}) {
+			t.Fatalf("directory refusal retained memory: %+v", used)
+		}
+	}
+	for i := range 300 {
+		assertSourceHistoryFile(t, root, filepath.Join("wide", fmt.Sprintf("f%03d", i)), "unchanged")
+	}
+	var count int
+	testutil.FailErr(t, "count refused intents", service.Journal.db.QueryRowContext(t.Context(), `SELECT count(*) FROM source_mutations`).Scan(&count))
+	if count != 0 {
+		t.Fatalf("nonrecursive refusal left %d intents", count)
+	}
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"strings"
@@ -114,12 +115,8 @@ func (s *SourceMutationService) prepareAgentRemoval(ctx context.Context, operati
 	}
 	// Review covers the selected entry, not its children, unless recursive.
 	if info.IsDir() && !removal.Recursive {
-		entries, readErr := os.ReadDir(abs)
-		if readErr != nil {
-			return nil, readErr
-		}
-		if len(entries) > 0 {
-			return nil, ErrSourceNotEmpty
+		if err := requireEmptyRemovalDirectory(ctx, fseffect.Location{Root: removal.RootPath, Rel: rel}, info, removal.Memory); err != nil {
+			return nil, err
 		}
 	}
 	if removal.ReviewedSnapshot != nil {
@@ -192,4 +189,36 @@ func (s *SourceMutationService) prepareAgentRemoval(ctx context.Context, operati
 		Changed:   true,
 		Response:  json.RawMessage(`{}`),
 	}, nil
+}
+
+// One observed child is sufficient to refuse nonrecursive directory removal.
+func requireEmptyRemovalDirectory(ctx context.Context, location fseffect.Location, selected os.FileInfo, memory sourceeffect.Memory) (result error) {
+	release, err := memory.ReserveProgramState(ctx, (16<<10)+8*int64(len(location.Root)+len(location.Rel)))
+	if err != nil {
+		return err
+	}
+	defer release()
+	directory, err := fseffect.OpenRead(location)
+	if err != nil {
+		return err
+	}
+	defer func() { result = errors.Join(result, directory.Close()) }()
+	opened, err := directory.Stat()
+	if err != nil {
+		return err
+	}
+	if !opened.IsDir() || !os.SameFile(selected, opened) {
+		return ErrSourceMutationDiverged
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	entries, err := directory.ReadDir(1)
+	if len(entries) != 0 {
+		return ErrSourceNotEmpty
+	}
+	if errors.Is(err, io.EOF) {
+		return nil
+	}
+	return err
 }
