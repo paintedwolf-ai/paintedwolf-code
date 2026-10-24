@@ -380,7 +380,11 @@ func stageReplace(req ReplaceRequest, inject func(stage) error) (*Replacement, R
 	if err != nil {
 		return nil, Result{}, err
 	}
-	tmpName, tmpFD, held, err := createTempAt(parent, 0o600)
+	initialMode := os.FileMode(0o600)
+	if !req.PreserveMode && req.Mode != 0 {
+		initialMode = chmodMode(req.Mode)
+	}
+	tmpName, tmpFD, held, err := createTempAt(parent, initialMode)
 	if err != nil {
 		parent.close()
 		return nil, Result{}, err
@@ -417,6 +421,8 @@ func stageReplace(req ReplaceRequest, inject func(stage) error) (*Replacement, R
 	if err != nil {
 		return nil, result, fmt.Errorf("write replacement: %w", err)
 	}
+	var stagedStat unix.Stat_t
+	stagedStatOK := inject == nil && unix.Fstat(tmpFD, &stagedStat) == nil
 	if err := injectAt(inject, stageWritten); err != nil {
 		return nil, result, err
 	}
@@ -439,8 +445,12 @@ func stageReplace(req ReplaceRequest, inject func(stage) error) (*Replacement, R
 		if err != nil {
 			return result, err
 		}
-		if err := unix.Fchmod(tmpFD, posixChmodMode(chmodMode(mode))); err != nil {
-			return result, fmt.Errorf("chmod replacement: %w", err)
+		targetMode := posixChmodMode(chmodMode(mode))
+		if !stagedStatOK || uint32(stagedStat.Mode)&0o7777 != targetMode {
+			if err := unix.Fchmod(tmpFD, targetMode); err != nil {
+				return result, fmt.Errorf("chmod replacement: %w", err)
+			}
+			stagedStatOK = false
 		}
 		if err := injectAt(inject, stageModeSet); err != nil {
 			return result, err
@@ -464,7 +474,20 @@ func stageReplace(req ReplaceRequest, inject func(stage) error) (*Replacement, R
 		if err := injectAt(inject, stageValidated); err != nil {
 			return result, err
 		}
-		if req.ReviewStaged != nil {
+		stagingUnchanged := false
+		if stagedStatOK {
+			var currentStat unix.Stat_t
+			if err := unix.Fstatat(parent.fd, tmpName, &currentStat, unix.AT_SYMLINK_NOFOLLOW); err == nil {
+				stagingUnchanged = currentStat.Dev == stagedStat.Dev &&
+					currentStat.Ino == stagedStat.Ino &&
+					currentStat.Mode == stagedStat.Mode &&
+					currentStat.Nlink == 1 &&
+					currentStat.Size == result.Bytes &&
+					currentStat.Mtim == stagedStat.Mtim &&
+					currentStat.Ctim == stagedStat.Ctim
+			}
+		}
+		if req.ReviewStaged != nil && !stagingUnchanged {
 			stagedParent := *parent
 			stagedParent.name = tmpName
 			if err := verifyTarget(targetAt{parent: &stagedParent}, result, req.CopyBuffer); err != nil {
@@ -486,8 +509,21 @@ func stageReplace(req ReplaceRequest, inject func(stage) error) (*Replacement, R
 		if err := injectAt(inject, stageDirSynced); err != nil {
 			return result, err
 		}
-		if err := verifyTarget(targetAt{parent: parent}, result, req.CopyBuffer); err != nil {
-			return result, err
+		verifiedFast := false
+		if stagingUnchanged {
+			var postStat unix.Stat_t
+			if err := unix.Fstatat(parent.fd, parent.name, &postStat, unix.AT_SYMLINK_NOFOLLOW); err == nil {
+				verifiedFast = postStat.Dev == stagedStat.Dev &&
+					postStat.Ino == stagedStat.Ino &&
+					postStat.Mode == stagedStat.Mode &&
+					postStat.Size == result.Bytes &&
+					postStat.Mtim == stagedStat.Mtim
+			}
+		}
+		if !verifiedFast {
+			if err := verifyTarget(targetAt{parent: parent}, result, req.CopyBuffer); err != nil {
+				return result, err
+			}
 		}
 		result.Publication = PublicationVerified
 		return result, injectAt(inject, stageVerified)

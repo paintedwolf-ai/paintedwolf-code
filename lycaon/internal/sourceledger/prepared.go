@@ -238,7 +238,7 @@ func (c *TxBatchCache) flushBufferedInserts(ctx context.Context, tx *sql.Tx) err
 	if len(c.operations) > 0 {
 		if err := execChunkedInsert(ctx, tx,
 			`INSERT INTO source_operations (id, project_id, branch_id, origin, person_id, cause, actor_label, session_id, job_id, turn, tool_call_id, tool_name, batch_id, operation_key, capture_quality, started_ts, committed_ts, git_transition_id, command_window_id) VALUES `,
-			`(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, ``, 19, 32, len(c.operations),
+			`(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, ``, 19, 128, len(c.operations),
 			func(i int, args []any) []any {
 				op := c.operations[i]
 				return append(args, op.ID, op.ProjectID, op.BranchID, op.Origin, op.PersonID, op.Cause, op.ActorLabel, op.SessionID, op.JobID, op.Turn, op.ToolCallID, op.ToolName, op.BatchID, op.OperationKey, op.CaptureQuality, op.StartedTs, op.CommittedTs, op.GitTransitionID, op.CommandWindowID)
@@ -250,7 +250,7 @@ func (c *TxBatchCache) flushBufferedInserts(ctx context.Context, tx *sql.Tx) err
 	if len(c.files) > 0 {
 		if err := execChunkedInsert(ctx, tx,
 			`INSERT INTO source_files (id, project_id, entry_kind, created_ts) VALUES `,
-			`(?,?,?,?)`, ``, 4, 64, len(c.files),
+			`(?,?,?,?)`, ``, 4, 256, len(c.files),
 			func(i int, args []any) []any {
 				f := c.files[i]
 				return append(args, f.ID, f.ProjectID, f.EntryKind, f.CreatedTs)
@@ -262,7 +262,7 @@ func (c *TxBatchCache) flushBufferedInserts(ctx context.Context, tx *sql.Tx) err
 	if len(c.versions) > 0 {
 		if err := execChunkedInsert(ctx, tx,
 			`INSERT INTO source_versions (id, file_id, project_id, branch_id, parent_version_id, derived_from_version_id, operation_id, root_id, path, state, content_sha256, byte_size, capture_state, capture_reason, capture_quality, created_ts, seq, landing) VALUES `,
-			`(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, ``, 18, 32, len(c.versions),
+			`(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, ``, 18, 128, len(c.versions),
 			func(i int, args []any) []any {
 				v := c.versions[i]
 				return append(args, v.ID, v.FileID, v.ProjectID, v.BranchID, v.ParentVersionID, v.DerivedFromVersionID, v.OperationID, v.RootID, v.Path, v.State, v.ContentSha256, v.ByteSize, v.CaptureState, v.CaptureReason, v.CaptureQuality, v.CreatedTs, v.Seq, v.Landing)
@@ -274,7 +274,7 @@ func (c *TxBatchCache) flushBufferedInserts(ctx context.Context, tx *sql.Tx) err
 	if len(c.effects) > 0 {
 		if err := execChunkedInsert(ctx, tx,
 			`INSERT INTO source_effects (id, project_id, operation_id, file_id, before_version_id, after_version_id, root_id, path, from_root_id, from_path, op, entry_kind, ordinal, walk_visible, created_ts) VALUES `,
-			`(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, ``, 15, 32, len(c.effects),
+			`(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, ``, 15, 128, len(c.effects),
 			func(i int, args []any) []any {
 				e := c.effects[i]
 				return append(args, e.ID, e.ProjectID, e.OperationID, e.FileID, e.BeforeVersionID, e.AfterVersionID, e.RootID, e.Path, e.FromRootID, e.FromPath, e.Op, e.EntryKind, e.Ordinal, e.WalkVisible, e.CreatedTs)
@@ -288,7 +288,7 @@ func (c *TxBatchCache) flushBufferedInserts(ctx context.Context, tx *sql.Tx) err
 			`INSERT INTO source_head_entries (project_id, branch_id, file_id, version_id, root_id, directory_id, name, state, content_sha256, ordinal, observed_ts) VALUES `,
 			`(?,?,?,?,?,?,?,?,?,?,?)`,
 			` ON CONFLICT(project_id, branch_id, file_id) DO UPDATE SET version_id = excluded.version_id, root_id = excluded.root_id, directory_id = excluded.directory_id, name = excluded.name, state = excluded.state, content_sha256 = excluded.content_sha256, ordinal = excluded.ordinal, observed_ts = excluded.observed_ts`,
-			11, 32, len(c.heads),
+			11, 128, len(c.heads),
 			func(i int, args []any) []any {
 				h := c.heads[i]
 				return append(args, h.ProjectID, h.BranchID, h.FileID, h.VersionID, h.RootID, h.DirectoryID, h.Name, h.State, h.ContentSha256, h.Ordinal, h.ObservedTs)
@@ -300,7 +300,7 @@ func (c *TxBatchCache) flushBufferedInserts(ctx context.Context, tx *sql.Tx) err
 	if len(c.presentations) > 0 {
 		if err := execChunkedInsert(ctx, tx,
 			`INSERT INTO source_agent_presentations (effect_id, project_id, file_id, ordinal) VALUES `,
-			`(?,?,?,?)`, ``, 4, 64, len(c.presentations),
+			`(?,?,?,?)`, ``, 4, 256, len(c.presentations),
 			func(i int, args []any) []any {
 				p := c.presentations[i]
 				return append(args, p.EffectID, p.ProjectID, p.FileID, p.Ordinal)
@@ -312,7 +312,7 @@ func (c *TxBatchCache) flushBufferedInserts(ctx context.Context, tx *sql.Tx) err
 	if len(c.lineAttrs) > 0 {
 		if err := execChunkedInsert(ctx, tx,
 			`INSERT INTO source_line_attr (project_id, branch_id, file_id, start_line, end_line, effect_id) VALUES `,
-			`(?,?,?,?,?,?)`, ``, 6, 64, len(c.lineAttrs),
+			`(?,?,?,?,?,?)`, ``, 6, 256, len(c.lineAttrs),
 			func(i int, args []any) []any {
 				l := c.lineAttrs[i]
 				return append(args, l.ProjectID, l.BranchID, l.FileID, l.StartLine, l.EndLine, l.EffectID)

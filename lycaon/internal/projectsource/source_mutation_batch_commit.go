@@ -166,7 +166,7 @@ func (s *sourceSettlement) commitPreparedRows(ctx context.Context, prepared []pr
 		for start := 0; start < len(deferredIDs); start += chunkSize {
 			end := min(start+chunkSize, len(deferredIDs))
 			var sb strings.Builder
-			sb.WriteString(`UPDATE source_mutations SET status=?, response_json='{}', error='', updated_at=?, plan_json=json_remove(plan_json, '$.agent_effect.record.Before', '$.agent_effect.record.After') WHERE id IN (`)
+			sb.WriteString(`UPDATE source_mutations SET status=?, response_json='{}', error='', updated_at=?, plan_json='{}' WHERE id IN (`)
 			args := make([]any, 0, (end-start)+2)
 			args = append(args, sourceMutationCommitted, updatedAtStr)
 			for i := start; i < end; i++ {
