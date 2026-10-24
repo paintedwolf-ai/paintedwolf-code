@@ -39,39 +39,10 @@ class InstalledSecurityTests(unittest.TestCase):
             with self.subTest(raw=raw), self.assertRaises(ValueError):
                 security.refusal(frame)
 
-    def test_logind_shape_is_validated_before_control_decisions(self):
-        row = ['sleep', 'fixture', 'fixture', 'block', 1000, 123]
-        with patch.object(security, 'bus_value', return_value=[[row]]):
-            self.assertEqual(security.inhibitors(), [row])
-        for result in [[], [['invalid']], [[['sleep', '', '', 'block', True, 123]]]]:
-            with patch.object(security, 'bus_value', return_value=result), self.assertRaises(ValueError):
-                security.inhibitors()
-
-    def test_successful_cli_requires_owned_inhibitor_and_release(self):
-        for observed_pid in [123, 456]:
-            active = threading.Event()
-            observed = threading.Event()
-            def product(*args, **kwargs):
-                active.set()
-                if not observed.wait(5):
-                    raise AssertionError("native observer did not sample running product")
-                active.clear()
-                return {'exit_code': 0, 'timed_out': False, 'output_limit': False,
-                        'launch_identity': {'pid': 123, 'start_time_ticks': '42'},
-                        'stdout': b'', 'stderr': b'success'}
-            def observer():
-                if not active.is_set():
-                    return []
-                row = ['sleep', '', '', 'block', 1000, observed_pid]
-                observed.set()
-                return [row]
-            with self.subTest(observed_pid=observed_pid), patch.object(security, 'run', side_effect=product), \
-                    patch.object(security, 'inhibitors', side_effect=observer), patch.object(
-                    security, 'execution_session', return_value={'Remote': False, 'Active': True, 'Type': 'wayland'}), \
-                    patch.object(security.os, 'getuid', return_value=1000):
-                status, facts, streams = security.inhibitor_lifetime({})
-                self.assertEqual(status, 'passed' if observed_pid == 123 else 'failed')
-                self.assertEqual(facts['after'], [])
+    def test_session_inhibitor_lifetime_routes_to_dedicated_keepawake_driver(self):
+        from linux_release import installed_execution
+        self.assertNotIn(('session', 'inhibitor-lifetime'), security.PROBES)
+        self.assertEqual(installed_execution.case_family('session', 'inhibitor-lifetime', 'deb'), 'keepawake')
 
     def test_memory_observer_never_reads_content_and_refuses_unexpected_errors(self):
         for code in [errno.EPERM, errno.EACCES]:
@@ -139,12 +110,3 @@ class InstalledSecurityTests(unittest.TestCase):
                     security, 'observe', return_value=json.dumps({'type': 'u', 'data': data}).encode()):
                 with self.subTest(data=data), self.assertRaises(ValueError):
                     security.service_pid()
-
-    def test_remote_or_inactive_inhibitor_fixture_is_not_product_failure(self):
-        for session in [{'Remote': True, 'Active': True, 'Type': 'tty'},
-                        {'Remote': False, 'Active': False, 'Type': 'wayland'}]:
-            with patch.object(security, 'execution_session', return_value=session), patch.object(security, 'run') as product:
-                status, facts, streams = security.inhibitor_lifetime({})
-            self.assertEqual(status, 'unverified')
-            self.assertEqual(facts['execution_session'], session)
-            product.assert_not_called()

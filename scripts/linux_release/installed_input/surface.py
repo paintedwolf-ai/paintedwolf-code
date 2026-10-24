@@ -106,7 +106,7 @@ class FrameObserver:
             if row['kind'] != 'quit-dialog' or not wire.active(row):
                 continue
             node = self.nodes[self._key(row['identity'])][0]
-            for control in self.ui.descendants(node):
+            for control in accessibility.descendants(node):
                 if (control.getRole() == self.ui.api.ROLE_PUSH_BUTTON and control.name in {'Quit', 'Keep working'}
                         and self.ui.visible(control) and control.getState().contains(self.ui.api.STATE_FOCUSED)):
                     matches.append({'identity': self._identity(control), 'kind': 'quit-button' if control.name == 'Quit' else 'keep-working-button',

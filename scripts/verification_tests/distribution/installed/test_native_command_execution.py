@@ -35,10 +35,100 @@ class NativeCommandTests(unittest.TestCase):
     def test_invalid_bounds_refuse_before_creating_any_child(self):
         with patch.object(owner.subprocess, 'Popen') as launch:
             for options in ({'limit': True}, {'limit': 0}, {'limit': owner.LIMIT + 1},
-                            {'timeout': 0}, {'timeout': 301}, {'timeout': float('nan')}):
+                            {'timeout': 0}, {'timeout': 301}, {'timeout': float('nan')},
+                            {'input_bytes': b''}, {'input_bytes': 'secret'},
+                            {'limit': 8, 'input_bytes': b'123456789'}):
                 with self.subTest(options=options), self.assertRaises(ValueError):
                     owner.command(['unused'], **options)
             launch.assert_not_called()
+
+    def test_input_bytes_delivers_bounded_stdin_and_closes_eof_immediately(self):
+        secret = bytearray(b'pwqual058a:SecretValue0123456789abcdefABCDEF\n')
+        result = owner.command(
+            [sys.executable, '-c',
+             "import hashlib,sys;data=sys.stdin.buffer.read();print(len(data),hashlib.sha256(data).hexdigest())"],
+            input_bytes=secret, timeout=5, limit=1024)
+        self.assertEqual(result[0], 0)
+        self.assertEqual(result[2], b'')
+        self.assertIn(b'45 ', result[1])
+        self.assertNotIn(b'SecretValue0123456789abcdefABCDEF', result[1])
+
+    def test_large_chunked_input_bytes_interleaves_with_stdout_without_deadlock(self):
+        payload = (b'ChunkSecret9876543210' * 10000)
+        result = owner.command(
+            [sys.executable, '-c',
+             "import hashlib,sys\n"
+             "total = 0\n"
+             "digest = hashlib.sha256()\n"
+             "while chunk := sys.stdin.buffer.read(16384):\n"
+             "    total += len(chunk)\n"
+             "    digest.update(chunk)\n"
+             "    sys.stdout.buffer.write(b'.')\n"
+             "    sys.stdout.buffer.flush()\n"
+             "print(f'\\n{total}:{digest.hexdigest()}')\n"],
+            input_bytes=payload, timeout=10, limit=len(payload) + 4096)
+        self.assertEqual(result[0], 0)
+        self.assertIn(f'\n{len(payload)}:'.encode('ascii'), result[1])
+        self.assertNotIn(b'ChunkSecret9876543210', result[1])
+
+    def test_early_child_exit_or_broken_pipe_refuses_without_leaking_input_bytes(self):
+        secret = b'TopSecretCredentialForBrokenPipeTest0123456789' * 4000
+        launched = []
+        popen = subprocess.Popen
+        def capture(*args, **kwargs):
+            child = popen(*args, **kwargs)
+            launched.append(child)
+            return child
+        with patch.object(owner.subprocess, 'Popen', side_effect=capture):
+            with self.assertRaisesRegex(CaseUnavailable, 'native-command-stdin-incomplete') as refused:
+                owner.command([sys.executable, '-c', 'import sys;sys.stdin.close();sys.exit(0)'],
+                              input_bytes=secret, timeout=5, limit=len(secret) + 1024)
+        self.assertEqual(len(launched), 1)
+        self.assertIsNotNone(launched[0].returncode)
+        self.assertTrue(launched[0].stdin.closed)
+        observations = getattr(refused.exception, 'observations', {})
+        self.assertTrue(observations['native_command_stdin']['stdin_closed'])
+        self.assertEqual(observations['native_command_stdin']['stdin_bytes_expected'], len(secret))
+        self.assertLess(observations['native_command_stdin']['stdin_bytes_written'], len(secret))
+        self.assertNotIn('TopSecretCredentialForBrokenPipeTest0123456789', repr(refused.exception))
+        self.assertNotIn('TopSecretCredentialForBrokenPipeTest0123456789', repr(observations))
+
+        launched.clear()
+        with patch.object(owner.subprocess, 'Popen', side_effect=capture), patch.object(
+                owner.os, 'write', side_effect=BrokenPipeError):
+            with self.assertRaisesRegex(CaseUnavailable, 'native-command-stdin-incomplete') as refused:
+                owner.command([sys.executable, '-c', 'import time;time.sleep(60)'],
+                              input_bytes=secret, timeout=5, limit=len(secret) + 1024)
+        self.assertEqual(len(launched), 1)
+        self.assertIsNotNone(launched[0].returncode)
+        self.assertTrue(launched[0].stdin.closed)
+        observations = getattr(refused.exception, 'observations', {})
+        self.assertEqual(observations['native_command_stdin'], {
+            'stdin_closed': True, 'stdin_bytes_written': 0, 'stdin_bytes_expected': len(secret)})
+        self.assertNotIn('TopSecretCredentialForBrokenPipeTest0123456789', repr(refused.exception))
+        self.assertNotIn('TopSecretCredentialForBrokenPipeTest0123456789', repr(observations))
+
+    def test_timeout_with_input_bytes_closes_stdin_settles_child_and_never_leaks_secret(self):
+        secret = b'NeverLeakThisTimeoutSecretValue0123456789ABCD'
+        launched = []
+        popen = subprocess.Popen
+        def capture(*args, **kwargs):
+            child = popen(*args, **kwargs)
+            launched.append(child)
+            return child
+        with patch.object(owner.subprocess, 'Popen', side_effect=capture), patch.object(
+                owner, 'remaining', side_effect=[5, CaseUnavailable('native-command-deadline'), 5]):
+            with self.assertRaisesRegex(CaseUnavailable, 'native-command-deadline') as refused:
+                owner.command([sys.executable, '-c', 'import sys,time;sys.stdin.buffer.read(1);time.sleep(60)'],
+                              input_bytes=secret, timeout=5, limit=1024)
+        self.assertEqual(len(launched), 1)
+        self.assertIsNotNone(launched[0].returncode)
+        self.assertTrue(launched[0].stdin.closed)
+        self.assertTrue(launched[0].stdout.closed)
+        self.assertTrue(launched[0].stderr.closed)
+        self.assertNotIn('NeverLeakThisTimeoutSecretValue0123456789ABCD', repr(refused.exception))
+        self.assertNotIn('NeverLeakThisTimeoutSecretValue0123456789ABCD',
+                         repr(getattr(refused.exception, 'observations', None)))
 
     def test_capture_deadline_settles_the_actual_owned_child(self):
         launched = []
