@@ -24,7 +24,24 @@ def materialize(fixture: Path, config: Path, project: Path):
         database.execute("UPDATE project_roots SET path = ? WHERE path = 'project-root' OR path LIKE 'project-root/%'", (str(project),))
 
 
+def sync_engine_token(config: Path, observation: dict):
+    pid = observation.get("engine_pid")
+    if type(pid) is not int or pid <= 1:
+        return
+    command = subprocess.run(["ps", "eww", "-p", str(pid), "-o", "command="],
+                             capture_output=True, text=True, check=True, timeout=5).stdout
+    for field in command.split():
+        if field.startswith("LYCAON_API_TOKEN="):
+            token = field.removeprefix("LYCAON_API_TOKEN=").strip()
+            if token:
+                token_file = config / "api.token"
+                token_file.write_text(token)
+                token_file.chmod(0o600)
+                return
+
+
 def verify_semantics(config: Path, fixture: Path, observation: dict, evidence: Path):
+    sync_engine_token(config, observation)
     with (evidence / "semantics.log").open("wb") as log:
         subprocess.run([sys.executable, str(SCRIPTS / "upgrade-corpus-semantics.py"), "verify",
                         "--base", f"http://127.0.0.1:{observation['port']}", "--token-file", str(config / "api.token"),
@@ -152,10 +169,27 @@ def run_case(case: dict, plan: dict, root: Path, work: Path, config: Path, evide
         return {"id": case["id"], "result": "passed", "activation_trigger": "startup_after_staging",
                 "steps": observations, "restart_health": restart["health"]}
     finally:
+        finish_case(installation, config, records, evidence, sys.exc_info()[1])
+
+
+def finish_case(installation, config, records, evidence, primary_error):
+    errors = []
+    actions = (
+        ("write startup observation", lambda: (evidence / "startup-observation.json").write_text(
+            json.dumps(installation.last_observation, indent=2) + "\n")),
+        ("stop installation", installation.stop),
+        ("retain installation state", lambda: retain_state(config, records, evidence)),
+    )
+    for label, action in actions:
         try:
-            installation.stop()
-        finally:
-            retain_state(config, records, evidence)
+            action()
+        except Exception as error:
+            errors.append(error)
+            if primary_error is not None:
+                primary_error.add_note(f"{label}: {type(error).__name__}: {error}")
+            print(f"{label}: {type(error).__name__}: {error}", file=sys.stderr)
+    if errors and primary_error is None:
+        raise errors[0]
 
 
 def retain_state(config, records, evidence):

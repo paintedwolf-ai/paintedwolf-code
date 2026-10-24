@@ -62,7 +62,7 @@ def sample_resources(stop, interval=60):
         print(resource_line(), flush=True)
 
 
-def run_lane(name, shard=""):
+def run_lane(name, shard="", merge_group=False):
     lane = hosted_plan.lanes()[name]
     count = lane.get("shards", 1)
     if (shard == "") != (count == 1) or shard and shard not in {f"{k}/{count}" for k in range(1, count + 1)}:
@@ -101,14 +101,40 @@ def run_lane(name, shard=""):
     command = ["./task", *hosted_plan.invocation(targets)]
     if "arguments" in lane:
         command += ["--", *lane["arguments"]]
-    if scope and name == "behavior":
-        from ci_policy.impact import go_scope
-        packages = go_scope(scope)
-        if packages:
-            command += ["--", *packages]
-            record["packages"] = packages
+
     try:
-        code = subprocess.call(command, cwd=ROOT, env=environment)
+        code = 0
+        record["phases"] = []
+        packages = None
+        if scope and name == "behavior":
+            from ci_policy.impact import go_scope
+            packages = go_scope(scope)
+            if packages:
+                command += ["--", *packages]
+                record["packages"] = packages
+        if lane.get("preflight"):
+            preflight = ["./task", *lane["preflight"]]
+            record["preflight"] = {"command": preflight, "started_at": time.time()}
+            path.write_text(json.dumps(record, indent=2) + "\n")
+            code = subprocess.call(preflight, cwd=ROOT, env=environment)
+            record["preflight"].update(exit_code=code, finished_at=time.time())
+        commands = [command]
+        if code == 0 and merge_group:
+            from ci_policy.merge_preflight import commands as ordered_commands
+            commands = ordered_commands(lane, hosted_plan.invocation(targets), packages)
+        for command in commands:
+            if code != 0:
+                break
+            phase = {"command": command, "started_at": time.time()}
+            record["phases"].append(phase)
+            path.write_text(json.dumps(record, indent=2) + "\n")
+            code = subprocess.call(command, cwd=ROOT, env=environment)
+            phase.update(exit_code=code, finished_at=time.time())
+    except (subprocess.SubprocessError, OSError, ValueError) as error:
+        code = 2
+        record["execution_error"] = {"type": type(error).__name__, "message": str(error)}
+        if isinstance(error, subprocess.CalledProcessError):
+            record["execution_error"].update(command=error.cmd, exit_code=error.returncode, stderr=error.stderr)
     finally:
         stop.set()
     record["oom_after"] = oom_events()

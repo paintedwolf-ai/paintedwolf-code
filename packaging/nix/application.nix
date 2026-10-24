@@ -1,4 +1,4 @@
-{ lib, stdenvNoCC, callPackage, python3, makeWrapper, wrapGAppsHook3, gtk3, apparmor-parser, apparmor-profiles, mesa
+{ lib, stdenvNoCC, callPackage, python3, makeShellWrapper, wrapGAppsHook3, gtk3, apparmor-parser, apparmor-profiles, mesa
 , gsettings-desktop-schemas, glib-networking, nix, source, shell, engine
 , bialy, document-core, resources
 , desktopSettings ? callPackage ./desktop-settings.nix { inherit source; }
@@ -14,7 +14,7 @@ stdenvNoCC.mkDerivation {
   pname = "painted-wolf-code";
   inherit version;
   dontUnpack = true;
-  nativeBuildInputs = [ python3 makeWrapper wrapGAppsHook3 ];
+  nativeBuildInputs = [ python3 makeShellWrapper wrapGAppsHook3 ];
   buildInputs = [ gtk3 gsettings-desktop-schemas glib-networking ];
   dontStrip = true;
   dontPatchELF = true;
@@ -49,7 +49,7 @@ stdenvNoCC.mkDerivation {
       export VK_DRIVER_FILES="''${VK_DRIVER_FILES:-'"''${vulkan_drivers%:}"'}"
     }'
     for executable in painted-wolf-code pw pw-logs; do
-      makeWrapper "$root/bin/$executable" "$out/bin/$executable" --run "$graphics"
+      makeShellWrapper "$root/bin/$executable" "$out/bin/$executable" --run "$graphics"
     done
     install -m644 ${source}/lycaon-den/src-tauri/icons/128x128.png "$out/share/icons/hicolor/128x128/apps/painted-wolf-code.png"
     substitute ${source}/packaging/linux/dev.paintedwolf.code.desktop \
@@ -75,6 +75,7 @@ stdenvNoCC.mkDerivation {
         -I ${apparmor-profiles}/etc/apparmor.d "$profile"
     done
   '';
+  passthru.noticeRuntimeInputs = [ mesa nix ];
   meta = {
     description = "Painted Wolf Code desktop application and complete immutable runtime resources";
     license = lib.licenses.asl20;

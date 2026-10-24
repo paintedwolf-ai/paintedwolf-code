@@ -31,7 +31,7 @@ class CaseTests(unittest.TestCase):
         case = {"id": "1.0.2-preview", "source_version": "1.0.2", "channel": "preview", "protocol": "native-v2", "steps": [step]}
         plan = {"candidate": step, "archives": {"1.0.2": manifest("1.0.2")}, "schema_version": 5, "schemas": {"1.0.2": 5}}
         records = config / "updates/installations" / hashlib.sha256(str(app).encode()).hexdigest()
-        installation = Mock(executable=executable)
+        installation = Mock(executable=executable, last_observation={"state": "healthy"})
         launches = []
         def launch():
             launches.append(True)
@@ -76,6 +76,7 @@ class CaseTests(unittest.TestCase):
                 installation.stop.assert_any_call(crash_app=True)
                 self.assertEqual(semantics.call_count, 3)
                 self.assertTrue((evidence / "1.1.0-transaction.json").exists())
+                self.assertEqual(json.loads((evidence / "startup-observation.json").read_text()), {"state": "healthy"})
             self.assertGreaterEqual(installation.stop.call_count, 1)
 
     def test_activation_requires_a_complete_native_transition_and_another_restart(self):
@@ -92,3 +93,40 @@ class CaseTests(unittest.TestCase):
 
     def test_upgraded_health_must_report_the_candidate_schema(self):
         self.exercise(fault="schema")
+
+    def test_diagnostic_write_failure_preserves_the_activation_failure_and_cleanup(self):
+        write = Path.write_text
+        def fail_observation(path, *args, **kwargs):
+            if path.name == "startup-observation.json":
+                raise OSError("evidence disk unavailable")
+            return write(path, *args, **kwargs)
+        with patch.object(Path, "write_text", fail_observation), patch.object(driver, "retain_state") as retain:
+            self.exercise(fault="channel")
+            retain.assert_called_once()
+
+    def test_cleanup_attempts_every_operation_and_retains_primary_error(self):
+        primary = ValueError("activation failed")
+        installation = Mock(last_observation={})
+        installation.stop.side_effect = OSError("stop failed")
+        with patch.object(Path, "write_text", side_effect=OSError("write failed")), \
+                patch.object(driver, "retain_state", side_effect=OSError("retain failed")) as retain:
+            driver.finish_case(installation, Path("config"), Path("records"), Path("evidence"), primary)
+            installation.stop.assert_called_once()
+            retain.assert_called_once()
+            self.assertEqual(len(primary.__notes__), 3)
+            with self.assertRaisesRegex(OSError, "write failed"):
+                driver.finish_case(installation, Path("config"), Path("records"), Path("evidence"), None)
+
+    def test_semantics_verification_syncs_the_desktop_engine_token(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            config, fixture, evidence = root / "config", root / "fixture", root / "evidence"
+            for path in (config, fixture, evidence):
+                path.mkdir()
+            outputs = [unittest.mock.Mock(stdout="/Applications/Painted Wolf Code.app/Contents/MacOS/pw serve LYCAON_ADDR=127.0.0.1:0 LYCAON_API_TOKEN=desktop-bearer-token\n"),
+                       unittest.mock.Mock()]
+            with patch.object(driver.subprocess, "run", side_effect=outputs) as calls:
+                driver.verify_semantics(config, fixture, {"engine_pid": 42, "port": 1234}, evidence)
+            self.assertEqual((config / "api.token").read_text(), "desktop-bearer-token")
+            self.assertEqual((config / "api.token").stat().st_mode & 0o777, 0o600)
+            self.assertEqual(calls.call_count, 2)

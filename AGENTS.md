@@ -101,7 +101,7 @@ limits remain absolute. Before editing large code, run
 boundary or a bounded retention decision. Warnings do not block
 admission; post-merge maintainability issues track the review. Resolve hard-limit
 failures by reshaping or trimming.
-`coverage:changes` and `den:coverage:changes` require tests for added statements.
+`coverage:changes`, `den:coverage:changes`, and `scripts:coverage:changes` require tests for added statements.
 See [size budgets and changed coverage](docs/test-strategy.md#size-budgets-and-changed-coverage).
 
 ### Architectural decisions from warnings

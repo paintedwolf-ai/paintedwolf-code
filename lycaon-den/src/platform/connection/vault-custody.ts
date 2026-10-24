@@ -6,7 +6,9 @@ export type VaultCustodyMode =
   | "app_password"
   | "keychain"
   | "development"
-  | "refused";
+  | "refused"
+  | "restart_required"
+  | "unavailable";
 
 export type VaultCustody = {
   mode: VaultCustodyMode;

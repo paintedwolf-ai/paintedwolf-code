@@ -60,7 +60,7 @@ function feedbackStore(meta: WorkflowFeedbackMeta, messageId = "fb-msg") {
 }
 
 describe("AskUserDock", () => {
-  it("submits secret responses only through the protected endpoint", async () => {
+  it.each(["button", "keyboard"])("submits secret responses through the protected endpoint by %s", async (method) => {
     const c = client();
     const meta: WorkflowFeedbackMeta = {
       phase_id: "secret-1",
@@ -87,7 +87,13 @@ describe("AskUserDock", () => {
     fireEvent.click(getByRole("button", { name: "Hide secret" }));
     expect(input.type).toBe("password");
 
-    fireEvent.click(getByRole("button", { name: "Store secret" }));
+    for (const composition of [{ isComposing: true }, { keyCode: 229 }]) {
+      fireEvent.keyDown(input, { key: "Enter", ...composition });
+      expect(c.resolveWorkflowSecret).not.toHaveBeenCalled();
+      expect(c.resolveWorkflowFeedback).not.toHaveBeenCalled();
+    }
+    if (method === "button") fireEvent.click(getByRole("button", { name: "Store secret" }));
+    else fireEvent.keyDown(input, { key: "Enter" });
 
     await vi.waitFor(() => expect(c.resolveWorkflowSecret).toHaveBeenCalledWith(
       "run-1",
