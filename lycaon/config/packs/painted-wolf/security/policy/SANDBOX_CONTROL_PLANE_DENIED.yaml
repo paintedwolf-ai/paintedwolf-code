@@ -47,3 +47,4 @@ x-paintedwolf-scenarios:
       tool: write
     expect_contains:
       - 'Code: SANDBOX_CONTROL_PLANE_DENIED'
+      - ${config_dir}/packs/stock/skills/verify-a-change/SKILL.md

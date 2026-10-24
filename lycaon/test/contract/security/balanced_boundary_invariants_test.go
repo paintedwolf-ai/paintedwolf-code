@@ -14,7 +14,7 @@ import (
 
 // WriteRootsForBoundary and BuildProfile share the same write-root union.
 func TestInvariantWriteRootSSOTSharedByGateAndConfine(t *testing.T) {
-	t.Parallel()
+	t.Setenv("LYCAON_CONFIG_DIR", "/opt/paintedwolf-fixture-state")
 	proj := t.TempDir()
 	writeRoots, err := confine.WriteRootsForBoundary("", []string{proj}, nil, "")
 	contractcheck.FailErr(t, "admit write roots", err)

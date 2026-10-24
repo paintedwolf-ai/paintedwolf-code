@@ -27,6 +27,7 @@ func TestWriteRootsForBoundaryMatchesBuildSeatbeltProfile(t *testing.T) {
 }
 
 func TestPathWithinWriteRootsSymlinkParity(t *testing.T) {
+	t.Setenv("LYCAON_CONFIG_DIR", "/opt/paintedwolf-fixture-state")
 	proj := t.TempDir()
 	roots, err := confine.WriteRootsForBoundary("", []string{proj}, nil, "")
 	testutil.FailErr(t, "admit write roots", err)
