@@ -18,6 +18,7 @@ from linux_release.installed_cases.records import retain
 
 class NativeBootstrapTests(unittest.TestCase):
     def fixture(self, root):
+        (root / 'home').mkdir(mode=0o700)
         execution = {'format_version': 1, 'execution_nonce': 'a' * 32, 'source_commit': 'b' * 40,
             'driver_tree': 'c' * 40, 'artifact_id': 'app', 'environment_id': 'ubuntu', 'variant_id': 'baseline'}
         artifact = {'id': 'app', 'installation': 'deb', 'identity': {'sha256': 'd' * 64}}
@@ -29,7 +30,7 @@ class NativeBootstrapTests(unittest.TestCase):
     def test_snapshot_precedes_owned_removal_and_absence_has_positive_controls(self):
         for failure in (None, 'remove', 'process', 'version', 'owner'):
             with self.subTest(failure=failure), tempfile.TemporaryDirectory() as temporary:
-                root = Path(temporary)
+                root = Path(temporary).resolve()
                 execution, artifact, binding, inventory = self.fixture(root)
                 order = []
                 def command(arguments):
@@ -69,7 +70,7 @@ class NativeBootstrapTests(unittest.TestCase):
 
     def test_changed_payload_after_inventory_is_never_purged(self):
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             execution, artifact, binding, inventory = self.fixture(root)
             with patch.object(owner, 'prepare_install', return_value={'status': 'passed'}), \
                     patch.object(owner, 'bind', side_effect=[binding, ValueError('changed payload')]), \
@@ -86,7 +87,7 @@ class NativeBootstrapTests(unittest.TestCase):
 
     def test_supervisor_captures_real_exit_and_bounds_output(self):
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             kill = os.killpg
             def held_group(pid, number):
                 self.assertIsNotNone(os.waitid(os.P_PID, pid, os.WEXITED | os.WNOHANG | os.WNOWAIT))
@@ -96,7 +97,7 @@ class NativeBootstrapTests(unittest.TestCase):
                 self.assertEqual(supervisor.captured_child([sys.executable, '-c', 'print("observed");raise SystemExit(7)'], root, root), 7)
             self.assertEqual((root / 'bootstrap-supervision.stdout').read_bytes(), b'observed\n')
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             with self.assertRaises(ValueError):
                 supervisor.captured_child([sys.executable, '-c', 'import sys;sys.stdout.write("x"*100000)'], root, root)
             self.assertEqual((root / 'bootstrap-supervision.stdout').stat().st_size, 65536)
@@ -117,7 +118,7 @@ class NativeBootstrapTests(unittest.TestCase):
 
     def test_supervision_binds_actual_success_and_refuses_changed_request(self):
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             execution, _, _, _ = self.fixture(root)
             (root / 'execution-request.json').write_text(json.dumps(execution))
             selected = {'controller_commit': 'd' * 40, 'controller_tree': 'c' * 40, 'source_commit': 'b' * 40}
@@ -136,7 +137,7 @@ class NativeBootstrapTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     supervisor.verify(root, selected, account, execution)
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             (root / 'execution-request.json').write_text(json.dumps(execution))
             with patch.object(supervisor.os, 'getuid', return_value=0), \
                     patch.object(supervisor.os, 'geteuid', return_value=0), \
@@ -149,7 +150,7 @@ class NativeBootstrapTests(unittest.TestCase):
 
     def test_failed_installation_never_attempts_unowned_removal(self):
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             execution, _, _, _ = self.fixture(root)
             with patch.object(owner, 'prepare_install', return_value={'status': 'unverified'}), \
                     patch.object(owner, 'command') as command, patch.object(owner, 'bind') as bind:
@@ -160,7 +161,7 @@ class NativeBootstrapTests(unittest.TestCase):
 
     def test_receipt_requires_exact_preleaf_nonce_snapshot_and_real_journals(self):
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             execution, artifact, binding, inventory = self.fixture(root)
             evidence = root / 'evidence'
             evidence.mkdir()
