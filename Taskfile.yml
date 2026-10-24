@@ -275,6 +275,11 @@ tasks:
     cmds:
       - python3 {{.SCRIPTS_DIR}}/coverage_changes.py go
 
+  scripts:coverage:changes:
+    desc: Scripts Python statements the change adds or modifies must be tested, subprocesses included (floors and suites in scripts/coverage-policy.json)
+    cmds:
+      - python3 {{.SCRIPTS_DIR}}/coverage_changes.py python
+
   check:coverage:
     desc: Minimum statement coverage on internal/* (default 62%% floor)
     sources:
@@ -362,16 +367,10 @@ tasks:
     cmds:
       - python3 {{.SCRIPTS_DIR}}/test-execution.py plan -- test:contract -- {{.CLI_ARGS}}
 
-  # Confinement and gated integration tests use separate filters.
   test:seatbelt:
-    desc: 'Applied Seatbelt + Available()-gated confinement (--full, darwin)'
+    desc: 'Applied Seatbelt and confinement consumers (--full, darwin)'
     cmds:
-      - bash {{.SCRIPTS_DIR}}/go-test-digest.sh --full --name test:seatbelt-confine -- ./internal/confine/...
-      # The scope contract derives this applied-confinement inventory.
-      - bash {{.SCRIPTS_DIR}}/go-test-digest.sh --full --name test:seatbelt-gated -- ./cmd/opengrep-artifact/... ./test/contract/... ./internal/mcp/... ./internal/scan/... ./internal/hitl/... ./internal/exec/... ./internal/webresearch/... ./internal/tools/... ./internal/toolexecution/... -run '^(TestArtifactCLIRequiresConfinement|TestEngineLossFixtureProcess|TestLaunchPlanRefusesUnavailableLinuxBoundary|TestConfinementIntegrityCompositeChain|TestConfinementIntegrityConfigTokenUnreadable|TestConfinementIntegrityForeignVarFoldersWriteDenied|TestConfinementIntegrityLauncherUntamperable|TestConfinementIntegrityNoProfileStagingFile|TestNonHTTPContractContainedDerivesFromSameRequestAsProfile|TestNonHTTPContractProxyStartupFailureDeniesAndRollsBack|TestPrepareStdioCommandConfinedWhenAvailable|TestPrepareStdioCommandHandsTheServerNoCredential|TestPrepareStdioCommandRequiresRootsWhenAvailable|TestBundledScannerConfinementDeniesNetwork|TestExternalScannerWritesProjectTree|TestContainedCarriesDirectIPNarrowing|TestContainedProvenanceMatchesDefaultConfinement|TestContainedTaskOverlayStaysOutOfRoots|TestContainedWriteRootsCarryDurableGrants|TestExternalScannerLaunchIsValidWhileEnforcing|TestWebToolsUnaffectedByCommandProxyOnlyDefault|TestOpenGrepBundledAdapterFixture|TestIngesterBundledSASTProducesGuidance|TestOpenGrepScopesExcludesToProjectNotAncestorDirectories|TestOpenGrepEmbeddedSourceRecovery|TestExecutionCapabilityAsksBeforeSpawnAndConsumesOnce|TestConsumerFinalizationNativeScanner|TestInstalledScannerProductCases|TestSelectedScannerCannotQualifyAnEmptySuccessfulReport)$'
-      - |
-        bash {{.SCRIPTS_DIR}}/with-bundled-scanners.sh -- \
-          bash {{.SCRIPTS_DIR}}/go-test-digest.sh --full --tags scanstress --name test:seatbelt-scanstress -- ./test/scanstress/...
+      - python3 {{.SCRIPTS_DIR}}/test-execution.py plan -- test:seatbelt -- {{.CLI_ARGS}}
 
   test:linux:installed:
     desc: 'Admit an exact-artifact Linux installed campaign and retain its required-row checklist'
@@ -635,21 +634,8 @@ tasks:
       - sh: command -v cargo
         msg: cargo required — install rustup from https://rustup.rs; rust-toolchain.toml selects the version
     cmds:
-      - |
-        component='{{.CLI_ARGS}}'
-        case "$component" in
-          "")
-            bash {{.SCRIPTS_DIR}}/ensure-tauri-binaries.sh
-            cargo test --workspace --all-targets --quiet
-            ;;
-          desktop-settings-observer)
-            cargo test --package desktop-settings-observer --all-targets --quiet
-            retained="$(mktemp -d '{{.ARTIFACT_DIR}}/desktop-settings-component.XXXXXX')"
-            cp Cargo.lock "$retained/Cargo.lock"
-            echo "Desktop settings component lock retained at $retained/Cargo.lock"
-            ;;
-          *) echo "unsupported Rust test component" >&2; exit 2 ;;
-        esac
+      - bash {{.SCRIPTS_DIR}}/ensure-tauri-binaries.sh
+      - cargo test --workspace --all-targets --quiet
 
   decide:test:
     desc: Decision engine (bialy) Rust tests
@@ -666,7 +652,7 @@ tasks:
         msg: cargo required — install rustup from https://rustup.rs; rust-toolchain.toml selects the version
     cmds:
       # Parity tests use the shipped binary's features.
-      - cargo test --all-targets --quiet --features "$(bash {{.SCRIPTS_DIR}}/decide-features.sh)"
+      - bash {{.SCRIPTS_DIR}}/toolchain/decide-test.sh --quiet
 
   den:test:coverage:
     desc: Frontend Vitest with v8 coverage report

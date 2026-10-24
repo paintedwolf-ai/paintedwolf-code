@@ -29,6 +29,9 @@ outputs:
   decide-cache-hit:
     description: Whether the decision engine's exact build cache was restored
     value: ${{ steps.decide.outputs.cache-hit }}
+  document-cache-hit:
+    description: Whether the document compiler cache was restored
+    value: ${{ steps.document.outputs.cache-hit }}
   artifact-root:
     description: Checkout artifact directory
     value: ${{ steps.paths.outputs.artifact-root }}
@@ -41,6 +44,10 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Set verification compiler profiles
+      shell: bash
+      run: printf 'CARGO_PROFILE_DEV_DEBUG=0\nCARGO_PROFILE_TEST_DEBUG=0\n' >> "${GITHUB_ENV}"
+
     - name: Resolve artifact directory
       id: paths
       shell: bash
@@ -93,13 +100,12 @@ runs:
       with:
         save: ${{ inputs.save-caches }}
 
-    - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+    - uses: ./.github/actions/cache-document-core
+      id: document
+
+    - uses: ./.github/actions/cache-rust
       id: rust
       if: inputs.setup == 'shell' || inputs.setup == 'harness'
-      with:
-        workspaces: lycaon-den/src-tauri -> ../target
-        shared-key: den-shell
-        save-if: ${{ inputs.save-caches == 'true' && github.ref == 'refs/heads/main' }}
 
     - name: Restore the decision engine build
       id: decide

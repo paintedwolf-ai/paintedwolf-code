@@ -144,7 +144,7 @@ class MeasuredTimingsTests(unittest.TestCase):
         selection = lambda rows: sorted((row["lane"], row["shard"], row["minutes"]) for row in rows)
         self.assertEqual(selection(rows), selection(unmeasured))
         self.assertEqual({row["lane"] for row in rows[:2]}, {"limits", "lint"})
-        rest = [row["lane"] for row in rows if not lanes[row["lane"]].get("first")]
+        rest = [row["lane"] for row in rows if not lanes[row["lane"]].get("first") and not lanes[row["lane"]].get("contract_first")]
         self.assertEqual(rest[:4], ["webkit-gtk", "frontend", "native", "runner"])
         self.assertLess(rest.index("runner"), rest.index("contracts"))
 
