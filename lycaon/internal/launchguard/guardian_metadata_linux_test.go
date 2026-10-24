@@ -211,6 +211,9 @@ func TestGuardianProtocolDistinguishesClosedPeerFromEmptyCredentialedPacket(t *t
 		n, oobn, flags, _, err := unix.Recvmsg(pair[1], raw, control, unix.MSG_CMSG_CLOEXEC|unix.MSG_DONTWAIT)
 		testutil.FailErr(t, "observe actual closed seqpacket", err)
 		t.Logf("closed seqpacket scalar facts: bytes=%d ancillary_bytes=%d flags=%d", n, oobn, flags)
+		if n != 0 || oobn != 0 || (flags != 0 && flags != unix.MSG_CMSG_CLOEXEC) {
+			t.Fatal("closed peer returned an unexpected EOF tuple")
+		}
 		if _, err := receiveGuardianNotice(pair[1], os.Getpid(), caller); !errors.Is(err, io.EOF) {
 			t.Fatalf("closed peer lost exact typed fatal EOF: %v", err)
 		}

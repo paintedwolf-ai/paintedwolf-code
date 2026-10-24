@@ -60,7 +60,8 @@ func receiveGuardianPacket(fd int, pid int, caller Identity, limit int) ([]byte,
 		if err != nil {
 			return nil, err
 		}
-		if n == 0 && oobn == 0 && flags == 0 {
+		// Linux can echo the requested close-on-exec flag even on EOF.
+		if n == 0 && oobn == 0 && (flags == 0 || flags == unix.MSG_CMSG_CLOEXEC) {
 			return nil, io.EOF
 		}
 		messages, controlErr := unix.ParseSocketControlMessage(control[:oobn])
