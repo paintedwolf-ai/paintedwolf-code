@@ -2,6 +2,7 @@ import os
 import unittest
 from unittest.mock import patch
 
+from scripts.linux_release.installed_cases.logind_context import CallFailure
 from scripts.linux_release.installed_cases.native_session import NativeSessionObserver
 from scripts.linux_release.installed_cases.records import CaseUnavailable
 
@@ -42,7 +43,10 @@ class NativeReader:
     def call(self, path, interface, method, args, signature, *, user=False, destination=None):
         self.calls.append((destination, method, user))
         if method == 'GetNameOwner':
-            return Variant((self.names[args[1][0]],))
+            name = args[1][0]
+            if name not in self.names:
+                raise CallFailure('org.freedesktop.DBus.Error.NameHasNoOwner')
+            return Variant((self.names[name],))
         if method == 'GetConnectionUnixProcessID':
             return Variant((self.pids[args[1][0]],))
         if method == 'GetSession':
@@ -107,10 +111,14 @@ class NativeSessionTests(unittest.TestCase):
         self.reader.pids[':1.9'] = 250
         self.births[250] = 25
         self.reader.names['org.gnome.Shell.ScreenShield'] = ':1.2'
-        observer = self.observer()
-        observed = observer.observe()
+        observed = self.observer().observe()
         self.assertEqual(observed['authorities']['locker']['name'], 'org.gnome.Shell.ScreenShield')
         self.assertEqual(observed['authorities']['locker']['unique'], ':1.2')
+        del self.reader.names['org.gnome.ScreenSaver']
+        self.assertEqual(self.observer().observe()['authorities']['locker']['name'], 'org.gnome.Shell.ScreenShield')
+        self.reader.names['org.gnome.ScreenSaver'] = 'invalid'
+        with self.assertRaises(ValueError):
+            self.observer()
 
     def test_replaced_bus_owner_or_reused_pid_refuses(self):
         for change in ('bus', 'birth'):
