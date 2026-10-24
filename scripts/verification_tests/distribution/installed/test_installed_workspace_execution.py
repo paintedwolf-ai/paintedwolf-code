@@ -186,7 +186,7 @@ class InstalledWorkspaceTests(unittest.TestCase):
         unfocused.app.bus_name, unfocused.path = ':1.3', '/entry'
         unfocused.get_process_id.return_value, unfocused.get_parent.return_value = 123, frame
         unfocused.queryComponent.return_value.grabFocus.return_value = True
-        unfocused.getState.return_value.contains.side_effect = [False, True, False]
+        unfocused.getState.return_value.contains.side_effect = [False, True, False, False]
         ui.find.side_effect = [original, unfocused, unfocused]
         with patch.object(focus_owner, 'process_identity', return_value=identity), patch.object(
                 focus_owner.lineage, 'process_identity', return_value=identity), patch.object(focus_owner, 'owned_process', return_value=True):
