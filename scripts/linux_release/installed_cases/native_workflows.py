@@ -11,6 +11,7 @@ import stat
 
 from ..installed_evidence import artifacts
 from ..installed_runtime import bind
+from ..installed_storage import resolve as storage_for_launch
 from .package_native import command, current_package, operations, owner_commands
 from .package_payload import MetadataMismatch, inspect
 from .products import require_owned_guest
@@ -112,8 +113,8 @@ def prepare_install(final, source, artifact_id, file_root, install_root, case_in
             code, owner = run("selected-owner", header)
             if code or owner != PACKAGE:
                 raise ValueError("fresh installation package is not the selected product")
-            profile = Path.home() / ".config/paintedwolf"
-            webview_profile = Path.home() / ".local/share/dev.paintedwolf.code"
+            storage = storage_for_launch({"HOME": str(Path.home())})
+            profile, webview_profile = storage.config, storage.webview
             observations["webview_profile_absent"] = not os.path.lexists(webview_profile)
             observations["profile_absent"] = not os.path.lexists(profile)
             if not observations["profile_absent"] or not observations["webview_profile_absent"]:
