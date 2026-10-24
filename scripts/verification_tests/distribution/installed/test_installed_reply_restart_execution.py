@@ -17,57 +17,93 @@ PROJECT = '10000000-0000-4000-8000-000000000001'
 SESSION = '10000000-0000-4000-8000-000000000002'
 OUTPUT = '10000000-0000-4000-8000-000000000003'
 MESSAGE = '10000000-0000-4000-8000-000000000004'
+TURN = '10000000-0000-4000-8000-000000000005'
+ATTEMPT = '10000000-0000-4000-8000-000000000006'
 
 
 class ReplyObserverTests(unittest.TestCase):
     def fixture(self, root, *, model=observer.MODEL, digest=observer.DIGEST, status='idle'):
         database = sqlite3.connect(':memory:')
         self.addCleanup(database.close)
-        database.executescript('CREATE TABLE sessions(id,project_id,status); '
+        database.executescript('CREATE TABLE sessions(id,project_id,status,provider_id,model,parent_session_id); '
             'CREATE TABLE content_blob_objects(project_id,sha256,byte_size,stored_size); '
-            'CREATE TABLE model_outputs(id,message_id,content_blob_sha256,project_id,session_id,provider_id,model,finish_reason,settled_at,scripted);')
-        database.execute('INSERT INTO sessions VALUES(?,?,?)', (SESSION, PROJECT, status))
+            'CREATE TABLE model_outputs(id,message_id,content_blob_sha256,project_id,session_id,provider_id,model,finish_reason,settled_at,scripted,turn_attempt_id); '
+            'CREATE TABLE turns(id,project_id,session_id,active_attempt_id,final_output_id,origin,status,completed_at); '
+            'CREATE TABLE turn_attempts(id,turn_id,status,phase,completed_at);')
+        database.execute('INSERT INTO sessions VALUES(?,?,?,?,?,?)', (SESSION, PROJECT, status, None, None, None))
         database.execute('INSERT INTO content_blob_objects VALUES(?,?,?,?)', (PROJECT, digest, len(observer.REPLY), 4))
-        database.execute('INSERT INTO model_outputs VALUES(?,?,?,?,?,?,?,?,?,?)',
-            (OUTPUT, MESSAGE, digest, PROJECT, SESSION, 'fixture', model, 'stop', 'settled', 0))
+        database.execute('INSERT INTO model_outputs VALUES(?,?,?,?,?,?,?,?,?,?,?)',
+            (OUTPUT, MESSAGE, digest, PROJECT, SESSION, 'fixture', model, '', 'settled', 0, ATTEMPT))
+        database.execute('INSERT INTO turns VALUES(?,?,?,?,?,?,?,?)',
+            (TURN, PROJECT, SESSION, ATTEMPT, OUTPUT, 'user', 'complete', 'completed'))
+        database.execute('INSERT INTO turn_attempts VALUES(?,?,?,?,?)',
+            (ATTEMPT, TURN, 'complete', 'complete', 'completed'))
         path = root / 'projects' / PROJECT / 'model-content' / digest[:2] / digest[2:]
         path.parent.mkdir(parents=True)
         path.write_bytes(b'zstd')
         return database, path
 
-    def observe(self, root, database, *, body=observer.REPLY, code=0):
-        child = MagicMock()
-        child.stdout.read.return_value = body
-        child.wait.return_value = code
-        child.poll.return_value = code
+    def observe(self, root, database, *, body=observer.REPLY):
         with patch.object(observer, '_database', return_value=nullcontext(database)), patch.object(
-                observer, 'profile', return_value=nullcontext(root)), patch.object(observer, 'physical'), patch.object(
-                observer.subprocess, 'Popen', return_value=child) as spawned:
+                observer, 'read_object', return_value=body) as read:
             result = observer.committed_reply(None, PROJECT, SESSION, 'fixture')
-        return result, spawned, child
+        return result, read
 
     def test_sql_settlement_and_physical_fixed_body_both_required(self):
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            database, path = self.fixture(root)
-            result, spawned, child = self.observe(root, database)
+            database, _ = self.fixture(Path(directory))
+            result, read = self.observe(Path(directory), database)
             self.assertEqual(result['content_blob_sha256'], hashlib.sha256(observer.REPLY).hexdigest())
             self.assertTrue(result['fixed_reply_verified'])
-            self.assertEqual(spawned.call_args.args[0], ['zstd', '--decompress', '--stdout', '--quiet'])
-            child.stdout.read.assert_called_once_with(len(observer.REPLY) + 1)
-            child.stdout.close.assert_called_once()
-            for body, code in ((b'wrong', 0), (observer.REPLY + b'x', 0), (observer.REPLY, 1)):
-                with self.subTest(body=body, code=code), self.assertRaises(ValueError):
-                    self.observe(root, database, body=body, code=code)
+            self.assertEqual(observer.REPLY, b'{"content":"Fixture complete.","tool_calls_json":[],"reasoning_json":null}')
+            read.assert_called_once_with(None, PROJECT, observer.DIGEST, len(observer.REPLY), 4, maximum=len(observer.REPLY))
+            for body in (b'wrong', observer.REPLY + b'x'):
+                with self.subTest(body=body), self.assertRaises(ValueError):
+                    self.observe(Path(directory), database, body=body)
 
     def test_busy_or_foreign_model_is_never_a_committed_reply(self):
         for changes in ({'status': 'busy'}, {'model': 'foreign'}):
             with self.subTest(changes=changes), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 database, _ = self.fixture(root, **changes)
-                result, spawned, _ = self.observe(root, database)
+                result, spawned = self.observe(root, database)
                 self.assertIsNone(result)
                 spawned.assert_not_called()
+
+    def test_terminal_links_and_exact_root_selection_are_required(self):
+        changes = (
+            ("UPDATE turns SET status='running'", ()),
+            ("UPDATE turns SET completed_at=''", ()),
+            ("UPDATE turns SET origin='worker'", ()),
+            ("UPDATE turns SET final_output_id=?", (MESSAGE,)),
+            ("UPDATE turns SET active_attempt_id=?", (MESSAGE,)),
+            ("UPDATE turns SET project_id=?", (MESSAGE,)),
+            ("UPDATE turn_attempts SET turn_id=?", (MESSAGE,)),
+            ("UPDATE turn_attempts SET phase='tools'", ()),
+            ("UPDATE turn_attempts SET status='failed'", ()),
+            ("UPDATE turn_attempts SET completed_at=''", ()),
+            ("UPDATE model_outputs SET turn_attempt_id=?", (MESSAGE,)),
+            ("UPDATE model_outputs SET settled_at=''", ()),
+            ("UPDATE model_outputs SET scripted=1", ()),
+            ("UPDATE sessions SET parent_session_id=?", (MESSAGE,)),
+            ("UPDATE sessions SET provider_id='fixture'", ()),
+            ("UPDATE sessions SET model=?", (observer.MODEL,)),
+            ("UPDATE sessions SET provider_id='foreign',model=?", (observer.MODEL,)),
+        )
+        for sql, arguments in changes:
+            with self.subTest(sql=sql), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                database, _ = self.fixture(root)
+                database.execute(sql, arguments)
+                result, spawned = self.observe(root, database)
+                self.assertIsNone(result)
+                spawned.assert_not_called()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            database, _ = self.fixture(root)
+            database.execute("UPDATE sessions SET provider_id='fixture',model=?", (observer.MODEL,))
+            result, _ = self.observe(root, database)
+            self.assertEqual((result['turn_id'], result['attempt_id']), (TURN, ATTEMPT))
 
     def test_wrong_content_reference_and_missing_or_changed_object_fail(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -76,14 +112,11 @@ class ReplyObserverTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'fixed content'):
                 self.observe(root, database)
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            database, path = self.fixture(root)
-            path.write_bytes(b'changed-size')
-            with self.assertRaisesRegex(ValueError, 'size differs'):
-                self.observe(root, database)
-            path.unlink()
-            with self.assertRaises(FileNotFoundError):
-                self.observe(root, database)
+            database, _ = self.fixture(Path(directory))
+            with patch.object(observer, '_database', return_value=nullcontext(database)), patch.object(
+                    observer, 'read_object', side_effect=FileNotFoundError):
+                with self.assertRaises(FileNotFoundError):
+                    observer.committed_reply(None, PROJECT, SESSION, 'fixture')
 
 
 class ReplyRestartTests(unittest.TestCase):
@@ -102,24 +135,6 @@ class ReplyRestartTests(unittest.TestCase):
             with self.assertRaises(desktop_launch.CaseUnavailable):
                 desktop_launch.protected_launcher(binding)
 
-    def test_settled_reply_requires_the_exact_successful_tool_call(self):
-        session = {'id': SESSION, 'provider_id': 'fixture', 'model': owner.MODEL, 'status': 'idle'}
-        proof = {'message_id': MESSAGE, 'invocation_id': OUTPUT}
-        acquisition = SimpleNamespace(completed=True, witness={'tool_call_id': 'call_1234abcd', 'invocation_id': OUTPUT},
-            command_witness={'tool_call_id': 'call_abcd1234', 'invocation_id': OUTPUT})
-        with patch.object(owner, 'project_for_owned_root', return_value={'project_id': PROJECT}), patch.object(
-                owner, 'sessions_for_project', return_value=[session]), patch.object(
-                owner, 'committed_reply', return_value={'session_id': SESSION}), patch.object(
-                owner, 'committed_fixed_tool', return_value=proof) as observed:
-            self.assertEqual(owner.await_reply(None, None, 'fixture', acquisition)['tool_message_id'], MESSAGE)
-            for missing in ('request_tools', 'command'):
-                observed.side_effect = lambda app, session, tool, call_id: None if tool == missing else proof
-                with self.assertRaisesRegex(ValueError, 'did not complete'):
-                    owner.await_reply(None, None, 'fixture', acquisition)
-            observed.side_effect = None
-            observed.return_value = {**proof, 'invocation_id': PROJECT}
-            with self.assertRaisesRegex(ValueError, 'differs from the projected'):
-                owner.await_reply(None, None, 'fixture', acquisition)
 
     def test_registry_and_physical_operation_are_fixed(self):
         self.assertEqual(installed_execution.case_family('conversation', 'restart-and-reconnect', 'deb'), 'reply_restart')
@@ -182,7 +197,7 @@ class ReplyRestartTests(unittest.TestCase):
             app_constructor = stack.enter_context(patch.object(owner, 'InstalledApp', autospec=True, side_effect=apps))
             stack.enter_context(patch.object(owner.ProviderFixture, 'gui', return_value=fixture))
             stack.enter_context(patch.object(owner, 'submit_project_turn', submission))
-            stack.enter_context(patch.object(owner, 'await_reply', side_effect=[before, after or before]))
+            stack.enter_context(patch.object(owner, 'await_fixture_reply', side_effect=[before, after or before]))
             retained = stack.enter_context(patch.object(owner, 'retain', side_effect=lambda *args: args))
             owner.execute({}, 'conversation', 'restart-and-reconnect', root)
             self.assertEqual([call.args for call in app_constructor.call_args_list],
