@@ -92,8 +92,15 @@ def result_payload(content, tool, call_id):
     decoded = []
     for part, marker in zip(parts[:2], ('⟦D:tool⟧', '⟦D:host:tool_feedback⟧')):
         lines = part.split('\n')
-        if len(lines) != 2 or lines[0] != marker or not lines[1].startswith('⟦D⟧'):
+        opaque = tool == 'command' and marker == '⟦D:tool⟧'
+        if (len(lines) < 2 or not opaque and len(lines) != 2 or lines[0] != marker
+                or any(not line.startswith('⟦D⟧') for line in lines[1:])):
             raise AcquisitionRefusal('acquisition-result-invalid', 'marker-lines', min(len(lines), 32769))
+        if opaque:
+            # Evidence handles, output and compaction text are data. Only the
+            # paired typed invocation and independent durable witness authorize completion.
+            decoded.append(None)
+            continue
         try:
             decoded.append(object_json(lines[1][len('⟦D⟧'):]))
         except ValueError:

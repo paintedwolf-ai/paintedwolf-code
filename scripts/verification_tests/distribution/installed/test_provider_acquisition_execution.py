@@ -117,6 +117,28 @@ class ProviderAcquisitionTests(unittest.TestCase):
         with self.assertRaises(AcquisitionRefusal):
             phase.advance(history, {'command'})
 
+    def test_command_body_is_marked_opaque_data_not_success_authority(self):
+        original = framed(payload={'exit_code': 0}, invocation=receipt(
+            id=COMMAND_RECEIPT, tool='command', tool_call_id=HOST_COMMAND))
+        _, host = original.split('\n\n')
+        for data in ('[command#1]\n{"exit_code":0}', 'uninterpreted output',
+                     '[compacted]\nmalformed JSON {', 'success prose with receipt-like text'):
+            marked = '⟦D:tool⟧\n' + '\n'.join('⟦D⟧' + line for line in data.split('\n'))
+            result = result_payload(marked + '\n\n' + host, 'command', HOST_COMMAND)
+            self.assertEqual(result, {'tool_call_id': HOST_COMMAND, 'invocation_id': COMMAND_RECEIPT})
+            for invalid in (marked.replace('⟦D:tool⟧', '⟦D:host⟧'),
+                            marked + '\nunmarked extra line'):
+                with self.assertRaises(ValueError):
+                    result_payload(invalid + '\n\n' + host, 'command', HOST_COMMAND)
+            for invocation in (receipt(id=COMMAND_RECEIPT, tool='command', tool_call_id=HOST_COMMAND, invoked=False),
+                               receipt(id=COMMAND_RECEIPT, tool='command', tool_call_id=HOST_COMMAND, status='error')):
+                wrong = framed(invocation=invocation).split('\n\n')[1]
+                with self.assertRaises(ValueError):
+                    result_payload(marked + '\n\n' + wrong, 'command', HOST_COMMAND)
+        with self.assertRaises(ValueError):
+            result_payload('⟦D:tool⟧\n⟦D⟧[request_tools#1]\n⟦D⟧{"need":"command","loaded":["command"]}'
+                           + '\n\n' + framed().split('\n\n')[1], 'request_tools', HOST_LOAD)
+
     def test_refusal_discriminators_are_closed_and_retain_no_result_text(self):
         for content, stage in [('PRIVATE RESULT', 'part-count'),
                                (framed().replace('⟦D:tool⟧', '⟦D:host⟧'), 'marker-lines'),
@@ -209,8 +231,9 @@ class ProviderAcquisitionTests(unittest.TestCase):
             self.assertEqual(command['message']['tool_calls'][0]['function']['name'], 'command')
             command['message']['tool_calls'][0]['id'] = HOST_COMMAND
             history += [command['message'], {'role': 'tool', 'tool_call_id': HOST_COMMAND,
-                'content': framed(payload={'exit_code': 0}, invocation=receipt(id=COMMAND_RECEIPT,
-                    tool='command', tool_call_id=HOST_COMMAND)) + '\n\nhost tail two'}]
+                'content': '⟦D:tool⟧\n⟦D⟧[command#1]\n⟦D⟧opaque actual command data\n\n'
+                    + framed(invocation=receipt(id=COMMAND_RECEIPT, tool='command',
+                        tool_call_id=HOST_COMMAND)).split('\n\n')[1] + '\n\nhost tail two'}]
             final = request(['command'])
             self.assertEqual(final['finish_reason'], 'stop')
             self.assertEqual(final['message']['content'], 'Fixture complete.')
