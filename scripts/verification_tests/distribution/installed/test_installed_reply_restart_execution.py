@@ -102,24 +102,6 @@ class ReplyRestartTests(unittest.TestCase):
             with self.assertRaises(desktop_launch.CaseUnavailable):
                 desktop_launch.protected_launcher(binding)
 
-    def test_settled_reply_requires_the_exact_successful_tool_call(self):
-        session = {'id': SESSION, 'provider_id': 'fixture', 'model': owner.MODEL, 'status': 'idle'}
-        proof = {'message_id': MESSAGE, 'invocation_id': OUTPUT}
-        acquisition = SimpleNamespace(completed=True, witness={'tool_call_id': 'call_1234abcd', 'invocation_id': OUTPUT},
-            command_witness={'tool_call_id': 'call_abcd1234', 'invocation_id': OUTPUT})
-        with patch.object(owner, 'project_for_owned_root', return_value={'project_id': PROJECT}), patch.object(
-                owner, 'sessions_for_project', return_value=[session]), patch.object(
-                owner, 'committed_reply', return_value={'session_id': SESSION}), patch.object(
-                owner, 'committed_fixed_tool', return_value=proof) as observed:
-            self.assertEqual(owner.await_reply(None, None, 'fixture', acquisition)['tool_message_id'], MESSAGE)
-            for missing in ('request_tools', 'command'):
-                observed.side_effect = lambda app, session, tool, call_id: None if tool == missing else proof
-                with self.assertRaisesRegex(ValueError, 'did not complete'):
-                    owner.await_reply(None, None, 'fixture', acquisition)
-            observed.side_effect = None
-            observed.return_value = {**proof, 'invocation_id': PROJECT}
-            with self.assertRaisesRegex(ValueError, 'differs from the projected'):
-                owner.await_reply(None, None, 'fixture', acquisition)
 
     def test_registry_and_physical_operation_are_fixed(self):
         self.assertEqual(installed_execution.case_family('conversation', 'restart-and-reconnect', 'deb'), 'reply_restart')
@@ -182,7 +164,7 @@ class ReplyRestartTests(unittest.TestCase):
             app_constructor = stack.enter_context(patch.object(owner, 'InstalledApp', autospec=True, side_effect=apps))
             stack.enter_context(patch.object(owner.ProviderFixture, 'gui', return_value=fixture))
             stack.enter_context(patch.object(owner, 'submit_project_turn', submission))
-            stack.enter_context(patch.object(owner, 'await_reply', side_effect=[before, after or before]))
+            stack.enter_context(patch.object(owner, 'await_fixture_reply', side_effect=[before, after or before]))
             retained = stack.enter_context(patch.object(owner, 'retain', side_effect=lambda *args: args))
             owner.execute({}, 'conversation', 'restart-and-reconnect', root)
             self.assertEqual([call.args for call in app_constructor.call_args_list],

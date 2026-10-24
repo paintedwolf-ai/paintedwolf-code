@@ -3,52 +3,17 @@ from __future__ import annotations
 
 from pathlib import Path
 import tempfile
-import time
 
 from .app import InstalledApp
 from .desktop_ui import interactive_window
 from .process import run
-from .profile_observer import project_for_owned_root, sessions_for_project
-from .provider import MODEL, ProviderFixture
+from .provider import ProviderFixture
 from .records import CaseFailed, CaseUnavailable, retain
 from .desktop_launch import protected_launcher
 from .provider_setup import configure_provider
 from .desktop_turn import submit_project_turn
-from .reply_observer import committed_reply, committed_fixed_tool
+from .fixture_turn import await_fixture_reply
 from .provider_recovery import load as load_provider_recovery
-
-def await_reply(app, project, provider_id, acquisition, *, selected_session=None):
-    deadline = time.monotonic() + 90
-    while time.monotonic() < deadline:
-        witness = project_for_owned_root(app, project)
-        if witness:
-            sessions = [row for row in sessions_for_project(app, witness['project_id'])
-                        if row['provider_id'] == provider_id and row['model'] == MODEL]
-            if selected_session is not None:
-                sessions = [row for row in sessions if row['id'] == selected_session]
-            if len(sessions) > 1:
-                raise ValueError('fixed reply project has ambiguous session identity')
-            if sessions:
-                session = sessions[0]
-                if session['status'] == 'error':
-                    raise ValueError('protected mock turn failed before its durable reply')
-                result = committed_reply(app, witness['project_id'], session['id'], provider_id)
-                if result is not None:
-                    if not acquisition.completed or acquisition.witness is None or acquisition.command_witness is None:
-                        raise ValueError('fixed provider phases did not establish both host call identities')
-                    acquired = committed_fixed_tool(app, session['id'], 'request_tools', acquisition.witness['tool_call_id'])
-                    command = committed_fixed_tool(app, session['id'], 'command', acquisition.command_witness['tool_call_id'])
-                    if acquired is not None and acquired['invocation_id'] != acquisition.witness['invocation_id']:
-                        raise ValueError('acquisition durable receipt differs from the projected receipt')
-                    if command is not None and command['invocation_id'] != acquisition.command_witness['invocation_id']:
-                        raise ValueError('command durable receipt differs from the projected receipt')
-                    if acquired is None or command is None:
-                        raise ValueError('fixed acquisition and command fixture did not complete successfully')
-                    return {**result, 'tool_message_id': command['message_id'],
-                            'schema_acquisition': acquired, 'command_invocation': command}
-        time.sleep(0.1)
-    raise CaseUnavailable('protected-mock-reply-or-restart-witness-timeout')
-
 
 def execute(binding, capability, case, root):
     launcher = protected_launcher(binding)
@@ -64,7 +29,7 @@ def execute(binding, capability, case, root):
             observations['provider_recovery'], streams['provider-registration'] = recovery
         with ProviderFixture.gui([{'name': 'command', 'arguments': {'command': '/usr/bin/true'}}],
                                  endpoint=recovery[0]['endpoint'] if recovery is not None else None,
-                                 acquire_command=True) as fixture:
+                                 acquire='command') as fixture:
             app = InstalledApp(launch_binding)
             with app:
                 observations['launch_before'] = app.observations
@@ -74,7 +39,7 @@ def execute(binding, capability, case, root):
                 if opened['exit_code'] or opened['timed_out'] or opened['output_limit']:
                     raise ValueError('installed CLI refused the fixed reply project')
                 submit_project_turn(app)
-                before = await_reply(app, project, provider['provider_id'], fixture.acquisition)
+                before = await_fixture_reply(app, project, provider['provider_id'], fixture.acquisition)
                 if (fixture.acquisition.witness is None or fixture.acquisition.witness['invocation_id']
                         != before['schema_acquisition']['invocation_id']):
                     raise ValueError('provider acquisition receipt differs from its durable invocation')
@@ -84,7 +49,7 @@ def execute(binding, capability, case, root):
             streams.update({'before-' + key: value for key, value in app.streams().items()})
             restarted = InstalledApp(launch_binding)
             with restarted:
-                after = await_reply(restarted, project, provider['provider_id'], fixture.acquisition, selected_session=before['session_id'])
+                after = await_fixture_reply(restarted, project, provider['provider_id'], fixture.acquisition, selected_session=before['session_id'])
                 if after != before or restarted.observations['engine_identity'] == app.observations['engine_identity']:
                     raise ValueError('restart changed the fixed reply or reused the previous engine')
                 observations.update(reply_after=after, launch_after=restarted.observations,
