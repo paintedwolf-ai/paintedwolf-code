@@ -50,7 +50,7 @@ func newHarness(t *testing.T) *harness {
 	testutil.FailErr(t, "bundled git", err)
 	root, err := filepath.EvalSymlinks(t.TempDir())
 	testutil.FailErr(t, "resolve root", err)
-	owners, err := NewOwners(git.CommandReader{})
+	owners, err := NewOwners(git.NewManager())
 	testutil.FailErr(t, "owners", err)
 	boundary := nativefixture.Boundary(t)
 	owners.Boundary = boundary

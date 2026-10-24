@@ -36,7 +36,7 @@ func newComposedProgramFixture(t *testing.T) *programtest.Fixture {
 			Times:   &native.TimesTool{Boundary: b},
 			Extract: &native.ExtractArchiveTool{Boundary: b},
 		},
-	}).compose(f.Recorder)
+	}).compose(ProgramServices{Recorder: f.Recorder})
 	testutil.FailErr(t, "compose program owners", err)
 	f.Runtime.Owners = owners
 	return f
