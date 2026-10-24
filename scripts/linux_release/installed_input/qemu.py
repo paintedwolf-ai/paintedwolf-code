@@ -91,6 +91,7 @@ class Actor:
         self.value, self.nonce = copy.deepcopy(value), execution_nonce
         self.connection, self.buffer, self.command_id = None, b'', 0
         self.transactions, self.current, self.operation, self.ordinal = set(), None, None, 0
+        self.length, self.deadline = 0, None
         self.failed, self.closed = False, False
         self.lock = threading.Lock()
 
@@ -133,10 +134,21 @@ class Actor:
             if peer[:2] != (pid, uid):
                 raise ValueError('QMP connection is not the leased process')
 
+    def _bounded(self, minimum=0):
+        if self.failed or self.closed:
+            raise ValueError('physical input actor is unavailable')
+        if self.deadline is not None:
+            remaining = self.deadline - time.monotonic()
+            if remaining <= minimum:
+                raise ValueError('physical input transaction exceeded its deadline')
+            if self.connection is not None:
+                self.connection.settimeout(min(3, remaining))
+
     def frame(self):
         while b'\n' not in self.buffer:
             if len(self.buffer) >= LIMIT:
                 raise ValueError('QMP frame exceeds its fixed bound')
+            self._bounded()
             block = self.connection.recv(min(4096, LIMIT - len(self.buffer)))
             if not block:
                 raise ValueError('owned QMP connection ended')
@@ -150,12 +162,14 @@ class Actor:
         return value
 
     def command(self, name, arguments=None):
+        self._bounded()
         self.command_id += 1
         request = {'execute': name, 'id': self.command_id}
         if arguments is not None:
             request['arguments'] = arguments
         self.connection.sendall(json.dumps(request, separators=(',', ':')).encode() + b'\n')
         for _ in range(32):
+            self._bounded()
             reply = self.frame()
             if 'event' in reply:
                 if not isinstance(reply['event'], str):
@@ -202,16 +216,8 @@ class Actor:
                 if (not token(transaction_id) or type(ordinal) is not int or not 0 <= ordinal < len(sequence)
                         or len(sequence) > 256):
                     raise ValueError('input step is outside the sealed transaction')
-                if transaction_id != self.current:
-                    if (self.current is not None and self.ordinal != len(steps(self.operation))
-                            or transaction_id in self.transactions or len(self.transactions) >= 128 or ordinal != 0):
-                        raise ValueError('input transactions cannot overlap or replay')
-                    self.transactions.add(transaction_id)
-                    self.current, self.operation, self.ordinal = transaction_id, operation, 0
-                if operation != self.operation or ordinal != self.ordinal:
-                    raise ValueError('input operation or ordinal differs from the pinned transaction')
-                reply = self._deliver(sequence[ordinal])
-                self.ordinal += 1
+                self._reserve(operation, ordinal, len(sequence), transaction_id)
+                reply = self._send_keys(sequence[ordinal])
                 return {'format_version': 1, 'execution_nonce': self.nonce, 'vm_id': self.value['vm_id'],
                         'transaction_id': transaction_id, 'operation': operation, 'ordinal': ordinal,
                         'event_sha256': event_sha256(operation, ordinal), 'lease': self.identity,
@@ -219,6 +225,34 @@ class Actor:
             except BaseException:
                 self.failed = True
                 raise
+
+    def _reserve(self, operation, ordinal, count, transaction_id):
+        if transaction_id != self.current:
+            if (self.current is not None and self.ordinal != self.length
+                    or transaction_id in self.transactions or len(self.transactions) >= 128 or ordinal != 0):
+                raise ValueError('input transactions cannot overlap or replay')
+            self.transactions.add(transaction_id)
+            self.current, self.operation, self.ordinal, self.length = transaction_id, operation, 0, count
+        if operation != self.operation or ordinal != self.ordinal or count != self.length:
+            raise ValueError('input operation or ordinal differs from the pinned transaction')
+
+    def _send_keys(self, sequence):
+        self._bounded(0.1)
+        self.validate()
+        status = self.command('query-status')['return']
+        if status.get('running') is not True or status.get('status') != 'running':
+            raise ValueError('leased guest is not running')
+        self._bounded(0.1)
+        keys = [{'type': 'qcode', 'data': key} for key in sequence]
+        reply = self.command('send-key', {'keys': keys, 'hold-time': 80})
+        if reply['return'] != {}:
+            raise ValueError('QMP did not acknowledge its fixed keyboard step')
+        # QMP acknowledges before its automatic key-release timer fires.
+        time.sleep(0.1)
+        self.validate()
+        self._bounded()
+        self.ordinal += 1
+        return reply
 
     def close(self):
         self.closed = True

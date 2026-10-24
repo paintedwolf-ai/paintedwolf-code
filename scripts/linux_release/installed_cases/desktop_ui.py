@@ -153,8 +153,10 @@ class DesktopUI:
             'observed_roles': sorted(observed_roles)}}
         raise error
 
-    def click(self, name: str):
-        node = self.find(self.api.ROLE_PUSH_BUTTON, name)
+    def click(self, name: str, *, tab=False):
+        if type(tab) is not bool:
+            raise ValueError('normal native action requires an explicit button or page tab')
+        node = self.find(self.api.ROLE_PAGE_TAB if tab else self.api.ROLE_PUSH_BUTTON, name)
         try:
             action = node.queryAction()
             if action.nActions != 1 or action.doAction(0) is not True:

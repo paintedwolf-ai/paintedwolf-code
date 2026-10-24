@@ -210,6 +210,8 @@ class UnlockAccountAndBridgeTests(unittest.TestCase):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 unlock_wire.read_secret_frame(io.BytesIO(bad))
         self.assertEqual(unlock_account.validate_account_shape(ACCOUNT), ACCOUNT)
+        account_059 = {'name': 'pwqual059a1', 'uid': 30009, 'gid': 30009, 'home': '/home/pwqual059a1'}
+        self.assertEqual(unlock_account.validate_account_shape(account_059), account_059)
         for bad_account in (
                 {'name': 'pwtest', 'uid': 1000, 'gid': 1000, 'home': '/home/pwtest'},
                 {'name': 'root', 'uid': 0, 'gid': 0, 'home': '/root'},
