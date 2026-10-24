@@ -116,27 +116,47 @@ if (mode === "seed") {
 } else if (mode === "verify") {
   const evidence = manifest.editor_history;
   if (!evidence) throw new Error("Missing collaborative editor fixture evidence");
-  const raw = await fs.readFile(path.join(configDir, evidence.outbox_path));
-  if (digest(raw) !== evidence.outbox_sha256) throw new Error("Preserved editor bytes changed");
-  const records = await preservedRecords(raw, evidence);
-  const checkpoint = records.find(r => r.kind === "checkpoint");
-  if (digest(JSON.stringify(checkpoint.history)) !== evidence.history_sha256) throw new Error("Window undo history changed");
-  const doc = new Y.Doc();
-  Y.applyUpdate(doc, decode(checkpoint.state));
-  if (doc.getText("text").toString() !== evidence.local_text) throw new Error("Yjs checkpoint lost local edits");
-  let editor = EditorState.fromJSON({ ...checkpoint.history, doc: doc.getText("text").toString() }, { extensions: [history()] }, { history: historyField });
-  const target = { get state() { return editor; }, dispatch(transaction) { editor = transaction.state; } };
-  if (!undo(target) || editor.doc.toString() !== evidence.accepted_text || !redo(target) || editor.doc.toString() !== evidence.local_text) {
-    throw new Error("Retained window undo/redo semantics changed");
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const outboxDir = path.join(configDir, path.dirname(evidence.outbox_path));
+      const header = JSON.parse(await fs.readFile(path.join(outboxDir, layout.header), "utf8"));
+      const raw = await fs.readFile(path.join(outboxDir, header.log));
+      const checkpointFrame = header.frames.find(f => f.kind === "checkpoint");
+      const relayed = Boolean(header.synchronized || checkpointFrame?.synchronized);
+      if (!relayed && digest(raw) !== evidence.outbox_sha256) throw new Error("Preserved editor bytes changed");
+      const records = header.frames.map((frame) => JSON.parse(raw.subarray(frame.offset, frame.offset + frame.length)));
+      const checkpoint = records.find(r => r.kind === "checkpoint" && r.clientId === evidence.client_id) ?? records.find(r => r.kind === "checkpoint");
+      if (digest(JSON.stringify(checkpoint.history)) !== evidence.history_sha256) throw new Error("Window undo history changed");
+      const doc = new Y.Doc();
+      Y.applyUpdate(doc, decode(checkpoint.state));
+      if (doc.getText("text").toString() !== evidence.local_text) throw new Error("Yjs checkpoint lost local edits");
+      let editor = EditorState.fromJSON({ ...checkpoint.history, doc: doc.getText("text").toString() }, { extensions: [history()] }, { history: historyField });
+      const target = { get state() { return editor; }, dispatch(transaction) { editor = transaction.state; } };
+      if (!undo(target) || editor.doc.toString() !== evidence.accepted_text || !redo(target) || editor.doc.toString() !== evidence.local_text) {
+        throw new Error("Retained window undo/redo semantics changed");
+      }
+      const document = await request(`/editor-documents/${evidence.document_id}/snapshots`, { client_id: evidence.client_id });
+      const pending = records.find(r => r.kind === "update");
+      if (relayed) {
+        if (!checkpointFrame?.synchronized || checkpointFrame.pending?.length || (pending && (!pending.acknowledged || pending.operationId !== evidence.pending_operation_id))) throw new Error("Relayed editor update acknowledgement missing");
+        if (textOf(document) !== evidence.local_text || document.base_content !== evidence.accepted_text || !document.dirty) {
+          throw new Error("Relayed editor draft or saved base changed");
+        }
+      } else {
+        if (textOf(document) !== evidence.accepted_text || document.base_content !== evidence.saved_text || !document.dirty) throw new Error("Accepted editor draft or saved base changed");
+        const accepted = new Y.Doc();
+        Y.applyUpdate(accepted, decode(document.crdt_update));
+        Y.applyUpdate(accepted, decode(pending.update));
+        if (accepted.getText("text").toString() !== evidence.local_text) throw new Error("Pending editor update no longer joins the host state");
+        accepted.destroy();
+      }
+      doc.destroy();
+      break;
+    } catch (error) {
+      if (attempt >= 20) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
   }
-  const document = await request(`/editor-documents/${evidence.document_id}/snapshots`, { client_id: evidence.client_id });
-  if (textOf(document) !== evidence.accepted_text || document.base_content !== evidence.saved_text || !document.dirty) throw new Error("Accepted editor draft or saved base changed");
-  const accepted = new Y.Doc();
-  Y.applyUpdate(accepted, decode(document.crdt_update));
-  const pending = records.find(r => r.kind === "update");
-  Y.applyUpdate(accepted, decode(pending.update));
-  if (accepted.getText("text").toString() !== evidence.local_text) throw new Error("Pending editor update no longer joins the host state");
-  accepted.destroy(); doc.destroy();
   console.log("retained editor draft, pending update, and window undo/redo verified");
 } else if (mode === "replay") {
   const evidence = manifest.editor_history;

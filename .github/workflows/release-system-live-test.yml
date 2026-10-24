@@ -33,7 +33,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-go@5064d95ba18d4a9dda7c4cc67adeb03aea1a2a14 # v7.0.0
+      - uses: actions/setup-go@90ad2b35f69faf97585ad74d28fa006d2739b7af # v7.0.0
         with:
           go-version-file: lycaon/go.mod
           cache: false
@@ -62,7 +62,8 @@ jobs:
         run: ./task release:live-test
 
   r2-pacman-repositories:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'pacman-repositories' }}
+    needs: r2-release-controls
+    if: ${{ always() && !cancelled() && github.event_name == 'workflow_dispatch' && inputs.mode == 'pacman-repositories' }}
     runs-on: ubuntu-latest
     container:
       image: archlinux:base-devel@sha256:061679925e5d5028f2df9395d441ce6c4b9accf0157ff3486c06b6962e014ef1
@@ -85,7 +86,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-go@5064d95ba18d4a9dda7c4cc67adeb03aea1a2a14 # v7.0.0
+      - uses: actions/setup-go@90ad2b35f69faf97585ad74d28fa006d2739b7af # v7.0.0
         with:
           go-version-file: lycaon/go.mod
           cache: false
