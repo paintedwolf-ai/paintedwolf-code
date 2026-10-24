@@ -4,19 +4,16 @@ from __future__ import annotations
 import time
 
 from .. import scripts_module
+from ..installed_input import accessibility
 from .app import process_identity, session_environment
 from .records import CaseFailed, CaseUnavailable
-
-
-class _InventoryChanged(Exception):
-    pass
 
 
 def retry_inventory(app, error) -> bool:
     domain, code = getattr(error, 'domain', None), getattr(error, 'code', None)
     native = (isinstance(domain, str) and domain in {'atspi_error', 'g-dbus-error-quark', 'g-io-error-quark'}
               and type(code) is int and 0 <= code < 1 << 31)
-    if not isinstance(error, (IndexError, _InventoryChanged)) and not native:
+    if not isinstance(error, (IndexError, accessibility.InventoryChanged)) and not native:
         return False
     expected = app.observations['launch_identity']
     try:
@@ -90,6 +87,8 @@ class DesktopUI:
             if time.monotonic() >= deadline:
                 raise CaseUnavailable('normal-native-window-observation-deadline')
             application = desktop[index]
+            if application is None:
+                raise accessibility.InventoryChanged()
             pid = application.get_process_id()
             if not owned_process(pid, self.app):
                 continue
@@ -100,30 +99,12 @@ class DesktopUI:
                 if time.monotonic() >= deadline:
                     raise CaseUnavailable('normal-native-window-observation-deadline')
                 window = application[offset]
+                if window is None:
+                    raise accessibility.InventoryChanged()
                 if window.getRole() in {self.api.ROLE_FRAME, self.api.ROLE_DIALOG} and self.visible(window):
                     yield identity, window
             if process_identity(pid) != identity or not owned_process(pid, self.app):
                 raise ValueError('installed desktop owner changed during window observation')
-
-    def descendants(self, window, deadline=None):
-        deadline = time.monotonic() + 15 if deadline is None else deadline
-        pending, visited = [(window, 0)], 0
-        while pending:
-            if time.monotonic() >= deadline:
-                raise CaseUnavailable('normal-native-control-observation-deadline')
-            node, depth = pending.pop()
-            visited += 1
-            count = node.childCount
-            if type(count) is int and count == -1:
-                raise _InventoryChanged()
-            if type(count) is not int or visited > 4096 or depth > 64 or not 0 <= count <= 1024:
-                error = CaseUnavailable('installed accessible window exceeds its fixed observer traversal bound')
-                error.observations = {'desktop_inventory_bound': {'visited': visited, 'depth': depth,
-                    'child_count': count if type(count) is int else None,
-                    'limits': {'visited': 4096, 'depth': 64, 'child_count': 1024}}}
-                raise error
-            yield node
-            pending.extend((node[index], depth + 1) for index in range(count))
 
     def find(self, role: int, name: str):
         if not isinstance(name, str) or not 0 < len(name) <= 256:
@@ -133,7 +114,7 @@ class DesktopUI:
             matches = []
             try:
                 for identity, window in self.windows(deadline):
-                    for node in self.descendants(window, deadline):
+                    for node in accessibility.descendants(window, deadline):
                         node_role = node.getRole()
                         if self.visible(node) and node.name == name:
                             observed_roles.add(int(node_role))
@@ -204,7 +185,7 @@ class DesktopUI:
         for identity, window in self.windows(deadline):
             if window.getRole() != self.api.ROLE_FRAME:
                 continue
-            for node in self.descendants(window, deadline):
+            for node in accessibility.descendants(window, deadline):
                 role = node.getRole()
                 if role in controls and self.visible(node) and node.name and node.name not in decoration:
                     if role == self.api.ROLE_PUSH_BUTTON and node.queryAction().nActions != 1:

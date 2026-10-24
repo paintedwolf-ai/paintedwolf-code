@@ -92,6 +92,8 @@ def configure_provider(app, fixture):
             physical_input(app, ui, 'API key Paste your API key…', 'provider-fixture-credential-v1', password=True)
             ui.click('Add AI provider')
         witness = await_discovery(app, fixture)
+        if existing is None:
+            ui.click('AI providers')
         select_default_model(app, ui)
         ui.click('Skip')
     return witness

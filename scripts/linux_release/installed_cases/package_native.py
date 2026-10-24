@@ -5,57 +5,9 @@ import hashlib
 import os
 from pathlib import Path
 import re
-import selectors
-import signal
 import stat
-import subprocess
-import time
 
 from .records import CaseUnavailable
-
-LIMIT = 8 << 20
-
-
-def command(arguments: list[str]) -> tuple[int, bytes, bytes]:
-    process = subprocess.Popen(arguments, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                               start_new_session=True,
-                               env={"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL": "C", "HOME": os.environ["HOME"]})
-    buffers = {"stdout": bytearray(), "stderr": bytearray()}
-    deadline = time.monotonic() + 300
-    completed = False
-    try:
-        with selectors.DefaultSelector() as selected:
-            for stream, name in ((process.stdout, "stdout"), (process.stderr, "stderr")):
-                os.set_blocking(stream.fileno(), False)
-                selected.register(stream, selectors.EVENT_READ, name)
-            while selected.get_map():
-                if time.monotonic() >= deadline:
-                    raise CaseUnavailable("native package transaction exceeded its deadline")
-                for key, _ in selected.select(timeout=min(1, deadline - time.monotonic())):
-                    block = os.read(key.fileobj.fileno(), 65536)
-                    if not block:
-                        selected.unregister(key.fileobj)
-                        continue
-                    output = buffers[key.data]
-                    if len(output) + len(block) > LIMIT:
-                        raise CaseUnavailable("native package transaction exceeded its evidence bound")
-                    output.extend(block)
-        process.wait(timeout=max(0.1, deadline - time.monotonic()))
-        completed = True
-        return process.returncode, bytes(buffers["stdout"]), bytes(buffers["stderr"])
-    finally:
-        if not completed:
-            try:
-                os.killpg(process.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-            except PermissionError:
-                subprocess.run(["/usr/bin/sudo", "-n", "/bin/kill", "-KILL", "--", "-" + str(process.pid)],
-                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, timeout=10)
-        process.wait()
-        process.stdout.close()
-        process.stderr.close()
-
 
 def current_package(binding: dict) -> Path:
     inputs = binding.get("case_inputs", {}).get("native_packages")

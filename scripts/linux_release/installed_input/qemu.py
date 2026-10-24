@@ -179,6 +179,20 @@ class Actor:
         if self.command('qmp_capabilities')['return'] != {}:
             raise ValueError('leased QMP capabilities were not acknowledged')
 
+    def _deliver(self, keys):
+        """Deliver one already-authorized chord while the owning actor lock is held."""
+        self.validate()
+        status = self.command('query-status')['return']
+        if status.get('running') is not True or status.get('status') != 'running':
+            raise ValueError('leased guest is not running')
+        reply = self.command('send-key', {'keys': [{'type': 'qcode', 'data': key} for key in keys], 'hold-time': 80})
+        if reply['return'] != {}:
+            raise ValueError('QMP did not acknowledge its fixed keyboard step')
+        # QMP acknowledges before its automatic key-release timer fires.
+        time.sleep(0.1)
+        self.validate()
+        return reply
+
     def send(self, operation, ordinal, *, transaction_id):
         with self.lock:
             if self.failed or self.closed:
@@ -196,17 +210,7 @@ class Actor:
                     self.current, self.operation, self.ordinal = transaction_id, operation, 0
                 if operation != self.operation or ordinal != self.ordinal:
                     raise ValueError('input operation or ordinal differs from the pinned transaction')
-                self.validate()
-                status = self.command('query-status')['return']
-                if status.get('running') is not True or status.get('status') != 'running':
-                    raise ValueError('leased guest is not running')
-                keys = [{'type': 'qcode', 'data': key} for key in sequence[ordinal]]
-                reply = self.command('send-key', {'keys': keys, 'hold-time': 80})
-                if reply['return'] != {}:
-                    raise ValueError('QMP did not acknowledge its fixed keyboard step')
-                # QMP acknowledges before its automatic key-release timer fires.
-                time.sleep(0.1)
-                self.validate()
+                reply = self._deliver(sequence[ordinal])
                 self.ordinal += 1
                 return {'format_version': 1, 'execution_nonce': self.nonce, 'vm_id': self.value['vm_id'],
                         'transaction_id': transaction_id, 'operation': operation, 'ordinal': ordinal,

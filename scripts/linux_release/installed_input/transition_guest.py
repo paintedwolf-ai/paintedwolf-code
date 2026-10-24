@@ -1,17 +1,21 @@
-"""Deliver closed frame actions with transition-aware observation, never editor focus relaxation."""
+"""Deliver closed native transitions with their independent observation authorities."""
 from __future__ import annotations
 
 import secrets
 import time
 
-from . import protocol, surface_wire
+from . import protocol, session_wire, surface_wire
 from .mailbox import Mailbox
 from ..installed_cases.records import CaseUnavailable
 
 
 def perform_transition(execution, vm_id, observer, operation, mailbox=None):
-    if operation not in surface_wire.OPERATIONS:
-        raise ValueError('frame input requires a closed surface operation')
+    if operation in surface_wire.OPERATIONS:
+        wire, proof_key, after_key = surface_wire, 'surface', 'surface_after'
+    elif operation in session_wire.OPERATIONS:
+        wire, proof_key, after_key = session_wire, 'native_session', 'native_session_after'
+    else:
+        raise ValueError('native transition input requires a closed declared operation')
     sequence = protocol.steps(operation)
     mailbox = mailbox or Mailbox(execution, vm_id)
     mailbox.attach()
@@ -20,10 +24,10 @@ def perform_transition(execution, vm_id, observer, operation, mailbox=None):
     try:
         for ordinal, _ in enumerate(sequence):
             before = observer.prepare(operation)
-            surface_wire.same_runtime(initial, before)
+            wire.same_runtime(initial, before)
             pending = protocol.request({'format_version': 1, 'binding': execution,
                 'transaction_id': transaction, 'operation': operation,
-                'ordinal': ordinal, 'surface': before}, execution)
+                'ordinal': ordinal, proof_key: before}, execution)
             mailbox.write('request.json', pending)
             deadline = time.monotonic() + 10
             while True:
@@ -33,15 +37,15 @@ def perform_transition(execution, vm_id, observer, operation, mailbox=None):
                     break
                 observer.during(operation, initial)
                 if time.monotonic() >= deadline:
-                    raise CaseUnavailable('fixed-VM-surface-input-acknowledgment-unavailable')
+                    raise CaseUnavailable('fixed-VM-transition-input-acknowledgment-unavailable')
                 time.sleep(0.05)
             after = observer.settle(operation, initial) if ordinal == len(sequence) - 1 else observer.observe()
             if ordinal == len(sequence) - 1:
-                if not surface_wire.finished(operation, initial, after):
-                    raise ValueError('physical input did not establish its declared surface transition')
+                if not wire.finished(operation, initial, after):
+                    raise ValueError('physical input did not establish its declared native transition')
             else:
-                surface_wire.same_runtime(initial, after)
-            events.append({'request': pending, 'delivery': delivery, 'surface_after': after})
+                wire.same_runtime(initial, after)
+            events.append({'request': pending, 'delivery': delivery, after_key: after})
             mailbox.clear_completed(pending)
     except BaseException as error:
         error.observations = {**getattr(error, 'observations', {}), 'native_input': {

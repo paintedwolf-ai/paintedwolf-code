@@ -12,7 +12,8 @@ from ..installed_storage import resolve as storage_for_launch
 from ..installed_environment import package_inventory, package_inventory_arguments
 from ..installed_runtime import bind
 from .native_workflows import PACKAGE, native_lock, prepare_install, query
-from .package_native import command, current_package, operations
+from .native_command import command
+from .package_native import current_package, operations
 from .package_payload import inspect
 from .records import CaseUnavailable, retain
 
