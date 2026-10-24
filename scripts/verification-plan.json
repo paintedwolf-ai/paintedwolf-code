@@ -14,6 +14,7 @@
       "test:short",
       "test:contract",
       "coverage:changes",
+      "scripts:coverage:changes",
       "licenses:notices",
       "comments:check",
       "test:fail-messages:check",
@@ -37,6 +38,7 @@
       "budgets",
       "coverage:changes",
       "den:coverage:changes",
+      "scripts:coverage:changes",
       "lint:vuln",
       "licenses:notices"
     ],
@@ -74,6 +76,11 @@
       "db:sqlc:check",
       "db:sqlc:vet",
       "docs:links"
+    ],
+    "test:seatbelt": [
+      "seatbelt:confine",
+      "seatbelt:gated",
+      "seatbelt:scanstress"
     ]
   },
   "go": {
@@ -192,6 +199,49 @@
         "./..."
       ],
       "exclude": "/test/security$"
+    },
+    "seatbelt:confine": {
+      "options": [
+        "--full"
+      ],
+      "packages": [
+        "./internal/confine/..."
+      ]
+    },
+    "seatbelt:gated": {
+      "options": [
+        "--full",
+        "--tags",
+        "integration"
+      ],
+      "packages": [
+        "./cmd/opengrep-artifact",
+        "./internal/exec",
+        "./internal/hitl",
+        "./internal/mcp",
+        "./internal/scan/drivers/bundled",
+        "./internal/scan/drivers/external",
+        "./internal/scan/installed",
+        "./internal/scan/integration",
+        "./internal/toolexecution",
+        "./internal/webresearch",
+        "./test/contract/security"
+      ],
+      "flags": [
+        "-run=^(TestArtifactCLIRequiresConfinement|TestEngineLossFixtureProcess|TestLaunchPlanRefusesUnavailableLinuxBoundary|TestConfinementIntegrityCompositeChain|TestConfinementIntegrityConfigTokenUnreadable|TestConfinementIntegrityForeignVarFoldersWriteDenied|TestConfinementIntegrityLauncherUntamperable|TestConfinementIntegrityNoProfileStagingFile|TestNonHTTPContractContainedDerivesFromSameRequestAsProfile|TestNonHTTPContractProxyStartupFailureDeniesAndRollsBack|TestPrepareStdioCommandConfinedWhenAvailable|TestPrepareStdioCommandHandsTheServerNoCredential|TestPrepareStdioCommandRequiresRootsWhenAvailable|TestBundledScannerConfinementDeniesNetwork|TestExternalScannerWritesProjectTree|TestContainedCarriesDirectIPNarrowing|TestContainedProvenanceMatchesDefaultConfinement|TestContainedTaskOverlayStaysOutOfRoots|TestContainedWriteRootsCarryDurableGrants|TestExternalScannerLaunchIsValidWhileEnforcing|TestWebToolsUnaffectedByCommandProxyOnlyDefault|TestOpenGrepBundledAdapterFixture|TestIngesterBundledSASTProducesGuidance|TestOpenGrepScopesExcludesToProjectNotAncestorDirectories|TestOpenGrepEmbeddedSourceRecovery|TestExecutionCapabilityAsksBeforeSpawnAndConsumesOnce|TestConsumerFinalizationNativeScanner|TestInstalledScannerProductCases|TestSelectedScannerCannotQualifyAnEmptySuccessfulReport)$"
+      ],
+      "bundled": true
+    },
+    "seatbelt:scanstress": {
+      "options": [
+        "--full",
+        "--tags",
+        "scanstress"
+      ],
+      "packages": [
+        "./test/scanstress/..."
+      ],
+      "bundled": true
     }
   },
   "tasks": {
@@ -212,6 +262,9 @@
     ],
     "den:coverage:changes": [
       "den:coverage:changes"
+    ],
+    "scripts:coverage:changes": [
+      "scripts:coverage:changes"
     ],
     "codegen:approval-explanations:check": [
       "codegen:approval-explanations:check"
@@ -360,7 +413,10 @@
   },
   "private": [
     "check:tests",
-    "check:drift"
+    "check:drift",
+    "seatbelt:confine",
+    "seatbelt:gated",
+    "seatbelt:scanstress"
   ],
   "selection": {
     "test:digest": "go",
@@ -381,7 +437,6 @@
     "den:webkit:atspi": "passthrough",
     "test:confine:linux": "passthrough",
     "release:rehearse:linux-signing": "passthrough",
-    "den:test:rust": "fixed:desktop-settings-observer",
     "test:linux:installed": "passthrough"
   },
   "resources": {
@@ -498,6 +553,12 @@
       "workers": "shared"
     },
     "test:runner": {
+      "locks": [
+        "runner"
+      ],
+      "workers": 1
+    },
+    "scripts:coverage:changes": {
       "locks": [
         "runner"
       ],
@@ -667,6 +728,7 @@
       "locks": [
         "harness"
       ],
+      "progress": "log",
       "workers": 1
     },
     "test:confine:linux": {
@@ -791,7 +853,8 @@
       "targets": [
         "budgets",
         "coverage:changes",
-        "den:coverage:changes"
+        "den:coverage:changes",
+        "scripts:coverage:changes"
       ],
       "minutes": 45,
       "profiles": [
@@ -844,8 +907,12 @@
         "integration"
       ],
       "suite": "all",
-      "setup": "verification",
-      "first": true
+      "setup": "analysis",
+      "first": true,
+      "early_targets": [
+        "comments:check",
+        "test:fail-messages:check"
+      ]
     },
     "vulnerabilities": {
       "targets": [
@@ -858,7 +925,7 @@
         "integration"
       ],
       "suite": "all",
-      "setup": "verification"
+      "setup": "analysis"
     },
     "runner": {
       "targets": [
@@ -886,7 +953,8 @@
       "suite": "behavior",
       "setup": "verification",
       "workers": 3,
-      "shards": 2
+      "shards": 2,
+      "contract_first": true
     },
     "frontend": {
       "targets": [
@@ -1034,7 +1102,7 @@
         "nightly"
       ],
       "suite": "all",
-      "setup": "verification"
+      "setup": "analysis"
     },
     "benchmarks": {
       "targets": [
@@ -1096,10 +1164,11 @@
     "footprints": {
       "ci.yml": 1,
       "qualification.yml": 3,
+      "qualification-supersession.yml": 1,
       "build-caches.yml": 1,
       "nightly.yml": 2,
       "release.yml": 2,
-      "linux-candidates.yml": 1,
+      "linux-candidate-requests.yml": 1,
       "linux-desktop-environment-rehearsal.yml": 1,
       "linux-installed-desktop-rehearsal.yml": 1,
       "release-halt.yml": 1,
@@ -1109,6 +1178,7 @@
       "dependency-inventory.yml": 1,
       "release-system-live-test.yml": 1,
       "queue-health.yml": 1,
+      "queue-batching.yml": 1,
       "issue-stale.yml": 1,
       "issue-sweep.yml": 1,
       "issue-intake.yml": 1,

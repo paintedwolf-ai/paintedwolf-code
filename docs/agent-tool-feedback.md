@@ -18,6 +18,11 @@ Host code chooses the code and facts. Catalog templates choose the sentence. Nei
 
 At rendering, [`oarcopy.FactsFromData`](../lycaon/internal/oarcopy/facts.go) publishes host facts under `paintedwolf.*` and leaves standard profile names bare. Generic `reason` and `field` details publish as `paintedwolf.rejection_reason` and `paintedwolf.rejection_field`. The `arg_validation_*` facts describe real argument checks; validators mark those with `RejectInvalidArguments`, and operational or policy failures never populate them.
 
+Rule selection reuses the occurrence's fact projection only within that selection
+pass. Completing a lazy provider invalidates the projection, including a provider
+that publishes facts before returning an error. Conditions, counters, and later
+anchor evaluations still read their own current occurrence state.
+
 On the wire, a tool result carries ordered `feedback` entries (`code`, typed `details`, optional `subject`), a producer-stated `dispatch` record for worker creation, and a producer-stated `completion` record for lifecycle work. `codes` is the compact ordered card-selection projection of `feedback`; it is never the only rejection data.
 
 Literal `echo` and `printf` output directed to a file uses `USE_WRITE_NATIVE`,

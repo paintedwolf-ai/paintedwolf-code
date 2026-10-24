@@ -631,8 +631,8 @@ Gate composition lives in `scripts/verification-plan.json`.
 
 | Task | Composition |
 |------|-------------|
-| `check-fast` | Local handoff gate on one stable source snapshot: `build`, `lint:full`, `budgets`, `den:typecheck`, `den:lint`, `den:test:fast`, `den:coverage:changes`, `test:short`, `test:contract`, `coverage:changes`, `licenses:notices`, `comments:check`, `test:fail-messages:check`, and `docs:links`, each starting once its declared resources allow. CI's `fast` profile, the ready pull request tier, runs a subset of these stages |
-| `check` | Full local and qualification gate on one stable source snapshot, run exactly by CI's `check` profile: `build`, `build:cross`, `check:drift`, `openapi:lint`, `validate:workflows`, `oar:verify` (`test:oar` and `oar:conformance`), the runtime checks (`test:runner`, `test:full` including required bundled scanners, `den:typecheck`, `den:lint`, `den:test`, `den:test:rust`), `test:fail-messages:check`, `comments:check`, `lint:full`, `budgets`, `coverage:changes`, `den:coverage:changes`, and `lint:vuln`. Stages start as their declared resources allow, longest expected first, and the first failure ends the gate. Active fuzzing, transcript performance, stress, race, and coverage sweeps run separately in `nightly.yml` and the release workflow; ordinary Go tests still execute saved fuzz cases |
+| `check-fast` | Local handoff gate on one stable source snapshot: `build`, `lint:full`, `budgets`, `den:typecheck`, `den:lint`, `den:test:fast`, `den:coverage:changes`, `test:short`, `test:contract`, `coverage:changes`, `scripts:coverage:changes`, `licenses:notices`, `comments:check`, `test:fail-messages:check`, and `docs:links`, each starting once its declared resources allow. CI's `fast` profile, the ready pull request tier, runs a subset of these stages |
+| `check` | Full local and qualification gate on one stable source snapshot, run exactly by CI's `check` profile: `build`, `build:cross`, `check:drift`, `openapi:lint`, `validate:workflows`, `oar:verify` (`test:oar` and `oar:conformance`), the runtime checks (`test:runner`, `test:full` including required bundled scanners, `den:typecheck`, `den:lint`, `den:test`, `den:test:rust`), `test:fail-messages:check`, `comments:check`, `lint:full`, `budgets`, `coverage:changes`, `scripts:coverage:changes`, `den:coverage:changes`, and `lint:vuln`. Stages start as their declared resources allow, longest expected first, and the first failure ends the gate. Active fuzzing, transcript performance, stress, race, and coverage sweeps run separately in `nightly.yml` and the release workflow; ordinary Go tests still execute saved fuzz cases |
 | `check:drift` | Internal to `check`: every `codegen:*:check`, `openapi:bundle:check`, `db:sqlc:check`, `db:sqlc:vet`, the vendored-corpus checks (`oar:vendor:check`, `scan:rules:vendor:check`, `secret-mint:vendor:check`, `lint:vuln:vendor:check`), and `docs:links`. A stale generated surface fails here, not at compile time |
 | `check:digest` | Summarized local pass — build, `lint:fast`, unit/component Go tests, `den:test:fast`, and the harness canary. `FULL=1` delegates to `test:full`, including integration tags and required bundled scanners |
 | Contention controls | Up to eight batches overlap across checkouts; stages within a request and across requests overlap wherever resource locks and worker slots allow. Shared operations reserve slots within a global budget of three quarters of host CPUs, rounded down and bounded between one and eight workers; `PW_TEST_HOST=dedicated` (hosted CI) uses every CPU and lets shared operations reserve all of it. `PW_TEST_WORKERS` caps each invocation; runner-specific settings may reduce it. Scheduler-dependent waits and lint deadlines scale 1×–4× from host load, with `PW_TEST_TIMEOUT_SCALE` as an explicit override |
@@ -648,7 +648,7 @@ Gate composition lives in `scripts/verification-plan.json`.
 | `test:runner` | Bounded subprocess fixtures for batching, stage overlap, source snapshots, package outcomes and reuse, FIFO order and backfill, early failures, cancellation, crash recovery, nested admission, and worker limits |
 | `lint:fast` / `lint:full` | Both run vet and security checks. Interprocedural dead-code analysis belongs to `lint:full`. Arguments after `--` go to golangci-lint; `./task lint:full -- --timeout=40m` raises that analysis deadline |
 | `db:wipe` | Clears the store and every store-keyed host tree; preserves Den app preferences, device configuration, credentials, debug captures, and upgrade recovery archives. Refuses while any process holds the store open — stop the engine first |
-| `budgets` / `coverage:changes` / `den:coverage:changes` | Hold what a change touches to its limits and test the statements it adds; warnings arrive before the limit, and `PW_BUDGETS_INSPECT="<path>"` shows a file or directory's standing before editing it. See [Size budgets and changed coverage](test-strategy.md#size-budgets-and-changed-coverage) |
+| `budgets` / `coverage:changes` / `den:coverage:changes` / `scripts:coverage:changes` | Hold what a change touches to its limits and test the statements it adds; warnings arrive before the limit, and `PW_BUDGETS_INSPECT="<path>"` shows a file or directory's standing before editing it. `scripts:coverage:changes` shares the `runner` resource with `test:runner` and installs the pinned coverage.py once per interpreter under the [bin directory](#build-outputs-caches-and-locks); `./task setup-dev -- --ci-inputs` provisions it before an offline CI lane. See [Size budgets and changed coverage](test-strategy.md#size-budgets-and-changed-coverage) |
 | `check:coverage` / `check:coverage:packages` | `check:coverage` produces aggregate and package reports from one test run. Floors come from `scripts/coverage-policy.json`: `COVERAGE_MIN` overrides the aggregate floor; the per-package report is advisory until `COVERAGE_PKG_ENFORCE=1`, with `COVERAGE_PKG_MIN` overriding its floor and exemptions in `lycaon/coverage-exempt.txt`. Floors must be finite percentages from 0 through 100; fractional floors are compared without truncation. Go and Den coverage runs use the digest runners and retain failure diagnostics |
 | `build:decide` / `decide:test` | Build and test `bialy` with the host's features (`scripts/decide-features.sh`: `mlx` on Apple silicon, `vulkan` on Linux). On Linux, `decide:test` runs the Vulkan parity tests on the first GPU, or on Mesa's lavapipe (`mesa-vulkan-drivers`) without one. The first MLX build compiles the framework from source: several minutes, a network fetch, and Xcode's Metal toolchain (`xcodebuild -downloadComponent MetalToolchain` when the build cannot execute `metal`). Development builds stage heads installed under `$(python3 scripts/artifact_paths.py bin .)/decide-heads/`; the dev sidecar provisions the checkpoint at its first boot |
 | `build:document-core` | Builds `pw-document-core` for this host into the shared, content-addressed cache and prints its path. Go and Vitest digests, fuzz, and benchmark runs call it themselves and export `LYCAON_DOCUMENT_CORE_BINARY`, so editor tests always run the core built from the source they test; `build:lycaon-dev` stages a copy beside `lycaon-dev` |
@@ -760,8 +760,13 @@ and Linux, lost owner identity is `supervision_lost`; an OS-stopped owner is
 `supervisor_stopped`. Operations with ten minutes of continuously sampled unchanged
 descendant CPU counters, process trees, and captured output are `suspected_stall`;
 samples more than 90 seconds apart reset the inactivity window, and Go raw event
-files count as output even when the digest's console log is quiet. Queued
-reservations are not stalled operations. A healthy long-running command can
+files count as output even when the digest's console log is quiet. Targets whose
+work runs inside an external daemon (such as `nix-daemon` or container builds)
+declare `"progress": "log"` or `"progress": "heartbeat"` in their
+`scripts/verification-plan.json` resource recipe; the scheduler exports
+`PW_TEST_STAGE_PROGRESS` and samples that file's inode, size, and modification
+time alongside descendant processes and stage logs, without parsing output prose.
+Queued reservations are not stalled operations. A healthy long-running command can
 remain active indefinitely, and a quiet external wait may still trigger an
 advisory. These signals never kill processes, release leases, or change test
 results. Missing process identity or unsupported telemetry reports `unknown`;
@@ -1168,16 +1173,19 @@ A withdrawn bridge requires a reviewed `./task release:halt -- --plan PATH` plan
 
 ### Linux candidate builds
 
-The [Linux package candidates workflow](../.github/workflows/linux-candidates.yml)
+The [Linux candidate requests workflow](../.github/workflows/linux-candidate-requests.yml)
 builds the native amd64 and arm64 deb/rpm packages through the production bundle
-and staging path. It runs independently on relevant packaging pull requests
-once ready, weekly, or by manual dispatch on the selected branch. The release
-workflow calls the same job with its exact selected source commit. Candidate
+and staging path. It runs weekly, on ready PRs that change packaging inputs,
+or by manual dispatch on the selected branch. Use `gh workflow run linux-candidate-requests.yml --ref <branch>` when a pull
+request needs package artifacts. The release workflow calls the reusable
+[package build](../.github/workflows/linux-candidates.yml) directly with its exact
+selected source commit, within the release runner budget. Candidate
 artifacts include checksums and the source commit and are retained for 90 days.
 The workflow has read-only repository access and no signing environment or
 publication credentials. Package signing rehearsals and installed-system
 qualification remain separate requirements; a candidate build alone does not
-qualify a release. Draft pull requests do not start candidate builds.
+qualify a release. Standalone requests share the maintenance runner budget;
+release calls use the release budget and cannot be replaced by maintenance.
 
 When a package stage fails after the build starts, the workflow runs
 `./task release:candidate:diagnostics -- --source CHECKOUT --controller SHA --output FRESH_DIR`
@@ -1238,6 +1246,31 @@ xattr -w com.apple.quarantine "0083;00000000;Chrome;|com.google.Chrome" ~/Downlo
 5. **Readiness is clean or explained.** `GET /v1/preflight` returns `overall: ok`, or every non-ok probe is one the tester deliberately caused. A clean Mac without a host git install is the *expected* first-run environment — the golden path **passes** when the bundled engine is present (or the app surfaces `GIT_ENGINE_UNAVAILABLE` if it is not), and **fails** if the app is silent about a missing engine.
 
 ### Tag gate
+
+Select a release source explicitly when main is moving:
+
+```bash
+gh workflow run qualification.yml --ref main -f source-sha=<full-main-commit-sha>
+```
+
+The request remains queued until the shared executor can run it. Main pushes
+cannot replace it. Its completed `qualification-source-<attempt>` artifact binds
+the selected source to the controller and workflow attempt; publication checks
+that evidence before accepting the source. A failed or canceled request supplies
+no qualification. Source selection does not publish or tag a release.
+
+The selected source and controller must have identical `.github/`, `scripts/`,
+`task`, and `Taskfile.yml` content. Admission refuses incompatible tooling before
+any candidate checks start. Select a newer main commit when those interfaces
+change; qualification never combines an old script API with a new workflow.
+
+Rollout requires a fresh qualified candidate after this policy lands. Existing
+successful runs without a source receipt do not qualify release sources. Finish
+any already selected release before adopting this gate, or select and qualify a
+main commit containing it before requesting a release. Receipts expire after
+90 days; requalify expired candidates within the tooling compatibility rule.
+Historical dispatch lookup searches that retention window and filters the source
+SHA in the run title before downloading and verifying the receipt.
 
 Both preview and stable publication run the controller's compatibility check
 against the newest published stable release confirmed by the signed updater feed or GitHub mirror. The controller pins that
