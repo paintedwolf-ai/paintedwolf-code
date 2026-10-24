@@ -104,13 +104,13 @@ binaries:
     source_url: https://github.com/JetBrains/JetBrainsMono
     license_text_file: texts/OFL-1.1-jetbrainsmono.txt
 
-  # Compiled into bialy on Apple silicon (mlx-sys fetches the C++ with CMake, out
-  # of cargo-about's view); its kernels ship as engine-root/decide/mlx.metallib. The
+  # Compiled into bialy on Apple silicon from third_party/mlx's pinned offline
+  # C++ sources (outside cargo-about's view); its kernels ship as engine-root/decide/mlx.metallib. The
   # notice file covers the code MLX links in.
   - name: MLX
     version: "0.32.2"
     license: MIT
-    source_url: https://github.com/ml-explore/mlx
+    source_url: https://github.com/ml-explore/mlx/tree/1f8e74e3f12f31365464a6867c6579f0e9b29d85
     license_text_file: texts/MIT-mlx.txt
     notice_text_file: texts/mlx-compiled-notices.md
 

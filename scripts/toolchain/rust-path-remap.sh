@@ -19,8 +19,14 @@ rust_path_remap() {
     cargo="${cargo:-${home}/.cargo}"
   fi
   # rustc applies the last matching prefix, so broader directories come first.
+  # Capture slots share a stable parent. Mapping that parent keeps Cargo's
+  # build-script environment identical when admission chooses another slot.
+  local source_prefix="${root%/}"
+  if [[ -n "${PW_SOURCE_SNAPSHOT_COMMIT:-}" ]]; then
+    source_prefix="$(dirname "${root%/}")"
+  fi
   local mapping
-  for mapping in "${home}=/build-home" "${rustup%/}=/rustup" "${cargo%/}=/cargo" "${snapshots%/}=/source-snapshots" "${root%/}=/source"; do
+  for mapping in "${home}=/build-home" "${rustup%/}=/rustup" "${cargo%/}=/cargo" "${snapshots%/}=/source-snapshots" "${source_prefix}=/source"; do
     [[ "${mapping%%=*}" == /?* ]] || continue
     case "${separator}${flags}${separator}" in
       *"${separator}--remap-path-prefix=${mapping}${separator}"*) continue ;;

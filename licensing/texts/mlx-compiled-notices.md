@@ -1,5 +1,5 @@
 MLX links in the following code when bialy is compiled for Apple silicon. Each is
-fetched by MLX's own build or vendored in the mlx-sys crate, and none is visible to the
+provided by the pinned archives in `third_party/mlx` or vendored in the mlx-sys crate, and none is visible to the
 crate graph above.
 
 # mlx-c c74db5307cc8ce122f48d97ef951b30578674e7f
