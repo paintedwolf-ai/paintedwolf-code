@@ -4,12 +4,13 @@
   "kind": "test_suite",
   "workstream": "database-integrity",
   "disposition": "retain",
-  "reason": "Database tests exercise private fresh-schema, migration, transaction, and recovery seams through actual stores. The expression-index audit belongs with those contracts; moving it to an external package would obscure the schema fixture or broaden production visibility. Retain the current test membership and require renewed review for any membership growth or replacement.",
-  "reviewed_commit": "be8c82f32a7764e8b58a56a72420046e184b4510",
-  "ceiling": 40,
+  "reason": "Retain these 41 immediate database test files: private schema, migration, transaction, storage, and recovery fixtures belong beside the store implementation. Startup scalability and physical-store quarantine tests extend the existing health suite without introducing another test file. Bounded admission is proved by opening a fixture that a whole-store quick_check rejects, then confirming background quarantine and restart refusal. The subprocess fixture verifies committed WAL recovery and unfinished-transaction rollback. Stale-record discard for replaced and absent stores and the upgrade-path refusal of a recorded diagnosis were added to the existing health and upgrade suites. Reconsider membership on additions or replacements.",
+  "reviewed_commit": "d5c864fc49ef77ce1a86ddaa28c584fda59cecb3",
+  "ceiling": 41,
   "boundaries": {
     "lycaon/internal/db/schema_integrity_test.go": "40c3f6ae2cd2be3bd8b16dd852636611406d18ed9f737912351307f0b6169dbe",
-    "lycaon/internal/db/schema_index_integrity_test.go": "fa12ca9706074beda8b7bbd08726d68b2b9eb65bd03525fe58e9b4d52f742281"
+    "lycaon/internal/db/schema_index_integrity_test.go": "fa12ca9706074beda8b7bbd08726d68b2b9eb65bd03525fe58e9b4d52f742281",
+    "lycaon/internal/db/store_health_test.go": "97835afd62a6df6ea3775e1d9c5bcbfb7ae33d3fa8c2a7b03425c5db135139c2"
   },
-  "reviewed_shape": "301d2e62e2c1f64581faab0fb2a8a5508dd7120fb93e59f1608f9769613389a3"
+  "reviewed_shape": "502d42396659e753f8d65d0088a1d165e7860330b199e6374a1c0651aa36d01c"
 }
