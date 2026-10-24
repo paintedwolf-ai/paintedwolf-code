@@ -382,3 +382,85 @@ class UnlockAccountAndBridgeTests(unittest.TestCase):
 
             selected = {'format_version': 1, 'kind': 'qemu-fixed-input', 'lease': '/tmp/lease.json', 'vm_id': 'owned'}
             controller.verify_deliveries(root, EXECUTION, selected)
+
+    def test_bridge_prepare_unlock_sends_40_byte_bounded_secret_frame_to_prepare_exchange(self):
+        import os
+        import selectors
+        import time
+        from types import SimpleNamespace
+        from linux_release.installed_input import controller, protocol, unlock_account, unlock_guest
+        unlocked = copy.deepcopy(target()['session'])
+        unlocked['native_session'].update(locked_hint=False, locker_active=False)
+        pending = {
+            'format_version': 1, 'binding': EXECUTION, 'transaction_id': '1' * 32,
+            'operation': unlock_wire.PREPARE, 'native_session': unlocked, 'account': ACCOUNT}
+
+        guest_in_r, host_out_w = os.pipe()
+        host_in_r, guest_out_w = os.pipe()
+        host_stdin = os.fdopen(host_out_w, 'wb', buffering=0)
+        host_stdout = os.fdopen(host_in_r, 'rb', buffering=0)
+        guest_stdin = os.fdopen(guest_in_r, 'rb', buffering=0)
+        guest_stdout = os.fdopen(guest_out_w, 'wb', buffering=0)
+        for stream in (host_stdin, host_stdout, guest_stdin, guest_stdout):
+            self.addCleanup(stream.close)
+            os.set_blocking(stream.fileno(), False)
+
+        host_sel = selectors.DefaultSelector()
+        guest_sel = selectors.DefaultSelector()
+        self.addCleanup(host_sel.close)
+        self.addCleanup(guest_sel.close)
+        host_sel.register(host_stdout, selectors.EVENT_READ)
+        guest_sel.register(guest_stdin, selectors.EVENT_READ)
+
+        bridge = controller.Bridge.__new__(controller.Bridge)
+        bridge.selected = {'format_version': 1, 'kind': 'qemu-fixed-input', 'lease': '/tmp/lease.json', 'vm_id': 'owned'}
+        bridge.execution = protocol.binding(EXECUTION)
+        bridge.process = SimpleNamespace(stdin=host_stdin, stdout=host_stdout)
+        bridge.selector = host_sel
+        bridge.actor = Mock(nonce=EXECUTION['execution_nonce'], value={'vm_id': 'owned'})
+        bridge.bytes = 0
+        bridge.unlock_actor = None
+        bridge.prepared_request = None
+        bridge.unlock_proof = None
+        bridge._record_log = Mock()
+
+        observer = Mock()
+        observer.observe.return_value = unlocked
+        captured_secrets = []
+
+        def fake_prepare(acc, sec, *, vm_id=None):
+            captured_secrets.append((acc, bytes(sec), vm_id))
+            return {'prepared': True, 'account': dict(acc), 'credential_state': 'active'}
+
+        guest_streams = SimpleNamespace(stdin=guest_stdout, stdout=guest_stdin)
+        guest_pipe = controller.Pipe(guest_streams, guest_sel, time.monotonic() + 5)
+
+        def guest_worker():
+            cmd = guest_pipe.line({'state': 'waiting'}) if False else None
+            # Read native-prepare line and reply native-prepare-ready
+            raw = bytearray()
+            while not raw.endswith(b'\n'):
+                raw.extend(guest_pipe.read(1))
+            guest_pipe.write(protocol.canonical({
+                'state': 'native-prepare-ready',
+                'request_sha256': unlock_wire.digest(pending),
+                'vm_id': 'owned'}))
+            with patch.object(unlock_account, 'run_privileged_prepare', side_effect=fake_prepare):
+                unlock_guest.prepare_exchange(guest_pipe, observer, EXECUTION, pending, vm_id='owned')
+            raw = bytearray()
+            while not raw.endswith(b'\n'):
+                raw.extend(guest_pipe.read(1))
+            guest_pipe.write(protocol.canonical({'state': 'acknowledged'}))
+
+        worker = threading.Thread(target=guest_worker)
+        worker.start()
+        try:
+            ack = bridge.prepare_unlock(pending)
+        finally:
+            worker.join(5)
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(ack['result'], {'prepared': True, 'account': ACCOUNT})
+        self.assertEqual(len(captured_secrets), 1)
+        self.assertEqual(captured_secrets[0][0], ACCOUNT)
+        self.assertEqual(len(captured_secrets[0][1]), 40)
+        self.assertEqual(captured_secrets[0][2], 'owned')

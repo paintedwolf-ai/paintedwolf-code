@@ -191,6 +191,7 @@ class LockMonitorExecutionTests(unittest.TestCase):
                     'timed_out': False, 'output_limit': False,
                     'stdout': b'opened\n', 'stderr': b''}),
                 (lock_monitor, 'perform_transition', {'operation': 'session-lock-v1', 'completed': True}),
+                (lock_monitor, 'await_session', {'id': 'sess-1', 'status': 'idle'}),
                 (lock_monitor, 'submit_project_turn', None),
                 (lock_monitor, 'await_fixture_reply', {'settled': True}),
                 (lock_monitor, 'physical_input', None),
@@ -275,6 +276,7 @@ class LockMonitorExecutionTests(unittest.TestCase):
         self.assertTrue(obs['during_lock']['locked_hint'])
         self.assertFalse(obs['after_unlock']['locked_hint'])
         self.assertTrue(obs['step_away_unlocked']['latest']['locked_hint_seen'])
+        self.assertEqual(obs['opened_session'], {'id': 'sess-1', 'status': 'idle'})
         self.assertEqual(obs['settled_reply'], {'settled': True})
         disable_mock.assert_called_once_with(ACCOUNT, vm_id='owned')
 
