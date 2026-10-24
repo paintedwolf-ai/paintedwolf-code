@@ -199,6 +199,7 @@ The bundled `pw` command addresses the same host and project identities as Den. 
 | `pw .` | Open or focus the project containing the current directory |
 | `pw ls` | List projects and attached roots |
 | `pw logs` | Open the local diagnostic log viewer |
+| `pw --version` | Print the installed Painted Wolf Code version |
 
 Commands use stable ids internally and may accept unambiguous display selectors; ambiguity is reported rather than resolved by recency or path guessing. The CLI may request project actions available to the human operator; it grants an agent no new tool authority and bypasses no approval, confinement, or project trust. It discovers the local sidecar and authenticates with the same device-local API token: loopback is transport, the token is the caller boundary.
 
