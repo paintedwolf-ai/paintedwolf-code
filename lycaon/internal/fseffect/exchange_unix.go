@@ -39,8 +39,13 @@ func ExchangeGuarded(root, first, second, firstIdentity, secondIdentity string) 
 			return err
 		}
 	}
+	return exchangeParents(from, to, fsyncFD)
+}
+
+// Keep both directory flushes observable even if the first one fails.
+func exchangeParents(from, to *openedParent, syncDirectory func(int) error) error {
 	if err := renameExchange(int(from.file.Fd()), from.name, int(to.file.Fd()), to.name); err != nil {
 		return err
 	}
-	return errors.Join(fsyncFD(int(from.file.Fd())), fsyncFD(int(to.file.Fd())))
+	return errors.Join(syncDirectory(int(from.file.Fd())), syncDirectory(int(to.file.Fd())))
 }

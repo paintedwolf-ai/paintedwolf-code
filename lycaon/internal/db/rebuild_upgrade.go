@@ -126,12 +126,16 @@ func sealRebuiltStore(ctx context.Context, path string) error {
 	if mode != "delete" {
 		return fmt.Errorf("rebuilt store still requires a journal")
 	}
+	return syncSealedStore(path, fssync.File)
+}
+
+func syncSealedStore(path string, syncFile func(*os.File) error) error {
 	for _, name := range []string{path, filepath.Dir(path)} {
 		file, err := os.Open(name)
 		if err != nil {
 			return err
 		}
-		if err := errors.Join(fssync.File(file), file.Close()); err != nil {
+		if err := errors.Join(syncFile(file), file.Close()); err != nil {
 			return err
 		}
 	}
