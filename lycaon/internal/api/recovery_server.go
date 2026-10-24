@@ -25,6 +25,7 @@ type recoveryState struct {
 	StoreSchemaVersion int
 	SnapshotAvailable  bool
 	SnapshotAt         string // RFC 3339 UTC; empty when unavailable
+	Space              *db.InsufficientSpaceError
 }
 
 // RecoveryServerOpts configures the recovery-only server.
@@ -95,6 +96,7 @@ func buildRecoveryState(ctx context.Context, dbPath string, incompatible *db.Sto
 	if incompatible != nil {
 		st.Reason = incompatible.Reason
 		st.StoreSchemaVersion = incompatible.StoreSchemaVersion
+		st.Space = incompatible.Space
 		// The detail carries the diagnostic cause beneath the client-rendered summary.
 		if incompatible.Detail != "" {
 			st.Detail = incompatible.Detail

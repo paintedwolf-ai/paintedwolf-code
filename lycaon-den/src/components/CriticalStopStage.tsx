@@ -116,6 +116,8 @@ export function createCriticalStop(appStore: AppStore): CriticalStopHandle {
         return "Finishing…";
       case "finish_fresh_start":
         return "Starting fresh…";
+      case "retry_upgrade":
+        return "Updating…";
       case "unlock_credential_vault":
         return "Unlocking…";
       case "create_credential_vault":
@@ -281,7 +283,8 @@ export function createCriticalStop(appStore: AppStore): CriticalStopHandle {
     }
     if (
       stop.recovery === "finish_restore" ||
-      stop.recovery === "finish_fresh_start"
+      stop.recovery === "finish_fresh_start" ||
+      stop.recovery === "retry_upgrade"
     ) {
       void restartAppBackend().then(
         () => {

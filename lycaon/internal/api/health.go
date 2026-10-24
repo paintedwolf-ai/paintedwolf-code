@@ -34,6 +34,8 @@ type healthResponse struct {
 	RecoveryDetail            string `json:"recovery_detail,omitempty"`
 	RecoverySnapshotAvailable bool   `json:"recovery_snapshot_available"`
 	RecoverySnapshotAt        string `json:"recovery_snapshot_at,omitempty"`
+	RecoverySpaceNeeded       uint64 `json:"recovery_space_needed_bytes,omitempty"`
+	RecoverySpaceAvailable    uint64 `json:"recovery_space_available_bytes,omitempty"`
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -51,7 +53,7 @@ func (s *Server) healthPayload() healthResponse {
 	}
 	st := s.recovery
 	if failure := s.Routes.Storage.failure(); failure != nil {
-		st = &recoveryState{Reason: failure.Reason, Detail: failure.Detail, StoreSchemaVersion: failure.StoreSchemaVersion}
+		st = &recoveryState{Reason: failure.Reason, Detail: failure.Detail, StoreSchemaVersion: failure.StoreSchemaVersion, Space: failure.Space}
 	}
 	resp.setRecovery(st)
 	return resp
@@ -66,5 +68,9 @@ func (resp *healthResponse) setRecovery(st *recoveryState) {
 		resp.RecoveryDetail = st.Detail
 		resp.RecoverySnapshotAvailable = st.SnapshotAvailable
 		resp.RecoverySnapshotAt = st.SnapshotAt
+		if st.Space != nil {
+			resp.RecoverySpaceNeeded = st.Space.NeededBytes
+			resp.RecoverySpaceAvailable = st.Space.AvailableBytes
+		}
 	}
 }

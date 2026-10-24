@@ -6,6 +6,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -45,8 +46,9 @@ func TestCanceledCaptureStopsWithinCurrentFile(t *testing.T) {
 }
 
 func TestUpgradeSpaceRequiresRecoveryAndScratchAllowance(t *testing.T) {
-	if err := requireUpgradeSpace(4<<30, 3<<30); err == nil {
-		t.Fatal("insufficient space admitted upgrade")
+	var space *db.InsufficientSpaceError
+	if err := requireUpgradeSpace(4<<30, 3<<30); !errors.As(err, &space) || space.NeededBytes != 4<<30 || space.AvailableBytes != 3<<30 {
+		t.Fatalf("insufficient space = %v, want a typed refusal with both sizes", err)
 	}
 	testutil.FailErr(t, "space exactly meets estimate", requireUpgradeSpace(4<<30, 4<<30))
 }

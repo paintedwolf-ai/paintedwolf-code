@@ -1,0 +1,15 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/api/api.healthResponse",
+  "kind": "data_record",
+  "workstream": "store-health",
+  "disposition": "retain",
+  "reason": "The health response is one wire projection of startup and recovery state. Capacity details and operational failure reasons belong to that response; splitting it would obscure the existing client contract.",
+  "reviewed_commit": "fedf80ee7b88765c50c795dd50c8db432ae2c0d9",
+  "ceiling": 13,
+  "boundaries": {
+    "lycaon-den/src/notices/critical-stop-model.test.ts": "69d6354e01cbb3cca30c7219083fb1a61653c29590bc11e7cca5b762c024676e",
+    "lycaon/internal/api/health.go": "0601c605ec105bd481c0f8682adaf33d1d0db39303fba47dd5ba747e20c5805d"
+  },
+  "reviewed_shape": "d2d1164965de852794a80230afab427831738c68bfce51d6e3e5b62634cf9d97"
+}

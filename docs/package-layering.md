@@ -313,7 +313,7 @@ Scan integration tests live in [`scan/integration`](../lycaon/internal/scan/inte
 |------|-----------|-----------|
 | `pkg/api` wire-only | `internal/` | — |
 | Domain ↔ HTTP | `internal/*` → `internal/api` (except `internal/app`) | — |
-| db bottom | `internal/db` → `internal/` | `configdir`, `timelayout` |
+| db bottom | `internal/db` → `internal/` | `configdir`, `fileclone`, `fseffect`, `fssync`, `timelayout` |
 | Triangle | `internal/prompts` → `internal/tools` **hub** | `tools/readcaps`, `tools/surveyreceipt`, `toolcontract` |
 
 The rest are the extension-catalog edges described above — `extpacks` may not import `contribution`, `catalogview`, or `extensionstate`; `contribution` stays pure but for `filekind` and `theme`; `catalogview` may not import `extensionstate` or `usernotice` — plus a generated rule per loader hub forbidding the reverse edge into `catalogview`. A new rule is added to `layeringRules()` (or the hub loop beside it), not to this table.

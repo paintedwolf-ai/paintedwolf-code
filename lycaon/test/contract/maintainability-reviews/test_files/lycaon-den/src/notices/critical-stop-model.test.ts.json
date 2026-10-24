@@ -1,0 +1,13 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon-den/src/notices/critical-stop-model.test.ts",
+  "kind": "test_suite",
+  "workstream": "store-health",
+  "disposition": "retain",
+  "reason": "The suite compares typed failure reasons, copy, and allowed actions through one notice projection. Keeping capacity, access, and corruption cases together exposes inconsistent recovery advice.",
+  "reviewed_commit": "fedf80ee7b88765c50c795dd50c8db432ae2c0d9",
+  "ceiling": 417,
+  "boundaries": {
+    "lycaon-den/src/notices/critical-stop-model.test.ts": "69d6354e01cbb3cca30c7219083fb1a61653c29590bc11e7cca5b762c024676e"
+  }
+}

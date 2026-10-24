@@ -6,9 +6,11 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
+	"syscall"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/db/migrations"
@@ -188,5 +190,63 @@ func TestUpgradeRefusesAlteredAppliedMigration(t *testing.T) {
 	testutil.FailErr(t, "close altered ledger", w.Close())
 	if err := upgradeExistingUsing(t.Context(), path, UpgradeHooks{}, true, registry); !errors.Is(err, ErrStoreIncompatible) {
 		t.Fatalf("altered ledger error = %v", err)
+	}
+}
+
+// A volume too full for the upgrade is its own refusal: the store is
+// untouched and the numbers travel with it.
+func TestUpgradeRefusesAFullVolumeWithoutTouchingTheStore(t *testing.T) {
+	path, registry, _ := upgradeFixture(t)
+	before, err := os.ReadFile(path)
+	testutil.FailErr(t, "read initial bytes", err)
+	space := &InsufficientSpaceError{NeededBytes: 3 << 30, AvailableBytes: 1 << 30}
+	hooks := UpgradeHooks{Before: func(context.Context, *sql.DB, migrations.Plan) error {
+		return fmt.Errorf("capture: %w", space)
+	}}
+	err = upgradeExistingUsing(t.Context(), path, hooks, false, registry)
+	var refused *StoreIncompatibleError
+	if !errors.As(err, &refused) || refused.Reason != RecoveryReasonInsufficientSpace || refused.Space != space {
+		t.Fatalf("upgrade error = %v, want an insufficient-space refusal carrying its numbers", err)
+	}
+	after, err := os.ReadFile(path)
+	testutil.FailErr(t, "read refused bytes", err)
+	if !reflect.DeepEqual(before, after) {
+		t.Fatal("refused upgrade changed source bytes")
+	}
+}
+
+func TestUpgradeOperationalFailurePreservesSource(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		cause  error
+		reason RecoveryReason
+	}{
+		{"permission", os.ErrPermission, RecoveryReasonStorageUnavailable},
+		{"io", syscall.EIO, RecoveryReasonStorageUnavailable},
+		{"full", syscall.ENOSPC, RecoveryReasonInsufficientSpace},
+		{"quota", syscall.EDQUOT, RecoveryReasonInsufficientSpace},
+		{"canceled", context.Canceled, ""},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			path, registry, _ := upgradeFixture(t)
+			before, err := os.ReadFile(path)
+			testutil.FailErr(t, "read source before failed capture", err)
+			err = upgradeExistingUsing(t.Context(), path, UpgradeHooks{Before: func(context.Context, *sql.DB, migrations.Plan) error {
+				return fmt.Errorf("capture: %w", test.cause)
+			}}, false, registry)
+			var failure *StoreIncompatibleError
+			if test.reason == "" {
+				if !errors.Is(err, test.cause) || errors.As(err, &failure) {
+					t.Fatalf("cancellation = %v, want cancellation without recovery diagnosis", err)
+				}
+			} else if !errors.As(err, &failure) || failure.Reason != test.reason {
+				t.Fatalf("capture failure = %v, want %s", err, test.reason)
+			}
+			after, err := os.ReadFile(path)
+			testutil.FailErr(t, "read source after failed capture", err)
+			if !reflect.DeepEqual(before, after) {
+				t.Fatal("failed recovery capture changed source bytes")
+			}
+		})
 	}
 }

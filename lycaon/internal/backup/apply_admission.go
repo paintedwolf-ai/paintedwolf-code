@@ -124,14 +124,18 @@ func loadPendingRestore(configDir string) (*pendingRestore, error) {
 		appliedSet[rel] = struct{}{}
 	}
 
-	return &pendingRestore{
+	restore := &pendingRestore{
 		markerPath:  markerPath,
 		marker:      marker,
 		pendingSet:  pendingSet,
 		stagedFiles: stagedFiles,
 		applied:     applied,
 		appliedSet:  appliedSet,
-	}, nil
+	}
+	if err := restore.loadProgress(); err != nil {
+		return nil, err
+	}
+	return restore, nil
 }
 
 func validatePendingOperation(marker PendingMarker, pendingSet, deleteSet map[string]struct{}) error {

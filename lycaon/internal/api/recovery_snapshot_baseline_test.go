@@ -113,3 +113,16 @@ func TestQuarantinedStoreExposesRecoveryAndRefusesRoutes(t *testing.T) {
 		t.Fatalf("health status = %d", response.Code)
 	}
 }
+
+func TestRecoveryHealthReportsTheSpaceAnUpgradeNeeds(t *testing.T) {
+	_, dbPath, _ := writeRefusedStoreAndSnapshot(t)
+	space := &db.InsufficientSpaceError{NeededBytes: 3 << 30, AvailableBytes: 1 << 30}
+	state := buildRecoveryState(context.Background(), dbPath, &db.StoreIncompatibleError{
+		Reason: db.RecoveryReasonInsufficientSpace, Detail: space.Error(), Space: space,
+	})
+	var resp healthResponse
+	resp.setRecovery(state)
+	if resp.RecoveryReason != "insufficient_space" || resp.RecoverySpaceNeeded != 3<<30 || resp.RecoverySpaceAvailable != 1<<30 {
+		t.Fatalf("recovery health = %+v, want the reason and both sizes", resp)
+	}
+}

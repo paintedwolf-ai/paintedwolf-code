@@ -1,4 +1,5 @@
 import type { LocalDataBucketId } from "../../api/types.ts";
+import { formatBytes } from "../../format/format-bytes.ts";
 
 /** Advanced → Cache copy; it never names the engine. */
 export const CACHE_SETTINGS_COPY = {
@@ -116,26 +117,11 @@ export function cacheClearAllConfirm(labels: string[]): string {
   return `Clear all rebuildable cache and scratch?\n\n${list}\n\n${CACHE_SETTINGS_COPY.durableKeepNote}`;
 }
 
-/** Best-effort human size for status rows. */
-export function formatCacheBytes(n: number | undefined): string {
-  if (n == null || !Number.isFinite(n) || n <= 0) return "";
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(n < 10 * 1024 ? 1 : 0)} KB`;
-  if (n < 1024 * 1024 * 1024) {
-    return `${(n / (1024 * 1024)).toFixed(1)} MB`;
-  }
-  if (n < 1024 * 1024 * 1024 * 1024) {
-    return `${(n / (1024 * 1024 * 1024)).toFixed(1)} GB`;
-  }
-  return `${(n / (1024 * 1024 * 1024 * 1024)).toFixed(1)} TB`;
-}
-
-/** Status badge text: size when present, otherwise Empty. */
 export function cachePresenceLabel(
   present: boolean,
   bytes: number | undefined,
 ): string {
   if (!present) return CACHE_SETTINGS_COPY.empty;
-  const size = formatCacheBytes(bytes);
+  const size = formatBytes(bytes);
   return size || CACHE_SETTINGS_COPY.present;
 }

@@ -10,7 +10,7 @@ import {
 import { workerFailureDisplay } from "../worker/worker-failure-model.ts";
 import { workerRowStatus } from "../worker/workers-model.ts";
 import { workerSummaryTaskStatus } from "../worker/worker-summary-model.ts";
-import { formatCacheBytes } from "../../settings/storage/cache-settings-copy.ts";
+import { formatBytes } from "../../format/format-bytes.ts";
 
 export type TaskActivityContext = {
   worker?: WorkerTask;
@@ -121,8 +121,8 @@ export function taskActivityDisplay(
 ): string {
   const preparation = ctx?.worker?.workspace_preparation;
   if (preparation) {
-    const current = formatCacheBytes(preparation.bytes);
-    const total = formatCacheBytes(preparation.total_bytes);
+    const current = formatBytes(preparation.bytes);
+    const total = formatBytes(preparation.total_bytes);
     const amount = total
       ? `${current || "0 B"} of ${total}`
       : current || (preparation.files > 0 ? `${preparation.files} files` : "");

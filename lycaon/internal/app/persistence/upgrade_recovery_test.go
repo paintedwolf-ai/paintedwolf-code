@@ -1,6 +1,8 @@
 package persistence
 
 import (
+	"context"
+	"database/sql"
 	"errors"
 	"log/slog"
 	"os"
@@ -10,6 +12,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/backup"
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/db/migrations"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/version"
 )
@@ -28,8 +31,9 @@ func TestUnwritableRecoveryMetadataKeepsRecoveryRoutesEligible(t *testing.T) {
 		_ = database.Close()
 		t.Fatal("store exposed despite recovery metadata failure")
 	}
-	if !errors.Is(err, db.ErrStoreIncompatible) {
-		t.Fatalf("startup error=%v; want recovery-eligible refusal", err)
+	var unavailable *db.StoreIncompatibleError
+	if !errors.As(err, &unavailable) || unavailable.Reason != db.RecoveryReasonStorageUnavailable {
+		t.Fatalf("startup error=%v; want unavailable storage without a corruption diagnosis", err)
 	}
 }
 
@@ -109,4 +113,40 @@ func TestStoreOpenDetachesEmbeddedRecoveryBeforeWritersStart(t *testing.T) {
 	_, err = os.Stat(filepath.Join(root, db.UpgradeRecoveryDirName, record.Snapshot+".json"))
 	testutil.FailErr(t, "find detached recovery metadata before writers start", err)
 	testutil.FailErr(t, "complete application readiness", restarted.UpgradeReady())
+}
+
+// An application update the volume cannot hold is refused for space, not as
+// a failed integrity check.
+func TestApplicationUpdateRefusesAFullVolumeForSpace(t *testing.T) {
+	root := t.TempDir()
+	dbPath := filepath.Join(root, "store.db")
+	database, err := db.Open(dbPath)
+	testutil.FailErr(t, "open source", err)
+	testutil.FailErr(t, "stamp older application", db.New(database).UpsertStoreMeta(t.Context(), db.UpsertStoreMetaParams{Key: "app_version", Value: "0.0.1"}))
+	testutil.FailErr(t, "close source", database.Close())
+	space := &db.InsufficientSpaceError{NeededBytes: 2 << 30, AvailableBytes: 1 << 30}
+	hooks := db.UpgradeHooks{
+		Before:   func(context.Context, *sql.DB, migrations.Plan) error { return space },
+		Progress: func(migrations.Phase) {},
+	}
+	builder := &Runtime{logger: slog.Default()}
+	source, err := db.OpenReadOnly(t.Context(), dbPath)
+	testutil.FailErr(t, "inspect application update source", err)
+	defer func() { _ = source.Close() }()
+	plan, err := db.PlanUpgrade(t.Context(), source)
+	testutil.FailErr(t, "plan application update", err)
+	err = builder.captureVersionRecovery(t.Context(), source, plan, hooks)
+	var refused *db.StoreIncompatibleError
+	if !errors.As(err, &refused) || refused.Reason != db.RecoveryReasonInsufficientSpace || refused.Space != space {
+		t.Fatalf("capture error = %v, want an insufficient-space refusal", err)
+	}
+	hooks.Before = func(context.Context, *sql.DB, migrations.Plan) error { return os.ErrPermission }
+	err = builder.captureVersionRecovery(t.Context(), source, plan, hooks)
+	if !errors.As(err, &refused) || refused.Reason != db.RecoveryReasonStorageUnavailable {
+		t.Fatalf("permission error = %v, want unavailable storage", err)
+	}
+	hooks.Before = func(context.Context, *sql.DB, migrations.Plan) error { return context.Canceled }
+	if err = builder.captureVersionRecovery(t.Context(), source, plan, hooks); !errors.Is(err, context.Canceled) {
+		t.Fatalf("capture cancellation = %v, want cancellation", err)
+	}
 }

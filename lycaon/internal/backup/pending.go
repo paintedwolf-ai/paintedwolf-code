@@ -119,11 +119,28 @@ func publishPendingMarker(path string, marker PendingMarker, previous *pendingRe
 	return nil
 }
 
-func (r *pendingRestore) recordApplied(rel string) error {
+const restoreProgressFiles = 64
+const restoreProgressBytes int64 = 16 << 20
+
+// Files are durably installed before progress is checkpointed. A crash can
+// replay the partial batch and the file being checkpointed. Large files
+// checkpoint immediately; small files are bounded by count and bytes.
+func (r *pendingRestore) recordApplied(rel string, size int64, completed int) error {
 	r.applied = append(r.applied, rel)
 	r.appliedSet[rel] = struct{}{}
-	r.marker.Applied = r.applied
-	return writeMarker(r.markerPath, r.marker)
+	r.completed = completed
+	r.progressFiles++
+	if size > 0 {
+		r.progressBytes += min(size, restoreProgressBytes)
+	}
+	if r.progressFiles < restoreProgressFiles && r.progressBytes < restoreProgressBytes {
+		return nil
+	}
+	if err := r.checkpointProgress(); err != nil {
+		return err
+	}
+	r.progressFiles, r.progressBytes = 0, 0
+	return nil
 }
 
 // The failure marker allows an explicit recovery action to replace the transaction.

@@ -53,7 +53,7 @@ func CaptureUpgradeRecovery(ctx context.Context, opts CreateOpts, plan migration
 	}
 	pending := filepath.Join(root, "pending.json")
 	if record, err := readUpgradeRecovery(pending); err == nil && record.Source == plan.Source && record.Target == plan.Target && record.SourceAppVersion == opts.AppVersion && record.TargetAppVersion == targetApp {
-		if err := preflightUpgrade(ctx, opts, plan.ScratchBytes(), false); err != nil {
+		if err := preflightUpgrade(ctx, opts, plan, false); err != nil {
 			return err
 		}
 		return verifyRecoveryDirectory(ctx, root, record)
@@ -63,7 +63,7 @@ func CaptureUpgradeRecovery(ctx context.Context, opts CreateOpts, plan migration
 	if reused, err := reusePublishedRecovery(ctx, opts, plan, targetApp, root); reused || err != nil {
 		return err
 	}
-	if err := preflightUpgrade(ctx, opts, plan.ScratchBytes(), true); err != nil {
+	if err := preflightUpgrade(ctx, opts, plan, true); err != nil {
 		return err
 	}
 	name := uuid.NewString()
@@ -110,7 +110,7 @@ func reusePublishedRecovery(ctx context.Context, opts CreateOpts, plan migration
 		} else if !os.IsNotExist(err) {
 			return false, err
 		}
-		if err := preflightUpgrade(ctx, opts, plan.ScratchBytes(), false); err != nil {
+		if err := preflightUpgrade(ctx, opts, plan, false); err != nil {
 			return false, err
 		}
 		if err := verifyRecoveryDirectory(ctx, root, record); err != nil {

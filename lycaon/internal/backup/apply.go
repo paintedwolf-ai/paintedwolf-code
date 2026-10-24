@@ -2,6 +2,7 @@ package backup
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,12 +14,17 @@ import (
 )
 
 type pendingRestore struct {
-	markerPath  string
-	marker      PendingMarker
-	pendingSet  map[string]struct{}
-	stagedFiles map[string]string
-	applied     []string
-	appliedSet  map[string]struct{}
+	markerPath          string
+	marker              PendingMarker
+	pendingSet          map[string]struct{}
+	stagedFiles         map[string]string
+	applied             []string
+	appliedSet          map[string]struct{}
+	progressFiles       int
+	progressBytes       int64
+	progressIdentity    string
+	progressUnavailable bool
+	completed           int
 }
 
 // ApplyPending resumes a staged restore before the store opens.
@@ -45,6 +51,12 @@ func ApplyPending(ctx context.Context, configDir string) error {
 
 // unapplicableRestore keeps recovery actions available after a failed apply.
 func unapplicableRestore(err error) error {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+	if classified := db.ClassifyStoreFailure(err); errors.Is(classified, db.ErrStoreIncompatible) {
+		return classified
+	}
 	return &db.StoreIncompatibleError{
 		Reason: db.RecoveryReasonIntegrityFailed,
 		Detail: fmt.Sprintf("a staged restore could not be applied: %v", err),
@@ -106,7 +118,7 @@ func (r *pendingRestore) prepareFileDestinations(configDir string) error {
 }
 
 func (r *pendingRestore) installFiles(ctx context.Context, configDir string) error {
-	for _, fe := range r.marker.Files {
+	for index, fe := range r.marker.Files {
 		if _, done := r.appliedSet[fe.RelPath]; done {
 			continue
 		}
@@ -126,7 +138,7 @@ func (r *pendingRestore) installFiles(ctx context.Context, configDir string) err
 		if sum != fe.SHA256 || size != fe.Size {
 			return fmt.Errorf("hash mismatch after install %s", fe.RelPath)
 		}
-		if err := r.recordApplied(fe.RelPath); err != nil {
+		if err := r.recordApplied(fe.RelPath, fe.Size, index+1); err != nil {
 			return fmt.Errorf("record progress: %w", err)
 		}
 	}
@@ -134,7 +146,7 @@ func (r *pendingRestore) installFiles(ctx context.Context, configDir string) err
 }
 
 func (r *pendingRestore) deleteFiles(configDir string) error {
-	for _, rel := range r.marker.DeleteRelPaths {
+	for index, rel := range r.marker.DeleteRelPaths {
 		if _, done := r.appliedSet[rel]; done {
 			continue
 		}
@@ -151,7 +163,7 @@ func (r *pendingRestore) deleteFiles(configDir string) error {
 				return fmt.Errorf("sync delete %s: %w", rel, err)
 			}
 		}
-		if err := r.recordApplied(rel); err != nil {
+		if err := r.recordApplied(rel, 0, len(r.marker.Files)+index+1); err != nil {
 			return fmt.Errorf("record delete progress: %w", err)
 		}
 	}

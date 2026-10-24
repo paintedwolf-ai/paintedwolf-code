@@ -1,0 +1,14 @@
+scope: app
+title: Not enough free space to update
+message: >-
+  Updating your data safely needs about {needed} free on this disk, and
+  {available} is free. Your data has not been changed. Free up space, then
+  try again.
+suggested_action: >-
+  There is still not enough free space. Free up more space, then try again.
+scenarios:
+  - id: default
+    expect_contains:
+      - "{needed}"
+      - "{available}"
+      - has not been changed

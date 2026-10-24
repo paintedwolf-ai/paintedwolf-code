@@ -8,6 +8,9 @@ type RecoveryReason string
 const (
 	RecoveryReasonIntegrityFailed RecoveryReason = "integrity_failed"
 	RecoveryReasonSchemaMismatch  RecoveryReason = "schema_mismatch"
+	// RecoveryReasonInsufficientSpace reports a capacity refusal or exhausted storage.
+	RecoveryReasonInsufficientSpace  RecoveryReason = "insufficient_space"
+	RecoveryReasonStorageUnavailable RecoveryReason = "storage_unavailable"
 )
 
 // StoreIncompatibleError describes a store this build cannot serve.
@@ -15,6 +18,19 @@ type StoreIncompatibleError struct {
 	Reason             RecoveryReason
 	StoreSchemaVersion int
 	Detail             string
+	// Space is set when a preflight estimate is available.
+	Space *InsufficientSpaceError
+}
+
+// InsufficientSpaceError is an upgrade the volume cannot finish.
+type InsufficientSpaceError struct {
+	NeededBytes    uint64
+	AvailableBytes uint64
+}
+
+func (e *InsufficientSpaceError) Error() string {
+	return fmt.Sprintf("recovery and database work need approximately %.1f GiB free; %.1f GiB is available",
+		float64(e.NeededBytes)/(1<<30), float64(e.AvailableBytes)/(1<<30))
 }
 
 func (e *StoreIncompatibleError) Error() string {

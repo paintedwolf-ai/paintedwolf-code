@@ -1,0 +1,14 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/backup/upgrade_recovery.go",
+  "kind": "module",
+  "workstream": "store-health",
+  "disposition": "retain",
+  "reason": "Capture, publication, readiness, and retention form one recovery snapshot lifecycle. Preserve atomic publication and retry reuse in this bounded module; capacity estimation and filesystem copying already have separate implementations.",
+  "reviewed_commit": "fedf80ee7b88765c50c795dd50c8db432ae2c0d9",
+  "ceiling": 439,
+  "boundaries": {
+    "lycaon/internal/backup/upgrade_recovery_test.go": "c9a2ec60b31d7e989002dab7833470881f83d6bcbe11a9ee8f55c7bf028af80f",
+    "lycaon/internal/backup/recovery_publication_test.go": "6604aa8cd3aa9ea776cbb7020eb77ec4c12b0895015da8c100c8e8b9dec8b7cb"
+  }
+}
