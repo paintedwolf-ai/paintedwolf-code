@@ -33,22 +33,50 @@ from ..installed_input.unlock_control import NativeUnlockControl
 from ..installed_storage import resolve
 
 TIME_BUDGET_SECONDS, STEP_AWAY_PREFIX = 300, 'Step-away capability facts: '
+INVALIDATION_PREFIX = 'Step-away presence invalidation: '
 FACT_FIELDS = {'session', 'session_error', 'screensaver_locked', 'locked_hint_seen',
                'system_connected', 'session_bus_connected', 'sleeping', 'idle', 'mode'}
+OWNER_FIELDS = {'logind_owner', 'screensaver_owner'}
 SESSION_FIELDS = {'id', 'path', 'uid', 'session_type', 'active', 'can_lock', 'locked'}
 IDLE_SOURCES = {'wayland_input_idle', 'mutter_idle_monitor', 'x11_screen_saver'}
+INVALIDATION_FIELDS = {'challenge_id', 'purpose', 'window_label', 'generation_before',
+                       'generation_after', 'code', 'resolution'}
+
+
+def valid_unique_owner(value) -> bool:
+    return isinstance(value, str) and value.startswith(':') and len(value) > 1
+
+
+def valid_fact_keys(fact) -> bool:
+    if not isinstance(fact, dict) or set(fact) not in {FACT_FIELDS, FACT_FIELDS | OWNER_FIELDS}:
+        return False
+    return all(fact.get(k) is None or valid_unique_owner(fact[k]) for k in OWNER_FIELDS if k in fact)
 
 
 def step_away_facts(app) -> list[dict]:
     raw = app.streams().get('app-stderr', b'').decode('utf-8', 'replace')
     facts = [json.loads(r[len(STEP_AWAY_PREFIX):]) for r in raw.splitlines() if r.startswith(STEP_AWAY_PREFIX)]
-    if any(not isinstance(fact, dict) or set(fact) != FACT_FIELDS for fact in facts):
+    if any(not valid_fact_keys(fact) for fact in facts):
         raise ValueError('step-away capability facts record has an invalid shape')
     return facts
 
 
+def step_away_invalidations(app) -> list[dict]:
+    raw = app.streams().get('app-stderr', b'').decode('utf-8', 'replace')
+    rows = [json.loads(r[len(INVALIDATION_PREFIX):]) for r in raw.splitlines() if r.startswith(INVALIDATION_PREFIX)]
+    for row in rows:
+        if (not isinstance(row, dict) or set(row) != INVALIDATION_FIELDS
+                or not isinstance(row['challenge_id'], str) or not row['challenge_id']
+                or row['purpose'] != 'reveal' or row['window_label'] != 'main'
+                or type(row['generation_before']) is not int or type(row['generation_after']) is not int
+                or not (0 <= row['generation_before'] < row['generation_after'])
+                or row['code'] != 'presence_denied' or row['resolution'] != 'step_away'):
+            raise ValueError('step-away presence invalidation record has an invalid shape')
+    return rows
+
+
 def validate_step_away_fact(fact: dict, session: dict, *, locked: bool) -> dict:
-    if (type(locked) is not bool or not isinstance(fact, dict) or set(fact) != FACT_FIELDS
+    if (type(locked) is not bool or not valid_fact_keys(fact)
             or fact['system_connected'] is not True or fact['session_bus_connected'] is not True
             or fact['sleeping'] is not False or fact['session_error'] is not None or type(fact['locked_hint_seen']) is not bool):
         raise ValueError('step-away capability facts lack healthy bus or sleep state')
@@ -59,6 +87,9 @@ def validate_step_away_fact(fact: dict, session: dict, *, locked: bool) -> dict:
         raise ValueError('step-away capability facts session differs from the captured graphical seat')
     if screensaver is not None and type(screensaver) is not bool:
         raise ValueError('step-away capability facts screensaver state is invalid')
+    if OWNER_FIELDS <= set(fact) and (not valid_unique_owner(fact['logind_owner'])
+                                      or (screensaver is not None and not valid_unique_owner(fact['screensaver_owner']))):
+        raise ValueError('step-away capability facts lack bound D-Bus owner identities')
     if not isinstance(idle, dict) or set(idle) != {'source', 'error', 'idle'} or type(idle['idle']) is not bool:
         raise ValueError('step-away capability facts idle record has an invalid shape')
     expected_mode = ('lock_observed' if (screensaver is not None or fact['locked_hint_seen'] is True) else
@@ -149,7 +180,7 @@ def recover_case_observer(session: dict, native, lock) -> tuple:
 
 
 def is_capability_state_loss_fact(fact: dict, session: dict) -> bool:
-    if not isinstance(fact, dict) or set(fact) != FACT_FIELDS:
+    if not valid_fact_keys(fact):
         return False
     observed = fact.get('session')
     if isinstance(observed, dict) and (set(observed) != SESSION_FIELDS or observed['id'] != session['id']
@@ -184,6 +215,30 @@ def observe_capability_state_recovery(app, session: dict) -> dict | None:
             return {'baseline_index': baseline_index, 'baseline_fact': facts[baseline_index],
                     'loss_index': loss_index, 'loss_fact': facts[loss_index],
                     'recovered_index': idx, 'recovered_fact': recovered}
+    return None
+
+
+def observe_monitor_owner_recovery(app, session: dict) -> dict | None:
+    facts = step_away_facts(app)
+    baseline_index = next((i for i, r in enumerate(facts) if _valid_unlocked_lock_observed(r, session) is not None
+                           and all(valid_unique_owner(r.get(k)) for k in OWNER_FIELDS)), None)
+    if baseline_index is None:
+        return None
+    base = facts[baseline_index]
+    loss_index = next((i for i in range(baseline_index + 1, len(facts))
+                       if is_capability_state_loss_fact(facts[i], session) and OWNER_FIELDS <= set(facts[i])
+                       and ((facts[i]['logind_owner'] is None and facts[i]['session'] is None)
+                            or (facts[i]['screensaver_owner'] is None and facts[i]['screensaver_locked'] is None))), None)
+    if loss_index is None:
+        return None
+    loss = facts[loss_index]
+    for idx in range(loss_index + 1, len(facts)):
+        rec = _valid_unlocked_lock_observed(facts[idx], session)
+        if (rec is not None and all(valid_unique_owner(rec.get(k)) for k in OWNER_FIELDS)
+                and (loss['logind_owner'] is not None or rec['logind_owner'] != base['logind_owner'])
+                and (loss['screensaver_owner'] is not None or rec['screensaver_owner'] != base['screensaver_owner'])):
+            return {'baseline_index': baseline_index, 'baseline_fact': base,
+                    'loss_index': loss_index, 'loss_fact': loss, 'recovered_index': idx, 'recovered_fact': rec}
     return None
 
 
@@ -237,6 +292,7 @@ def run_lock_during_presence(app, ui, storage, native_input: dict, execution: di
     pre_lock_dialog = presence_dialog(app, ui)
     if pre_lock_dialog is not None:
         observations['pre_lock_confirmation'] = pre_lock_dialog
+        prior_invalidations = len(step_away_invalidations(app))
         lock_and_unlock(app, execution, vm_id, native, lock, unlock_ctl, observations)
         observations['post_unlock_activation'] = activate_visible_frame(app, ui)
         reservation.check_launch(app)
@@ -245,7 +301,10 @@ def run_lock_during_presence(app, ui, storage, native_input: dict, execution: di
         observations['stale_confirmation_attempt'], observations['stale_challenge_refusal'] = stale_attempt, refusal_alert
         if presence_dialog(app, ui) is not None:
             raise ValueError('stale pre-lock presence confirmation remained open after refusal')
-        observations['stale_challenge_refusal_verified'] = False
+        invalidations = step_away_invalidations(app)
+        invalidation = invalidations[-1] if len(invalidations) > prior_invalidations else None
+        observations['stale_challenge_invalidation'] = invalidation
+        observations['stale_challenge_refusal_verified'] = invalidation is not None
         ui.click('Reveal value')
         reservation.check_launch(app)
         fresh_dialog = presence_dialog(app, ui)
@@ -263,7 +322,9 @@ def run_lock_during_presence(app, ui, storage, native_input: dict, execution: di
         ui.click('Hide now')
         reservation.check_launch(app)
         observations['fresh_confirmation_verified'] = True
-        observations['reason'] = 'pre-lock-refusal-and-fresh-confirmation-observed-structured-stale-invalidation-unverified'
+        observations['reason'] = ('pre-lock-stale-challenge-refusal-and-fresh-confirmation-verified'
+                                  if invalidation is not None else
+                                  'pre-lock-refusal-and-fresh-confirmation-observed-structured-stale-invalidation-unverified')
         return
     observations['pre_lock_alert'] = await_alert(app, ui)
     lock_and_unlock(app, execution, vm_id, native, lock, unlock_ctl, observations)
@@ -281,22 +342,19 @@ def run_initial_lock_state(app, execution: dict, vm_id: str, native, lock, unloc
     lock_and_unlock(app, execution, vm_id, native, lock, unlock_ctl, observations)
     with DesktopUI(app) as ui:
         observations['post_unlock_activation'] = activate_visible_frame(app, ui)
-    observations['opened_session'] = await_session(
-        app, project, provider['provider_id'], MODEL,
-        status='idle', reason='lock-monitor-project-session-not-opened')
     submit_project_turn(app)
     observations['settled_reply'] = await_fixture_reply(app, project, provider['provider_id'], fixture.acquisition)
     reservation.check_launch(app)
     capability_recovery = observe_capability_state_recovery(app, app.observations['session'])
+    owner_recovery = observe_monitor_owner_recovery(app, app.observations['session'])
+    verified = owner_recovery is not None
     observations.update(
-        initial_lock_state_verified=True,
-        lock_unlock_verified=True,
-        capability_state_recovery=capability_recovery,
-        capability_state_recovery_verified=capability_recovery is not None,
-        monitor_owner_recovery=None,
-        monitor_owner_recovery_verified=False,
-        reason='initial-lock-state-and-lock-unlock-observed-monitor-owner-recovery-unverified')
-    return 'unverified'
+        initial_lock_state_verified=True, lock_unlock_verified=True,
+        capability_state_recovery=capability_recovery, capability_state_recovery_verified=capability_recovery is not None,
+        monitor_owner_recovery=owner_recovery, monitor_owner_recovery_verified=verified,
+        reason=('initial-lock-state-lock-unlock-and-monitor-owner-recovery-verified' if verified
+                else 'initial-lock-state-and-lock-unlock-observed-monitor-owner-recovery-unverified'))
+    return 'passed' if verified else 'unverified'
 
 
 def execute(binding: dict, capability: str, case: str, root: Path) -> dict:
@@ -339,6 +397,9 @@ def execute(binding: dict, capability: str, case: str, root: Path) -> dict:
                         reservation.check_launch(app)
                         project = Path(tempfile.mkdtemp(prefix='lock-monitor-project-', dir=storage.home))
                         open_project(launch_binding, project, observations, streams)
+                        observations['opened_session'] = await_session(
+                            app, project, provider['provider_id'], MODEL,
+                            status='idle', reason='lock-monitor-project-session-not-opened')
                         if case == 'initial-lock-state':
                             status = run_initial_lock_state(app, execution, vm_id, native, lock, unlock_ctl,
                                                             observations, provider, fixture, project, reservation)

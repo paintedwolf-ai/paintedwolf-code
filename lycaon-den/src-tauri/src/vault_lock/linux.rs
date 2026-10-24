@@ -14,7 +14,7 @@ use crate::linux_desktop::{bus, session};
 mod signals;
 mod state;
 use signals::{
-    preparing_for_sleep, screensaver_active, subscribe_screensaver, subscribe_system,
+    name_owner, preparing_for_sleep, screensaver_active, subscribe_screensaver, subscribe_system,
     watch_connection, watch_owner,
 };
 pub(crate) use state::LockSources;
@@ -198,7 +198,10 @@ impl Monitor {
         if let Some(system) = buses.system.clone() {
             current.sleeping = preparing_for_sleep(context, &system).unwrap_or(false);
             match session::discover(context, &system) {
-                Ok(session) => current.session = Some(session),
+                Ok(session) => {
+                    current.logind_owner = name_owner(context, &system, session::NAME);
+                    current.session = Some(session);
+                }
                 Err(error) => current.session_error = Some(error),
             }
             let path = current.session.as_ref().map(|session| session.path.clone());
@@ -211,6 +214,7 @@ impl Monitor {
             for (name, path) in SCREENSAVERS {
                 if let Some(active) = screensaver_active(context, &desktop, name, path) {
                     current.screensaver_locked = Some(active);
+                    current.screensaver_owner = name_owner(context, &desktop, name);
                     subscribe_screensaver(buses, &desktop, &weak, name, path);
                     break;
                 }

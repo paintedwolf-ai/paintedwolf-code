@@ -20,9 +20,28 @@ describe("InlineNotice", () => {
     ));
     const el = getByTestId("mcp-editor-error");
     expect(el.getAttribute("data-code")).toBe("remote_requires_https");
+    expect(el.getAttribute("data-resolution")).toBeNull();
     expect(el.textContent).toContain("Remote MCP must use HTTPS");
     expect(el.textContent).toContain("HTTPS");
     expect(el.textContent).toContain("https://");
+  });
+
+  it("exposes wire resolution on the alert container when present", () => {
+    const notice = noticeFromWire(
+      {
+        code: "presence_denied",
+        title: "You were not confirmed",
+        message: "The device locked or suspended during confirmation. Try again.",
+        resolution: "step_away",
+      },
+      APP_SCOPE,
+    );
+    const { getByTestId } = render(() => (
+      <InlineNotice notice={notice} testId="managed-secrets-error" />
+    ));
+    const el = getByTestId("managed-secrets-error");
+    expect(el.getAttribute("data-code")).toBe("presence_denied");
+    expect(el.getAttribute("data-resolution")).toBe("step_away");
   });
 
   it("omits a title that repeats the message", () => {

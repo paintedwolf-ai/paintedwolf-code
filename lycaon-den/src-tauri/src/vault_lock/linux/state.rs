@@ -9,6 +9,8 @@ pub(crate) struct LockSources {
     pub session: Option<GraphicalSession>,
     pub session_error: Option<SessionUnavailable>,
     pub screensaver_locked: Option<bool>,
+    pub logind_owner: Option<String>,
+    pub screensaver_owner: Option<String>,
     pub system_connected: bool,
     pub session_bus_connected: bool,
     pub sleeping: bool,
