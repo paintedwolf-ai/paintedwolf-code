@@ -881,7 +881,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Delete a project and settle reviewed optional extension cleanup */
+        /** Accept project deletion and reviewed optional extension cleanup */
         post: operations["createProjectRemoval"];
         delete?: never;
         options?: never;
@@ -896,7 +896,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Read the recorded project removal outcome */
+        /** Read live progress or the recorded project removal outcome */
         get: operations["getProjectRemoval"];
         put?: never;
         post?: never;
@@ -11634,7 +11634,15 @@ export interface components {
             remove_extensions: string[];
             force: boolean;
         };
+        /** @description Live host-owned progress; absent once the recorded operation settles. */
+        ProjectRemovalProgress: {
+            /** @enum {string} */
+            phase: "preparing" | "chats" | "project_data" | "files" | "extensions";
+            completed: number;
+            total: number;
+        };
         ProjectRemovalResult: {
+            progress?: components["schemas"]["ProjectRemovalProgress"] | null;
             assessment?: components["schemas"]["ProjectRemovalAssessment"] | null;
             /** Format: uuid */
             operation_id: string;
@@ -18490,7 +18498,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Host-owned removal evidence or outcome */
+            /** @description Durably accepted operation with live progress, or its settled outcome */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -29910,6 +29918,7 @@ export type ProjectRemovalReason = components["schemas"]["ProjectRemovalReason"]
 export type ProjectRemovalExtension = components["schemas"]["ProjectRemovalExtension"];
 export type ProjectRemovalAssessment = components["schemas"]["ProjectRemovalAssessment"];
 export type ProjectRemovalRequest = components["schemas"]["ProjectRemovalRequest"];
+export type ProjectRemovalProgress = components["schemas"]["ProjectRemovalProgress"];
 export type ProjectRemovalResult = components["schemas"]["ProjectRemovalResult"];
 export type AgentContextInstruction = components["schemas"]["AgentContextInstruction"];
 export type AgentContextSkill = components["schemas"]["AgentContextSkill"];
