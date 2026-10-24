@@ -339,6 +339,12 @@ where
     let challenge: Challenge =
         send_json(engine.agent.post(begin_url), &engine.api_token, begin_body)?;
     check_payload(&challenge.proof_payload, window.label(), &expect)?;
+    record_challenge_started(
+        step_away,
+        &challenge.challenge_id,
+        expect.purpose,
+        window.label(),
+    );
     let authenticator = verify_user_presence(window, &challenge.prompt)?;
     // Closing the native prompt can delay focus returning to this window.
     let deadline = std::time::Instant::now() + Duration::from_millis(500);
@@ -396,6 +402,23 @@ fn require_current_confirmation(generation: u64) -> Result<(), PresenceCommandEr
     Err(PresenceCommandError::stepped_away(
         "The device locked or suspended during confirmation. Try again.",
     ))
+}
+
+fn record_challenge_started(
+    generation: u64,
+    challenge_id: &str,
+    purpose: &str,
+    window_label: &str,
+) {
+    eprintln!(
+        "Step-away presence challenge: {}",
+        serde_json::json!({
+            "challenge_id": challenge_id,
+            "purpose": purpose,
+            "window_label": window_label,
+            "generation": generation,
+        })
+    );
 }
 
 fn require_challenge_confirmation(

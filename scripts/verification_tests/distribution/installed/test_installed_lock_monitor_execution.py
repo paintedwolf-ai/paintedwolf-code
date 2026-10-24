@@ -25,8 +25,7 @@ EXECUTION = {
     'variant_id': 'gnome-wayland'}
 
 
-def fact(*, locked=False, screensaver=False, hint_seen=False, can_lock=True,
-         mode='lock_observed', idle_source='wayland_input_idle', idle=False,
+def fact(*, locked=False, screensaver=False, can_lock=True,
          owners=False, logind_owner=':1.4', screensaver_owner=':1.42'):
     row = {
         'session': {
@@ -35,20 +34,18 @@ def fact(*, locked=False, screensaver=False, hint_seen=False, can_lock=True,
             'can_lock': can_lock, 'locked': locked},
         'session_error': None,
         'screensaver_locked': screensaver,
-        'locked_hint_seen': hint_seen,
         'system_connected': True,
         'session_bus_connected': True,
-        'sleeping': False,
-        'idle': {'source': idle_source, 'error': None, 'idle': idle},
-        'mode': mode}
+        'sleeping': False}
     if owners:
         row['logind_owner'] = logind_owner
         row['screensaver_owner'] = screensaver_owner
     return row
 
 
-def stderr_stream(*facts, invalidations=()):
+def stderr_stream(*facts, challenges=(), invalidations=()):
     lines = [lock_monitor.STEP_AWAY_PREFIX + json.dumps(row, sort_keys=True) + '\n' for row in facts]
+    lines.extend(lock_monitor.CHALLENGE_PREFIX + json.dumps(row, sort_keys=True) + '\n' for row in challenges)
     lines.extend(lock_monitor.INVALIDATION_PREFIX + json.dumps(row, sort_keys=True) + '\n' for row in invalidations)
     return ''.join(lines).encode('utf-8')
 
@@ -58,24 +55,27 @@ class StepAwayFactValidationTests(unittest.TestCase):
         self.assertEqual(installed_execution.case_family('session', 'initial-lock-state', 'deb'), 'lock_monitor')
         self.assertEqual(installed_execution.case_family('session', 'lock-during-presence', 'deb'), 'lock_monitor')
 
-    def test_step_away_fact_accepts_lock_observed_and_idle_fallback_but_never_can_lock_alone(self):
-        unlocked = fact(locked=False, screensaver=False, hint_seen=False, mode='lock_observed')
+    def test_step_away_fact_accepts_observed_lock_sources_and_rejects_can_lock_alone(self):
+        unlocked = fact(locked=False, screensaver=False)
         self.assertEqual(lock_monitor.validate_step_away_fact(unlocked, SESSION, locked=False), unlocked)
 
-        fallback = fact(locked=False, screensaver=None, hint_seen=False, mode='idle_fallback')
-        self.assertEqual(lock_monitor.validate_step_away_fact(fallback, SESSION, locked=False), fallback)
+        unlocked_with_owners = fact(locked=False, screensaver=False, owners=True)
+        self.assertEqual(
+            lock_monitor.validate_step_away_fact(unlocked_with_owners, SESSION, locked=False),
+            unlocked_with_owners)
 
-        locked_row = fact(locked=True, screensaver=True, hint_seen=True, mode='lock_observed')
+        locked_row = fact(locked=True, screensaver=True, owners=True)
         self.assertEqual(lock_monitor.validate_step_away_fact(locked_row, SESSION, locked=True), locked_row)
 
+        app = Mock(streams=Mock(return_value={'app-stderr': stderr_stream(unlocked, unlocked_with_owners, locked_row)}))
+        self.assertEqual(lock_monitor.step_away_facts(app), [unlocked, unlocked_with_owners, locked_row])
+
         for bad, expected_locked in (
-                (fact(locked=False, screensaver=None, hint_seen=False, can_lock=True,
-                      mode='lock_observed', idle_source=None), False),
-                (fact(locked=False, screensaver=None, hint_seen=False, can_lock=True,
-                      mode='unavailable', idle_source=None), False),
-                (fact(locked=True, screensaver=True, hint_seen=True, mode='lock_observed'), False),
-                (fact(locked=False, screensaver=False, hint_seen=True, mode='lock_observed'), True),
-                (fact(locked=False, screensaver=None, hint_seen=False, mode='idle_fallback', idle=True), False)):
+                (fact(locked=False, screensaver=None, can_lock=True), False),
+                (fact(locked=True, screensaver=True), False),
+                (fact(locked=False, screensaver=False), True),
+                (fact(locked=False, screensaver=False, owners=True, logind_owner=None), False),
+                (fact(locked=False, screensaver=False, owners=True, screensaver_owner=None), False)):
             with self.subTest(bad=bad, expected_locked=expected_locked), self.assertRaises(ValueError):
                 lock_monitor.validate_step_away_fact(bad, SESSION, locked=expected_locked)
 
@@ -87,7 +87,7 @@ class LockMonitorExecutionTests(unittest.TestCase):
 
     def _run_case(self, case_name, *, monitor_loss=False, owner_recovery=False, startup_none=False,
                   dialog_surfaces=None, alert_result=None, post_confirm_alerts=None,
-                  invalidation_rows=(), native_input_extra=None):
+                  challenge_rows=(), invalidation_rows=(), native_input_extra=None):
         binding = {
             'install_root': '/opt/painted-wolf-code',
             'native_input': {
@@ -119,30 +119,35 @@ class LockMonitorExecutionTests(unittest.TestCase):
         fresh_lock.__enter__ = Mock(return_value=fresh_lock)
         fresh_lock.__exit__ = Mock(return_value=False)
 
-        f0 = fact(locked=False, screensaver=None, hint_seen=False, mode='idle_fallback',
-                  owners=owner_recovery, screensaver_owner=None)
-        f1 = fact(locked=False, screensaver=False, hint_seen=False, mode='lock_observed',
-                  owners=owner_recovery)
-        f2 = fact(locked=True, screensaver=True, hint_seen=True, mode='lock_observed',
-                  owners=owner_recovery)
-        f3 = fact(locked=False, screensaver=False, hint_seen=True, mode='lock_observed',
-                  owners=owner_recovery)
-        loss = fact(locked=False, screensaver=None, hint_seen=True, mode='lock_observed',
-                    owners=owner_recovery, screensaver_owner=None)
-        recovered = fact(locked=False, screensaver=False, hint_seen=True, mode='lock_observed',
-                         owners=owner_recovery, screensaver_owner=':1.99')
+        f0 = fact(locked=False, screensaver=None, owners=owner_recovery, screensaver_owner=None)
+        f1 = fact(locked=False, screensaver=False, owners=owner_recovery)
+        f2 = fact(locked=True, screensaver=True, owners=owner_recovery)
+        f3 = fact(locked=False, screensaver=False, owners=owner_recovery)
+        loss = fact(locked=False, screensaver=None, owners=owner_recovery, screensaver_owner=None)
+        recovered = fact(locked=False, screensaver=False, owners=owner_recovery, screensaver_owner=':1.99')
         prefix = (f0, f1) if startup_none else (f1,)
         final_facts = (*prefix, f2, f3, loss, recovered) if (monitor_loss or owner_recovery) else (*prefix, f2, f3)
         fake_app = Mock(observations={
             'session': {**SESSION, 'Active': 'yes', 'Remote': 'no'},
             'launch_identity': {'pid': 100},
             'engine_identity': {'pid': 200}}, binding=binding)
-        stream_seq = [
-            {'app-stderr': stderr_stream(*prefix)},
-            {'app-stderr': stderr_stream(*prefix, f2)},
-            {'app-stderr': stderr_stream(*prefix, f2, f3)},
-            {'app-stderr': stderr_stream(*final_facts, invalidations=invalidation_rows)},
-        ]
+        if case_name == 'lock-during-presence' and dialog_surfaces and dialog_surfaces[0] is not None:
+            stream_seq = [
+                {'app-stderr': stderr_stream(*prefix)},
+                {'app-stderr': stderr_stream(*prefix)},
+                {'app-stderr': stderr_stream(*prefix, challenges=challenge_rows)},
+                {'app-stderr': stderr_stream(*prefix, challenges=challenge_rows)},
+                {'app-stderr': stderr_stream(*prefix, f2, challenges=challenge_rows)},
+                {'app-stderr': stderr_stream(*prefix, f2, f3, challenges=challenge_rows)},
+                {'app-stderr': stderr_stream(*final_facts, challenges=challenge_rows, invalidations=invalidation_rows)},
+            ]
+        else:
+            stream_seq = [
+                {'app-stderr': stderr_stream(*prefix)},
+                {'app-stderr': stderr_stream(*prefix, f2)},
+                {'app-stderr': stderr_stream(*prefix, f2, f3)},
+                {'app-stderr': stderr_stream(*final_facts, challenges=challenge_rows, invalidations=invalidation_rows)},
+            ]
         stream_idx = 0
 
         def next_streams():
@@ -283,10 +288,10 @@ class LockMonitorExecutionTests(unittest.TestCase):
         self.assertEqual(obs['reason'], 'initial-lock-state-and-lock-unlock-observed-monitor-owner-recovery-unverified')
         self.assertIn('native', obs['case_observer_recovery']['stale_refusals'])
         self.assertIn('lock', obs['case_observer_recovery']['stale_refusals'])
-        self.assertEqual(obs['step_away_initial']['latest']['mode'], 'lock_observed')
+        self.assertFalse(obs['step_away_initial']['latest']['screensaver_locked'])
         self.assertTrue(obs['during_lock']['locked_hint'])
         self.assertFalse(obs['after_unlock']['locked_hint'])
-        self.assertTrue(obs['step_away_unlocked']['latest']['locked_hint_seen'])
+        self.assertFalse(obs['step_away_unlocked']['latest']['screensaver_locked'])
         self.assertEqual(obs['opened_session'], {'id': 'sess-1', 'status': 'idle'})
         self.assertEqual(obs['settled_reply'], {'settled': True})
         disable_mock.assert_called_once_with(ACCOUNT, vm_id='owned')
@@ -367,15 +372,27 @@ class LockMonitorExecutionTests(unittest.TestCase):
         fresh_surface = {'kind': 'presence-dialog', 'identity': fresh_id, 'active': True}
         native_extra, witness_mock = self._mock_private_password_delivery([pre_id, fresh_id])
         refusal_alert = {'role': 2, 'visible': True, 'attributes': []}
+        challenge = {
+            'challenge_id': '00000000-0000-4000-8000-000000000001',
+            'purpose': 'reveal', 'window_label': 'main', 'generation': 0}
+        mismatched_invalidation = {
+            'challenge_id': '00000000-0000-4000-8000-000000000099',
+            'purpose': 'reveal', 'window_label': 'main',
+            'generation_before': 0, 'generation_after': 1,
+            'code': 'presence_denied', 'resolution': 'step_away'}
         outcome, disable_mock, _, fake_ui = self._run_case(
             'lock-during-presence',
             dialog_surfaces=[pre_surface, None, fresh_surface, None],
             alert_result=refusal_alert,
+            challenge_rows=(challenge,),
+            invalidation_rows=(mismatched_invalidation,),
             native_input_extra=native_extra)
         self.assertEqual(outcome[4], 'unverified')
         obs = outcome[5]
         self.assertEqual(obs['pre_lock_confirmation'], pre_surface)
+        self.assertEqual(obs['pre_lock_challenge'], challenge)
         self.assertEqual(obs['stale_challenge_refusal'], refusal_alert)
+        self.assertIsNone(obs['stale_challenge_invalidation'])
         self.assertFalse(obs['stale_challenge_refusal_verified'])
         self.assertEqual(obs['fresh_confirmation_surface'], fresh_surface)
         self.assertEqual(obs['fresh_confirmation_alerts'], [])
@@ -393,6 +410,9 @@ class LockMonitorExecutionTests(unittest.TestCase):
         fresh_surface = {'kind': 'presence-dialog', 'identity': fresh_id, 'active': True}
         native_extra, witness_mock = self._mock_private_password_delivery([pre_id, fresh_id])
         refusal_alert = {'role': 2, 'visible': True, 'attributes': []}
+        challenge = {
+            'challenge_id': '00000000-0000-4000-8000-000000000001',
+            'purpose': 'reveal', 'window_label': 'main', 'generation': 0}
         invalidation = {
             'challenge_id': '00000000-0000-4000-8000-000000000001',
             'purpose': 'reveal', 'window_label': 'main',
@@ -402,10 +422,12 @@ class LockMonitorExecutionTests(unittest.TestCase):
             'lock-during-presence',
             dialog_surfaces=[pre_surface, None, fresh_surface, None],
             alert_result=refusal_alert,
+            challenge_rows=(challenge,),
             invalidation_rows=(invalidation,),
             native_input_extra=native_extra)
         self.assertEqual(outcome[4], 'passed')
         obs = outcome[5]
+        self.assertEqual(obs['pre_lock_challenge'], challenge)
         self.assertTrue(obs['stale_challenge_refusal_verified'])
         self.assertEqual(obs['stale_challenge_invalidation'], invalidation)
         self.assertTrue(obs['fresh_confirmation_verified'])

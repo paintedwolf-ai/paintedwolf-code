@@ -33,12 +33,14 @@ from ..installed_input.unlock_control import NativeUnlockControl
 from ..installed_storage import resolve
 
 TIME_BUDGET_SECONDS, STEP_AWAY_PREFIX = 300, 'Step-away capability facts: '
+CHALLENGE_PREFIX = 'Step-away presence challenge: '
 INVALIDATION_PREFIX = 'Step-away presence invalidation: '
-FACT_FIELDS = {'session', 'session_error', 'screensaver_locked', 'locked_hint_seen',
-               'system_connected', 'session_bus_connected', 'sleeping', 'idle', 'mode'}
-OWNER_FIELDS = {'logind_owner', 'screensaver_owner'}
+FACT_FIELDS = frozenset({'session', 'session_error', 'screensaver_locked',
+                         'system_connected', 'session_bus_connected', 'sleeping'})
+OWNER_FIELDS = frozenset({'logind_owner', 'screensaver_owner'})
+ACCEPTED_FACT_KEYS = (FACT_FIELDS, FACT_FIELDS | OWNER_FIELDS)
 SESSION_FIELDS = {'id', 'path', 'uid', 'session_type', 'active', 'can_lock', 'locked'}
-IDLE_SOURCES = {'wayland_input_idle', 'mutter_idle_monitor', 'x11_screen_saver'}
+CHALLENGE_FIELDS = {'challenge_id', 'purpose', 'window_label', 'generation'}
 INVALIDATION_FIELDS = {'challenge_id', 'purpose', 'window_label', 'generation_before',
                        'generation_after', 'code', 'resolution'}
 
@@ -48,7 +50,7 @@ def valid_unique_owner(value) -> bool:
 
 
 def valid_fact_keys(fact) -> bool:
-    if not isinstance(fact, dict) or set(fact) not in {FACT_FIELDS, FACT_FIELDS | OWNER_FIELDS}:
+    if not isinstance(fact, dict) or frozenset(fact) not in ACCEPTED_FACT_KEYS:
         return False
     return all(fact.get(k) is None or valid_unique_owner(fact[k]) for k in OWNER_FIELDS if k in fact)
 
@@ -59,6 +61,18 @@ def step_away_facts(app) -> list[dict]:
     if any(not valid_fact_keys(fact) for fact in facts):
         raise ValueError('step-away capability facts record has an invalid shape')
     return facts
+
+
+def step_away_challenges(app) -> list[dict]:
+    raw = app.streams().get('app-stderr', b'').decode('utf-8', 'replace')
+    rows = [json.loads(r[len(CHALLENGE_PREFIX):]) for r in raw.splitlines() if r.startswith(CHALLENGE_PREFIX)]
+    for row in rows:
+        if (not isinstance(row, dict) or set(row) != CHALLENGE_FIELDS
+                or not isinstance(row['challenge_id'], str) or not row['challenge_id']
+                or row['purpose'] != 'reveal' or row['window_label'] != 'main'
+                or type(row['generation']) is not int or row['generation'] < 0):
+            raise ValueError('step-away presence challenge record has an invalid shape')
+    return rows
 
 
 def step_away_invalidations(app) -> list[dict]:
@@ -78,29 +92,22 @@ def step_away_invalidations(app) -> list[dict]:
 def validate_step_away_fact(fact: dict, session: dict, *, locked: bool) -> dict:
     if (type(locked) is not bool or not valid_fact_keys(fact)
             or fact['system_connected'] is not True or fact['session_bus_connected'] is not True
-            or fact['sleeping'] is not False or fact['session_error'] is not None or type(fact['locked_hint_seen']) is not bool):
+            or fact['sleeping'] is not False or fact['session_error'] is not None):
         raise ValueError('step-away capability facts lack healthy bus or sleep state')
-    observed, screensaver, idle = fact['session'], fact['screensaver_locked'], fact['idle']
+    observed, screensaver = fact['session'], fact['screensaver_locked']
     if (not isinstance(observed, dict) or set(observed) != SESSION_FIELDS or observed['id'] != session['id']
             or observed['uid'] != int(session['User']) or observed['session_type'] != session['Type']
             or observed['active'] is not True or type(observed['can_lock']) is not bool or type(observed['locked']) is not bool):
         raise ValueError('step-away capability facts session differs from the captured graphical seat')
     if screensaver is not None and type(screensaver) is not bool:
         raise ValueError('step-away capability facts screensaver state is invalid')
-    if OWNER_FIELDS <= set(fact) and (not valid_unique_owner(fact['logind_owner'])
-                                      or (screensaver is not None and not valid_unique_owner(fact['screensaver_owner']))):
+    if OWNER_FIELDS <= frozenset(fact) and (not valid_unique_owner(fact['logind_owner'])
+                                            or (screensaver is not None and not valid_unique_owner(fact['screensaver_owner']))):
         raise ValueError('step-away capability facts lack bound D-Bus owner identities')
-    if not isinstance(idle, dict) or set(idle) != {'source', 'error', 'idle'} or type(idle['idle']) is not bool:
-        raise ValueError('step-away capability facts idle record has an invalid shape')
-    expected_mode = ('lock_observed' if (screensaver is not None or fact['locked_hint_seen'] is True) else
-                     'idle_fallback' if idle['source'] in IDLE_SOURCES and idle['error'] is None else 'unavailable')
-    if fact['mode'] != expected_mode or expected_mode == 'unavailable':
-        raise ValueError('step-away capability facts reported an invalid or unavailable mode')
-    if locked and (fact['mode'] != 'lock_observed' or (observed['locked'] is not True and screensaver is not True)):
+    if locked and (screensaver is None or (observed['locked'] is not True and screensaver is not True)):
         raise ValueError('step-away capability facts did not observe the locked session')
-    if not locked and (observed['locked'] is not False or screensaver not in {False, None}
-                       or (fact['mode'] == 'idle_fallback' and idle['idle'] is not False)):
-        raise ValueError('step-away capability facts remained locked or idle')
+    if not locked and (observed['locked'] is not False or screensaver is not False):
+        raise ValueError('step-away capability facts remained locked or lacked screen saver observation')
     return fact
 
 
@@ -149,8 +156,8 @@ def lock_and_unlock(app, execution: dict, vm_id: str, native, lock, unlock_ctl, 
         raise ValueError('lock monitor unlock did not clear both native lock flags')
     observations['after_unlock'] = after_unlock
     unlocked = await_step_away_fact(app, app.observations['session'], locked=False, minimum_count=3)
-    if unlocked['latest']['mode'] != 'lock_observed' or unlocked['latest']['locked_hint_seen'] is not True:
-        raise ValueError('lock monitor did not preserve lock_observed mode after unlock')
+    if unlocked['latest']['screensaver_locked'] is not False or unlocked['latest']['session']['locked'] is not False:
+        raise ValueError('lock monitor did not restore unlocked screen saver and session observation after unlock')
     observations['step_away_unlocked'] = unlocked
 
 
@@ -198,7 +205,7 @@ def _valid_unlocked_lock_observed(row: dict, session: dict) -> dict | None:
         validated = validate_step_away_fact(row, session, locked=False)
     except ValueError:
         return None
-    return validated if validated['screensaver_locked'] is False and validated['mode'] == 'lock_observed' else None
+    return validated if validated['screensaver_locked'] is False else None
 
 
 def observe_capability_state_recovery(app, session: dict) -> dict | None:
@@ -226,7 +233,7 @@ def observe_monitor_owner_recovery(app, session: dict) -> dict | None:
         return None
     base = facts[baseline_index]
     loss_index = next((i for i in range(baseline_index + 1, len(facts))
-                       if is_capability_state_loss_fact(facts[i], session) and OWNER_FIELDS <= set(facts[i])
+                       if is_capability_state_loss_fact(facts[i], session) and OWNER_FIELDS <= frozenset(facts[i])
                        and ((facts[i]['logind_owner'] is None and facts[i]['session'] is None)
                             or (facts[i]['screensaver_owner'] is None and facts[i]['screensaver_locked'] is None))), None)
     if loss_index is None:
@@ -287,11 +294,15 @@ def submit_presence_confirmation(app, ui, storage, native_input: dict, *, expect
 
 def run_lock_during_presence(app, ui, storage, native_input: dict, execution: dict, vm_id: str,
                              native, lock, unlock_ctl, observations: dict, reservation):
+    prior_challenges = len(step_away_challenges(app))
     ui.click('Reveal value')
     reservation.check_launch(app)
     pre_lock_dialog = presence_dialog(app, ui)
     if pre_lock_dialog is not None:
         observations['pre_lock_confirmation'] = pre_lock_dialog
+        challenges = step_away_challenges(app)
+        pre_lock_challenge = challenges[-1] if len(challenges) > prior_challenges else None
+        observations['pre_lock_challenge'] = pre_lock_challenge
         prior_invalidations = len(step_away_invalidations(app))
         lock_and_unlock(app, execution, vm_id, native, lock, unlock_ctl, observations)
         observations['post_unlock_activation'] = activate_visible_frame(app, ui)
@@ -302,7 +313,11 @@ def run_lock_during_presence(app, ui, storage, native_input: dict, execution: di
         if presence_dialog(app, ui) is not None:
             raise ValueError('stale pre-lock presence confirmation remained open after refusal')
         invalidations = step_away_invalidations(app)
-        invalidation = invalidations[-1] if len(invalidations) > prior_invalidations else None
+        candidate = invalidations[-1] if len(invalidations) > prior_invalidations else None
+        invalidation = (candidate if (pre_lock_challenge is not None and candidate is not None
+                                      and candidate['challenge_id'] == pre_lock_challenge['challenge_id']
+                                      and candidate['generation_before'] == pre_lock_challenge['generation'])
+                        else None)
         observations['stale_challenge_invalidation'] = invalidation
         observations['stale_challenge_refusal_verified'] = invalidation is not None
         ui.click('Reveal value')
