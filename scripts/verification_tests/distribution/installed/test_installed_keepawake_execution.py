@@ -144,7 +144,7 @@ class EngineInhibitorTests(unittest.TestCase):
                     'timed_out': False, 'output_limit': False,
                     'stdout': b'opened\n', 'stderr': b''}),
                 (desktop_turn, 'submit_project_turn', None),
-                (profile_setup, 'active_session', {'id': 'sess-1'}),
+                (profile_setup, 'await_session', {'id': 'sess-1'}),
                 (profile_setup, 'require_active', {'id': 'sess-1'}),
                 (transition_guest, 'perform_transition', {'operation': 'session-lock-v1', 'completed': True}),
                 (fixture_turn, 'await_fixture_reply', {'settled': True})):

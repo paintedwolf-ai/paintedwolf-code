@@ -66,7 +66,7 @@ def execute(binding, capability, case, root):
     from .fresh_profile import Reservation
     from .native_session import NativeSessionObserver
     from .process import run
-    from .profile_setup import active_session, require_active
+    from .profile_setup import await_session, require_active
     from .provider import MODEL, ProviderFixture
     from .provider_barrier import ResponseBarrier
     from .provider_recovery import load as load_provider_recovery
@@ -131,13 +131,13 @@ def execute(binding, capability, case, root):
                                     streams['project-open-stderr'] = opened['stderr']
                                 if opened['exit_code'] or opened['timed_out'] or opened['output_limit']:
                                     raise ValueError('installed CLI refused the owned keepawake project')
+                                observations['opened_session'] = await_session(
+                                    app, project, provider['provider_id'], MODEL,
+                                    status='idle', reason='keepawake-project-session-not-opened')
                                 submit_project_turn(app)
                                 with DesktopUI(app):
-                                    deadline = time.monotonic() + 30
-                                    while active_session(app, project, provider['provider_id'], MODEL) is None:
-                                        if time.monotonic() >= deadline:
-                                            raise CaseUnavailable('keepawake-fixture-turn-did-not-start')
-                                        time.sleep(0.05)
+                                    await_session(app, project, provider['provider_id'], MODEL,
+                                                  reason='keepawake-fixture-turn-did-not-start')
                                     observations['provider_held_before'] = barrier.await_held()
                                     active = require_active(app, project, provider['provider_id'], MODEL)
                                     if not any(row['completed'] is False for row in fixture.observations):

@@ -334,7 +334,7 @@ class Bridge:
             envelope = {'purpose': unlock_wire.PREPARE, 'binding': self.execution,
                         'transaction_id': pending['transaction_id']}
             pipe.send_metadata({**envelope, 'phase': 'prepare'})
-            pipe.send_frame(bytes(secret_buf))
+            pipe.send_frame(bytes(secret_buf), 40)
             reply = pipe.receive_metadata()
             if reply != {**envelope, 'phase': 'prepared', 'account': pending['account'],
                          'credential_state': 'active'}:
