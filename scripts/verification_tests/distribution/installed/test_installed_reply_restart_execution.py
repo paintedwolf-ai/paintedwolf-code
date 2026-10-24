@@ -35,37 +35,29 @@ class ReplyObserverTests(unittest.TestCase):
         path.write_bytes(b'zstd')
         return database, path
 
-    def observe(self, root, database, *, body=observer.REPLY, code=0):
-        child = MagicMock()
-        child.stdout.read.return_value = body
-        child.wait.return_value = code
-        child.poll.return_value = code
+    def observe(self, root, database, *, body=observer.REPLY):
         with patch.object(observer, '_database', return_value=nullcontext(database)), patch.object(
-                observer, 'profile', return_value=nullcontext(root)), patch.object(observer, 'physical'), patch.object(
-                observer.subprocess, 'Popen', return_value=child) as spawned:
+                observer, 'read_object', return_value=body) as read:
             result = observer.committed_reply(None, PROJECT, SESSION, 'fixture')
-        return result, spawned, child
+        return result, read
 
     def test_sql_settlement_and_physical_fixed_body_both_required(self):
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            database, path = self.fixture(root)
-            result, spawned, child = self.observe(root, database)
+            database, _ = self.fixture(Path(directory))
+            result, read = self.observe(Path(directory), database)
             self.assertEqual(result['content_blob_sha256'], hashlib.sha256(observer.REPLY).hexdigest())
             self.assertTrue(result['fixed_reply_verified'])
-            self.assertEqual(spawned.call_args.args[0], ['zstd', '--decompress', '--stdout', '--quiet'])
-            child.stdout.read.assert_called_once_with(len(observer.REPLY) + 1)
-            child.stdout.close.assert_called_once()
-            for body, code in ((b'wrong', 0), (observer.REPLY + b'x', 0), (observer.REPLY, 1)):
-                with self.subTest(body=body, code=code), self.assertRaises(ValueError):
-                    self.observe(root, database, body=body, code=code)
+            read.assert_called_once_with(None, PROJECT, observer.DIGEST, len(observer.REPLY), 4, maximum=len(observer.REPLY))
+            for body in (b'wrong', observer.REPLY + b'x'):
+                with self.subTest(body=body), self.assertRaises(ValueError):
+                    self.observe(Path(directory), database, body=body)
 
     def test_busy_or_foreign_model_is_never_a_committed_reply(self):
         for changes in ({'status': 'busy'}, {'model': 'foreign'}):
             with self.subTest(changes=changes), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 database, _ = self.fixture(root, **changes)
-                result, spawned, _ = self.observe(root, database)
+                result, spawned = self.observe(root, database)
                 self.assertIsNone(result)
                 spawned.assert_not_called()
 
@@ -76,14 +68,11 @@ class ReplyObserverTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'fixed content'):
                 self.observe(root, database)
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            database, path = self.fixture(root)
-            path.write_bytes(b'changed-size')
-            with self.assertRaisesRegex(ValueError, 'size differs'):
-                self.observe(root, database)
-            path.unlink()
-            with self.assertRaises(FileNotFoundError):
-                self.observe(root, database)
+            database, _ = self.fixture(Path(directory))
+            with patch.object(observer, '_database', return_value=nullcontext(database)), patch.object(
+                    observer, 'read_object', side_effect=FileNotFoundError):
+                with self.assertRaises(FileNotFoundError):
+                    observer.committed_reply(None, PROJECT, SESSION, 'fixture')
 
 
 class ReplyRestartTests(unittest.TestCase):

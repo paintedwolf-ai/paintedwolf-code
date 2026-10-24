@@ -32,8 +32,8 @@ def await_fixture_reply(app, project, provider_id, acquisition, *, selected_sess
                 if result is not None:
                     if not acquisition.completed or acquisition.witness is None or acquisition.tool_witness is None:
                         raise ValueError('fixed provider phases did not establish both host call identities')
-                    acquired = committed_fixture_tool(app, session['id'], 'request_tools', acquisition.witness['tool_call_id'], target=target)
-                    invoked = committed_fixture_tool(app, session['id'], target, acquisition.tool_witness['tool_call_id'], target=target)
+                    acquired = committed_fixture_tool(app, witness['project_id'], session['id'], 'request_tools', acquisition.witness['tool_call_id'], target=target)
+                    invoked = committed_fixture_tool(app, witness['project_id'], session['id'], target, acquisition.tool_witness['tool_call_id'], target=target)
                     if acquired is not None and acquired['invocation_id'] != acquisition.witness['invocation_id']:
                         raise ValueError('acquisition durable receipt differs from the projected receipt')
                     if invoked is not None and invoked['invocation_id'] != acquisition.tool_witness['invocation_id']:

@@ -10,6 +10,7 @@ from linux_release.installed_cases import fixture_receipt as owner
 SESSION = '10000000-0000-4000-8000-000000000001'
 MESSAGE = '10000000-0000-4000-8000-000000000002'
 RECEIPT = '10000000-0000-4000-8000-000000000003'
+PROJECT = '10000000-0000-4000-8000-000000000004'
 
 
 class ReplyToolReceiptTests(unittest.TestCase):
@@ -18,21 +19,34 @@ class ReplyToolReceiptTests(unittest.TestCase):
                                 else ('call_abcd1234', 'processes', {'command': '/usr/bin/true'}) if target == 'command'
                                 else ('call_abcd1234', 'browser', {'path': 'fixture.html'}))
         return {'tool': tool, 'tool_call_id': call, 'outcome': 'completed', 'tool_args': args,
-            'content': json.dumps({'need': target, 'loaded': [target]} if tool == 'request_tools' else
-                {'id': 'page_owned', 'live_pages': ['page_owned'], 'max_pages': 4}),
+            'content': json.dumps({'need': target, 'loaded': [target]}) if tool == 'request_tools' else '[page#1]\ncompacted opaque result',
             'invocation': {'id': RECEIPT, 'tool': tool, 'tool_call_id': call,
                            'owner': subsystem, 'status': 'completed', 'invoked': True}}
 
-    def observe(self, result, *, tool='request_tools', target='command', duplicate=False):
+    def observe(self, result, *, tool='request_tools', target='command', duplicate=False, mutate=None, body=None, during=None):
         with sqlite3.connect(':memory:') as database:
-            database.execute('CREATE TABLE messages(id,session_id,role,tool_result_json)')
-            database.execute('INSERT INTO messages VALUES(?,?,?,?)',
-                             (MESSAGE, SESSION, 'tool', json.dumps(result)))
+            database.executescript('CREATE TABLE messages(id TEXT,session_id TEXT,role TEXT,tool_result_json TEXT,evidence_handles_json TEXT); '
+                'CREATE TABLE sessions(id TEXT,project_id TEXT); '
+                'CREATE TABLE evidence_records(project_id TEXT,session_id TEXT,handle TEXT,kind TEXT,shape TEXT,fidelity TEXT,source_tool TEXT,truncated INTEGER,superseded_by TEXT,content_blob_sha256 TEXT); '
+                'CREATE TABLE content_blob_objects(project_id TEXT,sha256 TEXT,byte_size INTEGER,stored_size INTEGER);')
+            database.execute('INSERT INTO sessions VALUES(?,?)', (SESSION, PROJECT))
+            database.execute('INSERT INTO evidence_records VALUES(?,?,?,?,?,?,?,?,?,?)',
+                (PROJECT, SESSION, 'page#1', 'page', 'surface_snapshot', 'structured', 'page_open', 0, None, 'a'*64))
+            database.execute('INSERT INTO content_blob_objects VALUES(?,?,?,?)', (PROJECT, 'a'*64, 100, 50))
+            database.execute('INSERT INTO messages VALUES(?,?,?,?,?)',
+                             (MESSAGE, SESSION, 'tool', json.dumps(result), '["page#1"]'))
             if duplicate:
-                database.execute('INSERT INTO messages VALUES(?,?,?,?)',
-                                 (RECEIPT, SESSION, 'tool', json.dumps(result)))
-            with patch.object(owner, '_database', return_value=nullcontext(database)):
-                return owner.committed_fixture_tool(None, SESSION, tool, 'call_1234abcd' if tool == 'request_tools' else 'call_abcd1234', target=target)
+                database.execute('INSERT INTO messages VALUES(?,?,?,?,?)',
+                                 (RECEIPT, SESSION, 'tool', json.dumps(result), '["page#1"]'))
+            if mutate is not None:
+                mutate(database)
+            def read(*args, **kwargs):
+                if during is not None:
+                    during(database)
+                return body if body is not None else json.dumps([json.dumps({'id': 'page_owned', 'live_pages': ['page_owned'], 'max_pages': 4})]).encode()
+            with patch.object(owner, '_database', return_value=nullcontext(database)), patch.object(
+                    owner, 'read_object', side_effect=read):
+                return owner.committed_fixture_tool(None, PROJECT, SESSION, tool, 'call_1234abcd' if tool == 'request_tools' else 'call_abcd1234', target=target)
 
     def test_actual_successful_receipts_and_fixed_args_are_required(self):
         for tool in ('request_tools', 'command'):
@@ -76,3 +90,29 @@ class ReplyToolReceiptTests(unittest.TestCase):
                 self.observe({**self.fixture('page_open', target='page_open'), **change}, tool='page_open', target='page_open')
         with self.assertRaises(ValueError):
             self.observe(self.fixture('page_open', target='page_open'), tool='page_open', target='command')
+
+    def test_original_page_body_requires_exact_message_ledger_and_blob_binding(self):
+        changes = [
+            ("UPDATE messages SET evidence_handles_json=?", ('["page#2"]',)),
+            ("UPDATE messages SET evidence_handles_json=?", ('["page#1","page#1"]',)),
+            ("UPDATE evidence_records SET project_id=?", (SESSION,)),
+            ("UPDATE evidence_records SET source_tool=?", ('capture_page',)),
+            ("UPDATE evidence_records SET truncated=?", (1,)),
+            ("UPDATE evidence_records SET superseded_by=?", ('page#2',)),
+            ("UPDATE evidence_records SET shape=?", ('command',)),
+            ("DELETE FROM content_blob_objects", ()),
+        ]
+        result = self.fixture('page_open', target='page_open')
+        for query, args in changes:
+            with self.subTest(query=query), self.assertRaises(ValueError):
+                self.observe(result, tool='page_open', target='page_open',
+                    mutate=lambda db: db.execute(query, args))
+        for body in (b'[]', b'["{}","{}"]', b'[true]', b'["not JSON"]'):
+            with self.subTest(body=body), self.assertRaises(ValueError):
+                self.observe(result, tool='page_open', target='page_open', body=body)
+        with self.assertRaisesRegex(ValueError, 'changed'):
+            self.observe(result, tool='page_open', target='page_open',
+                during=lambda db: db.execute("UPDATE content_blob_objects SET stored_size=49"))
+        with self.assertRaises(ValueError):
+            self.observe(result, tool='page_open', target='page_open',
+                during=lambda db: db.execute("UPDATE messages SET tool_result_json='{}'"))

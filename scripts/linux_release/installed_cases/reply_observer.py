@@ -3,15 +3,11 @@ from __future__ import annotations
 
 import hashlib
 
-import os
-from pathlib import Path
 import re
-import subprocess
 
-from .profile_observer import _database, identifier, physical, profile, rows
-from .package_payload import stable
+from .profile_observer import _database, identifier, rows
+from .fixture_content import read_object
 from .provider import MODEL
-from .records import CaseUnavailable
 
 REPLY = b'{"content":"Fixture complete."}'
 DIGEST = hashlib.sha256(REPLY).hexdigest()
@@ -39,38 +35,9 @@ def committed_reply(app, project_id, session_id, provider_id):
     identifier(message_id)
     if byte_size != len(REPLY) or type(stored_size) is not int or not 0 < stored_size <= 4096:
         raise ValueError('committed fixture object metadata exceeds its fixed bound')
-    with profile(app) as directory:
-        parents = [directory / 'projects', directory / 'projects' / project_id]
-        parents.extend([parents[-1] / 'model-content', parents[-1] / 'model-content' / digest[:2]])
-        for parent in parents:
-            physical(parent, True)
-        path = parents[-1] / digest[2:]
-        before = physical(path)
-        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
-        with os.fdopen(descriptor, 'rb') as stream:
-            opened = os.fstat(stream.fileno())
-            if opened.st_size != stored_size:
-                raise ValueError('committed fixture object size differs from metadata')
-            try:
-                child = subprocess.Popen(['zstd', '--decompress', '--stdout', '--quiet'], stdin=stream,
-                    stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-            except FileNotFoundError:
-                raise CaseUnavailable('fixed-reply-zstd-observer-unavailable') from None
-            try:
-                raw = child.stdout.read(len(REPLY) + 1)
-                if raw != REPLY:
-                    raise ValueError('committed fixture object does not contain the fixed reply')
-                if child.wait(timeout=5) != 0:
-                    raise ValueError('committed fixture object failed decompression')
-            finally:
-                if child.poll() is None:
-                    child.kill()
-                    child.wait()
-                child.stdout.close()
-            if stable(opened) != stable(os.fstat(stream.fileno())) or stable(opened) != stable(path.lstat()):
-                raise ValueError('committed fixture object changed during decompression')
-        if physical(path) != before:
-            raise ValueError('committed fixture object changed during observation')
+    raw = read_object(app, project_id, digest, byte_size, stored_size, maximum=len(REPLY))
+    if raw != REPLY:
+        raise ValueError('committed fixture object does not contain the fixed reply')
     return {'project_id': project_id, 'session_id': session_id, 'output_id': output_id,
             'message_id': message_id, 'content_blob_sha256': digest, 'byte_size': byte_size,
             'stored_size': stored_size, 'fixed_reply_verified': True}
