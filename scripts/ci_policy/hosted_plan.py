@@ -147,6 +147,8 @@ def matrix(profile, suite="all", scope=None, platform=False, timings=None):
                            "notices": "licenses:notices" in lane["targets"],
                            "containers": CONTAINER_TARGET in lane["targets"],
                            "browser": BROWSER_TARGET in lane["targets"],
+                           "linux_launch": bool({"test:full", "test:confine:linux"} & set(lane["targets"]))
+                           or any(stage["name"] == "coverage:changes" for stage in expand(lane["targets"])),
                            "analysis": analysis_set(lane["targets"]),
                            "runner": lane.get("runner", "ubuntu-latest")})
     if not result:
