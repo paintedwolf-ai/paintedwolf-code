@@ -291,3 +291,7 @@ pub(crate) fn fixture_json(
         "architecture": architecture, "install_root": root, "executables": exec_rows, "payload": payload
     })
 }
+
+#[cfg(test)]
+#[path = "manifest_producer_tests.rs"]
+mod producer_contract_tests;

@@ -1,0 +1,168 @@
+{
+  "format_version": 2,
+  "package": "painted-wolf-code",
+  "version": "1.2.3",
+  "architecture": "aarch64",
+  "install_root": "/opt/painted-wolf-code",
+  "executables": [
+    {
+      "path": "/opt/painted-wolf-code/bin/bialy",
+      "sha256": "3d36d1a967b1ee7c7a39e99ad4296f8dbe1df7070c6c12f85f16bc7a3d039fba",
+      "size": 64
+    },
+    {
+      "path": "/opt/painted-wolf-code/bin/painted-wolf-code",
+      "sha256": "3d36d1a967b1ee7c7a39e99ad4296f8dbe1df7070c6c12f85f16bc7a3d039fba",
+      "size": 64
+    },
+    {
+      "path": "/opt/painted-wolf-code/bin/pw",
+      "sha256": "3d36d1a967b1ee7c7a39e99ad4296f8dbe1df7070c6c12f85f16bc7a3d039fba",
+      "size": 64
+    },
+    {
+      "path": "/opt/painted-wolf-code/bin/pw-desktop-settings",
+      "sha256": "3d36d1a967b1ee7c7a39e99ad4296f8dbe1df7070c6c12f85f16bc7a3d039fba",
+      "size": 64
+    },
+    {
+      "path": "/opt/painted-wolf-code/bin/pw-document-core",
+      "sha256": "3d36d1a967b1ee7c7a39e99ad4296f8dbe1df7070c6c12f85f16bc7a3d039fba",
+      "size": 64
+    },
+    {
+      "path": "/opt/painted-wolf-code/bin/pw-logs",
+      "sha256": "3d36d1a967b1ee7c7a39e99ad4296f8dbe1df7070c6c12f85f16bc7a3d039fba",
+      "size": 64
+    },
+    {
+      "path": "/opt/painted-wolf-code/bin/pw-vault-identity",
+      "sha256": "3d36d1a967b1ee7c7a39e99ad4296f8dbe1df7070c6c12f85f16bc7a3d039fba",
+      "size": 64
+    },
+    {
+      "path": "/usr/bin/pw",
+      "sha256": "306c6ca7407560340797866e077e053627ad409277d1b9da58106fce4cf717cb",
+      "size": 17
+    },
+    {
+      "path": "/usr/bin/pw-logs",
+      "sha256": "306c6ca7407560340797866e077e053627ad409277d1b9da58106fce4cf717cb",
+      "size": 17
+    }
+  ],
+  "payload": [
+    {
+      "path": "THIRD-PARTY-NOTICES.md",
+      "kind": "file",
+      "mode": 420,
+      "sha256": "88db85ee0fd588aff3e25801fc75eb8a4664412122a3b420f033683baf9847f8",
+      "size": 17,
+      "target": null
+    },
+    {
+      "path": "bin",
+      "kind": "directory",
+      "mode": 493,
+      "sha256": null,
+      "size": null,
+      "target": null
+    },
+    {
+      "path": "bin/bialy",
+      "kind": "file",
+      "mode": 493,
+      "sha256": "3d36d1a967b1ee7c7a39e99ad4296f8dbe1df7070c6c12f85f16bc7a3d039fba",
+      "size": 64,
+      "target": null
+    },
+    {
+      "path": "bin/painted-wolf-code",
+      "kind": "file",
+      "mode": 493,
+      "sha256": "3d36d1a967b1ee7c7a39e99ad4296f8dbe1df7070c6c12f85f16bc7a3d039fba",
+      "size": 64,
+      "target": null
+    },
+    {
+      "path": "bin/pw",
+      "kind": "file",
+      "mode": 493,
+      "sha256": "3d36d1a967b1ee7c7a39e99ad4296f8dbe1df7070c6c12f85f16bc7a3d039fba",
+      "size": 64,
+      "target": null
+    },
+    {
+      "path": "bin/pw-desktop-settings",
+      "kind": "file",
+      "mode": 493,
+      "sha256": "3d36d1a967b1ee7c7a39e99ad4296f8dbe1df7070c6c12f85f16bc7a3d039fba",
+      "size": 64,
+      "target": null
+    },
+    {
+      "path": "bin/pw-document-core",
+      "kind": "file",
+      "mode": 493,
+      "sha256": "3d36d1a967b1ee7c7a39e99ad4296f8dbe1df7070c6c12f85f16bc7a3d039fba",
+      "size": 64,
+      "target": null
+    },
+    {
+      "path": "bin/pw-logs",
+      "kind": "file",
+      "mode": 493,
+      "sha256": "3d36d1a967b1ee7c7a39e99ad4296f8dbe1df7070c6c12f85f16bc7a3d039fba",
+      "size": 64,
+      "target": null
+    },
+    {
+      "path": "bin/pw-vault-identity",
+      "kind": "file",
+      "mode": 493,
+      "sha256": "3d36d1a967b1ee7c7a39e99ad4296f8dbe1df7070c6c12f85f16bc7a3d039fba",
+      "size": 64,
+      "target": null
+    },
+    {
+      "path": "engine-root",
+      "kind": "directory",
+      "mode": 493,
+      "sha256": null,
+      "size": null,
+      "target": null
+    },
+    {
+      "path": "engine-root/resources",
+      "kind": "directory",
+      "mode": 493,
+      "sha256": null,
+      "size": null,
+      "target": null
+    },
+    {
+      "path": "engine-root/resources/current",
+      "kind": "symlink",
+      "mode": 511,
+      "sha256": null,
+      "size": null,
+      "target": "settings.json"
+    },
+    {
+      "path": "engine-root/resources/settings.json",
+      "kind": "file",
+      "mode": 420,
+      "sha256": "218589323cbe80b7ed077e3ee36f1663e7cb5f8f4e4ad02c938ad8a5c2c5a6b9",
+      "size": 17,
+      "target": null
+    },
+    {
+      "path": "release-version",
+      "kind": "file",
+      "mode": 420,
+      "sha256": "d82f34ae9aa41bc4a0cb529a1ac0898fed09d6b479fb1cc44cb66c34f15ee84d",
+      "size": 6,
+      "target": null
+    }
+  ]
+}
