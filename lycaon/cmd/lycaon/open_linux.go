@@ -47,15 +47,9 @@ func startDesktop(launch desktopLaunch) (appStart, error) {
 	if err := trustedLauncher(launch.path, launch.anchor, launch.owner); err != nil {
 		return nil, err
 	}
-	devnull, err := os.OpenFile(os.DevNull, os.O_RDWR, 0)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = devnull.Close() }()
-	cmd := exec.Command(launch.path) //nolint:gosec // G204 — fixed, ownership-verified installed launcher
+	cmd := exec.Command(launch.path) //nolint:gosec,noctx // G204 — fixed, ownership-verified installed launcher; the app outlives this CLI command
 	cmd.Env = launch.environment
 	cmd.Dir = "/"
-	cmd.Stdin, cmd.Stdout, cmd.Stderr = devnull, devnull, devnull
 	// Its own session: the app outlives this command and the terminal's signals.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	if err := cmd.Start(); err != nil {
