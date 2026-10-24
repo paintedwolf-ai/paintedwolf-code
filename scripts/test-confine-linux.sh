@@ -9,7 +9,7 @@ source "${ROOT}/scripts/artifact-paths.sh"
 # User-wide like the other pinned tools, so a lane can provision it before it goes offline.
 BROWSER_CACHE="${PW_BIN_DIR}/confine-browser"
 
-LEGS=(sandbox supervisor browser)
+LEGS=(sandbox supervisor launch browser)
 # --prepare provisions the pinned browser and runs nothing, for a lane that later runs offline.
 PREPARE=0
 if [[ "${1:-}" == "--prepare" ]]; then
@@ -54,6 +54,9 @@ run_leg() {
       ;;
     supervisor)
       bash "${ROOT}/scripts/go-test-digest.sh" --full --name test:confine:linux-supervisor -- ./internal/exec -run '^(TestParseProcStatReadsParentAndStartAfterTheCommandName|TestCommandDescendantsFollowsTheWholeTreeOnly|TestSupervisionSettlesTheTree|TestSupervisorExitPreservesThePrimaryStatus|TestParseSupervisorTargetRequiresDescriptorCountAndCommand|TestSupervisorLaunchReportReachesTheParent|TestAwaitEngineLossFollowsTheLifetimePipe|TestStartSupervisorTargetAppliesTheRequestedPriority|TestSignalSupervisorRefusesAReplacedProcess|TestSupervisorCleansDoubleForkedNewSessionOnCommandCompletion|TestSupervisorCancellationSparesAnotherCommandsDetachedDaemon|TestEngineLossFixtureProcess|TestSupervisorEngineSIGKILLRemovesOnlyItsOwnCommands|TestSupervisorEngineLifetimeEOFRemovesDetachedDaemon|TestSupervisorCompanionRequestsOwnedTreeCleanup|TestGuardedPipelinePriorityReachesPrimary|TestSupervisedPTYInteractiveShellOwnsForeground|TestSupervisedPTYInterruptReachesOnlyTheProgram|TestSupervisedCommandSeesOnlyItsIntendedDescriptors|TestTerminationBeforeSupervisorLaunchReportStopsLaunchedCommand|TestHeldTerminationKillsASupervisorThatNeverReportsLaunch)$' -count=1
+      ;;
+    launch)
+      bash "${ROOT}/scripts/go-test-digest.sh" --full --name test:confine:linux-launch -- ./internal/launchguard/... ./internal/launchverify/... ./cmd/pw-launch/... ./cmd/pw-launch-entry/... ./cmd/pw-vault-identity/... -count=1
       ;;
     browser)
       if ! browser="$(browser_path)"; then

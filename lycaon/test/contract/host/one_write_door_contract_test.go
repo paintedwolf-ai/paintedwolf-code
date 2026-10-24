@@ -16,6 +16,7 @@ import (
 
 // doorExemptions identifies writes with lifetimes outside replacement transactions.
 var doorExemptions = map[string]string{
+	"lycaon/internal/scan/installed/verify.go": "ephemeral installed-scanner fixtures in an owned temporary directory removed before return",
 	// Content-addressed stores determine the destination after streaming.
 	"lycaon/internal/sourceblob/store.go": "stream-then-name: the object's destination is its digest",
 
@@ -44,6 +45,7 @@ var doorExemptions = map[string]string{
 	"lycaon/internal/api/owner_only_posix.go":             "O_EXCL create so the 0600 mode is in force before any byte lands",
 	"lycaon/internal/api/owner_only_windows.go":           "owner-only ACL applied to a freshly created manifest",
 	"lycaon/internal/filelock/filelock.go":                "lock file opened for the flock it carries, not for its contents",
+	"lycaon/internal/launchguard/stage_linux.go":          "/dev/null opened read-write for the detached broker agent's standard streams",
 	"lycaon/internal/packagegeneration/lifetime.go":       "lock file opened for the flock it carries, not for its contents",
 	"lycaon/internal/fileclone/clone_linux.go":            "O_EXCL destination for a reflink clone; the ioctl replaces the write",
 	"lycaon/internal/indexwatch/indexwatch.go":            "O_EXCL destination while copying index file",
@@ -66,7 +68,6 @@ var doorExemptions = map[string]string{
 	"lycaon/internal/hostlock/hostlock.go":       "advisory pid stamp written under the lock it names; best-effort by design",
 	"lycaon/internal/preflight/probes.go":        "writability probe: written to prove the mount accepts a write, then removed",
 	"lycaon/cmd/lycaon-perf/fixtures.go":         "generated disposable benchmark tree under a fresh scratch root; no durable or prior content exists",
-	"lycaon/internal/scan/installed/verify.go":   "generated disposable qualification fixture under a fresh scratch root removed on return",
 	"lycaon/internal/testdbfixture/open.go":      "clones cached database template into disposable test fixture path",
 
 	// Maintenance commands write generated checkout artifacts.

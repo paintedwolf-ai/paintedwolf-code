@@ -20,7 +20,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/launchverify"
 	"github.com/lycaon/lycaon/internal/osprocess"
-	"github.com/lycaon/lycaon/internal/pkgmanifest"
 )
 
 const (
@@ -40,8 +39,10 @@ func run(args []string) error {
 	fs := flag.NewFlagSet("pw-vault-identity", flag.ContinueOnError)
 	socket := fs.String("socket", "", "listen on this socket path instead of the systemd-activated descriptor")
 	state := fs.String("state", os.Getenv("STATE_DIRECTORY"), "directory holding per-user identities")
-	manifest := fs.String("manifest", pkgmanifest.DefaultPath, "installed executable manifest")
+	generations := fs.String("generations", launchverify.DefaultGenerationsDir, "installed payload generations directory")
+	policy := fs.String("policy", launchverify.DefaultPolicyPath, "installed launch policy path")
 	trustPolicy := fs.String("trust-policy", "", "root-controlled policy selecting exact package generations and executable closures")
+	locks := fs.String("locks", launchverify.DefaultLocksDir, "generation lifetime locks directory")
 	procRoot := fs.String("proc", "/proc", "process filesystem root")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -60,9 +61,13 @@ func run(args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
 	server := &Server{
-		Store:       &Store{Root: *state},
-		Verifier:    launchverify.Verifier{ProcRoot: *procRoot},
-		Manifest:    *manifest,
+		Store: &Store{Root: *state},
+		Verifier: launchverify.Verifier{
+			ProcRoot:       *procRoot,
+			GenerationsDir: *generations,
+			PolicyPath:     *policy,
+			LocksDir:       *locks,
+		},
 		TrustPolicy: *trustPolicy,
 		PeerOf:      peerCredentials,
 		IdleExit:    idleExit,

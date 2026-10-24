@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/launchverify"
-	"github.com/lycaon/lycaon/internal/pkgmanifest"
 	"github.com/lycaon/lycaon/internal/vaultidentity"
 )
 
@@ -24,11 +23,8 @@ const requestDeadline = 30 * time.Second
 
 // Server answers identity requests for verified engines.
 type Server struct {
-	Store    *Store
-	Verifier launchverify.Verifier
-	// Manifest is loaded per connection, so a package upgrade applies to the
-	// next engine without restarting the service.
-	Manifest    string
+	Store       *Store
+	Verifier    launchverify.Verifier
 	TrustPolicy string
 	PeerOf      func(net.Conn) (Peer, error)
 	// IdleExit ends Serve after this long without a connection; the socket
@@ -155,6 +151,11 @@ func (s *Server) serveConn(ctx context.Context, conn net.Conn) {
 			return
 		}
 		resp := s.handle(caller, req)
+		// Handling may wait on storage. Reverify before releasing its response.
+		if err := verifier.Recheck(chain); err != nil {
+			s.answer(conn, refusal(err))
+			return
+		}
 		// Accounts are configuration-root digests, never secrets.
 		s.Log.InfoContext(ctx, "vault identity request", "op", req.Op, "account", req.Account, "status", resp.Status, "uid", peer.UID, "pid", peer.PID)
 		if !s.answer(conn, resp) {
@@ -174,17 +175,7 @@ func (s *Server) verifiersFor() ([]launchverify.Verifier, *vaultidentity.Respons
 		s.Log.Error("vault identity trust policy unreadable", "error", err)
 		return nil, &vaultidentity.Response{Status: vaultidentity.StatusUnavailable, Code: string(launchverify.CodeManifestUnreadable), Message: "the administrator-selected custody policy is unavailable"}
 	}
-	manifest, err := pkgmanifest.Load(s.Manifest)
-	if err != nil {
-		s.Log.Error("vault identity manifest unreadable", "path", s.Manifest, "error", err)
-		return nil, &vaultidentity.Response{
-			Status: vaultidentity.StatusUnavailable, Code: string(launchverify.CodeManifestUnreadable),
-			Message: "the installed executable manifest cannot be read",
-		}
-	}
-	verifier := s.Verifier
-	verifier.Manifest = manifest
-	return []launchverify.Verifier{verifier}, nil
+	return []launchverify.Verifier{s.Verifier}, nil
 }
 
 func refusal(err error) vaultidentity.Response {
