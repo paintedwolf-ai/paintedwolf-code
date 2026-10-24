@@ -171,15 +171,20 @@ func TestEmptyInfiniteLoopTerminatesOnHostCounters(t *testing.T) {
 }
 
 func childDispatchProgram(dispatches int64) string {
-	const inner = 100
-	outer := dispatches / inner
-	rest := dispatches % inner
+	const (
+		inner   = 100
+		perIter = 5
+		chunk   = inner * perIter
+	)
+	outer := dispatches / chunk
+	rest := dispatches % chunk
 	var b strings.Builder
 	// Precede the dispatches with AST frames, evaluator builtins and redirects
 	// so they would overflow child_executions if charged there.
 	b.WriteString("for k in" + strings.Repeat(" k", 20) + "; do { : >/dev/null; true; test -n x; [[ a == a ]]; }; done\n")
 	if outer > 0 {
-		b.WriteString("for a in" + strings.Repeat(" a", int(outer)) + "; do for b in" + strings.Repeat(" b", inner) + "; do echo tick >/dev/null; done; done\n")
+		body := strings.Repeat("echo tick >/dev/null; ", perIter)
+		b.WriteString("for a in" + strings.Repeat(" a", int(outer)) + "; do for b in" + strings.Repeat(" b", inner) + "; do " + body + "done; done\n")
 	}
 	for i := int64(0); i < rest; i++ {
 		b.WriteString("echo tick >/dev/null\n")
