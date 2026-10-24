@@ -63,7 +63,7 @@ class NativeDesktopAuthorityTests(unittest.TestCase):
         reader = Reader.__new__(Reader)
         captured = []
         connection = SimpleNamespace(close_sync=lambda _: None)
-        reader.gio = SimpleNamespace(DBusConnectionFlags=SimpleNamespace(
+        reader.gio = SimpleNamespace(Cancellable=lambda: SimpleNamespace(cancel=lambda: None), DBusConnectionFlags=SimpleNamespace(
             AUTHENTICATION_CLIENT=1, MESSAGE_BUS_CONNECTION=2), DBusConnection=SimpleNamespace(
                 new_for_address_sync=lambda *args: captured.append(args) or connection))
         directory = info(mode=stat.S_IFDIR | 0o755)
@@ -78,7 +78,7 @@ class NativeDesktopAuthorityTests(unittest.TestCase):
     def test_bus_connection_replacement_and_foreign_parent_refuse(self):
         reader = Reader.__new__(Reader)
         closed = []
-        reader.gio = SimpleNamespace(DBusConnectionFlags=SimpleNamespace(
+        reader.gio = SimpleNamespace(Cancellable=lambda: SimpleNamespace(cancel=lambda: None), DBusConnectionFlags=SimpleNamespace(
             AUTHENTICATION_CLIENT=1, MESSAGE_BUS_CONNECTION=2), DBusConnection=SimpleNamespace(
                 new_for_address_sync=lambda *args: SimpleNamespace(close_sync=lambda _: closed.append(True))))
         directory = info(mode=stat.S_IFDIR | 0o755)

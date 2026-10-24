@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import stat
+import threading
 
 from .records import CaseUnavailable
 
@@ -42,9 +43,16 @@ class Reader:
         before = path.lstat()
         if not stat.S_ISSOCK(before.st_mode) or before.st_uid != uid:
             raise ValueError('native session bus socket belongs to another account')
-        connection = self.gio.DBusConnection.new_for_address_sync('unix:path=' + address,
-            self.gio.DBusConnectionFlags.AUTHENTICATION_CLIENT | self.gio.DBusConnectionFlags.MESSAGE_BUS_CONNECTION,
-            None, None)
+        cancellation = self.gio.Cancellable()
+        timer = threading.Timer(5, cancellation.cancel)
+        timer.daemon = True
+        timer.start()
+        try:
+            connection = self.gio.DBusConnection.new_for_address_sync('unix:path=' + address,
+                self.gio.DBusConnectionFlags.AUTHENTICATION_CLIENT | self.gio.DBusConnectionFlags.MESSAGE_BUS_CONNECTION,
+                None, cancellation)
+        finally:
+            timer.cancel()
         after = path.lstat()
         if (before.st_dev, before.st_ino, before.st_uid, before.st_mode) != (
                 after.st_dev, after.st_ino, after.st_uid, after.st_mode):
