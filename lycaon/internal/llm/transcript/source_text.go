@@ -10,6 +10,8 @@ import (
 )
 
 // projectSourceText separates source bytes from their result coordinates.
+// Projected source lines carry no line labels, so they can be copied into exact
+// edit arguments; each block's label names its line range, starting at its first line.
 func projectSourceText(message api.Message, parts []api.MessageContentPart) []api.MessageContentPart {
 	if message.Role != api.MessageRoleTool || message.Origin != api.MessageOriginTool || message.ToolResult == nil ||
 		message.ToolResult.Outcome != api.ToolResultOutcomeCompleted || len(parts) != 1 {
@@ -26,6 +28,8 @@ func projectSourceText(message api.Message, parts []api.MessageContentPart) []ap
 		return projectReadSource(message, part, parts)
 	case "summarize":
 		return projectSummarizeSource(message, part, parts)
+	case "source_history":
+		return projectSourceHistoryVersion(message, part, parts)
 	}
 	return parts
 }
@@ -85,24 +89,52 @@ func projectSummarizeSource(message api.Message, part api.MessageContentPart, pa
 	return sourceParts(part, "summarize_metadata", handles, encoded, sources, suffix)
 }
 
-func projectReadSource(message api.Message, part api.MessageContentPart, parts []api.MessageContentPart) []api.MessageContentPart {
+// receiptMetadata decodes a native result whose receipt names tool, returning
+// its leading handles, JSON fields, mode, and trailing feedback.
+func receiptMetadata(message api.Message, part api.MessageContentPart, tool string) (handles []string, metadata map[string]json.RawMessage, mode, suffix string, ok bool) {
 	handles, body := resultHandles(message, part.Content)
 	prefix, body, suffix, ok := hostmarker.SplitToolJSONBody(body)
 	if !ok || prefix != "" {
-		return parts
+		return nil, nil, "", "", false
 	}
-	var metadata map[string]json.RawMessage
 	if json.Unmarshal([]byte(body), &metadata) != nil {
-		return parts
+		return nil, nil, "", "", false
 	}
 	var receipt struct {
 		Tool string `json:"tool"`
 	}
-	if json.Unmarshal(metadata["receipt"], &receipt) != nil || receipt.Tool != "read" {
+	if json.Unmarshal(metadata["receipt"], &receipt) != nil || receipt.Tool != tool {
+		return nil, nil, "", "", false
+	}
+	if json.Unmarshal(metadata["mode"], &mode) != nil {
+		return nil, nil, "", "", false
+	}
+	return handles, metadata, mode, suffix, true
+}
+
+// projectSourceHistoryVersion presents a retained version's lines like a read,
+// labeled with the version they came from.
+func projectSourceHistoryVersion(message api.Message, part api.MessageContentPart, parts []api.MessageContentPart) []api.MessageContentPart {
+	handles, metadata, mode, suffix, ok := receiptMetadata(message, part, "source_history")
+	if !ok || mode != "version" {
 		return parts
 	}
-	var mode string
-	if json.Unmarshal(metadata["mode"], &mode) != nil {
+	text, ok := readSourceBlock(metadata)
+	if !ok {
+		return parts
+	}
+	encoded, err := json.Marshal(metadata)
+	if err != nil {
+		return parts
+	}
+	_ = json.Unmarshal(metadata["version_id"], &text.version)
+	text.handle = strings.Join(handles, " ")
+	return sourceParts(part, "source_history_metadata", handles, encoded, []sourceText{text}, suffix)
+}
+
+func projectReadSource(message api.Message, part api.MessageContentPart, parts []api.MessageContentPart) []api.MessageContentPart {
+	handles, metadata, mode, suffix, ok := receiptMetadata(message, part, "read")
+	if !ok {
 		return parts
 	}
 	var sources []sourceText
@@ -149,14 +181,17 @@ func projectReadSource(message api.Message, part api.MessageContentPart, parts [
 }
 
 type sourceText struct {
-	text, path, handle string
-	start, end         int
+	text, path, version, handle string
+	start, end                  int
 }
 
 func (s sourceText) label() string {
 	label := "File contents"
 	if s.path != "" {
 		label += fmt.Sprintf(" %q", s.path)
+	}
+	if s.version != "" {
+		label += fmt.Sprintf(" at version %q", s.version)
 	}
 	label += fmt.Sprintf(" (lines %d–%d)", s.start, s.end)
 	if s.handle != "" {
