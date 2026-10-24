@@ -63,6 +63,8 @@ func stagedInspectionFailure(err error, manifest *Manifest, operation string) er
 	var failure *db.StoreIncompatibleError
 	if errors.As(classified, &failure) {
 		switch failure.Reason {
+		case db.RecoveryReasonInsufficientSpace, db.RecoveryReasonStorageUnavailable:
+			return fmt.Errorf("%s: %w", operation, classified)
 		case db.RecoveryReasonIntegrityFailed:
 			return &InvalidError{Detail: "store.db is not a readable SQLite database"}
 		case db.RecoveryReasonSchemaMismatch:

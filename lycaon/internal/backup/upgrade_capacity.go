@@ -79,10 +79,14 @@ func walBytes(dbPath string) uint64 {
 		return 0
 	}
 	info, err := os.Stat(dbPath + "-wal")
-	if err != nil || info.Size() < 0 {
+	if err != nil {
 		return 0
 	}
-	return uint64(info.Size())
+	size := info.Size()
+	if size < 0 {
+		return 0
+	}
+	return uint64(size)
 }
 
 func preflightRestore(ctx context.Context, opts StageOpts, manifest Manifest, localSnapshot bool) error {
