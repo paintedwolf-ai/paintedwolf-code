@@ -51,11 +51,12 @@ func (d DirectorySpills) Create(ctx context.Context) (SpillRun, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &fileRun{path: file.Name(), file: file, writer: bufio.NewWriterSize(file, 64<<10)}, nil
+	return &fileRun{dir: d.Dir, name: filepath.Base(file.Name()), file: file, writer: bufio.NewWriterSize(file, 64<<10)}, nil
 }
 
 type fileRun struct {
-	path   string
+	dir    string
+	name   string
 	file   *os.File
 	writer *bufio.Writer
 	frame  [binary.MaxVarintLen64]byte
@@ -86,8 +87,11 @@ func (r *fileRun) Open(maximumRecord int64, grow func(int64) error) (RunReader, 
 	if err := grow(64 << 10); err != nil {
 		return nil, err
 	}
-	file, err := os.Open(r.path)
-	if err != nil {
+	var file *os.File
+	if err := withDirRoot(r.dir, func(root *os.Root) (err error) {
+		file, err = root.Open(r.name)
+		return err
+	}); err != nil {
 		return nil, err
 	}
 	return &fileRunReader{file: file, reader: bufio.NewReaderSize(file, 64<<10), maximum: maximumRecord, grow: grow}, nil
@@ -95,10 +99,19 @@ func (r *fileRun) Open(maximumRecord int64, grow func(int64) error) (RunReader, 
 
 func (r *fileRun) Remove() error {
 	_ = r.Finish()
-	if err := os.Remove(r.path); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if err := withDirRoot(r.dir, func(root *os.Root) error { return root.Remove(r.name) }); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
 	return nil
+}
+
+func withDirRoot(dir string, fn func(*os.Root) error) error {
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = root.Close() }()
+	return fn(root)
 }
 
 type fileRunReader struct {
@@ -179,9 +192,11 @@ const spillRootName = ".painted-wolf-sort-spills"
 // directory when the program settles; ReclaimSessionSpills removes every
 // program's leftovers for a session after host loss.
 type SessionSpills struct {
-	mu     sync.Mutex
-	dir    string
-	closed bool
+	mu      sync.Mutex
+	scratch string
+	rel     string
+	dir     string
+	closed  bool
 }
 
 var _ SpillStorage = (*SessionSpills)(nil)
@@ -196,7 +211,8 @@ func NewSessionSpills(tc tools.ToolContext, programID string) (*SessionSpills, e
 	if programID == "" || filepath.Base(programID) != programID || strings.HasPrefix(programID, ".") {
 		return nil, errors.New("sort spills require a program identity")
 	}
-	return &SessionSpills{dir: filepath.Join(scratch, spillRootName, programID)}, nil
+	rel := filepath.Join(spillRootName, programID)
+	return &SessionSpills{scratch: scratch, rel: rel, dir: filepath.Join(scratch, rel)}, nil
 }
 
 // Create opens a new run, creating the program's directory on first use.
@@ -206,7 +222,7 @@ func (s *SessionSpills) Create(ctx context.Context) (SpillRun, error) {
 	if s.closed {
 		return nil, errors.New("program sort spills are closed")
 	}
-	if err := os.MkdirAll(s.dir, 0o700); err != nil {
+	if err := withDirRoot(s.scratch, func(root *os.Root) error { return root.MkdirAll(s.rel, 0o700) }); err != nil {
 		return nil, err
 	}
 	return DirectorySpills{Dir: s.dir}.Create(ctx)
@@ -218,7 +234,7 @@ func (s *SessionSpills) Close() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.closed = true
-	return os.RemoveAll(s.dir)
+	return withDirRoot(s.scratch, func(root *os.Root) error { return root.RemoveAll(s.rel) })
 }
 
 // ReclaimSessionSpills removes all programs' sort runs for a session. The
@@ -228,5 +244,5 @@ func ReclaimSessionSpills(tc tools.ToolContext) error {
 	if scratch == "" {
 		return nil
 	}
-	return os.RemoveAll(filepath.Join(scratch, spillRootName))
+	return withDirRoot(scratch, func(root *os.Root) error { return root.RemoveAll(spillRootName) })
 }
