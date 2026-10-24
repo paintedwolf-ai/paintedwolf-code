@@ -15,7 +15,7 @@ from .mailbox import decode
 from ..installed_cases import native_command
 from ..installed_cases.records import CaseUnavailable
 
-ACCOUNT_NAME = re.compile(r'pwqual058[a-z0-9]{0,12}')
+ACCOUNT_NAME = re.compile(r'pwqual05[89][a-z0-9]{0,12}')
 FORBIDDEN_NAMES = {'root', 'pwtest'}
 
 

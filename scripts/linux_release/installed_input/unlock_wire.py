@@ -134,7 +134,7 @@ def request(value, execution):
     native = session_wire.proof(value['native_session'])['native_session']
     account = value['account']
     if (not isinstance(account, dict) or set(account) != {'name', 'uid', 'gid', 'home'}
-            or not isinstance(account['name'], str) or not re.fullmatch(r'pwqual058[a-z0-9]{0,12}', account['name'])
+            or not isinstance(account['name'], str) or not re.fullmatch(r'pwqual05[89][a-z0-9]{0,12}', account['name'])
             or type(account['uid']) is not int or not 30000 <= account['uid'] < 1 << 31
             or type(account['gid']) is not int or account['gid'] != account['uid']
             or str(account['uid']) != native['session']['User']

@@ -11,7 +11,7 @@ import subprocess
 import threading
 import time
 
-from . import protocol, session_wire, surface_wire, unlock_actor, unlock_wire
+from . import password_wire, protocol, session_wire, surface_wire, unlock_actor, unlock_wire
 from .mailbox import decode
 from .qemu import open_lease
 from .private_pipe import Pipe
@@ -44,7 +44,10 @@ def delivery_records(directory, execution, vm_id):
     cases = [('conversation/restart-and-reconnect', 'reply'), ('files/edit-search-review', 'editor'),
              ('windowing/workspace-activation-and-exit', 'workspace'),
              ('browser/browser-sandbox-composition', 'browser'),
-             ('session/inhibitor-lifetime', 'keepawake')]
+             ('session/inhibitor-lifetime', 'keepawake'),
+             ('session/initial-lock-state', 'lock_initial'),
+             ('session/lock-during-presence', 'lock_presence'),
+             ('vault/presence-cancel-and-expiry', 'presence')]
     for case, kind in cases:
         leaf = directory / ('leaf/evidence/' + case + '/execution.json')
         if not leaf.exists():
@@ -53,7 +56,45 @@ def delivery_records(directory, execution, vm_id):
             raise ValueError('native input guest observations exceed their case bound')
         document = json.loads(leaf.read_bytes())
         observations = document['observations']
-        if kind in {'reply', 'workspace', 'browser', 'keepawake'}:
+        if kind in {'presence', 'lock_presence'}:
+            from .presence_fixture import FIELDS
+            selected = observations.get('launch', {}).get('fixed_input', [])
+            if not isinstance(selected, list):
+                raise ValueError('presence input requires its fixed transaction list')
+            partial = observations.get('native_input')
+            has_transitions = bool(observations.get('transitions') or observations.get('lock_transition'))
+            expected = ('provider-name-v1', None, 'provider-fixture-credential-v1',
+                        *(operation for _, operation, _, _ in FIELDS))
+            fixed_partial = partial is not None and (
+                kind == 'presence' or (len(selected) < len(expected) and not has_transitions))
+            if fixed_partial:
+                selected = [*selected, partial]
+            if len(selected) > len(expected):
+                raise ValueError('presence input exceeds its declared physical sequence')
+            for index, record in enumerate(selected):
+                operation = expected[index]
+                if operation is None:
+                    operation = record.get('operation') if isinstance(record, dict) else None
+                    if not isinstance(operation, str) or not re.fullmatch(r'provider-endpoint-v1-[0-9]{4,5}', operation):
+                        raise ValueError('presence input has no fixed loopback endpoint operation')
+                    protocol.steps(operation)
+                records.append(record)
+                operations.append(operation)
+            if kind == 'lock_presence':
+                if observations.get('lock_transition') is not None:
+                    transitions = [observations['lock_transition']]
+                else:
+                    transitions = observations.get('transitions', [])
+                if not isinstance(transitions, list):
+                    raise ValueError('lock-during-presence input requires its fixed transition list')
+                if partial is not None and not fixed_partial:
+                    transitions = [*transitions, partial]
+                expected_transitions = ('session-lock-v1',)
+                if len(transitions) > len(expected_transitions) or transitions and len(selected) != len(expected):
+                    raise ValueError('lock-during-presence input exceeds or precedes its declared physical sequence')
+                records.extend(transitions)
+                operations.extend(expected_transitions[:len(transitions)])
+        elif kind in {'reply', 'workspace', 'browser', 'keepawake', 'lock_initial'}:
             launch = 'launch_before' if kind == 'reply' else 'launch'
             prompt = 'browser-fixture-prompt-v1' if kind == 'browser' else 'reply-fixture-prompt-v1'
             selected = observations.get(launch, {}).get('fixed_input', [])
@@ -63,7 +104,7 @@ def delivery_records(directory, execution, vm_id):
                 raise ValueError('reply input exceeds its fixed transaction count')
             partial = observations.get('native_input')
             has_transitions = bool(observations.get('transitions') or observations.get('lock_transition'))
-            provider_partial = (kind in {'workspace', 'keepawake'} and partial is not None
+            provider_partial = (kind in {'workspace', 'keepawake', 'lock_initial'} and partial is not None
                 and len(selected) < input_limit and not has_transitions)
             if partial is not None and (kind in {'reply', 'browser'} or provider_partial):
                 selected = [*selected, partial]
@@ -105,7 +146,7 @@ def delivery_records(directory, execution, vm_id):
                     raise ValueError('workspace input exceeds or precedes its declared physical sequence')
                 records.extend(transitions)
                 operations.extend(expected[:len(transitions)])
-            elif kind == 'keepawake':
+            elif kind in {'keepawake', 'lock_initial'}:
                 if observations.get('lock_transition') is not None:
                     transitions = [observations['lock_transition']]
                 else:
@@ -203,8 +244,13 @@ def verify_deliveries(directory, execution, selected):
                     raise ValueError('native input has no observed declared session transition')
             elif event['focus_after'] != pending['focus']:
                 raise ValueError('native input host and guest focus differ')
-    keepawake_leaf = directory / 'leaf/evidence/session/inhibitor-lifetime/execution.json'
-    if unlock_rows or keepawake_leaf.exists():
+    unlock_leaves = [
+        directory / 'leaf/evidence/session/inhibitor-lifetime/execution.json',
+        directory / 'leaf/evidence/session/initial-lock-state/execution.json',
+        directory / 'leaf/evidence/session/lock-during-presence/execution.json',
+    ]
+    present_unlock_leaves = [leaf for leaf in unlock_leaves if leaf.exists()]
+    if unlock_rows or present_unlock_leaves:
         if len(unlock_rows) > 2:
             raise ValueError('native unlock exceeds its single prepare and unlock transactions')
         expected_ops = (unlock_wire.PREPARE, unlock_wire.PURPOSE)[:len(unlock_rows)]
@@ -228,8 +274,8 @@ def verify_deliveries(directory, execution, selected):
             session_wire.same_runtime(prep_req['native_session'], unl_req['native_session'])
             if not lock_row_indices or not (prep_idx < min(lock_row_indices) <= max(lock_row_indices) < unl_idx):
                 raise ValueError('native unlock ordering does not bracket the physical session lock')
-        if keepawake_leaf.exists():
-            observations = json.loads(keepawake_leaf.read_bytes())['observations']
+        for unlock_leaf in present_unlock_leaves:
+            observations = json.loads(unlock_leaf.read_bytes())['observations']
             guest_prep = observations.get('unlock_preparation')
             guest_unlock = observations.get('unlock_transaction')
             if guest_prep is not None:
@@ -280,6 +326,7 @@ class Bridge:
         self.unlock_actor = None
         self.prepared_request = None
         self.unlock_proof = None
+        self.private_session = None
 
     def __enter__(self):
         self.lease = open_lease(Path(self.selected['lease']), execution_nonce=self.execution['execution_nonce'],
@@ -289,17 +336,50 @@ class Bridge:
             self.log = (self.output / 'native-input.jsonl').open('xb')
             self.errors = (self.output / 'native-input-transport.log').open('xb')
             self.process = subprocess.Popen(self.ssh_command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                            stderr=self.errors, start_new_session=True)
+                                            stderr=self.errors, start_new_session=True, bufsize=0)
+            # These are exclusively owned SSH transport endpoints, not shared app FDs.
             os.set_blocking(self.process.stdin.fileno(), False)
             os.set_blocking(self.process.stdout.fileno(), False)
             self.selector = selectors.DefaultSelector()
             self.selector.register(self.process.stdout, selectors.EVENT_READ)
+            selected = self.exchange({'operation': 'identify-password-fixture-actor',
+                'binding': self.execution, 'vm_id': self.selected['vm_id']})
+            if not isinstance(selected, dict) or set(selected) != {'state', 'actor'} or selected['state'] != 'password-fixture-actor':
+                raise ValueError('private SSH transport omitted its password fixture actor identity')
+            self.fixture_actor = password_wire.actor(selected['actor'])
+            from .password_exchange import Session
+            self.private_session = Session(self.actor, self.fixture_actor, self.execution, self.output)
             self.thread = threading.Thread(target=self._run, name='fixed-native-input', daemon=True)
             self.thread.start()
         except BaseException:
-            self.lease.__exit__(None, None, None)
+            try:
+                self._close_transport()
+                if self.private_session is not None:
+                    self.private_session.close()
+            finally:
+                self.lease.__exit__(None, None, None)
             raise
         return self
+
+    def _close_transport(self):
+        process = getattr(self, 'process', None)
+        if process is not None:
+            if process.poll() is None:
+                process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=5)
+            process.stdin.close()
+            process.stdout.close()
+        selector = getattr(self, 'selector', None)
+        if selector is not None:
+            selector.close()
+        for name in ('log', 'errors'):
+            stream = getattr(self, name, None)
+            if stream is not None:
+                stream.close()
 
     def exchange(self, document):
         return Pipe(self.process, self.selector, time.monotonic() + 5).line(document)
@@ -390,6 +470,14 @@ class Bridge:
                 if row in ({'state': 'waiting'}, {'state': 'acknowledged'}):
                     self.stop.wait(0.025)
                     continue
+                if set(row) == {'state', 'request'} and row['state'] == 'private-request':
+                    pipe = Pipe(self.process, self.selector, time.monotonic() + password_wire.MAX_SECONDS)
+                    if not self.private_session.perform(row['request'], pipe):
+                        # Construct this outside the caught private exception's lifetime.
+                        self.error = ValueError('private fixture exchange failed; retained aggregate requires review')
+                        self.stop.set()
+                        return
+                    continue
                 if set(row) != {'state', 'request'} or row['state'] != 'request':
                     raise ValueError('fixed native input guest returned an unknown response')
                 if isinstance(row['request'], dict) and row['request'].get('operation') in unlock_wire.OPERATIONS:
@@ -420,27 +508,25 @@ class Bridge:
 
     def __exit__(self, *error):
         self.stop.set()
-        self.thread.join(6)
-        if self.unlock_actor is not None:
-            self.unlock_actor.close()
-        if self.process.poll() is None:
-            self.process.terminate()
+        self.actor.failed = True
         try:
-            self.process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            self.process.kill()
-            self.process.wait(timeout=5)
-        self.thread.join(1)
-        self.selector.close()
-        self.process.stdin.close()
-        self.process.stdout.close()
-        self.log.close()
-        self.errors.close()
-        if self.unlock_proof is not None:
-            self.unlock_proof['cleanup_completed_at'] = max(
-                time.time(),
-                self.unlock_proof['post_unlocked_at'] or self.unlock_proof['pre_locked_at'])
-            (self.output / 'native-unlock.json').write_bytes(protocol.canonical(self.unlock_proof))
-        self.lease.__exit__(*error)
+            self.thread.join(6)
+            if self.unlock_actor is not None:
+                self.unlock_actor.close()
+            self._close_transport()
+            self.thread.join(password_wire.MAX_SECONDS + 1)
+            if self.thread.is_alive():
+                self.error = ValueError('fixed native input thread did not settle after its bounded shutdown')
+            if self.unlock_proof is not None:
+                self.unlock_proof['cleanup_completed_at'] = max(
+                    time.time(),
+                    self.unlock_proof['post_unlocked_at'] or self.unlock_proof['pre_locked_at'])
+                (self.output / 'native-unlock.json').write_bytes(protocol.canonical(self.unlock_proof))
+        finally:
+            try:
+                if self.private_session is not None:
+                    self.private_session.close()
+            finally:
+                self.lease.__exit__(*error)
         if not any(error):
             self.require_healthy()

@@ -37,7 +37,7 @@ class NativeUnlockActor:
         actor = self.actor
         with actor.lock:
             if self.used or actor.failed or actor.closed or (actor.current is not None
-                    and actor.ordinal != len(protocol.steps(actor.operation))):
+                    and actor.ordinal != (actor.length or len(protocol.steps(actor.operation)))):
                 raise ValueError('native unlock cannot overlap, resume or replay physical input')
             self.used = True
             transaction = pending['transaction_id']

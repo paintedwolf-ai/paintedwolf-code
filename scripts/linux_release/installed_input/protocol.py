@@ -5,7 +5,7 @@ import hashlib
 import json
 import re
 
-from . import session_wire, surface_wire
+from . import presence_fixture, session_wire, surface_wire
 from ..installed_evidence import IDENTIFIER
 from ..installed_cases.provider import GUI_LABEL, GUI_API_KEY, gui_endpoint
 from . import accessibility, lineage
@@ -39,6 +39,7 @@ def _literal_steps(value: str) -> tuple[tuple[str, ...], ...]:
 
 _PROVIDER_STEPS = {'provider-name-v1': _literal_steps(GUI_LABEL),
                    'provider-fixture-credential-v1': _literal_steps(GUI_API_KEY)}
+_PRESENCE_STEPS = {operation: _literal_steps(value) for _, operation, value, _ in presence_fixture.FIELDS}
 _ENDPOINT_OPERATION = re.compile(r'provider-endpoint-v1-([0-9]{4,5})')
 
 
@@ -61,6 +62,8 @@ def steps(operation: str) -> tuple[tuple[str, ...], ...]:
         return surface_wire.OPERATIONS[operation]
     if operation in session_wire.OPERATIONS:
         return session_wire.OPERATIONS[operation]
+    if operation in _PRESENCE_STEPS:
+        return _PRESENCE_STEPS[operation]
     if operation in _PROVIDER_STEPS:
         return _PROVIDER_STEPS[operation]
     endpoint = _ENDPOINT_OPERATION.fullmatch(operation)
