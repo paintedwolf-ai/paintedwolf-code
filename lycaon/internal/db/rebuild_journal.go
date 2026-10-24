@@ -20,22 +20,16 @@ import (
 const StoreUpgradeDirectoryPrefix = ".store-upgrade-"
 const StoreUpgradeJournalSuffix = ".upgrade.json"
 
-type rebuildFile struct {
-	Suffix   string `json:"suffix"`
-	Identity string `json:"identity"`
-}
-
-// A prepared record is the commit decision. Recovery completes its guarded
-// renames before SQLite can open either pathname. The old DB and WAL remain
-// together in the work directory until installation readiness is recorded.
+// Publication exchanges two sealed databases. Before exchange, restart can
+// rebuild from the original; after exchange, recovery retains the old file.
 type rebuildJournal struct {
-	Version             int           `json:"version"`
-	Database            string        `json:"database"`
-	Directory           string        `json:"directory"`
-	DirectoryIdentity   string        `json:"directory_identity"`
-	State               string        `json:"state"`
-	Original            []rebuildFile `json:"original,omitempty"`
-	ReplacementIdentity string        `json:"replacement_identity,omitempty"`
+	Version             int    `json:"version"`
+	Database            string `json:"database"`
+	Directory           string `json:"directory"`
+	DirectoryIdentity   string `json:"directory_identity"`
+	State               string `json:"state"`
+	OriginalIdentity    string `json:"original_identity,omitempty"`
+	ReplacementIdentity string `json:"replacement_identity,omitempty"`
 }
 
 func rebuildMarker(path string) string { return path + StoreUpgradeJournalSuffix }
@@ -71,20 +65,13 @@ func readRebuildJournal(path string) (rebuildJournal, error) {
 	if err := decoder.Decode(new(any)); err != io.EOF {
 		return record, fmt.Errorf("store upgrade journal has trailing content")
 	}
-	if record.Version != 1 || record.Database != filepath.Base(path) || record.Directory != filepath.Base(record.Directory) || !strings.HasPrefix(record.Directory, StoreUpgradeDirectoryPrefix) || record.DirectoryIdentity == "" {
+	if record.Version != 2 || record.Database != filepath.Base(path) || record.Directory != filepath.Base(record.Directory) || !strings.HasPrefix(record.Directory, StoreUpgradeDirectoryPrefix) || record.DirectoryIdentity == "" {
 		return record, fmt.Errorf("store upgrade journal has invalid identity")
 	}
 	if record.State != "building" && record.State != "prepared" && record.State != "installed" {
 		return record, fmt.Errorf("store upgrade journal has invalid state")
 	}
-	seen := map[string]bool{}
-	for _, file := range record.Original {
-		if seen[file.Suffix] || file.Identity == "" || (file.Suffix != "" && file.Suffix != "-wal" && file.Suffix != "-shm" && file.Suffix != "-journal") {
-			return record, fmt.Errorf("store upgrade journal has invalid file")
-		}
-		seen[file.Suffix] = true
-	}
-	if record.State != "building" && (!seen[""] || record.ReplacementIdentity == "") {
+	if record.State != "building" && (record.OriginalIdentity == "" || record.ReplacementIdentity == "") {
 		return record, fmt.Errorf("store upgrade journal is missing its database identity")
 	}
 	return record, nil
@@ -107,6 +94,15 @@ func ResumeStoreUpgrade(path string) (err error) {
 	if record.State == "installed" {
 		return nil
 	}
+	identity, err := fspath.EntryIdentity(path)
+	if err != nil {
+		return err
+	}
+	if identity == record.OriginalIdentity {
+		// A journal-unaware older build may have written since the interruption.
+		// Its current database remains authoritative until the atomic exchange.
+		return discardRebuild(path, record)
+	}
 	return finishRebuildPublication(path, record, nil)
 }
 
@@ -118,40 +114,56 @@ func finishRebuildPublication(path string, record rebuildJournal, afterMove func
 	if err := requireRebuildIdentity(work, record.DirectoryIdentity); err != nil {
 		return err
 	}
-	if err := preserveEmptyRebuildOccupant(path, record); err != nil {
+	identity, err := fspath.EntryIdentity(path)
+	if err != nil {
 		return err
 	}
-	for _, file := range record.Original {
-		from := record.Database + file.Suffix
-		to := filepath.Join(record.Directory, "original.db"+file.Suffix)
-		if err := resumeRebuildMove(root, from, to, file.Identity); err != nil {
-			return err
-		}
-		if afterMove != nil {
-			if err := afterMove(from); err != nil {
-				return err
-			}
-		}
-	}
-	// An unexpected sidecar must never accompany the replacement database.
-	for _, suffix := range []string{"-wal", "-shm", "-journal"} {
-		if _, err := os.Lstat(path + suffix); !os.IsNotExist(err) {
+	if identity == record.OriginalIdentity {
+		if _, err := os.Lstat(filepath.Join(work, "original.db")); !os.IsNotExist(err) {
 			if err != nil {
 				return err
 			}
-			return fmt.Errorf("store sidecar remains before replacement: %s", suffix)
+			return fmt.Errorf("store upgrade archive destination occupied")
+		}
+		if err := requireSealedRebuild(path); err != nil {
+			return err
+		}
+		if err := requireSealedRebuild(filepath.Join(work, "replacement.db")); err != nil {
+			return err
+		}
+		if err := fseffect.ExchangeGuarded(root, record.Database, filepath.Join(record.Directory, "replacement.db"), record.OriginalIdentity, record.ReplacementIdentity); err != nil {
+			return err
+		}
+	} else if identity != record.ReplacementIdentity {
+		return fmt.Errorf("store upgrade destination identity changed")
+	}
+	if afterMove != nil {
+		if err := afterMove("exchange"); err != nil {
+			return err
 		}
 	}
-	if err := resumeRebuildMove(root, filepath.Join(record.Directory, "replacement.db"), record.Database, record.ReplacementIdentity); err != nil {
+	if err := resumeRebuildMove(root, filepath.Join(record.Directory, "replacement.db"), filepath.Join(record.Directory, "original.db"), record.OriginalIdentity); err != nil {
 		return err
 	}
 	if afterMove != nil {
-		if err := afterMove("replacement"); err != nil {
+		if err := afterMove("archive"); err != nil {
 			return err
 		}
 	}
 	record.State = "installed"
 	return writeRebuildJournal(path, record)
+}
+
+func requireSealedRebuild(path string) error {
+	for _, suffix := range []string{"-wal", "-shm", "-journal"} {
+		if _, err := os.Lstat(path + suffix); !os.IsNotExist(err) {
+			if err != nil {
+				return err
+			}
+			return fmt.Errorf("store sidecar remains before exchange: %s", suffix)
+		}
+	}
+	return nil
 }
 
 func resumeRebuildMove(root, from, to, identity string) error {

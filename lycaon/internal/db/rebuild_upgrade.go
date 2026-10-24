@@ -26,7 +26,7 @@ func beginRebuild(path string) (rebuildJournal, error) {
 	if err != nil {
 		return record, errors.Join(err, os.Remove(work))
 	}
-	record = rebuildJournal{Version: 1, Database: filepath.Base(path), Directory: filepath.Base(work), DirectoryIdentity: identity, State: "building"}
+	record = rebuildJournal{Version: 2, Database: filepath.Base(path), Directory: filepath.Base(work), DirectoryIdentity: identity, State: "building"}
 	if err := writeRebuildJournal(path, record); err != nil {
 		return record, errors.Join(err, discardRebuild(path, record))
 	}
@@ -36,6 +36,17 @@ func beginRebuild(path string) (rebuildJournal, error) {
 func upgradeRetained(ctx context.Context, path string, source *sql.DB, plan migrations.Plan, hooks UpgradeHooks, staged bool, registry *migrations.Registry) (err error) {
 	if !staged && hooks.Before == nil {
 		return fmt.Errorf("schema upgrade requires installation recovery capture")
+	}
+	// Fold the existing WAL before copying so source reads do not resolve every
+	// page through it. SQLite's checkpoint preserves the original logical store.
+	if err := checkpointRebuildSource(ctx, path); err != nil {
+		return err
+	}
+	if err := source.Close(); err != nil {
+		return err
+	}
+	if err := sealRebuiltStore(ctx, path); err != nil {
+		return err
 	}
 	record, err := beginRebuild(path)
 	if err != nil {
@@ -54,9 +65,6 @@ func upgradeRetained(ctx context.Context, path string, source *sql.DB, plan migr
 	if err := copyRetainedStore(ctx, path, replacement, plan); err != nil {
 		return err
 	}
-	if err := source.Close(); err != nil {
-		return err
-	}
 	// The compact released-shape copy is itself verified before it becomes
 	// recovery material. Capture retains every backed-up installation payload;
 	// only unreachable legacy chunks and abandoned staging have been omitted.
@@ -72,8 +80,8 @@ func upgradeRetained(ctx context.Context, path string, source *sql.DB, plan migr
 	if err := prepareRebuildPublication(path, replacement, &record); err != nil {
 		return err
 	}
-	// Once prepared is durable, cancellation cannot change the commit decision.
-	// Any filesystem failure leaves the journal and both sets of files for retry.
+	// Exchange publishes the commit atomically. Filesystem failures preserve the
+	// journal and both files so restart can determine whether it committed.
 	if err := finishRebuildPublication(path, record, nil); err != nil {
 		return err
 	}
@@ -131,21 +139,40 @@ func sealRebuiltStore(ctx context.Context, path string) error {
 }
 
 func prepareRebuildPublication(path, replacement string, record *rebuildJournal) error {
-	for _, suffix := range []string{"", "-wal", "-shm", "-journal"} {
-		identity, err := fspath.EntryIdentity(path + suffix)
-		if os.IsNotExist(err) && suffix != "" {
-			continue
-		}
-		if err != nil {
-			return err
-		}
-		record.Original = append(record.Original, rebuildFile{Suffix: suffix, Identity: identity})
+	if err := requireSealedRebuild(path); err != nil {
+		return err
 	}
-	identity, err := fspath.EntryIdentity(replacement)
+	if err := requireSealedRebuild(replacement); err != nil {
+		return err
+	}
+	identity, err := fspath.EntryIdentity(path)
+	if err != nil {
+		return err
+	}
+	record.OriginalIdentity = identity
+	identity, err = fspath.EntryIdentity(replacement)
 	if err != nil {
 		return err
 	}
 	record.ReplacementIdentity = identity
 	record.State = "prepared"
 	return writeRebuildJournal(path, *record)
+}
+
+// Keep the inspected reader open until checkpoint completes, retaining its WAL
+// index instead of recovering the large log again on a fresh connection.
+func checkpointRebuildSource(ctx context.Context, path string) (err error) {
+	writer, err := sql.Open("sqlite", fileDSN(path, "_pragma=synchronous(full)"))
+	if err != nil {
+		return err
+	}
+	defer func() { err = errors.Join(err, writer.Close()) }()
+	result, err := checkpointDatabase(ctx, writer, WALCheckpointTruncate)
+	if err != nil {
+		return err
+	}
+	if !result.Complete() {
+		return fmt.Errorf("source checkpoint still has active readers")
+	}
+	return nil
 }

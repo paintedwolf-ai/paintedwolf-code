@@ -19,13 +19,10 @@ func preparedRebuildFixture(t *testing.T) (string, rebuildJournal) {
 	testutil.FailErr(t, "create work directory", err)
 	identity, err := fspath.EntryIdentity(work)
 	testutil.FailErr(t, "identify work directory", err)
-	record := rebuildJournal{Version: 1, Database: "custom.db", Directory: filepath.Base(work), DirectoryIdentity: identity, State: "prepared"}
-	for _, suffix := range []string{"", "-wal", "-shm", "-journal"} {
-		testutil.FailErr(t, "seed original file", os.WriteFile(path+suffix, []byte("original"+suffix), 0o600))
-		identity, err := fspath.EntryIdentity(path + suffix)
-		testutil.FailErr(t, "identify original", err)
-		record.Original = append(record.Original, rebuildFile{Suffix: suffix, Identity: identity})
-	}
+	record := rebuildJournal{Version: 2, Database: "custom.db", Directory: filepath.Base(work), DirectoryIdentity: identity, State: "prepared"}
+	testutil.FailErr(t, "seed original file", os.WriteFile(path, []byte("original"), 0o600))
+	record.OriginalIdentity, err = fspath.EntryIdentity(path)
+	testutil.FailErr(t, "identify original", err)
 	replacement := filepath.Join(work, "replacement.db")
 	testutil.FailErr(t, "seed replacement", os.WriteFile(replacement, []byte("verified replacement"), 0o600))
 	record.ReplacementIdentity, err = fspath.EntryIdentity(replacement)
@@ -35,7 +32,7 @@ func preparedRebuildFixture(t *testing.T) (string, rebuildJournal) {
 }
 
 func TestRebuildPublicationResumesEveryDurablePrefix(t *testing.T) {
-	for prefix := range 6 {
+	for prefix := 1; prefix <= 2; prefix++ {
 		t.Run(fmt.Sprint(prefix), func(t *testing.T) {
 			path, record := preparedRebuildFixture(t)
 			interrupted := errors.New("process interrupted after durable move")
@@ -59,18 +56,11 @@ func TestRebuildPublicationResumesEveryDurablePrefix(t *testing.T) {
 			if string(raw) != "verified replacement" {
 				t.Fatal("replacement not published")
 			}
-			for _, file := range record.Original {
-				old := filepath.Join(filepath.Dir(path), record.Directory, "original.db"+file.Suffix)
-				raw, err := os.ReadFile(old)
-				testutil.FailErr(t, "read preserved original", err)
-				if string(raw) != "original"+file.Suffix {
-					t.Fatal("original database/journal pair changed")
-				}
-				if file.Suffix != "" {
-					if _, err := os.Stat(path + file.Suffix); !os.IsNotExist(err) {
-						t.Fatalf("old sidecar accompanied replacement: %v", err)
-					}
-				}
+			old := filepath.Join(filepath.Dir(path), record.Directory, "original.db")
+			raw, err = os.ReadFile(old)
+			testutil.FailErr(t, "read preserved original", err)
+			if string(raw) != "original" {
+				t.Fatal("original changed")
 			}
 			testutil.FailErr(t, "retire original after readiness", CompleteStoreUpgrade(path))
 			testutil.FailErr(t, "repeat retirement", CompleteStoreUpgrade(path))
@@ -85,7 +75,7 @@ func TestRebuildPublicationRefusesChangedDestination(t *testing.T) {
 	path, record := preparedRebuildFixture(t)
 	old := filepath.Join(filepath.Dir(path), record.Directory, "original.db")
 	testutil.FailErr(t, "occupy original destination", os.WriteFile(old, []byte("unrelated file"), 0o600))
-	if err := ResumeStoreUpgrade(path); err == nil {
+	if err := finishRebuildPublication(path, record, nil); err == nil {
 		t.Fatal("publication overwrote a different destination")
 	}
 	for _, check := range []struct{ path, want string }{{path, "original"}, {old, "unrelated file"}} {
@@ -105,12 +95,10 @@ func TestRebuildInterruptedBuildLeavesOriginalUntouched(t *testing.T) {
 		t.Fatal("unbuilt replacement reported complete")
 	}
 	testutil.FailErr(t, "discard unpublished build", ResumeStoreUpgrade(path))
-	for _, file := range record.Original {
-		raw, err := os.ReadFile(path + file.Suffix)
-		testutil.FailErr(t, "read untouched original", err)
-		if string(raw) != "original"+file.Suffix {
-			t.Fatal("interrupted build changed original")
-		}
+	raw, err := os.ReadFile(path)
+	testutil.FailErr(t, "read untouched original", err)
+	if string(raw) != "original" {
+		t.Fatal("interrupted build changed original")
 	}
 }
 
@@ -124,7 +112,5 @@ func TestRebuildPublicationRejectsTrailingJournalContent(t *testing.T) {
 	if err := ResumeStoreUpgrade(path); err == nil {
 		t.Fatal("accepted ambiguous publication decision")
 	}
-	for _, original := range record.Original {
-		testutil.FailErr(t, "preserve original identity", requireRebuildIdentity(path+original.Suffix, original.Identity))
-	}
+	testutil.FailErr(t, "preserve original identity", requireRebuildIdentity(path, record.OriginalIdentity))
 }

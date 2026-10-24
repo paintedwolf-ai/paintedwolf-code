@@ -74,6 +74,7 @@ func TestRetainedCopyClassifiesInconsistentChunkCounts(t *testing.T) {
 	_, err = database.Exec(`UPDATE source_manifest_chunks SET entry_count=entry_count+1 WHERE id IN (SELECT chunk_id FROM source_snapshot_chunks)`)
 	testutil.FailErr(t, "damage retained count", err)
 	testutil.FailErr(t, "close metadata", database.Close())
+	testutil.FailErr(t, "seal byte-comparison baseline", sealRebuiltStore(t.Context(), source))
 	before, err := os.ReadFile(source)
 	testutil.FailErr(t, "read damaged source", err)
 	err = UpgradeStaged(t.Context(), source)

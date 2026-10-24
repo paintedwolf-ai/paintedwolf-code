@@ -11,62 +11,83 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-func TestRebuildCrashWithUnawareEmptyOpener(t *testing.T) {
+func TestRebuildCrashKeepsLivePath(t *testing.T) {
 	if path := os.Getenv("PW_REBUILD_CRASH_FIXTURE"); path != "" {
 		record, err := readRebuildJournal(path)
 		testutil.FailErr(t, "read child journal", err)
-		moves := 0
-		_ = finishRebuildPublication(path, record, func(string) error {
-			moves++
-			if moves == 4 {
-				os.Exit(73)
-			}
-			return nil
-		})
+		_ = finishRebuildPublication(path, record, func(string) error { os.Exit(73); return nil })
 		os.Exit(74)
 	}
 	path, record := preparedRebuildFixture(t)
-	child := exec.Command(os.Args[0], "-test.run=^TestRebuildCrashWithUnawareEmptyOpener$")
+	child := exec.Command(os.Args[0], "-test.run=^TestRebuildCrashKeepsLivePath$")
 	child.Env = append(os.Environ(), "PW_REBUILD_CRASH_FIXTURE="+path)
 	var stopped *exec.ExitError
 	if err := child.Run(); !errors.As(err, &stopped) || stopped.ExitCode() != 73 {
 		t.Fatalf("child interruption: %v", err)
 	}
-	// Simulate an older opener that knows nothing about the publication journal.
-	unaware, err := sql.Open("sqlite", path)
-	testutil.FailErr(t, "open absent path", err)
-	_, err = unaware.Exec(`PRAGMA user_version=0`)
-	testutil.FailErr(t, "initialize empty database", err)
-	testutil.FailErr(t, "close unaware opener", unaware.Close())
-	testutil.FailErr(t, "resume after unaware opener", ResumeStoreUpgrade(path))
-	raw, err := os.ReadFile(path)
-	testutil.FailErr(t, "read replacement", err)
-	if string(raw) != "verified replacement" {
-		t.Fatal("replacement lost")
+	testutil.FailErr(t, "live path already names replacement", requireRebuildIdentity(path, record.ReplacementIdentity))
+	testutil.FailErr(t, "resume interrupted exchange", ResumeStoreUpgrade(path))
+	testutil.FailErr(t, "preserve original after exchange", requireRebuildIdentity(filepath.Join(filepath.Dir(path), record.Directory, "original.db"), record.OriginalIdentity))
+}
+
+func TestRebuildRestartPreservesOlderBuildWritesBeforeExchange(t *testing.T) {
+	source, _ := seedLegacyManifestStore(t, t.TempDir(), map[string]int{"/work/a": 3})
+	record, err := beginRebuild(source)
+	testutil.FailErr(t, "begin replacement", err)
+	replacement := filepath.Join(filepath.Dir(source), record.Directory, "replacement.db")
+	original, err := os.ReadFile(source)
+	testutil.FailErr(t, "read released source", err)
+	testutil.FailErr(t, "seed unpublished replacement", os.WriteFile(replacement, original, 0600))
+	testutil.FailErr(t, "seal original", sealRebuiltStore(t.Context(), source))
+	testutil.FailErr(t, "prepare exchange", prepareRebuildPublication(source, replacement, &record))
+	// An older build still sees its released schema and may write after the crash.
+	older, err := sql.Open("sqlite", source)
+	testutil.FailErr(t, "open original after interruption", err)
+	_, err = older.Exec(`INSERT INTO store_meta(key,value) VALUES('older-build-retained','new work')`)
+	testutil.FailErr(t, "retain work in older build", err)
+	testutil.FailErr(t, "close older build", older.Close())
+	testutil.FailErr(t, "discard stale unpublished candidate", ResumeStoreUpgrade(source))
+	older, err = sql.Open("sqlite", source)
+	testutil.FailErr(t, "read resumed source", err)
+	defer older.Close()
+	var value string
+	testutil.FailErr(t, "read older work", older.QueryRow(`SELECT value FROM store_meta WHERE key='older-build-retained'`).Scan(&value))
+	if value != "new work" {
+		t.Fatal("older build work lost")
 	}
-	preserved, err := filepath.Glob(filepath.Join(filepath.Dir(path), record.Directory, "empty-occupant-*", "store.db"))
-	testutil.FailErr(t, "find preserved occupant", err)
-	if len(preserved) != 1 {
-		t.Fatal("empty occupant was not preserved")
+	if _, err := os.Stat(rebuildMarker(source)); !os.IsNotExist(err) {
+		t.Fatalf("stale candidate still publishable: %v", err)
 	}
 }
 
-func TestRebuildRefusesNewUserState(t *testing.T) {
-	path, record := preparedRebuildFixture(t)
-	moves := 0
-	_ = finishRebuildPublication(path, record, func(string) error {
-		moves++
-		if moves == 4 {
-			return errors.New("interrupted")
-		}
-		return nil
-	})
-	occupant, err := sql.Open("sqlite", path)
-	testutil.FailErr(t, "open new occupant", err)
-	_, err = occupant.Exec(`CREATE TABLE user_data(value TEXT); INSERT INTO user_data VALUES('keep')`)
-	testutil.FailErr(t, "write new user state", err)
-	testutil.FailErr(t, "close occupant", occupant.Close())
-	if err := ResumeStoreUpgrade(path); err == nil {
-		t.Fatal("overwrote new user state")
+func TestRebuildSealPreservesCommittedWALAfterProcessExit(t *testing.T) {
+	if path := os.Getenv("PW_REBUILD_WAL_FIXTURE"); path != "" {
+		writer, err := sql.Open("sqlite", path)
+		testutil.FailErr(t, "open WAL child", err)
+		_, err = writer.Exec(`PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0; CREATE TABLE retained(value TEXT); INSERT INTO retained VALUES('committed')`)
+		testutil.FailErr(t, "commit WAL child data", err)
+		os.Exit(73)
+	}
+	path := filepath.Join(t.TempDir(), "store.db")
+	child := exec.Command(os.Args[0], "-test.run=^TestRebuildSealPreservesCommittedWALAfterProcessExit$")
+	child.Env = append(os.Environ(), "PW_REBUILD_WAL_FIXTURE="+path)
+	var stopped *exec.ExitError
+	if err := child.Run(); !errors.As(err, &stopped) || stopped.ExitCode() != 73 {
+		t.Fatalf("WAL child interruption: %v", err)
+	}
+	info, err := os.Stat(path + "-wal")
+	testutil.FailErr(t, "inspect committed WAL", err)
+	if info.Size() == 0 {
+		t.Fatal("fixture left no committed WAL")
+	}
+	testutil.FailErr(t, "seal committed WAL", sealRebuiltStore(t.Context(), path))
+	testutil.FailErr(t, "require independent database", requireSealedRebuild(path))
+	reader, err := sql.Open("sqlite", fileDSN(path, "mode=ro"))
+	testutil.FailErr(t, "open sealed database", err)
+	defer reader.Close()
+	var value string
+	testutil.FailErr(t, "read committed data without WAL", reader.QueryRow(`SELECT value FROM retained`).Scan(&value))
+	if value != "committed" {
+		t.Fatal("sealing lost committed WAL data")
 	}
 }
