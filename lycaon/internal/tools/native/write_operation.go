@@ -73,6 +73,9 @@ func (t *WriteTool) Apply(ctx context.Context, input WriteInput, tctx tools.Tool
 			beforeText := st.Content
 			before = &beforeText
 		} else if !os.IsNotExist(err) {
+			if toolrejection.AsToolReject(err) != nil {
+				return WriteResult{}, err
+			}
 			return WriteResult{}, fmt.Errorf("read failed: %w", err)
 		}
 		proposed := content
