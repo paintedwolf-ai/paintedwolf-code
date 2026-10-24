@@ -54,6 +54,7 @@ func (f *frame) statement(ctx context.Context, s commandsurface.Statement) (sign
 	}
 	inner := *f
 	inner.errexitIgnored = f.errexitIgnored || s.Negated
+	inner.procSubst = newProcSubstScope(f.procSubst)
 	sig, err := inner.redirected(ctx, s, func(g *frame) (signal, error) { return g.command(ctx, s) })
 	if err == nil && s.Negated {
 		f.state.control.Negate()
@@ -102,6 +103,10 @@ func (f *frame) command(ctx context.Context, s commandsurface.Statement) (signal
 		return signal{}, f.builtinStatus(s.SyntaxLocation, "function", 0)
 	case commandsurface.TestExpression:
 		return signal{}, f.testExpression(ctx, s, c)
+	case commandsurface.ArithmeticCommand:
+		return signal{}, runArithmeticCommand(ctx, f, s, c)
+	case commandsurface.TrapCommand:
+		return signal{}, runTrapCommand(f, s, c)
 	case nil:
 		return signal{}, nil
 	default:
@@ -275,6 +280,9 @@ func (f *frame) isolated(ctx context.Context, s commandsurface.Statement, list [
 	defer release()
 	g.parent, g.loops, g.returnable = run.inv, 0, false
 	_, err = g.statements(ctx, list)
+	if trapErr := runExitTrap(ctx, g, err); trapErr != nil && err == nil {
+		err = trapErr
+	}
 	f.publish.mark(g.publish.eligible())
 	return f.settleFrame(run, g, err)
 }

@@ -72,7 +72,7 @@ func (p NativePredicatePatterns) MatchPredicate(ctx context.Context, kind, input
 	// Lexical normalization is bounded by the submitted512-byte pattern and
 	// reserves old/new string/tag capacities before building intermediary data.
 	// The selected parser, writer and VM share the remaining dynamic admission.
-	lexicalBytes := 1024 + (raw+1)*(raw+1)*8
+	lexicalBytes := patternLexicalBytes(raw)
 	if p.Memory != nil {
 		release, err := p.Memory.Reserve(ctx, lexicalBytes)
 		if err != nil {

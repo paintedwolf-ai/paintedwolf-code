@@ -38,7 +38,7 @@ func runWc(inv *invocation) error {
 	var rows []wcRow
 	var total survey.TextCounts
 	for _, operand := range inv.operandsOrStdin() {
-		in, err := inv.open(operand, false)
+		in, err := inv.openField(operand, false)
 		if err != nil {
 			return err
 		}
@@ -56,12 +56,12 @@ func runWc(inv *invocation) error {
 			counts = survey.CountBytes(in.data)
 		}
 		if scalars && counts.InvalidEncoding {
-			inv.fail(1, operand, survey.ErrInvalidEncoding.Error())
+			inv.fail(1, operand.Value, survey.ErrInvalidEncoding.Error())
 			continue
 		}
 		label := ""
 		if named {
-			label = operand
+			label = operand.Value
 		}
 		rows = append(rows, wcRow{counts: counts, label: label})
 		total.Lines += counts.Lines

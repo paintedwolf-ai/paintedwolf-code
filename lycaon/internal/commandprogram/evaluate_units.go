@@ -35,8 +35,14 @@ func (e *evaluation) Substitute(ctx context.Context, scope ExpansionScope, reque
 	defer release()
 	g.parent, g.loops, g.returnable = run.inv, 0, false
 	g.state.options.errexit = false
-	g.streams = Streams{Input: NullInput(), Output: stdout, Error: f.streams.Error}
+	g.streams = f.streams
+	g.streams.SetReader(0, NullInput())
+	g.streams.SetWriter(1, stdout)
+	g.streams.SetWriter(2, f.streams.Error)
 	_, err = g.statements(ctx, part.Statements)
+	if trapErr := runExitTrap(ctx, g, err); trapErr != nil && err == nil {
+		err = trapErr
+	}
 	result := ordinaryResult(g.state.control.Status())
 	if stop, ok := g.state.latch.Stop(); ok {
 		result = stop.Result
@@ -159,6 +165,9 @@ func (f *frame) background(ctx context.Context, s commandsurface.Statement) erro
 		defer release()
 		job.streams = streams.withDefaults()
 		_, err := job.statement(jobCtx, statement)
+		if trapErr := runExitTrap(jobCtx, job, err); trapErr != nil && err == nil {
+			err = trapErr
+		}
 		result := ordinaryResult(job.state.control.Status())
 		if stop, ok := job.state.latch.Stop(); ok {
 			result = stop.Result
@@ -187,5 +196,8 @@ func (s Streams) withDefaults() Streams {
 	if s.Error == nil {
 		s.Error = io.Discard
 	}
+	s.readers[0] = s.Input
+	s.writers[1] = s.Output
+	s.writers[2] = s.Error
 	return s
 }
