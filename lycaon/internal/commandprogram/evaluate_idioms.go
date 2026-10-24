@@ -87,27 +87,13 @@ func (s *procSubstScope) add(entry *procSubstEntry) {
 	s.mu.Unlock()
 }
 
-func (s *procSubstScope) lookup(path string) *procSubstEntry {
-	for cur := s; cur != nil; cur = cur.parent {
-		cur.mu.Lock()
-		for _, entry := range cur.entries {
-			if entry.path == path {
-				cur.mu.Unlock()
-				return entry
-			}
-		}
-		cur.mu.Unlock()
-	}
-	return nil
-}
-
 // ProcessSubstitute evaluates a reached <(list) or >(list) unit concurrently
-// in an isolated frame connected by a bounded BytePipe, returning the virtual
-// descriptor path (/dev/fd/N) passed to the consuming command.
-func (e *evaluation) ProcessSubstitute(ctx context.Context, scope ExpansionScope, request SubstitutionRequest) (string, error) {
+// in an isolated frame connected by a bounded BytePipe, returning the typed
+// ProcessSubstitution handle bound into the expanded Field.
+func (e *evaluation) ProcessSubstitute(ctx context.Context, scope ExpansionScope, request SubstitutionRequest) (*ProcessSubstitution, error) {
 	f, ok := scope.(*frame)
 	if !ok || f.e != e {
-		return "", errors.New("process substitution scope is not a frame of this evaluation")
+		return nil, errors.New("process substitution scope is not a frame of this evaluation")
 	}
 	part := request.Unit
 	op := part.Operator
@@ -116,7 +102,7 @@ func (e *evaluation) ProcessSubstitute(ctx context.Context, scope ExpansionScope
 	}
 	run, err := f.beginRecorded(ctx, part.SyntaxLocation, op)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	run.producer = false
 	subCtx, cancel := context.WithCancel(ctx)
@@ -128,28 +114,34 @@ func (e *evaluation) ProcessSubstitute(ctx context.Context, scope ExpansionScope
 	if err != nil {
 		cancel()
 		run.close()
-		return "", err
+		return nil, err
 	}
 	g, release, err := f.isolate(subCtx, nil)
 	if err != nil {
 		cancel()
 		_ = pipe.CloseConsumer()
 		run.close()
-		return "", f.expansionRefusal(part.SyntaxLocation, err)
+		return nil, f.expansionRefusal(part.SyntaxLocation, err)
 	}
 	fd, path := e.allocateProcSubstFD()
 	g.parent, g.loops, g.returnable = run.inv, 0, false
 	g.state.options.errexit = false
 	g.streams = f.streams
-	g.streams.procSubst = nil
 	g.streams.SetWriter(2, &syncWriter{w: f.streams.Error})
+	var subst *ProcessSubstitution
 	if op == "<(" {
 		g.producerPipe = pipe
 		g.streams.SetReader(0, NullInput())
 		g.streams.SetWriter(1, pipe)
+		subst = NewProcessSubstitution(path, op, func() (io.ReadCloser, bool) {
+			return pipe.ConsumerEnd(), true
+		}, nil)
 	} else {
 		g.streams.SetReader(0, pipe.ConsumerEnd())
 		g.streams.SetWriter(1, &syncWriter{w: f.streams.Output})
+		subst = NewProcessSubstitution(path, op, nil, func() (io.WriteCloser, bool) {
+			return procSubstPipeWriter{pipe: pipe}, true
+		})
 	}
 	entry := &procSubstEntry{
 		part:   part,
@@ -197,9 +189,9 @@ func (e *evaluation) ProcessSubstitute(ctx context.Context, scope ExpansionScope
 		_ = pipe.CloseProducer(nil)
 		<-entry.done
 		e.releaseProcSubstFD(fd)
-		return path, entry.settle(f)
+		return subst, entry.settle(f)
 	}
-	return path, nil
+	return subst, nil
 }
 
 func (s *procSubstScope) finish(ctx context.Context, f *frame, stmtErr error) error {

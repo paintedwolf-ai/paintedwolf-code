@@ -6,6 +6,7 @@ import (
 	"io"
 	"slices"
 
+	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
@@ -38,21 +39,27 @@ func (in *input) reader() io.Reader {
 }
 
 // operandsOrStdin applies the "no PATH reads stdin" rule.
-func (inv *invocation) operandsOrStdin() []string {
-	operands := inv.operands()
+func (inv *invocation) operandsOrStdin() commandprogram.Fields {
+	operands := inv.argv.Operands()
 	if len(operands) == 0 {
-		return []string{"-"}
+		return commandprogram.Fields{{Value: "-"}}
 	}
 	return operands
 }
 
-// open acquires one operand. It returns nil after reporting an ordinary
+// open acquires one string operand.
+func (inv *invocation) open(operand string, whole bool) (*input, error) {
+	return inv.openField(commandprogram.Field{Value: operand}, whole)
+}
+
+// openField acquires one operand. It returns nil after reporting an ordinary
 // failure (missing, directory, permission) so the utility continues; any
 // other error is a typed stop. whole gathers stdin within the read budget.
-func (inv *invocation) open(operand string, whole bool) (*input, error) {
+func (inv *invocation) openField(field commandprogram.Field, whole bool) (*input, error) {
 	if err := inv.ctx.Err(); err != nil {
 		return nil, err
 	}
+	operand := field.Value
 	if operand == "-" {
 		in := &input{label: "-", stdin: true, stream: inv.input}
 		if !whole {
@@ -65,7 +72,7 @@ func (inv *invocation) open(operand string, whole bool) (*input, error) {
 		in.data, in.stream = data, nil
 		return in, nil
 	}
-	if reader, ok := inv.streams.OpenProcessSubstitutionReader(operand); ok {
+	if reader, ok := field.ProcessSubstitution().OpenReader(); ok {
 		in := &input{label: operand, stdin: true, stream: reader, closer: reader}
 		if !whole {
 			inv.closers = append(inv.closers, reader)

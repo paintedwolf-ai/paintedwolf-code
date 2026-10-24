@@ -260,12 +260,12 @@ func runTee(inv *invocation) error {
 			_ = w.Close()
 		}
 	}()
-	for _, operand := range inv.operands() {
-		if writer, ok := inv.streams.OpenProcessSubstitutionWriter(operand); ok {
+	for _, operand := range inv.argv.Operands() {
+		if writer, ok := operand.ProcessSubstitution().OpenWriter(); ok {
 			streamWriters = append(streamWriters, writer)
 			continue
 		}
-		bound, err := inv.paths.Bind(inv.ctx, operand, true)
+		bound, err := inv.paths.Bind(inv.ctx, operand.Value, true)
 		if err != nil {
 			return err
 		}

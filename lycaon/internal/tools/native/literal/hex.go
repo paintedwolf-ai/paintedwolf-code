@@ -61,9 +61,9 @@ func printable(c byte) byte {
 func (inv *invocation) singleInput() (*input, error) {
 	operands := inv.operandsOrStdin()
 	if len(operands) > 1 {
-		return nil, inv.usage(operands[1], "at most one PATH")
+		return nil, inv.usage(operands[1].Value, "at most one PATH")
 	}
-	return inv.open(operands[0], true)
+	return inv.openField(operands[0], true)
 }
 
 func runXxd(inv *invocation) error {
@@ -132,7 +132,7 @@ func runHexdump(inv *invocation) error {
 	}
 	var data []byte
 	for _, operand := range inv.operandsOrStdin() {
-		in, err := inv.open(operand, true)
+		in, err := inv.openField(operand, true)
 		if err != nil {
 			return err
 		}

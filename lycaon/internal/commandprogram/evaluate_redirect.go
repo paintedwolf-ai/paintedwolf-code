@@ -132,26 +132,28 @@ func (g *frame) bind(ctx context.Context, r commandsurface.ProgramRedirect) (*st
 		out, failed, err := g.hereDocument(ctx, r)
 		return out, nil, failed, err
 	}
-	var target string
+	var field Field
 	prevented, err := g.expanding(r.SyntaxLocation, func(scope *frame) error {
 		var err error
-		target, err = g.e.expander.ExpandScalar(ctx, scope, r.Target)
+		field, err = g.e.expander.ExpandScalarField(ctx, scope, r.Target)
 		return err
 	})
 	if prevented || err != nil {
 		return nil, nil, true, err
 	}
+	target := field.Value
 	child, err := g.beginRecorded(ctx, r.SyntaxLocation, r.Operator)
 	if err != nil {
 		return nil, nil, false, err
 	}
 	child.producer = false
-	field := Field{Value: target, Span: r.Target.Span}
 	if r.Operator == "<" {
-		if input, ok := g.streams.OpenProcessSubstitutionReader(target); ok {
-			g.streams.SetReader(redirectDescriptor(r), input)
-			child.settle(ordinaryResult(0), nil)
-			return nil, input, false, nil
+		if subst := field.ProcessSubstitution(); subst != nil {
+			if input, ok := subst.OpenReader(); ok {
+				g.streams.SetReader(redirectDescriptor(r), input)
+				child.settle(ordinaryResult(0), nil)
+				return nil, input, false, nil
+			}
 		}
 		inputs, _ := g.redirections()
 		input, err := inputs.OpenInput(ctx, InputDestination{Invocation: child.inv, Redirect: r, Target: field})
@@ -163,9 +165,12 @@ func (g *frame) bind(ctx context.Context, r commandsurface.ProgramRedirect) (*st
 		return nil, input, false, nil
 	}
 	var staged StagedOutput
-	if writer, ok := g.streams.OpenProcessSubstitutionWriter(target); ok {
-		staged = NewProcessSubstitutionStagedOutput(writer)
-	} else {
+	if subst := field.ProcessSubstitution(); subst != nil {
+		if writer, ok := subst.OpenWriter(); ok {
+			staged = NewProcessSubstitutionStagedOutput(writer)
+		}
+	}
+	if staged == nil {
 		_, outputs := g.redirections()
 		var openErr error
 		staged, openErr = outputs.Open(ctx, OutputDestination{Invocation: child.inv, Redirect: r, Target: field})

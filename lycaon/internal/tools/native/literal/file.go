@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"strconv"
 	"unicode/utf8"
+
+	"github.com/lycaon/lycaon/internal/commandprogram"
 )
 
 // signature is one versioned magic entry from the catalog corpus.
@@ -145,7 +147,7 @@ func peExecutable(data []byte) bool {
 }
 
 func runFile(inv *invocation) error {
-	operands := inv.operands()
+	operands := inv.argv.Operands()
 	if len(operands) == 0 {
 		return inv.usage("file", "at least one PATH")
 	}
@@ -163,7 +165,7 @@ func runFile(inv *invocation) error {
 			answer = id.mime
 		}
 		if !brief {
-			answer = operand + ": " + answer
+			answer = operand.Value + ": " + answer
 		}
 		if err := inv.out.text(answer + "\n"); err != nil {
 			return err
@@ -174,8 +176,9 @@ func runFile(inv *invocation) error {
 
 // identifyOperand reports links and directories from metadata and reads
 // content only for other entries.
-func (inv *invocation) identifyOperand(operand string) (identification, bool, error) {
-	if operand != "-" {
+func (inv *invocation) identifyOperand(field commandprogram.Field) (identification, bool, error) {
+	operand := field.Value
+	if operand != "-" && !field.ProcessSubstitution().IsInput() {
 		st, ok, err := inv.entry(operand, false)
 		if err != nil || !ok {
 			return identification{}, ok, err
@@ -195,7 +198,7 @@ func (inv *invocation) identifyOperand(operand string) (identification, bool, er
 			return identification{"symbolic link to " + target, "inode/symlink"}, true, nil
 		}
 	}
-	in, err := inv.open(operand, true)
+	in, err := inv.openField(field, true)
 	if err != nil || in == nil {
 		return identification{}, false, err
 	}

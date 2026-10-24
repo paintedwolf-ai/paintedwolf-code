@@ -21,7 +21,7 @@ func newPaths(inv *invocation) (*projectpaths.ProgramPaths, error) {
 // position and later publishes exact bytes at that pin. A destination that
 // moved since capture is COMMAND_REVISION_CONFLICT; nothing reruns.
 func (inv *invocation) openDestination(operand commandprogram.Field) (commandprogram.StagedOutput, error) {
-	if writer, ok := inv.streams.OpenProcessSubstitutionWriter(operand.Value); ok {
+	if writer, ok := operand.ProcessSubstitution().OpenWriter(); ok {
 		return commandprogram.NewProcessSubstitutionStagedOutput(writer), nil
 	}
 	if inv.ports.Publication == nil {

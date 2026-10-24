@@ -8,6 +8,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/commandprogram"
 	nativejq "github.com/lycaon/lycaon/internal/tools/native/jq"
 	"github.com/lycaon/lycaon/internal/tools/safecmd"
 )
@@ -19,7 +20,7 @@ import (
 // a typed refusal (budget, authority) that ends the run.
 type inputs struct {
 	inv      *invocation
-	operands []string
+	operands commandprogram.Fields
 	// raw yields each line as a string (-R) instead of JSON values; yaml
 	// decodes each operand's YAML documents (gojq --yaml-input, python yq).
 	raw  bool
@@ -99,11 +100,11 @@ func (in *inputs) nextValue() (any, bool) {
 }
 
 // open starts one operand: stdin streams; a file is captured and pinned.
-func (in *inputs) open(operand string) {
-	in.label = operand
+func (in *inputs) open(operand commandprogram.Field) {
+	in.label = operand.Value
 	in.data = &bytes.Buffer{}
 	var data io.Reader
-	if operand == "-" {
+	if operand.Value == "-" {
 		in.label = "<stdin>"
 		data = io.TeeReader(io.LimitReader(in.inv.input, in.limit+1), in.data)
 	} else {
@@ -123,7 +124,7 @@ func (in *inputs) open(operand string) {
 		in.stream = nativejq.NewValueStream(data)
 		return
 	}
-	text, err := in.readAll(data, operand == "-")
+	text, err := in.readAll(data, operand.Value == "-")
 	if err != nil {
 		in.stop = err
 		return
@@ -184,9 +185,9 @@ func (in *inputs) slurpRaw() (string, bool) {
 	for len(in.operands) > 0 && in.stop == nil {
 		operand := in.operands[0]
 		in.operands = in.operands[1:]
-		in.label = operand
+		in.label = operand.Value
 		in.data = &bytes.Buffer{}
-		if operand == "-" {
+		if operand.Value == "-" {
 			in.label = "<stdin>"
 			text, err := in.readAll(io.TeeReader(io.LimitReader(in.inv.input, in.limit+1), in.data), true)
 			if err != nil {

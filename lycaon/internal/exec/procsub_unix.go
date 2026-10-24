@@ -15,36 +15,20 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// ProcessSubstitutionStream is an active <(list) or >(list) byte stream bound
-// to a virtual descriptor path (/dev/fd/N).
+// ProcessSubstitutionStream is an active <(list) or >(list) byte stream to be
+// materialized as a named pipe (FIFO) for a confined external stage.
 type ProcessSubstitutionStream struct {
-	Path   string
 	Reader io.ReadCloser
 	Writer io.WriteCloser
 }
 
-// BindProcessSubstitutions materializes named pipes (FIFOs) in scratchDir for
-// any process-substitution paths referenced in argv, starts background relays
-// between each FIFO and its in-memory stream, and returns the rewritten argv
-// along with a deterministic cleanup function.
-func BindProcessSubstitutions(scratchDir string, argv []string, streams []ProcessSubstitutionStream) ([]string, func(), error) {
-	if len(streams) == 0 || len(argv) <= 1 {
-		return argv, func() {}, nil
-	}
-	used := make([]ProcessSubstitutionStream, 0, len(streams))
-	for _, s := range streams {
-		if s.Path == "" {
-			continue
-		}
-		for _, arg := range argv[1:] {
-			if strings.Contains(arg, s.Path) {
-				used = append(used, s)
-				break
-			}
-		}
-	}
-	if len(used) == 0 {
-		return argv, func() {}, nil
+// BindProcessSubstitutions materializes one named pipe (FIFO) in scratchDir
+// per stream, starts background relays between each FIFO and its in-memory
+// stream, and returns the FIFO paths in stream order along with a deterministic
+// cleanup function.
+func BindProcessSubstitutions(scratchDir string, streams []ProcessSubstitutionStream) ([]string, func(), error) {
+	if len(streams) == 0 {
+		return nil, func() {}, nil
 	}
 	baseDir := strings.TrimSpace(scratchDir)
 	if baseDir != "" {
@@ -62,15 +46,14 @@ func BindProcessSubstitutions(scratchDir string, argv []string, streams []Proces
 	if resolved, err := filepath.EvalSymlinks(dir); err == nil && resolved != "" {
 		dir = resolved
 	}
-	outArgv := append([]string(nil), argv...)
 	var closing atomic.Bool
 	var wg sync.WaitGroup
-	fifoPaths := make([]string, 0, len(used))
-	for i, s := range used {
+	fifoPaths := make([]string, 0, len(streams))
+	for i, s := range streams {
 		fifoPath := filepath.Join(dir, fmt.Sprintf("fd-%d", i))
 		if err := unix.Mkfifo(fifoPath, 0o600); err != nil {
 			closing.Store(true)
-			for _, u := range used[:i] {
+			for _, u := range streams[:i] {
 				if u.Reader != nil {
 					_ = u.Reader.Close()
 				}
@@ -83,11 +66,6 @@ func BindProcessSubstitutions(scratchDir string, argv []string, streams []Proces
 			return nil, nil, err
 		}
 		fifoPaths = append(fifoPaths, fifoPath)
-		for j := 1; j < len(outArgv); j++ {
-			if strings.Contains(outArgv[j], s.Path) {
-				outArgv[j] = strings.ReplaceAll(outArgv[j], s.Path, fifoPath)
-			}
-		}
 		wg.Add(1)
 		go func(s ProcessSubstitutionStream, fifoPath string) {
 			defer wg.Done()
@@ -118,7 +96,7 @@ func BindProcessSubstitutions(scratchDir string, argv []string, streams []Proces
 	cleanup := func() {
 		once.Do(func() {
 			closing.Store(true)
-			for _, u := range used {
+			for _, u := range streams {
 				if u.Reader != nil {
 					_ = u.Reader.Close()
 				}
@@ -130,7 +108,7 @@ func BindProcessSubstitutions(scratchDir string, argv []string, streams []Proces
 			_ = os.RemoveAll(dir)
 		})
 	}
-	return outArgv, cleanup, nil
+	return fifoPaths, cleanup, nil
 }
 
 func openFIFO(path string, mode int) (*os.File, error) {

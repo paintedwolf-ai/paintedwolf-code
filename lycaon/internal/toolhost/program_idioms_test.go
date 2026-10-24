@@ -105,6 +105,9 @@ func TestComposedProgramIdiomsHaveExactBytesAndStatuses(t *testing.T) {
 		{"input redirect from process substitution", `read -r line < <(printf 'streamed-in\n'); printf '%s\n' "$line"`, "streamed-in\n", "", 0},
 		{"output process substitution via tee and redirect", `printf 'hello\n' | tee >(tr a-z A-Z > upper.txt) > lower.txt; printf '%s:%s\n' "$(cat lower.txt)" "$(cat upper.txt)"`, "hello:HELLO\n", "", 0},
 		{"direct redirect to output process substitution", `printf 'world\n' > >(tr a-z A-Z > direct.txt); cat direct.txt`, "WORLD\n", "", 0},
+		{"native grep embedded --file=<(...) process substitution", `grep --file=<(printf 'needle\n') <(printf 'hay\nneedle\n')`, "needle\n", "", 0},
+		{"native sed attached -f<(...) process substitution", `sed -f<(printf 's/world/earth/\n') <(printf 'hello world\n')`, "hello earth\n", "", 0},
+		{"native grep literal /dev/fd/63 and /dev/fd/6 next to <(...)", `grep -F -e /dev/fd/63 -e /dev/fd/6 <(printf '/dev/fd/63\n/dev/fd/6\nother\n')`, "/dev/fd/63\n/dev/fd/6\n", "", 0},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -139,6 +142,18 @@ func TestComposedProgramProcessSubstitutionWithExternalAndEarlyExit(t *testing.T
 		outcome := callComposedProgram(t, f, `python3 -c 'import sys; print(open(sys.argv[1]).read().strip())' <(printf 'fifo-in\n')`)
 		if outcome.Stdout != "fifo-in\n" || outcome.Stderr != "" || outcome.Status != 0 || outcome.Refusal != nil {
 			t.Fatalf("python3 <(...) outcome: %+v", outcome)
+		}
+		outcome = callComposedProgram(t, f, `python3 -c 'import sys; print(sys.argv[1], sys.argv[2], open(sys.argv[3]).read().strip())' /dev/fd/63 /dev/fd/6 <(printf 'fifo-in\n')`)
+		if outcome.Stdout != "/dev/fd/63 /dev/fd/6 fifo-in\n" || outcome.Stderr != "" || outcome.Status != 0 || outcome.Refusal != nil {
+			t.Fatalf("python3 literal /dev/fd/63 and /dev/fd/6 next to <(...) outcome: %+v", outcome)
+		}
+		outcome = callComposedProgram(t, f, `python3 -c 'import sys; k, p = sys.argv[1].split("=", 1); print(k, open(p).read().strip())' --file=<(printf 'embedded-fifo\n')`)
+		if outcome.Stdout != "--file embedded-fifo\n" || outcome.Stderr != "" || outcome.Status != 0 || outcome.Refusal != nil {
+			t.Fatalf("python3 --file=<(...) outcome: %+v", outcome)
+		}
+		outcome = callComposedProgram(t, f, `python3 -c 'import sys; a, b, c = sys.argv[1].split(":", 2); print(a, b, open(c).read().strip())' --spec=/dev/fd/63:/dev/fd/6:<(printf 'real-part\n')`)
+		if outcome.Stdout != "--spec=/dev/fd/63 /dev/fd/6 real-part\n" || outcome.Stderr != "" || outcome.Status != 0 || outcome.Refusal != nil {
+			t.Fatalf("python3 --spec=/dev/fd/63:/dev/fd/6:<(...) outcome: %+v", outcome)
 		}
 		outcome = callComposedProgram(t, f, `python3 -c 'import sys; f = open(sys.argv[1], "w"); f.write("fifo-out\n"); f.close()' >(tr a-z A-Z > ext_upper.txt); cat ext_upper.txt`)
 		if outcome.Stdout != "FIFO-OUT\n" || outcome.Stderr != "" || outcome.Status != 0 || outcome.Refusal != nil {

@@ -59,7 +59,7 @@ func runChecksum(inv *invocation) error {
 		return checkManifests(inv, newHash)
 	}
 	for _, operand := range inv.operandsOrStdin() {
-		in, err := inv.open(operand, false)
+		in, err := inv.openField(operand, false)
 		if err != nil {
 			return err
 		}
@@ -70,7 +70,7 @@ func runChecksum(inv *invocation) error {
 		if err != nil {
 			return err
 		}
-		if err := inv.out.text(sum + "  " + operand + "\n"); err != nil {
+		if err := inv.out.text(sum + "  " + operand.Value + "\n"); err != nil {
 			return err
 		}
 	}
@@ -84,7 +84,7 @@ func checkManifests(inv *invocation, newHash func() hash.Hash) error {
 	size := newHash().Size() * 2
 	failed, unreadable, malformed := 0, 0, 0
 	for _, manifest := range inv.operandsOrStdin() {
-		in, err := inv.open(manifest, true)
+		in, err := inv.openField(manifest, true)
 		if err != nil {
 			return err
 		}
@@ -98,7 +98,7 @@ func checkManifests(inv *invocation, newHash func() hash.Hash) error {
 			want, name, ok := manifestLine(string(line), size)
 			if !ok {
 				malformed++
-				_, _ = fmt.Fprintf(inv.stderr, "%s: %s: %d: improperly formatted checksum line\n", inv.name(), manifest, number+1)
+				_, _ = fmt.Fprintf(inv.stderr, "%s: %s: %d: improperly formatted checksum line\n", inv.name(), manifest.Value, number+1)
 				continue
 			}
 			target, err := inv.open(name, false)

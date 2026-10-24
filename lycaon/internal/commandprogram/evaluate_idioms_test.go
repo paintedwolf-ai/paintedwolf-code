@@ -2,7 +2,9 @@ package commandprogram
 
 import (
 	"bytes"
+	"io"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -174,6 +176,63 @@ func TestEvaluateProcessSubstitutionStreamsConcurrentlyAndSettlesChildren(t *tes
 		out, err := f.run(t, t.Context(), `echo streamed > >(cat > captured.txt)`)
 		if err != nil || out.Status != 0 || f.publication.published["captured.txt"] != "streamed\n" {
 			t.Fatalf("out=%+v published=%v err=%v", out, f.publication.published, err)
+		}
+	})
+	t.Run("identity binding preserves literal /dev/fd paths and substring collisions", func(t *testing.T) {
+		f := newEvalFixture(t)
+		f.log.files["/dev/fd/63"] = "literal-fd-63\n"
+		f.log.files["/dev/fd/6"] = "literal-fd-6\n"
+		out, err := f.run(t, t.Context(), `cat /dev/fd/63 /dev/fd/6 <(echo real-subst)`)
+		if err != nil || out.Status != 0 || f.stdout.String() != "literal-fd-63\nliteral-fd-6\nreal-subst\n" {
+			t.Fatalf("out=%+v stdout=%q err=%v", out, f.stdout.String(), err)
+		}
+	})
+	t.Run("embedded process substitution in option word preserves part identity", func(t *testing.T) {
+		f := newEvalFixture(t)
+		out, err := f.run(t, t.Context(), `echo from-option | grep --file=<(echo from-option); cat -- --file=<(echo operand-slice)`)
+		if err != nil || out.Status != 0 || f.stdout.String() != "from-option\noperand-slice\n" {
+			t.Fatalf("out=%+v stdout=%q err=%v", out, f.stdout.String(), err)
+		}
+	})
+	t.Run("field parts and slice preserve /dev/fd/6 and /dev/fd/63 substitution identities", func(t *testing.T) {
+		sub6 := NewProcessSubstitution("/dev/fd/6", "<(", func() (io.ReadCloser, bool) {
+			return io.NopCloser(strings.NewReader("six")), true
+		}, nil)
+		sub63 := NewProcessSubstitution("/dev/fd/63", "<(", func() (io.ReadCloser, bool) {
+			return io.NopCloser(strings.NewReader("sixty-three")), true
+		}, nil)
+		word := NewFieldWithParts("--file=/dev/fd/6:/dev/fd/63:/dev/fd/6:/dev/fd/63", Field{}.Span, []FieldPart{
+			{Value: "--file=/dev/fd/6:/dev/fd/63:"},
+			{Value: "/dev/fd/6", Substitution: sub6},
+			{Value: ":"},
+			{Value: "/dev/fd/63", Substitution: sub63},
+		})
+		sliced := word.SliceFrom(len("--file="))
+		parts := sliced.Parts()
+		if len(parts) != 4 || parts[0].Substitution != nil || parts[1].Substitution != sub6 || parts[2].Substitution != nil || parts[3].Substitution != sub63 {
+			t.Fatalf("unexpected sliced parts: %+v", parts)
+		}
+		single := NewFieldWithParts("--file=/dev/fd/63", Field{}.Span, []FieldPart{
+			{Value: "--file="},
+			{Value: "/dev/fd/63", Substitution: sub63},
+		}).SliceFrom(len("--file="))
+		if single.ProcessSubstitution() != sub63 {
+			t.Fatalf("expected sliced option value to carry sub63, got %+v", single.ProcessSubstitution())
+		}
+		bound, err := (CatalogBinder{}).Bind(catalogCommand(t, "grep"), Fields{
+			{Value: "grep"},
+			NewFieldWithParts("--file=/dev/fd/63", Field{}.Span, []FieldPart{
+				{Value: "--file="},
+				{Value: "/dev/fd/63", Substitution: sub63},
+			}),
+			{Value: "input.txt"},
+		})
+		if err != nil {
+			t.Fatalf("Bind grep --file=<(...): %v", err)
+		}
+		opts := bound.Options("-f")
+		if len(opts) != 1 || len(opts[0].Values) != 1 || opts[0].Values[0].ProcessSubstitution() != sub63 {
+			t.Fatalf("expected bound grep -f option to preserve sub63, got %+v", opts)
 		}
 	})
 }

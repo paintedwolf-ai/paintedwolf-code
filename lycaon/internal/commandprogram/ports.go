@@ -11,24 +11,78 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
-// ProcessSubstitutionStream is an active <(list) or >(list) byte stream bound
-// to a virtual /dev/fd/N path in the current statement scope.
-type ProcessSubstitutionStream struct {
-	Path   string
-	Reader io.ReadCloser
-	Writer io.WriteCloser
+// ProcessSubstitution is a typed handle to a concurrent <(list) or >(list)
+// stream created during word expansion. Its Path is the virtual descriptor
+// path (/dev/fd/N) used for display and unsplit word text; consumers bind
+// the stream by this handle's identity, never by matching Path text.
+type ProcessSubstitution struct {
+	path   string
+	op     string
+	reader func() (io.ReadCloser, bool)
+	writer func() (io.WriteCloser, bool)
+}
+
+// NewProcessSubstitution constructs a typed process-substitution handle.
+func NewProcessSubstitution(path, operator string, reader func() (io.ReadCloser, bool), writer func() (io.WriteCloser, bool)) *ProcessSubstitution {
+	return &ProcessSubstitution{
+		path:   path,
+		op:     operator,
+		reader: reader,
+		writer: writer,
+	}
+}
+
+// Path returns the virtual descriptor path (/dev/fd/N) of the substitution.
+func (p *ProcessSubstitution) Path() string {
+	if p == nil {
+		return ""
+	}
+	return p.path
+}
+
+// Operator returns "<(" or ">(".
+func (p *ProcessSubstitution) Operator() string {
+	if p == nil {
+		return ""
+	}
+	return p.op
+}
+
+// IsInput reports whether the substitution is <(list).
+func (p *ProcessSubstitution) IsInput() bool {
+	return p != nil && p.op == "<("
+}
+
+// IsOutput reports whether the substitution is >(list).
+func (p *ProcessSubstitution) IsOutput() bool {
+	return p != nil && p.op == ">("
+}
+
+// OpenReader returns the consumer end of an active <(list) stream.
+func (p *ProcessSubstitution) OpenReader() (io.ReadCloser, bool) {
+	if p == nil || p.reader == nil {
+		return nil, false
+	}
+	return p.reader()
+}
+
+// OpenWriter returns the producer end of an active >(list) stream.
+func (p *ProcessSubstitution) OpenWriter() (io.WriteCloser, bool) {
+	if p == nil || p.writer == nil {
+		return nil, false
+	}
+	return p.writer()
 }
 
 // Streams carry complete bytes (BytePipe consumer end, StreamInput, ScreenedPipe
 // or the typed null endpoints). Closing Input is a deliberate consumer stop,
 // never producer failure. Display previews are a separate projection.
 type Streams struct {
-	Input     io.ReadCloser
-	Output    io.Writer
-	Error     io.Writer
-	readers   [10]io.ReadCloser
-	writers   [10]io.Writer
-	procSubst *procSubstScope
+	Input   io.ReadCloser
+	Output  io.Writer
+	Error   io.Writer
+	readers [10]io.ReadCloser
+	writers [10]io.Writer
 }
 
 // Reader returns the input stream bound to descriptor fd (0..9).
@@ -118,57 +172,6 @@ func (s Streams) hasWriter(fd int) bool {
 		return true
 	}
 	return (fd == 1 || fd == 2) && s.readers[fd] == nil
-}
-
-// HasProcessSubstitutionReader reports whether path names an active <(list)
-// input stream in this scope.
-func (s Streams) HasProcessSubstitutionReader(path string) bool {
-	entry := s.procSubst.lookup(path)
-	return entry != nil && entry.part.Operator == "<("
-}
-
-// OpenProcessSubstitutionReader returns the consumer end of an active <(list)
-// stream in this scope.
-func (s Streams) OpenProcessSubstitutionReader(path string) (io.ReadCloser, bool) {
-	entry := s.procSubst.lookup(path)
-	if entry == nil || entry.part.Operator != "<(" {
-		return nil, false
-	}
-	return entry.pipe.ConsumerEnd(), true
-}
-
-// OpenProcessSubstitutionWriter returns the producer end of an active >(list)
-// stream in this scope.
-func (s Streams) OpenProcessSubstitutionWriter(path string) (io.WriteCloser, bool) {
-	entry := s.procSubst.lookup(path)
-	if entry == nil || entry.part.Operator != ">(" {
-		return nil, false
-	}
-	return procSubstPipeWriter{pipe: entry.pipe}, true
-}
-
-// ProcessSubstitutions lists the active <(list) and >(list) streams in this scope.
-func (s Streams) ProcessSubstitutions() []ProcessSubstitutionStream {
-	var out []ProcessSubstitutionStream
-	for cur := s.procSubst; cur != nil; cur = cur.parent {
-		cur.mu.Lock()
-		for _, entry := range cur.entries {
-			switch entry.part.Operator {
-			case "<(":
-				out = append(out, ProcessSubstitutionStream{
-					Path:   entry.path,
-					Reader: entry.pipe.ConsumerEnd(),
-				})
-			case ">(":
-				out = append(out, ProcessSubstitutionStream{
-					Path:   entry.path,
-					Writer: procSubstPipeWriter{pipe: entry.pipe},
-				})
-			}
-		}
-		cur.mu.Unlock()
-	}
-	return out
 }
 
 // OperationRequest is one reached simple command after expansion and before

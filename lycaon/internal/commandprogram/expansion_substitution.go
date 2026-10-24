@@ -12,7 +12,7 @@ import (
 type substitutionDepthKey struct{}
 
 type processSubstitutionPort interface {
-	ProcessSubstitute(ctx context.Context, scope ExpansionScope, request SubstitutionRequest) (string, error)
+	ProcessSubstitute(ctx context.Context, scope ExpansionScope, request SubstitutionRequest) (*ProcessSubstitution, error)
 }
 
 // SubstitutionDepth is the number of substitutions enclosing ctx. The
@@ -22,14 +22,14 @@ func SubstitutionDepth(ctx context.Context) int {
 	return depth
 }
 
-func (e *WordExpander) processSubstitute(r *expansionRun, part commandsurface.SubstitutionPart) (string, error) {
+func (e *WordExpander) processSubstitute(r *expansionRun, part commandsurface.SubstitutionPart) (*ProcessSubstitution, error) {
 	port, ok := e.substitutions.(processSubstitutionPort)
 	if !ok {
-		return "", &ExpansionError{Code: codeSyntaxUnsupported, Span: part.Span, Expected: "a process substitution port"}
+		return nil, &ExpansionError{Code: codeSyntaxUnsupported, Span: part.Span, Expected: "a process substitution port"}
 	}
 	depth := SubstitutionDepth(r.ctx) + 1
 	if int64(depth) > e.limits.substitutionDepth {
-		return "", e.limits.exceeded("substitution_depth", int64(depth), part.Span)
+		return nil, e.limits.exceeded("substitution_depth", int64(depth), part.Span)
 	}
 	ctx := context.WithValue(r.ctx, substitutionDepthKey{}, depth)
 	return port.ProcessSubstitute(ctx, r.scope, SubstitutionRequest{Unit: part, Depth: depth})

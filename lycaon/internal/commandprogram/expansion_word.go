@@ -16,6 +16,7 @@ import (
 type expansionPiece struct {
 	text   string
 	quoted bool
+	subst  *ProcessSubstitution
 }
 
 // pieceBytes conservatively covers one piece record and its slice growth.
@@ -279,11 +280,11 @@ func positionalName(name string) bool {
 
 func (r *expansionRun) substitution(part commandsurface.SubstitutionPart, quoted bool) error {
 	if part.Operator == "<(" || part.Operator == ">(" {
-		path, err := r.expander.processSubstitute(r, part)
+		subst, err := r.expander.processSubstitute(r, part)
 		if err != nil {
 			return err
 		}
-		return r.assembly.add(path, true)
+		return r.assembly.addSubstitution(subst)
 	}
 	output, err := r.expander.substitute(r, part)
 	if err != nil {

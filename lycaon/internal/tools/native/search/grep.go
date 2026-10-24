@@ -8,6 +8,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/litprefilter"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/textsearch"
@@ -53,7 +54,7 @@ type grepRun struct {
 	pruned   int
 	selected bool
 	stopped  bool
-	operands []string
+	operands commandprogram.Fields
 }
 
 func runGrep(inv *invocation) error {
@@ -114,7 +115,7 @@ func runRg(inv *invocation) error {
 	}
 	if inv.flag("--files") {
 		r.mode = modeFileList
-		r.operands = inv.argv.Operands().Values()
+		r.operands = inv.argv.Operands()
 		return r.searchOperands()
 	}
 	spec := textsearch.Spec{Dialect: dialect, Word: inv.flag("-w")}
@@ -226,7 +227,7 @@ func (r *grepRun) patternWords() ([]string, bool) {
 
 // patterns gathers -e values and -f files in argument order. A pattern file
 // is pinned like any other read; "-f -" reads standard input.
-func (r *grepRun) patterns() ([]string, []string, error) {
+func (r *grepRun) patterns() ([]string, commandprogram.Fields, error) {
 	var patterns []string
 	explicit := false
 	for _, item := range r.inv.argv.Items {
@@ -239,7 +240,7 @@ func (r *grepRun) patterns() ([]string, []string, error) {
 			explicit = true
 		case "-f":
 			explicit = true
-			content, err := r.patternFile(item.Option.Values[0].Value)
+			content, err := r.patternFile(item.Option.Values[0])
 			if err != nil {
 				return nil, nil, err
 			}
@@ -248,25 +249,25 @@ func (r *grepRun) patterns() ([]string, []string, error) {
 			}
 		}
 	}
-	operands := r.inv.argv.Operands().Values()
+	operands := r.inv.argv.Operands()
 	if explicit {
 		return patterns, operands, nil
 	}
 	if len(operands) == 0 {
 		return nil, nil, r.inv.usage(r.inv.word(), "a PATTERN operand or -e PATTERN")
 	}
-	return operands[:1], operands[1:], nil
+	return []string{operands[0].Value}, operands[1:], nil
 }
 
-func (r *grepRun) patternFile(spelling string) ([]byte, error) {
-	if spelling == "-" {
+func (r *grepRun) patternFile(field commandprogram.Field) ([]byte, error) {
+	if field.Value == "-" {
 		return r.inv.readAll(r.inv.input)
 	}
-	if reader, ok := r.inv.streams.OpenProcessSubstitutionReader(spelling); ok {
+	if reader, ok := field.ProcessSubstitution().OpenReader(); ok {
 		defer func() { _ = reader.Close() }()
 		return r.inv.readAll(reader)
 	}
-	bound, err := r.inv.paths.Bind(r.inv.ctx, spelling, false)
+	bound, err := r.inv.paths.Bind(r.inv.ctx, field.Value, false)
 	if err != nil {
 		return nil, err
 	}
@@ -389,14 +390,14 @@ func (r *grepRun) searchOperands() error {
 		if !r.recursive {
 			return r.searchStdin()
 		}
-		operands, implicit = []string{"."}, true
+		operands, implicit = commandprogram.Fields{{Value: "."}}, true
 	}
 	multiple := len(operands) > 1
 	for _, operand := range operands {
 		if r.stopped {
 			return nil
 		}
-		if operand == "-" {
+		if operand.Value == "-" {
 			if err := r.searchStdin(); err != nil {
 				return err
 			}
@@ -437,9 +438,10 @@ func (r *grepRun) forcedNames(byDefault bool) bool {
 	return byDefault
 }
 
-func (r *grepRun) searchOperand(operand string, implicit, multiple bool) error {
+func (r *grepRun) searchOperand(field commandprogram.Field, implicit, multiple bool) error {
 	inv := r.inv
-	if reader, ok := inv.streams.OpenProcessSubstitutionReader(operand); ok {
+	operand := field.Value
+	if reader, ok := field.ProcessSubstitution().OpenReader(); ok {
 		if r.mode == modeFileList {
 			_ = reader.Close()
 			return inv.out.text(operand, "\n")

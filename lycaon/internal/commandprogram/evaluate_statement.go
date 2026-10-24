@@ -55,7 +55,6 @@ func (f *frame) statement(ctx context.Context, s commandsurface.Statement) (sign
 	inner := *f
 	inner.errexitIgnored = f.errexitIgnored || s.Negated
 	inner.procSubst = newProcSubstScope(f.procSubst)
-	inner.streams.procSubst = inner.procSubst
 	sig, err := inner.redirected(ctx, s, func(g *frame) (signal, error) { return g.command(ctx, s) })
 	if err == nil && s.Negated {
 		f.state.control.Negate()
