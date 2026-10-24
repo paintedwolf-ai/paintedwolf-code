@@ -1923,7 +1923,7 @@ paths:
         - projects
       operationId: createProjectRemoval
       x-person-action: record
-      summary: Delete a project and settle reviewed optional extension cleanup
+      summary: Accept project deletion and reviewed optional extension cleanup
       parameters:
         - $ref: '#/components/parameters/ProjectId'
       requestBody:
@@ -1934,7 +1934,7 @@ paths:
               $ref: '#/components/schemas/ProjectRemovalRequest'
       responses:
         '202':
-          description: Host-owned removal evidence or outcome
+          description: Durably accepted operation with live progress, or its settled outcome
           content:
             application/json:
               schema:
@@ -1962,7 +1962,7 @@ paths:
       tags:
         - projects
       operationId: getProjectRemoval
-      summary: Read the recorded project removal outcome
+      summary: Read live progress or the recorded project removal outcome
       parameters:
         - $ref: '#/components/parameters/ProjectId'
         - name: operation_id
@@ -29786,6 +29786,30 @@ components:
             type: string
         force:
           type: boolean
+    ProjectRemovalProgress:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: Live host-owned progress; absent once the recorded operation settles.
+      required:
+        - phase
+        - completed
+        - total
+      properties:
+        phase:
+          type: string
+          enum:
+            - preparing
+            - chats
+            - project_data
+            - files
+            - extensions
+        completed:
+          type: integer
+          minimum: 0
+        total:
+          type: integer
+          minimum: 0
     ProjectRemovalResult:
       x-go-generate: true
       type: object
@@ -29803,6 +29827,11 @@ components:
         - workers
         - overlays
       properties:
+        progress:
+          x-go-type: '*ProjectRemovalProgress'
+          oneOf:
+            - $ref: '#/components/schemas/ProjectRemovalProgress'
+            - type: 'null'
         assessment:
           x-go-type: '*ProjectRemovalAssessment'
           oneOf:
