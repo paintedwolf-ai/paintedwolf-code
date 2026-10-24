@@ -12,7 +12,8 @@ from .fresh_profile import Reservation
 from .polkit_policy import PresencePolicy
 from .presence_alert import alerts, await_alert
 from .process import run
-from .provider import ProviderFixture
+from .profile_setup import await_session
+from .provider import MODEL, ProviderFixture
 from .provider_setup import configure_provider, physical_input
 from .records import CaseFailed, CaseUnavailable
 from ..installed_environment import graphical_session
@@ -38,7 +39,7 @@ def unchallenged_presence(binding):
                 observations['initial_activation'] = activate_visible_frame(app, ui)
                 reservation.check_launch(app)
             with ProviderFixture.gui([{'name': 'command', 'arguments': {'command': '/usr/bin/true'}}]) as fixture:
-                configure_provider(app, fixture)
+                provider = configure_provider(app, fixture)
                 reservation.check_launch(app)
                 # The project is disposable fixture state, retained on all outcomes.
                 project = Path(tempfile.mkdtemp(prefix='presence-project-', dir=storage.home))
@@ -46,6 +47,8 @@ def unchallenged_presence(binding):
                 observations['project_open'] = opened
                 if opened['exit_code'] or opened['timed_out'] or opened['output_limit']:
                     raise CaseUnavailable('normal installed CLI refused the owned presence project')
+                observations['opened_session'] = await_session(app, project, provider['provider_id'], MODEL, status='idle',
+                                                               reason='presence-project-session-not-opened')
                 with DesktopUI(app) as ui:
                     ui.click('Project configuration')
                     ui.click('Secrets', tab=True)
