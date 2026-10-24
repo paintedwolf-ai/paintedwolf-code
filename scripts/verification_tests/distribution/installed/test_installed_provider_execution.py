@@ -4,7 +4,8 @@ import unittest
 import urllib.error
 import urllib.request
 
-from linux_release.installed_cases.provider import MODEL, GUI_API_KEY, ProviderFixture
+from linux_release.installed_cases.provider import (MODEL, GUI_API_KEY, ProviderFixture,
+                                                    FixtureRefusal, request_shape)
 
 
 class InstalledProviderTests(unittest.TestCase):
@@ -82,3 +83,46 @@ class InstalledProviderTests(unittest.TestCase):
             with self.assertRaises(urllib.error.HTTPError) as flooded:
                 opener.open(request, timeout=5)
             self.assertEqual(flooded.exception.code, 429)
+
+    def test_missing_tool_has_closed_reason_without_acceptance_change(self):
+        fixture = ProviderFixture([{'name': 'command', 'arguments': {}}])
+        request = dict(self.request(), tools=[])
+        with self.assertRaises(FixtureRefusal) as error:
+            fixture.completion(request)
+        self.assertEqual(error.exception.code, 'required-tools-missing')
+        self.assertEqual(fixture.observations, [])
+
+    def test_actual_http_refusal_retains_only_bounded_structural_evidence(self):
+        with ProviderFixture.gui([{'name': 'command', 'arguments': {}}]) as fixture:
+            request = dict(self.request(), tools=[{'type': 'function', 'function': {'name': 'page_open',
+                          'arguments': 'PRIVATE TOOL ARGUMENTS'}}])
+            request['messages'].append({'role': 'PRIVATE ROLE', 'content': 'PRIVATE MESSAGE'})
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            wire = urllib.request.Request(fixture.base_url + '/chat/completions',
+                data=json.dumps(request).encode(), headers={'Authorization': 'Bearer ' + GUI_API_KEY})
+            with self.assertRaises(urllib.error.HTTPError) as refused:
+                opener.open(wire, timeout=5)
+            self.assertEqual(refused.exception.code, 400)
+            self.assertEqual(json.load(refused.exception), {'error': 'fixture-request-refused'})
+            record, = fixture.transport_observations
+            self.assertEqual(record['refusal_code'], 'required-tools-missing')
+            self.assertEqual(record['request_shape']['offered_tools'], ['page_open'])
+            self.assertEqual(record['request_shape']['role_counts']['unknown_count'], 1)
+            self.assertIs(record['request_shape']['expected_model'], True)
+            self.assertEqual(record['request_shape']['field_types'],
+                             {'model': 'string', 'messages': 'array', 'tools': 'array'})
+            self.assertNotIn('PRIVATE', json.dumps(record))
+            self.assertNotIn('private fixture prompt', json.dumps(record))
+            self.assertEqual(fixture.observations, [])
+
+    def test_refusal_shape_clips_counts_and_refuses_arbitrary_identifiers(self):
+        request = {'model': 'PRIVATE MODEL', 'messages': [{'role': 'PRIVATE'}] * 257,
+                   'tools': [{'function': {'name': 'PRIVATE SECRET/'}}] * 257}
+        shape = request_shape(request)
+        self.assertIs(shape['expected_model'], False)
+        self.assertTrue(shape['messages_clipped'])
+        self.assertTrue(shape['tools_clipped'])
+        self.assertEqual(shape['invalid_tool_identifiers'], 64)
+        self.assertEqual(shape['offered_tools'], [])
+        self.assertNotIn('PRIVATE', json.dumps(shape))
+        self.assertEqual(request_shape(None), {'request_type': 'null'})
