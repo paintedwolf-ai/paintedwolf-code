@@ -81,10 +81,12 @@ observable behavior; they do not freeze prompt wording.
 - Each E2E tier starts and stops its own dependencies.
 - Fixture corpora are committed. A test keyed to a path outside the repository runs on one machine and skips on every other.
 - A suite that needs a provisioned host — applied Seatbelt, a staged scanner engine — derives its gated inventory from source and fails when the declared CI scope does not reach a member. Where a job promises the suite, its `*_REQUIRED` flag makes a missing dependency fatal instead of a skip.
+  Applied Seatbelt recipes live in `scripts/verification-plan.json`: the complete confinement package, the exact packages owning gated consumers with their integration build tag, and the scanner stress suite. The existing source-derived inventory checks these declarations. Each stage enters through `./task test:seatbelt` and retains its own captured-source evidence.
 - A test belongs in the cheapest layer that can prove its promise. Unit/component tests exercise one domain boundary with in-process collaborators; repository contracts prove a durable cross-tree invariant; wiring tests prove assembled managers; HTTP and browser tiers prove a user-visible journey. Do not use a repository scan to stand in for behavior, or an end-to-end journey to prove a parser branch.
 - `test:short` is only the unit/component feedback loop. Repository contracts run beside it as their own `test:contract` stage of `check-fast`, because they are cheap and are the boundary changes most often cross. External integration, wiring, process smoke tests, and HTTP journeys remain mandatory but run as named closeout/release tiers, where their failure names the boundary rather than making every edit wait on a source-tree crawl.
 - Files classified as internal integration carry the `integration` build tag and stay out of `test:short`; `test:integration`, `test:full`, and `test:race` opt in explicitly and run without `-short`. Source-content limit journeys, document compaction/reload scenarios, full checkpoint-cap capture, and archive entry-limit extraction assemble real stores and filesystems, so they belong to this tier with their exact limit and editing-history fixtures intact. Randomized SQLite lifecycle properties in `test/property` use the same tag; pure in-memory properties remain in the normal suite.
 - Keep scale sweeps separate from boundary proofs. Routine source-tree tests exercise first and late pages and indexed edits at 1,000 and 4,096 rows; stress runs repeat the same assertions at 100,000, one million, and ten million rows. Do not shrink a fixture below a real page, spill, or byte-limit boundary merely to save time.
+  Scanner output and contention checks use a declared Swift finding corpus: dense output returns 2,400 findings and exceeds the console capture size, while contention proves simultaneous engine work. These fixtures enforce host RSS of 256 MiB, aggregate RSS of 256 MiB plus 768 MiB per scan, and a 32 MiB dense-output budget. They do not impose a product report-size limit. Cancellation and shutdown retain their sustained mixed-language workloads.
 - A test must invoke the production transition it claims to prove. Test-local copies of draft settlement or retention deletion are not lifecycle coverage.
 - Use virtual clocks for in-process timers (`testing/synctest` in Go and Vitest fake timers in Den). Mutex-contention tests need real bounded deadlines: a mutex wait prevents Go virtual time from advancing. Synchronize queue tests on admission and completion; use a required barrier when the queue deliberately drops writes.
 - Den follows the same cadence: `den:test:fast` proves a representative model-and-DOM seam canary, while exhaustive model tests, component fixtures, accessibility checks, and repository scans run in full `den:test`. Browser journeys remain their own explicit tier.
@@ -829,11 +831,16 @@ commit status on the dispatched commit. [`qualification.yml`](../.github/workflo
 runs the complete check, then platform confinement and upgrade corpus beside
 the `release` profile's platform lanes, then browser and desktop journeys on
 main. One qualification runs at a time. Its `queue: max` concurrency queue
-retains up to 100 pending requests without canceling a running qualification.
-When a push reaches the executor, source selection cancels that request if main
-has advanced. Current main and explicit candidates retain their queue order.
-Cancellation does not spend verification runners or produce qualification
-evidence. The queue limit is a bound, not a reservation: GitHub cancels additional requests when it is full.
+retains up to 100 pending requests and preserves explicit candidate runs.
+[`qualification-supersession.yml`](../.github/workflows/qualification-supersession.yml)
+uses the existing maintenance runner reservation to cancel queued or running
+background push qualifications superseded by newer main. It reads live main,
+requires the old source to be an ancestor, and rechecks each run before
+cancellation. Manual candidate requests are never canceled by this controller.
+If maintenance is busy or its pending request is replaced, cancellation can be
+delayed until a later push; selection still drops obsolete pushes at admission.
+Canceled runs produce no qualification evidence. The executor queue limit is a
+bound, not a reservation: GitHub cancels additional requests when it is full.
 
 A manual request selects a full `source-sha` from main's history, or the dispatch
 commit when omitted. The main workflow remains the controller; each verification,
@@ -910,6 +917,62 @@ Merge-group CI is the only CI granted `actions: write`, for that call; pull
 request CI, which runs unreviewed code, keeps a read-only token. Queue-to-merge
 time and lane durations are measured service objectives, not claims
 established by timeout settings.
+
+#### Automatic queue batching
+
+Use the merge queue normally. The hosted `Automatic queue batching` controller
+runs after CI, source changes, no-combine label changes, and every five minutes. It
+reserves the first two queue positions for existing cumulative groups, then
+combines up to four consecutive waiting entries in their existing priority
+order. Campaign exclusions live in `.github/queue-batching.json`; Linux and
+portable-command work are held. No opt-in label or routine approval is needed.
+
+PRs changing `.github/workflows/` remain individual because the Actions token
+cannot push workflow changes. The controller checks both source file inventories
+and the combined tree before pushing or withdrawing originals. These PRs retain
+their normal testing and merge eligibility.
+
+`no-combine` is an optional escape hatch: the controller keeps the PR on its
+individual testing and merge path and dissolves any batch containing it. It does
+not disable the original PR’s auto-merge. The existing queue admission remains
+the authorization.
+
+The controller runs only trusted main-branch code. It merges immutable source
+heads without executing their contents, records them in a structured PR manifest,
+and explicitly dispatches normal CI and original-commit certification because
+GitHub's workflow token does not trigger ordinary PR workflows. A successful
+combined admission enables auto-merge; the normal merge queue verifies the exact
+landing result. Existing groups are never withdrawn to make room for a batch.
+The workflow token requires repository permission to create pull requests; its
+job has no approval step and cannot bypass rulesets or required checks.
+
+Source changes, draft decisions, no-combine labels, failed combined checks, or closed
+batches restore unchanged eligible originals to individual admission. Failed
+source identities are excluded from further automatic batching in retained batch
+history, preventing a retry loop. Conflicting combinations leave originals alone.
+A human draft decision on the batch stops automatic promotion. On landing,
+originals close only if their heads still match the manifest. Later heads stay
+open. Agents do not manually assemble batches.
+
+#### Throughput choices
+
+Prefer automatic queue batching and cancellation of obsolete background work before adding
+runner capacity. Keep current runner caps; purchase capacity only against a
+measured runner wait or execution bottleneck and an agreed budget. There is no
+new paid runner requirement.
+
+Keep affected correctness checks before merge and the full platform matrix in
+main qualification. Platform-sensitive changes still select their relevant
+platform checks immediately. Do not remove architecture or data-integrity
+coverage to shorten admission.
+
+Local Go result reuse already binds to build dependencies, observed inputs,
+toolchain, test options, and declared environment. Extending that reuse to
+hosted or native test results needs equally complete input accounting; compiler
+cache hits alone do not establish a test pass. Existing recovery retains first
+failures and retries only demonstrated infrastructure faults. Product assertions
+and races remain blocking; there is no new automatic quarantine or assertion
+retry policy.
 
 ##### Integration capacity experiment
 
@@ -1034,6 +1097,32 @@ lane durations, and unsuccessful merge-group runs. Three distinct runs sharing
 one failure signature appear in the report without opening issues. Missing artifacts
 remain a coverage gap; cancellation is reported separately from an attributed test failure.
 
+### Reusing completed source verification
+
+Qualification reuses complete source lanes from successful merge-group CI runs
+whose Git tree exactly matches the selected landed source. Each compact proof
+binds repository, source commit and tree, workflow run and attempt, lane recipe,
+runner label, shard, and successful full-scope execution. The lookup considers
+up to twenty successful merge-group runs within fourteen days. PR-only results,
+partial package selections, missing evidence, and failed runs grant no reuse.
+
+All shards of a lane must have matching proofs from one run attempt. Qualification
+retains its own plan listing every reused proof and every lane it executes.
+Change-relative budget and coverage reports always execute against the current
+qualification context. Platform, end-to-end, signed-package, and upgrade checks
+retain their separate gates. Pinned source and toolchains define source-lane
+identity; hosted image versions are recorded as provenance. Native platform
+qualification continues to exercise the current hosted environment.
+
+### Browser qualification capacity
+
+Web qualification partitions the complete suite across two hosted jobs with two
+isolated local shards each. The two available web slots execute one wave;
+nightly observation can serialize the same jobs within its smaller budget.
+Shared test-location groups stay together, and every selected test belongs to
+one shard. Per-job concurrency does not increase. The execution deadline allows
+60 minutes for each larger slice, with separate setup and cleanup allowance.
+
 ### Compiler cache storage admission
 
 Only the serialized main warmer publishes compiler caches. Each publication
@@ -1041,15 +1130,23 @@ measures a tar payload compressed with zstd and reserves that size plus 5% and
 1 MiB for archive variance against an 8 GiB repository budget. Superseded platform
 entries remain available until GitHub's inventory confirms the new cache. Only
 when required to fit the upload does admission retire entries first, preferring
-superseded generations and then the least recently used owned compiler entries; it never deletes another ref or an unknown family. Oversized
+superseded generations of the same platform family; it never displaces another
+family, ref, or unknown entry. A payload that cannot coexist with the other
+caches is reported and left unpublished. Oversized
 payloads are reported and left unpublished. The remaining allowance leaves
 headroom for tool caches; concurrent writes and GitHub eviction can still
 displace entries.
 This is write admission, not a storage reservation or a pinned cache.
 
 The publisher trims its ephemeral Go build cache to 1 GiB before measuring the
-combined module/build payload. The desktop warmer removes workspace package
+compiler-only payload. Go modules are downloaded during online provisioning
+before offline verification. Expanded sources and their duplicate archives do
+not compete with native compiler intermediates for repository storage. The desktop warmer removes workspace package
 outputs with Cargo's package-scoped cleanup, retaining dependency builds.
+Decision-engine preparation and tests share the deployment floor, Metal kernel
+path, and Rust/native path mappings. Checkout and captured-source builds map
+the snapshot parent consistently, so changing capture slots does not invalidate
+dependency fingerprints. Cargo still validates the current source.
 Hosted development Rust profiles are configured explicitly by setup and the
 calling workflows; cache restore and save do not change compiler settings.
 Development builds omit debug data,
@@ -1060,6 +1157,22 @@ confirmed GitHub storage bytes, retired entry IDs, and skipped writes. A success
 save step alone never permits retiring the prior cache because upload failures
 can be reported as warnings.
 Consumers remain read-only and rebuild safely on a miss.
+
+Each platform warmer keeps preparation, compilation, and publication in one
+runner. The macOS warmer compiles release Go inputs before publishing the shared
+Go cache, alongside its native release cache. Cache hits skip unchanged compiler
+families; publication still requires successful preparation and storage admission.
+
+The document core retains Cargo intermediates in the checkout compiler cache.
+Every build asks Cargo to validate its current inputs and stages a separate
+executable under a publication lock. Hosted lanes restore the bounded document
+compiler family; only the main warmer publishes it. Source changes invalidate
+workspace compilation without discarding dependency builds.
+
+Go analysis lanes provision only the pinned Go module graphs and their selected
+analyzers. They do not restore native compiler caches, install frontend packages,
+or download runtime engines. The lane catalog rejects runtime checks assigned
+to this setup; admission and behavioral lanes retain their complete inputs.
 
 Linux native setup resolves archives from signed APT indexes, verifies each size
 and SHA-256 digest, and bounds package-manager calls and downloads. Four transfers
@@ -1090,21 +1203,21 @@ budgets for the whole selected matrix. Runner caps do not depend on timing data.
 | Class | Workflows | One run at a time | Runners (macOS) |
 |---|---|---|---|
 | Qualification | `qualification.yml` | `qualification` | 3 (1): the `check` profile capped at three, then platform's two jobs beside the `release` platform lanes one at a time, then two browser shards beside the desktop journey |
-| Cache warming | `build-caches.yml` | `build-caches` | 1 (1): Linux, macOS, then the release compile |
+| Cache warming | `build-caches.yml` | `build-caches` | 1 (1): Linux, then macOS including release compilation |
 | Nightly | `nightly.yml` | `nightly` | 2 (1): the `nightly` profile capped at two, then one browser shard beside the desktop journey, then the upgrade rehearsal beside quarantine observation |
-| Releases | `release.yml`, `release-halt.yml` | `release-static-update` | 2 (2): preflight or the upgrade rehearsal beside one signed build; later desktop rehearsal or protected fixture preparation beside Linux packaging |
+| Releases | `release.yml`, `release-halt.yml` | `release-static-update` | 2 (2): source validation beside one signed build; later desktop rehearsal or protected fixture preparation beside Linux packaging |
 | DCO certification | `dco.yml` | `dco-certification` | 1 |
 | Maintainability tracking | `maintainability-issues.yml` | `maintainability-issues` | 1 |
-| Maintenance | Linux candidate requests, dependency inventory, release-system live test, queue health, issue staleness, the issue sweep, release secrets check | `maintenance`, shared | 1 |
+| Maintenance | Qualification supersession, Linux candidate requests, dependency inventory, release-system live test, queue health, automatic queue batching, issue staleness, the issue sweep, release secrets check | `maintenance`, shared | 1 |
 | Merge queue | CI of merge groups | one run per group, two groups at once | 8: two groups × the `integration` cap of four |
 | Ready pull requests | CI of pull requests | one run per pull request; a newer push cancels it | 1 per pull request, with a two-hour execution ceiling |
 
 Nightly replaces its pending snapshot while a started run finishes. Qualification
-retains explicit requests and drops superseded pushes at admission; both run
-one executor at a time. The maintenance workflows
-share one group across workflows; their schedules are staggered so that no two
-are pending at once, and a scheduled run replaced by a manual one returns at
-its next schedule. Issue intake, an issue's lifecycle nudge, and verification
+retains explicit requests, drops superseded pushes at admission, and permits
+maintenance to cancel obsolete background runs; both use one executor at a time. The maintenance workflows
+share one group across workflows; their schedules are staggered. Push-triggered qualification supersession may
+replace a pending maintenance request; scheduled work returns at its next
+schedule, and an explicit dispatch restores a needed candidate. Issue intake, an issue's lifecycle nudge, and verification
 recovery handle one event per run instead: each run is a single job bounded to
 fifteen minutes.
 
@@ -1149,6 +1262,12 @@ and a pull request's run to hold one runner.
 
 ### Upgrade rehearsal preparation and startup evidence
 
+Release source validation runs preflight and the store upgrade rehearsal in one
+checkout on one runner. Both managed targets retain their build validation;
+unchanged compiler inputs and development outputs stay available between them.
+Each phase retains its own evidence, and either failure blocks publication.
+Signing remains isolated in its protected packaging job.
+
 Nightly upgrade rehearsal uses the shared verification setup for the pinned
 Node/Bun runtimes and frontend semantic fixture dependencies, then installs the
 public feed verifier. The managed rehearsal task owns its development sidecar
@@ -1161,6 +1280,8 @@ structured startup state. Timeout errors include the same observation. Engine
 and updater logs and transaction records remain attached. Missing startup is a
 failed gate; these observations distinguish rejection reasons without weakening
 ownership, health, schema, activation, or restart requirements.
+
+Release upgrade diagnostics can replay retained, authenticated fixtures through the existing release workflow: select `rehearsal_run_id` and an exact `rehearsal_case`, leaving `release_tag` empty. Replay accepts only a completed release run from this repository with successful fixture preparation in the selected attempt. It downloads that exact artifact, verifies its inventory, and exercises the signed installed upgrade without rebuilding or publishing. Replay evidence diagnoses the selected source and artifacts; it does not substitute for release admission or authorize publication.
 
 ## Released-version compatibility
 
