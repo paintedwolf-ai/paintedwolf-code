@@ -85,7 +85,7 @@ func TestProtectedLaunchFixture(t *testing.T) {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	if testing.CoverMode() == "" {
+	if mode == "mount-nested-probe" || testing.CoverMode() == "" {
 		os.Exit(0)
 	}
 }
