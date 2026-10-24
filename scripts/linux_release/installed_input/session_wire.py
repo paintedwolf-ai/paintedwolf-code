@@ -78,9 +78,12 @@ def proof(value):
 def same_runtime(old, new):
     proof(old)
     proof(new)
-    if (old['lock_bindings'] != new['lock_bindings'] or any(
+    lifecycle = lambda value: {**value['native_session']['lifecycle'],
+        'user': list(value['native_session']['lifecycle']['user']),
+        'seat': list(value['native_session']['lifecycle']['seat'])}
+    if (old['lock_bindings'] != new['lock_bindings'] or lifecycle(old) != lifecycle(new) or any(
             old['native_session'][key] != new['native_session'][key]
-            for key in ('session', 'session_object', 'lifecycle', 'authorities'))):
+            for key in ('session', 'session_object', 'authorities'))):
         raise ValueError('native lock replaced its captured session or locker authority')
 
 
