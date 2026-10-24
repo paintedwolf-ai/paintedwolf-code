@@ -7,6 +7,7 @@ import re
 from .profile_observer import _database, identifier, rows
 from .provider_acquisition import fixed_call, host_call_id, loaded_tool, object_json
 from .fixture_content import read_object
+from .browser_result import opened
 
 
 def page_record(connection, project_id, session_id, message_id, result):
@@ -106,7 +107,10 @@ def committed_fixture_tool(app, project_id, session_id, tool, call_id, *, target
         with _database(app) as connection:
             if page_record(connection, project_id, session_id, message_id, result) != record:
                 raise ValueError('page evidence metadata changed during physical observation')
-    return {'message_id': identifier(message_id), 'invocation_id': identifier(receipt_id),
+    result = {'message_id': identifier(message_id), 'invocation_id': identifier(receipt_id),
             'tool_call_id': call_id, 'tool': tool, 'owner': owner,
             'status': 'completed', 'invoked': True, 'arguments': arguments,
             **({'payload': payload, 'evidence_handle': handle, 'content_blob_sha256': digest} if payload is not None else {})}
+    if payload is not None:
+        result['payload'] = opened({'tool_invocation': result})['page']
+    return result

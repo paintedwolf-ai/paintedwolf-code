@@ -107,7 +107,7 @@ class ReplyToolReceiptTests(unittest.TestCase):
             with self.subTest(query=query), self.assertRaises(ValueError):
                 self.observe(result, tool='page_open', target='page_open',
                     mutate=lambda db: db.execute(query, args))
-        for body in (b'[]', b'["{}","{}"]', b'[true]', b'["not JSON"]'):
+        for body in (b'[]', b'["{}"]', b'["{}","{}"]', b'[true]', b'["not JSON"]'):
             with self.subTest(body=body), self.assertRaises(ValueError):
                 self.observe(result, tool='page_open', target='page_open', body=body)
         with self.assertRaisesRegex(ValueError, 'changed'):
