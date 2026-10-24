@@ -12,6 +12,29 @@ MESSAGE = '10000000-0000-4000-8000-000000000004'
 
 
 class FixtureTurnTests(unittest.TestCase):
+    def test_later_context_drift_never_relabels_prior_valid_tool_receipts(self):
+        selected = {'id': SESSION, 'provider_id': 'fixture', 'model': owner.MODEL, 'status': 'idle'}
+        acquisition = SimpleNamespace(tool='page_open', completed=True,
+            witness={'tool_call_id': 'call_1234abcd', 'invocation_id': OUTPUT},
+            tool_witness={'tool_call_id': 'call_abcd1234', 'invocation_id': OUTPUT})
+        proof = {'message_id': MESSAGE, 'invocation_id': OUTPUT}
+        for changed in ('project', 'session'):
+            with self.subTest(changed=changed):
+                ticks = iter((0, 0, 1))
+                witnesses = [{'project_id': PROJECT}, {'project_id': OUTPUT if changed == 'project' else PROJECT}]
+                sessions = [[selected], [{**selected, 'id': MESSAGE if changed == 'session' else SESSION}]]
+                with patch.object(owner, 'project_for_owned_root', side_effect=witnesses), patch.object(
+                        owner, 'sessions_for_project', side_effect=sessions), patch.object(
+                        owner, 'committed_fixture_tool', side_effect=[proof, proof, None, None]) as receipts, patch.object(
+                        owner, 'committed_reply', return_value=None), patch.object(owner, 'time',
+                        SimpleNamespace(monotonic=lambda: next(ticks), sleep=lambda _: None)):
+                    with self.assertRaisesRegex(ValueError, 'changed') as refused:
+                        owner.await_fixture_reply(None, None, 'fixture', acquisition)
+                retained = refused.exception.observations['fixture_tool_receipts']
+                self.assertEqual((retained['project_id'], retained['session_id']), (PROJECT, SESSION))
+                self.assertEqual(retained['tool_invocation'], proof)
+                self.assertEqual(receipts.call_count, 2)
+
     def test_valid_tool_receipts_survive_later_reply_refusal_or_timeout_without_success(self):
         session = {'id': SESSION, 'provider_id': 'fixture', 'model': owner.MODEL, 'status': 'idle'}
         acquisition = SimpleNamespace(tool='page_open', completed=True,
