@@ -77,10 +77,11 @@ func allowExecutionRule(ruleset int, path string, access uint64) error {
 		return fmt.Errorf("executable path %s: %w", path, err)
 	}
 	defer func() { _ = object.Close() }()
-	if object.Fd() > 1<<31-1 {
+	fd := object.Fd()
+	if fd > 1<<31-1 {
 		return errors.New("executable path descriptor exceeds the Landlock ABI")
 	}
-	rule := unix.LandlockPathBeneathAttr{Allowed_access: access, Parent_fd: int32(object.Fd())}
+	rule := unix.LandlockPathBeneathAttr{Allowed_access: access, Parent_fd: int32(fd)}
 	// #nosec G103 -- the kernel copies the fixed-layout rule before this synchronous syscall returns.
 	if _, _, errno := unix.Syscall6(unix.SYS_LANDLOCK_ADD_RULE, uintptr(ruleset), unix.LANDLOCK_RULE_PATH_BENEATH,
 		uintptr(unsafe.Pointer(&rule)), 0, 0, 0); errno != 0 {
