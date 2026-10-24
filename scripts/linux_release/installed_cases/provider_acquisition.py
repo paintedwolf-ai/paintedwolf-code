@@ -84,11 +84,13 @@ def result_payload(content, tool, call_id):
     host_call_id(call_id)
     if not isinstance(content, str) or not 0 < len(content.encode()) <= 32768:
         raise ValueError('projected acquisition result exceeds its bound')
-    parts = content.split('\n\n')
-    if len(parts) != 2:
+    # LocalInference's SystemPreamble folds later host system rows onto the
+    # tool row. Only the original result/receipt prefix supplies case evidence.
+    parts = content.split('\n\n', 2)
+    if len(parts) < 2:
         raise AcquisitionRefusal('acquisition-result-invalid', 'part-count', min(len(parts), 32769))
     decoded = []
-    for part, marker in zip(parts, ('⟦D:tool⟧', '⟦D:host:tool_feedback⟧')):
+    for part, marker in zip(parts[:2], ('⟦D:tool⟧', '⟦D:host:tool_feedback⟧')):
         lines = part.split('\n')
         if len(lines) != 2 or lines[0] != marker or not lines[1].startswith('⟦D⟧'):
             raise AcquisitionRefusal('acquisition-result-invalid', 'marker-lines', min(len(lines), 32769))
