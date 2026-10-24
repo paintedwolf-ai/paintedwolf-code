@@ -224,6 +224,7 @@ func TestGrantedLaneAgreesWithSplitTaskOverlay(t *testing.T) {
 	if err != nil || home == "" {
 		t.Skip("no home dir")
 	}
+	t.Setenv(configdir.EnvConfigDir, filepath.Join(t.TempDir(), "state"))
 	paths := []string{
 		filepath.Join(home, ".docker"),
 		filepath.Join(home, ".docker", "buildx", "activity"),
@@ -260,6 +261,7 @@ func TestAncestorsOfCredentialStoresSplitByLane(t *testing.T) {
 	if err != nil || strings.TrimSpace(home) == "" {
 		t.Skip("no home directory")
 	}
+	t.Setenv(configdir.EnvConfigDir, filepath.Join(t.TempDir(), "state"))
 
 	ancestors := []string{
 		filepath.Join(home, ".config"),
@@ -399,6 +401,7 @@ func TestControlPlanePathDeniedLeavesOnlyTheInvocationsScratch(t *testing.T) {
 }
 
 func TestWriteRootsForBoundarySymmetricAliases(t *testing.T) {
+	t.Setenv(configdir.EnvConfigDir, "/opt/paintedwolf-fixture-state")
 	roots, err := WriteRootsForBoundary("", nil, nil, "")
 	testutil.FailErr(t, "admit write roots", err)
 	if runtime.GOOS == "darwin" {
