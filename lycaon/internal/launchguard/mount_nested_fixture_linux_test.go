@@ -374,6 +374,10 @@ func checkNestedHiddenAndSymlink(source, desktop *os.File, pins *fixtureLifecycl
 	if !errors.Is(openErr, unix.ELOOP) {
 		return fmt.Errorf("real destination lookup followed fixture symlink: %w", openErr)
 	}
+	redirected, changed, observeErr := observeNestedView(filepath.Join(root, "real"))
+	if observeErr != nil || changed || redirected.members != 0 || len(redirected.payloads) != 0 {
+		return errors.Join(observeErr, errors.New("symlink control acquired an alternate mount or payload"))
+	}
 	if err = unix.Setns(int(source.Fd()), unix.CLONE_NEWNS); err != nil {
 		return err
 	}
