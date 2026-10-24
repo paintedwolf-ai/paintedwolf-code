@@ -58,10 +58,11 @@ func EnterDesktop() error {
 		os.NewFile(entryOriginFD, "original-user-namespace"),
 		entryBrokerFD,
 		os.NewFile(entryLifetimeFD, "generation-lifetime"),
+		os.NewFile(entrySelfFD+1, "guardian-desktop-admission"),
 	)
 }
 
-func enterDesktop(image, frame, origin *os.File, brokerFD int, lifetime *os.File) error {
+func enterDesktop(image, frame, origin *os.File, brokerFD int, lifetime, gate *os.File) error {
 	// Keep the seal, verification, Landlock restriction and execve on one OS thread.
 	runtime.LockOSThread()
 	defer func() { _ = origin.Close() }()
@@ -104,6 +105,18 @@ func enterDesktop(image, frame, origin *os.File, brokerFD int, lifetime *os.File
 	unix.CloseOnExec(int(image.Fd()))
 	if err := restrictExecution(spec.Generation, image); err != nil {
 		return err
+	}
+	if gate == nil {
+		return errors.New("desktop lacks guardian admission")
+	}
+	var gateStat unix.Stat_t
+	if err := unix.Fstat(int(gate.Fd()), &gateStat); err != nil || gateStat.Mode&unix.S_IFMT != unix.S_IFIFO || gateStat.Uid != 0 {
+		return errors.New("desktop admission is not the root-created pipe")
+	}
+	marker, err := io.ReadAll(io.LimitReader(gate, 2))
+	_ = gate.Close()
+	if err != nil || len(marker) != 1 || marker[0] != 1 {
+		return errors.New("guardian did not admit protected desktop")
 	}
 	args := append([]string{filepath.Join(spec.Generation.LogicalInstallRoot, "bin/painted-wolf-code")}, spec.Arguments...)
 	return syscall.Exec("/proc/self/fd/3", args, env)

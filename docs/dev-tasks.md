@@ -683,7 +683,9 @@ Set `PW_LAUNCH_DESKTOP_ARTIFACT` to an absolute JSON evidence file containing:
 `preparation_result` (absolute paths to the retained background job files),
 `preparation_job_sha256`, `preparation_result_sha256`, and `system_executables`
 (the root-controlled system helper paths the fixture policy needs, including its
-WebKit helpers). Hash the exact bytes of each referenced evidence file. The
+WebKit helpers), and `library_roots` (the explicit physical system library roots
+selected from that package's protected-launch catalog for the native family and
+architecture). Missing roots refuse the fixture; no implicit module root is added. Hash the exact bytes of each referenced evidence file. The
 manifest must cover the actual desktop, `pw`, `pw-logs`, `pw-vault-identity` and
 complete engine resources. The fixture retains those bytes and substitutes only
 the entry and bootstrap built from the runtime check's captured source, recording

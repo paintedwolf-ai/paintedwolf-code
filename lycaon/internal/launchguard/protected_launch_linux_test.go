@@ -43,6 +43,9 @@ const (
 
 // protectedFacts is the fixture desktop's report.
 type protectedFacts struct {
+	ProcessStarts   map[int]uint64              `json:"process_starts"`
+	DetachedStart   uint64                      `json:"detached_start"`
+	LineagePIDs     []int                       `json:"lineage_pids,omitempty"`
 	PID             int                         `json:"pid"`
 	UIDs            [3]int                      `json:"uids"`
 	GIDs            [3]int                      `json:"gids"`
@@ -115,7 +118,16 @@ type runningLaunch struct {
 	stdin  io.WriteCloser
 	reader *bufio.Reader
 	facts  protectedFacts
+	result *launchWaitResult
+	stderr *strings.Builder
 }
+
+type launchWaitResult struct {
+	done chan struct{}
+	err  error
+}
+
+func (launch runningLaunch) wait() error { <-launch.result.done; return launch.result.err }
 
 func startLaunch(t *testing.T, f launchFixture, env []string, args ...string) runningLaunch {
 	t.Helper()
@@ -132,14 +144,15 @@ func startLaunch(t *testing.T, f launchFixture, env []string, args ...string) ru
 	probeErr := make(chan error, 1)
 	go probeEarlyBrokerAgent(stopProbe, probeErr)
 	testutil.FailErr(t, "start bootstrap", cmd.Start())
+	result := &launchWaitResult{done: make(chan struct{})}
+	go func() { result.err = cmd.Wait(); close(result.done) }()
 	t.Cleanup(func() {
 		_ = stdin.Close()
-		done := make(chan struct{})
-		go func() { _ = cmd.Wait(); close(done) }()
 		select {
-		case <-done:
+		case <-result.done:
 		case <-time.After(10 * time.Second):
 			_ = cmd.Process.Kill()
+			<-result.done
 		}
 	})
 	lines := make(chan string, 1)
@@ -162,7 +175,7 @@ func startLaunch(t *testing.T, f launchFixture, env []string, args ...string) ru
 	if err := json.Unmarshal([]byte(line), &facts); err != nil {
 		t.Fatalf("decode desktop report %q: %v; bootstrap stderr: %s", line, err, stderr.String())
 	}
-	return runningLaunch{cmd: cmd, stdin: stdin, reader: reader, facts: facts}
+	return runningLaunch{cmd: cmd, stdin: stdin, reader: reader, facts: facts, result: result, stderr: &stderr}
 }
 
 func refusedLaunch(t *testing.T, cmd *exec.Cmd, want string) {
@@ -235,7 +248,7 @@ func TestProtectedLaunchSealsTheDesktopInARootOwnedNamespace(t *testing.T) {
 	if len(facts.OpenBeyond) != 0 {
 		t.Fatalf("bootstrap descriptors reached the desktop: %v", facts.OpenBeyond)
 	}
-	assertProcessThreadCredentials(t, launch.cmd.Process.Pid, "0", 1)
+	assertBootstrapSupervisorProfile(t, launch.cmd.Process.Pid)
 	agentPID := findBrokerAgentPID(t)
 	assertProcessThreadCredentials(t, agentPID, "0", 1)
 	assertBrokerAgentSealed(t, agentPID)
@@ -266,7 +279,22 @@ func TestProtectedLaunchSealsTheDesktopInARootOwnedNamespace(t *testing.T) {
 	if facts.BrokerUserExec != "brokered-user-program" {
 		t.Fatalf("brokered program from the caller's files: %q", facts.BrokerUserExec)
 	}
-	testutil.FailErr(t, "post-launch host mounts arrive noexec in the module view", sudoFixture(t, "module-view", f.dir, fmt.Sprintf("%s=%d", fixtureDesktopPIDEnv, facts.PID)))
+	finishObservation, checkpointObservation := observeFixtureLifecycle(t, f, launch)
+	defer finishObservation()
+	mountErr := sudoFixture(t, "module-view", f.dir, fmt.Sprintf("%s=%d", fixtureDesktopPIDEnv, facts.PID),
+		fixtureUIDEnv+"="+strconv.Itoa(os.Getuid()),
+		"PW_FIXTURE_DESKTOP_START="+strconv.FormatUint(facts.ProcessStarts[facts.PID], 10),
+		"PW_FIXTURE_BOOTSTRAP_PID="+strconv.Itoa(launch.cmd.Process.Pid))
+	checkpointObservation()
+	if mountErr != nil {
+		t.Errorf("post-launch host mounts arrive noexec in the module view: %v", mountErr)
+		t.Logf("failed_setup_cleanup_stdin_close_begin_monotonic_ns=%d", lifecycleMonotonicNS())
+		_ = launch.stdin.Close()
+		t.Logf("failed_setup_cleanup_stdin_close_end_monotonic_ns=%d", lifecycleMonotonicNS())
+		waitLaunchEnd(t, launch)
+		t.Logf("settled failed-setup bootstrap stderr: %s", launch.stderr.String())
+		return
+	}
 	if facts.InstallWrite != "EROFS" || facts.Remount != "EPERM" {
 		t.Fatalf("generation mount is not sealed: write %s, remount %s", facts.InstallWrite, facts.Remount)
 	}
@@ -281,10 +309,14 @@ func TestProtectedLaunchSealsTheDesktopInARootOwnedNamespace(t *testing.T) {
 		t.Fatalf("opening protected memory: %v, want EACCES", err)
 	}
 	if err := sudoFixture(t, "lock-free", f.dir, fixtureHash+"="+f.digest); err == nil {
-		t.Fatal("the generation lifetime lock was free while the desktop ran")
+		t.Error("the generation lifetime lock was free while the desktop ran")
 	}
-	testutil.FailErr(t, "close desktop input", launch.stdin.Close())
-	waitLaunchEnd(t, launch.cmd)
+	t.Logf("desktop_input_close_begin_monotonic_ns=%d", lifecycleMonotonicNS())
+	if err := launch.stdin.Close(); err != nil {
+		t.Errorf("close desktop input: %v", err)
+	}
+	t.Logf("desktop_input_close_end_monotonic_ns=%d", lifecycleMonotonicNS())
+	waitLaunchEnd(t, launch)
 	testutil.FailErr(t, "generation lock released after the tree ended", sudoFixture(t, "lock-free", f.dir, fixtureHash+"="+f.digest))
 	if _, err := os.Stat(fmt.Sprintf("/proc/%d", facts.DetachedPID)); err != nil {
 		t.Fatalf("detached background process %d did not survive desktop exit: %v", facts.DetachedPID, err)
@@ -469,13 +501,13 @@ func TestProtectedLaunchRefusesAGenerationThePolicyDoesNotName(t *testing.T) {
 
 // waitLaunchEnd requires the supervisor to exit once the launch's last
 // process has ended, broker agent included.
-func waitLaunchEnd(t *testing.T, cmd *exec.Cmd) {
+func waitLaunchEnd(t *testing.T, launch runningLaunch) {
 	t.Helper()
-	done := make(chan error, 1)
-	go func() { done <- cmd.Wait() }()
 	select {
-	case err := <-done:
-		testutil.FailErr(t, "supervisor exit", err)
+	case <-launch.result.done:
+		if err := launch.result.err; err != nil {
+			t.Fatalf("supervisor exit: %v; stderr: %s", err, launch.stderr.String())
+		}
 	case <-time.After(20 * time.Second):
 		t.Fatal("the supervisor outlived the launch's processes")
 	}
@@ -526,5 +558,25 @@ func TestProtectedLaunchRoutesEngineLaunchesThroughTheBroker(t *testing.T) {
 		t.Fatalf("killing the protected engine did not end the brokered browser: %s", probe.BrowserEngineLossError)
 	}
 	testutil.FailErr(t, "close desktop input", launch.stdin.Close())
-	waitLaunchEnd(t, launch.cmd)
+	waitLaunchEnd(t, launch)
+}
+
+func assertBootstrapSupervisorProfile(t *testing.T, pid int) {
+	t.Helper()
+	groups, err := os.Getgroups()
+	testutil.FailErr(t, "capture supervisor caller groups", err)
+	caller := Identity{UID: uint32(os.Getuid()), GID: uint32(os.Getgid())}
+	for _, group := range groups {
+		caller.Groups = append(caller.Groups, uint32(group))
+	}
+	tasks, err := os.ReadDir(fmt.Sprintf("/proc/%d/task", pid))
+	testutil.FailErr(t, "read live caller supervisor threads", err)
+	if len(tasks) == 0 {
+		t.Fatal("caller supervisor has no threads")
+	}
+	for _, task := range tasks {
+		raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/task/%s/status", pid, task.Name()))
+		testutil.FailErr(t, "read caller supervisor authority", err)
+		testutil.FailErr(t, "caller supervisor fully dropped capabilities and bounding set", guardianThreadProfile(raw, caller))
+	}
 }

@@ -40,6 +40,12 @@ func TestProtectedLaunchFixture(t *testing.T) {
 	switch mode {
 	case "install":
 		err = installFixture(dir, strings.Split(os.Getenv(fixtureBinsEnv), ":"))
+	case "guardian-exec-failure":
+		err = checkGuardianExecFailure(dir, os.Getenv(fixtureGuardianProbe), os.Getenv(fixtureUIDEnv), os.Getenv(fixtureGIDEnv), os.Getenv(fixtureFaultHOME), os.Getenv(fixtureHash))
+	case "guardian-c":
+		err = checkGuardianCTransition(dir, os.Getenv(fixtureGuardianProbe), os.Getenv(fixtureUIDEnv), os.Getenv(fixtureGIDEnv))
+	case "nested-generation":
+		err = nestFixtureGenerationStore(dir)
 	case "upgrade":
 		err = stageFixtureGeneration(dir, "1.0.1", strings.Split(os.Getenv(fixtureBinsEnv), ":"), []byte("generation-1.0.1\n"))
 	case "vault-server":
@@ -56,6 +62,20 @@ func TestProtectedLaunchFixture(t *testing.T) {
 		digest := `"manifest_sha256":"` + os.Getenv(fixtureHash) + `"`
 		tampered := strings.Replace(mustRead(filepath.Join(dir, "launch.json")), digest, `"manifest_sha256":"`+strings.Repeat("0", 64)+`"`, 1)
 		err = os.WriteFile(filepath.Join(dir, "launch.json"), []byte(tampered), 0o644)
+	case "fail-mount-role":
+		err = failFixtureMountRole(dir, os.Getenv(fixtureDesktopPIDEnv), os.Getenv(fixtureFailedRoleEnv))
+	case "setup-notice":
+		err = checkBootstrapNotice(dir, os.Getenv(fixtureUIDEnv), os.Getenv(fixtureGIDEnv))
+	case "mount-nested":
+		err = checkLateNestedMounts(dir)
+	case "mount-nested-probe":
+		err = runNestedSingleProbe(dir)
+	case "mount-pipeline":
+		err = checkPrivateMountPipeline(dir, os.Getenv(fixtureUIDEnv), os.Getenv(fixtureGIDEnv))
+	case "mount-prepare":
+		err = checkInitialMountPreparation(dir, os.Getenv(fixtureUIDEnv), os.Getenv(fixtureGIDEnv))
+	case "mount-source":
+		err = checkMountSourceRole(dir, os.Getenv(fixtureUIDEnv), os.Getenv(fixtureGIDEnv), os.Getenv(fixtureSourcePathEnv))
 	case "module-view":
 		err = verifyModuleViewIsolation(dir, os.Getenv(fixtureDesktopPIDEnv))
 	default:
@@ -65,7 +85,7 @@ func TestProtectedLaunchFixture(t *testing.T) {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	if testing.CoverMode() == "" {
+	if mode == "mount-nested-probe" || testing.CoverMode() == "" {
 		os.Exit(0)
 	}
 }
@@ -95,8 +115,8 @@ func lockFree(path string) error {
 const fixtureLibraryRoot = "/usr/lib"
 
 func installFixture(dir string, binaries []string) error {
-	if len(binaries) != 3 {
-		return errors.New("fixture needs bootstrap, entry and desktop binaries")
+	if len(binaries) != 4 {
+		return errors.New("fixture needs bootstrap, entry, desktop and fixed transition binaries")
 	}
 	install := filepath.Join(dir, "install")
 	if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
@@ -134,8 +154,8 @@ func copyRootBinary(source, target string, mode uint32, extra []byte) (string, i
 }
 
 func stageFixtureGeneration(dir, version string, binaries []string, extra []byte) error {
-	if len(binaries) != 3 {
-		return errors.New("fixture needs bootstrap, entry and desktop binaries")
+	if len(binaries) != 4 {
+		return errors.New("fixture needs bootstrap, entry, desktop and fixed transition binaries")
 	}
 	install := filepath.Join(dir, "install")
 	staging := filepath.Join(dir, "staging")
@@ -158,6 +178,7 @@ func stageFixtureGeneration(dir, version string, binaries []string, extra []byte
 		{binaries[1], "pw-launch-entry", nil},
 		{binaries[2], "painted-wolf-code", extra},
 		{binaries[2], "pw", extra},
+		{binaries[3], "pw-mount-intake-transition", nil},
 	} {
 		sum, size, err := copyRootBinary(role.source, filepath.Join(staging, "bin", role.name), 0o755, role.extra)
 		if err != nil {
@@ -290,6 +311,9 @@ func sudoFixture(t *testing.T, mode, dir string, extra ...string) error {
 	if err != nil {
 		return fmt.Errorf("%s fixture: %w: %s", mode, err, out)
 	}
+	if mode == "module-view" || mode == "mount-nested" {
+		t.Logf("mediated mount visibility observation: %s", out)
+	}
 	return nil
 }
 
@@ -322,10 +346,11 @@ func installLaunchFixture(t *testing.T) launchFixture {
 	build := t.TempDir()
 	module := "github.com/lycaon/lycaon/internal/launchguard"
 	layout := fmt.Sprintf("-X %s.policyPath=%s -X %s.lockDirectory=%s", module, filepath.Join(dir, "launch.json"), module, filepath.Join(dir, "locks"))
-	binaries := []string{filepath.Join(build, "pw-launch"), filepath.Join(build, "pw-launch-entry"), filepath.Join(build, "painted-wolf-code")}
+	binaries := []string{filepath.Join(build, "pw-launch"), filepath.Join(build, "pw-launch-entry"), filepath.Join(build, "painted-wolf-code"), filepath.Join(build, "pw-mount-intake-transition")}
 	goBuild(t, binaries[0], "github.com/lycaon/lycaon/cmd/pw-launch", layout)
 	goBuild(t, binaries[1], "github.com/lycaon/lycaon/cmd/pw-launch-entry", "")
 	goBuild(t, binaries[2], "./testdata/protecteddesktop", "")
+	buildMountTransition(t, binaries[3])
 	for _, binary := range binaries {
 		testutil.FailErr(t, "fixture binary readable", os.Chmod(binary, 0o755))
 	}
@@ -339,4 +364,29 @@ func installLaunchFixture(t *testing.T) launchFixture {
 	digest, err := os.ReadFile(filepath.Join(dir, "digest"))
 	testutil.FailErr(t, "fixture digest", err)
 	return launchFixture{dir: dir, bootstrap: filepath.Join(dir, "pw-launch"), digest: string(digest), install: filepath.Join(dir, "install"), binaries: binaries}
+}
+
+func nestFixtureGenerationStore(dir string) error {
+	raw, err := os.ReadFile(filepath.Join(dir, "launch.json"))
+	if err != nil {
+		return err
+	}
+	var policy GenerationPolicy
+	if err := json.Unmarshal(raw, &policy); err != nil {
+		return err
+	}
+	source := filepath.Join(dir, "generations")
+	if filepath.Dir(policy.GenerationRoot) != source {
+		return errors.New("fixture generation is outside selected store")
+	}
+	target := filepath.Join(policy.LogicalInstallRoot, "generations")
+	if err := os.Rename(source, target); err != nil {
+		return err
+	}
+	policy.GenerationRoot = filepath.Join(target, filepath.Base(policy.GenerationRoot))
+	raw, err = json.Marshal(policy)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, "launch.json"), raw, 0644)
 }

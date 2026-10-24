@@ -5,7 +5,6 @@ package launchguard
 import (
 	"io"
 	"os"
-	"os/exec"
 	"strconv"
 	"strings"
 	"syscall"
@@ -247,28 +246,6 @@ func TestBrokerEndsAbandonedNonDetachedCallAndSupervisesEmptyTree(t *testing.T) 
 	}
 	_ = client.Close()
 	<-done
-
-	lifetime, err := os.Open("/dev/null")
-	testutil.FailErr(t, "open lifetime", err)
-	if code := superviseLaunch(lifetime); code != 0 {
-		t.Fatalf("superviseLaunch = %d, want 0", code)
-	}
-
-	cmd := exec.Command("sh", "-c", "exit 3")
-	testutil.FailErr(t, "start exit 3", cmd.Start())
-	lifetime2, err := os.Open("/dev/null")
-	testutil.FailErr(t, "open lifetime2", err)
-	if code := superviseLaunch(lifetime2); code != 3 {
-		t.Fatalf("superviseLaunch = %d, want 3", code)
-	}
-
-	sigCmd := exec.Command("sh", "-c", "kill -9 $$")
-	testutil.FailErr(t, "start kill -9", sigCmd.Start())
-	lifetime3, err := os.Open("/dev/null")
-	testutil.FailErr(t, "open lifetime3", err)
-	if code := superviseLaunch(lifetime3); code != 128+int(unix.SIGKILL) {
-		t.Fatalf("superviseLaunch = %d, want %d", code, 128+int(unix.SIGKILL))
-	}
 
 	// Malformed/oversized broker messages and start-while-closing.
 	agent2, client2, done2 := startTestBrokerAgent(t)

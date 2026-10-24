@@ -1,0 +1,18 @@
+{
+  "category": "source_directories",
+  "artifact": "lycaon/internal/launchguard",
+  "kind": "module",
+  "workstream": "linux-protected-mount-lifecycle",
+  "disposition": "retain",
+  "reason": "Retain fifty-one immediate production files after reviewing the added standard-stream sanitizer as part of the privileged-input phase. It does not introduce another runtime owner: generation custody, authenticated role transitions, mount intake/attachment and protected-lineage settlement still share private descriptor contracts. Native standard-stream ingress, real namespace sealing, source access, mount pipeline and fatal-lineage contracts exercise the authority boundary. Keep fifty-one as the measured ceiling; a further member change requires renewed review.",
+  "reviewed_commit": "3e89dc173aa9de7829f873d4f778416eed055dda",
+  "ceiling": 51,
+  "boundaries": {
+    "lycaon/internal/launchguard/mount_plan_linux_test.go": "4f6ab78b6ccea7864bc814b6075a1c653e9cf522024aab33c1fdb801e1fa26c1",
+    "lycaon/internal/launchguard/mount_pipeline_linux_test.go": "a1b48da3048683d0bc6cafe8b5f1cfb3a2955c07479a2a11b5e62d306eb45383",
+    "lycaon/internal/launchguard/guardian_lineage_linux_test.go": "6e69889d4730d8ee4e0efe4654bf3b1f316b2d5b902b36a5284df9fe8773009d",
+    "lycaon/internal/launchguard/guardian_exec_failure_linux_test.go": "ad04f3fc26a6894ed4bd2da24506576ac8c1f7855694f3686d3a50db2ca3630b",
+    "lycaon/internal/launchguard/standard_stream_policy_linux_test.go": "ed97a1947579d80a6b111b609429ab22db32ba9b7dbdba89c70c0dccddd8d67c"
+  },
+  "reviewed_shape": "c58030cca7d85b20fd4649c11387283762cd8dcfb7fb3371a90aafe00e96f1a6"
+}
