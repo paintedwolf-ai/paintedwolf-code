@@ -19,8 +19,11 @@ from .process import run
 from .provider import ProviderFixture
 from .provider_setup import configure_provider, physical_input
 from .records import CaseFailed, CaseUnavailable, retain
+from ..installed_input.password_focus import FixtureFocus
 from ..installed_input.presence_fixture import FIELDS
 from ..installed_input.session_lock import NativeLockObserver
+from ..installed_input import session_wire, surface_wire
+from ..installed_input.surface import FrameObserver
 from ..installed_input.transition_guest import perform_transition
 from ..installed_input.unlock_account import run_privileged_disable, validate_account_shape
 from ..installed_input.unlock_control import NativeUnlockControl
@@ -108,21 +111,18 @@ def await_step_away_fact(app, session: dict, *, locked: bool, minimum_count: int
 
 def open_project(launch_binding: dict, project: Path, observations: dict, streams: dict):
     opened = run(launch_binding, 'pw', ['open', str(project)], timeout=30)
-    observations['project_open'] = {key: opened[key]
-                                    for key in ('launch_identity', 'exit_code', 'timed_out', 'output_limit')
-                                    if key in opened}
-    if 'stdout' in opened:
-        streams['project-open-stdout'] = opened['stdout']
-    if 'stderr' in opened:
-        streams['project-open-stderr'] = opened['stderr']
+    observations['project_open'] = {key: opened[key] for key in (
+        'launch_identity', 'exit_code', 'timed_out', 'output_limit') if key in opened}
+    for key, stream_key in (('stdout', 'project-open-stdout'), ('stderr', 'project-open-stderr')):
+        if key in opened:
+            streams[stream_key] = opened[key]
     if opened['exit_code'] or opened['timed_out'] or opened['output_limit']:
         raise ValueError('installed CLI refused the owned lock-monitor project')
 
 
 def lock_and_unlock(app, execution: dict, vm_id: str, native, lock, unlock_ctl, observations: dict):
     lock_transition = perform_transition(execution, vm_id, lock, 'session-lock-v1')
-    observations['lock_transition'] = lock_transition
-    observations['transitions'] = [lock_transition]
+    observations['lock_transition'], observations['transitions'] = lock_transition, [lock_transition]
     during_lock = native.observe()
     if not all(during_lock[key] for key in ('locked_hint', 'locker_active')):
         raise ValueError('lock monitor transition did not establish both native lock flags')
@@ -134,11 +134,117 @@ def lock_and_unlock(app, execution: dict, vm_id: str, native, lock, unlock_ctl, 
     if any(after_unlock[key] for key in ('locked_hint', 'locker_active')):
         raise ValueError('lock monitor unlock did not clear both native lock flags')
     observations['after_unlock'] = after_unlock
-    unlocked = await_step_away_fact(
-        app, app.observations['session'], locked=False, minimum_count=3)
+    unlocked = await_step_away_fact(app, app.observations['session'], locked=False, minimum_count=3)
     if unlocked['latest']['mode'] != 'lock_observed' or unlocked['latest']['locked_hint_seen'] is not True:
         raise ValueError('lock monitor did not preserve lock_observed mode after unlock')
     observations['step_away_unlocked'] = unlocked
+
+
+def recover_case_observer(session: dict, native, lock) -> tuple:
+    initial_proof = lock.initial
+    lock.close()
+    native.close()
+    refusals = {}
+    for label, observer in (('native', native), ('lock', lock)):
+        try:
+            observer.observe()
+        except ValueError as err:
+            refusals[label] = str(err)
+        else:
+            raise ValueError('closed case lock observer did not refuse stale observation')
+    fresh_native = NativeSessionObserver(session)
+    fresh_lock = NativeLockObserver(session, native=fresh_native)
+    try:
+        session_wire.same_runtime(initial_proof, fresh_lock.initial)
+        if any(fresh_native.initial[key] for key in ('locked_hint', 'locker_active')):
+            raise ValueError('reconnected case lock observer drifted from the captured runtime')
+    except ValueError:
+        fresh_lock.close()
+        fresh_native.close()
+        raise
+    return fresh_native, fresh_lock, {'stale_refusals': refusals, 'reconnected_proof': fresh_lock.initial}
+
+
+def observe_monitor_owner_recovery(app, session: dict) -> dict | None:
+    facts = step_away_facts(app)
+    loss_index = next((idx for idx, row in enumerate(facts)
+                       if row.get('screensaver_locked') is None or row.get('session_error') is not None), None)
+    for row in facts[loss_index + 1:] if loss_index is not None else ():
+        try:
+            validated = validate_step_away_fact(row, session, locked=False)
+        except ValueError:
+            continue
+        if validated['screensaver_locked'] is False and validated['mode'] == 'lock_observed':
+            return {'loss_fact': facts[loss_index], 'recovered_fact': validated}
+    return None
+
+
+def presence_dialog(app, ui) -> dict | None:
+    dialogs = [row for row in FrameObserver(app, ui).observe()['surfaces']
+               if row['kind'] == 'presence-dialog' and surface_wire.active(row)]
+    return dialogs[0] if len(dialogs) == 1 else None
+
+
+def submit_presence_confirmation(app, ui, binding: dict) -> dict:
+    focus = FixtureFocus(app, ui, 'native-presence-password', FrameObserver(app, ui)).capture()
+    actor = binding.get('presence_actor')
+    delivery = actor(focus) if callable(actor) else None
+    ui.click('Confirm')
+    return {'focus': focus, 'delivery': delivery}
+
+
+def run_lock_during_presence(app, ui, binding: dict, execution: dict, vm_id: str,
+                             native, lock, unlock_ctl, observations: dict, reservation):
+    ui.click('Reveal value')
+    reservation.check_launch(app)
+    pre_lock_dialog = presence_dialog(app, ui)
+    if pre_lock_dialog is not None:
+        observations['pre_lock_confirmation'] = pre_lock_dialog
+        lock_and_unlock(app, execution, vm_id, native, lock, unlock_ctl, observations)
+        observations['post_unlock_activation'] = activate_visible_frame(app, ui)
+        reservation.check_launch(app)
+        observations['stale_confirmation_attempt'] = submit_presence_confirmation(app, ui, binding)
+        observations['stale_challenge_refusal'] = await_alert(app, ui)
+        if presence_dialog(app, ui) is not None:
+            raise ValueError('stale pre-lock presence confirmation remained open after refusal')
+        observations['stale_challenge_refusal_verified'] = True
+        ui.click('Reveal value')
+        reservation.check_launch(app)
+        fresh_dialog = presence_dialog(app, ui)
+        if fresh_dialog is None:
+            raise ValueError('fresh post-unlock presence confirmation did not open')
+        observations['fresh_confirmation_surface'] = fresh_dialog
+        observations['fresh_confirmation_submission'] = submit_presence_confirmation(app, ui, binding)
+        ui.click('Hide now')
+        reservation.check_launch(app)
+        observations['fresh_confirmation_verified'] = True
+        return
+    observations['pre_lock_alert'] = await_alert(app, ui)
+    lock_and_unlock(app, execution, vm_id, native, lock, unlock_ctl, observations)
+    observations['post_unlock_activation'] = activate_visible_frame(app, ui)
+    reservation.check_launch(app)
+    ui.click('Reveal value')
+    observations['reveal_alert'] = await_alert(app, ui)
+    reservation.check_launch(app)
+    observations.update(stale_challenge_refusal_verified=False, fresh_confirmation_verified=False, reason=(
+        'pre-and-post-unlock-presence-alerts-captured-stale-challenge-refusal-and-fresh-completion-unverified'))
+
+
+def run_initial_lock_state(app, execution: dict, vm_id: str, native, lock, unlock_ctl,
+                           observations: dict, provider: dict, fixture, project: Path, reservation) -> str:
+    lock_and_unlock(app, execution, vm_id, native, lock, unlock_ctl, observations)
+    with DesktopUI(app) as ui:
+        observations['post_unlock_activation'] = activate_visible_frame(app, ui)
+    submit_project_turn(app)
+    observations['settled_reply'] = await_fixture_reply(app, project, provider['provider_id'], fixture.acquisition)
+    reservation.check_launch(app)
+    recovery = observe_monitor_owner_recovery(app, app.observations['session'])
+    observations.update(initial_lock_state_verified=True, lock_unlock_verified=True,
+                        monitor_owner_recovery=recovery, monitor_owner_recovery_verified=recovery is not None)
+    if recovery is not None:
+        return 'passed'
+    observations['reason'] = 'initial-lock-state-and-lock-unlock-observed-monitor-owner-recovery-unverified'
+    return 'unverified'
 
 
 def execute(binding: dict, capability: str, case: str, root: Path) -> dict:
@@ -151,7 +257,7 @@ def execute(binding: dict, capability: str, case: str, root: Path) -> dict:
     launch_binding = {**binding, 'launcher': protected_launcher(binding)}
     storage = resolve(session_environment(graphical_session()))
     reservation = Reservation(launch_binding, storage)
-    observations, streams = {}, {}
+    observations, streams, status = {}, {}, 'unverified'
     app, fixture, policy = InstalledApp(launch_binding), None, None
     calls = [{'name': 'command', 'arguments': {'command': '/usr/bin/true'}}]
     try:
@@ -160,8 +266,7 @@ def execute(binding: dict, capability: str, case: str, root: Path) -> dict:
             app.launch()
             app.wait_ready()
             reservation.check_launch(app)
-            observations['launch'] = app.observations
-            observations['interactive'] = interactive_window(app)
+            observations['launch'], observations['interactive'] = app.observations, interactive_window(app)
             with DesktopUI(app) as ui:
                 observations['initial_activation'] = activate_visible_frame(app, ui)
                 reservation.check_launch(app)
@@ -169,6 +274,9 @@ def execute(binding: dict, capability: str, case: str, root: Path) -> dict:
                 app, app.observations['session'], locked=False, minimum_count=1)
             with NativeSessionObserver(app.observations['session']) as native, \
                     NativeLockObserver(app.observations['session'], native=native) as lock:
+                if case == 'initial-lock-state':
+                    native, lock, observations['case_observer_recovery'] = recover_case_observer(
+                        app.observations['session'], native, lock)
                 unlock_ctl = NativeUnlockControl(execution, vm_id, lock)
                 validate_account_shape(unlock_ctl.account)
                 observations['unlock_preparation'] = unlock_ctl.prepare()
@@ -180,13 +288,8 @@ def execute(binding: dict, capability: str, case: str, root: Path) -> dict:
                         project = Path(tempfile.mkdtemp(prefix='lock-monitor-project-', dir=storage.home))
                         open_project(launch_binding, project, observations, streams)
                         if case == 'initial-lock-state':
-                            lock_and_unlock(app, execution, vm_id, native, lock, unlock_ctl, observations)
-                            with DesktopUI(app) as ui:
-                                observations['post_unlock_activation'] = activate_visible_frame(app, ui)
-                            submit_project_turn(app)
-                            observations['settled_reply'] = await_fixture_reply(
-                                app, project, provider['provider_id'], fixture.acquisition)
-                            reservation.check_launch(app)
+                            status = run_initial_lock_state(app, execution, vm_id, native, lock, unlock_ctl,
+                                                            observations, provider, fixture, project, reservation)
                         else:
                             with DesktopUI(app) as ui:
                                 ui.click('Project configuration')
@@ -201,31 +304,28 @@ def execute(binding: dict, capability: str, case: str, root: Path) -> dict:
                                     raise CaseUnavailable('lock-during-presence-already-has-an-owned-alert')
                                 policy = PresencePolicy(launch_binding)
                                 with policy:
-                                    lock_and_unlock(app, execution, vm_id, native, lock, unlock_ctl, observations)
-                                    observations['post_unlock_activation'] = activate_visible_frame(app, ui)
-                                    reservation.check_launch(app)
-                                    ui.click('Reveal value')
-                                    observations['reveal_alert'] = await_alert(app, ui)
-                                    reservation.check_launch(app)
+                                    run_lock_during_presence(app, ui, binding, execution, vm_id,
+                                                             native, lock, unlock_ctl, observations, reservation)
+                                if (observations.get('stale_challenge_refusal_verified') is True
+                                        and observations.get('fresh_confirmation_verified') is True):
+                                    status = 'passed'
                 finally:
-                    observations['credential_cleanup'] = run_privileged_disable(
-                        unlock_ctl.account, vm_id=vm_id)
+                    lock.close()
+                    native.close()
+                    observations['credential_cleanup'] = run_privileged_disable(unlock_ctl.account, vm_id=vm_id)
     except (OSError, ValueError, TypeError, KeyError) as error:
         observations.update(getattr(error, 'observations', {}))
-        observations['failure_type'] = type(error).__name__
-        observations['failure_detail'] = str(error)[:512]
+        observations['failure_type'], observations['failure_detail'] = type(error).__name__, str(error)[:512]
         failure = error if isinstance(error, CaseUnavailable) else CaseFailed(
             'session lock monitor or lock-during-presence continuity failed')
-        failure.observations = observations
-        failure.streams = streams
+        failure.observations, failure.streams = observations, streams
         raise failure from None
     finally:
         app.stop()
         streams.update(app.streams())
-        observations['launch'] = app.observations
-        observations['fresh_storage'] = reservation.facts()
+        observations['launch'], observations['fresh_storage'] = app.observations, reservation.facts()
         if fixture is not None:
             observations['provider_requests'] = list(fixture.observations)
         if policy is not None:
             observations['presence_policy'] = policy.observations
-    return retain(binding, capability, case, root, 'passed', observations, streams)
+    return retain(binding, capability, case, root, status, observations, streams)
