@@ -4,7 +4,6 @@ from __future__ import annotations
 from contextlib import ExitStack, contextmanager
 import os
 from pathlib import Path
-
 import re
 import sqlite3
 import stat
@@ -40,10 +39,13 @@ def physical(path, directory=False):
     return info.st_dev, info.st_ino, info.st_uid, info.st_mode
 
 
-def schema(connection):
+def schema(connection, required=None):
     if connection.execute('PRAGMA user_version').fetchone() != (4,):
         raise ValueError('profile observer does not support this store revision')
-    for table, required in COLUMNS.items():
+    columns = {table: dict(fields) for table, fields in COLUMNS.items()}
+    for table, fields in (required or {}).items():
+        columns.setdefault(table, {}).update(fields)
+    for table, required in columns.items():
         row = connection.execute('SELECT type, sql FROM sqlite_schema WHERE name = ?', (table,)).fetchone()
         if row is None or row[0] != 'table' or not re.match(r'CREATE TABLE\b', row[1], re.IGNORECASE):
             raise ValueError('profile observer requires the declared physical tables')
@@ -124,7 +126,7 @@ def sqlite_sidecars(path):
 
 
 @contextmanager
-def _database(app):
+def _database(app, *, required=None):
     with profile(app) as directory:
         path = directory / 'store.db'
         before = physical(path)
@@ -142,7 +144,7 @@ def _database(app):
                 connection.execute('PRAGMA query_only = ON')
                 connection.execute('PRAGMA trusted_schema = OFF')
                 connection.execute('BEGIN')
-                schema(connection)
+                schema(connection, required)
                 yield connection
                 if physical(path) != before:
                     raise ValueError('captured profile or engine changed during observation')
@@ -171,15 +173,16 @@ def project_for_owned_root(app, fixture_path):
 
 def sessions_for_project(app, project_id):
     identifier(project_id)
-    with _database(app) as connection:
-        found = rows(connection.execute('SELECT id,status,provider_id,model FROM sessions WHERE project_id=? ORDER BY id LIMIT 257', (project_id,)))
-    if any(status not in {'preparing', 'idle', 'busy', 'error'} for _, status, _, _ in found):
+    with _database(app, required={'sessions': {'parent_session_id': 'TEXT'}}) as connection:
+        found = rows(connection.execute('SELECT id,status,provider_id,model,parent_session_id FROM sessions WHERE project_id=? ORDER BY id LIMIT 257', (project_id,)))
+    if any(status not in {'preparing', 'idle', 'busy', 'error'} for _, status, _, _, _ in found):
         raise ValueError('profile observer encountered an undeclared session state')
     if any(any(value is not None and (not isinstance(value, str) or not 1 <= len(value) <= 128)
-               for value in (provider, model)) for _, _, provider, model in found):
+               for value in (provider, model)) for _, _, provider, model, _ in found):
         raise ValueError('profile observer provider identity exceeds its declared bound')
-    return [{'id': identifier(key), 'status': status, 'provider_id': provider, 'model': model}
-            for key, status, provider, model in found]
+    return [{'id': identifier(key), 'status': status, 'provider_id': provider, 'model': model,
+             'parent_session_id': None if parent is None else identifier(parent)}
+            for key, status, provider, model, parent in found]
 
 
 def invocations(app, session_id, tool_names):

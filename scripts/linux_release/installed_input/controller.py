@@ -13,7 +13,7 @@ import time
 from . import protocol, surface_wire, password_wire
 from .mailbox import decode
 from .qemu import open_lease
-from .password_pipe import Pipe
+from .private_pipe import Pipe
 
 MAX_LOG = 8 << 20
 

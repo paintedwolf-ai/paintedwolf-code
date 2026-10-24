@@ -1,7 +1,6 @@
 """Closed app-password fixture metadata; secret frames never use evidence encoding."""
 from __future__ import annotations
 
-import struct
 
 from . import lineage, protocol
 
@@ -91,21 +90,6 @@ def request(value, execution):
     target(value['stage'], value['target'])
     protocol.canonical(value)
     return value
-
-
-def frame(raw, maximum):
-    if not isinstance(raw, bytes) or not 0 < len(raw) <= maximum:
-        raise ValueError('private fixture frame exceeded its fixed bound')
-    return struct.pack('!I', len(raw)) + raw
-
-
-def frame_size(header, maximum):
-    if not isinstance(header, bytes) or len(header) != 4:
-        raise ValueError('private fixture frame has no complete bounded header')
-    size, = struct.unpack('!I', header)
-    if not 0 < size <= maximum:
-        raise ValueError('private fixture frame exceeded its fixed bound')
-    return size
 
 
 def completed(value, pending, vm_id):

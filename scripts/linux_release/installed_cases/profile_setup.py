@@ -2,7 +2,9 @@
 from __future__ import annotations
 import hashlib
 import json
-from .profile_observer import profile, physical
+import os
+from pathlib import Path
+from .profile_observer import profile, physical, _database, identifier, rows
 from .profile_documents import read_private, yaml_document
 
 ONBOARDING = '6f6e626f617264696e67.json'
@@ -54,3 +56,25 @@ def state(app):
                 'onboarding_sha256': None if raw is None else hashlib.sha256(raw).hexdigest(),
                 'model_policy_sha256': None if policy is None else hashlib.sha256(policy).hexdigest(),
                 'observer': 'owned-persisted-setup'}
+
+
+def fixture_selection(app, project, project_id, provider_id, model):
+    """Bind the one-root fixture to its persisted coordinator without overlay merging."""
+    identifier(project_id)
+    path = Path(project)
+    identity = physical(path, True)
+    if os.path.lexists(path / '.paintedwolf'):
+        raise ValueError('fixed reply project must have no project overlay')
+    with _database(app, required={'project_roots': {'is_primary': 'INTEGER', 'kind': 'TEXT'}}) as connection:
+        roots = rows(connection.execute('SELECT id,path,is_primary,kind FROM project_roots WHERE project_id=? LIMIT 257',
+                                        (project_id,)))
+    if len(roots) != 1 or roots[0][1:] != (str(path), 1, 'attached'):
+        raise ValueError('fixed reply requires exactly its owned primary attached root')
+    selected = state(app)
+    if (not selected['onboarding_completed']
+            or selected['coordinator'] != {'provider_id': provider_id, 'model': model}
+            or selected['model_policy_sha256'] is None):
+        raise ValueError('fixed reply coordinator differs from its persisted selection')
+    return {'provider_id': provider_id, 'model': model,
+            'model_policy_sha256': selected['model_policy_sha256'],
+            'root_id': identifier(roots[0][0]), 'root_path': str(path), 'root_identity': identity, 'project_overlay_absent': True}

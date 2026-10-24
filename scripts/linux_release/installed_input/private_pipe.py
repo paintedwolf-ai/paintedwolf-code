@@ -3,13 +3,31 @@ from __future__ import annotations
 
 import os
 import select
+import struct
 import time
 
-from . import password_wire, protocol
+from . import protocol
+
+
+def frame(raw, maximum):
+    if not isinstance(raw, bytes) or not 0 < len(raw) <= maximum:
+        raise ValueError('private fixture frame exceeded its fixed bound')
+    return struct.pack('!I', len(raw)) + raw
+
+
+def frame_size(header, maximum):
+    if not isinstance(header, bytes) or len(header) != 4:
+        raise ValueError('private fixture frame has no complete bounded header')
+    size, = struct.unpack('!I', header)
+    if not 0 < size <= maximum:
+        raise ValueError('private fixture frame exceeded its fixed bound')
+    return size
 
 
 class Pipe:
     def __init__(self, process, selector, deadline):
+        if os.get_blocking(process.stdin.fileno()) or os.get_blocking(process.stdout.fileno()):
+            raise ValueError('private actor transport requires nonblocking owned pipe endpoints')
         self.process, self.selector, self.deadline = process, selector, deadline
 
     def remaining(self):
@@ -56,22 +74,18 @@ class Pipe:
         raise ValueError('private actor line exceeded its fixed bound')
 
     def send_metadata(self, document):
-        self.write(password_wire.frame(protocol.canonical(document), protocol.MAX_DOCUMENT))
+        self.write(frame(protocol.canonical(document), protocol.MAX_DOCUMENT))
 
     def receive_metadata(self):
         from .mailbox import decode
-        size = password_wire.frame_size(self.read(4), protocol.MAX_DOCUMENT)
+        size = frame_size(self.read(4), protocol.MAX_DOCUMENT)
         try:
             return decode(self.read(size))
         except (ValueError, UnicodeError):
             raise ValueError('private actor metadata has an invalid fixed shape') from None
 
-    def send_fixture_value(self, value):
-        self.write(password_wire.frame(password_wire.private_secret(value).encode('ascii'), 128))
+    def send_frame(self, raw, maximum):
+        self.write(frame(raw, maximum))
 
-    def receive_fixture_value(self):
-        size = password_wire.frame_size(self.read(4), 128)
-        try:
-            return password_wire.private_secret(self.read(size).decode('ascii'))
-        except (ValueError, UnicodeError):
-            raise ValueError('private actor value has an invalid fixed shape') from None
+    def receive_frame(self, maximum):
+        return self.read(frame_size(self.read(4), maximum))

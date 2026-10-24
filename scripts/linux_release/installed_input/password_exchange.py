@@ -19,7 +19,10 @@ def exchange(actor, pending, pipe):
         selected = copy.deepcopy(pending)
         if not 0 < pipe.remaining() <= password_wire.MAX_SECONDS:
             raise ValueError('private fixture transport has no bounded one-use lifetime')
-        value = pipe.receive_fixture_value()
+        try:
+            value = password_wire.private_secret(pipe.receive_frame(128).decode('ascii'))
+        except (ValueError, UnicodeError):
+            raise ValueError('private actor value has an invalid fixed shape') from None
         fixture = Fixture(actor, pending, value)
         value = None
         with fixture:

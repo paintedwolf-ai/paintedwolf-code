@@ -36,7 +36,7 @@ def relay(mailbox, pending, selected_actor, pipe):
             if channel.receive_metadata() != {'request': pending}:
                 raise ValueError('private fixture case stream differs from its published metadata')
             value = channel.receive_fixture_value()
-            pipe.send_fixture_value(value)
+            pipe.send_frame(password_wire.private_secret(value).encode('ascii'), 128)
             value = None
             for ordinal in range(password_wire.SECRET_BYTES + 1):
                 for operation in ('observe-before', 'observe-after'):
@@ -66,7 +66,7 @@ def serve(mailbox, pending, selected_actor):
     import selectors
     import sys
     from types import SimpleNamespace
-    from .password_pipe import Pipe
+    from .private_pipe import Pipe
     from . import protocol
     streams, selector, succeeded = [], None, False
     try:

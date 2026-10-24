@@ -12,6 +12,7 @@ import threading
 
 from ..installed_cases.app import process_identity
 from . import password_wire, protocol
+from .private_pipe import frame, frame_size
 
 # The campaign owns this QA UID; hostile controllers of that same UID are outside this fixture boundary.
 NAME = 'app-password.sock'
@@ -101,11 +102,11 @@ class Channel:
         return bytes(chunks)
 
     def _receive(self, maximum):
-        return self._read(password_wire.frame_size(self._read(4), maximum))
+        return self._read(frame_size(self._read(4), maximum))
 
     def _send(self, raw):
         self.check()
-        self.stream.sendall(password_wire.frame(raw, protocol.MAX_DOCUMENT))
+        self.stream.sendall(frame(raw, protocol.MAX_DOCUMENT))
         self.check()
 
     def receive_metadata(self):
