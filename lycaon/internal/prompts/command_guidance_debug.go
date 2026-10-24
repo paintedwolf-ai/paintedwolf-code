@@ -35,6 +35,7 @@ func CommandGuidanceFactKeys() []string {
 		"reviews_confined_writes",
 		"root_count",
 		"runner_direct_ip_tools",
+		"runner_host_execution_tools",
 		"runner_host_resource_tools",
 		"runner_local_listen_tools",
 		"runner_loopback_connect_tools",

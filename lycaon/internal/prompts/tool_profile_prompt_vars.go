@@ -271,7 +271,7 @@ func MergeRunnerCapabilityVars(offered []string, vars map[string]any) {
 		commandMutates = true
 	}
 	capabilities := map[string]toolcontract.Capability{
-		"host_resource":    toolcontract.CapabilityHostResource,
+		"host_execution": toolcontract.CapabilityHostExecution, "host_resource": toolcontract.CapabilityHostResource,
 		"socket":           toolcontract.CapabilitySocket,
 		"direct_ip":        toolcontract.CapabilityDirectIP,
 		"local_listen":     toolcontract.CapabilityLocalListen,

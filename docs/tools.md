@@ -98,14 +98,16 @@ Typed syntax diagnostics carry byte ranges, line/column, expected forms and
 resource measurements through the existing rejection/OAR pipeline. They never
 guess missing source contents or create executable replacement calls.
 
-The new plan is separate from the existing process-stage plan. Retained verify,
-PTY, process launch, detection, secret inspection and command-identity consumers
-still require that process representation. The current command executor remains
-its consumer until the runtime integration replaces it. Do not flatten functions,
-loops or substitutions into process stages, broaden a retained surface merely
-because the new parser accepts a form, or remove a recognizer while one of these
-consumers still uses it. Their replacement and obsolete-path cleanup accompany
-the introducing runtime integration.
+The program plan is separate from the process-stage plan (`commandsurface.Plan`).
+`command` runs on [`command.ProgramRuntime`](../lycaon/internal/tools/native/command/program_entry.go)
+over [`commandprogram.Evaluate`](../lycaon/internal/commandprogram) and dispatches
+typed simple commands to their native owners or confined external execution.
+`verify`, the PTY (`terminal_open`), process launch, detection, secret inspection
+and command-identity consumers remain independent current consumers of the
+process-stage representation. Do not flatten functions, loops or substitutions
+into process stages, broaden one of those process-stage surfaces merely because
+the program parser accepts a form, or remove a recognizer while one of those
+consumers uses it.
 
 The syntax adapter charges parser scratch to the enclosing program before each
 allocation and meters the selected upstream parser's allocations and recursive
@@ -644,7 +646,7 @@ A file the person has open in the editor is its editor document, for the agent a
 | `read`, `diff` | Serve the draft. The receipt's `source.editor` carries the document revision and `dirty`; an unsaved draft is `recorded: false` with a note, because the ledger records saves, not keystrokes |
 | `grep`, `wc` | Search or count the unsaved text for open dirty files; `files_from_editor` and `in_editor` say how many were served that way |
 | `write`, `edit`, `replace_lines`, `code_rewrite`, `jq_edit`, `restore_version` | Compute against the draft, land in the document, and save through the person's own journaled save door, recorded as the agent's write. One save publishes every contribution the draft holds, the person's unsaved typing included, and the ledger records each contributor, so such a publication reads as mixed authorship rather than the agent's alone. `EDITOR_DOCUMENT_CHANGING` rejects a document that kept moving under the write. A document diverged from disk, or a publication that fails after acceptance, holds the edit unsaved in the document: the receipt says the file was not written and why, that the disk still holds its earlier bytes for commands and tests, and names the retained state |
-| `command`, `verify`, processes | See disk. An agent write saves, so the files it touched are current for them |
+| `command`, `verify`, processes | Read saved disk, including when an accepted write is still held unsaved in the document |
 
 A worker on its private branch never sees documents: its tree is a copy. The design and the Den side are in [files-live.md § The open document is the file](files-live.md#the-open-document-is-the-file).
 

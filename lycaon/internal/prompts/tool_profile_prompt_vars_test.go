@@ -216,6 +216,9 @@ func TestToolProfileCapabilityVarsImplement(t *testing.T) {
 	if vars["profile_has_terminal_capture"] != true {
 		t.Fatal("implement command surface must advertise sealed terminal capture")
 	}
+	if hostExec, _ := vars["runner_host_execution_tools"].([]string); !reflect.DeepEqual(hostExec, []string{"command", "verify"}) {
+		t.Fatalf("implement runner_host_execution_tools = %v, want [command verify]", hostExec)
+	}
 }
 
 func TestToolProfileCapabilityVarsExploreReadonly(t *testing.T) {
@@ -246,6 +249,9 @@ func TestToolProfileCapabilityVarsExploreReadonly(t *testing.T) {
 	}
 	if vars["profile_has_terminal_capture"] != false {
 		t.Fatalf("explore_readonly must not advertise sealed terminal capture")
+	}
+	if hostExec, _ := vars["runner_host_execution_tools"].([]string); len(hostExec) != 0 {
+		t.Fatalf("explore_readonly runner_host_execution_tools = %v, want empty", hostExec)
 	}
 	surveyTools, _ := vars["tool_check_survey_tools"].([]string)
 	if slices.Contains(surveyTools, "write") || slices.Contains(surveyTools, "edit") {
