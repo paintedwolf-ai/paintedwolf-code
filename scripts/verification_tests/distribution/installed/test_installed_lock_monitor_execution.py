@@ -264,8 +264,11 @@ class LockMonitorExecutionTests(unittest.TestCase):
         obs = outcome[5]
         self.assertTrue(obs['initial_lock_state_verified'])
         self.assertTrue(obs['lock_unlock_verified'])
+        self.assertFalse(obs['capability_state_recovery_verified'])
+        self.assertIsNone(obs['capability_state_recovery'])
         self.assertFalse(obs['monitor_owner_recovery_verified'])
         self.assertIsNone(obs['monitor_owner_recovery'])
+        self.assertEqual(obs['reason'], 'initial-lock-state-and-lock-unlock-observed-monitor-owner-recovery-unverified')
         self.assertIn('native', obs['case_observer_recovery']['stale_refusals'])
         self.assertIn('lock', obs['case_observer_recovery']['stale_refusals'])
         self.assertEqual(obs['step_away_initial']['latest']['mode'], 'lock_observed')
@@ -275,30 +278,36 @@ class LockMonitorExecutionTests(unittest.TestCase):
         self.assertEqual(obs['settled_reply'], {'settled': True})
         disable_mock.assert_called_once_with(ACCOUNT, vm_id='owned')
 
-    def test_initial_lock_state_does_not_promote_startup_none_to_false_transition_as_owner_recovery(self):
+    def test_initial_lock_state_does_not_promote_startup_none_to_false_transition_as_capability_recovery(self):
         outcome, disable_mock, _, _ = self._run_case(
             'initial-lock-state', monitor_loss=False, startup_none=True)
         self.assertEqual(outcome[4], 'unverified')
         obs = outcome[5]
         self.assertTrue(obs['initial_lock_state_verified'])
         self.assertTrue(obs['lock_unlock_verified'])
+        self.assertFalse(obs['capability_state_recovery_verified'])
+        self.assertIsNone(obs['capability_state_recovery'])
         self.assertFalse(obs['monitor_owner_recovery_verified'])
         self.assertIsNone(obs['monitor_owner_recovery'])
+        self.assertEqual(obs['reason'], 'initial-lock-state-and-lock-unlock-observed-monitor-owner-recovery-unverified')
         disable_mock.assert_called_once_with(ACCOUNT, vm_id='owned')
 
-    def test_initial_lock_state_passes_when_monitor_owner_loss_and_reconnect_recovery_are_observed(self):
+    def test_initial_lock_state_records_capability_state_recovery_while_keeping_monitor_owner_recovery_unverified(self):
         outcome, disable_mock, _, _ = self._run_case('initial-lock-state', monitor_loss=True, startup_none=True)
-        self.assertEqual(outcome[4], 'passed')
+        self.assertEqual(outcome[4], 'unverified')
         obs = outcome[5]
         self.assertTrue(obs['initial_lock_state_verified'])
         self.assertTrue(obs['lock_unlock_verified'])
-        self.assertTrue(obs['monitor_owner_recovery_verified'])
-        rec = obs['monitor_owner_recovery']
+        self.assertTrue(obs['capability_state_recovery_verified'])
+        rec = obs['capability_state_recovery']
         self.assertLess(rec['baseline_index'], rec['loss_index'])
         self.assertLess(rec['loss_index'], rec['recovered_index'])
         self.assertFalse(rec['baseline_fact']['screensaver_locked'])
         self.assertIsNone(rec['loss_fact']['screensaver_locked'])
         self.assertFalse(rec['recovered_fact']['screensaver_locked'])
+        self.assertFalse(obs['monitor_owner_recovery_verified'])
+        self.assertIsNone(obs['monitor_owner_recovery'])
+        self.assertEqual(obs['reason'], 'initial-lock-state-and-lock-unlock-observed-monitor-owner-recovery-unverified')
         disable_mock.assert_called_once_with(ACCOUNT, vm_id='owned')
 
     def test_lock_during_presence_does_not_pass_from_alerts_alone(self):
@@ -323,45 +332,28 @@ class LockMonitorExecutionTests(unittest.TestCase):
             self._run_case('lock-during-presence', dialog_surfaces=[pre_surface])
         self.assertEqual(str(ctx.exception), 'presence-password-confirmation-requires-private-fixture-custody')
 
-    def test_lock_during_presence_keeps_generic_alert_without_structured_stale_invalidation_unverified(self):
-        pre_id = self._dialog_identity(2)
-        pre_surface = {'kind': 'presence-dialog', 'identity': pre_id, 'active': True}
-        native_extra, witness_mock = self._mock_private_password_delivery([pre_id])
-        outcome, disable_mock, _, fake_ui = self._run_case(
-            'lock-during-presence',
-            dialog_surfaces=[pre_surface, None],
-            alert_result={'role': 2, 'visible': True, 'attributes': ['data-code:presence_denied']},
-            native_input_extra=native_extra)
-        self.assertEqual(outcome[4], 'unverified')
-        obs = outcome[5]
-        self.assertFalse(obs['stale_challenge_refusal_verified'])
-        self.assertFalse(obs['fresh_confirmation_verified'])
-        self.assertEqual(obs['reason'], 'stale-challenge-refusal-lacks-structured-invalidation-facts')
-        self.assertEqual(witness_mock.call_count, 1)
-        self.assertNotIn((('Hide now',), {}), fake_ui.click.call_args_list)
-        disable_mock.assert_called_once_with(ACCOUNT, vm_id='owned')
-
-    def test_lock_during_presence_passes_when_pre_lock_challenge_is_refused_and_fresh_challenge_completes(self):
+    def test_lock_during_presence_verifies_fresh_confirmation_while_keeping_stale_invalidation_unverified(self):
         pre_id, fresh_id = self._dialog_identity(2), self._dialog_identity(3)
         pre_surface = {'kind': 'presence-dialog', 'identity': pre_id, 'active': True}
         fresh_surface = {'kind': 'presence-dialog', 'identity': fresh_id, 'active': True}
         native_extra, witness_mock = self._mock_private_password_delivery([pre_id, fresh_id])
-        structured_alert = {
-            'role': 2, 'visible': True,
-            'attributes': ['data-code:presence_denied', 'data-reason:step_away']}
+        refusal_alert = {'role': 2, 'visible': True, 'attributes': []}
         outcome, disable_mock, _, fake_ui = self._run_case(
             'lock-during-presence',
             dialog_surfaces=[pre_surface, None, fresh_surface, None],
-            alert_result=structured_alert,
+            alert_result=refusal_alert,
             native_input_extra=native_extra)
-        self.assertEqual(outcome[4], 'passed')
+        self.assertEqual(outcome[4], 'unverified')
         obs = outcome[5]
         self.assertEqual(obs['pre_lock_confirmation'], pre_surface)
-        self.assertEqual(obs['stale_challenge_refusal'], structured_alert)
-        self.assertTrue(obs['stale_challenge_refusal_verified'])
+        self.assertEqual(obs['stale_challenge_refusal'], refusal_alert)
+        self.assertFalse(obs['stale_challenge_refusal_verified'])
         self.assertEqual(obs['fresh_confirmation_surface'], fresh_surface)
         self.assertEqual(obs['fresh_confirmation_alerts'], [])
         self.assertTrue(obs['fresh_confirmation_verified'])
+        self.assertEqual(
+            obs['reason'],
+            'pre-lock-refusal-and-fresh-confirmation-observed-structured-stale-invalidation-unverified')
         self.assertEqual(witness_mock.call_count, 2)
         fake_ui.click.assert_any_call('Hide now')
         disable_mock.assert_called_once_with(ACCOUNT, vm_id='owned')
