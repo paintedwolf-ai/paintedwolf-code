@@ -207,15 +207,15 @@ func resolveUnderAdmittedRoots(ctx context.Context, b *sandbox.Boundary, tctx to
 		switch op {
 		case sandbox.PathOpRead:
 			if err := b.AssertReadScope(ctx, root.Path, scopeRel, tctx.ProfileID()); err != nil {
-				return Resolved{}, err
+				return Resolved{}, mapResolveErr(err, modelPath)
 			}
 		case sandbox.PathOpWrite:
 			if err := b.AssertPathAllowed(ctx, root.Path, scopeRel, sandbox.PathOpWrite); err != nil {
-				return Resolved{}, err
+				return Resolved{}, mapResolveErr(err, modelPath)
 			}
 		default:
 			if err := b.AssertPathAllowed(ctx, root.Path, scopeRel, op); err != nil {
-				return Resolved{}, err
+				return Resolved{}, mapResolveErr(err, modelPath)
 			}
 		}
 	}
