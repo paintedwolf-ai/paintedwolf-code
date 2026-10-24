@@ -40,6 +40,8 @@ jobs:
     permissions:
       contents: read
       actions: write
+      # Validate the exact live queue entry before recovered integration dispatch.
+      pull-requests: read
     uses: ./.github/workflows/verification.yml
     with:
       profile: ${{ (github.event_name == 'merge_group' || inputs.profile == 'integration') && 'integration' || 'check' }}
