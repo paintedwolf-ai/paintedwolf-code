@@ -4,11 +4,11 @@
   "kind": "module",
   "workstream": "store-health",
   "disposition": "retain",
-  "reason": "Retain the database lifecycle as one authority. Copy equivalence and preservation of an unexpected empty publication occupant are separate implementation seams within pre-open recovery, not separate subsystem authorities. The 30-file boundary keeps journal, copy, and identity decisions in db.",
+  "reason": "Retain the database lifecycle as one authority. Copy equivalence and preservation of an unexpected empty publication occupant are separate implementation seams within pre-open recovery, not separate subsystem authorities. The 30-file boundary keeps journal, copy, and identity decisions in db. The retained-copy transaction remains under the same publication authority; deterministic page-limit rollback and inconsistent-count refusal contracts passed without adding files or raising the ceiling.",
   "reviewed_commit": "582212cf337c61cbd340e889502e0ca524ceb6d1",
   "ceiling": 30,
   "boundaries": {
-    "lycaon/internal/db/rebuild_equivalence_test.go": "8bc520bb004585da1142b522fa2bddda682257582e3b712ddd18c387f15047b5",
+    "lycaon/internal/db/rebuild_equivalence_test.go": "81b1d33e34cc5d6b448af3802f21cc105601324350418ff9fcddb6a6481ec95e",
     "lycaon/internal/db/rebuild_crash_test.go": "7c3250c21e95367f8214192c26ba586ce87102fffa7c284366d6e43f8169bccb",
     "lycaon/internal/db/rebuild_journal_test.go": "46ef36ff444075d81b6e9a18477d6de726093bc96a3c28c16cf20d7d25fe239c"
   },

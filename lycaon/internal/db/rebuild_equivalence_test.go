@@ -3,6 +3,7 @@ package db
 import (
 	"bytes"
 	"database/sql"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -63,5 +64,34 @@ func TestSkippedReleasesUseRetainedRebuild(t *testing.T) {
 			defer reader.Close()
 			testutil.FailErr(t, "verify migrated fixture", validateStoreIntegrity(t.Context(), reader))
 		})
+	}
+}
+
+func TestRetainedCopyClassifiesInconsistentChunkCounts(t *testing.T) {
+	source, _ := seedLegacyManifestStore(t, t.TempDir(), map[string]int{"/work/a": 3})
+	database, err := sql.Open("sqlite", source)
+	testutil.FailErr(t, "open retained metadata", err)
+	_, err = database.Exec(`UPDATE source_manifest_chunks SET entry_count=entry_count+1 WHERE id IN (SELECT chunk_id FROM source_snapshot_chunks)`)
+	testutil.FailErr(t, "damage retained count", err)
+	testutil.FailErr(t, "close metadata", database.Close())
+	before, err := os.ReadFile(source)
+	testutil.FailErr(t, "read damaged source", err)
+	err = UpgradeStaged(t.Context(), source)
+	var failure *StoreIncompatibleError
+	if !errors.As(err, &failure) || failure.Reason != RecoveryReasonIntegrityFailed {
+		t.Fatalf("inconsistent retained count classification = %v", err)
+	}
+	after, err := os.ReadFile(source)
+	testutil.FailErr(t, "read refused source", err)
+	if !bytes.Equal(before, after) {
+		t.Fatal("refused copy changed original bytes")
+	}
+	if _, err := os.Stat(rebuildMarker(source)); !os.IsNotExist(err) {
+		t.Fatalf("failed copy left publication journal: %v", err)
+	}
+	work, err := filepath.Glob(filepath.Join(filepath.Dir(source), StoreUpgradeDirectoryPrefix+"*"))
+	testutil.FailErr(t, "inspect unpublished work", err)
+	if len(work) != 0 {
+		t.Fatal("failed copy left unpublished work")
 	}
 }

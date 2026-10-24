@@ -1,6 +1,7 @@
 package db
 
 import (
+	"bytes"
 	"database/sql"
 	"errors"
 	"os"
@@ -158,5 +159,37 @@ func TestRetainedCopyReadsPrimaryRowsWhenCoveringIndexIsDamaged(t *testing.T) {
 	testutil.FailErr(t, "verify preserved rows", tx.QueryRow(`SELECT COUNT(*) FROM main.retained WHERE (rowid=1 AND value='first') OR (rowid=2 AND value='second')`).Scan(&count))
 	if count != 2 {
 		t.Fatalf("retained rows copied=%d", count)
+	}
+}
+
+func TestRetainedCopyDiskFullPreservesSource(t *testing.T) {
+	source, _ := seedLegacyManifestStore(t, t.TempDir(), map[string]int{"/work/a": 20})
+	reader, err := OpenReadOnly(t.Context(), source)
+	testutil.FailErr(t, "open source", err)
+	plan, err := PlanUpgrade(t.Context(), reader)
+	testutil.FailErr(t, "plan retained copy", err)
+	testutil.FailErr(t, "close source", reader.Close())
+	before, err := os.ReadFile(source)
+	testutil.FailErr(t, "read source bytes", err)
+	copyDB, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "copy.db"))
+	testutil.FailErr(t, "open bounded copy", err)
+	defer copyDB.Close()
+	copyDB.SetMaxOpenConns(1)
+	_, err = copyDB.Exec(`PRAGMA max_page_count=8`)
+	testutil.FailErr(t, "bound replacement pages", err)
+	err = classifyUpgradeFailure(copyRetainedDatabase(t.Context(), copyDB, source, plan), plan.Source.Revision)
+	var full *sqlite.Error
+	if !errors.As(err, &full) || full.Code()&0xff != sqlite3.SQLITE_FULL || errors.Is(err, ErrStoreIncompatible) {
+		t.Fatalf("copy allocation failure lost its operational cause: %v", err)
+	}
+	var objects int
+	testutil.FailErr(t, "inspect rolled back replacement", copyDB.QueryRow(`SELECT COUNT(*) FROM main.sqlite_schema`).Scan(&objects))
+	if objects != 0 {
+		t.Fatalf("failed copy retained %d schema objects", objects)
+	}
+	after, err := os.ReadFile(source)
+	testutil.FailErr(t, "read original after failed copy", err)
+	if !bytes.Equal(before, after) {
+		t.Fatal("disk-full copy changed original bytes")
 	}
 }

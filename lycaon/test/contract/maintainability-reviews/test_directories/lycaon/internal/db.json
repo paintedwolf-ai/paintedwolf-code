@@ -4,11 +4,11 @@
   "kind": "test_suite",
   "workstream": "store-health",
   "disposition": "retain",
-  "reason": "Retain the 47-file private database suite. Copy equivalence, released-source routing, actual process interruption, and operational error preservation now have focused contracts; moving them outside db would expose private publication seams.",
+  "reason": "Retain the 47-file private database suite. Copy equivalence, released-source routing, actual process interruption, and operational error preservation now have focused contracts; moving them outside db would expose private publication seams. The retained-copy transaction remains under the same publication authority; deterministic page-limit rollback and inconsistent-count refusal contracts passed without adding files or raising the ceiling.",
   "reviewed_commit": "582212cf337c61cbd340e889502e0ca524ceb6d1",
   "ceiling": 47,
   "boundaries": {
-    "lycaon/internal/db/rebuild_equivalence_test.go": "8bc520bb004585da1142b522fa2bddda682257582e3b712ddd18c387f15047b5",
+    "lycaon/internal/db/rebuild_equivalence_test.go": "81b1d33e34cc5d6b448af3802f21cc105601324350418ff9fcddb6a6481ec95e",
     "lycaon/internal/db/rebuild_crash_test.go": "7c3250c21e95367f8214192c26ba586ce87102fffa7c284366d6e43f8169bccb",
     "lycaon/internal/db/rebuild_errors_test.go": "395614bfa11d8e7955bc26efbdea56a07011dbc35abe136841a54f91963e415f",
     "lycaon/internal/db/source_manifest_layout_upgrade_test.go": "e93ecffbb82a3d846c944650053ac500bb1ca65777258abe36d08eabbb06ad85"
