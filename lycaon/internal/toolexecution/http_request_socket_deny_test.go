@@ -65,7 +65,7 @@ func (r *recordingSocketRuntime) AppliedGrants(string) []confine.SocketGrant {
 	return append([]confine.SocketGrant(nil), r.granted...)
 }
 
-func (r *recordingSocketRuntime) AuthorizedGrants(_, _, _, _ string, requested []confine.SocketGrant) []confine.SocketGrant {
+func (r *recordingSocketRuntime) AuthorizedGrants(_ string, _ hitl.EffectPermitIdentity, _ string, requested []confine.SocketGrant) []confine.SocketGrant {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	var out []confine.SocketGrant
@@ -87,13 +87,13 @@ func (r *recordingSocketRuntime) GrantChat(_ string, g confine.SocketGrant, _, _
 	return true
 }
 
-func (r *recordingSocketRuntime) IssuePermit(_, _, _ string, g confine.SocketGrant) {
+func (r *recordingSocketRuntime) IssuePermit(_ hitl.EffectPermitIdentity, _ string, g confine.SocketGrant) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.permits = append(r.permits, g)
 }
 
-func (r *recordingSocketRuntime) ConsumePermit(string, string, string, confine.SocketGrant) (bool, error) {
+func (r *recordingSocketRuntime) ConsumePermit(hitl.EffectPermitIdentity, string, confine.SocketGrant) (bool, error) {
 	return false, nil
 }
 

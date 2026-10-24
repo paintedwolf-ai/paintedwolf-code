@@ -1,5 +1,6 @@
 id: explore_readonly
 description: Read-only exploration — native find/grep and metadata tools (no command)
+command_effects: [read_only]
 tools:
   recall: sticky
   read: sticky

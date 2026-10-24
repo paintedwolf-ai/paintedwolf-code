@@ -17,7 +17,7 @@ import (
 // ToolContext copies share one permit, consumed at the launch boundary.
 type executionPermit struct {
 	mu                            sync.Mutex
-	session, call                 string
+	session, call, action         string
 	boundary                      string
 	arguments                     string
 	processControl, hostExecution bool
@@ -34,7 +34,7 @@ func finalizeExecutionCapability(tc ToolContext, req confine.Request) *toolrejec
 	}
 	permit.mu.Lock()
 	defer permit.mu.Unlock()
-	if permit.arguments != executionArgumentsDigest(tc.Effects.CanonicalArgs) || permit.boundary != ExecutionBoundaryDigest(req) || permit.consumed || permit.session != tc.Identity.SessionID || permit.call != tc.Identity.ToolCallID || permit.hostExecution != req.HostExecution || permit.processControl != req.ProcessControl {
+	if permit.arguments != executionArgumentsDigest(tc.Effects.CanonicalArgs) || permit.boundary != ExecutionBoundaryDigest(req) || permit.consumed || permit.session != tc.Identity.SessionID || permit.call != tc.Identity.ToolCallID || permit.action != tc.Invocation.ID || permit.hostExecution != req.HostExecution || permit.processControl != req.ProcessControl {
 		return &toolrejection.ToolReject{Code: isolation.CodeExecutionAuthorizationChanged}
 	}
 	permit.consumed = true
@@ -87,7 +87,7 @@ func executionBoundarySet[T comparable](values []T) []T {
 
 // StampExecutionApproval binds reviewed authority to this call and launch boundary.
 func (tc *ToolContext) StampExecutionApproval(args map[string]any, reviewed hitl.ProposedAction) {
-	tc.Execution.executionPermit = &executionPermit{session: tc.Identity.SessionID, call: tc.Identity.ToolCallID, processControl: tc.Execution.ProcessControl, hostExecution: tc.Execution.HostExecution, boundary: reviewed.Execution.ExecutionBoundaryDigest, arguments: executionArgumentsDigest(args)}
+	tc.Execution.executionPermit = &executionPermit{session: tc.Identity.SessionID, call: tc.Identity.ToolCallID, action: tc.Invocation.ID, processControl: tc.Execution.ProcessControl, hostExecution: tc.Execution.HostExecution, boundary: reviewed.Execution.ExecutionBoundaryDigest, arguments: executionArgumentsDigest(args)}
 }
 
 // HasExecutionApproval reports whether this invocation reached capability review.

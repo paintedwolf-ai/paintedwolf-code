@@ -105,6 +105,9 @@ func (o ApprovalOption) validateKind() error {
 }
 
 func (d ApprovalAuthorityDelta) validate() error {
+	if d.ExecutionID != "" && ((d.Kind != AuthoritySocketPermit && d.Kind != AuthorityDirectIPPermit) || !d.PermitIdentity().Valid()) {
+		return fmt.Errorf("execution identity is valid only on exact one-action authority")
+	}
 	if d.Grant != nil {
 		if err := ValidateElevatedEffects(d.Grant.ElevatedEffects); err != nil {
 			return err

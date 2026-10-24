@@ -26,6 +26,7 @@ import (
 	sessiondecisions "github.com/lycaon/lycaon/internal/session/decisions"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolhost"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -87,6 +88,8 @@ func (r *Runtime) WireCheckpoints(ctx context.Context, deps CheckpointDependenci
 	r.Manager.SetSandboxLoopbackRuntime(loopbackRT)
 	loopbackProv := session.NewLoopbackProvenance(ctx)
 	r.Manager.SetLoopbackProvenance(loopbackProv)
+	releaseOwnedLoopback := confine.SetOwnedLoopbackResolver(ownedLoopbackResolver(loopbackProv, deps.Execution.Host.Authority.ApprovalPosture))
+	deps.Resources.Track("owned-loopback-observation", 22, releaseOwnedLoopback)
 
 	if err := wireGrantedAccess(r, deps); err != nil {
 		return err
@@ -135,11 +138,9 @@ func (r *Runtime) WireCheckpoints(ctx context.Context, deps CheckpointDependenci
 		Checkpoints:       r.Checkpoints,
 		Store:             deps.Sessions,
 		Runtime:           listenRT,
-		Loopback:          loopbackRT,
 		Authority:         deps.Execution.Host.Authority.ApprovalGate(),
 		ApprovalsDisabled: deps.Execution.Host.Authority.ApprovalsDisabled,
 		Posture:           deps.Execution.Host.Authority.ApprovalPosture,
-		Provenance:        loopbackProv,
 		Authz:             authzRec,
 	})
 	deps.Execution.Host.Authority.SetSandboxLoopbackGate(&session.LoopbackCheckpointBroker{
@@ -190,6 +191,15 @@ func wireAskSpamGuards(r *Runtime, authority *toolhost.AuthorityServices) *appro
 }
 
 func wireToolApprovalCheckpointHooks(ctx context.Context, mgr *hitl.Checkpoints, toolApprovalRT *approvalstate.ToolApprovalCoalesce) error {
+	limits, err := toolcontract.CatalogProgramMemoryLimits()
+	if err != nil {
+		return err
+	}
+	hostState, err := toolcontract.NewProgramMemory(limits)
+	if err != nil {
+		return err
+	}
+	mgr.Authority.SetNativeAuthorityAdmission(hostState)
 	mgr.Authority.SetToolApprovalTerminalHook(func(chatSessionID, grantKey string, _ hitl.DecisionStatus) {
 		toolApprovalRT.ClearPending(chatSessionID, grantKey)
 	})

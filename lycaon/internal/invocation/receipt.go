@@ -407,12 +407,11 @@ func (r *SQLRecorder) InterruptRunningSession(ctx context.Context, sessionID str
 
 // ArgsDigest identifies the exact structured argument object.
 func ArgsDigest(args map[string]any) (string, error) {
-	canonical, err := authzcontext.CanonicalJSON(args)
+	digest, err := authzcontext.CanonicalDigest(args)
 	if err != nil {
 		return "", fmt.Errorf("canonical invocation args: %w", err)
 	}
-	sum := sha256.Sum256(canonical)
-	return hex.EncodeToString(sum[:]), nil
+	return digest, nil
 }
 
 func terminalStatus(status api.InvocationStatus) bool {

@@ -57,6 +57,23 @@ incomplete input, denied authority, stale revisions and cancellation discard
 uncommitted staging. Earlier committed effects remain; programs are not
 multi-operation transactions. Host terminal stops cannot be masked by `exit 0`.
 
+Reached native operations freeze the normalized opaque-reference arguments
+before capability and policy review. Their separate `operation_arguments_v1`
+representation tags every scalar and container, sorts object keys by original
+bytes, and explicitly Base64-encodes non-UTF-8 strings and keys. Literal arrays
+cannot impersonate tags; numeric tokens retain their exact precision. The
+existing semantic grant normalization still removes declared authority-neutral
+arguments. Native review has a distinct identity domain; structured tool calls
+retain their existing digest and grant contracts. Owners receive the original
+frozen values, never a decoded inspection projection or resolved-secret record.
+
+The program frame separately retains the actual submitted `command` model
+arguments and real model call ID. Native operation arguments and child execution
+IDs cannot stand in for that outer observation. The immutable submitted JSON is
+borrowed until the frame closes. Closing denies new admission immediately;
+addressed roots and argument reservations remain held until active owner calls
+and prepared envelopes release their uses, then the shared facts are cleared.
+
 The golden program and option/limit fixture definitions are normative inputs
 for later acceptance suites. Catalog generation, reference probes and unit tests
 are distinct from executing native owners, live model qualification and installed
@@ -190,6 +207,60 @@ Every mutation-capable profile can reach all three lifecycle tools; requesting g
 A tool profile is a declared capability surface for an agent role: allowed tools, filesystem scope, command policy, loop and output budgets, and optional deferred tools. Profiles answer which capabilities an agent may request; the effect boundary still answers whether a particular request may proceed.
 
 Open-world `tools: all` means all effective registered tools admitted to that workflow surface, including enabled extensions and MCP definitions. Restricted profiles remain closed and do not gain a tool merely because it registered at runtime.
+
+### Native command admission
+
+Typed command operations are selected explicitly from immutable native definitions.
+Retained structured schema registration and discovery do not expose a native
+binding. The effective profile declares the set-valued `command_effects` axes
+(`read_only`, `mutation`, `external_exec`, `network_egress`); an absent declaration
+admits none. Coordinator surface and session posture declarations further
+intersect that set. Project posture overlays can tighten their shipped set.
+These declarations do not activate the replacement command entry or remove
+current structured tools and shell restrictions.
+
+Each program frame pins the real initiating model call, actor, session, addressed
+roots and source branches. A child has its own host execution identity, fresh
+one-call capability state and owner contract; its identity does not replace the
+model call used for checkpoint correlation. Binding and effect-class admission
+supply no filesystem, network, revision, content-review or person authority.
+Those existing boundaries still admit each reached effect, including resumption.
+
+Reached admission freezes the actual reviewed opaque-reference argument object,
+separately from the ephemeral resolved-secret copy, under the shared retained
+state admission. The required recorder marker runs before entering the complete
+native owner. `OwnerInvoked` is independent of mutation certainty: an executed
+read with `NoEffect` still rules out a claim of zero program execution. A later
+host stop cannot rewrite a completed owner result or make its output publishable.
+Socket and direct-IP once permits bind session, the real model call and optional
+native execution id; a structured-only permit cannot authorize a native child.
+
+Progress requirements belong to immutable operation metadata. Retained operations
+use the existing progress-gated catalog; native definitions declare `required` or
+`not_required`. The shared progress predicate preserves worker and review-loop
+exemptions. The introducing command entry must validate the complete syntax unit
+and optional owner-prepared progress before applying that progress, then check
+known prerequisites and recheck reached effects against current progress. A
+progress update remains separate from program success and is never inferred
+from utility output.
+
+`PrepareProgramEnvelope` requires the actual parsed program's live validated
+identity before admitting the optional payload through the existing
+`update_progress` schema and author validation. `ApplyProgramProgress` uses the
+existing policy, secret screens, review and progress store, checking the held
+program identity and current root again before application. Its host envelope
+execution id has no invented shell node or source span. The progress recorder
+marker and `AuthorUpdateResult` remain separate from program-child settlement;
+a committed checklist is preserved after a later denied operation. These typed
+ports do not activate the replacement command entry.
+
+A listen request alone grants no connection. Automatic paired loopback access
+requires narrowed per-action conditional admission, current policy, and a fresh
+exact native listener/resource observation before dialing and before payload
+writes. Incomplete platform ownership observations use ordinary approval.
+Separately approved connect grants retain their existing authority. Resource
+identity changes stop later writes without rewriting earlier delivered effects;
+these checks do not claim kernel-atomic ownership across observation and write.
 
 ### Turn tool plans
 

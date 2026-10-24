@@ -7,7 +7,6 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/oar"
-	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 	"github.com/lycaon/lycaon/internal/session/workeradmission"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -38,12 +37,8 @@ func (m *Service) BeforeTool(
 	}
 	implState := m.state.ForSession(ctx, sess)
 	surfaceID := m.surface.PromptTurnSurfaceID(sess.ID)
-	root := sessiontree.RootID(ctx, m.store, sess.ID)
-	currentProgress := ""
-	if m.progress != nil {
-		currentProgress = m.progress.Get(ctx, root)
-	}
-	reviewLoopActive := m.workflows != nil && m.workflows.Policy.ActivePhaseHasReviewLoop(ctx, sess.ID)
+	progressState := m.progressPrerequisites(ctx, sess)
+	root, currentProgress, reviewLoopActive := progressState.RootSessionID, progressState.Content, progressState.ReviewLoopActive
 	closureBaseline, closureArmed := m.ProgressClosure.Baseline(root)
 	guardDeps := m.WorkerAdmission()
 	declaredVerify := ""

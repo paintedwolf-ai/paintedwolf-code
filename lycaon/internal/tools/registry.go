@@ -307,6 +307,8 @@ type InvocationExecution struct {
 
 // InvocationLocal carries local network grants and audit.
 type InvocationLocal struct {
+	// OwnedLoopbackPorts requires fresh exact listener proof at every mediated write.
+	OwnedLoopbackPorts []uint16
 	// ContainerRecorder records container launches for session loopback provenance.
 	ContainerRecorder ContainerRecorder
 	// SocksProxyEnv is true when the invocation asked for ALL_PROXY (mediated SOCKS).
@@ -444,15 +446,19 @@ func (m ToolMeta) IsMCP() bool {
 
 // Invocation is the immutable action envelope passed to a subsystem owner.
 type Invocation struct {
-	ID             string
-	ProjectID      string
-	SessionID      string
-	MessageID      string
-	ToolCallID     string
-	ToolName       string
-	ArgsDigest     string
-	ContractDigest string
-	Contract       toolcontract.Contract
+	NativeReview    *hitl.NativeActionReview
+	NativeInputs    *hitl.NativeActionInputs
+	NativeOperation *toolcontract.BoundOperation
+	NativeStages    []toolcontract.ExecutionStage
+	ID              string
+	ProjectID       string
+	SessionID       string
+	MessageID       string
+	ToolCallID      string
+	ToolName        string
+	ArgsDigest      string
+	ContractDigest  string
+	Contract        toolcontract.Contract
 }
 
 // Definition is one atomically published registry entry.

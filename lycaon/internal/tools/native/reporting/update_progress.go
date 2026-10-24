@@ -2,6 +2,7 @@ package reporting
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
@@ -22,27 +23,24 @@ func ProgressHandler(store progress.Store, scopeKey ProgressScopeKey) tools.Tool
 			return "", fmt.Errorf("session required")
 		}
 		content, _ := args["content"].(string)
-		content = strings.TrimSpace(content)
-		if content == "" {
-			return "", fmt.Errorf("content is required")
+		prepared, err := progress.PrepareAuthorUpdate(content)
+		if err != nil {
+			var rejected *progress.AuthorUpdateRejection
+			if errors.As(err, &rejected) {
+				return "", &toolrejection.ToolReject{Code: rejected.Code, Data: rejected.Data}
+			}
+			return "", err
 		}
-		if code, data, ok := progress.ValidateAuthorProgress(content); !ok {
-			return "", &toolrejection.ToolReject{Code: code, Data: data}
+		result, err := prepared.Apply(ctx, store, root)
+		if err != nil {
+			return "", err
 		}
-		prev := store.Get(ctx, root)
-		// Identical content adds no revision or transcript row.
-		if strings.TrimSpace(prev) == content {
-			raw, _ := surveyjson.Marshal(map[string]any{
-				"status": "unchanged",
-			})
-			return string(raw), nil
+		status := "unchanged"
+		if result.Updated {
+			status = "updated"
 		}
-		if err := store.Set(root, content); err != nil {
-			return "", fmt.Errorf("store progress: %w", err)
-		}
-		progress.NotifyWriteObservers(ctx, progress.WriteEvent{SessionID: root, Prev: prev})
 
-		raw, _ := surveyjson.Marshal(map[string]any{"status": "updated"})
+		raw, _ := surveyjson.Marshal(map[string]any{"status": status})
 		return string(raw), nil
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"net/netip"
 	"strconv"
 	"strings"
 	"time"
@@ -22,9 +23,7 @@ type ListenCheckpointBroker struct {
 	Checkpoints hitl.CheckpointManager
 	Store       Store
 	Runtime     *approvalstate.SandboxPortGrantRuntime
-	Loopback    *approvalstate.SandboxPortGrantRuntime
 	Authority   hitl.ApprovalGate
-	Provenance  LoopbackProvenanceResolver
 	// ApprovalsDisabled authorizes the request without a prompt.
 	ApprovalsDisabled func(projectDir string) bool
 	Posture           func(projectDir string) gate.Posture
@@ -51,9 +50,6 @@ func (b *ListenCheckpointBroker) Await(ctx context.Context, in tools.LocalListen
 	}
 	if b.ApprovalsDisabled != nil && b.ApprovalsDisabled(in.ProjectDir) {
 		b.Runtime.GrantSessionPorts(rootSessionID, nil)
-		if b.Loopback != nil {
-			b.Loopback.GrantSessionPorts(rootSessionID, nil)
-		}
 		return tools.LocalListenResult{Authorized: true}, nil
 	}
 
@@ -68,9 +64,6 @@ func (b *ListenCheckpointBroker) Await(ctx context.Context, in tools.LocalListen
 	verdict, _ := gate.Evaluate(facts, b.posture(in.ProjectDir))
 	if verdict != gate.Ask {
 		b.Runtime.GrantSessionPorts(rootSessionID, ports)
-		if reach := connectCoGrant(ctx, b.Provenance, invokingSessionID, in.ProjectDir, ports); len(reach) > 0 && b.Loopback != nil {
-			b.Loopback.GrantSessionPorts(rootSessionID, reach)
-		}
 		return tools.LocalListenResult{Authorized: true, Ports: ports}, nil
 	}
 
@@ -80,30 +73,27 @@ func (b *ListenCheckpointBroker) Await(ctx context.Context, in tools.LocalListen
 	return b.raiseListenCard(ctx, in, invokingSessionID, rootSessionID, ports)
 }
 
-// connectCoGrant is the connect authority a listener grant carries: the
-// declared ports only, minus any a listener this session does not own already
-// holds. An undeclared port set carries none.
-func connectCoGrant(ctx context.Context, provenance LoopbackProvenanceResolver, invokingSessionID, projectDir string, ports []uint16) []uint16 {
-	if provenance == nil {
-		return nil
-	}
-	var reach []uint16
-	for _, p := range ports {
-		if !provenance.HeldByOther(ctx, invokingSessionID, projectDir, p) {
-			reach = append(reach, p)
-		}
-	}
-	return reach
-}
-
-// sessionOwnsPorts reports whether every requested port is served by this session.
-// An unnarrowed request is never owned.
+// sessionOwnsPorts reports whether every requested port is exclusively served
+// by this session with complete holder observation across loopback families.
+// An unnarrowed, partially observed, or shared port is never owned.
 func sessionOwnsPorts(ctx context.Context, provenance LoopbackProvenanceResolver, invokingSessionID, projectDir string, ports []uint16) bool {
-	if provenance == nil || len(ports) == 0 {
+	observer, ok := provenance.(ExactSessionListener)
+	if !ok || invokingSessionID == "" || len(ports) == 0 || ctx.Err() != nil {
 		return false
 	}
 	for _, p := range ports {
-		if owned, _ := provenance.IsSessionOwned(ctx, invokingSessionID, projectDir, p); !owned {
+		if p == 0 || provenance.HeldByOther(ctx, invokingSessionID, projectDir, p) {
+			return false
+		}
+		id4, owned4, err4 := observer.ObserveSessionListener(ctx, invokingSessionID, netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), p))
+		id6, owned6, err6 := observer.ObserveSessionListener(ctx, invokingSessionID, netip.AddrPortFrom(netip.IPv6Loopback(), p))
+		if err4 != nil || err6 != nil || ctx.Err() != nil {
+			return false
+		}
+		if (id4 != "" && !owned4) || (id6 != "" && !owned6) {
+			return false
+		}
+		if (!owned4 || id4 == "") && (!owned6 || id6 == "") {
 			return false
 		}
 	}

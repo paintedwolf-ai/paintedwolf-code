@@ -23,10 +23,11 @@ type Card struct {
 
 // Surface is a coordinator surface declaration.
 type Surface struct {
-	ActivityLabel string `yaml:"activity_label"`
-	ModeRef       string `yaml:"mode_ref"`
-	Card          Card   `yaml:"card"`
-	Exit          string `yaml:"exit"`
+	CommandEffects []toolcontract.CommandEffectClass `yaml:"command_effects"`
+	ActivityLabel  string                            `yaml:"activity_label"`
+	ModeRef        string                            `yaml:"mode_ref"`
+	Card           Card                              `yaml:"card"`
+	Exit           string                            `yaml:"exit"`
 	// ProseFinish lets a turn on this surface end with grounded prose to the person.
 	ProseFinish bool `yaml:"prose_finish"`
 	// Floor is offered on every model call.
@@ -91,6 +92,9 @@ func validate(rows map[string]Surface) (Catalog, error) {
 		id := strings.TrimSpace(rawID)
 		if id == "" {
 			return Catalog{}, fmt.Errorf("coordinator surfaces: empty surface id")
+		}
+		if _, err := toolcontract.NewCommandEffects(row.CommandEffects...); err != nil {
+			return Catalog{}, fmt.Errorf("coordinator surface %q command effects: %w", id, err)
 		}
 		var err error
 		row.Floor, err = normalizeNames(id, "floor", row.Floor)
@@ -163,6 +167,7 @@ func (c Catalog) Surface(id string) (Surface, error) {
 	if !ok || id == NoFolderAllowlistID {
 		return Surface{}, fmt.Errorf("unknown coordinator surface %q", id)
 	}
+	row.CommandEffects = append([]toolcontract.CommandEffectClass(nil), row.CommandEffects...)
 	row.Floor = append([]string(nil), row.Floor...)
 	row.Loadable = append([]string(nil), row.Loadable...)
 	return row, nil
