@@ -179,6 +179,26 @@ export function sortTranscriptItemsByOrd<T extends TranscriptItem>(
   return sortItemsWithIndex(items, buildOrdIndex(messages));
 }
 
+/**
+ * A row whose message is outside the ord index shares its neighbor's key, so the stable sort keeps
+ * it where the span placed it instead of sending it to the tail. A pending send stays last.
+ */
+function holdUnorderedRowsInPlace(rows: { item: TranscriptItem; key: TranscriptOrdSortKey }[]): void {
+  const unordered = (row: (typeof rows)[number]) =>
+    row.key.ord === Number.MAX_SAFE_INTEGER && row.item.kind !== "pending_user";
+  let previous: TranscriptOrdSortKey | undefined;
+  for (const row of rows) {
+    if (!unordered(row)) previous = row.key;
+    else if (previous) row.key = previous;
+  }
+  const leading = rows.find((row) => !unordered(row))?.key;
+  if (!leading) return;
+  for (const row of rows) {
+    if (!unordered(row)) break;
+    row.key = leading;
+  }
+}
+
 export function sortItemsWithIndex<T extends TranscriptItem>(items: readonly T[], index: OrdIndex): T[] {
   const indexed = items.map((item) => ({
     item,
@@ -188,6 +208,7 @@ export function sortItemsWithIndex<T extends TranscriptItem>(items: readonly T[]
       index.progressSeqById,
     ),
   }));
+  holdUnorderedRowsInPlace(indexed);
   indexed.sort((a, b) => compareTranscriptOrdSortKeys(a.key, b.key));
   return indexed.map((row) => row.item);
 }

@@ -120,6 +120,55 @@ describe("createTranscriptVirtualizer lost anchor resolution", () => {
     }
   });
 
+  it("does not carry the reader with an anchor row that reorders to the tail", async () => {
+    const el = document.createElement("div");
+    Object.defineProperty(el, "clientHeight", { value: 400, configurable: true });
+    Object.defineProperty(el, "clientWidth", { value: 400, configurable: true });
+    Object.defineProperty(el, "scrollHeight", { value: 100_000, configurable: true });
+    Object.defineProperty(el, "scrollTop", { value: 0, writable: true, configurable: true });
+    mockScrollerMotion(el);
+    document.body.appendChild(el);
+
+    const user = (key: string): TranscriptItem => ({ kind: "user", key, text: key });
+    const rows = Array.from({ length: 10 }, (_, i) => user(`u-${i}`));
+    const [items, setItems] = createSignal<TranscriptItem[]>(rows);
+    const shifts: number[] = [];
+    let virtualizer!: MeasuredTranscriptVirtualizer;
+    const dispose = createRoot((d) => {
+      virtualizer = createTranscriptVirtualizer({
+        items,
+        scrollElement: () => el,
+        rowSizeHint: () => 72,
+        revealOffset: () => {},
+        shiftContent: (delta) => {
+          shifts.push(delta);
+          return delta;
+        },
+        observeElementRect: (_instance, cb) => {
+          cb({ width: 400, height: 400 });
+          return () => {};
+        },
+        observeElementOffset: (_instance, cb) => {
+          cb(0, false);
+          return () => {};
+        },
+      });
+      return d;
+    });
+
+    try {
+      expect(virtualizer.getVirtualItemForOffset(0)?.key).toBe("u-0");
+      // Same count, new order: the reader at the top keeps reading the top, not the moved row.
+      setItems([...rows.slice(1), rows[0]!]);
+      await Promise.resolve();
+      expect(shifts.filter((delta) => Math.abs(delta) >= 400)).toEqual([]);
+      expect(virtualizer.getVirtualItemForOffset(virtualizer.scrollOffset!)?.key).toBe("u-1");
+    } finally {
+      dispose();
+      el.remove();
+    }
+  });
+
   it("adjusts scroll offset when rows prepended into the before runway resize above the carried anchor", async () => {
     const el = document.createElement("div");
     Object.defineProperty(el, "clientHeight", { value: 400, configurable: true });
