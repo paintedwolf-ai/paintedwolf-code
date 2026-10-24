@@ -2,6 +2,8 @@ import { createSignal } from "solid-js";
 import { describe, expect, it, vi } from "vitest";
 import { createSeenMarker } from "./seen-marker.ts";
 
+const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
 type Harness = {
   setReadable: (id: string | null) => void;
   setRevision: (rev: string) => void;
@@ -38,8 +40,9 @@ describe("createSeenMarker", () => {
     h.dispose();
   });
 
-  it("re-marks when a turn lands while the person is watching", () => {
+  it("re-marks when a turn lands while the person is watching", async () => {
     const h = harness();
+    await settle();
     // A finish observed on screen is marked read immediately.
     h.setRevision("idle:2");
     expect(h.mark).toHaveBeenCalledTimes(2);
@@ -74,7 +77,7 @@ describe("createSeenMarker", () => {
     const [revision, setRevision] = createSignal("idle:1");
     const mark = vi.fn(() => Promise.reject(new Error("offline")));
     const dispose = createSeenMarker({ readable, revision, mark });
-    await Promise.resolve();
+    await settle();
     setRevision("idle:2");
     expect(mark).toHaveBeenCalledTimes(2);
     dispose();
@@ -101,10 +104,62 @@ describe("createSeenMarker", () => {
     dispose();
   });
 
+  it("collapses changes during a post into one trailing post", async () => {
+    const [readable] = createSignal<string | null>("s1");
+    const [revision, setRevision] = createSignal("busy:1");
+    const posts: Array<() => void> = [];
+    const mark = vi.fn(() => new Promise<void>((resolve) => posts.push(resolve)));
+    const dispose = createSeenMarker({ readable, revision, mark });
+    for (let n = 2; n <= 20; n++) setRevision(`busy:${n}`);
+    expect(mark).toHaveBeenCalledOnce();
+    posts.shift()?.();
+    await settle();
+    expect(mark).toHaveBeenCalledTimes(2);
+    posts.shift()?.();
+    await settle();
+    expect(mark).toHaveBeenCalledTimes(2);
+    dispose();
+  });
+
+  it("drops the trailing post when the session is no longer readable", async () => {
+    const [readable, setReadable] = createSignal<string | null>("s1");
+    const [revision, setRevision] = createSignal("busy:1");
+    let finish = () => {};
+    const mark = vi.fn(() => new Promise<void>((resolve) => { finish = resolve; }));
+    const dispose = createSeenMarker({ readable, revision, mark });
+    setRevision("busy:2");
+    setReadable(null);
+    finish();
+    await settle();
+    expect(mark).toHaveBeenCalledOnce();
+    dispose();
+  });
+
+  it("does not hold one session's stamp behind another's", () => {
+    const [readable, setReadable] = createSignal<string | null>("s1");
+    const [revision] = createSignal("idle:1");
+    const mark = vi.fn(() => new Promise<void>(() => {}));
+    const dispose = createSeenMarker({ readable, revision, mark });
+    setReadable("s2");
+    expect(mark.mock.calls).toEqual([["s1"], ["s2"]]);
+    dispose();
+  });
+
   it("stops marking after dispose", () => {
     const h = harness();
     h.dispose();
     h.setRevision("idle:2");
     expect(h.mark).toHaveBeenCalledOnce();
   });
+});
+
+it("releases a synchronously failed stamp for the next revision", async () => {
+  const [readable] = createSignal<string | null>("s1");
+  const [revision, setRevision] = createSignal("idle:1");
+  const mark = vi.fn((): Promise<void> => { throw new Error("offline"); });
+  const dispose = createSeenMarker({ readable, revision, mark });
+  await settle();
+  setRevision("idle:2");
+  expect(mark).toHaveBeenCalledTimes(2);
+  dispose();
 });
