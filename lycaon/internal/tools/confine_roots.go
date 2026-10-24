@@ -63,7 +63,7 @@ func writeRootRefusalReject(err *confine.WriteRootRefusalError) *toolrejection.T
 		return nil
 	}
 	code := isolation.CodeCapabilityRequestInvalid
-	if err.Code == confine.WriteRootCodeControlPlane {
+	if err.Code == confine.WriteRootCodeControlPlane || err.Code == confine.WriteRootCodeContainsState {
 		code = isolation.CodeControlPlaneDenied
 	}
 	return &toolrejection.ToolReject{
