@@ -4,6 +4,7 @@ package launchguard
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"os"
