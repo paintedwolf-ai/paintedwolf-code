@@ -49,14 +49,13 @@ func Relaunch(self string, args []string, plan []byte, network Network, marker, 
 		return 0, 0, fmt.Errorf("signal report pipe: %w", err)
 	}
 	defer func() { _ = report.Close() }()
-	pair, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_SEQPACKET|unix.SOCK_CLOEXEC, 0)
+	control, controlChild, err := controlPair()
 	if err != nil {
 		_ = read.Close()
 		_ = write.Close()
 		_ = reportWrite.Close()
 		return 0, 0, fmt.Errorf("control socket: %w", err)
 	}
-	control, controlChild := os.NewFile(uintptr(pair[0]), "control"), os.NewFile(uintptr(pair[1]), "control-child")
 	// A nil *os.File stored in the interface would not read as no feed.
 	var lines io.Writer
 	if refusals != nil {
