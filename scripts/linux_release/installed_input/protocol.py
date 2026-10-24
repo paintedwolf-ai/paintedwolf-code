@@ -66,6 +66,8 @@ def steps(operation: str) -> tuple[tuple[str, ...], ...]:
         return _literal_steps(gui_endpoint(int(endpoint.group(1))))
     if operation == 'reply-fixture-prompt-v1':
         return _literal_steps('Run the installed qualification fixture using command.')
+    if operation == 'browser-fixture-prompt-v1':
+        return _literal_steps('Open fixture.html in the managed browser and finish the fixture.')
     if operation == 'editor-replace-save-v1':
         return _EDITOR_STEPS
     if operation == 'editor-find-needle-v1':

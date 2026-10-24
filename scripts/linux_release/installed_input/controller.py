@@ -40,7 +40,8 @@ def delivery_records(directory, execution, vm_id):
     import json
     records, operations = [], []
     cases = [('conversation/restart-and-reconnect', 'reply'), ('files/edit-search-review', 'editor'),
-             ('windowing/workspace-activation-and-exit', 'workspace')]
+             ('windowing/workspace-activation-and-exit', 'workspace'),
+             ('browser/browser-sandbox-composition', 'browser')]
     for case, kind in cases:
         leaf = directory / ('leaf/evidence/' + case + '/execution.json')
         if not leaf.exists():
@@ -49,8 +50,9 @@ def delivery_records(directory, execution, vm_id):
             raise ValueError('native input guest observations exceed their case bound')
         document = json.loads(leaf.read_bytes())
         observations = document['observations']
-        if kind in {'reply', 'workspace'}:
+        if kind in {'reply', 'workspace', 'browser'}:
             launch = 'launch_before' if kind == 'reply' else 'launch'
+            prompt = 'browser-fixture-prompt-v1' if kind == 'browser' else 'reply-fixture-prompt-v1'
             selected = observations.get(launch, {}).get('fixed_input', [])
             recovery = observations.get('provider_recovery')
             input_limit = 1 if recovery is not None else 4
@@ -59,11 +61,11 @@ def delivery_records(directory, execution, vm_id):
             partial = observations.get('native_input')
             provider_partial = (kind == 'workspace' and partial is not None
                 and len(selected) < input_limit and not observations.get('transitions'))
-            if partial is not None and (kind == 'reply' or provider_partial):
+            if partial is not None and (kind in {'reply', 'browser'} or provider_partial):
                 selected = [*selected, partial]
             if len(selected) > input_limit:
                 raise ValueError('reply input exceeds its fixed transaction count')
-            order = ('provider-name-v1', None, 'provider-fixture-credential-v1', 'reply-fixture-prompt-v1')
+            order = ('provider-name-v1', None, 'provider-fixture-credential-v1', prompt)
             if recovery is not None:
                 from ..installed_cases.provider_recovery import registered
                 prior = leaf.with_name('provider-registration.bin')
@@ -76,7 +78,7 @@ def delivery_records(directory, execution, vm_id):
                 admitted = registered(json.loads(raw), binding, account)
                 if recovery != {**admitted, 'prior_execution_sha256': hashlib.sha256(raw).hexdigest()} or len(selected) > 1:
                     raise ValueError('provider recovery differs from its retained registration and fixed input order')
-                order = ('reply-fixture-prompt-v1',)
+                order = (prompt,)
             for index, record in enumerate(selected):
                 operation = order[index]
                 if operation is None:
