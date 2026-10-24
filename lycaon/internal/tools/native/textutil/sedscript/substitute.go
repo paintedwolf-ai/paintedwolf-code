@@ -57,7 +57,9 @@ func (s *substitution) apply(m *Machine) error {
 		return nil
 	}
 	m.space.pattern = append(out, space[copied:]...)
+	m.stream.pin = nil
 	m.stream.replaced = true
+	m.stream.pin = nil
 	if err := m.space.account(m.config.SpaceLimit, m.config.Reserve); err != nil {
 		return err
 	}

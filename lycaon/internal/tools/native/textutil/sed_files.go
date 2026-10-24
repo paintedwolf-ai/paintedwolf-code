@@ -187,7 +187,13 @@ func (s *sedInput) Next() (sedscript.Record, error) {
 		if err != nil {
 			return sedscript.Record{}, err
 		}
-		return sedscript.Record{Text: text, Terminated: terminated, Source: s.sources[0].name}, nil
+		return sedscript.Record{
+			Text:       text,
+			Terminated: terminated,
+			Source:     s.sources[0].name,
+			Pin:        s.sources[0].pin,
+			Offset:     s.records.lastOffset,
+		}, nil
 	}
 	return sedscript.Record{}, io.EOF
 }

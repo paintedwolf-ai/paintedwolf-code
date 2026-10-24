@@ -2,11 +2,8 @@ package sourceview
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"strings"
 
-	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
@@ -27,43 +24,4 @@ func OpenDocument(ctx context.Context, tctx tools.ToolContext, resolved projectp
 		return tools.EditorDocumentText{}, false, fmt.Errorf("read collaborative document: %w", err)
 	}
 	return doc, open, nil
-}
-
-// ErrDocumentUnrepresentable reports accepted text its recorded encoding cannot hold.
-var ErrDocumentUnrepresentable = errors.New("accepted document is not representable in its recorded encoding")
-
-// DocumentBytes encodes accepted text exactly as a save writes it: the
-// recorded encoding, BOM and newline policy. A clean document whose published
-// bytes do not round-trip (mixed newlines) is served from those bytes, which
-// are its accepted state. The result never exceeds maxBytes.
-func DocumentBytes(doc tools.EditorDocumentText, resolved projectpaths.Resolved, maxBytes int64) ([]byte, error) {
-	encoding := doc.Encoding
-	if encoding == "" {
-		encoding = textfile.UTF8
-	}
-	text := doc.Text
-	if doc.EOL == "crlf" {
-		text = strings.ReplaceAll(text, "\n", "\r\n")
-	}
-	encoded, err := textfile.EncodeBounded(text, encoding, textfile.LimitsForRaw(maxBytes))
-	if textTooLarge(err) {
-		return nil, AccessRead.SizeReject("read", resolved.DisplayPath, int64(len(text)), maxBytes)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrDocumentUnrepresentable, err)
-	}
-	if textfile.SHA256(encoded) == doc.SHA256 {
-		return encoded, nil
-	}
-	if doc.Dirty {
-		return nil, ErrDocumentUnrepresentable
-	}
-	raw, err := ReadContentCapped("read", AccessRead, resolved.EffectLocation(), resolved.DisplayPath, resolved.Compressed, maxBytes)
-	if err != nil {
-		return nil, err
-	}
-	if textfile.SHA256(raw) != doc.SHA256 {
-		return nil, ErrDocumentUnrepresentable
-	}
-	return raw, nil
 }

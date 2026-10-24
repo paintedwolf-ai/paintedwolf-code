@@ -6,6 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+
+	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
 // Record is one input record; Text is valid until the next call to Next.
@@ -14,6 +17,8 @@ type Record struct {
 	Text       []byte
 	Terminated bool
 	Source     string
+	Pin        *toolcontract.SourcePin
+	Offset     int64
 }
 
 // Input yields records and io.EOF at the end.
@@ -62,6 +67,8 @@ type inputState struct {
 	aheadOK    bool
 	line       int
 	source     string
+	pin        *toolcontract.SourcePin
+	offset     int64
 	terminated bool
 	replaced   bool
 	steps      int64
@@ -76,8 +83,16 @@ type spaces struct {
 // output is one destination; pending records that the last record written
 // lacked its newline, which later output restores first.
 type output struct {
-	w       io.Writer
-	pending bool
+	w              io.Writer
+	pending        bool
+	written        int64
+	mappings       commandprogram.SourceMappingRecorder
+	pendingMapping *toolcontract.StreamSourceMapping
+}
+
+func newOutput(w io.Writer) *output {
+	mappings, _ := w.(commandprogram.SourceMappingRecorder)
+	return &output{w: w, mappings: mappings}
 }
 
 type appendItem struct {
@@ -104,14 +119,14 @@ func NewMachine(ctx context.Context, program *Program, config Config) (*Machine,
 		config.Stderr = io.Discard
 	}
 	m := &Machine{ctx: ctx, program: program, config: config, outputs: map[string]*output{}, cursors: map[string]int{}}
-	m.outputs[Stdout] = &output{w: config.Stdout}
-	m.outputs[Stderr] = &output{w: config.Stderr}
+	m.outputs[Stdout] = newOutput(config.Stdout)
+	m.outputs[Stderr] = newOutput(config.Stderr)
 	for _, name := range program.writes {
 		w, ok := config.Writers[name]
 		if !ok {
 			return nil, fmt.Errorf("sed write file %s is not open", name)
 		}
-		m.outputs[name] = &output{w: w}
+		m.outputs[name] = newOutput(w)
 	}
 	return m, nil
 }
@@ -128,7 +143,7 @@ func (m *Machine) Stream(in Input, out io.Writer) (bool, error) {
 	}
 	m.stream = inputState{in: in, out: m.outputs[Stdout]}
 	if out != nil {
-		m.stream.out = &output{w: out}
+		m.stream.out = newOutput(out)
 	}
 	for _, c := range m.program.commands {
 		c.span = rangeState{active: c.first != nil && c.first.kind == addrZero}
@@ -141,31 +156,31 @@ func (m *Machine) Stream(in Input, out io.Writer) (bool, error) {
 	for {
 		if !restart {
 			if ok, err := m.next(false); err != nil || !ok {
-				return false, err
+				return false, errors.Join(err, m.stream.out.flushMapping())
 			}
 		}
 		end, err := m.execute()
 		if err != nil {
-			return false, err
+			return false, errors.Join(err, m.stream.out.flushMapping())
 		}
 		if (end == endCycle || end == endQuit) && !m.config.Quiet {
-			if err := m.stream.out.emit(m.space.pattern, m.config.Delimiter, m.stream.terminated); err != nil {
-				return false, err
+			if err := m.stream.out.emitMapped(m.space.pattern, m.config.Delimiter, m.stream.terminated, m.stream.pin, m.stream.offset); err != nil {
+				return false, errors.Join(err, m.stream.out.flushMapping())
 			}
 		}
 		if end != endQuitSilent {
 			if err := m.dumpAppends(); err != nil {
-				return false, err
+				return false, errors.Join(err, m.stream.out.flushMapping())
 			}
 		}
 		if end == endQuit || end == endQuitSilent {
 			m.quit = true
-			return true, nil
+			return true, m.stream.out.flushMapping()
 		}
 		restart = end == endRestart
 		if restart {
 			if err := m.stream.step(m.ctx, m.config.StepLimit); err != nil {
-				return false, err
+				return false, errors.Join(err, m.stream.out.flushMapping())
 			}
 		}
 	}
@@ -197,8 +212,10 @@ func (m *Machine) next(appending bool) (bool, error) {
 	record := m.stream.ahead
 	if appending {
 		m.space.pattern = append(append(m.space.pattern, m.config.Delimiter), record.Text...)
+		m.stream.pin = nil
 	} else {
 		m.space.pattern = append(m.space.pattern[:0], record.Text...)
+		m.stream.pin, m.stream.offset = record.Pin, record.Offset
 	}
 	m.stream.terminated, m.stream.source = record.Terminated, record.Source
 	m.stream.line++
@@ -244,27 +261,87 @@ func (s *spaces) account(limit int64, reserve func(int64) error) error {
 // emit writes one record to an output. A record that lacked its delimiter is
 // written without it; later output first restores a newline.
 func (o *output) emit(record []byte, delimiter byte, terminated bool) error {
-	if err := o.raw(record); err != nil {
+	return o.emitMapped(record, delimiter, terminated, nil, 0)
+}
+
+func (o *output) emitMapped(record []byte, delimiter byte, terminated bool, pin *toolcontract.SourcePin, sourceOffset int64) error {
+	if o.pending {
+		if err := o.flushMapping(); err != nil {
+			return err
+		}
+		if err := o.writeBytes([]byte{'\n'}); err != nil {
+			return err
+		}
+		o.pending = false
+	}
+	start := o.written
+	if err := o.writeBytes(record); err != nil {
 		return err
 	}
 	if !terminated {
 		o.pending = true
+	} else if err := o.writeBytes([]byte{delimiter}); err != nil {
+		return err
+	}
+	end := o.written
+	if pin != nil && (!terminated || delimiter == '\n') && end > start {
+		return o.recordSpan(*pin, start, end, sourceOffset, sourceOffset+(end-start))
+	}
+	return o.flushMapping()
+}
+
+func (o *output) recordSpan(pin toolcontract.SourcePin, outStart, outEnd, srcStart, srcEnd int64) error {
+	if o.mappings == nil || outEnd <= outStart || srcEnd <= srcStart {
 		return nil
 	}
-	_, err := o.w.Write([]byte{delimiter})
+	if m := o.pendingMapping; m != nil &&
+		m.Source == pin &&
+		m.OutputEndByte == outStart && m.SourceEndByte == srcStart {
+		m.OutputEndByte = outEnd
+		m.SourceEndByte = srcEnd
+		return nil
+	}
+	if err := o.flushMapping(); err != nil {
+		return err
+	}
+	o.pendingMapping = &toolcontract.StreamSourceMapping{
+		Source:          pin,
+		OutputStartByte: outStart,
+		OutputEndByte:   outEnd,
+		SourceStartByte: srcStart,
+		SourceEndByte:   srcEnd,
+	}
+	return nil
+}
+
+func (o *output) flushMapping() error {
+	if o.mappings == nil || o.pendingMapping == nil {
+		o.pendingMapping = nil
+		return nil
+	}
+	m := *o.pendingMapping
+	o.pendingMapping = nil
+	return o.mappings.RecordSourceMapping(m)
+}
+
+func (o *output) writeBytes(p []byte) error {
+	n, err := o.w.Write(p)
+	o.written += int64(n)
 	return err
 }
 
 // raw writes bytes after restoring a missing newline.
 func (o *output) raw(text []byte) error {
+	if err := o.flushMapping(); err != nil {
+		return err
+	}
 	if o.pending {
-		if _, err := o.w.Write([]byte{'\n'}); err != nil {
+		if err := o.writeBytes([]byte{'\n'}); err != nil {
 			return err
 		}
 		o.pending = false
 	}
-	_, err := o.w.Write(text)
-	return err
+	return o.writeBytes(text)
 }
 
 // text writes a, i and c text and its newline.
@@ -272,8 +349,7 @@ func (o *output) text(text []byte) error {
 	if err := o.raw(text); err != nil {
 		return err
 	}
-	_, err := o.w.Write([]byte{'\n'})
-	return err
+	return o.writeBytes([]byte{'\n'})
 }
 
 // dumpAppends writes queued a text, r file contents and R lines.

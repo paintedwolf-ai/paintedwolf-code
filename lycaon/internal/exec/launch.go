@@ -158,7 +158,7 @@ func AgentLaunchOptions(launch LaunchPlan, dir string, environment, pathExtra []
 			opts.InlineEnv[name] = value
 		}
 		if err := ValidateInlineEnv(opts.InlineEnv); err != nil {
-			return ExecOpts{}, err
+			return ExecOpts{Launch: launch}, err
 		}
 	}
 	return opts, nil

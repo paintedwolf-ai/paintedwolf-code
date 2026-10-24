@@ -71,6 +71,7 @@ func (r *CommandServices) SetSandboxWriteRootGate(writeRoot command.SandboxWrite
 				ProjectID: tc.Identity.ProjectID, ToolCallID: tc.Identity.ToolCallID, ProjectDir: tc.ActiveRootPath(),
 				ToolName: tool, Command: commandsurface.PrimaryCommandLine(args, nil), ProposedWriteRoot: root,
 				SessionScratchRoot: tc.Host.SessionScratchDir,
+				SessionOutputRoot:  tc.Host.SessionOutputDir,
 			})
 			return result.Authorized, result.Denied, result.UserGuidance, err
 		})
@@ -82,6 +83,7 @@ func (r *CommandServices) SetSandboxWriteRootGate(writeRoot command.SandboxWrite
 				ToolName: tool, Command: commandsurface.PrimaryCommandLine(args, nil), ProposedReadPath: path,
 				ReadDenyPaths:      tools.ActionConfineInputsForContext(tc, nil).ReadDenyPaths,
 				SessionScratchRoot: tc.Host.SessionScratchDir,
+				SessionOutputRoot:  tc.Host.SessionOutputDir,
 			})
 			return result.Authorized, result.Denied, result.UserGuidance, err
 		})

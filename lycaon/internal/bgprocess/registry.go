@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/captureprojection"
-	"github.com/lycaon/lycaon/internal/indexwatch"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -140,15 +139,18 @@ func (r *processTable) lookup(sessionID, handle string) (*Process, error) {
 }
 
 func (r *processTable) remove(sessionID, handle string) {
+	var owned completionResources
 	r.mu.Lock()
-	defer r.mu.Unlock()
+	defer func() {
+		r.mu.Unlock()
+		owned.release()
+	}()
 	procs := r.sessions[sessionID]
 	if procs == nil {
 		return
 	}
 	if proc := procs[handle]; proc != nil {
-		proc.indexWatch.Release()
-		proc.indexWatch = indexwatch.Snapshot{}
+		owned = proc.resources.take()
 	}
 	delete(procs, handle)
 	if len(procs) == 0 {

@@ -93,7 +93,7 @@ func (e *Executor) exactCommandReplacementReject(ctx context.Context, toolName, 
 	if !ok {
 		return nil
 	}
-	calls, ok := envelope.Replacements(ctx, tc.ActiveRootPath(), tc.Host.SessionScratchDir)
+	calls, ok := envelope.Replacements(ctx, tc.ActiveRootPath(), tc.Host.SessionScratchDir, tc.Host.SessionOutputDir)
 	if !ok {
 		return nil
 	}

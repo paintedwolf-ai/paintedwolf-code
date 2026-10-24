@@ -63,46 +63,52 @@ func NewProgramOutputRetention(ctx context.Context, recorder *SQLRecorder, store
 // Attach retains the actual body after the existing receipt operation commits.
 // A caller owns spill until this method reserves its lifetime entry. Afterwards
 // every outcome remains owned here, including an ambiguous commit failure.
-func (r *ProgramOutputRetention) Attach(ctx context.Context, program string, output RetainedOutput, spill *tooloutput.StreamSpill) error {
+func (r *ProgramOutputRetention) Attach(ctx context.Context, program string, output RetainedOutput, spill *tooloutput.StreamSpill) ([]toolcontract.StreamSourceMapping, error) {
 	if r == nil || ctx == nil || spill == nil {
-		return fmt.Errorf("output attachment requires retained stream")
+		return nil, fmt.Errorf("output attachment requires retained stream")
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if !r.ready || r.release == nil {
-		return fmt.Errorf("program output recovery is incomplete")
+		return nil, fmt.Errorf("program output recovery is incomplete")
 	}
 	var scoped bool
 	if err := r.recorder.database.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM invocation_programs p JOIN invocation_receipts i ON i.id=p.parent_receipt_id WHERE p.id=? AND i.session_id=?)`, program, r.sessionID).Scan(&scoped); err != nil {
-		return err
+		return nil, err
 	}
 	if !scoped {
-		return fmt.Errorf("output attachment belongs to another session")
+		return nil, fmt.Errorf("output attachment belongs to another session")
 	}
 	claim := spill.RetentionClaimID()
 	if r.entries[claim] != nil {
-		return fmt.Errorf("output retention claim is already owned")
+		return nil, fmt.Errorf("output retention claim is already owned")
 	}
 	release, err := r.resources.ReserveProgramState(ctx, 8192+int64(len(claim)+len(program)+len(output.Reference))*4)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if release == nil {
-		return fmt.Errorf("output lifetime entry returned no lease")
+		return nil, fmt.Errorf("output lifetime entry returned no lease")
 	}
 	entry := r.ownSpill(spill, release)
-	body, err := r.recorder.AttachProgramOutput(ctx, program, output, spill, r.resources)
+	body, mappings, err := r.recorder.AttachProgramOutput(ctx, program, output, spill, r.resources)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	entry.pending = nil
 	entry.body = body
-	return nil
+	return mappings, nil
+}
+
+// ProgramOutputRead holds the actual scoped reader and its retained byte identity.
+type ProgramOutputRead struct {
+	Reader io.ReadCloser
+	Blob   blobstore.Blob
 }
 
 // Open names an actual durable reference in this session/program. It neither
 // establishes delivered-source evidence nor treats readable bytes as completion.
-func (r *ProgramOutputRetention) Open(ctx context.Context, session, program, reference string) (io.ReadCloser, error) {
+func (r *ProgramOutputRetention) Open(ctx context.Context, session, program, reference string) (*ProgramOutputRead, error) {
 	if r == nil || ctx == nil || session != r.sessionID {
 		return nil, fmt.Errorf("output read requires actual session scope")
 	}
@@ -151,7 +157,11 @@ func (r *ProgramOutputRetention) Open(ctx context.Context, session, program, ref
 	if err = tx.Commit(); err != nil {
 		return nil, err
 	}
-	return entry.body.Open(ctx)
+	reader, err := entry.body.Open(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &ProgramOutputRead{Reader: reader, Blob: entry.reference.Blob}, nil
 }
 
 // Collect rechecks durable references before touching claims. It never closes a

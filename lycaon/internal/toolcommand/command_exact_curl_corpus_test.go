@@ -26,7 +26,7 @@ func TestExactCommandReplacementObservedCurlCorpus(t *testing.T) {
 	}
 	for _, tc := range representable {
 		t.Run(tc.command, func(t *testing.T) {
-			calls, ok := ExactCommandReplacement(t.Context(), tc.command, t.TempDir(), "")
+			calls, ok := ExactCommandReplacement(t.Context(), tc.command, t.TempDir(), "", "")
 			if !ok || len(calls) != tc.calls {
 				t.Fatalf("replacement = %#v ok=%v, want %d http_request calls", calls, ok, tc.calls)
 			}
@@ -47,7 +47,7 @@ func TestExactCommandReplacementObservedCurlCorpus(t *testing.T) {
 	}
 	for _, tc := range staysCommand {
 		t.Run(tc.command, func(t *testing.T) {
-			if calls, ok := ExactCommandReplacement(t.Context(), tc.command, t.TempDir(), ""); ok {
+			if calls, ok := ExactCommandReplacement(t.Context(), tc.command, t.TempDir(), "", ""); ok {
 				t.Fatalf("%s: redirected to %#v", tc.reason, calls)
 			}
 		})

@@ -28,6 +28,7 @@ const (
 	SSHDirName                = "ssh"
 	VerifyDetectFileName      = "verify-detect.json"
 	ScratchDirName            = "scratch"
+	SessionOutputDirName      = "session-output"
 )
 
 // SSHRootUnder returns host-managed SSH reference data.
@@ -143,6 +144,16 @@ func ScratchRootUnder(stateRoot string) string {
 // session, coordinator or worker, has its own folder directly under the root.
 func SessionScratchUnder(stateRoot, sessionID string) string {
 	return filepath.Join(ScratchRootUnder(stateRoot), strings.TrimSpace(sessionID))
+}
+
+// SessionOutputRootUnder holds host-published command copies outside writable scratch.
+func SessionOutputRootUnder(stateRoot string) string {
+	return filepath.Join(strings.TrimSpace(stateRoot), SessionOutputDirName)
+}
+
+// SessionOutputUnder returns the host-owned output folder for one session.
+func SessionOutputUnder(stateRoot, sessionID string) string {
+	return filepath.Join(SessionOutputRootUnder(stateRoot), strings.TrimSpace(sessionID))
 }
 
 // AgentWorkspaceRootsUnder returns state subtrees granted to confined commands.

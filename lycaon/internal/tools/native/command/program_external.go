@@ -8,9 +8,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
-	"github.com/lycaon/lycaon/internal/confine"
 	lycexec "github.com/lycaon/lycaon/internal/exec"
-	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -111,24 +109,6 @@ func (l ExternalStages) Installed(name string, environment []string) bool {
 	return err == nil
 }
 
-// programEnvironment builds the program's initial environment from the same
-// AgentLaunchOptions and ProcessEnvironment pipeline that ExternalStages.Launch
-// uses for confined external child launches.
-func programEnvironment(tc tools.ToolContext) []string {
-	confinement, _ := confine.DefaultConfinement(hitl.ActionConfineRequest(tools.ActionConfineInputsForContext(tc, nil)))
-	launch := agentCommandLaunch(tc, "command", confinement, nil, "")
-	opts, err := lycexec.AgentLaunchOptions(launch, "", nil, tc.Host.HostResourcePathExtra, tc.Files.PackageExecution != nil)
-	if err != nil {
-		return lycexec.ReducedEnviron()
-	}
-	env, err := lycexec.ProcessEnvironment(opts)
-	if err != nil {
-		return lycexec.ReducedEnviron()
-	}
-	return env
-}
-
-// externalArgv drops the explicit "external --" selector.
 func externalArgv(argv []string) []string {
 	if len(argv) >= 2 && argv[0] == "external" && argv[1] == "--" {
 		return argv[2:]

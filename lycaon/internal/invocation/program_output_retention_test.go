@@ -22,12 +22,13 @@ func TestProgramOutputLifetimeReconstructsActualClaimsAndKeepsReachableBodies(t 
 	output := invocation.RetainedOutput{ExecutionID: child.Invocation().Identity.ExecutionID, Stream: "stdout", Reference: "output:actual-retained-result", Complete: true}
 	lifetime, err := invocation.NewProgramOutputRetention(t.Context(), f.recorder, store, f.session, quota)
 	testutil.FailErr(t, "admit invocation output lifecycle", err)
-	if err = lifetime.Attach(t.Context(), f.program, output, spill); err == nil {
+	if _, err = lifetime.Attach(t.Context(), f.program, output, spill); err == nil {
 		t.Fatal("new work bypassed boot reference reconstruction")
 	}
 	testutil.FailErr(t, "reconstruct empty durable output set", lifetime.Restore(t.Context()))
 	claim := spill.RetentionClaimID()
-	testutil.FailErr(t, "durably attach same live body token", lifetime.Attach(t.Context(), f.program, output, spill))
+	_, err = lifetime.Attach(t.Context(), f.program, output, spill)
+	testutil.FailErr(t, "durably attach same live body token", err)
 	testutil.FailErr(t, "collect leaves still-reachable body open", lifetime.Collect(t.Context()))
 	foreignQuota := &outputQuota{}
 	foreign, err := invocation.NewProgramOutputRetention(t.Context(), f.recorder, store, "foreign-session", foreignQuota)
@@ -36,15 +37,15 @@ func TestProgramOutputLifetimeReconstructsActualClaimsAndKeepsReachableBodies(t 
 	if foreignQuota.disk != 0 {
 		t.Fatal("another session was charged for this session's durable body")
 	}
-	if err = foreign.Attach(t.Context(), f.program, output, spill); err == nil {
+	if _, err = foreign.Attach(t.Context(), f.program, output, spill); err == nil {
 		t.Fatal("foreign session attached this program output")
 	}
 	testutil.FailErr(t, "close empty separate session lifetime", foreign.Close(t.Context()))
 	reader, err := lifetime.Open(t.Context(), f.session, f.program, output.Reference)
 	testutil.FailErr(t, "open actual scoped durable output", err)
-	got, err := io.ReadAll(reader)
+	got, err := io.ReadAll(reader.Reader)
 	testutil.FailErr(t, "read complete output beyond preview", err)
-	testutil.FailErr(t, "close actual output reader", reader.Close())
+	testutil.FailErr(t, "close actual output reader", reader.Reader.Close())
 	if string(got) != "screened complete output" {
 		t.Fatal("preview substituted for retained stream")
 	}
@@ -67,7 +68,7 @@ func TestProgramOutputLifetimeReconstructsActualClaimsAndKeepsReachableBodies(t 
 	testutil.FailErr(t, "restore actual durable body and quota", recovered.Restore(t.Context()))
 	reader, err = recovered.Open(t.Context(), f.session, f.program, output.Reference)
 	testutil.FailErr(t, "open exact recovered output", err)
-	testutil.FailErr(t, "close recovered reader", reader.Close())
+	testutil.FailErr(t, "close recovered reader", reader.Reader.Close())
 	_, err = f.database.ExecContext(t.Context(), `DELETE FROM invocation_programs WHERE id=?`, f.program)
 	testutil.FailErr(t, "release actual durable fixture references", err)
 	testutil.FailErr(t, "collect recovered physical body before quota", recovered.Close(t.Context()))
@@ -93,7 +94,7 @@ func TestProgramOutputLifetimeRetainsAmbiguousWrapperUntilActualAttachmentReconc
 	testutil.FailErr(t, "retain pending body", err)
 	_, err = f.database.ExecContext(t.Context(), `CREATE TRIGGER fixture_output_fault BEFORE INSERT ON invocation_program_outputs BEGIN SELECT RAISE(ABORT,'fixture output failure'); END`)
 	testutil.FailErr(t, "install output ledger failure", err)
-	if err = lifetime.Attach(t.Context(), f.program, invocation.RetainedOutput{ExecutionID: child.Invocation().Identity.ExecutionID, Stream: "stdout", Reference: "output:not-committed", Complete: true}, spill); err == nil {
+	if _, err = lifetime.Attach(t.Context(), f.program, invocation.RetainedOutput{ExecutionID: child.Invocation().Identity.ExecutionID, Stream: "stdout", Reference: "output:not-committed", Complete: true}, spill); err == nil {
 		t.Fatal("ledger failure reported known attachment")
 	}
 	// The lifetime still owns the wrapper, so a known unreferenced failure can

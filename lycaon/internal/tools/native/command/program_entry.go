@@ -11,6 +11,8 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/pkg/api"
 	"io"
+	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -48,6 +50,8 @@ type ProgramRuntime struct {
 	Boundary *sandbox.Boundary
 	// Sessions names the person who started the session; the program acts for them.
 	Sessions SessionOwners
+	// SourceObserver confirms delivered source windows into the evidence ledger.
+	SourceObserver invocation.ProgramSourceObserver
 	// Builtins supplies host utilities for one invocation; nested runs their command operands.
 	Builtins func(tools.ToolContext, commandprogram.NestedCommand, NativeBindings) map[string]commandprogram.OperationDispatcher
 	// Owners composes one program's host owner set from its root directory frame.
@@ -83,6 +87,11 @@ type SessionOwners interface {
 
 // programRun is one invocation's frozen frame, surface and ledger bindings.
 type programRun struct {
+	control         programControlDefinition
+	publicationOnce sync.Once
+	publicationErr  error
+	publishDocument func(context.Context, tools.ToolContext, *toolcontract.ProgramMemory, tools.EditorDocumentPublication) (tools.EditorDocumentApplied, error)
+
 	externalHidden bool
 	// retainOutput keeps one child stream in the program output store.
 	retainOutput  func(ctx context.Context, executionID, stream string, data []byte, complete bool) error
@@ -112,18 +121,21 @@ type programRun struct {
 
 // ProgramOutcome is the command tool's result for a settled program.
 type ProgramOutcome struct {
-	ProgramID        string `json:"program_id"`
-	State            string `json:"state"`
-	Status           int    `json:"status"`
-	StopCode         string `json:"stop_code,omitempty"`
-	Stdout           string `json:"stdout"`
-	Stderr           string `json:"stderr"`
-	Truncated        bool   `json:"truncated,omitempty"`
-	ExecutedChildren int    `json:"executed_children"`
-	CompletedEffects int    `json:"completed_effects"`
-	UncertainEffects int    `json:"uncertain_effects"`
-	NativeGaps       int    `json:"native_gaps,omitempty"`
-	ReplayAvailable  bool   `json:"replay_available"`
+	ProgramID        string                           `json:"program_id"`
+	State            string                           `json:"state"`
+	Status           int                              `json:"status"`
+	StopCode         string                           `json:"stop_code,omitempty"`
+	Stdout           string                           `json:"stdout"`
+	Stderr           string                           `json:"stderr"`
+	StdoutRef        string                           `json:"stdout_ref,omitempty"`
+	StderrRef        string                           `json:"stderr_ref,omitempty"`
+	Outputs          []api.CommandProgramOutputWindow `json:"outputs,omitempty"`
+	Truncated        bool                             `json:"truncated,omitempty"`
+	ExecutedChildren int                              `json:"executed_children"`
+	CompletedEffects int                              `json:"completed_effects"`
+	UncertainEffects int                              `json:"uncertain_effects"`
+	NativeGaps       int                              `json:"native_gaps,omitempty"`
+	ReplayAvailable  bool                             `json:"replay_available"`
 	// Refusal is the host decision that stopped the program; the output and
 	// status of every child that ran before it stay in this outcome.
 	Refusal *ProgramRefusal `json:"refusal,omitempty"`
@@ -136,12 +148,11 @@ type ProgramRefusal struct {
 	Feedback string `json:"feedback"`
 }
 
-const programOutputBytes = 64 << 10
-
 // Run parses and validates the whole submitted program before any effect,
 // freezes frame and surface, records the program, evaluates it under
 // supervision, settles it and returns the bounded owner projection.
 func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.ToolContext) (string, error) {
+	ctx = sandbox.WithSessionID(ctx, tc.Identity.SessionID)
 	source, _ := args["command"].(string)
 	if source == "" {
 		return "", toolrejection.RejectInvalidArguments("COMMAND_ARGV_REQUIRED", map[string]any{"field": "command"})
@@ -211,6 +222,17 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	}
 	releasePlan := release
 	release = func() { frame.Close(); releasePlan() }
+	if strings.TrimSpace(tc.Host.SessionOutputDir) == "" {
+		return "", toolrejection.RejectInvalidArguments(tools.SessionOutputUnavailableCode, map[string]any{"path": "@output"})
+	}
+	documents, err := newProgramDocuments(ctx, tc, memory)
+	if err != nil {
+		return "", err
+	}
+	releaseDocuments := release
+	release = func() { documents.close(); releaseDocuments() }
+	ctx = context.WithValue(ctx, programDocumentsKey{}, documents)
+	ctx = tools.WithCommandReadObserver(ctx, documents.read)
 	// A validation run's source identity is captured before anything runs.
 	var verification func() commandSourceIdentity
 	if tc.Execution.VerificationCheck {
@@ -231,23 +253,6 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	}
 	// Many command names share one operation owner; each definition enters
 	// the surface once, keyed by its operation identity.
-	active := []toolcontract.OperationDefinition{external}
-	seen := map[string]bool{}
-	for _, operation := range owners.Natives {
-		for _, tool := range append([]string{operation.Tool}, operation.Tools...) {
-			if seen[tool] {
-				continue
-			}
-			seen[tool] = true
-			if definition, ok := r.Registry.Definition(tool); ok {
-				active = append(active, programOperationDefinition(definition.Operation))
-			}
-		}
-	}
-	surface, err := r.Executor.Metadata.FreezeProgramSurface(ctx, platform.ToolFilter{ProfileID: tc.ProfileID(), SurfaceID: tc.Turn.TurnSurfaceID}, active)
-	if err != nil {
-		return "", err
-	}
 	outputs, err := r.sessionOutputs(ctx, tc.Identity.SessionID)
 	if err != nil {
 		return "", err
@@ -262,16 +267,14 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 			return err
 		}
 		output := invocation.RetainedOutput{ExecutionID: executionID, Stream: stream, Reference: "output:" + executionID + ":" + stream, Complete: complete && spill.Complete, Redacted: redacted}
-		if err := outputs.Attach(ctx, root.Identity.ProgramID, output, spill); err != nil {
+		if _, err := outputs.Attach(ctx, root.Identity.ProgramID, output, spill); err != nil {
 			return errors.Join(err, spill.Close())
 		}
 		return nil
 	}
-	run.frame, run.surface, run.memory, run.tc, run.root, run.parentReceipt, run.source = frame, surface, memory, tc, root, tc.Invocation.ID, source
+	run.frame, run.memory, run.tc, run.root, run.parentReceipt, run.source = frame, memory, tc, root, tc.Invocation.ID, source
+	run.publishDocument = owners.PublishDocument
 	run.capture = invocation.ProgramInputCapture{State: memory, Outputs: outputs, Projector: r.Projector, ProgramID: root.Identity.ProgramID, Scope: scope, Screening: screening, MaximumNodes: 1024, MaximumDepth: 64}
-	if err := r.beginProgram(ctx, run, outputs, snapshot.Plan, scope, screening); err != nil {
-		return "", err
-	}
 	jobs := r.Supervisor.Jobs(tc.Identity.SessionID, tc.Identity.ProjectID)
 	jobs.BeginProgram()
 	builtins := jobBuiltins(jobs, run.commands)
@@ -281,7 +284,11 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	}
 	builtins["lsof"] = lsofBuiltin(run.commands["lsof"], tc.Identity.SessionID, listeners)
 	builtins["sleep"] = sleepBuiltin()
-	dispatcher := &ProgramDispatcher{run: run, builtins: builtins, natives: owners.Natives, binder: commandprogram.CatalogBinder{}, paths: paths, shared: &dispatchShared{}, admitLaunch: owners.AdmitLaunch, redirections: owners.Redirections}
+	dispatcher := &ProgramDispatcher{run: run, builtins: builtins, natives: owners.Natives, binder: commandprogram.CatalogBinder{}, paths: paths, shared: &dispatchShared{}, redirections: owners.Redirections}
+	var publication commandprogram.OutputPublication
+	if owners.Publication != nil {
+		publication = owners.Publication(dispatcher.beginOutput)
+	}
 	if r.Builtins != nil {
 		for name, builtin := range r.Builtins(tc, dispatcher, dispatcher) {
 			if _, taken := builtins[name]; !taken {
@@ -290,7 +297,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 		}
 	}
 	if owners.Builtins != nil {
-		utilities, releaseUtilities, err := owners.Builtins(BuiltinPorts{ToolContext: tc, Memory: memory, ProgramID: root.Identity.ProgramID, Nested: dispatcher, Publication: owners.Publication, Admission: r.sessionResources(tc.Identity.SessionID)})
+		utilities, releaseUtilities, err := owners.Builtins(BuiltinPorts{ToolContext: tc, Memory: memory, ProgramID: root.Identity.ProgramID, Nested: dispatcher, Publication: publication, Admission: r.sessionResources(tc.Identity.SessionID)})
 		if err != nil {
 			return "", err
 		}
@@ -302,14 +309,69 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 			}
 		}
 	}
-	stdout, stderr := &boundedBuffer{limit: programOutputBytes}, &boundedBuffer{limit: programOutputBytes}
+	run.control.available = map[string]bool{}
+	for name := range builtins {
+		run.control.available[name] = true
+	}
+	for name := range pathCommands {
+		run.control.available[name] = true
+	}
+	for name := range owners.Natives {
+		run.control.available[name] = true
+	}
+	definitions, err := run.controlDefinitions()
+	if err != nil {
+		return "", err
+	}
+	active := []toolcontract.OperationDefinition{external}
+	hostOwners := make([]string, 0, len(definitions))
+	for owner := range definitions {
+		hostOwners = append(hostOwners, owner)
+	}
+	slices.Sort(hostOwners)
+	for _, owner := range hostOwners {
+		active = append(active, definitions[owner])
+	}
+	if write, ok := r.Registry.Definition("write"); ok {
+		active = append(active, write.Operation)
+	}
+	seen := map[string]bool{"write": true}
+	for _, operation := range owners.Natives {
+		for _, tool := range append([]string{operation.Tool}, operation.Tools...) {
+			if seen[tool] {
+				continue
+			}
+			seen[tool] = true
+			if definition, ok := r.Registry.Definition(tool); ok {
+				active = append(active, definition.Operation)
+			}
+		}
+	}
+	surface, err := r.Executor.Metadata.FreezeProgramSurface(ctx, platform.ToolFilter{ProfileID: tc.ProfileID(), SurfaceID: tc.Turn.TurnSurfaceID}, active)
+	if err != nil {
+		return "", err
+	}
+
+	run.surface = surface
+	if err := r.beginProgram(ctx, run, outputs, snapshot.Plan, scope, screening); err != nil {
+		return "", err
+	}
+	var outputLimit int64
+	for _, limit := range run.catalog.Language.Limits {
+		if limit.ID == "spill_bytes" {
+			outputLimit = limit.Maximum
+		}
+	}
+	stdout, stderr := newProgramStream(ctx, outputLimit, r.sessionResources(tc.Identity.SessionID), memory), newProgramStream(ctx, outputLimit, r.sessionResources(tc.Identity.SessionID), memory)
+	releaseOutputs := release
+	release = func() { _ = stdout.Close(); _ = stderr.Close(); releaseOutputs() }
 	ports := commandprogram.EvaluationPorts{
-		Invocation: root, Dispatch: dispatcher, Binder: commandprogram.CatalogBinder{}, Files: projectpaths.GlobFiles{Paths: paths},
-		Publication: owners.Publication, Input: owners.Input,
+		Invocation: root, Dispatch: dispatcher, Refusals: dispatcher.reportRefusal, Binder: commandprogram.CatalogBinder{}, Files: projectpaths.GlobFiles{Paths: paths},
+		Publication: publication, Input: owners.Input,
 		Executions: dispatcher, Supervision: r.Supervisor, Predicates: commandprogram.PredicateRuntime{Patterns: commandprogram.NativePredicatePatterns{Memory: memory}},
 		Memory:      memory,
-		Environment: programEnvironment(tc),
 		Streams:     commandprogram.Streams{Input: commandprogram.NullInput(), Output: stdout, Error: stderr},
+		Environment: paths.Environment(),
 	}
 	var evaluated commandprogram.ProgramOutcome
 	result, evalErr := r.Supervisor.RunProgram(ctx, root, func(ctx context.Context) (toolcontract.ProducerResult, error) {
@@ -338,10 +400,11 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	if (feedback != nil && refusal == nil) || settleErr != nil {
 		return "", errors.Join(feedback, settleErr)
 	}
-	outcome, err := r.outcome(ctx, run, result, stdout, stderr, scope, screening)
+	outcome, err := r.outcome(ctx, run, outputs, result, stdout, stderr, scope)
 	if err != nil {
 		return "", errors.Join(feedback, err)
 	}
+	outcome.Stderr = documents.appendNotes(outcome.Stderr)
 	if refusal != nil {
 		outcome.Refusal = &ProgramRefusal{Code: refusal.Code, Feedback: feedback.Error()}
 	}
@@ -438,6 +501,14 @@ func (r *ProgramRuntime) feedback(ctx context.Context, run *programRun, dispatch
 			if refusal.Command != "" {
 				data["command"], data["word"], data["expected_form"] = refusal.Command, refusal.Option, refusal.Form
 			}
+			// A word refused by its owner (a stale @label) keeps the owner's facts.
+			if cause := toolrejection.AsToolReject(refusal.Cause); cause != nil && cause.Code == refusal.Code {
+				for key, value := range cause.Data {
+					if _, set := data[key]; !set {
+						data[key] = value
+					}
+				}
+			}
 			reject := toolrejection.RejectInvalidArguments(refusal.Code, data)
 			enrichProgramReject(reject, refusal.Command, span)
 			return ensureProgramRefusalText(toolrejection.RenderReject(reject, nil), reject)
@@ -470,30 +541,6 @@ func (r *ProgramRuntime) feedback(ctx context.Context, run *programRun, dispatch
 		return errors.Join(ensureProgramRefusalText(toolrejection.RenderReject(reject, nil), reject), rendered)
 	}
 	return ensureProgramRefusalText(rendered, reject)
-}
-
-func (r *ProgramRuntime) outcome(ctx context.Context, run *programRun, result toolcontract.ProducerResult, stdout, stderr *boundedBuffer, scope captureprojection.Scope, screening captureprojection.StreamOptions) (ProgramOutcome, error) {
-	projection, err := r.Recorder.ProjectProgram(ctx, run.tc.Identity.SessionID, run.root.Identity.ProgramID, 4)
-	if err != nil {
-		return ProgramOutcome{}, err
-	}
-	if run.tc.Effects.Out != nil {
-		receipt := projection.Program
-		run.tc.Effects.Out.CommandProgram = &receipt
-	}
-	out := ProgramOutcome{ProgramID: run.root.Identity.ProgramID, State: projection.Program.State, Status: result.Status, StopCode: result.StopCode, Truncated: stdout.truncated || stderr.truncated,
-		ExecutedChildren: projection.ExecutedChildren, CompletedEffects: projection.CompletedEffects, UncertainEffects: projection.UncertainEffects, NativeGaps: projection.NativeGaps}
-	for _, stream := range []struct {
-		buffer *boundedBuffer
-		target *string
-	}{{stdout, &out.Stdout}, {stderr, &out.Stderr}} {
-		var screened bytes.Buffer
-		if _, err := r.Projector.ScreenStream(ctx, scope, "capture.native", bytes.NewReader(stream.buffer.Bytes()), &screened, screening); err != nil {
-			return ProgramOutcome{}, err
-		}
-		*stream.target = screened.String()
-	}
-	return out, nil
 }
 
 func (r *ProgramRuntime) sessionOutputs(ctx context.Context, sessionID string) (*invocation.ProgramOutputRetention, error) {
@@ -703,27 +750,47 @@ func (r *programRun) launchArguments(line, cwd string) map[string]any {
 // childOutputBytes bounds each child stream the output store retains.
 const childOutputBytes = 64 << 10
 
-// childOutputs tees a child's stdout and stderr into bounded buffers and
-// returns the streams to use and a function that retains what was written.
-func (r *programRun) childOutputs(request commandprogram.OperationRequest, streams commandprogram.Streams) (commandprogram.Streams, func(context.Context)) {
-	if r.retainOutput == nil {
-		return streams, func(context.Context) {}
-	}
-	stdout, stderr := &boundedBuffer{limit: childOutputBytes}, &boundedBuffer{limit: childOutputBytes}
+// childOutputs wraps a child's streams so source mappings on top-level stdout
+// carry their stream offset and only a failed child's stderr is retained per
+// execution; pipe stages produce no retention rows.
+func (r *programRun) childOutputs(request commandprogram.OperationRequest, streams commandprogram.Streams) (commandprogram.Streams, func(context.Context, toolcontract.ProducerResult, error)) {
 	teed := streams
-	teed.Output = io.MultiWriter(nonNilWriter(streams.Output), stdout)
-	teed.Error = io.MultiWriter(nonNilWriter(streams.Error), stderr)
+	outputView, errorView := newChildStreamView(streams.Output), newChildStreamView(streams.Error)
+	if outputView != nil {
+		teed.Output = outputView
+	}
+	errorOutput := nonNilWriter(streams.Error)
+	if errorView != nil {
+		errorOutput = errorView
+	}
+	closeViews := func() {
+		if outputView != nil {
+			outputView.Close()
+		}
+		if errorView != nil {
+			errorView.Close()
+		}
+	}
+	if r.retainOutput == nil {
+		teed.Error = errorOutput
+		return teed, func(context.Context, toolcontract.ProducerResult, error) { closeViews() }
+	}
+	stderr := &boundedBuffer{limit: childOutputBytes}
+	if errorView != nil {
+		errorView.copy = stderr
+		teed.Error = errorView
+	} else {
+		teed.Error = io.MultiWriter(errorOutput, stderr)
+	}
 	execution := request.Invocation.Identity.ExecutionID
-	return teed, func(ctx context.Context) {
-		for _, stream := range []struct {
-			name   string
-			buffer *boundedBuffer
-		}{{"stdout", stdout}, {"stderr", stderr}} {
-			if data := stream.buffer.Bytes(); len(data) > 0 {
-				// Retention is evidence for previews; a failure here never
-				// changes the child's settled outcome.
-				_ = r.retainOutput(context.WithoutCancel(ctx), execution, stream.name, data, !stream.buffer.truncated)
-			}
+	return teed, func(ctx context.Context, result toolcontract.ProducerResult, err error) {
+		defer closeViews()
+		failed := err != nil || result.Status != 0 || (result.Terminal != "" && result.Terminal != toolcontract.ProducerCompleted)
+		if !failed {
+			return
+		}
+		if data := stderr.Bytes(); len(data) > 0 {
+			_ = r.retainOutput(context.WithoutCancel(ctx), execution, "stderr", data, !stderr.truncated)
 		}
 	}
 }

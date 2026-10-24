@@ -23,7 +23,6 @@ type invocation struct {
 	owners  *Owners
 	tc      tools.ToolContext
 	paths   *projectpaths.ProgramPaths
-	barrier *native.PublicationBarrier
 	request commandprogram.OperationRequest
 	spec    toolcontract.CommandSpecification
 	argv    commandprogram.BoundArgv
@@ -37,7 +36,7 @@ type invocation struct {
 }
 
 func newInvocation(ctx context.Context, p Prepared, tc tools.ToolContext, streams commandprogram.Streams) *invocation {
-	inv := &invocation{ctx: ctx, owners: p.owners, tc: tc, paths: p.program.Paths, barrier: p.program.Barrier, request: p.request, spec: p.spec, argv: p.Argv,
+	inv := &invocation{ctx: ctx, owners: p.owners, tc: tc, paths: p.program.Paths, request: p.request, spec: p.spec, argv: p.Argv,
 		input: streams.Input, stderr: streams.Error}
 	if inv.input == nil {
 		inv.input = commandprogram.NullInput()
@@ -116,7 +115,7 @@ type unreadable struct {
 
 func (e *unreadable) Error() string { return e.operand + ": " + e.reason }
 
-// capture pins one PATH operand's accepted text for jq. An unreadable
+// capture pins one PATH operand's published text for jq. An unreadable
 // operand is reported as jq does and returns nil.
 func (inv *invocation) capture(operand string) (*source, error) {
 	captured, err := inv.captureSource(operand)
@@ -128,7 +127,7 @@ func (inv *invocation) capture(operand string) (*source, error) {
 	return captured, err
 }
 
-// captureSource pins one PATH operand's accepted text before it is read.
+// captureSource pins one PATH operand's published text before it is read.
 func (inv *invocation) captureSource(operand string) (*source, error) {
 	bound, err := inv.paths.Bind(inv.ctx, operand, false)
 	if err == nil && bound.Null {
@@ -173,6 +172,10 @@ func (inv *invocation) recordPin(revision toolcontract.ExecutionRevision) error 
 // settle projects the run onto the producer contract. A published edit is a
 // completed effect even when a later step stops the run.
 func (inv *invocation) settle(err error) (toolcontract.ProducerResult, error) {
+	var domain toolcontract.ProducerFailure
+	if errors.As(err, &domain) {
+		return domain.ProducerResult(), err
+	}
 	certainty := toolcontract.NoEffect
 	if inv.published {
 		certainty = toolcontract.EffectCompleted

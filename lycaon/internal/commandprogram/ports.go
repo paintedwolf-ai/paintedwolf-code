@@ -20,13 +20,29 @@ type Streams struct {
 	Error  io.Writer
 }
 
+// RefusalReport carries owner facts to the host's existing rejection renderer.
+// Diagnostic text is never a permission or effect discriminator.
+type RefusalReport struct {
+	Operation, Operand, Code string
+	Span                     toolcontract.SourceSpan
+	Cause                    error
+}
+
+type RefusalWriter func(io.Writer, RefusalReport)
+
 // OperationRequest is one reached simple command after expansion and before
 // per-child admission. Statement is the typed plan node; its span is the
 // invocation span. Argv is the complete expanded argv, command words included.
 // Environment is the frame's exported NAME=value list, including assignments
 // scoped to this one dispatch, sorted by name; it carries no ambient host state.
+type StreamPreparation interface {
+	RequiredEffects() toolcontract.CommandEffects
+	PrepareStreams(context.Context) (Streams, error)
+}
+
 type OperationRequest struct {
-	Invocation toolcontract.OperationInvocation
+	StreamPreparation StreamPreparation
+	Invocation        toolcontract.OperationInvocation
 	// OperationID is the catalog command name ("external" for launches); the
 	// typed owner's operation identity is the owner's own fact.
 	OperationID string
@@ -204,6 +220,7 @@ type Dispatch interface {
 	OperationDispatcher
 	ExternalLauncher
 	Fork(context.Context) (Dispatch, func(), error)
+	InvokeEvaluator(context.Context, OperationRequest, Streams, func(context.Context, Streams) (toolcontract.ProducerResult, error)) (toolcontract.ProducerResult, error)
 }
 
 // NativeGaps is implemented by a Dispatch that can run a native name's

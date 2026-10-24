@@ -21,7 +21,10 @@ type RootRef struct {
 // VirtualScratchLabel names the host namespace for the invoking session's
 // scratch folder. Virtual roots are addressed like attached roots, so no
 // attached root may carry their labels.
-const VirtualScratchLabel = "scratch"
+const (
+	VirtualScratchLabel = "scratch"
+	VirtualOutputLabel  = "output"
+)
 
 var (
 	ErrNoProjectRoots   = errors.New("project has no folder roots")
@@ -33,7 +36,8 @@ var (
 // IsVirtualRootLabel reports whether label names a host namespace. Labels
 // compare case-insensitively, as attached root labels do.
 func IsVirtualRootLabel(label string) bool {
-	return strings.EqualFold(strings.TrimSpace(label), VirtualScratchLabel)
+	label = strings.TrimSpace(label)
+	return strings.EqualFold(label, VirtualScratchLabel) || strings.EqualFold(label, VirtualOutputLabel)
 }
 
 // BranchDirForID derives a stable host-only directory from a root ID.
