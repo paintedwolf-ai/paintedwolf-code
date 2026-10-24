@@ -48,6 +48,10 @@ func notePreparedAgentEffect(row *sourceMutationRow) {
 }
 
 func (s *SourceMutationService) prepareAgentEffect(ctx context.Context, effect sourceeffect.Plan) (*agentSourceMutation, error) {
+	return s.prepareAgentEffectOpt(ctx, effect, true)
+}
+
+func (s *SourceMutationService) prepareAgentEffectOpt(ctx context.Context, effect sourceeffect.Plan, reservePath bool) (*agentSourceMutation, error) {
 	if s == nil || s.Journal.db == nil || s.recorder == nil || effect.Record.ProjectID == "" {
 		return nil, fmt.Errorf("durable source mutation service required")
 	}
@@ -65,8 +69,9 @@ func (s *SourceMutationService) prepareAgentEffect(ctx context.Context, effect s
 	}
 	now := time.Now().UTC()
 	id := effect.Record.OperationID
-	if id == "" {
-		id = uuid.NewString()
+	freshID := id == ""
+	if freshID {
+		id = uuid.Must(uuid.NewV7()).String()
 	}
 	unlock, err := s.operationLocks.Acquire(ctx, id)
 	if err != nil {
@@ -88,30 +93,38 @@ func (s *SourceMutationService) prepareAgentEffect(ctx context.Context, effect s
 		}
 		unlock()
 	}
-	claim := sourceMutationPlan{AgentEffect: &effect}
-	releasePath, err = s.Paths.reserveSourcePlan(claim)
-	if err != nil {
-		return nil, err
+	if reservePath {
+		claim := sourceMutationPlan{AgentEffect: &effect}
+		releasePath, err = s.Paths.reserveSourcePlan(claim)
+		if err != nil {
+			return nil, err
+		}
 	}
 	// The operation ID identifies one admitted filesystem effect.
 	effect.Record.OperationID = id
-	digestEffect := effect
-	digestEffect.Record.TS = time.Time{}
-	digestEffect.Change.TS = time.Time{}
-	input, err := json.Marshal(digestEffect)
-	if err != nil {
-		return nil, err
-	}
-	digest := sha256.Sum256(input)
-	existing, found, err := s.Journal.load(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	if found {
-		if existing.InputDigest != hex.EncodeToString(digest[:]) {
-			return nil, ErrSourceMutationConflict
+	var digestHex string
+	if !freshID || reservePath {
+		digestEffect := effect
+		digestEffect.Record.TS = time.Time{}
+		digestEffect.Change.TS = time.Time{}
+		input, err := json.Marshal(digestEffect)
+		if err != nil {
+			return nil, err
 		}
-		return nil, fmt.Errorf("%w: operation %s already admitted", ErrSourceMutationConflict, id)
+		digest := sha256.Sum256(input)
+		digestHex = hex.EncodeToString(digest[:])
+		if !freshID {
+			existing, found, err := s.Journal.load(ctx, id)
+			if err != nil {
+				return nil, err
+			}
+			if found {
+				if existing.InputDigest != digestHex {
+					return nil, ErrSourceMutationConflict
+				}
+				return nil, fmt.Errorf("%w: operation %s already admitted", ErrSourceMutationConflict, id)
+			}
+		}
 	}
 	effect.Record.OperationID = id
 	effect.Record.TS = now
@@ -123,8 +136,8 @@ func (s *SourceMutationService) prepareAgentEffect(ctx context.Context, effect s
 		AgentEffect:               &effect,
 		Response:                  json.RawMessage(`{}`),
 	}
-	row := &sourceMutationRow{ID: id, ProjectID: plan.ProjectID, Kind: kind,
-		InputDigest: hex.EncodeToString(digest[:]), Plan: plan, Status: sourceMutationPrepared,
+	row := &sourceMutationRow{freshOperation: true, ID: id, ProjectID: plan.ProjectID, Kind: kind,
+		InputDigest: digestHex, Plan: plan, Status: sourceMutationPrepared,
 		CreatedAt: now, UpdatedAt: now}
 	retained = true
 	return &agentSourceMutation{service: s, row: row, release: release}, nil

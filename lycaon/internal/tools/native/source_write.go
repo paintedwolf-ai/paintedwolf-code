@@ -114,6 +114,7 @@ type agentStreamRequest struct {
 	Mode         *os.FileMode
 	Target       mutationTarget
 	Source       io.Reader
+	KnownAbsent  bool
 	BeforeCommit func(fseffect.Target, fseffect.Result) error
 }
 
@@ -152,9 +153,13 @@ func stageAgentStream(ctx context.Context, tctx tools.ToolContext, req agentStre
 		}
 	}()
 
-	before, err := captureAgentFileAt(req.Target.Location, ctx, req.Memory, true)
-	if err != nil {
-		return nil, fseffect.Result{}, err
+	var before agentFileEvidence
+	if !req.KnownAbsent {
+		var err error
+		before, err = captureAgentFileAt(req.Target.Location, ctx, req.Memory, true)
+		if err != nil {
+			return nil, fseffect.Result{}, err
+		}
 	}
 	op := api.SourceChangeOpWrite
 	if !before.exists {
@@ -171,7 +176,7 @@ func stageAgentStream(ctx context.Context, tctx tools.ToolContext, req agentStre
 		mode = *req.Mode
 	}
 	replacement, result, err := fseffect.StageReplace(fseffect.ReplaceRequest{
-		Location: req.Target.Location, Source: io.TeeReader(req.Source, captured), Mode: mode, PreserveMode: true, CopyBuffer: stage.copyBuffer,
+		Location: req.Target.Location, Source: io.TeeReader(req.Source, captured), Mode: mode, PreserveMode: !req.KnownAbsent, CopyBuffer: stage.copyBuffer,
 		ReviewStaged: func(target fseffect.Target, staged fseffect.Result) error {
 			if req.BeforeCommit != nil {
 				if err := req.BeforeCommit(target, staged); err != nil {
@@ -195,7 +200,7 @@ func stageAgentStream(ctx context.Context, tctx tools.ToolContext, req agentStre
 				operation = api.AgentIntentOperationCreate
 			}
 			reportMutationIntent(tctx, *mutation, req.Target.Location, fseffect.Location{}, operation)
-			return reviewAgentMutation(ctx, tctx, *mutation, req.Target.Location, fseffect.Location{}, false)
+			return reviewHeldAgentMutation(ctx, tctx, *mutation, req.Target.Location, target)
 		},
 		BeforeCommit: func(target fseffect.Target, staged fseffect.Result) error {
 			if err := ctx.Err(); err != nil {
@@ -359,6 +364,10 @@ func mkdirAgentPath(ctx context.Context, tctx tools.ToolContext, target mutation
 }
 
 func renameAgentPath(ctx context.Context, tctx tools.ToolContext, from, to mutationTarget, memory *toolcontract.ProgramMemory) error {
+	return renameAgentEntry(ctx, tctx, from, to, 0, memory, nil)
+}
+
+func renameAgentEntry(ctx context.Context, tctx tools.ToolContext, from, to mutationTarget, displacedBytes int64, memory *toolcontract.ProgramMemory, reviewDisplacedPolicy func() ([]sourceeffect.ReviewedFile, error)) error {
 	if filepath.Clean(from.Location.Root) != filepath.Clean(to.Location.Root) {
 		return fmt.Errorf("rename crosses filesystem effect roots")
 	}
@@ -376,26 +385,53 @@ func renameAgentPath(ctx context.Context, tctx tools.ToolContext, from, to mutat
 	if before.release != nil {
 		defer before.release()
 	}
+	beforeSize := before.size
+	if before.isDir && displacedBytes > 0 {
+		beforeSize = displacedBytes
+	}
 	mutation := agentMutation{Memory: memory, Op: api.SourceChangeOpRename, AbsPath: to.Abs, FromAbsPath: from.Abs,
-		Before: before.content, BeforeSHA256: before.sha256, BeforeSize: before.size,
+		Before: before.content, BeforeSHA256: before.sha256, BeforeSize: beforeSize,
 		After: after.content, AfterSHA256: after.sha256, AfterSize: after.size, IsDir: after.isDir}
 	reportMutationIntent(tctx, mutation, to.Location, from.Location, api.AgentIntentOperationMove)
 	if err := reviewAgentMutation(ctx, tctx, mutation, to.Location, from.Location, false); err != nil {
 		return err
 	}
 	rename := fseffect.RenameNoReplace
-	if before.exists && !before.isDir {
-		// The review above showed the replaced file; set it aside recoverably
+	if before.exists && before.isDir == after.isDir {
+		// The review above showed the replaced destination; set it aside recoverably
 		// so the move never destroys the only copy.
 		displaced := agentMutation{Memory: memory, Op: api.SourceChangeOpDelete, AbsPath: to.Abs,
-			Before: before.content, BeforeSHA256: before.sha256, BeforeSize: before.size}
+			Before: before.content, BeforeSHA256: before.sha256, BeforeSize: beforeSize, IsDir: before.isDir, Recursive: before.isDir}
+		if reviewDisplacedPolicy != nil {
+			reviewed, err := reviewDisplacedPolicy()
+			if err != nil {
+				return err
+			}
+			displaced.ReviewedFiles = reviewed
+		}
 		if _, ok := recoverableRemoval(tctx, displaced); ok {
+			if err := measureAgentRemoval(ctx, tctx, to, &displaced, to.Location.Rel); err != nil {
+				return err
+			}
+			if displaced.Unrecoverable {
+				if err := reviewAgentMutation(ctx, tctx, displaced, to.Location, fseffect.Location{}, true); err != nil {
+					return err
+				}
+			}
 			if err := discardAgentEntry(ctx, tctx, to, displaced); err != nil {
 				return fmt.Errorf("set aside replaced destination: %w", err)
 			}
 			mutation.Before, mutation.BeforeSHA256, mutation.BeforeSize = nil, "", 0
-		} else {
+		} else if !before.isDir {
 			rename = fseffect.Rename
+		} else {
+			identity, idErr := fspath.EntryIdentity(to.Abs)
+			if idErr != nil {
+				return idErr
+			}
+			if err := fseffect.RemoveTreeGuarded(to.Location, identity); err != nil {
+				return err
+			}
 		}
 	}
 	journal, err := prepareAgentMutation(ctx, tctx, mutation, to.Location, from.Location, false)
@@ -442,6 +478,7 @@ func recoverableRemoval(tctx tools.ToolContext, m agentMutation) (sourceeffect.R
 		Change:           change,
 		RootPath:         root.Path,
 		ReviewedSHA256:   m.BeforeSHA256,
+		ReviewedFiles:    m.ReviewedFiles,
 		Recursive:        m.Recursive,
 		Unrecoverable:    m.Unrecoverable,
 		ReviewedSnapshot: m.RemovalSnapshot,
@@ -552,6 +589,7 @@ type agentMutation struct {
 	Recursive       bool
 	Unrecoverable   bool
 	RemovalSnapshot *sourceeffect.RemovalSnapshot
+	ReviewedFiles   []sourceeffect.ReviewedFile
 }
 
 type agentFileEvidence struct {
@@ -634,6 +672,10 @@ func commitAgentMutation(ctx context.Context, tctx tools.ToolContext, m agentMut
 
 // Paths outside attached roots produce no durable mutation.
 func agentCommitInputs(tctx tools.ToolContext, m agentMutation) (sourceledger.RecordInput, sourcefeed.Change, bool) {
+	return agentCommitInputsWithWorkspace(tctx, m, "")
+}
+
+func agentCommitInputsWithWorkspace(tctx tools.ToolContext, m agentMutation, workspaceID string) (sourceledger.RecordInput, sourcefeed.Change, bool) {
 	root, path, located := tctx.SourceLocation(m.AbsPath)
 	if tctx.Identity.ProjectID == "" || !located {
 		return sourceledger.RecordInput{}, sourcefeed.Change{}, false
@@ -663,9 +705,12 @@ func agentCommitInputs(tctx tools.ToolContext, m agentMutation) (sourceledger.Re
 	if m.IsDir {
 		in.EntryKind = sourceledger.EntryKindDirectory
 	}
+	if workspaceID == "" {
+		workspaceID = sourceworkspace.ID(tctx.Identity.ProjectID, tctx.Source.Roots)
+	}
 	change := sourcefeed.Change{
 		ProjectID:     tctx.Identity.ProjectID,
-		WorkspaceID:   sourceworkspace.ID(tctx.Identity.ProjectID, tctx.Source.Roots),
+		WorkspaceID:   workspaceID,
 		WorkspaceKind: tctx.Source.SourceWorkspaceKind,
 		RootID:        root.ID,
 		Path:          path,
@@ -756,8 +801,12 @@ func recordAgentMutationPaths(tctx tools.ToolContext, m agentMutation) {
 // destination. Each held replacement still revalidates its own target at commit.
 func publishAgentStreams(ctx context.Context, tc tools.ToolContext, memory *toolcontract.ProgramMemory, streams []*agentStreamStage) ([]sourceeffect.Completion, sourceeffect.PendingEffects, error) {
 	plans := make([]sourceeffect.Plan, 0, len(streams))
+	var workspaceID string
+	if tc.Identity.ProjectID != "" {
+		workspaceID = sourceworkspace.ID(tc.Identity.ProjectID, tc.Source.Roots)
+	}
 	for _, stream := range streams {
-		record, change, ok := agentCommitInputs(tc, stream.mutation)
+		record, change, ok := agentCommitInputsWithWorkspace(tc, stream.mutation, workspaceID)
 		if tc.Source.SourceMutations == nil || !ok {
 			completions, err := publishIndividualStreams(ctx, tc, streams)
 			return completions, nil, err

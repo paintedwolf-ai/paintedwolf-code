@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/sourceeffect"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -109,7 +110,32 @@ func (t *MoveTool) Move(ctx context.Context, in MoveInput, tctx tools.ToolContex
 				continue
 			}
 		}
-		if err := renameAgentPath(ctx, tctx, resolvedMutationTarget(srcResolved), resolvedMutationTarget(dstResolved), in.Memory); err != nil {
+		var displacedBytes int64
+		var reviewDisplacedPolicy func() ([]sourceeffect.ReviewedFile, error)
+		if srcInfo, srcErr := os.Lstat(srcResolved.Abs); srcErr == nil && srcInfo.IsDir() {
+			if dstInfo, dstErr := os.Lstat(dstResolved.Abs); dstErr == nil && dstInfo.IsDir() {
+				summary, inspectErr := inspectDeleteTree(ctx, t.Boundary, tctx, dstResolved, prof, in.Memory, nil)
+				if inspectErr != nil {
+					return result, fmt.Errorf("move %s -> %s: %w", pair.From, pair.To, inspectErr)
+				}
+				displacedBytes = summary.bytes
+				if len(summary.policyTargets) > 0 {
+					policyTargets := summary.policyTargets
+					reviewDisplacedPolicy = func() ([]sourceeffect.ReviewedFile, error) {
+						reviewed := make([]sourceeffect.ReviewedFile, 0, len(policyTargets))
+						for _, target := range policyTargets {
+							item, err := reviewAgentTreePolicyRemoval(ctx, tctx, target, in.Memory)
+							if err != nil {
+								return nil, err
+							}
+							reviewed = append(reviewed, item)
+						}
+						return reviewed, nil
+					}
+				}
+			}
+		}
+		if err := renameAgentEntry(ctx, tctx, resolvedMutationTarget(srcResolved), resolvedMutationTarget(dstResolved), displacedBytes, in.Memory, reviewDisplacedPolicy); err != nil {
 			return result, fmt.Errorf("move %s -> %s: %w", pair.From, pair.To, err)
 		}
 		result.Moved = append(result.Moved, FilePair{From: fromSlash, To: toSlash})

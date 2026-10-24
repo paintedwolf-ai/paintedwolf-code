@@ -94,8 +94,13 @@ type captureBuffer struct {
 func (b *captureBuffer) Append(p []byte) error {
 	wanted := len(b.bytes) + len(p)
 	if wanted > cap(b.bytes) {
-		capacity := min(b.maximum, max(int64(wanted), max(64<<10, 2*int64(cap(b.bytes)))))
-		release, err := b.revisions.reserveCapture(b.ctx, capacity)
+		floor := int64(64)
+		if cap(b.bytes) > 0 {
+			floor = max(64<<10, 2*int64(cap(b.bytes)))
+		}
+		capacity := min(b.maximum, max(int64(wanted), floor))
+		reserved := min(b.maximum, max(int64(wanted), max(64<<10, 2*int64(cap(b.bytes)))))
+		release, err := b.revisions.reserveCapture(b.ctx, reserved)
 		if err != nil {
 			return err
 		}

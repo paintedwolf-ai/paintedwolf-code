@@ -21,6 +21,7 @@ type Journal interface {
 	// RecoveryQuotaBytes bounds recovery representation charges per project.
 	// Manifest content and retained tree allocation keep their own byte facts.
 	RecoveryQuotaBytes() int64
+	CanMoveAside(context.Context, fseffect.Location) (bool, error)
 	InspectRemoval(context.Context, fseffect.Location, Memory) (RemovalSnapshot, error)
 	PrepareEffect(context.Context, Plan) (Pending, error)
 	PrepareEffects(context.Context, Memory, []Plan) (PendingEffects, error)
@@ -54,6 +55,13 @@ func (e *RecoveryUnavailableError) Error() string {
 
 func (e *RecoveryUnavailableError) Unwrap() error { return e.Cause }
 
+// ReviewedFile is a child instruction or policy file whose content was reviewed
+// before a recursive tree removal.
+type ReviewedFile struct {
+	Rel    string `json:"rel"`
+	SHA256 string `json:"sha256"`
+}
+
 // Removal is an entry the agent reviewed for removal from an attached root.
 type Removal struct {
 	Memory Memory `json:"-"`
@@ -65,11 +73,12 @@ type Removal struct {
 	// ReviewedSHA256 is the file content the review showed; a file that no
 	// longer matches is refused. Empty for directories and links.
 	ReviewedSHA256   string           `json:"reviewed_sha256,omitempty"`
+	ReviewedFiles    []ReviewedFile   `json:"reviewed_files,omitempty"`
 	ReviewedSnapshot *RemovalSnapshot `json:"reviewed_snapshot,omitempty"`
 	// Recursive allows removing a non-empty directory tree as one operation.
 	Recursive bool `json:"recursive,omitempty"`
-	// Unrecoverable skips recovery capture after explicit user approval of an
-	// removal exceeding the history recovery quota.
+	// Unrecoverable skips recovery capture after explicit user approval of a
+	// permanent removal when same-filesystem recovery is unavailable.
 	Unrecoverable bool `json:"unrecoverable,omitempty"`
 }
 

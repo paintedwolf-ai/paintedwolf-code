@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
@@ -45,7 +46,9 @@ func NewSourceMutationService(database db.Handle, ledger *sourceledger.Store) *S
 		recorder, heads, objects = ledger, ledger.History, ledger.Retention
 	}
 	journal := &SourceMutationJournal{db: database, people: peoplestore.New(database), memory: make(map[string]*sourceMutationRow)}
-	recovery := &sourceRecovery{db: database, objects: objects, recoveryBytes: make(map[string][]byte), recoveryEntries: make(map[string][]sourceledger.RecoveryEntry)}
+	reclaim := &recoveryReclaimer{}
+	reclaim.cond = sync.NewCond(&reclaim.mu)
+	recovery := &sourceRecovery{db: database, objects: objects, recoveryBytes: make(map[string][]byte), recoveryEntries: make(map[string][]sourceledger.RecoveryEntry), reclaim: reclaim}
 	history := &SourceHistory{db: database, recovery: recovery, history: make(map[string]*sourceHistoryEntry)}
 	recovery.quota = history.recoveryQuotaBytes
 	service := &SourceMutationService{
@@ -53,11 +56,157 @@ func NewSourceMutationService(database db.Handle, ledger *sourceledger.Store) *S
 		Effects:    &SourceEffects{Journal: journal, recovery: recovery, trash: desktoptrash.Move, sameFilesystem: fspath.SameFilesystem, relocate: fseffect.RelocateGuarded},
 		settlement: &sourceSettlement{db: database, recorder: recorder, Journal: journal, History: history},
 	}
+	history.onQuotaChanged = func() { scheduleReclamation(service) }
 	service.Versions = &SourceVersions{heads: heads, recorder: recorder, recovery: recovery, execute: service.execute}
 	if ledger != nil {
 		ledger.SetMutationScopeProvider(journal)
 	}
 	return service
+}
+
+// Close waits for any in-flight background recovery reclamation to finish.
+func (s *SourceMutationService) Close() error {
+	return closeRecoveryReclamation(s)
+}
+
+// WaitReclamation waits for pending background recovery reclamation passes to complete.
+func (s *SourceMutationService) WaitReclamation(ctx context.Context) error {
+	return waitRecoveryReclamation(ctx, s)
+}
+
+func closeRecoveryReclamation(s *SourceMutationService) error {
+	if s == nil {
+		return nil
+	}
+	_ = waitRecoveryReclamation(context.Background(), s)
+	r := s.recovery.reclaim
+	r.mu.Lock()
+	r.closed = true
+	if r.cancel != nil {
+		r.cancel()
+	}
+	r.cond.Broadcast()
+	for r.running {
+		r.cond.Wait()
+	}
+	r.mu.Unlock()
+	return nil
+}
+
+func waitRecoveryReclamation(ctx context.Context, s *SourceMutationService) error {
+	if s == nil {
+		return nil
+	}
+	r := s.recovery.reclaim
+	r.mu.Lock()
+	if r.closed {
+		r.mu.Unlock()
+		return nil
+	}
+	if r.reqSeq == 0 {
+		r.reqSeq = 1
+		if !r.running {
+			r.running = true
+			go reclaimWorkerLoop(s)
+		}
+		r.cond.Broadcast()
+	}
+	target := r.reqSeq
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			r.mu.Lock()
+			r.cond.Broadcast()
+			r.mu.Unlock()
+		case <-done:
+		}
+	}()
+	defer close(done)
+	for !r.closed && r.doneSeq < target && ctx.Err() == nil {
+		r.cond.Wait()
+	}
+	err := ctx.Err()
+	r.mu.Unlock()
+	return err
+}
+
+func scheduleReclamation(s *SourceMutationService) {
+	if s == nil {
+		return
+	}
+	r := s.recovery.reclaim
+	r.mu.Lock()
+	if !r.closed {
+		r.reqSeq++
+		if !r.running {
+			r.running = true
+			go reclaimWorkerLoop(s)
+		}
+		r.cond.Broadcast()
+	}
+	r.mu.Unlock()
+}
+
+func beginForegroundExecution(s *SourceMutationService) {
+	r := s.recovery.reclaim
+	r.mu.Lock()
+	r.fgCount++
+	if r.cancel != nil {
+		r.cancel()
+	}
+	r.cond.Broadcast()
+	r.mu.Unlock()
+	s.recovery.lifecycle.RLock()
+}
+
+func endForegroundExecution(s *SourceMutationService) {
+	s.recovery.lifecycle.RUnlock()
+	r := s.recovery.reclaim
+	r.mu.Lock()
+	r.fgCount--
+	if !r.closed {
+		r.reqSeq++
+		if !r.running {
+			r.running = true
+			go reclaimWorkerLoop(s)
+		}
+	}
+	r.cond.Broadcast()
+	r.mu.Unlock()
+}
+
+func reclaimWorkerLoop(s *SourceMutationService) {
+	r := s.recovery.reclaim
+	for {
+		r.mu.Lock()
+		for !r.closed && r.fgCount > 0 {
+			r.cond.Wait()
+		}
+		if r.closed || r.doneSeq >= r.reqSeq {
+			r.running = false
+			r.cancel = nil
+			r.cond.Broadcast()
+			r.mu.Unlock()
+			return
+		}
+		seq := r.reqSeq
+		ctx, cancel := context.WithCancel(context.Background())
+		r.cancel = cancel
+		r.mu.Unlock()
+
+		reclaimEvictedRecovery(ctx, s)
+		canceled := ctx.Err() != nil
+		cancel()
+
+		r.mu.Lock()
+		r.cancel = nil
+		if !canceled && seq > r.doneSeq {
+			r.doneSeq = seq
+		}
+		r.cond.Broadcast()
+		r.mu.Unlock()
+	}
 }
 
 func (s *SourceMutationService) execute(ctx context.Context, operationID, projectID, inputDigest string, memory sourceeffect.Memory, prepare func() (*sourceMutationPlan, error)) (json.RawMessage, error) {
@@ -74,12 +223,15 @@ func (s *SourceMutationService) execute(ctx context.Context, operationID, projec
 		return nil, err
 	}
 	defer unlock()
-	defer s.reclaimEvictedRecovery(ctx)
-	if s.recovery.objects == nil {
-		s.recovery.lifecycle.RLock()
-		defer s.recovery.lifecycle.RUnlock()
-	}
+	beginForegroundExecution(s)
+	defer endForegroundExecution(s)
 	if s.recovery.objects != nil {
+		defer func() {
+			if err := s.recovery.objects.SweepBlobs(context.WithoutCancel(ctx)); err != nil && !errors.Is(err, sourceledger.ErrBlobMaintenanceDeferred) {
+				// Best-effort sweep for legacy retained recovery objects.
+				_ = err
+			}
+		}()
 		release := s.recovery.objects.HoldRecoveryReferences()
 		defer release()
 	}

@@ -22,7 +22,6 @@ import (
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/localdata"
-	"github.com/lycaon/lycaon/internal/sourceledger"
 )
 
 // CreateOpts configures archive production.
@@ -74,9 +73,6 @@ func Create(ctx context.Context, opts CreateOpts, destPath string) (Manifest, er
 		return Manifest{}, fmt.Errorf("backup: snapshot store: %w", err)
 	}
 
-	if err := materializeRecovery(ctx, opts.ConfigDir, snapshotPath, tmpDir); err != nil {
-		return Manifest{}, fmt.Errorf("%w: materialize recovery: %w", ErrCaptureIncomplete, err)
-	}
 	snapshot, err := db.OpenReadOnly(ctx, snapshotPath)
 	if err != nil {
 		return Manifest{}, fmt.Errorf("backup: open captured store: %w", err)
@@ -120,9 +116,6 @@ func Create(ctx context.Context, opts CreateOpts, destPath string) (Manifest, er
 		}
 	}
 
-	if err := collectDurableDir(ctx, tmpDir, enginepaths.SourceContentDirName, files, branches, maxArchiveEntries); err != nil {
-		return Manifest{}, err
-	}
 	if err := validateArchiveReferences(ctx, snapshot, files); err != nil {
 		return Manifest{}, fmt.Errorf("%w: %w", ErrCaptureIncomplete, err)
 	}
@@ -182,12 +175,6 @@ func collectDurableDir(ctx context.Context, configDir, relDir string, files map[
 		rel, err := filepath.Rel(configDir, path)
 		if err != nil {
 			return err
-		}
-		if filepath.ToSlash(rel) == enginepaths.SourceContentDirName+"/"+sourceledger.RecoveryTreeDirectory {
-			if !entry.IsDir() {
-				return fmt.Errorf("retained recovery namespace is not a directory")
-			}
-			return filepath.SkipDir
 		}
 		if !branches.includes(filepath.ToSlash(rel), entry.IsDir()) {
 			if entry.IsDir() {

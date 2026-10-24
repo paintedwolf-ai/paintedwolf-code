@@ -16,13 +16,14 @@ import (
 )
 
 type SourceHistory struct {
-	db         db.Handle
-	recovery   *sourceRecovery
-	stateMu    sync.Mutex
-	policyMu   sync.RWMutex
-	history    map[string]*sourceHistoryEntry
-	historySeq int64
-	quotaBytes int64
+	db             db.Handle
+	recovery       *sourceRecovery
+	stateMu        sync.Mutex
+	policyMu       sync.RWMutex
+	history        map[string]*sourceHistoryEntry
+	historySeq     int64
+	quotaBytes     int64
+	onQuotaChanged func()
 }
 
 const (
@@ -43,7 +44,11 @@ func (s *SourceHistory) SetRecoveryQuotaBytes(quota int64) {
 	defer s.policyMu.Unlock()
 	s.stateMu.Lock()
 	s.quotaBytes = quota
+	onChanged := s.onQuotaChanged
 	s.stateMu.Unlock()
+	if onChanged != nil {
+		onChanged()
+	}
 }
 
 func (s *SourceMutationService) RecoveryQuotaBytes() int64 {
@@ -61,6 +66,15 @@ func (s *SourceHistory) recoveryQuotaBytes() int64 {
 		return quota
 	}
 	return DefaultSourceHistoryRecoveryQuotaBytes
+}
+
+func (s *SourceHistory) hasCustomQuota() bool {
+	if s == nil {
+		return false
+	}
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+	return s.quotaBytes > 0
 }
 
 var ErrSourceHistoryChanged = errors.New("source history changed")
@@ -130,6 +144,11 @@ func (s *SourceMutationService) applyHistory(ctx context.Context, operationID st
 	if p == nil || len(p.SourceRoots()) == 0 {
 		return nil, ErrSourceNoRoot
 	}
+	if direction == "undo" && s.History.hasCustomQuota() {
+		if err := s.WaitReclamation(ctx); err != nil {
+			return nil, err
+		}
+	}
 	releaseHistory, lockErr := s.Paths.lockSourceHistory(ctx, p.SourceID())
 	if lockErr != nil {
 		return nil, lockErr
@@ -147,7 +166,10 @@ func (s *SourceMutationService) applyHistory(ctx context.Context, operationID st
 		return nil, err
 	}
 	if err := s.validatePendingHistoryHead(ctx, operationID, p.SourceID(), expectedEntryID, direction, digest); err != nil {
-		return nil, err
+		if errors.Is(err, ErrSourceTrashUnavailable) {
+			err = errors.Join(err, s.History.markUnavailable(context.WithoutCancel(ctx), p.SourceID(), expectedEntryID, direction))
+		}
+		return nil, fmt.Errorf("apply source history %s: %w", direction, err)
 	}
 	encoded, err := s.execute(ctx, operationID, p.SourceID(), digest, memory, func() (*sourceMutationPlan, error) {
 		state, order := "applied", "DESC"
@@ -159,6 +181,9 @@ func (s *SourceMutationService) applyHistory(ctx context.Context, operationID st
 			return nil, historyErr
 		}
 		if entry == nil || expectedEntryID == "" || entry.ID != expectedEntryID {
+			if direction == "undo" && expectedEntryID != "" && isReclaimedHistoryOperation(ctx, s, p.SourceID(), expectedEntryID) {
+				return nil, ErrSourceTrashUnavailable
+			}
 			return nil, ErrSourceHistoryChanged
 		}
 		plan := entry.UndoPlan
@@ -269,6 +294,9 @@ func (s *SourceMutationService) validatePendingHistoryHead(ctx context.Context, 
 		return err
 	}
 	if entry == nil || entry.ID != expected {
+		if direction == "undo" && expected != "" && isReclaimedHistoryOperation(ctx, s, projectID, expected) {
+			return ErrSourceTrashUnavailable
+		}
 		return ErrSourceHistoryChanged
 	}
 	return nil
@@ -371,7 +399,7 @@ func (s *SourceHistory) planSourceHistory(ctx context.Context, operationID strin
 	case "delete":
 		undo := sourceMutationPlan{
 			sourceMutationContent:     sourceMutationContent{After: original.Before, AfterSHA: original.BaseSHA256, AfterSize: original.BeforeSize},
-			sourceMutationRecovery:    sourceMutationRecovery{EntryRecoveryKey: original.EntryRecoveryKey, RetainedTree: original.RetainedTree, NativeTrash: original.NativeTrash, RecoveryID: original.RecoveryID, RecoveryCount: original.RecoveryCount, TreeSHA: original.TreeSHA},
+			sourceMutationRecovery:    sourceMutationRecovery{EntryRecoveryKey: original.EntryRecoveryKey, NativeTrash: original.NativeTrash, RecoveryID: original.RecoveryID, RecoveryCount: original.RecoveryCount, TreeSHA: original.TreeSHA, Disposal: original.Disposal},
 			sourceMutationAttribution: sourceMutationAttribution{ProjectID: original.ProjectID, WorkspaceID: original.WorkspaceID, BranchID: original.BranchID},
 			Kind:                      "restore",
 			RootID:                    original.RootID,
@@ -397,10 +425,6 @@ func (s *SourceHistory) planSourceHistory(ctx context.Context, operationID strin
 }
 
 func historyPlan(plan sourceMutationPlan) sourceMutationPlan {
-	if plan.RetainedTree != nil {
-		copy := *plan.RetainedTree
-		plan.RetainedTree = &copy
-	}
 	if plan.NativeTrash != nil {
 		copy := *plan.NativeTrash
 		plan.NativeTrash = &copy

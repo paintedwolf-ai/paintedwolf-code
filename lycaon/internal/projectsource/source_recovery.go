@@ -27,9 +27,20 @@ type sourceRecovery struct {
 	stateMu         sync.Mutex
 	lifecycle       sync.RWMutex
 	quota           func() int64
-	treeRoot        string
 	recoveryBytes   map[string][]byte
 	recoveryEntries map[string][]sourceledger.RecoveryEntry
+	reclaim         *recoveryReclaimer
+}
+
+type recoveryReclaimer struct {
+	mu      sync.Mutex
+	cond    *sync.Cond
+	cancel  context.CancelFunc
+	reqSeq  uint64
+	doneSeq uint64
+	running bool
+	closed  bool
+	fgCount int
 }
 
 var ErrSourceRecoveryQuota = errors.New("source recovery content exceeds the history byte quota")
@@ -114,9 +125,6 @@ func (s *sourceRecovery) copyRecoveryFile(ctx context.Context, sha string, dst i
 }
 
 func (s *SourceEffects) applySourceRestore(ctx context.Context, row *sourceMutationRow) error {
-	if row.Plan.RetainedTree != nil {
-		return s.restoreSourceTree(ctx, row)
-	}
 	if row.Plan.NativeTrash != nil {
 		return s.restoreNativeTrash(ctx, row)
 	}

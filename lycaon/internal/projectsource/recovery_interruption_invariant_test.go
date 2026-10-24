@@ -30,7 +30,7 @@ func TestRecoveryRetentionSurvivesEveryDeletionSettlementBoundary(t *testing.T) 
 			}()
 			row, found, err := service.Journal.load(t.Context(), removal.Record.OperationID)
 			testutil.FailErr(t, "load interrupted deletion", err)
-			if !found || row.Status != sourceMutationPrepared || row.Plan.RecoveryCount == 0 {
+			if !found || row.Status != sourceMutationPrepared || row.Plan.NativeTrash == nil {
 				t.Fatalf("deletion lacks durable recovery: %+v", row)
 			}
 			testutil.FailErr(t, "collect prepared recovery", ledger.Retention.SweepBlobs(t.Context()))

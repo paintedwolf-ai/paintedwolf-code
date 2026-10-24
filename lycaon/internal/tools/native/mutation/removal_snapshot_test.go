@@ -17,7 +17,7 @@ func TestRemovalReviewCannotApproveChangedTree(t *testing.T) {
 	for _, replace := range []bool{false, true} {
 		t.Run(map[bool]string{false: "growth", true: "replacement"}[replace], func(t *testing.T) {
 			h := newHarness(t, map[string]string{"tree/file": "before"})
-			h.service.History.SetRecoveryQuotaBytes(1)
+			h.service.Effects.SetSameFilesystem(func(string, string) (bool, error) { return false, nil })
 			calls := 0
 			h.tc.Files.FileChangeReview = func(_ context.Context, changes []tools.FileChange) error {
 				calls++
@@ -49,7 +49,7 @@ func TestOverwriteAboveRecoveryQuotaRequiresRecoveryLossReview(t *testing.T) {
 	h := newHarness(t, map[string]string{"from": "new"})
 	original := strings.Repeat("x", sourceledger.MaxRevisionContentBytes+1)
 	testutil.FailErr(t, "seed unversioned destination", os.WriteFile(h.path("to"), []byte(original), 0o600))
-	h.service.History.SetRecoveryQuotaBytes(2)
+	h.service.Effects.SetSameFilesystem(func(string, string) (bool, error) { return false, nil })
 	lossReviews := 0
 	h.tc.Files.FileChangeReview = func(_ context.Context, changes []tools.FileChange) error {
 		for _, change := range changes {

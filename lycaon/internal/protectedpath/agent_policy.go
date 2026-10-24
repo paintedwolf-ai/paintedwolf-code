@@ -52,9 +52,15 @@ func ProjectSkillDirs() []string {
 // ProjectPromptFilesDir is the root-relative prompt override directory.
 func ProjectPromptFilesDir() string { return settingsoverlay.Rel(PromptFilesDirName) }
 
+var agentPolicyLocations = buildAgentPolicyLocations()
+
 // AgentPolicyLocations lists every trust-surface location, one declaration
 // shared by the loaders, the process floor, and the native write review.
 func AgentPolicyLocations() []AgentPolicyLocation {
+	return agentPolicyLocations
+}
+
+func buildAgentPolicyLocations() []AgentPolicyLocation {
 	out := []AgentPolicyLocation{{Surface: SurfaceAgentsMD, Name: AgentsMDFileName}}
 	for _, dir := range ProjectSkillDirs() {
 		out = append(out, AgentPolicyLocation{Surface: SurfaceSkills, Dir: dir})

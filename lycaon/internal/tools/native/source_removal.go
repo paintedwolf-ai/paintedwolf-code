@@ -7,6 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/projectsource"
+	"github.com/lycaon/lycaon/internal/sourceeffect"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
@@ -17,6 +18,15 @@ func measureAgentRemoval(ctx context.Context, tc tools.ToolContext, target mutat
 	if _, ok := recoverableRemoval(tc, *mutation); !ok {
 		return nil
 	}
+	canMoveAside, err := tc.Source.SourceMutations.CanMoveAside(ctx, target.Location)
+	if err != nil {
+		return err
+	}
+	if canMoveAside {
+		mutation.RemovalSnapshot = nil
+		mutation.Unrecoverable = false
+		return nil
+	}
 	snapshot, err := tc.Source.SourceMutations.InspectRemoval(ctx, target.Location, mutation.Memory)
 	if err != nil {
 		return err
@@ -25,10 +35,8 @@ func measureAgentRemoval(ctx context.Context, tc tools.ToolContext, target mutat
 		return err
 	}
 	mutation.RemovalSnapshot, mutation.BeforeSize = &snapshot, snapshot.Bytes
-	mutation.Unrecoverable = !snapshot.RecoveryAvailable || snapshot.RecoveryBytes > tc.Source.SourceMutations.RecoveryQuotaBytes()
-	if mutation.Unrecoverable {
-		mutation.MetadataChange, err = permanentRemovalNote(ctx, display, mutation)
-	}
+	mutation.Unrecoverable = true
+	mutation.MetadataChange, err = permanentRemovalNote(ctx, display, mutation)
 	return err
 }
 
@@ -45,10 +53,14 @@ func reviewUnavailableRemoval(ctx context.Context, tc tools.ToolContext, target 
 	if err != nil {
 		return err
 	}
-	if before == nil || before.Identity != current.Identity || before.TreeSHA != current.TreeSHA || before.Bytes != current.Bytes || before.Files != current.Files || before.RecoveryBytes != current.RecoveryBytes || before.RecoverySizeKnown != current.RecoverySizeKnown {
-		return projectsource.ErrSourceMutationDiverged
+	if before != nil {
+		if before.Identity != current.Identity || before.TreeSHA != current.TreeSHA || before.Bytes != current.Bytes || before.Files != current.Files || before.RecoveryBytes != current.RecoveryBytes || before.RecoverySizeKnown != current.RecoverySizeKnown {
+			return projectsource.ErrSourceMutationDiverged
+		}
+	} else if err := verifyEntrySnapshot(ctx, target.Location, mutation.BeforeSHA256, mutation.IsDir); err != nil {
+		return err
 	}
-	mutation.RemovalSnapshot, mutation.Unrecoverable = &current, true
+	mutation.RemovalSnapshot, mutation.BeforeSize, mutation.Unrecoverable = &current, current.Bytes, true
 	mutation.MetadataChange, err = permanentRemovalNote(ctx, target.Location.Rel, mutation)
 	if err != nil {
 		return err
@@ -56,7 +68,7 @@ func reviewUnavailableRemoval(ctx context.Context, tc tools.ToolContext, target 
 	return reviewAgentMutation(ctx, tc, *mutation, target.Location, fseffect.Location{}, true)
 }
 
-func removeAgentTree(ctx context.Context, tc tools.ToolContext, target mutationTarget, display string, bytes int64, memory *toolcontract.ProgramMemory, recheck func() error) error {
+func removeAgentTree(ctx context.Context, tc tools.ToolContext, target mutationTarget, display string, bytes int64, memory *toolcontract.ProgramMemory, recheck func() ([]sourceeffect.ReviewedFile, error)) error {
 	mutation := agentMutation{Memory: memory, Op: api.SourceChangeOpDelete, AbsPath: target.Abs, BeforeSize: bytes, IsDir: true, Recursive: true}
 	if err := measureAgentRemoval(ctx, tc, target, &mutation, display); err != nil {
 		return err
@@ -67,35 +79,40 @@ func removeAgentTree(ctx context.Context, tc tools.ToolContext, target mutationT
 	}
 	// Content measurement does not grant per-entry write authority.
 	if recheck != nil {
-		if err := recheck(); err != nil {
+		reviewed, err := recheck()
+		if err != nil {
 			return err
 		}
+		mutation.ReviewedFiles = reviewed
 	}
 	return discardAgentEntry(ctx, tc, target, mutation)
 }
 
 // Child instruction changes use the same preimage review as scalar removal;
 // the eventual tree move remains one journal and recovery operation.
-func reviewAgentTreePolicyRemoval(ctx context.Context, tc tools.ToolContext, target projectpaths.Resolved, memory *toolcontract.ProgramMemory) error {
+func reviewAgentTreePolicyRemoval(ctx context.Context, tc tools.ToolContext, target projectpaths.Resolved, memory *toolcontract.ProgramMemory) (sourceeffect.ReviewedFile, error) {
 	before, err := captureRemovedEntry(ctx, target.EffectLocation(), memory, true)
 	if err != nil {
-		return err
+		return sourceeffect.ReviewedFile{}, err
 	}
 	if before.release != nil {
 		defer before.release()
 	}
 	release, err := memory.ReserveProgramState(ctx, int64(16<<10)+6*int64(len(before.content))+8*int64(len(target.Abs)))
 	if err != nil {
-		return err
+		return sourceeffect.ReviewedFile{}, err
 	}
 	defer release()
 	working, err := memory.Reserve(ctx, 36<<10)
 	if err != nil {
-		return err
+		return sourceeffect.ReviewedFile{}, err
 	}
 	defer working()
 	mutation := agentMutation{Memory: memory, Op: api.SourceChangeOpDelete, AbsPath: target.Abs, Before: before.content, BeforeSHA256: before.sha256, BeforeSize: before.size, IsDir: before.isDir}
-	return reviewAgentMutation(ctx, tc, mutation, target.EffectLocation(), fseffect.Location{}, false)
+	if err := reviewAgentMutation(ctx, tc, mutation, target.EffectLocation(), fseffect.Location{}, false); err != nil {
+		return sourceeffect.ReviewedFile{}, err
+	}
+	return sourceeffect.ReviewedFile{Rel: target.ScopeRel, SHA256: before.sha256}, nil
 }
 
 func formatDeleteByteSize(bytes int64) string {

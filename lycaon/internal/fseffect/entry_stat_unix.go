@@ -22,7 +22,7 @@ func (r *ReadRoot) Stat(rel string, follow bool, admit func(string) error) (Entr
 	}
 	if relative == "." || relative == "" {
 		var st unix.Stat_t
-		if err := unix.Fstat(int(r.root.file.Fd()), &st); err != nil {
+		if err := unix.Fstat(r.root.fd, &st); err != nil {
 			return EntryStat{}, err
 		}
 		if admit != nil {

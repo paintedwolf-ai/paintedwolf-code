@@ -14,7 +14,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/editoroutbox"
-	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/localdata"
 )
@@ -37,9 +36,6 @@ func captureRecoveryDirectory(ctx context.Context, opts CreateOpts, destination 
 	}
 	storePath := filepath.Join(destination, storeRelPath)
 	if err := db.CreateSnapshot(ctx, opts.SQLDB, storePath); err != nil {
-		return Manifest{}, usage, err
-	}
-	if err := materializeRecovery(ctx, opts.ConfigDir, storePath, destination); err != nil {
 		return Manifest{}, usage, err
 	}
 	source, err := db.OpenReadOnly(ctx, storePath)
@@ -81,16 +77,6 @@ func captureRecoveryDirectory(ctx context.Context, opts CreateOpts, destination 
 			base = destination
 		}
 		if err := collectDurableDir(ctx, base, dir, files, branches, math.MaxInt); err != nil {
-			return Manifest{}, usage, err
-		}
-	}
-	materialized := map[string]archiveSource{}
-	if err := collectDurableDir(ctx, destination, enginepaths.SourceContentDirName, materialized, branches, math.MaxInt); err != nil {
-		return Manifest{}, usage, err
-	}
-	for rel, file := range materialized {
-		files[rel] = file
-		if err := usage.addFile(file.path, false); err != nil {
 			return Manifest{}, usage, err
 		}
 	}

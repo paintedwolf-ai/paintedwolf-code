@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/sourceeffect"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -130,11 +131,19 @@ func (t *DeleteTool) Delete(ctx context.Context, in DeleteInput, tctx tools.Tool
 				} else if resolved.ScopeRel != "" {
 					displayPath = filepath.ToSlash(resolved.ScopeRel)
 				}
-				if err := removeAgentTree(ctx, tctx, resolvedMutationTarget(resolved), displayPath, summary.bytes, in.Memory, func() error {
-					_, err := inspectDeleteTree(ctx, t.Boundary, tctx, resolved, prof, in.Memory, func(target projectpaths.Resolved) error {
-						return reviewAgentTreePolicyRemoval(ctx, tctx, target, in.Memory)
-					})
-					return err
+				if err := removeAgentTree(ctx, tctx, resolvedMutationTarget(resolved), displayPath, summary.bytes, in.Memory, func() ([]sourceeffect.ReviewedFile, error) {
+					if len(summary.policyTargets) == 0 {
+						return nil, nil
+					}
+					reviewed := make([]sourceeffect.ReviewedFile, 0, len(summary.policyTargets))
+					for _, target := range summary.policyTargets {
+						item, err := reviewAgentTreePolicyRemoval(ctx, tctx, target, in.Memory)
+						if err != nil {
+							return nil, err
+						}
+						reviewed = append(reviewed, item)
+					}
+					return reviewed, nil
 				}); err != nil {
 					return result, fmt.Errorf("delete %s: %w", relSlash, err)
 				}
@@ -153,8 +162,9 @@ func (t *DeleteTool) Delete(ctx context.Context, in DeleteInput, tctx tools.Tool
 }
 
 type deleteTreeSummary struct {
-	files int64
-	bytes int64
+	files         int64
+	bytes         int64
+	policyTargets []projectpaths.Resolved
 }
 
 func inspectDeleteTree(ctx context.Context, b *sandbox.Boundary, tctx tools.ToolContext, selected projectpaths.Resolved, prof string, memory *toolcontract.ProgramMemory, reviewPolicy func(projectpaths.Resolved) error) (deleteTreeSummary, error) {
@@ -179,9 +189,12 @@ func inspectDeleteTree(ctx context.Context, b *sandbox.Boundary, tctx tools.Tool
 			if err != nil {
 				return err
 			}
-			if policy && reviewPolicy != nil {
-				if err := reviewPolicy(target); err != nil {
-					return err
+			if policy {
+				summary.policyTargets = append(summary.policyTargets, target)
+				if reviewPolicy != nil {
+					if err := reviewPolicy(target); err != nil {
+						return err
+					}
 				}
 			}
 		}

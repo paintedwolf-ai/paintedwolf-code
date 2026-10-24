@@ -10,6 +10,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/fspath"
+	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourceeffect"
 	"github.com/lycaon/lycaon/internal/sourceledger"
@@ -34,12 +35,10 @@ func TestAgentTreeRemovalRenamesAndRestoresItsOriginalEntries(t *testing.T) {
 	testutil.FailErr(t, "remove tree", err)
 	row, found, err := service.Journal.load(t.Context(), id)
 	testutil.FailErr(t, "read journal", err)
-	if !found || row.Plan.RetainedTree == nil || row.Plan.RecoveryCount != 1 {
+	if !found || row.Plan.NativeTrash == nil || !nativeTrashReceiptRecorded(&row.Plan) {
 		t.Fatalf("tree recovery plan: %+v", row)
 	}
-	location, err := service.recovery.treeLocation(id)
-	testutil.FailErr(t, "locate retained tree", err)
-	if err := requireSourceIdentity(filepath.Join(location.Root, location.Rel), identity); err != nil {
+	if err := requireSourceIdentity(row.Plan.NativeTrash.Receipt.Path, identity); err != nil {
 		t.Fatalf("delete copied rather than renamed the original tree: %v", err)
 	}
 	var captures int
@@ -104,7 +103,7 @@ func TestRetainedTreeRenameFailureDistinguishesPublication(t *testing.T) {
 				undoHistoryHead(t, service, project, id)
 			} else {
 				var unavailable *sourceeffect.RecoveryUnavailableError
-				if !errors.As(err, &unavailable) || row.Status != sourceMutationFailed || row.Plan.RetainedTree != nil || row.Plan.RecoveryID != "" || row.Plan.RecoveryCount != 0 {
+				if !errors.As(err, &unavailable) || row.Status != sourceMutationFailed || nativeTrashReceiptRecorded(&row.Plan) || row.Plan.RecoveryID != "" || row.Plan.RecoveryCount != 0 {
 					t.Fatalf("unperformed rename kept a recovery claim: plan=%+v status=%s error=%v", row.Plan, row.Status, err)
 				}
 				state, stateErr := service.History.State(t.Context(), project.ID)
@@ -126,6 +125,12 @@ func TestRetainedTreeRevalidatesAfterEffectAdmission(t *testing.T) {
 	testutil.FailErr(t, "seed tree", os.Mkdir(filepath.Join(root, "tree"), 0o700))
 	testutil.FailErr(t, "seed content", os.WriteFile(filepath.Join(root, "tree", "file"), []byte("original"), 0o600))
 	ctx := WithSourceEffect(t.Context(), func() error {
+		if err := os.Rename(filepath.Join(root, "tree"), filepath.Join(root, "prior-tree")); err != nil {
+			return err
+		}
+		if err := os.Mkdir(filepath.Join(root, "tree"), 0o700); err != nil {
+			return err
+		}
 		return os.WriteFile(filepath.Join(root, "tree", "file"), []byte("changed after admission"), 0o600)
 	})
 	removal := agentRemoval(t, project, "tree", "")
@@ -136,7 +141,7 @@ func TestRetainedTreeRevalidatesAfterEffectAdmission(t *testing.T) {
 	}
 	row, found, loadErr := service.Journal.load(t.Context(), id)
 	testutil.FailErr(t, "load unperformed attempt", loadErr)
-	if !found || row.Plan.RetainedTree != nil || row.Plan.RecoveryID != "" {
+	if !found || nativeTrashReceiptRecorded(&row.Plan) || row.Plan.RecoveryID != "" {
 		t.Fatalf("unperformed attempt kept custody claim: %+v", row)
 	}
 	assertSourceHistoryFile(t, root, "tree/file", "changed after admission")
@@ -156,7 +161,7 @@ func TestRetainedTreeQuotaPhysicallyPrunesEvictedEntries(t *testing.T) {
 				testutil.FailErr(t, "seed tree", os.Mkdir(filepath.Join(root, name), 0o750))
 				testutil.FailErr(t, "seed file", os.WriteFile(filepath.Join(root, name, "file"), []byte("ok"), 0o600))
 				if i == 0 {
-					_, measured, err := sourceTreeFingerprint(t.Context(), filepath.Join(root, name), testSourceOperationMemory(t))
+					_, measured, err := measureRemovalMetadata(t.Context(), filepath.Join(root, name), testSourceOperationMemory(t))
 					testutil.FailErr(t, "measure allocated storage", err)
 					if !measured.AllocationKnown || measured.AllocatedBytes == 0 {
 						t.Fatal("allocation fact unavailable")
@@ -169,17 +174,78 @@ func TestRetainedTreeQuotaPhysicallyPrunesEvictedEntries(t *testing.T) {
 				testutil.FailErr(t, "remove tree", err)
 				ids = append(ids, id)
 			}
+			testutil.FailErr(t, "wait background reclamation", service.WaitReclamation(t.Context()))
 			for i, id := range ids {
-				location, err := service.recovery.treeLocation(id)
-				testutil.FailErr(t, "locate tree", err)
-				_, err = os.Stat(filepath.Join(location.Root, location.Rel))
+				slotPath := filepath.Join(settingsoverlay.RecoveryDir(root), recoverySlotName(id))
+				_, err := os.Stat(slotPath)
 				if (i == 0 && !os.IsNotExist(err)) || (i > 0 && err != nil) {
 					t.Fatalf("retained tree %d: %v", i, err)
 				}
 			}
 			undoHistoryHead(t, service, project, ids[2])
 			assertSourceHistoryFile(t, root, "tree-2/file", "ok")
+			undoHistoryHead(t, service, project, ids[1])
+			assertSourceHistoryFile(t, root, "tree-1/file", "ok")
+			_, err := service.Undo(t.Context(), "undo-reclaimed", project, SourceHistoryMutationRequest{ExpectedEntryID: ids[0]})
+			if !errors.Is(err, ErrSourceTrashUnavailable) {
+				t.Fatalf("expected ErrSourceTrashUnavailable for reclaimed entry, got %v", err)
+			}
 		})
+	}
+}
+
+func TestMovedAsideReclamationByHistoryAgeAndAcrossRestart(t *testing.T) {
+	service, project, root, _ := sourceMutationFixture(t)
+	ledger := service.settlement.recorder.(*sourceledger.Store)
+	t.Cleanup(func() { testutil.FailErr(t, "close recovery", service.Close()) })
+
+	// 1. Remove an entry, then push it out of the 100-operation lifecycle history.
+	testutil.FailErr(t, "seed aged file", os.WriteFile(filepath.Join(root, "aged.txt"), []byte("aged"), 0o600))
+	agedID, err := service.RemoveEntry(t.Context(), agentRemoval(t, project, "aged.txt", ""))
+	testutil.FailErr(t, "remove aged file", err)
+	agedSlot := filepath.Join(settingsoverlay.RecoveryDir(root), recoverySlotName(agedID))
+	if _, err := os.Stat(agedSlot); err != nil {
+		t.Fatalf("expected aged slot to exist before eviction: %v", err)
+	}
+	for i := range sourceHistoryLimit {
+		name := fmt.Sprintf("filler-%d.txt", i)
+		_, err := service.Create(t.Context(), fmt.Sprintf("create-filler-%d", i), project, SourceEntryCreateRequest{
+			RootID: project.Roots[0].ID,
+			Path:   name,
+			Kind:   SourceEntryFile,
+		})
+		testutil.FailErr(t, "create filler", err)
+	}
+	testutil.FailErr(t, "wait age reclamation", service.WaitReclamation(t.Context()))
+	if _, err := os.Stat(agedSlot); !os.IsNotExist(err) {
+		t.Fatalf("expected aged slot to be reclaimed after falling out of 100-op history, stat err=%v", err)
+	}
+
+	// 2. Verify budget reclamation survives restart and reports unavailable on Undo.
+	testutil.FailErr(t, "seed restart tree", os.Mkdir(filepath.Join(root, "restart-tree"), 0o750))
+	testutil.FailErr(t, "seed restart file", os.WriteFile(filepath.Join(root, "restart-tree", "f.txt"), []byte("restart"), 0o600))
+	restartID, err := service.RemoveEntry(t.Context(), func() sourceeffect.Removal {
+		r := agentRemoval(t, project, "restart-tree", "")
+		r.Recursive = true
+		return r
+	}())
+	testutil.FailErr(t, "remove restart tree", err)
+	testutil.FailErr(t, "wait initial measurement", service.WaitReclamation(t.Context()))
+	restartSlot := filepath.Join(settingsoverlay.RecoveryDir(root), recoverySlotName(restartID))
+	if _, err := os.Stat(restartSlot); err != nil {
+		t.Fatalf("expected restart slot before quota tightening: %v", err)
+	}
+	testutil.FailErr(t, "close initial service before restart", service.Close())
+	restarted := NewSourceMutationService(service.Journal.db, ledger)
+	t.Cleanup(func() { testutil.FailErr(t, "close restarted service", restarted.Close()) })
+	restarted.History.SetRecoveryQuotaBytes(1)
+	testutil.FailErr(t, "recover restarted service", restarted.Recover(t.Context()))
+	if _, err := os.Stat(restartSlot); !os.IsNotExist(err) {
+		t.Fatalf("expected restart slot to be reclaimed on Recover, stat err=%v", err)
+	}
+	_, err = restarted.Undo(t.Context(), "undo-after-restart-reclaim", project, SourceHistoryMutationRequest{ExpectedEntryID: restartID})
+	if !errors.Is(err, ErrSourceTrashUnavailable) {
+		t.Fatalf("expected ErrSourceTrashUnavailable after restart reclamation, got %v", err)
 	}
 }
 

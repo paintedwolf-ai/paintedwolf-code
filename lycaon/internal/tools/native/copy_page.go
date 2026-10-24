@@ -8,6 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/sourceeffect"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -56,24 +57,30 @@ func (p *copyPage) Add(pair FilePair, maximum int64) error {
 	if err != nil {
 		return err
 	}
-	if _, err := os.Lstat(to.Abs); err == nil {
-		if err := p.Flush(); err != nil {
+	return p.AddResolved(pair, from, to, maximum, false)
+}
+
+func (p *copyPage) AddResolved(pair FilePair, from, to projectpaths.Resolved, maximum int64, guaranteedNew bool) error {
+	if !guaranteedNew {
+		if _, err := os.Lstat(to.Abs); err == nil {
+			if err := p.Flush(); err != nil {
+				return err
+			}
+			before := len(p.result.Copied)
+			err = p.operation.copyFile(p.ctx, p.tc, pair, maximum, p.result)
+			if len(p.result.Copied) > before {
+				p.operation.used.Bytes += p.result.Copied[len(p.result.Copied)-1].Bytes
+			}
+			return err
+		} else if !os.IsNotExist(err) {
 			return err
 		}
-		before := len(p.result.Copied)
-		err = p.operation.copyFile(p.ctx, p.tc, pair, maximum, p.result)
-		if len(p.result.Copied) > before {
-			p.operation.used.Bytes += p.result.Copied[len(p.result.Copied)-1].Bytes
-		}
-		return err
-	} else if !os.IsNotExist(err) {
-		return err
 	}
 	buffer, err := p.streamBuffer()
 	if err != nil {
 		return err
 	}
-	staged, result, err := p.operation.stageCopyFileWithinLimit(p.ctx, p.tc, from, resolvedMutationTarget(to), maximum, buffer)
+	staged, result, err := p.operation.stageCopyFileWithinLimit(p.ctx, p.tc, from, resolvedMutationTarget(to), maximum, buffer, true)
 	if err != nil {
 		return err
 	}
@@ -137,19 +144,24 @@ func (p *copyPage) Flush() error {
 	if p.operation.input.Preserve || p.operation.pendingRecords >= copySettlementRecords || p.operation.pendingBytes >= copySettlementBytes || err != nil {
 		err = errors.Join(err, p.operation.settlePending(p.ctx, p.tc))
 	}
+	committedPaths := make([]string, 0, len(completions))
 	for i, completion := range completions {
 		if !completion.Result.Publication.Committed() {
 			continue
 		}
 		p.result.Effects++
 		entry := p.entries[i]
-		p.result.Copied = append(p.result.Copied, copyResult{From: filepath.ToSlash(entry.pair.From), To: filepath.ToSlash(entry.pair.To), Bytes: entry.bytes})
+		toSlash := filepath.ToSlash(entry.pair.To)
+		p.result.Copied = append(p.result.Copied, copyResult{From: filepath.ToSlash(entry.pair.From), To: toSlash, Bytes: entry.bytes})
 		p.operation.used.Bytes += entry.bytes
-		afterSuccessfulMutation(p.ctx, p.tc, filepath.ToSlash(entry.pair.To))
+		committedPaths = append(committedPaths, toSlash)
 		if p.operation.input.Preserve {
 			preserveErr := preserveMetadata(p.ctx, p.tc, entry.source, entry.stage.request.Target)
 			err = errors.Join(err, preserveErr)
 		}
+	}
+	if len(committedPaths) > 0 {
+		afterSuccessfulMutation(p.ctx, p.tc, committedPaths...)
 	}
 	return err
 }

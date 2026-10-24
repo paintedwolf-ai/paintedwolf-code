@@ -73,7 +73,12 @@ func (p sourceMutationPlan) ledgerInputs(operationID string) []sourceledger.Reco
 // sourceChanges flattens one plan into file changes.
 func (p sourceMutationPlan) sourceChanges() []sourcefeed.Change {
 	if p.AgentEffect != nil {
-		return []sourcefeed.Change{p.AgentEffect.Change}
+		change := p.AgentEffect.Change
+		if change.IsDir == nil && p.AgentEffect.Record.EntryKind != "" {
+			isDir := p.AgentEffect.Record.EntryKind == sourceledger.EntryKindDirectory
+			change.IsDir = &isDir
+		}
+		return []sourcefeed.Change{change}
 	}
 	if p.Kind == "batch_write" {
 		changes := make([]sourcefeed.Change, 0, len(p.Writes))

@@ -16,6 +16,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/sourceblob"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -110,12 +111,15 @@ func TestSourceRemovalAdmitsNarrowWideAndDeepTraversalBeforeEffects(t *testing.T
 			removal := agentRemoval(t, project, "tree", "")
 			removal.Recursive = true
 			removal.Memory = memory
-			id, err := service.RemoveEntry(t.Context(), removal)
 			if shape == "narrow" {
+				_, err := service.InspectRemoval(t.Context(), fseffect.Location{Root: root, Rel: "tree"}, memory)
+				testutil.FailErr(t, "inspect admitted tree", err)
+				id, err := service.RemoveEntry(t.Context(), removal)
 				testutil.FailErr(t, "remove admitted tree", err)
 				_, err = service.Undo(t.Context(), "undo-bounded", project, SourceHistoryMutationRequest{ExpectedEntryID: id})
 				testutil.FailErr(t, "restore admitted tree", err)
 			} else {
+				_, err := service.InspectRemoval(t.Context(), fseffect.Location{Root: root, Rel: "tree"}, memory)
 				var limit *toolcontract.ProgramMemoryLimitError
 				if !errors.As(err, &limit) || limit.Account != "state" {
 					t.Fatalf("lost original memory refusal: %v", err)
@@ -125,6 +129,10 @@ func TestSourceRemovalAdmitsNarrowWideAndDeepTraversalBeforeEffects(t *testing.T
 				if intents != 0 {
 					t.Fatalf("unadmitted traversal recorded effect intent: %d", intents)
 				}
+				id, err := service.RemoveEntry(t.Context(), removal)
+				testutil.FailErr(t, "move aside without traversal", err)
+				_, err = service.Undo(t.Context(), "undo-bounded", project, SourceHistoryMutationRequest{ExpectedEntryID: id})
+				testutil.FailErr(t, "restore moved-aside tree without traversal", err)
 			}
 			if _, err := os.Stat(target); err != nil {
 				t.Fatalf("tree changed or not restored: %v", err)

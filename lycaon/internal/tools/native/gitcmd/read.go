@@ -228,6 +228,7 @@ func (p Prepared) run(ctx context.Context, streams commandprogram.Streams) (int,
 	if _, err := p.paths.Bind(ctx, repo.Root, false); err != nil {
 		return 0, err
 	}
+	_ = gitrepo.EnsureRecoveryExcluded(repo.Root)
 	out := &meteredOutput{ctx: ctx, w: streams.Output, maximum: p.owners.limit("stream_bytes")}
 	if out.w == nil {
 		out.w = io.Discard

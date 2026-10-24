@@ -26,7 +26,6 @@ func (s *SourceMutationService) cancelSourcePreparation(ctx context.Context, row
 		}
 		plan.RecoveryID = ""
 		plan.RecoveryCount = 0
-		plan.RetainedTree = nil
 		plan.EntryRecoveryKey = ""
 	}
 	return s.Journal.update(ctx, row)

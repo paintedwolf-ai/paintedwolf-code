@@ -10,8 +10,9 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
+	"github.com/lycaon/lycaon/internal/projectsource"
+	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/sourceeffect"
-	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -23,7 +24,7 @@ func TestOversizeDeleteRejectionLeavesTreeIntact(t *testing.T) {
 		"oversize/a.txt": strings.Repeat("a", 32),
 		"oversize/b.txt": strings.Repeat("b", 32),
 	})
-	h.service.History.SetRecoveryQuotaBytes(16)
+	h.service.Effects.SetSameFilesystem(func(string, string) (bool, error) { return false, nil })
 	var notes []string
 	h.tc.Files.FileChangeReview = func(_ context.Context, changes []tools.FileChange) error {
 		for _, ch := range changes {
@@ -37,7 +38,7 @@ func TestOversizeDeleteRejectionLeavesTreeIntact(t *testing.T) {
 	}
 	r := h.run("", "rm", "-rf", "oversize")
 	if r.err == nil || h.absent("oversize/a.txt") || h.absent("oversize/b.txt") {
-		t.Fatalf("declined oversize delete should leave tree intact: %+v %v", r.result, r.err)
+		t.Fatalf("declined cross-filesystem delete should leave tree intact: %+v %v", r.result, r.err)
 	}
 	if len(notes) != 1 {
 		t.Fatalf("expected one permanent-removal review, got %d", len(notes))
@@ -46,8 +47,9 @@ func TestOversizeDeleteRejectionLeavesTreeIntact(t *testing.T) {
 
 func TestDirectoryDeletesRespectQuotaAndPruneRetainedTrees(t *testing.T) {
 	h := newHarness(t, nil)
+	t.Cleanup(func() { testutil.FailErr(t, "close service", h.service.Close()) })
 	// Measure the real filesystem allocation before setting this fixture
-	// quota. Retained trees must be reclaimed without per-file blob capture.
+	// quota. Moved-aside trees must be reclaimed in the background without per-file blob capture.
 
 	for round := 0; round < 5; round++ {
 		chunk := fmt.Sprintf("round %d\n", round) + strings.Repeat("retained-build-artifact-line\n", 48)
@@ -72,32 +74,76 @@ func TestDirectoryDeletesRespectQuotaAndPruneRetainedTrees(t *testing.T) {
 		}
 	}
 
-	var historyCount int
-	testutil.FailErr(t, "count history entries", h.db.QueryRowContext(t.Context(), `SELECT count(*) FROM source_history_entries WHERE project_id = ?`, h.project.ID).Scan(&historyCount))
-	if historyCount > 2 {
-		t.Fatalf("expected directory history to stay bounded (<= 2 entries), got %d", historyCount)
-	}
+	testutil.FailErr(t, "wait background reclamation", h.service.WaitReclamation(t.Context()))
+
 	var totalRecoveryBytes int64
 	testutil.FailErr(t, "sum recovery bytes", h.db.QueryRowContext(t.Context(), `SELECT COALESCE(SUM(size), 0) FROM source_blob_objects`).Scan(&totalRecoveryBytes))
 	if totalRecoveryBytes != 0 {
 		t.Fatalf("tree removal captured per-file blobs: %d bytes", totalRecoveryBytes)
 	}
-	ledger := h.tc.Source.SourceLedger.(*sourceledger.Store)
-	slots, err := os.ReadDir(ledger.Retention.RecoveryTreeRoot())
+	slots, err := os.ReadDir(settingsoverlay.RecoveryDir(h.root))
 	testutil.FailErr(t, "inspect retained recovery slots", err)
-	if len(slots) != historyCount {
-		t.Fatalf("physical custody not reclaimed with history: slots=%d history=%d", len(slots), historyCount)
+	if len(slots) == 0 || len(slots) > 2 {
+		t.Fatalf("expected physical recovery slots to stay bounded within quota (1..2 slots), got %d", len(slots))
 	}
 }
 
 func TestOversizeDeleteWithoutReviewerLeavesTreeIntact(t *testing.T) {
 	h := newHarness(t, map[string]string{"tree/a": "content"})
-	h.service.History.SetRecoveryQuotaBytes(1)
+	h.service.Effects.SetSameFilesystem(func(string, string) (bool, error) { return false, nil })
 	h.tc.Files.FileChangeReview = nil
 	r := h.run("", "rm", "-rf", "tree")
 	reject := toolrejection.AsToolReject(r.err)
 	if reject == nil || reject.Code != "SOURCE_RECOVERY_APPROVAL_UNAVAILABLE" || h.absent("tree/a") {
 		t.Fatalf("permanent removal escaped review: result=%+v error=%v", r.result, r.err)
+	}
+}
+
+func TestRecoveryAreaHiddenFromCommandsFilesAndGitExclude(t *testing.T) {
+	h := newHarness(t, map[string]string{
+		"visible.txt":      "visible-line\n",
+		"secret/token.txt": "moved-aside-secret-payload\n",
+	})
+	t.Cleanup(func() { testutil.FailErr(t, "close service", h.service.Close()) })
+	testutil.FailErr(t, "mkdir .git/info", os.MkdirAll(h.path(".git/info"), 0o755))
+
+	if r := h.run("", "rm", "-rf", "secret"); r.err != nil || r.result.Status != 0 || !h.absent("secret") {
+		t.Fatalf("rm secret: %+v %v", r.result, r.err)
+	}
+	slots, err := os.ReadDir(settingsoverlay.RecoveryDir(h.root))
+	testutil.FailErr(t, "read recovery dir", err)
+	if len(slots) != 1 {
+		t.Fatalf("expected 1 recovery slot on disk, got %d", len(slots))
+	}
+	excludeBytes, err := os.ReadFile(h.path(".git/info/exclude"))
+	testutil.FailErr(t, "read .git/info/exclude", err)
+	if !strings.Contains(string(excludeBytes), ".paintedwolf/recovery/") {
+		t.Fatalf("expected .git/info/exclude to contain .paintedwolf/recovery/, got %q", string(excludeBytes))
+	}
+	if !h.absent(".gitignore") {
+		t.Fatal("recovery exclusion must never touch .gitignore")
+	}
+
+	if r := h.run("", "rm", "-rf", ".paintedwolf/recovery"); r.err == nil && r.result.Status == 0 {
+		t.Fatalf("rm -rf .paintedwolf/recovery was admitted: %+v", r.result)
+	}
+	slotsAfterRm, err := os.ReadDir(settingsoverlay.RecoveryDir(h.root))
+	testutil.FailErr(t, "re-read recovery dir after rm attempt", err)
+	if len(slotsAfterRm) != 1 {
+		t.Fatalf("recovery slot was affected by rm attempt: slots=%d", len(slotsAfterRm))
+	}
+	browse, err := projectsource.BrowseProjectSource(h.project, "", ".")
+	testutil.FailErr(t, "browse root", err)
+	for _, entry := range browse.Entries {
+		if strings.Contains(entry.Name, "recovery") || entry.Name == ".paintedwolf" {
+			t.Fatalf("Files browse exposed recovery area: %+v", entry)
+		}
+	}
+	if _, err := projectsource.BrowseProjectSource(h.project, "", ".paintedwolf"); !errors.Is(err, projectsource.ErrSourceNotFound) {
+		t.Fatalf("expected .paintedwolf with only recovery to be hidden in Files browse, got %v", err)
+	}
+	if _, err := projectsource.BrowseProjectSource(h.project, "", ".paintedwolf/recovery"); !errors.Is(err, projectsource.ErrSourceNotFound) {
+		t.Fatalf("expected .paintedwolf/recovery to be hidden in Files browse, got %v", err)
 	}
 }
 

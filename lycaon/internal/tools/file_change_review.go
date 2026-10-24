@@ -42,6 +42,9 @@ func (tc ToolContext) ReviewFileChanges(ctx context.Context, changes ...FileChan
 			continue
 		}
 		for _, path := range []string{change.Path, change.FromPath} {
+			if path == "" {
+				continue
+			}
 			if _, policy := tc.AgentPolicyTarget(path); policy {
 				return &toolrejection.ToolReject{Code: "FILE_CHANGE_APPROVAL_UNAVAILABLE", Data: map[string]any{"path": path}}
 			}

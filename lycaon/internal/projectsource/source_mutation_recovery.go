@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/sourceeffect"
 	"os"
 	"path/filepath"
 
+	"github.com/lycaon/lycaon/internal/desktoptrash"
 	"github.com/lycaon/lycaon/internal/fspath"
+	"github.com/lycaon/lycaon/internal/settingsoverlay"
+	"github.com/lycaon/lycaon/internal/sourceeffect"
 )
 
 // Recover completes pending filesystem and ledger phases before requests are served.
@@ -31,7 +33,8 @@ func (s *SourceMutationService) Recover(ctx context.Context) error {
 			recoveryErr = errors.Join(recoveryErr, fmt.Errorf("recover source mutation %s: %w", row.ID, err))
 		}
 	}
-	return recoveryErr
+	scheduleReclamation(s)
+	return errors.Join(recoveryErr, s.WaitReclamation(ctx))
 }
 
 func (s *SourceMutationService) recoverOne(ctx context.Context, row *sourceMutationRow, memory sourceeffect.Memory) error {
@@ -42,10 +45,8 @@ func (s *SourceMutationService) recoverOne(ctx context.Context, row *sourceMutat
 		return err
 	}
 	defer unlock()
-	if s.recovery.objects == nil {
-		s.recovery.lifecycle.RLock()
-		defer s.recovery.lifecycle.RUnlock()
-	}
+	s.recovery.lifecycle.RLock()
+	defer s.recovery.lifecycle.RUnlock()
 
 	// The row may change while recovery waits for the operation lock.
 	current, found, err := s.Journal.load(ctx, row.ID)
@@ -74,12 +75,16 @@ func (s *SourceMutationService) recoverOne(ctx context.Context, row *sourceMutat
 		if current.Plan.Kind == "delete" {
 			identity, statErr := fspath.EntryIdentity(current.Plan.AbsPath)
 			applied = current.Plan.DeleteStarted && (os.IsNotExist(statErr) || (statErr == nil && identity != current.Plan.DeleteIdentity))
-			if applied && current.Plan.RetainedTree != nil {
-				location, locateErr := s.recovery.treeLocation(current.Plan.RecoveryID)
-				if locateErr != nil {
-					return locateErr
+			if applied && current.Plan.NativeTrash != nil && current.Plan.Disposal == sourceDisposalDiscard && !nativeTrashReceiptRecorded(&current.Plan) {
+				slotPath := filepath.Join(current.Plan.RootPath, settingsoverlay.RecoveryDirRelPath, recoverySlotName(current.ID))
+				if requireSourceIdentity(slotPath, current.Plan.DeleteIdentity) == nil {
+					current.Plan.NativeTrash.Receipt = desktoptrash.Receipt{
+						Path:     slotPath,
+						Identity: current.Plan.DeleteIdentity,
+					}
+				} else {
+					applied = false
 				}
-				applied = current.Plan.RetainedTree.Version == 1 && requireSourceIdentity(filepath.Join(location.Root, location.Rel), current.Plan.RetainedTree.Identity) == nil
 			}
 		}
 		if applied && (current.Plan.Kind == "delete" || current.Plan.Kind == "restore") && current.Plan.NativeTrash != nil && !nativeTrashReceiptRecorded(&current.Plan) {

@@ -18,7 +18,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -153,6 +152,22 @@ func TestDirectoryMoveIsJournaledAndReversible(t *testing.T) {
 	}
 	if r := h.run("", "mv", "dest/renamed", "pkg"); r.err != nil || h.read("pkg/a.go") != "package a\n" || h.read("pkg/sub/b.txt") != "b\n" || !h.absent("dest/renamed") {
 		t.Fatalf("moving the directory back did not restore it: %+v %v", r.result, r.err)
+	}
+	// Replacing an existing directory with mv sets the replaced directory aside first so Undo restores it.
+	testutil.FailErr(t, "mkdir replaced dir", os.MkdirAll(h.path("dest/pkg"), 0o755))
+	testutil.FailErr(t, "seed replaced dir file", os.WriteFile(h.path("dest/pkg/old.txt"), []byte("old-dir-content\n"), 0o644))
+	if r := h.run("", "mv", "pkg", "dest"); r.err != nil || r.result.Status != 0 {
+		t.Fatalf("mv dir onto existing dir: %+v %v %q", r.result, r.err, r.stderr)
+	}
+	if !h.absent("pkg") || h.read("dest/pkg/a.go") != "package a\n" || !h.absent("dest/pkg/old.txt") {
+		t.Fatal("mv did not replace destination directory with source directory")
+	}
+	if r := h.run("", "mv", "dest/pkg", "pkg"); r.err != nil || r.result.Status != 0 {
+		t.Fatalf("move replacement out of the way before Undo: %+v %v", r.result, r.err)
+	}
+	h.undoAll(1)
+	if h.read("dest/pkg/old.txt") != "old-dir-content\n" {
+		t.Fatal("Undo did not restore the replaced directory")
 	}
 }
 
@@ -355,16 +370,9 @@ func TestRecursiveMutationCapsAtBoundaryAndOnePast(t *testing.T) {
 				h := newHarness(t, tree(c.files, c.size))
 				h.owners.Operations.Copy.Caps = caps
 				if command[0] == "rm" {
-					measured, err := h.service.InspectRemoval(t.Context(), fseffect.Location{Root: h.root, Rel: "tree"}, h.program.Memory)
-					testutil.FailErr(t, "measure recovery charge", err)
-					if !measured.RecoverySizeKnown || measured.RecoveryBytes < 2 {
-						t.Fatalf("unavailable recovery charge: %+v", measured)
-					}
-					quota := measured.RecoveryBytes
 					if c.limit == "recursive_mutation_bytes" {
-						quota--
+						h.service.Effects.SetSameFilesystem(func(string, string) (bool, error) { return false, nil })
 					}
-					h.service.History.SetRecoveryQuotaBytes(quota)
 				}
 				var reviewed []tools.FileChange
 				h.tc.Files.FileChangeReview = func(_ context.Context, changes []tools.FileChange) error {

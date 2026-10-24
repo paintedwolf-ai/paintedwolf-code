@@ -58,6 +58,7 @@ func TestRecoveryRetentionFollowsHistoryAcrossRestartAndBranching(t *testing.T) 
 
 func recoverWithMaintenance(t *testing.T, service *SourceMutationService, ledger *sourceledger.Store) *SourceMutationService {
 	t.Helper()
+	testutil.FailErr(t, "close previous service", service.Close())
 	testutil.FailErr(t, "collect before recovery", ledger.Retention.SweepBlobs(t.Context()))
 	restarted := NewSourceMutationService(service.Journal.db, ledger)
 	installTestTrash(t, restarted)

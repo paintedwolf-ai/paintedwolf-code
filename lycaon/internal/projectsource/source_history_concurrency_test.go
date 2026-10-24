@@ -59,7 +59,7 @@ func TestNativeRemovalOrdersAfterAnInFlightUndo(t *testing.T) {
 
 func TestMemoryRecoveryQuotaKeepsOtherProjectsActiveCapture(t *testing.T) {
 	service := NewSourceMutationService(nil, nil)
-	service.History.SetRecoveryQuotaBytes(4)
+	t.Cleanup(func() { testutil.FailErr(t, "close service", service.Close()) })
 	type removalRun struct {
 		project          *Project
 		root, body       string
@@ -76,12 +76,7 @@ func TestMemoryRecoveryQuotaKeepsOtherProjectsActiveCapture(t *testing.T) {
 		reached, release := make(chan struct{}), make(chan struct{})
 		unblock := sync.OnceFunc(func() { close(release) })
 		t.Cleanup(unblock)
-		var once sync.Once
-		ctx := WithSourceProgress(t.Context(), func(progress SourceProgress) {
-			if progress.Phase == "preserving" {
-				once.Do(func() { close(reached); <-release })
-			}
-		})
+		ctx := WithSourceEffect(t.Context(), func() error { close(reached); <-release; return nil })
 		done := make(chan error, 1)
 		go func() {
 			_, err := service.RemoveEntry(ctx, agentRemoval(t, project, "file", textfile.SHA256([]byte(body))))
@@ -93,16 +88,14 @@ func TestMemoryRecoveryQuotaKeepsOtherProjectsActiveCapture(t *testing.T) {
 		select {
 		case <-run.reached:
 		case <-time.After(5 * time.Second):
-			t.Fatal("project did not begin capture")
+			t.Fatal("project did not reach removal effect boundary")
 		}
 	}
 	runs[0].unblock()
-	testutil.FailErr(t, "settle first project while another captures", <-runs[0].done)
+	testutil.FailErr(t, "settle first project while another removes", <-runs[0].done)
 	runs[1].unblock()
 	testutil.FailErr(t, "settle second project", <-runs[1].done)
-	if len(service.recovery.recoveryBytes) != 2 {
-		t.Fatalf("reclamation dropped captured bodies: %d", len(service.recovery.recoveryBytes))
-	}
+	testutil.FailErr(t, "wait background reclamation", service.WaitReclamation(t.Context()))
 	for _, run := range runs {
 		state, err := service.History.State(t.Context(), run.project.ID)
 		testutil.FailErr(t, "read project Undo", err)

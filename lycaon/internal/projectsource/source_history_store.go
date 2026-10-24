@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/sourceledger"
 )
 
 func commitSourceHistoryTx(ctx context.Context, tx *sql.Tx, plan sourceMutationPlan, entry *sourceHistoryEntry, quotaBytes int64, now time.Time) error {
@@ -73,18 +72,20 @@ func commitSourceHistoryTx(ctx context.Context, tx *sql.Tx, plan sourceMutationP
 	return pruneSourceHistoryRecoveryQuotaTx(ctx, tx, entry.ProjectID, quotaBytes)
 }
 
-func (s *SourceMutationService) reclaimEvictedRecovery(ctx context.Context) {
-	if s.recovery.objects == nil {
-		if err := s.reclaimMemoryRecovery(context.WithoutCancel(ctx)); err != nil {
+func reclaimEvictedRecovery(ctx context.Context, s *SourceMutationService) {
+	if s.History.db == nil {
+		if err := reclaimMemoryRecovery(ctx, s); err != nil && ctx.Err() == nil && !errors.Is(err, context.Canceled) {
 			slog.WarnContext(ctx, "source recovery reclamation", "error", err)
 		}
 		return
 	}
-	if s.recovery.objects != nil {
-		if err := s.recovery.objects.SweepBlobs(context.WithoutCancel(ctx)); err != nil && !errors.Is(err, sourceledger.ErrBlobMaintenanceDeferred) {
-			slog.WarnContext(ctx, "source recovery reclamation", "error", err)
-		}
+	if err := reclaimMovedAsideRecovery(ctx, s); err != nil && ctx.Err() == nil && !errors.Is(err, context.Canceled) && !errors.Is(err, sql.ErrConnDone) && !isClosedDBErr(err) {
+		slog.WarnContext(ctx, "source recovery reclamation", "error", err)
 	}
+}
+
+func isClosedDBErr(err error) bool {
+	return err != nil && err.Error() == "sql: database is closed"
 }
 
 func (s *SourceHistory) commitSourceHistoryMemory(plan sourceMutationPlan, entry *sourceHistoryEntry) error {

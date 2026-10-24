@@ -2,11 +2,17 @@ package projectsource
 
 import (
 	"context"
+	"crypto/sha256"
+	"database/sql"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/sourceeffect"
+	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 )
 
@@ -16,6 +22,7 @@ type agentEffectBatch struct {
 	recorded      bool
 	closed        bool
 	releaseMemory func()
+	releasePaths  func()
 	prepared      []preparedSettlement
 	appliedID     string
 }
@@ -37,6 +44,11 @@ func (s *SourceMutationService) PrepareEffects(ctx context.Context, memory sourc
 			batch.Close()
 		}
 	}()
+	releasePaths, err := s.Paths.reserveBatchEffects(effects)
+	if err != nil {
+		return nil, err
+	}
+	batch.releasePaths = releasePaths
 	seen := make(map[string]bool, len(effects))
 	for _, effect := range effects {
 		if id := effect.Record.OperationID; id != "" {
@@ -45,29 +57,93 @@ func (s *SourceMutationService) PrepareEffects(ctx context.Context, memory sourc
 			}
 			seen[id] = true
 		}
-		pending, err := s.prepareAgentEffect(ctx, effect)
+		pending, err := s.prepareAgentEffectOpt(ctx, effect, false)
 		if err != nil {
 			return nil, err
 		}
 		pending.row.memory = memory
 		batch.pending = append(batch.pending, pending)
 	}
+	planJSONs := make([]string, len(batch.pending))
+	for i, pending := range batch.pending {
+		raw, err := json.Marshal(pending.row.Plan)
+		if err != nil {
+			return nil, err
+		}
+		if pending.row.InputDigest == "" {
+			if pending.row.freshOperation {
+				pending.row.InputDigest = pending.row.ID
+			} else {
+				sum := sha256.Sum256(raw)
+				pending.row.InputDigest = hex.EncodeToString(sum[:])
+			}
+		}
+		planJSONs[i] = string(raw)
+	}
 	tx, err := s.Journal.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	for _, pending := range batch.pending {
-		if err := s.Journal.insertWith(ctx, tx, pending.row); err != nil {
+	const chunkSize = 64
+	const insertPrefix = `INSERT INTO source_mutations(id, project_id, kind, input_digest, plan_json, status, error, created_at, updated_at) VALUES `
+	const rowPlaceholders = `(?,?,?,?,?,?,?,?,?)`
+	var fullStmt *sql.Stmt
+	if len(batch.pending) >= chunkSize*2 {
+		var sb strings.Builder
+		sb.WriteString(insertPrefix)
+		for i := range chunkSize {
+			if i > 0 {
+				sb.WriteByte(',')
+			}
+			sb.WriteString(rowPlaceholders)
+		}
+		if stmt, err := tx.PrepareContext(ctx, sb.String()); err == nil {
+			fullStmt = stmt
+			defer func() { _ = fullStmt.Close() }()
+		}
+	}
+	args := make([]any, 0, chunkSize*9)
+	for start := 0; start < len(batch.pending); start += chunkSize {
+		end := min(start+chunkSize, len(batch.pending))
+		args = args[:0]
+		for i := start; i < end; i++ {
+			row := batch.pending[i].row
+			args = append(args, row.ID, row.ProjectID, row.Kind, row.InputDigest, planJSONs[i], row.Status, row.Error,
+				row.CreatedAt.Format(time.RFC3339Nano), row.UpdatedAt.Format(time.RFC3339Nano))
+		}
+		if end-start == chunkSize && fullStmt != nil {
+			if _, err := fullStmt.ExecContext(ctx, args...); err != nil {
+				return nil, err
+			}
+			continue
+		}
+		var sb strings.Builder
+		sb.WriteString(insertPrefix)
+		for i := start; i < end; i++ {
+			if i > start {
+				sb.WriteByte(',')
+			}
+			sb.WriteString(rowPlaceholders)
+		}
+		if _, err := tx.ExecContext(ctx, sb.String(), args...); err != nil {
 			return nil, err
 		}
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
+	hostPaths := make([]string, 0, len(batch.pending)*2)
 	for _, pending := range batch.pending {
-		notePreparedAgentEffect(pending.row)
+		c := pending.row.Plan.AgentEffect.Change
+		if c.AbsPath != "" {
+			hostPaths = append(hostPaths, c.AbsPath)
+		}
+		if c.FromAbsPath != "" {
+			hostPaths = append(hostPaths, c.FromAbsPath)
+		}
 	}
+	sourcefeed.NoteHostWrites(hostPaths...)
 	ready = true
 	return batch, nil
 }
@@ -87,6 +163,10 @@ func (b *agentEffectBatch) Close() {
 		}
 	}
 	b.pending = nil
+	if b.releasePaths != nil {
+		b.releasePaths()
+		b.releasePaths = nil
+	}
 	if b.releaseMemory != nil {
 		b.releaseMemory()
 		b.releaseMemory = nil
@@ -152,9 +232,32 @@ func (b *agentEffectBatch) Record(ctx context.Context, completions []sourceeffec
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	updatedAt := time.Now().UTC()
+	updatedAtStr := updatedAt.Format(time.RFC3339Nano)
+	appliedIDs := make([]any, 0, len(b.pending)+3)
+	appliedIDs = append(appliedIDs, sourceMutationFileApplied, "", updatedAtStr)
 	for _, pending := range b.pending {
-		pending.row.UpdatedAt = time.Now().UTC()
-		if err := updateSourceMutation(ctx, tx, pending.row); err != nil {
+		pending.row.UpdatedAt = updatedAt
+		if pending.row.Status == sourceMutationFileApplied && pending.row.Error == "" {
+			appliedIDs = append(appliedIDs, pending.row.ID)
+			continue
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE source_mutations SET status=?, error=?, updated_at=? WHERE id=?`,
+			pending.row.Status, pending.row.Error, updatedAtStr, pending.row.ID); err != nil {
+			return err
+		}
+	}
+	if count := len(appliedIDs) - 3; count > 0 {
+		var sb strings.Builder
+		sb.WriteString(`UPDATE source_mutations SET status=?, error=?, updated_at=? WHERE id IN (`)
+		for i := range count {
+			if i > 0 {
+				sb.WriteByte(',')
+			}
+			sb.WriteByte('?')
+		}
+		sb.WriteByte(')')
+		if _, err := tx.ExecContext(ctx, sb.String(), appliedIDs...); err != nil {
 			return err
 		}
 	}
@@ -216,11 +319,34 @@ func (s *SourceMutationService) SettleEffects(ctx context.Context, effects []sou
 	if err != nil {
 		return err
 	}
-	for i, item := range prepared {
+	for i := range prepared {
 		deliveries[i].DeliverCommitted()
-		notifySourceMutation(ctx, item.row.Plan)
 	}
+	notifySourceMutations(ctx, prepared)
 	return nil
+}
+
+func notifySourceMutations(ctx context.Context, prepared []preparedSettlement) {
+	byRoot := map[string][]string{}
+	var collect func(sourceMutationPlan)
+	collect = func(current sourceMutationPlan) {
+		if current.Kind == "batch_write" {
+			for _, write := range current.Writes {
+				collect(write)
+			}
+			return
+		}
+		if !current.Changed || strings.TrimSpace(current.RootPath) == "" {
+			return
+		}
+		byRoot[current.RootPath] = append(byRoot[current.RootPath], sourceMutationPaths(current)...)
+	}
+	for _, item := range prepared {
+		collect(item.row.Plan)
+	}
+	for root, paths := range byRoot {
+		notifySourceRootPaths(ctx, root, paths)
+	}
 }
 
 // The fixed allowance covers intent JSON, pending records and overlapping

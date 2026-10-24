@@ -35,6 +35,14 @@ func reviewAgentMutation(ctx context.Context, tc tools.ToolContext, m agentMutat
 	return nil
 }
 
+func reviewHeldAgentMutation(ctx context.Context, tc tools.ToolContext, m agentMutation, target fseffect.Location, held fseffect.Target) error {
+	preview := agentMutationPreview(tc, m, target, fseffect.Location{})
+	if err := tc.ReviewFileChanges(ctx, tools.FileChange{Preview: preview, Path: m.AbsPath, FromPath: m.FromAbsPath, RecoveryLoss: m.Unrecoverable}); err != nil {
+		return err
+	}
+	return verifyHeldMutationSnapshot(ctx, target, held, m.BeforeSHA256)
+}
+
 func verifyMutationSnapshot(ctx context.Context, location fseffect.Location, expected string, directory bool) error {
 	current, err := captureAgentFileAt(location, ctx, nil, false)
 	return snapshotMatches(location, current, err, expected, directory)

@@ -2,7 +2,6 @@ package projectsource
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"io/fs"
 	"os"
@@ -65,19 +64,5 @@ func TestAllocationUnavailableAndCancellationDoNotEstimateOrLeak(t *testing.T) {
 	testutil.FailErr(t, "close temporary set", measure.close())
 	if measure.db != nil || measure.tx != nil {
 		t.Fatal("measurement retained temporary handles")
-	}
-}
-
-func TestRetainedTreeBindingRefusesUnknownShapes(t *testing.T) {
-	for _, raw := range []string{
-		`{"version":2,"identity":"entry","allocated_bytes":4}`,
-		`{"version":1,"identity":"entry"}`,
-		`{"version":1,"identity":"entry","allocated_bytes":4,"unknown":true}`,
-		`{"version":1,"identity":"entry","allocated_bytes":-1}`,
-	} {
-		var binding sourceRecoveryTree
-		if err := json.Unmarshal([]byte(raw), &binding); err == nil {
-			t.Fatalf("accepted unknown binding %s", raw)
-		}
 	}
 }

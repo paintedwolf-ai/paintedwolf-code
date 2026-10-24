@@ -79,7 +79,6 @@ type sourceMutationPublication struct {
 
 type sourceMutationRecovery struct {
 	EntryRecoveryKey string               `json:"entry_recovery_key,omitempty"`
-	RetainedTree     *sourceRecoveryTree  `json:"retained_tree,omitempty"`
 	NativeTrash      *sourceTrashRecovery `json:"native_trash,omitempty"`
 	RecoveryID       string               `json:"recovery_id,omitempty"`
 	RecoveryCount    int64                `json:"recovery_count,omitempty"`
@@ -115,6 +114,7 @@ type sourceMutationPlan struct {
 
 type sourceMutationRow struct {
 	memory                           sourceeffect.Memory
+	freshOperation                   bool
 	ID, ProjectID, Kind, InputDigest string
 	Plan                             sourceMutationPlan
 	Status                           sourceMutationStatus
