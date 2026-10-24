@@ -13,7 +13,6 @@ import time
 from .package_payload import stable
 from .profile_observer import identifier, physical, profile
 from .records import CaseUnavailable
-from scripts.harness.supervise import stop_stack
 
 LIMIT = 64 << 10
 TIMEOUT = 5
@@ -47,8 +46,19 @@ def decompress(stream, size):
             raise ValueError('fixture content failed exact bounded decompression')
         return bytes(output)
     finally:
-        stop_stack(child)
-        child.stdout.close()
+        try:
+            if child.poll() is None:
+                child.terminate()
+                try:
+                    child.wait(timeout=1)
+                except subprocess.TimeoutExpired:
+                    child.kill()
+                    try:
+                        child.wait(timeout=1)
+                    except subprocess.TimeoutExpired:
+                        raise CaseUnavailable('fixture-content-child-cleanup-deadline') from None
+        finally:
+            child.stdout.close()
 
 
 def read_object(app, project_id, digest, byte_size, stored_size, *, maximum):

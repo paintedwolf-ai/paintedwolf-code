@@ -8,7 +8,7 @@ import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from linux_release.installed_cases import fixture_content as owner
 
@@ -99,3 +99,25 @@ class FixtureContentTests(unittest.TestCase):
         # Expire before waiting: no machine-speed assertion or arbitrary real sleep.
         with self.assertRaises(owner.CaseUnavailable):
             self.decode_child('import signal;signal.pause()', 3, clocks=[0, 6, 6, 6, 6, 6, 6, 6])
+
+    def test_cleanup_signals_only_unsettled_child_and_has_bounded_waits(self):
+        for settled in (False, True):
+            with self.subTest(settled=settled):
+                child = MagicMock()
+                child.poll.return_value = 0 if settled else None
+                child.wait.side_effect = [subprocess.TimeoutExpired('zstd', 1), 0]
+                ticks = iter((0, 6))
+                with patch.object(owner.subprocess, 'Popen', return_value=child), patch.object(
+                        owner.selectors, 'DefaultSelector'), patch.object(
+                        owner, 'time', SimpleNamespace(monotonic=lambda: next(ticks))):
+                    with self.assertRaises(owner.CaseUnavailable):
+                        owner.decompress(None, 3)
+                child.stdout.close.assert_called_once()
+                if settled:
+                    child.terminate.assert_not_called()
+                    child.kill.assert_not_called()
+                    child.wait.assert_not_called()
+                else:
+                    child.terminate.assert_called_once()
+                    child.kill.assert_called_once()
+                    self.assertEqual([call.kwargs for call in child.wait.call_args_list], [{'timeout': 1}, {'timeout': 1}])
