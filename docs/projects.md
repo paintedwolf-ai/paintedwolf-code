@@ -201,6 +201,8 @@ The bundled `pw` command addresses the same host and project identities as Den. 
 | `pw logs` | Open the local diagnostic log viewer |
 | `pw --version` | Print the installed Painted Wolf Code version |
 
+When Painted Wolf Code is not running, `pw .`, `pw open` and `pw ls` start it and wait for it to accept the request. macOS asks Launch Services for the installed app. Linux starts the installed desktop program in its own session; it requires a graphical session in the terminal's environment and a launcher owned by root and not writable by others. A start that exits early, is cancelled, or does not become ready in time is reported as such, and only the session that command started is stopped.
+
 Commands use stable ids internally and may accept unambiguous display selectors; ambiguity is reported rather than resolved by recency or path guessing. The CLI may request project actions available to the human operator; it grants an agent no new tool authority and bypasses no approval, confinement, or project trust. It discovers the local sidecar and authenticates with the same device-local API token: loopback is transport, the token is the caller boundary.
 
 ---
