@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -34,8 +35,7 @@ func TestStagedInspectionPreservesOperationalFailures(t *testing.T) {
 func TestCanceledStagedInspectionLeavesSourceUntouched(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "store.db")
-	store, err := db.Open(path)
-	testutil.FailErr(t, "create staged database", err)
+	store := testdbfixture.OpenPath(t, path)
 	testutil.FailErr(t, "close staged database", store.Close())
 	before, err := os.ReadFile(path)
 	testutil.FailErr(t, "read source before cancellation", err)
