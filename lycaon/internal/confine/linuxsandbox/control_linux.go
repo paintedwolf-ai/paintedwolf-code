@@ -34,6 +34,9 @@ func receiveControl(control *os.File, header, rights []byte) (n, oobn int, err e
 		return !errors.Is(err, unix.EAGAIN) && !errors.Is(err, unix.EWOULDBLOCK)
 	})
 	if readErr != nil {
+		if readErr.Error() == "use of closed file" {
+			return 0, 0, os.ErrClosed
+		}
 		return 0, 0, readErr
 	}
 	return n, oobn, err
