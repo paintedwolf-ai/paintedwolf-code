@@ -7,10 +7,12 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"io/fs"
 	"net/url"
 	"os"
 	"path/filepath"
+	"syscall"
 
 	"github.com/lycaon/lycaon/internal/configdir"
 	"modernc.org/sqlite"
@@ -83,19 +85,19 @@ func OpenWithOptions(ctx context.Context, dbPath string, hooks UpgradeHooks, opt
 
 	if !created {
 		if err := upgradeExisting(ctx, dbPath, hooks, false); err != nil {
-			return nil, classifyStoreOpenFailure(err)
+			return nil, ClassifyStoreFailure(err)
 		}
 	}
 
 	writer, err := openWriter(ctx, dbPath, opts)
 	if err != nil {
-		return nil, classifyStoreOpenFailure(err)
+		return nil, ClassifyStoreFailure(err)
 	}
 
 	if created {
 		if err := prepareStoreSchema(ctx, writer, true); err != nil {
 			_ = writer.Close()
-			return nil, classifyStoreOpenFailure(err)
+			return nil, ClassifyStoreFailure(err)
 		}
 	}
 
@@ -109,7 +111,7 @@ func OpenWithOptions(ctx context.Context, dbPath string, hooks UpgradeHooks, opt
 		auditDue = !clean
 		if err := prepareAuditState(ctx, writer, auditDue); err != nil {
 			_ = writer.Close()
-			return nil, storeIncompatible(RecoveryReasonIntegrityFailed, SchemaVersion, err.Error())
+			return nil, ClassifyStoreFailure(err)
 		}
 	}
 	if err := markShutdownState(ctx, writer, false); err != nil {
@@ -118,7 +120,7 @@ func OpenWithOptions(ctx context.Context, dbPath string, hooks UpgradeHooks, opt
 	}
 	if err := recordAppVersion(ctx, writer, created); err != nil {
 		_ = writer.Close()
-		return nil, classifyStoreOpenFailure(err)
+		return nil, ClassifyStoreFailure(err)
 	}
 
 	if created {
@@ -133,7 +135,7 @@ func OpenWithOptions(ctx context.Context, dbPath string, hooks UpgradeHooks, opt
 	reader, err := openReader(ctx, dbPath)
 	if err != nil {
 		_ = writer.Close()
-		return nil, classifyStoreOpenFailure(err)
+		return nil, ClassifyStoreFailure(err)
 	}
 	store := newStore(writer, reader)
 	if filepath.IsAbs(dbPath) {
@@ -177,34 +179,32 @@ func openReader(ctx context.Context, dbPath string) (*sql.DB, error) {
 	return sqlDB, nil
 }
 
-// unservableStoreCodes identifies storage faults that require recovery.
-var unservableStoreCodes = map[int]struct{}{
-	sqlite3.SQLITE_CORRUPT:  {},
-	sqlite3.SQLITE_NOTADB:   {},
-	sqlite3.SQLITE_CANTOPEN: {},
-	sqlite3.SQLITE_IOERR:    {},
-	sqlite3.SQLITE_PERM:     {},
-	sqlite3.SQLITE_READONLY: {},
-	sqlite3.SQLITE_FULL:     {},
-}
-
-// classifyStoreOpenFailure maps storage faults to recovery mode.
-func classifyStoreOpenFailure(err error) error {
-	if err == nil {
-		return nil
-	}
-	if errors.Is(err, ErrStoreIncompatible) {
+// ClassifyStoreFailure preserves the distinction between damaged bytes and
+// an operation that cannot currently access or write them.
+func ClassifyStoreFailure(err error) error {
+	if err == nil || errors.Is(err, ErrStoreIncompatible) {
 		return err
+	}
+	var space *InsufficientSpaceError
+	if errors.As(err, &space) {
+		return &StoreIncompatibleError{Reason: RecoveryReasonInsufficientSpace, Detail: space.Error(), Space: space}
 	}
 	var se *sqlite.Error
 	if errors.As(err, &se) {
-		if _, unservable := unservableStoreCodes[se.Code()&0xff]; unservable {
+		switch se.Code() & 0xff {
+		case sqlite3.SQLITE_CORRUPT, sqlite3.SQLITE_NOTADB:
 			return storeIncompatible(RecoveryReasonIntegrityFailed, 0, err.Error())
+		case sqlite3.SQLITE_FULL:
+			return storeIncompatible(RecoveryReasonInsufficientSpace, 0, err.Error())
+		case sqlite3.SQLITE_CANTOPEN, sqlite3.SQLITE_IOERR, sqlite3.SQLITE_PERM, sqlite3.SQLITE_READONLY:
+			return storeIncompatible(RecoveryReasonStorageUnavailable, 0, err.Error())
 		}
-		return err
 	}
-	if errors.Is(err, fs.ErrPermission) {
-		return storeIncompatible(RecoveryReasonIntegrityFailed, 0, err.Error())
+	if errors.Is(err, syscall.ENOSPC) || errors.Is(err, syscall.EDQUOT) {
+		return storeIncompatible(RecoveryReasonInsufficientSpace, 0, err.Error())
+	}
+	if errors.Is(err, fs.ErrPermission) || errors.Is(err, syscall.EIO) || errors.Is(err, syscall.EROFS) || errors.Is(err, syscall.ENOTSUP) || errors.Is(err, syscall.ENOSYS) || errors.Is(err, fseffect.ErrUnsupported) {
+		return storeIncompatible(RecoveryReasonStorageUnavailable, 0, err.Error())
 	}
 	return err
 }

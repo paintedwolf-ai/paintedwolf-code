@@ -5444,14 +5444,24 @@ export interface components {
             /** @description PRAGMA user_version read from the live store when status is recovery. Omitted on ordinary health. */
             store_schema_version?: number;
             /**
-             * @description Closed reason the store cannot be served. Present when status is recovery.
+             * @description Closed reason the store cannot be served. Present when status is recovery. insufficient_space reports a capacity refusal or exhausted storage; storage_unavailable reports an access or I/O failure. Neither implies database corruption.
              * @enum {string}
              */
-            recovery_reason?: "integrity_failed" | "schema_mismatch";
+            recovery_reason?: "integrity_failed" | "schema_mismatch" | "insufficient_space" | "storage_unavailable";
             /** @description Human-readable sentence matching the recovery reason. Present when status is recovery. */
             recovery_detail?: string;
             /** @description Whether a local recovery snapshot has valid metadata and a supported schema upgrade route. Restore verifies all payload hashes before use. Always false on ordinary health. */
             recovery_snapshot_available: boolean;
+            /**
+             * Format: int64
+             * @description Free bytes the upgrade and its recovery point need. Present when an insufficient_space preflight refusal has an estimate.
+             */
+            recovery_space_needed_bytes?: number;
+            /**
+             * Format: int64
+             * @description Free bytes the volume held when the upgrade was refused. Present when an insufficient_space preflight refusal has an estimate.
+             */
+            recovery_space_available_bytes?: number;
             /**
              * Format: date-time
              * @description RFC 3339 UTC creation time of the recovery snapshot when available. Omitted when recovery_snapshot_available is false.
