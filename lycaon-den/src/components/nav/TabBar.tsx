@@ -23,6 +23,8 @@ import { type FirstTimeTipId } from "../../first-time-tips/first-time-tips-catal
 import { requestFirstTimeTip } from "../../first-time-tips/first-time-tips-service.ts";
 import { prefersReducedMotion } from "../../platform/interaction/reduced-motion.ts";
 
+import { Scrollport } from "../primitives/Scrollport.tsx";
+
 export type TabSpec = {
   id: TabId;
   label: string;
@@ -112,6 +114,7 @@ export function TabBar(props: TabBarProps) {
   };
 
   let clipEl: HTMLDivElement | undefined;
+  let clipViewport: HTMLDivElement | undefined;
   let heightAnim: Animation | undefined;
   let panelWashEl: HTMLDivElement | undefined;
   let panelWashAnim: Animation | undefined;
@@ -163,7 +166,14 @@ export function TabBar(props: TabBarProps) {
       (Number.parseFloat(cs.borderBottomWidth) || 0) +
       (Number.parseFloat(cs.paddingTop) || 0) +
       (Number.parseFloat(cs.paddingBottom) || 0);
-    return Math.round(panelHeight + extra);
+    const unconstrained = Math.round(panelHeight + extra);
+    if (cs.maxHeight && cs.maxHeight !== "none" && cs.maxHeight.endsWith("px")) {
+      const maxH = Number.parseFloat(cs.maxHeight);
+      if (Number.isFinite(maxH) && maxH > 0) {
+        return Math.min(unconstrained, Math.round(maxH));
+      }
+    }
+    return unconstrained;
   };
 
   const panelExpandedHeight = (): number => {
@@ -260,6 +270,7 @@ export function TabBar(props: TabBarProps) {
     props.onPanelHeightChange?.(to);
     const finish = () => {
       clip.style.height = settleTo;
+      if (clipViewport) clipViewport.style.overflowY = settleTo === "auto" ? "" : "hidden";
       settleOverlayExtent(to);
       onDone?.();
     };
@@ -271,6 +282,7 @@ export function TabBar(props: TabBarProps) {
       finish();
       return;
     }
+    if (clipViewport) clipViewport.style.overflowY = "hidden";
     clip.style.height = `${from}px`;
     settleOverlayExtent(from);
     animateOverlayExtent(from, to);
@@ -503,8 +515,10 @@ export function TabBar(props: TabBarProps) {
               </div>
               <div class="tabs__panel-shell">
                 <Show when={mounted() != null}>
-                  <div
+                  <Scrollport
+                    eager
                     class="tabs__panel-clip"
+                    viewportRef={(el) => { clipViewport = el; el.style.overflowY = "hidden"; }}
                     data-testid="tabs-clip"
                     ref={(el) => {
                       clipEl = el;
@@ -533,7 +547,7 @@ export function TabBar(props: TabBarProps) {
                         );
                       }}
                     </Show>
-                  </div>
+                  </Scrollport>
                 </Show>
               </div>
             </div>
