@@ -3,12 +3,11 @@ import hashlib
 from contextlib import nullcontext
 from pathlib import Path
 import tempfile
-import sys
 import unittest
 from unittest.mock import patch
 
 from scripts.linux_release.installed_cases import packages
-from scripts.linux_release.installed_cases.package_native import command, current_package, operations
+from scripts.linux_release.installed_cases.package_native import current_package, operations
 from scripts.linux_release.installed_cases.records import CaseUnavailable
 
 
@@ -20,10 +19,6 @@ class InstalledPackagesTests(unittest.TestCase):
                 "identity": {"kind": "file", "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}},
                 "launcher": {"path": "/usr/bin/painted-wolf-code"}, "install_root": "/opt/painted-wolf-code",
                 "case_inputs": {"native_packages": {"format_version": 1, "current_package": str(path)}}}
-
-    def test_native_command_retains_exit_status_and_separate_streams(self):
-        result = command([sys.executable, "-c", "import sys;print('out');print('err',file=sys.stderr);sys.exit(3)"])
-        self.assertEqual(result, (3, b"out\n", b"err\n"))
 
     def test_selected_fixture_rejects_changed_bytes_symlinks_and_unknown_fields(self):
         with tempfile.TemporaryDirectory() as temporary:

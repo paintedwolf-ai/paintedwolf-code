@@ -17,14 +17,14 @@ def stable(info):
     return (info.st_dev, info.st_ino, info.st_uid, info.st_gid, info.st_mode, info.st_size)
 
 
-def physical_image():
-    for path in [*reversed(IMAGE.parents), IMAGE]:
+def physical_image(image=IMAGE):
+    for path in [*reversed(image.parents), image]:
         info = path.lstat()
-        directory = path != IMAGE
+        directory = path != image
         if (info.st_uid != 0 or info.st_mode & 0o022
                 or not (stat.S_ISDIR(info.st_mode) if directory else stat.S_ISREG(info.st_mode))):
             raise ValueError('selected GNOME image path is not physically root controlled')
-    if IMAGE.resolve(strict=True) != IMAGE or not info.st_mode & 0o111 or info.st_mode & 0o7000:
+    if image.resolve(strict=True) != image or not info.st_mode & 0o111 or info.st_mode & 0o7000:
         raise ValueError('selected native GNOME image contract is unavailable')
     return info
 

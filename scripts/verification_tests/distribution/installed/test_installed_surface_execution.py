@@ -4,7 +4,7 @@ from contextlib import ExitStack
 import unittest
 from unittest.mock import Mock
 
-from linux_release.installed_input import protocol, surface_wire, surface_guest
+from linux_release.installed_input import protocol, surface_wire, transition_guest
 
 
 class SurfaceTests(unittest.TestCase):
@@ -129,7 +129,7 @@ class SurfaceTests(unittest.TestCase):
                     'event_sha256': protocol.event_sha256(pending['operation'], 0),
                     'lease': {'vm_id': 'owned'}, 'qmp_ack': {'id': 1, 'return': {}}}}
         mailbox.read.side_effect = read
-        result = surface_guest.perform_transition(self.execution, 'owned', observer,
+        result = transition_guest.perform_transition(self.execution, 'owned', observer,
                                                   'workspace-request-quit-v1', mailbox)
         self.assertTrue(result['completed'])
         self.assertEqual(result['events'][0]['surface_after'], shown)
@@ -138,7 +138,7 @@ class SurfaceTests(unittest.TestCase):
         mailbox.reset_mock()
         observer.settle.side_effect = ValueError('captured process replaced')
         with self.assertRaises(ValueError) as refused:
-            surface_guest.perform_transition(self.execution, 'owned', observer,
+            transition_guest.perform_transition(self.execution, 'owned', observer,
                                              'workspace-request-quit-v1', mailbox)
         self.assertFalse(refused.exception.observations['native_input']['completed'])
         self.assertEqual(mailbox.write.call_count, 1)
