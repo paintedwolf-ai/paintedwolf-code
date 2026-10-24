@@ -28,7 +28,7 @@ class FixtureTurnTests(unittest.TestCase):
                 owner, 'committed_fixture_tool', return_value=proof) as observed:
             self.assertEqual(owner.await_fixture_reply(None, None, 'fixture', acquisition)['tool_message_id'], MESSAGE)
             for missing in ('request_tools', target):
-                observed.side_effect = lambda app, session, tool, call_id, **kwargs: None if tool == missing else proof
+                observed.side_effect = lambda app, project, session, tool, call_id, **kwargs: None if tool == missing else proof
                 with self.assertRaisesRegex(ValueError, 'did not complete'):
                     owner.await_fixture_reply(None, None, 'fixture', acquisition)
             observed.side_effect = None
