@@ -8,6 +8,6 @@
   "reviewed_commit": "29e597ef299ecf4bf9022ea66b1dcb92a76fc56b",
   "ceiling": 545,
   "boundaries": {
-    "lycaon/test/contract/agentcontext/command_guidance_facts_test.go": "11699492b36ab24195b31c537fab04e27755d9321412900a033f94b84ed52a9b"
+    "lycaon/test/contract/agentcontext/command_guidance_facts_test.go": "c58b8b067e3a26cff776691ad85e6a7f88e1a1c04ef82348a94cb4cd56ef5f37"
   }
 }

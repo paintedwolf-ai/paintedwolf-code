@@ -2,9 +2,11 @@ package contract
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts"
@@ -42,7 +44,6 @@ func TestCommandGuidanceFactsMatchExecutionSurface(t *testing.T) {
 		label string
 		roots []projectroot.RootRef
 	}{
-		{label: "no_folders", roots: nil},
 		{label: "one_folder", roots: singleRoot},
 		{label: "two_folders", roots: multiRoots},
 	}
@@ -113,8 +114,7 @@ func TestCommandGuidanceFactsMatchExecutionSurface(t *testing.T) {
 
 			switch tc.name {
 			case "implement_investigate/ext_hidden/balanced/two_folders/darwin",
-				"explore_readonly/ext_shown/strict/one_folder/darwin",
-				"implement_investigate/ext_shown/strict/no_folders/darwin":
+				"explore_readonly/ext_shown/strict/one_folder/darwin":
 				t.Logf("RENDER_SAMPLE [%s]\n--- command-surface.md ---\n%s\n--- runner-operating-procedure.md ---\n%s\n--- coordinator-host-runner.md ---\n%s\n--- sandbox-confinement.md ---\n%s",
 					tc.name, strings.TrimSpace(cmdSurface), strings.TrimSpace(runnerUnit), strings.TrimSpace(hostRunnerUnit), strings.TrimSpace(sandboxConfinement))
 				t.Logf("--- visual-show-the-design.md ---\n%s", strings.TrimSpace(visualUnit))
@@ -136,6 +136,31 @@ func TestCommandGuidanceFactsMatchExecutionSurface(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("no_folders_omits_command_guidance", func(t *testing.T) {
+		noFolderPlan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: "implement_investigate"}, 0)
+		contractcheck.FailErr(t, "compile no-folder tool plan", err)
+		offered := noFolderPlan.ImmediateNames()
+		deferred := noFolderPlan.DeferredNames()
+		if slices.Contains(offered, "command") || slices.Contains(deferred, "command") {
+			t.Fatalf("no-folder plan must not offer or defer command: immediate=%v deferred=%v", offered, deferred)
+		}
+		templates, facts := prompts.BuildCommandGuidanceSnapshot(prompts.CommandGuidanceSnapshotInput{
+			ProfileID:     prompts.CoordinatorProfileID,
+			SurfaceID:     "implement_investigate",
+			IsCoordinator: true,
+			OfferedTools:  offered,
+			DeferredTools: deferred,
+			RootCount:     0,
+			Posture:       gate.PostureStrict,
+		})
+		if slices.Contains(templates, "partials/command-surface.md") || slices.Contains(templates, "tools/schemas/command.yaml") {
+			t.Fatalf("no-folder snapshot must not render command guidance: %v", templates)
+		}
+		if facts["profile_has_command"] != false {
+			t.Fatalf("no-folder profile_has_command = %#v, want false", facts["profile_has_command"])
+		}
+	})
 }
 
 func TestCommandVisualGuidanceUsesOfferedCaptureRoutes(t *testing.T) {

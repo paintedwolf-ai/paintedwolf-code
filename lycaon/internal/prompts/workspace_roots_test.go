@@ -247,19 +247,6 @@ func TestCommandSurfaceProjectAndOutsideFolderBehaviour(t *testing.T) {
 			}
 		})
 	}
-
-	t.Run("no folders attached", func(t *testing.T) {
-		vars := prompts.AgentPromptSurfaceTemplateVars(prompts.AgentPromptSurface{
-			Posture: gate.PostureStrict,
-		})
-		vars["tool_profile"] = "implement"
-		prompts.MergeWorkspaceRootsVars(vars, nil, "")
-		out, err := engine.Render(context.Background(), "partials/command-surface.md", vars)
-		testutil.FailErr(t, "render command-surface without roots", err)
-		if strings.Contains(out, "These folders are the project") || strings.Contains(out, "Other paths") {
-			t.Fatalf("no-roots command-surface rendered folder coverage copy:\n%s", out)
-		}
-	})
 }
 
 func TestPostureChangedNoticeCopy(t *testing.T) {

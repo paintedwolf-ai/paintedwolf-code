@@ -5,8 +5,7 @@
 {% if workspace_roots %}Programs start in {{ project_dir }}; `pwd`, `$PWD` and `$OLDPWD` are absolute.{% if root_count > 1 %} `cd` moves between folders by absolute path or `@label`.{% endif %} Unquoted `@label/...` and `@scratch/...` expand in arguments and redirects (quote to pass literally):
 {% for r in workspace_roots %}- `@{{ r.label }}` → {{ r.path }}{% if r.is_primary %} (primary){% endif %}
 {% endfor %}These folders are the project; search indexing, history and undo cover only them.{% if profile_command_mutation != false %} {% if reviews_confined_writes == false %}Other paths ask the person first, except temporary and cache folders.{% else %}Other paths, including temporary folders, ask the person first.{% endif %}{% endif %}
-{% if session_scratch_dir %}- `@scratch` → {{ session_scratch_dir }}: session scratch (`$TMPDIR`, `mktemp`); literal `/tmp` is the system's own.
-{% endif %}{% else %}No folder is attached. File and shell tools stay off until the user attaches one.
+{% endif %}{% if session_scratch_dir %}- `@scratch` → {{ session_scratch_dir }}: session scratch (`$TMPDIR`, `mktemp`); literal `/tmp` is the system's own.
 {% endif %}
 {% if profile_command_mutation != false %}Other programs (`go`, `python3`, `node`, `npm`, `make`, `cargo`) run inside a sandbox{% if platform_os == "linux" %} with an isolated process view{% endif %}{% if runner_host_execution_tools %} unless `host_execution` is approved{% endif %}.{% if not command_external_hidden %} Use `external -- NAME` (or `external -p PATH -- NAME`) when an installed binary shares a native name.{% endif %} Long output is cut at 64 KiB.{% if command_output_scratch_files %} When cut, the full stream is saved at `@scratch/output/<program_id>.stdout` (or `.stderr`).{% endif %}
 
