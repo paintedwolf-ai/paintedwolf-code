@@ -110,3 +110,25 @@ func TestStoreOpenDetachesEmbeddedRecoveryBeforeWritersStart(t *testing.T) {
 	testutil.FailErr(t, "find detached recovery metadata before writers start", err)
 	testutil.FailErr(t, "complete application readiness", restarted.UpgradeReady())
 }
+
+func TestStoreQuarantinePrecedesVersionRecoveryCapture(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "store.db")
+	database, err := db.Open(path)
+	testutil.FailErr(t, "open source", err)
+	testutil.FailErr(t, "stamp previous application", db.New(database).UpsertStoreMeta(t.Context(), db.UpsertStoreMetaParams{Key: "app_version", Value: "0.0.1"}))
+	testutil.FailErr(t, "close source", database.Close())
+	testutil.FailErr(t, "seed unsupported quarantine", os.WriteFile(path+db.IntegrityFailureSuffix, []byte(`{"version":2}`), 0o600))
+	builder := &Runtime{logger: slog.Default()}
+	database, err = builder.openUpgradeableStore(t.Context(), path)
+	if database != nil {
+		_ = database.Close()
+		t.Fatal("quarantined store opened")
+	}
+	if !errors.Is(err, db.ErrStoreIncompatible) {
+		t.Fatalf("open=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, db.UpgradeRecoveryDirName)); !os.IsNotExist(err) {
+		t.Fatalf("quarantine attempted recovery capture: %v", err)
+	}
+}

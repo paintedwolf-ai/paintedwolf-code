@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/db/migrations"
@@ -96,6 +97,32 @@ func TestUpgradeRequiresRecoveryBeforeAnyMutation(t *testing.T) {
 				t.Fatal("refused upgrade changed source bytes")
 			}
 		})
+	}
+}
+
+func TestUpgradeRefusesConfirmedDamageBeforeCapture(t *testing.T) {
+	path, registry, _ := upgradeFixture(t)
+	const diagnosis = "foreign_key_check failed: project_roots references projects"
+	w, err := openWriter(t.Context(), path, StoreOptions{})
+	testutil.FailErr(t, "open marker fixture", err)
+	_, err = w.ExecContext(t.Context(), `INSERT INTO store_meta(key,value) VALUES(?,?)`, integrityAuditFailedMetaKey, diagnosis)
+	testutil.FailErr(t, "seed confirmed damage", err)
+	testutil.FailErr(t, "close marker fixture", w.Close())
+	before, err := os.ReadFile(path)
+	testutil.FailErr(t, "read initial bytes", err)
+	hooks := UpgradeHooks{Before: func(context.Context, *sql.DB, migrations.Plan) error {
+		t.Fatal("recovery capture ran on a store with confirmed damage")
+		return nil
+	}}
+	err = upgradeExistingUsing(t.Context(), path, hooks, false, registry)
+	var incompatible *StoreIncompatibleError
+	if !errors.As(err, &incompatible) || !strings.Contains(incompatible.Detail, diagnosis) {
+		t.Fatalf("upgrade error = %v, want refusal with the recorded diagnosis", err)
+	}
+	after, err := os.ReadFile(path)
+	testutil.FailErr(t, "read refused bytes", err)
+	if !reflect.DeepEqual(before, after) {
+		t.Fatal("refused upgrade changed source bytes")
 	}
 }
 
