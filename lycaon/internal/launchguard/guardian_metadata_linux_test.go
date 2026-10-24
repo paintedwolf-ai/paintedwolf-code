@@ -5,6 +5,7 @@ package launchguard
 import (
 	"encoding/binary"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"testing"
@@ -197,4 +198,43 @@ func TestGuardianProtocolClosesInjectedDescriptorAuthority(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGuardianProtocolDistinguishesClosedPeerFromEmptyCredentialedPacket(t *testing.T) {
+	caller := Identity{UID: uint32(os.Getuid()), GID: uint32(os.Getgid())}
+	t.Run("closed peer", func(t *testing.T) {
+		pair := guardianMetadataPair(t, true)
+		testutil.FailErr(t, "close only owned peer write direction", unix.Shutdown(pair[0], unix.SHUT_WR))
+		raw := make([]byte, 25)
+		control := make([]byte, unix.CmsgSpace(unix.SizeofUcred))
+		n, oobn, flags, _, err := unix.Recvmsg(pair[1], raw, control, unix.MSG_CMSG_CLOEXEC|unix.MSG_DONTWAIT)
+		testutil.FailErr(t, "observe actual closed seqpacket", err)
+		t.Logf("closed seqpacket scalar facts: bytes=%d ancillary_bytes=%d flags=%d", n, oobn, flags)
+		if _, err := receiveGuardianNotice(pair[1], os.Getpid(), caller); !errors.Is(err, io.EOF) {
+			t.Fatalf("closed peer lost exact typed fatal EOF: %v", err)
+		}
+	})
+	t.Run("empty credentialed packet", func(t *testing.T) {
+		pair := guardianMetadataPair(t, true)
+		send := func() {
+			t.Helper()
+			_, err := unix.SendmsgN(pair[0], nil, nil, nil, unix.MSG_NOSIGNAL)
+			testutil.FailErr(t, "send owned zero-length packet", err)
+		}
+		send()
+		raw := make([]byte, 25)
+		control := make([]byte, unix.CmsgSpace(unix.SizeofUcred))
+		n, oobn, flags, _, err := unix.Recvmsg(pair[1], raw, control, unix.MSG_CMSG_CLOEXEC|unix.MSG_DONTWAIT)
+		testutil.FailErr(t, "observe empty credentialed packet", err)
+		messages, err := unix.ParseSocketControlMessage(control[:oobn])
+		testutil.FailErr(t, "decode actual zero-packet ancillary", err)
+		t.Logf("empty credentialed seqpacket scalar facts: bytes=%d ancillary_bytes=%d flags=%d messages=%d", n, oobn, flags, len(messages))
+		if n != 0 || len(messages) != 1 || messages[0].Header.Type != unix.SCM_CREDENTIALS {
+			t.Fatal("zero-length packet lost kernel credentials")
+		}
+		send()
+		if _, err := receiveGuardianNotice(pair[1], os.Getpid(), caller); err == nil || errors.Is(err, io.EOF) {
+			t.Fatalf("empty authenticated packet gained admission or EOF meaning: %v", err)
+		}
+	})
 }

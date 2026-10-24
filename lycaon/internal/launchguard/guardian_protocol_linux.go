@@ -5,6 +5,7 @@ package launchguard
 import (
 	"encoding/binary"
 	"errors"
+	"io"
 
 	"golang.org/x/sys/unix"
 )
@@ -58,6 +59,9 @@ func receiveGuardianPacket(fd int, pid int, caller Identity, limit int) ([]byte,
 		}
 		if err != nil {
 			return nil, err
+		}
+		if n == 0 && oobn == 0 && flags == 0 {
+			return nil, io.EOF
 		}
 		messages, controlErr := unix.ParseSocketControlMessage(control[:oobn])
 		// Close any injected rights before rejecting their control shape.
