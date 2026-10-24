@@ -284,3 +284,18 @@ class GateTests(unittest.TestCase):
         receipt = json.loads((self.evidence / "receipt.json").read_text())
         self.assertEqual(receipt["result"], "failed")
         self.assertEqual(receipt["recovery_probe"]["result"], "passed")
+
+
+    def test_diagnostic_errors_preserve_the_original_automatic_failure(self):
+        from contextlib import nullcontext
+        self.plan.update(cases=[{"id": "1.0.2-preview", "source_version": "1.0.2", "channel": "preview"}], skip_reason=None)
+        self.inventory()
+        with patch.object(gate, "require_disposable_host", return_value=self.root / "config"), \
+             patch.object(gate, "local_origin", return_value=nullcontext()), \
+             patch.object(gate, "run_case", side_effect=ValueError("automatic handoff failed")), \
+             patch.object(gate, "probe_committed_recovery", side_effect=ValueError("bad diagnostic target")):
+            with self.assertRaisesRegex(ValueError, "automatic handoff failed"):
+                gate.rehearse(self.fixtures, self.evidence, "1.0.2-preview", recovery_probe=True)
+        receipt = json.loads((self.evidence / "receipt.json").read_text())
+        self.assertEqual(receipt["error"], "automatic handoff failed")
+        self.assertEqual(receipt["recovery_probe"], {"result": "failed", "error": "bad diagnostic target"})

@@ -140,9 +140,10 @@ class CaseTests(unittest.TestCase):
             (work / "Product.app").mkdir()
             installation = Mock()
             installation.healthy.return_value = {"health": {"version": "1.1.0", "status": "ok"}}
-            case = {"source_version": "1.0.2"}
+            (work / ".paintedwolf-update-candidate.app").mkdir()
+            case = {"id": "1.0.2-preview", "source_version": "1.0.2"}
             plan = {"candidate": {"version": "1.1.0"}}
-            with patch.object(driver, "read_json", return_value={"phase": "committed"}), \
+            with patch.object(driver, "read_json", return_value={"phase": "committed", "target": str((work / "Product.app").resolve())}), \
                  patch.object(driver, "Installation", return_value=installation), \
                  patch.object(driver, "confirmed", return_value=True), \
                  patch.object(driver, "verify_semantics") as semantics, \

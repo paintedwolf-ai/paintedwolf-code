@@ -88,7 +88,10 @@ def rehearse(root: Path, evidence: Path, case_id: str, recovery_probe=False):
                 except (Exception, KeyboardInterrupt) as error:
                     receipt["cases"][-1]["error"] = str(error)
                     if recovery_probe and not isinstance(error, KeyboardInterrupt):
-                        receipt["recovery_probe"] = probe_committed_recovery(case, plan, root, case_work, config, evidence / "next-launch-recovery")
+                        try:
+                            receipt["recovery_probe"] = probe_committed_recovery(case, plan, root, case_work, config, evidence / "next-launch-recovery")
+                        except Exception as diagnostic_error:
+                            receipt["recovery_probe"] = {"result": "failed", "error": str(diagnostic_error)}
                     raise
                 receipt["cases"][-1] = result
                 shutil.rmtree(config)

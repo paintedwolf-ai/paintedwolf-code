@@ -205,12 +205,13 @@ def retain_state(config, records, evidence):
 
 def probe_committed_recovery(case, plan, root, work, config, evidence):
     """Diagnose next-launch recovery without changing the failed upgrade result."""
-    app, = work.glob("*.app")
-    app = app.resolve()
-    records = config / "updates/installations" / hashlib.sha256(str(app).encode()).hexdigest()
-    transaction = read_json(records / "transaction.json")
+    transaction = read_json(evidence.parent / case["id"] / "final-transaction.json")
     if not transaction or transaction.get("phase") != "committed":
         return {"result": "not_applicable", "reason": "no_committed_transaction"}
+    app = Path(transaction["target"])
+    if app.parent != work.resolve() or app.suffix != ".app" or app.is_symlink() or not app.is_dir():
+        raise ValueError("recovery target differs from the retained rehearsal installation")
+    records = config / "updates/installations" / hashlib.sha256(str(app).encode()).hexdigest()
     evidence.mkdir()
     installation = Installation(app, config)
     try:
