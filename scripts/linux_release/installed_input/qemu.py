@@ -205,9 +205,10 @@ class Actor:
                 status = self.command('query-status')['return']
                 if status.get('running') is not True or status.get('status') != 'running':
                     raise ValueError('leased guest is not running')
-                if display is not None and ordinal in {0, len(sequence) - 1} and self.display() != display:
-                    raise ValueError('pointer sequence differs from the current QEMU framebuffer')
                 step = sequence[ordinal]
+                if display is not None and (isinstance(step, PointerStep) or ordinal in {0, len(sequence) - 1}):
+                    if self.display() != display:
+                        raise ValueError('pointer sequence differs from the current QEMU framebuffer')
                 if isinstance(step, PointerStep):
                     if step.event == ('@button', 'down'):
                         # A lost acknowledgment may still have pressed the owned button.
