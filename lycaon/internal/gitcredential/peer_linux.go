@@ -9,9 +9,10 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/lycaon/lycaon/internal/osprocess"
 )
 
 // maxAncestry bounds the walk from the helper to the served git process.
@@ -66,16 +67,14 @@ func parentProcess(pid int) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	record := string(raw)
-	end := strings.LastIndexByte(record, ')')
-	if end < 0 {
-		return 0, errors.New("invalid process record")
+	record, err := osprocess.ParseLinuxStat(raw)
+	if err != nil {
+		return 0, err
 	}
-	fields := strings.Fields(record[end+1:])
-	if len(fields) < 2 {
-		return 0, errors.New("invalid process record")
+	if record.PID != pid {
+		return 0, errors.New("process record names a different pid")
 	}
-	return strconv.Atoi(fields[1])
+	return record.ParentPID, nil
 }
 
 func sameFile(a, b string) bool {
