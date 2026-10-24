@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
@@ -36,7 +37,7 @@ func runDiff(inv *invocation) error {
 	}
 	opts.maxCells = inv.owners.limit("evaluation_memory_bytes") / 4
 	opts.header = diffHeader(inv)
-	operands := inv.operands()
+	operands := inv.argv.Operands()
 	if len(operands) != 2 {
 		return inv.usage("diff", "exactly two PATH operands")
 	}
@@ -79,12 +80,20 @@ func diffHeader(inv *invocation) string {
 
 // diffSide is one compared operand.
 type diffSide struct {
+	field   commandprogram.Field
 	label   string
 	dir     bool
 	modTime time.Time
 }
 
-func (inv *invocation) diffSides(left, right string) (diffSide, diffSide, bool, error) {
+func (s diffSide) operandField() commandprogram.Field {
+	if s.field.Value == s.label {
+		return s.field
+	}
+	return commandprogram.Field{Value: s.label}
+}
+
+func (inv *invocation) diffSides(left, right commandprogram.Field) (diffSide, diffSide, bool, error) {
 	a, okA, err := inv.diffSide(left)
 	if err != nil {
 		return a, a, false, err
@@ -98,10 +107,14 @@ func (inv *invocation) diffSides(left, right string) (diffSide, diffSide, bool, 
 
 // diffSide classifies an operand by following metadata. An absent path may
 // still be an accepted unsaved document, which the content capture decides.
-func (inv *invocation) diffSide(operand string) (diffSide, bool, error) {
-	side := diffSide{label: operand}
+func (inv *invocation) diffSide(field commandprogram.Field) (diffSide, bool, error) {
+	operand := field.Value
+	side := diffSide{field: field, label: operand}
 	if operand == "-" {
 		side.modTime = time.Now().UTC()
+		return side, true, nil
+	}
+	if field.ProcessSubstitution().IsInput() {
 		return side, true, nil
 	}
 	bound, err := inv.paths.Bind(inv.ctx, operand, false)
@@ -128,11 +141,11 @@ func (inv *invocation) diffSide(operand string) (diffSide, bool, error) {
 
 // diffFiles compares two captured files and reports their difference.
 func (inv *invocation) diffFiles(left, right diffSide, opts diffOptions, tree bool) error {
-	a, err := inv.open(left.label, true)
+	a, err := inv.openField(left.operandField(), true)
 	if err != nil || a == nil {
 		return err
 	}
-	b, err := inv.open(right.label, true)
+	b, err := inv.openField(right.operandField(), true)
 	if err != nil || b == nil {
 		return err
 	}

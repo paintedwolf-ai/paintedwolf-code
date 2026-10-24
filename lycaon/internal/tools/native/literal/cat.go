@@ -30,7 +30,7 @@ func runCat(inv *invocation) error {
 	}
 	state := &lineState{next: 1}
 	for _, operand := range inv.operandsOrStdin() {
-		in, err := inv.open(operand, false)
+		in, err := inv.openField(operand, false)
 		if err != nil {
 			return err
 		}
@@ -152,9 +152,9 @@ func runNl(inv *invocation) error {
 	}
 	operands := inv.operandsOrStdin()
 	if len(operands) > 1 {
-		return inv.usage(operands[1], "at most one PATH")
+		return inv.usage(operands[1].Value, "at most one PATH")
 	}
-	in, err := inv.open(operands[0], false)
+	in, err := inv.openField(operands[0], false)
 	if err != nil || in == nil {
 		return err
 	}

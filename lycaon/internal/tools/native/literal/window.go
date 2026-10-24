@@ -101,7 +101,7 @@ func runHead(inv *invocation) error {
 	operands := inv.operandsOrStdin()
 	labels := newHeaders(inv, len(operands))
 	for _, operand := range operands {
-		in, err := inv.open(operand, false)
+		in, err := inv.openField(operand, false)
 		if err != nil {
 			return err
 		}
@@ -109,9 +109,12 @@ func runHead(inv *invocation) error {
 			continue
 		}
 		if err := labels.write(in.label); err != nil {
+			in.close()
 			return err
 		}
-		if err := headInput(inv, in, w); err != nil {
+		err = headInput(inv, in, w)
+		in.close()
+		if err != nil {
 			return err
 		}
 	}
@@ -159,7 +162,7 @@ func runTail(inv *invocation) error {
 	operands := inv.operandsOrStdin()
 	labels := newHeaders(inv, len(operands))
 	for _, operand := range operands {
-		in, err := inv.open(operand, true)
+		in, err := inv.openField(operand, true)
 		if err != nil {
 			return err
 		}

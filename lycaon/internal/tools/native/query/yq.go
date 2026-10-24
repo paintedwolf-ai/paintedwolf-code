@@ -14,6 +14,7 @@ import (
 
 	"github.com/mikefarah/yq/v4/pkg/yqlib"
 
+	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools/native"
@@ -39,12 +40,12 @@ type yqRun struct {
 	inv        *invocation
 	all        bool
 	expression string
-	files      []string
+	files      commandprogram.Fields
 	input      string
 	output     string
 	// sources holds each file captured once, so -i reads and publishes
 	// against the same revision.
-	sources map[string]*source
+	sources map[commandprogram.Field]*source
 }
 
 // runYq evaluates a yq expression with the yq v4 library. Errors print
@@ -89,10 +90,10 @@ func runYq(inv *invocation) error {
 // newYqRun applies yq's argument rules: an optional eval/eval-all word, then
 // the expression unless the first word is "-" or an existing file.
 func newYqRun(inv *invocation) (*yqRun, error) {
-	operands := inv.argv.Operands().Values()
-	run := &yqRun{inv: inv, sources: map[string]*source{}}
+	operands := inv.argv.Operands()
+	run := &yqRun{inv: inv, sources: map[commandprogram.Field]*source{}}
 	if len(operands) > 0 {
-		switch operands[0] {
+		switch operands[0].Value {
 		case "eval", "e":
 			operands = operands[1:]
 		case "eval-all", "ea":
@@ -101,8 +102,8 @@ func newYqRun(inv *invocation) (*yqRun, error) {
 	}
 	if expression, ok := inv.value("--expression"); ok {
 		run.expression = expression
-	} else if len(operands) > 0 && operands[0] != "-" && !inv.regularFile(operands[0]) {
-		run.expression, operands = operands[0], operands[1:]
+	} else if len(operands) > 0 && operands[0].Value != "-" && !inv.regularFile(operands[0]) {
+		run.expression, operands = operands[0].Value, operands[1:]
 	}
 	if inv.flag("-P") {
 		if run.expression == "" {
@@ -113,12 +114,12 @@ func newYqRun(inv *invocation) (*yqRun, error) {
 	}
 	run.files = operands
 	switch {
-	case inv.flag("-i") && (len(run.files) == 0 || run.files[0] == "-"):
+	case inv.flag("-i") && (len(run.files) == 0 || run.files[0].Value == "-"):
 		return nil, run.fail(errors.New("write in place flag only applicable when giving an expression and at least one file"))
 	case inv.flag("-n") && len(run.files) > 0:
 		return nil, run.fail(errors.New("cannot pass files in when using null-input flag"))
 	case len(run.files) == 0 && !inv.flag("-n"):
-		run.files = []string{"-"}
+		run.files = commandprogram.Fields{{Value: "-"}}
 	}
 	if err := run.formats(); err != nil {
 		return nil, run.fail(err)
@@ -138,7 +139,7 @@ func (r *yqRun) formats() error {
 	automatic := func(format string) bool { return format == "" || format == "auto" || format == "a" }
 	first := ""
 	if len(r.files) > 0 {
-		first = r.files[0]
+		first = r.files[0].Value
 	}
 	if automatic(r.input) {
 		r.input = yqlib.FormatStringFromFilename(first)
@@ -170,8 +171,11 @@ func yqOption(inv *invocation, key, fallback string) string {
 
 // regularFile is yq's maybeFile: an operand naming an existing regular file
 // is a file, not the expression.
-func (inv *invocation) regularFile(operand string) bool {
-	bound, err := inv.paths.Bind(inv.ctx, operand, false)
+func (inv *invocation) regularFile(operand commandprogram.Field) bool {
+	if operand.ProcessSubstitution() != nil {
+		return true
+	}
+	bound, err := inv.paths.Bind(inv.ctx, operand.Value, false)
 	if err != nil || bound.Null {
 		return false
 	}
@@ -331,9 +335,9 @@ func readYqDocuments(documents *list.List, text, label string, fileIndex int, de
 
 // read returns one operand's text: stdin within the input bound, or a
 // captured and pinned file.
-func (r *yqRun) read(file string) (string, string, error) {
+func (r *yqRun) read(file commandprogram.Field) (string, string, error) {
 	limit := safecmd.JQCaps().InputBytes
-	if file == "-" {
+	if file.Value == "-" {
 		data, err := io.ReadAll(io.LimitReader(r.inv.input, limit+1))
 		if err != nil {
 			return "", "-", err
@@ -345,20 +349,20 @@ func (r *yqRun) read(file string) (string, string, error) {
 	}
 	captured, err := r.capture(file)
 	if err != nil {
-		return "", file, err
+		return "", file.Value, err
 	}
-	return captured.text, file, nil
+	return captured.text, file.Value, nil
 }
 
 // capture pins a file once; an unreadable file is yq's open error.
-func (r *yqRun) capture(file string) (*source, error) {
+func (r *yqRun) capture(file commandprogram.Field) (*source, error) {
 	if captured, ok := r.sources[file]; ok {
 		return captured, nil
 	}
 	captured, err := r.inv.captureSource(file)
 	var failure *unreadable
 	if errors.As(err, &failure) {
-		return nil, fmt.Errorf("open %s: %s", file, strings.ToLower(failure.reason))
+		return nil, fmt.Errorf("open %s: %s", file.Value, strings.ToLower(failure.reason))
 	}
 	if err != nil {
 		return nil, err
@@ -371,12 +375,12 @@ func (r *yqRun) capture(file string) (*source, error) {
 // revisions it read, as jq-edit does; unchanged text publishes nothing.
 func (r *yqRun) inPlace() error {
 	target := r.files[0]
-	bound, err := r.inv.paths.Bind(r.inv.ctx, target, true)
+	bound, err := r.inv.paths.Bind(r.inv.ctx, target.Value, true)
 	if err != nil {
 		return err
 	}
 	if bound.Null {
-		return r.inv.usage(target, "a document PATH for -i")
+		return r.inv.usage(target.Value, "a document PATH for -i")
 	}
 	source, err := r.capture(target)
 	if err != nil {

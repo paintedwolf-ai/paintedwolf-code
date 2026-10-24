@@ -3,6 +3,7 @@ package query
 import (
 	"bytes"
 
+	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools/native"
 )
@@ -41,10 +42,10 @@ func runPythonYq(inv *invocation) error {
 	stdout := inv.out
 	defer func() { inv.out = stdout }()
 	for _, file := range args.files {
-		if file == "-" {
-			return inv.usage(file, "a FILE for -i")
+		if file.Value == "-" {
+			return inv.usage(file.Value, "a FILE for -i")
 		}
-		bound, err := inv.paths.Bind(inv.ctx, file, true)
+		bound, err := inv.paths.Bind(inv.ctx, file.Value, true)
 		if err != nil {
 			return err
 		}
@@ -61,7 +62,7 @@ func runPythonYq(inv *invocation) error {
 		}
 		var result bytes.Buffer
 		inv.out = &output{ctx: inv.ctx, w: &result, maximum: inv.owners.limit("stream_bytes"), steps: stdout.steps, maxSteps: stdout.maxSteps}
-		err = runJqLanguage(inv, jqDialect{yamlInput: true, pythonYAML: true, files: []string{file}})
+		err = runJqLanguage(inv, jqDialect{yamlInput: true, pythonYAML: true, files: commandprogram.Fields{file}})
 		stdout.steps = inv.out.steps
 		if err != nil || inv.status != 0 {
 			return err

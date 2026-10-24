@@ -12,6 +12,7 @@ import (
 
 	"github.com/itchyny/gojq"
 
+	"github.com/lycaon/lycaon/internal/commandprogram"
 	nativejq "github.com/lycaon/lycaon/internal/tools/native/jq"
 )
 
@@ -46,7 +47,7 @@ type jqDialect struct {
 	// with "...".
 	pythonYAML bool
 	// files replaces the operand files (python yq -i runs one at a time).
-	files []string
+	files commandprogram.Fields
 }
 
 // runJq compiles QUERY once and evaluates it over the input stream
@@ -257,18 +258,18 @@ func (r *jqRun) reportError(err error, positioned bool) {
 // filter jq runs ".".
 type jqArgs struct {
 	query      string
-	files      []string
+	files      commandprogram.Fields
 	positional []any
 }
 
 func (inv *invocation) jqArguments() (*jqArgs, error) {
 	args := &jqArgs{}
 	haveQuery := false
-	if file, ok := inv.value("-f"); ok {
+	if file, ok := inv.valueField("-f"); ok {
 		captured, err := inv.captureSource(file)
 		var failure *unreadable
 		if errors.As(err, &failure) {
-			_, _ = fmt.Fprintf(inv.stderr, "jq: Could not open %s: %s\n", file, failure.reason)
+			_, _ = fmt.Fprintf(inv.stderr, "jq: Could not open %s: %s\n", file.Value, failure.reason)
 			inv.status = jqUsage
 			return nil, nil
 		}
@@ -298,14 +299,14 @@ func (inv *invocation) jqArguments() (*jqArgs, error) {
 			}
 			args.positional = append(args.positional, decoded[0])
 		default:
-			args.files = append(args.files, word)
+			args.files = append(args.files, *item.Operand)
 		}
 	}
 	if !haveQuery {
 		args.query = "."
 	}
 	if len(args.files) == 0 {
-		args.files = []string{"-"}
+		args.files = commandprogram.Fields{{Value: "-"}}
 	}
 	return args, nil
 }
@@ -368,7 +369,7 @@ func (inv *invocation) variables(stream *inputs, positional []any) (out []native
 			}
 			value = decoded[0]
 		case "--slurpfile", "--rawfile":
-			captured, err := inv.captureSource(text)
+			captured, err := inv.captureSource(option.Values[1])
 			var failure *unreadable
 			if errors.As(err, &failure) {
 				_, _ = fmt.Fprintf(inv.stderr, "jq: Bad JSON in %s %s %s: Could not open %s: %s\n", option.Key, name, text, text, failure.reason)
