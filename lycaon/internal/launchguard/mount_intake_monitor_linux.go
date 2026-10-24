@@ -18,11 +18,13 @@ import (
 func monitorModuleIntake(spec EntrySpec, plan moduleViewPlan, socket, lifetime int) error {
 	watchdog := time.AfterFunc(mountSourceSetupLimit, func() { os.Exit(int(intakeFailureWatchdog)) })
 	defer watchdog.Stop()
-	info, err := os.Open("/proc/thread-self/mountinfo")
+	// This reader owns its event acknowledgements. os.Open registers mountinfo
+	// with Go netpoll, whose epoll callback can consume the same epoch event.
+	info, err := unix.Open("/proc/thread-self/mountinfo", unix.O_RDONLY|unix.O_CLOEXEC, 0)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = info.Close() }()
+	defer func() { _ = unix.Close(info) }()
 	_, current, err := readCurrentMountTopology()
 	if err != nil {
 		return err
@@ -90,7 +92,7 @@ func monitorModuleIntake(spec EntrySpec, plan moduleViewPlan, socket, lifetime i
 	lastHeartbeat := time.Now()
 	for {
 		watchdog.Reset(mountSourceSetupLimit)
-		fds := []unix.PollFd{{Fd: int32(info.Fd()), Events: unix.POLLPRI | unix.POLLERR}, {Fd: int32(lifetime), Events: unix.POLLIN | unix.POLLHUP | unix.POLLERR}, {Fd: int32(socket), Events: unix.POLLIN}}
+		fds := []unix.PollFd{{Fd: int32(info), Events: unix.POLLPRI | unix.POLLERR}, {Fd: int32(lifetime), Events: unix.POLLIN | unix.POLLHUP | unix.POLLERR}, {Fd: int32(socket), Events: unix.POLLIN}}
 		pollWait := 100
 		if pending {
 			pollWait = 0 // An observed topology change already requires reconciliation.
@@ -109,7 +111,7 @@ func monitorModuleIntake(spec EntrySpec, plan moduleViewPlan, socket, lifetime i
 		}
 		if fds[0].Revents != 0 || pending {
 			var changed bool
-			current, changed, err = readIntakeMountTopology(int(info.Fd()), readMountInfo)
+			current, changed, err = readIntakeMountTopology(info, readMountInfo)
 			if err != nil {
 				return err
 			}

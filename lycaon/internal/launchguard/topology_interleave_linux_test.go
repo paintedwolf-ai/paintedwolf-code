@@ -103,19 +103,19 @@ func captureOwnedTopologyInterleave() (facts topologyInterleaveFacts, err error)
 		}
 		defer unix.Unmount(filler, unix.MNT_DETACH)
 	}
-	info, err := os.Open("/proc/thread-self/mountinfo")
+	info, err := unix.Open("/proc/thread-self/mountinfo", unix.O_RDONLY|unix.O_CLOEXEC, 0)
 	if err != nil {
 		return facts, err
 	}
-	defer info.Close()
+	defer unix.Close(info)
 	var raw []byte
-	entries, changed, captureErr := readIntakeMountTopology(int(info.Fd()), func(_ int, _ []byte) ([]byte, error) {
+	entries, changed, captureErr := readIntakeMountTopology(info, func(_ int, _ []byte) ([]byte, error) {
 		// Stop only after the exact owned mount's complete structured row. Bytes
 		// already returned from this seq-file remain part of this same observation.
 		lineStart := 0
 		for len(raw) < maxMountTopologyBytes {
 			var one [1]byte
-			n, err := unix.Read(int(info.Fd()), one[:])
+			n, err := unix.Read(info, one[:])
 			if errors.Is(err, unix.EINTR) {
 				continue
 			}
@@ -162,7 +162,7 @@ func captureOwnedTopologyInterleave() (facts topologyInterleaveFacts, err error)
 		// kernel seq-file experiment, not an alternate production capture path.
 		var block [4096]byte
 		for len(raw) <= maxMountTopologyBytes {
-			n, err := unix.Read(int(info.Fd()), block[:])
+			n, err := unix.Read(info, block[:])
 			if errors.Is(err, unix.EINTR) {
 				continue
 			}
