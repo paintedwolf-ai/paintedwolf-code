@@ -89,11 +89,11 @@ func (l landing) publicationNote() string {
 	return note
 }
 
+type editorTextProposal struct{ Authored, Reviewed string }
+
 // landEditedText updates the source document or file. It is the final
 // content guard: review gates can change the text a tool proposed.
 // A changed document returns ErrEditorDocumentMoved before writing.
-type editorTextProposal struct{ Authored, Reviewed string }
-
 func landEditedText(ctx context.Context, tctx tools.ToolContext, tool string, resolved projectpaths.Resolved, st sourceview.Text, proposal editorTextProposal) (landing, error) {
 	newContent := proposal.Reviewed
 	if err := guardMutationContent(tool, resolved.DisplayPath, newContent); err != nil {

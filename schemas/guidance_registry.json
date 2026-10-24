@@ -600,7 +600,7 @@
       "branch_instruction": "Preserve earlier results and retry the output read",
       "category": "recoverable",
       "emit": "guard:tool",
-      "summary": "The host could not read verified retained output for {{ paintedwolf.path }} in this chat."
+      "summary": "The host could not complete a verified output read for {{ paintedwolf.path }} in this chat."
     },
     "COMMAND_PLATFORM_UNAVAILABLE": {
       "branch_instruction": "Inspect the declared supported forms and retained effects before choosing the next action; do not retry by external fallback.",

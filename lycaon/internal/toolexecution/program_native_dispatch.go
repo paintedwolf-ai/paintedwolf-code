@@ -234,9 +234,6 @@ func nativeAdmissionFailure(err error, certainty toolcontract.EffectCertainty) t
 	return result
 }
 
-// stageMatchesCommand checks the stage against its catalog command. A confined
-// external launch runs the launched program's own argv, so its stage starts
-// with that program rather than the external selector.
 func stageMatchesOperation(bound toolcontract.BoundOperation, argv []string) bool {
 	if bound.Publication() != toolcontract.NoPublication {
 		return len(argv) == 2 && argv[0] == bound.Command() && argv[1] != ""
@@ -244,6 +241,9 @@ func stageMatchesOperation(bound toolcontract.BoundOperation, argv []string) boo
 	return stageMatchesCommand(bound.Command(), argv)
 }
 
+// stageMatchesCommand checks the stage against its catalog command. A confined
+// external launch runs the launched program's own argv, so its stage starts
+// with that program rather than the external selector.
 func stageMatchesCommand(command string, argv []string) bool {
 	if command == "external" {
 		return len(argv) > 0 && argv[0] != ""
