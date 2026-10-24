@@ -4,6 +4,7 @@ from __future__ import annotations
 import time
 
 from .profile_observer import project_for_owned_root, sessions_for_project
+from .profile_setup import fixture_selection
 from .provider import MODEL
 from .provider_acquisition import fixed_call
 from .reply_observer import committed_reply
@@ -22,8 +23,8 @@ def await_fixture_reply(app, project, provider_id, acquisition, *, selected_sess
             if witness:
                 if partial and partial['project_id'] != witness['project_id']:
                     raise ValueError('fixed tool project changed after its durable receipt')
-                sessions = [row for row in sessions_for_project(app, witness['project_id'])
-                            if row['provider_id'] == provider_id and row['model'] == MODEL]
+                selection = fixture_selection(app, project, witness['project_id'], provider_id, MODEL)
+                sessions = sessions_for_project(app, witness['project_id'])
                 if selected_session is not None:
                     sessions = [row for row in sessions if row['id'] == selected_session]
                 if len(sessions) > 1:
@@ -32,6 +33,9 @@ def await_fixture_reply(app, project, provider_id, acquisition, *, selected_sess
                     session = sessions[0]
                     if partial and partial['session_id'] != session['id']:
                         raise ValueError('fixed tool session changed after its durable receipt')
+                    if (session['parent_session_id'] is not None or (session['provider_id'], session['model'])
+                            not in {(None, None), (provider_id, MODEL)}):
+                        raise ValueError('fixed tool session differs from its selected root coordinator')
                     acquired = invoked = None
                     if acquisition.completed and acquisition.witness is not None and acquisition.tool_witness is not None:
                         acquired = committed_fixture_tool(app, witness['project_id'], session['id'], 'request_tools', acquisition.witness['tool_call_id'], target=target)
@@ -54,7 +58,9 @@ def await_fixture_reply(app, project, provider_id, acquisition, *, selected_sess
                             raise ValueError('fixed provider phases did not establish both host call identities')
                         if acquired is None or invoked is None:
                             raise ValueError('fixed acquisition and tool fixture did not complete successfully')
-                        return {**result, 'tool_message_id': invoked['message_id'],
+                        if fixture_selection(app, project, witness['project_id'], provider_id, MODEL) != selection:
+                            raise ValueError('fixed reply model selection changed during observation')
+                        return {**result, 'model_selection': selection, 'tool_message_id': invoked['message_id'],
                                 'schema_acquisition': acquired, 'tool_invocation': invoked}
             time.sleep(0.1)
         raise CaseUnavailable('protected-mock-reply-or-restart-witness-timeout')

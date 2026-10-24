@@ -12,8 +12,38 @@ MESSAGE = '10000000-0000-4000-8000-000000000004'
 
 
 class FixtureTurnTests(unittest.TestCase):
+    def setUp(self):
+        selection = patch.object(owner, 'fixture_selection', return_value={'selected': True})
+        self.selection = selection.start()
+        self.addCleanup(selection.stop)
+
+    def test_selection_change_during_read_is_refused(self):
+        acquisition = SimpleNamespace(tool='command', completed=True,
+            witness={'tool_call_id': 'call_1234abcd', 'invocation_id': OUTPUT},
+            tool_witness={'tool_call_id': 'call_abcd1234', 'invocation_id': OUTPUT})
+        session = {'id': SESSION, 'status': 'idle', 'provider_id': None, 'model': None, 'parent_session_id': None}
+        self.selection.side_effect = [{'hash': 'before'}, {'hash': 'after'}]
+        with patch.object(owner, 'project_for_owned_root', return_value={'project_id': PROJECT}), patch.object(
+                owner, 'sessions_for_project', return_value=[session]), patch.object(
+                owner, 'committed_reply', return_value={'session_id': SESSION}), patch.object(
+                owner, 'committed_fixture_tool', return_value={'message_id': MESSAGE, 'invocation_id': OUTPUT}):
+            with self.assertRaisesRegex(ValueError, 'selection changed'):
+                owner.await_fixture_reply(None, None, 'fixture', acquisition)
+
+    def test_child_partial_or_foreign_root_references_refuse_before_receipt_read(self):
+        session = {'id': SESSION, 'status': 'idle', 'provider_id': None, 'model': None, 'parent_session_id': None}
+        acquisition = SimpleNamespace(tool='page_open', completed=True, witness={}, tool_witness={})
+        for change in ({'provider_id': 'fixture'}, {'model': owner.MODEL},
+                       {'parent_session_id': OUTPUT}, {'provider_id': 'foreign', 'model': owner.MODEL}):
+            with self.subTest(change=change), patch.object(owner, 'project_for_owned_root', return_value={'project_id': PROJECT}), patch.object(
+                    owner, 'sessions_for_project', return_value=[{**session, **change}]), patch.object(
+                    owner, 'committed_fixture_tool') as receipt:
+                with self.assertRaisesRegex(ValueError, 'selected root'):
+                    owner.await_fixture_reply(None, None, 'fixture', acquisition)
+                receipt.assert_not_called()
+
     def test_later_context_drift_never_relabels_prior_valid_tool_receipts(self):
-        selected = {'id': SESSION, 'provider_id': 'fixture', 'model': owner.MODEL, 'status': 'idle'}
+        selected = {'id': SESSION, 'provider_id': 'fixture', 'model': owner.MODEL, 'status': 'idle', 'parent_session_id': None}
         acquisition = SimpleNamespace(tool='page_open', completed=True,
             witness={'tool_call_id': 'call_1234abcd', 'invocation_id': OUTPUT},
             tool_witness={'tool_call_id': 'call_abcd1234', 'invocation_id': OUTPUT})
@@ -36,7 +66,7 @@ class FixtureTurnTests(unittest.TestCase):
                 self.assertEqual(receipts.call_count, 2)
 
     def test_valid_tool_receipts_survive_later_reply_refusal_or_timeout_without_success(self):
-        session = {'id': SESSION, 'provider_id': 'fixture', 'model': owner.MODEL, 'status': 'idle'}
+        session = {'id': SESSION, 'provider_id': 'fixture', 'model': owner.MODEL, 'status': 'idle', 'parent_session_id': None}
         acquisition = SimpleNamespace(tool='page_open', completed=True,
             witness={'tool_call_id': 'call_1234abcd', 'invocation_id': OUTPUT},
             tool_witness={'tool_call_id': 'call_abcd1234', 'invocation_id': OUTPUT})
@@ -72,7 +102,7 @@ class FixtureTurnTests(unittest.TestCase):
                 self.assert_tool(target)
 
     def assert_tool(self, target):
-        session = {'id': SESSION, 'provider_id': 'fixture', 'model': owner.MODEL, 'status': 'idle'}
+        session = {'id': SESSION, 'provider_id': 'fixture', 'model': owner.MODEL, 'status': 'idle', 'parent_session_id': None}
         proof = {'message_id': MESSAGE, 'invocation_id': OUTPUT}
         acquisition = SimpleNamespace(tool=target, completed=True, witness={'tool_call_id': 'call_1234abcd', 'invocation_id': OUTPUT},
             tool_witness={'tool_call_id': 'call_abcd1234', 'invocation_id': OUTPUT})
@@ -81,6 +111,8 @@ class FixtureTurnTests(unittest.TestCase):
                 owner, 'committed_reply', return_value={'session_id': SESSION}), patch.object(
                 owner, 'committed_fixture_tool', return_value=proof) as observed:
             self.assertEqual(owner.await_fixture_reply(None, None, 'fixture', acquisition)['tool_message_id'], MESSAGE)
+            session['provider_id'] = session['model'] = None
+            self.assertEqual(owner.await_fixture_reply(None, None, 'fixture', acquisition)['model_selection'], {'selected': True})
             for missing in ('request_tools', target):
                 observed.side_effect = lambda app, project, session, tool, call_id, **kwargs: None if tool == missing else proof
                 with self.assertRaisesRegex(ValueError, 'did not complete'):
