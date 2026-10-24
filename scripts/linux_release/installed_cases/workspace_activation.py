@@ -67,7 +67,7 @@ def execute(binding, capability, case, root):
         if recovery is not None:
             observations['provider_recovery'], streams['provider-registration'] = recovery
         barrier = ResponseBarrier()
-        with ProviderFixture.gui(calls, response_barrier=barrier,
+        with ProviderFixture.gui(calls, acquire_command=True, response_barrier=barrier,
                 endpoint=recovery[0]['endpoint'] if recovery is not None else None) as fixture:
             app = InstalledApp(launch_binding)
             with app:
