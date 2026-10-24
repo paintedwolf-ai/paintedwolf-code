@@ -36,8 +36,6 @@ FACT_FIELDS = {'session', 'session_error', 'screensaver_locked', 'locked_hint_se
                'system_connected', 'session_bus_connected', 'sleeping', 'idle', 'mode'}
 SESSION_FIELDS = {'id', 'path', 'uid', 'session_type', 'active', 'can_lock', 'locked'}
 IDLE_SOURCES = {'wayland_input_idle', 'mutter_idle_monitor', 'x11_screen_saver'}
-DENIED_CODES = {'code:presence_denied', 'data-code:presence_denied'}
-STALE_REASONS = {'challenge-invalidated:step_away', 'data-challenge-state:stale', 'data-reason:step_away', 'reason:step_away'}
 
 
 def step_away_facts(app) -> list[dict]:
@@ -149,7 +147,7 @@ def recover_case_observer(session: dict, native, lock) -> tuple:
     return fresh_native, fresh_lock, {'stale_refusals': refusals, 'reconnected_proof': fresh_lock.initial}
 
 
-def is_monitor_owner_loss_fact(fact: dict, session: dict) -> bool:
+def is_capability_state_loss_fact(fact: dict, session: dict) -> bool:
     if not isinstance(fact, dict) or set(fact) != FACT_FIELDS:
         return False
     observed = fact.get('session')
@@ -171,12 +169,12 @@ def _valid_unlocked_lock_observed(row: dict, session: dict) -> dict | None:
     return validated if validated['screensaver_locked'] is False and validated['mode'] == 'lock_observed' else None
 
 
-def observe_monitor_owner_recovery(app, session: dict) -> dict | None:
+def observe_capability_state_recovery(app, session: dict) -> dict | None:
     facts = step_away_facts(app)
     baseline_index = next((idx for idx, r in enumerate(facts) if _valid_unlocked_lock_observed(r, session) is not None), None)
     if baseline_index is None:
         return None
-    loss_index = next((idx for idx in range(baseline_index + 1, len(facts)) if is_monitor_owner_loss_fact(facts[idx], session)), None)
+    loss_index = next((idx for idx in range(baseline_index + 1, len(facts)) if is_capability_state_loss_fact(facts[idx], session)), None)
     if loss_index is None:
         return None
     for idx in range(loss_index + 1, len(facts)):
@@ -231,21 +229,6 @@ def submit_presence_confirmation(app, ui, storage, native_input: dict, *, expect
     return {'target': target, 'exchange': {'request': pending, 'delivery': delivery, 'guest_confirmed': True}}
 
 
-def stale_challenge_refusal_verified(pre_lock_dialog: dict, stale_attempt: dict,
-                                     refusal_alert: dict, observations: dict) -> bool:
-    exchange = stale_attempt.get('exchange') if isinstance(stale_attempt, dict) else None
-    delivery = exchange.get('delivery') if isinstance(exchange, dict) else None
-    attrs = set(refusal_alert.get('attributes') or ()) if isinstance(refusal_alert, dict) else set()
-    return (isinstance(pre_lock_dialog, dict) and 'identity' in pre_lock_dialog and isinstance(stale_attempt, dict)
-            and stale_attempt.get('target', {}).get('password', {}).get('parent') == pre_lock_dialog['identity']
-            and isinstance(exchange, dict) and exchange.get('guest_confirmed') is True
-            and isinstance(delivery, dict) and delivery.get('completed') is True and delivery.get('delivery_uncertain') is False
-            and observations.get('step_away_locked', {}).get('latest', {}).get('mode') == 'lock_observed'
-            and observations.get('step_away_unlocked', {}).get('latest', {}).get('locked_hint_seen') is True
-            and isinstance(refusal_alert, dict) and refusal_alert.get('visible') is True
-            and bool(attrs & DENIED_CODES) and bool(attrs & STALE_REASONS))
-
-
 def run_lock_during_presence(app, ui, storage, native_input: dict, execution: dict, vm_id: str,
                              native, lock, unlock_ctl, observations: dict, reservation):
     ui.click('Reveal value')
@@ -261,11 +244,7 @@ def run_lock_during_presence(app, ui, storage, native_input: dict, execution: di
         observations['stale_confirmation_attempt'], observations['stale_challenge_refusal'] = stale_attempt, refusal_alert
         if presence_dialog(app, ui) is not None:
             raise ValueError('stale pre-lock presence confirmation remained open after refusal')
-        if not stale_challenge_refusal_verified(pre_lock_dialog, stale_attempt, refusal_alert, observations):
-            observations.update(stale_challenge_refusal_verified=False, fresh_confirmation_verified=False,
-                                reason='stale-challenge-refusal-lacks-structured-invalidation-facts')
-            return
-        observations['stale_challenge_refusal_verified'] = True
+        observations['stale_challenge_refusal_verified'] = False
         ui.click('Reveal value')
         reservation.check_launch(app)
         fresh_dialog = presence_dialog(app, ui)
@@ -283,6 +262,7 @@ def run_lock_during_presence(app, ui, storage, native_input: dict, execution: di
         ui.click('Hide now')
         reservation.check_launch(app)
         observations['fresh_confirmation_verified'] = True
+        observations['reason'] = 'pre-lock-refusal-and-fresh-confirmation-observed-structured-stale-invalidation-unverified'
         return
     observations['pre_lock_alert'] = await_alert(app, ui)
     lock_and_unlock(app, execution, vm_id, native, lock, unlock_ctl, observations)
@@ -303,12 +283,15 @@ def run_initial_lock_state(app, execution: dict, vm_id: str, native, lock, unloc
     submit_project_turn(app)
     observations['settled_reply'] = await_fixture_reply(app, project, provider['provider_id'], fixture.acquisition)
     reservation.check_launch(app)
-    recovery = observe_monitor_owner_recovery(app, app.observations['session'])
-    observations.update(initial_lock_state_verified=True, lock_unlock_verified=True,
-                        monitor_owner_recovery=recovery, monitor_owner_recovery_verified=recovery is not None)
-    if recovery is not None:
-        return 'passed'
-    observations['reason'] = 'initial-lock-state-and-lock-unlock-observed-monitor-owner-recovery-unverified'
+    capability_recovery = observe_capability_state_recovery(app, app.observations['session'])
+    observations.update(
+        initial_lock_state_verified=True,
+        lock_unlock_verified=True,
+        capability_state_recovery=capability_recovery,
+        capability_state_recovery_verified=capability_recovery is not None,
+        monitor_owner_recovery=None,
+        monitor_owner_recovery_verified=False,
+        reason='initial-lock-state-and-lock-unlock-observed-monitor-owner-recovery-unverified')
     return 'unverified'
 
 
