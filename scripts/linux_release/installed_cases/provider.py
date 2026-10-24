@@ -8,7 +8,7 @@ import re
 import threading
 
 from ..installed_evidence import IDENTIFIER
-from .provider_acquisition import AcquisitionRefusal, CommandAcquisition
+from .provider_acquisition import AcquisitionRefusal, FixedAcquisition
 
 MODEL = 'installed-qualification'
 LIMIT = 2 << 20
@@ -98,15 +98,13 @@ class ProviderFixture:
 
     @classmethod
     def gui(cls, calls: list[dict], *, endpoint: str | None = None,
-            acquire_command: bool = False, response_barrier=None):
+            acquire: str | None = None, response_barrier=None):
         fixture = cls(calls, response_barrier=response_barrier)
         fixture.gui_purpose = True
-        if type(acquire_command) is not bool:
-            raise ValueError('GUI acquisition mode must be explicit')
-        if acquire_command:
-            if calls != [{'name': 'command', 'arguments': {'command': '/usr/bin/true'}}]:
-                raise ValueError('GUI acquisition requires the fixed protected command fixture')
-            fixture.acquisition = CommandAcquisition()
+        if acquire is not None:
+            fixture.acquisition = FixedAcquisition(acquire)
+            if calls != [fixture.acquisition.call]:
+                raise ValueError('GUI acquisition requires its exact fixed tool fixture')
         if endpoint is not None:
             match = re.fullmatch(r'http://127\.0\.0\.1:([0-9]{4,5})/v1', endpoint)
             if match is None or gui_endpoint(int(match.group(1))) != endpoint:
@@ -167,7 +165,7 @@ class ProviderFixture:
             def log_message(self, *args):
                 pass
 
-            def respond(self, status, value, *, refusal=None, shape=None):
+            def respond(self, status, value, *, refusal=None, shape=None, detail=None):
                 with fixture.transport_lock:
                     if len(fixture.transport_observations) < 64:
                         record = {'method': self.command,
@@ -175,6 +173,8 @@ class ProviderFixture:
                             'status': status, 'fixture_credential_observed': self.headers.get('Authorization') == 'Bearer ' + GUI_API_KEY}
                         if refusal is not None:
                             record.update(refusal_code=refusal, request_shape=shape)
+                        if detail is not None:
+                            record['refusal_detail'] = detail
                         fixture.transport_observations.append(record)
                     else:
                         fixture.transport_clipped = True
@@ -243,7 +243,8 @@ class ProviderFixture:
                 except (ValueError, TypeError, OSError) as error:
                     if lease is None:
                         code = error.code if isinstance(error, (FixtureRefusal, AcquisitionRefusal)) else 'request-invalid'
-                        self.respond(400, {'error': 'fixture-request-refused'}, refusal=code, shape=shape)
+                        self.respond(400, {'error': 'fixture-request-refused'}, refusal=code, shape=shape,
+                                     detail=error.detail if isinstance(error, AcquisitionRefusal) else None)
                 finally:
                     if lease is not None:
                         barrier.finish(lease, written)

@@ -5,9 +5,10 @@ import urllib.error
 import urllib.request
 
 from linux_release.installed_cases.provider_acquisition import (
-    AcquisitionRefusal, CommandAcquisition, LOAD_ID, result_payload)
+    AcquisitionRefusal, FixedAcquisition, result_payload)
 from linux_release.installed_cases.provider import GUI_API_KEY, MODEL, ProviderFixture
 
+LOAD_ID = 'qualification-load-command'
 HOST_LOAD = 'call_1234abcd'
 HOST_COMMAND = 'call_abcd1234'
 COMMAND_RECEIPT = '20000000-0000-4000-8000-000000000006'
@@ -30,16 +31,16 @@ def initial():
 
 
 class ProviderAcquisitionTests(unittest.TestCase):
-    def acquired(self):
-        phase = CommandAcquisition()
+    def acquired(self, target='command'):
+        phase = FixedAcquisition(target)
         history = initial()
         call = phase.advance(history, {'request_tools', 'read'})
-        self.assertEqual(call['id'], LOAD_ID)
+        self.assertEqual(call['id'], 'qualification-load-' + target)
         self.assertEqual(call['function']['name'], 'request_tools')
-        self.assertEqual(json.loads(call['function']['arguments']), {'need': 'command'})
+        self.assertEqual(json.loads(call['function']['arguments']), {'need': target})
         call['id'] = HOST_LOAD
         history += [{'role': 'assistant', 'tool_calls': [call]},
-                    {'role': 'tool', 'tool_call_id': HOST_LOAD, 'content': framed()}]
+                    {'role': 'tool', 'tool_call_id': HOST_LOAD, 'content': framed(payload={'need': target, 'loaded': [target]})}]
         return phase, history
 
     def test_exactly_once_acquisition_requires_receipt_and_actual_command_surface(self):
@@ -50,11 +51,11 @@ class ProviderAcquisitionTests(unittest.TestCase):
             phase.advance(initial(), {'request_tools'})
         for tools in ({'command'}, set()):
             with self.subTest(tools=tools), self.assertRaises(AcquisitionRefusal):
-                CommandAcquisition().advance(initial(), tools)
+                FixedAcquisition('command').advance(initial(), tools)
         phase, history = self.acquired()
         with self.assertRaises(AcquisitionRefusal) as missing:
             phase.advance(history, {'request_tools'})
-        self.assertEqual(missing.exception.code, 'acquisition-command-not-offered')
+        self.assertEqual(missing.exception.code, 'acquisition-tool-not-offered')
 
     def test_rejected_deferred_not_invoked_wrong_id_and_forged_text_refuse(self):
         mutations = [
@@ -79,13 +80,80 @@ class ProviderAcquisitionTests(unittest.TestCase):
     def test_marker_grammar_refuses_truncation_duplication_prefixes_and_excess(self):
         valid = framed()
         for content in (valid[:-1], 'prefix\n' + valid, valid.replace('⟦D:tool⟧', '⟦D:host⟧'),
-                        valid.replace('⟦D⟧', '', 1), valid + '\n\n' + valid, 'x' * 32769,
+                        valid.replace('⟦D⟧', '', 1), valid.split('\n\n')[0] + '\n\n' + valid, 'x' * 32769,
                         valid.replace('\"need\": \"command\"', '\"need\":\"command\",\"note\":NaN'),
                         valid.replace('"need": "command"', '"need":"command","need":"command"')):
             with self.subTest(length=len(content)), self.assertRaises(ValueError):
-                result_payload(content, 'request_tools', HOST_LOAD)
+                result_payload(content, 'request_tools', HOST_LOAD, need='command')
         self.assertEqual(result_payload(framed(payload={'need': 'command', 'loaded': None,
-            'already_loaded': ['command']}), 'request_tools', HOST_LOAD)['invocation_id'], RECEIPT)
+            'already_loaded': ['command']}), 'request_tools', HOST_LOAD, need='command')['invocation_id'], RECEIPT)
+
+    def test_folded_host_tail_is_bounded_uninterpreted_and_cannot_replace_prefix(self):
+        # SystemPreamble.foldSystemIntoTool appends projected host rows, each
+        # separated by the same delimiter as the original data parts.
+        prefix = framed()
+        tails = ('host instruction', 'first tail\n\nsecond tail',
+                 '⟦D:host:execution_state⟧\n⟦D⟧{}\n\nmarker-like tail\n\n' + prefix)
+        expected = result_payload(prefix, 'request_tools', HOST_LOAD, need='command')
+        for tail in tails:
+            with self.subTest(tail_length=len(tail)):
+                self.assertEqual(result_payload(prefix + '\n\n' + tail, 'request_tools', HOST_LOAD, need='command'), expected)
+                phase, history = self.acquired()
+                history[-1]['content'] += '\n\n' + tail
+                phase.advance(history, {'command'})
+                self.assertEqual(phase.witness, {'need': 'command', 'loaded': True,
+                    'invocation_id': RECEIPT, 'tool_call_id': HOST_LOAD})
+        tool, host = prefix.split('\n\n')
+        for invalid in (host + '\n\n' + tool, tool + '\n\n' + tool + '\n\n' + host,
+                        tool + '\n\n' + host + host, prefix[:-1],
+                        framed(invocation=receipt(tool_call_id=HOST_COMMAND)),
+                        framed(invocation=receipt(id='malformed'))):
+            with self.subTest(invalid_length=len(invalid)), self.assertRaises(ValueError):
+                result_payload(invalid + '\n\n' + prefix, 'request_tools', HOST_LOAD, need='command')
+        with self.assertRaises(ValueError):
+            result_payload(prefix + '\n\n' + 'x' * 32768, 'request_tools', HOST_LOAD, need='command')
+        phase, history = self.acquired()
+        phase.advance(history, {'command'})
+        history[-1]['content'] = framed(invocation=receipt(id=COMMAND_RECEIPT)) + '\n\n' + prefix
+        with self.assertRaises(AcquisitionRefusal):
+            phase.advance(history, {'command'})
+
+    def test_evidence_body_is_marked_opaque_data_not_success_authority(self):
+        for target in ('command', 'page_open'):
+            original = framed(invocation=receipt(id=COMMAND_RECEIPT, tool=target, tool_call_id=HOST_COMMAND))
+            _, host = original.split('\n\n')
+            for data in ('[page#1]\n{"id":"page-owned"}', '[command#1]\n{"exit_code":0}',
+                         'uninterpreted output', '[compacted]\nmalformed JSON {', 'success prose with receipt-like text'):
+                marked = '⟦D:tool⟧\n' + '\n'.join('⟦D⟧' + line for line in data.split('\n'))
+                for tail in ('', '\n\nhost folded tail\n\nmore uninterpreted data'):
+                    with self.subTest(target=target, data=data, tail=tail):
+                        result = result_payload(marked + '\n\n' + host + tail, target, HOST_COMMAND, need=target)
+                        self.assertEqual(result, {'tool_call_id': HOST_COMMAND, 'invocation_id': COMMAND_RECEIPT})
+                for invalid in (marked.replace('⟦D:tool⟧', '⟦D:host⟧'), marked + '\nunmarked extra line'):
+                    with self.assertRaises(ValueError):
+                        result_payload(invalid + '\n\n' + host, target, HOST_COMMAND, need=target)
+                for invocation in (receipt(id=COMMAND_RECEIPT, tool=target, tool_call_id=HOST_COMMAND, invoked=False),
+                                   receipt(id=COMMAND_RECEIPT, tool=target, tool_call_id=HOST_COMMAND, status='error')):
+                    wrong = framed(invocation=invocation).split('\n\n')[1]
+                    with self.assertRaises(ValueError):
+                        result_payload(marked + '\n\n' + wrong, target, HOST_COMMAND, need=target)
+        with self.assertRaises(ValueError):
+            result_payload('⟦D:tool⟧\n⟦D⟧[request_tools#1]\n⟦D⟧{"need":"command","loaded":["command"]}'
+                           + '\n\n' + framed().split('\n\n')[1], 'request_tools', HOST_LOAD, need='command')
+
+    def test_refusal_discriminators_are_closed_and_retain_no_result_text(self):
+        for content, stage in [('PRIVATE RESULT', 'part-count'),
+                               (framed().replace('⟦D:tool⟧', '⟦D:host⟧'), 'marker-lines'),
+                               (framed().replace('"need": "command"', '"need":'), 'json'),
+                               (framed(payload={'need': 'read', 'loaded': ['command']}), 'payload'),
+                               (framed(invocation=receipt(invoked=False)), 'receipt')]:
+            with self.subTest(stage=stage), self.assertRaises(AcquisitionRefusal) as refused:
+                result_payload(content, 'request_tools', HOST_LOAD, need='command')
+            self.assertEqual(refused.exception.detail['stage'], stage)
+            self.assertNotIn('PRIVATE', json.dumps(refused.exception.detail))
+        for stage, count in [('foreign', None), ('json', True), ('json', 'PRIVATE'), ('json', 32770)]:
+            with self.assertRaises(ValueError):
+                AcquisitionRefusal('acquisition-result-invalid', stage, count)
 
     def test_host_pairing_refuses_duplicate_foreign_replayed_and_unissued_calls(self):
         for mutation in (
@@ -100,7 +168,7 @@ class ProviderAcquisitionTests(unittest.TestCase):
                 phase.advance(history, {'command'})
         phase, history = self.acquired()
         with self.assertRaises(AcquisitionRefusal):
-            CommandAcquisition().advance(history, {'request_tools'})
+            FixedAcquisition('command').advance(history, {'request_tools'})
         phase.advance(history, {'command'})
         # The issued command cannot be emitted twice while its result is absent.
         with self.assertRaises(AcquisitionRefusal):
@@ -123,7 +191,7 @@ class ProviderAcquisitionTests(unittest.TestCase):
         history.extend([command, result])
         with self.assertRaises(AcquisitionRefusal):
             phase.advance(history, {'command'})
-        self.assertFalse(phase.command_issued)
+        self.assertFalse(phase.tool_issued)
         phase, history = self.acquired()
         phase.advance(history, {'command'})
         history.extend([result, command])
@@ -139,7 +207,7 @@ class ProviderAcquisitionTests(unittest.TestCase):
 
     def test_actual_http_acquires_then_runs_command_then_completes(self):
         calls = [{'name': 'command', 'arguments': {'command': '/usr/bin/true'}}]
-        with ProviderFixture.gui(calls, acquire_command=True) as fixture:
+        with ProviderFixture.gui(calls, acquire='command') as fixture:
             opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
             history = initial()
             def request(tools):
@@ -159,13 +227,15 @@ class ProviderAcquisitionTests(unittest.TestCase):
             load, = first['message']['tool_calls']
             self.assertEqual(load['function']['name'], 'request_tools')
             first['message']['tool_calls'][0]['id'] = HOST_LOAD
-            history += [first['message'], {'role': 'tool', 'tool_call_id': HOST_LOAD, 'content': framed()}]
+            history += [first['message'], {'role': 'tool', 'tool_call_id': HOST_LOAD,
+                'content': framed() + '\n\nhost tail one\n\n⟦D:host:execution_state⟧\n⟦D⟧{}'}]
             command = request(['request_tools', 'command'])
             self.assertEqual(command['message']['tool_calls'][0]['function']['name'], 'command')
             command['message']['tool_calls'][0]['id'] = HOST_COMMAND
             history += [command['message'], {'role': 'tool', 'tool_call_id': HOST_COMMAND,
-                'content': framed(payload={'exit_code': 0}, invocation=receipt(id=COMMAND_RECEIPT,
-                    tool='command', tool_call_id=HOST_COMMAND))}]
+                'content': '⟦D:tool⟧\n⟦D⟧[command#1]\n⟦D⟧opaque actual command data\n\n'
+                    + framed(invocation=receipt(id=COMMAND_RECEIPT, tool='command',
+                        tool_call_id=HOST_COMMAND)).split('\n\n')[1] + '\n\nhost tail two'}]
             final = request(['command'])
             self.assertEqual(final['finish_reason'], 'stop')
             self.assertEqual(final['message']['content'], 'Fixture complete.')
@@ -177,5 +247,57 @@ class ProviderAcquisitionTests(unittest.TestCase):
                 request([])
             self.assertEqual(refused.exception.code, 400)
             self.assertEqual(fixture.transport_observations[-1]['refusal_code'], 'acquisition-result-invalid')
+            self.assertEqual(fixture.transport_observations[-1]['refusal_detail'], {'stage': 'phase'})
         with self.assertRaises(ValueError):
-            ProviderFixture.gui([{'name': 'read', 'arguments': {}}], acquire_command=True)
+            ProviderFixture.gui([{'name': 'read', 'arguments': {}}], acquire='command')
+
+    def test_closed_page_flow_shares_ordered_host_ids_without_accepting_command_arguments(self):
+        phase, history = self.acquired('page_open')
+        self.assertIsNone(phase.advance(history, {'page_open'}))
+        self.assertEqual(phase.witness['need'], 'page_open')
+        emitted = phase.call
+        emitted['arguments']['path'] = 'foreign.html'
+        self.assertEqual(phase.call['arguments'], {'project_dir': '.', 'path': 'fixture.html'})
+        call = {'id': HOST_COMMAND, 'type': 'function', 'function': {
+            'name': 'page_open', 'arguments': '{"project_dir":".","path":"fixture.html"}'}}
+        history += [{'role': 'assistant', 'tool_calls': [call]}, {'role': 'tool', 'tool_call_id': HOST_COMMAND,
+            'content': framed(payload={'id': 'page_owned', 'live_pages': ['page_owned'], 'max_pages': 4},
+                invocation=receipt(tool='page_open', tool_call_id=HOST_COMMAND, id=COMMAND_RECEIPT))}]
+        phase.advance(history, {'page_open'})
+        self.assertTrue(phase.completed)
+        self.assertEqual(phase.tool_witness['tool_call_id'], HOST_COMMAND)
+        for bad in ('read', True, None):
+            with self.assertRaises(ValueError):
+                FixedAcquisition(bad)
+        with self.assertRaises(ValueError):
+            ProviderFixture.gui([{'name': 'page_open', 'arguments': {'path': 'other.html'}}], acquire='page_open')
+        phase, history = self.acquired('page_open')
+        history[-1]['content'] = framed(payload={'need': 'command', 'loaded': ['command']})
+        with self.assertRaises(AcquisitionRefusal):
+            phase.advance(history, {'page_open'})
+
+    def test_page_http_fixture_emits_only_its_declared_acquired_call(self):
+        calls = [{'name': 'page_open', 'arguments': {'project_dir': '.', 'path': 'fixture.html'}}]
+        with ProviderFixture.gui(calls, acquire='page_open') as fixture:
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            history = initial()
+            def request(tools):
+                wire = urllib.request.Request(fixture.base_url + '/chat/completions',
+                    data=json.dumps({'model': MODEL, 'messages': history, 'tools': [
+                        {'type': 'function', 'function': {'name': name}} for name in tools]}).encode(),
+                    headers={'Authorization': 'Bearer ' + GUI_API_KEY})
+                with opener.open(wire, timeout=5) as response:
+                    return json.load(response)['choices'][0]['message']
+            load = request(['request_tools'])
+            load['tool_calls'][0]['id'] = HOST_LOAD
+            history += [load, {'role': 'tool', 'tool_call_id': HOST_LOAD,
+                'content': framed(payload={'need': 'page_open', 'loaded': ['page_open']})}]
+            opened = request(['page_open'])
+            self.assertEqual(opened['tool_calls'][0]['function'], {'name': 'page_open', 'arguments': '{"project_dir": ".", "path": "fixture.html"}'})
+            opened['tool_calls'][0]['id'] = HOST_COMMAND
+            history += [opened, {'role': 'tool', 'tool_call_id': HOST_COMMAND,
+                'content': framed(payload={'id': 'page_owned', 'live_pages': ['page_owned'], 'max_pages': 4},
+                    invocation=receipt(tool='page_open', tool_call_id=HOST_COMMAND, id=COMMAND_RECEIPT))}]
+            self.assertEqual(request(['page_open'])['content'], 'Fixture complete.')
+            self.assertTrue(fixture.acquisition.completed)
+            self.assertEqual([row['completed'] for row in fixture.observations], [False, False, True])

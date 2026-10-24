@@ -2,6 +2,7 @@
 from contextlib import nullcontext
 import hashlib
 import json
+import sqlite3
 from pathlib import Path
 import tempfile
 from types import SimpleNamespace
@@ -114,3 +115,43 @@ class ProfileSetupTests(unittest.TestCase):
                     provider_setup.configure_provider(SimpleNamespace(observations={}), fixture)
             desktop.assert_not_called()
             discovery.assert_not_called()
+
+
+class FixtureSelectionTests(unittest.TestCase):
+    def test_single_primary_root_and_persisted_default_are_independent_authorities(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            root.chmod(0o700)
+            database = sqlite3.connect(':memory:')
+            self.addCleanup(database.close)
+            database.execute('CREATE TABLE project_roots(id,project_id,path,is_primary,kind)')
+            project = '10000000-0000-4000-8000-000000000001'
+            database.execute('INSERT INTO project_roots VALUES(?,?,?,?,?)', (project, project, str(root), 1, 'attached'))
+            state = {'onboarding_completed': True, 'coordinator': REF, 'model_policy_sha256': 'a' * 64}
+            with patch.object(owner, '_database', side_effect=lambda app, **kwargs: nullcontext(database)), patch.object(
+                    owner, 'state', return_value=state):
+                facts = owner.fixture_selection(None, root, project, 'fixed', MODEL)
+                self.assertEqual(facts['model_policy_sha256'], 'a' * 64)
+                for key, value in (('onboarding_completed', False), ('coordinator', {'provider_id': 'other', 'model': MODEL}),
+                                   ('model_policy_sha256', None)):
+                    with self.subTest(key=key), patch.object(owner, 'state', return_value={**state, key: value}), self.assertRaises(ValueError):
+                        owner.fixture_selection(None, root, project, 'fixed', MODEL)
+                for column, value in (('is_primary', 0), ('kind', 'draft'), ('path', '/foreign')):
+                    database.execute('SAVEPOINT invalid')
+                    database.execute('UPDATE project_roots SET ' + column + '=?', (value,))
+                    with self.subTest(column=column), self.assertRaises(ValueError):
+                        owner.fixture_selection(None, root, project, 'fixed', MODEL)
+                    database.execute('ROLLBACK TO invalid')
+                    database.execute('RELEASE invalid')
+                database.execute('INSERT INTO project_roots VALUES(?,?,?,?,?)', (project, project, '/second', 0, 'attached'))
+                with self.assertRaises(ValueError):
+                    owner.fixture_selection(None, root, project, 'fixed', MODEL)
+                database.execute("DELETE FROM project_roots WHERE path='/second'")
+                overlay = root / '.paintedwolf'
+                overlay.mkdir()
+                with self.assertRaises(ValueError):
+                    owner.fixture_selection(None, root, project, 'fixed', MODEL)
+                overlay.rmdir()
+                overlay.symlink_to('/missing')
+                with self.assertRaises(ValueError):
+                    owner.fixture_selection(None, root, project, 'fixed', MODEL)

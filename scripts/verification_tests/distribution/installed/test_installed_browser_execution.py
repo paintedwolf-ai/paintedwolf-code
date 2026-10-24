@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from linux_release.installed_cases import browser, browser_boundary
+from linux_release.installed_cases import browser_result, browser_boundary
 
 ENGINE = {'pid': 10, 'parent_pid': 5, 'start_time_ticks': 30}
 HOST = {'user': 1, 'mnt': 2, 'pid': 3, 'net': 4}
@@ -73,14 +73,18 @@ class InstalledBrowserTests(unittest.TestCase):
         run.assert_not_called()
 
     def test_browser_tool_receipt_cannot_be_replaced_by_success_prose(self):
-        row = {'tool': 'page_open', 'outcome': 'completed', 'invocation': {
-            'tool': 'page_open', 'invoked': True, 'status': 'completed'},
-            'content': json.dumps({'id': 'page_host_123', 'live_pages': ['page_host_123']})}
-        self.assertEqual(browser.opened([row])['page']['id'], 'page_host_123')
-        for changed in [dict(row, invocation={}), dict(row, outcome='rejected'),
-                        dict(row, content='browser is confined and open'),
-                        dict(row, content=json.dumps({'id': 'page_host_123', 'live_pages': []}))]:
-            with self.assertRaises(ValueError):
-                browser.opened([changed])
+        row = {'message_id': '10000000-0000-4000-8000-000000000001',
+            'invocation_id': '10000000-0000-4000-8000-000000000002',
+            'tool_call_id': 'call_1234abcd', 'tool': 'page_open', 'owner': 'browser',
+            'invoked': True, 'status': 'completed', 'arguments': {'project_dir': '.', 'path': 'fixture.html'},
+            'payload': {'id': 'page_host_123', 'live_pages': ['page_host_123'], 'max_pages': 4}}
+        self.assertEqual(browser_result.opened({'tool_invocation': row})['page']['id'], 'page_host_123')
+        for change in ({'owner': 'foreign'}, {'invoked': 1}, {'status': 'rejected'},
+                {'arguments': {'path': 'other.html'}}, {'arguments': {'path': 'fixture.html'}},
+                {'arguments': {'project_dir': '/tmp', 'path': 'fixture.html'}}, {'payload': 'browser is confined and open'},
+                {'payload': {'id': 'page_host_123', 'live_pages': [], 'max_pages': 4}},
+                {'payload': {'id': 'page_host_123', 'live_pages': ['page_host_123'], 'max_pages': True}}):
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                browser_result.opened({'tool_invocation': {**row, **change}})
         with self.assertRaises(ValueError):
-            browser.opened([row, row])
+            browser_result.opened([row, row])
