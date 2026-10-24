@@ -48,7 +48,10 @@ def browser_sandbox(binding: dict) -> tuple[str, dict, dict]:
             facts['interactive'] = interactive_window(app)
             selected = configure_provider(app, provider)
             project_open = run(launch_binding, 'pw', ['open', str(project)], timeout=30)
-            facts['project_open'] = project_open
+            facts['project_open'] = {key: project_open[key] for key in
+                ('launch_identity', 'exit_code', 'timed_out', 'output_limit')}
+            streams.update({'project-open-stdout': project_open['stdout'],
+                            'project-open-stderr': project_open['stderr']})
             if project_open['exit_code'] or project_open['timed_out'] or project_open['output_limit']:
                 raise CaseUnavailable('normal installed CLI refused the owned browser fixture project')
             submit_project_turn(app, operation='browser-fixture-prompt-v1')
