@@ -82,7 +82,8 @@ class MergeGroupTests(unittest.TestCase):
             captured['event_name'] = env['GITHUB_EVENT_NAME']
             captured['payload'] = json.loads(Path(env['GITHUB_EVENT_PATH']).read_text())
             return 1
-        with patch.object(qc, 'context', return_value=other), patch.object(qc.subprocess, 'call', side_effect=call), \
+        with patch('ci_policy.queue_dispatch.context', return_value=other), patch.object(qc, 'context', return_value=other), \
+                patch.object(qc.subprocess, 'call', side_effect=call), \
                 patch.dict('os.environ', {'GITHUB_REPOSITORY': 'owner/repo', 'QUEUE_REF': QUEUE_REF, 'QUEUE_SHA': sha, 'PULL_REQUEST': ''}, clear=False), \
                 patch('sys.argv', ['queue_certification.py', 'checker.py']), self.assertRaises(SystemExit) as exited:
             runpy.run_module('ci_policy.queue_certification', run_name='__main__')
