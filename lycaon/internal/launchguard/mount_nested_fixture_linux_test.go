@@ -451,7 +451,7 @@ func pinNestedViewRoot(source, desktop *os.File, pins *fixtureLifecyclePins, tar
 // The held descriptor selects only our own covered tmpfs, not a visible alias.
 // A late nested mount here must remain excluded while later positive phases
 // establish that the actual intake has reconciled this source epoch.
-func publishNestedHiddenArrival(source, desktop *os.File, pins *fixtureLifecyclePins, root string, underlay int) (int, error) {
+func publishNestedHiddenArrival(source, desktop *os.File, pins *fixtureLifecyclePins, root string, underlay int) (viewRoot int, err error) {
 	actualNS, err := os.Stat("/proc/thread-self/ns/mnt")
 	heldNS, heldErr := source.Stat()
 	if err != nil || heldErr != nil || !os.SameFile(actualNS, heldNS) {
@@ -469,14 +469,26 @@ func publishNestedHiddenArrival(source, desktop *os.File, pins *fixtureLifecycle
 	if err := mountNestedPayload(target, "late-hidden"); err != nil {
 		return 0, err
 	}
-	fd, err := openMountPoint(target)
+	// Only this fixed child is opened relative to the already bound owned root.
+	// The production resolver correctly refuses the proc-fd spelling above.
+	fd, err := unix.Openat(underlay, "late", unix.O_PATH|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
 	if err != nil {
 		return 0, err
 	}
-	defer unix.Close(fd)
+	defer func() { err = errors.Join(err, unix.Close(fd)) }()
+	var object unix.Stat_t
+	if err = unix.Fstat(fd, &object); err != nil {
+		return 0, err
+	}
+	if object.Uid != 0 || object.Mode&unix.S_IFMT != unix.S_IFDIR {
+		return 0, errors.New("late child is not the fixture-owned directory")
+	}
 	id, inode, err := mountDescriptorIdentity(fd)
 	if err != nil {
 		return 0, err
+	}
+	if inode != object.Ino || id == parent {
+		return 0, errors.New("late child descriptor differs from its new mount root")
 	}
 	_, rows, err := readCurrentMountTopology()
 	if err != nil {
