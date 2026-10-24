@@ -16,8 +16,10 @@ class WorkspaceTests(unittest.TestCase):
     def test_registry_and_active_session_require_exact_project_provider_and_busy_facts(self):
         self.assertEqual(installed_execution.case_family('windowing', 'workspace-activation-and-exit', 'deb'),
                          'workspace_activation')
-        session = {'id': 'session', 'status': 'busy', 'provider_id': 'fixture', 'model': owner.MODEL}
+        session = {'id': 'session', 'status': 'busy', 'provider_id': None, 'model': None,
+                   'parent_session_id': None}
         with patch.object(owner, 'project_for_owned_root', return_value={'project_id': 'project'}), patch.object(
+                owner, 'fixture_selection', return_value={'model_policy_sha256': 'a' * 64}), patch.object(
                 owner, 'sessions_for_project', return_value=[session]) as observed:
             active = owner.require_active(None, None, 'fixture')
             self.assertEqual(active['id'], 'session')
@@ -30,8 +32,22 @@ class WorkspaceTests(unittest.TestCase):
             observed.return_value = [session, session]
             with self.assertRaisesRegex(ValueError, 'ambiguous'):
                 owner.active_session(None, None, 'fixture')
-            observed.return_value = [{**session, 'provider_id': 'foreign'}]
-            self.assertIsNone(owner.active_session(None, None, 'fixture'))
+            for changed in ({'provider_id': 'foreign'}, {'provider_id': 'fixture'},
+                            {'model': owner.MODEL}, {'parent_session_id': 'child'}):
+                observed.return_value = [{**session, **changed}]
+                with self.subTest(changed=changed), self.assertRaisesRegex(ValueError, 'selected root'):
+                    owner.active_session(None, None, 'fixture')
+            observed.return_value = [{**session, 'provider_id': 'fixture', 'model': owner.MODEL}]
+            self.assertEqual(owner.require_active(None, None, 'fixture')['id'], 'session')
+
+    def test_busy_session_cannot_outlive_its_observed_model_selection(self):
+        session = {'id': 'session', 'status': 'busy', 'provider_id': None, 'model': None,
+                   'parent_session_id': None}
+        with patch.object(owner, 'project_for_owned_root', return_value={'project_id': 'project'}), patch.object(
+                owner, 'fixture_selection', side_effect=[{'policy': 'before'}, {'policy': 'after'}]), patch.object(
+                owner, 'sessions_for_project', return_value=[session]):
+            with self.assertRaisesRegex(ValueError, 'selection changed'):
+                owner.active_session(None, None, 'fixture')
 
     def activation(self, *, changed_image=False, changed_session=False, timeout=False, identity_error=False):
         image = {'mode': 0o4755, 'sha256': 'a' * 64}

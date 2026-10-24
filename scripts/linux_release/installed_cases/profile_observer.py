@@ -173,15 +173,16 @@ def project_for_owned_root(app, fixture_path):
 
 def sessions_for_project(app, project_id):
     identifier(project_id)
-    with _database(app) as connection:
-        found = rows(connection.execute('SELECT id,status,provider_id,model FROM sessions WHERE project_id=? ORDER BY id LIMIT 257', (project_id,)))
-    if any(status not in {'preparing', 'idle', 'busy', 'error'} for _, status, _, _ in found):
+    with _database(app, required={'sessions': {'parent_session_id': 'TEXT'}}) as connection:
+        found = rows(connection.execute('SELECT id,status,provider_id,model,parent_session_id FROM sessions WHERE project_id=? ORDER BY id LIMIT 257', (project_id,)))
+    if any(status not in {'preparing', 'idle', 'busy', 'error'} for _, status, _, _, _ in found):
         raise ValueError('profile observer encountered an undeclared session state')
     if any(any(value is not None and (not isinstance(value, str) or not 1 <= len(value) <= 128)
-               for value in (provider, model)) for _, _, provider, model in found):
+               for value in (provider, model)) for _, _, provider, model, _ in found):
         raise ValueError('profile observer provider identity exceeds its declared bound')
-    return [{'id': identifier(key), 'status': status, 'provider_id': provider, 'model': model}
-            for key, status, provider, model in found]
+    return [{'id': identifier(key), 'status': status, 'provider_id': provider, 'model': model,
+             'parent_session_id': None if parent is None else identifier(parent)}
+            for key, status, provider, model, parent in found]
 
 
 def invocations(app, session_id, tool_names):

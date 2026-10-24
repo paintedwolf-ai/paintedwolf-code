@@ -8,6 +8,7 @@ from .desktop_ui import DesktopUI, interactive_window
 from .desktop_launch import activate, protected_launcher
 from .process import run
 from .profile_observer import project_for_owned_root, sessions_for_project
+from .profile_setup import fixture_selection
 from .provider import MODEL, ProviderFixture
 from .provider_barrier import ResponseBarrier
 from .provider_setup import configure_provider
@@ -23,13 +24,20 @@ def active_session(app, project, provider):
     witness = project_for_owned_root(app, project)
     if witness is None:
         return None
-    rows = [row for row in sessions_for_project(app, witness['project_id'])
-            if row['provider_id'] == provider and row['model'] == MODEL]
+    selection = fixture_selection(app, project, witness['project_id'], provider, MODEL)
+    rows = sessions_for_project(app, witness['project_id'])
     if len(rows) > 1:
         raise ValueError('workspace fixture has ambiguous durable session identity')
+    if rows and (rows[0]['parent_session_id'] is not None
+            or (rows[0]['provider_id'], rows[0]['model']) not in {(None, None), (provider, MODEL)}):
+        raise ValueError('workspace fixture session differs from its selected root coordinator')
     if rows and rows[0]['status'] == 'error':
         raise ValueError('workspace fixture work failed before Quit')
-    return {**witness, **rows[0]} if rows and rows[0]['status'] == 'busy' else None
+    if rows and rows[0]['status'] == 'busy':
+        if fixture_selection(app, project, witness['project_id'], provider, MODEL) != selection:
+            raise ValueError('workspace fixture model selection changed during observation')
+        return {**witness, **rows[0], 'model_selection': selection}
+    return None
 
 
 def require_active(app, project, provider, expected=None):
