@@ -64,7 +64,7 @@ func verifyReadOnlyProgramSurface(t *testing.T, filter platform.ToolFilter) {
 	t.Helper()
 	profiles, err := sandbox.LoadToolProfiles()
 	contractcheck.FailErr(t, "load shipped tool profiles", err)
-	boundary := sandbox.NewBoundary(sandbox.Config{ToolProfiles: profiles}, nil)
+	boundary := sandbox.NewBoundary(sandbox.Config{}, profiles)
 	policy := toolprofiles.NewGuidanceRejectPolicy(toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), nil))
 	registry := tools.NewDefaultRegistry()
 	names := []string{"read", "find", "extract_archive", "git_status", "git_diff", "git_log", "write", "git_commit", "http_request"}

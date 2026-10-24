@@ -19,5 +19,8 @@ func ObserveOwnedSessionListener(ctx context.Context, provenance LoopbackProvena
 		return "", false
 	}
 	identity, owned, err := observer.ObserveSessionListener(ctx, sessionID, netip.AddrPortFrom(endpoint.Addr().Unmap(), endpoint.Port()))
-	return identity, err == nil && owned && identity != "" && ctx.Err() == nil
+	if err != nil || !owned || identity == "" || ctx.Err() != nil {
+		return "", false
+	}
+	return identity, true
 }
