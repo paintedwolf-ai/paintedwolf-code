@@ -9,6 +9,7 @@ from .app import InstalledApp
 from .desktop_ui import interactive_window
 from .process import run
 from .profile_observer import project_for_owned_root, sessions_for_project
+from .profile_setup import fixture_selection
 from .provider import MODEL, ProviderFixture
 from .records import CaseFailed, CaseUnavailable, retain
 from .desktop_launch import protected_launcher
@@ -22,8 +23,8 @@ def await_reply(app, project, provider_id, acquisition, *, selected_session=None
     while time.monotonic() < deadline:
         witness = project_for_owned_root(app, project)
         if witness:
-            sessions = [row for row in sessions_for_project(app, witness['project_id'])
-                        if row['provider_id'] == provider_id and row['model'] == MODEL]
+            selection = fixture_selection(app, project, witness['project_id'], provider_id, MODEL)
+            sessions = sessions_for_project(app, witness['project_id'])
             if selected_session is not None:
                 sessions = [row for row in sessions if row['id'] == selected_session]
             if len(sessions) > 1:
@@ -44,7 +45,9 @@ def await_reply(app, project, provider_id, acquisition, *, selected_session=None
                         raise ValueError('command durable receipt differs from the projected receipt')
                     if acquired is None or command is None:
                         raise ValueError('fixed acquisition and command fixture did not complete successfully')
-                    return {**result, 'tool_message_id': command['message_id'],
+                    if fixture_selection(app, project, witness['project_id'], provider_id, MODEL) != selection:
+                        raise ValueError('fixed reply model selection changed during observation')
+                    return {**result, 'model_selection': selection, 'tool_message_id': command['message_id'],
                             'schema_acquisition': acquired, 'command_invocation': command}
         time.sleep(0.1)
     raise CaseUnavailable('protected-mock-reply-or-restart-witness-timeout')
