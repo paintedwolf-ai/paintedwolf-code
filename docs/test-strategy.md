@@ -637,6 +637,17 @@ checked once through `db:sqlc:check` and `openapi:bundle:check` in
 `check:drift`; Go contracts inspect the generated surfaces without launching the
 generators again.
 
+Hosted Go shards partition resolved package identities in both shared admission
+and direct captured-source execution. Each direct invocation records its selected
+packages in the Actions log, so later runs can verify the actual partition.
+
+The queue coordinator recovers an active merge group whose exact ref and commit
+have no CI run by explicitly dispatching the integration profile. The dispatched
+plan validates the live queue identity and obtains its comparison base from the
+queue before running affected-scope checks. Existing runs, including failures and
+cancellations, are never replaced by recovery. Draft events skip the aggregate
+check; ready-review events still require successful admission.
+
 ## Working commands
 
 Run every task from the repository root through `./task`.

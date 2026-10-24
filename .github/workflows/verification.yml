@@ -44,6 +44,7 @@ jobs:
       matrix: ${{ steps.plan.outputs.matrix }}
       max-parallel: ${{ steps.plan.outputs.max-parallel }}
       package-timings: ${{ steps.plan.outputs.package-timings }}
+      change-base: ${{ steps.plan.outputs.change-base }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -61,6 +62,11 @@ jobs:
           # Reads main's qualification receipts; without actions read access the plan uses lane budgets.
           GH_TOKEN: ${{ github.token }}
         run: |
+          if [[ "$PROFILE" == integration && "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
+            PW_CHANGE_BASE="$(PYTHONPATH=scripts python3 -m ci_policy.queue_dispatch)"
+            export PW_CHANGE_BASE
+            echo "change-base=$PW_CHANGE_BASE" >> "$GITHUB_OUTPUT"
+          fi
           args=()
           if [[ "$AFFECTED" == true ]]; then args+=(--affected); fi
           if [[ "$PLATFORM" == true ]]; then args+=(--platform); fi
@@ -106,6 +112,7 @@ jobs:
       PW_TEST_HOST: dedicated
       SOAK: 10m
       PW_CI_AFFECTED: ${{ inputs.affected && '1' || '0' }}
+      PW_CHANGE_BASE: ${{ needs.plan.outputs.change-base }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

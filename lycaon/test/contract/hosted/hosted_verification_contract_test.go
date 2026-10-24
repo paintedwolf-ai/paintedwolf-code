@@ -75,6 +75,9 @@ func requireHostedGate(t *testing.T, jobs map[string]hostedJob, gate string, dep
 	slices.Sort(got)
 	slices.Sort(dependencies)
 	expectedCondition := "${{ !cancelled() }}"
+	if gate == "check" {
+		expectedCondition = "${{ !cancelled() && !(github.event_name == 'pull_request' && github.event.pull_request.draft) }}"
+	}
 	if gate == "ship-gates" {
 		expectedCondition = "${{ !cancelled() && inputs.rehearsal_run_id == '' }}"
 	}
