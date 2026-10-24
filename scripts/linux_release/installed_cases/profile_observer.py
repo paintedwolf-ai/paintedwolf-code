@@ -39,10 +39,13 @@ def physical(path, directory=False):
     return info.st_dev, info.st_ino, info.st_uid, info.st_mode
 
 
-def schema(connection):
+def schema(connection, required=None):
     if connection.execute('PRAGMA user_version').fetchone() != (4,):
         raise ValueError('profile observer does not support this store revision')
-    for table, required in COLUMNS.items():
+    columns = {table: dict(fields) for table, fields in COLUMNS.items()}
+    for table, fields in (required or {}).items():
+        columns.setdefault(table, {}).update(fields)
+    for table, required in columns.items():
         row = connection.execute('SELECT type, sql FROM sqlite_schema WHERE name = ?', (table,)).fetchone()
         if row is None or row[0] != 'table' or not re.match(r'CREATE TABLE\b', row[1], re.IGNORECASE):
             raise ValueError('profile observer requires the declared physical tables')
@@ -123,7 +126,7 @@ def sqlite_sidecars(path):
 
 
 @contextmanager
-def _database(app):
+def _database(app, *, required=None):
     with profile(app) as directory:
         path = directory / 'store.db'
         before = physical(path)
@@ -141,7 +144,7 @@ def _database(app):
                 connection.execute('PRAGMA query_only = ON')
                 connection.execute('PRAGMA trusted_schema = OFF')
                 connection.execute('BEGIN')
-                schema(connection)
+                schema(connection, required)
                 yield connection
                 if physical(path) != before:
                     raise ValueError('captured profile or engine changed during observation')
