@@ -46,8 +46,6 @@ type Store struct {
 	checkpoint  chan struct{}
 	// integrityAuditDue covers unclean shutdowns and unfinished audits.
 	integrityAuditDue bool
-	// auditedTable observes each table the background audit finishes.
-	auditedTable func(string)
 }
 
 func newStore(writer, reader *sql.DB) *Store {

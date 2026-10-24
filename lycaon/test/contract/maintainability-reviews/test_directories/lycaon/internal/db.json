@@ -4,13 +4,12 @@
   "kind": "test_suite",
   "workstream": "database-integrity",
   "disposition": "retain",
-  "reason": "Retain these 42 immediate database test files: private schema, migration, transaction, storage, and recovery fixtures belong beside the store implementation. Startup scalability and physical-store quarantine tests extend the existing health suite within the existing health suite. Bounded admission is proved by opening a fixture that a whole-store quick_check rejects, then confirming background quarantine and restart refusal. The subprocess fixture verifies committed WAL recovery and unfinished-transaction rollback. Stale-record discard for replaced and absent stores and the upgrade-path refusal of a recorded diagnosis were added to the existing health and upgrade suites. Reconsider membership on additions or replacements. Retain 42 immediate files after adding the focused real-WAL pressure fixture. Its separate connection and checkpoint lifecycle belong beside private database audit state, rather than in API or host suites. Nine focused audit/health tests and subtests passed, including pressure release and cancellation diagnosis. Reconsider any further membership growth.",
-  "reviewed_commit": "5a04749985dcdb1ca1c6953b7998b34ebfee5633",
-  "ceiling": 42,
+  "reason": "Retain 43 private database test files. The added scheduling suite tests virtual wakeups, byte/frame budgets, canceled reclamation admission, and maintenance handoff without machine-speed assertions. The separate WAL fixture exercises actual SQLite snapshots and reused allocation. Both belong beside private store lifecycle state; focused audit/retention and combined maintenance contracts passed.",
+  "reviewed_commit": "938578fd9ee0bf26659f9c393da43eeafef76299",
+  "ceiling": 43,
   "boundaries": {
-    "lycaon/internal/db/schema_integrity_test.go": "40c3f6ae2cd2be3bd8b16dd852636611406d18ed9f737912351307f0b6169dbe",
-    "lycaon/internal/db/schema_index_integrity_test.go": "fa12ca9706074beda8b7bbd08726d68b2b9eb65bd03525fe58e9b4d52f742281",
-    "lycaon/internal/db/store_health_test.go": "ddaa3c974a9dad3183c295ee88946ecb04ad70687b6359481cc78f5d751c76a8"
+    "lycaon/internal/db/integrity_audit_wal_test.go": "cac14114d7f1746d9a2d8112584371ad58e13beecc2000f94ffb2d8a17febe04",
+    "lycaon/internal/db/integrity_schedule_test.go": "500deaabe3e522ae199502726e712f50b3782c977b740104a427d555485281c5"
   },
-  "reviewed_shape": "ac7c72f554031af706c235f180d11ca00778fbce98793c0d355c48f85204f07a"
+  "reviewed_shape": "715bc1769a5166eaed39e1c721eca36fbd854da425dbe7b3662c1f7a5ac6bddf"
 }

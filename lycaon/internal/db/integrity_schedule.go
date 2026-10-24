@@ -2,28 +2,32 @@ package db
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"sync"
 	"time"
 )
-
-const auditPinnedFrameLimit = 1024
 
 var errAuditDeferred = errors.New("integrity audit yielded to checkpoint pressure")
 
 // auditControl connects the existing checkpointer to the current audit read.
 // It never interrupts application reads or writes.
 type auditControl struct {
-	run    sync.Mutex
-	mu     sync.Mutex
-	cancel context.CancelCauseFunc
+	run                sync.Mutex
+	mu                 sync.Mutex
+	cancel             context.CancelCauseFunc
+	frameLimit         uint64
+	background         chan struct{}
+	maintenanceWaiting int
 }
 
-func (a *auditControl) begin(parent context.Context) (context.Context, func()) {
+func (a *auditControl) begin(parent context.Context, frameLimit uint64) (context.Context, func()) {
 	ctx, cancel := context.WithCancelCause(parent)
 	a.mu.Lock()
 	a.cancel = cancel
+	a.frameLimit = frameLimit
+	if frameLimit == 0 && a.maintenanceWaiting > 0 {
+		cancel(errAuditDeferred)
+	}
 	a.mu.Unlock()
 	return ctx, func() {
 		a.mu.Lock()
@@ -39,77 +43,68 @@ func (a *auditControl) active() bool {
 	return a.cancel != nil
 }
 
+// SQLite's checkpoint result counts reused frames as well as file growth.
+// This is sampled pressure, not an absolute bound between checkpoints, and
+// other readers can retain these frames after the audit releases its snapshot.
 func (a *auditControl) checkpoint(result WALCheckpoint) {
-	if result.PinnedFrames() < auditPinnedFrameLimit {
-		return
-	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if a.cancel != nil {
+	if a.cancel != nil && uint64(result.PinnedFrames()) > a.frameLimit {
 		a.cancel(errAuditDeferred)
 	}
 }
 
-// Completed tables leave the queue. Deferred tables retry in this boot once
-// writes quiet down and their released snapshots can be checkpointed.
-func auditTables(ctx context.Context, database *sql.DB, audited func(string), check func(context.Context, string) error, wait func(context.Context) error) error {
-	remaining, err := auditableTables(ctx, database)
-	if err != nil {
-		return integrityCheckError(err, "list tables")
+func (a *auditControl) interrupt(cause error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.cancel != nil {
+		a.cancel(cause)
 	}
-	// Partial checks cannot prove global page ownership. Keep a whole-file
-	// check in the obligation; it obeys the same checkpoint pressure policy.
-	remaining = append(remaining, "")
-	for len(remaining) > 0 {
-		var deferred []string
-		for _, table := range remaining {
-			if err := ctx.Err(); err != nil {
-				return err
-			}
-			err := check(ctx, table)
-			if errors.Is(err, errAuditDeferred) {
-				deferred = append(deferred, table)
-				continue
-			}
-			if err != nil {
-				return err
-			}
-			if audited != nil && table != "" {
-				audited(table)
-			}
-		}
-		remaining = deferred
-		if len(remaining) > 0 {
-			if err := wait(ctx); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
 }
 
-func waitForAuditCapacity(ctx context.Context, store *Store) error {
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
-	writes := store.writeCount.Load()
+// Only a complete whole-file snapshot discharges the audit obligation.
+func auditAttempts(ctx context.Context, check func(context.Context) error, wait func(context.Context) error) error {
 	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-ticker.C:
-			current := store.writeCount.Load()
-			quiet := current == writes
-			writes = current
-			if !quiet {
-				continue
-			}
-			result, err := CheckpointWAL(ctx, store)
-			if err != nil {
-				return err
-			}
-			if result.Complete() {
-				return nil
-			}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		err := check(ctx)
+		if !errors.Is(err, errAuditDeferred) {
+			return err
+		}
+		if err := wait(ctx); err != nil {
+			return err
 		}
 	}
+}
+
+// Backoff spaces attempts without requiring writes to stop. Every wake gets
+// another chance even if unrelated readers prevent a complete checkpoint.
+func waitForAuditCapacity(ctx context.Context, store *Store, delay time.Duration) error {
+	return waitForAuditRetry(ctx, time.After(delay), func() error {
+		_, err := CheckpointWAL(ctx, store)
+		return err
+	})
+}
+
+func waitForAuditRetry(ctx context.Context, wake <-chan time.Time, checkpoint func() error) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-wake:
+		return checkpoint()
+	}
+}
+
+func auditRetryDelay(attempt int) time.Duration {
+	if attempt > 5 {
+		return 30 * time.Second
+	}
+	if attempt < 1 {
+		attempt = 1
+	}
+	return time.Duration(1<<(attempt-1)) * time.Second
 }

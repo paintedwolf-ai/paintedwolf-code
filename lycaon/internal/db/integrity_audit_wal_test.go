@@ -4,76 +4,43 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-// The background audit reads one table at a time, so writes during it are
-// checkpointed between tables instead of piling up behind one snapshot.
-func TestAuditLetsTheWALCheckpointBetweenTables(t *testing.T) {
-	store, _ := openTestDBWithPath(t)
-	audited, complete := 0, 0
-	store.auditedTable = func(table string) {
-		audited++
-		growWAL(t, store, "audit-"+table, 20)
-		result, err := CheckpointWAL(t.Context(), store)
-		testutil.FailErr(t, "checkpoint during audit", err)
-		if result.Complete() {
-			complete++
-		}
-	}
-	testutil.FailErr(t, "audit store", AuditIntegrity(t.Context(), store))
-	if audited < 10 {
-		t.Fatalf("audit visited %d tables, want every table", audited)
-	}
-	if complete != audited {
-		t.Fatalf("%d of %d checkpoints during the audit were pinned by it", audited-complete, audited)
-	}
-}
+const auditPinnedFrameLimit = 1024
 
-func TestAuditRetriesOnlyUnfinishedTablesWithoutADeadline(t *testing.T) {
+func TestAuditRetriesWholeSnapshotsWithoutPartialCredit(t *testing.T) {
 	_, store := uncleanAuditStore(t)
-	tables, err := auditableTables(t.Context(), store.reader)
-	testutil.FailErr(t, "list audit tables", err)
-	attempts := make(map[string]int)
-	waits := 0
-	testutil.FailErr(t, "finish deferred audit", auditTables(t.Context(), store.reader, nil,
-		func(ctx context.Context, table string) error {
-			attempts[table]++
-			if table == tables[0] && attempts[table] <= 3 {
+	attempts, waits := 0, 0
+	testutil.FailErr(t, "finish deferred audit", auditAttempts(t.Context(),
+		func(ctx context.Context) error {
+			attempts++
+			if attempts <= 3 {
 				return errAuditDeferred
 			}
-			return auditTable(ctx, store.reader, table)
+			return auditSnapshot(ctx, store.reader, nil)
 		}, func(ctx context.Context) error {
 			waits++
 			state, err := integrityAuditState(ctx, store.reader)
 			testutil.FailErr(t, "read pending audit", err)
 			if state != integrityAuditPendingValue || store.Failure() != nil {
-				t.Fatal("unfinished audit lost its obligation or quarantined the store")
+				t.Fatal("unfinished audit lost obligation or quarantined store")
 			}
 			return nil
 		}))
-	if waits != 3 || attempts[tables[0]] != 4 {
-		t.Fatalf("retry progress: waits=%d attempts=%d", waits, attempts[tables[0]])
-	}
-	for _, table := range tables[1:] {
-		if attempts[table] != 1 {
-			t.Fatalf("completed table %s repeated %d times", table, attempts[table])
-		}
+	if waits != 3 || attempts != 4 {
+		t.Fatalf("attempts=%d waits=%d", attempts, waits)
 	}
 	testutil.FailErr(t, "complete production audit", AuditIntegrity(t.Context(), store))
-	state, err := integrityAuditState(t.Context(), store.reader)
-	testutil.FailErr(t, "read completed state", err)
-	if state != "" {
-		t.Fatalf("completed audit state = %q", state)
-	}
 }
 
 func TestAuditCheckpointPressureReleasesOnlyItsRead(t *testing.T) {
 	_, store := uncleanAuditStore(t)
-	ctx, finish := store.audit.begin(t.Context())
+	ctx, finish := store.audit.begin(t.Context(), auditPinnedFrameLimit)
 	defer finish()
 	if _, limited := ctx.Deadline(); limited {
 		t.Fatal("audit imposed a machine-speed deadline")
@@ -82,7 +49,7 @@ func TestAuditCheckpointPressureReleasesOnlyItsRead(t *testing.T) {
 	if ctx.Err() != nil {
 		t.Fatal("audit yielded below its pinned-frame budget")
 	}
-	store.audit.checkpoint(WALCheckpoint{LogFrames: auditPinnedFrameLimit})
+	store.audit.checkpoint(WALCheckpoint{LogFrames: auditPinnedFrameLimit + 1})
 	if !errors.Is(context.Cause(ctx), errAuditDeferred) {
 		t.Fatalf("audit pressure cause = %v", context.Cause(ctx))
 	}
@@ -90,24 +57,24 @@ func TestAuditCheckpointPressureReleasesOnlyItsRead(t *testing.T) {
 		t.Fatal("audit pressure affected application health or caller context")
 	}
 	finish()
-	next, release := store.audit.begin(t.Context())
+	next, release := store.audit.begin(t.Context(), auditPinnedFrameLimit)
 	defer release()
 	if next.Err() != nil {
 		t.Fatal("previous pressure prevented the next read")
 	}
 	canceled, cancel := context.WithCancel(t.Context())
 	cancel()
-	if err := waitForAuditCapacity(canceled, store); !errors.Is(err, context.Canceled) {
+	if err := waitForAuditCapacity(canceled, store, 0); !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancel idle wait = %v", err)
 	}
-	if err := auditTable(canceled, store.reader, "store_meta"); !errors.Is(err, context.Canceled) {
+	if err := auditSnapshot(canceled, store.reader, nil); !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancel audit = %v", err)
 	}
 }
 
 func TestRealCheckpointPressureInterruptsAuditAndThenCompletes(t *testing.T) {
 	_, store := uncleanAuditStore(t)
-	ctx, finish := store.audit.begin(t.Context())
+	ctx, finish := store.audit.begin(t.Context(), auditPinnedFrameLimit)
 	conn, err := store.reader.Conn(t.Context())
 	testutil.FailErr(t, "open audit read", err)
 	defer conn.Close()
@@ -140,32 +107,6 @@ func TestRealCheckpointPressureInterruptsAuditAndThenCompletes(t *testing.T) {
 	}
 }
 
-func TestAuditCannotClearBeforeWholeFileCoverage(t *testing.T) {
-	_, store := uncleanAuditStore(t)
-	globalAttempts, waits := 0, 0
-	err := auditTables(t.Context(), store.reader, nil, func(ctx context.Context, table string) error {
-		if table == "" {
-			globalAttempts++
-			if globalAttempts == 1 {
-				return errAuditDeferred
-			}
-		}
-		return auditTable(ctx, store.reader, table)
-	}, func(ctx context.Context) error {
-		waits++
-		state, err := integrityAuditState(ctx, store.reader)
-		testutil.FailErr(t, "read outstanding global obligation", err)
-		if state != integrityAuditPendingValue {
-			t.Fatal("partial coverage cleared audit obligation")
-		}
-		return nil
-	})
-	testutil.FailErr(t, "complete whole-file audit", err)
-	if globalAttempts != 2 || waits != 1 {
-		t.Fatalf("global attempts=%d waits=%d", globalAttempts, waits)
-	}
-}
-
 func TestWholeFileAuditDetectsSharedTablePages(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "aliased.db")
 	writer, err := sql.Open("sqlite", path)
@@ -181,10 +122,109 @@ func TestWholeFileAuditDetectsSharedTablePages(t *testing.T) {
 	testutil.FailErr(t, "open page ownership reader", err)
 	defer reader.Close()
 	for _, table := range []string{"first", "second"} {
-		testutil.FailErr(t, "partial check cannot detect cross-table alias", auditTable(t.Context(), reader, table))
+		testutil.FailErr(t, "partial check cannot detect cross-table alias", scanCheck(t.Context(), reader, `PRAGMA integrity_check("`+table+`")`))
 	}
 	var damage *StoreIncompatibleError
-	if err := auditTable(t.Context(), reader, ""); !errors.As(err, &damage) || damage.Reason != RecoveryReasonIntegrityFailed {
+	if err := auditSnapshot(t.Context(), reader, nil); !errors.As(err, &damage) || damage.Reason != RecoveryReasonIntegrityFailed {
 		t.Fatalf("whole-file page alias diagnosis = %v", err)
+	}
+}
+
+func TestAuditUsesOneSnapshotForBothChecks(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "same-view.db")
+	writer, err := sql.Open("sqlite", path)
+	testutil.FailErr(t, "open writer", err)
+	defer writer.Close()
+	_, err = writer.Exec(`PRAGMA journal_mode=WAL; CREATE TABLE parent(id INTEGER PRIMARY KEY); CREATE TABLE child(parent_id INTEGER REFERENCES parent(id))`)
+	testutil.FailErr(t, "seed consistent view", err)
+	reader, err := sql.Open("sqlite", fileDSN(path, "mode=ro"))
+	testutil.FailErr(t, "open audit reader", err)
+	defer reader.Close()
+	testutil.FailErr(t, "check single consistent snapshot", auditSnapshot(t.Context(), reader, func() {
+		_, err := writer.Exec(`INSERT INTO child VALUES(123)`)
+		testutil.FailErr(t, "commit later violation", err)
+	}))
+	var damage *StoreIncompatibleError
+	if err := auditSnapshot(t.Context(), reader, nil); !errors.As(err, &damage) {
+		t.Fatalf("later snapshot missed committed violation: %v", err)
+	}
+}
+
+func TestCleanAuditPreservesConfirmedDamageStamp(t *testing.T) {
+	store, err := Open(filepath.Join(t.TempDir(), "store.db"))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	const damage = "confirmed damage after snapshot"
+	_, err = store.writer.ExecContext(t.Context(), `INSERT INTO store_meta(key,value) VALUES(?,?)`, integrityAuditFailedMetaKey, damage)
+	if err != nil {
+		t.Fatalf("stamp confirmed damage: %v", err)
+	}
+	if err := clearIntegrityAuditFailed(t.Context(), store.writer); err != nil {
+		t.Fatalf("clear pending audit: %v", err)
+	}
+	state, err := integrityAuditState(t.Context(), store.writer)
+	if err != nil {
+		t.Fatalf("read audit state: %v", err)
+	}
+	if state != damage {
+		t.Fatalf("audit state = %q; want confirmed damage preserved", state)
+	}
+	diagnosed := &StoreIncompatibleError{Reason: RecoveryReasonIntegrityFailed, Detail: damage}
+	store.health.failure.Store(diagnosed)
+	if err := finishIntegrityAudit(t.Context(), store, nil); !errors.Is(err, diagnosed) {
+		t.Fatalf("successful snapshot masked concurrent diagnosis: %v", err)
+	}
+}
+
+// A completed checkpoint allows frame reuse even while a new mark-zero reader
+// pins subsequent commits. File length cannot measure that retained work.
+func TestAuditPressureCountsReusedWALFrames(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "reuse.db")
+	writer, err := sql.Open("sqlite", path)
+	testutil.FailErr(t, "open WAL writer", err)
+	writer.SetMaxOpenConns(1)
+	defer writer.Close()
+	_, err = writer.Exec(`PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0; PRAGMA journal_size_limit=67108864; CREATE TABLE payload(value BLOB); INSERT INTO payload VALUES(zeroblob(8388608))`)
+	testutil.FailErr(t, "allocate reusable WAL", err)
+	result, err := checkpointDatabase(t.Context(), writer, WALCheckpointPassive)
+	testutil.FailErr(t, "backfill initial WAL", err)
+	if !result.Complete() {
+		t.Fatal("initial WAL not fully backfilled")
+	}
+	before, err := os.Stat(path + "-wal")
+	testutil.FailErr(t, "measure allocated WAL", err)
+	reader, err := sql.Open("sqlite", fileDSN(path, "mode=ro"))
+	testutil.FailErr(t, "open snapshot reader", err)
+	defer reader.Close()
+	tx, err := reader.BeginTx(t.Context(), &sql.TxOptions{ReadOnly: true})
+	testutil.FailErr(t, "begin mark-zero snapshot", err)
+	defer tx.Rollback()
+	var count int
+	testutil.FailErr(t, "establish checkpointed snapshot", tx.QueryRowContext(t.Context(), `SELECT count(*) FROM payload`).Scan(&count))
+	store := newStore(writer, reader)
+	auditCtx, finish := store.audit.begin(t.Context(), auditPinnedFrameLimit)
+	defer finish()
+	_, err = writer.Exec(`INSERT INTO payload VALUES(zeroblob(5242880))`)
+	testutil.FailErr(t, "reuse WAL allocation", err)
+	after, err := os.Stat(path + "-wal")
+	testutil.FailErr(t, "measure reused WAL", err)
+	if after.Size() != before.Size() {
+		t.Fatalf("fixture WAL grew: %d -> %d", before.Size(), after.Size())
+	}
+	result, err = CheckpointWAL(t.Context(), store)
+	testutil.FailErr(t, "observe pinned reused frames", err)
+	if result.PinnedFrames() < auditPinnedFrameLimit {
+		t.Fatalf("fixture pinned %d frames", result.PinnedFrames())
+	}
+	if !errors.Is(context.Cause(auditCtx), errAuditDeferred) {
+		t.Fatalf("reused frames did not release audit: %v", context.Cause(auditCtx))
+	}
+	testutil.FailErr(t, "release only snapshot", tx.Rollback())
+	result, err = checkpointDatabase(t.Context(), writer, WALCheckpointPassive)
+	testutil.FailErr(t, "backfill reused frames", err)
+	if !result.Complete() {
+		t.Fatal("released snapshot still pins reused frames")
 	}
 }

@@ -55,12 +55,23 @@ func AuditIntegrity(ctx context.Context, store *Store) error {
 	store.audit.run.Lock()
 	defer store.audit.run.Unlock()
 	started := time.Now()
-	auditErr := auditTables(ctx, store.reader, store.auditedTable,
-		func(ctx context.Context, table string) error {
-			checkCtx, finish := store.audit.begin(ctx)
+	attempt := 0
+	auditErr := auditAttempts(ctx,
+		func(ctx context.Context) error {
+			attempt++
+			release, err := store.audit.backgroundTurn(ctx)
+			if err != nil {
+				return err
+			}
+			defer release()
+			limit, err := auditFrameBudget(ctx, store)
+			if err != nil {
+				return err
+			}
+			checkCtx, finish := store.audit.begin(ctx, limit)
 			defer finish()
-			return auditTable(checkCtx, store.reader, table)
-		}, func(ctx context.Context) error { return waitForAuditCapacity(ctx, store) })
+			return auditSnapshot(checkCtx, store.reader, nil)
+		}, func(ctx context.Context) error { return waitForAuditCapacity(ctx, store, auditRetryDelay(attempt)) })
 	if err := finishIntegrityAudit(ctx, store, auditErr); err != nil {
 		return err
 	}
@@ -83,7 +94,11 @@ func finishIntegrityAudit(ctx context.Context, store *Store, auditErr error) err
 	if auditErr != nil {
 		return auditErr
 	}
-	return clearIntegrityAuditFailed(ctx, store.writer)
+	clearErr := clearIntegrityAuditFailed(ctx, store.writer)
+	if failure := store.Failure(); failure != nil {
+		return failure
+	}
+	return clearErr
 }
 
 func integrityAuditState(ctx context.Context, sqlDB DBTX) (string, error) {
@@ -96,7 +111,7 @@ func integrityAuditState(ctx context.Context, sqlDB DBTX) (string, error) {
 }
 
 func clearIntegrityAuditFailed(ctx context.Context, sqlDB DBTX) error {
-	_, err := sqlDB.ExecContext(ctx, `DELETE FROM store_meta WHERE key = ?`, integrityAuditFailedMetaKey)
+	_, err := sqlDB.ExecContext(ctx, `DELETE FROM store_meta WHERE key = ? AND value = ?`, integrityAuditFailedMetaKey, integrityAuditPendingValue)
 	return err
 }
 
@@ -109,18 +124,19 @@ func validateStoreIntegrity(ctx context.Context, sqlDB *sql.DB) error {
 	return foreignKeyCheck(ctx, sqlDB, "PRAGMA foreign_key_check")
 }
 
-// An empty table requests whole-file page accounting.
-// auditTable has no wall-clock limit. Checkpoint pressure can release its
-// snapshot, and the audit scheduler retains the unfinished table for retry.
-func auditTable(ctx context.Context, sqlDB *sql.DB, table string) error {
-	quoted := `"` + strings.ReplaceAll(table, `"`, `""`) + `"`
-	suffix := "(" + quoted + ")"
-	if table == "" {
-		suffix = ""
-	}
-	err := scanCheck(ctx, sqlDB, "PRAGMA integrity_check"+suffix)
+// auditSnapshot keeps page accounting and foreign keys on the same read view.
+// betweenChecks is an observation seam; it never changes snapshot custody.
+func auditSnapshot(ctx context.Context, database *sql.DB, betweenChecks func()) error {
+	tx, err := database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err == nil {
-		err = foreignKeyCheck(ctx, sqlDB, "PRAGMA foreign_key_check"+suffix)
+		defer tx.Rollback()
+		err = scanCheck(ctx, tx, "PRAGMA integrity_check")
+		if err == nil {
+			if betweenChecks != nil {
+				betweenChecks()
+			}
+			err = foreignKeyCheck(ctx, tx, "PRAGMA foreign_key_check")
+		}
 	}
 	var damaged *StoreIncompatibleError
 	if errors.As(err, &damaged) {
@@ -132,28 +148,8 @@ func auditTable(ctx context.Context, sqlDB *sql.DB, table string) error {
 	return err
 }
 
-// auditableTables lists the stored tables, including virtual tables' shadow
-// tables but not the virtual tables themselves, which hold no pages.
-func auditableTables(ctx context.Context, sqlDB *sql.DB) ([]string, error) {
-	rows, err := sqlDB.QueryContext(ctx, `SELECT name FROM pragma_table_list
-WHERE schema = 'main' AND type IN ('table', 'shadow') ORDER BY name`)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-	var tables []string
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			return nil, err
-		}
-		tables = append(tables, name)
-	}
-	return tables, rows.Err()
-}
-
 // scanCheck reads SQLite's integrity check: one "ok" row or one row per problem.
-func scanCheck(ctx context.Context, sqlDB *sql.DB, statement string) error {
+func scanCheck(ctx context.Context, sqlDB DBTX, statement string) error {
 	const pragma = "integrity_check"
 	rows, err := sqlDB.QueryContext(ctx, statement) // #nosec G202 -- a fixed pragma over a listed table name
 	if err != nil {
@@ -188,7 +184,7 @@ func scanCheck(ctx context.Context, sqlDB *sql.DB, statement string) error {
 	return nil
 }
 
-func foreignKeyCheck(ctx context.Context, sqlDB *sql.DB, statement string) error {
+func foreignKeyCheck(ctx context.Context, sqlDB DBTX, statement string) error {
 	rows, err := sqlDB.QueryContext(ctx, statement) // #nosec G202 -- a fixed pragma over a listed table name
 	if err != nil {
 		return integrityCheckError(err, "foreign_key_check")
