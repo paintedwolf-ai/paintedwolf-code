@@ -2,14 +2,14 @@
 from __future__ import annotations
 
 from .profile_observer import identifier
-from .provider_acquisition import host_call_id
+from .provider_acquisition import fixed_call, host_call_id
 
 
 def opened(result):
     row = result.get('tool_invocation') if isinstance(result, dict) else None
     if (not isinstance(row, dict) or row.get('tool') != 'page_open' or row.get('owner') != 'browser'
             or row.get('invoked') is not True or row.get('status') != 'completed'
-            or row.get('arguments') != {'path': 'fixture.html'}):
+            or row.get('arguments') != fixed_call('page_open')['arguments']):
         raise ValueError('browser fixture has no exact successful durable page invocation')
     identifier(row.get('message_id'))
     identifier(row.get('invocation_id'))
