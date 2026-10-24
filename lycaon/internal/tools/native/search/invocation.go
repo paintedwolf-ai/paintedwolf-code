@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
@@ -36,7 +37,8 @@ type invocation struct {
 	// noMatchPublishes marks a complete status-one search as publishable.
 	noMatchPublishes bool
 	effects          toolcontract.EffectCertainty
-	pins             []toolcontract.ExecutionRevision
+	pinCount         int
+	releases         []func()
 }
 
 func newInvocation(ctx context.Context, p Prepared, tc tools.ToolContext, streams commandprogram.Streams) *invocation {
@@ -100,11 +102,6 @@ func (inv *invocation) usage(word, reason string) error {
 	}}
 }
 
-// limitExceeded refuses work above a frozen catalog limit; nothing is truncated.
-func limitExceeded(id string, maximum, observed int64) error {
-	return &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"limit_id": id, "resource_unit": nativeutility.ResourceUnit(id), "maximum": maximum, "observed": observed}}
-}
-
 // ordinary classifies an input failure the utility reports on stderr and
 // survives. Authority, budget and platform refusals stay typed stops.
 func ordinary(err error) (string, bool) {
@@ -153,8 +150,11 @@ func (inv *invocation) recordPin(revision toolcontract.ExecutionRevision) error 
 	if inv.owners.Pins == nil || execution == "" {
 		return fmt.Errorf("search reads require a program execution and pin recorder")
 	}
-	inv.pins = append(inv.pins, revision)
-	return inv.owners.Pins.RecordRevisionPins(inv.ctx, execution, len(inv.pins)-1, inv.pins[len(inv.pins)-1:])
+	if err := inv.owners.Pins.RecordRevisionPins(inv.ctx, execution, inv.pinCount, []toolcontract.ExecutionRevision{revision}); err != nil {
+		return err
+	}
+	inv.pinCount++
+	return nil
 }
 
 // capture pins one file operand's exact bytes before any are searched.
@@ -169,6 +169,7 @@ func (inv *invocation) capturePinned(bound projectpaths.BoundPath) ([]byte, *too
 	if err != nil {
 		return nil, nil, err
 	}
+	inv.releases = append(inv.releases, captured.Close)
 	// A credential file's bytes reach no stream until their exposure is recorded.
 	if err := inv.tc.ObserveCredentialRead(inv.ctx, bound.Resolved.Abs, captured.Path, string(captured.Bytes)); err != nil {
 		return nil, nil, fmt.Errorf("record credential file read: %w", err)
@@ -182,22 +183,35 @@ func (inv *invocation) capturePinned(bound projectpaths.BoundPath) ([]byte, *too
 	return captured.Bytes, nil, nil
 }
 
-// readAll gathers stdin whole, refusing rather than truncating input above
-// stream_bytes.
+// openPinnedStream pins one file operand and returns a stream over its bytes.
+func (inv *invocation) openPinnedStream(bound projectpaths.BoundPath) (native.ExecutionStream, *toolcontract.SourcePin, error) {
+	streamed, err := inv.owners.Revisions.OpenStream(inv.ctx, inv.tc, bound.Resolved.Abs, 0)
+	if err != nil {
+		return native.ExecutionStream{}, nil, err
+	}
+	if err := inv.recordPin(streamed.Revision); err != nil {
+		_ = streamed.Reader.Close()
+		return native.ExecutionStream{}, nil, err
+	}
+	if pin, ok := streamed.Revision.SourcePin(); ok {
+		return streamed, &pin, nil
+	}
+	return streamed, nil, nil
+}
+
+// readAll releases a pattern program from stdin through the shared whole-input owner.
 func (inv *invocation) readAll(r io.Reader) ([]byte, error) {
-	maximum := inv.owners.streamBytes()
-	data, err := io.ReadAll(io.LimitReader(r, maximum+1))
+	buffer, err := inv.owners.Revisions.ReadWholeInput(inv.ctx, r, inv.owners.limit("whole_file_bytes"))
 	if err != nil {
 		return nil, err
 	}
-	if int64(len(data)) > maximum {
-		return nil, limitExceeded("stream_bytes", maximum, int64(len(data)))
-	}
-	return data, nil
+	inv.releases = append(inv.releases, buffer.Close)
+	return buffer.Bytes, nil
 }
 
 // settle projects the run onto the producer contract.
 func (inv *invocation) settle(err error) (toolcontract.ProducerResult, error) {
+	err = tools.CommandResourceRejection(err)
 	err = projectpaths.WithPathRejection(patternRejection(err), inv.request.Invocation.Span)
 	if err != nil {
 		result := toolcontract.ProducerResult{Status: inv.failure, Terminal: toolcontract.ProducerFailed, EffectCertainty: inv.effects}
@@ -222,7 +236,7 @@ func (inv *invocation) settle(err error) (toolcontract.ProducerResult, error) {
 	return result, nil
 }
 
-// output meters stdout against stream_bytes before each write and, when the
+// output meters stdout against stream_throughput_bytes before each write and, when the
 // endpoint retains them, records exact source mappings for bytes copied from
 // a pinned capture. Prefixes, separators and replacements carry none.
 type output struct {
@@ -278,7 +292,7 @@ func (o *output) flush() error {
 }
 
 func (o *output) Write(p []byte) (int, error) {
-	return nativeutility.WriteChunked(o.ctx, o.w, o.maximum, &o.written, p)
+	return nativeutility.WriteChunked(o.ctx, o.w, "stream_throughput_bytes", o.maximum, &o.written, p)
 }
 
 func (o *output) text(parts ...string) error {

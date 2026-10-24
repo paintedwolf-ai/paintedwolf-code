@@ -19,7 +19,7 @@ func (s *substitution) apply(m *Machine) error {
 	}
 	space := m.space.pattern
 	ordinal := max(s.ordinal, 1)
-	var out []byte
+	m.space.scratch = m.space.scratch[:0]
 	copied, from, count, previousEnd := 0, 0, 0, -1
 	replaced := false
 	for from <= len(space) {
@@ -31,36 +31,38 @@ func (s *substitution) apply(m *Machine) error {
 			break
 		}
 		start, end := match[0], match[1]
-		if start == end && start == previousEnd {
+		empty := start == end
+		if empty && start == previousEnd {
 			from = start + scalarWidth(space, start)
 			continue
 		}
 		count++
 		if count >= ordinal && (s.global || count == ordinal) {
-			out = append(out, space[copied:start]...)
-			out = appendReplacement(out, s.pieces, space, match)
-			copied, replaced = end, true
-			if limit := m.config.SpaceLimit; limit > 0 && int64(len(out)) > limit {
-				return &LimitError{Resource: "record_bytes", Maximum: limit, Observed: int64(len(out))}
+			if err := m.space.append(&m.space.scratch, space[copied:start]); err != nil {
+				return err
 			}
+			if err := m.space.appendReplacement(s.pieces, space, match); err != nil {
+				return err
+			}
+			copied, replaced = end, true
 			if !s.global {
 				break
 			}
 		}
 		previousEnd = end
 		from = end
-		if end == start {
+		if empty {
 			from = end + scalarWidth(space, end)
 		}
 	}
 	if !replaced {
 		return nil
 	}
-	m.space.pattern = append(out, space[copied:]...)
-	m.stream.replaced = true
-	if err := m.space.account(m.config.SpaceLimit, m.config.Reserve); err != nil {
+	if err := m.space.append(&m.space.scratch, space[copied:]); err != nil {
 		return err
 	}
+	m.space.swapScratch()
+	m.stream.replaced = true
 	if s.print {
 		if err := m.stream.out.emit(m.space.pattern, m.config.Delimiter, m.stream.terminated); err != nil {
 			return err
@@ -74,7 +76,7 @@ func (s *substitution) apply(m *Machine) error {
 
 // appendReplacement expands the pieces for one match; \U \L \E set a case
 // mode and \u \l convert only the next scalar, across literal and group text.
-func appendReplacement(out []byte, pieces []piece, space []byte, match []int) []byte {
+func (s *spaces) appendReplacement(pieces []piece, space []byte, match []int) error {
 	var mode, once pieceKind
 	for _, p := range pieces {
 		var text []byte
@@ -96,7 +98,9 @@ func appendReplacement(out []byte, pieces []piece, space []byte, match []int) []
 			continue
 		}
 		if mode == 0 && once == 0 {
-			out = append(out, text...)
+			if err := s.append(&s.scratch, text); err != nil {
+				return err
+			}
 			continue
 		}
 		for len(text) > 0 {
@@ -108,11 +112,13 @@ func appendReplacement(out []byte, pieces []piece, space []byte, match []int) []
 				r = unicode.ToLower(r)
 			}
 			once = 0
-			out = appendScalar(out, r)
+			if err := s.appendRune(r); err != nil {
+				return err
+			}
 			text = text[size:]
 		}
 	}
-	return out
+	return nil
 }
 
 func scalarWidth(b []byte, at int) int {
@@ -125,13 +131,14 @@ func scalarWidth(b []byte, at int) int {
 
 // translation reads y/SOURCE/DEST/: equal-length scalar lists where \\, the
 // escaped delimiter and the control escapes stand for one scalar.
-func (p *scriptCursor) translation() (map[rune]rune, error) {
+func (p *parser) translation() (map[rune]rune, error) {
 	delimiter := p.peek()
 	if delimiter == 0 || delimiter == '\n' || delimiter == '\\' {
 		return nil, p.fail("a y delimiter other than newline or backslash")
 	}
 	p.pos++
 	var lists [2][]rune
+	var err error
 	for i := range lists {
 		var text []byte
 		for {
@@ -147,24 +154,35 @@ func (p *scriptCursor) translation() (map[rune]rune, error) {
 				e := p.src[p.pos]
 				p.pos++
 				if e == delimiter || e == '\\' {
-					text = append(text, e)
+					if text, err = appendAdmittedBytes(p, text, e); err != nil {
+						return nil, err
+					}
 				} else if b, ok := controlEscapes[e]; ok {
-					text = append(text, b)
+					if text, err = appendAdmittedBytes(p, text, b); err != nil {
+						return nil, err
+					}
 				} else {
 					return nil, p.fail("y escapes \\\\, \\n, \\t or the delimiter")
 				}
 				continue
 			}
-			text = append(text, c)
+			if text, err = appendAdmittedBytes(p, text, c); err != nil {
+				return nil, err
+			}
 		}
 		for len(text) > 0 {
 			r, size := decodeScalar(text)
-			lists[i] = append(lists[i], r)
+			if lists[i], err = appendAdmitted(p, lists[i], r, runeElemBytes); err != nil {
+				return nil, err
+			}
 			text = text[size:]
 		}
 	}
 	if len(lists[0]) != len(lists[1]) {
 		return nil, p.fail("y source and destination of equal length")
+	}
+	if err := p.reserve(int64(max(1, len(lists[0]))) * trMapEntryBytes); err != nil {
+		return nil, err
 	}
 	out := make(map[rune]rune, len(lists[0]))
 	for i, r := range lists[0] {
@@ -185,9 +203,14 @@ func decodeScalar(b []byte) (rune, int) {
 	return r, size
 }
 
-func appendScalar(out []byte, r rune) []byte {
+func (s *spaces) appendRune(r rune) error {
+	var encoded [utf8.UTFMax]byte
+	var text []byte
 	if r >= 0xDC80 && r <= 0xDCFF {
-		return append(out, byte(r-0xDC00))
+		encoded[0] = byte(r - 0xDC00)
+		text = encoded[:1]
+	} else {
+		text = utf8.AppendRune(encoded[:0], r)
 	}
-	return utf8.AppendRune(out, r)
+	return s.append(&s.scratch, text)
 }

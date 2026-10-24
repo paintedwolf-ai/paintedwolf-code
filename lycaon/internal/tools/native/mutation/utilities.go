@@ -2,6 +2,7 @@ package mutation
 
 import (
 	"crypto/rand"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -269,16 +270,37 @@ func runTee(inv *invocation) error {
 		target.append = appendMode
 		targets = append(targets, target)
 	}
-	maximum := inv.owners.limit("stream_bytes")
-	data, err := io.ReadAll(io.LimitReader(inv.input, maximum+1))
-	if err != nil {
-		return err
-	}
-	if int64(len(data)) > maximum {
-		return &commandprogram.StreamLimitError{Limit: "stream_bytes", Maximum: maximum, Observed: int64(len(data))}
-	}
-	if _, err := inv.stdout.Write(data); err != nil {
-		return err
+	maximum := inv.owners.limit("stream_throughput_bytes")
+	var data []byte
+	var total int64
+	buf := make([]byte, 32*1024)
+	for {
+		if err := inv.ctx.Err(); err != nil {
+			return err
+		}
+		n, err := inv.input.Read(buf)
+		if n > 0 {
+			total += int64(n)
+			if total > maximum {
+				return &commandprogram.StreamLimitError{Limit: "stream_throughput_bytes", Maximum: maximum, Observed: total}
+			}
+			chunk := buf[:n]
+			if len(targets) > 0 {
+				data = append(data, chunk...)
+			}
+			if _, werr := inv.stdout.Write(chunk); werr != nil {
+				if len(targets) > 0 {
+					inv.uncertain = true
+				}
+				return werr
+			}
+		}
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return err
+		}
 	}
 	for _, target := range targets {
 		if _, err := inv.owners.publish(inv.ctx, inv.tc, inv.barrier, target, data); err != nil {

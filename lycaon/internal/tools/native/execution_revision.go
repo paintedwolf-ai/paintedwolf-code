@@ -27,6 +27,8 @@ import (
 // advances the conversational read bases that structured edits require.
 type ExecutionRevisions struct {
 	Boundary *sandbox.Boundary
+	// Memory belongs to the invoking program; non-program metadata checks hold no retained captures.
+	Memory *toolcontract.ProgramMemory
 }
 
 // ExecutionSource is one pinned native input: the exact text the utility
@@ -34,7 +36,9 @@ type ExecutionRevisions struct {
 type ExecutionSource struct {
 	Path     string
 	Content  string
+	Encoding string
 	Revision toolcontract.ExecutionRevision
+	release  func()
 }
 
 // ExecutionRevisionConflict reports that a pinned source or destination moved
@@ -69,14 +73,50 @@ func (e ExecutionRevisions) CaptureSource(ctx context.Context, tctx tools.ToolCo
 	if err != nil {
 		return ExecutionSource{}, err
 	}
-	st, revision, err := captureRevision(ctx, tctx, resolved, toolcontract.SourceRevision)
+	maximum := sourceview.AccessCommand.MaxBytes()
+	raw, revision, release, err := e.captureBytes(ctx, tctx, resolved, maximum)
+	if errors.Is(err, fs.ErrNotExist) {
+		return ExecutionSource{}, sourceview.PathNotFound("read", resolved.DisplayPath, resolved.Abs)
+	}
 	if err != nil {
 		return ExecutionSource{}, err
 	}
-	if revision.Mode == toolcontract.AbsentRevision {
-		return ExecutionSource{}, sourceview.PathNotFound("read", resolved.DisplayPath, resolved.Abs)
+	defer release()
+	detection := textfile.Classify(raw)
+	scratchBytes := 4*int64(len(raw)) + (64 << 10)
+	if detection.Encoding == textfile.UTF8 || detection.Encoding == textfile.UTF8BOM {
+		scratchBytes = int64(len(raw)) + (64 << 10)
 	}
-	return ExecutionSource{Path: resolved.DisplayPath, Content: st.Content, Revision: revision}, nil
+	scratch, err := e.reserveWorking(ctx, scratchBytes)
+	if err != nil {
+		return ExecutionSource{}, err
+	}
+	defer scratch()
+	content, detection, err := textfile.Decode(raw, textfile.LimitsForRaw(maximum))
+	if err != nil {
+		return ExecutionSource{}, &toolrejection.ToolReject{Code: "READ_BINARY_DENIED", Data: map[string]any{"path": resolved.DisplayPath, "bytes": len(raw), "reason": err.Error()}}
+	}
+	// Working covers the decoded representation while the surviving string
+	// transfers to State; the raw capture lease is no longer needed.
+	release()
+	retainedBytes := int64(len(content))
+	if detection.Encoding == textfile.UTF8BOM {
+		retainedBytes += 3
+	}
+	retained, err := e.reserveCapture(ctx, retainedBytes)
+	if err != nil {
+		return ExecutionSource{}, err
+	}
+	revision.Representation = toolcontract.UTF8SourceBytes
+	if revision.Mode == toolcontract.AcceptedDocumentRevision {
+		revision.Representation = toolcontract.LogicalUTF8LF
+	}
+	revision.ContentSHA256, revision.ContentBytes = textfile.StringSHA256(content), int64(len(content))
+	if err = revision.Validate(); err != nil {
+		retained()
+		return ExecutionSource{}, err
+	}
+	return ExecutionSource{Path: resolved.DisplayPath, Content: content, Encoding: detection.Encoding, Revision: revision, release: retained}, nil
 }
 
 // CaptureDestination pins a destination's revision, or its absence, before
@@ -141,7 +181,9 @@ func (e ExecutionRevisions) Verify(ctx context.Context, tctx tools.ToolContext, 
 		}
 		var current toolcontract.ExecutionRevision
 		if pin.Basis == toolcontract.CapturedRevision && pin.Representation == toolcontract.OriginalEncodedBytes {
-			current, err = recaptureBytes(ctx, tctx, resolved)
+			current, err = e.recaptureBytes(ctx, tctx, resolved)
+		} else if pin.Role == toolcontract.SourceRevision {
+			current, err = e.recaptureSource(ctx, tctx, resolved)
 		} else {
 			_, current, err = captureRevision(ctx, tctx, resolved, pin.Role)
 		}
@@ -161,7 +203,7 @@ func (e ExecutionRevisions) Verify(ctx context.Context, tctx tools.ToolContext, 
 func captureRevision(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved, role toolcontract.ExecutionRevisionRole) (sourceview.Text, toolcontract.ExecutionRevision, error) {
 	root, rel := revisionLocation(resolved)
 	revision := toolcontract.ExecutionRevision{Role: role, Basis: toolcontract.CapturedRevision, RootID: root, Path: rel}
-	tool, access := "read", sourceview.AccessRead
+	tool, access := "read", sourceview.AccessCommand
 	if role == toolcontract.DestinationRevision {
 		tool, access = "write", sourceview.AccessMutate
 	}
@@ -243,25 +285,27 @@ func captureRawRevision(resolved projectpaths.Resolved, revision toolcontract.Ex
 
 // captureDestinationBytes captures a destination for an exact write and
 // returns its current raw bytes, which an append stages ahead of the output.
-func captureDestinationBytes(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved) (sourceview.Text, toolcontract.ExecutionRevision, []byte, error) {
+func (e ExecutionRevisions) captureDestinationBytes(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved, appendExisting bool) (sourceview.Text, toolcontract.ExecutionRevision, []byte, func(), error) {
 	st, revision, err := captureRevision(ctx, tctx, resolved, toolcontract.DestinationRevision)
-	if err != nil || revision.Mode == toolcontract.AbsentRevision || st.Editor != nil {
-		return st, revision, nil, err
+	empty := func() {}
+	if err != nil || !appendExisting || revision.Mode == toolcontract.AbsentRevision || st.Editor != nil || st.Disk == nil {
+		return st, revision, nil, empty, err
 	}
-	if st.Disk != nil {
-		return st, revision, st.Disk.RawBytes(), nil
-	}
-	f, err := fseffect.OpenRead(resolved.EffectLocation())
+	raw, release, err := e.readCapturedBytes(ctx, resolved, sourceview.AccessCommand.MaxBytes())
 	if err != nil {
-		return st, revision, nil, err
-	}
-	defer func() { _ = f.Close() }()
-	raw, err := io.ReadAll(f)
-	if err != nil {
-		return st, revision, nil, err
+		return st, revision, nil, empty, err
 	}
 	if textfile.SHA256(raw) != revision.DiskSHA256 {
-		return st, revision, nil, &ExecutionRevisionConflict{Path: resolved.DisplayPath, Pinned: revision}
+		release()
+		return st, revision, nil, empty, &ExecutionRevisionConflict{Path: resolved.DisplayPath, Pinned: revision}
 	}
-	return st, revision, raw, nil
+	return st, revision, raw, release, nil
+}
+
+func (s *ExecutionSource) Close() {
+	if s.release != nil {
+		s.release()
+		s.release = nil
+	}
+	s.Content = ""
 }

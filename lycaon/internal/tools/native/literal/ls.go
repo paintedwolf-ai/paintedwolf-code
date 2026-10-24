@@ -2,6 +2,7 @@ package literal
 
 import (
 	"fmt"
+	"github.com/lycaon/lycaon/internal/tools"
 	"path"
 	"slices"
 	"strconv"
@@ -151,7 +152,7 @@ func (inv *invocation) children(dir projectpaths.BoundPath, opts lsOptions, visi
 		}
 		*visited++
 		if maximum > 0 && *visited > maximum {
-			return nil, false, limitExceeded("traversal_visits", maximum, *visited)
+			return nil, false, tools.CommandLimitExceeded("traversal_visits", maximum, *visited)
 		}
 		child := dir
 		if name != "." {

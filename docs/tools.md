@@ -147,6 +147,10 @@ receipt, digest or truncation notice is never a pipeline source. Here-document
 and native-null inputs use the same exact byte endpoints; typed null sinks count
 ingress without opening a platform device or resolving secret references.
 
+Pipes and file redirects receive the exact producer bytes. Secret screening runs
+when output is delivered to the model or retained for the transcript and receipts;
+it does not rewrite bytes consumed by another stage or published to a file.
+
 `ScreenedPipe` connects the existing capture projection to that byte plane.
 Screening reserves actual payload/candidate capacities incrementally against the
 caller's aggregate working-memory ledger before allocation. It reuses the
@@ -354,8 +358,11 @@ stream through the program in operand order, and the same iterator backs
 reaches it; `--slurpfile` and `--rawfile` files are pinned the same way. `$ENV`
 and `env` present the program's exported environment. No module loader or
 other file access exists. `query_depth`, `query_outputs`, `query_value_bytes`,
-`query_cpu_ms` and `stream_bytes` refuse rather than truncate. gojq exposes no
-instruction counter, so the evaluation deadline is the work bound.
+`query_elapsed_ms` and `stream_bytes` refuse rather than truncate. The jq
+evaluation clock accumulates time across inputs inside the compiled program,
+including its input/output callbacks. Preparing a reached input between program
+runs is outside that clock. gojq exposes no instruction counter; cancellation is
+cooperative at its existing VM boundaries, not a CPU-time or hard wall-time guarantee.
 
 yq is mikefarah yq v4 on its own library: yq expression syntax, `eval` per
 document and `eval-all` over every document, `-p`/`-o` formats, and YAML output
@@ -404,7 +411,9 @@ Multi-root calls use explicit root addressing when a relative path is ambiguous.
 
 `@scratch/<path>` addresses the invoking session's private scratch folder, a host namespace no attached root may share. One grammar resolves it for native tools, `cwd`, stream redirects, and unquoted `command` and `verify` arguments, which reach the program as absolute paths; a quoted `@scratch/...` stays literal. Processes also receive the folder as `SCRATCH_DIR`. A worker's scratch is its own, so a worker returns findings in its result rather than as a scratch path.
 
-Recovery reads and structured queries of retained tool output use the session's spill byte bound (64 MiB by default), including decompression. Ordinary project files keep the 8 MiB read bound (`read`, `summarize`, and `diff`; `grep` searches the leading 8 MiB) and the 20 MiB `jq` input bound. Native edits (`edit`, `replace_lines`, `code_rewrite`, `jq_edit`, `write`, and `restore_version`) have a lower 4 MiB bound, the size that version history and pre-turn checkpoints retain in full: a file or open document above it, or new content that would exceed it, rejects with `EDIT_FILE_TOO_LARGE` before any review or write, so every state a native edit replaces stays restorable. Removal and replacement follow the same promise without the bound: `delete`, `move` onto an existing file, and a `copy`, redirect, or extracted entry overwriting a file above it set the old entry aside in lifecycle recovery first ([Files live](files-live.md)). `command` has no such bound. The host's resolved path classification selects the bound; a similarly named project directory cannot widen it. Line and output limits still bound the returned page. A single long JSON string can be recovered in bounded substrings with `jq`.
+Recovery reads and structured queries of retained tool output use the session's spill byte bound (64 MiB by default), including decompression. Ordinary project files keep the 8 MiB read bound (`read`, `summarize`, and `diff`; `grep` searches the leading 8 MiB) and the 64 MiB `jq` input bound. Native edits (`edit`, `replace_lines`, `code_rewrite`, `jq_edit`, `write`, and `restore_version`) have a lower 4 MiB bound, the size that version history and pre-turn checkpoints retain in full: a file or open document above it, or new content that would exceed it, rejects with `EDIT_FILE_TOO_LARGE` before any review or write, so every state a native edit replaces stays restorable. Removal and replacement follow the same promise without the bound: `delete`, `move` onto an existing file, and a `copy`, redirect, or extracted entry overwriting a file above it set the old entry aside in lifecycle recovery first ([Files live](files-live.md)). Portable `command` reads ordinary disk streams without a per-file gather limit; operations that need a whole input use a 32 MiB bound. Buffered stages keep a 64 MiB bound, records have a 4 MiB bound, and streaming throughput has a 1 GiB runaway guard. `grep -T` on nonseekable stdin needs a second pass and uses a quota-admitted anonymous spool bounded to 64 MiB; ordinary file searches stream. Program memory admission is aggregate, so representation conversion and concurrent work can refuse below an individual input ceiling. Editor documents and credential-read fallback retain their own bounded capture rules. The host's resolved path classification selects the bound; a similarly named project directory cannot widen it. Line and output limits still bound the returned page. A single long JSON string can be recovered in bounded substrings with `jq`.
+
+A stopped `command` result keeps `refusal.code`, rendered `refusal.feedback`, and optional `refusal.details` from the actual screened rejection. Limit identifiers, maximum and observed values, and source coordinates stay typed. The program's separate completed and uncertain effect counts come from its settled receipt; a refusal does not undo earlier work. If feedback cannot be delivered, `refusal.delivery_failure` names capacity, cancellation or unavailable rendering; feedback and details remain empty, and the settled partial result remains available.
 
 Scope is rechecked where the effect occurs. A model-visible schema, prompt instruction, or earlier path classification never authorizes a later write.
 
@@ -789,6 +798,12 @@ A settled foreground result carries the last 8 KiB of screened output as `tail`.
 A confined result also lists `sandbox_refusals`: each operation the kernel refused the invocation's processes, with its target, process, count, and the capability that would admit it ([Denials are legible](security.md#denials-are-legible)). A running result and `command_output` list the refusals so far; a finished one lists the settled record.
 
 A run can fail for a reason its exit status does not carry. The foreground result, `command_output` for a job, and the job's completion then state `exec_failure` with a `kind` (`redirect_commit` when redirected output did not land, `stage_launch` when a later stage never started, `run` otherwise) and the error as `detail`. Such a run is never `ok`, and a verification check that ends this way fails. A timeout is reported by `termination_reason`, not here.
+
+Non-interactive external programs receive pipes rather than a terminal. Their
+default environment sets `TERM=dumb`, `PAGER=cat`, and `GIT_PAGER=cat`, and drops
+ambient `COLORTERM`. This avoids pagers and automatic terminal color; explicit
+program options still control their output. Interactive terminal sessions keep
+their terminal setup.
 
 ### Command job lifecycle
 

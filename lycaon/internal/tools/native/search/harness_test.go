@@ -190,6 +190,7 @@ func newHarness(t *testing.T, files map[string]string) *harness {
 	removed := &removals{}
 	owners, err := NewOwners(native.ExecutionRevisions{Boundary: boundary}, pins, removed)
 	testutil.FailErr(t, "build owners", err)
+	owners.Admission = &alignedSpillQuota{maximum: 512 << 20}
 	owners.Now = func() time.Time { return fixtureTime.Add(36 * time.Hour) }
 	h := &harness{t: t, boundary: boundary, root: resolved, tc: nativefixture.Context(resolved), owners: owners, pins: pins, removals: removed, cwd: "."}
 	h.dispatch = &childDispatch{h: h}

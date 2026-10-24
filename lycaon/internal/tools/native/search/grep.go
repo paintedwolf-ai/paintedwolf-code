@@ -1,7 +1,6 @@
 package search
 
 import (
-	"bytes"
 	"errors"
 	"strconv"
 	"strings"
@@ -414,11 +413,12 @@ func (r *grepRun) searchStdin() error {
 	if r.mode == modeFileList {
 		return nil
 	}
-	data, err := r.inv.readAll(r.inv.input)
-	if err != nil {
-		return err
+	var err error
+	if r.tabs {
+		err = r.searchAlignedStdin()
+	} else {
+		err = r.searchStream("(standard input)", r.inv.input, r.inv.owners.streamBytes(), 0, -1, nil, r.forcedNames(false))
 	}
-	err = r.searchContent("(standard input)", data, nil, r.forcedNames(false))
 	if errors.Is(err, errQuietMatch) {
 		r.stopped = true
 		return nil
@@ -485,6 +485,9 @@ func (r *grepRun) walk(dir entry, ancestors map[[2]uint64]bool) error {
 		if r.stopped {
 			return nil
 		}
+		if _, err := r.inv.out.w.Write(nil); err != nil {
+			return err
+		}
 		if child.link && !r.follow {
 			continue
 		}
@@ -526,7 +529,7 @@ func (r *grepRun) searchFile(e entry, names bool) error {
 		r.pruned++
 		return r.searchContent(e.display, nil, nil, names)
 	}
-	content, pin, err := r.inv.capturePinned(e.bound)
+	streamed, pin, err := r.inv.openPinnedStream(e.bound)
 	if err != nil {
 		if reason, ok := ordinary(err); ok {
 			r.inv.fail(r.quietErrors, "%s: %s", e.display, reason)
@@ -534,10 +537,11 @@ func (r *grepRun) searchFile(e entry, names bool) error {
 		}
 		return err
 	}
-	if r.rg && e.depth > 0 && !r.searchBinary && bytes.IndexByte(content, 0) >= 0 {
+	defer func() { _ = streamed.Reader.Close() }()
+	if r.rg && e.depth > 0 && !r.searchBinary && streamed.FirstNullOffset >= 0 {
 		return nil
 	}
-	return r.searchContent(e.display, content, pin, names)
+	return r.searchStream(e.display, streamed.Reader, 0, int(streamed.Revision.ContentBytes), streamed.FirstNullOffset, pin, names)
 }
 
 // indexAcceleration enables Bloom pruning when a missing record can only

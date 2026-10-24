@@ -64,16 +64,16 @@ func runOutline(inv *invocation) error {
 		return err
 	}
 	text, _, err := textfile.Decode(in.data, textfile.LimitsForRaw(max(int64(len(in.data)), 1)))
-	if err != nil {
-		inv.fail(1, operand, "not a text file")
-		return nil
+	if err == nil {
+		label := in.bound.Resolved.DisplayPath
+		outline, buildErr := fileoutline.BuildContent(inv.ctx, label, []byte(text), int64(len(text)))
+		if buildErr != nil {
+			return buildErr
+		}
+		return inv.structured(survey.OutlineResponse(label, outline))
 	}
-	label := in.bound.Resolved.DisplayPath
-	outline, err := fileoutline.BuildContent(inv.ctx, label, []byte(text), int64(len(text)))
-	if err != nil {
-		return err
-	}
-	return inv.structured(survey.OutlineResponse(label, outline))
+	inv.fail(1, operand, "not a text file")
+	return nil
 }
 
 func runSummarize(inv *invocation) error {

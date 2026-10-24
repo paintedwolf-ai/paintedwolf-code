@@ -1,7 +1,6 @@
 package sedscript
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -22,8 +21,8 @@ type Input interface {
 }
 
 // Config binds a program to one run. Writers holds every Program.WriteFiles
-// entry; Files holds the contents of each readable r and R file (an absent
-// file reads as nothing, as in GNU sed). SpaceLimit bounds pattern and hold
+// entry; OpenFile opens an r or R input when reached (nil for an absent
+// or unreadable file). SpaceLimit bounds pattern and hold
 // space; StepLimit bounds branches and D restarts between input reads.
 type Config struct {
 	Quiet      bool
@@ -34,11 +33,11 @@ type Config struct {
 	Stdout     io.Writer
 	Stderr     io.Writer
 	Writers    map[string]io.Writer
-	Files      map[string][]byte
+	OpenFile   func(string) (ReadFile, error)
 }
 
-// Machine is one sed run. Hold space, the last regex, R file positions and
-// quit state persist across the inputs given to Stream.
+// Machine is one sed run. Hold space, the last regex and quit state persist
+// across calls to Stream; R file positions restart with each stream.
 type Machine struct {
 	ctx     context.Context
 	program *Program
@@ -46,9 +45,10 @@ type Machine struct {
 	outputs map[string]*output
 	stream  inputState
 	space   spaces
+	files   readFiles
 	appends []appendItem
+	listing []byte
 	last    Regex
-	cursors map[string]int
 	status  int
 	quit    bool
 }
@@ -67,12 +67,6 @@ type inputState struct {
 	steps      int64
 }
 
-// spaces are pattern and hold space and the memory reserved for them.
-type spaces struct {
-	pattern, hold []byte
-	reserved      int64
-}
-
 // output is one destination; pending records that the last record written
 // lacked its newline, which later output restores first.
 type output struct {
@@ -83,6 +77,7 @@ type output struct {
 type appendItem struct {
 	text []byte
 	file string
+	line bool
 }
 
 type ending uint8
@@ -103,7 +98,17 @@ func NewMachine(ctx context.Context, program *Program, config Config) (*Machine,
 	if config.Stderr == nil {
 		config.Stderr = io.Discard
 	}
-	m := &Machine{ctx: ctx, program: program, config: config, outputs: map[string]*output{}, cursors: map[string]int{}}
+	if len(program.reads) > 0 {
+		if config.OpenFile == nil {
+			return nil, errors.New("sed read files need a stream factory")
+		}
+		if config.Reserve != nil {
+			if err := config.Reserve(int64(len(program.reads)) * 256); err != nil {
+				return nil, err
+			}
+		}
+	}
+	m := &Machine{ctx: ctx, program: program, config: config, space: spaces{limit: config.SpaceLimit, reserve: config.Reserve}, outputs: map[string]*output{}, files: readFiles{open: config.OpenFile, reserve: config.Reserve, cursors: map[string]ReadFile{}}}
 	m.outputs[Stdout] = &output{w: config.Stdout}
 	m.outputs[Stderr] = &output{w: config.Stderr}
 	for _, name := range program.writes {
@@ -122,10 +127,22 @@ func (m *Machine) Status() int { return m.status }
 // Stream runs records through the script, writing the pattern space to out
 // (standard output when nil). Line numbers, $ and ranges are per call, so
 // sed -s and -i call it once per file. It reports whether q or Q ended the run.
-func (m *Machine) Stream(in Input, out io.Writer) (bool, error) {
+func (m *Machine) Stream(in Input, out io.Writer) (_ bool, finalErr error) {
 	if m.quit {
 		return true, nil
 	}
+	if err := m.files.start(); err != nil {
+		return false, err
+	}
+	defer func() {
+		if err := m.files.close(); err != nil {
+			if finalErr == nil {
+				finalErr = err
+			} else {
+				finalErr = errors.Join(finalErr, err)
+			}
+		}
+	}()
 	m.stream = inputState{in: in, out: m.outputs[Stdout]}
 	if out != nil {
 		m.stream.out = &output{w: out}
@@ -133,7 +150,6 @@ func (m *Machine) Stream(in Input, out io.Writer) (bool, error) {
 	for _, c := range m.program.commands {
 		c.span = rangeState{active: c.first != nil && c.first.kind == addrZero}
 	}
-	clear(m.cursors)
 	if err := m.stream.fill(); err != nil {
 		return false, err
 	}
@@ -195,17 +211,18 @@ func (m *Machine) next(appending bool) (bool, error) {
 		return false, err
 	}
 	record := m.stream.ahead
+	var err error
 	if appending {
-		m.space.pattern = append(append(m.space.pattern, m.config.Delimiter), record.Text...)
+		err = m.space.join(&m.space.pattern, m.config.Delimiter, record.Text)
 	} else {
-		m.space.pattern = append(m.space.pattern[:0], record.Text...)
+		err = m.space.assign(&m.space.pattern, record.Text)
+	}
+	if err != nil {
+		return false, err
 	}
 	m.stream.terminated, m.stream.source = record.Terminated, record.Source
 	m.stream.line++
 	m.stream.replaced, m.stream.steps = false, 0
-	if err := m.space.account(m.config.SpaceLimit, m.config.Reserve); err != nil {
-		return false, err
-	}
 	return true, m.stream.fill()
 }
 
@@ -220,24 +237,6 @@ func (s *inputState) step(ctx context.Context, limit int64) error {
 	if limit > 0 && s.steps > limit {
 		return &LimitError{Resource: "query_work_steps", Maximum: limit, Observed: s.steps}
 	}
-	return nil
-}
-
-// account bounds pattern and hold space and reserves their growth.
-func (s *spaces) account(limit int64, reserve func(int64) error) error {
-	for _, space := range [][]byte{s.pattern, s.hold} {
-		if limit > 0 && int64(len(space)) > limit {
-			return &LimitError{Resource: "record_bytes", Maximum: limit, Observed: int64(len(space))}
-		}
-	}
-	total := int64(cap(s.pattern) + cap(s.hold))
-	if total <= s.reserved || reserve == nil {
-		return nil
-	}
-	if err := reserve(total - s.reserved); err != nil {
-		return err
-	}
-	s.reserved = total
 	return nil
 }
 
@@ -281,7 +280,7 @@ func (m *Machine) dumpAppends() error {
 	for _, item := range m.appends {
 		var err error
 		if item.file != "" {
-			err = m.stream.out.raw(m.config.Files[item.file])
+			err = m.files.append(item, m.stream.out)
 		} else {
 			err = m.stream.out.text(item.text)
 		}
@@ -289,22 +288,7 @@ func (m *Machine) dumpAppends() error {
 			return err
 		}
 	}
+	clear(m.appends)
 	m.appends = m.appends[:0]
 	return nil
-}
-
-// readLine returns the next line of an R file, without its newline.
-func (m *Machine) readLine(file string) ([]byte, bool) {
-	content, at := m.config.Files[file], m.cursors[file]
-	if at >= len(content) {
-		return nil, false
-	}
-	end := bytes.IndexByte(content[at:], '\n')
-	if end < 0 {
-		end = len(content) - at
-		m.cursors[file] = len(content)
-	} else {
-		m.cursors[file] = at + end + 1
-	}
-	return content[at : at+end], true
 }

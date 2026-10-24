@@ -1,10 +1,12 @@
 package query
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/tools"
 	"io"
 	"strings"
 
@@ -29,6 +31,9 @@ type inputs struct {
 	pendingEvents []any
 	pending       []any
 	stream        *nativejq.ValueStream
+	rawReader     *bufio.Reader
+	rawWork       *queryWorking
+	rawOffset     int64
 	// data holds the current operand's bytes read so far, for positions.
 	data   *bytes.Buffer
 	label  string
@@ -36,7 +41,11 @@ type inputs struct {
 	stop   error
 	broken bool
 	// openErrors records an operand that could not be read (jq's status 2).
-	openErrors bool
+	openErrors    bool
+	positions     *inputPositions
+	currentCloser io.Closer
+	text          string
+	captured      *source
 }
 
 // Next yields the next input, or with --stream the next event of it.
@@ -69,8 +78,23 @@ func (in *inputs) nextValue() (any, bool) {
 			in.pending = in.pending[1:]
 			return v, true
 		}
+		if in.rawReader != nil {
+			line, err := in.rawLine()
+			if errors.Is(err, io.EOF) {
+				in.rawReader = nil
+				continue
+			}
+			if err != nil {
+				in.stop = err
+				return nil, false
+			}
+			return line, true
+		}
 		if in.stream != nil {
 			v, err := in.stream.Decode()
+			if in.stop != nil {
+				return nil, false
+			}
 			switch {
 			case errors.Is(err, io.EOF):
 				in.stream = nil
@@ -80,7 +104,7 @@ func (in *inputs) nextValue() (any, bool) {
 				return nil, false
 			}
 			if in.stream.InputOffset() > in.limit {
-				in.stop = safecmd.Reject("JQ_INPUT_TOO_LARGE", map[string]any{"path": in.label, "max_bytes": in.limit})
+				in.stop = safecmd.Reject("JQ_INPUT_TOO_LARGE", map[string]any{"path": in.label, "max_bytes": in.limit, "bytes": in.stream.InputOffset()})
 				return nil, false
 			}
 			if !in.admit(v) {
@@ -100,14 +124,25 @@ func (in *inputs) nextValue() (any, bool) {
 
 // open starts one operand: stdin streams; a file is captured and pinned.
 func (in *inputs) open(operand string) {
+	in.close()
 	in.label = operand
+	in.text = ""
+	in.data = nil
+	if !in.yaml {
+		in.openStream(operand)
+		return
+	}
 	in.data = &bytes.Buffer{}
 	var data io.Reader
 	if operand == "-" {
 		in.label = "<stdin>"
 		data = io.TeeReader(io.LimitReader(in.inv.input, in.limit+1), in.data)
 	} else {
-		captured, err := in.inv.capture(operand)
+		captured := in.captured
+		var err error
+		if captured == nil {
+			captured, err = in.inv.capture(operand)
+		}
 		if err != nil {
 			in.stop = err
 			return
@@ -116,13 +151,11 @@ func (in *inputs) open(operand string) {
 			in.openErrors = true
 			return
 		}
-		in.data.WriteString(captured.text)
+		in.data = nil
+		in.text = captured.text
 		data = strings.NewReader(captured.text)
 	}
-	if !in.raw && !in.yaml {
-		in.stream = nativejq.NewValueStream(data)
-		return
-	}
+
 	text, err := in.readAll(data, operand == "-")
 	if err != nil {
 		in.stop = err
@@ -152,7 +185,7 @@ func (in *inputs) open(operand string) {
 // readAll reads one operand whole within the input bound.
 func (in *inputs) readAll(data io.Reader, stdin bool) (string, error) {
 	if !stdin {
-		return in.data.String(), nil
+		return in.text, nil
 	}
 	if _, err := io.Copy(io.Discard, data); err != nil {
 		return "", err
@@ -178,39 +211,6 @@ func rawLines(text string) []any {
 	return out
 }
 
-// slurpRaw is -R -s: every operand's bytes as one string.
-func (in *inputs) slurpRaw() (string, bool) {
-	var all strings.Builder
-	for len(in.operands) > 0 && in.stop == nil {
-		operand := in.operands[0]
-		in.operands = in.operands[1:]
-		in.label = operand
-		in.data = &bytes.Buffer{}
-		if operand == "-" {
-			in.label = "<stdin>"
-			text, err := in.readAll(io.TeeReader(io.LimitReader(in.inv.input, in.limit+1), in.data), true)
-			if err != nil {
-				in.stop = err
-				return "", false
-			}
-			all.WriteString(text)
-			continue
-		}
-		captured, err := in.inv.capture(operand)
-		if err != nil {
-			in.stop = err
-			return "", false
-		}
-		if captured == nil {
-			in.openErrors = true
-			continue
-		}
-		in.data.WriteString(captured.text)
-		all.WriteString(captured.text)
-	}
-	return all.String(), in.stop == nil
-}
-
 // malformed reports an input that is not JSON as jq does and stops reading.
 func (in *inputs) malformed(err error) {
 	offset := in.stream.InputOffset()
@@ -218,11 +218,21 @@ func (in *inputs) malformed(err error) {
 	var syntax *json.SyntaxError
 	switch {
 	case errors.Is(err, io.ErrUnexpectedEOF):
-		message, offset = "Unfinished JSON term at EOF", int64(in.data.Len())
+		message = "Unfinished JSON term at EOF"
+		if in.positions != nil {
+			offset = in.positions.read
+		} else {
+			offset = int64(in.data.Len())
+		}
 	case errors.As(err, &syntax):
 		offset = syntax.Offset
 	}
-	line, column := lineColumn(in.data.Bytes(), offset)
+	var line, column int
+	if in.positions != nil {
+		line, column = in.positions.lineColumn(offset)
+	} else {
+		line, column = lineColumn(in.data.Bytes(), offset)
+	}
 	_, _ = fmt.Fprintf(in.inv.stderr, "jq: parse error: %s at line %d, column %d\n", message, line, column)
 	in.broken = true
 }
@@ -231,7 +241,7 @@ func (in *inputs) malformed(err error) {
 // a line at a time, so LINE counts every newline through the line where
 // the value ended.
 func (in *inputs) position() string {
-	if in.data == nil {
+	if in.label == "" {
 		return "<unknown>"
 	}
 	_, line := in.current()
@@ -241,12 +251,19 @@ func (in *inputs) position() string {
 // current is input_filename and input_line_number: the file being read
 // (null for stdin) and the lines read from it so far.
 func (in *inputs) current() (any, int) {
-	if in.data == nil {
+	if in.label == "" {
 		return nil, 0
 	}
-	end := int64(in.data.Len())
+	end := int64(len(in.text))
+	if in.positions != nil {
+		end = in.positions.read
+	} else if in.data != nil {
+		end = int64(in.data.Len())
+	}
 	if in.stream != nil {
 		end = in.stream.InputOffset()
+	} else if in.rawReader != nil {
+		end = in.rawOffset
 	}
 	var name any = in.label
 	if in.label == "<stdin>" {
@@ -256,6 +273,18 @@ func (in *inputs) current() (any, int) {
 }
 
 func (in *inputs) lineAt(offset int64) int {
+	if in.positions != nil {
+		return in.positions.lineAt(offset)
+	}
+	if in.data == nil {
+		offset = min(max(offset, 0), int64(len(in.text)))
+		if i := strings.IndexByte(in.text[offset:], '\n'); i >= 0 {
+			offset += int64(i) + 1
+		} else {
+			offset = int64(len(in.text))
+		}
+		return strings.Count(in.text[:offset], "\n")
+	}
 	data := in.data.Bytes()
 	offset = min(max(offset, 0), int64(len(data)))
 	if i := bytes.IndexByte(data[offset:], '\n'); i >= 0 {
@@ -277,7 +306,7 @@ func lineColumn(data []byte, offset int64) (int, int) {
 // admit bounds one input value's nesting by query_depth.
 func (in *inputs) admit(v any) bool {
 	if maximum := in.inv.owners.limit("query_depth"); int64(nativejq.ValueDepth(v)) > maximum {
-		in.stop = limitExceeded("query_depth", maximum, int64(nativejq.ValueDepth(v)))
+		in.stop = tools.CommandLimitExceeded("query_depth", maximum, int64(nativejq.ValueDepth(v)))
 		return false
 	}
 	return true

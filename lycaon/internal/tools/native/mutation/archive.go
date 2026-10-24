@@ -294,7 +294,7 @@ func (inv *invocation) tarReader(archive string) (*tar.Reader, error) {
 	case "tar.bz2":
 		stream = bzip2.NewReader(stream)
 	}
-	return tar.NewReader(&boundedReader{r: stream, remaining: inv.decodeLimit(int64(len(data)))}), nil
+	return tar.NewReader(&boundedReader{r: stream, maximum: inv.decodeLimit(int64(len(data)))}), nil
 }
 
 func (inv *invocation) tarList(archive string, strip int) error {
@@ -473,7 +473,7 @@ func (inv *invocation) unzipList(zr *zip.Reader) error {
 }
 
 func (inv *invocation) unzipPipe(zr *zip.Reader, members []string, maximum int64) error {
-	reader := &boundedReader{remaining: maximum}
+	reader := &boundedReader{maximum: maximum}
 	for _, f := range zr.File {
 		if strings.HasSuffix(f.Name, "/") || (len(members) > 0 && !containsName(members, f.Name)) {
 			continue
@@ -499,20 +499,6 @@ func containsName(names []string, name string) bool {
 		}
 	}
 	return false
-}
-
-// boundedReader refuses decoded bytes past the expansion ceiling.
-type boundedReader struct {
-	r         io.Reader
-	remaining int64
-}
-
-func (b *boundedReader) Read(p []byte) (int, error) {
-	n, err := b.r.Read(p)
-	if b.remaining -= int64(n); b.remaining < 0 {
-		return 0, limitRefusal("archive_extract_bytes", "bytes", 0, -b.remaining)
-	}
-	return n, err
 }
 
 // runGzip replaces each PATH with PATH.gz; the original is removed through
@@ -544,8 +530,8 @@ func runGzip(inv *invocation) error {
 }
 
 func runGunzip(inv *invocation) error {
-	if len(inv.operands()) == 0 {
-		return inv.usage(inv.name(), "at least one PATH")
+	if len(inv.operands()) == 0 || inv.flag("-c") {
+		return runZcat(inv)
 	}
 	return inv.each(inv.operands(), func(operand string) (int, error) {
 		output, ok := strings.CutSuffix(operand, ".gz")
@@ -575,7 +561,7 @@ func (inv *invocation) gunzipBytes(data []byte) ([]byte, error) {
 		return nil, err
 	}
 	defer func() { _ = gz.Close() }()
-	return io.ReadAll(&boundedReader{r: gz, remaining: inv.decodeLimit(int64(len(data)))})
+	return io.ReadAll(&boundedReader{r: gz, maximum: inv.decodeLimit(int64(len(data)))})
 }
 
 // replaceCompressed publishes the new file, refusing to replace an existing
@@ -595,26 +581,13 @@ func (inv *invocation) replaceCompressed(input, output string, data []byte) (int
 
 func runZcat(inv *invocation) error {
 	if len(inv.operands()) == 0 {
-		data, err := io.ReadAll(io.LimitReader(inv.input, inv.owners.limit("archive_input_bytes")+1))
-		if err != nil {
-			return err
-		}
-		if int64(len(data)) > inv.owners.limit("archive_input_bytes") {
-			return limitRefusal("archive_input_bytes", "bytes", inv.owners.limit("archive_input_bytes"), int64(len(data)))
-		}
-		decoded, err := inv.gunzipBytes(data)
-		if err != nil {
-			return err
-		}
-		_, err = inv.stdout.Write(decoded)
-		return err
+		return inv.gunzipStream(inv.input, -1)
 	}
 	return inv.each(inv.operands(), func(operand string) (int, error) {
-		decoded, err := inv.gunzipFile(operand)
+		data, _, err := inv.readBound(operand, inv.owners.limit("archive_input_bytes"), "archive_input_bytes")
 		if err != nil {
 			return 0, err
 		}
-		_, err = inv.stdout.Write(decoded)
-		return 0, err
+		return 0, inv.gunzipStream(bytes.NewReader(data), int64(len(data)))
 	})
 }

@@ -21,13 +21,13 @@ func SubstitutionDepth(ctx context.Context) int {
 // substitute runs one reached unit and returns its scalar output: trailing LF
 // bytes stripped, NUL refused. Ordinary nonzero status is data for the
 // evaluator; a port error or host stop fails the containing word.
-func (e *WordExpander) substitute(r *expansionRun, part commandsurface.SubstitutionPart) (string, error) {
-	depth := SubstitutionDepth(r.ctx) + 1
+func (e *WordExpander) substitute(ctx context.Context, r *expansionRun, part commandsurface.SubstitutionPart) (string, error) {
+	depth := SubstitutionDepth(ctx) + 1
 	if int64(depth) > e.limits.substitutionDepth {
 		return "", e.limits.exceeded("substitution_depth", int64(depth), part.Span)
 	}
-	output := &substitutionOutput{run: r, maximum: e.limits.substitutionBytes, span: part.Span}
-	ctx := context.WithValue(r.ctx, substitutionDepthKey{}, depth)
+	output := &substitutionOutput{charge: func(n int64) error { return r.charge(ctx, n) }, run: r, maximum: e.limits.substitutionBytes, span: part.Span}
+	ctx = context.WithValue(ctx, substitutionDepthKey{}, depth)
 	result, err := e.substitutions.Substitute(ctx, r.scope, SubstitutionRequest{Unit: part, Depth: depth}, output)
 	if refusal := output.refusal(); refusal != nil {
 		return "", refusal
@@ -45,7 +45,7 @@ func (e *WordExpander) substitute(r *expansionRun, part commandsurface.Substitut
 	if bytes.IndexByte(text, 0) >= 0 {
 		return "", invalidValue(part.Span, "substitution output without NUL bytes")
 	}
-	if err := r.charge(int64(len(text))); err != nil {
+	if err := r.charge(ctx, int64(len(text))); err != nil {
 		return "", err
 	}
 	return string(text), nil
@@ -54,6 +54,7 @@ func (e *WordExpander) substitute(r *expansionRun, part commandsurface.Substitut
 // substitutionOutput retains one unit's stdout under substitution_bytes and
 // the run's memory admission; the first refused write latches.
 type substitutionOutput struct {
+	charge  func(int64) error
 	run     *expansionRun
 	maximum int64
 	span    toolcontract.SourceSpan
@@ -74,7 +75,7 @@ func (o *substitutionOutput) Write(p []byte) (int, error) {
 		o.refused = o.run.expander.limits.exceeded("substitution_bytes", observed, o.span)
 		return 0, o.refused
 	}
-	if err := o.run.charge(int64(len(p))); err != nil {
+	if err := o.charge(int64(len(p))); err != nil {
 		o.refused = err
 		return 0, err
 	}
