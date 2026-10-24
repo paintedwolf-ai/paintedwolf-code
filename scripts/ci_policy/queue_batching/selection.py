@@ -32,6 +32,7 @@ def identity(base, sources):
 def held(pull, files, policy):
     return (HOLD in pull.get('labels', [])
             or any(fnmatchcase(pull['headRefName'], pattern) for pattern in policy['held_branches'])
+            or any(path.startswith('.github/workflows/') for path in files)
             or any(fnmatchcase(path, pattern) for path in files for pattern in policy['held_paths']))
 
 

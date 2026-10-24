@@ -38,6 +38,12 @@ class SelectionTests(unittest.TestCase):
         self.assertEqual(s.select(entries(), POLICY, lambda n: [], {(4, SHA)}), [])
         self.assertEqual(len(s.select(entries(), POLICY, lambda n: [], {(4, OTHER)})), 4)
 
+    def test_workflow_changes_stay_individual_and_preserve_queue_order(self):
+        for path in ('.github/workflows/release.yml', '.github/workflows/ci.yaml'):
+            with self.subTest(path=path):
+                self.assertEqual(s.select(entries(), POLICY, lambda n: [path] if n == 4 else [], set()), [])
+        self.assertEqual(len(s.select(entries(), POLICY, lambda n: ['.github/actions/setup/action.yml'], set())), 4)
+
     def test_manifest_round_trip_binds_exact_heads_and_rejects_missing_identity(self):
         record = {'version': 1, 'batch_head': SHA, 'sources': [row(3), row(4)]}
         self.assertEqual(s.manifest(c.describe(record)), record)
@@ -156,6 +162,19 @@ class LifecycleTests(unittest.TestCase):
         self.assertTrue(any('/dco.yml/' in path for path in dispatches))
         self.assertEqual(calls[-1][:3], ['git', 'worktree', 'remove'])
 
+    def test_combined_workflow_change_is_rejected_before_push_or_withdrawal(self):
+        calls = []
+        def command(args, cwd=None):
+            calls.append(args)
+            return '.github/workflows/release.yml' if args[1] == 'diff' else ''
+        with patch.object(c, 'command', side_effect=command), patch.object(c, 'api', return_value={'object': {'sha': SHA}}), \
+             patch.object(gh, 'queue', return_value=entries()), patch.object(c, 'source', side_effect=lambda repo, n: row(n)), \
+             patch.object(gh, 'withdraw') as withdraw:
+            self.assertIsNone(c.build('o/r', [row(3), row(4)], 2))
+            withdraw.assert_not_called()
+        self.assertFalse(any(args[1] == 'push' for args in calls))
+        self.assertEqual(calls[-1][:3], ['git', 'worktree', 'remove'])
+
     def test_source_becoming_active_during_build_is_never_withdrawn(self):
         snapshot = entries()
         snapshot[2]['state'] = 'AWAITING_CHECKS'
@@ -178,7 +197,7 @@ class LifecycleTests(unittest.TestCase):
             if path.endswith('/dispatches'):
                 raise RuntimeError('dispatch unavailable')
             return pull
-        with patch.object(c, 'command', return_value=SHA), patch.object(c, 'api', side_effect=api), \
+        with patch.object(c, 'command', side_effect=lambda args, cwd=None: '' if args[1] == 'diff' else SHA), patch.object(c, 'api', side_effect=api), \
              patch.object(gh, 'queue', return_value=entries()), patch.object(c, 'source', side_effect=lambda repo, n: row(n)), \
              patch.object(gh, 'withdraw'), patch.object(gh, 'mutation'), patch.object(c, 'dissolve') as dissolve:
             with self.assertRaisesRegex(RuntimeError, 'dispatch unavailable'):

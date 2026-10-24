@@ -105,6 +105,12 @@ def build(repository, rows, entries):
                     return None
                 if not unchanged(source(repository, row['number']), row):
                     return None
+            # The Actions token cannot publish workflow changes. Recheck the
+            # actual combined tree before any push or source withdrawal.
+            workflows = command(['git', 'diff', '--name-only', base, 'HEAD',
+                                 '--', '.github/workflows/'], checkout)
+            if workflows:
+                return None
             record['batch_head'] = command(['git', 'rev-parse', 'HEAD'], checkout)
             command(['git', 'push', 'origin', f'HEAD:refs/heads/{branch}'], checkout)
             pull = api(f'repos/{repository}/pulls', 'POST', {
@@ -150,7 +156,8 @@ def run(repository, policy):
     if not rows:
         return {'state': 'no_waiting_batch'}
     try:
-        return {'state': 'created', 'url': build(repository, rows, policy['preserve_front'])}
+        url = build(repository, rows, policy['preserve_front'])
+        return {'state': 'created', 'url': url} if url else {'state': 'individual_fallback'}
     except subprocess.CalledProcessError:
         # A source conflict leaves original admissions intact and requires no
         # interactive resolution. Their normal queue checks remain authoritative.
