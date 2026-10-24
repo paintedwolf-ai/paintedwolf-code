@@ -15,6 +15,40 @@ def info(*, inode=2, uid=0, mode=stat.S_IFREG | 0o755):
 
 
 class NativeDesktopAuthorityTests(unittest.TestCase):
+    def test_reader_closes_all_private_connections_idempotently_even_after_failure(self):
+        reader = Reader.__new__(Reader)
+        reader.closed = False
+        closed = []
+        def failing(_):
+            closed.append('user')
+            raise ValueError('fixture close failure')
+        reader.user = SimpleNamespace(close_sync=failing)
+        reader.system = SimpleNamespace(close_sync=lambda _: closed.append('system'))
+        with self.assertRaises(ValueError):
+            reader.close()
+        reader.close()
+        self.assertEqual(closed, ['user', 'system'])
+        self.assertIsNone(reader.system)
+        self.assertIsNone(reader.user)
+
+    def test_shell_owner_closes_owned_reader_on_failure_and_leaves_borrowed_reader_open(self):
+        class OwnedReader:
+            closes = 0
+            def __enter__(self):
+                return self
+            def __exit__(self, *_):
+                self.closes += 1
+            def call(self, *args, **kwargs):
+                return SimpleNamespace(unpack=lambda: (123,))
+        reader = OwnedReader()
+        with patch.object(gnome, 'Reader', return_value=reader):
+            with self.assertRaises(ValueError):
+                gnome.owner()
+        self.assertEqual(reader.closes, 1)
+        with self.assertRaises(ValueError):
+            gnome.owner(reader)
+        self.assertEqual(reader.closes, 1)
+
     def test_selected_image_requires_every_physical_root_controlled_parent(self):
         image = info()
         directory = info(mode=stat.S_IFDIR | 0o755)

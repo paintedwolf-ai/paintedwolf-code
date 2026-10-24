@@ -1,5 +1,8 @@
 """Graphical execution is an actual session or an attested user-manager unit."""
 import unittest
+from unittest.mock import patch
+
+from linux_release.installed_cases import logind_context as owner
 
 from linux_release.installed_cases.logind_context import observed, CallFailure, LOGIN, CaseUnavailable
 
@@ -33,6 +36,19 @@ class Reader:
 
 
 class ExecutionContextTests(unittest.TestCase):
+    def test_execution_context_closes_its_owned_reader_on_observation_failure(self):
+        closed = []
+        class OwnedReader:
+            def __enter__(self):
+                return self
+            def __exit__(self, *_):
+                closed.append(True)
+        with patch.object(owner, 'Reader', return_value=OwnedReader()), patch.object(
+                owner, 'observed', side_effect=ValueError('fixture observation failed')):
+            with self.assertRaises(ValueError):
+                owner.execution_session()
+        self.assertEqual(closed, [True])
+
     def test_direct_remote_session_cannot_be_replaced_with_local_user_display(self):
         reader = Reader()
         reader.values['Remote'] = True
