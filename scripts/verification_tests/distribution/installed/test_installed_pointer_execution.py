@@ -95,7 +95,7 @@ class PointerDeliveryTests(unittest.TestCase):
             self.assertEqual(receipt['qmp_ack'], {'id': 2, 'return': {}})
             self.assertEqual(receipt['event_sha256'], protocol.event_sha256(OPERATION, ordinal))
         self.assertEqual(self.inputs(actor), [step.qmp_events() for step in SEQUENCE])
-        self.assertEqual(actor.display.call_count, 2)
+        self.assertEqual(actor.display.call_count, 3)
         self.assertFalse(actor.pointer_down)
         self.assertFalse(actor.pointer_cleanup['attempted'])
 
@@ -124,6 +124,25 @@ class PointerDeliveryTests(unittest.TestCase):
             self.send(actor, 2)
         actor.close()
         self.assertEqual(actor.command.call_count, before)
+
+    def test_resize_after_initial_move_never_presses_the_changed_display(self):
+        actor = self.actor(); self.send(actor, 0)
+        actor.display.return_value = (1280, 800)
+        with self.assertRaises(ValueError):
+            self.send(actor, 1)
+        self.assertEqual(self.inputs(actor), [SEQUENCE[0].qmp_events()])
+        self.assertFalse(actor.pointer_cleanup['attempted'])
+        self.assertTrue(actor.failed)
+
+    def test_resize_during_drag_never_maps_a_later_move_into_changed_geometry(self):
+        sequence = (*SEQUENCE[:2], pointer.PointerStep(('@move', 500, 500), MODE), SEQUENCE[2])
+        with patch.object(qemu, 'steps', return_value=sequence), patch.object(protocol, 'steps', return_value=sequence):
+            actor = self.actor(); self.send(actor, 0); self.send(actor, 1)
+            actor.display.return_value = (1280, 800)
+            with self.assertRaises(ValueError):
+                self.send(actor, 2)
+        self.assertEqual(self.inputs(actor), [step.qmp_events() for step in SEQUENCE])
+        self.assertTrue(actor.pointer_cleanup['acknowledged'])
 
     def test_invalid_ordinal_or_overlap_after_press_cleans_up_without_more_input(self):
         for ordinal, transaction in ((1, 'b' * 32), (0, 'c' * 32)):
