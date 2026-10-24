@@ -172,13 +172,32 @@ def task_command(stage):
     return ["./task", "--force", *stage["arguments"]]
 
 
+def direct_packages(stage):
+    """Resolve a direct invocation before partitioning, as shared admission does."""
+    shard = os.environ.get("PW_GO_SHARD", "")
+    if not shard:
+        return stage["packages"]
+    result = subprocess.run(list_arguments(stage), cwd=Path(__file__).resolve().parents[1] / "lycaon",
+                            text=True, capture_output=True, check=True)
+    records = list(json_stream(result.stdout))
+    if not records or any(row.get("Error") or row.get("DepsErrors") for row in records):
+        raise ValueError("direct shard requires complete Go package metadata")
+    packages = sorted({row["ImportPath"] for row in records
+                       if not stage["exclude"] or not re.search(stage["exclude"], row["ImportPath"])})
+    if not packages:
+        raise ValueError("direct shard selection matched no packages")
+    selected = shard_packages(packages, shard, measured_durations())
+    print("verification shard: " + json.dumps({"shard": shard, "packages": selected}), flush=True)
+    return selected
+
+
 def direct(names, cli):
     """Execute the catalog for nested or exclusive invocations, honouring the same selection."""
     for stage in expand(names, cli):
         if stage["kind"] == "task":
             command = task_command(stage)
         else:
-            command = digest_command(stage, stage["packages"])
+            command = digest_command(stage, direct_packages(stage))
             if stage["exclude"]:
                 index = command.index("--name")
                 command[index:index] = ["--exclude-pkg", stage["exclude"]]

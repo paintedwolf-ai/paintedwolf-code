@@ -7,6 +7,7 @@ from unittest.mock import patch
 from ci_policy import hosted_execution as ci
 from ci_policy import hosted_plan
 from verification_execute import shard_packages
+import verification_execute as execution
 
 
 class HostedExecutionTests(unittest.TestCase):
@@ -26,6 +27,31 @@ class HostedExecutionTests(unittest.TestCase):
                 self.assertEqual(environment["PW_TEST_WORKERS"], str(lane["workers"]))
             with self.assertRaises(ValueError):
                 ci.run_lane("behavior")
+
+    def test_captured_direct_execution_partitions_the_actual_go_packages(self):
+        stage = {"kind": "go", "packages": ["./..."], "exclude": "", "options": [], "flags": []}
+        records = "".join(json.dumps({"ImportPath": name}) for name in ["module/a", "module/b", "module/c", "module/d"])
+        partitions = []
+        for shard in ["1/2", "2/2"]:
+            with patch.dict(execution.os.environ, {"PW_GO_SHARD": shard, "PW_SOURCE_SNAPSHOT_COMMIT": "a" * 40}), \
+                    patch.object(execution, "expand", return_value=[stage]), \
+                    patch.object(execution.subprocess, "run", return_value=type("Result", (), {"stdout": records})()), \
+                    patch.object(execution, "digest_command", return_value=["digest"]) as digest, \
+                    patch.object(execution, "run_direct", return_value=0):
+                self.assertEqual(execution.direct(["test:full"], []), 0)
+                partitions.append(set(digest.call_args.args[1]))
+        self.assertFalse(partitions[0] & partitions[1])
+        self.assertEqual(partitions[0] | partitions[1], {"module/a", "module/b", "module/c", "module/d"})
+
+    def test_direct_shard_refuses_incomplete_metadata_before_starting_tests(self):
+        stage = {"kind": "go", "packages": ["./..."], "exclude": "", "options": [], "flags": []}
+        for records in ["", '{"ImportPath":"module/a","DepsErrors":[{}]}']:
+            with patch.dict(execution.os.environ, {"PW_GO_SHARD": "1/2"}), \
+                    patch.object(execution.subprocess, "run", return_value=type("Result", (), {"stdout": records})()), \
+                    self.assertRaises(ValueError):
+                execution.direct_packages(stage)
+        with patch.dict(execution.os.environ, {"PW_GO_SHARD": ""}):
+            self.assertEqual(execution.direct_packages(stage), ["./..."])
 
     def test_lane_uses_task_admission_and_preserves_the_verdict(self):
         with tempfile.TemporaryDirectory() as directory:
