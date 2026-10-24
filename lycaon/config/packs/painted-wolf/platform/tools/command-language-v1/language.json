@@ -152,7 +152,7 @@
     },
     {
       "id": "archive_expansion_ratio",
-      "maximum": 1000,
+      "maximum": 100,
       "unit": "ratio",
       "scope": "operation",
       "exceeded": "COMMAND_LIMIT_EXCEEDED",
@@ -166,7 +166,7 @@
     },
     {
       "id": "archive_extract_bytes",
-      "maximum": 52428800,
+      "maximum": 134217728,
       "unit": "bytes",
       "scope": "operation",
       "exceeded": "COMMAND_LIMIT_EXCEEDED",
@@ -180,7 +180,7 @@
     },
     {
       "id": "archive_extract_entries",
-      "maximum": 500,
+      "maximum": 25000,
       "unit": "entries",
       "scope": "operation",
       "exceeded": "COMMAND_LIMIT_EXCEEDED",
@@ -838,7 +838,7 @@
     },
     {
       "id": "traversal_visits",
-      "maximum": 100000,
+      "maximum": 250000,
       "unit": "entries",
       "scope": "program",
       "exceeded": "COMMAND_LIMIT_EXCEEDED",

@@ -61,7 +61,7 @@ func Usage(spec toolcontract.CommandSpecification, word commandprogram.Field, ex
 
 // ResourceUnit returns the catalog unit for a resource limit id.
 func ResourceUnit(id string) string {
-	if catalog, err := toolcontract.LanguageV1(); err == nil {
+	if catalog, err := toolcontract.ReadOnlyLanguageV1(); err == nil {
 		for _, limit := range catalog.Language.Limits {
 			if limit.ID == id && limit.Unit != "" {
 				return limit.Unit

@@ -74,7 +74,7 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	defer end()
 	bound := effect.Operation
 	definition, invocation := bound.Definition(), bound.Invocation()
-	facts := definition.Facts()
+	facts := definition.ReadOnlyFacts()
 	boundaryStarted := false
 	ownerStarted := false
 	defer func() {

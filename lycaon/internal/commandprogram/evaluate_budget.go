@@ -27,7 +27,7 @@ type evaluationLimits map[string]int64
 var evaluationLimitIDs = []string{"statement_visits", "loop_iterations", "function_depth", "source_depth", "child_executions", "concurrent_processes", "trace_events", "trace_bytes", "pipeline_stages", "stream_bytes"}
 
 var catalogEvaluationLimits = sync.OnceValues(func() (evaluationLimits, error) {
-	catalog, err := toolcontract.LanguageV1()
+	catalog, err := toolcontract.ReadOnlyLanguageV1()
 	if err != nil {
 		return nil, err
 	}
@@ -118,9 +118,6 @@ func (f *frame) beginRecorded(ctx context.Context, loc commandsurface.SyntaxLoca
 // reserved until close records exactly one settlement.
 func (f *frame) begin(loc commandsurface.SyntaxLocation, command string) (*childRun, error) {
 	e := f.e
-	if err := e.charge(f, loc, "child_executions", 1); err != nil {
-		return nil, err
-	}
 	e.mu.Lock()
 	events := e.traceEvents + (e.live+2)*settlementEvents
 	bytes := e.traceBytes + (e.live+2)*settlementBytes

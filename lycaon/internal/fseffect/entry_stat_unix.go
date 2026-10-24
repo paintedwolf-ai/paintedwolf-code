@@ -45,6 +45,21 @@ func (r *ReadRoot) Stat(rel string, follow bool, admit func(string) error) (Entr
 	return out, err
 }
 
+// StatChildAt reports an immediate child's no-follow metadata through a held
+// contained directory descriptor.
+func (r *ReadRoot) StatChildAt(dir *os.File, _ string, name string, admit func(string) error) (EntryStat, error) {
+	var st unix.Stat_t
+	if err := unix.Fstatat(int(dir.Fd()), name, &st, unix.AT_SYMLINK_NOFOLLOW); err != nil {
+		return EntryStat{}, &fs.PathError{Op: "open effect path", Path: name, Err: err}
+	}
+	if admit != nil {
+		if err := admit(filepath.Join(dir.Name(), name)); err != nil {
+			return EntryStat{}, err
+		}
+	}
+	return entryStat(name, &st), nil
+}
+
 func entryStat(name string, st *unix.Stat_t) EntryStat {
 	mode := fs.FileMode(st.Mode & 0o777)
 	switch st.Mode & unix.S_IFMT {

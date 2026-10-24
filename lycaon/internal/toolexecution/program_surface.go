@@ -41,7 +41,7 @@ func (e *Metadata) SelectNativeOperations(ctx context.Context, filter platform.T
 		if err := definition.ValidateNativeCommands(); err != nil {
 			return NativeOperationSelection{}, err
 		}
-		facts := definition.Facts()
+		facts := definition.ReadOnlyFacts()
 		if seen[facts.Identity] {
 			return NativeOperationSelection{}, fmt.Errorf("duplicate native operation %q", facts.Identity)
 		}

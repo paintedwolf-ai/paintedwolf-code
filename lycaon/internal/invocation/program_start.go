@@ -145,7 +145,7 @@ func insertProgramChild(ctx context.Context, tx *sql.Tx, in toolcontract.Program
 	if err = validateChildParent(ctx, tx, in); err != nil {
 		return err
 	}
-	facts := in.Definition.Facts()
+	facts := in.Definition.ReadOnlyFacts()
 	identity := in.Invocation.Identity
 	scope, err := json.Marshal(in.Invocation.Scope)
 	if err != nil {
@@ -159,7 +159,16 @@ func insertProgramChild(ctx context.Context, tx *sql.Tx, in toolcontract.Program
 		}
 		gap = string(encoded)
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO invocation_program_executions (id,program_id,node_id,ordinal,parent_execution_id,actor_id,scope_json,operation_id,definition_digest,definition_json,arguments_representation,arguments_digest,arguments_ref,canonical,state,owner,lifecycle,native_gap_json,started_at) VALUES (?,?,?,(SELECT COALESCE(MAX(ordinal),0)+1 FROM invocation_program_executions WHERE program_id=?),?,?,?,?,?,?,?,?,?,?,'prepared',?,?,?,?)`, identity.ExecutionID, identity.ProgramID, identity.NodeID, identity.ProgramID, identity.ParentExecutionID, in.Invocation.ActorID, string(scope), facts.Identity, in.Definition.Digest(), in.Definition.Serialized(), in.ExpandedInputs.Representation(), in.ExpandedInputs.ArgumentsDigest(), in.ArgumentsReference, in.Canonical, facts.Contract.Owner, facts.Contract.Lifecycle.String(), gap, time.Now().UTC().Format(time.RFC3339Nano))
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if in.StartOwner != nil {
+		classes, err := json.Marshal(in.StartOwner.Effects().Classes())
+		if err != nil {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, `INSERT INTO invocation_program_executions (id,program_id,node_id,ordinal,parent_execution_id,actor_id,scope_json,operation_id,definition_digest,definition_json,arguments_representation,arguments_digest,arguments_ref,canonical,state,owner_started,effect_certainty,reviewed_arguments_digest,reviewed_arguments_ref,reviewed_arguments_representation,native_command,effect_mode,effect_classes_json,owner,lifecycle,native_gap_json,started_at) VALUES (?,?,?,(SELECT COALESCE(MAX(ordinal),0)+1 FROM invocation_program_executions WHERE program_id=?),?,?,?,?,?,?,?,?,?,?,'running',1,'unknown',?,?,?,?,?,?,?,?,?,?)`, identity.ExecutionID, identity.ProgramID, identity.NodeID, identity.ProgramID, identity.ParentExecutionID, in.Invocation.ActorID, string(scope), facts.Identity, in.Definition.Digest(), in.Definition.Serialized(), in.ExpandedInputs.Representation(), in.ExpandedInputs.ArgumentsDigest(), in.ArgumentsReference, in.Canonical, in.ExpandedInputs.ArgumentsDigest(), in.ArgumentsReference, in.ExpandedInputs.Representation(), in.StartOwner.Command(), in.StartOwner.Mode(), string(classes), facts.Contract.Owner, facts.Contract.Lifecycle.String(), gap, now)
+	} else {
+		_, err = tx.ExecContext(ctx, `INSERT INTO invocation_program_executions (id,program_id,node_id,ordinal,parent_execution_id,actor_id,scope_json,operation_id,definition_digest,definition_json,arguments_representation,arguments_digest,arguments_ref,canonical,state,owner,lifecycle,native_gap_json,started_at) VALUES (?,?,?,(SELECT COALESCE(MAX(ordinal),0)+1 FROM invocation_program_executions WHERE program_id=?),?,?,?,?,?,?,?,?,?,?,'prepared',?,?,?,?)`, identity.ExecutionID, identity.ProgramID, identity.NodeID, identity.ProgramID, identity.ParentExecutionID, in.Invocation.ActorID, string(scope), facts.Identity, in.Definition.Digest(), in.Definition.Serialized(), in.ExpandedInputs.Representation(), in.ExpandedInputs.ArgumentsDigest(), in.ArgumentsReference, in.Canonical, facts.Contract.Owner, facts.Contract.Lifecycle.String(), gap, now)
+	}
 	if err != nil {
 		return fmt.Errorf("prepare program child: %w", err)
 	}
@@ -171,17 +180,23 @@ func insertProgramChild(ctx context.Context, tx *sql.Tx, in toolcontract.Program
 }
 
 func validateChildParent(ctx context.Context, tx *sql.Tx, in toolcontract.ProgramChildStart) error {
-	var parent, root, session, state, catalog, unit string
+	var parent, root, session, state, catalog, unit, receiptStatus, receiptToolCall string
 	var start, end int64
 	var line, column int
 	id := in.Invocation.Identity
-	err := tx.QueryRowContext(ctx, `SELECT p.parent_receipt_id,p.root_execution_id,r.session_id,p.state,p.catalog_digest,n.source_unit_id,n.start_byte,n.end_byte,n.line,n.column_number FROM invocation_programs p JOIN invocation_receipts r ON r.id=p.parent_receipt_id JOIN invocation_program_nodes n ON n.program_id=p.id AND n.node_id=? WHERE p.id=? AND p.syntax_validated=1`, id.NodeID, id.ProgramID).Scan(&parent, &root, &session, &state, &catalog, &unit, &start, &end, &line, &column)
+	err := tx.QueryRowContext(ctx, `SELECT p.parent_receipt_id,p.root_execution_id,r.session_id,p.state,p.catalog_digest,n.source_unit_id,n.start_byte,n.end_byte,n.line,n.column_number,r.status,r.tool_call_id FROM invocation_programs p JOIN invocation_receipts r ON r.id=p.parent_receipt_id JOIN invocation_program_nodes n ON n.program_id=p.id AND n.node_id=? WHERE p.id=? AND p.syntax_validated=1`, id.NodeID, id.ProgramID).Scan(&parent, &root, &session, &state, &catalog, &unit, &start, &end, &line, &column, &receiptStatus, &receiptToolCall)
 	if err != nil {
 		return fmt.Errorf("child program identity: %w", err)
 	}
 	v := in.Invocation
 	if parent != in.ParentReceiptID || session != v.SessionID || catalog != v.CatalogDigest || unit != v.SourceUnitID || start != int64(v.Span.StartByte) || end != int64(v.Span.EndByte) || line != v.Span.Line || column != v.Span.Column || (state != "running" && state != "waiting") {
 		return fmt.Errorf("child differs from its retained program")
+	}
+	if in.StartOwner != nil {
+		ownerIn := in.StartOwner.Invocation()
+		if in.ModelToolCallID == "" || receiptStatus != "running" || receiptToolCall != in.ModelToolCallID || ownerIn.Identity != v.Identity || ownerIn.ActorID != v.ActorID || ownerIn.Scope != v.Scope || in.StartOwner.Definition().Digest() != in.Definition.Digest() {
+			return fmt.Errorf("child owner start differs from its retained program")
+		}
 	}
 	if id.ParentExecutionID == root {
 		return nil

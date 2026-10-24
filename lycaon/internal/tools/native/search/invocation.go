@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
@@ -37,6 +38,7 @@ type invocation struct {
 	noMatchPublishes bool
 	effects          toolcontract.EffectCertainty
 	pins             []toolcontract.ExecutionRevision
+	flushedPins      int
 }
 
 func newInvocation(ctx context.Context, p Prepared, tc tools.ToolContext, streams commandprogram.Streams) *invocation {
@@ -49,6 +51,7 @@ func newInvocation(ctx context.Context, p Prepared, tc tools.ToolContext, stream
 		inv.stderr = io.Discard
 	}
 	inv.out = newOutput(ctx, streams.Output, p.owners.streamBytes())
+	inv.out.beforeWrite = inv.flushPins
 	return inv
 }
 
@@ -147,14 +150,38 @@ func patternRejection(err error) error {
 	return err
 }
 
+const searchPinBatchSize = 1024
+
 // recordPin retains every capture of this execution before its bytes are used.
 func (inv *invocation) recordPin(revision toolcontract.ExecutionRevision) error {
 	execution := inv.request.Invocation.Identity.ExecutionID
 	if inv.owners.Pins == nil || execution == "" {
 		return fmt.Errorf("search reads require a program execution and pin recorder")
 	}
+	if err := revision.Validate(); err != nil {
+		return err
+	}
 	inv.pins = append(inv.pins, revision)
-	return inv.owners.Pins.RecordRevisionPins(inv.ctx, execution, len(inv.pins)-1, inv.pins[len(inv.pins)-1:])
+	if len(inv.pins)%searchPinBatchSize == 0 || len(inv.pins)-inv.flushedPins >= searchPinBatchSize {
+		return inv.flushPins()
+	}
+	return nil
+}
+
+func (inv *invocation) flushPins() error {
+	if len(inv.pins) <= inv.flushedPins {
+		return nil
+	}
+	execution := inv.request.Invocation.Identity.ExecutionID
+	if inv.owners.Pins == nil || execution == "" {
+		return fmt.Errorf("search reads require a program execution and pin recorder")
+	}
+	first := inv.flushedPins
+	if err := inv.owners.Pins.RecordRevisionPins(inv.ctx, execution, first, inv.pins[first:]); err != nil {
+		return err
+	}
+	inv.flushedPins = len(inv.pins)
+	return nil
 }
 
 // capture pins one file operand's exact bytes before any are searched.
@@ -169,6 +196,25 @@ func (inv *invocation) capturePinned(bound projectpaths.BoundPath) ([]byte, *too
 	if err != nil {
 		return nil, nil, err
 	}
+	return inv.finishCaptured(bound, captured)
+}
+
+func (inv *invocation) captureWalkedPinned(e entry, w *walker) ([]byte, *toolcontract.SourcePin, error) {
+	if e.depth == 0 || e.link || e.bound.Resolved.External || w == nil {
+		return inv.capturePinned(e.bound)
+	}
+	root := w.readRoot(e.bound)
+	if root == nil {
+		return inv.capturePinned(e.bound)
+	}
+	captured, err := inv.owners.Revisions.CaptureWalkedBytes(inv.ctx, inv.tc, e.bound.Resolved, root, inv.owners.readBytes())
+	if err != nil {
+		return nil, nil, err
+	}
+	return inv.finishCaptured(e.bound, captured)
+}
+
+func (inv *invocation) finishCaptured(bound projectpaths.BoundPath, captured native.ExecutionBytes) ([]byte, *toolcontract.SourcePin, error) {
 	// A credential file's bytes reach no stream until their exposure is recorded.
 	if err := inv.tc.ObserveCredentialRead(inv.ctx, bound.Resolved.Abs, captured.Path, string(captured.Bytes)); err != nil {
 		return nil, nil, fmt.Errorf("record credential file read: %w", err)
@@ -198,6 +244,9 @@ func (inv *invocation) readAll(r io.Reader) ([]byte, error) {
 
 // settle projects the run onto the producer contract.
 func (inv *invocation) settle(err error) (toolcontract.ProducerResult, error) {
+	if flushErr := inv.flushPins(); flushErr != nil && err == nil {
+		err = flushErr
+	}
 	err = projectpaths.WithPathRejection(patternRejection(err), inv.request.Invocation.Span)
 	if err != nil {
 		result := toolcontract.ProducerResult{Status: inv.failure, Terminal: toolcontract.ProducerFailed, EffectCertainty: inv.effects}
@@ -228,6 +277,7 @@ func (inv *invocation) settle(err error) (toolcontract.ProducerResult, error) {
 type output struct {
 	ctx              context.Context
 	w                io.Writer
+	beforeWrite      func() error
 	mappings         commandprogram.SourceMappingRecorder
 	pending          *toolcontract.StreamSourceMapping
 	maximum, written int64
@@ -278,6 +328,11 @@ func (o *output) flush() error {
 }
 
 func (o *output) Write(p []byte) (int, error) {
+	if len(p) > 0 && o.beforeWrite != nil {
+		if err := o.beforeWrite(); err != nil {
+			return 0, err
+		}
+	}
 	return nativeutility.WriteChunked(o.ctx, o.w, o.maximum, &o.written, p)
 }
 

@@ -48,7 +48,7 @@ func NewOwners(host HostFacts, clock func() time.Time, boundary *sandbox.Boundar
 	if host == nil || clock == nil {
 		return nil, errors.New("host environment utilities require host facts and a clock")
 	}
-	catalog, err := toolcontract.LanguageV1()
+	catalog, err := toolcontract.ReadOnlyLanguageV1()
 	if err != nil {
 		return nil, err
 	}

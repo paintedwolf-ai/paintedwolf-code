@@ -19,10 +19,11 @@ func BindOperation(definition OperationDefinition, invocation OperationInvocatio
 	if err := invocation.Validate(); err != nil {
 		return BoundOperation{}, err
 	}
-	if invocation.Kind != ProgramChildInvocation || invocation.CatalogDigest != definition.Facts().CatalogDigest {
+	facts := definition.ReadOnlyFacts()
+	if invocation.Kind != ProgramChildInvocation || invocation.CatalogDigest != facts.CatalogDigest {
 		return BoundOperation{}, fmt.Errorf("native binding requires matching program child catalog")
 	}
-	for _, spec := range definition.Facts().Commands {
+	for _, spec := range facts.Commands {
 		if spec.Name != command {
 			continue
 		}

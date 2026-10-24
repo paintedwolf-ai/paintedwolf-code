@@ -379,6 +379,7 @@ var errQuietMatch = errors.New("quiet match")
 func (r *grepRun) searchOperands() error {
 	inv := r.inv
 	r.walker = newWalker(inv)
+	defer r.walker.close()
 	operands := r.operands
 	implicit := false
 	if len(operands) == 0 {
@@ -526,7 +527,7 @@ func (r *grepRun) searchFile(e entry, names bool) error {
 		r.pruned++
 		return r.searchContent(e.display, nil, nil, names)
 	}
-	content, pin, err := r.inv.capturePinned(e.bound)
+	content, pin, err := r.inv.captureWalkedPinned(e, r.walker)
 	if err != nil {
 		if reason, ok := ordinary(err); ok {
 			r.inv.fail(r.quietErrors, "%s: %s", e.display, reason)

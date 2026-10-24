@@ -54,7 +54,7 @@ var utilities = map[string]utility{
 
 // NewOwners binds the frozen catalog's specifications and operation identities.
 func NewOwners(revisions native.ExecutionRevisions, pins PinRecorder, domain DomainOwners) (*Owners, error) {
-	catalog, err := toolcontract.LanguageV1()
+	catalog, err := toolcontract.ReadOnlyLanguageV1()
 	if err != nil {
 		return nil, err
 	}
