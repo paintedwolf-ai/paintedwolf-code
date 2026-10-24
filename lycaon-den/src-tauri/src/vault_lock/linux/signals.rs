@@ -56,6 +56,32 @@ pub(super) fn screensaver_active(
     reply.child_value(0).get::<bool>()
 }
 
+pub(super) fn name_owner(
+    context: &glib::MainContext,
+    connection: &gio::DBusConnection,
+    name: &str,
+) -> Option<String> {
+    let reply = bus::call(
+        context,
+        connection,
+        Some("org.freedesktop.DBus"),
+        "/org/freedesktop/DBus",
+        "org.freedesktop.DBus",
+        "GetNameOwner",
+        Some(&(name,).to_variant()),
+        CALL_TIMEOUT,
+    )
+    .ok()?;
+    if !reply.is_type(glib::VariantTy::new("(s)").ok()?) {
+        return None;
+    }
+    reply
+        .child_value(0)
+        .str()
+        .filter(|owner| owner.starts_with(':'))
+        .map(str::to_owned)
+}
+
 thread_local! {
     /// Monitors by key, so the bus close handler, which GObject requires to
     /// be thread-safe, carries only a key. It runs on the monitor's context.
@@ -82,9 +108,11 @@ pub(super) fn watch_connection(
             next.system_connected = false;
             next.session = None;
             next.session_error = Some(session::SessionUnavailable::Unreadable);
+            next.logind_owner = None;
         } else {
             next.session_bus_connected = false;
             next.screensaver_locked = None;
+            next.screensaver_owner = None;
         }
         inner.lose(next);
     });
@@ -113,8 +141,10 @@ pub(super) fn watch_owner(
             if system {
                 next.session = None;
                 next.session_error = Some(session::SessionUnavailable::Unreadable);
+                next.logind_owner = None;
             } else {
                 next.screensaver_locked = None;
+                next.screensaver_owner = None;
             }
             inner.lose(next);
         },
@@ -178,6 +208,8 @@ pub(super) fn subscribe_system(
                 next.session = None;
                 next.session_error = Some(session::SessionUnavailable::Unreadable);
                 next.screensaver_locked = None;
+                next.logind_owner = None;
+                next.screensaver_owner = None;
                 inner.refresh_requested.set(true);
             }
             inner.apply(next, LockReason::Sleep);
@@ -233,6 +265,7 @@ pub(super) fn subscribe_system(
                 // The session's identity changed under us.
                 next.session = None;
                 next.session_error = Some(session::SessionUnavailable::Unreadable);
+                next.logind_owner = None;
                 inner.lose(next);
                 return;
             }

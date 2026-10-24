@@ -118,6 +118,12 @@ impl PresenceCommandError {
         }
     }
 
+    fn stepped_away(message: impl Into<String>) -> Self {
+        let mut error = Self::denied(message);
+        error.resolution = Some("step_away".into());
+        error
+    }
+
     fn failed(message: impl Into<String>) -> Self {
         Self {
             code: "presence_failed".into(),
@@ -340,12 +346,22 @@ where
         std::thread::sleep(Duration::from_millis(20));
     }
     require_active_window(window)?;
-    require_current_confirmation(step_away)?;
+    require_challenge_confirmation(
+        step_away,
+        &challenge.challenge_id,
+        expect.purpose,
+        window.label(),
+    )?;
     let signature = state.sign_presence(&challenge.proof_payload, authenticator);
     let (url, body) = complete(&challenge, authenticator, &signature);
     let result = send_json(engine.agent.post(&url), &engine.api_token, body)?;
     require_active_window(window)?;
-    require_current_confirmation(step_away)?;
+    require_challenge_confirmation(
+        step_away,
+        &challenge.challenge_id,
+        expect.purpose,
+        window.label(),
+    )?;
     Ok(result)
 }
 
@@ -377,7 +393,35 @@ fn require_current_confirmation(generation: u64) -> Result<(), PresenceCommandEr
     if crate::vault_lock::confirmation_unchanged(generation) {
         return Ok(());
     }
-    Err(PresenceCommandError::denied("The device locked or suspended during confirmation. Try again."))
+    Err(PresenceCommandError::stepped_away(
+        "The device locked or suspended during confirmation. Try again.",
+    ))
+}
+
+fn require_challenge_confirmation(
+    generation: u64,
+    challenge_id: &str,
+    purpose: &str,
+    window_label: &str,
+) -> Result<(), PresenceCommandError> {
+    match require_current_confirmation(generation) {
+        Ok(()) => Ok(()),
+        Err(error) => {
+            eprintln!(
+                "Step-away presence invalidation: {}",
+                serde_json::json!({
+                    "challenge_id": challenge_id,
+                    "purpose": purpose,
+                    "window_label": window_label,
+                    "generation_before": generation,
+                    "generation_after": crate::vault_lock::confirmation_generation(),
+                    "code": error.code,
+                    "resolution": error.resolution,
+                })
+            );
+            Err(error)
+        }
+    }
 }
 
 fn require_active_window(window: &tauri::Window) -> Result<(), PresenceCommandError> {
@@ -668,8 +712,15 @@ mod tests {
         let generation = crate::vault_lock::confirmation_generation();
         let state = SidecarState::new();
         crate::vault_lock::lock_now(&state, crate::vault_lock::LockReason::Sleep);
-        let error = require_current_confirmation(generation).expect_err("stale confirmation");
+        let error = require_challenge_confirmation(
+            generation,
+            "00000000-0000-4000-8000-000000000001",
+            "reveal",
+            "main",
+        )
+        .expect_err("stale confirmation");
         assert_eq!(error.code, "presence_denied");
+        assert_eq!(error.resolution.as_deref(), Some("step_away"));
     }
 
 }

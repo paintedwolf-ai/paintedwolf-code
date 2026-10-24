@@ -126,6 +126,8 @@ fn an_active_unlocked_session_confirms_and_reports_its_sources() {
         let session = status.session.as_ref().expect("fixture session read");
         assert!(session.active && !session.locked && !session.can_lock);
         assert_eq!(status.screensaver_locked, Some(false));
+        assert!(status.logind_owner.as_deref().is_some_and(|o| o.starts_with(':')));
+        assert!(status.screensaver_owner.as_deref().is_some_and(|o| o.starts_with(':')));
         assert!(h.allowed());
         assert!(h.locks().is_empty());
     });
@@ -317,9 +319,12 @@ fn losing_the_logind_owner_locks_and_recovers_on_refresh() {
     let harness = Harness::new(&fixture.system, &fixture.desktop);
     harness.run(|h| {
         h.monitor.refresh();
+        let initial_owner = h.monitor.status().logind_owner.clone();
+        assert!(initial_owner.as_deref().is_some_and(|o| o.starts_with(':')));
         fixture.logind().release(session::NAME);
         h.pump_until("owner loss", |h| !h.allowed());
         assert!(h.locks().contains(&LockReason::ScreenLocked));
+        assert_eq!(h.monitor.status().logind_owner, None);
         assert_eq!(
             h.monitor.status().session_error,
             Some(session::SessionUnavailable::Unreadable)
@@ -333,6 +338,9 @@ fn losing_the_logind_owner_locks_and_recovers_on_refresh() {
             h.monitor.tick();
             h.allowed()
         });
+        let recovered_owner = h.monitor.status().logind_owner;
+        assert!(recovered_owner.as_deref().is_some_and(|o| o.starts_with(':')));
+        assert_ne!(recovered_owner, initial_owner);
     });
 }
 

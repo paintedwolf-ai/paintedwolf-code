@@ -27,6 +27,7 @@ export function InlineNotice(props: Props) {
           class="den-inline-notice"
           data-testid={props.testId ?? "inline-notice"}
           data-code={notice.code}
+          data-resolution={notice.resolution}
           role="alert"
           {...proseProps()}
         >
