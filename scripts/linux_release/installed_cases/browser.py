@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import os
 from pathlib import Path
+import subprocess
 import tempfile
 
 from .app import InstalledApp
@@ -61,7 +62,7 @@ def browser_sandbox(binding: dict) -> tuple[str, dict, dict]:
             observation = observe(binding, engine)
             facts.update(engine_namespaces=host, browser_observation=observation)
             identities = validate(observation, engine, host, os.getuid())
-    except (OSError, ValueError, TypeError, KeyError) as error:
+    except (OSError, subprocess.SubprocessError, ValueError, TypeError, KeyError) as error:
         facts.update(getattr(error, 'observations', {}))
         facts['failure_type'] = type(error).__name__
         failure = error if isinstance(error, CaseUnavailable) else CaseFailed('protected browser fixture did not complete')

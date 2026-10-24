@@ -2,6 +2,7 @@
 from contextlib import ExitStack
 import json
 from pathlib import Path
+import subprocess
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -82,6 +83,15 @@ class BrowserGuiTests(unittest.TestCase):
             self.assertTrue(refused.exception.observations['launch']['capture_complete'])
             self.assertEqual(refused.exception.streams['stdout'], b'owned app output')
             app.stop.assert_called_once()
+
+    def test_timed_out_native_observer_also_retains_completed_page_and_app_streams(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.run_case(Path(directory), observe_error=subprocess.TimeoutExpired('owned observer', 5))
+            with self.assertRaises(browser.CaseFailed) as refused:
+                browser.browser_sandbox({})
+            self.assertEqual(refused.exception.observations['opened']['page']['id'], 'page_owned')
+            self.assertEqual(refused.exception.observations['failure_type'], 'TimeoutExpired')
+            self.assertEqual(refused.exception.streams['stdout'], b'owned app output')
 
     def test_partial_launch_and_remaining_processes_do_not_become_success(self):
         with tempfile.TemporaryDirectory() as directory:
