@@ -165,9 +165,9 @@ class InstalledHelperTests(unittest.TestCase):
             expanded = expand_physical_transactions(leaf, [summary_first, summary_lock, summary_partial])
             self.assertEqual(expanded, [completed, lock_tx, partial])
             with self.assertRaises(ValueError):
-                expand_physical_transactions(leaf, [summary_first, summary_lock], require_all=True)
+                expand_physical_transactions(leaf, [{**summary_first, "transaction_id": "9" * 32}])
             self.assertEqual(
-                expand_physical_transactions(leaf, [summary_first], require_all=False),
+                expand_physical_transactions(leaf, [summary_first]),
                 [completed],
             )
             tampered = {**summary_first, "events_sha256": "0" * 64}
