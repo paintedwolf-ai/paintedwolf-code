@@ -80,11 +80,14 @@ class LockMonitorExecutionTests(unittest.TestCase):
         self.stack = ExitStack()
         self.addCleanup(self.stack.close)
 
-    def _run_case(self, case_name, *, monitor_loss=False, dialog_surfaces=None, extra_binding=None):
+    def _run_case(self, case_name, *, monitor_loss=False, startup_none=False,
+                  dialog_surfaces=None, alert_result=None, post_confirm_alerts=None,
+                  native_input_extra=None):
         binding = {
             'install_root': '/opt/painted-wolf-code',
-            'native_input': {'format_version': 1, 'vm_id': 'owned', 'binding': EXECUTION},
-            **(extra_binding or {})}
+            'native_input': {
+                'format_version': 1, 'vm_id': 'owned', 'binding': EXECUTION,
+                **(native_input_extra or {})}}
         unlocked_obs = {'locked_hint': False, 'locker_active': False}
         locked_obs = {'locked_hint': True, 'locker_active': True}
         proof = copy.deepcopy(native_proof())
@@ -111,18 +114,22 @@ class LockMonitorExecutionTests(unittest.TestCase):
         fresh_lock.__enter__ = Mock(return_value=fresh_lock)
         fresh_lock.__exit__ = Mock(return_value=False)
 
+        f0 = fact(locked=False, screensaver=None, hint_seen=False, mode='idle_fallback')
         f1 = fact(locked=False, screensaver=False, hint_seen=False, mode='lock_observed')
         f2 = fact(locked=True, screensaver=True, hint_seen=True, mode='lock_observed')
         f3 = fact(locked=False, screensaver=False, hint_seen=True, mode='lock_observed')
         loss = fact(locked=False, screensaver=None, hint_seen=True, mode='lock_observed')
         recovered = fact(locked=False, screensaver=False, hint_seen=True, mode='lock_observed')
-        final_facts = (f1, f2, f3, loss, recovered) if monitor_loss else (f1, f2, f3)
-        fake_app = Mock(observations={'session': SESSION, 'launch_identity': {'pid': 100},
-                                      'engine_identity': {'pid': 200}}, binding=binding)
+        prefix = (f0, f1) if startup_none else (f1,)
+        final_facts = (*prefix, f2, f3, loss, recovered) if monitor_loss else (*prefix, f2, f3)
+        fake_app = Mock(observations={
+            'session': {**SESSION, 'Active': 'yes', 'Remote': 'no'},
+            'launch_identity': {'pid': 100},
+            'engine_identity': {'pid': 200}}, binding=binding)
         stream_seq = [
-            {'app-stderr': stderr_stream(f1)},
-            {'app-stderr': stderr_stream(f1, f2)},
-            {'app-stderr': stderr_stream(f1, f2, f3)},
+            {'app-stderr': stderr_stream(*prefix)},
+            {'app-stderr': stderr_stream(*prefix, f2)},
+            {'app-stderr': stderr_stream(*prefix, f2, f3)},
             {'app-stderr': stderr_stream(*final_facts)},
         ]
         stream_idx = 0
@@ -145,7 +152,9 @@ class LockMonitorExecutionTests(unittest.TestCase):
         fake_unlock.unlock.return_value = {'request': {'operation': unlock_wire.PURPOSE}, 'acknowledgment': {}}
 
         tmp = self.stack.enter_context(tempfile.TemporaryDirectory())
-        fake_storage = Mock(home=Path(tmp))
+        config_dir = Path(tmp) / 'config'
+        config_dir.mkdir(mode=0o700)
+        fake_storage = Mock(home=Path(tmp), config=config_dir)
         fake_fixture = Mock(observations=[], acquisition=Mock())
         fake_ui = Mock()
         fake_ui_ctx = MagicMockContext(fake_ui)
@@ -153,12 +162,17 @@ class LockMonitorExecutionTests(unittest.TestCase):
         fake_policy.__enter__ = Mock(return_value=fake_policy)
         fake_policy.__exit__ = Mock(return_value=False)
         dialogs = [None] if dialog_surfaces is None else list(dialog_surfaces)
+        default_alert = {'role': 2, 'visible': True, 'attributes': []} if alert_result is None else alert_result
 
         self.stack.enter_context(patch.object(
             lock_monitor, 'NativeSessionObserver', side_effect=[initial_native, fresh_native]))
         self.stack.enter_context(patch.object(
             lock_monitor, 'NativeLockObserver', side_effect=[initial_lock, fresh_lock]))
         self.stack.enter_context(patch.object(lock_monitor, 'presence_dialog', side_effect=dialogs))
+        if post_confirm_alerts is None:
+            self.stack.enter_context(patch.object(lock_monitor, 'alerts', return_value=[]))
+        else:
+            self.stack.enter_context(patch.object(lock_monitor, 'alerts', side_effect=post_confirm_alerts))
         for target_mod, attr, value in (
                 (lock_monitor, 'protected_launcher', {}),
                 (lock_monitor, 'graphical_session', SESSION),
@@ -180,15 +194,69 @@ class LockMonitorExecutionTests(unittest.TestCase):
                 (lock_monitor, 'submit_project_turn', None),
                 (lock_monitor, 'await_fixture_reply', {'settled': True}),
                 (lock_monitor, 'physical_input', None),
-                (lock_monitor, 'alerts', []),
                 (lock_monitor, 'PresencePolicy', fake_policy),
-                (lock_monitor, 'await_alert', {'role': 2, 'visible': True, 'attributes': []})):
+                (lock_monitor, 'await_alert', default_alert)):
             self.stack.enter_context(patch.object(target_mod, attr, return_value=value))
         disable_mock = self.stack.enter_context(patch.object(
             lock_monitor, 'run_privileged_disable', return_value={'disabled': True, 'shadow_locked': True}))
         self.stack.enter_context(patch.object(lock_monitor, 'retain', side_effect=lambda *args: args))
         outcome = lock_monitor.execute(binding, 'session', case_name, Path(tmp))
         return outcome, disable_mock, fake_policy, fake_ui
+
+    def _dialog_identity(self, index):
+        app_proc = {'pid': 100, 'parent_pid': 1, 'start_time_ticks': 80}
+        return {'bus_name': ':1.77', 'object_path': f'/org/a11y/atspi/accessible/{index}',
+                'process': app_proc, 'lineage': [app_proc]}
+
+    def _mock_private_password_delivery(self, dialog_identities):
+        actor = {
+            'process': {'pid': 401, 'parent_pid': 1, 'start_time_ticks': 99},
+            'uid': 30009, 'session_nonce': 'd' * 32}
+        secret = 'aB3' * 13 + '7'
+        case_proc = {'pid': 501, 'parent_pid': 1, 'start_time_ticks': 120}
+        app_proc = {'pid': 100, 'parent_pid': 1, 'start_time_ticks': 80}
+        engine_proc = {'pid': 200, 'parent_pid': 100, 'start_time_ticks': 81}
+        main_id = self._dialog_identity(1)
+        ctrl_id = self._dialog_identity(9)
+
+        def make_target(dialog_id):
+            surface = {
+                'launch': app_proc, 'engine': engine_proc, 'main': main_id, 'control': None,
+                'surfaces': [
+                    {'identity': main_id, 'kind': 'frame', 'visible': True, 'active': False,
+                     'defunct': False, 'modal': False, 'parent': None},
+                    {'identity': dialog_id, 'kind': 'presence-dialog', 'visible': True, 'active': True,
+                     'defunct': False, 'modal': True, 'parent': main_id}]}
+            return {'kind': 'native-presence', 'surface': surface,
+                    'password': {'identity': ctrl_id, 'parent': dialog_id, 'focused': True, 'visible': True}}
+
+        targets = [make_target(did) for did in dialog_identities]
+        focus_instances = []
+        for target in targets:
+            inst = Mock()
+            inst.observe.return_value = target
+            focus_instances.append(inst)
+
+        def fake_witness(channel, pending, priv, focus_obj, vm_id):
+            delivery = {
+                'format_version': 1, 'execution_nonce': pending['binding']['execution_nonce'],
+                'transaction_id': pending['transaction_id'], 'stage': pending['stage'],
+                'actor': pending['actor'], 'case': pending['case'],
+                'profile': pending['profile'], 'session': pending['session'],
+                'target': pending['target'], 'acknowledged_count': 41,
+                'completed': True, 'delivery_uncertain': False, 'lease': {'vm_id': vm_id}}
+            return {'request': copy.deepcopy(pending), 'delivery': delivery, 'guest_confirmed': True}
+
+        fake_box = Mock(path=Path('/nonexistent-mailbox-path'))
+        fake_listener = MagicMockContext(Mock(accept=Mock(return_value=Mock())))
+        self.stack.enter_context(patch.object(lock_monitor, 'FrameObserver', return_value=MagicMockContext(Mock())))
+        self.stack.enter_context(patch.object(lock_monitor, 'FixtureFocus', side_effect=focus_instances))
+        self.stack.enter_context(patch.object(lock_monitor, 'physical', return_value=(1, 2, 30009, 0o40700)))
+        self.stack.enter_context(patch.object(lock_monitor, 'process_identity', return_value=case_proc))
+        self.stack.enter_context(patch.object(lock_monitor, 'Mailbox', return_value=fake_box))
+        self.stack.enter_context(patch.object(lock_monitor, 'Listener', return_value=fake_listener))
+        witness_mock = self.stack.enter_context(patch.object(lock_monitor, 'witness', side_effect=fake_witness))
+        return {'fixture_actor': actor, 'private_password': secret}, witness_mock
 
     def test_initial_lock_state_keeps_monitor_owner_recovery_unverified_on_ordinary_lock_unlock(self):
         outcome, disable_mock, _, _ = self._run_case('initial-lock-state', monitor_loss=False)
@@ -207,15 +275,30 @@ class LockMonitorExecutionTests(unittest.TestCase):
         self.assertEqual(obs['settled_reply'], {'settled': True})
         disable_mock.assert_called_once_with(ACCOUNT, vm_id='owned')
 
+    def test_initial_lock_state_does_not_promote_startup_none_to_false_transition_as_owner_recovery(self):
+        outcome, disable_mock, _, _ = self._run_case(
+            'initial-lock-state', monitor_loss=False, startup_none=True)
+        self.assertEqual(outcome[4], 'unverified')
+        obs = outcome[5]
+        self.assertTrue(obs['initial_lock_state_verified'])
+        self.assertTrue(obs['lock_unlock_verified'])
+        self.assertFalse(obs['monitor_owner_recovery_verified'])
+        self.assertIsNone(obs['monitor_owner_recovery'])
+        disable_mock.assert_called_once_with(ACCOUNT, vm_id='owned')
+
     def test_initial_lock_state_passes_when_monitor_owner_loss_and_reconnect_recovery_are_observed(self):
-        outcome, disable_mock, _, _ = self._run_case('initial-lock-state', monitor_loss=True)
+        outcome, disable_mock, _, _ = self._run_case('initial-lock-state', monitor_loss=True, startup_none=True)
         self.assertEqual(outcome[4], 'passed')
         obs = outcome[5]
         self.assertTrue(obs['initial_lock_state_verified'])
         self.assertTrue(obs['lock_unlock_verified'])
         self.assertTrue(obs['monitor_owner_recovery_verified'])
-        self.assertIsNone(obs['monitor_owner_recovery']['loss_fact']['screensaver_locked'])
-        self.assertFalse(obs['monitor_owner_recovery']['recovered_fact']['screensaver_locked'])
+        rec = obs['monitor_owner_recovery']
+        self.assertLess(rec['baseline_index'], rec['loss_index'])
+        self.assertLess(rec['loss_index'], rec['recovered_index'])
+        self.assertFalse(rec['baseline_fact']['screensaver_locked'])
+        self.assertIsNone(rec['loss_fact']['screensaver_locked'])
+        self.assertFalse(rec['recovered_fact']['screensaver_locked'])
         disable_mock.assert_called_once_with(ACCOUNT, vm_id='owned')
 
     def test_lock_during_presence_does_not_pass_from_alerts_alone(self):
@@ -233,26 +316,53 @@ class LockMonitorExecutionTests(unittest.TestCase):
         fake_policy.__exit__.assert_called_once()
         disable_mock.assert_called_once_with(ACCOUNT, vm_id='owned')
 
+    def test_lock_during_presence_refuses_confirmation_without_private_fixture_custody(self):
+        pre_id = self._dialog_identity(2)
+        pre_surface = {'kind': 'presence-dialog', 'identity': pre_id, 'active': True}
+        with self.assertRaises(records.CaseUnavailable) as ctx:
+            self._run_case('lock-during-presence', dialog_surfaces=[pre_surface])
+        self.assertEqual(str(ctx.exception), 'presence-password-confirmation-requires-private-fixture-custody')
+
+    def test_lock_during_presence_keeps_generic_alert_without_structured_stale_invalidation_unverified(self):
+        pre_id = self._dialog_identity(2)
+        pre_surface = {'kind': 'presence-dialog', 'identity': pre_id, 'active': True}
+        native_extra, witness_mock = self._mock_private_password_delivery([pre_id])
+        outcome, disable_mock, _, fake_ui = self._run_case(
+            'lock-during-presence',
+            dialog_surfaces=[pre_surface, None],
+            alert_result={'role': 2, 'visible': True, 'attributes': ['data-code:presence_denied']},
+            native_input_extra=native_extra)
+        self.assertEqual(outcome[4], 'unverified')
+        obs = outcome[5]
+        self.assertFalse(obs['stale_challenge_refusal_verified'])
+        self.assertFalse(obs['fresh_confirmation_verified'])
+        self.assertEqual(obs['reason'], 'stale-challenge-refusal-lacks-structured-invalidation-facts')
+        self.assertEqual(witness_mock.call_count, 1)
+        self.assertNotIn((('Hide now',), {}), fake_ui.click.call_args_list)
+        disable_mock.assert_called_once_with(ACCOUNT, vm_id='owned')
+
     def test_lock_during_presence_passes_when_pre_lock_challenge_is_refused_and_fresh_challenge_completes(self):
-        pre_surface = {'kind': 'presence-dialog', 'title': "Confirm it's you", 'active': True, 'epoch': 1}
-        fresh_surface = {'kind': 'presence-dialog', 'title': "Confirm it's you", 'active': True, 'epoch': 2}
-        focus_proof = {'stage': 'native-presence-password', 'entry_focused': True}
-        actor = Mock(side_effect=[{'delivered': 'stale'}, {'delivered': 'fresh'}])
-        with patch.object(lock_monitor, 'FixtureFocus') as focus_cls, \
-                patch.object(lock_monitor, 'FrameObserver', return_value=Mock()):
-            focus_cls.return_value.capture.return_value = focus_proof
-            outcome, disable_mock, _, fake_ui = self._run_case(
-                'lock-during-presence',
-                dialog_surfaces=[pre_surface, None, fresh_surface],
-                extra_binding={'presence_actor': actor})
+        pre_id, fresh_id = self._dialog_identity(2), self._dialog_identity(3)
+        pre_surface = {'kind': 'presence-dialog', 'identity': pre_id, 'active': True}
+        fresh_surface = {'kind': 'presence-dialog', 'identity': fresh_id, 'active': True}
+        native_extra, witness_mock = self._mock_private_password_delivery([pre_id, fresh_id])
+        structured_alert = {
+            'role': 2, 'visible': True,
+            'attributes': ['data-code:presence_denied', 'data-reason:step_away']}
+        outcome, disable_mock, _, fake_ui = self._run_case(
+            'lock-during-presence',
+            dialog_surfaces=[pre_surface, None, fresh_surface, None],
+            alert_result=structured_alert,
+            native_input_extra=native_extra)
         self.assertEqual(outcome[4], 'passed')
         obs = outcome[5]
         self.assertEqual(obs['pre_lock_confirmation'], pre_surface)
-        self.assertEqual(obs['stale_challenge_refusal'], {'role': 2, 'visible': True, 'attributes': []})
+        self.assertEqual(obs['stale_challenge_refusal'], structured_alert)
         self.assertTrue(obs['stale_challenge_refusal_verified'])
         self.assertEqual(obs['fresh_confirmation_surface'], fresh_surface)
+        self.assertEqual(obs['fresh_confirmation_alerts'], [])
         self.assertTrue(obs['fresh_confirmation_verified'])
-        self.assertEqual(actor.call_count, 2)
+        self.assertEqual(witness_mock.call_count, 2)
         fake_ui.click.assert_any_call('Hide now')
         disable_mock.assert_called_once_with(ACCOUNT, vm_id='owned')
 
