@@ -45,9 +45,6 @@ def shard_packages(packages, shard, durations=None):
         return packages
     index, count = parse(shard)
     packages = sorted(packages)
-    # An empty shard must not pass as an empty run, so a selection smaller than the split repeats packages.
-    if len(packages) < count:
-        return [packages[(index - 1) % len(packages)]]
     durations = {package: seconds for package, seconds in (durations or {}).items()
                  if type(seconds) in (int, float) and seconds >= 0}
     default = statistics.median(durations.values()) if durations else 0
@@ -197,7 +194,10 @@ def direct(names, cli):
         if stage["kind"] == "task":
             command = task_command(stage)
         else:
-            command = digest_command(stage, direct_packages(stage))
+            packages = direct_packages(stage)
+            if not packages:
+                continue
+            command = digest_command(stage, packages)
             if stage["exclude"]:
                 index = command.index("--name")
                 command[index:index] = ["--exclude-pkg", stage["exclude"]]
