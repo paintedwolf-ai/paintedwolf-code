@@ -129,6 +129,7 @@ wheel-glide = { path = "crates/wheel-glide" }
 [target.'cfg(target_os = "linux")'.dependencies]
 desktop-settings-observer = { path = "crates/desktop-settings-observer" }
 gtk = "0.18"
+webkit2gtk = "=2.0.2"
 gdkx11 = "0.18"
 gdkwayland-sys = "0.18"
 
