@@ -4,7 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"path/filepath"
+	"syscall"
 	"testing"
 	"time"
 
@@ -155,5 +158,14 @@ func TestOperationalSQLiteFailuresAreNotCorruption(t *testing.T) {
 	failure = nil
 	if !errors.As(ClassifyStoreFailure(err), &failure) || failure.Reason != RecoveryReasonInsufficientSpace || failure.Space != nil {
 		t.Fatalf("full database failure = %v, want capacity failure without invented estimates", err)
+	}
+}
+
+func TestUnsupportedStorageOperationIsNotDamage(t *testing.T) {
+	for _, cause := range []error{syscall.ENOTSUP, syscall.ENOSYS, fseffect.ErrUnsupported} {
+		var failure *StoreIncompatibleError
+		if !errors.As(ClassifyStoreFailure(fmt.Errorf("publication: %w", cause)), &failure) || failure.Reason != RecoveryReasonStorageUnavailable {
+			t.Fatalf("unsupported storage operation = %v, want storage unavailable", failure)
+		}
 	}
 }

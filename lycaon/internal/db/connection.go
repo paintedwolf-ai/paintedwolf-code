@@ -7,6 +7,7 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"io/fs"
 	"net/url"
 	"os"
@@ -202,7 +203,7 @@ func ClassifyStoreFailure(err error) error {
 	if errors.Is(err, syscall.ENOSPC) || errors.Is(err, syscall.EDQUOT) {
 		return storeIncompatible(RecoveryReasonInsufficientSpace, 0, err.Error())
 	}
-	if errors.Is(err, fs.ErrPermission) || errors.Is(err, syscall.EIO) || errors.Is(err, syscall.EROFS) {
+	if errors.Is(err, fs.ErrPermission) || errors.Is(err, syscall.EIO) || errors.Is(err, syscall.EROFS) || errors.Is(err, syscall.ENOTSUP) || errors.Is(err, syscall.ENOSYS) || errors.Is(err, fseffect.ErrUnsupported) {
 		return storeIncompatible(RecoveryReasonStorageUnavailable, 0, err.Error())
 	}
 	return err
