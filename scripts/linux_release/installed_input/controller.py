@@ -12,6 +12,7 @@ import threading
 import time
 
 from . import password_wire, protocol, session_wire, surface_wire, unlock_actor, unlock_wire
+from ..installed_cases.records import expand_physical_transactions
 from .mailbox import decode
 from .qemu import open_lease
 from .private_pipe import Pipe
@@ -56,6 +57,7 @@ def delivery_records(directory, execution, vm_id):
             raise ValueError('native input guest observations exceed their case bound')
         document = json.loads(leaf.read_bytes())
         observations = document['observations']
+        start = len(records)
         if kind in {'presence', 'lock_presence'}:
             from .presence_fixture import FIELDS
             selected = observations.get('launch', {}).get('fixed_input', [])
@@ -120,7 +122,7 @@ def delivery_records(directory, execution, vm_id):
                 binding = {'artifact': document['artifact'], 'source_commit': execution['source_commit'],
                            'native_input': {'binding': execution, 'vm_id': vm_id}}
                 account = observations.get(launch, {}).get('session', {}).get('User')
-                admitted = registered(json.loads(raw), binding, account)
+                admitted = registered(json.loads(raw), binding, account, leaf=prior)
                 if recovery != {**admitted, 'prior_execution_sha256': hashlib.sha256(raw).hexdigest()} or len(selected) > 1:
                     raise ValueError('provider recovery differs from its retained registration and fixed input order')
                 order = (prompt,)
@@ -172,6 +174,7 @@ def delivery_records(directory, execution, vm_id):
                 raise ValueError('editor input exceeds its fixed transaction count')
             records.extend(selected)
             operations.extend(('editor-replace-save-v1', 'editor-find-needle-v1')[:len(selected)])
+        records[start:] = expand_physical_transactions(leaf, records[start:])
     return records, operations
 
 
