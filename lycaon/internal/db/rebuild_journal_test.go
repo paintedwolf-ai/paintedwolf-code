@@ -3,8 +3,10 @@ package db
 import (
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"os"
 	"path/filepath"
+	"syscall"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/fspath"
@@ -32,7 +34,7 @@ func preparedRebuildFixture(t *testing.T) (string, rebuildJournal) {
 }
 
 func TestRebuildPublicationResumesEveryDurablePrefix(t *testing.T) {
-	for prefix := 1; prefix <= 2; prefix++ {
+	for prefix := 1; prefix <= 3; prefix++ {
 		t.Run(fmt.Sprint(prefix), func(t *testing.T) {
 			path, record := preparedRebuildFixture(t)
 			interrupted := errors.New("process interrupted after durable move")
@@ -45,7 +47,7 @@ func TestRebuildPublicationResumesEveryDurablePrefix(t *testing.T) {
 					}
 					return nil
 				})
-				if !errors.Is(err, interrupted) {
+				if (prefix < 3 && !errors.Is(err, interrupted)) || (prefix == 3 && err != nil) {
 					t.Fatalf("interruption = %v", err)
 				}
 			}
@@ -64,6 +66,9 @@ func TestRebuildPublicationResumesEveryDurablePrefix(t *testing.T) {
 			}
 			testutil.FailErr(t, "retire original after readiness", CompleteStoreUpgrade(path))
 			testutil.FailErr(t, "repeat retirement", CompleteStoreUpgrade(path))
+			if _, err := os.Stat(filepath.Dir(old)); !os.IsNotExist(err) {
+				t.Fatalf("retired archive directory remains: %v", err)
+			}
 			if _, err := os.Stat(rebuildMarker(path)); !os.IsNotExist(err) {
 				t.Fatalf("publication journal remains: %v", err)
 			}
@@ -113,4 +118,56 @@ func TestRebuildPublicationRejectsTrailingJournalContent(t *testing.T) {
 		t.Fatal("accepted ambiguous publication decision")
 	}
 	testutil.FailErr(t, "preserve original identity", requireRebuildIdentity(path, record.OriginalIdentity))
+}
+
+func TestRebuildExchangeProbe(t *testing.T) {
+	for _, failure := range []error{nil, syscall.ENOTSUP, syscall.EINVAL, syscall.EACCES} {
+		t.Run(fmtProbeName(failure), func(t *testing.T) {
+			root := t.TempDir()
+			work := filepath.Join(root, "work")
+			testutil.FailErr(t, "create work directory", os.Mkdir(work, 0700))
+			calls := 0
+			err := probeRebuildExchange(root, work, func(root, first, second, a, b string) error {
+				calls++
+				if filepath.Dir(second) != "work" || a == "" || b == "" || a == b {
+					t.Fatal("probe does not match publication layout")
+				}
+				if failure != nil {
+					return failure
+				}
+				return fseffect.ExchangeGuarded(root, first, second, a, b)
+			})
+			if !errors.Is(err, failure) || calls != 1 {
+				t.Fatalf("probe error=%v calls=%d", err, calls)
+			}
+			if errors.Is(failure, syscall.EINVAL) && !errors.Is(err, fseffect.ErrUnsupported) {
+				t.Fatal("unsupported exchange flag was not classified")
+			}
+			entries, err := os.ReadDir(root)
+			testutil.FailErr(t, "inspect probe root", err)
+			children, err := os.ReadDir(work)
+			testutil.FailErr(t, "inspect probe work", err)
+			if len(entries) != 1 || len(children) != 0 {
+				t.Fatal("probe left entries or a journal behind")
+			}
+		})
+	}
+}
+
+func fmtProbeName(err error) string {
+	if err == nil {
+		return "supported"
+	}
+	return err.Error()
+}
+
+func TestRebuildSealRefusesAnotherOpenConnection(t *testing.T) {
+	path, _, _ := upgradeFixture(t)
+	writer, err := openWriter(t.Context(), path, StoreOptions{})
+	testutil.FailErr(t, "hold WAL connection", err)
+	if err := sealRebuiltStore(t.Context(), path); err == nil {
+		t.Fatal("sealed database with another WAL connection")
+	}
+	testutil.FailErr(t, "close WAL connection", writer.Close())
+	testutil.FailErr(t, "seal after connection closes", sealRebuiltStore(t.Context(), path))
 }

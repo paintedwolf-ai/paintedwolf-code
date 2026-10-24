@@ -84,11 +84,16 @@ func TestUpgradeRequiresRecoveryBeforeAnyMutation(t *testing.T) {
 			before, err := os.ReadFile(path)
 			testutil.FailErr(t, "read initial bytes", err)
 			hooks := UpgradeHooks{}
+			captureError := errors.New("recovery capture unavailable")
 			if captureFails {
-				hooks.Before = func(context.Context, *sql.DB, migrations.Plan) error { return errors.New("disk full") }
+				hooks.Before = func(context.Context, *sql.DB, migrations.Plan) error { return captureError }
 			}
-			if err := upgradeExistingUsing(t.Context(), path, hooks, false, registry); !errors.Is(err, ErrStoreIncompatible) {
-				t.Fatalf("upgrade error = %v, want recoverable refusal", err)
+			want := ErrStoreIncompatible
+			if captureFails {
+				want = captureError
+			}
+			if err := upgradeExistingUsing(t.Context(), path, hooks, false, registry); !errors.Is(err, want) {
+				t.Fatalf("upgrade error = %v, want %v", err, want)
 			}
 			after, err := os.ReadFile(path)
 			testutil.FailErr(t, "read refused bytes", err)

@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"syscall"
 
 	"github.com/lycaon/lycaon/internal/db/migrations"
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/fssync"
 )
@@ -21,6 +23,9 @@ func beginRebuild(path string) (rebuildJournal, error) {
 	work, err := os.MkdirTemp(filepath.Dir(path), StoreUpgradeDirectoryPrefix)
 	if err != nil {
 		return record, err
+	}
+	if err := probeRebuildExchange(filepath.Dir(path), work, fseffect.ExchangeGuarded); err != nil {
+		return record, errors.Join(fmt.Errorf("store volume cannot atomically publish an upgraded database: %w", err), os.Remove(work))
 	}
 	identity, err := fspath.EntryIdentity(work)
 	if err != nil {
@@ -37,6 +42,15 @@ func upgradeRetained(ctx context.Context, path string, source *sql.DB, plan migr
 	if !staged && hooks.Before == nil {
 		return fmt.Errorf("schema upgrade requires installation recovery capture")
 	}
+	record, err := beginRebuild(path)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if record.State == "building" {
+			err = errors.Join(err, discardRebuild(path, record))
+		}
+	}()
 	// Fold the existing WAL before copying so source reads do not resolve every
 	// page through it. SQLite's checkpoint preserves the original logical store.
 	if err := checkpointRebuildSource(ctx, path); err != nil {
@@ -48,15 +62,6 @@ func upgradeRetained(ctx context.Context, path string, source *sql.DB, plan migr
 	if err := sealRebuiltStore(ctx, path); err != nil {
 		return err
 	}
-	record, err := beginRebuild(path)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if record.State == "building" {
-			err = errors.Join(err, discardRebuild(path, record))
-		}
-	}()
 	work := filepath.Join(filepath.Dir(path), record.Directory)
 	replacement := filepath.Join(work, "replacement.db")
 	if hooks.Progress != nil {
@@ -179,4 +184,45 @@ func checkpointRebuildSource(ctx context.Context, path string) (err error) {
 		return fmt.Errorf("source checkpoint still has active readers")
 	}
 	return nil
+}
+
+// Exercise the same cross-directory exchange as publication, before touching
+// SQLite. These empty, exclusively created entries contain no user data.
+func probeRebuildExchange(root, work string, exchange func(string, string, string, string, string) error) (err error) {
+	first, err := os.CreateTemp(root, ".store-exchange-")
+	if err != nil {
+		return err
+	}
+	defer func() { err = errors.Join(err, os.Remove(first.Name())) }()
+	if err := first.Close(); err != nil {
+		return err
+	}
+	second, err := os.CreateTemp(work, ".store-exchange-")
+	if err != nil {
+		return err
+	}
+	defer func() { err = errors.Join(err, os.Remove(second.Name())) }()
+	if err := second.Close(); err != nil {
+		return err
+	}
+	firstIdentity, err := fspath.EntryIdentity(first.Name())
+	if err != nil {
+		return err
+	}
+	secondIdentity, err := fspath.EntryIdentity(second.Name())
+	if err != nil {
+		return err
+	}
+	relative, err := filepath.Rel(root, second.Name())
+	if err != nil {
+		return err
+	}
+	err = exchange(root, filepath.Base(first.Name()), relative, firstIdentity, secondIdentity)
+	// Some volumes report unsupported exchange flags as EINVAL. Both paths
+	// and identities above were created here, so retain the cause and classify
+	// this specific operation as unsupported without reclassifying other EINVALs.
+	if errors.Is(err, syscall.EINVAL) {
+		return errors.Join(fseffect.ErrUnsupported, err)
+	}
+	return err
 }
