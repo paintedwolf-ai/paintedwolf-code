@@ -43,6 +43,11 @@ func copyRetainedStore(ctx context.Context, source, destination string, plan mig
 		return err
 	}
 	defer func() { err = errors.Join(err, restoreLimit()) }()
+	return copyRetainedDatabase(ctx, copyDB, source, plan)
+}
+
+func copyRetainedDatabase(ctx context.Context, copyDB *sql.DB, source string, plan migrations.Plan) error {
+	selection := plan.CopyPlan()
 	if _, err := copyDB.ExecContext(ctx, `ATTACH DATABASE ? AS original`, fileDSN(source, "mode=ro")); err != nil {
 		return err
 	}

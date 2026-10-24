@@ -27,7 +27,7 @@ func validateRebuildCounts(ctx context.Context, tx *sql.Tx, objects []rebuildObj
 			return err
 		}
 		if source != copied {
-			return fmt.Errorf("retained table %s copied %d rows, expected %d", object.name, copied, source)
+			return fmt.Errorf("%w: retained table %s copied %d rows, expected %d", migrations.ErrIntegrity, object.name, copied, source)
 		}
 	}
 	return nil
