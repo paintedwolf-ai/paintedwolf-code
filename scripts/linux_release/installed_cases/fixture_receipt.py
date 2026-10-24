@@ -101,7 +101,8 @@ def committed_fixture_tool(app, project_id, session_id, tool, call_id, *, target
         body = json.loads(raw)
         if not isinstance(body, list) or len(body) != 1:
             raise ValueError('page evidence body differs from its original single result')
-        payload = object_json(body[0])
+        document = object_json(body[0])
+        payload = {key: document.get(key) for key in ('id', 'live_pages', 'max_pages')}
         with _database(app) as connection:
             if page_record(connection, project_id, session_id, message_id, result) != record:
                 raise ValueError('page evidence metadata changed during physical observation')
