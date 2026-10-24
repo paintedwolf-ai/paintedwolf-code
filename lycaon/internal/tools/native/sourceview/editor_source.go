@@ -2,11 +2,13 @@ package sourceview
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
@@ -68,6 +70,9 @@ func LoadText(ctx context.Context, tool string, access Access, tctx tools.ToolCo
 			return Text{}, err
 		}
 		doc, open, err := documents.OpenDocument(ctx, tctx.Identity.ProjectID, branch, resolved.Root.ID, resolved.ScopeRel)
+		if errors.Is(err, projectsource.ErrSourceIsDirectory) {
+			return Text{}, DirectoryReject(resolved.DisplayPath)
+		}
 		if err != nil {
 			return Text{}, fmt.Errorf("read collaborative document: %w", err)
 		}

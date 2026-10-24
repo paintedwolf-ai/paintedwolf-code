@@ -426,7 +426,7 @@ func (s *Workspace) writeSourceAddressError(w http.ResponseWriter, err error) bo
 		s.responses.Fail(w, wire.ApiErrorCodeSourcePathProtected, "path is protected project metadata")
 	case errors.Is(err, projectsource.ErrSourcePathDenied):
 		s.responses.Fail(w, wire.ApiErrorCodeSourcePathDenied, "path is outside the project sandbox")
-	case errors.Is(err, projectsource.ErrSourceNotFound):
+	case errors.Is(err, projectsource.ErrSourceNotFound), errors.Is(err, projectsource.ErrSourceIsDirectory):
 		s.responses.Fail(w, wire.ApiErrorCodeSourceNotFound, "file not found")
 	default:
 		return false

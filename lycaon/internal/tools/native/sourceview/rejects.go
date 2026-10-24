@@ -16,6 +16,14 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
+// DirectoryReject reports an attempt to read or mutate a directory where a file is required.
+func DirectoryReject(displayPath string) error {
+	return &toolrejection.ToolReject{
+		Code: "READ_IS_DIRECTORY",
+		Data: map[string]any{"path": displayPath},
+	}
+}
+
 func PathNotFound(tool, relPath, fullPath string) error {
 	dir := filepath.Dir(fullPath)
 	base := filepath.Base(fullPath)

@@ -52,7 +52,12 @@ func TestNativeToolsReadRejectsDirectoryListing(t *testing.T) {
 	// Every content tool refuses directories through sourceview.ReadContentCapped.
 	ingestGo, err := os.ReadFile(filepath.Join(root, "lycaon", "internal", "tools", "native", "sourceview", "ingest.go"))
 	contractcheck.FailErr(t, "read ingest.go", err)
-	if !strings.Contains(string(ingestGo), "READ_IS_DIRECTORY") {
-		t.Fatal("ReadContentCapped must reject directories with READ_IS_DIRECTORY")
+	if !strings.Contains(string(ingestGo), "return nil, DirectoryReject(displayPath)") {
+		t.Fatal("ReadContentCapped must reject directories through DirectoryReject")
+	}
+	rejectsGo, err := os.ReadFile(filepath.Join(root, "lycaon", "internal", "tools", "native", "sourceview", "rejects.go"))
+	contractcheck.FailErr(t, "read rejects.go", err)
+	if !strings.Contains(string(rejectsGo), `Code: "READ_IS_DIRECTORY"`) {
+		t.Fatal("DirectoryReject must retain READ_IS_DIRECTORY")
 	}
 }
