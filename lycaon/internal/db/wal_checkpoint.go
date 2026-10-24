@@ -10,6 +10,9 @@ import (
 
 const walFramesPinnedWarn = 10_000
 
+// walSizeLimitBytes is the WAL file size a restart truncates back to.
+const walSizeLimitBytes = 64 << 20
+
 // WALCheckpointMode selects a checkpoint strategy.
 type WALCheckpointMode string
 

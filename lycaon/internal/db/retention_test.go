@@ -2,8 +2,11 @@ package db
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"path/filepath"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -277,4 +280,96 @@ func rowExists(t *testing.T, database DBTX, query string, args ...any) bool {
 	}
 	testutil.FailErr(t, "probe row", err)
 	return true
+}
+
+// Pages another owner freed, such as the snapshot sweep, are returned even
+// when retention itself deleted nothing.
+func TestRetentionReturnsPagesItDidNotFree(t *testing.T) {
+	database := openTestDB(t)
+	ctx := t.Context()
+	_, err := database.ExecContext(ctx, `CREATE TABLE freed_elsewhere (body BLOB NOT NULL)`)
+	testutil.FailErr(t, "create scratch table", err)
+	for range 2000 {
+		_, err := database.ExecContext(ctx, `INSERT INTO freed_elsewhere (body) VALUES (zeroblob(4000))`)
+		testutil.FailErr(t, "fill scratch table", err)
+	}
+	_, err = database.ExecContext(ctx, `DROP TABLE freed_elsewhere`)
+	testutil.FailErr(t, "free scratch pages", err)
+	freelist := func() int64 {
+		var pages int64
+		testutil.FailErr(t, "read freelist", database.QueryRowContext(ctx, `PRAGMA freelist_count`).Scan(&pages))
+		return pages
+	}
+	before := freelist()
+	if before < 1500 {
+		t.Fatalf("freelist = %d pages; the test cannot show a reclaim", before)
+	}
+	report, err := RunRetention(ctx, database, DefaultRetention())
+	testutil.FailErr(t, "RunRetention", err)
+	if report.TotalDeleted() != 0 || !report.IncrementalVacuumed {
+		t.Fatalf("report = %+v, want a vacuum without deletions", report)
+	}
+	if after := freelist(); after >= DefaultRetention().IncrementalVacuumMinFreelistPages {
+		t.Fatalf("freelist after maintenance = %d, was %d", after, before)
+	}
+}
+
+// A single wake must reclaim more than one pass even without application writes.
+func TestMaintenanceDrainsIdleFreelist(t *testing.T) {
+	ctx := t.Context()
+	path := filepath.Join(t.TempDir(), "small-pages.db")
+	writer, err := sql.Open("sqlite", fileDSN(path, writerDSNQuery))
+	testutil.FailErr(t, "open fixture writer", err)
+	t.Cleanup(func() { _ = writer.Close() })
+	writer.SetMaxOpenConns(1)
+	_, err = writer.ExecContext(ctx, `PRAGMA page_size=512; PRAGMA auto_vacuum=INCREMENTAL; PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL`)
+	testutil.FailErr(t, "configure small fixture pages", err)
+	testutil.FailErr(t, "create fixture schema", prepareStoreSchema(ctx, writer, true))
+	reader, err := openReader(ctx, path)
+	testutil.FailErr(t, "open fixture reader", err)
+	database := newStore(writer, reader)
+	t.Cleanup(func() { _ = database.Close() })
+	_, err = database.ExecContext(ctx, `CREATE TABLE freed_elsewhere(body BLOB NOT NULL);
+WITH RECURSIVE rows(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM rows WHERE n<3000)
+INSERT INTO freed_elsewhere SELECT zeroblob(400) FROM rows;
+DROP TABLE freed_elsewhere`)
+	testutil.FailErr(t, "free more than one vacuum pass", err)
+	var before int64
+	testutil.FailErr(t, "read initial freelist", database.QueryRowContext(ctx, `PRAGMA freelist_count`).Scan(&before))
+	if before <= vacuumSlicePages*vacuumSlicesPerPass {
+		t.Fatalf("freelist=%d, need more than one pass", before)
+	}
+	turns := 0
+	testutil.FailErr(t, "drain one maintenance wake", drainMaintenance(ctx, database, DefaultRetention(), func(context.Context, *Store) error { turns++; return nil }))
+	if turns < 2 {
+		t.Fatal("multiple passes did not yield between admissions")
+	}
+	var remaining int64
+	testutil.FailErr(t, "read drained freelist", database.QueryRowContext(ctx, `PRAGMA freelist_count`).Scan(&remaining))
+	if remaining >= DefaultRetention().IncrementalVacuumMinFreelistPages {
+		t.Fatalf("one wake left %d of %d free pages", remaining, before)
+	}
+}
+
+func TestMaintenanceWaitsForQuietWritesWithoutAbandoningItsWake(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		store := &Store{writer: &sql.DB{}}
+		done := make(chan error, 1)
+		go func() { done <- waitForMaintenanceTurn(t.Context(), store) }()
+		synctest.Wait()
+		store.writeCount.Add(1)
+		time.Sleep(100 * time.Millisecond)
+		synctest.Wait()
+		select {
+		case err := <-done:
+			t.Fatalf("maintenance admitted during writes: %v", err)
+		default:
+		}
+		testutil.FailErr(t, "resume pending maintenance after writes quiet", <-done)
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+		if err := waitForMaintenanceTurn(ctx, store); !errors.Is(err, context.Canceled) {
+			t.Fatalf("stop waiting maintenance: %v", err)
+		}
+	})
 }

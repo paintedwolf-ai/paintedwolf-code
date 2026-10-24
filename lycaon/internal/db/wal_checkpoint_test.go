@@ -116,3 +116,39 @@ func walSize(t *testing.T, dbPath string) int64 {
 	testutil.FailErr(t, "stat wal", err)
 	return info.Size()
 }
+
+// A WAL that grew past its limit while a reader pinned it shrinks back once
+// the reader is gone and a write restarts it.
+func TestWALShrinksToItsLimitAfterAPinIsReleased(t *testing.T) {
+	sqlDB, dbPath := openTestDBWithPath(t)
+	ctx := t.Context()
+	conn, err := sqlDB.reader.Conn(ctx)
+	testutil.FailErr(t, "Conn", err)
+	defer func() { _ = conn.Close() }()
+	_, err = conn.ExecContext(ctx, `BEGIN`)
+	testutil.FailErr(t, "BEGIN reader", err)
+	var seen int
+	testutil.FailErr(t, "reader snapshot", conn.QueryRowContext(ctx, `SELECT count(*) FROM code_scans`).Scan(&seen))
+
+	_, err = sqlDB.ExecContext(ctx, `CREATE TABLE wal_growth (body BLOB NOT NULL)`)
+	testutil.FailErr(t, "create growth table", err)
+	for range 80 {
+		_, err := sqlDB.ExecContext(ctx, `INSERT INTO wal_growth (body) VALUES (zeroblob(1048576))`)
+		testutil.FailErr(t, "grow wal", err)
+	}
+	if size := walSize(t, dbPath); size <= walSizeLimitBytes {
+		t.Fatalf("wal = %d bytes; the test needs it past the limit", size)
+	}
+	_, err = conn.ExecContext(ctx, `ROLLBACK`)
+	testutil.FailErr(t, "ROLLBACK reader", err)
+	result, err := CheckpointWAL(ctx, sqlDB)
+	testutil.FailErr(t, "CheckpointWAL", err)
+	if !result.Complete() {
+		t.Fatalf("checkpoint after release = %+v", result)
+	}
+	_, err = sqlDB.ExecContext(ctx, `DELETE FROM wal_growth WHERE rowid = 1`)
+	testutil.FailErr(t, "restart wal", err)
+	if size := walSize(t, dbPath); size > walSizeLimitBytes {
+		t.Fatalf("wal stayed at %d bytes after restart, limit %d", size, walSizeLimitBytes)
+	}
+}
