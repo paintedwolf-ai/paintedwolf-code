@@ -9,6 +9,7 @@ import unittest
 from unittest.mock import MagicMock, Mock, patch
 
 from linux_release.installed_cases import browser
+from linux_release.installed_cases.records import retain
 from linux_release.installed_input import controller, protocol
 
 MESSAGE = '10000000-0000-4000-8000-000000000001'
@@ -43,7 +44,9 @@ class BrowserGuiTests(unittest.TestCase):
         for name, value in [('protected_launcher', {'path': 'bound bootstrap'}),
                 ('load_provider_recovery', None), ('interactive_window', {'owned': True}),
                 ('configure_provider', {'provider_id': 'fixture'}),
-                ('run', {'exit_code': 0, 'timed_out': False, 'output_limit': False}),
+                ('run', {'launch_identity': {'pid': 15, 'start_time_ticks': 45},
+                         'exit_code': 0, 'timed_out': False, 'output_limit': False,
+                         'stdout': b'CLI stdout', 'stderr': b'CLI stderr'}),
                 ('namespace_observer', {'mnt': 1}), ('validate', [{'pid': 12, 'start_ticks': '40'}])]:
             stack.enter_context(patch.object(browser, name, return_value=value))
         submitted = stack.enter_context(patch.object(browser, 'submit_project_turn'))
@@ -71,6 +74,13 @@ class BrowserGuiTests(unittest.TestCase):
             self.assertEqual(awaited.call_args.args[2], 'fixture')
             self.assertEqual((Path(facts['project_root']) / 'fixture.html').read_text(), browser.HTML)
             self.assertEqual(streams['stdout'], b'owned app output')
+            self.assertEqual(streams['project-open-stdout'], b'CLI stdout')
+            self.assertEqual(set(facts['project_open']), {'launch_identity', 'exit_code', 'timed_out', 'output_limit'})
+            binding = {'source_commit': 'a' * 40, 'artifact': {}}
+            retain(binding, 'browser', 'browser-sandbox-composition', home / 'evidence', status, facts, streams)
+            document = json.loads((home / 'evidence/browser/browser-sandbox-composition/execution.json').read_bytes())
+            self.assertEqual(document['observations'], facts)
+            self.assertEqual((home / 'evidence/browser/browser-sandbox-composition/project-open-stderr.bin').read_bytes(), b'CLI stderr')
             cleaned.assert_called_once_with([{'pid': 12, 'start_ticks': '40'}])
 
     def test_successful_page_is_preserved_when_kernel_observation_refuses(self):
@@ -83,6 +93,10 @@ class BrowserGuiTests(unittest.TestCase):
             self.assertTrue(refused.exception.observations['launch']['capture_complete'])
             self.assertEqual(refused.exception.streams['stdout'], b'owned app output')
             app.stop.assert_called_once()
+            retain({'source_commit': 'a' * 40, 'artifact': {}}, 'browser', 'browser-sandbox-composition',
+                   Path(directory) / 'failed-evidence', 'failed', refused.exception.observations, refused.exception.streams)
+            document = json.loads((Path(directory) / 'failed-evidence/browser/browser-sandbox-composition/execution.json').read_bytes())
+            self.assertEqual(document['observations']['failure_type'], 'ValueError')
 
     def test_timed_out_native_observer_also_retains_completed_page_and_app_streams(self):
         with tempfile.TemporaryDirectory() as directory:
