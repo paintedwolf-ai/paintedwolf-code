@@ -116,6 +116,44 @@ class ProfileSetupTests(unittest.TestCase):
             desktop.assert_not_called()
             discovery.assert_not_called()
 
+    def test_first_time_tips_and_renderer_session_validate_owned_slices(self):
+        tips = self.slices / owner.FIRST_TIME_TIPS
+        self.assertIs(owner.first_time_tips_enabled(None), True)
+        self.write(tips, {'key': 'firstTimeTips', 'value': {'enabled': False, 'dismissed': ['files-ai-editor']}})
+        self.assertIs(owner.first_time_tips_enabled(None), False)
+        for bad in ({'key': 'other', 'value': {}}, {'key': 'firstTimeTips', 'value': {'other': True}},
+                    {'key': 'firstTimeTips', 'value': {'enabled': 1}}, {'key': 'firstTimeTips', 'value': []}):
+            self.write(tips, bad)
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                owner.first_time_tips_enabled(None)
+        pid, sid, root = '10000000-0000-4000-8000-000000000001', '20000000-0000-4000-8000-000000000002', str(self.directory / 'w')
+        active_file, snap_file = self.slices / owner.LAST_ACTIVE_PROJECT, self.slices / owner.LAST_SESSION_SNAPSHOT
+        self.assertIsNone(owner.renderer_session(None, root, pid, sid))
+        self.write(active_file, {'key': 'lastActiveProjectId', 'value': pid})
+        valid = {'scope': {'projectId': pid, 'sessionId': sid},
+                 'session': {'id': sid, 'project_id': pid, 'workspace_path': root, 'status': 'idle'},
+                 'activeWorkflowRun': {'project_id': pid, 'session_id': sid, 'ui': {'request': {'question': 'What would you like to work on?'}}}}
+        self.write(snap_file, {'key': 'lastSessionSnapshot', 'value': valid})
+        self.assertEqual(owner.renderer_session(None, root, pid, sid), {
+            'observer': 'owned-app-state-JSON', 'project_id': pid, 'session_id': sid, 'status': 'idle',
+            'workspace_path': root, 'composer_question': 'What would you like to work on?',
+            'last_active_project_sha256': hashlib.sha256(active_file.read_bytes()).hexdigest(),
+            'last_session_snapshot_sha256': hashlib.sha256(snap_file.read_bytes()).hexdigest()})
+        for pending in ({**valid, 'scope': {'projectId': pid, 'sessionId': 'other'}}, {**valid, 'activeWorkflowRun': None},
+                        {**valid, 'session': {**valid['session'], 'status': 'preparing'}},
+                        {**valid, 'activeWorkflowRun': {**valid['activeWorkflowRun'], 'ui': {'request': {'question': 'Other'}}}}):
+            self.write(snap_file, {'key': 'lastSessionSnapshot', 'value': pending})
+            self.assertIsNone(owner.renderer_session(None, root, pid, sid))
+        for invalid in ([], {**valid, 'scope': {'projectId': pid}}, {**valid, 'session': {**valid['session'], 'workspace_path': '/bad'}},
+                        {**valid, 'session': {**valid['session'], 'status': 'error'}},
+                        {**valid, 'activeWorkflowRun': {**valid['activeWorkflowRun'], 'session_id': 'other'}}):
+            self.write(snap_file, {'key': 'lastSessionSnapshot', 'value': invalid})
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                owner.renderer_session(None, root, pid, sid)
+        self.write(active_file, {'key': 'lastActiveProjectId', 'value': 123})
+        with self.assertRaises(ValueError):
+            owner.renderer_session(None, root, pid, sid)
+
 
 class FixtureSelectionTests(unittest.TestCase):
     def test_single_primary_root_and_persisted_default_are_independent_authorities(self):
@@ -155,3 +193,59 @@ class FixtureSelectionTests(unittest.TestCase):
                 overlay.symlink_to('/missing')
                 with self.assertRaises(ValueError):
                     owner.fixture_selection(None, root, project, 'fixed', MODEL)
+
+
+class ActiveSessionTests(unittest.TestCase):
+    def test_active_session_requires_exact_project_provider_and_phase_facts(self):
+        session = {'id': 'session', 'status': 'busy', 'provider_id': None, 'model': None,
+                   'parent_session_id': None}
+        rendered = {'observer': 'owned-app-state-JSON', 'session_id': 'session', 'status': 'idle'}
+        with patch.object(owner, 'project_for_owned_root', return_value={'project_id': 'project'}), patch.object(
+                owner, 'fixture_selection', return_value={'model_policy_sha256': 'a' * 64}), patch.object(
+                owner, 'renderer_session', return_value=rendered) as render_obs, patch.object(
+                owner, 'sessions_for_project', return_value=[session]) as observed:
+            active = owner.require_active(None, None, 'fixture', MODEL)
+            self.assertEqual(active['id'], 'session')
+            self.assertNotIn('renderer_session', active)
+            self.assertIsNone(owner.active_session(None, None, 'fixture', MODEL, status='idle'))
+            observed.return_value = [{**session, 'status': 'idle'}]
+            idle_obs = owner.active_session(None, None, 'fixture', MODEL, status='idle')
+            self.assertEqual(idle_obs['id'], 'session')
+            self.assertEqual(idle_obs['renderer_session'], rendered)
+            render_obs.return_value = None
+            self.assertIsNone(owner.active_session(None, None, 'fixture', MODEL, status='idle'))
+            with self.assertRaises(owner.CaseUnavailable):
+                owner.require_active(None, None, 'fixture', MODEL, active)
+            with self.assertRaisesRegex(ValueError, 'idle or busy'):
+                owner.active_session(None, None, 'fixture', MODEL, status='other')
+            observed.return_value = [{**session, 'id': 'replacement'}]
+            with self.assertRaisesRegex(ValueError, 'replaced'):
+                owner.require_active(None, None, 'fixture', MODEL, active)
+            observed.return_value = [session, session]
+            with self.assertRaisesRegex(ValueError, 'ambiguous'):
+                owner.active_session(None, None, 'fixture', MODEL)
+            for changed in ({'provider_id': 'foreign'}, {'provider_id': 'fixture'},
+                            {'model': MODEL}, {'parent_session_id': 'child'}):
+                observed.return_value = [{**session, **changed}]
+                with self.subTest(changed=changed), self.assertRaisesRegex(ValueError, 'selected root'):
+                    owner.active_session(None, None, 'fixture', MODEL)
+            observed.return_value = [{**session, 'provider_id': 'fixture', 'model': MODEL}]
+            self.assertEqual(owner.require_active(None, None, 'fixture', MODEL)['id'], 'session')
+
+    def test_busy_session_cannot_outlive_its_observed_model_selection(self):
+        session = {'id': 'session', 'status': 'busy', 'provider_id': None, 'model': None,
+                   'parent_session_id': None}
+        with patch.object(owner, 'project_for_owned_root', return_value={'project_id': 'project'}), patch.object(
+                owner, 'fixture_selection', side_effect=[{'policy': 'before'}, {'policy': 'after'}]), patch.object(
+                owner, 'sessions_for_project', return_value=[session]):
+            with self.assertRaisesRegex(ValueError, 'selection changed'):
+                owner.active_session(None, None, 'fixture', MODEL)
+
+    def test_await_session_polls_requested_phase_and_refuses_timeout(self):
+        idle = {'id': 'session', 'status': 'idle'}
+        with patch.object(owner, 'active_session', side_effect=[None, idle]) as active, patch.object(owner.time, 'sleep') as sleep:
+            self.assertEqual(owner.await_session(None, None, 'fixture', MODEL, status='idle', reason='keepawake-project-session-not-opened'), idle)
+            self.assertEqual((active.call_count, sleep.call_args.args), (2, (0.05,)))
+        with patch.object(owner, 'active_session', return_value=None), patch.object(owner.time, 'monotonic', side_effect=[0.0, 30.0]), patch.object(owner.time, 'sleep'):
+            with self.assertRaisesRegex(owner.CaseUnavailable, 'keepawake-project-session-not-opened'):
+                owner.await_session(None, None, 'fixture', MODEL, status='idle', reason='keepawake-project-session-not-opened')
