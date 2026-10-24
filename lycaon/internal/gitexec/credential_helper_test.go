@@ -56,11 +56,20 @@ func TestNetworkInvocationServesTheVaultHelperOnLinux(t *testing.T) {
 	if (network.helper == hostHelperVault) != wantVault || network.remote != "https://example.com/r.git" {
 		t.Fatalf("network facts %+v with argv %q", network, argv)
 	}
-	started, stopped := 0, 0
+	started, stopped, bound := 0, 0, 0
 	previous := credentialServiceFn
-	credentialServiceFn = func(context.Context, string) (string, func() error, error) {
+	credentialServiceFn = func(context.Context, string) (credentialService, error) {
 		started++
-		return "/run/user/1000/pw-git-x/credential", func() error { stopped++; return nil }, nil
+		return credentialService{
+			socket: "/run/user/1000/pw-git-x/credential",
+			bind: func(pid int) error {
+				if pid > 0 {
+					bound++
+				}
+				return nil
+			},
+			stop: func() error { stopped++; return nil },
+		}, nil
 	}
 	t.Cleanup(func() { credentialServiceFn = previous })
 	dir := t.TempDir()
@@ -69,8 +78,8 @@ func TestNetworkInvocationServesTheVaultHelperOnLinux(t *testing.T) {
 	if err != nil || code != 0 {
 		t.Fatalf("network invocation: err=%v code=%d out=%s", err, code, out)
 	}
-	if wantVault && (started != 1 || stopped != 1) {
-		t.Fatalf("credential service started %d times and stopped %d times", started, stopped)
+	if wantVault && (started != 1 || stopped != 1 || bound != 1) {
+		t.Fatalf("credential service started %d times, bound %d times and stopped %d times", started, bound, stopped)
 	}
 	if !wantVault && started != 0 {
 		t.Fatal("credential service started where no vault helper is served")
@@ -78,8 +87,8 @@ func TestNetworkInvocationServesTheVaultHelperOnLinux(t *testing.T) {
 	if !wantVault {
 		return
 	}
-	credentialServiceFn = func(context.Context, string) (string, func() error, error) {
-		return "", nil, errors.New("socket directory unavailable")
+	credentialServiceFn = func(context.Context, string) (credentialService, error) {
+		return credentialService{}, errors.New("socket directory unavailable")
 	}
 	if _, _, err := Run(t.Context(), dir, []string{"config", "--get-all", "credential.helper"}, Opts{Profile: ProfileNetwork, RemoteURL: "https://example.com/r.git"}); err == nil || !strings.Contains(err.Error(), "socket directory unavailable") {
 		t.Fatalf("service failure = %v", err)

@@ -144,13 +144,16 @@ func run(ctx context.Context, projectDir string, args []string, opts Opts, stdou
 		}
 		env = append(env, plan.Environment()...)
 	}
+	var started func(pid int)
 	if network.helper == hostHelperVault {
-		socket, stop, err := credentialServiceFn(ctx, bin)
+		service, err := credentialServiceFn(ctx, bin)
 		if err != nil {
 			return nil, -1, fmt.Errorf("gitexec: start credential service: %w", err)
 		}
-		defer func() { _ = stop() }()
-		env = append(env, gitcredential.SocketEnv+"="+socket)
+		defer func() { _ = service.stop() }()
+		env = append(env, gitcredential.SocketEnv+"="+service.socket)
+		// An unbound service answers no helper, so a failed bind fails closed.
+		started = func(pid int) { _ = service.bind(pid) }
 	}
 
 	timeout := opts.Timeout
@@ -174,6 +177,7 @@ func run(ctx context.Context, projectDir string, args []string, opts Opts, stdou
 		Stdout:         stdout,
 		AppendEnv:      env,
 		Stdin:          stdin,
+		Started:        started,
 	})
 	if stdout != nil {
 		out = diagnostics

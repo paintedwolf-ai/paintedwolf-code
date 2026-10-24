@@ -53,10 +53,18 @@ func resolveCredentialHelperFor(helper, goos string) (string, hostHelper, error)
 // credentialServiceFn starts the per-invocation vault service; tests replace it.
 var credentialServiceFn = startCredentialService
 
-func startCredentialService(ctx context.Context, gitBinary string) (string, func() error, error) {
+// credentialService is the per-invocation vault service as gitexec uses it:
+// its socket, binding to the started invocation, and release.
+type credentialService struct {
+	socket string
+	bind   func(pid int) error
+	stop   func() error
+}
+
+func startCredentialService(ctx context.Context, gitBinary string) (credentialService, error) {
 	service, err := gitcredential.Serve(ctx, gitcredential.ServeOptions{GitBinary: gitBinary})
 	if err != nil {
-		return "", nil, err
+		return credentialService{}, err
 	}
-	return service.Path(), service.Close, nil
+	return credentialService{socket: service.Path(), bind: service.Bind, stop: service.Close}, nil
 }
