@@ -55,16 +55,18 @@ def compact_physical_input(observations: dict, streams: dict[str, bytes]) -> tup
                 seen.add(key)
                 detailed_list.append(record)
 
-    for launch_key in ("launch", "launch_before"):
+    for launch_key in ("launch", "launch_before", "launch_after"):
         launch = observations.get(launch_key)
         if isinstance(launch, dict) and isinstance(launch.get("fixed_input"), list):
             for item in launch["fixed_input"]:
                 collect(item)
-    collect(observations.get("native_input"))
-    if isinstance(observations.get("transitions"), list):
-        for item in observations["transitions"]:
-            collect(item)
-    collect(observations.get("lock_transition"))
+    for list_key in ("fixed_input", "transitions"):
+        rows = observations.get(list_key)
+        if isinstance(rows, list):
+            for item in rows:
+                collect(item)
+    for single_key in ("native_input", "lock_transition"):
+        collect(observations.get(single_key))
     for editor_key in ("editor_keyboard", "editor_search_keyboard"):
         editor = observations.get(editor_key)
         if isinstance(editor, dict):
@@ -75,7 +77,7 @@ def compact_physical_input(observations: dict, streams: dict[str, bytes]) -> tup
                               sort_keys=True, separators=(",", ":")) + "\n").encode()
     stream_sha256 = hashlib.sha256(payload_raw).hexdigest()
     compacted = dict(observations)
-    for launch_key in ("launch", "launch_before"):
+    for launch_key in ("launch", "launch_before", "launch_after"):
         launch = compacted.get(launch_key)
         if isinstance(launch, dict) and isinstance(launch.get("fixed_input"), list):
             compacted[launch_key] = {
@@ -84,14 +86,15 @@ def compact_physical_input(observations: dict, streams: dict[str, bytes]) -> tup
                                 if _is_physical_transaction(row) else row
                                 for row in launch["fixed_input"]],
             }
-    if _is_physical_transaction(compacted.get("native_input")):
-        compacted["native_input"] = summarize_physical_transaction(compacted["native_input"], stream_sha256)
-    if isinstance(compacted.get("transitions"), list):
-        compacted["transitions"] = [summarize_physical_transaction(row, stream_sha256)
-                                    if _is_physical_transaction(row) else row
-                                    for row in compacted["transitions"]]
-    if _is_physical_transaction(compacted.get("lock_transition")):
-        compacted["lock_transition"] = summarize_physical_transaction(compacted["lock_transition"], stream_sha256)
+    for list_key in ("fixed_input", "transitions"):
+        rows = compacted.get(list_key)
+        if isinstance(rows, list):
+            compacted[list_key] = [summarize_physical_transaction(row, stream_sha256)
+                                   if _is_physical_transaction(row) else row
+                                   for row in rows]
+    for single_key in ("native_input", "lock_transition"):
+        if _is_physical_transaction(compacted.get(single_key)):
+            compacted[single_key] = summarize_physical_transaction(compacted[single_key], stream_sha256)
     for editor_key in ("editor_keyboard", "editor_search_keyboard"):
         editor = compacted.get(editor_key)
         if isinstance(editor, dict) and _is_physical_transaction(editor.get("physical_vm_keyboard")):
@@ -104,7 +107,8 @@ def compact_physical_input(observations: dict, streams: dict[str, bytes]) -> tup
 
 
 def expand_physical_transactions(leaf: Path | None, selected: list[dict]) -> list[dict]:
-    if not any(isinstance(record, dict) and "physical_input_stream" in record for record in selected):
+    if not any(isinstance(record, dict) and ("physical_input_stream" in record or "events_sha256" in record
+               or "physical_input_sha256" in record or "event_count" in record) for record in selected):
         return selected
     if leaf is None:
         raise ValueError("compacted physical input requires its retained stream path")
@@ -142,6 +146,9 @@ def expand_physical_transactions(leaf: Path | None, selected: list[dict]) -> lis
     for record in selected:
         if not isinstance(record, dict):
             raise ValueError("physical input summary must be an object")
+        if "physical_input_stream" not in record and isinstance(record.get("events"), list):
+            expanded.append(record)
+            continue
         key = (record.get("transaction_id"), record.get("operation"))
         full = by_key.get(key)
         if full is None or summarize_physical_transaction(full, stream_sha256) != record:
