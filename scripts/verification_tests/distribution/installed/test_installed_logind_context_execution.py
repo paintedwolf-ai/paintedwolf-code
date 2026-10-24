@@ -1,4 +1,5 @@
 """Graphical execution is an actual session or an attested user-manager unit."""
+import io
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -106,7 +107,9 @@ class ExecutionContextTests(unittest.TestCase):
                 return self
             def __exit__(self, *_):
                 closed.append(True)
-        with patch.object(owner, 'Reader', return_value=OwnedReader()), patch.object(
+        with patch.object(owner.Path, 'stat', return_value=SimpleNamespace(st_size=0)), patch.object(
+                owner.Path, 'open', return_value=io.StringIO('0::fixture\n')), patch.object(
+                owner, 'Reader', return_value=OwnedReader()), patch.object(
                 owner, 'observed', side_effect=ValueError('fixture observation failed')):
             with self.assertRaises(ValueError):
                 owner.execution_session()
