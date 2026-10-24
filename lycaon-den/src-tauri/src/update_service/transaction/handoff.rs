@@ -1,25 +1,18 @@
 //! Commit occurs after work is saved and the engine stops.
 use super::journal::{write, Phase, Transaction};
-use crate::update_service::{persistence, staging, Candidate, Failure, UpdateError};
-use std::{fs, path::PathBuf};
+use crate::update_service::{persistence, Failure, UpdateError};
 
 pub struct Activation {
     pub(super) transaction: Transaction,
-    pub(super) helper: PathBuf,
     pub(super) _permit: tokio::sync::OwnedMutexGuard<()>,
 }
 impl Activation {
     pub fn commit(mut self) -> Result<(), UpdateError> {
         self.transaction.phase = Phase::Committed;
         write(&self.transaction)?;
-        let result = std::process::Command::new(&self.helper)
-            .arg("--apply-update")
-            .arg(&self.transaction.id)
-            .arg(persistence::installation_id(&self.transaction.target))
-            .stdin(std::process::Stdio::null())
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .spawn();
+        // The application signature binds Info.plist; a loose copy cannot execute.
+        // The parent retains the installation lease until this helper is running.
+        let result = helper_command(&self.transaction).spawn();
         if let Err(error) = result {
             return Err(record_spawn_failure(&mut self.transaction, error, write));
         }
@@ -38,41 +31,34 @@ pub(super) fn record_spawn_failure(
         Err(record) => UpdateError::new(Failure::RecoveryRequired, error).with_context(record),
     }
 }
-/// A private copy of the running executable that applies the update after the parent exits.
-pub(super) fn stage_helper(candidate: &Candidate) -> Result<PathBuf, UpdateError> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        let dir = staging::root(candidate)?;
-        crate::config_dir::ensure_private_dir(&dir)
-            .map_err(|e| UpdateError::new(Failure::StateUnavailable, e))?;
-        let helper = dir.join("update-helper");
-        match fs::symlink_metadata(&helper) {
-            Ok(_) => {
-                fs::remove_file(&helper).map_err(|e| UpdateError::new(Failure::InstallFailed, e))?
-            }
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-            Err(e) => return Err(UpdateError::new(Failure::InstallFailed, e)),
-        }
-        let source_path =
-            std::env::current_exe().map_err(|e| UpdateError::new(Failure::StateUnavailable, e))?;
-        let mut source = fs::File::open(source_path)
-            .map_err(|e| UpdateError::new(Failure::StateUnavailable, e))?;
-        let mut copy = fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .mode(0o700)
-            .open(&helper)
-            .map_err(|e| UpdateError::new(Failure::InstallFailed, e))?;
-        std::io::copy(&mut source, &mut copy)
-            .map_err(|e| UpdateError::new(Failure::InstallFailed, e))?;
-        copy.sync_all()
-            .map_err(|e| UpdateError::new(Failure::InstallFailed, e))?;
-        Ok(helper)
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = candidate;
-        Err(Failure::UnsupportedInstallation.into())
+
+fn helper_command(transaction: &Transaction) -> std::process::Command {
+    let mut command = std::process::Command::new(super::executable(&transaction.target));
+    command
+        .arg("--apply-update")
+        .arg(&transaction.id)
+        .arg(persistence::installation_id(&transaction.target))
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+    command
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn helper_executes_inside_the_signed_transaction_bundle() {
+        let root = crate::test_support::TempDir::new("signed-update-helper");
+        let transaction = super::super::tests::fixture(&root);
+        let command = helper_command(&transaction);
+        assert_eq!(command.get_program(), super::super::executable(&transaction.target).as_os_str());
+        let arguments: Vec<_> = command.get_args().collect();
+        assert_eq!(arguments, [
+            std::ffi::OsStr::new("--apply-update"),
+            std::ffi::OsStr::new(&transaction.id),
+            std::ffi::OsStr::new(&persistence::installation_id(&transaction.target)),
+        ]);
     }
 }
