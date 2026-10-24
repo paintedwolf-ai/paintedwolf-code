@@ -1,15 +1,8 @@
 """Own one final installed desktop process and its actual engine connection."""
 from __future__ import annotations
 
-import json
-import os
+import json, os, re, stat, subprocess, threading, time, urllib.parse
 from pathlib import Path
-import stat
-import re
-import subprocess
-import threading
-import time
-import urllib.parse
 
 from ..installed_storage import Storage, resolve as storage_for_launch
 from .app_api import EngineAPI
@@ -114,6 +107,38 @@ def session_environment(session: dict) -> dict:
     return result
 
 
+def enter_desktop_application_scope(path: Path, storage: Storage) -> dict:
+    from gi.repository import Gio, GLib
+    desktop_path = Path(f"/usr/share/applications/{storage.application_identifier}.desktop")
+    desktop_identity = file_identity(desktop_path); desktop_identity.pop("header", None)
+    lines = [line.strip() for line in desktop_path.read_text(encoding="utf-8").splitlines()]
+    exec_lines = [line.removeprefix("Exec=").strip() for line in lines if line.startswith("Exec=")]
+    if (f"StartupWMClass={storage.application_identifier}" not in lines or len(exec_lines) != 1
+            or exec_lines[0].split()[0] not in {str(path), "/usr/libexec/painted-wolf-code/pw-launch",
+                                                "/opt/painted-wolf-code/bin/painted-wolf-code"}):
+        raise ValueError("installed desktop entry does not match the selected application launcher")
+    cgroup_before = Path("/proc/self/cgroup").read_text(encoding="utf-8").strip()
+    unit = f"app-gnome-{storage.application_identifier}-{os.getpid()}-{int(time.monotonic() * 1000)}.scope"
+    os.environ.setdefault("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+    os.environ.setdefault("DBUS_SESSION_BUS_ADDRESS", f"unix:path=/run/user/{os.getuid()}/bus")
+    bus, props = Gio.bus_get_sync(Gio.BusType.SESSION, None), [("PIDs", GLib.Variant("au", [os.getpid()]))]
+    bus.call_sync("org.freedesktop.systemd1", "/org/freedesktop/systemd1", "org.freedesktop.systemd1.Manager",
+                  "StartTransientUnit", GLib.Variant("(ssa(sv)a(sa(sv)))", (unit, "fail", props, [])),
+                  GLib.VariantType.new("(o)"), Gio.DBusCallFlags.NONE, 5000, None)
+    deadline, cgroup_after = time.monotonic() + 5.0, ""
+    while time.monotonic() < deadline:
+        cgroup_after = Path("/proc/self/cgroup").read_text(encoding="utf-8").strip()
+        if cgroup_after.endswith("/" + unit): break
+        time.sleep(0.02)
+    else:
+        raise ValueError("installed desktop application scope unit did not attach to the launcher cgroup")
+    return {"desktop_entry_path": str(desktop_path), "desktop_entry_identity": desktop_identity,
+            "exec_target": str(path), "application_id": storage.application_identifier, "unit": unit,
+            "caller_cgroup_before": cgroup_before, "caller_cgroup_after": cgroup_after,
+            "launch_mode": "installed-desktop-entry-systemd-user-scope",
+            "cli_launch_comparison": "direct CLI/SSH launches outside a desktop-entry systemd user unit remain in the caller session scope where xdg-desktop-portal < 1.20 without host.portal.Registry cannot attribute app_id"}
+
+
 class InstalledApp:
     def __init__(self, binding: dict, *, arguments: list[str] | None = None, timeout: float = 60):
         self.binding, self.arguments, self.timeout = binding, arguments or [], timeout
@@ -126,19 +151,13 @@ class InstalledApp:
             path = Path(urllib.parse.unquote(parsed.path)) if parsed.scheme == "file" and not parsed.netloc else Path(value)
             if not path.is_absolute() or not path.exists() or parsed.scheme not in {"", "file"}:
                 raise ValueError("installed launcher argument is not an existing absolute fixture path")
-        self.process = None
-        self.storage = None
-        self.api = None
+        self.process = self.storage = self.api = None
         self.observations = {"artifact": binding["artifact"], "source_commit": binding["source_commit"]}
-        self._streams = {"app-stdout": bytearray(), "app-stderr": bytearray()}
-        self._readers = []
-        self._overflow = threading.Event()
+        self._streams, self._readers, self._overflow = {"app-stdout": bytearray(), "app-stderr": bytearray()}, [], threading.Event()
 
-    def __enter__(self):
-        return self.start()
+    def __enter__(self): return self.start()
 
-    def __exit__(self, kind, value, traceback):
-        self.stop()
+    def __exit__(self, kind, value, traceback): self.stop()
 
     def start(self):
         from .onboarding import onboard
@@ -159,37 +178,37 @@ class InstalledApp:
         session = graphical_session()
         environment = session_environment(session)
         storage = storage_for_launch(environment)
-        config = storage.config
-        daemon = config / "daemon.json"
+        daemon = storage.config / "daemon.json"
         if daemon.exists():
             previous = private_json(daemon)
             pid = previous.get("pid")
             if type(pid) is int and pid > 1 and Path(f"/proc/{pid}").exists():
                 raise CaseUnavailable("guest already has a running engine; preserving its owner")
-        launcher = dict(self.binding["launcher"])
-        path = Path(launcher.pop("path"))
-        current = file_identity(path)
-        current.pop("header")
+        launcher = dict(self.binding["launcher"]); path = Path(launcher.pop("path"))
+        current = file_identity(path); current.pop("header")
         if current != launcher:
             raise ValueError("installed application launcher changed since final artifact binding")
+        unit_info = enter_desktop_application_scope(path, storage)
         self.storage = storage
         self.process = subprocess.Popen([str(path), *self.arguments], env=environment,
             stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
+        launch_cgroup = Path(f"/proc/{self.process.pid}/cgroup").read_text(encoding="utf-8").strip()
+        if not launch_cgroup.endswith("/" + unit_info["unit"]):
+            raise ValueError("installed launcher did not inherit its desktop application unit scope")
         self.observations.update({"launcher": self.binding["launcher"], "session": session,
-                                  "launch_identity": process_identity(self.process.pid), "storage": storage.facts()})
+                                  "launch_identity": process_identity(self.process.pid), "storage": storage.facts(),
+                                  "application_unit": {**unit_info, "launch_cgroup": launch_cgroup}})
 
         def capture(name, stream):
             with stream:
                 while block := stream.read(64 << 10):
                     if len(self._streams[name]) + len(block) > LIMIT:
-                        self._overflow.set()
-                        return
+                        self._overflow.set(); return
                     self._streams[name].extend(block)
 
         self._readers = [threading.Thread(target=capture, args=(name, getattr(self.process, stream)), daemon=True)
                          for name, stream in (("app-stdout", "stdout"), ("app-stderr", "stderr"))]
-        for reader in self._readers:
-            reader.start()
+        for reader in self._readers: reader.start()
         return self
 
     def wait_ready(self):
@@ -198,8 +217,7 @@ class InstalledApp:
         deadline = time.monotonic() + self.timeout
         try:
             while time.monotonic() < deadline:
-                if self.try_ready():
-                    return self
+                if self.try_ready(): return self
                 time.sleep(0.1)
             self.require_running()
             raise CaseUnavailable("installed application did not reach an owned engine API; onboarding or a native interaction driver may be required")
@@ -218,8 +236,7 @@ class InstalledApp:
             error = CaseFailed('selected installed application exited before its required interaction; exit code ' + str(code))
         elif self._overflow.is_set():
             error = CaseFailed('selected installed application exceeded its bounded startup output')
-        else:
-            return
+        else: return
         error.observations, error.streams = self.observations, self.streams()
         raise error
 
@@ -232,49 +249,44 @@ class InstalledApp:
         return storage
 
     def try_ready(self) -> bool:
-        if self.process is None:
-            return False
-        self.require_running()
-        self.require_engine()
+        if self.process is None: return False
+        self.require_running(); self.require_engine()
         config = self.selected_storage().config
-        try:
-            return self._bind_engine(private_json(config / "daemon.json"), config)
-        except (FileNotFoundError, ProcessLookupError):
-            return False
+        try: return self._bind_engine(private_json(config / "daemon.json"), config)
+        except (FileNotFoundError, ProcessLookupError): return False
 
     def _bind_engine(self, record: dict, config: Path) -> bool:
         pid, port = record.get("pid"), record.get("port")
         if type(pid) is not int or pid <= 1 or record.get("host") not in {"127.0.0.1", "localhost"}:
             raise ValueError("installed engine record names a foreign endpoint")
-        try:
-            engine = process_identity(pid)
-        except FileNotFoundError:
-            return False
+        try: engine = process_identity(pid)
+        except FileNotFoundError: return False
         if engine["parent_pid"] != self.process.pid:
             raise ValueError("installed engine is not the captured application's child")
         expected = self.binding["images"][str(Path(self.binding["install_root"]) / "bin/pw")]
         if engine_image(pid) != (expected["device"], expected["inode"], expected["bytes"]):
             raise ValueError("running engine differs from the selected final installed image")
+        unit_info = self.observations.get("application_unit")
+        if isinstance(unit_info, dict):
+            engine_cgroup = Path(f"/proc/{pid}/cgroup").read_text(encoding="utf-8").strip()
+            if engine_cgroup != unit_info["launch_cgroup"] or not engine_cgroup.endswith("/" + unit_info["unit"]):
+                raise ValueError("installed engine escaped its desktop application unit scope")
+            self.observations["application_unit"] = {**unit_info, "engine_cgroup": engine_cgroup,
+                                                     "ancestry": [engine, process_identity(self.process.pid)]}
         self.observations["engine_identity"] = engine
         api = EngineAPI(port)
-        try:
-            health = api.request("GET", "/health")
+        try: health = api.request("GET", "/health")
         except (OSError, ValueError):
-            self.require_engine()
-            return False
+            self.require_engine(); return False
         self.require_engine()
-        if health["status"] != 200:
-            return False
+        if health["status"] != 200: return False
         if process_identity(pid) != engine:
             raise ValueError("installed engine changed during readiness capture")
         # GUI launches keep their bearer in native memory. Public health proves
         # readiness; a pre-existing standalone token must independently authenticate.
-        token_path = config / "api.token"
-        try:
-            descriptor = os.open(token_path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
-        except FileNotFoundError:
-            descriptor = None
-        private_available = False
+        token_path, descriptor, private_available = config / "api.token", None, False
+        try: descriptor = os.open(token_path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        except FileNotFoundError: descriptor = None
         if descriptor is not None:
             with os.fdopen(descriptor, "rb") as stream:
                 info = os.fstat(stream.fileno())
@@ -283,26 +295,21 @@ class InstalledApp:
                 token = stream.read(4097).decode().strip()
             candidate = EngineAPI(port, token)
             try:
-                private_available = candidate.request("GET", "/v1/providers")["status"] == 200
+                if candidate.request("GET", "/v1/providers")["status"] == 200:
+                    private_available, api = True, candidate
             except (OSError, ValueError):
                 private_available = False
-            if private_available:
-                api = candidate
         if process_identity(pid) != engine:
             raise ValueError("installed engine changed during private API observation")
-        self.observations["private_api_available"] = private_available
         self.api = api
-        self.observations.update({"engine_identity": engine, "engine_port": port, "health": health})
+        self.observations.update({"private_api_available": private_available, "engine_identity": engine, "engine_port": port, "health": health})
         return True
 
     def require_engine(self):
         expected = self.observations.get("engine_identity")
-        if expected is None:
-            return
-        try:
-            actual = process_identity(expected["pid"])
-        except (FileNotFoundError, ProcessLookupError):
-            actual = None
+        if expected is None: return
+        try: actual = process_identity(expected["pid"])
+        except (FileNotFoundError, ProcessLookupError): actual = None
         if actual != expected:
             error = CaseFailed("captured installed engine exited or changed during its required interaction")
             error.observations, error.streams = self.observations, self.streams()
@@ -315,14 +322,11 @@ class InstalledApp:
         return self.api.request(method, path, payload)
 
     def stop(self):
-        if self.process is None:
-            return
+        if self.process is None: return
         stop_stack(self.process)
-        for reader in self._readers:
-            reader.join(timeout=3)
+        for reader in self._readers: reader.join(timeout=3)
         self.observations.update({"exit_code": self.process.poll(), "output_limit": self._overflow.is_set(),
                                   "capture_complete": not any(reader.is_alive() for reader in self._readers)})
         self.api = None
 
-    def streams(self) -> dict[str, bytes]:
-        return {name: bytes(raw) for name, raw in self._streams.items()}
+    def streams(self) -> dict[str, bytes]: return {name: bytes(raw) for name, raw in self._streams.items()}

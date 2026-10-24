@@ -34,11 +34,11 @@ def load(binding):
             raise ValueError('provider recovery execution changed during observation')
     if hashlib.sha256(raw).hexdigest() != selected['sha256']:
         raise ValueError('provider recovery execution digest differs')
-    witness = registered(json.loads(raw), binding, str(os.getuid()))
+    witness = registered(json.loads(raw), binding, str(os.getuid()), leaf=path)
     return {**witness, 'prior_execution_sha256': selected['sha256']}, raw
 
 
-def registered(document, binding, account):
+def registered(document, binding, account, *, leaf=None):
     if not isinstance(account, str) or not account.isdecimal() or int(account) <= 0:
         raise ValueError('provider recovery requires a real owned graphical UID')
     if (not isinstance(document, dict) or type(document.get('format_version')) is not int or document['format_version'] != 1
@@ -60,6 +60,9 @@ def registered(document, binding, account):
     if len(matches) != 1:
         raise ValueError('provider recovery has no unique completed endpoint transaction')
     record = matches[0]
+    if leaf is not None and 'physical_input_stream' in record:
+        from ..installed_input.controller import expand_physical_transactions
+        record = expand_physical_transactions(leaf, [record])[0]
     operation = record['operation']
     sequence = protocol.steps(operation)
     events = record.get('events')

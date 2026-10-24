@@ -149,6 +149,35 @@ class GuestInputTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 controller.verify_deliveries(root, self.execution, selected)
 
+    def test_compacted_physical_input_stream_expands_and_refuses_digest_mismatch(self):
+        import copy, json
+        from linux_release.installed_cases.records import retain
+        actor = Mock()
+        actor.observe.return_value = self.focus
+        operations = ['provider-name-v1', 'provider-endpoint-v1-12345',
+                      'provider-fixture-credential-v1', 'reply-fixture-prompt-v1']
+        records = [guest.perform(self.execution, 'owned', actor, self.mailbox(), operation=operation)
+                   for operation in operations]
+        partial = {**copy.deepcopy(records[-1]), 'events': records[-1]['events'][:5], 'completed': False}
+        selected = {'format_version': 1, 'kind': 'qemu-fixed-input', 'lease': '/root/lease', 'vm_id': 'owned'}
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            evidence = root / 'leaf/evidence'
+            binding = {'source_commit': self.execution['source_commit'], 'artifact': {'id': 'app'}}
+            retain(binding, 'session', 'inhibitor-lifetime', evidence, 'unverified',
+                   {'launch': {'fixed_input': records[:3]}, 'native_input': partial})
+            host = [protocol.canonical({'request': event['request'], 'acknowledgment': {
+                'format_version': 1, 'request_sha256': protocol.request_sha256(event['request']), 'delivery': event['delivery']}})
+                for record in [*records[:3], partial] for event in record['events']]
+            (root / 'native-input.jsonl').write_bytes(b''.join(host))
+            controller.verify_deliveries(root, self.execution, selected)
+            stream_path = evidence / 'session/inhibitor-lifetime/physical-input.bin'
+            tampered = json.loads(stream_path.read_bytes())
+            tampered['transactions'][-1]['completed'] = True
+            stream_path.write_bytes(json.dumps(tampered, sort_keys=True, separators=(',', ':')).encode() + b'\n')
+            with self.assertRaisesRegex(ValueError, 'summary differs'):
+                controller.verify_deliveries(root, self.execution, selected)
+
 
 if __name__ == '__main__':
     unittest.main()

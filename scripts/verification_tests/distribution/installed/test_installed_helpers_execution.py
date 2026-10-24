@@ -120,3 +120,32 @@ class InstalledHelperTests(unittest.TestCase):
                 (root / "leaf/execution.json").write_text(json.dumps({**request, name: value}))
                 with self.assertRaises(ValueError):
                     verify_execution_receipt(root, target, "b" * 40, "c" * 40)
+
+    def test_physical_input_compaction_retains_linked_stream_and_preserves_adverse_partials(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            binding = {"source_commit": "a" * 40, "artifact": {"installation": "deb"}}
+            tx_full = {"format_version": 1, "vm_id": "owned", "transaction_id": "1" * 32,
+                       "operation": "provider-name-v1", "completed": True, "text_readback": False,
+                       "events": [{"ordinal": i, "focus": {"chain": "x" * 2048}} for i in range(60)]}
+            tx_partial = {"format_version": 1, "vm_id": "owned", "transaction_id": "2" * 32,
+                          "operation": "reply-fixture-prompt-v1", "completed": False,
+                          "events": [{"ordinal": i, "focus": {"chain": "y" * 2048}} for i in range(55)]}
+            tx_lock = {"format_version": 1, "vm_id": "owned", "transaction_id": "3" * 32,
+                       "operation": "session-lock-v1", "completed": True, "text_readback": False,
+                       "events": [{"ordinal": 0, "native_session_after": {"locked_hint": True}}]}
+            observations = {"launch": {"fixed_input": [tx_full]}, "native_input": tx_partial,
+                            "lock_transition": tx_lock, "transitions": [tx_lock]}
+            result = retain(binding, "session", "inhibitor-lifetime", root, "unverified", observations)
+            paths = {row["path"]: row["sha256"] for row in result["evidence"]}
+            self.assertIn("session/inhibitor-lifetime/physical-input.bin", paths)
+            stream_raw = (root / "session/inhibitor-lifetime/physical-input.bin").read_bytes()
+            stream_doc = json.loads(stream_raw)
+            self.assertEqual(len(stream_doc["transactions"]), 3)
+            doc = json.loads((root / "session/inhibitor-lifetime/execution.json").read_bytes())
+            summary_partial = doc["observations"]["native_input"]
+            self.assertFalse(summary_partial["completed"])
+            self.assertEqual(summary_partial["event_count"], 55)
+            self.assertEqual(summary_partial["physical_input_sha256"], paths["session/inhibitor-lifetime/physical-input.bin"])
+            self.assertNotIn("events", summary_partial)
+            self.assertIn("events", observations["native_input"])

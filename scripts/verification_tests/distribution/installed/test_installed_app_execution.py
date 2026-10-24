@@ -154,3 +154,48 @@ class InstalledAppTests(unittest.TestCase):
                     app.try_ready()
                 self.assertNotIsInstance(failure.exception, CaseUnavailable)
                 self.assertEqual(failure.exception.observations['engine_identity'], identity)
+
+    def test_desktop_application_scope_verifies_desktop_entry_and_engine_cgroup_ancestry(self):
+        from scripts.linux_release.installed_cases.app import enter_desktop_application_scope
+        storage = SimpleNamespace(application_identifier="dev.paintedwolf.code")
+        desktop_text = "[Desktop Entry]\nExec=/usr/libexec/painted-wolf-code/pw-launch %U\nStartupWMClass=dev.paintedwolf.code\n"
+        fake_bus, fake_gio, fake_glib = Mock(), Mock(), Mock()
+        fake_gio.bus_get_sync.return_value = fake_bus
+        cgroups = ["0::/user.slice/user-30068.slice/session-1961.scope\n",
+                   "0::/user.slice/user-30068.slice/user@30068.service/app.slice/app-gnome-dev.paintedwolf.code-500-1000.scope\n"]
+        def fake_read_text(path_obj, *args, **kwargs):
+            if str(path_obj).endswith(".desktop"):
+                return desktop_text
+            return cgroups.pop(0) if len(cgroups) > 1 else cgroups[0]
+        with patch.dict("sys.modules", {"gi": SimpleNamespace(repository=SimpleNamespace(Gio=fake_gio, GLib=fake_glib)),
+                                        "gi.repository": SimpleNamespace(Gio=fake_gio, GLib=fake_glib)}), \
+                patch("scripts.linux_release.installed_cases.app.file_identity",
+                      return_value={"sha256": "a" * 64, "bytes": 120, "mode": 0o644, "header": b"[Desktop"}), \
+                patch("scripts.linux_release.installed_cases.app.os.getpid", return_value=500), \
+                patch("scripts.linux_release.installed_cases.app.time.monotonic", side_effect=[1.0, 1.0, 1.1]), \
+                patch.object(Path, "read_text", autospec=True, side_effect=fake_read_text):
+            witness = enter_desktop_application_scope(Path("/usr/libexec/painted-wolf-code/pw-launch"), storage)
+        self.assertEqual(witness["unit"], "app-gnome-dev.paintedwolf.code-500-1000.scope")
+        self.assertEqual(witness["launch_mode"], "installed-desktop-entry-systemd-user-scope")
+        fake_bus.call_sync.assert_called_once()
+        engine = {"pid": 321, "parent_pid": 123, "start_time_ticks": 456}
+        launcher = {"pid": 123, "parent_pid": 500, "start_time_ticks": 400}
+        app = InstalledApp({"artifact": {}, "source_commit": "a" * 40})
+        app.process = SimpleNamespace(pid=123)
+        app.binding = {"install_root": "/opt/app", "images": {"/opt/app/bin/pw": {"device": 1, "inode": 2, "bytes": 3}}}
+        app.observations["application_unit"] = {**witness, "launch_cgroup": witness["caller_cgroup_after"]}
+        api = Mock()
+        api.request.return_value = {"status": 200, "body": {"ready": True}}
+        with patch("scripts.linux_release.installed_cases.app.process_identity",
+                   side_effect=lambda pid: engine if pid == 321 else launcher), \
+                patch("scripts.linux_release.installed_cases.app.engine_image", return_value=(1, 2, 3)), \
+                patch("scripts.linux_release.installed_cases.app.EngineAPI", return_value=api), \
+                patch("scripts.linux_release.installed_cases.app.os.open", side_effect=FileNotFoundError), \
+                patch.object(Path, "read_text", return_value=witness["caller_cgroup_after"]):
+            self.assertTrue(app._bind_engine({"pid": 321, "port": 12345, "host": "127.0.0.1"}, Path("/unused")))
+        self.assertEqual(app.observations["application_unit"]["ancestry"], [engine, launcher])
+        with patch("scripts.linux_release.installed_cases.app.process_identity", return_value=engine), \
+                patch("scripts.linux_release.installed_cases.app.engine_image", return_value=(1, 2, 3)), \
+                patch.object(Path, "read_text", return_value="0::/user.slice/session-1961.scope"):
+            with self.assertRaisesRegex(ValueError, "escaped its desktop application unit scope"):
+                app._bind_engine({"pid": 321, "port": 12345, "host": "127.0.0.1"}, Path("/unused"))

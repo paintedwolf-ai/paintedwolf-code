@@ -38,6 +38,47 @@ def run_managed(bridge, command, output):
     return process.returncode
 
 
+def expand_physical_transactions(leaf: Path, selected: list[dict]) -> list[dict]:
+    import json
+    from ..installed_cases.records import PHYSICAL_INPUT_STREAM, summarize_physical_transaction
+    if not any(isinstance(row, dict) and ('physical_input_stream' in row or 'events_sha256' in row
+               or 'physical_input_sha256' in row or 'event_count' in row) for row in selected):
+        return selected
+    path = leaf.with_name(PHYSICAL_INPUT_STREAM + '.bin')
+    if not path.is_file() or not 0 < path.stat().st_size <= MAX_LOG:
+        raise ValueError('native input detailed stream is missing or exceeds its bound')
+    raw = path.read_bytes()
+    if len(raw) > MAX_LOG:
+        raise ValueError('native input detailed stream exceeds its bound')
+    stream_sha256 = hashlib.sha256(raw).hexdigest()
+    payload = json.loads(raw)
+    if (not isinstance(payload, dict) or set(payload) != {'format_version', 'transactions'}
+            or type(payload['format_version']) is not int or payload['format_version'] != 1
+            or not isinstance(payload['transactions'], list)):
+        raise ValueError('native input detailed stream has an invalid format')
+    by_key = {}
+    for row in payload['transactions']:
+        if not isinstance(row, dict) or not isinstance(row.get('events'), list):
+            raise ValueError('native input detailed transaction is invalid')
+        key = (row.get('transaction_id'), row.get('operation'))
+        if key in by_key:
+            raise ValueError('native input detailed stream duplicates a transaction')
+        by_key[key] = row
+    expanded = []
+    for record in selected:
+        if not isinstance(record, dict):
+            raise ValueError('native input transaction summary must be an object')
+        if 'events' in record and 'physical_input_stream' not in record:
+            expanded.append(record)
+            continue
+        key = (record.get('transaction_id'), record.get('operation'))
+        full = by_key.get(key)
+        if full is None or summarize_physical_transaction(full, stream_sha256) != record:
+            raise ValueError('native input transaction summary differs from its detailed stream')
+        expanded.append(full)
+    return expanded
+
+
 def delivery_records(directory, execution, vm_id):
     import json
     records, operations = [], []
@@ -69,6 +110,7 @@ def delivery_records(directory, execution, vm_id):
                 selected = [*selected, partial]
             if len(selected) > input_limit:
                 raise ValueError('reply input exceeds its fixed transaction count')
+            selected = expand_physical_transactions(leaf, selected)
             order = ('provider-name-v1', None, 'provider-fixture-credential-v1', prompt)
             if recovery is not None:
                 from ..installed_cases.provider_recovery import registered
@@ -79,7 +121,7 @@ def delivery_records(directory, execution, vm_id):
                 binding = {'artifact': document['artifact'], 'source_commit': execution['source_commit'],
                            'native_input': {'binding': execution, 'vm_id': vm_id}}
                 account = observations.get(launch, {}).get('session', {}).get('User')
-                admitted = registered(json.loads(raw), binding, account)
+                admitted = registered(json.loads(raw), binding, account, leaf=prior)
                 if recovery != {**admitted, 'prior_execution_sha256': hashlib.sha256(raw).hexdigest()} or len(selected) > 1:
                     raise ValueError('provider recovery differs from its retained registration and fixed input order')
                 order = (prompt,)
@@ -103,6 +145,7 @@ def delivery_records(directory, execution, vm_id):
                     'workspace-request-quit-v1', 'workspace-focus-quit-v1', 'workspace-approve-quit-v1')
                 if len(transitions) > len(expected) or transitions and len(selected) != input_limit:
                     raise ValueError('workspace input exceeds or precedes its declared physical sequence')
+                transitions = expand_physical_transactions(leaf, transitions)
                 records.extend(transitions)
                 operations.extend(expected[:len(transitions)])
             elif kind == 'keepawake':
@@ -117,6 +160,7 @@ def delivery_records(directory, execution, vm_id):
                 expected = ('session-lock-v1',)
                 if len(transitions) > len(expected) or transitions and len(selected) != input_limit:
                     raise ValueError('keepawake input exceeds or precedes its declared physical sequence')
+                transitions = expand_physical_transactions(leaf, transitions)
                 records.extend(transitions)
                 operations.extend(expected[:len(transitions)])
         else:
@@ -129,6 +173,7 @@ def delivery_records(directory, execution, vm_id):
                 selected.append(observations['native_input'])
             if len(selected) > 2:
                 raise ValueError('editor input exceeds its fixed transaction count')
+            selected = expand_physical_transactions(leaf, selected)
             records.extend(selected)
             operations.extend(('editor-replace-save-v1', 'editor-find-needle-v1')[:len(selected)])
     return records, operations
