@@ -27,3 +27,8 @@ commands.allow = ["linux_decoration_layout"]
 identifier = "allow-linux-window-frame"
 description = "Read whether a Linux window floats with its frame's corners and shadow, and its content size."
 commands.allow = ["linux_window_frame"]
+
+[[permission]]
+identifier = "allow-linux-titlebar-action"
+description = "Lower the window or open the desktop's window menu for a title bar click, as the desktop configures."
+commands.allow = ["linux_titlebar_action"]

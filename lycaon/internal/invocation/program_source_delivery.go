@@ -82,9 +82,16 @@ func (r *SQLRecorder) CommitProgramSourceDelivery(ctx context.Context, in Progra
 		return out, errors.Join(ownerErr, err)
 	}
 	defer func() { _ = tx.Rollback() }()
-	_, err = tx.ExecContext(ctx, `INSERT INTO invocation_program_deliveries(id,output_id,response_id,delivery_id,start_byte,end_byte,source_owner_ref,mappings_json,created_at) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(output_id,response_id,delivery_id) DO NOTHING`, uuid.NewString(), outputID, fact.ResponseID, fact.DeliveryID, in.OutputStartByte, in.OutputEndByte, out.SourceOwnerReference, string(encoded), time.Now().UTC().Format(time.RFC3339Nano))
+	ins, err := tx.ExecContext(ctx, `INSERT INTO invocation_program_deliveries(id,output_id,response_id,delivery_id,start_byte,end_byte,source_owner_ref,mappings_json,created_at) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(output_id,response_id,delivery_id) DO NOTHING`, uuid.NewString(), outputID, fact.ResponseID, fact.DeliveryID, in.OutputStartByte, in.OutputEndByte, out.SourceOwnerReference, string(encoded), time.Now().UTC().Format(time.RFC3339Nano))
 	if err != nil {
 		return out, errors.Join(ownerErr, err)
+	}
+	if written, rowsErr := ins.RowsAffected(); rowsErr != nil {
+		return out, errors.Join(ownerErr, rowsErr)
+	} else if written > 0 {
+		if err = chargeProgramTrace(ctx, tx, in.ProgramID, 1, int64(len(fact.ResponseID)+len(fact.DeliveryID)+len(out.SourceOwnerReference)+len(encoded)), traceChargeNonTerminal); err != nil {
+			return out, errors.Join(ownerErr, err)
+		}
 	}
 	var start, end int64
 	var reference, mappings string

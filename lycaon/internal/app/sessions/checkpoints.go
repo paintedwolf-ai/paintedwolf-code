@@ -26,6 +26,7 @@ import (
 	sessiondecisions "github.com/lycaon/lycaon/internal/session/decisions"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolhost"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -190,6 +191,15 @@ func wireAskSpamGuards(r *Runtime, authority *toolhost.AuthorityServices) *appro
 }
 
 func wireToolApprovalCheckpointHooks(ctx context.Context, mgr *hitl.Checkpoints, toolApprovalRT *approvalstate.ToolApprovalCoalesce) error {
+	limits, err := toolcontract.CatalogProgramMemoryLimits()
+	if err != nil {
+		return err
+	}
+	hostState, err := toolcontract.NewProgramMemory(limits)
+	if err != nil {
+		return err
+	}
+	mgr.Authority.SetNativeAuthorityAdmission(hostState)
 	mgr.Authority.SetToolApprovalTerminalHook(func(chatSessionID, grantKey string, _ hitl.DecisionStatus) {
 		toolApprovalRT.ClearPending(chatSessionID, grantKey)
 	})

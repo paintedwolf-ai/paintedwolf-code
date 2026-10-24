@@ -14,6 +14,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -131,7 +132,10 @@ func (p *DefaultLoopbackProvenance) IsSessionOwned(ctx context.Context, sessionI
 	}
 	current, err := p.listeners(ctx)
 	if err != nil {
-		current = nil
+		return false, ProvenanceEvidence{
+			Method:      ProvenanceUnverified,
+			Description: fmt.Sprintf("port %d cannot be attributed: the current listener table is unavailable", port),
+		}
 	}
 	return p.ownership(ctx, sessionID, workspaceDir, port, onPort(current, port))
 }
@@ -153,7 +157,66 @@ func (p *DefaultLoopbackProvenance) HeldByOther(ctx context.Context, sessionID, 
 	return !owned
 }
 
+// ObserveSessionListener implements ExactSessionListener by verifying complete
+// holder observation across the port and returning an endpoint resource ID
+// bound to the current holder set.
+func (p *DefaultLoopbackProvenance) ObserveSessionListener(ctx context.Context, sessionID string, endpoint netip.AddrPort) (string, bool, error) {
+	if p == nil || sessionID == "" || !endpoint.IsValid() || endpoint.Port() == 0 || !endpoint.Addr().Unmap().IsLoopback() {
+		return "", false, nil
+	}
+	current, err := p.listeners(ctx)
+	if err != nil {
+		return "", false, err
+	}
+	port := endpoint.Port()
+	targetAddr := endpoint.Addr().Unmap()
+	canonicalEndpoint := netip.AddrPortFrom(targetAddr, port)
+	held := onPort(current, port)
+	var endpointPIDs []int
+	for _, l := range held {
+		if l.PID <= 0 || !l.Addr.IsValid() {
+			return "", false, fmt.Errorf("port %d has a listener with incomplete holder observation", port)
+		}
+		if l.Addr.Unmap() == targetAddr {
+			endpointPIDs = append(endpointPIDs, l.PID)
+		}
+	}
+	owned, evidence := p.ownership(ctx, sessionID, "", port, held)
+	if owned {
+		if len(held) == 0 {
+			return fmt.Sprintf("%s:%s:%s:%s", evidence.Method, sessionID, evidence.OwnerID, canonicalEndpoint), true, nil
+		}
+		if len(endpointPIDs) == 0 {
+			return "", false, nil
+		}
+		return fmt.Sprintf("%s:%s:%s:%s", evidence.Method, sessionID, canonicalEndpoint, joinSortedPIDs(endpointPIDs)), true, nil
+	}
+	if len(endpointPIDs) > 0 {
+		return fmt.Sprintf("foreign:%s:%s", canonicalEndpoint, joinSortedPIDs(endpointPIDs)), false, nil
+	}
+	return "", false, nil
+}
+
+func joinSortedPIDs(pids []int) string {
+	sorted := slices.Clone(pids)
+	slices.Sort(sorted)
+	sorted = slices.Compact(sorted)
+	parts := make([]string, len(sorted))
+	for i, pid := range sorted {
+		parts[i] = strconv.Itoa(pid)
+	}
+	return strings.Join(parts, ",")
+}
+
 func (p *DefaultLoopbackProvenance) ownership(ctx context.Context, sessionID, workspaceDir string, port uint16, held []socketListener) (bool, ProvenanceEvidence) {
+	for _, l := range held {
+		if l.PID <= 0 || !l.Addr.IsValid() {
+			return false, ProvenanceEvidence{
+				Method:      ProvenanceUnverified,
+				Description: fmt.Sprintf("port %d has a listener with incomplete holder observation", port),
+			}
+		}
+	}
 	if owner, ok := p.lineageOwner(sessionID, held); ok {
 		for _, l := range held {
 			if !l.loopbackBound() {
@@ -166,6 +229,16 @@ func (p *DefaultLoopbackProvenance) ownership(ctx context.Context, sessionID, wo
 		return true, ProvenanceEvidence{
 			Method: ProvenanceLineage, OwnerID: strconv.Itoa(owner),
 			Description: fmt.Sprintf("listener process %d on port %d was launched by session %s", owner, port, sessionID),
+		}
+	}
+	if p.lineageSession != nil {
+		for _, l := range held {
+			if _, ok := p.lineageSession(l.PID); ok {
+				return false, ProvenanceEvidence{
+					Method:      ProvenanceUnverified,
+					Description: fmt.Sprintf("port %d is not verified as owned by this chat", port),
+				}
+			}
 		}
 	}
 
