@@ -10,6 +10,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from linux_release.installed_cases import profile_observer as observer
+from linux_release.installed_cases.reply_observer import TERMINAL_COLUMNS
 
 PROJECT = '10000000-0000-4000-8000-000000000001'
 ROOT = '10000000-0000-4000-8000-000000000002'
@@ -60,6 +61,43 @@ class ProfileObserverTests(unittest.TestCase):
         self.assertNotIn('SECRET', json.dumps(found))
         self.assertEqual(self.writer.execute('PRAGMA journal_mode').fetchone(), ('wal',))
         self.app.require_engine.assert_called()
+
+    def test_purpose_columns_require_actual_tables_and_exact_declared_types(self):
+        required = {**TERMINAL_COLUMNS, 'project_roots': {'is_primary': 'INTEGER', 'kind': 'TEXT'}}
+        for table, fields in required.items():
+            if table in {'sessions', 'project_roots'}:
+                for name, kind in fields.items():
+                    self.writer.execute('ALTER TABLE ' + table + ' ADD COLUMN ' + name + ' ' + kind)
+            else:
+                self.writer.execute('CREATE TABLE ' + table + '(' + ','.join(
+                    name + ' ' + kind for name, kind in fields.items()) + ')')
+        self.writer.commit()
+        with observer._database(self.app, required=required):
+            pass
+        self.writer.execute('ALTER TABLE turns RENAME TO held_turns')
+        self.writer.execute('CREATE VIEW turns AS SELECT * FROM held_turns')
+        self.writer.commit()
+        with self.assertRaisesRegex(ValueError, 'physical tables'):
+            with observer._database(self.app, required=required):
+                pass
+        self.writer.execute('DROP VIEW turns')
+        self.writer.execute('ALTER TABLE held_turns RENAME TO turns')
+        self.writer.commit()
+        for table, column in (('turn_attempts', 'phase'), ('sessions', 'parent_session_id'),
+                              ('project_roots', 'is_primary')):
+            original = dict(observer.COLUMNS.get(table, {}))
+            original.update(required.get(table, {}))
+            wrong = {**original, column: 'INTEGER' if original[column] == 'TEXT' else 'TEXT'}
+            self.writer.execute('ALTER TABLE ' + table + ' RENAME TO held_table')
+            self.writer.execute('CREATE TABLE ' + table + '(' + ','.join(
+                name + ' ' + kind for name, kind in wrong.items()) + ')')
+            self.writer.commit()
+            with self.subTest(table=table), self.assertRaisesRegex(ValueError, 'column contract'):
+                with observer._database(self.app, required=required):
+                    pass
+            self.writer.execute('DROP TABLE ' + table)
+            self.writer.execute('ALTER TABLE held_table RENAME TO ' + table)
+            self.writer.commit()
 
     def test_read_connection_refuses_database_mutation(self):
         with observer._database(self.app) as connection:
