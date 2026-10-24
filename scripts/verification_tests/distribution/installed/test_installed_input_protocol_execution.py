@@ -55,6 +55,20 @@ class InstalledInputProtocolTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             protocol.request(request, binding)
 
+    def test_managed_presence_fixture_has_only_closed_public_values_and_no_submit(self):
+        from linux_release.installed_input.presence_fixture import FIELDS
+        punctuation = {('spc',): ' ', ('dot',): '.', ('minus',): '-'}
+        for _, operation, value, _ in FIELDS:
+            rows = protocol.steps(operation)
+            typed = ''.join(row[1].upper() if len(row) == 2 and row[0] == 'shift' else
+                            punctuation.get(row, row[0]) for row in rows[1:])
+            self.assertEqual(typed, value)
+            self.assertEqual(rows[0], ('ctrl', 'a'))
+            self.assertNotIn(('ret',), rows)
+        for operation in ('presence-fixture-value-v1-other', 'new-app-password', 'native-presence-password'):
+            with self.assertRaises(ValueError):
+                protocol.steps(operation)
+
     def test_endpoint_operation_types_only_the_bound_loopback_endpoint(self):
         operation = protocol.endpoint_operation(41234)
         rows = protocol.steps(operation)

@@ -13,8 +13,10 @@ class GuestInputTests(unittest.TestCase):
         bridge.process, bridge.selector = Mock(), Mock()
         bridge.selector.select.return_value = True
         with patch.object(controller.time, 'monotonic', side_effect=[0, 1, 6]), \
-                patch.object(controller.os, 'read', return_value=b' '):
-            with self.assertRaisesRegex(ValueError, 'response time'):
+                patch.object(controller.os, 'get_blocking', return_value=False), \
+                patch.object(controller.os, 'read', return_value=b' '), \
+                patch.object(controller.Pipe, 'write'):
+            with self.assertRaises(TimeoutError):
                 bridge.exchange({'operation': 'poll'})
         bridge.selector.select.assert_called_once_with(4)
 
@@ -146,6 +148,38 @@ class GuestInputTests(unittest.TestCase):
             write(changed)
             with self.assertRaises(ValueError):
                 controller.verify_deliveries(root, self.execution, selected)
+
+    def test_presence_public_fixture_transactions_and_partial_delivery_match_host_evidence(self):
+        import json
+        from linux_release.installed_input.presence_fixture import FIELDS
+        actor = Mock()
+        actor.observe.return_value = self.focus
+        operations = ['provider-name-v1', 'provider-endpoint-v1-12345',
+                      'provider-fixture-credential-v1', *(row[1] for row in FIELDS)]
+        records = [guest.perform(self.execution, 'owned', actor, self.mailbox(), operation=operation)
+                   for operation in operations]
+        selected = {'format_version': 1, 'kind': 'qemu-fixed-input', 'lease': '/root/lease', 'vm_id': 'owned'}
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            leaf = root / 'leaf/evidence/vault/presence-cancel-and-expiry'
+            leaf.mkdir(parents=True)
+            for partial in (False, True):
+                delivered = records[:-1] if partial else records
+                pending = {**records[-1], 'completed': False, 'events': records[-1]['events'][:2]} if partial else None
+                facts = {'launch': {'fixed_input': delivered}}
+                if pending is not None:
+                    facts['native_input'] = pending
+                (leaf / 'execution.json').write_text(json.dumps({'observations': facts}))
+                observed = [*delivered, *([pending] if pending is not None else [])]
+                host = [protocol.canonical({'request': event['request'], 'acknowledgment': {
+                    'format_version': 1, 'request_sha256': protocol.request_sha256(event['request']),
+                    'delivery': event['delivery']}}) for record in observed for event in record['events']]
+                (root / 'native-input.jsonl').write_bytes(b''.join(host))
+                controller.verify_deliveries(root, self.execution, selected)
+                facts['launch']['fixed_input'] = list(reversed(delivered))
+                (leaf / 'execution.json').write_text(json.dumps({'observations': facts}))
+                with self.assertRaises(ValueError):
+                    controller.verify_deliveries(root, self.execution, selected)
 
 
 if __name__ == '__main__':
