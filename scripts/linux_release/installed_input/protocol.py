@@ -7,6 +7,7 @@ import re
 
 from ..installed_evidence import IDENTIFIER
 from ..installed_cases.provider import GUI_LABEL, GUI_API_KEY, gui_endpoint
+from .pointer import PointerStep
 
 EDITOR_TEXT = 'Installed editor fixture changed through the native UI.\nFind the qualification needle.\n'
 MAX_TRANSACTIONS = 128
@@ -71,7 +72,9 @@ def event_sha256(operation: str, ordinal: int) -> str:
     events = steps(operation)
     if type(ordinal) is not int or not 0 <= ordinal < len(events):
         raise ValueError('native input ordinal differs from its fixed operation')
-    return hashlib.sha256(json.dumps(list(events[ordinal]), separators=(',', ':')).encode()).hexdigest()
+    step = events[ordinal]
+    event = step.event if isinstance(step, PointerStep) else step
+    return hashlib.sha256(json.dumps(list(event), separators=(',', ':')).encode()).hexdigest()
 
 
 def nonce(value: str) -> str:

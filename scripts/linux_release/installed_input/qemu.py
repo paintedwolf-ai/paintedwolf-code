@@ -1,4 +1,4 @@
-"""Deliver sealed keyboard steps only to a root-leased, captured QEMU process."""
+"""Deliver registry-selected input steps only to a root-leased, captured QEMU process."""
 from __future__ import annotations
 
 from contextlib import contextmanager
@@ -13,10 +13,12 @@ import re
 import socket
 import stat
 import struct
+import tempfile
 import threading
 import time
 
 from .protocol import event_sha256, steps
+from .pointer import PointerStep, framebuffer_size, sequence_display
 
 LIMIT = 16384
 
@@ -92,6 +94,8 @@ class Actor:
         self.connection, self.buffer, self.command_id = None, b'', 0
         self.transactions, self.current, self.operation, self.ordinal = set(), None, None, 0
         self.failed, self.closed = False, False
+        self.pointer_down = False
+        self.pointer_cleanup = {'attempted': False, 'acknowledged': False}
         self.lock = threading.Lock()
 
     @property
@@ -196,16 +200,32 @@ class Actor:
                     self.current, self.operation, self.ordinal = transaction_id, operation, 0
                 if operation != self.operation or ordinal != self.ordinal:
                     raise ValueError('input operation or ordinal differs from the pinned transaction')
+                display = sequence_display(sequence)
                 self.validate()
                 status = self.command('query-status')['return']
                 if status.get('running') is not True or status.get('status') != 'running':
                     raise ValueError('leased guest is not running')
-                keys = [{'type': 'qcode', 'data': key} for key in sequence[ordinal]]
-                reply = self.command('send-key', {'keys': keys, 'hold-time': 80})
-                if reply['return'] != {}:
-                    raise ValueError('QMP did not acknowledge its fixed keyboard step')
-                # QMP acknowledges before its automatic key-release timer fires.
-                time.sleep(0.1)
+                step = sequence[ordinal]
+                if display is not None and (isinstance(step, PointerStep) or ordinal in {0, len(sequence) - 1}):
+                    if self.display() != display:
+                        raise ValueError('pointer sequence differs from the current QEMU framebuffer')
+                if isinstance(step, PointerStep):
+                    if step.event == ('@button', 'down'):
+                        # A lost acknowledgment may still have pressed the owned button.
+                        self.pointer_down = True
+                    reply = self.command('input-send-event', {'events': step.qmp_events()})
+                    if reply['return'] != {}:
+                        raise ValueError('QMP did not acknowledge its selected pointer step')
+                    if step.event == ('@button', 'up'):
+                        self.pointer_down = False
+                    time.sleep(0.03)
+                else:
+                    keys = [{'type': 'qcode', 'data': key} for key in step]
+                    reply = self.command('send-key', {'keys': keys, 'hold-time': 80})
+                    if reply['return'] != {}:
+                        raise ValueError('QMP did not acknowledge its fixed keyboard step')
+                    # QMP acknowledges before its automatic key-release timer fires.
+                    time.sleep(0.1)
                 self.validate()
                 self.ordinal += 1
                 return {'format_version': 1, 'execution_nonce': self.nonce, 'vm_id': self.value['vm_id'],
@@ -214,13 +234,50 @@ class Actor:
                         'qmp_ack': reply}
             except BaseException:
                 self.failed = True
+                self._release_pointer()
                 raise
 
+    def display(self):
+        with tempfile.TemporaryDirectory(prefix='pw-qmp-display-') as directory:
+            path = Path(directory) / 'screen.ppm'
+            if self.command('screendump', {'filename': str(path)})['return'] != {}:
+                raise ValueError('QMP did not acknowledge its display observation')
+            descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+            with os.fdopen(descriptor, 'rb') as stream:
+                before = os.fstat(stream.fileno())
+                if not stat.S_ISREG(before.st_mode) or before.st_uid != self.value['uid'] or before.st_nlink != 1:
+                    raise ValueError('QMP framebuffer is not an owned regular file')
+                result = framebuffer_size(stream.read(128))
+                if stable(os.fstat(stream.fileno())) != stable(before) or stable(path.lstat()) != stable(before):
+                    raise ValueError('QMP framebuffer changed during its header observation')
+                return result
+
+    def _release_pointer(self):
+        """A poisoned transaction can only release the button it may have pressed."""
+        if not self.pointer_down:
+            return
+        self.pointer_down = False
+        self.pointer_cleanup = {'attempted': True, 'acknowledged': False}
+        try:
+            self.validate()
+            status = self.command('query-status')['return']
+            if status.get('running') is not True or status.get('status') != 'running':
+                return
+            reply = self.command('input-send-event', {'events': [
+                {'type': 'btn', 'data': {'down': False, 'button': 'left'}}]})
+            if reply['return'] == {}:
+                self.validate()
+                self.pointer_cleanup['acknowledged'] = True
+        except (OSError, ValueError):
+            pass
+
     def close(self):
-        self.closed = True
-        if self.connection is not None:
-            self.connection.close()
-            self.connection = None
+        with self.lock:
+            self.closed = True
+            self._release_pointer()
+            if self.connection is not None:
+                self.connection.close()
+                self.connection = None
 
 
 @contextmanager
