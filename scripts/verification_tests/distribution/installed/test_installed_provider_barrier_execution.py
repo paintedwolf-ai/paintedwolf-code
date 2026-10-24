@@ -87,20 +87,20 @@ class BarrierTests(unittest.TestCase):
         calls = [{'name': 'command', 'arguments': {'command': '/usr/bin/true'}}]
         with ProviderFixture.gui(calls) as previous:
             endpoint = previous.base_url
-        self.http_barrier(endpoint, acquire_command=True)
-        self.http_barrier(acquire_command=True, stream=True)
+        self.http_barrier(endpoint, acquire='command')
+        self.http_barrier(acquire='command', stream=True)
 
-    def http_barrier(self, endpoint=None, *, acquire_command=False, stream=False):
+    def http_barrier(self, endpoint=None, *, acquire=None, stream=False):
         barrier = ResponseBarrier()
         calls = [{'name': 'command', 'arguments': {'command': '/usr/bin/true'}}]
-        with ProviderFixture.gui(calls, endpoint=endpoint, acquire_command=acquire_command,
+        with ProviderFixture.gui(calls, endpoint=endpoint, acquire=acquire,
                 response_barrier=barrier) as fixture:
             if endpoint is not None:
                 self.assertEqual(fixture.base_url, endpoint)
             request = {'model': MODEL, 'messages': [{'role': 'user', 'content': 'fixed fixture'}],
-                'tools': [{'type': 'function', 'function': {'name': 'request_tools' if acquire_command else 'command'}}],
+                'tools': [{'type': 'function', 'function': {'name': 'request_tools' if acquire else 'command'}}],
                 'stream': stream}
-            if acquire_command:
+            if acquire:
                 invalid = Request(fixture.base_url + '/chat/completions',
                     data=json.dumps({**request, 'tools': []}).encode(),
                     headers={'Content-Type': 'application/json', 'Authorization': 'Bearer ' + GUI_API_KEY})
@@ -139,8 +139,8 @@ class BarrierTests(unittest.TestCase):
             self.assertEqual(errors, [])
             self.assertEqual(results[0]['choices'][0]['finish_reason'], 'tool_calls')
             call, = results[0]['choices'][0]['message']['tool_calls']
-            self.assertEqual(call['function']['name'], 'request_tools' if acquire_command else 'command')
-            if acquire_command:
+            self.assertEqual(call['function']['name'], 'request_tools' if acquire else 'command')
+            if acquire:
                 self.assertTrue(fixture.observations[0]['acquisition_requested'])
                 self.assertFalse(fixture.observations[0]['completed'])
             self.assertTrue(barrier.await_response_written()['response_written'])
