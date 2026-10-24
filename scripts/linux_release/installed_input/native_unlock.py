@@ -59,29 +59,37 @@ class NativeUnlockObserver:
             raise ValueError('native unlock observer is closed')
         before = self.session_proof()
         pid = before['native_session']['authorities']['shell']['pid']
-        desktop, windows, deadline = self.api.Registry.getDesktop(0), [], time.monotonic() + 5
-        count = desktop.childCount
-        if type(count) is not int or not 0 <= count <= 256:
-            raise ValueError('native shell application inventory exceeds its bound')
-        applications = [desktop[index] for index in range(count)]
-        if any(node is None for node in applications):
-            raise accessibility.InventoryChanged()
-        applications = [node for node in applications if node.get_process_id() == pid]
-        if len(applications) != 1:
-            raise CaseUnavailable('native-shell-accessibility-owner-missing-or-ambiguous')
-        for node in accessibility.descendants(applications[0], deadline):
-            if (node.getRole() == self.api.ROLE_WINDOW and self._visible(node)
-                    and node.getState().contains(self.api.STATE_ACTIVE)):
-                windows.append(node)
-        if len(windows) != 1:
-            raise CaseUnavailable('native-locked-shell-window-missing-or-ambiguous')
-        window = windows[0]
-        identity = accessibility.identity(window)
-        if self.window is not None and self.window != identity:
-            raise ValueError('native unlock changed its captured shell window')
-        passwords = [node for node in accessibility.descendants(window, deadline)
-            if node.getRole() == self.api.ROLE_PASSWORD_TEXT and self._visible(node)
-            and node.getState().contains(self.api.STATE_FOCUSED)]
+        deadline = time.monotonic() + 5
+        while True:
+            try:
+                desktop, windows = self.api.Registry.getDesktop(0), []
+                count = desktop.childCount
+                if type(count) is not int or not 0 <= count <= 256:
+                    raise ValueError('native shell application inventory exceeds its bound')
+                applications = [desktop[index] for index in range(count)]
+                if any(node is None for node in applications):
+                    raise accessibility.InventoryChanged()
+                applications = [node for node in applications if node.get_process_id() == pid]
+                if len(applications) != 1:
+                    raise CaseUnavailable('native-shell-accessibility-owner-missing-or-ambiguous')
+                for node in accessibility.descendants(applications[0], deadline):
+                    if (node.getRole() == self.api.ROLE_WINDOW and self._visible(node)
+                            and node.getState().contains(self.api.STATE_ACTIVE)):
+                        windows.append(node)
+                if len(windows) != 1:
+                    raise CaseUnavailable('native-locked-shell-window-missing-or-ambiguous')
+                window = windows[0]
+                identity = accessibility.identity(window)
+                if self.window is not None and self.window != identity:
+                    raise ValueError('native unlock changed its captured shell window')
+                passwords = [node for node in accessibility.descendants(window, deadline)
+                    if node.getRole() == self.api.ROLE_PASSWORD_TEXT and self._visible(node)
+                    and node.getState().contains(self.api.STATE_FOCUSED)]
+                break
+            except accessibility.InventoryChanged:
+                if time.monotonic() >= deadline:
+                    raise CaseUnavailable('normal-native-control-observation-deadline') from None
+                time.sleep(0.05)
         if len(passwords) > 1:
             raise CaseUnavailable('native-shell-password-focus-is-ambiguous')
         password, chain = None, []

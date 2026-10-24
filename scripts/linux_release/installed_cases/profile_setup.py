@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import time
 from .profile_observer import profile, physical, _database, identifier, rows, project_for_owned_root, sessions_for_project
 from .profile_documents import read_private, yaml_document
 from .records import CaseUnavailable
@@ -81,7 +82,9 @@ def fixture_selection(app, project, project_id, provider_id, model):
             'root_id': identifier(roots[0][0]), 'root_path': str(path), 'root_identity': identity, 'project_overlay_absent': True}
 
 
-def active_session(app, project, provider, model):
+def active_session(app, project, provider, model, *, status='busy'):
+    if status not in {'idle', 'busy'}:
+        raise ValueError('fixed active-work fixture requires an idle or busy session phase')
     witness = project_for_owned_root(app, project)
     if witness is None:
         return None
@@ -94,11 +97,21 @@ def active_session(app, project, provider, model):
         raise ValueError('fixed active-work fixture session differs from its selected root coordinator')
     if rows and rows[0]['status'] == 'error':
         raise ValueError('fixed active-work fixture work failed before observation')
-    if rows and rows[0]['status'] == 'busy':
+    if rows and rows[0]['status'] == status:
         if fixture_selection(app, project, witness['project_id'], provider, model) != selection:
             raise ValueError('fixed active-work fixture model selection changed during observation')
         return {**witness, **rows[0], 'model_selection': selection}
     return None
+
+
+def await_session(app, project, provider, model, *, status='busy',
+                  reason='protected-active-work-session-did-not-settle'):
+    deadline = time.monotonic() + 30
+    while (session := active_session(app, project, provider, model, status=status)) is None:
+        if time.monotonic() >= deadline:
+            raise CaseUnavailable(reason)
+        time.sleep(0.05)
+    return session
 
 
 def require_active(app, project, provider, model, expected=None):
