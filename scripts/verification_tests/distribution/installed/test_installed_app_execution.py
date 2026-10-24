@@ -9,7 +9,8 @@ from unittest.mock import Mock, patch
 
 from scripts.linux_release.installed_cases.app import engine_image, InstalledApp
 from scripts.linux_release.installed_cases.records import CaseUnavailable, CaseFailed
-from scripts.linux_release.installed_environment import graphical_session, gnome_owner
+from scripts.linux_release.installed_environment import graphical_session
+from scripts.linux_release.installed_gnome import owner as gnome_owner
 
 
 class InstalledAppTests(unittest.TestCase):
@@ -39,14 +40,15 @@ class InstalledAppTests(unittest.TestCase):
         details = {"exit_code": 0, "stdout": "User=1000\nActive=yes\nRemote=no\nType=wayland\nDesktop=\n"}
         with patch("scripts.linux_release.installed_environment.os.getuid", return_value=1000), patch(
                 "scripts.linux_release.installed_environment.query", side_effect=[listing, details]), patch(
-                "scripts.linux_release.installed_environment.gnome_owner", return_value={"pid": 2000}) as owner:
+                "scripts.linux_release.installed_environment.installed_gnome.owner", return_value={"pid": 2000}) as owner:
             value = graphical_session()
             self.assertEqual(value["Desktop"], "GNOME")
             self.assertEqual(value["DesktopOwner"], {"pid": 2000})
             owner.assert_called_once_with()
-        with patch("scripts.linux_release.installed_environment.query", return_value={"exit_code": 0, "stdout": '{"type":"s","data":["GNOME"]}'}):
-            with self.assertRaises(ValueError):
-                gnome_owner()
+        invalid = SimpleNamespace(unpack=lambda: (123,))
+        reader = SimpleNamespace(call=lambda *args, **kwargs: invalid)
+        with self.assertRaises(ValueError):
+            gnome_owner(reader)
 
     def test_x11_display_comes_from_the_captured_desktop_when_logind_omits_it(self):
         from scripts.linux_release.installed_cases.app import desktop_display

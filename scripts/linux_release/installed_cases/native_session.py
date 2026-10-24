@@ -6,6 +6,7 @@ from copy import deepcopy
 from pathlib import Path
 import re
 
+from .. import installed_gnome
 from .app import process_identity
 from .logind_context import Reader, LOGIN, MANAGER
 from .records import CaseUnavailable
@@ -28,7 +29,7 @@ def kernel_owner(pid, uid):
 class NativeSessionObserver:
     """Pin bus owners, kernel birth facts and the exact captured local seat."""
 
-    def __init__(self, session, *, reader=None, owner=kernel_owner):
+    def __init__(self, session, *, reader=None, owner=kernel_owner, shell=None):
         if (not isinstance(session, dict) or not isinstance(session.get('id'), str)
                 or not session['id'].isalnum() or session.get('User') != str(os.getuid())
                 or session.get('Type') not in {'wayland', 'x11'}
@@ -39,6 +40,7 @@ class NativeSessionObserver:
         if session.get('Desktop') != 'GNOME':
             raise CaseUnavailable('native-locker-adapter-unverified')
         self.reader, self.owner = reader or Reader(), owner
+        self.shell = shell or (lambda: installed_gnome.owner(self.reader))
         self.session = {key: session[key] for key in ('id', 'User', 'Type', 'Seat')}
         self.locker = ('org.gnome.ScreenSaver', '/org/gnome/ScreenSaver')
         self.authorities = self._authorities()
@@ -58,8 +60,12 @@ class NativeSessionObserver:
         return {'name': name, 'unique': unique, 'process': self.owner(pid, uid)}
 
     def _authorities(self):
-        return {'login': self._bus_owner(LOGIN, 0),
-                'locker': self._bus_owner(self.locker[0], os.getuid(), user=True)}
+        shell = self.shell()
+        locker = self._bus_owner(self.locker[0], os.getuid(), user=True)
+        if (locker['unique'] != shell['unique_owner'] or locker['process']['pid'] != shell['pid']
+                or locker['process']['start_time_ticks'] != shell['start_time_ticks']):
+            raise ValueError('native locker is not the independently selected GNOME shell')
+        return {'login': self._bus_owner(LOGIN, 0), 'locker': locker, 'shell': shell}
 
     def _property(self, path, name, signature):
         reply = self.reader.call(path, 'org.freedesktop.DBus.Properties', 'Get',
@@ -79,20 +85,27 @@ class NativeSessionObserver:
             raise ValueError('native session has an invalid object path')
         values = {name: self._property(path, name, signature) for name, signature in
                   [('Id', 's'), ('User', '(uo)'), ('Seat', '(so)'), ('Type', 's'),
-                   ('Remote', 'b'), ('Active', 'b'), ('LockedHint', 'b')]}
+                   ('Remote', 'b'), ('Active', 'b'), ('LockedHint', 'b'), ('TimestampMonotonic', 't')]}
         if (not isinstance(values['User'], tuple) or len(values['User']) != 2
                 or not isinstance(values['Seat'], tuple) or len(values['Seat']) != 2
                 or type(values['User'][0]) is not int
+                or not isinstance(values['User'][1], str) or not values['User'][1].startswith(MANAGER + '/user/')
+                or not isinstance(values['Seat'][1], str) or not values['Seat'][1].startswith(MANAGER + '/seat/')
+                or type(values['TimestampMonotonic']) is not int or values['TimestampMonotonic'] <= 0
                 or values['Id'] != self.session['id'] or values['User'][0] != os.getuid()
                 or values['Seat'][0] != self.session['Seat']
                 or values['Type'] != self.session['Type'] or values['Remote'] is not False
                 or values['Active'] is not True or type(values['LockedHint']) is not bool):
             raise ValueError('captured native graphical session changed')
+        lifecycle = {'object_path': path, 'user': values['User'], 'seat': values['Seat'],
+                     'created_monotonic_usec': values['TimestampMonotonic']}
+        if hasattr(self, 'initial') and lifecycle != self.initial['lifecycle']:
+            raise ValueError('captured native session lifecycle changed')
         active, = self._call(self.authorities['locker']['unique'], self.locker[1],
             self.locker[0], 'GetActive', None, '(b)', user=True)
         if type(active) is not bool or self._authorities() != self.authorities:
             raise ValueError('captured native locker authority changed')
-        return {'session': deepcopy(self.session), 'session_object': path,
+        return {'session': deepcopy(self.session), 'session_object': path, 'lifecycle': lifecycle,
                 'authorities': deepcopy(self.authorities), 'locked_hint': values['LockedHint'],
                 'locker_active': active}
 
