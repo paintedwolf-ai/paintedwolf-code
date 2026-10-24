@@ -67,7 +67,7 @@ func TestRestoreReplaysUncheckpointedDurableFiles(t *testing.T) {
 }
 
 func TestRestoreCompletesWithUnusableProgress(t *testing.T) {
-	for _, damage := range []string{"cursor", "destination", "directory"} {
+	for _, damage := range []string{"cursor", "destination", "directory", "destination-directory", "destination-loop"} {
 		t.Run(damage, func(t *testing.T) { testRestoreReplayPrefix(t, restoreProgressFiles+1, damage) })
 	}
 }
@@ -100,6 +100,14 @@ func testRestoreReplayPrefix(t *testing.T, prefix int, damage string) {
 		progress := filepath.Join(restore.marker.StagingDir, restoreProgressName)
 		testutil.FailErr(t, "remove cursor fixture", os.Remove(progress))
 		testutil.FailErr(t, "replace cursor with unexpected directory", os.Mkdir(progress, 0700))
+	} else if damage == "destination-directory" || damage == "destination-loop" {
+		destination := filepath.Join(root, restore.marker.Files[0].RelPath)
+		testutil.FailErr(t, "remove checkpointed destination", os.Remove(destination))
+		if damage == "destination-directory" {
+			testutil.FailErr(t, "replace destination with directory", os.Mkdir(destination, 0700))
+		} else {
+			testutil.FailErr(t, "replace destination with symlink loop", os.Symlink(filepath.Base(destination), destination))
+		}
 	} else if damage == "destination" {
 		testutil.FailErr(t, "change checkpointed destination", os.WriteFile(filepath.Join(root, restore.marker.Files[0].RelPath), []byte("wrong"), 0600))
 	}

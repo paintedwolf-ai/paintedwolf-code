@@ -114,6 +114,16 @@ func (r *pendingRestore) readProgress() error {
 			entry := r.marker.Files[index]
 			rel = entry.RelPath
 			destination := filepath.Join(filepath.Dir(r.markerPath), filepath.FromSlash(r.marker.liveRelPath(rel)))
+			info, err := os.Lstat(destination)
+			if os.IsNotExist(err) {
+				return errInvalidRestoreProgress
+			}
+			if err != nil {
+				return fmt.Errorf("inspect checkpointed file: %w", err)
+			}
+			if (entry.Kind == fileKindSymlink && info.Mode()&os.ModeSymlink == 0) || (entry.Kind != fileKindSymlink && !info.Mode().IsRegular()) {
+				return errInvalidRestoreProgress
+			}
 			sum, size, err := installedDigest(destination, entry.Kind)
 			if os.IsNotExist(err) {
 				return errInvalidRestoreProgress

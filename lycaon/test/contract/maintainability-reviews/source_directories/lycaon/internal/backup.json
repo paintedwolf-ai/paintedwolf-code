@@ -4,7 +4,7 @@
   "kind": "module",
   "workstream": "backup-process-lifecycle",
   "disposition": "retain",
-  "reason": "Retain 31 phase files under one backup and restore transaction authority. Capacity planning, snapshot publication, and the bounded restore progress cursor have separate cohesive implementations; splitting their lifecycle into another service would divide admission, pre-image custody, and restart recovery. Cursor-size and interrupted-replay contracts cover the new boundary. Unusable optional progress now replays the validated decision; full restore integration tests cover corrupt cursors and changed destinations without a new recovery authority. An unexpected object at the optional cursor path disables checkpointing for that replay; durable payload authority remains unchanged.",
+  "reason": "Retain 31 phase files under one backup and restore transaction authority. Capacity planning, snapshot publication, and the bounded restore progress cursor have separate cohesive implementations; splitting their lifecycle into another service would divide admission, pre-image custody, and restart recovery. Cursor-size and interrupted-replay contracts cover the new boundary. Unusable optional progress now replays the validated decision; full restore integration tests cover corrupt cursors and changed destinations without a new recovery authority. An unexpected object at the optional cursor path disables checkpointing for that replay; durable payload authority remains unchanged. Checkpointed destinations are inspected without following symlinks; changed object types replay through the existing restore publication authority. Directory and symlink-loop replay contracts passed.",
   "reviewed_commit": "0db3f300e95038787f4114eb48efffaf4c1bce34",
   "ceiling": 31,
   "boundaries": {
@@ -13,7 +13,7 @@
     "lycaon/internal/backup/upgrade_recovery_test.go": "c9a2ec60b31d7e989002dab7833470881f83d6bcbe11a9ee8f55c7bf028af80f",
     "lycaon/internal/backup/reasoning_retention_test.go": "708e2bb19d53d71f00754dcb9be34c85a897bc772b9b0726bff6810f8b02e06c",
     "lycaon/internal/backup/editor_outbox_test.go": "e7ab2c1eacf397d612cb7b918a6ce0dfc189069c09a1f04ed71f9b6279a71b84",
-    "lycaon/internal/backup/restore_progress_test.go": "8075c5ba20980243ae3c4f5242f5465f5cbdce8f046b8467e160feabb381905a",
+    "lycaon/internal/backup/restore_progress_test.go": "95995001a8212c1f9889440c10f41b1a7f52b8b84e45ec0912139abb284844f7",
     "lycaon/internal/backup/stage_upgrade_test.go": "ab011a4912370818788309e470d1036983735d28dd70b55d7118a31a0b5b2419"
   },
   "reviewed_shape": "0c6f43d6407887c28c5b6b6daea9ea043dd08a22a0465b78ddf4539468ee8472"
