@@ -4,7 +4,11 @@ from __future__ import annotations
 import copy
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
+import re
 import threading
+
+from ..installed_evidence import IDENTIFIER
+from .provider_acquisition import AcquisitionRefusal, CommandAcquisition
 
 MODEL = 'installed-qualification'
 LIMIT = 2 << 20
@@ -13,11 +17,61 @@ GUI_KIND = 'litellm-proxy'
 GUI_API_KEY = 'installed-local-fixture-key'
 
 
+REFUSALS = frozenset({'foreign-model', 'messages-or-tools-shape', 'message-role-shape',
+                      'required-tools-missing', 'request-count-bound', 'request-boundary',
+                      'request-truncated', 'request-invalid'})
+
+
+class FixtureRefusal(ValueError):
+    def __init__(self, code):
+        if code not in REFUSALS:
+            raise ValueError('fixture refusal code is not declared')
+        self.code = code
+        super().__init__(code)
+
+
+def request_shape(request):
+    if not isinstance(request, dict):
+        return {'request_type': json_type(request)}
+    result = {'field_types': {name: json_type(request.get(name)) for name in ('model', 'messages', 'tools')},
+              'expected_model': request.get('model') == MODEL}
+    messages, tools = request.get('messages'), request.get('tools')
+    if isinstance(messages, list):
+        counts = dict.fromkeys(('system', 'developer', 'user', 'assistant', 'tool', 'function', 'unknown_count'), 0)
+        for row in messages[:256]:
+            role = row.get('role') if isinstance(row, dict) else None
+            key = role if isinstance(role, str) and role in counts and role != 'unknown_count' else 'unknown_count'
+            counts[key] += 1
+        result.update(message_count=len(messages), role_counts=counts, messages_clipped=len(messages) > 256)
+    if isinstance(tools, list):
+        names, invalid = set(), 0
+        for row in tools[:64]:
+            function = row.get('function') if isinstance(row, dict) and row.get('type') == 'function' else None
+            name = function.get('name') if isinstance(function, dict) else None
+            if isinstance(name, str) and 1 <= len(name) <= 128 and IDENTIFIER.fullmatch(name):
+                names.add(name)
+            else:
+                invalid += 1
+        result.update(tool_count=len(tools), offered_tools=sorted(names),
+                      invalid_tool_identifiers=invalid, tools_clipped=len(tools) > 64)
+    return result
+
+
+def json_type(value):
+    return {dict: 'object', list: 'array', str: 'string', int: 'number', float: 'number',
+            bool: 'boolean', type(None): 'null'}.get(type(value), 'other')
+
+
 def gui_endpoint(port: int) -> str:
     """The loopback endpoint a GUI-purpose fixture serves on its bound port."""
     if type(port) is not int or not 1024 <= port <= 65535:
         raise ValueError('GUI provider fixture port is outside the unprivileged range')
     return f'http://127.0.0.1:{port}/v1'
+
+
+class _FixtureServer(ThreadingHTTPServer):
+    allow_reuse_address = False
+    allow_reuse_port = False
 
 
 class ProviderFixture:
@@ -31,25 +85,41 @@ class ProviderFixture:
         self.calls = copy.deepcopy(calls)
         self.observations = []
         self.discovery_observations = []
+        self.transport_observations = []
+        self.transport_clipped = False
+        self.transport_lock = threading.Lock()
         self.lock = threading.Lock()
         self.server = None
         self.thread = None
         self.gui_purpose = False
+        self.port = 0
+        self.acquisition = None
 
     @classmethod
-    def gui(cls, calls: list[dict]):
+    def gui(cls, calls: list[dict], *, endpoint: str | None = None, acquire_command: bool = False):
         fixture = cls(calls)
         fixture.gui_purpose = True
+        if type(acquire_command) is not bool:
+            raise ValueError('GUI acquisition mode must be explicit')
+        if acquire_command:
+            if calls != [{'name': 'command', 'arguments': {'command': '/usr/bin/true'}}]:
+                raise ValueError('GUI acquisition requires the fixed protected command fixture')
+            fixture.acquisition = CommandAcquisition()
+        if endpoint is not None:
+            match = re.fullmatch(r'http://127\.0\.0\.1:([0-9]{4,5})/v1', endpoint)
+            if match is None or gui_endpoint(int(match.group(1))) != endpoint:
+                raise ValueError('GUI fixture recovery requires its canonical loopback endpoint')
+            fixture.port = int(match.group(1))
         return fixture
 
     def completion(self, request: dict) -> dict:
         if not isinstance(request, dict) or request.get('model') != MODEL:
-            raise ValueError('fixture received a foreign model request')
+            raise FixtureRefusal('foreign-model')
         messages, tools = request.get('messages'), request.get('tools', [])
         if not isinstance(messages, list) or not messages or not isinstance(tools, list):
-            raise ValueError('fixture requires structured chat messages and tools')
+            raise FixtureRefusal('messages-or-tools-shape')
         if any(not isinstance(row, dict) or not isinstance(row.get('role'), str) for row in messages):
-            raise ValueError('fixture received malformed chat messages')
+            raise FixtureRefusal('message-role-shape')
         available = {row['function']['name'] for row in tools
                      if isinstance(row, dict) and row.get('type') == 'function'
                      and isinstance(row.get('function'), dict)
@@ -60,18 +130,29 @@ class ProviderFixture:
         expected = {f'qualification-{i}' for i in range(len(self.calls))}
         finished = expected.issubset(results)
         message = {'role': 'assistant', 'content': 'Fixture complete.' if finished else None}
-        if not finished:
+        acquisition = self.acquisition.advance(messages, available) if self.acquisition is not None else None
+        if self.acquisition is not None:
+            finished = self.acquisition.completed
+            message['content'] = 'Fixture complete.' if finished else None
+        if acquisition is not None:
+            if finished:
+                raise AcquisitionRefusal('acquisition-result-invalid')
+            message['tool_calls'] = [acquisition]
+        elif not finished:
             if not all(call['name'] in available for call in self.calls):
-                raise ValueError('required fixture tools were not offered by the installed host')
+                raise FixtureRefusal('required-tools-missing')
             message['tool_calls'] = [
                 {'id': f'qualification-{i}', 'type': 'function', 'function': {
                     'name': call['name'], 'arguments': json.dumps(call['arguments'])}}
                 for i, call in enumerate(self.calls)]
         with self.lock:
             if len(self.observations) >= 64:
-                raise ValueError('fixture request bound exceeded')
+                raise FixtureRefusal('request-count-bound')
             self.observations.append({'model': MODEL, 'roles': [row['role'] for row in messages],
-                                      'tools': sorted(available), 'completed': finished})
+                                      'tools': sorted(available), 'completed': finished,
+                                      **({'schema_acquisition': self.acquisition.witness,
+                                          'acquisition_requested': acquisition is not None}
+                                         if self.acquisition is not None else {})})
         return {'id': 'qualification-completion', 'object': 'chat.completion', 'created': 1,
                 'model': MODEL, 'choices': [{'index': 0, 'message': message,
                 'finish_reason': 'stop' if finished else 'tool_calls'}],
@@ -84,7 +165,19 @@ class ProviderFixture:
             def log_message(self, *args):
                 pass
 
-            def respond(self, status, value):
+            def respond(self, status, value, *, refusal=None, shape=None, detail=None):
+                with fixture.transport_lock:
+                    if len(fixture.transport_observations) < 64:
+                        record = {'method': self.command,
+                            'path': self.path if self.path in {'/v1/model/info', '/v1/models', '/v1/chat/completions'} else 'other',
+                            'status': status, 'fixture_credential_observed': self.headers.get('Authorization') == 'Bearer ' + GUI_API_KEY}
+                        if refusal is not None:
+                            record.update(refusal_code=refusal, request_shape=shape)
+                        if detail is not None:
+                            record['refusal_detail'] = detail
+                        fixture.transport_observations.append(record)
+                    else:
+                        fixture.transport_clipped = True
                 raw = json.dumps(value).encode()
                 self.send_response(status)
                 self.send_header('Content-Type', 'application/json')
@@ -112,16 +205,18 @@ class ProviderFixture:
 
             def do_POST(self):
                 self.connection.settimeout(10)
+                shape = None
                 try:
                     length = int(self.headers.get('Content-Length', '0'))
                     if self.path != '/v1/chat/completions' or not 0 < length <= LIMIT:
-                        raise ValueError('fixture request boundary refused')
+                        raise FixtureRefusal('request-boundary')
                     if fixture.gui_purpose and self.headers.get('Authorization') != 'Bearer ' + GUI_API_KEY:
                         return self.respond(401, {'error': 'fixture-credential-required'})
                     raw = self.rfile.read(length)
                     if len(raw) != length:
-                        raise ValueError('fixture request was truncated')
+                        raise FixtureRefusal('request-truncated')
                     request = json.loads(raw)
+                    shape = request_shape(request)
                     completion = fixture.completion(request)
                     if not request.get('stream', False):
                         return self.respond(200, completion)
@@ -137,12 +232,14 @@ class ProviderFixture:
                     self.send_header('Content-Length', str(len(raw)))
                     self.end_headers()
                     self.wfile.write(raw)
-                except (ValueError, TypeError, OSError):
-                    self.respond(400, {'error': 'fixture-request-refused'})
+                except (ValueError, TypeError, OSError) as error:
+                    code = error.code if isinstance(error, (FixtureRefusal, AcquisitionRefusal)) else 'request-invalid'
+                    self.respond(400, {'error': 'fixture-request-refused'}, refusal=code, shape=shape,
+                                 detail=error.detail if isinstance(error, AcquisitionRefusal) else None)
 
-        # The kernel picks a free loopback port; the GUI case types the bound
-        # endpoint, so no fixed port can collide with another listener.
-        self.server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+        # Fresh fixtures use a kernel-selected port. Recovery exclusively binds
+        # the exact prior admitted endpoint; an occupied port refuses without interference.
+        self.server = _FixtureServer(('127.0.0.1', self.port), Handler)
         self.server.daemon_threads = True
         self.base_url = gui_endpoint(self.server.server_port)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)

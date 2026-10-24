@@ -7,6 +7,7 @@ import re
 
 from ..installed_evidence import IDENTIFIER
 from ..installed_cases.provider import GUI_LABEL, GUI_API_KEY, gui_endpoint
+from . import accessibility, lineage
 
 EDITOR_TEXT = 'Installed editor fixture changed through the native UI.\nFind the qualification needle.\n'
 MAX_TRANSACTIONS = 128
@@ -60,6 +61,8 @@ def steps(operation: str) -> tuple[tuple[str, ...], ...]:
     endpoint = _ENDPOINT_OPERATION.fullmatch(operation)
     if endpoint:
         return _literal_steps(gui_endpoint(int(endpoint.group(1))))
+    if operation == 'reply-fixture-prompt-v1':
+        return _literal_steps('Run the installed qualification fixture using command.')
     if operation == 'editor-replace-save-v1':
         return _EDITOR_STEPS
     if operation == 'editor-find-needle-v1':
@@ -101,21 +104,16 @@ def binding(value: dict) -> dict:
     return value
 
 
-def process_identity(value: dict) -> dict:
-    if (not isinstance(value, dict) or set(value) != {'pid', 'parent_pid', 'start_time_ticks'}
-            or any(type(number) is not int for number in value.values())
-            or value['pid'] <= 1 or value['parent_pid'] < 1 or value['start_time_ticks'] <= 0):
-        raise ValueError('native input process identity is invalid')
-    return value
-
-
 def focus(value: dict) -> dict:
-    fields = {'launch', 'entry', 'frame', 'entry_focused', 'frame_active', 'frame_visible'}
+    fields = {'launch', 'entry', 'frame', 'frame_lineage', 'entry_lineage', 'accessible_chain', 'entry_focused', 'frame_active', 'frame_visible'}
     if not isinstance(value, dict) or set(value) != fields:
         raise ValueError('native input focus proof has an unknown shape')
     for name in ('launch', 'entry', 'frame'):
-        process_identity(value[name])
-    if value['frame'] != value['launch'] or any(value[name] is not True
+        lineage.identity(value[name])
+    lineage.validate(value['frame_lineage'], value['launch'], value['frame'])
+    lineage.validate(value['entry_lineage'], value['frame'], value['entry'])
+    accessibility.validate(value['accessible_chain'], value['entry']['pid'], value['frame']['pid'])
+    if any(value[name] is not True
             for name in ('entry_focused', 'frame_active', 'frame_visible')):
         raise ValueError('native input requires its focused entry and active captured frame')
     return value

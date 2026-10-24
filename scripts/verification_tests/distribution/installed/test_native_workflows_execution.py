@@ -13,7 +13,7 @@ from scripts.linux_release.installed_cases import native_workflows as owner
 
 class NativeWorkflowTests(unittest.TestCase):
     def fixture(self, directory):
-        root = Path(directory)
+        root = Path(directory).resolve()
         packages, output = root / "packages", root / "evidence"
         packages.mkdir(); output.mkdir()
         package = packages / "app.deb"
@@ -47,6 +47,11 @@ class NativeWorkflowTests(unittest.TestCase):
                 return 1, b"", b"fixture rollback failure"
             return 0, b"", b""
         root_identity = SimpleNamespace(st_mode=stat.S_IFDIR | 0o700, st_uid=0, st_dev=1, st_ino=2)
+        actual_lstat = Path.lstat
+        def snapshot_stat(path, *args, **kwargs):
+            if path == Path('/var/tmp/paintedwolf-native-1234567890'):
+                return root_identity
+            return actual_lstat(path, *args, **kwargs)
         with ExitStack() as stack:
             stack.enter_context(patch.object(owner.platform, "system", return_value="Linux"))
             stack.enter_context(patch.object(owner.platform, "machine", return_value="x86_64"))
@@ -56,7 +61,8 @@ class NativeWorkflowTests(unittest.TestCase):
             stack.enter_context(patch.object(owner, "inspect", return_value={"payload": SimpleNamespace(kind="file", name="opt/painted-wolf-code/bin/pw")}))
             stack.enter_context(patch.object(owner.os.path, "lexists", side_effect=lambda path: mutation == "existing-webview" and str(path).endswith("/.local/share/dev.paintedwolf.code")))
             stack.enter_context(patch.object(owner, "command", side_effect=command))
-            stack.enter_context(patch.object(Path, "lstat", return_value=root_identity))
+            stack.enter_context(patch.object(Path, "home", return_value=Path(directory).resolve()))
+            stack.enter_context(patch.object(Path, "lstat", autospec=True, side_effect=snapshot_stat))
             rebound = stack.enter_context(patch.object(owner, "bind", return_value={"payload": {"status": "passed"}}))
             if mutation in {"post-install-changed", "rollback-failed"}:
                 rebound.side_effect = ValueError("selected installed payload changed")

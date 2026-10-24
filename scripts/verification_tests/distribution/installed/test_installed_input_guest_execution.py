@@ -24,6 +24,8 @@ class GuestInputTests(unittest.TestCase):
             'artifact_id': 'app', 'environment_id': 'fedora', 'variant_id': 'gnome-wayland'}
         identity = {'pid': 123, 'parent_pid': 1, 'start_time_ticks': 42}
         self.focus = {'launch': identity, 'entry': identity, 'frame': identity,
+            'frame_lineage': [dict(identity)], 'entry_lineage': [dict(identity)],
+            'accessible_chain': [{'bus_name': ':1.2', 'path': '/frame', 'pid': 123}],
             'entry_focused': True, 'frame_active': True, 'frame_visible': True}
 
     def mailbox(self, stale=False):
@@ -111,6 +113,39 @@ class GuestInputTests(unittest.TestCase):
             self.assertEqual(box.write.call_count, 1)
             box.clear_completed.assert_not_called()
             self.assertFalse(refusal.exception.observations['native_input']['completed'])
+
+
+    def test_reply_provider_and_prompt_transactions_match_the_independent_host_log(self):
+        import copy, json
+        actor = Mock()
+        actor.observe.return_value = self.focus
+        operations = ['provider-name-v1', 'provider-endpoint-v1-12345',
+                      'provider-fixture-credential-v1', 'reply-fixture-prompt-v1']
+        records = [guest.perform(self.execution, 'owned', actor, self.mailbox(), operation=operation)
+                   for operation in operations]
+        selected = {'format_version': 1, 'kind': 'qemu-fixed-input', 'lease': '/root/lease', 'vm_id': 'owned'}
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            leaf = root / 'leaf/evidence/conversation/restart-and-reconnect'
+            leaf.mkdir(parents=True)
+            def write(values):
+                (leaf / 'execution.json').write_text(json.dumps({'observations': {'launch_before': {'fixed_input': values}}}))
+            write(records)
+            host = [protocol.canonical({'request': event['request'], 'acknowledgment': {
+                'format_version': 1, 'request_sha256': protocol.request_sha256(event['request']), 'delivery': event['delivery']}})
+                for record in records for event in record['events']]
+            (root / 'native-input.jsonl').write_bytes(b''.join(host))
+            controller.verify_deliveries(root, self.execution, selected)
+            for changed in (records[::-1], [records[0], {**records[1], 'operation': 'editor-find-needle-v1'}, *records[2:]],
+                            [records[0], *records[2:]]):
+                write(changed)
+                with self.assertRaises(ValueError):
+                    controller.verify_deliveries(root, self.execution, selected)
+            changed = copy.deepcopy(records)
+            changed[-1]['events'][-1]['focus_after']['frame_active'] = False
+            write(changed)
+            with self.assertRaises(ValueError):
+                controller.verify_deliveries(root, self.execution, selected)
 
 
 if __name__ == '__main__':

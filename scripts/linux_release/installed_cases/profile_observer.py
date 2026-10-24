@@ -1,7 +1,7 @@
 """Read bounded nonsecret identities from the captured GUI's disposable profile."""
 from __future__ import annotations
 
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 import os
 from pathlib import Path
 import re
@@ -12,6 +12,7 @@ import uuid
 
 from .products import require_owned_guest
 from .app import engine_image
+from .records import CaseUnavailable
 
 TOOLS = frozenset({'command', 'read', 'write', 'edit', 'list', 'search', 'view_image', 'page_open',
                    'terminal_open', 'terminal_send', 'terminal_read', 'terminal_close'})
@@ -38,10 +39,13 @@ def physical(path, directory=False):
     return info.st_dev, info.st_ino, info.st_uid, info.st_mode
 
 
-def schema(connection):
+def schema(connection, required=None):
     if connection.execute('PRAGMA user_version').fetchone() != (4,):
         raise ValueError('profile observer does not support this store revision')
-    for table, required in COLUMNS.items():
+    columns = {table: dict(fields) for table, fields in COLUMNS.items()}
+    for table, fields in (required or {}).items():
+        columns.setdefault(table, {}).update(fields)
+    for table, required in columns.items():
         row = connection.execute('SELECT type, sql FROM sqlite_schema WHERE name = ?', (table,)).fetchone()
         if row is None or row[0] != 'table' or not re.match(r'CREATE TABLE\b', row[1], re.IGNORECASE):
             raise ValueError('profile observer requires the declared physical tables')
@@ -63,7 +67,7 @@ def profile(app):
     image = expected['device'], expected['inode'], expected['bytes']
     if engine_image(engine['pid']) != image:
         raise ValueError('profile observer engine image differs from the installed artifact')
-    directory = Path.home() / '.config/paintedwolf'
+    directory = app.selected_storage().config
     for ancestor in (directory.parent, directory.parent.parent):
         info = ancestor.lstat()
         if (not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o022
@@ -74,36 +78,78 @@ def profile(app):
     app.require_running()
     app.require_engine()
     if (app.observations.get('engine_identity') != engine or engine_image(engine['pid']) != image
-            or physical(directory, True) != before):
+            or app.selected_storage().config != directory or physical(directory, True) != before):
         raise ValueError('captured profile or engine changed during observation')
 
 
+def sidecar_identity(info, path):
+    if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_nlink != 1
+            or stat.S_IMODE(info.st_mode) not in {0o600, 0o644} or info.st_size > 128 << 20
+            or path.resolve(strict=True) != path):
+        raise CaseUnavailable('SQLite-sidecar-is-not-a-declared-physical-owned-file')
+    return info.st_dev, info.st_ino, info.st_uid, info.st_gid, info.st_mode, info.st_nlink
+
+
 @contextmanager
-def _database(app):
+def sqlite_sidecars(path):
+    parent = physical(path.parent, True)
+    if stat.S_IMODE(parent[3]) != 0o700:
+        raise CaseUnavailable('SQLite-sidecars-require-the-pinned-private-profile')
+    with ExitStack() as custody:
+        held = []
+        for suffix in ('-wal', '-shm'):
+            sidecar = Path(str(path) + suffix)
+            try:
+                descriptor = os.open(sidecar, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+            except OSError:
+                raise CaseUnavailable('SQLite-sidecar-file-unavailable') from None
+            custody.callback(os.close, descriptor)
+            try:
+                before = sidecar_identity(os.fstat(descriptor), sidecar)
+                if sidecar_identity(sidecar.lstat(), sidecar) != before:
+                    raise CaseUnavailable('SQLite-sidecar-changed-before-observation')
+            except FileNotFoundError:
+                raise CaseUnavailable('SQLite-sidecar-disappeared-before-observation') from None
+            held.append((descriptor, sidecar, before))
+        try:
+            yield
+        finally:
+            try:
+                if physical(path.parent, True) != parent:
+                    raise CaseUnavailable('SQLite-profile-changed-during-observation')
+                for descriptor, sidecar, before in held:
+                    if (sidecar_identity(os.fstat(descriptor), sidecar) != before
+                            or sidecar_identity(sidecar.lstat(), sidecar) != before):
+                        raise CaseUnavailable('SQLite-sidecar-changed-during-observation')
+            except FileNotFoundError:
+                raise CaseUnavailable('SQLite-sidecar-disappeared-during-observation') from None
+
+
+@contextmanager
+def _database(app, *, required=None):
     with profile(app) as directory:
         path = directory / 'store.db'
         before = physical(path)
-        # Do not use immutable=1: it ignores live WAL commits. Existing sidecars
-        # avoid creating an observer-owned WAL/SHM pair in the product profile.
-        for suffix in ('-wal', '-shm'):
-            physical(Path(str(path) + suffix))
-        connection = sqlite3.connect(path.as_uri() + '?mode=ro', uri=True, timeout=1)
-        deadline, instructions = time.monotonic() + 2, 0
-        def progress():
-            nonlocal instructions
-            instructions += 1000
-            return int(instructions > 200000 or time.monotonic() > deadline)
-        connection.set_progress_handler(progress, 1000)
-        try:
-            connection.execute('PRAGMA query_only = ON')
-            connection.execute('PRAGMA trusted_schema = OFF')
-            connection.execute('BEGIN')
-            schema(connection)
-            yield connection
-            if physical(path) != before:
-                raise ValueError('captured profile or engine changed during observation')
-        finally:
-            connection.close()
+        # Existing sidecars avoid creating an observer-owned WAL/SHM pair.
+        # Their descriptor custody spans the readonly SQLite transaction.
+        with sqlite_sidecars(path):
+            connection = sqlite3.connect(path.as_uri() + '?mode=ro', uri=True, timeout=1)
+            deadline, instructions = time.monotonic() + 2, 0
+            def progress():
+                nonlocal instructions
+                instructions += 1000
+                return int(instructions > 200000 or time.monotonic() > deadline)
+            connection.set_progress_handler(progress, 1000)
+            try:
+                connection.execute('PRAGMA query_only = ON')
+                connection.execute('PRAGMA trusted_schema = OFF')
+                connection.execute('BEGIN')
+                schema(connection, required)
+                yield connection
+                if physical(path) != before:
+                    raise ValueError('captured profile or engine changed during observation')
+            finally:
+                connection.close()
 
 
 def rows(cursor):

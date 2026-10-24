@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
-from linux_release.installed_cases import profile_observer, profile_providers as observer
+from linux_release.installed_cases import profile_observer, profile_providers as observer, profile_documents
 from linux_release.installed_cases.provider import ProviderFixture, GUI_LABEL, GUI_KIND, MODEL, gui_endpoint
 
 ENDPOINT = gui_endpoint(41234)
@@ -29,6 +29,12 @@ class ProfileProviderTests(unittest.TestCase):
             observations={'engine_identity': {'pid': 123, 'start_time_ticks': 9}},
             require_running=Mock(), require_engine=Mock())
         self.stack.enter_context(patch.object(Path, 'home', return_value=self.home))
+        from linux_release.installed_cases.app import InstalledApp
+        from linux_release.installed_storage import resolve
+        from types import MethodType
+        self.app.storage = resolve({'HOME': str(self.home)})
+        self.app.observations['storage'] = self.app.storage.facts()
+        self.app.selected_storage = MethodType(InstalledApp.selected_storage, self.app)
         self.stack.enter_context(patch.object(profile_observer, 'require_owned_guest'))
         self.stack.enter_context(patch.object(profile_observer, 'engine_image', return_value=(1, 2, 3)))
         self.row = {'id': 'owned-fixture-1', 'kind': GUI_KIND, 'label': GUI_LABEL,
@@ -43,10 +49,10 @@ class ProfileProviderTests(unittest.TestCase):
         self.assertFalse(self.path.exists())
         self.write([{'id': 'other', 'label': 'SECRET OTHER PROVIDER', 'api_key_env': 'SECRET_ENV'}, self.row])
         before = self.path.read_bytes()
-        with patch.object(observer.os, 'open', wraps=os.open) as opened:
+        with patch.object(profile_documents.os, 'open', wraps=os.open) as opened:
             observed = observer.find_gui_provider(self.app, ENDPOINT)
         self.assertEqual(observed, {'provider_id': 'owned-fixture-1', 'kind': GUI_KIND,
-            'requires_api_key': True, 'models': [MODEL], 'observer': 'owned-provider-YAML'})
+            'requires_api_key': True, 'configured_models': [MODEL], 'observer': 'owned-provider-YAML'})
         self.assertNotIn('SECRET', json.dumps(observed))
         self.assertEqual(self.path.read_bytes(), before)
         self.assertFalse(opened.call_args.args[1] & (os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC))
@@ -54,7 +60,7 @@ class ProfileProviderTests(unittest.TestCase):
 
     def test_yaml_duplicates_aliases_excess_and_diagnostic_prose_are_refused(self):
         for raw in [b'providers: []\nproviders: []', b'providers: &a [*a]', b'unknown: []',
-                    b'providers: !!python/object/apply:SECRET []', b'providers: [SECRET', b'x' * (observer.LIMIT + 1)]:
+                    b'providers: !!python/object/apply:SECRET []', b'providers: [SECRET', b'x' * (profile_documents.LIMIT + 1)]:
             with self.subTest(length=len(raw)), self.assertRaises(ValueError) as refusal:
                 observer.document(raw)
             self.assertNotIn('SECRET', str(refusal.exception))
@@ -117,6 +123,9 @@ class ProfileProviderTests(unittest.TestCase):
         for port in (0, 80, 1023, 65536, True):
             with self.subTest(port=port), self.assertRaises(ValueError):
                 gui_endpoint(port)
+
+    def test_null_ambient_auth_is_the_declared_absent_transport(self):
+        self.assertEqual(observer.selected([{**self.row, 'ambient_auth': None}], ENDPOINT)['kind'], 'litellm-proxy')
 
     def test_a_registration_for_another_endpoint_is_refused(self):
         with self.assertRaisesRegex(ValueError, 'fixed local credential transport'):

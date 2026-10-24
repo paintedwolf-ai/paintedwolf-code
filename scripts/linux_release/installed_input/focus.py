@@ -6,6 +6,7 @@ from ..installed_cases.app import process_identity
 from ..installed_cases.desktop_ui import owned_process
 from ..installed_cases.records import CaseFailed, CaseUnavailable
 from .protocol import focus
+from . import accessibility, lineage
 
 
 class _FocusUnavailable(CaseUnavailable):
@@ -22,6 +23,7 @@ class EntryFocus:
         self.node = ui.find(self.role, label)
         self.entry = process_identity(self.node.get_process_id())
         self.launch = dict(app.observations['launch_identity'])
+        self.frame, self.frame_lineage, self.accessible_chain = None, None, None
         if self.node.queryComponent().grabFocus() is not True:
             raise CaseUnavailable('normal-owned-editor-focus-refused')
         self.observe()
@@ -71,29 +73,28 @@ class EntryFocus:
             error.observations = {'native_input_focus': {'entry_identity': self.entry,
                 'entry_visible': visible, 'entry_focused': focused}}
             raise error
-        parent, seen, frame = node, set(), None
-        for _ in range(64):
-            parent = parent.get_parent()
-            if parent is None:
-                break
-            marker = hash(parent)
-            if marker in seen:
-                raise ValueError('native input accessible parent chain cycles')
-            seen.add(marker)
-            if parent.getRole() in {ui.api.ROLE_FRAME, ui.api.ROLE_DIALOG}:
-                frame = parent
-                break
-        if frame is None:
-            raise _FocusUnavailable('normal-owned-editor-container-unavailable')
+        frame, accessible_chain = accessibility.capture(node, list(ui.windows()))
         frame_identity = process_identity(frame.get_process_id())
         active, visible = frame.getState().contains(ui.api.STATE_ACTIVE), bool(ui.visible(frame))
-        if (frame_identity != self.launch or not owned_process(frame_identity['pid'], self.app)
-                or not active or not visible):
+        if not active or not visible:
             refusal = _FocusUnavailable('normal-owned-editor-active-frame-unavailable')
             refusal.observations = {'editor_focus': {'entry_identity': self.entry,
                 'entry_focused': True, 'container_identity': frame_identity, 'container_active': bool(active)}}
             raise refusal
+        if self.frame is not None and (frame_identity != self.frame or accessible_chain != self.accessible_chain):
+            raise CaseFailed('native input captured frame or accessible ancestor changed')
+        chain = lineage.capture(self.launch, frame_identity)
+        entry_chain = lineage.capture(frame_identity, self.entry)
+        if self.frame is None:
+            self.frame = dict(frame_identity)
+            self.frame_lineage = [dict(row) for row in chain]
+            self.accessible_chain = [dict(row) for row in accessible_chain]
+        if (frame_identity != self.frame or chain != self.frame_lineage
+                or accessible_chain != self.accessible_chain):
+            raise CaseFailed('native input captured frame or launch lineage changed')
         self._stable(self.launch)
         self._stable(self.entry)
         return focus({'launch': self.launch, 'entry': self.entry, 'frame': frame_identity,
+                      'frame_lineage': chain, 'entry_lineage': entry_chain,
+                      'accessible_chain': accessible_chain,
                       'entry_focused': True, 'frame_active': True, 'frame_visible': True})

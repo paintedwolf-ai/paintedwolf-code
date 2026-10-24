@@ -10,6 +10,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from linux_release.installed_cases import profile_observer as observer
+from linux_release.installed_cases.reply_observer import TERMINAL_COLUMNS
 
 PROJECT = '10000000-0000-4000-8000-000000000001'
 ROOT = '10000000-0000-4000-8000-000000000002'
@@ -48,6 +49,12 @@ class ProfileObserverTests(unittest.TestCase):
         self.app = SimpleNamespace(binding={'install_root': '/owned', 'images': {'/owned/bin/pw': {'device': 1, 'inode': 2, 'bytes': 3}}}, observations={'engine_identity': {'pid': 123, 'start_time_ticks': 9}},
                                    require_running=Mock(), require_engine=Mock())
         self.stack.enter_context(patch.object(Path, 'home', return_value=self.home))
+        from linux_release.installed_cases.app import InstalledApp
+        from linux_release.installed_storage import resolve
+        from types import MethodType
+        self.app.storage = resolve({'HOME': str(self.home)})
+        self.app.observations['storage'] = self.app.storage.facts()
+        self.app.selected_storage = MethodType(InstalledApp.selected_storage, self.app)
         self.stack.enter_context(patch.object(observer, 'require_owned_guest'))
         self.stack.enter_context(patch.object(observer, 'engine_image', return_value=(1, 2, 3)))
 
@@ -60,6 +67,43 @@ class ProfileObserverTests(unittest.TestCase):
         self.assertNotIn('SECRET', json.dumps(found))
         self.assertEqual(self.writer.execute('PRAGMA journal_mode').fetchone(), ('wal',))
         self.app.require_engine.assert_called()
+
+    def test_purpose_columns_require_actual_tables_and_exact_declared_types(self):
+        required = {**TERMINAL_COLUMNS, 'project_roots': {'is_primary': 'INTEGER', 'kind': 'TEXT'}}
+        for table, fields in required.items():
+            if table in {'sessions', 'project_roots'}:
+                for name, kind in fields.items():
+                    self.writer.execute('ALTER TABLE ' + table + ' ADD COLUMN ' + name + ' ' + kind)
+            else:
+                self.writer.execute('CREATE TABLE ' + table + '(' + ','.join(
+                    name + ' ' + kind for name, kind in fields.items()) + ')')
+        self.writer.commit()
+        with observer._database(self.app, required=required):
+            pass
+        self.writer.execute('ALTER TABLE turns RENAME TO held_turns')
+        self.writer.execute('CREATE VIEW turns AS SELECT * FROM held_turns')
+        self.writer.commit()
+        with self.assertRaisesRegex(ValueError, 'physical tables'):
+            with observer._database(self.app, required=required):
+                pass
+        self.writer.execute('DROP VIEW turns')
+        self.writer.execute('ALTER TABLE held_turns RENAME TO turns')
+        self.writer.commit()
+        for table, column in (('turn_attempts', 'phase'), ('sessions', 'parent_session_id'),
+                              ('project_roots', 'is_primary')):
+            original = dict(observer.COLUMNS.get(table, {}))
+            original.update(required.get(table, {}))
+            wrong = {**original, column: 'INTEGER' if original[column] == 'TEXT' else 'TEXT'}
+            self.writer.execute('ALTER TABLE ' + table + ' RENAME TO held_table')
+            self.writer.execute('CREATE TABLE ' + table + '(' + ','.join(
+                name + ' ' + kind for name, kind in wrong.items()) + ')')
+            self.writer.commit()
+            with self.subTest(table=table), self.assertRaisesRegex(ValueError, 'column contract'):
+                with observer._database(self.app, required=required):
+                    pass
+            self.writer.execute('DROP TABLE ' + table)
+            self.writer.execute('ALTER TABLE held_table RENAME TO ' + table)
+            self.writer.commit()
 
     def test_read_connection_refuses_database_mutation(self):
         with observer._database(self.app) as connection:
@@ -97,9 +141,49 @@ class ProfileObserverTests(unittest.TestCase):
     def test_missing_sidecar_is_not_created_by_observer(self):
         sidecar = Path(str(self.path) + '-shm')
         sidecar.rename(sidecar.with_suffix('.held'))
-        with self.assertRaises(FileNotFoundError):
+        with self.assertRaises(observer.CaseUnavailable):
             observer.sessions_for_project(self.app, PROJECT)
         self.assertFalse(sidecar.exists())
+
+    def test_private_parent_allows_only_declared_sidecar_modes(self):
+        sidecar = Path(str(self.path) + '-wal')
+        sidecar.chmod(0o644)
+        self.assertEqual(len(observer.sessions_for_project(self.app, PROJECT)), 1)
+        for mode in (0o640, 0o664, 0o700):
+            with self.subTest(mode=mode):
+                sidecar.chmod(mode)
+                with self.assertRaises(observer.CaseUnavailable):
+                    observer.sessions_for_project(self.app, PROJECT)
+        sidecar.chmod(0o600)
+        self.profile.chmod(0o710)
+        with self.assertRaises(ValueError):
+            observer.sessions_for_project(self.app, PROJECT)
+
+    def test_sidecar_replacement_disappearance_mode_and_links_refuse(self):
+        sidecar = Path(str(self.path) + '-shm')
+        with self.assertRaises(observer.CaseUnavailable):
+            with observer.sqlite_sidecars(self.path):
+                sidecar.rename(sidecar.with_suffix('.held'))
+                sidecar.write_bytes(b'')
+                sidecar.chmod(0o600)
+        with self.assertRaises(observer.CaseUnavailable):
+            with observer.sqlite_sidecars(self.path):
+                sidecar.unlink()
+        sidecar.write_bytes(b'')
+        sidecar.chmod(0o600)
+        with self.assertRaises(observer.CaseUnavailable):
+            with observer.sqlite_sidecars(self.path):
+                sidecar.chmod(0o664)
+        sidecar.chmod(0o600)
+        os.link(sidecar, sidecar.with_suffix('.link'))
+        with self.assertRaises(observer.CaseUnavailable):
+            with observer.sqlite_sidecars(self.path):
+                self.fail('multiply linked sidecar admitted')
+
+    def test_sidecar_descriptor_custody_survives_live_growth(self):
+        with observer.sqlite_sidecars(self.path):
+            self.writer.execute('INSERT INTO projects VALUES(?)', ('another-project',))
+            self.writer.commit()
 
     def test_row_overflow_and_undeclared_tools_fail_closed(self):
         self.writer.executemany('INSERT INTO sessions VALUES(?,?,?,?,?)',
