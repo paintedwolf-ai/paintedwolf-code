@@ -10,6 +10,9 @@ policy before editing. Start unfamiliar work at [docs](docs/README.md) and
 
 ## Operating rules
 
+- **Judge safety end to end:** a locally conservative safeguard must not create
+  greater overall risk, make successful use or recovery impractical, or shift
+  avoidable burden onto the user.
 - **Work in an isolated worktree and dedicated branch.** Reuse them for the same
   task. Unless the user requests local-only work, commit your changes, push to
   GitHub, and open a PR for CI. Stage only authored paths: `git add -- <paths>`.
