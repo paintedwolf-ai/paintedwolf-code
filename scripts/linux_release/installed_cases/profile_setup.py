@@ -115,7 +115,7 @@ def renderer_session(app, project, project_id, session_id):
         raise ValueError('renderer session snapshot differs from its selected project session')
     if session.get('status') == 'error':
         raise ValueError('renderer session snapshot failed before observation')
-    if session.get('status') != 'idle':
+    if session.get('status') not in {'preparing', 'idle'}:
         return None
     workflow = snapshot.get('activeWorkflowRun')
     if workflow is None:
@@ -129,7 +129,7 @@ def renderer_session(app, project, project_id, session_id):
     if question != 'What would you like to work on?':
         return None
     return {'observer': 'owned-app-state-JSON', 'project_id': project_id, 'session_id': session_id,
-            'status': 'idle', 'workspace_path': root, 'composer_question': question,
+            'status': session['status'], 'workspace_path': root, 'composer_question': question,
             'last_active_project_sha256': active_digest, 'last_session_snapshot_sha256': snapshot_digest}
 
 
