@@ -43,11 +43,14 @@ func TestIntakeMonitorStatusFixture(t *testing.T) {
 	if phase >= 110 && phase <= 115 {
 		failure = &intakeMonitorFailure{intakeFailureReconcile, &mountTopologyRefusal{predicate: topologyPredicate(phase - 110)}}
 	}
+	if phase >= 120 && phase <= 125 {
+		failure = &intakeMonitorFailure{intakeFailureReconcile, &intakeReconcileFailure{intakeReconcileLeaf(phase), unix.EIO}}
+	}
 	os.Exit(MountIntakeExitStatus(failure))
 }
 
 func TestIntakeMonitorStatusesRemainActualNonzeroChildExits(t *testing.T) {
-	for _, code := range []int{80, 81, 82, 83, 84, 85, 86, 100, 101, 102, 103, 104, 105, 110, 111, 112, 113, 114, 115} {
+	for _, code := range []int{80, 81, 82, 83, 84, 85, 86, 100, 101, 102, 103, 104, 105, 110, 111, 112, 113, 114, 115, 120, 121, 122, 123, 124, 125} {
 		command := exec.Command(os.Args[0], "-test.run=^TestIntakeMonitorStatusFixture$")
 		command.Env = append(os.Environ(), "PW_INTAKE_MONITOR_STATUS_FIXTURE="+strconv.Itoa(code))
 		testutil.FailErr(t, "start only owned private-status child", command.Start())
@@ -56,5 +59,28 @@ func TestIntakeMonitorStatusesRemainActualNonzeroChildExits(t *testing.T) {
 		if !errors.As(err, &status) || status.ExitCode() != code {
 			t.Fatalf("private phase%d changed failure outcome: %v", code, err)
 		}
+	}
+}
+
+func TestIntakeReconcileStatusPreservesOriginalControlCauses(t *testing.T) {
+	for _, leaf := range []intakeReconcileLeaf{intakeReconcileStructural, intakeReconcileRetirement,
+		intakeReconcileHiddenRoots, intakeReconcileCapture, intakeReconcileLease, intakeReconcileArrival} {
+		for _, cause := range []error{unix.EIO, errIntakeEpochChanged, errIntakeDestinationUnavailable} {
+			nested := &intakeReconcileFailure{leaf, cause}
+			failure := &intakeMonitorFailure{intakeFailureReconcile, nested}
+			if !errors.Is(failure, cause) || MountIntakeExitStatus(failure) != int(leaf) || MountIntakeExitStatus(nested) != 1 ||
+				MountIntakeExitStatus(&intakeMonitorFailure{intakeFailureHeartbeat, nested}) != 85 {
+				t.Fatalf("nested diagnostic changed cause/role: leaf=%d cause=%v", leaf, cause)
+			}
+		}
+		parser := &mountTopologyRefusal{predicate: topologyDuplicateIdentity}
+		failure := &intakeMonitorFailure{intakeFailureReconcile, &intakeReconcileFailure{leaf, parser}}
+		var found *mountTopologyRefusal
+		if !errors.As(failure, &found) || found != parser || MountIntakeExitStatus(failure) != 112 {
+			t.Fatal("nested parser lost precedence or exact underlying fact")
+		}
+	}
+	if MountIntakeExitStatus(&intakeMonitorFailure{intakeFailureReconcile, &intakeReconcileFailure{255, unix.EIO}}) != 84 {
+		t.Fatal("unknown reconciliation leaf gained a diagnostic meaning")
 	}
 }

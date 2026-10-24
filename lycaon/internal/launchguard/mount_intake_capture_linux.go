@@ -60,7 +60,7 @@ func captureIntakeLease(root mountEntry, forest mountForest, current []mountEntr
 func (intake *moduleIntake) importArrivals(current []mountEntry, structural map[int]bool) (pending bool, err error) {
 	hidden, err := hiddenMountRoots(current)
 	if err != nil {
-		return false, err
+		return false, &intakeReconcileFailure{intakeReconcileHiddenRoots, err}
 	}
 	owned := make(map[int]bool)
 	for _, lease := range intake.leases {
@@ -93,12 +93,12 @@ func (intake *moduleIntake) importArrivals(current []mountEntry, structural map[
 				}
 				continue
 			}
-			return false, captureErr
+			return false, &intakeReconcileFailure{intakeReconcileCapture, captureErr}
 		}
 		lease.lease, err = intake.newLease()
 		if err != nil {
 			_ = unix.Close(tree)
-			return false, err
+			return false, &intakeReconcileFailure{intakeReconcileLease, err}
 		}
 		err = intake.exchange(mountTransferAdd, lease.lease, entry.mountPoint, tree)
 		_ = unix.Close(tree)
@@ -107,7 +107,7 @@ func (intake *moduleIntake) importArrivals(current []mountEntry, structural map[
 			continue
 		}
 		if err != nil {
-			return false, err
+			return false, &intakeReconcileFailure{intakeReconcileArrival, err}
 		}
 		if intake.leases == nil {
 			intake.leases = make(map[uint64]intakeMountLease)

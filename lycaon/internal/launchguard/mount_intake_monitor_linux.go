@@ -145,19 +145,43 @@ func (intake *moduleIntake) reconcile(current []mountEntry, structural map[int]b
 	for _, entry := range current {
 		if expected, exists := remaining[entry.id]; exists {
 			if expected != entry {
-				return false, errors.New("intake structural source changed")
+				return false, &intakeReconcileFailure{intakeReconcileStructural, errors.New("intake structural source changed")}
 			}
 			delete(remaining, entry.id)
 		}
 	}
 	if len(remaining) > 0 {
-		return false, errors.New("intake structural source disappeared")
+		return false, &intakeReconcileFailure{intakeReconcileStructural, errors.New("intake structural source disappeared")}
 	}
 	if err := intake.retireChanged(current); err != nil {
-		return false, err
+		if errors.Is(err, errIntakeEpochChanged) {
+			return false, err
+		}
+		return false, &intakeReconcileFailure{intakeReconcileRetirement, err}
 	}
 	return intake.importArrivals(current, structural)
 }
+
+// These closed groups describe only existing fatal reconciliation returns.
+// They preserve the underlying cause and introduce no retry decision.
+type intakeReconcileLeaf uint8
+
+const (
+	intakeReconcileStructural intakeReconcileLeaf = 120 + iota
+	intakeReconcileRetirement
+	intakeReconcileHiddenRoots
+	intakeReconcileCapture
+	intakeReconcileLease
+	intakeReconcileArrival
+)
+
+type intakeReconcileFailure struct {
+	leaf  intakeReconcileLeaf
+	cause error
+}
+
+func (failure *intakeReconcileFailure) Error() string { return failure.cause.Error() }
+func (failure *intakeReconcileFailure) Unwrap() error { return failure.cause }
 
 // These statuses describe only the private intake monitor's actual failure
 // phase. Every failure remains fatal; they grant no retry or lifecycle authority.
@@ -198,6 +222,15 @@ func MountIntakeExitStatus(err error) int {
 				return 110 + int(topology.predicate)
 			}
 		}
+		var reconcile *intakeReconcileFailure
+		if failure.phase == intakeFailureReconcile && errors.As(failure.cause, &reconcile) {
+			switch reconcile.leaf {
+			case intakeReconcileStructural, intakeReconcileRetirement, intakeReconcileHiddenRoots,
+				intakeReconcileCapture, intakeReconcileLease, intakeReconcileArrival:
+				return int(reconcile.leaf)
+			}
+		}
+
 		switch failure.phase {
 		case intakeFailurePoll, intakeFailureControl, intakeFailureMountInfo, intakeFailureTopology,
 			intakeFailureReconcile, intakeFailureHeartbeat, intakeFailureWatchdog:

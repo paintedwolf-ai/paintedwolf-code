@@ -105,7 +105,7 @@ func TestGuardianWaitidRejectsUnsupportedChildStatusEncoding(t *testing.T) {
 }
 
 func TestGuardianWaitidRetainsActualIntakeFailurePhase(t *testing.T) {
-	for _, code := range []int{80, 81, 82, 83, 84, 85, 86, 100, 101, 102, 103, 104, 105, 110, 111, 112, 113, 114, 115} {
+	for _, code := range []int{80, 81, 82, 83, 84, 85, 86, 100, 101, 102, 103, 104, 105, 110, 111, 112, 113, 114, 115, 120, 121, 122, 123, 124, 125} {
 		t.Run(strconv.Itoa(code), func(t *testing.T) {
 			command := exec.Command(os.Args[0], "-test.run=^TestIntakeMonitorStatusFixture$")
 			command.Env = append(os.Environ(), "PW_INTAKE_MONITOR_STATUS_FIXTURE="+strconv.Itoa(code))
