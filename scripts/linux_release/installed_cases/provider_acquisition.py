@@ -18,7 +18,7 @@ def fixed_call(tool):
     if tool == 'command':
         return {'name': tool, 'arguments': {'command': '/usr/bin/true'}}
     if tool == 'page_open':
-        return {'name': tool, 'arguments': {'path': 'fixture.html'}}
+        return {'name': tool, 'arguments': {'project_dir': '.', 'path': 'fixture.html'}}
     raise ValueError('fixture acquisition requires a declared fixed tool purpose')
 
 

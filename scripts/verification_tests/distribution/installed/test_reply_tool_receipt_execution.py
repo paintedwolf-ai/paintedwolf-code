@@ -17,7 +17,7 @@ class ReplyToolReceiptTests(unittest.TestCase):
     def fixture(self, tool='request_tools', *, target='command'):
         call, subsystem, args = (('call_1234abcd', 'tool_surface', {'need': target}) if tool == 'request_tools'
                                 else ('call_abcd1234', 'processes', {'command': '/usr/bin/true'}) if target == 'command'
-                                else ('call_abcd1234', 'browser', {'path': 'fixture.html'}))
+                                else ('call_abcd1234', 'browser', {'project_dir': '.', 'path': 'fixture.html'}))
         return {'tool': tool, 'tool_call_id': call, 'outcome': 'completed', 'tool_args': args,
             'content': json.dumps({'need': target, 'loaded': [target]}) if tool == 'request_tools' else '[page#1]\ncompacted opaque result',
             'invocation': {'id': RECEIPT, 'tool': tool, 'tool_call_id': call,
@@ -81,10 +81,11 @@ class ReplyToolReceiptTests(unittest.TestCase):
             result = self.observe(self.fixture(tool, target='page_open'), tool=tool, target='page_open')
             self.assertEqual(result['tool'], tool)
             self.assertEqual(result['owner'], 'tool_surface' if tool == 'request_tools' else 'browser')
-            self.assertEqual(result['arguments'], {'need': 'page_open'} if tool == 'request_tools' else {'path': 'fixture.html'})
+            self.assertEqual(result['arguments'], {'need': 'page_open'} if tool == 'request_tools' else {'project_dir': '.', 'path': 'fixture.html'})
             if tool == 'page_open':
                 self.assertEqual(result['payload']['id'], 'page_owned')
-        for change in ({'tool_args': {'path': 'foreign.html'}}, {'tool_args': {'command': '/usr/bin/true'}},
+        for change in ({'tool_args': {'path': 'foreign.html'}}, {'tool_args': {'path': 'fixture.html'}},
+                       {'tool_args': {'project_dir': '/tmp', 'path': 'fixture.html'}}, {'tool_args': {'command': '/usr/bin/true'}},
                        {'invocation': {**self.fixture('page_open', target='page_open')['invocation'], 'code': 'REFUSED'}}):
             with self.subTest(change=change), self.assertRaises(ValueError):
                 self.observe({**self.fixture('page_open', target='page_open'), **change}, tool='page_open', target='page_open')

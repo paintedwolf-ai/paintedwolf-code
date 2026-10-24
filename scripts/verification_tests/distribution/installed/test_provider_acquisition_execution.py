@@ -257,9 +257,9 @@ class ProviderAcquisitionTests(unittest.TestCase):
         self.assertEqual(phase.witness['need'], 'page_open')
         emitted = phase.call
         emitted['arguments']['path'] = 'foreign.html'
-        self.assertEqual(phase.call['arguments'], {'path': 'fixture.html'})
+        self.assertEqual(phase.call['arguments'], {'project_dir': '.', 'path': 'fixture.html'})
         call = {'id': HOST_COMMAND, 'type': 'function', 'function': {
-            'name': 'page_open', 'arguments': '{"path":"fixture.html"}'}}
+            'name': 'page_open', 'arguments': '{"project_dir":".","path":"fixture.html"}'}}
         history += [{'role': 'assistant', 'tool_calls': [call]}, {'role': 'tool', 'tool_call_id': HOST_COMMAND,
             'content': framed(payload={'id': 'page_owned', 'live_pages': ['page_owned'], 'max_pages': 4},
                 invocation=receipt(tool='page_open', tool_call_id=HOST_COMMAND, id=COMMAND_RECEIPT))}]
@@ -277,7 +277,7 @@ class ProviderAcquisitionTests(unittest.TestCase):
             phase.advance(history, {'page_open'})
 
     def test_page_http_fixture_emits_only_its_declared_acquired_call(self):
-        calls = [{'name': 'page_open', 'arguments': {'path': 'fixture.html'}}]
+        calls = [{'name': 'page_open', 'arguments': {'project_dir': '.', 'path': 'fixture.html'}}]
         with ProviderFixture.gui(calls, acquire='page_open') as fixture:
             opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
             history = initial()
@@ -293,7 +293,7 @@ class ProviderAcquisitionTests(unittest.TestCase):
             history += [load, {'role': 'tool', 'tool_call_id': HOST_LOAD,
                 'content': framed(payload={'need': 'page_open', 'loaded': ['page_open']})}]
             opened = request(['page_open'])
-            self.assertEqual(opened['tool_calls'][0]['function'], {'name': 'page_open', 'arguments': '{"path": "fixture.html"}'})
+            self.assertEqual(opened['tool_calls'][0]['function'], {'name': 'page_open', 'arguments': '{"project_dir": ".", "path": "fixture.html"}'})
             opened['tool_calls'][0]['id'] = HOST_COMMAND
             history += [opened, {'role': 'tool', 'tool_call_id': HOST_COMMAND,
                 'content': framed(payload={'id': 'page_owned', 'live_pages': ['page_owned'], 'max_pages': 4},

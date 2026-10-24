@@ -20,7 +20,7 @@ LAUNCH = {'pid': 5, 'parent_pid': 1, 'start_time_ticks': 20}
 def turn():
     return {'tool_invocation': {'message_id': MESSAGE, 'invocation_id': RECEIPT,
         'tool_call_id': 'call_1234abcd', 'tool': 'page_open', 'owner': 'browser',
-        'status': 'completed', 'invoked': True, 'arguments': {'path': 'fixture.html'},
+        'status': 'completed', 'invoked': True, 'arguments': {'project_dir': '.', 'path': 'fixture.html'},
         'payload': {'id': 'page_owned', 'live_pages': ['page_owned'], 'max_pages': 4}}}
 
 
@@ -65,7 +65,7 @@ class BrowserGuiTests(unittest.TestCase):
             self.assertEqual(facts['opened']['page']['id'], 'page_owned')
             self.assertEqual(constructor.call_args.args, ({'launcher': {'path': 'bound bootstrap'}},))
             self.assertEqual(gui.call_args.kwargs['acquire'], 'page_open')
-            self.assertEqual(gui.call_args.args[0], [{'name': 'page_open', 'arguments': {'path': 'fixture.html'}}])
+            self.assertEqual(gui.call_args.args[0], [{'name': 'page_open', 'arguments': {'project_dir': '.', 'path': 'fixture.html'}}])
             app.launch.assert_called_once(); app.wait_ready.assert_called_once(); app.stop.assert_called_once()
             submitted.assert_called_once_with(app, operation='browser-fixture-prompt-v1')
             self.assertEqual(awaited.call_args.args[2], 'fixture')
