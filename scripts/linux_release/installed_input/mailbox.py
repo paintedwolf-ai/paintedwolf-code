@@ -9,7 +9,7 @@ import stat
 import sys
 import tempfile
 
-from . import protocol
+from . import protocol, session_wire, unlock_wire
 
 
 def decode(raw: bytes) -> dict:
@@ -123,7 +123,10 @@ class Mailbox:
         if self.read('request.json') != pending:
             raise ValueError('native input pending request changed before completion')
         acknowledgment = self.read('ack.json')
-        protocol.acknowledgment(acknowledgment, pending, self.vm_id)
+        if pending.get('operation') in unlock_wire.OPERATIONS:
+            unlock_wire.acknowledgment(acknowledgment, pending, self.vm_id)
+        else:
+            protocol.acknowledgment(acknowledgment, pending, self.vm_id)
         (self.path / 'request.json').unlink()
         (self.path / 'ack.json').unlink()
 
@@ -132,6 +135,7 @@ def serve(execution: dict, vm_id: str):
     mailbox = Mailbox(execution, vm_id)
     acknowledged = None
     publication = None
+    prepared, prepare_delivered, unlock_used, credential_disabled = None, False, False, False
 
     def attached_publication():
         mailbox.attach()
@@ -140,47 +144,95 @@ def serve(execution: dict, vm_id: str):
         return ((directory.st_dev, directory.st_ino),
                 (binding.st_dev, binding.st_ino, binding.st_size, binding.st_mtime_ns, binding.st_ctime_ns))
 
-    for _ in range(protocol.MAX_TRANSACTIONS * 256 * 20):
-        raw = sys.stdin.buffer.readline(protocol.MAX_DOCUMENT + 1)
-        if not raw:
-            return
-        command = decode(raw)
-        if command == {'operation': 'close'}:
-            return
-        if command == {'operation': 'poll'}:
-            if publication is None and not mailbox.path.exists():
-                result = {'state': 'waiting'}
-            elif publication is None and mailbox.read('binding.json') is None:
-                result = {'state': 'waiting'}
-            else:
-                current = attached_publication()
-                if publication is not None and current != publication:
-                    raise ValueError('native input mailbox publication changed after attachment')
-                publication = current
-                pending = mailbox.read('request.json')
-                if pending is None:
-                    acknowledged = None
+    try:
+        for _ in range(protocol.MAX_TRANSACTIONS * 256 * 20):
+            raw = sys.stdin.buffer.readline(protocol.MAX_DOCUMENT + 1)
+            if not raw:
+                return
+            command = decode(raw)
+            if command == {'operation': 'close'}:
+                return
+            if command == {'operation': 'poll'}:
+                if publication is None and not mailbox.path.exists():
+                    result = {'state': 'waiting'}
+                elif publication is None and mailbox.read('binding.json') is None:
                     result = {'state': 'waiting'}
                 else:
+                    current = attached_publication()
+                    if publication is not None and current != publication:
+                        raise ValueError('native input mailbox publication changed after attachment')
+                    publication = current
+                    pending = mailbox.read('request.json')
+                    if pending is None:
+                        acknowledged = None
+                        result = {'state': 'waiting'}
+                    else:
+                        if pending.get('operation') in unlock_wire.OPERATIONS:
+                            unlock_wire.request(pending, execution)
+                        else:
+                            protocol.request(pending, execution)
+                        digest = protocol.request_sha256(pending)
+                        result = {'state': 'acknowledged'} if digest == acknowledged else {'state': 'request', 'request': pending}
+            elif set(command) == {'operation', 'request_sha256'} and command['operation'] == 'native-prepare':
+                if publication is None or attached_publication() != publication:
+                    raise ValueError('native credential preparation requires its attached publication')
+                pending = mailbox.read('request.json')
+                unlock_wire.request(pending, execution)
+                if (pending['operation'] != unlock_wire.PREPARE or command['request_sha256'] != unlock_wire.digest(pending)
+                        or acknowledged == unlock_wire.digest(pending) or mailbox.read('ack.json') is not None):
+                    raise ValueError('native credential preparation cannot replay or replace its pending request')
+                if prepared is not None or prepare_delivered or unlock_used:
+                    raise ValueError('native credential preparation cannot replay')
+                prepare_delivered = True
+                prepared = pending
+                from .unlock_guest import serve_prepare
+                serve_prepare(pending, execution, vm_id, mailbox)
+                continue
+            elif set(command) == {'operation', 'request_sha256'} and command['operation'] == 'native-unlock':
+                if publication is None or attached_publication() != publication:
+                    raise ValueError('native unlock requires its attached publication')
+                pending = mailbox.read('request.json')
+                unlock_wire.request(pending, execution)
+                if (pending['operation'] != unlock_wire.PURPOSE or command['request_sha256'] != unlock_wire.digest(pending)
+                        or acknowledged == unlock_wire.digest(pending) or mailbox.read('ack.json') is not None):
+                    raise ValueError('native unlock cannot replay or replace its pending request')
+                if prepared is None or not prepare_delivered or unlock_used or prepared['account'] != pending['account']:
+                    raise ValueError('native unlock has no unused prepared account custody')
+                session_wire.same_runtime(prepared['native_session'], pending['native_session'])
+                unlock_used = True
+                from .unlock_guest import serve_mailbox
+                serve_mailbox(pending, execution, vm_id, mailbox)
+                credential_disabled = True
+                continue
+            elif set(command) == {'operation', 'acknowledgment'} and command['operation'] == 'ack':
+                if publication is None or attached_publication() != publication:
+                    raise ValueError('native input acknowledgment requires its attached publication')
+                pending = mailbox.read('request.json')
+                if pending.get('operation') in unlock_wire.OPERATIONS:
+                    unlock_wire.request(pending, execution)
+                    unlock_wire.acknowledgment(command['acknowledgment'], pending, vm_id)
+                    if pending['operation'] == unlock_wire.PREPARE:
+                        if not prepare_delivered or prepared != pending or unlock_used:
+                            raise ValueError('native credential preparation acknowledgment precedes its private delivery')
+                    elif not unlock_used:
+                        raise ValueError('native unlock acknowledgment precedes its private delivery')
+                else:
                     protocol.request(pending, execution)
-                    digest = protocol.request_sha256(pending)
-                    result = {'state': 'acknowledged'} if digest == acknowledged else {'state': 'request', 'request': pending}
-        elif set(command) == {'operation', 'acknowledgment'} and command['operation'] == 'ack':
-            if publication is None or attached_publication() != publication:
-                raise ValueError('native input acknowledgment requires its attached publication')
-            pending = mailbox.read('request.json')
-            protocol.request(pending, execution)
-            protocol.acknowledgment(command['acknowledgment'], pending, vm_id)
-            if acknowledged == protocol.request_sha256(pending) or mailbox.read('ack.json') is not None:
-                raise ValueError('native input acknowledgment cannot be replayed')
-            mailbox.write('ack.json', command['acknowledgment'])
-            acknowledged = protocol.request_sha256(pending)
-            result = {'state': 'acknowledged'}
-        else:
-            raise ValueError('native input server refuses unknown operations')
-        sys.stdout.buffer.write(protocol.canonical(result))
-        sys.stdout.buffer.flush()
-    raise ValueError('native input server exceeded its fixed frame bound')
+                    protocol.acknowledgment(command['acknowledgment'], pending, vm_id)
+                if acknowledged == protocol.request_sha256(pending) or mailbox.read('ack.json') is not None:
+                    raise ValueError('native input acknowledgment cannot be replayed')
+                mailbox.write('ack.json', command['acknowledgment'])
+                acknowledged = protocol.request_sha256(pending)
+                result = {'state': 'acknowledged'}
+            else:
+                raise ValueError('native input server refuses unknown operations')
+            sys.stdout.buffer.write(protocol.canonical(result))
+            sys.stdout.buffer.flush()
+        raise ValueError('native input server exceeded its fixed frame bound')
+    finally:
+        if prepared is not None and prepare_delivered and not credential_disabled:
+            from . import unlock_account
+            unlock_account.run_privileged_disable(prepared['account'], vm_id=vm_id)
 
 
 def main():

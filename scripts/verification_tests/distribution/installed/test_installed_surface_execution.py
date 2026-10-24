@@ -167,7 +167,7 @@ class FrameObserverTests(unittest.TestCase):
         self.visible = [self.main]
         self.ui.windows.side_effect = lambda: [(self.identity, node) for node in self.visible]
         self.ui.visible.return_value = True
-        self.ui.descendants.return_value = []
+        self.context.enter_context(patch.object(surface.accessibility, 'descendants', return_value=[]))
         def identity(pid):
             return self.identity.copy() if pid == 123 else self.engine.copy()
         self.identities = self.context.enter_context(patch.object(surface, 'process_identity', side_effect=identity))

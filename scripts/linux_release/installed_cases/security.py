@@ -14,12 +14,10 @@ import time
 
 from ..installed_runtime import unchanged
 from .app import InstalledApp
-from .logind_context import execution_session
 from .ipc import system_v_isolation
 from .lifecycle import background_cancel
 from .crash import detached_cleanup, host_execution_lifetime
 from .kernel import private_shared_memory, restricted_namespaces, helper_boundary
-from .process import run
 from .terminal import terminal_interaction
 from .browser import browser_sandbox
 from .browser_network import denied_local_services, allowed_local_server
@@ -44,48 +42,6 @@ def bus_value(arguments: list[str], expected: str):
     if not isinstance(row, dict) or row.get('type') != expected or not isinstance(row.get('data'), list):
         raise ValueError('native D-Bus observer returned an invalid typed value')
     return row['data']
-
-
-def inhibitors() -> list:
-    data = bus_value(['call', 'org.freedesktop.login1', '/org/freedesktop/login1',
-                      'org.freedesktop.login1.Manager', 'ListInhibitors'], 'a(ssssuu)')
-    if len(data) != 1 or not isinstance(data[0], list):
-        raise ValueError('logind inhibitor result has an invalid array shape')
-    rows = data[0]
-    if any(not isinstance(row, list) or len(row) != 6
-           or any(not isinstance(value, str) for value in row[:4])
-           or any(type(value) is not int or value < 0 for value in row[4:]) for row in rows):
-        raise ValueError('logind inhibitor row has an invalid typed shape')
-    return rows
-
-
-def inhibitor_lifetime(binding: dict) -> tuple[str, dict, dict]:
-    context = execution_session()
-    if context['Remote'] or not context['Active'] or context['Type'] not in {'x11', 'wayland'}:
-        return 'unverified', {'reason': 'inhibitor-requires-local-graphical-execution-session',
-                              'execution_session': context}, {}
-    baseline = inhibitors()
-    observed = []
-    with ThreadPoolExecutor(max_workers=1) as executor:
-        future = executor.submit(run, binding, 'pw', ['diagnostics', 'power-inhibit', '2s'], timeout=15)
-        while not future.done():
-            observed.extend(inhibitors())
-            time.sleep(0.1)
-        result = future.result()
-    identity = result.get('launch_identity')
-    if not isinstance(identity, dict) or type(identity.get('pid')) is not int or identity['pid'] <= 1:
-        raise ValueError('installed inhibitor omitted its captured process identity')
-    pid = identity['pid']
-    held = [row for row in observed if row[5] == pid and row[4] == os.getuid()
-            and 'sleep' in row[0].split(':') and row[3] == 'block']
-    final = inhibitors()
-    passed = (result['exit_code'] == 0 and not result['timed_out'] and not result['output_limit']
-              and bool(held) and not any(row[5] == pid for row in final))
-    return ('passed' if passed else 'failed',
-            {'execution_session': context, 'launch_identity': identity, 'before': baseline, 'held': held, 'after': final,
-             'exit_code': result['exit_code'], 'timed_out': result['timed_out'],
-             'output_limit': result['output_limit']},
-            {name: result[name] for name in ('stdout', 'stderr')})
 
 
 def receive(stream, size):
@@ -216,7 +172,6 @@ PROBES = {('browser', 'denied-local-services'): denied_local_services,
           ('confinement', 'restricted-user-namespaces'): restricted_namespaces,
           ('confinement', 'helper-boundary-and-descendants'): helper_boundary,
           ('confinement', 'filesystem-and-egress-denial'): filesystem_egress,
-          ('session', 'inhibitor-lifetime'): inhibitor_lifetime,
           ('vault', 'wrong-launcher-and-memory'): wrong_launcher_memory}
 
 

@@ -13,6 +13,7 @@ class GuestInputTests(unittest.TestCase):
         bridge.process, bridge.selector = Mock(), Mock()
         bridge.selector.select.return_value = True
         with patch.object(controller.time, 'monotonic', side_effect=[0, 1, 6]), \
+                patch.object(controller.os, 'get_blocking', return_value=False), \
                 patch.object(controller.os, 'read', return_value=b' '):
             with self.assertRaisesRegex(ValueError, 'response time'):
                 bridge.exchange({'operation': 'poll'})

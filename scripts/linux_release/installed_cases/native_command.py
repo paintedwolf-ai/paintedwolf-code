@@ -82,14 +82,19 @@ def settle(process):
         raise error from cause
 
 
-def command(arguments, *, timeout=300, limit=LIMIT, environment=None):
+def command(arguments, *, timeout=300, limit=LIMIT, environment=None, input_bytes=None):
     if (type(timeout) not in (int, float) or not math.isfinite(timeout) or not 0 < timeout <= 300
-            or type(limit) is not int or not 0 < limit <= LIMIT):
+            or type(limit) is not int or not 0 < limit <= LIMIT
+            or (input_bytes is not None and (not isinstance(input_bytes, (bytes, bytearray))
+                                             or not 0 < len(input_bytes) <= limit))):
         raise ValueError('native command exceeds its fixed lifetime or evidence bounds')
     environment = ({'PATH': '/usr/sbin:/usr/bin:/sbin:/bin', 'LC_ALL': 'C', 'HOME': os.environ['HOME']}
                    if environment is None else dict(environment))
-    process = subprocess.Popen(arguments, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE, start_new_session=True, env=environment)
+    pending_input = bytearray(input_bytes) if input_bytes is not None else bytearray()
+    input_offset = 0
+    process = subprocess.Popen(arguments,
+        stdin=subprocess.DEVNULL if input_bytes is None else subprocess.PIPE,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True, env=environment)
     buffers = {'stdout': bytearray(), 'stderr': bytearray()}
     deadline, completed = time.monotonic() + timeout, False
     try:
@@ -97,8 +102,46 @@ def command(arguments, *, timeout=300, limit=LIMIT, environment=None):
             for stream, name in ((process.stdout, 'stdout'), (process.stderr, 'stderr')):
                 os.set_blocking(stream.fileno(), False)
                 selected.register(stream, selectors.EVENT_READ, name)
+            if process.stdin is not None:
+                os.set_blocking(process.stdin.fileno(), False)
+                selected.register(process.stdin, selectors.EVENT_WRITE, 'stdin')
             while selected.get_map():
                 for key, _ in selected.select(timeout=min(1, remaining(deadline, 'native-command-deadline'))):
+                    if key.data == 'stdin':
+                        view = memoryview(pending_input)[input_offset:input_offset + 65536]
+                        try:
+                            written = os.write(key.fileobj.fileno(), view)
+                        except (BlockingIOError, InterruptedError):
+                            continue
+                        except BrokenPipeError:
+                            selected.unregister(key.fileobj)
+                            key.fileobj.close()
+                            try:
+                                process.wait(timeout=0.05)
+                            except subprocess.TimeoutExpired:
+                                pass
+                            error = CaseUnavailable('native-command-stdin-incomplete')
+                            error.observations = {'native_command_stdin': {
+                                'stdin_closed': True, 'stdin_bytes_written': input_offset,
+                                'stdin_bytes_expected': len(pending_input)}}
+                            raise error from None
+                        if written <= 0:
+                            selected.unregister(key.fileobj)
+                            key.fileobj.close()
+                            try:
+                                process.wait(timeout=0.05)
+                            except subprocess.TimeoutExpired:
+                                pass
+                            error = CaseUnavailable('native-command-stdin-incomplete')
+                            error.observations = {'native_command_stdin': {
+                                'stdin_closed': True, 'stdin_bytes_written': input_offset,
+                                'stdin_bytes_expected': len(pending_input)}}
+                            raise error
+                        input_offset += written
+                        if input_offset == len(pending_input):
+                            selected.unregister(key.fileobj)
+                            key.fileobj.close()
+                        continue
                     output = buffers[key.data]
                     block = os.read(key.fileobj.fileno(), min(65536, limit + 1 - len(output)))
                     if not block:
@@ -107,13 +150,26 @@ def command(arguments, *, timeout=300, limit=LIMIT, environment=None):
                     if len(output) + len(block) > limit:
                         raise CaseUnavailable('native-command-evidence-bound')
                     output.extend(block)
+        if input_bytes is not None and input_offset != len(pending_input):
+            try:
+                process.wait(timeout=0.05)
+            except subprocess.TimeoutExpired:
+                pass
+            error = CaseUnavailable('native-command-stdin-incomplete')
+            error.observations = {'native_command_stdin': {
+                'stdin_closed': True, 'stdin_bytes_written': input_offset,
+                'stdin_bytes_expected': len(pending_input)}}
+            raise error
         process.wait(timeout=remaining(deadline, 'native-command-deadline'))
         completed = True
         return process.returncode, bytes(buffers['stdout']), bytes(buffers['stderr'])
     except subprocess.TimeoutExpired:
         raise CaseUnavailable('native-command-deadline') from None
     finally:
+        pending_input[:] = b'\0' * len(pending_input)
         try:
+            if process.stdin is not None:
+                process.stdin.close()
             if not completed:
                 settle(process)
         finally:
