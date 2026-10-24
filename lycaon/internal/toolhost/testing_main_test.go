@@ -1,7 +1,7 @@
 package toolhost
 
 import (
-	"github.com/lycaon/lycaon/internal/gitengine"
+	gittestsetup "github.com/lycaon/lycaon/internal/testsetup/git"
 	guidancetestsetup "github.com/lycaon/lycaon/internal/testsetup/guidance"
 	"os"
 	"testing"
@@ -9,6 +9,6 @@ import (
 
 func TestMain(m *testing.M) {
 	guidancetestsetup.Install()
-	gitengine.TestingEnableBundledBinary()
+	gittestsetup.Enable()
 	os.Exit(m.Run())
 }

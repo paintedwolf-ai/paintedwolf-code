@@ -92,7 +92,7 @@ func BindProcessSubstitutions(scratchDir string, argv []string, streams []Proces
 		go func(s ProcessSubstitutionStream, fifoPath string) {
 			defer wg.Done()
 			if s.Reader != nil {
-				defer s.Reader.Close()
+				defer func() { _ = s.Reader.Close() }()
 				f, err := openFIFO(fifoPath, unix.O_WRONLY)
 				if err != nil {
 					return
@@ -104,7 +104,7 @@ func BindProcessSubstitutions(scratchDir string, argv []string, streams []Proces
 				return
 			}
 			if s.Writer != nil {
-				defer s.Writer.Close()
+				defer func() { _ = s.Writer.Close() }()
 				f, err := openFIFO(fifoPath, unix.O_RDONLY)
 				if err != nil {
 					return

@@ -99,7 +99,7 @@ func (v *Variables) AssignArray(ctx context.Context, name string, items []string
 		}
 	}
 	if len(items) > 0 && int64(len(items)-1) > math.MaxInt64-start {
-		return v.arrayIndexOverflow(uint64(start) + uint64(len(items)-1))
+		return v.arrayIndexOverflow(uint64(start) + uint64(len(items)) - 1)
 	}
 	for _, item := range items {
 		if err := assignable(v.bounds, name, item); err != nil {

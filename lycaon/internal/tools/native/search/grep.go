@@ -263,7 +263,7 @@ func (r *grepRun) patternFile(spelling string) ([]byte, error) {
 		return r.inv.readAll(r.inv.input)
 	}
 	if reader, ok := r.inv.streams.OpenProcessSubstitutionReader(spelling); ok {
-		defer reader.Close()
+		defer func() { _ = reader.Close() }()
 		return r.inv.readAll(reader)
 	}
 	bound, err := r.inv.paths.Bind(r.inv.ctx, spelling, false)

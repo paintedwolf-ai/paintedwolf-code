@@ -153,12 +153,13 @@ func (s Streams) ProcessSubstitutions() []ProcessSubstitutionStream {
 	for cur := s.procSubst; cur != nil; cur = cur.parent {
 		cur.mu.Lock()
 		for _, entry := range cur.entries {
-			if entry.part.Operator == "<(" {
+			switch entry.part.Operator {
+			case "<(":
 				out = append(out, ProcessSubstitutionStream{
 					Path:   entry.path,
 					Reader: entry.pipe.ConsumerEnd(),
 				})
-			} else if entry.part.Operator == ">(" {
+			case ">(":
 				out = append(out, ProcessSubstitutionStream{
 					Path:   entry.path,
 					Writer: procSubstPipeWriter{pipe: entry.pipe},
