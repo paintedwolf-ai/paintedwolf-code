@@ -20,6 +20,8 @@ def await_fixture_reply(app, project, provider_id, acquisition, *, selected_sess
         while time.monotonic() < deadline:
             witness = project_for_owned_root(app, project)
             if witness:
+                if partial and partial['project_id'] != witness['project_id']:
+                    raise ValueError('fixed tool project changed after its durable receipt')
                 sessions = [row for row in sessions_for_project(app, witness['project_id'])
                             if row['provider_id'] == provider_id and row['model'] == MODEL]
                 if selected_session is not None:
@@ -28,6 +30,8 @@ def await_fixture_reply(app, project, provider_id, acquisition, *, selected_sess
                     raise ValueError('fixed reply project has ambiguous session identity')
                 if sessions:
                     session = sessions[0]
+                    if partial and partial['session_id'] != session['id']:
+                        raise ValueError('fixed tool session changed after its durable receipt')
                     acquired = invoked = None
                     if acquisition.completed and acquisition.witness is not None and acquisition.tool_witness is not None:
                         acquired = committed_fixture_tool(app, witness['project_id'], session['id'], 'request_tools', acquisition.witness['tool_call_id'], target=target)
@@ -36,7 +40,8 @@ def await_fixture_reply(app, project, provider_id, acquisition, *, selected_sess
                             raise ValueError('acquisition durable receipt differs from the projected receipt')
                         if invoked is not None and invoked['invocation_id'] != acquisition.tool_witness['invocation_id']:
                             raise ValueError('tool durable receipt differs from the projected receipt')
-                        partial.update(project_id=witness['project_id'], session_id=session['id'])
+                        if acquired is not None or invoked is not None:
+                            partial.update(project_id=witness['project_id'], session_id=session['id'])
                         if acquired is not None:
                             partial['schema_acquisition'] = acquired
                         if invoked is not None:
