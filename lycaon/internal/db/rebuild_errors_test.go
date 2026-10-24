@@ -95,3 +95,31 @@ func TestRebuildCopyAndSealFailuresPreserveOriginal(t *testing.T) {
 		})
 	}
 }
+
+func TestRebuildSealSyncFailuresRetainSealedDatabase(t *testing.T) {
+	for _, failAt := range []int{1, 2} {
+		t.Run(fmt.Sprint(failAt), func(t *testing.T) {
+			source, _ := seedLegacyManifestStore(t, t.TempDir(), map[string]int{"/work/a": 3})
+			testutil.FailErr(t, "seal source", sealRebuiltStore(t.Context(), source))
+			before, err := os.ReadFile(source)
+			testutil.FailErr(t, "read sealed source", err)
+			calls := 0
+			err = syncSealedStore(source, func(*os.File) error {
+				calls++
+				if calls == failAt {
+					return syscall.ENOSPC
+				}
+				return nil
+			})
+			if !errors.Is(err, syscall.ENOSPC) {
+				t.Fatalf("seal sync failure=%v", err)
+			}
+			after, err := os.ReadFile(source)
+			testutil.FailErr(t, "read source after sync failure", err)
+			if !bytes.Equal(before, after) {
+				t.Fatal("sync failure changed sealed source")
+			}
+			testutil.FailErr(t, "sealed source still independent", requireSealedRebuild(source))
+		})
+	}
+}
