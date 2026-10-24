@@ -1,0 +1,15 @@
+{
+  "category": "source_directories",
+  "artifact": "lycaon/internal/db",
+  "kind": "module",
+  "workstream": "database-integrity",
+  "disposition": "retain",
+  "reason": "Retain the 27-file database lifecycle as one authority. Platform capacity sampling, whole-snapshot audit scheduling, and background maintenance admission remain private parts of the same store lifetime. No separate writer or persistence owner is introduced. Real WAL reuse, zero-budget quiet completion, and audit/maintenance/foreground-write contracts passed; native combined-source startup also completed the pending audit.",
+  "reviewed_commit": "938578fd9ee0bf26659f9c393da43eeafef76299",
+  "ceiling": 27,
+  "boundaries": {
+    "lycaon/internal/db/integrity_audit_wal_test.go": "cac14114d7f1746d9a2d8112584371ad58e13beecc2000f94ffb2d8a17febe04",
+    "lycaon/internal/db/integrity_schedule_test.go": "500deaabe3e522ae199502726e712f50b3782c977b740104a427d555485281c5"
+  },
+  "reviewed_shape": "5603b456ce016ee3c25138c92d82f9b99cd50de702d3ee82c03869493725cc7c"
+}

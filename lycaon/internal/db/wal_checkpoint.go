@@ -107,8 +107,17 @@ func RunWALCheckpointer(ctx context.Context, store *Store, dbPath string) error 
 }
 
 func checkpointOnce(ctx context.Context, store *Store, dbPath string) error {
+	if store.audit.active() {
+		limit, err := auditFrameBudget(ctx, store)
+		if err != nil {
+			store.audit.interrupt(err)
+			return err
+		}
+		store.audit.resourceLimit(limit)
+	}
 	result, err := CheckpointWAL(ctx, store)
 	if err != nil {
+		store.audit.interrupt(err)
 		return err
 	}
 	if result.Complete() {
