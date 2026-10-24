@@ -61,6 +61,37 @@ class MergeGroupTests(unittest.TestCase):
             merge_group.main()
         watch.assert_not_called()
 
+    def test_queue_certification_validates_inputs_synthesizes_event_and_propagates_failure(self):
+        import json
+        from pathlib import Path
+        import runpy
+        from ci_policy import queue_certification as qc
+        sha = 'a' * 40
+        other = 'b' * 40
+        with self.assertRaisesRegex(ValueError, 'cannot combine pull_request'):
+            qc.event('owner/repo', QUEUE_REF, sha, '7')
+        for missing_ref, missing_sha in (('', sha), (QUEUE_REF, '')):
+            with self.assertRaisesRegex(ValueError, 'requires both queue_ref and queue_sha'):
+                qc.event('owner/repo', missing_ref, missing_sha)
+        with patch.object(qc, 'context', side_effect=ValueError('merge-queue ref no longer identifies this exact commit')):
+            with self.assertRaisesRegex(ValueError, 'exact commit'):
+                qc.run('owner/repo', QUEUE_REF, sha, 'checker.py')
+        captured = {}
+        def call(cmd, env=None):
+            captured['cmd'] = cmd
+            captured['event_name'] = env['GITHUB_EVENT_NAME']
+            captured['payload'] = json.loads(Path(env['GITHUB_EVENT_PATH']).read_text())
+            return 1
+        with patch.object(qc, 'context', return_value=other), patch.object(qc.subprocess, 'call', side_effect=call), \
+                patch.dict('os.environ', {'GITHUB_REPOSITORY': 'owner/repo', 'QUEUE_REF': QUEUE_REF, 'QUEUE_SHA': sha, 'PULL_REQUEST': ''}, clear=False), \
+                patch('sys.argv', ['queue_certification.py', 'checker.py']), self.assertRaises(SystemExit) as exited:
+            runpy.run_module('ci_policy.queue_certification', run_name='__main__')
+        self.assertEqual(exited.exception.code, 1)
+        self.assertEqual(captured['cmd'][-1], 'checker.py')
+        self.assertEqual(captured['event_name'], 'merge_group')
+        self.assertEqual(captured['payload'], {'merge_group': {
+            'base_ref': 'refs/heads/main', 'head_ref': QUEUE_REF, 'base_sha': other, 'head_sha': sha}})
+
 
 if __name__ == '__main__':
     unittest.main()
