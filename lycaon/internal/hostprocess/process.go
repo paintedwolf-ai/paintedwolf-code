@@ -147,5 +147,9 @@ func (s *Service) Signal(ctx context.Context, process Process, signal string) er
 	if !sameInstance(current, process) {
 		return ErrStale
 	}
-	return signalInstance(process, signal)
+	kind, err := parseSignal(signal)
+	if err != nil {
+		return err
+	}
+	return signalInstance(process, kind)
 }
