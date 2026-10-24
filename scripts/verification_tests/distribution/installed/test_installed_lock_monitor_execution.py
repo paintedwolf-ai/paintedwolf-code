@@ -141,6 +141,14 @@ class LockMonitorExecutionTests(unittest.TestCase):
                 {'app-stderr': stderr_stream(*prefix, f2, f3, challenges=challenge_rows)},
                 {'app-stderr': stderr_stream(*final_facts, challenges=challenge_rows, invalidations=invalidation_rows)},
             ]
+        elif case_name == 'lock-during-presence':
+            stream_seq = [
+                {'app-stderr': stderr_stream(*prefix)},
+                {'app-stderr': stderr_stream(*prefix)},
+                {'app-stderr': stderr_stream(*prefix, f2)},
+                {'app-stderr': stderr_stream(*prefix, f2, f3)},
+                {'app-stderr': stderr_stream(*final_facts, challenges=challenge_rows, invalidations=invalidation_rows)},
+            ]
         else:
             stream_seq = [
                 {'app-stderr': stderr_stream(*prefix)},
