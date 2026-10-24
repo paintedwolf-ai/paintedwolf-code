@@ -52,10 +52,11 @@ def _verify_marker(vm_id: str, marker_path: Path = Path('/etc/paintedwolf-input-
         os.close(descriptor)
 
 
-def _verify_directory(path: Path, *, uid: int, gid: int, mode: int = 0o755):
+def _verify_directory(path: Path, *, uid: int, gid: int, mode: int | tuple[int, ...] = 0o755):
+    modes = (mode,) if type(mode) is int else mode
     info = path.lstat()
     if (not stat.S_ISDIR(info.st_mode) or info.st_uid != uid or info.st_gid != gid
-            or stat.S_IMODE(info.st_mode) != mode or path.resolve() != path):
+            or stat.S_IMODE(info.st_mode) not in modes or path.resolve() != path):
         raise ValueError(f'dedicated QA account directory failed physical verification: {path}')
 
 
@@ -83,7 +84,7 @@ def validate_account(account: dict, *, vm_id: str | None = None,
         raise ValueError('dedicated QA account passwd/group records do not match')
     home = Path(account['home'])
     _verify_directory(home.parent, uid=0, gid=0, mode=0o755)
-    _verify_directory(home, uid=account['uid'], gid=account['gid'], mode=0o755)
+    _verify_directory(home, uid=account['uid'], gid=account['gid'], mode=(0o750, 0o755))
     _verify_directory(home / '.config', uid=account['uid'], gid=account['gid'], mode=0o755)
     return account
 
