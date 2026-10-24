@@ -66,6 +66,10 @@ func TestProtectedLaunchFixture(t *testing.T) {
 		err = failFixtureMountRole(dir, os.Getenv(fixtureDesktopPIDEnv), os.Getenv(fixtureFailedRoleEnv))
 	case "setup-notice":
 		err = checkBootstrapNotice(dir, os.Getenv(fixtureUIDEnv), os.Getenv(fixtureGIDEnv))
+	case "mount-nested":
+		err = checkLateNestedMounts(dir)
+	case "mount-nested-probe":
+		err = runNestedSingleProbe(dir)
 	case "mount-pipeline":
 		err = checkPrivateMountPipeline(dir, os.Getenv(fixtureUIDEnv), os.Getenv(fixtureGIDEnv))
 	case "mount-prepare":
@@ -307,7 +311,7 @@ func sudoFixture(t *testing.T, mode, dir string, extra ...string) error {
 	if err != nil {
 		return fmt.Errorf("%s fixture: %w: %s", mode, err, out)
 	}
-	if mode == "module-view" {
+	if mode == "module-view" || mode == "mount-nested" {
 		t.Logf("mediated mount visibility observation: %s", out)
 	}
 	return nil
