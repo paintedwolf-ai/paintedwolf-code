@@ -39,7 +39,7 @@ func TestSelectedReleaseTagPinsEverySourceCheckout(t *testing.T) {
 			switch name {
 			case "classify":
 				want = "${{ steps.source.outputs.source_sha }}"
-			case "bundle-upgrade":
+			case "bundle-upgrade", "replay-bundle-upgrade":
 				want = "${{ github.workflow_sha }}"
 			}
 			if step.With["ref"] != want {
@@ -54,6 +54,7 @@ func TestUpgradeRehearsalCheckoutsPreserveSourceAndControllerIdentity(t *testing
 	for name, expected := range map[string]map[string]string{
 		"prepare-bundle-upgrade": {"": "${{ needs.classify.outputs.source_sha }}", ".release-controller": "${{ github.workflow_sha }}"},
 		"bundle-upgrade":         {"": "${{ github.workflow_sha }}"},
+		"replay-bundle-upgrade":  {"": "${{ github.workflow_sha }}"},
 	} {
 		seen := map[string]bool{}
 		for _, step := range jobs[name].Steps {

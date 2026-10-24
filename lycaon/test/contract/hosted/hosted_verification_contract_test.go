@@ -75,6 +75,9 @@ func requireHostedGate(t *testing.T, jobs map[string]hostedJob, gate string, dep
 	slices.Sort(got)
 	slices.Sort(dependencies)
 	expectedCondition := "${{ !cancelled() }}"
+	if gate == "ship-gates" {
+		expectedCondition = "${{ !cancelled() && inputs.rehearsal_run_id == '' }}"
+	}
 	if gate == "qualification" {
 		expectedCondition = "${{ !cancelled() && needs.select.outputs.admitted == 'true' }}"
 	}

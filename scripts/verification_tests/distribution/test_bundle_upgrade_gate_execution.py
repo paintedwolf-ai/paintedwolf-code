@@ -268,3 +268,34 @@ class GateTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "case identity"):
                 gate.rehearse(self.fixtures, self.evidence, "../escape")
             guard.assert_not_called()
+
+
+    def test_a_passing_recovery_probe_never_turns_the_automatic_failure_green(self):
+        from contextlib import nullcontext
+        self.plan.update(cases=[{"id": "1.0.2-preview", "source_version": "1.0.2", "channel": "preview"}], skip_reason=None)
+        self.inventory()
+        with patch.object(gate, "require_disposable_host", return_value=self.root / "config"), \
+             patch.object(gate, "local_origin", return_value=nullcontext()), \
+             patch.object(gate, "run_case", side_effect=ValueError("automatic handoff failed")), \
+             patch.object(gate, "probe_committed_recovery", return_value={"result": "passed"}) as probe:
+            with self.assertRaisesRegex(ValueError, "automatic handoff failed"):
+                gate.rehearse(self.fixtures, self.evidence, "1.0.2-preview", recovery_probe=True)
+            probe.assert_called_once()
+        receipt = json.loads((self.evidence / "receipt.json").read_text())
+        self.assertEqual(receipt["result"], "failed")
+        self.assertEqual(receipt["recovery_probe"]["result"], "passed")
+
+
+    def test_diagnostic_errors_preserve_the_original_automatic_failure(self):
+        from contextlib import nullcontext
+        self.plan.update(cases=[{"id": "1.0.2-preview", "source_version": "1.0.2", "channel": "preview"}], skip_reason=None)
+        self.inventory()
+        with patch.object(gate, "require_disposable_host", return_value=self.root / "config"), \
+             patch.object(gate, "local_origin", return_value=nullcontext()), \
+             patch.object(gate, "run_case", side_effect=ValueError("automatic handoff failed")), \
+             patch.object(gate, "probe_committed_recovery", side_effect=ValueError("bad diagnostic target")):
+            with self.assertRaisesRegex(ValueError, "automatic handoff failed"):
+                gate.rehearse(self.fixtures, self.evidence, "1.0.2-preview", recovery_probe=True)
+        receipt = json.loads((self.evidence / "receipt.json").read_text())
+        self.assertEqual(receipt["error"], "automatic handoff failed")
+        self.assertEqual(receipt["recovery_probe"], {"result": "failed", "error": "bad diagnostic target"})
