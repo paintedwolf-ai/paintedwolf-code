@@ -28,7 +28,7 @@ func EvaluatorBuiltin(name string) bool {
 var controlBuiltins = map[string]bool{"exit": true, "return": true, "break": true, "continue": true}
 
 var catalogCommands = sync.OnceValues(func() ([]toolcontract.CommandSpecification, error) {
-	catalog, err := toolcontract.LanguageV1()
+	catalog, err := toolcontract.ReadOnlyLanguageV1()
 	return catalog.Commands, err
 })
 
@@ -190,7 +190,7 @@ func (f *frame) testExpression(ctx context.Context, s commandsurface.Statement, 
 
 // inProcess runs a native host builtin as its own dynamic execution.
 func (f *frame) inProcess(ctx context.Context, s commandsurface.Statement, name string, run func(context.Context, toolcontract.OperationInvocation) (toolcontract.ProducerResult, error)) error {
-	child, err := f.beginRecorded(ctx, s.SyntaxLocation, name)
+	child, err := f.begin(s.SyntaxLocation, name)
 	if err != nil {
 		return err
 	}
@@ -211,6 +211,9 @@ func (f *frame) dispatch(ctx context.Context, s commandsurface.Statement, fields
 	operation := "external"
 	if native {
 		operation = spec.Name
+	}
+	if err := f.e.charge(f, s.SyntaxLocation, "child_executions", 1); err != nil {
+		return err
 	}
 	child, err := f.begin(s.SyntaxLocation, operation)
 	if err != nil {

@@ -48,7 +48,8 @@ func newPerfFixture(tb testing.TB, catalog *sourcecatalog.Catalog) *perfFixture 
 	f.Fixture = programtest.New(tb, programtest.Options{Tools: names, Scratch: true,
 		Owners: func(boundary *sandbox.Boundary, recorder *invocation.SQLRecorder) (func(tools.ToolContext, *projectpaths.ProgramPaths) (command.ProgramOwners, error), error) {
 			operations := mutation.Operations{Write: &native.WriteTool{Boundary: boundary}, Delete: &native.DeleteTool{Boundary: boundary}, Move: &native.MoveTool{Boundary: boundary},
-				Copy: &native.CopyTool{Boundary: boundary}, Mkdir: &native.MkdirTool{Boundary: boundary}, Chmod: &native.ChmodTool{Boundary: boundary}}
+				Copy: &native.CopyTool{Boundary: boundary}, Mkdir: &native.MkdirTool{Boundary: boundary}, Chmod: &native.ChmodTool{Boundary: boundary},
+				Chown: &native.ChownTool{Boundary: boundary}, Times: &native.TimesTool{Boundary: boundary}, Extract: &native.ExtractArchiveTool{Boundary: boundary}}
 			return programOwnerTools{boundary: boundary, operations: operations, catalog: catalog}.compose(recorder)
 		}})
 	return f

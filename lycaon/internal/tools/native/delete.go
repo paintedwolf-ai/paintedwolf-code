@@ -210,7 +210,7 @@ type RecursiveCaps struct {
 // CatalogRecursiveCaps are the frozen catalog's recursive_mutation_files and
 // recursive_mutation_bytes ceilings.
 func CatalogRecursiveCaps() (RecursiveCaps, error) {
-	catalog, err := toolcontract.LanguageV1()
+	catalog, err := toolcontract.ReadOnlyLanguageV1()
 	if err != nil {
 		return RecursiveCaps{}, err
 	}

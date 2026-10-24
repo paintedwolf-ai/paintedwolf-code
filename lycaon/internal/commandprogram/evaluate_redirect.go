@@ -83,6 +83,9 @@ func (o *stagedRedirect) finish(ctx context.Context, publish bool) error {
 // (for example a failed target substitution or a refused open) after which the
 // command is not run; err reports a host stop.
 func (g *frame) bind(ctx context.Context, r commandsurface.ProgramRedirect) (*stagedRedirect, bool, error) {
+	if err := g.e.charge(g, r.SyntaxLocation, "statement_visits", 1); err != nil {
+		return nil, false, err
+	}
 	switch r.Operator {
 	case ">&":
 		if r.Descriptor == 2 {
@@ -103,7 +106,12 @@ func (g *frame) bind(ctx context.Context, r commandsurface.ProgramRedirect) (*st
 	if prevented || err != nil {
 		return nil, true, err
 	}
-	child, err := g.beginRecorded(ctx, r.SyntaxLocation, r.Operator)
+	var child *childRun
+	if target == "/dev/null" || strings.EqualFold(target, "NUL") {
+		child, err = g.begin(r.SyntaxLocation, r.Operator)
+	} else {
+		child, err = g.beginRecorded(ctx, r.SyntaxLocation, r.Operator)
+	}
 	if err != nil {
 		return nil, false, err
 	}

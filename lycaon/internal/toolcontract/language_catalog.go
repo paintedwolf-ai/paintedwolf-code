@@ -190,3 +190,133 @@ func DecodeLanguageJSON(data []byte, target any) error {
 	}
 	return nil
 }
+
+func cloneStringSlice(in []string) []string {
+	if in == nil {
+		return nil
+	}
+	return append([]string(nil), in...)
+}
+
+func cloneStringMap(in map[string]string) map[string]string {
+	if in == nil {
+		return nil
+	}
+	out := make(map[string]string, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
+}
+
+func cloneRawMap(in map[string]json.RawMessage) map[string]json.RawMessage {
+	if in == nil {
+		return nil
+	}
+	out := make(map[string]json.RawMessage, len(in))
+	for k, v := range in {
+		out[k] = append(json.RawMessage(nil), v...)
+	}
+	return out
+}
+
+func cloneCommandSpecification(c CommandSpecification) CommandSpecification {
+	c.Aliases = cloneStringSlice(c.Aliases)
+	if c.Forms != nil {
+		forms := make([]OptionForm, len(c.Forms))
+		for i, f := range c.Forms {
+			f.Spellings = cloneStringSlice(f.Spellings)
+			f.SampleValues = cloneStringSlice(f.SampleValues)
+			forms[i] = f
+		}
+		c.Forms = forms
+	}
+	c.Statuses = cloneStringMap(c.Statuses)
+	if c.Effects != nil {
+		effects := make([]EffectRequirement, len(c.Effects))
+		for i, e := range c.Effects {
+			e.Requires = cloneStringSlice(e.Requires)
+			effects[i] = e
+		}
+		c.Effects = effects
+	}
+	c.PlatformCapabilities = cloneStringSlice(c.PlatformCapabilities)
+	c.Limits = cloneStringSlice(c.Limits)
+	if c.Example != nil {
+		c.Example = append(json.RawMessage(nil), c.Example...)
+	}
+	c.Reuse.Tests = cloneStringSlice(c.Reuse.Tests)
+	c.Unsupported.Words = cloneStringSlice(c.Unsupported.Words)
+	c.FixtureIDs = cloneStringSlice(c.FixtureIDs)
+	return c
+}
+
+func cloneResourceLimits(in []ResourceLimit) []ResourceLimit {
+	if in == nil {
+		return nil
+	}
+	out := make([]ResourceLimit, len(in))
+	for i, l := range in {
+		l.BoundaryFixtures = cloneStringSlice(l.BoundaryFixtures)
+		out[i] = l
+	}
+	return out
+}
+
+func cloneLanguageCatalog(c LanguageCatalog) LanguageCatalog {
+	c.Language.Sources = cloneStringSlice(c.Language.Sources)
+	c.Language.RequiredCommands = cloneStringSlice(c.Language.RequiredCommands)
+	c.Language.RequiredContracts = cloneStringMap(c.Language.RequiredContracts)
+	c.Language.Parser = cloneRawMap(c.Language.Parser)
+	c.Language.Encoding = cloneStringMap(c.Language.Encoding)
+	if c.Language.Syntax != nil {
+		syntax := make(map[string][]string, len(c.Language.Syntax))
+		for k, v := range c.Language.Syntax {
+			syntax[k] = cloneStringSlice(v)
+		}
+		c.Language.Syntax = syntax
+	}
+	c.Language.Rules = cloneStringMap(c.Language.Rules)
+	c.Language.Limits = cloneResourceLimits(c.Language.Limits)
+	c.Language.Diagnostics = append([]LanguageDiagnostic(nil), c.Language.Diagnostics...)
+	c.Language.SourceLocations = cloneStringMap(c.Language.SourceLocations)
+	c.Language.Compatibility = cloneStringMap(c.Language.Compatibility)
+	c.Language.Platforms = cloneStringMap(c.Language.Platforms)
+	c.Language.OptionGrammar = cloneStringMap(c.Language.OptionGrammar)
+	if c.Language.SettlementReserve != nil {
+		reserve := make(map[string]int64, len(c.Language.SettlementReserve))
+		for k, v := range c.Language.SettlementReserve {
+			reserve[k] = v
+		}
+		c.Language.SettlementReserve = reserve
+	}
+	if c.Commands != nil {
+		commands := make([]CommandSpecification, len(c.Commands))
+		for i, cmd := range c.Commands {
+			commands[i] = cloneCommandSpecification(cmd)
+		}
+		c.Commands = commands
+	}
+	if c.Tools != nil {
+		tools := make([]ToolDisposition, len(c.Tools))
+		for i, t := range c.Tools {
+			t.CommandForms = cloneStringSlice(t.CommandForms)
+			t.ImplementingIssues = cloneStringSlice(t.ImplementingIssues)
+			tools[i] = t
+		}
+		c.Tools = tools
+	}
+	c.Contracts = cloneRawMap(c.Contracts)
+	if c.Fixtures != nil {
+		fixtures := make([]FormFixture, len(c.Fixtures))
+		for i, f := range c.Fixtures {
+			if f.Definition != nil {
+				f.Definition = append(json.RawMessage(nil), f.Definition...)
+			}
+			f.Words = cloneStringSlice(f.Words)
+			fixtures[i] = f
+		}
+		c.Fixtures = fixtures
+	}
+	return c
+}

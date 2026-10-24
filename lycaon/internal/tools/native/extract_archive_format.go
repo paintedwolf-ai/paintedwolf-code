@@ -51,7 +51,7 @@ type extractBudget struct {
 
 // archiveLimit reads one archive ceiling from the frozen catalog.
 func archiveLimit(id string) int64 {
-	catalog, err := toolcontract.LanguageV1()
+	catalog, err := toolcontract.ReadOnlyLanguageV1()
 	if err != nil {
 		return 0
 	}

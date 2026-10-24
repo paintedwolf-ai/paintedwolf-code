@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 )
 
 // OperationFacts are compiled declarations. Runtime bindings and grants live
@@ -104,10 +105,53 @@ func (d OperationDefinition) Digest() string { return d.digest }
 // Receipt persistence must not decode and re-encode a different representation.
 func (d OperationDefinition) Serialized() string { return d.data }
 
-func (d OperationDefinition) Facts() OperationFacts {
+var operationFactsCache sync.Map
+
+// ReadOnlyFacts returns the compiled operation declaration without copying
+// its slices or maps. Callers must not mutate the returned value.
+func (d OperationDefinition) ReadOnlyFacts() OperationFacts {
+	if d.digest != "" {
+		if cached, ok := operationFactsCache.Load(d.digest); ok {
+			return cached.(OperationFacts)
+		}
+	}
 	var facts OperationFacts
 	// Construction validates the encoded declaration; the bytes cannot change.
 	_ = json.Unmarshal([]byte(d.data), &facts)
+	if d.digest != "" {
+		operationFactsCache.Store(d.digest, facts)
+	}
+	return facts
+}
+
+func (d OperationDefinition) Facts() OperationFacts {
+	facts := d.ReadOnlyFacts()
+	if d.digest != "" {
+		return cloneOperationFacts(facts)
+	}
+	return facts
+}
+
+func cloneOperationFacts(facts OperationFacts) OperationFacts {
+	facts.Contract = facts.Contract.Clone()
+	if facts.Arguments != nil {
+		facts.Arguments = append(json.RawMessage(nil), facts.Arguments...)
+	}
+	if facts.Commands != nil {
+		commands := make([]CommandSpecification, len(facts.Commands))
+		for i, c := range facts.Commands {
+			commands[i] = cloneCommandSpecification(c)
+		}
+		facts.Commands = commands
+	}
+	if facts.Streams.Statuses != nil {
+		statuses := make(map[int]string, len(facts.Streams.Statuses))
+		for k, v := range facts.Streams.Statuses {
+			statuses[k] = v
+		}
+		facts.Streams.Statuses = statuses
+	}
+	facts.Resources = cloneResourceLimits(facts.Resources)
 	return facts
 }
 
