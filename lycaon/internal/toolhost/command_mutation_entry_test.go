@@ -5,10 +5,12 @@ package toolhost
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -20,8 +22,11 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testdbseed"
+	gittestsetup "github.com/lycaon/lycaon/internal/testsetup/git"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/extpackstest"
 	"github.com/lycaon/lycaon/internal/textfile"
@@ -231,6 +236,106 @@ BEGIN SELECT RAISE(ABORT,'recording unavailable'); END`)
 		testutil.FailErr(t, "read restored exact body", err)
 		if string(content) != want {
 			t.Fatalf("restored file %d=%q want=%q", i, content, want)
+		}
+	}
+}
+
+func TestComposedRecoveryAreaHiddenFromLsFindGrepSurveyFilesAndGitStatus(t *testing.T) {
+	gittestsetup.Enable()
+	fixture, _, p, _ := composedMutationEntry(t)
+	call := func(source string) command.ProgramOutcome {
+		t.Helper()
+		raw, err := fixture.Call(t, t.Context(), source)
+		testutil.FailErr(t, "run command "+source, err)
+		var outcome command.ProgramOutcome
+		testutil.FailErr(t, "decode command outcome "+source, json.Unmarshal([]byte(raw), &outcome))
+		return outcome
+	}
+
+	if out := call("git init"); out.State != "completed" || out.Status != 0 {
+		t.Fatalf("git init failed: %+v", out)
+	}
+	const secretPayload = "moved-aside-secret-payload"
+	testutil.FailErr(t, "write visible file", os.WriteFile(filepath.Join(fixture.Dir, "visible.txt"), []byte("visible\n"), 0o644))
+	testutil.FailErr(t, "create secret dir", os.MkdirAll(filepath.Join(fixture.Dir, "secret"), 0o755))
+	testutil.FailErr(t, "write secret file", os.WriteFile(filepath.Join(fixture.Dir, "secret", "token.txt"), []byte(secretPayload+"\n"), 0o644))
+
+	if out := call("rm -rf secret"); out.State != "completed" || out.Status != 0 {
+		t.Fatalf("rm -rf secret failed: %+v", out)
+	}
+
+	slots, err := os.ReadDir(settingsoverlay.RecoveryDir(fixture.Dir))
+	testutil.FailErr(t, "read recovery dir", err)
+	if len(slots) != 1 {
+		t.Fatalf("recovery slots=%d, want 1", len(slots))
+	}
+	excludeBytes, err := os.ReadFile(filepath.Join(fixture.Dir, ".git", "info", "exclude"))
+	testutil.FailErr(t, "read .git/info/exclude", err)
+	if !strings.Contains(string(excludeBytes), settingsoverlay.RecoveryRelPath+"/") {
+		t.Fatalf(".git/info/exclude=%q missing %s/", string(excludeBytes), settingsoverlay.RecoveryRelPath)
+	}
+	if _, err := os.Lstat(filepath.Join(fixture.Dir, ".gitignore")); !os.IsNotExist(err) {
+		t.Fatalf(".gitignore should not be created: %v", err)
+	}
+
+	for _, cmd := range []string{"ls -la", "find .", "git status --porcelain"} {
+		out := call(cmd)
+		if out.State != "completed" || out.Status != 0 {
+			t.Fatalf("%s failed: %+v", cmd, out)
+		}
+		combined := out.Stdout + "\n" + out.Stderr
+		for _, forbidden := range []string{"recovery", "token.txt", secretPayload} {
+			if strings.Contains(combined, forbidden) {
+				t.Fatalf("%s leaked %q in output:\n%s", cmd, forbidden, combined)
+			}
+		}
+		if !strings.Contains(out.Stdout, "visible.txt") {
+			t.Fatalf("%s did not include visible.txt:\n%s", cmd, out.Stdout)
+		}
+	}
+
+	if lsOverlay := call("ls -la .paintedwolf"); lsOverlay.State != "completed" || lsOverlay.Status == 0 || lsOverlay.Stdout != "" || strings.Contains(lsOverlay.Stderr, "recovery") {
+		t.Fatalf("ls -la .paintedwolf should not expose recovery area: %+v", lsOverlay)
+	}
+
+	grepOut := call("grep -r " + secretPayload + " .")
+	if grepOut.State != "completed" || grepOut.Status != 1 || grepOut.Stdout != "" {
+		t.Fatalf("grep -r should find nothing (status 1, empty stdout), got: %+v", grepOut)
+	}
+	if strings.Contains(grepOut.Stderr, "recovery") || strings.Contains(grepOut.Stderr, secretPayload) {
+		t.Fatalf("grep -r leaked recovery in stderr: %q", grepOut.Stderr)
+	}
+
+	rootListing, err := projectsource.BrowseProjectSource(p, "r1", "")
+	testutil.FailErr(t, "browse root", err)
+	for _, entry := range rootListing.Entries {
+		if strings.Contains(entry.Name, "recovery") {
+			t.Fatalf("Files root browse leaked recovery entry: %+v", entry)
+		}
+	}
+	if _, err := projectsource.BrowseProjectSource(p, "r1", settingsoverlay.DirName()); !errors.Is(err, projectsource.ErrSourceNotFound) {
+		t.Fatalf("Files .paintedwolf browse error=%v, want ErrSourceNotFound when recovery-only", err)
+	}
+	if _, err := projectsource.BrowseProjectSource(p, "r1", settingsoverlay.RecoveryRelPath); !errors.Is(err, projectsource.ErrSourceNotFound) {
+		t.Fatalf("Files .paintedwolf/recovery browse error=%v, want ErrSourceNotFound", err)
+	}
+
+	for _, opts := range []sandbox.SurveyOptions{
+		sandbox.HumanFilesSurveyOptions(),
+		{IncludeHidden: true, IncludeEngineOverlay: true},
+	} {
+		sawVisible := false
+		testutil.FailErr(t, "survey walk", sandbox.SurveyWalk(t.Context(), fixture.Dir, opts, func(entry sandbox.SurveyEntry) (sandbox.SurveyAction, error) {
+			if entry.Rel == "visible.txt" {
+				sawVisible = true
+			}
+			if strings.Contains(entry.Rel, "recovery") || strings.Contains(entry.Rel, "token.txt") {
+				t.Fatalf("survey walk leaked %q", entry.Rel)
+			}
+			return sandbox.SurveyContinue, nil
+		}))
+		if !sawVisible {
+			t.Fatalf("survey walk with opts %+v did not visit visible.txt", opts)
 		}
 	}
 }
