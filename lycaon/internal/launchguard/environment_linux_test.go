@@ -49,7 +49,7 @@ func TestScrubBootstrapEnvironmentClearsProcessEnvironment(t *testing.T) {
 		os.Clearenv()
 		for _, entry := range saved {
 			if k, v, ok := cutEnv(entry); ok {
-				_ = os.Setenv(k, v)
+				_ = os.Setenv(k, v) //nolint:usetesting // Restore the complete environment after the scrubber cleared it.
 			}
 		}
 		scrubbedSession = nil
@@ -57,12 +57,12 @@ func TestScrubBootstrapEnvironmentClearsProcessEnvironment(t *testing.T) {
 	})
 
 	os.Clearenv()
-	_ = os.Setenv("HOME", "/nonexistent-caller-home")
-	_ = os.Setenv("PATH", "/usr/bin:/bin")
-	_ = os.Setenv("GODEBUG", "inittrace=1")
-	_ = os.Setenv("GOTRACEBACK", "crash")
-	_ = os.Setenv("GOCOVERDIR", "/tmp")
-	_ = os.Setenv("LD_PRELOAD", "/tmp/evil.so")
+	t.Setenv("HOME", "/nonexistent-caller-home")
+	t.Setenv("PATH", "/usr/bin:/bin")
+	t.Setenv("GODEBUG", "inittrace=1")
+	t.Setenv("GOTRACEBACK", "crash")
+	t.Setenv("GOCOVERDIR", "/tmp")
+	t.Setenv("LD_PRELOAD", "/tmp/evil.so")
 	scrubbedSession = nil
 	scrubbedOnce = false
 

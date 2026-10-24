@@ -44,6 +44,7 @@ func restrictExecution(policy GenerationPolicy, image *os.File) error {
 		// gain EXECUTE at the destination.
 		attr.Handled_access_fs |= unix.LANDLOCK_ACCESS_FS_REFER
 	}
+	// #nosec G103 -- the kernel copies this fixed-layout attribute during the synchronous syscall.
 	ruleset, _, errno := unix.Syscall(unix.SYS_LANDLOCK_CREATE_RULESET, uintptr(unsafe.Pointer(&attr)), unsafe.Offsetof(attr.Handled_access_net), 0)
 	if errno != 0 {
 		return fmt.Errorf("execution ruleset: %w", errno)
@@ -76,7 +77,11 @@ func allowExecutionRule(ruleset int, path string, access uint64) error {
 		return fmt.Errorf("executable path %s: %w", path, err)
 	}
 	defer func() { _ = object.Close() }()
+	if object.Fd() > 1<<31-1 {
+		return errors.New("executable path descriptor exceeds the Landlock ABI")
+	}
 	rule := unix.LandlockPathBeneathAttr{Allowed_access: access, Parent_fd: int32(object.Fd())}
+	// #nosec G103 -- the kernel copies the fixed-layout rule before this synchronous syscall returns.
 	if _, _, errno := unix.Syscall6(unix.SYS_LANDLOCK_ADD_RULE, uintptr(ruleset), unix.LANDLOCK_RULE_PATH_BENEATH,
 		uintptr(unsafe.Pointer(&rule)), 0, 0, 0); errno != 0 {
 		return fmt.Errorf("execution ruleset path %s: %w", path, errno)

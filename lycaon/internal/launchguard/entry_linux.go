@@ -105,6 +105,7 @@ func enterDesktop(image, frame, origin *os.File, brokerFD int, lifetime *os.File
 		return err
 	}
 	args := append([]string{filepath.Join(spec.Generation.LogicalInstallRoot, "bin/painted-wolf-code")}, spec.Arguments...)
+	// #nosec G204 -- fd 3 is the verified generation image; arguments remain separate from the program.
 	return syscall.Exec("/proc/self/fd/3", args, env)
 }
 
@@ -131,7 +132,7 @@ func sameIdentity(spec EntrySpec) error {
 		return errors.New("entry supplementary groups differ from the original caller")
 	}
 	for i, group := range groups {
-		if uint32(group) != spec.Groups[i] {
+		if group < 0 || uint64(group) > uint64(^uint32(0)) || uint32(group) != spec.Groups[i] {
 			return errors.New("entry supplementary groups differ from the original caller")
 		}
 	}
