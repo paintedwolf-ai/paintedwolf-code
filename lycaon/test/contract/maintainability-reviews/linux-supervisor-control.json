@@ -5,11 +5,11 @@
   "workstream": "linux-confinement",
   "disposition": "retain",
   "reason": "The 303 receiver lines coordinate one sandbox lifetime and its socket policy. Descriptor transport owns poller-safe receive and close behavior without adding supervisor methods or authority. Keep the lifecycle together under the existing measured ceiling.",
-  "reviewed_commit": "8ad02c97dd554a235fa714fe3f5cc3bc3641dd63",
+  "reviewed_commit": "07355e29fbe8ad8af3f01c96ce46ed49a6259bbe",
   "ceiling": 303,
   "reviewed_shape": "72571879dd739889f4dd686a4a0d16fc48ffeaa343dff336c3242fdd197917f7",
   "boundaries": {
-    "lycaon/internal/confine/linuxsandbox/control_linux_test.go": "b3793672f8d082c9ee322cf1b71cd69f66babbeb8d7c444ba89873017b183735",
+    "lycaon/internal/confine/linuxsandbox/control_linux_test.go": "7f5441a76fd0614539a9ee94d826e74c039b6478965a054f0cbf8851b250941e",
     "lycaon/internal/confine/linuxsandbox/socket_policy_test.go": "cc13d705fd92e394627944bf53e9e635fb4df2c9ec288c1e956779f55e998ab8"
   }
 }
