@@ -1044,7 +1044,19 @@ Each result carries `row_id`, `source_commit`, `artifact_id`, `tier`, `execution
 
 `./task test:linux:installed -- --source-commit SHA --campaign FILE --final-artifacts FILE --evidence-root DIRECTORY` runs installed campaign admission through the normal queue. It retains a machine-readable report under the checkout's artifacts and prints the report as JSON, including every missing or unverified required row and the native/manual checklist. Optional `--report FILE` selects a fresh report path and `--catalog FILE` selects a scoped contract fixture. A report cannot replace an input, retained evidence or an existing report. Case drivers must still produce actual observations against the selected installed artifacts; invoking admission does not execute or certify missing cases.
 
-The admission module is a foundation for the installed campaign, not an installed test runner or a release gate by itself. Collectors, managed `test:linux:installed` orchestration and release consumption remain tracked in #456; the campaign closes only after its required rows pass. Architecture-specific performance limits and actual results remain #455, and native arm64 desktop/performance capacity is still required.
+#### Installed qualification lane
+
+Installed GUI qualification is a local pre-release lane on the native qualification host's VMs, like `den:webkit:atspi`. No GitHub runner executes it: CI runs only what GitHub-hosted Ubuntu runners can. The lane runs three steps from a clean checkout of the release controller commit that produced the selected plan:
+
+1. `./task test:linux:installed -- --prepare-qualification --source-commit SHA --source-tree TREE --control-run-id N --control-artifact-id N --qualification-plan-run-id N --qualification-plan-artifact-id N --output DIR`. This downloads the release controller's control inputs and plan by exact run and artifact ID, and refuses a checkout whose commit is not the plan's controller commit.
+2. `./task test:linux:installed -- --execute-plan --plan DIR/plan/qualification-plan.json --final-artifacts DIR/controls/final-artifacts.json --output EXECUTED`. This runs every planned guest target over SSH and physical input.
+3. `./task test:linux:installed -- --retain-qualification --prepared DIR --execution EXECUTED --output RAW`. This retains only a complete, freshly admitted campaign, recording its local producer: controller commit, repository and host.
+
+Each case runs within its own time budget, 900 seconds unless its driver family declares `TIME_BUDGET_SECONDS`. A case past its budget fails, and the campaign continues with the next case.
+
+The dispatch-only `Linux installed desktop rehearsal` workflow exercises the same case runner on a GitHub-hosted Ubuntu desktop for amd64 or arm64. Its candidate is chosen through dispatch inputs; nothing is pinned in the repository. It fails unless the retained campaign is accepted, or, for partial diagnostic packages, unless the first-launch diagnosis passed. It grants no qualification or publication authority. Confinement boundaries have one installed smoke each; the confinement contract itself is `./task test:confine:linux`.
+
+Release consumption of the retained campaign, architecture-specific performance limits (#455) and the full matrix (#456) remain tracked there; the campaign closes only after its required rows pass.
 
 ### Updates
 

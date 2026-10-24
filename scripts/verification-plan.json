@@ -1169,6 +1169,8 @@
       "nightly.yml": 2,
       "release.yml": 2,
       "linux-candidate-requests.yml": 1,
+      "linux-desktop-environment-rehearsal.yml": 1,
+      "linux-installed-desktop-rehearsal.yml": 1,
       "release-halt.yml": 1,
       "release-secrets-check.yml": 1,
       "release-staple-probe.yml": 1,
