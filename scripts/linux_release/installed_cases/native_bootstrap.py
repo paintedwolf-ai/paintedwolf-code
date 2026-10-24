@@ -7,6 +7,8 @@ import json
 import os
 from pathlib import Path
 
+from ..installed_storage import resolve as storage_for_launch
+
 from ..installed_environment import package_inventory, package_inventory_arguments
 from ..installed_runtime import bind
 from .native_workflows import PACKAGE, native_lock, prepare_install, query
@@ -147,8 +149,9 @@ def bootstrap(final, source, artifact_id, packages: Path, install: Path, output:
                     remaining = [entry.name for entry in entries.values()
                         if entry.kind != 'directory' and os.path.lexists(Path('/') / entry.name)]
                     observations['remaining_payload_paths'] = remaining[:128]
-                    observations['profile_absent'] = not os.path.lexists(Path.home() / '.config/paintedwolf')
-                    observations['webview_profile_absent'] = not os.path.lexists(Path.home() / '.local/share/dev.paintedwolf.code')
+                    storage = storage_for_launch({'HOME': str(Path.home())})
+                    observations['profile_absent'] = not os.path.lexists(storage.config)
+                    observations['webview_profile_absent'] = not os.path.lexists(storage.webview)
                     if code != 1 or remaining or not observations['profile_absent'] or not observations['webview_profile_absent']:
                         raise ValueError('bootstrap did not restore verified package, payload and profile absence')
                     code, raw = run('process-absence', ['sudo', '-n', '/usr/bin/python3', '-c', PROCESS_OBSERVER,
