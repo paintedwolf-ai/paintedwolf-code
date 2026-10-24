@@ -10,6 +10,8 @@ from ..installed_evidence import IDENTIFIER
 
 REFUSALS = frozenset({'acquisition-surface-invalid', 'acquisition-result-missing',
                       'acquisition-result-invalid', 'acquisition-tool-not-offered'})
+STAGES = frozenset({'phase', 'part-count', 'marker-lines', 'json', 'payload',
+                    'feedback-envelope', 'receipt', 'call-count', 'call-shape', 'result-order'})
 
 
 def fixed_call(tool):
@@ -21,10 +23,12 @@ def fixed_call(tool):
 
 
 class AcquisitionRefusal(ValueError):
-    def __init__(self, code):
-        if code not in REFUSALS:
+    def __init__(self, code, stage='phase', count=None):
+        if (code not in REFUSALS or stage not in STAGES
+                or count is not None and (type(count) is not int or not 0 <= count <= 32769)):
             raise ValueError('acquisition refusal code is not declared')
         self.code = code
+        self.detail = {'stage': stage, **({'count': count} if count is not None else {})}
         super().__init__(code)
 
 
@@ -92,21 +96,40 @@ def result_payload(content, tool, call_id, *, need):
     host_call_id(call_id)
     if not isinstance(content, str) or not 0 < len(content.encode()) <= 32768:
         raise ValueError('projected acquisition result exceeds its bound')
-    parts = content.split('\n\n')
-    if len(parts) != 2:
-        raise ValueError('acquisition result has an unknown projection grammar')
+    # LocalInference's SystemPreamble folds later host system rows onto the
+    # tool row. Only the original result/receipt prefix supplies case evidence.
+    parts = content.split('\n\n', 2)
+    if len(parts) < 2:
+        raise AcquisitionRefusal('acquisition-result-invalid', 'part-count', min(len(parts), 32769))
     decoded = []
-    for part, marker in zip(parts, ('⟦D:tool⟧', '⟦D:host:tool_feedback⟧')):
+    for part, marker in zip(parts[:2], ('⟦D:tool⟧', '⟦D:host:tool_feedback⟧')):
         lines = part.split('\n')
-        if len(lines) != 2 or lines[0] != marker or not lines[1].startswith('⟦D⟧'):
-            raise ValueError('acquisition result has an unknown host-written marker')
-        decoded.append(object_json(lines[1][len('⟦D⟧'):]))
+        opaque = tool == need and marker == '⟦D:tool⟧'
+        if (len(lines) < 2 or not opaque and len(lines) != 2 or lines[0] != marker
+                or any(not line.startswith('⟦D⟧') for line in lines[1:])):
+            raise AcquisitionRefusal('acquisition-result-invalid', 'marker-lines', min(len(lines), 32769))
+        if opaque:
+            # Evidence handles, output and compaction text are data. Only the
+            # paired typed invocation and independent durable witness authorize completion.
+            decoded.append(None)
+            continue
+        try:
+            decoded.append(object_json(lines[1][len('⟦D⟧'):]))
+        except ValueError:
+            raise AcquisitionRefusal('acquisition-result-invalid', 'json') from None
     payload, feedback = decoded
     if tool == 'request_tools':
-        loaded_tool(payload, need)
+        try:
+            loaded_tool(payload, need)
+        except ValueError:
+            raise AcquisitionRefusal('acquisition-result-invalid', 'payload') from None
     if set(feedback) != {'invocation'}:
-        raise ValueError('acquisition receipt projection is missing or truncated')
-    return {'tool_call_id': call_id, 'invocation_id': projected_receipt(feedback['invocation'], tool, call_id),
+        raise AcquisitionRefusal('acquisition-result-invalid', 'feedback-envelope', len(feedback))
+    try:
+        invocation_id = projected_receipt(feedback['invocation'], tool, call_id)
+    except ValueError:
+        raise AcquisitionRefusal('acquisition-result-invalid', 'receipt') from None
+    return {'tool_call_id': call_id, 'invocation_id': invocation_id,
             **({'need': need, 'loaded': True} if tool == 'request_tools' else {})}
 
 
@@ -135,7 +158,7 @@ def paired_result(messages, tool, arguments, target, expected=None):
     history, all_calls = fixed_history(messages, target)
     calls = [(ordinal, call) for ordinal, call in all_calls if call['function']['name'] == tool]
     if len(calls) != 1:
-        raise AcquisitionRefusal('acquisition-result-missing')
+        raise AcquisitionRefusal('acquisition-result-missing', 'call-count', min(len(calls), 32769))
     assistant_ordinal, call = calls[0]
     try:
         identifier = host_call_id(call.get('id'))
@@ -145,10 +168,12 @@ def paired_result(messages, tool, arguments, target, expected=None):
         results = [(ordinal, row) for ordinal, row in enumerate(history) if row['role'] == 'tool'
                    and row.get('tool_call_id') == identifier]
         if len(results) != 1 or results[0][0] <= assistant_ordinal:
-            raise ValueError('fixture call has no unique paired result')
+            raise AcquisitionRefusal('acquisition-result-invalid', 'result-order', min(len(results), 32769))
         return result_payload(results[0][1].get('content'), tool, identifier, need=target)
+    except AcquisitionRefusal:
+        raise
     except (ValueError, TypeError, KeyError, AttributeError):
-        raise AcquisitionRefusal('acquisition-result-invalid') from None
+        raise AcquisitionRefusal('acquisition-result-invalid', 'call-shape') from None
 
 
 class FixedAcquisition:
