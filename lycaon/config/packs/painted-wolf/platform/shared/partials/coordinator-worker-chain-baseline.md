@@ -7,7 +7,5 @@
 - **A write leg’s `done_when` names proportionate validation.** Carry user/repository requirements into the brief; allow inspection where sufficient. The selected check is a default, not a full-suite mandate. Workers report scope and limits; blocked validation alone does not require resuming completed work or prevent promotion.
 - Up to **{{ max_in_flight }}** jobs in flight; cap → `Code: COORDINATOR_WORKER_IN_FLIGHT`.
 - Continue coordinating ready work after dispatch. Use **`wait(timeout_ms=120000–300000, conditions=[{kind: next_worker_done}])`** when the next action needs a result. Choose `{kind: all_workers_idle}` only when you need the whole set.
-- Wait for **complete** envelopes before user-facing done claims; `partial` → re-dispatch{% if pending_overlay_promote %} when that job has no pending overlay{% endif %}. Synthesis: restate worker **`findings[]`** or paths from your tool results — not **`brief`**/`objectives_met`.
-{% if pending_overlay_promote %}- Pending overlay → `preview_overlay` then promote/reject — `wait()` won't preview.
-{% endif %}
+- Wait for **complete** envelopes before user-facing done claims; `partial` → re-dispatch. Synthesis: restate worker **`findings[]`** or paths from your tool results — not **`brief`**/`objectives_met`.
 - Before user-facing prose after a complete envelope, do not call {% for t in defer_until_user_reply_tools %}`{{ t }}`{% if not forloop.Last %}, {% endif %}{% endfor %} (`Code: COORDINATOR_BATCH_WRONG_PHASE`).
