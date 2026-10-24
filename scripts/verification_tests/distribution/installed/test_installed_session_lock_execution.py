@@ -46,6 +46,11 @@ class SessionWireTests(unittest.TestCase):
         partial['native_session']['locked_hint'] = False
         self.assertFalse(session_wire.finished('session-lock-v1', self.before, partial))
         self.assertTrue(session_wire.finished('session-lock-v1', self.before, self.after))
+        screenshield_before = copy.deepcopy(self.before)
+        screenshield_before['native_session']['authorities']['locker']['name'] = 'org.gnome.Shell.ScreenShield'
+        screenshield_after = copy.deepcopy(self.after)
+        screenshield_after['native_session']['authorities']['locker']['name'] = 'org.gnome.Shell.ScreenShield'
+        self.assertTrue(session_wire.finished('session-lock-v1', screenshield_before, screenshield_after))
         with self.assertRaises(ValueError):
             session_wire.before('session-lock-v1', self.after)
         for bindings in ([], ['<Control><Alt>l'], ['<Super>l', '<Super>l'], ['<Super>l', 7]):
