@@ -66,6 +66,8 @@ class DesktopUIOwnershipTests(unittest.TestCase):
         actor = ui.DesktopUI(self.app, API)
         with self.assertRaises(ui._InventoryChanged):
             list(actor.descendants(node))
+        with self.assertRaises(ui._InventoryChanged):
+            list(actor.descendants(Node(API.ROLE_FRAME, children=[None])))
         node.action.doAction.assert_not_called()
 
     def test_observer_bound_retains_exact_single_read_facts_without_authorizing_action(self):

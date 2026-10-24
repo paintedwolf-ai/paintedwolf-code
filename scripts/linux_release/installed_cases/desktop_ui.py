@@ -90,6 +90,8 @@ class DesktopUI:
             if time.monotonic() >= deadline:
                 raise CaseUnavailable('normal-native-window-observation-deadline')
             application = desktop[index]
+            if application is None:
+                raise _InventoryChanged()
             pid = application.get_process_id()
             if not owned_process(pid, self.app):
                 continue
@@ -100,6 +102,8 @@ class DesktopUI:
                 if time.monotonic() >= deadline:
                     raise CaseUnavailable('normal-native-window-observation-deadline')
                 window = application[offset]
+                if window is None:
+                    raise _InventoryChanged()
                 if window.getRole() in {self.api.ROLE_FRAME, self.api.ROLE_DIALOG} and self.visible(window):
                     yield identity, window
             if process_identity(pid) != identity or not owned_process(pid, self.app):
@@ -113,6 +117,8 @@ class DesktopUI:
                 raise CaseUnavailable('normal-native-control-observation-deadline')
             node, depth = pending.pop()
             visited += 1
+            if node is None:
+                raise _InventoryChanged()
             count = node.childCount
             if type(count) is int and count == -1:
                 raise _InventoryChanged()
