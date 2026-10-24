@@ -144,7 +144,7 @@ func OpenWithOptions(ctx context.Context, dbPath string, hooks UpgradeHooks, opt
 	if err := bindStoreHealth(store, dbPath); err != nil {
 		_ = reader.Close()
 		_ = writer.Close()
-		return nil, classifyStoreOpenFailure(err)
+		return nil, ClassifyStoreFailure(err)
 	}
 	if filepath.IsAbs(dbPath) {
 		store.dataDir = filepath.Dir(dbPath)
