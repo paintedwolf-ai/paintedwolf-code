@@ -4,12 +4,13 @@
   "kind": "test_suite",
   "workstream": "database-integrity",
   "disposition": "retain",
-  "reason": "Database tests exercise private fresh-schema, migration, transaction, and recovery seams through actual stores. The expression-index audit belongs with those contracts; moving it to an external package would obscure the schema fixture or broaden production visibility. Retain the current test membership and require renewed review for any membership growth or replacement.",
-  "reviewed_commit": "be8c82f32a7764e8b58a56a72420046e184b4510",
-  "ceiling": 40,
+  "reason": "Retain the 42-file private database suite. Maintenance pacing and idle reclamation share the real store fixtures and writer authority with persistence contracts; moving these tests outside db would expose private lifecycle seams. Focused virtual-clock and freelist-drain tests validate progress without machine-speed assertions.",
+  "reviewed_commit": "0bd6f24bfbd2c0c189ba20950faa9df18d781544",
+  "ceiling": 42,
   "boundaries": {
     "lycaon/internal/db/schema_integrity_test.go": "40c3f6ae2cd2be3bd8b16dd852636611406d18ed9f737912351307f0b6169dbe",
-    "lycaon/internal/db/schema_index_integrity_test.go": "fa12ca9706074beda8b7bbd08726d68b2b9eb65bd03525fe58e9b4d52f742281"
+    "lycaon/internal/db/schema_index_integrity_test.go": "fa12ca9706074beda8b7bbd08726d68b2b9eb65bd03525fe58e9b4d52f742281",
+    "lycaon/internal/db/maintenance_progress_test.go": "a369d45d5c1e73cfede21e583c0da30862dbe69080a6c0ee51d275b334f622ea"
   },
-  "reviewed_shape": "301d2e62e2c1f64581faab0fb2a8a5508dd7120fb93e59f1608f9769613389a3"
+  "reviewed_shape": "9a56caa047a118524ddb2a821a8674c31eb39ffa96ecc56cf490e8fca6cb3590"
 }
