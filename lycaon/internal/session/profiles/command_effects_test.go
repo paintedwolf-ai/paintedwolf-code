@@ -54,8 +54,8 @@ func TestShippedReadOnlyProfilesDeclareOnlyNativeReads(t *testing.T) {
 				if profile.CommandEffects != read {
 					t.Fatalf("%s permits %v", id, profile.CommandEffects.Classes())
 				}
-				if !profile.ToolDenied("command") {
-					t.Fatal("native metadata prematurely activated old shell command")
+				if !profile.ToolAllowed("command") || !profile.StickyTools["command"] {
+					t.Fatalf("%s does not offer sticky read-only command", id)
 				}
 			}
 		}

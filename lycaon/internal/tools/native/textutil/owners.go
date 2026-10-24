@@ -187,6 +187,11 @@ func leadingBind(spec toolcontract.CommandSpecification, argv commandprogram.Fie
 			index++
 			break
 		}
+		if word.Value == "--help" {
+			bound.Help = true
+			bound.Items = append(bound.Items, commandprogram.BoundItem{Option: &commandprogram.BoundOption{Key: "--help", Spelling: "--help", ValueRole: "boolean", Span: word.Span}})
+			continue
+		}
 		keys, ok := shortCluster(word.Value, declared)
 		if !ok {
 			break
@@ -226,6 +231,12 @@ func (p Prepared) InvokeOwner(ctx context.Context, ports Ports, streams commandp
 	if ports.Memory == nil {
 		err := errors.New("text utilities require program memory admission")
 		return nativeutility.Settle(err, 0, false), err
+	}
+	if p.Argv.Help {
+		if streams.Input != nil {
+			_ = streams.Input.Close()
+		}
+		return commandprogram.WriteCatalogHelp(p.spec, streams.Output)
 	}
 	inv := newInvocation(ctx, p, ports, streams)
 	err := p.run(inv)

@@ -84,23 +84,23 @@ type SessionOwners interface {
 // programRun is one invocation's frozen frame, surface and ledger bindings.
 type programRun struct {
 	externalHidden bool
-	// retainOutput keeps one child stream in the program output store.
-	retainOutput  func(ctx context.Context, executionID, stream string, data []byte, complete bool) error
-	executor      *toolexecution.Executor
-	registry      *tools.DefaultRegistry
-	recorder      *invocation.SQLRecorder
-	supervisor    *ProgramSupervisor
-	progress      toolexecution.ProgramProgressFacts
-	frame         toolexecution.ProgramFrame
-	surface       toolexecution.ProgramSurface
-	memory        *toolcontract.ProgramMemory
-	capture       invocation.ProgramInputCapture
-	tc            tools.ToolContext
-	root          toolcontract.OperationInvocation
-	parentReceipt string
-	source        string
-	catalog       toolcontract.LanguageCatalog
-	commands      map[string]toolcontract.CommandSpecification
+	retainOutput   func(context.Context, string, string, []byte, bool) error
+	executor       *toolexecution.Executor
+	registry       *tools.DefaultRegistry
+	recorder       *invocation.SQLRecorder
+	supervisor     *ProgramSupervisor
+	progress       toolexecution.ProgramProgressFacts
+	frame          toolexecution.ProgramFrame
+	surface        toolexecution.ProgramSurface
+	memory         *toolcontract.ProgramMemory
+	capture        invocation.ProgramInputCapture
+	tc             tools.ToolContext
+	root           toolcontract.OperationInvocation
+	parentReceipt  string
+	source         string
+	catalog        toolcontract.LanguageCatalog
+	commands       map[string]toolcontract.CommandSpecification
+	nativeDefs     map[string]toolcontract.OperationDefinition
 
 	// envelope carries the call's launch capability requests to each launch.
 	envelope map[string]any
@@ -232,17 +232,11 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	}
 	// Many command names share one operation owner; each definition enters
 	// the surface once, keyed by its operation identity.
-	active := []toolcontract.OperationDefinition{external}
-	selected := map[string]bool{}
-	for _, operation := range owners.Natives {
-		if selected[operation.Tool] {
-			continue
-		}
-		if definition, ok := r.Registry.Definition(operation.Tool); ok {
-			selected[operation.Tool] = true
-			active = append(active, definition.Operation)
-		}
+	active, nativeDefs, err := r.nativeSurfaceDefinitions(external, catalog, owners.Natives)
+	if err != nil {
+		return "", err
 	}
+	run.nativeDefs = nativeDefs
 	surface, err := r.Executor.Metadata.FreezeProgramSurface(ctx, platform.ToolFilter{ProfileID: tc.ProfileID(), SurfaceID: tc.Turn.TurnSurfaceID}, active)
 	if err != nil {
 		return "", err
@@ -305,8 +299,9 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 		Invocation: root, Dispatch: dispatcher, Binder: commandprogram.CatalogBinder{}, Files: projectpaths.GlobFiles{Paths: paths},
 		Publication: owners.Publication, Input: owners.Input,
 		Executions: dispatcher, Supervision: r.Supervisor, Predicates: commandprogram.PredicateRuntime{Patterns: commandprogram.NativePredicatePatterns{Memory: memory}},
-		Memory:  memory,
-		Streams: commandprogram.Streams{Input: commandprogram.NullInput(), Output: stdout, Error: stderr},
+		Memory:      memory,
+		Streams:     commandprogram.Streams{Input: commandprogram.NullInput(), Output: stdout, Error: stderr},
+		Environment: paths.Environment(),
 	}
 	var evaluated commandprogram.ProgramOutcome
 	result, evalErr := r.Supervisor.RunProgram(ctx, root, func(ctx context.Context) (toolcontract.ProducerResult, error) {
@@ -434,6 +429,14 @@ func (r *ProgramRuntime) feedback(ctx context.Context, run *programRun, dispatch
 			data := map[string]any{"tool": "command", "source_start_byte": span.StartByte, "source_end_byte": span.EndByte, "source_line": span.Line, "source_column": span.Column, "expected_form": refusal.Expected, "reason": refusal.Expected}
 			if refusal.Command != "" {
 				data["command"], data["word"], data["expected_form"] = refusal.Command, refusal.Option, refusal.Form
+			}
+			// A word refused by its owner (a stale @label) keeps the owner's facts.
+			if cause := toolrejection.AsToolReject(refusal.Cause); cause != nil && cause.Code == refusal.Code {
+				for key, value := range cause.Data {
+					if _, set := data[key]; !set {
+						data[key] = value
+					}
+				}
 			}
 			return toolrejection.RejectInvalidArguments(refusal.Code, data)
 		}
@@ -620,6 +623,47 @@ func (r *programRun) externalDefinition() (toolcontract.OperationDefinition, err
 		})
 	})
 	return r.external, r.externalErr
+}
+
+// nativeSurfaceDefinitions collects one operation definition per native tool,
+// attaching catalog commands (such as touch and mktemp) that share a tool's
+// owner without their own structured-tool disposition row.
+func (r *ProgramRuntime) nativeSurfaceDefinitions(external toolcontract.OperationDefinition, catalog toolcontract.LanguageCatalog, natives map[string]NativeOperation) ([]toolcontract.OperationDefinition, map[string]toolcontract.OperationDefinition, error) {
+	active := []toolcontract.OperationDefinition{external}
+	defs := map[string]toolcontract.OperationDefinition{}
+	for _, spec := range catalog.Commands {
+		op, ok := natives[spec.Name]
+		if !ok || defs[op.Tool].Digest() != "" {
+			continue
+		}
+		reg, ok := r.Registry.Definition(op.Tool)
+		if !ok {
+			continue
+		}
+		def := reg.Operation
+		facts := def.Facts()
+		have := map[string]bool{}
+		for _, declared := range facts.Commands {
+			have[declared.Name] = true
+		}
+		changed := false
+		for _, candidate := range catalog.Commands {
+			if natives[candidate.Name].Tool == op.Tool && !have[candidate.Name] {
+				facts.Commands = append(facts.Commands, candidate)
+				have[candidate.Name] = true
+				changed = true
+			}
+		}
+		if changed {
+			var err error
+			if def, err = toolcontract.NewOperationDefinition(facts); err != nil {
+				return nil, nil, err
+			}
+		}
+		defs[op.Tool] = def
+		active = append(active, def)
+	}
+	return active, defs, nil
 }
 
 // programLifetime releases a program's plan and frame once both the tool call

@@ -9,7 +9,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
 func TestIdentityAndSystemUtilities(t *testing.T) {
@@ -37,10 +36,11 @@ func TestIdentityAndSystemUtilities(t *testing.T) {
 	}
 	for source, code := range map[string]string{
 		"id -n": "COMMAND_OPERAND_INVALID", "id -u -g": "COMMAND_OPERAND_INVALID", "uname -p": "COMMAND_OPTION_UNSUPPORTED",
-		"whoami --help": "COMMAND_OPTION_UNSUPPORTED", "hostname -f": "COMMAND_OPTION_UNSUPPORTED",
+		"whoami -x": "COMMAND_OPTION_UNSUPPORTED", "hostname -f": "COMMAND_OPTION_UNSUPPORTED",
 	} {
 		h.run(source).expectRefusal(t, source, code)
 	}
+	h.run("whoami --help").expectOutput(t, "whoami --help", h.owners.specs["whoami"].Help()+"\n", "", 0)
 }
 
 func TestMissingHostFactsRefuseWithoutSubstitutes(t *testing.T) {
@@ -85,18 +85,6 @@ func TestDateCapturesTheClockOnceInUTC(t *testing.T) {
 	}
 }
 
-func TestPwdUsesThePathOwner(t *testing.T) {
-	h := newHarness(t, defaultHost())
-	for _, cwd := range []string{"", "pkg"} {
-		h.cwd = cwd
-		paths, err := projectpaths.NewProgramPaths(t.Context(), nil, h.tc, cwd)
-		testutil.FailErr(t, "path frame", err)
-		h.run("pwd").expectOutput(t, "pwd in "+cwd, paths.Cwd().DisplayPath+"\n", "", 0)
-	}
-	h.run("pwd extra").expectRefusal(t, "pwd with an operand", "COMMAND_OPERAND_INVALID")
-	h.run("pwd -P").expectRefusal(t, "pwd -P", "COMMAND_OPTION_UNSUPPORTED")
-}
-
 func TestOwnersBindOnlyTheirOperations(t *testing.T) {
 	h := newHarness(t, defaultHost())
 	if got := h.owners.Commands(); len(got) != len(utilities) {
@@ -112,7 +100,7 @@ func TestOwnersBindOnlyTheirOperations(t *testing.T) {
 	if _, err := h.owners.Prepare(request); err == nil {
 		t.Fatal("prepared a command these owners do not serve")
 	}
-	if _, err := NewOwners(nil, h.clock.now, nil); err == nil {
+	if _, err := NewOwners(nil, h.clock.now); err == nil {
 		t.Fatal("owners without host facts accepted")
 	}
 	var unprepared Prepared

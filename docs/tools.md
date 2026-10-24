@@ -4,7 +4,7 @@ Tools are structured capabilities published with argument schema, execution poli
 
 **See also:** [Architecture](architecture.md#subsystem-owners) · [Adding a tool](adding-tools.md) · [Coordination](coordination.md) · [Grounding](grounding.md) · [Security](security.md) · [Authorization](authorization.md)
 
-**Machine truth:** native manifest `native-tools.yaml`, per-tool `schemas/`, `profiles/`, `tool-command-equivalence.yaml`, and `tool-presentation.yaml` under `lycaon/config/packs/painted-wolf/platform/tools/` · non-native catalog allowlist `lycaon-tools.yaml` beside them · generated invocation contracts in `internal/toolcontract`
+**Machine truth:** native manifest `native-tools.yaml`, per-tool `schemas/`, `profiles/`, and `tool-presentation.yaml` under `lycaon/config/packs/painted-wolf/platform/tools/` · non-native catalog allowlist `lycaon-tools.yaml` beside them · generated invocation contracts in `internal/toolcontract`
 
 ---
 
@@ -98,14 +98,16 @@ Typed syntax diagnostics carry byte ranges, line/column, expected forms and
 resource measurements through the existing rejection/OAR pipeline. They never
 guess missing source contents or create executable replacement calls.
 
-The new plan is separate from the existing process-stage plan. Retained verify,
-PTY, process launch, detection, secret inspection and command-identity consumers
-still require that process representation. The current command executor remains
-its consumer until the runtime integration replaces it. Do not flatten functions,
-loops or substitutions into process stages, broaden a retained surface merely
-because the new parser accepts a form, or remove a recognizer while one of these
-consumers still uses it. Their replacement and obsolete-path cleanup accompany
-the introducing runtime integration.
+The program plan is separate from the process-stage plan (`commandsurface.Plan`).
+`command` runs on [`command.ProgramRuntime`](../lycaon/internal/tools/native/command/program_entry.go)
+over [`commandprogram.Evaluate`](../lycaon/internal/commandprogram) and dispatches
+typed simple commands to their native owners or confined external execution.
+`verify`, the PTY (`terminal_open`), process launch, detection, secret inspection
+and command-identity consumers remain independent current consumers of the
+process-stage representation. Do not flatten functions, loops or substitutions
+into process stages, broaden one of those process-stage surfaces merely because
+the program parser accepts a form, or remove a recognizer while one of those
+consumers uses it.
 
 The syntax adapter charges parser scratch to the enclosing program before each
 allocation and meters the selected upstream parser's allocations and recursive
@@ -402,7 +404,7 @@ Temporary, cache, and tool data paths derive from the same OS conventions as sub
 
 Multi-root calls use explicit root addressing when a relative path is ambiguous. Host-data-relative spill paths are a separate jailed namespace that never exposes the absolute config directory.
 
-`@scratch/<path>` addresses the invoking session's private scratch folder, a host namespace no attached root may share. One grammar resolves it for native tools, `cwd`, stream redirects, and unquoted `command` and `verify` arguments, which reach the program as absolute paths; a quoted `@scratch/...` stays literal. Processes also receive the folder as `SCRATCH_DIR`. A worker's scratch is its own, so a worker returns findings in its result rather than as a scratch path.
+`@scratch/<path>` addresses the invoking session's private scratch folder, a host namespace no attached root may share, and `@label/<path>` an attached folder. One grammar resolves them for native tools, `cwd` and redirects. In a `command` program an unquoted leading `@label` or `@scratch` expands to the folder's absolute path in every argument and assignment value, external programs included; a quoted one stays literal, and a label no folder carries stays literal for the program to read. Expansion grants nothing; the operation or launch that uses the path checks it. `native_path` converts a computed path explicitly. `TMPDIR`, `TMP`, `TEMP` and `SCRATCH_DIR` name the same folder for native utilities and processes, and `mktemp` creates there; literal `/tmp` keeps its OS meaning. `pwd` and `$PWD` are absolute, and the command guidance lists each folder's label and absolute path with the scratch path ([paths in command programs](projects.md#paths-in-command-programs)). A path or label of a folder that was removed, moved or renamed refuses with `ROOT_NOT_ATTACHED` and lists the current folders ([root changes](projects.md#root-changes-during-a-session)). A worker's scratch is its own, so a worker returns findings in its result rather than as a scratch path.
 
 Recovery reads and structured queries of retained tool output use the session's spill byte bound (64 MiB by default), including decompression. Ordinary project files keep the 8 MiB read bound (`read`, `summarize`, and `diff`; `grep` searches the leading 8 MiB) and the 20 MiB `jq` input bound. Native edits (`edit`, `replace_lines`, `code_rewrite`, `jq_edit`, `write`, and `restore_version`) have a lower 4 MiB bound, the size that version history and pre-turn checkpoints retain in full: a file or open document above it, or new content that would exceed it, rejects with `EDIT_FILE_TOO_LARGE` before any review or write, so every state a native edit replaces stays restorable. Removal and replacement follow the same promise without the bound: `delete`, `move` onto an existing file, and a `copy`, redirect, or extracted entry overwriting a file above it set the old entry aside in lifecycle recovery first ([Files live](files-live.md)). `command` has no such bound. The host's resolved path classification selects the bound; a similarly named project directory cannot widen it. Line and output limits still bound the returned page. A single long JSON string can be recovered in bounded substrings with `jq`.
 
@@ -644,7 +646,7 @@ A file the person has open in the editor is its editor document, for the agent a
 | `read`, `diff` | Serve the draft. The receipt's `source.editor` carries the document revision and `dirty`; an unsaved draft is `recorded: false` with a note, because the ledger records saves, not keystrokes |
 | `grep`, `wc` | Search or count the unsaved text for open dirty files; `files_from_editor` and `in_editor` say how many were served that way |
 | `write`, `edit`, `replace_lines`, `code_rewrite`, `jq_edit`, `restore_version` | Compute against the draft, land in the document, and save through the person's own journaled save door, recorded as the agent's write. One save publishes every contribution the draft holds, the person's unsaved typing included, and the ledger records each contributor, so such a publication reads as mixed authorship rather than the agent's alone. `EDITOR_DOCUMENT_CHANGING` rejects a document that kept moving under the write. A document diverged from disk, or a publication that fails after acceptance, holds the edit unsaved in the document: the receipt says the file was not written and why, that the disk still holds its earlier bytes for commands and tests, and names the retained state |
-| `command`, `verify`, processes | See disk. An agent write saves, so the files it touched are current for them |
+| `command`, `verify`, processes | Read saved disk, including when an accepted write is still held unsaved in the document |
 
 A worker on its private branch never sees documents: its tree is a copy. The design and the Den side are in [files-live.md § The open document is the file](files-live.md#the-open-document-is-the-file).
 
@@ -865,7 +867,7 @@ Redirects under `redirects: safe` follow RFC 9110 method rewriting (303 becomes 
 
 Failures separate what a retry can fix from what it cannot. A bounded body, a refused redirect chain, and an unusable declaration are permanent (`internal/outboundhttp` typed faults) and come back with `retryable: false`; a dial, a reset, or a deadline stays retryable and names `timeout_ms` when the deadline was the cause. A transfer that stops mid-download is a transfer failure, not a failure of its sink.
 
-Requesting `command` does not automatically load `http_request`; the coordinator can request that native tool when needed. An exact `curl` shape may be parsed before execution; agent-visible recovery is `USE_HTTP_REQUEST_NATIVE` with validated native entries in `replacement_calls`, never parser examples. The parsed grammar covers one request or a `;` / `&&` sequence with `echo` separators and carries the runner envelope: `cwd` joins onto body, response, and socket paths; `loopback_connect` is carried; a loopback URL declares its own port unless `--unix-socket` makes the socket the destination; `timeout_ms` is carried only when exactly one produced call owns the deadline and the native schema can hold it. Cookie files become a jar named after the file, basic credentials become `auth`, form parts become `form`, and url-encoded data is encoded into the body. Insecure TLS, a `||` gate, an unsupported capability request, and any `--data-urlencode` or `-F` operand that reads a file into an encoded body have no native shape and stay on the command boundary.
+Requesting `command` does not automatically load `http_request`; `curl` in a program runs through the native HTTP owner, and the coordinator can request `http_request` by exact name when it needs the structured result.
 
 ## Web research sources
 
@@ -882,3 +884,18 @@ The registry publishes one immutable operation declaration with the existing sch
 Program, static node and dynamic execution identity are distinct. Loops allocate fresh execution ids, held approvals retain their exact execution and prepared input, and a new invocation allocates new ids. Actor, session, addressed scope, source unit/span and catalog digest are explicit. Source pins describe computation inputs. Delivery mappings describe exact source ranges represented in a response actually delivered; one cannot substitute for the other.
 
 Producer results separate ordinary status, typed terminal/host-stop facts, completeness and publication eligibility. Status one from complete grep/diff can be eligible; status zero with partial output cannot. Accepted document edits expose saved publication and publication errors separately. Progress, child effects and process aggregate settle independently. Workflow and grounding project remaining obligations from authoritative facts. [Record classification and retention](compatibility.md#portable-command-records) precede future persistence and wire producers.
+
+### Command schema, guidance, and floor cutover
+
+`command` is offered on the routine floor across coordinator surfaces and bundled profiles (`read_only` on read-only profiles and surfaces), replacing `read`, `grep`, `find`, `list_dir`, and `jq` on the floor while keeping `survey_repo`, `summarize`, `edit`, `replace_lines`, `code_rewrite`, and `jq_edit` loadable. Any catalog utility invoked as `CMD --help` prints its catalog help (`CommandSpecification.Help`) in-process without external execution or `COMMAND_OPTION_UNSUPPORTED`.
+
+| Surface / artifact | Cutover action |
+|--------------------|----------------|
+| `platform/tools/schemas/command.yaml` | Rewritten for ordinary bash programs (pipelines, loops, variables, functions, `$(...)`, here-documents, redirects, background `&` jobs), native GNU/BSD utilities, `CMD --help`, direct external toolchains, and real `capability_request` keys |
+| `platform/shared/partials/command-surface.md` | Rewritten from `argv host runner` (`COMMAND_NOT_ARGV`, no here-docs/`$()`) to portable command language v1 with `{{ command_roots_listing }}` slot |
+| `platform/shared/units/native-{read,grep,find,list-dir,jq}-tool.md` | Removed |
+| `USE_*_NATIVE` policy redirects & `tool-command-equivalence.yaml` | Removed (`USE_READ_NATIVE`, `USE_GREP_REGEX`, `USE_FIND_NOT_COMMAND`, `USE_LIST_DIR_NATIVE`, `USE_JQ_NATIVE`, `USE_STAT_NATIVE`, `USE_WC_NATIVE`, `USE_WRITE_NATIVE`, `USE_CHMOD_NATIVE`, `USE_CHOWN_NATIVE`, `USE_COPY_NATIVE`, `USE_DELETE_NATIVE`, `USE_MKDIR_NATIVE`, `USE_MOVE_NATIVE`, `USE_GIT_STATUS_NATIVE`, `USE_GIT_DIFF_NATIVE`, `USE_HTTP_REQUEST_NATIVE`, `USE_NATIVE_TOOL`); OAR rules route by `paintedwolf.operation` selector |
+| `platform/host/coordinator-surfaces.yaml` & `platform/tools/profiles/*.yaml` | `command` promoted to floor/sticky (`command_effects: [read_only]` on read-only surfaces/profiles); `read`, `grep`, `find`, `list_dir`, and `jq` removed from floors and demoted from sticky |
+| `platform/shared/units/{runner-operating-procedure,secure-by-default-read,native-edit-tool,native-summarize-tool,survey-first-pass}.md` | Updated to attach to and teach `command` (`cat`, `sed -n`, `grep -n`, `find`, `ls`, `jq`) instead of argv-only restrictions or routine floor tools |
+| `platform/shared/partials/{workspace-roots,coordinator-turn-recipe,multi-root-addressing,coordinator-synthesis-wrapup,coordinator-tool-discipline,coordinator-floor}.md` & `implement/shared/partials/implementer-scoped-file.md` | Updated to teach `command` for routine file reads, directory listings, and searches |
+| `platform/agents/prompts/{code-reviewer,coordinator-surface-build}.md`, `implement/agents/prompts/coordinator-mode-implement-routing.md`, `recon-pack/agents/{repo-researcher.yaml,prompts/path-explorer.md}`, and skills | Updated to reference `command` utilities instead of routine `read`/`grep`/`find`/`list_dir`/`jq` schemas |

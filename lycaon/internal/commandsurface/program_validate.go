@@ -196,7 +196,6 @@ func (c *programCompiler) validateSet(call *syntax.CallExpr) {
 			case 'e', 'u':
 			case 'o':
 				if i+1 >= len(args) {
-					c.unsupported(args[i], expected)
 					return
 				}
 				i++

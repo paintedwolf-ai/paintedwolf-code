@@ -78,6 +78,7 @@ func TestOfferedSchemaResolvesEarlierLoadingRejections(t *testing.T) {
 	}
 	deps := promptloop.StoreDeps(messages)
 	deps.Context.Tools, deps.Context.Policy, deps.Nudges.DoomLoop = tools.NewStubRegistry(), &recordingToolPolicy{}, guard
+	deps.Context.LoadedTools = workersLoaded
 	invoked := 0
 	testutil.FailErr(t, "register loaded tool", deps.Context.Tools.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 		invoked++

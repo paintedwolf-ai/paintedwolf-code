@@ -146,6 +146,13 @@ func (f *frame) simple(ctx context.Context, s commandsurface.Statement, c comman
 	if decl, ok := f.state.functions[name]; ok {
 		return signal{}, f.call(ctx, s, decl, fields, assigns)
 	}
+	if spec, native, err := ResolveCommand(fields); err == nil && native && spec.Name != "external" {
+		if bound, err := f.e.ports.Binder.Bind(spec, fields); err == nil && bound.Help {
+			return signal{}, f.inProcess(ctx, s, spec.Name, func(context.Context, toolcontract.OperationInvocation) (toolcontract.ProducerResult, error) {
+				return WriteCatalogHelp(spec, f.streams.Output)
+			})
+		}
+	}
 	switch name {
 	case "source":
 		return signal{}, f.source(ctx, s, fields)
@@ -173,6 +180,9 @@ func (f *frame) predicates() PredicateRuntime {
 	}
 	if runtime.Memory == nil && !runtime.LocalBoundsOnly {
 		runtime.Memory = f.e.ports.Memory
+	}
+	if runtime.Patterns == nil {
+		runtime.Patterns = NativePredicatePatterns{Memory: runtime.Memory, LocalBoundsOnly: runtime.LocalBoundsOnly}
 	}
 	return runtime
 }
@@ -238,6 +248,10 @@ func (f *frame) dispatch(ctx context.Context, s commandsurface.Statement, fields
 	var result toolcontract.ProducerResult
 	if native && spec.Name != "external" && gap == nil {
 		result, err = f.state.dispatch.Invoke(ctx, request, f.streams)
+		if syncErr := f.syncDirectory(ctx, spec.Name == "cd" && err == nil && result.Status == 0); syncErr != nil {
+			child.settle(result, errors.Join(err, syncErr))
+			return f.expansionRefusal(s.SyntaxLocation, syncErr)
+		}
 	} else {
 		if err := f.e.charge(f, s.SyntaxLocation, "concurrent_processes", 1); err != nil {
 			child.close()
@@ -372,6 +386,13 @@ func (f *frame) exportDeclaration(ctx context.Context, s commandsurface.Statemen
 	})
 	if prevented || err != nil {
 		return err
+	}
+	if len(assigns) == 0 && len(names) == 1 && names[0].name == "--help" {
+		if spec, native, err := ResolveCommand(Fields{{Value: "export"}, {Value: "--help"}}); err == nil && native {
+			return f.inProcess(ctx, s, spec.Name, func(context.Context, toolcontract.OperationInvocation) (toolcontract.ProducerResult, error) {
+				return WriteCatalogHelp(spec, f.streams.Output)
+			})
+		}
 	}
 	all := append(append([]assignment(nil), assigns...), names...)
 	for _, a := range all {

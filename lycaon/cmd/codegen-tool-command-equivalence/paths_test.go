@@ -24,7 +24,7 @@ func TestResolveModulePathsAllowlist(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolveModulePaths: %v", err)
 	}
-	for _, path := range []string{paths.equivalenceYAML, paths.generatedGo, paths.toolSchemasDir} {
+	for _, path := range []string{paths.languageDir} {
 		if _, err := os.Stat(path); err != nil {
 			t.Fatalf("expected tracked path %q: %v", path, err)
 		}
