@@ -156,11 +156,7 @@ pub fn restore_main_workspace(app: &AppHandle) {
     };
     #[cfg(target_os = "linux")]
     {
-        use gtk::prelude::*;
-        let _ = window.show();
-        if let Ok(native) = window.gtk_window() {
-            native.present();
-        }
+        let _ = crate::notifications::present_main_window(&window);
     }
     #[cfg(not(target_os = "linux"))]
     {

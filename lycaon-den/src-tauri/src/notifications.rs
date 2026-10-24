@@ -5,6 +5,8 @@ pub(crate) mod native;
 
 #[cfg(target_os = "linux")]
 mod linux;
+#[cfg(target_os = "linux")]
+pub(crate) use linux::present_main_window;
 
 use tauri::{AppHandle, Manager};
 
