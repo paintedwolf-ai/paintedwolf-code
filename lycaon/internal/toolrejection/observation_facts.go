@@ -194,6 +194,7 @@ var rejectCodeObservation = map[string]string{
 	"PAGE_NOT_FOUND":                            "not_found",
 	"PAGE_NOT_RUNNING":                          "not_running",
 	"PROGRESS_NESTED_LINE":                      "nested_line",
+	"PROGRESS_NO_OPEN_STEP":                     "no_open_step",
 	"PROGRESS_PENDING_AFTER_OPTIONAL":           "pending_after_optional",
 	"PROGRESS_TOO_MANY_LINES":                   "too_many_lines",
 	"PROJECT_HAS_NO_ROOTS":                      "has_no_roots",

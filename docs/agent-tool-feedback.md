@@ -329,7 +329,13 @@ Matched results explain how to recover their public records when no body is pres
 checklist write result, not gate admission. An identical write adds no revision
 or progress event and does not reset tool-repetition tracking. Rewording an
 all-terminal checklist retains the same repetition identity until intervening
-work changes the state. Pending rows permit implementation. A successful worker
+work changes the state. Pending rows permit implementation. Each user request
+starts its own checklist; a completed checklist from an earlier request remains in
+the transcript as `progress_complete` and does not cover the follow-up request.
+When the stored document has no checklist rows for the current request,
+`update_progress` requires at least one open `- [ ]` deliverable row before
+progress-gated tools may run. If no work remains for the follow-up turn, the
+coordinator continues without establishing a checklist. A successful worker
 finish can latch reconciliation before further dispatch or editing; an unchanged
 checklist does not clear that latch. Closeout recovery keeps unfinished rows
 pending and directs the coordinator to continue with tools. Completed work is
