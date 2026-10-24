@@ -116,6 +116,64 @@ class ProfileSetupTests(unittest.TestCase):
             desktop.assert_not_called()
             discovery.assert_not_called()
 
+    def test_first_time_tips_enabled_defaults_true_and_validates_slice(self):
+        tips = self.slices / owner.FIRST_TIME_TIPS
+        self.assertIs(owner.first_time_tips_enabled(None), True)
+        self.write(tips, {'key': 'firstTimeTips', 'value': {}})
+        self.assertIs(owner.first_time_tips_enabled(None), True)
+        self.write(tips, {'key': 'firstTimeTips', 'value': {'enabled': False, 'dismissed': ['files-ai-editor']}})
+        self.assertIs(owner.first_time_tips_enabled(None), False)
+        for bad in ({'key': 'other', 'value': {}}, {'key': 'firstTimeTips', 'value': {'other': True}},
+                    {'key': 'firstTimeTips', 'value': {'enabled': 1}}, {'key': 'firstTimeTips', 'value': []}):
+            self.write(tips, bad)
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                owner.first_time_tips_enabled(None)
+        tips.unlink()
+        self.slices.rmdir()
+        self.assertIs(owner.first_time_tips_enabled(None), True)
+
+    def test_renderer_session_requires_matching_active_project_idle_session_and_armed_question(self):
+        project_id = '10000000-0000-4000-8000-000000000001'
+        session_id = '20000000-0000-4000-8000-000000000002'
+        root = str(self.directory / 'workspace')
+        active_file = self.slices / owner.LAST_ACTIVE_PROJECT
+        snap_file = self.slices / owner.LAST_SESSION_SNAPSHOT
+        self.assertIsNone(owner.renderer_session(None, root, project_id, session_id))
+        self.write(active_file, {'key': 'lastActiveProjectId', 'value': project_id})
+        self.assertIsNone(owner.renderer_session(None, root, project_id, session_id))
+        valid_snap = {
+            'scope': {'projectId': project_id, 'sessionId': session_id},
+            'session': {'id': session_id, 'project_id': project_id, 'workspace_path': root, 'status': 'idle'},
+            'activeWorkflowRun': {'project_id': project_id, 'session_id': session_id,
+                                  'ui': {'request': {'question': 'What would you like to work on?'}}},
+        }
+        self.write(snap_file, {'key': 'lastSessionSnapshot', 'value': valid_snap})
+        observed = owner.renderer_session(None, root, project_id, session_id)
+        self.assertEqual(observed, {
+            'observer': 'owned-app-state-JSON', 'project_id': project_id, 'session_id': session_id,
+            'status': 'idle', 'workspace_path': root, 'composer_question': 'What would you like to work on?',
+            'last_active_project_sha256': hashlib.sha256(active_file.read_bytes()).hexdigest(),
+            'last_session_snapshot_sha256': hashlib.sha256(snap_file.read_bytes()).hexdigest(),
+        })
+        for pending in ({**valid_snap, 'scope': {'projectId': project_id, 'sessionId': 'other'}},
+                        {**valid_snap, 'session': {**valid_snap['session'], 'status': 'preparing'}},
+                        {**valid_snap, 'activeWorkflowRun': None},
+                        {**valid_snap, 'activeWorkflowRun': {**valid_snap['activeWorkflowRun'], 'ui': {'request': {'question': 'Other'}}}}):
+            self.write(snap_file, {'key': 'lastSessionSnapshot', 'value': pending})
+            with self.subTest(pending=pending):
+                self.assertIsNone(owner.renderer_session(None, root, project_id, session_id))
+        for invalid in ([], {**valid_snap, 'scope': {'projectId': project_id}},
+                        {**valid_snap, 'session': {**valid_snap['session'], 'workspace_path': '/foreign'}},
+                        {**valid_snap, 'session': {**valid_snap['session'], 'status': 'error'}},
+                        {**valid_snap, 'activeWorkflowRun': {**valid_snap['activeWorkflowRun'], 'session_id': 'other'}}):
+            self.write(snap_file, {'key': 'lastSessionSnapshot', 'value': invalid})
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                owner.renderer_session(None, root, project_id, session_id)
+        for bad_active in (123, 'x' * 129):
+            self.write(active_file, {'key': 'lastActiveProjectId', 'value': bad_active})
+            with self.subTest(bad_active=bad_active), self.assertRaises(ValueError):
+                owner.renderer_session(None, root, project_id, session_id)
+
 
 class FixtureSelectionTests(unittest.TestCase):
     def test_single_primary_root_and_persisted_default_are_independent_authorities(self):
@@ -161,14 +219,21 @@ class ActiveSessionTests(unittest.TestCase):
     def test_active_session_requires_exact_project_provider_and_phase_facts(self):
         session = {'id': 'session', 'status': 'busy', 'provider_id': None, 'model': None,
                    'parent_session_id': None}
+        rendered = {'observer': 'owned-app-state-JSON', 'session_id': 'session', 'status': 'idle'}
         with patch.object(owner, 'project_for_owned_root', return_value={'project_id': 'project'}), patch.object(
                 owner, 'fixture_selection', return_value={'model_policy_sha256': 'a' * 64}), patch.object(
+                owner, 'renderer_session', return_value=rendered) as render_obs, patch.object(
                 owner, 'sessions_for_project', return_value=[session]) as observed:
             active = owner.require_active(None, None, 'fixture', MODEL)
             self.assertEqual(active['id'], 'session')
+            self.assertNotIn('renderer_session', active)
             self.assertIsNone(owner.active_session(None, None, 'fixture', MODEL, status='idle'))
             observed.return_value = [{**session, 'status': 'idle'}]
-            self.assertEqual(owner.active_session(None, None, 'fixture', MODEL, status='idle')['id'], 'session')
+            idle_obs = owner.active_session(None, None, 'fixture', MODEL, status='idle')
+            self.assertEqual(idle_obs['id'], 'session')
+            self.assertEqual(idle_obs['renderer_session'], rendered)
+            render_obs.return_value = None
+            self.assertIsNone(owner.active_session(None, None, 'fixture', MODEL, status='idle'))
             with self.assertRaises(owner.CaseUnavailable):
                 owner.require_active(None, None, 'fixture', MODEL, active)
             with self.assertRaisesRegex(ValueError, 'idle or busy'):
