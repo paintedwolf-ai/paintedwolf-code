@@ -44,6 +44,7 @@ func AdoptActiveRun(_ context.Context, store RunScopedStore, sessionID, workflow
 
 // EnsureBootstrap refreshes Goal + Progress on a user-intent turn when the bound
 // run changes, or when the same long-lived run has a fully terminal checklist.
+// Each request starts its own checklist; the completed one stays in the transcript as progress_complete.
 // An unbound doc is adopted without wiping seeded content.
 func EnsureBootstrap(ctx context.Context, store RunScopedStore, sessionID, workflowRunID, goal string) (refreshed bool) {
 	if store == nil {

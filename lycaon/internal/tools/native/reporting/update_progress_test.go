@@ -35,6 +35,32 @@ func TestUpdateProgress_rejectsPendingAfterOptional(t *testing.T) {
 	)
 }
 
+func TestUpdateProgress_rejectsNoOpenStepInitial(t *testing.T) {
+	assertUpdateProgressReject(t,
+		"PROGRESS_NO_OPEN_STEP",
+		"## Progress\n- [x] already finished\n",
+	)
+}
+
+func TestUpdateProgress_acceptsAllTerminalWhenPrevHasRows(t *testing.T) {
+	store := progress.NewMemoryStore()
+	reg := tools.NewDefaultRegistry()
+	scope := func(_ context.Context, id string) string { return id }
+	testutil.FailErr(t, "register update_progress", native.RegisterUpdateProgressTool(reg, store, scope))
+
+	store.Set("sess-1", "## Progress\n- [ ] open step\n")
+	exec := toolexecution.NewExecutor(nil, reg, "coordinator")
+	_, err := exec.Invoke(context.Background(), "update_progress", map[string]any{
+		"content": "## Progress\n- [x] open step\n",
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "sess-1"},
+	})
+	testutil.FailErr(t, "update_progress all terminal with prior rows", err)
+	if !strings.Contains(store.Get(t.Context(), "sess-1"), "- [x] open step") {
+		t.Fatal("expected updated plan to be stored")
+	}
+}
+
 func TestUpdateProgress_acceptsOverlongLabel(t *testing.T) {
 	store := progress.NewMemoryStore()
 	reg := tools.NewDefaultRegistry()

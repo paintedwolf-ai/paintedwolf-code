@@ -26,10 +26,10 @@ func ProgressHandler(store progress.Store, scopeKey ProgressScopeKey) tools.Tool
 		if content == "" {
 			return "", fmt.Errorf("content is required")
 		}
-		if code, data, ok := progress.ValidateAuthorProgress(content); !ok {
+		prev := store.Get(ctx, root)
+		if code, data, ok := progress.ValidateAuthorProgress(prev, content); !ok {
 			return "", &toolrejection.ToolReject{Code: code, Data: data}
 		}
-		prev := store.Get(ctx, root)
 		// Identical content adds no revision or transcript row.
 		if strings.TrimSpace(prev) == content {
 			raw, _ := surveyjson.Marshal(map[string]any{

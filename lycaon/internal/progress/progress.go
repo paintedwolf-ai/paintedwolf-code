@@ -87,7 +87,7 @@ func visibleChecklist(content string) []api.ProgressStep {
 	return out
 }
 
-// ProgressMissing reports whether the coordinator has not yet authored any checklist step.
+// ProgressMissing reports whether the coordinator has not yet authored any checklist step for the current request.
 func ProgressMissing(content string) bool {
 	return len(parseChecklist(content)) == 0
 }

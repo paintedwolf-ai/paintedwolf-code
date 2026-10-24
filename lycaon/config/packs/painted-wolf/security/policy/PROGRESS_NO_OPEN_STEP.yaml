@@ -1,0 +1,33 @@
+oar: '1.0'
+id: PROGRESS_NO_OPEN_STEP
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - update_progress
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+when: paintedwolf.rejection_code == "PROGRESS_NO_OPEN_STEP"
+effect: block
+copy:
+  what: Initial progress checklist contains no open `- [ ]` steps.
+  cause: Starting a progress checklist requires at least one open `- [ ]` deliverable for the current request.
+  why: A checklist with zero open steps tracks no active work.
+  fix: >-
+    Include at least one open `- [ ]` row for the deliverables planned for this request.
+    If no work remains for this request, continue without a checklist (no closeout gate requires one unless gated tools were attempted).
+  instead: Branch on Code; include at least one open `- [ ]` step or continue without update_progress if no work remains
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:update_progress
+x-paintedwolf-message: Progress checklist must start with at least one open step
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    tool: update_progress
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: PROGRESS_NO_OPEN_STEP'
+  - 'If no work remains for this request, continue without a checklist'
