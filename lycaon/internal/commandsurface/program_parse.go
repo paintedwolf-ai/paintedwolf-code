@@ -136,7 +136,16 @@ func parseProgram(ctx context.Context, source []byte, options ParseOptions, memo
 	if err != nil {
 		return nil, parserDiagnostic(err, len(source))
 	}
-	c := programCompiler{catalog: catalog, source: source, pool: pool}
+	sourceHash := sha256.Sum256(source)
+	nodePrefix := ""
+	if options.Sourced {
+		name := sourceName
+		if name == "" {
+			name = "sourced"
+		}
+		nodePrefix = fmt.Sprintf("%s:%x:", name, sourceHash[:4])
+	}
+	c := programCompiler{catalog: catalog, source: source, pool: pool, nodePrefix: nodePrefix}
 	c.validate(file)
 	if c.err != nil {
 		return nil, c.err
@@ -174,7 +183,6 @@ func parseProgram(ctx context.Context, source []byte, options ParseOptions, memo
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	sourceHash := sha256.Sum256(source)
 	digest := toolcontract.LanguageCatalogDigest()
 	retained = true
 	return &ParsedProgram{source: bytes.Clone(source), stateBytes: hostBytes, releaseState: releaseState, plan: ProgramSnapshot{Version: toolcontract.LanguageVersion, CatalogDigest: digest, SourceDigest: hex.EncodeToString(sourceHash[:]), SourceName: sourceName, Statements: statements}}, nil
@@ -229,6 +237,7 @@ func parserPosition(pos syntax.Pos, length int) toolcontract.SourceSpan {
 type programCompiler struct {
 	catalog           toolcontract.LanguageCatalog
 	source            []byte
+	nodePrefix        string
 	sequence          int
 	literalContext    map[*syntax.Word]bool
 	testWords         map[*syntax.Word]bool
@@ -245,7 +254,7 @@ type programCompiler struct {
 
 func (c *programCompiler) location(n syntax.Node) SyntaxLocation {
 	c.sequence++
-	return SyntaxLocation{ID: NodeID(fmt.Sprintf("n%d", c.sequence)), Span: c.span(n)}
+	return SyntaxLocation{ID: NodeID(fmt.Sprintf("%sn%d", c.nodePrefix, c.sequence)), Span: c.span(n)}
 }
 func (c *programCompiler) span(n syntax.Node) toolcontract.SourceSpan {
 	if c.spanOverride != nil {

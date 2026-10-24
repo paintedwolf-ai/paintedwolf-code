@@ -85,7 +85,13 @@ func (f *frame) source(ctx context.Context, s commandsurface.Statement, fields F
 		return err
 	}
 	defer run.close()
-	parsed, captured, err := LoadSourceUnit(ctx, f.e.ports.Sources, run.inv, operands[0].Value, f.e.ports.Memory)
+	sources := f.e.ports.Sources
+	if inputs, _ := f.redirections(); inputs != nil {
+		if sc, ok := inputs.(SourceCapture); ok {
+			sources = sc
+		}
+	}
+	parsed, captured, err := LoadSourceUnit(ctx, sources, run.inv, operands[0].Value, f.e.ports.Memory)
 	if captured.Pin.SourceID != "" {
 		f.e.recordSource(run.inv.Identity.ExecutionID, captured.Pin)
 	}
@@ -104,6 +110,12 @@ func (f *frame) source(ctx context.Context, s commandsurface.Statement, fields F
 		var refusal *EvaluationRefusal
 		errors.As(err, &refusal)
 		return f.refuse(refusal.Node, refusal.Code, refusal.Expected, nil)
+	}
+	if registrar, ok := f.e.ports.Executions.(SourceUnitRegistrar); ok {
+		if err := registrar.RegisterSourceUnit(ctx, run.inv, captured, lease.Plan); err != nil {
+			run.settle(ownerResult(err), err)
+			return err
+		}
 	}
 	g := *f
 	g.parent = run.inv

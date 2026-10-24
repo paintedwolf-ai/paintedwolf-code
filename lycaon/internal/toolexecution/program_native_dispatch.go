@@ -107,7 +107,19 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	}
 	values := effect.Arguments
 	if effect.Argv != nil {
-		values = effect.Argv.Arguments()
+		argv := effect.Argv.Arguments()
+		if len(values) == 0 {
+			values = argv
+		} else {
+			merged := make(map[string]any, len(values)+len(argv))
+			for k, v := range values {
+				merged[k] = v
+			}
+			for k, v := range argv {
+				merged[k] = v
+			}
+			values = merged
+		}
 	}
 	arguments, err := prepareNativeArguments(ctx, admission, values)
 	if err != nil {

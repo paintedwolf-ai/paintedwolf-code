@@ -285,7 +285,7 @@ func (r *grepRun) patternFile(field commandprogram.Field) ([]byte, error) {
 	}
 	content, err := r.inv.capture(bound)
 	if reason, ok := ordinary(err); ok {
-		r.inv.fail(false, "%s: %s", spelling, reason)
+		r.inv.fail(false, "%s: %s", field.Value, reason)
 		return nil, errUsage
 	}
 	return content, err

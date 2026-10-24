@@ -482,6 +482,21 @@ def corpus_cases() -> list[dict[str, Any]]:
             "program": r"""export A=1 B=2; printenv A; env -u A printenv B; env -i CLEAN=yes printenv CLEAN; command -v cat >/dev/null && command -V cat >/dev/null && type -t cat >/dev/null && type -a cat >/dev/null && which cat >/dev/null && sleep 0.01 && test -n "$(pwd)" && test -n "$(uname -s)" && test -n "$(uname -m)" && test -n "$(whoami)" && test -n "$(id -u)" && test -n "$(id -g)" && test -n "$(hostname)" && test -n "$(date -u)" && printf 'env-host-ok\n'""",
             "tracked_files": [],
         },
+        {
+            "id": "pure-text-utilities-extended",
+            "category": "pure",
+            "description": "seq, tac, rev, paste, comm, join, fold, column, yes, and nproc",
+            "commands": ["seq", "tac", "rev", "paste", "comm", "join", "fold", "column", "yes", "nproc"],
+            "forms": [
+                "seq:-f", "seq:-s", "seq:-w", "tac:-s", "paste:-d", "paste:-s",
+                "comm:-1", "comm:-2", "comm:-3", "join:-1", "join:-2", "join:-j",
+                "join:-t", "join:-a", "join:-v", "join:-e", "join:-o",
+                "fold:-w", "fold:-s", "fold:-b", "column:-t", "column:-s",
+                "column:-o", "column:-c", "column:-x", "nproc:--all", "nproc:--ignore",
+            ],
+            "program": r"""seq 1 3 | tac; printf 'abc\n' | rev; paste sub/a.txt sub/b.txt; comm -12 sub/a.txt sub/b.txt; join sub/a.txt sub/b.txt; printf '123456\n' | fold -w 3; printf 'a b\nc d\n' | column -t; yes ok | head -n 2; test "$(nproc)" -ge 1 && printf 'nproc-ok\n'""",
+            "tracked_files": [],
+        },
         # --- Path utilities (paths.json) ---
         {
             "id": "paths-cd-basename-dirname-realpath-readlink-source",
@@ -601,6 +616,7 @@ def corpus_cases() -> list[dict[str, Any]]:
                 "git checkout", "git switch", "git merge", "git stash",
                 "git reset", "git clean", "git worktree", "git fetch",
                 "git pull", "git push", "git ls-remote", "git",
+                "git ls-files", "git cherry-pick", "git revert", "git rebase", "git clone",
             ],
             "forms": [
                 "git:-C", "git:-c",

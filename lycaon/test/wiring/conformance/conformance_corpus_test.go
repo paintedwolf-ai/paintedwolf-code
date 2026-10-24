@@ -24,6 +24,15 @@ func strPtr(s string) *string { return &s }
 // language or built-in contracts that do not exist in POSIX/GNU/BSD bash.
 var v1SpecificCases = map[string]v1SpecificExpectation{
 	"inspect-domain-builtins": {ExpectedStatus: 0, Validate: verifyInspectDomainOutputs},
+	"mutation-domain-builtins": {
+		ExpectedStatus: 0,
+		ExpectedStdout: "",
+		ExpectedFiles: map[string]*string{
+			"sub/a.txt":   strPtr("EDITED\nsecond\n"),
+			"sub/b.txt":   strPtr("REPLACED\nthird\n"),
+			"config.json": strPtr("{\"enabled\":true,\"version\":1,\"items\":[\"a\",\"b\"]}\n"),
+		},
+	},
 	"query-jq-options-and-transform": {
 		ExpectedStatus: 0,
 		ExpectedStdout: "a\nb\n{\"greeting\":7}\n5\njq_e=1\n{\"enabled\":true,\"version\":1,\"items\":[\"a\",\"b\"]}\n",

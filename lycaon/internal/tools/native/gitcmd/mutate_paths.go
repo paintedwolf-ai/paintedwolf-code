@@ -52,9 +52,11 @@ func resolveCommandRepo(ctx context.Context, p Prepared, stderr io.Writer, write
 		_, _ = io.WriteString(stderr, "fatal: not a git repository (or any of the parent directories): .git\n")
 		return "", gitrepo.Repo{}, 128, nil
 	}
-	if _, err := p.paths.Bind(ctx, repo.Root, false); err != nil {
+	boundRepo, err := p.paths.Bind(ctx, repo.Root, false)
+	if err != nil {
 		return "", gitrepo.Repo{}, 0, err
 	}
+	repo.Root = boundRepo.Resolved.Abs
 	return dir, repo, 0, nil
 }
 

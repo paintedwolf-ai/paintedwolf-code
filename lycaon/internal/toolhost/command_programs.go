@@ -90,6 +90,7 @@ func (t programOwnerTools) compose(services ProgramServices) (func(tools.ToolCon
 			Natives:     map[string]command.NativeOperation{},
 			Publication: &mutation.Publication{Owners: mutationOwners, Program: program, Tools: tc},
 			Input:       &mutation.Publication{Owners: mutationOwners, Program: program, Tools: tc},
+			Sources:     &mutation.Publication{Owners: mutationOwners, Program: program, Tools: tc},
 			AdmitLaunch: barrier.AdmitDependentLaunch,
 			Builtins: func(ports command.BuiltinPorts) (map[string]commandprogram.OperationDispatcher, func(), error) {
 				spills, err := textutil.NewSessionSpills(ports.ToolContext, ports.ProgramID)
