@@ -57,7 +57,7 @@ components:
       required: [code, limit_id, maximum, observed]
       properties:
         code: {type: string, enum: [COMMAND_LIMIT_EXCEEDED]}
-        limit_id: {type: string}
+        limit_id: {type: string, pattern: '^[A-Za-z0-9_.:-]+$'}
         maximum: {type: integer, format: int64, minimum: 1}
         observed: {type: integer, format: int64, minimum: 1}
     CommandExecutionReceipt:

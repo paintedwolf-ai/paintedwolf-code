@@ -27308,6 +27308,7 @@ components:
             - COMMAND_LIMIT_EXCEEDED
         limit_id:
           type: string
+          pattern: ^[A-Za-z0-9_.:-]+$
         maximum:
           type: integer
           format: int64
