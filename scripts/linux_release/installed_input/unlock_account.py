@@ -180,16 +180,42 @@ def disable_account(account: dict, *, vm_id: str | None = None, terminate_sessio
             'credential_state': 'locked', 'sessions_terminated': bool(terminate_sessions)}
 
 
+def _verified_checkout_root() -> Path:
+    module_path = Path(__file__).resolve()
+    checkout = module_path.parents[3]
+    info = checkout.lstat()
+    if (not stat.S_ISDIR(info.st_mode) or info.st_uid not in {0, os.getuid()}
+            or info.st_mode & 0o022 or checkout.resolve() != checkout
+            or (checkout / 'scripts/linux_release/installed_input/unlock_account.py').resolve() != module_path):
+        raise ValueError('dedicated QA account helper checkout root failed physical verification')
+    return checkout
+
+
+def helper_python_arguments(action: str, account: dict, *, vm_id: str | None = None,
+                            terminate_sessions: bool = False) -> list[str]:
+    if action not in {'prepare', 'disable'}:
+        raise ValueError('dedicated QA account helper requires a closed action')
+    validate_account_shape(account)
+    checkout = _verified_checkout_root()
+    python_exe = Path(sys.executable).resolve()
+    arguments = [
+        str(python_exe), '-I', '-c',
+        'import sys;sys.path.insert(0,sys.argv.pop(1));'
+        'from scripts.linux_release.installed_input.unlock_account import main;main()',
+        str(checkout), action, '--account', protocol.canonical(account).decode('ascii').strip()]
+    if vm_id is not None:
+        arguments.extend(['--vm-id', vm_id])
+    if terminate_sessions:
+        arguments.append('--terminate-sessions')
+    return arguments
+
+
 def run_privileged_prepare(account: dict, secret_raw: bytes | bytearray, *, vm_id: str | None = None) -> dict:
     validate_account_shape(account)
     unlock_wire.secret(secret_raw)
     frame = bytearray(unlock_wire.secret_frame(secret_raw))
     try:
-        arguments = ['/usr/bin/sudo', '-n', sys.executable, '-I', '-m',
-                     'scripts.linux_release.installed_input.unlock_account', 'prepare',
-                     '--account', protocol.canonical(account).decode('ascii').strip()]
-        if vm_id is not None:
-            arguments.extend(['--vm-id', vm_id])
+        arguments = ['/usr/bin/sudo', '-n', *helper_python_arguments('prepare', account, vm_id=vm_id)]
         returncode, stdout, _ = native_command.command(arguments, timeout=15, limit=4096, input_bytes=frame)
     finally:
         frame[:] = b'\0' * len(frame)
@@ -203,14 +229,8 @@ def run_privileged_prepare(account: dict, secret_raw: bytes | bytearray, *, vm_i
 
 def run_privileged_disable(account: dict, *, vm_id: str | None = None,
                            terminate_sessions: bool = False) -> dict:
-    validate_account_shape(account)
-    arguments = ['/usr/bin/sudo', '-n', sys.executable, '-I', '-m',
-                 'scripts.linux_release.installed_input.unlock_account', 'disable',
-                 '--account', protocol.canonical(account).decode('ascii').strip()]
-    if vm_id is not None:
-        arguments.extend(['--vm-id', vm_id])
-    if terminate_sessions:
-        arguments.append('--terminate-sessions')
+    arguments = ['/usr/bin/sudo', '-n', *helper_python_arguments(
+        'disable', account, vm_id=vm_id, terminate_sessions=terminate_sessions)]
     returncode, stdout, _ = native_command.command(arguments, timeout=15, limit=4096)
     if returncode != 0:
         raise CaseUnavailable('native-unlock-account-disable-failed')

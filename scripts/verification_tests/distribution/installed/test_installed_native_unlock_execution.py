@@ -258,6 +258,17 @@ class UnlockAccountAndBridgeTests(unittest.TestCase):
                     'credential_state': 'locked', 'sessions_terminated': True})
                 self.assertNotIn('hasheddigestvalue', repr(disabled))
 
+    def test_privileged_helper_isolated_python_command_resolves_checkout_module_in_real_subprocess(self):
+        from linux_release.installed_cases import native_command
+        from linux_release.installed_input import unlock_account
+        args = unlock_account.helper_python_arguments('disable', ACCOUNT, vm_id='owned', terminate_sessions=True)
+        self.assertEqual(args[1:3], ['-I', '-c'])
+        rc, stdout, stderr = native_command.command(args, timeout=10, limit=4096)
+        self.assertNotEqual(rc, 0)
+        self.assertEqual(stdout, b'')
+        self.assertNotIn(b'ModuleNotFoundError', stderr)
+        self.assertIn(b'dedicated QA account custody requires root execution', stderr)
+
     def test_controller_bridge_and_verify_deliveries_bracket_session_lock_with_prepare_and_unlock(self):
         import json
         from pathlib import Path
