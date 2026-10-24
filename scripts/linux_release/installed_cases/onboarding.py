@@ -42,6 +42,8 @@ def controls(window, api, deadline=None, ready=None):
             raise CaseUnavailable('normal native vault inventory deadline exceeded')
         node, depth = pending.pop()
         visited += 1
+        if node is None:
+            raise _InventoryChanged(visited, depth)
         children = node.childCount
         if type(children) is not int or not -1 <= children <= 1024 or visited > 4096 or depth > 64:
             raise _InventoryBound(visited, depth, children if type(children) is int else None)

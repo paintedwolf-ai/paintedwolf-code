@@ -11,7 +11,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from linux_release.installed_cases.app import process_identity
-from linux_release.installed_input import password_endpoint, password_exchange, password_pipe, password_socket
+from linux_release.installed_input import password_endpoint, password_exchange, private_pipe, password_socket
 from verification_tests.distribution.installed import test_installed_password_actor_execution as actor_tests
 
 
@@ -35,7 +35,7 @@ class PasswordTransportTests(unittest.TestCase):
                 os.set_blocking(stream.fileno(), False)
                 self.addCleanup(stream.close)
             selector.register(process.stdout, selectors.EVENT_READ)
-            result.append(password_pipe.Pipe(process, selector, deadline))
+            result.append(private_pipe.Pipe(process, selector, deadline))
         return result
 
     def exercise(self, changed=False):
@@ -134,4 +134,4 @@ class PasswordTransportTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 password_endpoint.relay(mailbox, self.pending, self.pending['actor'], pipe)
         connect.assert_not_called()
-        pipe.send_fixture_value.assert_not_called()
+        pipe.send_frame.assert_not_called()
