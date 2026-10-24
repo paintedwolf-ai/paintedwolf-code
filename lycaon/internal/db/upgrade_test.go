@@ -84,11 +84,16 @@ func TestUpgradeRequiresRecoveryBeforeAnyMutation(t *testing.T) {
 			before, err := os.ReadFile(path)
 			testutil.FailErr(t, "read initial bytes", err)
 			hooks := UpgradeHooks{}
+			captureError := errors.New("recovery capture unavailable")
 			if captureFails {
-				hooks.Before = func(context.Context, *sql.DB, migrations.Plan) error { return errors.New("disk full") }
+				hooks.Before = func(context.Context, *sql.DB, migrations.Plan) error { return captureError }
 			}
-			if err := upgradeExistingUsing(t.Context(), path, hooks, false, registry); !errors.Is(err, ErrStoreIncompatible) {
-				t.Fatalf("upgrade error = %v, want recoverable refusal", err)
+			want := ErrStoreIncompatible
+			if captureFails {
+				want = captureError
+			}
+			if err := upgradeExistingUsing(t.Context(), path, hooks, false, registry); !errors.Is(err, want) {
+				t.Fatalf("upgrade error = %v, want %v", err, want)
 			}
 			after, err := os.ReadFile(path)
 			testutil.FailErr(t, "read refused bytes", err)
@@ -188,5 +193,65 @@ func TestUpgradeRefusesAlteredAppliedMigration(t *testing.T) {
 	testutil.FailErr(t, "close altered ledger", w.Close())
 	if err := upgradeExistingUsing(t.Context(), path, UpgradeHooks{}, true, registry); !errors.Is(err, ErrStoreIncompatible) {
 		t.Fatalf("altered ledger error = %v", err)
+	}
+}
+
+func TestUpgradeRefusesRecordedDamageButAllowsPendingAudit(t *testing.T) {
+	for _, value := range []string{"confirmed damage", "integrity audit pending"} {
+		t.Run(value, func(t *testing.T) {
+			path, registry, plan := upgradeFixture(t)
+			writer, err := openWriter(t.Context(), path, StoreOptions{})
+			testutil.FailErr(t, "open audit fixture", err)
+			_, err = writer.Exec(`INSERT INTO store_meta(key, value) VALUES(?,?)`, integrityAuditFailedMetaKey, value)
+			testutil.FailErr(t, "record audit state", err)
+			testutil.FailErr(t, "close audit fixture", writer.Close())
+			err = upgradeExistingUsing(t.Context(), path, UpgradeHooks{}, true, registry)
+			if value == "integrity audit pending" {
+				testutil.FailErr(t, "upgrade pending audit", err)
+				return
+			}
+			var failure *StoreIncompatibleError
+			if !errors.As(err, &failure) || failure.Reason != RecoveryReasonIntegrityFailed {
+				t.Fatalf("recorded damage error = %v", err)
+			}
+			reader, err := openReader(t.Context(), path)
+			testutil.FailErr(t, "read refused source", err)
+			defer func() { _ = reader.Close() }()
+			actual, err := inspectSchema(t.Context(), reader)
+			testutil.FailErr(t, "inspect refused source", err)
+			if actual != plan.Source {
+				t.Fatal("recorded damage was migrated")
+			}
+		})
+	}
+}
+
+func TestUpgradeClassifiesSQLiteDamageDuringMigration(t *testing.T) {
+	path, _, plan := upgradeFixture(t)
+	damagedPath := filepath.Join(t.TempDir(), "damaged.db")
+	testutil.FailErr(t, "seed invalid SQLite header", os.WriteFile(damagedPath, []byte("this is not a SQLite database and cannot be read"), 0600))
+	source := []byte("attach damaged database")
+	sum := sha256.Sum256(source)
+	target := migrations.Baseline{Revision: plan.Source.Revision + 1, Shape: plan.Source.Shape}
+	registry, err := migrations.New(target, []migrations.Baseline{plan.Source}, []migrations.Step{{
+		ID: "damaged-source", Source: source, Checksum: hex.EncodeToString(sum[:]), From: plan.Source, To: target,
+		Apply: func(ctx context.Context, tx *sql.Tx) error {
+			_, err := tx.ExecContext(ctx, `ATTACH DATABASE ? AS damaged`, damagedPath)
+			return err
+		},
+	}})
+	testutil.FailErr(t, "register failing migration", err)
+	err = upgradeExistingUsing(t.Context(), path, UpgradeHooks{}, true, registry)
+	var failure *StoreIncompatibleError
+	if !errors.As(err, &failure) || failure.Reason != RecoveryReasonIntegrityFailed {
+		t.Fatalf("SQLite damage was not classified as integrity failure: %v", err)
+	}
+	reader, err := openReader(t.Context(), path)
+	testutil.FailErr(t, "open rolled back source", err)
+	defer func() { _ = reader.Close() }()
+	actual, err := inspectSchema(t.Context(), reader)
+	testutil.FailErr(t, "inspect rolled back source", err)
+	if actual != plan.Source {
+		t.Fatal("failed migration changed source schema")
 	}
 }

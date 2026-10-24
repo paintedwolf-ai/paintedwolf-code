@@ -2,14 +2,16 @@
   "category": "test_directories",
   "artifact": "lycaon/internal/db",
   "kind": "test_suite",
-  "workstream": "database-integrity",
+  "workstream": "store-health",
   "disposition": "retain",
-  "reason": "Database tests exercise private fresh-schema, migration, transaction, and recovery seams through actual stores. The expression-index audit belongs with those contracts; moving it to an external package would obscure the schema fixture or broaden production visibility. Retain the current test membership and require renewed review for any membership growth or replacement.",
-  "reviewed_commit": "be8c82f32a7764e8b58a56a72420046e184b4510",
-  "ceiling": 40,
+  "reason": "Retain the 47-file private database suite. Publication crash and journal fixtures cover the same pre-open authority as retained-copy and error-classification tests. Exchange removes empty-occupant behavior without adding a test subsystem. Focused process-exit, WAL preservation, copy SQLITE_FULL, and seal-connection operational-failure contracts passed; filesystem exchange identity contracts stay with fseffect. The sealed-file sync boundary now preserves injected ENOSPC and unchanged sealed contents; filesystem exchange tests independently cover either directory sync failing while both exchanged files remain identifiable.",
+  "reviewed_commit": "9eda632f64d4f1a4728977973852653795bddada",
+  "ceiling": 47,
   "boundaries": {
-    "lycaon/internal/db/schema_integrity_test.go": "40c3f6ae2cd2be3bd8b16dd852636611406d18ed9f737912351307f0b6169dbe",
-    "lycaon/internal/db/schema_index_integrity_test.go": "fa12ca9706074beda8b7bbd08726d68b2b9eb65bd03525fe58e9b4d52f742281"
+    "lycaon/internal/db/rebuild_equivalence_test.go": "ad40b1e4101ac05338bf3b87ca593ae434a7ead5ceca01169859ec0642ac198e",
+    "lycaon/internal/db/rebuild_crash_test.go": "fc637d9935806c84c8fc8166211ab9049cdaf945a89cbad920082cdb9609dfab",
+    "lycaon/internal/db/rebuild_errors_test.go": "068ee8d208bd97d283e73e0afb5793f33d88767744451e3f01844805eb282765",
+    "lycaon/internal/db/source_manifest_layout_upgrade_test.go": "e93ecffbb82a3d846c944650053ac500bb1ca65777258abe36d08eabbb06ad85"
   },
-  "reviewed_shape": "301d2e62e2c1f64581faab0fb2a8a5508dd7120fb93e59f1608f9769613389a3"
+  "reviewed_shape": "354442ef4f0bb0f17da9348cef8afa848fd14d0ce61e8d767d44a9e31f6af132"
 }

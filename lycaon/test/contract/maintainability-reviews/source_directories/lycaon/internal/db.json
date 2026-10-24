@@ -1,0 +1,16 @@
+{
+  "category": "source_directories",
+  "artifact": "lycaon/internal/db",
+  "kind": "module",
+  "workstream": "store-health",
+  "disposition": "retain",
+  "reason": "Retain the 29-file database lifecycle as one authority. Atomic exchange removes the empty-occupant workaround; platform syscalls belong to fseffect while journal identities, retained-copy equivalence, and restart decisions remain with db. Committed-WAL preservation, process interruption, older-build writes before exchange, and deterministic allocation failure contracts support this boundary. The full production-copy migration also preserved all 159 retained roots. Empty-file exchange preflight stays beside beginRebuild, retaining the same 29-file lifecycle. Focused tests cover unsupported flags, cleanup, installed restart retirement, and refusal to seal an open WAL connection.",
+  "reviewed_commit": "9eda632f64d4f1a4728977973852653795bddada",
+  "ceiling": 29,
+  "boundaries": {
+    "lycaon/internal/db/rebuild_equivalence_test.go": "ad40b1e4101ac05338bf3b87ca593ae434a7ead5ceca01169859ec0642ac198e",
+    "lycaon/internal/db/rebuild_crash_test.go": "fc637d9935806c84c8fc8166211ab9049cdaf945a89cbad920082cdb9609dfab",
+    "lycaon/internal/db/rebuild_journal_test.go": "f875a13460ccb07798c118dc5df6d92977063686c634134ff7c44d9cb725e131"
+  },
+  "reviewed_shape": "66b502364731d3a3447a72469579daaacb0a427b912087f31209583f101f9170"
+}

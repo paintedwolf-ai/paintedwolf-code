@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/lycaon/lycaon/internal/db/migrations"
@@ -29,8 +30,11 @@ func schemaRegistry(ctx context.Context) (*migrations.Registry, error) {
 	if err := json.Unmarshal(releasedBaselinesJSON, &released); err != nil {
 		return nil, fmt.Errorf("decode released schemas: %w", err)
 	}
-	resultPaths := migrations.ToolResultPaths(current)
-	steps := []migrations.Step{migrations.SourceNamespace(), migrations.PresenceAuthenticators(resultPaths.From), resultPaths}
+	resultPaths := migrations.ToolResultPaths()
+	steps := []migrations.Step{
+		migrations.SourceNamespace(), migrations.PresenceAuthenticators(resultPaths.From), resultPaths,
+		migrations.SourceManifestLayout(current),
+	}
 	return migrations.New(current, released, steps)
 }
 
@@ -97,6 +101,9 @@ func upgradeExisting(ctx context.Context, path string, hooks UpgradeHooks, stage
 }
 
 func upgradeExistingUsing(ctx context.Context, path string, hooks UpgradeHooks, staged bool, registry *migrations.Registry) (err error) {
+	if err := ResumeStoreUpgrade(path); err != nil {
+		return err
+	}
 	if hooks.Progress != nil {
 		hooks.Progress(migrations.Inspecting)
 		defer func() {
@@ -117,8 +124,17 @@ func upgradeExistingUsing(ctx context.Context, path string, hooks UpgradeHooks, 
 	if !plan.Required() {
 		return prepareIntegrity(ctx, reader)
 	}
-	if err := validateStoreIntegrity(ctx, reader); err != nil {
+	if err := refuseRecordedUpgradeDamage(ctx, reader); err != nil {
 		return err
+	}
+	if plan.CopyPlan() != nil {
+		if err := upgradeRetained(ctx, path, reader, plan, hooks, staged, registry); err != nil {
+			return classifyUpgradeFailure(err, plan.Source.Revision)
+		}
+		if hooks.After != nil {
+			return hooks.After(ctx, plan)
+		}
+		return nil
 	}
 	if !staged {
 		if hooks.Before == nil {
@@ -128,21 +144,36 @@ func upgradeExistingUsing(ctx context.Context, path string, hooks UpgradeHooks, 
 			hooks.Progress(migrations.Snapshotting)
 		}
 		if err := hooks.Before(ctx, reader, plan); err != nil {
-			return storeIncompatible(RecoveryReasonIntegrityFailed, plan.Source.Revision, fmt.Sprintf("capture upgrade recovery: %v", err))
+			return fmt.Errorf("capture upgrade recovery: %w", err)
 		}
 	}
 	if err := reader.Close(); err != nil {
 		return err
 	}
 	if err := executeUpgrade(ctx, path, plan, hooks.Progress, registry); err != nil {
-		return storeIncompatible(RecoveryReasonSchemaMismatch, plan.Source.Revision, err.Error())
+		return classifyUpgradeFailure(err, plan.Source.Revision)
 	}
 	if hooks.After != nil {
 		if err := hooks.After(ctx, plan); err != nil {
-			return storeIncompatible(RecoveryReasonIntegrityFailed, plan.Target.Revision, fmt.Sprintf("record upgrade commit: %v", err))
+			return fmt.Errorf("record upgrade commit: %w", err)
 		}
 	}
 	return nil
+}
+
+func classifyUpgradeFailure(err error, revision int) error {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+	if errors.Is(err, migrations.ErrIntegrity) {
+		return storeIncompatible(RecoveryReasonIntegrityFailed, revision, err.Error())
+	}
+	var damaged *StoreIncompatibleError
+	if classified := integrityCheckError(err, "migrate store"); errors.As(classified, &damaged) {
+		return classified
+	}
+	// Preserve operational causes for the open boundary's shared classifier.
+	return fmt.Errorf("migrate store: %w", err)
 }
 
 func executeUpgrade(ctx context.Context, path string, plan migrations.Plan, progress func(migrations.Phase), registry *migrations.Registry) error {
@@ -152,4 +183,22 @@ func executeUpgrade(ctx context.Context, path string, plan migrations.Plan, prog
 	}
 	defer func() { _ = writer.Close() }()
 	return registry.Execute(ctx, writer, plan, inspectSchema, progress)
+}
+
+// A pending audit is work to complete, not evidence that the source is damaged.
+// Whole-file verification runs against the migrated state before commit.
+func refuseRecordedUpgradeDamage(ctx context.Context, reader *sql.DB) error {
+	var value string
+	err := reader.QueryRowContext(ctx, `SELECT value FROM store_meta WHERE key = ?`, integrityAuditFailedMetaKey).Scan(&value)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if value != "" && value != "integrity audit pending" {
+		version, _ := ReadUserVersion(ctx, reader)
+		return storeIncompatible(RecoveryReasonIntegrityFailed, version, value)
+	}
+	return nil
 }

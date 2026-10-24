@@ -1,0 +1,13 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/db/store_schema.go",
+  "kind": "module",
+  "workstream": "store-health",
+  "disposition": "retain",
+  "reason": "Schema identity inspection and verified snapshot publication are existing database contracts. This branch changes only the target schema revision here; retain the current file while migration implementation remains under migrations.",
+  "reviewed_commit": "582212cf337c61cbd340e889502e0ca524ceb6d1",
+  "ceiling": 355,
+  "boundaries": {
+    "lycaon/internal/db/source_manifest_layout_upgrade_test.go": "e93ecffbb82a3d846c944650053ac500bb1ca65777258abe36d08eabbb06ad85"
+  }
+}

@@ -2,9 +2,9 @@ package sourcesnapshot
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"log/slog"
-	"maps"
 	"os"
 	"sort"
 	"strings"
@@ -31,11 +31,6 @@ func (s *Store) converge(ctx context.Context, req Request) (Snapshot, error) {
 	for _, root := range req.Roots {
 		repochange.EnsureRoot(ctx, root.Path)
 	}
-	storageRelease, err := s.acquireStorage(ctx, false)
-	if err != nil {
-		return Snapshot{}, err
-	}
-	defer storageRelease()
 	rootRelease, err := s.acquireRootStorage(ctx, req.Roots, true)
 	if err != nil {
 		return Snapshot{}, err
@@ -124,7 +119,7 @@ func (s *Store) converge(ctx context.Context, req Request) (Snapshot, error) {
 	return s.publishCandidates(ctx, req, captures, quality, started)
 }
 
-// candidate applies retained deltas when a covered generation is available.
+// candidate applies retained deltas when the covered manifest is still held.
 func (s *Store) candidate(ctx context.Context, req Request, root Root, plan deltaPlan) (*rootCandidate, error) {
 	if plan.covered == "" {
 		return s.survey(ctx, req, root)
@@ -133,32 +128,33 @@ func (s *Store) candidate(ctx context.Context, req Request, root Root, plan delt
 	if scope.Identity() != plan.scopeID {
 		return s.survey(ctx, req, root)
 	}
-	head, err := s.Get(ctx, plan.covered)
-	if err != nil {
-		if !errors.Is(err, ErrSnapshotNotFound) {
+	held := s.pins.holdManifests(plan.covered)
+	if _, err := s.queries.GetSourceManifest(ctx, plan.covered); err != nil {
+		held.release()
+		if !errors.Is(err, sql.ErrNoRows) {
 			return nil, err
 		}
 		return s.survey(ctx, req, root)
 	}
 	baseline, err := s.newObserved(ctx, root.Path)
 	if err != nil {
+		held.release()
 		return nil, err
 	}
 	c := &rootCandidate{
 		root: root, scope: scope, baseline: baseline,
 		ids:        &identifier{root: root.Path},
 		boundaries: make(map[string]Boundary),
-		base:       head.ID, overrides: make(map[byte]map[string]*Entry),
+		base:       plan.covered, overrides: make(map[string]*Entry),
+		pin: held,
 	}
-	c.baseChunks, err = s.chunkMap(ctx, head.ID)
+	c.baseLayout, err = s.manifestLayout(ctx, plan.covered)
 	if err != nil {
 		c.close(ctx, s)
 		return nil, err
 	}
-	for _, b := range head.Boundaries {
-		if b.RootPath == root.Path {
-			c.boundaries[b.Path] = b
-		}
+	for _, b := range plan.boundaries {
+		c.boundaries[b.Path] = b
 	}
 	if err := s.applyDelta(ctx, req, c, plan.paths); err != nil {
 		c.close(ctx, s)
@@ -180,7 +176,7 @@ func (s *Store) survey(ctx context.Context, req Request, root Root) (*rootCandid
 		root: root, scope: s.scopeFor(ctx, req, root), baseline: baseline,
 		ids:        &identifier{root: root.Path, eager: true},
 		boundaries: make(map[string]Boundary), surveyed: true,
-		build: newBuildID(),
+		build: newBuildID(), pin: s.pins.holdManifests(),
 	}
 	files := 0
 	boundaries, err := admittedFiles(ctx, root, c.scope, func(ref fileRef) error {
@@ -221,19 +217,22 @@ func (s *Store) resurvey(ctx context.Context, req Request, c *rootCandidate) err
 
 // confirm reports new reads or a changed manifest after resurveying.
 func (s *Store) confirm(ctx context.Context, req Request, c *rootCandidate) (int, error) {
-	before, err := c.chunkIDs(ctx, s)
+	before, err := c.manifest(ctx, s)
 	if err != nil {
 		return 0, err
 	}
+	// The earlier build's chunks stay pinned until this candidate closes.
+	earlier := s.pins.holdManifests(before.id)
+	defer earlier.release()
 	if err := s.resurvey(ctx, req, c); err != nil {
 		return 0, err
 	}
 	c.confirmed = true
-	after, err := c.chunkIDs(ctx, s)
+	after, err := c.manifest(ctx, s)
 	if err != nil {
 		return 0, err
 	}
-	if !maps.Equal(before, after) {
+	if before.id != after.id {
 		return 1, nil
 	}
 	return c.baseline.reads, nil
@@ -319,15 +318,18 @@ func (s *Store) captureInto(ctx context.Context, req Request, c *rootCandidate, 
 }
 
 func (s *Store) publishCandidates(ctx context.Context, req Request, captures []rootCapture, quality CaptureQuality, started time.Time) (Snapshot, error) {
-	candidates := make([]*rootCandidate, 0, len(captures))
-	boundaries := make([]Boundary, 0)
+	roots := make([]publishedRoot, 0, len(captures))
 	// Retained budget boundaries keep the snapshot admission bounded.
 	admission := AdmissionScope
 	for _, capture := range captures {
 		c := capture.candidate
-		candidates = append(candidates, c)
+		manifest, err := c.manifest(ctx, s)
+		if err != nil {
+			return Snapshot{}, err
+		}
+		root := publishedRoot{root: c.root, manifest: manifest}
 		for _, b := range c.boundaries {
-			boundaries = append(boundaries, b)
+			root.boundaries = append(root.boundaries, b)
 			if b.Reason == string(sandbox.BoundaryUnreadable) {
 				quality = CaptureObserved
 			}
@@ -335,19 +337,24 @@ func (s *Store) publishCandidates(ctx context.Context, req Request, captures []r
 				admission = AdmissionScopeBounded
 			}
 		}
+		roots = append(roots, root)
 	}
-	snapshot, err := s.publish(ctx, req, candidates, boundaries, quality, admission)
+	snapshot, err := s.publish(ctx, req, roots, quality, admission)
 	if err != nil {
 		return Snapshot{}, err
 	}
-	for _, capture := range captures {
+	_, storedManifests, err := s.load(ctx, snapshot.ID)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	for i, capture := range captures {
 		c := capture.candidate
 		exact := quality == CaptureExact && repochange.Coverage(c.root.Path).Complete
-		s.deltas.coveredBy(c.root.Path, snapshot.ID, c.scope.Identity(), capture.plan.upTo, exact)
+		s.deltas.coveredBy(c.root.Path, storedManifests[i], roots[i].boundaries, c.scope.Identity(), capture.plan.upTo, exact)
 	}
 	slog.InfoContext(ctx, "source snapshot published",
 		"roots_key", snapshot.RootsKey, "snapshot_id", snapshot.ID, "files", snapshot.FileCount,
-		"boundaries", len(boundaries), "unobserved", len(snapshot.Unobserved()),
+		"boundaries", len(snapshot.Boundaries), "unobserved", len(snapshot.Unobserved()),
 		"quality", string(quality), "admission", string(admission), "duration_ms", time.Since(started).Milliseconds())
 	return snapshot, nil
 }
