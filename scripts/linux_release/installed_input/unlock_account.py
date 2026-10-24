@@ -184,8 +184,11 @@ def _verified_checkout_root() -> Path:
     module_path = Path(__file__).resolve()
     checkout = module_path.parents[3]
     info = checkout.lstat()
+    group_writable_invalid = bool(info.st_mode & 0o020) and (
+        info.st_uid == 0 or info.st_gid != info.st_uid)
     if (not stat.S_ISDIR(info.st_mode) or info.st_uid not in {0, os.getuid()}
-            or info.st_mode & 0o022 or checkout.resolve() != checkout
+            or info.st_mode & 0o002 or group_writable_invalid
+            or checkout.resolve() != checkout
             or (checkout / 'scripts/linux_release/installed_input/unlock_account.py').resolve() != module_path):
         raise ValueError('dedicated QA account helper checkout root failed physical verification')
     return checkout
