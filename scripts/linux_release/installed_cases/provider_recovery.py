@@ -56,7 +56,7 @@ def registered(document, binding, account, leaf=None):
     records = launch.get('fixed_input', [])
     if not isinstance(records, list) or len(records) > 4:
         raise ValueError('provider recovery registration exceeds its transaction bound')
-    records = expand_physical_transactions(leaf, records, require_all=False)
+    records = expand_physical_transactions(leaf, records)
     matches = [row for row in records if isinstance(row, dict) and isinstance(row.get('operation'), str)
                and re.fullmatch('provider-endpoint-v1-[0-9]{4,5}', row['operation'])]
     if len(matches) != 1:

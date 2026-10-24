@@ -1,7 +1,6 @@
 """Retain the exact observations behind one installed case outcome."""
 from __future__ import annotations
 
-import copy
 import hashlib
 import json
 from pathlib import Path
@@ -22,12 +21,11 @@ MAX_STREAM_BYTES = 8 << 20
 MAX_CASE_BYTES = 32 << 20
 MAX_OBSERVATION_BYTES = 1 << 20
 PHYSICAL_INPUT_STREAM = "physical-input"
-SUMMARY_FIELDS = frozenset({"event_count", "events_sha256", "physical_input_stream", "physical_input_sha256"})
 
 
-def _is_physical_transaction(value: object) -> bool:
-    return (isinstance(value, dict) and isinstance(value.get("events"), list)
-            and isinstance(value.get("transaction_id"), str) and isinstance(value.get("operation"), str))
+def _is_physical_transaction(record: object) -> bool:
+    return (isinstance(record, dict) and isinstance(record.get("events"), list)
+            and isinstance(record.get("transaction_id"), str))
 
 
 def summarize_physical_transaction(record: dict, stream_sha256: str) -> dict:
@@ -46,40 +44,37 @@ def summarize_physical_transaction(record: dict, stream_sha256: str) -> dict:
 def compact_physical_input(observations: dict, streams: dict[str, bytes]) -> tuple[dict, dict[str, bytes]]:
     if PHYSICAL_INPUT_STREAM in streams:
         return observations, streams
-    detailed: list[dict] = []
-    seen_by_key: dict[tuple[str, str], dict] = {}
+    detailed_list: list[dict] = []
+    seen: set[tuple[object, object]] = set()
 
-    def collect(record: dict) -> None:
-        key = (record["transaction_id"], record["operation"])
-        if key in seen_by_key:
-            if seen_by_key[key] != record:
-                raise ValueError("conflicting physical input transactions share identity")
-            return
-        seen_by_key[key] = record
-        detailed.append(record)
+    def collect(record: object) -> None:
+        if _is_physical_transaction(record):
+            assert isinstance(record, dict)
+            key = (record.get("transaction_id"), record.get("operation"))
+            if key not in seen:
+                seen.add(key)
+                detailed_list.append(record)
 
     for launch_key in ("launch", "launch_before", "launch_after"):
         launch = observations.get(launch_key)
         if isinstance(launch, dict) and isinstance(launch.get("fixed_input"), list):
             for item in launch["fixed_input"]:
-                if _is_physical_transaction(item):
-                    collect(item)
+                collect(item)
+    for list_key in ("fixed_input", "transitions"):
+        rows = observations.get(list_key)
+        if isinstance(rows, list):
+            for item in rows:
+                collect(item)
+    for single_key in ("native_input", "lock_transition"):
+        collect(observations.get(single_key))
     for editor_key in ("editor_keyboard", "editor_search_keyboard"):
         editor = observations.get(editor_key)
-        if isinstance(editor, dict) and _is_physical_transaction(editor.get("physical_vm_keyboard")):
-            collect(editor["physical_vm_keyboard"])
-    if _is_physical_transaction(observations.get("lock_transition")):
-        collect(observations["lock_transition"])
-    if isinstance(observations.get("transitions"), list):
-        for item in observations["transitions"]:
-            if _is_physical_transaction(item):
-                collect(item)
-    if _is_physical_transaction(observations.get("native_input")):
-        collect(observations["native_input"])
-    if not detailed:
+        if isinstance(editor, dict):
+            collect(editor.get("physical_vm_keyboard"))
+    if not detailed_list:
         return observations, streams
-    payload = {"format_version": 1, "transactions": detailed}
-    payload_raw = (json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    payload_raw = (json.dumps({"format_version": 1, "transactions": detailed_list},
+                              sort_keys=True, separators=(",", ":")) + "\n").encode()
     stream_sha256 = hashlib.sha256(payload_raw).hexdigest()
     compacted = dict(observations)
     for launch_key in ("launch", "launch_before", "launch_after"):
@@ -87,72 +82,78 @@ def compact_physical_input(observations: dict, streams: dict[str, bytes]) -> tup
         if isinstance(launch, dict) and isinstance(launch.get("fixed_input"), list):
             compacted[launch_key] = {
                 **launch,
-                "fixed_input": [
-                    summarize_physical_transaction(item, stream_sha256) if _is_physical_transaction(item) else item
-                    for item in launch["fixed_input"]
-                ],
+                "fixed_input": [summarize_physical_transaction(row, stream_sha256)
+                                if _is_physical_transaction(row) else row
+                                for row in launch["fixed_input"]],
             }
+    for list_key in ("fixed_input", "transitions"):
+        rows = compacted.get(list_key)
+        if isinstance(rows, list):
+            compacted[list_key] = [summarize_physical_transaction(row, stream_sha256)
+                                   if _is_physical_transaction(row) else row
+                                   for row in rows]
+    for single_key in ("native_input", "lock_transition"):
+        if _is_physical_transaction(compacted.get(single_key)):
+            compacted[single_key] = summarize_physical_transaction(compacted[single_key], stream_sha256)
     for editor_key in ("editor_keyboard", "editor_search_keyboard"):
         editor = compacted.get(editor_key)
         if isinstance(editor, dict) and _is_physical_transaction(editor.get("physical_vm_keyboard")):
             compacted[editor_key] = {
                 **editor,
-                "physical_vm_keyboard": summarize_physical_transaction(editor["physical_vm_keyboard"], stream_sha256),
+                "physical_vm_keyboard": summarize_physical_transaction(
+                    editor["physical_vm_keyboard"], stream_sha256),
             }
-    if _is_physical_transaction(compacted.get("lock_transition")):
-        compacted["lock_transition"] = summarize_physical_transaction(compacted["lock_transition"], stream_sha256)
-    if isinstance(compacted.get("transitions"), list):
-        compacted["transitions"] = [
-            summarize_physical_transaction(item, stream_sha256) if _is_physical_transaction(item) else item
-            for item in compacted["transitions"]
-        ]
-    if _is_physical_transaction(compacted.get("native_input")):
-        compacted["native_input"] = summarize_physical_transaction(compacted["native_input"], stream_sha256)
     return compacted, {**streams, PHYSICAL_INPUT_STREAM: payload_raw}
 
 
-def expand_physical_transactions(leaf: Path | None, selected: list[dict], *, require_all: bool = True) -> list[dict]:
-    if not isinstance(selected, list):
+def expand_physical_transactions(leaf: Path | None, selected: list[dict]) -> list[dict]:
+    if not any(isinstance(record, dict) and ("physical_input_stream" in record or "events_sha256" in record
+               or "physical_input_sha256" in record or "event_count" in record) for record in selected):
         return selected
-    has_summary = any(isinstance(row, dict) and bool(SUMMARY_FIELDS & set(row)) for row in selected)
-    stream_path = leaf.with_name(PHYSICAL_INPUT_STREAM + ".bin") if leaf is not None else None
-    if not has_summary:
-        if require_all and stream_path is not None and stream_path.exists():
-            raise ValueError("unreferenced physical input stream evidence is forbidden")
-        return selected
-    if stream_path is None or not stream_path.exists():
-        raise ValueError("physical input stream evidence is missing")
-    size = stream_path.stat().st_size
-    if not 0 < size <= MAX_STREAM_BYTES:
-        raise ValueError("physical input stream exceeds its bound")
-    raw = stream_path.read_bytes()
+    if leaf is None:
+        raise ValueError("compacted physical input requires its retained stream path")
+    path = leaf.with_name(PHYSICAL_INPUT_STREAM + ".bin")
+    if not path.is_file() or not 0 < path.stat().st_size <= MAX_STREAM_BYTES:
+        raise ValueError("physical input stream is missing or exceeds its bound")
+    raw = path.read_bytes()
     stream_sha256 = hashlib.sha256(raw).hexdigest()
-    payload = json.loads(raw.decode("utf-8"))
+
+    def pairs(items: list[tuple[str, object]]) -> dict[str, object]:
+        result: dict[str, object] = {}
+        for key, value in items:
+            if key in result:
+                raise ValueError("physical input stream repeats a key")
+            result[key] = value
+        return result
+
+    payload = json.loads(raw, object_pairs_hook=pairs,
+                         parse_constant=lambda _: (_ for _ in ()).throw(ValueError("invalid JSON number")))
     if (not isinstance(payload, dict) or set(payload) != {"format_version", "transactions"}
             or type(payload["format_version"]) is not int or payload["format_version"] != 1
-            or not isinstance(payload["transactions"], list) or not payload["transactions"]):
-        raise ValueError("physical input stream has an invalid shape")
+            or not isinstance(payload["transactions"], list)):
+        raise ValueError("physical input stream has an invalid envelope")
     by_key: dict[tuple[str, str], dict] = {}
     for row in payload["transactions"]:
-        if not _is_physical_transaction(row):
+        if (not isinstance(row, dict) or not isinstance(row.get("events"), list)
+                or not isinstance(row.get("transaction_id"), str)
+                or not isinstance(row.get("operation"), str)):
             raise ValueError("physical input stream transaction has an invalid shape")
         key = (row["transaction_id"], row["operation"])
         if key in by_key:
             raise ValueError("physical input stream contains duplicate transactions")
         by_key[key] = row
     expanded: list[dict] = []
-    seen_keys: set[tuple[str, str]] = set()
     for record in selected:
-        if not isinstance(record, dict) or "events" in record:
-            raise ValueError("physical input summary record has an invalid shape")
+        if not isinstance(record, dict):
+            raise ValueError("physical input summary must be an object")
+        if "physical_input_stream" not in record and isinstance(record.get("events"), list):
+            expanded.append(record)
+            continue
         key = (record.get("transaction_id"), record.get("operation"))
         full = by_key.get(key)
         if full is None or summarize_physical_transaction(full, stream_sha256) != record:
-            raise ValueError("physical input summary differs from its retained stream transaction")
-        seen_keys.add(key)
-        expanded.append(copy.deepcopy(full))
-    if require_all and seen_keys != set(by_key):
-        raise ValueError("physical input stream transactions differ from execution summary")
+            raise ValueError("physical input summary differs from its retained stream")
+        expanded.append(full)
     return expanded
 
 
@@ -163,7 +164,8 @@ def retain(binding: dict, capability: str, case: str, evidence_root: Path, statu
     source(binding["source_commit"])
     if not isinstance(observations, dict):
         raise ValueError("installed case observations must be an object")
-    observations, streams = compact_physical_input(observations, dict(streams or {}))
+    streams = streams or {}
+    observations, streams = compact_physical_input(observations, streams)
     if (len(streams) > MAX_STREAMS or any(not IDENTIFIER.fullmatch(name) or not isinstance(raw, bytes)
             or len(raw) > MAX_STREAM_BYTES for name, raw in streams.items())
             or sum(map(len, streams.values())) > MAX_CASE_BYTES):
