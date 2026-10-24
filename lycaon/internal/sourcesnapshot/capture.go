@@ -89,6 +89,10 @@ func (s *Store) converge(ctx context.Context, req Request) (Snapshot, error) {
 			case s.deltas.moved(root.Path, capture.plan):
 				moved = true
 				next := s.deltas.pending(root.Path, capture.plan)
+				if next.rescope {
+					// A changed ignore file re-reads its directory under rules read now.
+					c.scope = s.scopeFor(ctx, req, root)
+				}
 				if next.overflow {
 					if err := s.resurvey(ctx, req, c); err != nil {
 						return Snapshot{}, err
