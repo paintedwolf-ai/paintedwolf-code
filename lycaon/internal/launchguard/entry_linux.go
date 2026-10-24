@@ -50,6 +50,10 @@ type EntrySpec struct {
 // login identity inside the protected namespace, with every selection already
 // made by the privileged stage, and seals itself before executing the desktop.
 func EnterDesktop() error {
+	// Reject unrelated runtime descriptors before taking ownership of the inherited frame.
+	if seals, err := unix.FcntlInt(entrySpecFD, unix.F_GET_SEALS, 0); err != nil || seals&entrySeals != entrySeals {
+		return errors.New("entry specification is not sealed")
+	}
 	runtime.LockOSThread()
 	return enterDesktop(
 		os.NewFile(entryImageFD, "selected-desktop-image"),
