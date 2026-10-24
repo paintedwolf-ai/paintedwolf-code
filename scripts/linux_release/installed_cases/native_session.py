@@ -7,13 +7,13 @@ from pathlib import Path
 import re
 
 from .. import installed_gnome
+from ..installed_input.session_wire import LOCKER_NAMES
 from .app import process_identity
-from .logind_context import Reader, LOGIN, MANAGER
+from .logind_context import CallFailure, Reader, LOGIN, MANAGER
 from .records import CaseUnavailable
 
 DBUS = 'org.freedesktop.DBus'
 DBUS_PATH = '/org/freedesktop/DBus'
-LOCKER_NAMES = ('org.gnome.ScreenSaver', 'org.gnome.Shell.ScreenShield', 'org.gnome.Shell')
 UNIQUE = re.compile(r':[0-9]+\.[0-9]+\Z')
 
 
@@ -71,9 +71,14 @@ class NativeSessionObserver:
         return self.reader.call(path, interface, method, args, signature,
                                 user=user, destination=destination).unpack()
 
-    def _bus_owner(self, name, uid, *, user=False):
-        unique, = self._call(DBUS, DBUS_PATH, DBUS, 'GetNameOwner',
-                             ('(s)', (name,)), '(s)', user=user)
+    def _bus_owner(self, name, uid, *, user=False, optional=False):
+        try:
+            unique, = self._call(DBUS, DBUS_PATH, DBUS, 'GetNameOwner',
+                                 ('(s)', (name,)), '(s)', user=user)
+        except CallFailure as error:
+            if optional and error.name == DBUS + '.Error.NameHasNoOwner':
+                return None
+            raise
         if not isinstance(unique, str) or not UNIQUE.fullmatch(unique):
             raise ValueError('native session bus returned an invalid unique owner')
         pid, = self._call(DBUS, DBUS_PATH, DBUS, 'GetConnectionUnixProcessID',
@@ -84,11 +89,8 @@ class NativeSessionObserver:
         shell = self.shell()
         locker = None
         for name in LOCKER_NAMES:
-            try:
-                candidate = self._bus_owner(name, os.getuid(), user=True)
-            except BaseException:
-                continue
-            if (candidate['unique'] == shell['unique_owner']
+            candidate = self._bus_owner(name, os.getuid(), user=True, optional=True)
+            if (candidate is not None and candidate['unique'] == shell['unique_owner']
                     and candidate['process']['pid'] == shell['pid']
                     and candidate['process']['start_time_ticks'] == shell['start_time_ticks']):
                 locker = candidate
