@@ -18,7 +18,10 @@ type RecoveryEntry struct {
 	Link string
 }
 
-const recoveryPageSize = 256
+const (
+	recoveryPageSize      = 256
+	recoverySeenObjectMax = 4096
+)
 
 // RecoveryWriter bounds memory and keeps compression outside database transactions.
 type RecoveryWriter struct {
@@ -26,6 +29,8 @@ type RecoveryWriter struct {
 	projectID, recoveryID string
 	entries               []RecoveryEntry
 	objects               []sourceblob.Capture
+	pageObjects           map[string]struct{}
+	committedObjects      map[string]struct{}
 	ordinal               int64
 	release               func()
 }
@@ -57,7 +62,15 @@ func (w *RecoveryWriter) Append(ctx context.Context, entry RecoveryEntry, root *
 			return entry, fmt.Errorf("%w: entry mode changed", sourceblob.ErrFileChanged)
 		}
 		entry.SHA = object.SHA256
-		w.objects = append(w.objects, object)
+		if _, committed := w.committedObjects[object.SHA256]; !committed {
+			if _, inPage := w.pageObjects[object.SHA256]; !inPage {
+				if w.pageObjects == nil {
+					w.pageObjects = make(map[string]struct{}, recoveryPageSize)
+				}
+				w.pageObjects[object.SHA256] = struct{}{}
+				w.objects = append(w.objects, object)
+			}
+		}
 	}
 	w.entries = append(w.entries, entry)
 	if len(w.entries) >= recoveryPageSize {
@@ -92,9 +105,19 @@ func (w *RecoveryWriter) Flush(ctx context.Context) error {
 	if err := tx.Commit(); err != nil {
 		return err
 	}
+	if w.committedObjects == nil {
+		w.committedObjects = make(map[string]struct{}, min(len(w.objects), recoverySeenObjectMax))
+	}
+	for _, object := range w.objects {
+		if len(w.committedObjects) >= recoverySeenObjectMax {
+			clear(w.committedObjects)
+		}
+		w.committedObjects[object.SHA256] = struct{}{}
+	}
 	w.ordinal += int64(len(w.entries))
 	w.entries = w.entries[:0]
 	w.objects = w.objects[:0]
+	clear(w.pageObjects)
 	return nil
 }
 
