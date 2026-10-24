@@ -68,9 +68,10 @@ class EngineInhibitorTests(unittest.TestCase):
         from contextlib import nullcontext
         from pathlib import Path
         import tempfile
+        from linux_release import installed_storage
         from linux_release.installed_cases import (
             app as app_mod, desktop_launch, desktop_turn, desktop_ui,
-            fixture_turn, native_session, process, profile_setup,
+            fixture_turn, fresh_profile, native_session, process, profile_setup,
             provider, provider_barrier, provider_recovery, provider_setup, records)
         from linux_release.installed_input import session_lock, transition_guest, unlock_account, unlock_control
 
@@ -104,9 +105,12 @@ class EngineInhibitorTests(unittest.TestCase):
         fake_app = Mock(
             observations={'engine_identity': ENGINE, 'session': {'id': '2', 'User': '30008'}},
             binding=binding)
-        fake_app.__enter__ = Mock(return_value=fake_app)
-        fake_app.__exit__ = Mock(return_value=False)
         fake_app.streams.return_value = {}
+
+        fake_reservation = Mock()
+        fake_reservation.__enter__ = Mock(return_value=fake_reservation)
+        fake_reservation.__exit__ = Mock(return_value=False)
+        fake_reservation.facts.return_value = {'empty_before': True}
 
         fake_fixture = Mock(observations=[{'completed': False}], acquisition=Mock())
         fake_barrier = Mock()
@@ -118,31 +122,52 @@ class EngineInhibitorTests(unittest.TestCase):
         fake_unlock.prepare.return_value = {'request': {'operation': 'native-gnome-qa-prepare-v1'}, 'acknowledgment': {}}
         fake_unlock.unlock.return_value = {'request': {'operation': 'native-gnome-qa-unlock-v1'}, 'acknowledgment': {}}
 
-        with tempfile.TemporaryDirectory() as tmp, \
-                patch.object(desktop_launch, 'protected_launcher', return_value={}), \
-                patch.object(provider_recovery, 'load', return_value=None), \
-                patch.object(provider_barrier, 'ResponseBarrier', return_value=fake_barrier), \
-                patch.object(provider.ProviderFixture, 'gui', return_value=nullcontext(fake_fixture)), \
-                patch.object(app_mod, 'InstalledApp', return_value=fake_app), \
-                patch.object(desktop_ui, 'interactive_window', return_value={'window': 'ok'}), \
-                patch.object(desktop_ui, 'DesktopUI', return_value=nullcontext()), \
-                patch.object(native_session, 'NativeSessionObserver', return_value=native_observer), \
-                patch.object(session_lock, 'NativeLockObserver', return_value=lock_observer), \
-                patch.object(unlock_control, 'NativeUnlockControl', return_value=fake_unlock), \
-                patch.object(unlock_account, ' run_privileged_disable' if False else 'run_privileged_disable',
-                             return_value={'disabled': True, 'shadow_locked': True}) as disable_mock, \
-                patch.object(provider_setup, 'configure_provider', return_value={'provider_id': 'loopback'}), \
-                patch.object(process, 'run', return_value={'exit_code': 0, 'timed_out': False, 'output_limit': False}), \
-                patch.object(desktop_turn, 'submit_project_turn'), \
-                patch.object(profile_setup, 'active_session', return_value={'id': 'sess-1'}), \
-                patch.object(profile_setup, 'require_active', return_value={'id': 'sess-1'}), \
-                patch.object(transition_guest, 'perform_transition', return_value={'operation': 'session-lock-v1', 'completed': True}), \
-                patch.object(fixture_turn, 'await_fixture_reply', return_value={'settled': True}), \
-                patch.object(records, 'retain', side_effect=lambda *args: args):
-            outcome = keepawake.execute(binding, 'session', 'inhibitor-lifetime', Path(tmp))
+        tmp = self.stack.enter_context(tempfile.TemporaryDirectory())
+        for target_mod, attr, value in (
+                (desktop_launch, 'protected_launcher', {}),
+                (provider_recovery, 'load', None),
+                (app_mod, 'graphical_session', {'id': '2', 'User': '30008'}),
+                (app_mod, 'session_environment', {'HOME': '/home/pwqual058a1'}),
+                (installed_storage, 'resolve', {'home': '/home/pwqual058a1'}),
+                (fresh_profile, 'Reservation', fake_reservation),
+                (provider_barrier, 'ResponseBarrier', fake_barrier),
+                (provider.ProviderFixture, 'gui', nullcontext(fake_fixture)),
+                (app_mod, 'InstalledApp', fake_app),
+                (desktop_ui, 'interactive_window', {'window': 'ok'}),
+                (desktop_ui, 'DesktopUI', nullcontext()),
+                (native_session, 'NativeSessionObserver', native_observer),
+                (session_lock, 'NativeLockObserver', lock_observer),
+                (unlock_control, 'NativeUnlockControl', fake_unlock),
+                (provider_setup, 'configure_provider', {'provider_id': 'loopback'}),
+                (process, 'run', {
+                    'launch_identity': {'pid': 301}, 'exit_code': 0,
+                    'timed_out': False, 'output_limit': False,
+                    'stdout': b'opened\n', 'stderr': b''}),
+                (desktop_turn, 'submit_project_turn', None),
+                (profile_setup, 'active_session', {'id': 'sess-1'}),
+                (profile_setup, 'require_active', {'id': 'sess-1'}),
+                (transition_guest, 'perform_transition', {'operation': 'session-lock-v1', 'completed': True}),
+                (fixture_turn, 'await_fixture_reply', {'settled': True})):
+            self.stack.enter_context(patch.object(target_mod, attr, return_value=value))
+        disable_mock = self.stack.enter_context(patch.object(
+            unlock_account, 'run_privileged_disable', return_value={'disabled': True, 'shadow_locked': True}))
+        self.stack.enter_context(patch.object(records, 'retain', side_effect=lambda *args: args))
+        outcome = keepawake.execute(binding, 'session', 'inhibitor-lifetime', Path(tmp))
 
         self.assertEqual(outcome[4], 'passed')
         retained_obs = outcome[5]
+        retained_streams = outcome[6]
+        fake_reservation.check.assert_called_once_with(empty=True)
+        fake_app.launch.assert_called_once_with()
+        fake_app.wait_ready.assert_called_once_with()
+        fake_reservation.check_launch.assert_called_once_with(fake_app)
+        fake_app.stop.assert_called_once_with()
+        self.assertEqual(retained_obs['fresh_storage'], {'empty_before': True})
+        self.assertEqual(retained_obs['project_open'], {
+            'launch_identity': {'pid': 301}, 'exit_code': 0,
+            'timed_out': False, 'output_limit': False})
+        self.assertEqual(retained_streams['project-open-stdout'], b'opened\n')
+        self.assertEqual(retained_streams['project-open-stderr'], b'')
         self.assertEqual(retained_obs['inhibitor_initial']['engine_inhibitors'], [])
         self.assertEqual(retained_obs['before_lock']['engine_inhibitors'], [held_row])
         self.assertEqual(retained_obs['during_lock']['engine_inhibitors'], [held_row])

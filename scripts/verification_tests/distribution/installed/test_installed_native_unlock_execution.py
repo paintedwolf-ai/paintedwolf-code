@@ -219,6 +219,19 @@ class UnlockAccountAndBridgeTests(unittest.TestCase):
                 {**ACCOUNT, 'home': '/tmp/pwqual058a1'}):
             with self.subTest(account=bad_account), self.assertRaises(ValueError):
                 unlock_account.validate_account_shape(bad_account)
+        import os
+        from pathlib import Path
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            home_dir = (Path(tmp) / 'pwqual058a1').resolve()
+            home_dir.mkdir(mode=0o750)
+            home_dir.chmod(0o750)
+            unlock_account._verify_directory(home_dir, uid=os.getuid(), gid=os.getgid(), mode=(0o750, 0o755))
+            home_dir.chmod(0o755)
+            unlock_account._verify_directory(home_dir, uid=os.getuid(), gid=os.getgid(), mode=(0o750, 0o755))
+            home_dir.chmod(0o775)
+            with self.assertRaises(ValueError):
+                unlock_account._verify_directory(home_dir, uid=os.getuid(), gid=os.getgid(), mode=(0o750, 0o755))
 
     def test_prepare_and_disable_account_enforce_shadow_state_without_exposing_secret_or_hash(self):
         import io

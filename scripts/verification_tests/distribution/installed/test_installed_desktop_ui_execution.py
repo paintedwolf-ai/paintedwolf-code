@@ -73,6 +73,14 @@ class DesktopUIOwnershipTests(unittest.TestCase):
         window = Node(API.ROLE_FRAME, children=[None, button])
         with self.assertRaises(ui.accessibility.InventoryChanged):
             list(ui.accessibility.descendants(window))
+        api, _ = surface([button])
+        api.Registry.getDesktop(0).children = [None]
+        with self.assertRaises(ui.accessibility.InventoryChanged):
+            list(ui.DesktopUI(self.app, api).windows())
+        api, _ = surface([button])
+        api.Registry.getDesktop(0)[0].children = [None]
+        with self.assertRaises(ui.accessibility.InventoryChanged):
+            list(ui.DesktopUI(self.app, api).windows())
         button.action.doAction.assert_not_called()
 
     def test_observer_bound_retains_exact_single_read_facts_without_authorizing_action(self):
