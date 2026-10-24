@@ -35,7 +35,8 @@ env:
 
 jobs:
   replay-bundle-upgrade:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.rehearsal_run_id != '' }}
+    if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && inputs.rehearsal_run_id != '' }}
+    needs: [ship-gates, bundle-upgrade, linux-candidates, publish-github-release]
     runs-on: macos-15
     timeout-minutes: 30
     permissions:

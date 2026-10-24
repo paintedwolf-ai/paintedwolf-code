@@ -95,6 +95,8 @@ class ReplayTests(unittest.TestCase):
         replay = workflow.split("  replay-bundle-upgrade:\n", 1)[1].split("  classify:\n", 1)[0]
         self.assertIn("inputs.rehearsal_run_id != ''", replay)
         self.assertIn("if: ${{ inputs.rehearsal_run_id == '' }}", workflow)
+        self.assertIn("needs: [ship-gates, bundle-upgrade, linux-candidates, publish-github-release]", replay)
+        self.assertIn("!cancelled()", replay)
         self.assertIn("actions: read", replay)
         self.assertNotIn("secrets.", replay)
         self.assertNotIn("environment: release-publication", replay)
