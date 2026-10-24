@@ -94,24 +94,45 @@ func (d *ProgramDispatcher) BeginExecution(ctx context.Context, invocation toolc
 	if span := invocation.Span; span.StartByte >= 0 && span.EndByte <= len(display) && span.StartByte <= span.EndByte {
 		display = display[span.StartByte:span.EndByte]
 	}
-	child, err := d.prepareInvocation(ctx, definition, invocation, display, map[string]any{"operation_id": command}, nil)
-	if err != nil {
-		return err
-	}
+	inputs := map[string]any{"operation_id": command}
 	invoked := false
+	var child programChild
 	if native && len(spec.Effects) > 0 {
-		if child.bound, err = toolcontract.BindOperation(definition, invocation, spec.Name, spec.Effects[0].Mode, nil); err == nil {
-			err = d.start(ctx, child)
+		bound, bindErr := toolcontract.BindOperation(definition, invocation, spec.Name, spec.Effects[0].Mode, nil)
+		if bindErr == nil && d.run.tc.Identity.ToolCallID != "" {
+			if prepared, prepErr := d.prepareInvocationWithOwner(ctx, definition, invocation, display, inputs, nil, &bound); prepErr == nil {
+				prepared.bound = bound
+				child = prepared
+				invoked = true
+			}
 		}
+		if !invoked {
+			child, err = d.prepareInvocation(ctx, definition, invocation, display, inputs, nil)
+			if err != nil {
+				return err
+			}
+			child.bound = bound
+			if bindErr != nil {
+				err = bindErr
+			} else {
+				err = d.start(ctx, child)
+			}
+			if err != nil {
+				_ = d.settle(ctx, child, ownerFailure(err), false, "")
+				child.release()
+				return err
+			}
+			invoked = true
+		}
+	} else {
+		child, err = d.prepareInvocation(ctx, definition, invocation, display, inputs, nil)
 		if err != nil {
-			_ = d.settle(ctx, child, ownerFailure(err), false, "")
-			child.release()
 			return err
 		}
-		invoked = true
-	} else if isRedirectConstruct(command) {
-		if teeSpec, ok := d.run.commands["tee"]; ok && len(teeSpec.Effects) > 0 {
-			child.bound, _ = toolcontract.BindOperation(definition, invocation, teeSpec.Name, teeSpec.Effects[0].Mode, nil)
+		if isRedirectConstruct(command) {
+			if teeSpec, ok := d.run.commands["tee"]; ok && len(teeSpec.Effects) > 0 {
+				child.bound, _ = toolcontract.BindOperation(definition, invocation, teeSpec.Name, teeSpec.Effects[0].Mode, nil)
+			}
 		}
 	}
 	d.shared.mu.Lock()
@@ -158,11 +179,16 @@ func isRedirectConstruct(command string) bool {
 	}
 }
 
+var compiledStructuralDefinitions sync.Map
+
 // structuralDefinition compiles one definition per evaluator construct.
 func (d *ProgramDispatcher) structuralDefinition(construct string) (toolcontract.OperationDefinition, error) {
+	key := "construct " + construct
+	if cached, ok := compiledStructuralDefinitions.Load(key); ok {
+		return cached.(toolcontract.OperationDefinition), nil
+	}
 	d.shared.mu.Lock()
 	defer d.shared.mu.Unlock()
-	key := "construct " + construct
 	if definition, ok := d.shared.definitions[key]; ok {
 		return definition, nil
 	}
@@ -189,6 +215,7 @@ func (d *ProgramDispatcher) structuralDefinition(construct string) (toolcontract
 		d.shared.definitions = map[string]toolcontract.OperationDefinition{}
 	}
 	d.shared.definitions[key] = definition
+	compiledStructuralDefinitions.Store(key, definition)
 	return definition, nil
 }
 
@@ -315,7 +342,7 @@ func writeRejectRefusal(streams commandprogram.Streams, command string, request 
 }
 
 func definitionHasCommand(definition toolcontract.OperationDefinition, name string) bool {
-	for _, cmd := range definition.Facts().Commands {
+	for _, cmd := range definition.ReadOnlyFacts().Commands {
 		if cmd.Name == name {
 			return true
 		}
@@ -335,15 +362,26 @@ func selectEffectMode(spec toolcontract.CommandSpecification, requested string) 
 	return ""
 }
 
+var programOperationDefinitions sync.Map
+
 func programOperationDefinition(definition toolcontract.OperationDefinition) toolcontract.OperationDefinition {
-	facts := definition.Facts()
-	if facts.ProgressGate == toolcontract.ProgressNotRequired {
+	if definition.ReadOnlyFacts().ProgressGate == toolcontract.ProgressNotRequired {
 		return definition
 	}
+	digest := definition.Digest()
+	if digest != "" {
+		if cached, ok := programOperationDefinitions.Load(digest); ok {
+			return cached.(toolcontract.OperationDefinition)
+		}
+	}
+	facts := definition.Facts()
 	facts.ProgressGate = toolcontract.ProgressNotRequired
 	updated, err := toolcontract.NewOperationDefinition(facts)
 	if err != nil {
 		return definition
+	}
+	if digest != "" {
+		programOperationDefinitions.Store(digest, updated)
 	}
 	return updated
 }

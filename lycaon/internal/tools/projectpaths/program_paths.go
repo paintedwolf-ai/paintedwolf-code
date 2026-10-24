@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -212,12 +213,13 @@ func (p *ProgramPaths) Bind(ctx context.Context, operand string, write bool) (Bo
 	if err != nil {
 		return BoundPath{}, err
 	}
+	canonicalRoot := fspath.CanonicalPath(resolved.Root.Path)
 	bound := BoundPath{Resolved: resolved, rootIdentity: identity, rootInfo: rootInfo, exactRelative: relative}
 	bound.admitRead = func(actual string) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		authority, err := authorityAddress(resolved.Root.Path, actual)
+		authority, err := authorityAddressWithCanonical(resolved.Root.Path, canonicalRoot, actual)
 		if err != nil {
 			return err
 		}
@@ -231,7 +233,7 @@ func (p *ProgramPaths) Bind(ctx context.Context, operand string, write bool) (Bo
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		authority, err := authorityAddress(resolved.Root.Path, actual)
+		authority, err := authorityAddressWithCanonical(resolved.Root.Path, canonicalRoot, actual)
 		if err != nil {
 			return err
 		}
@@ -249,7 +251,7 @@ func (p *ProgramPaths) Bind(ctx context.Context, operand string, write bool) (Bo
 			if err := ctx.Err(); err != nil {
 				return Resolved{}, err
 			}
-			authority, err := authorityAddress(resolved.Root.Path, actual)
+			authority, err := authorityAddressWithCanonical(resolved.Root.Path, canonicalRoot, actual)
 			if err != nil {
 				return Resolved{}, err
 			}

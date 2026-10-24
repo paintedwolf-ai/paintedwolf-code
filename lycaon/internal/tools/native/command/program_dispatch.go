@@ -183,14 +183,16 @@ func (d *ProgramDispatcher) invokeBuiltin(ctx context.Context, spec toolcontract
 			request.EffectMode = m.EffectMode(request)
 		}
 	}
-	child, err := d.prepare(ctx, spec, request, nil)
+	child, started, err := d.prepareStarted(ctx, spec, request, nil)
 	if err != nil {
 		return refusedResult("COMMAND_OPERAND_INVALID"), err
 	}
 	defer child.release()
-	if err := d.start(ctx, child); err != nil {
-		result := ownerFailure(err)
-		return result, errors.Join(err, d.settle(ctx, child, result, false, ""))
+	if !started {
+		if err := d.start(ctx, child); err != nil {
+			result := ownerFailure(err)
+			return result, errors.Join(err, d.settle(ctx, child, result, false, ""))
+		}
 	}
 	tracker := &trackingWriter{w: nonNilWriter(streams.Error)}
 	runStreams := streams
@@ -260,7 +262,7 @@ func (d *ProgramDispatcher) invokeExternal(ctx context.Context, request commandp
 		Operation: bound, Streams: streams, Inspection: d.run.capture,
 		// The existing command review, detection and policy read these fields.
 		Arguments: d.run.launchArguments(line, display),
-		Stage:     toolcontract.ExecutionStage{ExecutionID: request.Invocation.Identity.ExecutionID, OperationID: definition.Facts().Identity, Argv: argv, CommandLine: line, PipelineCommandLine: line},
+		Stage:     toolcontract.ExecutionStage{ExecutionID: request.Invocation.Identity.ExecutionID, OperationID: definition.ReadOnlyFacts().Identity, Argv: argv, CommandLine: line, PipelineCommandLine: line},
 		PrepareReviewed: func(context.Context, map[string]any, tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
 			return toolexecution.PreparedNativeEffect{Operation: bound, InvokeOwner: func(ctx context.Context, admitted tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 				return ExternalStages{ToolContext: admitted, Dir: cwd}.Launch(ctx, request, streams)
@@ -341,13 +343,14 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 		return refusedResult("COMMAND_NATIVE_FORM_UNSUPPORTED"), err
 	}
 	review := prepared.Review
-	review.OperationID = operationDef.Facts().Identity
+	opIdentity := operationDef.ReadOnlyFacts().Identity
+	review.OperationID = opIdentity
 	tracker := &trackingWriter{w: nonNilWriter(streams.Error)}
 	runStreams := streams
 	runStreams.Error = tracker
 	effect := toolexecution.NativeEffect{
 		Operation: bound, Streams: runStreams, Argv: &review, Inspection: d.run.capture,
-		Stage: toolcontract.ExecutionStage{ExecutionID: request.Invocation.Identity.ExecutionID, OperationID: operationDef.Facts().Identity, Argv: request.Argv.Values()},
+		Stage: toolcontract.ExecutionStage{ExecutionID: request.Invocation.Identity.ExecutionID, OperationID: opIdentity, Argv: request.Argv.Values()},
 		PrepareReviewed: func(context.Context, map[string]any, tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
 			return toolexecution.PreparedNativeEffect{Operation: bound, InvokeOwner: prepared.Invoke}, nil
 		},
@@ -379,14 +382,16 @@ func (d *ProgramDispatcher) invokeHosted(ctx context.Context, spec toolcontract.
 	if prepared.Mode != "" && request.EffectMode == "" {
 		request.EffectMode = prepared.Mode
 	}
-	child, err := d.prepare(ctx, spec, request, prepared.Review.Arguments())
+	child, started, err := d.prepareStarted(ctx, spec, request, prepared.Review.Arguments())
 	if err != nil {
 		return refusedResult("COMMAND_OPERAND_INVALID"), err
 	}
 	defer child.release()
-	if err := d.start(ctx, child); err != nil {
-		result := ownerFailure(err)
-		return result, errors.Join(err, d.settle(ctx, child, result, false, ""))
+	if !started {
+		if err := d.start(ctx, child); err != nil {
+			result := ownerFailure(err)
+			return result, errors.Join(err, d.settle(ctx, child, result, false, ""))
+		}
 	}
 	tracker := &trackingWriter{w: nonNilWriter(streams.Error)}
 	runStreams := streams
@@ -460,6 +465,43 @@ func (d *ProgramDispatcher) prepare(ctx context.Context, spec toolcontract.Comma
 	return child, nil
 }
 
+// prepareStarted records a host-run child and commits its owner-start marker in
+// the same transaction when possible, falling back to two-step preparation when
+// the start precondition must be evaluated separately.
+func (d *ProgramDispatcher) prepareStarted(ctx context.Context, spec toolcontract.CommandSpecification, request commandprogram.OperationRequest, inputs map[string]any) (programChild, bool, error) {
+	if len(spec.Effects) == 0 || d.run.tc.Identity.ToolCallID == "" {
+		child, err := d.prepare(ctx, spec, request, inputs)
+		return child, false, err
+	}
+	definition, err := d.catalogDefinition(spec)
+	if err != nil {
+		return programChild{}, false, err
+	}
+	mode := selectEffectMode(spec, request.EffectMode)
+	bound, err := toolcontract.BindOperation(definition, request.Invocation, spec.Name, mode, d.childEffectSet(spec, mode, request))
+	if err != nil {
+		return programChild{}, false, err
+	}
+	if inputs == nil {
+		inputs = map[string]any{"operation_id": spec.Name, "argv": request.Argv.Values()}
+	}
+	display, err := request.Statement.DisplayText([]byte(d.run.source))
+	if err != nil {
+		return programChild{}, false, err
+	}
+	child, err := d.prepareInvocationWithOwner(ctx, definition, request.Invocation, display, inputs, request.Gap, &bound)
+	if err == nil {
+		child.bound = bound
+		return child, true, nil
+	}
+	child, err = d.prepareDefinition(ctx, definition, request, inputs)
+	if err != nil {
+		return programChild{}, false, err
+	}
+	child.bound = bound
+	return child, false, nil
+}
+
 // prepareDefinition retains the expanded inputs and the dynamic child row
 // together, before the child is admitted or reaches any owner.
 func (d *ProgramDispatcher) prepareDefinition(ctx context.Context, definition toolcontract.OperationDefinition, request commandprogram.OperationRequest, inputs map[string]any) (programChild, error) {
@@ -471,12 +513,21 @@ func (d *ProgramDispatcher) prepareDefinition(ctx context.Context, definition to
 }
 
 func (d *ProgramDispatcher) prepareInvocation(ctx context.Context, definition toolcontract.OperationDefinition, invocation toolcontract.OperationInvocation, display string, inputs map[string]any, gap *toolcontract.NativeGap) (programChild, error) {
+	return d.prepareInvocationWithOwner(ctx, definition, invocation, display, inputs, gap, nil)
+}
+
+func (d *ProgramDispatcher) prepareInvocationWithOwner(ctx context.Context, definition toolcontract.OperationDefinition, invocation toolcontract.OperationInvocation, display string, inputs map[string]any, gap *toolcontract.NativeGap, startOwner *toolcontract.BoundOperation) (programChild, error) {
 	prepareCtx := context.WithoutCancel(ctx)
 	review, release, err := toolcontract.NewReviewedOperationInputs(prepareCtx, d.run.memory, inputs)
 	if err != nil {
 		return programChild{}, err
 	}
-	reference, err := d.run.capture.PrepareChild(prepareCtx, toolcontract.ProgramChildStart{ParentReceiptID: d.run.parentReceipt, Invocation: invocation, Definition: definition, ExpandedInputs: review, Canonical: display, NativeGap: gap})
+	start := toolcontract.ProgramChildStart{ParentReceiptID: d.run.parentReceipt, Invocation: invocation, Definition: definition, ExpandedInputs: review, Canonical: display, NativeGap: gap}
+	if startOwner != nil {
+		start.StartOwner = startOwner
+		start.ModelToolCallID = d.run.tc.Identity.ToolCallID
+	}
+	reference, err := d.run.capture.PrepareChild(prepareCtx, start)
 	if err != nil {
 		release()
 		return programChild{}, err
@@ -515,9 +566,14 @@ func (d *ProgramDispatcher) settleWith(ctx context.Context, child programChild, 
 	return d.run.recorder.SettleChild(context.WithoutCancel(ctx), child.id, settlement)
 }
 
+var compiledCatalogDefinitions sync.Map
+
 // catalogDefinition compiles one definition per catalog command without a
 // registered tool, attributed to the command's declared owner.
 func (d *ProgramDispatcher) catalogDefinition(spec toolcontract.CommandSpecification) (toolcontract.OperationDefinition, error) {
+	if cached, ok := compiledCatalogDefinitions.Load(spec.Name); ok {
+		return cached.(toolcontract.OperationDefinition), nil
+	}
 	d.shared.mu.Lock()
 	defer d.shared.mu.Unlock()
 	if definition, ok := d.shared.definitions[spec.Name]; ok {
@@ -551,6 +607,7 @@ func (d *ProgramDispatcher) catalogDefinition(spec toolcontract.CommandSpecifica
 		d.shared.definitions = map[string]toolcontract.OperationDefinition{}
 	}
 	d.shared.definitions[spec.Name] = definition
+	compiledCatalogDefinitions.Store(spec.Name, definition)
 	return definition, nil
 }
 

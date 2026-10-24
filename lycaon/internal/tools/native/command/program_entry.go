@@ -104,10 +104,6 @@ type programRun struct {
 
 	// envelope carries the call's launch capability requests to each launch.
 	envelope map[string]any
-
-	externalOnce sync.Once
-	external     toolcontract.OperationDefinition
-	externalErr  error
 }
 
 // ProgramOutcome is the command tool's result for a settled program.
@@ -157,7 +153,11 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	if r == nil || r.Executor == nil || r.Recorder == nil || r.Evaluate == nil || r.Supervisor == nil || r.Sessions == nil || r.Projector == nil {
 		return "", fmt.Errorf("command program runtime is not configured")
 	}
-	catalog, err := toolcontract.LanguageV1()
+	catalog, err := toolcontract.ReadOnlyLanguageV1()
+	if err != nil {
+		return "", err
+	}
+	commands, err := compiledCommandIndex()
 	if err != nil {
 		return "", err
 	}
@@ -224,7 +224,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 			return "", err
 		}
 	}
-	run := &programRun{catalog: catalog, commands: commandIndex(catalog), envelope: launchEnvelope(args)}
+	run := &programRun{catalog: catalog, commands: commands, envelope: launchEnvelope(args)}
 	external, err := run.externalDefinition()
 	if err != nil {
 		return "", err
@@ -628,23 +628,39 @@ func programNodes(statements []commandsurface.Statement) []commandsurface.Syntax
 	return unique
 }
 
+var compiledCommandIndex = sync.OnceValues(func() (map[string]toolcontract.CommandSpecification, error) {
+	catalog, err := toolcontract.ReadOnlyLanguageV1()
+	if err != nil {
+		return nil, err
+	}
+	return commandIndex(catalog), nil
+})
+
+var compiledExternalDefinition = sync.OnceValues(func() (toolcontract.OperationDefinition, error) {
+	catalog, err := toolcontract.ReadOnlyLanguageV1()
+	if err != nil {
+		return toolcontract.OperationDefinition{}, err
+	}
+	commands, err := compiledCommandIndex()
+	if err != nil {
+		return toolcontract.OperationDefinition{}, err
+	}
+	contract, ok := toolcontract.Lookup("command")
+	if !ok {
+		return toolcontract.OperationDefinition{}, fmt.Errorf("command contract missing")
+	}
+	return toolcontract.NewOperationDefinition(toolcontract.OperationFacts{
+		Identity: "command", Version: 1, Contract: contract, Arguments: json.RawMessage(`{"type":"object"}`),
+		Commands: []toolcontract.CommandSpecification{commands["external"]}, Resources: catalog.Language.Limits,
+		ProgressGate: toolcontract.ProgressExistingAdmission, RejectionContract: "command",
+		Streams: toolcontract.StreamContract{Input: "exact process stdin bytes", Output: "exact process stdout bytes", Error: "process stderr; typed host refusals", Statuses: map[int]string{0: "process exit status"}},
+	})
+})
+
 // externalDefinition is the command tool's operation for confined launches:
 // the existing command review, detection and policy admit each launch.
 func (r *programRun) externalDefinition() (toolcontract.OperationDefinition, error) {
-	r.externalOnce.Do(func() {
-		contract, ok := toolcontract.Lookup("command")
-		if !ok {
-			r.externalErr = fmt.Errorf("command contract missing")
-			return
-		}
-		r.external, r.externalErr = toolcontract.NewOperationDefinition(toolcontract.OperationFacts{
-			Identity: "command", Version: 1, Contract: contract, Arguments: json.RawMessage(`{"type":"object"}`),
-			Commands: []toolcontract.CommandSpecification{r.commands["external"]}, Resources: r.catalog.Language.Limits,
-			ProgressGate: toolcontract.ProgressExistingAdmission, RejectionContract: "command",
-			Streams: toolcontract.StreamContract{Input: "exact process stdin bytes", Output: "exact process stdout bytes", Error: "process stderr; typed host refusals", Statuses: map[int]string{0: "process exit status"}},
-		})
-	})
-	return r.external, r.externalErr
+	return compiledExternalDefinition()
 }
 
 // programLifetime releases a program's plan and frame once both the tool call

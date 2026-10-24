@@ -45,7 +45,14 @@ func exactRelativeOperand(resolved Resolved, operand string) (string, error) {
 // authorityAddress maps a reached canonical name back to the same admitted root
 // coordinates, so OS aliases cannot evade that root's read profile.
 func authorityAddress(rootPath, actual string) (string, error) {
-	rel, err := filepath.Rel(fspath.CanonicalPath(rootPath), actual)
+	return authorityAddressWithCanonical(rootPath, fspath.CanonicalPath(rootPath), actual)
+}
+
+func authorityAddressWithCanonical(rootPath, canonicalRoot, actual string) (string, error) {
+	if canonicalRoot == "" {
+		canonicalRoot = fspath.CanonicalPath(rootPath)
+	}
+	rel, err := filepath.Rel(canonicalRoot, actual)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return "", invalidOperand(actual, "reached identity left admitted root")
 	}

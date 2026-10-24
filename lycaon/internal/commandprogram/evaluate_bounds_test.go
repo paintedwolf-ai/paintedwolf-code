@@ -153,9 +153,10 @@ func TestLoopIterationCeilingAtBoundaryAndOnePast(t *testing.T) {
 
 func TestEmptyInfiniteLoopTerminatesOnHostCounters(t *testing.T) {
 	for program, binding := range map[string]string{
-		"while x=1; do x=2; done; echo never":      "loop_iterations",
-		"f() { while x=1; do continue; done; }; f": "loop_iterations",
-		"while :; do :; done; echo never":          "child_executions",
+		"while x=1; do x=2; done; echo never":        "loop_iterations",
+		"f() { while x=1; do continue; done; }; f":   "loop_iterations",
+		"while :; do :; done; echo never":            "loop_iterations",
+		"while echo a; do echo b; done; echo never":  "child_executions",
 	} {
 		f := newEvalFixture(t)
 		out, err := f.run(t, t.Context(), program)
@@ -163,9 +164,44 @@ func TestEmptyInfiniteLoopTerminatesOnHostCounters(t *testing.T) {
 		if !errors.As(err, &limit) || limit.Limit != binding || out.Stop == nil {
 			t.Fatalf("%q: %v", program, err)
 		}
-		if len(f.log.calls) != 0 {
+		if slices.Contains(f.log.argv(), "echo never") {
 			t.Fatalf("%q admitted a child after exhaustion", program)
 		}
+	}
+}
+
+func childDispatchProgram(dispatches int64) string {
+	const inner = 100
+	outer := dispatches / inner
+	rest := dispatches % inner
+	var b strings.Builder
+	// Precede the dispatches with AST frames, evaluator builtins and redirects
+	// so they would overflow child_executions if charged there.
+	b.WriteString("for k in" + strings.Repeat(" k", 20) + "; do { : >/dev/null; true; test -n x; [[ a == a ]]; }; done\n")
+	if outer > 0 {
+		b.WriteString("for a in" + strings.Repeat(" a", int(outer)) + "; do for b in" + strings.Repeat(" b", inner) + "; do echo tick >/dev/null; done; done\n")
+	}
+	for i := int64(0); i < rest; i++ {
+		b.WriteString("echo tick >/dev/null\n")
+	}
+	return b.String()
+}
+
+func TestChildExecutionCeilingAtBoundaryAndOnePast(t *testing.T) {
+	limits, err := catalogEvaluationLimits()
+	if err != nil {
+		t.Fatal(err)
+	}
+	maximum := limits["child_executions"]
+	f := newEvalFixture(t)
+	if _, err := f.run(t, t.Context(), childDispatchProgram(maximum)); err != nil || int64(len(f.log.calls)) != maximum {
+		t.Fatalf("boundary refused: %v calls=%d", err, len(f.log.calls))
+	}
+	f = newEvalFixture(t)
+	out, err := f.run(t, t.Context(), childDispatchProgram(maximum+1))
+	assertLimit(t, err, "child_executions", maximum, maximum+1)
+	if out.Stop == nil || int64(len(f.log.calls)) != maximum {
+		t.Fatalf("one past the ceiling admitted work: calls=%d", len(f.log.calls))
 	}
 }
 

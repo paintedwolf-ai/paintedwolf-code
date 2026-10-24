@@ -47,7 +47,7 @@ func NewOwners(revisions native.ExecutionRevisions, pins PinRecorder, write *nat
 	if pins == nil || write == nil {
 		return nil, errors.New("query owners require a pin recorder and the write door")
 	}
-	catalog, err := toolcontract.LanguageV1()
+	catalog, err := toolcontract.ReadOnlyLanguageV1()
 	if err != nil {
 		return nil, err
 	}

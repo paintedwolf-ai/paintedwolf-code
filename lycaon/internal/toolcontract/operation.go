@@ -134,9 +134,7 @@ func (d OperationDefinition) Facts() OperationFacts {
 
 func cloneOperationFacts(facts OperationFacts) OperationFacts {
 	facts.Contract = facts.Contract.Clone()
-	if facts.Arguments != nil {
-		facts.Arguments = append(json.RawMessage(nil), facts.Arguments...)
-	}
+	facts.Arguments = cloneRawBytes(facts.Arguments)
 	if facts.Commands != nil {
 		commands := make([]CommandSpecification, len(facts.Commands))
 		for i, c := range facts.Commands {
@@ -157,6 +155,6 @@ func cloneOperationFacts(facts OperationFacts) OperationFacts {
 
 // Clone detaches mutable contract values at registry publication and lookup.
 func (c Contract) Clone() Contract {
-	c.SecretReferenceArgs = append([]string(nil), c.SecretReferenceArgs...)
+	c.SecretReferenceArgs = cloneStringSlice(c.SecretReferenceArgs)
 	return c
 }

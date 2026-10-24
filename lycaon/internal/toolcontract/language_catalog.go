@@ -195,7 +195,18 @@ func cloneStringSlice(in []string) []string {
 	if in == nil {
 		return nil
 	}
-	return append([]string(nil), in...)
+	out := make([]string, len(in))
+	copy(out, in)
+	return out
+}
+
+func cloneRawBytes(in json.RawMessage) json.RawMessage {
+	if in == nil {
+		return nil
+	}
+	out := make(json.RawMessage, len(in))
+	copy(out, in)
+	return out
 }
 
 func cloneStringMap(in map[string]string) map[string]string {
@@ -215,7 +226,7 @@ func cloneRawMap(in map[string]json.RawMessage) map[string]json.RawMessage {
 	}
 	out := make(map[string]json.RawMessage, len(in))
 	for k, v := range in {
-		out[k] = append(json.RawMessage(nil), v...)
+		out[k] = cloneRawBytes(v)
 	}
 	return out
 }
@@ -242,9 +253,7 @@ func cloneCommandSpecification(c CommandSpecification) CommandSpecification {
 	}
 	c.PlatformCapabilities = cloneStringSlice(c.PlatformCapabilities)
 	c.Limits = cloneStringSlice(c.Limits)
-	if c.Example != nil {
-		c.Example = append(json.RawMessage(nil), c.Example...)
-	}
+	c.Example = cloneRawBytes(c.Example)
 	c.Reuse.Tests = cloneStringSlice(c.Reuse.Tests)
 	c.Unsupported.Words = cloneStringSlice(c.Unsupported.Words)
 	c.FixtureIDs = cloneStringSlice(c.FixtureIDs)
@@ -278,7 +287,11 @@ func cloneLanguageCatalog(c LanguageCatalog) LanguageCatalog {
 	}
 	c.Language.Rules = cloneStringMap(c.Language.Rules)
 	c.Language.Limits = cloneResourceLimits(c.Language.Limits)
-	c.Language.Diagnostics = append([]LanguageDiagnostic(nil), c.Language.Diagnostics...)
+	if c.Language.Diagnostics != nil {
+		diagnostics := make([]LanguageDiagnostic, len(c.Language.Diagnostics))
+		copy(diagnostics, c.Language.Diagnostics)
+		c.Language.Diagnostics = diagnostics
+	}
 	c.Language.SourceLocations = cloneStringMap(c.Language.SourceLocations)
 	c.Language.Compatibility = cloneStringMap(c.Language.Compatibility)
 	c.Language.Platforms = cloneStringMap(c.Language.Platforms)
@@ -310,9 +323,7 @@ func cloneLanguageCatalog(c LanguageCatalog) LanguageCatalog {
 	if c.Fixtures != nil {
 		fixtures := make([]FormFixture, len(c.Fixtures))
 		for i, f := range c.Fixtures {
-			if f.Definition != nil {
-				f.Definition = append(json.RawMessage(nil), f.Definition...)
-			}
+			f.Definition = cloneRawBytes(f.Definition)
 			f.Words = cloneStringSlice(f.Words)
 			fixtures[i] = f
 		}

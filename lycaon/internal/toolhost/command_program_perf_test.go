@@ -1,14 +1,20 @@
 package toolhost
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"context"
 	"fmt"
 	"io"
 	"math/rand/v2"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/litprefilter"
@@ -38,7 +44,7 @@ type perfFixture struct {
 
 func newPerfFixture(tb testing.TB, catalog *sourcecatalog.Catalog) *perfFixture {
 	tb.Helper()
-	catalogContract, err := toolcontract.LanguageV1()
+	catalogContract, err := toolcontract.ReadOnlyLanguageV1()
 	testutil.FailErr(tb, "catalog", err)
 	var names []string
 	for _, row := range catalogContract.Tools {
@@ -83,9 +89,9 @@ func writeLines(tb testing.TB, path string, lines int, line func(i int) string) 
 func bigText(tb testing.TB, dir string) {
 	writeLines(tb, filepath.Join(dir, "big.txt"), 120_000, func(i int) string {
 		if i%64 == 0 {
-			return fmt.Sprintf("%06d the needle x marks this line %060d", i, i)
+			return fmt.Sprintf("%06d the needle x marks this line %026d", i, i)
 		}
-		return fmt.Sprintf("%06d plain filler text without the mark %060d", i, i)
+		return fmt.Sprintf("%06d plain filler text without the mark %026d", i, i)
 	})
 }
 
@@ -112,8 +118,7 @@ func sourceTree(tb testing.TB, dir string) {
 	}
 }
 
-// wideTree is exactly traversal_visits entries: the root, 99 directories and
-// 99,900 files.
+// wideTree is 100,000 entries: the root, 99 directories and 99,900 files.
 func wideTree(tb testing.TB, dir string) {
 	root := filepath.Join(dir, "wide")
 	for d := range 99 {
@@ -239,4 +244,173 @@ func (s structuredWc) run(tb testing.TB, paths []string) (string, error) {
 		args = append(args, p)
 	}
 	return s.tool.Run(context.Background(), map[string]any{"paths": args}, s.tc)
+}
+
+func currentMaxRSSBytes() int64 {
+	var ru syscall.Rusage
+	if err := syscall.Getrusage(syscall.RUSAGE_SELF, &ru); err != nil {
+		return 0
+	}
+	// Darwin reports Maxrss in bytes; Linux reports KiB.
+	if runtime.GOOS == "darwin" {
+		return int64(ru.Maxrss)
+	}
+	return int64(ru.Maxrss) * 1024
+}
+
+func paddedPerfGzip(tb testing.TB, payloadLen, targetGzLen int) []byte {
+	tb.Helper()
+	payload := bytes.Repeat([]byte("a"), payloadLen)
+	build := func(commentLen int) []byte {
+		var buf bytes.Buffer
+		gz := gzip.NewWriter(&buf)
+		if commentLen > 0 {
+			gz.Comment = strings.Repeat("c", commentLen)
+		}
+		_, err := gz.Write(payload)
+		testutil.FailErr(tb, "gzip write", err)
+		testutil.FailErr(tb, "gzip close", gz.Close())
+		return buf.Bytes()
+	}
+	base := build(0)
+	if len(base) == targetGzLen {
+		return base
+	}
+	return build(targetGzLen - len(base) - 1)
+}
+
+func writePerfTarHeaders(tb testing.TB, path string, count int) {
+	tb.Helper()
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+	for i := range count {
+		testutil.FailErr(tb, "tar header", tw.WriteHeader(&tar.Header{Name: fmt.Sprintf("f%05d", i), Mode: 0o644, Size: 0, Typeflag: tar.TypeReg}))
+	}
+	testutil.FailErr(tb, "tar close", tw.Close())
+	testutil.FailErr(tb, "write tar", os.WriteFile(path, buf.Bytes(), 0o644))
+}
+
+// TestCommandProgramResourceCeilings exercises the declared resource limits
+// through the real command entry, verifying that memory, spill files, process
+// count, goroutines and wall time stay bounded and that cleanup leaves nothing
+// behind.
+func TestCommandProgramResourceCeilings(t *testing.T) {
+	f := newPerfFixture(t, nil)
+	writeLines(t, filepath.Join(f.Dir, "small.txt"), 100, func(i int) string { return fmt.Sprintf("line %d", i) })
+	bigText(t, f.Dir)
+	sortInput(t, f.Dir)
+	writeLines(t, filepath.Join(f.Dir, "words.txt"), 9_999, func(i int) string { return fmt.Sprint(i) })
+
+	// Seed a 1,000-entry directory (d + 999 files) and a single file (one) so
+	// 250 operands of d reach exactly 250,000 traversal_visits.
+	visitDir := filepath.Join(f.Dir, "visits", "d")
+	testutil.FailErr(t, "mkdir visits/d", os.MkdirAll(visitDir, 0o755))
+	for i := range 999 {
+		testutil.FailErr(t, "write visit file", os.WriteFile(filepath.Join(visitDir, fmt.Sprintf("f%03d", i)), nil, 0o644))
+	}
+	testutil.FailErr(t, "write visits/one", os.WriteFile(filepath.Join(f.Dir, "visits", "one"), nil, 0o644))
+
+	// Seed archive_expansion_ratio (100x) and archive_extract_entries (25,000) fixtures.
+	testutil.FailErr(t, "write at-ratio.gz", os.WriteFile(filepath.Join(f.Dir, "at-ratio.gz"), paddedPerfGzip(t, 10_000, 100), 0o644))
+	testutil.FailErr(t, "write past-ratio.gz", os.WriteFile(filepath.Join(f.Dir, "past-ratio.gz"), paddedPerfGzip(t, 10_001, 100), 0o644))
+	writePerfTarHeaders(t, filepath.Join(f.Dir, "entries-at.tar"), 25_000)
+	writePerfTarHeaders(t, filepath.Join(f.Dir, "entries-past.tar"), 25_001)
+
+	find250k := "find" + strings.Repeat(" visits/d", 250) + " -maxdepth 1 -name none"
+	find250kPast := "find" + strings.Repeat(" visits/d", 250) + " visits/one -maxdepth 1 -name none"
+
+	cases := []struct {
+		name      string
+		program   string
+		wantError string
+		maxTime   time.Duration
+	}{
+		{"noop", ":", "", 5 * time.Second},
+		{"fifty-statements", strings.Repeat(": ; ", 49) + ":", "", 5 * time.Second},
+		{"native-child-wc", "wc -l small.txt", "", 5 * time.Second},
+		{"pipeline-cat-grep-wc-8MiB", "cat big.txt | grep x | wc -l", "", 15 * time.Second},
+		{"sort-spill-8MiB", "sort unsorted.txt | wc -l", "", 20 * time.Second},
+		{"loop-9999-iterations", "n=0; for w in $(cat words.txt); do n=$((n+1)); done; echo $n", "", 15 * time.Second},
+		{"loop-iterations-past-limit", "while :; do :; done", "COMMAND_LIMIT_EXCEEDED", 15 * time.Second},
+		{"builtins-and-redirects-count-visits", "for k in " + strings.Repeat("k ", 200) + "; do { : >/dev/null; true; test -n x; [[ a == a ]]; }; done", "", 10 * time.Second},
+		{"traversal-visits-at-250k", find250k, "", 20 * time.Second},
+		{"traversal-visits-past-250k", find250kPast, "COMMAND_LIMIT_EXCEEDED", 20 * time.Second},
+		{"archive-ratio-at-100x", "zcat at-ratio.gz >/dev/null", "", 5 * time.Second},
+		{"archive-ratio-past-100x", "zcat past-ratio.gz >/dev/null", "COMMAND_LIMIT_EXCEEDED", 5 * time.Second},
+		{"archive-entries-at-25k", "tar -tf entries-at.tar >/dev/null", "", 10 * time.Second},
+		{"archive-entries-past-25k", "tar -tf entries-past.tar >/dev/null", "COMMAND_LIMIT_EXCEEDED", 10 * time.Second},
+	}
+
+	runtime.GC()
+	baseGoroutines := runtime.NumGoroutine()
+	var baseMem runtime.MemStats
+	runtime.ReadMemStats(&baseMem)
+	peakRSS := currentMaxRSSBytes()
+	peakGoroutines := baseGoroutines
+	var peakHeapInuse uint64
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			start := time.Now()
+			out, err := f.Call(t, context.Background(), c.program)
+			elapsed := time.Since(start)
+			if c.wantError == "" {
+				if err != nil || strings.Contains(out, `"refusal"`) {
+					t.Fatalf("%s failed: err=%v out=%s", c.name, err, out)
+				}
+				if c.name == "builtins-and-redirects-count-visits" && !strings.Contains(out, `"executed_children":0`) {
+					t.Fatalf("%s charged child_executions for builtins/redirects: %s", c.name, out)
+				}
+			} else if !strings.Contains(out, c.wantError) && (err == nil || !strings.Contains(err.Error(), c.wantError)) {
+				t.Fatalf("%s: want %s, got err=%v out=%s", c.name, c.wantError, err, out)
+			}
+			if elapsed > c.maxTime {
+				t.Fatalf("%s exceeded time ceiling: %v > %v", c.name, elapsed, c.maxTime)
+			}
+			if active := f.Background.ActiveJobs(f.Session); len(active) != 0 {
+				t.Fatalf("%s leaked %d active background jobs", c.name, len(active))
+			}
+			spillsDir := filepath.Join(f.ScratchDir(), "command-spills")
+			if entries, readErr := os.ReadDir(spillsDir); readErr == nil && len(entries) != 0 {
+				t.Fatalf("%s left %d spill entries in %s", c.name, len(entries), spillsDir)
+			}
+			var ms runtime.MemStats
+			runtime.ReadMemStats(&ms)
+			if ms.HeapInuse > peakHeapInuse {
+				peakHeapInuse = ms.HeapInuse
+			}
+			if g := runtime.NumGoroutine(); g > peakGoroutines {
+				peakGoroutines = g
+			}
+			if rss := currentMaxRSSBytes(); rss > peakRSS {
+				peakRSS = rss
+			}
+			t.Logf("%s: elapsed=%v heap_inuse=%.2fMiB goroutines=%d peak_rss=%.2fMiB",
+				c.name, elapsed, float64(ms.HeapInuse)/(1<<20), runtime.NumGoroutine(), float64(peakRSS)/(1<<20))
+		})
+	}
+
+	runtime.GC()
+	finalGoroutines := runtime.NumGoroutine()
+	var finalMem runtime.MemStats
+	runtime.ReadMemStats(&finalMem)
+	if rss := currentMaxRSSBytes(); rss > peakRSS {
+		peakRSS = rss
+	}
+
+	var unsettled int
+	testutil.FailErr(t, "check unsettled executions", f.Database.QueryRowContext(t.Context(),
+		`SELECT (SELECT count(*) FROM invocation_programs WHERE state IN ('running','waiting')) + (SELECT count(*) FROM invocation_program_executions WHERE state IN ('prepared','waiting','running'))`).Scan(&unsettled))
+	if unsettled != 0 {
+		t.Fatalf("leaked %d unsettled program/execution receipts", unsettled)
+	}
+	if finalGoroutines > baseGoroutines+8 {
+		t.Fatalf("goroutine leak after ceiling runs: base=%d final=%d", baseGoroutines, finalGoroutines)
+	}
+	const maxPeakHeapInuse = 512 << 20 // 512 MiB ceiling
+	if peakHeapInuse > maxPeakHeapInuse {
+		t.Fatalf("peak heap in-use %d bytes exceeded %d bytes", peakHeapInuse, maxPeakHeapInuse)
+	}
+	t.Logf("resource ceiling summary: base_goroutines=%d peak_goroutines=%d final_goroutines=%d peak_heap_inuse=%.2fMiB final_heap_inuse=%.2fMiB peak_rss=%.2fMiB",
+		baseGoroutines, peakGoroutines, finalGoroutines, float64(peakHeapInuse)/(1<<20), float64(finalMem.HeapInuse)/(1<<20), float64(peakRSS)/(1<<20))
 }

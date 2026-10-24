@@ -35,10 +35,41 @@ type walker struct {
 	visited int64
 	maximum int64
 	filters map[string]sandbox.ReadFilter
+	roots   map[string]*fseffect.ReadRoot
 }
 
 func newWalker(inv *invocation) *walker {
-	return &walker{inv: inv, maximum: inv.owners.limit("traversal_visits"), filters: map[string]sandbox.ReadFilter{}}
+	return &walker{inv: inv, maximum: inv.owners.limit("traversal_visits"), filters: map[string]sandbox.ReadFilter{}, roots: map[string]*fseffect.ReadRoot{}}
+}
+
+func (w *walker) close() {
+	for k, r := range w.roots {
+		_ = r.Close()
+		delete(w.roots, k)
+	}
+}
+
+func (w *walker) readRoot(bound projectpaths.BoundPath) *fseffect.ReadRoot {
+	path := bound.Resolved.Root.Path
+	if path == "" || bound.Resolved.External {
+		return nil
+	}
+	if err := bound.Validate(); err != nil {
+		if old, ok := w.roots[path]; ok {
+			_ = old.Close()
+			delete(w.roots, path)
+		}
+		return nil
+	}
+	if r, ok := w.roots[path]; ok {
+		return r
+	}
+	r, err := fseffect.OpenReadRoot(path)
+	if err != nil {
+		return nil
+	}
+	w.roots[path] = r
+	return r
 }
 
 func (w *walker) visit() error {
@@ -79,10 +110,12 @@ func (w *walker) operand(spelling string, follow bool) (entry, error) {
 // follow reports the target metadata of contained links; a link whose
 // target cannot be reached stays a link.
 func (w *walker) children(dir entry, follow bool) ([]entry, error) {
-	names, err := dir.bound.ReadDir()
+	opened, err := dir.bound.OpenDir()
 	if err != nil {
 		return nil, err
 	}
+	defer opened.Close()
+	names := opened.Names()
 	filter, err := w.filter(dir.bound)
 	if err != nil {
 		return nil, err
@@ -95,8 +128,7 @@ func (w *walker) children(dir entry, follow bool) ([]entry, error) {
 		if err := w.visit(); err != nil {
 			return nil, err
 		}
-		child := dir.bound.Child(name)
-		st, err := child.Stat(false)
+		child, st, err := opened.StatChild(name)
 		if err != nil {
 			if _, ok := ordinary(err); ok {
 				continue // removed between listing and inspection
@@ -105,7 +137,7 @@ func (w *walker) children(dir entry, follow bool) ([]entry, error) {
 		}
 		e := entry{display: joinDisplay(dir.display, name), name: name, bound: child, stat: st, depth: dir.depth + 1, start: dir.start, link: st.Mode&fs.ModeSymlink != 0}
 		if e.link && follow {
-			if target, err := child.Stat(true); err == nil {
+			if target, err := opened.StatChildFollowed(child); err == nil {
 				e.stat = target
 			}
 		}

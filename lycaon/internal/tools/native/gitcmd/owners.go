@@ -49,7 +49,7 @@ func NewOwners(reader Reader) (*Owners, error) {
 	if reader == nil {
 		return nil, errors.New("git command owners require the Git read door")
 	}
-	catalog, err := toolcontract.LanguageV1()
+	catalog, err := toolcontract.ReadOnlyLanguageV1()
 	if err != nil {
 		return nil, err
 	}

@@ -147,6 +147,11 @@ func (f *Fixture) Call(t testing.TB, ctx context.Context, source string) (string
 	return f.Runtime.Run(ctx, args, tc)
 }
 
+// ScratchDir returns the session scratch directory when Scratch is enabled.
+func (f *Fixture) ScratchDir() string {
+	return f.scratch
+}
+
 // Programs lists program receipt states in start order.
 func (f *Fixture) Programs(t *testing.T) []string {
 	t.Helper()

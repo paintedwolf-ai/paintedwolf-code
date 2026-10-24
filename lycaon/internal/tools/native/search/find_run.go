@@ -44,6 +44,7 @@ func unavailable(form, reason string) error {
 func runFind(inv *invocation) error {
 	inv.failure = 1
 	r := &findRun{inv: inv, walker: newWalker(inv), maxDepth: -1, now: time.Now()}
+	defer r.walker.close()
 	if inv.owners.Now != nil {
 		r.now = inv.owners.Now()
 	}

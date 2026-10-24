@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -34,7 +35,13 @@ func (e ExecutionRevisions) CaptureBytes(ctx context.Context, tctx tools.ToolCon
 	if err != nil {
 		return ExecutionBytes{}, err
 	}
-	content, revision, err := captureBytes(ctx, tctx, resolved, maxBytes)
+	return e.CaptureWalkedBytes(ctx, tctx, resolved, nil, maxBytes)
+}
+
+// CaptureWalkedBytes pins one already-resolved literal byte input, using root
+// when non-nil to avoid re-opening the root directory per file during a walk.
+func (e ExecutionRevisions) CaptureWalkedBytes(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved, root *fseffect.ReadRoot, maxBytes int64) (ExecutionBytes, error) {
+	content, revision, err := captureBytesFromRoot(ctx, tctx, resolved, root, maxBytes)
 	if errors.Is(err, fs.ErrNotExist) {
 		return ExecutionBytes{}, sourceview.PathNotFound("read", resolved.DisplayPath, resolved.Abs)
 	}
@@ -45,8 +52,12 @@ func (e ExecutionRevisions) CaptureBytes(ctx context.Context, tctx tools.ToolCon
 }
 
 func captureBytes(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved, maxBytes int64) ([]byte, toolcontract.ExecutionRevision, error) {
-	root, rel := revisionLocation(resolved)
-	revision := toolcontract.ExecutionRevision{Role: toolcontract.SourceRevision, Basis: toolcontract.CapturedRevision, RootID: root, Path: rel, Representation: toolcontract.OriginalEncodedBytes}
+	return captureBytesFromRoot(ctx, tctx, resolved, nil, maxBytes)
+}
+
+func captureBytesFromRoot(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved, root *fseffect.ReadRoot, maxBytes int64) ([]byte, toolcontract.ExecutionRevision, error) {
+	rootID, rel := revisionLocation(resolved)
+	revision := toolcontract.ExecutionRevision{Role: toolcontract.SourceRevision, Basis: toolcontract.CapturedRevision, RootID: rootID, Path: rel, Representation: toolcontract.OriginalEncodedBytes}
 	doc, open, err := sourceview.OpenDocument(ctx, tctx, resolved)
 	if err != nil {
 		return nil, revision, err
@@ -59,7 +70,7 @@ func captureBytes(ctx context.Context, tctx tools.ToolContext, resolved projectp
 		revision.Mode, revision.DocumentID, revision.DocumentRevision, revision.DiskSHA256 = toolcontract.AcceptedDocumentRevision, doc.ID, doc.Revision, doc.BaseSHA256
 		revision.ContentSHA256 = textfile.SHA256(content)
 	} else {
-		content, err = sourceview.ReadContentCapped("read", sourceview.AccessRead, resolved.EffectLocation(), resolved.DisplayPath, resolved.Compressed, maxBytes)
+		content, err = sourceview.ReadContentCappedFromRoot("read", sourceview.AccessRead, root, resolved.EffectLocation(), resolved.DisplayPath, resolved.Compressed, maxBytes)
 		if os.IsNotExist(err) {
 			return nil, revision, fs.ErrNotExist
 		}

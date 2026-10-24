@@ -87,7 +87,7 @@ var utilities = map[string]utility{"grep": runGrep, "rg": runRg, "find": runFind
 
 // NewOwners binds the frozen catalog's specifications and operation identities.
 func NewOwners(revisions native.ExecutionRevisions, pins PinRecorder, remover Remover) (*Owners, error) {
-	catalog, err := toolcontract.LanguageV1()
+	catalog, err := toolcontract.ReadOnlyLanguageV1()
 	if err != nil {
 		return nil, err
 	}
