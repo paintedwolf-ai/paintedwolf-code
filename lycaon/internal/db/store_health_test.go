@@ -377,6 +377,5 @@ func TestQuarantinePublicationFailureStillStopsWrites(t *testing.T) {
 	}
 	if _, err := store.ExecContext(t.Context(), `INSERT INTO store_meta(key,value) VALUES('unsafe','unsafe')`); !errors.Is(err, ErrStoreIncompatible) {
 		t.Fatalf("write after failure=%v", err)
->>>>>>> bfcfddb008 (Defer crash integrity audits until after startup)
 	}
 }
