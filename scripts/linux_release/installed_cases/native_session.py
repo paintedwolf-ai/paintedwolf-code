@@ -39,12 +39,32 @@ class NativeSessionObserver:
         # Each locker adapter must be established from its actual native contract.
         if session.get('Desktop') != 'GNOME':
             raise CaseUnavailable('native-locker-adapter-unverified')
+        self.owns_reader = reader is None
+        self.closed = False
         self.reader, self.owner = reader or Reader(), owner
         self.shell = shell or (lambda: installed_gnome.owner(self.reader))
         self.session = {key: session[key] for key in ('id', 'User', 'Type', 'Seat')}
         self.locker = ('org.gnome.ScreenSaver', '/org/gnome/ScreenSaver')
-        self.authorities = self._authorities()
-        self.initial = self.observe()
+        try:
+            self.authorities = self._authorities()
+            self.initial = self.observe()
+        except BaseException:
+            self.close()
+            raise
+
+    def close(self):
+        if not self.closed:
+            self.closed = True
+            if self.owns_reader:
+                self.reader.close()
+
+    def __enter__(self):
+        if self.closed:
+            raise ValueError('native session observer is closed')
+        return self
+
+    def __exit__(self, *_):
+        self.close()
 
     def _call(self, destination, path, interface, method, args, signature, *, user=False):
         return self.reader.call(path, interface, method, args, signature,
@@ -77,6 +97,8 @@ class NativeSessionObserver:
         return value.unpack()
 
     def observe(self):
+        if self.closed:
+            raise ValueError('native session observer is closed')
         if self._authorities() != self.authorities:
             raise ValueError('captured native session authority changed')
         path, = self._call(self.authorities['login']['unique'], MANAGER,
@@ -123,6 +145,9 @@ class NativeSessionObserver:
                 raise ValueError('native inhibitor row has an invalid typed shape')
             what, _, _, mode, uid, pid = row
             result.append({'what': what, 'mode': mode, 'owner': self.owner(pid, uid)})
-        if self.observe() != before:
+        again, = self._call(self.authorities['login']['unique'], MANAGER,
+            LOGIN + '.Manager', 'ListInhibitors', None, '(a(ssssuu))')
+        if (again != rows or any(self.owner(row['owner']['pid'], row['owner']['uid']) != row['owner']
+                                 for row in result) or self.observe() != before):
             raise ValueError('native session changed during inhibitor observation')
         return {'native_session': before, 'inhibitors': result}

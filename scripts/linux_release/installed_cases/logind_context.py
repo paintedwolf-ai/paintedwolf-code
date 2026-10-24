@@ -21,6 +21,8 @@ class CallFailure(Exception):
 
 class Reader:
     def __init__(self):
+        self.system = self.user = None
+        self.closed = False
         try:
             from gi.repository import Gio, GLib
         except ImportError:
@@ -30,7 +32,29 @@ class Reader:
             self.system = self.connect('/run/dbus/system_bus_socket', 0)
         except GLib.Error:
             raise CaseUnavailable('typed-native-session-bus-unavailable') from None
-        self.user = None
+
+    def close(self):
+        if self.closed:
+            return
+        self.closed = True
+        errors = []
+        for connection in (self.user, self.system):
+            if connection is not None:
+                try:
+                    connection.close_sync(None)
+                except Exception as error:
+                    errors.append(error)
+        self.user = self.system = None
+        if errors:
+            raise ValueError('native session bus connection cleanup failed') from errors[0]
+
+    def __enter__(self):
+        if self.closed:
+            raise ValueError('native session reader is closed')
+        return self
+
+    def __exit__(self, *_):
+        self.close()
 
     def connect(self, address, uid):
         path = Path(address)
@@ -53,14 +77,19 @@ class Reader:
                 None, cancellation)
         finally:
             timer.cancel()
-        after = path.lstat()
-        if (before.st_dev, before.st_ino, before.st_uid, before.st_mode) != (
-                after.st_dev, after.st_ino, after.st_uid, after.st_mode):
+        try:
+            after = path.lstat()
+            if (before.st_dev, before.st_ino, before.st_uid, before.st_mode) != (
+                    after.st_dev, after.st_ino, after.st_uid, after.st_mode):
+                raise ValueError('native session bus socket changed during connection')
+        except BaseException:
             connection.close_sync(None)
-            raise ValueError('native session bus socket changed during connection')
+            raise
         return connection
 
     def call(self, path, interface, method, args, signature, *, user=False, destination=None):
+        if self.closed:
+            raise ValueError('native session reader is closed')
         destination = destination or ('org.freedesktop.systemd1' if user else LOGIN)
         parameters = self.glib.Variant(*args) if args else None
         try:
@@ -70,7 +99,11 @@ class Reader:
             return connection.call_sync(destination, path, interface, method, parameters,
                 self.glib.VariantType.new(signature), self.gio.DBusCallFlags.NONE, 5000, None)
         except self.glib.Error as error:
+            self.close()
             raise CallFailure(self.gio.DBusError.get_remote_error(error)) from None
+        except BaseException:
+            self.close()
+            raise
 
     def object(self, method, pid, *, user=False):
         base = '/org/freedesktop/systemd1' if user else MANAGER
@@ -139,7 +172,8 @@ def execution_session() -> dict:
             cgroups = stream.read(65537)
         if len(cgroups) > 65536:
             raise ValueError('native execution cgroup observation exceeds its bound')
-        return observed(Reader(), os.getpid(), os.getuid(), cgroups)
+        with Reader() as reader:
+            return observed(reader, os.getpid(), os.getuid(), cgroups)
     except CallFailure as error:
         unavailable = CaseUnavailable('typed-native-session-observation-unavailable')
         unavailable.observations = {'native_session_error': {'remote_name': error.name}}

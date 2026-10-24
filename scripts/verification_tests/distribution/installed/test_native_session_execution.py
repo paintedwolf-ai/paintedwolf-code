@@ -1,5 +1,6 @@
 import os
 import unittest
+from unittest.mock import patch
 
 from scripts.linux_release.installed_cases.native_session import NativeSessionObserver
 from scripts.linux_release.installed_cases.records import CaseUnavailable
@@ -24,6 +25,7 @@ class Variant:
 
 class NativeReader:
     def __init__(self):
+        self.closes = 0
         self.names = {'org.freedesktop.login1': ':1.1', 'org.gnome.ScreenSaver': ':1.2'}
         self.pids = {':1.1': 100, ':1.2': 200}
         self.properties = {'Id': ('s', '7'), 'User': ('(uo)', (os.getuid(), '/org/freedesktop/login1/user/_1000')),
@@ -33,6 +35,9 @@ class NativeReader:
         self.locked = False
         self.rows = [('sleep', 'private diagnostic', 'private diagnostic', 'block', os.getuid(), 300)]
         self.calls = []
+
+    def close(self):
+        self.closes += 1
 
     def call(self, path, interface, method, args, signature, *, user=False, destination=None):
         self.calls.append((destination, method, user))
@@ -66,6 +71,23 @@ class NativeSessionTests(unittest.TestCase):
         return NativeSessionObserver(self.session, reader=self.reader, owner=self.owner, shell=lambda: {
             'unique_owner': ':1.2', 'pid': 200, 'start_time_ticks': 20,
             'executable': '/usr/bin/gnome-shell', 'device': 1, 'inode': 2, 'mode': 0o755, 'bytes': 3})
+
+    def test_owned_reader_closes_on_context_exit_and_failed_initial_capture(self):
+        borrowed = self.observer()
+        shell = borrowed.shell
+        borrowed.close()
+        self.assertEqual(self.reader.closes, 0)
+        with patch('scripts.linux_release.installed_cases.native_session.Reader', return_value=self.reader):
+            with NativeSessionObserver(self.session, owner=self.owner, shell=shell) as owned:
+                self.assertFalse(owned.closed)
+            owned.close()
+            self.assertEqual(self.reader.closes, 1)
+            with self.assertRaises(ValueError):
+                owned.observe()
+            self.reader.properties['TimestampMonotonic'] = ('t', 0)
+            with self.assertRaises(ValueError):
+                NativeSessionObserver(self.session, owner=self.owner, shell=shell)
+            self.assertEqual(self.reader.closes, 2)
 
     def test_independent_session_locker_and_kernel_inhibitor_facts(self):
         observer = self.observer()
