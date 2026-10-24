@@ -131,7 +131,7 @@ class NativeSessionObserver:
                 or values['Type'] != self.session['Type'] or values['Remote'] is not False
                 or values['Active'] is not True or type(values['LockedHint']) is not bool):
             raise ValueError('captured native graphical session changed')
-        lifecycle = {'object_path': path, 'user': values['User'], 'seat': values['Seat'],
+        lifecycle = {'object_path': path, 'user': list(values['User']), 'seat': list(values['Seat']),
                      'created_monotonic_usec': values['TimestampMonotonic']}
         if hasattr(self, 'initial') and lifecycle != self.initial['lifecycle']:
             raise ValueError('captured native session lifecycle changed')

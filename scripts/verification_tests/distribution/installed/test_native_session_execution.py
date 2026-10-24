@@ -160,8 +160,10 @@ class NativeSessionTests(unittest.TestCase):
             observer.inhibitors()
 
     def test_observation_cannot_mutate_captured_session_authority(self):
+        import json
         observer = self.observer()
         result = observer.observe()
+        self.assertEqual(json.loads(json.dumps(result)), result)
         result['session']['id'] = '8'
         result['authorities']['locker']['process']['start_time_ticks'] = 1
         self.assertEqual(observer.observe()['session']['id'], '7')
