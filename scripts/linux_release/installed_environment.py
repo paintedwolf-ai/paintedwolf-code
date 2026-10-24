@@ -8,6 +8,8 @@ import platform
 import shlex
 import subprocess
 
+from . import installed_gnome
+
 OS_IDS = {"Ubuntu": {"ubuntu"}, "Fedora": {"fedora"}, "Debian": {"debian"}, "RHEL-compatible": {"rhel", "rocky", "almalinux", "centos"},
           "Arch Linux": {"arch"}, "Arch Linux ARM": {"archarm"}, "Artix": {"artix"},
           "Debian-compatible": {"debian", "ubuntu", "linuxmint", "pop"},
@@ -81,34 +83,9 @@ def graphical_session() -> dict:
         raise ValueError("qualification requires one active local graphical session for its nonroot account")
     session = sessions[0]
     if not session.get("Desktop"):
-        session["DesktopOwner"] = gnome_owner()
+        session["DesktopOwner"] = installed_gnome.owner()
         session["Desktop"] = "GNOME"
     return session
-
-
-def gnome_owner() -> dict:
-    command = ["busctl", "--address=unix:path=/run/user/" + str(os.getuid()) + "/bus", "--json=short", "call",
-               "org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus", "GetConnectionUnixProcessID", "s", "org.gnome.Shell"]
-    response = query(command)
-    if response["exit_code"]:
-        raise ValueError("empty logind desktop has no independently bound GNOME shell owner")
-    value = json.loads(response["stdout"])
-    if set(value) != {"type", "data"} or value["type"] != "u" or len(value["data"]) != 1 or type(value["data"][0]) is not int:
-        raise ValueError("GNOME bus owner returned an invalid typed PID")
-    pid = value["data"][0]
-    if pid <= 1:
-        raise ValueError("GNOME bus owner has no live process")
-    process = Path("/proc") / str(pid)
-    before = (process / "stat").read_text().rpartition(") ")[2].split()[19]
-    executable = (process / "exe").resolve(strict=True)
-    image = executable.stat()
-    if (process.stat().st_uid != os.getuid() or executable.name != "gnome-shell"
-            or image.st_uid != 0 or image.st_mode & 0o022):
-        raise ValueError("GNOME bus owner is not the account's root-owned shell executable")
-    if query(command) != response or (process / "stat").read_text().rpartition(") ")[2].split()[19] != before:
-        raise ValueError("GNOME shell owner changed during session observation")
-    return {"bus_name": "org.gnome.Shell", "pid": pid, "start_time_ticks": int(before), "executable": str(executable),
-            "device": image.st_dev, "inode": image.st_ino}
 
 
 def package_inventory_arguments(installation: str) -> list[str]:

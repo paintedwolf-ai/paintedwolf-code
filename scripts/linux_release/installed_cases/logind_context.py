@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import stat
 
 from .records import CaseUnavailable
 
@@ -25,17 +26,38 @@ class Reader:
             raise CaseUnavailable('typed-native-session-observer-unavailable') from None
         self.gio, self.glib = Gio, GLib
         try:
-            self.system = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
+            self.system = self.connect('/run/dbus/system_bus_socket', 0)
         except GLib.Error:
             raise CaseUnavailable('typed-native-session-bus-unavailable') from None
         self.user = None
+
+    def connect(self, address, uid):
+        path = Path(address)
+        for parent in reversed(path.parents):
+            info = parent.lstat()
+            expected_uid = uid if parent == Path('/run/user') / str(uid) else 0
+            if (not stat.S_ISDIR(info.st_mode) or info.st_uid != expected_uid
+                    or info.st_mode & 0o022):
+                raise ValueError('native session bus parent is not controlled by its expected account')
+        before = path.lstat()
+        if not stat.S_ISSOCK(before.st_mode) or before.st_uid != uid:
+            raise ValueError('native session bus socket belongs to another account')
+        connection = self.gio.DBusConnection.new_for_address_sync('unix:path=' + address,
+            self.gio.DBusConnectionFlags.AUTHENTICATION_CLIENT | self.gio.DBusConnectionFlags.MESSAGE_BUS_CONNECTION,
+            None, None)
+        after = path.lstat()
+        if (before.st_dev, before.st_ino, before.st_uid, before.st_mode) != (
+                after.st_dev, after.st_ino, after.st_uid, after.st_mode):
+            connection.close_sync(None)
+            raise ValueError('native session bus socket changed during connection')
+        return connection
 
     def call(self, path, interface, method, args, signature, *, user=False, destination=None):
         destination = destination or ('org.freedesktop.systemd1' if user else LOGIN)
         parameters = self.glib.Variant(*args) if args else None
         try:
             if user and self.user is None:
-                self.user = self.gio.bus_get_sync(self.gio.BusType.SESSION, None)
+                self.user = self.connect('/run/user/' + str(os.getuid()) + '/bus', os.getuid())
             connection = self.user if user else self.system
             return connection.call_sync(destination, path, interface, method, parameters,
                 self.glib.VariantType.new(signature), self.gio.DBusCallFlags.NONE, 5000, None)

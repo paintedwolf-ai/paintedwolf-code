@@ -26,9 +26,10 @@ class NativeReader:
     def __init__(self):
         self.names = {'org.freedesktop.login1': ':1.1', 'org.gnome.ScreenSaver': ':1.2'}
         self.pids = {':1.1': 100, ':1.2': 200}
-        self.properties = {'Id': ('s', '7'), 'User': ('(uo)', (os.getuid(), '/user')),
-            'Seat': ('(so)', ('seat0', '/seat')), 'Type': ('s', 'wayland'),
-            'Remote': ('b', False), 'Active': ('b', True), 'LockedHint': ('b', False)}
+        self.properties = {'Id': ('s', '7'), 'User': ('(uo)', (os.getuid(), '/org/freedesktop/login1/user/_1000')),
+            'Seat': ('(so)', ('seat0', '/org/freedesktop/login1/seat/seat0')), 'Type': ('s', 'wayland'),
+            'TimestampMonotonic': ('t', 123456), 'Remote': ('b', False), 'Active': ('b', True), 'LockedHint': ('b', False)}
+        self.path = '/org/freedesktop/login1/session/_7'
         self.locked = False
         self.rows = [('sleep', 'private diagnostic', 'private diagnostic', 'block', os.getuid(), 300)]
         self.calls = []
@@ -40,7 +41,7 @@ class NativeReader:
         if method == 'GetConnectionUnixProcessID':
             return Variant((self.pids[args[1][0]],))
         if method == 'GetSession':
-            return Variant(('/org/freedesktop/login1/session/_7',))
+            return Variant((self.path,))
         if method == 'Get':
             kind, value = self.properties[args[1][1]]
             return Variant((Variant(value, kind),))
@@ -62,7 +63,9 @@ class NativeSessionTests(unittest.TestCase):
         return {'pid': pid, 'parent_pid': 1, 'start_time_ticks': self.births[pid], 'uid': uid}
 
     def observer(self):
-        return NativeSessionObserver(self.session, reader=self.reader, owner=self.owner)
+        return NativeSessionObserver(self.session, reader=self.reader, owner=self.owner, shell=lambda: {
+            'unique_owner': ':1.2', 'pid': 200, 'start_time_ticks': 20,
+            'executable': '/usr/bin/gnome-shell', 'device': 1, 'inode': 2, 'mode': 0o755, 'bytes': 3})
 
     def test_independent_session_locker_and_kernel_inhibitor_facts(self):
         observer = self.observer()
@@ -122,6 +125,22 @@ class NativeSessionTests(unittest.TestCase):
         result['session']['id'] = '8'
         result['authorities']['locker']['process']['start_time_ticks'] = 1
         self.assertEqual(observer.observe()['session']['id'], '7')
+
+    def test_same_session_id_recreation_and_changed_object_links_refuse(self):
+        for change in ('created', 'object', 'user', 'seat'):
+            with self.subTest(change=change):
+                self.setUp()
+                observer = self.observer()
+                if change == 'created':
+                    self.reader.properties['TimestampMonotonic'] = ('t', 123457)
+                elif change == 'object':
+                    self.reader.path += '_new'
+                elif change == 'user':
+                    self.reader.properties['User'] = ('(uo)', (os.getuid(), '/org/freedesktop/login1/user/new'))
+                else:
+                    self.reader.properties['Seat'] = ('(so)', ('seat0', '/org/freedesktop/login1/seat/new'))
+                with self.assertRaises(ValueError):
+                    observer.observe()
 
 
 if __name__ == '__main__':
