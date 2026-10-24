@@ -155,3 +155,59 @@ class FixtureSelectionTests(unittest.TestCase):
                 overlay.symlink_to('/missing')
                 with self.assertRaises(ValueError):
                     owner.fixture_selection(None, root, project, 'fixed', MODEL)
+
+
+class ActiveSessionTests(unittest.TestCase):
+    def test_active_session_requires_exact_project_provider_and_phase_facts(self):
+        session = {'id': 'session', 'status': 'busy', 'provider_id': None, 'model': None,
+                   'parent_session_id': None}
+        with patch.object(owner, 'project_for_owned_root', return_value={'project_id': 'project'}), patch.object(
+                owner, 'fixture_selection', return_value={'model_policy_sha256': 'a' * 64}), patch.object(
+                owner, 'sessions_for_project', return_value=[session]) as observed:
+            active = owner.require_active(None, None, 'fixture', MODEL)
+            self.assertEqual(active['id'], 'session')
+            self.assertIsNone(owner.active_session(None, None, 'fixture', MODEL, status='idle'))
+            observed.return_value = [{**session, 'status': 'idle'}]
+            self.assertEqual(owner.active_session(None, None, 'fixture', MODEL, status='idle')['id'], 'session')
+            with self.assertRaises(owner.CaseUnavailable):
+                owner.require_active(None, None, 'fixture', MODEL, active)
+            with self.assertRaisesRegex(ValueError, 'idle or busy'):
+                owner.active_session(None, None, 'fixture', MODEL, status='other')
+            observed.return_value = [{**session, 'id': 'replacement'}]
+            with self.assertRaisesRegex(ValueError, 'replaced'):
+                owner.require_active(None, None, 'fixture', MODEL, active)
+            observed.return_value = [session, session]
+            with self.assertRaisesRegex(ValueError, 'ambiguous'):
+                owner.active_session(None, None, 'fixture', MODEL)
+            for changed in ({'provider_id': 'foreign'}, {'provider_id': 'fixture'},
+                            {'model': MODEL}, {'parent_session_id': 'child'}):
+                observed.return_value = [{**session, **changed}]
+                with self.subTest(changed=changed), self.assertRaisesRegex(ValueError, 'selected root'):
+                    owner.active_session(None, None, 'fixture', MODEL)
+            observed.return_value = [{**session, 'provider_id': 'fixture', 'model': MODEL}]
+            self.assertEqual(owner.require_active(None, None, 'fixture', MODEL)['id'], 'session')
+
+    def test_busy_session_cannot_outlive_its_observed_model_selection(self):
+        session = {'id': 'session', 'status': 'busy', 'provider_id': None, 'model': None,
+                   'parent_session_id': None}
+        with patch.object(owner, 'project_for_owned_root', return_value={'project_id': 'project'}), patch.object(
+                owner, 'fixture_selection', side_effect=[{'policy': 'before'}, {'policy': 'after'}]), patch.object(
+                owner, 'sessions_for_project', return_value=[session]):
+            with self.assertRaisesRegex(ValueError, 'selection changed'):
+                owner.active_session(None, None, 'fixture', MODEL)
+
+    def test_await_session_polls_requested_phase_and_refuses_timeout(self):
+        idle = {'id': 'session', 'status': 'idle'}
+        with patch.object(owner, 'active_session', side_effect=[None, idle]) as active, patch.object(
+                owner.time, 'sleep') as sleep:
+            self.assertEqual(owner.await_session(
+                None, None, 'fixture', MODEL, status='idle',
+                reason='workspace-activation-project-session-not-opened'), idle)
+            self.assertEqual(active.call_count, 2)
+            sleep.assert_called_once_with(0.05)
+        with patch.object(owner, 'active_session', return_value=None), patch.object(
+                owner.time, 'monotonic', side_effect=[0.0, 30.0]), patch.object(owner.time, 'sleep'):
+            with self.assertRaisesRegex(CaseUnavailable, 'workspace-activation-project-session-not-opened'):
+                owner.await_session(
+                    None, None, 'fixture', MODEL, status='idle',
+                    reason='workspace-activation-project-session-not-opened')

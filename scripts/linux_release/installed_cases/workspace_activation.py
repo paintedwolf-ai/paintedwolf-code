@@ -7,8 +7,7 @@ from .app import InstalledApp
 from .desktop_ui import DesktopUI, interactive_window
 from .desktop_launch import activate, protected_launcher
 from .process import run
-from .profile_observer import project_for_owned_root, sessions_for_project
-from .profile_setup import fixture_selection
+from .profile_setup import active_session, await_session, require_active
 from .provider import MODEL, ProviderFixture
 from .provider_barrier import ResponseBarrier
 from .provider_setup import configure_provider
@@ -18,35 +17,6 @@ from .records import CaseFailed, CaseUnavailable, retain
 from ..installed_input.surface import FrameObserver
 from ..installed_input.surface_guest import perform_transition
 from ..installed_input import surface_wire
-
-
-def active_session(app, project, provider):
-    witness = project_for_owned_root(app, project)
-    if witness is None:
-        return None
-    selection = fixture_selection(app, project, witness['project_id'], provider, MODEL)
-    rows = sessions_for_project(app, witness['project_id'])
-    if len(rows) > 1:
-        raise ValueError('workspace fixture has ambiguous durable session identity')
-    if rows and (rows[0]['parent_session_id'] is not None
-            or (rows[0]['provider_id'], rows[0]['model']) not in {(None, None), (provider, MODEL)}):
-        raise ValueError('workspace fixture session differs from its selected root coordinator')
-    if rows and rows[0]['status'] == 'error':
-        raise ValueError('workspace fixture work failed before Quit')
-    if rows and rows[0]['status'] == 'busy':
-        if fixture_selection(app, project, witness['project_id'], provider, MODEL) != selection:
-            raise ValueError('workspace fixture model selection changed during observation')
-        return {**witness, **rows[0], 'model_selection': selection}
-    return None
-
-
-def require_active(app, project, provider, expected=None):
-    current = active_session(app, project, provider)
-    if current is None:
-        raise CaseUnavailable('normal-workspace-quit-has-no-observed-active-session')
-    if expected is not None and current != expected:
-        raise ValueError('workspace interaction replaced its active durable session')
-    return current
 
 
 def reopen(app, observer):
@@ -85,15 +55,15 @@ def execute(binding, capability, case, root):
                 opened = run(binding, 'pw', ['open', str(project)], timeout=30)
                 if opened['exit_code'] or opened['timed_out'] or opened['output_limit']:
                     raise ValueError('installed CLI refused the owned workspace project')
+                observations['opened_session'] = await_session(
+                    app, project, provider['provider_id'], MODEL,
+                    status='idle', reason='workspace-activation-project-session-not-opened')
                 submit_project_turn(app)
                 with DesktopUI(app) as ui:
-                    deadline = time.monotonic() + 30
-                    while active_session(app, project, provider['provider_id']) is None:
-                        if time.monotonic() >= deadline:
-                            raise CaseUnavailable('normal-workspace-fixture-did-not-start')
-                        time.sleep(0.05)
+                    await_session(app, project, provider['provider_id'], MODEL,
+                                  reason='normal-workspace-fixture-did-not-start')
                     observations['provider_held_before'] = barrier.await_held()
-                    active = require_active(app, project, provider['provider_id'])
+                    active = require_active(app, project, provider['provider_id'], MODEL)
                     if not any(row['completed'] is False for row in fixture.observations):
                         raise CaseUnavailable('workspace-active-turn-has-no-fixed-provider-request')
                     observations['active_before'] = active
@@ -109,15 +79,15 @@ def execute(binding, capability, case, root):
                         transition('workspace-hide-main-v1')
                         observations['reopen_hidden'] = reopen(app, observer)
                         observations['repeated_activation'] = reopen(app, observer)
-                        require_active(app, project, provider['provider_id'], active)
+                        require_active(app, project, provider['provider_id'], MODEL, active)
                         barrier.require_held()
                         transition('workspace-request-quit-v1')
                         transition('workspace-cancel-quit-v1')
-                        observations['active_after_cancel'] = require_active(app, project, provider['provider_id'], active)
+                        observations['active_after_cancel'] = require_active(app, project, provider['provider_id'], MODEL, active)
                         observations['provider_held_after_cancel'] = barrier.require_held()
                         transition('workspace-request-quit-v1')
                         transition('workspace-focus-quit-v1')
-                        require_active(app, project, provider['provider_id'], active)
+                        require_active(app, project, provider['provider_id'], MODEL, active)
                         barrier.require_held()
                         transition('workspace-approve-quit-v1')
                         observations['provider_cancelled_by_quit'] = barrier.await_peer_cancellation()
