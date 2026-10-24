@@ -75,7 +75,7 @@ class _FixtureServer(ThreadingHTTPServer):
 
 
 class ProviderFixture:
-    def __init__(self, calls: list[dict]):
+    def __init__(self, calls: list[dict], *, response_barrier=None):
         if not calls or len(calls) > 16:
             raise ValueError('fixture requires one to sixteen tool calls')
         for call in calls:
@@ -92,12 +92,14 @@ class ProviderFixture:
         self.server = None
         self.thread = None
         self.gui_purpose = False
+        self.response_barrier = response_barrier
         self.port = 0
         self.acquisition = None
 
     @classmethod
-    def gui(cls, calls: list[dict], *, endpoint: str | None = None, acquire_command: bool = False):
-        fixture = cls(calls)
+    def gui(cls, calls: list[dict], *, endpoint: str | None = None,
+            acquire_command: bool = False, response_barrier=None):
+        fixture = cls(calls, response_barrier=response_barrier)
         fixture.gui_purpose = True
         if type(acquire_command) is not bool:
             raise ValueError('GUI acquisition mode must be explicit')
@@ -205,7 +207,8 @@ class ProviderFixture:
 
             def do_POST(self):
                 self.connection.settimeout(10)
-                shape = None
+                lease, written, shape = None, False, None
+                barrier = fixture.response_barrier
                 try:
                     length = int(self.headers.get('Content-Length', '0'))
                     if self.path != '/v1/chat/completions' or not 0 < length <= LIMIT:
@@ -218,8 +221,14 @@ class ProviderFixture:
                     request = json.loads(raw)
                     shape = request_shape(request)
                     completion = fixture.completion(request)
+                    if barrier is not None:
+                        lease = barrier.capture(self.connection, raw)
+                        if lease is not None and not barrier.wait(lease):
+                            return
                     if not request.get('stream', False):
-                        return self.respond(200, completion)
+                        self.respond(200, completion)
+                        written = True
+                        return
                     choice = completion['choices'][0]
                     delta = choice['message'].copy()
                     if 'tool_calls' in delta:
@@ -232,10 +241,15 @@ class ProviderFixture:
                     self.send_header('Content-Length', str(len(raw)))
                     self.end_headers()
                     self.wfile.write(raw)
+                    written = True
                 except (ValueError, TypeError, OSError) as error:
-                    code = error.code if isinstance(error, (FixtureRefusal, AcquisitionRefusal)) else 'request-invalid'
-                    self.respond(400, {'error': 'fixture-request-refused'}, refusal=code, shape=shape,
-                                 detail=error.detail if isinstance(error, AcquisitionRefusal) else None)
+                    if lease is None:
+                        code = error.code if isinstance(error, (FixtureRefusal, AcquisitionRefusal)) else 'request-invalid'
+                        self.respond(400, {'error': 'fixture-request-refused'}, refusal=code, shape=shape,
+                                     detail=error.detail if isinstance(error, AcquisitionRefusal) else None)
+                finally:
+                    if lease is not None:
+                        barrier.finish(lease, written)
 
         # Fresh fixtures use a kernel-selected port. Recovery exclusively binds
         # the exact prior admitted endpoint; an occupied port refuses without interference.
@@ -247,8 +261,12 @@ class ProviderFixture:
         return self
 
     def __exit__(self, kind, value, traceback):
-        self.server.shutdown()
-        self.server.server_close()
-        self.thread.join(timeout=5)
-        if self.thread.is_alive():
-            raise RuntimeError('fixture provider failed to stop')
+        try:
+            if self.response_barrier is not None:
+                self.response_barrier.close()
+        finally:
+            self.server.shutdown()
+            self.server.server_close()
+            self.thread.join(timeout=5)
+            if self.thread.is_alive():
+                raise RuntimeError('fixture provider failed to stop')

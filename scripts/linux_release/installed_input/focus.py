@@ -68,6 +68,10 @@ class EntryFocus:
                 self.node = replacement
                 visible = bool(ui.visible(node))
                 focused = bool(node.getState().contains(ui.api.STATE_FOCUSED))
+                if self.frame is None and visible and not focused:
+                    if node.queryComponent().grabFocus() is not True:
+                        raise CaseUnavailable('normal-owned-editor-focus-refused')
+                    focused = bool(node.getState().contains(ui.api.STATE_FOCUSED))
         if not owned_process(self.entry['pid'], self.app) or not visible or not focused:
             error = _FocusUnavailable('normal-owned-editor-focus-unavailable')
             error.observations = {'native_input_focus': {'entry_identity': self.entry,

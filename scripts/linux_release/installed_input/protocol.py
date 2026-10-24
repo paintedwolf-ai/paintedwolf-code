@@ -5,6 +5,7 @@ import hashlib
 import json
 import re
 
+from . import surface_wire
 from ..installed_evidence import IDENTIFIER
 from ..installed_cases.provider import GUI_LABEL, GUI_API_KEY, gui_endpoint
 from . import accessibility, lineage
@@ -56,6 +57,8 @@ _SEARCH_STEPS = (('ctrl', 'a'), *(('spc',) if char == ' ' else (char,)
 def steps(operation: str) -> tuple[tuple[str, ...], ...]:
     if not isinstance(operation, str):
         raise ValueError('native input requires a fixed declared operation')
+    if operation in surface_wire.OPERATIONS:
+        return surface_wire.OPERATIONS[operation]
     if operation in _PROVIDER_STEPS:
         return _PROVIDER_STEPS[operation]
     endpoint = _ENDPOINT_OPERATION.fullmatch(operation)
@@ -121,7 +124,9 @@ def focus(value: dict) -> dict:
 
 def request(document: dict, execution: dict) -> dict:
     binding(execution)
-    fields = {'format_version', 'binding', 'transaction_id', 'operation', 'ordinal', 'focus'}
+    surface = isinstance(document, dict) and document.get('operation') in surface_wire.OPERATIONS
+    fields = {'format_version', 'binding', 'transaction_id', 'operation', 'ordinal',
+              'surface' if surface else 'focus'}
     if (not isinstance(document, dict) or set(document) != fields
             or type(document['format_version']) is not int or document['format_version'] != 1
             or document['binding'] != execution):
@@ -129,7 +134,10 @@ def request(document: dict, execution: dict) -> dict:
     binding(document['binding'])
     nonce(document['transaction_id'])
     event_sha256(document['operation'], document['ordinal'])
-    focus(document['focus'])
+    if surface:
+        surface_wire.before(document['operation'], document['surface'])
+    else:
+        focus(document['focus'])
     canonical(document)
     return document
 

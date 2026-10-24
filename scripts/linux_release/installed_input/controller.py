@@ -10,7 +10,7 @@ import subprocess
 import threading
 import time
 
-from . import protocol
+from . import protocol, surface_wire
 from .mailbox import decode
 from .qemu import open_lease
 
@@ -39,7 +39,8 @@ def run_managed(bridge, command, output):
 def delivery_records(directory, execution, vm_id):
     import json
     records, operations = [], []
-    cases = [('conversation/restart-and-reconnect', 'reply'), ('files/edit-search-review', 'editor')]
+    cases = [('conversation/restart-and-reconnect', 'reply'), ('files/edit-search-review', 'editor'),
+             ('windowing/workspace-activation-and-exit', 'workspace')]
     for case, kind in cases:
         leaf = directory / ('leaf/evidence/' + case + '/execution.json')
         if not leaf.exists():
@@ -48,15 +49,20 @@ def delivery_records(directory, execution, vm_id):
             raise ValueError('native input guest observations exceed their case bound')
         document = json.loads(leaf.read_bytes())
         observations = document['observations']
-        if kind == 'reply':
-            selected = observations.get('launch_before', {}).get('fixed_input', [])
-            if not isinstance(selected, list) or len(selected) > 4:
-                raise ValueError('reply input exceeds its fixed transaction count')
-            if observations.get('native_input') is not None:
-                selected = [*selected, observations['native_input']]
-            if len(selected) > 4:
-                raise ValueError('reply input exceeds its fixed transaction count')
+        if kind in {'reply', 'workspace'}:
+            launch = 'launch_before' if kind == 'reply' else 'launch'
+            selected = observations.get(launch, {}).get('fixed_input', [])
             recovery = observations.get('provider_recovery')
+            input_limit = 1 if recovery is not None else 4
+            if not isinstance(selected, list) or len(selected) > input_limit:
+                raise ValueError('reply input exceeds its fixed transaction count')
+            partial = observations.get('native_input')
+            provider_partial = (kind == 'workspace' and partial is not None
+                and len(selected) < input_limit and not observations.get('transitions'))
+            if partial is not None and (kind == 'reply' or provider_partial):
+                selected = [*selected, partial]
+            if len(selected) > input_limit:
+                raise ValueError('reply input exceeds its fixed transaction count')
             order = ('provider-name-v1', None, 'provider-fixture-credential-v1', 'reply-fixture-prompt-v1')
             if recovery is not None:
                 from ..installed_cases.provider_recovery import registered
@@ -66,7 +72,7 @@ def delivery_records(directory, execution, vm_id):
                 raw = prior.read_bytes()
                 binding = {'artifact': document['artifact'], 'source_commit': execution['source_commit'],
                            'native_input': {'binding': execution, 'vm_id': vm_id}}
-                account = observations.get('launch_before', {}).get('session', {}).get('User')
+                account = observations.get(launch, {}).get('session', {}).get('User')
                 admitted = registered(json.loads(raw), binding, account)
                 if recovery != {**admitted, 'prior_execution_sha256': hashlib.sha256(raw).hexdigest()} or len(selected) > 1:
                     raise ValueError('provider recovery differs from its retained registration and fixed input order')
@@ -80,6 +86,19 @@ def delivery_records(directory, execution, vm_id):
                     protocol.steps(operation)
                 operations.append(operation)
                 records.append(record)
+            if kind == 'workspace':
+                transitions = observations.get('transitions', [])
+                if not isinstance(transitions, list):
+                    raise ValueError('workspace input requires its fixed transition list')
+                if partial is not None and not provider_partial:
+                    transitions = [*transitions, partial]
+                expected = ('workspace-open-peer-v1', 'workspace-hide-main-v1',
+                    'workspace-request-quit-v1', 'workspace-cancel-quit-v1',
+                    'workspace-request-quit-v1', 'workspace-focus-quit-v1', 'workspace-approve-quit-v1')
+                if len(transitions) > len(expected) or transitions and len(selected) != input_limit:
+                    raise ValueError('workspace input exceeds or precedes its declared physical sequence')
+                records.extend(transitions)
+                operations.extend(expected[:len(transitions)])
         else:
             selected = []
             for key in ('editor_keyboard', 'editor_search_keyboard'):
@@ -129,14 +148,24 @@ def verify_deliveries(directory, execution, selected):
         for ordinal, event in enumerate(events):
             row = rows[offset]
             offset += 1
-            if set(row) != {'request', 'acknowledgment'} or set(event) != {'request', 'delivery', 'focus_after'}:
+            surface = operation in surface_wire.OPERATIONS
+            after_key = 'surface_after' if surface else 'focus_after'
+            if set(row) != {'request', 'acknowledgment'} or set(event) != {'request', 'delivery', after_key}:
                 raise ValueError('native input retained delivery has an unknown shape')
             pending = protocol.request(row['request'], execution)
             delivered = protocol.acknowledgment(row['acknowledgment'], pending, selected['vm_id'])
             if (pending['transaction_id'] != transaction or pending['operation'] != operation
                     or pending['ordinal'] != ordinal
-                    or event != {'request': pending, 'delivery': delivered, 'focus_after': pending['focus']}):
+                    or event['request'] != pending or event['delivery'] != delivered):
                 raise ValueError('native input host and guest focus or physical delivery differ')
+            if surface:
+                if operation != 'workspace-approve-quit-v1':
+                    surface_wire.same_runtime(pending['surface'], event['surface_after'])
+                if record['completed'] and ordinal == len(events) - 1 and not surface_wire.finished(
+                        operation, events[0]['request']['surface'], event['surface_after']):
+                    raise ValueError('native input has no observed declared surface transition')
+            elif event['focus_after'] != pending['focus']:
+                raise ValueError('native input host and guest focus differ')
 
 
 def adapter(value):
