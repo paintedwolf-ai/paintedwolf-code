@@ -1724,6 +1724,12 @@
       "emit": "guard:coordinator_synthesis",
       "summary": "Synthesis used markdown image syntax with {{ paintedwolf.offender_count }} visual artifact id(s) as the URL. Bare UUIDs in markdown are not resolved — that renders as a broken image."
     },
+    "PROCESS_NOT_OWNED": {
+      "branch_instruction": "Branch on Code; do not retry with another reference, PID, name, or command for the same process. Ask the user to stop it themselves.",
+      "category": "policy",
+      "emit": "guard:host_process",
+      "summary": "The target process was not started by this session."
+    },
     "PROCESS_REFERENCE_STALE": {
       "branch_instruction": "Branch on Code; call process_list again and review the new exact target. Do not replace the reference with a PID or name.",
       "category": "recoverable",
