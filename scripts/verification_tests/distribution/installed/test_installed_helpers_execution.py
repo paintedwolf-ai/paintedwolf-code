@@ -10,7 +10,7 @@ import zipfile
 from scripts.linux_release.installed_cases.app_api import EngineAPI
 from scripts.linux_release.installed_campaign import command, verify_execution_receipt
 from scripts.linux_release.installed_cases.desktop import execute
-from scripts.linux_release.installed_cases.records import retain
+from scripts.linux_release.installed_cases.records import expand_physical_transactions, retain
 from scripts.linux_release.installed_execution import case_family, driver_family, execute_case
 from scripts.linux_release.installed_transfer import export, receive
 
@@ -120,3 +120,59 @@ class InstalledHelperTests(unittest.TestCase):
                 (root / "leaf/execution.json").write_text(json.dumps({**request, name: value}))
                 with self.assertRaises(ValueError):
                     verify_execution_receipt(root, target, "b" * 40, "c" * 40)
+
+    def test_physical_input_transactions_compact_to_linked_stream_preserving_partial_failures(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            binding = {"source_commit": "a" * 40, "artifact": {"installation": "deb"}}
+            completed = {
+                "format_version": 1, "vm_id": "owned", "transaction_id": "1" * 32,
+                "operation": "provider-name-v1", "completed": True, "text_readback": False,
+                "events": [{"request": {"ordinal": 0}, "delivery": {"id": 1}, "focus_after": {"ok": True}}],
+            }
+            lock_tx = {
+                "format_version": 1, "vm_id": "owned", "transaction_id": "2" * 32,
+                "operation": "session-lock-v1", "completed": True, "text_readback": False,
+                "events": [{"request": {"ordinal": 0}, "delivery": {"id": 2}, "native_session_after": {"locked": True}}],
+            }
+            partial = {
+                "format_version": 1, "vm_id": "owned", "transaction_id": "3" * 32,
+                "operation": "reply-fixture-prompt-v1", "completed": False, "text_readback": False,
+                "events": [{"request": {"ordinal": 0}, "delivery": {"id": 3}, "focus_after": {"ok": False}}],
+            }
+            observations = {
+                "launch": {"fixed_input": [completed]},
+                "lock_transition": lock_tx,
+                "transitions": [lock_tx],
+                "native_input": partial,
+            }
+            result = retain(binding, "session", "compacted-case", root, "failed", observations)
+            self.assertIn("events", observations["launch"]["fixed_input"][0])
+            self.assertIn("events", observations["native_input"])
+            leaf = root / "session/compacted-case/execution.json"
+            stream = root / "session/compacted-case/physical-input.bin"
+            self.assertTrue(stream.exists())
+            document = json.loads(leaf.read_text())
+            saved = document["observations"]
+            summary_first = saved["launch"]["fixed_input"][0]
+            summary_lock = saved["lock_transition"]
+            summary_partial = saved["native_input"]
+            self.assertNotIn("events", summary_first)
+            self.assertEqual(summary_first["event_count"], 1)
+            self.assertEqual(summary_first["physical_input_stream"], "physical-input.bin")
+            self.assertEqual(saved["transitions"], [summary_lock])
+            self.assertFalse(summary_partial["completed"])
+            expanded = expand_physical_transactions(leaf, [summary_first, summary_lock, summary_partial])
+            self.assertEqual(expanded, [completed, lock_tx, partial])
+            with self.assertRaises(ValueError):
+                expand_physical_transactions(leaf, [summary_first, summary_lock], require_all=True)
+            self.assertEqual(
+                expand_physical_transactions(leaf, [summary_first], require_all=False),
+                [completed],
+            )
+            tampered = {**summary_first, "events_sha256": "0" * 64}
+            with self.assertRaises(ValueError):
+                expand_physical_transactions(leaf, [tampered, summary_lock, summary_partial])
+            stream.write_bytes(stream.read_bytes() + b" ")
+            with self.assertRaises(ValueError):
+                expand_physical_transactions(leaf, [summary_first, summary_lock, summary_partial])

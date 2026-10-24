@@ -150,7 +150,8 @@ class GuestInputTests(unittest.TestCase):
                 controller.verify_deliveries(root, self.execution, selected)
 
     def test_presence_public_fixture_transactions_and_partial_delivery_match_host_evidence(self):
-        import json
+        import json, shutil
+        from linux_release.installed_cases.records import retain
         from linux_release.installed_input.presence_fixture import FIELDS
         actor = Mock()
         actor.observe.return_value = self.focus
@@ -159,25 +160,32 @@ class GuestInputTests(unittest.TestCase):
         records = [guest.perform(self.execution, 'owned', actor, self.mailbox(), operation=operation)
                    for operation in operations]
         selected = {'format_version': 1, 'kind': 'qemu-fixed-input', 'lease': '/root/lease', 'vm_id': 'owned'}
+        binding = {'source_commit': self.execution['source_commit'], 'artifact': {'id': 'app'}}
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            leaf = root / 'leaf/evidence/vault/presence-cancel-and-expiry'
-            leaf.mkdir(parents=True)
+            evidence_root = root / 'leaf/evidence'
+            leaf = evidence_root / 'vault/presence-cancel-and-expiry'
             for partial in (False, True):
+                if leaf.exists():
+                    shutil.rmtree(leaf)
                 delivered = records[:-1] if partial else records
                 pending = {**records[-1], 'completed': False, 'events': records[-1]['events'][:2]} if partial else None
                 facts = {'launch': {'fixed_input': delivered}}
                 if pending is not None:
                     facts['native_input'] = pending
-                (leaf / 'execution.json').write_text(json.dumps({'observations': facts}))
+                retain(binding, 'vault', 'presence-cancel-and-expiry', evidence_root,
+                       'unverified' if not partial else 'failed', facts)
+                self.assertTrue((leaf / 'physical-input.bin').exists())
                 observed = [*delivered, *([pending] if pending is not None else [])]
                 host = [protocol.canonical({'request': event['request'], 'acknowledgment': {
                     'format_version': 1, 'request_sha256': protocol.request_sha256(event['request']),
                     'delivery': event['delivery']}}) for record in observed for event in record['events']]
                 (root / 'native-input.jsonl').write_bytes(b''.join(host))
                 controller.verify_deliveries(root, self.execution, selected)
-                facts['launch']['fixed_input'] = list(reversed(delivered))
-                (leaf / 'execution.json').write_text(json.dumps({'observations': facts}))
+                saved = json.loads((leaf / 'execution.json').read_text())
+                saved['observations']['launch']['fixed_input'] = list(reversed(
+                    saved['observations']['launch']['fixed_input']))
+                (leaf / 'execution.json').write_text(json.dumps(saved))
                 with self.assertRaises(ValueError):
                     controller.verify_deliveries(root, self.execution, selected)
 
