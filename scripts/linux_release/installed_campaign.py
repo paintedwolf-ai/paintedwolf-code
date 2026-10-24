@@ -84,8 +84,12 @@ def run_guest(target: dict, source: str, tree: str, output: Path) -> Path:
             arguments.extend(['--input-fixture-actor', json.dumps(bridge.fixture_actor, sort_keys=True,
                                                                separators=(',', ':'))])
         returncode = run_managed(bridge, command(target, arguments), directory / 'managed-execution.log')
-    if returncode not in {0, 1}:
-        raise ValueError("guest managed execution failed before retaining an installed campaign")
+    if type(returncode) is not int or not -255 <= returncode <= 255:
+        raise ValueError("guest managed execution returned an invalid exit status")
+    (directory / "managed-execution.json").write_text(json.dumps({
+        "format_version": 1, "execution": request, "exit_code": returncode}, sort_keys=True) + "\n")
+    # Task can map a completed failed/unverified case to a different nonzero
+    # status. Retain and authenticate its leaf before interpreting that status.
     archive = directory / "leaf.zip"
     with archive.open("xb") as stream, (directory / "transfer.log").open("xb") as log:
         subprocess.run(command(target, ["python3", "-m", "scripts.linux_release.installed_transfer", "--export", target["output"]]),
@@ -94,6 +98,20 @@ def run_guest(target: dict, source: str, tree: str, output: Path) -> Path:
     receive(archive, leaf)
     verify_execution_receipt(directory, target, source, tree)
     return leaf
+
+
+def verify_managed_result(directory: Path, campaign: dict) -> dict:
+    result = evidence.object_fields(read(directory / "managed-execution.json"),
+                                    {"format_version", "execution", "exit_code"})
+    if (type(result["format_version"]) is not int or result["format_version"] != 1
+            or result["execution"] != read(directory / "execution-request.json")
+            or type(result["exit_code"]) is not int or not -255 <= result["exit_code"] <= 255):
+        raise ValueError("managed guest result differs from its fresh execution request")
+    if not campaign["results"]:
+        raise ValueError("managed guest output has no completed case rows")
+    if result["exit_code"] != 0 and all(row["status"] == "passed" for row in campaign["results"]):
+        raise ValueError("nonzero managed guest execution cannot establish a passing campaign")
+    return result
 
 
 def verify_execution_receipt(directory: Path, target: dict, source: str, tree: str) -> dict:
@@ -163,6 +181,7 @@ def execute(plan: dict, final: dict, catalog: dict, output: Path) -> dict:
         campaign = read(leaf / "campaign.json")
         # This validation preserves failed/unverified rows while rejecting malformed observations.
         admit(catalog, campaign, final, source, leaf / "evidence")
+        verify_managed_result(output / target["id"], campaign)
         for row in campaign["results"]:
             if row["artifact_id"] != target["artifact_id"]:
                 raise ValueError("executed guests repeat a row or changed selected artifact")
@@ -178,7 +197,8 @@ def execute(plan: dict, final: dict, catalog: dict, output: Path) -> dict:
                     record["path"] = target["id"] + "/" + record["path"]
             for case in row["cases"]:
                 for name, path in (("environment-facts.json", leaf / "environment-facts.json"), ("variant.json", leaf / "variant.json"), ("execution.json", leaf / "execution.json"),
-                                   ("execution-request.json", output / target["id"] / "execution-request.json")):
+                                   ("execution-request.json", output / target["id"] / "execution-request.json"),
+                                   ("managed-execution.json", output / target["id"] / "managed-execution.json")):
                     case["evidence"].append({"path": target["id"] + "/" + name, "sha256": hashlib.sha256(path.read_bytes()).hexdigest()})
             variants.setdefault(row["row_id"], []).append((target["variant_id"], row))
         shutil.copytree(leaf / "evidence", root / target["id"], symlinks=False)
@@ -186,6 +206,7 @@ def execute(plan: dict, final: dict, catalog: dict, output: Path) -> dict:
         shutil.copyfile(leaf / "variant.json", root / target["id"] / "variant.json")
         shutil.copyfile(leaf / "execution.json", root / target["id"] / "execution.json")
         shutil.copyfile(output / target["id"] / "execution-request.json", root / target["id"] / "execution-request.json")
+        shutil.copyfile(output / target["id"] / "managed-execution.json", root / target["id"] / "managed-execution.json")
     rows = aggregate(catalog, variants, known)
     campaign = {"format_version": 1, "source_commit": source, "artifacts": final["artifacts"], "results": rows}
     report = admit(catalog, campaign, final, source, root)
