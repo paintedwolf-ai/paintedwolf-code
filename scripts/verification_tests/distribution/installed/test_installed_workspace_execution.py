@@ -184,14 +184,12 @@ class InstalledWorkspaceTests(unittest.TestCase):
         original.queryComponent.return_value.grabFocus.assert_called_once_with()
         unfocused = MagicMock()
         unfocused.app.bus_name, unfocused.path = ':1.3', '/entry'
-        unfocused.get_process_id.return_value = 123
-        unfocused.get_parent.return_value = frame
+        unfocused.get_process_id.return_value, unfocused.get_parent.return_value = 123, frame
         unfocused.queryComponent.return_value.grabFocus.return_value = True
-        unfocused.getState.return_value.contains.side_effect = [False, True, False]
+        unfocused.getState.return_value.contains.side_effect = [False, True, False, False]
         ui.find.side_effect = [original, unfocused, unfocused]
-        with patch.object(focus_owner, 'process_identity', return_value=identity), \
-                patch.object(focus_owner.lineage, 'process_identity', return_value=identity), \
-                patch.object(focus_owner, 'owned_process', return_value=True):
+        with patch.object(focus_owner, 'process_identity', return_value=identity), patch.object(
+                focus_owner.lineage, 'process_identity', return_value=identity), patch.object(focus_owner, 'owned_process', return_value=True):
             selected = focus_owner.EntryFocus(app, ui, 'Contents of fixture')
             with self.assertRaises(focus_owner._FocusUnavailable):
                 selected._observe_once()
