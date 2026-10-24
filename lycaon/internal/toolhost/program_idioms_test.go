@@ -88,7 +88,9 @@ func TestComposedProgramIdiomsHaveExactBytesAndStatuses(t *testing.T) {
 		{"trailing duplication", `printf '%s\n' error >&2`, "", "error\n", 0},
 		{"leading duplication", `>&2 printf '%s\n' error`, "", "error\n", 0},
 		{"middle duplication", `printf >&2 '%s\n' error`, "", "error\n", 0},
+		{"pipeline duplication", `printf 'err\n' 2>&1 1>&2 | cat`, "err\n", "", 0},
 		{"general descriptor swap", `{ printf 'out\n'; printf 'err\n' >&2; } 9>&1 1>&2 2>&9`, "err\n", "out\n", 0},
+		{"custom descriptor read and write", `{ printf 'line1\nline2\n' >&4; } 4> fd4.txt; { read -r x <&3; read -r y <&3; printf '%s+%s\n' "$x" "$y"; } 3< fd4.txt`, "line1+line2\n", "", 0},
 		{"trap status", `trap 'printf "exit=%d\n" "$?"' EXIT; printf 'body\n'; exit 7`, "body\nexit=7\n", "", 7},
 		{"trap replacement", `trap 'printf "wrong\n"' EXIT; trap 'printf "right\n"' EXIT`, "right\n", "", 0},
 		{"trap explicit exit", `trap 'printf "trap\n"; exit 3' EXIT; exit 7`, "trap\n", "", 3},
@@ -96,6 +98,13 @@ func TestComposedProgramIdiomsHaveExactBytesAndStatuses(t *testing.T) {
 		{"subshell local trap", `(trap 'printf "sub\n"' EXIT; printf 'body\n'); printf 'parent\n'`, "body\nsub\nparent\n", "", 0},
 		{"pipeline stage local trap", `(trap 'printf "sub\n"' EXIT; printf 'body\n') | cat`, "body\nsub\n", "", 0},
 		{"command substitution local trap", `s=$(trap 'printf "sub\n"' EXIT; printf 'body\n'); printf '%s\n' "$s"`, "body\nsub\n", "", 0},
+		{"diff process substitutions", `diff -u <(printf 'b\na\n' | sort) <(printf 'a\nb\n' | sort)`, "", "", 0},
+		{"comm process substitutions", `comm -12 <(printf 'c\na\nb\n' | sort) <(printf 'b\nd\na\n' | sort)`, "a\nb\n", "", 0},
+		{"paste process substitutions", `paste <(printf '1\n2\n') <(printf 'a\nb\n')`, "1\ta\n2\tb\n", "", 0},
+		{"early consumer exit on process substitution", `head -n 1 <(while true; do printf 'y\n'; done)`, "y\n", "", 0},
+		{"input redirect from process substitution", `read -r line < <(printf 'streamed-in\n'); printf '%s\n' "$line"`, "streamed-in\n", "", 0},
+		{"output process substitution via tee and redirect", `printf 'hello\n' | tee >(tr a-z A-Z > upper.txt) > lower.txt; printf '%s:%s\n' "$(cat lower.txt)" "$(cat upper.txt)"`, "hello:HELLO\n", "", 0},
+		{"direct redirect to output process substitution", `printf 'world\n' > >(tr a-z A-Z > direct.txt); cat direct.txt`, "WORLD\n", "", 0},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -116,4 +125,24 @@ func TestComposedProgramArrayOverflowRendersTypedRefusal(t *testing.T) {
 		t.Fatalf("array overflow outcome: %+v", outcome)
 	}
 	t.Logf("Rendered array overflow refusal:\n%s", outcome.Refusal.Feedback)
+}
+
+func TestComposedProgramProcessSubstitutionWithExternalAndEarlyExit(t *testing.T) {
+	f := newComposedProgramFixture(t)
+	if _, err := exec.LookPath("yes"); err == nil {
+		outcome := callComposedProgram(t, f, `head -n 1 <(yes)`)
+		if outcome.Stdout != "y\n" || outcome.Stderr != "" || outcome.Status != 0 || outcome.Refusal != nil {
+			t.Fatalf("head <(yes) outcome: %+v", outcome)
+		}
+	}
+	if _, err := exec.LookPath("python3"); err == nil {
+		outcome := callComposedProgram(t, f, `python3 -c 'import sys; print(open(sys.argv[1]).read().strip())' <(printf 'fifo-in\n')`)
+		if outcome.Stdout != "fifo-in\n" || outcome.Stderr != "" || outcome.Status != 0 || outcome.Refusal != nil {
+			t.Fatalf("python3 <(...) outcome: %+v", outcome)
+		}
+		outcome = callComposedProgram(t, f, `python3 -c 'import sys; f = open(sys.argv[1], "w"); f.write("fifo-out\n"); f.close()' >(tr a-z A-Z > ext_upper.txt); cat ext_upper.txt`)
+		if outcome.Stdout != "FIFO-OUT\n" || outcome.Stderr != "" || outcome.Status != 0 || outcome.Refusal != nil {
+			t.Fatalf("python3 >(...) outcome: %+v", outcome)
+		}
+	}
 }

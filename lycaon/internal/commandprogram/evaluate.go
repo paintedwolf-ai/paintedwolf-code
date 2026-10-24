@@ -136,7 +136,6 @@ func Evaluate(ctx context.Context, plan commandsurface.ProgramSnapshot, ports Ev
 		return ProgramOutcome{}, err
 	}
 	defer release()
-	defer e.cleanupScratch()
 	_, err = root.statements(ctx, plan.Statements)
 	if trapErr := runExitTrap(ctx, root, err); trapErr != nil && err == nil {
 		err = trapErr

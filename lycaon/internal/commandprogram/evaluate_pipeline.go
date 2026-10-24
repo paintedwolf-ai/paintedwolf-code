@@ -86,6 +86,7 @@ func (f *frame) pipeline(ctx context.Context, s commandsurface.Statement, c comm
 			g.streams.SetReader(0, pipes[i-1].ConsumerEnd())
 		}
 		if i < len(pipes) {
+			g.producerPipe = pipes[i]
 			g.streams.SetWriter(1, pipes[i])
 		}
 		frames[i] = g
@@ -170,6 +171,9 @@ func (f *frame) settlePipeline(run *childRun, stages []commandsurface.Statement,
 // aggregation-only record of that status (exit, negation, bookkeeping).
 func (g *frame) stage(ctx context.Context, s commandsurface.Statement) stageResult {
 	_, err := g.statement(ctx, s)
+	if errors.Is(err, ErrConsumerClosed) && g.producerPipe != nil && g.producerPipe.Completion().Termination == StreamConsumerClosed {
+		err = nil
+	}
 	if trapErr := runExitTrap(ctx, g, err); trapErr != nil && err == nil {
 		err = trapErr
 	}

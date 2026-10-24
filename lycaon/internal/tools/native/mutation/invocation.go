@@ -26,6 +26,7 @@ type invocation struct {
 	request commandprogram.OperationRequest
 	spec    toolcontract.CommandSpecification
 	argv    commandprogram.BoundArgv
+	streams commandprogram.Streams
 	input   io.Reader
 	stdout  io.Writer
 	stderr  io.Writer
@@ -36,7 +37,7 @@ type invocation struct {
 
 func newInvocation(ctx context.Context, p Prepared, tc tools.ToolContext, streams commandprogram.Streams) *invocation {
 	inv := &invocation{ctx: ctx, owners: p.owners, tc: tc, paths: p.program.Paths, barrier: p.program.Barrier, request: p.request, spec: p.spec, argv: p.Argv,
-		input: streams.Input, stdout: streams.Output, stderr: streams.Error}
+		streams: streams, input: streams.Input, stdout: streams.Output, stderr: streams.Error}
 	if inv.input == nil {
 		inv.input = commandprogram.NullInput()
 	}

@@ -16,9 +16,17 @@ type input struct {
 	label  string
 	data   []byte
 	stream io.Reader
+	closer io.Closer
 	pin    *toolcontract.SourcePin
 	bound  projectpaths.BoundPath
 	stdin  bool
+}
+
+func (in *input) close() {
+	if in != nil && in.closer != nil {
+		_ = in.closer.Close()
+		in.closer = nil
+	}
 }
 
 // reader returns the bytes in order, whichever way they were acquired.
@@ -55,6 +63,20 @@ func (inv *invocation) open(operand string, whole bool) (*input, error) {
 			return nil, err
 		}
 		in.data, in.stream = data, nil
+		return in, nil
+	}
+	if reader, ok := inv.streams.OpenProcessSubstitutionReader(operand); ok {
+		in := &input{label: operand, stdin: true, stream: reader, closer: reader}
+		if !whole {
+			inv.closers = append(inv.closers, reader)
+			return in, nil
+		}
+		data, err := readBounded(reader, inv.owners.streamBytes(), "stream_bytes")
+		_ = reader.Close()
+		if err != nil {
+			return nil, err
+		}
+		in.data, in.stream, in.closer = data, nil, nil
 		return in, nil
 	}
 	bound, err := inv.paths.Bind(inv.ctx, operand, false)

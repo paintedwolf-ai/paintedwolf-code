@@ -127,6 +127,15 @@ func (d *fakeDispatch) run(ctx context.Context, argv, env []string, streams Stre
 		if len(argv) > 1 {
 			var out strings.Builder
 			for _, name := range argv[1:] {
+				if reader, ok := streams.OpenProcessSubstitutionReader(name); ok {
+					data, err := io.ReadAll(reader)
+					_ = reader.Close()
+					if err != nil {
+						return ownerResult(err), err
+					}
+					out.Write(data)
+					continue
+				}
 				d.log.mu.Lock()
 				content, ok := d.log.files[name]
 				d.log.mu.Unlock()
@@ -144,9 +153,15 @@ func (d *fakeDispatch) run(ctx context.Context, argv, env []string, streams Stre
 		}
 		return write(string(data))
 	case "head":
-		line, _ := bufio.NewReader(streams.Input).ReadString('\n')
+		in := streams.Input
+		if len(argv) > 1 {
+			if reader, ok := streams.OpenProcessSubstitutionReader(argv[len(argv)-1]); ok {
+				in = reader
+			}
+		}
+		line, _ := bufio.NewReader(in).ReadString('\n')
 		call.stdin = line
-		_ = streams.Input.Close()
+		_ = in.Close()
 		return write(line)
 	case "grep":
 		data, err := io.ReadAll(streams.Input)

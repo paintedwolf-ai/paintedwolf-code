@@ -68,7 +68,17 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		}
 		return refusedResult("COMMAND_EXEC_DENIED"), err
 	}
-	async, err := lycexec.StartPipelineAsync(ctx, []lycexec.Stage{{Name: argv[0], Args: argv[1:]}}, opts, nonNilWriter(streams.Output), nonNilWriter(streams.Error))
+	procSubstStreams := streams.ProcessSubstitutions()
+	execStreams := make([]lycexec.ProcessSubstitutionStream, len(procSubstStreams))
+	for i, s := range procSubstStreams {
+		execStreams[i] = lycexec.ProcessSubstitutionStream{Path: s.Path, Reader: s.Reader, Writer: s.Writer}
+	}
+	launchArgv, cleanupProcSubst, err := lycexec.BindProcessSubstitutions(tctx.Host.SessionScratchDir, argv, execStreams)
+	if err != nil {
+		return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, err
+	}
+	defer cleanupProcSubst()
+	async, err := lycexec.StartPipelineAsync(ctx, []lycexec.Stage{{Name: launchArgv[0], Args: launchArgv[1:]}}, opts, nonNilWriter(streams.Output), nonNilWriter(streams.Error))
 	if err != nil {
 		if ctx.Err() != nil {
 			return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.EffectUnknown}, errors.Join(ctx.Err(), err)

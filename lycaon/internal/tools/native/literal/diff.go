@@ -104,6 +104,9 @@ func (inv *invocation) diffSide(operand string) (diffSide, bool, error) {
 		side.modTime = time.Now().UTC()
 		return side, true, nil
 	}
+	if inv.streams.HasProcessSubstitutionReader(operand) {
+		return side, true, nil
+	}
 	bound, err := inv.paths.Bind(inv.ctx, operand, false)
 	if err == nil {
 		st, statErr := bound.Stat(true)

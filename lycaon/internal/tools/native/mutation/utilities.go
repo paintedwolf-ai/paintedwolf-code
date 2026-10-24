@@ -254,7 +254,17 @@ func (inv *invocation) capture(abs string) (pinnedTarget, error) {
 func runTee(inv *invocation) error {
 	appendMode := inv.flag("-a")
 	var targets []pinnedTarget
+	var streamWriters []io.WriteCloser
+	defer func() {
+		for _, w := range streamWriters {
+			_ = w.Close()
+		}
+	}()
 	for _, operand := range inv.operands() {
+		if writer, ok := inv.streams.OpenProcessSubstitutionWriter(operand); ok {
+			streamWriters = append(streamWriters, writer)
+			continue
+		}
 		bound, err := inv.paths.Bind(inv.ctx, operand, true)
 		if err != nil {
 			return err
@@ -280,6 +290,15 @@ func runTee(inv *invocation) error {
 	if _, err := inv.stdout.Write(data); err != nil {
 		return err
 	}
+	for _, w := range streamWriters {
+		if _, err := w.Write(data); err != nil {
+			return err
+		}
+		if err := w.Close(); err != nil {
+			return err
+		}
+	}
+	streamWriters = nil
 	for _, target := range targets {
 		if _, err := inv.owners.publish(inv.ctx, inv.tc, inv.barrier, target, data); err != nil {
 			return err

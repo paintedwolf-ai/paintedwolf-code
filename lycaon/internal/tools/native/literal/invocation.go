@@ -25,11 +25,13 @@ type invocation struct {
 	paths   *projectpaths.ProgramPaths
 	request commandprogram.OperationRequest
 	spec    toolcontract.CommandSpecification
-	argv    commandprogram.BoundArgv
-	input   io.Reader
-	stderr  io.Writer
-	out     *output
-	status  int
+	argv       commandprogram.BoundArgv
+	streams    commandprogram.Streams
+	closers    []io.Closer
+	input      io.Reader
+	stderr     io.Writer
+	out        *output
+	status     int
 	// comparison marks diff's complete status-one result as publishable.
 	comparison bool
 	diffVisits int64
@@ -38,7 +40,7 @@ type invocation struct {
 }
 
 func newInvocation(ctx context.Context, p Prepared, tc tools.ToolContext, streams commandprogram.Streams) *invocation {
-	inv := &invocation{ctx: ctx, owners: p.owners, tc: tc, paths: p.paths, request: p.request, spec: p.spec, argv: p.Argv, input: streams.Input, stderr: streams.Error}
+	inv := &invocation{ctx: ctx, owners: p.owners, tc: tc, paths: p.paths, request: p.request, spec: p.spec, argv: p.Argv, streams: streams, input: streams.Input, stderr: streams.Error}
 	if inv.input == nil {
 		inv.input = commandprogram.NullInput()
 	}

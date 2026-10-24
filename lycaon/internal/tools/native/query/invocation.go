@@ -27,6 +27,7 @@ type invocation struct {
 	request commandprogram.OperationRequest
 	spec    toolcontract.CommandSpecification
 	argv    commandprogram.BoundArgv
+	streams commandprogram.Streams
 	input   io.Reader
 	stderr  io.Writer
 	out     *output
@@ -38,7 +39,7 @@ type invocation struct {
 
 func newInvocation(ctx context.Context, p Prepared, tc tools.ToolContext, streams commandprogram.Streams) *invocation {
 	inv := &invocation{ctx: ctx, owners: p.owners, tc: tc, paths: p.program.Paths, barrier: p.program.Barrier, request: p.request, spec: p.spec, argv: p.Argv,
-		input: streams.Input, stderr: streams.Error}
+		streams: streams, input: streams.Input, stderr: streams.Error}
 	if inv.input == nil {
 		inv.input = commandprogram.NullInput()
 	}
@@ -130,6 +131,18 @@ func (inv *invocation) capture(operand string) (*source, error) {
 
 // captureSource pins one PATH operand's accepted text before it is read.
 func (inv *invocation) captureSource(operand string) (*source, error) {
+	if reader, ok := inv.streams.OpenProcessSubstitutionReader(operand); ok {
+		maximum := safecmd.JQCaps().InputBytes
+		data, err := io.ReadAll(io.LimitReader(reader, maximum+1))
+		_ = reader.Close()
+		if err != nil {
+			return nil, err
+		}
+		if int64(len(data)) > maximum {
+			return nil, safecmd.Reject("JQ_INPUT_TOO_LARGE", map[string]any{"path": operand, "max_bytes": maximum})
+		}
+		return &source{label: operand, text: string(data)}, nil
+	}
 	bound, err := inv.paths.Bind(inv.ctx, operand, false)
 	if err == nil && bound.Null {
 		return &source{label: operand}, nil

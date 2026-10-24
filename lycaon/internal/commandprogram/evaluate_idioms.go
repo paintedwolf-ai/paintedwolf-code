@@ -3,217 +3,300 @@ package commandprogram
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/commandsurface"
 )
 
-type procSubstConsumer struct {
-	part commandsurface.SubstitutionPart
-	path string
+const procSubstPrefix = "/dev/fd/"
+
+type procSubstPipeWriter struct {
+	pipe *BytePipe
+}
+
+func (w procSubstPipeWriter) Write(p []byte) (int, error) {
+	return w.pipe.Write(p)
+}
+
+func (w procSubstPipeWriter) Close() error {
+	return w.pipe.CloseProducer(nil)
+}
+
+type procSubstStagedOutput struct {
+	mu     sync.Mutex
+	writer io.WriteCloser
+	closed bool
+}
+
+// NewProcessSubstitutionStagedOutput adapts a process-substitution writer
+// to the StagedOutput interface.
+func NewProcessSubstitutionStagedOutput(writer io.WriteCloser) StagedOutput {
+	return &procSubstStagedOutput{writer: writer}
+}
+
+func (o *procSubstStagedOutput) Write(p []byte) (int, error) {
+	return o.writer.Write(p)
+}
+
+func (o *procSubstStagedOutput) closeOnce() error {
+	o.mu.Lock()
+	if o.closed {
+		o.mu.Unlock()
+		return nil
+	}
+	o.closed = true
+	o.mu.Unlock()
+	return o.writer.Close()
+}
+
+func (o *procSubstStagedOutput) Publish(context.Context) (OutputPublished, error) {
+	return OutputPublished{}, o.closeOnce()
+}
+
+func (o *procSubstStagedOutput) Abandon(context.Context) error {
+	return o.closeOnce()
+}
+
+type procSubstEntry struct {
+	part   commandsurface.SubstitutionPart
+	fd     int
+	path   string
+	pipe   *BytePipe
+	run    *childRun
+	frame  *frame
+	cancel context.CancelFunc
+	done   chan struct{}
+	err    error
 }
 
 type procSubstScope struct {
-	mu        sync.Mutex
-	consumers []procSubstConsumer
+	parent  *procSubstScope
+	mu      sync.Mutex
+	entries []*procSubstEntry
 }
 
-func (s *procSubstScope) addConsumer(part commandsurface.SubstitutionPart, path string) {
+func newProcSubstScope(parent *procSubstScope) *procSubstScope {
+	return &procSubstScope{parent: parent}
+}
+
+func (s *procSubstScope) add(entry *procSubstEntry) {
 	s.mu.Lock()
-	s.consumers = append(s.consumers, procSubstConsumer{part: part, path: path})
+	s.entries = append(s.entries, entry)
 	s.mu.Unlock()
 }
 
-// ProcessSubstitute evaluates a reached <(list) or >(list) unit in an isolated
-// frame with its own child receipt and resource bounds, returning the scratch
-// path passed to the consuming command.
+func (s *procSubstScope) lookup(path string) *procSubstEntry {
+	for cur := s; cur != nil; cur = cur.parent {
+		cur.mu.Lock()
+		for _, entry := range cur.entries {
+			if entry.path == path {
+				cur.mu.Unlock()
+				return entry
+			}
+		}
+		cur.mu.Unlock()
+	}
+	return nil
+}
+
+// ProcessSubstitute evaluates a reached <(list) or >(list) unit concurrently
+// in an isolated frame connected by a bounded BytePipe, returning the virtual
+// descriptor path (/dev/fd/N) passed to the consuming command.
 func (e *evaluation) ProcessSubstitute(ctx context.Context, scope ExpansionScope, request SubstitutionRequest) (string, error) {
 	f, ok := scope.(*frame)
 	if !ok || f.e != e {
 		return "", errors.New("process substitution scope is not a frame of this evaluation")
 	}
 	part := request.Unit
-	path, file, err := e.newScratchFile()
+	op := part.Operator
+	if op != "<(" && op != ">(" {
+		op = "<("
+	}
+	run, err := f.beginRecorded(ctx, part.SyntaxLocation, op)
 	if err != nil {
 		return "", err
 	}
-	if part.Operator == ">(" {
-		_ = file.Close()
-		if f.procSubst != nil {
-			f.procSubst.addConsumer(part, path)
-		}
-		return path, nil
+	run.producer = false
+	subCtx, cancel := context.WithCancel(ctx)
+	budget, err := NewByteBudget("stream_bytes", e.limits["stream_bytes"])
+	var pipe *BytePipe
+	if err == nil {
+		pipe, err = NewBytePipe(subCtx, budget)
 	}
-	run, err := f.beginRecorded(ctx, part.SyntaxLocation, "<(")
 	if err != nil {
-		_ = file.Close()
+		cancel()
+		run.close()
 		return "", err
 	}
-	defer run.close()
-	g, release, err := f.isolate(ctx, nil)
+	g, release, err := f.isolate(subCtx, nil)
 	if err != nil {
-		_ = file.Close()
+		cancel()
+		_ = pipe.CloseConsumer()
+		run.close()
 		return "", f.expansionRefusal(part.SyntaxLocation, err)
 	}
-	defer release()
+	fd, path := e.allocateProcSubstFD()
 	g.parent, g.loops, g.returnable = run.inv, 0, false
 	g.state.options.errexit = false
-	writer := &boundedProcessSubstWriter{frame: g, loc: part.SyntaxLocation, file: file, maximum: e.limits["stream_bytes"]}
 	g.streams = f.streams
-	g.streams.SetReader(0, NullInput())
-	g.streams.SetWriter(1, writer)
-	g.streams.SetWriter(2, f.streams.Error)
-	_, err = g.statements(ctx, part.Statements)
-	if trapErr := runExitTrap(ctx, g, err); trapErr != nil && err == nil {
-		err = trapErr
+	g.streams.procSubst = nil
+	g.streams.SetWriter(2, &syncWriter{w: f.streams.Error})
+	if op == "<(" {
+		g.producerPipe = pipe
+		g.streams.SetReader(0, NullInput())
+		g.streams.SetWriter(1, pipe)
+	} else {
+		g.streams.SetReader(0, pipe.ConsumerEnd())
+		g.streams.SetWriter(1, &syncWriter{w: f.streams.Output})
 	}
-	closeErr := file.Close()
-	if err == nil && writer.err != nil {
-		err = writer.err
+	entry := &procSubstEntry{
+		part:   part,
+		fd:     fd,
+		path:   path,
+		pipe:   pipe,
+		run:    run,
+		frame:  g,
+		cancel: cancel,
+		done:   make(chan struct{}),
 	}
-	if err == nil && closeErr != nil {
-		err = closeErr
+	if f.procSubst != nil {
+		f.procSubst.add(entry)
 	}
-	result := ordinaryResult(g.state.control.Status())
-	if stop, ok := g.state.latch.Stop(); ok {
-		result = stop.Result
-	}
-	run.settle(result, err)
-	if err != nil {
-		return "", &SubstitutionError{Node: part.ID, Span: part.Span, Result: result, Cause: err}
+	go func() {
+		defer close(entry.done)
+		defer release()
+		defer cancel()
+		_, runErr := g.statements(subCtx, part.Statements)
+		if op == "<(" && errors.Is(runErr, ErrConsumerClosed) && pipe.Completion().Termination == StreamConsumerClosed {
+			runErr = nil
+		}
+		if trapErr := runExitTrap(subCtx, g, runErr); trapErr != nil && runErr == nil {
+			runErr = trapErr
+		}
+		var streamLimit *StreamLimitError
+		if errors.As(runErr, &streamLimit) {
+			runErr = g.refuseLimit(part.SyntaxLocation, streamLimit.Limit, streamLimit.Observed)
+		}
+		if op == "<(" {
+			var incomplete error
+			if runErr != nil {
+				incomplete = errStageIncomplete
+			} else if _, stopped := g.state.latch.Stop(); stopped {
+				incomplete = errStageIncomplete
+			}
+			_ = pipe.CloseProducer(incomplete)
+		} else {
+			_ = pipe.CloseConsumer()
+		}
+		entry.err = runErr
+	}()
+	if f.procSubst == nil {
+		_ = pipe.CloseConsumer()
+		_ = pipe.CloseProducer(nil)
+		<-entry.done
+		e.releaseProcSubstFD(fd)
+		return path, entry.settle(f)
 	}
 	return path, nil
 }
 
-type boundedProcessSubstWriter struct {
-	frame   *frame
-	loc     commandsurface.SyntaxLocation
-	file    *os.File
-	maximum int64
-	written int64
-	err     error
-}
-
-func (w *boundedProcessSubstWriter) Write(p []byte) (int, error) {
-	if w.err != nil {
-		return 0, w.err
-	}
-	observed := w.written + int64(len(p))
-	if observed > w.maximum {
-		w.err = w.frame.refuseLimit(w.loc, "stream_bytes", observed)
-		return 0, w.err
-	}
-	n, err := w.file.Write(p)
-	w.written += int64(n)
-	if err != nil {
-		w.err = err
-	}
-	return n, err
-}
-
-func (s *procSubstScope) finish(ctx context.Context, f *frame) error {
+func (s *procSubstScope) finish(ctx context.Context, f *frame, stmtErr error) error {
 	if s == nil {
 		return nil
 	}
 	s.mu.Lock()
-	consumers := append([]procSubstConsumer(nil), s.consumers...)
-	s.consumers = nil
+	entries := append([]*procSubstEntry(nil), s.entries...)
+	s.entries = nil
 	s.mu.Unlock()
-	for _, consumer := range consumers {
-		if _, stopped := f.state.latch.Stop(); stopped {
-			return nil
+	if len(entries) == 0 {
+		return nil
+	}
+	_, stopped := f.state.latch.Stop()
+	var incomplete error
+	if stmtErr != nil || stopped {
+		incomplete = errStageIncomplete
+	}
+	for _, entry := range entries {
+		if entry.part.Operator == ">(" {
+			_ = entry.pipe.CloseProducer(incomplete)
+		} else {
+			_ = entry.pipe.CloseConsumer()
 		}
-		if err := s.runConsumer(ctx, f, consumer); err != nil {
-			return err
+		if stmtErr != nil || stopped {
+			entry.cancel()
 		}
 	}
-	return nil
+	var firstErr error
+	for _, entry := range entries {
+		<-entry.done
+		f.e.releaseProcSubstFD(entry.fd)
+		if err := entry.settle(f); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
 }
 
-func (s *procSubstScope) runConsumer(ctx context.Context, f *frame, consumer procSubstConsumer) error {
-	part := consumer.part
-	file, err := os.Open(consumer.path)
-	if err != nil {
-		return err
+func (entry *procSubstEntry) settle(f *frame) error {
+	g := entry.frame
+	err := entry.err
+	status := g.state.control.Status()
+	if entry.part.Operator == "<(" && err == nil && entry.isExpectedConsumerClosure() {
+		status = 0
 	}
-	defer func() {
-		_ = file.Close()
-		_ = os.Remove(consumer.path)
-	}()
-	run, err := f.beginRecorded(ctx, part.SyntaxLocation, ">(")
-	if err != nil {
-		return err
-	}
-	defer run.close()
-	g, release, err := f.isolate(ctx, nil)
-	if err != nil {
-		return f.stateRefusal(part.SyntaxLocation, err)
-	}
-	defer release()
-	g.parent, g.loops, g.returnable = run.inv, 0, false
-	g.state.options.errexit = false
-	g.streams = f.streams
-	g.streams.SetReader(0, io.NopCloser(file))
-	g.streams.SetWriter(1, f.streams.Output)
-	g.streams.SetWriter(2, f.streams.Error)
-	_, err = g.statements(ctx, part.Statements)
-	if trapErr := runExitTrap(ctx, g, err); trapErr != nil && err == nil {
-		err = trapErr
-	}
-	result := ordinaryResult(g.state.control.Status())
+	result := ordinaryResult(status)
 	if stop, ok := g.state.latch.Stop(); ok {
 		result = stop.Result
 	}
-	run.settle(result, err)
+	entry.run.settle(result, err)
+	f.publish.mark(result.PublicationEligible)
+	if stop, ok := f.state.latch.Stop(); ok {
+		if err != nil {
+			return err
+		}
+		return &AdmissionStoppedError{Stop: stop}
+	}
 	return err
 }
 
-func (e *evaluation) newScratchFile() (string, *os.File, error) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	dir := e.ports.ScratchDir
-	if dir != "" {
-		if err := os.MkdirAll(dir, 0o700); err != nil {
-			return "", nil, err
+func (entry *procSubstEntry) isExpectedConsumerClosure() bool {
+	if entry.pipe.Completion().Termination == StreamConsumerClosed {
+		if last := entry.frame.state.last; last == nil || errors.Is(last.Diagnostic, ErrConsumerClosed) {
+			return true
 		}
-	} else {
-		if e.tempDir == "" {
-			created, err := os.MkdirTemp("", "pw-procsubst-*")
-			if err != nil {
-				return "", nil, err
-			}
-			e.tempDir = created
+	}
+	if last := entry.frame.state.last; last != nil && last.Command == "external" {
+		var executor ExecutorClosure
+		if errors.As(last.Diagnostic, &executor) && executor.ExpectedConsumerClosure() {
+			return true
 		}
-		dir = e.tempDir
 	}
-	if canonical, err := filepath.EvalSymlinks(dir); err == nil && canonical != "" {
-		dir = canonical
-	}
-	file, err := os.CreateTemp(dir, "procsubst-*")
-	if err != nil {
-		return "", nil, err
-	}
-	path := file.Name()
-	e.scratchFiles = append(e.scratchFiles, path)
-	return path, file, nil
+	return false
 }
 
-func (e *evaluation) cleanupScratch() {
+func (e *evaluation) allocateProcSubstFD() (int, string) {
 	e.mu.Lock()
-	files := e.scratchFiles
-	e.scratchFiles = nil
-	tempDir := e.tempDir
-	e.tempDir = ""
+	defer e.mu.Unlock()
+	if e.procSubstFDs == nil {
+		e.procSubstFDs = map[int]bool{}
+	}
+	fd := 63
+	for fd >= 10 && e.procSubstFDs[fd] {
+		fd--
+	}
+	if fd < 10 {
+		fd = 63 + len(e.procSubstFDs)
+	}
+	e.procSubstFDs[fd] = true
+	return fd, fmt.Sprintf("%s%d", procSubstPrefix, fd)
+}
+
+func (e *evaluation) releaseProcSubstFD(fd int) {
+	e.mu.Lock()
+	delete(e.procSubstFDs, fd)
 	e.mu.Unlock()
-	for _, path := range files {
-		_ = os.Remove(path)
-	}
-	if tempDir != "" {
-		_ = os.RemoveAll(tempDir)
-	}
 }
 
 func runArithmeticCommand(ctx context.Context, f *frame, s commandsurface.Statement, c commandsurface.ArithmeticCommand) error {

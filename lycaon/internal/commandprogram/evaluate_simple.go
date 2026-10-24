@@ -256,6 +256,13 @@ func effectMode(spec toolcontract.CommandSpecification, native bool) string {
 // handleable; refusal, interruption, owner stops and invalid results latch and
 // return the owner's own error so its rejection code reaches feedback.
 func (f *frame) settle(child *childRun, result toolcontract.ProducerResult, err error) error {
+	var streamLimit *StreamLimitError
+	if errors.As(err, &streamLimit) {
+		loc := commandsurface.SyntaxLocation{ID: commandsurface.NodeID(child.inv.Identity.NodeID), Span: child.inv.Span}
+		refusal := f.refuseLimit(loc, streamLimit.Limit, streamLimit.Observed)
+		child.settle(toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerFailed, StopCode: limitExceeded, EffectCertainty: result.EffectCertainty}, refusal)
+		return refusal
+	}
 	if invalid := result.Validate(); invalid != nil {
 		child.settle(result, errors.Join(err, invalid))
 		_ = f.state.latch.Record(child.inv.Identity.ExecutionID, result, true)
@@ -271,6 +278,9 @@ func (f *frame) settle(child *childRun, result toolcontract.ProducerResult, err 
 			return err
 		}
 		return &AdmissionStoppedError{Stop: stop}
+	}
+	if recordErr == nil && f.producerPipe != nil && errors.Is(err, ErrConsumerClosed) && f.producerPipe.Completion().Termination == StreamConsumerClosed {
+		return ErrConsumerClosed
 	}
 	return recordErr
 }

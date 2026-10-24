@@ -2,7 +2,6 @@ package commandprogram
 
 import (
 	"bytes"
-	"os"
 	"slices"
 	"testing"
 )
@@ -23,7 +22,10 @@ func TestEvaluateFileDescriptorDuplicationAndOrdering(t *testing.T) {
 		{"2>&1 into pipe", "echo err 2>&1 1>&2 | cat", "err\n", "", 0},
 		{"swap stdout and stderr via fd 3", "{ echo out; echo err >&2; } 3>&1 1>&2 2>&3", "err\n", "out\n", 0},
 		{"duplicate input fd 3<&0 and 0<&3", "cat 3< input.txt 0<&3", "from file\n", "", 0},
+		{"read lines via custom fd 3", "{ read -r a <&3; echo got:$a; } 3< input.txt", "got:from file\n", "", 0},
+		{"write via custom fd 4", "{ echo via4 >&4; } 4>&1", "via4\n", "", 0},
 		{"unopened descriptor fails ordinary status 1", "echo hi 1>&9; echo status=$?", "status=1\n", "", 0},
+		{"wrong direction descriptor fails ordinary status 1", "{ echo hi 1<&3; echo status=$?; } 3>&1", "status=1\n", "", 0},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -143,25 +145,35 @@ func TestEvaluateTrapExitRunsOnceAndPreservesStatus(t *testing.T) {
 	})
 }
 
-func TestEvaluateProcessSubstitutionRecordsChildrenAndCleansScratch(t *testing.T) {
-	f := newEvalFixture(t)
-	scratch := t.TempDir()
-	f.ports.ScratchDir = scratch
-	out, err := f.run(t, t.Context(), `echo <(echo left)`)
-	if err != nil || out.Status != 0 {
-		t.Fatalf("out=%+v err=%v", out, err)
-	}
-	foundProcSubst := false
-	for _, child := range out.Children {
-		if child.Command == "<(" && child.Executed && child.Result.Status == 0 {
-			foundProcSubst = true
+func TestEvaluateProcessSubstitutionStreamsConcurrentlyAndSettlesChildren(t *testing.T) {
+	t.Run("multiple input process substitutions stream concurrently", func(t *testing.T) {
+		f := newEvalFixture(t)
+		out, err := f.run(t, t.Context(), `cat <(echo left) <(echo right)`)
+		if err != nil || out.Status != 0 || f.stdout.String() != "left\nright\n" {
+			t.Fatalf("out=%+v stdout=%q err=%v", out, f.stdout.String(), err)
 		}
-	}
-	if !foundProcSubst {
-		t.Fatalf("missing <( child receipt in %+v", out.Children)
-	}
-	entries, err := os.ReadDir(scratch)
-	if err != nil || len(entries) != 0 {
-		t.Fatalf("scratch files not cleaned up: %v %v", entries, err)
-	}
+		procSubstCount := 0
+		for _, child := range out.Children {
+			if child.Command == "<(" && child.Executed && child.Result.Status == 0 {
+				procSubstCount++
+			}
+		}
+		if procSubstCount != 2 {
+			t.Fatalf("want 2 <( child receipts, got %d in %+v", procSubstCount, out.Children)
+		}
+	})
+	t.Run("early consumer exit stops infinite producer cleanly", func(t *testing.T) {
+		f := newEvalFixture(t)
+		out, err := f.run(t, t.Context(), `head -n 1 <(external -- yes); head -n 1 <(while true; do echo loop; done)`)
+		if err != nil || out.Status != 0 || f.stdout.String() != "y\nloop\n" {
+			t.Fatalf("out=%+v stdout=%q err=%v", out, f.stdout.String(), err)
+		}
+	})
+	t.Run("output process substitution streams and publishes", func(t *testing.T) {
+		f := newEvalFixture(t)
+		out, err := f.run(t, t.Context(), `echo streamed > >(cat > captured.txt)`)
+		if err != nil || out.Status != 0 || f.publication.published["captured.txt"] != "streamed\n" {
+			t.Fatalf("out=%+v published=%v err=%v", out, f.publication.published, err)
+		}
+	})
 }

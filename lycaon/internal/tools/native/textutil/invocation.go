@@ -119,6 +119,10 @@ func (inv *invocation) openInputs(operands commandprogram.Fields) ([]source, err
 			out = append(out, source{name: "-", reader: io.NopCloser(inv.streams.Input)})
 			continue
 		}
+		if reader, ok := inv.streams.OpenProcessSubstitutionReader(operand.Value); ok {
+			out = append(out, source{name: operand.Value, reader: reader})
+			continue
+		}
 		if paths == nil {
 			var err error
 			paths, err = projectpaths.NewProgramPaths(inv.ctx, inv.owners.Revisions.Boundary, inv.ports.ToolContext, inv.request.Invocation.Scope.Directory)
@@ -144,6 +148,9 @@ func (inv *invocation) openInputs(operands commandprogram.Fields) ([]source, err
 // capture binds one operand under the invocation cwd, pins its accepted
 // revision and returns its captured bytes.
 func (inv *invocation) capture(paths *projectpaths.ProgramPaths, operand commandprogram.Field) (io.ReadCloser, *toolcontract.ExecutionRevision, error) {
+	if reader, ok := inv.streams.OpenProcessSubstitutionReader(operand.Value); ok {
+		return reader, nil, nil
+	}
 	bound, err := paths.Bind(inv.ctx, operand.Value, false)
 	if err != nil {
 		return nil, nil, err

@@ -16,11 +16,29 @@ import (
 // eligible and no host stop latched; otherwise staged bytes are abandoned.
 func (f *frame) redirected(ctx context.Context, s commandsurface.Statement, run func(*frame) (signal, error)) (signal, error) {
 	if len(s.Redirects) == 0 {
-		return run(f)
+		sig, err := run(f)
+		if procErr := f.procSubst.finish(ctx, f, err); procErr != nil && err == nil {
+			err = procErr
+		}
+		return sig, err
 	}
 	g := *f
 	g.publish = newEligibility()
 	var staged []*stagedRedirect
+	var openedInputs []io.Closer
+	closeInputs := func() {
+		for _, in := range openedInputs {
+			_ = in.Close()
+		}
+		openedInputs = nil
+	}
+	closeProcSubstOutputs := func() {
+		for _, out := range staged {
+			if ps, ok := out.output.(*procSubstStagedOutput); ok {
+				_ = ps.closeOnce()
+			}
+		}
+	}
 	settleStaged := func(publish bool) error {
 		var first error
 		for _, out := range staged {
@@ -31,16 +49,27 @@ func (f *frame) redirected(ctx context.Context, s commandsurface.Statement, run 
 		return first
 	}
 	for _, r := range s.Redirects {
-		out, failed, err := g.bind(ctx, r)
+		out, in, failed, err := g.bind(ctx, r)
 		if out != nil {
 			staged = append(staged, out)
 		}
+		if in != nil {
+			openedInputs = append(openedInputs, in)
+		}
 		if err != nil || failed {
+			closeInputs()
+			closeProcSubstOutputs()
+			_ = g.procSubst.finish(ctx, &g, err)
 			_ = settleStaged(false)
 			return signal{}, err
 		}
 	}
 	sig, err := run(&g)
+	closeInputs()
+	closeProcSubstOutputs()
+	if procErr := g.procSubst.finish(ctx, &g, err); procErr != nil && err == nil {
+		err = procErr
+	}
 	_, stopped := f.state.latch.Stop()
 	eligible := err == nil && !stopped && g.publish.eligible()
 	f.publish.mark(eligible)
@@ -83,24 +112,25 @@ func (o *stagedRedirect) finish(ctx context.Context, publish bool) error {
 // bind applies one redirect to g.streams. failed reports an ordinary failure
 // (for example a failed target substitution or a refused open) after which the
 // command is not run; err reports a host stop.
-func (g *frame) bind(ctx context.Context, r commandsurface.ProgramRedirect) (*stagedRedirect, bool, error) {
+func (g *frame) bind(ctx context.Context, r commandsurface.ProgramRedirect) (*stagedRedirect, io.Closer, bool, error) {
 	switch r.Operator {
 	case ">&":
 		src, _ := strconv.Atoi(staticWord(r.Target))
 		if !g.streams.hasWriter(src) {
-			return nil, true, g.builtinStatus(r.SyntaxLocation, r.Operator, 1)
+			return nil, nil, true, g.builtinStatus(r.SyntaxLocation, r.Operator, 1)
 		}
 		g.streams.SetWriter(redirectDescriptor(r), g.streams.Writer(src))
-		return nil, false, nil
+		return nil, nil, false, nil
 	case "<&":
 		src, _ := strconv.Atoi(staticWord(r.Target))
 		if !g.streams.hasReader(src) {
-			return nil, true, g.builtinStatus(r.SyntaxLocation, r.Operator, 1)
+			return nil, nil, true, g.builtinStatus(r.SyntaxLocation, r.Operator, 1)
 		}
 		g.streams.SetReader(redirectDescriptor(r), g.streams.Reader(src))
-		return nil, false, nil
+		return nil, nil, false, nil
 	case "<<", "<<-":
-		return g.hereDocument(ctx, r)
+		out, failed, err := g.hereDocument(ctx, r)
+		return out, nil, failed, err
 	}
 	var target string
 	prevented, err := g.expanding(r.SyntaxLocation, func(scope *frame) error {
@@ -109,28 +139,39 @@ func (g *frame) bind(ctx context.Context, r commandsurface.ProgramRedirect) (*st
 		return err
 	})
 	if prevented || err != nil {
-		return nil, true, err
+		return nil, nil, true, err
 	}
 	child, err := g.beginRecorded(ctx, r.SyntaxLocation, r.Operator)
 	if err != nil {
-		return nil, false, err
+		return nil, nil, false, err
 	}
 	child.producer = false
 	field := Field{Value: target, Span: r.Target.Span}
 	if r.Operator == "<" {
+		if input, ok := g.streams.OpenProcessSubstitutionReader(target); ok {
+			g.streams.SetReader(redirectDescriptor(r), input)
+			child.settle(ordinaryResult(0), nil)
+			return nil, input, false, nil
+		}
 		inputs, _ := g.redirections()
 		input, err := inputs.OpenInput(ctx, InputDestination{Invocation: child.inv, Redirect: r, Target: field})
 		if err != nil {
-			return nil, true, g.redirectFailure(child, r.Operator, target, err)
+			return nil, nil, true, g.redirectFailure(child, r.Operator, target, err)
 		}
 		g.streams.SetReader(redirectDescriptor(r), input)
 		child.settle(ordinaryResult(0), nil)
-		return nil, false, nil
+		return nil, input, false, nil
 	}
-	_, outputs := g.redirections()
-	staged, err := outputs.Open(ctx, OutputDestination{Invocation: child.inv, Redirect: r, Target: field})
-	if err != nil {
-		return nil, true, g.redirectFailure(child, r.Operator, target, err)
+	var staged StagedOutput
+	if writer, ok := g.streams.OpenProcessSubstitutionWriter(target); ok {
+		staged = NewProcessSubstitutionStagedOutput(writer)
+	} else {
+		_, outputs := g.redirections()
+		var openErr error
+		staged, openErr = outputs.Open(ctx, OutputDestination{Invocation: child.inv, Redirect: r, Target: field})
+		if openErr != nil {
+			return nil, nil, true, g.redirectFailure(child, r.Operator, target, openErr)
+		}
 	}
 	errorStream := g.streams.Error
 	switch r.Operator {
@@ -140,7 +181,7 @@ func (g *frame) bind(ctx context.Context, r commandsurface.ProgramRedirect) (*st
 	default:
 		g.streams.SetWriter(redirectDescriptor(r), staged)
 	}
-	return &stagedRedirect{frame: g, run: child, operator: r.Operator, target: target, errorStream: errorStream, output: staged}, false, nil
+	return &stagedRedirect{frame: g, run: child, operator: r.Operator, target: target, errorStream: errorStream, output: staged}, nil, false, nil
 }
 
 func redirectDescriptor(r commandsurface.ProgramRedirect) int {

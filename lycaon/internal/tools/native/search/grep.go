@@ -262,6 +262,10 @@ func (r *grepRun) patternFile(spelling string) ([]byte, error) {
 	if spelling == "-" {
 		return r.inv.readAll(r.inv.input)
 	}
+	if reader, ok := r.inv.streams.OpenProcessSubstitutionReader(spelling); ok {
+		defer reader.Close()
+		return r.inv.readAll(reader)
+	}
 	bound, err := r.inv.paths.Bind(r.inv.ctx, spelling, false)
 	if err != nil {
 		return nil, err
@@ -435,6 +439,18 @@ func (r *grepRun) forcedNames(byDefault bool) bool {
 
 func (r *grepRun) searchOperand(operand string, implicit, multiple bool) error {
 	inv := r.inv
+	if reader, ok := inv.streams.OpenProcessSubstitutionReader(operand); ok {
+		if r.mode == modeFileList {
+			_ = reader.Close()
+			return inv.out.text(operand, "\n")
+		}
+		data, err := inv.readAll(reader)
+		_ = reader.Close()
+		if err != nil {
+			return err
+		}
+		return r.searchContent(operand, data, nil, r.forcedNames(multiple))
+	}
 	e, err := r.walker.operand(operand, true)
 	if err != nil {
 		if reason, ok := ordinary(err); ok {

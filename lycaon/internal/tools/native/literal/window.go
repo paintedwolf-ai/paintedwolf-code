@@ -109,9 +109,12 @@ func runHead(inv *invocation) error {
 			continue
 		}
 		if err := labels.write(in.label); err != nil {
+			in.close()
 			return err
 		}
-		if err := headInput(inv, in, w); err != nil {
+		err = headInput(inv, in, w)
+		in.close()
+		if err != nil {
 			return err
 		}
 	}

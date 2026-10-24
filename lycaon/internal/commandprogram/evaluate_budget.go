@@ -59,8 +59,7 @@ type evaluation struct {
 	children     []ChildRecord
 	sources      []SourceRecord
 	jobs         []string
-	tempDir      string
-	scratchFiles []string
+	procSubstFDs map[int]bool
 }
 
 // charge counts one unit of a cumulative program ceiling before the work it
