@@ -13,27 +13,27 @@ require (
 	github.com/aws/aws-sdk-go-v2 v1.47.3
 	github.com/aws/aws-sdk-go-v2/config v1.33.9
 	github.com/aws/aws-sdk-go-v2/credentials v1.20.9
-	github.com/aws/aws-sdk-go-v2/service/bedrock v1.73.4
-	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.63.4
+	github.com/aws/aws-sdk-go-v2/service/bedrock v1.74.0
+	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.63.5
 	github.com/aws/smithy-go v1.28.5
 	github.com/aymanbagabas/go-udiff v0.4.1
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/charmbracelet/x/ansi v0.11.9
-	github.com/charmbracelet/x/vt v0.0.0-20260713092006-0d683c34c74b
+	github.com/charmbracelet/x/vt v0.1.0
 	github.com/creack/pty v1.1.24
 	github.com/fatih/semgroup v1.3.0
 	github.com/flosch/pongo2/v6 v6.1.0
 	github.com/fsnotify/fsevents v0.2.0
 	github.com/fsnotify/fsnotify v1.10.1
-	github.com/getkin/kin-openapi v0.149.0
-	github.com/go-chi/chi/v5 v5.4.0
+	github.com/getkin/kin-openapi v0.151.0
+	github.com/go-chi/chi/v5 v5.5.0
 	github.com/go-chi/cors v1.2.2
 	github.com/go-enry/go-enry/v2 v2.9.6
 	github.com/go-git/go-git/v5 v5.19.3
 	github.com/go-rod/rod v0.116.2
-	github.com/godbus/dbus/v5 v5.2.3
+	github.com/godbus/dbus/v5 v5.2.4
 	github.com/google/go-cmp v0.7.0
 	github.com/google/osv-scalibr v0.5.3
 	github.com/google/uuid v1.6.0
@@ -42,7 +42,7 @@ require (
 	github.com/johnfercher/go-tree v1.1.0
 	github.com/johnfercher/maroto/v2 v2.4.3
 	github.com/keybase/go-keychain v0.0.1
-	github.com/klauspost/compress v1.20.1
+	github.com/klauspost/compress v1.20.3
 	github.com/mikefarah/yq/v4 v4.54.1
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/odvcencio/gotreesitter v0.52.0
