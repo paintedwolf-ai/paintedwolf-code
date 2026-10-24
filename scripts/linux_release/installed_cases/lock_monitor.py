@@ -15,7 +15,8 @@ from .polkit_policy import PresencePolicy
 from .presence_alert import alerts, await_alert
 from .process import run
 from .profile_observer import physical
-from .provider import ProviderFixture
+from .profile_setup import await_session
+from .provider import MODEL, ProviderFixture
 from .provider_setup import configure_provider, physical_input
 from .records import CaseFailed, CaseUnavailable, retain
 from ..installed_input import password_wire, session_wire, surface_wire
@@ -280,6 +281,9 @@ def run_initial_lock_state(app, execution: dict, vm_id: str, native, lock, unloc
     lock_and_unlock(app, execution, vm_id, native, lock, unlock_ctl, observations)
     with DesktopUI(app) as ui:
         observations['post_unlock_activation'] = activate_visible_frame(app, ui)
+    observations['opened_session'] = await_session(
+        app, project, provider['provider_id'], MODEL,
+        status='idle', reason='lock-monitor-project-session-not-opened')
     submit_project_turn(app)
     observations['settled_reply'] = await_fixture_reply(app, project, provider['provider_id'], fixture.acquisition)
     reservation.check_launch(app)

@@ -32,7 +32,16 @@ def exchange(pipe, observer, execution, pending, *, timeout=15):
         if pipe.receive_metadata() != {**envelope, 'ordinal': ordinal, 'phase': 'observe'}:
             raise ValueError('native unlock target observation changed its fixed ordinal')
         while True:
-            current = observer.observe()
+            try:
+                current = observer.observe()
+            except CaseUnavailable as error:
+                if (ordinal != 0 or time.monotonic() >= deadline
+                        or str(error) not in {
+                            'native-clock-window-has-no-positive-focus-proof',
+                            'native-locked-shell-window-missing-or-ambiguous'}):
+                    raise
+                time.sleep(0.05)
+                continue
             unlock_wire.same_runtime(initial, current)
             if current['password'] is not None:
                 break
