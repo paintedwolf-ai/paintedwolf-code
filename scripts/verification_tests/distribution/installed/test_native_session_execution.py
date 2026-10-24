@@ -102,6 +102,16 @@ class NativeSessionTests(unittest.TestCase):
         self.assertIn((':1.1', 'ListInhibitors', False), self.reader.calls)
         self.assertIn((':1.2', 'GetActive', True), self.reader.calls)
 
+    def test_screenshield_bus_name_binds_locker_when_screensaver_proxy_is_separate(self):
+        self.reader.names['org.gnome.ScreenSaver'] = ':1.9'
+        self.reader.pids[':1.9'] = 250
+        self.births[250] = 25
+        self.reader.names['org.gnome.Shell.ScreenShield'] = ':1.2'
+        observer = self.observer()
+        observed = observer.observe()
+        self.assertEqual(observed['authorities']['locker']['name'], 'org.gnome.Shell.ScreenShield')
+        self.assertEqual(observed['authorities']['locker']['unique'], ':1.2')
+
     def test_replaced_bus_owner_or_reused_pid_refuses(self):
         for change in ('bus', 'birth'):
             with self.subTest(change=change):

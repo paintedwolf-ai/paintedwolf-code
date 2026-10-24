@@ -6,13 +6,15 @@ import re
 from . import lineage
 
 OPERATIONS = {'session-lock-v1': (('meta_l', 'l'),)}
+LOCKER_NAMES = ('org.gnome.ScreenSaver', 'org.gnome.Shell.ScreenShield', 'org.gnome.Shell')
 PATH = re.compile(r'/(?:[A-Za-z0-9_]+/)*[A-Za-z0-9_]+\Z')
 UNIQUE = re.compile(r':[0-9]+\.[0-9]+\Z')
 
 
 def native_owner(value, name, uid):
+    allowed = (name,) if isinstance(name, str) else tuple(name)
     if (not isinstance(value, dict) or set(value) != {'name', 'unique', 'process'}
-            or value['name'] != name or not isinstance(value['unique'], str)
+            or value['name'] not in allowed or not isinstance(value['unique'], str)
             or len(value['unique']) > 255 or not UNIQUE.fullmatch(value['unique'])):
         raise ValueError('native lock proof has an invalid unique bus owner')
     process = value['process']
@@ -60,7 +62,7 @@ def proof(value):
     if not isinstance(owners, dict) or set(owners) != {'login', 'locker', 'shell'}:
         raise ValueError('native lock authority proof has an unknown shape')
     native_owner(owners['login'], 'org.freedesktop.login1', 0)
-    native_owner(owners['locker'], 'org.gnome.ScreenSaver', int(session['User']))
+    native_owner(owners['locker'], LOCKER_NAMES, int(session['User']))
     shell = owners['shell']
     if (not isinstance(shell, dict) or set(shell) != {'bus_name', 'unique_owner', 'pid', 'start_time_ticks',
             'executable', 'device', 'inode', 'mode', 'bytes'}
