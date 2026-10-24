@@ -110,3 +110,20 @@ class PresencePrerequisiteTests(unittest.TestCase):
         self.assertTrue(failed.exception.observations['presence_policy']['recovery_required'])
         self.app.stop.assert_called_once()
         self.assertEqual(failed.exception.streams, {'app-stderr': b'bounded'})
+
+    def test_project_open_output_bytes_move_to_streams_and_keep_observations_json_safe(self):
+        import json
+        self.values['run'].return_value = {
+            'launch_identity': {'pid': 42, 'start_time_ticks': 99},
+            'exit_code': 0, 'timed_out': False, 'output_limit': False,
+            'stdout': b'opened\n', 'stderr': b'',
+        }
+        status, facts, streams = presence.unchallenged_presence({})
+        self.assertEqual(status, 'unverified')
+        self.assertEqual(facts['project_open'], {
+            'launch_identity': {'pid': 42, 'start_time_ticks': 99},
+            'exit_code': 0, 'timed_out': False, 'output_limit': False,
+        })
+        self.assertEqual(streams['project-open-stdout'], b'opened\n')
+        self.assertEqual(streams['project-open-stderr'], b'')
+        json.dumps(facts)
