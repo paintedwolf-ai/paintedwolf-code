@@ -13,6 +13,7 @@ from .records import CaseUnavailable
 
 DBUS = 'org.freedesktop.DBus'
 DBUS_PATH = '/org/freedesktop/DBus'
+LOCKER_NAMES = ('org.gnome.ScreenSaver', 'org.gnome.Shell.ScreenShield', 'org.gnome.Shell')
 UNIQUE = re.compile(r':[0-9]+\.[0-9]+\Z')
 
 
@@ -81,9 +82,18 @@ class NativeSessionObserver:
 
     def _authorities(self):
         shell = self.shell()
-        locker = self._bus_owner(self.locker[0], os.getuid(), user=True)
-        if (locker['unique'] != shell['unique_owner'] or locker['process']['pid'] != shell['pid']
-                or locker['process']['start_time_ticks'] != shell['start_time_ticks']):
+        locker = None
+        for name in LOCKER_NAMES:
+            try:
+                candidate = self._bus_owner(name, os.getuid(), user=True)
+            except BaseException:
+                continue
+            if (candidate['unique'] == shell['unique_owner']
+                    and candidate['process']['pid'] == shell['pid']
+                    and candidate['process']['start_time_ticks'] == shell['start_time_ticks']):
+                locker = candidate
+                break
+        if locker is None:
             raise ValueError('native locker is not the independently selected GNOME shell')
         return {'login': self._bus_owner(LOGIN, 0), 'locker': locker, 'shell': shell}
 
