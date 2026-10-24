@@ -118,7 +118,7 @@ def enter_desktop_application_scope(path: Path, storage: Storage) -> dict:
                                                 "/opt/painted-wolf-code/bin/painted-wolf-code"}):
         raise ValueError("installed desktop entry does not match the selected application launcher")
     cgroup_before = Path("/proc/self/cgroup").read_text(encoding="utf-8").strip()
-    unit = f"app-gnome-{storage.application_identifier}-{os.getpid()}-{int(time.monotonic() * 1000)}.scope"
+    unit = f"app-gnome-{storage.application_identifier}-{os.getpid()}{int(time.monotonic() * 1000)}.scope"
     os.environ.setdefault("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
     os.environ.setdefault("DBUS_SESSION_BUS_ADDRESS", f"unix:path=/run/user/{os.getuid()}/bus")
     bus, props = Gio.bus_get_sync(Gio.BusType.SESSION, None), [("PIDs", GLib.Variant("au", [os.getpid()]))]

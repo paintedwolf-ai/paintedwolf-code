@@ -1,6 +1,7 @@
 """Actual application identity and platform-owner boundaries fail closed."""
 import io
 import os
+import re
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace
@@ -162,7 +163,7 @@ class InstalledAppTests(unittest.TestCase):
         fake_bus, fake_gio, fake_glib = Mock(), Mock(), Mock()
         fake_gio.bus_get_sync.return_value = fake_bus
         cgroups = ["0::/user.slice/user-30068.slice/session-1961.scope\n",
-                   "0::/user.slice/user-30068.slice/user@30068.service/app.slice/app-gnome-dev.paintedwolf.code-500-1000.scope\n"]
+                   "0::/user.slice/user-30068.slice/user@30068.service/app.slice/app-gnome-dev.paintedwolf.code-5001000.scope\n"]
         def fake_read_text(path_obj, *args, **kwargs):
             if str(path_obj).endswith(".desktop"):
                 return desktop_text
@@ -175,7 +176,9 @@ class InstalledAppTests(unittest.TestCase):
                 patch("scripts.linux_release.installed_cases.app.time.monotonic", side_effect=[1.0, 1.0, 1.1]), \
                 patch.object(Path, "read_text", autospec=True, side_effect=fake_read_text):
             witness = enter_desktop_application_scope(Path("/usr/libexec/painted-wolf-code/pw-launch"), storage)
-        self.assertEqual(witness["unit"], "app-gnome-dev.paintedwolf.code-500-1000.scope")
+        self.assertEqual(witness["unit"], "app-gnome-dev.paintedwolf.code-5001000.scope")
+        self.assertEqual(re.match(r"^app-(?:[0-9A-Za-z]+-)?(.+?)(?:-[0-9A-Za-z]*)(?:\.scope|\.slice)$", witness["unit"]).group(1),
+                         "dev.paintedwolf.code")
         self.assertEqual(witness["launch_mode"], "installed-desktop-entry-systemd-user-scope")
         fake_bus.call_sync.assert_called_once()
         engine = {"pid": 321, "parent_pid": 123, "start_time_ticks": 456}
