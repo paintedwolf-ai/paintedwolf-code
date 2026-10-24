@@ -17,10 +17,8 @@ LIMIT = 8 << 20
 
 def process_identity(pid: int) -> dict:
     row = Path(f"/proc/{pid}/stat").read_text().rpartition(") ")[2].split()
-    if len(row) < 20:
-        raise ValueError("installed process identity is unavailable")
+    if len(row) < 20: raise ValueError("installed process identity is unavailable")
     return {"pid": pid, "parent_pid": int(row[1]), "start_time_ticks": int(row[19])}
-
 
 
 def engine_image(pid: int) -> tuple:
@@ -32,17 +30,14 @@ def engine_image(pid: int) -> tuple:
         # Nondumpable engines can hide proc-exe even from the actual launcher UID.
         try:
             result = subprocess.run(["/usr/bin/sudo", "-n", "/usr/bin/stat", "-L", "-c", "%d:%i:%s", f"/proc/{pid}/exe"],
-                                    capture_output=True, timeout=10, check=False,
-                                    env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"})
+                                    capture_output=True, timeout=10, check=False, env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"})
         except (OSError, subprocess.SubprocessError) as error:
             raise CaseUnavailable("selected engine image observer is unavailable") from error
-        if result.returncode:
-            raise CaseUnavailable("selected engine image observer is unavailable")
+        if result.returncode: raise CaseUnavailable("selected engine image observer is unavailable")
         if not re.fullmatch(rb"[0-9]+:[0-9]+:[0-9]+\n", result.stdout):
             raise ValueError("selected engine image observer returned malformed identity")
         identity = tuple(int(value) for value in result.stdout.strip().split(b":"))
-    if process_identity(pid) != before:
-        raise ValueError("selected engine changed during image observation")
+    if process_identity(pid) != before: raise ValueError("selected engine changed during image observation")
     return identity
 
 
@@ -54,28 +49,23 @@ def private_json(path: Path) -> dict:
                 or stat.S_IMODE(info.st_mode) & 0o077 or info.st_size > 4096):
             raise ValueError("installed process record is not a private owned regular file")
         raw = stream.read(4097)
-        if len(raw) != info.st_size:
-            raise ValueError("installed process record changed while reading")
+        if len(raw) != info.st_size: raise ValueError("installed process record changed while reading")
         return json.loads(raw)
 
 
 def desktop_display(session: dict) -> str:
     value = session.get("Display")
     if not value:
-        owner = session.get("DesktopOwner", {})
-        pid = owner.get("pid")
-        if type(pid) is not int or pid <= 1:
-            raise CaseUnavailable("native X11 session has no captured desktop owner")
+        owner = session.get("DesktopOwner", {}); pid = owner.get("pid")
+        if type(pid) is not int or pid <= 1: raise CaseUnavailable("native X11 session has no captured desktop owner")
         before = process_identity(pid)
         if before["start_time_ticks"] != owner.get("start_time_ticks"):
             raise ValueError("native X11 desktop owner changed before display observation")
-        with Path(f"/proc/{pid}/environ").open("rb") as stream:
-            raw = stream.read((256 << 10) + 1)
+        with Path(f"/proc/{pid}/environ").open("rb") as stream: raw = stream.read((256 << 10) + 1)
         if len(raw) > 256 << 10 or process_identity(pid) != before:
             raise ValueError("native X11 desktop environment changed or exceeded its bound")
         displays = [field[len(b"DISPLAY="):] for field in raw.split(b"\0") if field.startswith(b"DISPLAY=")]
-        if len(displays) != 1:
-            raise CaseUnavailable("native X11 desktop owner has no unique display")
+        if len(displays) != 1: raise CaseUnavailable("native X11 desktop owner has no unique display")
         value = displays[0].decode("ascii")
     if not isinstance(value, str) or re.fullmatch(r":[0-9]{1,5}(?:\.[0-9]{1,2})?", value) is None:
         raise ValueError("native X11 display is not a local session display")
@@ -84,8 +74,7 @@ def desktop_display(session: dict) -> str:
 
 def session_environment(session: dict) -> dict:
     home, runtime = Path.home(), Path(f"/run/user/{os.getuid()}")
-    info = runtime.stat()
-    bus = runtime / "bus"
+    info, bus = runtime.stat(), runtime / "bus"
     if info.st_uid != os.getuid() or not stat.S_ISSOCK(bus.stat().st_mode):
         raise CaseUnavailable("native graphical session bus is unavailable")
     result = {"HOME": str(home), "USER": home.name, "LOGNAME": home.name,
@@ -96,18 +85,19 @@ def session_environment(session: dict) -> dict:
     if session["Type"] == "wayland":
         sockets = [path for path in runtime.glob("wayland-*") if stat.S_ISSOCK(path.lstat().st_mode)
                    and path.lstat().st_uid == os.getuid()]
-        if len(sockets) != 1:
-            raise CaseUnavailable("native Wayland display socket is not uniquely selected")
+        if len(sockets) != 1: raise CaseUnavailable("native Wayland display socket is not uniquely selected")
         result["WAYLAND_DISPLAY"] = sockets[0].name
     else:
-        result["DISPLAY"] = desktop_display(session)
-        authority = home / ".Xauthority"
-        if authority.is_file():
-            result["XAUTHORITY"] = str(authority)
+        result["DISPLAY"], authority = desktop_display(session), home / ".Xauthority"
+        if authority.is_file(): result["XAUTHORITY"] = str(authority)
     return result
 
 
-def enter_desktop_application_scope(path: Path, storage: Storage) -> dict:
+APP_SCOPE_RE = re.compile(r"^app-(?:[0-9A-Za-z]+-)?(.+?)(?:-[0-9A-Za-z]*)(?:\.scope|\.slice)$")
+
+
+def enter_desktop_application_scope(path: Path, storage: Storage,
+                                    cli_probe: Path = Path("/opt/painted-wolf-code/bin/pw")) -> dict:
     from gi.repository import Gio, GLib
     desktop_path = Path(f"/usr/share/applications/{storage.application_identifier}.desktop")
     desktop_identity = file_identity(desktop_path); desktop_identity.pop("header", None)
@@ -118,6 +108,12 @@ def enter_desktop_application_scope(path: Path, storage: Storage) -> dict:
                                                 "/opt/painted-wolf-code/bin/painted-wolf-code"}):
         raise ValueError("installed desktop entry does not match the selected application launcher")
     cgroup_before = Path("/proc/self/cgroup").read_text(encoding="utf-8").strip()
+    probe = subprocess.Popen([str(cli_probe), "--version"], stdin=subprocess.DEVNULL,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    direct_identity = process_identity(probe.pid)
+    direct_cgroup = Path(f"/proc/{probe.pid}/cgroup").read_text(encoding="utf-8").strip()
+    probe_exit, direct_leaf = probe.wait(timeout=10), direct_cgroup.rsplit("/", 1)[-1]
+    direct_match = APP_SCOPE_RE.match(direct_leaf)
     unit = f"app-gnome-{storage.application_identifier}-{os.getpid()}{int(time.monotonic() * 1000)}.scope"
     os.environ.setdefault("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
     os.environ.setdefault("DBUS_SESSION_BUS_ADDRESS", f"unix:path=/run/user/{os.getuid()}/bus")
@@ -130,13 +126,17 @@ def enter_desktop_application_scope(path: Path, storage: Storage) -> dict:
         cgroup_after = Path("/proc/self/cgroup").read_text(encoding="utf-8").strip()
         if cgroup_after.endswith("/" + unit): break
         time.sleep(0.02)
-    else:
-        raise ValueError("installed desktop application scope unit did not attach to the launcher cgroup")
+    else: raise ValueError("installed desktop application scope unit did not attach to the launcher cgroup")
+    scoped_match = APP_SCOPE_RE.match(unit)
     return {"desktop_entry_path": str(desktop_path), "desktop_entry_identity": desktop_identity,
             "exec_target": str(path), "application_id": storage.application_identifier, "unit": unit,
             "caller_cgroup_before": cgroup_before, "caller_cgroup_after": cgroup_after,
-            "launch_mode": "installed-desktop-entry-systemd-user-scope",
-            "cli_launch_comparison": "direct CLI/SSH launches outside a desktop-entry systemd user unit remain in the caller session scope where xdg-desktop-portal < 1.20 without host.portal.Registry cannot attribute app_id"}
+            "launch_mode": "controlled-systemd-application-scope", "desktop_entry_launch_proven": False,
+            "cli_launch_comparison": {"direct_cli_executable": str(cli_probe), "direct_cli_identity": direct_identity,
+                "direct_cli_exit_code": probe_exit, "direct_cli_cgroup": direct_cgroup, "direct_cli_leaf_unit": direct_leaf,
+                "direct_cli_attributed_app_id": direct_match.group(1) if direct_match else None,
+                "controlled_scope_unit": unit,
+                "controlled_scope_attributed_app_id": scoped_match.group(1) if scoped_match else None}}
 
 
 class InstalledApp:
@@ -188,7 +188,7 @@ class InstalledApp:
         current = file_identity(path); current.pop("header")
         if current != launcher:
             raise ValueError("installed application launcher changed since final artifact binding")
-        unit_info = enter_desktop_application_scope(path, storage)
+        unit_info = enter_desktop_application_scope(path, storage, Path(self.binding["install_root"]) / "bin/pw")
         self.storage = storage
         self.process = subprocess.Popen([str(path), *self.arguments], env=environment,
             stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)

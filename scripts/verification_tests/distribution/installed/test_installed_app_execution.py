@@ -163,15 +163,20 @@ class InstalledAppTests(unittest.TestCase):
         fake_bus, fake_gio, fake_glib = Mock(), Mock(), Mock()
         fake_gio.bus_get_sync.return_value = fake_bus
         cgroups = ["0::/user.slice/user-30068.slice/session-1961.scope\n",
+                   "0::/user.slice/user-30068.slice/session-1961.scope\n",
                    "0::/user.slice/user-30068.slice/user@30068.service/app.slice/app-gnome-dev.paintedwolf.code-5001000.scope\n"]
         def fake_read_text(path_obj, *args, **kwargs):
             if str(path_obj).endswith(".desktop"):
                 return desktop_text
             return cgroups.pop(0) if len(cgroups) > 1 else cgroups[0]
+        fake_probe = SimpleNamespace(pid=501, wait=lambda timeout=10: 0)
+        direct_cli_id = {"pid": 501, "parent_pid": 500, "start_time_ticks": 399}
         with patch.dict("sys.modules", {"gi": SimpleNamespace(repository=SimpleNamespace(Gio=fake_gio, GLib=fake_glib)),
                                         "gi.repository": SimpleNamespace(Gio=fake_gio, GLib=fake_glib)}), \
                 patch("scripts.linux_release.installed_cases.app.file_identity",
                       return_value={"sha256": "a" * 64, "bytes": 120, "mode": 0o644, "header": b"[Desktop"}), \
+                patch("scripts.linux_release.installed_cases.app.subprocess.Popen", return_value=fake_probe), \
+                patch("scripts.linux_release.installed_cases.app.process_identity", return_value=direct_cli_id), \
                 patch("scripts.linux_release.installed_cases.app.os.getpid", return_value=500), \
                 patch("scripts.linux_release.installed_cases.app.time.monotonic", side_effect=[1.0, 1.0, 1.1]), \
                 patch.object(Path, "read_text", autospec=True, side_effect=fake_read_text):
@@ -179,7 +184,18 @@ class InstalledAppTests(unittest.TestCase):
         self.assertEqual(witness["unit"], "app-gnome-dev.paintedwolf.code-5001000.scope")
         self.assertEqual(re.match(r"^app-(?:[0-9A-Za-z]+-)?(.+?)(?:-[0-9A-Za-z]*)(?:\.scope|\.slice)$", witness["unit"]).group(1),
                          "dev.paintedwolf.code")
-        self.assertEqual(witness["launch_mode"], "installed-desktop-entry-systemd-user-scope")
+        self.assertEqual(witness["launch_mode"], "controlled-systemd-application-scope")
+        self.assertFalse(witness["desktop_entry_launch_proven"])
+        self.assertEqual(witness["cli_launch_comparison"], {
+            "direct_cli_executable": "/opt/painted-wolf-code/bin/pw",
+            "direct_cli_identity": direct_cli_id,
+            "direct_cli_exit_code": 0,
+            "direct_cli_cgroup": "0::/user.slice/user-30068.slice/session-1961.scope",
+            "direct_cli_leaf_unit": "session-1961.scope",
+            "direct_cli_attributed_app_id": None,
+            "controlled_scope_unit": "app-gnome-dev.paintedwolf.code-5001000.scope",
+            "controlled_scope_attributed_app_id": "dev.paintedwolf.code",
+        })
         fake_bus.call_sync.assert_called_once()
         engine = {"pid": 321, "parent_pid": 123, "start_time_ticks": 456}
         launcher = {"pid": 123, "parent_pid": 500, "start_time_ticks": 400}
