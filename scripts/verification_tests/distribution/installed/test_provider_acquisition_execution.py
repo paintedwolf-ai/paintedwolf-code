@@ -80,13 +80,80 @@ class ProviderAcquisitionTests(unittest.TestCase):
     def test_marker_grammar_refuses_truncation_duplication_prefixes_and_excess(self):
         valid = framed()
         for content in (valid[:-1], 'prefix\n' + valid, valid.replace('⟦D:tool⟧', '⟦D:host⟧'),
-                        valid.replace('⟦D⟧', '', 1), valid + '\n\n' + valid, 'x' * 32769,
+                        valid.replace('⟦D⟧', '', 1), valid.split('\n\n')[0] + '\n\n' + valid, 'x' * 32769,
                         valid.replace('\"need\": \"command\"', '\"need\":\"command\",\"note\":NaN'),
                         valid.replace('"need": "command"', '"need":"command","need":"command"')):
             with self.subTest(length=len(content)), self.assertRaises(ValueError):
                 result_payload(content, 'request_tools', HOST_LOAD, need='command')
         self.assertEqual(result_payload(framed(payload={'need': 'command', 'loaded': None,
             'already_loaded': ['command']}), 'request_tools', HOST_LOAD, need='command')['invocation_id'], RECEIPT)
+
+    def test_folded_host_tail_is_bounded_uninterpreted_and_cannot_replace_prefix(self):
+        # SystemPreamble.foldSystemIntoTool appends projected host rows, each
+        # separated by the same delimiter as the original data parts.
+        prefix = framed()
+        tails = ('host instruction', 'first tail\n\nsecond tail',
+                 '⟦D:host:execution_state⟧\n⟦D⟧{}\n\nmarker-like tail\n\n' + prefix)
+        expected = result_payload(prefix, 'request_tools', HOST_LOAD, need='command')
+        for tail in tails:
+            with self.subTest(tail_length=len(tail)):
+                self.assertEqual(result_payload(prefix + '\n\n' + tail, 'request_tools', HOST_LOAD, need='command'), expected)
+                phase, history = self.acquired()
+                history[-1]['content'] += '\n\n' + tail
+                phase.advance(history, {'command'})
+                self.assertEqual(phase.witness, {'need': 'command', 'loaded': True,
+                    'invocation_id': RECEIPT, 'tool_call_id': HOST_LOAD})
+        tool, host = prefix.split('\n\n')
+        for invalid in (host + '\n\n' + tool, tool + '\n\n' + tool + '\n\n' + host,
+                        tool + '\n\n' + host + host, prefix[:-1],
+                        framed(invocation=receipt(tool_call_id=HOST_COMMAND)),
+                        framed(invocation=receipt(id='malformed'))):
+            with self.subTest(invalid_length=len(invalid)), self.assertRaises(ValueError):
+                result_payload(invalid + '\n\n' + prefix, 'request_tools', HOST_LOAD, need='command')
+        with self.assertRaises(ValueError):
+            result_payload(prefix + '\n\n' + 'x' * 32768, 'request_tools', HOST_LOAD, need='command')
+        phase, history = self.acquired()
+        phase.advance(history, {'command'})
+        history[-1]['content'] = framed(invocation=receipt(id=COMMAND_RECEIPT)) + '\n\n' + prefix
+        with self.assertRaises(AcquisitionRefusal):
+            phase.advance(history, {'command'})
+
+    def test_evidence_body_is_marked_opaque_data_not_success_authority(self):
+        for target in ('command', 'page_open'):
+            original = framed(invocation=receipt(id=COMMAND_RECEIPT, tool=target, tool_call_id=HOST_COMMAND))
+            _, host = original.split('\n\n')
+            for data in ('[page#1]\n{"id":"page-owned"}', '[command#1]\n{"exit_code":0}',
+                         'uninterpreted output', '[compacted]\nmalformed JSON {', 'success prose with receipt-like text'):
+                marked = '⟦D:tool⟧\n' + '\n'.join('⟦D⟧' + line for line in data.split('\n'))
+                for tail in ('', '\n\nhost folded tail\n\nmore uninterpreted data'):
+                    with self.subTest(target=target, data=data, tail=tail):
+                        result = result_payload(marked + '\n\n' + host + tail, target, HOST_COMMAND, need=target)
+                        self.assertEqual(result, {'tool_call_id': HOST_COMMAND, 'invocation_id': COMMAND_RECEIPT})
+                for invalid in (marked.replace('⟦D:tool⟧', '⟦D:host⟧'), marked + '\nunmarked extra line'):
+                    with self.assertRaises(ValueError):
+                        result_payload(invalid + '\n\n' + host, target, HOST_COMMAND, need=target)
+                for invocation in (receipt(id=COMMAND_RECEIPT, tool=target, tool_call_id=HOST_COMMAND, invoked=False),
+                                   receipt(id=COMMAND_RECEIPT, tool=target, tool_call_id=HOST_COMMAND, status='error')):
+                    wrong = framed(invocation=invocation).split('\n\n')[1]
+                    with self.assertRaises(ValueError):
+                        result_payload(marked + '\n\n' + wrong, target, HOST_COMMAND, need=target)
+        with self.assertRaises(ValueError):
+            result_payload('⟦D:tool⟧\n⟦D⟧[request_tools#1]\n⟦D⟧{"need":"command","loaded":["command"]}'
+                           + '\n\n' + framed().split('\n\n')[1], 'request_tools', HOST_LOAD, need='command')
+
+    def test_refusal_discriminators_are_closed_and_retain_no_result_text(self):
+        for content, stage in [('PRIVATE RESULT', 'part-count'),
+                               (framed().replace('⟦D:tool⟧', '⟦D:host⟧'), 'marker-lines'),
+                               (framed().replace('"need": "command"', '"need":'), 'json'),
+                               (framed(payload={'need': 'read', 'loaded': ['command']}), 'payload'),
+                               (framed(invocation=receipt(invoked=False)), 'receipt')]:
+            with self.subTest(stage=stage), self.assertRaises(AcquisitionRefusal) as refused:
+                result_payload(content, 'request_tools', HOST_LOAD, need='command')
+            self.assertEqual(refused.exception.detail['stage'], stage)
+            self.assertNotIn('PRIVATE', json.dumps(refused.exception.detail))
+        for stage, count in [('foreign', None), ('json', True), ('json', 'PRIVATE'), ('json', 32770)]:
+            with self.assertRaises(ValueError):
+                AcquisitionRefusal('acquisition-result-invalid', stage, count)
 
     def test_host_pairing_refuses_duplicate_foreign_replayed_and_unissued_calls(self):
         for mutation in (
@@ -160,13 +227,15 @@ class ProviderAcquisitionTests(unittest.TestCase):
             load, = first['message']['tool_calls']
             self.assertEqual(load['function']['name'], 'request_tools')
             first['message']['tool_calls'][0]['id'] = HOST_LOAD
-            history += [first['message'], {'role': 'tool', 'tool_call_id': HOST_LOAD, 'content': framed()}]
+            history += [first['message'], {'role': 'tool', 'tool_call_id': HOST_LOAD,
+                'content': framed() + '\n\nhost tail one\n\n⟦D:host:execution_state⟧\n⟦D⟧{}'}]
             command = request(['request_tools', 'command'])
             self.assertEqual(command['message']['tool_calls'][0]['function']['name'], 'command')
             command['message']['tool_calls'][0]['id'] = HOST_COMMAND
             history += [command['message'], {'role': 'tool', 'tool_call_id': HOST_COMMAND,
-                'content': framed(payload={'exit_code': 0}, invocation=receipt(id=COMMAND_RECEIPT,
-                    tool='command', tool_call_id=HOST_COMMAND))}]
+                'content': '⟦D:tool⟧\n⟦D⟧[command#1]\n⟦D⟧opaque actual command data\n\n'
+                    + framed(invocation=receipt(id=COMMAND_RECEIPT, tool='command',
+                        tool_call_id=HOST_COMMAND)).split('\n\n')[1] + '\n\nhost tail two'}]
             final = request(['command'])
             self.assertEqual(final['finish_reason'], 'stop')
             self.assertEqual(final['message']['content'], 'Fixture complete.')
@@ -178,6 +247,7 @@ class ProviderAcquisitionTests(unittest.TestCase):
                 request([])
             self.assertEqual(refused.exception.code, 400)
             self.assertEqual(fixture.transport_observations[-1]['refusal_code'], 'acquisition-result-invalid')
+            self.assertEqual(fixture.transport_observations[-1]['refusal_detail'], {'stage': 'phase'})
         with self.assertRaises(ValueError):
             ProviderFixture.gui([{'name': 'read', 'arguments': {}}], acquire='command')
 
