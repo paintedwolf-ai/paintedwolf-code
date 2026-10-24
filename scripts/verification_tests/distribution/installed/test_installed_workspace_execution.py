@@ -182,6 +182,20 @@ class InstalledWorkspaceTests(unittest.TestCase):
             self.assertEqual(selected.observe()['entry'], identity)
         replacement.queryComponent.assert_not_called()
         original.queryComponent.return_value.grabFocus.assert_called_once_with()
+        unfocused = MagicMock()
+        unfocused.app.bus_name, unfocused.path = ':1.3', '/entry'
+        unfocused.get_process_id.return_value = 123
+        unfocused.get_parent.return_value = frame
+        unfocused.queryComponent.return_value.grabFocus.return_value = True
+        unfocused.getState.return_value.contains.side_effect = [False, True, False]
+        ui.find.side_effect = [original, unfocused, unfocused]
+        with patch.object(focus_owner, 'process_identity', return_value=identity), \
+                patch.object(focus_owner.lineage, 'process_identity', return_value=identity), \
+                patch.object(focus_owner, 'owned_process', return_value=True):
+            selected = focus_owner.EntryFocus(app, ui, 'Contents of fixture')
+            with self.assertRaises(focus_owner._FocusUnavailable):
+                selected._observe_once()
+        unfocused.queryComponent.return_value.grabFocus.assert_called_once_with()
 
     def test_accepted_keyboard_dispatch_without_saved_bytes_never_passes(self):
         ui = MagicMock()
