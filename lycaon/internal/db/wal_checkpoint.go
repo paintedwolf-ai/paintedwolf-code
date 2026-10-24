@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"time"
 )
 
 const walFramesPinnedWarn = 10_000
@@ -47,7 +48,11 @@ func CheckpointWAL(ctx context.Context, store *Store) (WALCheckpoint, error) {
 	if store == nil {
 		return WALCheckpoint{}, errors.New("checkpoint wal: nil database")
 	}
-	return checkpointDatabase(ctx, store.writer, WALCheckpointPassive)
+	result, err := checkpointDatabase(ctx, store.writer, WALCheckpointPassive)
+	if err == nil {
+		store.audit.checkpoint(result)
+	}
+	return result, err
 }
 
 func checkpointDatabase(
@@ -81,8 +86,16 @@ func RunWALCheckpointer(ctx context.Context, store *Store, dbPath string) error 
 	if store == nil {
 		return errors.New("run wal checkpointer: nil database")
 	}
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
 	for {
 		select {
+		case <-ticker.C:
+			if store.audit.active() {
+				if err := checkpointOnce(ctx, store, dbPath); err != nil {
+					return err
+				}
+			}
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-store.checkpointSignals():
@@ -94,8 +107,17 @@ func RunWALCheckpointer(ctx context.Context, store *Store, dbPath string) error 
 }
 
 func checkpointOnce(ctx context.Context, store *Store, dbPath string) error {
+	if store.audit.active() {
+		limit, err := auditFrameBudget(ctx, store)
+		if err != nil {
+			store.audit.interrupt(err)
+			return err
+		}
+		store.audit.resourceLimit(limit)
+	}
 	result, err := CheckpointWAL(ctx, store)
 	if err != nil {
+		store.audit.interrupt(err)
 		return err
 	}
 	if result.Complete() {
