@@ -45,7 +45,7 @@ func runRm(inv *invocation) error {
 		if err != nil {
 			return 0, err
 		}
-		result, err := inv.owners.Operations.Delete.Delete(inv.ctx, native.DeleteInput{Paths: []string{bound.Resolved.Abs}, FilesOnly: !recursive, Recursive: recursive, Force: force}, inv.tc)
+		result, err := inv.owners.Operations.Delete.Delete(inv.ctx, native.DeleteInput{Memory: inv.memory, Paths: []string{bound.Resolved.Abs}, FilesOnly: !recursive, Recursive: recursive, Force: force}, inv.tc)
 		return len(result.Deleted), err
 	})
 }
@@ -63,7 +63,7 @@ func runRmdir(inv *invocation) error {
 			inv.fail(operand, "Not a directory")
 			return 0, nil
 		}
-		result, err := inv.owners.Operations.Delete.Delete(inv.ctx, native.DeleteInput{Paths: []string{bound.Resolved.Abs}}, inv.tc)
+		result, err := inv.owners.Operations.Delete.Delete(inv.ctx, native.DeleteInput{Memory: inv.memory, Paths: []string{bound.Resolved.Abs}}, inv.tc)
 		return len(result.Deleted), err
 	})
 }
@@ -92,7 +92,7 @@ func runMv(inv *invocation) error {
 		if err != nil {
 			return 0, err
 		}
-		result, err := inv.owners.Operations.Move.Move(inv.ctx, native.MoveInput{Pairs: []native.FilePair{{From: source.Resolved.Abs, To: to}}, NoClobber: noClobber, Directories: true}, inv.tc)
+		result, err := inv.owners.Operations.Move.Move(inv.ctx, native.MoveInput{Memory: inv.memory, Pairs: []native.FilePair{{From: source.Resolved.Abs, To: to}}, NoClobber: noClobber, Directories: true}, inv.tc)
 		return len(result.Moved), err
 	})
 }
@@ -103,6 +103,11 @@ func runCp(inv *invocation) error {
 		return err
 	}
 	recursive, noClobber := inv.flag("-r"), inv.flag("-n")
+	operation, err := inv.owners.Operations.Copy.Begin(native.CopyInput{Recursive: recursive, NoClobber: noClobber, Preserve: inv.flag("-p"), MaxFileBytes: inv.owners.limit("recursive_mutation_bytes")}, inv.memory)
+	if err != nil {
+		return err
+	}
+	defer operation.Close()
 	return inv.each(sources, func(operand string) (int, error) {
 		source, err := inv.bind(operand, false)
 		if err != nil {
@@ -116,9 +121,8 @@ func runCp(inv *invocation) error {
 		if err != nil {
 			return 0, err
 		}
-		result, err := inv.owners.Operations.Copy.Copy(inv.ctx, native.CopyInput{Pairs: []native.FilePair{{From: source.Resolved.Abs, To: to}}, Recursive: recursive, NoClobber: noClobber, Preserve: inv.flag("-p"),
-			MaxFileBytes: inv.owners.limit("recursive_mutation_bytes")}, inv.tc)
-		return len(result.Copied), err
+		result, err := operation.CopyPair(inv.ctx, native.FilePair{From: source.Resolved.Abs, To: to}, inv.tc)
+		return result.Effects, err
 	})
 }
 
@@ -151,7 +155,7 @@ func runMkdir(inv *invocation) error {
 			}
 		}
 		created, err := inv.owners.Operations.Mkdir.Mkdir(inv.ctx, native.MkdirInput{Paths: []string{bound.Resolved.Abs}, Mode: mode}, inv.tc)
-		return len(created), err
+		return created.Effects, err
 	})
 }
 
@@ -323,7 +327,7 @@ func runMktemp(inv *invocation) error {
 	abs := filepath.Join(dir, name)
 	if inv.flag("-d") {
 		created, err := inv.owners.Operations.Mkdir.Mkdir(inv.ctx, native.MkdirInput{Paths: []string{abs}, Mode: 0o700}, inv.tc)
-		inv.effects += len(created)
+		inv.effects += created.Effects
 		if err != nil {
 			return err
 		}

@@ -18,6 +18,7 @@ import (
 
 // invocation is one utility run: its bound argv, streams and effects so far.
 type invocation struct {
+	memory  *toolcontract.ProgramMemory
 	ctx     context.Context
 	owners  *Owners
 	tc      tools.ToolContext
@@ -35,7 +36,7 @@ type invocation struct {
 }
 
 func newInvocation(ctx context.Context, p Prepared, tc tools.ToolContext, streams commandprogram.Streams) *invocation {
-	inv := &invocation{ctx: ctx, owners: p.owners, tc: tc, paths: p.program.Paths, barrier: p.program.Barrier, request: p.request, spec: p.spec, argv: p.Argv,
+	inv := &invocation{ctx: ctx, memory: p.program.Memory, owners: p.owners, tc: tc, paths: p.program.Paths, barrier: p.program.Barrier, request: p.request, spec: p.spec, argv: p.Argv,
 		input: streams.Input, stdout: streams.Output, stderr: streams.Error}
 	if inv.input == nil {
 		inv.input = commandprogram.NullInput()

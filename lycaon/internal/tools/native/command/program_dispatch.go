@@ -192,6 +192,7 @@ func (d *ProgramDispatcher) invokeBuiltin(ctx context.Context, spec toolcontract
 		result := ownerFailure(err)
 		return result, errors.Join(err, d.settle(ctx, child, result, false, ""))
 	}
+	noteJobNative(ctx, request.Argv.Values())
 	tracker := &trackingWriter{w: nonNilWriter(streams.Error)}
 	runStreams := streams
 	runStreams.Error = tracker
@@ -349,7 +350,10 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 		Operation: bound, Streams: runStreams, Argv: &review, Inspection: d.run.capture,
 		Stage: toolcontract.ExecutionStage{ExecutionID: request.Invocation.Identity.ExecutionID, OperationID: operationDef.Facts().Identity, Argv: request.Argv.Values()},
 		PrepareReviewed: func(context.Context, map[string]any, tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
-			return toolexecution.PreparedNativeEffect{Operation: bound, InvokeOwner: prepared.Invoke}, nil
+			return toolexecution.PreparedNativeEffect{Operation: bound, InvokeOwner: func(ctx context.Context, admitted tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+				noteJobNative(ctx, request.Argv.Values())
+				return prepared.Invoke(ctx, admitted, streams)
+			}}, nil
 		},
 	}
 	child, err := d.prepareDefinition(ctx, operationDef, request, review.Arguments())
@@ -388,6 +392,7 @@ func (d *ProgramDispatcher) invokeHosted(ctx context.Context, spec toolcontract.
 		result := ownerFailure(err)
 		return result, errors.Join(err, d.settle(ctx, child, result, false, ""))
 	}
+	noteJobNative(ctx, request.Argv.Values())
 	tracker := &trackingWriter{w: nonNilWriter(streams.Error)}
 	runStreams := streams
 	runStreams.Error = tracker

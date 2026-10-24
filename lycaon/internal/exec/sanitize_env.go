@@ -9,12 +9,15 @@ import (
 
 // blockedEnvKeys cannot cross into child processes.
 var blockedEnvKeys = map[string]struct{}{
-	"BASH_ENV":      {},
-	"ENV":           {},
-	"NODE_OPTIONS":  {},
-	"PERL5OPT":      {},
-	"RUBYOPT":       {},
-	"SSLKEYLOGFILE": {},
+	"BASH_ENV":            {},
+	"ENV":                 {},
+	"NODE_OPTIONS":        {},
+	"PERL5OPT":            {},
+	"RUBYOPT":             {},
+	"SSLKEYLOGFILE":       {},
+	"SSH_ASKPASS":         {},
+	"SSH_ASKPASS_REQUIRE": {},
+	"GCM_INTERACTIVE":     {},
 }
 
 // blockedEnvPrefixes are matched case-insensitively.
@@ -83,7 +86,7 @@ func ReducedEnviron() []string {
 		"HOME": {}, "USER": {}, "LOGNAME": {},
 		"TMPDIR": {}, "TMP": {}, "TEMP": {},
 		"XDG_CACHE_HOME": {}, "XDG_CONFIG_HOME": {}, "XDG_DATA_HOME": {}, "XDG_STATE_HOME": {},
-		"LANG": {}, "LANGUAGE": {}, "TERM": {}, "COLORTERM": {}, "NO_COLOR": {},
+		"LANG": {}, "LANGUAGE": {}, "NO_COLOR": {},
 	}
 	var out []string
 	for _, entry := range SanitizeEnviron(os.Environ()) {
@@ -101,7 +104,7 @@ func ReducedEnviron() []string {
 			out = append(out, entry)
 		}
 	}
-	return withResolvedPath(out)
+	return withResolvedPath(append(out, "TERM=dumb", "PAGER=cat", "EDITOR=false", "VISUAL=false"))
 }
 
 func withResolvedPath(entries []string) []string {

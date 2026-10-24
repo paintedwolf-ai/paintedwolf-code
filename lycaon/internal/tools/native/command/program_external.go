@@ -59,7 +59,7 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		return refusedResult("COMMAND_OPERAND_INVALID"), toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"command": "external", "reason": err.Error(), "expected": "an environment without host-reserved keys"})
 	}
 	opts.NoTimeout, opts.SeparateStderr, opts.Stdout, opts.HostConsumer = true, true, nonNilWriter(streams.Output), true
-	if streams.Input != nil {
+	if streams.Input != nil && !commandprogram.IsNullInput(streams.Input) {
 		opts.Stdin = &lycexec.StdinSpec{Reader: streams.Input}
 	}
 	if err := tctx.Effects.Secrets.HandOff(ctx, nil); err != nil {
@@ -68,6 +68,7 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		}
 		return refusedResult("COMMAND_EXEC_DENIED"), err
 	}
+	opts.Started = func(pid int) { noteJobProcess(ctx, pid, argv) }
 	async, err := lycexec.StartPipelineAsync(ctx, []lycexec.Stage{{Name: argv[0], Args: argv[1:]}}, opts, nonNilWriter(streams.Output), nonNilWriter(streams.Error))
 	if err != nil {
 		if ctx.Err() != nil {

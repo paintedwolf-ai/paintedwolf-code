@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
+	"github.com/lycaon/lycaon/internal/settingsoverlay"
 )
 
 // Stat reads entry metadata through the held root without opening content.
@@ -15,6 +16,9 @@ import (
 func (p BoundPath) Stat(follow bool) (fseffect.EntryStat, error) {
 	if p.Null {
 		return fseffect.EntryStat{}, invalidOperand(p.Resolved.DisplayPath, "null device is not a directory entry")
+	}
+	if settingsoverlay.IsRecoveryRelPath(p.Resolved.ScopeRel) || settingsoverlay.HasRecoverySegment(p.Resolved.Abs) || settingsoverlay.IsRecoveryOnlyDir(p.Resolved.Abs) {
+		return fseffect.EntryStat{}, PathOperationError(p.Resolved.DisplayPath, &fs.PathError{Op: "stat", Path: p.Resolved.DisplayPath, Err: fs.ErrNotExist})
 	}
 	root, err := p.openRoot()
 	if err != nil {
@@ -51,6 +55,15 @@ func (p BoundPath) ReadDir() ([]string, error) {
 	if err != nil {
 		return nil, PathOperationError(p.Resolved.DisplayPath, err)
 	}
+	kept := names[:0]
+	for _, name := range names {
+		childAbs := p.Resolved.Abs + string(filepath.Separator) + name
+		if settingsoverlay.HasRecoverySegment(childAbs) || settingsoverlay.IsRecoveryOnlyDir(childAbs) {
+			continue
+		}
+		kept = append(kept, name)
+	}
+	names = kept
 	slices.Sort(names)
 	return names, nil
 }

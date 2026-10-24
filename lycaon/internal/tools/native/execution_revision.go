@@ -26,6 +26,7 @@ import (
 // document when one exists and published disk otherwise. It never consults or
 // advances the conversational read bases that structured edits require.
 type ExecutionRevisions struct {
+	Memory   *toolcontract.ProgramMemory
 	Boundary *sandbox.Boundary
 }
 

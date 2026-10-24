@@ -3,19 +3,45 @@ package toolexecution
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolrejection"
-	"github.com/lycaon/lycaon/internal/tools"
+	"sync"
 
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/hitl"
+	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools"
 )
 
 func (e *Boundary) fileChangeReviewer(tool string, args map[string]any, tc tools.ToolContext) tools.FileChangeReviewer {
+	var classifyOnce sync.Once
+	var classifyPolicy func(string) (hitl.AgentPolicyTarget, bool)
+	policyTarget := func(path string) (hitl.AgentPolicyTarget, bool) {
+		classifyOnce.Do(func() {
+			classifyPolicy = hitl.AgentPolicyTargetClassifier(tools.HostWriteRoot(tc), tools.ConfineRootsForAction(tc)...)
+		})
+		return classifyPolicy(path)
+	}
 	return func(ctx context.Context, changes []tools.FileChange) error {
 		if e.Approvals.approvalGate == nil {
-			unwired := tc
-			unwired.Files.FileChangeReview = nil
-			return unwired.ReviewFileChanges(ctx, changes...)
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			for _, change := range changes {
+				if change.RecoveryLoss {
+					return &toolrejection.ToolReject{Code: "SOURCE_RECOVERY_APPROVAL_UNAVAILABLE", Data: map[string]any{"path": change.Path}}
+				}
+				if change.Preview.Target == "index" {
+					continue
+				}
+				for _, path := range []string{change.Path, change.FromPath} {
+					if path == "" {
+						continue
+					}
+					if _, policy := policyTarget(path); policy {
+						return &toolrejection.ToolReject{Code: "FILE_CHANGE_APPROVAL_UNAVAILABLE", Data: map[string]any{"path": path}}
+					}
+				}
+			}
+			return nil
 		}
 		action := hitl.ProposedAction{
 			Invocation: hitl.ActionInvocation{
@@ -37,6 +63,7 @@ func (e *Boundary) fileChangeReviewer(tool string, args map[string]any, tc tools
 		}
 		files, policies := map[string]bool{}, map[string]bool{}
 		for _, change := range changes {
+			action.Mutations.RecoveryLoss = action.Mutations.RecoveryLoss || change.RecoveryLoss
 			for _, path := range []string{change.Path, change.FromPath} {
 				if path != "" && !files[path] {
 					files[path] = true
@@ -46,7 +73,7 @@ func (e *Boundary) fileChangeReviewer(tool string, args map[string]any, tc tools
 				if change.Preview.Target == "index" || policies[path] {
 					continue
 				}
-				if target, policy := tc.AgentPolicyTarget(path); policy {
+				if target, policy := policyTarget(path); policy {
 					policies[path] = true
 					action.Mutations.AgentPolicy = append(action.Mutations.AgentPolicy, target)
 				}

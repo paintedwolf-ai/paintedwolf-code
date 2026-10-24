@@ -3,6 +3,8 @@ package toolhost
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/tooloutput"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
@@ -40,7 +42,7 @@ type programOwnerTools struct {
 
 // compose builds the literal and mutation owners once and returns the
 // per-program factory: one publication barrier and redirect owner per program.
-func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools.ToolContext, *projectpaths.ProgramPaths) (command.ProgramOwners, error), error) {
+func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools.ToolContext, *projectpaths.ProgramPaths, *toolcontract.ProgramMemory, tooloutput.SpillAdmission) (command.ProgramOwners, error), error) {
 	revisions := native.ExecutionRevisions{Boundary: t.boundary}
 	literalOwners, err := literal.NewOwners(revisions, recorder, literal.DomainOwners{Summarize: t.summarize, Repo: t.repo})
 	if err != nil {
@@ -74,9 +76,9 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 	if err != nil {
 		return nil, err
 	}
-	return func(tc tools.ToolContext, paths *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
+	return func(tc tools.ToolContext, paths *projectpaths.ProgramPaths, memory *toolcontract.ProgramMemory, _ tooloutput.SpillAdmission) (command.ProgramOwners, error) {
 		barrier := &native.PublicationBarrier{}
-		program := mutation.Program{Paths: paths, Barrier: barrier}
+		program := mutation.Program{Paths: paths, Barrier: barrier, Memory: memory}
 		owners := command.ProgramOwners{
 			Natives:     map[string]command.NativeOperation{},
 			Publication: &mutation.Publication{Owners: mutationOwners, Program: program, Tools: tc},
@@ -106,7 +108,7 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 				return builtins, release, nil
 			},
 			Redirections: func(frame *projectpaths.ProgramPaths) (commandprogram.InputRedirection, commandprogram.OutputPublication) {
-				publication := &mutation.Publication{Owners: mutationOwners, Program: mutation.Program{Paths: frame, Barrier: barrier}, Tools: tc}
+				publication := &mutation.Publication{Owners: mutationOwners, Program: mutation.Program{Paths: frame, Barrier: barrier, Memory: memory}, Tools: tc}
 				return publication, publication
 			},
 		}
@@ -133,7 +135,7 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 		for _, name := range mutationOwners.Commands() {
 			tool, _ := mutationOwners.Operation(name)
 			owners.Natives[name] = command.NativeOperation{Tool: tool, Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
-				prepared, err := mutationOwners.Prepare(mutation.Program{Paths: frame, Barrier: barrier}, request)
+				prepared, err := mutationOwners.Prepare(mutation.Program{Paths: frame, Barrier: barrier, Memory: memory}, request)
 				if err != nil {
 					return command.NativePrepared{}, err
 				}

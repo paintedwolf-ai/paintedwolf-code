@@ -143,6 +143,7 @@ type Prepared struct {
 // write the program's utilities and redirects accept is tracked on Barrier so
 // a dependent external launch waits for it.
 type Program struct {
+	Memory  *toolcontract.ProgramMemory
 	Paths   *projectpaths.ProgramPaths
 	Barrier *native.PublicationBarrier
 }

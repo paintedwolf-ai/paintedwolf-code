@@ -1,0 +1,30 @@
+oar: '1.0'
+id: PROCESS_NOT_OWNED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+  - command
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+when: paintedwolf.rejection_code == "PROCESS_NOT_OWNED"
+effect: block
+copy:
+  what: This process is not owned by the current session.
+  cause: kill and pkill may only signal processes and background jobs started by this session.
+  why: Inspecting processes with ps or pgrep is read-only, while signalling is confined to this session's own jobs so other processes on the machine are never interrupted.
+  fix: Signal only jobs or PIDs owned by this session (use jobs or $! to find them).
+  instead: Use ps or pgrep to inspect non-session processes read-only; use kill or pkill only on this session's jobs
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:tool
+x-paintedwolf-message: process is not owned by the current session
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    tool: command
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: PROCESS_NOT_OWNED'

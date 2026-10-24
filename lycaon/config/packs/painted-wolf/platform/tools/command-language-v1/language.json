@@ -558,7 +558,7 @@
     },
     {
       "id": "recursive_mutation_bytes",
-      "maximum": 104857600,
+      "maximum": 268435456,
       "unit": "bytes",
       "scope": "operation",
       "exceeded": "COMMAND_LIMIT_EXCEEDED",
@@ -572,7 +572,7 @@
     },
     {
       "id": "recursive_mutation_files",
-      "maximum": 10000,
+      "maximum": 50000,
       "unit": "files",
       "scope": "operation",
       "exceeded": "COMMAND_LIMIT_EXCEEDED",
@@ -1124,6 +1124,8 @@
     "nproc",
     "outline",
     "paste",
+    "pgrep",
+    "pkill",
     "printenv",
     "printf",
     "ps",

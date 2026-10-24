@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/settingsoverlay"
 )
 
 // GlobFiles is pathname expansion's view of one invocation's logical paths.
@@ -37,6 +38,10 @@ func (g GlobFiles) ListDir(ctx context.Context, dir string, maximum int) ([]comm
 	}
 	entries := make([]commandsurface.GlobEntry, 0, len(listed))
 	for _, entry := range listed {
+		childAbs := bound.Resolved.Abs + string(filepath.Separator) + entry.Name()
+		if settingsoverlay.HasRecoverySegment(childAbs) || settingsoverlay.IsRecoveryOnlyDir(childAbs) {
+			continue
+		}
 		link := entry.Type()&os.ModeSymlink != 0
 		entries = append(entries, commandsurface.GlobEntry{Name: entry.Name(), Dir: entry.IsDir() && !link, Link: link})
 	}
@@ -56,6 +61,9 @@ func (g GlobFiles) Entry(ctx context.Context, path string) (commandsurface.GlobE
 		return commandsurface.GlobEntry{Dir: true}, true, nil
 	}
 	if bound.Null {
+		return commandsurface.GlobEntry{}, false, nil
+	}
+	if settingsoverlay.IsRecoveryRelPath(bound.Resolved.ScopeRel) || settingsoverlay.HasRecoverySegment(bound.Resolved.Abs) || settingsoverlay.IsRecoveryOnlyDir(bound.Resolved.Abs) {
 		return commandsurface.GlobEntry{}, false, nil
 	}
 	root, err := bound.openRoot()

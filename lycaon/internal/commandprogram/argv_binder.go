@@ -332,7 +332,10 @@ func (b *argvBinding) psOptions() error {
 				ch := suffix[i]
 				flag := "-" + suffix[i:i+1]
 				switch ch {
-				case 'e', 'f', 'a', 'u', 'x', 'l':
+				case 'e', 'A', 'f', 'a', 'u', 'x', 'l':
+					if ch == 'A' {
+						flag = "-e"
+					}
 					b.record(toolcontract.OptionForm{Spellings: []string{flag}}, flag, word, nil, "")
 				case 'o', 'p':
 					rest := suffix[i+1:]

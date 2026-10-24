@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/isolation"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/tools"
 )
@@ -102,6 +103,32 @@ func resolveMutationScope(ctx context.Context, b *sandbox.Boundary, tctx tools.T
 		return Resolved{}, gitInternalsWriteReject(resolved.DisplayPath, class)
 	}
 	return resolved, nil
+}
+
+// ChildResolved derives a child path under an already-resolved directory.
+func ChildResolved(tctx tools.ToolContext, parent Resolved, rel string) Resolved {
+	abs := filepath.Join(parent.Abs, rel)
+	scopeRel := projectroot.ScopeRel(parent.Root, abs)
+	return Resolved{
+		Abs:         abs,
+		DisplayPath: QualifyAbs(tctx, parent.Root, abs),
+		ScopeRel:    scopeRel,
+		Root:        parent.Root,
+		External:    parent.External,
+	}
+}
+
+// RecordResolvedMutation records a primary-tree write for an already-resolved path.
+func RecordResolvedMutation(ctx context.Context, tctx tools.ToolContext, resolved Resolved) {
+	recordPrimaryMutation(ctx, tctx, resolved)
+}
+
+// IsSpecialMutationRel reports whether rel names repository metadata or recovery paths.
+func IsSpecialMutationRel(rel string) bool {
+	if _, denied := repositoryMetadataClass(rel); denied {
+		return true
+	}
+	return settingsoverlay.IsRecoveryRelPath(rel) || settingsoverlay.HasRecoverySegment(rel)
 }
 
 // recordPrimaryMutation records a primary-tree write for the open rewind checkpoint.
@@ -203,6 +230,12 @@ func resolveUnderAdmittedRoots(ctx context.Context, b *sandbox.Boundary, tctx to
 		return Resolved{}, noRootsReject()
 	}
 	scopeRel := projectroot.ScopeRel(root, abs)
+	if settingsoverlay.IsRecoveryRelPath(scopeRel) || settingsoverlay.HasRecoverySegment(abs) {
+		return Resolved{}, mapResolveErr(fmt.Errorf("%w: %q", projectroot.ErrPathEscape, modelPath), modelPath)
+	}
+	if op == sandbox.PathOpRead && settingsoverlay.IsRecoveryOnlyDir(abs) {
+		return Resolved{}, &os.PathError{Op: "stat", Path: modelPath, Err: os.ErrNotExist}
+	}
 	if b != nil {
 		switch op {
 		case sandbox.PathOpRead:

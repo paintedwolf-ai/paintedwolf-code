@@ -301,6 +301,8 @@ func writeRejectRefusal(streams commandprogram.Streams, command string, request 
 		}
 	case "COMMAND_JOB_UNKNOWN":
 		detail = "no such job in this session; check active jobs with jobs"
+	case "PROCESS_NOT_OWNED":
+		detail = "process is not owned by this session; signal only background jobs started in this session"
 	case "COMMAND_OPTION_UNSUPPORTED", "COMMAND_NATIVE_FORM_UNSUPPORTED":
 		if detail != "" {
 			detail = "not supported here (expected " + detail + ")"
@@ -492,6 +494,8 @@ func enrichProgramReject(reject *toolrejection.ToolReject, defaultCommand string
 		remedy = "invalid regular expression; use -F for fixed strings or escape regex metacharacters"
 	case "COMMAND_JOB_UNKNOWN":
 		remedy = "no such job in this session; use jobs to list this session's background jobs, then pass %N, %% or $!"
+	case "PROCESS_NOT_OWNED":
+		remedy = "process is not owned by this session; signal only background jobs started in this session"
 	}
 	if remedy == "" {
 		remedy = "rewrite the command with a supported form"

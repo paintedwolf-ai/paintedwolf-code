@@ -738,6 +738,11 @@ type InvocationProgramExecutions struct {
 	PublishedRevision               string         `json:"published_revision"`
 	DetailRef                       string         `json:"detail_ref"`
 	ApprovalRef                     string         `json:"approval_ref"`
+	JobHandle                       string         `json:"job_handle"`
+	ConflictPath                    string         `json:"conflict_path"`
+	ConflictExpectedRevision        string         `json:"conflict_expected_revision"`
+	ConflictObservedRevision        string         `json:"conflict_observed_revision"`
+	NativeGapJson                   string         `json:"native_gap_json"`
 	StartedAt                       string         `json:"started_at"`
 	SettledAt                       sql.NullString `json:"settled_at"`
 }
@@ -765,6 +770,8 @@ type InvocationProgramOutputs struct {
 	Complete          int64          `json:"complete"`
 	Redacted          int64          `json:"redacted"`
 	MappingsJson      string         `json:"mappings_json"`
+	Preview           string         `json:"preview"`
+	PreviewTruncated  int64          `json:"preview_truncated"`
 	CreatedAt         string         `json:"created_at"`
 }
 
@@ -783,6 +790,16 @@ type InvocationProgramProgress struct {
 	DetailRef               string         `json:"detail_ref"`
 	StartedAt               string         `json:"started_at"`
 	SettledAt               sql.NullString `json:"settled_at"`
+}
+
+type InvocationProgramRevisionPinSegments struct {
+	ProgramID    string `json:"program_id"`
+	ExecutionID  string `json:"execution_id"`
+	FirstOrdinal int64  `json:"first_ordinal"`
+	PinCount     int64  `json:"pin_count"`
+	Encoding     string `json:"encoding"`
+	Body         []byte `json:"body"`
+	BodySha256   string `json:"body_sha256"`
 }
 
 type InvocationProgramRevisionPins struct {

@@ -98,8 +98,10 @@ type ActionResources struct {
 
 // ActionMutations carries pending file and policy mutations.
 type ActionMutations struct {
-	FileChanges []api.ApprovalFileChange
-	AgentPolicy []AgentPolicyTarget
+	// RecoveryLoss marks host-observed loss of undo for a prepared removal.
+	RecoveryLoss bool `json:"recovery_loss,omitempty"`
+	FileChanges  []api.ApprovalFileChange
+	AgentPolicy  []AgentPolicyTarget
 }
 
 // ActionPresentation captures card presentation facts.

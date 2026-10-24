@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 )
@@ -66,6 +67,9 @@ func (p BoundPath) Validate() error {
 func (p BoundPath) Open() (*os.File, error) {
 	if p.Null {
 		return nil, &PathError{Code: "COMMAND_OPERAND_INVALID", Cause: errors.New("null input is an empty stream, not a file")}
+	}
+	if settingsoverlay.IsRecoveryRelPath(p.Resolved.ScopeRel) || settingsoverlay.HasRecoverySegment(p.Resolved.Abs) || settingsoverlay.IsRecoveryOnlyDir(p.Resolved.Abs) {
+		return nil, PathOperationError(p.Resolved.DisplayPath, &os.PathError{Op: "open", Path: p.Resolved.DisplayPath, Err: os.ErrNotExist})
 	}
 	root, err := p.openRoot()
 	if err != nil {
