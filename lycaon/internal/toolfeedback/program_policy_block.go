@@ -79,6 +79,11 @@ func (b *ProgramPolicyBlock) MatchesOperation(operation toolcontract.BoundOperat
 	return b != nil && b.invocation == operation.Invocation() && b.definition == operation.Definition().Digest() && b.command == operation.Command() && b.mode == operation.Mode()
 }
 
+// MatchesProgress binds frozen policy copy to an envelope progress refusal.
+func (b *ProgramPolicyBlock) MatchesProgress() bool {
+	return b != nil && b.invocation == (toolcontract.OperationInvocation{}) && b.definition == "" && b.command == "" && b.mode == ""
+}
+
 // RenderSettled uses the frozen occurrence copy with admitted receipt details.
 // It never re-runs conditions, on-fire actions, or current execution admission.
 func (b *ProgramPolicyBlock) RenderSettled(ctx context.Context, renderer *oar.Renderer, reject *toolrejection.ToolReject) error {
