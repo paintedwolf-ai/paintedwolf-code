@@ -4,6 +4,7 @@ import socket
 import threading
 import unittest
 from urllib.request import Request, build_opener, ProxyHandler
+from urllib.error import HTTPError
 
 from linux_release.installed_cases.provider import GUI_API_KEY, MODEL, ProviderFixture
 from linux_release.installed_cases.provider_barrier import ResponseBarrier
@@ -82,14 +83,33 @@ class BarrierTests(unittest.TestCase):
         # recovery cannot silently choose another port or bypass real transport.
         self.http_barrier(endpoint)
 
-    def http_barrier(self, endpoint=None):
+    def test_acquisition_and_recovered_endpoint_share_the_real_response_barrier(self):
+        calls = [{'name': 'command', 'arguments': {'command': '/usr/bin/true'}}]
+        with ProviderFixture.gui(calls) as previous:
+            endpoint = previous.base_url
+        self.http_barrier(endpoint, acquire_command=True)
+        self.http_barrier(acquire_command=True, stream=True)
+
+    def http_barrier(self, endpoint=None, *, acquire_command=False, stream=False):
         barrier = ResponseBarrier()
         calls = [{'name': 'command', 'arguments': {'command': '/usr/bin/true'}}]
-        with ProviderFixture.gui(calls, endpoint=endpoint, response_barrier=barrier) as fixture:
+        with ProviderFixture.gui(calls, endpoint=endpoint, acquire_command=acquire_command,
+                response_barrier=barrier) as fixture:
             if endpoint is not None:
                 self.assertEqual(fixture.base_url, endpoint)
             request = {'model': MODEL, 'messages': [{'role': 'user', 'content': 'fixed fixture'}],
-                'tools': [{'type': 'function', 'function': {'name': 'command'}}]}
+                'tools': [{'type': 'function', 'function': {'name': 'request_tools' if acquire_command else 'command'}}],
+                'stream': stream}
+            if acquire_command:
+                invalid = Request(fixture.base_url + '/chat/completions',
+                    data=json.dumps({**request, 'tools': []}).encode(),
+                    headers={'Content-Type': 'application/json', 'Authorization': 'Bearer ' + GUI_API_KEY})
+                with self.assertRaises(HTTPError) as refused:
+                    build_opener(ProxyHandler({})).open(invalid, timeout=5)
+                self.assertEqual(refused.exception.code, 400)
+                self.assertEqual(fixture.transport_observations[-1]['refusal_code'], 'acquisition-surface-invalid')
+                self.assertFalse(fixture.acquisition.issued)
+                self.assertIsNone(barrier.record)
             results, errors = [], []
             def send():
                 try:
@@ -97,7 +117,15 @@ class BarrierTests(unittest.TestCase):
                         data=json.dumps(request).encode(),
                         headers={'Content-Type': 'application/json', 'Authorization': 'Bearer ' + GUI_API_KEY})
                     with build_opener(ProxyHandler({})).open(req, timeout=5) as response:
-                        results.append(json.loads(response.read()))
+                        wire = response.read().decode()
+                        if stream:
+                            chunks = wire.split('\n\n')
+                            self.assertEqual(chunks[1], 'data: [DONE]')
+                            row = json.loads(chunks[0].removeprefix('data: '))
+                            row['choices'][0]['message'] = row['choices'][0]['delta']
+                        else:
+                            row = json.loads(wire)
+                        results.append(row)
                 except BaseException as error:
                     errors.append(error)
             thread = threading.Thread(target=send)
@@ -110,6 +138,11 @@ class BarrierTests(unittest.TestCase):
             self.assertFalse(thread.is_alive())
             self.assertEqual(errors, [])
             self.assertEqual(results[0]['choices'][0]['finish_reason'], 'tool_calls')
+            call, = results[0]['choices'][0]['message']['tool_calls']
+            self.assertEqual(call['function']['name'], 'request_tools' if acquire_command else 'command')
+            if acquire_command:
+                self.assertTrue(fixture.observations[0]['acquisition_requested'])
+                self.assertFalse(fixture.observations[0]['completed'])
             self.assertTrue(barrier.await_response_written()['response_written'])
 
     def test_extra_connection_input_and_failed_response_never_certify_release(self):
