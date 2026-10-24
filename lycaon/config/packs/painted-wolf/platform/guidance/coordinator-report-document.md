@@ -1,7 +1,8 @@
 [host:coordinator-report-document]
 
-Report fields need repair. Emit only the report fence; the host keeps the pinned body. Attempt {{ attempt }}/{{ max_attempts }}; after the last, {% if run_report %}the run ends with this report stored as not accepted{% else %}the host keeps only the fields it read{% endif %}.
-
+Report fields need repair. To repair them, emit only the report fence; the host keeps the pinned body. Attempt {{ attempt }}/{{ max_attempts }}; after the last, {% if run_report %}the run ends with this report stored as not accepted{% else %}the host keeps only the fields it read{% endif %}.
+{% if resume_work_allowed %}If the work is not finished, use an offered tool instead, then write a fresh report reflecting its results. This retires the pinned body.
+{% endif %}
 {% if offending_keys %}Remove these unrecognized keys:
 {% for k in offending_keys %}- `{{ k }}`
 {% endfor %}

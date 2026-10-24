@@ -80,7 +80,7 @@ func (l *turnCloseout) handleAcceptedCloseoutReport(
 	if l.Deps.EvaluateCloseoutBlock == nil {
 		return out, fmt.Errorf("closeout OAR not configured")
 	}
-	decision, err := l.Deps.EvaluateCloseoutBlock(tools.WithRecoveryTools(ctx, l.repairOfferedTools(ctx, sessionID, st)), sess, observation.facts)
+	decision, err := l.Deps.EvaluateCloseoutBlock(tools.WithRecoveryTools(ctx, st.offeredToolNames), sess, observation.facts)
 	if err != nil {
 		return out, err
 	}
@@ -189,8 +189,10 @@ func (l *turnCloseout) rejectCloseoutGrounding(
 	if renderDecision.Data == nil {
 		renderDecision.Data = map[string]any{}
 	}
-	renderDecision.Data["resume_work_allowed"] = !st.proseFinish && len(st.offeredToolNames) > 0 && !l.repairsReportDocument(ctx, sessionID)
-	renderDecision.Data["can_recall"] = slices.Contains(l.repairOfferedTools(ctx, sessionID, st), "recall")
+	// The repair turn offers the closed turn's tools unless that was the final
+	// turn, so repair copy may name them.
+	renderDecision.Data["resume_work_allowed"] = !st.proseFinish && len(st.offeredToolNames) > 0
+	renderDecision.Data["can_recall"] = slices.Contains(st.offeredToolNames, "recall")
 	decision = &renderDecision
 	nudge, err := guard.FormatCloseoutGroundingReject(
 		ctx,
@@ -258,25 +260,6 @@ func (l *turnCloseout) pinnedCloseoutSynthesis(ctx context.Context, sessionID st
 		return ""
 	}
 	return guidance.UsableCloseoutSynthesis(retained.Drafted)
-}
-
-// repairOfferedTools is the closed turn's offered tool set, or none when the
-// repair turn forbids tool calls.
-func (l *turnCloseout) repairOfferedTools(ctx context.Context, sessionID string, st *promptLoopTurnState) []string {
-	if st == nil || l.repairsReportDocument(ctx, sessionID) {
-		return nil
-	}
-	return st.offeredToolNames
-}
-
-// repairsReportDocument reports whether the session's closeout is in a report
-// document repair: a refusal of its fields is retained and not yet answered.
-func (l *turnCloseout) repairsReportDocument(ctx context.Context, sessionID string) bool {
-	if l == nil || l.Deps.CloseoutStallState == nil {
-		return false
-	}
-	retained := l.Deps.CloseoutStallState(ctx, sessionID)
-	return retained.Active && guidance.RepairsReportDocument(retained.ForcedBy)
 }
 
 func closeoutHasCitationIssues(gc *oar.GuardContext) bool {
