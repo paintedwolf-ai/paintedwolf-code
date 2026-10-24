@@ -1,7 +1,9 @@
 package db
 
 import (
+	"context"
 	"database/sql"
+	"errors"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -31,4 +33,25 @@ func TestMaintenanceProgressUnderContinuousWrites(t *testing.T) {
 		}
 		t.Fatal("continuous writes starved bounded maintenance")
 	})
+}
+
+func TestMaintenanceCancellationAndFailedAdmissionPreserveTheirCause(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	store := &Store{writer: &sql.DB{}}
+	if err := RunMaintenance(ctx, store, DefaultRetention()); !errors.Is(err, context.Canceled) {
+		t.Fatalf("maintenance cancellation = %v", err)
+	}
+	if err := waitForMaintenanceTurn(ctx, store); !errors.Is(err, context.Canceled) {
+		t.Fatalf("turn cancellation = %v", err)
+	}
+	refused := errors.New("writer admission refused")
+	err := drainMaintenance(t.Context(), store, DefaultRetention(), func(context.Context, *Store) error {
+		return refused
+	})
+	if !errors.Is(err, refused) {
+		t.Fatalf("failed admission = %v", err)
+	}
+	testutil.FailErr(t, "nil store maintenance", RunMaintenance(t.Context(), nil, DefaultRetention()))
+	testutil.FailErr(t, "disabled maintenance", RunMaintenance(t.Context(), store, RetentionConfig{}))
 }
