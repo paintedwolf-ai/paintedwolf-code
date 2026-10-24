@@ -87,6 +87,20 @@ class ProviderAcquisitionTests(unittest.TestCase):
         self.assertEqual(result_payload(framed(payload={'need': 'command', 'loaded': None,
             'already_loaded': ['command']}), 'request_tools', HOST_LOAD)['invocation_id'], RECEIPT)
 
+    def test_refusal_discriminators_are_closed_and_retain_no_result_text(self):
+        for content, stage in [('PRIVATE RESULT', 'part-count'),
+                               (framed().replace('⟦D:tool⟧', '⟦D:host⟧'), 'marker-lines'),
+                               (framed().replace('"need": "command"', '"need":'), 'json'),
+                               (framed(payload={'need': 'read', 'loaded': ['command']}), 'payload'),
+                               (framed(invocation=receipt(invoked=False)), 'receipt')]:
+            with self.subTest(stage=stage), self.assertRaises(AcquisitionRefusal) as refused:
+                result_payload(content, 'request_tools', HOST_LOAD)
+            self.assertEqual(refused.exception.detail['stage'], stage)
+            self.assertNotIn('PRIVATE', json.dumps(refused.exception.detail))
+        for stage, count in [('foreign', None), ('json', True), ('json', 'PRIVATE'), ('json', 32770)]:
+            with self.assertRaises(ValueError):
+                AcquisitionRefusal('acquisition-result-invalid', stage, count)
+
     def test_host_pairing_refuses_duplicate_foreign_replayed_and_unissued_calls(self):
         for mutation in (
                 lambda h: h.append(dict(h[-1])),
@@ -177,5 +191,6 @@ class ProviderAcquisitionTests(unittest.TestCase):
                 request([])
             self.assertEqual(refused.exception.code, 400)
             self.assertEqual(fixture.transport_observations[-1]['refusal_code'], 'acquisition-result-invalid')
+            self.assertEqual(fixture.transport_observations[-1]['refusal_detail'], {'stage': 'phase'})
         with self.assertRaises(ValueError):
             ProviderFixture.gui([{'name': 'read', 'arguments': {}}], acquire_command=True)

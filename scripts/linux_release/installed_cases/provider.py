@@ -165,7 +165,7 @@ class ProviderFixture:
             def log_message(self, *args):
                 pass
 
-            def respond(self, status, value, *, refusal=None, shape=None):
+            def respond(self, status, value, *, refusal=None, shape=None, detail=None):
                 with fixture.transport_lock:
                     if len(fixture.transport_observations) < 64:
                         record = {'method': self.command,
@@ -173,6 +173,8 @@ class ProviderFixture:
                             'status': status, 'fixture_credential_observed': self.headers.get('Authorization') == 'Bearer ' + GUI_API_KEY}
                         if refusal is not None:
                             record.update(refusal_code=refusal, request_shape=shape)
+                        if detail is not None:
+                            record['refusal_detail'] = detail
                         fixture.transport_observations.append(record)
                     else:
                         fixture.transport_clipped = True
@@ -232,7 +234,8 @@ class ProviderFixture:
                     self.wfile.write(raw)
                 except (ValueError, TypeError, OSError) as error:
                     code = error.code if isinstance(error, (FixtureRefusal, AcquisitionRefusal)) else 'request-invalid'
-                    self.respond(400, {'error': 'fixture-request-refused'}, refusal=code, shape=shape)
+                    self.respond(400, {'error': 'fixture-request-refused'}, refusal=code, shape=shape,
+                                 detail=error.detail if isinstance(error, AcquisitionRefusal) else None)
 
         # Fresh fixtures use a kernel-selected port. Recovery exclusively binds
         # the exact prior admitted endpoint; an occupied port refuses without interference.
