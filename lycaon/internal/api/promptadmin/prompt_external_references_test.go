@@ -8,8 +8,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/grantedpath"
+	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/promptattach"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/apitestdeps"
 	"github.com/lycaon/lycaon/internal/visual"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -125,5 +127,46 @@ func TestPromptGrantRollbackPreservesAnotherSubmission(t *testing.T) {
 	handler.Submission.revokePromptGrants(first)
 	if _, ok := handler.Submission.GrantedPaths.Covers(sess.ID, "", path, grantedpath.ModeWrite); ok {
 		t.Fatal("refused submission retained access")
+	}
+
+	if _, err := handler.Submission.grantPromptReferences(t.Context(), "", uuid.NewString(), []wire.MessageContentPart{
+		{Path: path, ReferenceKind: wire.MessageReferenceKindExternalFile},
+		{Path: "relative.txt", ReferenceKind: wire.MessageReferenceKindExternalFile},
+	}); err == nil {
+		t.Fatal("expected relative external reference grant to fail")
+	}
+	handler.Submission.GrantedPaths = nil
+	if _, err := handler.Submission.grantPromptReferences(t.Context(), sess.ID, uuid.NewString(), parts); err == nil {
+		t.Fatal("expected nil GrantedPaths to refuse external reference grants")
+	}
+}
+
+func TestReadReferenceImageValidatesProjectRootFile(t *testing.T) {
+	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
+	var deps apitestdeps.Deps
+	apitestdeps.Fill(t, &deps)
+	rootDir := canonPath(t, t.TempDir())
+	p, err := project.CreateWithRoot(t.Context(), deps.Projects, rootDir)
+	testutil.FailErr(t, "create project", err)
+	rootID := p.Roots[0].ID
+
+	testutil.FailErr(t, "write png", os.WriteFile(filepath.Join(rootDir, "pic.png"), visual.TestPNG1x1Bytes(), 0o644))
+	testutil.FailErr(t, "write text", os.WriteFile(filepath.Join(rootDir, "notes.txt"), []byte("hello"), 0o644))
+
+	refs := &References{Caps: promptattach.Active(), Projects: deps.Projects}
+	refDeps := refs.ReferenceDeps(t.Context(), &wire.Session{ID: "sess-1", ProjectID: p.ID})
+	raw, mime, err := refDeps.ReadImage(p.ID, rootID, "pic.png")
+	testutil.FailErr(t, "read reference image", err)
+	if mime != "image/png" || len(raw) == 0 {
+		t.Fatalf("got mime=%q len=%d, want image/png", mime, len(raw))
+	}
+	if _, _, err := refDeps.ReadImage("missing-project", rootID, "pic.png"); err == nil {
+		t.Fatal("expected missing project error")
+	}
+	if _, _, err := refDeps.ReadImage(p.ID, rootID, "missing.png"); err == nil {
+		t.Fatal("expected missing file error")
+	}
+	if _, _, err := refDeps.ReadImage(p.ID, rootID, "notes.txt"); err == nil {
+		t.Fatal("expected non-image file error")
 	}
 }

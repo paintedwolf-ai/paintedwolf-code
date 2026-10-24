@@ -95,12 +95,14 @@ func ForwardedAttachmentFromPart(part api.MessageContentPart) (ForwardedAttachme
 				return ForwardedAttachment{}, false
 			}
 			kind := ForwardedPathFile
-			if part.ReferenceKind == api.MessageReferenceKindPathFolder {
+			switch part.ReferenceKind {
+			case api.MessageReferenceKindPathFolder:
 				kind = ForwardedPathFolder
-			} else if part.ReferenceKind == api.MessageReferenceKindExternalFile {
+			case api.MessageReferenceKindExternalFile:
 				kind = ForwardedExternalFile
-			} else if part.ReferenceKind == api.MessageReferenceKindExternalFolder {
+			case api.MessageReferenceKindExternalFolder:
 				kind = ForwardedExternalFolder
+			case api.MessageReferenceKindPathFile, api.MessageReferenceKindSearchHit:
 			}
 			name := path.Base(loc)
 			if name == "." || name == "/" || name == "" {
