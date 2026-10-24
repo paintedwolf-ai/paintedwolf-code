@@ -18,18 +18,34 @@ import (
 
 const intakeSnapshotFixture = "PW_INTAKE_SNAPSHOT_FIXTURE"
 
+type intakeMoveInterleaveFacts struct {
+	RootInode             uint64 `json:"root_inode"`
+	PostMoveMountID       uint64 `json:"post_move_mount_id"`
+	PostMoveInode         uint64 `json:"post_move_inode"`
+	UnderlyingMountID     uint64 `json:"underlying_mount_id"`
+	PreMoveAliasMatched   bool   `json:"pre_move_alias_matched"`
+	PostMoveAliasMatched  bool   `json:"post_move_alias_matched"`
+	OldPathUnderlying     bool   `json:"old_path_underlying"`
+	MovedRowAtTarget      bool   `json:"moved_row_at_target"`
+	EpochChanged          bool   `json:"epoch_changed"`
+	PollEpochChanged      bool   `json:"poll_epoch_changed"`
+	OriginalVerifyRefused bool   `json:"original_verify_refused"`
+	MovedVerifySucceeded  bool   `json:"moved_verify_succeeded"`
+}
+
 type intakeSnapshotFacts struct {
-	SnapshotMountID         uint64 `json:"snapshot_mount_id"`
-	OpenedMountID           uint64 `json:"opened_mount_id"`
-	SnapshotRetired         bool   `json:"snapshot_retired"`
-	IdentityLookupSucceeded bool   `json:"identity_lookup_succeeded"`
-	CaptureRetryable        bool   `json:"capture_retryable"`
-	IntakeRetryable         bool   `json:"intake_retryable"`
-	IntakeTerminal          bool   `json:"intake_terminal"`
-	IntakePending           bool   `json:"intake_pending"`
-	SyscallFailurePreserved bool   `json:"syscall_failure_preserved"`
-	AliasFailureFatal       bool   `json:"alias_failure_fatal"`
-	StructuralFailureFatal  bool   `json:"structural_failure_fatal"`
+	SnapshotMountID         uint64                    `json:"snapshot_mount_id"`
+	OpenedMountID           uint64                    `json:"opened_mount_id"`
+	SnapshotRetired         bool                      `json:"snapshot_retired"`
+	IdentityLookupSucceeded bool                      `json:"identity_lookup_succeeded"`
+	CaptureRetryable        bool                      `json:"capture_retryable"`
+	IntakeRetryable         bool                      `json:"intake_retryable"`
+	IntakeTerminal          bool                      `json:"intake_terminal"`
+	IntakePending           bool                      `json:"intake_pending"`
+	SyscallFailurePreserved bool                      `json:"syscall_failure_preserved"`
+	AliasFailureFatal       bool                      `json:"alias_failure_fatal"`
+	StructuralFailureFatal  bool                      `json:"structural_failure_fatal"`
+	MoveInterleave          intakeMoveInterleaveFacts `json:"move_interleave"`
 }
 
 func TestIntakeStaleSnapshotFixture(t *testing.T) {
@@ -64,6 +80,13 @@ func TestIntakeSnapshotAfterOwnedUnmount(t *testing.T) {
 	if !facts.SyscallFailurePreserved || !facts.AliasFailureFatal || !facts.StructuralFailureFatal {
 		t.Fatalf("retry swallowed a syscall, alias or structural failure: %+v", facts)
 	}
+	move := facts.MoveInterleave
+	if move.RootInode == 0 || move.PostMoveMountID != facts.SnapshotMountID || move.PostMoveInode != move.RootInode ||
+		!move.PreMoveAliasMatched || !move.PostMoveAliasMatched || !move.OldPathUnderlying ||
+		move.UnderlyingMountID != facts.OpenedMountID || !move.MovedRowAtTarget || !move.EpochChanged ||
+		!move.PollEpochChanged || !move.OriginalVerifyRefused || !move.MovedVerifySucceeded {
+		t.Fatalf("owned mount move interleave did not prove held-descriptor alias change: %+v", facts)
+	}
 	t.Logf("actual intake stale-snapshot facts: %s", out)
 }
 
@@ -88,16 +111,20 @@ func staleIntakeSnapshot() (intakeSnapshotFacts, error) {
 	}
 	defer func() { _ = os.RemoveAll(root) }()
 	target := filepath.Join(root, "owned-volume")
+	movedTarget := filepath.Join(root, "owned-volume-moved")
 	if err := os.Mkdir(target, 0700); err != nil {
+		return facts, err
+	}
+	if err := os.Mkdir(movedTarget, 0700); err != nil {
 		return facts, err
 	}
 	if err := unix.Mount("none", target, "tmpfs", unix.MS_NODEV|unix.MS_NOSUID, "size=1m"); err != nil {
 		return facts, err
 	}
-	mounted := true
+	mountedAt := target
 	defer func() {
-		if mounted {
-			_ = unix.Unmount(target, 0)
+		if mountedAt != "" {
+			_ = unix.Unmount(mountedAt, 0)
 		}
 	}()
 	_, snapshot, err := readCurrentMountTopology()
@@ -130,6 +157,7 @@ func staleIntakeSnapshot() (intakeSnapshotFacts, error) {
 		return facts, err
 	}
 	root, target = movedRoot, filepath.Join(movedRoot, "owned-volume")
+	mountedAt = target
 	aliasID, _, err := mountDescriptorIdentity(descriptor)
 	if err != nil || aliasID != uint64(selected.id) {
 		_ = unix.Close(descriptor)
@@ -142,11 +170,16 @@ func staleIntakeSnapshot() (intakeSnapshotFacts, error) {
 		return facts, err
 	}
 	root, target = originalRoot, selected.mountPoint
+	mountedAt = target
 	facts.SnapshotMountID = uint64(selected.id)
-	if err := unix.Unmount(target, 0); err != nil {
+	facts.MoveInterleave, err = observeIntakeMoveInterleave(snapshot, selected, target, movedTarget, &mountedAt)
+	if err != nil {
 		return facts, err
 	}
-	mounted = false
+	if err := unix.Unmount(movedTarget, 0); err != nil {
+		return facts, err
+	}
+	mountedAt = ""
 	_, current, err := readCurrentMountTopology()
 	if err != nil {
 		return facts, err
@@ -183,6 +216,101 @@ func staleIntakeSnapshot() (intakeSnapshotFacts, error) {
 	facts.IntakeRetryable = errors.Is(intakeErr, errIntakeEpochChanged)
 	facts.IntakeTerminal = intakeErr != nil && !facts.IntakeRetryable
 	return facts, nil
+}
+
+func observeIntakeMoveInterleave(snapshot []mountEntry, selected mountEntry, target, movedTarget string, mountedAt *string) (intakeMoveInterleaveFacts, error) {
+	var move intakeMoveInterleaveFacts
+	infoFD, err := unix.Open("/proc/thread-self/mountinfo", unix.O_RDONLY|unix.O_CLOEXEC, 0)
+	if err != nil {
+		return move, err
+	}
+	defer func() { _ = unix.Close(infoFD) }()
+	beforeMove, preMovePollChanged, err := readIntakeMountTopology(infoFD, readMountInfo)
+	if err != nil {
+		return move, err
+	}
+	if preMovePollChanged || !sameMountEpoch(snapshot, beforeMove, nil) {
+		return move, errors.New("pre-move topology changed before opening source descriptor")
+	}
+	fd, err := openMountPoint(target)
+	if err != nil {
+		return move, err
+	}
+	defer func() { _ = unix.Close(fd) }()
+	preID, preInode, err := mountDescriptorIdentity(fd)
+	if err != nil {
+		return move, err
+	}
+	preAlias, err := os.Readlink(mountDescriptorPath(fd))
+	if err != nil {
+		return move, err
+	}
+	if preID != uint64(selected.id) || preInode == 0 || preAlias != target {
+		return move, errors.New("pre-move source descriptor differs from selected mount root")
+	}
+	move.RootInode = preInode
+	move.PreMoveAliasMatched = preAlias == target
+	if err := unix.Mount(target, movedTarget, "", unix.MS_MOVE, ""); err != nil {
+		return move, err
+	}
+	*mountedAt = movedTarget
+	postMovePollChanged, err := mountInfoEpochChanged(infoFD)
+	if err != nil {
+		return move, err
+	}
+	polledFresh, postReadPollChanged, err := readIntakeMountTopology(infoFD, readMountInfo)
+	if err != nil {
+		return move, err
+	}
+	postID, postInode, err := mountDescriptorIdentity(fd)
+	if err != nil {
+		return move, err
+	}
+	postAlias, err := os.Readlink(mountDescriptorPath(fd))
+	if err != nil {
+		return move, err
+	}
+	move.PostMoveMountID, move.PostMoveInode = postID, postInode
+	move.PostMoveAliasMatched = postAlias == movedTarget && postAlias != target
+	_, fresh, err := readCurrentMountTopology()
+	if err != nil {
+		return move, err
+	}
+	underFD, err := openMountPoint(target)
+	if err != nil {
+		return move, err
+	}
+	underID, _, underErr := mountDescriptorIdentity(underFD)
+	_ = unix.Close(underFD)
+	if underErr != nil {
+		return move, underErr
+	}
+	move.UnderlyingMountID = underID
+	expectedMoved := selected
+	expectedMoved.mountPoint = movedTarget
+	var movedEntry mountEntry
+	var movedCount int
+	oldTargetPresent := false
+	for _, entry := range fresh {
+		if entry.mountPoint == target {
+			oldTargetPresent = true
+		}
+		if entry.id == selected.id || entry.mountPoint == movedTarget {
+			movedEntry = entry
+			movedCount++
+		}
+	}
+	move.OldPathUnderlying = underID != 0 && underID != uint64(selected.id) && !oldTargetPresent
+	move.MovedRowAtTarget = movedCount == 1 && movedEntry == expectedMoved
+	move.EpochChanged = !sameMountEpoch(snapshot, fresh, nil) && sameMountEpoch(polledFresh, fresh, nil)
+	move.PollEpochChanged = !preMovePollChanged && postMovePollChanged && !postReadPollChanged
+	_, origVerifyErr := verifyIntakeRoot(fd, selected)
+	var identity *intakeIdentityError
+	move.OriginalVerifyRefused = origVerifyErr != nil && !errors.As(origVerifyErr, &identity) &&
+		!intakeLookupUnavailable(origVerifyErr) && !errors.Is(origVerifyErr, errIntakeEpochChanged)
+	verifiedMovedInode, movedVerifyErr := verifyIntakeRoot(fd, movedEntry)
+	move.MovedVerifySucceeded = movedVerifyErr == nil && verifiedMovedInode == preInode
+	return move, nil
 }
 
 func TestIntakeLookupRefusalCannotHideIdentitySyscallFailure(t *testing.T) {
