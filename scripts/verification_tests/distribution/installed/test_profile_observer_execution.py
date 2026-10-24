@@ -49,6 +49,12 @@ class ProfileObserverTests(unittest.TestCase):
         self.app = SimpleNamespace(binding={'install_root': '/owned', 'images': {'/owned/bin/pw': {'device': 1, 'inode': 2, 'bytes': 3}}}, observations={'engine_identity': {'pid': 123, 'start_time_ticks': 9}},
                                    require_running=Mock(), require_engine=Mock())
         self.stack.enter_context(patch.object(Path, 'home', return_value=self.home))
+        from linux_release.installed_cases.app import InstalledApp
+        from linux_release.installed_storage import resolve
+        from types import MethodType
+        self.app.storage = resolve({'HOME': str(self.home)})
+        self.app.observations['storage'] = self.app.storage.facts()
+        self.app.selected_storage = MethodType(InstalledApp.selected_storage, self.app)
         self.stack.enter_context(patch.object(observer, 'require_owned_guest'))
         self.stack.enter_context(patch.object(observer, 'engine_image', return_value=(1, 2, 3)))
 

@@ -14,8 +14,9 @@ class GuestInputTests(unittest.TestCase):
         bridge.selector.select.return_value = True
         with patch.object(controller.time, 'monotonic', side_effect=[0, 1, 6]), \
                 patch.object(controller.os, 'get_blocking', return_value=False), \
-                patch.object(controller.os, 'read', return_value=b' '):
-            with self.assertRaisesRegex(ValueError, 'response time'):
+                patch.object(controller.os, 'read', return_value=b' '), \
+                patch.object(controller.Pipe, 'write'):
+            with self.assertRaises(TimeoutError):
                 bridge.exchange({'operation': 'poll'})
         bridge.selector.select.assert_called_once_with(4)
 
