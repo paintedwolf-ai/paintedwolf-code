@@ -67,7 +67,7 @@ def profile(app):
     image = expected['device'], expected['inode'], expected['bytes']
     if engine_image(engine['pid']) != image:
         raise ValueError('profile observer engine image differs from the installed artifact')
-    directory = Path.home() / '.config/paintedwolf'
+    directory = app.selected_storage().config
     for ancestor in (directory.parent, directory.parent.parent):
         info = ancestor.lstat()
         if (not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o022
@@ -78,7 +78,7 @@ def profile(app):
     app.require_running()
     app.require_engine()
     if (app.observations.get('engine_identity') != engine or engine_image(engine['pid']) != image
-            or physical(directory, True) != before):
+            or app.selected_storage().config != directory or physical(directory, True) != before):
         raise ValueError('captured profile or engine changed during observation')
 
 
