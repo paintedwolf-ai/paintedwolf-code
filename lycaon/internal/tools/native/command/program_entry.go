@@ -227,26 +227,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 		}
 	}
 	run := &programRun{catalog: catalog, commands: commandIndex(catalog), envelope: launchEnvelope(args)}
-	external, err := run.externalDefinition()
-	if err != nil {
-		return "", err
-	}
-	// Many command names share one operation owner; each definition enters
-	// the surface once, keyed by its operation identity.
-	active := []toolcontract.OperationDefinition{external}
-	seen := map[string]bool{}
-	for _, operation := range owners.Natives {
-		for _, tool := range append([]string{operation.Tool}, operation.Tools...) {
-			if seen[tool] {
-				continue
-			}
-			seen[tool] = true
-			if definition, ok := r.Registry.Definition(tool); ok {
-				active = append(active, programOperationDefinition(definition.Operation))
-			}
-		}
-	}
-	surface, err := r.Executor.Metadata.FreezeProgramSurface(ctx, platform.ToolFilter{ProfileID: tc.ProfileID(), SurfaceID: tc.Turn.TurnSurfaceID}, active)
+	surface, err := freezeSurface(ctx, r, run, owners, tc)
 	if err != nil {
 		return "", err
 	}
@@ -258,23 +239,11 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	screening := captureprojection.StreamOptions{WorkingMemory: memory, Bounds: secretmatch.StreamBounds{InputBytes: 1 << 20, OutputBytes: 1 << 20, MemoryBytes: 32 << 20, DetectorWork: 1 << 30}}
 	run.executor, run.registry, run.recorder, run.supervisor, run.progress = r.Executor, r.Registry, r.Recorder, r.Supervisor, r.Progress
 	run.externalHidden = r.ExternalHidden
-	run.retainOutput = func(ctx context.Context, executionID, stream string, data []byte, complete bool) error {
-		spill, redacted, err := r.retainScreened(ctx, memory, executionID+":"+stream, data, scope, screening)
-		if err != nil {
-			return err
-		}
-		output := invocation.RetainedOutput{ExecutionID: executionID, Stream: stream, Reference: "output:" + executionID + ":" + stream, Complete: complete && spill.Complete, Redacted: redacted}
-		if err := outputs.Attach(ctx, root.Identity.ProgramID, output, spill); err != nil {
-			return errors.Join(err, spill.Close())
-		}
-		return nil
-	}
 	run.frame, run.surface, run.memory, run.tc, run.root, run.parentReceipt, run.source = frame, surface, memory, tc, root, tc.Invocation.ID, source
-	run.capture = invocation.ProgramInputCapture{State: memory, Outputs: outputs, Projector: r.Projector, ProgramID: root.Identity.ProgramID, Scope: scope, Screening: screening, MaximumNodes: 1024, MaximumDepth: 64}
 	if err := r.beginProgram(ctx, run, outputs, snapshot.Plan, scope, screening); err != nil {
 		return "", err
 	}
-	dispatcher, releaseUtilities, err := r.newDispatcher(run, owners, paths, tc, memory)
+	dispatcher, releaseUtilities, err := newDispatcher(r, run, owners, paths, tc, memory)
 	if err != nil {
 		return "", err
 	}
@@ -335,9 +304,30 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	return string(out), nil
 }
 
-// parseProgram validates the entire unit; an excluded construct anywhere
-// refuses before the first statement could run.
-func (r *ProgramRuntime) newDispatcher(run *programRun, owners ProgramOwners, paths *projectpaths.ProgramPaths, tc tools.ToolContext, memory *toolcontract.ProgramMemory) (*ProgramDispatcher, func(), error) {
+func freezeSurface(ctx context.Context, r *ProgramRuntime, run *programRun, owners ProgramOwners, tc tools.ToolContext) (toolexecution.ProgramSurface, error) {
+	external, err := run.externalDefinition()
+	if err != nil {
+		return toolexecution.ProgramSurface{}, err
+	}
+	// Many command names share one operation owner; each definition enters
+	// the surface once, keyed by its operation identity.
+	active := []toolcontract.OperationDefinition{external}
+	seen := map[string]bool{}
+	for _, operation := range owners.Natives {
+		for _, tool := range append([]string{operation.Tool}, operation.Tools...) {
+			if seen[tool] {
+				continue
+			}
+			seen[tool] = true
+			if definition, ok := r.Registry.Definition(tool); ok {
+				active = append(active, programOperationDefinition(definition.Operation))
+			}
+		}
+	}
+	return r.Executor.Metadata.FreezeProgramSurface(ctx, platform.ToolFilter{ProfileID: tc.ProfileID(), SurfaceID: tc.Turn.TurnSurfaceID}, active)
+}
+
+func newDispatcher(r *ProgramRuntime, run *programRun, owners ProgramOwners, paths *projectpaths.ProgramPaths, tc tools.ToolContext, memory *toolcontract.ProgramMemory) (*ProgramDispatcher, func(), error) {
 	jobs := r.Supervisor.Jobs(tc.Identity.SessionID, tc.Identity.ProjectID)
 	jobs.BeginProgram()
 	builtins := jobBuiltins(jobs, run.commands)
@@ -370,6 +360,8 @@ func (r *ProgramRuntime) newDispatcher(run *programRun, owners ProgramOwners, pa
 	return dispatcher, releaseUtilities, nil
 }
 
+// parseProgram validates the entire unit; an excluded construct anywhere
+// refuses before the first statement could run.
 func parseProgram(ctx context.Context, memory *toolcontract.ProgramMemory, source string) (*commandsurface.ParsedProgram, *commandsurface.ProgramSnapshotLease, error) {
 	parsed, err := commandsurface.ParseAdmitted(ctx, memory, []byte(source), commandsurface.ParseOptions{})
 	if err != nil {
@@ -387,6 +379,18 @@ func parseProgram(ctx context.Context, memory *toolcontract.ProgramMemory, sourc
 }
 
 func (r *ProgramRuntime) beginProgram(ctx context.Context, run *programRun, outputs *invocation.ProgramOutputRetention, plan commandsurface.ProgramSnapshot, scope captureprojection.Scope, screening captureprojection.StreamOptions) error {
+	run.retainOutput = func(ctx context.Context, executionID, stream string, data []byte, complete bool) error {
+		spill, redacted, err := r.retainScreened(ctx, run.memory, executionID+":"+stream, data, scope, screening)
+		if err != nil {
+			return err
+		}
+		output := invocation.RetainedOutput{ExecutionID: executionID, Stream: stream, Reference: "output:" + executionID + ":" + stream, Complete: complete && spill.Complete, Redacted: redacted}
+		if err := outputs.Attach(ctx, run.root.Identity.ProgramID, output, spill); err != nil {
+			return errors.Join(err, spill.Close())
+		}
+		return nil
+	}
+	run.capture = invocation.ProgramInputCapture{State: run.memory, Outputs: outputs, Projector: r.Projector, ProgramID: run.root.Identity.ProgramID, Scope: scope, Screening: screening, MaximumNodes: 1024, MaximumDepth: 64}
 	sourceRef := "output:program-source:" + run.root.Identity.ProgramID
 	var nodes []toolcontract.ProgramNode
 	for _, location := range programNodes(plan.Statements) {
