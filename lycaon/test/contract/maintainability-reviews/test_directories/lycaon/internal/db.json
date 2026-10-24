@@ -4,13 +4,13 @@
   "kind": "test_suite",
   "workstream": "store-health",
   "disposition": "retain",
-  "reason": "Retain the 47-file private database suite. Copy equivalence, released-source routing, actual process interruption, and operational error preservation now have focused contracts; moving them outside db would expose private publication seams. The retained-copy transaction remains under the same publication authority; deterministic page-limit rollback and inconsistent-count refusal contracts passed without adding files or raising the ceiling.",
-  "reviewed_commit": "582212cf337c61cbd340e889502e0ca524ceb6d1",
+  "reason": "Retain the 47-file private database suite. Publication crash and journal fixtures cover the same pre-open authority as retained-copy and error-classification tests. Exchange removes empty-occupant behavior without adding a test subsystem. Focused process-exit, WAL preservation, copy SQLITE_FULL, and seal-connection operational-failure contracts passed; filesystem exchange identity contracts stay with fseffect.",
+  "reviewed_commit": "9eda632f64d4f1a4728977973852653795bddada",
   "ceiling": 47,
   "boundaries": {
-    "lycaon/internal/db/rebuild_equivalence_test.go": "81b1d33e34cc5d6b448af3802f21cc105601324350418ff9fcddb6a6481ec95e",
-    "lycaon/internal/db/rebuild_crash_test.go": "7c3250c21e95367f8214192c26ba586ce87102fffa7c284366d6e43f8169bccb",
-    "lycaon/internal/db/rebuild_errors_test.go": "395614bfa11d8e7955bc26efbdea56a07011dbc35abe136841a54f91963e415f",
+    "lycaon/internal/db/rebuild_equivalence_test.go": "ad40b1e4101ac05338bf3b87ca593ae434a7ead5ceca01169859ec0642ac198e",
+    "lycaon/internal/db/rebuild_crash_test.go": "fc637d9935806c84c8fc8166211ab9049cdaf945a89cbad920082cdb9609dfab",
+    "lycaon/internal/db/rebuild_errors_test.go": "2b1296ba5e3054cc43fbafab0179812e85226789a6417dda37a17ce4da81353a",
     "lycaon/internal/db/source_manifest_layout_upgrade_test.go": "e93ecffbb82a3d846c944650053ac500bb1ca65777258abe36d08eabbb06ad85"
   },
   "reviewed_shape": "354442ef4f0bb0f17da9348cef8afa848fd14d0ce61e8d767d44a9e31f6af132"
