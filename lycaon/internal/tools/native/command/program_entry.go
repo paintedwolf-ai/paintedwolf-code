@@ -99,6 +99,8 @@ type programRun struct {
 	root          toolcontract.OperationInvocation
 	parentReceipt string
 	source        string
+	sourcesMu     sync.RWMutex
+	sources       map[string]string
 	catalog       toolcontract.LanguageCatalog
 	commands      map[string]toolcontract.CommandSpecification
 
@@ -303,12 +305,19 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 		}
 	}
 	stdout, stderr := &boundedBuffer{limit: programOutputBytes}, &boundedBuffer{limit: programOutputBytes}
+	sources := owners.Sources
+	if sources == nil {
+		if sc, ok := owners.Input.(commandprogram.SourceCapture); ok {
+			sources = sc
+		}
+	}
 	ports := commandprogram.EvaluationPorts{
 		Invocation: root, Dispatch: dispatcher, Binder: commandprogram.CatalogBinder{}, Files: projectpaths.GlobFiles{Paths: paths},
-		Publication: owners.Publication, Input: owners.Input,
+		Publication: owners.Publication, Input: owners.Input, Sources: sources,
 		Executions: dispatcher, Supervision: r.Supervisor, Predicates: commandprogram.PredicateRuntime{Patterns: commandprogram.NativePredicatePatterns{Memory: memory}},
 		Memory:      memory,
 		Environment: programEnvironment(tc),
+		ScratchDir:  tc.Host.SessionScratchDir,
 		Streams:     commandprogram.Streams{Input: commandprogram.NullInput(), Output: stdout, Error: stderr},
 	}
 	var evaluated commandprogram.ProgramOutcome
@@ -435,6 +444,10 @@ func (r *ProgramRuntime) feedback(ctx context.Context, run *programRun, dispatch
 		if errors.As(evalErr, &refusal) {
 			span := refusal.Node.Span
 			data := map[string]any{"tool": "command", "source_start_byte": span.StartByte, "source_end_byte": span.EndByte, "source_line": span.Line, "source_column": span.Column, "expected": refusal.Expected, "expected_form": refusal.Expected, "reason": refusal.Expected}
+			var expansion *commandprogram.ExpansionError
+			if errors.As(refusal.Cause, &expansion) && expansion.Limit != "" {
+				data["limit_id"], data["maximum"], data["observed"] = expansion.Limit, expansion.Maximum, expansion.ObservedValue()
+			}
 			if refusal.Command != "" {
 				data["command"], data["word"], data["expected_form"] = refusal.Command, refusal.Option, refusal.Form
 			}
@@ -588,6 +601,15 @@ func programNodes(statements []commandsurface.Statement) []commandsurface.Syntax
 		case commandsurface.SimpleCommand:
 			words(node.Words)
 			for _, assignment := range node.Assignments {
+				if assignment.Index != nil {
+					words(commandsurface.ArithmeticPart{Expression: assignment.Index}.Words())
+				}
+				words([]commandsurface.DeferredWord{assignment.Value})
+				words(assignment.Array)
+			}
+		case commandsurface.EnvironmentDeclaration:
+			words(node.Words)
+			for _, assignment := range node.Assignments {
 				words([]commandsurface.DeferredWord{assignment.Value})
 			}
 		case commandsurface.BinaryCommand:
@@ -614,6 +636,10 @@ func programNodes(statements []commandsurface.Statement) []commandsurface.Syntax
 			}
 		case commandsurface.FunctionDeclaration:
 			statement(node.Body)
+		case commandsurface.ArithmeticCommand:
+			words(node.Words())
+		case commandsurface.TrapCommand:
+			list(node.Statements)
 		}
 	}
 	list(statements)
@@ -698,6 +724,54 @@ func (r *programRun) launchArguments(line, cwd string) map[string]any {
 		arguments[field] = value
 	}
 	return arguments
+}
+
+// nativeArguments attaches any call-level capability declarations that the
+// bound native operation contract accepts.
+func (r *programRun) nativeArguments(base map[string]any, contract toolcontract.Contract) map[string]any {
+	arguments := make(map[string]any, len(base)+len(r.envelope))
+	for k, v := range base {
+		arguments[k] = v
+	}
+	if raw, ok := r.envelope["capability_request"].(map[string]any); ok {
+		supported := map[string]any{}
+		for _, field := range contract.CapabilityRequestFields() {
+			if value, exists := raw[field]; exists {
+				supported[field] = value
+			}
+		}
+		if len(supported) > 0 {
+			arguments["capability_request"] = supported
+		}
+	}
+	if secretUse, ok := r.envelope["secret_use"]; ok && contract.SecretReferenceSurface != "" {
+		arguments["secret_use"] = secretUse
+	}
+	return arguments
+}
+
+func (r *programRun) sourceText(unitID string) string {
+	if unitID == "" || unitID == "submitted" {
+		return r.source
+	}
+	r.sourcesMu.RLock()
+	defer r.sourcesMu.RUnlock()
+	if s, ok := r.sources[unitID]; ok {
+		return s
+	}
+	return r.source
+}
+
+func (r *programRun) setSourceText(unitID, text string) {
+	if unitID == "" {
+		return
+	}
+	r.sourcesMu.Lock()
+	if r.sources == nil {
+		r.sources = map[string]string{}
+	}
+	r.sources[unitID] = text
+	r.sourcesMu.Unlock()
 }
 
 // childOutputBytes bounds each child stream the output store retains.

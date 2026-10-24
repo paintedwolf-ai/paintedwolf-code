@@ -36,6 +36,11 @@ func TestVersionOneGrammarIsLoweredWithoutExecution(t *testing.T) {
 		"result=$(printf ok); back=`printf yes`; printf '%s' \"${#result} $0 $1 ${10} $# $? $! $@ $*\"",
 		"sleep 1 & wait \"$!\"; jobs; source -- ./script.pw",
 		"echo ./src/**/*.go; ! false",
+		"echo <(cat ./input); cat > >(cat > ./output)",
+		"((1+2)); ((i++)); ((x = 1, x += 2)); ((a[i++]=i)); ((v=a[i++]+1))",
+		"a=(one two); a+=(three); a[0]=first; printf '%s' \"${a[@]}\" \"${a[*]}\" \"${#a[@]}\" \"${a[0]}\" \"${a:1:2}\"",
+		"trap 'printf done' EXIT; trap - EXIT; trap -- 'printf done' 0",
+		"cat 3> ./output; cat 2>&3; cat >&2; cat 0<&3",
 	}
 	for _, source := range cases {
 		t.Run(source, func(t *testing.T) {
@@ -69,11 +74,11 @@ func TestWholeUnitRefusesMalformedOrExcludedLaterSyntax(t *testing.T) {
 	cases := []string{
 		"printf changed > ./output; if false; then echo 'unterminated; fi",
 		"printf changed > ./output; if false; then eval dangerous; fi",
-		"echo <(cat ./input)", "echo $((i++))", "echo $((x=1))", "((1+2))", "a=(one two)",
+		"echo $((i++))", "echo $((x=1))", "echo $((a[i++]))", "echo ${a[i++]}", "a=([k]=one)",
 		"echo ${name:=fallback}", "echo ${!name}", "echo $-", "echo $$",
 		"echo {one,two}", "case x in x) true;& esac", "until false; do :; done",
-		"select x in one; do :; done", "coproc echo x", "trap true EXIT", "set -x", "set +o pipefail", "set -- a b",
-		"cat <<< value", "cat 3> ./output", "cat 2>&3", "cat 1<> ./input",
+		"select x in one; do :; done", "coproc echo x", "trap true INT", "trap 'eval x' EXIT", "set -x", "set +o pipefail", "set -- a b",
+		"cat <<< value", "cat 10> ./output", "cat 2>&10", "cat 1<> ./input",
 		"function helper { :; }", "cat() { :; }", "local x=value", "IFS=, echo x",
 		"echo $'escaped'", "echo $\"localized\"", "[[ -S ./sock ]]", "for ((i=0;i<1;i++)); do :; done",
 	}

@@ -62,9 +62,16 @@ type RepoResponse struct {
 	GroupsFolded     int             `json:"groups_folded,omitempty"`
 }
 
+// RepoRequest selects one bundle and optionally bounds layout metadata depth.
+// A nil depth keeps the bundle's complete subtree rollups.
+type RepoRequest struct {
+	Bundle, Path string
+	LayoutDepth  *int64
+}
+
 // Run executes survey_repo with bundle and optional path args.
 func (t *RepoTool) Run(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-	resp, err := t.Survey(ctx, strings.TrimSpace(argString(args, "bundle")), strings.TrimSpace(argString(args, "path")), tctx)
+	resp, err := t.Survey(ctx, RepoRequest{Bundle: strings.TrimSpace(argString(args, "bundle")), Path: strings.TrimSpace(argString(args, "path"))}, tctx)
 	if err != nil {
 		return "", err
 	}
@@ -77,7 +84,11 @@ func (t *RepoTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 
 // Survey runs one catalog bundle under path ("." when empty): the typed
 // operation behind survey_repo and the repo-map command built-in.
-func (t *RepoTool) Survey(ctx context.Context, bundleID, relPath string, tctx tools.ToolContext) (RepoResponse, error) {
+func (t *RepoTool) Survey(ctx context.Context, request RepoRequest, tctx tools.ToolContext) (RepoResponse, error) {
+	bundleID, relPath := request.Bundle, request.Path
+	if request.LayoutDepth != nil && *request.LayoutDepth < 0 {
+		return RepoResponse{}, toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"operation": "survey_repo", "argument": "depth", "word": *request.LayoutDepth, "minimum": int64(0)})
+	}
 	if t == nil || t.Boundary == nil || t.BaseCatalog == nil {
 		return RepoResponse{}, fmt.Errorf("survey_repo: not configured")
 	}
@@ -116,7 +127,7 @@ func (t *RepoTool) Survey(ctx context.Context, bundleID, relPath string, tctx to
 		return RepoResponse{}, err
 	}
 	result, err := runner.Run(ctx, bundleID, relPath, Scope{
-		Boundary: t.Boundary, ToolCtx: tctx, SourceCatalog: t.SourceCatalog, ReadFilter: readFilter,
+		Boundary: t.Boundary, ToolCtx: tctx, SourceCatalog: t.SourceCatalog, ReadFilter: readFilter, LayoutDepth: request.LayoutDepth,
 	})
 	if err != nil {
 		if errors.Is(err, ErrSurveyPathEscape) {

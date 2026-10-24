@@ -190,15 +190,18 @@ func TestRedirectOutsideRootsIsRefusedWithoutEffect(t *testing.T) {
 	h := newHarness(t, nil)
 	// Not the host temporary area, which carries its own session grants.
 	outside := filepath.Join(string(filepath.Separator), "pw-outside-"+h.invocation().Identity.ExecutionID+".txt")
-	if _, err := h.publication().Open(t.Context(), h.destination(">", outside)); err == nil {
-		t.Fatal("redirect outside attached roots was admitted")
+	if _, err := h.publication().Open(t.Context(), h.destination(">", outside)); toolrejection.AsToolReject(err) == nil {
+		t.Fatalf("redirect outside attached roots was admitted or missing ToolReject: %v", err)
+	}
+	if _, err := h.publication().OpenInput(t.Context(), commandprogram.InputDestination{Invocation: h.invocation(), Target: commandprogram.Field{Value: outside}}); toolrejection.AsToolReject(err) == nil {
+		t.Fatalf("input redirect outside attached roots was admitted or missing ToolReject: %v", err)
 	}
 	if _, err := os.Lstat(outside); !os.IsNotExist(err) {
 		t.Fatal("refused redirect created a file")
 	}
 	r := h.run("", "rm", "-f", "--", outside)
-	if r.result.Terminal != toolcontract.ProducerRefused || r.err == nil || r.result.EffectCertainty != toolcontract.NoEffect {
-		t.Fatalf("rm outside roots %+v %v", r.result, r.err)
+	if r.result.Terminal != toolcontract.ProducerRefused || toolrejection.AsToolReject(r.err) == nil || r.result.EffectCertainty != toolcontract.NoEffect || !strings.Contains(r.stderr, r.result.StopCode) {
+		t.Fatalf("rm outside roots %+v %v %q", r.result, r.err, r.stderr)
 	}
 }
 

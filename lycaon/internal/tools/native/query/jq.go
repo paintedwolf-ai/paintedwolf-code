@@ -12,8 +12,8 @@ import (
 
 	"github.com/itchyny/gojq"
 
+	"github.com/lycaon/lycaon/internal/commandprogram"
 	nativejq "github.com/lycaon/lycaon/internal/tools/native/jq"
-	"github.com/lycaon/lycaon/internal/tools/safecmd"
 )
 
 // jq's exit statuses (jq 1.8 main.c): a run's status is its last input's.
@@ -47,7 +47,7 @@ type jqDialect struct {
 	// with "...".
 	pythonYAML bool
 	// files replaces the operand files (python yq -i runs one at a time).
-	files []string
+	files commandprogram.Fields
 }
 
 // runJq compiles QUERY once and evaluates it over the input stream
@@ -84,7 +84,7 @@ func runJqProgram(inv *invocation, dialect jqDialect) error {
 	if err != nil {
 		return err
 	}
-	stream := &inputs{inv: inv, operands: args.files, raw: inv.flag("-R"), yaml: dialect.yamlInput || inv.flag("--yaml-input"), limit: safecmd.JQCaps().InputBytes}
+	stream := &inputs{inv: inv, operands: args.files, yaml: dialect.yamlInput || inv.flag("--yaml-input")}
 	if inv.flag("--stream") {
 		events, err := nativejq.CompileProgram("tostream", nativejq.ProgramOptions{})
 		if err != nil {
@@ -106,16 +106,22 @@ func runJqProgram(inv *invocation, dialect jqDialect) error {
 		inv.status = jqCompile
 		return nil
 	}
+	// gojq has no VM step counter hook; intra-value evaluation work is bounded
+	// by the query_cpu_ms deadline while host-observable input/output value
+	// transitions are metered against query_work_steps.
 	budget := time.Duration(inv.owners.limit("query_cpu_ms")) * time.Millisecond
 	ctx, cancel := context.WithTimeout(inv.ctx, budget)
 	defer cancel()
 	run := &jqRun{inv: inv, program: program, stream: stream, ctx: ctx, exitStatus: inv.flag("-e"), ret: jqOK, last: jqLastUnseen,
-		emitter: &emitter{inv: inv, layout: layout, maxOutputs: inv.owners.limit("query_outputs"), maxValue: inv.owners.limit("query_value_bytes")}}
+		emitter: &emitter{inv: inv, stream: stream, layout: layout, maxOutputs: inv.owners.limit("query_outputs"), maxValue: inv.owners.limit("query_value_bytes")}}
 	if err := run.evaluateAll(); err != nil {
 		return err
 	}
 	if stream.stop != nil {
 		return stream.stop
+	}
+	if err := run.emitter.finish(); err != nil {
+		return err
 	}
 	inv.status = run.status()
 	return nil
@@ -127,7 +133,7 @@ func (r *jqRun) evaluateAll() error {
 	case r.inv.flag("-n"):
 		_, err := r.evaluate(nil, false)
 		return err
-	case r.inv.flag("-s") && r.stream.raw:
+	case r.inv.flag("-s") && r.inv.flag("-R"):
 		text, ok := r.stream.slurpRaw()
 		if !ok {
 			return nil
@@ -252,18 +258,18 @@ func (r *jqRun) reportError(err error, positioned bool) {
 // filter jq runs ".".
 type jqArgs struct {
 	query      string
-	files      []string
+	files      commandprogram.Fields
 	positional []any
 }
 
 func (inv *invocation) jqArguments() (*jqArgs, error) {
 	args := &jqArgs{}
 	haveQuery := false
-	if file, ok := inv.value("-f"); ok {
+	if file, ok := inv.valueField("-f"); ok {
 		captured, err := inv.captureSource(file)
 		var failure *unreadable
 		if errors.As(err, &failure) {
-			_, _ = fmt.Fprintf(inv.stderr, "jq: Could not open %s: %s\n", file, failure.reason)
+			_, _ = fmt.Fprintf(inv.stderr, "jq: Could not open %s: %s\n", file.Value, failure.reason)
 			inv.status = jqUsage
 			return nil, nil
 		}
@@ -293,14 +299,14 @@ func (inv *invocation) jqArguments() (*jqArgs, error) {
 			}
 			args.positional = append(args.positional, decoded[0])
 		default:
-			args.files = append(args.files, word)
+			args.files = append(args.files, *item.Operand)
 		}
 	}
 	if !haveQuery {
 		args.query = "."
 	}
 	if len(args.files) == 0 {
-		args.files = []string{"-"}
+		args.files = commandprogram.Fields{{Value: "-"}}
 	}
 	return args, nil
 }
@@ -363,7 +369,7 @@ func (inv *invocation) variables(stream *inputs, positional []any) (out []native
 			}
 			value = decoded[0]
 		case "--slurpfile", "--rawfile":
-			captured, err := inv.captureSource(text)
+			captured, err := inv.captureSource(option.Values[1])
 			var failure *unreadable
 			if errors.As(err, &failure) {
 				_, _ = fmt.Fprintf(inv.stderr, "jq: Bad JSON in %s %s %s: Could not open %s: %s\n", option.Key, name, text, text, failure.reason)
@@ -430,14 +436,18 @@ type outputLayout struct {
 // emitter writes each result in jq's encoding within the output budgets.
 type emitter struct {
 	inv                  *invocation
+	stream               *inputs
 	layout               outputLayout
 	count                int64
-	produced             bool
+	produced, openEnded  bool
 	last                 any
 	maxOutputs, maxValue int64
 }
 
 func (e *emitter) emit(v any) error {
+	if err := e.inv.step(); err != nil {
+		return err
+	}
 	e.count++
 	if e.maxOutputs > 0 && e.count > e.maxOutputs {
 		return limitExceeded("query_outputs", e.maxOutputs, e.count)
@@ -454,6 +464,17 @@ func (e *emitter) emit(v any) error {
 	return err
 }
 
+// finish writes PyYAML's deferred scalar document-end marker ("...") when
+// the final emitted document was an unquoted scalar; preceding scalars are
+// closed by the next document's "---".
+func (e *emitter) finish() error {
+	if !e.openEnded {
+		return nil
+	}
+	_, err := e.inv.out.Write([]byte("...\n"))
+	return err
+}
+
 // encode is jq's printer: -r and -j print strings raw unless -a asks for
 // escapes, -j omits the newline, and values are JSON in the chosen layout.
 func (e *emitter) encode(v any) ([]byte, error) {
@@ -464,23 +485,29 @@ func (e *emitter) encode(v any) ([]byte, error) {
 	case e.layout.join:
 		newline = ""
 	}
-	if s, ok := v.(string); ok && (e.layout.raw || e.layout.join || e.layout.nul) && !e.layout.ascii {
-		return []byte(s + newline), nil
-	}
 	if e.layout.yaml {
-		out, err := nativejq.EncodeYAML(v)
+		var (
+			out []byte
+			err error
+		)
+		if e.stream != nil && e.stream.roundtrip != nil {
+			out, err = e.stream.roundtrip.EncodeDoc(e.stream.yamlDoc-1, v)
+		} else {
+			out, err = nativejq.EncodeYAML(v)
+		}
 		if err != nil {
 			return nil, err
 		}
 		_, array := v.([]any)
 		_, object := v.(*gojq.OrderedObject)
-		if e.layout.pythonYAML && !array && !object {
-			out = append(out, "...\n"...)
-		}
+		e.openEnded = e.layout.pythonYAML && !array && !object && len(out) > 0 && out[0] != '\'' && out[0] != '"'
 		if e.count > 1 {
 			out = append([]byte("---\n"), out...)
 		}
 		return out, nil
+	}
+	if s, ok := v.(string); ok && (e.layout.raw || e.layout.join || e.layout.nul) && !e.layout.ascii {
+		return []byte(s + newline), nil
 	}
 	out, err := gojq.MarshalWith(v, gojq.MarshalOptions{Pretty: e.layout.pretty, Indent: e.layout.indent, SortKeys: e.layout.sortKeys, ASCII: e.layout.ascii})
 	if err != nil {

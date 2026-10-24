@@ -136,7 +136,16 @@ func parseProgram(ctx context.Context, source []byte, options ParseOptions, memo
 	if err != nil {
 		return nil, parserDiagnostic(err, len(source))
 	}
-	c := programCompiler{catalog: catalog, source: source, pool: pool}
+	sourceHash := sha256.Sum256(source)
+	nodePrefix := ""
+	if options.Sourced {
+		name := sourceName
+		if name == "" {
+			name = "sourced"
+		}
+		nodePrefix = fmt.Sprintf("%s:%x:", name, sourceHash[:4])
+	}
+	c := programCompiler{catalog: catalog, source: source, pool: pool, nodePrefix: nodePrefix}
 	c.validate(file)
 	if c.err != nil {
 		return nil, c.err
@@ -174,7 +183,6 @@ func parseProgram(ctx context.Context, source []byte, options ParseOptions, memo
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	sourceHash := sha256.Sum256(source)
 	digest := toolcontract.LanguageCatalogDigest()
 	retained = true
 	return &ParsedProgram{source: bytes.Clone(source), stateBytes: hostBytes, releaseState: releaseState, plan: ProgramSnapshot{Version: toolcontract.LanguageVersion, CatalogDigest: digest, SourceDigest: hex.EncodeToString(sourceHash[:]), SourceName: sourceName, Statements: statements}}, nil
@@ -227,21 +235,32 @@ func parserPosition(pos syntax.Pos, length int) toolcontract.SourceSpan {
 }
 
 type programCompiler struct {
-	catalog        toolcontract.LanguageCatalog
-	source         []byte
-	sequence       int
-	literalContext map[*syntax.Word]bool
-	testWords      map[*syntax.Word]bool
-	staticProof    map[*syntax.Word]bool
-	nodeCount      int64
-	maximumDepth   int64
-	pool           *syntax.AllocationBudget
-	err            error
+	catalog           toolcontract.LanguageCatalog
+	source            []byte
+	nodePrefix        string
+	sequence          int
+	literalContext    map[*syntax.Word]bool
+	testWords         map[*syntax.Word]bool
+	arithmeticIndexes map[*syntax.ParamExp]bool
+	staticProof       map[*syntax.Word]bool
+	traps             map[*syntax.CallExpr]*syntax.File
+	trapSpans         map[*syntax.CallExpr]toolcontract.SourceSpan
+	spanOverride      *toolcontract.SourceSpan
+	nodeCount         int64
+	maximumDepth      int64
+	pool              *syntax.AllocationBudget
+	err               error
 }
 
 func (c *programCompiler) location(n syntax.Node) SyntaxLocation {
 	c.sequence++
-	return SyntaxLocation{ID: NodeID(fmt.Sprintf("n%d", c.sequence)), Span: nodeSpan(n)}
+	return SyntaxLocation{ID: NodeID(fmt.Sprintf("%sn%d", c.nodePrefix, c.sequence)), Span: c.span(n)}
+}
+func (c *programCompiler) span(n syntax.Node) toolcontract.SourceSpan {
+	if c.spanOverride != nil {
+		return *c.spanOverride
+	}
+	return nodeSpan(n)
 }
 func nodeSpan(n syntax.Node) toolcontract.SourceSpan {
 	if w, ok := n.(*syntax.Word); ok && len(w.Parts) == 0 {
@@ -251,13 +270,13 @@ func nodeSpan(n syntax.Node) toolcontract.SourceSpan {
 }
 func (c *programCompiler) unsupported(n syntax.Node, expected string) {
 	if c.err == nil {
-		c.err = &SyntaxDiagnostic{Code: "COMMAND_SYNTAX_UNSUPPORTED", Span: nodeSpan(n), Expected: expected}
+		c.err = &SyntaxDiagnostic{Code: "COMMAND_SYNTAX_UNSUPPORTED", Span: c.span(n), Expected: expected}
 	}
 }
 func (c *programCompiler) limit(n syntax.Node, id string, observed int64) {
 	maximum := languageLimit(c.catalog, id)
 	if c.err == nil && observed > maximum {
-		c.err = &SyntaxDiagnostic{Code: "COMMAND_LIMIT_EXCEEDED", Span: nodeSpan(n), Expected: "bounded " + id, Limit: id, Unit: languageLimitUnit(c.catalog, id), Maximum: maximum, Observed: observed}
+		c.err = &SyntaxDiagnostic{Code: "COMMAND_LIMIT_EXCEEDED", Span: c.span(n), Expected: "bounded " + id, Limit: id, Unit: languageLimitUnit(c.catalog, id), Maximum: maximum, Observed: observed}
 	}
 }
 func (c *programCompiler) nativeName(name string) bool {

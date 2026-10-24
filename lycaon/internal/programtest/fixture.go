@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -44,6 +45,7 @@ type Fixture struct {
 	Database   db.Handle
 	Session    string
 	Dir        string
+	Scratch    string
 	Background *bgprocess.Registry
 	// Configure adjusts each call's tool context before the entry runs.
 	Configure func(*tools.ToolContext)
@@ -103,7 +105,7 @@ func New(t *testing.T, options Options) *Fixture {
 			return command.ProgramOwners{Natives: natives}, nil
 		},
 	}
-	return &Fixture{Runtime: runtime, Recorder: recorder, Database: database, Session: session, Dir: dir, Background: background}
+	return &Fixture{Runtime: runtime, Recorder: recorder, Database: database, Session: session, Dir: dir, Scratch: fspath.CanonicalPath(t.TempDir()), Background: background}
 }
 
 // Call opens a real model receipt for one command call and runs the entry.
@@ -118,6 +120,7 @@ func (f *Fixture) Call(t *testing.T, ctx context.Context, source string) (string
 	tc := tools.ToolContext{Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: f.Dir, IsPrimary: true}}, ActiveRootID: "r1", SourceWorkspaceKind: api.SourceWorkspaceKindProject}}
 	tc.Identity.Agent, tc.Identity.ProjectID, tc.Identity.SessionID, tc.Identity.ToolCallID = "fixture", testdbseed.DefaultProjectID, f.Session, callID
 	tc.Invocation.ID = parent.ID
+	tc.Host.SessionScratchDir = f.Scratch
 	if f.Configure != nil {
 		f.Configure(&tc)
 	}

@@ -5,9 +5,11 @@ import (
 	"errors"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/litprefilter"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/textsearch"
@@ -45,7 +47,12 @@ type grepRun struct {
 	follow       bool
 	selection    selection
 	searchBinary bool
-	walker       *walker
+	// binaryMode is binary (notice), text (-a) or without-match (-I).
+	binaryMode      string
+	skipDirectories bool
+	walker          *walker
+	// json is rg --json's printer; nil for the plain forms.
+	json *rgJSON
 	// prune holds the index requirement when acceleration applies; drafts
 	// are the unsaved documents the index cannot speak for.
 	prune    litprefilter.Requirement
@@ -53,7 +60,7 @@ type grepRun struct {
 	pruned   int
 	selected bool
 	stopped  bool
-	operands []string
+	operands commandprogram.Fields
 }
 
 func runGrep(inv *invocation) error {
@@ -64,6 +71,9 @@ func runGrep(inv *invocation) error {
 	}
 	r.recursive = inv.flag("-r") || inv.flag("-R")
 	r.follow = inv.flag("-R")
+	if err := r.bsdModes(); err != nil {
+		return err
+	}
 	r.quietErrors = inv.flag("-s")
 	r.names = lastChoice(inv, "-H", "-h")
 	r.selection = newSelection(inv, false)
@@ -114,7 +124,7 @@ func runRg(inv *invocation) error {
 	}
 	if inv.flag("--files") {
 		r.mode = modeFileList
-		r.operands = inv.argv.Operands().Values()
+		r.operands = inv.argv.Operands()
 		return r.searchOperands()
 	}
 	spec := textsearch.Spec{Dialect: dialect, Word: inv.flag("-w")}
@@ -132,7 +142,7 @@ func (r *grepRun) grepDialect() (textsearch.Dialect, error) {
 	case "fgrep":
 		chosen[textsearch.Fixed] = true
 	}
-	for key, dialect := range map[string]textsearch.Dialect{"-E": textsearch.Extended, "-F": textsearch.Fixed, "-P": textsearch.Perl} {
+	for key, dialect := range map[string]textsearch.Dialect{"-E": textsearch.Extended, "-F": textsearch.Fixed, "-P": textsearch.Perl, "-G": textsearch.Basic} {
 		if r.inv.flag(key) {
 			chosen[dialect] = true
 		}
@@ -226,7 +236,7 @@ func (r *grepRun) patternWords() ([]string, bool) {
 
 // patterns gathers -e values and -f files in argument order. A pattern file
 // is pinned like any other read; "-f -" reads standard input.
-func (r *grepRun) patterns() ([]string, []string, error) {
+func (r *grepRun) patterns() ([]string, commandprogram.Fields, error) {
 	var patterns []string
 	explicit := false
 	for _, item := range r.inv.argv.Items {
@@ -239,7 +249,7 @@ func (r *grepRun) patterns() ([]string, []string, error) {
 			explicit = true
 		case "-f":
 			explicit = true
-			content, err := r.patternFile(item.Option.Values[0].Value)
+			content, err := r.patternFile(item.Option.Values[0])
 			if err != nil {
 				return nil, nil, err
 			}
@@ -248,28 +258,37 @@ func (r *grepRun) patterns() ([]string, []string, error) {
 			}
 		}
 	}
-	operands := r.inv.argv.Operands().Values()
+	operands := r.inv.argv.Operands()
 	if explicit {
 		return patterns, operands, nil
 	}
 	if len(operands) == 0 {
 		return nil, nil, r.inv.usage(r.inv.word(), "a PATTERN operand or -e PATTERN")
 	}
-	return operands[:1], operands[1:], nil
+	return []string{operands[0].Value}, operands[1:], nil
 }
 
-func (r *grepRun) patternFile(spelling string) ([]byte, error) {
-	if spelling == "-" {
+func (r *grepRun) patternFile(field commandprogram.Field) ([]byte, error) {
+	if field.Value == "-" {
 		return r.inv.readAll(r.inv.input)
 	}
-	bound, err := r.inv.paths.Bind(r.inv.ctx, spelling, false)
+	if reader, ok := field.ProcessSubstitution().OpenReader(); ok {
+		defer func() { _ = reader.Close() }()
+		return r.inv.readAll(reader)
+	}
+	bound, err := r.inv.paths.Bind(r.inv.ctx, field.Value, false)
 	if err != nil {
 		return nil, err
 	}
 	if bound.Null {
 		return nil, nil
 	}
-	return r.inv.capture(bound)
+	content, err := r.inv.capture(bound)
+	if reason, ok := ordinary(err); ok {
+		r.inv.fail(false, "%s: %s", field.Value, reason)
+		return nil, errUsage
+	}
+	return content, err
 }
 
 func (r *grepRun) count(key string) (int, bool, error) {
@@ -321,6 +340,9 @@ func (r *grepRun) run(spec textsearch.Spec) error {
 	if r.matcher, err = textsearch.Compile(inv.ctx, spec, inv.owners.regex); err != nil {
 		return err
 	}
+	if r.rg && inv.flag("--json") && r.mode == modeLines {
+		r.json = &rgJSON{started: time.Now()}
+	}
 	r.indexAcceleration()
 	if r.replace != nil {
 		if err := checkReplacement(*r.replace, r.matcher.CaptureGroups()); err != nil {
@@ -329,6 +351,11 @@ func (r *grepRun) run(spec textsearch.Spec) error {
 	}
 	if err := r.searchOperands(); err != nil {
 		return err
+	}
+	if r.json != nil {
+		if err := inv.out.text(r.json.summary()); err != nil {
+			return err
+		}
 	}
 	switch {
 	case inv.status == inv.failure && !(r.mode == modeQuiet && r.selected):
@@ -382,17 +409,20 @@ func (r *grepRun) searchOperands() error {
 	operands := r.operands
 	implicit := false
 	if len(operands) == 0 {
-		if !r.recursive {
+		// rg searches an attached stdin, as it does a pipe; with no producer it
+		// walks the current directory. grep reads stdin unless recursive.
+		piped := r.rg && r.mode != modeFileList && !commandprogram.IsNullInput(inv.input)
+		if !r.recursive || piped {
 			return r.searchStdin()
 		}
-		operands, implicit = []string{"."}, true
+		operands, implicit = commandprogram.Fields{{Value: "."}}, true
 	}
 	multiple := len(operands) > 1
 	for _, operand := range operands {
 		if r.stopped {
 			return nil
 		}
-		if operand == "-" {
+		if operand.Value == "-" {
 			if err := r.searchStdin(); err != nil {
 				return err
 			}
@@ -418,7 +448,14 @@ func (r *grepRun) searchStdin() error {
 	if err != nil {
 		return err
 	}
-	err = r.searchContent("(standard input)", data, nil, r.forcedNames(false))
+	label := "(standard input)"
+	if r.json != nil {
+		label = "<stdin>"
+	}
+	if named, ok := r.inv.value("--label"); ok {
+		label = named
+	}
+	err = r.searchContent(label, data, nil, r.forcedNames(false))
 	if errors.Is(err, errQuietMatch) {
 		r.stopped = true
 		return nil
@@ -433,8 +470,21 @@ func (r *grepRun) forcedNames(byDefault bool) bool {
 	return byDefault
 }
 
-func (r *grepRun) searchOperand(operand string, implicit, multiple bool) error {
+func (r *grepRun) searchOperand(field commandprogram.Field, implicit, multiple bool) error {
 	inv := r.inv
+	operand := field.Value
+	if reader, ok := field.ProcessSubstitution().OpenReader(); ok {
+		if r.mode == modeFileList {
+			_ = reader.Close()
+			return inv.out.text(operand, "\n")
+		}
+		data, err := inv.readAll(reader)
+		_ = reader.Close()
+		if err != nil {
+			return err
+		}
+		return r.searchContent(operand, data, nil, r.forcedNames(multiple))
+	}
 	e, err := r.walker.operand(operand, true)
 	if err != nil {
 		if reason, ok := ordinary(err); ok {
@@ -450,6 +500,9 @@ func (r *grepRun) searchOperand(operand string, implicit, multiple bool) error {
 		return r.searchFile(e, r.forcedNames(multiple))
 	}
 	if !r.recursive {
+		if r.skipDirectories {
+			return nil
+		}
 		inv.fail(r.quietErrors, "%s: Is a directory", operand)
 		return nil
 	}
@@ -545,7 +598,7 @@ func (r *grepRun) searchFile(e entry, names bool) error {
 // --files-without-match, whose walk skips binary files a pruned file would
 // not reveal.
 func (r *grepRun) indexAcceleration() {
-	if r.inv.owners.Catalog == nil || r.scan.Invert || r.rg && r.mode == modeFilesWithout {
+	if r.inv.owners.Catalog == nil || r.scan.Invert || r.json != nil || r.rg && r.mode == modeFilesWithout {
 		return
 	}
 	r.prune = r.matcher.Requirement()
@@ -582,4 +635,53 @@ func (r *grepRun) color() error {
 		return nil
 	}
 	return r.inv.usage(option.Values[0].Value, "--color=never or --color=auto")
+}
+
+// bsdModes applies the GNU and BSD spellings that select binary, directory,
+// device and link handling; for each, the last occurrence wins.
+func (r *grepRun) bsdModes() error {
+	r.binaryMode = "binary"
+	for _, item := range r.inv.argv.Items {
+		option := item.Option
+		if option == nil {
+			continue
+		}
+		value := ""
+		if len(option.Values) > 0 {
+			value = option.Values[0].Value
+		}
+		switch option.Key {
+		case "-a":
+			r.binaryMode = "text"
+		case "-I":
+			r.binaryMode = "without-match"
+		case "--binary-files":
+			switch value {
+			case "binary", "text", "without-match":
+				r.binaryMode = value
+			default:
+				return r.inv.usage(value, "--binary-files=binary, text or without-match")
+			}
+		case "-d":
+			switch value {
+			case "read":
+				r.skipDirectories = false
+			case "skip":
+				r.skipDirectories = true
+			case "recurse":
+				r.recursive = true
+			default:
+				return r.inv.usage(value, "-d read, skip or recurse")
+			}
+		case "-D":
+			if value != "read" && value != "skip" {
+				return r.inv.usage(value, "-D read or skip")
+			}
+		case "-S":
+			r.follow = true
+		case "-p", "-O":
+			r.follow = false
+		}
+	}
+	return nil
 }

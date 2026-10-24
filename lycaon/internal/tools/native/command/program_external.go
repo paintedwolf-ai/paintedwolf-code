@@ -30,7 +30,8 @@ var _ commandprogram.ExternalLauncher = ExternalStages{}
 // Launch runs argv (after an optional "external --") with the request's
 // streams and settles with the process's actual status.
 func (l ExternalStages) Launch(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-	argv := externalArgv(request.Argv.Values())
+	fields := externalFields(request.Argv)
+	argv := fields.Values()
 	if len(argv) == 0 {
 		return refusedResult("COMMAND_OPERAND_INVALID"), fmt.Errorf("external launch requires a program")
 	}
@@ -68,7 +69,12 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		}
 		return refusedResult("COMMAND_EXEC_DENIED"), err
 	}
-	async, err := lycexec.StartPipelineAsync(ctx, []lycexec.Stage{{Name: argv[0], Args: argv[1:]}}, opts, nonNilWriter(streams.Output), nonNilWriter(streams.Error))
+	launchArgv, cleanupProcSubst, err := materializeExternalArgv(tctx.Host.SessionScratchDir, fields)
+	if err != nil {
+		return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, err
+	}
+	defer cleanupProcSubst()
+	async, err := lycexec.StartPipelineAsync(ctx, []lycexec.Stage{{Name: launchArgv[0], Args: launchArgv[1:]}}, opts, nonNilWriter(streams.Output), nonNilWriter(streams.Error))
 	if err != nil {
 		if ctx.Err() != nil {
 			return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.EffectUnknown}, errors.Join(ctx.Err(), err)
@@ -134,6 +140,79 @@ func externalArgv(argv []string) []string {
 		return argv[2:]
 	}
 	return argv
+}
+
+// externalFields drops the explicit "external --" selector while keeping the
+// remaining Field values and any attached ProcessSubstitution references.
+func externalFields(argv commandprogram.Fields) commandprogram.Fields {
+	if len(argv) >= 2 && argv[0].Value == "external" && argv[1].Value == "--" {
+		return argv[2:]
+	}
+	return argv
+}
+
+// materializeExternalArgv creates one FIFO per distinct ProcessSubstitution
+// referenced in fields and replaces only the FieldPart spans carrying a
+// non-nil Substitution with the corresponding FIFO path. Literal /dev/fd/N
+// strings in ordinary fields remain untouched.
+func materializeExternalArgv(scratchDir string, fields commandprogram.Fields) ([]string, func(), error) {
+	var streams []lycexec.ProcessSubstitutionStream
+	indexBySubst := map[*commandprogram.ProcessSubstitution]int{}
+	for _, field := range fields {
+		for _, part := range field.Parts() {
+			subst := part.Substitution
+			if subst == nil {
+				continue
+			}
+			if _, seen := indexBySubst[subst]; seen {
+				continue
+			}
+			stream := lycexec.ProcessSubstitutionStream{}
+			switch {
+			case subst.IsInput():
+				reader, ok := subst.OpenReader()
+				if !ok {
+					continue
+				}
+				stream.Reader = reader
+			case subst.IsOutput():
+				writer, ok := subst.OpenWriter()
+				if !ok {
+					continue
+				}
+				stream.Writer = writer
+			default:
+				continue
+			}
+			indexBySubst[subst] = len(streams)
+			streams = append(streams, stream)
+		}
+	}
+	if len(streams) == 0 {
+		return fields.Values(), func() {}, nil
+	}
+	fifoPaths, cleanup, err := lycexec.BindProcessSubstitutions(scratchDir, streams)
+	if err != nil {
+		return nil, func() {}, err
+	}
+	argv := make([]string, len(fields))
+	for i, field := range fields {
+		parts := field.Parts()
+		if len(parts) == 0 {
+			argv[i] = field.Value
+			continue
+		}
+		var b strings.Builder
+		for _, part := range parts {
+			if idx, ok := indexBySubst[part.Substitution]; ok {
+				b.WriteString(fifoPaths[idx])
+			} else {
+				b.WriteString(part.Value)
+			}
+		}
+		argv[i] = b.String()
+	}
+	return argv, cleanup, nil
 }
 
 func nonNilWriter(w io.Writer) io.Writer {

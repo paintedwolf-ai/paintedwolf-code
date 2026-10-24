@@ -66,6 +66,12 @@ func cloneCommand(cmd CommandNode) CommandNode {
 	case TestExpression:
 		v.Expression = cloneTest(v.Expression)
 		return v
+	case ArithmeticCommand:
+		v.Expression = cloneArithmetic(v.Expression)
+		return v
+	case TrapCommand:
+		v.Statements = cloneStatements(v.Statements)
+		return v
 	default:
 		return nil
 	}
@@ -82,7 +88,11 @@ func cloneConditional(v Conditional) Conditional {
 func cloneAssignments(src []Assignment) []Assignment {
 	out := append([]Assignment(nil), src...)
 	for i := range out {
+		out[i].Index = cloneArithmetic(out[i].Index)
 		out[i].Value = cloneWord(out[i].Value)
+		if out[i].Array != nil {
+			out[i].Array = cloneWords(out[i].Array)
+		}
 	}
 	return out
 }
@@ -115,6 +125,14 @@ func cloneParts(src []WordNode) []WordNode {
 			p.Expression = cloneArithmetic(p.Expression)
 			out[i] = p
 		case ParameterPart:
+			p.Index = cloneArithmetic(p.Index)
+			if p.Slice != nil {
+				slice := ParameterSlice{
+					Offset: cloneArithmetic(p.Slice.Offset),
+					Length: cloneArithmetic(p.Slice.Length),
+				}
+				p.Slice = &slice
+			}
 			p.Argument, p.Replacement = cloneOptionalWord(p.Argument), cloneOptionalWord(p.Replacement)
 			out[i] = p
 		default:

@@ -8,6 +8,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/commandprogram"
 	nativejq "github.com/lycaon/lycaon/internal/tools/native/jq"
 	"github.com/lycaon/lycaon/internal/tools/safecmd"
 )
@@ -19,11 +20,11 @@ import (
 // a typed refusal (budget, authority) that ends the run.
 type inputs struct {
 	inv      *invocation
-	operands []string
-	// raw yields each line as a string (-R) instead of JSON values; yaml
-	// decodes each operand's YAML documents (gojq --yaml-input, python yq).
-	raw  bool
-	yaml bool
+	operands commandprogram.Fields
+	// yaml decodes each operand's YAML documents (gojq --yaml-input, python yq).
+	yaml      bool
+	yamlDoc   int
+	roundtrip *nativejq.YAMLRoundtrip
 	// events turns each value into its --stream events; nil passes values.
 	events        *nativejq.Program
 	pendingEvents []any
@@ -32,7 +33,6 @@ type inputs struct {
 	// data holds the current operand's bytes read so far, for positions.
 	data   *bytes.Buffer
 	label  string
-	limit  int64
 	stop   error
 	broken bool
 	// openErrors records an operand that could not be read (jq's status 2).
@@ -63,10 +63,18 @@ func (in *inputs) Next() (any, bool) {
 }
 
 func (in *inputs) nextValue() (any, bool) {
+	limit := safecmd.JQCaps().InputBytes
 	for !in.broken && in.stop == nil {
 		if len(in.pending) > 0 {
 			v := in.pending[0]
 			in.pending = in.pending[1:]
+			if in.yaml {
+				in.yamlDoc++
+			}
+			if err := in.inv.step(); err != nil {
+				in.stop = err
+				return nil, false
+			}
 			return v, true
 		}
 		if in.stream != nil {
@@ -79,11 +87,15 @@ func (in *inputs) nextValue() (any, bool) {
 				in.malformed(err)
 				return nil, false
 			}
-			if in.stream.InputOffset() > in.limit {
-				in.stop = safecmd.Reject("JQ_INPUT_TOO_LARGE", map[string]any{"path": in.label, "max_bytes": in.limit})
+			if in.stream.InputOffset() > limit {
+				in.stop = safecmd.Reject("JQ_INPUT_TOO_LARGE", map[string]any{"path": in.label, "max_bytes": limit})
 				return nil, false
 			}
 			if !in.admit(v) {
+				return nil, false
+			}
+			if err := in.inv.step(); err != nil {
+				in.stop = err
 				return nil, false
 			}
 			return v, true
@@ -99,13 +111,15 @@ func (in *inputs) nextValue() (any, bool) {
 }
 
 // open starts one operand: stdin streams; a file is captured and pinned.
-func (in *inputs) open(operand string) {
-	in.label = operand
+func (in *inputs) open(operand commandprogram.Field) {
+	limit := safecmd.JQCaps().InputBytes
+	raw := in.inv.flag("-R")
+	in.label = operand.Value
 	in.data = &bytes.Buffer{}
 	var data io.Reader
-	if operand == "-" {
+	if operand.Value == "-" {
 		in.label = "<stdin>"
-		data = io.TeeReader(io.LimitReader(in.inv.input, in.limit+1), in.data)
+		data = io.TeeReader(io.LimitReader(in.inv.input, limit+1), in.data)
 	} else {
 		captured, err := in.inv.capture(operand)
 		if err != nil {
@@ -119,16 +133,16 @@ func (in *inputs) open(operand string) {
 		in.data.WriteString(captured.text)
 		data = strings.NewReader(captured.text)
 	}
-	if !in.raw && !in.yaml {
+	if !raw && !in.yaml {
 		in.stream = nativejq.NewValueStream(data)
 		return
 	}
-	text, err := in.readAll(data, operand == "-")
+	text, err := in.readAll(data, operand.Value == "-")
 	if err != nil {
 		in.stop = err
 		return
 	}
-	if in.raw {
+	if raw {
 		in.pending = append(in.pending, rawLines(text)...)
 		return
 	}
@@ -146,6 +160,12 @@ func (in *inputs) open(operand string) {
 			return
 		}
 	}
+	if in.inv.flag("-Y") {
+		if in.roundtrip == nil {
+			in.roundtrip = &nativejq.YAMLRoundtrip{}
+		}
+		in.roundtrip.Add(text)
+	}
 	in.pending = append(in.pending, values...)
 }
 
@@ -157,8 +177,9 @@ func (in *inputs) readAll(data io.Reader, stdin bool) (string, error) {
 	if _, err := io.Copy(io.Discard, data); err != nil {
 		return "", err
 	}
-	if int64(in.data.Len()) > in.limit {
-		return "", safecmd.Reject("JQ_INPUT_TOO_LARGE", map[string]any{"path": in.label, "max_bytes": in.limit})
+	limit := safecmd.JQCaps().InputBytes
+	if int64(in.data.Len()) > limit {
+		return "", safecmd.Reject("JQ_INPUT_TOO_LARGE", map[string]any{"path": in.label, "max_bytes": limit})
 	}
 	return in.data.String(), nil
 }
@@ -180,15 +201,16 @@ func rawLines(text string) []any {
 
 // slurpRaw is -R -s: every operand's bytes as one string.
 func (in *inputs) slurpRaw() (string, bool) {
+	limit := safecmd.JQCaps().InputBytes
 	var all strings.Builder
 	for len(in.operands) > 0 && in.stop == nil {
 		operand := in.operands[0]
 		in.operands = in.operands[1:]
-		in.label = operand
+		in.label = operand.Value
 		in.data = &bytes.Buffer{}
-		if operand == "-" {
+		if operand.Value == "-" {
 			in.label = "<stdin>"
-			text, err := in.readAll(io.TeeReader(io.LimitReader(in.inv.input, in.limit+1), in.data), true)
+			text, err := in.readAll(io.TeeReader(io.LimitReader(in.inv.input, limit+1), in.data), true)
 			if err != nil {
 				in.stop = err
 				return "", false
@@ -229,20 +251,29 @@ func (in *inputs) malformed(err error) {
 
 // position is jq's "(at FILE:LINE)" for the value last read: jq reads input
 // a line at a time, so LINE counts every newline through the line where
-// the value ended.
+// the value ended. In python yq, jq reads one JSON document per line from
+// its stdin pipe, so positions are "<stdin>:DOC".
 func (in *inputs) position() string {
 	if in.data == nil {
 		return "<unknown>"
+	}
+	if in.inv.pythonYq() {
+		return fmt.Sprintf("<stdin>:%d", in.yamlDoc)
 	}
 	_, line := in.current()
 	return fmt.Sprintf("%s:%d", in.label, line)
 }
 
 // current is input_filename and input_line_number: the file being read
-// (null for stdin) and the lines read from it so far.
+// ("<stdin>" for stdin; null when no input has been read) and the lines
+// read from it so far. In python yq, jq sees "<stdin>" and the 1-based YAML
+// document index.
 func (in *inputs) current() (any, int) {
 	if in.data == nil {
 		return nil, 0
+	}
+	if in.inv.pythonYq() {
+		return "<stdin>", in.yamlDoc
 	}
 	end := int64(in.data.Len())
 	if in.stream != nil {

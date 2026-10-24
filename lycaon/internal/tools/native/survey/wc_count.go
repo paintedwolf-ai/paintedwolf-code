@@ -2,7 +2,10 @@ package survey
 
 import (
 	"errors"
+	"unicode"
 	"unicode/utf8"
+
+	"github.com/mattn/go-runewidth"
 )
 
 // ErrInvalidEncoding reports bytes that are not UTF-8 where a count needs
@@ -25,13 +28,16 @@ type TextCounts struct {
 	InvalidEncoding bool
 }
 
+var wcDisplayColumns = runewidth.Condition{StrictEmojiNeutral: true}
+
 // Counter accumulates TextCounts over a stream written in any chunking.
 type Counter struct {
-	counts  TextCounts
-	inWord  bool
-	line    int64
-	pending []byte
-	cr      bool
+	counts                  TextCounts
+	inWord                  bool
+	line                    int64
+	pending                 []byte
+	cr                      bool
+	display, longestDisplay int64
 }
 
 // CountBytes counts one complete captured byte sequence.
@@ -76,6 +82,17 @@ func (c *Counter) Write(p []byte) (int, error) {
 
 func (c *Counter) scalar(r rune) {
 	c.counts.Chars++
+	switch r {
+	case '\n', '\r', '\f':
+		c.longestDisplay = max(c.longestDisplay, c.display)
+		c.display = 0
+	case '\t':
+		c.display = (c.display/8 + 1) * 8
+	default:
+		if unicode.IsPrint(r) {
+			c.display += int64(wcDisplayColumns.RuneWidth(r))
+		}
+	}
 	if r == '\n' {
 		c.counts.Lines++
 		length := c.line
@@ -88,6 +105,11 @@ func (c *Counter) scalar(r rune) {
 	}
 	c.line++
 	c.cr = r == '\r'
+}
+
+// DisplayWidth returns wc -L's terminal columns, including eight-column tabs.
+func (c *Counter) DisplayWidth() int64 {
+	return max(c.longestDisplay, c.display)
 }
 
 // Counts returns the totals; a trailing incomplete scalar is invalid encoding.

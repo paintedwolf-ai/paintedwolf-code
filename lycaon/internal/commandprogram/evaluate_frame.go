@@ -12,9 +12,15 @@ import (
 // frameState is what statements sharing one frame observe and mutate: braces,
 // function bodies and sourced units share it; ( ), $( ), pipeline stages and
 // background jobs receive an isolated copy with their own status control.
+type declaredFunction struct {
+	decl       commandsurface.FunctionDeclaration
+	unit       string
+	sourceUnit string
+}
+
 type frameState struct {
 	vars      *Variables
-	functions map[string]commandsurface.FunctionDeclaration
+	functions map[string]declaredFunction
 	latch     *OutcomeLatch
 	control   *StatusControl
 	dispatch  Dispatch
@@ -25,6 +31,7 @@ type frameState struct {
 	last       *ChildRecord
 	pipeStatus []int
 	options    shellOptions
+	exitTrap   []commandsurface.Statement
 }
 
 // shellOptions are the fixed set options: errexit and nounset. Pipelines
@@ -43,9 +50,11 @@ type frame struct {
 	positional []string
 	// prefix holds a function call's NAME=value prefixes: visible to the body
 	// and exported to its dispatches, never stored in the caller's frame.
-	prefix     map[string]string
-	substs     *substitutionStatus
-	loops      int
+	prefix       map[string]string
+	substs       *substitutionStatus
+	procSubst    *procSubstScope
+	producerPipe *BytePipe
+	loops        int
 	functions  int
 	sources    int
 	returnable bool
@@ -101,7 +110,7 @@ func (e *evaluation) rootFrame(ctx context.Context) (*frame, func(), error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	state := &frameState{vars: vars, functions: map[string]commandsurface.FunctionDeclaration{}, latch: latch, control: control, dispatch: e.ports.Dispatch}
+	state := &frameState{vars: vars, functions: map[string]declaredFunction{}, latch: latch, control: control, dispatch: e.ports.Dispatch}
 	f := &frame{e: e, state: state, parent: e.ports.Invocation, unit: e.programName, streams: e.ports.Streams.withDefaults(), publish: newEligibility()}
 	return f, vars.Close, nil
 }
@@ -116,12 +125,14 @@ func (f *frame) isolate(ctx context.Context, latch *OutcomeLatch) (*frame, func(
 	if err != nil {
 		return nil, nil, err
 	}
+	control.status = f.state.control.Status()
 	vars, err := f.state.vars.Clone(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
 	for name, value := range f.prefix {
-		if err := vars.Assign(ctx, name, value); err == nil {
+		err = vars.Assign(ctx, name, value)
+		if err == nil {
 			err = vars.Export(ctx, name)
 		}
 		if err != nil {
@@ -134,13 +145,13 @@ func (f *frame) isolate(ctx context.Context, latch *OutcomeLatch) (*frame, func(
 		vars.Close()
 		return nil, nil, err
 	}
-	functions := make(map[string]commandsurface.FunctionDeclaration, len(f.state.functions))
+	functions := make(map[string]declaredFunction, len(f.state.functions))
 	for name, decl := range f.state.functions {
 		functions[name] = decl
 	}
 	g := *f
 	g.state = &frameState{vars: vars, functions: functions, latch: latch, control: control, dispatch: dispatch, lastJob: f.state.lastJob, hasJob: f.state.hasJob, pipeStatus: append([]int(nil), f.state.pipeStatus...), options: f.state.options}
-	g.publish, g.prefix, g.substs = newEligibility(), nil, nil
+	g.publish, g.prefix, g.substs, g.procSubst, g.producerPipe = newEligibility(), nil, nil, nil, nil
 	return &g, func() { releaseDispatch(); vars.Close() }, nil
 }
 
@@ -154,11 +165,11 @@ func (f *frame) Variable(name string) (string, bool) {
 }
 func (f *frame) ProgramName() string  { return f.unit }
 func (f *frame) Nounset() bool        { return f.state.options.nounset }
-func (f *frame) Positional() []string { return append([]string(nil), f.positional...) }
+func (f *frame) Positional() []string { return f.positional }
 func (f *frame) LastStatus() int      { return f.state.control.Status() }
 func (f *frame) PipeStatus() []int {
 	if len(f.state.pipeStatus) > 0 {
-		return append([]int(nil), f.state.pipeStatus...)
+		return f.state.pipeStatus
 	}
 	return []int{f.state.control.Status()}
 }
@@ -169,7 +180,12 @@ func (f *frame) LastBackground() (string, bool) {
 // environment is the exported NAME=value list for one dispatch, with this
 // frame's function prefixes and the statement's own prefixes applied to that
 // dispatch only.
-func (f *frame) environment(prefix []assignment) ([]string, error) {
+func (f *frame) environment(ctx context.Context, prefix []assignment) ([]string, func(), error) {
+	release, err := f.e.ports.Memory.Reserve(ctx, int64(len(f.prefix)+len(prefix))*64)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer release()
 	overrides := make(map[string]string, len(f.prefix)+len(prefix))
 	for name, value := range f.prefix {
 		overrides[name] = value
@@ -177,12 +193,17 @@ func (f *frame) environment(prefix []assignment) ([]string, error) {
 	for _, a := range prefix {
 		overrides[a.name] = a.value
 	}
-	return f.state.vars.Environment(overrides)
+	return f.state.vars.Environment(ctx, overrides)
 }
 
 type assignment struct {
 	loc         commandsurface.SyntaxLocation
 	name, value string
+	index       int64
+	hasIndex    bool
+	appendMode  bool
+	array       bool
+	items       []string
 }
 
 // syncWriter serializes concurrent stage writes to one shared stream.
