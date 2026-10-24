@@ -927,6 +927,11 @@ combines up to four consecutive waiting entries in their existing priority
 order. Campaign exclusions live in `.github/queue-batching.json`; Linux and
 portable-command work are held. No opt-in label or routine approval is needed.
 
+PRs changing `.github/workflows/` remain individual because the Actions token
+cannot push workflow changes. The controller checks both source file inventories
+and the combined tree before pushing or withdrawing originals. These PRs retain
+their normal testing and merge eligibility.
+
 `no-combine` is an optional escape hatch: the controller keeps the PR on its
 individual testing and merge path and dissolves any batch containing it. It does
 not disable the original PR’s auto-merge. The existing queue admission remains
