@@ -23,6 +23,7 @@ class WorkspaceTests(unittest.TestCase):
                    'parent_session_id': None}
         with patch.object(profile_setup, 'project_for_owned_root', return_value={'project_id': 'project'}), patch.object(
                 profile_setup, 'fixture_selection', return_value={'model_policy_sha256': 'a' * 64}), patch.object(
+                profile_setup, 'renderer_session', return_value={'observer': 'owned-app-state-JSON', 'session_id': 'session', 'status': 'idle'}), patch.object(
                 profile_setup, 'sessions_for_project', return_value=[session]) as observed:
             active = owner.require_active(None, None, 'fixture', owner.MODEL)
             self.assertEqual(active['id'], 'session')
