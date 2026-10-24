@@ -220,8 +220,24 @@ func TestMovedAsideReclamationByHistoryAgeAndAcrossRestart(t *testing.T) {
 	if _, err := os.Stat(agedSlot); !os.IsNotExist(err) {
 		t.Fatalf("expected aged slot to be reclaimed after falling out of 100-op history, stat err=%v", err)
 	}
+	_, err = service.Undo(t.Context(), "undo-after-age-reclaim", project, SourceHistoryMutationRequest{ExpectedEntryID: agedID})
+	if !errors.Is(err, ErrSourceTrashUnavailable) {
+		t.Fatalf("expected ErrSourceTrashUnavailable after history-age reclamation, got %v", err)
+	}
 
-	// 2. Verify budget reclamation survives restart and reports unavailable on Undo.
+	// Verify history-age reclamation across a restart when a slot was not yet deleted before shutdown.
+	testutil.FailErr(t, "seed aged-restart file", os.WriteFile(filepath.Join(root, "aged-restart.txt"), []byte("aged-restart"), 0o600))
+	agedRestartID, err := service.RemoveEntry(t.Context(), agentRemoval(t, project, "aged-restart.txt", ""))
+	testutil.FailErr(t, "remove aged-restart file", err)
+	testutil.FailErr(t, "wait aged-restart measurement", service.WaitReclamation(t.Context()))
+	agedRestartSlot := filepath.Join(settingsoverlay.RecoveryDir(root), recoverySlotName(agedRestartID))
+	if _, err := os.Stat(agedRestartSlot); err != nil {
+		t.Fatalf("expected aged-restart slot before history eviction: %v", err)
+	}
+	_, err = service.History.db.ExecContext(t.Context(), `DELETE FROM source_history_entries WHERE id=?`, agedRestartID)
+	testutil.FailErr(t, "simulate history-age eviction before restart", err)
+
+	// 2. Verify both history-age and budget reclamation survive restart and report unavailable on Undo.
 	testutil.FailErr(t, "seed restart tree", os.Mkdir(filepath.Join(root, "restart-tree"), 0o750))
 	testutil.FailErr(t, "seed restart file", os.WriteFile(filepath.Join(root, "restart-tree", "f.txt"), []byte("restart"), 0o600))
 	restartID, err := service.RemoveEntry(t.Context(), func() sourceeffect.Removal {
@@ -240,12 +256,55 @@ func TestMovedAsideReclamationByHistoryAgeAndAcrossRestart(t *testing.T) {
 	t.Cleanup(func() { testutil.FailErr(t, "close restarted service", restarted.Close()) })
 	restarted.History.SetRecoveryQuotaBytes(1)
 	testutil.FailErr(t, "recover restarted service", restarted.Recover(t.Context()))
-	if _, err := os.Stat(restartSlot); !os.IsNotExist(err) {
-		t.Fatalf("expected restart slot to be reclaimed on Recover, stat err=%v", err)
+	for label, slot := range map[string]string{"aged-restart": agedRestartSlot, "budget-restart": restartSlot} {
+		if _, err := os.Stat(slot); !os.IsNotExist(err) {
+			t.Fatalf("expected %s slot to be reclaimed on Recover, stat err=%v", label, err)
+		}
 	}
-	_, err = restarted.Undo(t.Context(), "undo-after-restart-reclaim", project, SourceHistoryMutationRequest{ExpectedEntryID: restartID})
-	if !errors.Is(err, ErrSourceTrashUnavailable) {
-		t.Fatalf("expected ErrSourceTrashUnavailable after restart reclamation, got %v", err)
+	for label, id := range map[string]string{"aged-restart": agedRestartID, "budget-restart": restartID} {
+		_, err = restarted.Undo(t.Context(), "undo-"+label, project, SourceHistoryMutationRequest{ExpectedEntryID: id})
+		if !errors.Is(err, ErrSourceTrashUnavailable) {
+			t.Fatalf("expected ErrSourceTrashUnavailable for %s after restart reclamation, got %v", label, err)
+		}
+	}
+
+	// 3. Directory names never affect reclamation order: node_modules and src are treated identically (oldest first).
+	for _, order := range [][2]string{{"src", "node_modules"}, {"node_modules", "src"}} {
+		t.Run(order[0]+"_then_"+order[1], func(t *testing.T) {
+			svc, proj, dirRoot, _ := sourceMutationFixture(t)
+			t.Cleanup(func() { testutil.FailErr(t, "close dir-order service", svc.Close()) })
+			for _, name := range order {
+				testutil.FailErr(t, "seed "+name, os.Mkdir(filepath.Join(dirRoot, name), 0o750))
+				testutil.FailErr(t, "seed "+name+" file", os.WriteFile(filepath.Join(dirRoot, name, "index.js"), []byte("same-bytes"), 0o600))
+			}
+			_, measured, err := measureRemovalMetadata(t.Context(), filepath.Join(dirRoot, order[0]), testSourceOperationMemory(t))
+			testutil.FailErr(t, "measure dir allocation", err)
+			svc.History.SetRecoveryQuotaBytes(measured.AllocatedBytes)
+
+			var ids [2]string
+			for i, name := range order {
+				r := agentRemoval(t, proj, name, "")
+				r.Recursive = true
+				id, err := svc.RemoveEntry(t.Context(), r)
+				testutil.FailErr(t, "remove "+name, err)
+				ids[i] = id
+			}
+			testutil.FailErr(t, "wait reclamation", svc.WaitReclamation(t.Context()))
+			olderSlot := filepath.Join(settingsoverlay.RecoveryDir(dirRoot), recoverySlotName(ids[0]))
+			newerSlot := filepath.Join(settingsoverlay.RecoveryDir(dirRoot), recoverySlotName(ids[1]))
+			if _, err := os.Stat(olderSlot); !os.IsNotExist(err) {
+				t.Fatalf("older directory %q should be reclaimed first regardless of name, stat err=%v", order[0], err)
+			}
+			if _, err := os.Stat(newerSlot); err != nil {
+				t.Fatalf("newer directory %q should remain retained regardless of name, stat err=%v", order[1], err)
+			}
+			undoHistoryHead(t, svc, proj, ids[1])
+			assertSourceHistoryFile(t, dirRoot, filepath.Join(order[1], "index.js"), "same-bytes")
+			_, err = svc.Undo(t.Context(), "undo-older-"+order[0], proj, SourceHistoryMutationRequest{ExpectedEntryID: ids[0]})
+			if !errors.Is(err, ErrSourceTrashUnavailable) {
+				t.Fatalf("expected ErrSourceTrashUnavailable for reclaimed older directory %q, got %v", order[0], err)
+			}
+		})
 	}
 }
 
