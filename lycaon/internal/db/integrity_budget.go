@@ -19,7 +19,9 @@ func auditFrameBudget(ctx context.Context, store *Store) (uint64, error) {
 	}
 	free, known, err := auditAvailableBytes(filepath.Dir(store.health.path))
 	if err != nil {
-		return 0, err
+		// Capacity is advisory; an unavailable filesystem statistic must not
+		// prevent verification. Checkpoint failures still interrupt the attempt.
+		known = false
 	}
 	return auditBudgetFrames(free, known, pageSize), nil
 }

@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -130,4 +131,18 @@ func TestAuditStopsWhenPressureObservationFails(t *testing.T) {
 	if store.Failure() != nil {
 		t.Fatalf("observation failure quarantined store: %v", store.Failure())
 	}
+}
+
+func TestAuditCapacityFailureUsesUnknownBudget(t *testing.T) {
+	_, store := uncleanAuditStore(t)
+	// The open database remains usable while its capacity lookup fails.
+	store.health.path = filepath.Join(t.TempDir(), "missing", "store.db")
+	budget, err := auditFrameBudget(t.Context(), store)
+	testutil.FailErr(t, "budget without filesystem statistics", err)
+	var page uint64
+	testutil.FailErr(t, "read page size", store.reader.QueryRow("PRAGMA page_size").Scan(&page))
+	if budget != auditUnknownCapacityBytes/(page+24) {
+		t.Fatalf("unknown capacity budget = %d", budget)
+	}
+	testutil.FailErr(t, "complete audit without filesystem statistics", AuditIntegrity(t.Context(), store))
 }
