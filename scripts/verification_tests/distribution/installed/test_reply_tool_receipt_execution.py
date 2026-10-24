@@ -116,3 +116,11 @@ class ReplyToolReceiptTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.observe(result, tool='page_open', target='page_open',
                 during=lambda db: db.execute("UPDATE messages SET tool_result_json='{}'"))
+
+    def test_page_evidence_retains_only_the_closed_live_page_fields(self):
+        document = {'id': 'page_owned', 'live_pages': ['page_owned'], 'max_pages': 4,
+                    'final_url': 'PRIVATE URL', 'unknown': 'PRIVATE EXTRA'}
+        found = self.observe(self.fixture('page_open', target='page_open'), tool='page_open', target='page_open',
+            body=json.dumps([json.dumps(document)]).encode())
+        self.assertEqual(found['payload'], {key: document[key] for key in ('id', 'live_pages', 'max_pages')})
+        self.assertNotIn('PRIVATE', json.dumps(found))
