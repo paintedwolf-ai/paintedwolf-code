@@ -10,6 +10,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from linux_release.installed_cases import profile_observer as observer
+from linux_release.installed_cases.reply_observer import TERMINAL_COLUMNS
 
 PROJECT = '10000000-0000-4000-8000-000000000001'
 ROOT = '10000000-0000-4000-8000-000000000002'
@@ -31,7 +32,7 @@ class ProfileObserverTests(unittest.TestCase):
         self.writer.executescript('''PRAGMA journal_mode=WAL; PRAGMA user_version=4;
           CREATE TABLE projects(id TEXT);
           CREATE TABLE project_roots(id TEXT,project_id TEXT,path TEXT);
-          CREATE TABLE sessions(id TEXT,project_id TEXT,status TEXT,provider_id TEXT,model TEXT);
+          CREATE TABLE sessions(id TEXT,project_id TEXT,status TEXT,provider_id TEXT,model TEXT,parent_session_id TEXT);
           CREATE TABLE messages(id TEXT,session_id TEXT,role TEXT,tool_result_json TEXT,content TEXT);''')
         self.path.chmod(0o600)
         for suffix in ('-wal', '-shm'):
@@ -40,7 +41,7 @@ class ProfileObserverTests(unittest.TestCase):
         self.fixture.mkdir()
         self.writer.execute('INSERT INTO projects VALUES(?)', (PROJECT,))
         self.writer.execute('INSERT INTO project_roots VALUES(?,?,?)', (ROOT, PROJECT, str(self.fixture)))
-        self.writer.execute('INSERT INTO sessions VALUES(?,?,?,?,?)', (SESSION, PROJECT, 'idle', 'fixture-provider', 'fixture-model'))
+        self.writer.execute('INSERT INTO sessions VALUES(?,?,?,?,?,?)', (SESSION, PROJECT, 'idle', 'fixture-provider', 'fixture-model', None))
         self.writer.execute('INSERT INTO messages VALUES(?,?,?,?,?)', (MESSAGE, SESSION, 'tool',
             json.dumps({'tool_call_id': 'fixed-command-1', 'tool': 'command', 'outcome': 'completed',
                         'content': 'SECRET RESULT', 'tool_args': {'secret': 'SECRET ARG'}}), 'SECRET PROMPT'))
@@ -54,12 +55,60 @@ class ProfileObserverTests(unittest.TestCase):
     def test_live_wal_commit_is_visible_without_copy_checkpoint_or_payload_retention(self):
         self.assertEqual(observer.project_for_owned_root(self.app, self.fixture), {'project_id': PROJECT, 'root_id': ROOT})
         self.assertEqual(observer.sessions_for_project(self.app, PROJECT), [{'id': SESSION, 'status': 'idle',
-            'provider_id': 'fixture-provider', 'model': 'fixture-model'}])
+            'provider_id': 'fixture-provider', 'model': 'fixture-model', 'parent_session_id': None}])
         found = observer.invocations(self.app, SESSION, ['command'])
         self.assertEqual(found, [{'message_id': MESSAGE, 'tool_call_id': 'fixed-command-1', 'tool': 'command', 'outcome': 'completed'}])
         self.assertNotIn('SECRET', json.dumps(found))
         self.assertEqual(self.writer.execute('PRAGMA journal_mode').fetchone(), ('wal',))
         self.app.require_engine.assert_called()
+
+    def test_session_parent_is_an_explicit_canonical_identity(self):
+        self.writer.execute('UPDATE sessions SET parent_session_id=?', (MESSAGE,))
+        self.writer.commit()
+        self.assertEqual(observer.sessions_for_project(self.app, PROJECT)[0]['parent_session_id'], MESSAGE)
+        self.writer.execute("UPDATE sessions SET parent_session_id='not-a-session-id'")
+        self.writer.commit()
+        with self.assertRaises(ValueError):
+            observer.sessions_for_project(self.app, PROJECT)
+
+    def test_purpose_columns_require_actual_tables_and_exact_declared_types(self):
+        required = {**TERMINAL_COLUMNS, 'project_roots': {'is_primary': 'INTEGER', 'kind': 'TEXT'}}
+        for table, fields in required.items():
+            if table in {'sessions', 'project_roots'}:
+                existing = {row[1] for row in self.writer.execute('PRAGMA table_xinfo(' + table + ')')}
+                for name, kind in fields.items():
+                    if name not in existing:
+                        self.writer.execute('ALTER TABLE ' + table + ' ADD COLUMN ' + name + ' ' + kind)
+            else:
+                self.writer.execute('CREATE TABLE ' + table + '(' + ','.join(
+                    name + ' ' + kind for name, kind in fields.items()) + ')')
+        self.writer.commit()
+        with observer._database(self.app, required=required):
+            pass
+        self.writer.execute('ALTER TABLE turns RENAME TO held_turns')
+        self.writer.execute('CREATE VIEW turns AS SELECT * FROM held_turns')
+        self.writer.commit()
+        with self.assertRaisesRegex(ValueError, 'physical tables'):
+            with observer._database(self.app, required=required):
+                pass
+        self.writer.execute('DROP VIEW turns')
+        self.writer.execute('ALTER TABLE held_turns RENAME TO turns')
+        self.writer.commit()
+        for table, column in (('turn_attempts', 'phase'), ('sessions', 'parent_session_id'),
+                              ('project_roots', 'is_primary')):
+            original = dict(observer.COLUMNS.get(table, {}))
+            original.update(required.get(table, {}))
+            wrong = {**original, column: 'INTEGER' if original[column] == 'TEXT' else 'TEXT'}
+            self.writer.execute('ALTER TABLE ' + table + ' RENAME TO held_table')
+            self.writer.execute('CREATE TABLE ' + table + '(' + ','.join(
+                name + ' ' + kind for name, kind in wrong.items()) + ')')
+            self.writer.commit()
+            with self.subTest(table=table), self.assertRaisesRegex(ValueError, 'column contract'):
+                with observer._database(self.app, required=required):
+                    pass
+            self.writer.execute('DROP TABLE ' + table)
+            self.writer.execute('ALTER TABLE held_table RENAME TO ' + table)
+            self.writer.commit()
 
     def test_read_connection_refuses_database_mutation(self):
         with observer._database(self.app) as connection:
@@ -142,8 +191,8 @@ class ProfileObserverTests(unittest.TestCase):
             self.writer.commit()
 
     def test_row_overflow_and_undeclared_tools_fail_closed(self):
-        self.writer.executemany('INSERT INTO sessions VALUES(?,?,?,?,?)',
-            [(str(__import__('uuid').uuid4()), PROJECT, 'idle', None, None) for _ in range(256)])
+        self.writer.executemany('INSERT INTO sessions VALUES(?,?,?,?,?,?)',
+            [(str(__import__('uuid').uuid4()), PROJECT, 'idle', None, None, None) for _ in range(256)])
         self.writer.commit()
         with self.assertRaises(ValueError):
             observer.sessions_for_project(self.app, PROJECT)

@@ -10,18 +10,15 @@ from .fixture_content import read_object
 from .browser_result import opened
 
 
+PAGE_COLUMNS = {
+    'messages': {'evidence_handles_json': 'TEXT'},
+    'evidence_records': {**{name: 'TEXT' for name in ('project_id', 'session_id', 'handle',
+        'kind', 'shape', 'fidelity', 'source_tool', 'superseded_by', 'content_blob_sha256')}, 'truncated': 'INTEGER'},
+    'content_blob_objects': {'project_id': 'TEXT', 'sha256': 'TEXT', 'byte_size': 'INTEGER', 'stored_size': 'INTEGER'},
+}
+
+
 def page_record(connection, project_id, session_id, message_id, result):
-    required = {
-        'messages': {'evidence_handles_json': 'TEXT'},
-        'evidence_records': {**{name: 'TEXT' for name in ('project_id', 'session_id', 'handle',
-            'kind', 'shape', 'fidelity', 'source_tool', 'superseded_by', 'content_blob_sha256')}, 'truncated': 'INTEGER'},
-        'content_blob_objects': {'project_id': 'TEXT', 'sha256': 'TEXT', 'byte_size': 'INTEGER', 'stored_size': 'INTEGER'},
-    }
-    for table, columns in required.items():
-        schema = connection.execute('SELECT type FROM sqlite_schema WHERE name=?', (table,)).fetchone()
-        observed = {row[1]: row[2] for row in connection.execute('PRAGMA table_xinfo(' + table + ')')}
-        if schema != ('table',) or any(observed.get(name) != kind for name, kind in columns.items()):
-            raise ValueError('page evidence differs from its declared physical table contract')
     message = connection.execute('SELECT CASE WHEN length(CAST(tool_result_json AS BLOB))<=32768 THEN tool_result_json ELSE NULL END,'
         'length(CAST(evidence_handles_json AS BLOB)),'
         'CASE WHEN length(CAST(evidence_handles_json AS BLOB))<=1024 THEN evidence_handles_json ELSE NULL END '
@@ -81,7 +78,7 @@ def committed_fixture_tool(app, project_id, session_id, tool, call_id, *, target
     if tool == 'request_tools':
         loaded_tool(object_json(content), target)
     elif tool == 'page_open':
-        with _database(app) as connection:
+        with _database(app, required=PAGE_COLUMNS) as connection:
             result = connection.execute('SELECT CASE WHEN length(CAST(tool_result_json AS BLOB))<=32768 '
                 'THEN tool_result_json ELSE NULL END FROM messages WHERE id=? AND session_id=?',
                 (message_id, session_id)).fetchone()
@@ -104,7 +101,7 @@ def committed_fixture_tool(app, project_id, session_id, tool, call_id, *, target
             raise ValueError('page evidence body differs from its original single result')
         document = object_json(body[0])
         payload = {key: document.get(key) for key in ('id', 'live_pages', 'max_pages')}
-        with _database(app) as connection:
+        with _database(app, required=PAGE_COLUMNS) as connection:
             if page_record(connection, project_id, session_id, message_id, result) != record:
                 raise ValueError('page evidence metadata changed during physical observation')
     result = {'message_id': identifier(message_id), 'invocation_id': identifier(receipt_id),

@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import patch
 
 from linux_release.installed_cases import fixture_receipt as owner
+from linux_release.installed_cases.profile_observer import schema
 
 SESSION = '10000000-0000-4000-8000-000000000001'
 MESSAGE = '10000000-0000-4000-8000-000000000002'
@@ -25,11 +26,12 @@ class ReplyToolReceiptTests(unittest.TestCase):
 
     def observe(self, result, *, tool='request_tools', target='command', duplicate=False, mutate=None, body=None, during=None):
         with sqlite3.connect(':memory:') as database:
-            database.executescript('CREATE TABLE messages(id TEXT,session_id TEXT,role TEXT,tool_result_json TEXT,evidence_handles_json TEXT); '
-                'CREATE TABLE sessions(id TEXT,project_id TEXT); '
+            database.executescript('PRAGMA user_version=4; CREATE TABLE projects(id TEXT); '
+                'CREATE TABLE project_roots(id TEXT,project_id TEXT,path TEXT); CREATE TABLE messages(id TEXT,session_id TEXT,role TEXT,tool_result_json TEXT,evidence_handles_json TEXT); '
+                'CREATE TABLE sessions(id TEXT,project_id TEXT,status TEXT,provider_id TEXT,model TEXT); '
                 'CREATE TABLE evidence_records(project_id TEXT,session_id TEXT,handle TEXT,kind TEXT,shape TEXT,fidelity TEXT,source_tool TEXT,truncated INTEGER,superseded_by TEXT,content_blob_sha256 TEXT); '
                 'CREATE TABLE content_blob_objects(project_id TEXT,sha256 TEXT,byte_size INTEGER,stored_size INTEGER);')
-            database.execute('INSERT INTO sessions VALUES(?,?)', (SESSION, PROJECT))
+            database.execute('INSERT INTO sessions(id,project_id) VALUES(?,?)', (SESSION, PROJECT))
             database.execute('INSERT INTO evidence_records VALUES(?,?,?,?,?,?,?,?,?,?)',
                 (PROJECT, SESSION, 'page#1', 'page', 'surface_snapshot', 'structured', 'page_open', 0, None, 'a'*64))
             database.execute('INSERT INTO content_blob_objects VALUES(?,?,?,?)', (PROJECT, 'a'*64, 100, 50))
@@ -44,7 +46,10 @@ class ReplyToolReceiptTests(unittest.TestCase):
                 if during is not None:
                     during(database)
                 return body if body is not None else json.dumps([json.dumps({'id': 'page_owned', 'live_pages': ['page_owned'], 'max_pages': 4})]).encode()
-            with patch.object(owner, '_database', return_value=nullcontext(database)), patch.object(
+            def selected_database(app, *, required=None):
+                schema(database, required)
+                return nullcontext(database)
+            with patch.object(owner, '_database', side_effect=selected_database), patch.object(
                     owner, 'read_object', side_effect=read):
                 return owner.committed_fixture_tool(None, PROJECT, SESSION, tool, 'call_1234abcd' if tool == 'request_tools' else 'call_abcd1234', target=target)
 
@@ -102,6 +107,7 @@ class ReplyToolReceiptTests(unittest.TestCase):
             ("UPDATE evidence_records SET superseded_by=?", ('page#2',)),
             ("UPDATE evidence_records SET shape=?", ('command',)),
             ("DELETE FROM content_blob_objects", ()),
+            ("ALTER TABLE evidence_records RENAME COLUMN source_tool TO foreign_field", ()),
         ]
         result = self.fixture('page_open', target='page_open')
         for query, args in changes:

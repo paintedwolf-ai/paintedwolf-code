@@ -210,6 +210,22 @@ class InstalledOnboardingTests(unittest.TestCase):
             field.editor.setTextContents.assert_not_called()
         button.action.doAction.assert_not_called()
 
+    def test_nullable_child_refuses_even_a_partial_form_and_pins_its_owner(self):
+        window, fields, button = form()
+        window.children.insert(0, None)
+        application = Node(0, children=[window])
+        application.get_process_id = lambda: 123
+        api = SimpleNamespace(**vars(API), Registry=SimpleNamespace(getDesktop=lambda index: Node(0, children=[application])))
+        with patch.object(onboarding, 'owned_process', return_value=True):
+            with self.assertRaises(onboarding._InventoryChanged) as changed:
+                onboarding.form(api, SimpleNamespace())
+        self.assertEqual(changed.exception.identity, IDENTITY)
+        self.assertEqual(changed.exception.counts, {'visited': 5, 'depth': 1, 'child_count': -1})
+        for field in fields:
+            field.editor.setTextContents.assert_not_called()
+        button.action.doAction.assert_not_called()
+        self.assertIsNone(onboarding._password)
+
     def test_invalidated_inventory_passively_retries_only_the_same_owned_process(self):
         for owned in (True, False):
             with self.subTest(owned=owned):
