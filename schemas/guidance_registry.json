@@ -2099,10 +2099,10 @@
       "summary": "The structured execution capability request was invalid{% if paintedwolf.rejection_reason %} — {{ paintedwolf.rejection_reason }}{% endif %}{% if paintedwolf.rejection_field %} (field {{ paintedwolf.rejection_field }}){% endif %}{% if paintedwolf.capability %} ({{ paintedwolf.capability }}){% endif %}."
     },
     "SANDBOX_CONTROL_PLANE_DENIED": {
-      "branch_instruction": "Branch on Code; do not retry access to the host control plane with this or any other tool or capability, including host_execution",
+      "branch_instruction": "Continue without this path. Ask the person to export needed content or change the app settings.",
       "category": "control-plane",
       "emit": "guard:sandbox_control_plane",
-      "summary": "{{ paintedwolf.path }} is part of the agent host's control plane."
+      "summary": "This operation would reach the app's own state through {{ paintedwolf.path }}."
     },
     "SANDBOX_DIRECT_IP_AUTHORIZATION_CHANGED": {
       "branch_instruction": "Branch on Code; re-request direct network access for this action",

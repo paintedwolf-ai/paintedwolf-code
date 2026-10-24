@@ -10,7 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-func TestWriteRootsForProjectMatchesBuildSeatbeltProfile(t *testing.T) {
+func TestWriteRootsForBoundaryMatchesBuildSeatbeltProfile(t *testing.T) {
 	proj := t.TempDir()
 	t.Setenv("LYCAON_SANDBOX_WRITE_ROOTS", "/opt/customcache-1451")
 	roots, err := confine.WriteRootsForBoundary("", []string{proj}, nil, "")
