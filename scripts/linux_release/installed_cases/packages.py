@@ -6,7 +6,8 @@ from pathlib import Path
 
 from ..installed_runtime import bind
 from .package_payload import inspect
-from .package_native import command, current_package, operations, owner_commands
+from .native_command import command
+from .package_native import current_package, operations, owner_commands
 from .products import require_owned_guest
 from .records import CaseUnavailable, retain
 from .native_workflows import native_lock

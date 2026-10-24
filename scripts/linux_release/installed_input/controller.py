@@ -10,7 +10,7 @@ import subprocess
 import threading
 import time
 
-from . import protocol, surface_wire
+from . import protocol, session_wire, surface_wire
 from .mailbox import decode
 from .qemu import open_lease
 
@@ -151,7 +151,8 @@ def verify_deliveries(directory, execution, selected):
             row = rows[offset]
             offset += 1
             surface = operation in surface_wire.OPERATIONS
-            after_key = 'surface_after' if surface else 'focus_after'
+            session = operation in session_wire.OPERATIONS
+            after_key = 'surface_after' if surface else 'native_session_after' if session else 'focus_after'
             if set(row) != {'request', 'acknowledgment'} or set(event) != {'request', 'delivery', after_key}:
                 raise ValueError('native input retained delivery has an unknown shape')
             pending = protocol.request(row['request'], execution)
@@ -166,6 +167,11 @@ def verify_deliveries(directory, execution, selected):
                 if record['completed'] and ordinal == len(events) - 1 and not surface_wire.finished(
                         operation, events[0]['request']['surface'], event['surface_after']):
                     raise ValueError('native input has no observed declared surface transition')
+            elif session:
+                session_wire.same_runtime(pending['native_session'], event['native_session_after'])
+                if record['completed'] and ordinal == len(events) - 1 and not session_wire.finished(
+                        operation, events[0]['request']['native_session'], event['native_session_after']):
+                    raise ValueError('native input has no observed declared session transition')
             elif event['focus_after'] != pending['focus']:
                 raise ValueError('native input host and guest focus differ')
 
