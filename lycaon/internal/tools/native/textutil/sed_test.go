@@ -3,6 +3,10 @@
 package textutil
 
 import (
+	"bytes"
+	"context"
+	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,6 +15,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/textsearch"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 )
@@ -155,6 +160,10 @@ func TestSedGNUForms(t *testing.T) {
 		if err != nil || prepared.Mode != mode {
 			t.Fatalf("%s mode %q, %v; want %q", source, prepared.Mode, err, mode)
 		}
+		prepared.Close()
+		if h.memory.InUse().Working != 0 {
+			t.Fatalf("%s retained working memory after Close: %+v", source, h.memory.InUse())
+		}
 	}
 }
 
@@ -291,5 +300,131 @@ func TestSedInPlaceRecordRefusalPreservesEarlierPublishedEffect(t *testing.T) {
 	}
 	if held := h.memory.InUse(); held != (toolcontract.ProgramMemoryUsage{}) {
 		t.Fatalf("leases remain %+v", held)
+	}
+}
+
+type countingPosixEngine struct {
+	PosixRegexEngine
+	compiles int
+}
+
+func (c *countingPosixEngine) Compile(ctx context.Context, pattern string, extended bool) (textsearch.PosixRegex, error) {
+	c.compiles++
+	return c.PosixRegexEngine.Compile(ctx, pattern, extended)
+}
+
+func (c *countingPosixEngine) CompileFolded(ctx context.Context, pattern string, extended bool) (textsearch.PosixRegex, error) {
+	c.compiles++
+	return c.PosixRegexEngine.CompileFolded(ctx, pattern, extended)
+}
+
+func TestSedPreparedOwnerParsesInlineOnceAndPropagatesResourceRefusals(t *testing.T) {
+	h := sedHarness(t)
+	counter := &countingPosixEngine{PosixRegexEngine: h.owners.Regex}
+	h.owners.Regex = counter
+	h.seed("f", "alpha\n")
+	h.seed("g", "alpha\n")
+
+	for _, tc := range []struct {
+		source, wantMode, wantOut string
+	}{
+		{"sed s/alpha/beta/", "stream-script", "beta\n"},
+		{"sed -e s/alpha/beta/", "stream-script", "beta\n"},
+		{"sed 's/alpha/beta/w written'", "w-command", "beta\n"},
+		{"sed -i s/alpha/beta/ f g", "-i", ""},
+		{"sed -i .bak s/alpha/gamma/ f", "-i", ""},
+	} {
+		counter.compiles = 0
+		request, release := h.bind(tc.source)
+		prepared, err := h.owners.Prepare(t.Context(), request)
+		testutil.FailErr(t, "prepare "+tc.source, err)
+		if prepared.Mode != tc.wantMode || counter.compiles != 1 || h.memory.InUse().Working == 0 {
+			t.Fatalf("%s after Prepare: mode=%q compiles=%d working=%d", tc.source, prepared.Mode, counter.compiles, h.memory.InUse().Working)
+		}
+		var stdout, stderr bytes.Buffer
+		result, err := prepared.InvokeOwner(t.Context(), h.ports(), commandprogram.Streams{Input: io.NopCloser(strings.NewReader("alpha\n")), Output: &stdout, Error: &stderr})
+		testutil.FailErr(t, "invoke "+tc.source, err)
+		if result.Status != 0 || stdout.String() != tc.wantOut || counter.compiles != 1 {
+			t.Fatalf("%s after InvokeOwner: result=%+v stdout=%q compiles=%d", tc.source, result, stdout.String(), counter.compiles)
+		}
+		release()
+		if h.memory.InUse().Working != 0 {
+			t.Fatalf("%s retained working memory: %+v", tc.source, h.memory.InUse())
+		}
+	}
+
+	// Resource refusal during Prepare (including BSD -i suffix disambiguation)
+	// must surface as COMMAND_LIMIT_EXCEEDED and release all leases.
+	tight, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: 300, State: 1 << 20})
+	testutil.FailErr(t, "tight memory", err)
+	h.owners.Revisions.Memory = tight
+	for _, src := range []string{
+		"sed 's/alpha/beta/;s/beta/gamma/;s/gamma/delta/' f",
+		"sed -i 's/alpha/beta/;s/beta/gamma/;s/gamma/delta/' f g",
+		"sed -i .bak 's/alpha/beta/;s/beta/gamma/;s/gamma/delta/' f",
+	} {
+		req, release := h.bind(src)
+		_, prepErr := h.owners.Prepare(t.Context(), req)
+		release()
+		reject := toolrejection.AsToolReject(prepErr)
+		var memLimit *toolcontract.ProgramMemoryLimitError
+		if reject == nil || reject.Code != "COMMAND_LIMIT_EXCEEDED" || reject.Data["limit_id"] != "evaluation_memory_bytes" || !errors.As(prepErr, &memLimit) {
+			t.Fatalf("%s: expected COMMAND_LIMIT_EXCEEDED (evaluation_memory_bytes), got %v", src, prepErr)
+		}
+		if tight.InUse().Working != 0 {
+			t.Fatalf("%s leaked working memory on refusal: %+v", src, tight.InUse())
+		}
+	}
+	h.owners.Revisions.Memory = h.memory
+
+	// Regex compile budget refusal during Prepare must surface as COMMAND_LIMIT_EXCEEDED, not invalid regex syntax.
+	tinyRegex, err := textsearch.NewPOSIXEngine()
+	testutil.FailErr(t, "tiny regex", err)
+	tinyRegex.Limits.PatternBytes = 4
+	h.owners.Regex = tinyRegex
+	for _, src := range []string{
+		"sed 's/alphabet/beta/w out' f",
+		"sed -i .bak 's/alphabet/beta/' f",
+	} {
+		req, release := h.bind(src)
+		_, prepErr := h.owners.Prepare(t.Context(), req)
+		release()
+		reject := toolrejection.AsToolReject(prepErr)
+		var budgetErr *textsearch.BudgetError
+		if reject == nil || reject.Code != "COMMAND_LIMIT_EXCEEDED" || reject.Data["limit_id"] != "regex_pattern_bytes" || !errors.As(prepErr, &budgetErr) {
+			t.Fatalf("%s: expected COMMAND_LIMIT_EXCEEDED (regex_pattern_bytes), got %v", src, prepErr)
+		}
+		if h.memory.InUse().Working != 0 {
+			t.Fatalf("%s leaked working memory on regex budget refusal: %+v", src, h.memory.InUse())
+		}
+	}
+	h.owners.Regex = counter
+
+	// Cancellation during Prepare propagates context.Canceled rather than syntax error.
+	canceledCtx, cancel := context.WithCancel(t.Context())
+	cancel()
+	req, release := h.bind("sed -i .bak s/alpha/beta/ f")
+	_, cancelErr := h.owners.Prepare(canceledCtx, req)
+	release()
+	if !errors.Is(cancelErr, context.Canceled) || toolrejection.AsToolReject(cancelErr) != nil || h.memory.InUse().Working != 0 {
+		t.Fatalf("canceled Prepare: err=%v working=%+v", cancelErr, h.memory.InUse())
+	}
+
+	// -f script files defer capture until InvokeOwner (after child receipt exists).
+	h.seed("f", "alpha\n")
+	h.seed("deferred.sed", "s/alpha/omega/\n")
+	reqFile, releaseFile := h.bind("sed -f deferred.sed f")
+	defer releaseFile()
+	preparedFile, err := h.owners.Prepare(t.Context(), reqFile)
+	testutil.FailErr(t, "prepare -f", err)
+	if preparedFile.Mode != "stream-script" || len(h.pins.executions[reqFile.Invocation.Identity.ExecutionID]) != 0 {
+		t.Fatalf("-f read before InvokeOwner: mode=%q pins=%+v", preparedFile.Mode, h.pins.executions[reqFile.Invocation.Identity.ExecutionID])
+	}
+	var outBuf bytes.Buffer
+	resFile, err := preparedFile.InvokeOwner(t.Context(), h.ports(), commandprogram.Streams{Output: &outBuf})
+	testutil.FailErr(t, "invoke -f", err)
+	pins := h.pins.executions[reqFile.Invocation.Identity.ExecutionID]
+	if resFile.Status != 0 || outBuf.String() != "omega\n" || len(pins) != 2 || pins[0].Path != "deferred.sed" || pins[1].Path != "f" || h.memory.InUse().Working != 0 {
+		t.Fatalf("-f outcome: res=%+v out=%q pins=%+v working=%+v", resFile, outBuf.String(), pins, h.memory.InUse())
 	}
 }

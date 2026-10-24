@@ -2,6 +2,7 @@ package toolhost
 
 import (
 	"bytes"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -45,5 +46,47 @@ func TestCommandSedScriptFilesStreamLargePinnedBytes(t *testing.T) {
 	if result.Status != 0 || result.State != "completed" || result.Refusal != nil || result.Stdout != "1\n" || memory().InUse().Working != 0 || memory().InUse().State > 64<<10 {
 		t.Fatalf("closed script-file consumer lost completion or cleanup: %+v usage=%+v", result, memory().InUse())
 	}
+}
 
+func TestCommandSedPreparedAdmissionAndFileScriptPins(t *testing.T) {
+	env := newPipeSemanticsEnv(t)
+	memory := observedProgramMemory(t, env)
+	testutil.FailErr(t, "write input", os.WriteFile(filepath.Join(env.Dir, "in.txt"), []byte("alpha\nbeta\n"), 0o644))
+	testutil.FailErr(t, "write script", os.WriteFile(filepath.Join(env.Dir, "edit.sed"), []byte("s/alpha/omega/\n"), 0o644))
+	testutil.FailErr(t, "write forbidden w script", os.WriteFile(filepath.Join(env.Dir, "write.sed"), []byte("w out.txt\n"), 0o644))
+
+	out, err := env.Call(t, t.Context(), `sed -f edit.sed in.txt && sed -i .bak 's/beta/delta/' in.txt`)
+	testutil.FailErr(t, "run sed -f and BSD -i", err)
+	result := decodePipeOutcome(t, out)
+	if result.Status != 0 || result.State != "completed" || result.Refusal != nil || result.Stdout != "omega\nbeta\n" || result.CompletedEffects != 1 || memory().InUse().Working != 0 {
+		t.Fatalf("sed -f and BSD -i outcome: %+v usage=%+v", result, memory().InUse())
+	}
+	edited, err := os.ReadFile(filepath.Join(env.Dir, "in.txt"))
+	testutil.FailErr(t, "read edited in.txt", err)
+	backup, err := os.ReadFile(filepath.Join(env.Dir, "in.txt.bak"))
+	testutil.FailErr(t, "read in.txt.bak", err)
+	if string(edited) != "alpha\ndelta\n" || string(backup) != "alpha\nbeta\n" {
+		t.Fatalf("edited=%q backup=%q", edited, backup)
+	}
+
+	var scriptPinCount int
+	testutil.FailErr(t, "query script pin", env.Database.QueryRowContext(t.Context(), `SELECT count(*) FROM invocation_program_revision_pins WHERE path = 'edit.sed' AND role = 'source'`).Scan(&scriptPinCount))
+	if scriptPinCount != 1 {
+		t.Fatalf("expected 1 revision pin for edit.sed after child creation, got %d", scriptPinCount)
+	}
+
+	for _, tc := range []struct {
+		program, wantCode string
+	}{
+		{`sed 'e date' in.txt`, "COMMAND_OPTION_UNSUPPORTED"},
+		{`sed 's/a/b/M' in.txt`, "COMMAND_OPTION_UNSUPPORTED"},
+		{`sed -f write.sed in.txt`, "COMMAND_NATIVE_FORM_UNSUPPORTED"},
+	} {
+		out, err := env.Call(t, t.Context(), tc.program)
+		testutil.FailErr(t, tc.program, err)
+		refused := decodePipeOutcome(t, out)
+		if refused.Refusal == nil || refused.Refusal.Code != tc.wantCode || refused.NativeGaps != 0 || memory().InUse().Working != 0 {
+			t.Fatalf("%s: outcome=%+v refusal=%+v usage=%+v", tc.program, refused, refused.Refusal, memory().InUse())
+		}
+	}
 }

@@ -27,12 +27,26 @@ const (
 	Stderr = "/dev/stderr"
 )
 
-// Program is one parsed script.
+// Program is one parsed script and its admitted memory leases.
 type Program struct {
 	commands []*command
 	quiet    bool
 	writes   []string
 	reads    []string
+	releases []func()
+}
+
+// Close releases all program memory leases admitted while parsing the script.
+func (p *Program) Close() {
+	if p == nil {
+		return
+	}
+	for i := len(p.releases) - 1; i >= 0; i-- {
+		if p.releases[i] != nil {
+			p.releases[i]()
+		}
+	}
+	p.releases = nil
 }
 
 // Quiet reports a script whose first line is exactly #n, which means -n.

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/textsearch"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
 type engine struct{ posix textsearch.POSIXEngine }
@@ -58,10 +59,27 @@ func (f fixture) run(t *testing.T, separate bool) (string, map[string]*bytes.Buf
 	if err != nil {
 		t.Fatal(err)
 	}
-	program, err := Parse(t.Context(), f.script, f.extended, engine{posix})
+	limits, err := toolcontract.CatalogProgramMemoryLimits()
 	if err != nil {
+		t.Fatal(err)
+	}
+	memory, err := toolcontract.NewProgramMemory(limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	program, err := Parse(t.Context(), memory, f.script, f.extended, engine{posix})
+	if err != nil {
+		if memory.InUse() != (toolcontract.ProgramMemoryUsage{}) {
+			t.Fatalf("failed parse leaked memory: %+v", memory.InUse())
+		}
 		return "", nil, 0, err
 	}
+	defer func() {
+		program.Close()
+		if memory.InUse() != (toolcontract.ProgramMemoryUsage{}) {
+			t.Fatalf("closed program leaked memory: %+v", memory.InUse())
+		}
+	}()
 	delimiter := byte('\n')
 	if f.nul {
 		delimiter = 0

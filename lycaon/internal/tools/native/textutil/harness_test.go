@@ -135,8 +135,9 @@ func newHarness(t *testing.T) *harness {
 	testutil.FailErr(t, "memory limits", err)
 	memory, err := toolcontract.NewProgramMemory(limits)
 	testutil.FailErr(t, "memory", err)
+	owners.Revisions.Memory = memory
 	tc := nativefixture.Context(root)
-	mutations, err := mutation.NewOwners(native.ExecutionRevisions{Boundary: boundary}, pins, mutation.Operations{Write: &native.WriteTool{Boundary: boundary}, Delete: &native.DeleteTool{Boundary: boundary},
+	mutations, err := mutation.NewOwners(native.ExecutionRevisions{Boundary: boundary, Memory: memory}, pins, mutation.Operations{Write: &native.WriteTool{Boundary: boundary}, Delete: &native.DeleteTool{Boundary: boundary},
 		Move: &native.MoveTool{Boundary: boundary}, Copy: &native.CopyTool{Boundary: boundary}, Mkdir: &native.MkdirTool{Boundary: boundary}, Chmod: &native.ChmodTool{Boundary: boundary},
 		Chown: &native.ChownTool{Boundary: boundary}, Times: &native.TimesTool{Boundary: boundary}, Extract: &native.ExtractArchiveTool{Boundary: boundary}})
 	testutil.FailErr(t, "mutation owners", err)

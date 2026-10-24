@@ -131,13 +131,14 @@ func scalarWidth(b []byte, at int) int {
 
 // translation reads y/SOURCE/DEST/: equal-length scalar lists where \\, the
 // escaped delimiter and the control escapes stand for one scalar.
-func (p *scriptCursor) translation() (map[rune]rune, error) {
+func (p *parser) translation() (map[rune]rune, error) {
 	delimiter := p.peek()
 	if delimiter == 0 || delimiter == '\n' || delimiter == '\\' {
 		return nil, p.fail("a y delimiter other than newline or backslash")
 	}
 	p.pos++
 	var lists [2][]rune
+	var err error
 	for i := range lists {
 		var text []byte
 		for {
@@ -153,24 +154,35 @@ func (p *scriptCursor) translation() (map[rune]rune, error) {
 				e := p.src[p.pos]
 				p.pos++
 				if e == delimiter || e == '\\' {
-					text = append(text, e)
+					if text, err = appendAdmittedBytes(p, text, e); err != nil {
+						return nil, err
+					}
 				} else if b, ok := controlEscapes[e]; ok {
-					text = append(text, b)
+					if text, err = appendAdmittedBytes(p, text, b); err != nil {
+						return nil, err
+					}
 				} else {
 					return nil, p.fail("y escapes \\\\, \\n, \\t or the delimiter")
 				}
 				continue
 			}
-			text = append(text, c)
+			if text, err = appendAdmittedBytes(p, text, c); err != nil {
+				return nil, err
+			}
 		}
 		for len(text) > 0 {
 			r, size := decodeScalar(text)
-			lists[i] = append(lists[i], r)
+			if lists[i], err = appendAdmitted(p, lists[i], r, runeElemBytes); err != nil {
+				return nil, err
+			}
 			text = text[size:]
 		}
 	}
 	if len(lists[0]) != len(lists[1]) {
 		return nil, p.fail("y source and destination of equal length")
+	}
+	if err := p.reserve(int64(max(1, len(lists[0]))) * trMapEntryBytes); err != nil {
+		return nil, err
 	}
 	out := make(map[rune]rune, len(lists[0]))
 	for i, r := range lists[0] {

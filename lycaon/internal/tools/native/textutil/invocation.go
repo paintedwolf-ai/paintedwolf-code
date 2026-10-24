@@ -27,12 +27,16 @@ type invocation struct {
 	published bool
 	uncertain bool
 	releases  []func()
+	sed       *preparedSed
 	// The ordered xargs settlement loop owns the first stopped child outcome.
 	stoppedBatch *toolcontract.ProducerResult
 }
 
 func newInvocation(ctx context.Context, p Prepared, ports Ports, streams commandprogram.Streams) *invocation {
-	inv := &invocation{ctx: ctx, owners: p.owners, ports: ports, request: p.request, spec: p.spec, argv: p.Argv, streams: streams}
+	inv := &invocation{ctx: ctx, owners: p.owners, ports: ports, request: p.request, spec: p.spec, argv: p.Argv, streams: streams, sed: p.sed}
+	if p.sed != nil {
+		inv.releases = append(inv.releases, p.Close)
+	}
 	if inv.streams.Input == nil {
 		inv.streams.Input = commandprogram.NullInput()
 	}

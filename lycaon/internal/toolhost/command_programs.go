@@ -86,13 +86,13 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 		literalOwners, searchOwners, queryOwners, mutationOwners, textOwners := &literalProgram, &searchProgram, &queryProgram, &mutationProgram, &textProgram
 		barrier := &native.PublicationBarrier{}
 		program := mutation.Program{Paths: paths, Barrier: barrier}
+		spills := &textutil.Spills{}
 		owners := command.ProgramOwners{
 			Natives:     map[string]command.NativeOperation{},
 			Publication: &mutation.Publication{Owners: mutationOwners, Program: program, Tools: tc},
 			Input:       &mutation.Publication{Owners: mutationOwners, Program: program, Tools: tc},
 			AdmitLaunch: barrier.AdmitDependentLaunch,
 			Builtins: func(ports command.BuiltinPorts) (map[string]commandprogram.OperationDispatcher, func(), error) {
-				spills := &textutil.Spills{}
 				text := textutil.Ports{ToolContext: ports.ToolContext, Memory: ports.Memory, Admission: ports.Admission, Nested: ports.Nested, Publication: ports.Publication, Spills: spills}
 				release := func() { _ = spills.Close() }
 				builtins := textOwners.Builtins(text)
@@ -112,6 +112,24 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 				return publication, publication
 			},
 		}
+		owners.Natives["sed"] = command.NativeOperation{Prepare: func(ctx context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
+			request.Invocation.Scope.Directory = frame.Cwd().DisplayPath
+			prepared, err := textOwners.Prepare(ctx, request)
+			if err != nil {
+				return command.NativePrepared{}, err
+			}
+			publication := &mutation.Publication{Owners: mutationOwners, Program: mutation.Program{Paths: frame, Barrier: barrier}, Tools: tc}
+			ports := textutil.Ports{ToolContext: tc, Memory: memory, Admission: admission, Publication: publication, Spills: spills}
+			return command.NativePrepared{
+				Mode:    prepared.Mode,
+				Review:  prepared.Review,
+				Release: prepared.Close,
+				Invoke: func(ctx context.Context, admitted tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+					ports.ToolContext = admitted
+					return prepared.InvokeOwner(ctx, ports, streams)
+				},
+			}, nil
+		}}
 		for _, name := range literalOwners.Commands() {
 			tool, _ := literalOwners.Operation(name)
 			owners.Natives[name] = command.NativeOperation{Tool: tool, Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {

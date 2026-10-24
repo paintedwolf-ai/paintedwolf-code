@@ -16,7 +16,9 @@ func admittedMachine(t *testing.T, script string, record, working int64, out io.
 	t.Helper()
 	posix, err := textsearch.NewPOSIXEngine()
 	testutil.FailErr(t, "create regex owner", err)
-	program, err := Parse(t.Context(), script, false, engine{posix})
+	parseMemory, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: 1 << 20, State: 1})
+	testutil.FailErr(t, "create parse admission", err)
+	program, err := Parse(t.Context(), parseMemory, script, false, engine{posix})
 	testutil.FailErr(t, "parse script", err)
 	memory, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: working, State: 1})
 	testutil.FailErr(t, "create actual admission", err)
@@ -33,7 +35,8 @@ func admittedMachine(t *testing.T, script string, record, working int64, out io.
 		for _, release := range releases {
 			release()
 		}
-		if memory.InUse() != (toolcontract.ProgramMemoryUsage{}) {
+		program.Close()
+		if parseMemory.InUse() != (toolcontract.ProgramMemoryUsage{}) || memory.InUse() != (toolcontract.ProgramMemoryUsage{}) {
 			t.Fatal("sed storage admission leaked")
 		}
 	})
@@ -110,5 +113,54 @@ func TestListingUsesOneBoundedAdmittedBuffer(t *testing.T) {
 	want := strings.Repeat("\\000", 8192) + "$\n"
 	if out.String() != want+want || memory.InUse().Working != 8192+4096 || cap(m.listing) != 4096 {
 		t.Fatalf("listing bytes=%d usage=%+v listing=%d", out.Len(), memory.InUse(), cap(m.listing))
+	}
+}
+
+func TestParseAdmissionChargesAndReleasesEveryScriptStructure(t *testing.T) {
+	posix, err := textsearch.NewPOSIXEngine()
+	testutil.FailErr(t, "create regex owner", err)
+	if _, err := Parse(t.Context(), nil, "p", false, engine{posix}); err == nil {
+		t.Fatal("expected nil memory to refuse")
+	}
+
+	richScript := strings.Join([]string{
+		":loop",
+		"1,10{",
+		`/alpha/,/omega/s/\(foo\)\(bar\)/\U\2\E-\1-literal/gw out1.txt`,
+		"y/abcdef/ABCDEF/",
+		"a\\nappended line with escaped \\\\ and text",
+		"r read1.txt",
+		"w out2.txt",
+		"t loop",
+		"}",
+	}, "\n")
+
+	fullMemory, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: 1 << 20, State: 1})
+	testutil.FailErr(t, "create full memory", err)
+	program, err := Parse(t.Context(), fullMemory, richScript, false, engine{posix})
+	testutil.FailErr(t, "parse rich script", err)
+	held := fullMemory.InUse().Working
+	if held <= parserBaseBytes {
+		t.Fatalf("expected admitted script structures to hold working bytes, got %d", held)
+	}
+	program.Close()
+	program.Close()
+	if fullMemory.InUse() != (toolcontract.ProgramMemoryUsage{}) {
+		t.Fatalf("closed program retained memory: %+v", fullMemory.InUse())
+	}
+
+	// Any ceiling below the required working bytes must fail with a typed
+	// ProgramMemoryLimitError and release all partial leases before returning.
+	for _, ceiling := range []int64{1, parserBaseBytes, parserBaseBytes + commandStructBytes, held / 2, held - 1} {
+		tight, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: ceiling, State: 1})
+		testutil.FailErr(t, "create tight memory", err)
+		prog, err := Parse(t.Context(), tight, richScript, false, engine{posix})
+		var limit *toolcontract.ProgramMemoryLimitError
+		if prog != nil || !errors.As(err, &limit) || limit.Account != "working" || limit.Maximum != ceiling || limit.Observed <= ceiling {
+			t.Fatalf("ceiling %d: prog=%v err=%v", ceiling, prog, err)
+		}
+		if tight.InUse() != (toolcontract.ProgramMemoryUsage{}) {
+			t.Fatalf("ceiling %d leaked %+v after refusal", ceiling, tight.InUse())
+		}
 	}
 }

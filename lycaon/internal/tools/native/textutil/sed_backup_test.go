@@ -46,6 +46,7 @@ func TestSedBackupNonseekableReplayAdmission(t *testing.T) {
 			testutil.FailErr(t, "abandon unpublished backup", backup.stage.Abandon(context.WithoutCancel(t.Context())))
 			testutil.FailErr(t, "close backup", backup.Close())
 			testutil.FailErr(t, "close backup again", backup.Close())
+			inv.close()
 			if h.quota.used != 0 || h.memory.InUse().Working != 0 {
 				t.Fatalf("retained quota=%d memory=%+v", h.quota.used, h.memory.InUse())
 			}

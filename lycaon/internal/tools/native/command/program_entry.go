@@ -274,35 +274,13 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	if err := r.beginProgram(ctx, run, outputs, snapshot.Plan, scope, screening); err != nil {
 		return "", err
 	}
-	jobs := r.Supervisor.Jobs(tc.Identity.SessionID, tc.Identity.ProjectID)
-	jobs.BeginProgram()
-	builtins := jobBuiltins(jobs, run.commands)
-	listeners := r.Listeners
-	if listeners == nil {
-		listeners = lineage.SessionListeners
+	dispatcher, releaseUtilities, err := r.newDispatcher(run, owners, paths, tc, memory)
+	if err != nil {
+		return "", err
 	}
-	builtins["lsof"] = lsofBuiltin(run.commands["lsof"], tc.Identity.SessionID, listeners)
-	builtins["sleep"] = sleepBuiltin()
-	dispatcher := &ProgramDispatcher{run: run, builtins: builtins, natives: owners.Natives, binder: commandprogram.CatalogBinder{}, paths: paths, shared: &dispatchShared{}, admitLaunch: owners.AdmitLaunch, redirections: owners.Redirections}
-	if r.Builtins != nil {
-		for name, builtin := range r.Builtins(tc, dispatcher, dispatcher) {
-			if _, taken := builtins[name]; !taken {
-				builtins[name] = builtin
-			}
-		}
-	}
-	if owners.Builtins != nil {
-		utilities, releaseUtilities, err := owners.Builtins(BuiltinPorts{ToolContext: tc, Memory: memory, ProgramID: root.Identity.ProgramID, Nested: dispatcher, Publication: owners.Publication, Admission: r.sessionResources(tc.Identity.SessionID)})
-		if err != nil {
-			return "", err
-		}
+	if releaseUtilities != nil {
 		releaseBefore := release
 		release = func() { releaseUtilities(); releaseBefore() }
-		for name, builtin := range utilities {
-			if _, taken := builtins[name]; !taken {
-				builtins[name] = builtin
-			}
-		}
 	}
 	stdout, stderr := &boundedBuffer{limit: programOutputBytes}, &boundedBuffer{limit: programOutputBytes}
 	ports := commandprogram.EvaluationPorts{
@@ -359,6 +337,39 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 
 // parseProgram validates the entire unit; an excluded construct anywhere
 // refuses before the first statement could run.
+func (r *ProgramRuntime) newDispatcher(run *programRun, owners ProgramOwners, paths *projectpaths.ProgramPaths, tc tools.ToolContext, memory *toolcontract.ProgramMemory) (*ProgramDispatcher, func(), error) {
+	jobs := r.Supervisor.Jobs(tc.Identity.SessionID, tc.Identity.ProjectID)
+	jobs.BeginProgram()
+	builtins := jobBuiltins(jobs, run.commands)
+	listeners := r.Listeners
+	if listeners == nil {
+		listeners = lineage.SessionListeners
+	}
+	builtins["lsof"] = lsofBuiltin(run.commands["lsof"], tc.Identity.SessionID, listeners)
+	builtins["sleep"] = sleepBuiltin()
+	dispatcher := &ProgramDispatcher{run: run, builtins: builtins, natives: owners.Natives, binder: commandprogram.CatalogBinder{}, paths: paths, shared: &dispatchShared{}, admitLaunch: owners.AdmitLaunch, redirections: owners.Redirections}
+	if r.Builtins != nil {
+		for name, builtin := range r.Builtins(tc, dispatcher, dispatcher) {
+			if _, taken := builtins[name]; !taken {
+				builtins[name] = builtin
+			}
+		}
+	}
+	if owners.Builtins == nil {
+		return dispatcher, nil, nil
+	}
+	utilities, releaseUtilities, err := owners.Builtins(BuiltinPorts{ToolContext: tc, Memory: memory, ProgramID: run.root.Identity.ProgramID, Nested: dispatcher, Publication: owners.Publication, Admission: r.sessionResources(tc.Identity.SessionID)})
+	if err != nil {
+		return nil, nil, err
+	}
+	for name, builtin := range utilities {
+		if _, taken := builtins[name]; !taken {
+			builtins[name] = builtin
+		}
+	}
+	return dispatcher, releaseUtilities, nil
+}
+
 func parseProgram(ctx context.Context, memory *toolcontract.ProgramMemory, source string) (*commandsurface.ParsedProgram, *commandsurface.ProgramSnapshotLease, error) {
 	parsed, err := commandsurface.ParseAdmitted(ctx, memory, []byte(source), commandsurface.ParseOptions{})
 	if err != nil {

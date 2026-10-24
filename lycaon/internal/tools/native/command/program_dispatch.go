@@ -47,6 +47,9 @@ type NativePrepared struct {
 	// NativeOperation.Tool. With neither, the owner runs as the catalog
 	// command's own host execution, as builtins do.
 	Tool string
+	// Release frees any admitted resources retained by the prepared invocation
+	// across start/approval refusals and owner completion.
+	Release func()
 }
 
 // ProgramOwners is one program's host owner set. Publication and Input serve
@@ -306,11 +309,14 @@ func (d *ProgramDispatcher) refuseUnimplemented(ctx context.Context, spec toolco
 func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.CommandSpecification, operation NativeOperation, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 	prepared, err := operation.Prepare(ctx, d.paths, d, request)
 	if err != nil {
-		if gap := unsupportedForm(spec, err); gap != nil && d.GapLaunchable(request) {
+		if gap := unsupportedForm(spec, err); gap != nil && (operation.Tool != "" || len(operation.Tools) > 0) && d.GapLaunchable(request) {
 			request.Gap = gap
 			return d.invokeExternal(ctx, request, streams)
 		}
 		return d.refuseArgv(ctx, spec, request, err, streams)
+	}
+	if prepared.Release != nil {
+		defer prepared.Release()
 	}
 	if prepared.Command != "" {
 		resolved, ok := d.run.catalogCommand(prepared.Command)
@@ -409,6 +415,16 @@ func (d *ProgramDispatcher) invokeHosted(ctx context.Context, spec toolcontract.
 }
 
 func (d *ProgramDispatcher) refuseArgv(ctx context.Context, spec toolcontract.CommandSpecification, request commandprogram.OperationRequest, cause error, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+	cause = tools.CommandResourceRejection(cause)
+	if errors.Is(cause, context.Canceled) || errors.Is(cause, context.DeadlineExceeded) {
+		result := ownerFailure(cause)
+		child, err := d.prepare(ctx, spec, request, nil)
+		if err != nil {
+			return result, joinSettle(cause, err)
+		}
+		defer child.release()
+		return result, joinSettle(cause, d.settle(ctx, child, result, false, ""))
+	}
 	rejection := argvRejection(spec, cause)
 	reject := toolrejection.AsToolReject(rejection)
 	writeRejectRefusal(streams, spec.Name, request, reject)
