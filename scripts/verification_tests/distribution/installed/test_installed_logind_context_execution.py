@@ -1,5 +1,6 @@
 """Graphical execution is an actual session or an attested user-manager unit."""
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from linux_release.installed_cases import logind_context as owner
@@ -36,6 +37,68 @@ class Reader:
 
 
 class ExecutionContextTests(unittest.TestCase):
+    def transport_reader(self, *, remote=LOGIN + '.NoSessionForPID'):
+        class Error(Exception):
+            pass
+        class Variant:
+            def __init__(self, value, signature=None):
+                self.value, self.signature = value, signature
+            def unpack(self):
+                return self.value
+            def get_child_value(self, index):
+                return self.value[index]
+            def get_variant(self):
+                return self
+            def get_type_string(self):
+                return self.signature
+        values = {'Id': ('s', 'owned.service'), 'ControlGroup': ('s', GROUP),
+            'UID': ('u', 1000), 'Display': ('(so)', ('1', SESSION)),
+            'User': ('(uo)', (1000, OWNER)), 'Remote': ('b', False),
+            'Active': ('b', True), 'Type': ('s', 'wayland')}
+        closed = []
+        def call(destination, path, interface, method, parameters, *args):
+            if method == 'GetSessionByPID':
+                raise Error()
+            if method in {'GetUnitByPID', 'GetUserByPID'}:
+                return Variant((UNIT if method == 'GetUnitByPID' else OWNER,))
+            if method == 'Get':
+                signature, value = values[parameters[1][1]]
+                return Variant((Variant(value, signature),))
+            raise AssertionError(method)
+        reader = owner.Reader.__new__(owner.Reader)
+        reader.closed = False
+        reader.system = SimpleNamespace(call_sync=call, close_sync=lambda _: closed.append('system'))
+        reader.user = SimpleNamespace(call_sync=call, close_sync=lambda _: closed.append('user'))
+        reader.gio = SimpleNamespace(DBusCallFlags=SimpleNamespace(NONE=0),
+            DBusError=SimpleNamespace(get_remote_error=lambda _: remote))
+        reader.glib = SimpleNamespace(Error=Error, Variant=lambda *args: args,
+            VariantType=SimpleNamespace(new=lambda signature: signature))
+        return reader, closed
+
+    def test_real_reader_preserves_typed_remote_refusal_for_graphical_unit_fallback(self):
+        reader, closed = self.transport_reader()
+        self.assertEqual(observed(reader, 123, 1000, '0::' + GROUP + '\n')['binding'], 'graphical-user-unit')
+        self.assertFalse(reader.closed)
+        self.assertEqual(closed, [])
+        reader.close()
+        self.assertEqual(closed, ['user', 'system'])
+
+    def test_real_transport_failure_closes_all_private_connections(self):
+        reader, closed = self.transport_reader(remote=None)
+        with self.assertRaises(CaseUnavailable):
+            observed(reader, 123, 1000, '')
+        self.assertTrue(reader.closed)
+        self.assertEqual(closed, ['user', 'system'])
+
+    def test_failed_user_connection_closes_already_established_system_connection(self):
+        reader, closed = self.transport_reader()
+        reader.user = None
+        with patch.object(reader, 'connect', side_effect=reader.glib.Error()):
+            with self.assertRaises(CallFailure):
+                reader.object('GetUnitByPID', 123, user=True)
+        self.assertTrue(reader.closed)
+        self.assertEqual(closed, ['system'])
+
     def test_execution_context_closes_its_owned_reader_on_observation_failure(self):
         closed = []
         class OwnedReader:

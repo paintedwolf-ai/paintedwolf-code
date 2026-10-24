@@ -94,13 +94,19 @@ class Reader:
         parameters = self.glib.Variant(*args) if args else None
         try:
             if user and self.user is None:
-                self.user = self.connect('/run/user/' + str(os.getuid()) + '/bus', os.getuid())
+                try:
+                    self.user = self.connect('/run/user/' + str(os.getuid()) + '/bus', os.getuid())
+                except BaseException:
+                    self.close()
+                    raise
             connection = self.user if user else self.system
             return connection.call_sync(destination, path, interface, method, parameters,
                 self.glib.VariantType.new(signature), self.gio.DBusCallFlags.NONE, 5000, None)
         except self.glib.Error as error:
-            self.close()
-            raise CallFailure(self.gio.DBusError.get_remote_error(error)) from None
+            remote = self.gio.DBusError.get_remote_error(error)
+            if remote is None:
+                self.close()
+            raise CallFailure(remote) from None
         except BaseException:
             self.close()
             raise
