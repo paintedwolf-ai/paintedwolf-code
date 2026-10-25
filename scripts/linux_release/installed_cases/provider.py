@@ -96,6 +96,16 @@ class ProviderFixture:
         self.port = 0
         self.acquisition = None
 
+    def begin_next_turn(self):
+        """Allocate fresh acquisition/response custody after the prior turn completes."""
+        with self.lock:
+            if self.response_barrier is None or self.acquisition is None or not self.acquisition.completed:
+                raise ValueError('fixture prior controlled acquisition is not complete')
+            following = self.response_barrier.successor()
+            self.acquisition = FixedAcquisition(self.acquisition.tool)
+            self.response_barrier = following
+            return following
+
     @classmethod
     def gui(cls, calls: list[dict], *, endpoint: str | None = None,
             acquire: str | None = None, response_barrier=None):
