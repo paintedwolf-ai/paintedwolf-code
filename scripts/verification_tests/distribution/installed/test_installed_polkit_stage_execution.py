@@ -13,6 +13,7 @@ from verification_tests.distribution.installed.test_installed_polkit_transaction
 def target():
     value = unlock_target()
     native = value['session']['native_session']
+    value['session'] = native
     native.update(locked_hint=False, locker_active=False)
     attempt = copy.deepcopy(ATTEMPT)
     attempt['subject']['uid'] = ACCOUNT['uid']
@@ -48,7 +49,7 @@ class PolkitStageTests(unittest.TestCase):
     def test_actual_polkit_target_is_distinct_from_lock_screen_target(self):
         self.assertEqual(stage.target(target()), target())
         value = target()
-        value['session']['native_session']['locked_hint'] = True
+        value['session']['locked_hint'] = True
         with self.assertRaises(ValueError):
             stage.target(value)
         for field in ('password', 'pending'):

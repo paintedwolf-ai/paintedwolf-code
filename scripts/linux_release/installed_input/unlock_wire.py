@@ -4,7 +4,7 @@ from __future__ import annotations
 import hashlib
 import re
 
-from . import accessibility, session_wire
+from . import native_password_surface, session_wire
 
 PURPOSE = 'native-gnome-qa-unlock-v1'
 REVEAL = 'native-gnome-qa-reveal-v1'
@@ -15,29 +15,7 @@ def target(value):
         raise ValueError('native unlock target has an unknown shape')
     session_wire.proof(value['session'])
     shell = value['session']['native_session']['authorities']['shell']
-    accessibility.validate_identity(value['window'])
-    if value['window']['pid'] != shell['pid']:
-        raise ValueError('native unlock window is not the captured GNOME shell')
-    state = value['window_state']
-    if (not isinstance(state, dict) or set(state) != {'active', 'focused', 'visible', 'enabled', 'sensitive', 'defunct'}
-            or any(type(item) is not bool for item in state.values()) or not state['active']
-            or not all(state[key] for key in ('visible', 'enabled', 'sensitive')) or state['defunct']):
-        raise ValueError('native unlock window has no positive live active surface proof')
-    password, chain = value['password'], value['ancestors']
-    if password is None:
-        if chain != [] or value['password_state'] is not None or not state['focused']:
-            raise ValueError('native clock proof cannot claim a password ancestor chain')
-    else:
-        password_state = value['password_state']
-        if (not isinstance(password_state, dict) or set(password_state) != {'focused', 'visible', 'enabled', 'sensitive', 'defunct'}
-                or any(type(item) is not bool for item in password_state.values()) or password_state['defunct']
-                or not all(password_state[key] for key in ('focused', 'visible', 'enabled', 'sensitive'))):
-            raise ValueError('native password has no positive live focus proof')
-        accessibility.validate_identity(password)
-        accessibility.validate(chain, shell['pid'], shell['pid'])
-        if (chain[0] != password or chain[-1] != value['window']
-                or any(row['pid'] != shell['pid'] or row['bus_name'] != value['window']['bus_name'] for row in chain)):
-            raise ValueError('native password does not belong to the captured shell window')
+    native_password_surface.validate({key: value[key] for key in native_password_surface.FIELDS}, shell)
     return value
 
 

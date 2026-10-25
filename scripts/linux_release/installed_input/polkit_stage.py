@@ -5,7 +5,7 @@ before using this stage. Public JSON observations never establish that custody.
 """
 from __future__ import annotations
 
-from . import protocol, session_wire, unlock_wire
+from . import native_password_surface, protocol, session_wire, unlock_wire
 from .polkit_wire import validate
 from .private_pipe import Pipe
 from .unlock_account import validate_account_shape
@@ -17,7 +17,7 @@ def target(value):
     fields = {'session', 'pending', 'window', 'password', 'ancestors', 'window_state', 'password_state'}
     if not isinstance(value, dict) or set(value) != fields:
         raise ValueError('Polkit input requires its closed native target shape')
-    native = session_wire.proof(value['session'])['native_session']
+    native = session_wire.native_session(value['session'])
     if native['locked_hint'] or native['locker_active']:
         raise ValueError('Polkit input requires the captured unlocked graphical session')
     pending = value['pending']
@@ -37,9 +37,8 @@ def target(value):
             or any(type(pending[key]) is not int or pending[key] <= 0
                    for key in ('check_serial', 'begin_serial'))):
         raise ValueError('Polkit input agent differs from the independently captured GNOME process')
-    # Surface shape/focus validation is shared; locked/unlock phase authority is
-    # not. This operation separately requires the actual pending Polkit check.
-    unlock_wire.target({key: value[key] for key in fields - {'pending'}})
+    native_password_surface.validate(
+        {key: value[key] for key in native_password_surface.FIELDS}, shell)
     if value['password'] is None:
         raise ValueError('Polkit input requires its actual focused password object')
     return value
@@ -48,7 +47,7 @@ def target(value):
 def same_target(before, after):
     target(before)
     target(after)
-    session_wire.same_runtime(before['session'], after['session'])
+    session_wire.same_session(before['session'], after['session'])
     if any(before[key] != after[key] for key in ('pending', 'window', 'password', 'ancestors')):
         raise ValueError('Polkit input replaced its captured transaction or password object')
 
