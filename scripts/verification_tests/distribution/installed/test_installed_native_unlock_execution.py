@@ -162,12 +162,16 @@ class NativeUnlockObservationTests(unittest.TestCase):
             def __getitem__(self, index):
                 return self.children[index]
         window = Indexed(node('/window', 1, {4, 5, 6, 7, 8} | ({9} if clock and not clock_child else set())))
+        hidden = Indexed(node('/hidden', 0, {5}, window))
+        hidden.childCount = 9999
         entry = Indexed(node('/password', 2, {4, 5, 6, 7} | ({9} if focus else set()), window))
         shield = Indexed(node('/shield', 1, {4, 5, 6, 7} | ({9} if focus else set()), window))
         if not clock:
-            window.children, window.childCount = [entry], 1
+            window.children, window.childCount = [hidden, entry], 2
         elif clock_child:
-            window.children, window.childCount = [shield], 1
+            window.children, window.childCount = [hidden, shield], 2
+        else:
+            window.children, window.childCount = [hidden], 1
         app = Indexed(node('/application', 0, set(), children=[window], pid=201 if foreign else 200))
         desktop = Indexed(node('/desktop', 0, set(), children=[app], pid=100))
         api.Registry = SimpleNamespace(getDesktop=lambda _: desktop)
