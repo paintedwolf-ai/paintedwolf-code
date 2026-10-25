@@ -8,7 +8,7 @@
   "reviewed_commit": "1715fadedd158a5e720a137d0e4c243e95685783",
   "ceiling": 15,
   "boundaries": {
-    "lycaon/internal/sourcesnapshot/manifest_test.go": "c1ef1507ade74e28c37fdd7568e350ffe97e050f8a406d54824add98aa3e3bf7",
+    "lycaon/internal/sourcesnapshot/manifest_test.go": "a7f71ba0fbf38aa664e29b9c8608f6b61083b37bc6a04447aa862cccfb30f5e9",
     "lycaon/internal/sourcesnapshot/read_consistency_test.go": "c57c60b1899ceea660787c12d3d2714384c127b9478a506c4081400104f6374f",
     "lycaon/internal/sourcesnapshot/migration_test.go": "d59afa102fdb15335b12d14328335373e5db82041673c9be6412e6719e6e7267"
   },
