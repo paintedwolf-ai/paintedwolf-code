@@ -12,6 +12,8 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
+	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
 type commitFailBackend struct {
@@ -345,5 +347,23 @@ func TestWorktreeAddRemovePruneAndOperandValidation(t *testing.T) {
 		{"git", "clone", "--depth", "0", "https://example.test/r.git"},
 	} {
 		h.exec(argv...).refused(t, strings.Join(argv, " "), "COMMAND_OPERAND_INVALID")
+	}
+}
+
+func TestSymlinkedWorkspaceRootResolvesRepoRelativeOperands(t *testing.T) {
+	h := newHarness(t)
+	aliasParent, err := filepath.EvalSymlinks(t.TempDir())
+	testutil.FailErr(t, "resolve alias parent", err)
+	aliasRoot := filepath.Join(aliasParent, "repo-link")
+	testutil.FailErr(t, "symlink repo root", os.Symlink(h.root, aliasRoot))
+	h.tc = nativefixture.Context(aliasRoot)
+	h.paths, err = projectpaths.NewProgramPaths(t.Context(), h.owners.Boundary, h.tc, "")
+	testutil.FailErr(t, "program paths via symlinked root", err)
+
+	if add := h.exec("git", "add", "new.txt"); add.err != nil || add.result.Status != 0 {
+		t.Fatalf("git add through symlinked root: %+v %v %s", add.result, add.err, add.stderr)
+	}
+	if restore := h.exec("git", "restore", "--staged", "new.txt"); restore.err != nil || restore.result.Status != 0 {
+		t.Fatalf("git restore --staged through symlinked root: %+v %v %s", restore.result, restore.err, restore.stderr)
 	}
 }
