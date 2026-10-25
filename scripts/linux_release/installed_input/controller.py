@@ -190,8 +190,19 @@ def verify_deliveries(directory, execution, selected):
         raise ValueError('native input delivery log exceeds its bound')
     all_rows = [decode(raw) for raw in path.read_bytes().splitlines()]
     rows, unlock_rows = [], []
+    from . import polkit_control
+    polkit_seen = set()
     for row_index, row in enumerate(all_rows):
         if (isinstance(row, dict) and isinstance(row.get('request'), dict)
+                and row['request'].get('operation') in polkit_control.OPERATIONS):
+            if set(row) != {'request', 'acknowledgment'}:
+                raise ValueError('retained Polkit control has an unknown envelope')
+            pending = polkit_control.request(row['request'], execution)
+            polkit_control.acknowledgment(row['acknowledgment'], pending, selected['vm_id'])
+            if pending['transaction_id'] in polkit_seen:
+                raise ValueError('retained Polkit control replayed a consumed transaction')
+            polkit_seen.add(pending['transaction_id'])
+        elif (isinstance(row, dict) and isinstance(row.get('request'), dict)
                 and row['request'].get('operation') in unlock_wire.OPERATIONS):
             unlock_rows.append((row_index, row))
         else:
@@ -328,7 +339,7 @@ def adapter(value):
 
 
 class Bridge:
-    def __init__(self, selected, execution, ssh_command, output):
+    def __init__(self, selected, execution, ssh_command, output, *, target=None):
         self.selected = adapter(selected)
         self.execution = protocol.binding(execution)
         self.ssh_command, self.output = ssh_command, output
@@ -338,6 +349,8 @@ class Bridge:
         self.prepared_request = None
         self.unlock_proof = None
         self.private_session = None
+        self.polkit_target = target
+        self.polkit_session = None
 
     def __enter__(self):
         self.lease = open_lease(Path(self.selected['lease']), execution_nonce=self.execution['execution_nonce'],
@@ -365,6 +378,8 @@ class Bridge:
         except BaseException:
             try:
                 self._close_transport()
+                if self.polkit_session is not None:
+                    self.polkit_session.close()
                 if self.private_session is not None:
                     self.private_session.close()
             finally:
@@ -474,6 +489,31 @@ class Bridge:
             self.unlock_proof['post_unlocked_at'] = time.time()
         return acknowledgment
 
+    def control_polkit(self, pending):
+        from . import polkit_control
+        polkit_control.request(pending, self.execution)
+        if self.polkit_target is None:
+            raise ValueError('Polkit control requires the actual selected SSH guest target')
+        if self.bytes + protocol.MAX_DOCUMENT > MAX_LOG:
+            raise ValueError('fixed native input controller log is full before Polkit control')
+        if self.polkit_session is None:
+            self.polkit_session = polkit_control.Session(self.actor, self.polkit_target, self.execution)
+        result = self.polkit_session.handle(pending, self._deliver_polkit)
+        acknowledgment = {'format_version': 1, 'request_sha256': protocol.request_sha256(pending),
+                          'vm_id': self.selected['vm_id'], 'result': result}
+        polkit_control.acknowledgment(acknowledgment, pending, self.selected['vm_id'])
+        self._record_log(pending, acknowledgment)
+        if self.exchange({'operation': 'ack', 'acknowledgment': acknowledgment}) != {'state': 'acknowledged'}:
+            raise ValueError('Polkit guest refused its exact control acknowledgment')
+
+    def _deliver_polkit(self, stage, pending, deadline):
+        ready = self.exchange({'operation': 'native-polkit-input',
+                               'request_sha256': protocol.request_sha256(pending)})
+        if ready != {'state': 'native-polkit-ready',
+                'request_sha256': protocol.request_sha256(pending), 'vm_id': self.selected['vm_id']}:
+            raise ValueError('Polkit guest has no exact current target readiness')
+        return stage.perform(self.process, self.selector, deadline, pending['transaction_id'])
+
     def _run(self):
         try:
             while not self.stop.is_set():
@@ -491,6 +531,10 @@ class Bridge:
                     continue
                 if set(row) != {'state', 'request'} or row['state'] != 'request':
                     raise ValueError('fixed native input guest returned an unknown response')
+                from . import polkit_control
+                if isinstance(row['request'], dict) and row['request'].get('operation') in polkit_control.OPERATIONS:
+                    self.control_polkit(row['request'])
+                    continue
                 if isinstance(row['request'], dict) and row['request'].get('operation') in unlock_wire.OPERATIONS:
                     if row['request']['operation'] == unlock_wire.PREPARE:
                         self.prepare_unlock(row['request'])
@@ -522,9 +566,15 @@ class Bridge:
         self.actor.failed = True
         try:
             self.thread.join(6)
-            if self.unlock_actor is not None:
-                self.unlock_actor.close()
-            self._close_transport()
+            try:
+                if self.polkit_session is not None:
+                    self.polkit_session.close()
+            finally:
+                try:
+                    if self.unlock_actor is not None:
+                        self.unlock_actor.close()
+                finally:
+                    self._close_transport()
             self.thread.join(password_wire.MAX_SECONDS + 1)
             if self.thread.is_alive():
                 self.error = ValueError('fixed native input thread did not settle after its bounded shutdown')
