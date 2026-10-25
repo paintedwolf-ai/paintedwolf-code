@@ -7,18 +7,17 @@ import time
 
 from .app import InstalledApp, session_environment
 from .desktop_launch import protected_launcher, activate_visible_frame
-from .desktop_turn import open_project_configuration
 from .desktop_ui import DesktopUI
 from .fresh_profile import Reservation
 from .polkit_policy import PresencePolicy
-from .presence_alert import alerts, await_alert
+from .presence_alert import await_alert
 from .process import run
 from .profile_setup import await_session
 from .provider import MODEL, ProviderFixture
-from .provider_setup import configure_provider, physical_input
+from .provider_setup import configure_provider
+from .presence_setup import prepare_secret
 from .records import CaseFailed, CaseUnavailable
 from ..installed_environment import graphical_session
-from ..installed_input.presence_fixture import FIELDS
 from ..installed_storage import resolve
 
 
@@ -58,17 +57,7 @@ def unchallenged_presence(binding):
                 observations['opened_session'] = await_session(app, project, provider['provider_id'], MODEL, status='idle',
                                                                reason='presence-project-session-not-opened')
                 with DesktopUI(app) as ui:
-                    observations['project_configuration_navigation'] = open_project_configuration(app, ui)
-                    ui.click('Secrets', tab=True)
-                    ui.click('Add secret')
-                    for label, operation, _, password in FIELDS:
-                        reservation.check_launch(app)
-                        physical_input(app, ui, label, operation, password=password)
-                    ui.click('Add secret')
-                    reservation.check_launch(app)
-                    baseline = alerts(app, ui, time.monotonic() + 15)
-                    if baseline:
-                        raise CaseUnavailable('presence-reveal-prerequisite-already-has-an-owned-alert')
+                    observations['secret_setup'] = prepare_secret(app, ui, reservation)
                     policy = PresencePolicy(launch_binding)
                     with policy:
                         reservation.check_launch(app)
