@@ -3,12 +3,15 @@ package visualscreen
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"hash/crc32"
 	"image"
 	"image/color"
 	"image/gif"
 	"image/jpeg"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestDecodeRasterTruncatedJPEG(t *testing.T) {
@@ -20,7 +23,7 @@ func TestDecodeRasterTruncatedJPEG(t *testing.T) {
 	}
 	var buf bytes.Buffer
 	if err := jpeg.Encode(&buf, img, nil); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "jpeg.Encode failed", err)
 	}
 	raw := buf.Bytes()
 	truncated := raw[:len(raw)/2]
@@ -44,7 +47,7 @@ func TestDecodeRasterTruncatedGIF(t *testing.T) {
 	palImg := image.NewPaletted(image.Rect(0, 0, 50, 50), palette)
 	var buf bytes.Buffer
 	if err := gif.Encode(&buf, palImg, nil); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "gif.Encode failed", err)
 	}
 	raw := buf.Bytes()
 	truncated := raw[:len(raw)/2]
@@ -64,10 +67,10 @@ func TestDecodeRasterAnimatedGIF(t *testing.T) {
 	}
 	var buf bytes.Buffer
 	if err := gif.EncodeAll(&buf, g); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "gif.EncodeAll failed", err)
 	}
 	_, err := decodeRaster(buf.Bytes())
-	if err != errAnimatedRaster {
+	if !errors.Is(err, errAnimatedRaster) {
 		t.Fatalf("expected errAnimatedRaster, got %v", err)
 	}
 }
@@ -106,7 +109,7 @@ func apngBytes(t *testing.T) []byte {
 func TestDecodeRasterAnimatedPNG(t *testing.T) {
 	raw := apngBytes(t)
 	_, err := decodeRaster(raw)
-	if err != errAnimatedRaster {
+	if !errors.Is(err, errAnimatedRaster) {
 		t.Fatalf("expected errAnimatedRaster, got %v", err)
 	}
 }
@@ -175,7 +178,7 @@ func TestDecodeRasterRejectsSecondGIFFrameBeforeDecodingItsPixels(t *testing.T) 
 	// A second image introducer is sufficient to refuse animation. Never decode
 	// or allocate its pixels, even when the remainder of that frame is incomplete.
 	animated := append(append([]byte(nil), raw[:len(raw)-1]...), 0x2c)
-	if _, err := decodeRaster(animated); err != errAnimatedRaster {
+	if _, err := decodeRaster(animated); !errors.Is(err, errAnimatedRaster) {
 		t.Fatalf("second frame err=%v", err)
 	}
 
