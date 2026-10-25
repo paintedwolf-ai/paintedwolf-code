@@ -11,7 +11,7 @@ import (
 )
 
 func TestVaultUnlockAwayMigrationKeepsAuditsAndAdmitsAway(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join("..", "..", "testdata", "upgrade-corpus", "1.0.2-rc6", "store.db"))
+	raw, err := os.ReadFile(filepath.Join("..", "..", "testdata", "upgrade-corpus", "1.0.3-rc1", "store.db"))
 	testutil.FailErr(t, "read released corpus", err)
 	path := filepath.Join(t.TempDir(), "store.db")
 	testutil.FailErr(t, "copy released corpus", os.WriteFile(path, raw, 0600))
@@ -19,7 +19,7 @@ func TestVaultUnlockAwayMigrationKeepsAuditsAndAdmitsAway(t *testing.T) {
 	testutil.FailErr(t, "open released store", err)
 	released, err := inspectSchema(t.Context(), source)
 	testutil.FailErr(t, "inspect released store", err)
-	if released != migrations.VaultUnlockAway(released).From {
+	if released != migrations.SourceManifestLayout(released).From {
 		t.Fatalf("released store is %+v, not the registered revision-4 source", released)
 	}
 	var project, person string

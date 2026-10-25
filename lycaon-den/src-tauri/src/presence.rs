@@ -547,24 +547,14 @@ fn verify_user_presence(
     }
 }
 
-/// polkit confirms the person through the desktop's agent. Without one, the
-/// native app-password dialog stands in only while the vault is on the
-/// app-password path; a click never does.
+/// The system authentication agent confirms the person independently of vault custody.
 #[cfg(target_os = "linux")]
 fn verify_user_presence(
     window: &tauri::Window,
-    prompt: &str,
+    _prompt: &str,
 ) -> Result<&'static str, PresenceCommandError> {
     let identifier = window.app_handle().config().identifier.clone();
-    match linux::confirm_with_polkit(&identifier) {
-        Ok(()) => Ok(linux::AUTHENTICATOR_POLKIT),
-        Err(linux::PolkitRefusal::Denied(message)) => Err(PresenceCommandError::denied(message)),
-        Err(linux::PolkitRefusal::Failed(message)) => Err(PresenceCommandError::failed(message)),
-        Err(linux::PolkitRefusal::Unavailable(reason)) => {
-            linux::confirm_app_password(window, prompt, &reason)
-                .map(|()| linux::AUTHENTICATOR_APP_PASSWORD)
-        }
-    }
+    linux::confirmation_result(linux::confirm_with_polkit(&identifier))
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]

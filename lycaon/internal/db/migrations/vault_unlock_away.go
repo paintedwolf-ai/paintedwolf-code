@@ -9,8 +9,8 @@ import (
 //go:embed vault_unlock_away.sql
 var vaultUnlockAwayMigration []byte
 
-// vaultUnlockAwaySource is the shipped revision-4 shape.
-var vaultUnlockAwaySource = Baseline{Revision: 4, Shape: "c0280798481d97c01e3ddf30812db8b6c28db69520cd8b33b88642ddb03d18a2"}
+// vaultUnlockAwaySource is the candidate revision-5 shape.
+var vaultUnlockAwaySource = Baseline{Revision: 5, Shape: "75a4630362bee47170cf4c307b98d66630569ce3cbad397f71cd920e1efd2d54"}
 
 // VaultUnlockAway admits an unlock that ended because the person's input went
 // idle for the step-away period to the unlock audit.
