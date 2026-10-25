@@ -274,6 +274,15 @@ fn resolve_checkpoint_with_presence(
     }
 }
 
+/// Public correlation facts for this confirmation, never the proof payload.
+#[derive(Serialize)]
+struct ConfirmationChallenge<'a> {
+    challenge_id: &'a str,
+    purpose: &'a str,
+    window_label: &'a str,
+    step_away_generation: u64,
+}
+
 /// The app-started engine and a client bound to it.
 struct EngineClient {
     agent: ureq::Agent,
@@ -333,7 +342,13 @@ where
     let challenge: Challenge =
         send_json(engine.agent.post(begin_url), &engine.api_token, begin_body)?;
     check_payload(&challenge.proof_payload, window.label(), &expect)?;
-    let authenticator = verify_user_presence(window, &challenge.prompt)?;
+    let binding = ConfirmationChallenge {
+        challenge_id: &challenge.challenge_id,
+        purpose: expect.purpose,
+        window_label: window.label(),
+        step_away_generation: step_away,
+    };
+    let authenticator = verify_user_presence(window, &challenge.prompt, &binding)?;
     // Closing the native prompt can delay focus returning to this window.
     let deadline = std::time::Instant::now() + Duration::from_millis(500);
     while !window.is_focused().unwrap_or(false) && std::time::Instant::now() < deadline {
@@ -455,6 +470,7 @@ fn send_json<T: for<'de> Deserialize<'de>>(
 fn verify_user_presence(
     _window: &tauri::Window,
     prompt: &str,
+    _binding: &ConfirmationChallenge<'_>,
 ) -> Result<&'static str, PresenceCommandError> {
     use std::sync::mpsc;
 
@@ -504,6 +520,7 @@ fn verify_user_presence(
 fn verify_user_presence(
     window: &tauri::Window,
     prompt: &str,
+    _binding: &ConfirmationChallenge<'_>,
 ) -> Result<&'static str, PresenceCommandError> {
     use windows::core::{factory, HSTRING};
     use windows::Foundation::IAsyncOperation;
@@ -550,15 +567,17 @@ fn verify_user_presence(
 fn verify_user_presence(
     window: &tauri::Window,
     _prompt: &str,
+    _binding: &ConfirmationChallenge<'_>,
 ) -> Result<&'static str, PresenceCommandError> {
     let identifier = window.app_handle().config().identifier.clone();
-    linux::confirmation_result(linux::confirm_with_polkit(&identifier))
+    linux::confirmation_result(linux::confirm_with_polkit(&identifier, _binding))
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
 fn verify_user_presence(
     _window: &tauri::Window,
     _prompt: &str,
+    _binding: &ConfirmationChallenge<'_>,
 ) -> Result<&'static str, PresenceCommandError> {
     Err(
         PresenceCommandError::unavailable("This operating system cannot confirm you.")
