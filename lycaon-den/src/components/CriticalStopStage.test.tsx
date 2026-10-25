@@ -201,6 +201,30 @@ describe("createCriticalStop", () => {
     ).toBeNull();
   });
 
+  it.each(["credential_vault_custodian_absent", "credential_vault_custodian_unavailable"])("keeps %s recovery non-destructive", async (failure) => {
+    startFailure = failure;
+    connectAppBackend.mockResolvedValue({});
+    const { appStore, rendered } = mount();
+    appStore.actions.setSidecarStatus("disconnected");
+    const root = rendered.baseElement as HTMLElement;
+    (await findByTestId(root, "critical-stop-primary")).click();
+    await waitFor(() => expect(connectAppBackend).toHaveBeenCalled());
+    expect(root.querySelector('input[type="password"]')).toBeNull();
+    expect(root.querySelector('[data-testid="critical-stop-secondary"]')).toBeNull();
+    expect(resetCredentialVault).not.toHaveBeenCalled();
+  });
+
+  it("quits through the native coordinator when the installed desktop changed", async () => {
+    startFailure = "desktop_restart_required";
+    const { appStore, rendered } = mount();
+    appStore.actions.setSidecarStatus("disconnected");
+    const root = rendered.baseElement as HTMLElement;
+    (await findByTestId(root, "critical-stop-primary")).click();
+    await waitFor(() => expect(quitDesktopForRestart).toHaveBeenCalledOnce());
+    expect(connectAppBackend).not.toHaveBeenCalled();
+    expect(resetCredentialVault).not.toHaveBeenCalled();
+  });
+
   it("resets a corrupt credential vault only after confirmation", async () => {
     startFailure = "credential_vault_corrupt";
     connectAppBackend.mockRejectedValue(new Error("corrupt vault"));
