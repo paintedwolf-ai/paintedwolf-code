@@ -131,6 +131,10 @@ func TestInstalledRunsAreHeldToReleaseValidBudgets(t *testing.T) {
 }
 
 func TestInstalledModeRequiresAnAccountWithoutReleaseConfiguration(t *testing.T) {
+	t.Setenv("HOME", "")
+	if _, err := installedConfigRoot(); err == nil {
+		t.Fatal("expected empty HOME to fail installedConfigRoot")
+	}
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	root, err := installedConfigRoot()
@@ -162,6 +166,11 @@ func TestInstalledModeRequiresAnAccountWithoutReleaseConfiguration(t *testing.T)
 	testutil.FailErr(t, "remove scratch", os.RemoveAll(state.scratch))
 	testutil.FailErr(t, "remove configDir", os.RemoveAll(state.configDir))
 	testutil.FailErr(t, "chmod sidecar non-executable", os.Chmod(bin, 0o600))
+	sidecarCfg := cfg
+	sidecarCfg.installed = false
+	if _, err := run(t.Context(), sidecarCfg); err == nil {
+		t.Fatal("expected non-executable sidecar binary to fail sidecar run")
+	}
 	if _, err := run(t.Context(), cfg); err == nil {
 		t.Fatal("expected non-executable sidecar binary to fail run")
 	}
