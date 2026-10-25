@@ -1,0 +1,132 @@
+"""Root observer custody comes from a captured process, never a public receipt."""
+import copy
+from pathlib import Path
+from types import SimpleNamespace
+import unittest
+from unittest.mock import Mock, patch
+
+from scripts.linux_release.installed_input import polkit_proxy, polkit_root, polkit_runtime
+from verification_tests.distribution.installed.test_installed_native_unlock_execution import ACCOUNT, EXECUTION
+from verification_tests.distribution.installed.polkit.test_installed_polkit_stage_execution import target
+
+
+class RootProxyTests(unittest.TestCase):
+    def proxy(self):
+        value = polkit_proxy.Proxy.__new__(polkit_proxy.Proxy)
+        value.execution, value.account, value.vm_id = copy.deepcopy(EXECUTION), ACCOUNT, 'owned'
+        value.sequence = 0
+        value.started, value.bound, value.failed, value.closed = True, True, False, False
+        value.deadline = 100
+        value.process = Mock(pid=901, poll=Mock(return_value=None))
+        value.selector = Mock()
+        value.process_birth = {'pid': 901, 'parent_pid': 1, 'start_time_ticks': 42}
+        return value
+
+    def test_only_captured_private_process_reply_can_supply_observer_facts(self):
+        proxy, pipe = self.proxy(), Mock()
+        def reply(request):
+            return {**request, 'result': target()['pending']}
+        pipe.line.side_effect = reply
+        with patch.object(polkit_proxy, 'Pipe', return_value=pipe), patch.object(
+                polkit_proxy, 'process_identity', return_value=proxy.process_birth), patch.object(
+                polkit_proxy.time, 'monotonic', return_value=1):
+            self.assertEqual(proxy.observe(), target()['pending'])
+        self.assertEqual(proxy.sequence, 1)
+        self.assertEqual(pipe.line.call_args.args[0]['operation'], 'observe')
+        self.assertEqual(pipe.line.call_args.args[0]['binding'], EXECUTION)
+
+    def test_uncertain_changed_sequence_or_reused_ssh_process_poison_without_retry(self):
+        for kind in ('uncertain', 'sequence', 'birth'):
+            proxy, pipe = self.proxy(), Mock()
+            pipe.line.side_effect = OSError('uncertain') if kind == 'uncertain' else lambda request: {
+                **request, 'sequence': 99, 'result': target()['pending']}
+            birth = {**proxy.process_birth, 'start_time_ticks': 43} if kind == 'birth' else proxy.process_birth
+            with patch.object(polkit_proxy, 'Pipe', return_value=pipe), patch.object(
+                    polkit_proxy, 'process_identity', return_value=birth), patch.object(
+                    polkit_proxy.time, 'monotonic', return_value=1):
+                with self.subTest(kind=kind), self.assertRaises((OSError, ValueError)):
+                    proxy.observe()
+                self.assertTrue(proxy.failed)
+                self.assertTrue(proxy.closed)
+                with self.assertRaises(ValueError):
+                    proxy.observe()
+            proxy.process.terminate.assert_called_once()
+            self.assertLessEqual(pipe.line.call_count, 1)
+
+    def test_bootstrap_refuses_user_writable_capture_before_project_import(self):
+        fake = SimpleNamespace(parents=[], lstat=lambda: SimpleNamespace(
+            st_mode=0o40777, st_uid=1000, st_gid=1000))
+        class FakePath:
+            def __init__(self, *_):
+                pass
+            def __truediv__(self, _):
+                return fake
+        with patch('pathlib.Path', FakePath), patch('sys.argv', ['fixed', 'c' * 40]):
+            with self.assertRaises(SystemExit) as refused:
+                exec(polkit_proxy.BOOTSTRAP, {})
+        self.assertEqual(refused.exception.code, 2)
+
+
+class RootEndpointTests(unittest.TestCase):
+    def endpoint(self):
+        result = polkit_root.Endpoint.__new__(polkit_root.Endpoint)
+        result.identity = {'binding': EXECUTION, 'vm_id': 'owned', 'account': ACCOUNT}
+        result.sequence, result.deadline, result.bound = 0, 100, True
+        result.monitor = Mock(observe=Mock(return_value=target()['pending']))
+        result._current = Mock(return_value={})
+        return result
+
+    def test_closed_identity_and_sequence_are_consumed_before_observation(self):
+        endpoint = self.endpoint()
+        request = {'format_version': 1, **endpoint.identity, 'sequence': 0, 'operation': 'observe'}
+        with patch.object(polkit_root.time, 'monotonic', return_value=1):
+            self.assertEqual(endpoint.handle(request)['result'], target()['pending'])
+            with self.assertRaises(ValueError):
+                endpoint.handle(request)
+        endpoint.monitor.observe.assert_called_once()
+        self.assertEqual(endpoint.sequence, 1)
+
+    def test_foreign_account_nonce_or_unbounded_operation_cannot_query_monitor(self):
+        for kind in ('account', 'nonce', 'operation', 'extra'):
+            endpoint = self.endpoint()
+            request = copy.deepcopy({'format_version': 1, **endpoint.identity,
+                                     'sequence': 0, 'operation': 'observe'})
+            if kind == 'account':
+                request['account']['uid'] += 1
+            elif kind == 'nonce':
+                request['binding']['execution_nonce'] = 'e' * 32
+            elif kind == 'operation':
+                request['operation'] = 'arbitrary-command'
+            else:
+                request['command'] = 'private prose'
+            with patch.object(polkit_root.time, 'monotonic', return_value=1):
+                with self.subTest(kind=kind), self.assertRaises(ValueError):
+                    endpoint.handle(request)
+            endpoint.monitor.observe.assert_not_called()
+
+
+class RootRuntimeTests(unittest.TestCase):
+    def test_image_hash_binding_is_once_but_kernel_birth_and_image_metadata_are_continuous(self):
+        launch = {'pid': 401, 'parent_pid': 1, 'start_time_ticks': 71}
+        engine = {'pid': 402, 'parent_pid': 401, 'start_time_ticks': 72}
+        image = {'device': 1, 'inode': 2, 'bytes': 3}
+        binding = {'install_root': '/opt/painted-wolf-code', 'images': {
+            '/opt/painted-wolf-code/bin/painted-wolf-code': image,
+            '/opt/painted-wolf-code/bin/pw': image}}
+        def owner(pid, uid):
+            return {**(launch if pid == 401 else engine), 'uid': uid}
+        with patch.object(polkit_runtime, 'controlled_image', return_value=(1, 2, 3)), patch.object(
+                polkit_runtime, 'unchanged') as hashed, patch.object(polkit_runtime, 'kernel_owner', side_effect=owner), patch.object(
+                polkit_runtime, 'engine_image', return_value=(1, 2, 3)), patch.object(
+                polkit_runtime, 'process_identity', return_value=launch), patch.object(
+                polkit_runtime, 'descends', return_value=[engine]):
+            runtime = polkit_runtime.Runtime({'binding': binding, 'launch': launch, 'native': launch, 'engine': engine}, ACCOUNT)
+            runtime.observe()
+            self.assertEqual(hashed.call_count, 2)
+            with patch.object(polkit_runtime, 'engine_image', return_value=(1, 9, 3)):
+                with self.assertRaises(ValueError):
+                    runtime.observe()
+
+
+if __name__ == '__main__':
+    unittest.main()
