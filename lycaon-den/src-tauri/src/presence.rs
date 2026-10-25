@@ -17,6 +17,7 @@ use crate::sidecar::SidecarState;
 
 #[cfg(target_os = "linux")]
 mod linux;
+mod observation;
 
 const HTTP_TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -348,19 +349,30 @@ where
         window_label: window.label(),
         step_away_generation: step_away,
     };
-    let authenticator = verify_user_presence(window, &challenge.prompt, &binding)?;
+    observation::challenge(&binding);
+    let authenticator = verify_user_presence(window, &challenge.prompt, &binding).map_err(|error| {
+        observation::refused(&binding, &error, false);
+        error
+    })?;
     // Closing the native prompt can delay focus returning to this window.
     let deadline = std::time::Instant::now() + Duration::from_millis(500);
     while !window.is_focused().unwrap_or(false) && std::time::Instant::now() < deadline {
         std::thread::sleep(Duration::from_millis(20));
     }
-    require_active_window(window)?;
-    require_current_confirmation(step_away)?;
+    require_active_window(window).map_err(|error| {
+        observation::refused(&binding, &error, false);
+        error
+    })?;
+    require_challenge_confirmation(&binding).map_err(|error| {
+        observation::refused(&binding, &error, true);
+        error
+    })?;
+    observation::confirmed(&binding, authenticator);
     let signature = state.sign_presence(&challenge.proof_payload, authenticator);
     let (url, body) = complete(&challenge, authenticator, &signature);
     let result = send_json(engine.agent.post(&url), &engine.api_token, body)?;
     require_active_window(window)?;
-    require_current_confirmation(step_away)?;
+    require_challenge_confirmation(&binding)?;
     Ok(result)
 }
 
@@ -393,6 +405,13 @@ fn require_current_confirmation(generation: u64) -> Result<(), PresenceCommandEr
         return Ok(());
     }
     Err(PresenceCommandError::denied("The device locked or suspended during confirmation. Try again."))
+}
+
+fn require_challenge_confirmation(binding: &ConfirmationChallenge<'_>) -> Result<(), PresenceCommandError> {
+    require_current_confirmation(binding.step_away_generation).map_err(|error| {
+        observation::invalidated(binding, crate::vault_lock::confirmation_generation());
+        error
+    })
 }
 
 fn require_active_window(window: &tauri::Window) -> Result<(), PresenceCommandError> {
@@ -677,8 +696,13 @@ mod tests {
         let generation = crate::vault_lock::confirmation_generation();
         let state = SidecarState::new();
         crate::vault_lock::lock_now(&state, crate::vault_lock::LockReason::Sleep);
-        let error = require_current_confirmation(generation).expect_err("stale confirmation");
+        let binding = ConfirmationChallenge {
+            challenge_id: "10000000-0000-4000-8000-000000000001",
+            purpose: "reveal", window_label: "main", step_away_generation: generation,
+        };
+        let error = require_challenge_confirmation(&binding).expect_err("stale confirmation");
         assert_eq!(error.code, "presence_denied");
+        assert!(error.resolution.is_none());
     }
 
 }
