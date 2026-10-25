@@ -91,19 +91,55 @@ func (f jobBuiltin) Invoke(ctx context.Context, request commandprogram.Operation
 // only; no host-global PID or process name is ever addressed.
 func jobBuiltins(jobs *SessionJobs, commands map[string]toolcontract.CommandSpecification) map[string]commandprogram.OperationDispatcher {
 	list := jobBuiltin(func(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-		if _, err := (commandprogram.CatalogBinder{}).Bind(commands[request.Argv[0].Value], request.Argv); err != nil {
-			return refusedResult("COMMAND_OPERAND_INVALID"), argvRejection(commands[request.Argv[0].Value], err)
-		}
-		if len(request.Argv) != 1 {
-			return refusedResult("COMMAND_OPERAND_INVALID"), toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"command": request.Argv[0].Value, "reason": "takes no operands"})
+		name := request.Argv[0].Value
+		bound, err := (commandprogram.CatalogBinder{}).Bind(commands[name], request.Argv)
+		if err != nil {
+			return refusedResult("COMMAND_OPERAND_INVALID"), argvRejection(commands[name], err)
 		}
 		statuses, err := jobs.List(ctx)
 		if err != nil {
 			return ownerFailure(err), err
 		}
+		var targets []string
+		if name == "ps" {
+			for _, opt := range bound.Options("-p") {
+				if len(opt.Values) > 0 {
+					targets = append(targets, opt.Values[0].Value)
+				}
+			}
+		}
+		for _, op := range bound.Operands() {
+			if name == "ps" && strings.TrimLeft(op.Value, "auxef") == "" {
+				continue
+			}
+			targets = append(targets, op.Value)
+		}
+		if len(targets) > 0 {
+			wanted := map[string]bool{}
+			for _, target := range targets {
+				handle, resolveErr := jobs.Resolve(target)
+				if resolveErr != nil {
+					_, _ = fmt.Fprintf(nonNilWriter(streams.Error), "%s: %s: session-owned background jobs only (no session job %s)\n", name, target, target)
+					continue
+				}
+				wanted[handle] = true
+			}
+			filtered := statuses[:0]
+			for _, job := range statuses {
+				if wanted[job.Handle] {
+					filtered = append(filtered, job)
+				}
+			}
+			statuses = filtered
+		}
+		showCmd := name == "ps" || len(bound.Options("-l")) > 0
 		var out strings.Builder
 		for _, job := range statuses {
-			fmt.Fprintf(&out, "[%d] %s running\n", jobs.Number(job.Handle), job.Handle)
+			if showCmd && job.CommandLine != "" {
+				fmt.Fprintf(&out, "[%d] %s running %s\n", jobs.Number(job.Handle), job.Handle, job.CommandLine)
+			} else {
+				fmt.Fprintf(&out, "[%d] %s running\n", jobs.Number(job.Handle), job.Handle)
+			}
 		}
 		if _, err := fmt.Fprint(nonNilWriter(streams.Output), out.String()); err != nil {
 			return ownerFailure(err), err
@@ -116,18 +152,19 @@ func jobBuiltins(jobs *SessionJobs, commands map[string]toolcontract.CommandSpec
 		"wait": jobBuiltin(func(ctx context.Context, request commandprogram.OperationRequest, _ commandprogram.Streams) (toolcontract.ProducerResult, error) {
 			handles := request.Argv.Values()[1:]
 			if len(handles) == 0 {
-				statuses, err := jobs.List(ctx)
+				var err error
+				handles, err = jobs.Unwaited(ctx)
 				if err != nil {
 					return ownerFailure(err), err
-				}
-				for _, job := range statuses {
-					handles = append(handles, job.Handle)
 				}
 			}
 			last := readResult(0)
 			for _, handle := range handles {
 				result, err := jobs.Wait(ctx, handle)
 				if err != nil {
+					if reject := toolrejection.AsToolReject(err); reject != nil && reject.Data != nil {
+						reject.Data["command"] = "wait"
+					}
 					return ownerFailure(err), err
 				}
 				last = toolcontract.ProducerResult{Status: result.Status, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: result.Status == 0, EffectCertainty: toolcontract.NoEffect}
@@ -149,6 +186,9 @@ func jobBuiltins(jobs *SessionJobs, commands map[string]toolcontract.CommandSpec
 			}
 			for _, handle := range argv {
 				if err := jobs.Signal(ctx, handle, signal); err != nil {
+					if reject := toolrejection.AsToolReject(err); reject != nil && reject.Data != nil {
+						reject.Data["command"] = "kill"
+					}
 					return ownerFailure(err), err
 				}
 			}
@@ -175,6 +215,12 @@ func argvRejection(spec toolcontract.CommandSpecification, cause error) error {
 		code = argvErr.Code
 		data["word"], data["expected"] = argvErr.Word, argvErr.Expected
 		data["source_start_byte"], data["source_end_byte"], data["source_line"], data["source_column"] = argvErr.Span.StartByte, argvErr.Span.EndByte, argvErr.Span.Line, argvErr.Span.Column
+	} else if owner := toolrejection.AsToolReject(cause); owner != nil {
+		// An owner's own operand rule keeps its code and facts.
+		code = owner.Code
+		for key, value := range owner.Data {
+			data[key] = value
+		}
 	}
 	return toolrejection.RejectInvalidArguments(code, data)
 }

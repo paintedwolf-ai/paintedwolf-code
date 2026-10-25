@@ -52,8 +52,8 @@ func TestTerminalPTYReusesBoundedExecGuards(t *testing.T) {
 			path: filepath.Join(root, "lycaon", "internal", "exec", "pty_start.go"),
 			markers: []string{
 				"toExecOpts",
-				"buildExecCmd",
-				"configureCmdEnv",
+				"prepareNativeCommand",
+				"ValidateProcessInputs",
 			},
 		},
 		{

@@ -1,14 +1,20 @@
 package contract
 
 import (
+	"context"
 	"sort"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
+	"github.com/lycaon/lycaon/internal/platform"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolexecution"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
+	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/workflowfixture"
@@ -46,6 +52,83 @@ func TestReadOnlyPostureSurfacesCarryNoMutatingTool(t *testing.T) {
 					t.Errorf("posture %q reaches surface %q, which offers %q (%s)", posture, id, tool, reason)
 				}
 			}
+			verifyReadOnlyProgramSurface(t, platform.ToolFilter{ProfileID: toolcontract.CoordinatorProfileID, SurfaceID: id})
+		}
+	}
+	for _, profileID := range []string{"worker_readonly", "explore_readonly", "plan_review_readonly"} {
+		verifyReadOnlyProgramSurface(t, platform.ToolFilter{ProfileID: profileID})
+	}
+}
+
+func verifyReadOnlyProgramSurface(t *testing.T, filter platform.ToolFilter) {
+	t.Helper()
+	profiles, err := sandbox.LoadToolProfiles()
+	contractcheck.FailErr(t, "load shipped tool profiles", err)
+	boundary := sandbox.NewBoundary(sandbox.Config{}, profiles)
+	policy := toolprofiles.NewGuidanceRejectPolicy(toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), nil))
+	registry := tools.NewDefaultRegistry()
+	names := []string{"read", "find", "extract_archive", "git_status", "git_diff", "git_log", "write", "git_commit", "http_request"}
+	defs := make(map[string]toolcontract.OperationDefinition, len(names))
+	active := make([]toolcontract.OperationDefinition, 0, len(names))
+	for _, name := range names {
+		contract, ok := toolcontract.Lookup(name)
+		if !ok {
+			t.Fatalf("missing contract for %s", name)
+		}
+		contractcheck.FailErr(t, "register "+name, registry.RegisterDefinition(tools.Definition{
+			Meta:     tools.ToolMeta{Name: name, ArgsSchema: map[string]any{"type": "object"}},
+			Contract: contract,
+			Handler: func(context.Context, map[string]any, tools.ToolContext) (string, error) {
+				t.Fatalf("read-only surface admission invoked handler for %s", name)
+				return "", nil
+			},
+		}))
+		def, _ := registry.Definition(name)
+		defs[name] = def.Operation
+		active = append(active, def.Operation)
+	}
+	executor := toolexecution.NewExecutor(policy, registry, filter.ProfileID)
+	frozen, err := executor.Metadata.FreezeProgramSurface(t.Context(), filter, active)
+	contractcheck.FailErr(t, "freeze program surface "+filter.ProfileID+"/"+filter.SurfaceID, err)
+	invocation := toolcontract.OperationInvocation{
+		Kind:          toolcontract.ProgramChildInvocation,
+		Identity:      toolcontract.ExecutionIdentity{ProgramID: "program", NodeID: "node", ExecutionID: "child"},
+		ActorID:       "principal",
+		SessionID:     "session",
+		Scope:         toolcontract.OperationScope{Kind: toolcontract.SessionOperationScope},
+		SourceUnitID:  "source",
+		Span:          toolcontract.SourceSpan{StartByte: 1, EndByte: 4, Line: 1, Column: 1},
+		CatalogDigest: toolcontract.LanguageCatalogDigest(),
+	}
+	for _, okCase := range []struct {
+		tool, command, mode string
+	}{
+		{"read", "cat", "always"},
+		{"find", "find", "default-predicates-print"},
+		{"extract_archive", "tar", "listing-or-stream-decode"},
+		{"git_status", "git status", "query"},
+		{"git_diff", "git diff", "query"},
+		{"git_log", "git log", "query"},
+	} {
+		if err := frozen.ValidateBound(defs[okCase.tool], invocation, okCase.command, okCase.mode, nil); err != nil {
+			t.Errorf("%s/%s rejected read-only %s (%s): %v", filter.ProfileID, filter.SurfaceID, okCase.command, okCase.mode, err)
+		}
+	}
+	externalExec, err := toolcontract.NewCommandEffects(toolcontract.CommandExternalExec)
+	contractcheck.FailErr(t, "compile external_exec effect", err)
+	for _, badCase := range []struct {
+		tool, command, mode string
+		child               *toolcontract.CommandEffects
+	}{
+		{"write", "tee", "each-target", nil},
+		{"find", "find", "-delete", nil},
+		{"find", "find", "-exec", &externalExec},
+		{"extract_archive", "tar", "create-extract-compress-decompress-to-path", nil},
+		{"git_commit", "git commit", "mutation-network", nil},
+		{"http_request", "curl", "request", nil},
+	} {
+		if err := frozen.ValidateBound(defs[badCase.tool], invocation, badCase.command, badCase.mode, badCase.child); err == nil {
+			t.Errorf("%s/%s admitted non-read-only %s (%s)", filter.ProfileID, filter.SurfaceID, badCase.command, badCase.mode)
 		}
 	}
 }

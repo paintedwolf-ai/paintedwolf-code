@@ -47,8 +47,7 @@ func TestCommandCatServesTheAcceptedDocumentNewerThanDisk(t *testing.T) {
 		for i, word := range argv {
 			fields[i] = commandprogram.Field{Value: word}
 		}
-		operation, _ := owners.Operation(argv[0])
-		request := commandprogram.OperationRequest{OperationID: operation, Argv: fields,
+		request := commandprogram.OperationRequest{OperationID: argv[0], Argv: fields,
 			Invocation: toolcontract.OperationInvocation{Kind: toolcontract.ProgramChildInvocation, Identity: toolcontract.ExecutionIdentity{ProgramID: f.program, ExecutionID: f.execution}}}
 		var out mappedOutput
 		result, err := owners.Invoke(ctx, f.tctx, paths, request, commandprogram.Streams{Input: io.NopCloser(strings.NewReader("")), Output: &out, Error: io.Discard})
@@ -91,7 +90,7 @@ func TestCommandCatServesTheAcceptedDocumentNewerThanDisk(t *testing.T) {
 	}
 	pins, err = f.recorder.RevisionPins(ctx, f.session, f.execution)
 	testutil.FailErr(t, "read pins after later reads", err)
-	if len(pins) != 1 {
-		t.Fatalf("each run resubmits its own captures as a prefix: %+v", pins)
+	if len(pins) != 3 || pins[1] != pin || pins[2] != pin {
+		t.Fatalf("each run appends its capture: %+v", pins)
 	}
 }

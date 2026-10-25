@@ -58,8 +58,10 @@ type Fixture struct {
 	Session    string
 	Dir        string
 	Background *bgprocess.Registry
-	context    func(string, *tools.ToolContext)
-	calls      int
+	context func(string, *tools.ToolContext)
+	// Configure adjusts each call's tool context before the entry runs.
+	Configure func(*tools.ToolContext)
+	calls     int
 }
 
 type sessions struct{}
@@ -135,6 +137,9 @@ func (f *Fixture) Call(t *testing.T, ctx context.Context, source string) (string
 	tc.Invocation.ID = parent.ID
 	if f.context != nil {
 		f.context(f.Dir, &tc)
+	}
+	if f.Configure != nil {
+		f.Configure(&tc)
 	}
 	return f.Runtime.Run(ctx, args, tc)
 }

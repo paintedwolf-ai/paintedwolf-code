@@ -84,22 +84,26 @@ type SessionOwners interface {
 // programRun is one invocation's frozen frame, surface and ledger bindings.
 type programRun struct {
 	externalHidden bool
-	executor       *toolexecution.Executor
-	registry       *tools.DefaultRegistry
-	recorder       *invocation.SQLRecorder
-	supervisor     *ProgramSupervisor
-	progress       toolexecution.ProgramProgressFacts
-	frame          toolexecution.ProgramFrame
-	surface        toolexecution.ProgramSurface
-	memory         *toolcontract.ProgramMemory
-	capture        invocation.ProgramInputCapture
-	tc             tools.ToolContext
-	root           toolcontract.OperationInvocation
-	parentReceipt  string
-	source         string
-	catalog        toolcontract.LanguageCatalog
-	commands       map[string]toolcontract.CommandSpecification
-	nativeDefs     map[string]toolcontract.OperationDefinition
+	// retainOutput keeps one child stream in the program output store.
+	retainOutput  func(ctx context.Context, executionID, stream string, data []byte, complete bool) error
+	executor      *toolexecution.Executor
+	registry      *tools.DefaultRegistry
+	recorder      *invocation.SQLRecorder
+	supervisor    *ProgramSupervisor
+	progress      toolexecution.ProgramProgressFacts
+	frame         toolexecution.ProgramFrame
+	surface       toolexecution.ProgramSurface
+	memory        *toolcontract.ProgramMemory
+	capture       invocation.ProgramInputCapture
+	tc            tools.ToolContext
+	root          toolcontract.OperationInvocation
+	parentReceipt string
+	source        string
+	sourcesMu     sync.RWMutex
+	sources       map[string]string
+	catalog       toolcontract.LanguageCatalog
+	commands      map[string]toolcontract.CommandSpecification
+	nativeDefs    map[string]toolcontract.OperationDefinition
 
 	// envelope carries the call's launch capability requests to each launch.
 	envelope map[string]any
@@ -168,13 +172,6 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	if err != nil {
 		return "", err
 	}
-	session, err := r.Sessions.Get(ctx, tc.Identity.SessionID)
-	if err != nil {
-		return "", err
-	}
-	if session == nil || session.OwnerPersonID == "" {
-		return "", fmt.Errorf("command program requires the session owner")
-	}
 	parsed, snapshot, err := parseProgram(ctx, memory, source)
 	if err != nil {
 		return "", err
@@ -189,17 +186,27 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 		}
 	}()
 
-	root := toolcontract.OperationInvocation{
-		Kind:         toolcontract.ProgramChildInvocation,
-		Identity:     toolcontract.ExecutionIdentity{ProgramID: uuid.NewString(), NodeID: "program", ExecutionID: uuid.NewString()},
-		ActorID:      session.OwnerPersonID,
-		SessionID:    tc.Identity.SessionID,
-		Scope:        toolcontract.OperationScope{Kind: toolcontract.ProjectOperationScope, ProjectID: tc.Identity.ProjectID, RootID: tc.Source.ActiveRootID},
-		SourceUnitID: "submitted", Span: toolcontract.SourceSpan{Line: 1, Column: 1},
-		CatalogDigest: snapshot.Plan.CatalogDigest,
+	cwd, _ := args["cwd"].(string)
+	paths, err := projectpaths.NewProgramPaths(ctx, r.Boundary, tc, cwd)
+	if err != nil {
+		return "", err
 	}
-	if cwd, _ := args["cwd"].(string); cwd != "" {
-		root.Scope.Directory = cwd
+	session, err := r.Sessions.Get(ctx, tc.Identity.SessionID)
+	if err != nil {
+		return "", err
+	}
+	if session == nil || session.OwnerPersonID == "" {
+		return "", fmt.Errorf("command program requires the session owner")
+	}
+	branch, err := tc.SourceBranch(tc.Source.ActiveRootID)
+	if err != nil {
+		return "", err
+	}
+	root := toolcontract.OperationInvocation{
+		Kind: toolcontract.ProgramChildInvocation, Identity: toolcontract.ExecutionIdentity{ProgramID: uuid.NewString(), NodeID: "program", ExecutionID: uuid.NewString()},
+		ActorID: session.OwnerPersonID, SessionID: tc.Identity.SessionID,
+		Scope:        toolcontract.OperationScope{Kind: toolcontract.ProjectOperationScope, ProjectID: tc.Identity.ProjectID, RootID: tc.Source.ActiveRootID, BranchID: branch.String(), Directory: cwd},
+		SourceUnitID: "submitted", Span: toolcontract.SourceSpan{Line: 1, Column: 1}, CatalogDigest: snapshot.Plan.CatalogDigest,
 	}
 	frame, err := toolexecution.FreezeProgramFrame(ctx, root, tc, toolexecution.ProgramModelInvocation{ToolName: "command", Arguments: args}, memory)
 	if err != nil {
@@ -207,9 +214,12 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	}
 	releasePlan := release
 	release = func() { frame.Close(); releasePlan() }
-	paths, err := projectpaths.NewProgramPaths(ctx, r.Boundary, tc, root.Scope.Directory)
-	if err != nil {
-		return "", err
+	// A validation run's source identity is captured before anything runs.
+	var verification func() commandSourceIdentity
+	if tc.Execution.VerificationCheck {
+		_, reader := commandSourceReaders(ctx, tc, paths.Cwd().Abs)
+		identity := reader()
+		verification = func() commandSourceIdentity { return identity }
 	}
 	var owners ProgramOwners
 	if r.Owners != nil {
@@ -241,12 +251,24 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	screening := captureprojection.StreamOptions{WorkingMemory: memory, Bounds: secretmatch.StreamBounds{InputBytes: 1 << 20, OutputBytes: 1 << 20, MemoryBytes: 32 << 20, DetectorWork: 1 << 30}}
 	run.executor, run.registry, run.recorder, run.supervisor, run.progress = r.Executor, r.Registry, r.Recorder, r.Supervisor, r.Progress
 	run.externalHidden = r.ExternalHidden
+	run.retainOutput = func(ctx context.Context, executionID, stream string, data []byte, complete bool) error {
+		spill, redacted, err := r.retainScreened(ctx, memory, executionID+":"+stream, data, scope, screening)
+		if err != nil {
+			return err
+		}
+		output := invocation.RetainedOutput{ExecutionID: executionID, Stream: stream, Reference: "output:" + executionID + ":" + stream, Complete: complete && spill.Complete, Redacted: redacted}
+		if err := outputs.Attach(ctx, root.Identity.ProgramID, output, spill); err != nil {
+			return errors.Join(err, spill.Close())
+		}
+		return nil
+	}
 	run.frame, run.surface, run.memory, run.tc, run.root, run.parentReceipt, run.source = frame, surface, memory, tc, root, tc.Invocation.ID, source
 	run.capture = invocation.ProgramInputCapture{State: memory, Outputs: outputs, Projector: r.Projector, ProgramID: root.Identity.ProgramID, Scope: scope, Screening: screening, MaximumNodes: 1024, MaximumDepth: 64}
 	if err := r.beginProgram(ctx, run, outputs, snapshot.Plan, scope, screening); err != nil {
 		return "", err
 	}
 	jobs := r.Supervisor.Jobs(tc.Identity.SessionID, tc.Identity.ProjectID)
+	jobs.BeginProgram()
 	builtins := jobBuiltins(jobs, run.commands)
 	listeners := r.Listeners
 	if listeners == nil {
@@ -276,13 +298,19 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 		}
 	}
 	stdout, stderr := &boundedBuffer{limit: programOutputBytes}, &boundedBuffer{limit: programOutputBytes}
+	sources := owners.Sources
+	if sources == nil {
+		if sc, ok := owners.Input.(commandprogram.SourceCapture); ok {
+			sources = sc
+		}
+	}
 	ports := commandprogram.EvaluationPorts{
 		Invocation: root, Dispatch: dispatcher, Binder: commandprogram.CatalogBinder{}, Files: projectpaths.GlobFiles{Paths: paths},
-		Publication: owners.Publication, Input: owners.Input,
+		Publication: owners.Publication, Input: owners.Input, Sources: sources,
 		Executions: dispatcher, Supervision: r.Supervisor, Predicates: commandprogram.PredicateRuntime{Patterns: commandprogram.NativePredicatePatterns{Memory: memory}},
 		Memory:      memory,
+		Environment: programEnvironment(tc),
 		Streams:     commandprogram.Streams{Input: commandprogram.NullInput(), Output: stdout, Error: stderr},
-		Environment: paths.Environment(),
 	}
 	var evaluated commandprogram.ProgramOutcome
 	result, evalErr := r.Supervisor.RunProgram(ctx, root, func(ctx context.Context) (toolcontract.ProducerResult, error) {
@@ -299,12 +327,14 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 		lifetime.settled()
 	})
 	var settleErr error
+	settledNow := false
 	select {
 	case settleErr = <-settled:
+		settledNow = true
 	default:
 		// & jobs still run under supervision; the program settles when they end.
 	}
-	feedback := r.feedback(ctx, run, dispatcher, evalErr)
+	feedback := r.feedback(ctx, run, dispatcher, result.StopCode, evalErr)
 	refusal := toolrejection.AsToolReject(feedback)
 	if (feedback != nil && refusal == nil) || settleErr != nil {
 		return "", errors.Join(feedback, settleErr)
@@ -315,6 +345,9 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	}
 	if refusal != nil {
 		outcome.Refusal = &ProgramRefusal{Code: refusal.Code, Feedback: feedback.Error()}
+	}
+	if settledNow {
+		stampProgramRun(tc, source, paths.Cwd(), outcome, verification)
 	}
 	out, err := surveyjson.Marshal(outcome)
 	if err != nil {
@@ -367,7 +400,7 @@ func (r *ProgramRuntime) retainScreened(ctx context.Context, memory *toolcontrac
 		return nil, false, err
 	}
 	spill, err := tooloutput.RetainScreenedStream(ctx, tooloutput.ScreenedReader(io.NopCloser(bytes.NewReader(screened.Bytes()))), tooloutput.StreamSpillOptions{
-		Store: r.Recorder.ProgramBlobStore(r.Blobs), ClaimID: claim, MaximumBytes: 1 << 20, Admission: r.sessionResources(scope.SessionID), WorkingMemory: memory, RetainedState: memory,
+		Store: r.Recorder.ProgramBlobStore(r.Blobs), ClaimID: claim, MaximumBytes: 1 << 20, PreviewBytes: 4 << 10, Admission: r.sessionResources(scope.SessionID), WorkingMemory: memory, RetainedState: memory,
 	})
 	if err != nil {
 		return nil, false, err
@@ -396,13 +429,13 @@ func evaluatedResult(outcome commandprogram.ProgramOutcome) toolcontract.Produce
 
 // feedback renders the first native owner rejection through the program
 // feedback boundary, with the program's completed and uncertain effects.
-func (r *ProgramRuntime) feedback(ctx context.Context, run *programRun, dispatcher *ProgramDispatcher, evalErr error) error {
+func (r *ProgramRuntime) feedback(ctx context.Context, run *programRun, dispatcher *ProgramDispatcher, stopCode string, evalErr error) error {
 	rejection := dispatcher.firstRejection()
 	if rejection == nil {
 		var refusal *commandprogram.EvaluationRefusal
 		if errors.As(evalErr, &refusal) {
 			span := refusal.Node.Span
-			data := map[string]any{"tool": "command", "source_start_byte": span.StartByte, "source_end_byte": span.EndByte, "source_line": span.Line, "source_column": span.Column, "expected_form": refusal.Expected, "reason": refusal.Expected}
+			data := map[string]any{"tool": "command", "source_start_byte": span.StartByte, "source_end_byte": span.EndByte, "source_line": span.Line, "source_column": span.Column, "expected": refusal.Expected, "expected_form": refusal.Expected, "reason": refusal.Expected}
 			if refusal.Command != "" {
 				data["command"], data["word"], data["expected_form"] = refusal.Command, refusal.Option, refusal.Form
 			}
@@ -414,26 +447,48 @@ func (r *ProgramRuntime) feedback(ctx context.Context, run *programRun, dispatch
 					}
 				}
 			}
-			return toolrejection.RejectInvalidArguments(refusal.Code, data)
+			reject := toolrejection.RejectInvalidArguments(refusal.Code, data)
+			enrichProgramReject(reject, refusal.Command, span)
+			return ensureProgramRefusalText(toolrejection.RenderReject(reject, nil), reject)
 		}
 		if reject := toolrejection.AsToolReject(evalErr); reject != nil {
-			return reject
+			enrichProgramReject(reject, "", run.root.Span)
+			return ensureProgramRefusalText(toolrejection.RenderReject(reject, nil), reject)
+		}
+		if evalErr != nil && !errors.Is(evalErr, context.Canceled) && !errors.Is(evalErr, context.DeadlineExceeded) {
+			code := stopCode
+			if code == "" {
+				code = toolrejection.ToolOwnerFailedCode
+			}
+			reject := &toolrejection.ToolReject{Code: code, FailureClass: "owner_error", Data: map[string]any{"tool": "command", "reason": evalErr.Error()}}
+			enrichProgramReject(reject, "command", run.root.Span)
+			return errors.Join(evalErr, ensureProgramRefusalText(toolrejection.RenderReject(reject, nil), reject))
 		}
 		// A host stop without a typed rejection is a host failure, never success.
 		return evalErr
 	}
+	reject := toolrejection.AsToolReject(rejection.cause)
+	enrichProgramReject(reject, rejection.operation.Command(), rejection.operation.Invocation().Span)
 	prepared, err := toolexecution.PrepareProgramFailure(ctx, run.recorder, run.memory, run.capture, run.tc, rejection.operation, rejection.cause)
 	if err != nil || prepared == nil {
-		return errors.Join(rejection.cause, err)
+		return errors.Join(ensureProgramRefusalText(toolrejection.RenderReject(reject, nil), reject), err)
 	}
 	defer prepared.Close()
-	return run.executor.Rejections.RenderProgramFailure(ctx, run.frame, run.tc, prepared)
+	rendered := run.executor.Rejections.RenderProgramFailure(ctx, run.frame, run.tc, prepared)
+	if rendered != nil && toolrejection.AsToolReject(rendered) == nil {
+		return errors.Join(ensureProgramRefusalText(toolrejection.RenderReject(reject, nil), reject), rendered)
+	}
+	return ensureProgramRefusalText(rendered, reject)
 }
 
 func (r *ProgramRuntime) outcome(ctx context.Context, run *programRun, result toolcontract.ProducerResult, stdout, stderr *boundedBuffer, scope captureprojection.Scope, screening captureprojection.StreamOptions) (ProgramOutcome, error) {
 	projection, err := r.Recorder.ProjectProgram(ctx, run.tc.Identity.SessionID, run.root.Identity.ProgramID, 4)
 	if err != nil {
 		return ProgramOutcome{}, err
+	}
+	if run.tc.Effects.Out != nil {
+		receipt := projection.Program
+		run.tc.Effects.Out.CommandProgram = &receipt
 	}
 	out := ProgramOutcome{ProgramID: run.root.Identity.ProgramID, State: projection.Program.State, Status: result.Status, StopCode: result.StopCode, Truncated: stdout.truncated || stderr.truncated,
 		ExecutedChildren: projection.ExecutedChildren, CompletedEffects: projection.CompletedEffects, UncertainEffects: projection.UncertainEffects, NativeGaps: projection.NativeGaps}
@@ -468,6 +523,30 @@ func (r *ProgramRuntime) sessionOutputs(ctx context.Context, sessionID string) (
 	}
 	r.outputs[sessionID] = outputs
 	return outputs, nil
+}
+
+func (r *programRun) sourceText(unitID string) string {
+	if unitID == "" || unitID == "submitted" {
+		return r.source
+	}
+	r.sourcesMu.RLock()
+	defer r.sourcesMu.RUnlock()
+	if s, ok := r.sources[unitID]; ok {
+		return s
+	}
+	return r.source
+}
+
+func (r *programRun) setSourceText(unitID, text string) {
+	if unitID == "" {
+		return
+	}
+	r.sourcesMu.Lock()
+	if r.sources == nil {
+		r.sources = map[string]string{}
+	}
+	r.sources[unitID] = text
+	r.sourcesMu.Unlock()
 }
 
 // boundedBuffer keeps the first limit bytes and records truncation; the
@@ -607,37 +686,53 @@ func (r *programRun) externalDefinition() (toolcontract.OperationDefinition, err
 func (r *ProgramRuntime) nativeSurfaceDefinitions(external toolcontract.OperationDefinition, catalog toolcontract.LanguageCatalog, natives map[string]NativeOperation) ([]toolcontract.OperationDefinition, map[string]toolcontract.OperationDefinition, error) {
 	active := []toolcontract.OperationDefinition{external}
 	defs := map[string]toolcontract.OperationDefinition{}
+	addTool := func(tool string, attachCandidates bool) error {
+		if tool == "" || defs[tool].Digest() != "" {
+			return nil
+		}
+		reg, ok := r.Registry.Definition(tool)
+		if !ok {
+			return nil
+		}
+		def := programOperationDefinition(reg.Operation)
+		if attachCandidates {
+			facts := def.Facts()
+			have := map[string]bool{}
+			for _, declared := range facts.Commands {
+				have[declared.Name] = true
+			}
+			changed := false
+			for _, candidate := range catalog.Commands {
+				if natives[candidate.Name].Tool == tool && !have[candidate.Name] {
+					facts.Commands = append(facts.Commands, candidate)
+					have[candidate.Name] = true
+					changed = true
+				}
+			}
+			if changed {
+				var err error
+				if def, err = toolcontract.NewOperationDefinition(facts); err != nil {
+					return err
+				}
+			}
+		}
+		defs[tool] = def
+		active = append(active, def)
+		return nil
+	}
 	for _, spec := range catalog.Commands {
 		op, ok := natives[spec.Name]
-		if !ok || defs[op.Tool].Digest() != "" {
-			continue
-		}
-		reg, ok := r.Registry.Definition(op.Tool)
 		if !ok {
 			continue
 		}
-		def := reg.Operation
-		facts := def.Facts()
-		have := map[string]bool{}
-		for _, declared := range facts.Commands {
-			have[declared.Name] = true
+		if err := addTool(op.Tool, true); err != nil {
+			return nil, nil, err
 		}
-		changed := false
-		for _, candidate := range catalog.Commands {
-			if natives[candidate.Name].Tool == op.Tool && !have[candidate.Name] {
-				facts.Commands = append(facts.Commands, candidate)
-				have[candidate.Name] = true
-				changed = true
-			}
-		}
-		if changed {
-			var err error
-			if def, err = toolcontract.NewOperationDefinition(facts); err != nil {
+		for _, tool := range op.Tools {
+			if err := addTool(tool, false); err != nil {
 				return nil, nil, err
 			}
 		}
-		defs[op.Tool] = def
-		active = append(active, def)
 	}
 	return active, defs, nil
 }
@@ -693,4 +788,78 @@ func (r *programRun) launchArguments(line, cwd string) map[string]any {
 		arguments[field] = value
 	}
 	return arguments
+}
+
+// nativeArguments attaches any call-level capability declarations that the
+// bound native operation contract accepts.
+func (r *programRun) nativeArguments(base map[string]any, contract toolcontract.Contract) map[string]any {
+	arguments := make(map[string]any, len(base)+len(r.envelope))
+	for k, v := range base {
+		arguments[k] = v
+	}
+	if raw, ok := r.envelope["capability_request"].(map[string]any); ok {
+		supported := map[string]any{}
+		for _, field := range contract.CapabilityRequestFields() {
+			if value, exists := raw[field]; exists {
+				supported[field] = value
+			}
+		}
+		if len(supported) > 0 {
+			arguments["capability_request"] = supported
+		}
+	}
+	if secretUse, ok := r.envelope["secret_use"]; ok && contract.SecretReferenceSurface != "" {
+		arguments["secret_use"] = secretUse
+	}
+	return arguments
+}
+
+// childOutputBytes bounds each child stream the output store retains.
+const childOutputBytes = 64 << 10
+
+// childOutputs tees a child's stdout and stderr into bounded buffers and
+// returns the streams to use and a function that retains what was written.
+func (r *programRun) childOutputs(request commandprogram.OperationRequest, streams commandprogram.Streams) (commandprogram.Streams, func(context.Context)) {
+	if r.retainOutput == nil {
+		return streams, func(context.Context) {}
+	}
+	stdout, stderr := &boundedBuffer{limit: childOutputBytes}, &boundedBuffer{limit: childOutputBytes}
+	teed := streams
+	teed.Output = io.MultiWriter(nonNilWriter(streams.Output), stdout)
+	teed.Error = io.MultiWriter(nonNilWriter(streams.Error), stderr)
+	execution := request.Invocation.Identity.ExecutionID
+	return teed, func(ctx context.Context) {
+		for _, stream := range []struct {
+			name   string
+			buffer *boundedBuffer
+		}{{"stdout", stdout}, {"stderr", stderr}} {
+			if data := stream.buffer.Bytes(); len(data) > 0 {
+				// Retention is evidence for previews; a failure here never
+				// changes the child's settled outcome.
+				_ = r.retainOutput(context.WithoutCancel(ctx), execution, stream.name, data, !stream.buffer.truncated)
+			}
+		}
+	}
+}
+
+// stampProgramRun states the settled program's run for verification evidence:
+// passed on status 0, failed otherwise, unverifiable when the host stopped it.
+// A program whose jobs still run states nothing.
+func stampProgramRun(tc tools.ToolContext, source string, cwd projectpaths.Resolved, outcome ProgramOutcome, verification func() commandSourceIdentity) {
+	if tc.Effects.Out == nil {
+		return
+	}
+	verdict := api.SourceVerdictPassed
+	switch {
+	case outcome.Refusal != nil || outcome.State == "interrupted":
+		verdict = api.SourceVerdictUnverifiable
+	case outcome.Status != 0:
+		verdict = api.SourceVerdictFailed
+	}
+	run := &tools.SourceRunCapture{CheckID: tc.Identity.ToolCallID, IsCheck: tc.Execution.VerificationCheck, Command: source, ExitCode: outcome.Status, Verdict: verdict, Cwd: cwd.DisplayPath}
+	if tc.Execution.VerificationCheck && verification != nil {
+		identity := verification()
+		run.SourceRevision, run.SourceRootDigest = identity.Revision, identity.Root
+	}
+	tc.Effects.Out.SourceRun = run
 }

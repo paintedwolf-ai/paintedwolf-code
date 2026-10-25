@@ -5,6 +5,7 @@ package textutil
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -46,10 +47,10 @@ func TestSortOperandsAndRefusals(t *testing.T) {
 	if r.stderr != "sort: missing.txt: No such file or directory\n" {
 		t.Fatalf("stderr %q", r.stderr)
 	}
-	for _, source := range []string{"sort -k 0", "sort -k 1.0", "sort -k x", "sort -k 1b", "sort -t ab", "sort -k +1"} {
+	for _, source := range []string{"sort -k 0", "sort -k 1.0", "sort -k x", "sort -k 1q", "sort -t ab", "sort -k +1"} {
 		h.run(source, "").expectRefusal(t, source, "COMMAND_OPERAND_INVALID")
 	}
-	h.run("sort -s", "").expectRefusal(t, "sort -s", "COMMAND_OPTION_UNSUPPORTED")
+	h.run("sort -R", "").expectRefusal(t, "sort -R", "COMMAND_OPTION_UNSUPPORTED")
 }
 
 // Input past sort_memory_bytes spills sorted runs, merges with bounded fan-in
@@ -141,4 +142,58 @@ func TestWorkingMemoryRefusal(t *testing.T) {
 	if r.err == nil || !asMemoryLimit(r.err, &exhausted) || small.InUse().Working != 0 {
 		t.Fatalf("err %v in use %+v", r.err, small.InUse())
 	}
+}
+
+// A spilled sort keeps its runs in the program's private directory under the
+// session TMPDIR; settling the program and host loss both remove them.
+func TestSessionSpillsLiveUnderTheSessionAndAreReclaimed(t *testing.T) {
+	h := newHarness(t)
+	scratch := t.TempDir()
+	h.tc.Host.SessionScratchDir = scratch
+	spills, err := NewSessionSpills(h.tc, "program-1")
+	testutil.FailErr(t, "session spills", err)
+	h.owners.limits["sort_memory_bytes"] = 512
+	ports := h.ports()
+	ports.Spills = spills
+	input := strings.Repeat("b\na\nc\n", 200)
+	h.runWith(ports, "sort -u", input).expectOutput(t, "spilled sort", "a\nb\nc\n", 0)
+	dir := filepath.Join(scratch, spillRootName, "program-1")
+	entries, err := os.ReadDir(dir)
+	testutil.FailErr(t, "read program spill dir", err)
+	if len(entries) != 0 {
+		t.Fatalf("completed sort left %d runs", len(entries))
+	}
+	info, err := os.Stat(dir)
+	testutil.FailErr(t, "stat program spill dir", err)
+	if info.Mode().Perm() != 0o700 {
+		t.Fatalf("spill dir mode %v", info.Mode().Perm())
+	}
+	run, err := spills.Create(t.Context())
+	testutil.FailErr(t, "leftover run", err)
+	testutil.FailErr(t, "write leftover", run.WriteRecord([]byte("x")))
+	testutil.FailErr(t, "close program spills", spills.Close())
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Fatal("settled program kept its spill directory")
+	}
+	if _, err := spills.Create(t.Context()); err == nil {
+		t.Fatal("closed program spills accepted a run")
+	}
+	other, err := NewSessionSpills(h.tc, "program-2")
+	testutil.FailErr(t, "second program", err)
+	_, err = other.Create(t.Context())
+	testutil.FailErr(t, "second program run", err)
+	testutil.FailErr(t, "reclaim after host loss", ReclaimSessionSpills(h.tc))
+	if _, err := os.Stat(filepath.Join(scratch, spillRootName)); !os.IsNotExist(err) {
+		t.Fatal("host loss left session spills")
+	}
+	for _, id := range []string{"", "../escape", ".hidden"} {
+		if _, err := NewSessionSpills(h.tc, id); err == nil {
+			t.Fatalf("program identity %q accepted", id)
+		}
+	}
+	h.tc.Host.SessionScratchDir = ""
+	if _, err := NewSessionSpills(h.tc, "program-3"); err == nil {
+		t.Fatal("spills without a session TMPDIR accepted")
+	}
+	testutil.FailErr(t, "reclaim without scratch", ReclaimSessionSpills(h.tc))
 }

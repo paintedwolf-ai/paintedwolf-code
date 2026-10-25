@@ -71,7 +71,7 @@ func TestWholeUnitRefusesMalformedOrExcludedLaterSyntax(t *testing.T) {
 		"printf changed > ./output; if false; then eval dangerous; fi",
 		"echo <(cat ./input)", "echo $((i++))", "echo $((x=1))", "((1+2))", "a=(one two)",
 		"echo ${name:=fallback}", "echo ${!name}", "echo $-", "echo $$",
-		"echo {one,two}", "case x in x) true;; esac", "until false; do :; done",
+		"echo {one,two}", "case x in x) true;& esac", "until false; do :; done",
 		"select x in one; do :; done", "coproc echo x", "trap true EXIT", "set -x", "set +o pipefail", "set -- a b",
 		"cat <<< value", "cat 3> ./output", "cat 2>&3", "cat 1<> ./input",
 		"function helper { :; }", "cat() { :; }", "local x=value", "IFS=, echo x",
@@ -217,7 +217,7 @@ func TestForeignDialectRefusalPreservesItsActualLaterSpan(t *testing.T) {
 }
 
 func TestLiteralExcludedCommandsUseShellQuoteRemovalBeforeAdmission(t *testing.T) {
-	for _, name := range []string{`e\val`, `ev"al"`, `'eval'`, `tr\ap`, `s\et`} {
+	for _, name := range []string{`e\val`, `ev"al"`, `'eval'`, `tr\ap`, `sh\opt`} {
 		source := "printf changed > ./output; " + name + " data"
 		plan, err := commandsurface.ParseProgram([]byte(source), commandsurface.ParseOptions{})
 		var diagnostic *commandsurface.SyntaxDiagnostic

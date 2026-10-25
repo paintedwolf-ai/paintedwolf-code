@@ -5,7 +5,7 @@
       "aliases": [],
       "family": "query",
       "owner": "filesystem",
-      "argv": "jq [-rcesn] [--arg NAME VALUE] [--argjson NAME JSON] QUERY [--] [PATH ...]",
+      "argv": "jq [-rjacesnRSM] [--tab | --indent N] [--raw-output0] [--stream] [--yaml-input] [--yaml-output] [--arg NAME VALUE] [--argjson NAME JSON] [--slurpfile NAME PATH] [--rawfile NAME PATH] [-f PATH] [QUERY] [--] [PATH ...] [--args VALUE ... | --jsonargs JSON ...]",
       "forms": [
         {
           "spellings": [
@@ -87,15 +87,193 @@
             "fixture",
             "{}"
           ]
+        },
+        {
+          "spellings": [
+            "-R",
+            "--raw-input"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "jq-option-R-rawinput",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-j",
+            "--join-output"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "jq-option-j-joinoutput",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-a",
+            "--ascii-output"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "jq-option-a-asciioutput",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-S",
+            "--sort-keys"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "jq-option-S-sortkeys",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-M",
+            "--monochrome-output"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "jq-option-M-monochromeoutput",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--tab"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "jq-option-tab",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--indent"
+          ],
+          "arity": 1,
+          "value_role": "width",
+          "fixture_id": "jq-option-indent",
+          "consumption": "fixed",
+          "sample_values": [
+            "2"
+          ]
+        },
+        {
+          "spellings": [
+            "--slurpfile"
+          ],
+          "arity": 2,
+          "value_role": "name-path-pair",
+          "fixture_id": "jq-option-slurpfile",
+          "consumption": "fixed",
+          "sample_values": [
+            "fixture",
+            "input"
+          ]
+        },
+        {
+          "spellings": [
+            "--rawfile"
+          ],
+          "arity": 2,
+          "value_role": "name-path-pair",
+          "fixture_id": "jq-option-rawfile",
+          "consumption": "fixed",
+          "sample_values": [
+            "fixture",
+            "input"
+          ]
+        },
+        {
+          "spellings": [
+            "--args"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "jq-option-args",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--jsonargs"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "jq-option-jsonargs",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-f",
+            "--from-file"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "jq-option-f-fromfile",
+          "consumption": "fixed",
+          "sample_values": [
+            "input"
+          ]
+        },
+        {
+          "spellings": [
+            "--raw-output0"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "jq-option-rawoutput0",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--stream"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "jq-option-stream",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--yaml-input"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "jq-option-yamlinput",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--yaml-output"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "jq-option-yamloutput",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
-      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. jq [-rcesn] [--arg NAME VALUE] [--argjson NAME JSON] QUERY [--] [PATH ...]",
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. jq [-rjacesnRSM] [--tab | --indent N] [--raw-output0] [--stream] [--yaml-input] [--yaml-output] [--arg NAME VALUE] [--argjson NAME JSON] [--slurpfile NAME PATH] [--rawfile NAME PATH] [-f PATH] [QUERY] [--] [PATH ...] [--args VALUE ... | --jsonargs JSON ...]",
       "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
-        "0": "complete output; -e final truthy",
-        "1": "-e final false/null",
-        "4": "-e no values",
-        "2": "usage/input/compile/runtime error"
+        "0": "complete output; -e last output truthy",
+        "1": "-e last output false or null",
+        "2": "usage, or an operand file could not be read",
+        "3": "query compile error",
+        "4": "-e no output",
+        "5": "runtime error in the last input, or input that is not JSON"
       },
       "effects": [
         {
@@ -138,10 +316,11 @@
           }
         }
       },
-      "notes": "Retain gojq and yq/TOML codecs; --arg/--argjson consume TWO argv words. Complete value streams; -s array, -n one null input; -r strings raw, -c compact JSON, default indented2 JSON. yq parses YAML/TOML by explicit input selection/extension, stdin YAML; emits YAML default with LF. No ambient env, import/module/filesystem loader; query work/depth/allocation bounded. Plain serialization differs from jq-edit preserving comments.",
+      "notes": "jq 1.8 semantics on the shared gojq engine: input key order and unmodified number literals are kept (2.0, 1E+3), keys sorts, keys_unsorted and to_entries follow input order, and runtime errors use jq's wording with \"jq: error (at FILE:LINE)\". --arg/--argjson/--slurpfile/--rawfile consume TWO argv words; --slurpfile and --rawfile files are captured and pinned. -s array, -n one null input, -R lines as strings (-Rs one string); -r and -j print strings raw (-j without newlines) unless -a escapes; the last of -c, --tab and --indent N (0-7) sets the layout; -S sorts output keys; -M is accepted (no colour is ever produced). $ENV and env read the program's exported environment; no import/module/filesystem loader; query work/depth/output bounded. A plain redirect re-serializes; jq-edit preserves comments and layout. Without a filter jq runs \".\"; -f reads the filter from a pinned file; operands after --args/--jsonargs are $ARGS.positional, and $ARGS.named holds every named value. --stream evaluates each input's tostream events; --yaml-input/--yaml-output are gojq's YAML spellings. Command-line errors print jq's message and help pointer with status 2.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/jq/jq.go",
+        "implementation": "lycaon/internal/tools/native/query/jq.go",
         "tests": [
+          "lycaon/internal/tools/native/query/forms_test.go",
           "lycaon/internal/tools/native/jq/jq_test.go"
         ],
         "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
@@ -164,7 +343,23 @@
         "jq-option-s-slurp",
         "jq-option-n-nullinput",
         "jq-option-arg",
-        "jq-option-argjson"
+        "jq-option-argjson",
+        "jq-option-R-rawinput",
+        "jq-option-j-joinoutput",
+        "jq-option-a-asciioutput",
+        "jq-option-S-sortkeys",
+        "jq-option-M-monochromeoutput",
+        "jq-option-tab",
+        "jq-option-indent",
+        "jq-option-slurpfile",
+        "jq-option-rawfile",
+        "jq-option-args",
+        "jq-option-jsonargs",
+        "jq-option-f-fromfile",
+        "jq-option-rawoutput0",
+        "jq-option-stream",
+        "jq-option-yamlinput",
+        "jq-option-yamloutput"
       ]
     },
     {
@@ -172,27 +367,28 @@
       "aliases": [],
       "family": "query",
       "owner": "filesystem",
-      "argv": "yq [-rcesn] [--arg NAME VALUE] [--argjson NAME JSON] QUERY [--] [PATH ...]",
+      "argv": "yq [eval|e|eval-all|ea] [-i] [-n] [-e] [-r] [-P] [-N] [-M] [-0] [-j] [-I N] [-o FORMAT] [-p FORMAT] [--expression EXPR] [EXPRESSION] [--] [PATH ...]; python yq: yq [-y|-Y] [-c] [-s] [-S] [-a] [-R] [--tab] [--arg NAME VALUE] [--argjson NAME JSON] [--slurpfile NAME PATH] [--rawfile NAME PATH] [-i] FILTER [PATH ...]",
       "forms": [
         {
           "spellings": [
-            "-r",
-            "--raw-output"
+            "-i",
+            "--inplace",
+            "--in-place"
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "yq-option-r-rawoutput",
+          "fixture_id": "yq-option-i-inplace",
           "consumption": "fixed",
           "sample_values": []
         },
         {
           "spellings": [
-            "-c",
-            "--compact-output"
+            "-n",
+            "--null-input"
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "yq-option-c-compactoutput",
+          "fixture_id": "yq-option-n-nullinput",
           "consumption": "fixed",
           "sample_values": []
         },
@@ -209,23 +405,140 @@
         },
         {
           "spellings": [
-            "-s",
-            "--slurp"
+            "-r",
+            "--unwrapScalar"
+          ],
+          "arity": -1,
+          "value_role": "boolean",
+          "fixture_id": "yq-option-r-unwrapscalar",
+          "consumption": "optional-attached-value",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-P",
+            "--prettyPrint"
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "yq-option-s-slurp",
+          "fixture_id": "yq-option-P-prettyprint",
           "consumption": "fixed",
           "sample_values": []
         },
         {
           "spellings": [
-            "-n",
-            "--null-input"
+            "-N",
+            "--no-doc"
           ],
           "arity": 0,
           "value_role": "boolean",
-          "fixture_id": "yq-option-n-nullinput",
+          "fixture_id": "yq-option-N-nodoc",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-M",
+            "--no-colors"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "yq-option-M-nocolors",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-0",
+            "--nul-output"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "yq-option-0-nuloutput",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-j",
+            "--tojson"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "yq-option-j-tojson",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-I",
+            "--indent"
+          ],
+          "arity": 1,
+          "value_role": "width",
+          "fixture_id": "yq-option-I-indent",
+          "consumption": "fixed",
+          "sample_values": [
+            "2"
+          ]
+        },
+        {
+          "spellings": [
+            "-o",
+            "--output-format"
+          ],
+          "arity": 1,
+          "value_role": "format",
+          "fixture_id": "yq-option-o-outputformat",
+          "consumption": "fixed",
+          "sample_values": [
+            "json"
+          ]
+        },
+        {
+          "spellings": [
+            "-p",
+            "--input-format"
+          ],
+          "arity": 1,
+          "value_role": "format",
+          "fixture_id": "yq-option-p-inputformat",
+          "consumption": "fixed",
+          "sample_values": [
+            "yaml"
+          ]
+        },
+        {
+          "spellings": [
+            "--expression"
+          ],
+          "arity": 1,
+          "value_role": "query",
+          "fixture_id": "yq-option-expression",
+          "consumption": "fixed",
+          "sample_values": [
+            "."
+          ]
+        },
+        {
+          "spellings": [
+            "-y",
+            "--yaml-output"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "yq-option-y-yamloutput",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-Y",
+            "--yaml-roundtrip"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "yq-option-Y-yamlroundtrip",
           "consumption": "fixed",
           "sample_values": []
         },
@@ -254,22 +567,165 @@
             "fixture",
             "{}"
           ]
+        },
+        {
+          "spellings": [
+            "--slurpfile"
+          ],
+          "arity": 2,
+          "value_role": "name-path-pair",
+          "fixture_id": "yq-option-slurpfile",
+          "consumption": "fixed",
+          "sample_values": [
+            "fixture",
+            "input"
+          ]
+        },
+        {
+          "spellings": [
+            "--rawfile"
+          ],
+          "arity": 2,
+          "value_role": "name-path-pair",
+          "fixture_id": "yq-option-rawfile",
+          "consumption": "fixed",
+          "sample_values": [
+            "fixture",
+            "input"
+          ]
+        },
+        {
+          "spellings": [
+            "--args"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "yq-option-args",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--jsonargs"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "yq-option-jsonargs",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-S",
+            "--sort-keys"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "yq-option-S-sortkeys",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--tab"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "yq-option-tab",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-a",
+            "--ascii-output"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "yq-option-a-asciioutput",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-c",
+            "--compact-output"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "yq-option-c-compactoutput",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-s",
+            "--slurp"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "yq-option-s-slurp",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-R",
+            "--raw-input"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "yq-option-R-rawinput",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--raw-output0"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "yq-option-rawoutput0",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--stream"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "yq-option-stream",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
-      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. yq [-rcesn] [--arg NAME VALUE] [--argjson NAME JSON] QUERY [--] [PATH ...]",
+      "operands": "Declared PATH operands accept logical/native identity and --; the expression is the first operand unless it is - or an existing regular file. yq [eval|e|eval-all|ea] [-i] [-n] [-e] [-r] [-P] [-N] [-M] [-0] [-j] [-I N] [-o FORMAT] [-p FORMAT] [--expression EXPR] [EXPRESSION] [--] [PATH ...]; python yq: yq [-y|-Y] [-c] [-s] [-S] [-a] [-R] [--tab] [--arg NAME VALUE] [--argjson NAME JSON] [--slurpfile NAME PATH] [--rawfile NAME PATH] [-i] FILTER [PATH ...]",
       "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
-        "0": "complete output; -e final truthy",
-        "1": "-e final false/null",
-        "4": "-e no values",
-        "2": "usage/input/compile/runtime error"
+        "0": "complete output",
+        "1": "mikefarah: error or -e with no match other than null or false; python yq: -e last output false or null",
+        "2": "python yq: usage or unreadable file",
+        "3": "python yq: filter compile error",
+        "4": "python yq: -e no output",
+        "5": "python yq: runtime error or input that is not YAML"
       },
       "effects": [
         {
           "requires": [
             "read"
           ],
-          "mode": "always"
+          "mode": "query"
+        },
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "-i"
         }
       ],
       "platform_capabilities": [
@@ -285,7 +741,7 @@
         "child_executions"
       ],
       "example": {
-        "program": "printf '{\"x\":1}\\n' | yq -r '.x'",
+        "program": "printf 'x: 1\\n' | yq '.x'",
         "stdout": "1\n",
         "status": 0,
         "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
@@ -305,11 +761,11 @@
           }
         }
       },
-      "notes": "Retain gojq and yq/TOML codecs; --arg/--argjson consume TWO argv words. Complete value streams; -s array, -n one null input; -r strings raw, -c compact JSON, default indented2 JSON. yq parses YAML/TOML by explicit input selection/extension, stdin YAML; emits YAML default with LF. No ambient env, import/module/filesystem loader; query work/depth/allocation bounded. Plain serialization differs from jq-edit preserving comments.",
+      "notes": "mikefarah yq v4 on its own library (pinned in go.mod): yq expression syntax, eval per document or eval-all over every document, input format from -p or the first file's extension (unknown is YAML), output format from -o (-j is json) or else the input's; YAML output keeps comments, key order and styles. -i evaluates into the first file and publishes it at the captured revisions through the write door. Environment, load and system operators are disabled; -s split files, --from-file and colour output are not supported. Errors print \"Error: ...\" and exit 1. Both yq dialects are served: a python yq spelling (-y, -Y, -c, -s, -S, -a, -R, --tab, --arg, --argjson, --slurpfile, --rawfile, --args, --jsonargs, --raw-output0, --stream) selects python yq, which runs the jq program over each file's YAML documents with jq's statuses and diagnostics, prints jq's JSON unless -y/-Y asks for YAML, and with -i rewrites each file; otherwise yq is mikefarah yq v4. Spellings both dialects share (-e, -n, -r, -i, --indent) mean the same in each; -j stays mikefarah's --tojson.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/jq/jq.go",
+        "implementation": "lycaon/internal/tools/native/query/yq.go",
         "tests": [
-          "lycaon/internal/tools/native/jq/jq_test.go"
+          "lycaon/internal/tools/native/query/yq_test.go"
         ],
         "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
@@ -325,13 +781,35 @@
       "fixture_ids": [
         "yq-operands-valid",
         "yq-rejection",
-        "yq-option-r-rawoutput",
-        "yq-option-c-compactoutput",
-        "yq-option-e-exitstatus",
-        "yq-option-s-slurp",
+        "yq-option-i-inplace",
         "yq-option-n-nullinput",
+        "yq-option-e-exitstatus",
+        "yq-option-r-unwrapscalar",
+        "yq-option-P-prettyprint",
+        "yq-option-N-nodoc",
+        "yq-option-M-nocolors",
+        "yq-option-0-nuloutput",
+        "yq-option-j-tojson",
+        "yq-option-I-indent",
+        "yq-option-o-outputformat",
+        "yq-option-p-inputformat",
+        "yq-option-expression",
+        "yq-option-y-yamloutput",
+        "yq-option-Y-yamlroundtrip",
         "yq-option-arg",
-        "yq-option-argjson"
+        "yq-option-argjson",
+        "yq-option-slurpfile",
+        "yq-option-rawfile",
+        "yq-option-args",
+        "yq-option-jsonargs",
+        "yq-option-S-sortkeys",
+        "yq-option-tab",
+        "yq-option-a-asciioutput",
+        "yq-option-c-compactoutput",
+        "yq-option-s-slurp",
+        "yq-option-R-rawinput",
+        "yq-option-rawoutput0",
+        "yq-option-stream"
       ]
     }
   ]

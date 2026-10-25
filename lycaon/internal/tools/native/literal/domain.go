@@ -85,16 +85,23 @@ func runSummarize(inv *invocation) error {
 		return err
 	}
 	focus, _ := inv.value("--focus")
-	resp, _, err := inv.owners.Domain.Summarize.Summarize(inv.ctx, survey.SummarizeRequest{Path: abs, Task: focus}, inv.tc)
+	resp, _, err := inv.owners.Domain.Summarize.Summarize(inv.ctx, survey.SummarizeRequest{Path: abs, Task: focus, Observe: inv.pinOpened}, inv.tc)
 	if err != nil {
 		return err
 	}
 	return inv.structured(resp)
 }
 
+// runRepoMap runs the layout bundle, whose find and list_dir probes read
+// catalog and directory metadata only; it opens no file content to pin.
 func runRepoMap(inv *invocation) error {
-	if value, ok := inv.value("--depth"); ok {
-		return inv.usage(value, "the survey owner selects its own layout depth")
+	var depth *int64
+	if _, ok := inv.value("--depth"); ok {
+		value, err := inv.integer("--depth", 0, false)
+		if err != nil {
+			return err
+		}
+		depth = &value
 	}
 	if inv.owners.Domain.Repo == nil {
 		return platformUnavailable("repo-map", "survey owner")
@@ -103,7 +110,7 @@ func runRepoMap(inv *invocation) error {
 	if err != nil || !ok {
 		return err
 	}
-	resp, err := inv.owners.Domain.Repo.Survey(inv.ctx, repoMapBundle, abs, inv.tc)
+	resp, err := inv.owners.Domain.Repo.Survey(inv.ctx, reposurvey.RepoRequest{Bundle: repoMapBundle, Path: abs, LayoutDepth: depth}, inv.tc)
 	if err != nil {
 		return err
 	}
