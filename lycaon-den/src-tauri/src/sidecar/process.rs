@@ -107,8 +107,9 @@ pub(super) fn spawn_sidecar_process(
     presence_public_key: &str,
 ) -> Result<SpawnedSidecar, String> {
     let bin = resolve_lycaon_binary()?;
+    let image = crate::linux_generation::capture_helper(&bin)?;
     let config_dir = crate::config_dir::ensure_host_config_dir()?;
-    let mut cmd = engine_command(&bin, presence_public_key, &config_dir);
+    let mut cmd = engine_command(&image.path, presence_public_key, &config_dir);
     write_engine_log_header(&bin);
     cmd.stderr(Stdio::piped());
     if let Some(layout) = bundled_engine_layout() {

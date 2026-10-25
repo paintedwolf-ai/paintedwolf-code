@@ -13,9 +13,10 @@ pub(crate) struct CustodyReport {
     pub detail: Option<String>,
 }
 
-fn engine_command(args: &[&str]) -> Result<Command, String> {
+fn engine_command(args: &[&str]) -> Result<(Command, crate::linux_generation::HelperImage), String> {
     super::installation::ensure_current().map_err(|reason| reason.guidance())?;
-    let mut cmd = Command::new(resolve_lycaon_binary()?);
+    let image = crate::linux_generation::capture_helper(&resolve_lycaon_binary()?)?;
+    let mut cmd = Command::new(&image.path);
     cmd.arg("credentials")
         .args(args)
         .env(
@@ -23,7 +24,7 @@ fn engine_command(args: &[&str]) -> Result<Command, String> {
             crate::config_dir::ensure_host_config_dir()?,
         )
         .stderr(Stdio::null());
-    Ok(cmd)
+    Ok((cmd, image))
 }
 
 fn read_custody() -> Result<CustodyReport, String> {
@@ -34,7 +35,8 @@ fn read_custody() -> Result<CustodyReport, String> {
             detail: Some(reason.guidance()),
         });
     }
-    let output = engine_command(&["custody"])?
+    let (mut command, _image) = engine_command(&["custody"])?;
+    let output = command
         .stdin(Stdio::null())
         .output()
         .map_err(|err| format!("read vault custody: {err}"))?;
