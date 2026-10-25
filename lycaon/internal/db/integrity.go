@@ -129,7 +129,7 @@ func validateStoreIntegrity(ctx context.Context, sqlDB *sql.DB) error {
 func auditSnapshot(ctx context.Context, database *sql.DB, betweenChecks func()) error {
 	tx, err := database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err == nil {
-		defer tx.Rollback()
+		defer func() { _ = tx.Rollback() }()
 		err = scanCheck(ctx, tx, "PRAGMA integrity_check")
 		if err == nil {
 			if betweenChecks != nil {

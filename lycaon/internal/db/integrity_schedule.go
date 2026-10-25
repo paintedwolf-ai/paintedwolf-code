@@ -49,7 +49,7 @@ func (a *auditControl) active() bool {
 func (a *auditControl) checkpoint(result WALCheckpoint) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if a.cancel != nil && uint64(result.PinnedFrames()) > a.frameLimit {
+	if a.cancel != nil && result.PinnedFrames() > 0 && uint64(result.PinnedFrames()) > a.frameLimit { // #nosec G115
 		a.cancel(errAuditDeferred)
 	}
 }
