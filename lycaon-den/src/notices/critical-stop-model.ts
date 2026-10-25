@@ -8,6 +8,7 @@ import type { EngineState } from "../platform/connection/engine-supervision.ts";
 import { isBackendReachable } from "../platform/connection/sidecar-status.ts";
 import type { SidecarStatus } from "../store/app-state-model.ts";
 import { CLIENT_NOTICES, type ClientNoticeCopy } from "./client-notices.generated.ts";
+import { formatBytes } from "../format/format-bytes.ts";
 
 export type CriticalStopRecovery =
   | "quit_desktop"
@@ -17,6 +18,7 @@ export type CriticalStopRecovery =
   | "restore_backup"
   | "finish_restore"
   | "finish_fresh_start"
+  | "retry_upgrade"
   | "unlock_credential_vault"
   | "create_credential_vault"
   | "reset_credential_vault";
@@ -59,6 +61,8 @@ export function criticalStopRecoveryLabel(
       return "Finish restore";
     case "finish_fresh_start":
       return "Finish starting fresh";
+    case "retry_upgrade":
+      return "Try again";
     case "unlock_credential_vault":
       return "Unlock vault";
     case "create_credential_vault":
@@ -240,9 +244,31 @@ function storeIncompatibleCopy(
     : CLIENT_NOTICES.store_incompatible_integrity_no_snapshot;
 }
 
+// Operational failures offer retry without implying that history is damaged.
+function storageUnavailableCriticalStop(health: HealthResponse): CriticalStopSpec {
+  const copy = health.recovery_reason === "storage_unavailable"
+    ? CLIENT_NOTICES.store_storage_unavailable
+    : health.recovery_space_needed_bytes === undefined
+      ? CLIENT_NOTICES.store_storage_full
+      : CLIENT_NOTICES.store_insufficient_space;
+  return {
+    code: STORE_INCOMPATIBLE_STOP_CODE,
+    title: copy.title,
+    message: copy.message
+      .replace("{needed}", formatBytes(health.recovery_space_needed_bytes))
+      .replace("{available}", formatBytes(health.recovery_space_available_bytes) || "0 B"),
+    retryFailed: copy.suggestedAction,
+    recovery: "retry_upgrade",
+    diagnostic: health.recovery_detail?.trim() || undefined,
+  };
+}
+
 export function storeIncompatibleCriticalStop(
   health: HealthResponse,
 ): CriticalStopSpec {
+  if (health.recovery_reason === "insufficient_space" || health.recovery_reason === "storage_unavailable") {
+    return storageUnavailableCriticalStop(health);
+  }
   const at = health.recovery_snapshot_at?.trim();
   const time = at ? formatRecoverySnapshotAt(at) : undefined;
   const hasSnapshot = health.recovery_snapshot_available === true && Boolean(at);

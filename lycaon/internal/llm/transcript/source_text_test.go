@@ -320,3 +320,42 @@ func TestReadSourceLabelsBindRangesWithoutInventingCoordinates(t *testing.T) {
 		}
 	}
 }
+
+func TestSourceHistoryVersionProjectsExactSourceWithVersionLabel(t *testing.T) {
+	version := `{"mode":"version","path":"app.go","recorded":true,"version_id":"ver-7","state":"present",` +
+		`"content":"     3: \tif ok {\n     4: \t\treturn \"done\"","total_lines":9,"offset":3,"limit":2,"end_line":4,` +
+		`"receipt":{"tool":"source_history","path":"app.go"}}`
+	message := sourceReadMessage("[source_history#2]\n" + version)
+	message.ToolResult.Tool = "source_history"
+	message.EvidenceHandles = []string{"source_history#2"}
+	projected := transcript.Project([]api.Message{message})
+	got := projected[len(projected)-1].Content
+	for _, want := range []string{
+		`File contents "app.go" at version "ver-7" (lines 3–4); evidence "[source_history#2]":`,
+		"⟦D⟧\tif ok {\n⟦D⟧\t\treturn \"done\"",
+		`"version_id":"ver-7"`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("source history projection lacks %q: %s", want, got)
+		}
+	}
+	if strings.Contains(got, "     3: ") || strings.Contains(got, `"content":`) {
+		t.Fatalf("version source kept line labels or stayed in metadata: %s", got)
+	}
+	if again := transcript.Project(projected); again[len(again)-1].Content != got {
+		t.Fatal("source history projection is not idempotent")
+	}
+
+	for name, body := range map[string]string{
+		"effects":        `{"mode":"effects","path":"app.go","recorded":true,"receipt":{"tool":"source_history"}}`,
+		"absent_version": `{"mode":"version","path":"app.go","state":"absent","receipt":{"tool":"source_history"}}`,
+		"read_receipt":   strings.ReplaceAll(version, `"tool":"source_history"`, `"tool":"read"`),
+	} {
+		message := sourceReadMessage(body)
+		message.ToolResult.Tool = "source_history"
+		projected := transcript.Project([]api.Message{message})
+		if got := projected[len(projected)-1].Content; strings.Contains(got, "⟦D:tool:source⟧") {
+			t.Fatalf("%s projected as source: %s", name, got)
+		}
+	}
+}

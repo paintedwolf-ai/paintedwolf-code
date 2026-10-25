@@ -10,7 +10,7 @@ Security defines the boundaries around local agent effects: project scope, subpr
 
 ## Local API transport
 
-The API is Den's authenticated loopback sidecar. Versioned routes require an explicit bearer token; CORS permits the shipped desktop origins without ambient credentials. A staged restore keeps health reachable and preflights valid while authenticated API calls receive `409 backup_restore_pending` until restart.
+The API is Den's authenticated loopback sidecar. Versioned routes require an explicit bearer token, which the desktop hands the engine as the first frame on its private stdin rather than in its environment: a process environment stays readable through the process filesystem until the engine disables dumps, and to same-user processes on macOS for its whole life. A standalone engine still reads `LYCAON_API_TOKEN`. CORS permits the shipped desktop origins without ambient credentials. A staged restore keeps health reachable and preflights valid while authenticated API calls receive `409 backup_restore_pending` until restart.
 
 Ordinary JSON requests have a 1 MiB envelope limit (`httpio.MaxJSONBody`). Source replacement and editor draft updates use a separate envelope budget for JSON escaping and UTF-16 expansion; their services enforce the decoded text bound and the 4 MiB encoded file cap before committing an update. Stream replay validates message membership against the session transcript before using cached content; removed messages and messages from another session are not replayable.
 
@@ -82,6 +82,8 @@ The host serves its owner over loopback. Loopback prevents ordinary LAN access b
 
 The host trusts the installed binary and its shipped catalogs, the operating system's enforcement primitives, protected credential storage, and explicit human decisions over host-authored plans.
 
+Linux native presence also requires an observed active graphical session with an unlocked state. Screen lock, suspend and lock-observer loss invalidate in-flight native confirmations; the host invalidates pending challenges and rejects delayed unlock commits from before that boundary.
+
 Primary risks are unauthorized local API use, path escape, subprocess boundary failure, unmediated egress, secret disclosure, runaway work, and treating untrusted content as authority.
 
 ---
@@ -134,7 +136,7 @@ Third-party processes the host executes on the person's behalf (a local MCP serv
 | Writes | Attached project roots, approved exact/tree grants, bounded temp/dev/cache locations, and declared host-managed scratch |
 | Reads | Broad enough for toolchains, with the app config tree and protected/sensitive locations separately controlled |
 | Symlinks | Followed only while descriptor-relative resolution remains inside the admitted root |
-| Signals | Same-boundary descendants or host-mediated process control |
+| Signals | Same-boundary descendants, or the session's own processes through host-mediated process control |
 
 Default write roots derive from operating-system conventions rather than a list of programming ecosystems, so a newly named toolchain does not require editing the security floor. The one bounded exception is a short list of package stores kept in the home directory rather than under a cache convention (`~/.bun/install/cache`, `~/.npm/_cacache`, `~/.cargo/registry`, `~/.cargo/git`; see `confine/package_cache_roots.go`), plus Go's local telemetry counter directory under the user config directory, which `go` writes on every run and which no cache convention covers. Extracted packages there are the same risk class as the conventional build caches; the tool homes around them are not roots, because their install and `bin` directories hold programs that run outside the sandbox. A program some tool installs under a conventional cache or data root is the accepted cost of deriving roots from conventions ([What stays quiet](#what-stays-quiet-and-why)).
 
@@ -150,7 +152,7 @@ Settled approval metadata accompanies the model-visible tool receipt as structur
 
 ### Host processes and exceptional execution
 
-Native `process_list` and `process_signal` provide reviewed inspection and signaling without opening a command sandbox. Inspection omits arguments and environment values. Signals target task-bound process instances, rechecked before delivery, so PID reuse cannot redirect an approved signal. macOS uses audit tokens; Linux uses pidfds. References expire on host restart, and delivery does not establish exit.
+Native `process_list` and `process_signal` provide reviewed inspection and signaling without opening a command sandbox. Inspection omits arguments and environment values. A session's process authority is its own descendants: the processes holding the lineage of a launch the session made, including ones a finished command left running. Inspection names every visible process, but only the session's own carry a reference, and `process_signal` refuses any other process with `PROCESS_NOT_OWNED` before review and again at delivery, whatever an approval said. Stopping anything else is the person's to do. Signals target session-bound process instances, rechecked before delivery, so PID reuse cannot redirect an approved signal. macOS uses audit tokens; Linux uses pidfds. References expire on host restart, and delivery does not establish exit.
 
 For operations these tools cannot express, `command` and `verify` accept explicit capabilities on each invocation:
 
@@ -243,7 +245,7 @@ The intended policy is platform-independent; enforcement adapters differ. macOS 
 | Loopback connect, direct IP | `localhost` and port rules | An admitted stream connection runs on a socket the supervisor creates in the host's namespace and connects before it replaces the process's own; a destination inside the sandbox stays there. Datagram sockets never leave the namespace, because a host datagram socket sends wherever a later call names. The outer helper relays each granted host loopback datagram service from the same address inside the sandbox: those the host serves at launch below the ephemeral port range before the command starts, any other when the process connects to it. A `udp` permit, or direct IP without permits, adds a gateway interface that carries every route off the sandbox; the outer helper forwards each datagram a permit covers from a socket of its own and writes the replies back, and refuses a connect no permit covers. Direct IP reaches names through a stub at `127.0.0.53` inside the sandbox that the supervisor relays to the host's resolver |
 | Local listener | `localhost` bind and inbound rules | A granted stream listener is a socket the supervisor binds to loopback in the host's namespace and puts listening at once; the wildcard address is narrowed to loopback. A granted datagram listener on a fixed port binds inside the sandbox, and the outer helper first takes the same port on the host's loopback and relays from it, so a port the host already uses refuses the bind. Any other listener stays inside the sandbox |
 | Unix-domain sockets | Path connects denied except exact grants, including sockets the program created itself; `socketpair` allowed | The supervisor connects an exact grant by its resolved path and refuses every other path with `EACCES`, binding a path included; abstract names stay in the sandbox's namespace. A datagram Unix socket, even a connected end of a pair, sends to whatever path a later call names, which the filter cannot read, so neither `socket` nor `socketpair` creates one; stream and seqpacket pairs are allowed; `io_uring` answers `ENOSYS`, since its operations bypass the filter; a send that would open a connection by TCP Fast Open is refused |
-| Signals | Same-sandbox descendants, or any process with `process_control` | The PID namespace: a confined process can signal only processes inside it, with or without `process_control`; the host's processes are reached through the native `process_signal` tool |
+| Signals | Same-sandbox descendants, or any process with `process_control` | The PID namespace: a confined process can signal only processes inside it, with or without `process_control`; the native `process_signal` tool reaches the session's own processes outside it |
 | Escape | Profile denies | seccomp kills a process that calls `unshare`, `setns`, `mount` or the mount API, `pivot_root`, `ptrace`, `process_vm_*`, `bpf`, `perf_event_open`, `kexec_*`, module loading, or the key-management syscalls, `ioctl` with `TIOCSTI` or `TIOCLINUX` (compared as the kernel does, on the request's low 32 bits), so an inherited terminal cannot be fed input, or `clone` with a namespace flag; `clone3` answers `ENOSYS` so libraries fall back to `clone`; no capability remains and privileges cannot grow |
 | Attestation | `sandbox_check` membership | Landlock refuses a probe write, seccomp mode 2, no-new-privs set, empty capability sets, and every namespace differs from the engine's; any miss ends the helper before the target runs |
 | Refusal reports | Unified log stream | The supervisor's socket refusals and the datagrams the gateway drops, per launch; filesystem refusals are not observable, so the witness is `incomplete` |
@@ -256,6 +258,18 @@ The Linux floor is a kernel with Landlock ABI 3 (6.2) and unprivileged user name
 Namespace creation failures distinguish exhausted per-user quotas (`namespace_limit_reached`, `review_namespace_limits`) from a host-policy denial (`user_namespaces_denied`, `review_host_policy`). Inspect the reported quota or host policy before choosing a narrowly scoped repair. Only a directly observed disabled namespace sysctl carries `enable_user_namespaces`; a permission error alone does not establish that cause. AppArmor-restricted hosts continue to name the packaged profile and its installation remedy. These diagnostics never retry the launch unconfined or change host policy.
 
 Individual read-denied files use empty, unreadable, read-only file mounts. The helper prepares their shared inode inside its private mount namespace, removes the temporary writable source before applying the filesystem plan, and clones subsequent masks from the first sealed file mount. This also supports kernels that cannot clone a file from a detached filesystem. Preparation or cleanup failure refuses the target; the original host files remain unchanged.
+
+On NixOS, the [declarative module](../packaging/nix/nixos.nix) adds an exact
+engine attachment only when AppArmor is already enabled. The selected `package`
+and explicitly retained `additionalTrustedPackages` each receive a literal
+immutable engine path verified against that generation's final manifest. A
+system switch updates those attachments; retain a running previous generation
+explicitly during a transition, or restart the desktop into the selected one.
+Removing a retained generation or disabling the module removes its attachment
+on the next system switch. Re-select the required generation and rebuild the
+system to recover a missing attachment. The module does not enable AppArmor,
+relax namespace sysctls, admit arbitrary store executables or grant vault trust
+through an AppArmor profile. Missing kernel capabilities still fail closed.
 
 What the Linux adapter cannot express yet, and what it expresses differently, is bounded:
 
@@ -272,6 +286,7 @@ What the Linux adapter cannot express yet, and what it expresses differently, is
 - Loader files named at any depth (`AGENTS.md`) are masked read-only where they exist at launch, found by walking each root up to a bounded number of entries; creating a new one deeper in the tree is not refused.
 - Within the sandbox's private loopback, binding and connecting reach only the command's own processes; they are not grants of host-local reach.
 - The supervisor examines a caller's thread group, opened by pidfd, and refuses a call whose socket it cannot take a descriptor for.
+- A relative Unix-domain socket path is resolved against the caller's working directory; when the supervisor cannot read that directory, the call is refused as unexamined rather than performed.
 - The command's processes end with the command ([Processes a command leaves behind](#processes-a-command-leaves-behind)).
 
 The macOS profile is deny-default: filesystem and network authority is granted by rule. Mach service lookup is the one capability that inverts that shape. It is allowed broadly, because a confined process needs a wide set of system services to start, and a short list of power-management services is then subtracted. That subtraction is an enumeration and therefore incomplete by construction; it is a posture limit, not a boundary. Narrowing it would mean first observing which services confined tools legitimately reach.

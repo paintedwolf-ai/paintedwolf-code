@@ -29,6 +29,9 @@ outputs:
   decide-cache-hit:
     description: Whether the decision engine's exact build cache was restored
     value: ${{ steps.decide.outputs.cache-hit }}
+  document-cache-hit:
+    description: Whether the document compiler cache was restored
+    value: ${{ steps.document.outputs.cache-hit }}
   artifact-root:
     description: Checkout artifact directory
     value: ${{ steps.paths.outputs.artifact-root }}
@@ -41,12 +44,16 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Set verification compiler profiles
+      shell: bash
+      run: printf 'CARGO_PROFILE_DEV_DEBUG=0\nCARGO_PROFILE_TEST_DEBUG=0\n' >> "${GITHUB_ENV}"
+
     - name: Resolve artifact directory
       id: paths
       shell: bash
       run: echo "artifact-root=$(python3 scripts/artifact_paths.py artifacts "$GITHUB_WORKSPACE")" >> "$GITHUB_OUTPUT"
 
-    - uses: actions/setup-go@5064d95ba18d4a9dda7c4cc67adeb03aea1a2a14 # v7.0.0
+    - uses: actions/setup-go@90ad2b35f69faf97585ad74d28fa006d2739b7af # v7.0.0
       with:
         go-version-file: lycaon/go.mod
         cache: false
@@ -87,29 +94,18 @@ runs:
           sudo apparmor_parser -r /etc/apparmor.d/paintedwolf-verification
         fi
 
-    - name: Install Tauri Linux build dependencies
+    - name: Provision Linux native test dependencies
       if: runner.os == 'Linux' && inputs.setup == 'shell'
-      shell: bash
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y --no-install-recommends \
-          libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev xvfb \
-          libjavascriptcoregtk-4.1-dev librsvg2-dev patchelf \
-          sway wl-clipboard wtype xclip
+      uses: ./.github/actions/setup-linux-native
+      with:
+        save: ${{ inputs.save-caches }}
 
-    # Lavapipe gives the decision engine's Vulkan parity tests a device on GPU-less runners.
-    - name: Install Mesa's Vulkan drivers
-      if: runner.os == 'Linux' && inputs.setup == 'shell'
-      shell: bash
-      run: sudo apt-get install -y --no-install-recommends mesa-vulkan-drivers libvulkan1
+    - uses: ./.github/actions/cache-document-core
+      id: document
 
-    - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+    - uses: ./.github/actions/cache-rust
       id: rust
       if: inputs.setup == 'shell' || inputs.setup == 'harness'
-      with:
-        workspaces: lycaon-den/src-tauri -> ../target
-        shared-key: den-shell
-        save-if: ${{ inputs.save-caches == 'true' && github.ref == 'refs/heads/main' }}
 
     - name: Restore the decision engine build
       id: decide

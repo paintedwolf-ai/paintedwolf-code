@@ -11,7 +11,7 @@ import (
 func TestHostedCacheWritesRequireTheTrustedMainRef(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	for _, name := range []string{"cache-go", "cache-decide", "cache-notices-tools", "cache-release-build", "cache-analysis-tools", "cache-lint-diagnostics", "setup-opengrep", "setup-verification", "setup-webkit-atspi-images"} {
+	for _, name := range []string{"cache-go", "cache-decide", "cache-document-core", "cache-rust", "cache-notices-tools", "cache-release-build", "cache-analysis-tools", "cache-lint-diagnostics", "setup-opengrep", "setup-verification", "setup-linux-native", "setup-webkit-atspi-images"} {
 		var action struct {
 			Runs struct {
 				Steps []struct {
@@ -40,8 +40,14 @@ func TestHostedCacheWritesRequireTheTrustedMainRef(t *testing.T) {
 func TestReleaseBuildReusesTheSharedGoCache(t *testing.T) {
 	t.Parallel()
 	data := contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), ".github/actions/cache-release-build/action.yml")
-	if !strings.Contains(data, "uses: ./.github/actions/cache-go") {
-		t.Fatal("release builds must restore the shared Go compiler cache")
+	restored := map[string]bool{}
+	for _, step := range hostedJobs(t, "release")["build-release"].Steps {
+		restored[step.Uses] = true
+	}
+	for _, name := range []string{"cache-go", "cache-document-core", "cache-notices-tools", "cache-release-build"} {
+		if !restored["./.github/actions/"+name] {
+			t.Errorf("release builds must restore %s", name)
+		}
 	}
 	if strings.Contains(data, "gocache") || strings.Contains(data, "gomodcache") {
 		t.Fatal("release cache must not duplicate the shared Go payload")
@@ -66,7 +72,7 @@ func TestMainCacheWarmingCompletesBeforeTheNextPush(t *testing.T) {
 func TestNestedCachePublicationRunsAfterPreparation(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	for _, name := range []string{"cache-go", "cache-decide", "cache-notices-tools", "cache-analysis-tools", "cache-lint-diagnostics", "setup-webkit-atspi-images"} {
+	for _, name := range []string{"cache-go", "cache-decide", "cache-document-core", "cache-rust", "cache-notices-tools", "cache-analysis-tools", "cache-lint-diagnostics", "setup-webkit-atspi-images"} {
 		data := contractcheck.ReadRepoFile(t, root, ".github/actions/"+name+"/action.yml")
 		if strings.Contains(data, "uses: actions/cache@") || !strings.Contains(data, "uses: actions/cache/save@") {
 			t.Errorf("%s must publish in its current action scope, not a nested post-job hook", name)
@@ -96,9 +102,45 @@ func TestNestedCachePublicationRunsAfterPreparation(t *testing.T) {
 			published[step.Uses] = true
 		}
 	}
-	for _, name := range []string{"cache-go", "cache-decide", "cache-notices-tools", "cache-analysis-tools", "cache-lint-diagnostics", "setup-webkit-atspi-images"} {
+	for _, name := range []string{"cache-go", "cache-decide", "cache-document-core", "cache-rust", "cache-notices-tools", "cache-analysis-tools", "cache-lint-diagnostics", "setup-webkit-atspi-images"} {
 		if !published["./.github/actions/"+name] {
 			t.Errorf("prepared %s has no publication stage", name)
+		}
+	}
+}
+
+func TestCompilerCacheRetirementRequiresPostSaveInventory(t *testing.T) {
+	t.Parallel()
+	root := contractcheck.RepoRoot(t)
+	for _, name := range []string{"cache-go", "cache-decide", "cache-document-core", "cache-rust", "cache-release-build"} {
+		var action struct {
+			Runs struct {
+				Steps []struct {
+					Uses string
+					If   string
+					With map[string]string
+				}
+			}
+		}
+		data := contractcheck.ReadRepoFile(t, root, ".github/actions/"+name+"/action.yml")
+		contractcheck.FailErr(t, "decode compiler cache "+name, yaml.Unmarshal([]byte(data), &action))
+		saved, confirmed := false, false
+		for _, step := range action.Runs.Steps {
+			if strings.HasPrefix(step.Uses, "actions/cache/save@") {
+				saved = true
+			}
+			if step.Uses == "./.github/actions/cache-budget" && step.With["record"] != "" {
+				confirmed = saved && step.With["record"] == "${{ steps.budget.outputs.record }}"
+			}
+			if name == "cache-release-build" && (step.Uses == "./.github/actions/cache-go" || step.Uses == "./.github/actions/cache-notices-tools") && step.If != "inputs.save != 'true'" {
+				t.Error("release publication must not restore nested caches again")
+			}
+		}
+		if !confirmed {
+			t.Errorf("%s must confirm its admitted payload after saving", name)
+		}
+		if strings.Contains(data, "CARGO_PROFILE_") {
+			t.Errorf("%s must leave compiler profiles to setup", name)
 		}
 	}
 }

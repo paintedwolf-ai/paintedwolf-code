@@ -146,7 +146,7 @@ func (s *supervisor) serve() {
 	header := make([]byte, maxHandoff)
 	oob := make([]byte, unix.CmsgSpace(4))
 	for {
-		n, oobn, _, _, err := unix.Recvmsg(int(s.control.Fd()), header, oob, unix.MSG_CMSG_CLOEXEC)
+		n, oobn, err := receiveControl(s.control, header, oob)
 		if err != nil {
 			if errors.Is(err, unix.EINTR) {
 				continue
