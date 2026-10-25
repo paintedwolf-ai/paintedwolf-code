@@ -47,7 +47,7 @@ def main(arguments):
         '--binding', json.dumps(request, sort_keys=True, separators=(',', ':')), '--vm-id', selected['vm_id']])
     args.output.mkdir(parents=True, mode=0o700, exist_ok=False)
     (args.output / 'execution-request.json').write_bytes(canonical(request))
-    with Bridge(selected, request, mailbox, args.output) as bridge:
+    with Bridge(selected, request, mailbox, args.output, target=target) as bridge:
         if bridge.actor.value['ssh'] != {key: target[key] for key in ('host', 'port', 'user')}:
             raise ValueError('physical input diagnostic lease differs from its selected guest endpoint')
         code = run_managed(bridge, command(target, arguments), args.output / 'managed-execution.log')

@@ -76,7 +76,7 @@ def run_guest(target: dict, source: str, tree: str, output: Path) -> Path:
     mailbox_command = command(target, ['python3', '-m', 'scripts.linux_release.installed_input.mailbox',
         '--binding', json.dumps(request, sort_keys=True, separators=(',', ':')),
         '--vm-id', selected_input['vm_id']]) if selected_input else None
-    context = Bridge(selected_input, request, mailbox_command, directory) if selected_input else nullcontext()
+    context = Bridge(selected_input, request, mailbox_command, directory, target=target) if selected_input else nullcontext()
     with context as bridge:
         if bridge is not None and bridge.actor.value['ssh'] != {key: target[key] for key in ('host', 'port', 'user')}:
             raise ValueError('fixed native input lease differs from selected SSH guest')

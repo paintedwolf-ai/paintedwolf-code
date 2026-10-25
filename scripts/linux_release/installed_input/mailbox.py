@@ -131,7 +131,10 @@ class Mailbox:
         if self.read('request.json') != pending:
             raise ValueError('native input pending request changed before completion')
         acknowledgment = self.read('ack.json')
-        if pending.get('operation') in unlock_wire.OPERATIONS:
+        from . import polkit_control
+        if pending.get('operation') in polkit_control.OPERATIONS:
+            polkit_control.acknowledgment(acknowledgment, pending, self.vm_id)
+        elif pending.get('operation') in unlock_wire.OPERATIONS:
             unlock_wire.acknowledgment(acknowledgment, pending, self.vm_id)
         else:
             protocol.acknowledgment(acknowledgment, pending, self.vm_id)
@@ -147,6 +150,8 @@ def serve(execution: dict, vm_id: str):
     from ..installed_process import process_identity
     from . import password_wire
     identified = False
+    from . import polkit_control
+    polkit_inputs = set()
 
     def attached_publication():
         mailbox.attach()
@@ -190,6 +195,8 @@ def serve(execution: dict, vm_id: str):
                             password_wire.request(pending, execution)
                             if not identified or pending['actor'] != private_actor:
                                 raise ValueError('private fixture requires its independently selected SSH actor')
+                        elif pending.get('operation') in polkit_control.OPERATIONS:
+                            polkit_control.request(pending, execution)
                         elif pending.get('operation') in unlock_wire.OPERATIONS:
                             unlock_wire.request(pending, execution)
                         else:
@@ -210,6 +217,20 @@ def serve(execution: dict, vm_id: str):
                 if not serve_private(mailbox, pending, private_actor):
                     raise SystemExit(1)
                 acknowledged = digest
+                continue
+            elif set(command) == {'operation', 'request_sha256'} and command['operation'] == 'native-polkit-input':
+                if publication is None or attached_publication() != publication:
+                    raise ValueError('Polkit target input requires its attached publication')
+                pending = mailbox.read('request.json')
+                polkit_control.request(pending, execution)
+                digest = protocol.request_sha256(pending)
+                if (pending['operation'] not in {polkit_control.PURPOSE, polkit_control.CANCEL}
+                        or command['request_sha256'] != digest or acknowledged == digest
+                        or digest in polkit_inputs or mailbox.read('ack.json') is not None):
+                    raise ValueError('Polkit target input cannot replay or replace its publication')
+                polkit_inputs.add(digest)
+                from .polkit_guest import serve as serve_polkit
+                serve_polkit(mailbox, pending, vm_id)
                 continue
             elif set(command) == {'operation', 'request_sha256'} and command['operation'] == 'native-prepare':
                 if publication is None or attached_publication() != publication:
@@ -246,7 +267,13 @@ def serve(execution: dict, vm_id: str):
                 if publication is None or attached_publication() != publication:
                     raise ValueError('native input acknowledgment requires its attached publication')
                 pending = mailbox.read('request.json')
-                if pending.get('operation') in unlock_wire.OPERATIONS:
+                if pending.get('operation') in polkit_control.OPERATIONS:
+                    polkit_control.request(pending, execution)
+                    polkit_control.acknowledgment(command['acknowledgment'], pending, vm_id)
+                    if (pending['operation'] in {polkit_control.PURPOSE, polkit_control.CANCEL}
+                            and protocol.request_sha256(pending) not in polkit_inputs):
+                        raise ValueError('Polkit input acknowledgment precedes its private delivery')
+                elif pending.get('operation') in unlock_wire.OPERATIONS:
                     unlock_wire.request(pending, execution)
                     unlock_wire.acknowledgment(command['acknowledgment'], pending, vm_id)
                     if pending['operation'] == unlock_wire.PREPARE:
