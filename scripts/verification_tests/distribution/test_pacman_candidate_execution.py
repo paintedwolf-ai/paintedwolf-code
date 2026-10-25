@@ -17,6 +17,53 @@ ROOT = Path(__file__).resolve().parents[3]
 
 
 class PacmanCandidateTests(unittest.TestCase):
+    def test_final_pacman_metadata_is_checked_after_safe_extraction(self):
+        class Decoder:
+            def __init__(self, payload):
+                self.stdout = io.BytesIO(payload)
+
+            def wait(self):
+                return 0
+
+            def poll(self):
+                return 0
+
+        with tempfile.TemporaryDirectory() as temporary:
+            work = Path(temporary)
+            root = work / "source"
+            (root / "lycaon/internal/platformfloor").mkdir(parents=True)
+            (root / "lycaon/internal/platformfloor/linux_floor.txt").write_text("GLIBC 2.35\n")
+            (root / "packaging/linux").mkdir(parents=True)
+            (root / "packaging/linux/dependencies.json").write_text(json.dumps({
+                "pacman": {"depends": ["glibc>={GLIBC}"], "recommends": []}}))
+            (root / "RELEASE_BUILD").write_text("2\n")
+            package = work / "candidate.pkg.tar.zst"
+            package.write_bytes(b"selected native package")
+
+            def archive_bytes(metadata):
+                result = io.BytesIO()
+                with tarfile.open(fileobj=result, mode="w") as output:
+                    for name, body in {".PKGINFO": metadata, ".BUILDINFO": "native build\n",
+                                       ".MTREE": "native inventory\n", "usr/bin/pw": "sealed bytes"}.items():
+                        encoded = body.encode()
+                        member = tarfile.TarInfo(name)
+                        member.size = len(encoded)
+                        member.mode = 0o755 if name == "usr/bin/pw" else 0o644
+                        output.addfile(member, io.BytesIO(encoded))
+                return result.getvalue()
+
+            expected = "pkgname = painted-wolf-code\npkgver = 1.2.3-2\narch = x86_64\ndepend = glibc>=2.35\n"
+            with patch("linux_release.arch_stage.subprocess.Popen", return_value=Decoder(archive_bytes(expected))):
+                fields = extract(package, work / "installed", root, "x86_64", "1.2.3")
+            self.assertEqual(fields["depend"], ["glibc>=2.35"])
+            self.assertEqual((work / "installed/usr/bin/pw").read_text(), "sealed bytes")
+            with patch("linux_release.arch_stage.subprocess.Popen", return_value=Decoder(archive_bytes(
+                    expected.replace("glibc>=2.35", "glibc>=2.34")))), self.assertRaisesRegex(ValueError, "dependencies"):
+                extract(package, work / "wrong-dependency", root, "x86_64", "1.2.3")
+            with patch("linux_release.arch_stage.subprocess.Popen", return_value=Decoder(archive_bytes(
+                    expected.replace("pkgver = 1.2.3-2", "pkgver = 1.2.3-1")))), self.assertRaisesRegex(ValueError, "selected release"):
+                extract(package, work / "wrong-version", root, "x86_64", "1.2.3")
+
     def test_every_native_family_binds_final_retained_bytes(self):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
@@ -91,6 +138,75 @@ class PacmanCandidateTests(unittest.TestCase):
                     "linux_release.arch_substrate.command") as runner, self.assertRaisesRegex(ValueError, "reviewed pin"):
                 rootfs(ROOT, row)
             runner.assert_not_called()
+
+    def test_arm_rootfs_requires_the_reviewed_key_and_upstream_signature(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            work = Path(temporary)
+            source = work / "source/packaging/linux/arch"
+            source.mkdir(parents=True)
+            (source / "trusted.asc").write_text("public fixture key")
+            (source / "rootfs.sig").write_text("retained fixture signature")
+            archive_bytes = b"bounded fixture rootfs"
+            fingerprint = "A" * 40
+            row = {"rootfs_sha256": hashlib.sha256(archive_bytes).hexdigest(),
+                   "rootfs_url": "https://example.invalid/rootfs.tar.gz", "key_file": "trusted.asc",
+                   "signature_file": "rootfs.sig", "key_fingerprint": fingerprint}
+            commands = []
+
+            def command(*arguments):
+                commands.append(arguments)
+                if "--show-keys" in arguments:
+                    return "fpr:::::::::" + fingerprint + ":\n"
+                if arguments[0] == "gpgv":
+                    return "[GNUPG:] VALIDSIG " + fingerprint
+                return ""
+
+            def download(_url, destination, _limit):
+                destination.write_bytes(archive_bytes)
+
+            with patch.dict("os.environ", {"XDG_CACHE_HOME": str(work / "cache")}), \
+                    patch("linux_release.arch_substrate.download", side_effect=download) as fetch, \
+                    patch("linux_release.arch_substrate.command", side_effect=command):
+                selected = rootfs(work / "source", row)
+                self.assertEqual(selected.read_bytes(), archive_bytes)
+                self.assertEqual(rootfs(work / "source", row), selected)
+                fetch.assert_called_once()
+                self.assertTrue(any(call[0] == "gpgv" for call in commands))
+                (source / "rootfs.sig").unlink()
+                with self.assertRaisesRegex(ValueError, "retained upstream"):
+                    rootfs(work / "source", row)
+
+    def test_imported_arm_substrate_is_offline_for_packaging_and_cleans_up(self):
+        calls = []
+
+        def command(*arguments):
+            calls.append(arguments)
+            if arguments[:2] == ("docker", "version"):
+                return "linux/arm64"
+            if arguments[:3] == ("docker", "image", "inspect"):
+                return "arm64"
+            if arguments[:2] == ("docker", "create"):
+                return "owned-arm-container"
+            if arguments[:2] == ("docker", "inspect"):
+                return "0"
+            if arguments[-2:] == ("pacman", "-Q"):
+                return "base-devel 1\nmakepkg 2"
+            return "fixture"
+
+        with tempfile.TemporaryDirectory() as temporary, \
+                patch("linux_release.arch_substrate.platform.system", return_value="Linux"), \
+                patch("linux_release.arch_substrate.platform.machine", return_value="aarch64"), \
+                patch("linux_release.arch_substrate.os.getuid", return_value=1000), \
+                patch("linux_release.arch_substrate.os.getgid", return_value=1000), \
+                patch("linux_release.arch_substrate.rootfs", return_value=Path(temporary) / "verified-rootfs"), \
+                patch("linux_release.arch_substrate.command", side_effect=command), \
+                patch("linux_release.arch_substrate.subprocess.run") as runner:
+            result = build(ROOT, Path(temporary), "aarch64", 123)
+        self.assertEqual(result["platform"], "linux/arm64")
+        self.assertFalse(result["network_during_packaging"])
+        self.assertTrue(any(call[:2] == ("docker", "import") for call in calls))
+        self.assertTrue(any(call.args[0][:3] == ["docker", "image", "rm"] for call in runner.call_args_list))
+        self.assertTrue(any(call.args[0][:3] == ["docker", "rm", "--force"] for call in runner.call_args_list))
 
     def test_symbolic_links_are_relative_to_their_parent_and_cannot_escape(self):
         with tempfile.TemporaryDirectory() as temporary:

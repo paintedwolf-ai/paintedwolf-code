@@ -1,20 +1,71 @@
 """Pacman recipes preserve the sealed common payload without package-time fixups."""
 
 import hashlib
+import json
 from pathlib import Path
 import subprocess
 import shutil
 import tarfile
 import tempfile
 import unittest
+from unittest.mock import patch
 
-from linux_release.arch import recipe, validate_resources, write_payload
+from linux_release.arch import build, recipe, validate_resources, write_payload
 from release_semver import pacman_package_version, parse
 
 ROOT = Path(__file__).resolve().parents[3]
 
 
 class ArchPackageTests(unittest.TestCase):
+    def test_build_binds_the_native_package_and_sealed_payload_to_its_receipt(self):
+        for container in (False, True):
+            with self.subTest(container=container), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                (root / "VERSION").write_text("1.2.3\n")
+                (root / "RELEASE_BUILD").write_text("2\n")
+                tree = root / "tree"
+                tree.mkdir()
+                output = root / "out"
+
+                def checked_output(arguments, **_options):
+                    if arguments[:2] == ["git", "show"]:
+                        return "1234\n"
+                    if arguments[:2] == ["git", "rev-parse"]:
+                        return "a" * 40 + "\n"
+                    self.assertEqual(arguments, ["makepkg", "--printsrcinfo"])
+                    return "pkgbase = painted-wolf-code\n"
+
+                def run(arguments, **_options):
+                    if arguments[0] == "makepkg":
+                        work = next(output.glob("painted-wolf-code-x86_64-recipe-*"))
+                        (work / "painted-wolf-code-1.2.3-2-x86_64.pkg.tar.zst").write_bytes(b"native package")
+                    return subprocess.CompletedProcess(arguments, 0)
+
+                def write_fixture_payload(_tree, path, _epoch):
+                    path.write_bytes(b"sealed fixture")
+
+                def build_fixture_substrate(*_arguments):
+                    run(["makepkg"])
+                    return {"distribution": "pinned fixture"}
+
+                with patch("linux_release.arch.platform.system", return_value="Linux"), \
+                        patch("linux_release.arch.platform.machine", return_value="x86_64"), \
+                        patch("linux_release.arch.os.geteuid", return_value=1000), \
+                        patch("linux_release.arch.shutil.which", return_value="/usr/bin/makepkg"), \
+                        patch("linux_release.arch.validate_resources"), \
+                        patch("linux_release.arch.write_payload", side_effect=write_fixture_payload) as payload, \
+                        patch("linux_release.arch.recipe", return_value="pkgname=painted-wolf-code\n"), \
+                        patch("linux_release.arch.subprocess.check_output", side_effect=checked_output), \
+                        patch("linux_release.arch.subprocess.run", side_effect=run), \
+                        patch("linux_release.arch.build_in_substrate", side_effect=build_fixture_substrate):
+                    candidate = build(root, tree, "x86_64", output, container=container)
+                self.assertEqual(candidate.read_bytes(), b"native package")
+                self.assertEqual(payload.call_args.args[2], 1234)
+                report = json.loads((output / "pacman-candidate.json").read_text())
+                self.assertEqual(report["source_commit"], "a" * 40)
+                self.assertEqual(report["sealed_payload_sha256"], hashlib.sha256(b"sealed fixture").hexdigest())
+                self.assertFalse(report["published"])
+
     def test_versions_preserve_release_and_reject_ambiguous_prerelease_ordering(self):
         self.assertEqual(pacman_package_version(parse("1.2.3")), "1.2.3")
         self.assertEqual(pacman_package_version(parse("1.2.3-rc6")), "1.2.3pre.rc6")

@@ -9,6 +9,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from linux_release.payload import load
 from linux_release.arch import write_payload
@@ -24,6 +25,53 @@ def module(name):
 
 
 class LinuxPayloadTests(unittest.TestCase):
+    def test_optional_pacman_family_uses_the_sealed_staged_tree(self):
+        assembler = module("linux-package-assemble")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            bundle = root / "bundle"
+            bundle.mkdir()
+            staged = root / "staged"
+            (staged / "data").mkdir(parents=True)
+            optional = root / "maintained-hook"
+            optional.write_bytes(b"native hook")
+            config = type("Config", (), {"optional_files": lambda self, _root, family:
+                          {"/etc/init.d/paintedwolf-vault-identity": optional} if family == "pacman" else {}})()
+            family_calls = []
+            built = {}
+
+            def write_family(_root, _staged, _work, _version, _architecture, output, *extra):
+                family_calls.append(output.name)
+                output.mkdir(exist_ok=True)
+                result = output / ("fixture." + output.name)
+                result.write_bytes(b"sealed family")
+                return result
+
+            def make_pacman_tree(_root, _data, destination):
+                destination.mkdir()
+                return destination
+
+            def build_pacman(_root, tree, _architecture, _output, container):
+                built["hook"] = (tree / "etc/init.d/paintedwolf-vault-identity").read_bytes()
+                built["container"] = container
+                return root / "candidate.pkg.tar.zst"
+
+            args = argparse.Namespace(root=root, bundle_dir=bundle, version="1.2.3", arch="x86_64",
+                                      zstd_level=3, pacman=True, pacman_container=False)
+            with patch.object(assembler.shutil, "which", return_value="/usr/bin/tool"), \
+                    patch.object(assembler, "staged_tree", return_value=staged), \
+                    patch.object(assembler, "tauri_metadata", return_value={"identifier": "dev.paintedwolf.code"}), \
+                    patch.object(assembler, "place_shell"), patch.object(assembler, "normalise_modes"), \
+                    patch.object(assembler.subprocess, "run"), \
+                    patch.object(assembler, "write_rpm", side_effect=write_family), \
+                    patch.object(assembler, "write_deb", side_effect=write_family), \
+                    patch.object(assembler, "rpm_tree", side_effect=make_pacman_tree), \
+                    patch.object(assembler, "load_package_config", return_value=config), \
+                    patch.object(assembler, "build_arch", side_effect=build_pacman):
+                self.assertEqual(assembler.assemble(args), 0)
+            self.assertEqual(family_calls, ["rpm", "deb"])
+            self.assertEqual(built, {"hook": b"native hook", "container": False})
+
     def test_catalog_requires_valid_unique_helper_and_entry_point_roles(self):
         self.assertIn("pw-vault-identity", load()["helpers"])
         self.assertIn("pw-desktop-settings", load()["helpers"])
