@@ -56,7 +56,7 @@ func (f *frame) source(ctx context.Context, s commandsurface.Statement, fields F
 	if len(fields) > 1 && fields[1].Value != "--" && strings.HasPrefix(fields[1].Value, "-") {
 		return f.builtinStatus(s.SyntaxLocation, "source", 2)
 	}
-	spec, _, err := ResolveCommand(fields)
+	_, _, err := ResolveCommand(fields)
 	if err != nil {
 		return err
 	}

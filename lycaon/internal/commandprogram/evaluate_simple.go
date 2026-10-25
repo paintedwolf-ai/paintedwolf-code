@@ -147,10 +147,11 @@ func (f *frame) simple(ctx context.Context, s commandsurface.Statement, c comman
 	if spec, native, err := ResolveCommand(fields); err == nil && native && spec.Name != "external" {
 		if bound, err := f.e.ports.Binder.Bind(spec, fields); err == nil && bound.Help {
 			return signal{}, f.inProcess(ctx, s, spec.Name, func(context.Context, toolcontract.OperationInvocation) (toolcontract.ProducerResult, error) {
-				return WriteCatalogHelp(spec, f.streams.Output)
+				return WriteCatalogHelp(spec, f.io.streams.Output)
 			})
 		}
 	}
+	name := fields[0].Value
 	switch name {
 	case "source":
 		return signal{}, f.source(ctx, s, fields)
@@ -391,7 +392,7 @@ func (f *frame) exportDeclaration(ctx context.Context, s commandsurface.Statemen
 	if len(assigns) == 0 && len(names) == 1 && names[0].name == "--help" {
 		if spec, native, err := ResolveCommand(Fields{{Value: "export"}, {Value: "--help"}}); err == nil && native {
 			return f.inProcess(ctx, s, spec.Name, func(context.Context, toolcontract.OperationInvocation) (toolcontract.ProducerResult, error) {
-				return WriteCatalogHelp(spec, f.streams.Output)
+				return WriteCatalogHelp(spec, f.io.streams.Output)
 			})
 		}
 	}
