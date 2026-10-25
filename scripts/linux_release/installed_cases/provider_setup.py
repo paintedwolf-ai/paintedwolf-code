@@ -51,30 +51,46 @@ def select_default_model(app, ui):
     for role, name, expected_action in controls:
         deadline = time.monotonic() + 15
         while True:
-            node = ui.find(role, name)
+            node = ui.find(role, name, deadline=deadline)
+            phase = 'inventory-ownership'
             try:
-                frame, chain = accessibility.capture(node, list(ui.windows()))
+                frame, chain = accessibility.capture(node, list(ui.windows(deadline)))
                 control = process_identity(node.get_process_id())
                 surface = process_identity(frame.get_process_id())
                 entry_chain = lineage.capture(surface, control)
                 frame_chain = lineage.capture(root, surface)
+                phase = 'action-interface'
                 action = node.queryAction()
                 if action.nActions != 1 or (expected_action is not None and action.getName(0) != expected_action):
+                    phase = 'action-count'
                     raise CaseUnavailable('normal-model-picker-action-is-not-unique')
-                if (accessibility.capture(node, list(ui.windows()))[1] != chain
+                phase = 'identity-recheck'
+                if (accessibility.capture(node, list(ui.windows(deadline)))[1] != chain
                         or lineage.capture(surface, control) != entry_chain
                         or lineage.capture(root, surface) != frame_chain):
                     raise ValueError('normal model picker identity changed before its action')
-                if action.doAction(0) is not True:
-                    raise CaseUnavailable('normal-model-picker-action-refused')
                 break
             except (ValueError, TypeError, CaseUnavailable, CaseFailed):
                 raise
             except Exception as error:
-                if time.monotonic() < deadline and retry_inventory(app, error):
+                if (time.monotonic() < deadline
+                        and retry_inventory(app, error, interface_mounting=(phase == 'action-interface'))):
                     time.sleep(0.05)
                     continue
-                raise CaseUnavailable('normal-model-picker-action-unavailable') from None
+                refusal = CaseUnavailable('normal-model-picker-action-unavailable')
+                refusal.observations = {'model_picker_mutation': {'phase': phase, 'exception_type': type(error).__name__}}
+                raise refusal from None
+        phase = 'do-action'
+        try:
+            if action.doAction(0) is not True:
+                phase = 'do-action-refused'
+                raise CaseUnavailable('normal-model-picker-action-refused')
+        except (CaseUnavailable, CaseFailed):
+            raise
+        except Exception as error:
+            refusal = CaseUnavailable('normal-model-picker-action-unavailable')
+            refusal.observations = {'model_picker_mutation': {'phase': phase, 'exception_type': type(error).__name__}}
+            raise refusal from None
         # Selecting an option closes its popup; the captured native surface and launch must survive.
         if lineage.capture(root, surface) != frame_chain or lineage.capture(surface, control) != entry_chain:
             raise ValueError('normal model picker process identity changed after its action')

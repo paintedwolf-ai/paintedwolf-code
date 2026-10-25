@@ -8,8 +8,15 @@ from ..installed_cases.records import CaseUnavailable
 MAX_PARENTS = 64
 
 
+class InventoryChanged(Exception):
+    """The native service invalidated an unfinished inventory."""
+
+
 def identity(node) -> dict:
-    value = {'bus_name': node.app.bus_name, 'path': node.path, 'pid': node.get_process_id()}
+    app = getattr(node, 'app', None)
+    if node is None or app is None:
+        raise InventoryChanged()
+    value = {'bus_name': app.bus_name, 'path': node.path, 'pid': node.get_process_id()}
     validate_identity(value)
     return value
 
@@ -57,10 +64,6 @@ def capture(node, windows):
             return selected[tuple(row.items())], validate(chain, chain[0]['pid'], row['pid'])
         node = node.get_parent()
     raise ValueError('focused entry has no bounded native inventory window ancestor')
-
-
-class InventoryChanged(Exception):
-    """The native service invalidated an unfinished inventory."""
 
 
 def descendants(window, deadline=None, *, include=None):
