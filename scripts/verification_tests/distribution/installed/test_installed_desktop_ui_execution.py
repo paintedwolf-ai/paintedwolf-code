@@ -287,3 +287,10 @@ class CompleteWindowSnapshotTests(unittest.TestCase):
                 patch.object(ui, 'process_identity', return_value={**IDENTITY, 'start_time_ticks': 43}):
             with self.assertRaises(CaseFailed):
                 list(actor.windows())
+
+    def test_completed_inventory_after_deadline_is_not_published(self):
+        actor = ui.DesktopUI(self.app, API)
+        with patch.object(actor, '_window_snapshot', return_value=[(IDENTITY, Node(API.ROLE_FRAME))]), \
+                patch.object(ui.time, 'monotonic', side_effect=[0, 4]):
+            with self.assertRaises(CaseUnavailable):
+                list(actor.windows(deadline=3))

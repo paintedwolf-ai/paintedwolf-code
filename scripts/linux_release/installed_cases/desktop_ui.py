@@ -85,6 +85,8 @@ class DesktopUI:
         while time.monotonic() < deadline:
             try:
                 snapshot = self._window_snapshot(deadline)
+                if time.monotonic() >= deadline:
+                    raise CaseUnavailable('normal-native-window-observation-deadline')
                 break
             except (ValueError, TypeError):
                 raise
