@@ -135,8 +135,11 @@ class PresencePrerequisiteTests(unittest.TestCase):
     def test_polkit_authorized_without_confirmation_fails_the_refusal_contract(self):
         self.values['await_confirmation'].return_value = {
             'status': 'confirmed', 'authenticator': 'linux_user_presence', 'code': None}
-        with self.assertRaisesRegex(CaseFailed, 'did-not-refuse') as failed:
+        with self.assertRaisesRegex(CaseFailed, 'normal-presence-prerequisite-failed') as failed:
             presence.unchallenged_presence({})
+        self.assertEqual(failed.exception.observations['failure_type'], 'CaseFailed')
+        self.assertEqual(failed.exception.observations['failure_detail'],
+                         'unchallenged-polkit-did-not-refuse-native-presence')
         self.assertFalse(failed.exception.observations['typed_refusal_verified'])
         self.policy.__exit__.assert_called_once()
         self.assertTrue(failed.exception.observations['presence_policy']['restored'])
