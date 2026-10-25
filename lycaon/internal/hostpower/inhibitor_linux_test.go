@@ -282,6 +282,8 @@ type fixturePortal struct {
 	deny   bool
 	// grant is the Response code the portal sends once the backend answers.
 	grant    uint32
+	response []any
+	withhold bool
 	flags    uint32
 	options  map[string]dbus.Variant
 	request  dbus.ObjectPath
@@ -299,10 +301,16 @@ func (f *fixturePortal) Inhibit(caller dbus.Sender, window string, flags uint32,
 	token, _ := options["handle_token"].Value().(string)
 	sender := strings.TrimPrefix(strings.ReplaceAll(string(caller), ".", "_"), ":")
 	f.request = dbus.ObjectPath("/org/freedesktop/portal/desktop/request/" + sender + "/" + token)
-	request, grant := f.request, f.grant
+	request := f.request
+	response := f.response
+	if response == nil {
+		response = []any{f.grant, map[string]dbus.Variant{}}
+	}
 	// Like the portal, answer as soon as the backend does, which can precede
 	// the method reply.
-	go func() { _ = f.server.Emit(request, portalRequest+".Response", grant, map[string]dbus.Variant{}) }()
+	if !f.withhold {
+		go func() { _ = f.server.Emit(request, portalRequest+".Response", response...) }()
+	}
 	if err := f.server.Export(f, f.request, portalRequest); err != nil {
 		return "", dbus.MakeFailedError(err)
 	}
