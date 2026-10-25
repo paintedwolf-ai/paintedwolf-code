@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -157,6 +158,9 @@ func runServe(signals context.Context, dbPath string) error {
 		cfg.Startup = startup
 	}
 	cfg.DBPath = dbPath
+	if err := readStartupAPIToken(os.Stdin, &cfg); err != nil {
+		return err
+	}
 	if strings.TrimSpace(os.Getenv(credentialstore.UnlockStdinEnv)) != "" {
 		if err := credentialstore.ReadUnlockFrame(os.Stdin); err != nil {
 			return err
@@ -188,6 +192,18 @@ func runServe(signals context.Context, dbPath string) error {
 	}
 	defer func() { _ = serveApp.Close() }() //nolint:contextcheck // shutdown runs after the serve context ends
 	return serveApp.Run(ctx)
+}
+
+func readStartupAPIToken(r io.Reader, cfg *configuration.Config) error {
+	if strings.TrimSpace(os.Getenv(startupprotocol.APITokenStdinEnv)) == "" {
+		return nil
+	}
+	token, err := startupprotocol.ReadAPITokenFrame(r)
+	if err != nil {
+		return err
+	}
+	cfg.APIToken = token
+	return nil
 }
 
 // startReaper keeps the engine's children from outliving it; without the
