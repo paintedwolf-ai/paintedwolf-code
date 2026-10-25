@@ -45,7 +45,8 @@ def delivery_records(directory, execution, vm_id):
     cases = [('conversation/restart-and-reconnect', 'reply'), ('files/edit-search-review', 'editor'),
              ('windowing/workspace-activation-and-exit', 'workspace'),
              ('browser/browser-sandbox-composition', 'browser'),
-             ('session/inhibitor-lifetime', 'keepawake')]
+             ('session/inhibitor-lifetime', 'keepawake'),
+             ('vault/service-onboarding', 'quiet')]
     for case, kind in cases:
         leaf = directory / ('leaf/evidence/' + case + '/execution.json')
         if not leaf.exists():
@@ -54,11 +55,13 @@ def delivery_records(directory, execution, vm_id):
             raise ValueError('native input guest observations exceed their case bound')
         document = json.loads(leaf.read_bytes())
         observations = document['observations']
-        if kind in {'reply', 'workspace', 'browser', 'keepawake'}:
-            launch = 'launch_before' if kind == 'reply' else 'launch'
+        if kind in {'reply', 'workspace', 'browser', 'keepawake', 'quiet'}:
+            launch = 'launch_before' if kind in {'reply', 'quiet'} else 'launch'
             prompt = 'browser-fixture-prompt-v1' if kind == 'browser' else 'reply-fixture-prompt-v1'
             selected = observations.get(launch, {}).get('fixed_input', [])
             recovery = observations.get('provider_recovery')
+            if kind == 'quiet' and recovery is not None:
+                raise ValueError('quiet custody requires its own fresh provider registration')
             input_limit = 1 if recovery is not None else 4
             if not isinstance(selected, list) or len(selected) > input_limit:
                 raise ValueError('reply input exceeds its fixed transaction count')
@@ -66,7 +69,8 @@ def delivery_records(directory, execution, vm_id):
             has_transitions = bool(observations.get('transitions') or observations.get('lock_transition'))
             provider_partial = (kind in {'workspace', 'keepawake'} and partial is not None
                 and len(selected) < input_limit and not has_transitions)
-            if partial is not None and (kind in {'reply', 'browser'} or provider_partial):
+            if partial is not None and (kind in {'reply', 'browser'} or provider_partial
+                    or kind == 'quiet' and observations.get('phase') != 'after-turn'):
                 selected = [*selected, partial]
             if len(selected) > input_limit:
                 raise ValueError('reply input exceeds its fixed transaction count')
@@ -94,6 +98,21 @@ def delivery_records(directory, execution, vm_id):
                     protocol.steps(operation)
                 operations.append(operation)
                 records.append(record)
+            if kind == 'quiet':
+                following = observations.get('launch_after', {}).get('fixed_input', [])
+                if not isinstance(following, list):
+                    raise ValueError('quiet restart input requires a fixed transaction list')
+                if partial is not None and observations.get('phase') == 'after-turn':
+                    following = [*following, partial]
+                if (len(following) > 1 or following and len(selected) != 4
+                        or document.get('status') == 'passed' and (len(selected) != 4 or len(following) != 1)):
+                    raise ValueError('quiet custody input omitted or exceeded its two-turn sequence')
+                following = expand_physical_transactions(leaf, following)
+                if document.get('status') == 'passed' and any(
+                        record.get('completed') is not True for record in [*selected, *following]):
+                    raise ValueError('quiet custody passed with an incomplete physical transaction')
+                records.extend(following)
+                operations.extend(('reply-fixture-prompt-v1',)[:len(following)])
             if kind == 'workspace':
                 transitions = observations.get('transitions', [])
                 if not isinstance(transitions, list):

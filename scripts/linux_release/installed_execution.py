@@ -83,6 +83,8 @@ def case_family(capability: str, case: str, installation: str) -> str | None:
         return "workspace_activation"
     if (capability, case) == ("conversation", "restart-and-reconnect"):
         return "reply_restart"
+    if (capability, case) == ("vault", "service-onboarding"):
+        return "vault_quiet"
     if (capability, case) == ("session", "inhibitor-lifetime"):
         return "keepawake"
     if capability == "installation" and case in {"clean-install-and-launch", "launcher-arguments"}:
