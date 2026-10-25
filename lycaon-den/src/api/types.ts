@@ -11525,10 +11525,10 @@ export interface components {
             checkpoints: components["schemas"]["CheckpointEvent"][];
         };
         /**
-         * @description User-presence verifier that confirmed the person before the shell signed: the operating system's own prompt, or on Linux without a polkit agent, the shell's native app-password dialog.
+         * @description User-presence verifier that confirmed the person before the shell signed after fresh authentication through the operating system's native prompt. Unavailable system authentication refuses the operation.
          * @enum {string}
          */
-        PresenceAuthenticator: "macos_user_presence" | "windows_user_presence" | "linux_user_presence" | "linux_app_password";
+        PresenceAuthenticator: "macos_user_presence" | "windows_user_presence" | "linux_user_presence";
         /** @description Challenge-bound native user-presence proof. The signature covers the challenge payload plus the authenticator identifier. */
         PresenceProof: {
             /** Format: uuid */

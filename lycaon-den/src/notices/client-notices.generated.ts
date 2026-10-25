@@ -23,9 +23,6 @@ export type ClientNoticeKind =
   | "credential_vault_custodian_unavailable"
   | "credential_vault_identity_missing"
   | "credential_vault_launcher_refused"
-  | "credential_vault_locked"
-  | "credential_vault_uninitialized"
-  | "credential_vault_unlock_failed"
   | "den_version_skew"
   | "desktop_restart_required"
   | "engine_already_running"
@@ -79,14 +76,14 @@ export const CLIENT_NOTICES: Readonly<Record<ClientNoticeKind, ClientNoticeCopy>
     scope: "app",
   },
   credential_vault_custodian_absent: {
-    title: "Vault identity service is gone",
-    message: "The vault identity service that held the key to your saved credentials is not installed, not running, or cannot serve this computer. If an administrator can reinstall or re-enable it, do that and try again. Otherwise reset the vault: the key the service held cannot be recovered, so saved credentials are removed; projects and conversation history are not deleted.",
-    suggestedAction: "The vault identity service is still unavailable. Reinstall or re-enable it and try again, or reset the vault.",
+    title: "Vault identity service is unavailable",
+    message: "Your encrypted credentials are preserved. The vault identity service is not installed, not running, or cannot serve this computer. Reinstall or re-enable the service, then try again from the installed Painted Wolf Code desktop app.",
+    suggestedAction: "Restore the vault identity service and try again.",
     scope: "app",
   },
   credential_vault_custodian_unavailable: {
     title: "Credential custodian is unavailable",
-    message: "Your encrypted credentials are preserved. Restore the Painted Wolf Code vault identity service, then try again from the installed desktop app. An app password can open this vault only after its key has been exported to password custody.",
+    message: "Your encrypted credentials are preserved. Restore the Painted Wolf Code vault identity service, then try again from the installed desktop app.",
     suggestedAction: "The custodian is still unavailable. Restore the service and reopen the installed app.",
     scope: "app",
   },
@@ -98,26 +95,8 @@ export const CLIENT_NOTICES: Readonly<Record<ClientNoticeKind, ClientNoticeCopy>
   },
   credential_vault_launcher_refused: {
     title: "Open the installed desktop app",
-    message: "The vault identity service refused this launcher. Your encrypted credentials are preserved. Quit this copy and open the installed Painted Wolf Code desktop app. Moving to an app password requires a verified connection to the service first.",
+    message: "The vault identity service refused this launcher. Your encrypted credentials are preserved. Quit this copy and open the installed Painted Wolf Code desktop app.",
     suggestedAction: "The launcher is still refused. Open the installed desktop app and try again.",
-    scope: "app",
-  },
-  credential_vault_locked: {
-    title: "Unlock credential vault",
-    message: "Your saved credentials are encrypted. Enter the app password you created on this device to finish opening the app.",
-    suggestedAction: "The credential vault is still locked. Check the password and try again.",
-    scope: "app",
-  },
-  credential_vault_uninitialized: {
-    title: "Protect saved credentials",
-    message: "Create an app password for the encrypted credential vault. You will enter it when opening the app on this device, and it cannot be recovered.",
-    suggestedAction: "The credential vault could not be created. Check the passwords and try again.",
-    scope: "app",
-  },
-  credential_vault_unlock_failed: {
-    title: "Could not unlock credential vault",
-    message: "That app password did not open the encrypted credential vault. Check it and try again.",
-    suggestedAction: "The credential vault is still locked. Try the password again or reset the vault.",
     scope: "app",
   },
   den_version_skew: {

@@ -14,14 +14,14 @@ func VerifyIdentityProtection() (err error) {
 	}
 	custody := linuxCustody()
 	switch custody.mode {
-	case custodyRefused, custodyUnavailable:
-		return custody.refusal
-	case custodyPassword:
-		return fmt.Errorf("credential protection verification requires the vault identity service; this host is on the app-password path")
+	case custodyRefused:
+		return errors.Join(ErrLauncherRefused, custody.refusal)
+	case custodyUnavailable:
+		return errors.Join(ErrCustodianUnavailable, custody.refusal)
 	case custodyService:
 	}
-	a := custody.serviceHost("protection-probe/" + uuid.NewString()).service
-	b := custody.serviceHost("protection-probe/" + uuid.NewString()).service
+	a := custody.provider("protection-probe/" + uuid.NewString()).(*itemsIdentityProvider)
+	b := custody.provider("protection-probe/" + uuid.NewString()).(*itemsIdentityProvider)
 	defer func() { err = errors.Join(err, a.Purge(), b.Purge()) }()
 	return verifyDisposableIdentities(a, b)
 }

@@ -48,7 +48,6 @@ func TestRustHostWireFixturesMatchGoTypes(t *testing.T) {
 		"daemon_manifest":                goTypeFixture(t, "internal/api.DaemonManifest", api.DaemonManifest{}),
 		"startup_record":                 startupRecordFixture(t),
 		"vault_custody_report":           goTypeFixture(t, "internal/credentialstore.CustodyReport", credentialstore.CustodyReport{}),
-		"vault_custody_outcome":          goTypeFixture(t, "internal/credentialstore.CustodyOutcome", credentialstore.CustodyOutcome{}),
 	}
 	phases := make([]string, 0, len(startupprotocol.Phases()))
 	for _, phase := range startupprotocol.Phases() {

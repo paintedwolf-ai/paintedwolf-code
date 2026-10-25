@@ -81,7 +81,7 @@ func TestServiceCustodyOpensTheVaultUnattended(t *testing.T) {
 	if c.mode != custodyService || c.launcherPID != 42 {
 		t.Fatalf("custody = %+v", c)
 	}
-	p := c.provider("/cfg/credential-vault.age").(*serviceHostProvider)
+	p := c.provider("/cfg/credential-vault.age").(*itemsIdentityProvider)
 	created, err := p.LoadOrCreate(false)
 	testutil.FailErr(t, "create identity", err)
 	loaded, err := p.LoadOrCreate(true)
@@ -89,7 +89,7 @@ func TestServiceCustodyOpensTheVaultUnattended(t *testing.T) {
 	if created != loaded || len(svc.values) != 1 {
 		t.Fatal("the service did not keep one identity")
 	}
-	other := c.provider("/other/credential-vault.age").(*serviceHostProvider)
+	other := c.provider("/other/credential-vault.age").(*itemsIdentityProvider)
 	if _, err := other.LoadOrCreate(true); !errors.Is(err, ErrIdentityMissing) {
 		t.Fatalf("another root's missing identity: %v", err)
 	}
@@ -119,13 +119,13 @@ func TestServiceCustodyReportsEmptyAndFailedResponses(t *testing.T) {
 	}
 }
 
-func TestAbsentOrUnavailableServiceLeavesTheAppPasswordPath(t *testing.T) {
+func TestAbsentOrUnavailableServiceCannotSelectAppPassword(t *testing.T) {
 	absent := vaultidentity.NewClient(filepath.Join(t.TempDir(), "none.sock"))
 	if c := probeCustody(absent); c.mode != custodyUnavailable || c.launcherPID != 0 {
 		t.Fatalf("absent service custody = %+v", c)
 	}
-	if _, ok := probeCustody(absent).provider("/cfg/credential-vault.age").(*passphraseIdentityProvider); !ok {
-		t.Fatal("absent service did not select the app password")
+	if _, err := probeCustody(absent).provider("/cfg/credential-vault.age").LoadOrCreate(false); !errors.Is(err, ErrCustodianAbsent) {
+		t.Fatalf("absent service must refuse password setup: %v", err)
 	}
 	_, client := startFakeService(t, vaultidentity.Response{Status: vaultidentity.StatusUnavailable, Code: "manifest_unreadable"})
 	if c := probeCustody(client); c.mode != custodyUnavailable {

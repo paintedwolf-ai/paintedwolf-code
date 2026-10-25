@@ -129,15 +129,6 @@
         }
       ]
     },
-    "vault_custody_outcome": {
-      "source": "internal/credentialstore.CustodyOutcome",
-      "examples": [
-        {
-          "code": "code",
-          "message": "message"
-        }
-      ]
-    },
     "vault_custody_report": {
       "source": "internal/credentialstore.CustodyReport",
       "examples": [
