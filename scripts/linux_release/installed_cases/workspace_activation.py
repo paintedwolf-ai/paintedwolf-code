@@ -93,7 +93,7 @@ def execute(binding, capability, case, root):
                         observations['provider_cancelled_by_quit'] = barrier.await_peer_cancellation()
                 observations['provider_requests'] = list(fixture.observations)
             streams.update(app.streams())
-    except (OSError, ValueError, TypeError) as error:
+    except Exception as error:
         if barrier is not None:
             observations['provider_response_control'] = barrier.snapshot()
         if app is not None:

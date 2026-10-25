@@ -89,6 +89,56 @@ class WorkspaceTests(unittest.TestCase):
         ])
         self.assertEqual(raised.exception.observations['opened_session'], {'id': 'opened', 'status': 'idle'})
 
+    def test_unexpected_cancel_observation_retains_partial_evidence_without_replaying(self):
+        app = Mock(observations={'launch_identity': {'pid': 123}})
+        app.__enter__ = Mock(return_value=app)
+        def stopped(*_):
+            app.observations.update(exit_code=0, capture_complete=True)
+        app.__exit__ = Mock(side_effect=stopped)
+        app.streams.return_value = {'app-stderr': b'owned desktop log'}
+        fixture = Mock(observations=[{'completed': False}])
+        fixture_context = Mock(__enter__=Mock(return_value=fixture), __exit__=Mock(return_value=False))
+        ui_context = Mock(__enter__=Mock(), __exit__=Mock(return_value=False))
+        frames = Mock(__enter__=Mock(), __exit__=Mock(return_value=False))
+        barrier = Mock()
+        barrier.snapshot.return_value = {'held': True}
+        def transition(*args):
+            operation = args[-1]
+            if operation == 'workspace-cancel-quit-v1':
+                error = IndexError('window removed during observation')
+                error.observations = {'native_input': {'operation': operation, 'completed': False}}
+                raise error
+            return {'operation': operation, 'completed': True}
+        with tempfile.TemporaryDirectory() as root, ExitStack() as stack:
+            replacements = {
+                'protected_launcher': {'path': '/bin/pw'}, 'load_provider_recovery': None,
+                'InstalledApp': app, 'interactive_window': {}, 'ResponseBarrier': barrier,
+                'configure_provider': {'provider_id': 'fixture'}, 'DesktopUI': ui_context,
+                'FrameObserver': frames, 'await_session': {'id': 'session'},
+                'require_active': {'id': 'session', 'status': 'busy'},
+                'run': {'exit_code': 0, 'timed_out': False, 'output_limit': False},
+                'reopen': {'observed': True}, 'submit_project_turn': None,
+            }
+            for name, value in replacements.items():
+                stack.enter_context(patch.object(owner, name, return_value=value))
+            stack.enter_context(patch.object(owner.ProviderFixture, 'gui', return_value=fixture_context))
+            performed = stack.enter_context(patch.object(owner, 'perform_transition', side_effect=transition))
+            with self.assertRaises(owner.CaseFailed) as raised:
+                owner.execute({'native_input': {'binding': {}, 'vm_id': 'owned'}},
+                              'windowing', 'workspace-activation-and-exit', Path(root))
+        retained = raised.exception.observations
+        self.assertEqual(retained['failure_type'], 'IndexError')
+        self.assertEqual(retained['native_input']['completed'], False)
+        self.assertEqual(retained['provider_response_control'], {'held': True})
+        self.assertEqual(retained['launch']['exit_code'], 0)
+        self.assertTrue(retained['launch']['capture_complete'])
+        self.assertEqual(raised.exception.streams, {'app-stderr': b'owned desktop log'})
+        self.assertEqual([call.args[-1] for call in performed.call_args_list], [
+            'workspace-open-peer-v1', 'workspace-hide-main-v1',
+            'workspace-request-quit-v1', 'workspace-cancel-quit-v1'])
+        self.assertEqual(len(retained['transitions']), 3)
+        app.__exit__.assert_called_once()
+
     def activation(self, *, changed_image=False, changed_session=False, timeout=False, identity_error=False):
         image = {'mode': 0o4755, 'sha256': 'a' * 64}
         app = Mock(binding={}, observations={'session': {'id': 'session'}})
