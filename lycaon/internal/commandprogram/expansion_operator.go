@@ -1,7 +1,7 @@
 package commandprogram
 
 import (
-	"strconv"
+	"context"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -11,7 +11,7 @@ import (
 )
 
 // operated expands ${name OP word}. Operators read state only; none assigns.
-func (r *expansionRun) operated(part commandsurface.ParameterPart, quoted bool) error {
+func (r *expansionRun) operated(ctx context.Context, part commandsurface.ParameterPart, quoted bool) error {
 	value, set, err := r.parameterState(part)
 	if err != nil {
 		return err
@@ -21,21 +21,21 @@ func (r *expansionRun) operated(part commandsurface.ParameterPart, quoted bool) 
 	switch strings.TrimPrefix(part.Operator, ":") {
 	case "-":
 		if missing {
-			return r.operand(part.Argument, quoted)
+			return r.operand(ctx, part.Argument, quoted)
 		}
-		return r.emit(value, quoted)
+		return r.emit(ctx, value, quoted)
 	case "+":
 		if missing {
-			return r.emit("", quoted)
+			return r.emit(ctx, "", quoted)
 		}
-		return r.operand(part.Argument, quoted)
+		return r.operand(ctx, part.Argument, quoted)
 	case "?":
 		if !missing {
-			return r.emit(value, quoted)
+			return r.emit(ctx, value, quoted)
 		}
 		message := "parameter null or not set"
 		if part.Argument != nil && len(part.Argument.Parts) > 0 {
-			if message, err = r.expander.ExpandScalar(r.ctx, r.scope, *part.Argument); err != nil {
+			if message, err = r.expander.ExpandScalar(ctx, r.scope, *part.Argument); err != nil {
 				return err
 			}
 		}
@@ -45,10 +45,10 @@ func (r *expansionRun) operated(part commandsurface.ParameterPart, quoted bool) 
 		if size > r.expander.limits.valueBytes {
 			return r.expander.limits.exceeded("variable_value_bytes", size, part.Span)
 		}
-		if err := r.charge(size); err != nil {
+		if err := r.charge(ctx, size); err != nil {
 			return err
 		}
-		return r.emit(convertCase(value, part.Operator), quoted)
+		return r.emit(ctx, convertCase(value, part.Operator), quoted)
 	}
 	return r.patternOperation(value, part, quoted)
 }
@@ -56,7 +56,7 @@ func (r *expansionRun) operated(part commandsurface.ParameterPart, quoted bool) 
 // parameterState reads a parameter's value and whether it is set.
 func (r *expansionRun) parameterState(part commandsurface.ParameterPart) (string, bool, error) {
 	if part.Index != nil {
-		index, err := r.arithmeticValue(part.Index)
+		index, err := r.arithmeticValue(r.ctx, part.Index)
 		if err != nil {
 			return "", false, err
 		}
@@ -77,9 +77,9 @@ func (r *expansionRun) parameterState(part commandsurface.ParameterPart) (string
 		joined, err := r.joinParameterElements(positional)
 		return joined, len(positional) > 0, err
 	case positionalName(name):
-		index, err := strconv.Atoi(name)
 		positional := r.scope.Positional()
-		if err != nil || index > len(positional) {
+		index, valid := parameterIndex(name, len(positional))
+		if !valid || index == 0 {
 			return "", false, nil
 		}
 		return positional[index-1], true, nil
@@ -96,29 +96,29 @@ func (r *expansionRun) parameterState(part commandsurface.ParameterPart) (string
 
 // operand expands an operator word in place. Within double quotes its text
 // stays quoted, as the enclosing quotes still apply.
-func (r *expansionRun) operand(word *commandsurface.DeferredWord, quoted bool) error {
+func (r *expansionRun) operand(ctx context.Context, word *commandsurface.DeferredWord, quoted bool) error {
 	if word == nil {
-		return r.emit("", quoted)
+		return r.emit(ctx, "", quoted)
 	}
 	if !quoted {
-		return r.word(word.Parts)
+		return r.word(ctx, word.Parts)
 	}
 	r.assembly.present = true
 	for _, inner := range word.Parts {
 		var err error
 		switch inner := inner.(type) {
 		case commandsurface.LiteralPart:
-			err = r.literal(inner.Value, expand.DoubleQuotedText)
+			err = r.literal(ctx, inner.Value, expand.DoubleQuotedText)
 		case commandsurface.SingleQuotedPart:
 			err = r.assembly.add("'"+inner.Value+"'", true)
 		case commandsurface.DoubleQuotedPart:
-			err = r.double(inner)
+			err = r.double(ctx, inner)
 		case commandsurface.ParameterPart:
-			err = r.parameter(inner, true)
+			err = r.parameter(ctx, inner, true)
 		case commandsurface.ArithmeticPart:
-			err = r.arithmetic(inner, true)
+			err = r.arithmetic(ctx, inner, true)
 		case commandsurface.SubstitutionPart:
-			err = r.substitution(inner, true)
+			err = r.substitution(ctx, inner, true)
 		default:
 			err = &ExpansionError{Code: codeSyntaxUnsupported, Span: r.span, Expected: "a version 1 word part"}
 		}
@@ -159,7 +159,7 @@ func (r *expansionRun) joinParameterElements(values []string) (string, error) {
 	if size > r.expander.limits.valueBytes {
 		return "", r.expander.limits.exceeded("variable_value_bytes", size, r.span)
 	}
-	if err := r.charge(size); err != nil {
+	if err := r.charge(r.ctx, size); err != nil {
 		return "", err
 	}
 	return strings.Join(values, " "), nil

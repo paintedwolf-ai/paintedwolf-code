@@ -187,6 +187,7 @@ func (f *frame) loopBody(ctx context.Context, body []commandsurface.Statement) (
 		}
 	case signalReturn:
 		return sig, true, nil
+	case signalNext:
 	}
 	return signal{}, false, nil
 }
@@ -272,7 +273,7 @@ func (f *frame) isolated(ctx context.Context, s commandsurface.Statement, list [
 	if err != nil {
 		return err
 	}
-	defer run.close()
+	defer run.close(ctx)
 	g, release, err := f.isolate(ctx, nil)
 	if err != nil {
 		return f.stateRefusal(s.SyntaxLocation, err)
@@ -284,16 +285,16 @@ func (f *frame) isolated(ctx context.Context, s commandsurface.Statement, list [
 		err = trapErr
 	}
 	f.publish.mark(g.publish.eligible())
-	return f.settleFrame(run, g, err)
+	return f.settleFrame(ctx, run, g, err)
 }
 
 // settleFrame records a nested frame's status in this frame as one execution.
-func (f *frame) settleFrame(run *childRun, g *frame, err error) error {
+func (f *frame) settleFrame(ctx context.Context, run *childRun, g *frame, err error) error {
 	result := ordinaryResult(g.state.control.Status())
 	if stop, ok := g.state.latch.Stop(); ok {
 		result = stop.Result
 	}
-	run.settle(result, err)
+	run.settle(ctx, result, err)
 	if err != nil {
 		return err
 	}

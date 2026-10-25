@@ -30,7 +30,7 @@ func (r *expansionRun) patternOperation(value string, part commandsurface.Parame
 		return err
 	}
 	if matcher == nil {
-		return r.emit(value, quoted)
+		return r.emit(r.ctx, value, quoted)
 	}
 	defer matcher.session.Close()
 	var result string
@@ -50,7 +50,7 @@ func (r *expansionRun) patternOperation(value string, part commandsurface.Parame
 	if matcher.err != nil {
 		return matcher.failure(matcher.err)
 	}
-	return r.emit(result, quoted)
+	return r.emit(r.ctx, result, quoted)
 }
 
 func (r *expansionRun) parameterPattern(value string, part commandsurface.ParameterPart) (*parameterMatcher, error) {
@@ -76,7 +76,7 @@ func (r *expansionRun) parameterPattern(value string, part commandsurface.Parame
 	}
 	// Share the predicate owner's bound for quoted glob translation and syntax
 	// normalization. The maintained parser/VM meter their dynamic allocation.
-	if err := r.charge(patternLexicalBytes(raw)); err != nil {
+	if err := r.charge(r.ctx, patternLexicalBytes(raw)); err != nil {
 		return nil, err
 	}
 	var glob strings.Builder
@@ -93,13 +93,13 @@ func (r *expansionRun) parameterPattern(value string, part commandsurface.Parame
 	}
 	matcher := &parameterMatcher{run: r}
 	reserve := func(_ context.Context, n int64) (func(), error) {
-		if err := r.charge(n); err != nil {
+		if err := r.charge(r.ctx, n); err != nil {
 			return nil, err
 		}
 		// Compiled code and parse generations stay charged until expansion closes.
 		return func() {}, nil
 	}
-	limits := regexp2.SyntaxBudget{MaxBytes: r.expander.limits.memory, MaxSteps: r.expander.limits.maximum["regex_work_steps"], Timeout: time.Duration(r.expander.limits.maximum["regex_cpu_ms"]) * time.Millisecond, Reserve: reserve}
+	limits := regexp2.SyntaxBudget{MaxBytes: r.expander.limits.memory, MaxSteps: r.expander.limits.maximum["regex_work_steps"], Reserve: reserve}
 	tree, err := regexp2.ParseSyntaxBounded(r.ctx, expression, syntax.Perl|syntax.DotNL|regexp2.ScalarCollation, limits)
 	if err != nil {
 		return nil, matcher.failure(err)
@@ -109,7 +109,7 @@ func (r *expansionRun) parameterPattern(value string, part commandsurface.Parame
 		return nil, matcher.failure(err)
 	}
 	count := utf8.RuneCountInString(value)
-	if err := r.charge(int64(count)*12 + 8); err != nil {
+	if err := r.charge(r.ctx, int64(count)*12+8); err != nil {
 		return nil, err
 	}
 	matcher.text = []rune(value)
@@ -204,7 +204,7 @@ func (m *parameterMatcher) replace(value, replacement, operator string) string {
 			m.err = m.run.expander.limits.exceeded("variable_value_bytes", next, m.run.span)
 			return false
 		}
-		if err := m.run.charge(48); err != nil {
+		if err := m.run.charge(m.run.ctx, 48); err != nil {
 			m.err = err
 			return false
 		}
@@ -246,7 +246,7 @@ func (m *parameterMatcher) replace(value, replacement, operator string) string {
 	if !appendText(value[m.bounds[copied]:]) {
 		return ""
 	}
-	if err := m.run.charge(size); err != nil {
+	if err := m.run.charge(m.run.ctx, size); err != nil {
 		m.err = err
 		return ""
 	}

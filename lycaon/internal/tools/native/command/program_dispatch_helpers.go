@@ -296,6 +296,11 @@ func writeRejectRefusal(streams commandprogram.Streams, command string, request 
 	if streams.Error == nil || reject == nil {
 		return
 	}
+	if programResourceRefusal(reject) {
+		// Resource refusals render once through settled program feedback, where
+		// the original limit facts and completed effects are available.
+		return
+	}
 	subject := command
 	for _, key := range []string{"word", "path", "operand", "job", "signal", "pattern"} {
 		if val, _ := reject.Data[key].(string); val != "" {
@@ -467,6 +472,18 @@ type renderedProgramRefusal struct {
 func (r *renderedProgramRefusal) Error() string { return r.text }
 func (r *renderedProgramRefusal) Unwrap() error { return r.cause }
 
+func programResourceRefusal(reject *toolrejection.ToolReject) bool {
+	if reject == nil {
+		return false
+	}
+	switch reject.Code {
+	case "COMMAND_LIMIT_EXCEEDED", "GREP_MATCH_BUDGET", "JQ_INPUT_TOO_LARGE":
+		return true
+	default:
+		return false
+	}
+}
+
 func enrichProgramReject(reject *toolrejection.ToolReject, defaultCommand string, defaultSpan toolcontract.SourceSpan) {
 	if reject == nil {
 		return
@@ -505,6 +522,9 @@ func enrichProgramReject(reject *toolrejection.ToolReject, defaultCommand string
 	if _, ok := reject.Data["source_end_byte"]; !ok {
 		reject.Data["source_end_byte"] = defaultSpan.EndByte
 	}
+	if programResourceRefusal(reject) {
+		return
+	}
 	remedy := firstStringFact(reject.Data, "expected_form", "expected", "remedy", "reason")
 	switch reject.Code {
 	case "SURVEY_PATH_ESCAPE":
@@ -529,6 +549,9 @@ func ensureProgramRefusalText(rendered error, reject *toolrejection.ToolReject) 
 	}
 	if rendered == nil {
 		rendered = toolrejection.RenderReject(reject, nil)
+	}
+	if programResourceRefusal(reject) {
+		return rendered
 	}
 	text := rendered.Error()
 	cmd := firstStringFact(reject.Data, "command", "native_command", "operation")

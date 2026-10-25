@@ -19,7 +19,7 @@ func (e *WordExpander) EvaluateArithmeticCommand(ctx context.Context, scope Expa
 	}
 	r := expansionRun{ctx: ctx, expander: e, scope: scope, span: cmd.Span, mode: modeScalar, allowArithmeticMutation: true}
 	defer r.close()
-	return r.arithmeticValue(cmd.Expression)
+	return r.arithmeticValue(ctx, cmd.Expression)
 }
 
 // EvaluateArithmeticNode evaluates a non-mutating arithmetic node (such as an
@@ -30,7 +30,7 @@ func (e *WordExpander) EvaluateArithmeticNode(ctx context.Context, scope Expansi
 	}
 	r := expansionRun{ctx: ctx, expander: e, scope: scope, span: span, mode: modeScalar}
 	defer r.close()
-	return r.arithmeticValue(node)
+	return r.arithmeticValue(ctx, node)
 }
 
 func scopeArrayElement(scope ExpansionScope, name string, index int64) (string, bool) {
@@ -87,7 +87,7 @@ func scopeArrayElements(scope ExpansionScope, name string) ([]string, bool) {
 
 func (r *expansionRun) resolveParameterValue(part commandsurface.ParameterPart) (string, error) {
 	if part.Index != nil {
-		index, err := r.arithmeticValue(part.Index)
+		index, err := r.arithmeticValue(r.ctx, part.Index)
 		if err != nil {
 			return "", err
 		}
@@ -125,23 +125,23 @@ func (r *expansionRun) emitElements(elems []string, subscript string, quoted boo
 	for _, value := range elems {
 		joined += len(value) + 1
 	}
-	if err := r.charge(int64(joined)); err != nil {
+	if err := r.charge(r.ctx, int64(joined)); err != nil {
 		return err
 	}
-	return r.emit(strings.Join(elems, " "), quoted)
+	return r.emit(r.ctx, strings.Join(elems, " "), quoted)
 }
 
 func (r *expansionRun) sliceString(value string, slice *commandsurface.ParameterSlice, span toolcontract.SourceSpan) (string, error) {
 	var offset int64
 	var err error
 	if slice.Offset != nil {
-		offset, err = r.arithmeticValue(slice.Offset)
+		offset, err = r.arithmeticValue(r.ctx, slice.Offset)
 		if err != nil {
 			return "", err
 		}
 	}
 	// The rune vector and UTF-8 result overlap until the expansion completes.
-	if err := r.charge(4*int64(utf8.RuneCountInString(value)) + int64(len(value))); err != nil {
+	if err := r.charge(r.ctx, 4*int64(utf8.RuneCountInString(value))+int64(len(value))); err != nil {
 		return "", err
 	}
 	runes := []rune(value)
@@ -158,7 +158,7 @@ func (r *expansionRun) sliceString(value string, slice *commandsurface.Parameter
 	if slice.Length == nil {
 		return string(runes[offset:]), nil
 	}
-	length, err := r.arithmeticValue(slice.Length)
+	length, err := r.arithmeticValue(r.ctx, slice.Length)
 	if err != nil {
 		return "", err
 	}
@@ -180,7 +180,7 @@ func (r *expansionRun) sliceElements(elems []string, slice *commandsurface.Param
 	var offset int64
 	var err error
 	if slice.Offset != nil {
-		offset, err = r.arithmeticValue(slice.Offset)
+		offset, err = r.arithmeticValue(r.ctx, slice.Offset)
 		if err != nil {
 			return nil, err
 		}
@@ -212,7 +212,7 @@ func (r *expansionRun) sliceElements(elems []string, slice *commandsurface.Param
 		elems = elems[offset:]
 	}
 	if slice.Length != nil {
-		length, err := r.arithmeticValue(slice.Length)
+		length, err := r.arithmeticValue(r.ctx, slice.Length)
 		if err != nil {
 			return nil, err
 		}
@@ -231,7 +231,7 @@ func (r *expansionRun) unboundIndexed(part commandsurface.ParameterPart) (bool, 
 		_, set := scopeArrayElements(r.scope, part.Name)
 		return set, nil
 	}
-	index, err := r.arithmeticValue(part.Index)
+	index, err := r.arithmeticValue(r.ctx, part.Index)
 	if err != nil {
 		return false, err
 	}

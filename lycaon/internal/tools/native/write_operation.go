@@ -23,6 +23,8 @@ type WriteInput struct {
 	// the destination revision or absence, and the inputs Content came from.
 	Destination toolcontract.ExecutionRevision
 	Sources     []toolcontract.ExecutionRevision
+	// Memory is the invoking program's existing admission; conversational writes omit it.
+	Memory *toolcontract.ProgramMemory
 	// Exact publishes Bytes verbatim instead of encoding Content: a program's
 	// redirect output, text or not. It requires the execution-pinned admission.
 	Exact bool

@@ -1,6 +1,7 @@
 package commandprogram
 
 import (
+	"context"
 	"math"
 	"strconv"
 	"strings"
@@ -11,26 +12,26 @@ import (
 
 // arithmetic evaluates $(( )) with wrapping signed 64-bit integers. && || and
 // ?: evaluate only the selected operands.
-func (r *expansionRun) arithmetic(part commandsurface.ArithmeticPart, quoted bool) error {
-	value, err := r.arithmeticValue(part.Expression)
+func (r *expansionRun) arithmetic(ctx context.Context, part commandsurface.ArithmeticPart, quoted bool) error {
+	value, err := r.arithmeticValue(ctx, part.Expression)
 	if err != nil {
 		return err
 	}
-	return r.emit(strconv.FormatInt(value, 10), quoted)
+	return r.emit(ctx, strconv.FormatInt(value, 10), quoted)
 }
 
-func (r *expansionRun) arithmeticValue(node commandsurface.ArithmeticNode) (int64, error) {
-	if err := r.ctx.Err(); err != nil {
+func (r *expansionRun) arithmeticValue(ctx context.Context, node commandsurface.ArithmeticNode) (int64, error) {
+	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
 	switch n := node.(type) {
 	case commandsurface.ArithmeticOperand:
-		return r.arithmeticOperand(n)
+		return r.arithmeticOperand(ctx, n)
 	case commandsurface.ArithmeticUnary:
 		if n.Operator == "++" || n.Operator == "--" {
-			return r.arithmeticIncDec(n)
+			return r.arithmeticIncDec(ctx, n)
 		}
-		value, err := r.arithmeticValue(n.Operand)
+		value, err := r.arithmeticValue(ctx, n.Operand)
 		if err != nil {
 			return 0, err
 		}
@@ -44,25 +45,25 @@ func (r *expansionRun) arithmeticValue(node commandsurface.ArithmeticNode) (int6
 		}
 		return value, nil
 	case commandsurface.ArithmeticBinary:
-		return r.arithmeticBinary(n)
+		return r.arithmeticBinary(ctx, n)
 	}
 	return 0, &ExpansionError{Code: codeSyntaxUnsupported, Span: r.span, Expected: "a version 1 arithmetic expression"}
 }
 
-func (r *expansionRun) arithmeticBinary(n commandsurface.ArithmeticBinary) (int64, error) {
+func (r *expansionRun) arithmeticBinary(ctx context.Context, n commandsurface.ArithmeticBinary) (int64, error) {
 	if n.Operator == "," {
 		if !r.allowArithmeticMutation {
 			return 0, &ExpansionError{Code: codeSyntaxUnsupported, Span: n.Span, Expected: "a version 1 arithmetic operator"}
 		}
-		if _, err := r.arithmeticValue(n.Left); err != nil {
+		if _, err := r.arithmeticValue(ctx, n.Left); err != nil {
 			return 0, err
 		}
-		return r.arithmeticValue(n.Right)
+		return r.arithmeticValue(ctx, n.Right)
 	}
 	if baseOp, isAssign := arithmeticAssignBase(n.Operator); isAssign {
-		return r.arithmeticAssign(n, baseOp)
+		return r.arithmeticAssign(ctx, n, baseOp)
 	}
-	left, err := r.arithmeticValue(n.Left)
+	left, err := r.arithmeticValue(ctx, n.Left)
 	if err != nil {
 		return 0, err
 	}
@@ -71,7 +72,7 @@ func (r *expansionRun) arithmeticBinary(n commandsurface.ArithmeticBinary) (int6
 		if (n.Operator == "&&") == (left == 0) {
 			return boolInt(left != 0), nil
 		}
-		right, err := r.arithmeticValue(n.Right)
+		right, err := r.arithmeticValue(ctx, n.Right)
 		return boolInt(right != 0), err
 	case "?":
 		branches, ok := n.Right.(commandsurface.ArithmeticBinary)
@@ -79,11 +80,11 @@ func (r *expansionRun) arithmeticBinary(n commandsurface.ArithmeticBinary) (int6
 			return 0, invalidValue(n.Span, "a ? b : c")
 		}
 		if left != 0 {
-			return r.arithmeticValue(branches.Left)
+			return r.arithmeticValue(ctx, branches.Left)
 		}
-		return r.arithmeticValue(branches.Right)
+		return r.arithmeticValue(ctx, branches.Right)
 	}
-	right, err := r.arithmeticValue(n.Right)
+	right, err := r.arithmeticValue(ctx, n.Right)
 	if err != nil {
 		return 0, err
 	}
@@ -125,9 +126,9 @@ func evalArithmeticBinaryOp(op string, left, right int64, span toolcontract.Sour
 		}
 		return result, nil
 	case "<<":
-		return left << (uint64(right) & 63), nil
+		return left << (right & 63), nil
 	case ">>":
-		return left >> (uint64(right) & 63), nil
+		return left >> (right & 63), nil
 	case "&":
 		return left & right, nil
 	case "|":
@@ -161,11 +162,11 @@ func arithmeticAssignBase(op string) (string, bool) {
 	}
 }
 
-func (r *expansionRun) arithmeticIncDec(n commandsurface.ArithmeticUnary) (int64, error) {
+func (r *expansionRun) arithmeticIncDec(ctx context.Context, n commandsurface.ArithmeticUnary) (int64, error) {
 	if !r.allowArithmeticMutation {
 		return 0, &ExpansionError{Code: codeSyntaxUnsupported, Span: n.Span, Expected: "a version 1 arithmetic expression"}
 	}
-	name, index, current, err := r.arithmeticTarget(n.Operand, n.Span, true)
+	name, index, current, err := r.arithmeticTarget(ctx, n.Operand, n.Span, true)
 	if err != nil {
 		return 0, err
 	}
@@ -173,7 +174,7 @@ func (r *expansionRun) arithmeticIncDec(n commandsurface.ArithmeticUnary) (int64
 	if n.Operator == "--" {
 		next = current - 1
 	}
-	if err := assignArithmeticVariable(r.ctx, r.scope, name, index, next, n.Span); err != nil {
+	if err := assignArithmeticVariable(ctx, r.scope, name, index, next, n.Span); err != nil {
 		return 0, err
 	}
 	if n.Postfix {
@@ -182,7 +183,7 @@ func (r *expansionRun) arithmeticIncDec(n commandsurface.ArithmeticUnary) (int64
 	return next, nil
 }
 
-func (r *expansionRun) arithmeticAssign(n commandsurface.ArithmeticBinary, baseOp string) (int64, error) {
+func (r *expansionRun) arithmeticAssign(ctx context.Context, n commandsurface.ArithmeticBinary, baseOp string) (int64, error) {
 	if !r.allowArithmeticMutation {
 		return 0, &ExpansionError{Code: codeSyntaxUnsupported, Span: n.Span, Expected: "a version 1 arithmetic operator"}
 	}
@@ -193,14 +194,14 @@ func (r *expansionRun) arithmeticAssign(n commandsurface.ArithmeticBinary, baseO
 	if baseOp == "" {
 		// Plain assignment evaluates the right side before resolving its target
 		// subscript and never interprets the previous value as an integer.
-		right, err = r.arithmeticValue(n.Right)
+		right, err = r.arithmeticValue(ctx, n.Right)
 		if err == nil {
-			name, index, current, err = r.arithmeticTarget(n.Left, n.Span, false)
+			name, index, current, err = r.arithmeticTarget(ctx, n.Left, n.Span, false)
 		}
 	} else {
-		name, index, current, err = r.arithmeticTarget(n.Left, n.Span, true)
+		name, index, current, err = r.arithmeticTarget(ctx, n.Left, n.Span, true)
 		if err == nil {
-			right, err = r.arithmeticValue(n.Right)
+			right, err = r.arithmeticValue(ctx, n.Right)
 		}
 	}
 	if err != nil {
@@ -213,13 +214,13 @@ func (r *expansionRun) arithmeticAssign(n commandsurface.ArithmeticBinary, baseO
 			return 0, err
 		}
 	}
-	if err := assignArithmeticVariable(r.ctx, r.scope, name, index, next, n.Span); err != nil {
+	if err := assignArithmeticVariable(ctx, r.scope, name, index, next, n.Span); err != nil {
 		return 0, err
 	}
 	return next, nil
 }
 
-func (r *expansionRun) arithmeticTarget(node commandsurface.ArithmeticNode, span toolcontract.SourceSpan, readCurrent bool) (string, *int64, int64, error) {
+func (r *expansionRun) arithmeticTarget(ctx context.Context, node commandsurface.ArithmeticNode, span toolcontract.SourceSpan, readCurrent bool) (string, *int64, int64, error) {
 	operand, ok := node.(commandsurface.ArithmeticOperand)
 	if !ok || len(operand.Word.Parts) != 1 {
 		return "", nil, 0, invalidValue(span, "an assignable variable")
@@ -244,7 +245,7 @@ func (r *expansionRun) arithmeticTarget(node commandsurface.ArithmeticNode, span
 		if part.Index == nil || !VariableName(part.Name) || part.Name == "IFS" || part.Name == "PIPESTATUS" {
 			return "", nil, 0, invalidValue(span, "an assignable variable")
 		}
-		idx, err := r.arithmeticValue(part.Index)
+		idx, err := r.arithmeticValue(ctx, part.Index)
 		if err != nil {
 			return "", nil, 0, err
 		}
@@ -268,17 +269,28 @@ func (r *expansionRun) arithmeticTarget(node commandsurface.ArithmeticNode, span
 
 // arithmeticOperand reads an integer literal or a variable holding one; an
 // unset or empty value is zero. Values are never evaluated as expressions.
-func (r *expansionRun) arithmeticOperand(n commandsurface.ArithmeticOperand) (int64, error) {
+func (r *expansionRun) arithmeticOperand(ctx context.Context, n commandsurface.ArithmeticOperand) (int64, error) {
 	var text string
 	var err error
 	if len(n.Word.Parts) == 1 {
-		if part, ok := n.Word.Parts[0].(commandsurface.ParameterPart); ok && part.Index != nil {
-			text, err = r.resolveParameterValue(part)
-		} else {
-			text, err = r.expander.ExpandScalar(r.ctx, r.scope, n.Word)
+		switch part := n.Word.Parts[0].(type) {
+		case commandsurface.ParameterPart:
+			if part.Index != nil {
+				text, err = r.resolveParameterValue(part)
+			} else {
+				text, err = r.expander.ExpandScalar(ctx, r.scope, n.Word)
+			}
+		case commandsurface.LiteralPart:
+			if !strings.ContainsAny(part.Value, "\\'\"~@") {
+				text = part.Value
+			} else {
+				text, err = r.expander.ExpandScalar(ctx, r.scope, n.Word)
+			}
+		default:
+			text, err = r.expander.ExpandScalar(ctx, r.scope, n.Word)
 		}
 	} else {
-		text, err = r.expander.ExpandScalar(r.ctx, r.scope, n.Word)
+		text, err = r.expander.ExpandScalar(ctx, r.scope, n.Word)
 	}
 	if err != nil {
 		return 0, err
@@ -309,10 +321,15 @@ func parseArithmeticInteger(text string, span toolcontract.SourceSpan) (int64, e
 	if err != nil {
 		return 0, invalidValue(span, "an integer arithmetic operand")
 	}
-	if negative {
-		return -int64(value), nil
+	// Preserve the low 64 bits without an out-of-range unsigned conversion.
+	signed := int64(value & math.MaxInt64)
+	if value > math.MaxInt64 {
+		signed += math.MinInt64
 	}
-	return int64(value), nil
+	if negative {
+		return -signed, nil
+	}
+	return signed, nil
 }
 
 func boolInt(value bool) int64 {
