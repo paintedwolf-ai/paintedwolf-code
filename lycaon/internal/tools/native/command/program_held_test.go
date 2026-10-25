@@ -190,12 +190,12 @@ func TestProgramEntrySourcesScriptAndDeduplicatesProgramDefinitions(t *testing.T
 	testutil.FailErr(t, "read program page", err)
 	var externalExecs []api.CommandExecutionReceipt
 	for _, exec := range page.Executions {
-		if exec.Owner == "external" {
+		if exec.NativeCommand == "external" || strings.HasPrefix(exec.Command, "external") {
 			externalExecs = append(externalExecs, exec)
 		}
 	}
 	if len(externalExecs) != 2 || externalExecs[0].DefinitionDigest == "" || externalExecs[0].DefinitionDigest != externalExecs[1].DefinitionDigest {
-		t.Fatalf("external executions = %+v", externalExecs)
+		t.Fatalf("external executions = %+v (all = %+v)", externalExecs, page.Executions)
 	}
 	var defCount int
 	testutil.FailErr(t, "count deduplicated definitions", f.database.QueryRowContext(t.Context(),
