@@ -83,6 +83,22 @@ class DesktopUIOwnershipTests(unittest.TestCase):
             list(actor.descendants(node))
         node.action.doAction.assert_not_called()
 
+    def test_nullable_child_refuses_partial_inventory_without_authorizing_action(self):
+        button = Node(API.ROLE_PUSH_BUTTON, 'Send')
+        window = Node(API.ROLE_FRAME, children=[None, button])
+        actor = ui.DesktopUI(self.app, API)
+        with self.assertRaises(ui._InventoryChanged):
+            list(actor.descendants(window))
+        api, _ = surface([button])
+        api.Registry.getDesktop(0).children = [None]
+        with self.assertRaises(ui._InventoryChanged):
+            list(ui.DesktopUI(self.app, api).windows())
+        api, _ = surface([button])
+        api.Registry.getDesktop(0)[0].children = [None]
+        with self.assertRaises(ui._InventoryChanged):
+            list(ui.DesktopUI(self.app, api).windows())
+        button.action.doAction.assert_not_called()
+
     def test_observer_bound_retains_exact_single_read_facts_without_authorizing_action(self):
         class Oversized(Node):
             reads = 0

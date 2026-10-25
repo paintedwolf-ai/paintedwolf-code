@@ -4,12 +4,11 @@ from __future__ import annotations
 import time
 
 from .. import scripts_module
+from ..installed_input import accessibility
 from .app import process_identity, session_environment
 from .records import CaseFailed, CaseUnavailable
 
-
-class _InventoryChanged(Exception):
-    pass
+_InventoryChanged = accessibility.InventoryChanged
 
 
 def retry_inventory(app, error) -> bool:
@@ -90,6 +89,8 @@ class DesktopUI:
             if time.monotonic() >= deadline:
                 raise CaseUnavailable('normal-native-window-observation-deadline')
             application = desktop[index]
+            if application is None:
+                raise _InventoryChanged()
             pid = application.get_process_id()
             if not owned_process(pid, self.app):
                 continue
@@ -100,30 +101,15 @@ class DesktopUI:
                 if time.monotonic() >= deadline:
                     raise CaseUnavailable('normal-native-window-observation-deadline')
                 window = application[offset]
+                if window is None:
+                    raise _InventoryChanged()
                 if window.getRole() in {self.api.ROLE_FRAME, self.api.ROLE_DIALOG} and self.visible(window):
                     yield identity, window
             if process_identity(pid) != identity or not owned_process(pid, self.app):
                 raise ValueError('installed desktop owner changed during window observation')
 
-    def descendants(self, window, deadline=None):
-        deadline = time.monotonic() + 15 if deadline is None else deadline
-        pending, visited = [(window, 0)], 0
-        while pending:
-            if time.monotonic() >= deadline:
-                raise CaseUnavailable('normal-native-control-observation-deadline')
-            node, depth = pending.pop()
-            visited += 1
-            count = node.childCount
-            if type(count) is int and count == -1:
-                raise _InventoryChanged()
-            if type(count) is not int or visited > 4096 or depth > 64 or not 0 <= count <= 1024:
-                error = CaseUnavailable('installed accessible window exceeds its fixed observer traversal bound')
-                error.observations = {'desktop_inventory_bound': {'visited': visited, 'depth': depth,
-                    'child_count': count if type(count) is int else None,
-                    'limits': {'visited': 4096, 'depth': 64, 'child_count': 1024}}}
-                raise error
-            yield node
-            pending.extend((node[index], depth + 1) for index in range(count))
+    def descendants(self, window, deadline=None, *, include=None):
+        return accessibility.descendants(window, deadline, include=include)
 
     def find(self, role: int, name: str):
         if not isinstance(name, str) or not 0 < len(name) <= 256:
