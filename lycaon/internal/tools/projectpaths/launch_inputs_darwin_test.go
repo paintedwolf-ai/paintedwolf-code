@@ -37,7 +37,7 @@ func TestActualLaunchUsesCheckedProgramPathHandles(t *testing.T) {
 	defer cleanup()
 	var output bytes.Buffer
 	cmd.Stdout = &output
-	if err := hostexec.RunInOwnGroup(cmd); err != nil {
+	if err := hostexec.RunInOwnGroup(t.Context(), cmd); err != nil {
 		t.Fatal(err)
 	}
 	if output.String() != "literal argument\n" {

@@ -82,7 +82,7 @@ func (r *SQLRecorder) BeginProgram(ctx context.Context, in toolcontract.ProgramS
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if err = insertProgram(ctx, tx, in); err != nil {
+	if err := insertProgram(ctx, tx, in); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -168,7 +168,7 @@ func (r *SQLRecorder) PrepareChild(ctx context.Context, in toolcontract.ProgramC
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if err = insertProgramChild(ctx, tx, in); err != nil {
+	if err := insertProgramChild(ctx, tx, in); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -179,7 +179,7 @@ func insertProgramChild(ctx context.Context, tx *sql.Tx, in toolcontract.Program
 		return err
 	}
 	var err error
-	if err = validateChildParent(ctx, tx, in); err != nil {
+	if err := validateChildParent(ctx, tx, in); err != nil {
 		return err
 	}
 	facts := in.Definition.ReadOnlyFacts()
@@ -201,7 +201,7 @@ func insertProgramChild(ctx context.Context, tx *sql.Tx, in toolcontract.Program
 		return err
 	}
 	events := int64(2)
-	bytes := int64(len(identity.ExecutionID) + len(identity.NodeID) + len(identity.ParentExecutionID) + len(in.Invocation.ActorID) + len(scope) + len(facts.Identity) + len(in.Definition.Digest()) + len(in.ExpandedInputs.Representation()) + len(in.ExpandedInputs.ArgumentsDigest()) + len(in.ArgumentsReference) + len(in.Canonical) + len(facts.Contract.Owner) + len(facts.Contract.Lifecycle.String()))
+	bytes := int64(len(identity.ExecutionID) + len(identity.NodeID) + len(identity.ParentExecutionID) + len(in.Invocation.ActorID) + len(scope) + len(facts.Identity) + len(in.Definition.Digest()) + len(in.ExpandedInputs.Representation()) + len(in.ExpandedInputs.ArgumentsDigest()) + len(in.ArgumentsReference) + len(in.Canonical) + len(facts.Contract.Owner) + len(facts.Contract.Lifecycle.String()) + len(gap))
 	if definitionPresent == 0 {
 		events++
 		bytes += int64(len(in.Definition.Serialized()))

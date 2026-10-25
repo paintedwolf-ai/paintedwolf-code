@@ -111,12 +111,12 @@ func TestCanonicalPathLeavesRelativeNamesRelative(t *testing.T) {
 
 // TestCanonicalPathFollowsASymlinkToASocket covers an unopened socket leaf.
 func TestCanonicalPathFollowsASymlinkToASocket(t *testing.T) {
-	dir := t.TempDir()
+	dir, err := os.MkdirTemp("", "pw-sock-")
+	testutil.FailErr(t, "create socket directory", err)
+	t.Cleanup(func() { testutil.FailErr(t, "remove socket directory", os.RemoveAll(dir)) })
 	sock := filepath.Join(dir, "a.sock")
 	l, err := net.Listen("unix", sock)
-	if err != nil {
-		t.Skipf("cannot bind a unix socket here: %v", err)
-	}
+	testutil.FailErr(t, "bind unix socket", err)
 	defer func() { _ = l.Close() }()
 
 	link := filepath.Join(dir, "link.sock")

@@ -9,57 +9,87 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
+	"github.com/lycaon/lycaon/internal/settingsoverlay"
 )
 
 // BoundDir holds a bound directory and its root descriptor open while listing
 // and inspecting its immediate entries.
 type BoundDir struct {
-	dir   BoundPath
-	root  *fseffect.ReadRoot
-	file  *os.File
-	names []string
+	dir      BoundPath
+	root     *fseffect.ReadRoot
+	ownsRoot bool
+	file     *os.File
+	names    []string
 }
 
 // OpenDir opens a bound directory and lists its entry names in unsigned byte order.
 func (p BoundPath) OpenDir() (*BoundDir, error) {
+	return p.OpenDirWithRoot(nil)
+}
+
+// OpenDirWithRoot opens a bound directory using shared when non-nil instead of opening a fresh ReadRoot.
+func (p BoundPath) OpenDirWithRoot(shared *fseffect.ReadRoot) (*BoundDir, error) {
 	if p.Null {
 		return nil, &PathError{Code: "COMMAND_OPERAND_INVALID", Cause: errors.New("null input is an empty stream, not a file")}
 	}
-	root, err := p.openRoot()
-	if err != nil {
-		return nil, PathOperationError(p.Resolved.DisplayPath, err)
+	root := shared
+	ownsRoot := false
+	if root == nil {
+		var err error
+		root, err = p.openRoot()
+		if err != nil {
+			return nil, PathOperationError(p.Resolved.DisplayPath, err)
+		}
+		ownsRoot = true
+	}
+	closeRoot := func() {
+		if ownsRoot {
+			_ = root.Close()
+		}
 	}
 	file, err := root.OpenExact(p.exactRelative)
 	if err != nil {
-		_ = root.Close()
+		closeRoot()
 		return nil, PathOperationError(p.Resolved.DisplayPath, err)
 	}
 	if p.admitRead != nil {
 		if err := p.admitRead(file.Name()); err != nil {
 			_ = file.Close()
-			_ = root.Close()
+			closeRoot()
 			return nil, PathOperationError(p.Resolved.DisplayPath, err)
 		}
 	}
 	info, err := file.Stat()
 	if err != nil {
 		_ = file.Close()
-		_ = root.Close()
+		closeRoot()
 		return nil, PathOperationError(p.Resolved.DisplayPath, err)
 	}
 	if !info.IsDir() {
 		_ = file.Close()
-		_ = root.Close()
+		closeRoot()
 		return nil, PathOperationError(p.Resolved.DisplayPath, &fs.PathError{Op: "readdir", Path: p.Resolved.DisplayPath, Err: errors.New("not a directory")})
 	}
 	names, err := file.Readdirnames(-1)
 	if err != nil {
 		_ = file.Close()
-		_ = root.Close()
+		closeRoot()
 		return nil, PathOperationError(p.Resolved.DisplayPath, err)
 	}
+	parentHasRecovery := strings.Contains(p.Resolved.Abs, ".paintedwolf")
+	kept := names[:0]
+	for _, name := range names {
+		if parentHasRecovery || name == ".paintedwolf" || name == settingsoverlay.RecoveryDirName {
+			childAbs := p.Resolved.Abs + string(filepath.Separator) + name
+			if settingsoverlay.HasRecoverySegment(childAbs) || settingsoverlay.IsRecoveryOnlyDir(childAbs) {
+				continue
+			}
+		}
+		kept = append(kept, name)
+	}
+	names = kept
 	slices.Sort(names)
-	return &BoundDir{dir: p, root: root, file: file, names: names}, nil
+	return &BoundDir{dir: p, root: root, ownsRoot: ownsRoot, file: file, names: names}, nil
 }
 
 // Names returns the sorted entry names in the held directory.
@@ -67,6 +97,9 @@ func (d *BoundDir) Names() []string { return d.names }
 
 // Close releases the held directory and root descriptors.
 func (d *BoundDir) Close() error {
+	if !d.ownsRoot {
+		return d.file.Close()
+	}
 	return errors.Join(d.file.Close(), d.root.Close())
 }
 
@@ -93,11 +126,14 @@ func (d *BoundDir) StatChildFollowed(child BoundPath) (fseffect.EntryStat, error
 // Without follow it reports the final entry itself, including a dangling or
 // outward-pointing link; follow resolves contained links only.
 func (p BoundPath) Stat(follow bool) (fseffect.EntryStat, error) {
+	if settingsoverlay.IsRecoveryRelPath(p.Resolved.ScopeRel) || settingsoverlay.HasRecoverySegment(p.Resolved.Abs) || settingsoverlay.IsRecoveryOnlyDir(p.Resolved.Abs) {
+		return fseffect.EntryStat{}, PathOperationError(p.Resolved.DisplayPath, &fs.PathError{Op: "stat", Path: p.Resolved.DisplayPath, Err: fs.ErrNotExist})
+	}
 	root, err := p.openEntryRoot()
 	if err != nil {
 		return fseffect.EntryStat{}, PathOperationError(p.Resolved.DisplayPath, err)
 	}
-	defer root.Close()
+	defer func() { _ = root.Close() }()
 	admit := p.admitRead
 	if !follow {
 		admit = p.admitEntry
@@ -151,7 +187,7 @@ func (p BoundPath) Readlink() (string, error) {
 	if err != nil {
 		return "", PathOperationError(p.Resolved.DisplayPath, err)
 	}
-	defer root.Close()
+	defer func() { _ = root.Close() }()
 	target, err := root.Readlink(p.exactRelative, p.admitEntry)
 	return target, PathOperationError(p.Resolved.DisplayPath, err)
 }

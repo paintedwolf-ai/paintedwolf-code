@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/textsearch"
@@ -37,6 +38,7 @@ type invocation struct {
 	// noMatchPublishes marks a complete status-one search as publishable.
 	noMatchPublishes bool
 	effects          toolcontract.EffectCertainty
+	releases         []func()
 	pins             []toolcontract.ExecutionRevision
 	flushedPins      int
 }
@@ -116,11 +118,6 @@ func capitalizeFirst(s string) string {
 		return s
 	}
 	return string(s[0]-'a'+'A') + s[1:]
-}
-
-// limitExceeded refuses work above a frozen catalog limit; nothing is truncated.
-func limitExceeded(id string, maximum, observed int64) error {
-	return &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"limit_id": id, "resource_unit": nativeutility.ResourceUnit(id), "maximum": maximum, "observed": observed}}
 }
 
 // ordinary classifies an input failure the utility reports on stderr and
@@ -211,25 +208,7 @@ func (inv *invocation) capturePinned(bound projectpaths.BoundPath) ([]byte, *too
 	if err != nil {
 		return nil, nil, err
 	}
-	return inv.finishCaptured(bound, captured)
-}
-
-func (inv *invocation) captureWalkedPinned(e entry, w *walker) ([]byte, *toolcontract.SourcePin, error) {
-	if e.depth == 0 || e.link || e.bound.Resolved.External || w == nil {
-		return inv.capturePinned(e.bound)
-	}
-	root := w.readRoot(e.bound)
-	if root == nil {
-		return inv.capturePinned(e.bound)
-	}
-	captured, err := inv.owners.Revisions.CaptureWalkedBytes(inv.ctx, inv.tc, e.bound.Resolved, root, inv.owners.readBytes())
-	if err != nil {
-		return nil, nil, err
-	}
-	return inv.finishCaptured(e.bound, captured)
-}
-
-func (inv *invocation) finishCaptured(bound projectpaths.BoundPath, captured native.ExecutionBytes) ([]byte, *toolcontract.SourcePin, error) {
+	inv.releases = append(inv.releases, captured.Close)
 	// A credential file's bytes reach no stream until their exposure is recorded.
 	if err := inv.tc.ObserveCredentialRead(inv.ctx, bound.Resolved.Abs, captured.Path, string(captured.Bytes)); err != nil {
 		return nil, nil, fmt.Errorf("record credential file read: %w", err)
@@ -243,18 +222,49 @@ func (inv *invocation) finishCaptured(bound projectpaths.BoundPath, captured nat
 	return captured.Bytes, nil, nil
 }
 
-// readAll gathers stdin whole, refusing rather than truncating input above
-// stream_bytes.
+// openPinnedStream pins one file operand and returns a stream over its bytes.
+func (inv *invocation) openPinnedStream(bound projectpaths.BoundPath) (native.ExecutionStream, *toolcontract.SourcePin, error) {
+	streamed, err := inv.owners.Revisions.OpenStream(inv.ctx, inv.tc, bound.Resolved.Abs, 0)
+	if err != nil {
+		return native.ExecutionStream{}, nil, err
+	}
+	return inv.finishPinnedStream(streamed)
+}
+
+func (inv *invocation) openWalkedPinnedStream(e entry, w *walker) (native.ExecutionStream, *toolcontract.SourcePin, error) {
+	if e.depth == 0 || e.link || e.bound.Resolved.External || w == nil || strings.HasSuffix(strings.ToLower(e.name), ".gz") {
+		return inv.openPinnedStream(e.bound)
+	}
+	root := w.readRoot(e.bound)
+	if root == nil {
+		return inv.openPinnedStream(e.bound)
+	}
+	streamed, err := inv.owners.Revisions.OpenWalkedStream(inv.ctx, inv.tc, e.bound.Resolved, root, 0)
+	if err != nil {
+		return native.ExecutionStream{}, nil, err
+	}
+	return inv.finishPinnedStream(streamed)
+}
+
+func (inv *invocation) finishPinnedStream(streamed native.ExecutionStream) (native.ExecutionStream, *toolcontract.SourcePin, error) {
+	if err := inv.recordPin(streamed.Revision); err != nil {
+		_ = streamed.Reader.Close()
+		return native.ExecutionStream{}, nil, err
+	}
+	if pin, ok := streamed.Revision.SourcePin(); ok {
+		return streamed, &pin, nil
+	}
+	return streamed, nil, nil
+}
+
+// readAll releases a pattern program from stdin through the shared whole-input owner.
 func (inv *invocation) readAll(r io.Reader) ([]byte, error) {
-	maximum := inv.owners.streamBytes()
-	data, err := io.ReadAll(io.LimitReader(r, maximum+1))
+	buffer, err := inv.owners.Revisions.ReadWholeInput(inv.ctx, r, inv.owners.limit("whole_file_bytes"))
 	if err != nil {
 		return nil, err
 	}
-	if int64(len(data)) > maximum {
-		return nil, limitExceeded("stream_bytes", maximum, int64(len(data)))
-	}
-	return data, nil
+	inv.releases = append(inv.releases, buffer.Close)
+	return buffer.Bytes, nil
 }
 
 // settle projects the run onto the producer contract.
@@ -273,6 +283,7 @@ func (inv *invocation) settle(err error) (toolcontract.ProducerResult, error) {
 	if flushErr := inv.flushPins(); flushErr != nil && err == nil {
 		err = flushErr
 	}
+	err = tools.CommandResourceRejection(err)
 	err = projectpaths.WithPathRejection(patternRejection(err), inv.request.Invocation.Span)
 	if err != nil {
 		result := toolcontract.ProducerResult{Status: inv.failure, Terminal: toolcontract.ProducerFailed, EffectCertainty: inv.effects}
@@ -297,7 +308,7 @@ func (inv *invocation) settle(err error) (toolcontract.ProducerResult, error) {
 	return result, nil
 }
 
-// output meters stdout against stream_bytes before each write and, when the
+// output meters stdout against stream_throughput_bytes before each write and, when the
 // endpoint retains them, records exact source mappings for bytes copied from
 // a pinned capture. Prefixes, separators and replacements carry none.
 type output struct {
@@ -306,6 +317,7 @@ type output struct {
 	beforeWrite      func() error
 	mappings         commandprogram.SourceMappingRecorder
 	pending          *toolcontract.StreamSourceMapping
+	scratch          []byte
 	maximum, written int64
 }
 
@@ -359,14 +371,24 @@ func (o *output) Write(p []byte) (int, error) {
 			return 0, err
 		}
 	}
-	return nativeutility.WriteChunked(o.ctx, o.w, o.maximum, &o.written, p)
+	return nativeutility.WriteChunked(o.ctx, o.w, "stream_throughput_bytes", o.maximum, &o.written, p)
 }
 
 func (o *output) text(parts ...string) error {
-	for _, part := range parts {
-		if _, err := io.WriteString(o, part); err != nil {
-			return err
+	if len(parts) == 1 {
+		if len(parts[0]) == 0 {
+			return nil
 		}
+		_, err := io.WriteString(o, parts[0])
+		return err
 	}
-	return nil
+	o.scratch = o.scratch[:0]
+	for _, part := range parts {
+		o.scratch = append(o.scratch, part...)
+	}
+	if len(o.scratch) == 0 {
+		return nil
+	}
+	_, err := o.Write(o.scratch)
+	return err
 }

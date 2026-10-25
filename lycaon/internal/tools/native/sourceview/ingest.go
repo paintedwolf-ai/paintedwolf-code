@@ -3,6 +3,7 @@ package sourceview
 import (
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"io"
 	"os"
@@ -21,10 +22,24 @@ const (
 	// AccessMutate loads a mutation base within readcaps.MaxMutationBytes, the
 	// bound that retained versions, checkpoints, and editor documents share.
 	AccessMutate
+	// AccessCommand bounds operations that genuinely need a complete command input.
+	AccessCommand
 )
 
 // MaxBytes is the raw byte budget for a project file loaded with this access.
 func (a Access) MaxBytes() int64 {
+	if a == AccessCommand {
+		catalog, err := toolcontract.LanguageV1()
+		if err != nil {
+			return 0
+		}
+		for _, limit := range catalog.Language.Limits {
+			if limit.ID == "whole_file_bytes" {
+				return limit.Maximum
+			}
+		}
+		return 0
+	}
 	if a == AccessMutate {
 		return readcaps.MaxMutationBytes
 	}
@@ -34,6 +49,9 @@ func (a Access) MaxBytes() int64 {
 // SizeReject reports a file or proposed content above maxBytes. size is the
 // measured lower bound; zero means a decoder stopped before measuring.
 func (a Access) SizeReject(tool, path string, size, maxBytes int64) error {
+	if a == AccessCommand {
+		return &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"command": tool, "path": path, "limit_id": "whole_file_bytes", "resource_unit": "bytes", "maximum": maxBytes, "observed": size}}
+	}
 	code := "READ_FILE_TOO_LARGE"
 	if a == AccessMutate {
 		code = "EDIT_FILE_TOO_LARGE"

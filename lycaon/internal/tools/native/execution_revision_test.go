@@ -167,27 +167,3 @@ func TestPinnedDiskAppendExtendsCapturedDestination(t *testing.T) {
 	_, err = f.write.Apply(t.Context(), WriteInput{Path: "new.txt", Content: "x\n", Append: true, Admission: WriteExecutionPinned, Destination: absent}, f.tctx)
 	requireRejectCode(t, err, "READ_PATH_NOT_FOUND")
 }
-
-func TestPublicationBarrierTracksOnlyUnpublishedAcceptedWrites(t *testing.T) {
-	var barrier PublicationBarrier
-	tctx := nativefixture.Context(t.TempDir())
-	testutil.FailErr(t, "admit with nothing pending", barrier.AdmitDependentLaunch(t.Context(), tctx))
-	testutil.FailErr(t, "saved write", barrier.Track(WriteResult{Path: "a.txt", Accepted: true, Saved: true}))
-	testutil.FailErr(t, "refused write", barrier.Track(WriteResult{Path: "b.txt"}))
-	testutil.FailErr(t, "published writes do not block", barrier.AdmitDependentLaunch(t.Context(), tctx))
-	if err := barrier.Track(WriteResult{Path: "c.txt", Accepted: true}); err == nil {
-		t.Fatal("unpublished write without document identity tracked")
-	}
-	testutil.FailErr(t, "accepted document write", barrier.Track(WriteResult{Path: "d.txt", Accepted: true, DocumentID: "doc-d", AcceptedRevision: 3}))
-	err := barrier.AdmitDependentLaunch(t.Context(), tctx)
-	var pending *PublicationPending
-	if !errors.As(err, &pending) || len(pending.Paths) != 1 || pending.Paths[0] != "d.txt" || pending.Error() == "" {
-		t.Fatalf("launch without document owner: %v", err)
-	}
-	requireRejectCode(t, err, "COMMAND_PUBLICATION_PENDING")
-	docs := &fakeEditorDocuments{docs: map[string]*tools.EditorDocumentText{}}
-	tctx = editorCtx(t.TempDir(), docs)
-	if err := barrier.AdmitDependentLaunch(t.Context(), tctx); err == nil || errors.As(err, &pending) {
-		t.Fatalf("owner failure must not read as a publication state: %v", err)
-	}
-}

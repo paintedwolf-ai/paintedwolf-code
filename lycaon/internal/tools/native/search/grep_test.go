@@ -323,7 +323,7 @@ func TestSearchLimitsRefuseInsteadOfTruncating(t *testing.T) {
 	h.exec("", "grep", "alpha", "a.txt").refused(t, "stream", "COMMAND_LIMIT_EXCEEDED")
 	h.owners.StreamBytes = 0
 	h.owners.ReadBytes = 4
-	h.exec("", "grep", "alpha", "a.txt").refused(t, "read", "READ_FILE_TOO_LARGE")
+	h.exec("", "grep", "alpha", "a.txt").expect(t, "streaming ignores whole-file bound", "two alpha\nsix alpha\n", "", 0)
 }
 
 func TestTraversalVisitsCatalogCeilingAtBoundaryAndOnePast(t *testing.T) {

@@ -2,6 +2,7 @@ package search
 
 import (
 	"errors"
+	"github.com/lycaon/lycaon/internal/tools"
 	"strings"
 	"time"
 
@@ -84,11 +85,11 @@ func runFind(inv *invocation) error {
 		r.expr = expr
 	}
 	if !r.actions {
-		print := &findNode{op: "primary", test: func(r *findRun, e entry) (bool, error) { return true, r.inv.out.text(e.display, "\n") }}
+		emitPath := &findNode{op: "primary", test: func(r *findRun, e entry) (bool, error) { return true, r.inv.out.text(e.display, "\n") }}
 		if r.expr == nil {
-			r.expr = print
+			r.expr = emitPath
 		} else {
-			r.expr = &findNode{op: "and", left: r.expr, right: print}
+			r.expr = &findNode{op: "and", left: r.expr, right: emitPath}
 		}
 	}
 	for _, start := range starts {
@@ -138,6 +139,11 @@ func expressionWord(word string) bool { return word == "!" || word == "(" || wor
 func (r *findRun) visit(e entry) error {
 	if err := r.inv.ctx.Err(); err != nil {
 		return err
+	}
+	if !r.actions {
+		if _, err := r.inv.out.w.Write(nil); err != nil {
+			return err
+		}
 	}
 	inRange := e.depth >= r.minDepth && (r.maxDepth < 0 || e.depth <= r.maxDepth)
 	descend := e.dir() && !e.link && (r.maxDepth < 0 || e.depth < r.maxDepth) && (!r.sameDevice || e.stat.Device == r.device)
@@ -262,7 +268,7 @@ func (r *findRun) dispatch(argv commandprogram.Fields) (toolcontract.ProducerRes
 	inv := r.inv
 	r.children++
 	if maximum := inv.owners.limit("child_executions"); maximum > 0 && r.children > maximum {
-		return toolcontract.ProducerResult{}, limitExceeded("child_executions", maximum, r.children)
+		return toolcontract.ProducerResult{}, tools.CommandLimitExceeded("child_executions", maximum, r.children)
 	}
 	spec, native, err := commandprogram.ResolveCommand(argv)
 	if err != nil {
@@ -291,6 +297,8 @@ func (r *findRun) dispatch(argv commandprogram.Fields) (toolcontract.ProducerRes
 		return result, errors.Join(err, invalid)
 	}
 	switch result.Terminal {
+	case toolcontract.ProducerCompleted, toolcontract.ProducerFailed:
+		return result, nil
 	case toolcontract.ProducerRefused, toolcontract.ProducerInterrupted:
 		if err == nil {
 			err = &toolrejection.ToolReject{Code: result.StopCode, Data: map[string]any{"command": spec.Name}}
@@ -309,6 +317,9 @@ func (r *findRun) remove(e entry) (bool, error) {
 		return true, nil
 	}
 	target, err := inv.paths.Bind(inv.ctx, e.display, true)
+	if err == nil {
+		err = inv.owners.Revisions.CheckUnsavedDraft(inv.ctx, inv.tc, target.Resolved.Abs, true)
+	}
 	if err == nil {
 		err = inv.owners.Remover.RemoveRecoverable(inv.ctx, inv.tc, target)
 	}

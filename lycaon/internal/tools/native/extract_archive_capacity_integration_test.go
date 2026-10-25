@@ -18,6 +18,10 @@ import (
 
 func TestExtractArchiveToolRejectsEntryLimit(t *testing.T) {
 	t.Parallel()
+	entryLimit := int(archiveLimit("archive_extract_entries"))
+	if entryLimit < 1 {
+		t.Fatal("catalog archive entry ceiling is missing")
+	}
 	for _, tc := range []struct {
 		suffix string
 		write  func(*testing.T, string, map[string]string)
@@ -26,9 +30,8 @@ func TestExtractArchiveToolRejectsEntryLimit(t *testing.T) {
 			t.Parallel()
 			tmpDir := t.TempDir()
 			zipPath := filepath.Join(tmpDir, "many"+tc.suffix)
-			maxEntries := int(archiveLimit("archive_extract_entries"))
-			entries := make(map[string]string, maxEntries+1)
-			for i := range maxEntries + 1 {
+			entries := make(map[string]string, entryLimit+1)
+			for i := range entryLimit + 1 {
 				entries[fmt.Sprintf("f%d.txt", i)] = "x"
 			}
 			tc.write(t, zipPath, entries)
@@ -38,16 +41,16 @@ func TestExtractArchiveToolRejectsEntryLimit(t *testing.T) {
 				"dest": "out",
 			}, nativefixture.Context(tmpDir))
 			var reject *toolrejection.ToolReject
-			if !errors.As(err, &reject) || reject.Code != "EXTRACT_ENTRY_LIMIT" {
+			if !errors.As(err, &reject) || reject.Code != "EXTRACT_ENTRY_LIMIT" || reject.Data["max_entries"] != entryLimit {
 				t.Fatalf("err = %v want EXTRACT_ENTRY_LIMIT", err)
 			}
 			files, err := os.ReadDir(filepath.Join(tmpDir, "out"))
 			testutil.FailErr(t, "read partial extraction", err)
-			if len(files) != maxEntries {
-				t.Fatalf("wrote %d entries, cap %d", len(files), maxEntries)
+			if len(files) != entryLimit {
+				t.Fatalf("wrote %d entries, cap %d", len(files), entryLimit)
 			}
 			paths, ok := reject.Data["extracted_paths"].([]string)
-			if !ok || len(paths) != maxEntries || reject.Data["extracted_entries"] != maxEntries || reject.Data["extracted_bytes"] != int64(maxEntries) {
+			if !ok || len(paths) != entryLimit || reject.Data["extracted_entries"] != entryLimit || reject.Data["extracted_bytes"] != int64(entryLimit) {
 				t.Fatalf("partial extraction facts = %#v", reject.Data)
 			}
 			for _, path := range paths {

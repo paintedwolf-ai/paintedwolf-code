@@ -50,7 +50,7 @@ func TestScreenedPipeNativeAndProcessOutputRetainExactCompleteBytes(t *testing.T
 				source = read
 				exited := make(chan error, 1)
 				go func() {
-					err := lyexec.RunInOwnGroup(cmd)
+					err := lyexec.RunInOwnGroup(t.Context(), cmd)
 					_ = write.Close()
 					exited <- err
 				}()

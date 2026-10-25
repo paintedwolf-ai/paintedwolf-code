@@ -16,7 +16,7 @@ import (
 )
 
 var implementInvestigateSurfaceTools = []string{
-	"read", "grep", "summarize", "skills_read", "find", "list_dir",
+	"command", "summarize", "skills_read",
 	"update_progress", "ask_user", "surface_note", "request_tools",
 	"recall",
 }
@@ -43,7 +43,7 @@ func TestCoordinatorToolSurface_managedSecretLifecycleFollowsMutationCapability(
 		plan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: surfaceID}, 1)
 		contractcheck.FailErr(t, "compile tool plan for "+surfaceID, err)
 		available := plan.AddressableNames()
-		if !prompts.ToolNamesMutationCapable(available) {
+		if !prompts.CoordinatorSurfaceMutationCapable(surfaceID) {
 			continue
 		}
 		if !contractcheck.ContainsString(available, "skills_read") {
@@ -58,15 +58,15 @@ func TestCoordinatorToolSurface_managedSecretLifecycleFollowsMutationCapability(
 }
 
 var implementInvestigateDeferredTools = []string{
-	"survey_repo", "jq", "stat", "wc",
+	"survey_repo", "read", "grep", "find", "list_dir", "jq", "stat", "wc",
 	"write", "edit", "replace_lines", "restore_version", "code_rewrite", "jq_edit", "diff", "source_history", "delete", "copy", "move", "mkdir", "chmod", "chown", "extract_archive",
-	"command", "command_output", "command_stop", "process_list", "process_signal", "verify", "wait",
+	"process_list", "process_signal", "verify", "wait",
 	"terminal_open", "terminal_send", "terminal_read", "terminal_snapshot", "terminal_close",
 	"git_status", "git_diff", "git_log", "git_show", "git_blame", "git_ref", "git_branches", "git_compare", "git_commit", "git_restore", "git_checkout", "git_merge", "git_stash", "git_stash_list",
 	"render_view", "view_image", "view_video", "capture_page", "measure_page", "page_open", "page_act", "page_snapshot", "page_close",
 	"secret_generate", "secret_list", "secret_revoke", "http_request",
 	"web_search", "fetch_url",
-	"scan_pack", "scan_query", "scan_summary", "scan_list", "scan_compare",
+	"scan_pack", "scan_query", "scan_list", "scan_summary", "scan_compare",
 	"task", "pack_board", "worker_cancel", "answer_decision", "extend_worker_budget", "decline_worker_budget",
 }
 
@@ -153,7 +153,7 @@ func TestCoordinatorToolSurface_investigateSurveyRouteRendered(t *testing.T) {
 	)
 	for _, want := range []string{
 		"`summarize`",
-		"list_dir",
+		"`command`",
 		"load through `request_tools`",
 	} {
 		if !strings.Contains(rendered, want) {

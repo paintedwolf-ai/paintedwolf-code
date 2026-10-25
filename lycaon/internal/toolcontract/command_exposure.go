@@ -64,7 +64,10 @@ func (d OperationDefinition) validateNativeCommandsUncached() error {
 				break
 			}
 		}
-		selectedBytes, _ := json.Marshal(selected)
+		selectedBytes, err := json.Marshal(selected)
+		if err != nil {
+			return fmt.Errorf("encode native command %q: %w", selected.Name, err)
+		}
 		if string(selectedBytes) != declaredBytes || declaredOwner != facts.Contract.Owner {
 			return fmt.Errorf("native command %q differs from frozen catalog", selected.Name)
 		}

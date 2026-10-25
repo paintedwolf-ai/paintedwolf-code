@@ -1,12 +1,13 @@
+//go:build !windows
+
 package native
 
 import (
 	"context"
 	"encoding/json"
-	"runtime"
-	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -17,13 +18,12 @@ import (
 // nothing, so a refused bind is attributable to the sandbox rather than read
 // as the child's own errno.
 func TestEveryTerminalResultStatesTheBox(t *testing.T) {
-	if testing.Short() {
-		t.Skip("pty")
-	}
-	if runtime.GOOS == "windows" {
-		t.Skip("unix openpty")
-	}
+	confine.TestingSetAutoConfine(t)
+	t.Setenv("LYCAON_BYPASS_APPROVALS", "0")
+	t.Setenv("LYCAON_SANDBOX", "on")
+	t.Setenv("LYCAON_SANDBOX_NETWORK", "deny")
 	bg := newTestBackgroundRegistry(t)
+	t.Cleanup(func() { _ = bg.Lifecycle.Close(context.Background()) })
 	reg := tools.NewDefaultRegistry()
 	testutil.FailErr(t, "register", RegisterTerminalSessionTools(reg, bg))
 
@@ -31,6 +31,7 @@ func TestEveryTerminalResultStatesTheBox(t *testing.T) {
 	tctx := tools.ToolContext{
 		Identity: tools.InvocationIdentity{SessionID: "sess",
 			ProjectID: "proj"},
+		Host:   tools.InvocationHost{SessionScratchDir: t.TempDir(), HostDataDir: t.TempDir()},
 		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "main", Path: dir, IsPrimary: true}}},
 	}
 	for _, observe := range []string{"ack", "delta", "screen"} {
@@ -44,8 +45,8 @@ func TestEveryTerminalResultStatesTheBox(t *testing.T) {
 			defer func() {
 				_, _ = reg.Run(context.Background(), terminal.CloseToolName, map[string]any{"id": opened.ID}, tctx)
 			}()
-			if !strings.Contains(raw, `"confined"`) {
-				t.Fatalf("observe=%s omitted the confinement fields: %s", observe, raw)
+			if !opened.Confined || string(opened.Observe) != observe {
+				t.Fatalf("observe=%s boundary=%+v", observe, opened)
 			}
 		})
 	}

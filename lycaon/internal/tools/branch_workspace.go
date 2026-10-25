@@ -38,12 +38,16 @@ func ValidateWorkerBranch(ctx context.Context, tctx ToolContext) error {
 	return tctx.Source.BranchWorkspace.ValidateMeta(ctx)
 }
 
-// AgentLaunchAuthority rechecks, at the launch door, the worker branch and the
+// AgentLaunchAuthority rechecks, at the launch door, the worker branch, that
+// no captured root was removed or moved since the context was built, and the
 // live action lease that admitted an agent command under its bound identity.
 func AgentLaunchAuthority(tctx ToolContext, confinement *confine.Confinement, lease *confine.ActionLease, identity confine.EgressCommand) func(context.Context) error {
 	return func(ctx context.Context) error {
 		if err := ValidateWorkerBranch(ctx, tctx); err != nil {
 			return err
+		}
+		if reject := ValidateRootsCurrent(tctx); reject != nil {
+			return reject
 		}
 		return lease.ValidateLaunch(ctx, confinement, identity)
 	}

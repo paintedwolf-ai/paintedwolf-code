@@ -6,6 +6,8 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 // joinSpec is one GNU join: join fields per file (zero-based), the field
@@ -48,6 +50,7 @@ func runJoin(inv *invocation) error {
 		return nil
 	}
 	j := joiner{inv: inv, spec: spec}
+	defer j.close()
 	for i, source := range sources {
 		if j.readers[i], err = inv.records(source.reader, '\n'); err != nil {
 			return err
@@ -134,11 +137,32 @@ type joiner struct {
 	inv     *invocation
 	spec    joinSpec
 	readers [2]*records
-	current [2][][]byte
+	current [2]*joinRecord
 	live    [2]bool
 }
 
+type joinRecord struct {
+	fields  [][]byte
+	release func()
+}
+
+func (r *joinRecord) close() {
+	if r != nil && r.release != nil {
+		r.release()
+		r.release = nil
+		r.fields = nil
+	}
+}
+func (j *joiner) close() {
+	closeRecords(j.readers[:])
+	for _, record := range j.current {
+		record.close()
+	}
+}
+
 func (j *joiner) advance(i int) error {
+	j.current[i].close()
+	j.current[i] = nil
 	record, err := j.readers[i].next()
 	if errors.Is(err, io.EOF) {
 		j.live[i] = false
@@ -147,10 +171,27 @@ func (j *joiner) advance(i int) error {
 	if err != nil {
 		return err
 	}
-	if err := j.inv.reserve(int64(len(record))); err != nil {
+	count := 0
+	if j.spec.separator >= 0 {
+		count = bytes.Count(record, []byte{byte(j.spec.separator)}) + 1
+	} else {
+		inField := false
+		for rest := record; len(rest) > 0; {
+			r, size := utf8.DecodeRune(rest)
+			space := unicode.IsSpace(r)
+			if !space && !inField {
+				count++
+			}
+			inField = !space
+			rest = rest[size:]
+		}
+	}
+	release, err := j.inv.ports.Memory.Reserve(j.inv.ctx, 2*int64(len(record))+48*int64(count)+256)
+	if err != nil {
 		return err
 	}
-	j.live[i], j.current[i] = true, j.fields(bytes.Clone(record))
+	j.current[i] = &joinRecord{fields: j.fields(bytes.Clone(record)), release: release}
+	j.live[i] = true
 	return nil
 }
 
@@ -171,13 +212,13 @@ func (j *joiner) key(i int, fields [][]byte) []byte {
 // merge walks both inputs, pairing each group of equal keys.
 func (j *joiner) merge() error {
 	for j.live[0] && j.live[1] {
-		c := compareFolded(j.key(0, j.current[0]), j.key(1, j.current[1]), j.spec.fold)
+		c := compareFolded(j.key(0, j.current[0].fields), j.key(1, j.current[1].fields), j.spec.fold)
 		if c != 0 {
 			side := 0
 			if c > 0 {
 				side = 1
 			}
-			if err := j.unpairedLine(side, j.current[side]); err != nil {
+			if err := j.unpairedLine(side, j.current[side].fields); err != nil {
 				return err
 			}
 			if err := j.advance(side); err != nil {
@@ -185,33 +226,49 @@ func (j *joiner) merge() error {
 			}
 			continue
 		}
-		var groups [2][][][]byte
-		for i := range groups {
-			key := bytes.Clone(j.key(i, j.current[i]))
-			for j.live[i] && compareFolded(j.key(i, j.current[i]), key, j.spec.fold) == 0 {
-				groups[i] = append(groups[i], j.current[i])
-				if err := j.advance(i); err != nil {
-					return err
-				}
-			}
-		}
-		if j.spec.only {
-			continue
-		}
-		for _, left := range groups[0] {
-			for _, right := range groups[1] {
-				if err := j.write([2][][]byte{left, right}); err != nil {
-					return err
-				}
-			}
+		if err := j.equalGroups(); err != nil {
+			return err
 		}
 	}
 	for i := range j.live {
 		for j.live[i] {
-			if err := j.unpairedLine(i, j.current[i]); err != nil {
+			if err := j.unpairedLine(i, j.current[i].fields); err != nil {
 				return err
 			}
 			if err := j.advance(i); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// equalGroups owns only the two live equal-key runs needed for their product.
+func (j *joiner) equalGroups() error {
+	var groups [2][]*joinRecord
+	defer func() {
+		for _, group := range groups {
+			for _, record := range group {
+				record.close()
+			}
+		}
+	}()
+	for i := range groups {
+		key := j.key(i, j.current[i].fields)
+		for j.live[i] && compareFolded(j.key(i, j.current[i].fields), key, j.spec.fold) == 0 {
+			groups[i] = append(groups[i], j.current[i])
+			j.current[i] = nil
+			if err := j.advance(i); err != nil {
+				return err
+			}
+		}
+	}
+	if j.spec.only {
+		return nil
+	}
+	for _, left := range groups[0] {
+		for _, right := range groups[1] {
+			if err := j.write([2][][]byte{left.fields, right.fields}); err != nil {
 				return err
 			}
 		}
@@ -230,6 +287,22 @@ func (j *joiner) unpairedLine(side int, fields [][]byte) error {
 
 // write prints one joined or unpairable line; a nil side is missing.
 func (j *joiner) write(pair [2][][]byte) error {
+	fields := max(len(j.spec.output), 1+len(pair[0])+len(pair[1]))
+	var capacityBytes int64
+	for _, side := range pair {
+		for _, field := range side {
+			capacityBytes += int64(len(field))
+		}
+	}
+	if len(j.spec.output) > 0 {
+		capacityBytes *= int64(len(j.spec.output))
+	}
+	capacityBytes += int64(fields) * (64 + int64(len(j.spec.empty)))
+	release, err := j.inv.ports.Memory.Reserve(j.inv.ctx, capacityBytes)
+	if err != nil {
+		return err
+	}
+	defer release()
 	separator := []byte{' '}
 	if j.spec.separator >= 0 {
 		separator = []byte{byte(j.spec.separator)}

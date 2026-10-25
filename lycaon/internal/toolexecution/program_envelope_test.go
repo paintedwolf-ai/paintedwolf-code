@@ -33,7 +33,7 @@ func (f progressStartFunc) BeforeProgressOwner(ctx context.Context, id toolcontr
 
 func TestProgramEnvelopeValidatesBeforeProgressAndSeparatesCommittedOutcome(t *testing.T) {
 	parent, tc := frameFixture(t)
-	frame, err := FreezeProgramFrame(t.Context(), parent, tc, ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"script": "fixture"}}, stageMemory(t, 64<<20))
+	frame, err := FreezeProgramFrame(t.Context(), parent, tc, ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"command": "fixture"}}, stageMemory(t, 64<<20))
 	testutil.FailErr(t, "freeze frame", err)
 	t.Cleanup(frame.Close)
 	schema, err := toolschema.LoadSchemaDir(filepath.Join("..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))

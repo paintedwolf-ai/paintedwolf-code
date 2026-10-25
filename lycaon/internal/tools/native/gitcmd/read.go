@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 )
@@ -209,7 +210,7 @@ func (p Prepared) run(ctx context.Context, streams commandprogram.Streams) (int,
 	if out.w == nil {
 		out.w = io.Discard
 	}
-	diagnostics, status, err := p.owners.Git.ReadCommand(ctx, dir, p.command.args, p.command.config, out)
+	diagnostics, status, err := (git.CommandReader{}).ReadCommand(ctx, dir, p.command.args, p.command.config, out)
 	if out.err != nil {
 		return 0, out.err
 	}

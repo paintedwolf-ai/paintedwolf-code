@@ -2,8 +2,6 @@ package textutil
 
 import (
 	"bytes"
-	"errors"
-	"io"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -83,23 +81,16 @@ func runCut(inv *invocation) error {
 		if err != nil {
 			return err
 		}
-		for {
-			record, err := records.next()
-			if errors.Is(err, io.EOF) {
-				break
-			}
-			if err != nil {
-				return err
-			}
+		if err := records.consume(func(record []byte, _ bool) error {
 			if spec.mode == "-c" && !utf8.Valid(record) {
 				return inv.usage(list, "valid UTF-8 input for -c")
 			}
 			if spec.mode == "-f" && spec.only && !spec.delimited(record) {
-				continue
+				return nil
 			}
-			if err := writeRecord(inv.out, spec.cut(record), spec.record); err != nil {
-				return err
-			}
+			return writeRecord(inv.out, spec.cut(record), spec.record)
+		}); err != nil {
+			return err
 		}
 	}
 	return nil

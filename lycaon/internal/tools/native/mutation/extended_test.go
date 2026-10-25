@@ -154,6 +154,22 @@ func TestDirectoryMoveIsJournaledAndReversible(t *testing.T) {
 	if r := h.run("", "mv", "dest/renamed", "pkg"); r.err != nil || h.read("pkg/a.go") != "package a\n" || h.read("pkg/sub/b.txt") != "b\n" || !h.absent("dest/renamed") {
 		t.Fatalf("moving the directory back did not restore it: %+v %v", r.result, r.err)
 	}
+	// Replacing an existing directory with mv sets the replaced directory aside first so Undo restores it.
+	testutil.FailErr(t, "mkdir replaced dir", os.MkdirAll(h.path("dest/pkg"), 0o755))
+	testutil.FailErr(t, "seed replaced dir file", os.WriteFile(h.path("dest/pkg/old.txt"), []byte("old-dir-content\n"), 0o644))
+	if r := h.run("", "mv", "pkg", "dest"); r.err != nil || r.result.Status != 0 {
+		t.Fatalf("mv dir onto existing dir: %+v %v %q", r.result, r.err, r.stderr)
+	}
+	if !h.absent("pkg") || h.read("dest/pkg/a.go") != "package a\n" || !h.absent("dest/pkg/old.txt") {
+		t.Fatal("mv did not replace destination directory with source directory")
+	}
+	if r := h.run("", "mv", "dest/pkg", "pkg"); r.err != nil || r.result.Status != 0 {
+		t.Fatalf("move replacement out of the way before Undo: %+v %v", r.result, r.err)
+	}
+	h.undoAll(1)
+	if h.read("dest/pkg/old.txt") != "old-dir-content\n" {
+		t.Fatal("Undo did not restore the replaced directory")
+	}
 }
 
 func TestChownNumericForms(t *testing.T) {
@@ -273,7 +289,7 @@ func TestZipAndUnzip(t *testing.T) {
 	}
 }
 
-func TestHostileArchivesAreRefusedBeforeEffect(t *testing.T) {
+func TestHostileArchivesRefuseFilesystemEffectsAndBoundOutput(t *testing.T) {
 	h := newHarness(t, map[string]string{"out/": ""})
 	writeZip(t, h.path("slip.zip"), map[string]string{"../escape.txt": "x"})
 	if r := h.run("", "unzip", "-q", "-d", "out", "slip.zip"); r.result.Terminal != toolcontract.ProducerRefused || !h.absent("escape.txt") {
@@ -287,13 +303,17 @@ func TestHostileArchivesAreRefusedBeforeEffect(t *testing.T) {
 	if r := h.run("", "tar", "-x", "-f", "link.tar", "-C", "out"); r.result.Terminal != toolcontract.ProducerRefused || !h.absent("out/link") {
 		t.Fatalf("archive link extracted: %+v", r.result)
 	}
-	// A decompression bomb stops at the catalog's expansion ceiling.
+	// Streaming output may precede refusal, but never exceeds the expansion ceiling.
 	bomb := gzipBytes(t, make([]byte, h.owners.limit("archive_extract_bytes")+(1<<20)))
 	testutil.FailErr(t, "write bomb", os.WriteFile(h.path("bomb.gz"), bomb, 0o644))
 	r := h.run("", "zcat", "bomb.gz")
 	reject := toolrejection.AsToolReject(r.err)
-	if reject == nil || reject.Code != "COMMAND_LIMIT_EXCEEDED" || len(r.stdout) != 0 {
-		t.Fatalf("bomb decoded: %v (%d bytes out)", r.err, len(r.stdout))
+	maximum := min(h.owners.limit("archive_extract_bytes"), int64(len(bomb))*h.owners.limit("archive_expansion_ratio"))
+	if reject == nil || reject.Code != "COMMAND_LIMIT_EXCEEDED" || len(r.stdout) == 0 || int64(len(r.stdout)) > maximum || r.result.EffectCertainty != toolcontract.NoEffect {
+		t.Fatalf("bomb decoded: %v (%d bytes out), result=%+v", r.err, len(r.stdout), r.result)
+	}
+	if reject.Data["maximum"] != maximum || strings.Trim(r.stdout, "\x00") != "" {
+		t.Fatalf("wrong limit or changed stream bytes: %+v", reject.Data)
 	}
 }
 
@@ -353,12 +373,37 @@ func TestRecursiveMutationCapsAtBoundaryAndOnePast(t *testing.T) {
 		for _, command := range [][]string{{"rm", "-rf", "tree"}, {"cp", "-r", "tree", "copy"}} {
 			t.Run(c.name+" "+command[0], func(t *testing.T) {
 				h := newHarness(t, tree(c.files, c.size))
-				h.owners.Operations.Delete.Caps, h.owners.Operations.Copy.Caps = caps, caps
+				h.owners.Operations.Copy.Caps = caps
+				if command[0] == "rm" {
+					if c.limit == "recursive_mutation_bytes" {
+						h.service.Effects.SetSameFilesystem(func(string, string) (bool, error) { return false, nil })
+					}
+				}
+				var reviewed []tools.FileChange
+				h.tc.Files.FileChangeReview = func(_ context.Context, changes []tools.FileChange) error {
+					reviewed = append(reviewed, changes...)
+					return nil
+				}
 				r := h.run("", command...)
 				reject := toolrejection.AsToolReject(r.err)
+				if command[0] == "rm" {
+					if r.err != nil || r.result.Status != 0 || !h.absent("tree") {
+						t.Fatalf("whole-tree removal failed: %+v %v", r.result, r.err)
+					}
+					permanent := c.limit == "recursive_mutation_bytes"
+					if len(reviewed) != 1 || reviewed[0].RecoveryLoss != permanent {
+						t.Fatalf("recovery-loss decision = %+v, want %v", reviewed, permanent)
+					}
+					history, err := h.service.History.State(t.Context(), h.project.ID)
+					testutil.FailErr(t, "read history", err)
+					if (history.Undo == nil) != permanent {
+						t.Fatalf("whole-tree recovery = %+v, permanent=%v", history.Undo, permanent)
+					}
+					return
+				}
 				if c.limit == "" {
 					if r.err != nil || r.result.Status != 0 {
-						t.Fatalf("at the limit refused: %+v %v", r.result, r.err)
+						t.Fatalf("at the copy limit refused: %+v %v", r.result, r.err)
 					}
 					return
 				}
