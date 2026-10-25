@@ -62,6 +62,15 @@ const HOST_WIRE_MIRRORS: &[Entry] = &[
         },
     },
     Entry {
+        file: "src/http_transport/linux_proxy.rs",
+        rust_type: "Reply",
+        binding: Binding::Mirror {
+            fixture: "native_proxy_response",
+            ignored: &[],
+            forward: None,
+        },
+    },
+    Entry {
         file: "src/sidecar/manifest.rs",
         rust_type: "Manifest",
         binding: Binding::NotHostWire {
@@ -368,6 +377,7 @@ fn production_source(path: &Path) -> Option<String> {
 
 fn is_host_facing(relative: &str, source: &str) -> bool {
     relative.starts_with("src/sidecar/")
+        || relative == "src/http_transport/linux_proxy.rs"
         || HOST_FACING_MARKERS.iter().any(|marker| source.contains(marker))
 }
 
