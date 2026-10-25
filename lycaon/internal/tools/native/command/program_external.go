@@ -54,7 +54,7 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		return refusedResult("COMMAND_EXEC_DENIED"), err
 	}
 	defer bound.close(context.WithoutCancel(ctx))
-	opts, err := lycexec.AgentLaunchOptions(agentCommandLaunch(tctx, "command", bound.confinement, bound.lease, commandLine), cwd, request.Environment, tctx.Host.HostResourcePathExtra, tctx.Files.PackageExecution != nil)
+	opts, err := lycexec.AgentLaunchOptions(agentCommandLaunch(tctx, "command", bound.confinement, bound.lease, commandLine), cwd, request.Environment, tctx.Host.HostResourcePathExtra)
 	if err != nil {
 		return refusedResult("COMMAND_OPERAND_INVALID"), toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"command": "external", "reason": err.Error(), "expected": "an environment without host-reserved keys"})
 	}
@@ -103,7 +103,7 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 // Installed reports whether the confined launch would find name: the same
 // final PATH, launch directory and environment as Launch.
 func (l ExternalStages) Installed(name string, environment []string) bool {
-	opts, err := lycexec.AgentLaunchOptions(lycexec.LaunchPlan{}, l.Dir, environment, l.ToolContext.Host.HostResourcePathExtra, l.ToolContext.Files.PackageExecution != nil)
+	opts, err := lycexec.AgentLaunchOptions(lycexec.LaunchPlan{}, l.Dir, environment, l.ToolContext.Host.HostResourcePathExtra)
 	if err != nil {
 		return false
 	}
@@ -117,7 +117,7 @@ func (l ExternalStages) Installed(name string, environment []string) bool {
 func programEnvironment(tc tools.ToolContext) []string {
 	confinement, _ := confine.DefaultConfinement(hitl.ActionConfineRequest(tools.ActionConfineInputsForContext(tc, nil)))
 	launch := agentCommandLaunch(tc, "command", confinement, nil, "")
-	opts, err := lycexec.AgentLaunchOptions(launch, "", nil, tc.Host.HostResourcePathExtra, tc.Files.PackageExecution != nil)
+	opts, err := lycexec.AgentLaunchOptions(launch, "", nil, tc.Host.HostResourcePathExtra)
 	if err != nil {
 		return lycexec.ReducedEnviron()
 	}

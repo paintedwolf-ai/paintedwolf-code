@@ -6,7 +6,6 @@ import (
 	"regexp"
 	"strings"
 	"testing"
-	"time"
 )
 
 func budgetResource(t *testing.T, err error) string {
@@ -18,39 +17,23 @@ func budgetResource(t *testing.T, err error) string {
 	return budget.Resource
 }
 
-// TestRegexBudgets exercises each engine's resource ceilings: the linear
-// engine at its exact catalog step boundary, the bounded engines on
-// catastrophic backtracking, and pattern and record size.
+// TestRegexBudgets exercises work exhaustion across every regex dialect,
+// plus pattern and record bounds.
 func TestRegexBudgets(t *testing.T) {
 	limits := catalogLimits(t)
 	ctx := t.Context()
-	linear, err := Compile(ctx, Spec{Patterns: []string{`b`}, Dialect: Extended}, limits)
-	if err != nil {
-		t.Fatal(err)
-	}
-	at := []byte(strings.Repeat("a", int(limits.WorkSteps)-1))
-	if _, ok, err := linear.Select(ctx, at); err != nil || ok {
-		t.Fatalf("record at the step ceiling: %v %v", ok, err)
-	}
-	over := append(at, 'a')
-	if _, _, err := linear.Select(ctx, over); budgetResource(t, err) != "regex_work_steps" {
-		t.Fatalf("record over the step ceiling: %v", err)
-	}
 
 	catastrophic := []byte(strings.Repeat("a", 40))
 	for _, spec := range []Spec{
 		{Patterns: []string{`(a*)*b`}, Dialect: Perl},
 		{Patterns: []string{`\(a*\)*\1b`}, Dialect: Basic},
-		{Patterns: []string{`(a|aa)*c`}, Dialect: Extended, Word: true},
+		{Patterns: []string{`(a|aa)*c`}, Dialect: Extended},
+		{Patterns: []string{`(a|aa)*c`}, Dialect: RE2},
 	} {
 		m, err := Compile(ctx, spec, limits)
 		if err != nil {
 			t.Fatalf("%v: %v", spec.Patterns, err)
 		}
-		// A loaded host must not reach the time ceiling first.
-		vm := m.engine.(vmEngine)
-		vm.limits.CPU = time.Minute
-		m.engine = vm
 		if _, _, err := m.Select(ctx, catastrophic); budgetResource(t, err) != "regex_work_steps" {
 			t.Fatalf("%v select: %v", spec.Patterns, err)
 		}
@@ -78,16 +61,6 @@ func TestRegexBudgets(t *testing.T) {
 		}
 	}
 
-	m, err := Compile(ctx, Spec{Patterns: []string{`(a|b)*c`}, Dialect: Perl}, limits)
-	if err != nil {
-		t.Fatal(err)
-	}
-	vm := m.engine.(vmEngine)
-	vm.limits.CPU = time.Nanosecond
-	m.engine = vm
-	if _, _, err := m.Select(ctx, []byte(strings.Repeat("ab", 2000))); budgetResource(t, err) != "regex_cpu_ms" {
-		t.Fatalf("cpu ceiling: %v", err)
-	}
 }
 
 // TestBoundedSessionStepBoundary is the catalog's injected work-step pair:

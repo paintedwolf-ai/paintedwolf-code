@@ -83,7 +83,7 @@ func (j *SessionJobs) start(ctx context.Context, commandLine string, run func(co
 	handle, err = j.Registry.StartProgram(ctx, bgprocess.ProgramJobSpec{
 		SessionID: j.SessionID, RootSessionID: j.RootSessionID, ProjectID: j.ProjectID,
 		CommandLine: commandLine, OriginTool: "command", ToolCallID: j.ToolCallID,
-		Run: func(stopCtx context.Context, stdout, stderr io.Writer) (int, error) {
+		Run: func(stopCtx context.Context, stdout, stderr io.Writer) (bgprocess.ProgramJobResult, error) {
 			defer release()
 			<-ready
 			ctx, cancel := context.WithCancel(jobCtx)
@@ -91,12 +91,16 @@ func (j *SessionJobs) start(ctx context.Context, commandLine string, run func(co
 			stopAfter := context.AfterFunc(stopCtx, cancel)
 			defer stopAfter()
 			result, err := run(ctx, commandprogram.Streams{Input: commandprogram.NullInput(), Output: stdout, Error: stderr})
-			if ctx.Err() != nil {
+			if ctx.Err() != nil && (result.Terminal == "" || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
 				status := j.signalStatus(handle)
-				result = toolcontract.ProducerResult{Status: status, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.EffectUnknown}
+				result = toolcontract.ProducerResult{Status: status, Terminal: toolcontract.ProducerInterrupted, StopCode: toolrejection.ToolOwnerInterruptedCode, EffectCertainty: toolcontract.EffectUnknown}
 			}
 			j.record(handle, result, err)
-			return result.Status, err
+			settled := bgprocess.ProgramJobResult{ExitCode: result.Status}
+			if documents, ok := ctx.Value(programDocumentsKey{}).(*programDocuments); ok {
+				settled.UnsavedDocumentPaths, settled.ReleaseNotices = documents.takePaths()
+			}
+			return settled, err
 		},
 	})
 	if err != nil {
@@ -213,7 +217,7 @@ func (j *SessionJobs) Wait(ctx context.Context, reference string) (toolcontract.
 // Signal accepts the catalog's TERM/INT/KILL; every one requests the owned
 // job's stop. Acknowledgement is not proof of exit.
 func (j *SessionJobs) Signal(_ context.Context, reference, signal string) error {
-	status := 143
+	var status int
 	switch signal {
 	case "TERM", "15":
 		status = 143

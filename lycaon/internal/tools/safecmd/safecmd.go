@@ -52,7 +52,7 @@ func MCPCaps() Caps {
 
 // Tool-specific envelope limits.
 const (
-	JQMaxInputBytes     = 20 << 20
+	JQMaxInputBytes     = 64 << 20
 	JQTimeout           = 5 * time.Second
 	JQMaxResults        = 2000
 	JQZoomBytes         = 64 << 10

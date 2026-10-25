@@ -1071,10 +1071,9 @@ tasks:
       - bash {{.SCRIPTS_DIR}}/repo-snapshot-lock.sh read -- bash {{.SCRIPTS_DIR}}/bundle-openapi.sh check
 
   codegen:tool-command-equivalence:
-    desc: Generate exact command equivalence tables and sync tool-schema replaces suffixes
+    desc: Generate the frozen command language catalog
     dir: '{{.GO_DIR}}'
     sources:
-      - config/packs/painted-wolf/platform/tools/tool-command-equivalence.yaml
       - cmd/codegen-tool-command-equivalence/**/*
       - config/packs/painted-wolf/platform/tools/command-language-v1/*.json
       - config/packs/painted-wolf/platform/tools/native-tools.yaml
@@ -1082,25 +1081,20 @@ tasks:
       - internal/toolcontract/language_contract.go
       - config/packs/painted-wolf/platform/tools/schemas/**/*
     generates:
-      - internal/toolcommand/command_equivalence_gen.go
-      - internal/confine/read_habit_catalog_gen.go
       - internal/toolcontract/language_catalog.generated.go
     cmds:
       - go run ./cmd/codegen-tool-command-equivalence --root .
 
   codegen:tool-command-equivalence:check:
-    desc: Fail if command equivalence codegen outputs are stale
+    desc: Fail if the generated command language catalog is stale
     dir: '{{.GO_DIR}}'
     sources:
-      - config/packs/painted-wolf/platform/tools/tool-command-equivalence.yaml
       - cmd/codegen-tool-command-equivalence/**/*
       - config/packs/painted-wolf/platform/tools/command-language-v1/*.json
       - config/packs/painted-wolf/platform/tools/native-tools.yaml
       - internal/toolcontract/language_catalog.go
       - internal/toolcontract/language_contract.go
       - config/packs/painted-wolf/platform/tools/schemas/**/*
-      - internal/toolcommand/command_equivalence_gen.go
-      - internal/confine/read_habit_catalog_gen.go
       - internal/toolcontract/language_catalog.generated.go
     cmds:
       - go run ./cmd/codegen-tool-command-equivalence --root . --check

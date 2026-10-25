@@ -5,6 +5,9 @@ import (
 	"errors"
 	"io"
 	"os"
+	"os/user"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -12,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
@@ -24,6 +28,17 @@ func (d programDispatch) Fork(context.Context) (commandprogram.Dispatch, func(),
 }
 
 func (d programDispatch) Invoke(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+	if request.StreamPreparation != nil {
+		var err error
+		streams, err = request.StreamPreparation.PrepareStreams(ctx)
+		if err != nil {
+			var failure toolcontract.ProducerFailure
+			if errors.As(err, &failure) {
+				return failure.ProducerResult(), err
+			}
+			return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, err
+		}
+	}
 	argv := request.Argv.Values()
 	if argv[0] == "echo" {
 		_, err := io.WriteString(streams.Output, strings.Join(argv[1:], " ")+"\n")
@@ -37,7 +52,18 @@ func (d programDispatch) Invoke(ctx context.Context, request commandprogram.Oper
 }
 
 // Launch is an external producer that writes a prefix and then fails.
-func (d programDispatch) Launch(_ context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+func (d programDispatch) Launch(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+	if request.StreamPreparation != nil {
+		var err error
+		streams, err = request.StreamPreparation.PrepareStreams(ctx)
+		if err != nil {
+			var failure toolcontract.ProducerFailure
+			if errors.As(err, &failure) {
+				return failure.ProducerResult(), err
+			}
+			return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, err
+		}
+	}
 	_, _ = io.WriteString(streams.Output, "partial prefix\n")
 	return toolcontract.ProducerResult{Status: 3, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.EffectCompleted}, nil
 }
@@ -93,4 +119,72 @@ func TestProgramRedirectConflictStopsLaterStatements(t *testing.T) {
 	if !errors.As(err, &refusal) {
 		t.Fatalf("conflict lost its typed code: %v", err)
 	}
+}
+
+func TestProgramOutsideWritesRefusedForRedirectAndMutationWhileTempAllowed(t *testing.T) {
+	h := newHarness(t, nil)
+	account, err := user.LookupId(strconv.Itoa(os.Getuid()))
+	testutil.FailErr(t, "look up account home", err)
+	outsideDir, err := os.MkdirTemp(account.HomeDir, ".paintedwolf-mutation-outside-") //nolint:usetesting // Must lie outside OS temporary write roots.
+	testutil.FailErr(t, "create outside fixture dir", err)
+	t.Cleanup(func() { _ = os.RemoveAll(outsideDir) })
+
+	tmpDir, err := os.MkdirTemp("/tmp", "paintedwolf-temp-allow-") //nolint:usetesting // Exercises the /tmp OS temp write root explicitly.
+	testutil.FailErr(t, "create /tmp fixture dir", err)
+	t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
+
+	tmpFile := filepath.Join(tmpDir, "allowed.txt")
+	tmpSub := filepath.Join(tmpDir, "sub")
+	out, err := h.evaluate("echo temp-ok > " + tmpFile + "; mkdir " + tmpSub)
+	if err != nil || out.Stop != nil {
+		t.Fatalf("OS temp write refused below Strict: err=%v stop=%+v", err, out.Stop)
+	}
+	if data, readErr := os.ReadFile(tmpFile); readErr != nil || string(data) != "temp-ok\n" {
+		t.Fatalf("/tmp redirect write = %q, %v", data, readErr)
+	}
+	if info, statErr := os.Stat(tmpSub); statErr != nil || !info.IsDir() {
+		t.Fatalf("/tmp mkdir = %v, %v", info, statErr)
+	}
+
+	redirectTarget := filepath.Join(outsideDir, "redirect.txt")
+	out, err = h.evaluate("echo nope > " + redirectTarget)
+	if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != "SURVEY_PATH_ESCAPE" || out.Stop == nil {
+		t.Fatalf("outside redirect was not refused with SURVEY_PATH_ESCAPE: err=%v stop=%+v", err, out.Stop)
+	}
+	if _, statErr := os.Lstat(redirectTarget); !os.IsNotExist(statErr) {
+		t.Fatalf("outside redirect created %s: %v", redirectTarget, statErr)
+	}
+
+	mkdirTarget := filepath.Join(outsideDir, "created-dir")
+	out, err = h.evaluate("mkdir " + mkdirTarget)
+	if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != "SURVEY_PATH_ESCAPE" || out.Stop == nil {
+		t.Fatalf("outside mkdir was not refused with SURVEY_PATH_ESCAPE: err=%v stop=%+v", err, out.Stop)
+	}
+	if _, statErr := os.Lstat(mkdirTarget); !os.IsNotExist(statErr) {
+		t.Fatalf("outside mkdir created %s: %v", mkdirTarget, statErr)
+	}
+
+	teeTarget := filepath.Join(outsideDir, "tee.txt")
+	out, err = h.evaluate("echo nope | tee " + teeTarget)
+	if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != "SURVEY_PATH_ESCAPE" || out.Stop == nil {
+		t.Fatalf("outside tee was not refused with SURVEY_PATH_ESCAPE: err=%v stop=%+v", err, out.Stop)
+	}
+	if _, statErr := os.Lstat(teeTarget); !os.IsNotExist(statErr) {
+		t.Fatalf("outside tee created %s: %v", teeTarget, statErr)
+	}
+}
+
+func (d programDispatch) InvokeEvaluator(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams, body func(context.Context, commandprogram.Streams) (toolcontract.ProducerResult, error)) (toolcontract.ProducerResult, error) {
+	if request.StreamPreparation != nil {
+		var err error
+		streams, err = request.StreamPreparation.PrepareStreams(ctx)
+		if err != nil {
+			var failure toolcontract.ProducerFailure
+			if errors.As(err, &failure) {
+				return failure.ProducerResult(), err
+			}
+			return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, err
+		}
+	}
+	return body(ctx, streams)
 }

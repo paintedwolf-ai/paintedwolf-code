@@ -44,6 +44,8 @@ type BoundPath struct {
 	admitRead     func(string) error
 	admitEntry    func(string) error
 	admitMutation func(string) (Resolved, error)
+	// attached refuses once the bound root is removed or moved.
+	attached func() error
 }
 
 // Validate rejects a root replaced since binding. Descriptor-relative effect
@@ -51,6 +53,11 @@ type BoundPath struct {
 func (p BoundPath) Validate() error {
 	if p.Null {
 		return nil
+	}
+	if p.attached != nil {
+		if err := p.attached(); err != nil {
+			return err
+		}
 	}
 	identity, err := directoryIdentity(p.Resolved.Root.Path)
 	if err != nil {
@@ -88,13 +95,17 @@ func (p BoundPath) Open() (*os.File, error) {
 // ProgramPaths is one invocation's logical cwd. It never changes process cwd,
 // mutates grants, or rewrites external argv. Each invocation has a separate value.
 type ProgramPaths struct {
-	boundary      *sandbox.Boundary
-	context       tools.ToolContext
-	cwd           BoundPath
-	initial       BoundPath
-	initialInfo   os.FileInfo
-	specs         map[string]toolcontract.CommandSpecification
-	cwdInfo       os.FileInfo
+	boundary    *sandbox.Boundary
+	context     tools.ToolContext
+	cwd         BoundPath
+	initial     BoundPath
+	initialInfo os.FileInfo
+	specs       map[string]toolcontract.CommandSpecification
+	cwdInfo     os.FileInfo
+	// previous is OLDPWD, the directory the last cd left.
+	previous      BoundPath
+	previousInfo  os.FileInfo
+	hasPrevious   bool
 	argumentLimit int64
 	outputLimit   int64
 }
@@ -160,8 +171,8 @@ func (p *ProgramPaths) Bind(ctx context.Context, operand string, write bool) (Bo
 		if err != nil {
 			return BoundPath{}, err
 		}
-		held.Close()
-		if !filepath.IsAbs(operand) && !strings.HasPrefix(operand, "@") {
+		_ = held.Close()
+		if !filepath.IsAbs(operand) {
 			addressed = p.cwd.Resolved.Abs + string(filepath.Separator) + operand
 		}
 	}
@@ -198,6 +209,7 @@ func (p *ProgramPaths) Bind(ctx context.Context, operand string, write bool) (Bo
 		return BoundPath{}, err
 	}
 	bound := BoundPath{Resolved: resolved, rootIdentity: identity, rootInfo: rootInfo, exactRelative: relative}
+	bound.attached = func() error { return currentRootReject(p.context, resolved.Root, resolved.Abs) }
 	bound.admitRead = func(actual string) error {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -214,6 +226,9 @@ func (p *ProgramPaths) Bind(ctx context.Context, operand string, write bool) (Bo
 	// followed to decide whether its own metadata may be read.
 	bound.admitEntry = func(actual string) error {
 		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := bound.attached(); err != nil {
 			return err
 		}
 		authority, err := authorityAddress(resolved.Root.Path, actual)
@@ -242,21 +257,6 @@ func (p *ProgramPaths) Bind(ctx context.Context, operand string, write bool) (Bo
 		}
 	}
 	return bound, nil
-}
-
-// Chdir changes only this invocation's cwd after descriptor-relative inspection.
-func (p *ProgramPaths) Chdir(ctx context.Context, operand string) error {
-	bound, err := p.Bind(ctx, operand, false)
-	if err != nil {
-		return err
-	}
-	bound, info, err := p.directoryBinding(ctx, bound)
-	if err != nil {
-		return err
-	}
-	p.cwdInfo = info
-	p.cwd = bound
-	return nil
 }
 
 // Cwd reports both the addressed root and native directory without a global cwd.
@@ -325,6 +325,14 @@ func (p *ProgramPaths) NativePaths(ctx context.Context, operands []string, nul b
 }
 
 func (p *ProgramPaths) nativePath(ctx context.Context, operand string, nul bool) (string, error) {
+	// Explicit conversion accepts addressed text, including computed values.
+	if _, addressed := rootLabel(operand); addressed {
+		resolved, err := ResolveRead(ctx, p.boundary, p.context, operand)
+		if err != nil {
+			return "", err
+		}
+		operand = resolved.Abs
+	}
 	bound, err := p.Bind(ctx, operand, false)
 	if err != nil {
 		return "", err
@@ -360,7 +368,7 @@ func (p *ProgramPaths) TemporaryDirectory(ctx context.Context) (string, error) {
 	if p.context.Host.SessionScratchDir == "" {
 		return "", tools.ErrSessionScratchUnavailable
 	}
-	bound, err := p.Bind(ctx, "@scratch", false)
+	bound, err := p.Bind(ctx, p.context.Host.SessionScratchDir, false)
 	if err != nil {
 		return "", err
 	}

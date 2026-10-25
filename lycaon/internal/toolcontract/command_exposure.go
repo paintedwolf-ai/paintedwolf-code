@@ -22,8 +22,14 @@ func (d OperationDefinition) ValidateNativeCommands() error {
 			if selected.Name != declared.Name {
 				continue
 			}
-			selectedBytes, _ := json.Marshal(selected)
-			declaredBytes, _ := json.Marshal(declared)
+			selectedBytes, err := json.Marshal(selected)
+			if err != nil {
+				return fmt.Errorf("encode native command %q: %w", selected.Name, err)
+			}
+			declaredBytes, err := json.Marshal(declared)
+			if err != nil {
+				return fmt.Errorf("encode catalog command %q: %w", declared.Name, err)
+			}
 			if string(selectedBytes) != string(declaredBytes) || declared.Owner != facts.Contract.Owner {
 				return fmt.Errorf("native command %q differs from frozen catalog", selected.Name)
 			}

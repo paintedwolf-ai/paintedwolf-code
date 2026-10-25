@@ -92,6 +92,17 @@ func (d *fakeDispatch) Fork(context.Context) (Dispatch, func(), error) {
 }
 
 func (d *fakeDispatch) Invoke(ctx context.Context, request OperationRequest, streams Streams) (toolcontract.ProducerResult, error) {
+	if request.StreamPreparation != nil {
+		var err error
+		streams, err = request.StreamPreparation.PrepareStreams(ctx)
+		if err != nil {
+			var failure toolcontract.ProducerFailure
+			if errors.As(err, &failure) {
+				return failure.ProducerResult(), err
+			}
+			return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, err
+		}
+	}
 	if err := request.Validate(); err != nil {
 		return toolcontract.ProducerResult{}, err
 	}
@@ -179,6 +190,17 @@ func (d *fakeDispatch) run(ctx context.Context, argv, env []string, streams Stre
 
 // Launch is the confined external fixture: fail N exits N, yes floods stdout.
 func (d *fakeDispatch) Launch(ctx context.Context, request OperationRequest, streams Streams) (toolcontract.ProducerResult, error) {
+	if request.StreamPreparation != nil {
+		var err error
+		streams, err = request.StreamPreparation.PrepareStreams(ctx)
+		if err != nil {
+			var failure toolcontract.ProducerFailure
+			if errors.As(err, &failure) {
+				return failure.ProducerResult(), err
+			}
+			return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, err
+		}
+	}
 	if err := request.Validate(); err != nil {
 		return toolcontract.ProducerResult{}, err
 	}
@@ -333,3 +355,17 @@ func (f *evalFixture) run(t *testing.T, ctx context.Context, program string) (Pr
 	return Evaluate(ctx, lease.Plan, f.ports)
 }
 
+func (d *fakeDispatch) InvokeEvaluator(ctx context.Context, request OperationRequest, streams Streams, body func(context.Context, Streams) (toolcontract.ProducerResult, error)) (toolcontract.ProducerResult, error) {
+	if request.StreamPreparation != nil {
+		var err error
+		streams, err = request.StreamPreparation.PrepareStreams(ctx)
+		if err != nil {
+			var failure toolcontract.ProducerFailure
+			if errors.As(err, &failure) {
+				return failure.ProducerResult(), err
+			}
+			return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, err
+		}
+	}
+	return body(ctx, streams)
+}

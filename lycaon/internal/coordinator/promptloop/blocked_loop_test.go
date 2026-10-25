@@ -315,6 +315,7 @@ func TestBlockedLoopStreakResetsOnProgress(t *testing.T) {
 	deps.Model.LLM = client
 	deps.Context.Tools = tools.NewStubRegistry()
 	deps.Context.Policy = &recordingToolPolicy{}
+	deps.Context.LoadedTools = workersLoaded
 
 	loop := promptloop.NewPromptLoopForTest(deps)
 	res, err := loop.Run(ctx, promptloop.PromptRunInput{
@@ -352,6 +353,7 @@ func TestSchemaRejectsDoNotForceBlockedLoopCloseout(t *testing.T) {
 	deps.Model.LLM = client
 	deps.Context.Tools = reg
 	deps.Context.Policy = &recordingToolPolicy{}
+	deps.Context.LoadedTools = workersLoaded
 	deps.Closeout.TurnCloseoutNudge = func(_ context.Context, _ *api.Session, _ string, cause promptloop.TurnCloseoutCause) promptloop.HostNudge {
 		return promptloop.HostNudge{Content: "forced closeout: " + cause.Text()}
 	}
@@ -435,6 +437,7 @@ func TestPreInvokeRejectAccruesCodeTotalAndEscalates(t *testing.T) {
 	deps.Model.LLM = client
 	deps.Context.Tools = tools.NewStubRegistry()
 	deps.Context.Policy = &recordingToolPolicy{}
+	deps.Context.LoadedTools = workersLoaded
 	deps.Nudges.DoomLoop = guard
 	deps.Closeout.RejectFmt = guidance.NewStaticRejectFormatter(&guidance.HintConfig{
 		HintCodes: map[string]guidance.HintEntry{

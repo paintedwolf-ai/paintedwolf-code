@@ -329,7 +329,7 @@ func TestSurveyArcRepoToolSelectedZeroConstant(t *testing.T) {
 			return true
 		}
 		st, ok := cl.Type.(*ast.Ident)
-		if !ok || st.Name != "repoResponse" {
+		if !ok || (st.Name != "repoResponse" && st.Name != "RepoResponse") {
 			return true
 		}
 		for _, elt := range cl.Elts {

@@ -90,6 +90,9 @@ func (r posixRegex) Find(ctx context.Context, subject []byte, from int) ([]int, 
 	if err := session.Charge(int64(len(subject))); err != nil {
 		return nil, budgetError(err)
 	}
+	if err := session.ReserveMemory(int64(len(subject))*12 + 8); err != nil {
+		return nil, budgetError(err)
+	}
 	rec := decodeRecord(subject)
 	start := 0
 	for start < len(rec.runes) && rec.offsets[start] < from {

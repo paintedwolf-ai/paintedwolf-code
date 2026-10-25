@@ -46,7 +46,7 @@ func (r *grepRun) jsonContent(label string, content []byte) error {
 		// terminator; offsets are unchanged.
 		content = bytes.ReplaceAll(content, []byte{0}, []byte{'\n'})
 	}
-	n, err := textsearch.ScanLines(inv.ctx, content, r.matcher, r.scan, func(line textsearch.Line) error {
+	n, err := textsearch.ScanReader(inv.ctx, bytes.NewReader(content), 0, nil, r.matcher, r.scan, func(line textsearch.Line) error {
 		if !begun {
 			begun = true
 			if err := emit(`{"type":"begin","data":{"path":` + path + `}}`); err != nil {

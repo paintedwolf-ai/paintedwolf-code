@@ -50,6 +50,9 @@ func runRm(inv *invocation) error {
 		if err != nil {
 			return 0, err
 		}
+		if err := inv.owners.Revisions.CheckUnsavedDraft(inv.ctx, inv.tc, bound.Resolved.Abs, true); err != nil {
+			return 0, err
+		}
 		dirs, err := inv.directoriesUnder(bound.Resolved.Abs)
 		if err != nil {
 			return 0, err
@@ -86,6 +89,9 @@ func runRmdir(inv *invocation) error {
 			inv.fail(operand, "Not a directory")
 			return 0, nil
 		}
+		if err := inv.owners.Revisions.CheckUnsavedDraft(inv.ctx, inv.tc, bound.Resolved.Abs, true); err != nil {
+			return 0, err
+		}
 		result, err := inv.owners.Operations.Delete.Delete(inv.ctx, native.DeleteInput{Paths: []string{bound.Resolved.Abs}}, inv.tc)
 		return len(result.Deleted), err
 	})
@@ -109,6 +115,9 @@ func runMv(inv *invocation) error {
 	return inv.each(sources, func(operand string) (int, error) {
 		source, err := inv.bind(operand, true)
 		if err != nil {
+			return 0, err
+		}
+		if err := inv.owners.Revisions.CheckUnsavedDraft(inv.ctx, inv.tc, source.Resolved.Abs, true); err != nil {
 			return 0, err
 		}
 		to, err := inv.destinationEntry(dest, source.Resolved.Abs, len(sources) > 1)
@@ -143,6 +152,9 @@ func runCp(inv *invocation) error {
 		if info, err := os.Lstat(source.Resolved.Abs); err == nil && info.IsDir() && !recursive {
 			inv.fail(operand, "-r not specified; omitting directory")
 			return 0, nil
+		}
+		if pin, pinErr := inv.owners.Revisions.DeclareLaunchInput(inv.ctx, inv.tc, source.Resolved.Abs); pinErr == nil && pin.Mode == toolcontract.PublishedDiskRevision {
+			_ = inv.recordPin(pin)
 		}
 		to, err := inv.destinationEntry(dest, source.Resolved.Abs, len(sources) > 1)
 		if err != nil {
@@ -316,7 +328,7 @@ func runTouch(inv *invocation) error {
 		if err != nil {
 			return 0, err
 		}
-		if _, err := inv.owners.publish(inv.ctx, inv.tc, inv.barrier, target, []byte{}); err != nil {
+		if _, err := inv.owners.publish(inv.ctx, inv.tc, target, []byte{}); err != nil {
 			return 0, err
 		}
 		if explicit {
@@ -433,19 +445,40 @@ func runTee(inv *invocation) error {
 		target.append = appendMode
 		targets = append(targets, target)
 	}
-	maximum := inv.owners.limit("stream_bytes")
-	data, err := io.ReadAll(io.LimitReader(inv.input, maximum+1))
-	if err != nil {
-		return err
-	}
-	if int64(len(data)) > maximum {
-		return &commandprogram.StreamLimitError{Limit: "stream_bytes", Maximum: maximum, Observed: int64(len(data))}
-	}
-	if _, err := inv.stdout.Write(data); err != nil {
-		return err
+	maximum := inv.owners.limit("stream_throughput_bytes")
+	var data []byte
+	var total int64
+	buf := make([]byte, 32*1024)
+	for {
+		if err := inv.ctx.Err(); err != nil {
+			return err
+		}
+		n, err := inv.input.Read(buf)
+		if n > 0 {
+			total += int64(n)
+			if total > maximum {
+				return &commandprogram.StreamLimitError{Limit: "stream_throughput_bytes", Maximum: maximum, Observed: total}
+			}
+			chunk := buf[:n]
+			if len(targets) > 0 {
+				data = append(data, chunk...)
+			}
+			if _, werr := inv.stdout.Write(chunk); werr != nil {
+				if len(targets) > 0 {
+					inv.uncertain = true
+				}
+				return werr
+			}
+		}
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return err
+		}
 	}
 	for _, target := range targets {
-		if _, err := inv.owners.publish(inv.ctx, inv.tc, inv.barrier, target, data); err != nil {
+		if _, err := inv.owners.publish(inv.ctx, inv.tc, target, data); err != nil {
 			return err
 		}
 		inv.effects++
@@ -499,7 +532,7 @@ func runMktemp(inv *invocation) error {
 		if target.pin.Mode != toolcontract.AbsentRevision {
 			return inv.usage(name, "an unused temporary name")
 		}
-		if _, err := inv.owners.publish(inv.ctx, inv.tc, inv.barrier, target, []byte{}); err != nil {
+		if _, err := inv.owners.publish(inv.ctx, inv.tc, target, []byte{}); err != nil {
 			return err
 		}
 		inv.effects++
@@ -576,7 +609,7 @@ func runEdit(inv *invocation) error {
 	if result.Accepted || result.Saved {
 		inv.effects++
 	}
-	return inv.barrier.Track(result)
+	return nil
 }
 
 func runReplaceLines(inv *invocation) error {
@@ -640,7 +673,7 @@ func runReplaceLines(inv *invocation) error {
 	if result.Accepted || result.Saved {
 		inv.effects++
 	}
-	return inv.barrier.Track(result)
+	return nil
 }
 
 func runCodeRewrite(inv *invocation) error {
@@ -718,9 +751,6 @@ func runCodeRewrite(inv *invocation) error {
 		}
 		if result.Accepted || result.Saved {
 			inv.effects++
-		}
-		if err := inv.barrier.Track(result); err != nil {
-			return err
 		}
 	}
 	return nil

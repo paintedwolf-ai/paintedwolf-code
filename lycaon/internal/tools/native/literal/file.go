@@ -5,7 +5,9 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"strconv"
 	"unicode/utf8"
 )
@@ -205,9 +207,39 @@ func (inv *invocation) identifyOperand(operand string) (identification, bool, er
 			return identification{description: "symbolic link to " + target, mime: "inode/symlink"}, true, nil
 		}
 	}
-	in, err := inv.open(operand, true)
+	in, err := inv.open(operand, false)
 	if err != nil || in == nil {
 		return identification{}, false, err
 	}
-	return inv.owners.signatures.identify(in.data), true, nil
+	const headerBytes = (64 << 10) + utf8.UTFMax
+	if memory := inv.owners.Revisions.Memory; memory != nil {
+		release, err := memory.Reserve(inv.ctx, headerBytes+1)
+		if err != nil {
+			return identification{}, false, err
+		}
+		defer release()
+	}
+	header := make([]byte, headerBytes+1)
+	n, err := io.ReadFull(in.reader(), header)
+	header = header[:n]
+	complete := errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF)
+	if complete {
+		err = nil
+	}
+	if err != nil {
+		return identification{}, false, err
+	}
+	if !complete {
+		header = header[:headerBytes]
+		// A bounded header may end inside a valid scalar. Only omit an
+		// incomplete trailing scalar; malformed complete bytes still classify as data.
+		start := len(header) - 1
+		for start > 0 && !utf8.RuneStart(header[start]) {
+			start--
+		}
+		if !utf8.FullRune(header[start:]) {
+			header = header[:start]
+		}
+	}
+	return inv.owners.signatures.identify(header), true, nil
 }

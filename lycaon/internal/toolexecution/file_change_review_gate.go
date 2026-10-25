@@ -30,6 +30,7 @@ func (e *Boundary) fileChangeReviewer(tool string, args map[string]any, tc tools
 				SessionID:          tc.Identity.SessionID,
 				RootSessionID:      tc.ChatSessionID(),
 				SessionScratchRoot: tc.Host.SessionScratchDir,
+				SessionOutputRoot:  tc.Host.SessionOutputDir,
 			},
 			Execution: hitl.ActionExecution{
 				Contained: hitl.ContainedForRequest(e.actionConfineRequest(ctx, tc)),

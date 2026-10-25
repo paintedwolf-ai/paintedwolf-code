@@ -3,9 +3,10 @@
 package textutil
 
 import (
+	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
+	"github.com/lycaon/lycaon/internal/commandprogram"
+	"io"
 	"slices"
 	"strings"
 	"testing"
@@ -68,13 +69,11 @@ func TestSortSpillsAndMergesInBoundedPasses(t *testing.T) {
 	slices.Sort(lines)
 	want := strings.Join(lines, "\n") + "\n"
 	h.run("sort", input.String()).expectOutput(t, "spilled sort", want, 0)
-	if h.quota.reservations == 0 || h.quota.used != 0 {
+	if h.quota.reservations == 0 || h.quota.reservations >= len(lines)/10 || h.quota.used != 0 {
 		t.Fatalf("spill admission reservations=%d still held=%d", h.quota.reservations, h.quota.used)
 	}
-	entries, err := os.ReadDir(h.spills)
-	testutil.FailErr(t, "read spill dir", err)
-	if len(entries) != 0 {
-		t.Fatalf("spill runs left behind: %d", len(entries))
+	if len(h.spills.runs) != 0 {
+		t.Fatalf("spill runs left behind: %d", len(h.spills.runs))
 	}
 	unique := h.run("sort -u -r", input.String()+input.String())
 	slices.Reverse(lines)
@@ -87,8 +86,10 @@ func TestSortSpillBoundaries(t *testing.T) {
 	input := strings.Repeat("abcdefghij\n", 100)
 	h.quota.maximum = 0
 	var exhausted *toolcontract.ProgramMemoryLimitError
-	if r := h.run("sort", input); !asMemoryLimit(r.err, &exhausted) || r.result.Terminal != toolcontract.ProducerFailed || exhausted.Account != "session_spill_bytes" {
-		t.Fatalf("spill quota: %+v %v", r.result, r.err)
+	quotaRun := h.run("sort", input)
+	quota := quotaRun.expectRefusal(t, "session spill quota", "COMMAND_LIMIT_EXCEEDED")
+	if !asMemoryLimit(quotaRun.err, &exhausted) || exhausted.Account != "session_spill_bytes" || quota.Data["limit_id"] != exhausted.Account || quota.Data["maximum"] != exhausted.Maximum || quota.Data["observed"] != exhausted.Observed {
+		t.Fatalf("spill quota facts: %+v %v", quota, quotaRun.err)
 	}
 	h.quota.maximum = 1 << 30
 	h.owners.limits["spill_bytes"] = 64
@@ -96,9 +97,8 @@ func TestSortSpillBoundaries(t *testing.T) {
 	if reject.Data["limit_id"] != "spill_bytes" {
 		t.Fatalf("limit %+v", reject.Data)
 	}
-	entries, _ := os.ReadDir(h.spills)
-	if len(entries) != 0 || h.quota.used != 0 {
-		t.Fatalf("refused sort left %d runs and %d admitted bytes", len(entries), h.quota.used)
+	if len(h.spills.runs) != 0 || h.quota.used != 0 {
+		t.Fatalf("refused sort left %d runs and %d admitted bytes", len(h.spills.runs), h.quota.used)
 	}
 	h.owners.limits["spill_bytes"] = 1 << 28
 	noSpill := newHarness(t)
@@ -123,12 +123,12 @@ func TestRecordBytesBoundary(t *testing.T) {
 	h.run("uniq", at+"a").expectRefusal(t, "uniq record over limit", "COMMAND_LIMIT_EXCEEDED")
 }
 
-func TestStreamBytesBoundary(t *testing.T) {
+func TestStreamThroughputBoundary(t *testing.T) {
 	h := newHarness(t)
-	h.owners.limits["stream_bytes"] = 6
+	h.owners.limits["stream_throughput_bytes"] = 6
 	h.run("echo abcde", "").expectOutput(t, "stdout at limit", "abcde\n", 0)
 	reject := h.run("echo abcdef", "").expectRefusal(t, "stdout over limit", "COMMAND_LIMIT_EXCEEDED")
-	if reject.Data["limit_id"] != "stream_bytes" || reject.Data["observed"] != int64(7) {
+	if reject.Data["limit_id"] != "stream_throughput_bytes" || reject.Data["observed"] != int64(7) {
 		t.Fatalf("limit %+v", reject.Data)
 	}
 }
@@ -144,56 +144,75 @@ func TestWorkingMemoryRefusal(t *testing.T) {
 	}
 }
 
-// A spilled sort keeps its runs in the program's private directory under the
-// session TMPDIR; settling the program and host loss both remove them.
-func TestSessionSpillsLiveUnderTheSessionAndAreReclaimed(t *testing.T) {
-	h := newHarness(t)
-	scratch := t.TempDir()
-	h.tc.Host.SessionScratchDir = scratch
-	spills, err := NewSessionSpills(h.tc, "program-1")
-	testutil.FailErr(t, "session spills", err)
-	h.owners.limits["sort_memory_bytes"] = 512
-	ports := h.ports()
-	ports.Spills = spills
-	input := strings.Repeat("b\na\nc\n", 200)
-	h.runWith(ports, "sort -u", input).expectOutput(t, "spilled sort", "a\nb\nc\n", 0)
-	dir := filepath.Join(scratch, spillRootName, "program-1")
-	entries, err := os.ReadDir(dir)
-	testutil.FailErr(t, "read program spill dir", err)
-	if len(entries) != 0 {
-		t.Fatalf("completed sort left %d runs", len(entries))
-	}
-	info, err := os.Stat(dir)
-	testutil.FailErr(t, "stat program spill dir", err)
-	if info.Mode().Perm() != 0o700 {
-		t.Fatalf("spill dir mode %v", info.Mode().Perm())
-	}
+func TestSpillsReleaseInterruptedRunsAndRefuseAfterClose(t *testing.T) {
+	spills := &Spills{}
 	run, err := spills.Create(t.Context())
-	testutil.FailErr(t, "leftover run", err)
-	testutil.FailErr(t, "write leftover", run.WriteRecord([]byte("x")))
-	testutil.FailErr(t, "close program spills", spills.Close())
-	if _, err := os.Stat(dir); !os.IsNotExist(err) {
-		t.Fatal("settled program kept its spill directory")
+	testutil.FailErr(t, "create run", err)
+	testutil.FailErr(t, "write record", run.WriteRecord([]byte("unfinished")))
+	testutil.FailErr(t, "close spills", spills.Close())
+	if len(spills.runs) != 0 {
+		t.Fatal("closed storage retained runs")
 	}
 	if _, err := spills.Create(t.Context()); err == nil {
-		t.Fatal("closed program spills accepted a run")
+		t.Fatal("closed storage accepted a run")
 	}
-	other, err := NewSessionSpills(h.tc, "program-2")
-	testutil.FailErr(t, "second program", err)
-	_, err = other.Create(t.Context())
-	testutil.FailErr(t, "second program run", err)
-	testutil.FailErr(t, "reclaim after host loss", ReclaimSessionSpills(h.tc))
-	if _, err := os.Stat(filepath.Join(scratch, spillRootName)); !os.IsNotExist(err) {
-		t.Fatal("host loss left session spills")
+	if _, err := run.Open(1024, func(int64) error { return nil }); err == nil {
+		t.Fatal("closed run accepted a reader")
 	}
-	for _, id := range []string{"", "../escape", ".hidden"} {
-		if _, err := NewSessionSpills(h.tc, id); err == nil {
-			t.Fatalf("program identity %q accepted", id)
-		}
+	testutil.FailErr(t, "close again", spills.Close())
+}
+
+// The merge owns the opened readers and must not turn a successful close into
+// another wrapper around the actual output endpoint failure.
+type mergeCloseRun struct {
+	SpillRun
+	reader *mergeCloseReader
+}
+
+func (r mergeCloseRun) Open(int64, func(int64) error) (RunReader, error) { return r.reader, nil }
+
+type mergeCloseReader struct {
+	emitted bool
+	closes  int
+	failure error
+}
+
+func (r *mergeCloseReader) Next() ([]byte, error) {
+	if r.emitted {
+		return nil, io.EOF
 	}
-	h.tc.Host.SessionScratchDir = ""
-	if _, err := NewSessionSpills(h.tc, "program-3"); err == nil {
-		t.Fatal("spills without a session TMPDIR accepted")
+	r.emitted = true
+	return []byte("record"), nil
+}
+func (r *mergeCloseReader) Close() error { r.closes++; return r.failure }
+func TestSortMergePreservesEndpointAndIndependentCloseFailure(t *testing.T) {
+	for _, failedClose := range []bool{false, true} {
+		t.Run(fmt.Sprint(failedClose), func(t *testing.T) {
+			h := newHarness(t)
+			inv := &invocation{ctx: t.Context(), owners: h.owners, ports: h.ports()}
+			budget, err := commandprogram.NewByteBudget("fixture", 1024)
+			testutil.FailErr(t, "admit byte stream", err)
+			output, err := commandprogram.NewBytePipe(t.Context(), budget)
+			testutil.FailErr(t, "open byte stream", err)
+			testutil.FailErr(t, "close satisfied consumer", output.CloseConsumer())
+			reader := &mergeCloseReader{}
+			if failedClose {
+				reader.failure = errors.New("spill reader close failed")
+			}
+			before := inv.ports.Memory.InUse()
+			err = (&sorter{inv: inv}).mergeRuns([]SpillRun{mergeCloseRun{reader: reader}}, func(record []byte) error { _, failure := output.Write(record); return failure })
+			if !errors.Is(err, commandprogram.ErrConsumerClosed) || (failedClose && !errors.Is(err, reader.failure)) || reader.closes != 1 || inv.ports.Memory.InUse() != before {
+				t.Fatalf("cause=%v closes=%d memory=%+v", err, reader.closes, inv.ports.Memory.InUse())
+			}
+			stages := []commandprogram.PipelineStageOutcome{
+				{ExecutionID: "sort", Result: toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, RequiredInputComplete: true, Closure: commandprogram.NativeConsumerClosure(output, err, "sort", "head")},
+				{ExecutionID: "head", Result: toolcontract.ProducerResult{Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.NoEffect}, RequiredInputComplete: true},
+			}
+			result, err := commandprogram.SettlePipeline("merge", stages, &commandprogram.OutcomeLatch{})
+			testutil.FailErr(t, "settle merged stream", err)
+			if result.Complete == failedClose || result.PublicationEligible == failedClose {
+				t.Fatalf("close failed=%t result=%+v", failedClose, result)
+			}
+		})
 	}
-	testutil.FailErr(t, "reclaim without scratch", ReclaimSessionSpills(h.tc))
 }

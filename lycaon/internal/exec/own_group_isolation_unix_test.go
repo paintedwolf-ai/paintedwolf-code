@@ -29,7 +29,7 @@ func TestOwnedCancellationPreservesAnUnrelatedProcess(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer cleanup()
-	if err := RunInOwnGroup(owned); err == nil {
+	if err := RunInOwnGroup(t.Context(), owned); err == nil {
 		t.Fatal("canceled owned process reported success")
 	}
 	if ctx.Err() == nil {

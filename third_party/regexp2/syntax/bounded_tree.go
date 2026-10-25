@@ -44,8 +44,22 @@ func IsMarker(r rune) bool { return r >= markerFirst && r <= markerLast }
 // Word assertions use the fixed ASCII word class [0-9A-Za-z_].
 func FromMarkedSyntax(source *syntax.Regexp, m *budget.Meter, inputBound int) *RegexTree {
 	m.Alloc(512)
-	l := lowering{m: m, inputBound: inputBound, marked: true}
+	l := lowering{m: m, inputBound: inputBound, marked: true, captures: true}
 	root := &RegexNode{T: NtCapture, M: 0, N: -1, Children: []*RegexNode{l.lower(source)}}
+	root.Children[0].Parent = root
+	return &RegexTree{Root: root, Captop: source.MaxCap() + 1}
+}
+
+// FromCapturingSyntax preserves captures and case folding without interpreting
+// host marker scalars. Every private-use scalar remains literal.
+func FromCapturingSyntax(source *syntax.Regexp, m *budget.Meter, inputBound int, word bool) *RegexTree {
+	m.Alloc(512)
+	l := lowering{m: m, inputBound: inputBound, captures: true}
+	child := l.lower(source)
+	if word {
+		child = l.join(NtConcatenate, l.marker(MarkerNotAfterWord), child, l.marker(MarkerNotBeforeWord))
+	}
+	root := &RegexNode{T: NtCapture, M: 0, N: -1, Children: []*RegexNode{child}}
 	root.Children[0].Parent = root
 	return &RegexTree{Root: root, Captop: source.MaxCap() + 1}
 }
@@ -54,6 +68,7 @@ type lowering struct {
 	m          *budget.Meter
 	inputBound int
 	marked     bool
+	captures   bool
 }
 
 func (l lowering) lower(source *syntax.Regexp) *RegexNode {
@@ -67,7 +82,7 @@ func (l lowering) lower(source *syntax.Regexp) *RegexNode {
 	case syntax.OpEmptyMatch:
 		node.T = NtEmpty
 	case syntax.OpLiteral:
-		if l.marked {
+		if l.captures {
 			return l.literal(source)
 		}
 		if source.Flags&syntax.FoldCase != 0 {
@@ -103,18 +118,18 @@ func (l lowering) lower(source *syntax.Regexp) *RegexNode {
 	case syntax.OpEndText:
 		node.T = NtEnd
 	case syntax.OpWordBoundary:
-		if l.marked {
+		if l.captures {
 			return l.boundary(true)
 		}
 		node.T = NtECMABoundary
 	case syntax.OpNoWordBoundary:
-		if l.marked {
+		if l.captures {
 			return l.boundary(false)
 		}
 		node.T = NtNonECMABoundary
 	case syntax.OpCapture:
 		node.T = NtGroup
-		if l.marked {
+		if l.captures {
 			node.T, node.M, node.N = NtCapture, source.Cap, -1
 		}
 	case syntax.OpConcat:
@@ -123,13 +138,22 @@ func (l lowering) lower(source *syntax.Regexp) *RegexNode {
 		node.T = NtAlternate
 	case syntax.OpStar:
 		node.T = NtLoop
+		if source.Flags&syntax.NonGreedy != 0 {
+			node.T = NtLazyloop
+		}
 		node.N = math.MaxInt32
 	case syntax.OpPlus:
 		node.T = NtLoop
+		if source.Flags&syntax.NonGreedy != 0 {
+			node.T = NtLazyloop
+		}
 		node.M = 1
 		node.N = math.MaxInt32
 	case syntax.OpQuest:
 		node.T = NtLoop
+		if source.Flags&syntax.NonGreedy != 0 {
+			node.T = NtLazyloop
+		}
 		node.N = 1
 	case syntax.OpRepeat:
 		// Boolean matches on L input scalars need at most L+1 repetitions:
@@ -138,6 +162,9 @@ func (l lowering) lower(source *syntax.Regexp) *RegexNode {
 		// backreferences are absent in this typed API. This preserves arbitrary
 		// counts without introducing the VM's int32 counter as a grammar ceiling.
 		node.T = NtLoop
+		if source.Flags&syntax.NonGreedy != 0 {
+			node.T = NtLazyloop
+		}
 		node.M = min(source.Min, inputBound)
 		node.N = source.Max
 		if node.N < 0 {
@@ -165,7 +192,7 @@ func (l lowering) literal(source *syntax.Regexp) *RegexNode {
 		l.m.Step(1)
 		l.m.Alloc(256)
 		switch {
-		case IsMarker(r):
+		case l.marked && IsMarker(r):
 			node := l.marker(r)
 			if node.T == NtRef && source.Flags&syntax.FoldCase != 0 {
 				node.Options |= IgnoreCase

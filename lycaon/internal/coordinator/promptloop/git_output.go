@@ -1,6 +1,7 @@
 package promptloop
 
 import (
+	"context"
 	"encoding/json"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
@@ -10,7 +11,7 @@ import (
 )
 
 // projectGitDiff retains the screened observation before fitting its model view.
-func projectGitDiff(hostDir string, content tooloutput.ScreenedOutput, maxSpillBytes int) (string, *toolrejection.ToolReject) {
+func projectGitDiff(ctx context.Context, hostDir string, content tooloutput.ScreenedOutput, maxSpillBytes int) (string, *toolrejection.ToolReject) {
 	var page git.DiffToolResponse
 	if err := json.Unmarshal([]byte(content.String()), &page); err != nil || !page.Available || page.Stat || page.MaxBytes <= 0 {
 		return content.String(), nil //nolint:nilerr // output that is not a diff page passes through unchanged
@@ -22,14 +23,14 @@ func projectGitDiff(hostDir string, content tooloutput.ScreenedOutput, maxSpillB
 	if size <= page.MaxBytes {
 		return content.String(), nil
 	}
-	full := tooloutput.SpillWholeToolOutput(hostDir, content, maxSpillBytes)
+	full := tooloutput.SpillWholeToolOutput(ctx, hostDir, content, maxSpillBytes)
 	if full.SpillPath == "" || full.SpillCapped {
 		return "", gitSpillReject(full)
 	}
 	page.WireSpillPath = full.SpillPath
 	// A raw diff spill supports ordinary read offset/limit without JSON-escaped hunks.
 	if len(page.Files) > 0 && len(page.Files[0].Diff) > page.MaxBytes {
-		if reject := retainDiffHunks(hostDir, &page.Files[0], maxSpillBytes); reject != nil {
+		if reject := retainDiffHunks(ctx, hostDir, &page.Files[0], maxSpillBytes); reject != nil {
 			return "", reject
 		}
 	}
@@ -47,13 +48,13 @@ func projectGitDiff(hostDir string, content tooloutput.ScreenedOutput, maxSpillB
 	return out, nil
 }
 
-func retainDiffHunks(hostDir string, file *git.DiffToolEntry, maxSpillBytes int) *toolrejection.ToolReject {
+func retainDiffHunks(ctx context.Context, hostDir string, file *git.DiffToolEntry, maxSpillBytes int) *toolrejection.ToolReject {
 	diff := file.Diff
 	file.DiffLines = strings.Count(diff, "\n")
 	if !strings.HasSuffix(diff, "\n") {
 		file.DiffLines++
 	}
-	spill := tooloutput.SpillWholeRaw(hostDir, tooloutput.Screened(diff), maxSpillBytes)
+	spill := tooloutput.SpillWholeRaw(ctx, hostDir, tooloutput.Screened(diff), maxSpillBytes)
 	if spill.SpillPath == "" || spill.SpillCapped {
 		return gitSpillReject(spill)
 	}
