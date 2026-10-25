@@ -21,6 +21,9 @@ class GuestInputTests(unittest.TestCase):
         bridge.selector.select.assert_called_once_with(4)
 
     def setUp(self):
+        patcher = patch.object(guest.time, 'sleep')
+        self.sleep = patcher.start()
+        self.addCleanup(patcher.stop)
         self.execution = {'format_version': 1, 'execution_nonce': 'a' * 32,
             'source_commit': 'b' * 40, 'driver_tree': 'c' * 40,
             'artifact_id': 'app', 'environment_id': 'fedora', 'variant_id': 'gnome-wayland'}
@@ -51,6 +54,7 @@ class GuestInputTests(unittest.TestCase):
         self.assertTrue(result['completed'])
         self.assertEqual(len(result['events']), count)
         self.assertEqual(actor.observe.call_count, count * 2)
+        self.sleep.assert_called_once_with(0.2)
         self.assertEqual(box.clear_completed.call_count, count)
         self.assertEqual([event['request']['ordinal'] for event in result['events']], list(range(count)))
         with tempfile.TemporaryDirectory() as temporary:
