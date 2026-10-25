@@ -95,7 +95,7 @@ func (p portalProvider) enterApplicationScope(ctx context.Context, bus *dbus.Con
 	unitName := fmt.Sprintf("app-paintedwolf-%s-%d.scope", p.appID, os.Getpid())
 	properties := []systemdProperty{{
 		Name:  "PIDs",
-		Value: dbus.MakeVariant([]uint32{uint32(os.Getpid())}),
+		Value: dbus.MakeVariant([]uint32{uint32(os.Getpid())}), // #nosec G115 -- Linux PIDs fit in uint32
 	}}
 	var job dbus.ObjectPath
 	err := bus.Object(systemdBusName, systemdObjectPath).CallWithContext(
