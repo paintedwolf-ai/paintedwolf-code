@@ -49,7 +49,7 @@ def delivery_records(directory, execution, vm_id):
              ('session/initial-lock-state', 'lock_initial'),
              ('session/lock-during-presence', 'lock_presence'),
              ('vault/presence-cancel-and-expiry', 'presence'),
-             ('vault/service-onboarding', 'quiet')]
+             ('vault/service-onboarding', 'quiet'), ('vault/service-unavailable-retry', 'quiet')]
     for case, kind in cases:
         leaf = directory / ('leaf/evidence/' + case + '/execution.json')
         if not leaf.exists():

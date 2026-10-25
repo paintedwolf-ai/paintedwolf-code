@@ -193,13 +193,13 @@ class QuietCustodyCaseTests(unittest.TestCase):
 
 
 class QuietPhysicalDeliveryTests(unittest.TestCase):
-    def read(self, root, *, before=4, after=1, status='passed', phase='complete', partial=False):
+    def read(self, root, *, before=4, after=1, status='passed', phase='complete', partial=False, case='service-onboarding'):
         operations = ['provider-name-v1', 'provider-endpoint-v1-12345',
                       'provider-fixture-credential-v1', 'reply-fixture-prompt-v1']
         observed = {'launch_before': {'fixed_input': [{'operation': value, 'completed': True} for value in operations[:before]]},
             'launch_after': {'fixed_input': [{'operation': 'reply-fixture-prompt-v1', 'completed': True}] * after}, 'phase': phase}
         if partial: observed['native_input'] = {'operation': 'reply-fixture-prompt-v1'}
-        leaf = root / 'leaf/evidence/vault/service-onboarding/execution.json'
+        leaf = root / f'leaf/evidence/vault/{case}/execution.json'
         leaf.parent.mkdir(parents=True)
         leaf.write_text(json.dumps({'status': status, 'observations': observed}))
         with patch.object(controller, 'expand_physical_transactions', side_effect=lambda leaf, rows: rows):
@@ -221,3 +221,14 @@ class QuietPhysicalDeliveryTests(unittest.TestCase):
                                            phase='after-turn', partial=True)
         self.assertEqual(len(records), 5)
         self.assertEqual(operations[-1], 'reply-fixture-prompt-v1')
+
+
+    def test_recovery_case_reuses_only_the_same_two_turn_delivery_boundary(self):
+        self.assertEqual(installed_execution.case_family('vault', 'service-unavailable-retry', 'deb'),
+                         'vault_service_recovery')
+        with tempfile.TemporaryDirectory() as directory:
+            records, operations = self.read(Path(directory), case='service-unavailable-retry')
+        self.assertEqual(len(records), 5)
+        self.assertEqual(operations[-2:], ['reply-fixture-prompt-v1', 'reply-fixture-prompt-v1'])
+        with tempfile.TemporaryDirectory() as directory, self.assertRaises(ValueError):
+            self.read(Path(directory), case='service-unavailable-retry', after=0)
