@@ -16,6 +16,9 @@ var pythonYqFlags = []string{
 }
 
 func (inv *invocation) pythonYq() bool {
+	if inv.name() != "yq" {
+		return false
+	}
 	for _, key := range pythonYqFlags {
 		if inv.flag(key) {
 			return true
@@ -57,8 +60,10 @@ func runPythonYq(inv *invocation) error {
 			return err
 		}
 		var result bytes.Buffer
-		inv.out = &output{ctx: inv.ctx, w: &result, maximum: inv.owners.limit("stream_bytes")}
-		if err := runJqLanguage(inv, jqDialect{yamlInput: true, pythonYAML: true, files: []string{file}}); err != nil || inv.status != 0 {
+		inv.out = &output{ctx: inv.ctx, w: &result, maximum: inv.owners.limit("stream_bytes"), steps: stdout.steps, maxSteps: stdout.maxSteps}
+		err = runJqLanguage(inv, jqDialect{yamlInput: true, pythonYAML: true, files: []string{file}})
+		stdout.steps = inv.out.steps
+		if err != nil || inv.status != 0 {
 			return err
 		}
 		if result.String() == source.text {

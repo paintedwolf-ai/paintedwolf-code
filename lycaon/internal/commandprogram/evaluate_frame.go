@@ -12,9 +12,15 @@ import (
 // frameState is what statements sharing one frame observe and mutate: braces,
 // function bodies and sourced units share it; ( ), $( ), pipeline stages and
 // background jobs receive an isolated copy with their own status control.
+type declaredFunction struct {
+	decl       commandsurface.FunctionDeclaration
+	unit       string
+	sourceUnit string
+}
+
 type frameState struct {
 	vars      *Variables
-	functions map[string]commandsurface.FunctionDeclaration
+	functions map[string]declaredFunction
 	latch     *OutcomeLatch
 	control   *StatusControl
 	dispatch  Dispatch
@@ -103,7 +109,7 @@ func (e *evaluation) rootFrame(ctx context.Context) (*frame, func(), error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	state := &frameState{vars: vars, functions: map[string]commandsurface.FunctionDeclaration{}, latch: latch, control: control, dispatch: e.ports.Dispatch}
+	state := &frameState{vars: vars, functions: map[string]declaredFunction{}, latch: latch, control: control, dispatch: e.ports.Dispatch}
 	f := &frame{e: e, state: state, parent: e.ports.Invocation, unit: e.programName, io: descriptorFrame{streams: e.ports.Streams.withDefaults()}, publish: newEligibility()}
 	if dir, ok := e.ports.Dispatch.(DirectoryFrame); ok {
 		state.directory = dir.Directory()
@@ -125,6 +131,7 @@ func (f *frame) isolate(ctx context.Context, latch *OutcomeLatch) (*frame, func(
 	if err != nil {
 		return nil, nil, err
 	}
+	control.status = f.state.control.Status()
 	vars, err := f.state.vars.Clone(ctx)
 	if err != nil {
 		return nil, nil, err
@@ -143,7 +150,7 @@ func (f *frame) isolate(ctx context.Context, latch *OutcomeLatch) (*frame, func(
 		vars.Close()
 		return nil, nil, err
 	}
-	functions := make(map[string]commandsurface.FunctionDeclaration, len(f.state.functions))
+	functions := make(map[string]declaredFunction, len(f.state.functions))
 	for name, decl := range f.state.functions {
 		functions[name] = decl
 	}

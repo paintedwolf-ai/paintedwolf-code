@@ -26,33 +26,26 @@ import (
 // fixtureTime is the deterministic mtime every seeded entry carries.
 var fixtureTime = time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 
-// pinLog follows the receipt store's contract: each call carries the
-// captures from one ordinal on; a recorded position may only be repeated.
+// pinLog follows the receipt store's contract: each call appends one capture
+// at the execution's next position.
 type pinLog struct {
 	mu   sync.Mutex
 	pins map[string][]toolcontract.ExecutionRevision
 }
 
-func (l *pinLog) RecordRevisionPins(_ context.Context, execution string, first int, pins []toolcontract.ExecutionRevision) error {
+func (l *pinLog) AppendRevisionPin(_ context.Context, execution string, pin toolcontract.ExecutionRevision) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	for _, pin := range pins {
-		if err := pin.Validate(); err != nil {
-			return err
-		}
-	}
-	existing := l.pins[execution]
-	if first < 0 || first > len(existing) || len(pins) == 0 {
+	if execution == "" {
 		return io.ErrUnexpectedEOF
 	}
-	overlap := min(len(pins), len(existing)-first)
-	if !slices.Equal(existing[first:first+overlap], pins[:overlap]) {
-		return io.ErrUnexpectedEOF
+	if err := pin.Validate(); err != nil {
+		return err
 	}
 	if l.pins == nil {
 		l.pins = map[string][]toolcontract.ExecutionRevision{}
 	}
-	l.pins[execution] = append(slices.Clone(existing), pins[overlap:]...)
+	l.pins[execution] = append(l.pins[execution], pin)
 	return nil
 }
 

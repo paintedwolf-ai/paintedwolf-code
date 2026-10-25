@@ -56,6 +56,15 @@ describe("document history routing", () => {
     expect(stepHistory.mock.calls).toEqual([["undo"], ["redo"], ["redo"]]);
   });
 
+  it("leaves composition and its legacy commit key with the native editor", () => {
+    const { stepHistory, press } = mount("standard");
+    press({ key: "z", code: "KeyZ", ctrlKey: true, isComposing: true });
+    press({ key: "z", code: "KeyZ", ctrlKey: true, keyCode: 229 });
+    expect(stepHistory).not.toHaveBeenCalled();
+    press({ key: "z", code: "KeyZ", ctrlKey: true });
+    expect(stepHistory).toHaveBeenCalledWith("undo");
+  });
+
   it("keeps Control+Y as Emacs yank", () => {
     const { stepHistory, press } = mount("emacs");
     press({ key: "y", code: "KeyY", ctrlKey: true });

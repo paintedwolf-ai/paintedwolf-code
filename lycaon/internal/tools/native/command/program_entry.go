@@ -108,6 +108,8 @@ type programRun struct {
 	root          toolcontract.OperationInvocation
 	parentReceipt string
 	source        string
+	sourcesMu     sync.RWMutex
+	sources       map[string]string
 	catalog       toolcontract.LanguageCatalog
 	commands      map[string]toolcontract.CommandSpecification
 
@@ -365,9 +367,15 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	stdout, stderr := newProgramStream(ctx, outputLimit, r.sessionResources(tc.Identity.SessionID), memory), newProgramStream(ctx, outputLimit, r.sessionResources(tc.Identity.SessionID), memory)
 	releaseOutputs := release
 	release = func() { _ = stdout.Close(); _ = stderr.Close(); releaseOutputs() }
+	sources := owners.Sources
+	if sources == nil {
+		if sc, ok := owners.Input.(commandprogram.SourceCapture); ok {
+			sources = sc
+		}
+	}
 	ports := commandprogram.EvaluationPorts{
 		Invocation: root, Dispatch: dispatcher, Refusals: dispatcher.reportRefusal, Binder: commandprogram.CatalogBinder{}, Files: projectpaths.GlobFiles{Paths: paths},
-		Publication: publication, Input: owners.Input,
+		Publication: publication, Input: owners.Input, Sources: sources,
 		Executions: dispatcher, Supervision: r.Supervisor, Predicates: commandprogram.PredicateRuntime{Patterns: commandprogram.NativePredicatePatterns{Memory: memory}},
 		Memory:      memory,
 		Streams:     commandprogram.Streams{Input: commandprogram.NullInput(), Output: stdout, Error: stderr},
@@ -563,6 +571,30 @@ func (r *ProgramRuntime) sessionOutputs(ctx context.Context, sessionID string) (
 	return outputs, nil
 }
 
+func (r *programRun) sourceText(unitID string) string {
+	if unitID == "" || unitID == "submitted" {
+		return r.source
+	}
+	r.sourcesMu.RLock()
+	defer r.sourcesMu.RUnlock()
+	if s, ok := r.sources[unitID]; ok {
+		return s
+	}
+	return r.source
+}
+
+func (r *programRun) setSourceText(unitID, text string) {
+	if unitID == "" {
+		return
+	}
+	r.sourcesMu.Lock()
+	if r.sources == nil {
+		r.sources = map[string]string{}
+	}
+	r.sources[unitID] = text
+	r.sourcesMu.Unlock()
+}
+
 // boundedBuffer keeps the first limit bytes and records truncation; the
 // producer is never blocked or failed by a full display buffer.
 type boundedBuffer struct {
@@ -743,6 +775,30 @@ func (r *programRun) launchArguments(line, cwd string) map[string]any {
 	arguments := map[string]any{"command": line, "cwd": cwd}
 	for field, value := range r.envelope {
 		arguments[field] = value
+	}
+	return arguments
+}
+
+// nativeArguments attaches any call-level capability declarations that the
+// bound native operation contract accepts.
+func (r *programRun) nativeArguments(base map[string]any, contract toolcontract.Contract) map[string]any {
+	arguments := make(map[string]any, len(base)+len(r.envelope))
+	for k, v := range base {
+		arguments[k] = v
+	}
+	if raw, ok := r.envelope["capability_request"].(map[string]any); ok {
+		supported := map[string]any{}
+		for _, field := range contract.CapabilityRequestFields() {
+			if value, exists := raw[field]; exists {
+				supported[field] = value
+			}
+		}
+		if len(supported) > 0 {
+			arguments["capability_request"] = supported
+		}
+	}
+	if secretUse, ok := r.envelope["secret_use"]; ok && contract.SecretReferenceSurface != "" {
+		arguments["secret_use"] = secretUse
 	}
 	return arguments
 }

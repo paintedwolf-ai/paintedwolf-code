@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/textsearch"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"mvdan.cc/sh/v3/pattern"
@@ -208,8 +209,11 @@ func (r *findRun) primary(option commandprogram.BoundOption) (*findNode, error) 
 			return test(func(_ *findRun, e entry) (bool, error) { return e.dir(), nil })
 		case "l":
 			return test(func(_ *findRun, e entry) (bool, error) { return e.link, nil })
+		case "p", "s", "b", "c":
+			letter := value[0]
+			return test(func(_ *findRun, e entry) (bool, error) { return typeLetterOf(e.stat.Mode) == letter, nil })
 		}
-		return nil, inv.usage(value, "-type f, d or l")
+		return nil, inv.usage(value, "-type f, d, l, p, s, b or c")
 	case "-maxdepth", "-mindepth":
 		n, err := strconv.Atoi(value)
 		if err != nil || n < 0 {
@@ -225,14 +229,35 @@ func (r *findRun) primary(option commandprogram.BoundOption) (*findNode, error) 
 		return r.sizeTest(value)
 	case "-empty":
 		return test(func(r *findRun, e entry) (bool, error) { return r.empty(e) })
-	case "-mtime":
-		return r.ageTest(value, 24*time.Hour, "-mtime [+-]N days")
-	case "-mmin":
-		return r.ageTest(value, time.Minute, "-mmin [+-]N minutes")
+	case "-mtime", "-atime", "-ctime":
+		return r.ageTest(value, 24*time.Hour, option.Key+" [+-]N days", timeOf(option.Key))
+	case "-mmin", "-amin", "-cmin":
+		return r.ageTest(value, time.Minute, option.Key+" [+-]N minutes", timeOf(option.Key))
+	case "-E", "-s", "-x", "-H", "-L", "-P", "-d":
+		return nil, inv.usage(option.Spelling, option.Spelling+" before the starting points")
+	case "-xdev":
+		r.sameDevice = true
+		return test(func(*findRun, entry) (bool, error) { return true, nil })
+	case "-depth":
+		if p := r.parser; p != nil {
+			if word, ok := p.word(); ok {
+				if _, digits := splitSign(word); digits != "" && strings.Trim(digits, "0123456789") == "" {
+					p.pos++
+					return r.depthTest(word)
+				}
+			}
+		}
+		r.depthFirst = true
+		return test(func(*findRun, entry) (bool, error) { return true, nil })
+	case "-uid", "-user":
+		return r.ownerTest(value, option.Key, func(e entry) uint32 { return e.stat.UID })
+	case "-gid", "-group":
+		return r.ownerTest(value, option.Key, func(e entry) uint32 { return e.stat.GID })
+	case "-true", "-false":
+		truth := option.Key == "-true"
+		return test(func(*findRun, entry) (bool, error) { return truth, nil })
 	case "-perm":
 		return r.permTest(value)
-	case "-user":
-		return r.userTest(value)
 	case "-printf":
 		r.actions = true
 		return r.printfPrimary(value)
@@ -278,13 +303,21 @@ func (r *findRun) sizeTest(value string) (*findNode, error) {
 			unit, digits = 1024, digits[:len(digits)-1]
 		case 'M':
 			unit, digits = 1024*1024, digits[:len(digits)-1]
+		case 'G':
+			unit, digits = 1<<30, digits[:len(digits)-1]
+		case 'T':
+			unit, digits = 1<<40, digits[:len(digits)-1]
+		case 'P':
+			unit, digits = 1<<50, digits[:len(digits)-1]
+		case 'w':
+			unit, digits = 2, digits[:len(digits)-1]
 		case 'b':
 			digits = digits[:len(digits)-1]
 		}
 	}
 	n, err := strconv.ParseInt(digits, 10, 64)
 	if err != nil || n < 0 {
-		return nil, r.inv.usage(value, "-size [+-]N[ckMb]")
+		return nil, r.inv.usage(value, "-size [+-]N[cwbkMGTP]")
 	}
 	return &findNode{op: "primary", test: func(_ *findRun, e entry) (bool, error) {
 		units := (e.stat.Size + unit - 1) / unit
@@ -294,14 +327,14 @@ func (r *findRun) sizeTest(value string) (*findNode, error) {
 
 // ageTest is -mtime and -mmin [+-]N: whole units since modification,
 // truncated toward the past.
-func (r *findRun) ageTest(value string, unit time.Duration, form string) (*findNode, error) {
+func (r *findRun) ageTest(value string, unit time.Duration, form string, at func(fseffect.EntryStat) time.Time) (*findNode, error) {
 	compare, digits := splitSign(value)
 	n, err := strconv.ParseInt(digits, 10, 64)
 	if err != nil || n < 0 {
 		return nil, r.inv.usage(value, form)
 	}
 	return &findNode{op: "primary", test: func(r *findRun, e entry) (bool, error) {
-		age := r.now.Sub(e.stat.ModTime)
+		age := r.now.Sub(at(e.stat))
 		units := int64(age / unit)
 		if age < 0 && age%unit != 0 {
 			units--
@@ -342,19 +375,40 @@ func (r *findRun) permTest(value string) (*findNode, error) {
 	}}, nil
 }
 
-// userTest is -user UID with a numeric owner. Names are not resolved, and a
-// platform without POSIX owners refuses rather than guessing.
-func (r *findRun) userTest(value string) (*findNode, error) {
-	uid, err := strconv.ParseUint(value, 10, 32)
+// ownerTest is -user/-uid and -group/-gid with a numeric id. Names are not
+// resolved, and a platform without POSIX owners refuses rather than guessing.
+func (r *findRun) ownerTest(value, key string, id func(entry) uint32) (*findNode, error) {
+	want, err := strconv.ParseUint(value, 10, 32)
 	if err != nil {
-		return nil, r.inv.usage(value, "-user with a numeric uid")
+		return nil, r.inv.usage(value, key+" with a numeric id")
 	}
 	return &findNode{op: "primary", test: func(r *findRun, e entry) (bool, error) {
 		if !e.stat.POSIX {
-			return false, &toolrejection.ToolReject{Code: "COMMAND_PLATFORM_UNAVAILABLE", Data: map[string]any{"command": "find -user", "capability": "POSIX owners"}}
+			return false, &toolrejection.ToolReject{Code: "COMMAND_PLATFORM_UNAVAILABLE", Data: map[string]any{"command": "find " + key, "capability": "POSIX owners"}}
 		}
-		return uint64(e.stat.UID) == uid, nil
+		return uint64(id(e)) == want, nil
 	}}, nil
+}
+
+// depthTest is BSD's -depth N: the entry's depth below its starting point.
+func (r *findRun) depthTest(value string) (*findNode, error) {
+	compare, digits := splitSign(value)
+	n, err := strconv.ParseInt(digits, 10, 64)
+	if err != nil {
+		return nil, r.inv.usage(value, "-depth [+-]N")
+	}
+	return &findNode{op: "primary", test: func(_ *findRun, e entry) (bool, error) { return compare(int64(e.depth), n), nil }}, nil
+}
+
+// timeOf selects the timestamp an age primary reads.
+func timeOf(key string) func(fseffect.EntryStat) time.Time {
+	switch key[1] {
+	case 'a':
+		return func(st fseffect.EntryStat) time.Time { return st.AccessTime }
+	case 'c':
+		return func(st fseffect.EntryStat) time.Time { return st.ChangeTime }
+	}
+	return func(st fseffect.EntryStat) time.Time { return st.ModTime }
 }
 
 func (r *findRun) newerTest(value string) (*findNode, error) {
