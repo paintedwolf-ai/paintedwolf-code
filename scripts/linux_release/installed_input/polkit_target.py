@@ -89,10 +89,10 @@ class Target:
     def observe(self, pending):
         if not self.entered:
             raise ValueError('Polkit native target observer is closed')
-        before = session_wire.native_session(self.native.observe())
+        deadline = time.monotonic() + 5
+        before = session_wire.native_session(self.native.observe(deadline=deadline))
         if before['locked_hint'] or before['locker_active']:
             raise CaseUnavailable('polkit-native-session-is-locked')
-        deadline = time.monotonic() + 5
         while True:
             try:
                 rows = self._inventory(before['authorities']['shell']['pid'], deadline)
@@ -109,7 +109,7 @@ class Target:
                 modal_identity = accessibility.identity(modal)
                 if modal_identity not in ancestors[1:]:
                     raise ValueError('Polkit password does not descend from its actual native modal')
-                value = {'session': self.native.observe(), 'pending': pending,
+                value = {'session': self.native.observe(deadline=deadline), 'pending': pending,
                     'window': accessibility.identity(window), 'password': accessibility.identity(password),
                     'modal': modal_identity, 'modal_state': self._state(modal, modal=True),
                     'ancestors': ancestors, 'window_state': self._state(window, window=True),
@@ -125,7 +125,7 @@ class Target:
                         or value['modal_state'] != self._state(modal, modal=True)
                         or value['password_state'] != self._state(password)):
                     raise accessibility.InventoryChanged()
-                final = self.native.observe()
+                final = self.native.observe(deadline=deadline)
                 session_wire.same_session(value['session'], final)
                 if final['locked_hint'] or final['locker_active']:
                     raise CaseUnavailable('polkit-native-session-locked-during-observation')
@@ -137,7 +137,7 @@ class Target:
                 if (not isinstance(error, (IndexError, accessibility.InventoryChanged))
                         and not native):
                     raise
-                current = self.native.observe()
+                current = self.native.observe(deadline=deadline)
                 session_wire.same_session(before, current)
                 if current['locked_hint'] or current['locker_active']:
                     raise CaseUnavailable('polkit-native-session-locked-during-observation') from None
@@ -146,5 +146,7 @@ class Target:
                 time.sleep(0.05)
         if self.original is not None:
             polkit_stage.same_target(self.original, value)
+        if time.monotonic() >= deadline:
+            raise CaseUnavailable('polkit-native-target-observation-deadline')
         self.original = value
         return value

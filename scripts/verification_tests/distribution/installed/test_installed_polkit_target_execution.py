@@ -2,7 +2,7 @@
 import copy
 from types import SimpleNamespace
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from scripts.linux_release.installed_input import polkit_target
 from scripts.linux_release.installed_cases.records import CaseUnavailable
@@ -49,7 +49,7 @@ class PolkitTargetTests(unittest.TestCase):
         api.Registry = SimpleNamespace(getDesktop=lambda _: desktop)
         observer = polkit_target.Target.__new__(polkit_target.Target)
         observer.api, observer.entered, observer.original = api, True, None
-        observer.native = Mock(observe=lambda: copy.deepcopy(target()['session']))
+        observer.native = Mock(observe=lambda **kwargs: copy.deepcopy(target()['session']))
         return observer, window, modal, password
 
     def test_exact_modal_ancestor_is_captured_without_names_or_value_readback(self):
@@ -104,6 +104,29 @@ class PolkitTargetTests(unittest.TestCase):
         observer.native.observe = Mock(side_effect=[before, after])
         with self.assertRaises(ValueError):
             observer.observe(target()['pending'])
+
+    def test_native_rpc_and_inventory_share_one_success_deadline(self):
+        observer, _, _, _ = self.fixture()
+        calls = []
+        def native(**kwargs):
+            calls.append(kwargs['deadline'])
+            return copy.deepcopy(target()['session'])
+        observer.native.observe = native
+        with patch.object(polkit_target.time, 'monotonic', return_value=10):
+            observer.observe(target()['pending'])
+        self.assertEqual(calls, [15, 15, 15])
+        observer, _, _, _ = self.fixture()
+        observer.clock = 10
+        calls = []
+        def slow_native(**kwargs):
+            calls.append(kwargs['deadline'])
+            if len(calls) == 3:
+                observer.clock = 16
+            return copy.deepcopy(target()['session'])
+        observer.native.observe = slow_native
+        with patch.object(polkit_target.time, 'monotonic', side_effect=lambda: observer.clock):
+            with self.assertRaises(CaseUnavailable):
+                observer.observe(target()['pending'])
 
 
 if __name__ == '__main__':
