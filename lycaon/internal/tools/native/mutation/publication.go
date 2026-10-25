@@ -100,9 +100,14 @@ func (p *Publication) Capture(ctx context.Context, inv toolcontract.OperationInv
 	}
 	data := []byte(source.Content)
 	sum := sha256.Sum256(data)
-	rev := source.Revision.Identity()
-	if rev == "" {
-		rev = hex.EncodeToString(sum[:])
+	rev := hex.EncodeToString(sum[:])
+	switch {
+	case source.Revision.DocumentID != "":
+		rev = "document:" + source.Revision.DocumentID + "@" + strconv.FormatInt(source.Revision.DocumentRevision, 10)
+	case source.Revision.ContentSHA256 != "":
+		rev = "sha256:" + source.Revision.ContentSHA256
+	case source.Revision.DiskSHA256 != "":
+		rev = "disk:" + source.Revision.DiskSHA256
 	}
 	return commandprogram.CapturedSource{
 		Pin: toolcontract.SourcePin{
