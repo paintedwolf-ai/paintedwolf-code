@@ -56,7 +56,7 @@ func (o *evaluatorOperation) invoke(ctx context.Context) (signal, error) {
 	if child.settled {
 		return sig, err
 	}
-	return sig, f.settle(child, result, err)
+	return sig, f.settle(ctx, child, result, err)
 }
 func (o *evaluatorOperation) execute(ctx context.Context, f *frame) (signal, error) {
 	s, fields, assigns := o.statement, o.fields, o.assignments

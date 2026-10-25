@@ -224,7 +224,7 @@ func (f *frame) dispatch(ctx context.Context, s commandsurface.Statement, fields
 	if native && spec.Name != "external" && gap == nil {
 		result, err = f.state.dispatch.Invoke(ctx, request, f.io.streams)
 		if syncErr := f.state.syncDirectory(ctx, spec.Name == "cd" && err == nil && result.Status == 0); syncErr != nil {
-			child.settle(result, errors.Join(err, syncErr))
+			child.settle(ctx, result, errors.Join(err, syncErr))
 			return f.expansionRefusal(s.SyntaxLocation, syncErr)
 		}
 	} else {

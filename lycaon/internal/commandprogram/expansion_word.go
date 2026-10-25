@@ -27,6 +27,7 @@ type documentText struct{ literal, stripTabs, lineStart bool }
 // with fixed space/tab/LF splitting of unquoted expansions; scalar and pattern
 // modes keep one value.
 type expansionRun struct {
+	ctx      context.Context
 	expander *WordExpander
 	scope    ExpansionScope
 	span     toolcontract.SourceSpan
