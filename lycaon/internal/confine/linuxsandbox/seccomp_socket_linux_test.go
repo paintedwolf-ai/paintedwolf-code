@@ -32,7 +32,6 @@ func TestAppliedUnixDatagramSpellings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("apply production filter: %v", err)
 	}
-	defer func() { _ = unix.Close(listener) }()
 	for _, flags := range []int{0, unix.SOCK_CLOEXEC, unix.SOCK_NONBLOCK, unix.SOCK_CLOEXEC | unix.SOCK_NONBLOCK} {
 		for _, kind := range []int{unix.SOCK_DGRAM, unix.SOCK_RAW} {
 			fd, err := unix.Socket(unix.AF_UNIX, kind|flags, 0)
