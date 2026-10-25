@@ -144,22 +144,25 @@ class NativeSessionObserver:
                 'locker_active': active}
 
     def inhibitors(self):
-        before = self.observe()
-        rows, = self._call(self.authorities['login']['unique'], MANAGER,
-            LOGIN + '.Manager', 'ListInhibitors', None, '(a(ssssuu))')
-        if not isinstance(rows, (list, tuple)) or len(rows) > 256:
-            raise ValueError('native inhibitor observation exceeds its bound')
-        result = []
-        for row in rows:
-            if (not isinstance(row, (list, tuple)) or len(row) != 6
-                    or any(not isinstance(value, str) or len(value) > 4096 for value in row[:4])
-                    or any(type(value) is not int or value < 0 for value in row[4:])):
-                raise ValueError('native inhibitor row has an invalid typed shape')
-            what, _, _, mode, uid, pid = row
-            result.append({'what': what, 'mode': mode, 'owner': self.owner(pid, uid)})
-        again, = self._call(self.authorities['login']['unique'], MANAGER,
-            LOGIN + '.Manager', 'ListInhibitors', None, '(a(ssssuu))')
-        if (again != rows or any(self.owner(row['owner']['pid'], row['owner']['uid']) != row['owner']
-                                 for row in result) or self.observe() != before):
-            raise ValueError('native session changed during inhibitor observation')
-        return {'native_session': before, 'inhibitors': result}
+        for _ in range(4):
+            before = self.observe()
+            rows, = self._call(self.authorities['login']['unique'], MANAGER,
+                LOGIN + '.Manager', 'ListInhibitors', None, '(a(ssssuu))')
+            if not isinstance(rows, (list, tuple)) or len(rows) > 256:
+                raise ValueError('native inhibitor observation exceeds its bound')
+            result = []
+            for row in rows:
+                if (not isinstance(row, (list, tuple)) or len(row) != 6
+                        or any(not isinstance(value, str) or len(value) > 4096 for value in row[:4])
+                        or any(type(value) is not int or value < 0 for value in row[4:])):
+                    raise ValueError('native inhibitor row has an invalid typed shape')
+                what, _, _, mode, uid, pid = row
+                result.append({'what': what, 'mode': mode, 'owner': self.owner(pid, uid)})
+            again, = self._call(self.authorities['login']['unique'], MANAGER,
+                LOGIN + '.Manager', 'ListInhibitors', None, '(a(ssssuu))')
+            if self.observe() != before:
+                raise ValueError('native session changed during inhibitor observation')
+            if again == rows and all(self.owner(row['owner']['pid'], row['owner']['uid']) == row['owner']
+                                     for row in result):
+                return {'native_session': before, 'inhibitors': result}
+        raise ValueError('native session changed during inhibitor observation')

@@ -22,7 +22,17 @@ def exchange(pipe, observer, execution, pending, *, timeout=15):
         raise ValueError('native unlock endpoint requires its closed current execution')
     protocol.nonce(request['transaction_id'])
     envelope = {key: request[key] for key in ('purpose', 'binding', 'transaction_id')}
-    initial = observer.observe()
+    while True:
+        try:
+            initial = observer.observe()
+            break
+        except CaseUnavailable as error:
+            if (time.monotonic() >= deadline
+                    or str(error) not in {
+                        'native-clock-window-has-no-positive-focus-proof',
+                        'native-locked-shell-window-missing-or-ambiguous'}):
+                raise
+            time.sleep(0.05)
     session_wire.same_runtime(pending['native_session'], initial['session'])
     unlock_wire.locked(initial, password=initial['password'] is not None)
     pipe.send_metadata({**envelope, 'target': initial})
@@ -160,8 +170,8 @@ def serve_mailbox(pending, execution, vm_id, mailbox):
                 os.set_blocking(stream.fileno(), False)
             with selectors.DefaultSelector() as selector:
                 selector.register(streams.stdout, selectors.EVENT_READ)
-                result = exchange(Pipe(streams, selector, time.monotonic() + 25), observer,
-                                  execution, pending, timeout=20)
+                result = exchange(Pipe(streams, selector, time.monotonic() + 30), observer,
+                                  execution, pending, timeout=25)
             if mailbox.read('request.json') != pending:
                 raise ValueError('native unlock publication changed during private delivery')
             mailbox.attach()

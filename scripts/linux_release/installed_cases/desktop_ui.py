@@ -106,6 +106,9 @@ class DesktopUI:
             if process_identity(pid) != identity or not owned_process(pid, self.app):
                 raise ValueError('installed desktop owner changed during window observation')
 
+    def descendants(self, window, deadline=None, *, include=None):
+        return accessibility.descendants(window, deadline, include=include)
+
     def find(self, role: int, name: str):
         if not isinstance(name, str) or not 0 < len(name) <= 256:
             raise ValueError('desktop action requires an exact bounded control name')

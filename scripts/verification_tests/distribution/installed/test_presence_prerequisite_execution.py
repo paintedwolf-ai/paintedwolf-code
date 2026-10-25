@@ -33,7 +33,10 @@ class PresencePrerequisiteTests(unittest.TestCase):
             'resolve': Mock(return_value=self.storage), 'graphical_session': Mock(return_value={}),
             'session_environment': Mock(return_value={}), 'Reservation': Mock(return_value=self.reservation),
             'InstalledApp': Mock(return_value=self.app), 'PresencePolicy': Mock(return_value=self.policy),
-            'DesktopUI': Mock(return_value=self.ui), 'activate_visible_frame': Mock(return_value={'same_frame_active': True}), 'configure_provider': Mock(), 'physical_input': Mock(),
+            'DesktopUI': Mock(return_value=self.ui), 'activate_visible_frame': Mock(return_value={'same_frame_active': True}),
+            'configure_provider': Mock(return_value={'provider_id': 'fixture'}),
+            'await_session': Mock(return_value={'id': 'session', 'status': 'idle'}),
+            'physical_input': Mock(),
             'alerts': Mock(return_value=[]), 'await_alert': Mock(return_value={'attributes': ['xml-roles:alert']}),
             'run': Mock(return_value={'exit_code': 0, 'timed_out': False, 'output_limit': False})}
         self.values = values
@@ -52,6 +55,10 @@ class PresencePrerequisiteTests(unittest.TestCase):
         self.assertFalse(facts['typed_refusal_verified'])
         self.assertFalse(facts['password_fallback_verified'])
         self.assertEqual(facts['presence_policy'], self.policy.observations)
+        self.assertEqual(facts['opened_session'], {'id': 'session', 'status': 'idle'})
+        self.values['await_session'].assert_called_once_with(
+            self.app, Path('/fixture/project'), 'fixture', presence.MODEL, status='idle',
+            reason='presence-project-session-not-opened')
         self.app.start.assert_not_called()
         self.app.launch.assert_called_once()
         self.app.wait_ready.assert_called_once()
@@ -88,6 +95,7 @@ class PresencePrerequisiteTests(unittest.TestCase):
         self.values['run'].return_value = {'exit_code': 1, 'timed_out': False, 'output_limit': False}
         with self.assertRaises(CaseUnavailable) as refused:
             presence.unchallenged_presence({})
+        self.values['await_session'].assert_not_called()
         self.values['physical_input'].assert_not_called()
         self.values['PresencePolicy'].assert_not_called()
         self.assertEqual(refused.exception.observations['fresh_storage'], {'retained': True})
@@ -102,3 +110,20 @@ class PresencePrerequisiteTests(unittest.TestCase):
         self.assertTrue(failed.exception.observations['presence_policy']['recovery_required'])
         self.app.stop.assert_called_once()
         self.assertEqual(failed.exception.streams, {'app-stderr': b'bounded'})
+
+    def test_project_open_output_bytes_move_to_streams_and_keep_observations_json_safe(self):
+        import json
+        self.values['run'].return_value = {
+            'launch_identity': {'pid': 42, 'start_time_ticks': 99},
+            'exit_code': 0, 'timed_out': False, 'output_limit': False,
+            'stdout': b'opened\n', 'stderr': b'',
+        }
+        status, facts, streams = presence.unchallenged_presence({})
+        self.assertEqual(status, 'unverified')
+        self.assertEqual(facts['project_open'], {
+            'launch_identity': {'pid': 42, 'start_time_ticks': 99},
+            'exit_code': 0, 'timed_out': False, 'output_limit': False,
+        })
+        self.assertEqual(streams['project-open-stdout'], b'opened\n')
+        self.assertEqual(streams['project-open-stderr'], b'')
+        json.dumps(facts)
