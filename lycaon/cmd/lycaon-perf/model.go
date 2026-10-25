@@ -11,10 +11,14 @@ type runConfig struct {
 	soak       time.Duration
 	enforce    bool
 	keep       bool
+	// installed drives an installed release engine in a disposable account: its own
+	// release configuration, no mock provider, so no prompt scenarios.
+	installed bool
 }
 
 type report struct {
 	Version     int                      `json:"version"`
+	Mode        string                   `json:"mode"`
 	StartedAt   time.Time                `json:"started_at"`
 	DurationMS  float64                  `json:"duration_ms"`
 	Scale       string                   `json:"scale"`

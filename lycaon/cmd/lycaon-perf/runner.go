@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/debugpaths"
 	"github.com/lycaon/lycaon/internal/debugretention"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -68,6 +69,12 @@ func run(ctx context.Context, cfg runConfig) (result report, resultErr error) {
 		defer func() {
 			if err := os.RemoveAll(state.scratch); resultErr == nil && err != nil {
 				resultErr = fmt.Errorf("remove performance scratch directory: %w", err)
+			}
+			// The disposable account had no release configuration before this run.
+			if cfg.installed {
+				if err := os.RemoveAll(state.configDir); resultErr == nil && err != nil {
+					resultErr = fmt.Errorf("remove the run's release configuration: %w", err)
+				}
 			}
 		}()
 	}
@@ -123,9 +130,16 @@ func newRunState(cfg runConfig) (*runState, error) {
 		_ = os.RemoveAll(scratch)
 		return nil, fmt.Errorf("performance capture path is not registered")
 	}
+	configDir := filepath.Join(scratch, "config")
+	if cfg.installed {
+		if configDir, err = installedConfigRoot(); err != nil {
+			_ = os.RemoveAll(scratch)
+			return nil, err
+		}
+	}
 	state := &runState{
 		cfg: cfg, started: time.Now(), scratch: scratch,
-		configDir: filepath.Join(scratch, "config"), projectDir: filepath.Join(scratch, "project"),
+		configDir: configDir, projectDir: filepath.Join(scratch, "project"),
 		perfPath:   filepath.Join(scratch, performanceFile.Name),
 		stderrPath: filepath.Join(scratch, "sidecar.stderr.log"),
 		metrics:    newMeasurements(),
@@ -145,6 +159,21 @@ func newRunState(cfg runConfig) (*runState, error) {
 		return nil, err
 	}
 	return state, nil
+}
+
+// installedConfigRoot is the release configuration an installed engine uses, which must
+// not exist yet: release builds ignore configuration overrides, so the run owns the
+// account's real configuration and removes it afterwards.
+func installedConfigRoot() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	root := filepath.Join(home, ".config", configdir.DirNameProd)
+	if _, err := os.Lstat(root); !errors.Is(err, os.ErrNotExist) {
+		return "", fmt.Errorf("installed mode needs a disposable account without %s", root)
+	}
+	return root, nil
 }
 
 func (s *runState) startSidecar(ctx context.Context) error {
@@ -170,12 +199,14 @@ func (s *runState) startSidecar(ctx context.Context) error {
 	s.process.Env = append(os.Environ(),
 		"LYCAON_ADDR="+addr,
 		"LYCAON_API_TOKEN="+token,
-		"LYCAON_CONFIG_DIR="+s.configDir,
-		"LYCAON_LLM_MOCK=1",
 		"LYCAON_PERF_DEBUG=1",
 		"LYCAON_PERF_DEBUG_FILE="+s.perfPath,
 		"LYCAON_LOG_LEVEL=info",
 	)
+	// A release engine ignores both, so an installed run sets neither.
+	if !s.cfg.installed {
+		s.process.Env = append(s.process.Env, "LYCAON_CONFIG_DIR="+s.configDir, "LYCAON_LLM_MOCK=1")
+	}
 	s.process.Stdout, s.process.Stderr = stdout, stderr
 	start := time.Now()
 	if err := s.process.Start(); err != nil {
@@ -227,6 +258,9 @@ func (s *runState) runWorkload(ctx context.Context) error {
 	monitor, err := s.client.startEventMonitor(eventCtx, s.project.ID, "")
 	if err != nil {
 		return err
+	}
+	if s.cfg.installed {
+		return s.runInstalledWorkload(ctx, monitor, stopEvents)
 	}
 	if err := s.runPromptScenario(ctx, -1, false); err != nil {
 		stopEvents()
@@ -294,6 +328,21 @@ func (s *runState) runWorkload(ctx context.Context) error {
 		return monitorErr
 	}
 	return nil
+}
+
+// runInstalledWorkload measures the release-valid scenarios: without a mock provider an
+// installed engine takes no prompt turns.
+func (s *runState) runInstalledWorkload(ctx context.Context, monitor *eventMonitor, stopEvents context.CancelFunc) error {
+	s.resources.markBaseline(ctx)
+	s.workloadBaseline = time.Now()
+	err := s.runQueryScenarios(ctx)
+	stopEvents()
+	<-monitor.done
+	if err != nil {
+		return err
+	}
+	_, err = s.addEventMonitor(monitor)
+	return err
 }
 
 func (s *runState) addEventMonitor(monitor *eventMonitor) (string, error) {
@@ -514,9 +563,13 @@ func (s *runState) buildReport(resources resourceSummary) (report, error) {
 	if err := json.Unmarshal(budgetJSON, &limits); err != nil {
 		return report{}, err
 	}
+	mode, prompts := "sidecar", s.cfg.prompts
+	if s.cfg.installed {
+		mode, prompts = "installed", 0
+	}
 	value := report{
-		Version: 1, StartedAt: s.started.UTC(), DurationMS: elapsedMS(s.started),
-		Scale: s.cfg.scale, Fixture: s.fixture, Iterations: s.cfg.iterations, Prompts: s.cfg.prompts,
+		Version: 1, Mode: mode, StartedAt: s.started.UTC(), DurationMS: elapsedMS(s.started),
+		Scale: s.cfg.scale, Fixture: s.fixture, Iterations: s.cfg.iterations, Prompts: prompts,
 		SoakSeconds: s.cfg.soak.Seconds(), Metrics: summarizeMeasurements(s.metrics), Resources: resources,
 		Correctness: s.correctness, Budgets: limits,
 	}
@@ -534,6 +587,10 @@ func evaluateBudgets(value report) []string {
 		metric, ok := value.Metrics[name]
 		if !ok {
 			if name == "restart.ready" && value.SoakSeconds == 0 {
+				continue
+			}
+			// An installed engine has no mock provider, so prompts are another run's scope.
+			if value.Mode == "installed" && strings.HasPrefix(name, "prompt.") {
 				continue
 			}
 			violations = append(violations, fmt.Sprintf("%s was not measured", name))
@@ -569,7 +626,8 @@ func evaluateBudgets(value report) []string {
 			violations = append(violations, fmt.Sprintf("%s %.0f > %.0f", name, observed, limit))
 		}
 	}
-	if value.Correctness.EventCount == 0 {
+	// Installed runs take no prompt turns, which are what the event stream carries.
+	if value.Correctness.EventCount == 0 && value.Mode != "installed" {
 		violations = append(violations, "event stream delivered no events")
 	}
 	if value.Correctness.DuplicateEventIDs > 0 {
