@@ -16,7 +16,7 @@ def proof():
     return {'surface':{'launch':launch,'engine':engine,'main':main,'control':None,'surfaces':[
         {'identity':main,'kind':'frame','visible':False,'active':False,'defunct':False,'modal':False,'parent':None}]},
         'service':service,'shell':shell,'delivery':{'notification_id':1,'request_serial':32,
-            'sender':':1.60','title_sha256':'a'*64,'body_sha256':'b'*64},
+            'sender':':1.60','session_id':'11111111-1111-4111-8111-111111111111','title_sha256':'a'*64,'body_sha256':'b'*64},
         'geometry':{'display_owner':shell,'serial':9,'logical_extent':[0,0,1024,768],
             'pixel_size':[1024,768],'scale_percent':100,'transform':0,'layout_mode':2,'shell_extent':[0,0,1024,768]},
         'target':{'identity':target,'ancestry':[target,app],'role':101,'extent':[295,36,500,96],
@@ -77,6 +77,24 @@ class NotificationWireTests(unittest.TestCase):
         self.assertIs(wire.before(value),value)
         value['service']['process']=value['surface']['main']['process']
         with self.assertRaises(ValueError):wire.before(value)
+
+    def test_real_action_requires_same_notification_token_frame_and_selected_chat(self):
+        initial=proof()
+        after={key:copy.deepcopy(initial[key])for key in ('surface','service','shell','delivery')}
+        after['surface']['surfaces'][0].update(visible=True,active=True)
+        after.update(activation={'notification_id':1,'action':'default','sequence':4,
+            'token':{'sha256':'c'*64,'sequence':3}},selected_session_id=initial['delivery']['session_id'])
+        self.assertTrue(wire.finished(initial,after))
+        wrong=copy.deepcopy(after);wrong['selected_session_id']='22222222-2222-4222-8222-222222222222'
+        self.assertFalse(wire.finished(initial,wrong))
+        wrong=copy.deepcopy(after);wrong['surface']['surfaces'][0]['active']=False
+        self.assertFalse(wire.finished(initial,wrong))
+        for kind in ('id','owner','token-order'):
+            wrong=copy.deepcopy(after)
+            if kind=='id':wrong['activation']['notification_id']=2
+            elif kind=='owner':wrong['service']['bus_name']=':1.99'
+            else:wrong['activation']['token']['sequence']=5
+            with self.subTest(kind=kind),self.assertRaises(ValueError):wire.finished(initial,wrong)
 
 
 if __name__=='__main__':unittest.main()

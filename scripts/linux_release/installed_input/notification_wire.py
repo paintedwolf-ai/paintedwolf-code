@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import uuid
 
 from . import accessibility, lineage, surface_wire
 
@@ -52,7 +53,9 @@ def before(value):
     fields(value, ('surface', 'service', 'shell', 'delivery', 'geometry', 'target'))
     surface_wire.proof(value['surface'])
     service, shell = owner(value['service']), owner(value['shell'])
-    delivery = fields(value['delivery'], ('notification_id', 'request_serial', 'sender', 'title_sha256', 'body_sha256'))
+    delivery = fields(value['delivery'], ('notification_id', 'request_serial', 'sender', 'session_id', 'title_sha256', 'body_sha256'))
+    if not isinstance(delivery['session_id'], str) or str(uuid.UUID(delivery['session_id'])) != delivery['session_id']:
+        raise ValueError('notification click requires its canonical expected chat identity')
     positive(delivery['notification_id'], (1 << 32) - 1)
     positive(delivery['request_serial'], (1 << 32) - 1)
     if (not isinstance(delivery['sender'], str) or not _UNIQUE.fullmatch(delivery['sender'])
@@ -121,3 +124,27 @@ def qmp_events(value):
 
 def event_sha256(value):
     return hashlib.sha256(json.dumps(qmp_events(value), sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+
+
+def finished(previous, current):
+    before(previous)
+    fields(current, ('surface', 'service', 'shell', 'delivery', 'activation', 'selected_session_id'))
+    surface_wire.same_runtime(previous['surface'], current['surface'])
+    if any(previous[key] != current[key] for key in ('service', 'shell', 'delivery')):
+        raise ValueError('notification result changed its captured delivery or desktop authority')
+    activation = current['activation']
+    if activation is None:
+        return False
+    fields(activation, ('notification_id', 'action', 'sequence', 'token'))
+    token = fields(activation['token'], ('sha256', 'sequence'))
+    positive(activation['sequence'], 64)
+    positive(token['sequence'], 64)
+    if (type(activation['notification_id']) is not int
+            or activation['notification_id'] != previous['delivery']['notification_id']
+            or activation['action'] != 'default' or token['sequence'] >= activation['sequence']
+            or not isinstance(token['sha256'], str) or not _HASH.fullmatch(token['sha256'])):
+        raise ValueError('notification result has no matching owner-bound token and default action')
+    active = [row for row in current['surface']['surfaces'] if surface_wire.active(row)]
+    return (len(active) == 1 and active[0]['kind'] == 'frame'
+        and active[0]['identity'] == previous['surface']['main']
+        and current['selected_session_id'] == previous['delivery']['session_id'])
