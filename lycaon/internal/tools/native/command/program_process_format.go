@@ -50,9 +50,13 @@ func writePsCustomFormat(out *strings.Builder, cols []psColumn, visible []hostpr
 	if showHeader {
 		out.WriteString(strings.Join(headers, " ") + "\n")
 	}
+	represented := make(map[string]bool, len(statuses))
 	for _, proc := range visible {
 		job, owned := ownedByPID[proc.PID]
 		owned = owned && job.Process.Instance == proc.Instance
+		if owned {
+			represented[job.Handle] = true
+		}
 		values := make([]string, len(cols))
 		for i, col := range cols {
 			value := "-"
@@ -76,7 +80,7 @@ func writePsCustomFormat(out *strings.Builder, cols []psColumn, visible []hostpr
 		out.WriteString(strings.Join(values, " ") + "\n")
 	}
 	for _, job := range statuses {
-		if job.PID > 0 {
+		if represented[job.Handle] {
 			continue
 		}
 		values := make([]string, len(cols))

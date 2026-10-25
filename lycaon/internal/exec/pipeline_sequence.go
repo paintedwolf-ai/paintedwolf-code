@@ -141,7 +141,7 @@ func (s *sequenceRun) startGroup(ctx context.Context, group StageGroup) error {
 	s.live, s.liveFiles = wired, files
 	s.mu.Unlock()
 
-	if err := startWiredStages(wired); err != nil {
+	if err := startWiredStages(ctx, wired); err != nil {
 		s.mu.Lock()
 		s.live, s.liveFiles = nil, nil
 		s.mu.Unlock()
@@ -250,7 +250,21 @@ func (s *sequenceRun) stageFailed(group StageGroup, i int) bool {
 }
 
 func (s *sequenceRun) expectedConsumerClosure(group StageGroup, i int) bool {
-	return (!group.Final(i) || s.opts.HostConsumer) && killedBySIGPIPE(s.waitErrs[i])
+	if !group.Final(i) {
+		return killedBySIGPIPE(s.waitErrs[i])
+	}
+	if !s.opts.HostConsumer {
+		return false
+	}
+	if closed, ok := s.call.stdout.(interface{ ConsumerClosed() bool }); ok && !closed.ConsumerClosed() {
+		return false
+	}
+	return killedBySIGPIPE(s.waitErrs[i]) || isConsumerClosedError(s.waitErrs[i])
+}
+
+func isConsumerClosedError(err error) bool {
+	var closed interface{ ConsumerClosed() bool }
+	return errors.As(err, &closed) && closed.ConsumerClosed()
 }
 
 func (s *sequenceRun) stopped() bool {
@@ -289,6 +303,9 @@ func (s *sequenceRun) finalize(buf []byte, truncated bool, maxOut int) (*Pipelin
 			}
 			if !s.skipped[i] {
 				code := exitCodeFromWait(s.waitErrs[i])
+				if s.expectedConsumerClosure(group, i) && isConsumerClosedError(s.waitErrs[i]) {
+					code = 0
+				}
 				stageRuns[i].ExitCode = &code
 				stageRuns[i].Failed = s.stageFailed(group, i)
 				stageRuns[i].expectedConsumerClosure = s.expectedConsumerClosure(group, i)
@@ -319,15 +336,18 @@ func (s *sequenceRun) finalize(buf []byte, truncated bool, maxOut int) (*Pipelin
 	if res.ExitCode != 0 {
 		return res, nil
 	}
-	for i, err := range s.waitErrs {
-		if s.skipped[i] || err == nil || errors.Is(err, osexec.ErrWaitDelay) {
-			continue
+	for _, group := range s.groups {
+		for i := group.Start; i < group.End; i++ {
+			err := s.waitErrs[i]
+			if s.skipped[i] || err == nil || errors.Is(err, osexec.ErrWaitDelay) || s.expectedConsumerClosure(group, i) {
+				continue
+			}
+			var exitErr *osexec.ExitError
+			if errors.As(err, &exitErr) {
+				continue
+			}
+			return res, err
 		}
-		var exitErr *osexec.ExitError
-		if errors.As(err, &exitErr) {
-			continue
-		}
-		return res, err
 	}
 	return res, nil
 }

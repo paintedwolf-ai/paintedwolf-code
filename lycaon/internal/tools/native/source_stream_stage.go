@@ -67,7 +67,7 @@ func (c *revisionCapture) Write(raw []byte) (int, error) {
 	}
 	if len(c.buffer.Bytes)+len(raw) > sourceledger.MaxRevisionContentBytes {
 		c.overflow = true
-		_ = c.buffer.Close()
+		c.buffer.Close()
 		return len(raw), nil
 	}
 	return c.buffer.Write(raw)
@@ -85,6 +85,6 @@ func (c *revisionCapture) bytes() []byte {
 
 func (c *revisionCapture) Close() {
 	if c.buffer != nil {
-		_ = c.buffer.Close()
+		c.buffer.Close()
 	}
 }

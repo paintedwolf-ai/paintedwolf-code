@@ -30,7 +30,9 @@ func (r *ReadRoot) Stat(rel string, follow bool, admit func(string) error) (Entr
 				return EntryStat{}, err
 			}
 		}
-		return entryStat(filepath.Base(r.root.path), &st), nil
+		out := entryStat(filepath.Base(r.root.path), &st)
+		out.BirthTime = birthTime(r.root.fd, "", true, &st)
+		return out, nil
 	}
 	var out EntryStat
 	_, err = walkReadContained(r.root, relative, follow, func(dir *os.File, name string, st *unix.Stat_t) (*os.File, error) {
@@ -40,6 +42,7 @@ func (r *ReadRoot) Stat(rel string, follow bool, admit func(string) error) (Entr
 			}
 		}
 		out = entryStat(name, st)
+		out.BirthTime = birthTime(int(dir.Fd()), name, follow, st)
 		return nil, nil
 	})
 	return out, err
@@ -73,6 +76,7 @@ func entryStat(name string, st *unix.Stat_t) EntryStat {
 	return EntryStat{
 		Name: name, Mode: mode, Size: st.Size, ModTime: time.Unix(int64(st.Mtim.Sec), int64(st.Mtim.Nsec)).UTC(),
 		POSIX: true, UID: st.Uid, GID: st.Gid, Inode: uint64(st.Ino), Links: uint64(st.Nlink), Device: uint64(st.Dev),
+		DeviceMajor: unix.Major(uint64(st.Dev)), DeviceMinor: unix.Minor(uint64(st.Dev)),
 		Blocks: int64(st.Blocks), BlockSize: int64(st.Blksize),
 		AccessTime: time.Unix(int64(st.Atim.Sec), int64(st.Atim.Nsec)).UTC(), ChangeTime: time.Unix(int64(st.Ctim.Sec), int64(st.Ctim.Nsec)).UTC(),
 	}

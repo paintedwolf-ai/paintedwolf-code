@@ -1,7 +1,6 @@
 package query
 
 import (
-	"bytes"
 	"container/list"
 	"context"
 	"errors"
@@ -13,10 +12,8 @@ import (
 
 	"github.com/mikefarah/yq/v4/pkg/yqlib"
 
-	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/toolrejection"
-	"github.com/lycaon/lycaon/internal/tools/native"
-	"github.com/lycaon/lycaon/internal/tools/safecmd"
 )
 
 // yqlib keeps its preferences, expression parser and filename state in
@@ -175,7 +172,7 @@ func (inv *invocation) regularFile(operand string) bool {
 // fail reports an ordinary yq error; typed refusals and interruption stop
 // the run instead.
 func (r *yqRun) fail(err error) error {
-	if toolrejection.AsToolReject(err) != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+	if toolrejection.AsToolReject(err) != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, commandprogram.ErrConsumerClosed) {
 		return err
 	}
 	_, _ = fmt.Fprintf(r.inv.stderr, "Error: %s\n", err)
@@ -261,19 +258,19 @@ func (r *yqRun) evaluate(printer yqlib.Printer) error {
 	documents := list.New()
 	var processed uint
 	for index, file := range r.files {
-		text, label, err := r.read(file)
+		reader, label, err := r.reader(file)
 		if err != nil {
 			return err
 		}
 		if !r.all {
-			count, err := evaluator.Evaluate(label, strings.NewReader(text), node, printer, decoder)
+			count, err := evaluator.Evaluate(label, reader, node, printer, decoder)
 			processed += count
 			if err != nil {
 				return err
 			}
 			continue
 		}
-		if err := readYqDocuments(documents, text, label, index, decoder); err != nil {
+		if err := readYqDocuments(documents, reader, label, index, decoder); err != nil {
 			return err
 		}
 	}
@@ -295,8 +292,8 @@ func (r *yqRun) evaluate(printer yqlib.Printer) error {
 
 // readYqDocuments decodes one file for eval-all, marking each document with
 // its file as yq's own reader does.
-func readYqDocuments(documents *list.List, text, label string, fileIndex int, decoder yqlib.Decoder) error {
-	if err := decoder.Init(strings.NewReader(text)); err != nil {
+func readYqDocuments(documents *list.List, reader io.Reader, label string, fileIndex int, decoder yqlib.Decoder) error {
+	if err := decoder.Init(reader); err != nil {
 		return err
 	}
 	for index := uint(0); ; index++ {
@@ -313,27 +310,6 @@ func readYqDocuments(documents *list.List, text, label string, fileIndex int, de
 		node.EvaluateTogether = true
 		documents.PushBack(node)
 	}
-}
-
-// read returns one operand's text: stdin within the input bound, or a
-// captured and pinned file.
-func (r *yqRun) read(file string) (string, string, error) {
-	limit := safecmd.JQCaps().InputBytes
-	if file == "-" {
-		data, err := io.ReadAll(io.LimitReader(r.inv.input, limit+1))
-		if err != nil {
-			return "", "-", err
-		}
-		if int64(len(data)) > limit {
-			return "", "-", safecmd.Reject("JQ_INPUT_TOO_LARGE", map[string]any{"path": "<stdin>", "max_bytes": limit})
-		}
-		return string(data), "-", nil
-	}
-	captured, err := r.capture(file)
-	if err != nil {
-		return "", file, err
-	}
-	return captured.text, file, nil
 }
 
 // capture pins a file once; an unreadable file is yq's open error.
@@ -375,22 +351,20 @@ func (r *yqRun) inPlace() error {
 	if err := r.inv.recordPin(destination); err != nil {
 		return err
 	}
-	var result bytes.Buffer
-	printer, err := r.printer(&output{ctx: r.inv.ctx, w: &result, maximum: r.inv.owners.limit("stream_bytes")})
+	result, err := r.inv.owners.Revisions.NewBufferedBytes(r.inv.ctx, r.inv.owners.limit("whole_file_bytes"), "whole_file_bytes")
+	if err != nil {
+		return err
+	}
+	defer result.Close()
+	printer, err := r.printer(result)
 	if err != nil {
 		return r.fail(err)
 	}
 	if err := r.evaluate(printer); err != nil {
 		return r.fail(err)
 	}
-	if result.String() == source.text {
+	if string(result.Bytes) == source.text {
 		return nil
 	}
-	written, err := r.inv.owners.Write.Apply(r.inv.ctx, native.WriteInput{Path: bound.Resolved.Abs, Content: result.String(),
-		Admission: native.WriteExecutionPinned, Destination: destination, Sources: []toolcontract.ExecutionRevision{source.revision}}, r.inv.tc)
-	if err != nil {
-		return err
-	}
-	r.inv.published = written.Accepted || written.Saved
-	return r.inv.barrier.Track(written)
+	return r.inv.publishBytes(source, destination, result.Bytes)
 }

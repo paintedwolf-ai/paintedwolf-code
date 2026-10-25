@@ -7,7 +7,7 @@ import (
 	"sync"
 	"unicode/utf8"
 
-	"github.com/lycaon/lycaon/internal/authzcontext"
+	"github.com/lycaon/lycaon/internal/jsonvalue"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 )
@@ -28,14 +28,17 @@ type ProgramModelObservation struct {
 }
 
 type programFrameLifetime struct {
-	mu        sync.Mutex
-	closed    bool
-	active    int
-	facts     programFrameFacts
-	admission *toolcontract.ProgramMemory
-	model     ProgramModelObservation
-	arguments *nativeArguments
-	releases  []func()
+	mu            sync.Mutex
+	closed        bool
+	active        int
+	facts         programFrameFacts
+	admission     *toolcontract.ProgramMemory
+	model         ProgramModelObservation
+	arguments     *nativeArguments
+	releases      []func()
+	feedbackMu    sync.Mutex
+	feedback      *programRefusalMemo
+	feedbackTaken bool
 }
 
 func captureProgramModel(ctx context.Context, parent toolcontract.OperationInvocation, tc tools.ToolContext, model ProgramModelInvocation, admission *toolcontract.ProgramMemory) (*programFrameLifetime, error) {
@@ -46,8 +49,10 @@ func captureProgramModel(ctx context.Context, parent toolcontract.OperationInvoc
 		return nil, err
 	}
 	// Reserve the root map and scalar attribution before the addressed map is
-	// allocated. Strings remain immutable host values; this accounts retention.
-	bound := int64(4096)
+	// allocated. The fixed feedback allowance survives effects so a reached
+	// refusal can still deliver a bounded failure descriptor. Strings remain
+	// immutable host values; this accounts retention.
+	bound := int64(4096 + programFeedbackAllowance)
 	add := func(value string) bool {
 		if int64(len(value)) > (math.MaxInt64-bound)/8 {
 			return false
@@ -91,7 +96,7 @@ func captureProgramModel(ctx context.Context, parent toolcontract.OperationInvoc
 		lifetime.close()
 		return nil, fmt.Errorf("submitted model arguments require valid JSON text strings")
 	}
-	canonical, err := authzcontext.CanonicalJSON(snapshot.values)
+	canonical, err := jsonvalue.CanonicalJSON(snapshot.values)
 	if err != nil {
 		lifetime.close()
 		return nil, err

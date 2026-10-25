@@ -18,7 +18,6 @@ import (
 	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
-	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
@@ -30,16 +29,9 @@ type programFixture struct{ *programtest.Fixture }
 
 func newProgramFixture(t *testing.T) *programFixture {
 	t.Helper()
-	f := programtest.New(t, programtest.Options{Natives: func(dir string) map[string]command.NativeOperation {
+	return &programFixture{programtest.New(t, programtest.Options{Natives: func(dir string) map[string]command.NativeOperation {
 		return map[string]command.NativeOperation{"tee": teeOperation(dir), "head": firstLineOperation()}
-	}})
-	owners := f.Runtime.Owners
-	f.Runtime.Owners = func(tc tools.ToolContext, paths *projectpaths.ProgramPaths, memory *toolcontract.ProgramMemory, admission tooloutput.SpillAdmission) (command.ProgramOwners, error) {
-		out, err := owners(tc, paths, memory, admission)
-		out.Sources = dirSources(f.Dir)
-		return out, err
-	}
-	return &programFixture{f}
+	}})}
 }
 
 func (f *programFixture) call(t *testing.T, ctx context.Context, source string) (string, error) {
@@ -160,7 +152,7 @@ func TestProgramEntryRunsNativeAndExternalStagesWithChildReceipts(t *testing.T) 
 
 func TestProgramEntryRefusesExcludedConstructBeforeEarlierWrite(t *testing.T) {
 	f := newProgramFixture(t)
-	_, err := f.call(t, t.Context(), "external -- /bin/echo x | tee first.txt; cat <(ls)")
+	_, err := f.call(t, t.Context(), "external -- /bin/echo x | tee first.txt; eval ls")
 	rejected := toolrejection.AsToolReject(err)
 	if rejected == nil || !strings.HasPrefix(rejected.Code, "COMMAND_SYNTAX_") || rejected.Data["source_start_byte"] == nil || rejected.Data["source_line"] != 1 {
 		t.Fatalf("excluded construct %v", err)
@@ -434,7 +426,7 @@ func TestProgramEntryStatesTheSettledRun(t *testing.T) {
 	}{{"true", api.SourceVerdictPassed}, {"false", api.SourceVerdictFailed}, {"sleep 5 &", ""}} {
 		f := newProgramFixture(t)
 		out := &tools.ToolInvocationOut{}
-		f.Configure = func(tc *tools.ToolContext) { tc.Effects.Out = out }
+		f.Context = func(_ string, tc *tools.ToolContext) { tc.Effects.Out = out }
 		_, err := f.call(t, t.Context(), c.program)
 		testutil.FailErr(t, "run "+c.program, err)
 		switch {

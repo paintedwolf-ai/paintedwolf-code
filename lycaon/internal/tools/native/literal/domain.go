@@ -64,16 +64,16 @@ func runOutline(inv *invocation) error {
 		return err
 	}
 	text, _, err := textfile.Decode(in.data, textfile.LimitsForRaw(max(int64(len(in.data)), 1)))
-	if err != nil {
-		inv.fail(1, operand, "not a text file")
-		return nil
+	if err == nil {
+		label := in.bound.Resolved.DisplayPath
+		outline, buildErr := fileoutline.BuildContent(inv.ctx, label, []byte(text), int64(len(text)))
+		if buildErr != nil {
+			return buildErr
+		}
+		return inv.structured(survey.OutlineResponse(label, outline))
 	}
-	label := in.bound.Resolved.DisplayPath
-	outline, err := fileoutline.BuildContent(inv.ctx, label, []byte(text), int64(len(text)))
-	if err != nil {
-		return err
-	}
-	return inv.structured(survey.OutlineResponse(label, outline))
+	inv.fail(1, operand, "not a text file")
+	return nil
 }
 
 func runSummarize(inv *invocation) error {
@@ -85,7 +85,9 @@ func runSummarize(inv *invocation) error {
 		return err
 	}
 	focus, _ := inv.value("--focus")
-	resp, _, err := inv.owners.Domain.Summarize.Summarize(inv.ctx, survey.SummarizeRequest{Path: abs, Task: focus, Observe: inv.pinOpened}, inv.tc)
+	diskCtx := inv.tc
+	diskCtx.Source.EditorDocuments = nil
+	resp, _, err := inv.owners.Domain.Summarize.Summarize(inv.ctx, survey.SummarizeRequest{Path: abs, Task: focus, Observe: inv.pinOpened}, diskCtx)
 	if err != nil {
 		return err
 	}
@@ -95,8 +97,13 @@ func runSummarize(inv *invocation) error {
 // runRepoMap runs the layout bundle, whose find and list_dir probes read
 // catalog and directory metadata only; it opens no file content to pin.
 func runRepoMap(inv *invocation) error {
-	if value, ok := inv.value("--depth"); ok {
-		return inv.usage(value, "the survey owner selects its own layout depth")
+	var depth *int64
+	if _, ok := inv.value("--depth"); ok {
+		value, err := inv.integer("--depth", 0, false)
+		if err != nil {
+			return err
+		}
+		depth = &value
 	}
 	if inv.owners.Domain.Repo == nil {
 		return platformUnavailable("repo-map", "survey owner")
@@ -105,7 +112,9 @@ func runRepoMap(inv *invocation) error {
 	if err != nil || !ok {
 		return err
 	}
-	resp, err := inv.owners.Domain.Repo.Survey(inv.ctx, repoMapBundle, abs, inv.tc)
+	diskCtx := inv.tc
+	diskCtx.Source.EditorDocuments = nil
+	resp, err := inv.owners.Domain.Repo.Survey(inv.ctx, reposurvey.RepoRequest{Bundle: repoMapBundle, Path: abs, LayoutDepth: depth}, diskCtx)
 	if err != nil {
 		return err
 	}

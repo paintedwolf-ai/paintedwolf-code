@@ -2,6 +2,7 @@ package search
 
 import (
 	"errors"
+	"github.com/lycaon/lycaon/internal/tools"
 	"strings"
 	"time"
 
@@ -20,9 +21,15 @@ type findRun struct {
 	maxDepth   int
 	minDepth   int
 	now        time.Time
-	pruned     bool
-	batches    []*execBatch
-	children   int64
+	// followAll is -L, followArgs -H; sameDevice is -x/-xdev/-mount.
+	followAll, followArgs, sameDevice bool
+	device                            uint64
+	ancestors                         map[[2]uint64]string
+	// parser lets a primary read a following operand (BSD -depth N).
+	parser   *findParser
+	pruned   bool
+	batches  []*execBatch
+	children int64
 }
 
 // execBatch accumulates one -exec ... {} + primary's paths.
@@ -48,6 +55,10 @@ func runFind(inv *invocation) error {
 		r.now = inv.owners.Now()
 	}
 	items := inv.argv.Items
+	// BSD and GNU global options precede the starting points.
+	for len(items) > 0 && items[0].Option != nil && r.leadingOption(items[0].Option.Key) {
+		items = items[1:]
+	}
 	var starts []string
 	for len(items) > 0 && items[0].Operand != nil && !expressionWord(items[0].Operand.Value) {
 		starts = append(starts, items[0].Operand.Value)
@@ -58,6 +69,7 @@ func runFind(inv *invocation) error {
 	}
 	if len(items) > 0 {
 		p := &findParser{run: r, items: items}
+		r.parser = p
 		expr, err := p.parseOr()
 		if errors.Is(err, errFindAbort) {
 			return nil
@@ -72,15 +84,15 @@ func runFind(inv *invocation) error {
 		r.expr = expr
 	}
 	if !r.actions {
-		print := &findNode{op: "primary", test: func(r *findRun, e entry) (bool, error) { return true, r.inv.out.text(e.display, "\n") }}
+		emitPath := &findNode{op: "primary", test: func(r *findRun, e entry) (bool, error) { return true, r.inv.out.text(e.display, "\n") }}
 		if r.expr == nil {
-			r.expr = print
+			r.expr = emitPath
 		} else {
-			r.expr = &findNode{op: "and", left: r.expr, right: print}
+			r.expr = &findNode{op: "and", left: r.expr, right: emitPath}
 		}
 	}
 	for _, start := range starts {
-		e, err := r.walker.operand(start, false)
+		e, err := r.walker.operand(start, r.followAll || r.followArgs)
 		if err != nil {
 			if reason, ok := ordinary(err); ok {
 				inv.fail(false, "'%s': %s", start, reason)
@@ -88,6 +100,7 @@ func runFind(inv *invocation) error {
 			}
 			return err
 		}
+		r.device, r.ancestors = e.stat.Device, map[[2]uint64]string{}
 		if err := r.visit(e); err != nil {
 			return err
 		}
@@ -100,6 +113,25 @@ func runFind(inv *invocation) error {
 	return nil
 }
 
+// leadingOption applies one global option written before the starting
+// points and reports whether it was one.
+func (r *findRun) leadingOption(key string) bool {
+	switch key {
+	case "-E", "-s", "-P":
+	case "-x":
+		r.sameDevice = true
+	case "-H":
+		r.followArgs, r.followAll = true, false
+	case "-L":
+		r.followAll, r.followArgs = true, false
+	case "-d":
+		r.depthFirst = true
+	default:
+		return false
+	}
+	return true
+}
+
 // expressionWord reports an operator word that ends the starting points.
 func expressionWord(word string) bool { return word == "!" || word == "(" || word == ")" }
 
@@ -107,8 +139,24 @@ func (r *findRun) visit(e entry) error {
 	if err := r.inv.ctx.Err(); err != nil {
 		return err
 	}
+	if !r.actions {
+		if _, err := r.inv.out.w.Write(nil); err != nil {
+			return err
+		}
+	}
 	inRange := e.depth >= r.minDepth && (r.maxDepth < 0 || e.depth <= r.maxDepth)
-	descend := e.dir() && !e.link && (r.maxDepth < 0 || e.depth < r.maxDepth)
+	descend := e.dir() && !e.link && (r.maxDepth < 0 || e.depth < r.maxDepth) && (!r.sameDevice || e.stat.Device == r.device)
+	if descend && (r.followAll || r.followArgs) {
+		if id, ok := identity(e.stat); ok {
+			if first, loop := r.ancestors[id]; loop {
+				r.inv.fail(false, "File system loop detected; '%s' is part of the same file system loop as '%s'.", e.display, first)
+				descend = false
+			} else {
+				r.ancestors[id] = e.display
+				defer delete(r.ancestors, id)
+			}
+		}
+	}
 	if !r.depthFirst {
 		r.pruned = false
 		if inRange {
@@ -121,7 +169,7 @@ func (r *findRun) visit(e entry) error {
 		}
 	}
 	if descend {
-		children, err := r.walker.children(e, false)
+		children, err := r.walker.children(e, r.followAll)
 		if err != nil {
 			reason, ok := ordinary(err)
 			if !ok {
@@ -219,7 +267,7 @@ func (r *findRun) dispatch(argv commandprogram.Fields) (toolcontract.ProducerRes
 	inv := r.inv
 	r.children++
 	if maximum := inv.owners.limit("child_executions"); maximum > 0 && r.children > maximum {
-		return toolcontract.ProducerResult{}, limitExceeded("child_executions", maximum, r.children)
+		return toolcontract.ProducerResult{}, tools.CommandLimitExceeded("child_executions", maximum, r.children)
 	}
 	spec, native, err := commandprogram.ResolveCommand(argv)
 	if err != nil {
@@ -248,6 +296,8 @@ func (r *findRun) dispatch(argv commandprogram.Fields) (toolcontract.ProducerRes
 		return result, errors.Join(err, invalid)
 	}
 	switch result.Terminal {
+	case toolcontract.ProducerCompleted, toolcontract.ProducerFailed:
+		return result, nil
 	case toolcontract.ProducerRefused, toolcontract.ProducerInterrupted:
 		if err == nil {
 			err = &toolrejection.ToolReject{Code: result.StopCode, Data: map[string]any{"command": spec.Name}}
@@ -266,6 +316,9 @@ func (r *findRun) remove(e entry) (bool, error) {
 		return true, nil
 	}
 	target, err := inv.paths.Bind(inv.ctx, e.display, true)
+	if err == nil {
+		err = inv.owners.Revisions.CheckUnsavedDraft(inv.ctx, inv.tc, target.Resolved.Abs, true)
+	}
 	if err == nil {
 		err = inv.owners.Remover.RemoveRecoverable(inv.ctx, inv.tc, target)
 	}

@@ -99,3 +99,42 @@ func TestScreenedPipePreservesActualSourceFailureAfterClose(t *testing.T) {
 		t.Fatalf("consumer close rewrote utility failure %v", err)
 	}
 }
+
+type closeFailureSource struct {
+	io.Reader
+	cause error
+}
+
+func (s closeFailureSource) Close() error { return s.cause }
+func TestScreenedPipeCloseFailureWithholdsCompletion(t *testing.T) {
+	cause := errors.New("synthetic source close failure")
+	p := lifecyclePipe(t, t.Context(), closeFailureSource{Reader: bytes.NewReader([]byte("kept")), cause: cause})
+	got, readErr := io.ReadAll(p)
+	facts, waitErr := p.Wait(t.Context())
+	if string(got) != "kept" || !errors.Is(readErr, cause) || !errors.Is(waitErr, cause) || facts.Complete || p.pipe.Completion().Termination != StreamScreeningFailed {
+		t.Fatalf("bytes=%q read=%v wait=%v facts=%+v completion=%+v", got, readErr, waitErr, facts, p.pipe.Completion())
+	}
+}
+
+// Cancellation may make a blocked source report EOF; a failing close must
+// preserve both causes while withholding the expected-consumer exception.
+type canceledCloseFailureSource struct {
+	*closeEOFSource
+	cause error
+}
+
+func (s canceledCloseFailureSource) Close() error { _ = s.closeEOFSource.Close(); return s.cause }
+func TestScreenedPipeCanceledSourceCloseKeepsBothCauses(t *testing.T) {
+	parent, stop := context.WithCancelCause(t.Context())
+	defer stop(nil)
+	canceled, closed := errors.New("parent stopped"), errors.New("source close failed")
+	source := canceledCloseFailureSource{closeEOFSource: &closeEOFSource{entered: make(chan struct{}), closed: make(chan struct{})}, cause: closed}
+	pipe := lifecyclePipe(t, parent, source)
+	<-source.entered
+	stop(canceled)
+	facts, err := pipe.Wait(t.Context())
+	termination := pipe.pipe.Completion().Termination
+	if !errors.Is(err, canceled) || !errors.Is(err, closed) || facts.Complete || (termination != StreamCanceled && termination != StreamScreeningFailed) {
+		t.Fatalf("facts=%+v error=%v completion=%+v", facts, err, pipe.pipe.Completion())
+	}
+}

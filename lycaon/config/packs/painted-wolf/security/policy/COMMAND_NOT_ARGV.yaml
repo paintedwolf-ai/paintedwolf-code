@@ -72,7 +72,7 @@ copy:
     {% else %}{% if paintedwolf.reissue_via_command %}
 
     This surface takes one argv line and has no composition parameters — no `pipeline`, no `background`, and no
-    `&&`/`||`/`;` sequence. Send the single program you need here, or run the composed form under `command`, which
+    `&&`/`||`/`;` sequence. Send the single program you need here, or run the composed form under `command` or `verify`, which
     carries those parameters.
 
     {% else %}{% if paintedwolf.env_assignment %}

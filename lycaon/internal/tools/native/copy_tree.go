@@ -88,7 +88,7 @@ func (op *CopyOperation) copyTree(ctx context.Context, tc tools.ToolContext, sou
 		}
 		observed := info
 		if !info.Mode().IsRegular() {
-			held, err := op.reads.Open(from)
+			held, err := op.reads.Open(ctx, from)
 			if err != nil {
 				return err
 			}

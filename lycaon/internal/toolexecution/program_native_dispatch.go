@@ -90,10 +90,10 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	if e == nil || observer == nil || effect.PrepareReviewed == nil || tc.Identity.Agent == "" || tc.Identity.Agent != surface.profile {
 		return result, fmt.Errorf("native admission requires executor, owner and captured profile")
 	}
-	if err = surface.ValidateOperation(bound); err != nil {
+	if err := surface.ValidateOperation(bound); err != nil {
 		return result, err
 	}
-	if effect.Stage.ExecutionID != invocation.Identity.ExecutionID || effect.Stage.OperationID != facts.Identity || len(effect.Stage.Argv) == 0 || !stageMatchesCommand(bound.Command(), effect.Stage.Argv) {
+	if effect.Stage.ExecutionID != invocation.Identity.ExecutionID || effect.Stage.OperationID != facts.Identity || len(effect.Stage.Argv) == 0 || !stageMatchesOperation(bound, effect.Stage.Argv) {
 		return result, fmt.Errorf("native stage does not match bound operation")
 	}
 	tc, err = frame.ChildContext(ctx, definition, invocation, tc)
@@ -105,7 +105,19 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	}
 	values := effect.Arguments
 	if effect.Argv != nil {
-		values = effect.Argv.Arguments()
+		argv := effect.Argv.Arguments()
+		if len(values) == 0 {
+			values = argv
+		} else {
+			merged := make(map[string]any, len(values)+len(argv))
+			for k, v := range values {
+				merged[k] = v
+			}
+			for k, v := range argv {
+				merged[k] = v
+			}
+			values = merged
+		}
 	}
 	arguments, err := prepareNativeArguments(ctx, admission, values)
 	if err != nil {
@@ -130,16 +142,16 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 		return result, err
 	}
 	defer releaseObservation()
-	if err = checkLiveProgramProgress(ctx, progressFacts, definition, invocation); err != nil {
+	if err := checkLiveProgramProgress(ctx, progressFacts, definition, invocation); err != nil {
 		return result, err
 	}
 	if reject := capabilityrequest.ValidateCapabilityContract(facts.Contract, arguments.values); reject != nil {
 		return result, reject
 	}
-	if err = validateNativeArguments(facts, effect.Argv, arguments.values, tc); err != nil {
+	if err := validateNativeArguments(facts, effect.Argv, arguments.values, tc); err != nil {
 		return result, err
 	}
-	if err = validateNativeSecretSlots(facts.Contract, arguments.values); err != nil {
+	if err := validateNativeSecretSlots(facts.Contract, arguments.values); err != nil {
 		return result, err
 	}
 	secretUse, err := parseSecretUse(facts.Contract, arguments.values)
@@ -180,15 +192,15 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	}
 	bound = prepared.Operation
 	tc.Invocation.NativeOperation = &bound
-	if err = e.recheckNativeOwnerAdmission(ctx, frame, surface.profile, bound, progressFacts, tc); err != nil {
+	if err := e.recheckNativeOwnerAdmission(ctx, frame, surface.profile, bound, progressFacts, tc); err != nil {
 		return result, err
 	}
-	if err = observer.BeforeNativeOwner(ctx, bound, tc.Identity.ToolCallID, reviewed); err != nil {
+	if err := observer.BeforeNativeOwner(ctx, bound, tc.Identity.ToolCallID, reviewed); err != nil {
 		return result, err
 	}
 	// Recorder calls may yield. Recheck current admission after the marker;
 	// the marker does not grant permission or keep a closed frame executable.
-	if err = e.recheckNativeOwnerAdmission(ctx, frame, surface.profile, bound, progressFacts, tc); err != nil {
+	if err := e.recheckNativeOwnerAdmission(ctx, frame, surface.profile, bound, progressFacts, tc); err != nil {
 		return result, err
 	}
 	ownerStarted, result.OwnerInvoked = true, true
@@ -232,6 +244,13 @@ func nativeAdmissionFailure(err error, certainty toolcontract.EffectCertainty) t
 		result.Terminal = toolcontract.ProducerInterrupted
 	}
 	return result
+}
+
+func stageMatchesOperation(bound toolcontract.BoundOperation, argv []string) bool {
+	if bound.Publication() != toolcontract.NoPublication {
+		return len(argv) == 2 && argv[0] == bound.Command() && argv[1] != ""
+	}
+	return stageMatchesCommand(bound.Command(), argv)
 }
 
 // stageMatchesCommand checks the stage against its catalog command. A confined
@@ -286,13 +305,13 @@ func (e *Executor) recheckNativeOwnerAdmission(ctx context.Context, frame Progra
 	if err != nil {
 		return err
 	}
-	if err = current.ValidateOperation(bound); err != nil {
+	if err := current.ValidateOperation(bound); err != nil {
 		return err
 	}
-	if err = frame.validateHostContext(ctx, tc); err != nil {
+	if err := frame.validateHostContext(ctx, tc); err != nil {
 		return err
 	}
-	if err = frame.validateScope(invocation.Scope, tc); err != nil {
+	if err := frame.validateScope(invocation.Scope, tc); err != nil {
 		return err
 	}
 	return checkLiveProgramProgress(ctx, progressFacts, definition, invocation)
@@ -308,7 +327,7 @@ func validateNativeArguments(facts toolcontract.OperationFacts, argv *commandpro
 		}
 		return nil
 	}
-	if reject := tools.ValidateCapabilityPathAuthority(values, tc.Host.SessionScratchDir); reject != nil {
+	if reject := tools.ValidateCapabilityPathAuthority(values, tc.Host.SessionScratchDir, tc.Host.SessionOutputDir); reject != nil {
 		return reject
 	}
 	var schema map[string]any

@@ -154,7 +154,7 @@ func newRetainedDeliveryFixture(t *testing.T) retainedDeliveryFixture {
 		var screened bytes.Buffer
 		_, err := projector.ScreenStream(ctx, scope, "capture.native", bytes.NewReader(content), &screened, stream)
 		testutil.FailErr(t, "screen actual native bytes", err)
-		spill, err := tooloutput.RetainScreenedStream(ctx, tooloutput.ScreenedReader(io.NopCloser(bytes.NewReader(screened.Bytes()))), tooloutput.StreamSpillOptions{Store: recorder.ProgramBlobStore(blobstore.Store{Root: dataDir}), ClaimID: claim, MaximumBytes: 1 << 20, PreviewBytes: preview, Admission: quota, WorkingMemory: quota, RetainedState: quota})
+		spill, err := tooloutput.RetainScreenedStream(ctx, tooloutput.ScreenedReader(io.NopCloser(bytes.NewReader(screened.Bytes()))), tooloutput.StreamSpillOptions{Store: recorder.ProgramBlobStore(ctx, blobstore.Store{Root: dataDir}), ClaimID: claim, MaximumBytes: 1 << 20, PreviewBytes: preview, Admission: quota, WorkingMemory: quota, RetainedState: quota})
 		testutil.FailErr(t, "retain complete actual screened stream", err)
 		return spill
 	}
@@ -199,7 +199,11 @@ func newRetainedDeliveryFixture(t *testing.T) retainedDeliveryFixture {
 	mapping := toolcontract.StreamSourceMapping{Source: pin, SourceEndByte: int64(len(source)), OutputEndByte: int64(len(source))}
 	reference := "output:actual-native-source"
 	spill := retain(in.Identity.ExecutionID, source, 13)
-	testutil.FailErr(t, "retain actual native source mapping outside stdout", outputs.Attach(ctx, program, invocation.RetainedOutput{ExecutionID: in.Identity.ExecutionID, Stream: "stdout", Reference: reference, Complete: true, Mappings: []toolcontract.StreamSourceMapping{mapping}}, spill))
+	admitted, err := outputs.Attach(ctx, program, invocation.RetainedOutput{ExecutionID: in.Identity.ExecutionID, Stream: "stdout", Reference: reference, Complete: true, Mappings: []toolcontract.StreamSourceMapping{mapping}}, spill)
+	testutil.FailErr(t, "retain actual native source mapping outside stdout", err)
+	if len(admitted) != 1 || admitted[0] != mapping {
+		t.Fatal("actual source mapping was not admitted")
+	}
 	result := toolcontract.ProducerResult{Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, PublicationBasis: toolcontract.ZeroStatusPublication, EffectCertainty: toolcontract.NoEffect, Evidence: toolcontract.OperationEvidence{Owner: contract.Owner, Kind: "source_snapshot", EvidenceRef: pin.SourceID}}
 	testutil.FailErr(t, "settle actual executed read independently of delivery", recorder.SettleChild(ctx, in.Identity.ExecutionID, toolcontract.ProgramChildSettlement{Result: result, OwnerInvoked: true, OutputPublishable: true, DetailReference: reference}))
 	return retainedDeliveryFixture{owner: owner, recorder: recorder, outputs: outputs, source: source, pin: pin, mapping: mapping, session: session.ID, program: program, execution: in.Identity.ExecutionID, reference: reference, quota: quota}
@@ -216,12 +220,12 @@ func TestProgramRetainedNativeSourceOnlyQualifiesActuallyDeliveredExactPages(t *
 	deliver := func(start, end int64, response string) (string, evidence.DeliveredSourceObservation) {
 		reader, err := f.outputs.Open(ctx, f.session, f.program, f.reference)
 		testutil.FailErr(t, "fetch real retained source stream", err)
-		_, err = io.CopyN(io.Discard, reader, start)
+		_, err = io.CopyN(io.Discard, reader.Reader, start)
 		testutil.FailErr(t, "skip actual retained prefix", err)
 		page := make([]byte, end-start)
-		_, err = io.ReadFull(reader, page)
+		_, err = io.ReadFull(reader.Reader, page)
 		testutil.FailErr(t, "read actual retained page", err)
-		testutil.FailErr(t, "close actual output reader", reader.Close())
+		testutil.FailErr(t, "close actual output reader", reader.Reader.Close())
 		projection, err := commandprogram.ProjectStreamMappings(ctx, f.quota.ProgramMemory, []toolcontract.StreamSourceMapping{f.mapping}, start, end-start, commandprogram.MappingExactSlice)
 		testutil.FailErr(t, "clip native mapping to emitted page", err)
 		defer projection.Close()

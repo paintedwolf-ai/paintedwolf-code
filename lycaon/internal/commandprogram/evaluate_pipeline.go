@@ -51,7 +51,7 @@ func (f *frame) pipeline(ctx context.Context, s commandsurface.Statement, c comm
 	if err != nil {
 		return err
 	}
-	defer run.close()
+	defer run.close(ctx)
 	pctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	pipes := make([]*BytePipe, len(stages)-1)
@@ -63,7 +63,7 @@ func (f *frame) pipeline(ctx context.Context, s commandsurface.Statement, c comm
 		}
 	}()
 	for i := range pipes {
-		budget, err := NewByteBudget("stream_bytes", f.e.limits["stream_bytes"])
+		budget, err := NewByteBudget("stream_throughput_bytes", f.e.limits["stream_throughput_bytes"])
 		if err == nil {
 			pipes[i], err = NewBytePipe(pctx, budget)
 		}
@@ -71,21 +71,27 @@ func (f *frame) pipeline(ctx context.Context, s commandsurface.Statement, c comm
 			return err
 		}
 	}
-	stderr := &syncWriter{w: f.streams.Error}
+	stderr := &syncWriter{w: f.io.streams.Error}
 	frames := make([]*frame, len(stages))
+	releases := make([]func(), 0, len(stages))
+	defer func() {
+		for _, release := range releases {
+			release()
+		}
+	}()
 	for i := range stages {
 		g, release, err := f.isolate(pctx, nil)
 		if err != nil {
 			return f.stateRefusal(s.SyntaxLocation, err)
 		}
-		defer release()
+		releases = append(releases, release)
 		g.parent, g.loops, g.returnable = run.inv, 0, false
-		g.streams = Streams{Input: f.streams.Input, Output: f.streams.Output, Error: stderr}
+		g.io.streams = Streams{Input: f.io.streams.Input, Output: f.io.streams.Output, Error: stderr}
 		if i > 0 {
-			g.streams.Input = pipes[i-1].ConsumerEnd()
+			g.io.setInput(pipes[i-1].ConsumerEnd())
 		}
 		if i < len(pipes) {
-			g.streams.Output = pipes[i]
+			g.io.setOutput(pipes[i])
 		}
 		frames[i] = g
 	}
@@ -100,15 +106,15 @@ func (f *frame) pipeline(ctx context.Context, s commandsurface.Statement, c comm
 				_ = pipes[i].CloseProducer(results[i].incomplete())
 			}
 			if i > 0 {
-				_ = frames[i].streams.Input.Close()
+				_ = frames[i].io.streams.Input.Close()
 			}
 		}(i)
 	}
 	wg.Wait()
-	return f.settlePipeline(run, stages, pipes, results)
+	return f.settlePipeline(ctx, run, stages, pipes, results)
 }
 
-func (f *frame) settlePipeline(run *childRun, stages []commandsurface.Statement, pipes []*BytePipe, results []stageResult) error {
+func (f *frame) settlePipeline(ctx context.Context, run *childRun, stages []commandsurface.Statement, pipes []*BytePipe, results []stageResult) error {
 	outcomes := make([]PipelineStageOutcome, len(stages))
 	var stageErr error
 	for i, r := range results {
@@ -119,16 +125,11 @@ func (f *frame) settlePipeline(run *childRun, stages []commandsurface.Statement,
 		}
 		// The native byte-endpoint exception never applies to an external
 		// producer; only the executor's own SIGPIPE classification may.
-		if i < len(pipes) && !r.external {
-			cause := r.cause
-			if errors.Is(cause, ErrConsumerClosed) {
-				cause = ErrConsumerClosed
-			}
-			outcomes[i].Closure = NativeConsumerClosure(pipes[i], cause, r.executionID, results[i+1].executionID)
-		}
 		var executor ExecutorClosure
-		if i < len(pipes) && r.external && errors.As(r.cause, &executor) {
+		if i < len(pipes) && errors.As(r.cause, &executor) {
 			outcomes[i].Closure = ExternalConsumerClosure(executor, r.executionID, results[i+1].executionID)
+		} else if i < len(pipes) && !r.external {
+			outcomes[i].Closure = NativeConsumerClosure(pipes[i], r.cause, r.executionID, results[i+1].executionID)
 		}
 		if stageErr == nil && r.err != nil {
 			stageErr = r.err
@@ -146,7 +147,7 @@ func (f *frame) settlePipeline(run *childRun, stages []commandsurface.Statement,
 	if stop, ok := f.state.latch.Stop(); ok {
 		aggregate = stop.Result
 	}
-	run.settle(aggregate, errors.Join(stageErr, settleErr))
+	run.settle(ctx, aggregate, errors.Join(stageErr, settleErr))
 	if err := f.state.control.Record(run.inv.Identity.ExecutionID, aggregate, true, false); err != nil {
 		return err
 	}

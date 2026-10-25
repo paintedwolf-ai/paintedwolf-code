@@ -3,7 +3,6 @@ package projectpaths
 import (
 	"context"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 
@@ -103,17 +102,13 @@ func (s *ReadSession) hostAddressed(modelPath string) bool {
 			return true
 		}
 	}
-	if _, ok := projectroot.ScratchAddress(modelPath); ok {
-		return true
-	}
-	scratch := filepath.Clean(strings.TrimSpace(s.tctx.Host.SessionScratchDir))
-	path := filepath.Clean(modelPath)
-	return scratch != "." && filepath.IsAbs(path) && (path == scratch || strings.HasPrefix(path, scratch+string(filepath.Separator)))
+	_, _, _, ok := sessionRel(s.tctx, modelPath)
+	return ok
 }
 
 // Open opens a path Resolve returned relative to its root's held descriptor,
 // exactly as fseffect.OpenRead would open it.
-func (s *ReadSession) Open(resolved Resolved) (*os.File, error) {
+func (s *ReadSession) Open(ctx context.Context, resolved Resolved) (*os.File, error) {
 	loc := resolved.EffectLocation()
 	root, err := s.heldRoot(loc.Root)
 	if err != nil {
@@ -121,6 +116,10 @@ func (s *ReadSession) Open(resolved Resolved) (*os.File, error) {
 	}
 	file, err := root.Open(loc.Rel)
 	if err != nil {
+		return nil, err
+	}
+	if err := tools.ObserveCommandFileRead(ctx, resolved.Root.ID, resolved.ScopeRel); err != nil {
+		_ = file.Close()
 		return nil, err
 	}
 	s.mu.Lock()

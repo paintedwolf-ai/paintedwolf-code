@@ -83,6 +83,7 @@ var matcherNeedleArgs = map[string][]int{
 	"Count":        {1},
 	"Cut":          {1},
 	"CutPrefix":    {1},
+	"CutSuffix":    {1},
 	"EqualFold":    {0, 1}, // symmetric: either side may be the literal
 	"HasPrefix":    {1},
 	"HasSuffix":    {1},
@@ -106,6 +107,7 @@ var matcherNeedleArgs = map[string][]int{
 
 // matcherNonNeedle lists calls without string-pattern arguments.
 var matcherNonNeedle = map[string]bool{
+	"Clone":         true,
 	"Fields":        true,
 	"FieldsFunc":    true, // splits on a rune predicate; there is no needle
 	"IndexByte":     true, // byte argument, not a string needle

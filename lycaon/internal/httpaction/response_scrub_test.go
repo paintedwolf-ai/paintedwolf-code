@@ -126,3 +126,24 @@ func TestResponseWithoutAnEchoIsNotReportedAsRedacted(t *testing.T) {
 		t.Fatalf("result = %+v, want the body as received", got)
 	}
 }
+
+func TestCommandResponsePreservesResolvedSecretEcho(t *testing.T) {
+	server := echoingServer(t, 16)
+	deps, resolved, args := resolvedBearer(t, server, nil)
+	tc := sessionContext(t.TempDir(), "call-1")
+	tc.Effects.CanonicalArgs, tc.Effects.Secrets = args, resolved
+	got, err := Perform(t.Context(), deps, resolved.Arguments, tc, ExchangeOptions{MaxBodyBytes: 1 << 20, WireHeaders: true})
+	testutil.FailErr(t, "command echo", err)
+	if !strings.Contains(string(got.Response.Body), "Bearer "+echoedCredential) {
+		t.Fatalf("command body was rewritten: %q", got.Response.Body)
+	}
+	for _, header := range got.Response.Headers {
+		if header.Name == "X-Seen" {
+			if header.Value != "Bearer "+echoedCredential {
+				t.Fatalf("command header was rewritten: %q", header.Value)
+			}
+			return
+		}
+	}
+	t.Fatal("response header missing")
+}

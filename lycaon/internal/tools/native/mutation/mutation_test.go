@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -68,9 +69,6 @@ func TestRedirectStagesThenPublishesExactBytes(t *testing.T) {
 			if len(pins) != 1 || pins[0].Role != toolcontract.DestinationRevision || pins[0].Mode != wantMode || pins[0].Path != "out.txt" {
 				t.Fatalf("destination pin %+v", pins)
 			}
-			if err := h.program.Barrier.AdmitDependentLaunch(t.Context(), h.tc); err != nil {
-				t.Fatalf("published disk write still blocks dependent launch: %v", err)
-			}
 		})
 	}
 }
@@ -117,7 +115,6 @@ func TestRedirectConflictsWhenDestinationChangesDuringReview(t *testing.T) {
 		reviews++
 		return os.WriteFile(h.path("out.txt"), []byte("human during review\n"), 0o644)
 	}
-	staged.(*fileStage).tools = h.tc
 	_, err := staged.Publish(t.Context())
 	if err == nil || reviews != 1 {
 		t.Fatalf("write landed over a change made during review (reviews=%d): %v", reviews, err)
@@ -134,7 +131,6 @@ func TestInterruptedPublicationLeavesNoPartialFile(t *testing.T) {
 			staged, _ := stage(t, h, ">", "out.txt", strings.Repeat("payload\n", 4096))
 			ctx, cancel := context.WithCancel(t.Context())
 			h.tc.Files.FileChangeReview = func(context.Context, []tools.FileChange) error { cancel(); return nil }
-			staged.(*fileStage).tools = h.tc
 			if _, err := staged.Publish(ctx); !errors.Is(err, context.Canceled) {
 				t.Fatalf("interrupted publication err=%v", err)
 			}
@@ -174,7 +170,6 @@ func TestInputRedirectServesAndPinsItsCapture(t *testing.T) {
 	inv := h.invocation()
 	input, err := h.publication().OpenInput(t.Context(), commandprogram.InputDestination{Invocation: inv, Target: commandprogram.Field{Value: "in.txt"}})
 	testutil.FailErr(t, "open input", err)
-	testutil.FailErr(t, "later change", os.WriteFile(h.path("in.txt"), []byte("changed\n"), 0o644))
 	data, err := io.ReadAll(input)
 	testutil.FailErr(t, "read input", err)
 	pins := h.pins.pins[inv.Identity.ExecutionID]
@@ -186,19 +181,40 @@ func TestInputRedirectServesAndPinsItsCapture(t *testing.T) {
 	}
 }
 
+func TestInputRedirectRefusesChangedCapturedBytes(t *testing.T) {
+	h := newHarness(t, map[string]string{"in.txt": "captured input\n"})
+	inv := h.invocation()
+	input, err := h.publication().OpenInput(t.Context(), commandprogram.InputDestination{Invocation: inv, Target: commandprogram.Field{Value: "in.txt"}})
+	testutil.FailErr(t, "open input", err)
+	defer input.Close()
+	testutil.FailErr(t, "later change", os.WriteFile(h.path("in.txt"), []byte("changed bytes!\n"), 0644))
+	data, err := io.ReadAll(input)
+	if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != "COMMAND_REVISION_CONFLICT" || len(data) != 0 {
+		t.Fatalf("changed input escaped under captured pin: %q %v", data, err)
+	}
+	pins := h.pins.pins[inv.Identity.ExecutionID]
+	if len(pins) != 1 || pins[0].ContentSHA256 != textfile.SHA256([]byte("captured input\n")) {
+		t.Fatalf("capture pins %+v", pins)
+	}
+}
+
 func TestRedirectOutsideRootsIsRefusedWithoutEffect(t *testing.T) {
 	h := newHarness(t, nil)
 	// Not the host temporary area, which carries its own session grants.
 	outside := filepath.Join(string(filepath.Separator), "pw-outside-"+h.invocation().Identity.ExecutionID+".txt")
-	if _, err := h.publication().Open(t.Context(), h.destination(">", outside)); err == nil {
-		t.Fatal("redirect outside attached roots was admitted")
+	if _, err := h.publication().Open(t.Context(), h.destination(">", outside)); toolrejection.AsToolReject(err) == nil {
+		t.Fatalf("redirect outside attached roots was admitted or missing ToolReject: %v", err)
+	}
+	if _, err := h.publication().OpenInput(t.Context(), commandprogram.InputDestination{Invocation: h.invocation(), Target: commandprogram.Field{Value: outside}}); toolrejection.AsToolReject(err) == nil {
+		t.Fatalf("input redirect outside attached roots was admitted or missing ToolReject: %v", err)
 	}
 	if _, err := os.Lstat(outside); !os.IsNotExist(err) {
 		t.Fatal("refused redirect created a file")
 	}
 	r := h.run("", "rm", "-f", "--", outside)
-	if r.result.Terminal != toolcontract.ProducerRefused || r.err == nil || r.result.EffectCertainty != toolcontract.NoEffect {
-		t.Fatalf("rm outside roots %+v %v", r.result, r.err)
+	reject := toolrejection.AsToolReject(r.err)
+	if r.result.Terminal != toolcontract.ProducerRefused || reject == nil || reject.Code != r.result.StopCode || r.result.EffectCertainty != toolcontract.NoEffect {
+		t.Fatalf("rm outside roots %+v %v %q", r.result, r.err, r.stderr)
 	}
 }
 
@@ -359,5 +375,34 @@ func TestTeeDestinationsAfterARedirectInOneExecution(t *testing.T) {
 	pins := h.pins.pins[inv.Identity.ExecutionID]
 	if len(pins) != 3 || pins[0].Path != "copy.txt" || pins[1].Path != "a.txt" || pins[2].Path != "b.txt" {
 		t.Fatalf("pins %+v", pins)
+	}
+}
+
+func TestEditReplaceLinesCodeRewriteAndSourceCapture(t *testing.T) {
+	h := newHarness(t, map[string]string{
+		"file.txt":   "alpha\nbeta\ngamma\n",
+		"main.go":    "package p\n\nfunc f() int {\n\treturn 1 + 2\n}\n",
+		"script.sh":  "echo ok\n",
+	})
+	if r := h.run("", "edit", "--path", "file.txt", "--old-string", "beta", "--new-string", "BETA"); r.err != nil || r.result.Status != 0 || h.read("file.txt") != "alpha\nBETA\ngamma\n" {
+		t.Fatalf("edit: %+v %v %q", r.result, r.err, h.read("file.txt"))
+	}
+	if r := h.run("", "replace-lines", "--path", "file.txt", "--start", "2", "--end", "3", "--content", "two\nthree"); r.err != nil || r.result.Status != 0 || h.read("file.txt") != "alpha\ntwo\nthree\n" {
+		t.Fatalf("replace-lines: %+v %v %q", r.result, r.err, h.read("file.txt"))
+	}
+	if r := h.run("", "code-rewrite", "--path", "main.go", "--pattern", "1 + 2", "--rewrite", "3", "--dry-run"); r.err != nil || r.result.Status != 0 || !strings.Contains(h.read("main.go"), "1 + 2") {
+		t.Fatalf("code-rewrite --dry-run: %+v %v %q", r.result, r.err, h.read("main.go"))
+	}
+	if r := h.run("", "code-rewrite", "--path", "main.go", "--pattern", "1 + 2", "--rewrite", "3"); r.err != nil || r.result.Status != 0 || !strings.Contains(h.read("main.go"), "return 3") {
+		t.Fatalf("code-rewrite: %+v %v %q", r.result, r.err, h.read("main.go"))
+	}
+	inv := h.invocation()
+	captured, err := h.publication().Capture(t.Context(), inv, commandprogram.SourceCaptureRequest{
+		Path:           "script.sh",
+		Representation: toolcontract.UTF8SourceBytes,
+	})
+	testutil.FailErr(t, "capture source script", err)
+	if string(captured.Bytes) != "echo ok\n" || captured.Pin.SourceID != "script.sh" {
+		t.Fatalf("captured source = %+v", captured)
 	}
 }

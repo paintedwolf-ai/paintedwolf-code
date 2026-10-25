@@ -127,7 +127,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [-s|--short] [--porcelain[=v1]] [--untracked-files=all|normal|no] [--] [PATH ...]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -401,7 +401,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [--cached|--staged] [--stat] [-U N] [REF] [--] [PATH ...]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -759,7 +759,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [-n N|-N] [--oneline] [REF_RANGE] [--] [PATH ...]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -977,7 +977,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [--stat] [REF[:PATH]]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -1149,7 +1149,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [-L START,END] [REF] [--] PATH",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -1366,7 +1366,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [--list] [-a]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -1504,7 +1504,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] --list [PATTERN]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -1723,7 +1723,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [--verify] REF",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -1920,7 +1920,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [--count] [-n N] REF_RANGE",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -2055,7 +2055,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] REF REF",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -2185,7 +2185,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [-v|get-url NAME]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -2352,7 +2352,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] (--get KEY|--list)",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -2474,7 +2474,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] stash list",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -2603,7 +2603,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] worktree list [--porcelain]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -2804,7 +2804,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] ls-files [-c|--cached] [-m|--modified] [-o|--others] [-d|--deleted] [-s|--stage] [--exclude-standard] [-z] [--] [PATH ...]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -2888,7 +2888,7 @@
       "aliases": [],
       "family": "git",
       "owner": "git",
-      "argv": "git [-C DIR] [-c KEY=VALUE ...] add [--] PATH ...",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] add [-A|--all] [-u|--update] [--] PATH ...",
       "forms": [
         {
           "spellings": [
@@ -2915,10 +2915,57 @@
           "sample_values": [
             "core.fsmonitor=false"
           ]
+        },
+        {
+          "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git add-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-A",
+            "--all"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git add-option-A-all",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-u",
+            "--update"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git add-option-u-update",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-q",
+            "--quiet"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git add-option-q-quiet",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [--] PATH ...",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -2969,11 +3016,11 @@
           }
         }
       },
-      "notes": "Git owner staging/rehearsal/ref evidence; global -C and allowlisted -c only: core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false. Native read disables uncontrolled pager/extdiff/textconv; GIT_OPTIONAL_LOCKS=0 separate. Session-authored default commits preserve unrelated staged work; explicit paths remain explicit. Config read-only: --get/--list never writes. Network operations retain auth/egress and unknown outcomes. Exact status output follows selected Git owner presentation; immutable ref retained separately.",
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/git_operations.go",
+        "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
         "tests": [
-          "lycaon/internal/tools/native/git_operations_test.go"
+          "lycaon/internal/tools/native/gitcmd/mutate_test.go"
         ],
         "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
@@ -2990,7 +3037,11 @@
         "git-add-operands-valid",
         "git-add-rejection",
         "git add-option-C-global",
-        "git add-option-c-global"
+        "git add-option-c-global",
+        "git add-option-A-all",
+        "git add-option-u-update",
+        "git add-option-q-quiet",
+        "git add-option-nopager-global"
       ]
     },
     {
@@ -2998,7 +3049,7 @@
       "aliases": [],
       "family": "git",
       "owner": "git",
-      "argv": "git [-C DIR] [-c KEY=VALUE ...] commit [-m MESSAGE] [--amend] [--] [PATH ...]",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] commit [-a] [-m MESSAGE ...] [--amend [--no-edit]] [--] [PATH ...]",
       "forms": [
         {
           "spellings": [
@@ -3028,7 +3079,19 @@
         },
         {
           "spellings": [
-            "-m"
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git commit-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-m",
+            "--message"
           ],
           "arity": 1,
           "value_role": "message",
@@ -3049,10 +3112,45 @@
           "scope": "subcommand",
           "consumption": "fixed",
           "sample_values": []
+        },
+        {
+          "spellings": [
+            "-a",
+            "--all"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git commit-option-a-all",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--no-edit"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git commit-option-noedit",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-q",
+            "--quiet"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git commit-option-q-quiet",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [-m MESSAGE] [--amend] [--] [PATH ...]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -3103,11 +3201,11 @@
           }
         }
       },
-      "notes": "Git owner staging/rehearsal/ref evidence; global -C and allowlisted -c only: core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false. Native read disables uncontrolled pager/extdiff/textconv; GIT_OPTIONAL_LOCKS=0 separate. Session-authored default commits preserve unrelated staged work; explicit paths remain explicit. Config read-only: --get/--list never writes. Network operations retain auth/egress and unknown outcomes. Exact status output follows selected Git owner presentation; immutable ref retained separately.",
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/git_operations.go",
+        "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
         "tests": [
-          "lycaon/internal/tools/native/git_operations_test.go"
+          "lycaon/internal/tools/native/gitcmd/mutate_test.go"
         ],
         "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
@@ -3126,7 +3224,11 @@
         "git commit-option-C-global",
         "git commit-option-c-global",
         "git commit-option-m",
-        "git commit-option-amend"
+        "git commit-option-amend",
+        "git commit-option-a-all",
+        "git commit-option-noedit",
+        "git commit-option-q-quiet",
+        "git commit-option-nopager-global"
       ]
     },
     {
@@ -3164,6 +3266,18 @@
         },
         {
           "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git restore-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-S",
             "--staged"
           ],
           "arity": 0,
@@ -3175,6 +3289,7 @@
         },
         {
           "spellings": [
+            "-W",
             "--worktree"
           ],
           "arity": 0,
@@ -3186,6 +3301,7 @@
         },
         {
           "spellings": [
+            "-s",
             "--source"
           ],
           "arity": 1,
@@ -3199,7 +3315,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [--staged] [--worktree] [--source REF] [--] PATH ...",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -3250,11 +3366,11 @@
           }
         }
       },
-      "notes": "Git owner staging/rehearsal/ref evidence; global -C and allowlisted -c only: core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false. Native read disables uncontrolled pager/extdiff/textconv; GIT_OPTIONAL_LOCKS=0 separate. Session-authored default commits preserve unrelated staged work; explicit paths remain explicit. Config read-only: --get/--list never writes. Network operations retain auth/egress and unknown outcomes. Exact status output follows selected Git owner presentation; immutable ref retained separately.",
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/git_operations.go",
+        "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
         "tests": [
-          "lycaon/internal/tools/native/git_operations_test.go"
+          "lycaon/internal/tools/native/gitcmd/mutate_test.go"
         ],
         "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
@@ -3274,7 +3390,8 @@
         "git restore-option-c-global",
         "git restore-option-staged",
         "git restore-option-worktree",
-        "git restore-option-source"
+        "git restore-option-source",
+        "git restore-option-nopager-global"
       ]
     },
     {
@@ -3282,7 +3399,7 @@
       "aliases": [],
       "family": "git",
       "owner": "git",
-      "argv": "git [-C DIR] [-c KEY=VALUE ...] checkout [-b BRANCH] [REF] [--] [PATH ...]",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] checkout [-q] [-b BRANCH | --detach] [REF] [--] [PATH ...]",
       "forms": [
         {
           "spellings": [
@@ -3312,6 +3429,17 @@
         },
         {
           "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git checkout-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
             "-b"
           ],
           "arity": 1,
@@ -3322,10 +3450,33 @@
           "sample_values": [
             "fixture-branch"
           ]
+        },
+        {
+          "spellings": [
+            "--detach"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git checkout-option-detach",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-q",
+            "--quiet"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git checkout-option-q-quiet",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [-b BRANCH] [REF] [--] [PATH ...]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -3376,11 +3527,11 @@
           }
         }
       },
-      "notes": "Git owner staging/rehearsal/ref evidence; global -C and allowlisted -c only: core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false. Native read disables uncontrolled pager/extdiff/textconv; GIT_OPTIONAL_LOCKS=0 separate. Session-authored default commits preserve unrelated staged work; explicit paths remain explicit. Config read-only: --get/--list never writes. Network operations retain auth/egress and unknown outcomes. Exact status output follows selected Git owner presentation; immutable ref retained separately.",
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/git_operations.go",
+        "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
         "tests": [
-          "lycaon/internal/tools/native/git_operations_test.go"
+          "lycaon/internal/tools/native/gitcmd/mutate_test.go"
         ],
         "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
@@ -3398,7 +3549,10 @@
         "git-checkout-rejection",
         "git checkout-option-C-global",
         "git checkout-option-c-global",
-        "git checkout-option-b"
+        "git checkout-option-b",
+        "git checkout-option-detach",
+        "git checkout-option-q-quiet",
+        "git checkout-option-nopager-global"
       ]
     },
     {
@@ -3406,7 +3560,7 @@
       "aliases": [],
       "family": "git",
       "owner": "git",
-      "argv": "git [-C DIR] [-c KEY=VALUE ...] switch [-c BRANCH] [REF]",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] switch [-q] [-c BRANCH | --detach] [REF]",
       "forms": [
         {
           "spellings": [
@@ -3436,7 +3590,19 @@
         },
         {
           "spellings": [
-            "-c"
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git switch-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-c",
+            "--create"
           ],
           "arity": 1,
           "value_role": "branch",
@@ -3446,10 +3612,34 @@
           "sample_values": [
             "fixture-branch"
           ]
+        },
+        {
+          "spellings": [
+            "--detach",
+            "-d"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git switch-option-detach",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-q",
+            "--quiet"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git switch-option-q-quiet",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [-c BRANCH] [REF]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -3500,11 +3690,11 @@
           }
         }
       },
-      "notes": "Git owner staging/rehearsal/ref evidence; global -C and allowlisted -c only: core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false. Native read disables uncontrolled pager/extdiff/textconv; GIT_OPTIONAL_LOCKS=0 separate. Session-authored default commits preserve unrelated staged work; explicit paths remain explicit. Config read-only: --get/--list never writes. Network operations retain auth/egress and unknown outcomes. Exact status output follows selected Git owner presentation; immutable ref retained separately.",
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/git_operations.go",
+        "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
         "tests": [
-          "lycaon/internal/tools/native/git_operations_test.go"
+          "lycaon/internal/tools/native/gitcmd/mutate_test.go"
         ],
         "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
@@ -3522,7 +3712,10 @@
         "git-switch-rejection",
         "git switch-option-C-global",
         "git switch-option-c-global",
-        "git switch-option-c"
+        "git switch-option-c",
+        "git switch-option-detach",
+        "git switch-option-q-quiet",
+        "git switch-option-nopager-global"
       ]
     },
     {
@@ -3530,7 +3723,7 @@
       "aliases": [],
       "family": "git",
       "owner": "git",
-      "argv": "git [-C DIR] [-c KEY=VALUE ...] merge [--ff-only|--abort] [REF]",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] merge [--ff|--no-ff|--ff-only] [--no-commit] [-m MESSAGE] [REF] | merge (--continue|--abort)",
       "forms": [
         {
           "spellings": [
@@ -3560,6 +3753,17 @@
         },
         {
           "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git merge-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
             "--ff-only"
           ],
           "arity": 0,
@@ -3579,10 +3783,91 @@
           "scope": "subcommand",
           "consumption": "fixed",
           "sample_values": []
+        },
+        {
+          "spellings": [
+            "--no-ff"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git merge-option-noff",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--ff"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git merge-option-ff",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--no-commit"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git merge-option-nocommit",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--continue"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git merge-option-continue",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-m",
+            "--message"
+          ],
+          "arity": 1,
+          "value_role": "message",
+          "fixture_id": "git merge-option-m-message",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "Merge fixture"
+          ]
+        },
+        {
+          "spellings": [
+            "--no-edit"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git merge-option-noedit",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-q",
+            "--quiet"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git merge-option-q-quiet",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [--ff-only|--abort] [REF]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -3633,11 +3918,11 @@
           }
         }
       },
-      "notes": "Git owner staging/rehearsal/ref evidence; global -C and allowlisted -c only: core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false. Native read disables uncontrolled pager/extdiff/textconv; GIT_OPTIONAL_LOCKS=0 separate. Session-authored default commits preserve unrelated staged work; explicit paths remain explicit. Config read-only: --get/--list never writes. Network operations retain auth/egress and unknown outcomes. Exact status output follows selected Git owner presentation; immutable ref retained separately.",
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/git_operations.go",
+        "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
         "tests": [
-          "lycaon/internal/tools/native/git_operations_test.go"
+          "lycaon/internal/tools/native/gitcmd/mutate_test.go"
         ],
         "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
@@ -3656,7 +3941,527 @@
         "git merge-option-C-global",
         "git merge-option-c-global",
         "git merge-option-ffonly",
-        "git merge-option-abort"
+        "git merge-option-abort",
+        "git merge-option-noff",
+        "git merge-option-ff",
+        "git merge-option-nocommit",
+        "git merge-option-continue",
+        "git merge-option-m-message",
+        "git merge-option-noedit",
+        "git merge-option-q-quiet",
+        "git merge-option-nopager-global"
+      ]
+    },
+    {
+      "name": "git cherry-pick",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] cherry-pick [-n] REF ... | cherry-pick (--continue|--abort|--skip)",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git cherry-pick-option-C-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git cherry-pick-option-c-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
+        },
+        {
+          "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git cherry-pick-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--continue"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git cherry-pick-option-continue",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--abort"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git cherry-pick-option-abort",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--skip"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git cherry-pick-option-skip",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-n",
+            "--no-commit"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git cherry-pick-option-n-nocommit",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] cherry-pick [-n] REF ... | cherry-pick (--continue|--abort|--skip)",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "mutation-network"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git cherry-pick fixture",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
+        "tests": [
+          "lycaon/internal/tools/native/gitcmd/mutate_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "git-cherry-pick-operands-valid",
+        "git-cherry-pick-rejection",
+        "git cherry-pick-option-C-global",
+        "git cherry-pick-option-c-global",
+        "git cherry-pick-option-continue",
+        "git cherry-pick-option-abort",
+        "git cherry-pick-option-skip",
+        "git cherry-pick-option-n-nocommit",
+        "git cherry-pick-option-nopager-global"
+      ]
+    },
+    {
+      "name": "git revert",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] revert [-n] [--no-edit] REF ... | revert (--continue|--abort|--skip)",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git revert-option-C-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git revert-option-c-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
+        },
+        {
+          "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git revert-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--continue"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git revert-option-continue",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--abort"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git revert-option-abort",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--skip"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git revert-option-skip",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-n",
+            "--no-commit"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git revert-option-n-nocommit",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--no-edit"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git revert-option-noedit",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] revert [-n] [--no-edit] REF ... | revert (--continue|--abort|--skip)",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "mutation-network"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git revert HEAD",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
+        "tests": [
+          "lycaon/internal/tools/native/gitcmd/mutate_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "git-revert-operands-valid",
+        "git-revert-rejection",
+        "git revert-option-C-global",
+        "git revert-option-c-global",
+        "git revert-option-continue",
+        "git revert-option-abort",
+        "git revert-option-skip",
+        "git revert-option-n-nocommit",
+        "git revert-option-noedit",
+        "git revert-option-nopager-global"
+      ]
+    },
+    {
+      "name": "git rebase",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] rebase UPSTREAM | rebase (--continue|--abort|--skip)",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git rebase-option-C-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git rebase-option-c-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
+        },
+        {
+          "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git rebase-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--continue"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git rebase-option-continue",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--abort"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git rebase-option-abort",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--skip"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git rebase-option-skip",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] rebase UPSTREAM | rebase (--continue|--abort|--skip)",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "mutation-network"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git rebase main",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
+        "tests": [
+          "lycaon/internal/tools/native/gitcmd/mutate_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "git-rebase-operands-valid",
+        "git-rebase-rejection",
+        "git rebase-option-C-global",
+        "git rebase-option-c-global",
+        "git rebase-option-continue",
+        "git rebase-option-abort",
+        "git rebase-option-skip",
+        "git rebase-option-nopager-global"
       ]
     },
     {
@@ -3664,7 +4469,7 @@
       "aliases": [],
       "family": "git",
       "owner": "git",
-      "argv": "git [-C DIR] [-c KEY=VALUE ...] stash (push [-m MESSAGE] [--] PATH ...|apply ID|pop ID|drop ID)",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] stash [push|save] [-m MESSAGE] [-u] [--] [PATH ...] | stash (apply [--index]|pop [--index]|drop) [ID] | stash show [ID]",
       "forms": [
         {
           "spellings": [
@@ -3694,7 +4499,19 @@
         },
         {
           "spellings": [
-            "-m"
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git stash-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-m",
+            "--message"
           ],
           "arity": 1,
           "value_role": "message",
@@ -3704,10 +4521,45 @@
           "sample_values": [
             "fixture"
           ]
+        },
+        {
+          "spellings": [
+            "-u",
+            "--include-untracked"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git stash-option-u-includeuntracked",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--index"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git stash-option-index",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-q",
+            "--quiet"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git stash-option-q-quiet",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] (push [-m MESSAGE] [--] PATH ...|apply ID|pop ID|drop ID)",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -3758,11 +4610,11 @@
           }
         }
       },
-      "notes": "Git owner staging/rehearsal/ref evidence; global -C and allowlisted -c only: core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false. Native read disables uncontrolled pager/extdiff/textconv; GIT_OPTIONAL_LOCKS=0 separate. Session-authored default commits preserve unrelated staged work; explicit paths remain explicit. Config read-only: --get/--list never writes. Network operations retain auth/egress and unknown outcomes. Exact status output follows selected Git owner presentation; immutable ref retained separately.",
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/git_operations.go",
+        "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
         "tests": [
-          "lycaon/internal/tools/native/git_operations_test.go"
+          "lycaon/internal/tools/native/gitcmd/mutate_test.go"
         ],
         "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
@@ -3780,7 +4632,11 @@
         "git-stash-rejection",
         "git stash-option-C-global",
         "git stash-option-c-global",
-        "git stash-option-m"
+        "git stash-option-m",
+        "git stash-option-u-includeuntracked",
+        "git stash-option-index",
+        "git stash-option-q-quiet",
+        "git stash-option-nopager-global"
       ]
     },
     {
@@ -3818,6 +4674,17 @@
         },
         {
           "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git reset-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
             "--soft"
           ],
           "arity": 0,
@@ -3848,10 +4715,44 @@
           "scope": "subcommand",
           "consumption": "fixed",
           "sample_values": []
+        },
+        {
+          "spellings": [
+            "--keep"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git reset-option-keep",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--merge"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git reset-option-merge",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-q",
+            "--quiet"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git reset-option-q-quiet",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [--soft|--mixed|--hard] [REF] [--] [PATH ...]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -3902,11 +4803,11 @@
           }
         }
       },
-      "notes": "Git owner staging/rehearsal/ref evidence; global -C and allowlisted -c only: core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false. Native read disables uncontrolled pager/extdiff/textconv; GIT_OPTIONAL_LOCKS=0 separate. Session-authored default commits preserve unrelated staged work; explicit paths remain explicit. Config read-only: --get/--list never writes. Network operations retain auth/egress and unknown outcomes. Exact status output follows selected Git owner presentation; immutable ref retained separately.",
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/git_operations.go",
+        "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
         "tests": [
-          "lycaon/internal/tools/native/git_operations_test.go"
+          "lycaon/internal/tools/native/gitcmd/mutate_test.go"
         ],
         "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
@@ -3926,7 +4827,11 @@
         "git reset-option-c-global",
         "git reset-option-soft",
         "git reset-option-mixed",
-        "git reset-option-hard"
+        "git reset-option-hard",
+        "git reset-option-keep",
+        "git reset-option-merge",
+        "git reset-option-q-quiet",
+        "git reset-option-nopager-global"
       ]
     },
     {
@@ -3934,7 +4839,7 @@
       "aliases": [],
       "family": "git",
       "owner": "git",
-      "argv": "git [-C DIR] [-c KEY=VALUE ...] clean -f [-d] [--] PATH ...",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] clean (-f|-n) [-d] [--] [PATH ...]",
       "forms": [
         {
           "spellings": [
@@ -3964,7 +4869,19 @@
         },
         {
           "spellings": [
-            "-f"
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git clean-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-f",
+            "--force"
           ],
           "arity": 0,
           "value_role": "boolean",
@@ -3983,10 +4900,34 @@
           "scope": "subcommand",
           "consumption": "fixed",
           "sample_values": []
+        },
+        {
+          "spellings": [
+            "-n",
+            "--dry-run"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git clean-option-n-dryrun",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-q",
+            "--quiet"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git clean-option-q-quiet",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] -f [-d] [--] PATH ...",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -4037,11 +4978,11 @@
           }
         }
       },
-      "notes": "Git owner staging/rehearsal/ref evidence; global -C and allowlisted -c only: core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false. Native read disables uncontrolled pager/extdiff/textconv; GIT_OPTIONAL_LOCKS=0 separate. Session-authored default commits preserve unrelated staged work; explicit paths remain explicit. Config read-only: --get/--list never writes. Network operations retain auth/egress and unknown outcomes. Exact status output follows selected Git owner presentation; immutable ref retained separately.",
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/git_operations.go",
+        "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
         "tests": [
-          "lycaon/internal/tools/native/git_operations_test.go"
+          "lycaon/internal/tools/native/gitcmd/mutate_test.go"
         ],
         "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
@@ -4060,7 +5001,10 @@
         "git clean-option-C-global",
         "git clean-option-c-global",
         "git clean-option-f",
-        "git clean-option-d"
+        "git clean-option-d",
+        "git clean-option-n-dryrun",
+        "git clean-option-q-quiet",
+        "git clean-option-nopager-global"
       ]
     },
     {
@@ -4068,7 +5012,7 @@
       "aliases": [],
       "family": "git",
       "owner": "git",
-      "argv": "git [-C DIR] [-c KEY=VALUE ...] worktree (add PATH [REF]|remove PATH|prune)",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] worktree (add [-b BRANCH] PATH [REF]|remove PATH|prune)",
       "forms": [
         {
           "spellings": [
@@ -4095,10 +5039,34 @@
           "sample_values": [
             "core.fsmonitor=false"
           ]
+        },
+        {
+          "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git worktree-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-b"
+          ],
+          "arity": 1,
+          "value_role": "branch",
+          "fixture_id": "git worktree-option-b",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "fixture"
+          ]
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] (add PATH [REF]|remove PATH|prune)",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -4149,11 +5117,11 @@
           }
         }
       },
-      "notes": "Git owner staging/rehearsal/ref evidence; global -C and allowlisted -c only: core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false. Native read disables uncontrolled pager/extdiff/textconv; GIT_OPTIONAL_LOCKS=0 separate. Session-authored default commits preserve unrelated staged work; explicit paths remain explicit. Config read-only: --get/--list never writes. Network operations retain auth/egress and unknown outcomes. Exact status output follows selected Git owner presentation; immutable ref retained separately.",
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/git_operations.go",
+        "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
         "tests": [
-          "lycaon/internal/tools/native/git_operations_test.go"
+          "lycaon/internal/tools/native/gitcmd/mutate_test.go"
         ],
         "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
@@ -4170,7 +5138,9 @@
         "git-worktree-operands-valid",
         "git-worktree-rejection",
         "git worktree-option-C-global",
-        "git worktree-option-c-global"
+        "git worktree-option-c-global",
+        "git worktree-option-b",
+        "git worktree-option-nopager-global"
       ]
     },
     {
@@ -4178,7 +5148,7 @@
       "aliases": [],
       "family": "git",
       "owner": "git",
-      "argv": "git [-C DIR] [-c KEY=VALUE ...] fetch [REMOTE [REFSPEC ...]]",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] fetch [--all] [-p] [-t] [-q] [REMOTE [REFSPEC ...]]",
       "forms": [
         {
           "spellings": [
@@ -4205,10 +5175,68 @@
           "sample_values": [
             "core.fsmonitor=false"
           ]
+        },
+        {
+          "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git fetch-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--all"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git fetch-option-all",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-p",
+            "--prune"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git fetch-option-p-prune",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-t",
+            "--tags"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git fetch-option-t-tags",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-q",
+            "--quiet"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git fetch-option-q-quiet",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [REMOTE [REFSPEC ...]]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -4260,11 +5288,11 @@
           }
         }
       },
-      "notes": "Git owner staging/rehearsal/ref evidence; global -C and allowlisted -c only: core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false. Native read disables uncontrolled pager/extdiff/textconv; GIT_OPTIONAL_LOCKS=0 separate. Session-authored default commits preserve unrelated staged work; explicit paths remain explicit. Config read-only: --get/--list never writes. Network operations retain auth/egress and unknown outcomes. Exact status output follows selected Git owner presentation; immutable ref retained separately.",
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/git_operations.go",
+        "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
         "tests": [
-          "lycaon/internal/tools/native/git_operations_test.go"
+          "lycaon/internal/tools/native/gitcmd/mutate_test.go"
         ],
         "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
@@ -4281,7 +5309,177 @@
         "git-fetch-operands-valid",
         "git-fetch-rejection",
         "git fetch-option-C-global",
-        "git fetch-option-c-global"
+        "git fetch-option-c-global",
+        "git fetch-option-all",
+        "git fetch-option-p-prune",
+        "git fetch-option-t-tags",
+        "git fetch-option-q-quiet",
+        "git fetch-option-nopager-global"
+      ]
+    },
+    {
+      "name": "git clone",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] clone [-b BRANCH] [--depth N] [-q] URL [DIR]",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git clone-option-C-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git clone-option-c-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
+        },
+        {
+          "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git clone-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-b",
+            "--branch"
+          ],
+          "arity": 1,
+          "value_role": "branch",
+          "fixture_id": "git clone-option-b-branch",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "main"
+          ]
+        },
+        {
+          "spellings": [
+            "--depth"
+          ],
+          "arity": 1,
+          "value_role": "count",
+          "fixture_id": "git clone-option-depth",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
+        },
+        {
+          "spellings": [
+            "-q",
+            "--quiet"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git clone-option-q-quiet",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] clone [-b BRANCH] [--depth N] [-q] URL [DIR]",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery",
+            "egress"
+          ],
+          "mode": "mutation-network"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git clone ./fixture-remote copy",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
+        "tests": [
+          "lycaon/internal/tools/native/gitcmd/mutate_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "git-clone-operands-valid",
+        "git-clone-rejection",
+        "git clone-option-C-global",
+        "git clone-option-c-global",
+        "git clone-option-b-branch",
+        "git clone-option-depth",
+        "git clone-option-q-quiet",
+        "git clone-option-nopager-global"
       ]
     },
     {
@@ -4289,7 +5487,7 @@
       "aliases": [],
       "family": "git",
       "owner": "git",
-      "argv": "git [-C DIR] [-c KEY=VALUE ...] pull [--ff-only] [REMOTE [REFSPEC]]",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] pull [--ff-only] [--rebase|--no-rebase] [REMOTE [REFSPEC]]",
       "forms": [
         {
           "spellings": [
@@ -4319,6 +5517,17 @@
         },
         {
           "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git pull-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
             "--ff-only"
           ],
           "arity": 0,
@@ -4327,10 +5536,45 @@
           "scope": "subcommand",
           "consumption": "fixed",
           "sample_values": []
+        },
+        {
+          "spellings": [
+            "--rebase",
+            "-r"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git pull-option-rebase",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--no-rebase"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git pull-option-norebase",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-q",
+            "--quiet"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git pull-option-q-quiet",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [--ff-only] [REMOTE [REFSPEC]]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -4382,11 +5626,11 @@
           }
         }
       },
-      "notes": "Git owner staging/rehearsal/ref evidence; global -C and allowlisted -c only: core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false. Native read disables uncontrolled pager/extdiff/textconv; GIT_OPTIONAL_LOCKS=0 separate. Session-authored default commits preserve unrelated staged work; explicit paths remain explicit. Config read-only: --get/--list never writes. Network operations retain auth/egress and unknown outcomes. Exact status output follows selected Git owner presentation; immutable ref retained separately.",
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/git_operations.go",
+        "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
         "tests": [
-          "lycaon/internal/tools/native/git_operations_test.go"
+          "lycaon/internal/tools/native/gitcmd/mutate_test.go"
         ],
         "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
@@ -4404,7 +5648,11 @@
         "git-pull-rejection",
         "git pull-option-C-global",
         "git pull-option-c-global",
-        "git pull-option-ffonly"
+        "git pull-option-ffonly",
+        "git pull-option-rebase",
+        "git pull-option-norebase",
+        "git pull-option-q-quiet",
+        "git pull-option-nopager-global"
       ]
     },
     {
@@ -4412,7 +5660,7 @@
       "aliases": [],
       "family": "git",
       "owner": "git",
-      "argv": "git [-C DIR] [-c KEY=VALUE ...] push [REMOTE [REFSPEC ...]]",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] push [-u] [--tags] [REMOTE [REFSPEC ...]]",
       "forms": [
         {
           "spellings": [
@@ -4439,10 +5687,56 @@
           "sample_values": [
             "core.fsmonitor=false"
           ]
+        },
+        {
+          "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git push-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-u",
+            "--set-upstream"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git push-option-u-setupstream",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--tags"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git push-option-tags",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-q",
+            "--quiet"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git push-option-q-quiet",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [REMOTE [REFSPEC ...]]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -4494,11 +5788,11 @@
           }
         }
       },
-      "notes": "Git owner staging/rehearsal/ref evidence; global -C and allowlisted -c only: core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false. Native read disables uncontrolled pager/extdiff/textconv; GIT_OPTIONAL_LOCKS=0 separate. Session-authored default commits preserve unrelated staged work; explicit paths remain explicit. Config read-only: --get/--list never writes. Network operations retain auth/egress and unknown outcomes. Exact status output follows selected Git owner presentation; immutable ref retained separately.",
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/git_operations.go",
+        "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
         "tests": [
-          "lycaon/internal/tools/native/git_operations_test.go"
+          "lycaon/internal/tools/native/gitcmd/mutate_test.go"
         ],
         "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
@@ -4515,7 +5809,11 @@
         "git-push-operands-valid",
         "git-push-rejection",
         "git push-option-C-global",
-        "git push-option-c-global"
+        "git push-option-c-global",
+        "git push-option-u-setupstream",
+        "git push-option-tags",
+        "git push-option-q-quiet",
+        "git push-option-nopager-global"
       ]
     },
     {
@@ -4550,10 +5848,57 @@
           "sample_values": [
             "core.fsmonitor=false"
           ]
+        },
+        {
+          "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git ls-remote-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--heads",
+            "-h"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git ls-remote-option-heads",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--tags",
+            "-t"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git ls-remote-option-tags",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-q",
+            "--quiet"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git ls-remote-option-q-quiet",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] [REMOTE [PATTERN ...]]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",
@@ -4601,11 +5946,11 @@
           }
         }
       },
-      "notes": "Git owner staging/rehearsal/ref evidence; global -C and allowlisted -c only: core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false. Native read disables uncontrolled pager/extdiff/textconv; GIT_OPTIONAL_LOCKS=0 separate. Session-authored default commits preserve unrelated staged work; explicit paths remain explicit. Config read-only: --get/--list never writes. Network operations retain auth/egress and unknown outcomes. Exact status output follows selected Git owner presentation; immutable ref retained separately.",
+      "notes": "One mutation path with the structured Git tools: GitMutations admits paths, the Git owner rehearses the operation in a scratch clone, the host reviews every file effect, refs and the work tree are revalidated, and source history records the change so it can be restored. Default commits take the session's authored paths plus paths it staged with git add and leave unrelated staged work staged; explicit paths stay explicit. Conflicts and failures report the observed repository state. Network forms gate the destination host through mediated egress and use the host's Git credential helper and proxy policy; force pushes are not supported.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/git_operations.go",
+        "implementation": "lycaon/internal/tools/native/gitcmd/mutate.go",
         "tests": [
-          "lycaon/internal/tools/native/git_operations_test.go"
+          "lycaon/internal/tools/native/gitcmd/mutate_test.go"
         ],
         "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
@@ -4622,7 +5967,11 @@
         "git-ls-remote-operands-valid",
         "git-ls-remote-rejection",
         "git ls-remote-option-C-global",
-        "git ls-remote-option-c-global"
+        "git ls-remote-option-c-global",
+        "git ls-remote-option-heads",
+        "git ls-remote-option-tags",
+        "git ls-remote-option-q-quiet",
+        "git ls-remote-option-nopager-global"
       ]
     },
     {
@@ -4669,7 +6018,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] SUBCOMMAND ARGS ...",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
         "1": "ordinary command failure",

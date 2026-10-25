@@ -43,7 +43,7 @@ func TestProgramGitPreservesOwnEditorAndHookFailures(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	f := newProgramFixture(t)
 	git := requiredExternal(t, "git")
-	opts, err := lycexec.AgentLaunchOptions(lycexec.HostLaunch("noninteractive fixture"), f.Dir, nil, nil, false)
+	opts, err := lycexec.AgentLaunchOptions(lycexec.HostLaunch("noninteractive fixture"), f.Dir, nil, nil)
 	testutil.FailErr(t, "build process environment", err)
 	environment, err := lycexec.ProcessEnvironment(opts)
 	testutil.FailErr(t, "resolve process environment", err)
