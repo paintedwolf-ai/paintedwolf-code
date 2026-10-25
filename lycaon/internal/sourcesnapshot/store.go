@@ -14,8 +14,6 @@ import (
 	"sync"
 	"time"
 
-	"golang.org/x/sync/semaphore"
-
 	"github.com/lycaon/lycaon/internal/backgroundwork"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/repochange"
@@ -56,11 +54,10 @@ type Store struct {
 	mu   sync.Mutex
 	jobs map[string]*buildJob
 
-	// Storage admission orders publications, which read their base chunks,
-	// against the sweep that removes unreferenced generations.
-	storageGateOnce sync.Once
-	storageGate     *semaphore.Weighted
-	rootStorage     map[string]*rootStorageGate
+	// pins keep manifests and chunks in use safe from the sweep.
+	pins        *pinSet
+	sweepMu     sync.Mutex
+	rootStorage map[string]*rootStorageGate
 
 	// scopes decides what each root's capture observes.
 	scopes ScopeProvider
@@ -80,7 +77,7 @@ func New(sqlDB db.Handle, blobs *sourceblob.Store, observationPath string, broke
 	s := &Store{
 		db: sqlDB, queries: db.New(sqlDB), blobs: blobs, observations: sourceobservation.New(observationPath), broker: broker,
 		jobs:   make(map[string]*buildJob),
-		scopes: defaultScopes(), deltas: newDeltaTracker(),
+		scopes: defaultScopes(), deltas: newDeltaTracker(), pins: newPinSet(),
 	}
 	s.deltas.admit = func(ctx context.Context, root, rel string) bool {
 		return s.scopeFor(ctx, Request{}, Root{Path: root}).AdmitPath(rel, false)
@@ -227,9 +224,6 @@ admit:
 	job.snapshot, job.err = s.converge(ctx, req)
 	if job.err == nil {
 		job.err = s.Sweep(ctx, time.Now().UTC().Add(-Retention))
-		if errors.Is(job.err, ErrMaintenanceDeferred) {
-			job.err = nil
-		}
 	}
 	return job.snapshot, job.err
 }
