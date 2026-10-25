@@ -379,3 +379,35 @@ func TestQuarantinePublicationFailureStillStopsWrites(t *testing.T) {
 		t.Fatalf("write after failure=%v", err)
 	}
 }
+
+func TestConfirmedAuditDamageSurvivesCancellation(t *testing.T) {
+	path, store := uncleanAuditStore(t)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	damage := storeIncompatible(RecoveryReasonIntegrityFailed, SchemaVersion, "confirmed before cancellation")
+	if err := finishIntegrityAudit(ctx, store, damage); !errors.Is(err, ErrStoreIncompatible) {
+		t.Fatalf("cancellation replaced confirmed damage: %v", err)
+	}
+	if store.Failure() == nil {
+		t.Fatal("confirmed damage did not quarantine writes")
+	}
+	testutil.FailErr(t, "close quarantined store", store.Close())
+	if _, err := Open(path); !errors.Is(err, ErrStoreIncompatible) {
+		t.Fatalf("restart lost confirmed damage: %v", err)
+	}
+}
+
+func TestAuditStampClearFailureDoesNotReportCompletion(t *testing.T) {
+	_, store := uncleanAuditStore(t)
+	_, err := store.writer.Exec(`PRAGMA query_only=ON`)
+	testutil.FailErr(t, "refuse audit stamp writes", err)
+	defer func() { _, _ = store.writer.Exec(`PRAGMA query_only=OFF`) }()
+	if err := finishIntegrityAudit(t.Context(), store, nil); err == nil || errors.Is(err, ErrStoreIncompatible) {
+		t.Fatalf("stamp failure must remain retryable: %v", err)
+	}
+	state, err := integrityAuditState(t.Context(), store.reader)
+	testutil.FailErr(t, "read unfinished audit marker", err)
+	if state != integrityAuditPendingValue {
+		t.Fatalf("unfinished audit marker=%q", state)
+	}
+}
