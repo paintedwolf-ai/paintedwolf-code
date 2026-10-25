@@ -12,11 +12,11 @@ import (
 
 	"github.com/lycaon/lycaon/internal/approvaloutcome"
 	"github.com/lycaon/lycaon/internal/commandprogram"
-	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type heldProbe struct {
@@ -181,14 +181,16 @@ func TestProgramEntrySourcesScriptAndDeduplicatesProgramDefinitions(t *testing.T
 	}
 	var programID string
 	testutil.FailErr(t, "read program id", f.database.QueryRowContext(t.Context(), `SELECT id FROM invocation_programs`).Scan(&programID))
-	page, err := f.recorder.ReadProgramPage(t.Context(), f.session, programID, invocation.ProgramExecutionPageQuery{Limit: 10})
-	testutil.FailErr(t, "read program page", err)
-	if len(page.Sources) != 2 {
-		t.Fatalf("sources = %+v, want root and sourced unit", page.Sources)
+	var sourceCount int
+	testutil.FailErr(t, "count program sources", f.database.QueryRowContext(t.Context(), `SELECT count(*) FROM invocation_program_sources WHERE program_id = ?`, programID).Scan(&sourceCount))
+	if sourceCount != 2 {
+		t.Fatalf("sourceCount = %d, want 2 (root and sourced unit)", sourceCount)
 	}
-	var externalExecs []invocation.ProgramExecutionSummary
+	page, err := f.recorder.ReadProgramPage(t.Context(), f.session, programID, "", 10)
+	testutil.FailErr(t, "read program page", err)
+	var externalExecs []api.CommandExecutionReceipt
 	for _, exec := range page.Executions {
-		if exec.OperationID == "external" {
+		if exec.Owner == "external" {
 			externalExecs = append(externalExecs, exec)
 		}
 	}
@@ -204,10 +206,10 @@ func TestProgramEntrySourcesScriptAndDeduplicatesProgramDefinitions(t *testing.T
 		t.Fatalf("invocation_program_definitions rows for external digest = %d, want 1", defCount)
 	}
 	for _, exec := range externalExecs {
-		binding, err := f.recorder.ReadProgramExecutionBinding(t.Context(), exec.ExecutionID)
+		binding, err := f.recorder.ReadProgramExecutionBinding(t.Context(), f.session, exec.ID)
 		testutil.FailErr(t, "read child binding", err)
-		if binding.DefinitionDigest != exec.DefinitionDigest || binding.DefinitionJSON == "" {
-			t.Fatalf("binding %s = %+v", exec.ExecutionID, binding)
+		if binding.DefinitionDigest != exec.DefinitionDigest || binding.DefinitionJSON == "" || binding.Invocation.SourceUnitID != "lib.sh" {
+			t.Fatalf("binding %s = %+v", exec.ID, binding)
 		}
 	}
 }
