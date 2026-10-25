@@ -136,6 +136,7 @@ func OpenHandler(bg *bgprocess.Registry) tools.ToolHandler {
 		}
 		facts := confine.SpawnFacts{Report: report, Network: egressLease.ObservedHosts}
 		if err := tctx.Effects.Secrets.HandOff(ctx, nil); err != nil {
+			egressLease.Close(ctx)
 			return "", toolrejection.HeldHandOffReject("terminal_open", err)
 		}
 		handle, err := bg.Terminal.StartPTY(
