@@ -52,7 +52,7 @@ class FreshAuthenticatedTurnTests(unittest.TestCase):
 
 class QuietCustodyCaseTests(unittest.TestCase):
     def execute(self, root, *, duplicate=False, stale_provider=False, changed_reply=False, stop_failure=False,
-                after_error=False, same_engine=False):
+                after_error=False, same_engine=False, startup_input=False):
         stack = ExitStack()
         self.addCleanup(stack.close)
         apps = [MagicMock(), MagicMock()]
@@ -66,6 +66,8 @@ class QuietCustodyCaseTests(unittest.TestCase):
                 app.observations.update(exit_code=0, capture_complete=True, output_limit=False)
             app.stop.side_effect = stop
             app.__exit__.side_effect = lambda *args, app=app: app.stop()
+        if startup_input:
+            apps[0].observations['onboarding'] = {'normal_action': True}
         if stop_failure:
             apps[1].stop.side_effect = RuntimeError('failed settlement')
         reservation, fixture = MagicMock(), MagicMock()
@@ -106,7 +108,7 @@ class QuietCustodyCaseTests(unittest.TestCase):
 
     def test_reused_engine_invocation_or_reply_and_new_turn_failure_never_pass(self):
         for changes in ({'same_engine': True}, {'duplicate': True}, {'changed_reply': True},
-                        {'stale_provider': True}, {'after_error': True}, {'stop_failure': True}):
+                        {'stale_provider': True}, {'after_error': True}, {'stop_failure': True}, {'startup_input': True}):
             with self.subTest(changes=changes), tempfile.TemporaryDirectory() as directory:
                 with self.assertRaises(owner.CaseFailed) as failure:
                     self.execute(Path(directory), **changes)
