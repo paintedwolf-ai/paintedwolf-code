@@ -36,12 +36,14 @@ class NativeReader:
         self.locked = False
         self.rows = [('sleep', 'private diagnostic', 'private diagnostic', 'block', os.getuid(), 300)]
         self.calls = []
+        self.deadlines = []
 
     def close(self):
         self.closes += 1
 
-    def call(self, path, interface, method, args, signature, *, user=False, destination=None):
+    def call(self, path, interface, method, args, signature, *, user=False, destination=None, deadline=None):
         self.calls.append((destination, method, user))
+        self.deadlines.append(deadline)
         if method == 'GetNameOwner':
             name = args[1][0]
             if name not in self.names:
@@ -148,6 +150,17 @@ class NativeSessionTests(unittest.TestCase):
         self.session['Desktop'] = 'KDE'
         with self.assertRaises(CaseUnavailable):
             self.observer()
+
+    def test_one_deadline_reaches_every_rpc_and_success_cannot_outlive_it(self):
+        observer = self.observer()
+        self.reader.deadlines.clear()
+        with patch('scripts.linux_release.installed_cases.native_session.time.monotonic', return_value=10):
+            observer.observe(deadline=20)
+        self.assertTrue(self.reader.deadlines)
+        self.assertEqual(set(self.reader.deadlines), {20})
+        with patch('scripts.linux_release.installed_cases.native_session.time.monotonic', return_value=21):
+            with self.assertRaises(CaseUnavailable):
+                observer.observe(deadline=20)
 
     def test_foreign_uid_requires_root_and_an_explicit_reader(self):
         foreign = os.getuid() + 1

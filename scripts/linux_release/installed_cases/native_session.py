@@ -5,6 +5,7 @@ import os
 from copy import deepcopy
 from pathlib import Path
 import re
+import time
 
 from .. import installed_gnome
 from ..installed_input.session_wire import LOCKER_NAMES
@@ -30,7 +31,7 @@ def kernel_owner(pid, uid):
 class NativeSessionObserver:
     """Pin bus owners, kernel birth facts and the exact captured local seat."""
 
-    def __init__(self, session, *, reader=None, owner=kernel_owner, shell=None, expected_uid=None):
+    def __init__(self, session, *, reader=None, owner=kernel_owner, shell=None, expected_uid=None, deadline=None):
         self.uid = os.getuid() if expected_uid is None else expected_uid
         if (type(self.uid) is not int or not 0 <= self.uid < 1 << 31
                 or self.uid != os.getuid() and (os.geteuid() != 0 or reader is None)):
@@ -47,12 +48,14 @@ class NativeSessionObserver:
         self.owns_reader = reader is None
         self.closed = False
         self.reader, self.owner = reader or Reader(), owner
-        self.shell = shell or (lambda: installed_gnome.owner(self.reader, expected_uid=self.uid))
+        self.default_shell = shell is None
+        self.shell = shell or (lambda *, deadline=None: installed_gnome.owner(
+            self.reader, expected_uid=self.uid, deadline=deadline))
         self.session = {key: session[key] for key in ('id', 'User', 'Type', 'Seat')}
         self.locker = ('org.gnome.ScreenSaver', '/org/gnome/ScreenSaver')
         try:
-            self.authorities = self._authorities()
-            self.initial = self.observe()
+            self.authorities = self._authorities(deadline)
+            self.initial = self.observe(deadline=deadline)
         except BaseException:
             self.close()
             raise
@@ -71,14 +74,14 @@ class NativeSessionObserver:
     def __exit__(self, *_):
         self.close()
 
-    def _call(self, destination, path, interface, method, args, signature, *, user=False):
+    def _call(self, destination, path, interface, method, args, signature, *, user=False, deadline=None):
         return self.reader.call(path, interface, method, args, signature,
-                                user=user, destination=destination).unpack()
+            user=user, destination=destination, **({} if deadline is None else {'deadline': deadline})).unpack()
 
-    def _bus_owner(self, name, uid, *, user=False, optional=False):
+    def _bus_owner(self, name, uid, *, user=False, optional=False, deadline=None):
         try:
             unique, = self._call(DBUS, DBUS_PATH, DBUS, 'GetNameOwner',
-                                 ('(s)', (name,)), '(s)', user=user)
+                                 ('(s)', (name,)), '(s)', user=user, deadline=deadline)
         except CallFailure as error:
             if optional and error.name == DBUS + '.Error.NameHasNoOwner':
                 return None
@@ -86,14 +89,14 @@ class NativeSessionObserver:
         if not isinstance(unique, str) or not UNIQUE.fullmatch(unique):
             raise ValueError('native session bus returned an invalid unique owner')
         pid, = self._call(DBUS, DBUS_PATH, DBUS, 'GetConnectionUnixProcessID',
-                          ('(s)', (unique,)), '(u)', user=user)
+                          ('(s)', (unique,)), '(u)', user=user, deadline=deadline)
         return {'name': name, 'unique': unique, 'process': self.owner(pid, uid)}
 
-    def _authorities(self):
-        shell = self.shell()
+    def _authorities(self, deadline=None):
+        shell = self.shell(deadline=deadline) if self.default_shell else self.shell()
         locker = None
         for name in LOCKER_NAMES:
-            candidate = self._bus_owner(name, self.uid, user=True, optional=True)
+            candidate = self._bus_owner(name, self.uid, user=True, optional=True, deadline=deadline)
             if (candidate is not None and candidate['unique'] == shell['unique_owner']
                     and candidate['process']['pid'] == shell['pid']
                     and candidate['process']['start_time_ticks'] == shell['start_time_ticks']):
@@ -101,27 +104,27 @@ class NativeSessionObserver:
                 break
         if locker is None:
             raise ValueError('native locker is not the independently selected GNOME shell')
-        return {'login': self._bus_owner(LOGIN, 0), 'locker': locker, 'shell': shell}
+        return {'login': self._bus_owner(LOGIN, 0, deadline=deadline), 'locker': locker, 'shell': shell}
 
-    def _property(self, path, name, signature):
+    def _property(self, path, name, signature, deadline=None):
         reply = self.reader.call(path, 'org.freedesktop.DBus.Properties', 'Get',
             ('(ss)', (LOGIN + '.Session', name)), '(v)',
-            destination=self.authorities['login']['unique'])
+            destination=self.authorities['login']['unique'], **({} if deadline is None else {'deadline': deadline}))
         value = reply.get_child_value(0).get_variant()
         if value.get_type_string() != signature:
             raise ValueError('native session returned an invalid property signature')
         return value.unpack()
 
-    def observe(self):
+    def observe(self, *, deadline=None):
         if self.closed:
             raise ValueError('native session observer is closed')
-        if self._authorities() != self.authorities:
+        if self._authorities(deadline) != self.authorities:
             raise ValueError('captured native session authority changed')
         path, = self._call(self.authorities['login']['unique'], MANAGER,
-            LOGIN + '.Manager', 'GetSession', ('(s)', (self.session['id'],)), '(o)')
+            LOGIN + '.Manager', 'GetSession', ('(s)', (self.session['id'],)), '(o)', deadline=deadline)
         if not isinstance(path, str) or not path.startswith(MANAGER + '/session/'):
             raise ValueError('native session has an invalid object path')
-        values = {name: self._property(path, name, signature) for name, signature in
+        values = {name: self._property(path, name, signature, deadline) for name, signature in
                   [('Id', 's'), ('User', '(uo)'), ('Seat', '(so)'), ('Type', 's'),
                    ('Remote', 'b'), ('Active', 'b'), ('LockedHint', 'b'), ('TimestampMonotonic', 't')]}
         if (not isinstance(values['User'], tuple) or len(values['User']) != 2
@@ -140,9 +143,11 @@ class NativeSessionObserver:
         if hasattr(self, 'initial') and lifecycle != self.initial['lifecycle']:
             raise ValueError('captured native session lifecycle changed')
         active, = self._call(self.authorities['locker']['unique'], self.locker[1],
-            self.locker[0], 'GetActive', None, '(b)', user=True)
-        if type(active) is not bool or self._authorities() != self.authorities:
+            self.locker[0], 'GetActive', None, '(b)', user=True, deadline=deadline)
+        if type(active) is not bool or self._authorities(deadline) != self.authorities:
             raise ValueError('captured native locker authority changed')
+        if deadline is not None and time.monotonic() >= deadline:
+            raise CaseUnavailable('typed-native-session-observation-deadline')
         return {'session': deepcopy(self.session), 'session_object': path, 'lifecycle': lifecycle,
                 'authorities': deepcopy(self.authorities), 'locked_hint': values['LockedHint'],
                 'locker_active': active}

@@ -106,12 +106,13 @@ class NativeDesktopAuthorityTests(unittest.TestCase):
                         with self.assertRaises(ValueError):
                             gnome.physical_image()
 
-    def owner(self, *, executable=None, names=None, births=None, image_after=None, expected_uid=None):
+    def owner(self, *, executable=None, names=None, births=None, image_after=None, expected_uid=None, deadline=None):
         names = iter(names or [':1.2', ':1.2'])
         pids = iter([200, 200])
         def call(path, interface, method, args, signature, **kwargs):
             self.assertTrue(kwargs['user'])
             self.assertEqual(kwargs['destination'], 'org.freedesktop.DBus')
+            self.assertEqual(kwargs.get('deadline'), deadline)
             value = next(names) if method == 'GetNameOwner' else next(pids)
             return SimpleNamespace(unpack=lambda: (value,))
         reader = SimpleNamespace(call=call)
@@ -125,12 +126,13 @@ class NativeDesktopAuthorityTests(unittest.TestCase):
                 gnome.os, 'close') as close, patch.object(Path, 'stat', process_stat), patch.object(
                 Path, 'read_text', side_effect=lambda *args: '200 (shell) ' + ' '.join(['S', '1', *(['0'] * 17), next(births)])):
             try:
-                return gnome.owner(reader, expected_uid=expected_uid)
+                return gnome.owner(reader, expected_uid=expected_uid, deadline=deadline)
             finally:
                 close.assert_called_once_with(99)
 
     def test_shell_unique_owner_kernel_birth_and_selected_image_must_all_match(self):
         self.assertEqual(self.owner()['unique_owner'], ':1.2')
+        self.assertEqual(self.owner(deadline=123)['unique_owner'], ':1.2')
         with patch.object(gnome.os, 'geteuid', return_value=0):
             self.assertEqual(self.owner(expected_uid=os.getuid() + 1)['unique_owner'], ':1.2')
         for changes in ({'executable': info(inode=3)}, {'names': [':1.2', ':1.3']},

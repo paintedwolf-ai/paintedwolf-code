@@ -30,14 +30,14 @@ SIGNATURES = {
 class Monitor:
     def __init__(self, account, vm_id):
         validate_account(account, vm_id=vm_id)
-        self.reader = Reader()
+        self.deadline = time.monotonic() + 150
+        self.reader = Reader(deadline=self.deadline)
         self.connection = None
         self.rows, self.calls = [], set()
         self.failure = None
         self.transaction = None
         self.lock = threading.RLock()
         self.closed = False
-        self.deadline = time.monotonic() + 150
         try:
             self.authority = self._call('GetNameOwner', AUTHORITY_NAME, 's')
             process = self.peer(self.authority)
@@ -55,7 +55,8 @@ class Monitor:
                       "type='signal',sender='org.freedesktop.DBus',interface='org.freedesktop.DBus',member='NameOwnerChanged'"]
             self.connection.call_sync(DBUS, DBUS_PATH, 'org.freedesktop.DBus.Monitoring',
                 'BecomeMonitor', self.reader.glib.Variant('(asu)', (rules, 0)),
-                self.reader.glib.VariantType.new('()'), self.reader.gio.DBusCallFlags.NONE, 5000, None)
+                self.reader.glib.VariantType.new('()'), self.reader.gio.DBusCallFlags.NONE,
+                self.reader.timeout_ms(), None)
             self._authority()
         except BaseException:
             self.close()
@@ -163,6 +164,7 @@ class Monitor:
             rows, self.rows = self.rows, []
             for row in rows:
                 self.transaction.observe(row)
+            self.reader.timeout_ms()
             if self.transaction.finished:
                 return self.transaction.witness()
             return self.transaction.pending() if self.transaction.begin is not None else None

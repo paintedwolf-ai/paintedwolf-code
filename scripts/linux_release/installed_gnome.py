@@ -29,7 +29,7 @@ def physical_image(image=IMAGE):
     return info
 
 
-def owner(reader=None, *, expected_uid=None):
+def owner(reader=None, *, expected_uid=None, deadline=None):
     expected_uid = os.getuid() if expected_uid is None else expected_uid
     if (type(expected_uid) is not int or not 0 <= expected_uid < 1 << 31
             or expected_uid != os.getuid() and (os.geteuid() != 0 or reader is None)):
@@ -38,7 +38,7 @@ def owner(reader=None, *, expected_uid=None):
         def bus_call(method, argument, signature):
             result = reader.call('/org/freedesktop/DBus', 'org.freedesktop.DBus', method,
                 ('(s)', (argument,)), '(' + signature + ')', user=True,
-                destination='org.freedesktop.DBus').unpack()
+                destination='org.freedesktop.DBus', **({} if deadline is None else {'deadline': deadline})).unpack()
             if not isinstance(result, tuple) or len(result) != 1:
                 raise ValueError('GNOME bus owner returned an invalid protocol shape')
             return result[0]
