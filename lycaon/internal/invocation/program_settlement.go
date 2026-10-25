@@ -47,6 +47,9 @@ func (r *SQLRecorder) startNativeOwner(ctx context.Context, operation toolcontra
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err = chargeProgramTrace(ctx, tx, in.Identity.ProgramID, 1, int64(len(reviewedArgumentsDigest)+len(reviewedReference)+len(reviewedRepresentation)+len(operation.Command())+len(operation.Mode())+len(classes)), traceChargeNonTerminal); err != nil {
+		return err
+	}
 	result, err := tx.ExecContext(ctx, `UPDATE invocation_program_executions SET state='running',owner_started=1,effect_certainty='unknown',reviewed_arguments_digest=?,reviewed_arguments_ref=?,reviewed_arguments_representation=?,native_command=?,effect_mode=?,effect_classes_json=? WHERE id=? AND program_id=? AND node_id=? AND parent_execution_id=? AND actor_id=? AND scope_json=? AND definition_digest=? AND state IN ('prepared','waiting') AND EXISTS (SELECT 1 FROM invocation_programs p JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE p.id=invocation_program_executions.program_id AND p.state IN ('running','waiting') AND r.status='running' AND r.session_id=? AND r.tool_call_id=?)`, reviewedArgumentsDigest, reviewedReference, reviewedRepresentation, operation.Command(), operation.Mode(), string(classes), in.Identity.ExecutionID, in.Identity.ProgramID, in.Identity.NodeID, in.Identity.ParentExecutionID, in.ActorID, string(scope), operation.Definition().Digest(), in.SessionID, modelCallID)
 	if err != nil {
 		return err
@@ -65,11 +68,26 @@ func (r *SQLRecorder) WaitChild(ctx context.Context, executionID, approvalRefere
 	if approvalReference == "" {
 		return fmt.Errorf("waiting child requires authoritative wait reference")
 	}
-	result, err := r.database.ExecContext(ctx, `UPDATE invocation_program_executions SET state='waiting',approval_ref=? WHERE id=? AND state='prepared'`, approvalReference, executionID)
+	tx, err := r.database.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
-	return oneProgramTransition(result)
+	defer func() { _ = tx.Rollback() }()
+	var programID string
+	if err = tx.QueryRowContext(ctx, `SELECT program_id FROM invocation_program_executions WHERE id=? AND state='prepared'`, executionID).Scan(&programID); err != nil {
+		return err
+	}
+	if err = chargeProgramTrace(ctx, tx, programID, 1, int64(len(approvalReference)), traceChargeNonTerminal); err != nil {
+		return err
+	}
+	result, err := tx.ExecContext(ctx, `UPDATE invocation_program_executions SET state='waiting',approval_ref=? WHERE id=? AND state='prepared'`, approvalReference, executionID)
+	if err != nil {
+		return err
+	}
+	if err = oneProgramTransition(result); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // SettleChild preserves the exact typed owner result independently of a later
@@ -86,9 +104,9 @@ func (r *SQLRecorder) SettleChild(ctx context.Context, executionID string, in to
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	var owner, state string
+	var programID, owner, state string
 	var started bool
-	if err = tx.QueryRowContext(ctx, `SELECT owner,state,owner_started FROM invocation_program_executions WHERE id=?`, executionID).Scan(&owner, &state, &started); err != nil {
+	if err = tx.QueryRowContext(ctx, `SELECT program_id,owner,state,owner_started FROM invocation_program_executions WHERE id=?`, executionID).Scan(&programID, &owner, &state, &started); err != nil {
 		return err
 	}
 	result := in.Result
@@ -108,6 +126,10 @@ func (r *SQLRecorder) SettleChild(ctx context.Context, executionID string, in to
 	var conflict toolcontract.RevisionConflict
 	if in.Conflict != nil {
 		conflict = *in.Conflict
+	}
+	settleBytes := int64(len(result.Terminal) + len(result.StopCode) + len(in.HostStopCode) + len(result.EffectCertainty) + len(evidence.Kind) + len(evidence.EvidenceRef) + len(evidence.OwnerRef) + len(evidence.RecoveryRef) + len(evidence.HeldVersionID) + len(in.AcceptedRevision) + len(in.PublishedRevision) + len(in.DetailReference) + len(in.JobHandle) + len(conflict.Path) + len(conflict.ExpectedRevision) + len(conflict.ObservedRevision) + 32)
+	if err = chargeProgramTrace(ctx, tx, programID, 1, settleBytes, traceChargeChildSettlement); err != nil {
+		return err
 	}
 	transition, err := tx.ExecContext(ctx, `UPDATE invocation_program_executions SET state=?,owner_invoked=?,status_code=?,stop_code=?,host_stop_code=?,output_publishable=?,complete=?,publication_eligible=?,publication_basis=?,effect_certainty=?,evidence_kind=?,evidence_ref=?,owner_ref=?,recovery_ref=?,held_version_id=?,accepted_revision=?,published_revision=?,detail_ref=?,job_handle=?,conflict_path=?,conflict_expected_revision=?,conflict_observed_revision=?,settled_at=? WHERE id=? AND state IN ('prepared','waiting','running')`, string(result.Terminal), in.OwnerInvoked, result.Status, result.StopCode, in.HostStopCode, in.OutputPublishable, result.Complete, result.PublicationEligible, int(result.PublicationBasis), string(result.EffectCertainty), evidence.Kind, evidence.EvidenceRef, evidence.OwnerRef, evidence.RecoveryRef, evidence.HeldVersionID, in.AcceptedRevision, in.PublishedRevision, in.DetailReference, in.JobHandle, conflict.Path, conflict.ExpectedRevision, conflict.ObservedRevision, time.Now().UTC().Format(time.RFC3339Nano), executionID)
 	if err != nil {
@@ -139,6 +161,9 @@ func (r *SQLRecorder) SettleProgram(ctx context.Context, programID string, in to
 	}
 	if count != 0 {
 		return fmt.Errorf("program has %d unsettled children", count)
+	}
+	if err = chargeProgramTrace(ctx, tx, programID, 1, int64(len(in.State)+len(in.StopCode)+len(in.DetailReference)+32), traceChargeProgramSettlement); err != nil {
+		return err
 	}
 	transition, err := tx.ExecContext(ctx, `UPDATE invocation_programs SET state=?,status_code=?,stop_code=?,detail_ref=?,settled_at=? WHERE id=? AND state IN ('running','waiting')`, in.State, in.Status, in.StopCode, in.DetailReference, time.Now().UTC().Format(time.RFC3339Nano), programID)
 	if err != nil {

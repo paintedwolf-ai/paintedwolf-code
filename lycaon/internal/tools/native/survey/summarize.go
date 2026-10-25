@@ -131,6 +131,8 @@ type SummarizeResponse struct {
 type SummarizeRequest struct {
 	Task, Content, Path, Pattern, Cursor string
 	Paths                                []string
+	// Observe sees every file the briefing opens, before it reads it.
+	Observe projectpaths.ReadObserver
 }
 
 func (t *SummarizeTool) Run(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
@@ -230,6 +232,7 @@ func (t *SummarizeTool) Summarize(ctx context.Context, in SummarizeRequest, tctx
 	rerank := t.Rerank.WithLedger(rerankLedger)
 	reads := projectpaths.NewReadSession(t.Boundary, tctx)
 	defer reads.Close()
+	reads.Observe(in.Observe)
 	gatherer := newSummarizeGatherer(t.Boundary, reads, t.Caps, tctx, t.Catalog, rerank)
 	defer gatherer.trees.closeTrees()
 	engine := summarize.NewEngine(gatherer, t.Caps)

@@ -86,12 +86,25 @@ pub(crate) async fn den_notify_send(
 
 /// Nonpositive counts clear the dock badge.
 #[tauri::command]
-pub(crate) fn den_set_badge_count(app: tauri::AppHandle, count: i64) -> Result<(), String> {
-    let Some(window) = app.get_webview_window("main") else {
-        return Err("Main window is unavailable".into());
-    };
-    let value = if count > 0 { Some(count) } else { None };
-    window.set_badge_count(value).map_err(|e| e.to_string())
+pub(crate) async fn den_set_badge_count(app: tauri::AppHandle, count: i64) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    {
+        // Linux launchers read the LauncherEntry protocol the shell publishes.
+        let (reply, receiver) = tokio::sync::oneshot::channel();
+        app.run_on_main_thread(move || {
+            let _ = reply.send(linux::launcher::set_on_main_thread(count));
+        })
+        .map_err(|e| e.to_string())?;
+        receiver.await.map_err(|_| "launcher count was not published".to_string())?
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let Some(window) = app.get_webview_window("main") else {
+            return Err("Main window is unavailable".into());
+        };
+        let value = if count > 0 { Some(count) } else { None };
+        window.set_badge_count(value).map_err(|e| e.to_string())
+    }
 }
 
 #[tauri::command]

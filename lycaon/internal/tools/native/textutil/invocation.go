@@ -26,11 +26,12 @@ type invocation struct {
 	spec    toolcontract.CommandSpecification
 	argv    commandprogram.BoundArgv
 	// streams has non-nil Input and Error; Output is reached through out.
-	streams  commandprogram.Streams
-	out      *nativeutility.Output
-	errors   strings.Builder
-	status   int
-	releases []func()
+	streams   commandprogram.Streams
+	out       *nativeutility.Output
+	errors    strings.Builder
+	status    int
+	published bool
+	releases  []func()
 }
 
 func newInvocation(ctx context.Context, p Prepared, ports Ports, streams commandprogram.Streams) *invocation {
@@ -162,19 +163,14 @@ func (inv *invocation) capture(paths *projectpaths.ProgramPaths, operand command
 	if err := tc.ObserveCredentialRead(inv.ctx, bound.Resolved.Abs, captured.Path, captured.Content); err != nil {
 		return nil, nil, fmt.Errorf("record credential file read: %w", err)
 	}
-	if err := inv.recordPin(captured.Revision); err != nil {
+	execution := inv.request.Invocation.Identity.ExecutionID
+	if execution == "" {
+		return nil, nil, errors.New("file operands require a program execution identity")
+	}
+	if err := inv.owners.Pins.AppendRevisionPin(inv.ctx, execution, captured.Revision); err != nil {
 		return nil, nil, err
 	}
 	return io.NopCloser(strings.NewReader(captured.Content)), &captured.Revision, nil
-}
-
-// recordPin retains every capture of this execution, in order, before use.
-func (inv *invocation) recordPin(pin toolcontract.ExecutionRevision) error {
-	execution := inv.request.Invocation.Identity.ExecutionID
-	if execution == "" {
-		return errors.New("file operands require a program execution identity")
-	}
-	return inv.owners.Pins.AppendRevisionPin(inv.ctx, execution, pin)
 }
 
 // pathRejection projects a path owner's typed refusal with the operand span.

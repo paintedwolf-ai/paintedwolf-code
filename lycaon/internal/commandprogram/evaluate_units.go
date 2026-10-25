@@ -52,6 +52,9 @@ func (e *evaluation) Substitute(ctx context.Context, scope ExpansionScope, reque
 // owner, then runs it in the current frame. A capture, encoding or syntax
 // refusal latches before any sourced statement; earlier parent effects stay.
 func (f *frame) source(ctx context.Context, s commandsurface.Statement, fields Fields) error {
+	if len(fields) > 1 && fields[1].Value != "--" && strings.HasPrefix(fields[1].Value, "-") {
+		return f.builtinStatus(s.SyntaxLocation, "source", 2)
+	}
 	spec, _, err := ResolveCommand(fields)
 	if err != nil {
 		return err
@@ -95,6 +98,12 @@ func (f *frame) source(ctx context.Context, s commandsurface.Statement, fields F
 		var refusal *EvaluationRefusal
 		errors.As(err, &refusal)
 		return f.refuse(refusal.Node, refusal.Code, refusal.Expected, nil)
+	}
+	if registrar, ok := f.e.ports.Executions.(SourceUnitRegistrar); ok {
+		if err := registrar.RegisterSourceUnit(ctx, run.inv, captured, lease.Plan); err != nil {
+			run.settle(ownerResult(err), err)
+			return err
+		}
 	}
 	g := *f
 	g.parent = run.inv

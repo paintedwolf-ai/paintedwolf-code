@@ -58,6 +58,9 @@ func (t *CommandTool) Run(ctx context.Context, args map[string]any, tctx tools.T
 		t.FailureTracker = NewCommandFailureTracker()
 	}
 	if !CaptureInvocation(args) {
+		if t.Programs == nil {
+			return "", fmt.Errorf("command program runtime is not configured")
+		}
 		return t.Programs.Run(ctx, args, tctx)
 	}
 	res, outcome, err := t.confined().Run(ctx, args, tctx)
