@@ -8,7 +8,7 @@
   "reviewed_commit": "d343c29b138815e0e1f8332fb8fb8ee1dfca57f1",
   "ceiling": 362,
   "boundaries": {
-    "lycaon/internal/projectremoval/recovery_test.go": "2642c67c67e3bbde0f03d024d5e10b9fce68ee69ecf3b67b5e43022ee9426561"
+    "lycaon/internal/projectremoval/recovery_test.go": "864534ac548500a7f41a76afd8c9872fcf567076f7f91d15b065fafd867f95d8"
   },
   "reviewed_shape": "5635b6c7a19c97d2ab4773ff08746020037bdbaca2d4600b30446282209e2f47"
 }
