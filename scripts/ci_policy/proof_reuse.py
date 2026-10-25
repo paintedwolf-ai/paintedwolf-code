@@ -53,12 +53,20 @@ def select(matrix, proofs, run, repository, tree):
     return {"include": [row for row in matrix["include"] if row["lane"] not in names]}, reused
 
 
+def merge_group_run(run):
+    event = run.get("event")
+    return event == "merge_group" or (
+        event == "workflow_dispatch"
+        and (run.get("head_branch") or "").startswith("gh-readonly-queue/main/")
+    )
+
+
 def candidates(repository, tree):
     since = (datetime.now(timezone.utc) - timedelta(days=14)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    query = f"event=merge_group&status=success&created=%3E%3D{since}&per_page=20"
+    query = f"status=success&created=%3E%3D{since}&per_page=40"
     runs = api(f"repos/{repository}/actions/workflows/ci.yml/runs?{query}")["workflow_runs"]
     for run in runs:
-        if (run.get("event") != "merge_group" or run.get("conclusion") != "success"
+        if (not merge_group_run(run) or run.get("conclusion") != "success"
                 or run.get("path") != ".github/workflows/ci.yml"
                 or (run.get("head_repository") or {}).get("full_name") != repository):
             continue
