@@ -83,8 +83,8 @@ export const CLIENT_NOTICES: Readonly<Record<ClientNoticeKind, ClientNoticeCopy>
   },
   credential_vault_custodian_unavailable: {
     title: "Credential custodian is unavailable",
-    message: "Your encrypted credentials are preserved. Restore the Painted Wolf Code vault identity service, then try again from the installed desktop app.",
-    suggestedAction: "The custodian is still unavailable. Restore the service and reopen the installed app.",
+    message: "Your encrypted credentials are preserved. Restore access to this device's protected credential storage, then try again from the installed desktop app.",
+    suggestedAction: "The custodian is still unavailable. Restore access and reopen the installed app.",
     scope: "app",
   },
   credential_vault_identity_missing: {
