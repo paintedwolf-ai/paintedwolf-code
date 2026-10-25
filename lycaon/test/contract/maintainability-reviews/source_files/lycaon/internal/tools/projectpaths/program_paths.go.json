@@ -4,13 +4,13 @@
   "kind": "runtime_service",
   "workstream": "portable-command-paths",
   "disposition": "retain",
-  "reason": "Retain one invocation path frame at the measured 342 lines. Its frozen scope, initial/current directory identity, and exact operand bindings must share authority before bytes or effect coordinates are exposed. The added Rebind boundary creates an admitted child frame after an approval, while AdoptCwd carries only the approved directory identity forward after cd. Moving either to a forwarding service would split directory state from the path authority that checks it. Command projection and bounded output remain in distinct files; native owners retain publication and attribution. Real filesystem identity, symlink/dot-dot, held cwd, native/process interchange, bounded partial output, and the production outside-folder approval fixtures support this decision. Further growth or a new frame dependency requires renewed review.",
-  "reviewed_commit": "a1e3ed6a783c7a3b32622e3b646405cec3781934",
+  "reason": "Retain one invocation path frame at the measured 342 lines. Its frozen scope, initial/current directory identity, and exact operand bindings must share authority before bytes or effect coordinates are exposed. The added Rebind boundary creates an admitted child frame after an approval, while AdoptCwd carries only the approved directory identity forward after cd. Moving either to a forwarding service would split directory state from the path authority that checks it. Command projection and bounded output remain in distinct files; native owners retain publication and attribution. Real filesystem identity, symlink/dot-dot, held cwd, native/process interchange, bounded partial output, and the production outside-folder approval fixtures support this decision. Further growth or a new frame dependency requires renewed review. The inherited path test changes bind actual argv instead of legacy arguments and prove the retained cwd by file identity after replacement; the focused projectpaths and production wiring digests passed with those contracts.",
+  "reviewed_commit": "befd2a639e1c971a33a7d47c036df0454fa70243",
   "ceiling": 342,
   "boundaries": {
-    "lycaon/internal/tools/projectpaths/program_paths_test.go": "1a90f395caa4a3ee7d4a747192bd046f4ef41f7a47acf0bde71854ca9ecf2331",
+    "lycaon/internal/tools/projectpaths/program_paths_test.go": "214a0edf92b38e1eff246c3ef701b002a7f676196a9d5600350922b0f90dd922",
     "lycaon/internal/tools/projectpaths/path_output_test.go": "d2e336465aa71b629c262fc995f0d7b96636d6d985502044ad2fcd5fcbd44483",
-    "lycaon/internal/tools/projectpaths/program_interchange_test.go": "a77ec2ad77163bb115a316572f9e27942b9f8c76cfc40d091d51f5fce887b80f",
+    "lycaon/internal/tools/projectpaths/program_interchange_test.go": "e4b421254633eeaec332579b023d2044d02fdd6b33e5fe22215a245974144538",
     "lycaon/test/wiring/command_native_outside_approval_e2e_test.go": "dc87361567c65e77ffe922cf3a0462f8840a4c67db8118b9a3efac12db4f596f"
   }
 }
