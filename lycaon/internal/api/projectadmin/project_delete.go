@@ -12,7 +12,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Removal) deleteProject(ctx context.Context, id string, force bool) error {
+func (s *Removal) deleteProject(ctx context.Context, id string, force bool, report func(wire.ProjectRemovalProgress)) error {
 	release, waitForDrain, err := s.acquireProjectDeletion(ctx, id)
 	if err != nil {
 		return err
@@ -46,7 +46,9 @@ func (s *Removal) deleteProject(ctx context.Context, id string, force bool) erro
 	} else if !s.MutationGate.MutationDrained(id) {
 		return project.ErrProjectBusy
 	}
-	if err := s.Sessions.Chats.RetireForProjectDelete(ctx, id); err != nil {
+	if err := s.Sessions.Chats.RetireForProjectDelete(ctx, id, func(completed, total int) {
+		report(wire.ProjectRemovalProgress{Phase: "chats", Completed: completed, Total: total})
+	}); err != nil {
 		return err
 	}
 	mutationCtx := ctx
@@ -57,6 +59,7 @@ func (s *Removal) deleteProject(ctx context.Context, id string, force bool) erro
 	if err != nil {
 		return err
 	}
+	report(wire.ProjectRemovalProgress{Phase: "project_data"})
 	if err := s.Registry.Delete(mutationCtx, id); err != nil {
 		return err
 	}
@@ -65,6 +68,7 @@ func (s *Removal) deleteProject(ctx context.Context, id string, force bool) erro
 			slog.WarnContext(ctx, "remove managed secrets after project delete", "project_id", id, "err", err)
 		}
 	}
+	report(wire.ProjectRemovalProgress{Phase: "files"})
 	s.finishProjectDeletion(ctx, p, dependents, removedRootPaths)
 	return nil
 }

@@ -3419,12 +3419,16 @@ type HealthResponse struct {
 	PreviousAppVersion string `json:"previous_app_version,omitempty"`
 	// PRAGMA user_version read from the live store when status is recovery. Omitted on ordinary health.
 	StoreSchemaVersion int `json:"store_schema_version,omitempty"`
-	// Closed reason the store cannot be served. Present when status is recovery.
+	// Closed reason the store cannot be served. Present when status is recovery. insufficient_space reports a capacity refusal or exhausted storage; storage_unavailable reports an access or I/O failure. Neither implies database corruption.
 	RecoveryReason string `json:"recovery_reason,omitempty"`
 	// Human-readable sentence matching the recovery reason. Present when status is recovery.
 	RecoveryDetail string `json:"recovery_detail,omitempty"`
 	// Whether a local recovery snapshot has valid metadata and a supported schema upgrade route. Restore verifies all payload hashes before use. Always false on ordinary health.
 	RecoverySnapshotAvailable bool `json:"recovery_snapshot_available"`
+	// Free bytes the upgrade and its recovery point need. Present when an insufficient_space preflight refusal has an estimate.
+	RecoverySpaceNeededBytes int64 `json:"recovery_space_needed_bytes,omitempty"`
+	// Free bytes the volume held when the upgrade was refused. Present when an insufficient_space preflight refusal has an estimate.
+	RecoverySpaceAvailableBytes int64 `json:"recovery_space_available_bytes,omitempty"`
 	// RFC 3339 UTC creation time of the recovery snapshot when available. Omitted when recovery_snapshot_available is false.
 	RecoverySnapshotAt time.Time `json:"recovery_snapshot_at,omitempty"`
 }
@@ -4605,6 +4609,13 @@ type ProjectRemovalExtension struct {
 	Reasons     []ProjectRemovalReason `json:"reasons"`
 }
 
+// ProjectRemovalProgress Live host-owned progress; absent once the recorded operation settles.
+type ProjectRemovalProgress struct {
+	Phase     string `json:"phase"`
+	Completed int    `json:"completed"`
+	Total     int    `json:"total"`
+}
+
 // ProjectRemovalReason
 type ProjectRemovalReason struct {
 	Code      string `json:"code"`
@@ -4621,6 +4632,7 @@ type ProjectRemovalRequest struct {
 
 // ProjectRemovalResult
 type ProjectRemovalResult struct {
+	Progress     *ProjectRemovalProgress   `json:"progress,omitempty"`
 	Assessment   *ProjectRemovalAssessment `json:"assessment,omitempty"`
 	OperationID  string                    `json:"operation_id"`
 	ProjectID    string                    `json:"project_id"`

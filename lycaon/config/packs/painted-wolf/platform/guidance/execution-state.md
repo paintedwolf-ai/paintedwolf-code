@@ -2,7 +2,7 @@
 {% else %}## Execution observations
 
 Bounded observations from retained history for this user intent; omitted fields are unknown.
-{% if operations %}Rejected operations without a later successful call with matching tool and arguments:
+{% if operations %}Rejected operations without a later successful retry or change to the same path:
 {% for row in operations %}- {{ row.tool }} call={{ row.call_id }}{% if row.path %} path={{ row.path }}{% endif %} {% if row.invoked %}was rejected after invocation{% else %}did not execute{% endif %} ({{ row.code }}).{% if row.checklist_after %} Later checklist update completed.{% endif %}{% if row.tool_request_after %} Later tool request completed; consult current schemas.{% endif %}
 {% endfor %}{% if operations_omitted %}Earlier rejected operations omitted: {{ operations_omitted }}.
 {% endif %}{% endif %}{% if executions %}Latest execution receipts, oldest first:

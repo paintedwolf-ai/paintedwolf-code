@@ -108,6 +108,9 @@ export function captureSessionChatFromStore(
     scope: { projectId, sessionId },
     touchedAt: Date.now(),
     session: cloneStoreValue(session),
+    queueDraft: appStore.state.queueDraft
+      ? cloneStoreValue(appStore.state.queueDraft)
+      : undefined,
     transcript,
     messages: materializeTranscriptWindow(transcript),
     transcriptWatermark: appStore.state.transcriptWatermark,

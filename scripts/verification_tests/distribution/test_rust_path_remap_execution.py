@@ -25,13 +25,14 @@ def remapped(environment, root, times=1):
 
 class RustPathRemap(unittest.TestCase):
     environment = {"HOME": "/home/builder", "CARGO_HOME": "/home/builder/.cargo",
-                   "RUSTUP_HOME": "/opt/rustup"}
+                   "RUSTUP_HOME": "/opt/rustup", "PW_TEST_SNAPSHOT_ROOT": "/snapshots"}
 
     def test_specific_prefixes_follow_broader_ones_because_rustc_applies_the_last_match(self):
         flags, rustflags, cflags, cxxflags = remapped(self.environment, "/home/builder/work/source")
         self.assertEqual(flags, ["--remap-path-prefix=/home/builder=/build-home",
                                  "--remap-path-prefix=/opt/rustup=/rustup",
                                  "--remap-path-prefix=/home/builder/.cargo=/cargo",
+                                 "--remap-path-prefix=/snapshots=/source-snapshots",
                                  "--remap-path-prefix=/home/builder/work/source=/source"])
         self.assertEqual(rustflags, "unset")
         maps = [flag.replace("--remap-path-prefix=", "-ffile-prefix-map=") for flag in flags]
@@ -41,26 +42,41 @@ class RustPathRemap(unittest.TestCase):
         flags, _, cflags, _ = remapped({**self.environment, "RUSTFLAGS": "-C  target-cpu=native",
                                         "CFLAGS": "-O2"}, "/src", times=2)
         self.assertEqual(flags[:2], ["-C", "target-cpu=native"])
-        self.assertEqual(len(flags), 6)
+        self.assertEqual(len(flags), 7)
         self.assertEqual(cflags.split()[0], "-O2")
-        self.assertEqual(len(cflags.split()), 5)
+        self.assertEqual(len(cflags.split()), 6)
         encoded = "-Cdebuginfo=0\x1f--cfg=feature"
         flags, *_ = remapped({**self.environment, "CARGO_ENCODED_RUSTFLAGS": encoded,
                               "RUSTFLAGS": "-C ignored"}, "/src")
         self.assertEqual(flags[:2], ["-Cdebuginfo=0", "--cfg=feature"])
         self.assertNotIn("ignored", flags)
 
+    def test_source_snapshots_keep_the_checkout_compiler_fingerprint(self):
+        checkout = remapped(self.environment, "/checkout")
+        for slot in ("/snapshots/first-0", "/snapshots/second-1"):
+            captured = remapped({**self.environment, "PW_SOURCE_ROOT_ORIGINAL": "/checkout"}, slot)
+            self.assertEqual(captured, checkout)
+            self.assertIn("--remap-path-prefix=/snapshots=/source-snapshots", captured[0])
+
     def test_a_checkout_with_spaces_stays_one_rustc_argument(self):
         flags, _, cflags, _ = remapped(self.environment, "/home/builder/my work")
         self.assertEqual(flags[-1], "--remap-path-prefix=/home/builder/my work=/source")
         self.assertNotIn("my work", cflags)
+
+    def test_snapshot_slots_keep_identical_compiler_flags(self):
+        environment = {**self.environment, "PW_SOURCE_SNAPSHOT_COMMIT": "captured"}
+        first = remapped(environment, "/tmp/source-snapshots/repo-0")
+        second = remapped(environment, "/tmp/source-snapshots/repo-1")
+        self.assertEqual(first, second)
+        self.assertEqual(first[0][-1], "--remap-path-prefix=/tmp/source-snapshots=/source")
+        self.assertNotIn("repo-0", first[2])
 
     def test_unset_toolchain_homes_default_beneath_home(self):
         flags, *_ = remapped({"HOME": "/home/builder"}, "/src")
         self.assertIn("--remap-path-prefix=/home/builder/.cargo=/cargo", flags)
         self.assertIn("--remap-path-prefix=/home/builder/.rustup=/rustup", flags)
         flags, *_ = remapped({"HOME": ""}, "/src")
-        self.assertEqual(flags, ["--remap-path-prefix=/src=/source"])
+        self.assertEqual(flags[-1], "--remap-path-prefix=/src=/source")
 
 
 class StagedBuilderPaths(unittest.TestCase):

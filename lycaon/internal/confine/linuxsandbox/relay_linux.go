@@ -49,14 +49,13 @@ func Relaunch(self string, args []string, plan []byte, network Network, marker, 
 		return 0, 0, fmt.Errorf("signal report pipe: %w", err)
 	}
 	defer func() { _ = report.Close() }()
-	pair, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_SEQPACKET|unix.SOCK_CLOEXEC, 0)
+	control, controlChild, err := controlPair()
 	if err != nil {
 		_ = read.Close()
 		_ = write.Close()
 		_ = reportWrite.Close()
 		return 0, 0, fmt.Errorf("control socket: %w", err)
 	}
-	control, controlChild := os.NewFile(uintptr(pair[0]), "control"), os.NewFile(uintptr(pair[1]), "control-child")
 	// A nil *os.File stored in the interface would not read as no feed.
 	var lines io.Writer
 	if refusals != nil {
@@ -79,7 +78,7 @@ func Relaunch(self string, args []string, plan []byte, network Network, marker, 
 	_ = controlChild.Close()
 	if err != nil {
 		_ = write.Close()
-		return 0, 0, classifyLaunch(err)
+		return 0, 0, classifyLaunch(err, sysctlIs(appArmorUsernsSysctl, 1))
 	}
 	go sup.serve()
 	go func() {
@@ -241,7 +240,24 @@ func (e *exitStatusError) Sys() any      { return e.status }
 func notifyForwarded() chan os.Signal {
 	events := make(chan os.Signal, 8)
 	signal.Notify(events, forwardedSignals()...)
+	if stdinIsTerminal() {
+		absorbTerminalSignals()
+	}
 	return events
+}
+
+// absorbTerminalSignals keeps the terminal's job-control signals from ending or
+// stopping a helper. The terminal delivers them to the target in the same
+// foreground group itself, and an interpreter that handles Ctrl-C must outlive
+// it. Handling rather than ignoring them leaves the target's dispositions at
+// their defaults across exec.
+func absorbTerminalSignals() {
+	absorbed := make(chan os.Signal, 8)
+	signal.Notify(absorbed, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGTSTP)
+	go func() {
+		for range absorbed {
+		}
+	}()
 }
 
 // relay forwards events to the child until wait returns, then maps the

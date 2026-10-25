@@ -45,9 +45,6 @@ def shard_packages(packages, shard, durations=None):
         return packages
     index, count = parse(shard)
     packages = sorted(packages)
-    # An empty shard must not pass as an empty run, so a selection smaller than the split repeats packages.
-    if len(packages) < count:
-        return [packages[(index - 1) % len(packages)]]
     durations = {package: seconds for package, seconds in (durations or {}).items()
                  if type(seconds) in (int, float) and seconds >= 0}
     default = statistics.median(durations.values()) if durations else 0
@@ -172,13 +169,35 @@ def task_command(stage):
     return ["./task", "--force", *stage["arguments"]]
 
 
+def direct_packages(stage):
+    """Resolve a direct invocation before partitioning, as shared admission does."""
+    shard = os.environ.get("PW_GO_SHARD", "")
+    if not shard:
+        return stage["packages"]
+    result = subprocess.run(list_arguments(stage), cwd=Path(__file__).resolve().parents[1] / "lycaon",
+                            text=True, capture_output=True, check=True)
+    records = list(json_stream(result.stdout))
+    if not records or any(row.get("Error") or row.get("DepsErrors") for row in records):
+        raise ValueError("direct shard requires complete Go package metadata")
+    packages = sorted({row["ImportPath"] for row in records
+                       if not stage["exclude"] or not re.search(stage["exclude"], row["ImportPath"])})
+    if not packages:
+        raise ValueError("direct shard selection matched no packages")
+    selected = shard_packages(packages, shard, measured_durations())
+    print("verification shard: " + json.dumps({"shard": shard, "packages": selected}), flush=True)
+    return selected
+
+
 def direct(names, cli):
     """Execute the catalog for nested or exclusive invocations, honouring the same selection."""
     for stage in expand(names, cli):
         if stage["kind"] == "task":
             command = task_command(stage)
         else:
-            command = digest_command(stage, stage["packages"])
+            packages = direct_packages(stage)
+            if not packages:
+                continue
+            command = digest_command(stage, packages)
             if stage["exclude"]:
                 index = command.index("--name")
                 command[index:index] = ["--exclude-pkg", stage["exclude"]]
@@ -301,7 +320,7 @@ class Executor:
                     reservation.entry["child_identity"] = identity(child.pid)
                     reservation.entry["activity_paths"] = [str(path) for path in
                         (log, errors, env.get("PW_TEST_STAGE_RAW"), env.get("PW_TEST_STAGE_RESULT"),
-                         env.get("PW_TEST_STAGE_EVENTS")) if path]
+                         env.get("PW_TEST_STAGE_EVENTS"), env.get("PW_TEST_STAGE_PROGRESS")) if path]
                     reservation.write()
                     self.operation_pid(log.stem, child.pid)
                 while child.poll() is None:
@@ -455,7 +474,11 @@ class Executor:
         events = self.directory / (stage_id + "-events.jsonl")
         command = task_command(first) if first["kind"] == "task" else digest_command(
             first, self.ordered_packages(first, packages))
-        env = {k: v for k, v in os.environ.items() if k not in {"PW_TEST_STAGE_RESULT", "PW_TEST_STAGE_RAW"}}
+        spec = profile(first, self.catalog)
+        env = {k: v for k, v in os.environ.items()
+               if k not in {"PW_TEST_STAGE_RESULT", "PW_TEST_STAGE_RAW", "PW_TEST_STAGE_PROGRESS"}}
+        if spec.get("progress"):
+            env["PW_TEST_STAGE_PROGRESS"] = str(self.directory / (stage_id + "-progress.log"))
         artifacts = None
         if first["name"] == "den:harness:test":
             artifacts = str(self.directory / (stage_id + "-browser"))
@@ -474,7 +497,7 @@ class Executor:
         names = sorted({s["name"] for _, s, _, _ in peers})
         print(f"test execution: {stage_id}: {', '.join(names)} ({len(consumers)} requests); log {log}", flush=True)
         reservation = Reservation(self.queue, self.queue.lock_file, self.plan["batch"]["ticket"],
-                                  ", ".join(names), profile(first, self.catalog), self.plan["batch"]["workers"],
+                                  ", ".join(names), spec, self.plan["batch"]["workers"],
                                   self.arrival(consumers))
         reservation.__enter__()
         try:
