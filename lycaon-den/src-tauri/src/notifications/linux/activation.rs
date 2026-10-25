@@ -80,17 +80,42 @@ fn present_native(window: &tauri::WebviewWindow, token: Option<&str>) -> Result<
         }
         Raise::RemapThenPresent => {
             native.hide();
-            let _ = window.show();
             native.present();
+            retry_wayland_focus(&native);
         }
         Raise::Present => {
-            if !visible {
+            if !wayland && !visible {
                 let _ = window.show();
             }
             native.present();
+            if wayland && !active {
+                retry_wayland_focus(&native);
+            }
         }
     }
     Ok(())
+}
+
+fn retry_wayland_focus(native: &gtk::ApplicationWindow) {
+    let first = native.clone();
+    gtk::glib::timeout_add_local_once(std::time::Duration::from_millis(80), move || {
+        if first.is_visible() && !first.is_active() {
+            first.present();
+        }
+    });
+    let second = native.clone();
+    gtk::glib::timeout_add_local_once(std::time::Duration::from_millis(220), move || {
+        if second.is_visible() && !second.is_active() {
+            second.hide();
+            second.present();
+            let third = second.clone();
+            gtk::glib::timeout_add_local_once(std::time::Duration::from_millis(80), move || {
+                if third.is_visible() && !third.is_active() {
+                    third.present();
+                }
+            });
+        }
+    });
 }
 
 #[cfg(test)]
