@@ -387,11 +387,21 @@ class UnlockAccountAndBridgeTests(unittest.TestCase):
             (root / 'native-unlock.json').write_bytes(protocol.canonical({
                 'format_version': 1, 'binding': EXECUTION, 'vm_id': 'owned', 'account': ACCOUNT,
                 'prepare_attempt_id': '1' * 32, 'unlock_attempt_id': '3' * 32,
-                'secret_sha256': 'f' * 64, 'pre_locked_at': 10.0,
+                'pre_locked_at': 10.0,
                 'post_unlocked_at': 20.0, 'cleanup_completed_at': 30.0}))
 
             selected = {'format_version': 1, 'kind': 'qemu-fixed-input', 'lease': '/tmp/lease.json', 'vm_id': 'owned'}
             controller.verify_deliveries(root, EXECUTION, selected)
+            proof_path = root / 'native-unlock.json'
+            proof = json.loads(proof_path.read_bytes())
+            # Correlation is the opaque execution/attempt identity, not password material.
+            for changed in ({**proof, 'secret_sha256': 'f' * 64},
+                            {**proof, 'prepare_attempt_id': '8' * 32},
+                            {**proof, 'unlock_attempt_id': '9' * 32}):
+                proof_path.write_bytes(protocol.canonical(changed))
+                with self.assertRaises(ValueError):
+                    controller.verify_deliveries(root, EXECUTION, selected)
+            proof_path.write_bytes(protocol.canonical(proof))
 
     def test_bridge_prepare_unlock_sends_40_byte_bounded_secret_frame_to_prepare_exchange(self):
         import os
@@ -474,3 +484,52 @@ class UnlockAccountAndBridgeTests(unittest.TestCase):
         self.assertEqual(captured_secrets[0][0], ACCOUNT)
         self.assertEqual(len(captured_secrets[0][1]), 40)
         self.assertEqual(captured_secrets[0][2], 'owned')
+        self.assertEqual(set(bridge.unlock_proof), {'format_version', 'binding', 'vm_id', 'account',
+            'prepare_attempt_id', 'unlock_attempt_id', 'pre_locked_at', 'post_unlocked_at',
+            'cleanup_completed_at'})
+        self.assertEqual(bridge.unlock_proof['prepare_attempt_id'], pending['transaction_id'])
+        self.assertIsNone(bridge.unlock_proof['unlock_attempt_id'])
+        self.assertNotIn(captured_secrets[0][1].decode(), protocol.canonical(bridge.unlock_proof).decode())
+
+
+class UnlockCredentialCleanupTests(unittest.TestCase):
+    def test_stale_unlock_keeps_lifetime_until_outer_cleanup_even_when_target_exchange_fails(self):
+        from contextlib import ExitStack
+        from types import SimpleNamespace
+        from unittest.mock import MagicMock
+        from linux_release.installed_input import unlock_account, unlock_guest, private_pipe, session_lock, native_unlock
+        from linux_release import installed_environment
+        for operation in (unlock_wire.PURPOSE, unlock_wire.STALE_UNLOCK):
+            for uncertain in (False, True):
+                with self.subTest(operation=operation, uncertain=uncertain), ExitStack() as stack:
+                    pending = {'format_version': 1, 'binding': EXECUTION, 'transaction_id': 'a' * 32,
+                        'operation': operation, 'native_session': target()['session'], 'account': ACCOUNT}
+                    mailbox = Mock()
+                    mailbox.read.return_value = pending
+                    observer = Mock()
+                    observer.session_proof.return_value = pending['native_session']
+                    lock_context = MagicMock()
+                    observer_context = MagicMock()
+                    observer_context.__enter__.return_value = observer
+                    stack.enter_context(patch.object(session_lock, 'NativeLockObserver', return_value=lock_context))
+                    stack.enter_context(patch.object(native_unlock, 'NativeUnlockObserver', return_value=observer_context))
+                    stack.enter_context(patch.object(installed_environment, 'graphical_session',
+                        return_value={'User': str(ACCOUNT['uid'])}))
+                    stack.enter_context(patch('sys.stdout', SimpleNamespace(buffer=Mock())))
+                    stack.enter_context(patch('sys.stdin', SimpleNamespace(buffer=Mock())))
+                    stack.enter_context(patch('os.get_blocking', return_value=True))
+                    stack.enter_context(patch('os.set_blocking'))
+                    stack.enter_context(patch('selectors.DefaultSelector', return_value=MagicMock()))
+                    stack.enter_context(patch.object(private_pipe, 'Pipe', return_value=Mock()))
+                    exchange = stack.enter_context(patch.object(unlock_guest, 'exchange', return_value={'unlocked': True}))
+                    if uncertain: exchange.side_effect = OSError('private target transport ended')
+                    disable = stack.enter_context(patch.object(unlock_account, 'run_privileged_disable'))
+                    if uncertain:
+                        with self.assertRaises(OSError):
+                            unlock_guest.serve_mailbox(pending, EXECUTION, 'owned', mailbox)
+                    else:
+                        self.assertEqual(unlock_guest.serve_mailbox(pending, EXECUTION, 'owned', mailbox), {'unlocked': True})
+                    if operation == unlock_wire.PURPOSE:
+                        disable.assert_called_once_with(ACCOUNT, vm_id='owned')
+                    else:
+                        disable.assert_not_called()

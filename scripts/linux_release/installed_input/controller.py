@@ -314,11 +314,9 @@ def verify_deliveries(directory, execution, selected):
         if proof_path.exists():
             proof = decode(proof_path.read_bytes())
             if (set(proof) != {'format_version', 'binding', 'vm_id', 'account', 'prepare_attempt_id',
-                    'unlock_attempt_id', 'secret_sha256', 'pre_locked_at', 'post_unlocked_at', 'cleanup_completed_at'}
+                    'unlock_attempt_id', 'pre_locked_at', 'post_unlocked_at', 'cleanup_completed_at'}
                     or proof['format_version'] != 1 or proof['binding'] != protocol.binding(execution)
                     or proof['vm_id'] != selected['vm_id']
-                    or not isinstance(proof['secret_sha256'], str)
-                    or not re.fullmatch(r'[0-9a-f]{64}', proof['secret_sha256'])
                     or not validated_unlock or proof['prepare_attempt_id'] != validated_unlock[0][1]['transaction_id']
                     or proof['account'] != validated_unlock[0][1]['account']):
                 raise ValueError('native unlock proof does not match the retained preparation')
@@ -459,7 +457,6 @@ class Bridge:
         alphabet = b'0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
         secret_buf = bytearray(secrets.choice(alphabet) for _ in range(40))
         try:
-            secret_sha256 = hashlib.sha256(secret_buf).hexdigest()
             self.unlock_actor = unlock_actor.NativeUnlockActor(
                 self.actor, self.execution, pending['account'], bytes(secret_buf))
             ready = self.exchange({'operation': 'native-prepare',
@@ -489,7 +486,7 @@ class Bridge:
         self.unlock_proof = {
             'format_version': 1, 'binding': self.execution, 'vm_id': self.selected['vm_id'],
             'account': dict(pending['account']), 'prepare_attempt_id': pending['transaction_id'],
-            'unlock_attempt_id': None, 'secret_sha256': secret_sha256,
+            'unlock_attempt_id': None,
             'pre_locked_at': time.time(), 'post_unlocked_at': None, 'cleanup_completed_at': None}
         return acknowledgment
 
