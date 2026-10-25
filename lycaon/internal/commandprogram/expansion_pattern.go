@@ -99,7 +99,7 @@ func (r *expansionRun) parameterPattern(value string, part commandsurface.Parame
 		// Compiled code and parse generations stay charged until expansion closes.
 		return func() {}, nil
 	}
-	limits := regexp2.SyntaxBudget{MaxBytes: r.expander.limits.memory, MaxSteps: r.expander.limits.maximum["regex_work_steps"], Reserve: reserve}
+	limits := regexp2.SyntaxBudget{MaxBytes: r.expander.limits.memory, MaxSteps: r.expander.limits.maximum["regex_work_steps"], Timeout: time.Duration(r.expander.limits.maximum["regex_cpu_ms"]) * time.Millisecond, Reserve: reserve}
 	tree, err := regexp2.ParseSyntaxBounded(r.ctx, expression, syntax.Perl|syntax.DotNL|regexp2.ScalarCollation, limits)
 	if err != nil {
 		return nil, matcher.failure(err)
