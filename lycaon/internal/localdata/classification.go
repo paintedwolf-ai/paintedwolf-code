@@ -100,6 +100,7 @@ var configRootRegistry = []ConfigRootEntry{
 	{Name: extpacks.DeviceDesiredName, IsDir: false, Class: ClassArchiveExcluded, IncludeInDiagnostics: true, Reason: "device-specific installed extension pack list"},
 	{Name: extpacks.DeviceLockName, IsDir: false, Class: ClassArchiveExcluded, IncludeInDiagnostics: true, Reason: "lockfile pinning locally installed extension versions"},
 	{Name: db.UpgradeRecoveryDirName, IsDir: true, Class: ClassArchiveExcluded, Reason: "pre-upgrade recovery snapshots preserved outside backups"},
+	{Name: storeFileName + db.StoreUpgradeJournalSuffix, Class: ClassArchiveExcluded, Reason: "journal for atomic store upgrade publication; resolved under the installation lease"},
 
 	// Rebuildable state keyed by store.db identities
 	{Name: webIndexFileName, IsDir: false, Class: ClassStoreCoupled, StoreCoupled: true, Bucket: BucketWebIndex, Reason: "rebuildable personal web index SQLite database"},
@@ -142,6 +143,9 @@ func AllClassifiedEntries() []ConfigRootEntry {
 // LookupConfigRootEntry classifies name by its base name.
 func LookupConfigRootEntry(name string) (ConfigRootEntry, bool) {
 	base := filepath.Base(filepath.Clean(name))
+	if strings.HasPrefix(base, db.StoreUpgradeDirectoryPrefix) {
+		return ConfigRootEntry{Name: base, IsDir: true, Class: ClassArchiveExcluded, Reason: "unpublished replacement and original store files held by the upgrade journal"}, true
+	}
 	for _, e := range configRootRegistry {
 		if e.Name == base {
 			return e, true
