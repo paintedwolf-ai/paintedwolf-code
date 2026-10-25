@@ -75,8 +75,8 @@ class LinuxPayloadTests(unittest.TestCase):
 
     def test_rpm_removal_does_not_invoke_policy_tools_or_touch_user_state(self):
         fixture = maintainer_fixture.MaintainerScripts()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         log = fixture.root / "policy-calls"
         fixture.shim("semodule", f'echo "$*" >> "{log}"; echo painted-wolf-code')
         state = fixture.root / "home/vault"
