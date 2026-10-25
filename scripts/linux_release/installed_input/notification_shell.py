@@ -9,6 +9,8 @@ from . import accessibility, notification_geometry, notification_wire
 from ..installed_cases.app import process_identity
 from ..installed_cases.desktop_ui import load_api
 from ..installed_cases.records import CaseFailed, CaseUnavailable
+from ..installed_cases.logind_context import Reader
+from .. import installed_gnome
 from .. import scripts_module
 
 BUS = 'org.freedesktop.DBus'
@@ -117,22 +119,21 @@ def capture_target(api, shell_process, delivery, geometry, deadline, expected=No
 
 def observe(surface, service, shell, delivery, deadline=None, expected=None):
     """Capture shell authority separately from the original product runtime context."""
-    from gi.repository import Gio, GLib
     deadline = time.monotonic() + 15 if deadline is None else deadline
     runtime = '/run/user/' + str(os.getuid())
     environment = {'DBUS_SESSION_BUS_ADDRESS': 'unix:path=' + runtime + '/bus', 'XDG_RUNTIME_DIR': runtime}
-    connection = Gio.DBusConnection.new_for_address_sync(environment['DBUS_SESSION_BUS_ADDRESS'],
-        Gio.DBusConnectionFlags.AUTHENTICATION_CLIENT | Gio.DBusConnectionFlags.MESSAGE_BUS_CONNECTION, None, None)
-    try:
+    with Reader(user_only=True, deadline=deadline) as reader:
         def query(name, value):
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                raise CaseUnavailable('notification-shell-observation-deadline')
-            return connection.call_sync(BUS, BUS_PATH, BUS, name, GLib.Variant('(s)', (value,)), None,
-                Gio.DBusCallFlags.NONE, max(1, min(1000, int(remaining * 1000))), None).unpack()[0]
+            signature = '(s)' if name == 'GetNameOwner' else '(u)'
+            return reader.call(BUS_PATH, BUS, name, ('(s)', (value,)), signature,
+                user=True, destination=BUS).unpack()[0]
 
         def require_owners():
-            for name, expected in (('org.freedesktop.Notifications', service), ('org.gnome.Shell', shell), (MUTTER, shell)):
+            native = installed_gnome.owner(reader)
+            if (native['unique_owner'] != shell['bus_name'] or native['pid'] != shell['process']['pid']
+                    or native['start_time_ticks'] != shell['process']['start_time_ticks']):
+                raise CaseFailed('notification native shell authority changed before physical dispatch')
+            for name, expected in (('org.freedesktop.Notifications', service), (MUTTER, shell)):
                 if (query('GetNameOwner', name) != expected['bus_name']
                         or query('GetConnectionUnixUser', expected['bus_name']) != os.getuid()
                         or query('GetConnectionUnixProcessID', expected['bus_name']) != expected['process']['pid']
@@ -143,14 +144,13 @@ def observe(surface, service, shell, delivery, deadline=None, expected=None):
                     raise CaseFailed('notification product runtime changed before physical dispatch')
 
         require_owners()
-        result = connection.call_sync(shell['bus_name'], MUTTER_PATH, MUTTER, 'GetCurrentState', None, None,
-            Gio.DBusCallFlags.NONE, 1000, None)
+        result = reader.call(MUTTER_PATH, MUTTER, 'GetCurrentState', None, STATE_SIGNATURE,
+            user=True, destination=shell['bus_name'])
         if result.get_type_string() != STATE_SIGNATURE:
             raise ValueError('notification compositor returned an unexpected typed display state')
         geometry = notification_geometry.mapping(result.unpack())
         geometry.update(display_owner=shell, shell_extent=list(geometry['logical_extent']))
-        # shell_extent above is admitted only after an actual target ancestor
-        # independently reports the same rectangle in capture_target.
+        # The target's actual ancestor must independently report this rectangle.
         with scripts_module('harness.atspi_client').session_bus(environment):
             api = load_api()
             target = capture_target(api, shell['process'], delivery, geometry, deadline, expected)
@@ -159,8 +159,6 @@ def observe(surface, service, shell, delivery, deadline=None, expected=None):
             raise CaseUnavailable('notification-shell-observation-deadline')
         return notification_wire.before({'surface': surface, 'service': service, 'shell': shell,
             'delivery': delivery, 'geometry': geometry, 'target': target})
-    finally:
-        connection.close_sync(None)
 
 
 def refresh(value):

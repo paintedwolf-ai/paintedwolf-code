@@ -35,7 +35,7 @@ def execute(binding, capability, case, root):
         raise ValueError('notification activation driver requires its exact declared case')
     project = Path(tempfile.mkdtemp(prefix='notification-target-', dir=root))
     decoy = Path(tempfile.mkdtemp(prefix='notification-decoy-', dir=root))
-    app, bus, barrier, observations, streams = None, None, None, {}, {}
+    app, bus, barrier, fixture, observations, streams = None, None, None, None, {}, {}
     try:
         native = binding.get('native_input')
         if not isinstance(native, dict):
@@ -88,6 +88,8 @@ def execute(binding, capability, case, root):
                     observations['provider_requests'] = list(fixture.observations)
             streams.update(app.streams())
     except Exception as error:
+        if fixture is not None:
+            observations['provider_requests'] = list(fixture.observations)
         if barrier is not None:
             observations['provider_response_control'] = barrier.snapshot()
         if bus is not None:

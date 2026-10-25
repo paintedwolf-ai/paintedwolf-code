@@ -36,13 +36,22 @@ class NotificationBusTests(unittest.TestCase):
     def test_foreign_notification_is_not_a_product_delivery(self):
         self.monitor.require_owners = Mock()
         self.monitor._call = Mock(return_value=':1.7')
-        self.monitor._pid = Mock(side_effect=lambda sender: self.ui if sender == ':1.12' else self.service)
+        self.monitor._pid = Mock(side_effect=lambda sender, deadline=None: self.ui if sender == ':1.12' else self.service)
         self.monitor.rows.extend([message('call', sender=':1.13'), message('call'),
             message('return', reply_serial=10, signature='(u)', body=(41,))])
         self.monitor.drain()
         self.assertEqual(self.monitor.trace.sender, ':1.12')
         self.assertEqual(self.monitor.trace.delivery['notification_id'], 41)
         self.assertEqual(self.monitor.require_owners.call_count, 2)
+
+    def test_second_native_ui_connection_cannot_be_ignored_as_foreign(self):
+        self.monitor.require_owners = Mock()
+        self.monitor._call = Mock(return_value=':1.7')
+        self.monitor._pid = Mock(return_value=self.ui)
+        self.monitor.rows.extend([message('call'), message('call', sender=':1.13')])
+        with self.assertRaises(CaseFailed):
+            self.monitor.drain()
+        self.assertIsNotNone(self.monitor.trace)
 
     def test_capture_retains_bounded_callback_failure_for_main_observer(self):
         self.monitor.Gio = SimpleNamespace(DBusMessageType=SimpleNamespace(METHOD_CALL=1,METHOD_RETURN=2,SIGNAL=3))
@@ -91,7 +100,7 @@ class NotificationBusTests(unittest.TestCase):
         self.monitor.owner,self.monitor.service_process=None,None
         self.monitor.require_owners=Mock()
         self.monitor._call=Mock(return_value=':1.7')
-        self.monitor._pid=Mock(side_effect=lambda sender:self.ui if sender==':1.12' else self.service)
+        self.monitor._pid=Mock(side_effect=lambda sender, deadline=None:self.ui if sender==':1.12' else self.service)
         self.monitor.drain()
         self.monitor._call.assert_not_called()
         self.monitor.rows.extend([message('call'),message('return',reply_serial=10,signature='(u)',body=(41,))])

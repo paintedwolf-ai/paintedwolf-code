@@ -7,6 +7,7 @@ from .profile_observer import identifier, physical, profile
 from .profile_setup import slice_document, LAST_ACTIVE_PROJECT, LAST_SESSION_SNAPSHOT
 from .records import CaseFailed, CaseUnavailable
 from ..installed_input import notification_shell, notification_wire
+from .. import installed_gnome
 
 
 def selected_chat(app):
@@ -49,23 +50,27 @@ class NotificationObserver:
         if bus.trace is None or bus.trace.delivery is None:
             raise CaseUnavailable('notification-click-requires-an-actual-delivery')
         self.service = {'bus_name': bus.owner, 'process': dict(bus.service_process)}
-        shell = bus._call('GetNameOwner', '(s)', ('org.gnome.Shell',))
+        authority = installed_gnome.owner(bus.reader)
+        shell = authority['unique_owner']
         self.shell = {'bus_name': shell, 'process': bus._pid(shell)}
+        if (self.shell['process']['pid'] != authority['pid']
+                or self.shell['process']['start_time_ticks'] != authority['start_time_ticks']):
+            raise CaseFailed('notification shell changed while binding its native authority')
         self.delivery = {'notification_id': bus.trace.delivery['notification_id'],
             'request_serial': bus.trace.call['serial'], 'sender': bus.trace.sender,
             'session_id': self.session_id, 'title_sha256': bus.trace.call['title_sha256'],
             'body_sha256': bus.trace.call['body_sha256']}
 
-    def require_runtime(self):
+    def require_runtime(self, deadline=None):
         self.app.require_engine()
-        self.bus.require_owners()
-        if (self.bus._call('GetNameOwner', '(s)', ('org.gnome.Shell',)) != self.shell['bus_name']
-                or self.bus._pid(self.shell['bus_name']) != self.shell['process']):
+        self.bus.require_owners(deadline)
+        if (self.bus._call('GetNameOwner', '(s)', ('org.gnome.Shell',), deadline) != self.shell['bus_name']
+                or self.bus._pid(self.shell['bus_name'], deadline) != self.shell['process']):
             raise CaseFailed('notification shell changed during physical activation')
 
     def observe(self, deadline=None):
         deadline = time.monotonic() + 15 if deadline is None else deadline
-        self.require_runtime()
+        self.require_runtime(deadline)
         result = notification_shell.observe(self.frames.observe(deadline), self.service, self.shell,
             self.delivery, deadline=deadline, expected=self.target)
         self.target = result['target']
@@ -76,8 +81,8 @@ class NotificationObserver:
         self.bus.arm()
 
     def after(self, deadline):
-        self.require_runtime()
-        self.bus.drain()
+        self.require_runtime(deadline)
+        self.bus.drain(deadline)
         selected = self.last_selected = selected_chat(self.app)
         actual = (selected['session_id'] if selected is not None and selected['project_id'] == self.project_id
             and selected['workspace_path'] == self.project else None)

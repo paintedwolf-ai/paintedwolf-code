@@ -6,7 +6,8 @@ import os
 import threading
 import time
 
-from .app import process_identity, session_environment
+from .app import process_identity
+from .logind_context import Reader
 from .notification_delivery import DeliveryTrace, PATH, SERVICE, unique
 from .records import CaseFailed, CaseUnavailable
 
@@ -17,45 +18,45 @@ BUS_PATH = '/org/freedesktop/DBus'
 class NotificationBus:
     def __init__(self, app, ui_process, desktop_entry='dev.paintedwolf.code'):
         self.app, self.ui_process, self.desktop_entry = app, dict(ui_process), desktop_entry
-        self.control, self.monitor, self.filter_id = None, None, None
+        self.reader, self.control, self.monitor, self.filter_id = None, None, None, None
         self.rows, self.lock = deque(), threading.Lock()
         self.error, self.trace, self.monitoring = None, None, False
         self.owner, self.service_process = None, None
         self.pending_calls, self.signal_owners = set(), set()
 
-    def _call(self, name, signature, values):
-        result = self.control.call_sync(BUS, BUS_PATH, BUS, name,
-            self.GLib.Variant(signature, values), None, self.Gio.DBusCallFlags.NONE, 1000, None)
-        return result.unpack()[0]
+    def _call(self, name, signature, values, deadline=None):
+        if name not in {'GetNameOwner', 'GetConnectionUnixUser', 'GetConnectionUnixProcessID'}:
+            raise ValueError('notification observer only reads declared bus authority methods')
+        result_type = '(s)' if name == 'GetNameOwner' else '(u)'
+        return self.reader.call(BUS_PATH, BUS, name, (signature, values), result_type,
+            user=True, destination=BUS, deadline=deadline).unpack()[0]
 
-    def _pid(self, sender):
+    def _pid(self, sender, deadline=None):
         unique(sender)
-        uid = self._call('GetConnectionUnixUser', '(s)', (sender,))
-        pid = self._call('GetConnectionUnixProcessID', '(s)', (sender,))
+        uid = self._call('GetConnectionUnixUser', '(s)', (sender,), deadline)
+        pid = self._call('GetConnectionUnixProcessID', '(s)', (sender,), deadline)
         if type(uid) is not int or uid != os.getuid() or type(pid) is not int:
             raise CaseFailed('notification bus connection changed its graphical account')
         return process_identity(pid)
 
-    def require_owners(self):
+    def require_owners(self, deadline=None):
         self.app.require_running()
         if process_identity(self.ui_process['pid']) != self.ui_process:
             raise CaseFailed('notification native UI process changed identity')
         if self.owner is not None:
-            owner = self._call('GetNameOwner', '(s)', (SERVICE,))
-            if owner != self.owner or self._pid(owner) != self.service_process:
+            owner = self._call('GetNameOwner', '(s)', (SERVICE,), deadline)
+            if owner != self.owner or self._pid(owner, deadline) != self.service_process:
                 raise CaseFailed('notification service changed its captured bus or process owner')
-        if self.trace is not None and self._pid(self.trace.sender) != self.ui_process:
+        if self.trace is not None and self._pid(self.trace.sender, deadline) != self.ui_process:
             raise CaseFailed('notification sender changed its captured native UI process')
 
     def __enter__(self):
         try:
-            from gi.repository import Gio, GLib
-            self.Gio, self.GLib = Gio, GLib
-            address = session_environment(self.app.observations['session'])['DBUS_SESSION_BUS_ADDRESS']
-            flags = Gio.DBusConnectionFlags.AUTHENTICATION_CLIENT | Gio.DBusConnectionFlags.MESSAGE_BUS_CONNECTION
-            self.control = Gio.DBusConnection.new_for_address_sync(address, flags, None, None)
+            self.reader = Reader(user_only=True)
+            self.Gio, self.GLib = Gio, GLib = self.reader.gio, self.reader.glib
+            self.control = self.reader.user
             self.require_owners()
-            self.monitor = Gio.DBusConnection.new_for_address_sync(address, flags, None, None)
+            self.monitor = self.reader.connect('/run/user/' + str(os.getuid()) + '/bus', os.getuid())
             self.filter_id = self.monitor.add_filter(self._filter, None)
             rules = [f"type='method_call',interface='{SERVICE}',member='Notify'",
                 "type='method_return'",
@@ -110,8 +111,8 @@ class NotificationBus:
         # A monitor must consume observed calls rather than answer them.
         return None if self.monitoring or relevant else message
 
-    def drain(self):
-        self.require_owners()
+    def drain(self, deadline=None):
+        self.require_owners(deadline)
         with self.lock:
             error, rows = self.error, list(self.rows)
             self.rows.clear()
@@ -119,25 +120,27 @@ class NotificationBus:
             raise error
         for row in rows:
             if self.trace is None:
-                if row['type'] != 'call' or self._pid(row['sender']) != self.ui_process:
+                if row['type'] != 'call' or self._pid(row['sender'], deadline) != self.ui_process:
                     continue
-                owner = unique(self._call('GetNameOwner', '(s)', (SERVICE,)))
+                owner = unique(self._call('GetNameOwner', '(s)', (SERVICE,), deadline))
                 if row['destination'] not in {owner, SERVICE}:
                     raise CaseFailed('actual notification request has a replaced service destination')
                 if self.owner is not None and owner != self.owner:
                     raise CaseFailed('notification service changed before its real delivery')
-                self.owner, self.service_process = owner, self._pid(owner)
+                self.owner, self.service_process = owner, self._pid(owner, deadline)
                 self.trace = DeliveryTrace(row['sender'], self.owner, self.desktop_entry)
             if row['type'] == 'call' and row['sender'] != self.trace.sender:
+                if self._pid(row['sender'], deadline) == self.ui_process:
+                    raise CaseFailed('native UI notification sender became ambiguous')
                 continue
             if row['type'] == 'return' and row['destination'] != self.trace.sender:
                 continue
             self.trace.observe(row)
-        self.require_owners()
+        self.require_owners(deadline)
 
     def await_delivery(self, deadline):
         while time.monotonic() < deadline:
-            self.drain()
+            self.drain(deadline)
             if self.trace is not None and self.trace.delivery is not None:
                 return self.snapshot()
             time.sleep(0.02)
@@ -151,7 +154,7 @@ class NotificationBus:
 
     def await_activation(self, deadline):
         while time.monotonic() < deadline:
-            self.drain()
+            self.drain(deadline)
             if self.trace is not None and self.trace.activation is not None:
                 return self.snapshot()
             time.sleep(0.02)
@@ -163,14 +166,16 @@ class NotificationBus:
 
     def close(self):
         errors = []
-        monitor, control = self.monitor, self.control
-        self.monitor, self.control = None, None
+        monitor, control, reader = self.monitor, self.control, self.reader
+        self.monitor, self.control, self.reader = None, None, None
         operations = []
         if monitor is not None:
             if self.filter_id is not None:
                 operations.append(lambda: monitor.remove_filter(self.filter_id))
             operations.append(lambda: monitor.close_sync(None))
-        if control is not None:
+        if reader is not None:
+            operations.append(reader.close)
+        elif control is not None:
             operations.append(lambda: control.close_sync(None))
         for operation in operations:
             try:

@@ -2,7 +2,10 @@
 import time
 import unittest
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
+from contextlib import nullcontext
+
+from verification_tests.distribution.installed.test_notification_wire_execution import proof
 
 from linux_release.installed_input import accessibility, notification_shell as shell
 from linux_release.installed_cases.records import CaseFailed, CaseUnavailable
@@ -27,6 +30,47 @@ class NotificationShellTests(unittest.TestCase):
         self.panel=Node('panel',self.app)
         self.banner=Node('banner',self.panel)
         self.expected=[accessibility.identity(node)for node in (self.banner,self.panel,self.app)]
+
+    def capture(self, *, changed=False):
+        before = proof()
+        reader = MagicMock()
+        reader.__enter__.return_value = reader
+        names = {'org.freedesktop.Notifications': before['service'], shell.MUTTER: before['shell']}
+        def call(path, interface, method, args, signature, **kwargs):
+            if method == 'GetCurrentState':
+                self.assertEqual(kwargs['destination'], before['shell']['bus_name'])
+                self.assertEqual(signature, shell.STATE_SIGNATURE)
+                return SimpleNamespace(get_type_string=lambda: signature, unpack=lambda: ())
+            value = args[1][0]
+            target = names[value] if method == 'GetNameOwner' else next(
+                item for item in names.values() if item['bus_name'] == value)
+            result = target['bus_name'] if method == 'GetNameOwner' else (
+                shell.os.getuid() if method == 'GetConnectionUnixUser' else target['process']['pid'])
+            return SimpleNamespace(unpack=lambda: (result,))
+        reader.call.side_effect = call
+        authority = {'unique_owner': before['shell']['bus_name'], 'pid': before['shell']['process']['pid'],
+            'start_time_ticks': before['shell']['process']['start_time_ticks'] + int(changed)}
+        processes = {item['pid']: item for item in (before['service']['process'], before['shell']['process'],
+            before['surface']['launch'], before['surface']['engine'], before['surface']['main']['process'])}
+        mapping = {key: value for key, value in before['geometry'].items() if key not in {'display_owner', 'shell_extent'}}
+        with patch.object(shell, 'Reader', return_value=reader) as create, patch.object(
+                shell.installed_gnome, 'owner', return_value=authority) as owner, patch.object(
+                shell, 'process_identity', side_effect=processes.__getitem__), patch.object(
+                shell.notification_geometry, 'mapping', return_value=mapping), patch.object(
+                shell, 'scripts_module', return_value=SimpleNamespace(session_bus=lambda _: nullcontext())), patch.object(
+                shell, 'load_api'), patch.object(shell, 'capture_target', return_value=before['target']):
+            result = shell.observe(*(before[key] for key in ('surface', 'service', 'shell', 'delivery')),
+                deadline=time.monotonic() + 10)
+            self.assertTrue(create.call_args.kwargs['user_only'])
+            self.assertEqual(owner.call_count, 2)
+            return result
+
+    def test_observation_reuses_canonical_shell_authority_and_bounded_private_reader(self):
+        self.assertEqual(self.capture()['target'], proof()['target'])
+
+    def test_changed_native_shell_birth_refuses_before_reading_notification(self):
+        with self.assertRaises(CaseFailed):
+            self.capture(changed=True)
 
     def test_refresh_walks_actual_known_ancestors(self):
         self.assertIs(shell.follow(self.app,self.expected,time.monotonic()+1),self.banner)
