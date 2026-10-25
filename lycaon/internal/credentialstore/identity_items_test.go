@@ -1,7 +1,9 @@
 package credentialstore
 
 import (
+	"bytes"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -65,18 +67,18 @@ func TestItemsIdentityFailsClosed(t *testing.T) {
 		exists  bool
 		value   []byte
 		readErr error
+		want    error
 	}{
-		{name: "missing under vault", exists: true},
-		{name: "empty item", value: []byte{}},
-		{name: "damaged item", value: []byte("{")},
-		{name: "custodian error", readErr: custodianLocked},
+		{name: "missing under vault", exists: true, want: ErrIdentityMissing},
+		{name: "empty item", value: []byte{}, want: ErrVaultCorrupt},
+		{name: "damaged item", value: []byte("{"), want: ErrVaultCorrupt},
+		{name: "custodian error", readErr: custodianLocked, want: ErrCustodianUnavailable},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			items := &memoryItems{value: tt.value, readErr: tt.readErr}
 			p := &itemsIdentityProvider{account: "test", items: items}
-			if _, err := p.LoadOrCreate(tt.exists); err == nil {
-				t.Fatal("unusable identity accepted")
-			}
+			_, err := p.LoadOrCreate(tt.exists)
+			assertIdentityRecoveryError(t, err, tt.want)
 			if items.creates != 0 || items.removes != 0 {
 				t.Fatal("unusable identity was modified")
 			}
@@ -139,5 +141,64 @@ func TestDisposableIdentitiesProveIsolationAndDeletion(t *testing.T) {
 	b = &itemsIdentityProvider{account: "b", items: shared}
 	if err := verifyDisposableIdentities(a, b); err == nil {
 		t.Fatal("a custodian that confuses accounts passed")
+	}
+}
+
+func TestItemsIdentityRecoveryErrors(t *testing.T) {
+	doc, err := generateIdentityDocument()
+	testutil.FailErr(t, "generate retained identity", err)
+	raw, err := encodeIdentityDocument(doc)
+	testutil.FailErr(t, "encode retained identity", err)
+	unclassified := errors.New("custodian locked")
+	for _, tt := range []struct {
+		name        string
+		cause, want error
+	}{
+		{"absent", ErrCustodianAbsent, ErrCustodianAbsent},
+		{"unavailable", ErrCustodianUnavailable, ErrCustodianUnavailable},
+		{"refused", ErrLauncherRefused, ErrLauncherRefused},
+		{"missing", ErrIdentityMissing, ErrIdentityMissing},
+		{"corrupt", ErrVaultCorrupt, ErrVaultCorrupt},
+		{"unsupported", ErrCustodianUnsupported, ErrCustodianUnsupported},
+		{"unclassified", unclassified, ErrCustodianUnavailable},
+	} {
+		for _, operation := range []string{"read existing vault", "read before vault", "remove"} {
+			t.Run(tt.name+"/"+operation, func(t *testing.T) {
+				cause := errors.Join(tt.cause, errors.New("custodian response"))
+				items := &memoryItems{value: append([]byte(nil), raw...)}
+				p := &itemsIdentityProvider{account: "test", items: items}
+				var got error
+				if operation == "remove" {
+					items.removeErr = fmt.Errorf("remove response: %w", cause)
+					got = p.Purge()
+				} else {
+					items.readErr = fmt.Errorf("read response: %w", cause)
+					_, got = p.LoadOrCreate(operation == "read existing vault")
+				}
+				assertIdentityRecoveryError(t, got, tt.want)
+				if !errors.Is(got, cause) {
+					t.Fatal("lost the original custodian error")
+				}
+				wantRemoves := 0
+				if operation == "remove" {
+					wantRemoves = 1
+				}
+				if items.creates != 0 || items.removes != wantRemoves || !bytes.Equal(items.value, raw) {
+					t.Fatal("failed custody operation changed the retained identity")
+				}
+			})
+		}
+	}
+}
+
+func assertIdentityRecoveryError(t *testing.T, got, want error) {
+	t.Helper()
+	for _, outcome := range []error{
+		ErrCustodianAbsent, ErrCustodianUnavailable, ErrLauncherRefused,
+		ErrIdentityMissing, ErrVaultCorrupt, ErrCustodianUnsupported,
+	} {
+		if errors.Is(got, outcome) != (outcome == want) {
+			t.Fatalf("recovery error = %v; expected only %v, checking %v", got, want, outcome)
+		}
 	}
 }

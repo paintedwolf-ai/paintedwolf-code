@@ -107,15 +107,25 @@ func TestServiceCustodyReportsEmptyAndFailedResponses(t *testing.T) {
 	svc, client := startFakeService(t, vaultidentity.Response{Status: vaultidentity.StatusOK, LauncherPID: 42})
 	svc.values[identityAccount("/cfg/credential-vault.age")] = []byte{}
 	p := probeCustody(client).provider("/cfg/credential-vault.age")
-	if _, err := p.LoadOrCreate(true); !errors.Is(err, ErrVaultCorrupt) {
-		t.Fatalf("empty identity: %v", err)
-	}
+	_, err := p.LoadOrCreate(true)
+	assertIdentityRecoveryError(t, err, ErrVaultCorrupt)
 	svc.probe = vaultidentity.Response{Status: vaultidentity.StatusUnavailable, Code: "store"}
-	if _, err := p.LoadOrCreate(true); vaultidentity.StatusOf(err) != vaultidentity.StatusUnavailable {
+	_, err = p.LoadOrCreate(true)
+	assertIdentityRecoveryError(t, err, ErrCustodianUnavailable)
+	if vaultidentity.StatusOf(err) != vaultidentity.StatusUnavailable {
 		t.Fatalf("store failure: %v", err)
 	}
-	if err := p.Purge(); vaultidentity.StatusOf(err) != vaultidentity.StatusUnavailable {
+	err = p.Purge()
+	assertIdentityRecoveryError(t, err, ErrCustodianUnavailable)
+	if vaultidentity.StatusOf(err) != vaultidentity.StatusUnavailable {
 		t.Fatalf("purge during store failure: %v", err)
+	}
+	svc.probe = vaultidentity.Response{Status: vaultidentity.StatusRefused, Code: "executable_mismatch"}
+	_, err = p.LoadOrCreate(true)
+	assertIdentityRecoveryError(t, err, ErrLauncherRefused)
+	assertIdentityRecoveryError(t, p.Purge(), ErrLauncherRefused)
+	if len(svc.values) != 1 {
+		t.Fatal("failed service operations changed the retained identity")
 	}
 }
 
