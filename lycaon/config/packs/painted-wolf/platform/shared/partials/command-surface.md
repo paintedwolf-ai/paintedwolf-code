@@ -9,6 +9,8 @@
 {% endif %}
 {% if profile_command_mutation != false %}Other programs (`go`, `python3`, `node`, `npm`, `make`, `cargo`) run inside a sandbox unless the person approves host access.{% if not command_external_hidden %} Use `external -- NAME` (or `external -p PATH -- NAME`) when an installed binary shares a native name.{% endif %}
 
+{% if command_output_files %}For long output, read the saved copy named in the result.{% endif %}
+
 Trailing `&` starts a background job in this session: `$!` and `jobs` print its handle, `wait %1` / `wait $!` waits for it, and `kill %1` / `kill $!` stops it inside `command`. For a handle from an earlier call, read output with `command_output(handle="<handle>", cursor=0)` and pass each returned `next_cursor` on later reads, or stop it with `command_stop(handle="<handle>")`.{% if profile_has_wait %} To wait across turns, call `wait(until_complete=true, conditions=[{"kind":"process_done","handles":["<handle>"]}], reason="waiting for command completion")`.{% endif %}{% if profile_has_process_list != false or profile_has_process_signal != false %}
 
 For processes this session started, use {% if profile_has_process_list != false %}`process_list` to inspect them{% endif %}{% if profile_has_process_list != false and profile_has_process_signal != false %} and {% endif %}{% if profile_has_process_signal != false %}`process_signal` to signal them{% endif %}.{% endif %}{% else %}On this read-only surface, `command` runs read-only native utilities and pipelines only; file writes, output redirects to files, and external programs are refused.{% endif %}

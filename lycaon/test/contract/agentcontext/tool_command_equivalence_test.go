@@ -159,8 +159,8 @@ func TestCommandGuidanceDebugCaptureInLLMRequestsJSONL(t *testing.T) {
 			t.Errorf("command_guidance.templates = %v, missing %q", row.CommandGuidance.Templates, wantTmpl)
 		}
 	}
-	if row.CommandGuidance.Facts["command_output_scratch_files"] != true {
-		t.Fatalf("debug output capability differs from offered command: %#v", row.CommandGuidance.Facts["command_output_scratch_files"])
+	if row.CommandGuidance.Facts["command_output_files"] != true {
+		t.Fatalf("debug output capability differs from offered command: %#v", row.CommandGuidance.Facts["command_output_files"])
 	}
 	for _, key := range prompts.CommandGuidanceFactKeys() {
 		if key == "workspace_roots" {

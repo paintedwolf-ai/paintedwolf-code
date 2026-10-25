@@ -16,7 +16,7 @@ func CommandGuidanceFactKeys() []string {
 		"command_external_hidden",
 		"command_external_shown",
 		"command_on_floor",
-		"command_output_scratch_files",
+		"command_output_files",
 		"is_coordinator",
 		"platform_os",
 		"profile_command_mutation",
