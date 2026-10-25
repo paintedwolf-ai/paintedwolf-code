@@ -1,7 +1,6 @@
 package search
 
 import (
-	"bytes"
 	"errors"
 	"strconv"
 	"strings"
@@ -13,7 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/litprefilter"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/textsearch"
-	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
 )
 
 type grepMode int
@@ -53,10 +51,8 @@ type grepRun struct {
 	walker          *walker
 	// json is rg --json's printer; nil for the plain forms.
 	json *rgJSON
-	// prune holds the index requirement when acceleration applies; drafts
-	// are the unsaved documents the index cannot speak for.
+	// prune holds the index requirement when acceleration applies.
 	prune    litprefilter.Requirement
-	drafts   sourceview.DraftOverlay
 	pruned   int
 	selected bool
 	stopped  bool
@@ -436,14 +432,7 @@ func (r *grepRun) searchOperands() error {
 	return nil
 }
 
-func (r *grepRun) searchStdin() error {
-	if r.mode == modeFileList {
-		return nil
-	}
-	data, err := r.inv.readAll(r.inv.input)
-	if err != nil {
-		return err
-	}
+func (r *grepRun) stdinLabel() string {
 	label := "(standard input)"
 	if r.json != nil {
 		label = "<stdin>"
@@ -451,7 +440,19 @@ func (r *grepRun) searchStdin() error {
 	if named, ok := r.inv.value("--label"); ok {
 		label = named
 	}
-	err = r.searchContent(label, data, nil, r.forcedNames(false))
+	return label
+}
+
+func (r *grepRun) searchStdin() error {
+	if r.mode == modeFileList {
+		return nil
+	}
+	var err error
+	if r.tabs {
+		err = r.searchAlignedStdin()
+	} else {
+		err = r.searchStream(r.stdinLabel(), r.inv.input, r.inv.owners.streamBytes(), 0, -1, nil, r.forcedNames(false))
+	}
 	if errors.Is(err, errQuietMatch) {
 		r.stopped = true
 		return nil
@@ -521,6 +522,9 @@ func (r *grepRun) walk(dir entry, ancestors map[[2]uint64]bool) error {
 		if r.stopped {
 			return nil
 		}
+		if _, err := r.inv.out.w.Write(nil); err != nil {
+			return err
+		}
 		if child.link && !r.follow {
 			continue
 		}
@@ -562,7 +566,7 @@ func (r *grepRun) searchFile(e entry, names bool) error {
 		r.pruned++
 		return r.searchContent(e.display, nil, nil, names)
 	}
-	content, pin, err := r.inv.capturePinned(e.bound)
+	streamed, pin, err := r.inv.openPinnedStream(e.bound)
 	if err != nil {
 		if reason, ok := ordinary(err); ok {
 			r.inv.fail(r.quietErrors, "%s: %s", e.display, reason)
@@ -570,10 +574,11 @@ func (r *grepRun) searchFile(e entry, names bool) error {
 		}
 		return err
 	}
-	if r.rg && e.depth > 0 && !r.searchBinary && bytes.IndexByte(content, 0) >= 0 {
+	defer func() { _ = streamed.Reader.Close() }()
+	if r.rg && e.depth > 0 && !r.searchBinary && streamed.FirstNullOffset >= 0 {
 		return nil
 	}
-	return r.searchContent(e.display, content, pin, names)
+	return r.searchStream(e.display, streamed.Reader, 0, int(streamed.Revision.ContentBytes), streamed.FirstNullOffset, pin, names)
 }
 
 // indexAcceleration enables Bloom pruning when a missing record can only
@@ -585,19 +590,13 @@ func (r *grepRun) indexAcceleration() {
 		return
 	}
 	r.prune = r.matcher.Requirement()
-	if !r.prune.Empty() {
-		r.drafts = sourceview.DraftsFor(r.inv.ctx, r.inv.tc)
-	}
 }
 
 // indexProvesNoMatch asks the source catalog about one walked file. The
 // cached filter speaks only for the exact size, mode and mtime it was built
-// under, and never for an unsaved draft.
+// under.
 func (r *grepRun) indexProvesNoMatch(e entry) bool {
 	if r.prune.Empty() || e.depth == 0 || e.link || e.bound.Resolved.External {
-		return false
-	}
-	if _, draft := r.drafts.Lookup(e.bound.Resolved.Abs); draft {
 		return false
 	}
 	return r.inv.owners.Catalog.Literals.CanPrune(e.bound.Resolved.Root.Path, r.prune, sourcecatalog.Entry{

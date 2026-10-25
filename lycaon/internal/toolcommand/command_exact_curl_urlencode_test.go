@@ -4,7 +4,7 @@ import "testing"
 
 func singleReplacement(t *testing.T, command string) (ReplacementCall, bool) {
 	t.Helper()
-	calls, ok := ExactCommandReplacement(t.Context(), command, "/tmp/project", "")
+	calls, ok := ExactCommandReplacement(t.Context(), command, "/tmp/project", "", "")
 	if !ok {
 		return ReplacementCall{}, false
 	}
@@ -64,7 +64,7 @@ func TestRemoteNameNeedsAFilename(t *testing.T) {
 }
 
 func TestEnvelopeDeadlineIsCarriedOnlyWhenOneCallCanHoldIt(t *testing.T) {
-	one, ok := ExactCommandReplacement(t.Context(), `curl https://a.test/1`, "/tmp/project", "")
+	one, ok := ExactCommandReplacement(t.Context(), `curl https://a.test/1`, "/tmp/project", "", "")
 	if !ok {
 		t.Fatal("single request was not eligible")
 	}
@@ -75,7 +75,7 @@ func TestEnvelopeDeadlineIsCarriedOnlyWhenOneCallCanHoldIt(t *testing.T) {
 
 	// One runner deadline bounded the whole line. Handing it to each request
 	// would let the replacement run for three times what was declared.
-	many, ok := ExactCommandReplacement(t.Context(), `curl https://a.test/1; curl https://a.test/2; curl https://a.test/3`, "/tmp/project", "")
+	many, ok := ExactCommandReplacement(t.Context(), `curl https://a.test/1; curl https://a.test/2; curl https://a.test/3`, "/tmp/project", "", "")
 	if !ok {
 		t.Fatal("sequence was not eligible")
 	}
@@ -89,7 +89,7 @@ func TestEnvelopeDeadlineIsCarriedOnlyWhenOneCallCanHoldIt(t *testing.T) {
 }
 
 func TestEnvelopeDeadlineBelowTheNativeFloorIsRefusedNotWidened(t *testing.T) {
-	calls, ok := ExactCommandReplacement(t.Context(), `curl https://a.test/1`, "/tmp/project", "")
+	calls, ok := ExactCommandReplacement(t.Context(), `curl https://a.test/1`, "/tmp/project", "", "")
 	if !ok {
 		t.Fatal("request was not eligible")
 	}
@@ -99,7 +99,7 @@ func TestEnvelopeDeadlineBelowTheNativeFloorIsRefusedNotWidened(t *testing.T) {
 }
 
 func TestEnvelopeDeadlineKeepsTheTighterBound(t *testing.T) {
-	calls, ok := ExactCommandReplacement(t.Context(), `curl -m 5 https://a.test/1`, "/tmp/project", "")
+	calls, ok := ExactCommandReplacement(t.Context(), `curl -m 5 https://a.test/1`, "/tmp/project", "", "")
 	if !ok {
 		t.Fatal("request was not eligible")
 	}

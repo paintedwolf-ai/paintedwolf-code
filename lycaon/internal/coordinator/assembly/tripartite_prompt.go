@@ -45,7 +45,7 @@ func (e *promptSurface) renderCoordinatorStablePrompt(
 	// or on request_tools.
 	settingsFP += ";loaded=" + loadedFingerprint(e.loadedTools(sess))
 	settingsFP += ";omitted=" + loadedFingerprint(e.omittedUnits(sess))
-	stableKey := sessionPromptCacheKey(profile, templateRef, sess.AgentType, sess.WorkspacePath, posture, settingsFP, rootCountFromVars(vars), promptRevision)
+	stableKey := sessionPromptCacheKey(profile, templateRef, sess.AgentType, sess.WorkspacePath, posture, settingsFP, rootsFingerprint(vars), promptRevision)
 	if cached, ok := e.cache.LoadStable(sess.ID, stableKey); ok {
 		if turn != nil {
 			turn.StablePrompt = cached
@@ -232,7 +232,7 @@ func (e *promptSurface) implementSessionState(ctx context.Context, sess *api.Ses
 	return e.deps.ImplementSessionState(ctx, sess)
 }
 
-func sessionPromptCacheKey(profile surface.TurnProfile, templateRef, agentType, projectDir, posture, settingsHash string, rootCount int, promptRevision string) string {
+func sessionPromptCacheKey(profile surface.TurnProfile, templateRef, agentType, projectDir, posture, settingsHash, roots, promptRevision string) string {
 	modeKey := strings.Join(profile.ModeRefs, "+")
 	return strings.Join([]string{
 		strings.TrimSpace(templateRef),
@@ -243,18 +243,27 @@ func sessionPromptCacheKey(profile surface.TurnProfile, templateRef, agentType, 
 		modeKey,
 		settingsHash,
 		"prompts=" + strings.TrimSpace(promptRevision),
-		fmt.Sprintf("roots=%d", rootCount),
+		"roots=" + roots,
 	}, "|")
 }
 
-func rootCountFromVars(vars map[string]any) int {
-	if vars == nil {
-		return 0
+// rootsFingerprint keys the stable prompt by every root label and path it
+// renders and the scratch path, so a rename, move or swap re-renders it.
+func rootsFingerprint(vars map[string]any) string {
+	count, _ := vars["root_count"].(int)
+	out := []string{fmt.Sprint(count)}
+	if rows, ok := vars["workspace_roots"].([]map[string]any); ok {
+		for _, row := range rows {
+			out = append(out, fmt.Sprintf("%v=%v:%v", row["label"], row["path"], row["is_primary"]))
+		}
 	}
-	if v, ok := vars["root_count"].(int); ok {
-		return v
+	if scratch, ok := vars["session_scratch_dir"].(string); ok {
+		out = append(out, "scratch="+scratch)
 	}
-	return 0
+	if reviews, ok := vars["reviews_confined_writes"].(bool); ok {
+		out = append(out, fmt.Sprintf("reviews_confined_writes=%t", reviews))
+	}
+	return strings.Join(out, ";")
 }
 
 // loadedTools returns the turn ledger's loaded set for the session.

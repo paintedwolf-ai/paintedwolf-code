@@ -70,26 +70,28 @@ func (r returnValue) Error() string {
 
 type interp struct {
 	// Input/output
-	output        io.Writer
-	errorOutput   io.Writer
-	scanner       *bufio.Scanner
-	scanners      map[string]*bufio.Scanner
-	stdin         io.Reader
-	filenameIndex int
-	hadFiles      bool
-	input         io.Reader
-	inputBuffer   []byte
-	inputStreams  map[string]inputStream
-	outputStreams map[string]outputStream
-	noExec        bool
-	budget        Budget
-	noFileWrites  bool
-	noFileReads   bool
-	shellCommand  []string
-	csvOutput     *bufio.Writer
-	noArgVars     bool
-	splitBuffer   []byte
-	fileSystem    fs.FS
+	output         io.Writer
+	errorOutput    io.Writer
+	scanner        *bufio.Scanner
+	scanners       map[string]*bufio.Scanner
+	stdin          io.Reader
+	filenameIndex  int
+	hadFiles       bool
+	input          io.Reader
+	inputBuffer    []byte
+	inputStreams   map[string]inputStream
+	outputStreams  map[string]outputStream
+	noExec         bool
+	budget         Budget
+	maxInputRecord int
+	arrayHighWater []int
+	noFileWrites   bool
+	noFileReads    bool
+	shellCommand   []string
+	csvOutput      *bufio.Writer
+	noArgVars      bool
+	splitBuffer    []byte
+	fileSystem     fs.FS
 
 	// Scalars, arrays, and function state
 	globals       []value
@@ -110,6 +112,7 @@ type interp struct {
 	lineNum         value
 	fileLineNum     value
 	fields          []string
+	fieldBacking    string
 	fieldsIsTrueStr []bool
 	numFields       value
 	haveFields      bool
@@ -262,6 +265,8 @@ type Config struct {
 
 	// Budget, when set, meters work and allocation for an embedding host.
 	Budget Budget
+	// MaxInputRecord bounds one record; zero retains the upstream default.
+	MaxInputRecord int
 
 	// Exec args used to run system shell. Typically, this will
 	// be {"/bin/sh", "-c"}
@@ -581,6 +586,10 @@ func (p *interp) setExecuteConfig(config *Config) error {
 	// Set up I/O structures
 	p.noExec = config.NoExec
 	p.budget = config.Budget
+	p.maxInputRecord = config.MaxInputRecord
+	if p.maxInputRecord <= 0 {
+		p.maxInputRecord = maxRecordLength
+	}
 	p.noFileWrites = config.NoFileWrites
 	p.noFileReads = config.NoFileReads
 	p.stdin = config.Stdin
@@ -709,6 +718,9 @@ func (p *interp) execActions(actions []compiler.Action) error {
 	var inRange []bool
 lineLoop:
 	for {
+		if err := p.retainLiveValues(); err != nil {
+			return err
+		}
 		// Read and setup next line of input
 		line, err := p.nextLine()
 		if err == io.EOF {
@@ -847,6 +859,13 @@ func (p *interp) setVarByName(name, value string) error {
 
 // Set special variable by index to given value
 func (p *interp) setSpecial(index int, v value) error {
+	if v.backing != "" {
+		if err := p.allocate(len(v.s)); err != nil {
+			return err
+		}
+		v.s = strings.Clone(v.s)
+		v.backing = ""
+	}
 	switch index {
 	case ast.V_NF:
 		numFields := int(v.num())
@@ -859,6 +878,9 @@ func (p *interp) setSpecial(index int, v value) error {
 		p.ensureFields()
 		p.numFields = v
 		if numFields < len(p.fields) {
+			for i := numFields; i < len(p.fields); i++ {
+				p.fields[i] = ""
+			}
 			p.fields = p.fields[:numFields]
 			p.fieldsIsTrueStr = p.fieldsIsTrueStr[:numFields]
 		}
@@ -1004,9 +1026,12 @@ func (p *interp) getField(index int) value {
 		return str("")
 	}
 	if p.fieldsIsTrueStr[index-1] {
-		return str(p.fields[index-1])
+		v := borrowedString(p.fields[index-1], str(p.fieldBacking))
+		return v
 	} else {
-		return numStr(p.fields[index-1])
+		v := borrowedString(p.fields[index-1], str(p.fieldBacking))
+		v.typ = typeNumStr
+		return v
 	}
 }
 
@@ -1031,6 +1056,10 @@ func (p *interp) getFieldByName(name string) (value, error) {
 
 // Sets a single field, equivalent to "$index = value"
 func (p *interp) setField(index int, value string) error {
+	if err := p.allocate(len(value)); err != nil {
+		return err
+	}
+	value = strings.Clone(value)
 	if index == 0 {
 		p.setLine(value, true)
 		return nil
@@ -1117,7 +1146,7 @@ func (p *interp) compileRegex(regex string) (*regexp.Regexp, error) {
 	re.Longest() // other awks use leftmost-longest matching
 	// Dumb, non-LRU cache: just cache the first N regexes
 	if len(p.regexCache) < maxCachedRegexes {
-		p.regexCache[regex] = re
+		p.regexCache[strings.Clone(regex)] = re
 	}
 	return re, nil
 }

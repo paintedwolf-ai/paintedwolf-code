@@ -27,7 +27,7 @@ func TestGitOperationCommandReplacements(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.command, func(t *testing.T) {
-			got, ok := ExactCommandReplacement(t.Context(), tt.command, t.TempDir(), "")
+			got, ok := ExactCommandReplacement(t.Context(), tt.command, t.TempDir(), "", "")
 			if !ok || len(got) != 1 || got[0].Tool != tt.tool || !reflect.DeepEqual(got[0].Args, tt.args) {
 				t.Fatalf("replacement=%+v matched=%v", got, ok)
 			}
@@ -35,7 +35,7 @@ func TestGitOperationCommandReplacements(t *testing.T) {
 	}
 	for _, command := range []string{"git checkout --", "git checkout HEAD -- '*.md'", "git checkout main dev -- file.txt", "git checkout -f -- file.txt", "git restore -- '*.md'", "git checkout -f main", "git switch -C main", "git merge --squash main", "git stash push", "git stash pop", "git stash clear", "git stash push -- .//", "git stash push -- '*.md'", "git log -- '*.md'", "git log --format=%B", "git log -1000"} {
 		t.Run(command, func(t *testing.T) {
-			if calls, ok := ExactCommandReplacement(t.Context(), command, t.TempDir(), ""); ok {
+			if calls, ok := ExactCommandReplacement(t.Context(), command, t.TempDir(), "", ""); ok {
 				t.Fatalf("inexact command redirected: %+v", calls)
 			}
 		})

@@ -73,8 +73,8 @@ func (r *ProcessLifecycle) WatchIndex(sessionID, handle string, snapshot indexwa
 		snapshot.Release()
 		return
 	}
-	proc.indexWatch.Release()
-	proc.indexWatch = snapshot
+	proc.resources.indexWatch.Release()
+	proc.resources.indexWatch = snapshot
 }
 
 // TakeIndexWatch returns the process's index capture to an awaiting caller.
@@ -85,8 +85,8 @@ func (r *ProcessLifecycle) TakeIndexWatch(sessionID, handle string) indexwatch.S
 	}
 	r.jobs.mu.Lock()
 	defer r.jobs.mu.Unlock()
-	snapshot := proc.indexWatch
-	proc.indexWatch = indexwatch.Snapshot{}
+	snapshot := proc.resources.indexWatch
+	proc.resources.indexWatch = indexwatch.Snapshot{}
 	return snapshot
 }
 
@@ -165,6 +165,7 @@ func (r *ProcessLifecycle) DisposeSession(ctx context.Context, sessionID string)
 		if err := r.awaitSettled(ctx, proc); err != nil {
 			return err
 		}
+		r.releaseCompletionResources(proc)
 	}
 	return nil
 }
@@ -209,6 +210,7 @@ func (r *ProcessLifecycle) Close(ctx context.Context) error {
 		if err := r.awaitSettled(ctx, proc); err != nil {
 			return err
 		}
+		r.releaseCompletionResources(proc)
 	}
 	return nil
 }
@@ -234,7 +236,13 @@ func (r *Output) publishTerminal(ctx context.Context, proc *Process) {
 		return
 	}
 	r.jobs.mu.Lock()
-	if proc.silent || proc.discarded || !proc.hasExit || proc.terminalPublished {
+	if proc.discarded {
+		owned := proc.resources.take()
+		r.jobs.mu.Unlock()
+		owned.release()
+		return
+	}
+	if proc.silent || !proc.hasExit || proc.terminalPublished {
 		r.jobs.mu.Unlock()
 		return
 	}
@@ -248,8 +256,9 @@ func (r *Output) publishTerminal(ctx context.Context, proc *Process) {
 		TerminationReason: proc.reason, ExitCode: proc.exitCode, Failure: proc.failure,
 		Stages: append([]hostcmd.StageResult(nil), proc.Stages...),
 	}
-	completion.IndexWatch = proc.indexWatch
-	proc.indexWatch = indexwatch.Snapshot{}
+	owned := proc.resources.take()
+	completion.UnsavedDocumentPaths, completion.ReleaseNotices = owned.unsavedDocumentPaths, owned.releaseNotices
+	completion.IndexWatch = owned.indexWatch
 	exitCode := proc.exitCode
 	boundary := proc.boundary
 	facts := proc.facts
@@ -280,7 +289,7 @@ func (r *Output) publishTerminal(ctx context.Context, proc *Process) {
 		complete(ctx, completion)
 		return
 	}
-	completion.IndexWatch.Release()
+	owned.release()
 }
 
 func trim(s string) string {

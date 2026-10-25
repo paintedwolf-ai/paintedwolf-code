@@ -285,52 +285,14 @@ func (p *interp) split(s string, scope resolver.Scope, index int, sep string, se
 	}
 	array := make(map[string]value, len(parts))
 	for i, part := range parts {
-		array[strconv.Itoa(i+1)] = numStr(part)
+		array[strconv.Itoa(i+1)] = numStr(strings.Clone(part))
 	}
-	p.arrays[p.arrayIndex(scope, index)] = array
+	arrayIndex := p.arrayIndex(scope, index)
+	p.arrays[arrayIndex] = array
+	if arrayIndex < len(p.arrayHighWater) {
+		p.arrayHighWater[arrayIndex] = len(array)
+	}
 	return len(array), nil
-}
-
-// Guts of the sub() and gsub() functions
-func (p *interp) sub(regex, repl, in string, global bool) (out string, num int, err error) {
-	re, err := p.compileRegex(regex)
-	if err != nil {
-		return "", 0, err
-	}
-	count := 0
-	out = re.ReplaceAllStringFunc(in, func(s string) string {
-		// Only do the first replacement for sub(), or all for gsub()
-		if !global && count > 0 {
-			return s
-		}
-		count++
-		// Handle & (ampersand) properly in replacement string
-		r := make([]byte, 0, 64) // Up to 64 byte replacement won't require heap allocation
-		for i := 0; i < len(repl); i++ {
-			switch repl[i] {
-			case '&':
-				r = append(r, s...)
-			case '\\':
-				i++
-				if i < len(repl) {
-					switch repl[i] {
-					case '&':
-						r = append(r, '&')
-					case '\\':
-						r = append(r, '\\')
-					default:
-						r = append(r, '\\', repl[i])
-					}
-				} else {
-					r = append(r, '\\')
-				}
-			default:
-				r = append(r, repl[i])
-			}
-		}
-		return string(r)
-	})
-	return out, count, nil
 }
 
 type cachedFormat struct {

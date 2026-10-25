@@ -24,7 +24,15 @@ type ProgramJobSpec struct {
 	CommandLine   string
 	OriginTool    string
 	ToolCallID    string
-	Run           func(ctx context.Context, stdout, stderr io.Writer) (exitCode int, err error)
+	Run           func(ctx context.Context, stdout, stderr io.Writer) (ProgramJobResult, error)
+}
+
+// ProgramJobResult carries host notice facts separately from command bytes.
+// The producing program collects them before releasing its lifetime hold.
+type ProgramJobResult struct {
+	ExitCode             int
+	UnsavedDocumentPaths []string
+	ReleaseNotices       func()
 }
 
 // StartProgram registers a native job beside pipeline jobs under the same
@@ -70,10 +78,13 @@ func (r *Registry) StartProgram(ctx context.Context, spec ProgramJobSpec) (strin
 	stdout := streamWriter{proc: proc, stream: "stdout", publish: r.Output.publishStream}
 	stderr := streamWriter{proc: proc, stream: "stderr", publish: r.Output.publishStream}
 	go func() {
-		exitCode, err := spec.Run(runCtx, stdout, stderr)
+		settled, err := spec.Run(runCtx, stdout, stderr)
+		exitCode := settled.ExitCode
 		cancel()
 		r.jobs.mu.Lock()
 		proc.running, proc.hasExit, proc.exitCode = false, true, exitCode
+		proc.resources.unsavedDocumentPaths = settled.UnsavedDocumentPaths
+		proc.resources.releaseNotices = settled.ReleaseNotices
 		proc.Stages[0].ExitCode, proc.Stages[0].Failed = &exitCode, exitCode != 0
 		proc.failure = hostcmd.ExecFailureOf(err)
 		proc.finishedAt = time.Now().UTC()
@@ -101,4 +112,12 @@ func (r *ProcessLifecycle) Wait(ctx context.Context, sessionID, handle string) (
 	r.jobs.mu.Lock()
 	defer r.jobs.mu.Unlock()
 	return proc.exitCode, proc.stopped, nil
+}
+
+// releaseCompletionResources reclaims an untransferred completion's resources.
+func (r *ProcessLifecycle) releaseCompletionResources(proc *Process) {
+	r.jobs.mu.Lock()
+	owned := proc.resources.take()
+	r.jobs.mu.Unlock()
+	owned.release()
 }

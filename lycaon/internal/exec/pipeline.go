@@ -60,10 +60,6 @@ func buildExecCmd(ctx context.Context, name string, args []string, opts ExecOpts
 	return prepareNativeCommand(ctx, name, args, opts, stageEnv, false)
 }
 
-func configureCmdEnv(cmd *exec.Cmd, opts ExecOpts) error {
-	return configureStageCmdEnv(cmd, opts, nil)
-}
-
 // ProcessEnvironment builds the sanitized base environment for a process launch
 // before OS-specific sandbox confinement variables (such as proxy or SSH
 // wrappers) are attached. Both the command program's native env builtin and
@@ -371,9 +367,9 @@ func stageSinkWriter(sink argv.Sink, pipe *os.File, call callStreams, files *sta
 	}
 }
 
-func startWiredStages(wired []wiredStage) error {
+func startWiredStages(ctx context.Context, wired []wiredStage) error {
 	for i := range wired {
-		err := confine.ValidateProcessInputs(wired[i].cmd)
+		err := confine.ValidateProcessInputs(ctx, wired[i].cmd)
 		if err == nil {
 			err = wired[i].cmd.Start()
 		}
@@ -389,7 +385,7 @@ func startWiredStages(wired []wiredStage) error {
 		}
 		err = wired[i].guard.onStarted(wired[i].cmd)
 		if err == nil {
-			err = confine.ConfirmProcessLaunch(wired[i].cmd)
+			err = confine.ConfirmProcessLaunch(ctx, wired[i].cmd)
 		}
 		if err != nil {
 			killWired(wired[:i+1])

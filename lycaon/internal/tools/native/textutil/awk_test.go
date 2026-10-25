@@ -3,6 +3,7 @@
 package textutil
 
 import (
+	"fmt"
 	"os/exec"
 	"strings"
 	"testing"
@@ -35,7 +36,15 @@ func TestAwkReadsPinnedFilesByName(t *testing.T) {
 		t.Fatalf("pins %+v", h.pins.executions[r.execution])
 	}
 	missing := h.run(`awk '{print}' missing one`, "")
-	missing.expectOutput(t, "missing file", "a\nb\n", 2)
+	missing.expectOutput(t, "missing file", "", 2)
+	if !strings.Contains(missing.stderr, "cannot open file 'missing'") {
+		t.Fatalf("ordinary diagnostic: %q", missing.stderr)
+	}
+	partial := h.run(`awk '{print}' one missing two`, "")
+	partial.expectOutput(t, "missing after first operand", "a\nb\n", 2)
+	if len(h.pins.executions[partial.execution]) != 1 {
+		t.Fatal("later operand was opened after fatal input error")
+	}
 }
 
 func TestAwkRefusesUnsafeAndRE2OnlyConstructsBeforeReading(t *testing.T) {
@@ -107,5 +116,47 @@ func TestAwkDifferentialAgainstHost(t *testing.T) {
 			t.Fatalf("host awk %s: %v", program, err)
 		}
 		h.run("awk '"+program+"'", input).expectOutput(t, program, string(want), 0)
+	}
+}
+
+// Transient case conversion can process much more than the live memory cap;
+// persistent roots, including tiny substrings retaining big records, cannot.
+func TestAwkLiveValuesReleaseTransientStorage(t *testing.T) {
+	h := newHarness(t)
+	h.owners.limits["evaluation_memory_bytes"] = 32 << 10
+	input := strings.Repeat(strings.Repeat("x", 1000)+"\n", 1000)
+	r := h.run(`awk '{ x=toupper($0) } END {print length(x), NR}'`, input)
+	r.expectOutput(t, "transient transforms", "1000 1000\n", 0)
+	for _, program := range []string{
+		`awk '{ saved = saved $0 } END {print length(saved)}'`,
+		`awk '{ a[NR] = $0 } END {print length(a)}'`,
+		`awk '{ a[NR] = substr($0,1,1) } END {print length(a)}'`,
+		`awk '{ a[$0]++ } END {print length(a)}'`,
+	} {
+		data := input
+		if strings.Contains(program, "a[$0]") {
+			var unique strings.Builder
+			for i := 0; i < 1000; i++ {
+				fmt.Fprintf(&unique, "%04d%s\n", i, strings.Repeat("x", 996))
+			}
+			data = unique.String()
+		}
+		rejected := h.run(program, data).expectRefusal(t, "retained values", "COMMAND_LIMIT_EXCEEDED")
+		if rejected.Data["limit_id"] != "evaluation_memory_bytes" {
+			t.Fatalf("wrong memory refusal: %+v", rejected.Data)
+		}
+	}
+}
+
+func TestAwkReplacementRefusalReleasesWorkingMemory(t *testing.T) {
+	h := newHarness(t)
+	h.owners.limits["evaluation_memory_bytes"] = 32 << 10
+	result := h.run(`awk 'BEGIN { a[1]="a"; r=sprintf("%10000s","x"); print "before"; gsub(/a/,r,a[1]); print "after" }'`, "")
+	rejected := result.expectRefusal(t, "replacement growth", "COMMAND_LIMIT_EXCEEDED")
+	if rejected.Data["limit_id"] != "evaluation_memory_bytes" || result.stdout != "before\n" {
+		t.Fatalf("refusal %+v stdout %q", rejected, result.stdout)
+	}
+	if held := h.memory.InUse(); held.Working != 0 || held.State != 0 {
+		t.Fatalf("retained replacement admissions %+v", held)
 	}
 }

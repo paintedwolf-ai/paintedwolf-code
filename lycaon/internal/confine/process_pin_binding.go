@@ -125,32 +125,40 @@ func cloneVector(vector []string) []string {
 // ValidateProcessInputs runs before starting a prepared command, including after
 // the existing Linux supervisor adds its own prefix. Caller I/O setup is allowed;
 // changing the captured executable vector/environment/cwd is not.
-func ValidateProcessInputs(cmd *exec.Cmd) error {
+func ValidateProcessInputs(ctx context.Context, cmd *exec.Cmd) error {
 	value, ok := processHandoffs.Load(cmd)
 	if !ok {
 		return fmt.Errorf("command lacks prepared launch inputs")
 	}
 	state := value.(*processHandoff)
+	if err := state.ctx.Err(); err != nil {
+		return err
+	}
 	count := len(state.helperArguments)
 	if cmd.Path != state.helperPath || len(cmd.ExtraFiles) < len(state.files) || !slices.Equal(cmd.ExtraFiles[:len(state.files)], state.files) || len(cmd.Args) < count || !slices.Equal(cmd.Args[len(cmd.Args)-count:], state.helperArguments) || !slices.Equal(cmd.Env, state.environment) || cmd.Dir != "" {
 		return ErrLaunchIdentityChanged
 	}
-	if err := state.check(state.ctx); err != nil {
+	if err := state.check(ctx); err != nil {
 		return err
 	}
-	return state.inputs.revalidate(state.ctx)
+	return state.inputs.revalidate(ctx)
 }
 
 // ConfirmProcessLaunch is called only after the existing owner registered the
 // actual process/tree. It releases immutable inputs once; failure stays with that
 // owner's native kill/reap and terminal settlement rather than replaying a launch.
-func ConfirmProcessLaunch(cmd *exec.Cmd) error {
+func ConfirmProcessLaunch(ctx context.Context, cmd *exec.Cmd) error {
 	value, ok := processHandoffs.Load(cmd)
 	if !ok {
 		return fmt.Errorf("prepared launch handoff is absent")
 	}
 	state := value.(*processHandoff)
-	ctx, cancel := context.WithTimeout(state.ctx, 10*time.Second)
+	if err := state.ctx.Err(); err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	stop := context.AfterFunc(state.ctx, cancel)
+	defer stop()
 	defer cancel()
 	_ = state.readyWrite.Close()
 	_ = state.releaseRead.Close()

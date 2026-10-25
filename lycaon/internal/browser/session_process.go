@@ -25,7 +25,7 @@ func launchBrowserProcess(ctx context.Context, l *launcher.Launcher, chromePath 
 	}
 	parser := launcher.NewURLParser().Context(ctx)
 	cmd.Stdout, cmd.Stderr = parser, parser
-	group, err := execpkg.StartInOwnGroup(cmd)
+	group, err := execpkg.StartInOwnGroup(ctx, cmd)
 	if err != nil {
 		cleanup()
 		return "", nil, err
