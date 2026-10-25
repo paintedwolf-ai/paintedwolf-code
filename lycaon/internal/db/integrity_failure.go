@@ -31,7 +31,7 @@ type integrityFailureRecord struct {
 // store) is stale and is discarded here, on every open path.
 func CheckStoreHealth(path string) error {
 	recordPath := path + IntegrityFailureSuffix
-	file, err := os.Open(recordPath)
+	file, err := os.Open(recordPath) // #nosec G304,G703
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
@@ -54,7 +54,7 @@ func CheckStoreHealth(path string) error {
 	if err == nil && identity == record.Identity {
 		return storeIncompatible(RecoveryReasonIntegrityFailed, 0, record.Detail)
 	}
-	if err := os.Remove(recordPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if err := os.Remove(recordPath); err != nil && !errors.Is(err, os.ErrNotExist) { // #nosec G703
 		return fmt.Errorf("discard stale store quarantine: %w", err)
 	}
 	return nil

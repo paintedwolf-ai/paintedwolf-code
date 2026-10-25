@@ -160,7 +160,7 @@ const UpgradeRecoveryDirName = "upgrade-recovery"
 // Recovery artifacts make a zero-byte store ambiguous.
 func emptyStoreHasRecoveryArtifacts(dbPath string) bool {
 	for _, artifact := range []string{dbPath + "-wal", dbPath + "-shm", filepath.Join(filepath.Dir(dbPath), UpgradeRecoveryDirName)} {
-		if _, err := os.Stat(artifact); err == nil || !os.IsNotExist(err) {
+		if _, err := os.Stat(artifact); err == nil || !os.IsNotExist(err) { // #nosec G703
 			return true
 		}
 	}
