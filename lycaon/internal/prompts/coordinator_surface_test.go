@@ -100,7 +100,7 @@ func TestCoordinatorPromptVarsRejectUnknownSurface(t *testing.T) {
 	if err := prompts.MergeCoordinatorSurfacePathVars("missing", nil, vars, prompts.SurfaceTurn{}); err == nil {
 		t.Fatal("surface path vars accepted an unknown surface")
 	}
-	if err := prompts.MergeCoordinatorPromptVars("missing", prompts.ExecutionModePromptTransition{}, prompts.CoordinatorPromptGates{}, vars); err == nil {
+	if err := prompts.MergeCoordinatorPromptVars("missing", prompts.ExecutionModePromptTransition{}, "", vars); err == nil {
 		t.Fatal("prompt vars accepted an unknown surface")
 	}
 }

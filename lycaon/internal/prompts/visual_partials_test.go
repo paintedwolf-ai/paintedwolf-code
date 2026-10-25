@@ -415,7 +415,7 @@ func TestInvestigateShellRendersLoadedVisualProcedure(t *testing.T) {
 	testutil.FailErr(t, "surface path vars", prompts.MergeCoordinatorSurfacePathVars("implement_investigate", nil, vars, prompts.SurfaceTurn{Loaded: loaded}))
 	testutil.FailErr(t, "merge coordinator prompt vars", prompts.MergeCoordinatorPromptVars("implement_investigate", prompts.ExecutionModePromptTransition{
 		ExecutionMode: "investigate",
-	}, prompts.CoordinatorPromptGates{}, vars))
+	}, "", vars))
 	mergeUnits(t, engine, vars, promptunit.HostCoordinator, "investigate", nil)
 	out, err := engine.Render(ctx, "agents/coordinator-core.md", vars)
 	testutil.FailErr(t, "render investigate shell", err)

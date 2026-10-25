@@ -58,7 +58,7 @@ func TestCoordinatorTeachesSecretUseOnceSecretToolsLoad(t *testing.T) {
 		t.Fatal("fixture must exercise deferred secret generation")
 	}
 	testutil.FailErr(t, "merge coordinator prompt", prompts.MergeCoordinatorPromptVars("implement_investigate",
-		prompts.ExecutionModePromptTransition{ExecutionMode: "investigate"}, prompts.CoordinatorPromptGates{}, vars))
+		prompts.ExecutionModePromptTransition{ExecutionMode: "investigate"}, "", vars))
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
 	mergeUnits(t, engine, vars, promptunit.HostCoordinator, "investigate", nil)
 	out, err := engine.Render(context.Background(), "agents/coordinator-core.md", vars)

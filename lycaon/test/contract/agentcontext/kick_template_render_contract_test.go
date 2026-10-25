@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/test/contract/internal/catalogfixture"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -215,53 +216,27 @@ func TestLegFinishedKickSplitByAdvancePolicy(t *testing.T) {
 func TestCoordinatorOverlayPromptConditioning(t *testing.T) {
 	t.Parallel()
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
-
-	base := map[string]any{
-		"max_in_flight":                32,
-		"max_tool_loops":               40,
-		"max_concurrent_tool_calls":    8,
-		"pending_overlay_promote":      false,
-		"execution_mode":               "orchestrate",
-		"has_file_tools":               true,
-		"can_spawn_implementer":        true,
-		"can_spawn_web_research":       true,
-		"root_count":                   1,
-		"defer_until_user_reply_tools": []string{"pack_board"},
-	}
-	contractcheck.FailErr(t, "merge coordinator kick policy vars", prompts.MergeCoordinatorKickPolicyVars(base))
+	renderer := prompts.NewInjectRenderer(engine)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	dispatch, err := engine.Render(ctx, "agents/coordinator-mode-implement-dispatch.md", base)
-	contractcheck.FailErr(t, "render dispatch mode", err)
-	if strings.Contains(dispatch, "per-overlay promote order") {
-		t.Fatalf("dispatch must omit overlay promote order when pending_overlay_promote false\n---\n%s", dispatch)
-	}
-	if strings.Contains(dispatch, "without pending overlay") {
-		t.Fatalf("dispatch must omit pending-overlay partial clause when pending_overlay_promote false\n---\n%s", dispatch)
+	emptyBlock, err := inject.RenderTurnStateBlock(ctx, renderer, "sess-empty", inject.TurnStateInjectInput{})
+	contractcheck.FailErr(t, "render empty turn state", err)
+	if strings.Contains(emptyBlock, "per-overlay promote order") {
+		t.Fatalf("turn state must omit overlay promote order when pending_overlay_jobs empty\n---\n%s", emptyBlock)
 	}
 
-	pacing, err := engine.Render(ctx, "partials/coordinator-mode-orchestrate-pacing.md", base)
-	contractcheck.FailErr(t, "render orchestrate pacing", err)
-	if strings.Contains(pacing, "promote pending overlays") {
-		t.Fatalf("orchestrate pacing must omit promote when pending_overlay_promote false\n---\n%s", pacing)
+	withOverlay, err := inject.RenderTurnStateBlock(ctx, renderer, "sess-overlay", inject.TurnStateInjectInput{
+		PendingOverlayJobs: []string{"job-overlay"},
+		PartialWorkerJobs:  []string{"job-partial"},
+	})
+	contractcheck.FailErr(t, "render turn state with overlays", err)
+	if !strings.Contains(withOverlay, "per-overlay promote order") {
+		t.Fatalf("turn state must include overlay promote order when pending_overlay_jobs set\n---\n%s", withOverlay)
 	}
-
-	withOverlay := map[string]any{}
-	for k, v := range base {
-		withOverlay[k] = v
-	}
-	withOverlay["pending_overlay_promote"] = true
-	withOverlay["partial_worker_jobs"] = []string{"job-partial"}
-
-	dispatchPending, err := engine.Render(ctx, "agents/coordinator-mode-implement-dispatch.md", withOverlay)
-	contractcheck.FailErr(t, "render dispatch with overlays", err)
-	if !strings.Contains(dispatchPending, "per-overlay promote order") {
-		t.Fatalf("dispatch must include overlay promote order when pending_overlay_promote true\n---\n%s", dispatchPending)
-	}
-	if !strings.Contains(dispatchPending, "job-partial") {
-		t.Fatalf("dispatch must list partial_worker_jobs when set\n---\n%s", dispatchPending)
+	if !strings.Contains(withOverlay, "job-partial") {
+		t.Fatalf("turn state must list partial_worker_jobs when set\n---\n%s", withOverlay)
 	}
 }
 

@@ -1,0 +1,9 @@
+'on': inject.turn_state
+effect: inform
+render: turn-state
+tier: builtin
+when: 'true'
+invariants:
+  trigger_class: assembly_inject
+  fires_in:
+  - coordinator assembly with dynamic turn state

@@ -146,7 +146,7 @@ func PartialWorkerSummaryJobIDs(history []api.Message) []string {
 	seen := map[string]struct{}{}
 	for i := len(history) - 1; i >= 0; i-- {
 		meta := history[i].WorkerSummary
-		if meta == nil || meta.Status != api.WorkerSummaryStatusPartial {
+		if meta == nil {
 			continue
 		}
 		id := strings.TrimSpace(meta.WorkerID)
@@ -157,7 +157,9 @@ func PartialWorkerSummaryJobIDs(history []api.Message) []string {
 			continue
 		}
 		seen[id] = struct{}{}
-		ids = append(ids, id)
+		if meta.Status == api.WorkerSummaryStatusPartial {
+			ids = append(ids, id)
+		}
 	}
 	return ids
 }
@@ -168,7 +170,7 @@ func PendingOverlaySummaryIDs(history []api.Message) []string {
 	seen := map[string]struct{}{}
 	for i := len(history) - 1; i >= 0; i-- {
 		meta := history[i].WorkerSummary
-		if meta == nil || meta.Status != api.WorkerSummaryStatusOpen {
+		if meta == nil {
 			continue
 		}
 		id := strings.TrimSpace(meta.WorkerID)
@@ -179,7 +181,9 @@ func PendingOverlaySummaryIDs(history []api.Message) []string {
 			continue
 		}
 		seen[id] = struct{}{}
-		ids = append(ids, id)
+		if meta.Status == api.WorkerSummaryStatusOpen {
+			ids = append(ids, id)
+		}
 	}
 	return ids
 }

@@ -6,7 +6,9 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/heldcall"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -122,6 +124,12 @@ func (e *turnContextAssembler) buildTailSystemInjects(
 		if injectMsgs := e.prependSynthesisEvidenceInject(ctx, sess, surfaceID); len(injectMsgs) > 0 {
 			tail = append(tail, injectMsgs...)
 		}
+		if block, ok := e.turnStateInject(ctx, sess, frame, history, turn); ok {
+			tail = append(tail, api.Message{
+				Role: api.MessageRoleSystem, Content: block,
+				Origin: api.MessageOriginHost, Authority: api.ContentAuthorityNone, TrustTier: api.ContentTrustTierTrusted,
+			})
+		}
 	}
 
 	if coordinator && deps.CoordinatorFrame != nil && deps.Injects != nil {
@@ -201,4 +209,56 @@ func (e *turnContextAssembler) prepareCoordinatorBoard(
 		turn.BoardKey = boardInjectFingerprint(hash, strings.TrimSpace(frame.RunContext.CurrentPhase))
 	}
 	return frame, block, nil
+}
+
+func (e *turnContextAssembler) turnStateInject(
+	ctx context.Context,
+	sess *api.Session,
+	frame inject.CoordinatorTurnFrame,
+	history []api.Message,
+	turn *TurnAssemblyScratch,
+) (string, bool) {
+	if e == nil || e.deps.Injects == nil || sess == nil || e.surface == nil {
+		return "", false
+	}
+	profile, implState := e.surface.resolveCoordinatorProfile(ctx, sess, frame, history, turn)
+
+	floor, _ := prompts.LoadCoordinatorSurfaceFloor(profile.SurfaceID)
+	loadable, _ := prompts.LoadCoordinatorSurfaceLoadable(profile.SurfaceID)
+	offered, _ := prompts.OfferedTools(floor, loadable, e.surface.loadedTools(sess))
+
+	profileHasUpdateProgress := false
+	for _, tool := range offered {
+		if tool == "update_progress" {
+			profileHasUpdateProgress = true
+			break
+		}
+	}
+
+	partial := surface.PartialWorkerSummaryJobIDs(history)
+	pending := implState.PendingOverlayIDs
+	pendingSet := make(map[string]bool, len(pending))
+	for _, id := range pending {
+		pendingSet[id] = true
+	}
+	var partialWorkerJobs []string
+	for _, id := range partial {
+		if !pendingSet[id] {
+			partialWorkerJobs = append(partialWorkerJobs, id)
+		}
+	}
+
+	in := inject.TurnStateInjectInput{
+		ProgressMissing:          implState.ProgressMissing,
+		ProfileHasUpdateProgress: profileHasUpdateProgress,
+		VerifyRequired:           frame.RequiresEvidence("verify"),
+		PendingOverlayJobs:       pending,
+		PartialWorkerJobs:        partialWorkerJobs,
+	}
+
+	block, err := inject.RenderTurnStateBlock(ctx, e.deps.Injects, sess.ID, in)
+	if err != nil || strings.TrimSpace(block) == "" {
+		return "", false
+	}
+	return block, true
 }

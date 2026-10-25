@@ -163,15 +163,6 @@ func LoadCoordinatorSurfaceLoadable(surfaceID string) ([]string, error) {
 	return out, nil
 }
 
-// MergeCoordinatorTurnSurfaceVars adds turn-scoped flags for conditional coordinator mode partials.
-func MergeCoordinatorTurnSurfaceVars(surfaceID string, pendingOverlayPromote bool, into map[string]any) {
-	if into == nil {
-		return
-	}
-	into["surface_id"] = strings.TrimSpace(surfaceID)
-	into["pending_overlay_promote"] = pendingOverlayPromote
-}
-
 // MergeCoordinatorKickPolicyVars adds coordinator kick policy variables.
 func MergeCoordinatorKickPolicyVars(into map[string]any) error {
 	if into == nil {
