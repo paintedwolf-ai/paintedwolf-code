@@ -175,6 +175,42 @@ class DesktopUIOwnershipTests(unittest.TestCase):
         self.assertEqual(api.Registry.getDesktop.call_count, 2)
         button.action.doAction.assert_called_once_with(0)
 
+    def test_project_navigation_query_accepts_only_one_complete_owned_public_state(self):
+        labels = ('Project configuration', 'Show sidebar', 'Widen window to restore sidebar')
+        for label in labels:
+            with self.subTest(label=label):
+                node = Node(API.ROLE_PUSH_BUTTON, label)
+                api, _ = surface([node, Node(API.ROLE_ENTRY, 'PRIVATE')])
+                with ui.DesktopUI(self.app, api) as actor:
+                    self.assertIs(actor.project_navigation_control(ui.time.monotonic() + 15), node)
+                self.assertEqual(self.app.observations['project_navigation_inventory'], {
+                    'inventory_complete': True, 'match_count': 1,
+                    'states': {name: int(name == label) for name in labels}})
+                node.action.doAction.assert_not_called()
+        first, second = [Node(API.ROLE_PUSH_BUTTON, label) for label in labels[:2]]
+        api, _ = surface([first, second])
+        with ui.DesktopUI(self.app, api) as actor, self.assertRaises(CaseUnavailable):
+            actor.project_navigation_control(ui.time.monotonic() + 15)
+        for node in (first, second):
+            node.action.doAction.assert_not_called()
+
+    def test_project_navigation_incomplete_scan_cannot_return_partial_match_or_erase_complete_facts(self):
+        node = Node(API.ROLE_PUSH_BUTTON, 'Project configuration')
+        api, window = surface([node])
+        previous = {'inventory_complete': True, 'match_count': 0, 'states': {
+            'Project configuration': 0, 'Show sidebar': 0, 'Widen window to restore sidebar': 0}}
+        self.app.observations['project_navigation_inventory'] = previous
+        def incomplete(*args):
+            yield node
+            raise CaseUnavailable('observation-deadline')
+        with ui.DesktopUI(self.app, api) as actor, patch.object(actor, 'descendants', side_effect=incomplete):
+            with self.assertRaises(CaseUnavailable) as refusal:
+                actor.project_navigation_control(ui.time.monotonic() + 15)
+        self.assertIs(self.app.observations['project_navigation_inventory'], previous)
+        self.assertFalse(refusal.exception.observations['desktop_control']['inventory_complete'])
+        self.assertNotIn('PRIVATE', repr(self.app.observations))
+        node.action.doAction.assert_not_called()
+
     def test_incomplete_inventory_retains_exact_requested_control_without_action(self):
         button = Node(API.ROLE_PUSH_BUTTON, 'Send')
         api, _ = surface([button])
