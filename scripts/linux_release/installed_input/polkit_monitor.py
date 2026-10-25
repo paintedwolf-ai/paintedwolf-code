@@ -28,9 +28,9 @@ SIGNATURES = {
 
 
 class Monitor:
-    def __init__(self, account, vm_id):
+    def __init__(self, account, vm_id, *, deadline=None):
         validate_account(account, vm_id=vm_id)
-        self.deadline = time.monotonic() + 150
+        self.deadline = time.monotonic() + 150 if deadline is None else min(time.monotonic() + 150, deadline)
         self.reader = Reader(deadline=self.deadline)
         self.connection = None
         self.rows, self.calls = [], set()
