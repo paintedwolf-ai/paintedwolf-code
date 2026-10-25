@@ -14,8 +14,8 @@ const secretToken = "{{paintedwolf-secret:0f8fad5b-d9cb-469f-a165-70867728950e}}
 
 func TestEnvironmentUtilitiesListTheFrozenEnvironment(t *testing.T) {
 	h := newHarness(t, defaultHost())
-	h.env = []string{"B=two words", "A=1", "SECRET=" + secretToken, "LD_PRELOAD=/tmp/x.so", "NODE_OPTIONS=--require x"}
-	listing := "A=1\nB=two words\nSECRET=" + secretToken + "\n"
+	h.env = []string{"B=two words", "A=1", "GIT_PAGER=cat", "SECRET=" + secretToken, "LD_PRELOAD=/tmp/x.so", "NODE_OPTIONS=--require x"}
+	listing := "A=1\nB=two words\nGIT_PAGER=cat\nSECRET=" + secretToken + "\n"
 	cases := []struct {
 		source, stdout string
 		status         int
@@ -24,10 +24,11 @@ func TestEnvironmentUtilitiesListTheFrozenEnvironment(t *testing.T) {
 		{"printenv -- B A", "two words\n1\n", 0},
 		{"printenv B missing A LD_PRELOAD", "two words\n1\n", 1},
 		{"printenv SECRET", secretToken + "\n", 0},
+		{"printenv GIT_PAGER", "cat\n", 0},
 		{"env", listing, 0},
 		{"env -i", "", 0},
 		{"env --ignore-environment C=3", "C=3\n", 0},
-		{"env -u A --unset SECRET D=4 B=replaced", "B=replaced\nD=4\n", 0},
+		{"env -u A --unset SECRET D=4 B=replaced", "B=replaced\nD=4\nGIT_PAGER=cat\n", 0},
 		{"env -i 'Q=a b=c' E=", "E=\nQ=a b=c\n", 0},
 	}
 	for _, c := range cases {
