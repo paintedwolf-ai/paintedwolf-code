@@ -43,15 +43,15 @@ func TestReadyPullRequestsRunTheFastTierAndMergeGroupsTheGate(t *testing.T) {
 		fast.If != "${{ github.event_name == 'pull_request' && !github.event.pull_request.draft || inputs.profile == 'fast' }}" {
 		t.Error("ready pull requests, and only they or a dispatch asking for it, run the fast tier")
 	}
-	if integration.With["profile"] != "${{ github.event_name == 'merge_group' && 'integration' || 'check' }}" ||
-		integration.If != "${{ github.event_name == 'merge_group' || inputs.profile == 'check' }}" {
+	if integration.With["profile"] != "${{ (github.event_name == 'merge_group' || inputs.profile == 'integration') && 'integration' || 'check' }}" ||
+		integration.If != "${{ github.event_name == 'merge_group' || inputs.profile == 'integration' || inputs.profile == 'check' }}" {
 		t.Error("merge groups run the integration gate, and a full dispatch the check profile")
 	}
 	if platform.Uses != "./.github/workflows/platform-verification.yml" || platform.If != "inputs.profile == 'check'" {
 		t.Error("a full dispatch must include platform qualification")
 	}
 	requireHostedGate(t, jobs, "check", []string{"fast", "integration", "platform"})
-	const skipped = "${{ inputs.profile == 'check' && 'fast' || format('{0},platform', github.event_name == 'merge_group' && 'fast' || 'integration') }}"
+	const skipped = "${{ inputs.profile == 'check' && 'fast' || format('{0},platform', (github.event_name == 'merge_group' || inputs.profile == 'integration') && 'fast' || 'integration') }}"
 	for _, step := range jobs["check"].Steps {
 		if strings.HasPrefix(step.Run, ciGateStep) && (step.Env["SKIPPED"] != skipped || !strings.Contains(step.Run, `--skipped "$SKIPPED"`)) {
 			t.Error("each event may excuse only the tiers it does not run")
@@ -118,7 +118,7 @@ func TestMergeGroupJobsStopWithTheirRemovedGroup(t *testing.T) {
 	if ci.Permissions["actions"] != "" || ci.Jobs["fast"].Permissions != nil {
 		t.Error("pull request CI runs unreviewed code and must not hold actions write")
 	}
-	if want := map[string]string{"contents": "read", "actions": "write"}; !maps.Equal(ci.Jobs["integration"].Permissions, want) {
+	if want := map[string]string{"contents": "read", "actions": "write", "pull-requests": "read"}; !maps.Equal(ci.Jobs["integration"].Permissions, want) {
 		t.Errorf("merge-group CI needs exactly %v to cancel its own run, got %v", want, ci.Jobs["integration"].Permissions)
 	}
 	if verification := hostedWorkflowFile(t, "verification"); verification.Permissions != nil {
@@ -142,7 +142,7 @@ func TestMergeGroupJobsStopWithTheirRemovedGroup(t *testing.T) {
 	data := contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), ".github/actions/merge-group-watch/action.yml")
 	contractcheck.FailErr(t, "decode merge-group watch", yaml.Unmarshal([]byte(data), &action))
 	steps := action.Runs.Steps
-	if len(steps) != 1 || steps[0].If != "github.event_name == 'merge_group'" ||
+	if len(steps) != 1 || steps[0].If != "startsWith(github.ref, 'refs/heads/gh-readonly-queue/main/')" ||
 		!strings.Contains(steps[0].Run, "nohup python3 -m ci_policy.merge_group") || !strings.HasSuffix(strings.TrimSpace(steps[0].Run), "&") {
 		t.Error("the watch must run in the background for the rest of a merge-group job, and only there")
 	}
