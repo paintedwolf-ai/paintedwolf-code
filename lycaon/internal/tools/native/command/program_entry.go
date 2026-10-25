@@ -99,6 +99,8 @@ type programRun struct {
 	root          toolcontract.OperationInvocation
 	parentReceipt string
 	source        string
+	sourcesMu     sync.RWMutex
+	sources       map[string]string
 	catalog       toolcontract.LanguageCatalog
 	commands      map[string]toolcontract.CommandSpecification
 
@@ -303,9 +305,15 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 		}
 	}
 	stdout, stderr := &boundedBuffer{limit: programOutputBytes}, &boundedBuffer{limit: programOutputBytes}
+	sources := owners.Sources
+	if sources == nil {
+		if sc, ok := owners.Input.(commandprogram.SourceCapture); ok {
+			sources = sc
+		}
+	}
 	ports := commandprogram.EvaluationPorts{
 		Invocation: root, Dispatch: dispatcher, Binder: commandprogram.CatalogBinder{}, Files: projectpaths.GlobFiles{Paths: paths},
-		Publication: owners.Publication, Input: owners.Input,
+		Publication: owners.Publication, Input: owners.Input, Sources: sources,
 		Executions: dispatcher, Supervision: r.Supervisor, Predicates: commandprogram.PredicateRuntime{Patterns: commandprogram.NativePredicatePatterns{Memory: memory}},
 		Memory:      memory,
 		Environment: programEnvironment(tc),
@@ -514,6 +522,30 @@ func (r *ProgramRuntime) sessionOutputs(ctx context.Context, sessionID string) (
 	}
 	r.outputs[sessionID] = outputs
 	return outputs, nil
+}
+
+func (r *programRun) sourceText(unitID string) string {
+	if unitID == "" || unitID == "submitted" {
+		return r.source
+	}
+	r.sourcesMu.RLock()
+	defer r.sourcesMu.RUnlock()
+	if s, ok := r.sources[unitID]; ok {
+		return s
+	}
+	return r.source
+}
+
+func (r *programRun) setSourceText(unitID, text string) {
+	if unitID == "" {
+		return
+	}
+	r.sourcesMu.Lock()
+	if r.sources == nil {
+		r.sources = map[string]string{}
+	}
+	r.sources[unitID] = text
+	r.sourcesMu.Unlock()
 }
 
 // boundedBuffer keeps the first limit bytes and records truncation; the

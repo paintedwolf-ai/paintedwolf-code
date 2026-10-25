@@ -44,6 +44,9 @@ func (r ProgramAdmissionRecorder) BeforeProgressOwner(ctx context.Context, ident
 	defer func() { _ = tx.Rollback() }()
 	// Current root scope is read from P09's progress owner immediately before
 	// this marker. The model parent and addressed program must still be running.
+	if err = chargeProgramTrace(ctx, tx, identity.ProgramID, 1, int64(len(identity.ExecutionID)+len(identity.ActorID)+len(identity.SessionID)+len(identity.RootSessionID)+len(scope)+len(inputs.Representation())+len(inputs.ArgumentsDigest())+len(reference)), traceChargeProgressStart); err != nil {
+		return err
+	}
 	result, err := tx.ExecContext(ctx, `INSERT INTO invocation_program_progress (execution_id,program_id,actor_id,session_id,root_session_id,scope_json,arguments_representation,arguments_digest,arguments_ref,state,started_at) SELECT ?,p.id,?,?,?,?,?,?,?,'running',? FROM invocation_programs p JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE p.id=? AND p.syntax_validated=1 AND p.state='running' AND p.progress_state='unchanged' AND p.progress_ref='' AND r.status='running' AND r.session_id=? AND r.tool_call_id=?`, identity.ExecutionID, identity.ActorID, identity.SessionID, identity.RootSessionID, string(scope), inputs.Representation(), inputs.ArgumentsDigest(), reference, time.Now().UTC().Format(time.RFC3339Nano), identity.ProgramID, identity.SessionID, modelCallID)
 	if err != nil {
 		return err
@@ -89,6 +92,9 @@ func (r *SQLRecorder) SettleProgramProgress(ctx context.Context, in ProgressSett
 	id := in.Identity
 	scope, err := json.Marshal(id.Scope)
 	if err != nil {
+		return err
+	}
+	if err = chargeProgramTrace(ctx, tx, id.ProgramID, 1, int64(len(in.State)+len(in.DetailReference)+32), traceChargeProgressSettlement); err != nil {
 		return err
 	}
 	result, err := tx.ExecContext(ctx, `UPDATE invocation_program_progress SET state=?,owner_invoked=?,detail_ref=?,settled_at=? WHERE execution_id=? AND program_id=? AND actor_id=? AND session_id=? AND root_session_id=? AND scope_json=? AND state='running'`, in.State, in.OwnerInvoked, in.DetailReference, time.Now().UTC().Format(time.RFC3339Nano), id.ExecutionID, id.ProgramID, id.ActorID, id.SessionID, id.RootSessionID, string(scope))

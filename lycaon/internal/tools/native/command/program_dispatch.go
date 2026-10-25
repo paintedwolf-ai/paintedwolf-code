@@ -56,6 +56,7 @@ type ProgramOwners struct {
 	Natives     map[string]NativeOperation
 	Publication commandprogram.OutputPublication
 	Input       commandprogram.InputRedirection
+	Sources     commandprogram.SourceCapture
 	// Redirections binds redirect owners to a directory frame after cd.
 	Redirections func(*projectpaths.ProgramPaths) (commandprogram.InputRedirection, commandprogram.OutputPublication)
 	AdmitLaunch  func(context.Context, tools.ToolContext) error
@@ -468,7 +469,7 @@ func (d *ProgramDispatcher) prepare(ctx context.Context, spec toolcontract.Comma
 // prepareDefinition retains the expanded inputs and the dynamic child row
 // together, before the child is admitted or reaches any owner.
 func (d *ProgramDispatcher) prepareDefinition(ctx context.Context, definition toolcontract.OperationDefinition, request commandprogram.OperationRequest, inputs map[string]any) (programChild, error) {
-	display, err := request.Statement.DisplayText([]byte(d.run.source))
+	display, err := request.Statement.DisplayText([]byte(d.run.sourceText(request.Invocation.SourceUnitID)))
 	if err != nil {
 		return programChild{}, err
 	}

@@ -683,6 +683,15 @@ type HistoryStorageClock struct {
 	Generation int64 `json:"generation"`
 }
 
+type InvocationProgramDefinitions struct {
+	ProgramID        string `json:"program_id"`
+	DefinitionDigest string `json:"definition_digest"`
+	OperationID      string `json:"operation_id"`
+	Owner            string `json:"owner"`
+	Lifecycle        string `json:"lifecycle"`
+	DefinitionJson   string `json:"definition_json"`
+}
+
 type InvocationProgramDeliveries struct {
 	ID             string `json:"id"`
 	OutputID       string `json:"output_id"`
@@ -705,7 +714,6 @@ type InvocationProgramExecutions struct {
 	ScopeJson                       string         `json:"scope_json"`
 	OperationID                     string         `json:"operation_id"`
 	DefinitionDigest                string         `json:"definition_digest"`
-	DefinitionJson                  string         `json:"definition_json"`
 	ArgumentsRepresentation         string         `json:"arguments_representation"`
 	ArgumentsDigest                 string         `json:"arguments_digest"`
 	ReviewedArgumentsRepresentation string         `json:"reviewed_arguments_representation"`
@@ -850,6 +858,8 @@ type InvocationPrograms struct {
 	DetailRef       string         `json:"detail_ref"`
 	ProgressState   string         `json:"progress_state"`
 	ProgressRef     string         `json:"progress_ref"`
+	TraceEvents     int64          `json:"trace_events"`
+	TraceBytes      int64          `json:"trace_bytes"`
 	StartedAt       string         `json:"started_at"`
 	SettledAt       sql.NullString `json:"settled_at"`
 }

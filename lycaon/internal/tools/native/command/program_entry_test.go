@@ -18,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
@@ -29,9 +30,16 @@ type programFixture struct{ *programtest.Fixture }
 
 func newProgramFixture(t *testing.T) *programFixture {
 	t.Helper()
-	return &programFixture{programtest.New(t, programtest.Options{Natives: func(dir string) map[string]command.NativeOperation {
+	f := programtest.New(t, programtest.Options{Natives: func(dir string) map[string]command.NativeOperation {
 		return map[string]command.NativeOperation{"tee": teeOperation(dir), "head": firstLineOperation()}
-	}})}
+	}})
+	owners := f.Runtime.Owners
+	f.Runtime.Owners = func(tc tools.ToolContext, paths *projectpaths.ProgramPaths, memory *toolcontract.ProgramMemory, admission tooloutput.SpillAdmission) (command.ProgramOwners, error) {
+		out, err := owners(tc, paths, memory, admission)
+		out.Sources = dirSources(f.Dir)
+		return out, err
+	}
+	return &programFixture{f}
 }
 
 func (f *programFixture) call(t *testing.T, ctx context.Context, source string) (string, error) {
