@@ -87,3 +87,60 @@ func TestForwardedAttachmentSkipsSearchHit(t *testing.T) {
 		t.Fatal("search-hit must not become an openable attachment")
 	}
 }
+
+func TestForwardedAttachmentExternalFileUsesStampedPath(t *testing.T) {
+	attachment, ok := promptattach.ForwardedAttachmentFromPart(api.MessageContentPart{
+		Origin:        api.MessageOriginRetrieval,
+		ReferenceKind: api.MessageReferenceKindExternalFile,
+		Source:        "/tmp/ext.txt",
+		Path:          "/tmp/ext.txt",
+		MediaType:     "text/plain",
+	})
+	if !ok {
+		t.Fatal("expected external-file attachment")
+	}
+	if attachment.Path != "/tmp/ext.txt" || attachment.Kind != promptattach.ForwardedExternalFile {
+		t.Fatalf("attachment = %+v", attachment)
+	}
+	if attachment.Hint() != "[User attached file: /tmp/ext.txt]" {
+		t.Fatalf("hint = %q", attachment.Hint())
+	}
+}
+
+func TestForwardedAttachmentExternalFileImageUsesImageHint(t *testing.T) {
+	attachment, ok := promptattach.ForwardedAttachmentFromPart(api.MessageContentPart{
+		Origin:        api.MessageOriginRetrieval,
+		ReferenceKind: api.MessageReferenceKindExternalFile,
+		Source:        "/tmp/screenshot.png",
+		Path:          "/tmp/screenshot.png",
+		MediaType:     "image/png",
+	})
+	if !ok {
+		t.Fatal("expected external-file image attachment")
+	}
+	if attachment.Path != "/tmp/screenshot.png" || attachment.Kind != promptattach.ForwardedExternalFile {
+		t.Fatalf("attachment = %+v", attachment)
+	}
+	if attachment.Hint() != "[User attached image: /tmp/screenshot.png]" {
+		t.Fatalf("hint = %q", attachment.Hint())
+	}
+}
+
+func TestForwardedAttachmentExternalFolderUsesStampedPath(t *testing.T) {
+	attachment, ok := promptattach.ForwardedAttachmentFromPart(api.MessageContentPart{
+		Origin:        api.MessageOriginRetrieval,
+		ReferenceKind: api.MessageReferenceKindExternalFolder,
+		Source:        "/tmp/project-folder",
+		Path:          "/tmp/project-folder",
+	})
+	if !ok {
+		t.Fatal("expected external-folder attachment")
+	}
+	if attachment.Path != "/tmp/project-folder" || attachment.Kind != promptattach.ForwardedExternalFolder {
+		t.Fatalf("attachment = %+v", attachment)
+	}
+	if attachment.Hint() != "[User attached folder: /tmp/project-folder]" {
+		t.Fatalf("hint = %q", attachment.Hint())
+	}
+}
+
