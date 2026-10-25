@@ -1,4 +1,4 @@
-"""The reveal prerequisite never runs password onboarding or claims fallback qualification."""
+"""The reveal prerequisite preserves system authentication, cancellation and expiry obligations."""
 from contextlib import ExitStack
 from pathlib import Path
 from types import SimpleNamespace
@@ -55,7 +55,9 @@ class PresencePrerequisiteTests(unittest.TestCase):
         status, facts, streams = presence.unchallenged_presence({})
         self.assertEqual(status, 'unverified')
         self.assertTrue(facts['typed_refusal_verified'])
-        self.assertFalse(facts['password_fallback_verified'])
+        self.assertFalse(facts['system_authentication_verified'])
+        self.assertFalse(facts['cancel_verified'])
+        self.assertFalse(facts['expiry_verified'])
         self.assertEqual(facts['presence_policy'], self.policy.observations)
         self.assertEqual(facts['opened_session'], {'id': 'session', 'status': 'idle'})
         self.values['await_session'].assert_called_once_with(
@@ -91,7 +93,7 @@ class PresencePrerequisiteTests(unittest.TestCase):
         self.values['PresencePolicy'].assert_not_called()
         self.app.start.assert_not_called()
         self.app.stop.assert_called_once()
-        self.assertFalse(refused.exception.observations['password_fallback_verified'])
+        self.assertFalse(refused.exception.observations['system_authentication_verified'])
 
     def test_normal_project_open_refusal_is_unverified_and_preserves_fresh_state(self):
         self.values['run'].return_value = {'exit_code': 1, 'timed_out': False, 'output_limit': False}
@@ -144,5 +146,5 @@ class PresencePrerequisiteTests(unittest.TestCase):
         with self.assertRaises(CaseUnavailable) as refused:
             presence.unchallenged_presence({})
         self.assertFalse(refused.exception.observations['typed_refusal_verified'])
-        self.assertFalse(refused.exception.observations['password_fallback_verified'])
+        self.assertFalse(refused.exception.observations['system_authentication_verified'])
         self.policy.__exit__.assert_called_once()

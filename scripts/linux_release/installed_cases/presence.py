@@ -27,7 +27,8 @@ def unchallenged_presence(binding):
     storage = resolve(session_environment(graphical_session()))
     reservation = Reservation(launch_binding, storage)
     observations = {'startup_phase': 'launch-and-wait-ready-without-onboarding',
-                    'typed_refusal_verified': False, 'password_fallback_verified': False}
+                    'typed_refusal_verified': False, 'system_authentication_verified': False,
+                    'cancel_verified': False, 'expiry_verified': False}
     streams = {}
     app, fixture, policy = InstalledApp(launch_binding), None, None
     try:
@@ -71,7 +72,7 @@ def unchallenged_presence(binding):
                             raise CaseFailed('unchallenged-polkit-did-not-refuse-native-presence')
                         observations['typed_refusal_verified'] = True
                         reservation.check_launch(app)
-            observations['reason'] = 'typed-unchallenged-presence-refusal-observed-password-fallback-unverified'
+            observations['reason'] = 'typed-unchallenged-presence-refusal-observed-system-authentication-cancel-and-expiry-unverified'
     except (OSError, ValueError, TypeError, KeyError) as error:
         observations.update(getattr(error, 'observations', {}))
         observations['failure_type'] = type(error).__name__
