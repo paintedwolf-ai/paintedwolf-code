@@ -1,4 +1,5 @@
 """The installed fixture drives ordinary provider transport without real model calls."""
+import copy
 import json
 from concurrent.futures import ThreadPoolExecutor
 import unittest
@@ -146,15 +147,36 @@ class InstalledProviderTests(unittest.TestCase):
                     raw = response.read().decode()
                 self.assertTrue(raw.endswith('data: [DONE]\n\n'))
                 return json.loads(raw.split('\n\n')[0].removeprefix('data: '))['choices'][0]
+            def standalone(stream=False):
+                acquisition = fixture.acquisition
+                state = copy.deepcopy((acquisition.issued, acquisition.tool_issued, acquisition.completed,
+                                       acquisition.witness, acquisition.tool_witness))
+                primary = copy.deepcopy(fixture.observations)
+                hold = barrier.snapshot()
+                payload = {'model': MODEL, 'messages': [{'role': 'system', 'content': 'PRIVATE SYSTEM'},
+                    {'role': 'user', 'content': 'PRIVATE USER'}], 'stream': stream, 'tools': None}
+                request = urllib.request.Request(fixture.base_url + '/chat/completions',
+                    data=json.dumps(payload).encode(), headers={'Authorization': 'Bearer ' + GUI_API_KEY})
+                with opener.open(request, timeout=5) as response:
+                    raw = response.read().decode()
+                value = json.loads(raw.split('\n\n')[0].removeprefix('data: ')) if stream else json.loads(raw)
+                self.assertEqual(value['choices'][0]['finish_reason'], 'stop')
+                self.assertIs(fixture.acquisition, acquisition)
+                self.assertEqual((acquisition.issued, acquisition.tool_issued, acquisition.completed,
+                                  acquisition.witness, acquisition.tool_witness), state)
+                self.assertEqual(barrier.snapshot(), hold)
+                self.assertEqual(fixture.observations, primary)
             histories = []
             for number in range(2):
                 prior_count = len(fixture.transport_observations)
                 acquisition = fixture.acquisition
+                standalone()
                 history = [{'role': 'user', 'content': 'PRIVATE FIXTURE PROMPT'}]
                 with ThreadPoolExecutor(max_workers=1) as pool:
                     pending = pool.submit(send, history, ['request_tools'])
                     barrier.await_held()
-                    self.assertEqual(len(fixture.transport_observations), prior_count)
+                    self.assertEqual(len(fixture.transport_observations), prior_count + 1)
+                    standalone(stream=True)
                     barrier.release()
                     load = pending.result(timeout=5)['delta']['tool_calls'][0]
                 barrier.await_response_written()
@@ -172,7 +194,12 @@ class InstalledProviderTests(unittest.TestCase):
                             tool='command', tool_call_id=command['id']))}])
                 self.assertEqual(send(history, ['command'])['finish_reason'], 'stop')
                 self.assertTrue(acquisition.completed)
+                standalone()
                 rows = fixture.transport_observations[prior_count:]
+                auxiliary = [row for row in rows if row.get('completion_class') == 'standalone']
+                self.assertEqual(len(auxiliary), 3)
+                self.assertTrue(all(row['status'] == 200 and row['fixture_credential_observed'] for row in auxiliary))
+                rows = [row for row in rows if row.get('completion_class') != 'standalone']
                 self.assertEqual(len(rows), 3)
                 self.assertTrue(all(row == {'method': 'POST', 'path': '/v1/chat/completions',
                     'status': 200, 'fixture_credential_observed': True} for row in rows))
@@ -181,11 +208,61 @@ class InstalledProviderTests(unittest.TestCase):
                     barrier = fixture.begin_next_turn()
                     self.assertIsNot(fixture.acquisition, acquisition)
                     self.assertEqual(fixture.transport_observations, histories[0])
-            self.assertEqual(len(fixture.transport_observations), 6)
-            self.assertEqual(fixture.transport_observations[:3], histories[0])
+            self.assertEqual(len(fixture.transport_observations), 12)
+            self.assertEqual(fixture.transport_observations[:6], histories[0])
             self.assertNotIn(GUI_API_KEY, json.dumps(fixture.transport_observations))
             self.assertNotIn('PRIVATE', json.dumps(fixture.transport_observations))
             self.assertFalse(fixture.transport_clipped)
+
+    def test_standalone_http_success_cannot_supply_tool_or_response_custody(self):
+        barrier = ResponseBarrier()
+        with ProviderFixture.gui([{'name': 'command', 'arguments': {'command': '/usr/bin/true'}}],
+                acquire='command', response_barrier=barrier) as fixture:
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            body = {'model': MODEL, 'messages': [{'role': 'system', 'content': 'PRIVATE'},
+                                               {'role': 'user', 'content': 'PRIVATE'}]}
+            for tools in ('absent', None):
+                payload = body if tools == 'absent' else {**body, 'tools': tools}
+                wire = urllib.request.Request(fixture.base_url + '/chat/completions',
+                    data=json.dumps(payload).encode(), headers={'Authorization': 'Bearer ' + GUI_API_KEY})
+                with opener.open(wire, timeout=5) as response:
+                    self.assertEqual(json.load(response)['choices'][0]['finish_reason'], 'stop')
+            acquisition = fixture.acquisition
+            self.assertFalse(acquisition.issued or acquisition.tool_issued or acquisition.completed)
+            self.assertIsNone(acquisition.witness)
+            self.assertIsNone(acquisition.tool_witness)
+            self.assertIsNone(barrier.snapshot())
+            self.assertEqual(fixture.observations, [])
+            with self.assertRaises(ValueError):
+                fixture.begin_next_turn()
+            wrong = urllib.request.Request(fixture.base_url + '/chat/completions',
+                data=json.dumps(body).encode(), headers={'Authorization': 'Bearer PRIVATE WRONG'})
+            with self.assertRaises(urllib.error.HTTPError) as refused:
+                opener.open(wrong, timeout=5)
+            self.assertEqual(refused.exception.code, 401)
+            self.assertEqual(len(fixture.transport_observations), 3)
+            self.assertNotIn('PRIVATE', json.dumps(fixture.transport_observations))
+
+    def test_standalone_grammar_and_total_response_count_remain_bounded(self):
+        body = {'model': MODEL, 'messages': [{'role': 'system', 'content': 'PRIVATE'},
+                                          {'role': 'user', 'content': 'PRIVATE'}]}
+        for messages in ([{'role': 'user', 'content': 'PRIVATE'}],
+                         [{'role': 'system', 'content': []}, body['messages'][1]],
+                         [{**body['messages'][0], 'tool_calls': []}, body['messages'][1]],
+                         [{**body['messages'][0], 'content': 'X' * 32769}, body['messages'][1]]):
+            fixture = ProviderFixture.gui([{'name': 'command', 'arguments': {'command': '/usr/bin/true'}}],
+                                          acquire='command')
+            with self.assertRaises(ValueError):
+                fixture.completion({**body, 'messages': messages})
+            self.assertFalse(fixture.acquisition.issued)
+        fixture = ProviderFixture.gui([{'name': 'command', 'arguments': {'command': '/usr/bin/true'}}],
+                                      acquire='command')
+        for _ in range(64):
+            fixture.completion(body)
+        with self.assertRaises(FixtureRefusal):
+            fixture.completion(body)
+        self.assertEqual(fixture.observations, [])
+        self.assertFalse(fixture.acquisition.completed)
 
     def test_sse_wrong_credential_is_refused_once_without_acquisition_or_payload_evidence(self):
         with ProviderFixture.gui([{'name': 'command', 'arguments': {'command': '/usr/bin/true'}}],
