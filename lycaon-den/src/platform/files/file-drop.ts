@@ -205,11 +205,11 @@ export function classifyDroppedItem(
   if (kind === "missing") {
     return { kind: "reject", reason: DROP_REJECT_MISSING };
   }
+  const rel = relativeUnderRoot(abs, containingRoot.path, platform);
+  if (rel == null) {
+    return { kind: "reject", reason: DROP_REJECT_UNIMPORTABLE_PATH };
+  }
   if (kind === "folder") {
-    const rel = relativeUnderRoot(abs, containingRoot.path, platform);
-    if (rel == null) {
-      return { kind: "reject", reason: DROP_REJECT_UNIMPORTABLE_PATH };
-    }
     return {
       kind: "path-folder",
       projectId,
@@ -224,14 +224,10 @@ export function classifyDroppedItem(
       absolutePath: abs,
       rootId: containingRoot.id,
       projectId,
-      path: relativeUnderRoot(abs, containingRoot.path, platform)!,
+      path: rel,
     };
   }
 
-  const rel = relativeUnderRoot(abs, containingRoot.path, platform);
-  if (rel == null) {
-    return { kind: "reject", reason: DROP_REJECT_UNIMPORTABLE_PATH };
-  }
   return {
     kind: "path-file",
     absolutePath: abs,
