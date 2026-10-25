@@ -26,7 +26,7 @@ class ReplyToolReceiptTests(unittest.TestCase):
 
     def observe(self, result, *, tool='request_tools', target='command', duplicate=False, mutate=None, body=None, during=None):
         with sqlite3.connect(':memory:') as database:
-            database.executescript('PRAGMA user_version=4; CREATE TABLE projects(id TEXT); '
+            database.executescript('PRAGMA user_version=5; CREATE TABLE projects(id TEXT); '
                 'CREATE TABLE project_roots(id TEXT,project_id TEXT,path TEXT); CREATE TABLE messages(id TEXT,session_id TEXT,role TEXT,tool_result_json TEXT,evidence_handles_json TEXT); '
                 'CREATE TABLE sessions(id TEXT,project_id TEXT,status TEXT,provider_id TEXT,model TEXT); '
                 'CREATE TABLE evidence_records(project_id TEXT,session_id TEXT,handle TEXT,kind TEXT,shape TEXT,fidelity TEXT,source_tool TEXT,truncated INTEGER,superseded_by TEXT,content_blob_sha256 TEXT); '
