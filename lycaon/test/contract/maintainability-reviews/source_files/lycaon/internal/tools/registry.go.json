@@ -1,0 +1,14 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/tools/registry.go",
+  "kind": "module",
+  "workstream": "portable-command-operations",
+  "disposition": "retain",
+  "reason": "The 403-line registry module declares host invocation context and atomically published tool definitions. P03 adds one immutable operation field to that existing publication unit, preserving handlers and authority. Retain at this measured ceiling; splitting the declaration from its context solely for line count would hide the registration boundary. Detached schema/secret-slot publication tests passed.",
+  "reviewed_commit": "f66017977c2500399b4e4ca07e6fff3ee8c3ca76",
+  "ceiling": 403,
+  "boundaries": {
+    "lycaon/internal/tools/registry_contract_test.go": "34865f3ee9d32298398b6c298b9f25f8f087f08394465d07d4e493797e5e44b1",
+    "lycaon/internal/tools/provider_schema_test.go": "55abb105141104f3994a237b3a214cf723bfc1ef1dd2a15880ba554765ddf859"
+  }
+}
