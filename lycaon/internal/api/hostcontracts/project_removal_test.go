@@ -58,6 +58,9 @@ func TestProjectRemovalAssessmentAndRecordedOutcome(t *testing.T) {
 	if response.Code != http.StatusAccepted {
 		t.Fatalf("removal = %d %s", response.Code, response.Body.String())
 	}
+	contractfixture.DrainBackground(t, server)
+	response = httptest.NewRecorder()
+	server.ServeHTTP(response, contractfixture.NewAuthedRequest(http.MethodGet, path+"/removals/"+request.OperationID, nil))
 	var result wire.ProjectRemovalResult
 	testutil.FailErr(t, "decode outcome", json.Unmarshal(response.Body.Bytes(), &result))
 	if result.ProjectState != "deleted" || result.CleanupState != "removed" || result.Assessment == nil {

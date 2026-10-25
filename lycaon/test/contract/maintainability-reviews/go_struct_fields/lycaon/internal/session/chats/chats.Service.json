@@ -1,0 +1,15 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/session/chats/chats.Service",
+  "kind": "runtime_service",
+  "workstream": "project-deletion-progress",
+  "disposition": "retain",
+  "reason": "Chat membership, runtime retirement, prompt locking, and deletion events remain one lifecycle boundary. Selection now has a project-scoped metadata algorithm; the service still performs each tree deletion and its events. Its dependencies are unchanged, and receiver lines shrink from 349 to 343.",
+  "reviewed_commit": "3dd818c9a09ce5aed671a3d2071ced0607f7f974",
+  "ceiling": 17,
+  "boundaries": {
+    "lycaon/internal/session/project_retire_test.go": "6b9aa436749c44423e6fef49af932af83d10c6952ddb43fe7563253ad366ce5b",
+    "lycaon/internal/session/chats/project_retire_selection_test.go": "6c34c485a6cb5c9edf912b85b38ef77f7224ca9780812d73326c9e07d70c3655"
+  },
+  "reviewed_shape": "c5d4b96ddf00d37c59921bda9de698ca65726004e580bef86155a6088a38b520"
+}

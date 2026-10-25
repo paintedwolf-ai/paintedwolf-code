@@ -17,7 +17,7 @@ import (
 // path. It captures s, so call it once the handler is at its final address.
 func (s *Removal) InitProjectRemoval() {
 	s.Owner = &projectremoval.Owner{
-		Projects: s.Registry, Store: projectremoval.NewStore(s.Database), Delete: s.deleteProject,
+		Run: s.background.Go, Projects: s.Registry, Store: projectremoval.NewStore(s.Database), Delete: s.deleteProject,
 		Extensions: s.Extensions.Owner,
 		SuggestionsApply: func(p project.Project) bool {
 			return s.Settings.TrustSurfaces.Applies(projectcontrib.SurfaceExtensionSuggestions, p)

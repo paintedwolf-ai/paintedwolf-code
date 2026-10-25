@@ -25,7 +25,7 @@ paths:
       tags: [projects]
       operationId: createProjectRemoval
       x-person-action: record
-      summary: Delete a project and settle reviewed optional extension cleanup
+      summary: Accept project deletion and reviewed optional extension cleanup
       parameters:
       - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
       requestBody:
@@ -36,7 +36,7 @@ paths:
               $ref: ../../components/schemas/project/removal.yaml#/components/schemas/ProjectRemovalRequest
       responses:
         '202':
-          description: Host-owned removal evidence or outcome
+          description: Durably accepted operation with live progress, or its settled outcome
           content:
             application/json:
               schema:
@@ -64,7 +64,7 @@ paths:
     get:
       tags: [projects]
       operationId: getProjectRemoval
-      summary: Read the recorded project removal outcome
+      summary: Read live progress or the recorded project removal outcome
       parameters:
       - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
       - name: operation_id

@@ -55,6 +55,7 @@ func TestProjectRemovalRetiresScansOnlyAfterLastAttachment(t *testing.T) {
 				if response.Code != http.StatusAccepted {
 					t.Fatalf("removal status=%d body=%s", response.Code, response.Body.String())
 				}
+				contractfixture.DrainBackground(t, srv)
 			}
 			remove(first)
 			rows, err := store.ListSeriesForPath(t.Context(), canonical)

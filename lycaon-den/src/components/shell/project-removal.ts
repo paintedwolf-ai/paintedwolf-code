@@ -1,8 +1,10 @@
 import type { LycaonClient } from "../../api/client.ts";
 import { LycaonApiError, isApiErrorCode } from "../../api/http.ts";
+import { BackendTransportError } from "../../platform/connection/request-connectivity.ts";
 import type {
   ProjectRemovalAssessment,
   ProjectRemovalRequest,
+  ProjectRemovalProgress,
   ProjectRemovalResult,
 } from "../../api/types.ts";
 import type { ConfirmDestructivePresenter } from "../../platform/interaction/confirm-dialog.ts";
@@ -12,6 +14,12 @@ import type { NoticeInput } from "../../notices/notice-model.ts";
 
 /** Failures after which the removal may still have settled on the host. */
 const OUTCOME_UNKNOWN_CODES = ["internal_error", "host_fault"] as const;
+
+/** Consecutive unanswered status reads before the outcome is reported as unconfirmed. */
+const STATUS_TRANSPORT_RETRIES = 8;
+
+const statusPause = (unanswered: number) =>
+  new Promise<void>((resolve) => setTimeout(resolve, Math.min(15_000, 1000 * 2 ** Math.min(unanswered, 4))));
 
 type RemovalClient = Pick<
   LycaonClient,
@@ -45,6 +53,9 @@ export function createProjectRemoval(options: {
   report: (error: unknown) => void;
   notify: (notice: NoticeInput) => void;
   extensionsChanged: () => void;
+  progress?: (projectId: string, progress: ProjectRemovalProgress | null) => void;
+  /** Waits before the next status read; `unanswered` counts consecutive transport gaps. */
+  pause?: (unanswered: number) => Promise<void>;
   operationId?: () => string;
 }) {
   const active = new Map<string, Promise<void>>();
@@ -76,6 +87,23 @@ export function createProjectRemoval(options: {
     };
   };
 
+  const readStatus = async (client: RemovalClient, projectId: string, operationId: string) => {
+    let unanswered = 0;
+    for (;;) {
+      try {
+        return await client.getProjectRemoval(projectId, operationId);
+      } catch (cause) {
+        if (cause instanceof BackendTransportError && ++unanswered < STATUS_TRANSPORT_RETRIES) {
+          await (options.pause ?? statusPause)(unanswered);
+          continue;
+        }
+        const error = clientNoticeError("project_removal_unconfirmed");
+        error.cause = cause;
+        throw error;
+      }
+    }
+  };
+
   const execute = async (
     client: RemovalClient,
     projectId: string,
@@ -93,15 +121,22 @@ export function createProjectRemoval(options: {
         pending.delete(projectId);
         throw error;
       }
-      // The host may have settled after the response was lost.
-      try {
-        return await client.getProjectRemoval(projectId, req.operation_id);
-      } catch {
-        const notice = clientNoticeError("project_removal_unconfirmed");
-        notice.cause = error;
-        throw notice;
-      }
+      // A lost acceptance response gets the same bounded status recovery as accepted work.
+      return readStatus(client, projectId, req.operation_id);
     }
+  };
+
+  const settle = async (client: RemovalClient, projectId: string, req: ProjectRemovalRequest) => {
+    let result = await execute(client, projectId, req);
+    let lastProgress = "";
+    while (result.progress) {
+      const current = JSON.stringify(result.progress);
+      if (current !== lastProgress) options.progress?.(projectId, result.progress);
+      lastProgress = current;
+      await (options.pause ?? statusPause)(0);
+      result = await readStatus(client, projectId, req.operation_id);
+    }
+    return result;
   };
 
   const remove = async (
@@ -119,7 +154,7 @@ export function createProjectRemoval(options: {
         await options.prepare(projectId);
         request = await review(client, projectId, opts);
       }
-      let result = await execute(client, projectId, request);
+      let result = await settle(client, projectId, request);
       if (result.failure_code === "root_busy") {
         pending.delete(projectId);
         const force = await options.confirm({
@@ -129,7 +164,7 @@ export function createProjectRemoval(options: {
         });
         if (!force) return;
         request = { ...request, force: true, operation_id: newID() };
-        result = await execute(client, projectId, request);
+        result = await settle(client, projectId, request);
       }
       pending.delete(projectId);
       if (["removed", "interrupted", "failed"].includes(result.cleanup_state)) {
@@ -153,6 +188,8 @@ export function createProjectRemoval(options: {
       }
     } catch (error) {
       if (!(error instanceof RemovalCancelled)) options.report(error);
+    } finally {
+      options.progress?.(projectId, null);
     }
   };
 

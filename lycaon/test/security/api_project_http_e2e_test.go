@@ -2,11 +2,13 @@ package security
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -30,7 +32,8 @@ func TestProjectRemovalCascadeAndSSE(t *testing.T) {
 	}
 	var assessment wire.ProjectRemovalAssessment
 	testutil.FailErr(t, "decode removal assessment", json.Unmarshal(assessW.Body.Bytes(), &assessment))
-	removal, err := json.Marshal(wire.ProjectRemovalRequest{OperationID: uuid.NewString(), AssessmentToken: assessment.AssessmentToken})
+	operationID := uuid.NewString()
+	removal, err := json.Marshal(wire.ProjectRemovalRequest{OperationID: operationID, AssessmentToken: assessment.AssessmentToken})
 	testutil.FailErr(t, "encode removal request", err)
 	removeReq := authedRequest(t, http.MethodPost, "/v1/projects/"+projectRow.ID+"/removals", bytes.NewReader(removal))
 	removeReq.Header.Set("Content-Type", "application/json")
@@ -39,9 +42,24 @@ func TestProjectRemovalCascadeAndSSE(t *testing.T) {
 	if removeW.Code != http.StatusAccepted {
 		t.Fatalf("removal status = %d body = %s", removeW.Code, removeW.Body.String())
 	}
+	var accepted wire.ProjectRemovalResult
+	testutil.FailErr(t, "decode accepted removal", json.Unmarshal(removeW.Body.Bytes(), &accepted))
+	if accepted.OperationID != operationID {
+		t.Fatalf("accepted removal = %+v", accepted)
+	}
+	// Deletion runs in the server task group; the operation settles after it drains.
+	settleCtx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	srv.WaitForBackground(settleCtx)
+	testutil.FailErr(t, "settle project removal", settleCtx.Err())
+	resultW := httptest.NewRecorder()
+	srv.ServeHTTP(resultW, authedRequest(t, http.MethodGet, "/v1/projects/"+projectRow.ID+"/removals/"+operationID, nil))
+	if resultW.Code != http.StatusOK {
+		t.Fatalf("removal outcome status = %d body = %s", resultW.Code, resultW.Body.String())
+	}
 	var result wire.ProjectRemovalResult
-	testutil.FailErr(t, "decode removal result", json.Unmarshal(removeW.Body.Bytes(), &result))
-	if result.ProjectState != "deleted" {
+	testutil.FailErr(t, "decode removal result", json.Unmarshal(resultW.Body.Bytes(), &result))
+	if result.ProjectState != "deleted" || result.Progress != nil {
 		t.Fatalf("removal result = %+v", result)
 	}
 

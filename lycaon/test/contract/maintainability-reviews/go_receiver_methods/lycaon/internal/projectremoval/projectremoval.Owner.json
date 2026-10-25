@@ -1,0 +1,16 @@
+{
+  "category": "go_receiver_methods",
+  "artifact": "lycaon/internal/projectremoval/projectremoval.Owner",
+  "kind": "runtime_service",
+  "workstream": "project-deletion-progress",
+  "disposition": "retain",
+  "reason": "Assessment, durable acceptance, exact replay, and live progress share one operation lifetime. Keep status reads independent of the deletion lock within this existing service rather than create another progress subsystem.",
+  "reviewed_commit": "3dd818c9a09ce5aed671a3d2071ced0607f7f974",
+  "ceiling": 16,
+  "boundaries": {
+    "lycaon/internal/projectremoval/progress_test.go": "bd5f785efb1117c28edd811e7a73c7e7423f847ca84006b095c995fc9071a04e",
+    "lycaon/internal/projectremoval/owner_test.go": "19d79ce2dc763fdb7c1c833b8be2db835f0505d2eb76d06927dafc89a9d22d2e",
+    "lycaon/internal/projectremoval/deletion_failure_test.go": "e8a3bf8f9ff7948875dcf792f57aae044948832131df51eab33e6efacee427e5"
+  },
+  "reviewed_shape": "ef675fd6df7ed670e632006e0e3f5405b8c0cfeb30be278700319ecbbcfcc41f"
+}

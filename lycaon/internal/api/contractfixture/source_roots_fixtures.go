@@ -44,6 +44,7 @@ func DeleteProject(t *testing.T, srv *hostapi.Server, projectID string) {
 	if w.Code != http.StatusAccepted {
 		t.Fatalf("remove project status = %d body = %s", w.Code, w.Body.String())
 	}
+	DrainBackground(t, srv)
 }
 
 // newSnapshotTestServer serves a source ledger and keeps the project registry

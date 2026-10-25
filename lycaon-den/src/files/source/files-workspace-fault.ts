@@ -27,3 +27,12 @@ export function workspaceFaultMessage(err: unknown): string {
   }
   return WORKSPACE_FAULT_GENERIC;
 }
+
+/** A host lifecycle transition is a wait on the host's own work, not an editor sync failure. */
+export const WORKSPACE_PROJECT_MUTATION_WAITING = "Project changes are still in progress — waiting…";
+
+export function workspaceRetryMessage(err: unknown): string {
+  return err instanceof LycaonApiError && err.code === "project_mutation_in_progress"
+    ? WORKSPACE_PROJECT_MUTATION_WAITING
+    : WORKSPACE_SYNC_RETRYING;
+}
