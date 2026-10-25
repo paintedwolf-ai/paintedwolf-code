@@ -109,8 +109,9 @@ pub(super) fn spawn_sidecar_process(
     password: Option<&[u8]>,
 ) -> Result<SpawnedSidecar, String> {
     let bin = resolve_lycaon_binary()?;
+    let image = crate::linux_generation::capture_helper(&bin)?;
     let config_dir = crate::config_dir::ensure_host_config_dir()?;
-    let mut cmd = engine_command(&bin, presence_public_key, &config_dir);
+    let mut cmd = engine_command(&image.path, presence_public_key, &config_dir);
     if password.is_some() {
         cmd.env("LYCAON_CREDENTIAL_UNLOCK_STDIN", "1");
     }

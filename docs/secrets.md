@@ -48,8 +48,26 @@ The [qualification VM factory](../packaging/nix/module-vm.nix) builds a disposab
 A package-only or Home Manager installation does not register a system custodian. New vaults retain the app-password path; an existing service-held identity remains unavailable until its service is restored or explicitly migrated. Presence still requires a registered polkit action and authentication agent, or the existing native app-password confirmation. Lock and suspend invalidation remains the desktop's shared session boundary.
 
 Native Linux package upgrades replace files while a running desktop may still hold the previous executable inode. Before starting another engine or vault-custody helper, the shell compares its open `/proc/self/exe` image with the current package manifest. A mismatch or unavailable manifest requests a full desktop restart and preserves a running engine before incompatible work is attempted. Quit through the app menu or the stop screen's **Quit app** action, finish the package operation, and open the installed desktop launcher again. The identity service still verifies each new chain; it accepts no old executable or deleted mapping as a restart workaround. Package-manager upgrades do not use the macOS application-managed activation lifecycle.
-
 Both the engine and the desktop shell are non-dumpable on Linux (`PR_SET_DUMPABLE` cleared and read back at startup before engine command dispatch or desktop initialization, except in development builds), so a same-user process cannot ptrace them or read their memory, environment, or maps through the process filesystem; no host effect restores dumpability, and diagnostics bundles are built from logs. A protection failure stops the process before it handles vault identities or app passwords, including custody helpers. The shipped Linux engine is statically linked, and the stage script refuses an executable that asks for a program interpreter.
+
+Nix layout discovery does not authorize unattended custody. Its receipt and
+manifest keep the running desktop, helpers and resources on one retained output
+when a profile changes. A store-looking path, a user profile, and an arbitrary
+root-owned store output grant no credential authority. Package-only and Home
+Manager installations use the app-password path until an administrator enables
+the identity service for an explicitly selected package generation. Existing
+service-held identities remain in protected state when that service is disabled
+or its selected generation changes; a missing service never creates a replacement
+identity for an existing encrypted vault.
+
+Running-generation retention supports the standard physical `/nix/store` and
+`/nix/var/nix` layout, using its owning local account or the root-owned local
+daemon socket. The registrar uses an empty private configuration and ignores
+caller Nix configuration, plugins and remote-store overrides. It registers an
+already installed output with substitution and builders disabled. Missing or
+unsupported storage authority stops startup while preserving credentials;
+custom store or state directories need explicit installation facts before they
+can be supported. No automatic fallback creates a different store.
 
 The app bounds transient identity reads and clears decrypted and encoded identity buffers on return, including errors. The desktop retains a successful password only in process memory, so an engine restart in the same app session does not ask again; closing the app forgets it. A forgotten password cannot be recovered. The stop screen can reset the vault after destructive confirmation, removing saved credentials without deleting projects or history. A general store reset preserves the vault because it is device configuration; `pw credentials purge --yes` removes the vault and identity only when no engine is running.
 

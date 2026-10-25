@@ -34,6 +34,7 @@ var approvedHostLaunches = map[string]string{
 	"loopback_listener_probe":          "probes system listening ports and TCP socket process owners via lsof",
 	"toolchain_version_probe":          "probes installed compilers and runtimes for version detection",
 	"desktop_proxy_settings":           "reads the GNOME proxy schema through the desktop's gsettings tool, the schema's supported reader",
+	"nix_generation_retention":         "registers the running Nix store closure as an indirect GC root via the package-owned nix-store binary",
 }
 
 // forbiddenHostLaunchSubjects are host operations implemented natively in Go that must not shell out.
