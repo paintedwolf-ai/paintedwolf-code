@@ -46,6 +46,17 @@ func TestMain(m *testing.M) {
 		os.Exit(3)
 	case "stubborn":
 		signal.Ignore(syscall.SIGTERM)
+		if path := os.Getenv("PW_FAKE_CHILD_READY"); path != "" {
+			_ = os.WriteFile(path, []byte("ready"), 0o600)
+		}
+	case "stubborn-family":
+		self, _ := os.Executable()
+		child := exec.Command(self)
+		child.Env = append(os.Environ(), fakeDesktopEnv+"=stubborn")
+		if child.Start() != nil {
+			os.Exit(9)
+		}
+		_ = os.WriteFile(os.Getenv("PW_FAKE_CHILD"), []byte(strconv.Itoa(child.Process.Pid)), 0o600)
 	case "family":
 		child := exec.Command("sleep", "60")
 		if child.Start() != nil {
@@ -87,7 +98,8 @@ func newFakeDesktop(t *testing.T, behaviour string) *fakeDesktop {
 	t.Cleanup(func() { _ = os.RemoveAll(socketDir) })
 	socket := filepath.Join(socketDir, "s")
 	environment := append(os.Environ(), fakeDesktopEnv+"="+behaviour, "PW_FAKE_SOCKET="+socket,
-		"PW_FAKE_CHILD="+filepath.Join(base, "child.pid"), "WAYLAND_DISPLAY=wayland-test")
+		"PW_FAKE_CHILD="+filepath.Join(base, "child.pid"),
+		"PW_FAKE_CHILD_READY="+filepath.Join(base, "child.ready"), "WAYLAND_DISPLAY=wayland-test")
 	return &fakeDesktop{t: t, base: base, socket: socket, launch: desktopLaunch{
 		path: launcher, anchor: base, owner: uint32(os.Getuid()), environment: environment, grace: 200 * time.Millisecond}}
 }
@@ -256,4 +268,57 @@ func TestOnlyAnInstallerControlledLauncherStarts(t *testing.T) {
 	if linuxDesktopLauncher != "/usr/libexec/painted-wolf-code/pw-launch" {
 		t.Fatalf("installed launcher %q is not the desktop file's program", linuxDesktopLauncher)
 	}
+}
+
+func TestStoppingAReapedDesktopNeverSignalsItsReleasedGroup(t *testing.T) {
+	fake := newFakeDesktop(t, "fail")
+	owned, err := startDesktop(fake.launch)
+	testutil.FailErr(t, "start failed", err)
+	started := owned.(*desktopStart)
+	<-started.done
+	if started.cmd.ProcessState == nil || !started.reaped {
+		t.Fatal("desktop leader was not actually reaped")
+	}
+	bystander := exec.Command("sleep", "60")
+	testutil.FailErr(t, "bystander start", bystander.Start())
+	defer func() { _ = bystander.Process.Kill(); _ = bystander.Wait() }()
+	started.signalGroup = func(int, syscall.Signal) error {
+		t.Error("Stop tried to signal a group after releasing its leader")
+		return nil
+	}
+	started.Stop()
+	if err := bystander.Process.Signal(syscall.Signal(0)); err != nil {
+		t.Fatalf("unrelated process did not survive post-exit cleanup: %v", err)
+	}
+}
+
+func TestStoppingKeepsTheExitedLeaderUntilItsStubbornChildIsKilled(t *testing.T) {
+	fake := newFakeDesktop(t, "stubborn-family")
+	owned, err := startDesktop(fake.launch)
+	testutil.FailErr(t, "start failed", err)
+	started := owned.(*desktopStart)
+	t.Cleanup(started.Stop)
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if _, err := os.Stat(filepath.Join(fake.base, "child.ready")); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("stubborn descendant did not become ready")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	var signals []syscall.Signal
+	started.signalGroup = func(group int, sig syscall.Signal) error {
+		if _, err := os.Stat("/proc/" + strconv.Itoa(started.cmd.Process.Pid)); err != nil {
+			t.Errorf("leader identity was released before group signal %v: %v", sig, err)
+		}
+		signals = append(signals, sig)
+		return syscall.Kill(group, sig)
+	}
+	started.Stop()
+	if len(signals) != 2 || signals[0] != syscall.SIGTERM || signals[1] != syscall.SIGKILL {
+		t.Fatalf("group settlement signals = %v", signals)
+	}
+	groupGone(t, started.cmd.Process.Pid)
 }

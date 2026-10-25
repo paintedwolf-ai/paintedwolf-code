@@ -11,6 +11,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"golang.org/x/sys/unix"
 )
 
 // linuxDesktopLauncher is the installed desktop entry point, the same program the
@@ -52,7 +54,8 @@ func startDesktop(launch desktopLaunch) (appStart, error) {
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("could not start Painted Wolf Code: %w", err)
 	}
-	started := &desktopStart{cmd: cmd, grace: launch.grace, exited: make(chan error, 1), done: make(chan struct{})}
+	started := &desktopStart{cmd: cmd, grace: launch.grace, exited: make(chan error, 1), done: make(chan struct{}),
+		observed: make(chan struct{}), reapAllowed: make(chan struct{}), signalGroup: syscall.Kill}
 	go started.wait()
 	return started, nil
 }
@@ -103,15 +106,46 @@ func trustedLauncher(path, anchor string, owner uint32) error {
 
 // desktopStart owns one launched process group until the app is reachable.
 type desktopStart struct {
-	cmd    *exec.Cmd
-	grace  time.Duration
-	exited chan error
-	done   chan struct{}
-	stop   sync.Once
+	cmd                   *exec.Cmd
+	grace                 time.Duration
+	exited                chan error
+	done                  chan struct{}
+	stop                  sync.Once
+	mu                    sync.Mutex
+	stopping, reaped      bool
+	observed, reapAllowed chan struct{}
+	signalGroup           func(int, syscall.Signal) error
 }
 
 func (d *desktopStart) wait() {
+	// Observe exit while leaving the leader unreaped. Its PID also pins the
+	// session's group ID until Stop has finished any group-wide signaling.
+	var info unix.Siginfo
+	var observedErr error
+	for {
+		observedErr = unix.Waitid(unix.P_PID, d.cmd.Process.Pid, &info, unix.WEXITED|unix.WNOWAIT, nil)
+		if !errors.Is(observedErr, unix.EINTR) {
+			break
+		}
+	}
+	d.mu.Lock()
+	close(d.observed)
+	if d.stopping {
+		d.mu.Unlock()
+		<-d.reapAllowed
+		d.mu.Lock()
+	}
+	if observedErr != nil {
+		// A failed observer cannot leave Wait holding the ownership lock on a
+		// still-running child. Process.Kill uses the owned process handle.
+		_ = d.cmd.Process.Kill()
+	}
 	err := d.cmd.Wait()
+	if observedErr != nil {
+		err = fmt.Errorf("observe desktop exit without releasing its identity: %w", observedErr)
+	}
+	d.reaped = true
+	d.mu.Unlock()
 	if err == nil {
 		err = errors.New("exit status 0")
 	}
@@ -121,16 +155,29 @@ func (d *desktopStart) wait() {
 
 func (d *desktopStart) Exited() <-chan error { return d.exited }
 
-// Stop signals only the session this command created, then waits for its leader.
+// Stop retains the unreaped leader until its final group signal has completed.
 func (d *desktopStart) Stop() {
 	d.stop.Do(func() {
-		group := -d.cmd.Process.Pid
-		_ = syscall.Kill(group, syscall.SIGTERM)
-		select {
-		case <-d.done:
-		case <-time.After(d.grace):
-			_ = syscall.Kill(group, syscall.SIGKILL)
+		d.mu.Lock()
+		if d.reaped {
+			d.mu.Unlock()
 			<-d.done
+			return
 		}
+		d.stopping = true
+		group := -d.cmd.Process.Pid
+		_ = d.signalGroup(group, syscall.SIGTERM)
+		d.mu.Unlock()
+		select {
+		case <-d.observed:
+		case <-time.After(d.grace):
+		}
+		// The leader has not been reaped, even if TERM made it exit. Finish
+		// owned descendants before permitting Wait to release its group ID.
+		d.mu.Lock()
+		_ = d.signalGroup(group, syscall.SIGKILL)
+		close(d.reapAllowed)
+		d.mu.Unlock()
+		<-d.done
 	})
 }
