@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
 )
@@ -125,17 +126,23 @@ func (p BoundPath) ReadDir() ([]string, error) {
 // Child binds one entry beneath a bound directory with the same authority.
 func (p BoundPath) Child(name string) BoundPath {
 	child := p
-	if p.exactRelative == "." || p.exactRelative == "" {
+	if p.Resolved.ScopeRel == "" || p.Resolved.ScopeRel == "." {
+		child.Resolved.ScopeRel = name
+	} else {
+		child.Resolved.ScopeRel = p.Resolved.ScopeRel + "/" + name
+	}
+	if filepath.Separator == '/' && p.exactRelative == p.Resolved.ScopeRel {
+		child.exactRelative = child.Resolved.ScopeRel
+	} else if p.exactRelative == "." || p.exactRelative == "" {
 		child.exactRelative = name
 	} else {
 		child.exactRelative = p.exactRelative + string(filepath.Separator) + name
 	}
 	child.Resolved.Abs = p.Resolved.Abs + string(filepath.Separator) + name
-	child.Resolved.DisplayPath = filepath.ToSlash(filepath.Join(p.Resolved.DisplayPath, name))
-	if p.Resolved.ScopeRel == "" || p.Resolved.ScopeRel == "." {
-		child.Resolved.ScopeRel = name
+	if p.Resolved.DisplayPath == p.Resolved.ScopeRel && name != "" && name != "." && name != ".." && !strings.ContainsAny(name, `/\`) {
+		child.Resolved.DisplayPath = child.Resolved.ScopeRel
 	} else {
-		child.Resolved.ScopeRel = p.Resolved.ScopeRel + "/" + name
+		child.Resolved.DisplayPath = filepath.ToSlash(filepath.Join(p.Resolved.DisplayPath, name))
 	}
 	return child
 }

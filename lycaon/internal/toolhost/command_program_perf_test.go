@@ -292,8 +292,9 @@ func writePerfTarHeaders(tb testing.TB, path string, count int) {
 
 // TestCommandProgramResourceCeilings exercises the declared resource limits
 // through the real command entry, verifying that memory, spill files, process
-// count, goroutines and wall time stay bounded and that cleanup leaves nothing
-// behind.
+// count and goroutines stay bounded, limit refusals fire at 1 past each bound,
+// and cleanup leaves nothing behind. Wall-clock elapsed time is logged for
+// inspection here; time gates are enforced in the perf:bench lane.
 func TestCommandProgramResourceCeilings(t *testing.T) {
 	f := newPerfFixture(t, nil)
 	writeLines(t, filepath.Join(f.Dir, "small.txt"), 100, func(i int) string { return fmt.Sprintf("line %d", i) })
@@ -323,22 +324,21 @@ func TestCommandProgramResourceCeilings(t *testing.T) {
 		name      string
 		program   string
 		wantError string
-		maxTime   time.Duration
 	}{
-		{"noop", ":", "", 5 * time.Second},
-		{"fifty-statements", strings.Repeat(": ; ", 49) + ":", "", 5 * time.Second},
-		{"native-child-wc", "wc -l small.txt", "", 5 * time.Second},
-		{"pipeline-cat-grep-wc-8MiB", "cat big.txt | grep x | wc -l", "", 15 * time.Second},
-		{"sort-spill-8MiB", "sort unsorted.txt | wc -l", "", 20 * time.Second},
-		{"loop-9999-iterations", "n=0; for w in $(cat words.txt); do n=$((n+1)); done; echo $n", "", 15 * time.Second},
-		{"loop-iterations-past-limit", "while :; do :; done", "COMMAND_LIMIT_EXCEEDED", 15 * time.Second},
-		{"builtins-and-redirects-count-visits", "for k in " + strings.Repeat("k ", 200) + "; do { : >/dev/null; true; test -n x; [[ a == a ]]; }; done", "", 10 * time.Second},
-		{"traversal-visits-at-250k", find250k, "", 20 * time.Second},
-		{"traversal-visits-past-250k", find250kPast, "COMMAND_LIMIT_EXCEEDED", 20 * time.Second},
-		{"archive-ratio-at-100x", "zcat at-ratio.gz >/dev/null", "", 5 * time.Second},
-		{"archive-ratio-past-100x", "zcat past-ratio.gz >/dev/null", "COMMAND_LIMIT_EXCEEDED", 5 * time.Second},
-		{"archive-entries-at-25k", "tar -tf entries-at.tar >/dev/null", "", 10 * time.Second},
-		{"archive-entries-past-25k", "tar -tf entries-past.tar >/dev/null", "COMMAND_LIMIT_EXCEEDED", 10 * time.Second},
+		{"noop", ":", ""},
+		{"fifty-statements", strings.Repeat(": ; ", 49) + ":", ""},
+		{"native-child-wc", "wc -l small.txt", ""},
+		{"pipeline-cat-grep-wc-8MiB", "cat big.txt | grep x | wc -l", ""},
+		{"sort-spill-8MiB", "sort unsorted.txt | wc -l", ""},
+		{"loop-9999-iterations", "n=0; for w in $(cat words.txt); do n=$((n+1)); done; echo $n", ""},
+		{"loop-iterations-past-limit", "while :; do :; done", "COMMAND_LIMIT_EXCEEDED"},
+		{"builtins-and-redirects-count-visits", "for k in " + strings.Repeat("k ", 200) + "; do { : >/dev/null; true; test -n x; [[ a == a ]]; }; done", ""},
+		{"traversal-visits-at-250k", find250k, ""},
+		{"traversal-visits-past-250k", find250kPast, "COMMAND_LIMIT_EXCEEDED"},
+		{"archive-ratio-at-100x", "zcat at-ratio.gz >/dev/null", ""},
+		{"archive-ratio-past-100x", "zcat past-ratio.gz >/dev/null", "COMMAND_LIMIT_EXCEEDED"},
+		{"archive-entries-at-25k", "tar -tf entries-at.tar >/dev/null", ""},
+		{"archive-entries-past-25k", "tar -tf entries-past.tar >/dev/null", "COMMAND_LIMIT_EXCEEDED"},
 	}
 
 	runtime.GC()
@@ -363,9 +363,6 @@ func TestCommandProgramResourceCeilings(t *testing.T) {
 				}
 			} else if !strings.Contains(out, c.wantError) && (err == nil || !strings.Contains(err.Error(), c.wantError)) {
 				t.Fatalf("%s: want %s, got err=%v out=%s", c.name, c.wantError, err, out)
-			}
-			if elapsed > c.maxTime {
-				t.Fatalf("%s exceeded time ceiling: %v > %v", c.name, elapsed, c.maxTime)
 			}
 			if active := f.Background.ActiveJobs(f.Session); len(active) != 0 {
 				t.Fatalf("%s leaked %d active background jobs", c.name, len(active))

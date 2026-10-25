@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"golang.org/x/sys/unix"
@@ -53,7 +54,12 @@ func (r *ReadRoot) StatChildAt(dir *os.File, _ string, name string, admit func(s
 		return EntryStat{}, &fs.PathError{Op: "open effect path", Path: name, Err: err}
 	}
 	if admit != nil {
-		if err := admit(filepath.Join(dir.Name(), name)); err != nil {
+		dirName := dir.Name()
+		actual := dirName + string(filepath.Separator) + name
+		if dirName == "" || name == "" || name == "." || name == ".." || strings.ContainsRune(name, filepath.Separator) || strings.HasSuffix(dirName, string(filepath.Separator)) {
+			actual = filepath.Join(dirName, name)
+		}
+		if err := admit(actual); err != nil {
 			return EntryStat{}, err
 		}
 	}

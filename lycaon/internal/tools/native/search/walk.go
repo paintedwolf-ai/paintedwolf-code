@@ -135,7 +135,11 @@ func (w *walker) children(dir entry, follow bool) ([]entry, error) {
 			}
 			return nil, err
 		}
-		e := entry{display: joinDisplay(dir.display, name), name: name, bound: child, stat: st, depth: dir.depth + 1, start: dir.start, link: st.Mode&fs.ModeSymlink != 0}
+		display := child.Resolved.DisplayPath
+		if dir.display != dir.bound.Resolved.DisplayPath {
+			display = joinDisplay(dir.display, name)
+		}
+		e := entry{display: display, name: name, bound: child, stat: st, depth: dir.depth + 1, start: dir.start, link: st.Mode&fs.ModeSymlink != 0}
 		if e.link && follow {
 			if target, err := opened.StatChildFollowed(child); err == nil {
 				e.stat = target

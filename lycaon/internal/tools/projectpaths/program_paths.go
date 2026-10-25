@@ -233,11 +233,10 @@ func (p *ProgramPaths) Bind(ctx context.Context, operand string, write bool) (Bo
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		authority, err := authorityAddressWithCanonical(resolved.Root.Path, canonicalRoot, actual)
+		scope, err := entryScopeRel(resolved.Root, canonicalRoot, actual)
 		if err != nil {
 			return err
 		}
-		scope := projectroot.ScopeRel(resolved.Root, authority)
 		if scope == "." || scope == "" {
 			return bound.admitRead(actual)
 		}
