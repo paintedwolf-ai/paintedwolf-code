@@ -8,7 +8,6 @@ from pathlib import Path
 import stat
 import sys
 import tempfile
-import secrets
 
 from . import protocol, session_wire, unlock_wire
 
@@ -120,13 +119,6 @@ class Mailbox:
         finally:
             Path(temporary).unlink()
 
-    def clear_private(self, pending: dict):
-        from . import password_wire
-        password_wire.request(pending, self.execution)
-        if self.read('request.json') != pending or self.read('ack.json') is not None:
-            raise ValueError('private fixture publication changed before completion')
-        (self.path / 'request.json').unlink()
-
     def clear_completed(self, pending: dict):
         if self.read('request.json') != pending:
             raise ValueError('native input pending request changed before completion')
@@ -147,9 +139,6 @@ def serve(execution: dict, vm_id: str):
     acknowledged = None
     publication = None
     prepared, prepare_delivered, unlock_used, credential_disabled = None, False, False, False
-    from ..installed_process import process_identity
-    from . import password_wire
-    identified = False
     from . import polkit_control
     polkit_inputs = set()
 
@@ -168,14 +157,7 @@ def serve(execution: dict, vm_id: str):
             command = decode(raw)
             if command == {'operation': 'close'}:
                 return
-            if command == {'operation': 'identify-password-fixture-actor', 'binding': execution, 'vm_id': vm_id}:
-                if identified:
-                    raise ValueError('password fixture SSH actor identity cannot be replayed')
-                identified = True
-                private_actor = password_wire.actor({'process': process_identity(os.getpid()), 'uid': os.getuid(),
-                                                     'session_nonce': secrets.token_hex(16)})
-                result = {'state': 'password-fixture-actor', 'actor': private_actor}
-            elif command == {'operation': 'poll'}:
+            if command == {'operation': 'poll'}:
                 if publication is None and not mailbox.path.exists():
                     result = {'state': 'waiting'}
                 elif publication is None and mailbox.read('binding.json') is None:
@@ -190,12 +172,7 @@ def serve(execution: dict, vm_id: str):
                         acknowledged = None
                         result = {'state': 'waiting'}
                     else:
-                        private = pending.get('operation') == password_wire.OPERATION
-                        if private:
-                            password_wire.request(pending, execution)
-                            if not identified or pending['actor'] != private_actor:
-                                raise ValueError('private fixture requires its independently selected SSH actor')
-                        elif pending.get('operation') in polkit_control.OPERATIONS:
+                        if pending.get('operation') in polkit_control.OPERATIONS:
                             polkit_control.request(pending, execution)
                         elif pending.get('operation') in unlock_wire.OPERATIONS:
                             unlock_wire.request(pending, execution)
@@ -203,21 +180,7 @@ def serve(execution: dict, vm_id: str):
                             protocol.request(pending, execution)
                         digest = protocol.request_sha256(pending)
                         result = ({'state': 'acknowledged'} if digest == acknowledged else
-                                  {'state': 'private-request' if private else 'request', 'request': pending})
-            elif set(command) == {'operation', 'transaction_id'} and command['operation'] == 'open-password-fixture':
-                if not identified or publication is None or attached_publication() != publication:
-                    raise ValueError('private fixture requires its captured mailbox publication')
-                pending = mailbox.read('request.json')
-                password_wire.request(pending, execution)
-                digest = protocol.request_sha256(pending)
-                if (pending['actor'] != private_actor or command['transaction_id'] != pending['transaction_id']
-                        or acknowledged == digest or mailbox.read('ack.json') is not None):
-                    raise ValueError('private fixture opening changed or replayed its selected transaction')
-                from .password_endpoint import serve as serve_private
-                if not serve_private(mailbox, pending, private_actor):
-                    raise SystemExit(1)
-                acknowledged = digest
-                continue
+                                  {'state': 'request', 'request': pending})
             elif set(command) == {'operation', 'request_sha256'} and command['operation'] == 'native-polkit-input':
                 if publication is None or attached_publication() != publication:
                     raise ValueError('Polkit target input requires its attached publication')

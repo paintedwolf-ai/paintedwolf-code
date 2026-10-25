@@ -154,6 +154,56 @@ class NativeInputMailboxTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, 'attached publication'):
                     mailbox.serve(self.execution, 'owned-fedora')
 
+    def test_retired_password_handshake_open_and_unknown_request_are_refused(self):
+        commands = [
+            {'operation': 'identify-password-fixture-actor', 'binding': self.execution, 'vm_id': 'owned-fedora'},
+            {'operation': 'open-password-fixture', 'transaction_id': 'd' * 32},
+            {'operation': 'private-request'},
+        ]
+        for command in commands:
+            with self.subTest(command=command), tempfile.TemporaryDirectory() as directory:
+                selected = self.selected(directory)
+                output = SimpleNamespace(buffer=io.BytesIO())
+                with patch.object(mailbox, 'Mailbox', return_value=selected), \
+                        patch.object(mailbox.sys, 'stdin', SimpleNamespace(buffer=io.BytesIO(protocol.canonical(command)))), \
+                        patch.object(mailbox.sys, 'stdout', output):
+                    with self.assertRaisesRegex(ValueError, 'unknown operations'):
+                        mailbox.serve(self.execution, 'owned-fedora')
+                self.assertEqual(output.buffer.getvalue(), b'')
+        for operation in ('app-password-fixture-v1', 'unknown-input-v1'):
+            with self.subTest(operation=operation), tempfile.TemporaryDirectory() as directory:
+                selected = self.selected(directory)
+                selected.write('request.json', {'operation': operation})
+                output = SimpleNamespace(buffer=io.BytesIO())
+                with patch.object(mailbox, 'Mailbox', return_value=selected), \
+                        patch.object(mailbox.sys, 'stdin', SimpleNamespace(buffer=io.BytesIO(b'{"operation":"poll"}\n'))), \
+                        patch.object(mailbox.sys, 'stdout', output):
+                    with self.assertRaises(ValueError):
+                        mailbox.serve(self.execution, 'owned-fedora')
+                self.assertEqual(output.buffer.getvalue(), b'')
+
+    def test_polkit_and_native_unlock_requests_use_the_regular_validated_route(self):
+        from linux_release.installed_input import polkit_control, unlock_wire
+        from verification_tests.distribution.installed.test_installed_native_unlock_execution import ACCOUNT, target
+        native = target()['session']
+        native['native_session'].update(locked_hint=False, locker_active=False)
+        common = {'format_version': 1, 'binding': self.execution, 'transaction_id': 'd' * 32, 'account': ACCOUNT}
+        requests = [
+            {**common, 'operation': polkit_control.OBSERVE, 'session_id': 'e' * 32},
+            {**common, 'operation': unlock_wire.PREPARE, 'native_session': native},
+        ]
+        for pending in requests:
+            with self.subTest(operation=pending['operation']), tempfile.TemporaryDirectory() as directory:
+                selected = self.selected(directory)
+                selected.write('request.json', pending)
+                output = SimpleNamespace(buffer=io.BytesIO())
+                with patch.object(mailbox, 'Mailbox', return_value=selected), \
+                        patch.object(mailbox.sys, 'stdin', SimpleNamespace(buffer=io.BytesIO(
+                            b'{"operation":"poll"}\n{"operation":"close"}\n'))), \
+                        patch.object(mailbox.sys, 'stdout', output):
+                    mailbox.serve(self.execution, 'owned-fedora')
+                self.assertEqual(mailbox.decode(output.buffer.getvalue()), {'state': 'request', 'request': pending})
+
 
 if __name__ == '__main__':
     unittest.main()

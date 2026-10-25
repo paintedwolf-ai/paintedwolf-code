@@ -80,9 +80,6 @@ def run_guest(target: dict, source: str, tree: str, output: Path) -> Path:
     with context as bridge:
         if bridge is not None and bridge.actor.value['ssh'] != {key: target[key] for key in ('host', 'port', 'user')}:
             raise ValueError('fixed native input lease differs from selected SSH guest')
-        if bridge is not None:
-            arguments.extend(['--input-fixture-actor', json.dumps(bridge.fixture_actor, sort_keys=True,
-                                                               separators=(',', ':'))])
         returncode = run_managed(bridge, command(target, arguments), directory / 'managed-execution.log')
     if returncode not in {0, 1}:
         raise ValueError("guest managed execution failed before retaining an installed campaign")

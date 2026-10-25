@@ -125,7 +125,7 @@ def execute_case(binding: dict, capability: str, case: str, root: Path) -> dict:
 
 def execute(catalog: dict, final: dict, source: str, artifact_id: str, file_root: Path,
             install_root: Path, environment_id: str, output: Path, driver_tree: str,
-            nix_program: Path | None = None, case_inputs: dict | None = None, execution_nonce: str | None = None, variant_id: str | None = None, snapshot: dict | None = None, input_vm_id: str | None = None, input_fixture_actor: dict | None = None) -> dict:
+            nix_program: Path | None = None, case_inputs: dict | None = None, execution_nonce: str | None = None, variant_id: str | None = None, snapshot: dict | None = None, input_vm_id: str | None = None) -> dict:
     if not isinstance(execution_nonce, str) or not re.fullmatch(r"[a-f0-9]{32}", execution_nonce):
         raise ValueError("installed execution requires its fresh controller nonce")
     expected = evidence.artifacts(final, source)
@@ -160,11 +160,6 @@ def execute(catalog: dict, final: dict, source: str, artifact_id: str, file_root
         raise ValueError("fresh native installation failed; retained transaction requires recovery review")
     binding = bind(final, source, artifact_id, file_root, install_root, nix_program)
     binding['execution_nonce'] = execution_nonce
-    if input_fixture_actor is not None:
-        from .installed_input.password_wire import actor
-        actor(input_fixture_actor)
-        if input_vm_id is None or input_fixture_actor['uid'] != os.getuid():
-            raise ValueError('password fixture actor differs from the selected guest execution account')
     if input_vm_id is not None:
         from .installed_input.mailbox import Mailbox
         execution_binding = {'format_version': 1, 'execution_nonce': execution_nonce, 'source_commit': source,
@@ -173,8 +168,6 @@ def execute(catalog: dict, final: dict, source: str, artifact_id: str, file_root
         mailbox = Mailbox(execution_binding, input_vm_id)
         mailbox.create()
         binding['native_input'] = {'format_version': 1, 'vm_id': input_vm_id, 'binding': execution_binding}
-        if input_fixture_actor is not None:
-            binding['native_input']['fixture_actor'] = input_fixture_actor
     if case_inputs is not None:
         binding["case_inputs"] = case_inputs
     if transaction is not None:
@@ -263,12 +256,11 @@ def main(arguments: list[str]) -> int:
     parser.add_argument("--nix-program", type=Path)
     parser.add_argument("--case-inputs", type=Path)
     parser.add_argument('--input-vm-id')
-    parser.add_argument('--input-fixture-actor', type=json.loads)
     args = parser.parse_args(arguments)
     try:
         campaign = execute(read(args.catalog), read(args.final_artifacts), args.source_commit,
                            args.artifact_id, args.file_root, args.install_root, args.environment_id,
-                           args.output, args.driver_tree, args.nix_program, read(args.case_inputs) if args.case_inputs else None, args.execution_nonce, args.variant_id, args.snapshot, args.input_vm_id, args.input_fixture_actor)
+                           args.output, args.driver_tree, args.nix_program, read(args.case_inputs) if args.case_inputs else None, args.execution_nonce, args.variant_id, args.snapshot, args.input_vm_id)
     except (OSError, ValueError, TypeError, subprocess.SubprocessError) as error:
         print("Installed case execution refused: " + str(error), file=sys.stderr)
         return 2

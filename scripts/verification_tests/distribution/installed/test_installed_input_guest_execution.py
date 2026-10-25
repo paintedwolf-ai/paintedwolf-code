@@ -1,8 +1,10 @@
 """A guest requires exact physical delivery and stable focus for every fixed step."""
 from pathlib import Path
 import tempfile
+import threading
+from types import SimpleNamespace
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, call, patch
 
 from linux_release.installed_input import controller, guest, protocol
 
@@ -191,6 +193,92 @@ class GuestInputTests(unittest.TestCase):
                 (leaf / 'execution.json').write_text(json.dumps(saved))
                 with self.assertRaises(ValueError):
                     controller.verify_deliveries(root, self.execution, selected)
+
+
+class BridgeNativeOnlyTests(unittest.TestCase):
+    def bridge(self):
+        bridge = controller.Bridge.__new__(controller.Bridge)
+        bridge.actor = Mock(failed=False)
+        bridge.stop, bridge.error = threading.Event(), None
+        bridge.stale_credential = Mock()
+        bridge.polkit_session, bridge.unlock_actor = Mock(), Mock()
+        bridge.unlock_proof = None
+        bridge.lease = SimpleNamespace(__exit__=Mock())
+        bridge.thread = Mock()
+        bridge.thread.is_alive.return_value = False
+        bridge._close_transport = Mock()
+        return bridge
+
+    def test_entry_needs_no_removed_password_handshake_or_private_session(self):
+        execution = {'format_version': 1, 'execution_nonce': 'a' * 32,
+            'source_commit': 'b' * 40, 'driver_tree': 'c' * 40,
+            'artifact_id': 'app', 'environment_id': 'fedora', 'variant_id': 'gnome-wayland'}
+        selected = {'format_version': 1, 'kind': 'qemu-fixed-input', 'lease': '/owned/lease', 'vm_id': 'owned'}
+        with tempfile.TemporaryDirectory() as directory:
+            bridge = controller.Bridge(selected, execution, ['owned-ssh'], Path(directory))
+            bridge.exchange = Mock(side_effect=AssertionError('no startup handshake is needed'))
+            lease, process, thread = MagicMock(), Mock(), Mock()
+            process.poll.return_value = 0
+            thread.is_alive.return_value = False
+            with patch.object(controller, 'open_lease', return_value=lease), \
+                    patch.object(controller.subprocess, 'Popen', return_value=process), \
+                    patch.object(controller.os, 'set_blocking'), \
+                    patch.object(controller.selectors, 'DefaultSelector', return_value=Mock()), \
+                    patch.object(controller.threading, 'Thread', return_value=thread):
+                with bridge:
+                    thread.start.assert_called_once_with()
+                    bridge.exchange.assert_not_called()
+            self.assertFalse(hasattr(bridge, 'private_session'))
+            self.assertFalse(hasattr(bridge, 'fixture_actor'))
+            self.assertEqual(thread.join.call_args_list, [call(6), call(21)])
+            lease.__exit__.assert_called_once_with(None, None, None)
+
+    def test_worker_routes_polkit_and_unlock_without_a_private_password_stage(self):
+        from linux_release.installed_input import polkit_control, unlock_wire
+        routes = [(polkit_control.OBSERVE, 'control_polkit'), (unlock_wire.PREPARE, 'prepare_unlock'),
+                  (unlock_wire.STALE_PREPARE, 'prepare_stale'), (unlock_wire.PURPOSE, 'unlock_session')]
+        for operation, handler in routes:
+            with self.subTest(operation=operation):
+                bridge = self.bridge()
+                pending = {'operation': operation}
+                bridge.exchange = Mock(return_value={'state': 'request', 'request': pending})
+                setattr(bridge, handler, Mock(side_effect=lambda _pending: bridge.stop.set()))
+                bridge._run()
+                getattr(bridge, handler).assert_called_once_with(pending)
+                self.assertIsNone(bridge.error)
+                bridge.actor.send.assert_not_called()
+                bridge.stale_credential.close.assert_not_called()
+
+    def test_unknown_private_response_poison_is_not_replayed_and_closes_owned_credential(self):
+        bridge = self.bridge()
+        bridge.exchange = Mock(return_value={'state': 'private-request', 'request': {}})
+        bridge._run()
+        self.assertIsInstance(bridge.error, ValueError)
+        bridge.exchange.assert_called_once_with({'operation': 'poll'})
+        bridge.actor.send.assert_not_called()
+        bridge.stale_credential.close.assert_called_once_with()
+        self.assertTrue(bridge.stop.is_set())
+
+    def test_shutdown_keeps_exact_waits_and_independent_cleanup_on_failure(self):
+        for failure in (None, 'polkit', 'transport', 'credential', 'thread'):
+            with self.subTest(failure=failure):
+                bridge = self.bridge()
+                if failure == 'polkit': bridge.polkit_session.close.side_effect = OSError('observer lost')
+                if failure == 'transport': bridge._close_transport.side_effect = OSError('transport lost')
+                if failure == 'credential': bridge.stale_credential.close.side_effect = OSError('disable uncertain')
+                if failure == 'thread': bridge.thread.is_alive.return_value = True
+                if failure is None:
+                    bridge.__exit__(None, None, None)
+                    self.assertEqual(bridge.thread.join.call_args_list, [call(6), call(21)])
+                else:
+                    with self.assertRaises((OSError, ValueError)):
+                        bridge.__exit__(None, None, None)
+                bridge.unlock_actor.close.assert_called_once_with()
+                bridge._close_transport.assert_called_once_with()
+                bridge.stale_credential.close.assert_called_once_with()
+                bridge.lease.__exit__.assert_called_once_with(None, None, None)
+                self.assertTrue(bridge.actor.failed)
+                if failure == 'thread': self.assertIsInstance(bridge.error, ValueError)
 
 
 if __name__ == '__main__':

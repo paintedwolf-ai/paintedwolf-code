@@ -11,13 +11,14 @@ import subprocess
 import threading
 import time
 
-from . import password_wire, protocol, session_wire, surface_wire, unlock_actor, unlock_wire
+from . import protocol, session_wire, surface_wire, unlock_actor, unlock_wire
 from ..installed_cases.records import expand_physical_transactions
 from .mailbox import decode
 from .qemu import open_lease
 from .private_pipe import Pipe
 
 MAX_LOG = 8 << 20
+TRANSPORT_SHUTDOWN_JOIN_SECONDS = 21
 
 
 def run_managed(bridge, command, output):
@@ -348,7 +349,6 @@ class Bridge:
         self.unlock_actor = None
         self.prepared_request = None
         self.unlock_proof = None
-        self.private_session = None
         self.polkit_target = target
         self.polkit_session = None
         self.polkit_sessions = set()
@@ -368,13 +368,6 @@ class Bridge:
             os.set_blocking(self.process.stdout.fileno(), False)
             self.selector = selectors.DefaultSelector()
             self.selector.register(self.process.stdout, selectors.EVENT_READ)
-            selected = self.exchange({'operation': 'identify-password-fixture-actor',
-                'binding': self.execution, 'vm_id': self.selected['vm_id']})
-            if not isinstance(selected, dict) or set(selected) != {'state', 'actor'} or selected['state'] != 'password-fixture-actor':
-                raise ValueError('private SSH transport omitted its password fixture actor identity')
-            self.fixture_actor = password_wire.actor(selected['actor'])
-            from .password_exchange import Session
-            self.private_session = Session(self.actor, self.fixture_actor, self.execution, self.output)
             self.thread = threading.Thread(target=self._run, name='fixed-native-input', daemon=True)
             self.thread.start()
         except BaseException:
@@ -382,8 +375,6 @@ class Bridge:
                 self._close_transport()
                 if self.polkit_session is not None:
                     self.polkit_session.close()
-                if self.private_session is not None:
-                    self.private_session.close()
             finally:
                 self.lease.__exit__(None, None, None)
             raise
@@ -575,14 +566,6 @@ class Bridge:
                 if row in ({'state': 'waiting'}, {'state': 'acknowledged'}):
                     self.stop.wait(0.025)
                     continue
-                if set(row) == {'state', 'request'} and row['state'] == 'private-request':
-                    pipe = Pipe(self.process, self.selector, time.monotonic() + password_wire.MAX_SECONDS)
-                    if not self.private_session.perform(row['request'], pipe):
-                        # Construct this outside the caught private exception's lifetime.
-                        self.error = ValueError('private fixture exchange failed; retained aggregate requires review')
-                        self.stop.set()
-                        return
-                    continue
                 if set(row) != {'state', 'request'} or row['state'] != 'request':
                     raise ValueError('fixed native input guest returned an unknown response')
                 from . import polkit_control
@@ -634,7 +617,7 @@ class Bridge:
                         self.unlock_actor.close()
                 finally:
                     self._close_transport()
-            self.thread.join(password_wire.MAX_SECONDS + 1)
+            self.thread.join(TRANSPORT_SHUTDOWN_JOIN_SECONDS)
             if self.thread.is_alive():
                 self.error = ValueError('fixed native input thread did not settle after its bounded shutdown')
             if self.unlock_proof is not None:
@@ -644,13 +627,9 @@ class Bridge:
                 (self.output / 'native-unlock.json').write_bytes(protocol.canonical(self.unlock_proof))
         finally:
             try:
-                if self.private_session is not None:
-                    self.private_session.close()
+                if self.stale_credential is not None:
+                    self.stale_credential.close()
             finally:
-                try:
-                    if self.stale_credential is not None:
-                        self.stale_credential.close()
-                finally:
-                    self.lease.__exit__(*error)
+                self.lease.__exit__(*error)
         if not any(error):
             self.require_healthy()
