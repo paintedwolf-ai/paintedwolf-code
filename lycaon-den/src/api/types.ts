@@ -11484,7 +11484,7 @@ export interface components {
             checkpoints: components["schemas"]["CheckpointEvent"][];
         };
         /**
-         * @description User-presence verifier that confirmed the person before the shell signed: the operating system's own prompt, or on Linux without a polkit agent, the shell's native app-password dialog.
+         * @description User-presence verifier that confirmed the person before the shell signed. New Linux confirmations use the operating system's polkit authentication agent; credential-vault passwords do not confirm presence.
          * @enum {string}
          */
         PresenceAuthenticator: "macos_user_presence" | "windows_user_presence" | "linux_user_presence" | "linux_app_password";
