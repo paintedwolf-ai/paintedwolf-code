@@ -345,7 +345,18 @@ where
         expect.purpose,
         window.label(),
     );
-    let authenticator = verify_user_presence(window, &challenge.prompt)?;
+    let confirmation = verify_user_presence(window, &challenge.prompt);
+    eprintln!(
+        "Native presence confirmation: {}",
+        confirmation_observation(
+            step_away,
+            &challenge.challenge_id,
+            expect.purpose,
+            window.label(),
+            &confirmation,
+        )
+    );
+    let authenticator = confirmation?;
     // Closing the native prompt can delay focus returning to this window.
     let deadline = std::time::Instant::now() + Duration::from_millis(500);
     while !window.is_focused().unwrap_or(false) && std::time::Instant::now() < deadline {
@@ -402,6 +413,36 @@ fn require_current_confirmation(generation: u64) -> Result<(), PresenceCommandEr
     Err(PresenceCommandError::stepped_away(
         "The device locked or suspended during confirmation. Try again.",
     ))
+}
+
+/// Native confirmation is an observation, not evidence that the host accepted a reveal.
+fn confirmation_observation(
+    generation: u64,
+    challenge_id: &str,
+    purpose: &str,
+    window_label: &str,
+    result: &Result<&str, PresenceCommandError>,
+) -> serde_json::Value {
+    let (status, authenticator, code, resolution) = match result {
+        Ok(authenticator) => ("confirmed", Some(*authenticator), None, None),
+        Err(error) => (
+            "refused",
+            None,
+            Some(error.code.as_str()),
+            error.resolution.as_deref(),
+        ),
+    };
+    serde_json::json!({
+        "format_version": 1,
+        "challenge_id": challenge_id,
+        "purpose": purpose,
+        "window_label": window_label,
+        "generation": generation,
+        "status": status,
+        "authenticator": authenticator,
+        "code": code,
+        "resolution": resolution,
+    })
 }
 
 fn record_challenge_started(
@@ -730,6 +771,34 @@ mod tests {
         let wire = serde_json::to_value(PresenceCommandError::from(host)).unwrap();
         assert!(wire.get("actions").is_none());
     }
+    #[test]
+    fn native_confirmation_observation_omits_messages_and_distinguishes_host_completion() {
+        let refused = confirmation_observation(
+            7,
+            "challenge",
+            "reveal",
+            "main",
+            &Err(PresenceCommandError::unavailable("private diagnostic message")),
+        );
+        assert_eq!(refused["code"], "presence_unavailable");
+        assert_eq!(refused["status"], "refused");
+        assert!(refused["authenticator"].is_null());
+        assert!(!refused.to_string().contains("private diagnostic message"));
+        let confirmed = confirmation_observation(
+            7,
+            "challenge",
+            "reveal",
+            "main",
+            &Ok("linux_app_password"),
+        );
+        assert_eq!(confirmed["status"], "confirmed");
+        assert_eq!(confirmed["authenticator"], "linux_app_password");
+        assert_eq!(confirmed["generation"], 7);
+        assert_eq!(confirmed["challenge_id"], refused["challenge_id"]);
+        assert!(confirmed["code"].is_null());
+        assert!(confirmed.get("host_completed").is_none());
+    }
+
     #[test]
     fn stepping_away_during_confirmation_refuses_the_native_proof() {
         let generation = crate::vault_lock::confirmation_generation();
