@@ -58,6 +58,7 @@ var utilities = map[string]utility{
 	"rm": runRm, "rmdir": runRmdir, "mv": runMv, "cp": runCp, "mkdir": runMkdir,
 	"touch": runTouch, "chmod": runChmod, "chown": runChown, "tee": runTee, "mktemp": runMktemp,
 	"tar": runTar, "zip": runZip, "unzip": runUnzip, "gzip": runGzip, "gunzip": runGunzip, "zcat": runZcat,
+	"edit": runEdit, "replace-lines": runReplaceLines, "code-rewrite": runCodeRewrite,
 }
 
 // createOperations names the owner of utilities whose catalog entry has no
