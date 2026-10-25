@@ -159,3 +159,13 @@ it("keeps concurrent first pages when preparation resolves an empty presentation
   expect(view.frames()).toEqual([0, 200]);
   view.close();
 });
+
+ it("retains a reused page while loading its neighboring page at capacity", async () => {
+  const view = new PagedViewController<number>(() => ({ rows: 200, bytes: 1000 }), { rows: 400, pages: 2 });
+  await view.load("first", async () => 1);
+  await view.load("distant", async () => 99);
+  expect(view.find(frame => frame === 1)).toBe(1);
+  expect(view.find(frame => frame === 2)).toBeUndefined();
+  await view.load("neighbor", async () => 2);
+  expect(view.frames()).toEqual([1, 2]);
+ });

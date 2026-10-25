@@ -16,6 +16,7 @@ import {
   WORKSPACE_SYNC_RETRYING,
   workspaceFaultMessage,
   workspaceLookupRetryable,
+  workspaceRetryMessage,
 } from "./files-workspace-fault.ts";
 import { isComposedBufferKind } from "../documents/project-files-buffer-kind.ts";
 import { dropFilesBuffersForRoot, switchFilesRootBranches } from "../documents/project-files-buffers.ts";
@@ -254,7 +255,7 @@ export function createFilesWorkspace(options: {
               return;
             }
             if (workspaceLookupRetryable(err)) {
-              setWorkspaceError(WORKSPACE_SYNC_RETRYING);
+              setWorkspaceError(workspaceRetryMessage(err));
               retryTimer = setTimeout(
                 () => resolveWorkspace(attempt + 1),
                 Math.min(15_000, 1000 * 2 ** Math.min(attempt, 4)),

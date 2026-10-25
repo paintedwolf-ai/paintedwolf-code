@@ -17,19 +17,49 @@ fn fixture(output: &Path, desktop: &[u8], helper: &[u8]) -> PathBuf {
         .unwrap(),
     )
     .unwrap();
-    let entries: Vec<_> = [("painted-wolf-code", desktop), ("pw", helper)].iter().map(|(role, bytes)| {
-        serde_json::json!({"path": root.join("bin").join(role), "sha256": hex::encode(Sha256::digest(bytes)), "size": bytes.len()})
-    }).collect();
+    let shell_path = root.join("bin/painted-wolf-code");
+    let pw_path = root.join("bin/pw");
+    let manifest_json = crate::sidecar::manifest::fixture_json(
+        &root,
+        "x86_64",
+        &[(&shell_path, desktop), (&pw_path, helper)],
+        &[],
+    );
     std::fs::write(
         root.join("manifest.json"),
-        serde_json::to_vec(&serde_json::json!({
-            "format_version": 1, "package": "painted-wolf-code", "version": "1.0.2",
-            "architecture": "x86_64", "install_root": root, "executables": entries
-        }))
-        .unwrap(),
+        serde_json::to_vec(&manifest_json).unwrap(),
     )
     .unwrap();
-    root.join("bin/painted-wolf-code")
+    shell_path
+}
+
+#[test]
+fn generation_accepts_format_1_and_2_and_refuses_unknown_or_mismatched_versions() {
+    let temporary = crate::test_support::TempDir::new("nix-manifest-version");
+    let desktop = fixture(&temporary, b"desktop", b"\x7fELFhelper");
+    let root = desktop.parent().unwrap().parent().unwrap();
+    let manifest_path = root.join("manifest.json");
+    let base: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&manifest_path).unwrap()).unwrap();
+    let mut v1 = base.clone();
+    v1["format_version"] = serde_json::json!(1);
+    v1.as_object_mut().unwrap().remove("payload");
+    std::fs::write(&manifest_path, serde_json::to_vec(&v1).unwrap()).unwrap();
+    assert!(capture(&desktop, File::open(&desktop).unwrap()).is_ok());
+
+    for bad_version in [0, 1, 3, 99] {
+        let mut raw = base.clone();
+        raw["format_version"] = serde_json::json!(bad_version);
+        std::fs::write(&manifest_path, serde_json::to_vec(&raw).unwrap()).unwrap();
+        assert!(
+            capture(&desktop, File::open(&desktop).unwrap()).is_err(),
+            "format_version {bad_version} with payload must be refused"
+        );
+    }
+    let mut v2_no_payload = base;
+    v2_no_payload.as_object_mut().unwrap().remove("payload");
+    std::fs::write(&manifest_path, serde_json::to_vec(&v2_no_payload).unwrap()).unwrap();
+    assert!(capture(&desktop, File::open(&desktop).unwrap()).is_err());
 }
 
 #[test]
