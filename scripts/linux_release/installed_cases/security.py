@@ -26,6 +26,10 @@ from .browser_network import denied_local_services, allowed_local_server
 from .products import require_owned_guest
 from .records import CaseUnavailable, CaseFailed, retain
 from .security_boundary import filesystem_egress
+from .helper_families import helper_family_boundaries
+from .helper_suite import helper_suite
+from .descendant_cleanup import cancel_abandoned_call, terminal_close_descendants
+from .protected_launch import protected_launch
 
 SOCKET = Path('/run/painted-wolf-code/vault-identity.sock')
 UNIT = 'paintedwolf-vault-identity.service'
@@ -211,13 +215,18 @@ PROBES = {('browser', 'denied-local-services'): denied_local_services,
           ('processes', 'host-execution-lifetime'): host_execution_lifetime,
           ('processes', 'background-cancel'): background_cancel,
           ('processes', 'setsid-and-double-fork'): detached_cleanup,
+          ('processes', 'cancel-abandoned-call'): cancel_abandoned_call,
+          ('processes', 'terminal-close-descendants'): terminal_close_descendants,
           ('confinement', 'system-v-ipc-isolation'): system_v_isolation,
           ('confinement', 'private-shared-memory'): private_shared_memory,
           ('confinement', 'restricted-user-namespaces'): restricted_namespaces,
           ('confinement', 'helper-boundary-and-descendants'): helper_boundary,
           ('confinement', 'filesystem-and-egress-denial'): filesystem_egress,
+          ('confinement', 'helper-family-boundaries'): helper_family_boundaries,
+          ('confinement', 'helper-suite-and-typed-refusal'): helper_suite,
           ('session', 'inhibitor-lifetime'): inhibitor_lifetime,
-          ('vault', 'wrong-launcher-and-memory'): wrong_launcher_memory}
+          ('vault', 'wrong-launcher-and-memory'): wrong_launcher_memory,
+          ('vault', 'protected-launch-attestation'): protected_launch}
 
 
 def execute(binding: dict, capability: str, case: str, evidence_root: Path) -> dict:

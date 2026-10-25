@@ -277,14 +277,17 @@
         754,
         755,
         756,
-        939
+        939,
+        1116,
+        1121
       ],
       "cases": [
         "service-and-password-onboarding",
         "presence-cancel-and-expiry",
         "service-unavailable-retry",
         "wrong-launcher-and-memory",
-        "reinstall-with-healthy-credentials"
+        "reinstall-with-healthy-credentials",
+        "protected-launch-attestation"
       ]
     },
     {
@@ -296,14 +299,17 @@
         194,
         196,
         933,
-        935
+        935,
+        1113
       ],
       "cases": [
         "filesystem-and-egress-denial",
         "system-v-ipc-isolation",
         "private-shared-memory",
         "restricted-user-namespaces",
-        "helper-boundary-and-descendants"
+        "helper-boundary-and-descendants",
+        "helper-family-boundaries",
+        "helper-suite-and-typed-refusal"
       ]
     },
     {
@@ -318,7 +324,9 @@
         "terminal-interaction",
         "background-cancel",
         "setsid-and-double-fork",
-        "host-execution-lifetime"
+        "host-execution-lifetime",
+        "cancel-abandoned-call",
+        "terminal-close-descendants"
       ]
     },
     {
