@@ -1,10 +1,12 @@
 """Bind a probe to its real logind session or owned graphical user application unit."""
 from __future__ import annotations
 
+import math
 import os
 from pathlib import Path
 import stat
 import threading
+import time
 
 from .records import CaseUnavailable
 
@@ -20,7 +22,14 @@ class CallFailure(Exception):
 
 
 class Reader:
-    def __init__(self):
+    deadline = None
+    user_only = False
+
+    def __init__(self, *, user_only=False, deadline=None):
+        if type(user_only) is not bool or deadline is not None and (
+                type(deadline) not in {int, float} or not math.isfinite(deadline) or deadline <= 0):
+            raise ValueError('native session reader requires a bounded absolute deadline and bus scope')
+        self.user_only, self.deadline = user_only, deadline
         self.system = self.user = None
         self.closed = False
         try:
@@ -29,7 +38,10 @@ class Reader:
             raise CaseUnavailable('typed-native-session-observer-unavailable') from None
         self.gio, self.glib = Gio, GLib
         try:
-            self.system = self.connect('/run/dbus/system_bus_socket', 0)
+            if user_only:
+                self.user = self.connect('/run/user/' + str(os.getuid()) + '/bus', os.getuid())
+            else:
+                self.system = self.connect('/run/dbus/system_bus_socket', 0)
         except GLib.Error:
             raise CaseUnavailable('typed-native-session-bus-unavailable') from None
 
@@ -56,7 +68,18 @@ class Reader:
     def __exit__(self, *_):
         self.close()
 
-    def connect(self, address, uid):
+    def timeout_ms(self, deadline=None):
+        if deadline is not None and (type(deadline) not in {int, float} or not math.isfinite(deadline) or deadline <= 0):
+            raise ValueError('native session call requires a finite absolute deadline')
+        selected = [value for value in (self.deadline, deadline) if value is not None]
+        if not selected:
+            return 5000
+        remaining = min(selected) - time.monotonic()
+        if remaining <= 0:
+            raise CaseUnavailable('typed-native-session-observation-deadline')
+        return max(1, min(5000, math.ceil(remaining * 1000)))
+
+    def connect(self, address, uid, *, deadline=None):
         path = Path(address)
         for parent in reversed(path.parents):
             info = parent.lstat()
@@ -68,7 +91,7 @@ class Reader:
         if not stat.S_ISSOCK(before.st_mode) or before.st_uid != uid:
             raise ValueError('native session bus socket belongs to another account')
         cancellation = self.gio.Cancellable()
-        timer = threading.Timer(5, cancellation.cancel)
+        timer = threading.Timer(self.timeout_ms(deadline) / 1000, cancellation.cancel)
         timer.daemon = True
         timer.start()
         try:
@@ -87,21 +110,23 @@ class Reader:
             raise
         return connection
 
-    def call(self, path, interface, method, args, signature, *, user=False, destination=None):
+    def call(self, path, interface, method, args, signature, *, user=False, destination=None, deadline=None):
         if self.closed:
             raise ValueError('native session reader is closed')
+        if self.user_only and not user:
+            raise ValueError('user-only native reader cannot observe a system bus')
         destination = destination or ('org.freedesktop.systemd1' if user else LOGIN)
         parameters = self.glib.Variant(*args) if args else None
         try:
             if user and self.user is None:
                 try:
-                    self.user = self.connect('/run/user/' + str(os.getuid()) + '/bus', os.getuid())
+                    self.user = self.connect('/run/user/' + str(os.getuid()) + '/bus', os.getuid(), deadline=deadline)
                 except BaseException:
                     self.close()
                     raise
             connection = self.user if user else self.system
             return connection.call_sync(destination, path, interface, method, parameters,
-                self.glib.VariantType.new(signature), self.gio.DBusCallFlags.NONE, 5000, None)
+                self.glib.VariantType.new(signature), self.gio.DBusCallFlags.NONE, self.timeout_ms(deadline), None)
         except self.glib.Error as error:
             remote = self.gio.DBusError.get_remote_error(error)
             if remote is None:

@@ -2,6 +2,7 @@
 import os
 from pathlib import Path
 import stat
+import sys
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -15,6 +16,34 @@ def info(*, inode=2, uid=0, mode=stat.S_IFREG | 0o755):
 
 
 class NativeDesktopAuthorityTests(unittest.TestCase):
+    def test_reader_absolute_deadline_is_shared_and_never_extended(self):
+        reader = Reader.__new__(Reader)
+        reader.deadline = 10
+        with patch('scripts.linux_release.installed_cases.logind_context.time.monotonic', return_value=8):
+            self.assertEqual(reader.timeout_ms(), 2000)
+            self.assertEqual(reader.timeout_ms(20), 2000)
+            self.assertEqual(reader.timeout_ms(9), 1000)
+        with patch('scripts.linux_release.installed_cases.logind_context.time.monotonic', return_value=10):
+            with self.assertRaises(Exception) as raised:
+                reader.timeout_ms(20)
+        self.assertEqual(str(raised.exception), 'typed-native-session-observation-deadline')
+        for invalid in (True, float('inf'), float('nan'), 0, '10'):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                reader.timeout_ms(invalid)
+
+    def test_user_only_reader_uses_fixed_private_bus_and_refuses_system_calls(self):
+        connection = SimpleNamespace(close_sync=lambda _: None)
+        fake = SimpleNamespace(Gio=SimpleNamespace(), GLib=SimpleNamespace(Error=RuntimeError))
+        with patch.dict(sys.modules, {'gi.repository': fake}), patch.object(
+                Reader, 'connect', return_value=connection) as connect:
+            reader = Reader(user_only=True, deadline=100)
+        connect.assert_called_once_with('/run/user/' + str(os.getuid()) + '/bus', os.getuid())
+        self.assertIs(reader.user, connection)
+        self.assertIsNone(reader.system)
+        with self.assertRaises(ValueError):
+            reader.call('/path', 'interface', 'method', None, '()')
+        reader.close()
+
     def test_reader_closes_all_private_connections_idempotently_even_after_failure(self):
         reader = Reader.__new__(Reader)
         reader.closed = False
