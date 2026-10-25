@@ -33,7 +33,7 @@ func TestReadRootStatReportsEntriesWithoutOpeningContent(t *testing.T) {
 
 	file, err := held.Stat("file", false, nil)
 	testutil.FailErr(t, "stat write-only file", err)
-	if file.Name != "file" || file.Size != 5 || file.Mode != 0o200 || !file.ModTime.Equal(when) || !file.POSIX || file.UID != uint32(os.Getuid()) || file.Links != 1 || file.Inode == 0 {
+	if file.Name != "file" || file.Size != 5 || file.Mode != 0o200 || !file.ModTime.Equal(when) || !file.POSIX || file.UID != uint32(os.Getuid()) || file.Links != 1 || file.Inode == 0 || (file.DeviceMajor == 0 && file.DeviceMinor == 0) {
 		t.Fatalf("file = %+v", file)
 	}
 	dir, err := held.Stat("dir", false, nil)

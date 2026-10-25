@@ -81,24 +81,23 @@ const pinColumns = `role,mode,basis,root_id,path,document_id,document_revision,d
 // than refreshed. first may not leave a gap after the recorded pins, and pins
 // append only while the execution is unsettled.
 func (r *SQLRecorder) RecordRevisionPins(ctx context.Context, executionID string, first int, pins []toolcontract.ExecutionRevision) error {
-	if first < 0 {
-		return fmt.Errorf("revision pins require an execution, a first ordinal and at least one capture")
-	}
-	return r.recordRevisionPins(ctx, executionID, &first, pins)
+	return r.recordRevisionPins(ctx, executionID, first, false, pins)
 }
 
 // AppendRevisionPin records one capture at the execution's next position. An
 // execution's owners capture independently (each redirect destination, the
 // utility's own sources and destinations), so none of them assigns ordinals.
 func (r *SQLRecorder) AppendRevisionPin(ctx context.Context, executionID string, pin toolcontract.ExecutionRevision) error {
-	return r.recordRevisionPins(ctx, executionID, nil, []toolcontract.ExecutionRevision{pin})
+	return r.recordRevisionPins(ctx, executionID, 0, true, []toolcontract.ExecutionRevision{pin})
 }
 
-func (r *SQLRecorder) recordRevisionPins(ctx context.Context, executionID string, firstAt *int, pins []toolcontract.ExecutionRevision) error {
+// recordRevisionPins records pins from first, or from the recorded count when
+// appending, in one transaction with the execution's state check.
+func (r *SQLRecorder) recordRevisionPins(ctx context.Context, executionID string, first int, appending bool, pins []toolcontract.ExecutionRevision) error {
 	if r == nil || r.database == nil {
 		return fmt.Errorf("invocation recorder is not configured")
 	}
-	if executionID == "" || len(pins) == 0 {
+	if executionID == "" || len(pins) == 0 || first < 0 {
 		return fmt.Errorf("revision pins require an execution, a first ordinal and at least one capture")
 	}
 	for _, pin := range pins {
@@ -127,9 +126,8 @@ func (r *SQLRecorder) recordRevisionPins(ctx context.Context, executionID string
 		return err
 	}
 	recorded := sealed + unsealed
-	first := recorded
-	if firstAt != nil {
-		first = *firstAt
+	if appending {
+		first = recorded
 	}
 	if first > recorded {
 		return fmt.Errorf("revision pin %d would leave a gap after %d recorded captures", first, recorded)

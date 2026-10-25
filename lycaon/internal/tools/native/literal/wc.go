@@ -1,6 +1,7 @@
 package literal
 
 import (
+	"fmt"
 	"io"
 	"strconv"
 	"strings"
@@ -30,6 +31,11 @@ func runWc(inv *invocation) error {
 	}
 	scalars := selected["-m"] || selected["-L"]
 	named := len(inv.operands()) > 0
+	type wcRow struct {
+		counts survey.TextCounts
+		label  string
+	}
+	var rows []wcRow
 	var total survey.TextCounts
 	for _, operand := range inv.operandsOrStdin() {
 		in, err := inv.open(operand, false)
@@ -39,16 +45,16 @@ func runWc(inv *invocation) error {
 		if in == nil {
 			continue
 		}
-		var counts survey.TextCounts
+		var counter survey.Counter
 		if in.stream != nil {
-			var counter survey.Counter
 			if _, err := io.Copy(&counter, in.stream); err != nil {
 				return err
 			}
-			counts = counter.Counts()
 		} else {
-			counts = survey.CountBytes(in.data)
+			_, _ = counter.Write(in.data)
 		}
+		counts := counter.Counts()
+		counts.MaxLineLength = counter.DisplayWidth()
 		if scalars && counts.InvalidEncoding {
 			inv.fail(1, operand, survey.ErrInvalidEncoding.Error())
 			continue
@@ -57,26 +63,44 @@ func runWc(inv *invocation) error {
 		if named {
 			label = operand
 		}
-		if err := inv.out.text(wcLine(counts, selected, label)); err != nil {
-			return err
-		}
+		rows = append(rows, wcRow{counts: counts, label: label})
 		total.Lines += counts.Lines
 		total.Words += counts.Words
 		total.Chars += counts.Chars
 		total.Bytes += counts.Bytes
 		total.MaxLineLength = max(total.MaxLineLength, counts.MaxLineLength)
 	}
+	columns := 0
+	for _, enabled := range selected {
+		if enabled {
+			columns++
+		}
+	}
+	width := 1
+	if len(inv.operands()) > 1 || columns > 1 {
+		width = len(strconv.FormatInt(total.Bytes, 10))
+		for _, operand := range inv.operandsOrStdin() {
+			if operand == "-" {
+				width = max(width, 7)
+			}
+		}
+	}
+	for _, row := range rows {
+		if err := inv.out.text(wcLine(row.counts, selected, width, row.label)); err != nil {
+			return err
+		}
+	}
 	if len(inv.operands()) > 1 {
-		return inv.out.text(wcLine(total, selected, "total"))
+		return inv.out.text(wcLine(total, selected, width, "total"))
 	}
 	return nil
 }
 
-func wcLine(counts survey.TextCounts, selected map[string]bool, label string) string {
+func wcLine(counts survey.TextCounts, selected map[string]bool, width int, label string) string {
 	var fields []string
 	for _, column := range wcColumns {
 		if selected[column.key] {
-			fields = append(fields, strconv.FormatInt(column.value(counts), 10))
+			fields = append(fields, fmt.Sprintf("%*d", width, column.value(counts)))
 		}
 	}
 	if label != "" {
