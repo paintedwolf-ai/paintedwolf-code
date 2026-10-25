@@ -65,22 +65,16 @@ class DesktopTurnTests(unittest.TestCase):
                 owner.submit_project_turn(object())
         ui.click.assert_not_called()
 
-    def test_open_project_configuration_maximizes_via_app_menu_and_retains_visible_witness(self):
+    def test_project_configuration_uses_owned_public_control_and_retains_visible_witness(self):
         app = SimpleNamespace(observations={'launch_identity': ROOT})
         frame = Mock(get_process_id=Mock(return_value=11))
-        nodes = [Mock(get_process_id=Mock(return_value=12)) for _ in range(4)]
-        for node in nodes:
-            node.queryAction.return_value = SimpleNamespace(nActions=1, doAction=Mock(return_value=True))
-            node.queryComponent.return_value = SimpleNamespace(grabFocus=Mock(return_value=True))
-            node.getState.return_value = SimpleNamespace(contains=Mock(return_value=True))
-        ui = Mock(api=SimpleNamespace(ROLE_COMBO_BOX=11, ROLE_PUSH_BUTTON=43, ROLE_MENU_ITEM=34, STATE_FOCUSED=12),
-                  visible=Mock(return_value=True))
+        node = Mock(get_process_id=Mock(return_value=12))
+        action = SimpleNamespace(nActions=1, doAction=Mock(return_value=True))
+        node.queryAction.side_effect = [NotImplementedError('mounting'), action]
+        ui = Mock(api=SimpleNamespace(ROLE_PUSH_BUTTON=43), find=Mock(return_value=node))
         ui.windows.return_value = []
-        ui.find.side_effect = [nodes[0], nodes[1], nodes[1], nodes[1], nodes[2], nodes[3]]
-        nodes[1].queryAction.side_effect = [NotImplementedError('mounting'), nodes[1].queryAction.return_value,
-                                            nodes[1].queryAction.return_value]
-        nodes[1].getState.return_value.contains.side_effect = [False, True]
-        chain = [{'bus_name': ':1.2', 'path': '/control', 'pid': 12}, {'bus_name': ':1.1', 'path': '/frame', 'pid': 11}]
+        chain = [{'bus_name': ':1.2', 'path': '/control', 'pid': 12},
+                 {'bus_name': ':1.1', 'path': '/frame', 'pid': 11}]
         with patch.object(owner, 'prepare_composer') as prepare, \
                 patch.object(owner, 'process_identity', side_effect=lambda pid: {11: FRAME, 12: WEB}[pid]), \
                 patch.object(owner.accessibility, 'capture', return_value=(frame, chain)), \
@@ -89,45 +83,36 @@ class DesktopTurnTests(unittest.TestCase):
                 patch.object(owner.time, 'sleep'):
             witness = owner.open_project_configuration(app, ui)
         prepare.assert_called_once_with(app, ui)
-        self.assertEqual(retry.call_args_list, [
-            unittest.mock.call(app, unittest.mock.ANY, interface_mounting=True),
-            unittest.mock.call(app, unittest.mock.ANY, interface_mounting=False)])
-        self.assertEqual([call.args for call in ui.find.call_args_list], [
-            (11, 'App menu'), (34, 'Window'), (34, 'Window'), (34, 'Window'),
-            (34, 'Maximize'), (43, 'Project configuration')])
-        for node in nodes:
-            node.queryAction.return_value.doAction.assert_called_once_with(0)
-        self.assertEqual(nodes[1].queryComponent.return_value.grabFocus.call_count, 2)
-        nodes[2].queryComponent.return_value.grabFocus.assert_called_once_with()
-        self.assertEqual([row['name'] for row in witness['maximize_actions']], ['App menu', 'Window', 'Maximize'])
-        self.assertEqual(witness['project_configuration']['name'], 'Project configuration')
+        retry.assert_called_once_with(app, unittest.mock.ANY, interface_mounting=True)
+        self.assertEqual([call.args for call in ui.find.call_args_list],
+                         [(43, 'Project configuration'), (43, 'Project configuration')])
+        action.doAction.assert_called_once_with(0)
+        self.assertEqual(witness['project_configuration']['accessible_chain'], chain)
+        self.assertEqual(witness['project_configuration']['entry_lineage'], [WEB, FRAME])
+        self.assertEqual(witness['project_configuration']['frame_lineage'], [FRAME, ROOT])
         self.assertTrue(witness['project_configuration']['visible'])
         self.assertEqual(app.observations['project_configuration_navigation'], witness)
 
     def test_open_project_configuration_never_replays_after_dispatch_failure(self):
         app = SimpleNamespace(observations={'launch_identity': ROOT})
         frame = Mock(get_process_id=Mock(return_value=11))
-        first = Mock(get_process_id=Mock(return_value=12))
-        first.queryAction.return_value = SimpleNamespace(nActions=1, doAction=Mock(return_value=True))
-        second = Mock(get_process_id=Mock(return_value=12))
-        second.queryAction.return_value = SimpleNamespace(nActions=1, doAction=Mock(side_effect=RuntimeError('after')))
-        second.queryComponent.return_value = SimpleNamespace(grabFocus=Mock(return_value=True))
-        second.getState.return_value = SimpleNamespace(contains=Mock(return_value=True))
-        ui = Mock(api=SimpleNamespace(ROLE_COMBO_BOX=11, ROLE_PUSH_BUTTON=43, ROLE_MENU_ITEM=34, STATE_FOCUSED=12),
-                  find=Mock(side_effect=[first, second]), visible=Mock(return_value=True))
+        node = Mock(get_process_id=Mock(return_value=12))
+        action = SimpleNamespace(nActions=1, doAction=Mock(side_effect=RuntimeError('after')))
+        node.queryAction.return_value = action
+        ui = Mock(api=SimpleNamespace(ROLE_PUSH_BUTTON=43), find=Mock(return_value=node))
         ui.windows.return_value = []
-        chain = [{'bus_name': ':1.2', 'path': '/control', 'pid': 12}, {'bus_name': ':1.1', 'path': '/frame', 'pid': 11}]
+        chain = [{'bus_name': ':1.2', 'path': '/control', 'pid': 12},
+                 {'bus_name': ':1.1', 'path': '/frame', 'pid': 11}]
         with patch.object(owner, 'prepare_composer'), \
                 patch.object(owner, 'process_identity', side_effect=lambda pid: {11: FRAME, 12: WEB}[pid]), \
                 patch.object(owner.accessibility, 'capture', return_value=(frame, chain)), \
                 patch.object(owner.lineage, 'capture', side_effect=lambda r, c: [c, r]), \
-                patch.object(owner.time, 'sleep'), \
                 patch.object(owner, 'retry_inventory', return_value=True) as retry:
             with self.assertRaises(CaseUnavailable) as refusal:
                 owner.open_project_configuration(app, ui)
         retry.assert_not_called()
-        first.queryAction.return_value.doAction.assert_called_once_with(0)
-        second.queryAction.return_value.doAction.assert_called_once_with(0)
-        self.assertEqual([row['name'] for row in app.observations['project_configuration_actions']], ['App menu'])
+        action.doAction.assert_called_once_with(0)
+        self.assertEqual(app.observations['project_configuration_actions'], [])
         self.assertEqual(refusal.exception.observations['project_configuration_mutation'],
-                         {'phase': 'do-action', 'name': 'Window', 'role': 34, 'exception_type': 'RuntimeError'})
+                         {'phase': 'do-action', 'name': 'Project configuration',
+                          'role': 43, 'exception_type': 'RuntimeError'})
