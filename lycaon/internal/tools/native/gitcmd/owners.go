@@ -246,7 +246,7 @@ func validateGitEnvironment(spec toolcontract.CommandSpecification, entries []st
 		if blockedGitEnvKeys[strings.ToUpper(trimmed)] {
 			return operandInvalid(spec, entry, "an environment without SSH transport override variables")
 		}
-		if _, err := exec.AgentLaunchOptions(exec.LaunchPlan{}, "", []string{entry}, nil, false); err != nil {
+		if _, err := exec.AgentLaunchOptions(exec.LaunchPlan{}, "", []string{entry}, nil); err != nil {
 			return operandInvalid(spec, entry, "an environment without host-reserved variables")
 		}
 	}
