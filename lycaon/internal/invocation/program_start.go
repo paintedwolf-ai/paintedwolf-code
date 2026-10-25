@@ -129,6 +129,31 @@ func insertProgram(ctx context.Context, tx *sql.Tx, in toolcontract.ProgramStart
 	return nil
 }
 
+// RegisterSourceUnit records a reached sourced unit and its static nodes on a
+// running program before any statement in that unit prepares a child execution.
+func (r *SQLRecorder) RegisterSourceUnit(ctx context.Context, programID string, source toolcontract.ProgramSource, nodes []toolcontract.ProgramNode) error {
+	if r == nil || r.database == nil {
+		return fmt.Errorf("invocation recorder is not configured")
+	}
+	tx, err := r.database.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	pin := source.Pin
+	_, err = tx.ExecContext(ctx, `INSERT INTO invocation_program_sources (program_id,source_unit_id,source_id,revision,representation,sha256,start_byte,end_byte,detail_ref) VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(program_id,source_unit_id) DO UPDATE SET source_id=excluded.source_id,revision=excluded.revision,representation=excluded.representation,sha256=excluded.sha256,start_byte=excluded.start_byte,end_byte=excluded.end_byte,detail_ref=excluded.detail_ref`, programID, source.UnitID, pin.SourceID, pin.Revision, pin.Representation, pin.SHA256, pin.StartByte, pin.EndByte, source.DetailReference)
+	if err != nil {
+		return err
+	}
+	for _, node := range nodes {
+		_, err = tx.ExecContext(ctx, `INSERT INTO invocation_program_nodes (program_id,node_id,source_unit_id,start_byte,end_byte,line,column_number) VALUES (?,?,?,?,?,?,?) ON CONFLICT(program_id,node_id) DO NOTHING`, programID, node.ID, node.SourceUnitID, node.Span.StartByte, node.Span.EndByte, node.Span.Line, node.Span.Column)
+		if err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
 // PrepareChild records the independently addressed dynamic execution before
 // approval, including rejected admission and held calls. Reuse its ID on resume.
 func (r *SQLRecorder) PrepareChild(ctx context.Context, in toolcontract.ProgramChildStart) error {

@@ -149,15 +149,14 @@ func (inv *invocation) settle(err error) (toolcontract.ProducerResult, error) {
 		if reject.Data["command"] == nil {
 			reject.Data["command"] = inv.name()
 		}
+		_, _ = fmt.Fprintf(inv.stderr, "%s: %s [%s]\n", inv.name(), reject.Error(), reject.Code)
 		return toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerRefused, StopCode: reject.Code, EffectCertainty: certainty}, err
 	}
 	var pathErr *projectpaths.PathError
 	if errors.As(err, &pathErr) {
-		reject := toolrejection.RejectInvalidArguments(pathErr.Code, map[string]any{
-			"command": inv.name(), "word": pathErr.Operand, "path": pathErr.Operand,
-			"limit_id": pathErr.LimitID, "maximum": pathErr.Maximum, "observed": pathErr.Observed,
-		})
-		return toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerRefused, StopCode: pathErr.Code, EffectCertainty: certainty}, errors.Join(err, reject)
+		err = wrapPathError(inv.name(), err)
+		_, _ = fmt.Fprintf(inv.stderr, "%s: %s [%s]\n", inv.name(), pathErr.Error(), pathErr.Code)
+		return toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerRefused, StopCode: pathErr.Code, EffectCertainty: certainty}, err
 	}
 	if certainty == toolcontract.NoEffect {
 		certainty = toolcontract.EffectUnknown
@@ -167,6 +166,15 @@ func (inv *invocation) settle(err error) (toolcontract.ProducerResult, error) {
 
 // destinationEntry resolves a copy or move destination: an existing directory
 // receives the source's base name; several sources require one.
+// destinationDisplay names a destination entry as the program wrote DEST.
+func (inv *invocation) destinationDisplay(dest, to string) string {
+	bound, err := inv.paths.Bind(inv.ctx, dest, true)
+	if err != nil {
+		return to
+	}
+	return destinationDisplay(dest, bound.Resolved.Abs, to)
+}
+
 func (inv *invocation) destinationEntry(dest string, source string, many bool) (string, error) {
 	bound, err := inv.bind(dest, true)
 	if err != nil {

@@ -45,11 +45,20 @@ func newInvocation(ctx context.Context, p Prepared, tc tools.ToolContext, stream
 	if inv.stderr == nil {
 		inv.stderr = io.Discard
 	}
-	inv.out = &output{ctx: ctx, w: streams.Output, maximum: p.owners.limit("stream_bytes")}
+	inv.out = &output{ctx: ctx, w: streams.Output, maximum: p.owners.limit("stream_bytes"), maxSteps: p.owners.limit("query_work_steps")}
 	if inv.out.w == nil {
 		inv.out.w = io.Discard
 	}
 	return inv
+}
+
+// step meters one host-observable value transition against query_work_steps.
+func (inv *invocation) step() error {
+	inv.out.steps++
+	if inv.out.maxSteps > 0 && inv.out.steps > inv.out.maxSteps {
+		return limitExceeded("query_work_steps", inv.out.maxSteps, inv.out.steps)
+	}
+	return nil
 }
 
 func (inv *invocation) name() string { return inv.spec.Name }
@@ -210,11 +219,13 @@ func (inv *invocation) settle(err error) (toolcontract.ProducerResult, error) {
 	return result, nil
 }
 
-// output meters stdout against stream_bytes before each write.
+// output meters stdout against stream_bytes before each write and tracks
+// host-observable value transitions against query_work_steps.
 type output struct {
 	ctx              context.Context
 	w                io.Writer
 	maximum, written int64
+	steps, maxSteps  int64
 }
 
 func (o *output) Write(p []byte) (int, error) {

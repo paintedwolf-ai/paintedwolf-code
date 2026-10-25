@@ -60,7 +60,7 @@ func TestProgramEntryRunsGitReadFormsThroughTheUmbrella(t *testing.T) {
 	gitRun("commit", "-q", "-m", "seed commit")
 	testutil.FailErr(t, "dirty", os.WriteFile(filepath.Join(f.dir, "new.txt"), []byte("n\n"), 0o644))
 
-	owners, err := gitcmd.NewOwners(git.CommandReader{})
+	owners, err := gitcmd.NewOwners(git.NewManager())
 	testutil.FailErr(t, "git owners", err)
 	natives := map[string]command.NativeOperation{"git": {Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
 		prepared, err := owners.PrepareGit(frame, request)
@@ -84,6 +84,15 @@ func TestProgramEntryRunsGitReadFormsThroughTheUmbrella(t *testing.T) {
 	}
 	if executions := f.executions(t); executions["git status"] != "completed;" || executions["git ls-files"] != "completed;" || executions["git log"] != "completed;" {
 		t.Fatalf("child receipts %v", executions)
+	}
+
+	customPath, err := f.call(t, t.Context(), "PATH=/custom/bin git status -sb")
+	if !strings.Contains(customPath+fmt.Sprint(err), "COMMAND_OPERAND_INVALID") {
+		t.Fatalf("custom PATH ran: %s %v", customPath, err)
+	}
+	reservedEnv, err := f.call(t, t.Context(), "LD_PRELOAD=/tmp/inject.so git status -sb")
+	if !strings.Contains(reservedEnv+fmt.Sprint(err), "COMMAND_OPERAND_INVALID") {
+		t.Fatalf("host-reserved env ran: %s %v", reservedEnv, err)
 	}
 
 	t.Setenv("PATH", "")

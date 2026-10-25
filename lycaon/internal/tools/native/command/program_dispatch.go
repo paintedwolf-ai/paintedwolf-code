@@ -56,6 +56,7 @@ type ProgramOwners struct {
 	Natives     map[string]NativeOperation
 	Publication commandprogram.OutputPublication
 	Input       commandprogram.InputRedirection
+	Sources     commandprogram.SourceCapture
 	// Redirections binds redirect owners to a directory frame after cd.
 	Redirections func(*projectpaths.ProgramPaths) (commandprogram.InputRedirection, commandprogram.OutputPublication)
 	AdmitLaunch  func(context.Context, tools.ToolContext) error
@@ -345,21 +346,22 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 	tracker := &trackingWriter{w: nonNilWriter(streams.Error)}
 	runStreams := streams
 	runStreams.Error = tracker
+	inputs := d.run.nativeArguments(review.Arguments(), operationDef.Facts().Contract)
 	effect := toolexecution.NativeEffect{
-		Operation: bound, Streams: runStreams, Argv: &review, Inspection: d.run.capture,
+		Operation: bound, Streams: runStreams, Arguments: inputs, Argv: &review, Inspection: d.run.capture,
 		Stage: toolcontract.ExecutionStage{ExecutionID: request.Invocation.Identity.ExecutionID, OperationID: operationDef.Facts().Identity, Argv: request.Argv.Values()},
 		PrepareReviewed: func(context.Context, map[string]any, tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
 			return toolexecution.PreparedNativeEffect{Operation: bound, InvokeOwner: prepared.Invoke}, nil
 		},
 	}
-	child, err := d.prepareDefinition(ctx, operationDef, request, review.Arguments())
+	child, err := d.prepareDefinition(ctx, operationDef, request, inputs)
 	if err != nil {
 		return refusedResult("COMMAND_OPERAND_INVALID"), err
 	}
 	defer child.release()
 	marker := &admissionMarker{ProgramAdmissionRecorder: invocation.ProgramAdmissionRecorder{Recorder: d.run.recorder, Inputs: d.run.capture}}
 	native, runErr := d.run.executor.InvokeNative(ctx, d.run.frame, d.run.surface, d.run.memory, d.run.progress, marker, effect, d.run.tc)
-	if reject := toolrejection.AsToolReject(runErr); reject != nil {
+	if reject := toolrejection.AsToolReject(runErr); reject != nil && (!native.OwnerInvoked || native.Producer.Terminal == toolcontract.ProducerRefused) {
 		if !tracker.wrote {
 			writeRejectRefusal(streams, spec.Name, request, reject)
 		}
@@ -463,7 +465,7 @@ func (d *ProgramDispatcher) prepare(ctx context.Context, spec toolcontract.Comma
 // prepareDefinition retains the expanded inputs and the dynamic child row
 // together, before the child is admitted or reaches any owner.
 func (d *ProgramDispatcher) prepareDefinition(ctx context.Context, definition toolcontract.OperationDefinition, request commandprogram.OperationRequest, inputs map[string]any) (programChild, error) {
-	display, err := request.Statement.DisplayText([]byte(d.run.source))
+	display, err := request.Statement.DisplayText([]byte(d.run.sourceText(request.Invocation.SourceUnitID)))
 	if err != nil {
 		return programChild{}, err
 	}

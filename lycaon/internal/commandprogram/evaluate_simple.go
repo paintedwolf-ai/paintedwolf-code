@@ -46,13 +46,13 @@ func ResolveCommand(argv Fields) (toolcontract.CommandSpecification, bool, error
 		if len(names) == 0 || len(names) > len(argv) || len(names) <= words || !commandWord(spec, names[0], argv[0].Value) {
 			continue
 		}
-		match := true
-		for i := 1; i < len(names); i++ {
-			match = match && argv[i].Value == names[i]
+		if len(names) > 1 {
+			b := argvBinding{spec: spec, argv: argv, index: 1, bound: &BoundArgv{}}
+			if b.global(names[1:]) != nil {
+				continue
+			}
 		}
-		if match {
-			best, words = spec, len(names)
-		}
+		best, words = spec, len(names)
 	}
 	return best, words > 0, nil
 }
@@ -131,8 +131,8 @@ func (f *frame) simple(ctx context.Context, s commandsurface.Statement, c comman
 	if controlBuiltins[name] {
 		return f.controlBuiltin(s, name, fields)
 	}
-	if decl, ok := f.state.functions[name]; ok {
-		return signal{}, f.call(ctx, s, decl, fields, assigns)
+	if fn, ok := f.state.functions[name]; ok {
+		return signal{}, f.call(ctx, s, fn, fields, assigns)
 	}
 	switch name {
 	case "source":
@@ -399,7 +399,8 @@ func (f *frame) exportDeclaration(ctx context.Context, s commandsurface.Statemen
 
 // call runs a declared function with invocation-local positional arguments.
 // The body shares variables, functions and exit control with its caller.
-func (f *frame) call(ctx context.Context, s commandsurface.Statement, decl commandsurface.FunctionDeclaration, fields Fields, assigns []assignment) error {
+func (f *frame) call(ctx context.Context, s commandsurface.Statement, fn declaredFunction, fields Fields, assigns []assignment) error {
+	decl := fn.decl
 	if int64(f.functions+1) > f.e.limits["function_depth"] {
 		return f.refuseLimit(s.SyntaxLocation, "function_depth", int64(f.functions+1))
 	}
@@ -410,6 +411,12 @@ func (f *frame) call(ctx context.Context, s commandsurface.Statement, decl comma
 	defer child.close()
 	g := *f
 	g.parent, g.positional, g.functions, g.loops, g.returnable = child.inv, fields.Values()[1:], f.functions+1, 0, true
+	if fn.sourceUnit != "" {
+		g.parent.SourceUnitID = fn.sourceUnit
+	}
+	if fn.unit != "" {
+		g.unit = fn.unit
+	}
 	if len(assigns) > 0 {
 		g.prefix = make(map[string]string, len(f.prefix)+len(assigns))
 		for name, value := range f.prefix {

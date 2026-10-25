@@ -644,6 +644,12 @@
       "emit": "guard:command_composition_redirect",
       "summary": "Language admission stopped at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}."
     },
+    "COMMAND_TLS_VERIFICATION_REQUIRED": {
+      "branch_instruction": "Send the request without -k; do not retry through an external program.",
+      "category": "recoverable",
+      "emit": "guard:command_composition_redirect",
+      "summary": "The request asked to skip TLS certificate verification."
+    },
     "COMPLETE_LEG_ADDRESSED_SESSION": {
       "branch_instruction": "Branch on Code COMPLETE_LEG_ADDRESSED_SESSION; answer directly, do not retry here",
       "category": "recoverable",
@@ -1191,6 +1197,12 @@
       "category": "recoverable",
       "emit": "guard:tool",
       "summary": "{{ tool }} refused path {{ paintedwolf.path }} outside the allowed git scope."
+    },
+    "GIT_REMOTE_HOST_DENIED": {
+      "branch_instruction": "Do not reach the remote through another network client or an external git",
+      "category": "recoverable",
+      "emit": "guard:command_git_remote",
+      "summary": "The Git remote's host was not authorized."
     },
     "GIT_REPO_CONFIG_UNSAFE": {
       "branch_instruction": "Report the refusal to the user; do not retry the git tool for this repository",
