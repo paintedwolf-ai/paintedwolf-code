@@ -9,6 +9,8 @@ import subprocess
 import tempfile
 import unittest
 
+from verification_tests.distribution import test_protected_launch_packaging_execution as maintainer_fixture
+
 from linux_release.payload import load
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -72,29 +74,36 @@ class LinuxPayloadTests(unittest.TestCase):
             self.assertNotIn("/etc/apparmor.d/painted-wolf-code", rpm)
 
     def test_rpm_removal_does_not_invoke_policy_tools_or_touch_user_state(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            commands = root / "commands"
-            commands.mkdir()
-            log = root / "policy-calls"
-            tool = commands / "semodule"
-            tool.write_text('#!/bin/sh\necho "$*" >> "$POLICY_CALLS"\necho painted-wolf-code\n')
-            tool.chmod(0o755)
-            for name in ("update-desktop-database", "gtk-update-icon-cache"):
-                cache = commands / name
-                cache.write_text("#!/bin/sh\nexit 0\n")
-                cache.chmod(0o755)
-            state = root / "home/vault"
-            state.parent.mkdir()
-            state.write_text("preserve")
-            script = (ROOT / "packaging/linux/rpm/postun").read_text()
-            script = script.replace("/opt/painted-wolf-code", str(root / "package"))
-            script = script.replace("/run/systemd/system", str(root / "systemd"))
-            for action in ("0", "1"):
-                result = subprocess.run(["sh", "-s", "--", action], input=script,
-                                        env={**os.environ, "PATH": str(commands) + os.pathsep + os.environ["PATH"],
-                                             "POLICY_CALLS": str(log), "HOME": str(state.parent)},
-                                        capture_output=True, text=True, timeout=10)
-                self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertFalse(log.exists())
+        fixture = maintainer_fixture.MaintainerScripts()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        log = fixture.root / "policy-calls"
+        fixture.shim("semodule", f'echo "$*" >> "{log}"; echo painted-wolf-code')
+        state = fixture.root / "home/vault"
+        state.parent.mkdir()
+        state.write_text("preserve")
+        fixture.policy.mkdir(parents=True)
+        policy = fixture.policy / "launch.json"
+        policy.write_text("owned policy")
+        foreign = fixture.root / "etc/foreign-policy"
+        foreign.write_text("preserve foreign policy")
+        identity = "a" * 64
+        generation = fixture.install / "generations" / identity
+        generation.mkdir(parents=True)
+        (generation / "payload").write_text("owned generation")
+        lock = fixture.locks / (identity + ".lock")
+        for action in ("1", "0"):
+            result = fixture.run_script("rpm", "postun", action)
+            self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(state.read_text(), "preserve")
+            self.assertEqual(foreign.read_text(), "preserve foreign policy")
+            self.assertFalse(log.exists())
+            if action == "1":
+                self.assertTrue(policy.exists())
+                self.assertTrue(generation.exists())
+                self.assertFalse(lock.exists())
+            else:
+                self.assertFalse(policy.exists())
+                self.assertFalse(generation.exists())
+                self.assertTrue(lock.is_file())
+                self.assertEqual(lock.stat().st_mode & 0o777, 0o600)
