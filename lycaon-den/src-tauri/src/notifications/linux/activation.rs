@@ -10,7 +10,7 @@ use tauri::{AppHandle, Emitter, Manager};
 use super::super::{ActivatedPayload, PresentationOwner, ACTIVATED_EVENT};
 
 const WAYLAND_DISPLAY_TYPE: &str = "GdkWaylandDisplay";
-const FOLLOWUP_INTERVAL: Duration = Duration::from_millis(40);
+const FOLLOWUP_INTERVAL: Duration = Duration::from_millis(120);
 const FOLLOWUP_MAX_TICKS: u8 = 6;
 
 static ACTIVE_REQUEST: AtomicU64 = AtomicU64::new(0);
@@ -32,10 +32,10 @@ enum Raise {
 /// Post-map follow-up decision for an untokenized Wayland activation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Followup {
-    /// The surface is not yet mapped on Wayland; keep observing.
+    /// The surface is not yet configured and painted on Wayland; keep observing.
     WaitMap,
-    /// The surface is mapped and ready and no focus or modal state has
-    /// superseded the request; present once.
+    /// The surface is mapped, configured, and painted and no focus or modal
+    /// state has superseded the request; present once.
     PresentOnce,
     /// The request succeeded or was superseded by another request, a hidden
     /// surface, or a modal/transient dialog; finish and stop.
@@ -51,12 +51,14 @@ fn raise(wayland: bool, token: bool, visible: bool, active: bool) -> Raise {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn followup(
     request_id: u64,
     current_request_id: u64,
     completed: bool,
     visible: bool,
     mapped: bool,
+    painted: bool,
     active: bool,
     modal_or_transient_open: bool,
 ) -> Followup {
@@ -68,7 +70,7 @@ fn followup(
     {
         return Followup::Finish;
     }
-    if !mapped {
+    if !mapped || !painted {
         return Followup::WaitMap;
     }
     Followup::PresentOnce
@@ -136,7 +138,7 @@ fn present_native(window: &tauri::WebviewWindow, token: Option<&str>) -> Result<
             schedule_wayland_followup(&native, request_id);
         }
         Raise::Present => {
-            if !wayland && !visible {
+            if !visible {
                 let _ = window.show();
             }
             native.present();
@@ -177,12 +179,19 @@ fn schedule_wayland_followup(native: &gtk::ApplicationWindow, request_id: u64) {
     let hide_handler = Rc::new(Cell::new(Some(native.connect_hide(move |_| {
         completed_on_hide.set(true);
     }))));
+    let initial_frame = native.frame_clock().map_or(0, |clock| clock.frame_counter());
     let target = native.clone();
     let remaining = Cell::new(FOLLOWUP_MAX_TICKS);
     gtk::glib::timeout_add_local(FOLLOWUP_INTERVAL, move || {
         let current_id = ACTIVE_REQUEST.load(Ordering::Acquire);
         let visible = target.is_visible();
-        let mapped = target.is_mapped() && target.window().is_some_and(|w| w.is_visible());
+        let mapped = target.is_mapped()
+            && target.window().is_some_and(|w| {
+                w.is_visible() && !w.state().contains(gtk::gdk::WindowState::WITHDRAWN)
+            });
+        let painted = target
+            .frame_clock()
+            .is_some_and(|clock| clock.frame_counter() > initial_frame);
         let active = target.is_active();
         let modal_open = has_visible_modal_or_transient(&target);
         match followup(
@@ -191,6 +200,7 @@ fn schedule_wayland_followup(native: &gtk::ApplicationWindow, request_id: u64) {
             completed.get(),
             visible,
             mapped,
+            painted,
             active,
             modal_open,
         ) {
@@ -253,11 +263,15 @@ mod tests {
     #[test]
     fn followup_waits_for_mapped_surface_then_presents_once() {
         assert_eq!(
-            followup(7, 7, false, true, false, false, false),
+            followup(7, 7, false, true, false, false, false, false),
             Followup::WaitMap
         );
         assert_eq!(
-            followup(7, 7, false, true, true, false, false),
+            followup(7, 7, false, true, true, false, false, false),
+            Followup::WaitMap
+        );
+        assert_eq!(
+            followup(7, 7, false, true, true, true, false, false),
             Followup::PresentOnce
         );
     }
@@ -265,13 +279,13 @@ mod tests {
     #[test]
     fn followup_finishes_after_focus_succeeds_even_if_focus_later_changes() {
         assert_eq!(
-            followup(7, 7, false, true, true, true, false),
+            followup(7, 7, false, true, true, true, true, false),
             Followup::Finish
         );
         // Once completed is latched by focus success, a later focus change to a
         // peer window or dialog never triggers another present.
         assert_eq!(
-            followup(7, 7, true, true, true, false, false),
+            followup(7, 7, true, true, true, true, false, false),
             Followup::Finish
         );
     }
@@ -279,15 +293,15 @@ mod tests {
     #[test]
     fn followup_cancels_when_superseded_hidden_or_modal_open() {
         assert_eq!(
-            followup(7, 8, false, true, true, false, false),
+            followup(7, 8, false, true, true, true, false, false),
             Followup::Finish
         );
         assert_eq!(
-            followup(7, 7, false, false, false, false, false),
+            followup(7, 7, false, false, false, false, false, false),
             Followup::Finish
         );
         assert_eq!(
-            followup(7, 7, false, true, true, false, true),
+            followup(7, 7, false, true, true, true, false, true),
             Followup::Finish
         );
     }
