@@ -683,6 +683,15 @@ type HistoryStorageClock struct {
 	Generation int64 `json:"generation"`
 }
 
+type InvocationProgramDefinitions struct {
+	ProgramID        string `json:"program_id"`
+	DefinitionDigest string `json:"definition_digest"`
+	OperationID      string `json:"operation_id"`
+	Owner            string `json:"owner"`
+	Lifecycle        string `json:"lifecycle"`
+	DefinitionJson   string `json:"definition_json"`
+}
+
 type InvocationProgramDeliveries struct {
 	ID             string `json:"id"`
 	OutputID       string `json:"output_id"`
@@ -705,7 +714,6 @@ type InvocationProgramExecutions struct {
 	ScopeJson                       string         `json:"scope_json"`
 	OperationID                     string         `json:"operation_id"`
 	DefinitionDigest                string         `json:"definition_digest"`
-	DefinitionJson                  string         `json:"definition_json"`
 	ArgumentsRepresentation         string         `json:"arguments_representation"`
 	ArgumentsDigest                 string         `json:"arguments_digest"`
 	ReviewedArgumentsRepresentation string         `json:"reviewed_arguments_representation"`
@@ -738,6 +746,10 @@ type InvocationProgramExecutions struct {
 	PublishedRevision               string         `json:"published_revision"`
 	DetailRef                       string         `json:"detail_ref"`
 	ApprovalRef                     string         `json:"approval_ref"`
+	JobHandle                       string         `json:"job_handle"`
+	ConflictPath                    string         `json:"conflict_path"`
+	ConflictExpectedRevision        string         `json:"conflict_expected_revision"`
+	ConflictObservedRevision        string         `json:"conflict_observed_revision"`
 	StartedAt                       string         `json:"started_at"`
 	SettledAt                       sql.NullString `json:"settled_at"`
 }
@@ -765,6 +777,8 @@ type InvocationProgramOutputs struct {
 	Complete          int64          `json:"complete"`
 	Redacted          int64          `json:"redacted"`
 	MappingsJson      string         `json:"mappings_json"`
+	Preview           string         `json:"preview"`
+	PreviewTruncated  int64          `json:"preview_truncated"`
 	CreatedAt         string         `json:"created_at"`
 }
 
@@ -783,6 +797,16 @@ type InvocationProgramProgress struct {
 	DetailRef               string         `json:"detail_ref"`
 	StartedAt               string         `json:"started_at"`
 	SettledAt               sql.NullString `json:"settled_at"`
+}
+
+type InvocationProgramRevisionPinSegments struct {
+	ProgramID    string `json:"program_id"`
+	ExecutionID  string `json:"execution_id"`
+	FirstOrdinal int64  `json:"first_ordinal"`
+	PinCount     int64  `json:"pin_count"`
+	Encoding     string `json:"encoding"`
+	Body         []byte `json:"body"`
+	BodySha256   string `json:"body_sha256"`
 }
 
 type InvocationProgramRevisionPins struct {
@@ -833,6 +857,8 @@ type InvocationPrograms struct {
 	DetailRef       string         `json:"detail_ref"`
 	ProgressState   string         `json:"progress_state"`
 	ProgressRef     string         `json:"progress_ref"`
+	TraceEvents     int64          `json:"trace_events"`
+	TraceBytes      int64          `json:"trace_bytes"`
 	StartedAt       string         `json:"started_at"`
 	SettledAt       sql.NullString `json:"settled_at"`
 }

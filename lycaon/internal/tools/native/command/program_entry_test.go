@@ -29,9 +29,16 @@ type programFixture struct{ *programtest.Fixture }
 
 func newProgramFixture(t *testing.T) *programFixture {
 	t.Helper()
-	return &programFixture{programtest.New(t, programtest.Options{Natives: func(dir string) map[string]command.NativeOperation {
+	f := programtest.New(t, programtest.Options{Natives: func(dir string) map[string]command.NativeOperation {
 		return map[string]command.NativeOperation{"tee": teeOperation(dir), "head": firstLineOperation()}
-	}})}
+	}})
+	f.Runtime.Owners = func(tools.ToolContext, *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
+		return command.ProgramOwners{
+			Natives: map[string]command.NativeOperation{"tee": teeOperation(f.Dir), "head": firstLineOperation()},
+			Sources: dirSources(f.Dir),
+		}, nil
+	}
+	return &programFixture{f}
 }
 
 func (f *programFixture) call(t *testing.T, ctx context.Context, source string) (string, error) {

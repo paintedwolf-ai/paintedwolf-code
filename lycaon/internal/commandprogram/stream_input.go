@@ -86,11 +86,19 @@ func (s *StreamInput) Close() error { s.finish(StreamConsumerClosed, ErrConsumer
 
 // NullInput and NullOutput are typed native endpoints. Path classification is
 // supplied by the path adapter; these endpoints never open an OS device path.
-func NullInput() io.ReadCloser { return io.NopCloser(emptyInput{}) }
+func NullInput() io.ReadCloser { return nullInput{} }
 
-type emptyInput struct{}
+// IsNullInput reports the typed null stdin: no producer is attached, so a
+// utility that defaults to stdin (rg without paths) may choose its own source.
+func IsNullInput(r io.Reader) bool {
+	_, ok := r.(nullInput)
+	return ok
+}
 
-func (emptyInput) Read([]byte) (int, error) { return 0, io.EOF }
+type nullInput struct{}
+
+func (nullInput) Read([]byte) (int, error) { return 0, io.EOF }
+func (nullInput) Close() error             { return nil }
 
 type NullOutput struct {
 	Context context.Context
