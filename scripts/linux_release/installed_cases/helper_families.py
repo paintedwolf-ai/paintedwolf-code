@@ -65,7 +65,7 @@ def tree_outcome(document: dict | None, images: list[list[int]], outer_pid: int,
 
 
 def sample(root: dict, images: list[list[int]], running, *, limit: float = 90) -> dict | None:
-    """Observes root's tree until a sealed helper image is live or the operation ends."""
+    """Observes root's tree until a selected helper image is live or the operation ends."""
     deadline = time.monotonic() + limit
     while time.monotonic() < deadline:
         document = process_tree.observe(root)
