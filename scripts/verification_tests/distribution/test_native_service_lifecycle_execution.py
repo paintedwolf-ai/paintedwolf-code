@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[3]
 SOCKET = 'paintedwolf-vault-identity.socket'
 SERVICE = 'paintedwolf-vault-identity.service'
 STATE_DIR = '/var/lib/painted-wolf-code'
+GENERATIONS = '/opt/painted-wolf-code/bin/pw-generations'
 SCRIPTS = {
     'deb': {name: name for name in ('preinst', 'postinst', 'prerm', 'postrm')},
     'rpm': {'preinst': 'pre', 'postinst': 'post', 'prerm': 'preun', 'postrm': 'postun'},
@@ -70,6 +71,16 @@ class NativeServiceLifecycle(unittest.TestCase):
         self.bin = self.root / 'bin'
         self.bin.mkdir()
         self.state_dir = self.root / 'var-lib'
+        generation = self.bin / 'pw-generations'
+        generation.write_text(f'#!{sys.executable}\n' + '''import json,os,sys
+from pathlib import Path
+a=sys.argv[1:]
+if a not in [['install','--family','deb'],['install','--family','rpm'],['remove']]:
+    raise SystemExit('unexpected generation operation')
+p=Path(os.environ['SERVICE_STATE']);s=json.loads(p.read_text())
+s.setdefault('generation_calls',[]).append(a);p.write_text(json.dumps(s))
+''')
+        generation.chmod(0o755)
         (self.bin / 'systemctl').write_text(MANAGER)
         for name in ('systemctl', 'update-desktop-database', 'gtk-update-icon-cache', 'apparmor_parser'):
             stub = self.bin / name
@@ -84,7 +95,20 @@ class NativeServiceLifecycle(unittest.TestCase):
 
     def run_script(self, family, phase, *arguments):
         script = ROOT / 'packaging/linux' / family / SCRIPTS[family][phase]
-        wrapper = FIXTURE + 'set -- ' + ' '.join(shlex.quote(value) for value in arguments) + '\n. ' + shlex.quote(str(script))
+        return self.execute_script(script, *arguments)
+
+    def fixture_program(self, script):
+        # Remap only the declared generation executable; never invoke the host installer.
+        source = script.read_text()
+        source = source.replace('PW_GENERATIONS=' + GENERATIONS,
+                                'PW_GENERATIONS=' + shlex.quote(str(self.bin / 'pw-generations')))
+        if GENERATIONS in source:
+            raise ValueError('unbound host generation executable in fixture')
+        return source
+
+    def execute_script(self, script, *arguments):
+        source = self.fixture_program(script)
+        wrapper = FIXTURE + 'set -- ' + ' '.join(shlex.quote(value) for value in arguments) + '\n' + source
         result = subprocess.run(['/bin/sh', '-c', wrapper], env={**os.environ, 'PATH': str(self.bin),
             'SERVICE_STATE': str(self.state), 'FIXTURE_STATE': str(self.state_dir)},
             capture_output=True, text=True, timeout=15)
@@ -203,3 +227,17 @@ class NativeServiceLifecycle(unittest.TestCase):
         self.assertNotIn(['disable', '--now', SOCKET], upgraded['calls'])
         self.assertFalse(self.state_dir.exists())
 
+
+    def test_generation_installer_runs_only_the_exact_fixture_executable(self):
+        self.service()
+        script = self.root / 'generation-postinst'
+        script.write_text('PW_GENERATIONS=' + GENERATIONS + '\n"$PW_GENERATIONS" install --family deb\n')
+        self.assertNotIn(GENERATIONS, self.fixture_program(script))
+        result = self.execute_script(script)
+        self.assertEqual(result['generation_calls'], [['install', '--family', 'deb']])
+
+    def test_unbound_host_generation_command_is_rejected_before_execution(self):
+        script = self.root / 'unbound-generation'
+        script.write_text('"' + GENERATIONS + '" remove\n')
+        with self.assertRaisesRegex(ValueError, 'unbound host generation'):
+            self.execute_script(script)
