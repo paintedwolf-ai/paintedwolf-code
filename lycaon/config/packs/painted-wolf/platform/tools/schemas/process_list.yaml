@@ -1,8 +1,8 @@
 tags: [process]
 description: >-
   Inspect host processes after approval. Returns names, executable paths, UID,
-  parent PID, and opaque instance references; no argv or environment. Use pid
-  for a known target. Use next_after_pid for another page of the changing
+  and parent PID; no argv or environment. Only processes this session started
+  are owned and carry an opaque instance reference. Use pid for a known target. Use next_after_pid for another page of the changing
   snapshot. Unavailable metadata does not mean exited. Use command_output
   and command_stop for jobs you launched with command.
 schema:

@@ -201,3 +201,40 @@ func TestRetiredLineageIsReclaimedWhenItsSurvivorsExit(t *testing.T) {
 	}
 	t.Fatal("retired lineage still holds its descriptor after its last descendant exited")
 }
+
+// A session's members are the descendants of every launch it made, including
+// one that finished and left a process running, and nobody else's.
+func TestSessionMembersNameOnlyTheSessionsDescendants(t *testing.T) {
+	mine, err := lineage.Open("command:call_1", "session-members")
+	if err != nil {
+		t.Fatalf("open lineage: %v", err)
+	}
+	t.Cleanup(func() { _ = mine.Close() })
+	theirs, err := lineage.Open("command:call_2", "session-other")
+	if err != nil {
+		t.Fatalf("open lineage: %v", err)
+	}
+	t.Cleanup(func() { _ = theirs.Close() })
+	own := sleeper(t, mine, true)
+	mine.Started()
+	other := sleeper(t, theirs, false)
+	theirs.Started()
+	mine.Retire()
+
+	members, err := lineage.SessionMembers("session-members")
+	if err != nil {
+		t.Fatalf("session members: %v", err)
+	}
+	if _, ok := members[own.Process.Pid]; !ok {
+		t.Fatalf("retired launch's survivor %d missing from %v", own.Process.Pid, members)
+	}
+	if _, ok := members[other.Process.Pid]; ok {
+		t.Fatalf("another session's descendant %d listed as a member", other.Process.Pid)
+	}
+	if _, ok := members[os.Getpid()]; ok {
+		t.Fatal("the engine itself listed as a session member")
+	}
+	if none, err := lineage.SessionMembers(""); err != nil || len(none) != 0 {
+		t.Fatalf("an unnamed session owns %v (%v)", none, err)
+	}
+}

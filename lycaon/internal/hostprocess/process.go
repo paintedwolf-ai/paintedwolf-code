@@ -12,10 +12,16 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/lineage"
 )
 
-var ErrStale = errors.New("process reference is stale or belongs to another task")
+var ErrStale = errors.New("process reference is stale or belongs to another session")
 var ErrUnsupported = errors.New("instance-bound process operations are unavailable")
+
+// ErrNotOwned reports a process that no launch of the session started. Approval
+// cannot change it: the session's process authority is its own descendants.
+var ErrNotOwned = errors.New("process was not started by this session")
 
 // Process omits arguments and environment to avoid exposing secrets.
 type Process struct {
@@ -26,6 +32,9 @@ type Process struct {
 	Name       string `json:"name"`
 	Executable string `json:"executable,omitempty"`
 	Instance   string `json:"instance"`
+	// Owned reports descent from a launch this session made. Only an owned
+	// process carries a reference, so only an owned process can be signaled.
+	Owned bool `json:"owned"`
 }
 
 type Snapshot struct {
@@ -40,19 +49,28 @@ type reference struct {
 }
 
 // Service references expire on host restart and do not hold process descriptors.
-type Service struct{ key [32]byte }
+type Service struct {
+	key [32]byte
+	// members reports the processes descended from the session's launches.
+	members func(session string) (map[int]struct{}, error)
+}
 
 func New() (*Service, error) {
-	s := &Service{}
+	s := &Service{members: lineage.SessionMembers}
 	if _, err := rand.Read(s.key[:]); err != nil {
 		return nil, fmt.Errorf("process reference key: %w", err)
 	}
 	return s, nil
 }
 
-// List requires prior approval and returns a PID-ordered snapshot.
+// List requires prior approval and returns a PID-ordered snapshot. Every
+// visible process is named; only the session's own carry a reference.
 func (s *Service) List(ctx context.Context, session string, pid, after, limit int) (Snapshot, error) {
 	pids, err := listPIDs()
+	if err != nil {
+		return Snapshot{}, err
+	}
+	owned, err := s.members(session)
 	if err != nil {
 		return Snapshot{}, err
 	}
@@ -75,9 +93,11 @@ func (s *Service) List(ctx context.Context, session string, pid, after, limit in
 			unavailable++
 			continue
 		}
-		process.Reference, err = s.encode(session, process)
-		if err != nil {
-			return Snapshot{Unavailable: unavailable}, err
+		if _, process.Owned = owned[candidate]; process.Owned {
+			process.Reference, err = s.encode(session, process)
+			if err != nil {
+				return Snapshot{Unavailable: unavailable}, err
+			}
 		}
 		out = append(out, process)
 	}
@@ -127,16 +147,31 @@ func (s *Service) Resolve(session, token string) (Process, error) {
 	if !sameInstance(current, ref.Process) {
 		return Process{}, ErrStale
 	}
-	current.Reference = token
+	if err := s.owns(session, current.PID); err != nil {
+		return Process{}, err
+	}
+	current.Reference, current.Owned = token, true
 	return current, nil
+}
+
+func (s *Service) owns(session string, pid int) error {
+	owned, err := s.members(session)
+	if err != nil {
+		return err
+	}
+	if _, ok := owned[pid]; !ok {
+		return ErrNotOwned
+	}
+	return nil
 }
 
 func sameInstance(a, b Process) bool {
 	return a.PID == b.PID && a.Instance == b.Instance && a.UID == b.UID && a.Executable == b.Executable
 }
 
-// Signal revalidates review evidence and uses an atomic instance-targeted kernel call.
-func (s *Service) Signal(ctx context.Context, process Process, signal string) error {
+// Signal revalidates review evidence and session ownership, then uses an
+// atomic instance-targeted kernel call.
+func (s *Service) Signal(ctx context.Context, session string, process Process, signal string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -146,6 +181,9 @@ func (s *Service) Signal(ctx context.Context, process Process, signal string) er
 	}
 	if !sameInstance(current, process) {
 		return ErrStale
+	}
+	if err := s.owns(session, process.PID); err != nil {
+		return err
 	}
 	return signalInstance(process, signal)
 }
