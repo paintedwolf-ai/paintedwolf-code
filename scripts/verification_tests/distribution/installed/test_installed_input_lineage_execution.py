@@ -3,7 +3,7 @@ import copy
 import os
 from types import SimpleNamespace
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 from linux_release.installed_input import lineage, protocol
 from linux_release.installed_input import focus as focus_owner
