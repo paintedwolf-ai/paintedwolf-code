@@ -207,6 +207,12 @@ func captureRevision(ctx context.Context, tctx tools.ToolContext, resolved proje
 	if role == toolcontract.SourceRevision {
 		return captureSourceDisk(tctx, resolved)
 	}
+	if info, err := os.Lstat(resolved.Abs); err == nil && info.Mode().IsRegular() && info.Mode().Perm()&0o200 == 0 {
+		return sourceview.Text{}, toolcontract.ExecutionRevision{}, errors.Join(
+			&projectpaths.PathError{Code: "COMMAND_OPERAND_INVALID", Operand: resolved.DisplayPath, Cause: errors.New("destination is read-only")},
+			toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"path": resolved.DisplayPath, "reason": "destination is read-only"}),
+		)
+	}
 	root, rel := revisionLocation(resolved)
 	revision := toolcontract.ExecutionRevision{Role: role, Basis: toolcontract.CapturedRevision, RootID: root, Path: rel}
 	st, err := sourceview.LoadText(ctx, "write", sourceview.AccessMutate, tctx, resolved)

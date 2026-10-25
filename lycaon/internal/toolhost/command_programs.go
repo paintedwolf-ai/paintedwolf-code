@@ -95,7 +95,9 @@ func (t programOwnerTools) compose(services ProgramServices) (func(tools.ToolCon
 				if err != nil && !errors.Is(err, tools.ErrSessionScratchUnavailable) {
 					return nil, nil, err
 				}
-				text := textutil.Ports{ToolContext: ports.ToolContext, Memory: ports.Memory, Admission: ports.Admission, Nested: ports.Nested, Publication: ports.Publication}
+				builtinTC := ports.ToolContext
+				builtinPub := &mutation.Publication{Owners: mutationOwners, Program: program, Tools: builtinTC, Admission: directAdmission(&builtinTC)}
+				text := textutil.Ports{ToolContext: ports.ToolContext, Memory: ports.Memory, Admission: ports.Admission, Nested: ports.Nested, Publication: builtinPub}
 				release := func() {}
 				if spills != nil {
 					text.Spills = spills
@@ -204,4 +206,12 @@ func (t programOwnerTools) gitOperation() (command.NativeOperation, error) {
 		}
 		return command.NativePrepared{Command: prepared.Command, Tool: tool, Mode: prepared.Mode, Review: prepared.Review, Invoke: prepared.InvokeOwner}, nil
 	}}, nil
+}
+
+func directAdmission(tc *tools.ToolContext) tools.CommandOutputAdmission {
+	return func(_ context.Context, _ commandprogram.OutputDestination, _ string) (tools.CommandOutputWrite, error) {
+		return tools.CommandOutputWrite{Publish: func(ctx context.Context, apply func(context.Context, tools.ToolContext) (commandprogram.OutputPublished, error)) (commandprogram.OutputPublished, error) {
+			return apply(ctx, *tc)
+		}, Abandon: func(context.Context, error) error { return nil }}, nil
+	}
 }

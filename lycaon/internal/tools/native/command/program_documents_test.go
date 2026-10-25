@@ -77,3 +77,27 @@ func TestProgramDocumentNoticeRefusesBeforeRetainingUnadmittedEntry(t *testing.T
 		t.Fatalf("refused admission leaked: %+v", memory.InUse())
 	}
 }
+
+func TestControlDefinitionsNamespaceTakenToolIdentities(t *testing.T) {
+	catalog, err := toolcontract.LanguageV1()
+	testutil.FailErr(t, "language catalog", err)
+	run := &programRun{
+		catalog:  catalog,
+		commands: commandIndex(catalog),
+		control: programControlDefinition{
+			available: map[string]bool{"sed": true, "git": true},
+			taken:     map[string]bool{"read": true, "git": true},
+		},
+	}
+	definitions, err := run.controlDefinitions()
+	testutil.FailErr(t, "control definitions", err)
+	if got := definitions["sed"].Facts().Identity; got != "sed" {
+		t.Fatalf("sed identity = %q, want sed", got)
+	}
+	if got := definitions["read"].Facts().Identity; got != "command-host:read" {
+		t.Fatalf("read identity = %q, want command-host:read", got)
+	}
+	if got := definitions["git"].Facts().Identity; got != "command-host:git" {
+		t.Fatalf("git identity = %q, want command-host:git", got)
+	}
+}

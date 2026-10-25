@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"maps"
-	"strings"
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
@@ -22,10 +21,9 @@ type programControlDefinition struct {
 	once        sync.Once
 	definitions map[string]toolcontract.OperationDefinition
 	available   map[string]bool
+	taken       map[string]bool
 	err         error
 }
-
-var cachedControlOwnerDefinitions sync.Map
 
 func (r *programRun) controlDefinitions() (map[string]toolcontract.OperationDefinition, error) {
 	r.control.once.Do(func() {
@@ -34,34 +32,23 @@ func (r *programRun) controlDefinitions() (map[string]toolcontract.OperationDefi
 			r.control.err = fmt.Errorf("command contract missing")
 			return
 		}
-		commands := map[string][]toolcontract.CommandSpecification{}
-		for _, spec := range r.catalog.Commands {
-			if r.control.available[spec.Name] || commandprogram.EvaluatorBuiltin(spec.Name) || spec.Name == "[[" {
-				commands[spec.Owner] = append(commands[spec.Owner], spec)
-			}
-		}
 		r.control.definitions = map[string]toolcontract.OperationDefinition{}
-		for owner, specs := range commands {
-			var keyBuilder strings.Builder
-			keyBuilder.WriteString(owner)
-			for _, spec := range specs {
-				keyBuilder.WriteByte(0)
-				keyBuilder.WriteString(spec.Name)
-			}
-			key := keyBuilder.String()
-			if cached, ok := cachedControlOwnerDefinitions.Load(key); ok {
-				r.control.definitions[owner] = cached.(toolcontract.OperationDefinition)
+		for _, spec := range r.catalog.Commands {
+			if !r.control.available[spec.Name] && !commandprogram.EvaluatorBuiltin(spec.Name) && spec.Name != "[[" {
 				continue
 			}
 			owned := contract
-			owned.Owner = owner
-			definition, err := toolcontract.NewOperationDefinition(toolcontract.OperationFacts{Identity: "command-host:" + owner, Version: 1, Contract: owned, Arguments: json.RawMessage(`{"type":"object"}`), Commands: specs, Resources: r.catalog.Language.Limits, ProgressGate: toolcontract.ProgressNotRequired, RejectionContract: "command", Streams: toolcontract.StreamContract{Input: "complete command input", Output: "complete command output", Error: "typed host refusal", Statuses: map[int]string{0: "completed"}}})
+			owned.Owner = spec.Owner
+			identity := spec.Name
+			if r.control.taken[identity] {
+				identity = "command-host:" + spec.Name
+			}
+			definition, err := toolcontract.NewOperationDefinition(toolcontract.OperationFacts{Identity: identity, Version: 1, Contract: owned, Arguments: json.RawMessage(`{"type":"object"}`), Commands: []toolcontract.CommandSpecification{spec}, Resources: r.catalog.Language.Limits, ProgressGate: toolcontract.ProgressNotRequired, RejectionContract: "command", Streams: toolcontract.StreamContract{Input: "complete command input", Output: "complete command output", Error: "typed host refusal", Statuses: map[int]string{0: "completed"}}})
 			if err != nil {
 				r.control.err = err
 				return
 			}
-			cachedControlOwnerDefinitions.Store(key, definition)
-			r.control.definitions[owner] = definition
+			r.control.definitions[spec.Name] = definition
 		}
 	})
 	return r.control.definitions, r.control.err
@@ -84,7 +71,7 @@ func (d *ProgramDispatcher) invokeHost(ctx context.Context, request commandprogr
 	if err != nil {
 		return ownerFailure(err), err
 	}
-	definition := definitions[spec.Owner]
+	definition := definitions[spec.Name]
 	mode := selectEffectMode(spec, request.EffectMode)
 	bound, err := toolcontract.BindOperation(definition, request.Invocation, spec.Name, mode, d.childEffectSet(spec, mode, request))
 	if err != nil {
