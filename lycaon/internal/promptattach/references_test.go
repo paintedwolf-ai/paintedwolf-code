@@ -2,6 +2,8 @@ package promptattach_test
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -10,6 +12,25 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
+
+func testPNGBytes() []byte {
+	return []byte{
+		0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+		0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
+		0xde, 0x00, 0x00, 0x00, 0x0c, 0x49, 0x44, 0x41, 0x54, 0x08, 0xd7, 0x63, 0xf8, 0xcf, 0xc0, 0x00,
+		0x00, 0x03, 0x01, 0x01, 0x00, 0x18, 0xdd, 0x8d, 0xb4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e,
+		0x44, 0xae, 0x42, 0x60, 0x82,
+	}
+}
+
+func canonPath(t *testing.T, p string) string {
+	t.Helper()
+	resolved, err := filepath.EvalSymlinks(p)
+	if err != nil {
+		return filepath.Clean(p)
+	}
+	return resolved
+}
 
 // testCaps loads the bundled intake policy, so tests measure what ships rather
 // than numbers written twice.
@@ -352,3 +373,144 @@ func TestIngestReferences_projectMismatch(t *testing.T) {
 		t.Fatalf("err=%v code=%q want REFERENCE_OUT_OF_JAIL", err, attacherr.CodeOf(err))
 	}
 }
+
+func TestIngestReferences_externalFileText(t *testing.T) {
+	tmp := canonPath(t, t.TempDir())
+	filePath := filepath.Join(tmp, "notes.txt")
+	testutil.FailErr(t, "write file", os.WriteFile(filePath, []byte("hello from external file\nsecond line"), 0o644))
+
+	res, err := ingestReferences(t, promptattach.ReferenceDeps{SessionProjectID: "proj"}, []api.PromptReferencePart{
+		api.NewPromptReferenceExternalFile(api.PromptReferenceExternalFilePart{
+			ProjectID: "proj",
+			Path:      filePath,
+		}),
+	})
+	testutil.FailErr(t, "IngestReferences", err)
+	if len(res.Fences()) != 1 {
+		t.Fatalf("expected 1 fence, got %d", len(res.Fences()))
+	}
+	fence := res.Fences()[0]
+	if !strings.Contains(fence, "[User attached file: "+filePath+"]") {
+		t.Fatalf("fence missing external file hint: %s", fence)
+	}
+	if !strings.Contains(fence, "hello from external file") {
+		t.Fatalf("fence missing text content: %s", fence)
+	}
+	if len(res.Parts) != 1 || res.Parts[0].ReferenceKind != api.MessageReferenceKindExternalFile {
+		t.Fatalf("part reference kind = %+v", res.Parts)
+	}
+	if res.Parts[0].Path != filePath {
+		t.Fatalf("part path = %q want %q", res.Parts[0].Path, filePath)
+	}
+	if len(res.Images) != 0 {
+		t.Fatalf("expected 0 images for text file, got %d", len(res.Images))
+	}
+}
+
+func TestIngestReferences_externalFileImage(t *testing.T) {
+	tmp := canonPath(t, t.TempDir())
+	imagePath := filepath.Join(tmp, "capture.png")
+	pngBytes := testPNGBytes()
+	testutil.FailErr(t, "write image", os.WriteFile(imagePath, pngBytes, 0o644))
+
+	res, err := ingestReferences(t, promptattach.ReferenceDeps{SessionProjectID: "proj"}, []api.PromptReferencePart{
+		api.NewPromptReferenceExternalFile(api.PromptReferenceExternalFilePart{
+			ProjectID: "proj",
+			Path:      imagePath,
+		}),
+	})
+	testutil.FailErr(t, "IngestReferences", err)
+	if len(res.Fences()) != 1 {
+		t.Fatalf("expected 1 fence, got %d", len(res.Fences()))
+	}
+	fence := res.Fences()[0]
+	if !strings.Contains(fence, "[User attached image: "+imagePath+"]") {
+		t.Fatalf("fence missing external image hint: %s", fence)
+	}
+	if len(res.Images) != 1 {
+		t.Fatalf("expected 1 image, got %d", len(res.Images))
+	}
+	if res.Images[0].Mime != "image/png" || len(res.Images[0].Bytes) != len(pngBytes) {
+		t.Fatalf("image mismatch: %+v", res.Images[0])
+	}
+	if res.Parts[0].ReferenceKind != api.MessageReferenceKindExternalFile || res.Parts[0].MediaType != "image/png" {
+		t.Fatalf("part mismatch: %+v", res.Parts[0])
+	}
+}
+
+func TestIngestReferences_externalFolder(t *testing.T) {
+	tmp := canonPath(t, t.TempDir())
+	folderPath := filepath.Join(tmp, "subfolder")
+	testutil.FailErr(t, "mkdir", os.Mkdir(folderPath, 0o755))
+
+	res, err := ingestReferences(t, promptattach.ReferenceDeps{SessionProjectID: "proj"}, []api.PromptReferencePart{
+		api.NewPromptReferenceExternalFolder(api.PromptReferenceExternalFolderPart{
+			ProjectID: "proj",
+			Path:      folderPath,
+		}),
+	})
+	testutil.FailErr(t, "IngestReferences", err)
+	if len(res.Fences()) != 1 {
+		t.Fatalf("expected 1 fence, got %d", len(res.Fences()))
+	}
+	fence := res.Fences()[0]
+	if !strings.Contains(fence, "[User attached folder: "+folderPath+"]") {
+		t.Fatalf("fence missing external folder hint: %s", fence)
+	}
+	if res.Parts[0].ReferenceKind != api.MessageReferenceKindExternalFolder || res.Parts[0].Path != folderPath {
+		t.Fatalf("part mismatch: %+v", res.Parts[0])
+	}
+}
+
+func TestIngestReferences_externalFileProtectedPathRefused(t *testing.T) {
+	_, err := ingestReferences(t, promptattach.ReferenceDeps{SessionProjectID: "proj"}, []api.PromptReferencePart{
+		api.NewPromptReferenceExternalFile(api.PromptReferenceExternalFilePart{
+			ProjectID: "proj",
+			Path:      "relative/path.txt",
+		}),
+	})
+	if attacherr.CodeOf(err) != attacherr.CodeOutOfJail {
+		t.Fatalf("relative external path code=%q want REFERENCE_OUT_OF_JAIL", attacherr.CodeOf(err))
+	}
+
+	_, err = ingestReferences(t, promptattach.ReferenceDeps{SessionProjectID: "proj"}, []api.PromptReferencePart{
+		api.NewPromptReferenceExternalFile(api.PromptReferenceExternalFilePart{
+			ProjectID: "proj",
+			Path:      "/nonexistent/path/file.txt",
+		}),
+	})
+	if attacherr.CodeOf(err) != attacherr.CodeNotFound {
+		t.Fatalf("missing external path code=%q want REFERENCE_NOT_FOUND", attacherr.CodeOf(err))
+	}
+}
+
+func TestIngestReferences_pathFileImageUsesReadImage(t *testing.T) {
+	pngBytes := testPNGBytes()
+	res, err := ingestReferences(t, promptattach.ReferenceDeps{
+		SessionProjectID: "proj",
+		ResolvePath: func(_, _, path string) (string, api.NavigationTarget, error) {
+			return path, api.NavigationTarget{ProjectID: "proj", RootID: "root-1", Path: path}, nil
+		},
+		ReadImage: func(projectID, rootID, path string) ([]byte, string, error) {
+			if projectID != "proj" || rootID != "root-1" || path != "assets/logo.png" {
+				t.Fatalf("ReadImage called with %s/%s/%s", projectID, rootID, path)
+			}
+			return pngBytes, "image/png", nil
+		},
+	}, []api.PromptReferencePart{api.NewPromptReferencePathFile(api.PromptReferencePathFilePart{
+		ProjectID: "proj",
+		RootID:    "root-1",
+		Path:      "assets/logo.png",
+	})})
+	testutil.FailErr(t, "IngestReferences", err)
+	if len(res.Images) != 1 {
+		t.Fatalf("expected 1 image, got %d", len(res.Images))
+	}
+	if res.Images[0].Mime != "image/png" || len(res.Images[0].Bytes) != len(pngBytes) {
+		t.Fatalf("image mismatch: %+v", res.Images[0])
+	}
+	if !strings.Contains(res.Fences()[0], "[User attached image: assets/logo.png]") {
+		t.Fatalf("fence missing image hint: %s", res.Fences()[0])
+	}
+}
+

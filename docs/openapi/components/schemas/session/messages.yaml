@@ -214,6 +214,8 @@ components:
       enum:
       - path_file
       - path_folder
+      - external_file
+      - external_folder
       - search_hit
     MessageContentPart:
       x-go-generate: true

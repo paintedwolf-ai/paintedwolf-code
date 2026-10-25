@@ -6,6 +6,7 @@ import (
 	"github.com/lycaon/lycaon/internal/api/sourceapi"
 	"github.com/lycaon/lycaon/internal/api/taskgroup"
 	"github.com/lycaon/lycaon/internal/events"
+	"github.com/lycaon/lycaon/internal/grantedpath"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/promptattach"
@@ -24,6 +25,7 @@ type Deps struct {
 	Sessions       *session.Host
 	VisualStore    visual.Store
 	Sources        *sourceapi.Handler
+	GrantedPaths   *grantedpath.Runtime
 	// Video decodes attached videos; nil refuses them.
 	Video promptattach.VideoDecoder
 }
@@ -88,6 +90,7 @@ type Submission struct {
 	References     *References
 	Sessions       *session.Host
 	Store          session.Store
+	GrantedPaths   *grantedpath.Runtime
 	Video          promptattach.VideoDecoder
 	VisualStore    visual.Store
 	responses      *httpio.Responder
@@ -112,7 +115,7 @@ func New(responses *httpio.Responder, background *taskgroup.Group, deps Deps) Ha
 	h.Execution = &Execution{EventPublisher: deps.EventPublisher, Sessions: deps.Sessions, Store: deps.Store, background: background, responses: responses}
 	h.Queue = &Queue{Sessions: deps.Sessions, Store: deps.Store, background: background, responses: responses}
 	h.References = &References{Caps: caps, Projects: deps.Projects, Store: deps.Store, VisualStore: deps.VisualStore, sourceEditor: deps.Sources.Editor}
-	h.Submission = &Submission{Caps: caps, EventPublisher: deps.EventPublisher, ManagedSecrets: deps.ManagedSecrets, Sessions: deps.Sessions, Store: deps.Store, Video: deps.Video, VisualStore: deps.VisualStore, responses: responses}
+	h.Submission = &Submission{Caps: caps, EventPublisher: deps.EventPublisher, ManagedSecrets: deps.ManagedSecrets, Sessions: deps.Sessions, Store: deps.Store, GrantedPaths: deps.GrantedPaths, Video: deps.Video, VisualStore: deps.VisualStore, responses: responses}
 	h.Attachments.Submission = h.Submission
 	h.Execution.Attachments = h.Attachments
 	h.Submission.Attachments = h.Attachments

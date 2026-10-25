@@ -80,6 +80,7 @@ func NewServer(deps Dependencies, logger *slog.Logger, token string) *Server {
 		DataDir: s.dataDir, EventPublisher: deps.Host.EventPublisher, HintConfig: deps.Source.HintConfig,
 		ManagedSecrets: deps.Approvals.ManagedSecrets, Projects: deps.Core.Projects, Store: deps.Core.Store, Sessions: deps.Core.Sessions,
 		VisualStore: deps.Source.VisualStore, Sources: &s.Sources, Video: deps.Source.Video,
+		GrantedPaths: deps.Approvals.Authority.GrantedPaths,
 	})
 	s.Admin.SessionAdmin = sessionadmin.New(&s.responses, &s.background, sessionadmin.Deps{
 		Checkpoints: deps.Approvals.Checkpoints, EventPublisher: deps.Host.EventPublisher, Events: deps.Host.Events,

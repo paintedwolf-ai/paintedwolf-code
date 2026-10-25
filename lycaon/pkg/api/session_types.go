@@ -69,19 +69,23 @@ const (
 type PromptReferenceKind string
 
 const (
-	PromptReferencePathFile   PromptReferenceKind = "path-file"
-	PromptReferencePathFolder PromptReferenceKind = "path-folder"
-	PromptReferenceArtifact   PromptReferenceKind = "artifact"
-	PromptReferenceSearchHit  PromptReferenceKind = "search-hit"
+	PromptReferencePathFile       PromptReferenceKind = "path-file"
+	PromptReferencePathFolder     PromptReferenceKind = "path-folder"
+	PromptReferenceExternalFile   PromptReferenceKind = "external-file"
+	PromptReferenceExternalFolder PromptReferenceKind = "external-folder"
+	PromptReferenceArtifact       PromptReferenceKind = "artifact"
+	PromptReferenceSearchHit      PromptReferenceKind = "search-hit"
 )
 
 // PromptReferencePart is the exact discriminated reference union used by
 // prompt intake. Exactly one variant must be set.
 type PromptReferencePart struct {
-	PathFile   *PromptReferencePathFilePart   `json:"-"`
-	PathFolder *PromptReferencePathFolderPart `json:"-"`
-	Artifact   *PromptReferenceArtifactPart   `json:"-"`
-	SearchHit  *PromptReferenceSearchHitPart  `json:"-"`
+	PathFile       *PromptReferencePathFilePart       `json:"-"`
+	PathFolder     *PromptReferencePathFolderPart     `json:"-"`
+	ExternalFile   *PromptReferenceExternalFilePart   `json:"-"`
+	ExternalFolder *PromptReferenceExternalFolderPart `json:"-"`
+	Artifact       *PromptReferenceArtifactPart       `json:"-"`
+	SearchHit      *PromptReferenceSearchHitPart      `json:"-"`
 }
 
 // PromptReferencePathFilePart identifies a whole file or an inclusive line
@@ -100,6 +104,22 @@ type PromptReferencePathFolderPart struct {
 	Kind      PromptReferenceKind `json:"kind"`
 	ProjectID string              `json:"project_id"`
 	RootID    string              `json:"root_id,omitempty"`
+	Path      string              `json:"path"`
+}
+
+// PromptReferenceExternalFilePart identifies an absolute file path outside attached roots.
+type PromptReferenceExternalFilePart struct {
+	Kind      PromptReferenceKind `json:"kind"`
+	ProjectID string              `json:"project_id"`
+	Path      string              `json:"path"`
+	StartLine int                 `json:"start_line,omitempty"`
+	EndLine   int                 `json:"end_line,omitempty"`
+}
+
+// PromptReferenceExternalFolderPart identifies an absolute folder path outside attached roots.
+type PromptReferenceExternalFolderPart struct {
+	Kind      PromptReferenceKind `json:"kind"`
+	ProjectID string              `json:"project_id"`
 	Path      string              `json:"path"`
 }
 
@@ -129,6 +149,16 @@ func NewPromptReferencePathFolder(part PromptReferencePathFolderPart) PromptRefe
 	return PromptReferencePart{PathFolder: &part}
 }
 
+func NewPromptReferenceExternalFile(part PromptReferenceExternalFilePart) PromptReferencePart {
+	part.Kind = PromptReferenceExternalFile
+	return PromptReferencePart{ExternalFile: &part}
+}
+
+func NewPromptReferenceExternalFolder(part PromptReferenceExternalFolderPart) PromptReferencePart {
+	part.Kind = PromptReferenceExternalFolder
+	return PromptReferencePart{ExternalFolder: &part}
+}
+
 func NewPromptReferenceArtifact(part PromptReferenceArtifactPart) PromptReferencePart {
 	part.Kind = PromptReferenceArtifact
 	return PromptReferencePart{Artifact: &part}
@@ -146,6 +176,10 @@ func (p PromptReferencePart) ProjectID() string {
 		return p.PathFile.ProjectID
 	case p.PathFolder != nil:
 		return p.PathFolder.ProjectID
+	case p.ExternalFile != nil:
+		return p.ExternalFile.ProjectID
+	case p.ExternalFolder != nil:
+		return p.ExternalFolder.ProjectID
 	case p.Artifact != nil:
 		return p.Artifact.ProjectID
 	case p.SearchHit != nil:
@@ -168,6 +202,18 @@ func (p PromptReferencePart) Validate() error {
 		variants++
 		if p.PathFolder.Kind != PromptReferencePathFolder || strings.TrimSpace(p.PathFolder.ProjectID) == "" || strings.TrimSpace(p.PathFolder.Path) == "" {
 			return fmt.Errorf("invalid path-folder reference")
+		}
+	}
+	if p.ExternalFile != nil {
+		variants++
+		if p.ExternalFile.Kind != PromptReferenceExternalFile || strings.TrimSpace(p.ExternalFile.ProjectID) == "" || strings.TrimSpace(p.ExternalFile.Path) == "" {
+			return fmt.Errorf("invalid external-file reference")
+		}
+	}
+	if p.ExternalFolder != nil {
+		variants++
+		if p.ExternalFolder.Kind != PromptReferenceExternalFolder || strings.TrimSpace(p.ExternalFolder.ProjectID) == "" || strings.TrimSpace(p.ExternalFolder.Path) == "" {
+			return fmt.Errorf("invalid external-folder reference")
 		}
 	}
 	if p.Artifact != nil {
@@ -198,6 +244,10 @@ func (p PromptReferencePart) MarshalJSON() ([]byte, error) {
 		return json.Marshal(p.PathFile)
 	case p.PathFolder != nil:
 		return json.Marshal(p.PathFolder)
+	case p.ExternalFile != nil:
+		return json.Marshal(p.ExternalFile)
+	case p.ExternalFolder != nil:
+		return json.Marshal(p.ExternalFolder)
 	case p.Artifact != nil:
 		return json.Marshal(p.Artifact)
 	default:
@@ -233,6 +283,18 @@ func (p *PromptReferencePart) UnmarshalJSON(data []byte) error {
 			return err
 		}
 		out.PathFolder = &part
+	case PromptReferenceExternalFile:
+		var part PromptReferenceExternalFilePart
+		if err := decode(&part); err != nil {
+			return err
+		}
+		out.ExternalFile = &part
+	case PromptReferenceExternalFolder:
+		var part PromptReferenceExternalFolderPart
+		if err := decode(&part); err != nil {
+			return err
+		}
+		out.ExternalFolder = &part
 	case PromptReferenceArtifact:
 		var part PromptReferenceArtifactPart
 		if err := decode(&part); err != nil {
@@ -512,9 +574,11 @@ const (
 type MessageReferenceKind string
 
 const (
-	MessageReferenceKindPathFile   MessageReferenceKind = "path_file"
-	MessageReferenceKindPathFolder MessageReferenceKind = "path_folder"
-	MessageReferenceKindSearchHit  MessageReferenceKind = "search_hit"
+	MessageReferenceKindPathFile       MessageReferenceKind = "path_file"
+	MessageReferenceKindPathFolder     MessageReferenceKind = "path_folder"
+	MessageReferenceKindExternalFile   MessageReferenceKind = "external_file"
+	MessageReferenceKindExternalFolder MessageReferenceKind = "external_folder"
+	MessageReferenceKindSearchHit      MessageReferenceKind = "search_hit"
 )
 
 type Message struct {
