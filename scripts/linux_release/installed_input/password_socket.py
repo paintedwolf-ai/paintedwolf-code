@@ -10,7 +10,7 @@ import struct
 import time
 import threading
 
-from ..installed_cases.app import process_identity
+from ..installed_process import process_identity
 from . import password_wire, protocol
 from .private_pipe import frame, frame_size
 

@@ -11,7 +11,7 @@ from . import protocol
 from .polkit_wire import validate
 from .private_pipe import Pipe
 from .unlock_account import validate_account_shape
-from ..installed_cases.app import process_identity
+from ..installed_process import process_identity
 
 # This runs in isolated Python before importing any captured project code. The
 # capture is prepared separately by the trusted controller, never by the QA UID.

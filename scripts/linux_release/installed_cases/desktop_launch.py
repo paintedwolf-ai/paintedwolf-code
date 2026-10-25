@@ -3,7 +3,8 @@ from pathlib import Path
 import subprocess
 import time
 
-from .app import process_identity, session_environment
+from .app import session_environment
+from ..installed_process import process_identity
 from ..installed_environment import graphical_session
 from ..installed_runtime import file_identity
 

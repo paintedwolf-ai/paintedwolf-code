@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import time
 
-from .app import process_identity
+from ..installed_process import process_identity
 from .desktop_ui import DesktopUI, retry_inventory
 from .profile_setup import first_time_tips_enabled
 from .provider_setup import physical_input

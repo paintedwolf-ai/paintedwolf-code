@@ -144,7 +144,7 @@ def serve(execution: dict, vm_id: str):
     acknowledged = None
     publication = None
     prepared, prepare_delivered, unlock_used, credential_disabled = None, False, False, False
-    from ..installed_cases.app import process_identity
+    from ..installed_process import process_identity
     from . import password_wire
     identified = False
 
