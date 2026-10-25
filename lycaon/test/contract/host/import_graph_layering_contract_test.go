@@ -25,6 +25,21 @@ func layeringRules() []layeringRule {
 	const modulePath = "github.com/lycaon/lycaon"
 	return []layeringRule{
 		{
+			name:         "toolcontract remains pure compiled facts",
+			fromGlob:     modulePath + "/internal/toolcontract",
+			forbidden:    modulePath + "/internal/",
+			allowImports: []string{modulePath + "/internal/nativemanifest"},
+			why:          "operation facts cannot import parser, executable bindings, live capabilities or domain hubs",
+		},
+		{
+			name:         "commandprogram consumes pure contracts and parsed plans only",
+			fromGlob:     modulePath + "/internal/commandprogram",
+			forbidden:    modulePath + "/internal/",
+			allowImports: []string{modulePath + "/internal/toolcontract", modulePath + "/internal/commandsurface"},
+			why:          "evaluator ports are implemented by adapters; database, native tools, sessions and composition must not enter evaluation",
+		},
+
+		{
 			name:      "pkg/api is the wire surface — no internal deps",
 			fromGlob:  modulePath + "/pkg/api",
 			forbidden: modulePath + "/internal/",
@@ -40,9 +55,12 @@ func layeringRules() []layeringRule {
 			name:      "internal/db is the bottom — no internal cross-deps",
 			fromGlob:  modulePath + "/internal/db",
 			forbidden: modulePath + "/internal/",
-			// DB imports only shared storage leaves.
+			// DB imports only shared storage leaves. Snapshot cloning and
+			// publication use the same filesystem primitives as other durable writers.
 			allowImports: []string{
 				modulePath + "/internal/configdir",
+				modulePath + "/internal/fileclone",
+				modulePath + "/internal/fseffect",
 				modulePath + "/internal/fssync",
 				modulePath + "/internal/timelayout",
 			},

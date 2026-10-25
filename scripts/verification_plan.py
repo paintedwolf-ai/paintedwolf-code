@@ -13,8 +13,8 @@ GO_MODULE = CATALOG.parent.parent / "lycaon"
 DEN = CATALOG.parent.parent / "lycaon-den"
 # The scheduler's own descriptors and per-operation paths; a nested request never forwards them.
 SCHEDULER_ENV = {"PW_TEST_EXECUTION_TICKET", "PW_TEST_EXECUTION_FD", "PW_TEST_RESOURCE_FD",
-                 "PW_TEST_STAGE_RESULT", "PW_TEST_STAGE_RAW", "PW_TEST_STAGE_EVENTS", "PW_TEST_STAGE_ID",
-                 "PW_TEST_BATCH_DIRECTORY", "PW_TEST_REUSE_STORE", "PW_TEST_ENVIRONMENT_IDENTITY",
+                 "PW_TEST_STAGE_RESULT", "PW_TEST_STAGE_RAW", "PW_TEST_STAGE_EVENTS", "PW_TEST_STAGE_PROGRESS",
+                 "PW_TEST_STAGE_ID", "PW_TEST_BATCH_DIRECTORY", "PW_TEST_REUSE_STORE", "PW_TEST_ENVIRONMENT_IDENTITY",
                  "PW_TEST_PACKAGE_IDENTITIES", "PW_TEST_SCRATCH_ROOT", "PW_TEST_SOURCE_ROOT", "PW_TEST_MODULE_ROOT",
                  "PW_REPO_SNAPSHOT_TOKEN"}
 # Verification is offline and fixtures are repository-local, so proxy routes stay
@@ -93,8 +93,7 @@ def catalog():
         names.update(value[section])
     if not isinstance(value["selection"], dict) or not set(value["selection"]).issubset(names):
         raise ValueError("selection grammars must be declared for declared verification names")
-    if any(grammar not in SELECTION_GRAMMARS | {PASSTHROUGH} and not re.fullmatch(r"fixed:[a-z][a-z0-9-]{0,63}", grammar)
-           for grammar in value["selection"].values()):
+    if not set(value["selection"].values()).issubset(SELECTION_GRAMMARS | {PASSTHROUGH}):
         raise ValueError("unknown verification selection grammar")
     if any(grammar == "go" and name not in value["go"] for name, grammar in value["selection"].items()):
         raise ValueError("a Go selection grammar requires a Go recipe")
@@ -128,12 +127,12 @@ def catalog():
         # Catalog stages and invocations outside the catalog declare resources by Task name.
         if name in value["groups"] or name in value["go"]:
             raise ValueError(f"resources describe executed stages, not {name}")
-        if (set(spec) - {"locks", "workers", "shared_locks"} or not {"locks", "workers"}.issubset(spec)
-                or not isinstance(spec["locks"], list)
+        if (set(spec) - {"locks", "workers", "shared_locks", "progress"} or not {"locks", "workers"}.issubset(spec)
+                or not isinstance(spec["locks"], list) or not isinstance(spec.get("shared_locks", []), list)
                 or not all(isinstance(lock, str) and lock for lock in spec["locks"])
-                or not isinstance(spec.get("shared_locks", []), list)
                 or not all(isinstance(lock, str) for lock in spec.get("shared_locks", []))
                 or not set(spec.get("shared_locks", [])).issubset(set(spec["locks"]) - {"*"})
+                or spec.get("progress", "log") not in ("log", "heartbeat")
                 or not (spec["workers"] in ("shared", "all")
                         or type(spec["workers"]) is int and spec["workers"] > 0)):
             raise ValueError(f"invalid resource recipe: {name}")
@@ -318,9 +317,6 @@ def validate_selection(names, arguments):
         if missing:
             raise ValueError(f"{names[0]}: {' '.join(missing)} matches no test file under {DEN.name}/src. "
                              "No verification was queued")
-    elif grammar.startswith("fixed:"):
-        if list(arguments) != [grammar.removeprefix("fixed:")]:
-            raise ValueError(f"{names[0]} accepts only the fixed component {grammar.removeprefix('fixed:')}. No verification was queued")
     elif grammar == "playwright":
         missing = unmatched_playwright_filters(selection_filters(arguments, PLAYWRIGHT_FLAGS, names[0]))
         if missing:

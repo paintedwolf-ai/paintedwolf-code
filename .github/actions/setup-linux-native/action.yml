@@ -1,0 +1,29 @@
+name: Set up Linux native dependencies
+description: Reuse the resolved APT archives needed by native verification
+inputs:
+  save:
+    description: Publish prepared package archives from trusted main
+    default: 'false'
+runs:
+  using: composite
+  steps:
+    - name: Resolve native package archive identity
+      id: packages
+      shell: bash
+      run: timeout --kill-after=10s 7m python3 "$GITHUB_ACTION_PATH/provision.py" plan
+
+    - id: cache
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.packages.outputs.archives }}/*.deb
+        key: ${{ steps.packages.outputs.key }}
+
+    - name: Install resolved native packages
+      shell: bash
+      run: timeout --kill-after=10s 9m python3 "$GITHUB_ACTION_PATH/provision.py" install
+
+    - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      if: inputs.save == 'true' && github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
+      with:
+        path: ${{ steps.packages.outputs.archives }}/*.deb
+        key: ${{ steps.packages.outputs.key }}

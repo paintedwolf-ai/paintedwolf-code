@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -76,6 +77,7 @@ func TestPromptCacheStableBlockByteIdenticalAcrossTurns(t *testing.T) {
 	}
 	ctx := context.Background()
 	eng.BeginPromptTurn(sess.ID, "")
+	eng.SetTurnSurfaceID(sess.ID, "implement_dispatch")
 	if _, err := eng.BuildCompletionMessages(ctx, sess, nil, nil); err != nil {
 		t.Fatalf("turn 1 BuildCompletionMessages: %v", err)
 	}
@@ -111,6 +113,7 @@ func TestPromptCacheStableKeyChangesOnStableInput(t *testing.T) {
 		WorkspacePath: dir,
 	}
 	eng.BeginPromptTurn(sess.ID, "")
+	eng.SetTurnSurfaceID(sess.ID, "implement_dispatch")
 	if _, err := eng.BuildCompletionMessages(ctx, sess, nil, nil); err != nil {
 		t.Fatalf("build: %v", err)
 	}
@@ -119,6 +122,7 @@ func TestPromptCacheStableKeyChangesOnStableInput(t *testing.T) {
 	sess.Posture = api.SessionPostureSpec
 	turn := eng.Cache().LoadTurn(sess.ID)
 	turn.Iteration = 0
+	eng.SetTurnSurfaceID(sess.ID, "implement_dispatch")
 	if _, err := eng.BuildCompletionMessages(ctx, sess, nil, nil); err != nil {
 		t.Fatalf("build after posture change: %v", err)
 	}
@@ -143,6 +147,7 @@ func TestPromptTurnReadsWorkspaceRootsOnce(t *testing.T) {
 		AgentType: orchestration.ProfileCoordinator, WorkspacePath: t.TempDir(),
 	}
 	eng.BeginPromptTurn(sess.ID, "")
+	eng.SetTurnSurfaceID(sess.ID, "implement_dispatch")
 	if _, err := eng.BuildCompletionMessages(context.Background(), sess, nil, nil); err != nil {
 		t.Fatalf("BuildCompletionMessages: %v", err)
 	}
@@ -170,6 +175,7 @@ func TestPromptCacheStableKeyChangesWithEffectiveCapabilitySurface(t *testing.T)
 	}
 	ctx := context.Background()
 	eng.BeginPromptTurn(sess.ID, "")
+	eng.SetTurnSurfaceID(sess.ID, "implement_dispatch")
 	if _, err := eng.BuildCompletionMessages(ctx, sess, nil, nil); err != nil {
 		t.Fatalf("build ask surface: %v", err)
 	}
@@ -191,22 +197,230 @@ func TestPromptCacheStableKeyChangesWithEffectiveCapabilitySurface(t *testing.T)
 	}
 }
 
-func TestStableCapabilityFingerprintCoversRenderedCapabilityInputs(t *testing.T) {
-	vars := map[string]any{"caps": map[string]any{"vision": false}}
-	roster := &inject.AgentRoster{Effective: []string{"investigate", "implement"}}
-	base := stableCapabilityFingerprint(vars, roster, true)
+func TestStandingPromptInputsKeyDerivationCoversEveryField(t *testing.T) {
+	base := standingPromptInputs{
+		PromptRevision: "rev-1",
+		Profile: standingProfileInputs{
+			SurfaceID:       "surf-1",
+			SurfaceTemplate: "tmpl-1",
+			ModeRefs:        []string{"mode-1"},
+		},
+		Vars:             map[string]any{"v1": "val1"},
+		RootCount:        1,
+		EffectiveAgents:  []string{"agent-1"},
+		WebSearchEnabled: true,
+		LoadedTools:      []string{"tool-1"},
+		OmittedUnits:     []string{"unit-1"},
+		ExecutionMode:    "mode-1",
+		VerifyCommand:    "verify-cmd",
+		WorkerToolBudget: spawn.WorkerToolBudget{Default: 10, Min: 2, Max: 50},
+	}
+	baseKey, err := base.cacheKey()
+	if err != nil {
+		t.Fatalf("base.cacheKey: %v", err)
+	}
 
-	vars["caps"].(map[string]any)["vision"] = true
-	vision := stableCapabilityFingerprint(vars, roster, true)
-	if vision == base {
-		t.Fatal("vision change did not invalidate stable capability fingerprint")
+	mutateCases := []struct {
+		field  string
+		mutate func(*standingPromptInputs)
+	}{
+		{"PromptRevision", func(in *standingPromptInputs) { in.PromptRevision = "rev-2" }},
+		{"Profile.SurfaceID", func(in *standingPromptInputs) { in.Profile.SurfaceID = "surf-2" }},
+		{"Profile.SurfaceTemplate", func(in *standingPromptInputs) { in.Profile.SurfaceTemplate = "tmpl-2" }},
+		{"Profile.ModeRefs", func(in *standingPromptInputs) { in.Profile.ModeRefs = []string{"mode-2"} }},
+		{"Vars", func(in *standingPromptInputs) { in.Vars = map[string]any{"v1": "val2"} }},
+		{"RootCount", func(in *standingPromptInputs) { in.RootCount = 2 }},
+		{"EffectiveAgents", func(in *standingPromptInputs) { in.EffectiveAgents = []string{"agent-2"} }},
+		{"WebSearchEnabled", func(in *standingPromptInputs) { in.WebSearchEnabled = false }},
+		{"LoadedTools", func(in *standingPromptInputs) { in.LoadedTools = []string{"tool-2"} }},
+		{"OmittedUnits", func(in *standingPromptInputs) { in.OmittedUnits = []string{"unit-2"} }},
+		{"ExecutionMode", func(in *standingPromptInputs) { in.ExecutionMode = "mode-2" }},
+		{"VerifyCommand", func(in *standingPromptInputs) { in.VerifyCommand = "verify-cmd-2" }},
+		{"WorkerToolBudget", func(in *standingPromptInputs) { in.WorkerToolBudget.Default = 20 }},
 	}
-	if got := stableCapabilityFingerprint(vars, roster, false); got == vision {
-		t.Fatal("web-search change did not invalidate stable capability fingerprint")
+
+	for _, mc := range mutateCases {
+		t.Run(mc.field, func(t *testing.T) {
+			mutated := base
+			mutated.Profile.ModeRefs = append([]string(nil), base.Profile.ModeRefs...)
+			mutated.Vars = map[string]any{"v1": "val1"}
+			mutated.EffectiveAgents = append([]string(nil), base.EffectiveAgents...)
+			mutated.LoadedTools = append([]string(nil), base.LoadedTools...)
+			mutated.OmittedUnits = append([]string(nil), base.OmittedUnits...)
+
+			mc.mutate(&mutated)
+			mutKey, err := mutated.cacheKey()
+			if err != nil {
+				t.Fatalf("cacheKey: %v", err)
+			}
+			if mutKey == baseKey {
+				t.Fatalf("mutating field %s produced identical cache key %q", mc.field, mutKey)
+			}
+		})
 	}
-	roster.Effective = []string{"implement"}
-	if got := stableCapabilityFingerprint(vars, roster, true); got == vision {
-		t.Fatal("effective agent roster change did not invalidate stable capability fingerprint")
+}
+
+type prefixStabilityMutableCoordCtx struct {
+	base          inject.CoordinatorTurnFrameSource
+	evidenceGates *[]string
+}
+
+func (s prefixStabilityMutableCoordCtx) BuildCoordinatorTurnFrame(ctx context.Context, sessionID string, sess *api.Session) (inject.CoordinatorTurnFrame, error) {
+	frame, err := s.base.BuildCoordinatorTurnFrame(ctx, sessionID, sess)
+	if err != nil {
+		return frame, err
+	}
+	if s.evidenceGates != nil && len(*s.evidenceGates) > 0 {
+		frame.EvidenceRequirements = *s.evidenceGates
+	}
+	return frame, nil
+}
+
+func TestPromptCacheMidTurnGateFlipsPreservePrefixCache(t *testing.T) {
+	eng := prefixStabilityEngine(t)
+	var (
+		missingProgress bool
+		pendingOverlays []string
+		evidenceGates   []string
+	)
+	deps := eng.deps()
+	deps.ImplementSessionState = func(context.Context, *api.Session) surface.ImplementSessionState {
+		return surface.ImplementSessionState{
+			WrapupGatesLoaded: true,
+			ProgressMissing:   missingProgress,
+			PendingOverlayIDs: pendingOverlays,
+		}
+	}
+	deps.CoordinatorFrame = prefixStabilityMutableCoordCtx{
+		base:          deps.CoordinatorFrame,
+		evidenceGates: &evidenceGates,
+	}
+	eng.SetDeps(deps)
+
+	sess := &api.Session{
+		ID:            "prefix-gate-flips",
+		Posture:       api.SessionPostureBuild,
+		AgentType:     orchestration.ProfileCoordinator,
+		WorkspacePath: t.TempDir(),
+	}
+	history := []api.Message{
+		{Role: api.MessageRoleUser, Content: "implement feature"},
+	}
+
+	eng.BeginPromptTurn(sess.ID, "")
+	eng.SetTurnSurfaceID(sess.ID, "implement_dispatch")
+	var firstStandingContent string
+	var firstStandingKey string
+	firstStandingMarkIdx := -1
+	firstHistoryMarkIdx := -1
+
+	type testCase struct {
+		name            string
+		missingProgress bool
+		pendingOverlays []string
+		partialHistory  bool
+		verifyRequired  bool
+	}
+	cases := []testCase{
+		{name: "baseline", missingProgress: false},
+		{name: "progress_missing", missingProgress: true},
+		{name: "pending_overlays", pendingOverlays: []string{"job-ov-1"}},
+		{name: "partial_jobs_in_history", partialHistory: true},
+		{name: "verify_required", verifyRequired: true},
+		{name: "all_active", missingProgress: true, pendingOverlays: []string{"job-ov-1"}, partialHistory: true, verifyRequired: true},
+		{name: "return_to_baseline", missingProgress: false},
+	}
+
+	for i, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			missingProgress = tc.missingProgress
+			pendingOverlays = tc.pendingOverlays
+			if tc.verifyRequired {
+				evidenceGates = []string{"verify"}
+			} else {
+				evidenceGates = nil
+			}
+
+			testHistory := history
+			if tc.partialHistory {
+				testHistory = append([]api.Message(nil), history...)
+				testHistory = append(testHistory, api.Message{
+					Role:          api.MessageRoleAssistant,
+					Content:       `<task job_id="j-part" agent_type="implementer" state="partial"></task>`,
+					WorkerSummary: &api.WorkerSummaryMeta{WorkerID: "j-part", Status: api.WorkerSummaryStatusPartial},
+				})
+			}
+
+			eng.Cache().LoadTurn(sess.ID).Iteration = i
+			out, err := eng.BuildCompletionMessages(t.Context(), sess, testHistory, nil)
+			if err != nil {
+				t.Fatalf("BuildCompletionMessages: %v", err)
+			}
+			turn := eng.Cache().LoadTurn(sess.ID)
+
+			standingIdx := -1
+			historyIdx := -1
+			for idx, m := range out {
+				if m.PromptCacheBreakpoint == api.PromptCacheTierStanding {
+					standingIdx = idx
+				}
+				if m.PromptCacheBreakpoint == api.PromptCacheTierHistory {
+					historyIdx = idx
+				}
+			}
+
+			if i == 0 {
+				firstStandingContent = out[0].Content
+				firstStandingKey = turn.StablePromptKey
+				firstStandingMarkIdx = standingIdx
+				firstHistoryMarkIdx = historyIdx
+			} else if !tc.partialHistory {
+				if out[0].Content != firstStandingContent {
+					t.Fatalf("standing content mutated across mid-turn gate flips:\ngot=%q\nwant=%q", out[0].Content, firstStandingContent)
+				}
+				if turn.StablePromptKey != firstStandingKey {
+					t.Fatalf("standing key mutated across mid-turn gate flips: %q != %q", turn.StablePromptKey, firstStandingKey)
+				}
+				if standingIdx != firstStandingMarkIdx {
+					t.Fatalf("standing mark row changed: %d != %d", standingIdx, firstStandingMarkIdx)
+				}
+				if historyIdx != firstHistoryMarkIdx {
+					t.Fatalf("history mark row changed: %d != %d", historyIdx, firstHistoryMarkIdx)
+				}
+			} else {
+				if out[0].Content != firstStandingContent {
+					t.Fatalf("standing content mutated with partial history:\ngot=%q\nwant=%q", out[0].Content, firstStandingContent)
+				}
+				if turn.StablePromptKey != firstStandingKey {
+					t.Fatalf("standing key mutated with partial history: %q != %q", turn.StablePromptKey, firstStandingKey)
+				}
+			}
+
+			var turnStateBlock string
+			for idx := historyIdx + 1; idx < len(out); idx++ {
+				content := out[idx].Content
+				if strings.Contains(content, "No checklist is stored") ||
+					strings.Contains(content, "Integrate turn") ||
+					strings.Contains(content, "Partial `") ||
+					strings.Contains(content, "test-evidence gate") {
+					turnStateBlock = content
+					break
+				}
+			}
+
+			if tc.missingProgress && !strings.Contains(turnStateBlock, "No checklist is stored") {
+				t.Fatalf("expected checklist warning in turn-state block: %q", turnStateBlock)
+			}
+			if len(tc.pendingOverlays) > 0 && !strings.Contains(turnStateBlock, "Integrate turn") {
+				t.Fatalf("expected integrate-turn in turn-state block: %q", turnStateBlock)
+			}
+			if tc.partialHistory && len(tc.pendingOverlays) == 0 && !strings.Contains(turnStateBlock, "Partial `j-part`") {
+				t.Fatalf("expected partial job in turn-state block: %q", turnStateBlock)
+			}
+			if tc.verifyRequired && !strings.Contains(turnStateBlock, "test-evidence gate") {
+				t.Fatalf("expected test-evidence gate in turn-state block: %q", turnStateBlock)
+			}
+		})
 	}
 }
 
@@ -220,6 +434,7 @@ func TestPromptCacheVolatileChangeDoesNotAlterStableBytes(t *testing.T) {
 	}
 	ctx := context.Background()
 	eng.BeginPromptTurn(sess.ID, "")
+	eng.SetTurnSurfaceID(sess.ID, "implement_dispatch")
 	msgs1, err := eng.BuildCompletionMessages(ctx, sess, nil, nil)
 	if err != nil {
 		t.Fatalf("turn 1: %v", err)
