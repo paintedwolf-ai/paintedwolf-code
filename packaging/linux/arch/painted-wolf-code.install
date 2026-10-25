@@ -16,7 +16,7 @@ post_install() {
         rc-update add paintedwolf-vault-identity default
         rc-service paintedwolf-vault-identity start
     else
-        printf '%s\n' 'Enable the packaged vault identity service with your configured systemd or OpenRC service manager. App-password custody remains available.'
+        printf '%s\n' 'Credential storage requires the packaged vault identity service. Enable it with your configured systemd or OpenRC service manager; unavailable custody preserves saved credentials.'
     fi
 }
 
@@ -34,7 +34,7 @@ post_upgrade() {
 }
 
 pre_remove() {
-    printf '%s\n' 'Move credential custody to an app password in Settings before disabling this service. Existing identities remain on disk for recovery or reinstall.'
+    printf '%s\n' 'Disabling the vault identity service makes credential storage unavailable. Existing identities remain on disk; restore the service or reinstall to regain access.'
     if [ -d /run/systemd/system ]; then
         systemctl disable --now paintedwolf-vault-identity.socket
         systemctl stop paintedwolf-vault-identity.service
