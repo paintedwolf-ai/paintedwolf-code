@@ -4,6 +4,7 @@ from contextlib import ExitStack
 import unittest
 from unittest.mock import Mock
 
+from linux_release.installed_cases.records import CaseUnavailable
 from linux_release.installed_input import protocol, surface_wire, surface_guest
 
 
@@ -150,6 +151,7 @@ class FrameObserverTests(unittest.TestCase):
         from types import SimpleNamespace
         from unittest.mock import patch
         from linux_release.installed_input import surface
+        from linux_release.installed_cases import desktop_ui
         self.surface = surface
         self.context = ExitStack()
         self.addCleanup(self.context.close)
@@ -165,12 +167,13 @@ class FrameObserverTests(unittest.TestCase):
         self.main.getState().contains.side_effect = lambda state: (
             self.active if state == api.STATE_ACTIVE else self.defunct if state == api.STATE_DEFUNCT else False)
         self.visible = [self.main]
-        self.ui.windows.side_effect = lambda: [(self.identity, node) for node in self.visible]
+        self.ui.windows.side_effect = lambda deadline=None: [(self.identity, node) for node in self.visible]
         self.ui.visible.return_value = True
         self.ui.descendants.return_value = []
         def identity(pid):
             return self.identity.copy() if pid == 123 else self.engine.copy()
         self.identities = self.context.enter_context(patch.object(surface, 'process_identity', side_effect=identity))
+        self.context.enter_context(patch.object(desktop_ui, 'process_identity', side_effect=identity))
         self.context.enter_context(patch.object(surface.lineage, 'process_identity', side_effect=identity))
         self.context.enter_context(patch.object(surface.os, 'pidfd_open', side_effect=[101, 102, 103], create=True))
         self.close_fd = self.context.enter_context(patch.object(surface.os, 'close'))
@@ -258,3 +261,114 @@ class FrameObserverTests(unittest.TestCase):
                 mapping[125] = {**frame, 'parent_pid': 1}
                 with self.assertRaisesRegex(ValueError, 'identity changed'):
                     observer.observe()
+
+    def dialog(self):
+        dialog = self.node('/org/a11y/atspi/accessible/3', self.ui.api.ROLE_DIALOG,
+                           name='Quit Painted Wolf Code?', modal=True)
+        relation = Mock()
+        relation.getRelationType.return_value = self.ui.api.RELATION_SUBWINDOW_OF
+        relation.getNTargets.return_value = 1
+        relation.getTarget.return_value = self.main
+        dialog.getRelationSet.return_value = [relation]
+        return dialog
+
+    def transient(self):
+        error = Exception('removed during an AT-SPI read')
+        error.domain, error.code = 'atspi_error', 1
+        return error
+
+    def test_partial_relation_state_and_control_reads_roll_back_before_retry(self):
+        from unittest.mock import patch
+        for phase in ('relation', 'state', 'control'):
+            with self.subTest(phase=phase), ExitStack() as stack:
+                dialog = self.dialog()
+                peer = self.node('/org/a11y/atspi/accessible/2', self.ui.api.ROLE_FRAME)
+                self.visible = [self.main, peer, dialog]
+                previous = self.observer.nodes.copy()
+                original_control = self.observer._quit_control
+                def disappear(*_):
+                    self.visible = [self.main]
+                    raise self.transient()
+                if phase == 'relation':
+                    dialog.getRelationSet.side_effect = disappear
+                elif phase == 'state':
+                    peer.getState.side_effect = disappear
+                else:
+                    control_calls = []
+                    def control(*args):
+                        control_calls.append(args)
+                        if len(control_calls) == 1:
+                            disappear()
+                        return original_control(*args)
+                    stack.enter_context(patch.object(self.observer, '_quit_control', side_effect=control))
+                stack.enter_context(patch.object(self.surface.time, 'sleep'))
+                proof = self.observer.observe()
+                self.assertEqual(self.observer.nodes, previous)
+                self.assertEqual([row['identity'] for row in proof['surfaces']], [proof['main']])
+
+    def test_disappearing_dialog_keeps_only_its_previous_verified_defunct_metadata(self):
+        from unittest.mock import patch
+        dialog = self.dialog()
+        self.visible = [self.main, dialog]
+        original = self.observer.observe()['surfaces'][1]
+        def disappear():
+            self.visible = [self.main]
+            dialog.getState().contains.side_effect = lambda state: state == self.ui.api.STATE_DEFUNCT
+            raise self.transient()
+        dialog.getRelationSet.side_effect = disappear
+        with patch.object(self.surface.time, 'sleep'):
+            closed = self.observer.observe()['surfaces'][1]
+        self.assertEqual(closed['identity'], original['identity'])
+        self.assertEqual(closed['parent'], original['parent'])
+        self.assertTrue(closed['defunct'])
+        self.assertFalse(closed['visible'])
+
+    def test_snapshot_retries_share_one_deadline_and_programming_errors_are_terminal(self):
+        from unittest.mock import patch
+        for error, transient in ((self.transient(), True), (AttributeError('bug'), False)):
+            with self.subTest(error=type(error).__name__), ExitStack() as stack:
+                read = stack.enter_context(patch.object(self.observer, '_observe_snapshot', side_effect=error))
+                stack.enter_context(patch.object(self.surface.time, 'monotonic', side_effect=[1, 3]))
+                sleep = stack.enter_context(patch.object(self.surface.time, 'sleep'))
+                with self.assertRaises(CaseUnavailable if transient else AttributeError):
+                    self.observer.observe(deadline=2)
+                read.assert_called_once_with(2)
+                self.assertEqual(sleep.call_count, int(transient))
+
+    def test_settle_passes_its_deadline_to_window_and_quit_control_reads(self):
+        from unittest.mock import patch
+        before = self.observer.observe()
+        dialog = self.dialog()
+        dialog.getState().contains.side_effect = lambda state: state in {
+            self.ui.api.STATE_MODAL, self.ui.api.STATE_ACTIVE}
+        self.visible, self.active = [self.main, dialog], False
+        self.ui.descendants.reset_mock()
+        with patch.object(self.surface.time, 'monotonic', return_value=10):
+            after = self.observer.settle('workspace-request-quit-v1', before)
+        self.assertTrue(surface_wire.finished('workspace-request-quit-v1', before, after))
+        self.assertEqual(self.ui.windows.call_args.args, (25,))
+        self.ui.descendants.assert_called_once_with(dialog, 25)
+
+    def test_late_complete_snapshot_is_refused_without_publishing_partial_nodes(self):
+        from unittest.mock import patch
+        previous = self.observer.nodes.copy()
+        def read(deadline):
+            self.observer.nodes[('unexpected', '/partial')] = ('partial', {})
+            return {'late': True}
+        with patch.object(self.observer, '_observe_snapshot', side_effect=read), \
+                patch.object(self.surface.time, 'monotonic', side_effect=[1, 3]):
+            with self.assertRaises(CaseUnavailable):
+                self.observer.observe(deadline=2)
+        self.assertEqual(self.observer.nodes, previous)
+
+    def test_transport_failure_cannot_retry_after_a_pinned_runtime_changes(self):
+        from unittest.mock import patch
+        def changed(deadline):
+            self.identities.side_effect = lambda pid: {**self.identity, 'start_time_ticks': 99}
+            raise self.transient()
+        with patch.object(self.observer, '_observe_snapshot', side_effect=changed) as read, \
+                patch.object(self.surface.time, 'sleep') as sleep:
+            with self.assertRaisesRegex(ValueError, 'identity changed'):
+                self.observer.observe()
+        self.assertEqual(read.call_count, 1)
+        sleep.assert_not_called()

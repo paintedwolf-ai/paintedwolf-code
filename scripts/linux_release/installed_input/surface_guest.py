@@ -31,7 +31,7 @@ def perform_transition(execution, vm_id, observer, operation, mailbox=None):
                 if acknowledgment is not None:
                     delivery = protocol.acknowledgment(acknowledgment, pending, vm_id)
                     break
-                observer.during(operation, initial)
+                observer.during(operation, initial, deadline)
                 if time.monotonic() >= deadline:
                     raise CaseUnavailable('fixed-VM-surface-input-acknowledgment-unavailable')
                 time.sleep(0.05)
