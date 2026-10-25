@@ -1,6 +1,7 @@
 """Shipping launch routes preserve real command ownership and refuse invented success."""
 import signal
 import json
+import io
 import os
 import subprocess
 import sys
@@ -32,6 +33,39 @@ class ShippingLaunchTests(unittest.TestCase):
         self.assertEqual(command, [str(BOOTSTRAP)])
         self.assertFalse(facts['desktop_entry_launch_proven'])
         self.assertEqual(InstalledApp(binding).launch_mode, 'controlled')
+
+    def test_public_modes_keep_real_owner_and_never_enter_controlled_scope(self):
+        for mode in ['unscoped-direct', 'desktop-entry', 'pw-open-cold-start']:
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as directory:
+                identity = {'pid': 123, 'parent_pid': 100, 'start_time_ticks': 42}
+                process = SimpleNamespace(pid=123, stdout=io.BytesIO(), stderr=io.BytesIO())
+                events = [{'event': 'launched', 'owner': identity,
+                           'identity': {'pid': 124, 'parent_pid': 123, 'start_time_ticks': 43},
+                           'cgroup': '0::/session-42.scope'}]
+                owner = SimpleNamespace(process=process, facts=lambda: events)
+                storage = SimpleNamespace(config=Path(directory) / 'config', application_identifier=APP,
+                                          facts=lambda: {'home': directory})
+                binding = {'artifact': {}, 'source_commit': 'a' * 40, 'install_root': '/opt/app',
+                           'launcher': {'path': str(BOOTSTRAP), 'sha256': 'b' * 64}}
+                app = InstalledApp(binding, arguments=[directory], launch_mode=mode)
+                with patch(PREFIX + 'app.require_owned_guest'), \
+                        patch(PREFIX + 'app.graphical_session', return_value={'id': '42'}), \
+                        patch(PREFIX + 'app.session_environment', return_value={'HOME': directory}), \
+                        patch(PREFIX + 'app.storage_for_launch', return_value=storage), \
+                        patch(PREFIX + 'app.file_identity', side_effect=lambda _path: {'header': b'', 'sha256': 'b' * 64}), \
+                        patch(PREFIX + 'app.process_identity', return_value=identity), \
+                        patch(PREFIX + 'app.enter_desktop_application_scope') as synthetic_scope, \
+                        patch(PREFIX + 'shipping_launch.launch_command', return_value=(['/fixed-route'], {})) as route, \
+                        patch(PREFIX + 'launch_owner.LaunchOwner', return_value=owner), \
+                        patch.object(Path, 'read_text', return_value='0::/session-42.scope'):
+                    app.launch()
+                for reader in app._readers:
+                    reader.join(timeout=1)
+                synthetic_scope.assert_not_called()
+                route.assert_called_once_with(mode, BOOTSTRAP, storage, [directory], binding)
+                self.assertIs(app.process, process)
+                self.assertEqual(app.observations['application_unit']['command_identity']['pid'], 124)
+                self.assertEqual(app.observations['launch_identity'], identity)
 
     def test_cold_cli_opens_existing_project_with_exact_bound_image(self):
         with tempfile.TemporaryDirectory() as directory:

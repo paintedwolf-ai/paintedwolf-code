@@ -162,6 +162,29 @@ class BarrierTests(unittest.TestCase):
         with self.assertRaises(CaseUnavailable):
             failed.await_response_written()
 
+    def test_fixture_next_turn_requires_completed_acquisition_and_preserves_old_witness(self):
+        barrier = ResponseBarrier()
+        fixture = ProviderFixture.gui([{'name': 'command', 'arguments': {'command': '/usr/bin/true'}}],
+                                      acquire='command', response_barrier=barrier)
+        prior = fixture.acquisition
+        with self.assertRaises(ValueError):
+            fixture.begin_next_turn()
+        prior.completed = True
+        prior.witness = {'tool_call_id': 'old-acquisition'}
+        with self.assertRaises(CaseUnavailable):
+            fixture.begin_next_turn()
+        _, _, _, thread = self.start(barrier)
+        barrier.release()
+        thread.join(timeout=2)
+        barrier.await_response_written()
+        following = fixture.begin_next_turn()
+        self.assertIsNot(fixture.acquisition, prior)
+        self.assertEqual(prior.witness, {'tool_call_id': 'old-acquisition'})
+        self.assertTrue(prior.completed)
+        self.assertFalse(fixture.acquisition.completed)
+        self.assertIsNone(following.snapshot())
+        following.close()
+
     def test_next_turn_gets_a_distinct_hold_only_after_prior_response_settles(self):
         barrier = ResponseBarrier()
         with self.assertRaises(CaseUnavailable):
