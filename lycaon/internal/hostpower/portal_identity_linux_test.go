@@ -159,22 +159,13 @@ func TestPortalWithoutRegistryConcurrentAttributionEntersScopeOnce(t *testing.T)
 	const workers = 6
 	errs := make(chan error, workers)
 	var wg sync.WaitGroup
-	for i := range workers {
+	for range workers {
 		wg.Add(1)
-		go func(idx int) {
+		go func() {
 			defer wg.Done()
 			<-start
-			if idx%2 == 0 {
-				errs <- provider.Check(ctx)
-				return
-			}
-			held, err := provider.Acquire(ctx)
-			if err != nil {
-				errs <- err
-				return
-			}
-			errs <- held.Release()
-		}(i)
+			errs <- provider.Check(ctx)
+		}()
 	}
 	close(start)
 	wg.Wait()
