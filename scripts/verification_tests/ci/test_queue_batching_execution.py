@@ -328,24 +328,66 @@ class QueueDispatchTests(unittest.TestCase):
             calls.append((path, method, body))
             if 'matching-refs' in path:
                 return [ref]
+            if path.endswith('/status'):
+                return {'statuses': []}
             if '/runs?' in path:
                 return {'workflow_runs': []}
             return {}
         with patch.object(q, 'entries', return_value=[{'state': 'AWAITING_CHECKS', 'headCommit': {'oid': SHA}}]), \
                 patch.object(q, 'context', return_value=OTHER) as context, patch.object(q, 'api', side_effect=api):
             self.assertEqual(q.recover('o/r'), [{'ref': 'gh-readonly-queue/main/pr-3-base', 'sha': SHA}])
-        context.assert_called_once_with('o/r', ref['ref'], SHA)
-        self.assertEqual(calls[-1][2], {'ref': 'gh-readonly-queue/main/pr-3-base', 'inputs': {'profile': 'integration'}})
+        self.assertEqual(context.call_args_list, [unittest.mock.call('o/r', ref['ref'], SHA)] * 2)
+        dispatches = [(path, body) for path, method, body in calls if method == 'POST']
+        self.assertEqual(dispatches, [
+            ('repos/o/r/actions/workflows/dco.yml/dispatches',
+             {'ref': 'main', 'inputs': {'queue_ref': ref['ref'], 'queue_sha': SHA}}),
+            ('repos/o/r/actions/workflows/ci.yml/dispatches',
+             {'ref': 'gh-readonly-queue/main/pr-3-base', 'inputs': {'profile': 'integration'}}),
+        ])
 
     def test_existing_failed_or_running_run_is_never_replaced(self):
         from ci_policy import queue_dispatch as q
         for status in ['failure', 'cancelled', 'in_progress', 'success']:
             with self.subTest(status=status), \
                     patch.object(q, 'entries', return_value=[{'state': 'AWAITING_CHECKS', 'headCommit': {'oid': SHA}}]), \
-                    patch.object(q, 'api', side_effect=[[
-                        {'ref': q.PREFIX + 'pr-3-base', 'object': {'sha': SHA}}], {'workflow_runs': [{'conclusion': status}]}]) as api:
+                    patch.object(q, 'api', side_effect=[
+                        [{'ref': q.PREFIX + 'pr-3-base', 'object': {'sha': SHA}}],
+                        {'statuses': [{'context': 'DCO-owned', 'state': 'success'}]},
+                        {'workflow_runs': [{'conclusion': status}]}]) as api:
                 self.assertEqual(q.recover('o/r'), [])
                 self.assertTrue(all(call.args[1:] == () for call in api.call_args_list))
+
+    def test_missing_certification_recovers_with_existing_ci_and_stays_idempotent(self):
+        from ci_policy import queue_dispatch as q
+        ref = {'ref': q.PREFIX + 'pr-3-base', 'object': {'sha': SHA}}
+        calls = []
+        def api(path, method='GET', body=None):
+            calls.append((path, method, body))
+            if 'matching-refs' in path:
+                return [ref]
+            if path.endswith('/status'):
+                return {'statuses': [{'context': 'check', 'state': 'success'}]}
+            if 'dco.yml/runs?' in path:
+                return {'workflow_runs': [{'display_title': f'DCO queue {OTHER}'}]}
+            if 'ci.yml/runs?' in path:
+                return {'workflow_runs': [{'conclusion': 'success'}]}
+            return {}
+        with patch.object(q, 'entries', return_value=[{'state': 'AWAITING_CHECKS', 'headCommit': {'oid': SHA}}]), \
+                patch.object(q, 'context', return_value=OTHER) as context, patch.object(q, 'api', side_effect=api):
+            self.assertEqual(q.recover('o/r'), [])
+        context.assert_called_once_with('o/r', ref['ref'], SHA)
+        posts = [(path, body) for path, method, body in calls if method == 'POST']
+        self.assertEqual(posts, [('repos/o/r/actions/workflows/dco.yml/dispatches',
+                                  {'ref': 'main', 'inputs': {'queue_ref': ref['ref'], 'queue_sha': SHA}})])
+        for state in ('pending', 'success'):
+            with patch.object(q, 'api', return_value={'statuses': [{'context': 'DCO-owned', 'state': state}]}) as mocked:
+                q.certify('o/r', ref['ref'], SHA)
+                mocked.assert_called_once_with(f'repos/o/r/commits/{SHA}/status')
+        with patch.object(q, 'api', side_effect=[
+                {'statuses': []},
+                {'workflow_runs': [{'display_title': f'DCO queue {SHA}', 'status': 'in_progress'}]}]) as mocked:
+            q.certify('o/r', ref['ref'], SHA)
+            self.assertEqual(mocked.call_count, 2)
 
     def test_dispatch_context_refuses_wrong_ref_changed_sha_and_removed_group(self):
         from ci_policy import queue_dispatch as q
