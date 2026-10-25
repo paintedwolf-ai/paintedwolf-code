@@ -8,6 +8,7 @@ from .desktop_ui import DesktopUI, retry_inventory
 from .profile_setup import first_time_tips_enabled, project_configuration_identity
 from .provider_setup import physical_input
 from .records import CaseFailed, CaseUnavailable
+from .settings_query import SettingsQuery
 from ..installed_input import accessibility, lineage
 
 
@@ -35,18 +36,21 @@ def open_project_configuration(app, ui, project, selected) -> dict:
         actions.append(_project_configuration_action(app, ui, deadline, role, name))
         _require_configuration_target(app, project, selected, target)
     _require_configuration_target(app, project, selected, target)
-    query = physical_input(app, ui, 'Crossbar…', 'settings-providers-query-v1', deadline=deadline)
+    query = SettingsQuery(app, ui, deadline)
+    record = query.enter()
     _require_configuration_target(app, project, selected, target)
-    if query.get('operation') != 'settings-providers-query-v1' or query.get('completed') is not True:
+    if record.get('operation') != 'settings-providers-query-v1' or record.get('completed') is not True:
         raise ValueError('project configuration query did not complete its fixed operation')
     app.observations['project_configuration_query'] = {
-        'operation': query['operation'], 'completed': query['completed'],
+        'operation': record['operation'], 'completed': record['completed'],
+        'fixed_query_matches': True, 'explicit_actions_arm': True,
         'expected_catalog_id': 'painted-wolf/platform:settings-section-providers',
         'accessibility_exposes_catalog_id': False}
     for role, name, command in [(ui.api.ROLE_PUSH_BUTTON, 'Settings: AI providers', True),
                                 (ui.api.ROLE_PUSH_BUTTON, target['display_name'] + ' → AI providers', False)]:
         _require_configuration_target(app, project, selected, target)
-        actions.append(_project_configuration_action(app, ui, deadline, role, name, command=command))
+        actions.append(_project_configuration_action(app, ui, deadline, role, name, command=command,
+                                                     query=query if command else None))
         _require_configuration_target(app, project, selected, target)
     witness = {'project': target, 'actions': actions, 'native_action_completed': True}
     app.observations['project_configuration_navigation'] = witness
@@ -58,7 +62,7 @@ def _require_configuration_target(app, project, selected, target):
         raise ValueError('selected project changed during configuration navigation')
 
 
-def _project_configuration_action(app, ui, deadline, role, name, *, command=False):
+def _project_configuration_action(app, ui, deadline, role, name, *, command=False, query=None):
     root = app.observations['launch_identity']
     while True:
         node = ui.settings_provider_command(deadline) if command else ui.find(role, name, deadline=deadline)
@@ -82,6 +86,9 @@ def _project_configuration_action(app, ui, deadline, role, name, *, command=Fals
                     raise accessibility.InventoryChanged()
                 if not node.getState().contains(ui.api.STATE_FOCUSED):
                     raise accessibility.InventoryChanged()
+            if command:
+                phase = 'query-readback'
+                query.require_current()
             phase = 'identity-recheck'
             if (node.name != observed_name or not ui.visible(node)
                     or (command and not ui.settings_provider_command_matches(node, deadline))

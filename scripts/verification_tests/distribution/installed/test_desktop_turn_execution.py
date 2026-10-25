@@ -4,6 +4,7 @@ import unittest
 from unittest.mock import MagicMock, Mock, patch
 
 from linux_release.installed_cases import desktop_turn as owner
+from linux_release.installed_cases import settings_query
 from linux_release.installed_cases.records import CaseUnavailable
 
 ROOT = {'pid': 10, 'parent_pid': 2, 'start_time_ticks': 1}
@@ -97,8 +98,9 @@ class DesktopTurnTests(unittest.TestCase):
         stack.enter_context(patch.object(owner.accessibility, 'capture', return_value=(frame, chain)))
         stack.enter_context(patch.object(owner.lineage, 'capture', side_effect=lambda r, c: [c, r]))
         stack.enter_context(patch.object(owner.time, 'sleep'))
-        stack.enter_context(patch.object(owner, 'physical_input', return_value={
-            'operation': 'settings-providers-query-v1', 'completed': True}))
+        query = Mock()
+        query.enter.return_value = {'operation': 'settings-providers-query-v1', 'completed': True}
+        stack.enter_context(patch.object(owner, 'SettingsQuery', return_value=query))
         return stack
 
     def test_configuration_route_uses_exact_selected_project_and_owned_normal_actions(self):
@@ -160,9 +162,97 @@ class DesktopTurnTests(unittest.TestCase):
         app, ui, frame, nodes, target, chain = self.configuration_fixture()
         stack = self.configuration_patches(frame, chain)
         stack.enter_context(patch.object(owner, 'project_configuration_identity', return_value=target))
-        query = stack.enter_context(patch.object(owner, 'physical_input', return_value={
-            'operation': 'settings-providers-query-v1', 'completed': False}))
+        query = Mock()
+        query.enter.return_value = {'operation': 'settings-providers-query-v1', 'completed': False}
+        constructor = stack.enter_context(patch.object(owner, 'SettingsQuery', return_value=query))
         with self.assertRaisesRegex(ValueError, 'fixed operation'):
             owner.open_project_configuration(app, ui, '/fixture', {'id': 'session', 'project_id': 'project'})
         ui.settings_provider_command.assert_not_called()
-        self.assertEqual(query.call_args.kwargs['deadline'], ui.find.call_args_list[0].kwargs['deadline'])
+        self.assertEqual(constructor.call_args.args[2], ui.find.call_args_list[0].kwargs['deadline'])
+
+    def test_query_uncertainty_before_command_dispatch_never_selects_or_replays(self):
+        for failure in (CaseUnavailable('readback unavailable'), ValueError('identity changed')):
+            app, ui, frame, nodes, target, chain = self.configuration_fixture()
+            stack = self.configuration_patches(frame, chain)
+            stack.enter_context(patch.object(owner, 'project_configuration_identity', return_value=target))
+            query = Mock()
+            query.enter.return_value = {'operation': 'settings-providers-query-v1', 'completed': True}
+            query.require_current.side_effect = failure
+            constructor = stack.enter_context(patch.object(owner, 'SettingsQuery', return_value=query))
+            with self.assertRaises(type(failure)):
+                owner.open_project_configuration(app, ui, '/fixture', {'id': 'session', 'project_id': 'project'})
+            query.enter.assert_called_once_with()
+            query.require_current.assert_called_once_with()
+            nodes[3].queryAction.return_value.doAction.assert_not_called()
+            nodes[4].queryAction.return_value.doAction.assert_not_called()
+            self.assertEqual(constructor.call_args.args[2], ui.find.call_args_list[0].kwargs['deadline'])
+
+
+class ClosedSettingsQueryTests(unittest.TestCase):
+    def fixture(self):
+        app = SimpleNamespace(binding={'native_input': {'binding': {'fixed': True}, 'vm_id': 'owned-vm'}}, observations={})
+        text = Mock(characterCount=len('> Settings: AI providers'))
+        text.getText.return_value = '> Settings: AI providers'
+        node = Mock()
+        node.queryText.return_value = text
+        actor = Mock(node=node)
+        actor.observe.return_value = {'owned': True}
+        patcher = patch.object(settings_query, 'EntryFocus', return_value=actor)
+        constructor = patcher.start()
+        self.addCleanup(patcher.stop)
+        query = settings_query.SettingsQuery(app, object(), settings_query.time.monotonic() + 30)
+        return app, query, actor, text, constructor
+
+    def test_only_fixed_public_query_span_is_read_and_no_text_is_retained(self):
+        app, query, actor, text, constructor = self.fixture()
+        record = {'operation': 'settings-providers-query-v1', 'completed': True}
+        with patch.object(settings_query, 'perform', return_value=record) as perform:
+            self.assertIs(query.enter(), record)
+        constructor.assert_called_once()
+        self.assertEqual(constructor.call_args.args[2], 'Crossbar…')
+        self.assertEqual(constructor.call_args.kwargs, {'deadline': query.deadline})
+        perform.assert_called_once_with({'fixed': True}, 'owned-vm', actor,
+                                       operation='settings-providers-query-v1', deadline=query.deadline)
+        text.getText.assert_called_once_with(0, len('> Settings: AI providers'))
+        self.assertEqual(app.observations['project_configuration_query_readback'],
+                         {'fixed_query_matches': True, 'explicit_actions_arm': True})
+        self.assertNotIn('Settings:', repr(app.observations))
+
+    def test_wrong_fixed_query_or_missing_actions_arm_is_refused_without_export(self):
+        for value in ('? Settings: AI providers', 'Settings: AI providers', '> Settings: ai providers'):
+            app, query, actor, text, _ = self.fixture()
+            text.characterCount = len(value)
+            text.getText.return_value = value
+            with self.assertRaisesRegex(CaseUnavailable, 'fixed-query-mismatch'):
+                query.require_current()
+            self.assertEqual(app.observations['project_configuration_query_readback'],
+                             {'fixed_query_matches': False, 'explicit_actions_arm': False})
+            self.assertNotIn(value, repr(app.observations))
+            if len(value) != len('> Settings: AI providers'):
+                text.getText.assert_not_called()
+
+    def test_incomplete_or_changed_ownership_never_confirms_query(self):
+        for failure in (CaseUnavailable('inventory incomplete'), ValueError('identity changed')):
+            app, query, actor, text, _ = self.fixture()
+            actor.observe.side_effect = failure
+            with self.assertRaises(type(failure)):
+                query.require_current()
+            text.getText.assert_not_called()
+            self.assertFalse(app.observations['project_configuration_query_readback']['fixed_query_matches'])
+        app, query, actor, text, _ = self.fixture()
+        actor.observe.side_effect = [{'owner': 1}, {'owner': 2}]
+        with self.assertRaisesRegex(ValueError, 'identity changed'):
+            query.require_current()
+        self.assertFalse(app.observations['project_configuration_query_readback']['fixed_query_matches'])
+
+    def test_readback_transport_uncertainty_and_deadline_never_confirm_or_replay(self):
+        app, query, actor, text, _ = self.fixture()
+        text.getText.side_effect = RuntimeError('unavailable')
+        with self.assertRaisesRegex(CaseUnavailable, 'readback-unavailable'):
+            query.require_current()
+        self.assertFalse(app.observations['project_configuration_query_readback']['fixed_query_matches'])
+        text.getText.reset_mock()
+        with patch.object(settings_query.time, 'monotonic', return_value=query.deadline):
+            with self.assertRaisesRegex(CaseUnavailable, 'query-deadline'):
+                query.require_current()
+        text.getText.assert_not_called()

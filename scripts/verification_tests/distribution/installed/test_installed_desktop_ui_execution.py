@@ -194,6 +194,26 @@ class DesktopUIOwnershipTests(unittest.TestCase):
             actor.settings_provider_command(ui.time.monotonic() + 15)
         row.action.doAction.assert_not_called()
 
+    def test_catalog_combined_accessible_name_is_exact_and_still_unique_owned_visible(self):
+        exact = 'Settings: AI providers Other · painted-wolf/platform'
+        row = Node(API.ROLE_PUSH_BUTTON, exact)
+        api, _ = surface([row])
+        with ui.DesktopUI(self.app, api) as actor:
+            self.assertIs(actor.settings_provider_command(ui.time.monotonic() + 15), row)
+            for name in (exact + ' extra', exact.replace('Other', 'other'),
+                         exact.replace('platform', 'foreign'), 'Settings: AI providers'):
+                row.name = name
+                self.assertFalse(actor.settings_provider_command_matches(row, ui.time.monotonic() + 15))
+            row.name = exact
+        api, _ = surface([row, row])
+        with ui.DesktopUI(self.app, api) as actor, self.assertRaises(CaseUnavailable):
+            actor.settings_provider_command(ui.time.monotonic() + 15)
+        api, _ = surface([row])
+        with ui.DesktopUI(self.app, api) as actor, patch.object(actor, 'descendants',
+                side_effect=CaseUnavailable('inventory incomplete')), self.assertRaises(CaseUnavailable):
+            actor.settings_provider_command(ui.time.monotonic() + 15)
+        row.action.doAction.assert_not_called()
+
     def test_incomplete_inventory_retains_exact_requested_control_without_action(self):
         button = Node(API.ROLE_PUSH_BUTTON, 'Send')
         api, _ = surface([button])

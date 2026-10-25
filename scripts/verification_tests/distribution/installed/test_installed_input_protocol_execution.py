@@ -57,9 +57,9 @@ class InstalledInputProtocolTests(unittest.TestCase):
 
     def test_settings_query_is_fixed_public_text_without_command_submission(self):
         rows = protocol.steps('settings-providers-query-v1')
-        text = ''.join(':' if row == ('shift', 'semicolon') else ' ' if row == ('spc',) else
+        text = ''.join('>' if row == ('shift', 'dot') else ':' if row == ('shift', 'semicolon') else ' ' if row == ('spc',) else
                        row[1].upper() if len(row) == 2 and row[0] == 'shift' else row[0] for row in rows[1:])
-        self.assertEqual(text, 'Settings: AI providers')
+        self.assertEqual(text, '> Settings: AI providers')
         self.assertEqual(rows[0], ('ctrl', 'a'))
         self.assertNotIn(('ret',), rows)
         for operation in ('settings-providers-query-v1-other', 'settings-query-arbitrary'):

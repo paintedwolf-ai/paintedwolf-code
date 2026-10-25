@@ -154,6 +154,8 @@ class DesktopUI:
     def settings_provider_command_matches(self, node, deadline):
         if node.getRole() != self.api.ROLE_PUSH_BUTTON or not self.visible(node):
             return False
+        if node.name == 'Settings: AI providers Other · painted-wolf/platform':
+            return True
         expected = {'Settings: AI providers', 'Other · painted-wolf/platform'}
         observed = {child.name for child in self.descendants(node, deadline)
                     if child.name in expected and self.visible(child)}

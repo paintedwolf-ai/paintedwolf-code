@@ -32,7 +32,7 @@ def _editor_steps() -> tuple[tuple[str, ...], ...]:
 
 def _literal_steps(value: str) -> tuple[tuple[str, ...], ...]:
     punctuation = {' ': ('spc',), '.': ('dot',), ':': ('shift', 'semicolon'),
-                   '/': ('slash',), '-': ('minus',)}
+                   '/': ('slash',), '-': ('minus',), '>': ('shift', 'dot')}
     return (('ctrl', 'a'), *(('shift', char.lower()) if 'A' <= char <= 'Z' else
         (char,) if char.isascii() and char.isalnum() else punctuation[char] for char in value))
 
@@ -70,7 +70,7 @@ def steps(operation: str) -> tuple[tuple[str, ...], ...]:
     if endpoint:
         return _literal_steps(gui_endpoint(int(endpoint.group(1))))
     if operation == 'settings-providers-query-v1':
-        return _literal_steps('Settings: AI providers')
+        return _literal_steps('> Settings: AI providers')
     if operation == 'reply-fixture-prompt-v1':
         return _literal_steps('Run the installed qualification fixture using command.')
     if operation == 'browser-fixture-prompt-v1':
