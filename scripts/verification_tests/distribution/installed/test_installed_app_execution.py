@@ -219,3 +219,92 @@ class InstalledAppTests(unittest.TestCase):
                 patch.object(Path, "read_text", return_value="0::/user.slice/session-1961.scope"):
             with self.assertRaisesRegex(ValueError, "escaped its desktop application unit scope"):
                 app._bind_engine({"pid": 321, "port": 12345, "host": "127.0.0.1"}, Path("/unused"))
+
+
+class InstalledAppPipeCaptureTests(unittest.TestCase):
+    def launch_pipes(self, directory):
+        from contextlib import ExitStack
+        from scripts.linux_release.installed_cases import app as owner
+        stdout_read, stdout_write = os.pipe()
+        stderr_read, stderr_write = os.pipe()
+        writes = [stdout_write, stderr_write]
+        process = SimpleNamespace(pid=4321, stdout=os.fdopen(stdout_read, 'rb'),
+                                  stderr=os.fdopen(stderr_read, 'rb'), returncode=None)
+        process.poll = lambda: process.returncode
+        def finish(selected):
+            self.assertIs(selected, process)
+            for descriptor in writes[:]:
+                os.close(descriptor)
+                writes.remove(descriptor)
+            process.returncode = 0
+        identity = {'sha256': 'a' * 64, 'bytes': 1, 'mode': 0o755}
+        app = InstalledApp({'artifact': {}, 'source_commit': 'a' * 40, 'install_root': '/fixture',
+                            'launcher': {'path': str(directory / 'launcher'), **identity}})
+        storage = SimpleNamespace(config=directory, facts=lambda: {})
+        self.addCleanup(finish, process)
+        with ExitStack() as patches:
+            patches.enter_context(patch.object(owner, 'require_owned_guest'))
+            patches.enter_context(patch.object(owner, 'graphical_session', return_value={}))
+            patches.enter_context(patch.object(owner, 'session_environment', return_value={}))
+            patches.enter_context(patch.object(owner, 'storage_for_launch', return_value=storage))
+            patches.enter_context(patch.object(owner, 'file_identity', return_value={**identity, 'header': b'x'}))
+            patches.enter_context(patch.object(owner, 'enter_desktop_application_scope', return_value={'unit': 'fixture.scope'}))
+            patches.enter_context(patch.object(owner, 'process_identity', return_value={'pid': 4321}))
+            patches.enter_context(patch.object(Path, 'read_text', return_value='0::/fixture.scope'))
+            launch = patches.enter_context(patch.object(owner.subprocess, 'Popen', return_value=process))
+            app.launch()
+        # Keep the exact stop owner through app.stop, while the real pipe readers
+        # terminate only when these fixture writers close.
+        return app, process, writes, finish, launch
+
+    def await_condition(self, condition):
+        import time
+        finish = time.monotonic() + 5
+        while not condition():
+            if time.monotonic() >= finish:
+                self.fail('actual pipe capture did not publish its bounded observation')
+            time.sleep(0.005)
+
+    def test_small_native_record_is_visible_before_eof_and_stop_joins_both_readers(self):
+        from scripts.linux_release.installed_cases import app as owner
+        with tempfile.TemporaryDirectory() as root:
+            app, process, writes, finish, launch = self.launch_pipes(Path(root))
+            records = (b'small native stdout record\n', b'Native startup outcome: {"format_version":1}\n')
+            os.write(writes[0], records[0])
+            os.write(writes[1], records[1][:17])
+            try:
+                self.await_condition(lambda: app.streams()['app-stderr'] == records[1][:17])
+                self.assertIsNone(process.poll())
+                os.write(writes[1], records[1][17:])
+                self.await_condition(lambda: app.streams() == dict(zip(('app-stdout', 'app-stderr'), records)))
+                self.assertIsNone(process.poll())
+                self.assertEqual(len(writes), 2)
+                self.assertTrue(all(reader.is_alive() for reader in app._readers))
+                launch.assert_called_once()
+                with patch.object(owner, 'stop_stack', side_effect=finish) as stop:
+                    app.stop()
+                stop.assert_called_once_with(process)
+                self.assertTrue(app.observations['capture_complete'])
+                self.assertFalse(app.observations['output_limit'])
+                self.assertEqual(app.observations['exit_code'], 0)
+                self.assertTrue(process.stdout.closed and process.stderr.closed)
+                self.assertFalse(any(reader.is_alive() for reader in app._readers))
+            finally:
+                with patch.object(owner, 'stop_stack', side_effect=finish): app.stop()
+
+    def test_incremental_overflow_keeps_bound_and_stops_owned_capture(self):
+        from scripts.linux_release.installed_cases import app as owner
+        with tempfile.TemporaryDirectory() as root, patch.object(owner, 'LIMIT', 64):
+            app, process, writes, finish, _ = self.launch_pipes(Path(root))
+            try:
+                os.write(writes[1], b'x' * 65)
+                self.await_condition(app._overflow.is_set)
+                self.assertLessEqual(len(app.streams()['app-stderr']), 64)
+                with self.assertRaises(CaseFailed): app.require_running()
+                with patch.object(owner, 'stop_stack', side_effect=finish) as stop: app.stop()
+                stop.assert_called_once_with(process)
+                self.assertTrue(app.observations['output_limit'])
+                self.assertTrue(app.observations['capture_complete'])
+                self.assertFalse(any(reader.is_alive() for reader in app._readers))
+            finally:
+                with patch.object(owner, 'stop_stack', side_effect=finish): app.stop()
