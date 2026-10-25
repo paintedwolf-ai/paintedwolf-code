@@ -15,7 +15,7 @@ def retry_inventory(app, error) -> bool:
     domain, code = getattr(error, 'domain', None), getattr(error, 'code', None)
     native = (isinstance(domain, str) and domain in {'atspi_error', 'g-dbus-error-quark', 'g-io-error-quark'}
               and type(code) is int and 0 <= code < 1 << 31)
-    if not isinstance(error, (IndexError, _InventoryChanged)) and not native:
+    if not isinstance(error, (IndexError, _InventoryChanged, NotImplementedError, AttributeError)) and not native:
         return False
     expected = app.observations['launch_identity']
     try:
@@ -161,13 +161,22 @@ class DesktopUI:
     def click(self, name: str, *, tab=False):
         if type(tab) is not bool:
             raise ValueError('normal native action requires an explicit button or page tab')
-        node = self.find(self.api.ROLE_PAGE_TAB if tab else self.api.ROLE_PUSH_BUTTON, name)
-        try:
-            action = node.queryAction()
-            if action.nActions != 1 or action.doAction(0) is not True:
-                raise ValueError('normal native button refused its action')
-        except Exception:
-            raise CaseUnavailable('normal-native-button-action-unavailable') from None
+        role = self.api.ROLE_PAGE_TAB if tab else self.api.ROLE_PUSH_BUTTON
+        deadline = time.monotonic() + 15
+        while True:
+            node = self.find(role, name)
+            try:
+                action = node.queryAction()
+                if action.nActions != 1 or action.doAction(0) is not True:
+                    raise ValueError('normal native button refused its action')
+                return
+            except ValueError:
+                raise CaseUnavailable('normal-native-button-action-unavailable') from None
+            except Exception as error:
+                if time.monotonic() < deadline and retry_inventory(self.app, error):
+                    time.sleep(0.05)
+                    continue
+                raise CaseUnavailable('normal-native-button-action-unavailable') from None
 
     def fill(self, role: int, name: str, value: str):
         node = self.find(role, name)

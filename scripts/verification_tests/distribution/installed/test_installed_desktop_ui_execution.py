@@ -196,6 +196,14 @@ class DesktopUIOwnershipTests(unittest.TestCase):
                 actor.click('Send')
         button.action.doAction.assert_called_once_with(0)
         self.assertEqual(self.app.observations['desktop_inventory_retry']['domain'], 'atspi_error')
+        with ui.DesktopUI(self.app, api) as actor, patch.object(ui.time, 'sleep'):
+            with patch.object(button, 'queryAction', side_effect=[NotImplementedError('mounting'), button.action]):
+                actor.click('Send')
+        self.assertEqual(button.action.doAction.call_count, 2)
+        self.assertEqual(self.app.observations['desktop_inventory_retry']['exception_type'], 'NotImplementedError')
+        with ui.DesktopUI(self.app, api) as actor, patch.object(button, 'queryAction', side_effect=RuntimeError('bad')):
+            with self.assertRaises(CaseUnavailable):
+                actor.click('Send')
         with ui.DesktopUI(self.app, api) as actor:
             with patch.object(actor, 'descendants', side_effect=RuntimeError('not retained')):
                 with self.assertRaises(CaseUnavailable) as refusal:
