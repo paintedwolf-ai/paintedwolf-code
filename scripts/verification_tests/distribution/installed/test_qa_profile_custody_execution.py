@@ -302,6 +302,11 @@ class FixedProfileAccountTests(unittest.TestCase):
         from types import SimpleNamespace
         cases = [(self.PRESENCE, '/var/backups/paintedwolf-qualification/055-reply-a20'),
                  (self.REPLY, '/var/backups/paintedwolf-qualification/056-presence-058a2-a2'),
+                 (self.REPLY, '/var/backups/paintedwolf-qualification/vault-quiet-058a2-a1'),
+                 (self.PRESENCE, '/var/backups/paintedwolf-qualification/vault-quiet-058a2-a0'),
+                 (self.PRESENCE, '/var/backups/paintedwolf-qualification/vault-quiet-058a2-a1000'),
+                 (self.PRESENCE, '/var/backups/paintedwolf-qualification/vault-quiet-058a3-a1'),
+                 (self.PRESENCE, '/var/backups/paintedwolf-qualification/vault-quiet-058a2-a1/../foreign'),
                  (self.PRESENCE, '/var/backups/paintedwolf-qualification/056-existing058a2-8372-a1'),
                  (self.PRESENCE, '/var/backups/paintedwolf-qualification/056-presence-058a2-a0'),
                  (self.PRESENCE, '/var/backups/paintedwolf-qualification/056-presence-058a2-a2/../foreign')]
@@ -320,5 +325,30 @@ class FixedProfileAccountTests(unittest.TestCase):
                         patch.object(owner, 'directory') as opened, patch.object(owner, 'move') as moved:
                     with self.assertRaisesRegex(ValueError, 'backup family'): custody.prepare()
                 opened.assert_not_called()
+                moved.assert_not_called()
+                custody.quiet.assert_not_called()
+
+    def test_quiet_and_presence_families_reach_the_same_fixed_account_descriptor_owner(self):
+        from types import SimpleNamespace
+        selected = self.PRESENCE
+        account = SimpleNamespace(pw_name=selected['name'], pw_uid=selected['uid'],
+            pw_gid=selected['gid'], pw_dir=selected['home'])
+        group = SimpleNamespace(gr_name=selected['name'], gr_gid=selected['gid'])
+        for family in ('056-presence', 'vault-quiet'):
+            for attempt in (1, 999):
+                backup = Path(f'/var/backups/paintedwolf-qualification/{family}-058a2-a{attempt}')
+                custody = owner.Custody(backup, Mock(), account=selected)
+                self.addCleanup(custody.stack.close)
+                with self.subTest(family=family, attempt=attempt), \
+                        patch.object(owner.os, 'geteuid', return_value=0), \
+                        patch.object(owner.pwd, 'getpwnam', return_value=account), \
+                        patch.object(owner.pwd, 'getpwuid', return_value=account), \
+                        patch.object(owner.grp, 'getgrnam', return_value=group), \
+                        patch.object(owner.grp, 'getgrgid', return_value=group), \
+                        patch.object(owner, 'directory', side_effect=LookupError('descriptor boundary')) as opened, \
+                        patch.object(owner, 'move') as moved:
+                    with self.assertRaisesRegex(LookupError, 'descriptor boundary'): custody.prepare()
+                opened.assert_called_once_with(backup, custody.stack, custody.account)
+                self.assertTrue(custody.launch_owned)
                 moved.assert_not_called()
                 custody.quiet.assert_not_called()

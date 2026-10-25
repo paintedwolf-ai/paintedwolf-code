@@ -37,7 +37,7 @@ def selected_account(account=None):
 def backup_pattern(account):
     return (r'/var/backups/paintedwolf-qualification/055-reply-a[2-9][0-9]'
             if account['name'] == 'pwqual055' else
-            r'/var/backups/paintedwolf-qualification/056-presence-058a2-a[1-9][0-9]{0,2}')
+            r'/var/backups/paintedwolf-qualification/(?:056-presence|vault-quiet)-058a2-a[1-9][0-9]{0,2}')
 
 
 def identity(info):
