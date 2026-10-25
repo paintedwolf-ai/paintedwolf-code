@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/pkg/api"
 	"io"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -768,15 +769,21 @@ func (r *programRun) nativeArguments(base map[string]any, contract toolcontract.
 			arguments["capability_request"] = supported
 		}
 	}
-	if len(loopbackPorts) > 0 && contract.Supports(toolcontract.CapabilityLoopbackConnect) {
+	foreignPorts := make([]uint16, 0, len(loopbackPorts))
+	for _, port := range loopbackPorts {
+		if !slices.Contains(r.tc.Local.OwnedLoopbackPorts, port) {
+			foreignPorts = append(foreignPorts, port)
+		}
+	}
+	if len(foreignPorts) > 0 && contract.Supports(toolcontract.CapabilityLoopbackConnect) {
 		request, _ := arguments["capability_request"].(map[string]any)
 		if request == nil {
 			request = map[string]any{}
 			arguments["capability_request"] = request
 		}
 		if _, explicit := request["loopback_connect"]; !explicit {
-			ports := make([]any, len(loopbackPorts))
-			for i, port := range loopbackPorts {
+			ports := make([]any, len(foreignPorts))
+			for i, port := range foreignPorts {
 				ports[i] = int(port)
 			}
 			request["loopback_connect"] = map[string]any{"ports": ports}
