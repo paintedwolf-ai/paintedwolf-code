@@ -40,8 +40,9 @@ def physical(path, directory=False):
 
 
 def schema(connection, required=None):
-    if connection.execute('PRAGMA user_version').fetchone() != (4,):
-        raise ValueError('profile observer does not support this store revision')
+    revision = connection.execute('PRAGMA user_version').fetchone()
+    if revision != (5,):
+        raise ValueError(f'profile observer requires reviewed schema version 5; observed {revision!r}')
     columns = {table: dict(fields) for table, fields in COLUMNS.items()}
     for table, fields in (required or {}).items():
         columns.setdefault(table, {}).update(fields)

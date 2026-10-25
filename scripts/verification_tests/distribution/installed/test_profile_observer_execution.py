@@ -1,6 +1,8 @@
 """Real SQLite WAL reads, bounded identity projections and fail-closed custody."""
 from contextlib import ExitStack
+import hashlib
 import json
+import re
 import os
 from pathlib import Path
 import sqlite3
@@ -29,7 +31,7 @@ class ProfileObserverTests(unittest.TestCase):
         self.path = self.profile / 'store.db'
         self.writer = sqlite3.connect(self.path)
         self.addCleanup(self.writer.close)
-        self.writer.executescript('''PRAGMA journal_mode=WAL; PRAGMA user_version=4;
+        self.writer.executescript('''PRAGMA journal_mode=WAL; PRAGMA user_version=5;
           CREATE TABLE projects(id TEXT);
           CREATE TABLE project_roots(id TEXT,project_id TEXT,path TEXT);
           CREATE TABLE sessions(id TEXT,project_id TEXT,status TEXT,provider_id TEXT,model TEXT,parent_session_id TEXT);
@@ -216,16 +218,92 @@ class ProfileObserverTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             observer.invocations(self.app, SESSION, ['command'])
 
-    def test_shipped_schema_supports_the_fixed_read_projections(self):
+    def reviewed_presence_schema(self):
+        # Exact declarations reviewed in product 837287e5 (schema version 5).
+        # Its only v4→v5 change is in vault_unlocks, outside these six projections.
+        # Health store_revision is a boot counter, not SQLite's schema version.
+        source = Path(__file__).resolve().parents[4] / 'lycaon/internal/db/schema.sql'
+        expected = {
+            'projects': '08a1563ad14e43ffeea5dccf4e2aacbc63ea3db3b6dd9d8942391098949bdbc1',
+            'project_roots': 'f57811324f2908e4cfc92e25dacab8351aab5221469bdd7c3b044cac382169ac',
+            'sessions': '1dbdfb687e9077615c035c0efc444463e25846d7461733eb23e19f81fcf0c7ed',
+            'messages': 'b9b3f5e8009d24cdbce34e6c81dd55794a718a679ae0035e1b04b9ddf56eb7c9',
+            'managed_secrets': '7c632600808d05ac6eb7c7689eee12a0cd9dda4307e1ef00648ef6a15546eb68',
+            'managed_secret_reveals': 'fa607b41c709db3e5ee9ef618c30c0c93d504d9c3c285fe3cb66eb0f58af11d5',
+        }
+        declarations = []
+        for table, digest in expected.items():
+            matches = re.findall(r'CREATE TABLE IF NOT EXISTS ' + table + r' \([\s\S]+?^\) STRICT;',
+                                 source.read_text(), re.MULTILINE)
+            self.assertEqual(len(matches), 1, table)
+            self.assertEqual(hashlib.sha256(matches[0].encode()).hexdigest(), digest, table)
+            declarations.append(matches[0])
         self.writer.close()
         self.path.unlink()
         self.writer = sqlite3.connect(self.path)
         self.addCleanup(self.writer.close)
-        self.writer.execute('PRAGMA journal_mode=WAL')
-        source = Path(__file__).resolve().parents[4] / 'lycaon/internal/db/schema.sql'
-        self.writer.executescript(source.read_text())
-        self.writer.execute('PRAGMA user_version=4')
+        self.writer.executescript('PRAGMA journal_mode=WAL; PRAGMA user_version=5;' + '\n'.join(declarations))
         for path in (self.path, Path(str(self.path) + '-wal'), Path(str(self.path) + '-shm')):
             path.chmod(0o600)
-        self.assertEqual(observer.sessions_for_project(self.app, PROJECT), [])
+
+    def test_reviewed_product_five_supports_every_presence_projection_read_only(self):
+        from linux_release.installed_cases import profile_setup, presence_system
+        from linux_release.installed_input.presence_fixture import NAME
+        self.reviewed_presence_schema()
+        self.fixture.chmod(0o700)
+        stamp = '2026-10-25T00:00:00.000000000Z'
+        self.writer.execute('INSERT INTO projects(id,last_opened_at,created_at) VALUES(?,?,?)',
+                            (PROJECT, stamp, stamp))
+        self.writer.execute('INSERT INTO project_roots(id,project_id,path,label,is_primary,added_at) VALUES(?,?,?,?,1,?)',
+                            (ROOT, PROJECT, str(self.fixture), 'fixture', stamp))
+        self.writer.execute('INSERT INTO sessions(id,project_id,owner_person_id,posture,provider_id,model,created_at,activity_at,updated_at) '
+                            'VALUES(?,?,?,?,?,?,?,?,?)',
+                            (SESSION, PROJECT, MESSAGE, 'build', 'fixture-provider', 'fixture-model', stamp, stamp, stamp))
+        secret, challenge = ('10000000-0000-4000-8000-000000000005', '10000000-0000-4000-8000-000000000006')
+        self.writer.execute('INSERT INTO managed_secrets(id,project_id,created_by_person_id,scope,name,purpose,origin,operation_id,created_at) '
+                            'VALUES(?,?,?,?,?,?,?,?,?)',
+                            (secret, PROJECT, MESSAGE, 'project', NAME, 'Public fixture', 'settings_entered', challenge, stamp))
+        self.writer.execute('INSERT INTO managed_secret_reveals VALUES(?,?,?,?,?,?,?)',
+                            (challenge, secret, 1, 'linux_user_presence', 'main', MESSAGE, stamp))
+        self.writer.commit()
+        before = self.writer.total_changes
+        self.assertEqual(observer.project_for_owned_root(self.app, self.fixture)['project_id'], PROJECT)
+        self.assertEqual(observer.sessions_for_project(self.app, PROJECT)[0]['id'], SESSION)
+        selection = {'onboarding_completed': True, 'coordinator': {'provider_id': 'fixture-provider', 'model': 'fixture-model'},
+                     'model_policy_sha256': 'fixed-public-policy'}
+        with patch.object(profile_setup, 'state', return_value=selection):
+            self.assertEqual(profile_setup.fixture_selection(self.app, self.fixture, PROJECT,
+                'fixture-provider', 'fixture-model')['root_id'], ROOT)
+        audit = presence_system.reveal_audit(self.app, PROJECT)
+        self.assertEqual(audit['secret_id'], secret)
+        self.assertEqual(audit['reveals'][0]['challenge_id'], challenge)
         self.assertEqual(observer.invocations(self.app, SESSION, ['command']), [])
+        with observer._database(self.app) as connection:
+            with self.assertRaises(sqlite3.OperationalError):
+                connection.execute('DELETE FROM managed_secret_reveals')
+        self.assertEqual(self.writer.total_changes, before)
+        self.assertEqual(self.writer.execute('PRAGMA user_version').fetchone(), (5,))
+        self.assertEqual(self.writer.execute('SELECT count(*) FROM managed_secret_reveals').fetchone(), (1,))
+
+    def test_reviewed_product_five_missing_wrong_type_and_view_refuse(self):
+        self.reviewed_presence_schema()
+        for replacement in ('CREATE TABLE sessions(id TEXT)',
+                            'CREATE TABLE sessions(id TEXT,project_id TEXT,status INTEGER,provider_id TEXT,model TEXT)',
+                            'CREATE VIEW sessions AS SELECT * FROM held_sessions'):
+            self.writer.execute('ALTER TABLE sessions RENAME TO held_sessions')
+            self.writer.execute(replacement)
+            self.writer.commit()
+            with self.subTest(replacement=replacement), self.assertRaises(ValueError):
+                observer.sessions_for_project(self.app, PROJECT)
+            self.assertEqual(self.writer.execute('PRAGMA user_version').fetchone(), (5,))
+            self.writer.execute('DROP ' + ('VIEW' if replacement.startswith('CREATE VIEW') else 'TABLE') + ' sessions')
+            self.writer.execute('ALTER TABLE held_sessions RENAME TO sessions')
+            self.writer.commit()
+
+    def test_reviewed_product_unknown_or_previous_schema_refuses_without_mutation(self):
+        self.reviewed_presence_schema()
+        for revision in (4, 6, 99):
+            self.writer.execute('PRAGMA user_version=' + str(revision))
+            with self.subTest(revision=revision), self.assertRaisesRegex(ValueError, 'observed.*' + str(revision)):
+                observer.sessions_for_project(self.app, PROJECT)
+            self.assertEqual(self.writer.execute('PRAGMA user_version').fetchone(), (revision,))
