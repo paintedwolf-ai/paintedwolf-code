@@ -135,10 +135,8 @@ class InstalledApp:
     def __exit__(self, kind, value, traceback): self.stop()
 
     def start(self):
-        from .onboarding import onboard
         self.launch()
         try:
-            onboard(self)
             return self.wait_ready()
         except BaseException as error:
             self.stop()
@@ -189,7 +187,7 @@ class InstalledApp:
                 if self.try_ready(): return self
                 time.sleep(0.1)
             self.require_running()
-            raise CaseUnavailable("installed application did not reach an owned engine API; onboarding or a native interaction driver may be required")
+            raise CaseUnavailable("installed application did not reach an owned engine API without startup interaction")
         except BaseException as error:
             self.stop()
             if isinstance(error, (CaseUnavailable, CaseFailed)):
