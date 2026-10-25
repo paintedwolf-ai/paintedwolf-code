@@ -7,17 +7,29 @@ pub(super) async fn show(parent: &tauri::WebviewWindow, description: &str) -> Re
     let owner = parent.clone();
     let description = description.to_owned();
     parent.run_on_main_thread(move || {
-        let result = owner.gtk_window().map_err(|error| error.to_string()).map(|parent| {
+        let result = owner.gtk_window().map_err(|error| error.to_string()).and_then(|parent| {
             let dialog = gtk::MessageDialog::new(Some(&parent),
                 gtk::DialogFlags::MODAL | gtk::DialogFlags::DESTROY_WITH_PARENT,
                 gtk::MessageType::Info, gtk::ButtonsType::None, TITLE);
+            dialog.set_title(TITLE);
             dialog.set_secondary_text(Some(&description));
             dialog.add_button(QUIT, gtk::ResponseType::Ok);
-            dialog.add_button(KEEP_WORKING, gtk::ResponseType::Cancel);
+            let keep_working = dialog.add_button(KEEP_WORKING, gtk::ResponseType::Cancel);
             dialog.set_default_response(gtk::ResponseType::Cancel);
+            keep_working.grab_focus();
+            let (Some(accessible), Some(parent_accessible)) = (dialog.accessible(), parent.accessible()) else {
+                dialog.close();
+                return Err("Exit confirmation could not bind its accessible modal parent.".to_owned());
+            };
+            accessible.set_role(gtk::atk::Role::Dialog);
+            accessible.set_name(TITLE);
+            if !accessible.add_relationship(gtk::atk::RelationType::SubwindowOf, &parent_accessible) {
+                dialog.close();
+                return Err("Exit confirmation could not record its accessible parent relationship.".to_owned());
+            }
             let response = dialog.run();
             dialog.close();
-            choice(response)
+            Ok(choice(response))
         });
         let _ = send.send(result);
     }).map_err(|error| error.to_string())?;
