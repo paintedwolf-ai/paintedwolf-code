@@ -431,6 +431,25 @@ func verifyWindowsTarget(target windowsTarget, want Result) error {
 
 // Remove deletes a target by handle without reopening an absolute path.
 func Remove(req RemoveRequest) error {
+	if req.LinkSHA256 != "" {
+		root, err := os.OpenRoot(req.Location.Root)
+		if err != nil {
+			return err
+		}
+		defer root.Close()
+		text, err := root.Readlink(req.Location.Rel)
+		if err != nil {
+			return err
+		}
+		digest := sha256.Sum256([]byte(text))
+		if hex.EncodeToString(digest[:]) != req.LinkSHA256 {
+			return fmt.Errorf("symbolic link changed before removal")
+		}
+		if err := root.Remove(req.Location.Rel); err != nil {
+			return err
+		}
+		return SyncDirectory(root, filepath.Dir(req.Location.Rel))
+	}
 	parent, err := openWindowsParent(req.Location, false, true)
 	if err != nil {
 		return err

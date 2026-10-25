@@ -372,6 +372,29 @@ func Remove(req RemoveRequest) error {
 		return err
 	}
 	defer parent.close()
+	var st unix.Stat_t
+	if err := unix.Fstatat(int(parent.file.Fd()), parent.name, &st, unix.AT_SYMLINK_NOFOLLOW); err != nil {
+		return err
+	}
+	if st.Mode&unix.S_IFMT == unix.S_IFLNK {
+		if req.BeforeCommit != nil {
+			return fmt.Errorf("conditional link removal requires LinkSHA256")
+		}
+		if req.LinkSHA256 != "" {
+			text, err := readLinkAt(int(parent.file.Fd()), parent.name)
+			if err != nil {
+				return err
+			}
+			digest := sha256.Sum256([]byte(text))
+			if hex.EncodeToString(digest[:]) != req.LinkSHA256 {
+				return fmt.Errorf("symbolic link changed before removal")
+			}
+		}
+		if err := unix.Unlinkat(int(parent.file.Fd()), parent.name, 0); err != nil {
+			return err
+		}
+		return fsyncFD(int(parent.file.Fd()))
+	}
 	info, err := (targetAt{parent: parent}).Lstat()
 	if err != nil {
 		return err

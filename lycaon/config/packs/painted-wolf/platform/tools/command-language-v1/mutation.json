@@ -290,6 +290,146 @@
       ]
     },
     {
+      "name": "ln",
+      "aliases": [],
+      "family": "mutation",
+      "owner": "filesystem",
+      "argv": "ln [-s] [-f] [-n] [-v] [-r] [--] TARGET LINK",
+      "forms": [
+        {
+          "spellings": [
+            "-s",
+            "--symbolic"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ln-option-s-symbolic",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-f",
+            "--force"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ln-option-f-force",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-n",
+            "-h",
+            "--no-dereference"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ln-option-n-no-dereference",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-v",
+            "--verbose"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ln-option-v-verbose",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-r",
+            "--relative"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ln-option-r-relative",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "TARGET is stored as link text; LINK is a writable path. Without -s, hard links are refused.",
+      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "each-target"
+        }
+      ],
+      "platform_capabilities": [
+        "native filesystem authority",
+        "POSIX mode/uid/gid only when requested and supported",
+        "Windows unsupported capability is explicit"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "ln -s -- input link",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Symbolic links keep TARGET text, are confined at creation and on later reads, and enter source history. Hard links are refused because shared inode identity conflicts with revisions and undo.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/link.go",
+        "tests": [
+          "lycaon/internal/tools/native/mutation/link_test.go"
+        ],
+        "extension": "Publish the link entry through the shared mutation journal and source ledger.",
+        "evidence_kind": "new command behavior and adjacent regression references"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "ln-operands-valid",
+        "ln-rejection",
+        "ln-option-s-symbolic",
+        "ln-option-f-force",
+        "ln-option-n-no-dereference",
+        "ln-option-v-verbose",
+        "ln-option-r-relative"
+      ]
+    },
+    {
       "name": "rm",
       "aliases": [],
       "family": "mutation",

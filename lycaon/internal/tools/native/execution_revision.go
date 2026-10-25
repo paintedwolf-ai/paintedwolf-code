@@ -161,6 +161,11 @@ func (e ExecutionRevisions) Verify(ctx context.Context, tctx tools.ToolContext, 
 func captureRevision(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved, role toolcontract.ExecutionRevisionRole) (sourceview.Text, toolcontract.ExecutionRevision, error) {
 	root, rel := revisionLocation(resolved)
 	revision := toolcontract.ExecutionRevision{Role: role, Basis: toolcontract.CapturedRevision, RootID: root, Path: rel}
+	if role == toolcontract.DestinationRevision {
+		if link, linked, err := linkRevision(resolved, revision); err != nil || linked {
+			return sourceview.Text{}, link, err
+		}
+	}
 	tool, access := "read", sourceview.AccessRead
 	if role == toolcontract.DestinationRevision {
 		tool, access = "write", sourceview.AccessMutate
@@ -188,6 +193,32 @@ func captureRevision(ctx context.Context, tctx tools.ToolContext, resolved proje
 		revision.DiskSHA256 = st.Disk.RawSHA256()
 	}
 	return st, revision, revision.Validate()
+}
+
+func linkRevision(resolved projectpaths.Resolved, revision toolcontract.ExecutionRevision) (toolcontract.ExecutionRevision, bool, error) {
+	root, err := os.OpenRoot(resolved.Root.Path)
+	if err != nil {
+		return toolcontract.ExecutionRevision{}, false, err
+	}
+	defer root.Close()
+	info, err := root.Lstat(filepath.FromSlash(resolved.ScopeRel))
+	if errors.Is(err, os.ErrNotExist) {
+		return toolcontract.ExecutionRevision{}, false, nil
+	}
+	if err != nil {
+		return toolcontract.ExecutionRevision{}, false, err
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		return toolcontract.ExecutionRevision{}, false, nil
+	}
+	target, err := root.Readlink(filepath.FromSlash(resolved.ScopeRel))
+	if err != nil {
+		return toolcontract.ExecutionRevision{}, false, err
+	}
+	digest := textfile.SHA256([]byte(target))
+	revision.Mode, revision.Representation = toolcontract.PublishedDiskRevision, toolcontract.OriginalEncodedBytes
+	revision.DiskSHA256, revision.ContentSHA256, revision.ContentBytes = digest, digest, int64(len(target))
+	return revision, true, revision.Validate()
 }
 
 // revisionLocation names a path by its attached root, or absolutely when it

@@ -246,7 +246,7 @@ func (inv *invocation) directoriesUnder(abs string) (map[string]bool, error) {
 }
 
 // refuseLinks stops cp -a before copying a tree that holds a symbolic link:
-// -a copies links as links, and no owner creates links.
+// this copy operation has not admitted link entries for recursive publication.
 func (inv *invocation) refuseLinks(operand, abs string) error {
 	maximum, seen := inv.owners.limit("recursive_mutation_files"), int64(0)
 	return filepath.WalkDir(abs, func(walked string, entry fs.DirEntry, err error) error {
@@ -257,7 +257,7 @@ func (inv *invocation) refuseLinks(operand, abs string) error {
 			return limitRefusal("recursive_mutation_files", "files", maximum, seen)
 		}
 		if entry.Type()&fs.ModeSymlink != 0 {
-			return inv.unsupportedForm(displayed(walked, abs, operand), "cp -a preserves symbolic links as links; native link creation is unavailable, so use cp -R -p to copy the link targets")
+			return inv.unsupportedForm(displayed(walked, abs, operand), "cp -a cannot preserve symbolic links here; use cp -R -p to copy the link targets or ln -s to recreate a link")
 		}
 		return nil
 	})

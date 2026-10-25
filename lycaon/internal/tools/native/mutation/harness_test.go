@@ -63,6 +63,7 @@ type harness struct {
 	pins    *pinLog
 	program Program
 	service *projectsource.SourceMutationService
+	walk    *sourceledger.Walk
 	project *project.Project
 }
 
@@ -110,7 +111,7 @@ func newHarness(t *testing.T, files map[string]string) *harness {
 	paths, err := projectpaths.NewProgramPaths(t.Context(), boundary, tc, "")
 	testutil.FailErr(t, "bind program paths", err)
 	p := &project.Project{ID: "p1", Roots: []project.Root{{ID: "r1", ProjectID: "p1", Path: root, IsPrimary: true}}}
-	return &harness{t: t, db: sqlDB, root: root, tc: tc, owners: owners, pins: pins, program: Program{Paths: paths, Barrier: &native.PublicationBarrier{}}, service: service, project: p}
+	return &harness{t: t, db: sqlDB, root: root, tc: tc, owners: owners, pins: pins, program: Program{Paths: paths, Barrier: &native.PublicationBarrier{}}, service: service, walk: ledger.Walk, project: p}
 }
 
 // mutationBoundary admits every operation the frontend reaches for the default

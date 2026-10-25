@@ -23,24 +23,31 @@ type versionSpec struct {
 	TS      time.Time
 }
 
+func entryState(kind, sha string) string {
+	if kind == EntryKindDirectory {
+		return "directory"
+	}
+	if sha == "" {
+		return "unresolved"
+	}
+	if kind == EntryKindLink {
+		return "link"
+	}
+	return "content"
+}
+
 func (s *Store) insertVersion(ctx context.Context, q *db.Queries, spec versionSpec) (string, error) {
 	state := spec.State
 	if state == "" {
-		if spec.EntryKind == EntryKindDirectory {
-			state = "directory"
-		} else if spec.SHA256 == "" {
-			state = "unresolved"
-		} else {
-			state = "content"
-		}
+		state = entryState(spec.EntryKind, spec.SHA256)
 	}
-	// Content state requires a content identity.
-	if state == "content" && spec.SHA256 == "" {
+	// Retained content and link text require a content identity.
+	if (state == "content" || state == "link") && spec.SHA256 == "" {
 		state = "unresolved"
 	}
 	captureState, captureReason := "not_applicable", ""
 	switch state {
-	case "content":
+	case "content", "link":
 		captureState = "metadata_only"
 		captureReason = "content_not_captured"
 		if spec.Size > MaxRevisionContentBytes {

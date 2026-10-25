@@ -55,7 +55,7 @@ type Owners struct {
 type utility func(*invocation) error
 
 var utilities = map[string]utility{
-	"rm": runRm, "rmdir": runRmdir, "mv": runMv, "cp": runCp, "mkdir": runMkdir,
+	"rm": runRm, "rmdir": runRmdir, "mv": runMv, "cp": runCp, "ln": runLn, "mkdir": runMkdir,
 	"touch": runTouch, "chmod": runChmod, "chown": runChown, "tee": runTee, "mktemp": runMktemp,
 	"tar": runTar, "zip": runZip, "unzip": runUnzip, "gzip": runGzip, "gunzip": runGunzip, "zcat": runZcat,
 	"edit": runEdit, "replace-lines": runReplaceLines, "code-rewrite": runCodeRewrite,

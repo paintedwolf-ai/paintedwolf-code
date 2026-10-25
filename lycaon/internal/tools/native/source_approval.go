@@ -21,7 +21,7 @@ func reviewAgentMutation(ctx context.Context, tc tools.ToolContext, m agentMutat
 		return err
 	}
 	verifyTarget := verifyMutationSnapshot
-	if m.Op == api.SourceChangeOpDelete || m.Op == api.SourceChangeOpRename {
+	if m.Op == api.SourceChangeOpDelete || m.Op == api.SourceChangeOpRename || m.IsLink {
 		// A removed or replaced entry is the entry itself, never a link's target.
 		verifyTarget = verifyEntrySnapshot
 	}

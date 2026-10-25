@@ -152,6 +152,10 @@ func (s *Service) applyFile(ctx context.Context, o *Operation, index int, revers
 	if before.Path != after.Path {
 		op = api.SourceChangeOpRename
 	}
+	entryKind := sourceledger.EntryKindFile
+	if before.State == "link" || after.State == "link" {
+		entryKind = sourceledger.EntryKindLink
+	}
 	operationID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(fmt.Sprintf("%s/%s/%d", o.AttemptID, cause, index))).String()
 	loc, err := location(f.RootPath, after.Path)
 	if err != nil {
@@ -159,7 +163,7 @@ func (s *Service) applyFile(ctx context.Context, o *Operation, index int, revers
 	}
 	effect := sourceeffect.Plan{
 		Record: sourceledger.RecordInput{
-			RecordLocation: sourceledger.RecordLocation{RootID: after.RootID, Path: after.Path, EntryKind: sourceledger.EntryKindFile}, ProjectID: o.ProjectID, BranchID: f.BranchID,
+			RecordLocation: sourceledger.RecordLocation{RootID: after.RootID, Path: after.Path, EntryKind: entryKind}, ProjectID: o.ProjectID, BranchID: f.BranchID,
 			FileID: f.FileID, DerivedFromVersionID: after.ID,
 			Op: op, Origin: api.SourceChangeOriginUser, PersonID: o.PersonID, OperationID: operationID,
 			BatchID: o.AttemptID, Cause: cause, Before: before.Content, After: after.Content,

@@ -193,7 +193,7 @@ func removeAgentPath(ctx context.Context, tctx tools.ToolContext, target mutatio
 		return err
 	}
 	mutation := agentMutation{Op: api.SourceChangeOpDelete, AbsPath: target.Abs,
-		Before: before.content, BeforeSHA256: before.sha256, BeforeSize: before.size, IsDir: before.isDir}
+		Before: before.content, BeforeSHA256: before.sha256, BeforeSize: before.size, IsDir: before.isDir, IsLink: before.isLink}
 	reportMutationIntent(tctx, mutation, target.Location, fseffect.Location{}, api.AgentIntentOperationDelete)
 	if err := reviewAgentMutation(ctx, tctx, mutation, target.Location, fseffect.Location{}, false); err != nil {
 		return err
@@ -220,7 +220,9 @@ func discardAgentEntry(ctx context.Context, tctx tools.ToolContext, target mutat
 		return err
 	}
 	remove := fseffect.RemoveRequest{Location: target.Location}
-	if mutation.BeforeSHA256 != "" {
+	if mutation.IsLink {
+		remove.LinkSHA256 = mutation.BeforeSHA256
+	} else if mutation.BeforeSHA256 != "" {
 		remove.BeforeCommit = func(current fseffect.Target) error {
 			f, openErr := current.Open()
 			if openErr != nil {
@@ -300,8 +302,7 @@ func renameAgentPath(ctx context.Context, tctx tools.ToolContext, from, to mutat
 	return finishAgentMutation(ctx, tctx, mutation, journal, rename(from.Location.Root, from.Location.Rel, to.Location.Rel))
 }
 
-// captureRemovedEntry reads the entry itself: a symbolic link is removed as a
-// link, so it carries no content of its own.
+// captureRemovedEntry reads the entry itself, including literal link text.
 func captureRemovedEntry(loc fseffect.Location) (agentFileEvidence, error) {
 	info, err := os.Lstat(filepath.Join(loc.Root, loc.Rel))
 	if os.IsNotExist(err) {
@@ -311,7 +312,17 @@ func captureRemovedEntry(loc fseffect.Location) (agentFileEvidence, error) {
 		return agentFileEvidence{}, err
 	}
 	if info.Mode()&os.ModeSymlink != 0 {
-		return agentFileEvidence{exists: true}, nil
+		root, openErr := os.OpenRoot(loc.Root)
+		if openErr != nil {
+			return agentFileEvidence{}, openErr
+		}
+		defer root.Close()
+		target, readErr := root.Readlink(loc.Rel)
+		if readErr != nil {
+			return agentFileEvidence{}, readErr
+		}
+		content := []byte(target)
+		return agentFileEvidence{exists: true, isLink: true, content: content, sha256: textfile.SHA256(content), size: int64(len(content))}, nil
 	}
 	return captureAgentFileAt(loc)
 }
@@ -406,7 +417,7 @@ func prepareAgentMutation(ctx context.Context, tctx tools.ToolContext, mutation 
 }
 
 func finishAgentMutation(ctx context.Context, tctx tools.ToolContext, mutation agentMutation, journal sourceeffect.Pending, effectErr error) error {
-	if effectErr == nil && !mutation.IsDir && mutation.Op != api.SourceChangeOpDelete {
+	if effectErr == nil && !mutation.IsDir && !mutation.IsLink && mutation.Op != api.SourceChangeOpDelete {
 		tctx.RecordModelAuthoredCredentials(ctx, mutation.AbsPath, mutation.After)
 	}
 	if journal != nil {
@@ -434,11 +445,13 @@ type agentMutation struct {
 	BeforeSize     int64
 	AfterSize      int64
 	IsDir          bool
+	IsLink         bool
 }
 
 type agentFileEvidence struct {
 	exists  bool
 	isDir   bool
+	isLink  bool
 	content []byte
 	sha256  string
 	size    int64
@@ -525,6 +538,8 @@ func agentCommitInputs(tctx tools.ToolContext, m agentMutation) (sourceledger.Re
 		value := true
 		isDir = &value
 		in.EntryKind = sourceledger.EntryKindDirectory
+	} else if m.IsLink {
+		in.EntryKind = sourceledger.EntryKindLink
 	}
 	change := sourcefeed.Change{
 		ProjectID:     tctx.Identity.ProjectID,

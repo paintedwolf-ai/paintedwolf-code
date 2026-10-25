@@ -167,6 +167,22 @@ func observeAgentEffect(effect *sourceeffect.Plan) error {
 	if effect.MetadataOnly {
 		return fmt.Errorf("metadata effect has no durable completion marker")
 	}
+	if effect.Record.EntryKind == sourceledger.EntryKindLink && effect.Record.Op != api.SourceChangeOpDelete {
+		root, err := os.OpenRoot(effect.Target.Root)
+		if err != nil {
+			return err
+		}
+		defer root.Close()
+		target, err := root.Readlink(effect.Target.Rel)
+		if err != nil {
+			return err
+		}
+		digest := sha256.Sum256([]byte(target))
+		if hex.EncodeToString(digest[:]) != effect.Record.AfterSHA256 {
+			return fmt.Errorf("link target differs from the prepared effect")
+		}
+		return nil
+	}
 	if effect.Record.Op == api.SourceChangeOpDelete {
 		file, err := fseffect.OpenRead(effect.Target)
 		if errors.Is(err, os.ErrNotExist) {

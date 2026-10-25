@@ -209,6 +209,9 @@ func (s *Store) recordEffect(ctx context.Context, q *db.Queries, operationID str
 		}
 		afterSize = parent.ByteSize
 	}
+	if state == "content" && in.EntryKind == EntryKindLink {
+		state = "link"
+	}
 	afterVersionID, err := s.insertVersion(ctx, q, versionSpec{
 		FileID: fileID, ProjectID: in.ProjectID, BranchID: in.BranchID,
 		ParentVersionID:      parentVersionID,
