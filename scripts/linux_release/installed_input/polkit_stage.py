@@ -22,8 +22,13 @@ def target(value):
     if native['locked_hint'] or native['locker_active']:
         raise ValueError('Polkit input requires the captured unlocked graphical session')
     pending = value['pending']
-    if not isinstance(pending, dict) or set(pending) != {'attempt', 'agent', 'check_serial', 'begin_serial'}:
+    if not isinstance(pending, dict) or set(pending) != {
+            'attempt', 'agent', 'check_serial', 'begin_serial', 'native_session'}:
         raise ValueError('Polkit input has no exact live transaction observation')
+    root_session = session_wire.native_session(pending['native_session'])
+    session_wire.same_session(native, root_session)
+    if root_session['locked_hint'] or root_session['locker_active']:
+        raise ValueError('Polkit input requires the independently root-observed session to be unlocked')
     attempt = validate(pending['attempt'])
     if attempt['phase'] != 'interactive' or attempt['transport'] != 'pending':
         raise ValueError('Polkit input requires the actual pending interactive check')

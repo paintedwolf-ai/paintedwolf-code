@@ -23,7 +23,8 @@ def target():
     shell = native['authorities']['shell']
     value['pending'] = {'attempt': attempt, 'agent': {'unique': ':1.4', 'path': '/agent',
         'process': {'pid': shell['pid'], 'parent_pid': 1, 'start_time_ticks': shell['start_time_ticks'],
-                    'uid': ACCOUNT['uid']}}, 'check_serial': 11, 'begin_serial': 12}
+                    'uid': ACCOUNT['uid']}}, 'check_serial': 11, 'begin_serial': 12,
+                    'native_session': copy.deepcopy(native)}
     return value
 
 
@@ -53,6 +54,10 @@ class PolkitStageTests(unittest.TestCase):
         self.assertEqual(stage.target(target()), target())
         value = target()
         value['session']['locked_hint'] = True
+        with self.assertRaises(ValueError):
+            stage.target(value)
+        value = target()
+        value['pending']['native_session']['locked_hint'] = True
         with self.assertRaises(ValueError):
             stage.target(value)
         for field in ('password', 'pending'):

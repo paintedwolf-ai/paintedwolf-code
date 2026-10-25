@@ -82,7 +82,7 @@ class Endpoint:
             self.native = NativeSessionObserver(request['session'], reader=reader,
                 expected_uid=uid, deadline=self.deadline)
             self.initial = self.native.initial
-            self._current()
+            self._current(unlocked=True)
             result = {'monitoring': True}
         elif operation == 'bind':
             if self.bound:
@@ -100,17 +100,20 @@ class Endpoint:
             self._current()
             result = self.monitor.observe()
         self._current()
+        if operation != 'start' and result is not None:
+            result = {**result, 'native_session': self.current_session}
         if time.monotonic() >= self.deadline:
             raise ValueError('Polkit root observation outlived its fixed private transport')
         return {**{key: request[key] for key in ENVELOPE}, 'result': result}
 
-    def _current(self):
+    def _current(self, *, unlocked=False):
         if self.native is None or self.runtime is None:
             raise ValueError('Polkit root observer has no actual installed session binding')
         current = self.native.observe(deadline=self.deadline)
         session_wire.same_session(self.initial, current)
-        if current['locked_hint'] or current['locker_active']:
+        if unlocked and (current['locked_hint'] or current['locker_active']):
             raise ValueError('Polkit root observer selected session is locked')
+        self.current_session = current
         return self.runtime.observe()
 
     def close(self):
