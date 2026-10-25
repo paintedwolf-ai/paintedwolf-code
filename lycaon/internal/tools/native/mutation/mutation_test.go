@@ -364,3 +364,32 @@ func TestTeeDestinationsAfterARedirectInOneExecution(t *testing.T) {
 		t.Fatalf("pins %+v", pins)
 	}
 }
+
+func TestEditReplaceLinesCodeRewriteAndSourceCapture(t *testing.T) {
+	h := newHarness(t, map[string]string{
+		"file.txt":   "alpha\nbeta\ngamma\n",
+		"main.go":    "package p\n\nfunc f() int {\n\treturn 1 + 2\n}\n",
+		"script.sh":  "echo ok\n",
+	})
+	if r := h.run("", "edit", "--path", "file.txt", "--old-string", "beta", "--new-string", "BETA"); r.err != nil || r.result.Status != 0 || h.read("file.txt") != "alpha\nBETA\ngamma\n" {
+		t.Fatalf("edit: %+v %v %q", r.result, r.err, h.read("file.txt"))
+	}
+	if r := h.run("", "replace-lines", "--path", "file.txt", "--start", "2", "--end", "3", "--content", "two\nthree"); r.err != nil || r.result.Status != 0 || h.read("file.txt") != "alpha\ntwo\nthree\n" {
+		t.Fatalf("replace-lines: %+v %v %q", r.result, r.err, h.read("file.txt"))
+	}
+	if r := h.run("", "code-rewrite", "--path", "main.go", "--pattern", "1 + 2", "--rewrite", "3", "--dry-run"); r.err != nil || r.result.Status != 0 || !strings.Contains(h.read("main.go"), "1 + 2") {
+		t.Fatalf("code-rewrite --dry-run: %+v %v %q", r.result, r.err, h.read("main.go"))
+	}
+	if r := h.run("", "code-rewrite", "--path", "main.go", "--pattern", "1 + 2", "--rewrite", "3"); r.err != nil || r.result.Status != 0 || !strings.Contains(h.read("main.go"), "return 3") {
+		t.Fatalf("code-rewrite: %+v %v %q", r.result, r.err, h.read("main.go"))
+	}
+	inv := h.invocation()
+	captured, err := h.publication().Capture(t.Context(), inv, commandprogram.SourceCaptureRequest{
+		Path:           "script.sh",
+		Representation: toolcontract.UTF8SourceBytes,
+	})
+	testutil.FailErr(t, "capture source script", err)
+	if string(captured.Bytes) != "echo ok\n" || captured.Pin.SourceID != "script.sh" {
+		t.Fatalf("captured source = %+v", captured)
+	}
+}
