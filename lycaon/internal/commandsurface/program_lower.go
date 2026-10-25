@@ -142,7 +142,15 @@ func (c *programCompiler) parts(parts []syntax.WordPart) []WordNode {
 	return out
 }
 func (c *programCompiler) parameter(p *syntax.ParamExp, loc SyntaxLocation) ParameterPart {
-	out := ParameterPart{SyntaxLocation: loc, Name: strings.Clone(p.Param.Value), Length: p.Length}
+	name := strings.Clone(p.Param.Value)
+	if p.Index != nil {
+		if w, ok := p.Index.(*syntax.Word); ok && len(w.Parts) == 1 {
+			if lit, ok := w.Parts[0].(*syntax.Lit); ok {
+				name += "[" + strings.Clone(lit.Value) + "]"
+			}
+		}
+	}
+	out := ParameterPart{SyntaxLocation: loc, Name: name, Length: p.Length}
 	operand := func(w *syntax.Word) *DeferredWord {
 		word := c.word(w)
 		if w == nil {

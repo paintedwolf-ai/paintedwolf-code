@@ -1,6 +1,6 @@
 // Package hostenv is the command frontend for the invocation environment,
 // command discovery and host identity utilities: env, printenv, which,
-// command, type, pwd, uname, whoami, id, hostname and date. Each binds argv
+// command, type, pwd, uname, nproc, whoami, id, hostname and date. Each binds argv
 // through the catalog and answers from the request's frozen environment, the
 // shared launch lookup, the invocation's logical paths and injected host
 // facts. No utility launches a process or reads ambient shell state.
@@ -40,7 +40,7 @@ type utility func(*invocation) error
 var utilities = map[string]utility{
 	"env": runEnv, "printenv": runPrintenv,
 	"which": runWhich, "command": runCommand, "type": runType,
-	"pwd": runPwd, "uname": runUname, "whoami": runWhoami, "id": runID, "hostname": runHostname, "date": runDate,
+	"pwd": runPwd, "uname": runUname, "nproc": runNproc, "whoami": runWhoami, "id": runID, "hostname": runHostname, "date": runDate,
 }
 
 // NewOwners binds the frozen catalog. Host and Clock are required.
@@ -124,8 +124,17 @@ func (d dispatcher) Invoke(ctx context.Context, request commandprogram.Operation
 	return prepared.InvokeOwner(ctx, d.tc, d.nested, d.bound, streams)
 }
 
+func (d dispatcher) EffectMode(request commandprogram.OperationRequest) string {
+	prepared, err := d.owners.Prepare(request)
+	if err != nil {
+		return ""
+	}
+	return prepared.Mode
+}
+
 // Prepared is one bound utility invocation; it performs no query until run.
 type Prepared struct {
+	Mode    string
 	Argv    commandprogram.BoundArgv
 	Review  commandprogram.ArgvReview
 	owners  *Owners
@@ -152,7 +161,20 @@ func (o *Owners) Prepare(request commandprogram.OperationRequest) (Prepared, err
 	if err != nil {
 		return Prepared{}, nativeutility.ArgvRejection(err, spec)
 	}
-	return Prepared{Argv: bound, Review: bound.Review(spec.Name), owners: o, request: request, spec: spec, run: utilities[command]}, nil
+	mode := ""
+	if len(spec.Effects) > 0 {
+		mode = spec.Effects[0].Mode
+	}
+	if command == "env" {
+		mode = "inspect"
+		for _, op := range bound.Operands() {
+			if idx := strings.IndexByte(op.Value, '='); idx <= 0 {
+				mode = "dispatch"
+				break
+			}
+		}
+	}
+	return Prepared{Mode: mode, Argv: bound, Review: bound.Review(spec.Name), owners: o, request: request, spec: spec, run: utilities[command]}, nil
 }
 
 // InvokeOwner runs the bound utility once. Stdout is written only after the

@@ -57,43 +57,105 @@ func TestSedGolden(t *testing.T) {
 		{`sed -E 's/(a|ab)(c|bcd)(d*)/[\1|\2|\3]/'`, "abcd\n", "[ab|c|d]\n", 0},
 		{`sed 's/a\tb/X/'`, "a\tb\n", "X\n", 0},
 		{"sed 's/é/e/g'", "café é\n", "cafe e\n", 0},
+		{"sed '1!G;h;$!d'", lines, "d\nc\nb\na\n", 0},
 	})
 }
 
-func TestSedRefusesOutsideTheCatalogBeforeReading(t *testing.T) {
+func TestSedRefusesBeforeReading(t *testing.T) {
 	h := sedHarness(t)
 	for _, c := range []struct{ source, code string }{
-		{"sed 'w out'", "COMMAND_OPTION_UNSUPPORTED"},
-		{"sed 's/a/b/w out'", "COMMAND_OPTION_UNSUPPORTED"},
+		{"sed 'e date'", "COMMAND_OPTION_UNSUPPORTED"},
 		{"sed 's/a/b/e'", "COMMAND_OPTION_UNSUPPORTED"},
-		{"sed 's/a/b/I'", "COMMAND_OPTION_UNSUPPORTED"},
-		{"sed h", "COMMAND_OPTION_UNSUPPORTED"},
-		{"sed 'y/a/b/'", "COMMAND_OPTION_UNSUPPORTED"},
-		{"sed 'b end'", "COMMAND_OPTION_UNSUPPORTED"},
-		{"sed 'r file'", "COMMAND_OPTION_UNSUPPORTED"},
-		{"sed 1~2d", "COMMAND_OPTION_UNSUPPORTED"},
-		{"sed q5", "COMMAND_OPTION_UNSUPPORTED"},
-		{"sed 's//x/'", "COMMAND_OPTION_UNSUPPORTED"},
-		{"sed -i.bak s/a/b/ f", "COMMAND_OPTION_UNSUPPORTED"},
+		{"sed 's/a/b/M'", "COMMAND_OPTION_UNSUPPORTED"},
 		{"sed -i s/a/b/", "COMMAND_OPERAND_INVALID"},
 		{"sed -i s/a/b/ -", "COMMAND_OPERAND_INVALID"},
-		{"sed -f script", "COMMAND_OPTION_UNSUPPORTED"},
+		{"sed -f missing-script", "COMMAND_OPERAND_INVALID"},
+		{"sed -f -", "COMMAND_OPERAND_INVALID"},
 		{"sed 's/a/b'", "COMMAND_OPERAND_INVALID"},
 		{`sed 's/a/\1/'`, "COMMAND_OPERAND_INVALID"},
 		{"sed '0d'", "COMMAND_OPERAND_INVALID"},
 		{"sed '{p'", "COMMAND_OPERAND_INVALID"},
 		{"sed '}'", "COMMAND_OPERAND_INVALID"},
 		{"sed 'pq'", "COMMAND_OPERAND_INVALID"},
-		{"sed '1,2a x'", "COMMAND_OPERAND_INVALID"},
+		{"sed 'b nowhere'", "COMMAND_OPERAND_INVALID"},
 		{"sed 's/[/x/'", "COMMAND_OPERAND_INVALID"},
+		{"sed 's//x/'", "COMMAND_OPERAND_INVALID"},
+		{"sed ':a;ba'", "COMMAND_LIMIT_EXCEEDED"},
 		{"sed", "COMMAND_OPERAND_INVALID"},
 	} {
 		h.seed("f", "a\n")
 		h.run(c.source, "a\n").expectRefusal(t, c.source, c.code)
 	}
+	h.seed("writes.sed", "w out\n")
+	h.run("sed -f writes.sed", "a\n").expectRefusal(t, "w from a script file", "COMMAND_NATIVE_FORM_UNSUPPORTED")
 	unwired := newHarness(t)
 	unwired.owners.Regex = nil
 	unwired.run("sed p", "a\n").expectRefusal(t, "no shared engine", "COMMAND_PLATFORM_UNAVAILABLE")
+}
+
+// GNU forms beyond the POSIX core: script files, separate streams, NUL
+// records, w files and in-place backups, all through pinned publication.
+func TestSedGNUForms(t *testing.T) {
+	h := sedHarness(t)
+	h.seed("one", "a\nb\n")
+	h.seed("two", "c\nd\n")
+	h.seed("script.sed", "s/a/A/\n$!d\n")
+	h.run("sed -f script.sed -e 's/$/!/' one two", "").expectOutput(t, "-f then -e", "d!\n", 0)
+	h.run("sed -s -n '$p' one two", "").expectOutput(t, "-s", "b\nd\n", 0)
+	h.run("sed -sn 1F one two", "").expectOutput(t, "F names files", "one\ntwo\n", 0)
+	h.run("sed -z s/b/B/", "a\x00b\x00").expectOutput(t, "-z", "a\x00B\x00", 0)
+	h.run("sed q3", "x\ny\n").expectOutput(t, "exit code", "x\n", 3)
+	r := h.run("sed -n '/a/w kept\n/c/p' one two", "")
+	r.expectOutput(t, "w file", "c\n", 0)
+	if h.read("kept") != "a\n" {
+		t.Fatalf("kept %q", h.read("kept"))
+	}
+	h.seed("ins", "INSERTED\n")
+	h.run("sed '1r ins' one", "").expectOutput(t, "r file", "a\nINSERTED\nb\n", 0)
+	h.seed("f", "a\n")
+	h.run("sed -i.bak s/a/b/ f", "").expectOutput(t, "GNU backup suffix", "", 0)
+	if h.read("f") != "b\n" || h.read("f.bak") != "a\n" {
+		t.Fatalf("f %q f.bak %q", h.read("f"), h.read("f.bak"))
+	}
+	h.seed("dir/g", "x\n")
+	h.run("sed -i'orig-*' 's/x/y/w /dev/stdout' dir/g", "").expectOutput(t, "star backup and stdout", "y\n", 0)
+	if h.read("dir/g") != "y\n" || h.read("dir/orig-g") != "x\n" {
+		t.Fatalf("g %q backup %q", h.read("dir/g"), h.read("dir/orig-g"))
+	}
+	h.seed("bsd", "a\n")
+	h.run("sed -i .orig s/a/b/ bsd", "").expectOutput(t, "BSD separate suffix", "", 0)
+	if h.read("bsd") != "b\n" || h.read("bsd.orig") != "a\n" {
+		t.Fatalf("bsd %q bsd.orig %q", h.read("bsd"), h.read("bsd.orig"))
+	}
+	h.seed("bsdI", "a\n")
+	h.run("sed -I .k -u s/a/c/ bsdI", "").expectOutput(t, "BSD -I", "", 0)
+	if h.read("bsdI") != "c\n" || h.read("bsdI.k") != "a\n" {
+		t.Fatalf("bsdI %q bsdI.k %q", h.read("bsdI"), h.read("bsdI.k"))
+	}
+	h.seed("gnu", "p\n")
+	h.run("sed -i p gnu", "").expectOutput(t, "GNU script after -i", "", 0)
+	if h.read("gnu") != "p\np\n" {
+		t.Fatalf("gnu %q", h.read("gnu"))
+	}
+	modes := map[string]string{"sed p": "stream-script", "sed -i p f": "-i", "sed -I x p f": "-i", "sed 'w out'": "w-command", "sort -o x": "-o", "uniq a b": "OUTPUT-supplied", "uniq": "stdin-input-only", "tac": ""}
+	for source, mode := range modes {
+		words := strings.Fields(strings.ReplaceAll(source, "'", ""))
+		if source == "sed 'w out'" {
+			words = []string{"sed", "w out"}
+		}
+		argv := make(commandprogram.Fields, len(words))
+		for i, word := range words {
+			argv[i] = commandprogram.Field{Value: word}
+		}
+		request := commandprogramRequest("mode")
+		request.OperationID, request.Argv = words[0], argv
+		request.Invocation.Kind = toolcontract.ProgramChildInvocation
+		request.Statement.Span = request.Invocation.Span
+		prepared, err := h.owners.Prepare(request)
+		if err != nil || prepared.Mode != mode {
+			t.Fatalf("%s mode %q, %v; want %q", source, prepared.Mode, err, mode)
+		}
+	}
 }
 
 func TestSedReadsPinnedFilesAsOneStream(t *testing.T) {
@@ -129,6 +191,7 @@ func TestSedDifferentialAgainstHost(t *testing.T) {
 		{"sed -e s/a/b/ -e s/b/c/", []string{"-e", "s/a/b/", "-e", "s/b/c/"}},
 		{`sed -E 's/(a|al)(l|lpha)(.*)/[\1|\2|\3]/'`, []string{"-E", `s/(a|al)(l|lpha)(.*)/[\1|\2|\3]/`}},
 		{`sed 's/\(a\)\(.*\)\1/<\2>/'`, []string{`s/\(a\)\(.*\)\1/<\2>/`}},
+		{"sed '1!G;h;$!d'", []string{"1!G;h;$!d"}},
 	} {
 		cmd := exec.Command(hostTool(t, "sed"), c.argv...)
 		cmd.Env = []string{"LC_ALL=C", "PATH=/usr/bin:/bin"}

@@ -1,0 +1,30 @@
+oar: '1.0'
+id: TOOL_OWNER_INTERRUPTED
+kind: policy
+anchor: tool.rejected
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.rejection_reason
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "TOOL_OWNER_INTERRUPTED"
+effect: block
+copy:
+  what: The subsystem owner stopped the action before it settled.
+  cause: '{% if paintedwolf.rejection_reason %}{{ paintedwolf.rejection_reason }}{% else %}The active program or session supervision ended before the action settled.{% endif %}'
+  why: An interrupted action cannot admit new child work or claim completion.
+  fix: Inspect any earlier completed effects and active job state before submitting a new action.
+  instead: Branch on Code TOOL_OWNER_INTERRUPTED; inspect completed effects before starting new work
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:tool_owner
+x-paintedwolf-message: Subsystem owner interrupted the action before settlement
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    profile: implement
+    reason: program admission closed
+    tool: command
+  expect_contains:
+  - 'Code: TOOL_OWNER_INTERRUPTED'
+  - completed effects

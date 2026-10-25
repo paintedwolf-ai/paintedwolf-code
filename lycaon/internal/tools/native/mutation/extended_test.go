@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -368,6 +369,55 @@ func TestRecursiveMutationCapsAtBoundaryAndOnePast(t *testing.T) {
 					t.Fatal("refused recursive mutation had an effect")
 				}
 			})
+		}
+	}
+}
+
+func TestTarAndGzipInteroperateWithGNU(t *testing.T) {
+	var gtar string
+	for _, candidate := range []string{"/opt/homebrew/bin/gtar", "/usr/local/bin/gtar"} {
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+			gtar = candidate
+			break
+		}
+	}
+	if gtar == "" {
+		var err error
+		if gtar, err = exec.LookPath("gtar"); err != nil {
+			t.Skip("no gtar on this host")
+		}
+	}
+	runGTar := func(dir string, args ...string) string {
+		cmd := exec.Command(gtar, args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "LC_ALL=C", "LANG=C")
+		out, err := cmd.Output()
+		testutil.FailErr(t, "gtar "+strings.Join(args, " "), err)
+		return string(out)
+	}
+	h := newHarness(t, map[string]string{"proj/a.txt": "alpha\n", "proj/sub/b.txt": "beta\n"})
+	if r := h.run("", "tar", "-c", "-f", "native.tar", "proj"); r.err != nil {
+		t.Fatalf("tar -cf: %v", r.err)
+	}
+	wantList := runGTar(h.root, "-t", "-f", "native.tar")
+	if r := h.run("", "tar", "-t", "-f", "native.tar"); r.err != nil || r.stdout != wantList {
+		t.Fatalf("tar -tf:\n got %q\nwant %q (%v)", r.stdout, wantList, r.err)
+	}
+	runGTar(h.root, "--sort=name", "-c", "-z", "-f", "gnu.tgz", "proj")
+	if r := h.run("", "tar", "-t", "-f", "gnu.tgz"); r.err != nil || r.stdout != wantList {
+		t.Fatalf("tar -tf gnu.tgz:\n got %q\nwant %q (%v)", r.stdout, wantList, r.err)
+	}
+	testutil.FailErr(t, "mkdir out", os.Mkdir(h.path("out"), 0o755))
+	if r := h.run("", "tar", "-x", "-z", "-f", "gnu.tgz", "-C", "out", "--strip-components", "1"); r.err != nil || h.read("out/a.txt") != "alpha\n" || h.read("out/sub/b.txt") != "beta\n" {
+		t.Fatalf("tar -xzf gnu.tgz: %+v %v", r.result, r.err)
+	}
+	if r := h.run("", "gzip", "proj/a.txt"); r.err != nil {
+		t.Fatalf("gzip: %v", r.err)
+	} else if _, err := os.Stat("/usr/bin/gzip"); err == nil {
+		out, err := exec.Command("/usr/bin/gzip", "-d", "-c", h.path("proj/a.txt.gz")).Output()
+		testutil.FailErr(t, "/usr/bin/gzip -dc", err)
+		if string(out) != "alpha\n" {
+			t.Fatalf("/usr/bin/gzip -dc = %q, want alpha\\n", string(out))
 		}
 	}
 }

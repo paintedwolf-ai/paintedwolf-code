@@ -217,6 +217,7 @@ func (e *Executor) invokeProgramEntry(ctx context.Context, tool, profileID strin
 			tc.Invocation.Contract = def.Contract
 		}
 	}
+	tc.Files.FileChangeReview = e.Boundary.fileChangeReviewer(tool, args, tc)
 	out, err := e.Metadata.registry.Run(ctx, tool, args, tc)
 	if tr := toolrejection.AsToolReject(err); tr != nil {
 		return out, e.Rejections.settleReject(ctx, tool, profileID, args, toolrejection.CompleteFailureMetadata(tr, tool, tc.Invocation.Contract.Owner))

@@ -115,7 +115,7 @@ func (inv *invocation) recordPin(revision toolcontract.ExecutionRevision) error 
 		return nil
 	}
 	inv.pins = append(inv.pins, revision)
-	return inv.owners.Pins.RecordRevisionPins(inv.ctx, execution, len(inv.pins)-1, inv.pins[len(inv.pins)-1:])
+	return inv.owners.Pins.AppendRevisionPin(inv.ctx, execution, revision)
 }
 
 // readBounded gathers a stream whole, refusing rather than truncating input

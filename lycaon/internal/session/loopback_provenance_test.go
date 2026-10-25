@@ -100,12 +100,45 @@ func TestLoopbackOwnershipIgnoresListenersThatMerelyAppeared(t *testing.T) {
 // Every holder must descend from the chat; one foreign holder on the same port
 // keeps it foreign.
 func TestLoopbackOwnershipNeedsEveryHolder(t *testing.T) {
-	f := &provenanceFixture{
-		now:      []socketListener{listenerAt(4242, "127.0.0.1:9999"), listenerAt(900, "[::1]:9999")},
-		sessions: map[int]string{4242: "chat-1"},
+	workspace := "/workspace/my-app"
+	converged := &provenanceFixture{
+		now:      []socketListener{listenerAt(4242, "127.0.0.1:9999"), listenerAt(4243, "[::1]:9999")},
+		sessions: map[int]string{4242: "chat-1", 4243: "chat-1"},
 	}
-	if owned, evidence := f.resolver(t.Context()).IsSessionOwned(context.Background(), "chat-1", "/workspace", 9999); owned {
+	if owned, evidence := converged.resolver(t.Context()).IsSessionOwned(context.Background(), "chat-1", workspace, 9999); !owned || evidence.Method != ProvenanceLineage {
+		t.Fatalf("all-holder session convergence rejected: owned=%v evidence=%+v", owned, evidence)
+	}
+
+	f := &provenanceFixture{
+		now:        []socketListener{listenerAt(4242, "127.0.0.1:9999"), listenerAt(900, "[::1]:9999")},
+		sessions:   map[int]string{4242: "chat-1"},
+		containers: []dockerContainerInfo{workspaceContainer(workspace, containerPortMapping{PublicPort: 9999, LoopbackOnly: true})},
+	}
+	if owned, evidence := f.resolver(t.Context()).IsSessionOwned(context.Background(), "chat-1", workspace, 9999); owned {
 		t.Fatalf("a port shared with a foreign process was owned: %+v", evidence)
+	}
+	if !f.resolver(t.Context()).HeldByOther(context.Background(), "chat-1", workspace, 9999) {
+		t.Fatal("a port shared with a foreign process reported not held by other")
+	}
+
+	incompleteHolder := &provenanceFixture{
+		now:        []socketListener{listenerAt(4242, "127.0.0.1:9999"), listenerAt(0, "[::1]:9999")},
+		sessions:   map[int]string{4242: "chat-1"},
+		containers: []dockerContainerInfo{workspaceContainer(workspace, containerPortMapping{PublicPort: 9999, LoopbackOnly: true})},
+	}
+	if owned, evidence := incompleteHolder.resolver(t.Context()).IsSessionOwned(context.Background(), "chat-1", workspace, 9999); owned || evidence.Method != ProvenanceUnverified {
+		t.Fatalf("incomplete holder PID observation granted ownership: owned=%v evidence=%+v", owned, evidence)
+	}
+	if !incompleteHolder.resolver(t.Context()).HeldByOther(context.Background(), "chat-1", workspace, 9999) {
+		t.Fatal("incomplete holder PID observation reported not held by other")
+	}
+
+	nowUnavailable := &provenanceFixture{
+		nowErr:     errors.New("socket table unavailable"),
+		containers: []dockerContainerInfo{workspaceContainer(workspace, containerPortMapping{PublicPort: 9999, LoopbackOnly: true})},
+	}
+	if owned, evidence := nowUnavailable.resolver(t.Context()).IsSessionOwned(context.Background(), "chat-1", workspace, 9999); owned || evidence.Method != ProvenanceUnverified {
+		t.Fatalf("unreadable current listener table granted ownership: owned=%v evidence=%+v", owned, evidence)
 	}
 }
 

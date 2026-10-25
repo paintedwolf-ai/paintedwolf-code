@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
+	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/internal/tools/safecmd"
 )
@@ -44,11 +45,20 @@ func newInvocation(ctx context.Context, p Prepared, tc tools.ToolContext, stream
 	if inv.stderr == nil {
 		inv.stderr = io.Discard
 	}
-	inv.out = &output{ctx: ctx, w: streams.Output, maximum: p.owners.limit("stream_bytes")}
+	inv.out = &output{ctx: ctx, w: streams.Output, maximum: p.owners.limit("stream_bytes"), maxSteps: p.owners.limit("query_work_steps")}
 	if inv.out.w == nil {
 		inv.out.w = io.Discard
 	}
 	return inv
+}
+
+// step meters one host-observable value transition against query_work_steps.
+func (inv *invocation) step() error {
+	inv.out.steps++
+	if inv.out.maxSteps > 0 && inv.out.steps > inv.out.maxSteps {
+		return limitExceeded("query_work_steps", inv.out.maxSteps, inv.out.steps)
+	}
+	return nil
 }
 
 func (inv *invocation) name() string { return inv.spec.Name }
@@ -68,12 +78,12 @@ func (inv *invocation) value(key string) (string, bool) {
 
 func (inv *invocation) usage(word, reason string) error {
 	return &toolrejection.ToolReject{Code: "COMMAND_OPERAND_INVALID", Data: map[string]any{
-		"command": inv.name(), "word": word, "expected": reason, "expected_form": inv.spec.Argv}}
+		"command": inv.name(), "word": word, "expected": reason, "reason": reason, "expected_form": inv.spec.Argv}}
 }
 
 // limitExceeded refuses work above a frozen catalog limit; nothing is truncated.
 func limitExceeded(id string, maximum, observed int64) error {
-	return &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"limit_id": id, "maximum": maximum, "observed": observed}}
+	return &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"limit_id": id, "resource_unit": nativeutility.ResourceUnit(id), "maximum": maximum, "observed": observed}}
 }
 
 // fail reports an ordinary input or query failure on stderr: jq's status 2.
@@ -166,7 +176,7 @@ func (inv *invocation) recordPin(revision toolcontract.ExecutionRevision) error 
 		return fmt.Errorf("query reads require a program execution and pin recorder")
 	}
 	inv.pins = append(inv.pins, revision)
-	return inv.owners.Pins.RecordRevisionPins(inv.ctx, execution, inv.pins)
+	return inv.owners.Pins.AppendRevisionPin(inv.ctx, execution, revision)
 }
 
 // settle projects the run onto the producer contract. A published edit is a
@@ -192,11 +202,13 @@ func (inv *invocation) settle(err error) (toolcontract.ProducerResult, error) {
 	return result, nil
 }
 
-// output meters stdout against stream_bytes before each write.
+// output meters stdout against stream_bytes before each write and tracks
+// host-observable value transitions against query_work_steps.
 type output struct {
 	ctx              context.Context
 	w                io.Writer
 	maximum, written int64
+	steps, maxSteps  int64
 }
 
 func (o *output) Write(p []byte) (int, error) {

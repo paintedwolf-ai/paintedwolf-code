@@ -86,6 +86,9 @@ func (c *programCompiler) validateNode(n syntax.Node) {
 		if v.Name != nil && v.Name.Value == "IFS" {
 			c.unsupported(n, "fixed space/tab/newline splitting")
 		}
+		if v.Name != nil && v.Name.Value == "PIPESTATUS" {
+			c.unsupported(n, "read-only PIPESTATUS")
+		}
 	case *syntax.Redirect:
 		c.validateRedirect(v)
 	case *syntax.SglQuoted:
@@ -179,7 +182,7 @@ func (c *programCompiler) validateSet(call *syntax.CallExpr) {
 	const expected = "set with literal -e, -u or -o errexit/nounset/pipefail options"
 	args := call.Args[1:]
 	if len(args) == 0 {
-		c.unsupported(call, expected)
+		c.unsupported(call.Args[0], expected)
 	}
 	for i := 0; i < len(args); i++ {
 		value, ok := c.literal(args[i])
@@ -188,7 +191,7 @@ func (c *programCompiler) validateSet(call *syntax.CallExpr) {
 			flags, _ = strings.CutPrefix(value, "+")
 		}
 		if !ok || flags == "" || flags == value {
-			c.unsupported(args[i], expected)
+			c.unsupported(call.Args[0], expected)
 			return
 		}
 		for _, flag := range flags {
@@ -196,17 +199,16 @@ func (c *programCompiler) validateSet(call *syntax.CallExpr) {
 			case 'e', 'u':
 			case 'o':
 				if i+1 >= len(args) {
-					c.unsupported(args[i], expected)
 					return
 				}
 				i++
 				name, ok := c.literal(args[i])
 				if !ok || (name != "errexit" && name != "nounset" && (name != "pipefail" || !enable)) {
-					c.unsupported(args[i], expected)
+					c.unsupported(call.Args[0], expected)
 					return
 				}
 			default:
-				c.unsupported(args[i], expected)
+				c.unsupported(call.Args[0], expected)
 				return
 			}
 		}
@@ -214,7 +216,7 @@ func (c *programCompiler) validateSet(call *syntax.CallExpr) {
 }
 
 func (c *programCompiler) validateParameter(p *syntax.ParamExp) {
-	if p.Flags != nil || p.Excl || p.Width || p.IsSet || p.Split != syntax.OptUnset || p.GlobSubst != syntax.OptUnset || p.RcExpand != syntax.OptUnset || p.Param == nil || p.NestedParam != nil || p.Index != nil || len(p.Modifiers) > 0 || p.Slice != nil || p.Names != 0 || (p.Length && (p.Exp != nil || p.Repl != nil)) {
+	if p.Flags != nil || p.Excl || p.Width || p.IsSet || p.Split != syntax.OptUnset || p.GlobSubst != syntax.OptUnset || p.RcExpand != syntax.OptUnset || p.Param == nil || p.NestedParam != nil || (p.Index != nil && !validPipeStatusIndex(p)) || len(p.Modifiers) > 0 || p.Slice != nil || p.Names != 0 || (p.Length && (p.Exp != nil || p.Repl != nil)) {
 		c.unsupported(p, parameterForms)
 		return
 	}
@@ -230,6 +232,29 @@ func (c *programCompiler) validateParameter(p *syntax.ParamExp) {
 	if name == "-" || name == "$" {
 		c.unsupported(p, "invocation variables and supported positional/status parameters")
 	}
+}
+
+func validPipeStatusIndex(p *syntax.ParamExp) bool {
+	if p.Param == nil || p.Param.Value != "PIPESTATUS" || p.Exp != nil || p.Repl != nil {
+		return false
+	}
+	w, ok := p.Index.(*syntax.Word)
+	if !ok || len(w.Parts) != 1 {
+		return false
+	}
+	lit, ok := w.Parts[0].(*syntax.Lit)
+	if !ok || lit.Value == "" {
+		return false
+	}
+	if lit.Value == "@" || lit.Value == "*" {
+		return true
+	}
+	for i := 0; i < len(lit.Value); i++ {
+		if lit.Value[i] < '0' || lit.Value[i] > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 const parameterForms = "$name, ${name}, ${#name}, ${name:-word}, ${name:+word}, ${name:?word}, ${name#pattern}, ${name%pattern}, ${name/pattern/word}, ${name^^} or supported positional/status parameters"
