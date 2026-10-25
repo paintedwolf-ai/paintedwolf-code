@@ -113,13 +113,25 @@ class ProfileCustodyTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             owner.entry(self.custody.parents[0][1], 'profile')
 
-    def test_fixed_admission_refuses_nonroot_account_and_backup_reuse(self):
+    def test_fixed_admission_refuses_nonroot_or_conflicting_account_group(self):
         with patch.object(owner.os, 'geteuid', return_value=1000), self.assertRaises(ValueError):
             self.custody.prepare()
-        account = Mock(pw_uid=30005, pw_gid=30005, pw_dir='/wrong')
-        with patch.object(owner.os, 'geteuid', return_value=0), patch.object(owner.pwd, 'getpwnam', return_value=account):
-            with self.assertRaises(ValueError):
-                self.custody.prepare()
+        account = Mock(pw_name='pwqual055', pw_uid=os.getuid(), pw_gid=os.getuid(), pw_dir=str(owner.HOME))
+        group = Mock(gr_name='pwqual055', gr_gid=os.getuid())
+        for attribute in ('pw_dir', 'pw_name', 'gr_name', 'gr_gid'):
+            wrong_account, wrong_group = Mock(), Mock()
+            wrong_account.configure_mock(pw_name='pwqual055', pw_uid=os.getuid(),
+                                         pw_gid=os.getuid(), pw_dir=str(owner.HOME))
+            wrong_group.configure_mock(gr_name='pwqual055', gr_gid=os.getuid())
+            setattr(wrong_account if attribute.startswith('pw_') else wrong_group, attribute, 'foreign')
+            with self.subTest(attribute=attribute), patch.object(owner.os, 'geteuid', return_value=0), \
+                    patch.object(owner.pwd, 'getpwnam', return_value=account), \
+                    patch.object(owner.pwd, 'getpwuid', return_value=wrong_account), \
+                    patch.object(owner.grp, 'getgrnam', return_value=group), \
+                    patch.object(owner.grp, 'getgrgid', return_value=wrong_group):
+                with self.assertRaisesRegex(ValueError, 'account identity'):
+                    self.custody.prepare()
+                self.assertFalse((self.backup / 'profile-recovery.json').exists())
 
     def test_partial_parking_failure_retains_original_and_pre_effect_manifest(self):
         original = self.original(0)
@@ -146,3 +158,20 @@ class ProfileCustodyTests(unittest.TestCase):
         from contextlib import ExitStack
         with ExitStack() as stack, self.assertRaises((OSError, ValueError)):
             owner.directory(link, stack)
+
+    def test_original_absence_survives_interruption_without_inventing_original_data(self):
+        self.custody.record()
+        actual_move = owner.move
+        def interrupted(source, name, destination, target):
+            if target == 'fixture-1':
+                raise OSError('restore interrupted')
+            actual_move(source, name, destination, target)
+        self.custody.park()
+        with patch.object(owner, 'move', side_effect=interrupted), self.assertRaises(OSError):
+            self.custody.restore()
+        self.assertFalse((self.base / '0/profile').exists())
+        self.assertTrue((self.backup / 'fixture-0').is_dir())
+        self.assertTrue((self.base / '1/profile').is_dir())
+        manifest = json.loads((self.backup / 'profile-recovery.json').read_bytes())
+        self.assertTrue(all(row['original'] is None for row in manifest['roots']))
+        self.assertEqual(manifest['phase'], 'restoring')
