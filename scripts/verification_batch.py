@@ -251,6 +251,17 @@ def subscribe(queue, lease_class, lock_file, root, binary, arguments, plan, envi
                         sys.stdout.buffer.flush()
                     receipt = directory / (lease.entry["ticket"] + ".json")
                     if receipt.exists():
+                        batch_plan = read_optional(directory / "plan.json") or {}
+                        members = batch_plan.get("batch", {}).get("members", [])
+                        live = {e["ticket"] for e in entries}.intersection(members) - {lease.entry["ticket"]}
+                        # Wait for snapshot cleanup when no other active member remains.
+                        if all((directory / (member + ".json")).exists() for member in live) and not (directory / "finished.json").exists():
+                            time.sleep(0.05)
+                            continue
+                        output = log.read()
+                        if output:
+                            sys.stdout.buffer.write(output)
+                            sys.stdout.buffer.flush()
                         result = read_json(receipt)
                         print(f"test execution: {name}: {result['status']} (source {result.get('source_commit') or 'uncaptured'}; receipt {receipt})",
                               file=sys.stderr, flush=True)
@@ -379,11 +390,11 @@ def supervise(queue, directory, inherited_fd):
             if not receipt.exists():
                 write_json(receipt, unfinished_receipt(directory, member,
                                                        "Verification interrupted or source capture failed"))
-        write_json(directory / "finished.json", {"finished_at": time.time()})
         # Descendants retain admission after supervisor exit.
         lease.close()
         with queue.locked():
             queue.entries()
+        write_json(directory / "finished.json", {"finished_at": time.time()})
         prune(queue, Path(entry["source"]))
 
 

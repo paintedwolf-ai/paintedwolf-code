@@ -620,7 +620,6 @@ class Executor:
             for request in self.requests:
                 if request["ticket"] not in self.finished:
                     self.receipt(request, "unverified", 2, "Batch execution interrupted")
-            write_json(self.directory / "finished.json", {"finished_at": time.time()})
         write_json(self.directory / "summary.json", {"requests": len(self.requests), "executions": len(self.stages),
                    "requested_stages": sum(len(r["plan"]["stages"]) for r in self.requests),
                    "reused_packages": sum(stage.get("reused_packages", 0) for stage in self.stages),
