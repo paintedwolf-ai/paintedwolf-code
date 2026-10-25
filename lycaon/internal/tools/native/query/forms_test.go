@@ -193,4 +193,6 @@ func TestQueryBudgetsRefuse(t *testing.T) {
 	h.exec("", "jq", "--seq", ".").refused(t, "unsupported option", "COMMAND_OPTION_UNSUPPORTED")
 	h.owners.limitOverride = map[string]int64{"stream_bytes": 4}
 	h.exec("", "jq", "-n", "\"long string\"").refused(t, "stream bound", "COMMAND_LIMIT_EXCEEDED")
+	h.owners.limitOverride = map[string]int64{"query_work_steps": 3}
+	h.exec("", "jq", "-n", "range(5)").refused(t, "work steps", "COMMAND_LIMIT_EXCEEDED")
 }
