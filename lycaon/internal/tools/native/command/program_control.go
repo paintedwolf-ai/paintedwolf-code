@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"strings"
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
@@ -24,6 +25,8 @@ type programControlDefinition struct {
 	err         error
 }
 
+var cachedControlOwnerDefinitions sync.Map
+
 func (r *programRun) controlDefinitions() (map[string]toolcontract.OperationDefinition, error) {
 	r.control.once.Do(func() {
 		contract, ok := toolcontract.Lookup("command")
@@ -39,6 +42,17 @@ func (r *programRun) controlDefinitions() (map[string]toolcontract.OperationDefi
 		}
 		r.control.definitions = map[string]toolcontract.OperationDefinition{}
 		for owner, specs := range commands {
+			var keyBuilder strings.Builder
+			keyBuilder.WriteString(owner)
+			for _, spec := range specs {
+				keyBuilder.WriteByte(0)
+				keyBuilder.WriteString(spec.Name)
+			}
+			key := keyBuilder.String()
+			if cached, ok := cachedControlOwnerDefinitions.Load(key); ok {
+				r.control.definitions[owner] = cached.(toolcontract.OperationDefinition)
+				continue
+			}
 			owned := contract
 			owned.Owner = owner
 			definition, err := toolcontract.NewOperationDefinition(toolcontract.OperationFacts{Identity: "command-host:" + owner, Version: 1, Contract: owned, Arguments: json.RawMessage(`{"type":"object"}`), Commands: specs, Resources: r.catalog.Language.Limits, ProgressGate: toolcontract.ProgressNotRequired, RejectionContract: "command", Streams: toolcontract.StreamContract{Input: "complete command input", Output: "complete command output", Error: "typed host refusal", Statuses: map[int]string{0: "completed"}}})
@@ -46,6 +60,7 @@ func (r *programRun) controlDefinitions() (map[string]toolcontract.OperationDefi
 				r.control.err = err
 				return
 			}
+			cachedControlOwnerDefinitions.Store(key, definition)
 			r.control.definitions[owner] = definition
 		}
 	})

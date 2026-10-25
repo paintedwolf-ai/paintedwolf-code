@@ -31,6 +31,7 @@ type PreparedProgramFailure struct {
 	Rejection     *toolrejection.ToolReject
 	diagnostic    toolcontract.NativeValue
 	operation     toolcontract.BoundOperation
+	progress      bool
 	identity      tools.InvocationIdentity
 	memory        *toolcontract.ProgramMemory
 	policy        *toolfeedback.ProgramPolicyBlock
@@ -52,6 +53,7 @@ func (p *PreparedProgramFailure) Close() {
 		p.Rejection = nil
 		p.diagnostic = toolcontract.NativeValue{}
 		p.operation = toolcontract.BoundOperation{}
+		p.progress = false
 		p.identity = tools.InvocationIdentity{}
 		p.memory = nil
 		p.policy = nil
@@ -102,42 +104,13 @@ func PrepareProgramFailure(ctx context.Context, ledger ProgramFeedbackLedger, me
 			return nil, fmt.Errorf("program feedback identity exceeds projection ceiling")
 		}
 	}
-	// The exact owner diagnostic is retained only as an immutable host
-	// inspection value; publication uses the bounded capture screen's copy.
-	// Both are admitted before encoding, so neither aliases a mutable producer.
-	ownerData := rejected.Data
-	if ownerData == nil {
-		ownerData = map[string]any{}
-	}
-	diagnostic, releaseDiagnostic, err := toolcontract.NewNativeValue(ctx, memory, toolcontract.DiagnosticInspectionDomain, ownerData)
+	diagnostic, screened, releaseDiag, err := prepareFeedbackDiagnostic(ctx, memory, screen, rejected.Data)
 	if err != nil {
 		return nil, err
 	}
 	defer func() {
 		if prepared == nil {
-			releaseDiagnostic()
-		}
-	}()
-	screened, releaseScreened, err := screen.ProjectOperationDiagnostic(ctx, memory, ownerData)
-	if err != nil {
-		return nil, err
-	}
-	if screened == nil || releaseScreened == nil {
-		return nil, fmt.Errorf("diagnostic screening returned no retained projection")
-	}
-	defer func() {
-		if prepared == nil {
-			releaseScreened()
-		}
-	}()
-	// Supplemental facts are bounded separately; SQL has its measured lease.
-	release, err := memory.ReserveProgramState(ctx, 128<<10)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if prepared == nil {
-			release()
+			releaseDiag()
 		}
 	}()
 	retained, err := ledger.ReadProgramFeedback(ctx, inv.SessionID, inv.Identity.ProgramID, inv.Identity.ExecutionID, 2, memory)
@@ -195,7 +168,117 @@ func PrepareProgramFailure(ctx context.Context, ledger ProgramFeedbackLedger, me
 	if policy != nil && !policy.MatchesOperation(operation) {
 		return nil, fmt.Errorf("program policy copy belongs to another execution")
 	}
-	return &PreparedProgramFailure{policy: policy, Rejection: &clone, diagnostic: diagnostic, operation: operation, identity: tc.Identity, memory: memory, release: func() { retained.Close(); releaseScreened(); releaseDiagnostic(); release() }}, nil
+	return &PreparedProgramFailure{policy: policy, Rejection: &clone, diagnostic: diagnostic, operation: operation, identity: tc.Identity, memory: memory, release: func() { retained.Close(); releaseDiag() }}, nil
+}
+
+// PrepareProgramProgressFailure supplements a progress-envelope refusal from
+// PrepareProgramEnvelope or ApplyProgramProgress after receipt settlement.
+func PrepareProgramProgressFailure(ctx context.Context, ledger ProgramFeedbackLedger, memory *toolcontract.ProgramMemory, screen ProgramDiagnosticScreen, frame ProgramFrame, tc tools.ToolContext, cause error) (prepared *PreparedProgramFailure, err error) {
+	rejected := toolrejection.AsToolReject(cause)
+	if rejected == nil {
+		return nil, nil
+	}
+	if ctx == nil || ledger == nil || memory == nil || screen == nil || tc.Identity.ToolCallID == "" {
+		return nil, fmt.Errorf("program progress feedback requires frame, ledger, diagnostic screening and memory admission")
+	}
+	end, err := frame.beginUse()
+	if err != nil {
+		return nil, err
+	}
+	defer end()
+	if err = frame.validateHostContext(ctx, tc); err != nil {
+		return nil, err
+	}
+	parent := frame.lifetime.facts.parent
+	for _, identity := range []string{tc.Identity.ToolCallID, parent.Identity.ProgramID, parent.Identity.NodeID, parent.Identity.ExecutionID, parent.SourceUnitID} {
+		if len(identity) > maxProgramFeedbackReferenceBytes {
+			return nil, fmt.Errorf("program feedback identity exceeds projection ceiling")
+		}
+	}
+	diagnostic, screened, releaseDiag, err := prepareFeedbackDiagnostic(ctx, memory, screen, rejected.Data)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if prepared == nil {
+			releaseDiag()
+		}
+	}()
+	retained, err := ledger.ReadProgramFeedback(ctx, parent.SessionID, parent.Identity.ProgramID, "", 2, memory)
+	if err != nil {
+		return nil, err
+	}
+	if retained == nil {
+		return nil, fmt.Errorf("program feedback ledger returned no retained snapshot")
+	}
+	defer func() {
+		if prepared == nil {
+			retained.Close()
+		}
+	}()
+	projection := retained.Projection
+	if projection.ParentTool != "command" || projection.ParentToolCallID != tc.Identity.ToolCallID || projection.ParentSessionID != parent.SessionID || projection.Program.ID != parent.Identity.ProgramID || projection.Program.CatalogDigest != parent.CatalogDigest || projection.Program.State != "rejected" || projection.Program.ProgressState != "rejected" || projection.Program.StopCode != rejected.Code {
+		return nil, fmt.Errorf("program progress feedback does not match settled envelope")
+	}
+	facts, err := programOutcomeFacts(projection)
+	if err != nil {
+		return nil, err
+	}
+	clone := *rejected
+	clone.Data = make(map[string]any, len(screened)+len(facts)+12)
+	for name, value := range screened {
+		clone.Data[name] = value
+	}
+	for name, value := range facts {
+		clone.Data[name] = value
+	}
+	clone.Data["tool"] = "command"
+	clone.Data["model_tool_call_id"] = tc.Identity.ToolCallID
+	clone.Data["native_operation"] = "update_progress"
+	clone.Data["envelope_field"] = "progress"
+	if projection.Progress != nil && projection.Progress.ExecutionID != "" {
+		clone.Data["execution_id"] = projection.Progress.ExecutionID
+	}
+	if _, present := clone.Data["source_unit_id"]; !present {
+		clone.Data["source_unit_id"] = parent.SourceUnitID
+	}
+	var policy *toolfeedback.ProgramPolicyBlock
+	errors.As(cause, &policy)
+	if policy != nil && !policy.MatchesProgress() {
+		return nil, fmt.Errorf("program policy copy belongs to another execution")
+	}
+	return &PreparedProgramFailure{progress: true, policy: policy, Rejection: &clone, diagnostic: diagnostic, identity: tc.Identity, memory: memory, release: func() { retained.Close(); releaseDiag() }}, nil
+}
+
+func prepareFeedbackDiagnostic(ctx context.Context, memory *toolcontract.ProgramMemory, screen ProgramDiagnosticScreen, ownerData map[string]any) (toolcontract.NativeValue, map[string]any, func(), error) {
+	if ownerData == nil {
+		ownerData = map[string]any{}
+	}
+	diagnostic, releaseDiagnostic, err := toolcontract.NewNativeValue(ctx, memory, toolcontract.DiagnosticInspectionDomain, ownerData)
+	if err != nil {
+		return toolcontract.NativeValue{}, nil, nil, err
+	}
+	screened, releaseScreened, err := screen.ProjectOperationDiagnostic(ctx, memory, ownerData)
+	if err != nil {
+		releaseDiagnostic()
+		return toolcontract.NativeValue{}, nil, nil, err
+	}
+	if screened == nil || releaseScreened == nil {
+		releaseDiagnostic()
+		return toolcontract.NativeValue{}, nil, nil, fmt.Errorf("diagnostic screening returned no retained projection")
+	}
+	release, err := memory.ReserveProgramState(ctx, 128<<10)
+	if err != nil {
+		releaseScreened()
+		releaseDiagnostic()
+		return toolcontract.NativeValue{}, nil, nil, err
+	}
+	if release == nil {
+		releaseScreened()
+		releaseDiagnostic()
+		return toolcontract.NativeValue{}, nil, nil, fmt.Errorf("program feedback admission returned no lease")
+	}
+	return diagnostic, screened, func() { release(); releaseScreened(); releaseDiagnostic() }, nil
 }
 
 func validateProgramFeedbackBinding(tc tools.ToolContext, operation toolcontract.BoundOperation, b invocation.ProgramExecutionBinding, p invocation.ProgramProjection) error {

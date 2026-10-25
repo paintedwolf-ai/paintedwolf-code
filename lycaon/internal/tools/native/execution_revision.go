@@ -156,7 +156,7 @@ func (e ExecutionRevisions) Verify(ctx context.Context, tctx tools.ToolContext, 
 			return err
 		}
 		var current toolcontract.ExecutionRevision
-		if pin.Basis == toolcontract.CapturedRevision && pin.Representation == toolcontract.OriginalEncodedBytes {
+		if pin.Role == toolcontract.SourceRevision && pin.Basis == toolcontract.CapturedRevision && pin.Representation == toolcontract.OriginalEncodedBytes {
 			current, err = recaptureBytes(ctx, tctx, resolved)
 		} else if pin.Role == toolcontract.SourceRevision {
 			_, current, err = captureSourceDisk(tctx, resolved)

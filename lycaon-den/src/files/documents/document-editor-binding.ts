@@ -4,6 +4,7 @@ import { EditorView, ViewPlugin, keymap } from "@codemirror/view";
 import type { DocumentReplica } from "./document-replica.ts";
 import { modPressed, shortcutPlatform } from "../../shortcuts/platform.ts";
 import type { TauriPlatform } from "../../platform/runtime.ts";
+import { isImeComposition } from "../../platform/interaction/ime-composition.ts";
 
 export const documentSynchronization = Annotation.define<boolean>();
 export const documentRemoteChange = Annotation.define<boolean>();
@@ -35,8 +36,8 @@ export function documentEditorBinding(replica: DocumentReplica): Extension {
     };
   }), Prec.highest(EditorView.domEventHandlers({
     // Ahead of every keymap, including the stock undo bindings an editable view carries.
-    keydown(event) {
-      const direction = event.isComposing ? null : documentHistoryKey(event);
+    keydown(event, view) {
+      const direction = isImeComposition(event) || view.composing ? null : documentHistoryKey(event);
       if (!direction) return false;
       event.preventDefault();
       return command(direction)();

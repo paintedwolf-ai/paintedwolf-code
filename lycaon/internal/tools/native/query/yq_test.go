@@ -1,6 +1,10 @@
 package query
 
 import (
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -131,20 +135,23 @@ func TestYqInPlacePublishesAtCapturedRevisions(t *testing.T) {
 	missing.expect(t, "missing -i", "", 1)
 }
 
-// pythonYqCases are python yq spellings: jq programs over YAML documents,
-// jq's JSON output unless -y, and jq's statuses. Outputs are the jq 1.8.1
-// result over the same documents as JSON, with PyYAML's scalar end marker
-// for -y; runtime error positions name the YAML file.
+// pythonYqCases are python yq (yq 4.4.5 over jq 1.8.1) stdout, stderr and
+// status for each form, recorded from the real python-yq binary.
 var pythonYqCases = []queryCase{
 	{argv: "yq -c .server cfg.yaml", stdout: "{\"port\":8080,\"hosts\":[\"a\",\"b\"]}\n"},
 	{argv: "yq -c keys_unsorted cfg.yaml", stdout: "[\"server\",\"name\"]\n"},
 	{argv: "yq -y .server cfg.yaml", stdout: "port: 8080\nhosts:\n  - a\n  - b\n"},
 	{argv: "yq -y .name cfg.yaml", stdout: "api\n...\n"},
-	{argv: "yq --yaml-output .server.hosts[] cfg.yaml", stdout: "a\n...\n---\nb\n...\n"},
+	{argv: "yq -y -r .name cfg.yaml", stdout: "api\n...\n"},
+	{argv: "yq --yaml-output .server.hosts[] cfg.yaml", stdout: "a\n---\nb\n...\n"},
+	{argv: "yq -Y . cfg.yaml", stdout: "# settings\nserver:\n  port: 8080 # the port\n  hosts: [a, b]\nname: api\n"},
+	{argv: "yq -Y .server cfg.yaml", stdout: "port: 8080 # the port\nhosts: [a, b]\n"},
 	{argv: "yq -s -c [.[].kind] multi.yaml", stdout: "[\"A\",\"B\"]\n"},
 	{argv: "yq -c --arg x v {x:$x,n:.name} cfg.yaml", stdout: "{\"x\":\"v\",\"n\":\"api\"}\n"},
+	{argv: "yq -c --argjson x 42 {x:$x,n:.name} cfg.yaml", stdout: "{\"x\":42,\"n\":\"api\"}\n"},
 	{argv: "yq -S -c . three.yaml", stdout: "{\"a\":2,\"b\":[\"x\"]}\n"},
-	{argv: "yq -c .a.b three.yaml", stdout: "", stderr: "jq: error (at three.yaml:2): Cannot index number with string \"b\"\n", status: 5},
+	{argv: "yq -c .a.b three.yaml", stdout: "", stderr: "jq: error (at <stdin>:1): Cannot index number with string \"b\"\n", status: 5},
+	{argv: "yq -c [input_filename,input_line_number] multi.yaml", stdout: "[\"<stdin>\",1]\n[\"<stdin>\",2]\n"},
 	{argv: "yq -c .a", stdin: "a: [1, 2]\n", stdout: "[1,2]\n"},
 }
 
@@ -161,9 +168,123 @@ func TestPythonYqSpellingsRunJqOverYAML(t *testing.T) {
 		})
 	}
 	r := h.exec("", "yq", "-i", "-y", ".name = \"web\"", "cfg.yaml")
-	r.expect(t, "python yq -i", "", 0)
+	r.expect(t, "python yq -i -y", "", 0)
 	if got, want := h.disk("cfg.yaml"), "server:\n  port: 8080\n  hosts:\n    - a\n    - b\nname: web\n"; got != want || r.result.EffectCertainty != toolcontract.EffectCompleted {
 		t.Fatalf("disk %q want %q result %+v", got, want, r.result)
+	}
+	h2 := newHarness(t, yqFiles)
+	r2 := h2.exec("", "yq", "-i", "-Y", ".server.port=9090|.name=\"web\"", "cfg.yaml")
+	r2.expect(t, "python yq -i -Y", "", 0)
+	if got, want := h2.disk("cfg.yaml"), "# settings\nserver:\n  port: 9090 # the port\n  hosts: [a, b]\nname: web\n"; got != want || r2.result.EffectCertainty != toolcontract.EffectCompleted {
+		t.Fatalf("disk %q want %q result %+v", got, want, r2.result)
+	}
+}
+
+func hostMikefarahYq() string {
+	candidates := []string{"/opt/homebrew/bin/yq", "/usr/local/bin/yq"}
+	if p, err := exec.LookPath("yq"); err == nil {
+		candidates = append(candidates, p)
+	}
+	for _, c := range candidates {
+		out, err := exec.Command(c, "--version").CombinedOutput()
+		if err == nil && strings.Contains(string(out), "mikefarah/yq") {
+			return c
+		}
+	}
+	return ""
+}
+
+func hostPythonYq() (string, string) {
+	var candidates []string
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		candidates = append(candidates, filepath.Join(home, ".local", "bin", "yq"))
+	}
+	if p, err := exec.LookPath("yq"); err == nil {
+		candidates = append(candidates, p)
+	}
+	envPath := "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+	if cur := os.Getenv("PATH"); cur != "" {
+		envPath = envPath + ":" + cur
+	}
+	for _, c := range candidates {
+		cmd := exec.Command(c, "--version")
+		cmd.Env = []string{"PATH=" + envPath}
+		out, err := cmd.CombinedOutput()
+		if err == nil && !strings.Contains(string(out), "mikefarah/yq") && strings.HasPrefix(strings.TrimSpace(string(out)), "yq ") {
+			return c, envPath
+		}
+	}
+	return "", ""
+}
+
+// TestDifferentialAgainstHostMikefarahYq runs every yqCase through an installed
+// mikefarah yq binary (resolved explicitly and verified via --version so it is
+// never shadowed by python-yq) with env and file operators disabled.
+func TestDifferentialAgainstHostMikefarahYq(t *testing.T) {
+	binary := hostMikefarahYq()
+	if binary == "" {
+		t.Log("no host mikefarah yq; the recorded yq v4.54.1 goldens still apply")
+		return
+	}
+	h := newHarness(t, yqFiles)
+	for _, c := range yqCases {
+		t.Run(c.argv, func(t *testing.T) {
+			words := splitWords(c.argv)
+			args := append([]string{"--security-disable-env-ops", "--security-disable-file-ops"}, words[1:]...)
+			cmd := exec.Command(binary, args...)
+			cmd.Dir = h.root
+			cmd.Env = []string{"PATH=" + os.Getenv("PATH")}
+			cmd.Stdin = strings.NewReader(c.stdin)
+			var stderr strings.Builder
+			cmd.Stderr = &stderr
+			out, err := cmd.Output()
+			status := 0
+			if exit, ok := err.(*exec.ExitError); ok {
+				status = exit.ExitCode()
+			} else if err != nil {
+				t.Fatal(err)
+			}
+			r := h.exec(c.stdin, words...)
+			r.expect(t, c.argv, string(out), status)
+			if r.stderr != stderr.String() {
+				t.Fatalf("stderr %q\nhost   %q", r.stderr, stderr.String())
+			}
+		})
+	}
+}
+
+// TestDifferentialAgainstHostPythonYq runs every pythonYqCase and in-place form
+// through an installed python-yq binary (resolved explicitly at ~/.local/bin/yq
+// and verified via --version so it is never shadowed by mikefarah yq).
+func TestDifferentialAgainstHostPythonYq(t *testing.T) {
+	binary, envPath := hostPythonYq()
+	if binary == "" {
+		t.Log("no host python-yq; the recorded python-yq 4.4.5 goldens still apply")
+		return
+	}
+	h := newHarness(t, yqFiles)
+	for _, c := range pythonYqCases {
+		t.Run(c.argv, func(t *testing.T) {
+			words := splitWords(c.argv)
+			cmd := exec.Command(binary, words[1:]...)
+			cmd.Dir = h.root
+			cmd.Env = []string{"PATH=" + envPath}
+			cmd.Stdin = strings.NewReader(c.stdin)
+			var stderr strings.Builder
+			cmd.Stderr = &stderr
+			out, err := cmd.Output()
+			status := 0
+			if exit, ok := err.(*exec.ExitError); ok {
+				status = exit.ExitCode()
+			} else if err != nil {
+				t.Fatal(err)
+			}
+			r := h.exec(c.stdin, words...)
+			r.expect(t, c.argv, string(out), status)
+			if r.stderr != stderr.String() {
+				t.Fatalf("stderr %q\nhost   %q", r.stderr, stderr.String())
+			}
+		})
 	}
 }
 

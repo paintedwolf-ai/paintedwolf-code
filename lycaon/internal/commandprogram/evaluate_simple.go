@@ -141,8 +141,8 @@ func (f *frame) simple(ctx context.Context, s commandsurface.Statement, c comman
 	if len(fields) == 0 || EvaluatorBuiltin(fields[0].Value) {
 		return (&evaluatorOperation{frame: f, statement: s, fields: fields, assignments: assigns}).invoke(ctx)
 	}
-	if decl, ok := f.state.functions[fields[0].Value]; ok {
-		return signal{}, f.call(ctx, s, decl, fields, assigns)
+	if fn, ok := f.state.functions[fields[0].Value]; ok {
+		return signal{}, f.call(ctx, s, fn, fields, assigns)
 	}
 	return signal{}, f.dispatch(ctx, s, fields, assigns)
 }
@@ -380,7 +380,8 @@ func (f *frame) exportDeclaration(ctx context.Context, s commandsurface.Statemen
 
 // call runs a declared function with invocation-local positional arguments.
 // The body shares variables, functions and exit control with its caller.
-func (f *frame) call(ctx context.Context, s commandsurface.Statement, decl commandsurface.FunctionDeclaration, fields Fields, assigns []assignment) error {
+func (f *frame) call(ctx context.Context, s commandsurface.Statement, fn declaredFunction, fields Fields, assigns []assignment) error {
+	decl := fn.decl
 	if int64(f.functions+1) > f.e.limits["function_depth"] {
 		return f.refuseLimit(s.SyntaxLocation, "function_depth", int64(f.functions+1))
 	}
@@ -391,6 +392,12 @@ func (f *frame) call(ctx context.Context, s commandsurface.Statement, decl comma
 	defer child.close()
 	g := *f
 	g.parent, g.positional, g.functions, g.loops, g.returnable = child.inv, fields.Values()[1:], f.functions+1, 0, true
+	if fn.sourceUnit != "" {
+		g.parent.SourceUnitID = fn.sourceUnit
+	}
+	if fn.unit != "" {
+		g.unit = fn.unit
+	}
 	if len(assigns) > 0 {
 		g.prefix = make(map[string]string, len(f.prefix)+len(assigns))
 		for name, value := range f.prefix {

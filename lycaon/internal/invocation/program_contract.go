@@ -4,6 +4,17 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
+type (
+	ProgramVersion    = toolcontract.ProgramVersion
+	ProgramStart      = toolcontract.ProgramStart
+	ProgramSource     = toolcontract.ProgramSource
+	ProgramNode       = toolcontract.ProgramNode
+	ChildStart        = toolcontract.ProgramChildStart
+	ChildSettlement   = toolcontract.ProgramChildSettlement
+	RevisionConflict  = toolcontract.RevisionConflict
+	ProgramSettlement = toolcontract.ProgramSettlement
+)
+
 // validateChildStart adds the receipt trace ceiling to the structural contract.
 func validateChildStart(c toolcontract.ProgramChildStart) error {
 	if err := c.Validate(); err != nil {

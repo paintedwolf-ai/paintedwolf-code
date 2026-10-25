@@ -88,7 +88,7 @@ func TestCommandCatCapturesDiskWhileEditorHasUnsavedChanges(t *testing.T) {
 	}
 	pins, err = f.recorder.RevisionPins(ctx, f.session, f.execution)
 	testutil.FailErr(t, "read pins after later reads", err)
-	if len(pins) != 1 {
-		t.Fatalf("each run resubmits its own captures as a prefix: %+v", pins)
+	if len(pins) != 3 || pins[1] != pin || pins[2] != pin {
+		t.Fatalf("each run appends its capture: %+v", pins)
 	}
 }

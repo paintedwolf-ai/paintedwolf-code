@@ -3,34 +3,12 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 from pathlib import Path
-import subprocess
 import tempfile
-import urllib.error
-import urllib.request
 
-from release_distribution import PUBLIC_READ_HEADERS
 from release_semver import compare, parse
 
 FIRST_RELEASE = parse("1.0.0")
-
-ROOT = Path(__file__).resolve().parent.parent
-
-
-def read_public(url: str) -> dict | None:
-    request = urllib.request.Request(url, headers=PUBLIC_READ_HEADERS)
-    try:
-        with urllib.request.urlopen(request, timeout=30) as response:
-            raw = response.read(2 * 1024 * 1024 + 1)
-            if len(raw) > 2 * 1024 * 1024:
-                raise ValueError("release metadata exceeds its size bound")
-            return json.loads(raw)
-    except urllib.error.HTTPError as error:
-        if error.code == 404:
-            return None
-        raise
-
 
 def prior_versions(feeds: dict[str, dict | None], candidate: str) -> list[str]:
     target = parse(candidate)
@@ -49,21 +27,40 @@ def prior_versions(feeds: dict[str, dict | None], candidate: str) -> list[str]:
     return sorted(versions)
 
 
+def capture_sources(base: str, candidate: dict, destination: Path) -> dict:
+    from release_upgrade.baseline import capture as capture_baseline
+    from release_upgrade.feeds import capture
+    from release_upgrade.plan import plan
+    from update_keys import load_registry
+    if base != "https://downloads.paintedwolf.dev":
+        raise ValueError("upgrade rehearsal requires the production HTTPS origin")
+    registry = load_registry()
+    destination.mkdir(parents=True, exist_ok=True)
+    snapshots = []
+    for row in registry["generations"]:
+        if row["generation"] > candidate["update_keys"]["signing_generation"]:
+            continue
+        for channel in ("stable", "preview"):
+            snapshot = capture(base, channel, row["generation"], registry, destination)
+            if snapshot is not None:
+                snapshots.append(snapshot)
+    anchors = capture_baseline(base, candidate["version"], registry, snapshots, destination)
+    result = plan(candidate, registry, snapshots, anchors)
+    result["origin"] = base
+    (destination / "plan.json").write_text(json.dumps(result, indent=2) + "\n")
+    return result
+
+
 def resolve_prior(base: str, candidate: str, generation: int) -> list[str]:
-    if not base.startswith("https://") or base.endswith("/") or generation < 1:
-        raise ValueError("upgrade rehearsal requires the configured HTTPS download origin and positive key generation")
+    from release_upgrade.feeds import capture
+    from update_keys import load_registry
+    if base != "https://downloads.paintedwolf.dev" or generation < 1:
+        raise ValueError("upgrade rehearsal requires the production HTTPS origin and positive key generation")
     feeds = {}
-    for channel in ("stable", "preview"):
-        manifest = read_public(f"{base}/updates/{channel}/key-{generation}/latest.json")
-        if manifest is not None:
-            with tempfile.TemporaryDirectory(prefix="release-prior-") as temporary:
-                path = Path(temporary) / "manifest.json"
-                path.write_text(json.dumps(manifest))
-                subprocess.run(["bash", str(ROOT / "scripts/release-validate-updater-manifest.sh"), "--file", str(path), "--existing"],
-                               env={**os.environ, "DOWNLOAD_BASE_URL": base}, check=True)
-            if manifest["update_keys"]["signing_generation"] != generation:
-                raise ValueError("prior manifest belongs to another signing generation")
-        feeds[channel] = manifest
+    with tempfile.TemporaryDirectory(prefix="release-prior-") as temporary:
+        for channel in ("stable", "preview"):
+            snapshot = capture(base, channel, generation, load_registry(), Path(temporary))
+            feeds[channel] = snapshot["manifest"] if snapshot else None
     return prior_versions(feeds, candidate)
 
 
@@ -74,9 +71,25 @@ def main() -> None:
     prior.add_argument("--base-url", required=True)
     prior.add_argument("--candidate", required=True)
     prior.add_argument("--generation", type=int, required=True)
+    snapshot = commands.add_parser("snapshot")
+    snapshot.add_argument("--base-url", required=True)
+    snapshot.add_argument("--candidate-manifest", type=Path, required=True)
+    snapshot.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
+    if args.command == "snapshot":
+        args.output.mkdir(parents=True, exist_ok=False)
+        capture_sources(args.base_url, json.loads(args.candidate_manifest.read_text()), args.output)
+        return
     print("\n".join("v" + version for version in resolve_prior(args.base_url, args.candidate, args.generation)))
 
 
 if __name__ == "__main__":
-    main()
+    import importlib
+    import sys
+    handlers = {"bundle-prepare": "prepare", "bundle-rehearse": "rehearse", "bundle-serve": "server"}
+    selected = handlers.get(sys.argv[1] if len(sys.argv) > 1 else "")
+    if selected:
+        del sys.argv[1]
+        importlib.import_module("release_upgrade." + selected).main()
+    else:
+        main()

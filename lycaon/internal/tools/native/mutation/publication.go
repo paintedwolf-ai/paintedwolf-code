@@ -3,6 +3,8 @@ package mutation
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"io"
 	"strconv"
@@ -32,6 +34,7 @@ type Publication struct {
 var (
 	_ commandprogram.OutputPublication = (*Publication)(nil)
 	_ commandprogram.InputRedirection  = (*Publication)(nil)
+	_ commandprogram.SourceCapture     = (*Publication)(nil)
 )
 
 // Open captures one output destination. The null device is a typed sink that
@@ -80,6 +83,54 @@ func (p *Publication) OpenInput(ctx context.Context, destination commandprogram.
 	return io.NopCloser(strings.NewReader(source.Content)), nil
 }
 
+// Capture pins one source script from its accepted document or published disk.
+func (p *Publication) Capture(ctx context.Context, inv toolcontract.OperationInvocation, request commandprogram.SourceCaptureRequest) (commandprogram.CapturedSource, error) {
+	bound, err := p.Program.Paths.Bind(ctx, request.Path, false)
+	if err != nil {
+		return commandprogram.CapturedSource{}, wrapPathError("source", err)
+	}
+	if bound.Null {
+		sum := sha256.Sum256(nil)
+		return commandprogram.CapturedSource{
+			Pin: toolcontract.SourcePin{
+				SourceID:       "/dev/null",
+				Revision:       "null",
+				Representation: request.Representation,
+				SHA256:         hex.EncodeToString(sum[:]),
+			},
+		}, nil
+	}
+	source, err := p.Owners.Revisions.CaptureSource(ctx, p.Tools, bound.Resolved.Abs)
+	if err != nil {
+		return commandprogram.CapturedSource{}, wrapPathError("source", err)
+	}
+	if err := p.Owners.Pins.AppendRevisionPin(ctx, inv.Identity.ExecutionID, source.Revision); err != nil {
+		return commandprogram.CapturedSource{}, wrapPathError("source", err)
+	}
+	data := []byte(source.Content)
+	sum := sha256.Sum256(data)
+	rev := hex.EncodeToString(sum[:])
+	switch {
+	case source.Revision.DocumentID != "":
+		rev = "document:" + source.Revision.DocumentID + "@" + strconv.FormatInt(source.Revision.DocumentRevision, 10)
+	case source.Revision.ContentSHA256 != "":
+		rev = "sha256:" + source.Revision.ContentSHA256
+	case source.Revision.DiskSHA256 != "":
+		rev = "disk:" + source.Revision.DiskSHA256
+	}
+	return commandprogram.CapturedSource{
+		Pin: toolcontract.SourcePin{
+			SourceID:       bound.Resolved.DisplayPath,
+			Revision:       rev,
+			Representation: request.Representation,
+			SHA256:         hex.EncodeToString(sum[:]),
+			StartByte:      0,
+			EndByte:        int64(len(data)),
+		},
+		Bytes: data,
+	}, nil
+}
+
 func redirectError(operator string, target commandprogram.Field, err error) error {
 	if err == nil {
 		return nil
@@ -102,12 +153,31 @@ func redirectError(operator string, target commandprogram.Field, err error) erro
 	}
 	var pathErr *projectpaths.PathError
 	if errors.As(err, &pathErr) {
+		reason := pathErr.Error()
+		if pathErr.Cause != nil {
+			reason = pathErr.Cause.Error()
+		}
 		return errors.Join(err, toolrejection.RejectInvalidArguments(pathErr.Code, map[string]any{
-			"command": cmd, "word": target.Value, "path": pathErr.Operand,
-			"limit_id": pathErr.LimitID, "maximum": pathErr.Maximum, "observed": pathErr.Observed,
+			"command": cmd, "word": target.Value, "path": pathErr.Operand, "reason": reason,
+			"limit_id": pathErr.LimitID, "maximum": pathErr.Maximum, "observed": pathErr.Observed, "resource_unit": pathErr.ResourceUnit,
 			"source_start_byte": target.Span.StartByte, "source_end_byte": target.Span.EndByte,
 			"source_line": target.Span.Line, "source_column": target.Span.Column,
 		}))
+	}
+	return err
+}
+
+func wrapPathError(command string, err error) error {
+	var pathErr *projectpaths.PathError
+	if errors.As(err, &pathErr) && toolrejection.AsToolReject(err) == nil {
+		reason := pathErr.Error()
+		if pathErr.Cause != nil {
+			reason = pathErr.Cause.Error()
+		}
+		return errors.Join(err, &toolrejection.ToolReject{Code: pathErr.Code, Data: map[string]any{
+			"command": command, "word": pathErr.Operand, "path": pathErr.Operand, "reason": reason,
+			"limit_id": pathErr.LimitID, "maximum": pathErr.Maximum, "observed": pathErr.Observed, "resource_unit": pathErr.ResourceUnit,
+		}})
 	}
 	return err
 }
