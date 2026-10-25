@@ -234,11 +234,11 @@ class Bridge:
             raise
         return self
 
-    def exchange(self, document):
+    def exchange(self, document, *, deadline=None):
         self.process.stdin.write(protocol.canonical(document))
         self.process.stdin.flush()
         raw = bytearray()
-        deadline = time.monotonic() + 5
+        deadline = time.monotonic() + 5 if deadline is None else deadline
         while len(raw) <= protocol.MAX_DOCUMENT:
             remaining = deadline - time.monotonic()
             if remaining <= 0 or not self.selector.select(remaining):
@@ -266,8 +266,9 @@ class Bridge:
                     raise ValueError('fixed native input controller log is full before delivery')
                 preflight, options = None, {}
                 if pending['operation'] == notification_wire.OPERATION:
+                    deadline = time.monotonic() + 5
                     digest = protocol.request_sha256(pending)
-                    fresh = self.exchange({'operation': 'verify-notification', 'request_sha256': digest})
+                    fresh = self.exchange({'operation': 'verify-notification', 'request_sha256': digest}, deadline=deadline)
                     if (not isinstance(fresh, dict) or set(fresh) != {'state', 'request_sha256', 'notification'}
                             or fresh['state'] != 'verified-notification' or fresh['request_sha256'] != digest):
                         raise ValueError('notification pre-dispatch acknowledgment differs from its pending request')
@@ -276,6 +277,9 @@ class Bridge:
                         raise ValueError('notification pre-dispatch proof changed its pinned runtime context')
                     preflight = {'request_sha256': digest,
                         'notification_sha256': hashlib.sha256(protocol.canonical(fresh['notification'])).hexdigest()}
+                    if time.monotonic() >= deadline:
+                        raise ValueError('notification fresh proof expired before dispatch')
+                    options['dispatch_deadline'] = deadline
                     options['notification'] = fresh['notification']
                     def retainable(preview):
                         acknowledgment = {'format_version': 1, 'request_sha256': digest,

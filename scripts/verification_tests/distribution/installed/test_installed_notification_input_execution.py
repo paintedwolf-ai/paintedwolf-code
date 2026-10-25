@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import tempfile
 import threading
+import time
 import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -35,6 +36,7 @@ def after():
 class NotificationInputTests(unittest.TestCase):
     def actor(self, pointer=None, *, lost_ack=False):
         actor = qemu_fixture.QemuInputTests().actor()
+        actor.connection = Mock()
         def command(name, arguments=None):
             if name == 'query-status':
                 return {'id': 1, 'return': {'running': True, 'status': 'running'}}
@@ -58,14 +60,14 @@ class NotificationInputTests(unittest.TestCase):
 
     def test_one_actual_vector_follows_current_absolute_pointer_observation(self):
         actor = self.actor()
-        delivery = actor.send(notification_wire.OPERATION, 0, transaction_id='d' * 32, notification=proof())
+        delivery = actor.send(notification_wire.OPERATION, 0, transaction_id='d' * 32, notification=proof(), dispatch_deadline=time.monotonic() + 5)
         self.assertEqual([call.args[0] for call in actor.command.call_args_list], ['query-status', 'query-mice', 'input-send-event'])
         self.assertEqual(actor.command.call_args.args, ('input-send-event', {'events': notification_wire.qmp_events(proof())}))
         self.assertEqual(delivery['pointer_query'], POINTER)
         ack = {'format_version': 1, 'request_sha256': protocol.request_sha256(pending()), 'delivery': delivery}
         self.assertEqual(protocol.acknowledgment(ack, pending(), 'owned-test'), delivery)
         with self.assertRaises(ValueError):
-            actor.send(notification_wire.OPERATION, 0, transaction_id='d' * 32, notification=proof())
+            actor.send(notification_wire.OPERATION, 0, transaction_id='d' * 32, notification=proof(), dispatch_deadline=time.monotonic() + 5)
         self.assertEqual(actor.command.call_count, 3)
 
     def test_relative_ambiguous_or_unknown_pointer_never_dispatches(self):
@@ -79,18 +81,18 @@ class NotificationInputTests(unittest.TestCase):
             with self.subTest(pointer=pointer):
                 actor = self.actor(pointer)
                 with self.assertRaises(ValueError):
-                    actor.send(notification_wire.OPERATION, 0, transaction_id='d' * 32, notification=proof())
+                    actor.send(notification_wire.OPERATION, 0, transaction_id='d' * 32, notification=proof(), dispatch_deadline=time.monotonic() + 5)
                 self.assertEqual([call.args[0] for call in actor.command.call_args_list], ['query-status', 'query-mice'])
 
     def test_uncertain_click_and_changed_delivery_evidence_never_replay_or_qualify(self):
         actor = self.actor(lost_ack=True)
         with self.assertRaises(TimeoutError):
-            actor.send(notification_wire.OPERATION, 0, transaction_id='d' * 32, notification=proof())
+            actor.send(notification_wire.OPERATION, 0, transaction_id='d' * 32, notification=proof(), dispatch_deadline=time.monotonic() + 5)
         with self.assertRaises(ValueError):
-            actor.send(notification_wire.OPERATION, 0, transaction_id='e' * 32, notification=proof())
+            actor.send(notification_wire.OPERATION, 0, transaction_id='e' * 32, notification=proof(), dispatch_deadline=time.monotonic() + 5)
         self.assertEqual(actor.command.call_count, 3)
         actor = self.actor()
-        delivery = actor.send(notification_wire.OPERATION, 0, transaction_id='d' * 32, notification=proof())
+        delivery = actor.send(notification_wire.OPERATION, 0, transaction_id='d' * 32, notification=proof(), dispatch_deadline=time.monotonic() + 5)
         for change in ({'pointer_query': {**POINTER, 'id': 4}}, {'event_sha256': 'f' * 64}):
             ack = {'format_version': 1, 'request_sha256': protocol.request_sha256(pending()), 'delivery': {**delivery, **change}}
             with self.assertRaises(ValueError):
@@ -100,7 +102,7 @@ class NotificationInputTests(unittest.TestCase):
         request = pending()
         actor = self.actor()
         ack = {'format_version': 1, 'request_sha256': protocol.request_sha256(request),
-               'delivery': actor.send(notification_wire.OPERATION, 0, transaction_id='d' * 32, notification=proof())}
+               'delivery': actor.send(notification_wire.OPERATION, 0, transaction_id='d' * 32, notification=proof(), dispatch_deadline=time.monotonic() + 5)}
         for verified in (False, True):
             with self.subTest(verified=verified), tempfile.TemporaryDirectory() as temporary:
                 selected = mailbox.Mailbox(EXECUTION, 'owned-test')
@@ -147,7 +149,7 @@ class NotificationInputTests(unittest.TestCase):
 
     def test_host_bridge_requires_unchanged_fresh_target_before_single_dispatch(self):
         request = pending()
-        delivery = self.actor().send(notification_wire.OPERATION, 0, transaction_id='d' * 32, notification=proof())
+        delivery = self.actor().send(notification_wire.OPERATION, 0, transaction_id='d' * 32, notification=proof(), dispatch_deadline=time.monotonic() + 5)
         for changed in (False, True):
             with self.subTest(changed=changed), tempfile.TemporaryFile() as log:
                 bridge = controller.Bridge.__new__(controller.Bridge)
@@ -159,7 +161,7 @@ class NotificationInputTests(unittest.TestCase):
                 fresh = proof()
                 if changed:
                     fresh['target']['extent'][0] += 1
-                def exchange(command):
+                def exchange(command, **kwargs):
                     if command['operation'] == 'poll':
                         return {'state': 'request', 'request': request}
                     if command['operation'] == 'verify-notification':
@@ -186,7 +188,7 @@ class NotificationInputTests(unittest.TestCase):
 
     def test_retained_completed_click_requires_predispatch_proof_and_actual_selected_chat(self):
         request = pending()
-        delivery = self.actor().send(notification_wire.OPERATION, 0, transaction_id='d' * 32, notification=proof())
+        delivery = self.actor().send(notification_wire.OPERATION, 0, transaction_id='d' * 32, notification=proof(), dispatch_deadline=time.monotonic() + 5)
         host = {'request': request, 'acknowledgment': {'format_version': 1,
             'request_sha256': protocol.request_sha256(request), 'delivery': delivery},
             'preflight': {'request_sha256': protocol.request_sha256(request),
@@ -264,9 +266,9 @@ class NotificationInputTests(unittest.TestCase):
                                 'overflow': 'x' * protocol.MAX_DOCUMENT})
         with self.assertRaisesRegex(ValueError, 'exceeds its bound'):
             actor.send(notification_wire.OPERATION, 0, transaction_id='d' * 32,
-                       notification=proof(), before_effect=refuses)
+                       notification=proof(), dispatch_deadline=time.monotonic() + 5, before_effect=refuses)
         self.assertEqual([call.args[0] for call in actor.command.call_args_list],
                          ['query-status', 'query-mice'])
         with self.assertRaises(ValueError):
             actor.send(notification_wire.OPERATION, 0, transaction_id='e' * 32,
-                       notification=proof())
+                       notification=proof(), dispatch_deadline=time.monotonic() + 5)

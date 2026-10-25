@@ -6,6 +6,7 @@ import copy
 import fcntl
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import platform
@@ -93,6 +94,7 @@ class Actor:
         self.connection, self.buffer, self.command_id = None, b'', 0
         self.transactions, self.current, self.operation, self.ordinal = set(), None, None, 0
         self.failed, self.closed = False, False
+        self.dispatch_deadline = None
         self.lock = threading.Lock()
 
     @property
@@ -134,8 +136,18 @@ class Actor:
             if peer[:2] != (pid, uid):
                 raise ValueError('QMP connection is not the leased process')
 
+    def remaining(self):
+        if self.dispatch_deadline is None:
+            return
+        remaining = self.dispatch_deadline - time.monotonic()
+        if remaining <= 0:
+            raise ValueError('notification dispatch exceeded its absolute proof deadline')
+        self.connection.settimeout(min(3, remaining))
+
     def frame(self):
+        self.remaining()
         while b'\n' not in self.buffer:
+            self.remaining()
             if len(self.buffer) >= LIMIT:
                 raise ValueError('QMP frame exceeds its fixed bound')
             block = self.connection.recv(min(4096, LIMIT - len(self.buffer)))
@@ -151,6 +163,7 @@ class Actor:
         return value
 
     def command(self, name, arguments=None):
+        self.remaining()
         self.command_id += 1
         request = {'execute': name, 'id': self.command_id}
         if arguments is not None:
@@ -158,6 +171,7 @@ class Actor:
         self.connection.sendall(json.dumps(request, separators=(',', ':')).encode() + b'\n')
         for _ in range(32):
             reply = self.frame()
+            self.remaining()
             if 'event' in reply:
                 if not isinstance(reply['event'], str):
                     raise ValueError('QMP event identity is invalid')
@@ -181,11 +195,18 @@ class Actor:
         if self.command('qmp_capabilities')['return'] != {}:
             raise ValueError('leased QMP capabilities were not acknowledged')
 
-    def send(self, operation, ordinal, *, transaction_id, notification=None, before_effect=None):
+    def send(self, operation, ordinal, *, transaction_id, notification=None, before_effect=None, dispatch_deadline=None):
         with self.lock:
             if self.failed or self.closed:
                 raise ValueError('input actor is no longer available')
             try:
+                if operation == notification_wire.OPERATION:
+                    if (type(dispatch_deadline) not in {int, float} or not math.isfinite(dispatch_deadline)
+                            or not time.monotonic() < dispatch_deadline <= time.monotonic() + 5):
+                        raise ValueError('notification dispatch requires its fixed absolute proof deadline')
+                    self.dispatch_deadline = dispatch_deadline
+                elif dispatch_deadline is not None:
+                    raise ValueError('notification proof deadline cannot change another input operation')
                 sequence = steps(operation)
                 digest = event_sha256(operation, ordinal, notification)
                 if (not token(transaction_id) or type(ordinal) is not int or not 0 <= ordinal < len(sequence)
@@ -200,11 +221,13 @@ class Actor:
                 if operation != self.operation or ordinal != self.ordinal:
                     raise ValueError('input operation or ordinal differs from the pinned transaction')
                 self.validate()
+                self.remaining()
                 status = self.command('query-status')['return']
                 if status.get('running') is not True or status.get('status') != 'running':
                     raise ValueError('leased guest is not running')
                 pointer_query = None
                 if operation == notification_wire.OPERATION:
+                    self.remaining()
                     pointer_query = self.command('query-mice')
                     pointer_device(pointer_query)
                     if before_effect is not None:
@@ -217,6 +240,7 @@ class Actor:
                             'qmp_ack': {'id': self.command_id + 1, 'return': {}}}
                         before_effect(copy.deepcopy(preview))
                         self.validate()
+                    self.remaining()
                     reply = self.command('input-send-event', {'events': notification_wire.qmp_events(notification)})
                     if reply['return'] != {}:
                         raise ValueError('QMP did not acknowledge its fixed notification click')
@@ -235,6 +259,9 @@ class Actor:
                         'qmp_ack': reply}
                 if pointer_query is not None:
                     delivery['pointer_query'] = pointer_query
+                self.dispatch_deadline = None
+                if pointer_query is not None:
+                    self.connection.settimeout(3)
                 return delivery
             except BaseException:
                 self.failed = True
