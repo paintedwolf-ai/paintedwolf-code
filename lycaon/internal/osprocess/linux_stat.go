@@ -55,14 +55,14 @@ func ParseLinuxStat(raw []byte) (LinuxStat, error) {
 	if err != nil {
 		return LinuxStat{}, err
 	}
-	return LinuxStat{PID: int(pid), ParentPID: int(parent), SessionID: int(session),
+	return LinuxStat{PID: int(pid), ParentPID: int(parent), SessionID: int(session), // #nosec G115 -- parsed with strconv.IntSize-1 bits
 		StartTime: start, Command: string(raw[open+1 : close])}, nil
 }
 
 func linuxStatNumber(raw []byte, bits int, field string) (uint64, error) {
 	value, err := strconv.ParseUint(string(raw), 10, bits)
 	if err != nil {
-		return 0, fmt.Errorf("%w: %s: %v", ErrInvalidLinuxStat, field, err)
+		return 0, fmt.Errorf("%w: %s: %w", ErrInvalidLinuxStat, field, err)
 	}
 	return value, nil
 }
