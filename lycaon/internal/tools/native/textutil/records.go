@@ -17,6 +17,8 @@ type records struct {
 	delimiter     byte
 	buffer        []byte
 	maximum       int64
+	offset        int64
+	nextOffset    int64
 	releaseReader func()
 	releaseBuffer func()
 }
@@ -54,11 +56,13 @@ func (r *records) nextTerminated() ([]byte, bool, error) {
 		return nil, false, io.EOF
 	}
 	r.buffer = r.buffer[:0]
+	r.offset = r.nextOffset
 	for {
 		if err := r.inv.ctx.Err(); err != nil {
 			return nil, false, err
 		}
 		chunk, err := r.reader.ReadSlice(r.delimiter)
+		r.nextOffset += int64(len(chunk))
 		observed := int64(len(r.buffer) + len(chunk))
 		if err == nil {
 			observed--

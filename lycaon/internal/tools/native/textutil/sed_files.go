@@ -171,7 +171,11 @@ func (s *sedInput) Next() (sedscript.Record, error) {
 		if err != nil {
 			return sedscript.Record{}, err
 		}
-		return sedscript.Record{Text: text, Terminated: terminated, Source: s.sources[0].name}, nil
+		record := sedscript.Record{Text: text, Terminated: terminated, Source: s.sources[0].name, Offset: s.records.offset}
+		if operand, ok := s.sources[0].reader.(*operandReader); ok {
+			record.Pin = operand.pin
+		}
+		return record, nil
 	}
 	return sedscript.Record{}, io.EOF
 }

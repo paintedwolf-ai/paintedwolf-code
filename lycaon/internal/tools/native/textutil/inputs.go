@@ -49,6 +49,7 @@ type operandReader struct {
 	paths   *projectpaths.ProgramPaths
 	operand commandprogram.Field
 	reader  io.ReadCloser
+	pin     *toolcontract.SourcePin
 	closed  bool
 }
 
@@ -57,7 +58,7 @@ func (r *operandReader) Read(p []byte) (int, error) {
 		return 0, io.EOF
 	}
 	if r.reader == nil {
-		reader, _, err := r.inv.capture(r.paths, r.operand)
+		reader, revision, err := r.inv.capture(r.paths, r.operand)
 		if err != nil {
 			r.closed = true
 			if reason, ok := ordinary(err); ok {
@@ -69,6 +70,16 @@ func (r *operandReader) Read(p []byte) (int, error) {
 				return 0, io.EOF
 			}
 			return 0, pathRejection(err, r.operand)
+		}
+		if revision != nil {
+			release, err := r.inv.ports.Memory.ReserveProgramState(r.inv.ctx, int64(512+len(revision.RootID)+len(revision.Path)+len(revision.DocumentID)+len(revision.DiskSHA256)+len(revision.ContentSHA256)))
+			if err != nil {
+				return 0, errors.Join(err, reader.Close())
+			}
+			r.inv.releases = append(r.inv.releases, release)
+			if pin, ok := revision.SourcePin(); ok {
+				r.pin = &pin
+			}
 		}
 		r.reader = reader
 	}

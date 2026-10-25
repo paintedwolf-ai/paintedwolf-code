@@ -103,6 +103,7 @@ type programRun struct {
 	sources       map[string]string
 	catalog       toolcontract.LanguageCatalog
 	commands      map[string]toolcontract.CommandSpecification
+	baseEnv       []string
 
 	// envelope carries the call's launch capability requests to each launch.
 	envelope map[string]any
@@ -254,6 +255,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 		release = func() { releaseUtilities(); releaseBefore() }
 	}
 	stdout, stderr := &boundedBuffer{limit: programOutputBytes}, &boundedBuffer{limit: programOutputBytes}
+	run.baseEnv = programEnvironment(tc)
 	sources := owners.Sources
 	if sources == nil {
 		if sc, ok := owners.Input.(commandprogram.SourceCapture); ok {
@@ -265,7 +267,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 		Publication: owners.Publication, Input: owners.Input, Sources: sources,
 		Executions: dispatcher, Supervision: r.Supervisor, Predicates: commandprogram.PredicateRuntime{Patterns: commandprogram.NativePredicatePatterns{Memory: memory}},
 		Memory:      memory,
-		Environment: programEnvironment(tc),
+		Environment: run.baseEnv,
 		Streams:     commandprogram.Streams{Input: commandprogram.NullInput(), Output: stdout, Error: stderr},
 	}
 	var evaluated commandprogram.ProgramOutcome

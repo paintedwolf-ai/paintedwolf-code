@@ -59,7 +59,7 @@ func runTar(inv *invocation) error {
 	case inv.flag("-t"):
 		return inv.tarList(archive, strip)
 	}
-	format := "tar"
+	var format string
 	switch {
 	case inv.flag("-z"):
 		format = "tar.gz"

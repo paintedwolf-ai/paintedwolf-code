@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+
+	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
 // Record is one input record; Text is valid until the next call to Next.
@@ -13,6 +15,8 @@ type Record struct {
 	Text       []byte
 	Terminated bool
 	Source     string
+	Pin        *toolcontract.SourcePin
+	Offset     int64
 }
 
 // Input yields records and io.EOF at the end.

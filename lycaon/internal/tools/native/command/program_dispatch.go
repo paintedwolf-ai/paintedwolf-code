@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	lycexec "github.com/lycaon/lycaon/internal/exec"
+	"slices"
 	"strings"
 	"sync"
 
@@ -308,7 +309,17 @@ func (d *ProgramDispatcher) refuseUnimplemented(ctx context.Context, spec toolco
 }
 
 func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.CommandSpecification, operation NativeOperation, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-	prepared, err := operation.Prepare(ctx, d.paths, d, request)
+	prepareReq := request
+	if (spec.Name == "git" || spec.Owner == "git") && len(d.run.baseEnv) > 0 && len(prepareReq.Environment) > 0 {
+		filtered := make([]string, 0, len(prepareReq.Environment))
+		for _, entry := range prepareReq.Environment {
+			if !slices.Contains(d.run.baseEnv, entry) {
+				filtered = append(filtered, entry)
+			}
+		}
+		prepareReq.Environment = filtered
+	}
+	prepared, err := operation.Prepare(ctx, d.paths, d, prepareReq)
 	if err != nil {
 		if gap := unsupportedForm(spec, err); gap != nil && (operation.Tool != "" || len(operation.Tools) > 0) && d.GapLaunchable(request) {
 			request.Gap = gap
