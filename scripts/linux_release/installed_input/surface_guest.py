@@ -35,7 +35,12 @@ def perform_transition(execution, vm_id, observer, operation, mailbox=None):
                 if time.monotonic() >= deadline:
                     raise CaseUnavailable('fixed-VM-surface-input-acknowledgment-unavailable')
                 time.sleep(0.05)
-            after = observer.settle(operation, initial) if ordinal == len(sequence) - 1 else observer.observe()
+            try:
+                after = observer.settle(operation, initial) if ordinal == len(sequence) - 1 else observer.observe()
+            except BaseException as error:
+                events.append({'request': pending, 'delivery': delivery,
+                               'surface_after': getattr(error, 'observations', {}).get('surface_after')})
+                raise
             if ordinal == len(sequence) - 1:
                 if not surface_wire.finished(operation, initial, after):
                     raise ValueError('physical input did not establish its declared surface transition')

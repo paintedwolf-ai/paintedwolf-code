@@ -140,7 +140,7 @@ class SurfaceTests(unittest.TestCase):
         with self.assertRaises(ValueError) as refused:
             surface_guest.perform_transition(self.execution, 'owned', observer,
                                              'workspace-request-quit-v1', mailbox)
-        self.assertFalse(refused.exception.observations['native_input']['completed'])
+        self.assertEqual((refused.exception.observations['native_input']['completed'], len(refused.exception.observations['native_input']['events'])), (False, 1))
         self.assertEqual(mailbox.write.call_count, 1)
         mailbox.clear_completed.assert_not_called()
 
