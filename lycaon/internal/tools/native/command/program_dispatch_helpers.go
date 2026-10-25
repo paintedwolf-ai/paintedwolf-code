@@ -36,6 +36,12 @@ func (d *ProgramDispatcher) RunNested(ctx context.Context, parent commandprogram
 	child := commandprogram.NextExecution(parent.Invocation, parent.Invocation.Identity.NodeID, parent.Invocation.Span)
 	child.Scope = parent.Invocation.Scope
 	request := commandprogram.OperationRequest{Invocation: child, OperationID: argv[0].Value, Statement: parent.Statement, Argv: argv, Environment: entries}
+	if resolved, ok, err := commandprogram.ResolveCommand(argv); err == nil && ok && resolved.Name != "external" {
+		if bound, err := d.binder.Bind(resolved, argv); err == nil && bound.Help {
+			request.OperationID = resolved.Name
+			return d.Invoke(ctx, request, streams)
+		}
+	}
 	spec, native := d.run.commands[argv[0].Value]
 	if !native || spec.Name == "external" {
 		request.OperationID = "external"
@@ -104,9 +110,14 @@ func (d *ProgramDispatcher) RegisterSourceUnit(ctx context.Context, _ toolcontra
 // redirection) owns no effect of its own.
 func (d *ProgramDispatcher) BeginExecution(ctx context.Context, invocation toolcontract.OperationInvocation, command string) error {
 	spec, native := d.run.commands[command]
-	definition, err := d.structuralDefinition(command)
+	var (
+		definition toolcontract.OperationDefinition
+		err        error
+	)
 	if native {
 		definition, err = d.catalogDefinition(spec)
+	} else {
+		definition, err = d.structuralDefinition(command)
 	}
 	if err != nil {
 		return err
@@ -150,11 +161,6 @@ func (d *ProgramDispatcher) BeginExecution(ctx context.Context, invocation toolc
 		if err != nil {
 			return err
 		}
-		if isRedirectConstruct(command) {
-			if teeSpec, ok := d.run.commands["tee"]; ok && len(teeSpec.Effects) > 0 {
-				child.bound, _ = toolcontract.BindOperation(definition, invocation, teeSpec.Name, teeSpec.Effects[0].Mode, nil)
-			}
-		}
 	}
 	d.shared.mu.Lock()
 	if d.shared.evaluated == nil {
@@ -179,25 +185,11 @@ func (d *ProgramDispatcher) SettleExecution(ctx context.Context, invocation tool
 	if !record.Executed || result.Validate() != nil {
 		result = toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.EffectUnknown}
 	}
-	if !entry.ownerInvoked && result.EffectCertainty == toolcontract.EffectCompleted && isRedirectConstruct(record.Command) {
-		if err := d.start(ctx, entry.child); err == nil {
-			entry.ownerInvoked = true
-		}
-	}
 	if !entry.ownerInvoked && result.EffectCertainty == toolcontract.EffectCompleted {
 		// Descendants own their effects; a structural node only aggregates them.
 		result.EffectCertainty = toolcontract.EffectUnknown
 	}
 	return d.settleWith(ctx, entry.child, toolcontract.ProgramChildSettlement{Result: result, OwnerInvoked: entry.ownerInvoked, JobHandle: record.JobHandle, Conflict: revisionConflict(record.Diagnostic)})
-}
-
-func isRedirectConstruct(command string) bool {
-	switch command {
-	case ">", ">>", "2>", "2>>", "&>", "&>>":
-		return true
-	default:
-		return strings.HasPrefix(command, "redirect ")
-	}
 }
 
 var compiledStructuralDefinitions sync.Map
@@ -218,12 +210,6 @@ func (d *ProgramDispatcher) structuralDefinition(construct string) (toolcontract
 		return toolcontract.OperationDefinition{}, fmt.Errorf("command contract missing")
 	}
 	var commands []toolcontract.CommandSpecification
-	if isRedirectConstruct(construct) {
-		if teeSpec, ok := d.run.commands["tee"]; ok {
-			contract.Owner = teeSpec.Owner
-			commands = []toolcontract.CommandSpecification{teeSpec}
-		}
-	}
 	definition, err := toolcontract.NewOperationDefinition(toolcontract.OperationFacts{
 		Identity: "program " + construct, Version: 1, Contract: contract, Arguments: json.RawMessage(`{"type":"object"}`),
 		Commands: commands, Resources: d.run.catalog.Language.Limits, ProgressGate: toolcontract.ProgressNotRequired, RejectionContract: "command",
@@ -247,7 +233,7 @@ func (d *ProgramDispatcher) Redirections() (commandprogram.InputRedirection, com
 	if d.redirections == nil {
 		return nil, nil
 	}
-	return d.redirections(d.paths)
+	return d.redirections(d.paths.Fork(), d.beginOutput)
 }
 
 // NativeBindings reports whether a program binds a name to a native owner.
@@ -323,6 +309,11 @@ func writeRejectRefusal(streams commandprogram.Streams, command string, request 
 	if streams.Error == nil || reject == nil {
 		return
 	}
+	if programResourceRefusal(reject) {
+		// Resource refusals render once through settled program feedback, where
+		// the original limit facts and completed effects are available.
+		return
+	}
 	subject := command
 	for _, key := range []string{"word", "path", "operand", "job", "signal", "pattern"} {
 		if val, _ := reject.Data[key].(string); val != "" {
@@ -349,6 +340,8 @@ func writeRejectRefusal(streams commandprogram.Streams, command string, request 
 		}
 	case "COMMAND_JOB_UNKNOWN":
 		detail = "no such job in this session; check active jobs with jobs"
+	case "PROCESS_NOT_OWNED":
+		detail = "process is not owned by this session; signal only background jobs started in this session"
 	case "COMMAND_OPTION_UNSUPPORTED", "COMMAND_NATIVE_FORM_UNSUPPORTED":
 		if detail != "" {
 			detail = "not supported here (expected " + detail + ")"
@@ -383,30 +376,6 @@ func selectEffectMode(spec toolcontract.CommandSpecification, requested string) 
 	return ""
 }
 
-var programOperationDefinitions sync.Map
-
-func programOperationDefinition(definition toolcontract.OperationDefinition) toolcontract.OperationDefinition {
-	if definition.ReadOnlyFacts().ProgressGate == toolcontract.ProgressNotRequired {
-		return definition
-	}
-	digest := definition.Digest()
-	if digest != "" {
-		if cached, ok := programOperationDefinitions.Load(digest); ok {
-			return cached.(toolcontract.OperationDefinition)
-		}
-	}
-	facts := definition.Facts()
-	facts.ProgressGate = toolcontract.ProgressNotRequired
-	updated, err := toolcontract.NewOperationDefinition(facts)
-	if err != nil {
-		return definition
-	}
-	if digest != "" {
-		programOperationDefinitions.Store(digest, updated)
-	}
-	return updated
-}
-
 func (d *ProgramDispatcher) childEffectSet(spec toolcontract.CommandSpecification, mode string, request commandprogram.OperationRequest) *toolcontract.CommandEffects {
 	requiresBound := false
 	for _, effect := range spec.Effects {
@@ -415,10 +384,16 @@ func (d *ProgramDispatcher) childEffectSet(spec toolcontract.CommandSpecificatio
 			break
 		}
 	}
-	if !requiresBound {
+	var effects toolcontract.CommandEffects
+	if requiresBound {
+		effects = d.boundChildEffects(spec, request)
+	}
+	if request.StreamPreparation != nil {
+		effects |= request.StreamPreparation.RequiredEffects()
+	}
+	if effects == 0 {
 		return nil
 	}
-	effects := d.boundChildEffects(spec, request)
 	return &effects
 }
 
@@ -505,6 +480,18 @@ type renderedProgramRefusal struct {
 func (r *renderedProgramRefusal) Error() string { return r.text }
 func (r *renderedProgramRefusal) Unwrap() error { return r.cause }
 
+func programResourceRefusal(reject *toolrejection.ToolReject) bool {
+	if reject == nil {
+		return false
+	}
+	switch reject.Code {
+	case "COMMAND_LIMIT_EXCEEDED", "GREP_MATCH_BUDGET", "JQ_INPUT_TOO_LARGE":
+		return true
+	default:
+		return false
+	}
+}
+
 func enrichProgramReject(reject *toolrejection.ToolReject, defaultCommand string, defaultSpan toolcontract.SourceSpan) {
 	if reject == nil {
 		return
@@ -543,6 +530,9 @@ func enrichProgramReject(reject *toolrejection.ToolReject, defaultCommand string
 	if _, ok := reject.Data["source_end_byte"]; !ok {
 		reject.Data["source_end_byte"] = defaultSpan.EndByte
 	}
+	if programResourceRefusal(reject) {
+		return
+	}
 	remedy := firstStringFact(reject.Data, "expected_form", "expected", "remedy", "reason")
 	switch reject.Code {
 	case "SURVEY_PATH_ESCAPE":
@@ -551,6 +541,8 @@ func enrichProgramReject(reject *toolrejection.ToolReject, defaultCommand string
 		remedy = "invalid regular expression; use -F for fixed strings or escape regex metacharacters"
 	case "COMMAND_JOB_UNKNOWN":
 		remedy = "no such job in this session; use jobs to list this session's background jobs, then pass %N, %% or $!"
+	case "PROCESS_NOT_OWNED":
+		remedy = "process is not owned by this session; signal only background jobs started in this session"
 	}
 	if remedy == "" {
 		remedy = "rewrite the command with a supported form"
@@ -567,6 +559,9 @@ func ensureProgramRefusalText(rendered error, reject *toolrejection.ToolReject) 
 	}
 	if rendered == nil {
 		rendered = toolrejection.RenderReject(reject, nil)
+	}
+	if programResourceRefusal(reject) {
+		return rendered
 	}
 	text := rendered.Error()
 	cmd := firstStringFact(reject.Data, "command", "native_command", "operation")

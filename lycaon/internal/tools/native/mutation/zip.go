@@ -107,7 +107,7 @@ func (inv *invocation) unzipList(zr *zip.Reader) error {
 }
 
 func (inv *invocation) unzipPipe(zr *zip.Reader, members []string, maximum int64) error {
-	reader := &boundedReader{remaining: maximum}
+	reader := &boundedReader{maximum: maximum}
 	for _, f := range zr.File {
 		if strings.HasSuffix(f.Name, "/") || (len(members) > 0 && !containsName(members, f.Name)) {
 			continue

@@ -3,12 +3,11 @@ package textutil
 import (
 	"bytes"
 	"errors"
+	"github.com/lycaon/lycaon/internal/tools"
 	"io"
 	"slices"
 	"strconv"
 	"unicode/utf8"
-
-	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
 )
 
 // readAll buffers one input under stream_bytes, charging memory first.
@@ -23,7 +22,7 @@ func (inv *invocation) readAll(r io.Reader) ([]byte, error) {
 		buffer.Grow(chunk)
 		n, err := io.CopyN(&buffer, r, chunk)
 		if int64(buffer.Len()) > maximum {
-			return nil, nativeutility.LimitExceeded("stream_bytes", maximum, int64(buffer.Len()))
+			return nil, tools.CommandLimitExceeded("stream_bytes", maximum, int64(buffer.Len()))
 		}
 		if errors.Is(err, io.EOF) || (err == nil && n < chunk) {
 			return buffer.Bytes(), nil
@@ -46,17 +45,8 @@ func (inv *invocation) eachRecord(visit func(record []byte, terminated bool) err
 		if err != nil {
 			return err
 		}
-		for {
-			record, terminated, err := records.nextTerminated()
-			if errors.Is(err, io.EOF) {
-				break
-			}
-			if err != nil {
-				return err
-			}
-			if err := visit(record, terminated); err != nil {
-				return err
-			}
+		if err := records.consume(visit); err != nil {
+			return err
 		}
 	}
 	return nil

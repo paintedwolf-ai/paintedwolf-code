@@ -1,5 +1,5 @@
 tags: [git, mutation]
-description: "Stage and commit paths with a message; amend=true replaces HEAD with the selected paths, including new files, leaving unrelated staged changes alone. Success JSON: available, hash, paths, and uncommitted_paths/uncommitted_count for dirty files this commit left alone. Failure JSON: available=false, error, optional hook_failed, output_tail (last hook/CLI lines), and hint. Empty paths stages only files this session wrote; name paths explicitly to commit work this session did not write (max 500 paths per commit). Replaces command: git add paths && git commit -m, git commit --amend -m message -- paths."
+description: "Stage and commit paths with a message; amend=true replaces HEAD with the selected paths, including new files, leaving unrelated staged changes alone. Success JSON: available, hash, paths, and uncommitted_paths/uncommitted_count for dirty files this commit left alone. Failure JSON: available=false, error, optional hook_failed, output_tail (last hook/CLI lines), and hint. Empty paths stages only files this session wrote; name paths explicitly to commit work this session did not write (max 500 paths per commit)."
 schema:
   type: object
   properties:

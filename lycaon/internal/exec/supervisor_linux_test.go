@@ -52,7 +52,7 @@ func supervisedDaemonCommand(t *testing.T) (*exec.Cmd, func(), string) {
 func TestSupervisorCleansDoubleForkedNewSessionOnCommandCompletion(t *testing.T) {
 	cmd, cleanup, path := detachedDaemonCommand(t, context.Background(), false)
 	defer cleanup()
-	testutil.FailErr(t, "run daemon launcher", RunInOwnGroup(cmd))
+	testutil.FailErr(t, "run daemon launcher", RunInOwnGroup(t.Context(), cmd))
 	pid := waitForPIDFile(t, path)
 	testutil.FailErr(t, "detached daemon survived completion", waitForProcessGone(pid, 5*time.Second))
 }
@@ -68,7 +68,7 @@ func TestSupervisorCancellationSparesAnotherCommandsDetachedDaemon(t *testing.T)
 	cmd, cleanup, path := detachedDaemonCommand(t, ctx, true)
 	defer cleanup()
 	done := make(chan error, 1)
-	go func() { done <- RunInOwnGroup(cmd) }()
+	go func() { done <- RunInOwnGroup(t.Context(), cmd) }()
 	pid := waitForPIDFile(t, path)
 	cancel()
 	select {
@@ -174,7 +174,7 @@ print(" ".join(open_fds))`
 			want := strings.TrimSpace(string(wantBytes))
 			var out strings.Builder
 			cmd.Stdout = &out
-			testutil.FailErr(t, "run supervised descriptor probe", RunInOwnGroup(cmd))
+			testutil.FailErr(t, "run supervised descriptor probe", RunInOwnGroup(t.Context(), cmd))
 			if got := strings.TrimSpace(out.String()); got != want {
 				t.Fatalf("supervised command descriptors = %q, want %q", got, want)
 			}
