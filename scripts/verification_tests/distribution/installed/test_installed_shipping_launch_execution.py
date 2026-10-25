@@ -78,15 +78,21 @@ class ShippingLaunchTests(unittest.TestCase):
 
     def test_pid_reuse_refuses_signal_and_reparenting_preserves_birth_identity(self):
         captured = {'pid': 321, 'parent_pid': 123, 'start_time_ticks': 42}
-        with patch(PREFIX + 'launch_owner.process_identity', return_value={**captured, 'start_time_ticks': 43}), \
-                patch(PREFIX + 'launch_owner.os.kill') as kill:
+        with patch(PREFIX + 'launch_owner.os.pidfd_open', return_value=77, create=True), \
+                patch(PREFIX + 'launch_owner.os.close') as close, \
+                patch(PREFIX + 'launch_owner.signal.pidfd_send_signal', create=True) as kill, \
+                patch(PREFIX + 'launch_owner.process_identity', return_value={**captured, 'start_time_ticks': 43}):
             with self.assertRaisesRegex(ValueError, 'identity changed'):
                 signal_owned(captured, signal.SIGTERM)
             kill.assert_not_called()
-        with patch(PREFIX + 'launch_owner.process_identity', return_value={**captured, 'parent_pid': 999}), \
-                patch(PREFIX + 'launch_owner.os.kill') as kill:
+            close.assert_called_once_with(77)
+        with patch(PREFIX + 'launch_owner.os.pidfd_open', return_value=78, create=True), \
+                patch(PREFIX + 'launch_owner.os.close') as close, \
+                patch(PREFIX + 'launch_owner.signal.pidfd_send_signal', create=True) as kill, \
+                patch(PREFIX + 'launch_owner.process_identity', return_value={**captured, 'parent_pid': 999}):
             signal_owned(captured, signal.SIGTERM)
-            kill.assert_called_once_with(321, signal.SIGTERM)
+            kill.assert_called_once_with(78, signal.SIGTERM)
+            close.assert_called_once_with(78)
 
     def test_cleanup_reaps_adopted_children_without_stealing_popen_wait_ownership(self):
         rows = [{'pid': 1, 'parent_pid': 100}, {'pid': 2, 'parent_pid': 100}, {'pid': 3, 'parent_pid': 2}]

@@ -54,13 +54,19 @@ def children(pid):
 
 def signal_owned(row, sig):
     try:
+        descriptor = os.pidfd_open(row['pid'])
+    except ProcessLookupError:
+        return
+    try:
         if process_identity(row['pid'])['start_time_ticks'] != row['start_time_ticks']:
             raise ValueError('installed descendant identity changed before settlement')
-        os.kill(row['pid'], sig)
-    except ProcessLookupError:
+        # The descriptor pins the kernel task across exit/PID reuse after this
+        # identity check. A numeric kill here would reopen that race.
+        signal.pidfd_send_signal(descriptor, sig)
+    except (ProcessLookupError, FileNotFoundError):
         pass
-    except FileNotFoundError:
-        pass
+    finally:
+        os.close(descriptor)
 
 
 def reap(exclude):
