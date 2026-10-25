@@ -3,10 +3,10 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
-from scripts.linux_release.installed_cases.notification_bus import NotificationBus
-from scripts.linux_release.installed_cases.notification_delivery import PATH, SERVICE
-from scripts.linux_release.installed_cases.records import CaseFailed, CaseUnavailable
-from scripts.verification_tests.distribution.installed.test_notification_delivery_execution import message
+from linux_release.installed_cases.notification_bus import NotificationBus
+from linux_release.installed_cases.notification_delivery import PATH, SERVICE
+from linux_release.installed_cases.records import CaseFailed, CaseUnavailable
+from verification_tests.distribution.installed.test_notification_delivery_execution import message
 
 
 class NotificationBusTests(unittest.TestCase):
@@ -18,10 +18,10 @@ class NotificationBusTests(unittest.TestCase):
 
     def test_replaced_owner_and_reused_ui_pid_are_terminal(self):
         self.monitor._call = Mock(return_value=':1.8')
-        with patch('scripts.linux_release.installed_cases.notification_bus.process_identity', return_value=self.ui):
+        with patch('linux_release.installed_cases.notification_bus.process_identity', return_value=self.ui):
             with self.assertRaises(CaseFailed):
                 self.monitor.require_owners()
-        with patch('scripts.linux_release.installed_cases.notification_bus.process_identity',
+        with patch('linux_release.installed_cases.notification_bus.process_identity',
                 return_value={**self.ui, 'start_time_ticks': 201}):
             with self.assertRaises(CaseFailed):
                 self.monitor.require_owners()
@@ -29,7 +29,7 @@ class NotificationBusTests(unittest.TestCase):
     def test_refuses_service_process_replacement_even_with_same_unique_bus_name(self):
         self.monitor._call = Mock(return_value=':1.7')
         self.monitor._pid = Mock(return_value={**self.service, 'start_time_ticks': 301})
-        with patch('scripts.linux_release.installed_cases.notification_bus.process_identity', return_value=self.ui):
+        with patch('linux_release.installed_cases.notification_bus.process_identity', return_value=self.ui):
             with self.assertRaises(CaseFailed):
                 self.monitor.require_owners()
 

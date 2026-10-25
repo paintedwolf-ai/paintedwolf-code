@@ -2,8 +2,8 @@
 import copy
 import unittest
 
-from scripts.linux_release.installed_cases.notification_delivery import DeliveryTrace, PATH, SERVICE
-from scripts.linux_release.installed_cases.records import CaseFailed, CaseUnavailable
+from linux_release.installed_cases.notification_delivery import DeliveryTrace, PATH, SERVICE
+from linux_release.installed_cases.records import CaseFailed, CaseUnavailable
 
 
 def message(kind, **values):
