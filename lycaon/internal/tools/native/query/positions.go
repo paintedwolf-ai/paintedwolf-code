@@ -97,6 +97,9 @@ func (p *inputPositions) lineAt(offset int64) int {
 		}
 	}
 	line, _ := p.rank(end)
+	if p.read > 0 && (end == 0 || p.buffer.Bytes[(end-1)/8]&(1<<uint((end-1)%8)) == 0) {
+		line++
+	}
 	p.cachedOffset, p.cachedLine = offset, int(line)
 	return int(line)
 }

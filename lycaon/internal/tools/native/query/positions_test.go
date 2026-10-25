@@ -37,6 +37,9 @@ func TestQueryPositionsPreserveLineAndColumnAcrossChunkBoundaries(t *testing.T) 
 				end = int64(len(data))
 			}
 			wantCurrent := bytes.Count(data[:end], []byte{'\n'})
+			if end > 0 && data[end-1] != '\n' {
+				wantCurrent++
+			}
 			if line != wantLine || column != wantColumn || positions.lineAt(offset) != wantCurrent {
 				t.Fatalf("chunk %d offset %d line/column %d/%d want %d/%d current %d want %d", chunk, offset, line, column, wantLine, wantColumn, positions.lineAt(offset), wantCurrent)
 			}
