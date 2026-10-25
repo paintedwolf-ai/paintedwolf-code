@@ -119,13 +119,20 @@ def renderer_session(app, project, project_id, session_id):
         return None
     workflow = snapshot.get('activeWorkflowRun')
     if workflow is None:
-        return None
+        runs = snapshot.get('workflowRuns')
+        if not isinstance(runs, list) or len(runs) != 1:
+            return None
+        workflow = runs[0]
     if (not isinstance(workflow, dict) or workflow.get('project_id') != project_id
             or workflow.get('session_id') != session_id):
         raise ValueError('renderer workflow snapshot differs from its selected project session')
     ui_state = workflow.get('ui')
-    request = ui_state.get('request') if isinstance(ui_state, dict) else None
-    question = request.get('question') if isinstance(request, dict) else None
+    if ui_state is None and (workflow.get('workflow_id'), workflow.get('attach_policy'),
+                             workflow.get('status')) == ('implement', 'session_create', 'running'):
+        question = 'What would you like to work on?'
+    else:
+        request = ui_state.get('request') if isinstance(ui_state, dict) else None
+        question = request.get('question') if isinstance(request, dict) else None
     if question != 'What would you like to work on?':
         return None
     return {'observer': 'owned-app-state-JSON', 'project_id': project_id, 'session_id': session_id,
