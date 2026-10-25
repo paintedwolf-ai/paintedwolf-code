@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/anchorcatalog"
+	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/llm/transcript"
@@ -201,7 +202,9 @@ func TestProgramNativeDispatchRealEntryFixtures(t *testing.T) {
 			Stage:     toolcontract.ExecutionStage{ExecutionID: bound.Invocation().Identity.ExecutionID, OperationID: bound.Definition().Facts().Identity, Argv: argv},
 			Arguments: map[string]any{"path": "input"},
 			PrepareReviewed: func(context.Context, map[string]any, tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
-				return toolexecution.PreparedNativeEffect{Operation: bound, InvokeOwner: ownerFn}, nil
+				return toolexecution.PreparedNativeEffect{Operation: bound, InvokeOwner: func(ctx context.Context, tc tools.ToolContext, _ commandprogram.Streams) (toolcontract.ProducerResult, error) {
+					return ownerFn(ctx, tc)
+				}}, nil
 			},
 		}
 		observer := invocation.ProgramAdmissionRecorder{Recorder: f.recorder, Inputs: &retainedInputsFixture{}}
