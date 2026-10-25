@@ -373,7 +373,8 @@ class UnlockAccountAndBridgeTests(unittest.TestCase):
                     'launch': {'fixed_input': provider_records, 'session': {'User': '30008'}},
                     'unlock_preparation': {'request': prep_req, 'acknowledgment': prep_ack},
                     'lock_transition': lock_record,
-                    'unlock_transaction': {'request': unl_req, 'acknowledgment': unl_ack}}}))
+                    'unlock_transaction': {'request': unl_req, 'acknowledgment': unl_ack,
+                                           'independent_session_after': unlocked}}}))
             log_rows = [
                 {'request': prep_req, 'acknowledgment': prep_ack},
                 *provider_rows,
