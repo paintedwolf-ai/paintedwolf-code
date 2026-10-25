@@ -133,15 +133,18 @@ class ProfileSetupTests(unittest.TestCase):
         valid = {'scope': {'projectId': pid, 'sessionId': sid},
                  'session': {'id': sid, 'project_id': pid, 'workspace_path': root, 'status': 'idle'},
                  'activeWorkflowRun': {'project_id': pid, 'session_id': sid, 'ui': {'request': {'question': 'What would you like to work on?'}}}}
-        for status in ('preparing', 'idle'):
-            self.write(snap_file, {'key': 'lastSessionSnapshot', 'value': {**valid, 'session': {**valid['session'], 'status': status}}})
-            self.assertEqual(owner.renderer_session(None, root, pid, sid), {
-                'observer': 'owned-app-state-JSON', 'project_id': pid, 'session_id': sid, 'status': status,
-                'workspace_path': root, 'composer_question': 'What would you like to work on?',
-                'last_active_project_sha256': hashlib.sha256(active_file.read_bytes()).hexdigest(),
-                'last_session_snapshot_sha256': hashlib.sha256(snap_file.read_bytes()).hexdigest()})
+        for status in ('idle', 'preparing'):
+            for snap in ({**valid, 'session': {**valid['session'], 'status': status}},
+                         {**valid, 'session': {**valid['session'], 'status': status}, 'activeWorkflowRun': None,
+                          'workflowRuns': [{'project_id': pid, 'session_id': sid, 'workflow_id': 'implement', 'attach_policy': 'session_create', 'status': 'running'}]}):
+                self.write(snap_file, {'key': 'lastSessionSnapshot', 'value': snap})
+                self.assertEqual(owner.renderer_session(None, root, pid, sid), {
+                    'observer': 'owned-app-state-JSON', 'project_id': pid, 'session_id': sid, 'status': status,
+                    'workspace_path': root, 'composer_question': 'What would you like to work on?',
+                    'last_active_project_sha256': hashlib.sha256(active_file.read_bytes()).hexdigest(),
+                    'last_session_snapshot_sha256': hashlib.sha256(snap_file.read_bytes()).hexdigest()})
         for pending in ({**valid, 'scope': {'projectId': pid, 'sessionId': 'other'}}, {**valid, 'activeWorkflowRun': None},
-                        {**valid, 'session': {**valid['session'], 'status': 'busy'}},
+                        {**valid, 'session': {**valid['session'], 'status': 'busy'}}, {**valid, 'session': {**valid['session'], 'status': None}},
                         {**valid, 'activeWorkflowRun': {**valid['activeWorkflowRun'], 'ui': {'request': {'question': 'Other'}}}}):
             self.write(snap_file, {'key': 'lastSessionSnapshot', 'value': pending})
             self.assertIsNone(owner.renderer_session(None, root, pid, sid))
