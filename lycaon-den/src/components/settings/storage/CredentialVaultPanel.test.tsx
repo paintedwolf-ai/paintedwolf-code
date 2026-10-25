@@ -14,8 +14,12 @@ describe("CredentialVaultPanel", () => {
     expect(readVaultCustody).toHaveBeenCalledOnce();
   });
   it("retains a read failure without offering a reset", async () => {
-    readVaultCustody.mockRejectedValue(new Error("unavailable"));
+    let rejectRead!: (error: Error) => void;
+    readVaultCustody.mockReturnValue(new Promise<VaultCustody>((_resolve, reject) => {
+      rejectRead = reject;
+    }));
     const view = render(() => <CredentialVaultPanel />);
+    rejectRead(new Error("unavailable"));
     expect(await view.findByRole("alert")).toBeTruthy();
     expect(view.container.querySelector("input, button, form")).toBeNull();
   });
