@@ -172,6 +172,8 @@ func TestProgramOutsideWritesRefusedForRedirectAndMutationWhileTempAllowed(t *te
 	if _, statErr := os.Lstat(teeTarget); !os.IsNotExist(statErr) {
 		t.Fatalf("outside tee created %s: %v", teeTarget, statErr)
 	}
+}
+
 func (d programDispatch) InvokeEvaluator(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams, body func(context.Context, commandprogram.Streams) (toolcontract.ProducerResult, error)) (toolcontract.ProducerResult, error) {
 	if request.StreamPreparation != nil {
 		var err error
