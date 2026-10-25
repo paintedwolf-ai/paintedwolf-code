@@ -1,11 +1,15 @@
 """The installed fixture drives ordinary provider transport without real model calls."""
 import json
+from concurrent.futures import ThreadPoolExecutor
 import unittest
 import urllib.error
 import urllib.request
+import uuid
 
 from linux_release.installed_cases.provider import (MODEL, GUI_API_KEY, ProviderFixture,
                                                     FixtureRefusal, request_shape)
+from linux_release.installed_cases.provider_barrier import ResponseBarrier
+from verification_tests.distribution.installed.test_provider_acquisition_execution import framed, receipt
 
 
 class InstalledProviderTests(unittest.TestCase):
@@ -126,3 +130,73 @@ class InstalledProviderTests(unittest.TestCase):
         self.assertEqual(shape['offered_tools'], [])
         self.assertNotIn('PRIVATE', json.dumps(shape))
         self.assertEqual(request_shape(None), {'request_type': 'null'})
+
+    def test_two_real_authenticated_sse_turns_have_fresh_bounded_transport_observations(self):
+        barrier = ResponseBarrier()
+        with ProviderFixture.gui([{'name': 'command', 'arguments': {'command': '/usr/bin/true'}}],
+                acquire='command', response_barrier=barrier) as fixture:
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            def send(messages, available):
+                request = urllib.request.Request(fixture.base_url + '/chat/completions',
+                    data=json.dumps({'model': MODEL, 'messages': messages, 'stream': True,
+                        'tools': [{'type': 'function', 'function': {'name': name}} for name in available]}).encode(),
+                    headers={'Authorization': 'Bearer ' + GUI_API_KEY})
+                with opener.open(request, timeout=5) as response:
+                    self.assertEqual(response.headers['Content-Type'], 'text/event-stream')
+                    raw = response.read().decode()
+                self.assertTrue(raw.endswith('data: [DONE]\n\n'))
+                return json.loads(raw.split('\n\n')[0].removeprefix('data: '))['choices'][0]
+            histories = []
+            for number in range(2):
+                prior_count = len(fixture.transport_observations)
+                acquisition = fixture.acquisition
+                history = [{'role': 'user', 'content': 'PRIVATE FIXTURE PROMPT'}]
+                with ThreadPoolExecutor(max_workers=1) as pool:
+                    pending = pool.submit(send, history, ['request_tools'])
+                    barrier.await_held()
+                    self.assertEqual(len(fixture.transport_observations), prior_count)
+                    barrier.release()
+                    load = pending.result(timeout=5)['delta']['tool_calls'][0]
+                barrier.await_response_written()
+                load['id'] = f'call_{number * 2 + 1:08x}'
+                load.pop('index', None)
+                history.extend([{'role': 'assistant', 'tool_calls': [load]},
+                    {'role': 'tool', 'tool_call_id': load['id'], 'content': framed(invocation=receipt(
+                        id=str(uuid.uuid4()), tool_call_id=load['id']))}])
+                command = send(history, ['command'])['delta']['tool_calls'][0]
+                command['id'] = f'call_{number * 2 + 2:08x}'
+                command.pop('index', None)
+                history.extend([{'role': 'assistant', 'tool_calls': [command]},
+                    {'role': 'tool', 'tool_call_id': command['id'], 'content': framed(
+                        payload={'private': 'PRIVATE OUTPUT'}, invocation=receipt(id=str(uuid.uuid4()),
+                            tool='command', tool_call_id=command['id']))}])
+                self.assertEqual(send(history, ['command'])['finish_reason'], 'stop')
+                self.assertTrue(acquisition.completed)
+                rows = fixture.transport_observations[prior_count:]
+                self.assertEqual(len(rows), 3)
+                self.assertTrue(all(row == {'method': 'POST', 'path': '/v1/chat/completions',
+                    'status': 200, 'fixture_credential_observed': True} for row in rows))
+                histories.append(list(fixture.transport_observations))
+                if number == 0:
+                    barrier = fixture.begin_next_turn()
+                    self.assertIsNot(fixture.acquisition, acquisition)
+                    self.assertEqual(fixture.transport_observations, histories[0])
+            self.assertEqual(len(fixture.transport_observations), 6)
+            self.assertEqual(fixture.transport_observations[:3], histories[0])
+            self.assertNotIn(GUI_API_KEY, json.dumps(fixture.transport_observations))
+            self.assertNotIn('PRIVATE', json.dumps(fixture.transport_observations))
+            self.assertFalse(fixture.transport_clipped)
+
+    def test_sse_wrong_credential_is_refused_once_without_acquisition_or_payload_evidence(self):
+        with ProviderFixture.gui([{'name': 'command', 'arguments': {'command': '/usr/bin/true'}}],
+                acquire='command') as fixture:
+            request = urllib.request.Request(fixture.base_url + '/chat/completions',
+                data=json.dumps(dict(self.request(), stream=True)).encode(),
+                headers={'Authorization': 'Bearer PRIVATE WRONG KEY'})
+            with self.assertRaises(urllib.error.HTTPError) as failed:
+                urllib.request.build_opener(urllib.request.ProxyHandler({})).open(request, timeout=5)
+            self.assertEqual(failed.exception.code, 401)
+            self.assertEqual(fixture.transport_observations, [{'method': 'POST',
+                'path': '/v1/chat/completions', 'status': 401, 'fixture_credential_observed': False}])
+            self.assertFalse(fixture.acquisition.issued)
+            self.assertNotIn('PRIVATE', json.dumps(fixture.transport_observations))
