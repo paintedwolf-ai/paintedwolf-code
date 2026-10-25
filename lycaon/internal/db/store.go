@@ -14,8 +14,8 @@ const storeCloseTimeout = 30 * time.Second
 
 // StoreShutdownFloor is the time the clean marker and the WAL truncate are
 // guaranteed, whatever the caller's remaining budget. Skipping them costs the
-// next boot a quick_check on the startup path and a whole-store audit behind
-// it, so an already-spent shutdown context must not be what decides they run.
+// next boot a background whole-store audit, so an already-spent shutdown
+// context must not be what decides they run.
 const StoreShutdownFloor = 3 * time.Second
 
 // Handle is the durable-store interface used by repositories.
@@ -43,8 +43,7 @@ type Store struct {
 	writeCount  atomic.Uint64
 	maintenance chan struct{}
 	checkpoint  chan struct{}
-	// integrityAuditDue is set when the open followed an unclean shutdown:
-	// boot ran quick_check and the whole-store audit still has to run.
+	// integrityAuditDue covers unclean shutdowns and unfinished audits.
 	integrityAuditDue bool
 }
 
