@@ -141,14 +141,14 @@ class FrameObserver:
             raise ValueError('captured app surface inventory exceeds its bound')
         surfaces = []
         for marker, (node, metadata) in sorted(self.nodes.items()):
-            application = getattr(node, 'app', None)
-            if application is None:
-                raise accessibility.InventoryChanged()
-            if marker != (application.bus_name, node.path):
-                raise CaseFailed('retained accessible object address changed')
             state = node.getState()
             defunct = bool(state.contains(self.ui.api.STATE_DEFUNCT))
             if not defunct:
+                application = getattr(node, 'app', None)
+                if application is None:
+                    raise accessibility.InventoryChanged()
+                if marker != (application.bus_name, node.path):
+                    raise CaseFailed('retained accessible object address changed')
                 self._capture(node)
             # A defunct retained object keeps its previously verified identity and
             # parent; it cannot authorize input or stand in for a replacement frame.
