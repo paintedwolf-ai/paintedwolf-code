@@ -280,6 +280,8 @@ where
                             }
                             "credential_vault_custodian_absent" => SidecarStartError::CredentialVaultCustodianAbsent(engine_failure_message("the protected credential custodian is absent".into())),
                             "credential_vault_custodian_unavailable" => SidecarStartError::CredentialVaultCustodianUnavailable(engine_failure_message("the protected credential custodian is unavailable".into())),
+                            "credential_vault_launcher_refused" => SidecarStartError::CredentialVaultLauncherRefused("Open the installed desktop app; encrypted credentials are preserved.".into()),
+                            "credential_vault_identity_missing" => SidecarStartError::CredentialVaultIdentityMissing("The credential vault key is missing; restore it or reset the vault.".into()),
                             "credential_vault_corrupt" => {
                                 SidecarStartError::CredentialVaultCorrupt(engine_failure_message(
                                     "the encrypted credential vault or its identity is damaged"

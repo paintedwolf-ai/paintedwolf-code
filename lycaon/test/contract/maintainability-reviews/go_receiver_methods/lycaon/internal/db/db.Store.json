@@ -1,0 +1,16 @@
+{
+  "category": "go_receiver_methods",
+  "artifact": "lycaon/internal/db/db.Store",
+  "kind": "runtime_service",
+  "workstream": "database-integrity",
+  "disposition": "retain",
+  "reason": "Retain the 19 methods as one SQLite handle lifetime: writer admission, read-pool access, transactions, shutdown, maintenance signals, and integrity quarantine. The file-bound failure record is a free function in the database health boundary, not another service or writer. Quarantine still refuses retained statements and notifies the existing host before active transactions drain. Focused database, host, and API contracts protect those guarantees. The added log/slog dependency reports quarantine-publication failure; it adds no write authority or separate lifecycle. The same free health check discards stale evidence once the store it names is replaced or removed, so the handle gains no cleanup method. Startup, writer-quarantine, host shutdown, physical-store replacement, and orphan-record contracts passed before recording this structural decision.",
+  "reviewed_commit": "8a6c98e4cd20e6cc887151ef8debe4a16b6f928d",
+  "ceiling": 19,
+  "reviewed_shape": "5c2cb606fae4fc787c3fda41b989809ce20b4300d4dde4f4e668b70ea2a8e297",
+  "boundaries": {
+    "lycaon/internal/db/store_health_test.go": "0d6bf328fac5946722b15aadfcec3a6ead8dd785da92194e8b05229954e2f95f",
+    "lycaon/internal/app/store_health_test.go": "45ea772b7a1e835cafec50b1b0eb376388b5bb8b0c6152b16638700a49bcffda",
+    "lycaon/internal/api/recovery_snapshot_baseline_test.go": "e67ff1ea26b3ddc90766cdc214ac951c462d73a8fccdb52c12cf7b5610b1cb72"
+  }
+}

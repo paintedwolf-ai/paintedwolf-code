@@ -28,6 +28,9 @@ type Step struct {
 	To           Baseline
 	Apply        func(context.Context, *sql.Tx) error
 	Validate     func(context.Context, *sql.Tx) error
+	// Writes bounds the bytes the step writes to the store being upgraded.
+	// A step without it may rewrite the whole store.
+	Writes func(ctx context.Context, store DBTX, storeBytes uint64) (uint64, error)
 }
 
 // Plan contains a complete route; callers cannot replace its registered steps.
@@ -43,6 +46,27 @@ func (p Plan) Required() bool { return len(p.steps) != 0 }
 
 // ScratchBytes is the checked sum of declared migration working-space budgets.
 func (p Plan) ScratchBytes() uint64 { return p.scratchBytes }
+
+// WriteBytes bounds what the route writes to a store of storeBytes, summing
+// each step's declared bound and counting the whole store for a step that
+// declares none.
+func (p Plan) WriteBytes(ctx context.Context, store DBTX, storeBytes uint64) (uint64, error) {
+	var total uint64
+	for _, step := range p.steps {
+		written := storeBytes
+		if step.Writes != nil {
+			var err error
+			if written, err = step.Writes(ctx, store, storeBytes); err != nil {
+				return 0, fmt.Errorf("estimate migration %s writes: %w", step.ID, err)
+			}
+		}
+		if written > ^uint64(0)-total {
+			return 0, fmt.Errorf("migration write estimate overflows at %s", step.ID)
+		}
+		total += written
+	}
+	return total, nil
+}
 
 // Registry contains the current shape, immutable released shapes, and their upgrade routes.
 type Registry struct {

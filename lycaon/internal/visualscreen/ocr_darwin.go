@@ -12,6 +12,7 @@ import "C"
 import (
 	"context"
 	"errors"
+	"fmt"
 	"unsafe"
 )
 
@@ -30,6 +31,9 @@ func DefaultOCRBackend() (string, error) {
 func (e *appleVisionOCR) RecognizeText(ctx context.Context, mime string, raw []byte) ([]TextSpan, error) {
 	if len(raw) == 0 {
 		return nil, nil
+	}
+	if _, err := decodeRaster(raw); err != nil {
+		return nil, fmt.Errorf("decode raster: %w", err)
 	}
 	cData := (*C.uchar)(unsafe.Pointer(&raw[0]))
 	cLen := C.size_t(len(raw))

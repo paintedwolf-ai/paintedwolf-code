@@ -22,6 +22,11 @@ type passphraseIdentityProvider struct {
 	// missingGuidance names where a vault's identity may be instead when no
 	// wrapped identity exists beside it.
 	missingGuidance string
+	missingError    error
+	// unreachableVault, when set, is the vault whose key may be held by a
+	// custodian that could not be reached: with no wrapped identity beside
+	// it, purging would destroy credentials that custodian may still open.
+	unreachableVault string
 }
 
 func newPassphraseIdentityProvider(vaultPath string) identityProvider {
@@ -39,7 +44,11 @@ func (p *passphraseIdentityProvider) LoadOrCreate(vaultExists bool) (identityDoc
 	}
 	if os.IsNotExist(err) {
 		if vaultExists {
-			return identityDocument{}, fmt.Errorf("%w: wrapped identity is missing%s", ErrVaultCorrupt, p.missingGuidance)
+			missing := p.missingError
+			if missing == nil {
+				missing = ErrIdentityMissing
+			}
+			return identityDocument{}, fmt.Errorf("%w: wrapped identity is missing%s", missing, p.missingGuidance)
 		}
 		if len(password) == 0 {
 			return identityDocument{}, ErrVaultUninitialized
@@ -68,6 +77,7 @@ func (p *passphraseIdentityProvider) LoadOrCreate(vaultExists bool) (identityDoc
 		return identityDocument{}, fmt.Errorf("%w: password is incorrect or the wrapped identity is damaged", ErrVaultUnlockFailed)
 	}
 	plaintext, err := io.ReadAll(io.LimitReader(reader, maxIdentityBytes+1))
+	defer clear(plaintext)
 	if err != nil {
 		return identityDocument{}, fmt.Errorf("%w: read identity: %w", ErrVaultCorrupt, err)
 	}
@@ -86,6 +96,7 @@ func checkNewUnlockSecret(password []byte) error {
 
 func (p *passphraseIdentityProvider) commit(doc identityDocument, password []byte) error {
 	plaintext, err := encodeIdentityDocument(doc)
+	defer clear(plaintext)
 	if err != nil {
 		return err
 	}
@@ -112,6 +123,13 @@ func (p *passphraseIdentityProvider) commit(doc identityDocument, password []byt
 }
 
 func (p *passphraseIdentityProvider) Purge() error {
+	if p.unreachableVault != "" {
+		if _, err := os.Lstat(p.path); os.IsNotExist(err) {
+			if _, err := os.Lstat(p.unreachableVault); err == nil {
+				return fmt.Errorf("%w: refusing to remove a vault whose custodian may still hold its key", ErrCustodianUnavailable)
+			}
+		}
+	}
 	if err := os.Remove(p.path); err != nil && !os.IsNotExist(err) {
 		return err
 	}

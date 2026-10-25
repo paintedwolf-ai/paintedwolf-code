@@ -14,6 +14,7 @@ pub(crate) struct CustodyReport {
 }
 
 fn engine_command(args: &[&str]) -> Result<Command, String> {
+    super::installation::ensure_current().map_err(|reason| reason.guidance())?;
     let mut cmd = Command::new(resolve_lycaon_binary()?);
     cmd.arg("credentials")
         .args(args)
@@ -26,6 +27,13 @@ fn engine_command(args: &[&str]) -> Result<Command, String> {
 }
 
 fn read_custody() -> Result<CustodyReport, String> {
+    if let Err(reason) = super::installation::ensure_current() {
+        return Ok(CustodyReport {
+            mode: "restart_required".into(),
+            service_verified: false,
+            detail: Some(reason.guidance()),
+        });
+    }
     let output = engine_command(&["custody"])?
         .stdin(Stdio::null())
         .output()

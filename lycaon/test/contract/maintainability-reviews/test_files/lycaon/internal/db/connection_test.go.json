@@ -1,0 +1,14 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/internal/db/connection_test.go",
+  "kind": "test_suite",
+  "workstream": "database-integrity",
+  "disposition": "retain",
+  "reason": "Retain the 382 measured lines as the store connection acceptance suite: baseline refusal, pool configuration, shutdown state, audit handoff, and durability settings share real open/close fixtures. The change replaces production-only diagnostic-stamping and marker-classifying helpers with direct fixture seeding and raw marker reads, without adding lines. Damage, quarantine, interrupted-audit, and crash-recovery cases live in the focused store health suite; moving more unrelated connection tests would scatter the acceptance contract. Reconsider any growth above this measured size.",
+  "reviewed_commit": "8a6c98e4cd20e6cc887151ef8debe4a16b6f928d",
+  "ceiling": 382,
+  "boundaries": {
+    "lycaon/internal/db/connection_test.go": "0119703864bc6d364724d237b83bb3751bfbdf0e3f0a2067b15d828bb7bd87e3",
+    "lycaon/internal/db/store_health_test.go": "0d6bf328fac5946722b15aadfcec3a6ead8dd785da92194e8b05229954e2f95f"
+  }
+}

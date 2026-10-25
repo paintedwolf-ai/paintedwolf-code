@@ -22,7 +22,7 @@ if [[ -n "${holders}" ]]; then
   exit 1
 fi
 
-for path in "${DB_PATH}" "${DB_PATH}-wal" "${DB_PATH}-shm" "${DB_PATH}-journal"; do
+for path in "${DB_PATH}" "${DB_PATH}-wal" "${DB_PATH}-shm" "${DB_PATH}-journal" "${DB_PATH}.integrity-failure.json"; do
   if [[ -e "${path}" ]]; then
     rm -f "${path}"
     echo "removed ${path}" >&2

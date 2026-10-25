@@ -42,6 +42,7 @@ const confirmDestructive = vi.fn();
 const saveDiagnosticsBundle = vi.fn();
 const saveStartupDiagnosticsBundle = vi.fn();
 const resetCredentialVault = vi.fn();
+const quitDesktopForRestart = vi.fn();
 let startFailure: string | null = null;
 let recoveryClient: {
   restoreRecoverySnapshot: typeof restoreRecoverySnapshot;
@@ -68,6 +69,7 @@ vi.mock("../platform/connection/backend.ts", () => ({
   lastSidecarStartFailure: () => startFailure,
   lastSidecarStartDetail: () => null,
   resetCredentialVault: () => resetCredentialVault(),
+  quitDesktopForRestart: () => quitDesktopForRestart(),
 }));
 
 vi.mock("../settings/system/diagnostics-export.ts", () => ({
@@ -110,6 +112,7 @@ describe("createCriticalStop", () => {
     recoveryClient = null;
     saveDiagnosticsBundle.mockReset();
     saveStartupDiagnosticsBundle.mockReset();
+    quitDesktopForRestart.mockReset().mockResolvedValue(undefined);
     resetCredentialVault.mockReset();
     resetCredentialVault.mockResolvedValue(undefined);
     startFailure = null;
@@ -279,6 +282,31 @@ describe("createCriticalStop", () => {
       expect(root.querySelector(".den-critical-stop__message")?.textContent).toContain(
         CLIENT_NOTICES.readiness_recheck_failed.message,
       );
+    });
+  });
+
+  it.each(["insufficient_space", "storage_unavailable"] as const)("retries %s without offering a fresh start", async (reason) => {
+    noteHealthResponse({
+      ...recoveryHealth,
+      recovery_reason: reason,
+      recovery_space_needed_bytes: 3 * 1024 ** 3,
+      recovery_space_available_bytes: 1024 ** 3,
+    });
+    restartAppBackend.mockImplementation(async () => {
+      noteHealthResponse(readyHealth);
+    });
+    const { appStore, rendered } = mount();
+    appStore.actions.setSidecarStatus("connected");
+
+    const root = rendered.baseElement as HTMLElement;
+    const action = await findByTestId(root, "critical-stop-primary");
+    expect(action.textContent).toContain("Try again");
+    expect(root.querySelector('[data-testid="critical-stop-secondary"]')).toBeNull();
+    action.click();
+
+    await waitFor(() => {
+      expect(restartAppBackend).toHaveBeenCalledOnce();
+      expect(root.querySelector('[data-testid="critical-stop"]')).toBeNull();
     });
   });
 

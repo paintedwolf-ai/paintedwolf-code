@@ -8,22 +8,20 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/godbus/dbus/v5"
 )
 
 const (
-	portalName        = "org.freedesktop.portal.Desktop"
-	portalPath        = dbus.ObjectPath("/org/freedesktop/portal/desktop")
-	portalInhibit     = "org.freedesktop.portal.Inhibit"
-	portalRequest     = "org.freedesktop.portal.Request"
+	portalName    = "org.freedesktop.portal.Desktop"
+	portalPath    = dbus.ObjectPath("/org/freedesktop/portal/desktop")
+	portalInhibit = "org.freedesktop.portal.Inhibit"
+	portalRequest = "org.freedesktop.portal.Request"
+	// portalFlagSuspend is the only flag requested; the Idle flag (8) is the
+	// desktop's screen-saver and lock inhibitor.
 	portalFlagSuspend = uint32(4)
-	portalFlagIdle    = uint32(8)
-
-	powerManagementName    = "org.freedesktop.PowerManagement"
-	powerManagementPath    = dbus.ObjectPath("/org/freedesktop/PowerManagement/Inhibit")
-	powerManagementInhibit = "org.freedesktop.PowerManagement.Inhibit"
 )
 
 // sessionLease holds an inhibition that lives as long as its bus connection.
@@ -65,14 +63,11 @@ func (l *sessionLease) watch() {
 				l.done <- errors.New("sleep inhibitor service disconnected")
 				return
 			}
-			// Every signal on the connection arrives here; only the request's
-			// own Response ends the lease.
-			if response.Path != l.request || response.Name != portalRequest+".Response" {
+			// Every signal on the connection arrives here; only a later
+			// Response on the request ends the granted inhibition.
+			code, isResponse := responseCode(response, l.request)
+			if !isResponse || code == 0 {
 				continue
-			}
-			code := uint32(0)
-			if len(response.Body) > 0 {
-				code, _ = response.Body[0].(uint32)
 			}
 			l.done <- fmt.Errorf("sleep inhibitor ended by the desktop portal (response %d)", code)
 			return
@@ -94,8 +89,10 @@ func (l *sessionLease) Release() error {
 	return l.releaseError
 }
 
-// portalProvider inhibits through the desktop portal; the request object the
-// portal returns is closed to release. The portal must attribute the caller to
+// portalProvider inhibits automatic suspend through the desktop portal, whose
+// backend forwards it to the session's power policy; a backend that cannot
+// inhibit suspend alone refuses the request. The request object the portal
+// returns is closed to release. The portal must attribute the caller to
 // appID before inhibiting (see portalAttribution).
 type portalProvider struct {
 	connect busConnector
@@ -112,7 +109,7 @@ func (p portalProvider) Check(ctx context.Context) error {
 		return unavailable(ReasonBusUnreachable, "session bus unreachable: %w", err)
 	}
 	defer func() { _ = bus.Close() }()
-	if err := nameOwnedOn(ctx, bus, portalName); err != nil {
+	if err := nameAvailableOn(ctx, bus, portalName); err != nil {
 		return err
 	}
 	return p.attribute(ctx, bus)
@@ -134,20 +131,27 @@ func (p portalProvider) Acquire(ctx context.Context) (lease, error) {
 	}
 	responses := make(chan *dbus.Signal, 4)
 	bus.Signal(responses)
+	// The portal answers on the request object it is about to create, often
+	// before Inhibit returns, so observe that path before asking.
+	predicted := requestPath(bus, token)
+	if err := bus.AddMatchSignalContext(ctx, dbus.WithMatchObjectPath(predicted), dbus.WithMatchInterface(portalRequest), dbus.WithMatchMember("Response")); err != nil {
+		_ = bus.Close()
+		return nil, fmt.Errorf("observe portal inhibitor: %w", err)
+	}
 	options := map[string]dbus.Variant{
 		"handle_token": dbus.MakeVariant(token),
 		"reason":       dbus.MakeVariant("Painted Wolf Code: active work"),
 	}
 	var request dbus.ObjectPath
-	err = bus.Object(portalName, portalPath).CallWithContext(ctx, portalInhibit+".Inhibit", 0, "", portalFlagSuspend|portalFlagIdle, options).Store(&request)
+	err = bus.Object(portalName, portalPath).CallWithContext(ctx, portalInhibit+".Inhibit", 0, "", portalFlagSuspend, options).Store(&request)
 	if err != nil {
 		_ = bus.Close()
 		return nil, fmt.Errorf("acquire portal inhibitor: %w", err)
 	}
-	if err := bus.AddMatchSignalContext(ctx, dbus.WithMatchObjectPath(request), dbus.WithMatchInterface(portalRequest), dbus.WithMatchMember("Response")); err != nil {
+	if err := awaitGrant(ctx, responses, request); err != nil {
 		_ = bus.Object(portalName, request).CallWithContext(ctx, portalRequest+".Close", 0).Err
 		_ = bus.Close()
-		return nil, fmt.Errorf("observe portal inhibitor: %w", err)
+		return nil, err
 	}
 	release := func(ctx context.Context) error {
 		if err := bus.Object(portalName, request).CallWithContext(ctx, portalRequest+".Close", 0).Err; err != nil {
@@ -158,50 +162,53 @@ func (p portalProvider) Acquire(ctx context.Context) (lease, error) {
 	return newSessionLease(bus, p.Name(), release, responses, request), nil
 }
 
+// requestPath is the request object the portal creates for token on bus.
+func requestPath(bus *dbus.Conn, token string) dbus.ObjectPath {
+	sender := strings.ReplaceAll(strings.TrimPrefix(bus.Names()[0], ":"), ".", "_")
+	return dbus.ObjectPath("/org/freedesktop/portal/desktop/request/" + sender + "/" + token)
+}
+
+// awaitGrant waits for the request's first Response: 0 grants the inhibition,
+// which then lasts until the request is closed; any other code refuses it.
+func awaitGrant(ctx context.Context, responses <-chan *dbus.Signal, request dbus.ObjectPath) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("desktop portal did not answer the inhibitor request: %w", ctx.Err())
+		case response, ok := <-responses:
+			if !ok {
+				return errors.New("desktop portal disconnected before answering the inhibitor request")
+			}
+			code, isResponse := responseCode(response, request)
+			if !isResponse {
+				continue
+			}
+			if code != 0 {
+				return fmt.Errorf("desktop portal refused the inhibitor (response %d)", code)
+			}
+			return nil
+		}
+	}
+}
+
+// responseCode is the code of request's Response signal.
+func responseCode(signal *dbus.Signal, request dbus.ObjectPath) (uint32, bool) {
+	if signal.Path != request || signal.Name != portalRequest+".Response" {
+		return 0, false
+	}
+	code := uint32(2)
+	if len(signal.Body) > 0 {
+		if value, ok := signal.Body[0].(uint32); ok {
+			code = value
+		}
+	}
+	return code, true
+}
+
 func requestToken() (string, error) {
 	var raw [16]byte
 	if _, err := rand.Read(raw[:]); err != nil {
 		return "", fmt.Errorf("portal request token: %w", err)
 	}
 	return "pw" + hex.EncodeToString(raw[:]), nil
-}
-
-// powerManagementProvider uses the session power-management inhibit protocol
-// that standalone desktops serve; the cookie is released explicitly and the
-// service drops it when the connection ends.
-type powerManagementProvider struct{ connect busConnector }
-
-func (powerManagementProvider) Name() string { return "power-management" }
-
-func (p powerManagementProvider) Check(ctx context.Context) error {
-	return nameServed(ctx, p.connect, powerManagementName)
-}
-
-func (p powerManagementProvider) Acquire(ctx context.Context) (lease, error) {
-	bus, err := p.connect(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("connect to power management service: %w", err)
-	}
-	var cookie uint32
-	err = bus.Object(powerManagementName, powerManagementPath).CallWithContext(ctx, powerManagementInhibit+".Inhibit", 0, "Painted Wolf Code", "Active work").Store(&cookie)
-	if err != nil {
-		_ = bus.Close()
-		return nil, fmt.Errorf("acquire power management inhibitor: %w", err)
-	}
-	release := func(ctx context.Context) error {
-		if err := bus.Object(powerManagementName, powerManagementPath).CallWithContext(ctx, powerManagementInhibit+".UnInhibit", 0, cookie).Err; err != nil {
-			return fmt.Errorf("release power management inhibitor: %w", err)
-		}
-		return nil
-	}
-	return newSessionLease(bus, p.Name(), release, nil, ""), nil
-}
-
-func nameServed(ctx context.Context, connect busConnector, name string) error {
-	bus, err := connect(ctx)
-	if err != nil {
-		return unavailable(ReasonBusUnreachable, "session bus unreachable: %w", err)
-	}
-	defer func() { _ = bus.Close() }()
-	return nameOwnedOn(ctx, bus, name)
 }

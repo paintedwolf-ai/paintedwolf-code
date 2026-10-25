@@ -4,11 +4,11 @@
   "kind": "module",
   "workstream": "tool-prerequisite-recovery",
   "disposition": "retain",
-  "reason": "Application construction and adapters translate runtime service contracts for callers. The editor adapter supplies frozen retained reads while the document service retains mutation and recovery authority. Retain the bounded application module with real adapter and native-handler contracts.",
-  "reviewed_commit": "46d87a5d6ed1fe53c4cf707f18062a37ca65d7ed",
+  "reason": "Application construction and adapters remain a bounded 28-source-file composition module; P03 adds no source file or runtime dependency here. The new mixed contract uses real source capture, editor publication and one SQL aggregate settlement, proving preserved domain outcomes without a new coordinator owner or synthetic child calls. Existing adapter and mixed fixtures passed; renew the selected test boundary, not the source membership.",
+  "reviewed_commit": "f66017977c2500399b4e4ca07e6fff3ee8c3ca76",
   "ceiling": 28,
   "boundaries": {
-    "lycaon/internal/app/editor_retry_recovery_test.go": "a0d0b1d7537ef9b99d87f592ef54d2e4d518046eb64b0e0b6731babc0c774ac6",
+    "lycaon/internal/app/command_operation_contract_test.go": "bdb5c916997530e875414587959dd061d162d7a5bf523144502ea636ff9db12d",
     "lycaon/internal/app/editor_documents_adapter_test.go": "38027a6ca3d2029a4f085e46a45ed05300920fcad952dffa3d6fcb74522edb90"
   },
   "reviewed_shape": "cb83af53f96a45d2ba0b07b526b660853b1ce8061da9e48305c1dfb5be191e09"

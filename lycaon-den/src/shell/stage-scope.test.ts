@@ -232,4 +232,15 @@ describe("holdPresentedChat", () => {
       }),
     ).toBeNull();
   });
+
+  it("drops the presented chat when there is no incoming chat and no hydration lock", () => {
+    expect(
+      holdPresentedChat(outgoing, null, {
+        currentSessionId: undefined,
+        transcriptSessionId: undefined,
+        hydrationLock: undefined,
+        projectId: "p1",
+      }),
+    ).toBeNull();
+  });
 });

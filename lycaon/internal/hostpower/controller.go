@@ -33,8 +33,16 @@ type ProviderReasonCode string
 const (
 	// ReasonBusUnreachable is a bus the protocol lives on that cannot be reached.
 	ReasonBusUnreachable ProviderReasonCode = "bus_unreachable"
-	// ReasonNotServed is a protocol whose bus name has no owner.
+	// ReasonNotServed is a protocol with neither an owner nor an activation contract.
 	ReasonNotServed ProviderReasonCode = "not_served"
+	// ReasonPermissionDenied is an explicit native authorization refusal.
+	ReasonPermissionDenied ProviderReasonCode = "permission_denied"
+	// ReasonUnsupportedOperation is a native interface that lacks the operation.
+	ReasonUnsupportedOperation ProviderReasonCode = "unsupported_operation"
+	// ReasonDisconnected is a connection or service that ended before the operation.
+	ReasonDisconnected ProviderReasonCode = "disconnected"
+	// ReasonCanceled is an operation canceled by its caller.
+	ReasonCanceled ProviderReasonCode = "canceled"
 	// ReasonQueryFailed is a bus query that failed.
 	ReasonQueryFailed ProviderReasonCode = "query_failed"
 	// ReasonNoDescriptorPassing is a connection that cannot carry the lease descriptor.
@@ -42,6 +50,9 @@ const (
 	// ReasonNoApplicationID is a provider that refuses callers it cannot
 	// attribute to an application.
 	ReasonNoApplicationID ProviderReasonCode = "no_application_id"
+	// ReasonOwnUserOverride is a login manager whose locks the holder's own
+	// desktop overrides, with no session layer to stop that desktop.
+	ReasonOwnUserOverride ProviderReasonCode = "own_user_override"
 	// ReasonPlatform is a platform without an inhibition protocol.
 	ReasonPlatform ProviderReasonCode = "platform_unsupported"
 )
@@ -57,7 +68,11 @@ type ProviderReason struct {
 // protocol's own reason.
 type UnavailableError struct {
 	Reasons []ProviderReason
+	causes  []error
 }
+
+// Unwrap retains native causes for invocation-time classification and cancellation.
+func (e *UnavailableError) Unwrap() []error { return e.causes }
 
 func (e *UnavailableError) Error() string {
 	if len(e.Reasons) == 0 {
