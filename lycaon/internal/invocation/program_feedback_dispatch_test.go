@@ -208,7 +208,7 @@ func TestProgramNativeDispatchRealEntryFixtures(t *testing.T) {
 			},
 		}
 		observer := invocation.ProgramAdmissionRecorder{Recorder: f.recorder, Inputs: &retainedInputsFixture{}}
-		res, invokeErr := executor.InvokeNative(t.Context(), frame, surface, memory, dispatchProgress{content: "- [ ] Active step"}, observer, effect, tc)
+		res, invokeErr := executor.InvokeNative(t.Context(), frame, surface, memory, dispatchProgress{content: "- [ ] Active step"}, &observer, effect, tc)
 		return res, invokeErr, executor, frame, tc, memory
 	}
 

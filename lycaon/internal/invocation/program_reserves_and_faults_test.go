@@ -86,7 +86,7 @@ func TestProgramTraceReservesProtectTerminalSettlementUnderExhaustion(t *testing
 
 	// Non-terminal output attachment must also be refused when non-terminal trace events are exhausted.
 	quota := &outputQuota{}
-	store := f.recorder.ProgramBlobStore(blobstore.Store{Root: t.TempDir(), Dir: tooloutput.ToolOutputSpillDir})
+	store := f.recorder.ProgramBlobStore(t.Context(), blobstore.Store{Root: t.TempDir(), Dir: tooloutput.ToolOutputSpillDir})
 	spill, err := tooloutput.RetainScreenedStream(t.Context(), tooloutput.ScreenedReader(io.NopCloser(bytes.NewBufferString("blocked output"))), tooloutput.StreamSpillOptions{Store: store, ClaimID: runningChild.Invocation().Identity.ExecutionID + ":blocked", MaximumBytes: 64, Admission: quota, WorkingMemory: quota, RetainedState: quota})
 	testutil.FailErr(t, "retain candidate stream", err)
 	if _, _, err := f.recorder.AttachProgramOutput(t.Context(), f.program, invocation.RetainedOutput{ExecutionID: runningChild.Invocation().Identity.ExecutionID, Stream: "stdout", Reference: "output:blocked", Complete: true}, spill, quota); err == nil {
@@ -211,7 +211,7 @@ func TestProgramDeliveryReceiptFaultPreservesOwnerAcknowledgementAndReconcilesOn
 	f := newProgramReceiptFixture(t)
 	child := f.child(t)
 	quota := &outputQuota{}
-	store := f.recorder.ProgramBlobStore(blobstore.Store{Root: t.TempDir(), Dir: tooloutput.ToolOutputSpillDir})
+	store := f.recorder.ProgramBlobStore(t.Context(), blobstore.Store{Root: t.TempDir(), Dir: tooloutput.ToolOutputSpillDir})
 	lifetime, err := invocation.NewProgramOutputRetention(t.Context(), f.recorder, store, f.session, quota)
 	testutil.FailErr(t, "admit output lifetime", err)
 	testutil.FailErr(t, "restore empty output set", lifetime.Restore(t.Context()))
