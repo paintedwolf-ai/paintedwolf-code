@@ -29,6 +29,18 @@ def context(repository, ref, sha):
     raise ValueError('commit is no longer an active merge group')
 
 
+def certify(repository, ref, sha):
+    statuses = api(f'repos/{repository}/commits/{sha}/status')['statuses']
+    if any(row['context'] == 'DCO-owned' for row in statuses):
+        return
+    runs = api(f'repos/{repository}/actions/workflows/dco.yml/runs?event=workflow_dispatch&per_page=100')['workflow_runs']
+    if any(row.get('display_title') == f'DCO queue {sha}' for row in runs):
+        return
+    context(repository, ref, sha)
+    api(f'repos/{repository}/actions/workflows/dco.yml/dispatches', 'POST',
+        {'ref': 'main', 'inputs': {'queue_ref': ref, 'queue_sha': sha}})
+
+
 def recover(repository):
     active = {row['headCommit']['oid'] for row in entries(repository)
               if row['state'] == 'AWAITING_CHECKS' and row.get('headCommit')}
@@ -40,6 +52,7 @@ def recover(repository):
         sha = ref['object']['sha']
         if sha not in active:
             continue
+        certify(repository, ref['ref'], sha)
         branch = ref['ref'].removeprefix('refs/heads/')
         query = urlencode({'head_sha': sha, 'branch': branch, 'per_page': 100})
         runs = api(f'repos/{repository}/actions/workflows/ci.yml/runs?{query}')['workflow_runs']
