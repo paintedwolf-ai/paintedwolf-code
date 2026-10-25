@@ -4,19 +4,18 @@ from __future__ import annotations
 import time
 
 from .. import scripts_module
+from ..installed_input import accessibility
 from .app import process_identity, session_environment
 from .records import CaseFailed, CaseUnavailable
 
-
-class _InventoryChanged(Exception):
-    pass
+_InventoryChanged = accessibility.InventoryChanged
 
 
 def retry_inventory(app, error) -> bool:
     domain, code = getattr(error, 'domain', None), getattr(error, 'code', None)
     native = (isinstance(domain, str) and domain in {'atspi_error', 'g-dbus-error-quark', 'g-io-error-quark'}
               and type(code) is int and 0 <= code < 1 << 31)
-    if not isinstance(error, (IndexError, _InventoryChanged)) and not native:
+    if not isinstance(error, (IndexError, _InventoryChanged, NotImplementedError, AttributeError)) and not native:
         return False
     expected = app.observations['launch_identity']
     try:
@@ -109,27 +108,8 @@ class DesktopUI:
             if process_identity(pid) != identity or not owned_process(pid, self.app):
                 raise ValueError('installed desktop owner changed during window observation')
 
-    def descendants(self, window, deadline=None):
-        deadline = time.monotonic() + 15 if deadline is None else deadline
-        pending, visited = [(window, 0)], 0
-        while pending:
-            if time.monotonic() >= deadline:
-                raise CaseUnavailable('normal-native-control-observation-deadline')
-            node, depth = pending.pop()
-            visited += 1
-            if node is None:
-                raise _InventoryChanged()
-            count = node.childCount
-            if type(count) is int and count == -1:
-                raise _InventoryChanged()
-            if type(count) is not int or visited > 4096 or depth > 64 or not 0 <= count <= 1024:
-                error = CaseUnavailable('installed accessible window exceeds its fixed observer traversal bound')
-                error.observations = {'desktop_inventory_bound': {'visited': visited, 'depth': depth,
-                    'child_count': count if type(count) is int else None,
-                    'limits': {'visited': 4096, 'depth': 64, 'child_count': 1024}}}
-                raise error
-            yield node
-            pending.extend((node[index], depth + 1) for index in range(count))
+    def descendants(self, window, deadline=None, *, include=None):
+        return accessibility.descendants(window, deadline, include=include)
 
     def find(self, role: int, name: str):
         if not isinstance(name, str) or not 0 < len(name) <= 256:
@@ -178,14 +158,25 @@ class DesktopUI:
             'observed_roles': sorted(observed_roles)}}
         raise error
 
-    def click(self, name: str):
-        node = self.find(self.api.ROLE_PUSH_BUTTON, name)
-        try:
-            action = node.queryAction()
-            if action.nActions != 1 or action.doAction(0) is not True:
-                raise ValueError('normal native button refused its action')
-        except Exception:
-            raise CaseUnavailable('normal-native-button-action-unavailable') from None
+    def click(self, name: str, *, tab=False):
+        if type(tab) is not bool:
+            raise ValueError('normal native action requires an explicit button or page tab')
+        role = self.api.ROLE_PAGE_TAB if tab else self.api.ROLE_PUSH_BUTTON
+        deadline = time.monotonic() + 15
+        while True:
+            node = self.find(role, name)
+            try:
+                action = node.queryAction()
+                if action.nActions != 1 or action.doAction(0) is not True:
+                    raise ValueError('normal native button refused its action')
+                return
+            except ValueError:
+                raise CaseUnavailable('normal-native-button-action-unavailable') from None
+            except Exception as error:
+                if time.monotonic() < deadline and retry_inventory(self.app, error):
+                    time.sleep(0.05)
+                    continue
+                raise CaseUnavailable('normal-native-button-action-unavailable') from None
 
     def fill(self, role: int, name: str, value: str):
         node = self.find(role, name)

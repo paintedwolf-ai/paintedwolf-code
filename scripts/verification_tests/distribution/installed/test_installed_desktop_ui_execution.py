@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 from linux_release.installed_cases import desktop_ui as ui
 from linux_release.installed_cases.records import CaseFailed, CaseUnavailable
 
-API = SimpleNamespace(ROLE_FRAME=1, ROLE_DIALOG=2, ROLE_PUSH_BUTTON=3, ROLE_ENTRY=4, ROLE_PASSWORD_TEXT=5,
+API = SimpleNamespace(ROLE_FRAME=1, ROLE_DIALOG=2, ROLE_PUSH_BUTTON=3, ROLE_ENTRY=4, ROLE_PASSWORD_TEXT=5, ROLE_PAGE_TAB=6,
                       STATE_DEFUNCT=10, STATE_SHOWING=11, STATE_SENSITIVE=12, STATE_ENABLED=13)
 IDENTITY = {'pid': 123, 'parent_pid': 100, 'start_time_ticks': 42}
 
@@ -42,6 +42,21 @@ def surface(children):
 
 
 class DesktopUIOwnershipTests(unittest.TestCase):
+    def test_page_tab_is_an_explicit_role_and_uses_the_same_unique_action(self):
+        tab = Node(API.ROLE_PAGE_TAB, 'Secrets')
+        button = Node(API.ROLE_PUSH_BUTTON, 'Secrets')
+        api, _ = surface([tab, button])
+        with ui.DesktopUI(self.app, api) as actor:
+            actor.click('Secrets', tab=True)
+            tab.action.doAction.assert_called_once_with(0)
+            button.action.doAction.assert_not_called()
+            with self.assertRaises(ValueError):
+                actor.click('Secrets', tab=1)
+            tab.action.nActions = 2
+            with self.assertRaises(CaseUnavailable):
+                actor.click('Secrets', tab=True)
+        self.assertEqual(tab.action.doAction.call_count, 1)
+
     def test_interactive_retry_requires_same_owned_identity_and_one_deadline(self):
         api, _ = surface([Node(API.ROLE_PUSH_BUTTON, 'Send')])
         witness = {'normal_actionable_control': True}
@@ -66,9 +81,23 @@ class DesktopUIOwnershipTests(unittest.TestCase):
         actor = ui.DesktopUI(self.app, API)
         with self.assertRaises(ui._InventoryChanged):
             list(actor.descendants(node))
-        with self.assertRaises(ui._InventoryChanged):
-            list(actor.descendants(Node(API.ROLE_FRAME, children=[None])))
         node.action.doAction.assert_not_called()
+
+    def test_nullable_child_refuses_partial_inventory_without_authorizing_action(self):
+        button = Node(API.ROLE_PUSH_BUTTON, 'Send')
+        window = Node(API.ROLE_FRAME, children=[None, button])
+        actor = ui.DesktopUI(self.app, API)
+        with self.assertRaises(ui._InventoryChanged):
+            list(actor.descendants(window))
+        api, _ = surface([button])
+        api.Registry.getDesktop(0).children = [None]
+        with self.assertRaises(ui._InventoryChanged):
+            list(ui.DesktopUI(self.app, api).windows())
+        api, _ = surface([button])
+        api.Registry.getDesktop(0)[0].children = [None]
+        with self.assertRaises(ui._InventoryChanged):
+            list(ui.DesktopUI(self.app, api).windows())
+        button.action.doAction.assert_not_called()
 
     def test_observer_bound_retains_exact_single_read_facts_without_authorizing_action(self):
         class Oversized(Node):
@@ -167,6 +196,14 @@ class DesktopUIOwnershipTests(unittest.TestCase):
                 actor.click('Send')
         button.action.doAction.assert_called_once_with(0)
         self.assertEqual(self.app.observations['desktop_inventory_retry']['domain'], 'atspi_error')
+        with ui.DesktopUI(self.app, api) as actor, patch.object(ui.time, 'sleep'):
+            with patch.object(button, 'queryAction', side_effect=[NotImplementedError('mounting'), button.action]):
+                actor.click('Send')
+        self.assertEqual(button.action.doAction.call_count, 2)
+        self.assertEqual(self.app.observations['desktop_inventory_retry']['exception_type'], 'NotImplementedError')
+        with ui.DesktopUI(self.app, api) as actor, patch.object(button, 'queryAction', side_effect=RuntimeError('bad')):
+            with self.assertRaises(CaseUnavailable):
+                actor.click('Send')
         with ui.DesktopUI(self.app, api) as actor:
             with patch.object(actor, 'descendants', side_effect=RuntimeError('not retained')):
                 with self.assertRaises(CaseUnavailable) as refusal:
