@@ -252,6 +252,7 @@ func checkSorted(inv *invocation, order sortOrder, delimiter byte) error {
 	if err != nil {
 		return err
 	}
+	defer records.Close()
 	var previous []byte
 	for line := 1; ; line++ {
 		record, err := records.next()

@@ -20,6 +20,9 @@ const (
 	settlementEvents = 32
 	settlementBytes  = 16384
 	traceRecordBytes = 256
+	// A retained diagnostic includes its error reference and at most one
+	// stdout endpoint token. It never retains the closed pipe graph.
+	traceDiagnosticBytes = 32
 )
 
 type evaluationLimits map[string]int64
@@ -95,7 +98,6 @@ type childRun struct {
 	producer bool
 	// recorded executions settle their receipt through ports.Executions.
 	recorded bool
-	ctx      context.Context
 }
 
 // beginRecorded allocates an execution the evaluator itself runs (pipelines,
@@ -112,10 +114,10 @@ func (f *frame) beginRecorded(ctx context.Context, loc commandsurface.SyntaxLoca
 		return child, err
 	}
 	if err := f.e.ports.Executions.BeginExecution(ctx, child.inv, command); err != nil {
-		child.close()
+		child.close(ctx)
 		return nil, err
 	}
-	child.recorded, child.ctx = true, ctx
+	child.recorded = true
 	return child, nil
 }
 
@@ -143,25 +145,30 @@ func (f *frame) begin(loc commandsurface.SyntaxLocation, command string) (*child
 	return &childRun{frame: f, inv: inv, producer: true, record: ChildRecord{Identity: inv.Identity, SourceUnitID: inv.SourceUnitID, Span: loc.Span, Command: command}}, nil
 }
 
-func (c *childRun) settle(result toolcontract.ProducerResult, diagnostic error) {
+func (c *childRun) settle(ctx context.Context, result toolcontract.ProducerResult, diagnostic error) {
 	if c.settled {
 		return
+	}
+	if diagnostic != nil {
+		c.frame.e.mu.Lock()
+		c.frame.e.traceBytes += traceDiagnosticBytes
+		c.frame.e.mu.Unlock()
 	}
 	c.record.Executed, c.record.Result, c.record.Diagnostic = true, result, diagnostic
 	if c.producer {
 		record := c.record
 		c.frame.state.last = &record
 	}
-	c.close()
+	c.close(ctx)
 }
 
-func (c *childRun) close() {
+func (c *childRun) close(ctx context.Context) {
 	if c == nil || c.settled {
 		return
 	}
 	c.settled = true
 	if c.recorded {
-		_ = c.frame.e.ports.Executions.SettleExecution(context.WithoutCancel(c.ctx), c.inv, c.record)
+		_ = c.frame.e.ports.Executions.SettleExecution(context.WithoutCancel(ctx), c.inv, c.record)
 	}
 	e := c.frame.e
 	e.mu.Lock()
@@ -190,7 +197,7 @@ func (f *frame) refuseLimit(loc commandsurface.SyntaxLocation, limit string, obs
 	return f.refuse(loc, limitExceeded, "bounded "+limit, cause)
 }
 
-func (f *frame) refuse(loc commandsurface.SyntaxLocation, code, expected string, cause error) error {
+func (f *frame) refuse(loc commandsurface.SyntaxLocation, code, expected string, cause error) *EvaluationRefusal {
 	_ = f.state.latch.Record(uuid.NewString(), toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerRefused, StopCode: code, EffectCertainty: toolcontract.NoEffect}, true)
 	return &EvaluationRefusal{Code: code, Node: loc, Expected: expected, Cause: cause}
 }

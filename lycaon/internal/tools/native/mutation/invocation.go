@@ -29,7 +29,8 @@ type invocation struct {
 	stderr  io.Writer
 	status  int
 	// effects counts mutations that committed, so a later stop reports them.
-	effects int
+	effects   int
+	uncertain bool
 }
 
 func newInvocation(ctx context.Context, p Prepared, tc tools.ToolContext, streams commandprogram.Streams) *invocation {
@@ -136,9 +137,12 @@ func (inv *invocation) settle(err error) (toolcontract.ProducerResult, error) {
 	if errors.As(err, &domain) {
 		return domain.ProducerResult(), err
 	}
+	err = tools.CommandResourceRejection(err)
 	certainty := toolcontract.NoEffect
 	if inv.effects > 0 {
 		certainty = toolcontract.EffectCompleted
+	} else if inv.uncertain {
+		certainty = toolcontract.EffectUnknown
 	}
 	switch {
 	case err == nil:
@@ -165,7 +169,7 @@ func (inv *invocation) settle(err error) (toolcontract.ProducerResult, error) {
 		_, _ = fmt.Fprintf(inv.stderr, "%s: %s [%s]\n", inv.name(), pathErr.Error(), pathErr.Code)
 		return toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerRefused, StopCode: pathErr.Code, EffectCertainty: certainty}, err
 	}
-	if certainty == toolcontract.NoEffect {
+	if certainty == toolcontract.NoEffect && !errors.Is(err, commandprogram.ErrConsumerClosed) {
 		certainty = toolcontract.EffectUnknown
 	}
 	return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: certainty}, err

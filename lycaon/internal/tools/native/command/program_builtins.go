@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools"
 )
 
 // sessionOutputResources is session output-lifetime accounting: retained
@@ -205,6 +206,16 @@ func readResult(status int) toolcontract.ProducerResult {
 // host refusal an owner raised while binding (a path outside every folder, a
 // folder no longer attached) keeps its own code and facts.
 func argvRejection(spec toolcontract.CommandSpecification, cause error) error {
+	cause = tools.CommandResourceRejection(cause)
+	if owner := toolrejection.AsToolReject(cause); owner != nil && programResourceRefusal(owner) {
+		if owner.Data == nil {
+			owner.Data = map[string]any{}
+		}
+		if _, ok := owner.Data["command"]; !ok {
+			owner.Data["command"] = spec.Name
+		}
+		return cause
+	}
 	code := "COMMAND_OPERAND_INVALID"
 	data := map[string]any{"command": spec.Name, "expected_form": spec.Argv}
 	var argvErr *commandprogram.ArgvError
@@ -222,5 +233,5 @@ func argvRejection(spec toolcontract.CommandSpecification, cause error) error {
 			data[key] = value
 		}
 	}
-	return toolrejection.RejectInvalidArguments(code, data)
+	return errors.Join(toolrejection.RejectInvalidArguments(code, data), cause)
 }

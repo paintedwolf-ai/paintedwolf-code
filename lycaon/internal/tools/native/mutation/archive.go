@@ -191,17 +191,3 @@ func (inv *invocation) directory(key string) (string, error) {
 	}
 	return bound.Resolved.Abs, nil
 }
-
-// boundedReader refuses decoded bytes past the expansion ceiling.
-type boundedReader struct {
-	r         io.Reader
-	remaining int64
-}
-
-func (b *boundedReader) Read(p []byte) (int, error) {
-	n, err := b.r.Read(p)
-	if b.remaining -= int64(n); b.remaining < 0 {
-		return 0, limitRefusal("archive_extract_bytes", "bytes", 0, -b.remaining)
-	}
-	return n, err
-}

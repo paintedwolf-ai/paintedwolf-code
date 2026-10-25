@@ -1,13 +1,11 @@
 package sedscript
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 
-	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
@@ -27,23 +25,24 @@ type Input interface {
 }
 
 // Config binds a program to one run. Writers holds every Program.WriteFiles
-// entry; Files holds the contents of each readable r and R file (an absent
-// file reads as nothing, as in GNU sed). SpaceLimit bounds pattern and hold
+// entry; OpenFile opens an r or R input when reached (nil for an absent
+// or unreadable file). SpaceLimit bounds pattern and hold
 // space; StepLimit bounds branches and D restarts between input reads.
 type Config struct {
-	Quiet      bool
-	Delimiter  byte
-	SpaceLimit int64
-	StepLimit  int64
-	Reserve    func(int64) error
-	Stdout     io.Writer
-	Stderr     io.Writer
-	Writers    map[string]io.Writer
-	Files      map[string][]byte
+	Quiet        bool
+	Delimiter    byte
+	SpaceLimit   int64
+	StepLimit    int64
+	Reserve      func(int64) error
+	Stdout       io.Writer
+	WriteLiteral func(pin *toolcontract.SourcePin, p []byte, offset int64) error
+	Stderr       io.Writer
+	Writers      map[string]io.Writer
+	OpenFile     func(string) (ReadFile, error)
 }
 
-// Machine is one sed run. Hold space, the last regex, R file positions and
-// quit state persist across the inputs given to Stream.
+// Machine is one sed run. Hold space, the last regex and quit state persist
+// across calls to Stream; R file positions restart with each stream.
 type Machine struct {
 	ctx     context.Context
 	program *Program
@@ -51,9 +50,10 @@ type Machine struct {
 	outputs map[string]*output
 	stream  inputState
 	space   spaces
+	files   readFiles
 	appends []appendItem
+	listing []byte
 	last    Regex
-	cursors map[string]int
 	status  int
 	quit    bool
 }
@@ -74,30 +74,18 @@ type inputState struct {
 	steps      int64
 }
 
-// spaces are pattern and hold space and the memory reserved for them.
-type spaces struct {
-	pattern, hold []byte
-	reserved      int64
-}
-
 // output is one destination; pending records that the last record written
 // lacked its newline, which later output restores first.
 type output struct {
-	w              io.Writer
-	pending        bool
-	written        int64
-	mappings       commandprogram.SourceMappingRecorder
-	pendingMapping *toolcontract.StreamSourceMapping
-}
-
-func newOutput(w io.Writer) *output {
-	mappings, _ := w.(commandprogram.SourceMappingRecorder)
-	return &output{w: w, mappings: mappings}
+	w            io.Writer
+	writeLiteral func(pin *toolcontract.SourcePin, p []byte, offset int64) error
+	pending      bool
 }
 
 type appendItem struct {
 	text []byte
 	file string
+	line bool
 }
 
 type ending uint8
@@ -118,15 +106,25 @@ func NewMachine(ctx context.Context, program *Program, config Config) (*Machine,
 	if config.Stderr == nil {
 		config.Stderr = io.Discard
 	}
-	m := &Machine{ctx: ctx, program: program, config: config, outputs: map[string]*output{}, cursors: map[string]int{}}
-	m.outputs[Stdout] = newOutput(config.Stdout)
-	m.outputs[Stderr] = newOutput(config.Stderr)
+	if len(program.reads) > 0 {
+		if config.OpenFile == nil {
+			return nil, errors.New("sed read files need a stream factory")
+		}
+		if config.Reserve != nil {
+			if err := config.Reserve(int64(len(program.reads)) * 256); err != nil {
+				return nil, err
+			}
+		}
+	}
+	m := &Machine{ctx: ctx, program: program, config: config, space: spaces{limit: config.SpaceLimit, reserve: config.Reserve}, outputs: map[string]*output{}, files: readFiles{open: config.OpenFile, reserve: config.Reserve, cursors: map[string]ReadFile{}}}
+	m.outputs[Stdout] = &output{w: config.Stdout, writeLiteral: config.WriteLiteral}
+	m.outputs[Stderr] = &output{w: config.Stderr}
 	for _, name := range program.writes {
 		w, ok := config.Writers[name]
 		if !ok {
 			return nil, fmt.Errorf("sed write file %s is not open", name)
 		}
-		m.outputs[name] = newOutput(w)
+		m.outputs[name] = &output{w: w}
 	}
 	return m, nil
 }
@@ -137,18 +135,29 @@ func (m *Machine) Status() int { return m.status }
 // Stream runs records through the script, writing the pattern space to out
 // (standard output when nil). Line numbers, $ and ranges are per call, so
 // sed -s and -i call it once per file. It reports whether q or Q ended the run.
-func (m *Machine) Stream(in Input, out io.Writer) (bool, error) {
+func (m *Machine) Stream(in Input, out io.Writer) (_ bool, finalErr error) {
 	if m.quit {
 		return true, nil
 	}
+	if err := m.files.start(); err != nil {
+		return false, err
+	}
+	defer func() {
+		if err := m.files.close(); err != nil {
+			if finalErr == nil {
+				finalErr = err
+			} else {
+				finalErr = errors.Join(finalErr, err)
+			}
+		}
+	}()
 	m.stream = inputState{in: in, out: m.outputs[Stdout]}
 	if out != nil {
-		m.stream.out = newOutput(out)
+		m.stream.out = &output{w: out}
 	}
 	for _, c := range m.program.commands {
 		c.span = rangeState{active: c.first != nil && c.first.kind == addrZero}
 	}
-	clear(m.cursors)
 	if err := m.stream.fill(); err != nil {
 		return false, err
 	}
@@ -156,31 +165,31 @@ func (m *Machine) Stream(in Input, out io.Writer) (bool, error) {
 	for {
 		if !restart {
 			if ok, err := m.next(false); err != nil || !ok {
-				return false, errors.Join(err, m.stream.out.flushMapping())
+				return false, err
 			}
 		}
 		end, err := m.execute()
 		if err != nil {
-			return false, errors.Join(err, m.stream.out.flushMapping())
+			return false, err
 		}
 		if (end == endCycle || end == endQuit) && !m.config.Quiet {
-			if err := m.stream.out.emitMapped(m.space.pattern, m.config.Delimiter, m.stream.terminated, m.stream.pin, m.stream.offset); err != nil {
-				return false, errors.Join(err, m.stream.out.flushMapping())
+			if err := m.stream.out.emitRecord(m.space.pattern, m.config.Delimiter, m.stream.terminated, m.stream.pin, m.stream.offset); err != nil {
+				return false, err
 			}
 		}
 		if end != endQuitSilent {
 			if err := m.dumpAppends(); err != nil {
-				return false, errors.Join(err, m.stream.out.flushMapping())
+				return false, err
 			}
 		}
 		if end == endQuit || end == endQuitSilent {
 			m.quit = true
-			return true, m.stream.out.flushMapping()
+			return true, nil
 		}
 		restart = end == endRestart
 		if restart {
 			if err := m.stream.step(m.ctx, m.config.StepLimit); err != nil {
-				return false, errors.Join(err, m.stream.out.flushMapping())
+				return false, err
 			}
 		}
 	}
@@ -210,19 +219,20 @@ func (m *Machine) next(appending bool) (bool, error) {
 		return false, err
 	}
 	record := m.stream.ahead
+	var err error
 	if appending {
-		m.space.pattern = append(append(m.space.pattern, m.config.Delimiter), record.Text...)
+		err = m.space.join(&m.space.pattern, m.config.Delimiter, record.Text)
 		m.stream.pin = nil
 	} else {
-		m.space.pattern = append(m.space.pattern[:0], record.Text...)
+		err = m.space.assign(&m.space.pattern, record.Text)
 		m.stream.pin, m.stream.offset = record.Pin, record.Offset
+	}
+	if err != nil {
+		return false, err
 	}
 	m.stream.terminated, m.stream.source = record.Terminated, record.Source
 	m.stream.line++
 	m.stream.replaced, m.stream.steps = false, 0
-	if err := m.space.account(m.config.SpaceLimit, m.config.Reserve); err != nil {
-		return false, err
-	}
 	return true, m.stream.fill()
 }
 
@@ -240,108 +250,51 @@ func (s *inputState) step(ctx context.Context, limit int64) error {
 	return nil
 }
 
-// account bounds pattern and hold space and reserves their growth.
-func (s *spaces) account(limit int64, reserve func(int64) error) error {
-	for _, space := range [][]byte{s.pattern, s.hold} {
-		if limit > 0 && int64(len(space)) > limit {
-			return &LimitError{Resource: "record_bytes", Maximum: limit, Observed: int64(len(space))}
-		}
+// emitRecord writes one record to an output, recording a source mapping when
+// the record is unmodified and the output accepts literal mappings.
+func (o *output) emitRecord(record []byte, delimiter byte, terminated bool, pin *toolcontract.SourcePin, offset int64) error {
+	if o.writeLiteral == nil || pin == nil {
+		return o.emit(record, delimiter, terminated)
 	}
-	total := int64(cap(s.pattern) + cap(s.hold))
-	if total <= s.reserved || reserve == nil {
-		return nil
-	}
-	if err := reserve(total - s.reserved); err != nil {
-		return err
-	}
-	s.reserved = total
-	return nil
-}
-
-// emit writes one record to an output. A record that lacked its delimiter is
-// written without it; later output first restores a newline.
-func (o *output) emit(record []byte, delimiter byte, terminated bool) error {
-	return o.emitMapped(record, delimiter, terminated, nil, 0)
-}
-
-func (o *output) emitMapped(record []byte, delimiter byte, terminated bool, pin *toolcontract.SourcePin, sourceOffset int64) error {
 	if o.pending {
-		if err := o.flushMapping(); err != nil {
-			return err
-		}
-		if err := o.writeBytes([]byte{'\n'}); err != nil {
+		if _, err := o.w.Write([]byte{'\n'}); err != nil {
 			return err
 		}
 		o.pending = false
 	}
-	start := o.written
-	if err := o.writeBytes(record); err != nil {
+	if !terminated {
+		o.pending = true
+		return o.writeLiteral(pin, record, offset)
+	}
+	if err := o.writeLiteral(pin, record, offset); err != nil {
+		return err
+	}
+	return o.writeLiteral(pin, []byte{delimiter}, offset+int64(len(record)))
+}
+// emit writes one record to an output. A record that lacked its delimiter is
+// written without it; later output first restores a newline.
+func (o *output) emit(record []byte, delimiter byte, terminated bool) error {
+	if err := o.raw(record); err != nil {
 		return err
 	}
 	if !terminated {
 		o.pending = true
-	} else if err := o.writeBytes([]byte{delimiter}); err != nil {
-		return err
-	}
-	end := o.written
-	if pin != nil && (!terminated || delimiter == '\n') && end > start {
-		return o.recordSpan(*pin, start, end, sourceOffset, sourceOffset+(end-start))
-	}
-	return o.flushMapping()
-}
-
-func (o *output) recordSpan(pin toolcontract.SourcePin, outStart, outEnd, srcStart, srcEnd int64) error {
-	if o.mappings == nil || outEnd <= outStart || srcEnd <= srcStart {
 		return nil
 	}
-	if m := o.pendingMapping; m != nil &&
-		m.Source == pin &&
-		m.OutputEndByte == outStart && m.SourceEndByte == srcStart {
-		m.OutputEndByte = outEnd
-		m.SourceEndByte = srcEnd
-		return nil
-	}
-	if err := o.flushMapping(); err != nil {
-		return err
-	}
-	o.pendingMapping = &toolcontract.StreamSourceMapping{
-		Source:          pin,
-		OutputStartByte: outStart,
-		OutputEndByte:   outEnd,
-		SourceStartByte: srcStart,
-		SourceEndByte:   srcEnd,
-	}
-	return nil
-}
-
-func (o *output) flushMapping() error {
-	if o.mappings == nil || o.pendingMapping == nil {
-		o.pendingMapping = nil
-		return nil
-	}
-	m := *o.pendingMapping
-	o.pendingMapping = nil
-	return o.mappings.RecordSourceMapping(m)
-}
-
-func (o *output) writeBytes(p []byte) error {
-	n, err := o.w.Write(p)
-	o.written += int64(n)
+	_, err := o.w.Write([]byte{delimiter})
 	return err
 }
 
 // raw writes bytes after restoring a missing newline.
 func (o *output) raw(text []byte) error {
-	if err := o.flushMapping(); err != nil {
-		return err
-	}
 	if o.pending {
-		if err := o.writeBytes([]byte{'\n'}); err != nil {
+		if _, err := o.w.Write([]byte{'\n'}); err != nil {
 			return err
 		}
 		o.pending = false
 	}
-	return o.writeBytes(text)
+	_, err := o.w.Write(text)
+	return err
 }
 
 // text writes a, i and c text and its newline.
@@ -349,7 +302,8 @@ func (o *output) text(text []byte) error {
 	if err := o.raw(text); err != nil {
 		return err
 	}
-	return o.writeBytes([]byte{'\n'})
+	_, err := o.w.Write([]byte{'\n'})
+	return err
 }
 
 // dumpAppends writes queued a text, r file contents and R lines.
@@ -357,7 +311,7 @@ func (m *Machine) dumpAppends() error {
 	for _, item := range m.appends {
 		var err error
 		if item.file != "" {
-			err = m.stream.out.raw(m.config.Files[item.file])
+			err = m.files.append(item, m.stream.out)
 		} else {
 			err = m.stream.out.text(item.text)
 		}
@@ -365,22 +319,7 @@ func (m *Machine) dumpAppends() error {
 			return err
 		}
 	}
+	clear(m.appends)
 	m.appends = m.appends[:0]
 	return nil
-}
-
-// readLine returns the next line of an R file, without its newline.
-func (m *Machine) readLine(file string) ([]byte, bool) {
-	content, at := m.config.Files[file], m.cursors[file]
-	if at >= len(content) {
-		return nil, false
-	}
-	end := bytes.IndexByte(content[at:], '\n')
-	if end < 0 {
-		end = len(content) - at
-		m.cursors[file] = len(content)
-	} else {
-		m.cursors[file] = at + end + 1
-	}
-	return content[at : at+end], true
 }

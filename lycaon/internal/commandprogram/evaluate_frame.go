@@ -132,13 +132,16 @@ func (f *frame) isolate(ctx context.Context, latch *OutcomeLatch) (*frame, func(
 	if err != nil {
 		return nil, nil, err
 	}
-	control.status = f.state.control.Status()
+	if f.state.control != nil {
+		control.status = f.state.control.Status()
+	}
 	vars, err := f.state.vars.Clone(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
 	for name, value := range f.prefix {
-		if err := vars.Assign(ctx, name, value); err == nil {
+		err := vars.Assign(ctx, name, value)
+		if err == nil {
 			err = vars.Export(ctx, name)
 		}
 		if err != nil {

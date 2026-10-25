@@ -108,7 +108,7 @@ type harness struct {
 	owners      *Owners
 	pins        *pinLog
 	memory      *toolcontract.ProgramMemory
-	spills      string
+	spills      *Spills
 	quota       *spillQuota
 	nested      commandprogram.NestedCommand
 	env         []string
@@ -135,8 +135,9 @@ func newHarness(t *testing.T) *harness {
 	testutil.FailErr(t, "memory limits", err)
 	memory, err := toolcontract.NewProgramMemory(limits)
 	testutil.FailErr(t, "memory", err)
+	owners.Revisions.Memory = memory
 	tc := nativefixture.Context(root)
-	mutations, err := mutation.NewOwners(native.ExecutionRevisions{Boundary: boundary}, pins, mutation.Operations{Write: &native.WriteTool{Boundary: boundary}, Delete: &native.DeleteTool{Boundary: boundary},
+	mutations, err := mutation.NewOwners(native.ExecutionRevisions{Boundary: boundary, Memory: memory}, pins, mutation.Operations{Write: &native.WriteTool{Boundary: boundary}, Delete: &native.DeleteTool{Boundary: boundary},
 		Move: &native.MoveTool{Boundary: boundary}, Copy: &native.CopyTool{Boundary: boundary}, Mkdir: &native.MkdirTool{Boundary: boundary}, Chmod: &native.ChmodTool{Boundary: boundary},
 		Chown: &native.ChownTool{Boundary: boundary}, Times: &native.TimesTool{Boundary: boundary}, Extract: &native.ExtractArchiveTool{Boundary: boundary}})
 	testutil.FailErr(t, "mutation owners", err)
@@ -147,7 +148,7 @@ func newHarness(t *testing.T) *harness {
 			return apply(ctx, tc)
 		}, Abandon: func(context.Context, error) error { return nil }}, nil
 	}}
-	return &harness{t: t, root: root, tc: tc, owners: owners, pins: pins, memory: memory, spills: t.TempDir(), quota: &spillQuota{maximum: 1 << 30}, publication: publication}
+	return &harness{t: t, root: root, tc: tc, owners: owners, pins: pins, memory: memory, spills: &Spills{}, quota: &spillQuota{maximum: 1 << 30}, publication: publication}
 }
 
 func (h *harness) seed(name, content string) {
@@ -158,7 +159,7 @@ func (h *harness) seed(name, content string) {
 }
 
 func (h *harness) ports() Ports {
-	return Ports{ToolContext: h.tc, Memory: h.memory, Spills: DirectorySpills{Dir: h.spills}, Admission: h.quota, Nested: h.nested, Publication: h.publication}
+	return Ports{ToolContext: h.tc, Memory: h.memory, Spills: h.spills, Admission: h.quota, Nested: h.nested, Publication: h.publication}
 }
 
 func (h *harness) read(name string) string {
@@ -177,13 +178,30 @@ func (h *harness) run(source, stdin string) run {
 // expander and dispatches the first command with stdin as its input.
 func (h *harness) runWith(ports Ports, source, stdin string) run {
 	h.t.Helper()
+	request, release := h.bind(source)
+	defer release()
+	argv := request.Argv
+	builtins := h.owners.Builtins(ports)
+	var stdout, stderr bytes.Buffer
+	result, err := builtins[argv[0].Value].Invoke(h.t.Context(), request, commandprogram.Streams{Input: io.NopCloser(strings.NewReader(stdin)), Output: &stdout, Error: &stderr})
+	if validation := result.Validate(); validation != nil {
+		h.t.Fatalf("%s settled an invalid producer result %+v: %v", source, result, validation)
+	}
+	if used := ports.Memory.InUse().Working; used != 0 {
+		h.t.Fatalf("%s retained %d bytes of working memory", source, used)
+	}
+	return run{stdout: stdout.String(), stderr: stderr.String(), result: result, err: err, argv: argv, execution: request.Invocation.Identity.ExecutionID}
+}
+
+// bind owns the actual parsed command and its expansion frame.
+func (h *harness) bind(source string) (commandprogram.OperationRequest, func()) {
+	h.t.Helper()
 	parsed, err := commandsurface.ParseProgram([]byte(source), commandsurface.ParseOptions{SourceName: "inline"})
 	testutil.FailErr(h.t, "parse "+source, err)
 	statement := parsed.Snapshot().Statements[0]
 	command := statement.Command.(commandsurface.SimpleCommand)
 	frame, err := commandprogram.NewVariables(h.t.Context(), h.memory, "inline", h.env, nil)
 	testutil.FailErr(h.t, "frame", err)
-	defer frame.Close()
 	expander, err := commandprogram.NewWordExpander(commandprogram.ExpanderPorts{Substitutions: noSubstitution{}, Files: commandsurface.OSGlobFiles{Dir: h.root}, Memory: h.memory})
 	testutil.FailErr(h.t, "expander", err)
 	var argv commandprogram.Fields
@@ -202,16 +220,7 @@ func (h *harness) runWith(ports Ports, source, stdin string) run {
 		},
 		OperationID: argv[0].Value, Statement: statement, Argv: argv,
 	}
-	builtins := h.owners.Builtins(ports)
-	var stdout, stderr bytes.Buffer
-	result, err := builtins[argv[0].Value].Invoke(h.t.Context(), request, commandprogram.Streams{Input: io.NopCloser(strings.NewReader(stdin)), Output: &stdout, Error: &stderr})
-	if validation := result.Validate(); validation != nil {
-		h.t.Fatalf("%s settled an invalid producer result %+v: %v", source, result, validation)
-	}
-	if used := ports.Memory.InUse().Working; used != 0 {
-		h.t.Fatalf("%s retained %d bytes of working memory", source, used)
-	}
-	return run{stdout: stdout.String(), stderr: stderr.String(), result: result, err: err, argv: argv, execution: execution}
+	return request, frame.Close
 }
 
 type noSubstitution struct{}

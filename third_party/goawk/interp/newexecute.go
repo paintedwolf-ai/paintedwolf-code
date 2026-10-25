@@ -107,6 +107,8 @@ func (p *interp) resetCore() {
 	p.lineNum = num(0)
 	p.fileLineNum = num(0)
 	p.fields = nil
+	p.fieldBacking = ""
+	p.arrayHighWater = nil
 	p.fieldsIsTrueStr = nil
 	p.numFields = num(0)
 	p.haveFields = false

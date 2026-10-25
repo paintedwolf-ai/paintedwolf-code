@@ -48,6 +48,9 @@ type NativePrepared struct {
 	// NativeOperation.Tool. With neither, the owner runs as the catalog
 	// command's own host execution, as builtins do.
 	Tool string
+	// Release frees any admitted resources retained by the prepared invocation
+	// across start/approval refusals and owner completion.
+	Release func()
 }
 
 // ProgramOwners is one program's host owner set. Publication and Input serve
@@ -168,9 +171,9 @@ func (d *ProgramDispatcher) Invoke(ctx context.Context, request commandprogram.O
 func (d *ProgramDispatcher) invokeBuiltin(ctx context.Context, spec toolcontract.CommandSpecification, builtin commandprogram.OperationDispatcher, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 	if request.EffectMode == "" {
 		if m, ok := builtin.(interface {
-			EffectMode(commandprogram.OperationRequest) string
+			EffectMode(context.Context, commandprogram.OperationRequest) string
 		}); ok {
-			request.EffectMode = m.EffectMode(request)
+			request.EffectMode = m.EffectMode(ctx, request)
 		}
 	}
 	return d.InvokeEvaluator(ctx, request, streams, func(ctx context.Context, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
@@ -211,7 +214,7 @@ func (d *ProgramDispatcher) invokeExternal(ctx context.Context, request commandp
 		}
 		d.shared.mu.Unlock()
 		result := refusedResult("COMMAND_EXTERNAL_HIDDEN")
-		return result, errors.Join(reject, d.settle(ctx, child, result, false, ""))
+		return result, joinSettle(reject, d.settle(ctx, child, result, false, ""))
 	}
 	if reject := desktopCaptureRefusal(argv[0], line); reject != nil {
 		d.shared.mu.Lock()
@@ -220,7 +223,7 @@ func (d *ProgramDispatcher) invokeExternal(ctx context.Context, request commandp
 		}
 		d.shared.mu.Unlock()
 		result := refusedResult("DESKTOP_CAPTURE_DISALLOWED")
-		return result, errors.Join(reject, d.settle(ctx, child, result, false, ""))
+		return result, joinSettle(reject, d.settle(ctx, child, result, false, ""))
 	}
 	effect := toolexecution.NativeEffect{
 		Operation: bound, Streams: streams, Inspection: d.run.capture,
@@ -244,7 +247,7 @@ func (d *ProgramDispatcher) invokeExternal(ctx context.Context, request commandp
 		}
 		d.shared.mu.Unlock()
 	}
-	return launched.Producer, errors.Join(runErr, d.settle(ctx, child, launched.Producer, launched.OwnerInvoked || marker.started, launched.HostStopCode))
+	return launched.Producer, joinSettle(runErr, d.settle(ctx, child, launched.Producer, launched.OwnerInvoked || marker.started, launched.HostStopCode))
 }
 
 // refuseUnimplemented runs a catalogued name with no host owner here as its
@@ -258,7 +261,7 @@ func (d *ProgramDispatcher) refuseUnimplemented(ctx context.Context, spec toolco
 	cause := toolrejection.RejectInvalidArguments("COMMAND_NATIVE_FORM_UNSUPPORTED", map[string]any{"command": spec.Name, "source_start_byte": request.Invocation.Span.StartByte, "source_end_byte": request.Invocation.Span.EndByte, "source_line": request.Invocation.Span.Line, "source_column": request.Invocation.Span.Column})
 	child, err := d.prepare(ctx, spec, request, nil)
 	if err != nil {
-		return refusedResult("COMMAND_NATIVE_FORM_UNSUPPORTED"), errors.Join(cause, err)
+		return refusedResult("COMMAND_NATIVE_FORM_UNSUPPORTED"), joinSettle(cause, err)
 	}
 	defer child.release()
 	result := refusedResult("COMMAND_NATIVE_FORM_UNSUPPORTED")
@@ -268,27 +271,30 @@ func (d *ProgramDispatcher) refuseUnimplemented(ctx context.Context, spec toolco
 		d.shared.rejected = &nativeRejection{operation: child.bound, cause: cause}
 	}
 	d.shared.mu.Unlock()
-	return result, errors.Join(cause, settleErr)
+	return result, joinSettle(cause, settleErr)
 }
 
 func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.CommandSpecification, operation NativeOperation, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 	prepareReq := request
-	if (spec.Name == "git" || spec.Owner == "git") && len(d.run.baseEnv) > 0 && len(request.Environment) > 0 {
-		var explicit []string
-		for _, entry := range request.Environment {
+	if (spec.Name == "git" || spec.Owner == "git") && len(d.run.baseEnv) > 0 && len(prepareReq.Environment) > 0 {
+		filtered := make([]string, 0, len(prepareReq.Environment))
+		for _, entry := range prepareReq.Environment {
 			if !slices.Contains(d.run.baseEnv, entry) {
-				explicit = append(explicit, entry)
+				filtered = append(filtered, entry)
 			}
 		}
-		prepareReq.Environment = explicit
+		prepareReq.Environment = filtered
 	}
 	prepared, err := operation.Prepare(ctx, d.paths, d, prepareReq)
 	if err != nil {
-		if gap := unsupportedForm(spec, err); gap != nil && d.GapLaunchable(request) {
+		if gap := unsupportedForm(spec, err); gap != nil && (operation.Tool != "" || len(operation.Tools) > 0) && d.GapLaunchable(request) {
 			request.Gap = gap
 			return d.invokeExternal(ctx, request, streams)
 		}
 		return d.refuseArgv(ctx, spec, request, err, streams)
+	}
+	if prepared.Release != nil {
+		defer prepared.Release()
 	}
 	if prepared.Command != "" {
 		resolved, ok := d.run.catalogCommand(prepared.Command)
@@ -344,7 +350,7 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 	defer child.release()
 	marker := &admissionMarker{ProgramAdmissionRecorder: invocation.ProgramAdmissionRecorder{Recorder: d.run.recorder, Inputs: d.run.capture}}
 	native, runErr := d.run.executor.InvokeNative(ctx, d.run.frame, d.run.surface, d.run.memory, d.run.progress, marker, effect, d.run.tc)
-	if reject := toolrejection.AsToolReject(runErr); reject != nil {
+	if reject := toolrejection.AsToolReject(runErr); reject != nil && (!native.OwnerInvoked || native.Producer.Terminal == toolcontract.ProducerRefused) {
 		if !tracker.wrote {
 			writeRejectRefusal(streams, spec.Name, request, reject)
 		}
@@ -354,7 +360,7 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 		}
 		d.shared.mu.Unlock()
 	}
-	return native.Producer, errors.Join(runErr, d.settleWith(ctx, child, toolcontract.ProgramChildSettlement{Result: native.Producer, OwnerInvoked: native.OwnerInvoked || marker.started, HostStopCode: native.HostStopCode, Conflict: revisionConflict(runErr)}))
+	return native.Producer, joinSettle(runErr, d.settleWith(ctx, child, toolcontract.ProgramChildSettlement{Result: native.Producer, OwnerInvoked: native.OwnerInvoked || marker.started, HostStopCode: native.HostStopCode, Conflict: revisionConflict(runErr)}))
 }
 
 // invokeHosted runs an owner whose bound form has no structured tool as the
@@ -371,13 +377,23 @@ func (d *ProgramDispatcher) invokeHosted(ctx context.Context, spec toolcontract.
 }
 
 func (d *ProgramDispatcher) refuseArgv(ctx context.Context, spec toolcontract.CommandSpecification, request commandprogram.OperationRequest, cause error, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+	cause = tools.CommandResourceRejection(cause)
+	if errors.Is(cause, context.Canceled) || errors.Is(cause, context.DeadlineExceeded) {
+		result := ownerFailure(cause)
+		child, err := d.prepare(ctx, spec, request, nil)
+		if err != nil {
+			return result, joinSettle(cause, err)
+		}
+		defer child.release()
+		return result, joinSettle(cause, d.settle(ctx, child, result, false, ""))
+	}
 	rejection := argvRejection(spec, cause)
 	reject := toolrejection.AsToolReject(rejection)
 	writeRejectRefusal(streams, spec.Name, request, reject)
 	result := refusedResult(reject.Code)
 	child, err := d.prepare(ctx, spec, request, nil)
 	if err != nil {
-		return result, errors.Join(rejection, err)
+		return result, joinSettle(rejection, err)
 	}
 	defer child.release()
 	settleErr := d.settle(ctx, child, result, false, "")
@@ -386,7 +402,7 @@ func (d *ProgramDispatcher) refuseArgv(ctx context.Context, spec toolcontract.Co
 		d.shared.rejected = &nativeRejection{operation: child.bound, cause: rejection}
 	}
 	d.shared.mu.Unlock()
-	return result, errors.Join(rejection, settleErr)
+	return result, joinSettle(rejection, settleErr)
 }
 
 type programChild struct {

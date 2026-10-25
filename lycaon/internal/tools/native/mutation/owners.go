@@ -188,7 +188,7 @@ func mutationMode(spec toolcontract.CommandSpecification, bound commandprogram.B
 		}
 		return "create-extract-compress-decompress-to-path"
 	case "gunzip":
-		if hasOpt("-c") {
+		if hasOpt("-c") || len(bound.Operands()) == 0 {
 			return "listing-or-stream-decode"
 		}
 		return "create-extract-compress-decompress-to-path"

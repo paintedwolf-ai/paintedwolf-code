@@ -12,7 +12,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/commandsurface"
-	"github.com/lycaon/lycaon/internal/httpaction"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 )
@@ -119,7 +118,6 @@ type ProgramServices struct {
 	Recorder  *invocation.SQLRecorder
 	Blobs     blobstore.Store
 	Projector *captureprojection.Projector
-	HTTP      httpaction.Deps
 	Progress  toolexecution.ProgramProgressFacts
 	Sessions  command.SessionOwners
 	// ExternalHidden withdraws the explicit external selector.
@@ -148,7 +146,7 @@ func (r *CommandServices) SetProgramServices(services ProgramServices) error {
 	if programs.Executor != nil {
 		programs.Executor.Metadata.SetCommandExternalHidden(services.ExternalHidden)
 	}
-	owners, err := r.owners.compose(services)
+	owners, err := r.owners.compose(services.Recorder)
 	if err != nil {
 		return fmt.Errorf("compose command program owners: %w", err)
 	}

@@ -1,6 +1,7 @@
 package commandprogram
 
 import (
+	"context"
 	"math"
 	"strconv"
 	"strings"
@@ -11,23 +12,23 @@ import (
 
 // arithmetic evaluates $(( )) with wrapping signed 64-bit integers. && || and
 // ?: evaluate only the selected operands.
-func (r *expansionRun) arithmetic(part commandsurface.ArithmeticPart, quoted bool) error {
-	value, err := r.arithmeticValue(part.Expression)
+func (r *expansionRun) arithmetic(ctx context.Context, part commandsurface.ArithmeticPart, quoted bool) error {
+	value, err := r.arithmeticValue(ctx, part.Expression)
 	if err != nil {
 		return err
 	}
-	return r.emit(strconv.FormatInt(value, 10), quoted)
+	return r.emit(ctx, strconv.FormatInt(value, 10), quoted)
 }
 
-func (r *expansionRun) arithmeticValue(node commandsurface.ArithmeticNode) (int64, error) {
-	if err := r.ctx.Err(); err != nil {
+func (r *expansionRun) arithmeticValue(ctx context.Context, node commandsurface.ArithmeticNode) (int64, error) {
+	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
 	switch n := node.(type) {
 	case commandsurface.ArithmeticOperand:
-		return r.arithmeticOperand(n)
+		return r.arithmeticOperand(ctx, n)
 	case commandsurface.ArithmeticUnary:
-		value, err := r.arithmeticValue(n.Operand)
+		value, err := r.arithmeticValue(ctx, n.Operand)
 		if err != nil {
 			return 0, err
 		}
@@ -41,13 +42,13 @@ func (r *expansionRun) arithmeticValue(node commandsurface.ArithmeticNode) (int6
 		}
 		return value, nil
 	case commandsurface.ArithmeticBinary:
-		return r.arithmeticBinary(n)
+		return r.arithmeticBinary(ctx, n)
 	}
 	return 0, &ExpansionError{Code: codeSyntaxUnsupported, Span: r.span, Expected: "a version 1 arithmetic expression"}
 }
 
-func (r *expansionRun) arithmeticBinary(n commandsurface.ArithmeticBinary) (int64, error) {
-	left, err := r.arithmeticValue(n.Left)
+func (r *expansionRun) arithmeticBinary(ctx context.Context, n commandsurface.ArithmeticBinary) (int64, error) {
+	left, err := r.arithmeticValue(ctx, n.Left)
 	if err != nil {
 		return 0, err
 	}
@@ -56,7 +57,7 @@ func (r *expansionRun) arithmeticBinary(n commandsurface.ArithmeticBinary) (int6
 		if (n.Operator == "&&") == (left == 0) {
 			return boolInt(left != 0), nil
 		}
-		right, err := r.arithmeticValue(n.Right)
+		right, err := r.arithmeticValue(ctx, n.Right)
 		return boolInt(right != 0), err
 	case "?":
 		branches, ok := n.Right.(commandsurface.ArithmeticBinary)
@@ -64,11 +65,11 @@ func (r *expansionRun) arithmeticBinary(n commandsurface.ArithmeticBinary) (int6
 			return 0, invalidValue(n.Span, "a ? b : c")
 		}
 		if left != 0 {
-			return r.arithmeticValue(branches.Left)
+			return r.arithmeticValue(ctx, branches.Left)
 		}
-		return r.arithmeticValue(branches.Right)
+		return r.arithmeticValue(ctx, branches.Right)
 	}
-	right, err := r.arithmeticValue(n.Right)
+	right, err := r.arithmeticValue(ctx, n.Right)
 	if err != nil {
 		return 0, err
 	}
@@ -106,9 +107,9 @@ func (r *expansionRun) arithmeticBinary(n commandsurface.ArithmeticBinary) (int6
 		}
 		return result, nil
 	case "<<":
-		return left << (uint64(right) & 63), nil
+		return left << (right & 63), nil
 	case ">>":
-		return left >> (uint64(right) & 63), nil
+		return left >> (right & 63), nil
 	case "&":
 		return left & right, nil
 	case "|":
@@ -133,8 +134,8 @@ func (r *expansionRun) arithmeticBinary(n commandsurface.ArithmeticBinary) (int6
 
 // arithmeticOperand reads an integer literal or a variable holding one; an
 // unset or empty value is zero. Values are never evaluated as expressions.
-func (r *expansionRun) arithmeticOperand(n commandsurface.ArithmeticOperand) (int64, error) {
-	text, err := r.expander.ExpandScalar(r.ctx, r.scope, n.Word)
+func (r *expansionRun) arithmeticOperand(ctx context.Context, n commandsurface.ArithmeticOperand) (int64, error) {
+	text, err := r.expander.ExpandScalar(ctx, r.scope, n.Word)
 	if err != nil {
 		return 0, err
 	}
@@ -164,10 +165,15 @@ func parseArithmeticInteger(text string, span toolcontract.SourceSpan) (int64, e
 	if err != nil {
 		return 0, invalidValue(span, "an integer arithmetic operand")
 	}
-	if negative {
-		return -int64(value), nil
+	// Preserve the low 64 bits without an out-of-range unsigned conversion.
+	signed := int64(value & math.MaxInt64)
+	if value > math.MaxInt64 {
+		signed += math.MinInt64
 	}
-	return int64(value), nil
+	if negative {
+		return -signed, nil
+	}
+	return signed, nil
 }
 
 func boolInt(value bool) int64 {

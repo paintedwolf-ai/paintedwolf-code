@@ -40,7 +40,7 @@ func (inv *invocation) operands() commandprogram.Fields { return inv.argv.Operan
 // line appends one stdout line under stream_bytes; nothing is truncated.
 func (inv *invocation) line(text string) error {
 	if observed := int64(inv.out.Len() + len(text) + 1); observed > inv.owners.stream {
-		return nativeutility.LimitExceeded("stream_bytes", inv.owners.stream, observed)
+		return tools.CommandLimitExceeded("stream_bytes", inv.owners.stream, observed)
 	}
 	inv.out.WriteString(text)
 	inv.out.WriteByte('\n')

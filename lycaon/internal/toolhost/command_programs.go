@@ -2,16 +2,18 @@ package toolhost
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/httpaction"
+	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	reposurvey "github.com/lycaon/lycaon/internal/survey"
 	"github.com/lycaon/lycaon/internal/textsearch"
+	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
@@ -37,12 +39,13 @@ type programOwnerTools struct {
 	// git is the Git owner; nil leaves git to its unsupported refusal.
 	git      *git.Manager
 	registry *tools.DefaultRegistry
+	// spills wraps each program's textutil spill storage when set.
+	spills func(textutil.SpillStorage) textutil.SpillStorage
 }
 
 // compose builds the literal and mutation owners once and returns the
 // per-program factory: one redirect owner per program.
-func (t programOwnerTools) compose(services ProgramServices) (func(tools.ToolContext, *projectpaths.ProgramPaths) (command.ProgramOwners, error), error) {
-	recorder := services.Recorder
+func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools.ToolContext, *projectpaths.ProgramPaths, *toolcontract.ProgramMemory, tooloutput.SpillAdmission) (command.ProgramOwners, error), error) {
 	revisions := native.ExecutionRevisions{Boundary: t.boundary}
 	literalOwners, err := literal.NewOwners(revisions, recorder, literal.DomainOwners{Summarize: t.summarize, Repo: t.repo})
 	if err != nil {
@@ -76,11 +79,34 @@ func (t programOwnerTools) compose(services ProgramServices) (func(tools.ToolCon
 	if err != nil {
 		return nil, err
 	}
-	return func(tc tools.ToolContext, paths *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
+	return func(tc tools.ToolContext, paths *projectpaths.ProgramPaths, memory *toolcontract.ProgramMemory, admission tooloutput.SpillAdmission) (command.ProgramOwners, error) {
+		literalProgram, searchProgram, queryProgram, mutationProgram, textProgram := *literalOwners, *searchOwners, *queryOwners, *mutationOwners, *textOwners
+		literalProgram.Revisions.Memory = memory
+		searchProgram.Revisions.Memory = memory
+		searchProgram.Admission = admission
+		queryProgram.Revisions.Memory = memory
+		mutationProgram.Revisions.Memory = memory
+		textProgram.Revisions.Memory = memory
+		literalOwners, searchOwners, queryOwners, mutationOwners, textOwners := &literalProgram, &searchProgram, &queryProgram, &mutationProgram, &textProgram
 		program := mutation.Program{Paths: paths}
 		httpNative, err := t.httpOperation(mutationOwners)
 		if err != nil {
 			return command.ProgramOwners{}, err
+		}
+		baseSpills := &textutil.Spills{}
+		var spills textutil.SpillStorage = baseSpills
+		if t.spills != nil {
+			spills = t.spills(spills)
+		}
+		directAdmission := func(current *tools.ToolContext) tools.CommandOutputAdmission {
+			return func(_ context.Context, _ commandprogram.OutputDestination, _ string) (tools.CommandOutputWrite, error) {
+				return tools.CommandOutputWrite{
+					Publish: func(ctx context.Context, apply func(context.Context, tools.ToolContext) (commandprogram.OutputPublished, error)) (commandprogram.OutputPublished, error) {
+						return apply(ctx, *current)
+					},
+					Abandon: func(context.Context, error) error { return nil },
+				}, nil
+			}
 		}
 		owners := command.ProgramOwners{
 			PublishDocument: mutationOwners.Operations.Write.PublishAccepted,
@@ -91,18 +117,10 @@ func (t programOwnerTools) compose(services ProgramServices) (func(tools.ToolCon
 			Input:   &mutation.Publication{Owners: mutationOwners, Program: program, Tools: tc},
 			Sources: &mutation.Publication{Owners: mutationOwners, Program: program, Tools: tc},
 			Builtins: func(ports command.BuiltinPorts) (map[string]commandprogram.OperationDispatcher, func(), error) {
-				spills, err := textutil.NewSessionSpills(ports.ToolContext, ports.ProgramID)
-				if err != nil && !errors.Is(err, tools.ErrSessionScratchUnavailable) {
-					return nil, nil, err
-				}
 				builtinTC := ports.ToolContext
 				builtinPub := &mutation.Publication{Owners: mutationOwners, Program: program, Tools: builtinTC, Admission: directAdmission(&builtinTC)}
-				text := textutil.Ports{ToolContext: ports.ToolContext, Memory: ports.Memory, Admission: ports.Admission, Nested: ports.Nested, Publication: builtinPub}
-				release := func() {}
-				if spills != nil {
-					text.Spills = spills
-					release = func() { _ = spills.Close() }
-				}
+				text := textutil.Ports{ToolContext: ports.ToolContext, Memory: ports.Memory, Admission: ports.Admission, Nested: ports.Nested, Publication: builtinPub, Spills: spills}
+				release := func() { _ = baseSpills.Close() }
 				builtins := textOwners.Builtins(text)
 				var bound hostenv.NativeBindings
 				if b, ok := ports.Nested.(hostenv.NativeBindings); ok {
@@ -120,6 +138,27 @@ func (t programOwnerTools) compose(services ProgramServices) (func(tools.ToolCon
 				return publication, publication
 			},
 		}
+		owners.Natives["sed"] = command.NativeOperation{Prepare: func(ctx context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
+			request.Invocation.Scope.Directory = frame.Cwd().DisplayPath
+			prepared, err := textOwners.Prepare(ctx, request)
+			if err != nil {
+				return command.NativePrepared{}, err
+			}
+			currentTC := tc
+			publication := &mutation.Publication{Owners: mutationOwners, Program: mutation.Program{Paths: frame}, Tools: tc, Admission: directAdmission(&currentTC)}
+			ports := textutil.Ports{ToolContext: tc, Memory: memory, Admission: admission, Publication: publication, Spills: spills}
+			return command.NativePrepared{
+				Mode:    prepared.Mode,
+				Review:  prepared.Review,
+				Release: prepared.Close,
+				Invoke: func(ctx context.Context, admitted tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+					currentTC = admitted
+					publication.Tools = admitted
+					ports.ToolContext = admitted
+					return prepared.InvokeOwner(ctx, ports, streams)
+				},
+			}, nil
+		}}
 		for _, name := range literalOwners.Commands() {
 			tool, _ := literalOwners.Operation(name)
 			owners.Natives[name] = command.NativeOperation{Tool: tool, Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
@@ -206,12 +245,4 @@ func (t programOwnerTools) gitOperation() (command.NativeOperation, error) {
 		}
 		return command.NativePrepared{Command: prepared.Command, Tool: tool, Mode: prepared.Mode, Review: prepared.Review, Invoke: prepared.InvokeOwner}, nil
 	}}, nil
-}
-
-func directAdmission(tc *tools.ToolContext) tools.CommandOutputAdmission {
-	return func(_ context.Context, _ commandprogram.OutputDestination, _ string) (tools.CommandOutputWrite, error) {
-		return tools.CommandOutputWrite{Publish: func(ctx context.Context, apply func(context.Context, tools.ToolContext) (commandprogram.OutputPublished, error)) (commandprogram.OutputPublished, error) {
-			return apply(ctx, *tc)
-		}, Abandon: func(context.Context, error) error { return nil }}, nil
-	}
 }

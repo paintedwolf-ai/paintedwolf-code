@@ -67,6 +67,25 @@ Deleting bytes must produce an explainable unavailable state, not make a durable
 
 P03 introduces internal compiled declarations and consumer ports only. It adds no database columns, wire fields, output stores or public tool names. The existing command model call remains the aggregate receipt; child identities are host operations, never invented model calls. The introducing producer must implement the following classification, migrations and generated consumers in the same PR. P24 audits these contracts rather than supplying deferred upgrades.
 
+Command limit identifiers are `agent-public` vocabulary. The shared text-search
+regex owner uses bounded parser and VM work under `regex_work_steps`, caller cancellation and
+allocation admission. Query `query_elapsed_ms` accumulates time inside compiled
+jq evaluation, including its input/output callbacks; reached-input preparation
+between evaluations is outside the clock. Cancellation remains cooperative at
+existing VM boundaries. Neither owner promises CPU accounting or a hard
+wall-time upper bound. Refusal elapsed milliseconds round the measured total up.
+
+The handwritten `command` result uses `refusal.code`, `refusal.feedback` and
+optional `refusal.details` from the actual screened typed rejection, including
+reached limit and source coordinates. This co-shipped `bundle` tool-result shape
+has `agent-public` fact meanings; the generic API tool-result payload has no
+dedicated command-refusal OpenAPI schema. Both native and evaluator feedback
+keep their projection admission through serialization. A frame prepays one
+bounded feedback allowance before effects. An optional `refusal.delivery_failure`
+records capacity, cancellation or unavailable rendering with typed capacity facts
+when present; its feedback and details remain empty. Authority failures propagate
+as errors rather than publishing a result under a changed frame.
+
 | Artifact | Class and retention | Introducing responsibility |
 |---|---|---|
 | Immutable language/operation version, identity and catalog digest | Internal compiled facts; snapshot frozen for each invocation. Public operation/rejection meanings are `agent-public` and cannot be reused. | P03 definitions; utility producers bind actual typed operations |

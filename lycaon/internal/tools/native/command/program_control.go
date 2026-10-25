@@ -132,6 +132,9 @@ func (d *ProgramDispatcher) reportRefusal(w io.Writer, report commandprogram.Ref
 	if reject == nil {
 		reject = &toolrejection.ToolReject{Code: report.Code}
 	}
+	if programResourceRefusal(reject) {
+		return
+	}
 	copy := *reject
 	copy.Data = maps.Clone(reject.Data)
 	if copy.Data == nil {

@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/tooloutput"
 	"sync"
 	"testing"
 
@@ -13,8 +14,10 @@ import (
 	"github.com/lycaon/lycaon/internal/blobstore"
 	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/evidence"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -42,7 +45,7 @@ type Options struct {
 	Context func(dir string, tc *tools.ToolContext)
 	// Owners replaces the Natives-only owner set, for fixtures that compose
 	// real owners with the fixture's recorder and boundary.
-	Owners func(OwnerPorts) func(tools.ToolContext, *projectpaths.ProgramPaths) (command.ProgramOwners, error)
+	Owners func(OwnerPorts) func(tools.ToolContext, *projectpaths.ProgramPaths, *toolcontract.ProgramMemory, tooloutput.SpillAdmission) (command.ProgramOwners, error)
 }
 
 // OwnerPorts are the fixture's shared dependencies for composed owners.
@@ -63,11 +66,9 @@ type Fixture struct {
 	OutputDir  string
 	Background *bgprocess.Registry
 	Context    func(string, *tools.ToolContext)
-	// Configure adjusts each call's tool context before the entry runs.
-	Configure func(*tools.ToolContext)
-	calls     int
-	mu        sync.Mutex
-	delivered []evidence.Record
+	calls      int
+	mu         sync.Mutex
+	delivered  []evidence.Record
 }
 
 type sessions struct {
@@ -102,6 +103,10 @@ func (p progressFacts) ProgramProgressState(ctx context.Context, id string) (pro
 // New composes the entry. Structured tools exist only as owner identities.
 func New(t *testing.T, options Options) *Fixture {
 	t.Helper()
+	confine.TestingSetAutoConfine(t)
+	t.Setenv("LYCAON_BYPASS_APPROVALS", "0")
+	t.Setenv("LYCAON_SANDBOX", "on")
+	t.Setenv("LYCAON_SANDBOX_NETWORK", "deny")
 	dir := t.TempDir()
 	database := testdbfixture.Open(t, "programs.db")
 	session := options.Session
@@ -131,14 +136,14 @@ func New(t *testing.T, options Options) *Fixture {
 	if options.Natives != nil {
 		natives = options.Natives(dir)
 	}
-	scratchDir := t.TempDir()
+	scratchDir := fspath.CanonicalPath(t.TempDir())
 	f := &Fixture{Recorder: recorder, Database: database, Session: session, Dir: dir, ScratchDir: scratchDir, OutputDir: t.TempDir(), Background: background}
 	runtime := &command.ProgramRuntime{
 		Executor: executor, Registry: registry, Recorder: recorder, Blobs: blobstore.Store{Root: t.TempDir()},
 		Projector: captureprojection.New(secretmatch.NewInertMatcher(), nil), Boundary: boundary,
 		Progress: progressFacts{owner}, Supervisor: &command.ProgramSupervisor{Interrupter: recorder, Background: background}, Evaluate: commandprogram.Evaluate,
 		Sessions: sessions{fixture: f},
-		Owners: func(tools.ToolContext, *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
+		Owners: func(tools.ToolContext, *projectpaths.ProgramPaths, *toolcontract.ProgramMemory, tooloutput.SpillAdmission) (command.ProgramOwners, error) {
 			return command.ProgramOwners{Natives: natives}, nil
 		},
 	}
@@ -164,9 +169,6 @@ func (f *Fixture) Call(t *testing.T, ctx context.Context, source string) (string
 	tc.Host.SessionScratchDir, tc.Host.SessionOutputDir = f.ScratchDir, f.OutputDir
 	if f.Context != nil {
 		f.Context(f.Dir, &tc)
-	}
-	if f.Configure != nil {
-		f.Configure(&tc)
 	}
 	return f.Runtime.Run(ctx, args, tc)
 }

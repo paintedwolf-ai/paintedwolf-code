@@ -22,7 +22,7 @@ type stagedRedirect struct {
 func (o *stagedRedirect) finish(ctx context.Context, publish bool) error {
 	if !publish {
 		err := o.output.Abandon(ctx)
-		o.run.settle(toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, err)
+		o.run.settle(ctx, toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, err)
 		return nil
 	}
 	published, err := o.output.Publish(ctx)
@@ -31,13 +31,13 @@ func (o *stagedRedirect) finish(ctx context.Context, publish bool) error {
 		if report := o.frame.e.ports.Refusals; report != nil {
 			report(o.errorStream, RefusalReport{Operation: o.operator, Operand: o.target, Code: result.StopCode, Span: o.run.inv.Span, Cause: err})
 		}
-		return o.frame.settle(o.run, result, err)
+		return o.frame.settle(ctx, o.run, result, err)
 	}
 	certainty := toolcontract.EffectCompleted
 	if published.PublishedRevision == "" {
 		certainty = toolcontract.NoEffect
 	}
-	o.run.settle(toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: certainty, Evidence: toolcontract.OperationEvidence{OwnerRef: published.PublishedRevision}}, nil)
+	o.run.settle(ctx, toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: certainty, Evidence: toolcontract.OperationEvidence{OwnerRef: published.PublishedRevision}}, nil)
 	return nil
 }
 
@@ -68,19 +68,19 @@ func (s *descriptorScope) bind(ctx context.Context, g *frame, r commandsurface.P
 	if r.Operator == "<" {
 		input, err := s.input.OpenInput(ctx, InputDestination{Invocation: child.inv, Redirect: r, Target: field})
 		if err != nil {
-			if stop := g.redirectFailure(child, r.Operator, field.Value, err); stop != nil {
+			if stop := g.redirectFailure(ctx, child, r.Operator, field.Value, err); stop != nil {
 				return nil, true, stop
 			}
 			return nil, true, &descriptorOpenFailure{Status: g.state.control.Status(), Cause: err}
 		}
 		s.inputs = append(s.inputs, input)
-		g.io.streams.Input = io.NopCloser(input)
-		child.settle(ordinaryResult(0), nil)
+		g.io.streams.Input = input
+		child.settle(ctx, ordinaryResult(0), nil)
 		return nil, false, nil
 	}
 	staged, err := s.output.Open(ctx, OutputDestination{Invocation: child.inv, Redirect: r, Target: field})
 	if err != nil {
-		if stop := g.redirectFailure(child, r.Operator, field.Value, err); stop != nil {
+		if stop := g.redirectFailure(ctx, child, r.Operator, field.Value, err); stop != nil {
 			return nil, true, stop
 		}
 		return nil, true, &descriptorOpenFailure{Status: g.state.control.Status(), Cause: err}
@@ -101,12 +101,12 @@ func (s *descriptorScope) bind(ctx context.Context, g *frame, r commandsurface.P
 
 // redirectFailure records a refused open: owner stops latch, other failures
 // leave an ordinary status 1 and the command unrun.
-func (g *frame) redirectFailure(child *childRun, operator, target string, err error) error {
+func (g *frame) redirectFailure(ctx context.Context, child *childRun, operator, target string, err error) error {
 	result := ownerResult(err)
 	if report := g.e.ports.Refusals; report != nil {
 		report(g.io.streams.Error, RefusalReport{Operation: operator, Operand: target, Code: result.StopCode, Span: child.inv.Span, Cause: err})
 	}
-	if settleErr := g.settle(child, result, err); settleErr != nil {
+	if settleErr := g.settle(ctx, child, result, err); settleErr != nil {
 		return settleErr
 	}
 	return nil

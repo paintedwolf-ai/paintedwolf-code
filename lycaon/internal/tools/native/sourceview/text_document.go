@@ -20,7 +20,7 @@ import (
 // Retained tool output keeps the session's spill bound for either access.
 func ReadTextDocument(tool string, access Access, resolved projectpaths.Resolved, maxSpillBytes int) (textfile.UntrustedDocument, error) {
 	maxBytes := access.MaxBytes()
-	if resolved.ToolOutput {
+	if resolved.ToolOutput && access != AccessCommand {
 		maxBytes = int64(tooloutput.EffectiveMaxSpillFileBytes(maxSpillBytes))
 	}
 	raw, err := ReadContentCapped(tool, access, resolved.EffectLocation(), resolved.DisplayPath, resolved.Compressed, maxBytes)

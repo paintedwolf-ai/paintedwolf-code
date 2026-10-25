@@ -85,7 +85,7 @@ func NewOwners(revisions native.ExecutionRevisions, pins PinRecorder) (*Owners, 
 	for _, limit := range catalog.Language.Limits {
 		o.limits[limit.ID] = limit.Maximum
 	}
-	for _, id := range []string{"stream_bytes", "record_bytes", "sort_memory_bytes", "sort_merge_fan_in", "spill_bytes", "argv_bytes", "argument_bytes", "expanded_fields", "child_executions", "query_work_steps", "evaluation_memory_bytes"} {
+	for _, id := range []string{"stream_throughput_bytes", "whole_file_bytes", "stream_bytes", "record_bytes", "sort_memory_bytes", "sort_merge_fan_in", "spill_bytes", "argv_bytes", "argument_bytes", "expanded_fields", "child_executions", "query_work_steps", "evaluation_memory_bytes"} {
 		if o.limits[id] < 1 {
 			return nil, fmt.Errorf("language catalog is missing %s", id)
 		}
@@ -134,18 +134,29 @@ type dispatcher struct {
 }
 
 func (d dispatcher) Invoke(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-	prepared, err := d.owners.Prepare(request)
+	owners := *d.owners
+	if d.ports.Memory != nil {
+		owners.Revisions.Memory = d.ports.Memory
+	}
+	prepared, err := owners.Prepare(ctx, request)
 	if err != nil {
+		err = tools.CommandResourceRejection(err)
 		return nativeutility.Settle(err, 0, false), err
 	}
+	defer prepared.Close()
 	return prepared.InvokeOwner(ctx, d.ports, streams)
 }
 
-func (d dispatcher) EffectMode(request commandprogram.OperationRequest) string {
-	prepared, err := d.owners.Prepare(request)
+func (d dispatcher) EffectMode(ctx context.Context, request commandprogram.OperationRequest) string {
+	owners := *d.owners
+	if d.ports.Memory != nil {
+		owners.Revisions.Memory = d.ports.Memory
+	}
+	prepared, err := owners.Prepare(ctx, request)
 	if err != nil {
 		return ""
 	}
+	defer prepared.Close()
 	return prepared.Mode
 }
 
@@ -160,10 +171,16 @@ type Prepared struct {
 	request commandprogram.OperationRequest
 	spec    toolcontract.CommandSpecification
 	run     utility
+	sed     *preparedSed
+}
+
+// Close releases any admitted resources retained by the prepared invocation.
+func (p Prepared) Close() {
+	p.sed.close()
 }
 
 // Prepare binds a reached command. The operation identity is the command name.
-func (o *Owners) Prepare(request commandprogram.OperationRequest) (Prepared, error) {
+func (o *Owners) Prepare(ctx context.Context, request commandprogram.OperationRequest) (Prepared, error) {
 	if err := request.Validate(); err != nil {
 		return Prepared{}, err
 	}
@@ -182,7 +199,18 @@ func (o *Owners) Prepare(request commandprogram.OperationRequest) (Prepared, err
 	} else if bound, err = (commandprogram.CatalogBinder{}).Bind(spec, numericOperands(command, request.Argv)); err != nil {
 		return Prepared{}, nativeutility.ArgvRejection(err, spec)
 	}
-	return Prepared{Argv: bound, Review: bound.Review(spec.Name), Mode: o.effectMode(bound), owners: o, request: request, spec: spec, run: utilities[command]}, nil
+	prepared := Prepared{Argv: bound, Review: bound.Review(spec.Name), owners: o, request: request, spec: spec, run: utilities[command]}
+	if command == "sed" {
+		sedPlan, mode, err := o.prepareSed(ctx, spec, request, bound)
+		if err != nil {
+			return Prepared{}, tools.CommandResourceRejection(err)
+		}
+		prepared.sed = sedPlan
+		prepared.Mode = mode
+		return prepared, nil
+	}
+	prepared.Mode = o.effectMode(bound)
+	return prepared, nil
 }
 
 // leadingBind binds only leading words made entirely of declared boolean
@@ -236,6 +264,7 @@ func shortCluster(word string, declared map[string]string) ([]string, bool) {
 
 // InvokeOwner runs the bound utility once and settles its producer outcome.
 func (p Prepared) InvokeOwner(ctx context.Context, ports Ports, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+	defer p.Close()
 	if p.run == nil {
 		err := errors.New("text utility invocation is not prepared")
 		return nativeutility.Settle(err, 0, false), err
@@ -249,22 +278,31 @@ func (p Prepared) InvokeOwner(ctx context.Context, ports Ports, streams commandp
 	if err == nil {
 		err = inv.out.Flush()
 	}
-	if err == nil {
+	if err == nil && inv.stoppedBatch == nil {
 		err = ctx.Err()
 	}
 	inv.close()
 	if streams.Input != nil {
 		_ = streams.Input.Close()
 	}
-	var stopped *batchStop
-	if errors.As(err, &stopped) {
-		return stopped.result, err
+	if inv.stoppedBatch != nil {
+		return *inv.stoppedBatch, err
 	}
 	if inv.errors.Len() > 0 && streams.Error != nil {
 		_, _ = io.WriteString(streams.Error, inv.errors.String())
 	}
+	var domain toolcontract.ProducerFailure
+	if errors.As(err, &domain) {
+		return domain.ProducerResult(), err
+	}
+	err = tools.CommandResourceRejection(err)
 	result := nativeutility.Settle(err, inv.status, false)
-	if (p.Mode == "-i" || p.Mode == "w-files" || p.Mode == "-o" || p.Mode == "OUTPUT-supplied") && result.Terminal == toolcontract.ProducerCompleted && inv.status == 0 {
+	if (p.Mode == "-i" || p.Mode == "w-files" || p.Mode == "w-command" || p.Mode == "-o" || p.Mode == "OUTPUT-supplied") && result.Terminal == toolcontract.ProducerCompleted && inv.status == 0 {
+		result.EffectCertainty = toolcontract.EffectCompleted
+	}
+	if inv.uncertain {
+		result.EffectCertainty = toolcontract.EffectUnknown
+	} else if inv.published {
 		result.EffectCertainty = toolcontract.EffectCompleted
 	}
 	return result, err

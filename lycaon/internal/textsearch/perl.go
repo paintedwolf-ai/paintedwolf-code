@@ -186,7 +186,7 @@ func (t *perlTranslator) quantifier(w width, quantifiable bool) (width, error) {
 		return w, nil
 	}
 	c := t.src[t.pos]
-	minimum, maximum := 0, 0
+	var minimum, maximum int
 	switch c {
 	case '*':
 		minimum, maximum = 0, -1

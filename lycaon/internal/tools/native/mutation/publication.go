@@ -1,7 +1,6 @@
 package mutation
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -60,7 +59,12 @@ func (p *Publication) Open(ctx context.Context, destination commandprogram.Outpu
 		return nil, redirectError(destination.Redirect.Operator, destination.Target, err)
 	}
 	target.append = strings.HasSuffix(destination.Redirect.Operator, ">>")
-	return &fileStage{owners: p.Owners, target: target, admission: admission, operator: destination.Redirect.Operator, field: destination.Target, maximum: p.Owners.limit("stream_bytes")}, nil
+	buffer, err := p.Owners.Revisions.NewBufferedBytes(ctx, p.Owners.limit("stream_bytes"), "stream_bytes")
+	if err != nil {
+		_ = admission.Abandon(ctx, err)
+		return nil, redirectError(destination.Redirect.Operator, destination.Target, err)
+	}
+	return &fileStage{owners: p.Owners, target: target, admission: admission, operator: destination.Redirect.Operator, field: destination.Target, buffer: buffer}, nil
 }
 
 // OpenInput serves a < operand from its pinned published-disk capture. The
@@ -73,14 +77,15 @@ func (p *Publication) OpenInput(ctx context.Context, destination commandprogram.
 	if bound.Null {
 		return commandprogram.NullInput(), nil
 	}
-	source, err := p.Owners.Revisions.CaptureSource(ctx, p.Tools, bound.Resolved.Abs)
+	source, err := p.Owners.Revisions.OpenStream(ctx, p.Tools, bound.Resolved.Abs, 0)
 	if err != nil {
 		return nil, redirectError(destination.Redirect.Operator, destination.Target, err)
 	}
 	if err := p.Owners.Pins.AppendRevisionPin(ctx, destination.Invocation.Identity.ExecutionID, source.Revision); err != nil {
+		_ = source.Reader.Close()
 		return nil, redirectError(destination.Redirect.Operator, destination.Target, err)
 	}
-	return io.NopCloser(strings.NewReader(source.Content)), nil
+	return source.Reader, nil
 }
 
 // Capture pins one source script from its accepted document or published disk.
@@ -109,14 +114,9 @@ func (p *Publication) Capture(ctx context.Context, inv toolcontract.OperationInv
 	}
 	data := []byte(source.Content)
 	sum := sha256.Sum256(data)
-	rev := hex.EncodeToString(sum[:])
-	switch {
-	case source.Revision.DocumentID != "":
-		rev = "document:" + source.Revision.DocumentID + "@" + strconv.FormatInt(source.Revision.DocumentRevision, 10)
-	case source.Revision.ContentSHA256 != "":
-		rev = "sha256:" + source.Revision.ContentSHA256
-	case source.Revision.DiskSHA256 != "":
-		rev = "disk:" + source.Revision.DiskSHA256
+	rev := source.Revision.Identity()
+	if rev == "" {
+		rev = hex.EncodeToString(sum[:])
 	}
 	return commandprogram.CapturedSource{
 		Pin: toolcontract.SourcePin{
@@ -135,10 +135,12 @@ func redirectError(operator string, target commandprogram.Field, err error) erro
 	if err == nil {
 		return nil
 	}
+	err = tools.CommandResourceRejection(err)
 	cmd := "redirect"
 	if operator != "" {
 		cmd = "redirect " + operator
 	}
+	err = wrapPathError(cmd, err)
 	if reject := toolrejection.AsToolReject(err); reject != nil {
 		if reject.Data == nil {
 			reject.Data = map[string]any{}
@@ -149,20 +151,6 @@ func redirectError(operator string, target commandprogram.Field, err error) erro
 		reject.Data["source_end_byte"] = target.Span.EndByte
 		reject.Data["source_line"] = target.Span.Line
 		reject.Data["source_column"] = target.Span.Column
-		return err
-	}
-	var pathErr *projectpaths.PathError
-	if errors.As(err, &pathErr) {
-		reason := pathErr.Error()
-		if pathErr.Cause != nil {
-			reason = pathErr.Cause.Error()
-		}
-		return errors.Join(err, toolrejection.RejectInvalidArguments(pathErr.Code, map[string]any{
-			"command": cmd, "word": target.Value, "path": pathErr.Operand, "reason": reason,
-			"limit_id": pathErr.LimitID, "maximum": pathErr.Maximum, "observed": pathErr.Observed, "resource_unit": pathErr.ResourceUnit,
-			"source_start_byte": target.Span.StartByte, "source_end_byte": target.Span.EndByte,
-			"source_line": target.Span.Line, "source_column": target.Span.Column,
-		}))
 	}
 	return err
 }
@@ -208,7 +196,7 @@ func (o *Owners) captureDestination(ctx context.Context, tc tools.ToolContext, e
 func (o *Owners) publish(ctx context.Context, tc tools.ToolContext, target pinnedTarget, content []byte) (native.WriteResult, error) {
 	// Appending to a captured absence creates the file from the new bytes.
 	appendBytes := target.append && target.pin.Mode != toolcontract.AbsentRevision
-	return o.Operations.Write.Apply(ctx, native.WriteInput{Path: target.abs, Exact: true, Bytes: content, Append: appendBytes,
+	return o.Operations.Write.Apply(ctx, native.WriteInput{Path: target.abs, Exact: true, Bytes: content, Append: appendBytes, Memory: o.Revisions.Memory,
 		Admission: native.WriteExecutionPinned, Destination: target.pin}, tc)
 }
 
@@ -219,11 +207,10 @@ type fileStage struct {
 	target    pinnedTarget
 	operator  string
 	field     commandprogram.Field
-	maximum   int64
 	admission tools.CommandOutputWrite
 
 	mu      sync.Mutex
-	buffer  bytes.Buffer
+	buffer  *native.BufferedBytes
 	settled bool
 }
 
@@ -232,9 +219,6 @@ func (s *fileStage) Write(b []byte) (int, error) {
 	defer s.mu.Unlock()
 	if s.settled {
 		return 0, io.ErrClosedPipe
-	}
-	if observed := int64(s.buffer.Len() + len(b)); observed > s.maximum {
-		return 0, &commandprogram.StreamLimitError{Limit: "stream_bytes", Maximum: s.maximum, Observed: observed}
 	}
 	return s.buffer.Write(b)
 }
@@ -246,9 +230,9 @@ func (s *fileStage) Publish(ctx context.Context) (commandprogram.OutputPublished
 		return commandprogram.OutputPublished{}, io.ErrClosedPipe
 	}
 	s.settled = true
-	content := bytes.Clone(s.buffer.Bytes())
-	s.buffer.Reset()
+	content := s.buffer.Bytes
 	s.mu.Unlock()
+	defer s.buffer.Close()
 	published, err := s.admission.Publish(ctx, func(ctx context.Context, tc tools.ToolContext) (commandprogram.OutputPublished, error) {
 		result, err := s.owners.publish(ctx, tc, s.target, content)
 		if err != nil {
@@ -268,9 +252,13 @@ func (s *fileStage) Publish(ctx context.Context) (commandprogram.OutputPublished
 
 func (s *fileStage) Abandon(ctx context.Context) error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	if s.settled {
+		s.mu.Unlock()
+		return nil
+	}
 	s.settled = true
-	s.buffer.Reset()
+	s.mu.Unlock()
+	s.buffer.Close()
 	return s.admission.Abandon(ctx, nil)
 }
 

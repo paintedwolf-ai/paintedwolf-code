@@ -33,7 +33,7 @@ func TestCaptureBytesPinsExactPublishedBytes(t *testing.T) {
 		t.Fatalf("moved byte pin = %v", err)
 	}
 	_, err = f.revisions.CaptureBytes(t.Context(), f.tctx, "large", 4)
-	requireRejectCode(t, err, "READ_FILE_TOO_LARGE")
+	requireRejectCode(t, err, "COMMAND_LIMIT_EXCEEDED")
 	_, err = f.revisions.CaptureBytes(t.Context(), f.tctx, "missing", 4)
 	requireRejectCode(t, err, "READ_PATH_NOT_FOUND")
 	testutil.FailErr(t, "remove blob", os.Remove(filepath.Join(f.dir, "blob")))
@@ -51,7 +51,7 @@ func TestPinOpenedNamesTheOpenedObject(t *testing.T) {
 	file, err := os.Open(resolved.Abs)
 	testutil.FailErr(t, "open", err)
 	defer file.Close()
-	revision, ok, err := f.revisions.PinOpened(resolved, file)
+	revision, ok, err := f.revisions.PinOpened(t.Context(), resolved, file)
 	testutil.FailErr(t, "pin opened", err)
 	sum := textfile.SHA256([]byte("seen bytes\n"))
 	if !ok || revision.Path != "seen.txt" || revision.DiskSHA256 != sum || revision.ContentSHA256 != sum || revision.ContentBytes != 11 {
@@ -64,7 +64,7 @@ func TestPinOpenedNamesTheOpenedObject(t *testing.T) {
 	dir, err := os.Open(f.dir)
 	testutil.FailErr(t, "open dir", err)
 	defer dir.Close()
-	if _, ok, err := f.revisions.PinOpened(resolved, dir); ok || err != nil {
+	if _, ok, err := f.revisions.PinOpened(t.Context(), resolved, dir); ok || err != nil {
 		t.Fatalf("directory pinned: %v %v", ok, err)
 	}
 }

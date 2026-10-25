@@ -27,7 +27,6 @@ type documentText struct{ literal, stripTabs, lineStart bool }
 // with fixed space/tab/LF splitting of unquoted expansions; scalar and pattern
 // modes keep one value.
 type expansionRun struct {
-	ctx      context.Context
 	expander *WordExpander
 	scope    ExpansionScope
 	span     toolcontract.SourceSpan
@@ -39,25 +38,25 @@ type expansionRun struct {
 	releases []func()
 }
 
-func (r *expansionRun) word(parts []commandsurface.WordNode) error {
+func (r *expansionRun) word(ctx context.Context, parts []commandsurface.WordNode) error {
 	for i, part := range parts {
-		if err := r.ctx.Err(); err != nil {
+		if err := ctx.Err(); err != nil {
 			return err
 		}
 		var err error
 		switch part := part.(type) {
 		case commandsurface.LiteralPart:
-			err = r.literalPart(part.Value, i == 0, len(parts) == 1)
+			err = r.literalPart(ctx, part.Value, i == 0, len(parts) == 1)
 		case commandsurface.SingleQuotedPart:
 			err = r.assembly.add(part.Value, true)
 		case commandsurface.DoubleQuotedPart:
-			err = r.double(part)
+			err = r.double(ctx, part)
 		case commandsurface.ParameterPart:
-			err = r.parameter(part, r.document != nil)
+			err = r.parameter(ctx, part, r.document != nil)
 		case commandsurface.ArithmeticPart:
-			err = r.arithmetic(part, r.document != nil)
+			err = r.arithmetic(ctx, part, r.document != nil)
 		case commandsurface.SubstitutionPart:
-			err = r.substitution(part, r.document != nil)
+			err = r.substitution(ctx, part, r.document != nil)
 		default:
 			err = &ExpansionError{Code: codeSyntaxUnsupported, Span: r.span, Expected: "a version 1 word part"}
 		}
@@ -68,9 +67,9 @@ func (r *expansionRun) word(parts []commandsurface.WordNode) error {
 	return nil
 }
 
-func (r *expansionRun) literalPart(text string, first, whole bool) error {
+func (r *expansionRun) literalPart(ctx context.Context, text string, first, whole bool) error {
 	if r.document != nil {
-		return r.documentLiteral(text)
+		return r.documentLiteral(ctx, text)
 	}
 	if first {
 		var err error
@@ -87,28 +86,24 @@ func (r *expansionRun) literalPart(text string, first, whole bool) error {
 			text = text[1:]
 		}
 	}
-	return r.literal(text, expand.UnquotedText)
+	return r.literal(ctx, text, expand.UnquotedText)
 }
 
 // literal applies the selected quote removal. Escaped text is quoted.
-func (r *expansionRun) literal(text string, context expand.QuoteContext) error {
+func (r *expansionRun) literal(ctx context.Context, text string, quote expand.QuoteContext) error {
 	var err error
-	expand.RemoveQuotes(text, context, func(piece string, escaped bool) {
+	expand.RemoveQuotes(text, quote, func(piece string, escaped bool) {
 		if err == nil && piece != "" {
-			if !escaped && context == expand.UnquotedText && r.mode == modeFields && r.document == nil {
-				err = r.assembly.split(piece)
-			} else {
-				err = r.assembly.add(piece, escaped || context != expand.UnquotedText)
-			}
+			err = r.emit(ctx, piece, escaped || quote != expand.UnquotedText)
 		}
 	})
 	return err
 }
 
-func (r *expansionRun) documentLiteral(text string) error {
+func (r *expansionRun) documentLiteral(ctx context.Context, text string) error {
 	d := r.document
 	if d.stripTabs {
-		if err := r.charge(int64(len(text))); err != nil {
+		if err := r.charge(ctx, int64(len(text))); err != nil {
 			return err
 		}
 		var stripped strings.Builder
@@ -125,10 +120,10 @@ func (r *expansionRun) documentLiteral(text string) error {
 	if d.literal {
 		return r.assembly.add(text, true)
 	}
-	return r.literal(text, expand.HereDocumentText)
+	return r.literal(ctx, text, expand.HereDocumentText)
 }
 
-func (r *expansionRun) double(part commandsurface.DoubleQuotedPart) error {
+func (r *expansionRun) double(ctx context.Context, part commandsurface.DoubleQuotedPart) error {
 	if !r.onlyEmptyPositional(part.Parts) {
 		r.assembly.present = true
 	}
@@ -136,13 +131,13 @@ func (r *expansionRun) double(part commandsurface.DoubleQuotedPart) error {
 		var err error
 		switch inner := inner.(type) {
 		case commandsurface.LiteralPart:
-			err = r.literal(inner.Value, expand.DoubleQuotedText)
+			err = r.literal(ctx, inner.Value, expand.DoubleQuotedText)
 		case commandsurface.ParameterPart:
-			err = r.parameter(inner, true)
+			err = r.parameter(ctx, inner, true)
 		case commandsurface.ArithmeticPart:
-			err = r.arithmetic(inner, true)
+			err = r.arithmetic(ctx, inner, true)
 		case commandsurface.SubstitutionPart:
-			err = r.substitution(inner, true)
+			err = r.substitution(ctx, inner, true)
 		default:
 			err = &ExpansionError{Code: codeSyntaxUnsupported, Span: r.span, Expected: "a version 1 double-quoted part"}
 		}
@@ -167,9 +162,9 @@ func (r *expansionRun) onlyEmptyPositional(parts []commandsurface.WordNode) bool
 	return true
 }
 
-func (r *expansionRun) parameter(part commandsurface.ParameterPart, quoted bool) error {
+func (r *expansionRun) parameter(ctx context.Context, part commandsurface.ParameterPart, quoted bool) error {
 	if part.Operator != "" {
-		return r.operated(part, quoted)
+		return r.operated(ctx, part, quoted)
 	}
 	if (part.Name == "@" || part.Name == "*") && !part.Length {
 		positional := r.scope.Positional()
@@ -190,10 +185,10 @@ func (r *expansionRun) parameter(part commandsurface.ParameterPart, quoted bool)
 		for _, value := range positional {
 			joined += len(value) + 1
 		}
-		if err := r.charge(int64(joined)); err != nil {
+		if err := r.charge(ctx, int64(joined)); err != nil {
 			return err
 		}
-		return r.emit(strings.Join(positional, " "), quoted)
+		return r.emit(ctx, strings.Join(positional, " "), quoted)
 	}
 	if (part.Name == "PIPESTATUS[@]" || part.Name == "PIPESTATUS[*]") && !part.Length {
 		statuses := scopePipeStatuses(r.scope)
@@ -214,10 +209,10 @@ func (r *expansionRun) parameter(part commandsurface.ParameterPart, quoted bool)
 		for _, value := range statuses {
 			joined += len(value) + 1
 		}
-		if err := r.charge(int64(joined)); err != nil {
+		if err := r.charge(ctx, int64(joined)); err != nil {
 			return err
 		}
-		return r.emit(strings.Join(statuses, " "), quoted)
+		return r.emit(ctx, strings.Join(statuses, " "), quoted)
 	}
 	if err := r.unbound(part); err != nil {
 		return err
@@ -229,7 +224,7 @@ func (r *expansionRun) parameter(part commandsurface.ParameterPart, quoted bool)
 	if part.Length && part.Name != "@" && part.Name != "*" && part.Name != "PIPESTATUS[@]" && part.Name != "PIPESTATUS[*]" {
 		value = strconv.Itoa(utf8.RuneCountInString(value))
 	}
-	return r.emit(value, quoted)
+	return r.emit(ctx, value, quoted)
 }
 
 func scopePipeStatuses(scope ExpansionScope) []string {
@@ -257,9 +252,9 @@ func parameterValue(scope ExpansionScope, part commandsurface.ParameterPart) (st
 	case name == "PIPESTATUS":
 		return scopePipeStatuses(scope)[0], nil
 	case strings.HasPrefix(name, "PIPESTATUS[") && strings.HasSuffix(name, "]"):
-		index, err := strconv.Atoi(name[len("PIPESTATUS[") : len(name)-1])
 		statuses := scopePipeStatuses(scope)
-		if err != nil || index < 0 || index >= len(statuses) {
+		index, valid := parameterIndex(name[len("PIPESTATUS["):len(name)-1], len(statuses)-1)
+		if !valid {
 			return "", nil
 		}
 		return statuses[index], nil
@@ -271,9 +266,9 @@ func parameterValue(scope ExpansionScope, part commandsurface.ParameterPart) (st
 	case name == "0":
 		return scope.ProgramName(), nil
 	case positionalName(name):
-		index, err := strconv.Atoi(name)
 		positional := scope.Positional()
-		if err != nil || index > len(positional) {
+		index, valid := parameterIndex(name, len(positional))
+		if !valid || index == 0 {
 			return "", nil
 		}
 		return positional[index-1], nil
@@ -296,16 +291,16 @@ func positionalName(name string) bool {
 	return true
 }
 
-func (r *expansionRun) substitution(part commandsurface.SubstitutionPart, quoted bool) error {
-	output, err := r.expander.substitute(r, part)
+func (r *expansionRun) substitution(ctx context.Context, part commandsurface.SubstitutionPart, quoted bool) error {
+	output, err := r.expander.substitute(ctx, r, part)
 	if err != nil {
 		return err
 	}
-	return r.emit(output, quoted)
+	return r.emit(ctx, output, quoted)
 }
 
 // emit adds expansion output. Unquoted output splits in fields mode.
-func (r *expansionRun) emit(value string, quoted bool) error {
+func (r *expansionRun) emit(ctx context.Context, value string, quoted bool) error {
 	if r.document != nil {
 		r.document.lineStart = false
 	}
@@ -315,7 +310,7 @@ func (r *expansionRun) emit(value string, quoted bool) error {
 	return r.assembly.split(value)
 }
 
-func (r *expansionRun) join(pieces []expansionPiece, maximum int64, id string) (string, error) {
+func (r *expansionRun) join(ctx context.Context, pieces []expansionPiece, maximum int64, id string) (string, error) {
 	if len(pieces) == 1 {
 		if size := int64(len(pieces[0].text)); size > maximum {
 			return "", r.expander.limits.exceeded(id, size, r.span)
@@ -329,7 +324,7 @@ func (r *expansionRun) join(pieces []expansionPiece, maximum int64, id string) (
 	if size > maximum {
 		return "", r.expander.limits.exceeded(id, size, r.span)
 	}
-	if err := r.charge(size); err != nil {
+	if err := r.charge(ctx, size); err != nil {
 		return "", err
 	}
 	var value strings.Builder
@@ -363,4 +358,24 @@ func (r *expansionRun) unbound(part commandsurface.ParameterPart) error {
 		return nil
 	}
 	return invalidValue(part.Span, part.Name+": unbound variable")
+}
+
+// parameterIndex bounds a decimal index before arithmetic; very large indexes
+// name unset parameters without overflowing a machine integer.
+func parameterIndex(name string, maximum int) (int, bool) {
+	if name == "" || maximum < 0 {
+		return 0, false
+	}
+	value := 0
+	for _, c := range name {
+		if c < '0' || c > '9' {
+			return 0, false
+		}
+		digit := int(c - '0')
+		if value > maximum/10 || value == maximum/10 && digit > maximum%10 {
+			return 0, false
+		}
+		value = value*10 + digit
+	}
+	return value, true
 }

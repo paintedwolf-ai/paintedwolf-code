@@ -20,11 +20,11 @@ import (
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/textsearch"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
-	"github.com/lycaon/lycaon/internal/tools/readcaps"
 )
 
 // PinRecorder retains the revisions one execution captured
@@ -54,6 +54,8 @@ func (d DeleteRemover) RemoveRecoverable(ctx context.Context, tc tools.ToolConte
 // Owners holds the shared operations behind every search utility. One value
 // serves many programs; per-invocation state lives in Prepared.
 type Owners struct {
+	// Admission is the invoking program's existing session spill quota.
+	Admission tooloutput.SpillAdmission
 	Revisions native.ExecutionRevisions
 	Pins      PinRecorder
 	// Remover is required for find -delete; without it -delete refuses
@@ -265,6 +267,11 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 		return toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, fmt.Errorf("search invocation is not prepared")
 	}
 	inv := newInvocation(ctx, p, tc, streams)
+	defer func() {
+		for _, release := range inv.releases {
+			release()
+		}
+	}()
 	if p.spec.Name == "find" {
 		inv.failure = 1
 	}
@@ -304,14 +311,14 @@ func (o *Owners) readBytes() int64 {
 	if o.ReadBytes > 0 {
 		return o.ReadBytes
 	}
-	return readcaps.MaxFileBytes
+	return o.limit("whole_file_bytes")
 }
 
 func (o *Owners) streamBytes() int64 {
 	if o.StreamBytes > 0 {
 		return o.StreamBytes
 	}
-	return o.limit("stream_bytes")
+	return o.limit("stream_throughput_bytes")
 }
 
 func (o *Owners) limit(id string) int64 {
