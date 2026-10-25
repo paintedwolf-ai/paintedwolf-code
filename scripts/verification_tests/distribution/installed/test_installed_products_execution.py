@@ -45,7 +45,7 @@ class InstalledProductTests(unittest.TestCase):
 
     def test_missing_driver_never_invokes_a_command_or_passes(self):
         with patch.object(products, "run") as execute:
-            result = products.execute({}, "vault", "service-and-password-onboarding", Path("unused"))
+            result = products.execute({}, "vault", "service-onboarding", Path("unused"))
         self.assertEqual(result["status"], "unverified")
         execute.assert_not_called()
 

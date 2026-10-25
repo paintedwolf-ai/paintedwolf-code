@@ -271,7 +271,7 @@
     },
     {
       "id": "vault",
-      "outcome": "Credential onboarding, custody, password fallback and recovery",
+      "outcome": "Native credential custody, presence and non-destructive recovery",
       "tier": "native-security",
       "issues": [
         448,
@@ -281,7 +281,7 @@
         939
       ],
       "cases": [
-        "service-and-password-onboarding",
+        "service-onboarding",
         "presence-cancel-and-expiry",
         "service-unavailable-retry",
         "wrong-launcher-and-memory",
