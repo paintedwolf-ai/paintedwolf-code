@@ -88,7 +88,7 @@ func (r *SQLRecorder) BeginProgram(ctx context.Context, in toolcontract.ProgramS
 	return tx.Commit()
 }
 
-func traceFootprint(s toolcontract.ProgramStart) (int64, int64) {
+func programTraceFootprint(s toolcontract.ProgramStart) (int64, int64) {
 	bytes := int64(len(s.PlanReference) + len(s.Version.SourceReference))
 	for _, source := range s.Sources {
 		bytes += 512 + int64(len(source.UnitID)+len(source.Pin.SourceID)+len(source.Pin.Revision)+len(source.DetailReference))
@@ -107,7 +107,7 @@ func insertProgram(ctx context.Context, tx *sql.Tx, in toolcontract.ProgramStart
 	if state != "running" {
 		return fmt.Errorf("program parent is not running")
 	}
-	events, bytes := traceFootprint(in)
+	events, bytes := programTraceFootprint(in)
 	v := in.Version
 	_, err := tx.ExecContext(ctx, `INSERT INTO invocation_programs (id,parent_receipt_id,root_execution_id,language_version,catalog_digest,source_unit_id,source_digest,source_ref,source_exact,plan_ref,syntax_validated,state,trace_events,trace_bytes,started_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,'running',?,?,?)`, v.ProgramID, v.ParentReceiptID, v.RootExecutionID, v.LanguageVersion, v.CatalogDigest, v.SourceUnitID, v.SourceDigest, v.SourceReference, in.SourceExact, in.PlanReference, in.SyntaxValidated, events, bytes, time.Now().UTC().Format(time.RFC3339Nano))
 	if err != nil {

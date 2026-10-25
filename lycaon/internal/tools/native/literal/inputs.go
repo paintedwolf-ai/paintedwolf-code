@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
@@ -15,9 +16,17 @@ type input struct {
 	label  string
 	data   []byte
 	stream io.Reader
+	closer io.Closer
 	pin    *toolcontract.SourcePin
 	bound  projectpaths.BoundPath
 	stdin  bool
+}
+
+func (in *input) close() {
+	if in != nil && in.closer != nil {
+		_ = in.closer.Close()
+		in.closer = nil
+	}
 }
 
 // reader returns the bytes in order, whichever way they were acquired.
@@ -29,22 +38,28 @@ func (in *input) reader() io.Reader {
 }
 
 // operandsOrStdin applies the "no PATH reads stdin" rule.
-func (inv *invocation) operandsOrStdin() []string {
-	operands := inv.operands()
+func (inv *invocation) operandsOrStdin() commandprogram.Fields {
+	operands := inv.argv.Operands()
 	if len(operands) == 0 {
-		return []string{"-"}
+		return commandprogram.Fields{{Value: "-"}}
 	}
 	return operands
 }
 
-// open acquires one operand. It returns nil after reporting an ordinary
+// open acquires one string operand.
+func (inv *invocation) open(operand string, whole bool) (*input, error) {
+	return inv.openField(commandprogram.Field{Value: operand}, whole)
+}
+
+// openField acquires one operand. It returns nil after reporting an ordinary
 // failure (missing, directory, permission) so the utility continues; any
 // other error is a typed stop. whole gathers within the whole-input bound.
-func (inv *invocation) open(operand string, whole bool) (*input, error) {
+func (inv *invocation) openField(field commandprogram.Field, whole bool) (*input, error) {
 	inv.closeCurrentStream()
 	if err := inv.ctx.Err(); err != nil {
 		return nil, err
 	}
+	operand := field.Value
 	if operand == "-" {
 		in := &input{label: "-", stdin: true, stream: inv.input}
 		if !whole {
@@ -56,6 +71,21 @@ func (inv *invocation) open(operand string, whole bool) (*input, error) {
 		}
 		inv.releases = append(inv.releases, captured.Close)
 		in.data, in.stream = captured.Bytes, nil
+		return in, nil
+	}
+	if reader, ok := field.ProcessSubstitution().OpenReader(); ok {
+		in := &input{label: operand, stdin: true, stream: reader, closer: reader}
+		if !whole {
+			inv.currentStream = reader
+			return in, nil
+		}
+		captured, err := inv.owners.Revisions.ReadWholeInput(inv.ctx, reader, inv.owners.readBytes())
+		_ = reader.Close()
+		if err != nil {
+			return nil, err
+		}
+		inv.releases = append(inv.releases, captured.Close)
+		in.data, in.stream, in.closer = captured.Bytes, nil, nil
 		return in, nil
 	}
 	bound, err := inv.paths.Bind(inv.ctx, operand, false)
