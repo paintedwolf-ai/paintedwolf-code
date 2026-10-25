@@ -253,3 +253,56 @@ class ActiveSessionTests(unittest.TestCase):
         with patch.object(owner, 'active_session', return_value=None), patch.object(owner.time, 'monotonic', side_effect=[0.0, 30.0]), patch.object(owner.time, 'sleep'):
             with self.assertRaisesRegex(owner.CaseUnavailable, 'keepawake-project-session-not-opened'):
                 owner.await_session(None, None, 'fixture', MODEL, status='idle', reason='keepawake-project-session-not-opened')
+
+
+class ProjectConfigurationIdentityTests(unittest.TestCase):
+    def setUp(self):
+        self.project_id = '22222222-2222-4222-8222-222222222222'
+        self.session_id = '33333333-3333-4333-8333-333333333333'
+        self.selected = {'project_id': self.project_id, 'id': self.session_id}
+        self.owned = {'project_id': self.project_id, 'root_id': '44444444-4444-4444-8444-444444444444'}
+        self.db = sqlite3.connect(':memory:')
+        self.addCleanup(self.db.close)
+        self.db.execute('CREATE TABLE projects(id TEXT,name TEXT)')
+        self.db.execute('INSERT INTO projects VALUES(?,?)', (self.project_id, '  Alpha  '))
+        self.database = patch.object(owner, '_database', side_effect=lambda *a, **kw: nullcontext(self.db)).start()
+        self.root = patch.object(owner, 'project_for_owned_root', return_value=self.owned).start()
+        self.renderer = patch.object(owner, 'renderer_session', return_value={'project_id': self.project_id}).start()
+        self.addCleanup(patch.stopall)
+
+    def test_exact_owned_root_name_uses_shared_trim_and_untitled_projection(self):
+        for raw, expected in [('  Alpha  ', 'Alpha'), ('\ufeffAlpha\u00a0', 'Alpha'), (None, 'Untitled'), ('  ', 'Untitled')]:
+            self.db.execute('UPDATE projects SET name=?', (raw,))
+            with self.subTest(name=raw):
+                result = owner.project_configuration_identity(None, '/fixture', self.selected)
+            self.assertEqual(result, {**self.owned, 'session_id': self.session_id, 'display_name': expected})
+        self.database.assert_called_with(None, required={'projects': {'name': 'TEXT'}})
+        self.renderer.assert_called_with(None, '/fixture', self.project_id, self.session_id)
+
+    def test_unknown_name_shape_or_oversize_refuses_without_clipping(self):
+        for raw in ['x' * 201, b'bytes']:
+            self.db.execute('UPDATE projects SET name=?', (raw,))
+            with self.subTest(name=raw), self.assertRaises(ValueError):
+                owner.project_configuration_identity(None, '/fixture', self.selected)
+
+    def test_changed_root_or_unselected_renderer_never_authorizes_named_link(self):
+        self.root.return_value = {**self.owned, 'project_id': self.session_id}
+        with self.assertRaises(ValueError):
+            owner.project_configuration_identity(None, '/fixture', self.selected)
+        self.database.assert_not_called()
+        self.root.return_value = self.owned
+        self.renderer.return_value = None
+        with self.assertRaises(CaseUnavailable):
+            owner.project_configuration_identity(None, '/fixture', self.selected)
+        self.renderer.return_value = {'project_id': self.project_id}
+        self.root.side_effect = [self.owned, {**self.owned, 'root_id': self.session_id}]
+        with self.assertRaises(ValueError):
+            owner.project_configuration_identity(None, '/fixture', self.selected)
+
+    def test_missing_or_duplicate_project_name_refuses(self):
+        self.db.execute('DELETE FROM projects')
+        with self.assertRaises(ValueError):
+            owner.project_configuration_identity(None, '/fixture', self.selected)
+        self.db.executemany('INSERT INTO projects VALUES(?,?)', [(self.project_id, 'Alpha')] * 2)
+        with self.assertRaises(ValueError):
+            owner.project_configuration_identity(None, '/fixture', self.selected)

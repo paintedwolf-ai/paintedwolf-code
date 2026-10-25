@@ -59,7 +59,7 @@ def unchallenged_presence(binding):
                 observations['opened_session'] = await_session(app, project, provider['provider_id'], MODEL, status='idle',
                                                                reason='presence-project-session-not-opened')
                 with DesktopUI(app) as ui:
-                    observations['secret_setup'] = prepare_secret(app, ui, reservation)
+                    observations['secret_setup'] = prepare_secret(app, ui, reservation, project, observations['opened_session'])
                     policy = PresencePolicy(launch_binding)
                     with policy:
                         reservation.check_launch(app)

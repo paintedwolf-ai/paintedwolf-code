@@ -140,6 +140,32 @@ def renderer_session(app, project, project_id, session_id):
             'last_active_project_sha256': active_digest, 'last_session_snapshot_sha256': snapshot_digest}
 
 
+def project_configuration_identity(app, project, selected):
+    """Bind the shared named Settings counterpart to the selected owned project."""
+    project_id, session_id = identifier(selected['project_id']), identifier(selected['id'])
+    owned = project_for_owned_root(app, project)
+    if owned is None or owned['project_id'] != project_id:
+        raise ValueError('project configuration target differs from its reserved root')
+    with _database(app, required={'projects': {'name': 'TEXT'}}) as connection:
+        found = rows(connection.execute(
+            'SELECT CASE WHEN length(CAST(name AS BLOB))<=200 THEN name END,'
+            'length(CAST(name AS BLOB)) FROM projects WHERE id=? LIMIT 2', (project_id,)))
+    if len(found) != 1:
+        raise ValueError('project configuration target has no unique project name')
+    name, size = found[0]
+    if size is not None and (type(size) is not int or not 0 <= size <= 200 or not isinstance(name, str)):
+        raise ValueError('project configuration name exceeds its declared fixture bound')
+    # Match toProjectSummary's ECMAScript trim and its shared Untitled projection.
+    whitespace = ' \t\n\r\v\f\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff'
+    display_name = name.strip(whitespace) if isinstance(name, str) else ''
+    rendered = renderer_session(app, project, project_id, session_id)
+    if rendered is None:
+        raise CaseUnavailable('project-configuration-selected-renderer-project-unavailable')
+    if project_for_owned_root(app, project) != owned:
+        raise ValueError('project configuration root changed during observation')
+    return {**owned, 'session_id': session_id, 'display_name': display_name or 'Untitled'}
+
+
 def fixture_selection(app, project, project_id, provider_id, model):
     """Bind the one-root fixture to its persisted coordinator without overlay merging."""
     identifier(project_id)

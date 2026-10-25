@@ -5,7 +5,7 @@ import time
 
 from ..installed_process import process_identity
 from .desktop_ui import DesktopUI, retry_inventory
-from .profile_setup import first_time_tips_enabled
+from .profile_setup import first_time_tips_enabled, project_configuration_identity
 from .provider_setup import physical_input
 from .records import CaseFailed, CaseUnavailable
 from ..installed_input import accessibility, lineage
@@ -22,31 +22,31 @@ def prepare_composer(app, ui):
         time.sleep(0.05)
 
 
-def open_project_configuration(app, ui) -> dict:
+def open_project_configuration(app, ui, project, selected) -> dict:
     prepare_composer(app, ui)
+    target = project_configuration_identity(app, project, selected)
     actions = app.observations.setdefault('project_configuration_actions', [])
     deadline = time.monotonic() + 15
-    for restored in (False, True):
-        row = _project_configuration_action(app, ui, deadline, restored)
-        actions.append(row)
-        if row['name'] == 'Project configuration':
-            witness = {'sidebar_restore': actions[:-1], 'project_configuration': row, 'native_action_completed': True}
-            app.observations['project_configuration_navigation'] = witness
-            return witness
-    raise ValueError('project configuration navigation did not reach its declared destination')
+    controls = [(ui.api.ROLE_COMBO_BOX, 'App menu'),
+                (ui.api.ROLE_MENU_ITEM, 'Painted Wolf Code'),
+                (ui.api.ROLE_MENU_ITEM, 'Settings…'),
+                (ui.api.ROLE_PAGE_TAB, 'AI providers'),
+                (ui.api.ROLE_PUSH_BUTTON, target['display_name'] + ' → AI providers')]
+    for role, name in controls:
+        if project_configuration_identity(app, project, selected) != target:
+            raise ValueError('selected project changed before configuration navigation')
+        actions.append(_project_configuration_action(app, ui, deadline, role, name))
+        if project_configuration_identity(app, project, selected) != target:
+            raise ValueError('selected project changed after configuration navigation')
+    witness = {'project': target, 'actions': actions, 'native_action_completed': True}
+    app.observations['project_configuration_navigation'] = witness
+    return witness
 
 
-def _project_configuration_action(app, ui, deadline, restored):
-    role = ui.api.ROLE_PUSH_BUTTON
+def _project_configuration_action(app, ui, deadline, role, name):
     root = app.observations['launch_identity']
     while True:
-        node = (ui.find(role, 'Project configuration', deadline=deadline) if restored
-                else ui.project_navigation_control(deadline))
-        name = node.name
-        allowed = {'Project configuration'} if restored else {
-            'Project configuration', 'Show sidebar', 'Widen window to restore sidebar'}
-        if name not in allowed:
-            raise ValueError('project navigation control changed before its action')
+        node = ui.find(role, name, deadline=deadline)
         phase = 'inventory-ownership'
         try:
             frame, chain = accessibility.capture(node, list(ui.windows(deadline)))
@@ -58,8 +58,15 @@ def _project_configuration_action(app, ui, deadline, restored):
             if action.nActions != 1:
                 phase = 'action-count'
                 raise CaseUnavailable('normal-project-configuration-action-is-not-unique')
+            if role == ui.api.ROLE_MENU_ITEM:
+                phase = 'component-interface'
+                if not node.queryComponent().grabFocus():
+                    raise accessibility.InventoryChanged()
+                if not node.getState().contains(ui.api.STATE_FOCUSED):
+                    raise accessibility.InventoryChanged()
             phase = 'identity-recheck'
-            if (node.name != name or accessibility.capture(node, list(ui.windows(deadline)))[1] != chain
+            if (node.name != name or not ui.visible(node)
+                    or accessibility.capture(node, list(ui.windows(deadline)))[1] != chain
                     or lineage.capture(surface, control) != entry_chain
                     or lineage.capture(root, surface) != frame_chain):
                 raise ValueError('normal project configuration identity changed before its action')
@@ -68,7 +75,7 @@ def _project_configuration_action(app, ui, deadline, restored):
             raise
         except Exception as error:
             if (time.monotonic() < deadline and retry_inventory(
-                    app, error, interface_mounting=(phase == 'action-interface'))):
+                    app, error, interface_mounting=(phase in {'action-interface', 'component-interface'}))):
                 time.sleep(0.05)
                 continue
             refusal = CaseUnavailable('normal-project-configuration-action-unavailable')

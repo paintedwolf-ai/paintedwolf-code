@@ -10,13 +10,13 @@ from .records import CaseUnavailable
 from ..installed_input.presence_fixture import FIELDS
 
 
-def prepare_secret(app, ui, reservation) -> dict:
+def prepare_secret(app, ui, reservation, project, selected) -> dict:
     if 'presence_secret_setup' in app.observations:
         raise CaseUnavailable('presence-secret-setup-already-attempted')
     witness = {'phase': 'navigation', 'create_action_completed': False, 'reveal_ready': False}
     app.observations['presence_secret_setup'] = witness
     reservation.check_launch(app)
-    witness['navigation'] = open_project_configuration(app, ui)
+    witness['navigation'] = open_project_configuration(app, ui, project, selected)
     witness['phase'] = 'secret-list'
     ui.click('Secrets', tab=True)
     witness['phase'] = 'secret-form'

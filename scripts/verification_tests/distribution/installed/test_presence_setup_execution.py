@@ -21,7 +21,7 @@ class PresenceSecretSetupTests(unittest.TestCase):
         self.addCleanup(patch.stopall)
 
     def test_ready_requires_reveal_observation_after_one_create_action(self):
-        facts = presence_setup.prepare_secret(self.app, self.ui, self.reservation)
+        facts = presence_setup.prepare_secret(self.app, self.ui, self.reservation, '/fixture', {'id': 'session', 'project_id': 'project'})
         self.assertEqual(facts['phase'], 'ready')
         self.assertTrue(facts['create_action_completed'])
         self.assertTrue(facts['reveal_ready'])
@@ -33,7 +33,7 @@ class PresenceSecretSetupTests(unittest.TestCase):
     def test_uncertain_create_is_not_replayed_and_never_claimed_ready(self):
         self.ui.click.side_effect = [None, None, CaseUnavailable('uncertain delivery')]
         with self.assertRaises(CaseUnavailable):
-            presence_setup.prepare_secret(self.app, self.ui, self.reservation)
+            presence_setup.prepare_secret(self.app, self.ui, self.reservation, '/fixture', {'id': 'session', 'project_id': 'project'})
         facts = self.app.observations['presence_secret_setup']
         self.assertEqual(facts['phase'], 'create-dispatch')
         self.assertFalse(facts['create_action_completed'])
@@ -44,7 +44,7 @@ class PresenceSecretSetupTests(unittest.TestCase):
     def test_missing_reveal_preserves_acknowledged_create_without_recreation(self):
         self.ui.find.side_effect = CaseUnavailable('reveal missing')
         with self.assertRaises(CaseUnavailable):
-            presence_setup.prepare_secret(self.app, self.ui, self.reservation)
+            presence_setup.prepare_secret(self.app, self.ui, self.reservation, '/fixture', {'id': 'session', 'project_id': 'project'})
         facts = self.app.observations['presence_secret_setup']
         self.assertEqual(facts['phase'], 'reveal-observation')
         self.assertTrue(facts['create_action_completed'])
@@ -54,13 +54,13 @@ class PresenceSecretSetupTests(unittest.TestCase):
     def test_preexisting_alert_prevents_presence_policy_from_being_ready(self):
         self.alert.return_value = [{'role': 'alert'}]
         with self.assertRaises(CaseUnavailable):
-            presence_setup.prepare_secret(self.app, self.ui, self.reservation)
+            presence_setup.prepare_secret(self.app, self.ui, self.reservation, '/fixture', {'id': 'session', 'project_id': 'project'})
         self.assertEqual(self.app.observations['presence_secret_setup']['phase'], 'existing-alert')
         self.assertFalse(self.app.observations['presence_secret_setup']['reveal_ready'])
 
     def test_second_attempt_cannot_recreate_an_acknowledged_secret(self):
-        presence_setup.prepare_secret(self.app, self.ui, self.reservation)
+        presence_setup.prepare_secret(self.app, self.ui, self.reservation, '/fixture', {'id': 'session', 'project_id': 'project'})
         before = list(self.ui.mock_calls)
         with self.assertRaisesRegex(CaseUnavailable, 'already-attempted'):
-            presence_setup.prepare_secret(self.app, self.ui, self.reservation)
+            presence_setup.prepare_secret(self.app, self.ui, self.reservation, '/fixture', {'id': 'session', 'project_id': 'project'})
         self.assertEqual(self.ui.mock_calls, before)

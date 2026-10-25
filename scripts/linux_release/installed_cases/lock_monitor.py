@@ -348,7 +348,7 @@ def execute(binding: dict, capability: str, case: str, root: Path) -> dict:
                                                             observations, provider, fixture, project, reservation)
                         else:
                             with DesktopUI(app) as ui:
-                                observations['secret_setup'] = prepare_secret(app, ui, reservation)
+                                observations['secret_setup'] = prepare_secret(app, ui, reservation, project, observations['opened_session'])
                                 policy = PresencePolicy(launch_binding)
                                 with policy:
                                     run_lock_during_presence(app, ui, execution, vm_id,
