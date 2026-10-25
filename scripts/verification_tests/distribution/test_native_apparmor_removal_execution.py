@@ -8,6 +8,8 @@ import sys
 import tempfile
 import unittest
 
+from verification_tests.distribution.maintainer_fixture import program
+
 ROOT = Path(__file__).resolve().parents[3]
 PROFILE = 'painted-wolf-code (unconfined)'
 OTHER = 'painted-wolf-code-other (enforce)'
@@ -44,6 +46,13 @@ if not s['parser_failure'] and not s['remains']:
 p.write_text(json.dumps(s));raise SystemExit(1 if s['parser_failure'] else 0)
 ''')
                 binary.chmod(0o755)
+            generations = root / 'pw-generations'
+            generations.write_text(prefix + '''assert sys.argv[1:]==['remove']
+s.setdefault('generation_calls',[]).append(sys.argv[1:]);p.write_text(json.dumps(s))
+''')
+            generations.chmod(0o755)
+            source = program((ROOT / 'packaging/linux/deb/prerm').read_text(),
+                             generations, root / 'package-state')
             wrapper = '''fixture_test() {
 case "$1:$2" in
 -d:/sys/kernel/security/apparmor) return 0;;
@@ -52,7 +61,7 @@ esac
 command [ "$@"
 }
 alias '['=fixture_test
-set -- ''' + shlex.quote(operation) + '\n. ' + shlex.quote(str(ROOT / 'packaging/linux/deb/prerm'))
+set -- ''' + shlex.quote(operation) + '\n' + source
             result = subprocess.run(['/bin/sh', '-c', wrapper], env={**os.environ,
                 'PATH': str(root), 'KERNEL_STATE': str(state)}, capture_output=True, text=True, timeout=15)
             return result, json.loads(state.read_text())
@@ -62,6 +71,7 @@ set -- ''' + shlex.quote(operation) + '\n. ' + shlex.quote(str(ROOT / 'packaging
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(state['profiles'], [OTHER])
         self.assertEqual(len(state['calls']), 1)
+        self.assertEqual(state.get('generation_calls', []), [['remove']])
         self.assertEqual(state['calls'][0]['policy'], 'profile painted-wolf-code {}\n')
 
     def test_already_unloaded_removal_does_not_need_a_parser(self):
