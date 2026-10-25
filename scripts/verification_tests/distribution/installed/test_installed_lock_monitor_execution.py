@@ -36,7 +36,10 @@ def fact(*, locked=False, screensaver=False, can_lock=True,
         'screensaver_locked': screensaver,
         'system_connected': True,
         'session_bus_connected': True,
-        'sleeping': False}
+        'sleeping': False,
+        'locked_hint_seen': locked,
+        'idle': {'source': None, 'error': None, 'idle': False},
+        'mode': 'lock_observed' if screensaver is not None else 'unavailable'}
     if owners:
         row['logind_owner'] = logind_owner
         row['screensaver_owner'] = screensaver_owner
@@ -59,16 +62,11 @@ class StepAwayFactValidationTests(unittest.TestCase):
         unlocked = fact(locked=False, screensaver=False)
         self.assertEqual(lock_monitor.validate_step_away_fact(unlocked, SESSION, locked=False), unlocked)
 
-        unlocked_with_owners = fact(locked=False, screensaver=False, owners=True)
-        self.assertEqual(
-            lock_monitor.validate_step_away_fact(unlocked_with_owners, SESSION, locked=False),
-            unlocked_with_owners)
-
-        locked_row = fact(locked=True, screensaver=True, owners=True)
+        locked_row = fact(locked=True, screensaver=True)
         self.assertEqual(lock_monitor.validate_step_away_fact(locked_row, SESSION, locked=True), locked_row)
 
-        app = Mock(streams=Mock(return_value={'app-stderr': stderr_stream(unlocked, unlocked_with_owners, locked_row)}))
-        self.assertEqual(lock_monitor.step_away_facts(app), [unlocked, unlocked_with_owners, locked_row])
+        app = Mock(streams=Mock(return_value={'app-stderr': stderr_stream(unlocked, locked_row)}))
+        self.assertEqual(lock_monitor.step_away_facts(app), [unlocked, locked_row])
 
         for bad, expected_locked in (
                 (fact(locked=False, screensaver=None, can_lock=True), False),
@@ -78,6 +76,48 @@ class StepAwayFactValidationTests(unittest.TestCase):
                 (fact(locked=False, screensaver=False, owners=True, screensaver_owner=None), False)):
             with self.subTest(bad=bad, expected_locked=expected_locked), self.assertRaises(ValueError):
                 lock_monitor.validate_step_away_fact(bad, SESSION, locked=expected_locked)
+
+    def test_current_producer_shape_preserves_idle_and_mode_without_claiming_a_lock(self):
+        # LockSources + IdleFacts/IdleSource/IdleUnavailable in product 4a200827df.
+        # This actual nine-field wire shape supersedes the older owner-extension fixture.
+        for source in lock_monitor.IDLE_SOURCES:
+            for error in lock_monitor.IDLE_ERRORS:
+                row = fact(screensaver=None)
+                row.update(mode='idle_fallback' if source is not None else 'unavailable')
+                row['idle'] = {'source': source, 'error': error, 'idle': True}
+                self.assertTrue(lock_monitor.valid_fact_keys(row))
+                self.assertEqual(lock_monitor.step_away_facts(Mock(streams=Mock(
+                    return_value={'app-stderr': stderr_stream(row)}))), [row])
+                with self.assertRaises(ValueError):
+                    lock_monitor.validate_step_away_fact(row, SESSION, locked=True)
+                with self.assertRaises(ValueError):
+                    lock_monitor.validate_step_away_fact(row, SESSION, locked=False)
+        row = fact()
+        row['idle'] = {'source': 'mutter_idle_monitor', 'error': None, 'idle': True}
+        # Input idle does not override a healthy lock-observed mode.
+        self.assertEqual(lock_monitor.validate_step_away_fact(row, SESSION, locked=False), row)
+
+    def test_closed_fact_schema_refuses_old_unknown_nested_and_wrong_type_records(self):
+        variants = []
+        for key in fact():
+            row = fact(); del row[key]; variants.append(row)
+        row = fact(); row['unexpected'] = False; variants.append(row)
+        variants.append(fact(owners=True))
+        for key, value in [('mode', 'future_mode'), ('mode', []), ('session_error', 'diagnostic prose'),
+                           ('session_error', []), ('locked_hint_seen', 1), ('system_connected', 'true'),
+                           ('screensaver_locked', 0), ('session', [])]:
+            row = fact(); row[key] = value; variants.append(row)
+        for key, value in [('source', 'guessed_idle'), ('source', []), ('error', 'diagnostic prose'),
+                           ('error', []), ('idle', 1), ('extra', False)]:
+            row = fact(); row['idle'][key] = value; variants.append(row)
+        for key, value in [('uid', True), ('active', 1), ('session_type', 'unknown')]:
+            row = fact(); row['session'][key] = value; variants.append(row)
+        for row in variants:
+            with self.subTest(row=row):
+                self.assertFalse(lock_monitor.valid_fact_keys(row))
+                with self.assertRaises(ValueError):
+                    lock_monitor.step_away_facts(Mock(streams=Mock(
+                        return_value={'app-stderr': stderr_stream(row)})))
 
 
 class LockMonitorExecutionTests(unittest.TestCase):
@@ -281,21 +321,11 @@ class LockMonitorExecutionTests(unittest.TestCase):
         self.assertEqual(obs['reason'], 'initial-lock-state-and-lock-unlock-observed-monitor-owner-recovery-unverified')
         disable_mock.assert_called_once_with(ACCOUNT, vm_id='owned')
 
-    def test_initial_lock_state_passes_when_bound_monitor_owner_recovers_to_new_unique_owner(self):
-        outcome, disable_mock, _, _ = self._run_case(
-            'initial-lock-state', owner_recovery=True, startup_none=True)
-        self.assertEqual(outcome[4], 'passed')
-        obs = outcome[5]
-        self.assertTrue(obs['initial_lock_state_verified'])
-        self.assertTrue(obs['lock_unlock_verified'])
-        self.assertTrue(obs['capability_state_recovery_verified'])
-        self.assertTrue(obs['monitor_owner_recovery_verified'])
-        rec = obs['monitor_owner_recovery']
-        self.assertEqual(rec['baseline_fact']['screensaver_owner'], ':1.42')
-        self.assertIsNone(rec['loss_fact']['screensaver_owner'])
-        self.assertEqual(rec['recovered_fact']['screensaver_owner'], ':1.99')
-        self.assertEqual(obs['reason'], 'initial-lock-state-lock-unlock-and-monitor-owner-recovery-verified')
-        disable_mock.assert_called_once_with(ACCOUNT, vm_id='owned')
+    def test_initial_lock_state_refuses_an_owner_extension_not_emitted_by_current_product(self):
+        with self.assertRaises(records.CaseFailed) as caught:
+            self._run_case('initial-lock-state', owner_recovery=True, startup_none=True)
+        self.assertEqual(caught.exception.observations['failure_type'], 'ValueError')
+        self.assertNotEqual(caught.exception.observations.get('monitor_owner_recovery_verified'), True)
 
     def test_lock_during_presence_requires_real_system_stale_and_fresh_witnesses(self):
         outcome, disable, policy, ui = self._run_case('lock-during-presence')

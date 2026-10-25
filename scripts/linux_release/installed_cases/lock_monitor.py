@@ -28,9 +28,13 @@ TIME_BUDGET_SECONDS, STEP_AWAY_PREFIX = 300, 'Step-away capability facts: '
 CHALLENGE_PREFIX = 'Step-away presence challenge: '
 INVALIDATION_PREFIX = 'Step-away presence invalidation: '
 FACT_FIELDS = frozenset({'session', 'session_error', 'screensaver_locked',
-                         'system_connected', 'session_bus_connected', 'sleeping'})
+                         'system_connected', 'session_bus_connected', 'sleeping',
+                         'locked_hint_seen', 'idle', 'mode'})
 OWNER_FIELDS = frozenset({'logind_owner', 'screensaver_owner'})
-ACCEPTED_FACT_KEYS = (FACT_FIELDS, FACT_FIELDS | OWNER_FIELDS)
+IDLE_SOURCES = {None, 'wayland_input_idle', 'wayland_idle', 'mutter_idle_monitor', 'x11_screen_saver'}
+IDLE_ERRORS = {None, 'no_display_session', 'wayland_unreachable', 'no_idle_notifier',
+               'mutter_not_compositor', 'x11_unreachable', 'x11_no_screen_saver', 'lost'}
+SESSION_ERRORS = {None, 'no_graphical_session', 'unreadable', 'invalid_properties', 'wrong_user'}
 SESSION_FIELDS = {'id', 'path', 'uid', 'session_type', 'active', 'can_lock', 'locked'}
 CHALLENGE_FIELDS = {'challenge_id', 'purpose', 'window_label', 'generation'}
 INVALIDATION_FIELDS = {'challenge_id', 'purpose', 'window_label', 'generation_before',
@@ -42,9 +46,27 @@ def valid_unique_owner(value) -> bool:
 
 
 def valid_fact_keys(fact) -> bool:
-    if not isinstance(fact, dict) or frozenset(fact) not in ACCEPTED_FACT_KEYS:
+    if not isinstance(fact, dict) or frozenset(fact) != FACT_FIELDS:
         return False
-    return all(fact.get(k) is None or valid_unique_owner(fact[k]) for k in OWNER_FIELDS if k in fact)
+    if (any(type(fact[key]) is not bool for key in ('system_connected', 'session_bus_connected',
+                                                  'sleeping', 'locked_hint_seen'))
+            or fact['screensaver_locked'] is not None and type(fact['screensaver_locked']) is not bool
+            or not isinstance(fact['mode'], str) or fact['mode'] not in {'lock_observed', 'idle_fallback', 'unavailable'}
+            or not (fact['session_error'] is None or isinstance(fact['session_error'], str))
+            or fact['session_error'] not in SESSION_ERRORS):
+        return False
+    idle = fact['idle']
+    if (not isinstance(idle, dict) or set(idle) != {'source', 'error', 'idle'}
+            or type(idle['idle']) is not bool
+            or not (idle['source'] is None or isinstance(idle['source'], str)) or idle['source'] not in IDLE_SOURCES
+            or not (idle['error'] is None or isinstance(idle['error'], str)) or idle['error'] not in IDLE_ERRORS):
+        return False
+    observed = fact['session']
+    return observed is None or (isinstance(observed, dict) and set(observed) == SESSION_FIELDS
+        and isinstance(observed['id'], str) and isinstance(observed['path'], str)
+        and type(observed['uid']) is int and 0 <= observed['uid'] < 1 << 32
+        and observed['session_type'] in ('wayland', 'x11')
+        and all(type(observed[key]) is bool for key in ('active', 'can_lock', 'locked')))
 
 
 def step_away_facts(app) -> list[dict]:
@@ -84,7 +106,8 @@ def step_away_invalidations(app) -> list[dict]:
 def validate_step_away_fact(fact: dict, session: dict, *, locked: bool) -> dict:
     if (type(locked) is not bool or not valid_fact_keys(fact)
             or fact['system_connected'] is not True or fact['session_bus_connected'] is not True
-            or fact['sleeping'] is not False or fact['session_error'] is not None):
+            or fact['sleeping'] is not False or fact['session_error'] is not None
+            or fact['mode'] != 'lock_observed'):
         raise ValueError('step-away capability facts lack healthy bus or sleep state')
     observed, screensaver = fact['session'], fact['screensaver_locked']
     if (not isinstance(observed, dict) or set(observed) != SESSION_FIELDS or observed['id'] != session['id']
