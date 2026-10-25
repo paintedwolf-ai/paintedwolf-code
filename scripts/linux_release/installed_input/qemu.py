@@ -16,7 +16,8 @@ import struct
 import threading
 import time
 
-from .protocol import event_sha256, steps
+from .protocol import event_sha256, pointer_device, steps
+from . import notification_wire
 
 LIMIT = 16384
 
@@ -162,7 +163,8 @@ class Actor:
                     raise ValueError('QMP event identity is invalid')
                 continue
             if (set(reply) != {'id', 'return'} or type(reply['id']) is not int
-                    or reply['id'] != self.command_id or not isinstance(reply['return'], dict)):
+                    or reply['id'] != self.command_id
+                    or not isinstance(reply['return'], list if name == 'query-mice' else dict)):
                 raise ValueError('QMP did not acknowledge the exact owned command')
             return reply
         raise ValueError('QMP exceeded its bounded asynchronous event allowance')
@@ -179,12 +181,13 @@ class Actor:
         if self.command('qmp_capabilities')['return'] != {}:
             raise ValueError('leased QMP capabilities were not acknowledged')
 
-    def send(self, operation, ordinal, *, transaction_id):
+    def send(self, operation, ordinal, *, transaction_id, notification=None, before_effect=None):
         with self.lock:
             if self.failed or self.closed:
                 raise ValueError('input actor is no longer available')
             try:
                 sequence = steps(operation)
+                digest = event_sha256(operation, ordinal, notification)
                 if (not token(transaction_id) or type(ordinal) is not int or not 0 <= ordinal < len(sequence)
                         or len(sequence) > 256):
                     raise ValueError('input step is outside the sealed transaction')
@@ -200,18 +203,39 @@ class Actor:
                 status = self.command('query-status')['return']
                 if status.get('running') is not True or status.get('status') != 'running':
                     raise ValueError('leased guest is not running')
-                keys = [{'type': 'qcode', 'data': key} for key in sequence[ordinal]]
-                reply = self.command('send-key', {'keys': keys, 'hold-time': 80})
-                if reply['return'] != {}:
-                    raise ValueError('QMP did not acknowledge its fixed keyboard step')
-                # QMP acknowledges before its automatic key-release timer fires.
-                time.sleep(0.1)
+                pointer_query = None
+                if operation == notification_wire.OPERATION:
+                    pointer_query = self.command('query-mice')
+                    pointer_device(pointer_query)
+                    if before_effect is not None:
+                        # The controller must be able to retain the entire delivery
+                        # before the one irreversible click, including actual inventory.
+                        preview = {'format_version': 1, 'execution_nonce': self.nonce,
+                            'vm_id': self.value['vm_id'], 'transaction_id': transaction_id,
+                            'operation': operation, 'ordinal': ordinal, 'event_sha256': digest,
+                            'lease': self.identity, 'pointer_query': pointer_query,
+                            'qmp_ack': {'id': self.command_id + 1, 'return': {}}}
+                        before_effect(copy.deepcopy(preview))
+                        self.validate()
+                    reply = self.command('input-send-event', {'events': notification_wire.qmp_events(notification)})
+                    if reply['return'] != {}:
+                        raise ValueError('QMP did not acknowledge its fixed notification click')
+                else:
+                    keys = [{'type': 'qcode', 'data': key} for key in sequence[ordinal]]
+                    reply = self.command('send-key', {'keys': keys, 'hold-time': 80})
+                    if reply['return'] != {}:
+                        raise ValueError('QMP did not acknowledge its fixed keyboard step')
+                    # QMP acknowledges before its automatic key-release timer fires.
+                    time.sleep(0.1)
                 self.validate()
                 self.ordinal += 1
-                return {'format_version': 1, 'execution_nonce': self.nonce, 'vm_id': self.value['vm_id'],
+                delivery = {'format_version': 1, 'execution_nonce': self.nonce, 'vm_id': self.value['vm_id'],
                         'transaction_id': transaction_id, 'operation': operation, 'ordinal': ordinal,
-                        'event_sha256': event_sha256(operation, ordinal), 'lease': self.identity,
+                        'event_sha256': digest, 'lease': self.identity,
                         'qmp_ack': reply}
+                if pointer_query is not None:
+                    delivery['pointer_query'] = pointer_query
+                return delivery
             except BaseException:
                 self.failed = True
                 raise

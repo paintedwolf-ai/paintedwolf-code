@@ -79,6 +79,8 @@ def driver_family(capability: str, installation: str) -> str | None:
 
 
 def case_family(capability: str, case: str, installation: str) -> str | None:
+    if (capability, case) == ("notifications", "activation-token-and-chat"):
+        return "notification_activation"
     if (capability, case) == ("windowing", "workspace-activation-and-exit"):
         return "workspace_activation"
     if (capability, case) == ("conversation", "restart-and-reconnect"):

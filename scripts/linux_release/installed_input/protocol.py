@@ -5,7 +5,7 @@ import hashlib
 import json
 import re
 
-from . import surface_wire
+from . import surface_wire, notification_wire
 from ..installed_evidence import IDENTIFIER
 from ..installed_cases.provider import GUI_LABEL, GUI_API_KEY, gui_endpoint
 from . import accessibility, lineage
@@ -57,6 +57,8 @@ _SEARCH_STEPS = (('ctrl', 'a'), *(('spc',) if char == ' ' else (char,)
 def steps(operation: str) -> tuple[tuple[str, ...], ...]:
     if not isinstance(operation, str):
         raise ValueError('native input requires a fixed declared operation')
+    if operation == notification_wire.OPERATION:
+        return ((),)
     if operation in surface_wire.OPERATIONS:
         return surface_wire.OPERATIONS[operation]
     if operation in _PROVIDER_STEPS:
@@ -73,10 +75,14 @@ def steps(operation: str) -> tuple[tuple[str, ...], ...]:
     raise ValueError('native input requires a fixed declared operation')
 
 
-def event_sha256(operation: str, ordinal: int) -> str:
+def event_sha256(operation: str, ordinal: int, notification=None) -> str:
     events = steps(operation)
     if type(ordinal) is not int or not 0 <= ordinal < len(events):
         raise ValueError('native input ordinal differs from its fixed operation')
+    if operation == notification_wire.OPERATION:
+        return notification_wire.event_sha256(notification)
+    if notification is not None:
+        raise ValueError('keyboard input cannot supply a pointer target')
     return hashlib.sha256(json.dumps(list(events[ordinal]), separators=(',', ':')).encode()).hexdigest()
 
 
@@ -124,17 +130,20 @@ def focus(value: dict) -> dict:
 
 def request(document: dict, execution: dict) -> dict:
     binding(execution)
+    notification = isinstance(document, dict) and document.get('operation') == notification_wire.OPERATION
     surface = isinstance(document, dict) and document.get('operation') in surface_wire.OPERATIONS
     fields = {'format_version', 'binding', 'transaction_id', 'operation', 'ordinal',
-              'surface' if surface else 'focus'}
+              'notification' if notification else 'surface' if surface else 'focus'}
     if (not isinstance(document, dict) or set(document) != fields
             or type(document['format_version']) is not int or document['format_version'] != 1
             or document['binding'] != execution):
         raise ValueError('native input request differs from its fresh execution')
     binding(document['binding'])
     nonce(document['transaction_id'])
-    event_sha256(document['operation'], document['ordinal'])
-    if surface:
+    event_sha256(document['operation'], document['ordinal'], document.get('notification'))
+    if notification:
+        notification_wire.before(document['notification'])
+    elif surface:
         surface_wire.before(document['operation'], document['surface'])
     else:
         focus(document['focus'])
@@ -146,6 +155,28 @@ def request_sha256(document: dict) -> str:
     return hashlib.sha256(canonical(document)).hexdigest()
 
 
+def pointer_device(query):
+    """The actual current QMP pointer must accept the proof's absolute coordinates."""
+    if (not isinstance(query, dict) or set(query) != {'id', 'return'}
+            or type(query['id']) is not int or not 0 < query['id'] < 1 << 31
+            or not isinstance(query['return'], list) or not 1 <= len(query['return']) <= 16):
+        raise ValueError('notification input has no bounded QMP pointer observation')
+    indices, current = set(), []
+    for row in query['return']:
+        if (not isinstance(row, dict) or set(row) != {'name', 'index', 'current', 'absolute'}
+                or not isinstance(row['name'], str) or not 0 < len(row['name']) <= 256
+                or type(row['index']) is not int or not 0 <= row['index'] < 65536
+                or type(row['current']) is not bool or type(row['absolute']) is not bool
+                or row['index'] in indices):
+            raise ValueError('notification QMP pointer has an unknown or repeated identity')
+        indices.add(row['index'])
+        if row['current']:
+            current.append(row)
+    if len(current) != 1 or current[0]['absolute'] is not True:
+        raise ValueError('notification click requires one current absolute QMP pointer')
+    return current[0]
+
+
 def acknowledgment(document: dict, pending: dict, vm_id: str) -> dict:
     if (not isinstance(document, dict) or set(document) != {'format_version', 'request_sha256', 'delivery'}
             or type(document['format_version']) is not int or document['format_version'] != 1
@@ -154,11 +185,13 @@ def acknowledgment(document: dict, pending: dict, vm_id: str) -> dict:
     row = document['delivery']
     fields = {'format_version', 'execution_nonce', 'vm_id', 'transaction_id', 'operation',
               'ordinal', 'event_sha256', 'lease', 'qmp_ack'}
+    if pending['operation'] == notification_wire.OPERATION:
+        fields.add('pointer_query')
     if not isinstance(row, dict) or set(row) != fields or type(row['format_version']) is not int or row['format_version'] != 1:
         raise ValueError('native input delivery has an unknown shape')
     expected = {'execution_nonce': pending['binding']['execution_nonce'], 'vm_id': vm_id,
                 'transaction_id': pending['transaction_id'], 'operation': pending['operation'],
-                'ordinal': pending['ordinal'], 'event_sha256': event_sha256(pending['operation'], pending['ordinal'])}
+                'ordinal': pending['ordinal'], 'event_sha256': event_sha256(pending['operation'], pending['ordinal'], pending.get('notification'))}
     if any(type(row[name]) is not type(value) or row[name] != value for name, value in expected.items()):
         raise ValueError('native input delivery differs from its selected step')
     ack = row['qmp_ack']
@@ -166,5 +199,9 @@ def acknowledgment(document: dict, pending: dict, vm_id: str) -> dict:
             or type(ack['id']) is not int or not 0 < ack['id'] < 1 << 31
             or not isinstance(row['lease'], dict) or row['lease'].get('vm_id') != vm_id):
         raise ValueError('native input delivery omitted its actual bounded QMP acknowledgment')
+    if pending['operation'] == notification_wire.OPERATION:
+        pointer_device(row['pointer_query'])
+        if row['pointer_query']['id'] >= ack['id']:
+            raise ValueError('notification pointer observation did not precede its QMP click')
     canonical(document)
     return row

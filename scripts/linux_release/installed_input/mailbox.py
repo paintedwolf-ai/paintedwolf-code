@@ -132,6 +132,7 @@ def serve(execution: dict, vm_id: str):
     mailbox = Mailbox(execution, vm_id)
     acknowledged = None
     publication = None
+    notification_verified = None
 
     def attached_publication():
         mailbox.attach()
@@ -160,17 +161,38 @@ def serve(execution: dict, vm_id: str):
                 pending = mailbox.read('request.json')
                 if pending is None:
                     acknowledged = None
+                    notification_verified = None
                     result = {'state': 'waiting'}
                 else:
                     protocol.request(pending, execution)
                     digest = protocol.request_sha256(pending)
                     result = {'state': 'acknowledged'} if digest == acknowledged else {'state': 'request', 'request': pending}
+        elif set(command) == {'operation', 'request_sha256'} and command['operation'] == 'verify-notification':
+            from . import notification_wire
+            from .notification_shell import refresh
+            if publication is None or attached_publication() != publication:
+                raise ValueError('notification verification requires its attached publication')
+            pending = mailbox.read('request.json')
+            protocol.request(pending, execution)
+            digest = protocol.request_sha256(pending)
+            if (pending['operation'] != notification_wire.OPERATION or command['request_sha256'] != digest
+                    or acknowledged == digest or mailbox.read('ack.json') is not None):
+                raise ValueError('notification verification differs from its pending one-use request')
+            current = refresh(pending['notification'])
+            notification_wire.same_target(pending['notification'], current)
+            if mailbox.read('request.json') != pending or attached_publication() != publication:
+                raise ValueError('notification request changed during pre-dispatch observation')
+            notification_verified = digest
+            result = {'state': 'verified-notification', 'request_sha256': digest, 'notification': current}
         elif set(command) == {'operation', 'acknowledgment'} and command['operation'] == 'ack':
             if publication is None or attached_publication() != publication:
                 raise ValueError('native input acknowledgment requires its attached publication')
             pending = mailbox.read('request.json')
             protocol.request(pending, execution)
             protocol.acknowledgment(command['acknowledgment'], pending, vm_id)
+            from . import notification_wire
+            if pending['operation'] == notification_wire.OPERATION and notification_verified != protocol.request_sha256(pending):
+                raise ValueError('notification acknowledgment has no fresh pre-dispatch proof')
             if acknowledged == protocol.request_sha256(pending) or mailbox.read('ack.json') is not None:
                 raise ValueError('native input acknowledgment cannot be replayed')
             mailbox.write('ack.json', command['acknowledgment'])

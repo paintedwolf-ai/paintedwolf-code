@@ -10,7 +10,7 @@ import subprocess
 import threading
 import time
 
-from . import protocol, surface_wire
+from . import protocol, surface_wire, notification_wire
 from ..installed_cases.records import expand_physical_transactions
 from .mailbox import decode
 from .qemu import open_lease
@@ -41,7 +41,8 @@ def delivery_records(directory, execution, vm_id):
     import json
     records, operations = [], []
     cases = [('conversation/restart-and-reconnect', 'reply'), ('files/edit-search-review', 'editor'),
-             ('windowing/workspace-activation-and-exit', 'workspace')]
+             ('windowing/workspace-activation-and-exit', 'workspace'),
+             ('notifications/activation-token-and-chat', 'notification')]
     for case, kind in cases:
         leaf = directory / ('leaf/evidence/' + case + '/execution.json')
         if not leaf.exists():
@@ -50,7 +51,7 @@ def delivery_records(directory, execution, vm_id):
             raise ValueError('native input guest observations exceed their case bound')
         document = json.loads(leaf.read_bytes())
         observations = document['observations']
-        if kind in {'reply', 'workspace'}:
+        if kind in {'reply', 'workspace', 'notification'}:
             launch = 'launch_before' if kind == 'reply' else 'launch'
             selected = observations.get(launch, {}).get('fixed_input', [])
             recovery = observations.get('provider_recovery')
@@ -58,7 +59,7 @@ def delivery_records(directory, execution, vm_id):
             if not isinstance(selected, list) or len(selected) > input_limit:
                 raise ValueError('reply input exceeds its fixed transaction count')
             partial = observations.get('native_input')
-            provider_partial = (kind == 'workspace' and partial is not None
+            provider_partial = (kind in {'workspace', 'notification'} and partial is not None
                 and len(selected) < input_limit and not observations.get('transitions'))
             if partial is not None and (kind == 'reply' or provider_partial):
                 selected = [*selected, partial]
@@ -88,20 +89,33 @@ def delivery_records(directory, execution, vm_id):
                     protocol.steps(operation)
                 operations.append(operation)
                 records.append(record)
-            if kind == 'workspace':
+            if kind in {'workspace', 'notification'}:
                 transitions = observations.get('transitions', [])
                 if not isinstance(transitions, list):
                     raise ValueError('workspace input requires its fixed transition list')
-                if partial is not None and not provider_partial:
+                notification_partial = (kind == 'notification' and partial is not None
+                    and partial.get('operation') == notification_wire.OPERATION)
+                if partial is not None and not provider_partial and not notification_partial:
                     transitions = [*transitions, partial]
                 expected = ('workspace-open-peer-v1', 'workspace-hide-main-v1',
                     'workspace-request-quit-v1', 'workspace-cancel-quit-v1',
                     'workspace-request-quit-v1', 'workspace-focus-quit-v1', 'workspace-approve-quit-v1')
+                if kind == 'notification':
+                    expected = expected[:2]
                 if len(transitions) > len(expected) or transitions and len(selected) != input_limit:
                     raise ValueError('workspace input exceeds or precedes its declared physical sequence')
                 transitions = expand_physical_transactions(leaf, transitions)
                 records.extend(transitions)
                 operations.extend(expected[:len(transitions)])
+                if kind == 'notification':
+                    click = observations.get('notification_click')
+                    clicks = [] if click is None else [click]
+                    if notification_partial:
+                        clicks.append(partial)
+                    if len(clicks) > 1 or clicks and (len(transitions) != 2 or len(selected) != input_limit):
+                        raise ValueError('notification click repeats or precedes its declared background transition')
+                    records.extend(expand_physical_transactions(leaf, clicks))
+                    operations.extend([notification_wire.OPERATION] * len(clicks))
         else:
             selected = []
             for key in ('editor_keyboard', 'editor_search_keyboard'):
@@ -153,8 +167,10 @@ def verify_deliveries(directory, execution, selected):
             row = rows[offset]
             offset += 1
             surface = operation in surface_wire.OPERATIONS
-            after_key = 'surface_after' if surface else 'focus_after'
-            if set(row) != {'request', 'acknowledgment'} or set(event) != {'request', 'delivery', after_key}:
+            notification = operation == notification_wire.OPERATION
+            after_key = 'notification_after' if notification else 'surface_after' if surface else 'focus_after'
+            host_fields = {'request', 'acknowledgment', 'preflight'} if notification else {'request', 'acknowledgment'}
+            if set(row) != host_fields or set(event) != {'request', 'delivery', after_key}:
                 raise ValueError('native input retained delivery has an unknown shape')
             pending = protocol.request(row['request'], execution)
             delivered = protocol.acknowledgment(row['acknowledgment'], pending, selected['vm_id'])
@@ -162,7 +178,15 @@ def verify_deliveries(directory, execution, selected):
                     or pending['ordinal'] != ordinal
                     or event['request'] != pending or event['delivery'] != delivered):
                 raise ValueError('native input host and guest focus or physical delivery differ')
-            if surface:
+            if notification:
+                expected_preflight = {'request_sha256': protocol.request_sha256(pending),
+                    'notification_sha256': hashlib.sha256(protocol.canonical(pending['notification'])).hexdigest()}
+                if row['preflight'] != expected_preflight:
+                    raise ValueError('notification delivery has no exact fresh pre-dispatch proof')
+                finished = notification_wire.finished(pending['notification'], event['notification_after'])
+                if record['completed'] and not finished:
+                    raise ValueError('notification click has no observed selected-chat activation')
+            elif surface:
                 if operation != 'workspace-approve-quit-v1':
                     surface_wire.same_runtime(pending['surface'], event['surface_after'])
                 if record['completed'] and ordinal == len(events) - 1 and not surface_wire.finished(
@@ -240,12 +264,35 @@ class Bridge:
                 # Reserve the maximum acknowledgment before any irreversible key delivery.
                 if self.bytes + protocol.MAX_DOCUMENT > MAX_LOG:
                     raise ValueError('fixed native input controller log is full before delivery')
+                preflight, options = None, {}
+                if pending['operation'] == notification_wire.OPERATION:
+                    digest = protocol.request_sha256(pending)
+                    fresh = self.exchange({'operation': 'verify-notification', 'request_sha256': digest})
+                    if (not isinstance(fresh, dict) or set(fresh) != {'state', 'request_sha256', 'notification'}
+                            or fresh['state'] != 'verified-notification' or fresh['request_sha256'] != digest):
+                        raise ValueError('notification pre-dispatch acknowledgment differs from its pending request')
+                    notification_wire.same_target(pending['notification'], fresh['notification'])
+                    if fresh['notification'] != pending['notification']:
+                        raise ValueError('notification pre-dispatch proof changed its pinned runtime context')
+                    preflight = {'request_sha256': digest,
+                        'notification_sha256': hashlib.sha256(protocol.canonical(fresh['notification'])).hexdigest()}
+                    options['notification'] = fresh['notification']
+                    def retainable(preview):
+                        acknowledgment = {'format_version': 1, 'request_sha256': digest,
+                            'delivery': preview}
+                        protocol.acknowledgment(acknowledgment, pending, self.selected['vm_id'])
+                        protocol.canonical({'request': pending, 'preflight': preflight,
+                            'acknowledgment': acknowledgment})
+                    options['before_effect'] = retainable
                 delivered = self.actor.send(pending['operation'], pending['ordinal'],
-                                            transaction_id=pending['transaction_id'])
+                                            transaction_id=pending['transaction_id'], **options)
                 acknowledgment = {'format_version': 1, 'request_sha256': protocol.request_sha256(pending),
                                   'delivery': delivered}
                 protocol.acknowledgment(acknowledgment, pending, self.selected['vm_id'])
-                raw = protocol.canonical({'request': pending, 'acknowledgment': acknowledgment})
+                retained = {'request': pending, 'acknowledgment': acknowledgment}
+                if preflight is not None:
+                    retained['preflight'] = preflight
+                raw = protocol.canonical(retained)
                 self.log.write(raw)
                 self.log.flush()
                 os.fsync(self.log.fileno())
