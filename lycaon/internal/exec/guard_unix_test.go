@@ -93,12 +93,12 @@ func TestRunPipelineReturnsWhenDescendantEscapesProcessGroup(t *testing.T) {
 	const waitDelay = 50 * time.Millisecond
 	done := make(chan struct{})
 	var (
-		res *PipelineResult
-		err error
+		res    *PipelineResult
+		runErr error
 	)
 	go func() {
 		defer close(done)
-		res, err = runPipeline(context.Background(), []Stage{{Name: "sh", Args: []string{"-c", script}}}, ExecOpts{Launch: HostLaunch("exec test"),
+		res, runErr = runPipeline(context.Background(), []Stage{{Name: "sh", Args: []string{"-c", script}}}, ExecOpts{Launch: HostLaunch("exec test"),
 			Dir:       dir,
 			Timeout:   2 * time.Second,
 			InlineEnv: map[string]string{detachHelperEnv: pidFile},
@@ -113,8 +113,8 @@ func TestRunPipelineReturnsWhenDescendantEscapesProcessGroup(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("RunPipeline blocked on a descendant that left the process group")
 	}
-	if err != nil || res == nil || res.TimedOut {
-		t.Fatalf("RunPipeline res=%+v err=%v, want waitDelay pipe release before 2s command timeout", res, err)
+	if runErr != nil || res == nil || res.TimedOut {
+		t.Fatalf("RunPipeline res=%+v err=%v, want waitDelay pipe release before 2s command timeout", res, runErr)
 	}
 }
 
