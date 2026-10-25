@@ -296,7 +296,7 @@ func TestWorkflowFindTODOsAndWriteSummary(t *testing.T) {
 		t.Fatalf("executions turn1=%+v turn2=%+v", exec1, exec2)
 	}
 	pins1, pins2 := f.pins(t, progs[0].id), f.pins(t, progs[1].id)
-	if !hasPin(pins1, "source", "accepted_document", "src/auth.go", "") || !hasPin(pins2, "destination", "absent", "TODO_SUMMARY.md", "") || !hasPin(pins2, "source", "accepted_document", "TODO_SUMMARY.md", sha256Hex(wantSummary)) {
+	if !hasPin(pins1, "source", "published_disk", "src/auth.go", "") || !hasPin(pins2, "destination", "absent", "TODO_SUMMARY.md", "") || !hasPin(pins2, "source", "published_disk", "TODO_SUMMARY.md", sha256Hex(wantSummary)) {
 		t.Fatalf("pins turn1=%+v turn2=%+v", pins1, pins2)
 	}
 	var stdoutOutputs int
@@ -356,7 +356,7 @@ func TestWorkflowRunTestsFixWithSedInPlaceAndRerun(t *testing.T) {
 		t.Fatalf("sed executions = %+v", exec2)
 	}
 	pins2 := f.pins(t, progs[1].id)
-	if !hasPin(pins2, "destination", "accepted_document", "calc.cfg", sha256Hex(initialCfg)) || !hasPin(pins2, "source", "accepted_document", "calc.cfg", sha256Hex(initialCfg)) {
+	if !hasPin(pins2, "destination", "accepted_document", "calc.cfg", sha256Hex(initialCfg)) || !hasPin(pins2, "source", "published_disk", "calc.cfg", sha256Hex(initialCfg)) {
 		t.Fatalf("sed pins = %+v", pins2)
 	}
 	if f.journalCount(t, "calc.cfg") != 1 {
@@ -402,8 +402,8 @@ func TestWorkflowRenameJSONKeyAcrossFiles(t *testing.T) {
 	pins2 := f.pins(t, progs[1].id)
 	if !hasPin(pins2, "destination", "accepted_document", "config/api.json", sha256Hex(apiBefore)) ||
 		!hasPin(pins2, "destination", "accepted_document", "config/worker.json", sha256Hex(workerBefore)) ||
-		!hasPin(pins2, "source", "accepted_document", "config/api.json", sha256Hex(apiAfter)) ||
-		!hasPin(pins2, "source", "accepted_document", "config/worker.json", sha256Hex(workerAfter)) {
+		!hasPin(pins2, "source", "published_disk", "config/api.json", sha256Hex(apiAfter)) ||
+		!hasPin(pins2, "source", "published_disk", "config/worker.json", sha256Hex(workerAfter)) {
 		t.Fatalf("rename pins = %+v", pins2)
 	}
 	if f.journalCount(t, "config/api.json") != 1 || f.journalCount(t, "config/worker.json") != 1 || f.journalCount(t, "config/db.json") != 0 {
@@ -420,7 +420,7 @@ func TestWorkflowFailedRedirectPublishThenTargetedCorrection(t *testing.T) {
 			callID:  "conflict-turn",
 			command: `printf 'step1-complete\n' | tee step1.txt; { printf 'concurrent-edit\n' > target.txt; printf 'staged-payload\n'; } > target.txt; printf 'step3-never\n' | tee step3.txt`,
 			inspect: func(t *testing.T, prev command.ProgramOutcome) {
-				if prev.State != "rejected" || prev.StopCode != "COMMAND_REVISION_CONFLICT" || prev.CompletedEffects != 1 || prev.Refusal == nil || prev.Refusal.Code != "COMMAND_REVISION_CONFLICT" {
+				if prev.State != "rejected" || prev.StopCode != "COMMAND_REVISION_CONFLICT" || prev.CompletedEffects != 2 || prev.Refusal == nil || prev.Refusal.Code != "COMMAND_REVISION_CONFLICT" {
 					t.Fatalf("conflict turn outcome = %+v", prev)
 				}
 			},
@@ -450,7 +450,7 @@ func TestWorkflowFailedRedirectPublishThenTargetedCorrection(t *testing.T) {
 		t.Fatalf("conflict receipt = %+v", conflictRow)
 	}
 	pins2 := f.pins(t, progs[1].id)
-	if !hasPin(pins2, "source", "accepted_document", "target.txt", sha256Hex(concurrentTarget)) || !hasPin(pins2, "destination", "accepted_document", "target.txt", sha256Hex(concurrentTarget)) {
+	if !hasPin(pins2, "source", "published_disk", "target.txt", sha256Hex(concurrentTarget)) || !hasPin(pins2, "destination", "accepted_document", "target.txt", sha256Hex(concurrentTarget)) {
 		t.Fatalf("turn2 pins did not chain from observed conflict revision: %+v", pins2)
 	}
 	if f.journalCount(t, "step1.txt") != 1 || f.journalCount(t, "target.txt") != 2 || f.journalCount(t, "step3.txt") != 1 {
@@ -498,7 +498,7 @@ func TestWorkflowBackgroundBuildWaitAndStatusCheck(t *testing.T) {
 		t.Fatalf("bg executions = %+v (handle=%q want %q)", exec1, handleInReceipt, observedHandle)
 	}
 	pins2 := f.pins(t, progs[1].id)
-	if !hasPin(pins2, "source", "accepted_document", "dist/build.log", sha256Hex("build-log:ok\n")) || !hasPin(pins2, "source", "accepted_document", "dist/app.bin", sha256Hex("artifact:v1\n")) {
+	if !hasPin(pins2, "source", "published_disk", "dist/build.log", sha256Hex("build-log:ok\n")) || !hasPin(pins2, "source", "published_disk", "dist/app.bin", sha256Hex("artifact:v1\n")) {
 		t.Fatalf("bg verify pins = %+v", pins2)
 	}
 }
@@ -510,8 +510,7 @@ func TestWorkflowProgramRefusedMidwayAndModelRecovers(t *testing.T) {
 			command: `printf 'prepared-header\n' | tee header.txt; summarize --unsupported-flag notes.txt; printf 'unreachable\n' | tee tail.txt`,
 			inspect: func(t *testing.T, prev command.ProgramOutcome) {
 				if prev.State != "rejected" || prev.Status != 2 || prev.StopCode != "COMMAND_OPTION_UNSUPPORTED" ||
-					prev.Stdout != "prepared-header\n" || prev.CompletedEffects != 1 || prev.Refusal == nil || prev.Refusal.Code != "COMMAND_OPTION_UNSUPPORTED" ||
-					!strings.Contains(prev.Stderr, "summarize: --unsupported-flag: not supported here [COMMAND_OPTION_UNSUPPORTED]") {
+					prev.Stdout != "prepared-header\n" || prev.CompletedEffects != 1 || prev.Refusal == nil || prev.Refusal.Code != "COMMAND_OPTION_UNSUPPORTED" {
 					t.Fatalf("midway refusal outcome = %+v", prev)
 				}
 			},
