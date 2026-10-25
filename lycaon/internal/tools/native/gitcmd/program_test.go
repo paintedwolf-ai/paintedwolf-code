@@ -86,6 +86,15 @@ func TestProgramEntryRunsGitReadFormsThroughTheUmbrella(t *testing.T) {
 		t.Fatalf("child receipts %v", executions)
 	}
 
+	customPath, err := f.call(t, t.Context(), "PATH=/custom/bin git status -sb")
+	if !strings.Contains(customPath+fmt.Sprint(err), "COMMAND_OPERAND_INVALID") {
+		t.Fatalf("custom PATH ran: %s %v", customPath, err)
+	}
+	reservedEnv, err := f.call(t, t.Context(), "LD_PRELOAD=/tmp/inject.so git status -sb")
+	if !strings.Contains(reservedEnv+fmt.Sprint(err), "COMMAND_OPERAND_INVALID") {
+		t.Fatalf("host-reserved env ran: %s %v", reservedEnv, err)
+	}
+
 	t.Setenv("PATH", "")
 	refused, err := f.call(t, t.Context(), "git branch created")
 	if !strings.Contains(refused+fmt.Sprint(err), "COMMAND_OPERAND_INVALID") {
