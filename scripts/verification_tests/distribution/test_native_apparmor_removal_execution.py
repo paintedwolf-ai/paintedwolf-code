@@ -71,7 +71,8 @@ set -- ''' + shlex.quote(operation) + '\n' + source
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(state['profiles'], [OTHER])
         self.assertEqual(len(state['calls']), 1)
-        self.assertEqual(state.get('generation_calls', []), [['remove']])
+        generation_declared = 'PW_GENERATIONS=' in (ROOT / 'packaging/linux/deb/prerm').read_text()
+        self.assertEqual(state.get('generation_calls', []), [['remove']] if generation_declared else [])
         self.assertEqual(state['calls'][0]['policy'], 'profile painted-wolf-code {}\n')
 
     def test_already_unloaded_removal_does_not_need_a_parser(self):
