@@ -21,26 +21,56 @@ from ..installed_storage import resolve
 from ..installed_process import process_identity
 
 
-def authenticated_turn(app, fixture, barrier, project, provider):
-    first = len(fixture.transport_observations)
-    opened = run(app.binding, 'pw', ['open', str(project)], timeout=30)
-    if opened['exit_code'] or opened['timed_out'] or opened['output_limit']:
-        raise ValueError('quiet custody fixture project was not opened')
-    submit_project_turn(app)
-    held = barrier.await_held()
-    barrier.release()
-    written = barrier.await_response_written()
-    reply = await_fixture_reply(app, project, provider['provider_id'], fixture.acquisition)
-    requests = list(fixture.transport_observations[first:])
-    completions = [row for row in requests if row.get('path') == '/v1/chat/completions']
-    if (fixture.transport_clipped or not completions
-            or any(row.get('status') != 200 or row.get('fixture_credential_observed') is not True
-                   for row in completions)
-            or written['request_id'] != held['request_id']
-            or not fixture.acquisition.completed):
-        raise ValueError('fresh turn did not prove successful authenticated fixture transport')
-    return {'reply': reply, 'request_start': first, 'request_end': len(fixture.transport_observations),
-            'authenticated_completions': completions, 'response': written}
+def authenticated_turn(app, fixture, barrier, project, provider, *, progress=None):
+    progress = {} if progress is None else progress
+    progress.update(location='project-open', request_start=len(fixture.transport_observations))
+    try:
+        opened = run(app.binding, 'pw', ['open', str(project)], timeout=30)
+        progress['project_open'] = {key: opened[key] for key in ('exit_code', 'timed_out', 'output_limit')}
+        if opened['exit_code'] or opened['timed_out'] or opened['output_limit']:
+            raise ValueError('quiet custody fixture project was not opened')
+        progress['location'] = 'submit'
+        submit_project_turn(app)
+        progress['location'] = 'response-held'
+        held = barrier.await_held()
+        progress['response_held'] = True
+        progress['location'] = 'response-release'
+        barrier.release()
+        progress['location'] = 'response-written'
+        written = barrier.await_response_written()
+        progress['response_written'] = True
+        progress['location'] = 'durable-reply'
+        reply = await_fixture_reply(app, project, provider['provider_id'], fixture.acquisition)
+        progress['reply'] = reply
+        progress['location'] = 'authenticated-transport'
+        requests = list(fixture.transport_observations[progress['request_start']:])
+        all_completions = [row for row in requests if row.get('path') == '/v1/chat/completions']
+        completions = [row for row in all_completions if row.get('completion_class') != 'standalone']
+        if (fixture.transport_clipped or not completions
+                or any(row.get('status') != 200 or row.get('fixture_credential_observed') is not True
+                       for row in all_completions)
+                or written['request_id'] != held['request_id']
+                or not fixture.acquisition.completed):
+            raise ValueError('fresh turn did not prove successful authenticated fixture transport')
+        progress['location'] = 'complete'
+        return {'reply': reply, 'request_start': progress['request_start'],
+                'request_end': len(fixture.transport_observations),
+                'authenticated_completions': completions, 'response': written}
+    finally:
+        try:
+            row = barrier.snapshot()
+            progress['response_state'] = None if row is None else {key: row[key]
+                for key in ('state', 'connection_closed', 'response_written')}
+            acquisition = fixture.acquisition
+            with acquisition.lock:
+                progress['acquisition'] = {key: getattr(acquisition, key)
+                    for key in ('issued', 'tool_issued', 'completed')}
+                for key in ('witness', 'tool_witness'):
+                    witness = getattr(acquisition, key)
+                    progress['acquisition'][key] = None if witness is None else {
+                        field: witness[field] for field in ('tool_call_id', 'invocation_id')}
+        except Exception as error:
+            progress['observation_error'] = type(error).__name__
 
 
 def stopped(app):
@@ -88,7 +118,8 @@ def execute(binding, capability, case, root):
                 provider = configure_provider(first, fixture)
                 observations['provider'] = provider
                 observations['phase'] = 'before-turn'
-                before = authenticated_turn(first, fixture, fixture.response_barrier, projects[0], provider)
+                before = authenticated_turn(first, fixture, fixture.response_barrier, projects[0], provider,
+                    progress=observations.setdefault('turn_before_progress', {}))
                 observations['turn_before'] = before
             stopped(first)
             observations['phase'] = 'restart'
@@ -118,7 +149,8 @@ def execute(binding, capability, case, root):
                 observations['reply_reopened'] = persisted
                 barrier = fixture.begin_next_turn()
                 observations['phase'] = 'after-turn'
-                after = authenticated_turn(second, fixture, barrier, projects[1], provider)
+                after = authenticated_turn(second, fixture, barrier, projects[1], provider,
+                    progress=observations.setdefault('turn_after_progress', {}))
                 old, new = before['reply'], after['reply']
                 if (after['request_start'] < before['request_end']
                         or any(old[key] == new[key] for key in ('project_id', 'session_id', 'turn_id', 'attempt_id'))

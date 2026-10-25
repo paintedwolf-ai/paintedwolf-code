@@ -1,5 +1,5 @@
 """Quiet custody requires new authenticated work, not an old persisted reply."""
-from contextlib import ExitStack
+from contextlib import ExitStack, nullcontext
 import copy
 import json
 from pathlib import Path
@@ -21,22 +21,36 @@ def turn(number):
 
 
 class FreshAuthenticatedTurnTests(unittest.TestCase):
-    def exercise(self, *, extra=True, credential=True, clipped=False, completed=True, opened=0, changed=False):
+    def exercise(self, *, extra=True, credential=True, clipped=False, completed=True, opened=0,
+                 changed=False, standalone=False, progress=None, reply_error=None,
+                 failed_standalone=False, extra_standalone=False, snapshot_error=None):
         app = Mock(binding={})
         fixture = SimpleNamespace(transport_observations=[{'path': '/v1/chat/completions',
             'status': 200, 'fixture_credential_observed': True}], transport_clipped=clipped,
-            acquisition=SimpleNamespace(completed=completed))
+            acquisition=SimpleNamespace(completed=completed, issued=True, tool_issued=True,
+                witness={'tool_call_id': 'call_00000001', 'invocation_id': 'load'},
+                tool_witness={'tool_call_id': 'call_00000002', 'invocation_id': 'command'}, lock=nullcontext()))
         barrier = Mock()
+        barrier.snapshot.side_effect = snapshot_error
+        barrier.snapshot.return_value = {'state': 'released', 'response_written': True,
+            'connection_closed': False, 'request_sha256': 'PRIVATE OMITTED'}
         barrier.await_held.return_value = {'request_id': 'first'}
         barrier.await_response_written.return_value = {'request_id': 'other' if changed else 'first'}
         def submit(*args):
             if extra:
                 fixture.transport_observations.append({'path': '/v1/chat/completions',
-                    'status': 200, 'fixture_credential_observed': credential})
+                    'status': 200, 'fixture_credential_observed': credential,
+                    **({'completion_class': 'standalone'} if standalone else {})})
+                if extra_standalone:
+                    fixture.transport_observations.append({'path': '/v1/chat/completions', 'status': 200,
+                        'fixture_credential_observed': True, 'completion_class': 'standalone'})
+                if failed_standalone:
+                    fixture.transport_observations.append({'path': '/v1/chat/completions', 'status': 400,
+                        'fixture_credential_observed': True, 'completion_class': 'standalone'})
         with patch.object(owner, 'run', return_value={'exit_code': opened, 'timed_out': False,
                 'output_limit': False}), patch.object(owner, 'submit_project_turn', side_effect=submit), patch.object(
-                owner, 'await_fixture_reply', return_value=turn(1)['reply']):
-            return owner.authenticated_turn(app, fixture, barrier, Path('/fixture'), {'provider_id': 'fixture'})
+                owner, 'await_fixture_reply', side_effect=reply_error, return_value=turn(1)['reply']):
+            return owner.authenticated_turn(app, fixture, barrier, Path('/fixture'), {'provider_id': 'fixture'}, progress=progress)
 
     def test_old_authenticated_requests_cannot_qualify_new_work(self):
         with self.assertRaises(ValueError): self.exercise(extra=False)
@@ -48,6 +62,42 @@ class FreshAuthenticatedTurnTests(unittest.TestCase):
         for changes in ({'credential': False}, {'clipped': True}, {'completed': False},
                         {'changed': True}, {'opened': 1}):
             with self.subTest(changes=changes), self.assertRaises(ValueError): self.exercise(**changes)
+
+    def test_standalone_success_cannot_supply_primary_proof_and_failures_are_not_ignored(self):
+        for changes in ({'standalone': True}, {'failed_standalone': True}):
+            with self.subTest(changes=changes), self.assertRaises(ValueError):
+                self.exercise(**changes)
+        self.assertEqual(len(self.exercise(extra_standalone=True)['authenticated_completions']), 1)
+
+    def test_failed_stage_retains_bounded_progress_and_partial_durable_proof_without_error_prose(self):
+        progress = {}
+        with self.assertRaises(ValueError):
+            self.exercise(progress=progress, reply_error=ValueError('PRIVATE FAILURE'))
+        self.assertEqual(progress['location'], 'durable-reply')
+        self.assertTrue(progress['response_held'] and progress['response_written'])
+        self.assertEqual(progress['response_state'], {'state': 'released', 'response_written': True,
+                                                      'connection_closed': False})
+        self.assertTrue(progress['acquisition']['completed'])
+        self.assertEqual(progress['acquisition']['tool_witness']['invocation_id'], 'command')
+        self.assertNotIn('PRIVATE', json.dumps(progress))
+        progress = {}
+        with self.assertRaises(ValueError):
+            self.exercise(progress=progress, credential=False)
+        self.assertEqual(progress['location'], 'authenticated-transport')
+        self.assertEqual(progress['reply'], turn(1)['reply'])
+        progress = {}
+        with self.assertRaises(ValueError):
+            self.exercise(progress=progress, opened=1)
+        self.assertEqual(progress['location'], 'project-open')
+        self.assertNotIn('response_held', progress)
+        error = ValueError('PRIVATE ORIGINAL')
+        progress = {}
+        with self.assertRaises(ValueError) as failed:
+            self.exercise(progress=progress, reply_error=error, snapshot_error=RuntimeError('PRIVATE OBSERVER'))
+        self.assertIs(failed.exception, error)
+        self.assertEqual(progress['observation_error'], 'RuntimeError')
+        self.assertEqual(progress['location'], 'durable-reply')
+        self.assertNotIn('PRIVATE', json.dumps(progress))
 
 
 class QuietCustodyCaseTests(unittest.TestCase):
