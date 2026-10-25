@@ -8,4 +8,4 @@ bindings:
   windows:
     - "Mod+Alt+A"
   linux:
-    - "Mod+Alt+A"
+    - "Mod+A"

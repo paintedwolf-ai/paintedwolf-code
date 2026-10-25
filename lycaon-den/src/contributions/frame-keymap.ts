@@ -4,6 +4,7 @@ import {
   defaultBindingAllowedOnPlatform,
 } from "../shortcuts/binding-policy.ts";
 import {
+  DEFAULT_NAV_LEADER_CHORDS,
   resolveKeymap,
   type CommandScope,
   type KeymapDeclaration,
@@ -55,6 +56,7 @@ export function frameKeymapSource(
   }
   return {
     declarations,
+    defaultLeaderChord: DEFAULT_NAV_LEADER_CHORDS[platform],
     bindingAllowed: (binding) => bindingAllowedOnPlatform(binding, platform),
     defaultBindingAllowed: (binding) =>
       defaultBindingAllowedOnPlatform(binding, platform),

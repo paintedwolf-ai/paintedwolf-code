@@ -8,4 +8,4 @@ bindings:
   windows:
     - "Mod+Alt+Shift+ArrowLeft"
   linux:
-    - "Mod+Alt+Shift+ArrowLeft"
+    - "Mod+Shift+PageUp"

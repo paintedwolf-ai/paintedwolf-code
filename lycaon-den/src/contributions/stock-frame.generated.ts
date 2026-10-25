@@ -5153,7 +5153,7 @@ export const STOCK_FRAME: ContributionFrameResponse = {
       "allow_in_input": true,
       "bindings": {
         "linux": [
-          "Mod+Alt+A"
+          "Mod+A"
         ],
         "macos": [
           "Mod+A"
@@ -5678,7 +5678,7 @@ export const STOCK_FRAME: ContributionFrameResponse = {
       "allow_in_input": true,
       "bindings": {
         "linux": [
-          "Mod+Alt+Shift+ArrowLeft"
+          "Mod+Shift+PageUp"
         ],
         "macos": [
           "Mod+Alt+Shift+ArrowLeft"
@@ -5695,7 +5695,7 @@ export const STOCK_FRAME: ContributionFrameResponse = {
       "allow_in_input": true,
       "bindings": {
         "linux": [
-          "Mod+Alt+Shift+ArrowRight"
+          "Mod+Shift+PageDown"
         ],
         "macos": [
           "Mod+Alt+Shift+ArrowRight"
@@ -6999,7 +6999,7 @@ export const STOCK_FRAME: ContributionFrameResponse = {
       "allow_in_input": true,
       "bindings": {
         "linux": [
-          "Mod+."
+          "Shift+F5"
         ],
         "macos": [
           "Mod+."
@@ -7369,15 +7369,6 @@ export const STOCK_FRAME: ContributionFrameResponse = {
     {
       "platform": "linux",
       "scope": "files",
-      "chord": "Mod+Alt+A",
-      "active": "painted-wolf/platform:key-editor-select-all",
-      "candidates": [
-        "painted-wolf/platform:key-editor-select-all"
-      ]
-    },
-    {
-      "platform": "linux",
-      "scope": "files",
       "chord": "Mod+Alt+C",
       "active": "painted-wolf/platform:key-files-choose-comparison",
       "candidates": [
@@ -7418,24 +7409,6 @@ export const STOCK_FRAME: ContributionFrameResponse = {
       "active": "painted-wolf/platform:key-files-restore-version",
       "candidates": [
         "painted-wolf/platform:key-files-restore-version"
-      ]
-    },
-    {
-      "platform": "linux",
-      "scope": "files",
-      "chord": "Mod+Alt+Shift+ArrowLeft",
-      "active": "painted-wolf/platform:key-files-move-tab-left",
-      "candidates": [
-        "painted-wolf/platform:key-files-move-tab-left"
-      ]
-    },
-    {
-      "platform": "linux",
-      "scope": "files",
-      "chord": "Mod+Alt+Shift+ArrowRight",
-      "active": "painted-wolf/platform:key-files-move-tab-right",
-      "candidates": [
-        "painted-wolf/platform:key-files-move-tab-right"
       ]
     },
     {
@@ -7684,6 +7657,15 @@ export const STOCK_FRAME: ContributionFrameResponse = {
     {
       "platform": "linux",
       "scope": "files",
+      "chord": "Mod+A",
+      "active": "painted-wolf/platform:key-editor-select-all",
+      "candidates": [
+        "painted-wolf/platform:key-editor-select-all"
+      ]
+    },
+    {
+      "platform": "linux",
+      "scope": "files",
       "chord": "Mod+D",
       "active": "painted-wolf/platform:key-editor-select-next-occurrence",
       "candidates": [
@@ -7886,6 +7868,24 @@ export const STOCK_FRAME: ContributionFrameResponse = {
       "active": "painted-wolf/platform:key-editor-go-to-symbol",
       "candidates": [
         "painted-wolf/platform:key-editor-go-to-symbol"
+      ]
+    },
+    {
+      "platform": "linux",
+      "scope": "files",
+      "chord": "Mod+Shift+PageDown",
+      "active": "painted-wolf/platform:key-files-move-tab-right",
+      "candidates": [
+        "painted-wolf/platform:key-files-move-tab-right"
+      ]
+    },
+    {
+      "platform": "linux",
+      "scope": "files",
+      "chord": "Mod+Shift+PageUp",
+      "active": "painted-wolf/platform:key-files-move-tab-left",
+      "candidates": [
+        "painted-wolf/platform:key-files-move-tab-left"
       ]
     },
     {
@@ -8305,15 +8305,6 @@ export const STOCK_FRAME: ContributionFrameResponse = {
     {
       "platform": "linux",
       "scope": "global",
-      "chord": "Mod+.",
-      "active": "painted-wolf/platform:key-session-stop",
-      "candidates": [
-        "painted-wolf/platform:key-session-stop"
-      ]
-    },
-    {
-      "platform": "linux",
-      "scope": "global",
       "chord": "Mod+/",
       "active": "painted-wolf/platform:key-help-shortcuts",
       "candidates": [
@@ -8507,6 +8498,15 @@ export const STOCK_FRAME: ContributionFrameResponse = {
       "active": "painted-wolf/platform:key-session-recent",
       "candidates": [
         "painted-wolf/platform:key-session-recent"
+      ]
+    },
+    {
+      "platform": "linux",
+      "scope": "global",
+      "chord": "Shift+F5",
+      "active": "painted-wolf/platform:key-session-stop",
+      "candidates": [
+        "painted-wolf/platform:key-session-stop"
       ]
     },
     {

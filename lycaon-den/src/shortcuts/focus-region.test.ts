@@ -16,7 +16,7 @@ import {
 } from "./focus-region.ts";
 import {
   resolveKeymap,
-  DEFAULT_NAV_LEADER_CHORD,
+  DEFAULT_NAV_LEADER_CHORDS,
   NAV_LEADER_ID,
 } from "./keymap.ts";
 import { contributionCommandAvailable } from "../contributions/dispatch.ts";
@@ -210,7 +210,7 @@ describe("go.* availability", () => {
 describe("leader destination bindings", () => {
   it("defaults the leader to Mod+; and derives mnemonic destination sequences", () => {
     const map = resolveKeymap({}, frameKeymapSource(STOCK_FRAME, "macos"));
-    expect(map.leaderChord).toBe(DEFAULT_NAV_LEADER_CHORD);
+    expect(map.leaderChord).toBe(DEFAULT_NAV_LEADER_CHORDS.macos);
     expect(map.byCommand.get(stockId("go-context-files"))).toEqual(["Mod+; F"]);
     expect(map.byCommand.get(stockId("go-context-search"))).toEqual(["Mod+; K"]);
     expect(map.byCommand.get(stockId("go-context-security"))).toEqual(["Mod+; S"]);

@@ -21,7 +21,7 @@ import {
 import type { TauriPlatform } from "../platform/runtime.ts";
 import { STOCK_FRAME } from "../contributions/stock-frame.generated.ts";
 import { OS_INTERCEPTED_CHORDS } from "./reserved-chords.generated.ts";
-import { DEFAULT_NAV_LEADER_CHORD } from "./keymap.ts";
+import { DEFAULT_NAV_LEADER_CHORDS } from "./keymap.ts";
 import {
   bindingAllowedOnPlatform,
   defaultBindingAllowedOnPlatform,
@@ -160,7 +160,7 @@ describe("reservedReason", () => {
 
   it("Mod+Alt+* on linux and windows", () => {
     for (const platform of ["linux", "windows"] as const) {
-      expect(reservedReason("Mod+Alt+A", platform)).toBe("system");
+      expect(reservedReason("Mod+Alt+X", platform)).toBe("system");
       expect(reservedReason("Mod+Alt+Delete", platform)).toBe("os");
       expect(reservedReason("Mod+K", platform)).toBeNull();
     }
@@ -189,7 +189,7 @@ describe("reservedReason", () => {
       for (const [platform, chords] of Object.entries(binding.bindings)) {
         for (const declared of chords) {
           const chord = declared.startsWith("Leader ")
-            ? `${DEFAULT_NAV_LEADER_CHORD} ${declared.slice("Leader ".length)}`
+            ? `${DEFAULT_NAV_LEADER_CHORDS[platform as TauriPlatform]} ${declared.slice("Leader ".length)}`
             : declared;
           expect(
             defaultBindingAllowedOnPlatform(chord, platform as TauriPlatform),

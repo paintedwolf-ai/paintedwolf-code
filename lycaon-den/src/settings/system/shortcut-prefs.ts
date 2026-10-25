@@ -15,7 +15,7 @@ import {
   parseBinding,
 } from "../../shortcuts/chord.ts";
 import {
-  DEFAULT_NAV_LEADER_CHORD,
+  DEFAULT_NAV_LEADER_CHORDS,
   detectConflicts,
   detectSequenceConflicts,
   leaderCollidesWithCatalog,
@@ -245,7 +245,7 @@ export async function clearShortcutOverride(entryId: string): Promise<void> {
       next,
       liveKeymapSource(shortcutPlatform()),
     ).leaderChord;
-    next = rebindLeaderOverrides(next, DEFAULT_NAV_LEADER_CHORD, previous);
+    next = rebindLeaderOverrides(next, DEFAULT_NAV_LEADER_CHORDS[shortcutPlatform()], previous);
   }
   delete next[entryId];
   applyOverrides(next);

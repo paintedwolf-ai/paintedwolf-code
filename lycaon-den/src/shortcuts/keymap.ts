@@ -23,13 +23,18 @@ export type KeymapDeclaration = {
 /** Contribution declarations plus the platform policy they resolve under. */
 export type KeymapSource = {
   declarations: readonly KeymapDeclaration[];
+  defaultLeaderChord: string;
   /** Full policy for user-authored values. */
   bindingAllowed: (binding: string) => boolean;
   /** Host-approved defaults still have to be syntactically producible. */
   defaultBindingAllowed: (binding: string) => boolean;
 };
 
-export const DEFAULT_NAV_LEADER_CHORD = "Mod+;";
+export const DEFAULT_NAV_LEADER_CHORDS = {
+  macos: "Mod+;",
+  windows: "Mod+;",
+  linux: "Mod+Shift+;",
+} as const;
 
 const LEADER_PREFIX = "Leader ";
 
@@ -129,7 +134,7 @@ function resolveLeader(
   source: KeymapSource,
 ): string {
   const raw = overrides?.[NAV_LEADER_ID];
-  if (typeof raw !== "string") return DEFAULT_NAV_LEADER_CHORD;
+  if (typeof raw !== "string") return source.defaultLeaderChord;
   const chord = normalizeChord(raw);
   if (
     !chord ||
@@ -137,7 +142,7 @@ function resolveLeader(
     !source.bindingAllowed(chord) ||
     leaderCollidesWithCatalog(chord, source)
   ) {
-    return DEFAULT_NAV_LEADER_CHORD;
+    return source.defaultLeaderChord;
   }
   return chord;
 }

@@ -8,4 +8,4 @@ bindings:
   windows:
     - "Mod+."
   linux:
-    - "Mod+."
+    - "Shift+F5"
