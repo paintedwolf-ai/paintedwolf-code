@@ -21,6 +21,16 @@ def process_identity(pid: int) -> dict:
     return {"pid": pid, "parent_pid": int(row[1]), "start_time_ticks": int(row[19])}
 
 
+def descends(identity: dict, ancestor: int) -> list[dict]:
+    """Return identity's live parent chain before ancestor within a bounded depth, or []."""
+    chain, current = [identity], identity
+    for _ in range(16):
+        if current["parent_pid"] == ancestor: return chain
+        if current["parent_pid"] <= 1: return []
+        current = process_identity(current["parent_pid"]); chain.append(current)
+    return []
+
+
 def engine_image(pid: int) -> tuple:
     before = process_identity(pid)
     try:
@@ -172,22 +182,17 @@ class InstalledApp:
             raise
 
     def launch(self):
-        if self.process is not None:
-            raise ValueError("installed application was already launched")
+        if self.process is not None: raise ValueError("installed application was already launched")
         require_owned_guest(self.binding)
-        session = graphical_session()
-        environment = session_environment(session)
-        storage = storage_for_launch(environment)
-        daemon = storage.config / "daemon.json"
+        session = graphical_session(); environment = session_environment(session)
+        storage = storage_for_launch(environment); daemon = storage.config / "daemon.json"
         if daemon.exists():
-            previous = private_json(daemon)
-            pid = previous.get("pid")
+            previous = private_json(daemon); pid = previous.get("pid")
             if type(pid) is int and pid > 1 and Path(f"/proc/{pid}").exists():
                 raise CaseUnavailable("guest already has a running engine; preserving its owner")
         launcher = dict(self.binding["launcher"]); path = Path(launcher.pop("path"))
         current = file_identity(path); current.pop("header")
-        if current != launcher:
-            raise ValueError("installed application launcher changed since final artifact binding")
+        if current != launcher: raise ValueError("installed application launcher changed since final artifact binding")
         unit_info = enter_desktop_application_scope(path, storage, Path(self.binding["install_root"]) / "bin/pw")
         self.storage = storage
         self.process = subprocess.Popen([str(path), *self.arguments], env=environment,
@@ -212,8 +217,7 @@ class InstalledApp:
         return self
 
     def wait_ready(self):
-        if self.process is None:
-            raise ValueError("installed application must be launched before readiness capture")
+        if self.process is None: raise ValueError("installed application must be launched before readiness capture")
         deadline = time.monotonic() + self.timeout
         try:
             while time.monotonic() < deadline:
@@ -228,8 +232,7 @@ class InstalledApp:
             raise
 
     def require_running(self):
-        if self.process is None:
-            raise ValueError('installed application has no captured launch process')
+        if self.process is None: raise ValueError('installed application has no captured launch process')
         code = self.process.poll()
         if code is not None:
             self.observations['exit_code'] = code
@@ -261,8 +264,8 @@ class InstalledApp:
             raise ValueError("installed engine record names a foreign endpoint")
         try: engine = process_identity(pid)
         except FileNotFoundError: return False
-        if engine["parent_pid"] != self.process.pid:
-            raise ValueError("installed engine is not the captured application's child")
+        if not (chain := descends(engine, self.process.pid)):
+            raise ValueError("installed engine is not a descendant of the captured application")
         expected = self.binding["images"][str(Path(self.binding["install_root"]) / "bin/pw")]
         if engine_image(pid) != (expected["device"], expected["inode"], expected["bytes"]):
             raise ValueError("running engine differs from the selected final installed image")
@@ -272,7 +275,7 @@ class InstalledApp:
             if engine_cgroup != unit_info["launch_cgroup"] or not engine_cgroup.endswith("/" + unit_info["unit"]):
                 raise ValueError("installed engine escaped its desktop application unit scope")
             self.observations["application_unit"] = {**unit_info, "engine_cgroup": engine_cgroup,
-                                                     "ancestry": [engine, process_identity(self.process.pid)]}
+                                                     "ancestry": [*chain, process_identity(self.process.pid)]}
         self.observations["engine_identity"] = engine
         api = EngineAPI(port)
         try: health = api.request("GET", "/health")
