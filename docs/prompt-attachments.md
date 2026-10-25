@@ -1,6 +1,6 @@
 # Prompt attachments
 
-How user-supplied bytes and jailed path references enter a prompt: a streaming upload, content-addressed materialization, plane-typed caps, framing, and the reject contract.
+How user-supplied bytes and path references enter a prompt: a streaming upload, content-addressed materialization, plane-typed caps, framing, and the reject contract.
 
 **See also:** [Host contract](host-contract.md) · [Visual surface](visual-surface.md) (image faces) · [Security](security.md) · [Den](den.md) · [Tools](tools.md) · [Agent contract](agent-contract.md)
 
@@ -167,7 +167,7 @@ The block is untrusted user data, at the same altitude as typed chat and hostile
 
 ## Worker assignment
 
-`task()` workers do not inherit the parent user message. The host forwards every parent-session payload attachment and path-file/path-folder reference as metadata only (filename, mime, bytes, path, and any line range) on the worker assignment inject (`promptattach.ForwardedAttachment`). The worker pages the body with `jq` / `read` / `grep` at the stamped path. Host-data paths are not repo-relative focus paths. Visual-plane images stay on the coordinator; they have no agent-readable path. This channel is host-supplied; the coordinator cannot drop it.
+`task()` workers do not inherit the parent user message. The host forwards every parent-session payload attachment and file/folder reference, including external references, as metadata only (filename, mime, bytes, path, and any line range) on the worker assignment inject (`promptattach.ForwardedAttachment`). The worker pages the body with `jq` / `read` / `grep` at the stamped path. Host-data paths are not repo-relative focus paths. Visual-plane images stay on the coordinator; they have no agent-readable path. This channel is host-supplied; the coordinator cannot drop it. External grants permit worker reads, but worker mutations remain inside their private branch; a grant never bypasses overlay promotion.
 
 ## Reject contract
 
@@ -191,31 +191,33 @@ Two rules keep intake from becoming a way into the machine ([Security](security.
 
 | Rule | Requirement |
 |------|-------------|
-| **Bytes-only ingest** | Client-uploaded bytes only, the same path as image ingest. No URL fetch; no server `open(path)` / `file://` from attachment metadata. Attach is neither a filesystem reader nor an SSRF trampoline |
+| **Bytes-only ingest** | Client-uploaded bytes only, the same path as image ingest. No URL fetch or `file://` from attachment metadata. Live filesystem access uses the separate typed reference contract below |
 | **Bounded parse, no parser egress** | Every document handler enforces page/slide count, expansion ratio, wall-clock, and memory bounds, and must not resolve external entities or open network connections from document content. Over-cap, bomb, or malformed input is a typed reject, never a hang or an OOM |
 
 This is intake hygiene for a single-user desktop sidecar. It does not try to stop someone attaching a secret they could equally paste into the composer.
 
 ## Attachment references
 
-`attachments[]` carries blob IDs for every uploaded body, rasters included; there is no separate `images[]`. A sibling `references[]` of `PromptReferencePart` carries jailed coordinates only, never bytes and never a host-opened absolute path.
+`attachments[]` carries blob IDs for every uploaded body, rasters included; there is no separate `images[]`. A sibling `references[]` of `PromptReferencePart` carries project coordinates or explicit human selections of absolute external paths. The host resolves and frames them; external references install chat-scoped grants only as part of prompt admission. A rejected admission revokes the grants it installed, preserving grants from other submissions.
 
-`PromptReferencePart` is a strict discriminated union: a `oneOf` over four variants discriminated by `kind`, each with `additionalProperties: false`. A field belonging to another variant is a rejection, not a field the host ignores (`TestPromptReferencePartRejectsCrossVariantFields`). Go constructs it through the `NewPromptReference*` helpers, so the discriminator is never set by hand.
+`PromptReferencePart` is a strict discriminated union: a `oneOf` over six variants discriminated by `kind`, each with `additionalProperties: false`. A field belonging to another variant is a rejection, not a field the host ignores (`TestPromptReferencePartRejectsCrossVariantFields`). Go constructs it through the `NewPromptReference*` helpers, so the discriminator is never set by hand.
 
 | `kind` | Required | Also allowed | Host emits |
 |--------|----------|--------------|------------|
 | `path-file` | `project_id`, `path` | `root_id`, `start_line`, `end_line` | `[User attached file: {rel}]` read-hint fence; `{rel}:{start}` or `{rel}:{start}-{end}` when a 1-based inclusive selection range is attached. The agent reads in place |
 | `path-folder` | `project_id`, `path` | `root_id` | `[User attached folder: {rel}]` walk-hint fence; folder contents are never enumerate-uploaded |
+| `external-file` | `project_id`, absolute `path` | `start_line`, `end_line` | Canonical path and a bounded text preview, or native image perception for a raster; exact-path write grant for the chat |
+| `external-folder` | `project_id`, absolute `path` | — | Canonical folder hint and a tree write grant for the chat; no recursive upload |
 | `artifact` | `project_id`, `artifact_id` | — | Re-links the existing `VisualArtifact` onto the turn; no re-upload or re-raster |
 | `search-hit` | `project_id`, `source_ref` | `session_id`, `hit_kind` | The snippet the evidence index already stores, capped by `prompt.max_body_preview_bytes`; never client-supplied prose as authority |
 
 Path kinds use a project-relative `path` under an attached root; `root_id` names the root. Every path/folder reference resolves under an attached root before fencing (`IngestReferences`); unresolved is `reference_out_of_jail`, never a silent drop.
 
-**Image rule:** an image is always an uploaded body or an `artifact` re-link, never a path reference.
+**Image rule:** a raster path reference is read under the image byte cap and enters the same visual ingest path as an uploaded image. External file intake opens a descriptor under the canonical parent, rejects non-regular files, and bounds image reads even if the file grows. Text previews retain only the shared preview allowance; ranged previews stream within a scan bound. The path remains available for tools when a preview is omitted or truncated. Control-plane protections still apply to external selections.
 
-**Typed stamps, not hint prefixes.** Each payload part stamps its restageable `blob_id`. Each retrieval part is stamped with `MessageContentPart.reference_kind` (`path_file` | `path_folder` | `search_hit`), plus `start_line` / `end_line` for a ranged path-file and `hit_kind` / `source_ref` / `source_session_id` for a search hit. `source` stays the bare project-relative path; the fence, not `source`, carries the ranged display form. Clients branch on the stamp, never on the hint prefixes.
+**Typed stamps, not hint prefixes.** Each payload part stamps its restageable `blob_id`. Each retrieval part is stamped with `MessageContentPart.reference_kind` (`path_file` | `path_folder` | `external_file` | `external_folder` | `search_hit`), plus `start_line` / `end_line` for a ranged path-file and `hit_kind` / `source_ref` / `source_session_id` for a search hit. `source` stays the bare project-relative path; the fence, not `source`, carries the ranged display form. Clients branch on the stamp, never on the hint prefixes.
 
-**Den:** one composer sink (`addToChat` / shared pending-attachment store); whole-chat-area drop with a drag-active overlay; **Add to chat** on openable surfaces (shared path menu, search detail, file viewer, transcript/gallery artifacts, folder rows). Desktop drag keeps native paths (`dragDropEnabled`). A file under an attached root stays a jailed reference (except rasters, which follow image ingest); a regular file outside every root streams through the same bytes-only upload route and becomes an immutable project-host-data snapshot whose source path never enters the sidecar, transcript, prompt, or attachment metadata. Folders outside the project are rejected: selecting a folder never implies recursive import or grants a live external path.
+**Den presentation:** the external reference wire contract is available to clients; composer support for external selections is a separate frontend change. The current Den surface has one composer sink (`addToChat` / shared pending-attachment store); whole-chat-area drop with a drag-active overlay; **Add to chat** on openable surfaces (shared path menu, search detail, file viewer, transcript/gallery artifacts, folder rows). Desktop drag keeps native paths (`dragDropEnabled`). A file under an attached root stays a jailed reference (except rasters, which follow image ingest); a regular file outside every root streams through the same bytes-only upload route and becomes an immutable project-host-data snapshot whose source path never enters the sidecar, transcript, prompt, or attachment metadata. Folders outside the project are rejected: selecting a folder never implies recursive import or grants a live external path.
 
 **Transcript display:** Den projects `Message.content_parts` into composer-style chips beside the user's prose. Flattened `Message.content` keeps fences for the model and search; the bubble does not scrape that string. Edit restore uses user-instruction prose plus `restored_content_parts` / `restored_artifact_ids`; payloads reuse `blob_id` and search hits reuse `source_session_id`, so restaging preserves the original coordinates without dumping fences into the draft.
 

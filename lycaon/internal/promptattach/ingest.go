@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/blobstore"
@@ -142,6 +143,9 @@ func projectBlob(ctx context.Context, p projection, out *IngestResult) error {
 			return err
 		}
 		out.Images = append(out.Images, InlineImage{Mime: p.detected.MIME, Bytes: raw})
+		attrs := []string{fmt.Sprintf("bytes=%q", strconv.FormatInt(p.blob.Size, 10)), fmt.Sprintf("path=%q", p.blob.Rel)}
+		fence := FormatFence(p.blob.Name, p.detected.MIME, fmt.Sprintf("[User attached image: %s]", p.blob.Rel), false, attrs...)
+		out.Parts = append(out.Parts, framedPayload(p.blob, p.detected.MIME, fence))
 		return nil
 
 	case format.KindVideo:

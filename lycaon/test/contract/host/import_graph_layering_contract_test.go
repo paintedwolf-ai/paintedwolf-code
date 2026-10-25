@@ -55,9 +55,12 @@ func layeringRules() []layeringRule {
 			name:      "internal/db is the bottom — no internal cross-deps",
 			fromGlob:  modulePath + "/internal/db",
 			forbidden: modulePath + "/internal/",
-			// DB imports only shared storage leaves.
+			// DB imports only shared storage leaves. Snapshot cloning and
+			// publication use the same filesystem primitives as other durable writers.
 			allowImports: []string{
 				modulePath + "/internal/configdir",
+				modulePath + "/internal/fileclone",
+				modulePath + "/internal/fseffect",
 				modulePath + "/internal/fssync",
 				modulePath + "/internal/timelayout",
 			},

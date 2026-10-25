@@ -31,6 +31,17 @@ describe("incremental transcript projection", () => {
     expect(project([], [])).toEqual([]);
   });
 
+  it("keeps a span row in place while its message is absent from the ord index", () => {
+    const project = createTranscriptDisplayProjector();
+    const first = message("first", "top of the window", 1);
+    const mid = message("mid", "middle", 2);
+    const last = message("last", "newest", 3);
+    const spans = [messagesToTranscriptItems([first, mid, last])];
+    expect(project([first, mid, last], spans)[0]!.map((row) => row.key)).toEqual(["first", "mid", "last"]);
+    // Spans and messages arrive separately; an unknown ord must not send the top row to the tail.
+    expect(project([mid, last], spans)[0]!.map((row) => row.key)).toEqual(["first", "mid", "last"]);
+  });
+
   it("refreshes a settled span when its tool result arrives later", () => {
     const project = createTranscriptDisplayProjector();
     const assistant: Message = { ...message("a", "Working", 1), tool_calls: [{ id: "call", name: "read", args: { path: "a.go" } }] };

@@ -35,7 +35,7 @@ def order(rows, lanes, timings=None):
     result = [{**row, "expected_seconds": estimates[row["lane"]],
                "timing_basis": "measured" if complete else "catalog-budget"} for row in rows]
     # Package balancing changes shard assignments; siblings share the lane's longest estimate.
-    return sorted(result, key=lambda row: (not lanes[row["lane"]].get("first"),
+    return sorted(result, key=lambda row: (0 if lanes[row["lane"]].get("first") else 1 if lanes[row["lane"]].get("contract_first") else 2,
                                           -row["expected_seconds"], row["lane"], row["shard"]))
 
 

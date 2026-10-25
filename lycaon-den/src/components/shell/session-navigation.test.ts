@@ -17,7 +17,7 @@ function mountNavigation() {
   appStore.actions.setCurrentSession({ id: "session", project_id: "project", status: "idle", title: "Original" } as never);
   appStore.actions.installTranscriptBaseline("session", [], 0);
   const recents = { state: { recents: [] }, registerSession: vi.fn(async () => undefined) };
-  const projectSessions = { state: { projectId: "project", rows: [], sort: "recent" }, setProject: vi.fn(), setSort: vi.fn(), refresh: vi.fn(async () => undefined) };
+  const projectSessions = { state: { projectId: "project", rows: [] as Array<{ id: string }>, sort: "recent" }, setProject: vi.fn(), setSort: vi.fn(), refresh: vi.fn(async () => undefined) };
   const calls = { showProjects: vi.fn(), closeSearch: vi.fn(), closeCrossbar: vi.fn(), closeLauncher: vi.fn(),
     revealConversation: vi.fn(async () => true), focusComposer: vi.fn() };
   const navigation = createRoot((dispose) => {
@@ -71,5 +71,30 @@ describe("shell session navigation", () => {
     navigation.abandonWorkspaceOpening(token + 1); expect(shell.state.opening?.token).toBe(token);
     navigation.abandonWorkspaceOpening(token); expect(shell.state.opening).toBeNull();
     expect(calls.showProjects).toHaveBeenCalled();
+  });
+
+  it("archiving the last chat in a project clears currentSession and removes it from the sidebar", async () => {
+    const { navigation, shell, appStore, projectSessions } = mountNavigation();
+    seams.update.mockResolvedValueOnce({ id: "session", archived: true });
+    projectSessions.state.rows = [
+      { id: "session", project_id: "project", title: "Original", pin_rank: null, message_count: 0, activity_at: "t", created_at: "t", posture: "build", status: "idle", owner_person_id: "u1" } as never,
+    ];
+    (projectSessions as Record<string, unknown>).removeRow = vi.fn((id: string) => {
+      projectSessions.state.rows = projectSessions.state.rows.filter((r) => r.id !== id);
+    });
+    expect(navigation.sidebarSections().chats).toHaveLength(1);
+
+    await navigation.archiveSidebarSession({
+      projectId: "project",
+      sessionId: "session",
+      title: "Original",
+      activityAtMs: 0,
+      pinRank: null,
+      messageCount: 0,
+    });
+
+    expect(shell.state.foreground).toBeNull();
+    expect(appStore.state.currentSession).toBeUndefined();
+    expect(navigation.sidebarSections().chats).toHaveLength(0);
   });
 });
