@@ -199,10 +199,7 @@ class MaintainerScripts(unittest.TestCase):
 
     def run_script(self, family, name, *args):
         source = (LINUX / family / name).read_text()
-        script = (program(source, self.installer, self.root / "package-state")
-                  .replace("/opt/painted-wolf-code", str(self.install))
-                  .replace("/etc/paintedwolf", str(self.policy))
-                  .replace("/run/paintedwolf", str(self.root / "run/paintedwolf")))
+        script = program(source, self.root, self.installer)
         path = self.root / f"{family}-{name}"
         path.write_text(script if script.startswith("#!") else "#!/bin/sh\n" + script)
         path.chmod(0o755)
