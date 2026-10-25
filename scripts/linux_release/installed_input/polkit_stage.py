@@ -5,7 +5,7 @@ before using this stage. Public JSON observations never establish that custody.
 """
 from __future__ import annotations
 
-from . import native_password_surface, protocol, session_wire, unlock_wire
+from . import accessibility, native_password_surface, protocol, session_wire, unlock_wire
 from .polkit_wire import validate
 from .private_pipe import Pipe
 from .unlock_account import validate_account_shape
@@ -14,7 +14,8 @@ PURPOSE = 'native-polkit-qa-authenticate-v1'
 
 
 def target(value):
-    fields = {'session', 'pending', 'window', 'password', 'ancestors', 'window_state', 'password_state'}
+    fields = {'session', 'pending', 'window', 'modal', 'modal_state', 'password', 'ancestors',
+              'window_state', 'password_state'}
     if not isinstance(value, dict) or set(value) != fields:
         raise ValueError('Polkit input requires its closed native target shape')
     native = session_wire.native_session(value['session'])
@@ -41,6 +42,14 @@ def target(value):
         {key: value[key] for key in native_password_surface.FIELDS}, shell)
     if value['password'] is None:
         raise ValueError('Polkit input requires its actual focused password object')
+    accessibility.validate_identity(value['modal'])
+    state = value['modal_state']
+    if (value['modal'] not in value['ancestors'][1:]
+            or not isinstance(state, dict) or set(state) != {
+                'focused', 'visible', 'enabled', 'sensitive', 'defunct', 'modal'}
+            or any(type(item) is not bool for item in state.values()) or state['defunct']
+            or not all(state[key] for key in ('modal', 'visible', 'enabled', 'sensitive'))):
+        raise ValueError('Polkit password has no single live native modal ancestor')
     return value
 
 
@@ -48,7 +57,7 @@ def same_target(before, after):
     target(before)
     target(after)
     session_wire.same_session(before['session'], after['session'])
-    if any(before[key] != after[key] for key in ('pending', 'window', 'password', 'ancestors')):
+    if any(before[key] != after[key] for key in ('pending', 'window', 'modal', 'password', 'ancestors')):
         raise ValueError('Polkit input replaced its captured transaction or password object')
 
 

@@ -15,6 +15,9 @@ def target():
     native = value['session']['native_session']
     value['session'] = native
     native.update(locked_hint=False, locker_active=False)
+    value['modal'] = {**value['window'], 'path': '/org/a11y/atspi/accessible/5'}
+    value['modal_state'] = {**value['password_state'], 'focused': False, 'modal': True}
+    value['ancestors'].insert(1, value['modal'])
     attempt = copy.deepcopy(ATTEMPT)
     attempt['subject']['uid'] = ACCOUNT['uid']
     shell = native['authorities']['shell']
