@@ -141,7 +141,7 @@ func TestOutputViewHostReadRejectsRetainedDigestMismatchBeforePublication(t *tes
 	testutil.FailErr(t, "decode retained identity", json.Unmarshal([]byte(encoded), &blob))
 	bad, err := zstdcodec.Compress(strings.NewReader("tampered bytes\n"))
 	testutil.FailErr(t, "compress wrong retained content", err)
-	store := f.Recorder.ProgramBlobStore(f.Runtime.Blobs)
+	store := f.Recorder.ProgramBlobStore(t.Context(), f.Runtime.Blobs)
 	testutil.FailErr(t, "corrupt retained physical bytes", os.WriteFile(filepath.Join(store.Root, filepath.FromSlash(blob.Rel)), bad, 0600))
 	target := filepath.Join(f.OutputDir, out.ProgramID+".stdout")
 	testutil.FailErr(t, "remove view", os.Remove(target))
