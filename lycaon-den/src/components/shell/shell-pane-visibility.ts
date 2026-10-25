@@ -80,8 +80,11 @@ export function createShellPaneVisibility({ windowSubject, splitLive, presentedS
 
   // Preference object replacement is not a change to the pane's actual fit.
   const fitNavWidthPx = createMemo(preferredNavWidthPx);
-  const fitStageFloorPx = createMemo(responsiveStageFloorPx);
-  const fitSplitColumns = createMemo(() => presentedSplitLive() && hiddenSplitPanePref() === null);
+  // Residency is initialized later in Shell; effects first read it after setup.
+  const [fitStageFloorPx, setFitStageFloorPx] = createSignal(0);
+  const [fitSplitColumns, setFitSplitColumns] = createSignal(false);
+  createEffect(() => setFitStageFloorPx(responsiveStageFloorPx()));
+  createEffect(() => setFitSplitColumns(presentedSplitLive() && hiddenSplitPanePref() === null));
   const fitChatWidthPx = createMemo(requestedChatWidthPx);
   let navWasAutomaticallyCollapsed = false;
   createEffect(() => {
