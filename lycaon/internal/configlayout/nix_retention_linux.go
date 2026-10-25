@@ -8,12 +8,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
+	execpkg "github.com/lycaon/lycaon/internal/exec"
 	"golang.org/x/sys/unix"
 )
 
@@ -67,10 +67,11 @@ func retainNix(ctx context.Context, layout *NixLayout, directory string, registr
 	}
 	link := filepath.Join(directory, "session-"+hex.EncodeToString(nonce))
 	lockPath := link + ".lock"
-	file, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0o600)
+	fd, err := unix.Open(lockPath, unix.O_CREAT|unix.O_EXCL|unix.O_RDWR|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0o600)
 	if err != nil {
 		return nil, err
 	}
+	file := os.NewFile(uintptr(fd), lockPath)
 	if err := unix.Flock(int(file.Fd()), unix.LOCK_SH|unix.LOCK_NB); err != nil {
 		_ = file.Close()
 		_ = os.Remove(lockPath)
@@ -102,9 +103,18 @@ func retainNix(ctx context.Context, layout *NixLayout, directory string, registr
 		return nil, err
 	}
 	defer func() { _ = os.RemoveAll(config) }()
-	command := exec.CommandContext(operation, layout.NixStore, "--store", registrar.storeURI,
-		"--add-root", link, "--indirect", "--realise", layout.Output) // #nosec G204 -- exact package-owned Nix executable; no PATH lookup
-	command.Env = registrar.environment(config, directory)
+	command, cleanup, err := execpkg.PrepareCommand(operation, layout.NixStore, []string{
+		"--store", registrar.storeURI,
+		"--add-root", link, "--indirect", "--realise", layout.Output,
+	}, execpkg.ExecOpts{
+		Launch: execpkg.HostLaunch("nix_generation_retention"),
+		Env:    registrar.environment(config, directory),
+	})
+	if err != nil {
+		release()
+		return nil, err
+	}
+	defer cleanup()
 	command.Stdin = nil
 	var diagnostic boundedNixOutput
 	command.Stdout, command.Stderr = &diagnostic, &diagnostic
