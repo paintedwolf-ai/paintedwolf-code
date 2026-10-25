@@ -8,7 +8,7 @@ import sys
 import tempfile
 import unittest
 
-from verification_tests.distribution.maintainer_fixture import program
+from verification_tests.distribution.maintainer_fixture import APPARMOR_ROOT, program
 
 ROOT = Path(__file__).resolve().parents[3]
 PROFILE = 'painted-wolf-code (unconfined)'
@@ -23,13 +23,16 @@ class NativeAppArmorRemoval(unittest.TestCase):
             state = root / 'kernel.json'
             state.write_text(json.dumps({'profiles': [OTHER] + ([PROFILE] if loaded else []),
                 'read_error': read_error, 'parser_failure': parser_failure, 'remains': remains, 'calls': []}))
+            profiles = root / APPARMOR_ROOT.removeprefix('/') / 'profiles'
+            profiles.parent.mkdir(parents=True)
+            profiles.touch()
             prefix = f'#!{sys.executable}\n' + '''import json,os,sys
 from pathlib import Path
 p=Path(os.environ['KERNEL_STATE']);s=json.loads(p.read_text())
 '''
             grep = root / 'grep'
             grep.write_text(prefix + '''import re
-assert sys.argv[1]=='-Eq' and sys.argv[3]=='/sys/kernel/security/apparmor/profiles'
+assert sys.argv[1]=='-Eq' and sys.argv[3]==os.environ['APPARMOR_PROFILES']
 if s['read_error']: raise SystemExit(2)
 raise SystemExit(0 if any(re.search(sys.argv[2],line) for line in s['profiles']) else 1)
 ''')
@@ -55,7 +58,6 @@ s.setdefault('generation_calls',[]).append(sys.argv[1:]);p.write_text(json.dumps
                              root, generations)
             wrapper = '''fixture_test() {
 case "$1:$2" in
--d:/sys/kernel/security/apparmor) return 0;;
 -d:/run/systemd/system) return 1;;
 esac
 command [ "$@"
@@ -63,7 +65,7 @@ command [ "$@"
 alias '['=fixture_test
 set -- ''' + shlex.quote(operation) + '\n' + source
             result = subprocess.run(['/bin/sh', '-c', wrapper], env={**os.environ,
-                'PATH': str(root), 'KERNEL_STATE': str(state)}, capture_output=True, text=True, timeout=15)
+                'PATH': str(root), 'KERNEL_STATE': str(state), 'APPARMOR_PROFILES': str(profiles)}, capture_output=True, text=True, timeout=15)
             return result, json.loads(state.read_text())
 
     def test_remove_unloads_only_the_exact_owned_profile(self):
