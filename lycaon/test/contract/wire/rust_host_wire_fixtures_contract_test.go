@@ -14,6 +14,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/credentialstore"
+	"github.com/lycaon/lycaon/internal/nativeproxy"
 	"github.com/lycaon/lycaon/internal/startupprotocol"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -47,6 +48,7 @@ func TestRustHostWireFixturesMatchGoTypes(t *testing.T) {
 		"managed_secret_reveal_response": goTypeFixture(t, "pkg/api.ManagedSecretRevealResponse", wire.ManagedSecretRevealResponse{}),
 		"daemon_manifest":                goTypeFixture(t, "internal/api.DaemonManifest", api.DaemonManifest{}),
 		"startup_record":                 startupRecordFixture(t),
+		"native_proxy_response":          goTypeFixture(t, "internal/nativeproxy.Response", nativeproxy.Response{}),
 		"vault_custody_report":           goTypeFixture(t, "internal/credentialstore.CustodyReport", credentialstore.CustodyReport{}),
 		"vault_custody_outcome":          goTypeFixture(t, "internal/credentialstore.CustodyOutcome", credentialstore.CustodyOutcome{}),
 	}
