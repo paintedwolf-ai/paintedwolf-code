@@ -216,13 +216,9 @@ class LockMonitorExecutionTests(unittest.TestCase):
                     'stdout': b'opened\n', 'stderr': b''}),
                 (lock_monitor, 'perform_transition', {'operation': 'session-lock-v1', 'completed': True}),
                 (lock_monitor, 'await_session', {'id': 'sess-1', 'status': 'idle'}),
-                (lock_monitor, 'open_project_configuration', {
-                    'maximize_actions': [{'name': 'App menu'}, {'name': 'Window'}, {'name': 'Maximize'}],
-                    'project_configuration': {'name': 'Project configuration', 'visible': True, 'native_action_completed': True},
-                    'native_action_completed': True}),
+                (lock_monitor, 'prepare_secret', {'phase': 'ready', 'reveal_ready': True}),
                 (lock_monitor, 'submit_project_turn', None),
                 (lock_monitor, 'await_fixture_reply', {'settled': True}),
-                (lock_monitor, 'physical_input', None),
                 (lock_monitor, 'PresencePolicy', fake_policy),
                 (lock_monitor, 'await_alert', default_alert)):
             self.stack.enter_context(patch.object(target_mod, attr, return_value=value))
@@ -413,7 +409,7 @@ class LockMonitorExecutionTests(unittest.TestCase):
             obs['reason'],
             'pre-lock-refusal-and-fresh-confirmation-observed-structured-stale-invalidation-unverified')
         self.assertEqual(witness_mock.call_count, 2)
-        self.assertTrue(obs['project_configuration_navigation']['project_configuration']['visible'])
+        self.assertTrue(obs['secret_setup']['reveal_ready'])
         fake_ui.click.assert_any_call('Hide now')
         disable_mock.assert_called_once_with(ACCOUNT, vm_id='owned')
 
@@ -446,7 +442,7 @@ class LockMonitorExecutionTests(unittest.TestCase):
         self.assertTrue(obs['fresh_confirmation_verified'])
         self.assertEqual(obs['reason'], 'pre-lock-stale-challenge-refusal-and-fresh-confirmation-verified')
         self.assertEqual(witness_mock.call_count, 2)
-        self.assertTrue(obs['project_configuration_navigation']['project_configuration']['visible'])
+        self.assertTrue(obs['secret_setup']['reveal_ready'])
         fake_ui.click.assert_any_call('Hide now')
         disable_mock.assert_called_once_with(ACCOUNT, vm_id='owned')
 

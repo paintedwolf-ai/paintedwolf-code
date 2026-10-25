@@ -6,7 +6,7 @@ from pathlib import Path
 
 from .app import InstalledApp, graphical_session, process_identity, session_environment
 from .desktop_launch import activate_visible_frame, protected_launcher
-from .desktop_turn import open_project_configuration, submit_project_turn
+from .desktop_turn import submit_project_turn
 from .desktop_ui import DesktopUI, interactive_window
 from .fixture_turn import await_fixture_reply
 from .fresh_profile import Reservation
@@ -17,14 +17,14 @@ from .process import run
 from .profile_observer import physical
 from .profile_setup import await_session
 from .provider import MODEL, ProviderFixture
-from .provider_setup import configure_provider, physical_input
+from .provider_setup import configure_provider
+from .presence_setup import prepare_secret
 from .records import CaseFailed, CaseUnavailable, retain
 from ..installed_input import password_wire, session_wire, surface_wire
 from ..installed_input.mailbox import Mailbox
 from ..installed_input.password_exchange import witness
 from ..installed_input.password_focus import FixtureFocus
 from ..installed_input.password_socket import Listener
-from ..installed_input.presence_fixture import FIELDS
 from ..installed_input.session_lock import NativeLockObserver
 from ..installed_input.surface import FrameObserver
 from ..installed_input.transition_guest import perform_transition
@@ -420,16 +420,7 @@ def execute(binding: dict, capability: str, case: str, root: Path) -> dict:
                                                             observations, provider, fixture, project, reservation)
                         else:
                             with DesktopUI(app) as ui:
-                                observations['project_configuration_navigation'] = open_project_configuration(app, ui)
-                                ui.click('Secrets', tab=True)
-                                ui.click('Add secret')
-                                for label, operation, _, password in FIELDS:
-                                    reservation.check_launch(app)
-                                    physical_input(app, ui, label, operation, password=password)
-                                ui.click('Add secret')
-                                reservation.check_launch(app)
-                                if alerts(app, ui, time.monotonic() + 15):
-                                    raise CaseUnavailable('lock-during-presence-already-has-an-owned-alert')
+                                observations['secret_setup'] = prepare_secret(app, ui, reservation)
                                 policy = PresencePolicy(launch_binding)
                                 with policy:
                                     run_lock_during_presence(app, ui, storage, native_input, execution, vm_id,
