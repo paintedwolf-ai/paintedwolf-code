@@ -7,7 +7,7 @@ import time
 
 from .app import InstalledApp, session_environment
 from .desktop_launch import protected_launcher, activate_visible_frame
-from .desktop_turn import prepare_composer
+from .desktop_turn import open_project_configuration
 from .desktop_ui import DesktopUI
 from .fresh_profile import Reservation
 from .polkit_policy import PresencePolicy
@@ -58,9 +58,7 @@ def unchallenged_presence(binding):
                 observations['opened_session'] = await_session(app, project, provider['provider_id'], MODEL, status='idle',
                                                                reason='presence-project-session-not-opened')
                 with DesktopUI(app) as ui:
-                    prepare_composer(app, ui)
-                    ui.click('Widen window to restore sidebar')
-                    ui.click('Project configuration')
+                    observations['project_configuration_navigation'] = open_project_configuration(app, ui)
                     ui.click('Secrets', tab=True)
                     ui.click('Add secret')
                     for label, operation, _, password in FIELDS:
