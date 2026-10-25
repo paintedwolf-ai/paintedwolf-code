@@ -24,6 +24,9 @@ type Config struct {
 	MockLLMPath string
 	// Startup reports bundled-engine boot progress to the desktop parent.
 	Startup startupprotocol.Sink
+	// APIToken is the bearer the desktop delivered over the private startup
+	// pipe; empty resolves it from the environment or generates one.
+	APIToken string
 	// TestLLMClient, when set, is used as the session LLM client instead of the bundled mock.
 	TestLLMClient modelcall.LLMClient
 	// TestDecider, when set, answers turn decisions instead of the engine the

@@ -10,7 +10,7 @@ Security defines the boundaries around local agent effects: project scope, subpr
 
 ## Local API transport
 
-The API is Den's authenticated loopback sidecar. Versioned routes require an explicit bearer token; CORS permits the shipped desktop origins without ambient credentials. A staged restore keeps health reachable and preflights valid while authenticated API calls receive `409 backup_restore_pending` until restart.
+The API is Den's authenticated loopback sidecar. Versioned routes require an explicit bearer token, which the desktop hands the engine as the first frame on its private stdin rather than in its environment: a process environment stays readable through the process filesystem until the engine disables dumps, and to same-user processes on macOS for its whole life. A standalone engine still reads `LYCAON_API_TOKEN`. CORS permits the shipped desktop origins without ambient credentials. A staged restore keeps health reachable and preflights valid while authenticated API calls receive `409 backup_restore_pending` until restart.
 
 Ordinary JSON requests have a 1 MiB envelope limit (`httpio.MaxJSONBody`). Source replacement and editor draft updates use a separate envelope budget for JSON escaping and UTF-16 expansion; their services enforce the decoded text bound and the 4 MiB encoded file cap before committing an update. Stream replay validates message membership against the session transcript before using cached content; removed messages and messages from another session are not replayable.
 
