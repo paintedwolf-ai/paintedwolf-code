@@ -1,5 +1,6 @@
 """Shipping launch routes preserve real command ownership and refuse invented success."""
 import signal
+import json
 import os
 import subprocess
 import sys
@@ -170,6 +171,30 @@ class ShippingLaunchTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'unsupported'):
             selected_mode({'case_inputs': {'desktop': {'sleep_launch_mode': 'pretend-desktop'}}})
 
+    def test_second_turn_failure_preserves_prior_observations_and_raw_streams(self):
+        from scripts.linux_release.installed_cases.shipping_lifecycle import repeat_turn
+        from scripts.linux_release.installed_cases.records import CaseUnavailable
+        barrier = SimpleNamespace(snapshot=lambda: {'request_id': 'second-held-request'})
+        fixture = SimpleNamespace(begin_next_turn=lambda: barrier)
+        failure = CaseUnavailable('fixed-UI-prerequisite-unavailable')
+        failure.observations = {'native_detail': 'retained'}
+        opened = {'launch_identity': {'pid': 123}, 'exit_code': 0, 'timed_out': False,
+                  'output_limit': False, 'stdout': b'opened project', 'stderr': b''}
+        streams = {}
+        with tempfile.TemporaryDirectory() as root, \
+                patch(PREFIX + 'process.run', return_value=opened), \
+                patch(PREFIX + 'profile_setup.await_session', side_effect=[{'id': 'fresh-session'}, failure]), \
+                patch(PREFIX + 'desktop_turn.submit_project_turn'), \
+                patch(PREFIX + 'desktop_ui.DesktopUI'):
+            with self.assertRaises(CaseUnavailable) as captured:
+                repeat_turn(None, {}, fixture, {'provider_id': 'fixture'}, None, {}, root, streams)
+        observed = captured.exception.observations
+        self.assertEqual(observed['native_detail'], 'retained')
+        self.assertEqual(observed['shipping_repeat']['opened_session']['id'], 'fresh-session')
+        self.assertEqual(observed['shipping_repeat']['response_control']['request_id'], 'second-held-request')
+        self.assertEqual(streams['shipping-repeat-project-open-stdout'], b'opened project')
+        json.dumps(observed)
+
     def test_native_inhibition_flags_are_pinned_to_session_manager_owner(self):
         from scripts.linux_release.installed_cases.native_session import NativeSessionObserver
         native = NativeSessionObserver.__new__(NativeSessionObserver)
@@ -195,6 +220,10 @@ class ShippingLaunchTests(unittest.TestCase):
         self.assertEqual(native.application_unit_state(unit)['active_state'], 'absent')
         native._call.side_effect = [('/org/freedesktop/systemd1/unit/app',), ('active',)]
         with self.assertRaisesRegex(ValueError, 'scope active'):
+            native.application_unit_state(unit)
+        native._call.side_effect = [('/org/freedesktop/systemd1/unit/app',),
+                                    CallFailure('org.freedesktop.DBus.Error.Disconnected')]
+        with self.assertRaises(CaseUnavailable):
             native.application_unit_state(unit)
 
 

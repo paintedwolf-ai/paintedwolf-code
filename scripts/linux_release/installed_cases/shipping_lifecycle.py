@@ -45,7 +45,7 @@ def capture(app, native, *, held):
             'gnome_session_manager': session['owner'], 'gnome_inhibited_actions': actions}
 
 
-def repeat_turn(app, binding, fixture, provider, native, expected_engine, root):
+def repeat_turn(app, binding, fixture, provider, native, expected_engine, root, streams):
     from .desktop_turn import submit_project_turn
     from .desktop_ui import DesktopUI
     from .fixture_turn import await_fixture_reply
@@ -53,23 +53,39 @@ def repeat_turn(app, binding, fixture, provider, native, expected_engine, root):
     from .profile_setup import await_session, require_active
     from .provider import MODEL
 
-    barrier = fixture.begin_next_turn()
-    project = Path(tempfile.mkdtemp(prefix='shipping-repeat-project-', dir=root))
-    opened = run(binding, 'pw', ['open', str(project)], timeout=30)
-    if opened['exit_code'] or opened['timed_out'] or opened['output_limit']:
-        raise ValueError('repeated shipping work refused its fresh project')
-    await_session(app, project, provider['provider_id'], MODEL, status='idle', reason='shipping-repeat-not-opened')
-    submit_project_turn(app)
-    with DesktopUI(app):
-        await_session(app, project, provider['provider_id'], MODEL, reason='shipping-repeat-not-busy')
-        active = require_active(app, project, provider['provider_id'], MODEL)
-        held = barrier.await_held()
-        inhibitor = await_inhibitor(app, native, held=True, expected=expected_engine, deadline=time.monotonic() + 15)
-        during = capture(app, native, held=True)
-        barrier.release()
-        released = barrier.await_response_written()
-        reply = await_fixture_reply(app, project, provider['provider_id'], fixture.acquisition, selected_session=active['id'])
-        after = await_inhibitor(app, native, held=False, expected=expected_engine, deadline=time.monotonic() + 15)
-    return {'project': str(project), 'held': held, 'released': released, 'active': active,
-            'inhibitor': inhibitor, 'during_work': during, 'reply': reply,
-            'after_completion': after, 'scope_after_completion': capture(app, native, held=False)}
+    observed, barrier = {}, None
+    try:
+        barrier = fixture.begin_next_turn()
+        project = Path(tempfile.mkdtemp(prefix='shipping-repeat-project-', dir=root))
+        observed['project'] = str(project)
+        opened = run(binding, 'pw', ['open', str(project)], timeout=30)
+        observed['project_open'] = {key: opened[key] for key in (
+            'launch_identity', 'exit_code', 'timed_out', 'output_limit') if key in opened}
+        for name in ('stdout', 'stderr'):
+            if name in opened:
+                streams['shipping-repeat-project-open-' + name] = opened[name]
+        if opened['exit_code'] or opened['timed_out'] or opened['output_limit']:
+            raise ValueError('repeated shipping work refused its fresh project')
+        observed['opened_session'] = await_session(app, project, provider['provider_id'], MODEL,
+            status='idle', reason='shipping-repeat-not-opened')
+        submit_project_turn(app)
+        with DesktopUI(app):
+            await_session(app, project, provider['provider_id'], MODEL, reason='shipping-repeat-not-busy')
+            active = require_active(app, project, provider['provider_id'], MODEL)
+            observed.update(active=active, held=barrier.await_held())
+            observed['inhibitor'] = await_inhibitor(app, native, held=True,
+                expected=expected_engine, deadline=time.monotonic() + 15)
+            observed['during_work'] = capture(app, native, held=True)
+            barrier.release()
+            observed['released'] = barrier.await_response_written()
+            observed['reply'] = await_fixture_reply(app, project, provider['provider_id'],
+                fixture.acquisition, selected_session=active['id'])
+            observed['after_completion'] = await_inhibitor(app, native, held=False,
+                expected=expected_engine, deadline=time.monotonic() + 15)
+            observed['scope_after_completion'] = capture(app, native, held=False)
+        return observed
+    except (OSError, ValueError, TypeError) as error:
+        if barrier is not None:
+            observed['response_control'] = barrier.snapshot()
+        error.observations = {**getattr(error, 'observations', {}), 'shipping_repeat': observed}
+        raise

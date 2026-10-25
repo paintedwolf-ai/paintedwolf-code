@@ -172,8 +172,13 @@ class NativeSessionObserver:
             refusal = CaseUnavailable('native-application-unit-state-unavailable')
             refusal.observations = {'native_unit_error': error.name}
             raise refusal from None
-        state, = self._call('org.freedesktop.systemd1', path, 'org.freedesktop.DBus.Properties',
-            'Get', ('(ss)', ('org.freedesktop.systemd1.Unit', 'ActiveState')), '(v)', user=True)
+        try:
+            state, = self._call('org.freedesktop.systemd1', path, 'org.freedesktop.DBus.Properties',
+                'Get', ('(ss)', ('org.freedesktop.systemd1.Unit', 'ActiveState')), '(v)', user=True)
+        except CallFailure as error:
+            refusal = CaseUnavailable('native-application-unit-state-unavailable')
+            refusal.observations = {'native_unit_error': error.name}
+            raise refusal from None
         if state != 'inactive':
             raise ValueError('stopped installed application left its scope active')
         return {'unit': unit, 'active_state': state}

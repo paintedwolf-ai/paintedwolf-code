@@ -180,7 +180,7 @@ def execute(binding, capability, case, root):
                                     if mode != 'controlled':
                                         observations['shipping_after_completion'] = capture(app, native, held=False)
                                         observations['shipping_repeat'] = repeat_turn(
-                                            app, launch_binding, fixture, provider, native, captured_engine, root)
+                                            app, launch_binding, fixture, provider, native, captured_engine, root, streams)
                                         if (observations['shipping_repeat']['during_work']['engine_scope']['engine_cgroup']
                                                 != observations['shipping_before_lock']['engine_scope']['engine_cgroup']):
                                             raise ValueError('repeated active work changed the installed engine application unit')
