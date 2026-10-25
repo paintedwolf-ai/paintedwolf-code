@@ -111,16 +111,26 @@ func TestSSESubscriberOverflowIsFullyRecoverableFromStore(t *testing.T) {
 				Message:   after,
 			}))
 
-	select {
-	case env, ok := <-resub:
-		if !ok {
-			t.Fatal("reconnected subscriber closed immediately")
+	deadline := time.NewTimer(10 * time.Second)
+	defer deadline.Stop()
+	for {
+		select {
+		case env, ok := <-resub:
+			if !ok {
+				t.Fatal("reconnected subscriber closed before the published message")
+			}
+			// Project source-watch events may arrive before the message.
+			if env.Topic != wire.EventTopicMessage {
+				continue
+			}
+			var delivered wire.MessageEvent
+			testutil.FailErr(t, "decode reconnected message", json.Unmarshal(env.Data, &delivered))
+			if delivered.SessionID == sess.ID && delivered.Message.ID == after.ID {
+				return
+			}
+		case <-deadline.C:
+			t.Fatal("reconnected subscriber did not receive the published message")
 		}
-		if env.Topic != wire.EventTopicMessage {
-			t.Fatalf("reconnected subscriber topic = %q want message", env.Topic)
-		}
-	case <-time.After(10 * time.Second):
-		t.Fatal("reconnected subscriber received nothing — the drop poisoned the project stream")
 	}
 }
 

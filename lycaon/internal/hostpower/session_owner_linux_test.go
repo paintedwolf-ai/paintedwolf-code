@@ -3,6 +3,7 @@
 package hostpower
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -13,25 +14,23 @@ import (
 
 type providerInhibitor struct{ provider provider }
 
-func (p providerInhibitor) Availability() error     { return availabilityOf([]provider{p.provider}) }
-func (p providerInhibitor) Acquire() (lease, error) { return acquireFrom([]provider{p.provider}) }
+func (p providerInhibitor) Availability() error {
+	ctx, cancel := context.WithTimeout(context.Background(), busDeadline)
+	defer cancel()
+	return p.provider.Check(ctx)
+}
 
-func servePowerOwner(t *testing.T, path string) (*dbus.Conn, *fixturePowerManagement) {
-	t.Helper()
-	bus, err := linuxbus.Connect(t.Context(), path)
-	testutil.FailErr(t, "connect power owner", err)
-	t.Cleanup(func() { _ = bus.Close() })
-	fixture := &fixturePowerManagement{}
-	testutil.FailErr(t, "export power owner", bus.Export(fixture, powerManagementPath, powerManagementInhibit))
-	ownName(t, bus, powerManagementName)
-	return bus, fixture
+func (p providerInhibitor) Acquire() (lease, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), busDeadline)
+	defer cancel()
+	return p.provider.Acquire(ctx)
 }
 
 func awaitOwnerLoss(t *testing.T, held lease) {
 	t.Helper()
 	select {
 	case err := <-held.Done():
-		if err == nil || reasonFor(powerManagementProvider{}, err).Code != ReasonDisconnected {
+		if err == nil || reasonFor(portalProvider{}, err).Code != ReasonDisconnected {
 			t.Fatalf("owner loss result = %v", err)
 		}
 	case <-time.After(2 * time.Second):
@@ -39,10 +38,10 @@ func awaitOwnerLoss(t *testing.T, held lease) {
 	}
 }
 
-func TestPowerOwnerReplacementSettlesConcurrentLeasesAndRecoversWithoutReusingCookies(t *testing.T) {
+func TestPortalOwnerReplacementSettlesConcurrentLeasesAndRecoversWithoutReusingRequests(t *testing.T) {
 	path := fixtureBus(t)
-	previous, old := servePowerOwner(t, path)
-	subject := powerManagementProvider{connect: connectTo(path)}
+	old := servePortal(t, path, false)
+	subject := portalProvider{connect: connectTo(path), appID: testAppID, unitAppID: inOwnUnit}
 	first, err := subject.Acquire(t.Context())
 	testutil.FailErr(t, "first inhibition", err)
 	defer func() { _ = first.Release() }()
@@ -57,17 +56,17 @@ func TestPowerOwnerReplacementSettlesConcurrentLeasesAndRecoversWithoutReusingCo
 	if status := controller.Snapshot(); !status.Inhibiting {
 		t.Fatalf("initial controller status = %+v", status)
 	}
-	_, err = previous.ReleaseName(powerManagementName)
+	_, err = old.server.ReleaseName(portalName)
 	testutil.FailErr(t, "retire previous owner", err)
-	_, current := servePowerOwner(t, path)
+	current := servePortal(t, path, false)
 	awaitOwnerLoss(t, first)
 	awaitOwnerLoss(t, second)
-	testutil.FailErr(t, "release first old cookie", first.Release())
-	testutil.FailErr(t, "release second old cookie", second.Release())
+	testutil.FailErr(t, "release first old request", first.Release())
+	testutil.FailErr(t, "release second old request", second.Release())
 	deadline := time.Now().Add(2 * time.Second)
 	for {
 		current.mu.Lock()
-		acquired := current.application != ""
+		acquired := current.request != ""
 		current.mu.Unlock()
 		if acquired && controller.Snapshot().Inhibiting {
 			break
@@ -78,10 +77,10 @@ func TestPowerOwnerReplacementSettlesConcurrentLeasesAndRecoversWithoutReusingCo
 		time.Sleep(time.Millisecond)
 	}
 	old.mu.Lock()
-	oldReleases := len(old.released)
+	oldReleases := old.releases
 	old.mu.Unlock()
 	current.mu.Lock()
-	newReleases := len(current.released)
+	newReleases := current.releases
 	current.mu.Unlock()
 	if oldReleases != 3 || newReleases != 0 {
 		t.Fatalf("release counts old=%d current=%d, want 3 and 0", oldReleases, newReleases)
@@ -93,8 +92,8 @@ func TestPowerOwnerReplacementSettlesConcurrentLeasesAndRecoversWithoutReusingCo
 	testutil.FailErr(t, "close recovered controller", controller.Close())
 	current.mu.Lock()
 	defer current.mu.Unlock()
-	if len(current.released) != 1 {
-		t.Fatalf("replacement release count = %d", len(current.released))
+	if current.releases != 1 {
+		t.Fatalf("replacement release count = %d", current.releases)
 	}
 }
 
@@ -136,10 +135,10 @@ func TestPortalOwnerReplacementCannotSettleOrReceiveAnotherOwnersRequest(t *test
 
 func TestOwnerExitLeavesReleaseSafeOnTheLiveBus(t *testing.T) {
 	path := fixtureBus(t)
-	owner, _ := servePowerOwner(t, path)
-	held, err := powerManagementProvider{connect: connectTo(path)}.Acquire(t.Context())
+	owner := servePortal(t, path, false)
+	held, err := (portalProvider{connect: connectTo(path), appID: testAppID, unitAppID: inOwnUnit}).Acquire(t.Context())
 	testutil.FailErr(t, "inhibition before service exit", err)
-	testutil.FailErr(t, "close service connection", owner.Close())
+	testutil.FailErr(t, "close service connection", owner.server.Close())
 	awaitOwnerLoss(t, held)
 	testutil.FailErr(t, "release after service exit", held.Release())
 }

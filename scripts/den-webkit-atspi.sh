@@ -56,7 +56,7 @@ ensure_image() {
   local tag
   tag="$(image_tag "$1")"
   if ! "${RUNTIME}" image inspect "${tag}" >/dev/null 2>&1; then
-    "${RUNTIME}" build -q -t "${tag}" -f "${IMAGES}/$1.Containerfile" "${IMAGES}" >/dev/null || return 1
+    "${RUNTIME}" build -t "${tag}" -f "${IMAGES}/$1.Containerfile" "${IMAGES}" >>"${PW_TEST_STAGE_PROGRESS:-/dev/null}" 2>&1 || return 1
   fi
   echo "${tag}"
 }
@@ -108,6 +108,7 @@ for engine in "${ENGINES[@]}"; do
     continue
   fi
   result=0
+  [[ -z "${PW_TEST_STAGE_PROGRESS:-}" ]] || printf '%s\n' "${engine}" >>"${PW_TEST_STAGE_PROGRESS}"
   "${RUNTIME}" run --rm --network host --shm-size 512m \
     -v "${DIR}/harness:/probe:ro" -e EXPECTED="${engine}" -e URL="${LYCAON_E2E_BASE_URL}" \
     "${tag}" sh -c "${SESSION}" || result=$?
