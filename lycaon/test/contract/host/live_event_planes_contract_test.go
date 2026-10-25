@@ -48,8 +48,7 @@ func TestParentOnlyProjectSubscriberCannotSeeWorkerLiveBodies(t *testing.T) {
 	testutil.FailErr(t, "subscribe", err)
 	t.Cleanup(unsub)
 
-	drain := func(wait time.Duration) []api.MessageEvent {
-		_ = wait
+	drain := func() []api.MessageEvent {
 		hub.FlushDebounced()
 		var out []api.MessageEvent
 		for {
@@ -68,7 +67,7 @@ func TestParentOnlyProjectSubscriberCannotSeeWorkerLiveBodies(t *testing.T) {
 			}
 		}
 	}
-	_ = drain(50 * time.Millisecond)
+	_ = drain()
 
 	childMsg := "child-live-1"
 	testutil.FailErr(t, "append child placeholder", st.AppendMessages(ctx, child.ID, api.Message{
@@ -84,7 +83,7 @@ func TestParentOnlyProjectSubscriberCannotSeeWorkerLiveBodies(t *testing.T) {
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	_ = drain(200 * time.Millisecond)
+	_ = drain()
 
 	liveCh, liveUnsub := mgr.Runner.Transcript.Streams.Subscribe(childMsg)
 	t.Cleanup(liveUnsub)
@@ -98,7 +97,7 @@ func TestParentOnlyProjectSubscriberCannotSeeWorkerLiveBodies(t *testing.T) {
 	}
 	mgr.Runner.Transcript.Streams.Flush(ctx, child.ID)
 
-	hubAfterLive := drain(200 * time.Millisecond)
+	hubAfterLive := drain()
 	for _, ev := range hubAfterLive {
 		if ev.SessionID == child.ID && ev.Op == api.MessageChangePatch {
 			t.Fatalf("parent-only hub saw child live patch: content=%q", ev.Message.Content)

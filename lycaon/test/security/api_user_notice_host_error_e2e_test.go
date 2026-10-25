@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -35,7 +34,7 @@ func TestPromptWithoutProviderPublishesRenderedHostError(t *testing.T) {
 	acceptPromptOpenAPI(t, base, sess.ID, `{"text":"hello"}`)
 	waitPromptIdleHTTP(t, base, sess.ID)
 
-	env := waitForSessionHostError(t, hub, 10*time.Second)
+	env := waitForSessionHostError(t, hub)
 	var sessionEv wire.SessionEvent
 	if err := json.Unmarshal(env.Data, &sessionEv); err != nil {
 		t.Fatalf("decode session event: %v", err)
@@ -53,10 +52,10 @@ func TestPromptWithoutProviderPublishesRenderedHostError(t *testing.T) {
 	}
 }
 
-func waitForSessionHostError(t *testing.T, hub *projectHub, deadline time.Duration) wire.EventEnvelope {
+func waitForSessionHostError(t *testing.T, hub *projectHub) wire.EventEnvelope {
 	t.Helper()
 	for t.Context().Err() == nil {
-		env := hub.waitFor(t, wire.EventTopicSession, deadline)
+		env := hub.waitFor(t, wire.EventTopicSession)
 		var raw map[string]any
 		if err := json.Unmarshal(env.Data, &raw); err != nil {
 			t.Fatalf("session data not an object: %v", err)

@@ -8,7 +8,6 @@ import (
 	"runtime"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/cost"
@@ -194,9 +193,8 @@ func (s *gatedFailingStreamLLM) Stream(_ context.Context, _ modelcall.Completion
 }
 
 // Failed calls publish a terminal event.
-func drainTopic(t *testing.T, ch <-chan api.EventEnvelope, wait time.Duration) []api.EventEnvelope {
+func drainTopic(t *testing.T, ch <-chan api.EventEnvelope) []api.EventEnvelope {
 	t.Helper()
-	_ = wait
 	var out []api.EventEnvelope
 	for {
 		select {

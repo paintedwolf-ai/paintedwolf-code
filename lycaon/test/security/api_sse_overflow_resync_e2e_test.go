@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/api"
@@ -57,7 +56,7 @@ func TestSSESubscriberOverflowIsFullyRecoverableFromStore(t *testing.T) {
 	}
 
 	// Recovery is exercised only after a confirmed overflow.
-	delivered := drainUntilClosed(t, stream, 10*time.Second)
+	delivered := drainUntilClosed(t, stream)
 	if delivered >= overflowSessionMessages {
 		t.Fatalf("subscriber received all %d appends without being dropped — "+
 			"buffer size or publish path changed; this test needs a real overflow",
@@ -165,9 +164,8 @@ func pageWholeTranscript(t *testing.T, srv *api.Server, sessionID string) []wire
 }
 
 // Buffered events remain readable after the hub closes a dropped subscriber.
-func drainUntilClosed(t *testing.T, ch <-chan wire.EventEnvelope, timeout time.Duration) int {
+func drainUntilClosed(t *testing.T, ch <-chan wire.EventEnvelope) int {
 	t.Helper()
-	_ = timeout
 	count := 0
 	for {
 		select {

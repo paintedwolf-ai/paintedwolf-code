@@ -156,14 +156,13 @@ func acceptPromptOpenAPI(t *testing.T, base, sessionID, body string) {
 	})
 }
 
-func waitSessionIdleOpenAPI(t *testing.T, base, sessionID string, timeout time.Duration) wire.Session {
+func waitSessionIdleOpenAPI(t *testing.T, base, sessionID string) wire.Session {
 	t.Helper()
-	return waitPromptTurnOpenAPI(t, base, sessionID, len(listMessagesOpenAPI(t, base, map[string]string{"id": sessionID}, http.StatusOK)), time.Now(), timeout)
+	return waitPromptTurnOpenAPI(t, base, sessionID, len(listMessagesOpenAPI(t, base, map[string]string{"id": sessionID}, http.StatusOK)), time.Now())
 }
 
-func waitPromptTurnOpenAPI(t *testing.T, base, sessionID string, baseline int, acceptedAt time.Time, timeout time.Duration) wire.Session {
+func waitPromptTurnOpenAPI(t *testing.T, base, sessionID string, baseline int, acceptedAt time.Time) wire.Session {
 	t.Helper()
-	_ = timeout
 	sawBusy := false
 	for t.Context().Err() == nil {
 		sess := openAPIGetJSON[wire.Session](t, base, "/v1/sessions/{id}",
@@ -191,9 +190,9 @@ func waitPromptTurnOpenAPI(t *testing.T, base, sessionID string, baseline int, a
 	return wire.Session{}
 }
 
-func lastAssistantStreamURL(t *testing.T, base, sessionID string, timeout time.Duration) (messageID, streamURL string) {
+func lastAssistantStreamURL(t *testing.T, base, sessionID string) (messageID, streamURL string) {
 	t.Helper()
-	waitSessionIdleOpenAPI(t, base, sessionID, timeout)
+	waitSessionIdleOpenAPI(t, base, sessionID)
 	msgs := listMessagesOpenAPI(t, base, map[string]string{"id": sessionID}, http.StatusOK)
 	for i := len(msgs) - 1; i >= 0; i-- {
 		if msgs[i].Role == wire.MessageRoleAssistant && strings.TrimSpace(msgs[i].ID) != "" {

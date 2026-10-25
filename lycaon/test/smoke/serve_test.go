@@ -128,8 +128,8 @@ func TestLycaonServeSmoke(t *testing.T) {
 	}
 
 	assertSmokePromptIdentity(t, accepted, operationID)
-	waitSmokePromptComplete(t, baseURL, apiToken, sessionID, accepted.MessageID, "hello", 30*time.Second)
-	assistantID := waitSmokeAssistantMessage(t, baseURL, apiToken, sessionID, 5*time.Second)
+	waitSmokePromptComplete(t, baseURL, apiToken, sessionID, accepted.MessageID, "hello")
+	assistantID := waitSmokeAssistantMessage(t, baseURL, apiToken, sessionID)
 
 	streamReq, err := http.NewRequestWithContext(t.Context(), http.MethodGet, baseURL+"/v1/sessions/"+sessionID+"/stream?message="+assistantID, nil)
 	if err != nil {
@@ -212,9 +212,8 @@ func createSmokeSession(t *testing.T, baseURL, apiToken, projectID string) strin
 	return session.ID
 }
 
-func waitSmokePromptComplete(t *testing.T, baseURL, token, sessionID, messageID, text string, timeout time.Duration) {
+func waitSmokePromptComplete(t *testing.T, baseURL, token, sessionID, messageID, text string) {
 	t.Helper()
-	_ = timeout
 	for t.Context().Err() == nil {
 		pre := smokeSessionStatus(t, baseURL, token, sessionID)
 		msgs := smokeListMessages(t, baseURL, token, sessionID)
@@ -286,9 +285,8 @@ func smokePromptStored(msgs []api.Message, messageID, text string) bool {
 	return false
 }
 
-func waitSmokeAssistantMessage(t *testing.T, baseURL, token, sessionID string, timeout time.Duration) string {
+func waitSmokeAssistantMessage(t *testing.T, baseURL, token, sessionID string) string {
 	t.Helper()
-	_ = timeout
 	for t.Context().Err() == nil {
 		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, baseURL+"/v1/sessions/"+sessionID+"/messages", nil)
 		if err != nil {
