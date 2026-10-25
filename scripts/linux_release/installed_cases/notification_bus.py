@@ -20,6 +20,8 @@ class NotificationBus:
         self.control, self.monitor, self.filter_id = None, None, None
         self.rows, self.lock = deque(), threading.Lock()
         self.error, self.trace, self.monitoring = None, None, False
+        self.owner, self.service_process = None, None
+        self.pending_calls, self.signal_owners = set(), set()
 
     def _call(self, name, signature, values):
         result = self.control.call_sync(BUS, BUS_PATH, BUS, name,
@@ -38,9 +40,10 @@ class NotificationBus:
         self.app.require_running()
         if process_identity(self.ui_process['pid']) != self.ui_process:
             raise CaseFailed('notification native UI process changed identity')
-        owner = self._call('GetNameOwner', '(s)', (SERVICE,))
-        if owner != self.owner or self._pid(owner) != self.service_process:
-            raise CaseFailed('notification service changed its captured bus or process owner')
+        if self.owner is not None:
+            owner = self._call('GetNameOwner', '(s)', (SERVICE,))
+            if owner != self.owner or self._pid(owner) != self.service_process:
+                raise CaseFailed('notification service changed its captured bus or process owner')
         if self.trace is not None and self._pid(self.trace.sender) != self.ui_process:
             raise CaseFailed('notification sender changed its captured native UI process')
 
@@ -51,14 +54,12 @@ class NotificationBus:
             address = session_environment(self.app.observations['session'])['DBUS_SESSION_BUS_ADDRESS']
             flags = Gio.DBusConnectionFlags.AUTHENTICATION_CLIENT | Gio.DBusConnectionFlags.MESSAGE_BUS_CONNECTION
             self.control = Gio.DBusConnection.new_for_address_sync(address, flags, None, None)
-            self.owner = unique(self._call('GetNameOwner', '(s)', (SERVICE,)))
-            self.service_process = self._pid(self.owner)
             self.require_owners()
             self.monitor = Gio.DBusConnection.new_for_address_sync(address, flags, None, None)
             self.filter_id = self.monitor.add_filter(self._filter, None)
             rules = [f"type='method_call',interface='{SERVICE}',member='Notify'",
-                f"type='method_return',sender='{self.owner}'",
-                f"type='signal',sender='{self.owner}',interface='{SERVICE}',path='{PATH}'"]
+                "type='method_return'",
+                f"type='signal',interface='{SERVICE}',path='{PATH}'"]
             self.monitor.call_sync(BUS, BUS_PATH, BUS + '.Monitoring', 'BecomeMonitor',
                 GLib.Variant('(asu)', (rules, 0)), None, Gio.DBusCallFlags.NONE, 1000, None)
             self.monitoring = True
@@ -76,10 +77,21 @@ class NotificationBus:
             kinds = {self.Gio.DBusMessageType.METHOD_CALL: 'call',
                 self.Gio.DBusMessageType.METHOD_RETURN: 'return', self.Gio.DBusMessageType.SIGNAL: 'signal'}
             kind, sender = kinds.get(message.get_message_type()), message.get_sender()
-            relevant = (kind == 'call' and message.get_interface() == SERVICE
-                and message.get_member() == 'Notify' and message.get_destination() in {self.owner, SERVICE}
-                or kind == 'return' and sender == self.owner
-                or kind == 'signal' and sender == self.owner and message.get_interface() == SERVICE)
+            with self.lock:
+                relevant = False
+                if kind == 'call' and message.get_interface() == SERVICE and message.get_member() == 'Notify':
+                    if len(self.pending_calls) >= 16:
+                        raise ValueError('notification observed call count exceeds its bound')
+                    self.pending_calls.add((sender, message.get_serial()))
+                    destination = message.get_destination()
+                    if isinstance(destination, str) and destination.startswith(':'):
+                        self.signal_owners.add(destination)
+                    relevant = True
+                elif kind == 'return' and (message.get_destination(), message.get_reply_serial()) in self.pending_calls:
+                    self.signal_owners.add(sender)
+                    relevant = True
+                elif kind == 'signal' and sender in self.signal_owners and message.get_interface() == SERVICE:
+                    relevant = True
             if relevant:
                 body = message.get_body()
                 if body is None or body.get_size() > 64 << 10:
@@ -109,6 +121,12 @@ class NotificationBus:
             if self.trace is None:
                 if row['type'] != 'call' or self._pid(row['sender']) != self.ui_process:
                     continue
+                owner = unique(self._call('GetNameOwner', '(s)', (SERVICE,)))
+                if row['destination'] not in {owner, SERVICE}:
+                    raise CaseFailed('actual notification request has a replaced service destination')
+                if self.owner is not None and owner != self.owner:
+                    raise CaseFailed('notification service changed before its real delivery')
+                self.owner, self.service_process = owner, self._pid(owner)
                 self.trace = DeliveryTrace(row['sender'], self.owner, self.desktop_entry)
             if row['type'] == 'call' and row['sender'] != self.trace.sender:
                 continue
@@ -140,7 +158,7 @@ class NotificationBus:
         raise CaseUnavailable('real-notification-default-action-was-not-observed-before-deadline')
 
     def snapshot(self):
-        return {'service_process': dict(self.service_process), 'ui_process': dict(self.ui_process),
+        return {'service_process': dict(self.service_process) if self.service_process is not None else None, 'ui_process': dict(self.ui_process),
             'trace': self.trace.snapshot() if self.trace is not None else None}
 
     def close(self):
