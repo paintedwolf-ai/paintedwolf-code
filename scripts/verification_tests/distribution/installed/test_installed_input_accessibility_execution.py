@@ -32,6 +32,9 @@ class AccessibleAncestorTests(unittest.TestCase):
         entry.get_parent.side_effect = [frame, foreign]
         with self.assertRaises(ValueError):
             accessibility.capture(entry, [({}, frame)])
+        entry.get_parent.side_effect = [frame, None]
+        with self.assertRaises(accessibility.InventoryChanged):
+            accessibility.capture(entry, [({}, frame)])
         entry.get_parent.side_effect = [frame, FileNotFoundError()]
         with self.assertRaises(OSError):
             accessibility.capture(entry, [({}, frame)])
@@ -42,6 +45,9 @@ class AccessibleAncestorTests(unittest.TestCase):
         entry.get_process_id.side_effect = [101, 999]
         with self.assertRaises(ValueError):
             accessibility.capture(entry, [({}, frame)])
+        for missing in (None, SimpleNamespace(app=None)):
+            with self.assertRaises(accessibility.InventoryChanged):
+                accessibility.identity(missing)
         for value in ({'pid': 100}, {'bus_name': 'title', 'path': '/frame', 'pid': 100},
                       {'bus_name': ':1.2', 'path': 'frame', 'pid': True}):
             with self.assertRaises(ValueError):

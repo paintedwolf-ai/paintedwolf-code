@@ -66,6 +66,8 @@ class PresencePrerequisiteTests(unittest.TestCase):
         self.app.wait_ready.assert_called_once()
         self.app.stop.assert_called_once()
         self.policy.__exit__.assert_called_once()
+        self.ui.click.assert_any_call('Widen window to restore sidebar')
+        self.ui.click.assert_any_call('Project configuration')
         self.ui.click.assert_any_call('Secrets', tab=True)
         self.ui.click.assert_any_call('Reveal value')
         self.reservation.check.assert_called_once_with(empty=True)
