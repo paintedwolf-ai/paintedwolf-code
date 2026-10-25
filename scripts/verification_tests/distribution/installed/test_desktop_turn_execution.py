@@ -71,7 +71,7 @@ class DesktopTurnTests(unittest.TestCase):
         nodes = [Mock(get_process_id=Mock(return_value=12)) for _ in range(4)]
         for node in nodes:
             node.queryAction.return_value = SimpleNamespace(nActions=1, doAction=Mock(return_value=True))
-        ui = Mock(api=SimpleNamespace(ROLE_PUSH_BUTTON=43, ROLE_MENU_ITEM=34))
+        ui = Mock(api=SimpleNamespace(ROLE_COMBO_BOX=11, ROLE_PUSH_BUTTON=43, ROLE_MENU_ITEM=34))
         ui.windows.return_value = []
         ui.find.side_effect = [nodes[0], nodes[1], nodes[1], nodes[2], nodes[3]]
         nodes[1].queryAction.side_effect = [NotImplementedError('mounting'), nodes[1].queryAction.return_value]
@@ -86,7 +86,7 @@ class DesktopTurnTests(unittest.TestCase):
         prepare.assert_called_once_with(app, ui)
         retry.assert_called_once_with(app, unittest.mock.ANY, interface_mounting=True)
         self.assertEqual([call.args for call in ui.find.call_args_list], [
-            (43, 'App menu'), (34, 'Window'), (34, 'Window'), (34, 'Maximize'), (43, 'Project configuration')])
+            (11, 'App menu'), (34, 'Window'), (34, 'Window'), (34, 'Maximize'), (43, 'Project configuration')])
         for node in nodes:
             node.queryAction.return_value.doAction.assert_called_once_with(0)
         self.assertEqual([row['name'] for row in witness['maximize_actions']], ['App menu', 'Window', 'Maximize'])
@@ -99,7 +99,7 @@ class DesktopTurnTests(unittest.TestCase):
         frame = Mock(get_process_id=Mock(return_value=11))
         node = Mock(get_process_id=Mock(return_value=12))
         node.queryAction.return_value = SimpleNamespace(nActions=1, doAction=Mock(side_effect=RuntimeError('after')))
-        ui = Mock(api=SimpleNamespace(ROLE_PUSH_BUTTON=43, ROLE_MENU_ITEM=34), find=Mock(return_value=node))
+        ui = Mock(api=SimpleNamespace(ROLE_COMBO_BOX=11, ROLE_PUSH_BUTTON=43, ROLE_MENU_ITEM=34), find=Mock(return_value=node))
         ui.windows.return_value = []
         chain = [{'bus_name': ':1.2', 'path': '/control', 'pid': 12}, {'bus_name': ':1.1', 'path': '/frame', 'pid': 11}]
         with patch.object(owner, 'prepare_composer'), \
@@ -112,4 +112,4 @@ class DesktopTurnTests(unittest.TestCase):
         retry.assert_not_called()
         node.queryAction.return_value.doAction.assert_called_once_with(0)
         self.assertEqual(refusal.exception.observations['project_configuration_mutation'],
-                         {'phase': 'do-action', 'name': 'App menu', 'role': 43, 'exception_type': 'RuntimeError'})
+                         {'phase': 'do-action', 'name': 'App menu', 'role': 11, 'exception_type': 'RuntimeError'})

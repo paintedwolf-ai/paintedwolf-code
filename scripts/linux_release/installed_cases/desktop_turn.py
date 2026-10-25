@@ -24,7 +24,7 @@ def prepare_composer(app, ui):
 
 def open_project_configuration(app, ui) -> dict:
     prepare_composer(app, ui)
-    controls = [(ui.api.ROLE_PUSH_BUTTON, 'App menu'), (ui.api.ROLE_MENU_ITEM, 'Window'),
+    controls = [(ui.api.ROLE_COMBO_BOX, 'App menu'), (ui.api.ROLE_MENU_ITEM, 'Window'),
                 (ui.api.ROLE_MENU_ITEM, 'Maximize'), (ui.api.ROLE_PUSH_BUTTON, 'Project configuration')]
     root, actions = app.observations['launch_identity'], []
     for role, name in controls:
