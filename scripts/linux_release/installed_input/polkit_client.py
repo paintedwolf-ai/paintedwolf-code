@@ -37,7 +37,7 @@ class NativePolkitControl:
         record = {'request': pending}
         self.records.append(record)
         self.mailbox.write('request.json', pending)
-        deadline = time.monotonic() + (65 if operation == polkit_control.START else 40)
+        deadline = time.monotonic() + (65 if operation in {polkit_control.START, polkit_control.START_STALE} else 40)
         try:
             while True:
                 self.app.require_running()
@@ -55,11 +55,11 @@ class NativePolkitControl:
             self.failed = True
             raise
 
-    def start(self):
+    def start(self, *, stale=False):
         if self.started:
             raise ValueError('Polkit client cannot replay its initial capture')
         self.started = True
-        return self._request(polkit_control.START, native_session=self.session.observe(),
+        return self._request(polkit_control.START_STALE if stale else polkit_control.START, native_session=self.session.observe(),
             runtime=polkit_runtime.selection(self.app, self.native))
 
     def bind(self, attempt):

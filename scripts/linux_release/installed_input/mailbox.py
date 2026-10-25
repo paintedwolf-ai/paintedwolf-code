@@ -252,7 +252,7 @@ def serve(execution: dict, vm_id: str):
                     raise ValueError('native unlock requires its attached publication')
                 pending = mailbox.read('request.json')
                 unlock_wire.request(pending, execution)
-                if (pending['operation'] != unlock_wire.PURPOSE or command['request_sha256'] != unlock_wire.digest(pending)
+                if (pending['operation'] not in {unlock_wire.PURPOSE, unlock_wire.STALE_UNLOCK} or command['request_sha256'] != unlock_wire.digest(pending)
                         or acknowledged == unlock_wire.digest(pending) or mailbox.read('ack.json') is not None):
                     raise ValueError('native unlock cannot replay or replace its pending request')
                 if prepared is None or not prepare_delivered or unlock_used or prepared['account'] != pending['account']:
@@ -261,7 +261,7 @@ def serve(execution: dict, vm_id: str):
                 unlock_used = True
                 from .unlock_guest import serve_mailbox
                 serve_mailbox(pending, execution, vm_id, mailbox)
-                credential_disabled = True
+                credential_disabled = pending['operation'] == unlock_wire.PURPOSE
                 continue
             elif set(command) == {'operation', 'acknowledgment'} and command['operation'] == 'ack':
                 if publication is None or attached_publication() != publication:
@@ -276,7 +276,12 @@ def serve(execution: dict, vm_id: str):
                 elif pending.get('operation') in unlock_wire.OPERATIONS:
                     unlock_wire.request(pending, execution)
                     unlock_wire.acknowledgment(command['acknowledgment'], pending, vm_id)
-                    if pending['operation'] == unlock_wire.PREPARE:
+                    if pending['operation'] == unlock_wire.STALE_PREPARE:
+                        if prepared is not None or prepare_delivered or unlock_used:
+                            raise ValueError('stale credential reservation cannot replay')
+                        prepared = pending
+                        prepare_delivered = True
+                    elif pending['operation'] == unlock_wire.PREPARE:
                         if not prepare_delivered or prepared != pending or unlock_used:
                             raise ValueError('native credential preparation acknowledgment precedes its private delivery')
                     elif not unlock_used:

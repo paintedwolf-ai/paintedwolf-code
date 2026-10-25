@@ -13,7 +13,7 @@ from ..installed_cases.records import CaseUnavailable
 
 
 class NativeUnlockControl:
-    def __init__(self, execution, vm_id, lock):
+    def __init__(self, execution, vm_id, lock, *, stale=False):
         self.execution, self.vm_id, self.lock = execution, vm_id, lock
         account = pwd.getpwuid(os.getuid())
         self.account = {'name': account.pw_name, 'uid': account.pw_uid,
@@ -23,6 +23,7 @@ class NativeUnlockControl:
         self.mailbox = Mailbox(execution, vm_id)
         self.mailbox.attach()
         self.prepared, self.used = None, False
+        self.stale = stale
 
     def _request(self, operation):
         pending = unlock_wire.request({'format_version': 1, 'binding': self.execution,
@@ -45,14 +46,14 @@ class NativeUnlockControl:
     def prepare(self):
         if self.prepared is not None or self.used:
             raise ValueError('OS fixture credential preparation cannot replay')
-        self.prepared = self._request(unlock_wire.PREPARE)
+        self.prepared = self._request(unlock_wire.STALE_PREPARE if self.stale else unlock_wire.PREPARE)
         return self.prepared
 
     def unlock(self):
         if self.prepared is None or self.used:
             raise ValueError('native unlock requires its one-use prepared custody')
         self.used = True
-        result = self._request(unlock_wire.PURPOSE)
+        result = self._request(unlock_wire.STALE_UNLOCK if self.stale else unlock_wire.PURPOSE)
         final = self.lock.observe()
         session_wire.same_runtime(self.prepared['request']['native_session'], final)
         if any(final['native_session'][key] for key in ('locked_hint', 'locker_active')):

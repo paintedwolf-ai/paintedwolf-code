@@ -192,11 +192,8 @@ class LockMonitorExecutionTests(unittest.TestCase):
             lock_monitor, 'NativeSessionObserver', side_effect=[initial_native, fresh_native]))
         self.stack.enter_context(patch.object(
             lock_monitor, 'NativeLockObserver', side_effect=[initial_lock, fresh_lock]))
-        self.stack.enter_context(patch.object(lock_monitor, 'presence_dialog', side_effect=dialogs))
-        if post_confirm_alerts is None:
-            self.stack.enter_context(patch.object(lock_monitor, 'alerts', return_value=[]))
-        else:
-            self.stack.enter_context(patch.object(lock_monitor, 'alerts', side_effect=post_confirm_alerts))
+        from linux_release.installed_cases import presence_system
+        self.stack.enter_context(patch.object(presence_system, 'run_stale_reveal', return_value={}))
         for target_mod, attr, value in (
                 (lock_monitor, 'protected_launcher', {}),
                 (lock_monitor, 'graphical_session', SESSION),
@@ -215,12 +212,10 @@ class LockMonitorExecutionTests(unittest.TestCase):
                     'timed_out': False, 'output_limit': False,
                     'stdout': b'opened\n', 'stderr': b''}),
                 (lock_monitor, 'perform_transition', {'operation': 'session-lock-v1', 'completed': True}),
-                (lock_monitor, 'await_session', {'id': 'sess-1', 'status': 'idle'}),
+                (lock_monitor, 'await_session', {'id': 'sess-1', 'project_id': 'project-1', 'status': 'idle'}),
                 (lock_monitor, 'prepare_secret', {'phase': 'ready', 'reveal_ready': True}),
                 (lock_monitor, 'submit_project_turn', None),
-                (lock_monitor, 'await_fixture_reply', {'settled': True}),
-                (lock_monitor, 'PresencePolicy', fake_policy),
-                (lock_monitor, 'await_alert', default_alert)):
+                (lock_monitor, 'await_fixture_reply', {'settled': True})):
             self.stack.enter_context(patch.object(target_mod, attr, return_value=value))
         disable_mock = self.stack.enter_context(patch.object(
             lock_monitor, 'run_privileged_disable', return_value={'disabled': True, 'shadow_locked': True}))
@@ -250,7 +245,7 @@ class LockMonitorExecutionTests(unittest.TestCase):
         self.assertTrue(obs['during_lock']['locked_hint'])
         self.assertFalse(obs['after_unlock']['locked_hint'])
         self.assertFalse(obs['step_away_unlocked']['latest']['screensaver_locked'])
-        self.assertEqual(obs['opened_session'], {'id': 'sess-1', 'status': 'idle'})
+        self.assertEqual(obs['opened_session'], {'id': 'sess-1', 'project_id': 'project-1', 'status': 'idle'})
         self.assertEqual(obs['settled_reply'], {'settled': True})
         disable_mock.assert_called_once_with(ACCOUNT, vm_id='owned')
 
@@ -302,39 +297,12 @@ class LockMonitorExecutionTests(unittest.TestCase):
         self.assertEqual(obs['reason'], 'initial-lock-state-lock-unlock-and-monitor-owner-recovery-verified')
         disable_mock.assert_called_once_with(ACCOUNT, vm_id='owned')
 
-    def test_lock_during_presence_does_not_pass_from_alerts_alone(self):
-        outcome, disable_mock, fake_policy, _ = self._run_case('lock-during-presence', dialog_surfaces=[None])
+    def test_lock_during_presence_requires_real_system_stale_and_fresh_witnesses(self):
+        outcome, disable, policy, ui = self._run_case('lock-during-presence')
         self.assertEqual(outcome[4], 'unverified')
-        obs = outcome[5]
-        self.assertEqual(obs['pre_lock_alert'], {'role': 2, 'visible': True, 'attributes': []})
-        self.assertTrue(obs['during_lock']['locked_hint'])
-        self.assertFalse(obs['after_unlock']['locked_hint'])
-        self.assertEqual(obs['reveal_alert'], {'role': 2, 'visible': True, 'attributes': []})
-        self.assertFalse(obs['stale_challenge_refusal_verified'])
-        self.assertFalse(obs['fresh_confirmation_verified'])
-        self.assertEqual(obs['presence_policy'], {'rule_installed': True, 'restored': True})
-        fake_policy.__enter__.assert_called_once_with()
-        fake_policy.__exit__.assert_called_once()
-        disable_mock.assert_called_once_with(ACCOUNT, vm_id='owned')
-
-    def test_legacy_app_password_dialog_is_retained_but_never_submitted_as_system_auth(self):
-        pre_surface = {'kind': 'presence-dialog', 'identity': self._dialog_identity(2), 'active': True}
-        challenge = {'challenge_id': '00000000-0000-4000-8000-000000000001',
-                     'purpose': 'reveal', 'window_label': 'main', 'generation': 0}
-        outcome, disable, policy, ui = self._run_case(
-            'lock-during-presence', dialog_surfaces=[pre_surface], challenge_rows=(challenge,),
-            native_input_extra={'private_password': 'A' * 40})
-        self.assertEqual(outcome[4], 'unverified')
-        observations = outcome[5]
-        self.assertEqual(observations['pre_lock_confirmation'], pre_surface)
-        self.assertEqual(observations['pre_lock_challenge'], challenge)
-        self.assertFalse(observations['fresh_confirmation_verified'])
-        self.assertFalse(observations['system_authentication_verified'])
-        self.assertFalse(observations['stale_challenge_refusal_verified'])
-        self.assertEqual(observations['reason'], 'legacy-app-password-dialog-cannot-qualify-system-authentication')
-        self.assertNotIn('A' * 40, json.dumps(observations))
-        self.assertEqual([call.args[0] for call in ui.click.call_args_list], ['Reveal value'])
-        policy.__exit__.assert_called_once()
+        self.assertNotIn('presence_policy', outcome[5])
+        policy.__enter__.assert_not_called()
+        policy.__exit__.assert_not_called()
         disable.assert_called_once_with(ACCOUNT, vm_id='owned')
 
     def test_controller_verifies_deliveries_for_initial_lock_state_and_lock_during_presence(self):

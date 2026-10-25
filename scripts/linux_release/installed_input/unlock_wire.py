@@ -98,7 +98,9 @@ def read_secret_frame(descriptor=0, *, timeout=5):
 
 
 PREPARE = 'native-gnome-qa-prepare-v1'
-OPERATIONS = {PREPARE, PURPOSE}
+STALE_PREPARE = 'native-stale-qa-prepare-v1'
+STALE_UNLOCK = 'native-stale-qa-unlock-v1'
+OPERATIONS = {PREPARE, PURPOSE, STALE_PREPARE, STALE_UNLOCK}
 
 
 def request(value, execution):
@@ -118,7 +120,7 @@ def request(value, execution):
             or str(account['uid']) != native['session']['User']
             or account['home'] != '/home/' + account['name']):
         raise ValueError('OS input has no exact dedicated QA account identity')
-    expected = value['operation'] == PURPOSE
+    expected = value['operation'] in {PURPOSE, STALE_UNLOCK}
     if any(native[key] is not expected for key in ('locked_hint', 'locker_active')):
         raise ValueError('OS input request differs from its required native lock phase')
     return value
@@ -138,13 +140,13 @@ def acknowledgment(value, pending, vm_id):
             or not isinstance(vm_id, str) or not protocol.IDENTIFIER.fullmatch(vm_id)):
         raise ValueError('OS input acknowledgment differs from its exact request and VM')
     result = value['result']
-    if pending['operation'] == PREPARE:
+    if pending['operation'] in {PREPARE, STALE_PREPARE}:
         if (not isinstance(result, dict) or set(result) != {'prepared', 'account'}
                 or result['prepared'] is not True or result['account'] != pending['account']):
             raise ValueError('OS input has no exact prepared credential custody')
     else:
         if (not isinstance(result, dict) or set(result) != {'purpose', 'transaction_id', 'delivered',
-                'text_readback', 'session_after'} or result['purpose'] != PURPOSE
+                'text_readback', 'session_after'} or result['purpose'] != pending['operation']
                 or result['transaction_id'] != pending['transaction_id']
                 or result['delivered'] is not True or result['text_readback'] is not False):
             raise ValueError('OS input has no exact private transaction completion')

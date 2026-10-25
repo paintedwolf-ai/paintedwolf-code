@@ -10,14 +10,14 @@ from ..installed_cases.records import CaseUnavailable
 def exchange(pipe, observer, execution, pending, *, timeout=15):
     execution = protocol.binding(execution)
     unlock_wire.request(pending, execution)
-    if pending['operation'] != unlock_wire.PURPOSE:
+    if pending['operation'] not in {unlock_wire.PURPOSE, unlock_wire.STALE_UNLOCK}:
         raise ValueError('native unlock endpoint has a foreign phase')
     if type(timeout) not in {int, float} or not 0 < timeout <= 30:
         raise ValueError('native unlock requires its bounded target deadline')
     deadline = time.monotonic() + timeout
     request = pipe.receive_metadata()
     if (not isinstance(request, dict) or set(request) != {'purpose', 'binding', 'transaction_id', 'phase'}
-            or request['purpose'] != unlock_wire.PURPOSE or request['binding'] != execution
+            or request['purpose'] != pending['operation'] or request['binding'] != execution
             or request['phase'] != 'prompt' or request['transaction_id'] != pending['transaction_id']):
         raise ValueError('native unlock endpoint requires its closed current execution')
     protocol.nonce(request['transaction_id'])
@@ -68,7 +68,7 @@ def exchange(pipe, observer, execution, pending, *, timeout=15):
         session_wire.same_runtime(initial['session'], final)
         if not any(final['native_session'][key] for key in ('locked_hint', 'locker_active')):
             pipe.send_metadata({**envelope, 'phase': 'unlocked', 'session_after': final})
-            return {'purpose': unlock_wire.PURPOSE, 'transaction_id': envelope['transaction_id'],
+            return {'purpose': pending['operation'], 'transaction_id': envelope['transaction_id'],
                     'before': initial, 'session_after': final, 'unlocked': True, 'text_readback': False}
         if time.monotonic() >= deadline:
             raise CaseUnavailable('native-unlock-did-not-clear-both-independent-lock-flags')
@@ -152,7 +152,7 @@ def serve_mailbox(pending, execution, vm_id, mailbox):
     from .session_lock import NativeLockObserver
     from ..installed_environment import graphical_session
     unlock_wire.request(pending, execution)
-    if pending['operation'] != unlock_wire.PURPOSE or mailbox.read('request.json') != pending:
+    if pending['operation'] not in {unlock_wire.PURPOSE, unlock_wire.STALE_UNLOCK} or mailbox.read('request.json') != pending:
         raise ValueError('native unlock lost its exact published request')
     mailbox.attach()
     session = graphical_session()
@@ -179,4 +179,5 @@ def serve_mailbox(pending, execution, vm_id, mailbox):
         finally:
             for stream, blocking in zip((streams.stdin, streams.stdout), previous):
                 os.set_blocking(stream.fileno(), blocking)
-            unlock_account.run_privileged_disable(pending['account'], vm_id=vm_id)
+            if pending['operation'] == unlock_wire.PURPOSE:
+                unlock_account.run_privileged_disable(pending['account'], vm_id=vm_id)

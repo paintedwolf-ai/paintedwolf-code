@@ -72,5 +72,48 @@ class InstalledSystemPresenceTests(unittest.TestCase):
         self.assertFalse(failed.exception.record['system_authentication']['system_authentication_verified'])
 
 
+    def test_stale_native_refusal_and_zero_host_release_are_separate_from_fresh_reveal(self):
+        from scripts.linux_release.installed_cases import lock_monitor
+        attempt = target()['pending']['attempt']
+        before = {'secret_id': 'selected', 'person_id': 'person', 'reveals': []}
+        challenge = attempt['challenge']
+        invalidation = {'challenge_id': challenge['challenge_id'],
+                        'generation_before': challenge['step_away_generation']}
+        for changed in ('none', 'audit', 'refusal', 'authentication', 'invalidation'):
+            with self.subTest(changed=changed), ExitStack() as stack:
+                control = Mock(records=[])
+                witness = {'system_authenticated': changed != 'authentication'}
+                outcome = {'status': 'refused', 'code': 'presence_denied',
+                           'resolution': None if changed == 'refusal' else 'step_away'}
+                after = {**before, 'reveals': [{'unexpected': True}]} if changed == 'audit' else before
+                observations = {}
+                for key, value in {
+                    'native_caller': Mock(return_value={}), 'attempt_rows': Mock(return_value=[]),
+                    'confirmation_rows': Mock(return_value=[]), 'NativePolkitControl': Mock(return_value=control),
+                    'reveal_audit': Mock(side_effect=[before, after]), 'await_attempt': Mock(return_value=attempt),
+                    'await_observation': Mock(side_effect=[{'attempt': attempt}, witness]),
+                    'await_confirmation': Mock(return_value=outcome),
+                    'run_reveal': Mock(return_value={'host_release_verified': True,
+                                                   'system_authentication_verified': True})}.items():
+                    stack.enter_context(patch.object(system, key, value))
+                locked = stack.enter_context(patch.object(lock_monitor, 'lock_and_unlock'))
+                stack.enter_context(patch.object(lock_monitor, 'step_away_invalidations',
+                    return_value=[] if changed == 'invalidation' else [invalidation]))
+                arguments = (Mock(), Mock(), 'project', {'binding': {}, 'vm_id': 'owned'},
+                             Mock(), Mock(), Mock(), observations, Mock())
+                if changed != 'none':
+                    with self.assertRaises(system.CaseFailed): system.run_stale_reveal(*arguments)
+                    system.run_reveal.assert_not_called()
+                else:
+                    record = system.run_stale_reveal(*arguments)
+                    self.assertTrue(record['stale_challenge_refusal_verified'])
+                    self.assertTrue(observations['fresh_confirmation_verified'])
+                    system.run_reveal.assert_called_once()
+                control.start.assert_called_once_with(stale=True)
+                locked.assert_called_once()
+                control.deliver.assert_called_once_with()
+                control.close.assert_called_once()
+
+
 if __name__ == '__main__':
     unittest.main()

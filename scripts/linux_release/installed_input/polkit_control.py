@@ -14,10 +14,11 @@ from .polkit_wire import validate
 from .unlock_account import validate_account_shape
 
 START = 'native-polkit-start-v1'
+START_STALE = 'native-polkit-stale-start-v1'
 BIND = 'native-polkit-bind-v1'
 OBSERVE = 'native-polkit-observe-v1'
 CLOSE = 'native-polkit-close-v1'
-FIELDS = {START: {'native_session', 'runtime'}, BIND: {'attempt'}, OBSERVE: set(),
+FIELDS = {START: {'native_session', 'runtime'}, START_STALE: {'native_session', 'runtime'}, BIND: {'attempt'}, OBSERVE: set(),
           PURPOSE: set(), CANCEL: set(), CLOSE: set()}
 OPERATIONS = frozenset(FIELDS)
 BASE = {'format_version', 'binding', 'transaction_id', 'session_id', 'operation', 'account'}
@@ -32,7 +33,7 @@ def request(value, execution):
     protocol.nonce(value['transaction_id'])
     protocol.nonce(value['session_id'])
     validate_account_shape(value['account'])
-    if operation == START:
+    if operation in {START, START_STALE}:
         native = session_wire.native_session(value['native_session'])
         if (native['session']['User'] != str(value['account']['uid'])
                 or native['locked_hint'] or native['locker_active']
@@ -56,7 +57,7 @@ def acknowledgment(value, pending, vm_id):
         raise ValueError('Polkit acknowledgment differs from its selected request')
     result = value['result']
     operation = pending['operation']
-    if operation == START and (set(result) != {'monitoring', 'capture'}
+    if operation in {START, START_STALE} and (set(result) != {'monitoring', 'capture'}
             or result['monitoring'] is not True or not isinstance(result['capture'], dict)):
         raise ValueError('Polkit start has no captured observer prerequisite')
     if operation == CLOSE and result != {'closed': True, 'credential_disabled': True}:
@@ -73,12 +74,13 @@ def acknowledgment(value, pending, vm_id):
 
 class Session:
     """Own cleanup independently of a failed monitor, transport or physical event."""
-    def __init__(self, actor, target, execution, *, checkout=None):
+    def __init__(self, actor, target, execution, *, checkout=None, stale_credential=None):
         self.actor, self.target, self.execution = actor, target, protocol.binding(execution)
         self.checkout = Path(checkout) if checkout is not None else Path(__file__).resolve().parents[3]
         self.identity = self.credential = self.observer = self.stage = None
         self.lock = threading.RLock()
         self.transactions = set()
+        self.stale_credential = stale_credential
         self.failed = self.closed = self.bound = False
 
     def handle(self, pending, deliver):
@@ -100,19 +102,27 @@ class Session:
             raise ValueError('Polkit lifecycle cannot resume uncertain custody')
         if self.identity is not None and self.identity != identity:
             raise ValueError('Polkit lifecycle replaced its selected account or session')
-        if operation != START and self.identity is None:
+        if operation not in {START, START_STALE} and self.identity is None:
             raise ValueError('Polkit lifecycle requires its initial observer capture')
         try:
             if operation != CLOSE:
                 self._live()
-            if operation == START:
+            if operation in {START, START_STALE}:
                 if self.identity is not None:
                     raise ValueError('Polkit lifecycle cannot restart its observer')
                 self.identity = identity
                 capture = polkit_capture.prepare(self.actor, self.target, self.execution, self.checkout)
                 self._live()
-                self.credential = Credential(self.actor, self.target, self.execution, identity['account'])
-                self.credential.prepare()
+                if operation == START_STALE:
+                    if self.stale_credential is None:
+                        raise ValueError('stale Polkit requires its Bridge-owned credential lifetime')
+                    self.stale_credential.bind(identity['account'], pending['native_session'])
+                    self.credential = self.stale_credential
+                else:
+                    if self.stale_credential is not None:
+                        raise ValueError('stale credential cannot enter an independent Polkit session')
+                    self.credential = Credential(self.actor, self.target, self.execution, identity['account'])
+                    self.credential.prepare()
                 self._live()
                 self.observer = Proxy(self.actor, self.target, self.execution, identity['account'])
                 session = {**pending['native_session']['session'], 'Active': 'yes', 'Remote': 'no', 'Desktop': 'GNOME'}
@@ -125,14 +135,24 @@ class Session:
                 if self.bound:
                     raise ValueError('Polkit lifecycle cannot rebind a selected call')
                 self.bound = True
-                return {'observation': self.observer.bind(pending['attempt'])}
+                observation = self.observer.bind(pending['attempt'])
+                if self.stale_credential is not None and observation is not None:
+                    self.stale_credential.pending(observation)
+                return {'observation': observation}
             if not self.bound:
                 raise ValueError('Polkit lifecycle requires its actual native call selection')
             if operation == OBSERVE:
-                return {'observation': self.observer.observe()}
+                observation = self.observer.observe()
+                if (self.stale_credential is not None and observation is not None
+                        and 'host_release_verified' not in observation):
+                    self.stale_credential.pending(observation)
+                return {'observation': observation}
             if self.stage is not None:
                 raise ValueError('Polkit lifecycle cannot repeat authenticate or cancel delivery')
-            secret = self.credential.take() if operation == PURPOSE else None
+            secret = None
+            if operation == PURPOSE:
+                secret = (self.stale_credential.polkit_claim(self.observer.observe())
+                          if self.stale_credential is not None else self.credential.take())
             try:
                 self.stage = Stage(self.actor, self.execution, identity['account'], secret,
                                    observer=self.observer, purpose=operation)

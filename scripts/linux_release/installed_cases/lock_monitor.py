@@ -11,17 +11,14 @@ from .desktop_ui import DesktopUI, interactive_window
 from .fixture_turn import await_fixture_reply
 from .fresh_profile import Reservation
 from .native_session import NativeSessionObserver
-from .polkit_policy import PresencePolicy
-from .presence_alert import alerts, await_alert
 from .process import run
 from .profile_setup import await_session
 from .provider import MODEL, ProviderFixture
 from .provider_setup import configure_provider
 from .presence_setup import prepare_secret
 from .records import CaseFailed, CaseUnavailable, retain
-from ..installed_input import session_wire, surface_wire
+from ..installed_input import session_wire
 from ..installed_input.session_lock import NativeLockObserver
-from ..installed_input.surface import FrameObserver
 from ..installed_input.transition_guest import perform_transition
 from ..installed_input.unlock_account import run_privileged_disable, validate_account_shape
 from ..installed_input.unlock_control import NativeUnlockControl
@@ -244,42 +241,6 @@ def observe_monitor_owner_recovery(app, session: dict) -> dict | None:
     return None
 
 
-def presence_dialog(app, ui) -> dict | None:
-    with FrameObserver(app, ui) as observer:
-        dialogs = [r for r in observer.observe()['surfaces'] if r['kind'] == 'presence-dialog' and surface_wire.active(r)]
-    return dialogs[0] if len(dialogs) == 1 else None
-
-
-def run_lock_during_presence(app, ui, execution: dict, vm_id: str,
-                             native, lock, unlock_ctl, observations: dict, reservation):
-    observations.update(stale_challenge_refusal_verified=False, fresh_confirmation_verified=False,
-                        system_authentication_verified=False)
-    prior_challenges = len(step_away_challenges(app))
-    ui.click('Reveal value')
-    reservation.check_launch(app)
-    pre_lock_dialog = presence_dialog(app, ui)
-    if pre_lock_dialog is not None:
-        observations['pre_lock_confirmation'] = pre_lock_dialog
-        challenges = step_away_challenges(app)
-        pre_lock_challenge = challenges[-1] if len(challenges) > prior_challenges else None
-        observations['pre_lock_challenge'] = pre_lock_challenge
-        observations.update(
-            stale_challenge_refusal_verified=False,
-            fresh_confirmation_verified=False,
-            system_authentication_verified=False,
-            reason='legacy-app-password-dialog-cannot-qualify-system-authentication')
-        return
-    observations['pre_lock_alert'] = await_alert(app, ui)
-    lock_and_unlock(app, execution, vm_id, native, lock, unlock_ctl, observations)
-    observations['post_unlock_activation'] = activate_visible_frame(app, ui)
-    reservation.check_launch(app)
-    ui.click('Reveal value')
-    observations['reveal_alert'] = await_alert(app, ui)
-    reservation.check_launch(app)
-    observations.update(stale_challenge_refusal_verified=False, fresh_confirmation_verified=False, reason=(
-        'pre-and-post-unlock-presence-alerts-captured-stale-challenge-refusal-and-fresh-completion-unverified'))
-
-
 def run_initial_lock_state(app, execution: dict, vm_id: str, native, lock, unlock_ctl,
                            observations: dict, provider: dict, fixture, project: Path, reservation) -> str:
     lock_and_unlock(app, execution, vm_id, native, lock, unlock_ctl, observations)
@@ -311,7 +272,7 @@ def execute(binding: dict, capability: str, case: str, root: Path) -> dict:
     storage = resolve(session_environment(graphical_session()))
     reservation = Reservation(launch_binding, storage)
     observations, streams, status = {}, {}, 'unverified'
-    app, fixture, policy = InstalledApp(launch_binding), None, None
+    app, fixture = InstalledApp(launch_binding), None
     calls = [{'name': 'command', 'arguments': {'command': '/usr/bin/true'}}]
     try:
         with reservation:
@@ -330,7 +291,7 @@ def execute(binding: dict, capability: str, case: str, root: Path) -> dict:
                 if case == 'initial-lock-state':
                     native, lock, observations['case_observer_recovery'] = recover_case_observer(
                         app.observations['session'], native, lock)
-                unlock_ctl = NativeUnlockControl(execution, vm_id, lock)
+                unlock_ctl = NativeUnlockControl(execution, vm_id, lock, stale=case == 'lock-during-presence')
                 validate_account_shape(unlock_ctl.account)
                 observations['unlock_preparation'] = unlock_ctl.prepare()
                 try:
@@ -349,10 +310,9 @@ def execute(binding: dict, capability: str, case: str, root: Path) -> dict:
                         else:
                             with DesktopUI(app) as ui:
                                 observations['secret_setup'] = prepare_secret(app, ui, reservation)
-                                policy = PresencePolicy(launch_binding)
-                                with policy:
-                                    run_lock_during_presence(app, ui, execution, vm_id,
-                                                             native, lock, unlock_ctl, observations, reservation)
+                                from .presence_system import run_stale_reveal
+                                run_stale_reveal(app, ui, observations['opened_session']['project_id'],
+                                    native_input, native, lock, unlock_ctl, observations, reservation)
                                 if (observations.get('stale_challenge_refusal_verified') is True
                                         and observations.get('fresh_confirmation_verified') is True):
                                     status = 'passed'
@@ -373,6 +333,4 @@ def execute(binding: dict, capability: str, case: str, root: Path) -> dict:
         observations['launch'], observations['fresh_storage'] = app.observations, reservation.facts()
         if fixture is not None:
             observations['provider_requests'] = list(fixture.observations)
-        if policy is not None:
-            observations['presence_policy'] = policy.observations
     return retain(binding, capability, case, root, status, observations, streams)

@@ -267,7 +267,9 @@ def verify_deliveries(directory, execution, selected):
     if unlock_rows or present_unlock_leaves:
         if len(unlock_rows) > 2:
             raise ValueError('native unlock exceeds its single prepare and unlock transactions')
-        expected_ops = (unlock_wire.PREPARE, unlock_wire.PURPOSE)[:len(unlock_rows)]
+        stale = bool(unlock_rows and unlock_rows[0][1]['request']['operation'] == unlock_wire.STALE_PREPARE)
+        expected_ops = ((unlock_wire.STALE_PREPARE, unlock_wire.STALE_UNLOCK) if stale
+                        else (unlock_wire.PREPARE, unlock_wire.PURPOSE))[:len(unlock_rows)]
         validated_unlock = []
         for (row_index, row), expected_op in zip(unlock_rows, expected_ops):
             if set(row) != {'request', 'acknowledgment'}:
@@ -352,6 +354,7 @@ class Bridge:
         self.polkit_target = target
         self.polkit_session = None
         self.polkit_sessions = set()
+        self.stale_credential = None
 
     def __enter__(self):
         self.lease = open_lease(Path(self.selected['lease']), execution_nonce=self.execution['execution_nonce'],
@@ -418,6 +421,33 @@ class Bridge:
         os.fsync(self.log.fileno())
         self.bytes += len(raw)
 
+    def prepare_stale(self, pending):
+        from . import polkit_capture
+        from .polkit_account import StaleCredential
+        unlock_wire.request(pending, self.execution)
+        if (pending['operation'] != unlock_wire.STALE_PREPARE or self.polkit_target is None
+                or self.prepared_request is not None or self.unlock_actor is not None
+                or self.stale_credential is not None or self.polkit_session is not None):
+            raise ValueError('stale credential cannot overlap or replace existing custody')
+        polkit_capture.prepare(self.actor, self.polkit_target, self.execution,
+                               Path(__file__).resolve().parents[3])
+        self.stale_credential = StaleCredential(self.actor, self.polkit_target, self.execution,
+            pending['account'], pending['native_session']['native_session'])
+        try:
+            self.stale_credential.prepare()
+            acknowledgment = {'format_version': 1, 'request_sha256': unlock_wire.digest(pending),
+                'vm_id': self.selected['vm_id'],
+                'result': {'prepared': True, 'account': dict(pending['account'])}}
+            unlock_wire.acknowledgment(acknowledgment, pending, self.selected['vm_id'])
+            self._record_log(pending, acknowledgment)
+            if self.exchange({'operation': 'ack', 'acknowledgment': acknowledgment}) != {'state': 'acknowledged'}:
+                raise ValueError('stale credential preparation acknowledgment did not settle')
+            self.prepared_request = pending
+        except BaseException:
+            self.stale_credential.close()
+            raise
+        return acknowledgment
+
     def prepare_unlock(self, pending):
         unlock_wire.request(pending, self.execution)
         if pending['operation'] != unlock_wire.PREPARE:
@@ -465,8 +495,19 @@ class Bridge:
 
     def unlock_session(self, pending):
         unlock_wire.request(pending, self.execution)
-        if pending['operation'] != unlock_wire.PURPOSE:
+        if pending['operation'] not in {unlock_wire.PURPOSE, unlock_wire.STALE_UNLOCK}:
             raise ValueError('native unlock has a foreign operation')
+        if pending['operation'] == unlock_wire.STALE_UNLOCK:
+            if self.stale_credential is None or self.prepared_request is None or self.unlock_actor is not None:
+                raise ValueError('stale unlock requires its single prepared lifetime')
+            self.stale_credential.bind(pending['account'], pending['native_session']['native_session'])
+            secret = self.stale_credential.unlock_claim(pending['native_session']['native_session'])
+            try:
+                self.unlock_actor = unlock_actor.NativeUnlockActor(self.actor, self.execution, pending['account'], secret)
+            finally:
+                secret[:] = b'\0' * len(secret)
+        elif self.stale_credential is not None:
+            raise ValueError('stale lifetime cannot dispatch an independent unlock')
         if (self.prepared_request is None or self.unlock_actor is None or self.unlock_actor.used
                 or self.prepared_request['account'] != pending['account']):
             raise ValueError('native unlock has no unused prepared account custody')
@@ -482,6 +523,8 @@ class Bridge:
         acknowledgment = {'format_version': 1, 'request_sha256': unlock_wire.digest(pending),
                           'vm_id': self.selected['vm_id'], 'result': result}
         unlock_wire.acknowledgment(acknowledgment, pending, self.selected['vm_id'])
+        if pending['operation'] == unlock_wire.STALE_UNLOCK:
+            self.stale_credential.unlocked(result['session_after']['native_session'])
         self._record_log(pending, acknowledgment)
         if self.exchange({'operation': 'ack', 'acknowledgment': acknowledgment}) != {'state': 'acknowledged'}:
             raise ValueError('fixed native input guest refused its unlock acknowledgment')
@@ -497,15 +540,22 @@ class Bridge:
             raise ValueError('Polkit control requires the actual selected SSH guest target')
         if self.bytes + protocol.MAX_DOCUMENT > MAX_LOG:
             raise ValueError('fixed native input controller log is full before Polkit control')
-        if pending['operation'] == polkit_control.START:
+        if pending['operation'] in {polkit_control.START, polkit_control.START_STALE}:
             if (self.polkit_session is not None and not self.polkit_session.closed
                     or pending['session_id'] in self.polkit_sessions or len(self.polkit_sessions) >= 8):
                 raise ValueError('Polkit control cannot overlap or replay an observer session')
             self.polkit_sessions.add(pending['session_id'])
-            self.polkit_session = polkit_control.Session(self.actor, self.polkit_target, self.execution)
+            if (pending['operation'] == polkit_control.START_STALE) != (self.stale_credential is not None):
+                raise ValueError('Polkit start differs from the selected credential lifetime')
+            self.polkit_session = polkit_control.Session(self.actor, self.polkit_target, self.execution,
+                stale_credential=self.stale_credential)
         elif self.polkit_session is None:
             raise ValueError('Polkit control requires its captured observer session')
         result = self.polkit_session.handle(pending, self._deliver_polkit)
+        if pending['operation'] == polkit_control.CLOSE and self.stale_credential is not None:
+            if not self.stale_credential.closed:
+                raise ValueError('stale lifetime was not disabled before fresh authentication')
+            self.stale_credential = None
         acknowledgment = {'format_version': 1, 'request_sha256': protocol.request_sha256(pending),
                           'vm_id': self.selected['vm_id'], 'result': result}
         polkit_control.acknowledgment(acknowledgment, pending, self.selected['vm_id'])
@@ -543,7 +593,9 @@ class Bridge:
                     self.control_polkit(row['request'])
                     continue
                 if isinstance(row['request'], dict) and row['request'].get('operation') in unlock_wire.OPERATIONS:
-                    if row['request']['operation'] == unlock_wire.PREPARE:
+                    if row['request']['operation'] == unlock_wire.STALE_PREPARE:
+                        self.prepare_stale(row['request'])
+                    elif row['request']['operation'] == unlock_wire.PREPARE:
                         self.prepare_unlock(row['request'])
                     else:
                         self.unlock_session(row['request'])
@@ -563,6 +615,9 @@ class Bridge:
         except BaseException as error:
             self.error = error
             self.stop.set()
+        finally:
+            if self.error is not None and self.stale_credential is not None:
+                self.stale_credential.close()
 
     def require_healthy(self):
         if self.error is not None:
@@ -595,6 +650,10 @@ class Bridge:
                 if self.private_session is not None:
                     self.private_session.close()
             finally:
-                self.lease.__exit__(*error)
+                try:
+                    if self.stale_credential is not None:
+                        self.stale_credential.close()
+                finally:
+                    self.lease.__exit__(*error)
         if not any(error):
             self.require_healthy()

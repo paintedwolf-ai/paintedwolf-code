@@ -102,5 +102,80 @@ class PolkitLifecycleTests(unittest.TestCase):
                 control.acknowledgment({**acknowledgment, 'result': changed}, pending, 'owned')
 
 
+    def test_stale_session_borrows_one_prepared_lifetime_and_cleanup_survives_observer_loss(self):
+        lifetime = Mock()
+        lifetime.polkit_claim.return_value = bytearray(b'A1' * 20)
+        native = target()['session']
+        self.observer.observe.return_value = {'native_session': native}
+        self.session = control.Session(self.actor, self.target, EXECUTION, stale_credential=lifetime)
+        self.session.handle(request(control.START_STALE, native_session=native, runtime={}), self.deliver)
+        lifetime.bind.assert_called_once_with(ACCOUNT, native)
+        lifetime.prepare.assert_not_called()
+        self.bind()
+        with patch.object(control, 'Stage', return_value=Mock()):
+            self.next(control.PURPOSE)
+        lifetime.polkit_claim.assert_called_once_with({'native_session': native})
+        lifetime.take.assert_not_called()
+        self.observer.close.side_effect = OSError('observer lost')
+        with self.assertRaises(OSError): self.session.close()
+        lifetime.close.assert_called_once()
+
+    def test_stale_start_without_lifetime_never_prepares_another_password(self):
+        with self.assertRaises(ValueError):
+            self.session.handle(request(control.START_STALE, native_session=target()['session'], runtime={}), self.deliver)
+        self.credential.prepare.assert_not_called()
+        self.observer.start.assert_not_called()
+
+
+    def test_bridge_owns_prepare_and_transport_failure_cleanup_without_guest_secret_frame(self):
+        from scripts.linux_release.installed_input import controller, polkit_account, unlock_wire
+        from scripts.linux_release.installed_input import polkit_capture
+        from verification_tests.distribution.installed.test_installed_native_unlock_execution import target as unlock_target
+        selected = {'format_version': 1, 'kind': 'qemu-fixed-input', 'lease': '/tmp/lease', 'vm_id': 'owned'}
+        bridge = controller.Bridge(selected, EXECUTION, [], Mock(), target=self.target)
+        bridge.actor = self.actor
+        bridge._record_log = Mock()
+        bridge.exchange = Mock(return_value={'state': 'acknowledged'})
+        native = unlock_target()['session']
+        native['native_session'].update(locked_hint=False, locker_active=False)
+        pending = {'format_version': 1, 'binding': EXECUTION, 'transaction_id': 'a' * 32,
+                   'operation': unlock_wire.STALE_PREPARE, 'native_session': native, 'account': ACCOUNT}
+        lifetime = Mock()
+        with patch.object(polkit_account, 'StaleCredential', return_value=lifetime), \
+                patch.object(polkit_capture, 'prepare'):
+            acknowledgment = bridge.prepare_stale(pending)
+        lifetime.prepare.assert_called_once_with()
+        self.assertNotIn('secret', str(acknowledgment))
+        self.assertNotIn('sha256', str(acknowledgment['result']))
+        self.assertEqual(bridge.exchange.call_args.args[0]['operation'], 'ack')
+        self.assertIsNone(bridge.unlock_actor)
+        with self.assertRaises(ValueError): bridge.prepare_stale(pending)
+        bridge.exchange.side_effect = OSError('private transport ended')
+        bridge._run()
+        lifetime.close.assert_called_once_with()
+        self.assertIsInstance(bridge.error, OSError)
+
+    def test_bridge_uncertain_preparation_disables_without_publishing_success(self):
+        from scripts.linux_release.installed_input import controller, polkit_account, polkit_capture, unlock_wire
+        from verification_tests.distribution.installed.test_installed_native_unlock_execution import target as unlock_target
+        bridge = controller.Bridge({'format_version': 1, 'kind': 'qemu-fixed-input',
+            'lease': '/tmp/lease', 'vm_id': 'owned'}, EXECUTION, [], Mock(), target=self.target)
+        bridge.actor = self.actor
+        bridge.exchange = Mock()
+        bridge._record_log = Mock()
+        native = unlock_target()['session']
+        native['native_session'].update(locked_hint=False, locker_active=False)
+        pending = {'format_version': 1, 'binding': EXECUTION, 'transaction_id': 'a' * 32,
+                   'operation': unlock_wire.STALE_PREPARE, 'native_session': native, 'account': ACCOUNT}
+        lifetime = Mock()
+        lifetime.prepare.side_effect = OSError('preparation uncertain')
+        with patch.object(polkit_account, 'StaleCredential', return_value=lifetime), \
+                patch.object(polkit_capture, 'prepare'), self.assertRaises(OSError):
+            bridge.prepare_stale(pending)
+        lifetime.close.assert_called_once_with()
+        bridge.exchange.assert_not_called()
+        bridge._record_log.assert_not_called()
+
+
 if __name__ == '__main__':
     unittest.main()

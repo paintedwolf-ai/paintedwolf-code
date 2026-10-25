@@ -4,7 +4,7 @@ from __future__ import annotations
 from copy import deepcopy
 import secrets
 
-from . import protocol, unlock_wire
+from . import protocol, session_wire, unlock_wire
 from .mailbox import decode
 from .polkit_proxy import ACCOUNT_BOOTSTRAP
 from .unlock_account import validate_account_shape
@@ -71,5 +71,62 @@ class Credential:
             # Preparation uncertainty still consumes the attempt and requires a
             # bounded lock of only the same independently marked QA account.
             return self._command('disable') if self.attempted else None
+        finally:
+            self.secret[:] = b'\0' * len(self.secret)
+
+
+class StaleCredential(Credential):
+    """One account preparation, then one unlock and one original Polkit claim."""
+    def __init__(self, actor, target, execution, account, native):
+        super().__init__(actor, target, execution, account)
+        self.native = deepcopy(session_wire.native_session(native))
+        if (self.native['session']['User'] != str(self.account['uid'])
+                or self.native['locked_hint'] or self.native['locker_active']):
+            self.close()
+            raise ValueError('stale credential requires its selected unlocked session')
+        self.phase = 'prepared'
+        self.attempt = None
+
+    def bind(self, account, native):
+        if self.closed or account != self.account:
+            raise ValueError('stale credential replaced its marked account')
+        session_wire.same_session(self.native, native)
+
+    def pending(self, observation):
+        from .polkit_wire import validate
+        self.bind(self.account, observation['native_session'])
+        attempt = validate(observation['attempt'])
+        if (attempt['subject']['uid'] != self.account['uid']
+                or attempt['phase'] != 'interactive' or attempt['transport'] != 'pending'
+                or self.attempt is not None and self.attempt != attempt):
+            raise ValueError('stale credential replaced its original system authentication call')
+        self.attempt = deepcopy(attempt)
+
+    def take(self):
+        raise ValueError('stale credential requires its explicit ordered purpose')
+
+    def unlock_claim(self, native):
+        self.bind(self.account, native)
+        if (not self.prepared or self.attempt is None or self.phase != 'prepared'
+                or not all(native[key] for key in ('locked_hint', 'locker_active'))):
+            raise ValueError('stale credential has no unused locked unlock claim')
+        self.phase = 'unlock-claimed'
+        return bytearray(self.secret)
+
+    def unlocked(self, native):
+        self.bind(self.account, native)
+        if self.phase != 'unlock-claimed' or any(native[key] for key in ('locked_hint', 'locker_active')):
+            raise ValueError('stale credential requires observed completion of its unlock')
+        self.phase = 'unlocked'
+
+    def polkit_claim(self, observation):
+        self.pending(observation)
+        native = observation['native_session']
+        self.bind(self.account, native)
+        if self.phase != 'unlocked' or any(native[key] for key in ('locked_hint', 'locker_active')):
+            raise ValueError('stale credential has no original post-unlock Polkit claim')
+        self.phase = 'polkit-claimed'
+        try:
+            return bytearray(self.secret)
         finally:
             self.secret[:] = b'\0' * len(self.secret)

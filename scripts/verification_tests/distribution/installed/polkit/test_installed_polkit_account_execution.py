@@ -80,5 +80,76 @@ class PolkitCredentialTests(unittest.TestCase):
         self.assertTrue(value.closed)
 
 
+class StaleCredentialTests(unittest.TestCase):
+    def fixture(self):
+        from copy import deepcopy
+        from verification_tests.distribution.installed.polkit.test_installed_polkit_stage_execution import target
+        selected = {'host': '127.0.0.1', 'port': 2222, 'user': 'qa'}
+        actor = Mock(nonce=EXECUTION['execution_nonce'], value={'vm_id': 'owned', 'ssh': selected})
+        native = deepcopy(target()['session'])
+        value = polkit_account.StaleCredential(actor, selected, EXECUTION, ACCOUNT, native)
+        value._command = Mock(return_value={'settled': True})
+        return value, native
+
+    def test_one_prepare_two_named_consumed_claims_and_only_final_claim_erases_master(self):
+        from copy import deepcopy
+        value, native = self.fixture()
+        original = bytes(value.secret)
+        value.prepare()
+        from verification_tests.distribution.installed.polkit.test_installed_polkit_stage_execution import target
+        pending = target()['pending']
+        value.pending(pending)
+        with self.assertRaises(ValueError): value.polkit_claim(pending)
+        with self.assertRaises(ValueError): value.take()
+        locked = deepcopy(native)
+        locked.update(locked_hint=True, locker_active=True)
+        first = value.unlock_claim(locked)
+        self.assertEqual(bytes(first), original)
+        self.assertEqual(bytes(value.secret), original)
+        with self.assertRaises(ValueError): value.unlock_claim(locked)
+        with self.assertRaises(ValueError): value.polkit_claim({'native_session': native, 'attempt': value.attempt})
+        value.unlocked(native)
+        second = value.polkit_claim({'native_session': native, 'attempt': value.attempt})
+        self.assertEqual(bytes(second), original)
+        self.assertEqual(value.secret, bytearray(40))
+        with self.assertRaises(ValueError): value.polkit_claim({'native_session': native, 'attempt': value.attempt})
+        first[:] = second[:] = bytearray(40)
+        value.close()
+        self.assertEqual([call.args[0] for call in value._command.call_args_list], ['prepare', 'disable'])
+
+    def test_rebound_identity_and_changed_session_owners_never_claim(self):
+        from copy import deepcopy
+        value, native = self.fixture()
+        value.prepare()
+        with self.assertRaises(ValueError): value.bind({**ACCOUNT, 'uid': ACCOUNT['uid'] + 1}, native)
+        replaced = deepcopy(native)
+        replaced['authorities']['shell']['inode'] += 1
+        with self.assertRaises(ValueError): value.bind(ACCOUNT, replaced)
+        self.assertEqual(value.phase, 'prepared')
+        value.close()
+        value._command.assert_called_with('disable')
+
+    def test_uncertain_prepare_and_abandoned_first_claim_both_disable_without_replay(self):
+        from copy import deepcopy
+        for failed_prepare in (True, False):
+            value, native = self.fixture()
+            if failed_prepare:
+                value._command.side_effect = [OSError('uncertain'), {'disabled': True}]
+                with self.assertRaises(OSError): value.prepare()
+                with self.assertRaises(ValueError): value.prepare()
+            else:
+                value.prepare()
+                from verification_tests.distribution.installed.polkit.test_installed_polkit_stage_execution import target
+                value.pending(target()['pending'])
+                locked = deepcopy(native)
+                locked.update(locked_hint=True, locker_active=True)
+                copy = value.unlock_claim(locked)
+                copy[:] = bytearray(40)
+            value.close()
+            self.assertEqual(value.secret, bytearray(40))
+            value._command.assert_called_with('disable')
+            with self.assertRaises(ValueError): value.polkit_claim({'native_session': native, 'attempt': value.attempt})
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -133,3 +133,50 @@ def run_reveal(app, ui, project_id, native_input, observations, *, cancel):
         finally:
             control.close()
     return record
+
+
+def run_stale_reveal(app, ui, project_id, native_input, native, lock, unlock_ctl,
+                     observations, reservation):
+    """Complete only the original real system prompt after an actual lock/unlock."""
+    from .lock_monitor import lock_and_unlock, step_away_invalidations
+    owner = native_caller(app, ui)
+    before = reveal_audit(app, project_id)
+    record = {'host_audit_before': before, 'controls': [], 'stale_challenge_refusal_verified': False}
+    observations['stale_system_authentication'] = record
+    boundary = len(attempt_rows(app, owner))
+    confirmation_boundary = len(confirmation_rows(app))
+    control = NativePolkitControl(app, owner, native, native_input['binding'], native_input['vm_id'])
+    record['controls'] = control.records
+    try:
+        control.start(stale=True)
+        ui.click('Reveal value')
+        attempt = await_attempt(app, owner, boundary)
+        record['native_attempt'] = attempt
+        pending = await_observation(control, control.bind(attempt))
+        if pending['attempt'] != attempt:
+            raise ValueError('stale presence root selection replaced its original challenge')
+        lock_and_unlock(app, native_input['binding'], native_input['vm_id'], native, lock,
+                        unlock_ctl, observations)
+        reservation.check_launch(app)
+        record['physical_delivery'] = control.deliver()
+        record['root_witness'] = await_observation(control, final=True)
+        challenge = attempt['challenge']
+        outcome = await_confirmation(app, challenge['challenge_id'], challenge['step_away_generation'],
+                                     after_count=confirmation_boundary)
+        invalidations = [row for row in step_away_invalidations(app)
+            if row['challenge_id'] == challenge['challenge_id']
+            and row['generation_before'] == challenge['step_away_generation']]
+        after = reveal_audit(app, project_id)
+        record.update(native_confirmation=outcome, host_audit_after=after, invalidations=invalidations)
+        if (record['root_witness']['system_authenticated'] is not True
+                or outcome['status'] != 'refused' or outcome['code'] != 'presence_denied'
+                or outcome['resolution'] != 'step_away' or len(invalidations) != 1 or after != before):
+            raise CaseFailed('stale-system-authentication-did-not-refuse-without-host-release')
+        observations['stale_challenge_refusal_verified'] = True
+        record['stale_challenge_refusal_verified'] = True
+    finally:
+        control.close()
+    fresh = run_reveal(app, ui, project_id, native_input, observations, cancel=False)
+    observations['fresh_confirmation_verified'] = fresh['host_release_verified']
+    observations['system_authentication_verified'] = fresh['system_authentication_verified']
+    return record

@@ -32,7 +32,7 @@ class NativeUnlockActor:
 
     def _perform(self, pipe, pending):
         unlock_wire.request(pending, self.execution)
-        if pending['operation'] != unlock_wire.PURPOSE or pending['account'] != self.account:
+        if pending['operation'] not in {unlock_wire.PURPOSE, unlock_wire.STALE_UNLOCK} or pending['account'] != self.account:
             raise ValueError('native unlock differs from its prepared account and phase')
         actor = self.actor
         with actor.lock:
@@ -44,7 +44,7 @@ class NativeUnlockActor:
             if transaction in actor.transactions or len(actor.transactions) >= 128:
                 raise ValueError('native unlock exhausted the actor transaction bound')
             actor.transactions.add(transaction)
-            envelope = {'purpose': unlock_wire.PURPOSE, 'binding': self.execution,
+            envelope = {'purpose': pending['operation'], 'binding': self.execution,
                         'transaction_id': transaction}
             original = None
             try:
@@ -87,7 +87,7 @@ class NativeUnlockActor:
                 if not isinstance(final, dict) or set(final) != {*envelope, 'phase', 'session_after'} or any(
                         final[key] != value for key, value in envelope.items()) or final['phase'] != 'unlocked':
                     raise ValueError('native unlock has no independent final session proof')
-                result = {'purpose': unlock_wire.PURPOSE, 'transaction_id': transaction,
+                result = {'purpose': pending['operation'], 'transaction_id': transaction,
                           'delivered': True, 'text_readback': False, 'session_after': final['session_after']}
                 unlock_wire.acknowledgment({'format_version': 1, 'request_sha256': unlock_wire.digest(pending),
                     'vm_id': actor.value['vm_id'], 'result': result}, pending, actor.value['vm_id'])
