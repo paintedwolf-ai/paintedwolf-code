@@ -157,7 +157,7 @@ class InstalledAppTests(unittest.TestCase):
                 self.assertEqual(failure.exception.observations['engine_identity'], identity)
 
     def test_desktop_application_scope_verifies_desktop_entry_and_engine_cgroup_ancestry(self):
-        from scripts.linux_release.installed_cases.app import enter_desktop_application_scope
+        from scripts.linux_release.installed_cases.application_scope import enter_desktop_application_scope
         storage = SimpleNamespace(application_identifier="dev.paintedwolf.code")
         desktop_text = "[Desktop Entry]\nExec=/usr/libexec/painted-wolf-code/pw-launch %U\nStartupWMClass=dev.paintedwolf.code\n"
         fake_bus, fake_gio, fake_glib = Mock(), Mock(), Mock()
@@ -173,12 +173,12 @@ class InstalledAppTests(unittest.TestCase):
         direct_cli_id = {"pid": 501, "parent_pid": 500, "start_time_ticks": 399}
         with patch.dict("sys.modules", {"gi": SimpleNamespace(repository=SimpleNamespace(Gio=fake_gio, GLib=fake_glib)),
                                         "gi.repository": SimpleNamespace(Gio=fake_gio, GLib=fake_glib)}), \
-                patch("scripts.linux_release.installed_cases.app.file_identity",
+                patch("scripts.linux_release.installed_cases.application_scope.file_identity",
                       return_value={"sha256": "a" * 64, "bytes": 120, "mode": 0o644, "header": b"[Desktop"}), \
-                patch("scripts.linux_release.installed_cases.app.subprocess.Popen", return_value=fake_probe), \
-                patch("scripts.linux_release.installed_cases.app.process_identity", return_value=direct_cli_id), \
-                patch("scripts.linux_release.installed_cases.app.os.getpid", return_value=500), \
-                patch("scripts.linux_release.installed_cases.app.time.monotonic", side_effect=[1.0, 1.0, 1.1]), \
+                patch("scripts.linux_release.installed_cases.application_scope.subprocess.Popen", return_value=fake_probe), \
+                patch("scripts.linux_release.installed_cases.application_scope.process_identity", return_value=direct_cli_id), \
+                patch("scripts.linux_release.installed_cases.application_scope.os.getpid", return_value=500), \
+                patch("scripts.linux_release.installed_cases.application_scope.time.monotonic", side_effect=[1.0, 1.0, 1.1]), \
                 patch.object(Path, "read_text", autospec=True, side_effect=fake_read_text):
             witness = enter_desktop_application_scope(Path("/usr/libexec/painted-wolf-code/pw-launch"), storage)
         self.assertEqual(witness["unit"], "app-gnome-dev.paintedwolf.code-5001000.scope")

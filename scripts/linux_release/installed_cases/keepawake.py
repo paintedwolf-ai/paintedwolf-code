@@ -77,9 +77,11 @@ def execute(binding, capability, case, root):
     from ..installed_input.unlock_account import run_privileged_disable, validate_account_shape
     from ..installed_input.unlock_control import NativeUnlockControl
     from ..installed_storage import resolve
+    from .shipping_lifecycle import selected_mode, capture, repeat_turn
 
     if (capability, case) != ('session', 'inhibitor-lifetime'):
         raise ValueError('keepawake driver executes only session/inhibitor-lifetime')
+    mode = selected_mode(binding)
     launch_binding = {**binding, 'launcher': protected_launcher(binding)}
     project = Path(tempfile.mkdtemp(prefix='keepawake-project-', dir=root))
     app, observations, streams, barrier, reservation = None, {}, {}, None, None
@@ -102,7 +104,9 @@ def execute(binding, capability, case, root):
                 barrier = ResponseBarrier()
                 with ProviderFixture.gui(calls, acquire='command', response_barrier=barrier,
                         endpoint=recovery[0]['endpoint'] if recovery is not None else None) as fixture:
-                    app = InstalledApp(launch_binding)
+                    options = {} if mode == 'controlled' else {'launch_mode': mode,
+                        'arguments': [str(project)] if mode == 'pw-open-cold-start' else []}
+                    app = InstalledApp(launch_binding, **options)
                     try:
                         app.launch()
                         app.wait_ready()
@@ -145,6 +149,8 @@ def execute(binding, capability, case, root):
                                     observations['active_before'] = active
                                     observations['before_lock'] = await_inhibitor(
                                         app, native, held=True, expected=captured_engine, deadline=time.monotonic() + 15)
+                                    if mode != 'controlled':
+                                        observations['shipping_before_lock'] = capture(app, native, held=True)
                                     lock_transition = perform_transition(execution, vm_id, lock, 'session-lock-v1')
                                     observations['lock_transition'] = lock_transition
                                     observations['transitions'] = [lock_transition]
@@ -171,6 +177,13 @@ def execute(binding, capability, case, root):
                                         selected_session=active['id'])
                                     observations['after_completion'] = await_inhibitor(
                                         app, native, held=False, expected=captured_engine, deadline=time.monotonic() + 15)
+                                    if mode != 'controlled':
+                                        observations['shipping_after_completion'] = capture(app, native, held=False)
+                                        observations['shipping_repeat'] = repeat_turn(
+                                            app, launch_binding, fixture, provider, native, captured_engine, root)
+                                        if (observations['shipping_repeat']['during_work']['engine_scope']['engine_cgroup']
+                                                != observations['shipping_before_lock']['engine_scope']['engine_cgroup']):
+                                            raise ValueError('repeated active work changed the installed engine application unit')
                             finally:
                                 observations['credential_cleanup'] = run_privileged_disable(
                                     unlock_ctl.account, vm_id=vm_id)
@@ -185,6 +198,9 @@ def execute(binding, capability, case, root):
                                      if row['owner']['pid'] == captured_engine['pid']]
                         if remaining:
                             raise ValueError('captured engine retained a native sleep inhibitor after exit')
+                        if mode != 'controlled':
+                            unit = observations['shipping_before_lock']['engine_scope']['engine_cgroup'].rsplit('/', 1)[-1]
+                            observations['shipping_unit_after_exit'] = post_native.application_unit_state(unit)
                         observations['after_exit'] = {
                             'native_session': post_exit['native_session'],
                             'engine_inhibitors': remaining}

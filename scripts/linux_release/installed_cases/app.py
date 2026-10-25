@@ -15,10 +15,7 @@ from scripts.harness.supervise import stop_stack
 LIMIT = 8 << 20
 
 
-def process_identity(pid: int) -> dict:
-    row = Path(f"/proc/{pid}/stat").read_text().rpartition(") ")[2].split()
-    if len(row) < 20: raise ValueError("installed process identity is unavailable")
-    return {"pid": pid, "parent_pid": int(row[1]), "start_time_ticks": int(row[19])}
+from .launch_owner import process_identity
 
 
 def descends(identity: dict, ancestor: int) -> list[dict]:
@@ -103,54 +100,15 @@ def session_environment(session: dict) -> dict:
     return result
 
 
-APP_SCOPE_RE = re.compile(r"^app-(?:[0-9A-Za-z]+-)?(.+?)(?:-[0-9A-Za-z]*)(?:\.scope|\.slice)$")
-
-
-def enter_desktop_application_scope(path: Path, storage: Storage,
-                                    cli_probe: Path = Path("/opt/painted-wolf-code/bin/pw")) -> dict:
-    from gi.repository import Gio, GLib
-    desktop_path = Path(f"/usr/share/applications/{storage.application_identifier}.desktop")
-    desktop_identity = file_identity(desktop_path); desktop_identity.pop("header", None)
-    lines = [line.strip() for line in desktop_path.read_text(encoding="utf-8").splitlines()]
-    exec_lines = [line.removeprefix("Exec=").strip() for line in lines if line.startswith("Exec=")]
-    if (f"StartupWMClass={storage.application_identifier}" not in lines or len(exec_lines) != 1
-            or exec_lines[0].split()[0] not in {str(path), "/usr/libexec/painted-wolf-code/pw-launch",
-                                                "/opt/painted-wolf-code/bin/painted-wolf-code"}):
-        raise ValueError("installed desktop entry does not match the selected application launcher")
-    cgroup_before = Path("/proc/self/cgroup").read_text(encoding="utf-8").strip()
-    probe = subprocess.Popen([str(cli_probe), "--version"], stdin=subprocess.DEVNULL,
-                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
-    direct_identity = process_identity(probe.pid)
-    direct_cgroup = Path(f"/proc/{probe.pid}/cgroup").read_text(encoding="utf-8").strip()
-    probe_exit, direct_leaf = probe.wait(timeout=10), direct_cgroup.rsplit("/", 1)[-1]
-    direct_match = APP_SCOPE_RE.match(direct_leaf)
-    unit = f"app-gnome-{storage.application_identifier}-{os.getpid()}{int(time.monotonic() * 1000)}.scope"
-    os.environ.setdefault("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
-    os.environ.setdefault("DBUS_SESSION_BUS_ADDRESS", f"unix:path=/run/user/{os.getuid()}/bus")
-    bus, props = Gio.bus_get_sync(Gio.BusType.SESSION, None), [("PIDs", GLib.Variant("au", [os.getpid()]))]
-    bus.call_sync("org.freedesktop.systemd1", "/org/freedesktop/systemd1", "org.freedesktop.systemd1.Manager",
-                  "StartTransientUnit", GLib.Variant("(ssa(sv)a(sa(sv)))", (unit, "fail", props, [])),
-                  GLib.VariantType.new("(o)"), Gio.DBusCallFlags.NONE, 5000, None)
-    deadline, cgroup_after = time.monotonic() + 5.0, ""
-    while time.monotonic() < deadline:
-        cgroup_after = Path("/proc/self/cgroup").read_text(encoding="utf-8").strip()
-        if cgroup_after.endswith("/" + unit): break
-        time.sleep(0.02)
-    else: raise ValueError("installed desktop application scope unit did not attach to the launcher cgroup")
-    scoped_match = APP_SCOPE_RE.match(unit)
-    return {"desktop_entry_path": str(desktop_path), "desktop_entry_identity": desktop_identity,
-            "exec_target": str(path), "application_id": storage.application_identifier, "unit": unit,
-            "caller_cgroup_before": cgroup_before, "caller_cgroup_after": cgroup_after,
-            "launch_mode": "controlled-systemd-application-scope", "desktop_entry_launch_proven": False,
-            "cli_launch_comparison": {"direct_cli_executable": str(cli_probe), "direct_cli_identity": direct_identity,
-                "direct_cli_exit_code": probe_exit, "direct_cli_cgroup": direct_cgroup, "direct_cli_leaf_unit": direct_leaf,
-                "direct_cli_attributed_app_id": direct_match.group(1) if direct_match else None,
-                "controlled_scope_unit": unit,
-                "controlled_scope_attributed_app_id": scoped_match.group(1) if scoped_match else None}}
+from .application_scope import enter_desktop_application_scope, observe_engine_scope
 
 
 class InstalledApp:
-    def __init__(self, binding: dict, *, arguments: list[str] | None = None, timeout: float = 60):
+    def __init__(self, binding: dict, *, arguments: list[str] | None = None, timeout: float = 60,
+                 launch_mode: str = 'controlled'):
+        if launch_mode not in {'controlled', 'unscoped-direct', 'desktop-entry', 'pw-open-cold-start'}:
+            raise ValueError('unsupported installed application launch mode')
+        self.launch_mode, self._launch_owner = launch_mode, None
         self.binding, self.arguments, self.timeout = binding, arguments or [], timeout
         if not 0 < timeout <= 300:
             raise ValueError("installed launcher readiness timeout exceeds its bound")
@@ -162,6 +120,7 @@ class InstalledApp:
             if not path.is_absolute() or not path.exists() or parsed.scheme not in {"", "file"}:
                 raise ValueError("installed launcher argument is not an existing absolute fixture path")
         self.process = self.storage = self.api = None
+        self._stopped = False
         self.observations = {"artifact": binding["artifact"], "source_commit": binding["source_commit"]}
         self._streams, self._readers, self._overflow = {"app-stdout": bytearray(), "app-stderr": bytearray()}, [], threading.Event()
 
@@ -193,16 +152,30 @@ class InstalledApp:
         launcher = dict(self.binding["launcher"]); path = Path(launcher.pop("path"))
         current = file_identity(path); current.pop("header")
         if current != launcher: raise ValueError("installed application launcher changed since final artifact binding")
-        unit_info = enter_desktop_application_scope(path, storage, Path(self.binding["install_root"]) / "bin/pw")
         self.storage = storage
-        self.process = subprocess.Popen([str(path), *self.arguments], env=environment,
-            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
-        launch_cgroup = Path(f"/proc/{self.process.pid}/cgroup").read_text(encoding="utf-8").strip()
-        if not launch_cgroup.endswith("/" + unit_info["unit"]):
-            raise ValueError("installed launcher did not inherit its desktop application unit scope")
-        self.observations.update({"launcher": self.binding["launcher"], "session": session,
-                                  "launch_identity": process_identity(self.process.pid), "storage": storage.facts(),
-                                  "application_unit": {**unit_info, "launch_cgroup": launch_cgroup}})
+        if self.launch_mode == 'controlled':
+            unit_info = enter_desktop_application_scope(path, storage, Path(self.binding['install_root']) / 'bin/pw')
+            self.process = subprocess.Popen([str(path), *self.arguments], env=environment,
+                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
+            launch_cgroup = Path(f'/proc/{self.process.pid}/cgroup').read_text().strip()
+            if not launch_cgroup.endswith('/' + unit_info['unit']):
+                raise ValueError('installed launcher did not inherit its desktop application unit scope')
+        else:
+            from .launch_owner import LaunchOwner
+            from .shipping_launch import launch_command
+            command, facts = launch_command(self.launch_mode, path, storage, self.arguments, self.binding)
+            caller_cgroup = Path('/proc/self/cgroup').read_text().strip()
+            self._launch_owner = LaunchOwner(command, environment)
+            self.process = self._launch_owner.process
+            launched = self._launch_owner.facts()[0]
+            launch_cgroup = launched['cgroup']
+            unit_info = {**facts, 'application_id': storage.application_identifier,
+                         'caller_cgroup_before': caller_cgroup,
+                         'launch_mode': self.launch_mode, 'owner_identity': launched['owner'],
+                         'command_identity': launched['identity']}
+        self.observations.update({'launcher': self.binding['launcher'], 'session': session,
+                                  'launch_identity': process_identity(self.process.pid), 'storage': storage.facts(),
+                                  'application_unit': {**unit_info, 'launch_cgroup': launch_cgroup}})
 
         def capture(name, stream):
             with stream:
@@ -233,6 +206,8 @@ class InstalledApp:
 
     def require_running(self):
         if self.process is None: raise ValueError('installed application has no captured launch process')
+        if self._launch_owner is not None:
+            self.observations['native_launch'] = self._launch_owner.facts()
         code = self.process.poll()
         if code is not None:
             self.observations['exit_code'] = code
@@ -271,11 +246,19 @@ class InstalledApp:
             raise ValueError("running engine differs from the selected final installed image")
         unit_info = self.observations.get("application_unit")
         if isinstance(unit_info, dict):
-            engine_cgroup = Path(f"/proc/{pid}/cgroup").read_text(encoding="utf-8").strip()
-            if engine_cgroup != unit_info["launch_cgroup"] or not engine_cgroup.endswith("/" + unit_info["unit"]):
-                raise ValueError("installed engine escaped its desktop application unit scope")
-            self.observations["application_unit"] = {**unit_info, "engine_cgroup": engine_cgroup,
-                                                     "ancestry": [*chain, process_identity(self.process.pid)]}
+            self.observations['application_unit'] = {**observe_engine_scope(unit_info, pid),
+                                                     'ancestry': [*chain, process_identity(self.process.pid)]}
+        if self._launch_owner is not None:
+            events = self._launch_owner.facts()
+            self.observations['native_launch'] = events
+            if self.launch_mode in {'desktop-entry', 'pw-open-cold-start'}:
+                exits = [event for event in events if event.get('event') == 'command-exit']
+                if not exits:
+                    return False
+                if len(exits) != 1 or exits[0]['exit_code'] != 0:
+                    raise CaseFailed('installed public launch command did not complete successfully')
+                if self.launch_mode == 'desktop-entry':
+                    self.observations['application_unit']['desktop_entry_launch_proven'] = True
         self.observations["engine_identity"] = engine
         api = EngineAPI(port)
         try: health = api.request("GET", "/health")
@@ -325,9 +308,20 @@ class InstalledApp:
         return self.api.request(method, path, payload)
 
     def stop(self):
-        if self.process is None: return
+        if self.process is None or self._stopped: return
         stop_stack(self.process)
+        self._stopped = True
         for reader in self._readers: reader.join(timeout=3)
+        if self._launch_owner is not None:
+            self._launch_owner.reader.join(timeout=3)
+            events = self._launch_owner.facts()
+            self.observations['native_launch'] = events
+            unit_info = self.observations['application_unit']
+            unit_info['caller_cgroup_after'] = Path('/proc/self/cgroup').read_text().strip()
+            if unit_info['caller_cgroup_after'] != unit_info['caller_cgroup_before']:
+                raise ValueError('shipping launch changed its caller application scope')
+            if not self._launch_owner.closed.is_set() or not any(event.get('event') == 'settled' for event in events):
+                raise ValueError('installed detached launch has no complete settlement evidence')
         self.observations.update({"exit_code": self.process.poll(), "output_limit": self._overflow.is_set(),
                                   "capture_complete": not any(reader.is_alive() for reader in self._readers)})
         self.api = None

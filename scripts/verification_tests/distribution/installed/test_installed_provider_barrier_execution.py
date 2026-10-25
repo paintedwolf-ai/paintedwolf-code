@@ -162,6 +162,24 @@ class BarrierTests(unittest.TestCase):
         with self.assertRaises(CaseUnavailable):
             failed.await_response_written()
 
+    def test_next_turn_gets_a_distinct_hold_only_after_prior_response_settles(self):
+        barrier = ResponseBarrier()
+        with self.assertRaises(CaseUnavailable):
+            barrier.successor()
+        _, _, _, thread = self.start(barrier)
+        before = barrier.require_held()
+        with self.assertRaises(CaseUnavailable):
+            barrier.successor()
+        barrier.release()
+        thread.join(timeout=2)
+        barrier.await_response_written()
+        following = barrier.successor()
+        self.assertIsNone(following.snapshot())
+        self.assertEqual(barrier.snapshot()['request_id'], before['request_id'])
+        self.assertFalse(following.released.is_set())
+        self.assertFalse(following.done.is_set())
+        following.close()
+
     def test_invalid_deadlines_and_uncaptured_holds_refuse(self):
         for value in (0, -1, 181, True, float('nan')):
             with self.subTest(value=value), self.assertRaises(ValueError):

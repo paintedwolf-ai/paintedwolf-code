@@ -143,6 +143,41 @@ class NativeSessionObserver:
                 'authorities': deepcopy(self.authorities), 'locked_hint': values['LockedHint'],
                 'locker_active': active}
 
+    def suspend_inhibition(self):
+        """Pin GNOME's session-level suspend/idle flags to its actual bus owner."""
+        try:
+            before = self._bus_owner('org.gnome.SessionManager', os.getuid(), user=True)
+            actions, = self._call(before['unique'], '/org/gnome/SessionManager',
+                'org.freedesktop.DBus.Properties', 'Get',
+                ('(ss)', ('org.gnome.SessionManager', 'InhibitedActions')), '(v)', user=True)
+            if type(actions) is not int or not 0 <= actions < 1 << 32:
+                raise ValueError('GNOME inhibition flags have an invalid typed shape')
+            if self._bus_owner('org.gnome.SessionManager', os.getuid(), user=True) != before:
+                raise ValueError('GNOME session manager changed during inhibition observation')
+            return {'owner': before, 'inhibited_actions': actions}
+        except CallFailure as error:
+            refusal = CaseUnavailable('native-session-suspend-inhibition-unavailable')
+            refusal.observations = {'native_suspend_error': error.name}
+            raise refusal from None
+
+    def application_unit_state(self, unit):
+        if (not isinstance(unit, str) or not re.fullmatch(r'app-[A-Za-z0-9_.-]{1,220}\.scope', unit)):
+            raise ValueError('application unit observation requires its captured scope name')
+        try:
+            path, = self._call('org.freedesktop.systemd1', '/org/freedesktop/systemd1',
+                'org.freedesktop.systemd1.Manager', 'GetUnit', ('(s)', (unit,)), '(o)', user=True)
+        except CallFailure as error:
+            if error.name == 'org.freedesktop.systemd1.NoSuchUnit':
+                return {'unit': unit, 'active_state': 'absent'}
+            refusal = CaseUnavailable('native-application-unit-state-unavailable')
+            refusal.observations = {'native_unit_error': error.name}
+            raise refusal from None
+        state, = self._call('org.freedesktop.systemd1', path, 'org.freedesktop.DBus.Properties',
+            'Get', ('(ss)', ('org.freedesktop.systemd1.Unit', 'ActiveState')), '(v)', user=True)
+        if state != 'inactive':
+            raise ValueError('stopped installed application left its scope active')
+        return {'unit': unit, 'active_state': state}
+
     def inhibitors(self):
         for _ in range(4):
             before = self.observe()

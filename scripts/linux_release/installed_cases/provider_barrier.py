@@ -154,6 +154,15 @@ class ResponseBarrier:
             raise CaseUnavailable('fixed-provider-request-ended-without-peer-cancellation')
         return row
 
+    def successor(self):
+        """Allocate a new hold only after this response has independently settled."""
+        with self.lock:
+            if (self.cleanup or not self.settled.is_set() or self.connection is not None
+                    or self.record is None or self.record['state'] != 'released'
+                    or self.record['response_written'] is not True):
+                raise CaseUnavailable('fixed-provider-prior-response-is-not-complete')
+            return ResponseBarrier(self.timeout)
+
     def close(self):
         with self.lock:
             self.cleanup = True
