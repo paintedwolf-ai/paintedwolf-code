@@ -233,56 +233,6 @@ class LockMonitorExecutionTests(unittest.TestCase):
         return {'bus_name': ':1.77', 'object_path': f'/org/a11y/atspi/accessible/{index}',
                 'process': app_proc, 'lineage': [app_proc]}
 
-    def _mock_private_password_delivery(self, dialog_identities):
-        actor = {
-            'process': {'pid': 401, 'parent_pid': 1, 'start_time_ticks': 99},
-            'uid': 30009, 'session_nonce': 'd' * 32}
-        secret = 'aB3' * 13 + '7'
-        case_proc = {'pid': 501, 'parent_pid': 1, 'start_time_ticks': 120}
-        app_proc = {'pid': 100, 'parent_pid': 1, 'start_time_ticks': 80}
-        engine_proc = {'pid': 200, 'parent_pid': 100, 'start_time_ticks': 81}
-        main_id = self._dialog_identity(1)
-        ctrl_id = self._dialog_identity(9)
-
-        def make_target(dialog_id):
-            surface = {
-                'launch': app_proc, 'engine': engine_proc, 'main': main_id, 'control': None,
-                'surfaces': [
-                    {'identity': main_id, 'kind': 'frame', 'visible': True, 'active': False,
-                     'defunct': False, 'modal': False, 'parent': None},
-                    {'identity': dialog_id, 'kind': 'presence-dialog', 'visible': True, 'active': True,
-                     'defunct': False, 'modal': True, 'parent': main_id}]}
-            return {'kind': 'native-presence', 'surface': surface,
-                    'password': {'identity': ctrl_id, 'parent': dialog_id, 'focused': True, 'visible': True}}
-
-        targets = [make_target(did) for did in dialog_identities]
-        focus_instances = []
-        for target in targets:
-            inst = Mock()
-            inst.observe.return_value = target
-            focus_instances.append(inst)
-
-        def fake_witness(channel, pending, priv, focus_obj, vm_id):
-            delivery = {
-                'format_version': 1, 'execution_nonce': pending['binding']['execution_nonce'],
-                'transaction_id': pending['transaction_id'], 'stage': pending['stage'],
-                'actor': pending['actor'], 'case': pending['case'],
-                'profile': pending['profile'], 'session': pending['session'],
-                'target': pending['target'], 'acknowledged_count': 41,
-                'completed': True, 'delivery_uncertain': False, 'lease': {'vm_id': vm_id}}
-            return {'request': copy.deepcopy(pending), 'delivery': delivery, 'guest_confirmed': True}
-
-        fake_box = Mock(path=Path('/nonexistent-mailbox-path'))
-        fake_listener = MagicMockContext(Mock(accept=Mock(return_value=Mock())))
-        self.stack.enter_context(patch.object(lock_monitor, 'FrameObserver', return_value=MagicMockContext(Mock())))
-        self.stack.enter_context(patch.object(lock_monitor, 'FixtureFocus', side_effect=focus_instances))
-        self.stack.enter_context(patch.object(lock_monitor, 'physical', return_value=(1, 2, 30009, 0o40700)))
-        self.stack.enter_context(patch.object(lock_monitor, 'process_identity', return_value=case_proc))
-        self.stack.enter_context(patch.object(lock_monitor, 'Mailbox', return_value=fake_box))
-        self.stack.enter_context(patch.object(lock_monitor, 'Listener', return_value=fake_listener))
-        witness_mock = self.stack.enter_context(patch.object(lock_monitor, 'witness', side_effect=fake_witness))
-        return {'fixture_actor': actor, 'private_password': secret}, witness_mock
-
     def test_initial_lock_state_keeps_monitor_owner_recovery_unverified_on_ordinary_lock_unlock(self):
         outcome, disable_mock, _, _ = self._run_case('initial-lock-state', monitor_loss=False)
         self.assertEqual(outcome[4], 'unverified')
@@ -367,84 +317,25 @@ class LockMonitorExecutionTests(unittest.TestCase):
         fake_policy.__exit__.assert_called_once()
         disable_mock.assert_called_once_with(ACCOUNT, vm_id='owned')
 
-    def test_lock_during_presence_refuses_confirmation_without_private_fixture_custody(self):
-        pre_id = self._dialog_identity(2)
-        pre_surface = {'kind': 'presence-dialog', 'identity': pre_id, 'active': True}
-        with self.assertRaises(records.CaseUnavailable) as ctx:
-            self._run_case('lock-during-presence', dialog_surfaces=[pre_surface])
-        self.assertEqual(str(ctx.exception), 'presence-password-confirmation-requires-private-fixture-custody')
-
-    def test_lock_during_presence_verifies_fresh_confirmation_while_keeping_stale_invalidation_unverified(self):
-        pre_id, fresh_id = self._dialog_identity(2), self._dialog_identity(3)
-        pre_surface = {'kind': 'presence-dialog', 'identity': pre_id, 'active': True}
-        fresh_surface = {'kind': 'presence-dialog', 'identity': fresh_id, 'active': True}
-        native_extra, witness_mock = self._mock_private_password_delivery([pre_id, fresh_id])
-        refusal_alert = {'role': 2, 'visible': True, 'attributes': []}
-        challenge = {
-            'challenge_id': '00000000-0000-4000-8000-000000000001',
-            'purpose': 'reveal', 'window_label': 'main', 'generation': 0}
-        mismatched_invalidation = {
-            'challenge_id': '00000000-0000-4000-8000-000000000099',
-            'purpose': 'reveal', 'window_label': 'main',
-            'generation_before': 0, 'generation_after': 1,
-            'code': 'presence_denied', 'resolution': 'step_away'}
-        outcome, disable_mock, _, fake_ui = self._run_case(
-            'lock-during-presence',
-            dialog_surfaces=[pre_surface, None, fresh_surface, None],
-            alert_result=refusal_alert,
-            challenge_rows=(challenge,),
-            invalidation_rows=(mismatched_invalidation,),
-            native_input_extra=native_extra)
+    def test_legacy_app_password_dialog_is_retained_but_never_submitted_as_system_auth(self):
+        pre_surface = {'kind': 'presence-dialog', 'identity': self._dialog_identity(2), 'active': True}
+        challenge = {'challenge_id': '00000000-0000-4000-8000-000000000001',
+                     'purpose': 'reveal', 'window_label': 'main', 'generation': 0}
+        outcome, disable, policy, ui = self._run_case(
+            'lock-during-presence', dialog_surfaces=[pre_surface], challenge_rows=(challenge,),
+            native_input_extra={'private_password': 'A' * 40})
         self.assertEqual(outcome[4], 'unverified')
-        obs = outcome[5]
-        self.assertEqual(obs['pre_lock_confirmation'], pre_surface)
-        self.assertEqual(obs['pre_lock_challenge'], challenge)
-        self.assertEqual(obs['stale_challenge_refusal'], refusal_alert)
-        self.assertIsNone(obs['stale_challenge_invalidation'])
-        self.assertFalse(obs['stale_challenge_refusal_verified'])
-        self.assertEqual(obs['fresh_confirmation_surface'], fresh_surface)
-        self.assertEqual(obs['fresh_confirmation_alerts'], [])
-        self.assertTrue(obs['fresh_confirmation_verified'])
-        self.assertEqual(
-            obs['reason'],
-            'pre-lock-refusal-and-fresh-confirmation-observed-structured-stale-invalidation-unverified')
-        self.assertEqual(witness_mock.call_count, 2)
-        self.assertTrue(obs['secret_setup']['reveal_ready'])
-        fake_ui.click.assert_any_call('Hide now')
-        disable_mock.assert_called_once_with(ACCOUNT, vm_id='owned')
-
-    def test_lock_during_presence_passes_when_structured_step_away_invalidation_and_fresh_confirmation_succeed(self):
-        pre_id, fresh_id = self._dialog_identity(2), self._dialog_identity(3)
-        pre_surface = {'kind': 'presence-dialog', 'identity': pre_id, 'active': True}
-        fresh_surface = {'kind': 'presence-dialog', 'identity': fresh_id, 'active': True}
-        native_extra, witness_mock = self._mock_private_password_delivery([pre_id, fresh_id])
-        refusal_alert = {'role': 2, 'visible': True, 'attributes': []}
-        challenge = {
-            'challenge_id': '00000000-0000-4000-8000-000000000001',
-            'purpose': 'reveal', 'window_label': 'main', 'generation': 0}
-        invalidation = {
-            'challenge_id': '00000000-0000-4000-8000-000000000001',
-            'purpose': 'reveal', 'window_label': 'main',
-            'generation_before': 0, 'generation_after': 1,
-            'code': 'presence_denied', 'resolution': 'step_away'}
-        outcome, disable_mock, _, fake_ui = self._run_case(
-            'lock-during-presence',
-            dialog_surfaces=[pre_surface, None, fresh_surface, None],
-            alert_result=refusal_alert,
-            challenge_rows=(challenge,),
-            invalidation_rows=(invalidation,),
-            native_input_extra=native_extra)
-        self.assertEqual(outcome[4], 'passed')
-        obs = outcome[5]
-        self.assertEqual(obs['pre_lock_challenge'], challenge)
-        self.assertTrue(obs['stale_challenge_refusal_verified'])
-        self.assertEqual(obs['stale_challenge_invalidation'], invalidation)
-        self.assertTrue(obs['fresh_confirmation_verified'])
-        self.assertEqual(obs['reason'], 'pre-lock-stale-challenge-refusal-and-fresh-confirmation-verified')
-        self.assertEqual(witness_mock.call_count, 2)
-        self.assertTrue(obs['secret_setup']['reveal_ready'])
-        fake_ui.click.assert_any_call('Hide now')
-        disable_mock.assert_called_once_with(ACCOUNT, vm_id='owned')
+        observations = outcome[5]
+        self.assertEqual(observations['pre_lock_confirmation'], pre_surface)
+        self.assertEqual(observations['pre_lock_challenge'], challenge)
+        self.assertFalse(observations['fresh_confirmation_verified'])
+        self.assertFalse(observations['system_authentication_verified'])
+        self.assertFalse(observations['stale_challenge_refusal_verified'])
+        self.assertEqual(observations['reason'], 'legacy-app-password-dialog-cannot-qualify-system-authentication')
+        self.assertNotIn('A' * 40, json.dumps(observations))
+        self.assertEqual([call.args[0] for call in ui.click.call_args_list], ['Reveal value'])
+        policy.__exit__.assert_called_once()
+        disable.assert_called_once_with(ACCOUNT, vm_id='owned')
 
     def test_controller_verifies_deliveries_for_initial_lock_state_and_lock_during_presence(self):
         for case_name, extra_ops in (
