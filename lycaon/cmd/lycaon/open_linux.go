@@ -11,14 +11,11 @@ import (
 	"sync"
 	"syscall"
 	"time"
-
-	"github.com/lycaon/lycaon/internal/launchverify"
 )
 
 // linuxDesktopLauncher is the installed desktop entry point, the same program the
-// desktop file runs. The protected launch (#1118) replaces it with its fixed
-// bootstrap; nothing here searches PATH or accepts a caller-chosen program.
-const linuxDesktopLauncher = launchverify.DesktopAppPath
+// desktop file runs. Nothing here searches PATH or accepts a caller-chosen program.
+const linuxDesktopLauncher = "/usr/libexec/painted-wolf-code/pw-launch"
 
 // stopGrace bounds how long a cancelled or timed-out start may take to exit before
 // its process group is killed.

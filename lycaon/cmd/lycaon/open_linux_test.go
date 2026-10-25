@@ -253,7 +253,7 @@ func TestOnlyAnInstallerControlledLauncherStarts(t *testing.T) {
 	if _, err := startDesktop(missing); err == nil || !strings.Contains(err.Error(), "not installed") {
 		t.Fatalf("missing launcher = %v", err)
 	}
-	if linuxDesktopLauncher != "/opt/painted-wolf-code/bin/painted-wolf-code" {
+	if linuxDesktopLauncher != "/usr/libexec/painted-wolf-code/pw-launch" {
 		t.Fatalf("installed launcher %q is not the desktop file's program", linuxDesktopLauncher)
 	}
 }
