@@ -12,7 +12,7 @@ import threading
 import unittest
 from unittest.mock import patch
 
-from linux_release.installed_cases.app import process_identity
+from linux_release.installed_process import process_identity
 from linux_release.installed_input import password_socket as private
 
 

@@ -10,7 +10,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
-from linux_release.installed_cases.app import process_identity
+from linux_release.installed_process import process_identity
 from linux_release.installed_input import password_endpoint, password_exchange, private_pipe, password_socket
 from verification_tests.distribution.installed import test_installed_password_actor_execution as actor_tests
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import time
 
-from .app import process_identity
+from ..installed_process import process_identity
 from .desktop_ui import retry_inventory
 from .records import CaseUnavailable
 from ..installed_input import accessibility, lineage

@@ -9,7 +9,7 @@ import time
 
 from .. import installed_gnome
 from ..installed_input.session_wire import LOCKER_NAMES
-from .app import process_identity
+from ..installed_process import process_identity
 from .logind_context import CallFailure, Reader, LOGIN, MANAGER
 from .records import CaseUnavailable
 

@@ -6,7 +6,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from linux_release.installed_cases import app
+from linux_release import installed_process
 from linux_release.installed_input import mailbox, password_wire, protocol
 
 
@@ -38,7 +38,7 @@ class PasswordActorTests(unittest.TestCase):
         output = io.BytesIO()
         with patch.object(mailbox.sys, 'stdin', SimpleNamespace(buffer=source)), \
                 patch.object(mailbox.sys, 'stdout', SimpleNamespace(buffer=output)), \
-                patch.object(app, 'process_identity', return_value=self.identity), \
+                patch.object(installed_process, 'process_identity', return_value=self.identity), \
                 patch.object(mailbox.os, 'getuid', return_value=1234):
             mailbox.serve(self.execution, 'owned-fedora')
         return [mailbox.decode(line) for line in output.getvalue().splitlines()]
@@ -148,7 +148,7 @@ class PrivateMailboxRoutingTests(unittest.TestCase):
                 with patch.object(mailbox, 'Mailbox', return_value=selected), \
                      patch.object(mailbox.sys, 'stdin', SimpleNamespace(buffer=source)), \
                      patch.object(mailbox.sys, 'stdout', SimpleNamespace(buffer=output)), \
-                     patch.object(app, 'process_identity', return_value=pending['actor']['process']), \
+                     patch.object(installed_process, 'process_identity', return_value=pending['actor']['process']), \
                      patch.object(mailbox.os, 'getuid', return_value=1234), \
                      patch.object(mailbox.secrets, 'token_hex', return_value=pending['actor']['session_nonce']), \
                      patch.object(password_endpoint, 'serve', return_value=successful) as endpoint:

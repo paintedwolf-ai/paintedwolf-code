@@ -10,7 +10,7 @@ from pathlib import Path
 import stat
 
 from ..installed_runtime import unchanged
-from ..installed_cases.app import descends, engine_image, process_identity
+from ..installed_process import descends, engine_image, process_identity
 from ..installed_cases.native_session import kernel_owner
 from . import lineage
 
