@@ -10,6 +10,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/scan"
 	scancatalog "github.com/lycaon/lycaon/internal/scan/catalog"
+	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -23,22 +24,22 @@ func concurrency() int {
 	return 4
 }
 
-// TestConcurrentScansStayBounded runs several maintained-engine scans at once
-// and records what the host actually pays: per-scan latency spread, peak
-// aggregate process-tree memory, peak descendant count, and cleanup.
+// TestConcurrentScansStayBounded requires overlapping engine work within an RSS budget.
 func TestConcurrentScansStayBounded(t *testing.T) {
 	n := concurrency()
+	const files, matches = 16, 4
 	scanners := make([]scan.CodeScanner, n)
 	projects := make([]string, n)
 	for i := range scanners {
 		scanners[i] = newScanner(t, "stress-contention", scancatalog.RuntimePolicy{})
-		projects[i] = writeCorpus(t, corpusSpec{Files: corpusFiles(), VulnPerFile: 3})
+		projects[i] = writeResourceCorpus(t, files, matches)
 	}
 
 	loadBefore := loadAverage(t)
 	obs := startObserver(t, 250*time.Millisecond)
 	latencies := make([]time.Duration, n)
 	findings := make([]int, n)
+	results := make([]*scanoutput.Result, n)
 	errs := make([]error, n)
 	var wg sync.WaitGroup
 	wallStart := time.Now()
@@ -53,9 +54,7 @@ func TestConcurrentScansStayBounded(t *testing.T) {
 			})
 			latencies[i] = time.Since(start)
 			errs[i] = err
-			if res != nil {
-				findings[i] = res.FindingsCount
-			}
+			results[i] = res
 		}(i)
 	}
 	wg.Wait()
@@ -70,6 +69,8 @@ func TestConcurrentScansStayBounded(t *testing.T) {
 			t.Errorf("concurrent scan %d failed: %v", i, errs[i])
 			continue
 		}
+		requireResourceFindings(t, results[i], files, matches)
+		findings[i] = results[i].FindingsCount
 		if min == 0 || latencies[i] < min {
 			min = latencies[i]
 		}
@@ -78,6 +79,10 @@ func TestConcurrentScansStayBounded(t *testing.T) {
 		}
 		total += latencies[i]
 	}
+	if failed == n {
+		t.Fatal("every concurrent scan failed")
+	}
+	requireResourceBounds(t, samples, n)
 	if failed == 0 {
 		first := findings[0]
 		for i, got := range findings {

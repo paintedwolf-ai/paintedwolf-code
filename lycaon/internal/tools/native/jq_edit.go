@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	nativejq "github.com/lycaon/lycaon/internal/tools/native/jq"
 	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
@@ -53,7 +54,7 @@ func (t *JqEditTool) Run(ctx context.Context, args map[string]any, tctx tools.To
 			return "", err
 		}
 	}
-	return retryEditorDocument(ctx, target.DisplayPath, func() (string, error) {
+	return retryEditorOperation(ctx, target.DisplayPath, func() (string, error) {
 		src, err := t.loadSource(ctx, tctx, source, dest != "")
 		if err != nil {
 			return "", err
@@ -107,6 +108,9 @@ func loadWriteBase(ctx context.Context, tctx tools.ToolContext, target projectpa
 		return sourceview.Text{}, nil, nil
 	}
 	if err != nil {
+		if toolrejection.AsToolReject(err) != nil {
+			return sourceview.Text{}, nil, err
+		}
 		return sourceview.Text{}, nil, fmt.Errorf("read failed: %w", err)
 	}
 	return st, &st.Content, nil
