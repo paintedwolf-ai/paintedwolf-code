@@ -39,7 +39,7 @@ func TestReducedEnvironDropsAmbientCredentials(t *testing.T) {
 	if !strings.Contains(joined, "LANG=en_US.UTF-8") || !strings.Contains(joined, "PATH=") || !strings.Contains(joined, "TERM=dumb") || !strings.Contains(joined, "PAGER=cat") {
 		t.Fatalf("ReducedEnviron dropped process plumbing or non-interactive terminal defaults: %v", got)
 	}
-	opts, err := AgentLaunchOptions(HostLaunch("exec test"), t.TempDir(), nil, nil, true)
+	opts, err := AgentLaunchOptions(HostLaunch("exec test"), t.TempDir(), nil, nil)
 	if err != nil || !slices.Contains(opts.AppendEnv, "GIT_PAGER=cat") {
 		t.Fatalf("AgentLaunchOptions AppendEnv = %v, err = %v", opts.AppendEnv, err)
 	}

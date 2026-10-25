@@ -512,7 +512,7 @@ func TestScreeningExpansionKeepsFullCopyBeyondRawByteCount(t *testing.T) {
 	mappings, err := f.Recorder.ReadProgramOutputMappings(t.Context(), f.Session, out.ProgramID, out.StdoutRef, memory)
 	testutil.FailErr(t, "lookup expanded body", err)
 	defer mappings.Close()
-	store := f.Recorder.ProgramBlobStore(f.Runtime.Blobs)
+	store := f.Recorder.ProgramBlobStore(t.Context(), f.Runtime.Blobs)
 	store.Dir = tooloutput.ToolOutputSpillDir
 	reader, err := store.Open(mappings.Blob)
 	testutil.FailErr(t, "open expanded retained body", err)

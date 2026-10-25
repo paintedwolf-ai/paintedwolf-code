@@ -16,7 +16,7 @@ func TestProgramOutputLifetimeReconstructsActualClaimsAndKeepsReachableBodies(t 
 	f := newProgramReceiptFixture(t)
 	child := f.child(t)
 	quota := &outputQuota{}
-	store := f.recorder.ProgramBlobStore(blobstore.Store{Root: t.TempDir(), Dir: tooloutput.ToolOutputSpillDir})
+	store := f.recorder.ProgramBlobStore(t.Context(), blobstore.Store{Root: t.TempDir(), Dir: tooloutput.ToolOutputSpillDir})
 	spill, err := tooloutput.RetainScreenedStream(t.Context(), tooloutput.ScreenedReader(io.NopCloser(bytes.NewBufferString("screened complete output"))), tooloutput.StreamSpillOptions{Store: store, ClaimID: child.Invocation().Identity.ExecutionID, MaximumBytes: 64, PreviewBytes: 4, Admission: quota, WorkingMemory: quota, RetainedState: quota})
 	testutil.FailErr(t, "retain actual source-owned screened body", err)
 	output := invocation.RetainedOutput{ExecutionID: child.Invocation().Identity.ExecutionID, Stream: "stdout", Reference: "output:actual-retained-result", Complete: true}
@@ -86,7 +86,7 @@ func TestProgramOutputLifetimeRetainsAmbiguousWrapperUntilActualAttachmentReconc
 	f := newProgramReceiptFixture(t)
 	child := f.child(t)
 	quota := &outputQuota{}
-	store := f.recorder.ProgramBlobStore(blobstore.Store{Root: t.TempDir(), Dir: tooloutput.ToolOutputSpillDir})
+	store := f.recorder.ProgramBlobStore(t.Context(), blobstore.Store{Root: t.TempDir(), Dir: tooloutput.ToolOutputSpillDir})
 	lifetime, err := invocation.NewProgramOutputRetention(t.Context(), f.recorder, store, f.session, quota)
 	testutil.FailErr(t, "admit output lifecycle", err)
 	testutil.FailErr(t, "restore empty output references", lifetime.Restore(t.Context()))

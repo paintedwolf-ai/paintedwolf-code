@@ -127,7 +127,7 @@ func (d *ProgramDispatcher) publishDocument(ctx context.Context, parent toolcont
 			}}, nil
 		},
 	}
-	marker := &admissionMarker{ProgramAdmissionRecorder: invocation.ProgramAdmissionRecorder{Recorder: d.run.recorder, Inputs: d.run.capture}}
+	marker := &invocation.ProgramAdmissionRecorder{Recorder: d.run.recorder, Inputs: d.run.capture}
 	result, runErr := d.run.executor.InvokeNative(ctx, d.run.frame, d.run.surface, d.run.memory, d.run.progress, marker, effect, d.run.tc)
 	if toolrejection.AsToolReject(runErr) != nil {
 		d.shared.mu.Lock()
@@ -136,7 +136,7 @@ func (d *ProgramDispatcher) publishDocument(ctx context.Context, parent toolcont
 		}
 		d.shared.mu.Unlock()
 	}
-	settlement := toolcontract.ProgramChildSettlement{Result: result.Producer, OwnerInvoked: result.OwnerInvoked || marker.started, HostStopCode: result.HostStopCode}
+	settlement := toolcontract.ProgramChildSettlement{Result: result.Producer, OwnerInvoked: result.OwnerInvoked || marker.OwnerStartRecorded, HostStopCode: result.HostStopCode}
 	if saved.Saved {
 		settlement.AcceptedRevision = fmt.Sprintf("document:%s@%d", publication.Document.ID, publication.Document.Revision)
 		settlement.PublishedRevision = "sha256:" + saved.Document.BaseSHA256

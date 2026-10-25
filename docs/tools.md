@@ -10,10 +10,9 @@ Tools are structured capabilities published with argument schema, execution poli
 
 ## Portable command language version 1
 
-The [milestone 10](https://github.com/paintedwolf-ai/paintedwolf-code/milestone/10)
-contract is frozen independently from runtime activation. The currently shipped
-command path described below remains in use until its replacements land. The
-versioned catalog does not enable a shell fallback or qualify native execution.
+The versioned catalog defines the program language and native utility contracts.
+Programs dispatch through host-owned operations; the catalog grants no execution
+authority and provides no shell fallback.
 
 Machine sources live in
 [`command-language-v1/`](../lycaon/config/packs/painted-wolf/platform/tools/command-language-v1/).
@@ -23,31 +22,28 @@ status/publication rules, representation, retained output and compact schema cop
 Each utility family defines argv grammar, option spelling/arity/value role,
 effect modes, platform capabilities, status, encoding, examples and existing
 implementation/test references. The stock disposition inventory covers the live
-manifest, retaining domain operations and naming the future replacement work.
-No routine schema is retired by publishing these contracts.
+manifest and its domain operations.
 
 `./task codegen:tool-command-equivalence` compiles the same catalog into
 `toolcontract.LanguageV1`; its existing `:check` target detects drift.
 `CommandHelp` derives option help from these facts rather than maintaining a
-second executor/prompt option map. P04 consumes the typed facts in its parser;
-P03 binds executable operations through existing subsystem contracts. Pure catalog
+second executor/prompt option map. The parser consumes typed facts, and dispatch
+binds executable operations through existing subsystem contracts. Pure catalog
 facts carry no grant or execution authority.
 
 The catalog freezes both GNU and BSD `sed -i` without backups, GNU `stat -c`
 and BSD `stat -f` formats, and Base64 `-d`/`-D` decoding. Empty xargs launches
 nothing; `wc -l` counts LF bytes. Ripgrep's conflicting short options retain
 ripgrep roles rather than copying grep aliases. PCRE-compatible grammar is an
-explicit bounded contract; P13 selects and qualifies an engine rather than
-calling RE2 full PCRE. File signatures name format-identification evidence,
+explicit bounded contract enforced by the native regex engine. File signatures name format-identification evidence,
 not archive/database trust.
 
 Native byte streams preserve the saved file representation, including its
 encoding, BOM and newline policy. Checksums and byte counts cover those saved
 bytes; decoded transforms retain explicit source mappings. Exact delivered literal source windows may
 qualify conversational edit evidence, while internal execution reads do not.
-This deliberately replaces the old mixed editor-line/disk-byte wc projection
-for command output. Diff reuses the existing engine; complete stream bounds
-are independent from its old structured preview/context caps.
+Diff reuses the existing engine; complete stream bounds are independent from
+structured preview and context caps.
 
 Overwrite, append and in-place edits capture revisions before producers,
 stage complete output, review exact bytes, then publish each eligible target.
@@ -397,9 +393,9 @@ The preferred tool is the highest-level capability that completely expresses the
 | Domain tool | Files, git, scans, search, workflow, delegation, browser, and other host operations |
 | Native analysis tool | A bounded first-party read or transformation with structured arguments, rejects, and evidence |
 | Confined MCP | An external protocol tool whose complete effect remains inside host confinement and policy |
-| Generic `command` | Last resort when no structured capability expresses the operation |
+| `command` | Programs that compose native utilities and confined external processes |
 
-Higher-level tools expose intent and consequences as fields, so the host can enforce scope, choose approval, preserve evidence, and offer specific recovery without parsing shell text. The generic command path still takes structured argv, not a shell string, and is not a shortcut around a native operation, project boundary, or approval gate.
+Domain tools expose intent and consequences as fields. `command` expresses programs whose reached statements bind to the same native owners, project boundaries and approval gates. Both forms preserve operation evidence and structured recovery.
 
 ### Root-scope guards
 

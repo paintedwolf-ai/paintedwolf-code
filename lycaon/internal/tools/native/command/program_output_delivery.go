@@ -98,7 +98,7 @@ func (r *ProgramRuntime) outcome(ctx context.Context, run *programRun, outputs *
 }
 
 // retainProgramStream crosses durable screening once and gives its emitted
-// stream directly to the existing P10 retention owner.
+// stream directly to the invocation retention owner.
 func (r *ProgramRuntime) retainProgramStream(ctx context.Context, run *programRun, stream *programStream, name string, scope captureprojection.Scope) (*tooloutput.StreamSpill, bool, error) {
 	type retained struct {
 		spill *tooloutput.StreamSpill
@@ -113,7 +113,7 @@ func (r *ProgramRuntime) retainProgramStream(ctx context.Context, run *programRu
 	maximum := stream.limit
 	go func() {
 		spill, err := tooloutput.RetainScreenedStream(ctx, tooloutput.ScreenedReader(input), tooloutput.StreamSpillOptions{
-			Store: r.Recorder.ProgramBlobStore(r.Blobs), ClaimID: run.root.Identity.ProgramID + ":" + name,
+			Store: r.Recorder.ProgramBlobStore(ctx, r.Blobs), ClaimID: run.root.Identity.ProgramID + ":" + name,
 			MaximumBytes: maximum, PreviewBytes: 4 << 10, Admission: r.sessionResources(scope.SessionID), WorkingMemory: r.sessionResources(scope.SessionID), RetainedState: r.sessionResources(scope.SessionID),
 		})
 		_ = input.CloseWithError(err)

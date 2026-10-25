@@ -154,7 +154,7 @@ func newRetainedDeliveryFixture(t *testing.T) retainedDeliveryFixture {
 		var screened bytes.Buffer
 		_, err := projector.ScreenStream(ctx, scope, "capture.native", bytes.NewReader(content), &screened, stream)
 		testutil.FailErr(t, "screen actual native bytes", err)
-		spill, err := tooloutput.RetainScreenedStream(ctx, tooloutput.ScreenedReader(io.NopCloser(bytes.NewReader(screened.Bytes()))), tooloutput.StreamSpillOptions{Store: recorder.ProgramBlobStore(blobstore.Store{Root: dataDir}), ClaimID: claim, MaximumBytes: 1 << 20, PreviewBytes: preview, Admission: quota, WorkingMemory: quota, RetainedState: quota})
+		spill, err := tooloutput.RetainScreenedStream(ctx, tooloutput.ScreenedReader(io.NopCloser(bytes.NewReader(screened.Bytes()))), tooloutput.StreamSpillOptions{Store: recorder.ProgramBlobStore(ctx, blobstore.Store{Root: dataDir}), ClaimID: claim, MaximumBytes: 1 << 20, PreviewBytes: preview, Admission: quota, WorkingMemory: quota, RetainedState: quota})
 		testutil.FailErr(t, "retain complete actual screened stream", err)
 		return spill
 	}

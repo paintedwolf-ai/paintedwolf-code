@@ -71,7 +71,7 @@ func (d *ProgramDispatcher) beginOutput(ctx context.Context, destination command
 				}}, nil
 			},
 		}
-		marker := &admissionMarker{ProgramAdmissionRecorder: invocation.ProgramAdmissionRecorder{Recorder: d.run.recorder, Inputs: d.run.capture}}
+		marker := &invocation.ProgramAdmissionRecorder{Recorder: d.run.recorder, Inputs: d.run.capture}
 		result, err := d.run.executor.InvokeNative(ctx, d.run.frame, d.run.surface, d.run.memory, d.run.progress, marker, effect, d.run.tc)
 		if toolrejection.AsToolReject(err) != nil {
 			d.shared.mu.Lock()
@@ -80,7 +80,7 @@ func (d *ProgramDispatcher) beginOutput(ctx context.Context, destination command
 			}
 			d.shared.mu.Unlock()
 		}
-		finalErr = errors.Join(err, d.settleWith(ctx, child, toolcontract.ProgramChildSettlement{Result: result.Producer, OwnerInvoked: result.OwnerInvoked || marker.started, HostStopCode: result.HostStopCode, AcceptedRevision: published.AcceptedRevision, PublishedRevision: published.PublishedRevision, Conflict: revisionConflict(err)}))
+		finalErr = errors.Join(err, d.settleWith(ctx, child, toolcontract.ProgramChildSettlement{Result: result.Producer, OwnerInvoked: result.OwnerInvoked || marker.OwnerStartRecorded, HostStopCode: result.HostStopCode, AcceptedRevision: published.AcceptedRevision, PublishedRevision: published.PublishedRevision, Conflict: revisionConflict(err)}))
 	}
 	return tools.CommandOutputWrite{Publish: func(ctx context.Context, apply func(context.Context, tools.ToolContext) (commandprogram.OutputPublished, error)) (commandprogram.OutputPublished, error) {
 		once.Do(func() { settle(ctx, apply, nil) })

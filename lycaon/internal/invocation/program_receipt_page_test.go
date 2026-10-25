@@ -48,7 +48,7 @@ func TestProgramPageCarriesChildOutputsJobsAndConflicts(t *testing.T) {
 	f := newProgramReceiptFixture(t)
 	writeID, backgroundID := conflictedWrite(t, f)
 	quota := &outputQuota{}
-	store := f.recorder.ProgramBlobStore(blobstore.Store{Root: t.TempDir(), Dir: tooloutput.ToolOutputSpillDir})
+	store := f.recorder.ProgramBlobStore(t.Context(), blobstore.Store{Root: t.TempDir(), Dir: tooloutput.ToolOutputSpillDir})
 	lifetime, err := invocation.NewProgramOutputRetention(t.Context(), f.recorder, store, f.session, quota)
 	testutil.FailErr(t, "admit output lifetime", err)
 	testutil.FailErr(t, "restore empty output set", lifetime.Restore(t.Context()))

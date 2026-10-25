@@ -114,14 +114,10 @@ func (r *ProgramRuntime) sourceObserver() invocation.ProgramSourceObserver {
 
 func (r *ProgramRuntime) commitStreamSourceDeliveries(ctx context.Context, run *programRun, programID, ref string, screenedBytes []byte, mappings []toolcontract.StreamSourceMapping, ranges [][2]int64) {
 	observer := r.sourceObserver()
-	if r.Recorder == nil {
-		return
-	}
 	responseID := run.parentReceipt
 	if responseID == "" {
 		responseID = programID
 	}
-	admission := r.sessionResources(run.tc.Identity.SessionID)
 	for _, rng := range ranges {
 		winStart, winEnd := rng[0], rng[1]
 		if winEnd <= winStart || winEnd-winStart > int64(len(screenedBytes)) {
@@ -138,6 +134,10 @@ func (r *ProgramRuntime) commitStreamSourceDeliveries(ctx context.Context, run *
 				continue
 			}
 			deliveredSlice := screenedBytes[streamStart-winStart : streamEnd-winStart]
+			tools.RememberCommandSourceDelivery(ctx, run.tc, run.memory, m, deliveredSlice)
+			if observer == nil || r.Recorder == nil {
+				continue
+			}
 			relPath, capturedBytes, release, ok := r.loadCapturedSourceForPin(ctx, run, m.Source, len(deliveredSlice))
 			if !ok {
 				continue
@@ -152,7 +152,7 @@ func (r *ProgramRuntime) commitStreamSourceDeliveries(ctx context.Context, run *
 				continue
 			}
 			tools.RememberCommandSourceDelivery(ctx, run.tc, run.memory, local, deliveredSlice)
-			if observer != nil {
+			if observer != nil && r.Recorder != nil {
 				_, _ = r.Recorder.CommitProgramSourceDelivery(ctx, invocation.ProgramSourceDelivery{
 					SessionID:       run.tc.Identity.SessionID,
 					ProgramID:       programID,
@@ -160,7 +160,7 @@ func (r *ProgramRuntime) commitStreamSourceDeliveries(ctx context.Context, run *
 					OutputStartByte: streamStart,
 					OutputEndByte:   streamEnd,
 					Observation:     obs,
-				}, observer, admission)
+				}, observer, r.sessionResources(run.tc.Identity.SessionID))
 			}
 			release()
 		}

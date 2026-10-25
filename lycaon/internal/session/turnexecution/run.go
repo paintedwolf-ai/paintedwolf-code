@@ -29,7 +29,6 @@ var RunTurnBusyWindowFaultForTest func()
 func (m *Service) Run(ctx context.Context, id string, in promptinput.Input) (resp *promptresult.Result, runErr error) {
 	ctx = m.Execution.Attach(ctx, id)
 	defer m.Execution.Cancel(id)
-
 	sess, err := m.store.Get(ctx, id)
 	if err != nil {
 		return nil, err

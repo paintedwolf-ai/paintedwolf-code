@@ -37,7 +37,9 @@ func TestProgramRootSourceRetainsActualClaimAndRestoresWithoutSyntheticChild(t *
 	f := newProgramReceiptFixture(t)
 	_, err := f.database.ExecContext(t.Context(), `DELETE FROM invocation_programs WHERE id=?`, f.program)
 	testutil.FailErr(t, "prepare fresh actual parent", err)
-	store := f.recorder.ProgramBlobStore(blobstore.Store{Root: t.TempDir(), Dir: tooloutput.ToolOutputSpillDir})
+	programContext, cancelProgram := context.WithCancel(t.Context())
+	defer cancelProgram()
+	store := f.recorder.ProgramBlobStore(programContext, blobstore.Store{Root: t.TempDir(), Dir: tooloutput.ToolOutputSpillDir})
 	quota := &outputQuota{}
 	spill, err := tooloutput.RetainScreenedStream(t.Context(), tooloutput.ScreenedReader(io.NopCloser(bytes.NewBufferString("${op} arg"))), tooloutput.StreamSpillOptions{Store: store, ClaimID: f.program, MaximumBytes: 64, PreviewBytes: 3, Admission: quota, WorkingMemory: quota, RetainedState: quota})
 	testutil.FailErr(t, "retain screened exact submitted source", err)
@@ -70,6 +72,7 @@ func TestProgramRootSourceRetainsActualClaimAndRestoresWithoutSyntheticChild(t *
 	}
 	// A mistaken/ambiguous cleanup attempt must preserve the very marker
 	// required by boot reconstruction while SQL still names this attachment.
+	cancelProgram()
 	if err = body.Close(); err == nil {
 		t.Fatal("durable source allowed premature close")
 	}
@@ -107,7 +110,7 @@ func TestIncompleteDeliveryWindowSurvivesReopenWithoutChangingExecution(t *testi
 	before, err := f.recorder.ReadProgramPage(t.Context(), f.session, f.program, "", 10)
 	testutil.FailErr(t, "read execution before delivery", err)
 	quota := &outputQuota{}
-	store := f.recorder.ProgramBlobStore(blobstore.Store{Root: t.TempDir()})
+	store := f.recorder.ProgramBlobStore(t.Context(), blobstore.Store{Root: t.TempDir()})
 	lifetime, err := invocation.NewProgramOutputRetention(t.Context(), f.recorder, store, f.session, quota)
 	testutil.FailErr(t, "open output lifetime", err)
 	testutil.FailErr(t, "restore output lifetime", lifetime.Restore(t.Context()))
@@ -142,7 +145,7 @@ func TestProgramOutputOmitsUnadmittedMappingsAndKeepsCompleteBody(t *testing.T) 
 		t.Run(mode, func(t *testing.T) {
 			f := newProgramReceiptFixture(t)
 			quota := &mappingQuota{maximum: 1 << 30}
-			store := f.recorder.ProgramBlobStore(blobstore.Store{Root: t.TempDir(), Dir: tooloutput.ToolOutputSpillDir})
+			store := f.recorder.ProgramBlobStore(t.Context(), blobstore.Store{Root: t.TempDir(), Dir: tooloutput.ToolOutputSpillDir})
 			lifetime, err := invocation.NewProgramOutputRetention(t.Context(), f.recorder, store, f.session, quota)
 			testutil.FailErr(t, "create lifetime", err)
 			testutil.FailErr(t, "restore lifetime", lifetime.Restore(t.Context()))

@@ -17,7 +17,9 @@ import (
 
 // ProgramBlobStore includes receipt references in the existing blob-store floor.
 // It preserves other durable users' callback and never substitutes a new claim.
-func (r *SQLRecorder) ProgramBlobStore(store blobstore.Store) blobstore.Store {
+func (r *SQLRecorder) ProgramBlobStore(ctx context.Context, store blobstore.Store) blobstore.Store {
+	// Physical body cleanup must still check durable references after cancellation.
+	ctx = context.WithoutCancel(ctx)
 	previous := store.Retained
 	store.Retained = func(id string) (bool, error) {
 		if previous != nil {
@@ -30,7 +32,7 @@ func (r *SQLRecorder) ProgramBlobStore(store blobstore.Store) blobstore.Store {
 			return false, fmt.Errorf("invocation recorder is not configured")
 		}
 		var present bool
-		err := r.database.QueryRowContext(context.Background(), `SELECT EXISTS (SELECT 1 FROM invocation_program_outputs WHERE json_extract(blob_json,'$.ID')=?)`, id).Scan(&present)
+		err := r.database.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM invocation_program_outputs WHERE json_extract(blob_json,'$.ID')=?)`, id).Scan(&present)
 		return present, err
 	}
 	return store
@@ -110,7 +112,7 @@ func (r *SQLRecorder) AttachProgramOutput(ctx context.Context, programID string,
 			return err
 		}
 		defer func() { _ = tx.Rollback() }()
-		if err = insertProgramOutput(ctx, tx, programID, output, reference, string(mappings), spill.Preview); err != nil {
+		if err := insertProgramOutput(ctx, tx, programID, output, reference, string(mappings), spill.Preview); err != nil {
 			return err
 		}
 		return tx.Commit()
@@ -198,7 +200,7 @@ func (r *SQLRecorder) ReadProgramOutputMappings(ctx context.Context, sessionID, 
 	defer func() { _ = tx.Rollback() }()
 	const selection = ` FROM invocation_program_outputs o JOIN invocation_programs p ON p.id=o.program_id JOIN invocation_receipts rec ON rec.id=p.parent_receipt_id WHERE o.program_id=? AND o.reference=? AND rec.session_id=?`
 	var size int64
-	if err = tx.QueryRowContext(ctx, `SELECT length(CAST(o.blob_json AS BLOB))+length(CAST(o.mappings_json AS BLOB))`+selection, programID, reference, sessionID).Scan(&size); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT length(CAST(o.blob_json AS BLOB))+length(CAST(o.mappings_json AS BLOB))`+selection, programID, reference, sessionID).Scan(&size); err != nil {
 		return nil, err
 	}
 	if size < 0 || size > limits.bytes {
@@ -218,22 +220,22 @@ func (r *SQLRecorder) ReadProgramOutputMappings(ctx context.Context, sessionID, 
 		}
 	}()
 	var blobJSON, mappingsJSON string
-	if err = tx.QueryRowContext(ctx, `SELECT o.blob_json,o.mappings_json`+selection, programID, reference, sessionID).Scan(&blobJSON, &mappingsJSON); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT o.blob_json,o.mappings_json`+selection, programID, reference, sessionID).Scan(&blobJSON, &mappingsJSON); err != nil {
 		return nil, err
 	}
 	result := &ProgramOutputMappings{}
-	if err = json.Unmarshal([]byte(blobJSON), &result.Blob); err != nil {
+	if err := json.Unmarshal([]byte(blobJSON), &result.Blob); err != nil {
 		return nil, err
 	}
 	if mappingsJSON != "" {
-		if err = json.Unmarshal([]byte(mappingsJSON), &result.Mappings); err != nil {
+		if err := json.Unmarshal([]byte(mappingsJSON), &result.Mappings); err != nil {
 			return nil, err
 		}
 	}
 	if int64(len(result.Mappings)) > limits.events {
 		return nil, fmt.Errorf("output mapping count exceeds receipt bound")
 	}
-	if err = tx.Commit(); err != nil {
+	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 	result.release = release

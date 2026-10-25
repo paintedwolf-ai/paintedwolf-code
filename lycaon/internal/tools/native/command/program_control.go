@@ -90,7 +90,7 @@ func (d *ProgramDispatcher) invokeHost(ctx context.Context, request commandprogr
 			})
 		}}, nil
 	}}
-	marker := &admissionMarker{ProgramAdmissionRecorder: invocation.ProgramAdmissionRecorder{Recorder: d.run.recorder, Inputs: d.run.capture}}
+	marker := &invocation.ProgramAdmissionRecorder{Recorder: d.run.recorder, Inputs: d.run.capture}
 	result, runErr := d.run.executor.InvokeNative(ctx, d.run.frame, d.run.surface, d.run.memory, d.run.progress, marker, effect, d.run.tc)
 	if toolrejection.AsToolReject(runErr) != nil {
 		d.shared.mu.Lock()
@@ -99,7 +99,7 @@ func (d *ProgramDispatcher) invokeHost(ctx context.Context, request commandprogr
 		}
 		d.shared.mu.Unlock()
 	}
-	return result.Producer, errors.Join(runErr, d.settle(ctx, child, result.Producer, result.OwnerInvoked || marker.started, result.HostStopCode))
+	return result.Producer, errors.Join(runErr, d.settle(ctx, child, result.Producer, result.OwnerInvoked || marker.OwnerStartRecorded, result.HostStopCode))
 }
 
 // runProducer opens the evaluator's descriptor scope only after reached-owner

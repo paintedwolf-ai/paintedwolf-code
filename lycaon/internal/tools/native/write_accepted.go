@@ -7,6 +7,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
@@ -34,9 +35,11 @@ func (t *WriteTool) PublishAccepted(ctx context.Context, tc tools.ToolContext, m
 	if err != nil {
 		return result, err
 	}
-	st, _, err := captureSourceDisk(tc, resolved)
+	disk, err := sourceview.ReadTextDocument("read", sourceview.AccessRead, resolved, tc.Host.MaxToolSpillBytes)
+	st := sourceview.Text{}
 	var before *string
 	if err == nil {
+		st.Content, st.Disk = disk.Text(), &disk
 		before = &st.Content
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return result, err
