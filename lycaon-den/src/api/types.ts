@@ -881,7 +881,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Delete a project and settle reviewed optional extension cleanup */
+        /** Accept project deletion and reviewed optional extension cleanup */
         post: operations["createProjectRemoval"];
         delete?: never;
         options?: never;
@@ -896,7 +896,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Read the recorded project removal outcome */
+        /** Read live progress or the recorded project removal outcome */
         get: operations["getProjectRemoval"];
         put?: never;
         post?: never;
@@ -5444,14 +5444,24 @@ export interface components {
             /** @description PRAGMA user_version read from the live store when status is recovery. Omitted on ordinary health. */
             store_schema_version?: number;
             /**
-             * @description Closed reason the store cannot be served. Present when status is recovery.
+             * @description Closed reason the store cannot be served. Present when status is recovery. insufficient_space reports a capacity refusal or exhausted storage; storage_unavailable reports an access or I/O failure. Neither implies database corruption.
              * @enum {string}
              */
-            recovery_reason?: "integrity_failed" | "schema_mismatch";
+            recovery_reason?: "integrity_failed" | "schema_mismatch" | "insufficient_space" | "storage_unavailable";
             /** @description Human-readable sentence matching the recovery reason. Present when status is recovery. */
             recovery_detail?: string;
             /** @description Whether a local recovery snapshot has valid metadata and a supported schema upgrade route. Restore verifies all payload hashes before use. Always false on ordinary health. */
             recovery_snapshot_available: boolean;
+            /**
+             * Format: int64
+             * @description Free bytes the upgrade and its recovery point need. Present when an insufficient_space preflight refusal has an estimate.
+             */
+            recovery_space_needed_bytes?: number;
+            /**
+             * Format: int64
+             * @description Free bytes the volume held when the upgrade was refused. Present when an insufficient_space preflight refusal has an estimate.
+             */
+            recovery_space_available_bytes?: number;
             /**
              * Format: date-time
              * @description RFC 3339 UTC creation time of the recovery snapshot when available. Omitted when recovery_snapshot_available is false.
@@ -11634,7 +11644,15 @@ export interface components {
             remove_extensions: string[];
             force: boolean;
         };
+        /** @description Live host-owned progress; absent once the recorded operation settles. */
+        ProjectRemovalProgress: {
+            /** @enum {string} */
+            phase: "preparing" | "chats" | "project_data" | "files" | "extensions";
+            completed: number;
+            total: number;
+        };
         ProjectRemovalResult: {
+            progress?: components["schemas"]["ProjectRemovalProgress"] | null;
             assessment?: components["schemas"]["ProjectRemovalAssessment"] | null;
             /** Format: uuid */
             operation_id: string;
@@ -18490,7 +18508,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Host-owned removal evidence or outcome */
+            /** @description Durably accepted operation with live progress, or its settled outcome */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -29910,6 +29928,7 @@ export type ProjectRemovalReason = components["schemas"]["ProjectRemovalReason"]
 export type ProjectRemovalExtension = components["schemas"]["ProjectRemovalExtension"];
 export type ProjectRemovalAssessment = components["schemas"]["ProjectRemovalAssessment"];
 export type ProjectRemovalRequest = components["schemas"]["ProjectRemovalRequest"];
+export type ProjectRemovalProgress = components["schemas"]["ProjectRemovalProgress"];
 export type ProjectRemovalResult = components["schemas"]["ProjectRemovalResult"];
 export type AgentContextInstruction = components["schemas"]["AgentContextInstruction"];
 export type AgentContextSkill = components["schemas"]["AgentContextSkill"];

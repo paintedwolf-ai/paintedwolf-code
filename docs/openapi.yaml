@@ -1923,7 +1923,7 @@ paths:
         - projects
       operationId: createProjectRemoval
       x-person-action: record
-      summary: Delete a project and settle reviewed optional extension cleanup
+      summary: Accept project deletion and reviewed optional extension cleanup
       parameters:
         - $ref: '#/components/parameters/ProjectId'
       requestBody:
@@ -1934,7 +1934,7 @@ paths:
               $ref: '#/components/schemas/ProjectRemovalRequest'
       responses:
         '202':
-          description: Host-owned removal evidence or outcome
+          description: Durably accepted operation with live progress, or its settled outcome
           content:
             application/json:
               schema:
@@ -1962,7 +1962,7 @@ paths:
       tags:
         - projects
       operationId: getProjectRemoval
-      summary: Read the recorded project removal outcome
+      summary: Read live progress or the recorded project removal outcome
       parameters:
         - $ref: '#/components/parameters/ProjectId'
         - name: operation_id
@@ -14527,13 +14527,25 @@ components:
           enum:
             - integrity_failed
             - schema_mismatch
-          description: Closed reason the store cannot be served. Present when status is recovery.
+            - insufficient_space
+            - storage_unavailable
+          description: Closed reason the store cannot be served. Present when status is recovery. insufficient_space reports a capacity refusal or exhausted storage; storage_unavailable reports an access or I/O failure. Neither implies database corruption.
         recovery_detail:
           type: string
           description: Human-readable sentence matching the recovery reason. Present when status is recovery.
         recovery_snapshot_available:
           type: boolean
           description: Whether a local recovery snapshot has valid metadata and a supported schema upgrade route. Restore verifies all payload hashes before use. Always false on ordinary health.
+        recovery_space_needed_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Free bytes the upgrade and its recovery point need. Present when an insufficient_space preflight refusal has an estimate.
+        recovery_space_available_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Free bytes the volume held when the upgrade was refused. Present when an insufficient_space preflight refusal has an estimate.
         recovery_snapshot_at:
           type: string
           format: date-time
@@ -29786,6 +29798,30 @@ components:
             type: string
         force:
           type: boolean
+    ProjectRemovalProgress:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: Live host-owned progress; absent once the recorded operation settles.
+      required:
+        - phase
+        - completed
+        - total
+      properties:
+        phase:
+          type: string
+          enum:
+            - preparing
+            - chats
+            - project_data
+            - files
+            - extensions
+        completed:
+          type: integer
+          minimum: 0
+        total:
+          type: integer
+          minimum: 0
     ProjectRemovalResult:
       x-go-generate: true
       type: object
@@ -29803,6 +29839,11 @@ components:
         - workers
         - overlays
       properties:
+        progress:
+          x-go-type: '*ProjectRemovalProgress'
+          oneOf:
+            - $ref: '#/components/schemas/ProjectRemovalProgress'
+            - type: 'null'
         assessment:
           x-go-type: '*ProjectRemovalAssessment'
           oneOf:

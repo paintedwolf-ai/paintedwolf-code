@@ -313,7 +313,7 @@ Scan integration tests live in [`scan/integration`](../lycaon/internal/scan/inte
 |------|-----------|-----------|
 | `pkg/api` wire-only | `internal/` | — |
 | Domain ↔ HTTP | `internal/*` → `internal/api` (except `internal/app`) | — |
-| db bottom | `internal/db` → `internal/` | `configdir`, `timelayout` |
+| db bottom | `internal/db` → `internal/` | `configdir`, `fileclone`, `fseffect`, `fssync`, `timelayout` |
 | Triangle | `internal/prompts` → `internal/tools` **hub** | `tools/readcaps`, `tools/surveyreceipt`, `toolcontract` |
 
 The rest are the extension-catalog edges described above — `extpacks` may not import `contribution`, `catalogview`, or `extensionstate`; `contribution` stays pure but for `filekind` and `theme`; `catalogview` may not import `extensionstate` or `usernotice` — plus a generated rule per loader hub forbidding the reverse edge into `catalogview`. A new rule is added to `layeringRules()` (or the hub loop beside it), not to this table.
@@ -321,3 +321,17 @@ The rest are the extension-catalog edges described above — `extpacks` may not 
 Tool-contract leaf guards: [`TestPromptsUseCompiledToolContracts`](../lycaon/test/contract/tools/toolcontract_leaf_contract_test.go) and [`TestToolsHubUsesCompiledToolContracts`](../lycaon/test/contract/tools/toolcontract_leaf_contract_test.go) keep prompt projection and registration on the compiled generation.
 
 Coordinator wake resources in `coordinator/loopwake` are composed by `LoopEngine`. `Waits` owns sleep state and timer cleanup; `WaitSubscriptions` owns durable condition admission and settlement; `WaitDeliveries` owns resumed-turn delivery. `Nudges` owns pending queues and deduplication, `HostTurns` owns asynchronous turns and the prompt lane, and `Admission` owns execution tokens and loop budgets. Worker-cycle decisions, host wake policy, prompt observations, and session facts have separate narrow peers. Session cleanup drains turns before releasing the domains that hold session state.
+
+## Portable operation composition
+
+`toolcontract` contains the versioned language/catalog facts and immutable `OperationDefinition`. Runtime registry definitions compile the existing argument schema and owner contract into that declaration; metadata, OAR identity/rejection contract, command forms, secret slots, resource limits and lifecycle have one source. Snapshots detach mutable values. The leaf imports neither parser nor executable handlers/live capabilities.
+
+`commandprogram` consumes pure facts and parsed plans. Its operation dispatch, source capture, confined external launch, exact held effect, progress admission, process supervision and result projection interfaces belong to their consumer. Domain adapters implement them; the evaluator imports no database, tools/native, session, toolhost or API package. `toolhost` composes adapters. No package becomes a subsystem by holding an interface or recording a result.
+
+The retained `write` envelope and typed `WriteTool.Apply` share the complete existing scope, review, revision, syntax, attribution and `source_write.go` publication door. The typed result distinguishes acceptance from saved publication. Retained editor retry behavior is preserved. Typed writes explicitly select conversational or execution-pinned admission; execution-pinned writes refuse without effects until P11 supplies that admission, and never enter conversational refresh/rebase/retry. Pure input capture does not call `RememberAgentRead`. Existing command/verify/terminal restricted parser and launch consumers remain until their replacements land in P04/P08/P22; no command dispatch activation or obsolete consumer removal is claimed here.
+
+The mixed fixture uses real accepted-document capture, a pure in-memory transform, previewed exact-revision editor publication, existing held-call process supervision and one existing SQL aggregate receipt. It checks that a later aggregate error preserves the saved child and does not fabricate model observations or child model tool calls. It qualifies those component boundaries, not the future shell evaluator, native/external pipelines, crash reconciliation, installed platforms or live models. See [portable record classes](compatibility.md#portable-command-records).
+
+Operation scope explicitly selects a project tree or a projectless session. Project scope requires project identity; session scope forbids project/root/branch identities. Neither scope grants ambient host authority; existing per-operation people authorization, grants and confinement still apply.
+
+Invocation kind distinguishes a retained structured call carrying its actual model tool-call id from a program child carrying host program/node/execution/source identities. Validation refuses contradictory combinations. Ordinary retained calls never acquire fabricated program nodes, and program children never acquire synthetic model calls.
