@@ -1,9 +1,8 @@
 package query
 
 import (
-	"github.com/lycaon/lycaon/internal/toolcontract"
-	"github.com/lycaon/lycaon/internal/tools/native"
 	nativejq "github.com/lycaon/lycaon/internal/tools/native/jq"
+	"strings"
 )
 
 // runJqEdit runs the structured jq_edit's format-preserving edit over the
@@ -43,6 +42,19 @@ func runJqEdit(inv *invocation) error {
 	if err := inv.recordPin(destination); err != nil {
 		return err
 	}
+	work := &queryWorking{inv: inv}
+	defer work.Close()
+	detectedFormat, err := nativejq.DetectFormat(bound.Resolved.DisplayPath, format)
+	if err != nil {
+		return err
+	}
+	parseBytes := int64(len(source.text))
+	if detectedFormat == "json" {
+		parseBytes = int64(len(strings.TrimSpace(source.text)))
+	}
+	if err := work.resize(2*parseBytes + (64 << 10)); err != nil {
+		return err
+	}
 	edited, err := nativejq.Edit(inv.ctx, nativejq.EditRequest{Path: bound.Resolved.DisplayPath, Format: format, Query: query, Text: source.text})
 	if err != nil {
 		return err
@@ -50,11 +62,5 @@ func runJqEdit(inv *invocation) error {
 	if edited.Text == source.text {
 		return nil
 	}
-	result, err := inv.owners.Write.Apply(inv.ctx, native.WriteInput{Path: bound.Resolved.Abs, Content: edited.Text,
-		Admission: native.WriteExecutionPinned, Destination: destination, Sources: []toolcontract.ExecutionRevision{source.revision}}, inv.tc)
-	if err != nil {
-		return err
-	}
-	inv.published = result.Accepted || result.Saved
-	return inv.barrier.Track(result)
+	return inv.publishText(source, destination, edited.Text, work)
 }

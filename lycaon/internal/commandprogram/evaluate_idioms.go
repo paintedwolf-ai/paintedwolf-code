@@ -113,14 +113,14 @@ func (e *evaluation) ProcessSubstitute(ctx context.Context, scope ExpansionScope
 	}
 	if err != nil {
 		cancel()
-		run.close()
+		run.close(ctx)
 		return nil, err
 	}
 	g, release, err := f.isolate(subCtx, nil)
 	if err != nil {
 		cancel()
 		_ = pipe.CloseConsumer()
-		run.close()
+		run.close(ctx)
 		return nil, f.expansionRefusal(part.SyntaxLocation, err)
 	}
 	fd, path := e.allocateProcSubstFD()
@@ -189,7 +189,7 @@ func (e *evaluation) ProcessSubstitute(ctx context.Context, scope ExpansionScope
 		_ = pipe.CloseProducer(nil)
 		<-entry.done
 		e.releaseProcSubstFD(fd)
-		return subst, entry.settle(f)
+		return subst, entry.settle(ctx, f)
 	}
 	return subst, nil
 }
@@ -224,14 +224,14 @@ func (s *procSubstScope) finish(ctx context.Context, f *frame, stmtErr error) er
 	for _, entry := range entries {
 		<-entry.done
 		f.e.releaseProcSubstFD(entry.fd)
-		if err := entry.settle(f); err != nil && firstErr == nil {
+		if err := entry.settle(ctx, f); err != nil && firstErr == nil {
 			firstErr = err
 		}
 	}
 	return firstErr
 }
 
-func (entry *procSubstEntry) settle(f *frame) error {
+func (entry *procSubstEntry) settle(ctx context.Context, f *frame) error {
 	g := entry.frame
 	err := entry.err
 	status := g.state.control.Status()
@@ -242,7 +242,7 @@ func (entry *procSubstEntry) settle(f *frame) error {
 	if stop, ok := g.state.latch.Stop(); ok {
 		result = stop.Result
 	}
-	entry.run.settle(result, err)
+	entry.run.settle(ctx, result, err)
 	f.publish.mark(result.PublicationEligible)
 	if stop, ok := f.state.latch.Stop(); ok {
 		if err != nil {

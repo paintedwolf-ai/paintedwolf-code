@@ -39,11 +39,17 @@ func (inv *invocation) openDestination(operand commandprogram.Field) (commandpro
 }
 
 // settleStage publishes a complete stage or abandons it on failure.
-func settleStage(ctx context.Context, stage commandprogram.StagedOutput, err error) error {
+func (inv *invocation) settleStage(stage commandprogram.StagedOutput, err error) error {
 	if err != nil {
-		return errors.Join(err, stage.Abandon(context.WithoutCancel(ctx)))
+		return errors.Join(err, stage.Abandon(context.WithoutCancel(inv.ctx)))
 	}
-	_, err = stage.Publish(ctx)
+	published, err := stage.Publish(inv.ctx)
+	if published.AcceptedRevision != "" || published.PublishedRevision != "" {
+		inv.published = true
+	}
+	if err != nil {
+		inv.uncertain = true
+	}
 	return err
 }
 
@@ -67,15 +73,14 @@ func uniqOutput(inv *invocation, operands commandprogram.Fields, run func(*nativ
 	if err != nil {
 		return err
 	}
-	return settleStage(inv.ctx, stage, run(nativeutility.NewOutput(inv.ctx, stage, inv.limit("stream_bytes"))))
+	return inv.settleStage(stage, run(nativeutility.NewOutput(inv.ctx, stage, "stream_bytes", inv.limit("stream_bytes"))))
 }
 
-// effectMode names the catalog mode of commands with several: sed -i and
-// inline w files, sort -o and uniq OUTPUT write; every other form reads.
+// effectMode names the catalog mode of commands with several: sort -o and
+// uniq OUTPUT write; every other form reads. sed's mode is resolved by its
+// admitted prepared plan.
 func (o *Owners) effectMode(argv commandprogram.BoundArgv) string {
 	switch argv.Command {
-	case "sed":
-		return o.sedMode(context.Background(), argv)
 	case "sort":
 		if argvFlag(argv, "-o") {
 			return "-o"

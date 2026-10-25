@@ -35,14 +35,14 @@ func (s *grepSearch) collectMatches(rel string, content []byte) ([]grepMatch, er
 // forEachTextMatch runs the shared line scan with the tool's RE2 contract.
 // Only matching lines allocate surrounding context.
 func (s *grepSearch) forEachTextMatch(rel string, content []byte, yield func(grepMatch) bool) error {
-	_, err := textsearch.ScanLines(s.ctx, content, textsearch.RegexpSelector{Re: s.re}, textsearch.ScanOptions{MaxSelected: -1, TrimCR: true}, func(line textsearch.Line) error {
+	_, err := textsearch.ScanReader(s.ctx, bytes.NewReader(content), 0, nil, textsearch.RegexpSelector{Re: s.re}, textsearch.ScanOptions{MaxSelected: -1, TrimCR: true}, func(line textsearch.Line) error {
 		record := content[line.Start:line.End]
 		entry := grepMatch{Path: rel, Line: line.Number, Content: string(record), Match: string(record[line.Span.Start:line.Span.End])}
 		if s.contextLines > 0 {
 			entry.ContextBefore, entry.ContextAfter = grepLineContext(content, line.Start, grepLineEnd(content, line.Start), s.contextLines)
 		}
 		if !yield(entry) {
-			return textsearch.StopScan
+			return textsearch.ErrStopScan
 		}
 		return nil
 	})

@@ -92,20 +92,20 @@ type stagedRedirect struct {
 func (o *stagedRedirect) finish(ctx context.Context, publish bool) error {
 	if !publish {
 		err := o.output.Abandon(ctx)
-		o.run.settle(toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, err)
+		o.run.settle(ctx, toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, err)
 		return nil
 	}
 	published, err := o.output.Publish(ctx)
 	if err != nil {
 		result := ownerResult(err)
 		writeRedirectRefusal(o.errorStream, o.operator, o.target, result.StopCode)
-		return o.frame.settle(o.run, result, err)
+		return o.frame.settle(ctx, o.run, result, err)
 	}
 	certainty := toolcontract.EffectCompleted
 	if published.PublishedRevision == "" {
 		certainty = toolcontract.NoEffect
 	}
-	o.run.settle(toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: certainty, Evidence: toolcontract.OperationEvidence{OwnerRef: published.PublishedRevision}}, nil)
+	o.run.settle(ctx, toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: certainty, Evidence: toolcontract.OperationEvidence{OwnerRef: published.PublishedRevision}}, nil)
 	return nil
 }
 
@@ -151,17 +151,17 @@ func (g *frame) bind(ctx context.Context, r commandsurface.ProgramRedirect) (*st
 		if subst := field.ProcessSubstitution(); subst != nil {
 			if input, ok := subst.OpenReader(); ok {
 				g.streams.SetReader(redirectDescriptor(r), input)
-				child.settle(ordinaryResult(0), nil)
+				child.settle(ctx, ordinaryResult(0), nil)
 				return nil, input, false, nil
 			}
 		}
 		inputs, _ := g.redirections()
 		input, err := inputs.OpenInput(ctx, InputDestination{Invocation: child.inv, Redirect: r, Target: field})
 		if err != nil {
-			return nil, nil, true, g.redirectFailure(child, r.Operator, target, err)
+			return nil, nil, true, g.redirectFailure(ctx, child, r.Operator, target, err)
 		}
-		g.streams.SetReader(redirectDescriptor(r), input)
-		child.settle(ordinaryResult(0), nil)
+		g.streams.SetReader(redirectDescriptor(r), io.NopCloser(input))
+		child.settle(ctx, ordinaryResult(0), nil)
 		return nil, input, false, nil
 	}
 	var staged StagedOutput
@@ -175,7 +175,7 @@ func (g *frame) bind(ctx context.Context, r commandsurface.ProgramRedirect) (*st
 		var openErr error
 		staged, openErr = outputs.Open(ctx, OutputDestination{Invocation: child.inv, Redirect: r, Target: field})
 		if openErr != nil {
-			return nil, nil, true, g.redirectFailure(child, r.Operator, target, openErr)
+			return nil, nil, true, g.redirectFailure(ctx, child, r.Operator, target, openErr)
 		}
 	}
 	errorStream := g.streams.Error
@@ -203,17 +203,17 @@ func redirectDescriptor(r commandsurface.ProgramRedirect) int {
 
 // redirectFailure records a refused open: owner stops latch, other failures
 // leave an ordinary status 1 and the command unrun.
-func (g *frame) redirectFailure(child *childRun, operator, target string, err error) error {
+func (g *frame) redirectFailure(ctx context.Context, child *childRun, operator, target string, err error) error {
 	result := ownerResult(err)
 	writeRedirectRefusal(g.streams.Error, operator, target, result.StopCode)
-	if settleErr := g.settle(child, result, err); settleErr != nil {
+	if settleErr := g.settle(ctx, child, result, err); settleErr != nil {
 		return settleErr
 	}
 	return nil
 }
 
 func writeRedirectRefusal(w io.Writer, operator, target, code string) {
-	if w == nil || code == "" {
+	if w == nil || code == "" || code == codeLimitExceeded {
 		return
 	}
 	detail := "not supported here"

@@ -10,6 +10,7 @@ import "strings"
 type Budget interface {
 	Step() error
 	Allocate(n int) error
+	Retain(n int) error
 }
 
 func (p *interp) step() error {
@@ -28,17 +29,29 @@ func (p *interp) allocate(n int) error {
 
 // assignElement charges a new element's key and value before storing it.
 func (p *interp) assignElement(array map[string]value, key string, v value) error {
+	n := len(key)
 	if _, exists := array[key]; !exists {
-		if err := p.allocate(len(key) + len(p.toString(v)) + elementOverhead); err != nil {
-			return err
-		}
+		n += elementOverhead + len(v.s) + len(v.backing)
 	}
-	array[key] = v
+	if err := p.allocate(n); err != nil {
+		return err
+	}
+	array[strings.Clone(key)] = v
 	return nil
 }
 
+func (p *interp) arrayGet(array map[string]value, key string) (value, error) {
+	v, exists := array[key]
+	if !exists {
+		if err := p.assignElement(array, key, v); err != nil {
+			return value{}, err
+		}
+	}
+	return v, nil
+}
+
 // elementOverhead covers one map entry and value header beyond its bytes.
-const elementOverhead = 64
+const elementOverhead = 192
 
 // formatBound is an upper bound on the bytes fmt.Sprintf produces for a
 // parsed format: its literal bytes, every width and precision (including *

@@ -12,7 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
-	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/internal/tools/safecmd"
 )
@@ -33,7 +32,7 @@ type invocation struct {
 	status  int
 	// published reports that a write reached the destination owner.
 	published bool
-	pins      []toolcontract.ExecutionRevision
+	releases  []func()
 }
 
 func newInvocation(ctx context.Context, p Prepared, tc tools.ToolContext, streams commandprogram.Streams) *invocation {
@@ -45,7 +44,7 @@ func newInvocation(ctx context.Context, p Prepared, tc tools.ToolContext, stream
 	if inv.stderr == nil {
 		inv.stderr = io.Discard
 	}
-	inv.out = &output{ctx: ctx, w: streams.Output, maximum: p.owners.limit("stream_bytes"), maxSteps: p.owners.limit("query_work_steps")}
+	inv.out = &output{ctx: ctx, w: streams.Output, maximum: p.owners.limit("stream_throughput_bytes"), limitID: "stream_throughput_bytes", maxSteps: p.owners.limit("query_work_steps")}
 	if inv.out.w == nil {
 		inv.out.w = io.Discard
 	}
@@ -56,7 +55,7 @@ func newInvocation(ctx context.Context, p Prepared, tc tools.ToolContext, stream
 func (inv *invocation) step() error {
 	inv.out.steps++
 	if inv.out.maxSteps > 0 && inv.out.steps > inv.out.maxSteps {
-		return limitExceeded("query_work_steps", inv.out.maxSteps, inv.out.steps)
+		return tools.CommandLimitExceeded("query_work_steps", inv.out.maxSteps, inv.out.steps)
 	}
 	return nil
 }
@@ -84,11 +83,6 @@ func (inv *invocation) valueField(key string) (commandprogram.Field, bool) {
 func (inv *invocation) usage(word, reason string) error {
 	return &toolrejection.ToolReject{Code: "COMMAND_OPERAND_INVALID", Data: map[string]any{
 		"command": inv.name(), "word": word, "expected": reason, "reason": reason, "expected_form": inv.spec.Argv}}
-}
-
-// limitExceeded refuses work above a frozen catalog limit; nothing is truncated.
-func limitExceeded(id string, maximum, observed int64) error {
-	return &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"limit_id": id, "resource_unit": nativeutility.ResourceUnit(id), "maximum": maximum, "observed": observed}}
 }
 
 // fail reports an ordinary input or query failure on stderr: jq's status 2.
@@ -120,6 +114,7 @@ func ordinary(err error) (string, bool) {
 // source is one captured file operand's text and its pin.
 type source struct {
 	label, abs, text string
+	encoding         string
 	revision         toolcontract.ExecutionRevision
 }
 
@@ -174,6 +169,7 @@ func (inv *invocation) captureSource(operand commandprogram.Field) (*source, err
 		}
 		return nil, err
 	}
+	inv.releases = append(inv.releases, captured.Close)
 	if maximum := safecmd.JQCaps().InputBytes; int64(len(captured.Content)) > maximum {
 		return nil, safecmd.Reject("JQ_INPUT_TOO_LARGE", map[string]any{"path": captured.Path, "max_bytes": maximum})
 	}
@@ -183,22 +179,23 @@ func (inv *invocation) captureSource(operand commandprogram.Field) (*source, err
 	if err := inv.recordPin(captured.Revision); err != nil {
 		return nil, err
 	}
-	return &source{label: operand.Value, abs: bound.Resolved.Abs, text: captured.Content, revision: captured.Revision}, nil
+	return &source{label: operand.Value, abs: bound.Resolved.Abs, text: captured.Content, encoding: captured.Encoding, revision: captured.Revision}, nil
 }
 
-// recordPin retains every capture of this execution before its bytes are used.
+// recordPin records each capture before its bytes are used; the invocation
+// keeps no duplicate pin history.
 func (inv *invocation) recordPin(revision toolcontract.ExecutionRevision) error {
 	execution := inv.request.Invocation.Identity.ExecutionID
 	if inv.owners.Pins == nil || execution == "" {
 		return fmt.Errorf("query reads require a program execution and pin recorder")
 	}
-	inv.pins = append(inv.pins, revision)
 	return inv.owners.Pins.AppendRevisionPin(inv.ctx, execution, revision)
 }
 
 // settle projects the run onto the producer contract. A published edit is a
 // completed effect even when a later step stops the run.
 func (inv *invocation) settle(err error) (toolcontract.ProducerResult, error) {
+	err = tools.CommandResourceRejection(err)
 	certainty := toolcontract.NoEffect
 	if inv.published {
 		certainty = toolcontract.EffectCompleted
@@ -225,6 +222,7 @@ type output struct {
 	ctx              context.Context
 	w                io.Writer
 	maximum, written int64
+	limitID          string
 	steps, maxSteps  int64
 }
 
@@ -233,7 +231,11 @@ func (o *output) Write(p []byte) (int, error) {
 		return 0, err
 	}
 	if o.maximum > 0 && o.written+int64(len(p)) > o.maximum {
-		return 0, limitExceeded("stream_bytes", o.maximum, o.written+int64(len(p)))
+		id := o.limitID
+		if id == "" {
+			id = "stream_bytes"
+		}
+		return 0, tools.CommandLimitExceeded(id, o.maximum, o.written+int64(len(p)))
 	}
 	n, err := o.w.Write(p)
 	o.written += int64(n)
