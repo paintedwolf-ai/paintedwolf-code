@@ -1,7 +1,9 @@
 package projectadmin
 
 import (
+	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -23,6 +25,11 @@ func (s *Removal) InitProjectRemoval() {
 			return s.Settings.TrustSurfaces.Applies(projectcontrib.SurfaceExtensionSuggestions, p)
 		},
 	}
+	s.background.Go(s.background.Context(), func(ctx context.Context) {
+		if err := s.Owner.Recover(ctx); err != nil {
+			slog.ErrorContext(ctx, "recover interrupted project removals", "err", err)
+		}
+	})
 }
 
 func (s *Removal) HandleAssessProjectRemoval(w http.ResponseWriter, r *http.Request) {
