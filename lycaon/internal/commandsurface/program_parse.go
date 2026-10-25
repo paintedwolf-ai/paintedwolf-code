@@ -155,10 +155,6 @@ func parseProgram(ctx context.Context, source []byte, options ParseOptions, memo
 	}
 	// This envelope bounds the selected host representations, including boxed
 	// union values, old/new slice backing storage, node IDs and cloned strings.
-	// The 2 KiB/node allowance exceeds the largest host union (BinaryCommand),
-	// its slice-growth overlap and synthesized declaration words. Source text is
-	// cloned at most eight times across capture/lowering metadata. Host recursion
-	// shares the selected parser's conservative 4 KiB active-frame envelope.
 	hostBytes := c.nodeCount*2048 + int64(len(source))*8 + int64(len(sourceName)) + (c.maximumDepth+1)*4096 + (64 << 10)
 	var releaseState func()
 	retained := false

@@ -529,6 +529,30 @@ func (r *ProgramRuntime) sessionOutputs(ctx context.Context, sessionID string) (
 	return outputs, nil
 }
 
+func (r *programRun) sourceText(unitID string) string {
+	if unitID == "" || unitID == "submitted" {
+		return r.source
+	}
+	r.sourcesMu.RLock()
+	defer r.sourcesMu.RUnlock()
+	if s, ok := r.sources[unitID]; ok {
+		return s
+	}
+	return r.source
+}
+
+func (r *programRun) setSourceText(unitID, text string) {
+	if unitID == "" {
+		return
+	}
+	r.sourcesMu.Lock()
+	if r.sources == nil {
+		r.sources = map[string]string{}
+	}
+	r.sources[unitID] = text
+	r.sourcesMu.Unlock()
+}
+
 // boundedBuffer keeps the first limit bytes and records truncation; the
 // producer is never blocked or failed by a full display buffer.
 type boundedBuffer struct {
@@ -748,30 +772,6 @@ func (r *programRun) nativeArguments(base map[string]any, contract toolcontract.
 		arguments["secret_use"] = secretUse
 	}
 	return arguments
-}
-
-func (r *programRun) sourceText(unitID string) string {
-	if unitID == "" || unitID == "submitted" {
-		return r.source
-	}
-	r.sourcesMu.RLock()
-	defer r.sourcesMu.RUnlock()
-	if s, ok := r.sources[unitID]; ok {
-		return s
-	}
-	return r.source
-}
-
-func (r *programRun) setSourceText(unitID, text string) {
-	if unitID == "" {
-		return
-	}
-	r.sourcesMu.Lock()
-	if r.sources == nil {
-		r.sources = map[string]string{}
-	}
-	r.sources[unitID] = text
-	r.sourcesMu.Unlock()
 }
 
 // childOutputBytes bounds each child stream the output store retains.
