@@ -134,12 +134,38 @@ class HelperFamilyTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             helper_families.outcome('passed', 'unexpected-reason')
 
-    def test_images_come_only_from_the_sealed_manifest(self):
-        binding = {'images': {'/opt/painted-wolf-code/bin/bialy': {'device': 1, 'inode': 2, 'bytes': 3}}}
-        self.assertEqual(helper_families.images(binding, [Path('/opt/painted-wolf-code/bin/bialy')]), [[1, 2, 3]])
+    def test_images_come_only_from_the_selected_manifest(self):
+        records = {'/opt/painted-wolf-code/bin/bialy': {'device': 1, 'inode': 2, 'bytes': 3}}
+        self.assertEqual(helper_families.images(records, [Path('/opt/painted-wolf-code/bin/bialy')]), [[1, 2, 3]])
         for paths in ([], [Path('/opt/painted-wolf-code/bin/other')]):
             with self.subTest(paths=paths), self.assertRaises(CaseUnavailable):
-                helper_families.images(binding, paths)
+                helper_families.images(records, paths)
+
+    def test_diagnostic_helpers_match_package_identity_without_accepting_sealed_substitutes(self):
+        path = Path('/opt/painted-wolf-code/bin/pw-document-core')
+        package = {'device': IMAGE[0], 'inode': IMAGE[1], 'bytes': IMAGE[2]}
+        sealed = {**package, 'inode': package['inode'] + 1}
+        binding = {'images': {str(path): sealed}, 'package_images': {str(path): package}}
+        pw = {'pid': 11, 'parent_pid': ROOT['pid'], 'start_time_ticks': 31}
+        helper = {'pid': 12, 'parent_pid': pw['pid'], 'start_time_ticks': 32}
+        result = {'exit_code': 0, 'timed_out': False, 'output_limit': False,
+                  'stdout': b'', 'stderr': b'', 'launch_identity': pw}
+        for observed, expected in ((IMAGE, 'passed'),
+                                   ([sealed['device'], sealed['inode'], sealed['bytes']], 'unverified'),
+                                   ([IMAGE[0], IMAGE[1] + 2, IMAGE[2]], 'unverified')):
+            document = tree(process(pw, OUTER, [64768, 1, 1]), process(helper, INNER, observed))
+            with self.subTest(observed=observed), patch.object(helper_families, 'process_identity', return_value=ROOT), \
+                    patch.object(helper_families.os, 'getuid', return_value=1000), \
+                    patch.object(helper_families, 'run', return_value=result), \
+                    patch.object(helper_families, 'sample', return_value=document) as sampled:
+                outcome, _ = helper_families.cli_family(binding, 'document-core', [path])
+            self.assertEqual(outcome['status'], expected)
+            self.assertEqual(sampled.call_args.args[1], [IMAGE])
+        self.assertEqual(helper_families.images(binding['images'], [path]),
+                         [[sealed['device'], sealed['inode'], sealed['bytes']]])
+        with patch.object(helper_families, 'run') as launched, self.assertRaises(CaseUnavailable):
+            helper_families.cli_family({**binding, 'package_images': {}}, 'document-core', [path])
+        launched.assert_not_called()
 
     @unittest.skipUnless(Path('/proc/self/status').exists(), 'the in-domain probe reads Linux /proc')
     def test_probe_reports_from_inside_without_retaining_fixture_bytes(self):

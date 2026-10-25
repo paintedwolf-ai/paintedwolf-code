@@ -96,8 +96,8 @@ def guarded(function) -> dict:
         return outcome('failed', 'installed-contract-refused', error_type=type(error).__name__, detail=str(error)[:512])
 
 
-def images(binding: dict, paths: list[Path]) -> list[list[int]]:
-    selected = [binding['images'].get(str(path)) for path in paths]
+def images(records: dict, paths: list[Path]) -> list[list[int]]:
+    selected = [records.get(str(path)) for path in paths]
     if not paths or any(row is None for row in selected):
         raise CaseUnavailable('selected installed manifest omits a helper family image')
     return [[row['device'], row['inode'], row['bytes']] for row in selected]
@@ -150,7 +150,8 @@ def scanner_families(binding: dict, app, root: Path) -> dict:
     install = Path(binding['install_root'])
     opengrep = [Path(path) for path in binding['images'] if Path(path).name == 'opengrep'
                 and Path(path).is_relative_to(install / 'engine-root')]
-    selected = {'scanner-opengrep': images(binding, opengrep), 'scanner-bialy': images(binding, [install / 'bin/bialy'])}
+    selected = {'scanner-opengrep': images(binding['images'], opengrep),
+                'scanner-bialy': images(binding['images'], [install / 'bin/bialy'])}
     project = root / 'scanners'
     project.mkdir()
     (project / 'fixture.py').write_text('import subprocess\nsubprocess.call("echo " + input(), shell=True)\n')
@@ -196,7 +197,7 @@ def mcp_family(app, fixtures: Fixtures) -> dict:
 
 def cli_family(binding: dict, verb: str, paths: list[Path]) -> tuple[dict, dict]:
     """Runs one engine diagnostic and observes its helper against the diagnostic's own namespaces."""
-    selected = images(binding, paths)
+    selected = images(binding.get('package_images', binding['images']), paths)
     me = process_identity(os.getpid())
     with ThreadPoolExecutor(max_workers=1) as executor:
         future = executor.submit(run, binding, 'pw', ['diagnostics', verb], timeout=180)
