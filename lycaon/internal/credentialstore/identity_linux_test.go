@@ -120,11 +120,11 @@ func TestServiceCustodyReportsEmptyAndFailedResponses(t *testing.T) {
 }
 
 func TestAbsentOrUnavailableServiceCannotSelectAppPassword(t *testing.T) {
-	absent := vaultidentity.NewClient(filepath.Join(t.TempDir(), "none.sock"))
-	if c := probeCustody(absent); c.mode != custodyUnavailable || c.launcherPID != 0 {
-		t.Fatalf("absent service custody = %+v", c)
+	absent := unavailableCustody(t)
+	if absent.mode != custodyUnavailable || absent.launcherPID != 0 {
+		t.Fatalf("absent service custody = %+v", absent)
 	}
-	if _, err := probeCustody(absent).provider("/cfg/credential-vault.age").LoadOrCreate(false); !errors.Is(err, ErrCustodianAbsent) {
+	if _, err := absent.provider("/cfg/credential-vault.age").LoadOrCreate(false); !errors.Is(err, ErrCustodianAbsent) {
 		t.Fatalf("absent service must refuse password setup: %v", err)
 	}
 	_, client := startFakeService(t, vaultidentity.Response{Status: vaultidentity.StatusUnavailable, Code: "manifest_unreadable"})
