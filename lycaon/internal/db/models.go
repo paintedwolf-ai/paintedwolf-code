@@ -799,6 +799,16 @@ type InvocationProgramProgress struct {
 	SettledAt               sql.NullString `json:"settled_at"`
 }
 
+type InvocationProgramRevisionPinSegments struct {
+	ProgramID    string `json:"program_id"`
+	ExecutionID  string `json:"execution_id"`
+	FirstOrdinal int64  `json:"first_ordinal"`
+	PinCount     int64  `json:"pin_count"`
+	Encoding     string `json:"encoding"`
+	Body         []byte `json:"body"`
+	BodySha256   string `json:"body_sha256"`
+}
+
 type InvocationProgramRevisionPins struct {
 	ProgramID        string `json:"program_id"`
 	ExecutionID      string `json:"execution_id"`
