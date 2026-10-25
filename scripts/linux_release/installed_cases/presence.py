@@ -16,6 +16,7 @@ from .profile_setup import await_session
 from .provider import MODEL, ProviderFixture
 from .provider_setup import configure_provider
 from .presence_setup import prepare_secret
+from .presence_confirmation import await_confirmation, confirmation_rows
 from .records import CaseFailed, CaseUnavailable
 from ..installed_environment import graphical_session
 from ..installed_storage import resolve
@@ -61,10 +62,16 @@ def unchallenged_presence(binding):
                     policy = PresencePolicy(launch_binding)
                     with policy:
                         reservation.check_launch(app)
+                        before = len(confirmation_rows(app))
                         ui.click('Reveal value')
                         observations['reveal_alert'] = await_alert(app, ui)
+                        outcome = await_confirmation(app, after_count=before)
+                        observations['native_confirmation'] = outcome
+                        if outcome['status'] != 'refused' or outcome['code'] != 'presence_unavailable':
+                            raise CaseFailed('unchallenged-polkit-did-not-refuse-native-presence')
+                        observations['typed_refusal_verified'] = True
                         reservation.check_launch(app)
-            observations['reason'] = 'owned-alert-attributes-captured-typed-refusal-and-password-fallback-unverified'
+            observations['reason'] = 'typed-unchallenged-presence-refusal-observed-password-fallback-unverified'
     except (OSError, ValueError, TypeError, KeyError) as error:
         observations.update(getattr(error, 'observations', {}))
         observations['failure_type'] = type(error).__name__
