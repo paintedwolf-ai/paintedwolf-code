@@ -13,8 +13,7 @@ import (
 
 // A quit during active work spends the whole ordered drain budget before the
 // store closes. An exhausted context must not skip the clean marker and the WAL
-// truncate, or every launch after a busy quit pays quick_check on the startup
-// path and a whole-store audit behind it.
+// truncate, or every launch after a busy quit owes another whole-store audit.
 func TestShutdownMarksCleanWithAnAlreadySpentContext(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "store.db")

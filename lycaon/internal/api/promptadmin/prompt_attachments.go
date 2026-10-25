@@ -243,6 +243,12 @@ func (s *Submission) preparePromptAdmission(
 		s.WriteAttachmentError(w, err)
 		return promptAdmission{}, false
 	}
+	for i, img := range ingested.Images {
+		ingested.Parts[img.PartIndex].ArtifactID = createdArtifactIDs[i]
+	}
+	for i, img := range refResult.Images {
+		refResult.Parts[img.PartIndex].ArtifactID = createdArtifactIDs[len(ingested.Images)+i]
+	}
 	artifactIDs := append([]string(nil), createdArtifactIDs...)
 	artifactIDs = append(artifactIDs, refResult.ArtifactIDs...)
 	retainedBlobIDs := make([]string, 0, len(ingested.Parts))
@@ -318,15 +324,16 @@ func PromptContentParts(prose string, attachments, references []promptattach.Fra
 	})
 	for _, framed := range attachments {
 		parts = append(parts, wire.MessageContentPart{
-			Content:   strings.TrimSpace(framed.Fence),
-			Origin:    wire.MessageOriginAttachment,
-			Authority: wire.ContentAuthorityNone,
-			TrustTier: wire.ContentTrustTierUntrusted,
-			Source:    strings.TrimSpace(framed.Source),
-			MediaType: strings.TrimSpace(framed.MediaType),
-			BlobID:    strings.TrimSpace(framed.BlobID),
-			Path:      strings.TrimSpace(framed.Path),
-			SizeBytes: framed.SizeBytes,
+			Content:    strings.TrimSpace(framed.Fence),
+			Origin:     wire.MessageOriginAttachment,
+			Authority:  wire.ContentAuthorityNone,
+			TrustTier:  wire.ContentTrustTierUntrusted,
+			Source:     strings.TrimSpace(framed.Source),
+			MediaType:  strings.TrimSpace(framed.MediaType),
+			BlobID:     strings.TrimSpace(framed.BlobID),
+			ArtifactID: framed.ArtifactID,
+			Path:       strings.TrimSpace(framed.Path),
+			SizeBytes:  framed.SizeBytes,
 		})
 	}
 	for _, framed := range references {
@@ -341,6 +348,7 @@ func PromptContentParts(prose string, attachments, references []promptattach.Fra
 			RootID:          strings.TrimSpace(framed.RootID),
 			SizeBytes:       framed.SizeBytes,
 			ReferenceKind:   framed.ReferenceKind,
+			ArtifactID:      framed.ArtifactID,
 			HitKind:         strings.TrimSpace(framed.HitKind),
 			SourceRef:       strings.TrimSpace(framed.SourceRef),
 			SourceSessionID: strings.TrimSpace(framed.SourceSessionID),
