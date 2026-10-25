@@ -55,8 +55,7 @@ func TestCommandCatServesTheAcceptedDocumentNewerThanDisk(t *testing.T) {
 		for i, word := range argv {
 			fields[i] = commandprogram.Field{Value: word}
 		}
-		operation, _ := owners.Operation(argv[0])
-		request := commandprogram.OperationRequest{OperationID: operation, Argv: fields,
+		request := commandprogram.OperationRequest{OperationID: argv[0], Argv: fields,
 			Invocation: toolcontract.OperationInvocation{Kind: toolcontract.ProgramChildInvocation, Identity: toolcontract.ExecutionIdentity{ProgramID: f.program, ExecutionID: f.execution}}}
 		var out mappedOutput
 		result, err := owners.Invoke(ctx, f.tctx, paths, request, commandprogram.Streams{Input: io.NopCloser(strings.NewReader("")), Output: &out, Error: io.Discard})
