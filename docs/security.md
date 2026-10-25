@@ -289,6 +289,8 @@ system to recover a missing attachment. The module does not enable AppArmor,
 relax namespace sysctls, admit arbitrary store executables or grant vault trust
 through an AppArmor profile. Missing kernel capabilities still fail closed.
 
+The native `test:confine:linux` gate includes a required helper leg: a stdio MCP process must stay inside its write grant, a bundled-scanner boundary must keep source input read-only while permitting output, and the source-qualified native document core must round-trip its edit/restore/undo protocol under applied confinement. Missing kernel capabilities fail these fixtures. Browser admission and unsafe-root cases are included in the pinned-browser leg. These boundary fixtures complement producer and installed-package qualification; the scanner probe does not qualify the shipped scanner binary.
+
 What the Linux adapter cannot express yet, and what it expresses differently, is bounded:
 
 - A datagram the gateway does not carry is dropped there rather than refused at the call: an unconnected `sendto`, `sendmsg`, or `sendmmsg` to a destination no `udp` permit covers succeeds and reaches nothing, and the drop is reported as a refusal. A connect to such a destination is refused with `EACCES`, as macOS refuses it. The filter can read neither address `sendmsg` and `sendmmsg` carry, and refusing the unconnected sends it can read would make one call answer differently from the other two.
