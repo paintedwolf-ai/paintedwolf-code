@@ -2,15 +2,18 @@ oar: '1.0'
 id: CHOWN_NOT_FOUND
 kind: schema
 anchor: tool.rejected
+selector:
+  paintedwolf.operation:
+  - chown
 requires:
   facts:
   - paintedwolf.rejection_code
-  - paintedwolf.native_operation
+  - paintedwolf.operation
   - paintedwolf.path
   profiles:
   - filesystem
   - tool
-when: (tool == "chown" || (tool == "command" && paintedwolf.native_operation == "chown")) && paintedwolf.rejection_code == "CHOWN_NOT_FOUND"
+when: paintedwolf.rejection_code == "CHOWN_NOT_FOUND"
 effect: block
 copy:
   cause: The requested path or its resolved target is absent.

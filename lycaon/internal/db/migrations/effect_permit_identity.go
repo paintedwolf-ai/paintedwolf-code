@@ -13,20 +13,15 @@ import (
 //go:embed effect_permit_identity.go
 var effectPermitIdentityImplementation []byte
 
-// Revision5 stores native approval authority losslessly beside its screened
-// JSON display in the same authority rows. Revision4 holds no native authority,
-// so every retained row keeps the empty structured format.
-var nativeAuthorityColumns = []string{"checkpoints", "approval_operations", "chat_grants"}
+//go:embed effect_permit_identity.sql
+var effectPermitIdentitySQL []byte
 
-const nativeAuthorityColumnsDDL = `ALTER TABLE %[1]s ADD COLUMN authority_format TEXT NOT NULL DEFAULT '' CHECK (authority_format IN ('', 'native_approval_authority_v1'));
-ALTER TABLE %[1]s ADD COLUMN authority_digest TEXT NOT NULL DEFAULT '' CHECK ((authority_format = '') = (authority_digest = '') AND (authority_digest = '' OR length(authority_digest) = 64));
-ALTER TABLE %[1]s ADD COLUMN authority_body TEXT NOT NULL DEFAULT '' CHECK ((authority_format = '') = (authority_body = '') AND (authority_body = '' OR json_valid(authority_body)));`
+// The step's immutable source is its column DDL followed by the data repair.
+var effectPermitIdentityStepSource = append(append([]byte(nil), effectPermitIdentitySQL...), effectPermitIdentityImplementation...)
 
 func migrateEffectPermitIdentity(ctx context.Context, tx *sql.Tx) error {
-	for _, table := range nativeAuthorityColumns {
-		if _, err := tx.ExecContext(ctx, fmt.Sprintf(nativeAuthorityColumnsDDL, table)); err != nil {
-			return fmt.Errorf("native authority columns on %s: %w", table, err)
-		}
+	if _, err := tx.ExecContext(ctx, string(effectPermitIdentitySQL)); err != nil {
+		return fmt.Errorf("native authority columns: %w", err)
 	}
 	after := ""
 	for {

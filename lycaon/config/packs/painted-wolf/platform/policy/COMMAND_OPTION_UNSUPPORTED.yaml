@@ -19,7 +19,7 @@ copy:
   what: 'An option is unsupported for native {{ paintedwolf.command }}.'
   cause: 'Supported form: {{ paintedwolf.expected_form }}.'
   why: Native command names bind before option validation. Unsupported options never fall through to an external program.
-  fix: Use the supported form in these details or consult command help. Preserve earlier effects before choosing a new action.
+  fix: Use the supported form in these details or consult command help. A replacement_text detail, when present, is the only validated correction for that span; submitting it is a new command call. Preserve earlier effects before choosing a new action.
   instead: Inspect the declared supported forms and retained effects before choosing the next action; do not retry by external fallback.
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_composition_redirect

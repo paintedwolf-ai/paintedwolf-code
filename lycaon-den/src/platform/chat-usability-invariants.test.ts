@@ -12,10 +12,19 @@ const denSrc = join(repoRoot, "lycaon-den/src");
 
 /** Searches source without matching this file's pattern literals. */
 function rg(pattern: string, ...paths: string[]): string {
+  return search(["-g", "!chat-usability-invariants.test.ts"], pattern, paths);
+}
+
+/** Searches shipped source; test fixtures may render editable hosts. */
+function rgProduct(pattern: string, ...paths: string[]): string {
+  return search(["-g", "!*.test.ts", "-g", "!*.test.tsx"], pattern, paths);
+}
+
+function search(globs: string[], pattern: string, paths: string[]): string {
   try {
     return execFileSync(
       "rg",
-      ["-n", "-g", "!chat-usability-invariants.test.ts", pattern, ...paths],
+      ["-n", ...globs, pattern, ...paths],
       { encoding: "utf8", cwd: repoRoot },
     ).trim();
   } catch (err: unknown) {
@@ -120,7 +129,7 @@ describe("recovery introduces no heuristics", () => {
   });
 
   it("edit does not mutate the message row in place", () => {
-    const hits = rg("contentEditable|patchMessage\\(|updateMessageContent\\(", denSrc);
+    const hits = rgProduct("contentEditable|patchMessage\\(|updateMessageContent\\(", denSrc);
     expect(hits, `an in-place bubble editor appeared:\n${hits}`).toBe("");
   });
 });

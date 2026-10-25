@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolexecution"
@@ -53,6 +54,7 @@ type ProgramOwners struct {
 	Natives     map[string]NativeOperation
 	Publication commandprogram.OutputPublication
 	Input       commandprogram.InputRedirection
+	Sources     commandprogram.SourceCapture
 	AdmitLaunch func(context.Context, tools.ToolContext) error
 }
 
@@ -329,7 +331,7 @@ func (d *ProgramDispatcher) prepare(ctx context.Context, spec toolcontract.Comma
 // prepareDefinition retains the expanded inputs and the dynamic child row
 // together, before the child is admitted or reaches any owner.
 func (d *ProgramDispatcher) prepareDefinition(ctx context.Context, definition toolcontract.OperationDefinition, request commandprogram.OperationRequest, inputs map[string]any) (programChild, error) {
-	display, err := request.Statement.DisplayText([]byte(d.run.source))
+	display, err := request.Statement.DisplayText([]byte(d.run.sourceText(request.Invocation.SourceUnitID)))
 	if err != nil {
 		return programChild{}, err
 	}
@@ -465,7 +467,27 @@ func (d *ProgramDispatcher) RunNested(ctx context.Context, parent commandprogram
 	return d.Invoke(ctx, request, streams)
 }
 
-var _ commandprogram.ExecutionRecorder = (*ProgramDispatcher)(nil)
+var (
+	_ commandprogram.ExecutionRecorder   = (*ProgramDispatcher)(nil)
+	_ commandprogram.SourceUnitRegistrar = (*ProgramDispatcher)(nil)
+)
+
+// RegisterSourceUnit records a reached sourced unit and its static nodes in the
+// program ledger and retains its source text for child span display.
+func (d *ProgramDispatcher) RegisterSourceUnit(ctx context.Context, _ toolcontract.OperationInvocation, source commandprogram.CapturedSource, plan commandsurface.ProgramSnapshot) error {
+	unitID := source.Pin.SourceID
+	d.run.setSourceText(unitID, string(source.Bytes))
+	if d.run.recorder == nil {
+		return nil
+	}
+	locations := programNodes(plan.Statements)
+	nodes := make([]toolcontract.ProgramNode, 0, len(locations))
+	for _, loc := range locations {
+		nodes = append(nodes, toolcontract.ProgramNode{ID: string(loc.ID), SourceUnitID: unitID, Span: loc.Span})
+	}
+	sourceRef := "output:program-source:" + d.run.root.Identity.ProgramID
+	return d.run.recorder.RegisterSourceUnit(ctx, d.run.root.Identity.ProgramID, toolcontract.ProgramSource{UnitID: unitID, Pin: source.Pin, DetailReference: sourceRef}, nodes)
+}
 
 // BeginExecution records an execution the evaluator runs itself. A catalog
 // builtin (true, test, [[, export) also commits its owner-start marker; a
@@ -480,7 +502,7 @@ func (d *ProgramDispatcher) BeginExecution(ctx context.Context, invocation toolc
 	if err != nil {
 		return err
 	}
-	display := d.run.source
+	display := d.run.sourceText(invocation.SourceUnitID)
 	if span := invocation.Span; span.StartByte >= 0 && span.EndByte <= len(display) && span.StartByte <= span.EndByte {
 		display = display[span.StartByte:span.EndByte]
 	}

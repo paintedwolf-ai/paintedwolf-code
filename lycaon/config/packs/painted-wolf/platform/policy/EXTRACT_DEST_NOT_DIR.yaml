@@ -3,12 +3,13 @@ id: EXTRACT_DEST_NOT_DIR
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
   - extract_archive
 requires:
   profiles:
   - tool
   facts:
+  - paintedwolf.operation
   - paintedwolf.rejection_code
   - paintedwolf.dest
 when: paintedwolf.rejection_code == "EXTRACT_DEST_NOT_DIR"

@@ -3,12 +3,13 @@ id: READ_OFFSET_BEYOND_EOF
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
   - read
 requires:
   profiles:
   - tool
   facts:
+  - paintedwolf.operation
   - paintedwolf.rejection_code
   - paintedwolf.offset
   - paintedwolf.path
