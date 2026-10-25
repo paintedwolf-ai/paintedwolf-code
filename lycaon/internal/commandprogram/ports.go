@@ -26,7 +26,9 @@ type Streams struct {
 // Environment is the frame's exported NAME=value list, including assignments
 // scoped to this one dispatch, sorted by name; it carries no ambient host state.
 type OperationRequest struct {
-	Invocation  toolcontract.OperationInvocation
+	Invocation toolcontract.OperationInvocation
+	// OperationID is the catalog command name ("external" for launches); the
+	// typed owner's operation identity is the owner's own fact.
 	OperationID string
 	Statement   commandsurface.Statement
 	Argv        Fields
@@ -94,6 +96,21 @@ type Substitution interface {
 	Substitute(ctx context.Context, scope ExpansionScope, request SubstitutionRequest, stdout io.Writer) (toolcontract.ProducerResult, error)
 }
 
+// NestedCommand runs a command operand of a native utility (env's COMMAND)
+// as its own child execution of the parent request, with exactly the given
+// environment. The implementer allocates the child identity and receipt and
+// dispatches through the same admission as any reached command.
+type NestedCommand interface {
+	RunNested(ctx context.Context, parent OperationRequest, argv Fields, environment map[string]string, streams Streams) (toolcontract.ProducerResult, error)
+}
+
+// ExecutionRecorder records an execution the evaluator runs itself before any
+// descendant is dispatched, and settles it with its record once.
+type ExecutionRecorder interface {
+	BeginExecution(context.Context, toolcontract.OperationInvocation, string) error
+	SettleExecution(context.Context, toolcontract.OperationInvocation, ChildRecord) error
+}
+
 // ProgramRecorder is the receipt owner's port (invocation.SQLRecorder): one
 // parent program, a prepared child per dynamic execution, once-only settlements.
 type ProgramRecorder interface {
@@ -146,6 +163,13 @@ type SourceCaptureRequest struct {
 
 type SourceCapture interface {
 	Capture(context.Context, toolcontract.OperationInvocation, SourceCaptureRequest) (CapturedSource, error)
+}
+
+// SourceUnitRegistrar records a reached sourced unit's pin, bytes and static
+// nodes before its statements run so child executions validate against the
+// retained program.
+type SourceUnitRegistrar interface {
+	RegisterSourceUnit(context.Context, toolcontract.OperationInvocation, CapturedSource, commandsurface.ProgramSnapshot) error
 }
 
 // ExternalLauncher must enter the host launch-plan and confinement boundary.

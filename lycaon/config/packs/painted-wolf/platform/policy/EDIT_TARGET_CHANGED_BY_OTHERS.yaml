@@ -3,13 +3,14 @@ id: EDIT_TARGET_CHANGED_BY_OTHERS
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
   - edit
 requires:
   profiles:
   - filesystem
   - tool
   facts:
+  - paintedwolf.operation
   - paintedwolf.rejection_code
   - paintedwolf.old_string_chars
   - paintedwolf.path

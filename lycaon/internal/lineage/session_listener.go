@@ -122,3 +122,46 @@ func sessionSockets(ctx context.Context, session string) (map[string]bool, error
 	}
 	return owned, nil
 }
+
+// SessionListeners returns the listening sockets currently held by the
+// session's own lineages. It never lists host-global processes.
+func SessionListeners(ctx context.Context, session string) ([]SocketObservation, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if !supported {
+		return nil, ErrUnsupported
+	}
+	if session == "" {
+		return nil, nil
+	}
+	registry.mu.Lock()
+	var ids []ID
+	for id, l := range registry.live {
+		if l.session == session {
+			ids = append(ids, id)
+		}
+	}
+	registry.mu.Unlock()
+	var out []SocketObservation
+	seen := map[string]bool{}
+	for _, id := range ids {
+		sockets, err := OwnedSockets(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		for _, socket := range sockets {
+			if key := socketIdentity(socket); socket.Listening && !seen[key] {
+				seen[key] = true
+				out = append(out, socket)
+			}
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Local.Port() != out[j].Local.Port() {
+			return out[i].Local.Port() < out[j].Local.Port()
+		}
+		return out[i].Local.String() < out[j].Local.String()
+	})
+	return out, nil
+}

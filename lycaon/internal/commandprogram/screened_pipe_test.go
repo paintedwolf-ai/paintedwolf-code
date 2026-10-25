@@ -41,17 +41,27 @@ func TestScreenedPipeNativeAndProcessOutputRetainExactCompleteBytes(t *testing.T
 				cmd, cleanup, err := lyexec.PrepareCommand(ctx, self, []string{"-test.run=^TestScreenedPipeFixtureProcess$", "--", "fixture-byte-producer"}, lyexec.ExecOpts{Launch: lyexec.HostLaunch("stream fixture"), Dir: t.TempDir()})
 				testutil.FailErr(t, "prepare fixture through existing executor", err)
 				defer cleanup()
-				source, err = cmd.StdoutPipe()
+				// The executor's owner starts, hands off and reaps the prepared
+				// process; the parent write end closes only after native exit, so
+				// EOF follows every byte the child wrote.
+				read, write, err := os.Pipe()
 				testutil.FailErr(t, "open fixture stdout", err)
-				testutil.FailErr(t, "start fixture", cmd.Start())
+				cmd.Stdout = write
+				source = read
+				exited := make(chan error, 1)
+				go func() {
+					err := lyexec.RunInOwnGroup(cmd)
+					_ = write.Close()
+					exited <- err
+				}()
 				waited := false
 				defer func() {
 					if !waited {
-						_ = cmd.Process.Kill()
-						_ = cmd.Wait()
+						cancel()
+						<-exited
 					}
 				}()
-				settle = func() error { waited = true; return cmd.Wait() }
+				settle = func() error { waited = true; return <-exited }
 			}
 			memory := &streamSharedMemoryFixture{maximum: 32 << 20}
 			matcher := secretmatch.NewInertMatcher()
@@ -61,7 +71,8 @@ func TestScreenedPipeNativeAndProcessOutputRetainExactCompleteBytes(t *testing.T
 			projector := captureprojection.New(matcher, nil)
 			budget, err := NewByteBudget("fixture-output", 4<<20)
 			testutil.FailErr(t, "admit output bytes", err)
-			pipe, err := NewScreenedPipe(ctx, projector, captureprojection.Scope{}, "fixture-output", source, captureprojection.StreamOptions{WorkingMemory: memory, Bounds: secretmatch.StreamBounds{InputBytes: 4 << 20, OutputBytes: 4 << 20, MemoryBytes: 32 << 20, DetectorWork: 1 << 40}}, budget)
+			screen := projectorScreen{projector: projector, label: "fixture-output", options: captureprojection.StreamOptions{WorkingMemory: memory, Bounds: secretmatch.StreamBounds{InputBytes: 4 << 20, OutputBytes: 4 << 20, MemoryBytes: 32 << 20, DetectorWork: 1 << 40}}}
+			pipe, err := NewScreenedPipe(ctx, screen, source, budget)
 			testutil.FailErr(t, "connect screening to byte pipe", err)
 			defer pipe.Close()
 			spill, err := tooloutput.RetainScreenedStream(ctx, tooloutput.ScreenedReader(pipe), tooloutput.StreamSpillOptions{Store: blobstore.Store{Root: t.TempDir()}, ClaimID: "fixture-stream", MaximumBytes: 4 << 20, PreviewBytes: 8, RetainedState: memory, WorkingMemory: memory, Admission: streamSpillAdmissionFixture{}})
@@ -86,6 +97,34 @@ func TestScreenedPipeNativeAndProcessOutputRetainExactCompleteBytes(t *testing.T
 				t.Fatalf("shared quota leaked/exceeded: used=%d peak=%d", memory.used, memory.peak)
 			}
 		})
+	}
+}
+
+// projectorScreen is the capture owner's adapter onto the evaluator's port.
+type projectorScreen struct {
+	projector *captureprojection.Projector
+	label     string
+	options   captureprojection.StreamOptions
+}
+
+func (s projectorScreen) ScreenStream(ctx context.Context, src io.Reader, dst io.Writer) (ScreenedStreamFacts, error) {
+	metadata, err := s.projector.ScreenStream(ctx, captureprojection.Scope{}, s.label, src, dst, s.options)
+	return ScreenedStreamFacts(metadata), err
+}
+
+func TestScreenedPipeRequiresScreenAndSource(t *testing.T) {
+	budget, err := NewByteBudget("fixture", 1<<20)
+	testutil.FailErr(t, "admit stream", err)
+	screen := projectorScreen{projector: captureprojection.New(secretmatch.NewInertMatcher(), nil)}
+	for name, build := range map[string]func() (*ScreenedPipe, error){
+		"screen": func() (*ScreenedPipe, error) {
+			return NewScreenedPipe(t.Context(), nil, io.NopCloser(bytes.NewReader(nil)), budget)
+		},
+		"source": func() (*ScreenedPipe, error) { return NewScreenedPipe(t.Context(), screen, nil, budget) },
+	} {
+		if pipe, err := build(); err == nil || pipe != nil {
+			t.Fatalf("missing %s admitted a screened pipe", name)
+		}
 	}
 }
 

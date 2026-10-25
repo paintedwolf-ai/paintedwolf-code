@@ -148,8 +148,7 @@ type Program struct {
 }
 
 // Prepare binds a reached command through the catalog option grammar. It
-// reads and writes nothing. The request may name the command or its operation
-// identity.
+// reads and writes nothing. The request names the catalog command.
 func (o *Owners) Prepare(program Program, request commandprogram.OperationRequest) (Prepared, error) {
 	if err := request.Validate(); err != nil {
 		return Prepared{}, err
@@ -159,8 +158,8 @@ func (o *Owners) Prepare(program Program, request commandprogram.OperationReques
 	if !ok || program.Paths == nil || program.Barrier == nil {
 		return Prepared{}, fmt.Errorf("%s is not a mutation command", command)
 	}
-	if request.OperationID != command && request.OperationID != o.ops[command] {
-		return Prepared{}, fmt.Errorf("%s belongs to operation %s, not %s", command, o.ops[command], request.OperationID)
+	if request.OperationID != command {
+		return Prepared{}, fmt.Errorf("request names operation %s, not command %s", request.OperationID, command)
 	}
 	bound, err := commandprogram.CatalogBinder{}.Bind(spec, request.Argv)
 	if err != nil {

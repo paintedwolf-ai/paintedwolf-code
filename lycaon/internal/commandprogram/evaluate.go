@@ -27,6 +27,9 @@ type EvaluationPorts struct {
 	// Expansion, scope and memory are bound per reached frame.
 	Predicates PredicateRuntime
 	Memory     *toolcontract.ProgramMemory
+	// Executions records the executions the evaluator runs itself; dispatched
+	// operations are recorded by their owners. Nil records none.
+	Executions ExecutionRecorder
 	Streams    Streams
 	// Environment is the captured child environment; its entries start exported.
 	Environment []string

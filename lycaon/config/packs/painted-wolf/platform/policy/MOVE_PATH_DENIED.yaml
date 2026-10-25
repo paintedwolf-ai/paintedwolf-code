@@ -3,10 +3,11 @@ id: MOVE_PATH_DENIED
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
   - move
 requires:
   facts:
+  - paintedwolf.operation
   - paintedwolf.rejection_code
   - paintedwolf.path
   profiles:

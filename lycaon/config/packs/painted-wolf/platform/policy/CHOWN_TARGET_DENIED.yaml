@@ -2,17 +2,20 @@ oar: '1.0'
 id: CHOWN_TARGET_DENIED
 kind: schema
 anchor: tool.rejected
+selector:
+  paintedwolf.operation:
+  - chown
 requires:
   facts:
   - paintedwolf.rejection_code
-  - paintedwolf.native_operation
+  - paintedwolf.operation
   - paintedwolf.ownership_target
   - paintedwolf.ownership_field
   - paintedwolf.ownership_uid
   - paintedwolf.ownership_gid
   profiles:
   - tool
-when: (tool == "chown" || (tool == "command" && paintedwolf.native_operation == "chown")) && paintedwolf.rejection_code == "CHOWN_TARGET_DENIED"
+when: paintedwolf.rejection_code == "CHOWN_TARGET_DENIED"
 effect: block
 copy:
   cause: The requested identity differs from the identity this host permits.

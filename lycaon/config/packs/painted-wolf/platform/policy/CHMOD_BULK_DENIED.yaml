@@ -2,16 +2,19 @@ oar: '1.0'
 id: CHMOD_BULK_DENIED
 kind: schema
 anchor: tool.rejected
+selector:
+  paintedwolf.operation:
+  - chmod
 requires:
   profiles:
   - tool
   facts:
   - paintedwolf.rejection_code
-  - paintedwolf.native_operation
+  - paintedwolf.operation
   - paintedwolf.max_paths
   - paintedwolf.requested
   - paintedwolf.bulk_denied
-when: (tool == "chmod" || (tool == "command" && paintedwolf.native_operation == "chmod")) && paintedwolf.rejection_code == "CHMOD_BULK_DENIED"
+when: paintedwolf.rejection_code == "CHMOD_BULK_DENIED"
 effect: block
 copy:
   what: chmod requested {{ paintedwolf.requested }} paths but the cap is {{ paintedwolf.max_paths }} per call.

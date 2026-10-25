@@ -124,14 +124,16 @@ func seccompProgram() ([]bpf.RawInstruction, error) {
 	eacces := uint32(unix.SECCOMP_RET_ERRNO) | uint32(unix.EACCES)
 	insts = append(insts, bpf.RetConstant{Val: enosys})
 	for _, nr := range unixDatagramCreators {
+		// AF_UNIX treats SOCK_RAW as SOCK_DGRAM; deny both spellings.
 		// The domain and type are ints compared on their low halves.
 		insts = append(insts,
-			bpf.JumpIf{Cond: bpf.JumpEqual, Val: nr, SkipFalse: 7},
+			bpf.JumpIf{Cond: bpf.JumpEqual, Val: nr, SkipFalse: 8},
 			bpf.LoadAbsolute{Off: seccompDataArg0, Size: 4},
-			bpf.JumpIf{Cond: bpf.JumpEqual, Val: unix.AF_UNIX, SkipFalse: 4},
+			bpf.JumpIf{Cond: bpf.JumpEqual, Val: unix.AF_UNIX, SkipFalse: 5},
 			bpf.LoadAbsolute{Off: seccompArgLow(1), Size: 4},
 			bpf.ALUOpConstant{Op: bpf.ALUOpAnd, Val: socketTypeMask},
-			bpf.JumpIf{Cond: bpf.JumpEqual, Val: unix.SOCK_DGRAM, SkipFalse: 1},
+			bpf.JumpIf{Cond: bpf.JumpEqual, Val: unix.SOCK_DGRAM, SkipTrue: 1},
+			bpf.JumpIf{Cond: bpf.JumpEqual, Val: unix.SOCK_RAW, SkipFalse: 1},
 			bpf.RetConstant{Val: eacces},
 			bpf.RetConstant{Val: unix.SECCOMP_RET_ALLOW},
 		)
