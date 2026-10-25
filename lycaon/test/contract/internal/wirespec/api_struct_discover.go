@@ -57,15 +57,17 @@ type wireStructCatalogResult struct {
 
 func dtoSyncAliases() map[string]string {
 	return map[string]string{
-		"PromptReferencePathFilePart":   "PromptReferencePathFile",
-		"PromptReferencePathFolderPart": "PromptReferencePathFolder",
-		"PromptReferenceArtifactPart":   "PromptReferenceArtifact",
-		"PromptReferenceSearchHitPart":  "PromptReferenceSearchHit",
-		"EventEnvelope":                 "EventEnvelopeBase",
-		"ErrorResponse":                 "Error",
-		"ModelRefDTO":                   "ModelRef",
-		"AgentPoolDTO":                  "AgentPool",
-		"PresentedFact":                 "ApprovalCitedFact",
+		"PromptReferenceExternalFilePart":   "PromptReferenceExternalFile",
+		"PromptReferenceExternalFolderPart": "PromptReferenceExternalFolder",
+		"PromptReferencePathFilePart":       "PromptReferencePathFile",
+		"PromptReferencePathFolderPart":     "PromptReferencePathFolder",
+		"PromptReferenceArtifactPart":       "PromptReferenceArtifact",
+		"PromptReferenceSearchHitPart":      "PromptReferenceSearchHit",
+		"EventEnvelope":                     "EventEnvelopeBase",
+		"ErrorResponse":                     "Error",
+		"ModelRefDTO":                       "ModelRef",
+		"AgentPoolDTO":                      "AgentPool",
+		"PresentedFact":                     "ApprovalCitedFact",
 	}
 }
 

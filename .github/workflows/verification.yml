@@ -99,7 +99,7 @@ jobs:
     strategy:
       # A merge group stops at its first failure and frees its runners; every other run keeps
       # each lane's evidence.
-      fail-fast: ${{ github.event_name == 'merge_group' }}
+      fail-fast: ${{ github.event_name == 'merge_group' || startsWith(github.ref, 'refs/heads/gh-readonly-queue/main/') }}
       # The catalog's capacity table bounds how many runners each profile holds at once.
       max-parallel: ${{ fromJSON(needs.plan.outputs.max-parallel) }}
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
@@ -166,13 +166,13 @@ jobs:
           status: ${{ job.status }}
 
       - name: Seal complete merge-group lane proof
-        if: success() && github.event_name == 'merge_group'
+        if: success() && (github.event_name == 'merge_group' || startsWith(github.ref, 'refs/heads/gh-readonly-queue/main/'))
         env:
           PYTHONPATH: scripts
         run: python3 -m ci_policy.lane_proof
 
       - name: Retain complete merge-group lane proof
-        if: success() && github.event_name == 'merge_group'
+        if: success() && (github.event_name == 'merge_group' || startsWith(github.ref, 'refs/heads/gh-readonly-queue/main/'))
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: lane-proof-${{ matrix.lane }}-${{ strategy.job-index }}-${{ github.run_attempt }}

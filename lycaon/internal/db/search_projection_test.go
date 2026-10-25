@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -137,9 +138,15 @@ func TestSyncMessageWriteThroughReplacesEvidence(t *testing.T) {
 }
 
 func TestToolResultPathUpgradeRepairsPagedProjectionAndFTS(t *testing.T) {
+	// Revisions 3 and 4 share one shape, so the released revision-4 corpus
+	// restamped as revision 3 is a revision-3 store.
+	raw, err := os.ReadFile(filepath.Join("..", "..", "testdata", "upgrade-corpus", "1.0.3-rc1", "store.db"))
+	testutil.FailErr(t, "read released corpus", err)
 	path := filepath.Join(t.TempDir(), "store.db")
-	database, err := db.Open(path)
+	testutil.FailErr(t, "copy released corpus", os.WriteFile(path, raw, 0o600))
+	database, err := sql.Open("sqlite", path)
 	testutil.FailErr(t, "open projection fixture", err)
+	testdbseed.InsertProject(t, database, testdbseed.DefaultProjectID)
 	const session = "path-repair"
 	testdbseed.InsertSessionWithRoot(t, database, session, testdbseed.DefaultProjectID, t.TempDir())
 	tx, err := database.BeginTx(t.Context(), nil)
@@ -162,12 +169,9 @@ func TestToolResultPathUpgradeRepairsPagedProjectionAndFTS(t *testing.T) {
 	_, err = tx.ExecContext(t.Context(), `UPDATE evidence_index SET shape='url' WHERE message_id='observation-0001'`)
 	testutil.FailErr(t, "seed unrelated observation shape", err)
 	testutil.FailErr(t, "commit source fixture", tx.Commit())
-	testutil.FailErr(t, "close source fixture", database.Shutdown(t.Context()))
-	source, err := sql.Open("sqlite", path)
-	testutil.FailErr(t, "open prior revision", err)
-	_, err = source.Exec(`PRAGMA user_version=3`)
+	_, err = database.Exec(`PRAGMA user_version=3`)
 	testutil.FailErr(t, "set source revision", err)
-	testutil.FailErr(t, "close prior revision", source.Close())
+	testutil.FailErr(t, "close prior revision", database.Close())
 	testutil.FailErr(t, "upgrade recorded projection", db.UpgradeStaged(t.Context(), path))
 	upgraded, err := sql.Open("sqlite", path)
 	testutil.FailErr(t, "inspect repaired projection", err)
