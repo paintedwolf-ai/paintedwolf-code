@@ -8,11 +8,12 @@ import sys
 import tempfile
 import unittest
 
+from verification_tests.distribution.maintainer_fixture import GENERATIONS, program
+
 ROOT = Path(__file__).resolve().parents[3]
 SOCKET = 'paintedwolf-vault-identity.socket'
 SERVICE = 'paintedwolf-vault-identity.service'
 STATE_DIR = '/var/lib/painted-wolf-code'
-GENERATIONS = '/opt/painted-wolf-code/bin/pw-generations'
 SCRIPTS = {
     'deb': {name: name for name in ('preinst', 'postinst', 'prerm', 'postrm')},
     'rpm': {'preinst': 'pre', 'postinst': 'post', 'prerm': 'preun', 'postrm': 'postun'},
@@ -98,13 +99,7 @@ s.setdefault('generation_calls',[]).append(a);p.write_text(json.dumps(s))
         return self.execute_script(script, *arguments)
 
     def fixture_program(self, script):
-        # Remap only the declared generation executable; never invoke the host installer.
-        source = script.read_text()
-        source = source.replace('PW_GENERATIONS=' + GENERATIONS,
-                                'PW_GENERATIONS=' + shlex.quote(str(self.bin / 'pw-generations')))
-        if GENERATIONS in source:
-            raise ValueError('unbound host generation executable in fixture')
-        return source
+        return program(script.read_text(), self.bin / 'pw-generations', self.state_dir)
 
     def execute_script(self, script, *arguments):
         source = self.fixture_program(script)
@@ -233,6 +228,7 @@ s.setdefault('generation_calls',[]).append(a);p.write_text(json.dumps(s))
         script = self.root / 'generation-postinst'
         script.write_text('PW_GENERATIONS=' + GENERATIONS + '\n"$PW_GENERATIONS" install --family deb\n')
         self.assertNotIn(GENERATIONS, self.fixture_program(script))
+        self.assertNotIn(STATE_DIR, self.fixture_program(script))
         result = self.execute_script(script)
         self.assertEqual(result['generation_calls'], [['install', '--family', 'deb']])
 
