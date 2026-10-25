@@ -89,6 +89,9 @@ pub fn installed() -> Option<&'static InstalledPackage> {
                 return None;
             }
             let executable = std::env::current_exe().ok()?;
+            if let Ok(Some(generation)) = crate::linux_generation::running() {
+                return Some(InstalledPackage::new(PackageFamily::Nix, PACKAGE_NAME.into(), generation.version.clone()));
+            }
             owner(&executable)
         })
         .as_ref()
