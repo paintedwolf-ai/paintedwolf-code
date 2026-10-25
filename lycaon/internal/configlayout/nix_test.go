@@ -23,8 +23,12 @@ func nixFixture(t *testing.T, output string, image []byte) string {
 	testutil.FailErr(t, "write receipt", os.WriteFile(filepath.Join(root, "nix-layout.json"), receipt, 0o444))
 	digest := sha256.Sum256(image)
 	manifest, err := json.Marshal(map[string]any{
-		"format_version": 1, "package": "painted-wolf-code", "version": "1.0.2", "architecture": "x86_64", "install_root": root,
+		"format_version": 2, "package": "painted-wolf-code", "version": "1.0.2", "architecture": "x86_64", "install_root": root,
 		"executables": []any{map[string]any{"path": executable, "sha256": hex.EncodeToString(digest[:]), "size": len(image)}},
+		"payload": []any{
+			map[string]any{"path": "bin", "kind": "directory", "mode": 0o755, "sha256": nil, "size": nil, "target": nil},
+			map[string]any{"path": "bin/pw", "kind": "file", "mode": 0o755, "sha256": hex.EncodeToString(digest[:]), "size": len(image), "target": nil},
+		},
 	})
 	testutil.FailErr(t, "encode manifest", err)
 	testutil.FailErr(t, "write manifest", os.WriteFile(filepath.Join(root, "manifest.json"), manifest, 0o444))
