@@ -112,6 +112,7 @@ class RootEndpointTests(unittest.TestCase):
         result.sequence, result.deadline, result.bound = 0, 100, True
         result.monitor = Mock(observe=Mock(return_value=target()['pending']))
         result._current = Mock(return_value={})
+        result.current_session = target()['session']
         return result
 
     def test_closed_identity_and_sequence_are_consumed_before_observation(self):
@@ -141,6 +142,20 @@ class RootEndpointTests(unittest.TestCase):
                 with self.subTest(kind=kind), self.assertRaises(ValueError):
                     endpoint.handle(request)
             endpoint.monitor.observe.assert_not_called()
+
+    def test_read_only_observation_survives_lock_but_unlocked_start_is_separate(self):
+        endpoint = polkit_root.Endpoint.__new__(polkit_root.Endpoint)
+        endpoint.deadline = 100
+        endpoint.initial = target()['session']
+        locked = copy.deepcopy(endpoint.initial)
+        locked.update(locked_hint=True, locker_active=True)
+        endpoint.native = Mock(observe=Mock(return_value=locked))
+        endpoint.runtime = Mock(observe=Mock(return_value={'retained': True}))
+        self.assertEqual(endpoint._current(), {'retained': True})
+        self.assertTrue(endpoint.current_session['locked_hint'])
+        with self.assertRaises(ValueError):
+            endpoint._current(unlocked=True)
+        endpoint.native.observe.assert_called_with(deadline=100)
 
 
 class RootRuntimeTests(unittest.TestCase):
