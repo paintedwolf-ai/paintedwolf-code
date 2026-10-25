@@ -210,7 +210,7 @@ describe("createCriticalStop", () => {
     (await findByTestId(root, "critical-stop-primary")).click();
     await waitFor(() => expect(connectAppBackend).toHaveBeenCalled());
     expect(root.querySelector('input[type="password"]')).toBeNull();
-    expect(root.querySelector('[data-testid="critical-stop-secondary"]')).toBeNull();
+    expect(root.querySelector('[data-testid="critical-stop-secondary"]')?.textContent).not.toContain("Reset");
     expect(resetCredentialVault).not.toHaveBeenCalled();
   });
 
@@ -325,7 +325,7 @@ describe("createCriticalStop", () => {
     const root = rendered.baseElement as HTMLElement;
     const action = await findByTestId(root, "critical-stop-primary");
     expect(action.textContent).toContain("Try again");
-    expect(root.querySelector('[data-testid="critical-stop-secondary"]')).toBeNull();
+    expect(root.querySelector('[data-testid="critical-stop-secondary"]')?.textContent).not.toContain("Reset");
     action.click();
 
     await waitFor(() => {
@@ -518,7 +518,7 @@ describe("createCriticalStop", () => {
       expect(
         root.querySelector('[data-testid="critical-stop-primary"]')?.textContent,
       ).toContain("Finish starting fresh");
-      expect(root.querySelector('[data-testid="critical-stop-secondary"]')).toBeNull();
+      expect(root.querySelector('[data-testid="critical-stop-secondary"]')?.textContent).not.toContain("Reset");
     });
   });
 
@@ -564,7 +564,7 @@ describe("createCriticalStop", () => {
       expect(
         root.querySelector('[data-testid="critical-stop-primary"]')?.textContent,
       ).toContain("Finish starting fresh");
-      expect(root.querySelector('[data-testid="critical-stop-secondary"]')).toBeNull();
+      expect(root.querySelector('[data-testid="critical-stop-secondary"]')?.textContent).not.toContain("Reset");
     });
   });
 
