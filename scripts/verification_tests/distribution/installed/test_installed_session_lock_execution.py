@@ -61,6 +61,17 @@ class SessionWireTests(unittest.TestCase):
             with self.subTest(bindings=bindings), self.assertRaises(ValueError):
                 session_wire.proof({**self.before, 'lock_bindings': bindings})
 
+    def test_native_session_identity_is_independent_of_the_lock_shortcut(self):
+        native = self.before['native_session']
+        self.assertEqual(session_wire.native_session(native), native)
+        session_wire.same_session(native, self.after['native_session'])
+        with self.assertRaises(ValueError):
+            session_wire.proof({'native_session': native, 'lock_bindings': []})
+        changed = copy.deepcopy(native)
+        changed['authorities']['shell']['inode'] += 1
+        with self.assertRaises(ValueError):
+            session_wire.same_session(native, changed)
+
     def test_same_id_recreation_bus_replacement_and_foreign_image_refuse(self):
         for kind in ('creation', 'path', 'seat', 'user', 'bus', 'birth', 'inode', 'writable'):
             changed = copy.deepcopy(self.after)

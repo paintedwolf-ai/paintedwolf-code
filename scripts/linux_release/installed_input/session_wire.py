@@ -24,15 +24,7 @@ def native_owner(value, name, uid):
     lineage.identity({key: process[key] for key in ('pid', 'parent_pid', 'start_time_ticks')})
 
 
-def proof(value):
-    if not isinstance(value, dict) or set(value) != {'native_session', 'lock_bindings'}:
-        raise ValueError('native lock proof has an unknown shape')
-    bindings = value['lock_bindings']
-    if (not isinstance(bindings, list) or not 1 <= len(bindings) <= 16
-            or any(not isinstance(item, str) or not 1 <= len(item) <= 128 for item in bindings)
-            or len(set(bindings)) != len(bindings) or bindings.count('<Super>l') != 1):
-        raise ValueError('native lock proof has no exact configured supported shortcut')
-    native = value['native_session']
+def native_session(native):
     if (not isinstance(native, dict) or set(native) != {'session', 'session_object', 'lifecycle',
             'authorities', 'locked_hint', 'locker_active'}
             or any(type(native[key]) is not bool for key in ('locked_hint', 'locker_active'))):
@@ -72,19 +64,37 @@ def proof(value):
             or not shell['mode'] & 0o111 or shell['mode'] > 0o7777
             or any(shell[key] != owners['locker']['process'][key] for key in ('pid', 'start_time_ticks'))):
         raise ValueError('native lock is not bound to the selected physical GNOME shell')
+    return native
+
+
+def proof(value):
+    if not isinstance(value, dict) or set(value) != {'native_session', 'lock_bindings'}:
+        raise ValueError('native lock proof has an unknown shape')
+    bindings = value['lock_bindings']
+    if (not isinstance(bindings, list) or not 1 <= len(bindings) <= 16
+            or any(not isinstance(item, str) or not 1 <= len(item) <= 128 for item in bindings)
+            or len(set(bindings)) != len(bindings) or bindings.count('<Super>l') != 1):
+        raise ValueError('native lock proof has no exact configured supported shortcut')
+    native_session(value['native_session'])
     return value
 
 
 def same_runtime(old, new):
     proof(old)
     proof(new)
-    lifecycle = lambda value: {**value['native_session']['lifecycle'],
-        'user': list(value['native_session']['lifecycle']['user']),
-        'seat': list(value['native_session']['lifecycle']['seat'])}
-    if (old['lock_bindings'] != new['lock_bindings'] or lifecycle(old) != lifecycle(new) or any(
-            old['native_session'][key] != new['native_session'][key]
-            for key in ('session', 'session_object', 'authorities'))):
+    same_session(old['native_session'], new['native_session'])
+    if old['lock_bindings'] != new['lock_bindings']:
         raise ValueError('native lock replaced its captured session or locker authority')
+
+
+def same_session(old, new):
+    native_session(old)
+    native_session(new)
+    lifecycle = lambda value: {**value['lifecycle'],
+        'user': list(value['lifecycle']['user']), 'seat': list(value['lifecycle']['seat'])}
+    if lifecycle(old) != lifecycle(new) or any(old[key] != new[key]
+            for key in ('session', 'session_object', 'authorities')):
+        raise ValueError('native session replaced its captured lifecycle or authority')
 
 
 def before(operation, value):
