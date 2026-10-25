@@ -4,7 +4,8 @@ from pathlib import Path
 
 GENERATIONS = '/opt/painted-wolf-code/bin/pw-generations'
 PACKAGE_STATE = '/var/lib/painted-wolf-code'
-STATE_ROOTS = ('/opt/painted-wolf-code', '/etc/paintedwolf', '/run/paintedwolf', PACKAGE_STATE)
+APPARMOR_ROOT = '/sys/kernel/security/apparmor'
+FIXED_ROOTS = ('/opt/painted-wolf-code', '/etc/paintedwolf', '/run/paintedwolf', PACKAGE_STATE, APPARMOR_ROOT)
 
 
 def program(source: str, root: Path, generations=None) -> str:
@@ -20,11 +21,11 @@ def program(source: str, root: Path, generations=None) -> str:
     source = source.replace(assignment, 'PW_GENERATIONS=' + str(generations))
     if GENERATIONS in source:
         raise ValueError('unbound host generation executable in fixture')
-    for fixed in STATE_ROOTS:
+    for fixed in FIXED_ROOTS:
         source = source.replace(fixed, str(root / fixed.removeprefix('/')))
     unbound = source
-    for fixed in STATE_ROOTS:
+    for fixed in FIXED_ROOTS:
         unbound = unbound.replace(str(root / fixed.removeprefix('/')), '<scratch>')
-    if any(fixed in unbound for fixed in STATE_ROOTS):
+    if any(fixed in unbound for fixed in FIXED_ROOTS):
         raise ValueError('unbound host package state in fixture')
     return source
