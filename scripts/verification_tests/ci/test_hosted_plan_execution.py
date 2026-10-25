@@ -97,7 +97,7 @@ class HostedPlanTests(unittest.TestCase):
         self.assertEqual(nightly, {"test:full", "test:race", "test:fuzz", "test:stress", "check:coverage",
                                    "den:coverage-check", "den:test:transcript-scale", "lint:vuln:fresh",
                                    "perf:bench", "perf:sidecar", "perf:soak", "den:webkit:scroll",
-                                   "den:webkit:atspi", "test:confine:linux"})
+                                   "den:webkit:atspi", "test:confine:linux", "nix:check"})
         for suite in ci.SUITES - {"all"}:
             with self.subTest(suite=suite):
                 names = {row["lane"] for row in ci.matrix("nightly", suite)["include"]}
@@ -193,6 +193,33 @@ class HostedPlanTests(unittest.TestCase):
                 with self.subTest(profile=profile, lane=row["lane"]):
                     self.assertEqual(row["browser"], "test:confine:linux" in ci.lanes()[row["lane"]]["targets"])
         self.assertEqual([row["lane"] for row in ci.matrix("integration")["include"] if row["browser"]], ["confinement-arm64"])
+
+    def test_nix_lane_is_nightly_only_and_provisions_nix_before_running_offline(self):
+        # Nix verification informs; it never gates a merge or a release.
+        self.assertEqual(ci.lanes()["nix"]["profiles"], ["nightly"])
+        for profile in ("check", "integration", "release"):
+            with self.subTest(profile=profile):
+                self.assertNotIn("nix", {row["lane"] for row in ci.matrix(profile)["include"]})
+        rows = [row for row in ci.matrix("nightly")["include"] if row["lane"] == "nix"]
+        self.assertEqual([(row["nix"], row["browser"]) for row in rows], [(True, False)])
+
+    def test_lane_arguments_are_explicit(self):
+        for mutation in ("arguments-many-targets", "arguments-empty", "paths"):
+            with self.subTest(mutation=mutation):
+                data = copy.deepcopy(planning.catalog())
+                if mutation == "arguments-many-targets":
+                    data["ci"]["frontend"]["arguments"] = ["browser"]
+                elif mutation == "arguments-empty":
+                    data["ci"]["confinement-arm64"]["arguments"] = []
+                else:
+                    data["ci"]["nix"]["paths"] = ["packaging/nix/"]
+                with patch.object(ci, "catalog", return_value=data), self.assertRaises(ValueError):
+                    ci.matrix("nightly")
+        data = copy.deepcopy(planning.catalog())
+        data["ci"]["confinement-arm64"]["arguments"] = ["nix"]
+        with patch.object(ci, "catalog", return_value=data):
+            row = next(row for row in ci.matrix("nightly")["include"] if row["lane"] == "confinement-arm64")
+        self.assertEqual((row["nix"], row["browser"]), (True, False))
 
     def test_platform_selection_keeps_only_platform_lanes(self):
         for profile in ("integration", "nightly", "release"):

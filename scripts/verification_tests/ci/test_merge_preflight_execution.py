@@ -11,6 +11,12 @@ from ci_policy import hosted_plan
 
 
 class MergePreflightTests(unittest.TestCase):
+    def test_fixed_platform_arguments_survive_merge_preflight(self):
+        for arguments in (["launch"], ["nix"]):
+            lane = {"targets": ["test:confine:linux"], "arguments": arguments}
+            self.assertEqual(preflight.commands(lane, lane["targets"]),
+                             [["./task", *lane["targets"], "--", *lane["arguments"]]])
+
     def test_packages_are_partitioned_once_with_contracts_first(self):
         packages = ["module/internal/a", "module/test/contract/hosted", "module/test/contract", "module/test/smoke"]
         with patch.object(preflight.subprocess, "run") as run:
