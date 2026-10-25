@@ -55,6 +55,11 @@ pub(super) fn ensure_current() -> Result<(), RestartReason> {
     if !cfg!(target_os = "linux") {
         return Ok(());
     }
+    match crate::linux_generation::running() {
+        Ok(Some(_)) => return Ok(()),
+        Err(_) => return Err(RestartReason::RunningImageUnavailable),
+        Ok(None) => {}
+    }
     admit(crate::linux_install::installed(), || {
         let root = Path::new(crate::linux_install::INSTALL_ROOT);
         verify_root(root, Path::new("/proc/self/exe"))

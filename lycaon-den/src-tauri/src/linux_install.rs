@@ -110,6 +110,13 @@ pub fn installed() -> Ownership {
         if !cfg!(target_os = "linux") {
             return Ok(None);
         }
+        if let Ok(Some(generation)) = crate::linux_generation::running() {
+            return Ok(Some(InstalledPackage::new(
+                PackageFamily::Nix,
+                PACKAGE_NAME.into(),
+                generation.version.clone(),
+            )));
+        }
         let executable = running_executable().ok_or(QueryReason::InvalidResponse)?;
         owner(executable, &mut source::PerQuery(OWNER_QUERY_TIMEOUT))
     })
