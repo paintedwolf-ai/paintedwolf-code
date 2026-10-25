@@ -70,16 +70,6 @@ func (o *Owner) Result(ctx context.Context, projectID, operationID string) (wire
 	return o.replay(ctx, row)
 }
 
-func (o *Owner) replay(ctx context.Context, row record) (wire.ProjectRemovalResult, error) {
-	if row.Settled {
-		return row.Result, nil
-	}
-	row.Result.CleanupState = "interrupted"
-	row.Result.FailureCode = "removal_interrupted"
-	row.Result.Reason = "Removal was interrupted. Review the project and extension settings before starting another operation."
-	return row.Result, o.Store.save(ctx, row.Result, true)
-}
-
 // Remove durably accepts an operation; its work belongs to the server's tracked runner.
 func (o *Owner) Remove(ctx context.Context, projectID string, req wire.ProjectRemovalRequest) (wire.ProjectRemovalResult, error) {
 	accepted, err := o.accept(ctx, projectID, req)

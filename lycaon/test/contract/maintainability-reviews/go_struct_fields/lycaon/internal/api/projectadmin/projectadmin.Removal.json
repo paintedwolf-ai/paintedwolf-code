@@ -2,14 +2,13 @@
   "category": "go_struct_fields",
   "artifact": "lycaon/internal/api/projectadmin/projectadmin.Removal",
   "kind": "runtime_service",
-  "workstream": "project-deletion-progress",
+  "workstream": "store-health",
   "disposition": "retain",
-  "reason": "The removal route family composes the existing lifecycle services and adds only the shared server task group. Deletion authority and mutation draining stay in the handler; task tracking adds cancellation and shutdown accounting rather than another queue.",
-  "reviewed_commit": "3dd818c9a09ce5aed671a3d2071ced0607f7f974",
+  "reason": "The removal route composes existing lifecycle services. The watch fence and drain stay inside the project mutation lifetime, and failure restores watch admission. Retain the existing 16 dependencies without a parallel deletion controller. The final rebind emits a full-root resync after releasing removal admission; focused source-watch and composed removal contracts verify that missed edits invalidate the previous epoch. The measured size and dependency shape remain unchanged.",
+  "reviewed_commit": "13d9d4c0d9183cc535b349d947b84ec996446bc6",
   "ceiling": 16,
   "boundaries": {
-    "lycaon/internal/projectremoval/progress_test.go": "bd5f785efb1117c28edd811e7a73c7e7423f847ca84006b095c995fc9071a04e",
-    "lycaon/internal/api/hostcontracts/project_removal_test.go": "d33ffb727e2b605d306a20c39e1110df1343706c4fe17308915cf752a31ca877"
+    "lycaon/internal/api/hostcontracts/project_removal_watch_test.go": "4ba5f6a51106f5626815f4bb919a3eb41339bda832786d648f5db98410994b96"
   },
-  "reviewed_shape": "a5b14eb7a4f6ac2c10a854f3fc7de47a552b76c170899582a4c07695dd1ff462"
+  "reviewed_shape": "f2a5527c93ee42e1bb6e5359243204c98593c73891915de198d6b9ad483da792"
 }
