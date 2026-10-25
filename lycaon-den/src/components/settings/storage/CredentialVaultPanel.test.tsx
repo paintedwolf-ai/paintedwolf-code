@@ -5,7 +5,9 @@ import type { VaultCustody, VaultCustodyMode } from "../../../platform/connectio
 const readVaultCustody = vi.fn<() => Promise<VaultCustody>>();
 vi.mock("../../../platform/connection/vault-custody.ts", () => ({ readVaultCustody: () => readVaultCustody() }));
 describe("CredentialVaultPanel", () => {
-  beforeEach(() => readVaultCustody.mockReset());
+  beforeEach(() => {
+    readVaultCustody.mockReset();
+  });
   it.each(["keychain", "identity_service", "development", "unavailable", "refused", "restart_required"] satisfies VaultCustodyMode[])("reports %s without custody mutation controls", async (mode) => {
     readVaultCustody.mockResolvedValue({ mode, service_verified: mode === "identity_service" });
     const view = render(() => <CredentialVaultPanel />);
