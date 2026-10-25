@@ -81,3 +81,14 @@ class ModelPickerTests(TestCase):
             with self.assertRaisesRegex(ValueError, 'after its action'):
                 owner.select_default_model(self.app, self.ui)
         self.assertNotIn('provider_model_selection', self.app.observations)
+
+    def test_transient_native_accessibility_race_retries_with_same_launch_owner(self):
+        class NativeRace(Exception):
+            domain, code = 'atspi_error', 0
+        self.ui.find.side_effect = [self.nodes[0], self.nodes[0], self.nodes[1]]
+        self.nodes[0].queryAction.return_value.doAction.side_effect = [NativeRace('replaced node'), True]
+        with patch.object(owner, 'retry_inventory', return_value=True) as retry, patch.object(owner.time, 'sleep'):
+            owner.select_default_model(self.app, self.ui)
+        retry.assert_called_once()
+        self.assertEqual(self.nodes[0].queryAction.return_value.doAction.call_count, 2)
+        self.assertTrue(self.app.observations['provider_model_selection']['native_action_completed'])

@@ -286,9 +286,17 @@ def verify_deliveries(directory, execution, selected):
                         'request': validated_unlock[0][1], 'acknowledgment': validated_unlock[0][2]}:
                     raise ValueError('native credential preparation host and guest records differ')
             if guest_unlock is not None:
-                if len(validated_unlock) != 2 or guest_unlock != {
-                        'request': validated_unlock[1][1], 'acknowledgment': validated_unlock[1][2]}:
+                if (len(validated_unlock) != 2 or not isinstance(guest_unlock, dict)
+                        or not {'request', 'acknowledgment'} <= set(guest_unlock) <= {
+                            'request', 'acknowledgment', 'independent_session_after'}
+                        or guest_unlock['request'] != validated_unlock[1][1]
+                        or guest_unlock['acknowledgment'] != validated_unlock[1][2]):
                     raise ValueError('native unlock host and guest records differ')
+                if 'independent_session_after' in guest_unlock:
+                    after = session_wire.proof(guest_unlock['independent_session_after'])
+                    session_wire.same_runtime(validated_unlock[1][1]['native_session'], after)
+                    if any(after['native_session'][key] for key in ('locked_hint', 'locker_active')):
+                        raise ValueError('native unlock independent guest session remained locked')
         proof_path = directory / 'native-unlock.json'
         if proof_path.exists():
             proof = decode(proof_path.read_bytes())
@@ -454,7 +462,7 @@ class Bridge:
         if ready != {'state': 'native-unlock-ready', 'request_sha256': unlock_wire.digest(pending),
                      'vm_id': self.selected['vm_id']}:
             raise ValueError('fixed native input guest refused native unlock readiness')
-        result = self.unlock_actor.perform(self.process, self.selector, time.monotonic() + 25, pending)
+        result = self.unlock_actor.perform(self.process, self.selector, time.monotonic() + 30, pending)
         acknowledgment = {'format_version': 1, 'request_sha256': unlock_wire.digest(pending),
                           'vm_id': self.selected['vm_id'], 'result': result}
         unlock_wire.acknowledgment(acknowledgment, pending, self.selected['vm_id'])

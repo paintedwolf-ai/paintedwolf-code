@@ -63,7 +63,7 @@ class InventoryChanged(Exception):
     """The native service invalidated an unfinished inventory."""
 
 
-def descendants(window, deadline=None):
+def descendants(window, deadline=None, *, include=None):
     deadline = time.monotonic() + 15 if deadline is None else deadline
     pending, visited = [(window, 0)], 0
     while pending:
@@ -73,6 +73,8 @@ def descendants(window, deadline=None):
         visited += 1
         if node is None:
             raise InventoryChanged()
+        if include is not None and not include(node, depth):
+            continue
         count = node.childCount
         if type(count) is int and count == -1:
             raise InventoryChanged()

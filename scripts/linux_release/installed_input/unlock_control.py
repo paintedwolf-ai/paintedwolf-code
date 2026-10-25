@@ -29,7 +29,7 @@ class NativeUnlockControl:
             'transaction_id': secrets.token_hex(16), 'operation': operation,
             'native_session': self.lock.observe(), 'account': self.account}, self.execution)
         self.mailbox.write('request.json', pending)
-        deadline = time.monotonic() + 35
+        deadline = time.monotonic() + 40
         while True:
             ack = self.mailbox.read('ack.json')
             if ack is not None:

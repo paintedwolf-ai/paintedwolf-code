@@ -158,6 +158,11 @@ class NativeSessionTests(unittest.TestCase):
         self.reader.rows = [('sleep', '', '', 'block', os.getuid(), 999)]
         with self.assertRaises(KeyError):
             observer.inhibitors()
+        settled = [('sleep', '', '', 'block', os.getuid(), 300)]
+        lists = iter([[], settled, settled, settled])
+        with patch.object(self.reader, 'call', side_effect=lambda p, i, m, a, s, **kw:
+                Variant((next(lists),)) if m == 'ListInhibitors' else NativeReader.call(self.reader, p, i, m, a, s, **kw)):
+            self.assertEqual(len(observer.inhibitors()['inhibitors']), 1)
 
     def test_observation_cannot_mutate_captured_session_authority(self):
         import json
