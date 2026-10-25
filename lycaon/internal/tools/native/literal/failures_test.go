@@ -161,7 +161,7 @@ func TestUnsupportedAndInvalidFormsRefuse(t *testing.T) {
 		{"file", "COMMAND_OPERAND_INVALID"},
 		{"outline", "COMMAND_OPERAND_INVALID"},
 		{"outline --path input lines", "COMMAND_OPERAND_INVALID"},
-		{"repo-map --depth 2", "COMMAND_OPERAND_INVALID"},
+		{"repo-map --depth invalid", "COMMAND_OPERAND_INVALID"},
 	} {
 		t.Run(c.argv, func(t *testing.T) {
 			r := h.exec("", strings.Fields(c.argv)...)

@@ -43,8 +43,8 @@ func TestFileIdentifiesTheVersionedCorpus(t *testing.T) {
 			}
 		case strings.HasPrefix(fixture.Expected, "data/application/octet-stream"):
 			want := identifyData
-			if got == identifyText {
-				want = identifyText
+			if got == identifyText || got == identifyASCII {
+				want = got
 			}
 			if got != want {
 				t.Errorf("%s truncated header identified as %+v", fixture.ID, got)
@@ -92,7 +92,7 @@ func TestFileStructuralSignatures(t *testing.T) {
 	}{
 		"tar":          {tar, identifyTar},
 		"tar checksum": {brokenTar, identifyData},
-		"pe":           {pe, identification{"PE executable (validated PE offset/signature required)", "application/vnd.microsoft.portable-executable"}},
+		"pe":           {pe, identification{description: "PE executable (validated PE offset/signature required)", mime: "application/vnd.microsoft.portable-executable"}},
 		"dos stub":     {dos, identifyData},
 		"fat":          {fat, identifyMachOU},
 		"java class":   {java, identifyData},

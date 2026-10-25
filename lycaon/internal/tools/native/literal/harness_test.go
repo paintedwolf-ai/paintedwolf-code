@@ -137,11 +137,10 @@ func requestFor(h *harness, argv ...string) commandprogram.OperationRequest {
 	for i, word := range argv {
 		fields[i] = commandprogram.Field{Value: word}
 	}
-	operation, ok := h.owners.Operation(argv[0])
-	if !ok {
+	if _, ok := h.owners.Operation(argv[0]); !ok {
 		h.t.Fatalf("%s has no operation", argv[0])
 	}
-	return commandprogram.OperationRequest{Invocation: h.invocation(), OperationID: operation, Argv: fields}
+	return commandprogram.OperationRequest{Invocation: h.invocation(), OperationID: argv[0], Argv: fields}
 }
 
 func streamsFor(stdin string) commandprogram.Streams {
