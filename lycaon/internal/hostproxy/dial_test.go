@@ -148,7 +148,7 @@ func TestNoProxyUsesOriginalDestinationAndExplicitPolicyDoesNotReadDesktop(t *te
 	testutil.FailErr(t, "dial explicit exception", err)
 	defer func() { _ = connection.Close() }()
 	line, err := bufio.NewReader(connection).ReadString('\n')
-	if line != "direct" || err != io.EOF {
+	if line != "direct" || !errors.Is(err, io.EOF) {
 		t.Fatalf("direct reply = %q, %v", line, err)
 	}
 	if _, err := Resolve(mustURL(t, "https://other.invalid/")); err == nil {
@@ -162,7 +162,7 @@ func TestHTTPSProxyRequiresItsOwnValidCertificate(t *testing.T) {
 	defer server.Close()
 	t.Setenv("HTTPS_PROXY", server.URL)
 	_, err := DialPinned(t.Context(), mustURL(t, "https://approval.invalid/"), "tcp", netip.MustParseAddrPort("192.0.2.1:443"))
-	if err != ProxyTLS {
+	if !errors.Is(err, ProxyTLS) {
 		t.Fatalf("HTTPS proxy trust failure = %v", err)
 	}
 }

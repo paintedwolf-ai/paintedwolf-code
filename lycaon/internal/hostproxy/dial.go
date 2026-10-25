@@ -166,6 +166,7 @@ func connect(connection net.Conn, credentials *url.Userinfo, address netip.AddrP
 	if err != nil {
 		return nil, ProxyProtocol
 	}
+	_ = reply.Body.Close()
 	if reply.StatusCode != http.StatusOK {
 		return nil, ProxyRejected
 	}

@@ -2,6 +2,7 @@ package hostproxy
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -105,7 +106,7 @@ func TestSOCKSRefusesAuthDowngradeMalformedAndDeniedReplies(t *testing.T) {
 		}()
 		err := socks(client, url.UserPassword("alice", "private-secret"), netip.MustParseAddrPort("192.0.2.7:443"))
 		_ = client.Close()
-		if err != ProxyRejected {
+		if !errors.Is(err, ProxyRejected) {
 			t.Fatalf("auth downgrade = %v", err)
 		}
 	}

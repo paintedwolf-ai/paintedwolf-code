@@ -42,7 +42,7 @@ func runDiagnostics(ctx context.Context, args []string) error {
 		return verifyDocumentCore(ctx)
 	}
 	if len(args) == 2 && args[0] == "system-proxy" {
-		return describeSystemProxy(args[1], os.Stdout)
+		return describeSystemProxy(ctx, args[1], os.Stdout)
 	}
 	if len(args) == 2 && args[0] == "power-inhibit" {
 		hold, err := time.ParseDuration(args[1])
@@ -69,12 +69,12 @@ func runDiagnostics(ctx context.Context, args []string) error {
 
 // describeSystemProxy prints the proxy host clients would use for a URL, with
 // credentials removed, or the reason the configured mechanism is refused.
-func describeSystemProxy(raw string, out io.Writer) error {
+func describeSystemProxy(ctx context.Context, raw string, out io.Writer) error {
 	target, err := url.Parse(raw)
 	if err != nil || target.Scheme == "" || target.Host == "" {
 		return fmt.Errorf("system-proxy requires an absolute URL")
 	}
-	proxy, err := hostproxy.Resolve(target)
+	proxy, err := hostproxy.ResolveContext(ctx, target)
 	if err != nil {
 		return err
 	}

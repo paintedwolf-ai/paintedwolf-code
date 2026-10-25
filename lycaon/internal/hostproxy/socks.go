@@ -31,8 +31,8 @@ func socks(connection net.Conn, credentials *url.Userinfo, address netip.AddrPor
 		if len(user) == 0 || len(user) > 255 || len(password) > 255 {
 			return EndpointInvalid
 		}
-		auth := append([]byte{1, byte(len(user))}, user...)
-		auth = append(auth, byte(len(password)))
+		auth := append([]byte{1, byte(len(user))}, user...) // #nosec G115 -- len(user) <= 255 checked above
+		auth = append(auth, byte(len(password)))            // #nosec G115 -- len(password) <= 255 checked above
 		auth = append(auth, password...)
 		if err := writePacket(connection, auth); err != nil {
 			return ProxyUnavailable
@@ -64,7 +64,7 @@ func socks(connection net.Conn, credentials *url.Userinfo, address netip.AddrPor
 	if reply[1] != 0 {
 		return ProxyRejected
 	}
-	count := 0
+	var count int
 	switch reply[3] {
 	case 1:
 		count = 4
