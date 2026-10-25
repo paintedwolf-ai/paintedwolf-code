@@ -171,7 +171,7 @@ class InstalledApp:
 
         def capture(name, stream):
             with stream:
-                while block := stream.read(64 << 10):
+                while block := stream.read1(64 << 10):
                     if len(self._streams[name]) + len(block) > LIMIT:
                         self._overflow.set(); return
                     self._streams[name].extend(block)
