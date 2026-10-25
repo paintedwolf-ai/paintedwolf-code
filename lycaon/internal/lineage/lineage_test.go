@@ -101,8 +101,7 @@ func TestLineageEndsWithItsDescendants(t *testing.T) {
 	if err := cmd.Wait(); err != nil {
 		t.Fatalf("wait: %v", err)
 	}
-	deadline := time.Now().Add(2 * time.Second)
-	for l.Live() && time.Now().Before(deadline) {
+	for l.Live() && t.Context().Err() == nil {
 		time.Sleep(10 * time.Millisecond)
 	}
 	if l.Live() {
@@ -192,8 +191,7 @@ func TestRetiredLineageIsReclaimedWhenItsSurvivorsExit(t *testing.T) {
 
 	_ = cmd.Process.Kill()
 	_, _ = cmd.Process.Wait()
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		if _, ok := lineage.Of(pid); !ok {
 			return
 		}

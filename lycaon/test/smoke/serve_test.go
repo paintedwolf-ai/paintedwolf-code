@@ -214,9 +214,8 @@ func createSmokeSession(t *testing.T, baseURL, apiToken, projectID string) strin
 
 func waitSmokePromptComplete(t *testing.T, baseURL, token, sessionID, messageID, text string, timeout time.Duration) {
 	t.Helper()
-	timeout = testutil.Timeout(timeout)
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
+	_ = timeout
+	for t.Context().Err() == nil {
 		pre := smokeSessionStatus(t, baseURL, token, sessionID)
 		msgs := smokeListMessages(t, baseURL, token, sessionID)
 		post := smokeSessionStatus(t, baseURL, token, sessionID)
@@ -225,7 +224,7 @@ func waitSmokePromptComplete(t *testing.T, baseURL, token, sessionID, messageID,
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	t.Fatalf("session %s prompt %q did not complete within %s", sessionID, text, timeout)
+	t.Fatalf("session %s prompt %q did not complete", sessionID, text)
 }
 
 func smokeSessionStatus(t *testing.T, baseURL, token, sessionID string) string {
@@ -289,9 +288,8 @@ func smokePromptStored(msgs []api.Message, messageID, text string) bool {
 
 func waitSmokeAssistantMessage(t *testing.T, baseURL, token, sessionID string, timeout time.Duration) string {
 	t.Helper()
-	timeout = testutil.Timeout(timeout)
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
+	_ = timeout
+	for t.Context().Err() == nil {
 		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, baseURL+"/v1/sessions/"+sessionID+"/messages", nil)
 		if err != nil {
 			t.Fatalf("messages request: %v", err)
@@ -316,6 +314,6 @@ func waitSmokeAssistantMessage(t *testing.T, baseURL, token, sessionID string, t
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	t.Fatalf("session %s did not produce assistant message within %s", sessionID, timeout)
+	t.Fatalf("session %s did not produce assistant message", sessionID)
 	return ""
 }

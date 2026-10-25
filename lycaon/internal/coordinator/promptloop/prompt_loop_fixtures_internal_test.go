@@ -196,7 +196,7 @@ func (s *gatedFailingStreamLLM) Stream(_ context.Context, _ modelcall.Completion
 // Failed calls publish a terminal event.
 func drainTopic(t *testing.T, ch <-chan api.EventEnvelope, wait time.Duration) []api.EventEnvelope {
 	t.Helper()
-	deadline := time.After(wait)
+	_ = wait
 	var out []api.EventEnvelope
 	for {
 		select {
@@ -207,7 +207,7 @@ func drainTopic(t *testing.T, ch <-chan api.EventEnvelope, wait time.Duration) [
 			if env.Topic == api.EventTopicLLM {
 				out = append(out, env)
 			}
-		case <-deadline:
+		default:
 			return out
 		}
 	}

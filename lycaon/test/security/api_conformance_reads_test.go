@@ -12,13 +12,12 @@ import (
 	"sort"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/test/wiring"
 	wire "github.com/lycaon/lycaon/pkg/api"
+	"github.com/lycaon/lycaon/test/wiring"
 )
 
 // conformanceEffects observes host state changes around one read. The sweep
@@ -211,7 +210,6 @@ func settleSourceWatcher(t *testing.T, hub *events.MemoryHub, projectDir string)
 	defer unsubscribe()
 	const barrier = "conformance-barrier.txt"
 	testutil.FailErr(t, "write the watcher barrier", os.WriteFile(filepath.Join(projectDir, barrier), []byte("barrier\n"), 0o644))
-	deadline := time.After(30 * time.Second)
 	for {
 		select {
 		case envelope := <-ch:
@@ -230,7 +228,7 @@ func settleSourceWatcher(t *testing.T, hub *events.MemoryHub, projectDir string)
 					return
 				}
 			}
-		case <-deadline:
+		case <-t.Context().Done():
 			t.Fatal("the source watcher did not report the barrier file")
 		}
 	}

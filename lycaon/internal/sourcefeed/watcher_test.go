@@ -291,7 +291,7 @@ func TestProjectWatchKeepsBothCheckoutScopes(t *testing.T) {
 		select {
 		case id := <-seen:
 			observed[id] = true
-		case <-time.After(3 * time.Second):
+		case <-t.Context().Done():
 			t.Fatalf("lost checkout coverage: %v", observed)
 		}
 	}
@@ -358,13 +358,13 @@ func TestWatchLifetimeStopCancelsAndDrainsCopiedCallback(t *testing.T) {
 	go func() { defer close(done); copied(t.Context(), "lifetime-drain", ExternalBatch{Resync: true}) }()
 	select {
 	case <-entered:
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("copied callback did not enter")
 	}
 	lifetime.Stop(t.Context())
 	select {
 	case <-canceled:
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("stop did not cancel copied callback")
 	}
 	ctx, cancel := context.WithCancel(t.Context())
@@ -428,13 +428,13 @@ func TestWatchLifetimeStopDrainsWholeFlushPublication(t *testing.T) {
 	go func() { defer close(done); watch.flushExternalChanges(t.Context(), pendingExternalBatch{resync: true}) }()
 	select {
 	case <-pub.entered:
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("flush publication did not enter")
 	}
 	lifetime.Stop(t.Context())
 	select {
 	case <-pub.cancelled:
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("shutdown did not cancel publication")
 	}
 	ctx, cancel := context.WithCancel(t.Context())

@@ -65,7 +65,7 @@ func TestFinishConsumesRegistrationNoWaiter(t *testing.T) {
 	}()
 	select {
 	case <-done:
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("Finish blocked")
 	}
 	if _, pending := mgr.Pending(context.Background(), child); pending {

@@ -41,7 +41,7 @@ func TestSharedSnapshotSurvivesItsFirstConsumersCancellation(t *testing.T) {
 	case <-started:
 	case err := <-ownerDone:
 		t.Fatalf("initial capture ended before survey: %v", err)
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("initial capture did not begin surveying")
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)

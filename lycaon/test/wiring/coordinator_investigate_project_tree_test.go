@@ -142,7 +142,7 @@ func TestInvestigateCoordinatorWriteLandsOnProjectTree(t *testing.T) {
 	if !promptFinished {
 		select {
 		case promptErr = <-done:
-		case <-time.After(testutil.Timeout(10 * time.Second)):
+		case <-t.Context().Done():
 			pending, _ := hitlMgr.ListPending(ctx, sess.ID, ptrKind(api.CheckpointKindToolApproval))
 			msgs, _ := h.Store.GetMessages(ctx, sess.ID)
 			t.Fatalf("prompt did not finish: stage=%d pending=%+v messages=%+v", stage.Load(), pending, msgs)

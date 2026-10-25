@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"syscall"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -107,7 +106,7 @@ func TestIntegrityQuarantineNotifiesBeforeActiveTransactionDrains(t *testing.T) 
 	go func() { done <- AuditIntegrity(t.Context(), store) }()
 	select {
 	case <-store.Failed():
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("active transaction blocked the failure signal")
 	}
 	testutil.FailErr(t, "drain active transaction", tx.Rollback())
@@ -116,7 +115,7 @@ func TestIntegrityQuarantineNotifiesBeforeActiveTransactionDrains(t *testing.T) 
 		if !errors.Is(err, ErrStoreIncompatible) {
 			t.Fatalf("audit = %v", err)
 		}
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("quarantine did not finish draining")
 	}
 }

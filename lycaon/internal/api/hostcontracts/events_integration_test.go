@@ -70,8 +70,7 @@ func TestSSEEndToEnd(t *testing.T) {
 	})
 
 	reader := bufio.NewReader(resp.Body)
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		line, err := reader.ReadString('\n')
 		if err != nil {
 			t.Fatalf("read: %v", err)
@@ -169,7 +168,7 @@ func TestSSEStreamEndReleasesTheClientsLeases(t *testing.T) {
 		if client != "window-a" {
 			t.Fatalf("released leases for %q, want window-a", client)
 		}
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("a client whose only stream ended kept its editing leases")
 	}
 }
@@ -244,8 +243,7 @@ func TestSSEHeartbeat(t *testing.T) {
 	defer resp.Body.Close()
 
 	reader := bufio.NewReader(resp.Body)
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		line, err := reader.ReadString('\n')
 		if err != nil {
 			t.Fatalf("read: %v", err)

@@ -260,7 +260,7 @@ func TestRecoverSettledWaitResumesDirectSessionExactlyOnce(t *testing.T) {
 		if got.Kind != winner.Kind || got.Outcome != winner.Outcome {
 			t.Fatalf("resume winner = %+v, want %+v", got, winner)
 		}
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("settled direct wait did not resume")
 	}
 	loop.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, time.Second))
@@ -270,10 +270,11 @@ func TestRecoverSettledWaitResumesDirectSessionExactlyOnce(t *testing.T) {
 	if err := RecoverWaitLeases(context.Background(), loop.Subscriptions, store); err != nil {
 		t.Fatalf("recover delivered direct wait: %v", err)
 	}
+	loop.Turns.WaitForAsyncTurns(t.Context())
 	select {
 	case got := <-resumed:
 		t.Fatalf("delivered direct wait resumed twice: %+v", got)
-	case <-time.After(50 * time.Millisecond):
+	default:
 	}
 }
 
@@ -322,7 +323,7 @@ func TestSettledWaitRetriesTransientAdmissionFailure(t *testing.T) {
 	}
 	select {
 	case <-resumed:
-	case <-time.After(3 * time.Second):
+	case <-t.Context().Done():
 		t.Fatalf("wait resume attempts = %d, want successful retry", attempts.Load())
 	}
 	if got := attempts.Load(); got != 2 {

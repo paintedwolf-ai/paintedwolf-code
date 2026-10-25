@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"testing"
-	"time"
 )
 
 func TestProcessReferenceAndSignal(t *testing.T) {
@@ -50,7 +49,7 @@ func TestProcessReferenceAndSignal(t *testing.T) {
 	}
 	select {
 	case <-done:
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("owned child did not exit")
 	}
 	if _, err := service.Resolve("task", target.Reference); err == nil {

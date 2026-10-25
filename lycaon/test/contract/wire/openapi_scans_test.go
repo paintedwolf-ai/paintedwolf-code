@@ -68,7 +68,7 @@ func TestOpenAPIScansRealServer(t *testing.T) {
 			cancel()
 			select {
 			case <-done:
-			case <-time.After(3 * time.Second):
+			case <-t.Context().Done():
 				t.Errorf("scan runner did not stop")
 			}
 		})

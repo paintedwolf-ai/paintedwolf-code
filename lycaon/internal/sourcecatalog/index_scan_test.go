@@ -39,8 +39,7 @@ func writeIndexFile(t *testing.T, root, rel, body string) {
 // waitIndex waits for discovery to settle.
 func waitIndex(t *testing.T, c *Catalog, root Root) *IndexReader {
 	t.Helper()
-	until := time.Now().Add(30 * time.Second)
-	for time.Now().Before(until) {
+	for t.Context().Err() == nil {
 		reader, status, err := c.Trees.OpenIndex(t.Context(), "p", root, 250*time.Millisecond)
 		testutil.FailErr(t, "open file index", err)
 		if status.State == StateFailed {

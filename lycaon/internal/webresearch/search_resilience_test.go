@@ -41,12 +41,7 @@ func TestProviderHealthOpensAfterRepeatedHardFailures(t *testing.T) {
 
 func TestFanOutCutsSlowProviderWhenBudgetMet(t *testing.T) {
 	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		select {
-		case <-r.Context().Done():
-			return
-		case <-time.After(30 * time.Second):
-			_, _ = w.Write([]byte(`{"objects":[]}`))
-		}
+		<-r.Context().Done()
 	}))
 	t.Cleanup(slow.Close)
 	injectProviderHTTPClient(t, slow.Client())
@@ -95,7 +90,7 @@ func TestFanOutGraceCutsStragglersWithPartialHits(t *testing.T) {
 		health: reg.ensureHealthGate("fast"),
 	})
 	reg.Register(&healthWrappedProvider{
-		inner:  &slowSleepStubProvider{delay: 30 * time.Second},
+		inner:  &slowSleepStubProvider{},
 		health: reg.ensureHealthGate("slow"),
 	})
 
@@ -162,14 +157,8 @@ func (p *slowSleepStubProvider) Kind() ProviderKind { return KindKeyless }
 func (p *slowSleepStubProvider) Configured(Settings) bool { return true }
 
 func (p *slowSleepStubProvider) Search(ctx context.Context, _ Settings, _ string, _ int) providerOutcome {
-	timer := time.NewTimer(p.delay)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return providerOutcome{providerID: p.ID(), reason: "cut", detail: ctx.Err().Error()}
-	case <-timer.C:
-		return providerOutcome{providerID: p.ID(), ok: true, hits: []WebHit{{URL: "https://example.com/slow"}}}
-	}
+	<-ctx.Done()
+	return providerOutcome{providerID: p.ID(), reason: "cut", detail: ctx.Err().Error()}
 }
 
 type timeoutStubProvider struct {

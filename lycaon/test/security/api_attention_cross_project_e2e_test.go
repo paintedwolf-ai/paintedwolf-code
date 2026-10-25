@@ -57,7 +57,7 @@ func waitNeedsYouAttentionRow(
 	deadline time.Duration,
 ) wire.AttentionRow {
 	t.Helper()
-	timeout := time.After(deadline)
+	_ = deadline
 	for {
 		select {
 		case env, ok := <-ch:
@@ -76,7 +76,7 @@ func waitNeedsYouAttentionRow(
 					return row
 				}
 			}
-		case <-timeout:
+		case <-t.Context().Done():
 			t.Fatalf("no attention row for session %s reached a subscriber of another project", sessionID)
 		}
 	}
@@ -89,7 +89,7 @@ func waitAttentionClear(
 	deadline time.Duration,
 ) {
 	t.Helper()
-	timeout := time.After(deadline)
+	_ = deadline
 	for {
 		select {
 		case env, ok := <-ch:
@@ -112,7 +112,7 @@ func waitAttentionClear(
 			if !blocked {
 				return
 			}
-		case <-timeout:
+		case <-t.Context().Done():
 			t.Fatalf("session %s stayed on the attention list after its checkpoint was resolved", sessionID)
 		}
 	}

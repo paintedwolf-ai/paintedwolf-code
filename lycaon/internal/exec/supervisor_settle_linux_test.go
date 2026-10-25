@@ -5,6 +5,7 @@ package exec
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"errors"
 	"os"
 	"os/exec"
@@ -83,8 +84,8 @@ func stopped(pid int) bool {
 	return len(fields) > 0 && string(fields[0]) == "T"
 }
 
-func waitForStopped(pid int, within time.Duration) bool {
-	for deadline := time.Now().Add(within); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+func waitForStopped(ctx context.Context, pid int) bool {
+	for ; ctx.Err() == nil; time.Sleep(10 * time.Millisecond) {
 		if stopped(pid) {
 			return true
 		}
@@ -116,7 +117,7 @@ func TestCommandDescendantsFollowsTheWholeTreeOnly(t *testing.T) {
 		t.Fatalf("signalled %d descendants, want 2", n)
 	}
 	for _, pid := range direct {
-		if !waitForStopped(pid, 5*time.Second) {
+		if !waitForStopped(t.Context(), pid) {
 			t.Fatalf("descendant %d was not signalled", pid)
 		}
 	}
@@ -184,7 +185,7 @@ func TestSupervisionSettlesTheTree(t *testing.T) {
 			if reaps < max(1, tc.minReaps) {
 				t.Fatalf("reaps=%d, want >= %d", reaps, max(1, tc.minReaps))
 			}
-			testutil.FailErr(t, "descendant survived settlement", waitForProcessGone(pids[0], 5*time.Second))
+			testutil.FailErr(t, "descendant survived settlement", waitForProcessGone(t.Context(), pids[0]))
 		})
 	}
 }
@@ -277,15 +278,16 @@ func TestAwaitEngineLossFollowsTheLifetimePipe(t *testing.T) {
 	read, write, err := os.Pipe()
 	testutil.FailErr(t, "open lifetime pipe", err)
 	gone := awaitEngineLoss(read)
+	runtime.Gosched()
 	select {
 	case <-gone:
 		t.Fatal("reported engine loss while the engine held the pipe")
-	case <-time.After(50 * time.Millisecond):
+	default:
 	}
 	_ = write.Close()
 	select {
 	case <-gone:
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("engine loss was not observed")
 	}
 }

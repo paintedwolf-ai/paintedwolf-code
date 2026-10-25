@@ -126,7 +126,6 @@ func TestRefreshRepublishesScreenedDocuments(t *testing.T) {
 
 	f.h.RefreshProjectSecretScreens(t.Context(), uuid.NewString())
 	f.h.RefreshProjectSecretScreens(t.Context(), f.project.ID)
-	deadline := time.After(testutil.Timeout(5 * time.Second))
 	for {
 		select {
 		case envelope := <-updates:
@@ -138,7 +137,7 @@ func TestRefreshRepublishesScreenedDocuments(t *testing.T) {
 				t.Fatal("a screening refresh reported a content change")
 			}
 			return
-		case <-deadline:
+		case <-t.Context().Done():
 			t.Fatal("refresh published no editor document event")
 		}
 	}

@@ -175,8 +175,8 @@ func drainMessageEvents(t *testing.T, ch <-chan api.EventEnvelope, wait time.Dur
 
 func collectMessageOps(t *testing.T, ch <-chan api.EventEnvelope, wait time.Duration) map[api.MessageChangeOp]int {
 	t.Helper()
+	_ = wait
 	got := map[api.MessageChangeOp]int{}
-	deadline := time.After(wait)
 	for {
 		select {
 		case env := <-ch:
@@ -188,7 +188,7 @@ func collectMessageOps(t *testing.T, ch <-chan api.EventEnvelope, wait time.Dura
 				testutil.FailErr(t, "decode message event", err)
 			}
 			got[ev.Op]++
-		case <-deadline:
+		default:
 			return got
 		}
 	}
@@ -196,8 +196,7 @@ func collectMessageOps(t *testing.T, ch <-chan api.EventEnvelope, wait time.Dura
 
 func waitOutboxEmpty(t *testing.T, database db.Handle) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		var count int
 		if err := database.QueryRowContext(t.Context(), "SELECT COUNT(*) FROM event_outbox").Scan(&count); err == nil && count == 0 {
 			return

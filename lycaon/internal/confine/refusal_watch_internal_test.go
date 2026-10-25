@@ -10,6 +10,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -80,22 +81,24 @@ func (s *fakeRefusalSource) probe(ctx context.Context, tag string) error {
 }
 
 func TestRefusalSettleBoundsTheProbeItself(t *testing.T) {
-	w, source := liveWatch(t)
-	feed := w.register(testTag, FilesystemRules{})
-	source.blocked.Store(true)
-	done := make(chan struct{})
-	go func() {
-		w.settle(t.Context(), feed)
-		close(done)
-	}()
-	select {
-	case <-done:
-		if feed.snapshot().Witness != WitnessIncomplete {
-			t.Fatal("a timed out probe retained a kernel witness")
+	synctest.Test(t, func(t *testing.T) {
+		w, source := liveWatch(t)
+		feed := w.register(testTag, FilesystemRules{})
+		source.blocked.Store(true)
+		done := make(chan struct{})
+		go func() {
+			w.settle(t.Context(), feed)
+			close(done)
+		}()
+		select {
+		case <-done:
+			if feed.snapshot().Witness != WitnessIncomplete {
+				t.Fatal("a timed out probe retained a kernel witness")
+			}
+		case <-t.Context().Done():
+			t.Fatal("settle deadline did not bound the probe")
 		}
-	case <-time.After(2 * refusalSettleTimeout):
-		t.Fatal("settle deadline did not bound the probe")
-	}
+	})
 }
 
 func TestRefusalSettlementRetainsCanceledActionContext(t *testing.T) {
@@ -143,7 +146,7 @@ func TestRefusalWatchLossCancelsPendingSettlement(t *testing.T) {
 			}()
 			select {
 			case <-source.probing:
-			case <-time.After(refusalSettleTimeout):
+			case <-t.Context().Done():
 				t.Fatal("settlement probe did not start")
 			}
 			if tc.stop {
@@ -153,7 +156,7 @@ func TestRefusalWatchLossCancelsPendingSettlement(t *testing.T) {
 			}
 			select {
 			case <-done:
-			case <-time.After(refusalSettleTimeout / 2):
+			case <-t.Context().Done():
 				t.Fatal("stream loss did not cancel its settlement probe")
 			}
 			if got := feed.snapshot().Witness; got != WitnessIncomplete {
@@ -209,9 +212,8 @@ func newTestWatch(t *testing.T, source *fakeRefusalSource) *refusalWatchT {
 
 func waitFor(t *testing.T, what string, cond func() bool) {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
 	for !cond() {
-		if time.Now().After(deadline) {
+		if t.Context().Err() != nil {
 			t.Fatalf("timed out waiting for %s", what)
 		}
 		time.Sleep(5 * time.Millisecond)

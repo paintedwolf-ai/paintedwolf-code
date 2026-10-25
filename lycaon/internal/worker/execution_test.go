@@ -82,7 +82,7 @@ func TestCancelMidRun(t *testing.T) {
 
 	select {
 	case <-exec.started:
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("execute did not start")
 	}
 
@@ -238,14 +238,14 @@ func TestLocalWorkerPollerRunWaitsForInflightOnCancel(t *testing.T) {
 
 	select {
 	case <-block.started:
-	case <-time.After(2 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("execute did not start")
 	}
 
 	cancel()
 	select {
 	case <-runDone:
-	case <-time.After(2 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("Run did not return after cancel while job in flight")
 	}
 }

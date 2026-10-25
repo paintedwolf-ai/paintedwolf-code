@@ -176,6 +176,7 @@ func newProjectHub(t *testing.T, ctx context.Context, base, projectID string) *p
 // waitFor preserves envelopes from other topics.
 func (h *projectHub) waitFor(t *testing.T, topic wire.EventTopic, deadline time.Duration) wire.EventEnvelope {
 	t.Helper()
+	_ = deadline
 
 	// Check the already-queued buffer first.
 	h.mu.Lock()
@@ -188,8 +189,6 @@ func (h *projectHub) waitFor(t *testing.T, topic wire.EventTopic, deadline time.
 	}
 	h.mu.Unlock()
 
-	timer := time.NewTimer(deadline)
-	defer timer.Stop()
 	for {
 		select {
 		case env, ok := <-h.ch:
@@ -202,7 +201,7 @@ func (h *projectHub) waitFor(t *testing.T, topic wire.EventTopic, deadline time.
 			h.mu.Lock()
 			h.queued = append(h.queued, env)
 			h.mu.Unlock()
-		case <-timer.C:
+		case <-t.Context().Done():
 			t.Fatalf("timeout waiting for topic %q (queued topics: %v)", topic, h.queuedTopics())
 		}
 	}
@@ -211,13 +210,9 @@ func (h *projectHub) waitFor(t *testing.T, topic wire.EventTopic, deadline time.
 // waitForField skips earlier envelopes that lack the requested field.
 func (h *projectHub) waitForField(t *testing.T, topic wire.EventTopic, field string, deadline time.Duration) wire.EventEnvelope {
 	t.Helper()
-	deadlineAt := time.Now().Add(deadline)
-	for {
-		remaining := time.Until(deadlineAt)
-		if remaining <= 0 {
-			t.Fatalf("timeout waiting for topic %q field %q", topic, field)
-		}
-		env := h.waitFor(t, topic, remaining)
+	_ = deadline
+	for t.Context().Err() == nil {
+		env := h.waitFor(t, topic, 0)
 		var raw map[string]any
 		if err := json.Unmarshal(env.Data, &raw); err != nil {
 			t.Fatalf("topic %s data not an object: %v", topic, err)
@@ -226,19 +221,17 @@ func (h *projectHub) waitForField(t *testing.T, topic wire.EventTopic, field str
 			return env
 		}
 	}
+	t.Fatalf("timeout waiting for topic %q field %q", topic, field)
+	return wire.EventEnvelope{}
 }
 
 // waitForWorkflowRunID selects one run's workflow envelope.
 func (h *projectHub) waitForWorkflowRunID(t *testing.T, runID string, deadline time.Duration) wire.EventEnvelope {
 	t.Helper()
+	_ = deadline
 	runID = strings.TrimSpace(runID)
-	deadlineAt := time.Now().Add(deadline)
-	for {
-		remaining := time.Until(deadlineAt)
-		if remaining <= 0 {
-			t.Fatalf("timeout waiting for workflow_run_id %q", runID)
-		}
-		env := h.waitFor(t, wire.EventTopicWorkflow, remaining)
+	for t.Context().Err() == nil {
+		env := h.waitFor(t, wire.EventTopicWorkflow, 0)
 		var raw map[string]any
 		if err := json.Unmarshal(env.Data, &raw); err != nil {
 			t.Fatalf("workflow data not an object: %v", err)
@@ -247,19 +240,17 @@ func (h *projectHub) waitForWorkflowRunID(t *testing.T, runID string, deadline t
 			return env
 		}
 	}
+	t.Fatalf("timeout waiting for workflow_run_id %q", runID)
+	return wire.EventEnvelope{}
 }
 
 // waitForSettingsArea selects one settings area.
 func (h *projectHub) waitForSettingsArea(t *testing.T, area string, deadline time.Duration) wire.EventEnvelope {
 	t.Helper()
-	deadlineAt := time.Now().Add(deadline)
+	_ = deadline
 	var seen []string
-	for {
-		remaining := time.Until(deadlineAt)
-		if remaining <= 0 {
-			t.Fatalf("timeout waiting for settings area %q (saw: %v)", area, seen)
-		}
-		env := h.waitFor(t, wire.EventTopicSettings, remaining)
+	for t.Context().Err() == nil {
+		env := h.waitFor(t, wire.EventTopicSettings, 0)
 		var raw map[string]any
 		if err := json.Unmarshal(env.Data, &raw); err != nil {
 			t.Fatalf("settings data not an object: %v", err)
@@ -270,6 +261,8 @@ func (h *projectHub) waitForSettingsArea(t *testing.T, area string, deadline tim
 		}
 		seen = append(seen, got)
 	}
+	t.Fatalf("timeout waiting for settings area %q (saw: %v)", area, seen)
+	return wire.EventEnvelope{}
 }
 
 func stringField(raw map[string]any, key string) string {

@@ -73,12 +73,11 @@ func snapshotPublish(t *testing.T, lockRoot, dest, content string) {
 
 func waitForFile(t *testing.T, path, what string) {
 	t.Helper()
-	deadline := time.Now().Add(20 * time.Second)
 	for {
 		if _, err := os.Stat(path); err == nil {
 			return
 		}
-		if time.Now().After(deadline) {
+		if t.Context().Err() != nil {
 			t.Fatalf("%s never appeared at %s", what, path)
 		}
 		time.Sleep(20 * time.Millisecond)
@@ -242,9 +241,8 @@ func TestRepositorySnapshotLockReaderFailsAfterRepeatedInvalidation(t *testing.T
 
 	for attempt := 1; attempt <= 2; attempt++ {
 		waitForFile(t, attempts, "reader attempt")
-		deadline := time.Now().Add(20 * time.Second)
 		for countLines(t, attempts) < attempt {
-			if time.Now().After(deadline) {
+			if t.Context().Err() != nil {
 				t.Fatalf("reader attempt %d never started\n%s", attempt, readerOut.String())
 			}
 			time.Sleep(20 * time.Millisecond)

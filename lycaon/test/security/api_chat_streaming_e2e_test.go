@@ -259,10 +259,9 @@ func subscribeProjectEvents(t *testing.T, ctx context.Context, base, projectID s
 // collectHubUntil groups envelopes until a predicate matches.
 func collectHubUntil(t *testing.T, ch <-chan wire.EventEnvelope, deadline time.Duration, satisfied func(map[string]int) bool) map[string][]wire.EventEnvelope {
 	t.Helper()
+	_ = deadline
 	out := map[string][]wire.EventEnvelope{}
 	counts := map[string]int{}
-	timer := time.NewTimer(testutil.Timeout(deadline))
-	defer timer.Stop()
 	for {
 		select {
 		case env, ok := <-ch:
@@ -275,7 +274,7 @@ func collectHubUntil(t *testing.T, ch <-chan wire.EventEnvelope, deadline time.D
 			if satisfied(counts) {
 				return out
 			}
-		case <-timer.C:
+		case <-t.Context().Done():
 			return out
 		}
 	}

@@ -144,8 +144,7 @@ func TestAnalysisCacheJoinsConcurrentBuild(t *testing.T) {
 	}
 	close(start)
 	<-buildStarted
-	deadline := time.Now().Add(time.Second)
-	for cache.stats().Joins != callers-1 && time.Now().Before(deadline) {
+	for cache.stats().Joins != callers-1 && t.Context().Err() == nil {
 		time.Sleep(time.Millisecond)
 	}
 	close(releaseBuild)

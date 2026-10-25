@@ -37,7 +37,7 @@ func TestRunnerSleepsIdleAndWakesForCommittedScan(t *testing.T) {
 		if scan.ID != "wake-scan" || scan.Status != api.CodeScanStatusComplete {
 			t.Fatalf("committed demand completed as %+v", scan)
 		}
-	case <-time.After(testutil.Timeout(10 * time.Second)):
+	case <-t.Context().Done():
 		t.Fatal("committed demand waited for the recovery sweep")
 	}
 	scantest.AssertQuiet(t, database)

@@ -102,11 +102,9 @@ func openAPIPostJSON[T any](t *testing.T, base, pathTemplate string, pathParams 
 	return decodeOpenAPI[T](t, http.MethodPost, pathTemplate, respBody)
 }
 
-func waitSessionPreparedOpenAPI(t *testing.T, base, sessionID string, timeout time.Duration) {
+func waitSessionPreparedOpenAPI(t *testing.T, base, sessionID string, _ time.Duration) {
 	t.Helper()
-	timeout = testutil.Timeout(timeout)
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		sess := openAPIGetJSON[wire.Session](t, base, "/v1/sessions/{id}", map[string]string{"id": sessionID}, http.StatusOK)
 		if sess.Status != wire.SessionStatusPreparing {
 			return
@@ -165,10 +163,9 @@ func waitSessionIdleOpenAPI(t *testing.T, base, sessionID string, timeout time.D
 
 func waitPromptTurnOpenAPI(t *testing.T, base, sessionID string, baseline int, acceptedAt time.Time, timeout time.Duration) wire.Session {
 	t.Helper()
-	timeout = testutil.Timeout(timeout)
-	deadline := time.Now().Add(timeout)
+	_ = timeout
 	sawBusy := false
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		sess := openAPIGetJSON[wire.Session](t, base, "/v1/sessions/{id}",
 			map[string]string{"id": sessionID}, http.StatusOK)
 		if sess.Status == wire.SessionStatusBusy {
@@ -190,7 +187,7 @@ func waitPromptTurnOpenAPI(t *testing.T, base, sessionID string, baseline int, a
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	t.Fatalf("session %s did not complete prompt turn within %s", sessionID, timeout)
+	t.Fatalf("session %s did not complete prompt turn", sessionID)
 	return wire.Session{}
 }
 

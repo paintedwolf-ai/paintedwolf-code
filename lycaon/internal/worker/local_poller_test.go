@@ -80,13 +80,13 @@ func TestPollerDrainsPendingWorkWhenCapacityReturns(t *testing.T) {
 	go func() { done <- poller.Run(ctx) }()
 	select {
 	case <-executor.starts:
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("first worker did not start")
 	}
 	executor.release <- struct{}{}
 	select {
 	case <-executor.starts:
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("second worker waited for maintenance after capacity returned")
 	}
 	executor.release <- struct{}{}
@@ -319,7 +319,7 @@ func TestPollerDeliversTerminalOutcomeBeforeParentBecomesIdle(t *testing.T) {
 	}()
 	select {
 	case <-recorder.started:
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("terminal outcome delivery did not start")
 	}
 
@@ -329,16 +329,25 @@ func TestPollerDeliversTerminalOutcomeBeforeParentBecomesIdle(t *testing.T) {
 	go func() {
 		waitDone <- AwaitParentSessionWorkers(waitCtx, queue, waiter, testdbseed.DefaultProjectID, parent, settings.DefaultSessionLimits())
 	}()
+	for t.Context().Err() == nil {
+		waiter.mu.Lock()
+		n := len(waiter.waiters[parent])
+		waiter.mu.Unlock()
+		if n == 1 {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
 	select {
 	case err := <-waitDone:
 		t.Fatalf("parent became idle before terminal projection: %v", err)
-	case <-time.After(50 * time.Millisecond):
+	default:
 	}
 	close(recorder.release)
 	select {
 	case err := <-waitDone:
 		testutil.FailErr(t, "await delivered outcome", err)
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("parent did not resume after terminal outcome acknowledgement")
 	}
 	<-executeDone
@@ -422,7 +431,7 @@ func TestPollerKeepsRunningUntilDeferredOutcomeSucceeds(t *testing.T) {
 		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("poller stopped with %v", err)
 		}
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("poller did not stop")
 	}
 }

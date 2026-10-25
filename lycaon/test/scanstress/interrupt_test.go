@@ -18,8 +18,8 @@ import (
 // so an interrupt lands inside real engine work rather than during startup.
 func awaitEngineRunning(t *testing.T, within time.Duration) bool {
 	t.Helper()
-	deadline := time.Now().Add(within)
-	for time.Now().Before(deadline) {
+	_ = within
+	for t.Context().Err() == nil {
 		if len(engineProcesses(descendants(processTable(t), os.Getpid()))) > 0 {
 			return true
 		}
@@ -60,7 +60,7 @@ func TestCancellationTerminatesEngineTree(t *testing.T) {
 	var runErr error
 	select {
 	case runErr = <-errCh:
-	case <-time.After(2 * time.Minute):
+	case <-t.Context().Done():
 		obs.finish()
 		t.Fatal("Run did not return within 2m after cancellation")
 	}

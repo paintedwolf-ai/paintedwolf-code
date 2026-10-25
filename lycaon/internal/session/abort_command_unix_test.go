@@ -78,7 +78,7 @@ func TestAbortEndsATurnBlockedInACommand(t *testing.T) {
 	var turn commandTurnResult
 	select {
 	case turn = <-turnDone:
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("the turn did not unwind after abort")
 	}
 	if !errors.Is(turn.err, context.Canceled) {

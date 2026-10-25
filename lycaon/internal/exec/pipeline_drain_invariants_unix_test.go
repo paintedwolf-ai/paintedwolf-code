@@ -33,9 +33,6 @@ const (
 
 	exitModeNormal     = "normal"
 	exitModeWaitCancel = "wait_cancel"
-
-	// Allow scheduler overhead around the drain ceiling; supervised trees may settle sooner.
-	maxDrainCeiling = PipelineWaitDelay + 5*time.Second
 )
 
 type invariantTrackingWriter struct {
@@ -59,10 +56,9 @@ func (w *invariantTrackingWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func assertProcessGroupReaped(t *testing.T, pgid int, within time.Duration) {
+func assertProcessGroupReaped(t *testing.T, pgid int) {
 	t.Helper()
-	deadline := time.Now().Add(within)
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		err := syscall.Kill(-pgid, 0)
 		if errors.Is(err, syscall.ESRCH) {
 			return
@@ -71,13 +67,12 @@ func assertProcessGroupReaped(t *testing.T, pgid int, within time.Duration) {
 	}
 	err := syscall.Kill(-pgid, 0)
 	if !errors.Is(err, syscall.ESRCH) {
-		t.Fatalf("process group %d not reaped within %v: syscall.Kill(-pgid, 0) = %v, want ESRCH", pgid, within, err)
+		t.Fatalf("process group %d not reaped: syscall.Kill(-pgid, 0) = %v, want ESRCH", pgid, err)
 	}
 }
 
 func waitForPIDFileHelper(path string) {
-	deadline := time.Now().Add(10 * time.Second)
-	for time.Now().Before(deadline) {
+	for {
 		if _, err := os.Stat(path); err == nil {
 			return
 		}
@@ -228,9 +223,9 @@ func TestPipelineDrainInvariant_NormalExit(t *testing.T) {
 			grandchildPid := waitForPIDFile(t, filepath.Join(dir, "grandchild.pid"))
 			pgid := leaderPid
 
-			assertProcessGroupReaped(t, pgid, 5*time.Second)
+			assertProcessGroupReaped(t, pgid)
 			for _, pid := range []int{leaderPid, childPid, grandchildPid} {
-				if err := waitForProcessGone(pid, 5*time.Second); err != nil {
+				if err := waitForProcessGone(t.Context(), pid); err != nil {
 					t.Fatalf("lingering process %d: %v", pid, err)
 				}
 			}
@@ -280,7 +275,7 @@ func TestPipelineDrainInvariant_ForegroundCancellation_SameProcessGroup(t *testi
 
 	select {
 	case <-done:
-	case <-time.After(TerminateGrace + 5*time.Second):
+	case <-t.Context().Done():
 		t.Fatal("cancelled pipeline did not settle within grace period")
 	}
 
@@ -288,9 +283,9 @@ func TestPipelineDrainInvariant_ForegroundCancellation_SameProcessGroup(t *testi
 	_ = err
 
 	// Invariant: Entire process group reaped and no lingering zombies.
-	assertProcessGroupReaped(t, pgid, 5*time.Second)
+	assertProcessGroupReaped(t, pgid)
 	for _, pid := range []int{leaderPid, childPid, grandchildPid} {
-		if err := waitForProcessGone(pid, 5*time.Second); err != nil {
+		if err := waitForProcessGone(t.Context(), pid); err != nil {
 			t.Fatalf("lingering process %d after cancellation: %v", pid, err)
 		}
 	}
@@ -335,12 +330,12 @@ func TestPipelineDrainInvariant_ForegroundCancellation_DetachedDrainCeiling(t *t
 
 	select {
 	case <-done:
-	case <-time.After(maxDrainCeiling + 5*time.Second):
+	case <-t.Context().Done():
 		t.Fatal("cancelled pipeline with detached holder did not settle")
 	}
 
 	// Invariant: Leader reaped.
-	if err := waitForProcessGone(leaderPid, 5*time.Second); err != nil {
+	if err := waitForProcessGone(t.Context(), leaderPid); err != nil {
 		t.Fatalf("leader %d lingered after cancel: %v", leaderPid, err)
 	}
 
@@ -367,7 +362,7 @@ func TestPipelineDrainInvariant_AsyncPipelineDrainCeiling(t *testing.T) {
 
 	select {
 	case <-async.Done():
-	case <-time.After(maxDrainCeiling + 5*time.Second):
+	case <-t.Context().Done():
 		t.Fatal("async pipeline did not settle under drain ceiling")
 	}
 
@@ -380,7 +375,7 @@ func TestPipelineDrainInvariant_AsyncPipelineDrainCeiling(t *testing.T) {
 	// Invariant 2: Process group reaping.
 	leaderPid := waitForPIDFile(t, filepath.Join(dir, "leader.pid"))
 	pgid := leaderPid
-	assertProcessGroupReaped(t, pgid, 5*time.Second)
+	assertProcessGroupReaped(t, pgid)
 
 	// Invariant 3: Reader unblocked cleanly.
 	if tw.bytesWritten.Load() == 0 {

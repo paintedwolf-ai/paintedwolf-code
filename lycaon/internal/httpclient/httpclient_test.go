@@ -27,10 +27,7 @@ func isTimeout(err error) bool {
 
 func TestBoundedTimesOutOnSlowServer(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		select {
-		case <-time.After(2 * time.Second):
-		case <-r.Context().Done():
-		}
+		<-r.Context().Done()
 	}))
 	defer srv.Close()
 
@@ -46,16 +43,9 @@ func TestBoundedTimesOutOnSlowServer(t *testing.T) {
 func TestBoundedTimeoutCoversBody(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("chunk "))
 		w.(http.Flusher).Flush()
-		for i := 0; i < 30; i++ {
-			select {
-			case <-r.Context().Done():
-				return
-			case <-time.After(100 * time.Millisecond):
-			}
-			_, _ = w.Write([]byte("chunk "))
-			w.(http.Flusher).Flush()
-		}
+		<-r.Context().Done()
 	}))
 	defer srv.Close()
 
@@ -75,10 +65,9 @@ func TestStreamingSurvivesSlowBody(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		w.(http.Flusher).Flush()
 		for i := 0; i < chunks; i++ {
-			select {
-			case <-r.Context().Done():
+			time.Sleep(50 * time.Millisecond)
+			if r.Context().Err() != nil {
 				return
-			case <-time.After(50 * time.Millisecond):
 			}
 			_, _ = w.Write([]byte("x"))
 			w.(http.Flusher).Flush()
@@ -107,10 +96,7 @@ func TestStreamingBoundsResponseHeaderWait(t *testing.T) {
 	defer func() { DefaultResponseHeader = orig }()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		select {
-		case <-time.After(5 * time.Second):
-		case <-r.Context().Done():
-		}
+		<-r.Context().Done()
 	}))
 	defer srv.Close()
 

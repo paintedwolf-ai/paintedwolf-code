@@ -111,8 +111,6 @@ func TestSSESubscriberOverflowIsFullyRecoverableFromStore(t *testing.T) {
 				Message:   after,
 			}))
 
-	deadline := time.NewTimer(10 * time.Second)
-	defer deadline.Stop()
 	for {
 		select {
 		case env, ok := <-resub:
@@ -128,7 +126,7 @@ func TestSSESubscriberOverflowIsFullyRecoverableFromStore(t *testing.T) {
 			if delivered.SessionID == sess.ID && delivered.Message.ID == after.ID {
 				return
 			}
-		case <-deadline.C:
+		case <-t.Context().Done():
 			t.Fatal("reconnected subscriber did not receive the published message")
 		}
 	}
@@ -169,9 +167,8 @@ func pageWholeTranscript(t *testing.T, srv *api.Server, sessionID string) []wire
 // Buffered events remain readable after the hub closes a dropped subscriber.
 func drainUntilClosed(t *testing.T, ch <-chan wire.EventEnvelope, timeout time.Duration) int {
 	t.Helper()
+	_ = timeout
 	count := 0
-	timeout = testutil.Timeout(timeout)
-	deadline := time.After(timeout)
 	for {
 		select {
 		case _, ok := <-ch:
@@ -179,9 +176,8 @@ func drainUntilClosed(t *testing.T, ch <-chan wire.EventEnvelope, timeout time.D
 				return count
 			}
 			count++
-		case <-deadline:
-			t.Fatalf("subscriber still open after %s and %d events — expected the hub to drop it",
-				timeout, count)
+		case <-t.Context().Done():
+			t.Fatalf("subscriber still open after %d events — expected the hub to drop it", count)
 			return count
 		}
 	}

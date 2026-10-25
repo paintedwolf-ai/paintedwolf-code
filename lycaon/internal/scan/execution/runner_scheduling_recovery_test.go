@@ -33,7 +33,7 @@ func TestRunnerRecoversLeaseAtItsDeadline(t *testing.T) {
 		if row.ID != "abandoned" || row.Status != api.CodeScanStatusFailed || row.FailureCode != "SCAN_LEASE_EXPIRED" {
 			t.Fatalf("lease recovery = %+v", row)
 		}
-	case <-time.After(testutil.Timeout(5 * time.Second)):
+	case <-t.Context().Done():
 		t.Fatal("lease expiry waited for the idle recovery sweep")
 	}
 }
@@ -74,7 +74,7 @@ func TestSettingsDisableCancelsClaimBeforeEngineAdmission(t *testing.T) {
 		if scan.Status != api.CodeScanStatusCanceled || scan.FailureCode != "SCAN_CANCELED" {
 			t.Fatalf("waiting scan was not canceled: %+v", scan)
 		}
-	case <-time.After(testutil.Timeout(2 * time.Second)):
+	case <-t.Context().Done():
 		t.Fatal("claimed work waited for admission or the lease heartbeat before stopping")
 	}
 	select {

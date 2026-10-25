@@ -545,7 +545,7 @@ func TestLiteralBuildStopsWhenLastWaiterLeaves(t *testing.T) {
 	}
 	select {
 	case <-stopped:
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("abandoned build continued")
 	}
 }

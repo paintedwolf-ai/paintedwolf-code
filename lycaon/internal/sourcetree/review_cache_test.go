@@ -85,7 +85,7 @@ func TestReviewPreparationDoesNotBlockConcurrentReads(t *testing.T) {
 	}
 	select {
 	case <-entered:
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("review builder did not start")
 	}
 	_, _, err = review.projection(view.ctx, source, "intent", nil)

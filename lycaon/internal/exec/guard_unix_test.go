@@ -47,7 +47,7 @@ func TestUnixGuardKillsGroupAfterLeaderIsReaped(t *testing.T) {
 
 	guard.kill(cmd)
 
-	if err := waitForProcessGone(grandchild, 5*time.Second); err != nil {
+	if err := waitForProcessGone(t.Context(), grandchild); err != nil {
 		_ = syscall.Kill(grandchild, syscall.SIGKILL)
 		testutil.FailErr(t, "descendant outlived guard kill", err)
 	}
@@ -68,11 +68,11 @@ func TestRunPipelineTimeoutKillsDescendants(t *testing.T) {
 	grandchild := waitForPIDFile(t, pidFile)
 	select {
 	case <-done:
-	case <-time.After(30 * time.Second):
+	case <-t.Context().Done():
 		_ = syscall.Kill(grandchild, syscall.SIGKILL)
 		t.Fatal("RunPipeline did not return after its timeout")
 	}
-	if err := waitForProcessGone(grandchild, 5*time.Second); err != nil {
+	if err := waitForProcessGone(t.Context(), grandchild); err != nil {
 		_ = syscall.Kill(grandchild, syscall.SIGKILL)
 		testutil.FailErr(t, "descendant outlived pipeline timeout", err)
 	}
@@ -110,7 +110,7 @@ func TestRunPipelineReturnsWhenDescendantEscapesProcessGroup(t *testing.T) {
 
 	select {
 	case <-done:
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("RunPipeline blocked on a descendant that left the process group")
 	}
 	if runErr != nil || res == nil || res.TimedOut {
@@ -141,8 +141,7 @@ func TestExecDetachHelperProcess(t *testing.T) {
 
 func waitForPIDFile(t *testing.T, path string) int {
 	t.Helper()
-	deadline := time.Now().Add(20 * time.Second)
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		raw, err := os.ReadFile(path)
 		if err == nil {
 			if pid, convErr := strconv.Atoi(strings.TrimSpace(string(raw))); convErr == nil && pid > 0 {
@@ -155,13 +154,12 @@ func waitForPIDFile(t *testing.T, path string) int {
 	return 0
 }
 
-func waitForProcessGone(pid int, within time.Duration) error {
-	deadline := time.Now().Add(within)
-	for time.Now().Before(deadline) {
+func waitForProcessGone(ctx context.Context, pid int) error {
+	for ctx.Err() == nil {
 		if !osprocess.Alive(pid) {
 			return nil
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	return fmt.Errorf("process %d still running after %v", pid, within)
+	return fmt.Errorf("process %d still running: %w", pid, ctx.Err())
 }

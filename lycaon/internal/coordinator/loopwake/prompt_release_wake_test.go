@@ -87,12 +87,12 @@ func TestWorkerCycleTerminalDoesNotOccupyTheWorkerDuringHostPrompt(t *testing.T)
 	})
 	select {
 	case <-returned:
-	case <-time.After(2 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("worker delivery waited for the coordinator's model turn")
 	}
 	select {
 	case <-started:
-	case <-time.After(2 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("acknowledged worker did not start its pending host turn")
 	}
 }

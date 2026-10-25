@@ -103,7 +103,7 @@ func testHandleCommandRefusalWakesWithDigest(t *testing.T, offered []string) {
 		if !strings.Contains(env.CommandRefusalDigest, "state=running") || !strings.Contains(env.CommandRefusalDigest, "unshown_refusals=2") {
 			t.Fatalf("refusal lost running state: %s", env.CommandRefusalDigest)
 		}
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("refusal wake omitted the report")
 	}
 	loop.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, time.Second))

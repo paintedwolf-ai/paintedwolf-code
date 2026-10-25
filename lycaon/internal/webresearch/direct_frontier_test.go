@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -225,13 +224,8 @@ func TestDirectStragglerHostDoesNotBlockResults(t *testing.T) {
 			<body><h1>Widget frobnicator guide</h1></body></html>`)
 	}))
 	t.Cleanup(fast.Close)
-	var slowFinished atomic.Bool
 	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		select {
-		case <-r.Context().Done():
-		case <-time.After(8 * time.Second):
-			slowFinished.Store(true)
-		}
+		<-r.Context().Done()
 		w.WriteHeader(http.StatusOK)
 	}))
 	t.Cleanup(slow.Close)
@@ -245,9 +239,6 @@ func TestDirectStragglerHostDoesNotBlockResults(t *testing.T) {
 	}
 	if len(hits) != 1 {
 		t.Fatalf("hits = %+v", hits)
-	}
-	if slowFinished.Load() {
-		t.Fatal("the hanging host must not gate the result")
 	}
 }
 

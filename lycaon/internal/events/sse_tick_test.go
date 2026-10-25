@@ -1,9 +1,6 @@
 package events
 
-import (
-	"testing"
-	"time"
-)
+import "testing"
 
 func TestBurstEndOwesCommentsOnlyAfterAnEvent(t *testing.T) {
 	burst := NewBurstEnd()
@@ -17,7 +14,7 @@ func TestBurstEndOwesCommentsOnlyAfterAnEvent(t *testing.T) {
 		for comment := range burstEndDelays {
 			select {
 			case <-burst.C():
-			case <-time.After(5 * time.Second):
+			case <-t.Context().Done():
 				t.Fatalf("round %d: burst-end comment %d never came due", round, comment)
 			}
 			burst.Ended()
@@ -34,7 +31,7 @@ func TestBurstEndRestartsWhenEventsContinue(t *testing.T) {
 	burst.Wrote()
 	select {
 	case <-burst.C():
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("the first burst-end comment never came due")
 	}
 	burst.Ended()
@@ -45,7 +42,7 @@ func TestBurstEndRestartsWhenEventsContinue(t *testing.T) {
 	}
 	select {
 	case <-burst.C():
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("the restarted burst-end comment never came due")
 	}
 	burst.Ended()

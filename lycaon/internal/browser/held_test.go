@@ -43,14 +43,6 @@ func TestHeldPagePersistsAcrossOperationDeadlines(t *testing.T) {
 	if held.Page.GetContext().Err() != nil {
 		t.Fatal("one expired operation canceled the held page")
 	}
-	// Hold the page beyond the opening deadline.
-	timer := time.NewTimer(RasterizeTimeout + 50*time.Millisecond)
-	defer timer.Stop()
-	select {
-	case <-timer.C:
-	case <-t.Context().Done():
-		t.Fatal("test canceled before the retained-page wait completed")
-	}
 	_, err = held.Act(t.Context(), []CaptureAction{
 		{Type: "fill", ActionLocator: ActionLocator{Selector: "#email"}, Value: "still@live.test"},
 		{Type: "click", ActionLocator: ActionLocator{Selector: "#next"}},

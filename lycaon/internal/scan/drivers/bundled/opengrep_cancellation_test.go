@@ -52,11 +52,7 @@ exit 2
 			}()
 			t.Cleanup(func() {
 				cancel()
-				select {
-				case <-done:
-				case <-time.After(testutil.Timeout(15 * time.Second)):
-					t.Error("scanner process did not stop after cancellation")
-				}
+				<-done
 			})
 			testutil.WaitFor(t, 15*time.Second, func() bool {
 				select {
@@ -70,7 +66,7 @@ exit 2
 			cancel()
 			select {
 			case <-done:
-			case <-time.After(testutil.Timeout(15 * time.Second)):
+			case <-t.Context().Done():
 				t.Fatal("scanner did not return after cancellation")
 			}
 			if got.result != nil || !errors.Is(got.err, context.Canceled) {
