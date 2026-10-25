@@ -52,7 +52,7 @@ s.setdefault('generation_calls',[]).append(sys.argv[1:]);p.write_text(json.dumps
 ''')
             generations.chmod(0o755)
             source = program((ROOT / 'packaging/linux/deb/prerm').read_text(),
-                             generations, root / 'package-state')
+                             root, generations)
             wrapper = '''fixture_test() {
 case "$1:$2" in
 -d:/sys/kernel/security/apparmor) return 0;;

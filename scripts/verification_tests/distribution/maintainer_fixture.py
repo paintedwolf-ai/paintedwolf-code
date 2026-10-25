@@ -1,22 +1,30 @@
-"""Bind shipped maintainer programs to their two fixed scratch authorities."""
+"""Bind shipped maintainer programs to fixed state beneath their scratch root."""
 import re
 from pathlib import Path
 
 GENERATIONS = '/opt/painted-wolf-code/bin/pw-generations'
 PACKAGE_STATE = '/var/lib/painted-wolf-code'
+STATE_ROOTS = ('/opt/painted-wolf-code', '/etc/paintedwolf', '/run/paintedwolf', PACKAGE_STATE)
 
 
-def program(source: str, generations: Path, package_state: Path) -> str:
-    for path in (generations, package_state):
-        if not re.fullmatch(r'/[A-Za-z0-9_./-]+', str(path)):
+def program(source: str, root: Path, generations=None) -> str:
+    generations = generations or root / 'pw-generations'
+    for path in (root, generations):
+        if path == Path('/') or '..' in path.parts or not re.fullmatch(r'/[A-Za-z0-9_./-]+', str(path)):
             raise ValueError('maintainer fixture requires an absolute shell-safe scratch path')
+    if not generations.is_relative_to(root):
+        raise ValueError('maintainer fixture executable must belong to its scratch root')
     assignment = 'PW_GENERATIONS=' + GENERATIONS
     if source.count(assignment) != int('PW_GENERATIONS' in source):
         raise ValueError('unbound host generation executable in fixture')
     source = source.replace(assignment, 'PW_GENERATIONS=' + str(generations))
     if GENERATIONS in source:
         raise ValueError('unbound host generation executable in fixture')
-    source = source.replace(PACKAGE_STATE, str(package_state))
-    if PACKAGE_STATE in source:
+    for fixed in STATE_ROOTS:
+        source = source.replace(fixed, str(root / fixed.removeprefix('/')))
+    unbound = source
+    for fixed in STATE_ROOTS:
+        unbound = unbound.replace(str(root / fixed.removeprefix('/')), '<scratch>')
+    if any(fixed in unbound for fixed in STATE_ROOTS):
         raise ValueError('unbound host package state in fixture')
     return source
