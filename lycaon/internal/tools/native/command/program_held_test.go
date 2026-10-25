@@ -174,7 +174,7 @@ func (d dirSources) Capture(_ context.Context, _ toolcontract.OperationInvocatio
 func TestProgramEntrySourcesScriptAndDeduplicatesProgramDefinitions(t *testing.T) {
 	f := newProgramFixture(t)
 	testutil.FailErr(t, "write sourced script", os.WriteFile(filepath.Join(f.dir, "lib.sh"), []byte("greet() { external -- /bin/echo \"$1\"; }\n"), 0o600))
-	out, err := f.call(t, t.Context(), "source lib.sh; greet first; greet second")
+	out, err := f.call(t, t.Context(), "source -- lib.sh; greet first; greet second")
 	testutil.FailErr(t, "run sourced function calls", err)
 	if !strings.Contains(out, `"stdout":"first\nsecond\n"`) || !strings.Contains(out, `"state":"completed"`) {
 		t.Fatalf("sourced program outcome %s", out)
