@@ -28,25 +28,43 @@ def open_project_configuration(app, ui, project, selected) -> dict:
     actions = app.observations.setdefault('project_configuration_actions', [])
     deadline = time.monotonic() + 15
     controls = [(ui.api.ROLE_COMBO_BOX, 'App menu'),
-                (ui.api.ROLE_MENU_ITEM, 'Painted Wolf Code'),
-                (ui.api.ROLE_MENU_ITEM, 'Settings…'),
-                (ui.api.ROLE_PAGE_TAB, 'AI providers'),
-                (ui.api.ROLE_PUSH_BUTTON, target['display_name'] + ' → AI providers')]
+                (ui.api.ROLE_MENU_ITEM, 'Go'),
+                (ui.api.ROLE_MENU_ITEM, 'Crossbar…')]
     for role, name in controls:
-        if project_configuration_identity(app, project, selected) != target:
-            raise ValueError('selected project changed before configuration navigation')
+        _require_configuration_target(app, project, selected, target)
         actions.append(_project_configuration_action(app, ui, deadline, role, name))
-        if project_configuration_identity(app, project, selected) != target:
-            raise ValueError('selected project changed after configuration navigation')
+        _require_configuration_target(app, project, selected, target)
+    _require_configuration_target(app, project, selected, target)
+    query = physical_input(app, ui, 'Crossbar…', 'settings-providers-query-v1', deadline=deadline)
+    _require_configuration_target(app, project, selected, target)
+    if query.get('operation') != 'settings-providers-query-v1' or query.get('completed') is not True:
+        raise ValueError('project configuration query did not complete its fixed operation')
+    app.observations['project_configuration_query'] = {
+        'operation': query['operation'], 'completed': query['completed'],
+        'expected_catalog_id': 'painted-wolf/platform:settings-section-providers',
+        'accessibility_exposes_catalog_id': False}
+    for role, name, command in [(ui.api.ROLE_PUSH_BUTTON, 'Settings: AI providers', True),
+                                (ui.api.ROLE_PUSH_BUTTON, target['display_name'] + ' → AI providers', False)]:
+        _require_configuration_target(app, project, selected, target)
+        actions.append(_project_configuration_action(app, ui, deadline, role, name, command=command))
+        _require_configuration_target(app, project, selected, target)
     witness = {'project': target, 'actions': actions, 'native_action_completed': True}
     app.observations['project_configuration_navigation'] = witness
     return witness
 
 
-def _project_configuration_action(app, ui, deadline, role, name):
+def _require_configuration_target(app, project, selected, target):
+    if project_configuration_identity(app, project, selected) != target:
+        raise ValueError('selected project changed during configuration navigation')
+
+
+def _project_configuration_action(app, ui, deadline, role, name, *, command=False):
     root = app.observations['launch_identity']
     while True:
-        node = ui.find(role, name, deadline=deadline)
+        node = ui.settings_provider_command(deadline) if command else ui.find(role, name, deadline=deadline)
+        observed_name = node.name
+        if not isinstance(observed_name, str) or not 0 < len(observed_name) <= 256:
+            raise ValueError('project configuration control name exceeds its bound')
         phase = 'inventory-ownership'
         try:
             frame, chain = accessibility.capture(node, list(ui.windows(deadline)))
@@ -65,7 +83,8 @@ def _project_configuration_action(app, ui, deadline, role, name):
                 if not node.getState().contains(ui.api.STATE_FOCUSED):
                     raise accessibility.InventoryChanged()
             phase = 'identity-recheck'
-            if (node.name != name or not ui.visible(node)
+            if (node.name != observed_name or not ui.visible(node)
+                    or (command and not ui.settings_provider_command_matches(node, deadline))
                     or accessibility.capture(node, list(ui.windows(deadline)))[1] != chain
                     or lineage.capture(surface, control) != entry_chain
                     or lineage.capture(root, surface) != frame_chain):
@@ -98,7 +117,7 @@ def _project_configuration_action(app, ui, deadline, role, name):
         raise refusal from None
     if lineage.capture(root, surface) != frame_chain or lineage.capture(surface, control) != entry_chain:
         raise ValueError('normal project configuration process identity changed after its action')
-    return {'role': int(role), 'name': name, 'accessible_chain': chain, 'entry_lineage': entry_chain,
+    return {'role': int(role), 'name': name, 'accessible_name': observed_name, 'accessible_chain': chain, 'entry_lineage': entry_chain,
             'frame_lineage': frame_chain, 'visible': True, 'native_action_completed': True}
 
 

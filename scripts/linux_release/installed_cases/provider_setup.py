@@ -13,11 +13,13 @@ from ..installed_input.guest import perform
 from ..installed_input.protocol import endpoint_operation
 
 
-def physical_input(app, ui, label, operation, *, password=False):
+def physical_input(app, ui, label, operation, *, password=False, deadline=None):
     native = app.binding.get('native_input')
     if not isinstance(native, dict):
         raise CaseUnavailable('protected-reply-requires-fixed-physical-input')
-    record = perform(native['binding'], native['vm_id'], EntryFocus(app, ui, label, password=password), operation=operation)
+    options = {} if deadline is None else {'deadline': deadline}
+    record = perform(native['binding'], native['vm_id'],
+                     EntryFocus(app, ui, label, password=password, **options), operation=operation, **options)
     app.observations.setdefault('fixed_input', []).append(record)
     return record
 

@@ -175,6 +175,25 @@ class DesktopUIOwnershipTests(unittest.TestCase):
         self.assertEqual(api.Registry.getDesktop.call_count, 2)
         button.action.doAction.assert_called_once_with(0)
 
+    def test_catalog_row_requires_exact_owned_title_and_provider_children(self):
+        title = Node(API.ROLE_ENTRY, 'Settings: AI providers')
+        provider = Node(API.ROLE_ENTRY, 'Other · painted-wolf/platform')
+        row = Node(API.ROLE_PUSH_BUTTON, 'composite public name', [title, provider])
+        api, _ = surface([row])
+        with ui.DesktopUI(self.app, api) as actor:
+            self.assertIs(actor.settings_provider_command(ui.time.monotonic() + 15), row)
+            row.action.doAction.assert_not_called()
+            provider.name = 'Other · foreign/provider'
+            self.assertFalse(actor.settings_provider_command_matches(row, ui.time.monotonic() + 15))
+            provider.name = 'Other · painted-wolf/platform'
+            title.name = 'Settings: AI providers extra'
+            self.assertFalse(actor.settings_provider_command_matches(row, ui.time.monotonic() + 15))
+        title.name = 'Settings: AI providers'
+        api, _ = surface([row, row])
+        with ui.DesktopUI(self.app, api) as actor, self.assertRaises(CaseUnavailable):
+            actor.settings_provider_command(ui.time.monotonic() + 15)
+        row.action.doAction.assert_not_called()
+
     def test_incomplete_inventory_retains_exact_requested_control_without_action(self):
         button = Node(API.ROLE_PUSH_BUTTON, 'Send')
         api, _ = surface([button])

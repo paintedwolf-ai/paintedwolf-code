@@ -340,7 +340,7 @@ class LockMonitorExecutionTests(unittest.TestCase):
     def test_controller_verifies_deliveries_for_initial_lock_state_and_lock_during_presence(self):
         for case_name, extra_ops in (
                 ('initial-lock-state', ('reply-fixture-prompt-v1',)),
-                ('lock-during-presence', tuple(op for _, op, _, _ in presence_fixture.FIELDS))):
+                ('lock-during-presence', ('settings-providers-query-v1', *(op for _, op, _, _ in presence_fixture.FIELDS)))):
             with self.subTest(case=case_name), tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)
                 leaf_dir = root / f'leaf/evidence/session/{case_name}'

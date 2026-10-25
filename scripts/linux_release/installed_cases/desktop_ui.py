@@ -145,6 +145,21 @@ class DesktopUI:
     def find(self, role: int, name: str, deadline=None):
         if not isinstance(name, str) or not 0 < len(name) <= 256:
             raise ValueError('desktop action requires an exact bounded control name')
+        return self._find(role, name, lambda node: node.name == name, deadline)
+
+    def settings_provider_command(self, deadline):
+        return self._find(self.api.ROLE_PUSH_BUTTON, 'Settings: AI providers',
+                          lambda node: self.settings_provider_command_matches(node, deadline), deadline)
+
+    def settings_provider_command_matches(self, node, deadline):
+        if node.getRole() != self.api.ROLE_PUSH_BUTTON or not self.visible(node):
+            return False
+        expected = {'Settings: AI providers', 'Other · painted-wolf/platform'}
+        observed = {child.name for child in self.descendants(node, deadline)
+                    if child.name in expected and self.visible(child)}
+        return observed == expected
+
+    def _find(self, role, name, matches_control, deadline):
         deadline = time.monotonic() + 15 if deadline is None else deadline
         matches, observed_roles = [], set()
         while self.app.process.poll() is None and time.monotonic() < deadline:
@@ -152,7 +167,7 @@ class DesktopUI:
             try:
                 for identity, window in self.windows(deadline):
                     for node in self.descendants(window, deadline):
-                        if node.name == name and self.visible(node):
+                        if matches_control(node) and self.visible(node):
                             node_role = node.getRole()
                             observed_roles.add(int(node_role))
                             if node_role == role:

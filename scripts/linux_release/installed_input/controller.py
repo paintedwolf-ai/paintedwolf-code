@@ -66,7 +66,7 @@ def delivery_records(directory, execution, vm_id):
             partial = observations.get('native_input')
             has_transitions = bool(observations.get('transitions') or observations.get('lock_transition'))
             expected = ('provider-name-v1', None, 'provider-fixture-credential-v1',
-                        *(operation for _, operation, _, _ in FIELDS))
+                        'settings-providers-query-v1', *(operation for _, operation, _, _ in FIELDS))
             fixed_partial = partial is not None and (
                 kind == 'presence' or (len(selected) < len(expected) and not has_transitions))
             if fixed_partial:

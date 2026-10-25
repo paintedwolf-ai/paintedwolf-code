@@ -5,6 +5,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from linux_release.installed_input import controller, guest, protocol
+from linux_release.installed_cases.records import CaseUnavailable
 
 
 class GuestInputTests(unittest.TestCase):
@@ -159,7 +160,7 @@ class GuestInputTests(unittest.TestCase):
         actor = Mock()
         actor.observe.return_value = self.focus
         operations = ['provider-name-v1', 'provider-endpoint-v1-12345',
-                      'provider-fixture-credential-v1', *(row[1] for row in FIELDS)]
+                      'provider-fixture-credential-v1', 'settings-providers-query-v1', *(row[1] for row in FIELDS)]
         records = [guest.perform(self.execution, 'owned', actor, self.mailbox(), operation=operation)
                    for operation in operations]
         selected = {'format_version': 1, 'kind': 'qemu-fixed-input', 'lease': '/root/lease', 'vm_id': 'owned'}
@@ -192,6 +193,39 @@ class GuestInputTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     controller.verify_deliveries(root, self.execution, selected)
 
+
+    def test_expired_query_deadline_never_publishes_input(self):
+        actor, box = Mock(), self.mailbox()
+        with patch.object(guest.time, 'monotonic', return_value=20), self.assertRaises(CaseUnavailable):
+            guest.perform(self.execution, 'owned', actor, box,
+                          operation='settings-providers-query-v1', deadline=20)
+        box.write.assert_not_called()
+        actor.observe.assert_not_called()
+
+    def test_deadline_after_observation_refuses_before_delivery(self):
+        actor, box = Mock(), self.mailbox()
+        actor.observe.return_value = self.focus
+        with patch.object(guest.time, 'monotonic', side_effect=[0, 0, 20]), self.assertRaises(CaseUnavailable) as refusal:
+            guest.perform(self.execution, 'owned', actor, box,
+                          operation='settings-providers-query-v1', deadline=20)
+        box.write.assert_not_called()
+        self.assertFalse(refusal.exception.observations['native_input']['completed'])
+
+    def test_expiry_after_published_ack_retains_delivery_without_next_action(self):
+        actor, box = Mock(), self.mailbox()
+        actor.observe.return_value = self.focus
+        with patch.object(guest.time, 'monotonic', side_effect=[0, 0, 0, 0, 0, 20]), self.assertRaises(CaseUnavailable) as refusal:
+            guest.perform(self.execution, 'owned', actor, box,
+                          operation='settings-providers-query-v1', deadline=20)
+        facts = refusal.exception.observations['native_input']
+        self.assertFalse(facts['completed'])
+        self.assertTrue(facts['request_published'])
+        self.assertEqual(facts['pending_request']['ordinal'], 0)
+        self.assertEqual(facts['validated_delivery']['ordinal'], 0)
+        self.assertEqual(facts['events'], [])
+        box.write.assert_called_once()
+        box.clear_completed.assert_not_called()
+        actor.observe.assert_called_once()
 
 if __name__ == '__main__':
     unittest.main()

@@ -1,6 +1,7 @@
 """Bind native input to the selected focused entry and its actual owned active frame."""
 from __future__ import annotations
 import time
+import math
 
 from ..installed_process import process_identity
 from ..installed_cases.desktop_ui import owned_process
@@ -14,16 +15,23 @@ class _FocusUnavailable(CaseUnavailable):
 
 
 class EntryFocus:
-    def __init__(self, app, ui, label: str, *, password: bool = False):
+    def __init__(self, app, ui, label: str, *, password: bool = False, deadline=None):
         if type(password) is not bool:
             raise ValueError('native input entry kind must be fixed')
         self.role = ui.api.ROLE_PASSWORD_TEXT if password else ui.api.ROLE_ENTRY
         self.app, self.ui, self.label = app, ui, label
-        self.deadline = time.monotonic() + 90
-        self.node = ui.find(self.role, label)
+        if deadline is not None and (type(deadline) not in (int, float) or not math.isfinite(deadline)):
+            raise ValueError('native input requires a finite absolute deadline')
+        self.deadline = min(time.monotonic() + 90, deadline) if deadline is not None else time.monotonic() + 90
+        self.bounded = deadline is not None
+        if self.bounded and time.monotonic() >= self.deadline:
+            raise CaseUnavailable('native input observation deadline expired before focus')
+        self.node = ui.find(self.role, label, **({'deadline': self.deadline} if self.bounded else {}))
         self.entry = process_identity(self.node.get_process_id())
         self.launch = dict(app.observations['launch_identity'])
         self.frame, self.frame_lineage, self.accessible_chain = None, None, None
+        if self.bounded and time.monotonic() >= self.deadline:
+            raise CaseUnavailable('native input observation deadline expired before focus')
         if self.node.queryComponent().grabFocus() is not True:
             raise CaseUnavailable('normal-owned-editor-focus-refused')
         self.observe()
@@ -61,7 +69,7 @@ class EntryFocus:
         if not visible or not focused:
             # WebKit can replace the accessible entry during a normal editor render.
             # Re-observe the exact owned label; never refocus or replay delivered input.
-            replacement = ui.find(self.role, self.label)
+            replacement = ui.find(self.role, self.label, **({'deadline': self.deadline} if self.bounded else {}))
             replacement_identity = process_identity(replacement.get_process_id())
             if replacement_identity == self.entry:
                 node = replacement
@@ -77,7 +85,7 @@ class EntryFocus:
             error.observations = {'native_input_focus': {'entry_identity': self.entry,
                 'entry_visible': visible, 'entry_focused': focused}}
             raise error
-        frame, accessible_chain = accessibility.capture(node, list(ui.windows()))
+        frame, accessible_chain = accessibility.capture(node, list(ui.windows(*((self.deadline,) if self.bounded else ()))))
         frame_identity = process_identity(frame.get_process_id())
         active, visible = frame.getState().contains(ui.api.STATE_ACTIVE), bool(ui.visible(frame))
         if not active or not visible:

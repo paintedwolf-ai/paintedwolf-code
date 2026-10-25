@@ -69,6 +69,8 @@ def steps(operation: str) -> tuple[tuple[str, ...], ...]:
     endpoint = _ENDPOINT_OPERATION.fullmatch(operation)
     if endpoint:
         return _literal_steps(gui_endpoint(int(endpoint.group(1))))
+    if operation == 'settings-providers-query-v1':
+        return _literal_steps('Settings: AI providers')
     if operation == 'reply-fixture-prompt-v1':
         return _literal_steps('Run the installed qualification fixture using command.')
     if operation == 'browser-fixture-prompt-v1':

@@ -70,7 +70,7 @@ class DesktopTurnTests(unittest.TestCase):
         frame = Mock(get_process_id=Mock(return_value=11))
         api = SimpleNamespace(ROLE_COMBO_BOX=11, ROLE_MENU_ITEM=35, ROLE_PAGE_TAB=37,
                               ROLE_PUSH_BUTTON=43, STATE_FOCUSED=12)
-        labels = ['App menu', 'Painted Wolf Code', 'Settings…', 'AI providers', 'Alpha → AI providers']
+        labels = ['App menu', 'Go', 'Crossbar…', 'Settings: AI providers Other · painted-wolf/platform', 'Alpha → AI providers']
         nodes = []
         for label in labels:
             node = Mock(get_process_id=Mock(return_value=12))
@@ -79,7 +79,9 @@ class DesktopTurnTests(unittest.TestCase):
             node.queryComponent.return_value.grabFocus.return_value = True
             node.getState.return_value.contains.return_value = True
             nodes.append(node)
-        ui = Mock(api=api, find=Mock(side_effect=nodes), visible=Mock(return_value=True))
+        ui = Mock(api=api, find=Mock(side_effect=nodes[:3] + nodes[4:]), visible=Mock(return_value=True),
+                  settings_provider_command=Mock(return_value=nodes[3]),
+                  settings_provider_command_matches=Mock(return_value=True))
         ui.windows.return_value = []
         target = {'project_id': 'project', 'session_id': 'session', 'root_id': 'root', 'display_name': 'Alpha'}
         chain = [{'bus_name': ':1.2', 'path': '/control', 'pid': 12},
@@ -95,6 +97,8 @@ class DesktopTurnTests(unittest.TestCase):
         stack.enter_context(patch.object(owner.accessibility, 'capture', return_value=(frame, chain)))
         stack.enter_context(patch.object(owner.lineage, 'capture', side_effect=lambda r, c: [c, r]))
         stack.enter_context(patch.object(owner.time, 'sleep'))
+        stack.enter_context(patch.object(owner, 'physical_input', return_value={
+            'operation': 'settings-providers-query-v1', 'completed': True}))
         return stack
 
     def test_configuration_route_uses_exact_selected_project_and_owned_normal_actions(self):
@@ -103,10 +107,12 @@ class DesktopTurnTests(unittest.TestCase):
         observed = stack.enter_context(patch.object(owner, 'project_configuration_identity', return_value=target))
         witness = owner.open_project_configuration(app, ui, '/fixture', {'id': 'session', 'project_id': 'project'})
         self.assertEqual([c.args for c in ui.find.call_args_list], [
-            (11, 'App menu'), (35, 'Painted Wolf Code'), (35, 'Settings…'),
-            (37, 'AI providers'), (43, 'Alpha → AI providers')])
+            (11, 'App menu'), (35, 'Go'), (35, 'Crossbar…'), (43, 'Alpha → AI providers')])
         self.assertEqual(len({c.kwargs['deadline'] for c in ui.find.call_args_list}), 1)
-        self.assertEqual(observed.call_count, 11)
+        self.assertEqual(observed.call_count, 13)
+        ui.settings_provider_command.assert_called_once()
+        self.assertEqual(ui.settings_provider_command.call_args.args[0], ui.find.call_args_list[0].kwargs['deadline'])
+        self.assertFalse(app.observations['project_configuration_query']['accessibility_exposes_catalog_id'])
         for node in nodes:
             node.queryAction.return_value.doAction.assert_called_once_with(0)
         for node in nodes[1:3]:
@@ -149,3 +155,14 @@ class DesktopTurnTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'identity changed'):
             owner.open_project_configuration(app, ui, '/fixture', {'id': 'session', 'project_id': 'project'})
         nodes[0].queryAction.return_value.doAction.assert_not_called()
+
+    def test_configuration_route_never_selects_a_command_after_incomplete_query(self):
+        app, ui, frame, nodes, target, chain = self.configuration_fixture()
+        stack = self.configuration_patches(frame, chain)
+        stack.enter_context(patch.object(owner, 'project_configuration_identity', return_value=target))
+        query = stack.enter_context(patch.object(owner, 'physical_input', return_value={
+            'operation': 'settings-providers-query-v1', 'completed': False}))
+        with self.assertRaisesRegex(ValueError, 'fixed operation'):
+            owner.open_project_configuration(app, ui, '/fixture', {'id': 'session', 'project_id': 'project'})
+        ui.settings_provider_command.assert_not_called()
+        self.assertEqual(query.call_args.kwargs['deadline'], ui.find.call_args_list[0].kwargs['deadline'])

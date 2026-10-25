@@ -55,6 +55,17 @@ class InstalledInputProtocolTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             protocol.request(request, binding)
 
+    def test_settings_query_is_fixed_public_text_without_command_submission(self):
+        rows = protocol.steps('settings-providers-query-v1')
+        text = ''.join(':' if row == ('shift', 'semicolon') else ' ' if row == ('spc',) else
+                       row[1].upper() if len(row) == 2 and row[0] == 'shift' else row[0] for row in rows[1:])
+        self.assertEqual(text, 'Settings: AI providers')
+        self.assertEqual(rows[0], ('ctrl', 'a'))
+        self.assertNotIn(('ret',), rows)
+        for operation in ('settings-providers-query-v1-other', 'settings-query-arbitrary'):
+            with self.assertRaises(ValueError):
+                protocol.steps(operation)
+
     def test_managed_presence_fixture_has_only_closed_public_values_and_no_submit(self):
         from linux_release.installed_input.presence_fixture import FIELDS
         punctuation = {('spc',): ' ', ('dot',): '.', ('minus',): '-'}

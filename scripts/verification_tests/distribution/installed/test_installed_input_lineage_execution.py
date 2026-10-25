@@ -79,3 +79,15 @@ class InputLineageTests(unittest.TestCase):
             frame.get_process_id.return_value = peer['pid']
             with self.assertRaises(focus_owner.CaseFailed):
                 actor.observe()
+
+    def test_entry_lookup_cannot_authorize_focus_after_its_absolute_deadline(self):
+        ui, node = MagicMock(), MagicMock()
+        ui.find.return_value = node
+        node.get_process_id.return_value = self.frame['pid']
+        app = SimpleNamespace(observations={'launch_identity': self.root})
+        with patch.object(focus_owner.time, 'monotonic', side_effect=[0, 0, 10]), \
+                patch.object(focus_owner, 'process_identity', return_value=self.frame):
+            with self.assertRaises(focus_owner.CaseUnavailable):
+                focus_owner.EntryFocus(app, ui, 'Crossbar…', deadline=10)
+        ui.find.assert_called_once_with(ui.api.ROLE_ENTRY, 'Crossbar…', deadline=10)
+        node.queryComponent.assert_not_called()
