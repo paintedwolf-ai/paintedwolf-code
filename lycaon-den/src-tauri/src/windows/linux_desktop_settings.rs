@@ -7,7 +7,7 @@
 use std::collections::BTreeMap;
 
 use super::accessibility_text_size::{payload_for_category, TextSizePayload};
-use super::linux_decorations::{layout_from_raw, DecorationLayout};
+use super::linux_decorations::{layout_from_raw, DecorationLayout, TitlebarAction, TitlebarActions};
 use super::system_appearance::{hex_color, SystemAppearancePayload};
 
 #[cfg(target_os = "linux")]
@@ -61,7 +61,7 @@ impl DesktopSettingsFacts {
             text_scaling_factor: text_scaling_factor(snapshot),
             increase_contrast: any_true([
                 match lookup(snapshot, APPEARANCE_NS, "contrast") {
-                    Some(SettingValue::U32(level)) => Some(*level >= 1),
+                    Some(SettingValue::U32(level)) => Some(*level == 1),
                     _ => None,
                 },
                 match lookup(snapshot, GNOME_A11Y_NS, "high-contrast") {
@@ -122,12 +122,23 @@ fn kde_accent(snapshot: &SettingsSnapshot) -> Option<String> {
     }
 }
 
-/// The title bar layout the desktop asks for; the default when it names none.
+/// The title bar layout and click actions the desktop asks for; defaults for those it names none.
 fn decoration_layout(snapshot: &SettingsSnapshot) -> DecorationLayout {
-    match lookup(snapshot, WM_PREFERENCES_NS, "button-layout") {
+    let mut layout = match lookup(snapshot, WM_PREFERENCES_NS, "button-layout") {
         Some(SettingValue::Str(raw)) => layout_from_raw(raw),
         _ => DecorationLayout::default_layout(),
-    }
+    };
+    let defaults = TitlebarActions::default();
+    let action = |key: &str, default: TitlebarAction| match lookup(snapshot, WM_PREFERENCES_NS, key) {
+        Some(SettingValue::Str(raw)) => TitlebarAction::parse(raw),
+        _ => default,
+    };
+    layout.actions = TitlebarActions {
+        double_click: action("action-double-click-titlebar", defaults.double_click),
+        middle_click: action("action-middle-click-titlebar", defaults.middle_click),
+        right_click: action("action-right-click-titlebar", defaults.right_click),
+    };
+    layout
 }
 
 /// A payload whose content changed since the last emission.
