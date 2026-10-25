@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 
 from scripts.linux_release.installed_input import polkit_target
 from scripts.linux_release.installed_cases.records import CaseUnavailable
-from verification_tests.distribution.installed.test_installed_polkit_stage_execution import target
+from verification_tests.distribution.installed.polkit.test_installed_polkit_stage_execution import target
 
 
 class Node:

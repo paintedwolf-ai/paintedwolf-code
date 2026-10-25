@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 from scripts.linux_release.installed_input import polkit_stage as stage
 from verification_tests.distribution.installed.test_installed_native_unlock_execution import (
     ACCOUNT, EXECUTION, target as unlock_target)
-from verification_tests.distribution.installed.test_installed_polkit_transaction_execution import ATTEMPT
+from verification_tests.distribution.installed.polkit.test_installed_polkit_transaction_execution import ATTEMPT
 
 
 def target():
