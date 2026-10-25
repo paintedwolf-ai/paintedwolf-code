@@ -1,10 +1,10 @@
 """Bind native session lock-state observation and presence lock recovery to the installed runtime."""
 from __future__ import annotations
 
-import json, os, secrets, tempfile, time
+import json, tempfile, time
 from pathlib import Path
 
-from .app import InstalledApp, graphical_session, process_identity, session_environment
+from .app import InstalledApp, graphical_session, session_environment
 from .desktop_launch import activate_visible_frame, protected_launcher
 from .desktop_turn import submit_project_turn
 from .desktop_ui import DesktopUI, interactive_window
@@ -14,17 +14,12 @@ from .native_session import NativeSessionObserver
 from .polkit_policy import PresencePolicy
 from .presence_alert import alerts, await_alert
 from .process import run
-from .profile_observer import physical
 from .profile_setup import await_session
 from .provider import MODEL, ProviderFixture
 from .provider_setup import configure_provider
 from .presence_setup import prepare_secret
 from .records import CaseFailed, CaseUnavailable, retain
-from ..installed_input import password_wire, session_wire, surface_wire
-from ..installed_input.mailbox import Mailbox
-from ..installed_input.password_exchange import witness
-from ..installed_input.password_focus import FixtureFocus
-from ..installed_input.password_socket import Listener
+from ..installed_input import session_wire, surface_wire
 from ..installed_input.session_lock import NativeLockObserver
 from ..installed_input.surface import FrameObserver
 from ..installed_input.transition_guest import perform_transition
@@ -255,45 +250,10 @@ def presence_dialog(app, ui) -> dict | None:
     return dialogs[0] if len(dialogs) == 1 else None
 
 
-def submit_presence_confirmation(app, ui, storage, native_input: dict, *, expected_dialog: dict | None = None) -> dict:
-    raw_actor, raw_secret = native_input.get('fixture_actor'), native_input.get('private_password')
-    if raw_actor is None or raw_secret is None:
-        raise CaseUnavailable('presence-password-confirmation-requires-private-fixture-custody')
-    actor, secret = password_wire.actor(raw_actor), password_wire.private_secret(raw_secret)
-    try:
-        with FrameObserver(app, ui) as observer:
-            focus = FixtureFocus(app, ui, 'native-presence-password', observer)
-            target = focus.observe()
-            if (isinstance(expected_dialog, dict) and 'identity' in expected_dialog
-                    and target['password']['parent'] != expected_dialog['identity']):
-                raise ValueError('presence password confirmation target drifted from the captured modal')
-            info, mailbox = physical(storage.config, True), Mailbox(native_input['binding'], native_input['vm_id'])
-            pending = password_wire.request({
-                'format_version': 1, 'binding': native_input['binding'], 'operation': password_wire.OPERATION,
-                'stage': 'native-presence-password', 'transaction_id': secrets.token_hex(16), 'actor': actor,
-                'case': process_identity(os.getpid()), 'session': app.observations['session'], 'target': target,
-                'profile': {'path': str(storage.config), 'device': info[0], 'inode': info[1], 'uid': info[2]},
-                'expires_ns': time.monotonic_ns() + password_wire.MAX_SECONDS * 1_000_000_000,
-            }, native_input['binding'])
-            deadline = time.monotonic() + password_wire.MAX_SECONDS
-            with Listener(mailbox, actor) as listener:
-                mailbox.write('request.json', pending)
-                try:
-                    exchange = witness(listener.accept(deadline), pending, secret, focus, native_input['vm_id'])
-                finally:
-                    if (mailbox.path / 'request.json').exists():
-                        mailbox.clear_private(pending)
-        if not isinstance(exchange, dict) or exchange.get('guest_confirmed') is not True or exchange.get('request') != pending:
-            raise ValueError('presence password confirmation did not complete private guest witness')
-        delivery = password_wire.completed(exchange.get('delivery'), pending, native_input['vm_id'])
-    finally:
-        secret = None
-    ui.click('Confirm')
-    return {'target': target, 'exchange': {'request': pending, 'delivery': delivery, 'guest_confirmed': True}}
-
-
-def run_lock_during_presence(app, ui, storage, native_input: dict, execution: dict, vm_id: str,
+def run_lock_during_presence(app, ui, execution: dict, vm_id: str,
                              native, lock, unlock_ctl, observations: dict, reservation):
+    observations.update(stale_challenge_refusal_verified=False, fresh_confirmation_verified=False,
+                        system_authentication_verified=False)
     prior_challenges = len(step_away_challenges(app))
     ui.click('Reveal value')
     reservation.check_launch(app)
@@ -303,43 +263,11 @@ def run_lock_during_presence(app, ui, storage, native_input: dict, execution: di
         challenges = step_away_challenges(app)
         pre_lock_challenge = challenges[-1] if len(challenges) > prior_challenges else None
         observations['pre_lock_challenge'] = pre_lock_challenge
-        prior_invalidations = len(step_away_invalidations(app))
-        lock_and_unlock(app, execution, vm_id, native, lock, unlock_ctl, observations)
-        observations['post_unlock_activation'] = activate_visible_frame(app, ui)
-        reservation.check_launch(app)
-        stale_attempt = submit_presence_confirmation(app, ui, storage, native_input, expected_dialog=pre_lock_dialog)
-        refusal_alert = await_alert(app, ui)
-        observations['stale_confirmation_attempt'], observations['stale_challenge_refusal'] = stale_attempt, refusal_alert
-        if presence_dialog(app, ui) is not None:
-            raise ValueError('stale pre-lock presence confirmation remained open after refusal')
-        invalidations = step_away_invalidations(app)
-        candidate = invalidations[-1] if len(invalidations) > prior_invalidations else None
-        invalidation = (candidate if (pre_lock_challenge is not None and candidate is not None
-                                      and candidate['challenge_id'] == pre_lock_challenge['challenge_id']
-                                      and candidate['generation_before'] == pre_lock_challenge['generation'])
-                        else None)
-        observations['stale_challenge_invalidation'] = invalidation
-        observations['stale_challenge_refusal_verified'] = invalidation is not None
-        ui.click('Reveal value')
-        reservation.check_launch(app)
-        fresh_dialog = presence_dialog(app, ui)
-        if fresh_dialog is None or fresh_dialog == pre_lock_dialog:
-            raise ValueError('fresh post-unlock presence confirmation did not open a distinct challenge')
-        observations['fresh_confirmation_surface'] = fresh_dialog
-        observations['fresh_confirmation_submission'] = submit_presence_confirmation(
-            app, ui, storage, native_input, expected_dialog=fresh_dialog)
-        if presence_dialog(app, ui) is not None:
-            raise ValueError('fresh post-unlock presence confirmation remained open after submission')
-        post_alerts = alerts(app, ui, time.monotonic() + 1)
-        observations['fresh_confirmation_alerts'] = post_alerts
-        if post_alerts:
-            raise ValueError('fresh post-unlock presence confirmation produced an error alert')
-        ui.click('Hide now')
-        reservation.check_launch(app)
-        observations['fresh_confirmation_verified'] = True
-        observations['reason'] = ('pre-lock-stale-challenge-refusal-and-fresh-confirmation-verified'
-                                  if invalidation is not None else
-                                  'pre-lock-refusal-and-fresh-confirmation-observed-structured-stale-invalidation-unverified')
+        observations.update(
+            stale_challenge_refusal_verified=False,
+            fresh_confirmation_verified=False,
+            system_authentication_verified=False,
+            reason='legacy-app-password-dialog-cannot-qualify-system-authentication')
         return
     observations['pre_lock_alert'] = await_alert(app, ui)
     lock_and_unlock(app, execution, vm_id, native, lock, unlock_ctl, observations)
@@ -423,7 +351,7 @@ def execute(binding: dict, capability: str, case: str, root: Path) -> dict:
                                 observations['secret_setup'] = prepare_secret(app, ui, reservation)
                                 policy = PresencePolicy(launch_binding)
                                 with policy:
-                                    run_lock_during_presence(app, ui, storage, native_input, execution, vm_id,
+                                    run_lock_during_presence(app, ui, execution, vm_id,
                                                              native, lock, unlock_ctl, observations, reservation)
                                 if (observations.get('stale_challenge_refusal_verified') is True
                                         and observations.get('fresh_confirmation_verified') is True):
