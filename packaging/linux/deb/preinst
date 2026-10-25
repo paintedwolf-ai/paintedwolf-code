@@ -5,4 +5,10 @@ if [ "$1" = "install" ] && [ -d /opt/painted-wolf-code ] && [ -n "$(ls -A /opt/p
   echo "painted-wolf-code: /opt/painted-wolf-code already exists and is not owned by this package" >&2
   exit 1
 fi
+# dpkg passes the old version to install only when reinstalling over a removed
+# package's conffiles; postinst sees that as an upgrade, so record it here.
+if [ "$1" = "install" ] && [ -n "${2:-}" ]; then
+  mkdir -p /var/lib/painted-wolf-code
+  touch /var/lib/painted-wolf-code/reinstall-after-remove
+fi
 exit 0
