@@ -37,6 +37,8 @@ class PresencePrerequisiteTests(unittest.TestCase):
             'configure_provider': Mock(return_value={'provider_id': 'fixture'}),
             'await_session': Mock(return_value={'id': 'session', 'status': 'idle'}),
             'prepare_secret': Mock(return_value={'phase': 'ready', 'reveal_ready': True}),
+            'confirmation_rows': Mock(return_value=[]),
+            'await_confirmation': Mock(return_value={'status': 'refused', 'code': 'presence_unavailable'}),
             'await_alert': Mock(return_value={'attributes': ['xml-roles:alert']}),
             'run': Mock(return_value={'exit_code': 0, 'timed_out': False, 'output_limit': False})}
         self.values = values
@@ -52,7 +54,7 @@ class PresencePrerequisiteTests(unittest.TestCase):
     def test_normal_reveal_restores_policy_and_retains_unverified_partial_facts(self):
         status, facts, streams = presence.unchallenged_presence({})
         self.assertEqual(status, 'unverified')
-        self.assertFalse(facts['typed_refusal_verified'])
+        self.assertTrue(facts['typed_refusal_verified'])
         self.assertFalse(facts['password_fallback_verified'])
         self.assertEqual(facts['presence_policy'], self.policy.observations)
         self.assertEqual(facts['opened_session'], {'id': 'session', 'status': 'idle'})
@@ -127,3 +129,20 @@ class PresencePrerequisiteTests(unittest.TestCase):
         self.assertEqual(streams['project-open-stdout'], b'opened\n')
         self.assertEqual(streams['project-open-stderr'], b'')
         json.dumps(facts)
+
+    def test_polkit_authorized_without_confirmation_fails_the_refusal_contract(self):
+        self.values['await_confirmation'].return_value = {
+            'status': 'confirmed', 'authenticator': 'linux_user_presence', 'code': None}
+        with self.assertRaisesRegex(CaseFailed, 'did-not-refuse') as failed:
+            presence.unchallenged_presence({})
+        self.assertFalse(failed.exception.observations['typed_refusal_verified'])
+        self.policy.__exit__.assert_called_once()
+        self.assertTrue(failed.exception.observations['presence_policy']['restored'])
+
+    def test_missing_typed_record_keeps_alert_only_result_unverified(self):
+        self.values['await_confirmation'].side_effect = CaseUnavailable('native outcome unavailable')
+        with self.assertRaises(CaseUnavailable) as refused:
+            presence.unchallenged_presence({})
+        self.assertFalse(refused.exception.observations['typed_refusal_verified'])
+        self.assertFalse(refused.exception.observations['password_fallback_verified'])
+        self.policy.__exit__.assert_called_once()
