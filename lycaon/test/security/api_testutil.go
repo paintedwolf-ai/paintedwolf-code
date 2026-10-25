@@ -308,13 +308,13 @@ func postPromptAndWaitIdle(t *testing.T, srv *api.Server, sessionID, text string
 }
 
 // postPromptAndWaitTranscriptHTTP waits for matching transcript content.
-func postPromptAndWaitTranscriptHTTP(t *testing.T, srv *api.Server, sessionID, text, want string, timeout time.Duration) {
+func postPromptAndWaitTranscriptHTTP(t *testing.T, srv *api.Server, sessionID, text, want string) {
 	t.Helper()
 	acceptPromptHTTP(t, srv, sessionID, text)
-	waitTranscriptContainsHTTP(t, srv, sessionID, want, timeout)
+	waitTranscriptContainsHTTP(t, srv, sessionID, want)
 }
 
-func waitTranscriptContainsHTTP(t *testing.T, srv *api.Server, sessionID, want string, _ time.Duration) {
+func waitTranscriptContainsHTTP(t *testing.T, srv *api.Server, sessionID, want string) {
 	t.Helper()
 	for t.Context().Err() == nil {
 		msgs := listMessagesHTTP(t, srv, sessionID)
@@ -332,7 +332,7 @@ func waitTranscriptContainsHTTP(t *testing.T, srv *api.Server, sessionID, want s
 	t.Fatalf("session %s transcript did not contain %q; messages: %+v", sessionID, want, listMessagesHTTP(t, srv, sessionID))
 }
 
-func waitTaskEnqueueCountHTTP(t *testing.T, srv *api.Server, sessionID string, want int, _ time.Duration) {
+func waitTaskEnqueueCountHTTP(t *testing.T, srv *api.Server, sessionID string, want int) {
 	t.Helper()
 	for t.Context().Err() == nil {
 		msgs := listMessagesHTTP(t, srv, sessionID)
@@ -355,9 +355,9 @@ func taskMessageEnqueued(message wire.Message) bool {
 		message.ToolResult.Dispatch != nil && message.ToolResult.Dispatch.WorkerID != ""
 }
 
-func waitToolFeedbackHTTP(t *testing.T, srv *api.Server, sessionID, code string, timeout time.Duration) {
+func waitToolFeedbackHTTP(t *testing.T, srv *api.Server, sessionID, code string) {
 	t.Helper()
-	testutil.WaitFor(t, timeout, func() bool {
+	testutil.WaitFor(t, func() bool {
 		for _, message := range listMessagesHTTP(t, srv, sessionID) {
 			if message.ToolResult == nil {
 				continue
@@ -372,7 +372,7 @@ func waitToolFeedbackHTTP(t *testing.T, srv *api.Server, sessionID, code string,
 	})
 }
 
-func waitWorkflowRunCountHTTP(t *testing.T, srv *api.Server, sessionID string, wantCount int, _ time.Duration) {
+func waitWorkflowRunCountHTTP(t *testing.T, srv *api.Server, sessionID string, wantCount int) {
 	t.Helper()
 	for t.Context().Err() == nil {
 		req := authedRequest(t, http.MethodGet, "/v1/sessions/"+sessionID+"/workflow-runs", nil)
@@ -396,7 +396,7 @@ func waitWorkflowRunCountHTTP(t *testing.T, srv *api.Server, sessionID string, w
 }
 
 // waitActiveWorkflowRunHTTP waits for an asynchronous workflow start.
-func waitActiveWorkflowRunHTTP(t *testing.T, srv *api.Server, sessionID, wantWorkflowID string, _ time.Duration) wire.WorkflowRun {
+func waitActiveWorkflowRunHTTP(t *testing.T, srv *api.Server, sessionID, wantWorkflowID string) wire.WorkflowRun {
 	t.Helper()
 	var last string
 	for t.Context().Err() == nil {

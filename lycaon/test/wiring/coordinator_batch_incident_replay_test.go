@@ -15,7 +15,6 @@ import (
 	"slices"
 	"sync/atomic"
 	"testing"
-	"time"
 )
 
 type batchRunLoopWF struct {
@@ -87,7 +86,7 @@ func TestStackedWakeFactsAreConsumedByOneObservedPrompt(t *testing.T) {
 		t.Fatal("worker wake should defer while session busy")
 	}
 	finishExecution()
-	engine.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, time.Second))
+	engine.Turns.WaitForAsyncTurns(t.Context())
 	if got := prompts.Load(); got != 1 {
 		t.Fatalf("deferred worker wake prompts = %d want 1 after idle drain", got)
 	}
@@ -165,7 +164,7 @@ func TestStaleBatchSeqWakeDroppedAfterNewUserMessage(t *testing.T) {
 		anchor.Envelope{BatchSeq: staleSeq, BatchSeqSet: true},
 	)
 	h.Sessions.Manager.Coordinator.Runtime.CoordinatorLoop().Nudges.DrainPending(ctx, sess.ID)
-	h.Sessions.Manager.Coordinator.Runtime.CoordinatorLoop().Turns.WaitForAsyncTurns(testutil.BoundedContext(t, 5*time.Second))
+	h.Sessions.Manager.Coordinator.Runtime.CoordinatorLoop().Turns.WaitForAsyncTurns(t.Context())
 
 	msgsAfter, err := h.Sessions.Manager.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages after stale wake", err)

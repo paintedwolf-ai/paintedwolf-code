@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/events"
@@ -36,7 +35,7 @@ func TestSourceViewNotificationsAnnounceOnlyObservableChanges(t *testing.T) {
 	ready := func() *wire.SourceTreeView {
 		t.Helper()
 		var state *wire.SourceTreeView
-		testutil.WaitFor(t, 10*time.Second, func() bool {
+		testutil.WaitFor(t, func() bool {
 			state = readSourceViewResponse(t, callSourceViewHandler(t, server.Views.HandleGetSourceView, project.ID, created.ID, nil), http.StatusOK).Tree
 			return state.State == "ready"
 		})

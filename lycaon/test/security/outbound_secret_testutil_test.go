@@ -169,14 +169,14 @@ func awaitOutboundPrompt(t *testing.T, h *wiring.Harness, sessionID string, done
 
 func waitOnePendingApproval(t *testing.T, h *wiring.Harness, sessionID string) wire.CheckpointEvent {
 	t.Helper()
-	ev, ok := tryWaitOnePendingApproval(t, h, sessionID, 8*time.Second)
+	ev, ok := tryWaitOnePendingApproval(t, h, sessionID)
 	if !ok {
 		t.Fatal("timed out waiting for tool_approval checkpoint")
 	}
 	return ev
 }
 
-func tryWaitOnePendingApproval(t *testing.T, h *wiring.Harness, sessionID string, _ time.Duration) (wire.CheckpointEvent, bool) {
+func tryWaitOnePendingApproval(t *testing.T, h *wiring.Harness, sessionID string) (wire.CheckpointEvent, bool) {
 	t.Helper()
 	var ev wire.CheckpointEvent
 	for t.Context().Err() == nil {

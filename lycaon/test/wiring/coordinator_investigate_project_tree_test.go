@@ -7,7 +7,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/hitl"
@@ -121,7 +120,7 @@ func TestInvestigateCoordinatorWriteLandsOnProjectTree(t *testing.T) {
 	var checkpointID string
 	var promptErr error
 	promptFinished := false
-	testutil.WaitFor(t, 10*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		select {
 		case promptErr = <-done:
 			promptFinished = true
@@ -150,15 +149,11 @@ func TestInvestigateCoordinatorWriteLandsOnProjectTree(t *testing.T) {
 	}
 	testutil.FailErr(t, "Prompt", promptErr)
 	var data []byte
-	written := testutil.WaitForNoFatal(5*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		var readErr error
 		data, readErr = os.ReadFile(targetPath)
 		return readErr == nil && strings.Contains(string(data), "investigate project write")
 	})
-	if !written {
-		msgs, _ := h.Store.GetMessages(ctx, sess.ID)
-		t.Fatalf("src/foo.go = %q want investigate edit in project tree ProjectDir; stage=%d messages=%+v", string(data), stage.Load(), msgs)
-	}
 
 	state := h.Sessions.Manager.Workers.State.ForSession(ctx, sess)
 	if len(state.PendingOverlayIDs) != 0 {

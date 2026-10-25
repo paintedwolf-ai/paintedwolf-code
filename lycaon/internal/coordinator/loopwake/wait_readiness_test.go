@@ -263,7 +263,7 @@ func TestRecoverSettledWaitResumesDirectSessionExactlyOnce(t *testing.T) {
 	case <-t.Context().Done():
 		t.Fatal("settled direct wait did not resume")
 	}
-	loop.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, time.Second))
+	loop.Turns.WaitForAsyncTurns(t.Context())
 	if pending, err := store.PendingAgentResumes(t.Context()); err != nil || len(pending) != 0 {
 		t.Fatalf("pending resumes after delivery = %+v err=%v", pending, err)
 	}

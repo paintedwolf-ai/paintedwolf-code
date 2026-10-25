@@ -63,7 +63,7 @@ func TestSettingsDisableCancelsClaimBeforeEngineAdmission(t *testing.T) {
 	terminal := make(chan api.CodeScan, 1)
 	runner.OnTerminal = func(_ context.Context, scan api.CodeScan) { terminal <- scan }
 	scantest.RunService(t, runner.Run)
-	testutil.WaitFor(t, 5*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		count, err := store.CountRunning(t.Context())
 		return err == nil && count == 1
 	})

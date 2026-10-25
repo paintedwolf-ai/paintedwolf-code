@@ -48,7 +48,7 @@ func TestPollerClaimsCommittedEnqueueWithoutWaitingForMaintenance(t *testing.T) 
 		ProjectID: testdbseed.DefaultProjectID, ExecutionTarget: api.ExecutionTargetLocal,
 	})
 	testutil.FailErr(t, "enqueue signaled worker", err)
-	testutil.WaitFor(t, time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		task, ok := queue.Get(id)
 		return ok && task.Status == api.WorkerStatusComplete
 	})
@@ -216,7 +216,7 @@ func TestPollerRecoversExecutorPanic(t *testing.T) {
 	defer cancel()
 	go poller.Run(pollCtx)
 
-	testutil.WaitFor(t, time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		got, ok := queue.Get(id)
 		return ok && got.Status == api.WorkerStatusFailed
 	})
@@ -419,7 +419,7 @@ func TestPollerKeepsRunningUntilDeferredOutcomeSucceeds(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() { done <- poller.Run(ctx) }()
-	testutil.WaitFor(t, time.Second, func() bool { return recorder.attempts.Load() >= 2 })
+	testutil.WaitFor(t, func() bool { return recorder.attempts.Load() >= 2 })
 	pending, err := queue.ListPendingOutcomes(t.Context())
 	testutil.FailErr(t, "list acknowledged outcomes", err)
 	if len(pending) != 0 {
@@ -476,7 +476,7 @@ func TestPollerTransitionsToRetryWhenCompletionCommitFailsWithAttemptsRemaining(
 	done := make(chan error, 1)
 	go func() { done <- poller.Run(ctx) }()
 
-	testutil.WaitFor(t, 10*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		task, ok := queue.Get(id)
 		return ok && task.Attempt >= 2
 	})
@@ -504,7 +504,7 @@ func TestPollerTransitionsToFailureWhenCompletionCommitFailsExhausted(t *testing
 	done := make(chan error, 1)
 	go func() { done <- poller.Run(ctx) }()
 
-	testutil.WaitFor(t, 10*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		task, ok := queue.Get(id)
 		return ok && task.Status == api.WorkerStatusFailed
 	})

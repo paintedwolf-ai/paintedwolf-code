@@ -33,7 +33,7 @@ func TestProjectWatchOverflowPublishesOneInvalidation(t *testing.T) {
 	for i := 0; i <= maxChangesPerEvent; i++ {
 		w.changes.queue(t.Context(), root, fmt.Sprintf("churn/file-%d.txt", i))
 	}
-	testutil.WaitFor(t, time.Second, func() bool { return len(cap.batches()) == 1 })
+	testutil.WaitFor(t, func() bool { return len(cap.batches()) == 1 })
 	batch := cap.batches()[0]
 	if !batch.Resync || len(batch.Changes) != 0 {
 		t.Fatalf("overflow published a path list: resync=%t changes=%d", batch.Resync, len(batch.Changes))
@@ -193,7 +193,7 @@ func TestProjectWatchPublishesWatcherResyncWithoutPaths(t *testing.T) {
 		ProjectDir: root, Kind: repochange.WorktreeChanged,
 		Paths: []string{"."}, Source: repochange.SourceWatcher,
 	})
-	testutil.WaitFor(t, time.Second, func() bool { return len(cap.batches()) == 1 })
+	testutil.WaitFor(t, func() bool { return len(cap.batches()) == 1 })
 	batches := cap.batches()
 	if !batches[0].Resync || len(batches[0].Changes) != 0 {
 		t.Fatalf("watcher resync event = %+v", batches[0])
@@ -211,7 +211,7 @@ func TestProjectWatchIndexChangeRefreshesWithoutFileOrHeadEvents(t *testing.T) {
 	w.changes = newChangeConverger(10*time.Millisecond, 50*time.Millisecond, w.flushExternalChanges)
 	t.Cleanup(func() { w.changes.close(t.Context()) })
 	w.observe(t.Context(), repochange.Event{ProjectDir: root, Kind: repochange.IndexChanged, Source: repochange.SourceWatcher})
-	testutil.WaitFor(t, time.Second, func() bool { return len(cap.batches()) == 1 })
+	testutil.WaitFor(t, func() bool { return len(cap.batches()) == 1 })
 	batch := cap.batches()[0]
 	if !batch.Resync || len(batch.Changes) != 0 || batch.GitChanged {
 		t.Fatalf("index refresh fabricated changes: %+v", batch)

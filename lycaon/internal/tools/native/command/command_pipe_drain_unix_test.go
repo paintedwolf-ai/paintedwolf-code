@@ -56,7 +56,7 @@ func TestCancelledCommandDrainsEscapedOutputInline(t *testing.T) {
 		result <- runErr
 	}()
 	var pid int
-	testutil.WaitFor(t, 10*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		select {
 		case runErr := <-result:
 			t.Fatalf("command returned before fixture spawned: %v", runErr)

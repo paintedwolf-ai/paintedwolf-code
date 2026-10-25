@@ -206,7 +206,7 @@ func createSmokeSession(t *testing.T, baseURL, apiToken, projectID string) strin
 	if session.ID == "" {
 		t.Fatal("create session missing id")
 	}
-	testutil.WaitFor(t, 10*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		return smokeSessionStatus(t, baseURL, apiToken, session.ID) == "idle"
 	})
 	return session.ID

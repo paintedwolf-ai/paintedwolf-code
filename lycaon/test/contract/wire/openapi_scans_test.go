@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/api/apitest"
@@ -107,7 +106,7 @@ func TestOpenAPIScansRealServer(t *testing.T) {
 		t.Fatalf("created status = %q", created.Status)
 	}
 
-	testutil.WaitFor(t, 2*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		getReq := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/projects/"+proj.ID+"/scans/"+created.ID, nil)
 		getReq.Header.Set("Authorization", api.TestAuthHeader())
 		getW := httptest.NewRecorder()
@@ -125,7 +124,7 @@ func TestOpenAPIScansRealServer(t *testing.T) {
 		return got.Status == wire.CodeScanStatusComplete && got.FindingsCount == 2
 	})
 
-	testutil.WaitFor(t, time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		running, err := scanStore.CountRunning(context.Background())
 		return err == nil && running == 0
 	})

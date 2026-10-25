@@ -30,7 +30,7 @@ func TestScheduleLiveProjectionSurvivesCallerContextCancellation(t *testing.T) {
 	// Simulate Stop canceling the in-flight turn's context inside the debounce window.
 	cancel()
 
-	testutil.WaitFor(t, time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		msg, err := mem.GetMessage(context.Background(), sess.ID, "msg-live")
 		return err == nil && msg.Content == "partial before stop"
 	})

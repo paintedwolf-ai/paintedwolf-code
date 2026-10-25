@@ -1,7 +1,6 @@
 package testutil
 
 import (
-	"context"
 	"testing"
 	"time"
 )
@@ -9,7 +8,7 @@ import (
 const waitForPollInterval = 5 * time.Millisecond
 
 // WaitFor polls cond until it returns true or the test context ends.
-func WaitFor(t *testing.T, _ time.Duration, cond func() bool) {
+func WaitFor(t *testing.T, cond func() bool) {
 	t.Helper()
 	for t.Context().Err() == nil {
 		if cond() {
@@ -20,14 +19,6 @@ func WaitFor(t *testing.T, _ time.Duration, cond func() bool) {
 	if !cond() {
 		t.Fatal("timed out waiting for condition")
 	}
-}
-
-// WaitForNoFatal polls cond until it returns true.
-func WaitForNoFatal(_ time.Duration, cond func() bool) bool {
-	for !cond() {
-		time.Sleep(waitForPollInterval)
-	}
-	return true
 }
 
 // Receive returns the next channel value within the test timeout.
@@ -44,10 +35,4 @@ func Receive[T any](t testing.TB, step string, ch <-chan T) T {
 		var zero T
 		return zero
 	}
-}
-
-// BoundedContext returns the test-scoped context.
-func BoundedContext(t testing.TB, _ time.Duration) context.Context {
-	t.Helper()
-	return t.Context()
 }

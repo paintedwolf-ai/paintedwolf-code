@@ -12,7 +12,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/litprefilter"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -460,7 +459,7 @@ func TestLiteralCandidatesCanceledWaiterDoesNotAbortSharedBuild(t *testing.T) {
 		}
 		secondResult <- err
 	}()
-	testutil.WaitFor(t, time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		catalog.Literals.cache.mu.Lock()
 		defer catalog.Literals.cache.mu.Unlock()
 		for _, record := range catalog.Literals.cache.records {

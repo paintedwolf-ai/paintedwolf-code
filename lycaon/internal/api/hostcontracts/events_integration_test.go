@@ -70,7 +70,7 @@ func TestSSEEndToEnd(t *testing.T) {
 	})
 
 	reader := bufio.NewReader(resp.Body)
-	for t.Context().Err() == nil {
+	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
 			t.Fatalf("read: %v", err)
@@ -82,7 +82,6 @@ func TestSSEEndToEnd(t *testing.T) {
 			return
 		}
 	}
-	t.Fatal("timeout waiting for SSE data line")
 }
 
 func TestSSEDeviceWideSubscription(t *testing.T) {
@@ -243,7 +242,7 @@ func TestSSEHeartbeat(t *testing.T) {
 	defer resp.Body.Close()
 
 	reader := bufio.NewReader(resp.Body)
-	for t.Context().Err() == nil {
+	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
 			t.Fatalf("read: %v", err)
@@ -252,5 +251,4 @@ func TestSSEHeartbeat(t *testing.T) {
 			return
 		}
 	}
-	t.Fatal("timeout waiting for heartbeat ping")
 }

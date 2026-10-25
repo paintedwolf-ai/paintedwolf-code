@@ -8,7 +8,6 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 	"sync/atomic"
 	"testing"
-	"time"
 )
 
 func TestWakeQueuedAfterExecutionReleaseStartsWithoutAnotherEvent(t *testing.T) {
@@ -34,7 +33,7 @@ func TestWakeQueuedAfterExecutionReleaseStartsWithoutAnotherEvent(t *testing.T) 
 	}
 	engine.SetDeps(deps)
 	engine.Nudges.Nudge(t.Context(), id, anchor.WorkerTaskFinished, anchor.WorkerTaskFinished, "", anchor.Envelope{})
-	testutil.WaitFor(t, 2*time.Second, func() bool { return prompts.Load() == 1 })
+	testutil.WaitFor(t, func() bool { return prompts.Load() == 1 })
 	engine.Turns.asyncTurns.Wait()
 	if engine.Nudges.HasPendingLoopWakes(id) || prompts.Load() != 1 {
 		t.Fatalf("wake settlement: pending=%v prompts=%d", engine.Nudges.HasPendingLoopWakes(id), prompts.Load())

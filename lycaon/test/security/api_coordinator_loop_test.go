@@ -58,7 +58,7 @@ func TestPlanImplementLegLoopWakesCoordinator(t *testing.T) {
 	}
 	var allowed bool
 	var reason string
-	testutil.WaitFor(t, promptIdleBudget, func() bool {
+	testutil.WaitFor(t, func() bool {
 		var err error
 		allowed, reason, err = mgr.Coordinator.Runtime.CoordinatorLoop().Admission.ShouldLoopWake(ctx, sess.ID, anchor.LegFinished)
 		return err == nil && allowed
@@ -68,7 +68,7 @@ func TestPlanImplementLegLoopWakesCoordinator(t *testing.T) {
 	}
 	mgr.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(ctx, sess.ID, anchor.LegFinished, anchor.LegFinished, "leg-e2e", anchor.Envelope{})
 
-	testutil.WaitFor(t, promptIdleBudget, func() bool {
+	testutil.WaitFor(t, func() bool {
 		mgr.Runner.Coordinator.CoordinatorLoop().Nudges.DrainPending(ctx, sess.ID)
 		msgs, err := mgr.Runner.Transcript.GetMessages(ctx, sess.ID)
 		if err != nil {

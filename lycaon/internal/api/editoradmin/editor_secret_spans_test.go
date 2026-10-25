@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/editordoc"
@@ -96,7 +95,7 @@ func TestScreenProjectionCompletesInTheBackground(t *testing.T) {
 	d, err := f.h.EditorDocuments.CurrentSnapshot(t.Context(), f.project.ID, opened.ID)
 	testutil.FailErr(t, "read document", err)
 	var screen *wire.SecretScreen
-	testutil.WaitFor(t, 5*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		status, projected := f.h.EditorScreenProjection(t.Context(), d)
 		screen = projected
 		return status == wire.SecretScreenComplete

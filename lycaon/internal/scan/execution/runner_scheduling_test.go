@@ -3,7 +3,6 @@ package execution
 import (
 	"context"
 	"testing"
-	"time"
 
 	scanbase "github.com/lycaon/lycaon/internal/scan"
 	scancfg "github.com/lycaon/lycaon/internal/scan/configuration"
@@ -25,7 +24,7 @@ func TestRunnerSleepsIdleAndWakesForCommittedScan(t *testing.T) {
 	terminal := make(chan api.CodeScan, 1)
 	runner.OnTerminal = func(_ context.Context, scan api.CodeScan) { terminal <- scan }
 	scantest.RunService(t, runner.Run)
-	testutil.WaitFor(t, 5*time.Second, func() bool { return database.Writes.Load() > 0 })
+	testutil.WaitFor(t, func() bool { return database.Writes.Load() > 0 })
 	scantest.AssertQuiet(t, database)
 	testutil.FailErr(t, "insert scan after idle", store.Insert(t.Context(), api.CodeScan{
 		ID: "wake-scan", CanonicalPath: root, ScannerID: scanner.ID(),
@@ -49,11 +48,11 @@ func TestDisabledRunnerSleepsAndSettingsWakeIt(t *testing.T) {
 	runner := NewRunner(store, &scanbase.MockRegistry{Scanner: &scanbase.MockScanner{}}, scanbase.NoopIngester{}, scancfg.DefaultRunnerConfig(), nil)
 	runner.Settings = disabledScannerSettings(t)
 	scantest.RunService(t, runner.Run)
-	testutil.WaitFor(t, 5*time.Second, func() bool { return database.Writes.Load() > 0 })
+	testutil.WaitFor(t, func() bool { return database.Writes.Load() > 0 })
 	scantest.AssertQuiet(t, database)
 	before := database.Reads.Load()
 	on := true
 	testutil.FailErr(t, "enable scanners", runner.Settings.PutGlobal(settings.SecurityScannersUserOverlay{Enabled: &on}))
-	testutil.WaitFor(t, 5*time.Second, func() bool { return database.Reads.Load() > before })
+	testutil.WaitFor(t, func() bool { return database.Reads.Load() > before })
 	scantest.AssertQuiet(t, database)
 }

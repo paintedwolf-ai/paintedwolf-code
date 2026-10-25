@@ -97,12 +97,12 @@ func openAPIPostJSON[T any](t *testing.T, base, pathTemplate string, pathParams 
 		if err := json.Unmarshal(respBody, &sess); err != nil {
 			t.Fatalf("decode preparing session: %v body=%s", err, respBody)
 		}
-		waitSessionPreparedOpenAPI(t, base, sess.ID, 10*time.Second)
+		waitSessionPreparedOpenAPI(t, base, sess.ID)
 	}
 	return decodeOpenAPI[T](t, http.MethodPost, pathTemplate, respBody)
 }
 
-func waitSessionPreparedOpenAPI(t *testing.T, base, sessionID string, _ time.Duration) {
+func waitSessionPreparedOpenAPI(t *testing.T, base, sessionID string) {
 	t.Helper()
 	for t.Context().Err() == nil {
 		sess := openAPIGetJSON[wire.Session](t, base, "/v1/sessions/{id}", map[string]string{"id": sessionID}, http.StatusOK)
@@ -139,7 +139,7 @@ func acceptPromptOpenAPI(t *testing.T, base, sessionID, body string) {
 	t.Helper()
 	accepted := openAPIPostJSON[wire.PromptAcceptedResponse](t, base, "/v1/sessions/{id}/prompts",
 		map[string]string{"id": sessionID}, body, http.StatusAccepted)
-	testutil.WaitFor(t, 10*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		params := map[string]string{"id": sessionID}
 		before := openAPIGetJSON[wire.Session](t, base, "/v1/sessions/{id}", params, http.StatusOK)
 		messages := listMessagesOpenAPI(t, base, params, http.StatusOK)

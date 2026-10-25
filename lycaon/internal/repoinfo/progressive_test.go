@@ -75,7 +75,7 @@ func TestProgressiveBriefReturnsBeforeSlowAnalyze(t *testing.T) {
 	if brief.Materialized || brief.FileCount != 0 {
 		t.Fatalf("cold brief = %+v, want an unmeasured placeholder", brief)
 	}
-	testutil.WaitFor(t, 2*time.Second, func() bool { return started.Load() > 0 })
+	testutil.WaitFor(t, func() bool { return started.Load() > 0 })
 	if starts := started.Load(); starts != 1 {
 		t.Fatalf("analyze starts while blocked = %d want 1", starts)
 	}

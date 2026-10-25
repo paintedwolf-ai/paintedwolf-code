@@ -40,13 +40,13 @@ func TestDisposeSessionEndsJobsOutsideTheLeadersGroup(t *testing.T) {
 	if reg.HasRunning("sess-1") {
 		t.Fatal("session still has running processes after dispose")
 	}
-	testutil.WaitFor(t, 5*time.Second, func() bool { return !osprocess.Alive(job) })
+	testutil.WaitFor(t, func() bool { return !osprocess.Alive(job) })
 }
 
 func waitForJobPID(t *testing.T, path string) int {
 	t.Helper()
 	var pid int
-	testutil.WaitFor(t, 20*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		raw, err := os.ReadFile(path)
 		if err != nil {
 			return false

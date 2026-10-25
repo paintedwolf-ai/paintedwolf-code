@@ -33,7 +33,7 @@ func TestPromptWithoutProviderPublishesRenderedHostError(t *testing.T) {
 	hub := newProjectHub(t, subCtx, base, project.ID)
 
 	acceptPromptOpenAPI(t, base, sess.ID, `{"text":"hello"}`)
-	waitPromptIdleHTTP(t, base, sess.ID, 10*time.Second)
+	waitPromptIdleHTTP(t, base, sess.ID)
 
 	env := waitForSessionHostError(t, hub, 10*time.Second)
 	var sessionEv wire.SessionEvent
@@ -69,13 +69,11 @@ func waitForSessionHostError(t *testing.T, hub *projectHub, deadline time.Durati
 	return wire.EventEnvelope{}
 }
 
-func waitPromptIdleHTTP(t *testing.T, base, sessionID string, timeout time.Duration) {
+func waitPromptIdleHTTP(t *testing.T, base, sessionID string) {
 	t.Helper()
-	var status wire.SessionStatus
-	testutil.WaitFor(t, timeout, func() bool {
+	testutil.WaitFor(t, func() bool {
 		sess := openAPIGetJSON[wire.Session](t, base, "/v1/sessions/{id}",
 			map[string]string{"id": sessionID}, http.StatusOK)
-		status = sess.Status
-		return status == wire.SessionStatusIdle
+		return sess.Status == wire.SessionStatusIdle
 	})
 }

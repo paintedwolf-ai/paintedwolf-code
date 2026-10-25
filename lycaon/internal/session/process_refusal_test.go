@@ -106,7 +106,7 @@ func testHandleCommandRefusalWakesWithDigest(t *testing.T, offered []string) {
 	case <-t.Context().Done():
 		t.Fatal("refusal wake omitted the report")
 	}
-	loop.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, time.Second))
+	loop.Turns.WaitForAsyncTurns(t.Context())
 }
 
 func TestCommandCompletionDigestIncludesRefusalsAndTimeout(t *testing.T) {

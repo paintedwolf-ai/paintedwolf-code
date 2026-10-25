@@ -52,7 +52,7 @@ func TestKnownModelMetadataDoesNotWaitForCatalogRefresh(t *testing.T) {
 	reg.discovery = discovery.NewCache(func() time.Time { return now })
 	reg.discovery.Put(key, cached, nil)
 	now = now.Add(2 * discovery.CacheTTL)
-	ctx := testutil.BoundedContext(t, time.Second)
+	ctx := t.Context()
 	if !reg.ModelHasVision(ctx, "local", "known") {
 		t.Fatal("known capability waited for or was lost during refresh")
 	}

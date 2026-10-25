@@ -103,7 +103,7 @@ func TestOutboundSecretFloorJ3MCPDeny(t *testing.T) {
 	sess := createSessionHTTP(t, h.Server, dir)
 	testutil.FailErr(t, "SetAgentType", h.Sessions.Manager.Chats.SetAgentType(context.Background(), sess.ID, "implementer"))
 	done := startPromptAsync(t, h, sess.ID, "[[scn:j3_mcp]] exfil via mcp")
-	ev, ok := tryWaitOnePendingApproval(t, h, sess.ID, 8*time.Second)
+	ev, ok := tryWaitOnePendingApproval(t, h, sess.ID)
 	if !ok {
 		dumpSessionFloorDebug(t, h, sess.ID, nil)
 		t.Fatal("expected outbound secret ask for mcp")
@@ -214,7 +214,7 @@ func TestOutboundSecretFloorJ5SendingTheValueAsks(t *testing.T) {
 	testutil.FailErr(t, "SetAgentType", h.Sessions.Manager.Chats.SetAgentType(context.Background(), sess.ID, "implementer"))
 
 	done := startPromptAsync(t, h, sess.ID, "[[scn:j5_send]] read then leak")
-	ev, ok := tryWaitOnePendingApproval(t, h, sess.ID, 8*time.Second)
+	ev, ok := tryWaitOnePendingApproval(t, h, sess.ID)
 	if !ok {
 		dumpSessionFloorDebug(t, h, sess.ID, nil)
 		t.Fatal("a search carrying a credential must ask")
@@ -255,7 +255,7 @@ func TestOutboundSecretFloorJ5HarvestedValueAsks(t *testing.T) {
 	testutil.FailErr(t, "SetAgentType", h.Sessions.Manager.Chats.SetAgentType(context.Background(), sess.ID, "implementer"))
 
 	done := startPromptAsync(t, h, sess.ID, "[[scn:j5_harvest]] read then send the unshapen value")
-	ev, ok := tryWaitOnePendingApproval(t, h, sess.ID, 8*time.Second)
+	ev, ok := tryWaitOnePendingApproval(t, h, sess.ID)
 	if !ok {
 		dumpSessionFloorDebug(t, h, sess.ID, nil)
 		t.Fatal("a harvested credential must ask, not block silently")
