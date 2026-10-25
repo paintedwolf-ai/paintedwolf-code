@@ -732,6 +732,30 @@ func (r *programRun) launchArguments(line, cwd string) map[string]any {
 	return arguments
 }
 
+// nativeArguments attaches any call-level capability declarations that the
+// bound native operation contract accepts.
+func (r *programRun) nativeArguments(base map[string]any, contract toolcontract.Contract) map[string]any {
+	arguments := make(map[string]any, len(base)+len(r.envelope))
+	for k, v := range base {
+		arguments[k] = v
+	}
+	if raw, ok := r.envelope["capability_request"].(map[string]any); ok {
+		supported := map[string]any{}
+		for _, field := range contract.CapabilityRequestFields() {
+			if value, exists := raw[field]; exists {
+				supported[field] = value
+			}
+		}
+		if len(supported) > 0 {
+			arguments["capability_request"] = supported
+		}
+	}
+	if secretUse, ok := r.envelope["secret_use"]; ok && contract.SecretReferenceSurface != "" {
+		arguments["secret_use"] = secretUse
+	}
+	return arguments
+}
+
 // childOutputBytes bounds each child stream the output store retains.
 const childOutputBytes = 64 << 10
 
