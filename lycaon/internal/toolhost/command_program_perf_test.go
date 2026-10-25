@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"math/rand/v2"
@@ -12,6 +13,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -30,6 +32,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"github.com/lycaon/lycaon/internal/tools/native/mutation"
 	"github.com/lycaon/lycaon/internal/tools/native/survey"
+	"github.com/lycaon/lycaon/internal/tools/native/textutil"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -39,7 +42,77 @@ import (
 // receipts, supervisor and blob store), rooted at a generated tree.
 type perfFixture struct {
 	*programtest.Fixture
-	catalog *sourcecatalog.Catalog
+	catalog       *sourcecatalog.Catalog
+	spillsCreated atomic.Int64
+	spillsActive  atomic.Int64
+}
+
+type countingSpillStorage struct {
+	base    textutil.SpillStorage
+	created *atomic.Int64
+	active  *atomic.Int64
+}
+
+func (s countingSpillStorage) Create(ctx context.Context) (textutil.SpillRun, error) {
+	run, err := s.base.Create(ctx)
+	if err != nil {
+		return nil, err
+	}
+	s.created.Add(1)
+	s.active.Add(1)
+	return &countingSpillRun{SpillRun: run, active: s.active}, nil
+}
+
+type countingSpillRun struct {
+	textutil.SpillRun
+	active  *atomic.Int64
+	removed atomic.Bool
+}
+
+func (r *countingSpillRun) Remove() error {
+	if r.removed.CompareAndSwap(false, true) {
+		r.active.Add(-1)
+	}
+	return r.SpillRun.Remove()
+}
+
+func (f *perfFixture) wrapSpills(base textutil.SpillStorage) textutil.SpillStorage {
+	return countingSpillStorage{base: base, created: &f.spillsCreated, active: &f.spillsActive}
+}
+
+type programReceiptCounts struct {
+	traceEvents    int64
+	invokedRows    int64
+	executionRows  int64
+	definitionRows int64
+	pinCount       int64
+	outputRows     int64
+}
+
+func (f *perfFixture) writerRowChanges(tb testing.TB) int64 {
+	tb.Helper()
+	tx, err := f.Database.BeginTx(tb.Context(), nil)
+	testutil.FailErr(tb, "begin writer tx", err)
+	defer func() { _ = tx.Rollback() }()
+	var changes int64
+	testutil.FailErr(tb, "read total_changes", tx.QueryRowContext(tb.Context(), `SELECT total_changes()`).Scan(&changes))
+	return changes
+}
+
+func (f *perfFixture) receiptCounts(tb testing.TB, programID string) programReceiptCounts {
+	tb.Helper()
+	var c programReceiptCounts
+	testutil.FailErr(tb, "read receipt counts", f.Database.QueryRowContext(tb.Context(), `
+		SELECT
+			p.trace_events,
+			(SELECT count(*) FROM invocation_program_executions WHERE program_id = p.id AND owner_invoked = 1),
+			(SELECT count(*) FROM invocation_program_executions WHERE program_id = p.id),
+			(SELECT count(*) FROM invocation_program_definitions WHERE program_id = p.id),
+			(SELECT COALESCE(SUM(pin_count), 0) FROM invocation_program_revision_pin_segments WHERE program_id = p.id) +
+				(SELECT count(*) FROM invocation_program_revision_pins WHERE program_id = p.id),
+			(SELECT count(*) FROM invocation_program_outputs WHERE program_id = p.id)
+		FROM invocation_programs p WHERE p.id = ?`, programID).Scan(&c.traceEvents, &c.invokedRows, &c.executionRows, &c.definitionRows, &c.pinCount, &c.outputRows))
+	return c
 }
 
 func newPerfFixture(tb testing.TB, catalog *sourcecatalog.Catalog) *perfFixture {
@@ -56,7 +129,7 @@ func newPerfFixture(tb testing.TB, catalog *sourcecatalog.Catalog) *perfFixture 
 			operations := mutation.Operations{Write: &native.WriteTool{Boundary: boundary}, Delete: &native.DeleteTool{Boundary: boundary}, Move: &native.MoveTool{Boundary: boundary},
 				Copy: &native.CopyTool{Boundary: boundary}, Mkdir: &native.MkdirTool{Boundary: boundary}, Chmod: &native.ChmodTool{Boundary: boundary},
 				Chown: &native.ChownTool{Boundary: boundary}, Times: &native.TimesTool{Boundary: boundary}, Extract: &native.ExtractArchiveTool{Boundary: boundary}}
-			return programOwnerTools{boundary: boundary, operations: operations, catalog: catalog}.compose(recorder)
+			return programOwnerTools{boundary: boundary, operations: operations, catalog: catalog, spills: f.wrapSpills}.compose(recorder)
 		}})
 	return f
 }
@@ -351,15 +424,56 @@ func TestCommandProgramResourceCeilings(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
+			f.spillsCreated.Store(0)
+			beforeChanges := f.writerRowChanges(t)
 			start := time.Now()
 			out, err := f.Call(t, context.Background(), c.program)
 			elapsed := time.Since(start)
+			writerChanges := f.writerRowChanges(t) - beforeChanges
+			spillsCreated := f.spillsCreated.Load()
+			spillsActive := f.spillsActive.Load()
+			if spillsActive != 0 {
+				t.Fatalf("%s leaked %d active sort spill runs", c.name, spillsActive)
+			}
+			var outcome command.ProgramOutcome
+			if len(out) > 0 && out[0] == '{' {
+				testutil.FailErr(t, "unmarshal outcome", json.Unmarshal([]byte(out), &outcome))
+			}
+			var receipts programReceiptCounts
+			if outcome.ProgramID != "" {
+				receipts = f.receiptCounts(t, outcome.ProgramID)
+			}
 			if c.wantError == "" {
-				if err != nil || strings.Contains(out, `"refusal"`) {
+				if err != nil || outcome.Refusal != nil {
 					t.Fatalf("%s failed: err=%v out=%s", c.name, err, out)
 				}
-				if c.name == "builtins-and-redirects-count-visits" && !strings.Contains(out, `"executed_children":0`) {
-					t.Fatalf("%s charged child_executions for builtins/redirects: %s", c.name, out)
+				if receipts.invokedRows != int64(outcome.ExecutedChildren) {
+					t.Fatalf("%s invoked rows = %d, want executed_children = %d", c.name, receipts.invokedRows, outcome.ExecutedChildren)
+				}
+				switch c.name {
+				case "noop", "fifty-statements", "builtins-and-redirects-count-visits":
+					if outcome.ExecutedChildren != 0 || receipts.executionRows != 0 {
+						t.Fatalf("%s charged child executions for builtins/redirects: executed_children=%d rows=%d", c.name, outcome.ExecutedChildren, receipts.executionRows)
+					}
+				case "loop-9999-iterations":
+					// The 9,999-iteration loop dispatches 2 real children (cat words.txt and echo $n)
+					// plus 1 substitution frame; loop iterations and arithmetic issue O(1) receipt
+					// statements per child, not O(n).
+					if outcome.ExecutedChildren != 2 || receipts.executionRows != 3 || receipts.definitionRows != 3 || receipts.pinCount != 1 {
+						t.Fatalf("%s unexpected child/receipt counts: children=%d exec_rows=%d def_rows=%d pins=%d",
+							c.name, outcome.ExecutedChildren, receipts.executionRows, receipts.definitionRows, receipts.pinCount)
+					}
+					if receipts.traceEvents > 35 || writerChanges > 60 {
+						t.Fatalf("%s receipt work scaled with loop iterations: trace_events=%d writer_row_changes=%d",
+							c.name, receipts.traceEvents, writerChanges)
+					}
+				case "sort-spill-8MiB":
+					if spillsCreated < 1 || spillsCreated > 8 {
+						t.Fatalf("%s expected bounded spill files (1..8), got %d", c.name, spillsCreated)
+					}
+				}
+				if c.name != "sort-spill-8MiB" && spillsCreated != 0 {
+					t.Fatalf("%s unexpectedly created %d sort spill files", c.name, spillsCreated)
 				}
 			} else if !strings.Contains(out, c.wantError) && (err == nil || !strings.Contains(err.Error(), c.wantError)) {
 				t.Fatalf("%s: want %s, got err=%v out=%s", c.name, c.wantError, err, out)
@@ -367,9 +481,11 @@ func TestCommandProgramResourceCeilings(t *testing.T) {
 			if active := f.Background.ActiveJobs(f.Session); len(active) != 0 {
 				t.Fatalf("%s leaked %d active background jobs", c.name, len(active))
 			}
-			spillsDir := filepath.Join(f.ScratchDir(), "command-spills")
-			if entries, readErr := os.ReadDir(spillsDir); readErr == nil && len(entries) != 0 {
-				t.Fatalf("%s left %d spill entries in %s", c.name, len(entries), spillsDir)
+			for _, sub := range []string{"command-spills", ".painted-wolf-sort-spills"} {
+				spillsDir := filepath.Join(f.ScratchDir(), sub)
+				if entries, readErr := os.ReadDir(spillsDir); readErr == nil && len(entries) != 0 {
+					t.Fatalf("%s left %d spill entries in %s", c.name, len(entries), spillsDir)
+				}
 			}
 			var ms runtime.MemStats
 			runtime.ReadMemStats(&ms)
@@ -382,10 +498,38 @@ func TestCommandProgramResourceCeilings(t *testing.T) {
 			if rss := currentMaxRSSBytes(); rss > peakRSS {
 				peakRSS = rss
 			}
-			t.Logf("%s: elapsed=%v heap_inuse=%.2fMiB goroutines=%d peak_rss=%.2fMiB",
-				c.name, elapsed, float64(ms.HeapInuse)/(1<<20), runtime.NumGoroutine(), float64(peakRSS)/(1<<20))
+			t.Logf("%s: elapsed=%v children=%d exec_rows=%d trace_events=%d writer_changes=%d spills_created=%d heap_inuse=%.2fMiB goroutines=%d peak_rss=%.2fMiB",
+				c.name, elapsed, outcome.ExecutedChildren, receipts.executionRows, receipts.traceEvents, writerChanges, spillsCreated, float64(ms.HeapInuse)/(1<<20), runtime.NumGoroutine(), float64(peakRSS)/(1<<20))
 		})
 	}
+
+	t.Run("grep-r-10k-indexed-vs-live", func(t *testing.T) {
+		catalog := sourcecatalog.New()
+		liveFix := newPerfFixture(t, nil)
+		indexedFix := newPerfFixture(t, catalog)
+		sourceTree(t, liveFix.Dir)
+		sourceTree(t, indexedFix.Dir)
+		warmCatalog(t, catalog, indexedFix.Dir)
+
+		var liveOutcome, indexedOutcome command.ProgramOutcome
+		testutil.FailErr(t, "unmarshal live grep", json.Unmarshal([]byte(liveFix.run(t, "grep -rl NeedleToken src")), &liveOutcome))
+		testutil.FailErr(t, "unmarshal indexed grep", json.Unmarshal([]byte(indexedFix.run(t, "grep -rl NeedleToken src")), &indexedOutcome))
+		if liveOutcome.Stdout != "src/p042/f007.go\n" || indexedOutcome.Stdout != "src/p042/f007.go\n" {
+			t.Fatalf("grep stdout mismatch: live=%q indexed=%q", liveOutcome.Stdout, indexedOutcome.Stdout)
+		}
+		liveReceipts := liveFix.receiptCounts(t, liveOutcome.ProgramID)
+		indexedReceipts := indexedFix.receiptCounts(t, indexedOutcome.ProgramID)
+		// Every unpruned file walked by grep is read and pinned in invocation_program_revision_pins.
+		// Live grep must read and pin all 10,000 files; indexed grep must prune at least 99% (>= 100x fewer).
+		if liveReceipts.pinCount != 10_000 {
+			t.Fatalf("live grep pinned files = %d, want 10000", liveReceipts.pinCount)
+		}
+		if indexedReceipts.pinCount < 1 || liveReceipts.pinCount < 100*indexedReceipts.pinCount {
+			t.Fatalf("indexed grep pinned %d files vs %d live; want >= 100x fewer", indexedReceipts.pinCount, liveReceipts.pinCount)
+		}
+		t.Logf("grep-r-10k-indexed-vs-live: live_pinned_files=%d indexed_pinned_files=%d reduction_factor=%.1fx",
+			liveReceipts.pinCount, indexedReceipts.pinCount, float64(liveReceipts.pinCount)/float64(indexedReceipts.pinCount))
+	})
 
 	runtime.GC()
 	finalGoroutines := runtime.NumGoroutine()

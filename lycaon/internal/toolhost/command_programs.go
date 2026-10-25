@@ -33,6 +33,7 @@ type programOwnerTools struct {
 	repo       *reposurvey.RepoTool
 	operations mutation.Operations
 	catalog    *sourcecatalog.Catalog
+	spills     func(textutil.SpillStorage) textutil.SpillStorage
 	// git is the Git owner; nil leaves git to its unsupported refusal.
 	git      *git.Manager
 	registry *tools.DefaultRegistry
@@ -91,6 +92,9 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 				release := func() {}
 				if spills != nil {
 					text.Spills = spills
+					if t.spills != nil {
+						text.Spills = t.spills(spills)
+					}
 					release = func() { _ = spills.Close() }
 				}
 				builtins := textOwners.Builtins(text)
