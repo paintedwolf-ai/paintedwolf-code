@@ -141,6 +141,7 @@ func (r *conformanceRunner) runCase(t *testing.T, c fixtureCase) runtimeObservat
 	sess, err := r.h.Store.Create(t.Context(), wire.CreateSessionRequest{ProjectID: projectID}, projectID)
 	testutil.FailErr(t, "create session", err)
 	testutil.FailErr(t, "set implementer agent", r.h.Sessions.Manager.Chats.SetAgentType(t.Context(), sess.ID, "implementer"))
+	r.h.SeedProgress(t, t.Context(), sess.ID)
 	_, err = r.h.Sessions.Manager.Submissions.Prompt(t.Context(), sess.ID, "run case "+c.ID)
 	testutil.FailErr(t, "prompt conformance case", err)
 
