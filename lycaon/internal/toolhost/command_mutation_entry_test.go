@@ -70,7 +70,7 @@ func composedMutationEntry(t *testing.T) (*programtest.Fixture, *projectsource.S
 	return fixture, service, p, ledger
 }
 
-func runMutationEntryTree(t *testing.T, total int) (copyElapsed, removeElapsed time.Duration) {
+func runMutationEntryTree(t *testing.T, total int) {
 	t.Helper()
 	fixture, service, p, _ := composedMutationEntry(t)
 	const buckets = 100
@@ -79,29 +79,38 @@ func runMutationEntryTree(t *testing.T, total int) (copyElapsed, removeElapsed t
 		testutil.FailErr(t, "create source bucket", os.MkdirAll(dir, 0o755))
 		testutil.FailErr(t, "seed source file", os.WriteFile(filepath.Join(dir, fmt.Sprintf("f%05d", i)), []byte("ok\n"), 0o644))
 	}
-	call := func(source string) time.Duration {
-		started := time.Now()
+	call := func(source string) {
 		raw, err := fixture.Call(t, t.Context(), source)
-		elapsed := time.Since(started)
 		testutil.FailErr(t, "run production command entry", err)
 		var outcome command.ProgramOutcome
 		testutil.FailErr(t, "decode program outcome", json.Unmarshal([]byte(raw), &outcome))
 		if outcome.State != "completed" || outcome.Status != 0 {
 			t.Fatalf("program %q result: %s", source, raw)
 		}
-		return elapsed
 	}
-	copyElapsed = call("cp -r source copied")
-	t.Logf("production entry cp %d files elapsed=%s", total, copyElapsed)
-	var attributed int
+	call("cp -r source copied")
+	var attributed, uncommitted, copyBlobs int
 	testutil.FailErr(t, "count attributed copied files", fixture.Database.QueryRowContext(t.Context(), `SELECT count(*) FROM source_effects WHERE path LIKE 'copied/%' AND entry_kind='file'`).Scan(&attributed))
-	if attributed != total {
-		t.Fatalf("attributed copied files=%d want=%d", attributed, total)
+	testutil.FailErr(t, "count uncommitted copy mutations", fixture.Database.QueryRowContext(t.Context(), `SELECT count(*) FROM source_mutations WHERE status != 'committed'`).Scan(&uncommitted))
+	testutil.FailErr(t, "count copy recovery blobs", fixture.Database.QueryRowContext(t.Context(), `SELECT count(*) FROM source_blob_objects`).Scan(&copyBlobs))
+	if attributed != total || uncommitted != 0 || copyBlobs != 0 {
+		t.Fatalf("copied files=%d uncommitted=%d blobs=%d want=%d/0/0", attributed, uncommitted, copyBlobs, total)
 	}
-	removeElapsed = call("rm -rf copied")
-	t.Logf("production entry rm %d files elapsed=%s", total, removeElapsed)
+	call("rm -rf copied")
 	if _, err := os.Lstat(filepath.Join(fixture.Dir, "copied")); !os.IsNotExist(err) {
 		t.Fatalf("removed tree still exists: %v", err)
+	}
+	slots, err := os.ReadDir(settingsoverlay.RecoveryDir(fixture.Dir))
+	testutil.FailErr(t, "read recovery slots", err)
+	if len(slots) != 1 {
+		t.Fatalf("recovery slots=%d want=1", len(slots))
+	}
+	var deleteMutations, deleteEffects, deleteBlobs int
+	testutil.FailErr(t, "count delete mutations", fixture.Database.QueryRowContext(t.Context(), `SELECT count(*) FROM source_mutations WHERE kind='delete'`).Scan(&deleteMutations))
+	testutil.FailErr(t, "count delete effects", fixture.Database.QueryRowContext(t.Context(), `SELECT count(*) FROM source_effects WHERE op='delete'`).Scan(&deleteEffects))
+	testutil.FailErr(t, "count delete recovery blobs", fixture.Database.QueryRowContext(t.Context(), `SELECT count(*) FROM source_blob_objects`).Scan(&deleteBlobs))
+	if deleteMutations != 1 || deleteEffects != 1 || deleteBlobs != 0 {
+		t.Fatalf("delete mutations=%d effects=%d blobs=%d want=1/1/0", deleteMutations, deleteEffects, deleteBlobs)
 	}
 	state, err := service.History.State(t.Context(), p.ID)
 	testutil.FailErr(t, "read actual undo history", err)
@@ -131,7 +140,6 @@ func runMutationEntryTree(t *testing.T, total int) (copyElapsed, removeElapsed t
 	if restored != total {
 		t.Fatalf("restored files=%d want=%d", restored, total)
 	}
-	return copyElapsed, removeElapsed
 }
 
 func TestComposedMutationEntryCopyRemoveUndo(t *testing.T) {

@@ -65,7 +65,7 @@ func TestProgramSSHReachesPasswordAuthenticationWithoutPrompting(t *testing.T) {
 		if method != "none" && method != "password" {
 			t.Fatalf("unexpected authentication method %q", method)
 		}
-	case <-time.After(2 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("SSH failed before reaching the authentication fixture")
 	}
 	select {
@@ -73,7 +73,7 @@ func TestProgramSSHReachesPasswordAuthenticationWithoutPrompting(t *testing.T) {
 		if err == nil {
 			t.Fatal("password-only server accepted an unauthenticated command")
 		}
-	case <-time.After(2 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("SSH fixture connection did not close")
 	}
 }
