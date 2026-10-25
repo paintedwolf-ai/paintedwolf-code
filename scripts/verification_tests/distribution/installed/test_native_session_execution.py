@@ -149,6 +149,25 @@ class NativeSessionTests(unittest.TestCase):
         with self.assertRaises(CaseUnavailable):
             self.observer()
 
+    def test_foreign_uid_requires_root_and_an_explicit_reader(self):
+        foreign = os.getuid() + 1
+        session = {**self.session, 'User': str(foreign)}
+        for uid in (True, -1, 1 << 31, '30059'):
+            with self.subTest(uid=uid), self.assertRaises(ValueError):
+                NativeSessionObserver(session, reader=self.reader, expected_uid=uid)
+        with patch('scripts.linux_release.installed_cases.native_session.os.geteuid', return_value=1000):
+            with self.assertRaises(ValueError):
+                NativeSessionObserver(session, reader=self.reader, expected_uid=foreign)
+        with patch('scripts.linux_release.installed_cases.native_session.os.geteuid', return_value=0):
+            with self.assertRaises(ValueError):
+                NativeSessionObserver(session, expected_uid=foreign)
+            shell = self.observer().shell
+            self.reader.properties['User'] = ('(uo)', (foreign, '/org/freedesktop/login1/user/_1000'))
+            with NativeSessionObserver(session, reader=self.reader, owner=self.owner,
+                    shell=shell, expected_uid=foreign) as observer:
+                self.assertEqual(observer.observe()['authorities']['locker']['process']['uid'], foreign)
+        self.assertEqual(self.reader.closes, 0)
+
     def test_inhibitor_shapes_and_owner_disappearance_refuse(self):
         observer = self.observer()
         for rows in [[('sleep', '', '', 'block', True, 300)], [()] , self.reader.rows * 257]:

@@ -49,6 +49,19 @@ class NativeDesktopAuthorityTests(unittest.TestCase):
             gnome.owner(reader)
         self.assertEqual(reader.closes, 1)
 
+    def test_foreign_account_selection_requires_root_and_a_borrowed_reader(self):
+        reader = SimpleNamespace(call=lambda *args, **kwargs: self.fail('invalid selection reached the bus'))
+        for uid in (True, -1, 1 << 31, '30059'):
+            with self.subTest(uid=uid), self.assertRaises(ValueError):
+                gnome.owner(reader, expected_uid=uid)
+        foreign = os.getuid() + 1
+        with patch.object(gnome.os, 'geteuid', return_value=1000):
+            with self.assertRaises(ValueError):
+                gnome.owner(reader, expected_uid=foreign)
+        with patch.object(gnome.os, 'geteuid', return_value=0):
+            with self.assertRaises(ValueError):
+                gnome.owner(expected_uid=foreign)
+
     def test_selected_image_requires_every_physical_root_controlled_parent(self):
         image = info()
         directory = info(mode=stat.S_IFDIR | 0o755)
@@ -64,7 +77,7 @@ class NativeDesktopAuthorityTests(unittest.TestCase):
                         with self.assertRaises(ValueError):
                             gnome.physical_image()
 
-    def owner(self, *, executable=None, names=None, births=None, image_after=None):
+    def owner(self, *, executable=None, names=None, births=None, image_after=None, expected_uid=None):
         names = iter(names or [':1.2', ':1.2'])
         pids = iter([200, 200])
         def call(path, interface, method, args, signature, **kwargs):
@@ -76,18 +89,21 @@ class NativeDesktopAuthorityTests(unittest.TestCase):
         image = info()
         births = iter(births or ['42', '42'])
         def process_stat(path, **kwargs):
-            return executable or image if str(path).endswith('/exe') else info(uid=os.getuid())
+            return executable or image if str(path).endswith('/exe') else info(
+                uid=os.getuid() if expected_uid is None else expected_uid)
         with patch.object(gnome, 'physical_image', side_effect=[image, image_after or image]), patch.object(
                 gnome.os, 'open', return_value=99), patch.object(gnome.os, 'fstat', return_value=image), patch.object(
                 gnome.os, 'close') as close, patch.object(Path, 'stat', process_stat), patch.object(
                 Path, 'read_text', side_effect=lambda *args: '200 (shell) ' + ' '.join(['S', '1', *(['0'] * 17), next(births)])):
             try:
-                return gnome.owner(reader)
+                return gnome.owner(reader, expected_uid=expected_uid)
             finally:
                 close.assert_called_once_with(99)
 
     def test_shell_unique_owner_kernel_birth_and_selected_image_must_all_match(self):
         self.assertEqual(self.owner()['unique_owner'], ':1.2')
+        with patch.object(gnome.os, 'geteuid', return_value=0):
+            self.assertEqual(self.owner(expected_uid=os.getuid() + 1)['unique_owner'], ':1.2')
         for changes in ({'executable': info(inode=3)}, {'names': [':1.2', ':1.3']},
                         {'births': ['42', '43']}, {'image_after': info(inode=3)}):
             with self.subTest(changes=changes), self.assertRaises(ValueError):
