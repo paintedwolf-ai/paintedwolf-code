@@ -5,6 +5,7 @@ pub(crate) mod linux_decorations;
 pub(crate) mod linux_frame;
 pub(crate) mod linux_titlebar;
 pub(crate) mod window_appearance;
+pub(crate) mod workspace_lifecycle;
 pub(crate) mod window_backdrop;
 pub(crate) mod system_appearance;
 pub(crate) mod accessibility_text_size;

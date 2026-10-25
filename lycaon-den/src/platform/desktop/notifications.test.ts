@@ -6,10 +6,12 @@ const requestPermission = vi.fn(
 );
 const sendNotification = vi.fn(() => undefined);
 const invoke = vi.fn();
+const focusAppWindow = vi.fn(async () => {});
+vi.mock("../windows/window-chrome.ts", () => ({ focusAppWindow }));
 const listen = vi.fn(
   async (
     _event: string,
-    cb: (event: { payload: { sessionId?: string | null } }) => void,
+    cb: (event: { payload: unknown }) => void,
   ) => {
     listenHandler = cb;
     return () => {
@@ -18,7 +20,7 @@ const listen = vi.fn(
   },
 );
 let listenHandler:
-  | ((event: { payload: { sessionId?: string | null } }) => void)
+  | ((event: { payload: unknown }) => void)
   | undefined;
 
 vi.mock("@tauri-apps/plugin-notification", () => ({
@@ -165,6 +167,7 @@ describe.each(["macos", "linux"] as const)("notifications wrapper (%s native bri
     vi.resetModules();
     invoke.mockReset();
     listen.mockClear();
+    focusAppWindow.mockClear();
     listenHandler = undefined;
     sendNotification.mockClear();
     vi.doMock("../runtime.ts", () => ({
@@ -320,8 +323,18 @@ describe.each(["macos", "linux"] as const)("notifications wrapper (%s native bri
     await vi.waitFor(() => {
       expect(listen).toHaveBeenCalled();
     });
-    listenHandler?.({ payload: { sessionId: "sess-un" } });
+    listenHandler?.({ payload: { sessionId: "sess-un", presentation: "renderer" } });
     expect(seen).toEqual(["sess-un"]);
+    expect(focusAppWindow).toHaveBeenCalledOnce();
+    focusAppWindow.mockClear();
+    listenHandler?.({ payload: { sessionId: "sess-native", presentation: "native" } });
+    expect(seen).toEqual(["sess-un", "sess-native"]);
+    expect(focusAppWindow).not.toHaveBeenCalled();
+    for (const payload of [null, {}, { sessionId: "foreign" }, { presentation: "unknown" }]) {
+      listenHandler?.({ payload });
+    }
+    expect(seen).toEqual(["sess-un", "sess-native"]);
+    expect(focusAppWindow).not.toHaveBeenCalled();
     unsub();
   });
 });

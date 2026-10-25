@@ -5,7 +5,7 @@ import {
   cancelNotificationsForSessions, ensureNotificationPermission,
   onNotificationActivated, sendNotification,
 } from "../platform/desktop/notifications.ts";
-import { focusAppWindow, windowFocused } from "../platform/windows/window-chrome.ts";
+import { windowFocused } from "../platform/windows/window-chrome.ts";
 import { setWaitingBadge } from "../platform/desktop/badge.ts";
 import { isTauriRuntime } from "../platform/runtime.ts";
 import { recordNotificationPermission, notificationPrefsLive } from "../settings/chat/notification-prefs.ts";
@@ -40,7 +40,6 @@ export function mountNotificationService(stores: NotificationMountStores): () =>
     createEffect(() => svc.observe(stores.attention.state.rows, stores.attention.state.loaded));
     createEffect(() => void setWaitingBadge(stores.attention.state.rows.filter(row => row.class === "needs_you").length));
     const unsubClick = onNotificationActivated((sessionId) => {
-      void focusAppWindow();
       openSessionFromNotification(sessionId);
     });
     onCleanup(() => { unsubClick(); svc.dispose(); });

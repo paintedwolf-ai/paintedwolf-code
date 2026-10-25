@@ -12,7 +12,6 @@ const mocks = vi.hoisted(() => ({
   observe: vi.fn(),
   dispose: vi.fn(),
   badge: vi.fn(async () => undefined),
-  focus: vi.fn(async () => undefined),
   open: vi.fn(),
   unsubscribe: vi.fn(),
   activated: [] as Array<(sessionId: string) => void>,
@@ -30,7 +29,6 @@ vi.mock("../platform/desktop/notifications.ts", () => ({
   },
 }));
 vi.mock("../platform/windows/window-chrome.ts", () => ({
-  focusAppWindow: mocks.focus,
   windowFocused: () => false,
 }));
 vi.mock("../platform/desktop/badge.ts", () => ({ setWaitingBadge: mocks.badge }));
@@ -116,7 +114,6 @@ describe("mountNotificationService", () => {
   it("opens the chat a notification names and releases everything on dispose", () => {
     const dispose = mountNotificationService({ attention: attention([]).store, getClient: () => null });
     mocks.activated[0]!("chat-a");
-    expect(mocks.focus).toHaveBeenCalled();
     expect(mocks.open).toHaveBeenCalledWith("chat-a");
     dispose();
     expect(mocks.unsubscribe).toHaveBeenCalled();

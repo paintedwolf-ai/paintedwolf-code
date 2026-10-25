@@ -34,7 +34,7 @@ beforeEach(() => {
   disposeClose.mockReset();
   onCloseRequested.mockClear();
   nativeExit.id = null;
-  invoke.mockReset().mockImplementation(async (name: string) => name === "pending_app_exit" && nativeExit.id !== null ? { request_id: nativeExit.id } : null);
+  invoke.mockReset().mockImplementation(async (name: string) => name === "den_window_close_disposition" ? "destroy" : name === "pending_app_exit" && nativeExit.id !== null ? { request_id: nativeExit.id } : null);
   handlers.clear();
   document.documentElement.inert = false;
   vi.spyOn(console, "error").mockImplementation(() => undefined);
@@ -94,6 +94,7 @@ describe("durable window exit", () => {
     await installed();
     const done = closeHandler?.({ preventDefault: vi.fn() });
     expect(document.documentElement.inert).toBe(true);
+    await vi.waitFor(() => expect(flush).toHaveBeenCalledOnce());
     expect(release).not.toHaveBeenCalled();
     finishFlush();
     await vi.waitFor(() => expect(release).toHaveBeenCalledOnce());
@@ -164,6 +165,62 @@ describe("durable window exit", () => {
     await done;
   });
 
+  it("preserves a window the shell retains without releasing it or destroying it", async () => {
+    invoke.mockImplementation(async (name: string) => name === "den_window_close_disposition" ? "retained" : null);
+    const flush = vi.fn();
+    const release = vi.fn();
+    const resume = vi.fn();
+    watch(flush, { beforeDestroy: release, onKeepOpen: resume });
+    await installed();
+    const preventDefault = vi.fn();
+    await closeHandler?.({ preventDefault });
+    expect(preventDefault).toHaveBeenCalledOnce();
+    expect(invoke).toHaveBeenCalledWith("den_window_close_disposition");
+    expect(flush).toHaveBeenCalledOnce();
+    expect(release).not.toHaveBeenCalled();
+    expect(destroy).not.toHaveBeenCalled();
+    expect(document.documentElement.inert).toBe(false);
+    invoke.mockImplementation(async (name: string) => name === "den_window_close_disposition" ? "destroy" : null);
+    await closeHandler?.({ preventDefault: vi.fn() });
+    expect(release).toHaveBeenCalledOnce();
+    expect(destroy).toHaveBeenCalledOnce();
+  });
+
+  it.each(["rejected", null, undefined, false, "unknown", {}, ["destroy"]])(
+    "keeps the window and recovers input when native disposition is %s", async (reply) => {
+      invoke.mockImplementation(async (name: string) => {
+        if (name !== "den_window_close_disposition") return null;
+        if (reply === "rejected") throw new Error("ipc closed");
+        return reply;
+      });
+      const flush = vi.fn();
+      const release = vi.fn();
+      const resume = vi.fn();
+      watch(flush, { beforeDestroy: release, onKeepOpen: resume });
+      await installed();
+      const preventDefault = vi.fn();
+      const done = closeHandler?.({ preventDefault });
+      expect(document.documentElement.inert).toBe(true);
+      expect(shortcutCommandsSuspended()).toBe(true);
+      await done;
+      expect(preventDefault).toHaveBeenCalledOnce();
+      expect(flush).not.toHaveBeenCalled();
+      expect(release).not.toHaveBeenCalled();
+      expect(destroy).not.toHaveBeenCalled();
+      expect(resume).toHaveBeenCalledOnce();
+      expect(document.documentElement.inert).toBe(false);
+      expect(shortcutCommandsSuspended()).toBe(false);
+
+      invoke.mockImplementation(async (name: string) => name === "den_window_close_disposition" ? "destroy" : null);
+      await closeHandler?.({ preventDefault: vi.fn() });
+      expect(flush).toHaveBeenCalledOnce();
+      expect(release).toHaveBeenCalledOnce();
+      expect(destroy).toHaveBeenCalledOnce();
+      expect(document.documentElement.inert).toBe(false);
+      expect(shortcutCommandsSuspended()).toBe(false);
+    },
+  );
+
   it("coalesces repeated desktop close requests", async () => {
     let finish!: () => void;
     const flush = vi.fn(() => new Promise<void>((resolve) => { finish = resolve; }));
@@ -173,7 +230,7 @@ describe("durable window exit", () => {
     const preventDefault = vi.fn();
     await closeHandler?.({ preventDefault });
     expect(preventDefault).toHaveBeenCalledOnce();
-    expect(flush).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(flush).toHaveBeenCalledOnce());
     finish();
     await done;
     expect(destroy).toHaveBeenCalledOnce();

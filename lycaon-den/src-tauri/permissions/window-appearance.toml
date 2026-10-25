@@ -32,3 +32,8 @@ commands.allow = ["linux_window_frame"]
 identifier = "allow-linux-titlebar-action"
 description = "Lower the window or open the desktop's window menu for a title bar click, as the desktop configures."
 commands.allow = ["linux_titlebar_action"]
+
+[[permission]]
+identifier = "allow-den-window-close-disposition"
+description = "Ask whether the shell keeps this window after its close request, so the document does not destroy it."
+commands.allow = ["den_window_close_disposition"]

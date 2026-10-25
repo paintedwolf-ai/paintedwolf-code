@@ -1,5 +1,6 @@
 import { isTauriRuntime, tauriPlatform } from "../runtime.ts";
 import { listenHostEvent } from "../windows/window-channel.ts";
+import { focusAppWindow } from "../windows/window-chrome.ts";
 
 export interface DenNotification {
   title: string;
@@ -137,12 +138,15 @@ export function onNotificationActivated(
 
   void (async () => {
     try {
-      unlistenEvent = await listenHostEvent<{ sessionId?: string | null }>(
+      unlistenEvent = await listenHostEvent<{ sessionId?: string | null; presentation: "native" | "renderer" }>(
         NOTIFICATION_ACTIVATED_EVENT,
         (event) => {
           if (unsubscribed) return;
           try {
-            const sid = event.payload?.sessionId;
+            const payload = event.payload;
+            if (payload?.presentation !== "native" && payload?.presentation !== "renderer") return;
+            if (payload.presentation === "renderer") void focusAppWindow();
+            const sid = payload.sessionId;
             cb(typeof sid === "string" && sid.length > 0 ? sid : undefined);
           } catch (err) {
             console.debug("[notifications] activation callback failed", err);
