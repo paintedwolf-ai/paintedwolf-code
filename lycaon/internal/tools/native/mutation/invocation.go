@@ -166,6 +166,15 @@ func (inv *invocation) settle(err error) (toolcontract.ProducerResult, error) {
 
 // destinationEntry resolves a copy or move destination: an existing directory
 // receives the source's base name; several sources require one.
+// destinationDisplay names a destination entry as the program wrote DEST.
+func (inv *invocation) destinationDisplay(dest, to string) string {
+	bound, err := inv.paths.Bind(inv.ctx, dest, true)
+	if err != nil {
+		return to
+	}
+	return destinationDisplay(dest, bound.Resolved.Abs, to)
+}
+
 func (inv *invocation) destinationEntry(dest string, source string, many bool) (string, error) {
 	bound, err := inv.bind(dest, true)
 	if err != nil {
