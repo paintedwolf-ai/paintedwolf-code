@@ -19,19 +19,19 @@ func validateProgramStart(s toolcontract.ProgramStart) error {
 	if err != nil {
 		return err
 	}
-	if int64(len(s.Nodes)) > limits.nodes || int64(len(s.Sources)) > limits.events {
+	if int64(len(s.Nodes)) > limits.nodes || int64(1+len(s.Sources)+len(s.Nodes))+limits.parentEvents > limits.events {
 		return fmt.Errorf("program receipt metadata exceeds catalog count ceiling")
 	}
 	bytes := int64(len(s.PlanReference) + len(s.Version.SourceReference))
 	for _, source := range s.Sources {
 		bytes += 512 + int64(len(source.UnitID)+len(source.Pin.SourceID)+len(source.Pin.Revision)+len(source.DetailReference))
-		if bytes > limits.bytes {
+		if bytes+limits.parentBytes > limits.bytes {
 			return fmt.Errorf("program source metadata exceeds trace byte ceiling")
 		}
 	}
 	for _, node := range s.Nodes {
 		bytes += 128 + int64(len(node.ID)+len(node.SourceUnitID))
-		if bytes > limits.bytes {
+		if bytes+limits.parentBytes > limits.bytes {
 			return fmt.Errorf("program node metadata exceeds trace byte ceiling")
 		}
 	}
@@ -88,6 +88,17 @@ func (r *SQLRecorder) BeginProgram(ctx context.Context, in toolcontract.ProgramS
 	return tx.Commit()
 }
 
+func traceFootprint(s toolcontract.ProgramStart) (int64, int64) {
+	bytes := int64(len(s.PlanReference) + len(s.Version.SourceReference))
+	for _, source := range s.Sources {
+		bytes += 512 + int64(len(source.UnitID)+len(source.Pin.SourceID)+len(source.Pin.Revision)+len(source.DetailReference))
+	}
+	for _, node := range s.Nodes {
+		bytes += 128 + int64(len(node.ID)+len(node.SourceUnitID))
+	}
+	return int64(1 + len(s.Sources) + len(s.Nodes)), bytes
+}
+
 func insertProgram(ctx context.Context, tx *sql.Tx, in toolcontract.ProgramStart) error {
 	var state string
 	if err := tx.QueryRowContext(ctx, "SELECT status FROM invocation_receipts WHERE id = ?", in.Version.ParentReceiptID).Scan(&state); err != nil {
@@ -96,8 +107,9 @@ func insertProgram(ctx context.Context, tx *sql.Tx, in toolcontract.ProgramStart
 	if state != "running" {
 		return fmt.Errorf("program parent is not running")
 	}
+	events, bytes := traceFootprint(in)
 	v := in.Version
-	_, err := tx.ExecContext(ctx, `INSERT INTO invocation_programs (id,parent_receipt_id,root_execution_id,language_version,catalog_digest,source_unit_id,source_digest,source_ref,source_exact,plan_ref,syntax_validated,state,started_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,'running',?)`, v.ProgramID, v.ParentReceiptID, v.RootExecutionID, v.LanguageVersion, v.CatalogDigest, v.SourceUnitID, v.SourceDigest, v.SourceReference, in.SourceExact, in.PlanReference, in.SyntaxValidated, time.Now().UTC().Format(time.RFC3339Nano))
+	_, err := tx.ExecContext(ctx, `INSERT INTO invocation_programs (id,parent_receipt_id,root_execution_id,language_version,catalog_digest,source_unit_id,source_digest,source_ref,source_exact,plan_ref,syntax_validated,state,trace_events,trace_bytes,started_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,'running',?,?,?)`, v.ProgramID, v.ParentReceiptID, v.RootExecutionID, v.LanguageVersion, v.CatalogDigest, v.SourceUnitID, v.SourceDigest, v.SourceReference, in.SourceExact, in.PlanReference, in.SyntaxValidated, events, bytes, time.Now().UTC().Format(time.RFC3339Nano))
 	if err != nil {
 		return fmt.Errorf("begin program: %w", err)
 	}
@@ -151,7 +163,24 @@ func insertProgramChild(ctx context.Context, tx *sql.Tx, in toolcontract.Program
 	if err != nil {
 		return err
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO invocation_program_executions (id,program_id,node_id,ordinal,parent_execution_id,actor_id,scope_json,operation_id,definition_digest,definition_json,arguments_representation,arguments_digest,arguments_ref,canonical,state,owner,lifecycle,started_at) VALUES (?,?,?,(SELECT COALESCE(MAX(ordinal),0)+1 FROM invocation_program_executions WHERE program_id=?),?,?,?,?,?,?,?,?,?,?,'prepared',?,?,?)`, identity.ExecutionID, identity.ProgramID, identity.NodeID, identity.ProgramID, identity.ParentExecutionID, in.Invocation.ActorID, string(scope), facts.Identity, in.Definition.Digest(), in.Definition.Serialized(), in.ExpandedInputs.Representation(), in.ExpandedInputs.ArgumentsDigest(), in.ArgumentsReference, in.Canonical, facts.Contract.Owner, facts.Contract.Lifecycle.String(), time.Now().UTC().Format(time.RFC3339Nano))
+	var definitionPresent int
+	if err = tx.QueryRowContext(ctx, `SELECT count(*) FROM invocation_program_definitions WHERE program_id=? AND definition_digest=?`, identity.ProgramID, in.Definition.Digest()).Scan(&definitionPresent); err != nil {
+		return err
+	}
+	events := int64(2)
+	bytes := int64(len(identity.ExecutionID) + len(identity.NodeID) + len(identity.ParentExecutionID) + len(in.Invocation.ActorID) + len(scope) + len(facts.Identity) + len(in.Definition.Digest()) + len(in.ExpandedInputs.Representation()) + len(in.ExpandedInputs.ArgumentsDigest()) + len(in.ArgumentsReference) + len(in.Canonical) + len(facts.Contract.Owner) + len(facts.Contract.Lifecycle.String()))
+	if definitionPresent == 0 {
+		events++
+		bytes += int64(len(in.Definition.Serialized()))
+	}
+	if err = chargeProgramTrace(ctx, tx, identity.ProgramID, events, bytes, traceChargeChildStart); err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO invocation_program_definitions (program_id,definition_digest,operation_id,owner,lifecycle,definition_json) VALUES (?,?,?,?,?,?) ON CONFLICT (program_id,definition_digest) DO NOTHING`, identity.ProgramID, in.Definition.Digest(), facts.Identity, facts.Contract.Owner, facts.Contract.Lifecycle.String(), in.Definition.Serialized())
+	if err != nil {
+		return fmt.Errorf("record program definition: %w", err)
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO invocation_program_executions (id,program_id,node_id,ordinal,parent_execution_id,actor_id,scope_json,operation_id,definition_digest,arguments_representation,arguments_digest,arguments_ref,canonical,state,owner,lifecycle,started_at) VALUES (?,?,?,(SELECT COALESCE(MAX(ordinal),0)+1 FROM invocation_program_executions WHERE program_id=?),?,?,?,?,?,?,?,?,?,'prepared',?,?,?)`, identity.ExecutionID, identity.ProgramID, identity.NodeID, identity.ProgramID, identity.ParentExecutionID, in.Invocation.ActorID, string(scope), facts.Identity, in.Definition.Digest(), in.ExpandedInputs.Representation(), in.ExpandedInputs.ArgumentsDigest(), in.ArgumentsReference, in.Canonical, facts.Contract.Owner, facts.Contract.Lifecycle.String(), time.Now().UTC().Format(time.RFC3339Nano))
 	if err != nil {
 		return fmt.Errorf("prepare program child: %w", err)
 	}

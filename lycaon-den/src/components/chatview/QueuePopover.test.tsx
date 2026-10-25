@@ -254,6 +254,11 @@ describe("QueuePopover", () => {
     expect(h.onBeginArrange).toHaveBeenCalledOnce();
     const input = screen.getByRole("textbox", { name: "Queued message 1" }) as HTMLTextAreaElement;
     input.value = "after";
+    for (const composition of [{ isComposing: true }, { keyCode: 229 }]) {
+      fireEvent.keyDown(input, { key: "Enter", ...composition });
+      expect(h.onUpdate).not.toHaveBeenCalled();
+      expect(h.onEndArrange).not.toHaveBeenCalled();
+    }
     fireEvent.keyDown(input, { key: "Enter" });
     expect(h.onUpdate).toHaveBeenCalledWith("a", "after");
     expect(h.onEndArrange).toHaveBeenCalledOnce();
