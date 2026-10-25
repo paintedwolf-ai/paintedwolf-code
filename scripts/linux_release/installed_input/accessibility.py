@@ -1,6 +1,9 @@
 """Pin an embedded control to its actual enumerated native window, across AT-SPI services."""
 from __future__ import annotations
 import re
+import time
+
+from ..installed_cases.records import CaseUnavailable
 
 MAX_PARENTS = 64
 
@@ -54,3 +57,32 @@ def capture(node, windows):
             return selected[tuple(row.items())], validate(chain, chain[0]['pid'], row['pid'])
         node = node.get_parent()
     raise ValueError('focused entry has no bounded native inventory window ancestor')
+
+
+class InventoryChanged(Exception):
+    """The native service invalidated an unfinished inventory."""
+
+
+def descendants(window, deadline=None, *, include=None):
+    deadline = time.monotonic() + 15 if deadline is None else deadline
+    pending, visited = [(window, 0)], 0
+    while pending:
+        if time.monotonic() >= deadline:
+            raise CaseUnavailable('normal-native-control-observation-deadline')
+        node, depth = pending.pop()
+        visited += 1
+        if node is None:
+            raise InventoryChanged()
+        if include is not None and not include(node, depth):
+            continue
+        count = node.childCount
+        if type(count) is int and count == -1:
+            raise InventoryChanged()
+        if type(count) is not int or visited > 4096 or depth > 64 or not 0 <= count <= 1024:
+            error = CaseUnavailable('installed accessible window exceeds its fixed observer traversal bound')
+            error.observations = {'desktop_inventory_bound': {'visited': visited, 'depth': depth,
+                'child_count': count if type(count) is int else None,
+                'limits': {'visited': 4096, 'depth': 64, 'child_count': 1024}}}
+            raise error
+        yield node
+        pending.extend((node[index], depth + 1) for index in range(count))
