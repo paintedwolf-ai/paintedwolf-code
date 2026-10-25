@@ -125,7 +125,7 @@ class PreparedTargetTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = pathlib.Path(temporary)
             _, original, marker = self.fixture(root)
-            cache = original/'source/.bin/decide-target/release'
+            cache = original/'compiler-cache/decide/release'
             cache.mkdir(parents=True)
             (cache/'compiler-output').write_bytes(b'regenerable compiler output')
             fixture = original/'source/.bin/fixtures/decide-target'
@@ -139,7 +139,7 @@ class PreparedTargetTests(unittest.TestCase):
             copied = {pathlib.Path(call.args[0]) for call in clone.call_args_list}
             self.assertIn(original/'source/.bin/lycaon-dev', copied)
             self.assertIn(original/marker['preflight']['receipt'], copied)
-            self.assertFalse((destination/'source/.bin/decide-target').exists())
+            self.assertFalse((destination/'compiler-cache').exists())
             self.assertTrue((cache/'compiler-output').exists())
             self.assertEqual((destination/'source/.bin/fixtures/decide-target/input').read_bytes(), b'retained fixture')
             self.assertEqual((destination/'source/.bin/runtime-link').readlink(), pathlib.Path('lycaon-dev'))

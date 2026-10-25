@@ -144,6 +144,10 @@ func runLinuxProbe(mode string) int {
 		_, err = unix.Socketpair(unix.AF_UNIX, unix.SOCK_DGRAM|unix.SOCK_CLOEXEC, 0)
 		fmt.Println("datagram socketpair:", errnoName(err))
 		return 0
+	case "longcwd":
+		return longcwdProbe()
+	case "interrupted":
+		return interruptedProbe()
 	case "iouring":
 		params := make([]byte, 120)
 		_, _, errno := unix.Syscall(unix.SYS_IO_URING_SETUP, 1, uintptr(unsafe.Pointer(&params[0])), 0)
@@ -432,6 +436,87 @@ func TestLinuxTerminalInjectionKillsTheProcess(t *testing.T) {
 	}
 }
 
+// A terminal interrupt reaches the confined program, not the helpers between
+// it and the terminal, so an interactive interpreter survives Ctrl-C.
+func TestLinuxTerminalInterruptReachesOnlyTheTarget(t *testing.T) {
+	requireLinuxSandbox(t)
+	self, err := os.Executable()
+	testutil.FailErr(t, "test binary", err)
+	python, err := exec.LookPath("python3")
+	testutil.FailErr(t, "locate interactive interpreter", err)
+	master, slave := openPty(t)
+	defer master.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	cmd, cleanup, err := confine.Command(ctx, helperBinary(t, self), python, []string{"-i", "-q", "-u"}, denyConfinement(t.TempDir()))
+	testutil.FailErr(t, "confine.Command", err)
+	defer cleanup()
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = slave, slave, slave
+	if cmd.SysProcAttr == nil {
+		cmd.SysProcAttr = &syscall.SysProcAttr{}
+	}
+	cmd.SysProcAttr.Setsid, cmd.SysProcAttr.Setctty, cmd.SysProcAttr.Ctty = true, true, 0
+	testutil.FailErr(t, "start confined interpreter", cmd.Start())
+	_ = slave.Close()
+	terminal := watchTerminal(master)
+	send := func(text string) {
+		t.Helper()
+		_, err := master.WriteString(text)
+		testutil.FailErr(t, "write terminal input", err)
+	}
+	send("print('ready' + '-for-input')\n")
+	terminal.await(t, "ready-for-input")
+	send("\x03")
+	terminal.await(t, "KeyboardInterrupt")
+	send("print('interrupt' + '-survived')\n")
+	terminal.await(t, "interrupt-survived")
+	send("raise SystemExit(7)\n")
+	_ = cmd.Wait()
+	if status, _ := cmd.ProcessState.Sys().(syscall.WaitStatus); status.Signaled() || status.ExitStatus() != 7 {
+		t.Fatalf("interpreter exit after the interrupt: %v\n%q", status, terminal.text())
+	}
+}
+
+// terminalWatch accumulates what a terminal's main side reads.
+type terminalWatch struct {
+	mu  sync.Mutex
+	buf strings.Builder
+}
+
+func watchTerminal(master *os.File) *terminalWatch {
+	w := &terminalWatch{}
+	go func() {
+		chunk := make([]byte, 4096)
+		for {
+			n, err := master.Read(chunk)
+			w.mu.Lock()
+			w.buf.Write(chunk[:n])
+			w.mu.Unlock()
+			if err != nil {
+				return
+			}
+		}
+	}()
+	return w
+}
+
+func (w *terminalWatch) text() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.buf.String()
+}
+
+func (w *terminalWatch) await(t *testing.T, marker string) {
+	t.Helper()
+	deadline := time.Now().Add(15 * time.Second)
+	for !strings.Contains(w.text(), marker) {
+		if time.Now().After(deadline) {
+			t.Fatalf("terminal never showed %q:\n%q", marker, w.text())
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
 // openPty opens a pseudo-terminal pair that is no session's controlling terminal.
 func openPty(t *testing.T) (master, slave *os.File) {
 	t.Helper()
@@ -490,6 +575,112 @@ func TestLinuxUnixSocketsAreRefused(t *testing.T) {
 	status, out = linuxConfinedRun(t, self, denyConfinement(t.TempDir()), probeEnv("socketpair"), self, probeTestFlag)
 	if status.ExitStatus() != 0 || !strings.Contains(out, "socketpair: 1 p <nil>") || !strings.Contains(out, "datagram socketpair: EACCES") {
 		t.Fatalf("socketpair: exit %d: %s", status.ExitStatus(), out)
+	}
+}
+
+func longcwdProbe() int {
+	// A working directory deeper than the kernel names in one page leaves
+	// /proc/<pid>/cwd unreadable, so a relative socket path names nothing
+	// the supervisor can decide.
+	segment := strings.Repeat("d", 200)
+	for depth := 0; depth < 24; depth++ {
+		if err := unix.Mkdir(segment, 0o700); err != nil && !errors.Is(err, unix.EEXIST) {
+			fmt.Println("mkdir:", err)
+			return 2
+		}
+		if err := unix.Chdir(segment); err != nil {
+			fmt.Println("chdir:", err)
+			return 2
+		}
+	}
+	for _, op := range []string{"connect", "bind"} {
+		fd, err := unix.Socket(unix.AF_UNIX, unix.SOCK_STREAM|unix.SOCK_CLOEXEC, 0)
+		if err != nil {
+			fmt.Println("socket:", err)
+			return 2
+		}
+		sa := &unix.SockaddrUnix{Name: "relative.sock"}
+		if op == "connect" {
+			err = unix.Connect(fd, sa)
+		} else {
+			err = unix.Bind(fd, sa)
+		}
+		_ = unix.Close(fd)
+		fmt.Printf("relative %s: %s\n", op, errnoName(err))
+	}
+	return 0
+}
+
+// A relative socket path whose working directory the supervisor cannot read
+// is refused, never performed relative to the supervisor's own directory.
+func TestLinuxUnresolvableRelativeSocketPathsAreRefused(t *testing.T) {
+	self := requireLinuxSandbox(t)
+	root := t.TempDir()
+	c := denyConfinement(root)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	cmd, cleanup, err := confine.Command(ctx, helperBinary(t, self), self, []string{probeTestFlag}, c)
+	testutil.FailErr(t, "confine.Command", err)
+	defer cleanup()
+	cmd.Env = probeEnv("longcwd")
+	cmd.Dir = root
+	out, _ := cmd.CombinedOutput()
+	if cmd.ProcessState == nil || cmd.ProcessState.ExitCode() != 0 {
+		t.Fatalf("longcwd probe: %v: %s", cmd.ProcessState, out)
+	}
+	for _, want := range []string{"relative connect: EACCES", "relative bind: EACCES"} {
+		if !strings.Contains(string(out), want) {
+			t.Fatalf("longcwd probe missing %q:\n%s", want, out)
+		}
+	}
+}
+
+func interruptedProbe() int {
+	// Interrupt notified calls while they wait for the supervisor, the
+	// way Go's preemption signal does in a busy toolchain, then confirm
+	// the supervisor still answers.
+	stop := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-stop:
+				return
+			case <-time.After(200 * time.Microsecond):
+				_ = unix.Kill(os.Getpid(), unix.SIGURG)
+			}
+		}
+	}()
+	refusedConnect := func() error {
+		fd, err := unix.Socket(unix.AF_UNIX, unix.SOCK_STREAM|unix.SOCK_CLOEXEC, 0)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = unix.Close(fd) }()
+		return unix.Connect(fd, &unix.SockaddrUnix{Name: "/run/pw-interrupted-probe.sock"})
+	}
+	var wg sync.WaitGroup
+	for worker := 0; worker < 4; worker++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 300; i++ {
+				_ = refusedConnect()
+			}
+		}()
+	}
+	wg.Wait()
+	close(stop)
+	fmt.Println("after interruptions:", errnoName(refusedConnect()))
+	return 0
+}
+
+// A notified call interrupted while it waits must not end supervision: later
+// calls are still decided rather than failing with ENOSYS.
+func TestLinuxSupervisorSurvivesInterruptedNotifications(t *testing.T) {
+	self := requireLinuxSandbox(t)
+	status, out := linuxConfinedRun(t, self, denyConfinement(t.TempDir()), probeEnv("interrupted"), self, probeTestFlag)
+	if status.ExitStatus() != 0 || !strings.Contains(out, "after interruptions: EACCES") {
+		t.Fatalf("interrupted probe: exit %d: %s", status.ExitStatus(), out)
 	}
 }
 

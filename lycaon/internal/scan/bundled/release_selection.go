@@ -33,10 +33,17 @@ func SelectReleaseArtifact(ctx context.Context, source *Manifest, directory, goo
 }
 
 func (m *Manifest) verifyReleaseSelection(ctx context.Context) error {
-	if !m.releaseAdmitted {
+	source := m
+	if m.identity != nil && m.identity.Consumer != nil {
+		if m.consumerSource == nil {
+			return fmt.Errorf("consumer release audit requires original producer archive admission")
+		}
+		source = m.consumerSource
+	}
+	if !source.releaseAdmitted {
 		return fmt.Errorf("release selection requires pinned archive admission")
 	}
-	_, err := SelectReleaseArtifact(ctx, m, m.artifactDirectory, m.identity.GOOS, m.identity.GOARCH)
+	_, err := SelectReleaseArtifact(ctx, source, source.artifactDirectory, source.identity.GOOS, source.identity.GOARCH)
 	if err != nil {
 		return err
 	}

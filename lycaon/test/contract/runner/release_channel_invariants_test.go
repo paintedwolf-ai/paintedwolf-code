@@ -112,7 +112,7 @@ func TestReleasePlatformCatalogIsClosedAndComplete(t *testing.T) {
 	}
 	candidates := contractcheck.ReadRepoFile(t, root, ".github/workflows/linux-candidates.yml")
 	for _, needle := range []string{
-		"workflow_call:", "workflow_dispatch:", "schedule:", "pull_request:",
+		"workflow_call:", "source_sha:", "ref: ${{ inputs.source_sha }}",
 		"matrix: ${{ fromJSON(needs.source.outputs.matrix) }}", "./task den:bundle",
 		"deb,rpm) ./task den:bundle ;;", "deb,rpm,pkg.tar.zst) ./task den:bundle -- --pacman-container ;;",
 		`--package-extensions "${PACKAGE_EXTENSIONS}"`, "PACKAGE_EXTENSIONS: ${{ join(matrix.package_extensions, ',') }}",
