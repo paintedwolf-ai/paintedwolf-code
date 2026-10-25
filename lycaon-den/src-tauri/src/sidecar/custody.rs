@@ -63,6 +63,7 @@ struct Outcome {
 }
 
 fn engine_command(args: &[&str]) -> Result<Command, String> {
+    super::installation::ensure_current().map_err(|reason| reason.guidance())?;
     let mut cmd = Command::new(resolve_lycaon_binary()?);
     cmd.arg("credentials")
         .args(args)
@@ -75,6 +76,13 @@ fn engine_command(args: &[&str]) -> Result<Command, String> {
 }
 
 fn read_custody() -> Result<CustodyReport, String> {
+    if let Err(reason) = super::installation::ensure_current() {
+        return Ok(CustodyReport {
+            mode: "restart_required".into(),
+            service_verified: false,
+            detail: Some(reason.guidance()),
+        });
+    }
     let output = engine_command(&["custody"])?
         .stdin(Stdio::null())
         .output()
@@ -148,6 +156,11 @@ fn move_custody(
             )
         });
     }
+    super::installation::ensure_current().map_err(|reason| CustodyError {
+        code: "desktop_restart_required".into(),
+        message: reason.guidance(),
+        engine_stopped: false,
+    })?;
     let password = VaultPassword(password.into_bytes());
     // The password that unlocked this session settles a wrong entry without
     // stopping the engine.

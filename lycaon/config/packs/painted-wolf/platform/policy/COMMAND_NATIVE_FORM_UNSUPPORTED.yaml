@@ -1,0 +1,26 @@
+oar: '1.0'
+id: COMMAND_NATIVE_FORM_UNSUPPORTED
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles: [tool]
+  facts: [paintedwolf.rejection_code]
+when: paintedwolf.rejection_code == "COMMAND_NATIVE_FORM_UNSUPPORTED"
+effect: block
+copy:
+  what: The requested native form was refused before its effect attempt.
+  cause: The runtime does not provide the admission contract required by this form.
+  why: Native rejection cannot authorize shell fallback, refreshed input, or replay of earlier effects.
+  fix: Inspect the documented supported forms. If the required admission is unavailable, report that constraint and preserve completed child outcomes.
+  instead: Branch on Code; preserve exact prepared inputs and earlier outcomes, and do not retry through external or conversational admission
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_native_admission
+x-paintedwolf-message: native operation form is unavailable
+x-paintedwolf-scenarios:
+  - id: execution-pin-unavailable
+    vars:
+      tool: command
+    expect_contains:
+      - 'Code: COMMAND_NATIVE_FORM_UNSUPPORTED'
+      - before its effect attempt
+      - do not retry through external or conversational admission

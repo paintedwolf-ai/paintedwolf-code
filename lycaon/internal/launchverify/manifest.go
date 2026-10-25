@@ -5,6 +5,7 @@ package launchverify
 
 import (
 	"encoding/hex"
+	"path/filepath"
 
 	"github.com/lycaon/lycaon/internal/pkgmanifest"
 )
@@ -21,23 +22,29 @@ const (
 	DesktopAppPath = "/opt/painted-wolf-code/bin/painted-wolf-code"
 )
 
-func rolePath(role string) string {
+func rolePath(role, root string) string {
+	if root == "" {
+		root = "/opt/painted-wolf-code"
+	}
 	switch role {
 	case RoleEngine:
-		return EnginePath
+		return filepath.Join(root, "bin", "pw")
 	case RoleDesktopApp:
-		return DesktopAppPath
+		return filepath.Join(root, "bin", "painted-wolf-code")
 	default:
 		return ""
 	}
 }
 
 // expected returns the digest and size the manifest records for role.
-func expected(manifest *pkgmanifest.Manifest, role string) ([]byte, int64, bool) {
+func expected(manifest *pkgmanifest.Manifest, role, root string) ([]byte, int64, bool) {
 	if manifest == nil {
 		return nil, 0, false
 	}
-	entry, ok := manifest.Lookup(rolePath(role))
+	if root != "" && (!cleanAbsolute(root) || manifest.InstallRoot != root) {
+		return nil, 0, false
+	}
+	entry, ok := manifest.Lookup(rolePath(role, root))
 	if !ok {
 		return nil, 0, false
 	}
