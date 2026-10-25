@@ -199,7 +199,8 @@ def run_stale_reveal(app, ui, project_id, native_input, native, lock, unlock_ctl
         control.close()
     fresh = run_reveal(app, ui, project_id, native_input, observations, cancel=False)
     fresh_challenge = fresh['native_attempt']['challenge']
-    if (fresh_challenge['challenge_id'] == challenge['challenge_id']
+    if (fresh['host_audit_before'] != before
+            or fresh_challenge['challenge_id'] == challenge['challenge_id']
             or fresh_challenge['step_away_generation'] <= challenge['step_away_generation']
             or any(fresh_challenge[key] != challenge[key] for key in ('purpose', 'window_label'))
             or fresh['host_release_verified'] is not True or fresh['system_authentication_verified'] is not True):

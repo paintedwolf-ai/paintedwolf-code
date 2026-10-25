@@ -104,7 +104,9 @@ class StaleSystemPresenceTests(unittest.TestCase):
             fresh_attempt['challenge']['step_away_generation'] = challenge['step_away_generation']
         if changed == 'fresh_identity': fresh_attempt['challenge']['challenge_id'] = challenge['challenge_id']
         fresh = {'host_release_verified': changed != 'fresh_release', 'system_authentication_verified': True,
-                 'native_attempt': fresh_attempt}
+                 'native_attempt': fresh_attempt, 'host_audit_before': deepcopy(before)}
+        if changed == 'fresh_target': fresh['host_audit_before']['secret_id'] = 'foreign'
+        if changed == 'fresh_audit': fresh['host_audit_before']['reveals'] = [{'unexpected': True}]
         control, observations, events = Mock(records=[]), {}, []
         control.close.side_effect = lambda: events.append('closed')
         def reveal(*args, **kwargs):
@@ -155,7 +157,8 @@ class StaleSystemPresenceTests(unittest.TestCase):
     def test_each_branch_refuses_wrong_native_root_audit_or_challenge_facts(self):
         for cancelled in (True, False):
             changes = ['audit', 'authentication', 'agent_cancelled', 'root_release', 'refusal',
-                       'resolution', 'post_identity', 'fresh_generation', 'fresh_identity', 'fresh_release']
+                       'resolution', 'post_identity', 'fresh_generation', 'fresh_identity', 'fresh_release',
+                       'fresh_target', 'fresh_audit']
             changes += ['authenticator'] if cancelled else ['invalidation', 'final_identity']
             for changed in changes:
                 with self.subTest(cancelled=cancelled, changed=changed), self.assertRaises((system.CaseFailed, ValueError)) as failure:
