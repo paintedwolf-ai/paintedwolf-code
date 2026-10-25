@@ -350,6 +350,7 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 // catalog command's own execution: recorded, started and settled like a
 // builtin, on this frame.
 func (d *ProgramDispatcher) invokeHosted(ctx context.Context, spec toolcontract.CommandSpecification, prepared NativePrepared, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+	request.OperationID = spec.Name
 	if prepared.Mode != "" && request.EffectMode == "" {
 		request.EffectMode = prepared.Mode
 	}

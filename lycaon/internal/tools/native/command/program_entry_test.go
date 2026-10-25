@@ -502,6 +502,7 @@ func TestProgramEntryForwardsSupportedCapabilityDeclarationsToNativeChildren(t *
 	tc := tools.ToolContext{Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: f.Dir, IsPrimary: true}}, ActiveRootID: "r1", SourceWorkspaceKind: api.SourceWorkspaceKindProject}}
 	tc.Identity.Agent, tc.Identity.ProjectID, tc.Identity.SessionID, tc.Identity.ToolCallID = "fixture", testdbseed.DefaultProjectID, f.Session, "model-call-cap"
 	tc.Invocation.ID = parent.ID
+	tc.Host.SessionScratchDir, tc.Host.SessionOutputDir = f.ScratchDir, f.OutputDir
 	out, err := f.Runtime.Run(t.Context(), args, tc)
 	testutil.FailErr(t, "run capability-forwarded pipeline", err)
 	outcome := decodeOutcome(t, out)

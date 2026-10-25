@@ -31,7 +31,8 @@ type frameState struct {
 	last       *ChildRecord
 	pipeStatus []int
 	options    shellOptions
-	directory  string
+	// directory is the dispatch frame's directory PWD last recorded.
+	directory string
 }
 
 // shellOptions are the fixed set options: errexit and nounset. Pipelines
@@ -113,7 +114,7 @@ func (e *evaluation) rootFrame(ctx context.Context) (*frame, func(), error) {
 	f := &frame{e: e, state: state, parent: e.ports.Invocation, unit: e.programName, io: descriptorFrame{streams: e.ports.Streams.withDefaults()}, publish: newEligibility()}
 	if dir, ok := e.ports.Dispatch.(DirectoryFrame); ok {
 		state.directory = dir.Directory()
-		if err := f.exportVariable(ctx, "PWD", state.directory); err != nil {
+		if err := state.exportVariable(ctx, "PWD", state.directory); err != nil {
 			vars.Close()
 			return nil, nil, err
 		}
@@ -163,28 +164,28 @@ func (f *frame) isolate(ctx context.Context, latch *OutcomeLatch) (*frame, func(
 // syncDirectory records a directory change of the frame's dispatch the way
 // cd does in a shell: OLDPWD takes the old directory and PWD the new one,
 // both exported. An assignment to PWD stays until the next change.
-func (f *frame) syncDirectory(ctx context.Context, moved bool) error {
-	dir, ok := f.state.dispatch.(DirectoryFrame)
+func (s *frameState) syncDirectory(ctx context.Context, moved bool) error {
+	dir, ok := s.dispatch.(DirectoryFrame)
 	if !ok {
 		return nil
 	}
 	current := dir.Directory()
-	if !moved && current == f.state.directory {
+	if !moved && current == s.directory {
 		return nil
 	}
-	previous := f.state.directory
-	f.state.directory = current
-	if err := f.exportVariable(ctx, "OLDPWD", previous); err != nil {
+	previous := s.directory
+	s.directory = current
+	if err := s.exportVariable(ctx, "OLDPWD", previous); err != nil {
 		return err
 	}
-	return f.exportVariable(ctx, "PWD", current)
+	return s.exportVariable(ctx, "PWD", current)
 }
 
-func (f *frame) exportVariable(ctx context.Context, name, value string) error {
-	if err := f.state.vars.Assign(ctx, name, value); err != nil {
+func (s *frameState) exportVariable(ctx context.Context, name, value string) error {
+	if err := s.vars.Assign(ctx, name, value); err != nil {
 		return err
 	}
-	return f.state.vars.Export(ctx, name)
+	return s.vars.Export(ctx, name)
 }
 
 // ExpansionScope implementation: expansion reads, never assigns.

@@ -63,9 +63,11 @@ type Fixture struct {
 	OutputDir  string
 	Background *bgprocess.Registry
 	Context    func(string, *tools.ToolContext)
-	calls      int
-	mu         sync.Mutex
-	delivered  []evidence.Record
+	// Configure adjusts each call's tool context before the entry runs.
+	Configure func(*tools.ToolContext)
+	calls     int
+	mu        sync.Mutex
+	delivered []evidence.Record
 }
 
 type sessions struct {
@@ -162,6 +164,9 @@ func (f *Fixture) Call(t *testing.T, ctx context.Context, source string) (string
 	tc.Host.SessionScratchDir, tc.Host.SessionOutputDir = f.ScratchDir, f.OutputDir
 	if f.Context != nil {
 		f.Context(f.Dir, &tc)
+	}
+	if f.Configure != nil {
+		f.Configure(&tc)
 	}
 	return f.Runtime.Run(ctx, args, tc)
 }
