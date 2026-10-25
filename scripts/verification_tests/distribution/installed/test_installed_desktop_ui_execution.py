@@ -160,7 +160,7 @@ class DesktopUIOwnershipTests(unittest.TestCase):
         api, _ = surface([button])
         with patch.object(ui, 'process_identity', return_value={**IDENTITY, 'start_time_ticks': 43}), \
                 patch.object(ui.time, 'monotonic', side_effect=iter(range(100))), patch.object(ui.time, 'sleep'):
-            with ui.DesktopUI(self.app, api) as actor, self.assertRaises(CaseUnavailable):
+            with ui.DesktopUI(self.app, api) as actor, self.assertRaises(CaseFailed):
                 actor.click('Send')
         button.action.doAction.assert_not_called()
 
