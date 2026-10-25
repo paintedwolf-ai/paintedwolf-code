@@ -26,7 +26,8 @@ def open_project_configuration(app, ui) -> dict:
     prepare_composer(app, ui)
     controls = [(ui.api.ROLE_COMBO_BOX, 'App menu'), (ui.api.ROLE_MENU_ITEM, 'Window'),
                 (ui.api.ROLE_MENU_ITEM, 'Maximize'), (ui.api.ROLE_PUSH_BUTTON, 'Project configuration')]
-    root, actions = app.observations['launch_identity'], []
+    root = app.observations['launch_identity']
+    actions = app.observations.setdefault('project_configuration_actions', [])
     for role, name in controls:
         deadline = time.monotonic() + 15
         while True:
@@ -42,7 +43,15 @@ def open_project_configuration(app, ui) -> dict:
                 if action.nActions != 1:
                     phase = 'action-count'
                     raise CaseUnavailable('normal-project-configuration-action-is-not-unique')
+                if role == ui.api.ROLE_MENU_ITEM:
+                    phase = 'component-interface'
+                    if not node.queryComponent().grabFocus():
+                        raise accessibility.InventoryChanged()
+                    time.sleep(0.1)
                 phase = 'identity-recheck'
+                if role == ui.api.ROLE_MENU_ITEM and (
+                        not ui.visible(node) or not node.getState().contains(ui.api.STATE_FOCUSED)):
+                    raise accessibility.InventoryChanged()
                 if (accessibility.capture(node, list(ui.windows(deadline)))[1] != chain
                         or lineage.capture(surface, control) != entry_chain
                         or lineage.capture(root, surface) != frame_chain):
@@ -51,8 +60,8 @@ def open_project_configuration(app, ui) -> dict:
             except (ValueError, TypeError, CaseUnavailable, CaseFailed):
                 raise
             except Exception as error:
-                if (time.monotonic() < deadline
-                        and retry_inventory(app, error, interface_mounting=(phase == 'action-interface'))):
+                if (time.monotonic() < deadline and retry_inventory(
+                        app, error, interface_mounting=(phase in {'action-interface', 'component-interface'}))):
                     time.sleep(0.05)
                     continue
                 refusal = CaseUnavailable('normal-project-configuration-action-unavailable')
