@@ -60,7 +60,15 @@ struct Verdict {
 
 /// Load onto the fastest qualifying device.
 pub(crate) fn choose(prepared: &Prepared, opts: &EngineOptions) -> Result<Engine> {
-    let candidates = DeviceChoice::candidates();
+    choose_from(prepared, opts, &DeviceChoice::candidates())
+}
+
+/// [`choose`] among `candidates`. None at all is a machine the engine does not run on, which
+/// needs no measurement and no verdict.
+fn choose_from(prepared: &Prepared, opts: &EngineOptions, candidates: &[DeviceChoice]) -> Result<Engine> {
+    if candidates.is_empty() {
+        return Err(Error::NoGpu);
+    }
     let basis = Basis {
         build: build_id(),
         checkpoint: prepared.label().to_string(),
@@ -87,7 +95,7 @@ pub(crate) fn choose(prepared: &Prepared, opts: &EngineOptions) -> Result<Engine
     }
 
     let excluded = crashed.as_deref().map(str::trim);
-    let mut measured = measure(prepared, &candidates, opts, excluded);
+    let mut measured = measure(prepared, candidates, opts, excluded);
     let mut ranked: Vec<&Measured> = measured
         .iter()
         .filter(|m| m.error.is_none() && m.probe_ms.is_some_and(|ms| qualifies_ms(ms, opts.qualify)))
@@ -325,6 +333,23 @@ mod tests {
     use super::*;
     use crate::testutil::{scratch_dir, write_tiny_checkpoint};
 
+    /// `auto` over the CPU alone: the selection mechanics do not depend on the device kind,
+    /// and the test hosts have no GPU to rely on.
+    fn auto(opts: &EngineOptions) -> Result<Engine> {
+        choose_from(&Prepared::read(&opts.model_dir)?, opts, &[DeviceChoice::Cpu])
+    }
+
+    #[test]
+    fn no_device_at_all_is_its_own_refusal_and_measures_nothing() {
+        let dir = scratch_dir("select-no-gpu");
+        write_tiny_checkpoint(&dir);
+        let cache = dir.join("cache");
+        let opts = options(&dir, &cache, Some(Duration::from_secs(60)));
+        let err = choose_from(&Prepared::read(&dir).unwrap(), &opts, &[]).unwrap_err();
+        assert!(matches!(err, Error::NoGpu), "{err}");
+        assert!(!cache.join(VERDICT_FILE).exists());
+    }
+
     fn options(dir: &Path, cache: &Path, qualify: Option<Duration>) -> EngineOptions {
         EngineOptions {
             model_dir: dir.to_path_buf(),
@@ -350,15 +375,15 @@ mod tests {
         write_tiny_checkpoint(&dir);
         let cache = dir.join("cache");
         let opts = options(&dir, &cache, Some(Duration::from_secs(60)));
-        let engine = Engine::load(&opts).unwrap();
+        let engine = auto(&opts).unwrap();
         assert!(engine.identity().probe_ms.is_some());
         let verdict = read(&cache.join(VERDICT_FILE)).unwrap();
         assert_eq!(verdict.chosen.as_deref(), Some(engine.identity().device.as_str()));
-        assert_eq!(verdict.measured.len(), DeviceChoice::candidates().len());
+        assert_eq!(verdict.measured.len(), 1);
         assert!(!cache.join(LOADING_FILE).exists());
 
         // A later launch takes the remembered device without measuring the others.
-        let again = Engine::load(&opts).unwrap();
+        let again = auto(&opts).unwrap();
         assert_eq!(again.identity().device, engine.identity().device);
     }
 
@@ -368,15 +393,15 @@ mod tests {
         write_tiny_checkpoint(&dir);
         let cache = dir.join("cache");
         let opts = options(&dir, &cache, Some(Duration::ZERO));
-        let err = Engine::load(&opts).unwrap_err();
+        let err = auto(&opts).unwrap_err();
         assert!(matches!(err, Error::NoCapableDevice(ref m) if m.contains("cpu")), "{err}");
         let verdict = read(&cache.join(VERDICT_FILE)).unwrap();
         assert!(verdict.chosen.is_none());
 
         // The remembered refusal holds until something it was measured against changes.
-        assert!(matches!(Engine::load(&opts).unwrap_err(), Error::NoCapableDevice(_)));
+        assert!(matches!(auto(&opts).unwrap_err(), Error::NoCapableDevice(_)));
         let relaxed = options(&dir, &cache, Some(Duration::from_secs(60)));
-        assert!(Engine::load(&relaxed).is_ok());
+        assert!(auto(&relaxed).is_ok());
     }
 
     #[test]
@@ -388,7 +413,7 @@ mod tests {
             device: DeviceChoice::Auto,
             ..Default::default()
         };
-        assert!(Engine::load(&opts).unwrap().identity().probe_ms.is_some());
+        assert!(auto(&opts).unwrap().identity().probe_ms.is_some());
     }
 
     #[test]
@@ -398,7 +423,7 @@ mod tests {
         let cache = dir.join("cache");
         let mut opts = options(&dir, &cache, Some(Duration::from_secs(60)));
         opts.probe_exe = Some(fake_probe(&dir, r#"echo '{"probe_ms": 4.2}'"#));
-        let engine = Engine::load(&opts).unwrap();
+        let engine = auto(&opts).unwrap();
         assert_eq!(engine.identity().probe_ms, Some(4.2));
     }
 
@@ -409,12 +434,12 @@ mod tests {
         let cache = dir.join("cache");
         let mut opts = options(&dir, &cache, Some(Duration::from_secs(60)));
         opts.probe_exe = Some(fake_probe(&dir, "kill -SEGV $$"));
-        let err = Engine::load(&opts).unwrap_err();
+        let err = auto(&opts).unwrap_err();
         assert!(matches!(err, Error::NoCapableDevice(ref m) if m.contains("probe exited")), "{err}");
         // A fresh cache, or the remembered refusal would answer.
         opts.cache_dir = Some(dir.join("cache-garbled"));
         opts.probe_exe = Some(fake_probe(&dir, "echo not json"));
-        let err = Engine::load(&opts).unwrap_err();
+        let err = auto(&opts).unwrap_err();
         assert!(matches!(err, Error::NoCapableDevice(ref m) if m.contains("reported")), "{err}");
     }
 
@@ -424,12 +449,12 @@ mod tests {
         write_tiny_checkpoint(&dir);
         let cache = dir.join("cache");
         let opts = options(&dir, &cache, Some(Duration::from_secs(60)));
-        let first = Engine::load(&opts).unwrap();
+        let first = auto(&opts).unwrap();
         let device = first.identity().device.clone();
         drop(first);
         std::fs::write(cache.join(LOADING_FILE), &device).unwrap();
 
-        let next = Engine::load(&opts);
+        let next = auto(&opts);
         let verdict = read(&cache.join(VERDICT_FILE)).unwrap();
         let record = verdict.measured.iter().find(|m| m.device == device).unwrap();
         assert!(record.error.as_deref().is_some_and(|e| e.contains("died")), "{record:?}");

@@ -34,6 +34,14 @@ const exitNoCapableDevice = 3
 // is not started again.
 var ErrNoCapableDevice = fmt.Errorf("%w: no device meets the speed requirement", decide.ErrUnavailable)
 
+// exitNoGPU is the engine's exit status when this machine has no device it runs
+// on: on Linux, no hardware Vulkan GPU (EXIT_NO_GPU in native/src/protocol.rs).
+const exitNoGPU = 4
+
+// ErrNoGPU reports that this machine has no GPU the engine runs on. Like
+// ErrNoCapableDevice it holds for the life of the host, and decisions fall back.
+var ErrNoGPU = fmt.Errorf("%w: no GPU the engine runs on", decide.ErrUnavailable)
+
 // Client serializes concurrent requests through one supervised engine process.
 type Client struct {
 	cfg Config
@@ -50,6 +58,7 @@ type Client struct {
 	// own process instead of installing it.
 	generation int
 	incapable  bool
+	noGPU      bool
 	// warmErr is the last handshake failure; cleared once an engine answers.
 	warmErr error
 }
@@ -62,6 +71,7 @@ const (
 	ReasonBinaryMissing   Reason = "binary_missing"
 	ReasonModelMissing    Reason = "model_missing"
 	ReasonNoCapableDevice Reason = "no_capable_device"
+	ReasonNoGPU           Reason = "no_gpu"
 	ReasonUnusable        Reason = "unusable"
 )
 
@@ -78,6 +88,9 @@ func (c *Client) Status() Reason {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.noGPU {
+		return ReasonNoGPU
+	}
 	if c.incapable {
 		return ReasonNoCapableDevice
 	}
@@ -234,6 +247,10 @@ func (c *Client) ensure(ctx context.Context) (*process, error) {
 		c.mu.Unlock()
 		return proc, nil
 	}
+	if c.noGPU {
+		c.mu.Unlock()
+		return nil, ErrNoGPU
+	}
 	if c.incapable {
 		c.mu.Unlock()
 		return nil, ErrNoCapableDevice
@@ -286,6 +303,11 @@ func (c *Client) start(ctx context.Context, bin string, done chan struct{}, gene
 		return
 	}
 	c.startErr = err
+	if errors.Is(err, ErrNoGPU) {
+		c.noGPU = true
+		log.Info("decision engine has no GPU to run on; decisions fall back")
+		return
+	}
 	if errors.Is(err, ErrNoCapableDevice) {
 		c.incapable = true
 		log.Info("decision engine has no device fast enough; decisions fall back")
@@ -310,8 +332,11 @@ func (c *Client) handshake(ctx context.Context, bin string) (*process, decide.En
 	hello, err := proc.roundTrip(helloCtx, request{ID: c.seq.Add(1), Method: methodHello})
 	if err != nil {
 		proc.stop()
-		if proc.exitCode == exitNoCapableDevice {
+		switch proc.exitCode {
+		case exitNoCapableDevice:
 			return nil, decide.Engine{}, ErrNoCapableDevice
+		case exitNoGPU:
+			return nil, decide.Engine{}, ErrNoGPU
 		}
 		return nil, decide.Engine{}, fmt.Errorf("decide: engine handshake: %w", err)
 	}

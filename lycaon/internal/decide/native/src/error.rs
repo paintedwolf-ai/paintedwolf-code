@@ -37,6 +37,11 @@ pub enum Error {
     #[error("mlx: {0}")]
     Mlx(String),
 
+    /// Under `auto`, this machine has no device the engine runs on: on Linux, no hardware
+    /// Vulkan GPU. Nothing was measured.
+    #[error("no GPU the engine runs on")]
+    NoGpu,
+
     /// Under `auto`, every candidate was slower than the requirement or failed to load.
     #[error("no device meets the speed requirement: {0}")]
     NoCapableDevice(String),

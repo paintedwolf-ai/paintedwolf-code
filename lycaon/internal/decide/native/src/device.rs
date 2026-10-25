@@ -90,7 +90,11 @@ impl DeviceChoice {
         }
         #[cfg(feature = "vulkan")]
         out.extend((0..crate::vulkan::gpus().len()).map(DeviceChoice::Vulkan));
-        out.push(DeviceChoice::Cpu);
+        // Linux serves the engine on a GPU only, as macOS does through MLX; a machine without
+        // one runs without it rather than on the processor.
+        if !cfg!(target_os = "linux") {
+            out.push(DeviceChoice::Cpu);
+        }
         out
     }
 
@@ -178,9 +182,13 @@ mod tests {
     }
 
     #[test]
-    fn the_cpu_always_resolves_and_is_always_a_candidate() {
+    fn the_cpu_resolves_explicitly_but_is_a_candidate_only_off_linux() {
         assert!(matches!(DeviceChoice::Cpu.select().unwrap(), Selected::Cpu));
-        assert_eq!(DeviceChoice::candidates().last(), Some(&DeviceChoice::Cpu));
+        let candidates = DeviceChoice::candidates();
+        assert_eq!(candidates.contains(&DeviceChoice::Cpu), !cfg!(target_os = "linux"));
+        if cfg!(target_os = "linux") {
+            assert!(candidates.iter().all(|c| matches!(c, DeviceChoice::Vulkan(_))), "{candidates:?}");
+        }
     }
 
     #[cfg(not(feature = "vulkan"))]

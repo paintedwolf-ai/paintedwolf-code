@@ -216,6 +216,27 @@ func TestAnEngineWithNoCapableDeviceIsReportedAndNotRelaunched(t *testing.T) {
 	}
 }
 
+func TestAnEngineWithNoGPUIsReportedAndNotRelaunched(t *testing.T) {
+	t.Parallel()
+	cfg := fakeConfig(t)
+	launches := instrument(t, cfg, "exit 4\n")
+	client := bialy.New(cfg)
+	t.Cleanup(func() { _ = client.Close() })
+	err := client.Warm(context.Background())
+	if !errors.Is(err, bialy.ErrNoGPU) || !errors.Is(err, decide.ErrUnavailable) || errors.Is(err, bialy.ErrNoCapableDevice) {
+		t.Fatalf("warm error = %v, want ErrNoGPU", err)
+	}
+	if got := client.Status(); got != bialy.ReasonNoGPU {
+		t.Fatalf("status = %q, want %q", got, bialy.ReasonNoGPU)
+	}
+	if _, _, err := client.Rank(context.Background(), decide.HeadCodeRank, "t", []string{"a"}); !errors.Is(err, bialy.ErrNoGPU) {
+		t.Fatalf("rank error = %v", err)
+	}
+	if n := launches(); n != 1 {
+		t.Fatalf("engine launched %d times, want once", n)
+	}
+}
+
 func TestAnEngineThatFailsForAnotherReasonIsUnusable(t *testing.T) {
 	t.Parallel()
 	cfg := fakeConfig(t)

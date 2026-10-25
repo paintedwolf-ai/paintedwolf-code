@@ -80,6 +80,8 @@ const (
 	ReasonDecisionModelMissing DecisionReason = "model_missing"
 	// ReasonDecisionNoCapableDevice: no device on this machine runs the engine fast enough.
 	ReasonDecisionNoCapableDevice DecisionReason = "no_capable_device"
+	// ReasonDecisionNoGPU: this machine has no GPU the engine runs on (Linux needs Vulkan).
+	ReasonDecisionNoGPU DecisionReason = "no_gpu"
 	// ReasonDecisionUnusable: the engine started but did not answer its handshake.
 	ReasonDecisionUnusable DecisionReason = "unusable"
 )
