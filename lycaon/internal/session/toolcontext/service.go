@@ -58,9 +58,9 @@ func (m *Service) ScratchDir(ctx context.Context, sess *api.Session) string {
 	if m == nil {
 		return ""
 	}
-	return m.execution.ScratchDir(ctx, sess)
+	return m.execution.SessionDirectories(ctx, sess).Scratch
 }
-func (m *Service) SetDataDir(dir string)         { m.dataDir = strings.TrimSpace(dir) }
+func (m *Service) SetDataDir(dir string) { m.dataDir = strings.TrimSpace(dir) }
 func (m *Service) SetContainers(containers tools.ContainerRecorder) {
 	m.loopbackProv = containers
 }

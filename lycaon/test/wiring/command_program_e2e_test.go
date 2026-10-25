@@ -359,7 +359,7 @@ func TestCommandProgramLiveRun2Regressions(t *testing.T) {
 		name, program, code, cmd, word string
 	}{
 		{"sed unsupported command", "echo before > saved.txt; sed 'e' notes.txt", "COMMAND_OPTION_UNSUPPORTED", "sed", "e"},
-		{"grep invalid regex", "echo before > saved.txt; grep '[' notes.txt", "GREP_REGEX_INVALID", "grep", "["},
+		{"grep unsupported regex", "echo before > saved.txt; grep -P '(?R)' notes.txt", "GREP_REGEX_UNSUPPORTED", "grep", "(?R)"},
 		{"kill pid", "echo before > saved.txt; kill 9999999", "COMMAND_JOB_UNKNOWN", "kill", "9999999"},
 		{"redirect escape", "echo before > saved.txt; echo hi > /outside-root-escape.txt", "SURVEY_PATH_ESCAPE", "redirect >", "/outside-root-escape.txt"},
 	} {
@@ -374,6 +374,16 @@ func TestCommandProgramLiveRun2Regressions(t *testing.T) {
 			}
 		})
 	}
+	t.Run("grep invalid regex utility error", func(t *testing.T) {
+		rs := newCommandProgramSession(t, "echo before > saved.txt; grep '[' notes.txt; echo after:$?", "")
+		testutil.FailErr(t, "prompt", rs.prompt(t.Context()))
+		out := rs.result(t)
+		for _, want := range []string{`after:2`, `grep: Unmatched [`, `"state": "completed"`, `"completed_effects": 1`} {
+			if !strings.Contains(out, want) {
+				t.Fatalf("grep invalid regex utility error: missing %q in %s", want, out)
+			}
+		}
+	})
 }
 
 func TestCommandProgramEnvMatchesExternalChildEnv(t *testing.T) {

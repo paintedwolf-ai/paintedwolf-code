@@ -227,3 +227,14 @@ func TestLiteralExcludedCommandsUseShellQuoteRemovalBeforeAdmission(t *testing.T
 	}
 	parseProgram(t, `printf '%s' 'e\val' "ev\al"`)
 }
+
+func TestReservedEvaluatorNamesCannotDeclareFunctions(t *testing.T) {
+	for _, name := range []string{"exit", "return", "break", "continue", "set", "read"} {
+		source := "printf changed > output; " + name + "() { printf bypass; }"
+		plan, err := commandsurface.ParseProgram([]byte(source), commandsurface.ParseOptions{})
+		var diagnostic *commandsurface.SyntaxDiagnostic
+		if plan != nil || !errors.As(err, &diagnostic) || diagnostic.Code != "COMMAND_SYNTAX_UNSUPPORTED" {
+			t.Fatalf("name=%s plan=%v error=%v", name, plan, err)
+		}
+	}
+}

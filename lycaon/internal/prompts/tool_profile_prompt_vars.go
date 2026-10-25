@@ -204,6 +204,7 @@ func toolProfileCapabilityTemplateVars(data AgentToolSurfaceData) map[string]any
 		"profile_mutation_capable":        mutationCapable,
 		"profile_has_command":             enabled["command"],
 		"profile_command_mutation":        commandMutates,
+		"command_output_files":            enabled["command"],
 		"profile_has_task":                enabled["task"],
 		"profile_has_wait":                enabled["wait"],
 		"profile_has_verify":              enabled["verify"],
@@ -610,4 +611,5 @@ func mergeOfferedToolGuidance(offered []string, into map[string]any) {
 	into["profile_has_page_controls"] = set["page_open"] || set["page_snapshot"] || set["page_act"] || set["page_close"]
 	into["profile_has_scan_drilldown"] = profileHasScanDrilldownTools(set)
 	into["profile_has_managed_secrets"] = set["secret_generate"] && set["secret_list"] && set["secret_revoke"]
+	into["command_output_files"] = set["command"]
 }

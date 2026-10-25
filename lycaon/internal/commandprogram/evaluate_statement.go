@@ -54,7 +54,26 @@ func (f *frame) statement(ctx context.Context, s commandsurface.Statement) (sign
 	}
 	inner := *f
 	inner.errexitIgnored = f.errexitIgnored || s.Negated
-	sig, err := inner.redirected(ctx, s, func(g *frame) (signal, error) { return g.command(ctx, s) })
+	var descriptors *descriptorScope
+	if len(s.Redirects) > 0 {
+		descriptors = &descriptorScope{}
+		prevented, err := descriptors.prepare(ctx, &inner, s)
+		if prevented || err != nil {
+			return signal{}, err
+		}
+	}
+	sig, err := inner.command(ctx, s)
+	if descriptors != nil {
+		if !descriptors.opened.Load() && !descriptors.prevented && err == nil {
+			_, err = (&evaluatorOperation{frame: &inner, statement: s, fields: Fields{{Value: ":", Span: s.Span}}}).invoke(ctx)
+		}
+		_, stopped := f.state.latch.Stop()
+		eligible := err == nil && !stopped && inner.publish.eligible()
+		f.publish.mark(eligible)
+		if finishErr := descriptors.finish(ctx, eligible); finishErr != nil && err == nil {
+			err = finishErr
+		}
+	}
 	if err == nil && s.Negated {
 		f.state.control.Negate()
 	}
@@ -81,7 +100,7 @@ func (f *frame) command(ctx context.Context, s commandsurface.Statement) (signal
 	case commandsurface.SimpleCommand:
 		return f.simple(ctx, s, c)
 	case commandsurface.EnvironmentDeclaration:
-		return signal{}, f.exportDeclaration(ctx, s, c)
+		return (&evaluatorOperation{frame: f, statement: s, fields: Fields{{Value: "export", Span: s.Span}}, body: func(ctx context.Context, g *frame) (signal, error) { return signal{}, g.exportDeclaration(ctx, s, c) }}).invoke(ctx)
 	case commandsurface.StatementGroup:
 		if !c.Isolated {
 			return f.statements(ctx, c.Statements)
@@ -101,7 +120,7 @@ func (f *frame) command(ctx context.Context, s commandsurface.Statement) (signal
 		f.state.functions[c.Name] = declaredFunction{decl: c, unit: f.unit, sourceUnit: f.parent.SourceUnitID}
 		return signal{}, f.builtinStatus(s.SyntaxLocation, "function", 0)
 	case commandsurface.TestExpression:
-		return signal{}, f.testExpression(ctx, s, c)
+		return (&evaluatorOperation{frame: f, statement: s, fields: Fields{{Value: "[[", Span: s.Span}}, body: func(ctx context.Context, g *frame) (signal, error) { return signal{}, g.testExpression(ctx, s, c) }}).invoke(ctx)
 	case nil:
 		return signal{}, nil
 	default:
@@ -182,6 +201,7 @@ func (f *frame) loopBody(ctx context.Context, body []commandsurface.Statement) (
 		}
 	case signalReturn:
 		return sig, true, nil
+	case signalNext:
 	}
 	return signal{}, false, nil
 }
@@ -267,7 +287,7 @@ func (f *frame) isolated(ctx context.Context, s commandsurface.Statement, list [
 	if err != nil {
 		return err
 	}
-	defer run.close()
+	defer run.close(ctx)
 	g, release, err := f.isolate(ctx, nil)
 	if err != nil {
 		return f.stateRefusal(s.SyntaxLocation, err)
@@ -276,16 +296,16 @@ func (f *frame) isolated(ctx context.Context, s commandsurface.Statement, list [
 	g.parent, g.loops, g.returnable = run.inv, 0, false
 	_, err = g.statements(ctx, list)
 	f.publish.mark(g.publish.eligible())
-	return f.settleFrame(run, g, err)
+	return f.settleFrame(ctx, run, g, err)
 }
 
 // settleFrame records a nested frame's status in this frame as one execution.
-func (f *frame) settleFrame(run *childRun, g *frame, err error) error {
+func (f *frame) settleFrame(ctx context.Context, run *childRun, g *frame, err error) error {
 	result := ordinaryResult(g.state.control.Status())
 	if stop, ok := g.state.latch.Stop(); ok {
 		result = stop.Result
 	}
-	run.settle(result, err)
+	run.settle(ctx, result, err)
 	if err != nil {
 		return err
 	}
@@ -310,8 +330,8 @@ func (f *frame) stateRefusal(loc commandsurface.SyntaxLocation, err error) error
 		if address.Span != (toolcontract.SourceSpan{}) {
 			loc.Span = address.Span
 		}
-		if f.streams.Error != nil {
-			_, _ = fmt.Fprintf(f.streams.Error, "@%s: not attached here [%s]\n", address.Label, coded.MachineErrorCode())
+		if f.io.streams.Error != nil {
+			_, _ = fmt.Fprintf(f.io.streams.Error, "@%s: not attached here [%s]\n", address.Label, coded.MachineErrorCode())
 		}
 		return f.refuse(loc, coded.MachineErrorCode(), "an attached folder label", err)
 	}

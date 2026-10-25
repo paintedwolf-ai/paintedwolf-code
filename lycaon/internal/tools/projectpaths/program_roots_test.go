@@ -85,10 +85,10 @@ func TestProgramDirectoryIsAbsoluteAcrossAttachedRoots(t *testing.T) {
 		{"pwd", nil, f.api.Path, f.api.Path + "\n", ""},
 		{"cd", []string{f.web.Path}, f.web.Path, "", f.api.Path},
 		{"cd", []string{"src"}, filepath.Join(f.web.Path, "src"), "", f.web.Path},
-		{"cd", []string{"@api/cmd"}, filepath.Join(f.api.Path, "cmd"), "", filepath.Join(f.web.Path, "src")},
+		{"cd", []string{filepath.Join(f.api.Path, "cmd")}, filepath.Join(f.api.Path, "cmd"), "", filepath.Join(f.web.Path, "src")},
 		{"cd", []string{"-"}, filepath.Join(f.web.Path, "src"), filepath.Join(f.web.Path, "src") + "\n", filepath.Join(f.api.Path, "cmd")},
 		{"cd", []string{".."}, f.web.Path, "", filepath.Join(f.web.Path, "src")},
-		{"cd", []string{"@scratch/notes"}, filepath.Join(f.scratch, "notes"), "", f.web.Path},
+		{"cd", []string{filepath.Join(f.scratch, "notes")}, filepath.Join(f.scratch, "notes"), "", f.web.Path},
 		{"pwd", []string{"-P"}, filepath.Join(f.scratch, "notes"), filepath.Join(f.scratch, "notes") + "\n", f.web.Path},
 		{"cd", nil, f.api.Path, "", filepath.Join(f.scratch, "notes")},
 	}
@@ -109,7 +109,7 @@ func TestProgramDirectoryIsAbsoluteAcrossAttachedRoots(t *testing.T) {
 	}
 	// A fork keeps its own directory.
 	fork := p.Fork()
-	testutil.FailErr(t, "fork moves", fork.Chdir(t.Context(), "@api", false))
+	testutil.FailErr(t, "fork moves", fork.Chdir(t.Context(), f.api.Path, false))
 	if p.Directory() != f.web.Path || fork.Directory() != f.api.Path {
 		t.Fatalf("fork leaked: parent=%q fork=%q", p.Directory(), fork.Directory())
 	}
@@ -140,15 +140,9 @@ func TestCdFailuresAreUtilityErrorsInShellVoice(t *testing.T) {
 	}
 }
 
-func TestProgramEnvironmentAndAddressesNameRealFolders(t *testing.T) {
+func TestProgramAddressesNameRealFolders(t *testing.T) {
 	f := newTwoRoots(t)
 	p := f.paths(t)
-	env := strings.Join(p.Environment(), "\n")
-	for _, name := range []string{"TMPDIR", "TMP", "TEMP", "SCRATCH_DIR"} {
-		if !strings.Contains(env, name+"="+f.scratch) {
-			t.Fatalf("%s missing from %q", name, env)
-		}
-	}
 	for label, want := range map[string]string{"api": f.api.Path, "WEB": f.web.Path, "scratch": f.scratch} {
 		native, ok, err := p.Address(t.Context(), label)
 		if err != nil || !ok || native != want {
@@ -159,23 +153,16 @@ func TestProgramEnvironmentAndAddressesNameRealFolders(t *testing.T) {
 	if native, ok, err := p.Address(t.Context(), "types"); err != nil || ok || native != "" {
 		t.Fatalf("unknown label converted: %q,%v,%v", native, ok, err)
 	}
-	// Natives resolving the literal refuse with the label and the folders.
-	_, err := p.Bind(t.Context(), "@types/node", false)
-	reject := toolrejection.AsToolReject(err)
-	if reject == nil || reject.Code != "UNKNOWN_ROOT_LABEL" || reject.Data["root_label"] != "types" {
-		t.Fatalf("unknown label refusal = %v", err)
-	}
-	folders := reject.Data["attached_folders"].([]string)
-	if len(folders) != 3 || folders[0] != "api → "+f.api.Path || folders[1] != "web → "+f.web.Path || folders[2] != "scratch → "+f.scratch {
-		t.Fatalf("attached folders = %v", folders)
+	// Expansion leaves unknown names literal; binding uses the current directory.
+	bound, err := p.Bind(t.Context(), "@types/node", false)
+	testutil.FailErr(t, "bind literal scoped name", err)
+	if bound.Resolved.Abs != filepath.Join(f.api.Path, "@types", "node") {
+		t.Fatalf("literal binding=%q", bound.Resolved.Abs)
 	}
 	scratchless := f.tc
 	scratchless.Host.SessionScratchDir = ""
 	q, err := projectpaths.NewProgramPaths(t.Context(), nil, scratchless, "")
 	testutil.FailErr(t, "bind scratchless paths", err)
-	if len(q.Environment()) != 0 {
-		t.Fatalf("scratchless environment = %v", q.Environment())
-	}
 	if _, _, err := q.Address(t.Context(), "scratch"); err == nil {
 		t.Fatal("@scratch converted without session scratch")
 	}
@@ -199,14 +186,14 @@ func TestRelativeEscapeResolvesLikeItsAbsoluteSpelling(t *testing.T) {
 	// A link inside a root that climbs out with .. does not reach the parent's
 	// files with root authority.
 	testutil.FailErr(t, "seed climbing link", os.Symlink(f.outside, filepath.Join(f.web.Path, "out")))
-	bound, err := p.Bind(t.Context(), "@web/out/secret.txt", false)
+	bound, err := p.Bind(t.Context(), filepath.Join(f.web.Path, "out", "secret.txt"), false)
 	if err == nil {
 		if file, openErr := bound.Open(); openErr == nil {
 			file.Close()
 			t.Fatal("a link out of the web root read outside data with root authority")
 		}
 	}
-	testutil.FailErr(t, "cd through link and back", p.Chdir(t.Context(), "@web/out/..", false))
+	testutil.FailErr(t, "cd through link and back", p.Chdir(t.Context(), f.web.Path+"/out/..", false))
 	if p.Directory() != f.web.Path {
 		t.Fatalf("logical cd .. through a link left the root: %q", p.Directory())
 	}
@@ -215,7 +202,7 @@ func TestRelativeEscapeResolvesLikeItsAbsoluteSpelling(t *testing.T) {
 func TestStaleRootSpellingsRefuseWithCurrentFolders(t *testing.T) {
 	f := newTwoRoots(t)
 	p := f.paths(t)
-	bound, err := p.Bind(t.Context(), "@web/index.html", false)
+	bound, err := p.Bind(t.Context(), filepath.Join(f.web.Path, "index.html"), false)
 	testutil.FailErr(t, "bind web file before removal", err)
 	settled, err := bound.Open()
 	testutil.FailErr(t, "read before removal", err)
@@ -240,7 +227,7 @@ func TestStaleRootSpellingsRefuseWithCurrentFolders(t *testing.T) {
 	if q.Directory() != f.api.Path || tools.ValidateRootsCurrent(next) != nil {
 		t.Fatalf("next program starts in %q", q.Directory())
 	}
-	for _, spelling := range []string{"@web/index.html", filepath.Join(f.web.Path, "index.html"), f.web.Path} {
+	for _, spelling := range []string{filepath.Join(f.web.Path, "index.html"), f.web.Path} {
 		_, err := q.Bind(t.Context(), spelling, false)
 		reject := toolrejection.AsToolReject(err)
 		if reject == nil || reject.Code != tools.RootNotAttachedCode || reject.Data["root_label"] != "web" || reject.Data["former_path"] != f.web.Path {
@@ -275,11 +262,11 @@ func TestMovedAndRenamedRootsRefuseOldSpellings(t *testing.T) {
 	if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != tools.RootNotAttachedCode || reject.Data["root_status"] != "moved" || reject.Data["current_path"] != movedPath {
 		t.Fatalf("old path = %v", err)
 	}
-	_, err = p.Bind(t.Context(), "@web/index.html", false)
+	_, _, err = p.Address(t.Context(), "web")
 	if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != tools.RootNotAttachedCode || reject.Data["current_label"] != "site" {
 		t.Fatalf("old label = %v", err)
 	}
-	bound, err := p.Bind(t.Context(), "@site/index.html", false)
+	bound, err := p.Bind(t.Context(), filepath.Join(moved.Path, "index.html"), false)
 	testutil.FailErr(t, "bind new label", err)
 	file, err := bound.Open()
 	testutil.FailErr(t, "read through new label", err)

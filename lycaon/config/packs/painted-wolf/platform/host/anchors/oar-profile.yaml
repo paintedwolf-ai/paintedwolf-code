@@ -1254,6 +1254,8 @@ host_facts:
    type: string
  - name: paintedwolf.pattern
    type: string
+ - name: paintedwolf.unsaved_draft
+   type: bool
  - name: paintedwolf.pending
    type: string
  - name: paintedwolf.period

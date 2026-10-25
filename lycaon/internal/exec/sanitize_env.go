@@ -84,7 +84,7 @@ func ReducedEnviron() []string {
 		"PATH": {},
 		"HOME": {}, "USER": {}, "LOGNAME": {}, "TMPDIR": {}, "TMP": {}, "TEMP": {},
 		"XDG_CACHE_HOME": {}, "XDG_CONFIG_HOME": {}, "XDG_DATA_HOME": {}, "XDG_STATE_HOME": {},
-		"LANG": {}, "LANGUAGE": {}, "TERM": {}, "COLORTERM": {}, "NO_COLOR": {},
+		"LANG": {}, "LANGUAGE": {}, "NO_COLOR": {},
 	}
 	var out []string
 	for _, entry := range SanitizeEnviron(os.Environ()) {
@@ -102,6 +102,7 @@ func ReducedEnviron() []string {
 			out = append(out, entry)
 		}
 	}
+	out = append(out, "TERM=dumb", "PAGER=cat")
 	return withResolvedPath(out)
 }
 

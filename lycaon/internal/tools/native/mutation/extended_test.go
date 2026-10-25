@@ -273,7 +273,7 @@ func TestZipAndUnzip(t *testing.T) {
 	}
 }
 
-func TestHostileArchivesAreRefusedBeforeEffect(t *testing.T) {
+func TestHostileArchivesRefuseFilesystemEffectsAndBoundOutput(t *testing.T) {
 	h := newHarness(t, map[string]string{"out/": ""})
 	writeZip(t, h.path("slip.zip"), map[string]string{"../escape.txt": "x"})
 	if r := h.run("", "unzip", "-q", "-d", "out", "slip.zip"); r.result.Terminal != toolcontract.ProducerRefused || !h.absent("escape.txt") {
@@ -287,13 +287,17 @@ func TestHostileArchivesAreRefusedBeforeEffect(t *testing.T) {
 	if r := h.run("", "tar", "-x", "-f", "link.tar", "-C", "out"); r.result.Terminal != toolcontract.ProducerRefused || !h.absent("out/link") {
 		t.Fatalf("archive link extracted: %+v", r.result)
 	}
-	// A decompression bomb stops at the catalog's expansion ceiling.
+	// Streaming output may precede refusal, but never exceeds the expansion ceiling.
 	bomb := gzipBytes(t, make([]byte, h.owners.limit("archive_extract_bytes")+(1<<20)))
 	testutil.FailErr(t, "write bomb", os.WriteFile(h.path("bomb.gz"), bomb, 0o644))
 	r := h.run("", "zcat", "bomb.gz")
 	reject := toolrejection.AsToolReject(r.err)
-	if reject == nil || reject.Code != "COMMAND_LIMIT_EXCEEDED" || len(r.stdout) != 0 {
-		t.Fatalf("bomb decoded: %v (%d bytes out)", r.err, len(r.stdout))
+	maximum := min(h.owners.limit("archive_extract_bytes"), int64(len(bomb))*h.owners.limit("archive_expansion_ratio"))
+	if reject == nil || reject.Code != "COMMAND_LIMIT_EXCEEDED" || len(r.stdout) == 0 || int64(len(r.stdout)) > maximum || r.result.EffectCertainty != toolcontract.NoEffect {
+		t.Fatalf("bomb decoded: %v (%d bytes out), result=%+v", r.err, len(r.stdout), r.result)
+	}
+	if reject.Data["maximum"] != maximum || strings.Trim(r.stdout, "\x00") != "" {
+		t.Fatalf("wrong limit or changed stream bytes: %+v", reject.Data)
 	}
 }
 

@@ -596,6 +596,12 @@
       "emit": "guard:tool",
       "summary": "No live command job exists in this session, so handle {{ paintedwolf.handle }} cannot be polled or stopped."
     },
+    "COMMAND_OUTPUT_READ_UNAVAILABLE": {
+      "branch_instruction": "Preserve earlier results and retry the output read",
+      "category": "recoverable",
+      "emit": "guard:tool",
+      "summary": "The host could not complete a verified output read for {{ paintedwolf.path }} in this chat."
+    },
     "COMMAND_PLATFORM_UNAVAILABLE": {
       "branch_instruction": "Inspect the declared supported forms and retained effects before choosing the next action; do not retry by external fallback.",
       "category": "recoverable",
@@ -609,10 +615,10 @@
       "summary": "Command programs are turned off on this host, so this program did not start."
     },
     "COMMAND_PUBLICATION_PENDING": {
-      "branch_instruction": "Branch on Code; do not save other drafts or relaunch the process until the file holds the accepted edit",
+      "branch_instruction": "Do not repeat the accepted write or save other drafts",
       "category": "recoverable",
-      "emit": "guard:command_publication_barrier",
-      "summary": "The dependent process did not start: {{ paintedwolf.path }} holds an accepted edit that is not saved to disk."
+      "emit": "guard:command_write_publication",
+      "summary": "This command stopped after accepting its edit: {{ paintedwolf.path }} holds an accepted edit that is not saved to disk."
     },
     "COMMAND_PWD_NOT_CWD": {
       "branch_instruction": "Retry with cwd= on the call; do not set env.PWD",
@@ -627,10 +633,10 @@
       "summary": "`{{ tool }}()` cannot run the redirection `{{ paintedwolf.operator }}` as written ({{ paintedwolf.redirection_issue }})."
     },
     "COMMAND_REVISION_CONFLICT": {
-      "branch_instruction": "Branch on Code; keep the concurrent change and do not replay the stale transform",
+      "branch_instruction": "{% if paintedwolf.unsaved_draft %}Keep the unsaved editor changes{% else %}Keep the newer file; do not run the same write again{% endif %}",
       "category": "recoverable",
       "emit": "guard:command_revision_pin",
-      "summary": "{{ paintedwolf.path }} changed after the program captured it, so this operation did not publish."
+      "summary": "{% if paintedwolf.unsaved_draft %}{{ paintedwolf.path }} has unsaved changes in the editor, so this operation did not write there.{% else %}{{ paintedwolf.path }} changed after the program captured it, so this operation did not publish.{% endif %}"
     },
     "COMMAND_SYNTAX_INVALID": {
       "branch_instruction": "Expected: {{ paintedwolf.expected_form }}.",
@@ -2597,6 +2603,12 @@
       "category": "recoverable",
       "emit": "guard:security",
       "summary": "Security scanners are disabled for this device."
+    },
+    "SESSION_OUTPUT_UNAVAILABLE": {
+      "branch_instruction": "Keep the delivered result until output storage is available",
+      "category": "recoverable",
+      "emit": "guard:tool",
+      "summary": "This call has no session output folder, so {{ paintedwolf.path }} cannot resolve."
     },
     "SESSION_SCRATCH_UNAVAILABLE": {
       "branch_instruction": "Branch on Code; never re-create scratch files inside an attached folder",

@@ -23,6 +23,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolexecution"
+	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -482,7 +483,7 @@ func TestProgramEntryForwardsSupportedCapabilityDeclarationsToNativeChildren(t *
 			return toolcontract.ProducerResult{Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.EffectCompleted}, nil
 		}}, nil
 	}}
-	f.Runtime.Owners = func(tools.ToolContext, *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
+	f.Runtime.Owners = func(tools.ToolContext, *projectpaths.ProgramPaths, *toolcontract.ProgramMemory, tooloutput.SpillAdmission) (command.ProgramOwners, error) {
 		return command.ProgramOwners{Natives: map[string]command.NativeOperation{
 			"curl": curlOp,
 			"tee":  teeOperation(f.Dir),
@@ -502,6 +503,7 @@ func TestProgramEntryForwardsSupportedCapabilityDeclarationsToNativeChildren(t *
 	tc := tools.ToolContext{Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: f.Dir, IsPrimary: true}}, ActiveRootID: "r1", SourceWorkspaceKind: api.SourceWorkspaceKindProject}}
 	tc.Identity.Agent, tc.Identity.ProjectID, tc.Identity.SessionID, tc.Identity.ToolCallID = "fixture", testdbseed.DefaultProjectID, f.Session, "model-call-cap"
 	tc.Invocation.ID = parent.ID
+	tc.Host.SessionScratchDir, tc.Host.SessionOutputDir = f.ScratchDir, f.OutputDir
 	out, err := f.Runtime.Run(t.Context(), args, tc)
 	testutil.FailErr(t, "run capability-forwarded pipeline", err)
 	outcome := decodeOutcome(t, out)

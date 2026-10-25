@@ -123,7 +123,7 @@ func TestProgramPolicyBlockSettlesBeforeRenderingEarlierEffects(t *testing.T) {
 	}
 	testutil.FailErr(t, "settle actual policy-stopped child", f.recorder.SettleChild(t.Context(), read.Invocation().Identity.ExecutionID, invocation.ChildSettlement{Result: result.Producer, DetailReference: "output:policy-stop"}))
 	testutil.FailErr(t, "settle stopped program", f.recorder.SettleProgram(t.Context(), f.program, invocation.ProgramSettlement{State: "rejected", StopCode: code, DetailReference: "output:program-stop"}))
-	prepared, err := toolexecution.PrepareProgramFailure(t.Context(), f.recorder, memory, diagnosticScreen(f), tc, read, cause)
+	prepared, err := toolexecution.PrepareProgramFailure(t.Context(), frame, f.recorder, memory, diagnosticScreen(f), tc, read, cause)
 	testutil.FailErr(t, "prepare settled policy feedback", err)
 	defer prepared.Close()
 	executor.Rejections.SetBlockPlane(&toolfeedback.BlockPlane{Pipeline: oar.NewGuardPipeline(oar.NewRuleSet(nil), nil, nil), Renderer: oar.NewRenderer(nil, nil)})
@@ -208,7 +208,7 @@ func TestProgramNativeDispatchRealEntryFixtures(t *testing.T) {
 			},
 		}
 		observer := invocation.ProgramAdmissionRecorder{Recorder: f.recorder, Inputs: &retainedInputsFixture{}}
-		res, invokeErr := executor.InvokeNative(t.Context(), frame, surface, memory, dispatchProgress{content: "- [ ] Active step"}, observer, effect, tc)
+		res, invokeErr := executor.InvokeNative(t.Context(), frame, surface, memory, dispatchProgress{content: "- [ ] Active step"}, &observer, effect, tc)
 		return res, invokeErr, executor, frame, tc, memory
 	}
 
@@ -216,7 +216,7 @@ func TestProgramNativeDispatchRealEntryFixtures(t *testing.T) {
 		t.Helper()
 		testutil.FailErr(t, "settle child", f.recorder.SettleChild(t.Context(), bound.Invocation().Identity.ExecutionID, invocation.ChildSettlement{Result: res.Producer, OwnerInvoked: res.OwnerInvoked, DetailReference: "output:child"}))
 		testutil.FailErr(t, "settle program", f.recorder.SettleProgram(t.Context(), f.program, invocation.ProgramSettlement{State: state, StopCode: wantCode, DetailReference: "output:program"}))
-		prepared, err := toolexecution.PrepareProgramFailure(t.Context(), f.recorder, memory, diagnosticScreen(f), tc, bound, invokeErr)
+		prepared, err := toolexecution.PrepareProgramFailure(t.Context(), frame, f.recorder, memory, diagnosticScreen(f), tc, bound, invokeErr)
 		testutil.FailErr(t, "prepare program failure", err)
 		t.Cleanup(prepared.Close)
 		rendered := executor.Rejections.RenderProgramFailure(t.Context(), frame, tc, prepared)
@@ -290,10 +290,10 @@ func TestProgramNativeDispatchRealEntryFixtures(t *testing.T) {
 	}
 	f6 := newProgramReceiptFixture(t)
 	g6 := f6.childFor(t, "grep")
-	_, err6, _, _, tc6, mem6 := runNative(t, f6, "fixture", g6.Effects(), g6, []string{"grep", "input"}, nil, func(context.Context, tools.ToolContext) (toolcontract.ProducerResult, error) {
+	_, err6, _, fr6, tc6, mem6 := runNative(t, f6, "fixture", g6.Effects(), g6, []string{"grep", "input"}, nil, func(context.Context, tools.ToolContext) (toolcontract.ProducerResult, error) {
 		return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, errors.New("stderr: Code: COMMAND_EFFECT_NOT_ALLOWED")
 	})
-	if prep6, prepErr := toolexecution.PrepareProgramFailure(t.Context(), f6.recorder, mem6, diagnosticScreen(f6), tc6, g6, err6); prep6 != nil || prepErr != nil {
+	if prep6, prepErr := toolexecution.PrepareProgramFailure(t.Context(), fr6, f6.recorder, mem6, diagnosticScreen(f6), tc6, g6, err6); prep6 != nil || prepErr != nil {
 		t.Fatalf("misleading stderr fabricated native program failure: %+v %v", prep6, prepErr)
 	}
 }

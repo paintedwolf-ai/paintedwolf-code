@@ -7,17 +7,11 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
 	"syscall"
 
 	"github.com/lycaon/lycaon/internal/fspath"
-	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 )
-
-// scratchVariables name the session scratch directory for natives and
-// external processes alike; the launch boundary sets the same values.
-var scratchVariables = []string{"TMPDIR", "TMP", "TEMP", "SCRATCH_DIR"}
 
 // Directory is the frame's absolute logical working directory: the value
 // pwd prints, PWD holds and an external process starts in.
@@ -31,19 +25,6 @@ func (p *ProgramPaths) PreviousDirectory() (string, bool) {
 	return filepath.Clean(p.previous.Resolved.Abs), true
 }
 
-// Environment is the program's initial exported scratch state: when the
-// session has scratch, the temporary directory variables naming it. The
-// evaluator owns PWD and OLDPWD from Directory.
-func (p *ProgramPaths) Environment() []string {
-	var out []string
-	if dir := strings.TrimSpace(p.context.Host.SessionScratchDir); dir != "" {
-		for _, name := range scratchVariables {
-			out = append(out, name+"="+filepath.Clean(dir))
-		}
-	}
-	return out
-}
-
 // Address converts an unquoted @label or @scratch word prefix to its native
 // absolute directory. It grants nothing: the operation or launch that uses
 // the path checks authority as for any absolute path. A label no attached
@@ -53,15 +34,15 @@ func (p *ProgramPaths) Address(ctx context.Context, label string) (string, bool,
 	if err := ctx.Err(); err != nil {
 		return "", false, err
 	}
-	if projectroot.IsVirtualRootLabel(label) {
-		dir, err := p.TemporaryDirectory(ctx)
+	resolved, err := ResolveRead(ctx, nil, p.context, "@"+label)
+	if err == nil {
+		bound, err := p.Bind(ctx, resolved.Abs, false)
 		if err != nil {
 			return "", false, err
 		}
-		return dir, true, nil
-	}
-	bound, err := p.Bind(ctx, "@"+label, false)
-	if err == nil {
+		if _, err := directoryInfo(bound); err != nil {
+			return "", false, err
+		}
 		return filepath.Clean(bound.Resolved.Abs), true, nil
 	}
 	if reject := toolrejection.AsToolReject(err); reject != nil && reject.Code == "UNKNOWN_ROOT_LABEL" {
@@ -123,7 +104,7 @@ func (p *ProgramPaths) changeDirectory(ctx context.Context, operand string, phys
 // inspection. A logical change cleans the addressed text first.
 func (p *ProgramPaths) Chdir(ctx context.Context, operand string, physical bool) error {
 	target := operand
-	if !physical && !strings.HasPrefix(operand, "@") {
+	if !physical {
 		if !filepath.IsAbs(target) && p.cwd.Resolved.Abs != "" {
 			target = p.cwd.Resolved.Abs + string(filepath.Separator) + target
 		}

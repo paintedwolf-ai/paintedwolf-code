@@ -367,9 +367,9 @@ func stageSinkWriter(sink argv.Sink, pipe *os.File, call callStreams, files *sta
 	}
 }
 
-func startWiredStages(wired []wiredStage) error {
+func startWiredStages(ctx context.Context, wired []wiredStage) error {
 	for i := range wired {
-		err := confine.ValidateProcessInputs(wired[i].cmd)
+		err := confine.ValidateProcessInputs(ctx, wired[i].cmd)
 		if err == nil {
 			err = wired[i].cmd.Start()
 		}
@@ -385,7 +385,7 @@ func startWiredStages(wired []wiredStage) error {
 		}
 		err = wired[i].guard.onStarted(wired[i].cmd)
 		if err == nil {
-			err = confine.ConfirmProcessLaunch(wired[i].cmd)
+			err = confine.ConfirmProcessLaunch(ctx, wired[i].cmd)
 		}
 		if err != nil {
 			killWired(wired[:i+1])

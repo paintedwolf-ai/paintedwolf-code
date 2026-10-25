@@ -7,7 +7,6 @@ import (
 	"regexp/syntax"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/dlclark/regexp2/v2"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -15,8 +14,8 @@ import (
 )
 
 func TestBoundedPredicateEngineResourceAndCancellationControls(t *testing.T) {
-	baseline := regexp2.SyntaxBudget{MaxBytes: 32 << 20, MaxSteps: 1_000_000, Timeout: time.Hour}
-	for _, resource := range []string{"bytes", "steps", "time"} {
+	baseline := regexp2.SyntaxBudget{MaxBytes: 32 << 20, MaxSteps: 1_000_000}
+	for _, resource := range []string{"bytes", "steps"} {
 		t.Run(resource, func(t *testing.T) {
 			limits := baseline
 			switch resource {
@@ -24,8 +23,6 @@ func TestBoundedPredicateEngineResourceAndCancellationControls(t *testing.T) {
 				limits.MaxBytes = 1
 			case "steps":
 				limits.MaxSteps = 1
-			case "time":
-				limits.Timeout = time.Nanosecond
 			}
 			_, err := regexp2.MatchPatternBounded(t.Context(), "(a+)+$", strings.Repeat("a", 100)+"!", syntax.POSIX, nil, limits)
 			var stopped *regexp2.SyntaxBudgetError
@@ -105,14 +102,14 @@ func TestPredicateRefusalReleasesEarlierLeases(t *testing.T) {
 		t.Fatalf("admitted comparison %+v %v in use %+v", got, err, memory.InUse())
 	}
 	missing := func(context.Context, int64) (func(), error) { return nil, nil }
-	limits := regexp2.SyntaxBudget{MaxBytes: 32 << 20, MaxSteps: 1_000_000, Timeout: time.Second, Reserve: missing}
+	limits := regexp2.SyntaxBudget{MaxBytes: 32 << 20, MaxSteps: 1_000_000, Reserve: missing}
 	if _, err := regexp2.MatchPatternBounded(t.Context(), "a", "a", syntax.POSIX, nil, limits); err == nil {
 		t.Fatal("selected engine admitted missing lease")
 	}
 }
 
 func TestBoundedPredicateLiteralParserChargesBeforeGrowth(t *testing.T) {
-	limits := regexp2.SyntaxBudget{MaxBytes: 1024, MaxSteps: 1_000_000, Timeout: time.Second}
+	limits := regexp2.SyntaxBudget{MaxBytes: 1024, MaxSteps: 1_000_000}
 	_, err := regexp2.MatchPatternBounded(t.Context(), strings.Repeat("x", 4096), "x", syntax.Literal, nil, limits)
 	var stopped *regexp2.SyntaxBudgetError
 	if !errors.As(err, &stopped) || stopped.Resource != "bytes" {

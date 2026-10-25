@@ -3,35 +3,13 @@ package literal
 import (
 	"bytes"
 	"fmt"
+	"io"
+	"math"
 	"strconv"
 	"strings"
 )
 
 const hexDigits = "0123456789abcdef"
-
-// byteRange selects [start, start+length) after -s/-l (xxd) or -s/-n (hexdump).
-func (inv *invocation) byteRange(size int64, lengthKey string, negative bool) (int64, int64, error) {
-	start := int64(0)
-	if value, ok := inv.value("-s"); ok {
-		n, err := parseOffset(value)
-		if err != nil || (n < 0 && !negative) {
-			return 0, 0, inv.usage(value, "offset")
-		}
-		if n < 0 {
-			n = max(size+n, 0)
-		}
-		start = min(n, size)
-	}
-	end := size
-	if value, ok := inv.value(lengthKey); ok {
-		n, err := parseOffset(value)
-		if err != nil || n < 0 {
-			return 0, 0, inv.usage(value, "nonnegative byte count")
-		}
-		end = min(start+n, size)
-	}
-	return start, end, nil
-}
 
 // parseOffset accepts decimal or 0x hexadecimal with an optional sign.
 func parseOffset(value string) (int64, error) {
@@ -57,13 +35,13 @@ func printable(c byte) byte {
 	return '.'
 }
 
-// singleInput gathers the one optional PATH (or stdin) a dump reads.
+// singleInput streams the one optional PATH (or stdin) a dump reads.
 func (inv *invocation) singleInput() (*input, error) {
 	operands := inv.operandsOrStdin()
 	if len(operands) > 1 {
 		return nil, inv.usage(operands[1], "at most one PATH")
 	}
-	return inv.open(operands[0], true)
+	return inv.open(operands[0], false)
 }
 
 func runXxd(inv *invocation) error {
@@ -79,85 +57,107 @@ func runXxd(inv *invocation) error {
 	if err != nil || in == nil {
 		return err
 	}
-	if _, ok := inv.value("-s"); ok && in.stdin {
-		if value, _ := inv.value("-s"); strings.HasPrefix(value, "-") {
-			return inv.usage(value, "negative offset requires a captured PATH")
+	if memory := inv.owners.Revisions.Memory; memory != nil {
+		release, err := memory.Reserve(inv.ctx, 64<<10)
+		if err != nil {
+			return err
 		}
+		defer release()
 	}
-	start, end, err := inv.byteRange(int64(len(in.data)), "-l", true)
+	size := int64(math.MaxInt64)
+	if in.pin != nil {
+		size = in.pin.EndByte
+	} else if !in.stdin && in.stream == nil {
+		size = int64(len(in.data))
+	}
+	reader, start, err := inv.dumpRange(in.reader(), size, "-l", !in.stdin)
 	if err != nil {
 		return err
 	}
-	data := in.data[start:end]
+	columns := 16
 	if inv.flag("-p") {
-		var b strings.Builder
-		for i, c := range data {
-			b.WriteByte(hexDigits[c>>4])
-			b.WriteByte(hexDigits[c&15])
-			if (i+1)%30 == 0 || i == len(data)-1 {
-				b.WriteByte('\n')
-			}
-		}
-		return inv.out.text(b.String())
+		columns = 30
 	}
-	const columns = 16
-	width := 2*columns + columns/int(group) - 1
-	for row := 0; row < len(data); row += columns {
-		chunk := data[row:min(row+columns, len(data))]
-		var line strings.Builder
-		fmt.Fprintf(&line, "%08x: ", start+int64(row))
-		for i, c := range chunk {
-			line.WriteByte(hexDigits[c>>4])
-			line.WriteByte(hexDigits[c&15])
-			if (i+1)%int(group) == 0 && i+1 < columns {
-				line.WriteByte(' ')
-			}
+	var row [30]byte
+	for offset := start; ; {
+		n, err := io.ReadFull(reader, row[:columns])
+		if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
+			return err
 		}
-		pad := 10 + width - line.Len()
-		line.WriteString(strings.Repeat(" ", max(pad, 0)) + "  ")
-		for _, c := range chunk {
-			line.WriteByte(printable(c))
+		if n == 0 {
+			return nil
+		}
+		chunk := row[:n]
+		var line strings.Builder
+		if inv.flag("-p") {
+			for _, c := range chunk {
+				line.WriteByte(hexDigits[c>>4])
+				line.WriteByte(hexDigits[c&15])
+			}
+		} else {
+			fmt.Fprintf(&line, "%08x: ", offset)
+			for i, c := range chunk {
+				line.WriteByte(hexDigits[c>>4])
+				line.WriteByte(hexDigits[c&15])
+				if (i+1)%int(group) == 0 && i+1 < columns {
+					line.WriteByte(' ')
+				}
+			}
+			width := 2*columns + columns/int(group) - 1
+			line.WriteString(strings.Repeat(" ", max(10+width-line.Len(), 0)) + "  ")
+			for _, c := range chunk {
+				line.WriteByte(printable(c))
+			}
 		}
 		line.WriteByte('\n')
 		if err := inv.out.text(line.String()); err != nil {
 			return err
 		}
+		offset += int64(n)
 	}
-	return nil
 }
 
 func runHexdump(inv *invocation) error {
 	if !inv.flag("-C") {
 		return inv.usage("hexdump", "-C canonical display")
 	}
-	var data []byte
-	for _, operand := range inv.operandsOrStdin() {
-		in, err := inv.open(operand, true)
+	if memory := inv.owners.Revisions.Memory; memory != nil {
+		release, err := memory.Reserve(inv.ctx, 64<<10)
 		if err != nil {
 			return err
 		}
-		if in != nil {
-			data = append(data, in.data...)
-		}
+		defer release()
 	}
-	start, end, err := inv.byteRange(int64(len(data)), "-n", false)
+	input := &operandSequence{inv: inv, operands: inv.operandsOrStdin()}
+	reader, start, err := inv.dumpRange(input, math.MaxInt64, "-n", false)
 	if err != nil {
 		return err
 	}
-	var previous []byte
-	starred := false
-	for offset := start; offset < end; offset += 16 {
-		chunk := data[offset:min(offset+16, end)]
-		if len(chunk) == 16 && bytes.Equal(chunk, previous) {
+	var row, previous [16]byte
+	hasPrevious, starred := false, false
+	offset := start
+	for {
+		n, err := io.ReadFull(reader, row[:])
+		if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
+			return err
+		}
+		if n == 0 {
+			break
+		}
+		chunk := row[:n]
+		if n == 16 && hasPrevious && bytes.Equal(chunk, previous[:]) {
 			if !starred {
 				if err := inv.out.text("*\n"); err != nil {
 					return err
 				}
 				starred = true
 			}
+			offset += int64(n)
 			continue
 		}
-		previous, starred = chunk, false
+		previous = row
+		hasPrevious = n == 16
+		starred = false
 		var line strings.Builder
 		fmt.Fprintf(&line, "%08x  ", offset)
 		for i := 0; i < 16; i++ {
@@ -180,9 +180,10 @@ func runHexdump(inv *invocation) error {
 		if err := inv.out.text(line.String()); err != nil {
 			return err
 		}
+		offset += int64(n)
 	}
-	if end > start {
-		return inv.out.text(fmt.Sprintf("%08x\n", end))
+	if offset > start {
+		return inv.out.text(fmt.Sprintf("%08x\n", offset))
 	}
 	return nil
 }

@@ -183,7 +183,7 @@ func TestReaperHelperProcess(t *testing.T) {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
-		group, err := StartInOwnGroup(cmd)
+		group, err := StartInOwnGroup(t.Context(), cmd)
 		if err != nil {
 			cleanup()
 			fmt.Fprintln(os.Stderr, err)

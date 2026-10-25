@@ -232,6 +232,7 @@ func proposedActionFromPolicy(eval platform.PolicyContext) hitl.ProposedAction {
 			SessionID:          eval.SessionID,
 			RootSessionID:      eval.ChatSessionID(),
 			SessionScratchRoot: confReq.SessionScratchRoot,
+			SessionOutputRoot:  confReq.SessionOutputRoot,
 		},
 		Execution: hitl.ActionExecution{
 			Contained:        hitl.ContainedForRequest(confReq),

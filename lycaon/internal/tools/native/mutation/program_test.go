@@ -28,6 +28,17 @@ func (d programDispatch) Fork(context.Context) (commandprogram.Dispatch, func(),
 }
 
 func (d programDispatch) Invoke(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+	if request.StreamPreparation != nil {
+		var err error
+		streams, err = request.StreamPreparation.PrepareStreams(ctx)
+		if err != nil {
+			var failure toolcontract.ProducerFailure
+			if errors.As(err, &failure) {
+				return failure.ProducerResult(), err
+			}
+			return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, err
+		}
+	}
 	argv := request.Argv.Values()
 	if argv[0] == "echo" {
 		_, err := io.WriteString(streams.Output, strings.Join(argv[1:], " ")+"\n")
@@ -41,7 +52,18 @@ func (d programDispatch) Invoke(ctx context.Context, request commandprogram.Oper
 }
 
 // Launch is an external producer that writes a prefix and then fails.
-func (d programDispatch) Launch(_ context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+func (d programDispatch) Launch(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+	if request.StreamPreparation != nil {
+		var err error
+		streams, err = request.StreamPreparation.PrepareStreams(ctx)
+		if err != nil {
+			var failure toolcontract.ProducerFailure
+			if errors.As(err, &failure) {
+				return failure.ProducerResult(), err
+			}
+			return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, err
+		}
+	}
 	_, _ = io.WriteString(streams.Output, "partial prefix\n")
 	return toolcontract.ProducerResult{Status: 3, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.EffectCompleted}, nil
 }
@@ -150,4 +172,17 @@ func TestProgramOutsideWritesRefusedForRedirectAndMutationWhileTempAllowed(t *te
 	if _, statErr := os.Lstat(teeTarget); !os.IsNotExist(statErr) {
 		t.Fatalf("outside tee created %s: %v", teeTarget, statErr)
 	}
+func (d programDispatch) InvokeEvaluator(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams, body func(context.Context, commandprogram.Streams) (toolcontract.ProducerResult, error)) (toolcontract.ProducerResult, error) {
+	if request.StreamPreparation != nil {
+		var err error
+		streams, err = request.StreamPreparation.PrepareStreams(ctx)
+		if err != nil {
+			var failure toolcontract.ProducerFailure
+			if errors.As(err, &failure) {
+				return failure.ProducerResult(), err
+			}
+			return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, err
+		}
+	}
+	return body(ctx, streams)
 }

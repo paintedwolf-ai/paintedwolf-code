@@ -157,7 +157,7 @@ func (e *Executor) validateInvocation(
 	if reject := capabilityrequest.ValidateCapabilityContract(tc.Invocation.Contract, args); reject != nil {
 		return reject
 	}
-	return tools.ValidateCapabilityPathAuthority(args, tc.Host.SessionScratchDir)
+	return tools.ValidateCapabilityPathAuthority(args, tc.Host.SessionScratchDir, tc.Host.SessionOutputDir)
 }
 
 // definitionFor reads the registry snapshot dispatch will run.

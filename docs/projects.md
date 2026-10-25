@@ -145,12 +145,12 @@ launch directory all resolve from the statement's current directory. A missing
 or non-directory `cd` target fails in the shell's own words with status 1; a
 path outside every folder is a host refusal.
 
-`@label/...` and `@scratch/...` are conveniences. Unquoted at the start of a
-word or assignment value, the prefix expands to the folder's absolute path in
-every argv, including an external program's; quoted, it stays literal. A label
-no folder carries stays literal too, so `npm install @types/node` reaches npm
-unchanged, while a native path operand spelled that way refuses with
-`UNKNOWN_ROOT_LABEL`, naming the label and the attached folders. Neither the
+`@label/...`, `@scratch/...` and the saved output address `@output/...` are
+conveniences. Unquoted at the start of a word or assignment value, the prefix
+expands to the folder's absolute path in every argv, including an external
+program's; quoted, it stays literal. A label no folder carries stays literal too,
+so `npm install @types/node` reaches npm unchanged. Native path operands keep
+remaining relative names literal as well. Neither the
 expansion nor `native_path` grants anything: the operation or launch that uses
 the path checks authority exactly as for the absolute spelling, so a relative
 operand that leaves its folder (`../notes.txt`) reaches the same decision as

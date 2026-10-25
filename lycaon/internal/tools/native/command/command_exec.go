@@ -290,7 +290,7 @@ func runCommandForeground(
 		out.Network = networkLife.complete(ctx)
 		out.Refusals = bound.lease.SettledRefusals(ctx)
 		out.LeftRunning = networkLife.leftBehind()
-		out.SpillPath = spillCommandOutput(tctx, snap)
+		out.SpillPath = spillCommandOutput(ctx, tctx, snap)
 		ft.record(failureAttempt, out.Snapshot.ExitCode == 0)
 		out.IndexWatch = registry.Lifecycle.TakeIndexWatch(tctx.Identity.SessionID, handle)
 		registry.Lifecycle.Discard(tctx.Identity.SessionID, handle)
@@ -357,7 +357,7 @@ func isHex64(s string) bool {
 
 // spillCommandOutput persists the whole screened output when the tail dropped
 // some of it; the result names the file, readable by line.
-func spillCommandOutput(tctx tools.ToolContext, snap bgprocess.Snapshot) string {
+func spillCommandOutput(ctx context.Context, tctx tools.ToolContext, snap bgprocess.Snapshot) string {
 	if !snap.OutputScreened || len(snap.Output) <= len(snap.Tail) {
 		return ""
 	}
@@ -365,7 +365,7 @@ func spillCommandOutput(tctx tools.ToolContext, snap bgprocess.Snapshot) string 
 	if host == "" {
 		return ""
 	}
-	return tooloutput.SpillWholeRaw(host, tooloutput.Screened(snap.Output), tctx.Host.MaxToolSpillBytes).SpillPath
+	return tooloutput.SpillWholeRaw(ctx, host, tooloutput.Screened(snap.Output), tctx.Host.MaxToolSpillBytes).SpillPath
 }
 
 func stopAwaitedCommand(ctx context.Context, registry *bgprocess.Registry, sessionID, handle string) error {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/tooloutput"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -69,7 +70,7 @@ func TestProgramEntryRunsGitReadFormsThroughTheUmbrella(t *testing.T) {
 		}
 		return command.NativePrepared{Command: prepared.Command, Review: prepared.Review, Invoke: prepared.InvokeOwner}, nil
 	}}}
-	f.runtime.Owners = func(tools.ToolContext, *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
+	f.runtime.Owners = func(tools.ToolContext, *projectpaths.ProgramPaths, *toolcontract.ProgramMemory, tooloutput.SpillAdmission) (command.ProgramOwners, error) {
 		return command.ProgramOwners{Natives: natives}, nil
 	}
 	out, err := f.call(t, t.Context(), "git status -sb; git -C sub ls-files; git --no-pager log --format=%s")
@@ -84,6 +85,15 @@ func TestProgramEntryRunsGitReadFormsThroughTheUmbrella(t *testing.T) {
 	}
 	if executions := f.executions(t); executions["git status"] != "completed;" || executions["git ls-files"] != "completed;" || executions["git log"] != "completed;" {
 		t.Fatalf("child receipts %v", executions)
+	}
+
+	customPath, err := f.call(t, t.Context(), "PATH=/custom/bin git status -sb")
+	if !strings.Contains(customPath+fmt.Sprint(err), "COMMAND_OPERAND_INVALID") {
+		t.Fatalf("custom PATH ran: %s %v", customPath, err)
+	}
+	reservedEnv, err := f.call(t, t.Context(), "LD_PRELOAD=/tmp/inject.so git status -sb")
+	if !strings.Contains(reservedEnv+fmt.Sprint(err), "COMMAND_OPERAND_INVALID") {
+		t.Fatalf("host-reserved env ran: %s %v", reservedEnv, err)
 	}
 
 	t.Setenv("PATH", "")

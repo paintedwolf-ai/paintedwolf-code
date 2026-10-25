@@ -425,6 +425,9 @@ func TestVisibleToolsNativePartialVarsFromSurfaceTools(t *testing.T) {
 
 func TestPreferNativeAndHostRunnerDerivedFromSurface(t *testing.T) {
 	vars := prompts.VisibleToolsNativePartialVars([]string{"write", "command", "terminal_open"})
+	if vars["command_output_files"] != true {
+		t.Fatalf("command_output_files = %v, want true", vars["command_output_files"])
+	}
 	prefer, _ := vars["prefer_native_file_tools"].([]string)
 	host, _ := vars["host_runner_tools"].([]string)
 	if !slices.Contains(prefer, "write") {
