@@ -29,9 +29,19 @@ type programFixture struct{ *programtest.Fixture }
 
 func newProgramFixture(t *testing.T) *programFixture {
 	t.Helper()
-	return &programFixture{programtest.New(t, programtest.Options{Natives: func(dir string) map[string]command.NativeOperation {
+	fix := programtest.New(t, programtest.Options{Natives: func(dir string) map[string]command.NativeOperation {
 		return map[string]command.NativeOperation{"tee": teeOperation(dir), "head": firstLineOperation()}
-	}})}
+	}})
+	baseOwners := fix.Runtime.Owners
+	fix.Runtime.Owners = func(tc tools.ToolContext, paths *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
+		owners, err := baseOwners(tc, paths)
+		if err != nil {
+			return owners, err
+		}
+		owners.Sources = dirSources(fix.Dir)
+		return owners, nil
+	}
+	return &programFixture{fix}
 }
 
 func (f *programFixture) call(t *testing.T, ctx context.Context, source string) (string, error) {

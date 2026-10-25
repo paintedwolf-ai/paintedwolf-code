@@ -59,3 +59,4 @@ func (p *ProfilePolicyEngine) CommandOperationAllowed(ctx context.Context, profi
 	}
 	return boundary.CommandOperationAllowed(ctx, profileID, identity, command)
 }
+
