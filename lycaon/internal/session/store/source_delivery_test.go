@@ -92,6 +92,9 @@ func newDeliveryQuota(t *testing.T) *deliveryQuota {
 	t.Helper()
 	limits, err := toolcontract.CatalogProgramMemoryLimits()
 	testutil.FailErr(t, "catalog memory limits", err)
+	// Session output resources hold a spill read's decoder scratch, its
+	// screening window and a program's working storage at once.
+	limits.Working *= 3
 	memory, err := toolcontract.NewProgramMemory(limits)
 	testutil.FailErr(t, "program memory", err)
 	return &deliveryQuota{ProgramMemory: memory}

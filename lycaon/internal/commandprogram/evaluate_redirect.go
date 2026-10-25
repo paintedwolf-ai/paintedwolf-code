@@ -93,7 +93,7 @@ func (g *frame) bind(ctx context.Context, r commandsurface.ProgramRedirect) (*st
 	if prevented || err != nil {
 		return nil, true, err
 	}
-	child, err := g.begin(r.SyntaxLocation, r.Operator)
+	child, err := g.beginRecorded(ctx, r.SyntaxLocation, r.Operator)
 	if err != nil {
 		return nil, false, err
 	}

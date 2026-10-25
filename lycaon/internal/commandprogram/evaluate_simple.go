@@ -132,8 +132,8 @@ func (f *frame) simple(ctx context.Context, s commandsurface.Statement, c comman
 	if controlBuiltins[name] {
 		return f.controlBuiltin(s, name, fields)
 	}
-	if decl, ok := f.state.functions[name]; ok {
-		return signal{}, f.call(ctx, s, decl, fields, assigns)
+	if fn, ok := f.state.functions[name]; ok {
+		return signal{}, f.call(ctx, s, fn, fields, assigns)
 	}
 	switch name {
 	case "source":
@@ -169,7 +169,7 @@ func (f *frame) testExpression(ctx context.Context, s commandsurface.Statement, 
 
 // inProcess runs a native host builtin as its own dynamic execution.
 func (f *frame) inProcess(ctx context.Context, s commandsurface.Statement, name string, run func(context.Context, toolcontract.OperationInvocation) (toolcontract.ProducerResult, error)) error {
-	child, err := f.begin(s.SyntaxLocation, name)
+	child, err := f.beginRecorded(ctx, s.SyntaxLocation, name)
 	if err != nil {
 		return err
 	}
@@ -371,17 +371,24 @@ func (f *frame) exportDeclaration(ctx context.Context, s commandsurface.Statemen
 
 // call runs a declared function with invocation-local positional arguments.
 // The body shares variables, functions and exit control with its caller.
-func (f *frame) call(ctx context.Context, s commandsurface.Statement, decl commandsurface.FunctionDeclaration, fields Fields, assigns []assignment) error {
+func (f *frame) call(ctx context.Context, s commandsurface.Statement, fn declaredFunction, fields Fields, assigns []assignment) error {
+	decl := fn.decl
 	if int64(f.functions+1) > f.e.limits["function_depth"] {
 		return f.refuseLimit(s.SyntaxLocation, "function_depth", int64(f.functions+1))
 	}
-	child, err := f.begin(s.SyntaxLocation, decl.Name)
+	child, err := f.beginRecorded(ctx, s.SyntaxLocation, decl.Name)
 	if err != nil {
 		return err
 	}
 	defer child.close()
 	g := *f
 	g.parent, g.positional, g.functions, g.loops, g.returnable = child.inv, fields.Values()[1:], f.functions+1, 0, true
+	if fn.sourceUnit != "" {
+		g.parent.SourceUnitID = fn.sourceUnit
+	}
+	if fn.unit != "" {
+		g.unit = fn.unit
+	}
 	if len(assigns) > 0 {
 		g.prefix = make(map[string]string, len(f.prefix)+len(assigns))
 		for name, value := range f.prefix {

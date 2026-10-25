@@ -1483,6 +1483,8 @@ CREATE TABLE IF NOT EXISTS invocation_programs (
     detail_ref TEXT NOT NULL DEFAULT '',
     progress_state TEXT NOT NULL DEFAULT 'unchanged' CHECK (progress_state IN ('unchanged','committed','rejected','unknown')),
     progress_ref TEXT NOT NULL DEFAULT '',
+    trace_events INTEGER NOT NULL DEFAULT 0 CHECK (trace_events >= 0),
+    trace_bytes INTEGER NOT NULL DEFAULT 0 CHECK (trace_bytes >= 0),
     started_at TEXT NOT NULL,
     settled_at TEXT
 ) STRICT;
@@ -1504,6 +1506,8 @@ CREATE TABLE IF NOT EXISTS invocation_program_progress (
     started_at TEXT NOT NULL,
     settled_at TEXT
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_invocation_program_progress_session ON invocation_program_progress(session_id);
+CREATE INDEX IF NOT EXISTS idx_invocation_program_progress_root_session ON invocation_program_progress(root_session_id);
 
 CREATE TABLE IF NOT EXISTS invocation_program_sources (
     program_id TEXT NOT NULL REFERENCES invocation_programs(id) ON DELETE CASCADE,
@@ -1532,6 +1536,17 @@ CREATE TABLE IF NOT EXISTS invocation_program_nodes (
     FOREIGN KEY (program_id, source_unit_id) REFERENCES invocation_program_sources(program_id, source_unit_id) ON DELETE CASCADE
 ) STRICT, WITHOUT ROWID;
 
+-- Frozen operation definitions are stored once per program and referenced by digest.
+CREATE TABLE IF NOT EXISTS invocation_program_definitions (
+    program_id TEXT NOT NULL REFERENCES invocation_programs(id) ON DELETE CASCADE,
+    definition_digest TEXT NOT NULL,
+    operation_id TEXT NOT NULL,
+    owner TEXT NOT NULL,
+    lifecycle TEXT NOT NULL,
+    definition_json TEXT NOT NULL CHECK (json_valid(definition_json)),
+    PRIMARY KEY (program_id, definition_digest)
+) STRICT, WITHOUT ROWID;
+
 CREATE TABLE IF NOT EXISTS invocation_program_executions (
     id TEXT PRIMARY KEY,
     program_id TEXT NOT NULL,
@@ -1542,7 +1557,6 @@ CREATE TABLE IF NOT EXISTS invocation_program_executions (
     scope_json TEXT NOT NULL CHECK (json_valid(scope_json)),
     operation_id TEXT NOT NULL,
     definition_digest TEXT NOT NULL,
-    definition_json TEXT NOT NULL CHECK (json_valid(definition_json)),
     arguments_representation TEXT NOT NULL CHECK (arguments_representation='operation_arguments_v1'),
     arguments_digest TEXT NOT NULL,
     reviewed_arguments_representation TEXT NOT NULL DEFAULT '' CHECK (reviewed_arguments_representation IN ('','operation_arguments_v1')),
@@ -1575,12 +1589,18 @@ CREATE TABLE IF NOT EXISTS invocation_program_executions (
     published_revision TEXT NOT NULL DEFAULT '',
     detail_ref TEXT NOT NULL DEFAULT '',
     approval_ref TEXT NOT NULL DEFAULT '',
+    job_handle TEXT NOT NULL DEFAULT '',
+    conflict_path TEXT NOT NULL DEFAULT '',
+    conflict_expected_revision TEXT NOT NULL DEFAULT '',
+    conflict_observed_revision TEXT NOT NULL DEFAULT '',
     started_at TEXT NOT NULL,
     settled_at TEXT,
     CHECK (id != parent_execution_id),
+    CHECK ((conflict_path = '') = (conflict_expected_revision = '') AND (conflict_path = '') = (conflict_observed_revision = '')),
     UNIQUE (program_id, id),
     UNIQUE (program_id, ordinal),
-    FOREIGN KEY (program_id, node_id) REFERENCES invocation_program_nodes(program_id, node_id) ON DELETE CASCADE
+    FOREIGN KEY (program_id, node_id) REFERENCES invocation_program_nodes(program_id, node_id) ON DELETE CASCADE,
+    FOREIGN KEY (program_id, definition_digest) REFERENCES invocation_program_definitions(program_id, definition_digest) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_invocation_program_executions_program_started
     ON invocation_program_executions(program_id, started_at, id);
@@ -1599,6 +1619,8 @@ CREATE TABLE IF NOT EXISTS invocation_program_outputs (
     complete INTEGER NOT NULL CHECK (complete IN (0,1)),
     redacted INTEGER NOT NULL CHECK (redacted IN (0,1)),
     mappings_json TEXT NOT NULL CHECK (json_valid(mappings_json)),
+    preview TEXT NOT NULL DEFAULT '',
+    preview_truncated INTEGER NOT NULL DEFAULT 0 CHECK (preview_truncated IN (0,1)),
     created_at TEXT NOT NULL,
     FOREIGN KEY (program_id, execution_id) REFERENCES invocation_program_executions(program_id, id) ON DELETE CASCADE
 ) STRICT;
@@ -1624,6 +1646,7 @@ CREATE INDEX IF NOT EXISTS idx_invocation_program_deliveries_output ON invocatio
 -- What each execution captured before preparing an effect: accepted document
 -- revisions, published disk identities, absence preconditions and the disk
 -- identity declared to an external launch. Never a conversational read base.
+-- Rows hold the newest pins; full runs move into pin segments.
 CREATE TABLE IF NOT EXISTS invocation_program_revision_pins (
     program_id TEXT NOT NULL,
     execution_id TEXT NOT NULL,
@@ -1641,6 +1664,20 @@ CREATE TABLE IF NOT EXISTS invocation_program_revision_pins (
     content_bytes INTEGER NOT NULL CHECK (content_bytes >= 0),
     captured_at TEXT NOT NULL,
     PRIMARY KEY (execution_id, ordinal),
+    FOREIGN KEY (program_id, execution_id) REFERENCES invocation_program_executions(program_id, id) ON DELETE CASCADE
+) STRICT, WITHOUT ROWID;
+
+-- Sealed runs of an execution's pins: revisionPinSegment consecutive pins as
+-- gzip-compressed JSON with the SHA-256 of the exact uncompressed body.
+CREATE TABLE IF NOT EXISTS invocation_program_revision_pin_segments (
+    program_id TEXT NOT NULL,
+    execution_id TEXT NOT NULL,
+    first_ordinal INTEGER NOT NULL CHECK (first_ordinal >= 0),
+    pin_count INTEGER NOT NULL CHECK (pin_count > 0),
+    encoding TEXT NOT NULL CHECK (encoding IN ('gzip-json-v1')),
+    body BLOB NOT NULL,
+    body_sha256 TEXT NOT NULL CHECK (length(body_sha256) = 64),
+    PRIMARY KEY (execution_id, first_ordinal),
     FOREIGN KEY (program_id, execution_id) REFERENCES invocation_program_executions(program_id, id) ON DELETE CASCADE
 ) STRICT, WITHOUT ROWID;
 
@@ -2219,6 +2256,10 @@ CREATE TABLE IF NOT EXISTS checkpoints (
     -- A person answers or stops a checkpoint; expiry, a host stop, and policy name nobody.
     resolved_by_person_id TEXT REFERENCES people(id),
     project_id TEXT NOT NULL CHECK (project_id <> ''),
+    -- Lossless native authority; the JSON columns hold only its screened display.
+    authority_format TEXT NOT NULL DEFAULT '' CHECK (authority_format IN ('', 'native_approval_authority_v1')),
+    authority_digest TEXT NOT NULL DEFAULT '' CHECK ((authority_format = '') = (authority_digest = '') AND (authority_digest = '' OR length(authority_digest) = 64)),
+    authority_body TEXT NOT NULL DEFAULT '' CHECK ((authority_format = '') = (authority_body = '') AND (authority_body = '' OR json_valid(authority_body))),
     CHECK (
         (resolved_by IS NULL AND resolved_by_person_id IS NULL)
         OR (resolved_by IN ('expiry', 'host_stop', 'policy') AND resolved_by_person_id IS NULL)
@@ -2280,7 +2321,11 @@ CREATE TABLE IF NOT EXISTS approval_operations (
     status TEXT NOT NULL CHECK (status IN ('prepared', 'committed', 'rolled_back')),
     created_at TEXT NOT NULL,
     committed_at TEXT,
-    rolled_back_at TEXT
+    rolled_back_at TEXT,
+    -- Lossless native authority; the JSON columns hold only its screened display.
+    authority_format TEXT NOT NULL DEFAULT '' CHECK (authority_format IN ('', 'native_approval_authority_v1')),
+    authority_digest TEXT NOT NULL DEFAULT '' CHECK ((authority_format = '') = (authority_digest = '') AND (authority_digest = '' OR length(authority_digest) = 64)),
+    authority_body TEXT NOT NULL DEFAULT '' CHECK ((authority_format = '') = (authority_body = '') AND (authority_body = '' OR json_valid(authority_body)))
 ) STRICT;
 
 -- Resolved checkpoint metadata awaiting its tool row.
@@ -2304,6 +2349,10 @@ CREATE TABLE IF NOT EXISTS chat_grants (
     delta_json TEXT NOT NULL CHECK (json_valid(delta_json)),
     created_at TEXT NOT NULL,
     expires_at TEXT,
+    -- Lossless native authority; the JSON columns hold only its screened display.
+    authority_format TEXT NOT NULL DEFAULT '' CHECK (authority_format IN ('', 'native_approval_authority_v1')),
+    authority_digest TEXT NOT NULL DEFAULT '' CHECK ((authority_format = '') = (authority_digest = '') AND (authority_digest = '' OR length(authority_digest) = 64)),
+    authority_body TEXT NOT NULL DEFAULT '' CHECK ((authority_format = '') = (authority_body = '') AND (authority_body = '' OR json_valid(authority_body))),
     PRIMARY KEY (chat_session_id, id)
 ) STRICT, WITHOUT ROWID;
 

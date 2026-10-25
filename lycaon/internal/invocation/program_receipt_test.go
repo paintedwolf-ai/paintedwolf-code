@@ -38,6 +38,12 @@ func newProgramReceiptFixtureWithArgs(t *testing.T, args map[string]any) program
 	database := testdbfixture.Open(t, "programs.db")
 	session := "session-1"
 	testdbseed.InsertSession(t, database, session, testdbseed.DefaultProjectID)
+	return programReceiptFixtureOn(t, database, session, args)
+}
+
+// programReceiptFixtureOn begins an actual command program in an existing store.
+func programReceiptFixtureOn(t *testing.T, database db.Handle, session string, args map[string]any) programReceiptFixture {
+	t.Helper()
 	recorder := invocation.NewSQLRecorder(database)
 	contract, ok := toolcontract.Lookup("command")
 	if !ok {
@@ -75,7 +81,15 @@ func (f programReceiptFixture) childFor(t *testing.T, name string) toolcontract.
 	testutil.FailErr(t, "freeze lossless expanded arguments", err)
 	defer release()
 	testutil.FailErr(t, "prepare dynamic child", f.recorder.PrepareChild(t.Context(), toolcontract.ProgramChildStart{ParentReceiptID: f.parent, Invocation: in, Definition: definition, ArgumentsReference: "output:expanded-input", ExpandedInputs: expanded, Canonical: "cat input"}))
-	bound, err := toolcontract.BindOperation(definition, in, definition.Facts().Commands[0].Name, definition.Facts().Commands[0].Effects[0].Mode, nil)
+	// The fixture child's canonical form is a cat invocation when the
+	// operation attaches cat; other operations bind their first command.
+	command := definition.Facts().Commands[0]
+	for _, attached := range definition.Facts().Commands {
+		if attached.Name == "cat" {
+			command = attached
+		}
+	}
+	bound, err := toolcontract.BindOperation(definition, in, command.Name, command.Effects[0].Mode, nil)
 	testutil.FailErr(t, "bind actual native operation", err)
 	return bound
 }

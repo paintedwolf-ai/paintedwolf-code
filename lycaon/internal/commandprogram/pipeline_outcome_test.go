@@ -70,6 +70,26 @@ func TestExpectedEarlyClosureNormalizesOnlyItsOwnProducer(t *testing.T) {
 	}
 }
 
+type executorClosureFixture bool
+
+func (f executorClosureFixture) ExpectedConsumerClosure() bool { return bool(f) }
+
+func TestExternalConsumerClosureFollowsExecutorClassification(t *testing.T) {
+	for _, classified := range []bool{true, false} {
+		producer := stageOutcome("external-producer", 141)
+		producer.Result.Terminal = toolcontract.ProducerFailed
+		producer.Result.Complete = false
+		producer.RequiredInputComplete = false
+		producer.Result.EffectCertainty = toolcontract.EffectUnknown
+		producer.Closure = ExternalConsumerClosure(executorClosureFixture(classified), "external-producer", "head")
+		out, err := SettlePipeline("pipeline", []PipelineStageOutcome{producer, stageOutcome("head", 0)}, &OutcomeLatch{})
+		testutil.FailErr(t, "settle external closure", err)
+		if classified != (out.Status == 0 && out.Complete && out.PublicationEligible) {
+			t.Fatalf("executor classified=%t outcome=%+v", classified, out)
+		}
+	}
+}
+
 func TestPipelineHostRefusalAndBudgetCannotBeMasked(t *testing.T) {
 	first := stageOutcome("refused", 1)
 	first.Result.Terminal = toolcontract.ProducerRefused

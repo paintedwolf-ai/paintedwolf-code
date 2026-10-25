@@ -2,14 +2,17 @@ oar: '1.0'
 id: CHMOD_SPECIAL_BIT_DENIED
 kind: schema
 anchor: tool.rejected
+selector:
+  paintedwolf.operation:
+  - chmod
 requires:
   profiles:
   - tool
   facts:
   - paintedwolf.rejection_code
-  - paintedwolf.native_operation
+  - paintedwolf.operation
   - paintedwolf.mode
-when: (tool == "chmod" || (tool == "command" && paintedwolf.native_operation == "chmod")) && paintedwolf.rejection_code == "CHMOD_SPECIAL_BIT_DENIED"
+when: paintedwolf.rejection_code == "CHMOD_SPECIAL_BIT_DENIED"
 effect: block
 copy:
   what: chmod rejected special permission bits in mode {{ paintedwolf.mode }}.

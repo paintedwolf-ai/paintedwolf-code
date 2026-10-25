@@ -182,7 +182,7 @@ func TestCommandTransformsUnseenFileThroughExecutionPins(t *testing.T) {
 		t.Fatalf("destination = %+v", destination)
 	}
 	pins := []toolcontract.ExecutionRevision{source.Revision, destination}
-	testutil.FailErr(t, "record pins before preparation", f.recorder.RecordRevisionPins(ctx, f.execution, pins))
+	testutil.FailErr(t, "record pins before preparation", f.recorder.RecordRevisionPins(ctx, f.execution, 0, pins))
 	reviews := 0
 	f.tctx.Files.FileChangeReview = func(_ context.Context, changes []tools.FileChange) error {
 		reviews++
@@ -281,7 +281,7 @@ func TestCommandCapturesAcceptedDraftWhileExternalLaunchDeclaresDisk(t *testing.
 	if !result.Saved || f.disk(t, "b.txt") != "UNSAVED DRAFT\n" {
 		t.Fatalf("result = %+v", result)
 	}
-	testutil.FailErr(t, "record native and launch provenance", f.recorder.RecordRevisionPins(ctx, f.execution, []toolcontract.ExecutionRevision{source.Revision, destination, declared}))
+	testutil.FailErr(t, "record native and launch provenance", f.recorder.RecordRevisionPins(ctx, f.execution, 0, []toolcontract.ExecutionRevision{source.Revision, destination, declared}))
 	if f.disk(t, "a.txt") != "base\n" {
 		t.Fatal("unrelated draft was saved")
 	}
@@ -451,7 +451,7 @@ func TestCommandInterruptedPinnedWriteLeavesNoPartialFile(t *testing.T) {
 	if source.Revision.Mode != toolcontract.PublishedDiskRevision || source.Revision.Representation != toolcontract.UTF8SourceBytes {
 		t.Fatalf("disk capture = %+v", source.Revision)
 	}
-	testutil.FailErr(t, "record pins", f.recorder.RecordRevisionPins(ctx, f.execution, []toolcontract.ExecutionRevision{source.Revision, destination}))
+	testutil.FailErr(t, "record pins", f.recorder.RecordRevisionPins(ctx, f.execution, 0, []toolcontract.ExecutionRevision{source.Revision, destination}))
 	f.tctx.Files.FileChangeReview = func(context.Context, []tools.FileChange) error {
 		cancel()
 		return nil

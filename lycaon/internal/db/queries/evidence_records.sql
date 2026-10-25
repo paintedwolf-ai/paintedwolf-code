@@ -32,3 +32,17 @@ WHERE session_id = ? AND handle = ? AND superseded_by IS NULL AND handle != ?;
 SELECT COALESCE(MAX(ordinal), 0) + 1 AS next_ordinal
 FROM evidence_records
 WHERE session_id = ? AND kind = ?;
+
+-- FindSourceDeliveryHandle returns the record already holding this exact
+-- delivered source window, so a confirmed delivery commits once.
+-- name: FindSourceDeliveryHandle :one
+SELECT handle
+FROM evidence_records
+WHERE session_id = sqlc.arg(session_id)
+  AND json_extract(line_ranges, '$.source_delivery.response_id') = sqlc.arg(response_id)
+  AND json_extract(line_ranges, '$.source_delivery.delivery_id') = sqlc.arg(delivery_id)
+  AND json_extract(line_ranges, '$.source_delivery.source.SHA256') = sqlc.arg(source_sha256)
+  AND json_extract(line_ranges, '$.source_delivery.source.SourceID') = sqlc.arg(source_id)
+  AND json_extract(line_ranges, '$.source_delivery.source.Revision') = sqlc.arg(source_revision)
+  AND json_extract(line_ranges, '$.source_delivery.source_start_byte') = CAST(sqlc.arg(source_start_byte) AS INTEGER)
+  AND json_extract(line_ranges, '$.source_delivery.source_end_byte') = CAST(sqlc.arg(source_end_byte) AS INTEGER);

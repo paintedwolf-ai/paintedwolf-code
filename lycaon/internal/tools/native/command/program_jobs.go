@@ -1,0 +1,136 @@
+package command
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"sync"
+
+	"github.com/lycaon/lycaon/internal/bgprocess"
+	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolrejection"
+)
+
+// SessionJobs puts a program's & jobs in the session's process registry, so
+// jobs, wait, kill, command_output and command_stop share one set of handles.
+// A native job has no fabricated OS PID; its stop cancels its own context.
+type SessionJobs struct {
+	Registry      *bgprocess.Registry
+	Supervisor    *ProgramSupervisor
+	SessionID     string
+	RootSessionID string
+	ProjectID     string
+	ToolCallID    string
+
+	mu      sync.Mutex
+	results map[string]jobOutcome
+}
+
+type jobOutcome struct {
+	result toolcontract.ProducerResult
+	err    error
+}
+
+// jobStatus is the registry's observation; a stop request is not an exit.
+type jobStatus struct {
+	Handle      string
+	CommandLine string
+}
+
+// start runs the job body detached from the launching statement's context.
+func (j *SessionJobs) start(ctx context.Context, commandLine string, run func(context.Context, commandprogram.Streams) (toolcontract.ProducerResult, error)) (string, error) {
+	if j == nil || j.Registry == nil || run == nil {
+		return "", fmt.Errorf("program jobs require a session registry and body")
+	}
+	jobCtx, setStop, release, err := j.Supervisor.Hold(ctx)
+	if err != nil {
+		return "", err
+	}
+	var handle string
+	ready := make(chan struct{})
+	handle, err = j.Registry.StartProgram(ctx, bgprocess.ProgramJobSpec{
+		SessionID: j.SessionID, RootSessionID: j.RootSessionID, ProjectID: j.ProjectID,
+		CommandLine: commandLine, OriginTool: "command", ToolCallID: j.ToolCallID,
+		Run: func(stopCtx context.Context, stdout, stderr io.Writer) (int, error) {
+			defer release()
+			<-ready
+			ctx, cancel := context.WithCancel(jobCtx)
+			defer cancel()
+			stopAfter := context.AfterFunc(stopCtx, cancel)
+			defer stopAfter()
+			result, err := run(ctx, commandprogram.Streams{Input: commandprogram.NullInput(), Output: stdout, Error: stderr})
+			if ctx.Err() != nil && result.Terminal == "" {
+				result = toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.EffectUnknown}
+			}
+			j.record(handle, result, err)
+			return result.Status, err
+		},
+	})
+	if err != nil {
+		release()
+		close(ready)
+		return "", err
+	}
+	setStop(func() { _, _ = j.Registry.Lifecycle.Stop(j.SessionID, handle) })
+	close(ready)
+	return handle, nil
+}
+
+func (j *SessionJobs) record(handle string, result toolcontract.ProducerResult, err error) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	if j.results == nil {
+		j.results = map[string]jobOutcome{}
+	}
+	j.results[handle] = jobOutcome{result: result, err: err}
+}
+
+// Wait returns the job's own settled outcome; waiting does not stop it.
+func (j *SessionJobs) Wait(ctx context.Context, handle string) (toolcontract.ProducerResult, error) {
+	if _, _, err := j.Registry.Lifecycle.Wait(ctx, j.SessionID, handle); err != nil {
+		return toolcontract.ProducerResult{}, jobLookupError(err, handle)
+	}
+	j.mu.Lock()
+	outcome, ok := j.results[handle]
+	j.mu.Unlock()
+	if !ok {
+		return toolcontract.ProducerResult{}, fmt.Errorf("job %s settled without an outcome", handle)
+	}
+	return outcome.result, outcome.err
+}
+
+// Signal accepts the catalog's TERM/INT/KILL; every one requests the owned
+// job's stop. Acknowledgement is not proof of exit.
+func (j *SessionJobs) Signal(_ context.Context, handle, signal string) error {
+	switch signal {
+	case "TERM", "INT", "KILL", "15", "2", "9":
+	default:
+		return toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"signal": signal, "expected": "TERM, INT or KILL"})
+	}
+	if _, err := j.Registry.Lifecycle.Stop(j.SessionID, handle); err != nil {
+		return jobLookupError(err, handle)
+	}
+	return nil
+}
+
+// List reports this session's live jobs, never host-global processes.
+func (j *SessionJobs) List(context.Context) ([]jobStatus, error) {
+	var out []jobStatus
+	for _, job := range j.Registry.ActiveJobs(j.SessionID) {
+		line := ""
+		if len(job.Stages) > 0 {
+			line = job.Stages[0].Command
+		}
+		out = append(out, jobStatus{Handle: job.Handle, CommandLine: line})
+	}
+	return out, nil
+}
+
+func jobLookupError(err error, handle string) error {
+	if errors.Is(err, bgprocess.ErrProcessNotFound) {
+		return toolrejection.RejectInvalidArguments("PROCESS_REFERENCE_STALE", map[string]any{"job": handle, "reason": "not a job of this session"})
+	}
+	return err
+}
