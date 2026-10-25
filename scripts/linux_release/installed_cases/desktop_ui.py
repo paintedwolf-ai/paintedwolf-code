@@ -8,12 +8,14 @@ from ..installed_input import accessibility
 from .app import process_identity, session_environment
 from .records import CaseFailed, CaseUnavailable
 
+_InventoryChanged = accessibility.InventoryChanged
+
 
 def retry_inventory(app, error) -> bool:
     domain, code = getattr(error, 'domain', None), getattr(error, 'code', None)
     native = (isinstance(domain, str) and domain in {'atspi_error', 'g-dbus-error-quark', 'g-io-error-quark'}
               and type(code) is int and 0 <= code < 1 << 31)
-    if not isinstance(error, (IndexError, accessibility.InventoryChanged)) and not native:
+    if not isinstance(error, (IndexError, _InventoryChanged)) and not native:
         return False
     expected = app.observations['launch_identity']
     try:
@@ -88,7 +90,7 @@ class DesktopUI:
                 raise CaseUnavailable('normal-native-window-observation-deadline')
             application = desktop[index]
             if application is None:
-                raise accessibility.InventoryChanged()
+                raise _InventoryChanged()
             pid = application.get_process_id()
             if not owned_process(pid, self.app):
                 continue
@@ -100,7 +102,7 @@ class DesktopUI:
                     raise CaseUnavailable('normal-native-window-observation-deadline')
                 window = application[offset]
                 if window is None:
-                    raise accessibility.InventoryChanged()
+                    raise _InventoryChanged()
                 if window.getRole() in {self.api.ROLE_FRAME, self.api.ROLE_DIALOG} and self.visible(window):
                     yield identity, window
             if process_identity(pid) != identity or not owned_process(pid, self.app):
@@ -117,9 +119,9 @@ class DesktopUI:
             matches = []
             try:
                 for identity, window in self.windows(deadline):
-                    for node in accessibility.descendants(window, deadline):
-                        node_role = node.getRole()
-                        if self.visible(node) and node.name == name:
+                    for node in self.descendants(window, deadline):
+                        if node.name == name and self.visible(node):
+                            node_role = node.getRole()
                             observed_roles.add(int(node_role))
                             if node_role == role:
                                 matches.append((identity, node))
@@ -190,7 +192,7 @@ class DesktopUI:
         for identity, window in self.windows(deadline):
             if window.getRole() != self.api.ROLE_FRAME:
                 continue
-            for node in accessibility.descendants(window, deadline):
+            for node in self.descendants(window, deadline):
                 role = node.getRole()
                 if role in controls and self.visible(node) and node.name and node.name not in decoration:
                     if role == self.api.ROLE_PUSH_BUTTON and node.queryAction().nActions != 1:
