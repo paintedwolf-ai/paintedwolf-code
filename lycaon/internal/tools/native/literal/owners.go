@@ -132,7 +132,22 @@ func (o *Owners) Prepare(paths *projectpaths.ProgramPaths, request commandprogra
 	if err != nil {
 		return Prepared{}, argvRejection(err, spec)
 	}
-	return Prepared{Operation: o.ops[command], Argv: bound, Review: bound.Review(o.ops[command]), owners: o, paths: paths, request: request, spec: spec, run: utilities[command]}, nil
+	review := bound.Review(o.ops[command])
+	review.PathTargets = []commandprogram.PathTarget{}
+	for _, operand := range bound.Operands() {
+		if operand.Value != "-" {
+			review.PathTargets = append(review.PathTargets, commandprogram.PathTarget{Path: operand.Value})
+		}
+	}
+	for _, item := range bound.Items {
+		if item.Option == nil || item.Option.ValueRole != "path" {
+			continue
+		}
+		for _, value := range item.Option.Values {
+			review.PathTargets = append(review.PathTargets, commandprogram.PathTarget{Path: value.Value})
+		}
+	}
+	return Prepared{Operation: o.ops[command], Argv: bound, Review: review, owners: o, paths: paths, request: request, spec: spec, run: utilities[command]}, nil
 }
 
 // InvokeOwner runs the bound utility once and settles its producer outcome.

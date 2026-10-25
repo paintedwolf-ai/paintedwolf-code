@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	lycexec "github.com/lycaon/lycaon/internal/exec"
+	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -38,9 +40,10 @@ type NativeOperation struct {
 type NativePrepared struct {
 	// Mode is the catalog effect mode the bound form selects; empty uses the
 	// evaluator's single declared mode.
-	Mode   string
-	Review commandprogram.ArgvReview
-	Invoke func(context.Context, tools.ToolContext, commandprogram.Streams) (toolcontract.ProducerResult, error)
+	Mode          string
+	Review        commandprogram.ArgvReview
+	LoopbackPorts []uint16
+	Invoke        func(context.Context, tools.ToolContext, commandprogram.Streams) (toolcontract.ProducerResult, error)
 	// Command is the catalog command the bound form resolved to (git status
 	// for git -C DIR status); empty keeps the dispatched command.
 	Command string
@@ -168,6 +171,9 @@ func (d *ProgramDispatcher) Invoke(ctx context.Context, request commandprogram.O
 	case d.natives[spec.Name].Prepare != nil:
 		return d.invokeNative(ctx, spec, d.natives[spec.Name], request, streams)
 	case pathCommands[spec.Name]:
+		if spec.Name == "cd" || spec.Name == "realpath" || spec.Name == "readlink" || spec.Name == "native_path" {
+			return d.invokeNative(ctx, spec, d.pathOperation(spec), request, streams)
+		}
 		return d.invokeBuiltin(ctx, spec, d.paths, request, streams)
 	case d.builtins[spec.Name] != nil:
 		// Host builtins read the frame's directory from the invocation scope.
@@ -175,6 +181,26 @@ func (d *ProgramDispatcher) Invoke(ctx context.Context, request commandprogram.O
 		return d.invokeBuiltin(ctx, spec, d.builtins[spec.Name], request, streams)
 	}
 	return d.refuseUnimplemented(ctx, spec, request, streams)
+}
+
+func (d *ProgramDispatcher) pathOperation(spec toolcontract.CommandSpecification) NativeOperation {
+	return NativeOperation{Tool: spec.Name, Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (NativePrepared, error) {
+		bound, err := d.binder.Bind(spec, request.Argv)
+		if err != nil {
+			return NativePrepared{}, err
+		}
+		review := bound.Review(spec.Name)
+		for _, path := range bound.Operands().Values() {
+			review.PathTargets = append(review.PathTargets, commandprogram.PathTarget{Path: path})
+		}
+		return NativePrepared{Review: review, Tool: spec.Name, Invoke: func(ctx context.Context, _ tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+			result, err := frame.Invoke(ctx, request, streams)
+			if err == nil && spec.Name == "cd" {
+				d.paths.AdoptCwd(frame)
+			}
+			return result, err
+		}}, nil
+	}}
 }
 
 func (d *ProgramDispatcher) invokeBuiltin(ctx context.Context, spec toolcontract.CommandSpecification, builtin commandprogram.OperationDispatcher, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
@@ -338,11 +364,18 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 	if tool == "" {
 		return d.invokeHosted(ctx, spec, prepared, request, streams)
 	}
-	definition, ok := d.run.registry.Definition(tool)
-	if !ok || !definitionHasCommand(definition.Operation, spec.Name) {
+	var operationDef toolcontract.OperationDefinition
+	if definition, ok := d.run.registry.Definition(tool); ok && definitionHasCommand(definition.Operation, spec.Name) {
+		operationDef = programOperationDefinition(definition.Operation)
+	} else if tool == spec.Name {
+		var err error
+		operationDef, err = d.catalogDefinition(spec)
+		if err != nil {
+			return refusedResult("COMMAND_PLATFORM_UNAVAILABLE"), err
+		}
+	} else {
 		return d.invokeHosted(ctx, spec, prepared, request, streams)
 	}
-	operationDef := programOperationDefinition(definition.Operation)
 	mode := prepared.Mode
 	if mode == "" {
 		mode = request.EffectMode
@@ -354,15 +387,33 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 	}
 	review := prepared.Review
 	review.OperationID = operationDef.Facts().Identity
+	review.PathTargets = absolutePathTargets(d.paths.Cwd().Abs, d.run.tc.Host.SessionScratchDir, review.PathTargets)
 	tracker := &trackingWriter{w: nonNilWriter(streams.Error)}
 	runStreams := streams
 	runStreams.Error = tracker
-	inputs := d.run.nativeArguments(review.Arguments(), operationDef.Facts().Contract)
+	autoLoopback := prepared.LoopbackPorts
+	inputs := d.run.nativeArguments(review.Arguments(), operationDef.Facts().Contract, autoLoopback)
 	effect := toolexecution.NativeEffect{
 		Operation: bound, Streams: runStreams, Arguments: inputs, Argv: &review, Inspection: d.run.capture,
 		Stage: toolcontract.ExecutionStage{ExecutionID: request.Invocation.Identity.ExecutionID, OperationID: operationDef.Facts().Identity, Argv: request.Argv.Values()},
-		PrepareReviewed: func(context.Context, map[string]any, tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
-			return toolexecution.PreparedNativeEffect{Operation: bound, InvokeOwner: prepared.Invoke}, nil
+		PrepareReviewed: func(ctx context.Context, _ map[string]any, admitted tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
+			// The program's directory frame predates this child's approval. Bind
+			// the owner again with the admitted context so exact file access is
+			// available to the path authority used by the native operation.
+			frame, err := d.paths.Rebind(ctx, admitted)
+			if err != nil {
+				return toolexecution.PreparedNativeEffect{}, err
+			}
+			actual, err := operation.Prepare(ctx, frame, d, prepareReq)
+			if err != nil {
+				return toolexecution.PreparedNativeEffect{}, err
+			}
+			actual.Review.OperationID = operationDef.Facts().Identity
+			actual.Review.PathTargets = absolutePathTargets(frame.Cwd().Abs, admitted.Host.SessionScratchDir, actual.Review.PathTargets)
+			if !reflect.DeepEqual(actual.Review, review) || !slices.Equal(actual.LoopbackPorts, prepared.LoopbackPorts) || actual.Mode != prepared.Mode || actual.Tool != prepared.Tool || actual.Command != prepared.Command {
+				return toolexecution.PreparedNativeEffect{}, fmt.Errorf("native binding changed after approval")
+			}
+			return toolexecution.PreparedNativeEffect{Operation: bound, InvokeOwner: actual.Invoke}, nil
 		},
 	}
 	child, err := d.prepareDefinition(ctx, operationDef, request, inputs)
@@ -420,6 +471,29 @@ func (d *ProgramDispatcher) invokeHosted(ctx context.Context, spec toolcontract.
 		d.shared.mu.Unlock()
 	}
 	return result, errors.Join(runErr, d.settle(ctx, child, result, true, ""))
+}
+
+func absolutePathTargets(cwd, scratch string, targets []commandprogram.PathTarget) []commandprogram.PathTarget {
+	if targets == nil {
+		return nil
+	}
+	resolved := make([]commandprogram.PathTarget, len(targets))
+	for i, target := range targets {
+		resolved[i] = target
+		if target.Path == "@scratch" || strings.HasPrefix(target.Path, "@scratch/") {
+			rel := strings.TrimPrefix(target.Path, "@scratch")
+			rel = strings.TrimPrefix(rel, "/")
+			clean := filepath.Clean(rel)
+			if scratch != "" && clean != ".." && !strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+				resolved[i].Path = filepath.Join(scratch, clean)
+			}
+			continue
+		}
+		if target.Path != "" && !filepath.IsAbs(target.Path) {
+			resolved[i].Path = filepath.Clean(filepath.Join(cwd, target.Path))
+		}
+	}
+	return resolved
 }
 
 func (d *ProgramDispatcher) refuseArgv(ctx context.Context, spec toolcontract.CommandSpecification, request commandprogram.OperationRequest, cause error, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
@@ -537,6 +611,18 @@ func (d *ProgramDispatcher) catalogDefinition(spec toolcontract.CommandSpecifica
 	if definition, ok := d.shared.definitions[spec.Name]; ok {
 		return definition, nil
 	}
+	definition, err := catalogOperationDefinition(spec, d.run.catalog.Language.Limits)
+	if err != nil {
+		return toolcontract.OperationDefinition{}, err
+	}
+	if d.shared.definitions == nil {
+		d.shared.definitions = map[string]toolcontract.OperationDefinition{}
+	}
+	d.shared.definitions[spec.Name] = definition
+	return definition, nil
+}
+
+func catalogOperationDefinition(spec toolcontract.CommandSpecification, limits []toolcontract.ResourceLimit) (toolcontract.OperationDefinition, error) {
 	contract, ok := toolcontract.Lookup("command")
 	if !ok {
 		return toolcontract.OperationDefinition{}, fmt.Errorf("command contract missing")
@@ -554,17 +640,13 @@ func (d *ProgramDispatcher) catalogDefinition(spec toolcontract.CommandSpecifica
 	}
 	definition, err := toolcontract.NewOperationDefinition(toolcontract.OperationFacts{
 		Identity: spec.Name, Version: 1, Contract: contract, Arguments: json.RawMessage(`{"type":"object"}`),
-		Commands: []toolcontract.CommandSpecification{spec}, Resources: d.run.catalog.Language.Limits,
+		Commands: []toolcontract.CommandSpecification{spec}, Resources: limits,
 		Streams:      toolcontract.StreamContract{Input: spec.Encoding, Output: spec.Encoding, Error: "typed owner rejection; prose is diagnostic", Statuses: statuses},
 		ProgressGate: toolcontract.ProgressNotRequired, RejectionContract: spec.Name,
 	})
 	if err != nil {
 		return toolcontract.OperationDefinition{}, err
 	}
-	if d.shared.definitions == nil {
-		d.shared.definitions = map[string]toolcontract.OperationDefinition{}
-	}
-	d.shared.definitions[spec.Name] = definition
 	return definition, nil
 }
 

@@ -47,6 +47,6 @@ func (t programOwnerTools) httpOperation(servicesHTTP httpaction.Deps, mutations
 		if err != nil {
 			return command.NativePrepared{}, err
 		}
-		return command.NativePrepared{Mode: prepared.Mode, Review: prepared.Review, Invoke: prepared.InvokeOwner}, nil
+		return command.NativePrepared{Mode: prepared.Mode, Review: prepared.Review, LoopbackPorts: prepared.LoopbackPorts, Invoke: prepared.InvokeOwner}, nil
 	}}, nil
 }

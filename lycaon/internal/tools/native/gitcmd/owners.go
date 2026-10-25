@@ -166,12 +166,15 @@ func (o *Owners) Prepare(paths *projectpaths.ProgramPaths, request commandprogra
 	if reviewID == "" {
 		reviewID = spec.Name
 	}
+	mode := effectMode(spec, parsed, bound)
+	review := bound.Review(reviewID)
+	review.PathTargets = gitPathTargets(bound, parsed, mode)
 	return Prepared{
 		Command:   spec.Name,
 		Operation: o.ops[spec.Name],
-		Mode:      effectMode(spec, parsed, bound),
+		Mode:      mode,
 		Argv:      bound,
-		Review:    bound.Review(reviewID),
+		Review:    review,
 		command:   parsed,
 		owners:    o,
 		paths:     paths,

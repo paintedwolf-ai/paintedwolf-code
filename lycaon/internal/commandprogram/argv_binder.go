@@ -103,6 +103,13 @@ type ArgvReview struct {
 	Command     string           `json:"command"`
 	Options     []ReviewedOption `json:"options"`
 	Operands    []string         `json:"operands"`
+	PathTargets []PathTarget     `json:"path_targets,omitempty"`
+}
+
+// PathTarget is a bound native file operand and its exact access direction.
+type PathTarget struct {
+	Path  string `json:"path"`
+	Write bool   `json:"write"`
 }
 
 type ReviewedOption struct {
@@ -140,7 +147,15 @@ func (r ArgvReview) Arguments() map[string]any {
 	for i, operand := range r.Operands {
 		operands[i] = operand
 	}
-	return map[string]any{"operation_id": r.OperationID, "command": r.Command, "options": options, "operands": operands}
+	result := map[string]any{"operation_id": r.OperationID, "command": r.Command, "options": options, "operands": operands}
+	if r.PathTargets != nil {
+		targets := make([]any, 0, len(r.PathTargets))
+		for _, target := range r.PathTargets {
+			targets = append(targets, map[string]any{"path": target.Path, "write": target.Write})
+		}
+		result["path_targets"] = targets
+	}
+	return result
 }
 
 // ArgvError carries an existing public rejection code and the exact word span.
@@ -491,7 +506,7 @@ func (b *argvBinding) consume(form toolcontract.OptionForm, spelling string, wor
 
 // optional handles forms that never take a following nonempty word: an
 // attached value (--porcelain=v1), or, for optional-attached-or-empty, also
-// a following empty word (sed -i.bak in GNU spelling, -i '' in BSD spelling).
+// a following empty word (sed -i.bak in GNU spelling, -i ” in BSD spelling).
 func (b *argvBinding) optional(form toolcontract.OptionForm, spelling string, word Field, value string, attached bool) error {
 	switch form.Consumption {
 	case "optional-attached-value":

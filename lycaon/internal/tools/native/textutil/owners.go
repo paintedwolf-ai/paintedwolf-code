@@ -162,6 +162,17 @@ type Prepared struct {
 	run     utility
 }
 
+// NativeAdmissionError refuses forms whose script file may name additional
+// paths that cannot be projected from the bound command before admission.
+func (p Prepared) NativeAdmissionError() error {
+	if p.Argv.Command == "sed" {
+		if option, ok := p.Argv.Last("-f"); ok {
+			return nativeutility.Unsupported(p.spec, option.Values[0], "a script file with unprojected file effects")
+		}
+	}
+	return nil
+}
+
 // Prepare binds a reached command. The operation identity is the command name.
 func (o *Owners) Prepare(request commandprogram.OperationRequest) (Prepared, error) {
 	if err := request.Validate(); err != nil {
@@ -182,7 +193,11 @@ func (o *Owners) Prepare(request commandprogram.OperationRequest) (Prepared, err
 	} else if bound, err = (commandprogram.CatalogBinder{}).Bind(spec, numericOperands(command, request.Argv)); err != nil {
 		return Prepared{}, nativeutility.ArgvRejection(err, spec)
 	}
-	return Prepared{Argv: bound, Review: bound.Review(spec.Name), Mode: o.effectMode(bound), owners: o, request: request, spec: spec, run: utilities[command]}, nil
+	review := bound.Review(spec.Name)
+	if PathUtility(command) {
+		review.PathTargets = o.pathTargets(bound)
+	}
+	return Prepared{Argv: bound, Review: review, Mode: o.effectMode(bound), owners: o, request: request, spec: spec, run: utilities[command]}, nil
 }
 
 // leadingBind binds only leading words made entirely of declared boolean

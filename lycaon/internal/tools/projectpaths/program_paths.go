@@ -139,6 +139,25 @@ func NewProgramPaths(ctx context.Context, boundary *sandbox.Boundary, tc tools.T
 	return p, nil
 }
 
+// Rebind gives one admitted child the same directory with its own path grants.
+func (p *ProgramPaths) Rebind(ctx context.Context, tc tools.ToolContext) (*ProgramPaths, error) {
+	frame, err := NewProgramPaths(ctx, p.boundary, tc, p.initial.Resolved.Abs)
+	if err != nil {
+		return nil, err
+	}
+	// The logical directory may have been selected by a prior cd. Its bound
+	// descriptor keeps that directory address, while new child file access uses
+	// the newly admitted context held by frame.
+	frame.cwd, frame.cwdInfo = p.cwd, p.cwdInfo
+	return frame, nil
+}
+
+// AdoptCwd retains an approved cd's logical directory for later commands.
+// The original invocation directory remains the target of a bare cd.
+func (p *ProgramPaths) AdoptCwd(frame *ProgramPaths) {
+	p.cwd, p.cwdInfo = frame.cwd, frame.cwdInfo
+}
+
 // Bind resolves one exact native operand. A write binding checks mutation scope
 // but does not record a mutation before a complete operation actually runs.
 func (p *ProgramPaths) Bind(ctx context.Context, operand string, write bool) (BoundPath, error) {

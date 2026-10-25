@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	reposurvey "github.com/lycaon/lycaon/internal/survey"
 	"github.com/lycaon/lycaon/internal/textsearch"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
@@ -78,6 +79,7 @@ func (t programOwnerTools) compose(services ProgramServices) (func(tools.ToolCon
 	}
 	return func(tc tools.ToolContext, paths *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
 		barrier := &native.PublicationBarrier{}
+		var textPorts textutil.Ports
 		httpNative, err := t.httpOperation(services.HTTP, mutationOwners, barrier)
 		if err != nil {
 			return command.ProgramOwners{}, err
@@ -100,6 +102,7 @@ func (t programOwnerTools) compose(services ProgramServices) (func(tools.ToolCon
 					text.Spills = spills
 					release = func() { _ = spills.Close() }
 				}
+				textPorts = text
 				builtins := textOwners.Builtins(text)
 				var bound hostenv.NativeBindings
 				if b, ok := ports.Nested.(hostenv.NativeBindings); ok {
@@ -116,6 +119,26 @@ func (t programOwnerTools) compose(services ProgramServices) (func(tools.ToolCon
 				publication := &mutation.Publication{Owners: mutationOwners, Program: mutation.Program{Paths: frame, Barrier: barrier}, Tools: tc}
 				return publication, publication
 			},
+		}
+		for _, name := range textOwners.Commands() {
+			if !textutil.PathUtility(name) {
+				continue
+			}
+			owners.Natives[name] = command.NativeOperation{Tool: name, Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
+				prepared, err := textOwners.Prepare(request)
+				if err != nil {
+					return command.NativePrepared{}, err
+				}
+				if err := prepared.NativeAdmissionError(); err != nil {
+					return command.NativePrepared{}, err
+				}
+				return command.NativePrepared{Mode: prepared.Mode, Review: prepared.Review, Invoke: func(ctx context.Context, admitted tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+					ports := textPorts
+					ports.ToolContext = admitted
+					ports.Publication = &mutation.Publication{Owners: mutationOwners, Program: mutation.Program{Paths: frame, Barrier: barrier}, Tools: admitted}
+					return prepared.InvokeOwner(ctx, ports, streams)
+				}}, nil
+			}}
 		}
 		for _, name := range literalOwners.Commands() {
 			tool, _ := literalOwners.Operation(name)

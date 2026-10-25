@@ -358,10 +358,13 @@ func selectEffectMode(spec toolcontract.CommandSpecification, requested string) 
 
 func programOperationDefinition(definition toolcontract.OperationDefinition) toolcontract.OperationDefinition {
 	facts := definition.Facts()
-	if facts.ProgressGate == toolcontract.ProgressNotRequired {
-		return definition
+	// A command child retains its structured owner's identity, while the
+	// enclosing command may request file authority for that child's paths.
+	// These two capabilities are carried only on this program definition.
+	facts.Contract.Capabilities |= toolcontract.CapabilityReadPath | toolcontract.CapabilityWriteRoot
+	if facts.ProgressGate != toolcontract.ProgressNotRequired {
+		facts.ProgressGate = toolcontract.ProgressNotRequired
 	}
-	facts.ProgressGate = toolcontract.ProgressNotRequired
 	updated, err := toolcontract.NewOperationDefinition(facts)
 	if err != nil {
 		return definition

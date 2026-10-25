@@ -244,8 +244,25 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 			seen[tool] = true
 			if definition, ok := r.Registry.Definition(tool); ok {
 				active = append(active, programOperationDefinition(definition.Operation))
+			} else if spec, ok := run.catalogCommand(tool); ok {
+				definition, err := catalogOperationDefinition(spec, catalog.Language.Limits)
+				if err != nil {
+					return "", err
+				}
+				active = append(active, definition)
 			}
 		}
+	}
+	for _, name := range []string{"cd", "realpath", "readlink", "native_path"} {
+		spec, ok := run.catalogCommand(name)
+		if !ok {
+			return "", fmt.Errorf("path command %s missing from catalog", name)
+		}
+		definition, err := catalogOperationDefinition(spec, catalog.Language.Limits)
+		if err != nil {
+			return "", err
+		}
+		active = append(active, definition)
 	}
 	surface, err := r.Executor.Metadata.FreezeProgramSurface(ctx, platform.ToolFilter{ProfileID: tc.ProfileID(), SurfaceID: tc.Turn.TurnSurfaceID}, active)
 	if err != nil {
@@ -735,7 +752,7 @@ func (r *programRun) launchArguments(line, cwd string) map[string]any {
 
 // nativeArguments attaches any call-level capability declarations that the
 // bound native operation contract accepts.
-func (r *programRun) nativeArguments(base map[string]any, contract toolcontract.Contract) map[string]any {
+func (r *programRun) nativeArguments(base map[string]any, contract toolcontract.Contract, loopbackPorts []uint16) map[string]any {
 	arguments := make(map[string]any, len(base)+len(r.envelope))
 	for k, v := range base {
 		arguments[k] = v
@@ -749,6 +766,20 @@ func (r *programRun) nativeArguments(base map[string]any, contract toolcontract.
 		}
 		if len(supported) > 0 {
 			arguments["capability_request"] = supported
+		}
+	}
+	if len(loopbackPorts) > 0 && contract.Supports(toolcontract.CapabilityLoopbackConnect) {
+		request, _ := arguments["capability_request"].(map[string]any)
+		if request == nil {
+			request = map[string]any{}
+			arguments["capability_request"] = request
+		}
+		if _, explicit := request["loopback_connect"]; !explicit {
+			ports := make([]any, len(loopbackPorts))
+			for i, port := range loopbackPorts {
+				ports[i] = int(port)
+			}
+			request["loopback_connect"] = map[string]any{"ports": ports}
 		}
 	}
 	if secretUse, ok := r.envelope["secret_use"]; ok && contract.SecretReferenceSurface != "" {
