@@ -293,7 +293,7 @@ func maskRaster(raw []byte, scanned *ScannedVisual, matches []secretmatch.Match)
 		}
 	}
 
-	img, _, err := image.Decode(bytes.NewReader(raw))
+	img, err := decodeRaster(raw)
 	if err != nil {
 		return nil, false
 	}

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"image"
 	"io"
 	"os"
 	"strings"
@@ -59,7 +58,7 @@ func (t *tesseractOCR) RecognizeText(ctx context.Context, _ string, raw []byte) 
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrOCRUnavailable, err)
 	}
-	img, _, err := image.Decode(bytes.NewReader(raw))
+	img, err := decodeRaster(raw)
 	if err != nil {
 		return nil, fmt.Errorf("decode raster: %w", err)
 	}

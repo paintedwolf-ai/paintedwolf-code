@@ -281,6 +281,27 @@ describe("connection invalidation", () => {
     expectCall(refreshSession, client, "session-a");
   });
 
+  it("refreshes the cost of the presented session while the foreground switch is pending", async () => {
+    const appStore = foregroundStore();
+    const settings = createSettingsStore();
+    settings.actions.setPricing(pricing(true));
+    const costs = createCostStore();
+    const getCostSummary = vi.fn().mockResolvedValue(undefined);
+    await costs.refreshSession(stubClient({ getCostSummary }), "session-b");
+    const refreshSession = vi.spyOn(costs, "refreshSession").mockResolvedValue(undefined);
+    const invalidated = vi.fn();
+    costs.onInvalidated(invalidated);
+    const { invalidation } = bound(appStore, { settings, costs });
+
+    invalidation.invalidate(appStore, ["cost"], { kind: "session", project_id: "proj-1", session_id: "session-b" });
+    await vi.waitFor(() => expect(invalidated).toHaveBeenCalledTimes(1));
+    expect(refreshSession.mock.calls.map(([, id]) => id)).toEqual(["session-b"]);
+
+    invalidation.invalidate(appStore, ["cost"], { kind: "session", project_id: "proj-1", session_id: "session-c" });
+    await Promise.resolve();
+    expect(invalidated).toHaveBeenCalledTimes(1);
+  });
+
   it("applies device keys but not session keys from a background session", () => {
     const appStore = foregroundStore();
     const { invalidation } = bound(appStore);

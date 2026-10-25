@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"image/jpeg"
 	"image/png"
 	"math"
 	"runtime"
@@ -60,6 +61,19 @@ func renderPNG(t *testing.T, opts ocrfixture.Options) ([]byte, []ocrfixture.Line
 		testutil.FailErr(t, "encode fixture", err)
 	}
 	return raw, lines
+}
+
+func renderJPEG(t *testing.T, opts ocrfixture.Options) ([]byte, []ocrfixture.Line) {
+	t.Helper()
+	img, lines, err := ocrfixture.Render(opts)
+	if err != nil {
+		testutil.FailErr(t, "render fixture", err)
+	}
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, img, nil); err != nil {
+		testutil.FailErr(t, "encode jpeg", err)
+	}
+	return buf.Bytes(), lines
 }
 
 func recognize(t *testing.T, engine OCREngine, raw []byte) []TextSpan {
@@ -195,20 +209,35 @@ func TestBundledTesseractReadsRotatedCaptures(t *testing.T) {
 }
 
 // A raster whose header decodes but whose pixel data is cut short comes back
-// from the bundled engine as a recognition failure, never as a clean read.
-func TestBundledTesseractTruncatedRasterIsFailedNotClean(t *testing.T) {
-	engine := bundledTesseract(t)
-	raw, _ := renderPNG(t, ocrfixture.Options{Lines: []string{"Painted Wolf Code"}})
-	truncated := raw[:len(raw)*2/3]
-	scanned, err := NewScanner(engine).Scan(context.Background(), "image/png", truncated)
-	if err != nil {
-		testutil.FailErr(t, "scan", err)
+// from text recognition as a failure, never as a clean read.
+func TestPlatformEngineTruncatedRasterIsFailedNotClean(t *testing.T) {
+	engine := platformEngine(t)
+	cases := []struct {
+		mime string
+		raw  []byte
+	}{
+		{"image/png", func() []byte {
+			raw, _ := renderPNG(t, ocrfixture.Options{Lines: []string{"Painted Wolf Code"}})
+			return raw[:len(raw)*2/3]
+		}()},
+		{"image/jpeg", func() []byte {
+			raw, _ := renderJPEG(t, ocrfixture.Options{Lines: []string{"Painted Wolf Code"}})
+			return raw[:len(raw)*2/3]
+		}()},
 	}
-	if scanned.Gap != secretmatch.GapOCRFailed || scanned.GapDetail == "" {
-		t.Fatalf("scanned = %+v", scanned)
-	}
-	if _, err := engine.RecognizeText(context.Background(), "image/png", truncated); err == nil || errors.Is(err, ErrOCRUnavailable) {
-		t.Fatalf("truncated raster err = %v", err)
+	for _, tc := range cases {
+		t.Run(tc.mime, func(t *testing.T) {
+			scanned, err := NewScanner(engine).Scan(context.Background(), tc.mime, tc.raw)
+			if err != nil {
+				testutil.FailErr(t, "scan", err)
+			}
+			if scanned.Gap != secretmatch.GapOCRFailed || scanned.GapDetail == "" {
+				t.Fatalf("scanned = %+v", scanned)
+			}
+			if _, err := engine.RecognizeText(context.Background(), tc.mime, tc.raw); err == nil || errors.Is(err, ErrOCRUnavailable) {
+				t.Fatalf("truncated raster err = %v", err)
+			}
+		})
 	}
 }
 

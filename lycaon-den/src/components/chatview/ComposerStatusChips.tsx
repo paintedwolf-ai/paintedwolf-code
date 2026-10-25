@@ -239,9 +239,11 @@ export function ComposerStatusChips(props: Props) {
     const summary = props.appStore.state.board?.cost;
     return summary?.session_id === props.sessionId ? summary : undefined;
   };
-  const costSummary = () => props.costStore.state.session ?? boardCost();
-  const costView = () =>
-    costChipView(props.costStore.state.session, boardCost(), ceilingState());
+  // The shared store can hold another chat's summary during a switch.
+  const costStoreHolds = () => props.costStore.state.sessionId === props.sessionId.trim();
+  const sessionCost = () => (costStoreHolds() ? props.costStore.state.session : undefined);
+  const costSummary = () => sessionCost() ?? boardCost();
+  const costView = () => costChipView(sessionCost(), boardCost(), ceilingState());
 
   // Load limits before showing the ceiling suffix.
   const [limitsSettled, setLimitsSettled] = createSignal(false);
@@ -605,7 +607,7 @@ export function ComposerStatusChips(props: Props) {
             <CostSummaryPanel
               summary={costSummary()}
               trackingSince={costTrackingSince(props.settingsStore)}
-              loading={props.costStore.state.loading}
+              loading={props.costStore.state.loading || !costStoreHolds()}
             />
             <Show when={approaching()}>
               <p
