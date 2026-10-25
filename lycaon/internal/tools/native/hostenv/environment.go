@@ -19,6 +19,12 @@ func visibleEnvironment(environment []string) map[string]string {
 		name, value, _ := strings.Cut(entry, "=")
 		visible[name] = value
 	}
+	for _, entry := range environment {
+		if entry == "GIT_PAGER=cat" {
+			visible["GIT_PAGER"] = "cat"
+			break
+		}
+	}
 	return visible
 }
 
