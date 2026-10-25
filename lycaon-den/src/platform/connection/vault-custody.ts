@@ -5,6 +5,8 @@ export type VaultCustodyMode =
   | "identity_service"
   | "keychain"
   | "development"
+  // Shell-only state when the installed package no longer matches this process.
+  | "restart_required"
   | "unavailable"
   | "refused";
 

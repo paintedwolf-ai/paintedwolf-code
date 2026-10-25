@@ -6,7 +6,7 @@ const readVaultCustody = vi.fn<() => Promise<VaultCustody>>();
 vi.mock("../../../platform/connection/vault-custody.ts", () => ({ readVaultCustody: () => readVaultCustody() }));
 describe("CredentialVaultPanel", () => {
   beforeEach(() => readVaultCustody.mockReset());
-  it.each(["keychain", "identity_service", "development", "unavailable", "refused"] satisfies VaultCustodyMode[])("reports %s without custody mutation controls", async (mode) => {
+  it.each(["keychain", "identity_service", "development", "unavailable", "refused", "restart_required"] satisfies VaultCustodyMode[])("reports %s without custody mutation controls", async (mode) => {
     readVaultCustody.mockResolvedValue({ mode, service_verified: mode === "identity_service" });
     const view = render(() => <CredentialVaultPanel />);
     expect((await view.findByTestId("credential-vault-mode")).getAttribute("data-mode")).toBe(mode);
