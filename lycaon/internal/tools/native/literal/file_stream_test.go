@@ -7,7 +7,7 @@ import (
 
 func TestFileBoundedHeaderPreservesSplitUTF8AndRejectsMalformedTail(t *testing.T) {
 	// The bounded identification prefix stops partway through the final scalar.
-	prefix := strings.Repeat("a", (64<<10)+2)
+	prefix := "é" + strings.Repeat("a", 64<<10)
 	h := newHarness(t, map[string]string{
 		"split":      prefix + "😀" + strings.Repeat("x", 64),
 		"malformed":  prefix + "\xff" + strings.Repeat("x", 64),
