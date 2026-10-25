@@ -214,10 +214,12 @@ class DesktopUIOwnershipTests(unittest.TestCase):
             domain, code = 'atspi_error', 0
         button = Node(API.ROLE_PUSH_BUTTON, 'Send')
         api, _ = surface([button])
-        with ui.DesktopUI(self.app, api) as actor, patch.object(ui.time, 'monotonic', side_effect=[0, 1, 16]):
+        with ui.DesktopUI(self.app, api) as actor, patch.object(actor, 'find', return_value=button) as find_node, \
+                patch.object(ui.time, 'monotonic', side_effect=[0, 1, 16]), patch.object(ui.time, 'sleep'):
             with patch.object(button, 'queryAction', side_effect=NotImplementedError('unmounted')):
                 with self.assertRaises(CaseUnavailable) as refusal:
                     actor.click('Send')
+        self.assertEqual([call.kwargs for call in find_node.call_args_list], [{'deadline': 15}, {'deadline': 15}])
         self.assertEqual(refusal.exception.observations['desktop_mutation'],
                          {'phase': 'action-interface', 'exception_type': 'NotImplementedError'})
         button.action.doAction.assert_not_called()
