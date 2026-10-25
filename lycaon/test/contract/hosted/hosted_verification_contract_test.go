@@ -19,7 +19,7 @@ type hostedStep struct {
 	With     map[string]string
 }
 
-const mergeGroupFailFast = "${{ github.event_name == 'merge_group' }}"
+const mergeGroupFailFast = "${{ github.event_name == 'merge_group' || startsWith(github.ref, 'refs/heads/gh-readonly-queue/main/') }}"
 
 type hostedJob struct {
 	Uses        string

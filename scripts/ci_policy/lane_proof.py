@@ -19,9 +19,17 @@ def recipe(name):
     return hashlib.sha256(json.dumps(data, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
+def merge_group_execution(environment):
+    event = environment.get("GITHUB_EVENT_NAME")
+    return event == "merge_group" or (
+        event == "workflow_dispatch"
+        and environment.get("GITHUB_REF", "").startswith("refs/heads/gh-readonly-queue/main/")
+    )
+
+
 def seal(root, record, environment):
     name = record["lane"]
-    if (environment.get("GITHUB_EVENT_NAME") != "merge_group" or name not in REUSABLE
+    if (not merge_group_execution(environment) or name not in REUSABLE
             or record["status"] != "passed" or record.get("packages") or record.get("execution_error")):
         return None
     source = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
@@ -38,7 +46,7 @@ def seal(root, record, environment):
 
 
 def publish(root, record):
-    if os.environ.get("GITHUB_EVENT_NAME") != "merge_group":
+    if not merge_group_execution(os.environ):
         return
     proof = seal(root, record, os.environ)
     if proof is not None:
