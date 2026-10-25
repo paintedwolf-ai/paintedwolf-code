@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -58,6 +59,8 @@ func TestNixLayoutRequiresExplicitReceiptAndExactManifest(t *testing.T) {
 		`{"format_version":1,"output":"relative","nix_store":"/tools/nix-store"}`,
 		`{"format_version":2,"output":"/wrong","nix_store":"/tools/nix-store"}`,
 		`{"format_version":1,"output":"/wrong","nix_store":"/tools/nix-store","trusted":true}`,
+		`{"format_version":1,"output":"/wrong","nix_store":"/tools/nix-store"}{}`,
+		strings.Repeat(" ", 16385),
 	} {
 		testutil.FailErr(t, "replace receipt", os.WriteFile(filepath.Join(root, "nix-layout.json"), []byte(receipt), 0o600))
 		if _, err := nixLayout(executable, bytes.NewReader([]byte("image"))); err == nil {
@@ -76,8 +79,20 @@ func TestNixGenerationRefusesChangedImageAndMalformedManifest(t *testing.T) {
 	if _, err := nixLayout(executable, bytes.NewReader([]byte("changed"))); err == nil {
 		t.Fatal("changed image accepted")
 	}
-	testutil.FailErr(t, "make manifest replaceable", os.Chmod(filepath.Join(filepath.Dir(filepath.Dir(executable)), "manifest.json"), 0o600))
-	testutil.FailErr(t, "corrupt manifest", os.WriteFile(filepath.Join(filepath.Dir(filepath.Dir(executable)), "manifest.json"), []byte("{}"), 0o600))
+	root := filepath.Dir(filepath.Dir(executable))
+	if _, err := nixLayout(filepath.Join(root, "bin", "unlisted"), bytes.NewReader([]byte("image"))); err == nil {
+		t.Fatal("unlisted executable accepted")
+	}
+	testutil.FailErr(t, "make manifest replaceable", os.Chmod(filepath.Join(root, "manifest.json"), 0o600))
+	wrongPkg := strings.Replace(func() string {
+		b, _ := os.ReadFile(filepath.Join(root, "manifest.json"))
+		return string(b)
+	}(), `"painted-wolf-code"`, `"other-package"`, 1)
+	testutil.FailErr(t, "write wrong package manifest", os.WriteFile(filepath.Join(root, "manifest.json"), []byte(wrongPkg), 0o600))
+	if _, err := nixLayout(executable, bytes.NewReader([]byte("image"))); err == nil {
+		t.Fatal("foreign package manifest accepted")
+	}
+	testutil.FailErr(t, "corrupt manifest", os.WriteFile(filepath.Join(root, "manifest.json"), []byte("{}"), 0o600))
 	if _, err := nixLayout(executable, bytes.NewReader([]byte("image"))); err == nil {
 		t.Fatal("unknown manifest accepted")
 	}
