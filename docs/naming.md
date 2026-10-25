@@ -19,6 +19,8 @@ Product vs engine names, and one functional id per concept.
 
 The GitHub repository is **`paintedwolf-ai/paintedwolf-code`**. Host config lives under `~/.config/paintedwolf/` (`CONFIG_DIR_NAME`) — a separate leaf from the repo slug.
 
+The root sits at the same place on every platform and does not follow `XDG_CONFIG_HOME` on Linux. It is one device root holding configuration, the store, project data and credentials together, which the XDG base directories would split across config, data and state homes; the vault identity service binds each identity to that root's path, and the protected launch hands the engine only session facts, so a root chosen by an inherited variable would quietly open a different, empty device. `~/.config` is also XDG's default.
+
 **Desktop app OS identity** (the bundle id and binary use `painted-wolf`; the host config dir uses the product name):
 
 | Surface | Value |
