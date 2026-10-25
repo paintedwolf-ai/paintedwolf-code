@@ -40,10 +40,22 @@ pub struct PickedPath {
 /// The pick, or `None` on cancel.
 /// Blocking worker hosts the modal loop so the async runtime stays free.
 #[tauri::command]
-pub async fn pick_path(options: PickOptions) -> Result<Option<PickedPath>, String> {
-    let picked = tauri::async_runtime::spawn_blocking(move || run_picker(options))
-        .await
-        .map_err(|e| e.to_string())?;
+pub async fn pick_path(
+    window: tauri::WebviewWindow,
+    options: PickOptions,
+) -> Result<Option<PickedPath>, String> {
+    let picked = tauri::async_runtime::spawn_blocking(move || {
+        #[cfg(target_os = "linux")]
+        if matches!(options.target, PickTarget::Folder) {
+            return super::linux_folder_picker::pick(&window, &options.title)
+                .map(|picked| picked.map(|path| (path, None)));
+        }
+        #[cfg(not(target_os = "linux"))]
+        let _ = window;
+        Ok::<_, String>(run_picker(options))
+    })
+    .await
+    .map_err(|e| e.to_string())??;
     let Some((path, mode)) = picked else {
         return Ok(None);
     };
