@@ -33,7 +33,7 @@ func ReleaseProjectSources(t *testing.T, srv *hostapi.Server) {
 	projects, err := srv.Sources.Workspace.ProjectRegistry.List(ctx)
 	testutil.FailErr(t, "list projects for source release", err)
 	for i := range projects {
-		sourcefeed.StopProjectWatch(ctx, projects[i].ID)
+		testutil.FailErr(t, "stop project watch "+projects[i].ID, sourcefeed.StopProjectWatch(ctx, projects[i].ID))
 	}
 	// Events delivered before the watches stopped may have scheduled work.
 	DrainBackground(t, srv)
