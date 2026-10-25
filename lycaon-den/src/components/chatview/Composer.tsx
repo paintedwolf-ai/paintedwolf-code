@@ -85,6 +85,7 @@ import {
 } from "../../chat/composer/prompt-recall.ts";
 import { externalContentSearchQuery } from "../../chat/untrusted/untrusted-content-copy.ts";
 import { syncThemedScrollbar } from "../../platform/scrolling/themed-scrollbars.ts";
+import { revealTextareaCaret } from "../../platform/scrolling/textarea-caret-reveal.ts";
 import { Scrollport } from "../primitives/Scrollport.tsx";
 import { getLycaonClient } from "../../platform/connection/app-connection.ts";
 import { appBootPreparation } from "../../platform/connection/app-boot-readiness.ts";
@@ -105,6 +106,7 @@ import {
   type HeightFollow,
   type HeightMotionTiming,
 } from "../../ui/height-toggle-motion.ts";
+import { handleSlashSuggestionKey } from "../../chat/composer/slash-suggestion-keys.ts";
 
 let nextSlashListboxId = 0;
 
@@ -341,6 +343,7 @@ export function Composer(props: Props) {
   let footerRef: HTMLElement | undefined;
   let bodyRef: HTMLDivElement | undefined;
   let scrollRef: HTMLDivElement | undefined;
+  let viewportRef: HTMLDivElement | undefined;
   let composerHeight: HeightFollow | undefined;
   let fileInputRef: HTMLInputElement | undefined;
   // Plain prompts overlap; decision sends serialize.
@@ -446,6 +449,9 @@ export function Composer(props: Props) {
   const clearDraft = () => sizeDraft(clearDraftHeight, "snap");
   /** Conversation switches resize the draft without animation. */
   const snapDraft = () => sizeDraft(fitDraftHeight, "snap");
+  const revealCaret = () => {
+    if (inputRef && viewportRef) revealTextareaCaret(inputRef, viewportRef);
+  };
 
   const resizeChrome = (mutate: () => void) => {
     if (composerHeight) composerHeight.change(HEIGHT_TOGGLE_TIMING, mutate);
@@ -516,6 +522,7 @@ export function Composer(props: Props) {
       if (!inputRef) return;
       growDraft();
       inputRef.setSelectionRange(inputRef.value.length, inputRef.value.length);
+      revealCaret();
     });
     return true;
   };
@@ -556,53 +563,23 @@ export function Composer(props: Props) {
     queueMicrotask(() => {
       growDraft();
       focusComposerInput(inputRef);
+      revealCaret();
     });
   };
 
   const onSlashSuggestionKeyDown = (event: KeyboardEvent) => {
-    if (
-      !showSlashSuggestions() ||
-      event.isComposing ||
-      event.metaKey ||
-      event.ctrlKey ||
-      event.altKey ||
-      event.shiftKey
-    ) {
-      return;
-    }
+    if (!showSlashSuggestions()) return;
     const suggestions = slashSuggestions();
-    if (suggestions.length === 0) return;
-    let handled = true;
-    switch (event.key) {
-      case "ArrowDown":
-        setActiveSlashSuggestion((index) => (index + 1) % suggestions.length);
-        break;
-      case "ArrowUp":
-        setActiveSlashSuggestion(
-          (index) => (index - 1 + suggestions.length) % suggestions.length,
-        );
-        break;
-      case "Home":
-        setActiveSlashSuggestion(0);
-        break;
-      case "End":
-        setActiveSlashSuggestion(suggestions.length - 1);
-        break;
-      case "Enter":
-        {
-          const suggestion = suggestions[activeSlashSuggestion()];
-          if (suggestion) applySlashSuggestion(suggestion.trigger);
-        }
-        break;
-      case "Escape":
-        setDismissedSlashText(text());
-        break;
-      default:
-        handled = false;
-    }
-    if (!handled) return;
-    event.preventDefault();
-    event.stopPropagation();
+    handleSlashSuggestionKey(event, {
+      count: suggestions.length,
+      active: activeSlashSuggestion,
+      setActive: setActiveSlashSuggestion,
+      choose: (index) => {
+        const suggestion = suggestions[index];
+        if (suggestion) applySlashSuggestion(suggestion.trigger);
+      },
+      dismiss: () => setDismissedSlashText(text()),
+    });
   };
 
   const clearAttachments = () => {
@@ -725,6 +702,7 @@ export function Composer(props: Props) {
     queueMicrotask(() => {
       el.selectionStart = el.selectionEnd = start + 1;
       growDraft();
+      revealCaret();
     });
   };
 
@@ -1144,7 +1122,14 @@ export function Composer(props: Props) {
           </AnchoredSurface>
         </Show>
         <div class="den-composer-row">
-          <Scrollport ref={(el) => { scrollRef = el; }} class="den-composer-scroll">
+          <Scrollport class="den-composer-scroll"
+            ref={(el) => {
+              scrollRef = el;
+            }}
+            viewportRef={(el) => {
+              viewportRef = el;
+            }}
+          >
             <textarea
               ref={(el) => {
                 inputRef = el;
@@ -1170,6 +1155,22 @@ export function Composer(props: Props) {
                   updateComposerDocumentDraft(destination(), value);
                 });
                 growDraft();
+                revealCaret();
+              }}
+              onClick={() => revealCaret()}
+              onKeyUp={(event) => {
+                if (
+                  event.key === "ArrowUp" ||
+                  event.key === "ArrowDown" ||
+                  event.key === "ArrowLeft" ||
+                  event.key === "ArrowRight" ||
+                  event.key === "Home" ||
+                  event.key === "End" ||
+                  event.key === "PageUp" ||
+                  event.key === "PageDown"
+                ) {
+                  revealCaret();
+                }
               }}
               onFocus={() => {
                 setInputFocused(true);
