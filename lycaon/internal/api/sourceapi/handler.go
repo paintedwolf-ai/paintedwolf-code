@@ -179,18 +179,20 @@ type Views struct {
 }
 
 type Watch struct {
-	CatalogSnapshot CatalogSnapshotFunc
-	EditorDocuments *editordoc.Service
-	ProjectRegistry project.Registry
-	ScanCadence     *scancadence.Service
-	SourceInventory InventoryService
-	WatchNeedsSeed  func(rootPath string) bool
-	background      *taskgroup.Group
-	responses       *httpio.Responder
-	watches         sourcefeed.WatchLifetime
-	watchWork       workscope.Group
-	sourceWatchJobs map[string]*sourceWatchJob
-	sourceWatchMu   sync.Mutex
+	CatalogSnapshot  CatalogSnapshotFunc
+	EditorDocuments  *editordoc.Service
+	ProjectRegistry  project.Registry
+	ScanCadence      *scancadence.Service
+	SourceInventory  InventoryService
+	WatchNeedsSeed   func(rootPath string) bool
+	background       *taskgroup.Group
+	responses        *httpio.Responder
+	watches          sourcefeed.WatchLifetime
+	watchWork        workscope.Group
+	watchBindingMu   sync.Mutex
+	suspendedWatches map[string]int
+	sourceWatchJobs  map[string]*sourceWatchJob
+	sourceWatchMu    sync.Mutex
 }
 
 type Workspace struct {

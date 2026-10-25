@@ -3,6 +3,7 @@ package sourcefeed
 import (
 	"context"
 	"github.com/lycaon/lycaon/internal/repochange"
+	"github.com/lycaon/lycaon/internal/workscope"
 	"log/slog"
 	"strings"
 )
@@ -48,7 +49,12 @@ func EnsureProjectWatch(ctx context.Context, lifetime *WatchLifetime, projectID,
 	if previous != nil {
 		previous.unbind()
 	}
-	w := &projectWatch{projectID: projectID, roots: cleaned, external: external, lifetime: lifetime}
+	callbacks := &workscope.Group{}
+	if previous != nil {
+		// Root replacement keeps active callbacks inside the project's drain.
+		callbacks = previous.callbacks
+	}
+	w := &projectWatch{callbacks: callbacks, projectID: projectID, roots: cleaned, external: external, lifetime: lifetime}
 	w.changes = newChangeConverger(externalChangeQuietWindow, externalChangeMaxDelay, w.flushExternalChanges)
 	w.changes.holdWhile(w.gitBusy, externalChangeHoldCeiling)
 	w.unbind = repochange.RegisterObserver(w.observe)

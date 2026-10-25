@@ -81,7 +81,7 @@ func (s *Roots) HandleDetachProjectRoot(w http.ResponseWriter, r *http.Request) 
 	}
 	s.forgetRemovedEditorDocuments(dependents)
 	s.sourceViews.InvalidateProjectSourceViews(id)
-	sourcefeed.StopProjectWatch(r.Context(), id)
+	_ = sourcefeed.StopProjectWatch(r.Context(), id)
 	afterRoots := project.RootRefsFrom(change.After)
 	s.Sessions.ProjectControl.ReassignSessionsAfterRootDetach(r.Context(), id, rootID, afterRoots)
 	s.Sessions.ProjectControl.InvalidateSessionWorkspacePaths(r.Context(), id)

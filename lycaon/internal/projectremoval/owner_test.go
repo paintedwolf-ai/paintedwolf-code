@@ -1,5 +1,3 @@
-//go:build integration
-
 package projectremoval
 
 import (
@@ -240,7 +238,7 @@ func TestInterruptedReceiptSurvivesStoreRecreation(t *testing.T) {
 	operation := uuid.NewString()
 	result := wire.ProjectRemovalResult{OperationID: operation, ProjectID: id, ProjectState: "deleted", CleanupState: "interrupted", Extensions: []string{"acme/one"}}
 	testutil.FailErr(t, "begin receipt", store.begin(t.Context(), record{ProjectID: id, Request: "{}", Result: result}))
-	o := &Owner{Store: NewStore(database)}
+	o := &Owner{Store: NewStore(database), Projects: &registry{}}
 	replay, err := o.Result(t.Context(), id, operation)
 	testutil.FailErr(t, "recover receipt", err)
 	if replay.ProjectState != "deleted" || replay.CleanupState != "interrupted" || replay.FailureCode != "removal_interrupted" {
