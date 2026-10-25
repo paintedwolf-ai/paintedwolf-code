@@ -4,7 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"path/filepath"
+	"syscall"
 	"testing"
 	"time"
 
@@ -134,5 +137,35 @@ func TestAuditOperationalFailureRemainsRetryable(t *testing.T) {
 	}
 	if err := integrityCheckError(sql.ErrConnDone, "audit"); !errors.Is(err, sql.ErrConnDone) {
 		t.Fatalf("lost diagnostic cause: %v", err)
+	}
+}
+
+func TestOperationalSQLiteFailuresAreNotCorruption(t *testing.T) {
+	database, err := sql.Open("sqlite", ":memory:")
+	testutil.FailErr(t, "open operational failure fixture", err)
+	defer func() { _ = database.Close() }()
+	database.SetMaxOpenConns(1)
+	_, err = database.Exec(`CREATE TABLE retained(body BLOB); PRAGMA query_only=ON`)
+	testutil.FailErr(t, "configure read-only fixture", err)
+	_, err = database.Exec(`INSERT INTO retained VALUES('body')`)
+	var failure *StoreIncompatibleError
+	if !errors.As(ClassifyStoreFailure(err), &failure) || failure.Reason != RecoveryReasonStorageUnavailable {
+		t.Fatalf("read-only failure = %v, want unavailable storage", err)
+	}
+	_, err = database.Exec(`PRAGMA query_only=OFF; PRAGMA max_page_count=2`)
+	testutil.FailErr(t, "limit fixture capacity", err)
+	_, err = database.Exec(`INSERT INTO retained VALUES(zeroblob(100000))`)
+	failure = nil
+	if !errors.As(ClassifyStoreFailure(err), &failure) || failure.Reason != RecoveryReasonInsufficientSpace || failure.Space != nil {
+		t.Fatalf("full database failure = %v, want capacity failure without invented estimates", err)
+	}
+}
+
+func TestUnsupportedStorageOperationIsNotDamage(t *testing.T) {
+	for _, cause := range []error{syscall.ENOTSUP, syscall.ENOSYS, fseffect.ErrUnsupported} {
+		var failure *StoreIncompatibleError
+		if !errors.As(ClassifyStoreFailure(fmt.Errorf("publication: %w", cause)), &failure) || failure.Reason != RecoveryReasonStorageUnavailable {
+			t.Fatalf("unsupported storage operation = %v, want storage unavailable", failure)
+		}
 	}
 }

@@ -26,6 +26,7 @@ import {
   lastSidecarStartFailure,
   provideCredentialVaultPassword,
   resetCredentialVault,
+  quitDesktopForRestart,
 } from "../platform/connection/backend.ts";
 import { engineState } from "../platform/connection/engine-supervision.ts";
 import { lastSeenHealth } from "../platform/connection/health.ts";
@@ -103,6 +104,8 @@ export function createCriticalStop(appStore: AppStore): CriticalStopHandle {
 
   const recoveryInFlightLabel = (recovery: CriticalStopRecovery): string => {
     switch (recovery) {
+      case "quit_desktop":
+        return "Quitting…";
       case "reconnect":
       case "recheck":
         return "Checking…";
@@ -113,6 +116,8 @@ export function createCriticalStop(appStore: AppStore): CriticalStopHandle {
         return "Finishing…";
       case "finish_fresh_start":
         return "Starting fresh…";
+      case "retry_upgrade":
+        return "Updating…";
       case "unlock_credential_vault":
         return "Unlocking…";
       case "create_credential_vault":
@@ -151,6 +156,10 @@ export function createCriticalStop(appStore: AppStore): CriticalStopHandle {
   };
 
   const attempt = (stop: CriticalStopSpec): void => {
+    if (stop.recovery === "quit_desktop") {
+      void quitDesktopForRestart().catch(() => setAttemptError(stop.retryFailed));
+      return;
+    }
     if (stop.recovery === "reset_credential_vault") {
       void resetVault(stop);
       return;
@@ -274,7 +283,8 @@ export function createCriticalStop(appStore: AppStore): CriticalStopHandle {
     }
     if (
       stop.recovery === "finish_restore" ||
-      stop.recovery === "finish_fresh_start"
+      stop.recovery === "finish_fresh_start" ||
+      stop.recovery === "retry_upgrade"
     ) {
       void restartAppBackend().then(
         () => {

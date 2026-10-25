@@ -135,6 +135,7 @@ describe("resolveCriticalStop", () => {
     ["credential_vault_unlock_failed", "unlock_credential_vault"],
     ["credential_vault_uninitialized", "create_credential_vault"],
     ["credential_vault_corrupt", "reset_credential_vault"],
+    ["desktop_restart_required", "quit_desktop"],
     ["credential_vault_custodian_unavailable", "reconnect"],
     ["credential_vault_launcher_refused", "reconnect"],
     ["credential_vault_identity_missing", "reconnect"],
@@ -323,6 +324,7 @@ describe("criticalStopRecoveryLabel", () => {
     expect(criticalStopRecoveryLabel("finish_fresh_start")).toBe(
       "Finish starting fresh",
     );
+    expect(criticalStopRecoveryLabel("retry_upgrade")).toBe("Try again");
   });
 });
 
@@ -400,6 +402,36 @@ describe("store incompatible critical stop", () => {
     expect(stop.message).toBe(CLIENT_NOTICES.store_incompatible_schema_no_snapshot.message);
   });
 
+  it("asks for free space and a retry, never a restore, when the upgrade has no room", () => {
+    const stop = storeIncompatibleCriticalStop({
+      ...recoveryHealth,
+      recovery_reason: "insufficient_space",
+      recovery_detail: "recovery and database work need approximately 3.5 GiB free; 1.0 GiB is available",
+      recovery_space_needed_bytes: 3.5 * 1024 ** 3,
+      recovery_space_available_bytes: 1024 ** 3,
+    });
+    expect(stop.title).toBe(CLIENT_NOTICES.store_insufficient_space.title);
+    expect(stop.message).toContain("3.5 GB");
+    expect(stop.message).toContain("1.0 GB");
+    expect(stop.message).not.toContain("{");
+    expect(stop.recovery).toBe("retry_upgrade");
+    expect(stop.retryFailed).toBe(CLIENT_NOTICES.store_insufficient_space.suggestedAction);
+  });
+
+  it.each(["storage_unavailable", "insufficient_space"] as const)(
+    "offers retry without invented measurements for %s",
+    (reason) => {
+      const stop = storeIncompatibleCriticalStop({ ...recoveryHealth, recovery_reason: reason });
+      expect(stop.recovery).toBe("retry_upgrade");
+      expect(stop.message).not.toContain("{");
+      expect(stop.message).not.toContain("0 B");
+      expect(stop.message).not.toContain("has not been changed");
+      expect(stop.title).toBe(reason === "storage_unavailable"
+        ? CLIENT_NOTICES.store_storage_unavailable.title
+        : CLIENT_NOTICES.store_storage_full.title);
+    },
+  );
+
   it("keeps recovery copy out of the model source", () => {
     const here = dirname(fileURLToPath(import.meta.url));
     const src = readFileSync(join(here, "critical-stop-model.ts"), "utf8");
@@ -410,4 +442,14 @@ describe("store incompatible critical stop", () => {
       expect(src, fragment).not.toContain(fragment);
     }
   });
+});
+
+
+it("keeps a native restart requirement when automatic engine recovery stops", () => {
+  const stop = resolveCriticalStop({
+    sidecarStatus: "disconnected",
+    engine: { state: "stopped", exit: { code: 1, description: "exited" }, restart_required: true },
+  });
+  expect(stop?.code).toBe("desktop_restart_required");
+  expect(stop?.recovery).toBe("quit_desktop");
 });

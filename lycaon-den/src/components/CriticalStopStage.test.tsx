@@ -43,6 +43,7 @@ const saveDiagnosticsBundle = vi.fn();
 const saveStartupDiagnosticsBundle = vi.fn();
 const provideCredentialVaultPassword = vi.fn();
 const resetCredentialVault = vi.fn();
+const quitDesktopForRestart = vi.fn();
 let startFailure: string | null = null;
 let recoveryClient: {
   restoreRecoverySnapshot: typeof restoreRecoverySnapshot;
@@ -71,6 +72,7 @@ vi.mock("../platform/connection/backend.ts", () => ({
   provideCredentialVaultPassword: (...args: unknown[]) =>
     provideCredentialVaultPassword(...args),
   resetCredentialVault: () => resetCredentialVault(),
+  quitDesktopForRestart: () => quitDesktopForRestart(),
 }));
 
 vi.mock("../settings/system/diagnostics-export.ts", () => ({
@@ -114,6 +116,8 @@ describe("createCriticalStop", () => {
     saveDiagnosticsBundle.mockReset();
     saveStartupDiagnosticsBundle.mockReset();
     provideCredentialVaultPassword.mockReset();
+    quitDesktopForRestart.mockReset();
+    quitDesktopForRestart.mockResolvedValue(undefined);
     resetCredentialVault.mockReset();
     resetCredentialVault.mockResolvedValue(undefined);
     startFailure = null;
@@ -200,6 +204,18 @@ describe("createCriticalStop", () => {
     expect(
       rendered.baseElement.querySelector('[data-testid="critical-stop"]'),
     ).toBeNull();
+  });
+
+  it("quits through the native coordinator when the installed desktop changed", async () => {
+    startFailure = "desktop_restart_required";
+    const { appStore, rendered } = mount();
+    appStore.actions.setSidecarStatus("disconnected");
+    const root = rendered.baseElement as HTMLElement;
+    expect(root.querySelector('[data-testid="credential-vault-password"]')).toBeNull();
+    (await findByTestId(root, "critical-stop-primary")).click();
+    await waitFor(() => expect(quitDesktopForRestart).toHaveBeenCalledOnce());
+    expect(connectAppBackend).not.toHaveBeenCalled();
+    expect(resetCredentialVault).not.toHaveBeenCalled();
   });
 
   it("unlocks the credential vault with an explicit app password", async () => {
@@ -369,6 +385,31 @@ describe("createCriticalStop", () => {
       expect(root.querySelector(".den-critical-stop__message")?.textContent).toContain(
         CLIENT_NOTICES.readiness_recheck_failed.message,
       );
+    });
+  });
+
+  it.each(["insufficient_space", "storage_unavailable"] as const)("retries %s without offering a fresh start", async (reason) => {
+    noteHealthResponse({
+      ...recoveryHealth,
+      recovery_reason: reason,
+      recovery_space_needed_bytes: 3 * 1024 ** 3,
+      recovery_space_available_bytes: 1024 ** 3,
+    });
+    restartAppBackend.mockImplementation(async () => {
+      noteHealthResponse(readyHealth);
+    });
+    const { appStore, rendered } = mount();
+    appStore.actions.setSidecarStatus("connected");
+
+    const root = rendered.baseElement as HTMLElement;
+    const action = await findByTestId(root, "critical-stop-primary");
+    expect(action.textContent).toContain("Try again");
+    expect(root.querySelector('[data-testid="critical-stop-secondary"]')).toBeNull();
+    action.click();
+
+    await waitFor(() => {
+      expect(restartAppBackend).toHaveBeenCalledOnce();
+      expect(root.querySelector('[data-testid="critical-stop"]')).toBeNull();
     });
   });
 

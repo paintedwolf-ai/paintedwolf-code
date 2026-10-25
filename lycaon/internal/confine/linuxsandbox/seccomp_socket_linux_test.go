@@ -60,4 +60,6 @@ func TestAppliedUnixDatagramSpellings(t *testing.T) {
 		_ = unix.Close(pair[0])
 		_ = unix.Close(pair[1])
 	}
+	_ = unix.Close(listener)
+	os.Exit(0)
 }
