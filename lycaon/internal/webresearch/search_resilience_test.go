@@ -64,7 +64,6 @@ func TestFanOutCutsSlowProviderWhenBudgetMet(t *testing.T) {
 		health: reg.ensureHealthGate("slow"),
 	})
 
-	start := time.Now()
 	result := Search(context.Background(), SearchOptions{
 		Query: "widget probe",
 		Limit: 1,
@@ -77,8 +76,8 @@ func TestFanOutCutsSlowProviderWhenBudgetMet(t *testing.T) {
 	if !result.OK || len(result.Results) != 1 || result.Results[0].Provider != "fast" {
 		t.Fatalf("result = %+v want one fast hit", result)
 	}
-	if elapsed := time.Since(start); elapsed > 2*time.Second {
-		t.Fatalf("search took %v — slow provider was not cut", elapsed)
+	if len(result.ProvidersSkipped) != 1 || result.ProvidersSkipped[0].Provider != "slow" || result.ProvidersSkipped[0].Reason != "cut" {
+		t.Fatalf("providers skipped = %+v, want slow provider cut", result.ProvidersSkipped)
 	}
 }
 
@@ -100,7 +99,6 @@ func TestFanOutGraceCutsStragglersWithPartialHits(t *testing.T) {
 		health: reg.ensureHealthGate("slow"),
 	})
 
-	start := time.Now()
 	result := Search(context.Background(), SearchOptions{
 		Query: "widget probe",
 		Limit: 5,
@@ -116,8 +114,8 @@ func TestFanOutGraceCutsStragglersWithPartialHits(t *testing.T) {
 	if len(result.Results) != 1 {
 		t.Fatalf("result = %+v want one partial hit", result)
 	}
-	if elapsed := time.Since(start); elapsed > 2*time.Second {
-		t.Fatalf("search took %v — grace did not cut slow provider", elapsed)
+	if len(result.ProvidersSkipped) != 1 || result.ProvidersSkipped[0].Provider != "slow" || result.ProvidersSkipped[0].Reason != "cut" {
+		t.Fatalf("providers skipped = %+v, want slow provider cut by grace", result.ProvidersSkipped)
 	}
 }
 

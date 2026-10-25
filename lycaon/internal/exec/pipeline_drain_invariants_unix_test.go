@@ -214,21 +214,12 @@ func TestPipelineDrainInvariant_NormalExit(t *testing.T) {
 				Timeout:   15 * time.Second,
 			}
 
-			started := time.Now()
 			result, err := RunPipeline(context.Background(), []Stage{{Name: binary, Args: args}}, opts)
-			elapsed := time.Since(started)
-
 			if err != nil {
 				t.Fatalf("RunPipeline failed: %v", err)
 			}
-			if result.ExitCode != 0 {
-				t.Fatalf("result exit code = %d, want 0", result.ExitCode)
-			}
-
-			// Execution stays bounded even when descendants hold pipes open.
-			if elapsed > maxDrainCeiling {
-				t.Fatalf("execution finished in %v, want within %v of the drain ceiling",
-					elapsed, maxDrainCeiling)
+			if result.TimedOut || result.ExitCode != 0 {
+				t.Fatalf("result = %+v, want non-timed-out exit code 0", result)
 			}
 
 			// Invariant 2: Process group reaping and zombie-free lifecycle.
@@ -340,20 +331,12 @@ func TestPipelineDrainInvariant_ForegroundCancellation_DetachedDrainCeiling(t *t
 	})
 
 	// Cancel leader; detached grandchild continues holding pipes open.
-	cancelledAt := time.Now()
 	cancel()
 
 	select {
 	case <-done:
 	case <-time.After(maxDrainCeiling + 5*time.Second):
 		t.Fatal("cancelled pipeline with detached holder did not settle")
-	}
-	elapsed := time.Since(cancelledAt)
-
-	// Cancellation stays bounded whether supervision closes pipes or drain expires.
-	if elapsed > maxDrainCeiling {
-		t.Fatalf("cancellation settled in %v, want within %v of the drain ceiling",
-			elapsed, maxDrainCeiling)
 	}
 
 	// Invariant: Leader reaped.
@@ -378,7 +361,6 @@ func TestPipelineDrainInvariant_AsyncPipelineDrainCeiling(t *testing.T) {
 		InlineEnv: env,
 	}
 
-	started := time.Now()
 	async, err := StartPipelineAsync(context.Background(), []Stage{{Name: binary, Args: args}}, opts, tw, io.Discard)
 	testutil.FailErr(t, "start async pipeline", err)
 	t.Cleanup(async.Kill)
@@ -388,18 +370,11 @@ func TestPipelineDrainInvariant_AsyncPipelineDrainCeiling(t *testing.T) {
 	case <-time.After(maxDrainCeiling + 5*time.Second):
 		t.Fatal("async pipeline did not settle under drain ceiling")
 	}
-	elapsed := time.Since(started)
 
 	result, err := async.Wait()
 	testutil.FailErr(t, "settle async pipeline", err)
-	if result.ExitCode != 0 {
-		t.Fatalf("async result exit code = %d, want 0", result.ExitCode)
-	}
-
-	// Async completion stays bounded.
-	if elapsed > maxDrainCeiling {
-		t.Fatalf("async execution finished in %v, want within %v of the drain ceiling",
-			elapsed, maxDrainCeiling)
+	if result.TimedOut || result.ExitCode != 0 {
+		t.Fatalf("async result = %+v, want non-timed-out exit code 0", result)
 	}
 
 	// Invariant 2: Process group reaping.

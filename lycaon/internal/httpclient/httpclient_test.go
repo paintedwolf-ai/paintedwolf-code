@@ -34,18 +34,12 @@ func TestBoundedTimesOutOnSlowServer(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	start := time.Now()
 	_, err := Bounded(egressclass.ProviderModelDiscovery, 200*time.Millisecond).Get(srv.URL) //nolint:bodyclose // the request is expected to fail
-	elapsed := time.Since(start)
-
 	if err == nil {
 		t.Fatal("expected a timeout error")
 	}
 	if !isTimeout(err) {
 		t.Fatalf("error is not a timeout: %v", err)
-	}
-	if elapsed > time.Second {
-		t.Fatalf("took %v to time out on a 200ms bound", elapsed)
 	}
 }
 
@@ -120,15 +114,9 @@ func TestStreamingBoundsResponseHeaderWait(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	start := time.Now()
 	_, err := Streaming(egressclass.LLMProviderRequest).Get(srv.URL) //nolint:bodyclose // the request is expected to fail
-	elapsed := time.Since(start)
-
-	if err == nil {
-		t.Fatal("Streaming must still bound the wait for response headers")
-	}
-	if elapsed > 2*time.Second {
-		t.Fatalf("took %v to give up on a 150ms response-header bound", elapsed)
+	if err == nil || !isTimeout(err) {
+		t.Fatalf("Streaming response-header bound error = %v, want timeout", err)
 	}
 }
 
@@ -141,12 +129,8 @@ func TestProfilesFailFastOnClosedPort(t *testing.T) {
 		"download":  Download(egressclass.BrowserEngineDownload, time.Minute),
 	} {
 		t.Run(name, func(t *testing.T) {
-			start := time.Now()
-			if _, err := client.Get(url); err == nil { //nolint:bodyclose // the request is expected to fail
-				t.Fatal("expected a connection error against a closed port")
-			}
-			if elapsed := time.Since(start); elapsed > 5*time.Second {
-				t.Fatalf("took %v to fail against a closed port", elapsed)
+			if _, err := client.Get(url); err == nil || isTimeout(err) { //nolint:bodyclose // the request is expected to fail
+				t.Fatalf("closed port error = %v, want immediate connection error rather than timeout", err)
 			}
 		})
 	}

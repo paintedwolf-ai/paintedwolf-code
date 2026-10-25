@@ -28,13 +28,17 @@ func (p *deadlineProbeProvider) Complete(ctx context.Context, req modelcall.Comp
 
 // holdingScreen stands in for a credential card nobody has answered yet.
 type holdingScreen struct {
-	hold time.Duration
-	err  error
+	hold     time.Duration
+	err      error
+	screened *bool
 }
 
 func (s holdingScreen) Screen(ctx context.Context, _ ScreenDestination, req modelcall.CompletionRequest) (modelcall.CompletionRequest, error) {
 	select {
 	case <-time.After(s.hold):
+		if s.screened != nil {
+			*s.screened = true
+		}
 	case <-ctx.Done():
 		return modelcall.CompletionRequest{}, ctx.Err()
 	}
@@ -47,17 +51,17 @@ func TestCallBudgetStartsAfterScreening(t *testing.T) {
 	probe := &deadlineProbeProvider{namedStubProvider: namedStubProvider{id: "lite", content: "ok"}}
 	reg := newEmptyRegistry()
 	testutil.FailErr(t, "Register", reg.Register(probe))
-	reg.SetOutboundSecretScreen(holdingScreen{hold: 2 * budget})
+	var screened bool
+	reg.SetOutboundSecretScreen(holdingScreen{hold: 2 * budget, screened: &screened})
 
 	p, err := reg.Get("lite")
 	testutil.FailErr(t, "Get", err)
 	budgeted := NewCallBudget(budget)
-	start := time.Now()
 	_, err = p.Complete(WithCallBudget(context.Background(), budgeted), modelcall.CompletionRequest{Model: "lite-model"})
 	testutil.FailErr(t, "Complete", err)
 
-	if held := time.Since(start); held < 2*budget {
-		t.Fatalf("screen hold = %v, want the full %v hold", held, 2*budget)
+	if !screened {
+		t.Fatal("screen hold did not complete before provider call")
 	}
 	if !probe.hadDeadline {
 		t.Fatal("provider received no deadline: the budget never started")

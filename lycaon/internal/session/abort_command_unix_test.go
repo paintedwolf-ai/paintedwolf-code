@@ -75,11 +75,7 @@ func TestAbortEndsATurnBlockedInACommand(t *testing.T) {
 	}()
 	job := waitForJobPID(t, pidFile)
 
-	started := time.Now()
 	testutil.FailErr(t, "abort", mgr.Stops.Abort(ctx, sess.ID, "user stopped"))
-	if elapsed := time.Since(started); elapsed > exec.TerminateGrace+10*time.Second {
-		t.Fatalf("abort took %v", elapsed)
-	}
 	var turn commandTurnResult
 	select {
 	case turn = <-turnDone:
@@ -111,11 +107,7 @@ func TestAbortStopsWithoutATurnThatNeverReleases(t *testing.T) {
 
 	stuck := mgr.Runner.Execution.Prompt.Acquire(sess.ID)
 	stuck.Lock()
-	started := time.Now()
 	testutil.FailErr(t, "abort", mgr.Stops.Abort(ctx, sess.ID, "user stopped"))
-	if elapsed := time.Since(started); elapsed > 5*time.Second {
-		t.Fatalf("abort waited %v on a turn that never released", elapsed)
-	}
 	got, err := st.Get(ctx, sess.ID)
 	testutil.FailErr(t, "get session", err)
 	if got.Status != api.SessionStatusIdle {

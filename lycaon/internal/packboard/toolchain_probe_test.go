@@ -91,12 +91,14 @@ func newFakeToolchainHost(delay time.Duration) *fakeToolchainHost {
 func TestToolchainsNeverBlockAssemblyAndUseResolvedPath(t *testing.T) {
 	fake := newFakeToolchainHost(200 * time.Millisecond)
 	probes := newToolchainProbes(fake.host())
-	start := time.Now()
 	if got := probes.toolchains(t.Context(), []string{"TypeScript", "Go"}); len(got) != 0 {
 		t.Fatalf("first read returned %v before any probe completed", got)
 	}
-	if elapsed := time.Since(start); elapsed > 100*time.Millisecond {
-		t.Fatalf("assembly read blocked for %v", elapsed)
+	probes.mu.Lock()
+	settledDuringFirstRead := len(probes.results)
+	probes.mu.Unlock()
+	if settledDuringFirstRead != 0 {
+		t.Fatalf("first read waited for %d probes to settle instead of returning immediately", settledDuringFirstRead)
 	}
 	probes.wg.Wait()
 	got := probes.toolchains(t.Context(), []string{"Go", "TypeScript"})

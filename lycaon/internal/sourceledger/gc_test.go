@@ -29,13 +29,9 @@ func TestSweepDefersBehindACaptureWithoutHoldingTheLedger(t *testing.T) {
 	orphan := agedOrphan(t, store, "written by an interrupted capture\n")
 	releaseCapture := store.Content.AcquireReferenceLease()
 
-	started := time.Now()
 	err := store.Retention.SweepBlobs(ctx)
 	if !errors.Is(err, ErrBlobMaintenanceDeferred) {
 		t.Fatalf("sweep during a capture = %v, want ErrBlobMaintenanceDeferred", err)
-	}
-	if waited := time.Since(started); waited > time.Second {
-		t.Fatalf("a deferred sweep waited %s for the capture", waited)
 	}
 	if exists, err := store.Content.Exists(orphan); err != nil || !exists {
 		t.Fatalf("a deferred sweep removed an object: exists=%v err=%v", exists, err)

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -15,10 +16,16 @@ import (
 
 // The transport bounds the response-header wait.
 func TestStreamingHTTPClientResponseHeaderTimeout(t *testing.T) {
+	var wroteLate atomic.Bool
 	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Hold the connection past the header deadline.
-		time.Sleep(500 * time.Millisecond)
-		fmt.Fprintln(w, "too late")
+		select {
+		case <-r.Context().Done():
+			return
+		case <-time.After(500 * time.Millisecond):
+			wroteLate.Store(true)
+			fmt.Fprintln(w, "too late")
+		}
 	}))
 	defer mockServer.Close()
 
@@ -28,15 +35,13 @@ func TestStreamingHTTPClientResponseHeaderTimeout(t *testing.T) {
 		t.Fatalf("new request: %v", err)
 	}
 
-	start := time.Now()
 	resp, err := client.Do(req)
-	elapsed := time.Since(start)
 	if err == nil {
 		_ = resp.Body.Close()
-		t.Fatalf("expected header-timeout error, got response in %v", elapsed)
+		t.Fatal("expected header-timeout error, got response")
 	}
-	if elapsed > 300*time.Millisecond {
-		t.Fatalf("header timeout did not fire: elapsed %v (want < 300ms)", elapsed)
+	if wroteLate.Load() {
+		t.Fatal("header timeout did not fire before server finished 500ms sleep")
 	}
 }
 

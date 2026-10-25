@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -192,9 +193,9 @@ func TestDirectMemoryAnswersFromWarmIndex(t *testing.T) {
 		summarizer: &failIfCalledSummarizer{},
 		index:      store,
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	stats := newSearchStats("t-warm-index")
+	ctx, cancel := context.WithTimeout(withSearchStats(context.Background(), stats), 30*time.Second)
 	defer cancel()
-	start := time.Now()
 	hits, err := d.Search(ctx, DirectRequest{Query: "widget frobnicator review", MaxResults: 1})
 	if err != nil {
 		t.Fatalf("Search: %v", err)
@@ -202,8 +203,8 @@ func TestDirectMemoryAnswersFromWarmIndex(t *testing.T) {
 	if len(hits) != 1 || !strings.HasPrefix(hits[0].URL, page.URL) {
 		t.Fatalf("hits = %+v want memory-backed hit", hits)
 	}
-	if elapsed := time.Since(start); elapsed > 10*time.Second {
-		t.Fatalf("elapsed = %v want memory answer without waiting on network seed work", elapsed)
+	if stats.memoryHits.Load() != 1 || stats.crawlHosts.Load() != 0 {
+		t.Fatalf("memoryHits=%d crawlHosts=%d want memory answer without network seed work", stats.memoryHits.Load(), stats.crawlHosts.Load())
 	}
 }
 
@@ -224,10 +225,12 @@ func TestDirectStragglerHostDoesNotBlockResults(t *testing.T) {
 			<body><h1>Widget frobnicator guide</h1></body></html>`)
 	}))
 	t.Cleanup(fast.Close)
+	var slowFinished atomic.Bool
 	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		select {
 		case <-r.Context().Done():
 		case <-time.After(8 * time.Second):
+			slowFinished.Store(true)
 		}
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -236,7 +239,6 @@ func TestDirectStragglerHostDoesNotBlockResults(t *testing.T) {
 	d := discovererSeedingURLs(t, fast.URL, slow.URL)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	start := time.Now()
 	hits, err := d.Search(ctx, DirectRequest{Query: "widget frobnicator guide", MaxResults: 1})
 	if err != nil {
 		t.Fatalf("Search: %v", err)
@@ -244,8 +246,8 @@ func TestDirectStragglerHostDoesNotBlockResults(t *testing.T) {
 	if len(hits) != 1 {
 		t.Fatalf("hits = %+v", hits)
 	}
-	if elapsed := time.Since(start); elapsed > 6*time.Second {
-		t.Fatalf("elapsed = %v: the hanging host must not gate the result", elapsed)
+	if slowFinished.Load() {
+		t.Fatal("the hanging host must not gate the result")
 	}
 }
 

@@ -266,11 +266,12 @@ func TestRefusalWitnessDegradesWhenReportsMayBeMissing(t *testing.T) {
 	waitFor(t, "stream live", func() bool { return w.currentState() == watchLive })
 
 	late := w.register("fedcba9876543210fedcba9876543210", FilesystemRules{})
+	var probeCtx context.Context
+	source.probeCheck = func(ctx context.Context) { probeCtx = ctx }
 	source.muted.Store(true)
-	start := time.Now()
 	w.settle(t.Context(), late)
-	if late.snapshot().Witness != WitnessIncomplete || time.Since(start) < refusalSettleTimeout {
-		t.Fatalf("a settle whose probe never streamed left witness %s", late.snapshot().Witness)
+	if late.snapshot().Witness != WitnessIncomplete || probeCtx == nil || !errors.Is(probeCtx.Err(), context.DeadlineExceeded) {
+		t.Fatalf("a settle whose probe never streamed left witness %s (probeErr=%v)", late.snapshot().Witness, probeCtx.Err())
 	}
 }
 
