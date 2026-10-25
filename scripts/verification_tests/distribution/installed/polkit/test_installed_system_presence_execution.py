@@ -72,47 +72,102 @@ class InstalledSystemPresenceTests(unittest.TestCase):
         self.assertFalse(failed.exception.record['system_authentication']['system_authentication_verified'])
 
 
-    def test_stale_native_refusal_and_zero_host_release_are_separate_from_fresh_reveal(self):
+
+class StaleSystemPresenceTests(unittest.TestCase):
+    def execute(self, *, cancelled=False, changed=None):
         from scripts.linux_release.installed_cases import lock_monitor
-        attempt = target()['pending']['attempt']
-        before = {'secret_id': 'selected', 'person_id': 'person', 'reveals': []}
+        attempt = deepcopy(target()['pending']['attempt'])
         challenge = attempt['challenge']
-        invalidation = {'challenge_id': challenge['challenge_id'],
-                        'generation_before': challenge['step_away_generation']}
-        for changed in ('none', 'audit', 'refusal', 'authentication', 'invalidation'):
-            with self.subTest(changed=changed), ExitStack() as stack:
-                control = Mock(records=[])
-                witness = {'system_authenticated': changed != 'authentication'}
-                outcome = {'status': 'refused', 'code': 'presence_denied',
-                           'resolution': None if changed == 'refusal' else 'step_away'}
-                after = {**before, 'reveals': [{'unexpected': True}]} if changed == 'audit' else before
-                observations = {}
-                for key, value in {
-                    'native_caller': Mock(return_value={}), 'attempt_rows': Mock(return_value=[]),
-                    'confirmation_rows': Mock(return_value=[]), 'NativePolkitControl': Mock(return_value=control),
-                    'reveal_audit': Mock(side_effect=[before, after]), 'await_attempt': Mock(return_value=attempt),
-                    'await_observation': Mock(side_effect=[{'attempt': attempt}, witness]),
-                    'await_confirmation': Mock(return_value=outcome),
-                    'run_reveal': Mock(return_value={'host_release_verified': True,
-                                                   'system_authentication_verified': True})}.items():
-                    stack.enter_context(patch.object(system, key, value))
-                locked = stack.enter_context(patch.object(lock_monitor, 'lock_and_unlock'))
-                stack.enter_context(patch.object(lock_monitor, 'step_away_invalidations',
-                    return_value=[] if changed == 'invalidation' else [invalidation]))
-                arguments = (Mock(), Mock(), 'project', {'binding': {}, 'vm_id': 'owned'},
-                             Mock(), Mock(), Mock(), observations, Mock())
-                if changed != 'none':
-                    with self.assertRaises(system.CaseFailed): system.run_stale_reveal(*arguments)
-                    system.run_reveal.assert_not_called()
+        before = {'secret_id': 'selected', 'person_id': 'person', 'reveals': []}
+        after = {**before, 'reveals': [{'unexpected': True}]} if changed == 'audit' else before
+        witness = {'attempt': deepcopy(attempt), 'system_authenticated': not cancelled,
+                   'agent_cancelled': cancelled, 'host_release_verified': False}
+        outcome = {'status': 'refused', 'code': 'presence_denied', 'authenticator': None,
+                   'resolution': None if cancelled else 'step_away'}
+        invalidations = [{'challenge_id': challenge['challenge_id'],
+                          'generation_before': challenge['step_away_generation'],
+                          'generation_after': challenge['step_away_generation'] + 1}]
+        if cancelled or changed == 'invalidation': invalidations = []
+        if changed == 'authentication': witness['system_authenticated'] = cancelled
+        if changed == 'agent_cancelled': witness['agent_cancelled'] = not cancelled
+        if changed == 'root_release': witness['host_release_verified'] = True
+        if changed == 'refusal': outcome['code'] = 'presence_unavailable'
+        if changed == 'resolution': outcome['resolution'] = 'step_away' if cancelled else None
+        if changed == 'authenticator': outcome['authenticator'] = 'linux_user_presence'
+        post_lock = witness if cancelled else {'attempt': deepcopy(attempt)}
+        if changed == 'post_identity': post_lock['attempt']['request_id'] = 'foreign'
+        if changed == 'final_identity': witness['attempt']['request_id'] = 'foreign'
+        fresh_attempt = deepcopy(attempt)
+        fresh_attempt['challenge'].update(challenge_id='20000000-0000-4000-8000-000000000002',
+                                         step_away_generation=challenge['step_away_generation'] + 1)
+        if changed == 'fresh_generation':
+            fresh_attempt['challenge']['step_away_generation'] = challenge['step_away_generation']
+        if changed == 'fresh_identity': fresh_attempt['challenge']['challenge_id'] = challenge['challenge_id']
+        fresh = {'host_release_verified': changed != 'fresh_release', 'system_authentication_verified': True,
+                 'native_attempt': fresh_attempt}
+        control, observations, events = Mock(records=[]), {}, []
+        control.close.side_effect = lambda: events.append('closed')
+        def reveal(*args, **kwargs):
+            self.assertEqual(events, ['closed'])
+            events.append('fresh')
+            return fresh
+        with ExitStack() as stack:
+            values = {'native_caller': Mock(return_value={}), 'attempt_rows': Mock(return_value=[]),
+                'confirmation_rows': Mock(return_value=[]), 'NativePolkitControl': Mock(return_value=control),
+                'reveal_audit': Mock(side_effect=[before, after]), 'await_attempt': Mock(return_value=attempt),
+                'await_observation': Mock(side_effect=[{'attempt': attempt}, post_lock] + ([] if cancelled else [witness])),
+                'await_confirmation': Mock(return_value=outcome), 'run_reveal': Mock(side_effect=reveal)}
+            for key, value in values.items(): stack.enter_context(patch.object(system, key, value))
+            locked = stack.enter_context(patch.object(lock_monitor, 'lock_and_unlock'))
+            stack.enter_context(patch.object(lock_monitor, 'step_away_invalidations', return_value=invalidations))
+            arguments = (Mock(), Mock(), 'project', {'binding': {}, 'vm_id': 'owned'},
+                         Mock(), Mock(), Mock(), observations, Mock())
+            try:
+                result = system.run_stale_reveal(*arguments)
+            except BaseException as error:
+                error.control, error.fresh, error.observed = control, values['run_reveal'], observations
+                raise
+        control.start.assert_called_once_with(stale=True)
+        locked.assert_called_once()
+        control.close.assert_called_once()
+        self.assertEqual(events, ['closed', 'fresh'])
+        return result, observations, control
+
+    def test_original_cancel_never_inputs_PAM_and_requires_fresh_higher_generation_release(self):
+        record, observations, control = self.execute(cancelled=True)
+        control.deliver.assert_not_called()
+        self.assertTrue(record['original_prompt_cancelled_verified'])
+        self.assertFalse(record['late_pam_rejection_verified'])
+        self.assertFalse(observations['host_valid_stale_proof_rejection_verified'])
+        self.assertTrue(observations['stale_challenge_refusal_verified'])
+        self.assertTrue(observations['fresh_confirmation_verified'])
+        self.assertEqual(record['invalidations'], [])
+        self.assertIsNone(record['native_confirmation']['resolution'])
+
+    def test_still_pending_original_keeps_actual_PAM_and_step_away_requirements(self):
+        record, observations, control = self.execute()
+        control.deliver.assert_called_once_with()
+        self.assertTrue(record['late_pam_rejection_verified'])
+        self.assertFalse(record['original_prompt_cancelled_verified'])
+        self.assertFalse(observations['host_valid_stale_proof_rejection_verified'])
+        self.assertTrue(observations['fresh_confirmation_verified'])
+
+    def test_each_branch_refuses_wrong_native_root_audit_or_challenge_facts(self):
+        for cancelled in (True, False):
+            changes = ['audit', 'authentication', 'agent_cancelled', 'root_release', 'refusal',
+                       'resolution', 'post_identity', 'fresh_generation', 'fresh_identity', 'fresh_release']
+            changes += ['authenticator'] if cancelled else ['invalidation', 'final_identity']
+            for changed in changes:
+                with self.subTest(cancelled=cancelled, changed=changed), self.assertRaises((system.CaseFailed, ValueError)) as failure:
+                    self.execute(cancelled=cancelled, changed=changed)
+                error = failure.exception
+                error.control.close.assert_called_once()
+                if cancelled: error.control.deliver.assert_not_called()
+                if changed.startswith('fresh_'):
+                    error.fresh.assert_called_once()
+                    self.assertIsNot(error.observed.get('stale_challenge_refusal_verified'), True)
                 else:
-                    record = system.run_stale_reveal(*arguments)
-                    self.assertTrue(record['stale_challenge_refusal_verified'])
-                    self.assertTrue(observations['fresh_confirmation_verified'])
-                    system.run_reveal.assert_called_once()
-                control.start.assert_called_once_with(stale=True)
-                locked.assert_called_once()
-                control.deliver.assert_called_once_with()
-                control.close.assert_called_once()
+                    error.fresh.assert_not_called()
 
 
 if __name__ == '__main__':

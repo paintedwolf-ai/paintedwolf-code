@@ -72,7 +72,7 @@ def await_attempt(app, native, after):
 def await_observation(control, initial=None, *, final=False):
     deadline, value = time.monotonic() + 15, initial
     while True:
-        if value is not None and ('host_release_verified' in value) == final:
+        if value is not None and (final is None or ('host_release_verified' in value) == final):
             return value
         if time.monotonic() >= deadline:
             raise CaseUnavailable('system-presence-root-causal-observation-unverified')
@@ -137,11 +137,13 @@ def run_reveal(app, ui, project_id, native_input, observations, *, cancel):
 
 def run_stale_reveal(app, ui, project_id, native_input, native, lock, unlock_ctl,
                      observations, reservation):
-    """Complete only the original real system prompt after an actual lock/unlock."""
+    """Observe original cancellation or complete the still-pending original system prompt."""
     from .lock_monitor import lock_and_unlock, step_away_invalidations
     owner = native_caller(app, ui)
     before = reveal_audit(app, project_id)
-    record = {'host_audit_before': before, 'controls': [], 'stale_challenge_refusal_verified': False}
+    record = {'host_audit_before': before, 'controls': [], 'stale_challenge_refusal_verified': False,
+              'original_prompt_cancelled_verified': False, 'late_pam_rejection_verified': False,
+              'host_valid_stale_proof_rejection_verified': False}
     observations['stale_system_authentication'] = record
     boundary = len(attempt_rows(app, owner))
     confirmation_boundary = len(confirmation_rows(app))
@@ -158,8 +160,20 @@ def run_stale_reveal(app, ui, project_id, native_input, native, lock, unlock_ctl
         lock_and_unlock(app, native_input['binding'], native_input['vm_id'], native, lock,
                         unlock_ctl, observations)
         reservation.check_launch(app)
-        record['physical_delivery'] = control.deliver()
-        record['root_witness'] = await_observation(control, final=True)
+        post_lock = await_observation(control, control.observe(), final=None)
+        if post_lock['attempt'] != attempt:
+            raise ValueError('post-lock observation replaced the original system transaction')
+        cancelled = 'host_release_verified' in post_lock
+        if cancelled:
+            if (post_lock['agent_cancelled'] is not True or post_lock['system_authenticated'] is not False
+                    or post_lock['host_release_verified'] is not False):
+                raise CaseFailed('original-system-prompt-has-no-bound-lock-cancellation')
+            record['root_witness'] = post_lock
+        else:
+            record['physical_delivery'] = control.deliver()
+            record['root_witness'] = await_observation(control, final=True)
+        if record['root_witness']['attempt'] != attempt:
+            raise ValueError('completed system observation replaced the original transaction')
         challenge = attempt['challenge']
         outcome = await_confirmation(app, challenge['challenge_id'], challenge['step_away_generation'],
                                      after_count=confirmation_boundary)
@@ -168,15 +182,32 @@ def run_stale_reveal(app, ui, project_id, native_input, native, lock, unlock_ctl
             and row['generation_before'] == challenge['step_away_generation']]
         after = reveal_audit(app, project_id)
         record.update(native_confirmation=outcome, host_audit_after=after, invalidations=invalidations)
-        if (record['root_witness']['system_authenticated'] is not True
-                or outcome['status'] != 'refused' or outcome['code'] != 'presence_denied'
-                or outcome['resolution'] != 'step_away' or len(invalidations) != 1 or after != before):
-            raise CaseFailed('stale-system-authentication-did-not-refuse-without-host-release')
-        observations['stale_challenge_refusal_verified'] = True
-        record['stale_challenge_refusal_verified'] = True
+        if outcome['status'] != 'refused' or outcome['code'] != 'presence_denied' or after != before:
+            raise CaseFailed('locked-system-confirmation-did-not-refuse-without-host-release')
+        if cancelled:
+            if outcome['resolution'] is not None or outcome['authenticator'] is not None:
+                raise CaseFailed('cancelled-original-prompt-has-no-native-denial')
+            record['original_prompt_cancelled_verified'] = True
+        else:
+            if (record['root_witness']['system_authenticated'] is not True
+                    or record['root_witness']['agent_cancelled'] is not False
+                    or record['root_witness']['host_release_verified'] is not False
+                    or outcome['resolution'] != 'step_away' or len(invalidations) != 1):
+                raise CaseFailed('stale-system-authentication-did-not-refuse-without-host-release')
+            record['late_pam_rejection_verified'] = True
     finally:
         control.close()
     fresh = run_reveal(app, ui, project_id, native_input, observations, cancel=False)
+    fresh_challenge = fresh['native_attempt']['challenge']
+    if (fresh_challenge['challenge_id'] == challenge['challenge_id']
+            or fresh_challenge['step_away_generation'] <= challenge['step_away_generation']
+            or any(fresh_challenge[key] != challenge[key] for key in ('purpose', 'window_label'))
+            or fresh['host_release_verified'] is not True or fresh['system_authentication_verified'] is not True):
+        raise CaseFailed('fresh-confirmation-did-not-use-a-higher-generation-system-challenge')
+    observations['stale_challenge_refusal_verified'] = True
+    record['stale_challenge_refusal_verified'] = True
+    observations['late_pam_rejection_verified'] = record['late_pam_rejection_verified']
+    observations['host_valid_stale_proof_rejection_verified'] = False
     observations['fresh_confirmation_verified'] = fresh['host_release_verified']
     observations['system_authentication_verified'] = fresh['system_authentication_verified']
     return record

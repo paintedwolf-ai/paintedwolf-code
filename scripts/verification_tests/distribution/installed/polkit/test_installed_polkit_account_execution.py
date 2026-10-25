@@ -151,5 +151,25 @@ class StaleCredentialTests(unittest.TestCase):
             with self.assertRaises(ValueError): value.polkit_claim({'native_session': native, 'attempt': value.attempt})
 
 
+    def test_cancel_after_unlock_disables_and_erases_unused_original_PAM_claim(self):
+        from copy import deepcopy
+        from verification_tests.distribution.installed.polkit.test_installed_polkit_stage_execution import target
+        value, native = self.fixture()
+        value.prepare()
+        value.pending(target()['pending'])
+        locked = deepcopy(native)
+        locked.update(locked_hint=True, locker_active=True)
+        copy = value.unlock_claim(locked)
+        copy[:] = bytearray(40)
+        value.unlocked(native)
+        self.assertTrue(any(value.secret))
+        value.close()
+        value.close()
+        self.assertEqual(value.secret, bytearray(40))
+        self.assertEqual([call.args[0] for call in value._command.call_args_list], ['prepare', 'disable'])
+        with self.assertRaises(ValueError):
+            value.polkit_claim({'native_session': native, 'attempt': value.attempt})
+
+
 if __name__ == '__main__':
     unittest.main()

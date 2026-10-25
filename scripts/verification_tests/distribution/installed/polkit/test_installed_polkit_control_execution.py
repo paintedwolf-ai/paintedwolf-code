@@ -177,5 +177,26 @@ class PolkitLifecycleTests(unittest.TestCase):
         bridge._record_log.assert_not_called()
 
 
+    def test_terminal_original_cancel_closes_unused_PAM_without_rebinding_or_delivery(self):
+        lifetime = Mock()
+        native = target()['session']
+        attempt = target()['pending']['attempt']
+        self.observer.bind.return_value = target()['pending']
+        self.session = control.Session(self.actor, self.target, EXECUTION, stale_credential=lifetime)
+        self.session.handle(request(control.START_STALE, native_session=native, runtime={}), self.deliver)
+        self.bind()
+        lifetime.pending.reset_mock()
+        terminal = {'attempt': attempt, 'agent_cancelled': True,
+                    'system_authenticated': False, 'host_release_verified': False}
+        self.observer.observe.return_value = terminal
+        self.assertEqual(self.next(control.OBSERVE), {'observation': terminal})
+        lifetime.pending.assert_not_called()
+        self.assertEqual(self.next(control.CLOSE), {'closed': True, 'credential_disabled': True})
+        lifetime.polkit_claim.assert_not_called()
+        lifetime.close.assert_called_once()
+        self.observer.close.assert_called_once()
+        self.deliver.assert_not_called()
+
+
 if __name__ == '__main__':
     unittest.main()
