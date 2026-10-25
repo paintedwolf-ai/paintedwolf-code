@@ -66,7 +66,7 @@ func Open(dbPath string) (*Store, error) {
 // The caller holds the installation lease throughout recovery, upgrading, and serving.
 func OpenWithOptions(ctx context.Context, dbPath string, hooks UpgradeHooks, opts StoreOptions) (*Store, error) {
 	dir := filepath.Dir(dbPath)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil { // #nosec G703 -- local SQLite store dir
 		return nil, fmt.Errorf("create db directory: %w", err)
 	}
 
@@ -75,7 +75,7 @@ func OpenWithOptions(ctx context.Context, dbPath string, hooks UpgradeHooks, opt
 	}
 
 	created := false
-	if info, err := os.Stat(dbPath); err != nil {
+	if info, err := os.Stat(dbPath); err != nil { // #nosec G703 -- local SQLite store path
 		if !os.IsNotExist(err) {
 			return nil, fmt.Errorf("inspect database: %w", err)
 		}
@@ -127,12 +127,12 @@ func OpenWithOptions(ctx context.Context, dbPath string, hooks UpgradeHooks, opt
 	}
 
 	if created {
-		if err := os.Chmod(dbPath, defaultDBFileMode); err != nil {
+		if err := os.Chmod(dbPath, defaultDBFileMode); err != nil { // #nosec G703 -- local SQLite store path
 			_ = writer.Close()
 			return nil, fmt.Errorf("chmod database: %w", err)
 		}
 	} else {
-		_ = os.Chmod(dbPath, defaultDBFileMode)
+		_ = os.Chmod(dbPath, defaultDBFileMode) // #nosec G703 -- local SQLite store path
 	}
 
 	reader, err := openReader(ctx, dbPath)
