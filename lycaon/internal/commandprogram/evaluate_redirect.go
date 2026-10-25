@@ -160,7 +160,7 @@ func (g *frame) bind(ctx context.Context, r commandsurface.ProgramRedirect) (*st
 		if err != nil {
 			return nil, nil, true, g.redirectFailure(ctx, child, r.Operator, target, err)
 		}
-		g.streams.SetReader(redirectDescriptor(r), input)
+		g.streams.SetReader(redirectDescriptor(r), io.NopCloser(input))
 		child.settle(ctx, ordinaryResult(0), nil)
 		return nil, input, false, nil
 	}
