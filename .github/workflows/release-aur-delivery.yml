@@ -27,7 +27,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: aur-recipe-delivery
+  group: release-static-update
   cancel-in-progress: false
 
 jobs:
