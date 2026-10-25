@@ -50,6 +50,8 @@ sys.path.insert(0,str(root))
 from scripts.linux_release.installed_input.polkit_root import main
 main()
 '''
+BOOTSTRAP = 'try:\n' + ''.join(' ' + line for line in BOOTSTRAP.splitlines(keepends=True)) + \
+    'except BaseException:\n raise SystemExit(2) from None\n'
 
 
 class Proxy:
