@@ -1,9 +1,12 @@
 """Bind native input to the selected focused entry and its actual owned active frame."""
 from __future__ import annotations
+import os
+from pathlib import Path
 import time
 
 from ..installed_process import process_identity
 from ..installed_cases.desktop_ui import owned_process
+from ..installed_cases.native_session import kernel_owner
 from ..installed_cases.records import CaseFailed, CaseUnavailable
 from .protocol import focus
 from . import accessibility, lineage
@@ -46,10 +49,76 @@ class EntryFocus:
         while True:
             try:
                 return self._observe_once()
-            except _FocusUnavailable:
+            except _FocusUnavailable as error:
                 if time.monotonic() >= deadline:
+                    try:
+                        diagnostic = self._diagnose_windows()
+                    except BaseException as failure:
+                        diagnostic = {'complete': False, 'failure_type': type(failure).__name__[:64]}
+                    error.observations = {**getattr(error, 'observations', {}),
+                                          'focus_diagnostics': diagnostic}
                     raise
                 time.sleep(0.05)
+
+    def _diagnose_windows(self):
+        """Read same-UID top levels after refusal; these facts never authorize input."""
+        facts = {'complete': False, 'windows': [], 'application_limit': 32,
+                 'window_limit': 16, 'windows_examined': 0, 'budget_ms': 250, 'phase': 'after-focus-refusal'}
+        deadline = time.monotonic() + 0.25
+        def read(call):
+            if time.monotonic() >= deadline:
+                raise TimeoutError()
+            value = call()
+            if time.monotonic() >= deadline:
+                raise TimeoutError()
+            return value
+        try:
+            uid = os.getuid()
+            if self.app.observations['session']['User'] != str(uid):
+                raise ValueError('diagnostic UID differs from captured session')
+            facts['uid'] = uid
+            desktop = read(lambda: self.ui.api.Registry.getDesktop(0))
+            count = read(lambda: desktop.childCount)
+            if type(count) is not int or not 0 <= count <= 256:
+                raise ValueError('diagnostic application inventory exceeds its bound')
+            facts['application_count'] = count
+            for index in range(min(count, 32)):
+                application = read(lambda: desktop[index])
+                pid = read(application.get_process_id)
+                if type(pid) is not int or pid <= 1:
+                    raise ValueError('diagnostic application PID is invalid')
+                if read(lambda: Path('/proc', str(pid)).stat().st_uid) != uid:
+                    continue  # Do not inspect another user's accessibility windows.
+                process = read(lambda: kernel_owner(pid, uid))
+                windows = read(lambda: application.childCount)
+                if type(windows) is not int or not 0 <= windows <= 64:
+                    raise ValueError('diagnostic window inventory exceeds its bound')
+                for offset in range(windows):
+                    if facts['windows_examined'] >= 16:
+                        return facts
+                    facts['windows_examined'] += 1
+                    window = read(lambda: application[offset])
+                    role = read(window.getRole)
+                    if role not in {self.ui.api.ROLE_FRAME, self.ui.api.ROLE_DIALOG}:
+                        continue
+                    accessible = read(lambda: accessibility.identity(window))
+                    if accessible['pid'] != pid:
+                        raise ValueError('diagnostic window owner differs from its application')
+                    state = read(window.getState)
+                    row = {'process': process, 'accessible': accessible, 'role': int(role),
+                           'active': bool(state.contains(self.ui.api.STATE_ACTIVE)),
+                           'visible': bool(read(lambda: self.ui.visible(window))),
+                           'app_owned': bool(read(lambda: owned_process(pid, self.app)))}
+                    if (read(lambda: kernel_owner(pid, uid)) != process
+                            or read(lambda: accessibility.identity(window)) != accessible):
+                        raise ValueError('diagnostic window owner changed')
+                    facts['windows'].append(row)
+                if read(lambda: application.childCount) != windows:
+                    raise ValueError('diagnostic window inventory changed')
+            facts['complete'] = count <= 32 and read(lambda: desktop.childCount) == count
+        except BaseException as failure:
+            facts['failure_type'] = type(failure).__name__[:64]
+        return facts
 
     def _observe_once(self) -> dict:
         self.app.require_running()
@@ -83,7 +152,8 @@ class EntryFocus:
         if not active or not visible:
             refusal = _FocusUnavailable('normal-owned-editor-active-frame-unavailable')
             refusal.observations = {'editor_focus': {'entry_identity': self.entry,
-                'entry_focused': True, 'container_identity': frame_identity, 'container_active': bool(active)}}
+                'entry_focused': True, 'container_identity': frame_identity, 'container_active': bool(active),
+                'container_accessible': accessible_chain[-1], 'entry_accessible': accessible_chain[0]}}
             raise refusal
         if self.frame is not None and (frame_identity != self.frame or accessible_chain != self.accessible_chain):
             raise CaseFailed('native input captured frame or accessible ancestor changed')
