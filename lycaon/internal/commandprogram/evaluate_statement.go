@@ -62,9 +62,10 @@ func (f *frame) statement(ctx context.Context, s commandsurface.Statement) (sign
 			return signal{}, err
 		}
 	}
+	previousChild := inner.state.last
 	sig, err := inner.command(ctx, s)
 	if descriptors != nil {
-		if !descriptors.opened.Load() && !descriptors.prevented && err == nil {
+		if !descriptors.opened.Load() && !descriptors.prevented && err == nil && inner.state.last == previousChild {
 			_, err = (&evaluatorOperation{frame: &inner, statement: s, fields: Fields{{Value: ":", Span: s.Span}}}).invoke(ctx)
 		}
 		_, stopped := f.state.latch.Stop()
