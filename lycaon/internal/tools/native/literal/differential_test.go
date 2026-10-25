@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -21,8 +22,8 @@ var referenceFamily = map[string]string{
 }
 
 // differentialCases are forms whose catalog contract is the reference's own
-// output. Forms the catalog deliberately defines differently (wc column
-// separators, file's corpus, malformed manifests, long listings without
+// output. Forms the catalog deliberately defines differently (file's corpus,
+// malformed manifests, long listings without
 // block totals) are fixed by the exact fixtures instead.
 var differentialCases = []struct {
 	argv, stdin string
@@ -38,7 +39,11 @@ var differentialCases = []struct {
 	{argv: "wc -l input"}, {argv: "wc -l crlf"}, {argv: "wc -w words"}, {argv: "wc -c utf8"}, {argv: "wc -m utf8"}, {argv: "wc -L crlf"}, {argv: "wc -l", stdin: "a\nb"},
 	{argv: "ls dir"}, {argv: "ls -a dir"}, {argv: "ls -A dir"}, {argv: "ls -1 dir"}, {argv: "ls -d dir"}, {argv: "ls -F dir"}, {argv: "ls -R tree-a"},
 	{argv: "ls -t dir"}, {argv: "ls -S dir"}, {argv: "ls -r dir"}, {argv: "ls input dir"}, {argv: "ls missing", stderr: true},
-	{argv: "stat -c %n|%s|%a|%A|%F|%Y input"}, {argv: "stat -c %F empty"}, {argv: "stat -c %F link"}, {argv: "stat -L -c %F link"}, {argv: "stat -c %%%s input"},
+	{argv: "ls -p tree-a"}, {argv: "ls --group-directories-first tree-a"}, {argv: "ls -L dir"}, {argv: "ls -LF dir"},
+	{argv: "ls --color=never dir"}, {argv: "ls --color=auto dir"}, {argv: "ls -i dir"}, {argv: "ls -s dir"}, {argv: "ls -is tree-a"},
+	{argv: "ls -m dir"}, {argv: "ls -sm dir"}, {argv: "ls -im dir"}, {argv: "ls -ism dir"}, {argv: "ls -k dir"}, {argv: "ls -ks dir"}, {argv: "ls -H -F link"},
+	{argv: "stat input"}, {argv: "stat dir"}, {argv: "stat link"},
+	{argv: "stat -c %n|%s|%a|%A|%F|%Y input"}, {argv: "stat -c %Hd,%Ld input"}, {argv: "stat -c %F empty"}, {argv: "stat -c %F link"}, {argv: "stat -L -c %F link"}, {argv: "stat -c %%%s input"},
 	{argv: "diff same-a same-b"}, {argv: "diff -u old new"}, {argv: "diff -U 1 old new"}, {argv: "diff -q old new"}, {argv: "diff -u noeol-a noeol-b"},
 	{argv: "diff -u -w ws-a ws-b"}, {argv: "diff -u -b ws-a ws-b"}, {argv: "diff -u -B blank-a blank-b"}, {argv: "diff -u blank-a blank-b"},
 	{argv: "diff bin-a bin-b"}, {argv: "diff -u empty input"}, {argv: "diff -u input empty"}, {argv: "diff -r -u tree-a tree-b"},
@@ -50,19 +55,23 @@ var differentialCases = []struct {
 }
 
 // referenceBinary finds a host utility of the selected compatibility target.
+// Homebrew and other ports install GNU tools with a g prefix (gls, gstat)
+// beside the platform's own; either spelling qualifies when it is the target.
 func referenceBinary(name string) (string, bool) {
-	path, err := exec.LookPath(name)
-	if err != nil {
-		return "", false
-	}
 	family := referenceFamily[name]
-	if family == "hexdump" {
-		return path, true
-	}
-	for _, flag := range []string{"--version", "-v"} {
-		out, _ := exec.Command(path, flag).CombinedOutput()
-		if strings.Contains(string(out), family) {
+	for _, candidate := range []string{"g" + name, name} {
+		path, err := exec.LookPath(candidate)
+		if err != nil {
+			continue
+		}
+		if family == "hexdump" {
 			return path, true
+		}
+		for _, flag := range []string{"--version", "-v"} {
+			out, _ := exec.Command(path, flag).CombinedOutput()
+			if strings.Contains(string(out), family) {
+				return path, true
+			}
 		}
 	}
 	return "", false
@@ -74,15 +83,31 @@ func referenceBinary(name string) (string, bool) {
 // required evidence; a host without the target simply has nothing to compare.
 func TestDifferentialAgainstReferenceUtilities(t *testing.T) {
 	h := formHarness(t)
+	binDir := t.TempDir()
+	binaries := map[string]string{}
 	compared := 0
 	for _, c := range differentialCases {
 		argv := strings.Fields(c.argv)
-		binary, ok := referenceBinary(argv[0])
-		if !ok {
+		binary, cached := binaries[argv[0]]
+		if !cached {
+			found, ok := referenceBinary(argv[0])
+			if ok {
+				// On Darwin getprogname() reads the exec path rather than
+				// argv[0]; a link under the canonical name keeps diagnostics
+				// named "cat: ...", not "gcat: ...".
+				binary = filepath.Join(binDir, argv[0])
+				if err := os.Symlink(found, binary); err != nil {
+					t.Fatalf("link reference %s: %v", argv[0], err)
+				}
+			}
+			binaries[argv[0]] = binary
+		}
+		if binary == "" {
 			continue
 		}
 		t.Run(c.argv, func(t *testing.T) {
 			cmd := exec.Command(binary, argv[1:]...)
+			cmd.Args[0] = argv[0]
 			cmd.Dir = h.root
 			cmd.Env = []string{"TZ=UTC", "LC_ALL=C.UTF-8", "PATH=" + os.Getenv("PATH")}
 			cmd.Stdin = strings.NewReader(c.stdin)
