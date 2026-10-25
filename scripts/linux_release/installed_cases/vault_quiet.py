@@ -53,7 +53,8 @@ def stopped(app):
             actual = process_identity(engine['pid'])
         except (FileNotFoundError, ProcessLookupError):
             actual = None
-        if actual == engine:
+        if actual is not None and (actual['pid'], actual['start_time_ticks']) == (
+                engine['pid'], engine['start_time_ticks']):
             raise ValueError('quiet custody stopped launch left its captured engine running')
 
 
@@ -61,7 +62,8 @@ def execute(binding, capability, case, root):
     if (capability, case) != ('vault', 'service-onboarding'):
         raise ValueError('quiet custody executes only vault/service-onboarding')
     selected = binding.get('case_inputs', {}).get('security', {})
-    if selected not in ({}, {'format_version': 1}) or any(type(value) is not int for value in selected.values()):
+    if (not isinstance(selected, dict) or selected not in ({}, {'format_version': 1})
+            or any(type(value) is not int for value in selected.values())):
         raise ValueError('quiet custody permits only fixed native case inputs')
     launch_binding = {**binding, 'launcher': protected_launcher(binding)}
     storage = resolve(session_environment(graphical_session()))

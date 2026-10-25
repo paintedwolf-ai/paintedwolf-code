@@ -118,17 +118,21 @@ class QuietCustodyCaseTests(unittest.TestCase):
                     if app.__enter__.called: app.stop.assert_called()
 
     def test_settled_shell_does_not_hide_a_surviving_captured_engine(self):
-        engine = {'pid': 123, 'start_time_ticks': 77}
+        engine = {'pid': 123, 'parent_pid': 100, 'start_time_ticks': 77}
         app = SimpleNamespace(observations={'exit_code': 0, 'capture_complete': True,
             'output_limit': False, 'engine_identity': engine})
-        with patch.object(owner, 'process_identity', return_value=engine):
-            with self.assertRaises(ValueError): owner.stopped(app)
+        for actual in (engine, {**engine, 'parent_pid': 1}):
+            with self.subTest(actual=actual), patch.object(owner, 'process_identity', return_value=actual):
+                with self.assertRaises(ValueError): owner.stopped(app)
         with patch.object(owner, 'process_identity', return_value={**engine, 'start_time_ticks': 78}):
             owner.stopped(app)
 
     def test_closed_case_selection_and_internal_catalog_successor(self):
         self.assertEqual(installed_execution.case_family('vault', 'service-onboarding', 'deb'), 'vault_quiet')
         with self.assertRaises(ValueError): owner.execute({}, 'vault', 'reinstall-with-healthy-credentials', None)
+        for selected in (None, [], 'invalid', {'format_version': True}, {'format_version': 1.0}):
+            with self.subTest(selected=selected), self.assertRaises(ValueError):
+                owner.execute({'case_inputs': {'security': selected}}, 'vault', 'service-onboarding', None)
         root = Path(__file__).resolve().parents[4]
         catalog = json.loads((root / 'packaging/linux/support-matrix.json').read_text())
         cases = next(row['cases'] for row in catalog['capabilities'] if row['id'] == 'vault')
