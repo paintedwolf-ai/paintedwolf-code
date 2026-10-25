@@ -79,22 +79,23 @@ class DesktopUIOwnershipTests(unittest.TestCase):
                 return -1
         node = Invalidated(API.ROLE_FRAME)
         actor = ui.DesktopUI(self.app, API)
-        with self.assertRaises(ui.accessibility.InventoryChanged):
-            list(ui.accessibility.descendants(node))
+        with self.assertRaises(ui._InventoryChanged):
+            list(actor.descendants(node))
         node.action.doAction.assert_not_called()
 
     def test_nullable_child_refuses_partial_inventory_without_authorizing_action(self):
         button = Node(API.ROLE_PUSH_BUTTON, 'Send')
         window = Node(API.ROLE_FRAME, children=[None, button])
-        with self.assertRaises(ui.accessibility.InventoryChanged):
-            list(ui.accessibility.descendants(window))
+        actor = ui.DesktopUI(self.app, API)
+        with self.assertRaises(ui._InventoryChanged):
+            list(actor.descendants(window))
         api, _ = surface([button])
         api.Registry.getDesktop(0).children = [None]
-        with self.assertRaises(ui.accessibility.InventoryChanged):
+        with self.assertRaises(ui._InventoryChanged):
             list(ui.DesktopUI(self.app, api).windows())
         api, _ = surface([button])
         api.Registry.getDesktop(0)[0].children = [None]
-        with self.assertRaises(ui.accessibility.InventoryChanged):
+        with self.assertRaises(ui._InventoryChanged):
             list(ui.DesktopUI(self.app, api).windows())
         button.action.doAction.assert_not_called()
 
@@ -108,7 +109,7 @@ class DesktopUIOwnershipTests(unittest.TestCase):
         oversized = Oversized(API.ROLE_FRAME)
         actor = ui.DesktopUI(self.app, API)
         with self.assertRaises(CaseUnavailable) as refusal:
-            list(ui.accessibility.descendants(oversized))
+            list(actor.descendants(oversized))
         self.assertEqual(oversized.reads, 1)
         self.assertEqual(refusal.exception.observations['desktop_inventory_bound'], {
             'visited': 1, 'depth': 0, 'child_count': 1025,
@@ -176,7 +177,7 @@ class DesktopUIOwnershipTests(unittest.TestCase):
         button = Node(API.ROLE_PUSH_BUTTON, 'Send')
         api, _ = surface([button])
         with ui.DesktopUI(self.app, api) as actor:
-            with patch.object(ui.accessibility, 'descendants', side_effect=CaseUnavailable('normal-native-control-observation-deadline')):
+            with patch.object(actor, 'descendants', side_effect=CaseUnavailable('normal-native-control-observation-deadline')):
                 with self.assertRaises(CaseUnavailable) as refusal:
                     actor.click('Send')
         self.assertEqual(refusal.exception.observations['desktop_control'], {
@@ -191,12 +192,20 @@ class DesktopUIOwnershipTests(unittest.TestCase):
         api, window = surface([button])
         self.app.observations = {'launch_identity': IDENTITY, 'session': {}}
         with ui.DesktopUI(self.app, api) as actor, patch.object(ui.time, 'sleep'):
-            with patch.object(ui.accessibility, 'descendants', side_effect=[NativeRace('not retained'), iter([button])]):
+            with patch.object(actor, 'descendants', side_effect=[NativeRace('not retained'), iter([button])]):
                 actor.click('Send')
         button.action.doAction.assert_called_once_with(0)
         self.assertEqual(self.app.observations['desktop_inventory_retry']['domain'], 'atspi_error')
+        with ui.DesktopUI(self.app, api) as actor, patch.object(ui.time, 'sleep'):
+            with patch.object(button, 'queryAction', side_effect=[NotImplementedError('mounting'), button.action]):
+                actor.click('Send')
+        self.assertEqual(button.action.doAction.call_count, 2)
+        self.assertEqual(self.app.observations['desktop_inventory_retry']['exception_type'], 'NotImplementedError')
+        with ui.DesktopUI(self.app, api) as actor, patch.object(button, 'queryAction', side_effect=RuntimeError('bad')):
+            with self.assertRaises(CaseUnavailable):
+                actor.click('Send')
         with ui.DesktopUI(self.app, api) as actor:
-            with patch.object(ui.accessibility, 'descendants', side_effect=RuntimeError('not retained')):
+            with patch.object(actor, 'descendants', side_effect=RuntimeError('not retained')):
                 with self.assertRaises(CaseUnavailable) as refusal:
                     actor.find(API.ROLE_PUSH_BUTTON, 'Send')
         self.assertNotIn('not retained', str(refusal.exception))
@@ -218,7 +227,7 @@ class DesktopUIOwnershipTests(unittest.TestCase):
                     desktop.find(API.ROLE_PUSH_BUTTON, 'Send')
             with patch.object(ui.time, 'monotonic', side_effect=[0, 16]):
                 with self.assertRaises(CaseUnavailable):
-                    list(ui.accessibility.descendants(window))
+                    list(desktop.descendants(window))
 
     def test_observed_product_crash_is_failed_instead_of_missing_ui_fixture(self):
         api, _ = surface([])
