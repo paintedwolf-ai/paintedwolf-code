@@ -63,6 +63,22 @@ func TestNixRetentionRefusesUnavailableDaemonAndUnsafeDirectories(t *testing.T) 
 	if _, err := retainNix(context.Background(), layout, directory, nixRegistrar{storeURI: "local?store=/nix/store"}); err == nil {
 		t.Fatal("public directory accepted")
 	}
+	testutil.FailErr(t, "restore private directory", os.Chmod(directory, 0o700))
+	badHex := "session-" + strings.Repeat("z", 32) + ".lock"
+	testutil.FailErr(t, "write non-hex lock", os.WriteFile(filepath.Join(directory, badHex), nil, 0o600))
+	nonLink := "session-" + strings.Repeat("a", 32)
+	testutil.FailErr(t, "write unlocked regular file lock", os.WriteFile(filepath.Join(directory, nonLink+".lock"), nil, 0o600))
+	testutil.FailErr(t, "write regular file root", os.WriteFile(filepath.Join(directory, nonLink), []byte("not-a-symlink"), 0o600))
+	testutil.FailErr(t, "prune ignores non-hex and non-symlink", pruneNixRoots(directory))
+	var out boundedNixOutput
+	_, _ = out.Write([]byte(strings.Repeat("x", 5000)))
+	_, _ = out.Write([]byte("extra"))
+	if out.Len() != 4096 {
+		t.Fatalf("bounded output len = %d, want 4096", out.Len())
+	}
+	retention, err := RetainRunningNix(context.Background())
+	testutil.FailErr(t, "retain non-nix binary", err)
+	retention.Close()
 }
 
 func TestDesktopLockRetainsTheRootAfterItsHelperDies(t *testing.T) {
