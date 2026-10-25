@@ -143,7 +143,7 @@ revealInFileManager(
 |---|---|---|
 | macOS | `open -R <absolute path>` | Finder |
 | Windows | `explorer /select,<absolute path>` | File Explorer |
-| Linux | `org.freedesktop.FileManager1.ShowItems(file:// URI)`; fall back to `xdg-open <parent>` | Files |
+| Linux | `org.freedesktop.FileManager1.ShowItems(file:// URI)`; if unanswered, `org.freedesktop.portal.OpenURI.OpenDirectory`, then `gio::AppInfo::launch_default_for_uri`, then `xdg-open <parent>` (refusals are final) | Desktop file manager name (`Files`, `Dolphin`, …) or `File manager` |
 
 The Linux URI percent-encodes reserved and UTF-8 bytes. Browser-only clients disable local destinations with a desktop-app explanation; copy remains a separate action.
 

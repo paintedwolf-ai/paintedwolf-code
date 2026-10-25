@@ -256,7 +256,7 @@ In-memory state is classified by recovery requirement:
 
 No process-local map may become the only proof of a durable fact. If restart must preserve the state, it belongs in durable storage; if it can be rebuilt, its absence must be represented as warming or unknown rather than as an authoritative empty result. Startup and stop-time repair use bounded missing-projection queries; there is no fallback that scans all sessions or a session's transcript.
 
-On macOS, authoritative session, activity, worker, and scan lifecycle edges also feed the device power controller. Its default-on preference prevents idle sleep only while work is active and is stored outside the durable session database. Worker and scan runners renew every claim still held by the live process before sweeping expired leases after a scheduling pause, so a resumed process rescues its own elapsed lease while a fresh process converts genuine crash orphans to explicit failures.
+On macOS and Linux, authoritative session, activity, worker, and scan lifecycle edges also feed the device power controller. Its default-on preference prevents idle sleep only while work is active and is stored outside the durable session database. Worker and scan runners renew every claim still held by the live process before sweeping expired leases after a scheduling pause, so a resumed process rescues its own elapsed lease while a fresh process converts genuine crash orphans to explicit failures.
 
 ---
 
