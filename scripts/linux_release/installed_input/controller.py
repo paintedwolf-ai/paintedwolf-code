@@ -351,6 +351,7 @@ class Bridge:
         self.private_session = None
         self.polkit_target = target
         self.polkit_session = None
+        self.polkit_sessions = set()
 
     def __enter__(self):
         self.lease = open_lease(Path(self.selected['lease']), execution_nonce=self.execution['execution_nonce'],
@@ -496,8 +497,14 @@ class Bridge:
             raise ValueError('Polkit control requires the actual selected SSH guest target')
         if self.bytes + protocol.MAX_DOCUMENT > MAX_LOG:
             raise ValueError('fixed native input controller log is full before Polkit control')
-        if self.polkit_session is None:
+        if pending['operation'] == polkit_control.START:
+            if (self.polkit_session is not None and not self.polkit_session.closed
+                    or pending['session_id'] in self.polkit_sessions or len(self.polkit_sessions) >= 8):
+                raise ValueError('Polkit control cannot overlap or replay an observer session')
+            self.polkit_sessions.add(pending['session_id'])
             self.polkit_session = polkit_control.Session(self.actor, self.polkit_target, self.execution)
+        elif self.polkit_session is None:
+            raise ValueError('Polkit control requires its captured observer session')
         result = self.polkit_session.handle(pending, self._deliver_polkit)
         acknowledgment = {'format_version': 1, 'request_sha256': protocol.request_sha256(pending),
                           'vm_id': self.selected['vm_id'], 'result': result}

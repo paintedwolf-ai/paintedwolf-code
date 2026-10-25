@@ -51,6 +51,21 @@ class PresencePrerequisiteTests(unittest.TestCase):
         self.stack.enter_context(patch.object(presence.ProviderFixture, 'gui', side_effect=fixture))
         self.stack.enter_context(patch.object(presence.tempfile, 'mkdtemp', return_value='/fixture/project'))
 
+    def test_real_system_cancel_and_success_follow_policy_restoration_without_completing_expiry(self):
+        from linux_release.installed_cases import presence_system
+        self.values['await_session'].return_value = {'project_id': 'selected'}
+        def run(app, ui, project, native_input, observations, *, cancel):
+            self.policy.__exit__.assert_called_once()
+            self.assertEqual(project, 'selected')
+            return {'cancel_verified': cancel, 'system_authentication_verified': not cancel}
+        with patch.object(presence_system, 'run_reveal', side_effect=run) as actual:
+            status, facts, _ = presence.unchallenged_presence({'native_input': {'binding': {}, 'vm_id': 'owned'}})
+        self.assertEqual([item.kwargs['cancel'] for item in actual.call_args_list], [True, False])
+        self.assertTrue(facts['cancel_verified'])
+        self.assertTrue(facts['system_authentication_verified'])
+        self.assertFalse(facts['expiry_verified'])
+        self.assertEqual(status, 'unverified')
+
     def test_normal_reveal_restores_policy_and_retains_unverified_partial_facts(self):
         status, facts, streams = presence.unchallenged_presence({})
         self.assertEqual(status, 'unverified')

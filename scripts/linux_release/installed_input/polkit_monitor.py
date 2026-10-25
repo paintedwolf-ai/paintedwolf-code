@@ -167,7 +167,13 @@ class Monitor:
             self.reader.timeout_ms()
             if self.transaction.finished:
                 return self.transaction.witness()
-            return self.transaction.pending() if self.transaction.begin is not None else None
+            transaction = self.transaction
+            if (transaction.begin is None or transaction.response is not None
+                    or transaction.agent_returned or transaction.cancel_requested):
+                # Authentication may be in flight after physical Enter/Escape.
+                # Keep observing causality, but never offer another input target.
+                return None
+            return transaction.pending()
 
     def close(self):
         with self.lock:

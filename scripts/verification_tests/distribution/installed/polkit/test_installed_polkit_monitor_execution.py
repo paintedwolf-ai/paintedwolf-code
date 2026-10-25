@@ -94,6 +94,20 @@ class PolkitMonitorTests(unittest.TestCase):
         signal.values['sender'] = monitor.DBUS
         self.assertEqual(value._decode(signal)['kind'], 'owner-changed')
 
+    def test_inflight_authentication_exposes_no_second_input_target_or_early_success(self):
+        from unittest.mock import Mock
+        for field in ('response', 'agent_returned', 'cancel_requested'):
+            value = observer()
+            value.reader.timeout_ms = Mock(return_value=100)
+            value._authority = Mock()
+            transaction = Mock(finished=False, begin={'serial': 1}, response=None,
+                               agent_returned=False, cancel_requested=False)
+            setattr(transaction, field, {'serial': 2} if field == 'response' else True)
+            value.transaction = transaction
+            self.assertIsNone(value.observe())
+            transaction.pending.assert_not_called()
+            transaction.witness.assert_not_called()
+
     def test_late_or_outgoing_messages_cannot_extend_the_monitor_lifetime(self):
         value = observer()
         value.deadline = time.monotonic() - 1

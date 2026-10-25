@@ -72,7 +72,17 @@ def unchallenged_presence(binding):
                             raise CaseFailed('unchallenged-polkit-did-not-refuse-native-presence')
                         observations['typed_refusal_verified'] = True
                         reservation.check_launch(app)
-            observations['reason'] = 'typed-unchallenged-presence-refusal-observed-system-authentication-cancel-and-expiry-unverified'
+                if isinstance(binding.get('native_input'), dict):
+                    from .presence_system import run_reveal
+                    project_id = observations['opened_session']['project_id']
+                    with DesktopUI(app) as ui:
+                        cancelled = run_reveal(app, ui, project_id, binding['native_input'], observations, cancel=True)
+                        observations['cancel_verified'] = cancelled['cancel_verified']
+                        authenticated = run_reveal(app, ui, project_id, binding['native_input'], observations, cancel=False)
+                        observations['system_authentication_verified'] = authenticated['system_authentication_verified']
+            observations['reason'] = ('presence-refusal-system-authentication-and-cancel-observed-host-expiry-unverified'
+                if observations['system_authentication_verified'] and observations['cancel_verified'] else
+                'typed-unchallenged-presence-refusal-observed-system-authentication-cancel-and-expiry-unverified')
     except (OSError, ValueError, TypeError, KeyError) as error:
         observations.update(getattr(error, 'observations', {}))
         observations['failure_type'] = type(error).__name__
