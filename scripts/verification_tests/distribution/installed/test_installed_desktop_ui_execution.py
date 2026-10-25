@@ -193,6 +193,8 @@ class DesktopUIOwnershipTests(unittest.TestCase):
         button = Node(API.ROLE_PUSH_BUTTON, 'Send')
         api, window = surface([button])
         self.app.observations = {'launch_identity': IDENTITY, 'session': {}}
+        self.assertFalse(ui.retry_inventory(self.app, AttributeError('bug')))
+        self.assertFalse(ui.retry_inventory(self.app, NotImplementedError('permanent')))
         with ui.DesktopUI(self.app, api) as actor, patch.object(ui.time, 'sleep'):
             with patch.object(actor, 'descendants', side_effect=[NativeRace('not retained'), iter([button])]):
                 actor.click('Send')
@@ -203,14 +205,34 @@ class DesktopUIOwnershipTests(unittest.TestCase):
                 actor.click('Send')
         self.assertEqual(button.action.doAction.call_count, 2)
         self.assertEqual(self.app.observations['desktop_inventory_retry']['exception_type'], 'NotImplementedError')
-        with ui.DesktopUI(self.app, api) as actor, patch.object(button, 'queryAction', side_effect=RuntimeError('bad')):
-            with self.assertRaises(CaseUnavailable):
-                actor.click('Send')
         with ui.DesktopUI(self.app, api) as actor:
             with patch.object(actor, 'descendants', side_effect=RuntimeError('not retained')):
                 with self.assertRaises(CaseUnavailable) as refusal:
                     actor.find(API.ROLE_PUSH_BUTTON, 'Send')
         self.assertNotIn('not retained', str(refusal.exception))
+
+    def test_click_never_replays_after_dispatch_and_refuses_permanent_unmounted_interface(self):
+        class NativeRace(Exception):
+            domain, code = 'atspi_error', 0
+        button = Node(API.ROLE_PUSH_BUTTON, 'Send')
+        api, _ = surface([button])
+        with ui.DesktopUI(self.app, api) as actor, patch.object(actor, 'find', return_value=button) as find_node, \
+                patch.object(ui.time, 'monotonic', side_effect=[0, 1, 16]), patch.object(ui.time, 'sleep'):
+            with patch.object(button, 'queryAction', side_effect=NotImplementedError('unmounted')):
+                with self.assertRaises(CaseUnavailable) as refusal:
+                    actor.click('Send')
+        self.assertEqual([call.kwargs for call in find_node.call_args_list], [{'deadline': 15}, {'deadline': 15}])
+        self.assertEqual(refusal.exception.observations['desktop_mutation'],
+                         {'phase': 'action-interface', 'exception_type': 'NotImplementedError'})
+        button.action.doAction.assert_not_called()
+        for post_error in (NativeRace('post-dispatch'), RuntimeError('post-dispatch')):
+            button.action.doAction.reset_mock()
+            button.action.doAction.side_effect = post_error
+            with ui.DesktopUI(self.app, api) as actor, self.assertRaises(CaseUnavailable) as refusal:
+                actor.click('Send')
+            button.action.doAction.assert_called_once_with(0)
+            self.assertEqual(refusal.exception.observations['desktop_mutation'],
+                             {'phase': 'do-action', 'exception_type': type(post_error).__name__})
 
     def test_toolkit_exception_cannot_copy_input_into_retained_error(self):
         entry = Node(API.ROLE_ENTRY, 'Message')
