@@ -134,6 +134,8 @@ def supervise(command, report, *, lifetime=300):
 class LaunchOwner:
     """Parent-side evidence channel for a real Popen child, never a PID substitute."""
     def __init__(self, command, environment):
+        if sys.platform != 'linux':
+            raise ValueError('detached installed launch ownership requires Linux')
         read_fd, write_fd = os.pipe()
         self.events, self.failure, self.closed = [], None, threading.Event()
         try:

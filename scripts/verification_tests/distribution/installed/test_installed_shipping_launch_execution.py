@@ -1,5 +1,9 @@
 """Shipping launch routes preserve real command ownership and refuse invented success."""
 import signal
+import os
+import subprocess
+import sys
+import time
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace
@@ -112,6 +116,52 @@ class ShippingLaunchTests(unittest.TestCase):
         with patch.object(Path, 'glob', autospec=True, side_effect=tasks), \
                 patch(PREFIX + 'launch_owner.process_identity', return_value=row):
             self.assertEqual(children(100), [row])
+
+    def test_detached_launch_keeps_real_ancestry_and_settles_only_owned_children(self):
+        from scripts.linux_release.installed_cases.launch_owner import LaunchOwner
+        if sys.platform != 'linux':
+            with self.assertRaisesRegex(ValueError, 'requires Linux'):
+                LaunchOwner([], {})
+            return
+        sleeper = [sys.executable, '-c', 'import time; time.sleep(60)']
+        command = [sys.executable, '-c',
+            'import subprocess,sys; subprocess.Popen([sys.executable,"-c","import time; time.sleep(60)"],start_new_session=True)']
+        bystander = subprocess.Popen(sleeper, start_new_session=True)
+        owner, owned = None, []
+        try:
+            owner = LaunchOwner(command, os.environ.copy())
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                owned = children(owner.process.pid)
+                if owned and any(event.get('event') == 'command-exit' for event in owner.facts()):
+                    break
+                time.sleep(0.02)
+            self.assertTrue(owned)
+            self.assertTrue(all(row['parent_pid'] == owner.process.pid for row in owned))
+            self.assertEqual(owner.facts()[0]['owner']['pid'], owner.process.pid)
+            owner.process.terminate()
+            self.assertEqual(owner.process.wait(timeout=5), 0)
+            owner.reader.join(timeout=3)
+            self.assertTrue(owner.closed.is_set())
+            self.assertEqual(owner.facts()[-1], {'event': 'settled', 'remaining': []})
+            self.assertTrue(all(not Path('/proc', str(row['pid'])).exists() for row in owned))
+            self.assertIsNone(bystander.poll())
+        finally:
+            if owner is not None:
+                if owner.process.poll() is None:
+                    owner.process.terminate()
+                    try:
+                        owner.process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        owner.process.kill()
+                        owner.process.wait(timeout=5)
+                for row in owned:
+                    signal_owned(row, signal.SIGKILL)
+                owner.reader.join(timeout=3)
+                owner.process.stdout.close()
+                owner.process.stderr.close()
+            bystander.terminate()
+            bystander.wait(timeout=5)
 
     def test_shipping_mode_is_explicit_and_unknown_modes_refuse(self):
         from scripts.linux_release.installed_cases.shipping_lifecycle import selected_mode
