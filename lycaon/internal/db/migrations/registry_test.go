@@ -75,3 +75,33 @@ func TestPlanBudgetsEverySkippedMigrationWithoutOverflow(t *testing.T) {
 		t.Fatal("overflowed working-space budget accepted")
 	}
 }
+
+// A step that bounds its writes counts that bound; one that does not counts
+// the whole store.
+func TestPlanWriteBytesCountsUndeclaredStepsAsTheWholeStore(t *testing.T) {
+	first := Baseline{Revision: 1, Shape: strings.Repeat("a", 64)}
+	second := Baseline{Revision: 2, Shape: strings.Repeat("b", 64)}
+	third := Baseline{Revision: 3, Shape: strings.Repeat("c", 64)}
+	apply := func(context.Context, *sql.Tx) error { return nil }
+	source := []byte("SELECT 1")
+	sum := sha256.Sum256(source)
+	bounded := func(context.Context, DBTX, uint64) (uint64, error) { return 4096, nil }
+	steps := []Step{
+		{ID: "undeclared", Checksum: hex.EncodeToString(sum[:]), Source: source, From: first, To: second, Apply: apply},
+		{ID: "bounded", Checksum: hex.EncodeToString(sum[:]), Source: source, From: second, To: third, Apply: apply, Writes: bounded},
+	}
+	registry, err := New(third, []Baseline{first, second}, steps)
+	testutil.FailErr(t, "register route", err)
+	plan, err := registry.Plan(first)
+	testutil.FailErr(t, "plan route", err)
+	writes, err := plan.WriteBytes(t.Context(), nil, 1<<20)
+	testutil.FailErr(t, "estimate writes", err)
+	if writes != 1<<20+4096 {
+		t.Fatalf("writes = %d, want the whole store plus the declared bound", writes)
+	}
+	plan, err = registry.Plan(second)
+	testutil.FailErr(t, "plan bounded step", err)
+	if writes, err = plan.WriteBytes(t.Context(), nil, 1<<30); err != nil || writes != 4096 {
+		t.Fatalf("bounded writes = %d, %v", writes, err)
+	}
+}

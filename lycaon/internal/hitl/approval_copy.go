@@ -171,7 +171,7 @@ const (
 	ProcessListTitle     = "Inspect host processes"
 	ProcessListWhat      = "Reads process names, executable paths, owners, and process identities from this machine. Arguments and environment are not read."
 	ProcessListIfWrong   = "Process metadata can reveal other applications and work on this machine."
-	ProcessSignalTitle   = "Signal host processes"
+	ProcessSignalTitle   = "Signal processes this session started"
 	ProcessSignalWhat    = "Sends the requested signal to these exact process instances. The host rechecks identity before signaling; it does not signal by name or process group."
 	ProcessSignalIfWrong = "Signals can interrupt work or discard unsaved data. A delivered signal does not mean the process has exited."
 )

@@ -39,6 +39,7 @@ export type ClientNoticeKind =
   | "offline"
   | "package_update_listed"
   | "project_removal_incomplete"
+  | "project_removal_running"
   | "project_removal_unconfirmed"
   | "provider_check_unfinished"
   | "readiness_recheck_failed"
@@ -53,6 +54,9 @@ export type ClientNoticeKind =
   | "store_incompatible_schema"
   | "store_incompatible_schema_no_snapshot"
   | "store_incompatible_snapshot_incompatible"
+  | "store_insufficient_space"
+  | "store_storage_full"
+  | "store_storage_unavailable"
   | "transcript_row_gone"
   | "unexpected_client_error"
   | "update_available"
@@ -191,6 +195,11 @@ export const CLIENT_NOTICES: Readonly<Record<ClientNoticeKind, ClientNoticeCopy>
     message: "Review the project and extension settings to confirm the removal outcome.",
     scope: "app",
   },
+  project_removal_running: {
+    title: "Deleting project",
+    message: "Project deletion is running. Large histories can take several minutes. You can keep using other projects.",
+    scope: "app",
+  },
   project_removal_unconfirmed: {
     title: "Removal outcome is unknown",
     message: "The removal outcome could not be confirmed. The request may already have completed. Reconnect and retry if the project is still listed; otherwise, review extension settings.",
@@ -230,7 +239,7 @@ export const CLIENT_NOTICES: Readonly<Record<ClientNoticeKind, ClientNoticeCopy>
   },
   store_incompatible_integrity: {
     title: "Your data needs attention",
-    message: "Your conversation history did not pass its integrity check. Restoring the recovery snapshot from {time} is the safe way forward.",
+    message: "Your conversation history did not pass its integrity check. A recovery snapshot from {time} is available. We will verify it before restoring your data.",
     scope: "app",
   },
   store_incompatible_integrity_no_snapshot: {
@@ -251,7 +260,7 @@ export const CLIENT_NOTICES: Readonly<Record<ClientNoticeKind, ClientNoticeCopy>
   },
   store_incompatible_schema: {
     title: "This app can't open your data",
-    message: "Your conversation history uses a different data format. A recovery snapshot from {time} is available to restore.",
+    message: "Your conversation history uses a different data format. A recovery snapshot from {time} is available. We will verify it before restoring your data.",
     scope: "app",
   },
   store_incompatible_schema_no_snapshot: {
@@ -262,6 +271,24 @@ export const CLIENT_NOTICES: Readonly<Record<ClientNoticeKind, ClientNoticeCopy>
   store_incompatible_snapshot_incompatible: {
     title: "That snapshot cannot be restored",
     message: "The recovery snapshot uses a different data format. Restore a compatible backup instead.",
+    scope: "app",
+  },
+  store_insufficient_space: {
+    title: "Not enough free space to update",
+    message: "Updating your data safely needs about {needed} free on this disk, and {available} is free. Your data has not been changed. Free up space, then try again.",
+    suggestedAction: "There is still not enough free space. Free up more space, then try again.",
+    scope: "app",
+  },
+  store_storage_full: {
+    title: "Not enough free space",
+    message: "Painted Wolf Code could not finish writing its data because storage is full. Free up space on that disk, then try again.",
+    suggestedAction: "There is still not enough free space. Free up more space, then try again.",
+    scope: "app",
+  },
+  store_storage_unavailable: {
+    title: "Your data could not be opened",
+    message: "Painted Wolf Code cannot access its stored data. Check that its storage location is available and accessible, then try again.",
+    suggestedAction: "The storage location is still unavailable. Check access to it, then try again.",
     scope: "app",
   },
   transcript_row_gone: {

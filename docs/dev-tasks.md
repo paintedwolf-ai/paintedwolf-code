@@ -117,6 +117,66 @@ selection and staging recheck the archive. Isolated test checkouts reuse this
 cache while keeping their own release selection. Download failures can be
 retried normally and never start an engine source build.
 
+`pw scan engines verify-installed --root /absolute/engine-root` checks the
+packaged payload against the executable's embedded identity, then runs native
+and embedded-source positive cases plus ignored/comment-only controls through
+the product driver under required confinement. It emits JSON with the exact
+binary identity, capability facts, case results, and a structured failure code.
+Missing, changed, or wrong-architecture resources fail; this command never
+repairs the installation, downloads an engine, or searches a host-tool fallback.
+Run it from each installed package with its explicit resource root. A checkout
+probe does not establish an installed-package result.
+
+The selected producer qualification binds the original scanner bytes. Changing
+the ELF loader for Nix changes those bytes and requires a separate consumer
+finalization identity and qualification. The artifact build tool supports
+`-mode finalize-consumer -artifact-directory ORIGINAL -root FINAL_ROOT
+-consumer-recipe RECIPE.json -evidence-root SCANNER_CONFIG -audit-output AUDIT.json`.
+It emits the final base64 build identity only after the required product cases
+pass under confinement. The recipe is one closed JSON object with
+`schema_version: 1`, `kind: "nix-elf-relocation"`, the full `source_commit`,
+`flake_lock_sha256`, absolute `tool_path`, `tool_sha256`, and an `arguments`
+array. Declared inputs and observed ELF loader, dependencies, and RPATHs remain
+separate fields in the consumer record.
+
+The existing managed preparation entry point forwards these explicit build
+modes to that same tool:
+
+```sh
+./task scan:opengrep:stage -- --finalize-consumer -artifact-directory "$ORIGINAL" -root "$FINAL_ENGINE_ROOT" -consumer-recipe "$RECIPE" -evidence-root "$SCANNER_CONFIG" -audit-output "$AUDIT"
+./task scan:opengrep:stage -- --relocate-consumer -artifact-directory "$ORIGINAL" -root "$FINAL_ENGINE_ROOT" -consumer-recipe "$RECIPE" -evidence-root "$SCANNER_CONFIG" -audit-output "$AUDIT"
+./task scan:opengrep:stage -- --audit-consumer -artifact-directory "$ORIGINAL" -packaged-directory "$FINAL_ARTIFACT_DIRECTORY" -consumer-identity-file "$IDENTITY" -evidence-root "$SCANNER_CONFIG" -audit-output "$AUDIT"
+```
+
+These modes refuse development overrides and do not fetch or repair resources.
+The Nix build graph uses the built artifact command as a derivation dependency;
+it performs the same offline admission before compiling the engine.
+
+For the pinned Linux Nuitka onefile scanner, use `--relocate-consumer` with
+`kind: "nix-nuitka-relocation"` and exactly four `arguments` entries:
+`["--set-interpreter", "/nix/store/…/lib/ld-linux-….so", "--set-rpath", "/nix/store/…-glibc/lib:/nix/store/…-libgcc/lib"]`.
+Start with an exact staged producer copy. The build tool patches its separated
+launcher and embedded ELF images, retains safe relative library paths, and
+rebuilds per-file checksums, compression, and the attached-data trailer. Each
+native dependency must have a declared payload or Nix store provider; host
+library fallback is refused. Ordinary `patchelf` on the complete scanner breaks
+its attached-data layout. Relocation alone grants no qualification authority;
+the same invocation runs the product cases before emitting an identity.
+
+The native consumer integration uses the existing scoped digest with
+`-tags integration,consumer_scanners -run '^TestConsumerFinalizationNativeScanner$'`
+for `./cmd/opengrep-artifact`. It requires `PW_SCANNER_CONSUMER_RECIPE` and
+`PW_SCANNER_PRODUCER_DIRECTORY`; absent inputs fail that selected campaign.
+Ordinary scanner tests continue to qualify unchanged producer resources.
+
+Package assembly must transform its own writable staged copy first, run this
+native finalizer, inject the emitted identity into the engine build, and then
+preserve every finalized resource byte. A later audit uses the original
+`-artifact-directory`, final `-packaged-directory`, and
+`-consumer-identity-file IDENTITY.txt` together. The original pinned archive
+and selection evidence remain required. Nix package caller integration and
+installed qualification for both architectures are tracked under #49 and #927.
+
 Development executables run under the hardened runtime releases ship with:
 `scripts/sign-dev-binary.sh` signs them with the stable development identity
 when it is provisioned and ad hoc otherwise, always with `--options runtime`.
@@ -571,8 +631,8 @@ Gate composition lives in `scripts/verification-plan.json`.
 
 | Task | Composition |
 |------|-------------|
-| `check-fast` | Local handoff gate on one stable source snapshot: `build`, `lint:fast`, `budgets`, `den:typecheck`, `den:lint`, `den:test:fast`, `den:coverage:changes`, `test:short`, `test:contract`, and `coverage:changes`, each starting once its declared resources allow. CI's `fast` profile, the ready pull request tier, runs a subset of these stages |
-| `check` | Full local and qualification gate on one stable source snapshot, run exactly by CI's `check` profile: `build`, `build:cross`, `check:drift`, `openapi:lint`, `validate:workflows`, `oar:verify` (`test:oar` and `oar:conformance`), the runtime checks (`test:runner`, `test:full` including required bundled scanners, `den:typecheck`, `den:lint`, `den:test`, `den:test:rust`), `test:fail-messages:check`, `comments:check`, `lint:full`, `budgets`, `coverage:changes`, `den:coverage:changes`, and `lint:vuln`. Stages start as their declared resources allow, longest expected first, and the first failure ends the gate. Active fuzzing, transcript performance, stress, race, and coverage sweeps run separately in `nightly.yml` and the release workflow; ordinary Go tests still execute saved fuzz cases |
+| `check-fast` | Local handoff gate on one stable source snapshot: `build`, `lint:full`, `budgets`, `den:typecheck`, `den:lint`, `den:test:fast`, `den:coverage:changes`, `test:short`, `test:contract`, `coverage:changes`, `scripts:coverage:changes`, `licenses:notices`, `comments:check`, `test:fail-messages:check`, and `docs:links`, each starting once its declared resources allow. CI's `fast` profile, the ready pull request tier, runs a subset of these stages |
+| `check` | Full local and qualification gate on one stable source snapshot, run exactly by CI's `check` profile: `build`, `build:cross`, `check:drift`, `openapi:lint`, `validate:workflows`, `oar:verify` (`test:oar` and `oar:conformance`), the runtime checks (`test:runner`, `test:full` including required bundled scanners, `den:typecheck`, `den:lint`, `den:test`, `den:test:rust`), `test:fail-messages:check`, `comments:check`, `lint:full`, `budgets`, `coverage:changes`, `scripts:coverage:changes`, `den:coverage:changes`, and `lint:vuln`. Stages start as their declared resources allow, longest expected first, and the first failure ends the gate. Active fuzzing, transcript performance, stress, race, and coverage sweeps run separately in `nightly.yml` and the release workflow; ordinary Go tests still execute saved fuzz cases |
 | `check:drift` | Internal to `check`: every `codegen:*:check`, `openapi:bundle:check`, `db:sqlc:check`, `db:sqlc:vet`, the vendored-corpus checks (`oar:vendor:check`, `scan:rules:vendor:check`, `secret-mint:vendor:check`, `lint:vuln:vendor:check`), and `docs:links`. A stale generated surface fails here, not at compile time |
 | `check:digest` | Summarized local pass — build, `lint:fast`, unit/component Go tests, `den:test:fast`, and the harness canary. `FULL=1` delegates to `test:full`, including integration tags and required bundled scanners |
 | Contention controls | Up to eight batches overlap across checkouts; stages within a request and across requests overlap wherever resource locks and worker slots allow. Shared operations reserve slots within a global budget of three quarters of host CPUs, rounded down and bounded between one and eight workers; `PW_TEST_HOST=dedicated` (hosted CI) uses every CPU and lets shared operations reserve all of it. `PW_TEST_WORKERS` caps each invocation; runner-specific settings may reduce it. Scheduler-dependent waits and lint deadlines scale 1×–4× from host load, with `PW_TEST_TIMEOUT_SCALE` as an explicit override |
@@ -588,7 +648,7 @@ Gate composition lives in `scripts/verification-plan.json`.
 | `test:runner` | Bounded subprocess fixtures for batching, stage overlap, source snapshots, package outcomes and reuse, FIFO order and backfill, early failures, cancellation, crash recovery, nested admission, and worker limits |
 | `lint:fast` / `lint:full` | Both run vet and security checks. Interprocedural dead-code analysis belongs to `lint:full`. Arguments after `--` go to golangci-lint; `./task lint:full -- --timeout=40m` raises that analysis deadline |
 | `db:wipe` | Clears the store and every store-keyed host tree; preserves Den app preferences, device configuration, credentials, debug captures, and upgrade recovery archives. Refuses while any process holds the store open — stop the engine first |
-| `budgets` / `coverage:changes` / `den:coverage:changes` | Hold what a change touches to its limits and test the statements it adds; warnings arrive before the limit, and `PW_BUDGETS_INSPECT="<path>"` shows a file or directory's standing before editing it. See [Size budgets and changed coverage](test-strategy.md#size-budgets-and-changed-coverage) |
+| `budgets` / `coverage:changes` / `den:coverage:changes` / `scripts:coverage:changes` | Hold what a change touches to its limits and test the statements it adds; warnings arrive before the limit, and `PW_BUDGETS_INSPECT="<path>"` shows a file or directory's standing before editing it. `scripts:coverage:changes` shares the `runner` resource with `test:runner` and installs the pinned coverage.py once per interpreter under the [bin directory](#build-outputs-caches-and-locks); `./task setup-dev -- --ci-inputs` provisions it before an offline CI lane. See [Size budgets and changed coverage](test-strategy.md#size-budgets-and-changed-coverage) |
 | `check:coverage` / `check:coverage:packages` | `check:coverage` produces aggregate and package reports from one test run. Floors come from `scripts/coverage-policy.json`: `COVERAGE_MIN` overrides the aggregate floor; the per-package report is advisory until `COVERAGE_PKG_ENFORCE=1`, with `COVERAGE_PKG_MIN` overriding its floor and exemptions in `lycaon/coverage-exempt.txt`. Floors must be finite percentages from 0 through 100; fractional floors are compared without truncation. Go and Den coverage runs use the digest runners and retain failure diagnostics |
 | `build:decide` / `decide:test` | Build and test `bialy` with the host's features (`scripts/decide-features.sh`: `mlx` on Apple silicon, `vulkan` on Linux). On Linux, `decide:test` runs the Vulkan parity tests on the first GPU, or on Mesa's lavapipe (`mesa-vulkan-drivers`) without one. The first MLX build compiles the framework from source: several minutes, a network fetch, and Xcode's Metal toolchain (`xcodebuild -downloadComponent MetalToolchain` when the build cannot execute `metal`). Development builds stage heads installed under `$(python3 scripts/artifact_paths.py bin .)/decide-heads/`; the dev sidecar provisions the checkpoint at its first boot |
 | `build:document-core` | Builds `pw-document-core` for this host into the shared, content-addressed cache and prints its path. Go and Vitest digests, fuzz, and benchmark runs call it themselves and export `LYCAON_DOCUMENT_CORE_BINARY`, so editor tests always run the core built from the source they test; `build:lycaon-dev` stages a copy beside `lycaon-dev` |
@@ -625,6 +685,22 @@ editing modular OpenAPI sources, run `./task openapi:bundle` and
 ### Digest captures and locking
 
 Digest runners write unique captures inside a per-run isolation directory, then take a **short publish lock** only while publishing canonical evidence and failure pointers. Suite runtime does not hold that lock. Each test tree gets an isolated home, config, and temp directory; normal exit removes it, and the next run reclaims directories whose lease-holder PID is gone. Go and Rust toolchain and dependency stores (`GOCACHE`, `GOMODCACHE`, `GOPATH`, `RUSTUP_HOME`, `CARGO_HOME`) stay on the real home. Stale publish locks from killed agents are reclaimed via `${lockdir}/pid`. Commands under a lease run git with `core.fsmonitor`, `gc.autoDetach`, and `maintenance.autoDetach` off: a detached git daemon would inherit the lease and reservation descriptors and keep a finished run admitted.
+
+
+Decision-engine compiler intermediates use the checkout's `compiler-cache/decide`
+directory under its artifact root. `PW_COMPILER_CACHE_DIR` preserves that path
+across source snapshots; `PW_BUILD_DIR` still isolates executable outputs. The scheduler's `rust` resource lock prevents
+concurrent test runs from replacing shared test executables. Cargo serializes
+compilation, and the decision build holds a publication lock until its executable
+is staged. The decision cache warmer compiles both test and
+release profiles in the verification source slot. Prepared benchmarks set this
+cache path inside their run directory, outside the sealed source, so importing
+prepared artifacts omits compiler intermediates.
+
+Hosted frontend lanes install Bun, Node, Rust, ripgrep, and the native document
+core's pinned Cargo inputs. They skip the multi-gigabyte Go compiler cache,
+scanner provisioning, engine downloads, and Go generator tools. The catalog
+rejects this setup for targets that need those dependencies.
 
 Ordinary `./task` requests automatically share compatible verification on macOS
 and Linux: the oldest request admits up to 32 consecutive requests from the same
@@ -684,8 +760,13 @@ and Linux, lost owner identity is `supervision_lost`; an OS-stopped owner is
 `supervisor_stopped`. Operations with ten minutes of continuously sampled unchanged
 descendant CPU counters, process trees, and captured output are `suspected_stall`;
 samples more than 90 seconds apart reset the inactivity window, and Go raw event
-files count as output even when the digest's console log is quiet. Queued
-reservations are not stalled operations. A healthy long-running command can
+files count as output even when the digest's console log is quiet. Targets whose
+work runs inside an external daemon (such as `nix-daemon` or container builds)
+declare `"progress": "log"` or `"progress": "heartbeat"` in their
+`scripts/verification-plan.json` resource recipe; the scheduler exports
+`PW_TEST_STAGE_PROGRESS` and samples that file's inode, size, and modification
+time alongside descendant processes and stage logs, without parsing output prose.
+Queued reservations are not stalled operations. A healthy long-running command can
 remain active indefinitely, and a quiet external wait may still trigger an
 advisory. These signals never kill processes, release leases, or change test
 results. Missing process identity or unsupported telemetry reports `unknown`;
@@ -953,6 +1034,18 @@ A Nix generation rollback changes application/package files, not the live databa
 
 See the [update qualification matrix](operations/update-qualification.md#nix-owner-and-recovery-qualification) for owner-specific installed checks. The recipes above describe the package contract; the first released-pin, owner switching and both-architecture qualification remain pending the package/cache foundation.
 
+### Installed Linux result admission
+
+The shared [`support-matrix.json`](../packaging/linux/support-matrix.json) defines required environment/installation/architecture/capability rows. `scripts.linux_release.installed_results` admits a collector campaign against that catalog, an exact source commit, and the final artifact manifest supplied by the release owner. It emits JSON with `accepted`, every row's `passed`/`failed`/`unverified` outcome, errors and a checklist for native observations. Missing rows or cases, unknown/duplicate identities, skipped results, stale source/artifact identities and emulation of native-only tiers refuse admission. A file digest checks retained evidence bytes; the collector still owns the truth of each observation.
+
+The format-1 artifact manifest has `source_commit` and `artifacts`. Each artifact carries `id`, `installation`, `architecture`, `source_commit` and `identity`. File identity is `{ "kind": "file", "sha256": "<final payload digest>" }`. Nix identity is `{ "kind": "nix-closure", "sha256": "<NAR digest>", "store_path": "<exact output>", "lock_sha256": "<lock digest>" }`. Digests are lowercase SHA-256 hex; source commits are full lowercase Git SHAs. The campaign repeats the exact final manifest and adds `results`.
+
+Each result carries `row_id`, `source_commit`, `artifact_id`, `tier`, `execution` (`native` or `emulated`), `status` (`passed`, `failed`, `skipped` or `unverified`), `environment_facts` and `cases`. Facts contain exactly the catalog's `recorded_environment_facts` keys with recorded nonempty values. Every required case carries `id`, `status` and `evidence`; passing cases need retained `{ "path": "relative/file", "sha256": "<digest>" }` records. Paths must stay inside the evidence directory, including after symlink resolution. `variants` lists every release and scale variant the row's environment declares for that capability, each with `id`, `status` and `observed`: `os_id`, `version_id`, the typed `snapshot` (`kind`, `value`, `channel`), `display_protocol` and `scales_percent`. Admission compares each observation with its declared release, display protocol and scales. A missing, non-passing or mismatched variant leaves the row unverified, and a failed variant fails it. So a run on one release never covers another declared release, and two declared releases cannot share one observed snapshot. All final artifacts require installed results. A report about pre-signing or different bytes cannot certify the final set.
+
+`./task test:linux:installed -- --source-commit SHA --campaign FILE --final-artifacts FILE --evidence-root DIRECTORY` runs installed campaign admission through the normal queue. It retains a machine-readable report under the checkout's artifacts and prints the report as JSON, including every missing or unverified required row and the native/manual checklist. Optional `--report FILE` selects a fresh report path and `--catalog FILE` selects a scoped contract fixture. A report cannot replace an input, retained evidence or an existing report. Case drivers must still produce actual observations against the selected installed artifacts; invoking admission does not execute or certify missing cases.
+
+The admission module is a foundation for the installed campaign, not an installed test runner or a release gate by itself. Collectors, managed `test:linux:installed` orchestration and release consumption remain tracked in #456; the campaign closes only after its required rows pass. Architecture-specific performance limits and actual results remain #455, and native arm64 desktop/performance capacity is still required.
+
 ### Updates
 
 Before broad activation, use the [update qualification matrix](operations/update-qualification.md)
@@ -1070,6 +1163,28 @@ To rotate, append the next generation with both of its public keys; set the sour
 
 A withdrawn bridge requires a reviewed `./task release:halt -- --plan PATH` plan. It names `source_generation` and a `feeds` array covering both source channels and every existing successor channel. Each entry declares `generation`, `channel`, and either `bad`/`last_good` or an explicit unaffected `keep_version`; a generation-1 feed must name a `last_good`, because the 1.0.x clients that read it ignore the `withdrawn` marker. The tool reads all affected feeds and validates every halt before changing any pointer; changed or omitted offers refuse the plan. The protected workflow accepts that same JSON, withdraws every bad GitHub mirror, and restores only the newest affected channel casks and website offers. A replacement bridge gets a strictly higher version and updates the source's registered bridge; retained immutable artifacts remain untouched. Every subsequent bridge must remain newer than its predecessor. The offline generation rehearsal runs with `./task release:halt -- --self-test` and through the release contract tests; credentialed pointer behavior remains in `release:live-test`.
 
+### Linux candidate builds
+
+The [Linux candidate requests workflow](../.github/workflows/linux-candidate-requests.yml)
+builds the native amd64 and arm64 deb/rpm packages through the production bundle
+and staging path. It runs weekly, on ready PRs that change packaging inputs,
+or by manual dispatch on the selected branch. Use `gh workflow run linux-candidate-requests.yml --ref <branch>` when a pull
+request needs package artifacts. The release workflow calls the reusable
+[package build](../.github/workflows/linux-candidates.yml) directly with its exact
+selected source commit, within the release runner budget. Candidate
+artifacts include checksums and the source commit and are retained for 90 days.
+The workflow has read-only repository access and no signing environment or
+publication credentials. Package signing rehearsals and installed-system
+qualification remain separate requirements; a candidate build alone does not
+qualify a release. Standalone requests share the maintenance runner budget;
+release calls use the release budget and cannot be replaced by maintenance.
+
+When a package stage fails after the build starts, the workflow runs
+`./task release:candidate:diagnostics -- --source CHECKOUT --controller SHA --output FRESH_DIR`
+from the same source checkout. It retains the canonical assembled packages with
+hashes and an explicit report that grants no complete-candidate, installed or
+publication authority.
+
 ### Release dry run
 
 The isolated R2 rehearsal uses S3 credentials with **Object Read & Write** permission scoped to its test bucket. Create `~/.config/paintedwolf/release-rehearsal.json`, owned by your user with mode `600` (or read-only `400`):
@@ -1123,6 +1238,31 @@ xattr -w com.apple.quarantine "0083;00000000;Chrome;|com.google.Chrome" ~/Downlo
 5. **Readiness is clean or explained.** `GET /v1/preflight` returns `overall: ok`, or every non-ok probe is one the tester deliberately caused. A clean Mac without a host git install is the *expected* first-run environment — the golden path **passes** when the bundled engine is present (or the app surfaces `GIT_ENGINE_UNAVAILABLE` if it is not), and **fails** if the app is silent about a missing engine.
 
 ### Tag gate
+
+Select a release source explicitly when main is moving:
+
+```bash
+gh workflow run qualification.yml --ref main -f source-sha=<full-main-commit-sha>
+```
+
+The request remains queued until the shared executor can run it. Main pushes
+cannot replace it. Its completed `qualification-source-<attempt>` artifact binds
+the selected source to the controller and workflow attempt; publication checks
+that evidence before accepting the source. A failed or canceled request supplies
+no qualification. Source selection does not publish or tag a release.
+
+The selected source and controller must have identical `.github/`, `scripts/`,
+`task`, and `Taskfile.yml` content. Admission refuses incompatible tooling before
+any candidate checks start. Select a newer main commit when those interfaces
+change; qualification never combines an old script API with a new workflow.
+
+Rollout requires a fresh qualified candidate after this policy lands. Existing
+successful runs without a source receipt do not qualify release sources. Finish
+any already selected release before adopting this gate, or select and qualify a
+main commit containing it before requesting a release. Receipts expire after
+90 days; requalify expired candidates within the tooling compatibility rule.
+Historical dispatch lookup searches that retention window and filters the source
+SHA in the run title before downloading and verifying the receipt.
 
 Both preview and stable publication run the controller's compatibility check
 against the newest published stable release confirmed by the signed updater feed or GitHub mirror. The controller pins that
