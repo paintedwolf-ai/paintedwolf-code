@@ -387,7 +387,7 @@ class UnlockAccountAndBridgeTests(unittest.TestCase):
             (root / 'native-unlock.json').write_bytes(protocol.canonical({
                 'format_version': 1, 'binding': EXECUTION, 'vm_id': 'owned', 'account': ACCOUNT,
                 'prepare_attempt_id': '1' * 32, 'unlock_attempt_id': '3' * 32,
-                'secret_sha256': 'f' * 64, 'pre_locked_at': 10.0,
+                'pre_locked_at': 10.0,
                 'post_unlocked_at': 20.0, 'cleanup_completed_at': 30.0}))
 
             selected = {'format_version': 1, 'kind': 'qemu-fixed-input', 'lease': '/tmp/lease.json', 'vm_id': 'owned'}
