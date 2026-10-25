@@ -1,5 +1,3 @@
-//go:build integration
-
 package projectremoval
 
 import (
@@ -51,8 +49,11 @@ func fixture(t *testing.T) (*Owner, *registry, string) {
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
 	id := uuid.NewString()
 	reg := &registry{rows: map[string]*project.Project{id: {ID: id, Name: "Remove me"}}}
-	owner := &Owner{Projects: reg, Extensions: extstatetest.Owner(t), Store: NewStore(testdbfixture.Open(t, "removals.db")), SuggestionsApply: func(project.Project) bool { return true }}
-	owner.Delete = func(_ context.Context, id string, _ bool) error { delete(reg.rows, id); return nil }
+	owner := &Owner{Run: func(ctx context.Context, work func(context.Context)) { work(context.WithoutCancel(ctx)) }, Projects: reg, Extensions: extstatetest.Owner(t), Store: NewStore(testdbfixture.Open(t, "removals.db")), SuggestionsApply: func(project.Project) bool { return true }}
+	owner.Delete = func(_ context.Context, id string, _ bool, _ func(wire.ProjectRemovalProgress)) error {
+		delete(reg.rows, id)
+		return nil
+	}
 	return owner, reg, id
 }
 func install(t *testing.T, o *Owner, projectID, packID string) {
@@ -150,7 +151,7 @@ func TestAssessmentRetainsDeclaredReferences(t *testing.T) {
 func TestFailedDeletionKeepsExtensions(t *testing.T) {
 	o, _, id := fixture(t)
 	install(t, o, id, "acme/one")
-	o.Delete = func(context.Context, string, bool) error {
+	o.Delete = func(context.Context, string, bool, func(wire.ProjectRemovalProgress)) error {
 		return &Failure{Code: "root_busy", Message: "busy", Documents: 2}
 	}
 	req := review(t, o, id, "acme/one")
@@ -173,7 +174,10 @@ func TestRemovalBatchAndExactRetry(t *testing.T) {
 	}
 	assertInstalled(t, o, "acme/one", false)
 	assertInstalled(t, o, "acme/two", false)
-	o.Delete = func(context.Context, string, bool) error { t.Fatal("retry repeated deletion"); return nil }
+	o.Delete = func(context.Context, string, bool, func(wire.ProjectRemovalProgress)) error {
+		t.Fatal("retry repeated deletion")
+		return nil
+	}
 	replay, err := o.Remove(t.Context(), id, req)
 	testutil.FailErr(t, "replay", err)
 	if replay.CleanupState != "removed" {
@@ -196,7 +200,11 @@ func TestEvidenceChangesBeforeAndDuringDeletion(t *testing.T) {
 				suggestion(t, p, "format: 1\nsuggest:\n  - id: acme/one\n    source: https://example.com/one.git\n")
 			}
 			if during {
-				o.Delete = func(context.Context, string, bool) error { delete(reg.rows, id); change(); return nil }
+				o.Delete = func(context.Context, string, bool, func(wire.ProjectRemovalProgress)) error {
+					delete(reg.rows, id)
+					change()
+					return nil
+				}
 			} else {
 				change()
 			}
@@ -230,7 +238,7 @@ func TestInterruptedReceiptSurvivesStoreRecreation(t *testing.T) {
 	operation := uuid.NewString()
 	result := wire.ProjectRemovalResult{OperationID: operation, ProjectID: id, ProjectState: "deleted", CleanupState: "interrupted", Extensions: []string{"acme/one"}}
 	testutil.FailErr(t, "begin receipt", store.begin(t.Context(), record{ProjectID: id, Request: "{}", Result: result}))
-	o := &Owner{Store: NewStore(database)}
+	o := &Owner{Store: NewStore(database), Projects: &registry{}}
 	replay, err := o.Result(t.Context(), id, operation)
 	testutil.FailErr(t, "recover receipt", err)
 	if replay.ProjectState != "deleted" || replay.CleanupState != "interrupted" || replay.FailureCode != "removal_interrupted" {
@@ -261,7 +269,7 @@ func TestDeviceMutationAfterDeleteRetainsExtensions(t *testing.T) {
 	o, reg, id := fixture(t)
 	install(t, o, id, "acme/one")
 	req := review(t, o, id, "acme/one")
-	o.Delete = func(context.Context, string, bool) error {
+	o.Delete = func(context.Context, string, bool, func(wire.ProjectRemovalProgress)) error {
 		delete(reg.rows, id)
 		extstatetest.Apply(t, o.Extensions, extstatetest.DeviceScope(), extensionstate.SetPackEnabledOp{PackID: "acme/one", Enabled: false})
 		return nil
@@ -279,7 +287,7 @@ func TestDuplicateConcurrentRequestExecutesOnce(t *testing.T) {
 	req := wire.ProjectRemovalRequest{OperationID: uuid.NewString()}
 	entered, release := make(chan struct{}), make(chan struct{})
 	calls := 0
-	o.Delete = func(context.Context, string, bool) error {
+	o.Delete = func(context.Context, string, bool, func(wire.ProjectRemovalProgress)) error {
 		calls++
 		close(entered)
 		<-release
@@ -298,11 +306,46 @@ func TestDuplicateConcurrentRequestExecutesOnce(t *testing.T) {
 	for range 2 {
 		out := <-results
 		testutil.FailErr(t, "concurrent remove", out.err)
-		if out.result.ProjectState != "deleted" {
+		if out.result.ProjectState != "deleted" && out.result.Progress == nil {
 			t.Fatalf("result = %+v", out.result)
 		}
 	}
 	if calls != 1 {
 		t.Fatalf("deletion count = %d", calls)
+	}
+}
+
+func TestSecondOperationWhileRunningIsRefused(t *testing.T) {
+	o, reg, id := fixture(t)
+	entered, release, done := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	o.Run = func(ctx context.Context, work func(context.Context)) {
+		go func() { defer close(done); work(context.WithoutCancel(ctx)) }()
+	}
+	o.Delete = func(context.Context, string, bool, func(wire.ProjectRemovalProgress)) error {
+		close(entered)
+		<-release
+		delete(reg.rows, id)
+		return nil
+	}
+	first := wire.ProjectRemovalRequest{OperationID: uuid.NewString()}
+	accepted, err := o.Remove(t.Context(), id, first)
+	testutil.FailErr(t, "accept first operation", err)
+	if accepted.Progress == nil {
+		t.Fatalf("accepted = %+v", accepted)
+	}
+	<-entered
+	second := wire.ProjectRemovalRequest{OperationID: uuid.NewString()}
+	if _, err := o.Remove(t.Context(), id, second); !errors.Is(err, project.ErrProjectBusy) {
+		t.Fatalf("second operation error = %v, want project busy", err)
+	}
+	if _, found, err := o.Store.read(t.Context(), second.OperationID); err != nil || found {
+		t.Fatalf("refused operation journaled: found = %v, err = %v", found, err)
+	}
+	close(release)
+	<-done
+	settled, err := o.Result(t.Context(), id, first.OperationID)
+	testutil.FailErr(t, "settled first operation", err)
+	if settled.ProjectState != "deleted" || settled.Progress != nil {
+		t.Fatalf("settled = %+v", settled)
 	}
 }

@@ -3,8 +3,8 @@
 # also leaves mlx.metallib beside the binary.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-# shellcheck source=artifact-paths.sh
-source "${ROOT}/scripts/artifact-paths.sh"
+# shellcheck source=toolchain/decide-environment.sh
+source "${ROOT}/scripts/toolchain/decide-environment.sh"
 CRATE="${ROOT}/lycaon/internal/decide/native"
 OUT="${1:-${PW_BUILD_DIR}/bialy}"
 
@@ -14,16 +14,12 @@ if ! command -v cargo >/dev/null 2>&1; then
 fi
 
 FEATURES="$(bash "${ROOT}/scripts/decide-features.sh")"
-# MLX writes its compiled kernels here instead of under $HOME.
-export MLX_RS_METAL_PATH="${MLX_RS_METAL_PATH:-${PW_BIN_DIR}/mlx-metal}"
-if [[ "$(uname -s)" == "Darwin" ]]; then
-  MACOS_FLOOR_FILE="${ROOT}/lycaon/internal/platformfloor/macos_floor.txt"
-  if [[ -f "${MACOS_FLOOR_FILE}" ]]; then
-    export MACOSX_DEPLOYMENT_TARGET="$(tr -d '[:space:]' < "${MACOS_FLOOR_FILE}")"
-  fi
-fi
-
-export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-${PW_BUILD_DIR}/decide-target}"
+# Hold publication until the compiled binary has been staged.
+# shellcheck source=digest-run-lock.sh
+source "${ROOT}/scripts/digest-run-lock.sh"
+mkdir -p "${PW_COMPILER_CACHE_DIR}"
+digest_acquire_lock "${PW_COMPILER_CACHE_DIR}/decide-build.lockdir" 900
+trap digest_release_lock EXIT
 ARGS=(--locked --release --manifest-path "${CRATE}/Cargo.toml" --bin bialy)
 if [[ -n "${FEATURES}" ]]; then
   ARGS+=(--features "${FEATURES}")
