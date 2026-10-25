@@ -88,10 +88,10 @@ class Custody:
             raise ValueError('profile custody requires the admitted root seat owner')
         account = pwd.getpwnam('pwqual055')
         reverse, group, reverse_group = pwd.getpwuid(UID), grp.getgrnam('pwqual055'), grp.getgrgid(UID)
-        if (account.pw_uid != UID or account.pw_gid != UID or account.pw_dir != str(HOME)
+        if (account.pw_name != 'pwqual055' or account.pw_uid != UID or account.pw_gid != UID or account.pw_dir != str(HOME)
                 or reverse.pw_name != 'pwqual055' or reverse.pw_uid != UID
                 or reverse.pw_gid != UID or reverse.pw_dir != str(HOME)
-                or group.gr_gid != UID or reverse_group.gr_gid != UID
+                or group.gr_name != 'pwqual055' or group.gr_gid != UID or reverse_group.gr_gid != UID
                 or reverse_group.gr_name != 'pwqual055'):
             raise ValueError('QA account identity changed')
         if re.fullmatch(r'/var/backups/paintedwolf-qualification/055-reply-a[2-9][0-9]', str(self.backup)) is None:
