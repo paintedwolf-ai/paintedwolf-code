@@ -9,6 +9,6 @@
   "ceiling": 382,
   "boundaries": {
     "lycaon/internal/db/connection_test.go": "0119703864bc6d364724d237b83bb3751bfbdf0e3f0a2067b15d828bb7bd87e3",
-    "lycaon/internal/db/store_health_test.go": "e37cb6d65bad99d0888a6149375bb7ebbe46829c4e69cf0f307aa4dc28db4193"
+    "lycaon/internal/db/store_health_test.go": "0d6bf328fac5946722b15aadfcec3a6ead8dd785da92194e8b05229954e2f95f"
   }
 }

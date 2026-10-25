@@ -9,7 +9,7 @@
   "ceiling": 19,
   "reviewed_shape": "5c2cb606fae4fc787c3fda41b989809ce20b4300d4dde4f4e668b70ea2a8e297",
   "boundaries": {
-    "lycaon/internal/db/store_health_test.go": "e37cb6d65bad99d0888a6149375bb7ebbe46829c4e69cf0f307aa4dc28db4193",
+    "lycaon/internal/db/store_health_test.go": "0d6bf328fac5946722b15aadfcec3a6ead8dd785da92194e8b05229954e2f95f",
     "lycaon/internal/app/store_health_test.go": "45ea772b7a1e835cafec50b1b0eb376388b5bb8b0c6152b16638700a49bcffda",
     "lycaon/internal/api/recovery_snapshot_baseline_test.go": "e67ff1ea26b3ddc90766cdc214ac951c462d73a8fccdb52c12cf7b5610b1cb72"
   }
