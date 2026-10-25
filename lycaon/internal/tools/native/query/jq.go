@@ -110,12 +110,15 @@ func runJqProgram(inv *invocation, dialect jqDialect) error {
 		return nil
 	}
 	run := &jqRun{inv: inv, program: program, stream: stream, exitStatus: inv.flag("-e"), ret: jqOK, last: jqLastUnseen,
-		emitter: &emitter{inv: inv, layout: layout, maxOutputs: inv.owners.limit("query_outputs"), maxValue: inv.owners.limit("query_value_bytes")}}
+		emitter: &emitter{inv: inv, stream: stream, layout: layout, maxOutputs: inv.owners.limit("query_outputs"), maxValue: inv.owners.limit("query_value_bytes")}}
 	if err := run.evaluateAll(); err != nil {
 		return err
 	}
 	if stream.stop != nil {
 		return stream.stop
+	}
+	if err := run.emitter.finish(); err != nil {
+		return err
 	}
 	inv.status = run.status()
 	return nil
@@ -127,7 +130,7 @@ func (r *jqRun) evaluateAll() error {
 	case r.inv.flag("-n"):
 		_, err := r.evaluate(nil, false)
 		return err
-	case r.inv.flag("-s") && r.stream.raw:
+	case r.inv.flag("-s") && r.inv.flag("-R"):
 		text, ok := r.stream.slurpRaw()
 		if !ok {
 			return nil
@@ -444,14 +447,18 @@ type outputLayout struct {
 // emitter writes each result in jq's encoding within the output budgets.
 type emitter struct {
 	inv                  *invocation
+	stream               *inputs
 	layout               outputLayout
 	count                int64
-	produced             bool
+	produced, openEnded  bool
 	last                 any
 	maxOutputs, maxValue int64
 }
 
 func (e *emitter) emit(v any) error {
+	if err := e.inv.step(); err != nil {
+		return err
+	}
 	e.count++
 	if e.maxOutputs > 0 && e.count > e.maxOutputs {
 		return tools.CommandLimitExceeded("query_outputs", e.maxOutputs, e.count)
@@ -468,6 +475,17 @@ func (e *emitter) emit(v any) error {
 	return err
 }
 
+// finish writes PyYAML's deferred scalar document-end marker ("...") when
+// the final emitted document was an unquoted scalar; preceding scalars are
+// closed by the next document's "---".
+func (e *emitter) finish() error {
+	if !e.openEnded {
+		return nil
+	}
+	_, err := e.inv.out.Write([]byte("...\n"))
+	return err
+}
+
 // encode is jq's printer: -r and -j print strings raw unless -a asks for
 // escapes, -j omits the newline, and values are JSON in the chosen layout.
 func (e *emitter) encode(v any) ([]byte, error) {
@@ -478,23 +496,29 @@ func (e *emitter) encode(v any) ([]byte, error) {
 	case e.layout.join:
 		newline = ""
 	}
-	if s, ok := v.(string); ok && (e.layout.raw || e.layout.join || e.layout.nul) && !e.layout.ascii {
-		return []byte(s + newline), nil
-	}
 	if e.layout.yaml {
-		out, err := nativejq.EncodeYAML(v)
+		var (
+			out []byte
+			err error
+		)
+		if e.stream != nil && e.stream.roundtrip != nil {
+			out, err = e.stream.roundtrip.EncodeDoc(e.stream.yamlDoc-1, v)
+		} else {
+			out, err = nativejq.EncodeYAML(v)
+		}
 		if err != nil {
 			return nil, err
 		}
 		_, array := v.([]any)
 		_, object := v.(*gojq.OrderedObject)
-		if e.layout.pythonYAML && !array && !object {
-			out = append(out, "...\n"...)
-		}
+		e.openEnded = e.layout.pythonYAML && !array && !object && len(out) > 0 && out[0] != '\'' && out[0] != '"'
 		if e.count > 1 {
 			out = append([]byte("---\n"), out...)
 		}
 		return out, nil
+	}
+	if s, ok := v.(string); ok && (e.layout.raw || e.layout.join || e.layout.nul) && !e.layout.ascii {
+		return []byte(s + newline), nil
 	}
 	out, err := gojq.MarshalWith(v, gojq.MarshalOptions{Pretty: e.layout.pretty, Indent: e.layout.indent, SortKeys: e.layout.sortKeys, ASCII: e.layout.ascii})
 	if err != nil {

@@ -354,6 +354,11 @@ way. The command language promises jq's results, so
 
 The host adds `debug`, `stderr`, `input_filename` and `input_line_number`
 through `gojq.WithFunction` and never configures a module or file loader.
+Neither `gojq` nor `github.com/mikefarah/yq/v4/pkg/yqlib` exposes a VM
+instruction/step counter hook (`gojq` checks `ctx.Done()` at the top of each
+bytecode instruction in `execute.go`), so the host meters host-observable input
+and output value transitions against `query_work_steps` and bounds internal VM
+evaluation within a single value with the `query_cpu_ms` context deadline.
 
 To update this copy, verify the release against the module checksum, extract
 the same library subset into a clean directory and apply `gojq.patch` with

@@ -13,21 +13,9 @@ import (
 // maxReportedExcludedPaths limits the sample while preserving the full excluded count.
 const maxReportedExcludedPaths = 20
 
-// resolveCommitStaging uses explicit paths or the session's ledger-recorded authorship.
-func resolveCommitStaging(
-	ctx context.Context,
-	args map[string]any,
-	gm git.GitManager,
-	tctx tools.ToolContext,
-	cwd string,
-) (git.CommitStaging, error) {
-	if raw, ok := args["paths"].([]any); ok && len(raw) > 0 {
-		paths, err := parseBoundedPaths(args, git.DefaultGitCommitMaxPaths, commitBulkDenied)
-		if err != nil {
-			return git.CommitStaging{}, err
-		}
-		return git.CommitStaging{Paths: paths}, nil
-	}
+// sessionCommitStaging selects the session's ledger-recorded authorship and
+// the paths it staged itself that still differ from HEAD.
+func sessionCommitStaging(ctx context.Context, gm git.GitManager, tctx tools.ToolContext, cwd string, staged []string) (git.CommitStaging, error) {
 	if gm == nil {
 		return git.CommitStaging{}, fmt.Errorf("git manager required")
 	}
@@ -39,6 +27,7 @@ func resolveCommitStaging(
 	if err != nil {
 		return git.CommitStaging{}, err
 	}
+	authored = append(authored, staged...)
 	if len(authored) == 0 {
 		return git.CommitStaging{}, &toolrejection.ToolReject{
 			Code: "GIT_COMMIT_NO_SESSION_AUTHORSHIP",

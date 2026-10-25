@@ -99,6 +99,12 @@ func (f *frame) source(ctx context.Context, s commandsurface.Statement, fields F
 		errors.As(err, &refusal)
 		return f.refuse(refusal.Node, refusal.Code, refusal.Expected, nil)
 	}
+	if registrar, ok := f.e.ports.Executions.(SourceUnitRegistrar); ok {
+		if err := registrar.RegisterSourceUnit(ctx, run.inv, captured, lease.Plan); err != nil {
+			run.settle(ctx, ownerResult(err), err)
+			return err
+		}
+	}
 	g := *f
 	g.parent = run.inv
 	g.parent.SourceUnitID = captured.Pin.SourceID

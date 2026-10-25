@@ -21,6 +21,20 @@ type reference struct {
 	kind string // "bsd", "gnu" or "rg"
 }
 
+func lookReferencePath(name string) (string, error) {
+	if path, err := exec.LookPath(name); err == nil {
+		return path, nil
+	}
+	if !strings.Contains(name, "/") {
+		for _, dir := range []string{"/opt/homebrew/bin", "/usr/local/bin"} {
+			if path, err := exec.LookPath(dir + "/" + name); err == nil {
+				return path, nil
+			}
+		}
+	}
+	return "", exec.ErrNotFound
+}
+
 func references(t *testing.T) []reference {
 	t.Helper()
 	var out []reference
@@ -31,8 +45,9 @@ func references(t *testing.T) []reference {
 		{"ripgrep", "rg", "rg"},
 		{"bsd find", "/usr/bin/find", "bsd-find"},
 		{"gnu find", "/usr/bin/find", "gnu-find"},
+		{"gnu find", "gfind", "gnu-find"},
 	} {
-		path, err := exec.LookPath(candidate.path)
+		path, err := lookReferencePath(candidate.path)
 		if err != nil {
 			continue
 		}
@@ -89,6 +104,8 @@ type differentialCase struct {
 	argv   []string
 	kinds  []string // references that define this behavior identically
 	sorted bool
+	// json compares JSON Lines with the measured elapsed fields hidden.
+	json bool
 }
 
 func sortedLines(s string) string {
@@ -171,11 +188,34 @@ var grepDifferential = []differentialCase{
 	{argv: []string{"grep", "-T", "-n", "-b", "alpha", "a.txt"}, kinds: []string{"gnu"}},
 	{argv: []string{"grep", "--color=never", "alpha", "input"}, kinds: []string{"gnu", "bsd"}},
 	{argv: []string{"grep", "--line-buffered", "alpha", "input"}, kinds: []string{"gnu", "bsd"}},
+	{argv: []string{"grep", "-a", "alpha", "bin.dat"}, kinds: []string{"gnu", "bsd"}},
+	{argv: []string{"grep", "-I", "alpha", "bin.dat", "input"}, kinds: []string{"gnu", "bsd"}},
+	{argv: []string{"grep", "-c", "--binary-files=without-match", "alpha", "bin.dat"}, kinds: []string{"gnu"}},
+	{argv: []string{"grep", "-G", "-o", `\(ab\)\1`, "repeat"}, kinds: []string{"gnu", "bsd"}},
+	{argv: []string{"grep", "--silent", "alpha", "a.txt"}, kinds: []string{"gnu", "bsd"}},
+	{argv: []string{"grep", "-1", "six", "a.txt"}, kinds: []string{"gnu", "bsd"}},
+	{argv: []string{"grep", "-d", "skip", "alpha", "sub", "input"}, kinds: []string{"gnu", "bsd"}},
+	{argv: []string{"grep", "-r", "--include-dir=sub", "--include-dir=*deep", "alpha", "sub"}, kinds: []string{"bsd"}, sorted: true},
+	{argv: []string{"grep", "-u", "-U", "alpha", "input"}, kinds: []string{"bsd"}},
+	{argv: []string{"grep", "-H", "--label=piped", "alpha", "-"}, kinds: []string{"gnu", "bsd"}},
+	{argv: []string{"find", "tree/s", "-depth"}, kinds: []string{"bsd-find", "gnu-find"}},
+	{argv: []string{"find", "tree", "-depth", "2"}, kinds: []string{"bsd-find"}, sorted: true},
+	{argv: []string{"find", "-x", "tree/s"}, kinds: []string{"bsd-find"}, sorted: true},
+	{argv: []string{"find", "tree", "-name", "a.go", "-or", "-name", "c.go"}, kinds: []string{"bsd-find", "gnu-find"}, sorted: true},
+	{argv: []string{"find", "tree", "-type", "f", "-size", "5w"}, kinds: []string{"gnu-find"}, sorted: true},
 	{argv: []string{"rg", "-T", "md", "alpha", "sub"}, kinds: []string{"rg"}, sorted: true},
 	{argv: []string{"rg", "--color=never", "alpha", "input"}, kinds: []string{"rg"}},
 	{argv: []string{"find", "tree", "-iregex", ".*/A\\.GO"}, kinds: []string{"bsd-find", "gnu-find"}, sorted: true},
 	{argv: []string{"find", "tree", "-type", "f", "-perm", "-600"}, kinds: []string{"bsd-find", "gnu-find"}, sorted: true},
 	{argv: []string{"rg", "-n", "alpha", "input"}, kinds: []string{"rg"}},
+	{argv: []string{"rg", "--json", "alpha", "a.txt"}, kinds: []string{"rg"}, json: true},
+	{argv: []string{"rg", "--json", "-C", "1", "two", "a.txt"}, kinds: []string{"rg"}, json: true},
+	{argv: []string{"rg", "--json", "-r", "X", "(al)pha", "a.txt"}, kinds: []string{"rg"}, json: true},
+	{argv: []string{"rg", "--json", "-m", "1", "-A", "1", "alpha", "a.txt"}, kinds: []string{"rg"}, json: true},
+	{argv: []string{"rg", "--json", "-v", "alpha", "a.txt"}, kinds: []string{"rg"}, json: true},
+	{argv: []string{"rg", "--json", "-w", "alpha", "sub/c.txt"}, kinds: []string{"rg"}, json: true},
+	{argv: []string{"rg", "--json", "alpha", "bin.dat"}, kinds: []string{"rg"}, json: true},
+	{argv: []string{"rg", "--json", "zz", "a.txt"}, kinds: []string{"rg"}, json: true},
 	{argv: []string{"rg", "alpha", "sub"}, kinds: []string{"rg"}, sorted: true},
 	{argv: []string{"rg", "--hidden", "alpha", "sub"}, kinds: []string{"rg"}, sorted: true},
 	{argv: []string{"rg", "-g", "*.md", "alpha", "sub"}, kinds: []string{"rg"}, sorted: true},
@@ -238,6 +278,9 @@ func TestDifferentialAgainstInstalledReferences(t *testing.T) {
 				gotOut := got.stdout
 				if c.sorted {
 					want, gotOut = sortedLines(want), sortedLines(gotOut)
+				}
+				if c.json {
+					want, gotOut = normalizeElapsed(want), normalizeElapsed(gotOut)
 				}
 				if gotOut != want || got.result.Status != status {
 					t.Fatalf("native stdout %q status %d\nreference stdout %q status %d", gotOut, got.result.Status, want, status)

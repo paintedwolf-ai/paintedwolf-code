@@ -94,12 +94,27 @@ func (inv *invocation) fail(quiet bool, format string, args ...any) {
 	inv.status = max(inv.status, inv.failure)
 }
 
-// usage refuses a form the catalog admits syntactically but whose value is
-// invalid.
+// errUsage ends an invocation that already reported an ordinary usage or
+// pattern error on stderr.
+var errUsage = errors.New("search usage error")
+
+// usage reports an invalid argument, expression or option value on stderr and
+// stops the invocation with its ordinary failure status (2 for grep/rg, 1 for
+// find).
 func (inv *invocation) usage(word, reason string) error {
-	return &toolrejection.ToolReject{Code: "COMMAND_OPERAND_INVALID", Data: map[string]any{
-		"command": inv.spec.Name, "word": word, "expected": reason, "reason": reason, "expected_form": inv.spec.Argv,
-	}}
+	if word == "" || word == inv.word() {
+		inv.fail(false, "%s", reason)
+	} else {
+		inv.fail(false, "%s: %s", word, reason)
+	}
+	return errUsage
+}
+
+func capitalizeFirst(s string) string {
+	if s == "" || s[0] < 'a' || s[0] > 'z' {
+		return s
+	}
+	return string(s[0]-'a'+'A') + s[1:]
 }
 
 // ordinary classifies an input failure the utility reports on stderr and
@@ -211,6 +226,17 @@ func (inv *invocation) readAll(r io.Reader) ([]byte, error) {
 
 // settle projects the run onto the producer contract.
 func (inv *invocation) settle(err error) (toolcontract.ProducerResult, error) {
+	var pattern *textsearch.PatternError
+	if errors.As(err, &pattern) && pattern.Code == textsearch.CodeRegexInvalid {
+		if inv.spec.Name == "find" {
+			inv.fail(false, "failed to compile regular expression '%s': %s", pattern.Pattern, capitalizeFirst(pattern.Detail))
+		} else {
+			inv.fail(false, "%s", capitalizeFirst(pattern.Detail))
+		}
+		err = nil
+	} else if errors.Is(err, errUsage) {
+		err = nil
+	}
 	err = tools.CommandResourceRejection(err)
 	err = projectpaths.WithPathRejection(patternRejection(err), inv.request.Invocation.Span)
 	if err != nil {

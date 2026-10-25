@@ -24,8 +24,10 @@ type inputs struct {
 	operands []string
 	// raw yields each line as a string (-R) instead of JSON values; yaml
 	// decodes each operand's YAML documents (gojq --yaml-input, python yq).
-	raw  bool
-	yaml bool
+	raw       bool
+	yaml      bool
+	yamlDoc   int
+	roundtrip *nativejq.YAMLRoundtrip
 	// events turns each value into its --stream events; nil passes values.
 	events        *nativejq.Program
 	pendingEvents []any
@@ -76,6 +78,13 @@ func (in *inputs) nextValue() (any, bool) {
 		if len(in.pending) > 0 {
 			v := in.pending[0]
 			in.pending = in.pending[1:]
+			if in.yaml {
+				in.yamlDoc++
+			}
+			if err := in.inv.step(); err != nil {
+				in.stop = err
+				return nil, false
+			}
 			return v, true
 		}
 		if in.rawReader != nil {
@@ -85,6 +94,10 @@ func (in *inputs) nextValue() (any, bool) {
 				continue
 			}
 			if err != nil {
+				in.stop = err
+				return nil, false
+			}
+			if err := in.inv.step(); err != nil {
 				in.stop = err
 				return nil, false
 			}
@@ -108,6 +121,10 @@ func (in *inputs) nextValue() (any, bool) {
 				return nil, false
 			}
 			if !in.admit(v) {
+				return nil, false
+			}
+			if err := in.inv.step(); err != nil {
+				in.stop = err
 				return nil, false
 			}
 			return v, true
@@ -179,6 +196,12 @@ func (in *inputs) open(operand string) {
 			return
 		}
 	}
+	if in.inv.flag("-Y") {
+		if in.roundtrip == nil {
+			in.roundtrip = &nativejq.YAMLRoundtrip{}
+		}
+		in.roundtrip.Add(text)
+	}
 	in.pending = append(in.pending, values...)
 }
 
@@ -239,20 +262,29 @@ func (in *inputs) malformed(err error) {
 
 // position is jq's "(at FILE:LINE)" for the value last read: jq reads input
 // a line at a time, so LINE counts every newline through the line where
-// the value ended.
+// the value ended. In python yq, jq reads one JSON document per line from
+// its stdin pipe, so positions are "<stdin>:DOC".
 func (in *inputs) position() string {
 	if in.label == "" {
 		return "<unknown>"
+	}
+	if in.inv.pythonYq() {
+		return fmt.Sprintf("<stdin>:%d", in.yamlDoc)
 	}
 	_, line := in.current()
 	return fmt.Sprintf("%s:%d", in.label, line)
 }
 
 // current is input_filename and input_line_number: the file being read
-// (null for stdin) and the lines read from it so far.
+// ("<stdin>" for stdin; null when no input has been read) and the lines
+// read from it so far. In python yq, jq sees "<stdin>" and the 1-based YAML
+// document index.
 func (in *inputs) current() (any, int) {
 	if in.label == "" {
 		return nil, 0
+	}
+	if in.inv.pythonYq() {
+		return "<stdin>", in.yamlDoc
 	}
 	end := int64(len(in.text))
 	if in.positions != nil {

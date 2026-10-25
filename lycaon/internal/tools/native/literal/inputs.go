@@ -133,5 +133,5 @@ func (inv *invocation) recordPin(revision toolcontract.ExecutionRevision) error 
 	if err != nil || seen {
 		return err
 	}
-	return inv.owners.Pins.RecordRevisionPins(inv.ctx, execution, len(inv.pins.entries)-1, []toolcontract.ExecutionRevision{revision})
+	return inv.owners.Pins.AppendRevisionPin(inv.ctx, execution, revision)
 }

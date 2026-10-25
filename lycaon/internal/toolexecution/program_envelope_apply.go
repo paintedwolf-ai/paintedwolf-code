@@ -135,5 +135,5 @@ func (e *Executor) ApplyProgramProgress(ctx context.Context, p *PreparedProgramE
 	}
 	result.OwnerInvoked = true
 	result.Outcome, err = author.Apply(ctx, store, current.RootSessionID)
-	return result, err
+	return result, progressOwnerError(err)
 }

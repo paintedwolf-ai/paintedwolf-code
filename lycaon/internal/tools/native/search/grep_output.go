@@ -46,10 +46,30 @@ func (r *grepRun) searchContent(label string, content []byte, pin *toolcontract.
 // (GNU 3.5 and later). A selected line with invalid UTF-8 is binary from that
 // line on, as GNU grep does in a UTF-8 locale.
 func (r *grepRun) searchStream(label string, reader io.Reader, maxBytes int64, totalBytes int, firstNull int, pin *toolcontract.SourcePin, names bool) error {
+	if r.json != nil {
+		var data []byte
+		var err error
+		if maxBytes > 0 {
+			data, err = io.ReadAll(io.LimitReader(reader, maxBytes+1))
+			if err == nil && int64(len(data)) > maxBytes {
+				err = tools.CommandLimitExceeded("stream_throughput_bytes", maxBytes, int64(len(data)))
+			}
+		} else {
+			data, err = io.ReadAll(reader)
+		}
+		if err != nil {
+			return err
+		}
+		return r.jsonContent(label, data)
+	}
 	inv := r.inv
 	r.numberWidth = len(strconv.Itoa(totalBytes))
-	if !r.scan.NullData && firstNull < 0 {
-		reader = &nullTrackingReader{r: reader, firstNull: &firstNull}
+	if !r.scan.NullData && r.binaryMode != "text" {
+		if r.binaryMode == "without-match" && firstNull >= 0 {
+			reader, firstNull = bytes.NewReader(nil), -1
+		} else if firstNull < 0 {
+			reader = &nullTrackingReader{r: reader, firstNull: &firstNull}
+		}
 	}
 	listing := r.mode != modeLines
 	separator := false
@@ -66,6 +86,11 @@ func (r *grepRun) searchStream(label string, reader io.Reader, maxBytes int64, t
 		return tools.CommandLimitExceeded("stream_throughput_bytes", maximum, observed)
 	}
 	n, err := textsearch.ScanReader(inv.ctx, reader, maxBytes, onExceed, r.matcher, scan, func(line textsearch.Line) error {
+		record := line.Text
+		binary := !r.scan.NullData && r.binaryMode != "text" && firstNull >= 0
+		if r.binaryMode == "without-match" && (binary || (line.Kind == textsearch.SelectedLine && !utf8.Valid(record))) {
+			return errBinaryStop
+		}
 		if line.Kind == textsearch.SelectedLine {
 			selectedHere++
 			r.selected = true
@@ -76,9 +101,7 @@ func (r *grepRun) searchStream(label string, reader io.Reader, maxBytes int64, t
 		if listing {
 			return nil
 		}
-		record := line.Text
-		binary := !r.scan.NullData && firstNull >= 0
-		if binary || (line.Kind == textsearch.SelectedLine && !utf8.Valid(record)) {
+		if binary || (r.binaryMode != "text" && line.Kind == textsearch.SelectedLine && !utf8.Valid(record)) {
 			if line.Kind != textsearch.SelectedLine {
 				return nil
 			}

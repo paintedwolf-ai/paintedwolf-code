@@ -5,6 +5,7 @@ anchor: tool.rejected
 selector:
   paintedwolf.operation:
   - http_request
+  - command
 requires:
   facts:
   - paintedwolf.operation

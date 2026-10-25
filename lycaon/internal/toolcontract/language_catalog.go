@@ -186,12 +186,11 @@ func DecodeLanguageJSON(data []byte, target any) error {
 	if err := decoder.Decode(target); err != nil {
 		return err
 	}
-	err := decoder.Decode(new(any))
-	if errors.Is(err, io.EOF) {
-		return nil
-	}
-	if err != nil {
+	switch err := decoder.Decode(new(any)); {
+	case err == nil:
+		return errors.New("trailing language JSON payload")
+	case !errors.Is(err, io.EOF):
 		return fmt.Errorf("trailing language JSON: %w", err)
 	}
-	return errors.New("trailing language JSON value")
+	return nil
 }
