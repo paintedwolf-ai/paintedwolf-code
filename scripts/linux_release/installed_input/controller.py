@@ -46,7 +46,7 @@ def delivery_records(directory, execution, vm_id):
              ('windowing/workspace-activation-and-exit', 'workspace'),
              ('browser/browser-sandbox-composition', 'browser'),
              ('session/inhibitor-lifetime', 'keepawake'),
-             ('vault/service-onboarding', 'quiet')]
+             ('vault/service-onboarding', 'quiet'), ('vault/service-unavailable-retry', 'quiet')]
     for case, kind in cases:
         leaf = directory / ('leaf/evidence/' + case + '/execution.json')
         if not leaf.exists():
