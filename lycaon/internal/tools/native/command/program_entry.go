@@ -314,23 +314,11 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	for name := range owners.Natives {
 		run.control.available[name] = true
 	}
-	definitions, err := run.controlDefinitions()
-	if err != nil {
-		return "", err
-	}
 	active := []toolcontract.OperationDefinition{external}
-	hostOwners := make([]string, 0, len(definitions))
-	for owner := range definitions {
-		hostOwners = append(hostOwners, owner)
-	}
-	slices.Sort(hostOwners)
-	for _, owner := range hostOwners {
-		active = append(active, definitions[owner])
-	}
 	if write, ok := r.Registry.Definition("write"); ok {
 		active = append(active, write.Operation)
 	}
-	seen := map[string]bool{"write": true}
+	seen := map[string]bool{"write": true, external.Facts().Identity: true}
 	for _, operation := range owners.Natives {
 		for _, tool := range append([]string{operation.Tool}, operation.Tools...) {
 			if seen[tool] {
@@ -341,6 +329,19 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 				active = append(active, definition.Operation)
 			}
 		}
+	}
+	run.control.taken = seen
+	definitions, err := run.controlDefinitions()
+	if err != nil {
+		return "", err
+	}
+	hostCommands := make([]string, 0, len(definitions))
+	for name := range definitions {
+		hostCommands = append(hostCommands, name)
+	}
+	slices.Sort(hostCommands)
+	for _, name := range hostCommands {
+		active = append(active, definitions[name])
 	}
 	surface, err := r.Executor.Metadata.FreezeProgramSurface(ctx, platform.ToolFilter{ProfileID: tc.ProfileID(), SurfaceID: tc.Turn.TurnSurfaceID}, active)
 	if err != nil {
