@@ -7,6 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	reposurvey "github.com/lycaon/lycaon/internal/survey"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
@@ -24,15 +25,25 @@ type programOwnerTools struct {
 	operations mutation.Operations
 }
 
+type pinRecorderAdapter struct{ *invocation.SQLRecorder }
+
+func (a pinRecorderAdapter) RecordRevisionPins(ctx context.Context, executionID string, pins []toolcontract.ExecutionRevision) error {
+	return a.SQLRecorder.RecordRevisionPins(ctx, executionID, 0, pins)
+}
+
 // compose builds the literal and mutation owners once and returns the
 // per-program factory: one publication barrier and redirect owner per program.
 func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools.ToolContext, *projectpaths.ProgramPaths) (command.ProgramOwners, error), error) {
 	revisions := native.ExecutionRevisions{Boundary: t.boundary}
-	literalOwners, err := literal.NewOwners(revisions, recorder, literal.DomainOwners{Summarize: t.summarize, Repo: t.repo})
+	var pins pinRecorderAdapter
+	if recorder != nil {
+		pins = pinRecorderAdapter{recorder}
+	}
+	literalOwners, err := literal.NewOwners(revisions, pins, literal.DomainOwners{Summarize: t.summarize, Repo: t.repo})
 	if err != nil {
 		return nil, err
 	}
-	mutationOwners, err := mutation.NewOwners(revisions, recorder, t.operations)
+	mutationOwners, err := mutation.NewOwners(revisions, pins, t.operations)
 	if err != nil {
 		return nil, err
 	}
