@@ -1,13 +1,14 @@
 package launchverify
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/osprocess"
 )
 
 // Snapshot is one process's identity at an instant: its pid names the same
@@ -39,13 +40,14 @@ func (v Verifier) snapshot(pid int) (Snapshot, error) {
 	if err != nil {
 		return Snapshot{}, err
 	}
-	snap, err := parseStat(stat)
+	record, err := osprocess.ParseLinuxStat(stat)
 	if err != nil {
 		return Snapshot{}, err
 	}
-	if snap.PID != pid {
-		return Snapshot{}, fmt.Errorf("stat names pid %d", snap.PID)
+	if record.PID != pid {
+		return Snapshot{}, fmt.Errorf("stat names pid %d", record.PID)
 	}
+	snap := Snapshot{PID: record.PID, PPID: record.ParentPID, StartTime: record.StartTime}
 	status, err := os.ReadFile(v.procPath(pid, "status"))
 	if err != nil {
 		return Snapshot{}, err
@@ -55,37 +57,6 @@ func (v Verifier) snapshot(pid int) (Snapshot, error) {
 		return Snapshot{}, err
 	}
 	return snap, nil
-}
-
-// parseStat reads pid, ppid, and start time from a stat line. The command
-// name may contain spaces and parentheses, so fields start after its last
-// closing parenthesis.
-func parseStat(stat []byte) (Snapshot, error) {
-	open := bytes.IndexByte(stat, '(')
-	end := bytes.LastIndexByte(stat, ')')
-	if open < 1 || end < open {
-		return Snapshot{}, errors.New("stat has no command name")
-	}
-	pid, err := strconv.Atoi(strings.TrimSpace(string(stat[:open])))
-	if err != nil {
-		return Snapshot{}, fmt.Errorf("stat pid: %w", err)
-	}
-	// Fields after the command: state, ppid, pgrp, session, tty, tpgid,
-	// flags, minflt, cminflt, majflt, cmajflt, utime, stime, cutime, cstime,
-	// priority, nice, threads, itrealvalue, starttime.
-	fields := strings.Fields(string(stat[end+1:]))
-	if len(fields) < 20 {
-		return Snapshot{}, errors.New("stat is truncated")
-	}
-	ppid, err := strconv.Atoi(fields[1])
-	if err != nil {
-		return Snapshot{}, fmt.Errorf("stat ppid: %w", err)
-	}
-	start, err := strconv.ParseUint(fields[19], 10, 64)
-	if err != nil {
-		return Snapshot{}, fmt.Errorf("stat start time: %w", err)
-	}
-	return Snapshot{PID: pid, PPID: ppid, StartTime: start}, nil
 }
 
 func parseStatusUIDs(status []byte) (uid, euid int, err error) {

@@ -3,13 +3,13 @@
 package hostprocess
 
 import (
-	"bytes"
 	"fmt"
 	"os"
 	"strconv"
-	"strings"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/lycaon/lycaon/internal/osprocess"
 )
 
 func listPIDs() ([]int, error) {
@@ -32,24 +32,16 @@ func inspect(pid int) (Process, error) {
 	if err != nil {
 		return Process{}, err
 	}
-	start, end := bytes.IndexByte(raw, '('), bytes.LastIndexByte(raw, ')')
-	if start < 0 || end < start {
+	record, err := osprocess.ParseLinuxStat(raw)
+	if err != nil || record.PID != pid {
 		return Process{}, ErrStale
-	}
-	fields := strings.Fields(string(raw[end+1:]))
-	if len(fields) < 20 {
-		return Process{}, ErrStale
-	}
-	parent, err := strconv.Atoi(fields[1])
-	if err != nil {
-		return Process{}, err
 	}
 	var stat unix.Stat_t
 	if err := unix.Stat(path, &stat); err != nil {
 		return Process{}, err
 	}
 	executable, _ := os.Readlink(path + "/exe")
-	return Process{PID: pid, ParentPID: parent, UID: stat.Uid, Name: string(raw[start+1 : end]), Executable: executable, Instance: fields[19]}, nil
+	return Process{PID: pid, ParentPID: record.ParentPID, UID: stat.Uid, Name: record.Command, Executable: executable, Instance: strconv.FormatUint(record.StartTime, 10)}, nil
 }
 
 func nativeSignal(kind signalKind) (unix.Signal, bool) {

@@ -3,13 +3,14 @@
 package exec
 
 import (
-	"bytes"
 	"os"
 	"strconv"
 	"syscall"
 	"time"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/lycaon/lycaon/internal/osprocess"
 )
 
 type descendant struct {
@@ -18,31 +19,16 @@ type descendant struct {
 	start  uint64
 }
 
-// parseProcStat reads the parent and start time from a /proc/<pid>/stat line;
-// the command name may itself contain ')' or spaces.
-func parseProcStat(raw []byte) (parent int, start uint64, ok bool) {
-	end := bytes.LastIndexByte(raw, ')')
-	if end < 0 {
-		return 0, 0, false
-	}
-	fields := bytes.Fields(raw[end+1:])
-	if len(fields) < 20 {
-		return 0, 0, false
-	}
-	parent, err := strconv.Atoi(string(fields[1]))
-	if err != nil {
-		return 0, 0, false
-	}
-	start, err = strconv.ParseUint(string(fields[19]), 10, 64)
-	return parent, start, err == nil
-}
-
 func procStat(pid int) (parent int, start uint64, ok bool) {
 	raw, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
 	if err != nil {
 		return 0, 0, false
 	}
-	return parseProcStat(raw)
+	record, err := osprocess.ParseLinuxStat(raw)
+	if err != nil || record.PID != pid {
+		return 0, 0, false
+	}
+	return record.ParentPID, record.StartTime, true
 }
 
 func commandDescendants(root int) []descendant {

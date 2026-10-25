@@ -3,7 +3,6 @@
 package osprocess
 
 import (
-	"bytes"
 	"os"
 	"strconv"
 )
@@ -18,19 +17,9 @@ func StartTime(pid int) (int64, bool) {
 	if err != nil {
 		return 0, false
 	}
-	// The command name may contain spaces and parentheses; fields resume after the last ')'.
-	end := bytes.LastIndexByte(raw, ')')
-	if end < 0 {
+	record, err := ParseLinuxStat(raw)
+	if err != nil || record.PID != pid || record.StartTime > 1<<63-1 {
 		return 0, false
 	}
-	// Field 22 (starttime) is the 20th field after the command name.
-	fields := bytes.Fields(raw[end+1:])
-	if len(fields) < 20 {
-		return 0, false
-	}
-	start, err := strconv.ParseInt(string(fields[19]), 10, 64)
-	if err != nil {
-		return 0, false
-	}
-	return start, true
+	return int64(record.StartTime), true
 }
