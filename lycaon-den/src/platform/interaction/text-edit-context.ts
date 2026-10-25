@@ -324,8 +324,8 @@ export async function copyEditable(snap: EditableSnapshot): Promise<void> {
 
 export async function pasteEditable(snap: EditableSnapshot): Promise<void> {
   if (snap.readOnly) return;
-  if (tauriPlatform() === "macos") {
-    // The system paste reads the pasteboard on the person's behalf and fires
+  if (tauriPlatform() === "macos" || tauriPlatform() === "linux") {
+    // Native paste reads the clipboard on the person's behalf and fires
     // a real paste event, so images and rich text reach the editor's handler.
     restoreEditableSelection(snap);
     const { invoke } = await import("@tauri-apps/api/core");

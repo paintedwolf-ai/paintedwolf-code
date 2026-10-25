@@ -37,7 +37,7 @@ import {
   attachmentTurnBytes,
   countsAsImage,
   fileToComposerAttachment,
-  filesFromClipboard,
+  attachPastedFiles,
   formatAttachmentBytes,
   isAllowedImageMime,
   isAllowedVideoMime,
@@ -1196,12 +1196,7 @@ export function Composer(props: Props) {
                 }
               }}
               onPaste={(e) => {
-                const files = filesFromClipboard(e.clipboardData?.items);
-                if (files.length > 0) {
-                  e.preventDefault();
-                  void addFiles(files);
-                  return;
-                }
+                if (attachPastedFiles(e, addFiles, (error) => setComposerError(destination(), error instanceof Error ? error.message : String(error)))) return;
                 const pasted = e.clipboardData?.getData("text/plain") ?? "";
                 if (
                   interceptTextPaste(

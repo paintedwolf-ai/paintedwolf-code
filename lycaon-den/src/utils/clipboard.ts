@@ -1,4 +1,4 @@
-import { isTauriRuntime } from "../platform/runtime.ts";
+import { isTauriRuntime, tauriPlatform } from "../platform/runtime.ts";
 
 /** Distinguishes an empty clipboard from an unreadable one. */
 export type ClipboardRead =
@@ -38,4 +38,22 @@ export async function readClipboardText(): Promise<ClipboardRead> {
   } catch {
     return { readable: false };
   }
+}
+
+/**
+ * The clipboard image as a PNG file, or null when the clipboard holds none.
+ * WebKitGTK gives paste events no clipboard images, so on Linux the shell
+ * reads the image for the person; elsewhere the paste event carries it.
+ */
+export async function readClipboardImage(): Promise<File | null> {
+  if (!isTauriRuntime() || tauriPlatform() !== "linux") return null;
+  const { invoke } = await import("@tauri-apps/api/core");
+  let png: ArrayBuffer;
+  try {
+    png = await invoke<ArrayBuffer>("read_clipboard_image");
+  } catch (error) {
+    const code = typeof error === "object" && error !== null ? (error as { code?: unknown }).code : undefined;
+    throw new Error(code === "image_too_large" ? "The clipboard image is too large to paste." : "The clipboard image could not be read.");
+  }
+  return png.byteLength > 0 ? new File([png], "Pasted image.png", { type: "image/png" }) : null;
 }

@@ -41,7 +41,7 @@ import { ChromeDragSurface } from "../shell/ChromeDragSurface.tsx";
 import { registerChatDrop, type DroppedItem } from "../../platform/files/file-drop.ts";
 import {
   ATTACHMENT_PROVIDER_SEND_HINT,
-  filesFromClipboard,
+  attachPastedFiles,
 } from "../../chat/composer/composer-attachments.ts";
 import { webkitAtspiWorkaroundActive } from "../../platform/desktop/webkit-atspi-workaround.ts";
 import { isImeComposition } from "../../platform/interaction/ime-composition.ts";
@@ -373,12 +373,8 @@ export function HomeView(props: Props) {
                   autoGrowIdea(e.currentTarget);
                 }}
                 onPaste={(e) => {
-                  const files = filesFromClipboard(e.clipboardData?.items);
-                  if (files.length === 0) return;
-                  e.preventDefault();
-                  appendDroppedItems(
-                    files.map((file) => ({ source: "file" as const, file })),
-                  );
+                  attachPastedFiles(e, (files) =>
+                    appendDroppedItems(files.map((file) => ({ source: "file" as const, file }))));
                 }}
                 onKeyDown={(e) => {
                   if (isImeComposition(e)) return;

@@ -2,10 +2,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const isTauriRuntime = vi.fn(() => false);
+const tauriPlatform = vi.fn(() => "linux");
 const invoke = vi.fn();
 
 vi.mock("../platform/runtime.ts", () => ({
   isTauriRuntime: () => isTauriRuntime(),
+  tauriPlatform: () => tauriPlatform(),
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -14,6 +16,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 
 import {
   copyTextToClipboard,
+  readClipboardImage,
   readClipboardText,
   writeClipboardText,
 } from "./clipboard.ts";
@@ -78,5 +81,28 @@ describe("clipboard", () => {
     isTauriRuntime.mockReturnValue(true);
     invoke.mockRejectedValue(new Error("denied"));
     await expect(copyTextToClipboard("src/main.ts")).resolves.toBeUndefined();
+  });
+
+  it("reads the clipboard image through the Linux shell only", async () => {
+    isTauriRuntime.mockReturnValue(true);
+    invoke.mockResolvedValue(new Uint8Array([0x89, 0x50, 0x4e, 0x47]).buffer);
+    const image = await readClipboardImage();
+    expect(invoke).toHaveBeenCalledWith("read_clipboard_image");
+    expect([image?.name, image?.type, image?.size]).toEqual(["Pasted image.png", "image/png", 4]);
+    invoke.mockResolvedValue(new ArrayBuffer(0));
+    expect(await readClipboardImage()).toBeNull();
+    tauriPlatform.mockReturnValue("macos");
+    invoke.mockClear();
+    expect(await readClipboardImage()).toBeNull();
+    expect(invoke).not.toHaveBeenCalled();
+    tauriPlatform.mockReturnValue("linux");
+  });
+
+  it("explains why the clipboard image could not be read", async () => {
+    isTauriRuntime.mockReturnValue(true);
+    invoke.mockRejectedValueOnce({ code: "image_too_large" });
+    await expect(readClipboardImage()).rejects.toThrow("The clipboard image is too large to paste.");
+    invoke.mockRejectedValueOnce({ code: "timeout" });
+    await expect(readClipboardImage()).rejects.toThrow("The clipboard image could not be read.");
   });
 });

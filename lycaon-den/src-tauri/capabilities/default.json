@@ -48,6 +48,7 @@
     "allow-file-manager-name",
     "allow-reveal-typed-path-in-file-manager",
     "allow-read-clipboard-text",
+    "allow-read-clipboard-image",
     "allow-write-clipboard-text",
     "allow-paste-into-focused-view",
     "allow-path-kind",
