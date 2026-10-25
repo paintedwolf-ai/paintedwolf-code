@@ -31,8 +31,8 @@ type FeedOptions struct {
 func GetFeed(ctx context.Context, rawURL string, opts FeedOptions) ([]byte, error) {
 	return getFeed(ctx, rawURL, opts, feedNetwork{
 		resolve: egress.ResolvePublicIPs,
-		transport: func(host string, ips []netip.Addr) feedTransport {
-			return egress.PinnedTransport(host, ips, 0)
+		transport: func(target *url.URL, ips []netip.Addr) feedTransport {
+			return egress.PinnedTransport(target, ips, 0)
 		},
 	})
 }
@@ -44,7 +44,7 @@ type feedTransport interface {
 
 type feedNetwork struct {
 	resolve   func(context.Context, string) ([]netip.Addr, error)
-	transport func(string, []netip.Addr) feedTransport
+	transport func(*url.URL, []netip.Addr) feedTransport
 }
 
 func getFeed(ctx context.Context, rawURL string, opts FeedOptions, network feedNetwork) ([]byte, error) {
@@ -86,7 +86,7 @@ func (n feedNetwork) getHop(ctx context.Context, target *url.URL, opts FeedOptio
 	if err != nil {
 		return feedHop{}, err
 	}
-	transport := n.transport(target.Hostname(), ips)
+	transport := n.transport(target, ips)
 	defer transport.CloseIdleConnections()
 	client := &http.Client{
 		Transport:     transport,

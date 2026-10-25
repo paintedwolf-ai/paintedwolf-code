@@ -92,6 +92,6 @@ func providerEgressClient(ctx context.Context, u *url.URL, allowPrivate bool) (*
 	// The request context sets the deadline.
 	return httpclient.WithTransport(
 		httpclient.Streaming(egressclass.WebResearchRequest),
-		egress.PinnedTransport(host, ips, 0),
+		egress.PinnedTransport(u, ips, 0),
 	), nil
 }

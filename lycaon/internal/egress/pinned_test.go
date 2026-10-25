@@ -3,13 +3,14 @@ package egress_test
 import (
 	"errors"
 	"net/netip"
+	"net/url"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/egress"
 )
 
 func TestPinnedTransportRejectsAnotherDialHost(t *testing.T) {
-	tr := egress.PinnedTransport("feed.example", []netip.Addr{netip.MustParseAddr("127.0.0.1")}, 0)
+	tr := egress.PinnedTransport(&url.URL{Scheme: "https", Host: "feed.example"}, []netip.Addr{netip.MustParseAddr("127.0.0.1")}, 0)
 	defer tr.CloseIdleConnections()
 	if tr.Proxy != nil {
 		t.Fatal("pinned transport enables proxy discovery")

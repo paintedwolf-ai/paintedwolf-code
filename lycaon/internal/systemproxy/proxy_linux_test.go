@@ -95,19 +95,19 @@ func TestLookupCachesTheDesktopConfiguration(t *testing.T) {
 func TestGSettingsToolOutcomesMapToConfigurationFacts(t *testing.T) {
 	previous := runGSettings
 	t.Cleanup(func() { runGSettings = previous })
-	runGSettings = func(context.Context, string) ([]byte, int, error) { return nil, 1, nil }
+	runGSettings = func(context.Context) ([]byte, int, error) { return nil, 1, nil }
 	if _, ok, err := gsettingsConfiguration(t.Context()); ok || err != nil {
 		t.Fatalf("absent schema = %v, %v", ok, err)
 	}
-	runGSettings = func(context.Context, string) ([]byte, int, error) { return nil, -1, errors.New("timed out") }
+	runGSettings = func(context.Context) ([]byte, int, error) { return nil, -1, errors.New("timed out") }
 	if _, ok, err := gsettingsConfiguration(t.Context()); ok || err == nil {
 		t.Fatalf("tool failure = %v, %v", ok, err)
 	}
-	runGSettings = func(context.Context, string) ([]byte, int, error) { return []byte("garbage\n"), 0, nil }
+	runGSettings = func(context.Context) ([]byte, int, error) { return []byte("garbage\n"), 0, nil }
 	if _, _, err := gsettingsConfiguration(t.Context()); err == nil {
 		t.Fatal("malformed output was accepted")
 	}
-	runGSettings = func(context.Context, string) ([]byte, int, error) { return []byte(gnomeManualDump), 0, nil }
+	runGSettings = func(context.Context) ([]byte, int, error) { return []byte(gnomeManualDump), 0, nil }
 	config, ok, err := gsettingsConfiguration(t.Context())
 	if err != nil || !ok || config.Mode != ModeManual {
 		t.Fatalf("manual configuration = %+v, %v, %v", config, ok, err)

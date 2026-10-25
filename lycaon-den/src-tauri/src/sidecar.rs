@@ -18,6 +18,8 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{mpsc, Mutex};
 use std::time::Instant;
 
+#[cfg(target_os = "linux")]
+pub(crate) mod captured_engine;
 pub(crate) mod commands;
 pub(crate) mod custody;
 pub(crate) mod daemon;

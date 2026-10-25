@@ -92,7 +92,7 @@ func (s *ScalibrScanner) Run(ctx context.Context, req scan.ScanRequest) (*scanou
 		return nil, err
 	}
 	pluginCfg := &pluginconfig.PluginConfig{
-		ClientFactories: pluginconfig.NewDefaultClientFactories("lycaon"),
+		ClientFactories: advisoryClients(),
 		ProtoConfig: &cpb.PluginConfig{
 			PluginSpecific: []*cpb.PluginSpecificConfig{
 				{
@@ -102,7 +102,7 @@ func (s *ScalibrScanner) Run(ctx context.Context, req scan.ScanRequest) (*scanou
 							Download:  download,
 							RemoteHost: egressclass.RequireSingleFixedEndpoint(
 								egressclass.OSVAdvisoryDownload,
-								egressclass.LibraryDownload,
+								egressclass.HTTPDownload,
 							),
 						},
 					},

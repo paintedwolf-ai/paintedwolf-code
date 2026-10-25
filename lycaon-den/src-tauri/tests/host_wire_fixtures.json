@@ -71,6 +71,17 @@
         }
       ]
     },
+    "native_proxy_response": {
+      "source": "internal/nativeproxy.Response",
+      "examples": [
+        {
+          "error_code": "error_code",
+          "format_version": 1,
+          "proxy_url": "proxy_url",
+          "target": "target"
+        }
+      ]
+    },
     "presence_challenge": {
       "source": "pkg/api.PresenceChallenge",
       "examples": [

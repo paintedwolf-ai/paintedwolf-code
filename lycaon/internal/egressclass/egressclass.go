@@ -50,7 +50,6 @@ const (
 	HTTPStreaming   Transport = "http_streaming"
 	HTTPDownload    Transport = "http_download"
 	GitCLI          Transport = "git_cli"
-	LibraryDownload Transport = "library_download"
 )
 
 // Class is one app-level outbound request purpose.
@@ -110,7 +109,7 @@ var classes = []Class{
 		SilentReason: "extension install reports the git operation failure without classifying stderr prose", UserInitiated: true,
 	},
 	{
-		ID: OSVAdvisoryDownload, EndpointSource: EndpointBundled, Transport: LibraryDownload,
+		ID: OSVAdvisoryDownload, EndpointSource: EndpointBundled, Transport: HTTPDownload,
 		FixedEndpoints: []string{OSVAdvisoryEndpoint},
 		SilentReason:   "advisory download failures are recorded as the dependency scan outcome", UserInitiated: true,
 	},

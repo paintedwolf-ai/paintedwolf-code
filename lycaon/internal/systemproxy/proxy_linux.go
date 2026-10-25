@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	execpkg "github.com/lycaon/lycaon/internal/exec"
+	"github.com/lycaon/lycaon/internal/exec/hostread"
 )
 
 const (
@@ -38,7 +38,12 @@ var cache desktopCache
 
 // Current returns the desktop's proxy configuration.
 func Current() (Configuration, error) {
-	return cache.current(context.Background())
+	return CurrentContext(context.Background())
+}
+
+// CurrentContext bounds native discovery by the caller's lifetime.
+func CurrentContext(ctx context.Context) (Configuration, error) {
+	return cache.current(ctx)
 }
 
 // Lookup resolves the desktop-configured proxy for target.
@@ -56,10 +61,17 @@ func Lookup(target *url.URL) (*url.URL, error) {
 func (c *desktopCache) current(ctx context.Context) (Configuration, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return Configuration{}, err
+	}
 	if !c.at.IsZero() && time.Since(c.at) < desktopSettingsTTL {
 		return c.config, c.err
 	}
-	c.config, c.err = resolveDesktopConfiguration(ctx, desktopSources)
+	config, err := resolveDesktopConfiguration(ctx, desktopSources)
+	if ctx.Err() != nil {
+		return Configuration{}, ctx.Err()
+	}
+	c.config, c.err = config, err
 	c.at = time.Now()
 	return c.config, c.err
 }
@@ -77,25 +89,14 @@ func resolveDesktopConfiguration(ctx context.Context, sources []func(context.Con
 	return Configuration{Source: SourceNone, Mode: ModeNone}, nil
 }
 
-var runGSettings = func(ctx context.Context, program string) ([]byte, int, error) {
-	return execpkg.Run(ctx, program, []string{"list-recursively", gsettingsSchema}, execpkg.ExecOpts{
-		Launch:         execpkg.HostLaunch("desktop_proxy_settings"),
-		Timeout:        desktopSettingsTimeout,
-		MaxOutputBytes: maxGSettingsBytes,
-		AppendEnv:      []string{"LC_ALL=C"},
-	})
-}
+var runGSettings = hostread.DesktopProxySettings
 
 // gsettingsConfiguration reads the GNOME proxy schema through the desktop's
 // own settings tool; a desktop without it has no GNOME proxy configuration.
 func gsettingsConfiguration(ctx context.Context) (Configuration, bool, error) {
-	program, err := execpkg.LookPathIn("gsettings", "/usr/bin:/bin")
-	if err != nil {
-		return Configuration{}, false, nil
-	}
 	ctx, cancel := context.WithTimeout(ctx, desktopSettingsTimeout)
 	defer cancel()
-	out, code, err := runGSettings(ctx, program)
+	out, code, err := runGSettings(ctx)
 	if err != nil {
 		return Configuration{}, false, fmt.Errorf("read GNOME proxy settings: %w", err)
 	}
