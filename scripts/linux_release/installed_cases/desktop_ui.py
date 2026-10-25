@@ -8,12 +8,14 @@ from ..installed_input import accessibility
 from .app import process_identity, session_environment
 from .records import CaseFailed, CaseUnavailable
 
+_InventoryChanged = accessibility.InventoryChanged
+
 
 def retry_inventory(app, error) -> bool:
     domain, code = getattr(error, 'domain', None), getattr(error, 'code', None)
     native = (isinstance(domain, str) and domain in {'atspi_error', 'g-dbus-error-quark', 'g-io-error-quark'}
               and type(code) is int and 0 <= code < 1 << 31)
-    if not isinstance(error, (IndexError, accessibility.InventoryChanged)) and not native:
+    if not isinstance(error, (IndexError, _InventoryChanged)) and not native:
         return False
     expected = app.observations['launch_identity']
     try:
@@ -88,7 +90,7 @@ class DesktopUI:
                 raise CaseUnavailable('normal-native-window-observation-deadline')
             application = desktop[index]
             if application is None:
-                raise accessibility.InventoryChanged()
+                raise _InventoryChanged()
             pid = application.get_process_id()
             if not owned_process(pid, self.app):
                 continue
@@ -100,11 +102,14 @@ class DesktopUI:
                     raise CaseUnavailable('normal-native-window-observation-deadline')
                 window = application[offset]
                 if window is None:
-                    raise accessibility.InventoryChanged()
+                    raise _InventoryChanged()
                 if window.getRole() in {self.api.ROLE_FRAME, self.api.ROLE_DIALOG} and self.visible(window):
                     yield identity, window
             if process_identity(pid) != identity or not owned_process(pid, self.app):
                 raise ValueError('installed desktop owner changed during window observation')
+
+    def descendants(self, window, deadline=None, *, include=None):
+        return accessibility.descendants(window, deadline, include=include)
 
     def find(self, role: int, name: str):
         if not isinstance(name, str) or not 0 < len(name) <= 256:
@@ -114,9 +119,9 @@ class DesktopUI:
             matches = []
             try:
                 for identity, window in self.windows(deadline):
-                    for node in accessibility.descendants(window, deadline):
-                        node_role = node.getRole()
-                        if self.visible(node) and node.name == name:
+                    for node in self.descendants(window, deadline):
+                        if node.name == name and self.visible(node):
+                            node_role = node.getRole()
                             observed_roles.add(int(node_role))
                             if node_role == role:
                                 matches.append((identity, node))
@@ -153,8 +158,10 @@ class DesktopUI:
             'observed_roles': sorted(observed_roles)}}
         raise error
 
-    def click(self, name: str):
-        node = self.find(self.api.ROLE_PUSH_BUTTON, name)
+    def click(self, name: str, *, tab=False):
+        if type(tab) is not bool:
+            raise ValueError('normal native action requires an explicit button or page tab')
+        node = self.find(self.api.ROLE_PAGE_TAB if tab else self.api.ROLE_PUSH_BUTTON, name)
         try:
             action = node.queryAction()
             if action.nActions != 1 or action.doAction(0) is not True:
@@ -185,7 +192,7 @@ class DesktopUI:
         for identity, window in self.windows(deadline):
             if window.getRole() != self.api.ROLE_FRAME:
                 continue
-            for node in accessibility.descendants(window, deadline):
+            for node in self.descendants(window, deadline):
                 role = node.getRole()
                 if role in controls and self.visible(node) and node.name and node.name not in decoration:
                     if role == self.api.ROLE_PUSH_BUTTON and node.queryAction().nActions != 1:
