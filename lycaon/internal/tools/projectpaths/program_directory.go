@@ -14,10 +14,6 @@ import (
 	"github.com/lycaon/lycaon/internal/toolrejection"
 )
 
-// scratchVariables name the session scratch directory for natives and
-// external processes alike; the launch boundary sets the same values.
-var scratchVariables = []string{"TMPDIR", "TMP", "TEMP", "SCRATCH_DIR"}
-
 // Directory is the frame's absolute logical working directory: the value
 // pwd prints, PWD holds and an external process starts in.
 func (p *ProgramPaths) Directory() string { return filepath.Clean(p.cwd.Resolved.Abs) }
@@ -28,19 +24,6 @@ func (p *ProgramPaths) PreviousDirectory() (string, bool) {
 		return "", false
 	}
 	return filepath.Clean(p.previous.Resolved.Abs), true
-}
-
-// Environment is the program's initial exported scratch state: when the
-// session has scratch, the temporary directory variables naming it. The
-// evaluator owns PWD and OLDPWD from Directory.
-func (p *ProgramPaths) Environment() []string {
-	var out []string
-	if dir := strings.TrimSpace(p.context.Host.SessionScratchDir); dir != "" {
-		for _, name := range scratchVariables {
-			out = append(out, name+"="+filepath.Clean(dir))
-		}
-	}
-	return out
 }
 
 // Address converts an unquoted @label or @scratch word prefix to its native
