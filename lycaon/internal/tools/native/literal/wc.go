@@ -45,16 +45,16 @@ func runWc(inv *invocation) error {
 		if in == nil {
 			continue
 		}
-		var counts survey.TextCounts
+		var counter survey.Counter
 		if in.stream != nil {
-			var counter survey.Counter
 			if _, err := io.Copy(&counter, in.stream); err != nil {
 				return err
 			}
-			counts = counter.Counts()
 		} else {
-			counts = survey.CountBytes(in.data)
+			_, _ = counter.Write(in.data)
 		}
+		counts := counter.Counts()
+		counts.MaxLineLength = counter.DisplayWidth()
 		if scalars && counts.InvalidEncoding {
 			inv.fail(1, operand.Value, survey.ErrInvalidEncoding.Error())
 			continue
@@ -70,36 +70,37 @@ func runWc(inv *invocation) error {
 		total.Bytes += counts.Bytes
 		total.MaxLineLength = max(total.MaxLineLength, counts.MaxLineLength)
 	}
-	var widths map[string]int
-	if len(inv.operands()) > 1 {
-		widths = map[string]int{}
-		for _, column := range wcColumns {
-			if selected[column.key] {
-				widths[column.key] = len(strconv.FormatInt(column.value(total), 10))
+	columns := 0
+	for _, enabled := range selected {
+		if enabled {
+			columns++
+		}
+	}
+	width := 1
+	if len(inv.operands()) > 1 || columns > 1 {
+		width = len(strconv.FormatInt(total.Bytes, 10))
+		for _, operand := range inv.operandsOrStdin() {
+			if operand.Value == "-" {
+				width = max(width, 7)
 			}
 		}
 	}
 	for _, row := range rows {
-		if err := inv.out.text(wcLine(row.counts, selected, widths, row.label)); err != nil {
+		if err := inv.out.text(wcLine(row.counts, selected, width, row.label)); err != nil {
 			return err
 		}
 	}
 	if len(inv.operands()) > 1 {
-		return inv.out.text(wcLine(total, selected, widths, "total"))
+		return inv.out.text(wcLine(total, selected, width, "total"))
 	}
 	return nil
 }
 
-func wcLine(counts survey.TextCounts, selected map[string]bool, widths map[string]int, label string) string {
+func wcLine(counts survey.TextCounts, selected map[string]bool, width int, label string) string {
 	var fields []string
 	for _, column := range wcColumns {
 		if selected[column.key] {
-			val := column.value(counts)
-			if width := widths[column.key]; width > 0 {
-				fields = append(fields, fmt.Sprintf("%*d", width, val))
-			} else {
-				fields = append(fields, strconv.FormatInt(val, 10))
-			}
+			fields = append(fields, fmt.Sprintf("%*d", width, column.value(counts)))
 		}
 	}
 	if label != "" {
