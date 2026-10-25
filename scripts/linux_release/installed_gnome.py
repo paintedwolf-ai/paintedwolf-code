@@ -29,7 +29,11 @@ def physical_image(image=IMAGE):
     return info
 
 
-def owner(reader=None):
+def owner(reader=None, *, expected_uid=None):
+    expected_uid = os.getuid() if expected_uid is None else expected_uid
+    if (type(expected_uid) is not int or not 0 <= expected_uid < 1 << 31
+            or expected_uid != os.getuid() and (os.geteuid() != 0 or reader is None)):
+        raise ValueError('GNOME observation requires the current account or an explicit root-selected UID')
     with Reader() if reader is None else nullcontext(reader) as reader:
         def bus_call(method, argument, signature):
             result = reader.call('/org/freedesktop/DBus', 'org.freedesktop.DBus', method,
@@ -54,14 +58,14 @@ def owner(reader=None):
             process = Path('/proc') / str(pid)
             birth = (process / 'stat').read_text().rpartition(') ')[2].split()[19]
             executable = (process / 'exe').stat()
-            if (process.stat().st_uid != os.getuid()
+            if (process.stat().st_uid != expected_uid
                     or (executable.st_dev, executable.st_ino, executable.st_size)
                     != (opened.st_dev, opened.st_ino, opened.st_size)):
                 raise ValueError('GNOME bus process differs from the selected native image')
             if (bus_call('GetNameOwner', BUS_NAME, 's') != unique
                     or bus_call('GetConnectionUnixProcessID', unique, 'u') != pid
                     or (process / 'stat').read_text().rpartition(') ')[2].split()[19] != birth
-                    or process.stat().st_uid != os.getuid()
+                    or process.stat().st_uid != expected_uid
                     or stable((process / 'exe').stat()) != stable(executable)
                     or stable(physical_image()) != stable(opened)
                     or stable(os.fstat(descriptor)) != stable(opened)):

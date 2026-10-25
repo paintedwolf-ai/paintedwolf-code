@@ -30,9 +30,13 @@ def kernel_owner(pid, uid):
 class NativeSessionObserver:
     """Pin bus owners, kernel birth facts and the exact captured local seat."""
 
-    def __init__(self, session, *, reader=None, owner=kernel_owner, shell=None):
+    def __init__(self, session, *, reader=None, owner=kernel_owner, shell=None, expected_uid=None):
+        self.uid = os.getuid() if expected_uid is None else expected_uid
+        if (type(self.uid) is not int or not 0 <= self.uid < 1 << 31
+                or self.uid != os.getuid() and (os.geteuid() != 0 or reader is None)):
+            raise ValueError('native session observation requires an explicit root-selected reader and account')
         if (not isinstance(session, dict) or not isinstance(session.get('id'), str)
-                or not session['id'].isalnum() or session.get('User') != str(os.getuid())
+                or not session['id'].isalnum() or session.get('User') != str(self.uid)
                 or session.get('Type') not in {'wayland', 'x11'}
                 or session.get('Active') != 'yes' or session.get('Remote') != 'no'
                 or not isinstance(session.get('Seat'), str) or not session['Seat']):
@@ -43,7 +47,7 @@ class NativeSessionObserver:
         self.owns_reader = reader is None
         self.closed = False
         self.reader, self.owner = reader or Reader(), owner
-        self.shell = shell or (lambda: installed_gnome.owner(self.reader))
+        self.shell = shell or (lambda: installed_gnome.owner(self.reader, expected_uid=self.uid))
         self.session = {key: session[key] for key in ('id', 'User', 'Type', 'Seat')}
         self.locker = ('org.gnome.ScreenSaver', '/org/gnome/ScreenSaver')
         try:
@@ -89,7 +93,7 @@ class NativeSessionObserver:
         shell = self.shell()
         locker = None
         for name in LOCKER_NAMES:
-            candidate = self._bus_owner(name, os.getuid(), user=True, optional=True)
+            candidate = self._bus_owner(name, self.uid, user=True, optional=True)
             if (candidate is not None and candidate['unique'] == shell['unique_owner']
                     and candidate['process']['pid'] == shell['pid']
                     and candidate['process']['start_time_ticks'] == shell['start_time_ticks']):
@@ -126,7 +130,7 @@ class NativeSessionObserver:
                 or not isinstance(values['User'][1], str) or not values['User'][1].startswith(MANAGER + '/user/')
                 or not isinstance(values['Seat'][1], str) or not values['Seat'][1].startswith(MANAGER + '/seat/')
                 or type(values['TimestampMonotonic']) is not int or values['TimestampMonotonic'] <= 0
-                or values['Id'] != self.session['id'] or values['User'][0] != os.getuid()
+                or values['Id'] != self.session['id'] or values['User'][0] != self.uid
                 or values['Seat'][0] != self.session['Seat']
                 or values['Type'] != self.session['Type'] or values['Remote'] is not False
                 or values['Active'] is not True or type(values['LockedHint']) is not bool):
