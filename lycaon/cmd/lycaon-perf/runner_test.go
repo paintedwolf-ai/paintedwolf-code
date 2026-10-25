@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/configdir"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func healthyReport() report {
@@ -133,7 +134,7 @@ func TestInstalledModeRequiresAnAccountWithoutReleaseConfiguration(t *testing.T)
 		t.Fatalf("fresh account = %q, %v", root, err)
 	}
 	if err := os.MkdirAll(root, 0o700); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "create directory", err)
 	}
 	if _, err := installedConfigRoot(); err == nil || !strings.Contains(err.Error(), "disposable account") {
 		t.Fatalf("existing configuration = %v", err)
