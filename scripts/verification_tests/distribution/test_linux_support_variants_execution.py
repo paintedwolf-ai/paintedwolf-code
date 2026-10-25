@@ -21,6 +21,19 @@ class LinuxSupportVariantTests(unittest.TestCase):
         self.assertEqual(len(variants(self.fedora, "documents", self.capabilities)), 2)
         self.assertEqual(len(expand(self.catalog)), len({item["id"] for item in expand(self.catalog)}))
 
+    def test_conversation_semantics_keep_every_release_without_repeating_display_scales(self):
+        for environment in self.catalog["environments"]:
+            with self.subTest(environment=environment["id"]):
+                required = variants(environment, "conversation", self.capabilities)
+                releases = environment["qualification"]["releases"]
+                self.assertEqual(len(required), len(releases))
+                self.assertEqual({item["release"]["id"] for item in required}, {item["id"] for item in releases})
+                self.assertEqual({tuple(item["scales_percent"]) for item in required}, {(100,)})
+                for capability in ("input", "accessibility", "windowing"):
+                    layout = variants(environment, capability, self.capabilities)
+                    expected = {(release["id"], scale) for release in releases for scale in ((100,), (150,), (200,))}
+                    self.assertTrue(expected <= {(item["release"]["id"], tuple(item["scales_percent"])) for item in layout})
+
     def test_unknown_missing_or_ambiguous_metadata_refuses_expansion(self):
         for mutate in (lambda value: value.pop("qualification"),
                        lambda value: value["qualification"]["releases"].append(copy.deepcopy(value["qualification"]["releases"][0])),

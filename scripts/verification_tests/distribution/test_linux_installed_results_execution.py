@@ -96,23 +96,23 @@ class LinuxInstalledResultsTests(unittest.TestCase):
 
     def test_each_declared_variant_must_pass_on_its_own_release(self):
         original = copy.deepcopy(self.campaign)
-        row = self.campaign["results"][0]
+        row = self.campaign["results"][1]
         self.assertGreater(len(row["variants"]), 1)
         row["variants"].pop()
         result = self.report()
         self.assertFalse(result["accepted"])
-        self.assertEqual(result["rows"][0]["status"], "unverified")
-        self.assertTrue(any(error.endswith(": missing") for error in result["rows"][0]["errors"]))
+        self.assertEqual(result["rows"][1]["status"], "unverified")
+        self.assertTrue(any(error.endswith(": missing") for error in result["rows"][1]["errors"]))
         self.campaign = copy.deepcopy(original)
-        self.campaign["results"][0]["variants"][0]["observed"]["version_id"] = "26.04"
+        self.campaign["results"][1]["variants"][0]["observed"]["version_id"] = "26.04"
         result = self.report()
         self.assertFalse(result["accepted"])
-        self.assertEqual(result["rows"][0]["status"], "unverified")
+        self.assertEqual(result["rows"][1]["status"], "unverified")
         self.campaign = copy.deepcopy(original)
-        self.campaign["results"][0]["variants"][0]["status"] = "failed"
-        self.assertEqual(self.report()["rows"][0]["status"], "failed")
+        self.campaign["results"][1]["variants"][0]["status"] = "failed"
+        self.assertEqual(self.report()["rows"][1]["status"], "failed")
         self.campaign = copy.deepcopy(original)
-        self.campaign["results"][0]["variants"].append(copy.deepcopy(self.campaign["results"][0]["variants"][0]))
+        self.campaign["results"][1]["variants"].append(copy.deepcopy(self.campaign["results"][1]["variants"][0]))
         with self.assertRaises(ValueError):
             self.report()
 

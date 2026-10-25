@@ -90,6 +90,15 @@ each required row a stable identity, scenarios, implementing issues and required
 execution tier. Qualification and release admission must consume these same rows;
 they must not maintain independent workflow inventories.
 
+Conversation semantics, including provider setup, tool receipts and durable reply
+recovery, are qualified once at 100% scaling for each required environment,
+installation, architecture and release. Their host state does not vary with
+monitor scale. Fractional-scale and mixed-monitor requirements remain with the
+scale-sensitive capabilities. Input and accessibility checks must include provider
+and approval dialogs: visible controls, keyboard focus, text overflow and usable
+actions at the declared scales. Existing campaign evidence retains its captured
+requirements; changing this catalog does not promote an older partial campaign.
+
 The scope covers Linux amd64 and arm64 on Ubuntu 24.04 and later, Debian 13 and
 later, maintained Fedora releases satisfying the declared floors, RHEL 10
 compatibles, native Arch-family packages, and NixOS. Arch Linux supplies the
