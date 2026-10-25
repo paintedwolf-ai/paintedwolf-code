@@ -104,26 +104,6 @@ const NAMED_START_FAILURES: Record<
     code: "desktop_restart_required",
     copy: CLIENT_NOTICES.desktop_restart_required,
   },
-  credential_vault_custodian_unavailable: {
-    code: "credential_vault_custodian_unavailable",
-    copy: CLIENT_NOTICES.credential_vault_custodian_unavailable,
-  },
-  credential_vault_custodian_absent: {
-    code: "credential_vault_custodian_absent",
-    copy: CLIENT_NOTICES.credential_vault_custodian_absent,
-  },
-  credential_vault_launcher_refused: {
-    code: "credential_vault_launcher_refused",
-    copy: CLIENT_NOTICES.credential_vault_launcher_refused,
-  },
-  credential_vault_identity_missing: {
-    code: "credential_vault_identity_missing",
-    copy: CLIENT_NOTICES.credential_vault_identity_missing,
-  },
-  desktop_restart_required: {
-    code: "desktop_restart_required",
-    copy: CLIENT_NOTICES.desktop_restart_required,
-  },
   credential_vault_launcher_refused: {
     code: "credential_vault_launcher_refused",
     copy: CLIENT_NOTICES.credential_vault_launcher_refused,
