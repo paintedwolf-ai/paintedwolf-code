@@ -11,11 +11,12 @@ from .records import CaseFailed, CaseUnavailable
 _InventoryChanged = accessibility.InventoryChanged
 
 
-def retry_inventory(app, error) -> bool:
+def retry_inventory(app, error, *, interface_mounting=False) -> bool:
     domain, code = getattr(error, 'domain', None), getattr(error, 'code', None)
     native = (isinstance(domain, str) and domain in {'atspi_error', 'g-dbus-error-quark', 'g-io-error-quark'}
               and type(code) is int and 0 <= code < 1 << 31)
-    if not isinstance(error, (IndexError, _InventoryChanged, NotImplementedError, AttributeError)) and not native:
+    if not isinstance(error, (IndexError, _InventoryChanged)) and not native and not (
+            interface_mounting and isinstance(error, NotImplementedError)):
         return False
     expected = app.observations['launch_identity']
     try:
@@ -111,10 +112,11 @@ class DesktopUI:
     def descendants(self, window, deadline=None, *, include=None):
         return accessibility.descendants(window, deadline, include=include)
 
-    def find(self, role: int, name: str):
+    def find(self, role: int, name: str, deadline=None):
         if not isinstance(name, str) or not 0 < len(name) <= 256:
             raise ValueError('desktop action requires an exact bounded control name')
-        matches, observed_roles, deadline = [], set(), time.monotonic() + 15
+        deadline = time.monotonic() + 15 if deadline is None else deadline
+        matches, observed_roles = [], set()
         while self.app.process.poll() is None and time.monotonic() < deadline:
             matches = []
             try:
@@ -164,19 +166,31 @@ class DesktopUI:
         role = self.api.ROLE_PAGE_TAB if tab else self.api.ROLE_PUSH_BUTTON
         deadline = time.monotonic() + 15
         while True:
-            node = self.find(role, name)
+            node = self.find(role, name, deadline=deadline)
+            phase = 'action-interface'
             try:
                 action = node.queryAction()
-                if action.nActions != 1 or action.doAction(0) is not True:
-                    raise ValueError('normal native button refused its action')
-                return
-            except ValueError:
-                raise CaseUnavailable('normal-native-button-action-unavailable') from None
+                if action.nActions != 1:
+                    phase = 'action-count'
+                    raise ValueError('normal native button action is not unique')
+                break
             except Exception as error:
-                if time.monotonic() < deadline and retry_inventory(self.app, error):
+                if (phase == 'action-interface' and time.monotonic() < deadline
+                        and retry_inventory(self.app, error, interface_mounting=True)):
                     time.sleep(0.05)
                     continue
-                raise CaseUnavailable('normal-native-button-action-unavailable') from None
+                refusal = CaseUnavailable('normal-native-button-action-unavailable')
+                refusal.observations = {'desktop_mutation': {'phase': phase, 'exception_type': type(error).__name__}}
+                raise refusal from None
+        phase = 'do-action'
+        try:
+            if action.doAction(0) is not True:
+                phase = 'do-action-refused'
+                raise ValueError('normal native button refused its action')
+        except Exception as error:
+            refusal = CaseUnavailable('normal-native-button-action-unavailable')
+            refusal.observations = {'desktop_mutation': {'phase': phase, 'exception_type': type(error).__name__}}
+            raise refusal from None
 
     def fill(self, role: int, name: str, value: str):
         node = self.find(role, name)
