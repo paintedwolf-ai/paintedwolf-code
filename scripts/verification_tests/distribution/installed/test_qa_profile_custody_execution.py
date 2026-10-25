@@ -181,7 +181,7 @@ class ProfileCustodyTests(unittest.TestCase):
         patcher = patch.object(owner, 'PRESENCE_UID', os.getuid())
         patcher.start()
         self.addCleanup(patcher.stop)
-        account = dict(name='pwqual058a2', uid=os.getuid(), gid=os.getuid(), home='/home/pwqual058a2')
+        account = dict(name='pwqual058a2', uid=os.getuid(), gid=os.getuid(), home=str(owner.PRESENCE_HOME))
         prior = self.custody
         presence = owner.Custody(self.backup, self.quiet, account=account)
         self.addCleanup(presence.stack.close)
@@ -276,6 +276,85 @@ class ProfileCustodyTests(unittest.TestCase):
             self.assertTrue(all(row['fixture'] is not None for row in manifest['roots']))
             actual_move(*args)
         with patch.object(owner, 'move', side_effect=witnessed_move): presence.restore()
+
+    def fixed_launch_paths(self):
+        patcher = patch.object(owner, 'PRESENCE_HOME', self.base)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        presence = self.presence_custody()
+        presence.parents, presence.rows = [], []
+        roots = []
+        for index, (relative, name) in enumerate(owner.ROOTS):
+            parent = self.base / relative
+            parent.mkdir(parents=True, mode=0o700)
+            descriptor = os.open(parent, os.O_RDONLY | os.O_DIRECTORY)
+            presence.stack.callback(os.close, descriptor)
+            presence.parents.append((parent, descriptor, owner.identity(os.fstat(descriptor))))
+            path = parent / name
+            path.mkdir(mode=0o700)
+            roots.append(path)
+            presence.rows.append(dict(path=str(path), name=name, original=owner.identity(path.stat()),
+                                      parked=f'original-{index}', retained_fixture=f'fixture-{index}', fixture=None))
+        presence.record()
+        presence.park()
+        return presence, roots
+
+    def test_launch_webview_0755_is_retained_opaquely_and_original_pair_restored_exactly(self):
+        presence, roots = self.fixed_launch_paths()
+        original = [dict(row['original']) for row in presence.rows]
+        roots[0].mkdir(mode=0o700)
+        roots[1].mkdir(mode=0o755)
+        fixtures = [owner.identity(path.stat()) for path in roots]
+        with patch.object(owner, 'entry', wraps=owner.entry) as private_entry:
+            presence.restore()
+        self.assertEqual([owner.identity(path.stat()) for path in roots], original)
+        self.assertEqual([owner.identity((self.backup / f'fixture-{index}').stat()) for index in range(2)], fixtures)
+        self.assertEqual(fixtures[1]['mode'], 0o755)
+        manifest = json.loads((self.backup / 'profile-recovery.json').read_bytes())
+        self.assertEqual(manifest['phase'], 'restored')
+        self.assertEqual([row['fixture'] for row in manifest['roots']], fixtures)
+        self.assertGreater(private_entry.call_count, 0)
+
+    def test_writable_or_foreign_webview_fixture_refuses_before_either_pair_move(self):
+        from types import SimpleNamespace
+        presence, roots = self.fixed_launch_paths()
+        roots[0].mkdir(mode=0o700)
+        roots[1].mkdir(mode=0o775)
+        with patch.object(owner, 'move') as moved, self.assertRaises(ValueError): presence.restore()
+        moved.assert_not_called()
+        self.assertTrue(all(row['fixture'] is None for row in presence.rows))
+        roots[1].chmod(0o755)
+        actual_stat = owner.os.stat
+        for field in ('st_uid', 'st_gid'):
+            def foreign(name, *args, **kwargs):
+                info = actual_stat(name, *args, **kwargs)
+                if name == roots[1].name and kwargs.get('dir_fd') == presence.parents[1][1]:
+                    values = {key: getattr(info, key) for key in ('st_dev','st_ino','st_uid','st_gid','st_mode')}
+                    values[field] += 1
+                    return SimpleNamespace(**values)
+                return info
+            with patch.object(owner.os, 'stat', side_effect=foreign), patch.object(owner, 'move') as moved:
+                with self.assertRaises(ValueError): presence.restore()
+            moved.assert_not_called()
+            self.assertTrue(all(row['fixture'] is None for row in presence.rows))
+        self.assertTrue(all((self.backup / f'original-{index}').is_dir() for index in range(2)))
+        roots[1].rmdir()
+        roots[1].symlink_to(self.backup / 'original-1', target_is_directory=True)
+        with patch.object(owner, 'move') as moved, self.assertRaises(ValueError): presence.restore()
+        moved.assert_not_called()
+
+    def test_webview_fixture_exception_never_authorizes_originals_or_other_roots(self):
+        presence, roots = self.fixed_launch_paths()
+        roots[0].mkdir(mode=0o755)
+        roots[1].mkdir(mode=0o755)
+        with patch.object(owner, 'move') as moved, self.assertRaises(ValueError): presence.restore()
+        moved.assert_not_called()
+        with self.assertRaises(ValueError):
+            owner.entry(presence.parents[1][1], roots[1].name, presence.account)
+        presence.launch_owned = False
+        with self.assertRaises(ValueError):
+            presence.fixture_entry(presence.rows[1], presence.parents[1][1], roots[1].name)
+
 
 
 class FixedProfileAccountTests(unittest.TestCase):

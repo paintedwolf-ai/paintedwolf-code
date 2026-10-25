@@ -201,6 +201,22 @@ class Custody:
         self.record()
         self.pair_parked = True
 
+    def fixture_entry(self, row, descriptor, name):
+        # WebKit creates only this fixed launch-owned data root with public read/execute.
+        if (not self.launch_owned or row['path'] != str(PRESENCE_HOME / '.local/share/dev.paintedwolf.code')
+                or row['name'] != 'dev.paintedwolf.code'):
+            return entry(descriptor, name, self.account)
+        if name not in {row['name'], row['retained_fixture']}:
+            raise ValueError('launch WebView fixture has no selected custody destination')
+        try:
+            info = os.stat(name, dir_fd=descriptor, follow_symlinks=False)
+        except FileNotFoundError:
+            return None
+        if (not stat.S_ISDIR(info.st_mode) or info.st_uid != self.account['uid']
+                or info.st_gid != self.account['gid'] or stat.S_IMODE(info.st_mode) not in {0o700, 0o755}):
+            raise ValueError('launch WebView fixture is foreign, writable, or nonphysical')
+        return identity(info)
+
     def capture_launch_roots(self):
         if not self.pair_parked:
             raise ValueError('partial launch profile parking requires recovery')
@@ -208,7 +224,7 @@ class Custody:
         for row, (_, descriptor, _) in zip(self.rows, self.parents):
             if entry(self.backup_fd, row['parked'], self.account) != row['original']:
                 raise ValueError('original profile changed; recovery required')
-            fixtures.append(entry(descriptor, row['name'], self.account))
+            fixtures.append(self.fixture_entry(row, descriptor, row['name']))
         for row, fixture in zip(self.rows, fixtures):
             row['fixture'] = fixture
         self.phase = 'fixtures_captured'
@@ -221,7 +237,7 @@ class Custody:
             self.capture_launch_roots()
         # Check the entire pair before restoring either root.
         for row, (_, descriptor, _) in zip(self.rows, self.parents):
-            if entry(descriptor, row['name'], self.account) != row['fixture']:
+            if self.fixture_entry(row, descriptor, row['name']) != row['fixture']:
                 raise ValueError('fixture profile changed; originals retained for recovery')
             if entry(self.backup_fd, row['parked'], self.account) != row['original']:
                 raise ValueError('original profile changed; recovery required')
@@ -230,7 +246,7 @@ class Custody:
         for row, (_, descriptor, _) in zip(self.rows, self.parents):
             if row['fixture'] is not None:
                 move(descriptor, row['name'], self.backup_fd, row['retained_fixture'])
-                if entry(self.backup_fd, row['retained_fixture'], self.account) != row['fixture']:
+                if self.fixture_entry(row, self.backup_fd, row['retained_fixture']) != row['fixture']:
                     raise ValueError('fixture changed during retention; original remains parked')
             if row['original'] is not None:
                 move(self.backup_fd, row['parked'], descriptor, row['name'])
