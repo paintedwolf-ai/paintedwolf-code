@@ -145,18 +145,29 @@ class DesktopUI:
     def find(self, role: int, name: str, deadline=None):
         if not isinstance(name, str) or not 0 < len(name) <= 256:
             raise ValueError('desktop action requires an exact bounded control name')
+        return self._find(role, (name,), deadline)
+
+    def project_navigation_control(self, deadline):
+        return self._find(self.api.ROLE_PUSH_BUTTON,
+                          ('Project configuration', 'Show sidebar', 'Widen window to restore sidebar'), deadline)
+
+    def _find(self, role, names, deadline):
+        name = names[0] if len(names) == 1 else 'project-navigation'
         deadline = time.monotonic() + 15 if deadline is None else deadline
         matches, observed_roles = [], set()
         while self.app.process.poll() is None and time.monotonic() < deadline:
             matches = []
+            states = dict.fromkeys(names, 0)
             try:
                 for identity, window in self.windows(deadline):
                     for node in self.descendants(window, deadline):
-                        if node.name == name and self.visible(node):
+                        label = node.name
+                        if label in names and self.visible(node):
                             node_role = node.getRole()
                             observed_roles.add(int(node_role))
                             if node_role == role:
                                 matches.append((identity, node))
+                                states[label] += 1
             except CaseUnavailable as error:
                 error.observations = {**getattr(error, 'observations', {}), 'desktop_control': {
                     'role': int(role), 'name': name, 'match_count': len(matches),
@@ -172,6 +183,10 @@ class DesktopUI:
                 refusal.observations = {'desktop_control': {'role': int(role), 'name': name},
                                         'exception_type': type(error).__name__}
                 raise refusal from None
+            if len(names) > 1:
+                self.app.observations['project_navigation_inventory'] = {
+                    'inventory_complete': True, 'match_count': len(matches),
+                    'states': states}
             if len(matches) > 1:
                 break
             if len(matches) == 1:
