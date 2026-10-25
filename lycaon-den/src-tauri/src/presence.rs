@@ -789,10 +789,10 @@ mod tests {
             "challenge",
             "reveal",
             "main",
-            &Ok("linux_app_password"),
+            &Ok("linux_user_presence"),
         );
         assert_eq!(confirmed["status"], "confirmed");
-        assert_eq!(confirmed["authenticator"], "linux_app_password");
+        assert_eq!(confirmed["authenticator"], "linux_user_presence");
         assert_eq!(confirmed["generation"], 7);
         assert_eq!(confirmed["challenge_id"], refused["challenge_id"]);
         assert!(confirmed["code"].is_null());
