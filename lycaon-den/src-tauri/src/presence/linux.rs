@@ -1,23 +1,18 @@
 //! Linux user presence. polkit confirms the person through the desktop's
 //! authentication agent for a packaged action; the shell is the subject, so
-//! the agent's prompt belongs to this process and no webview. Without an
-//! agent, and only while the vault is on the app-password path, a native
-//! GTK dialog re-verifies the app password the shell unlocked the vault with.
+//! the agent's prompt belongs to this process and no webview. Missing system
+//! authentication refuses presence independently of the credential vault custodian.
 
 use std::collections::HashMap;
-use std::sync::mpsc;
 use std::time::Duration;
 
-use gtk::prelude::*;
+use gtk::glib::prelude::*;
 use gtk::{gio, glib};
-use tauri::Manager;
 
 use super::PresenceCommandError;
 use crate::linux_desktop::bus as linux_bus;
-use crate::sidecar::SidecarState;
 
 pub(super) const AUTHENTICATOR_POLKIT: &str = "linux_user_presence";
-pub(super) const AUTHENTICATOR_APP_PASSWORD: &str = "linux_app_password";
 
 /// The packaged polkit action for an application identifier; its defaults
 /// are `auth_self`.
@@ -293,103 +288,40 @@ fn user_id(name: &str) -> Option<u32> {
     Some(entry.pw_uid)
 }
 
-/// Re-verifies the app password in a native dialog. Only a shell that
-/// unlocked the vault with that password can verify it, so the dialog is
-/// unavailable on the identity-service path.
-pub(super) fn confirm_app_password(
-    window: &tauri::Window,
-    prompt: &str,
-    polkit_reason: &str,
-) -> Result<(), PresenceCommandError> {
-    let state = window.app_handle().state::<SidecarState>();
-    if !state.holds_vault_password() {
-        return Err(PresenceCommandError::unavailable(format!(
-            "{polkit_reason} The vault is not on the app-password path, so there is no password to re-enter."
-        ))
-        .with_suggested_action(
-            "Install a polkit authentication agent for this desktop, then try again.",
-        ));
+/// Only the operating system's authentication can confirm presence.
+pub(super) fn confirmation_result(
+    result: Result<(), PolkitRefusal>,
+) -> Result<&'static str, PresenceCommandError> {
+    match result {
+        Ok(()) => Ok(AUTHENTICATOR_POLKIT),
+        Err(PolkitRefusal::Denied(message)) => Err(PresenceCommandError::denied(message)),
+        Err(PolkitRefusal::Failed(message)) => Err(PresenceCommandError::failed(message)),
+        Err(PolkitRefusal::Unavailable(message)) => Err(
+            PresenceCommandError::unavailable(message).with_suggested_action(
+                "Start the system authentication agent for this desktop, then try again.",
+            ),
+        ),
     }
-    let (tx, rx) = mpsc::channel();
-    let owner = window.clone();
-    let prompt = prompt.to_string();
-    window
-        .run_on_main_thread(move || {
-            // GTK objects stay on the main thread; the window handle crosses.
-            let parent = owner.gtk_window().ok();
-            let _ = tx.send(ask_password(parent.as_ref(), &prompt));
-        })
-        .map_err(|error| {
-            PresenceCommandError::failed(format!("the password dialog could not open: {error}"))
-        })?;
-    let entered = rx
-        .recv_timeout(PROMPT_TIMEOUT)
-        .map_err(|_| PresenceCommandError::denied("Authentication did not finish in time."))?;
-    let Some(mut entered) = entered else {
-        return Err(PresenceCommandError::denied(
-            "The password dialog was canceled.",
-        ));
-    };
-    let verified = state.verify_vault_password(&entered);
-    entered.fill(0);
-    match verified {
-        Some(true) => Ok(()),
-        Some(false) => Err(PresenceCommandError::denied(
-            "The app password was incorrect.",
-        )),
-        None => Err(PresenceCommandError::unavailable(
-            "The vault is no longer on the app-password path.",
-        )),
-    }
-}
-
-/// Shows the modal password dialog on the main thread and returns the
-/// entered password, or None when dismissed.
-fn ask_password(parent: Option<&gtk::ApplicationWindow>, prompt: &str) -> Option<Vec<u8>> {
-    let dialog = gtk::Dialog::with_buttons(
-        Some("Confirm it's you"),
-        parent,
-        gtk::DialogFlags::MODAL | gtk::DialogFlags::DESTROY_WITH_PARENT,
-        &[
-            ("Cancel", gtk::ResponseType::Cancel),
-            ("Confirm", gtk::ResponseType::Ok),
-        ],
-    );
-    dialog.set_default_response(gtk::ResponseType::Ok);
-    let content = dialog.content_area();
-    content.set_margin_top(16);
-    content.set_margin_bottom(8);
-    content.set_margin_start(16);
-    content.set_margin_end(16);
-    content.set_spacing(8);
-    let reason = gtk::Label::new(Some(prompt));
-    reason.set_line_wrap(true);
-    reason.set_max_width_chars(60);
-    reason.set_xalign(0.0);
-    let instruction = gtk::Label::new(Some(
-        "Enter your Painted Wolf Code app password to continue.",
-    ));
-    instruction.set_xalign(0.0);
-    let entry = gtk::Entry::new();
-    entry.set_visibility(false);
-    entry.set_input_purpose(gtk::InputPurpose::Password);
-    entry.set_activates_default(true);
-    content.pack_start(&reason, false, false, 0);
-    content.pack_start(&instruction, false, false, 0);
-    content.pack_start(&entry, false, false, 0);
-    dialog.show_all();
-    let response = dialog.run();
-    let text = entry.text();
-    let value =
-        (response == gtk::ResponseType::Ok && !text.is_empty()).then(|| text.as_bytes().to_vec());
-    entry.set_text("");
-    dialog.close();
-    value
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn system_authentication_is_required_independently_of_vault_custody() {
+        assert_eq!(confirmation_result(Ok(())).unwrap(), AUTHENTICATOR_POLKIT);
+        for (refusal, expected) in [
+            (PolkitRefusal::Unavailable("no agent".into()), "presence_unavailable"),
+            (PolkitRefusal::Denied("canceled".into()), "presence_denied"),
+            (PolkitRefusal::Failed("bus failed".into()), "presence_failed"),
+        ] {
+            assert_eq!(confirmation_result(Err(refusal)).unwrap_err().code, expected);
+        }
+        let unavailable = confirmation_result(preflight(true, false)).unwrap_err();
+        assert_eq!(unavailable.code, "presence_unavailable");
+        assert!(unavailable.suggested_action.unwrap().contains("system authentication agent"));
+    }
 
     #[test]
     fn polkit_outcomes_map_to_presence_results() {
