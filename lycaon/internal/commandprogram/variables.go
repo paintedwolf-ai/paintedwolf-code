@@ -25,6 +25,7 @@ type Variables struct {
 	program    string
 	positional []string
 	status     int
+	pipeStatus []int
 	background string
 	hasJob     bool
 }
@@ -136,7 +137,7 @@ func (v *Variables) Environment(overrides map[string]string) ([]string, error) {
 
 // Clone copies the frame for an isolated group or substitution unit.
 func (v *Variables) Clone(ctx context.Context) (*Variables, error) {
-	clone := &Variables{memory: v.memory, bounds: v.bounds, values: map[string]variable{}, program: v.program, positional: append([]string(nil), v.positional...), status: v.status, background: v.background, hasJob: v.hasJob}
+	clone := &Variables{memory: v.memory, bounds: v.bounds, values: map[string]variable{}, program: v.program, positional: append([]string(nil), v.positional...), status: v.status, pipeStatus: append([]int(nil), v.pipeStatus...), background: v.background, hasJob: v.hasJob}
 	for name, entry := range v.values {
 		if err := clone.store(ctx, name, entry); err != nil {
 			clone.Close()
@@ -157,6 +158,9 @@ func (v *Variables) SetPositional(positional []string) {
 	v.positional = append([]string(nil), positional...)
 }
 func (v *Variables) SetStatus(status int) { v.status = status }
+func (v *Variables) SetPipeStatus(statuses []int) {
+	v.pipeStatus = append([]int(nil), statuses...)
+}
 func (v *Variables) SetBackground(job string) {
 	v.background, v.hasJob = job, true
 }
@@ -170,6 +174,12 @@ func (v *Variables) Positional() []string {
 	return append([]string(nil), v.positional...)
 }
 func (v *Variables) LastStatus() int { return v.status }
+func (v *Variables) PipeStatus() []int {
+	if len(v.pipeStatus) > 0 {
+		return append([]int(nil), v.pipeStatus...)
+	}
+	return []int{v.status}
+}
 func (v *Variables) LastBackground() (string, bool) {
 	return v.background, v.hasJob
 }
@@ -180,6 +190,8 @@ func assignable(bounds catalogBounds, name, value string) error {
 		return invalidValue(toolcontract.SourceSpan{}, "a variable name")
 	case name == "IFS":
 		return &ExpansionError{Code: codeSyntaxUnsupported, Expected: "fixed space/tab/newline splitting"}
+	case name == "PIPESTATUS":
+		return &ExpansionError{Code: codeSyntaxUnsupported, Expected: "read-only PIPESTATUS"}
 	case strings.IndexByte(value, 0) >= 0:
 		return invalidValue(toolcontract.SourceSpan{}, "variable values without NUL bytes")
 	case int64(len(value)) > bounds.maximum["variable_value_bytes"]:

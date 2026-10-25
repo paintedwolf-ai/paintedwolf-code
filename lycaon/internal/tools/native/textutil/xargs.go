@@ -1,60 +1,30 @@
 package textutil
 
 import (
-	"bytes"
-	"errors"
-	"io"
 	"strconv"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
-	"github.com/lycaon/lycaon/internal/toolcontract"
-	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
 )
 
 // runXargs reads all of standard input, splits it into items and runs
-// COMMAND (default echo) in serial batches, in input order. Each batch is one
-// child through the evaluator's nested-command port, with its own execution
-// identity, binding and receipt; no shell runs and no input becomes program
-// text. Empty input runs nothing. A batch's ordinary nonzero status makes
-// xargs status 1 and later batches still run; a host stop ends the run with
-// that batch's outcome.
-// xargsRun is one xargs invocation's input splitting and batch planning.
-type xargsRun struct{ inv *invocation }
-
-// batchStop ends xargs with the outcome of a batch that hit a host stop.
-type batchStop struct {
-	result toolcontract.ProducerResult
-	cause  error
-}
-
-func (s *batchStop) Error() string {
-	if s.cause != nil {
-		return "xargs batch stopped: " + s.cause.Error()
-	}
-	return "xargs batch stopped: " + string(s.result.Terminal) + " " + s.result.StopCode
-}
-
-func (s *batchStop) Unwrap() error { return s.cause }
-
+// COMMAND (default echo) in batches, in input order, as GNU xargs does. Each
+// batch is one child through the evaluator's nested-command port, with its
+// own execution identity, binding and receipt; no shell runs and no input
+// becomes program text. Empty input runs COMMAND once with no items unless
+// -r or -I. With -P, up to that many batches (at most concurrent_processes)
+// run at once and their output is delivered in input order.
 func runXargs(inv *invocation) error {
 	x := xargsRun{inv: inv}
-	count, err := x.batchCount()
+	plan, err := x.plan()
 	if err != nil {
 		return err
 	}
-	placeholder, replacing := inv.value("-I")
-	if replacing && count > 0 {
-		return inv.usage(placeholder, "-I or -n, not both")
-	}
-	if replacing && placeholder.Value == "" {
-		return inv.usage(placeholder, "a nonempty placeholder")
-	}
-	input, err := x.readAll()
+	input, err := inv.readAll(inv.streams.Input)
 	if err != nil {
 		return err
 	}
-	items, err := x.items(input, replacing)
+	lines, err := x.lines(input, plan.replacing, plan.eof)
 	if err != nil {
 		return err
 	}
@@ -62,36 +32,113 @@ func runXargs(inv *invocation) error {
 	if len(command) == 0 {
 		command = commandprogram.Fields{{Value: "echo", Span: inv.request.Invocation.Span}}
 	}
-	batches, err := x.batches(command, items, count, placeholder, replacing)
-	if err != nil || len(batches) == 0 {
+	batches, err := plan.batches(inv, command, lines)
+	if err != nil {
 		return err
+	}
+	if len(batches) == 0 && !plan.replacing && !inv.flag("-r") {
+		batches = []commandprogram.Fields{command}
+	}
+	if len(batches) == 0 {
+		return nil
 	}
 	if inv.ports.Nested == nil {
 		return unsupported(inv, command[0], "a program runtime that dispatches xargs batches")
 	}
-	// Each batch runs in the invoking frame's exported environment.
-	environment := make(map[string]string, len(inv.request.Environment))
-	for _, entry := range inv.request.Environment {
-		name, value, _ := strings.Cut(entry, "=")
-		environment[name] = value
-	}
-	for _, argv := range batches {
-		result, err := inv.ports.Nested.RunNested(inv.ctx, inv.request, argv, environment, commandprogram.Streams{Input: commandprogram.NullInput(), Output: inv.out, Error: inv.streams.Error})
-		if err != nil || result.Terminal != toolcontract.ProducerCompleted || result.StopCode != "" {
-			return &batchStop{result: result, cause: err}
-		}
-		if result.Status != 0 {
-			inv.status = 1
-		}
-	}
-	return nil
+	return x.execute(batches, plan.parallel)
 }
 
-func (x xargsRun) batchCount() (int, error) {
-	value, ok := x.inv.value("-n")
+// xargsRun is one xargs invocation's input splitting and batch planning.
+type xargsRun struct{ inv *invocation }
+
+// xargsPlan is the batching the options select: count items or lines per
+// batch (0 fills by size), one line per batch with replacing (-I, GNU -i),
+// BSD -J's argument that the items replace, the logical EOF item (-E, GNU
+// -e), the command-line byte cap (-s) and whether exceeding it refuses
+// (-x), and parallel batches at once.
+type xargsPlan struct {
+	count, lines, parallel int
+	placeholder            commandprogram.Field
+	replacing              bool
+	join                   string
+	eof                    *string
+	maxChars               int64
+	exact                  bool
+}
+
+func (x xargsRun) plan() (xargsPlan, error) {
+	plan := xargsPlan{parallel: 1, maxChars: x.inv.limit("argv_bytes"), exact: x.inv.flag("-x")}
+	var err error
+	if plan.count, err = x.positive("-n"); err != nil {
+		return plan, err
+	}
+	if plan.lines, err = x.positive("-L"); err != nil {
+		return plan, err
+	}
+	if option, ok := x.inv.argv.Last("-l"); ok {
+		plan.lines = 1
+		if len(option.Values) > 0 {
+			if plan.lines, err = x.count(option.Values[0]); err != nil {
+				return plan, err
+			}
+		}
+	}
+	plan.placeholder, plan.replacing = x.inv.value("-I")
+	if option, ok := x.inv.argv.Last("-i"); ok && !plan.replacing {
+		plan.placeholder, plan.replacing = commandprogram.Field{Value: "{}", Span: option.Span}, true
+		if len(option.Values) > 0 {
+			plan.placeholder = option.Values[0]
+		}
+	}
+	if value, ok := x.inv.value("-J"); ok {
+		if plan.replacing || value.Value == "" {
+			return plan, x.inv.usage(value, "a nonempty -J placeholder, without -I")
+		}
+		plan.join = value.Value
+	}
+	if value, ok := x.inv.value("-E"); ok {
+		plan.eof = &value.Value
+	} else if option, ok := x.inv.argv.Last("-e"); ok && len(option.Values) > 0 {
+		plan.eof = &option.Values[0].Value
+	}
+	if value, ok := x.inv.value("-s"); ok {
+		n, err := x.count(value)
+		if err != nil {
+			return plan, err
+		}
+		plan.maxChars = min(int64(n), plan.maxChars)
+	}
+	switch {
+	case plan.count > 0 && plan.lines > 0:
+		return plan, x.inv.usage(x.inv.commandWord(), "-n or -L, not both")
+	case plan.replacing && (plan.count > 0 || plan.lines > 0):
+		return plan, x.inv.usage(plan.placeholder, "-I alone, without -n or -L")
+	case plan.replacing && plan.placeholder.Value == "":
+		return plan, x.inv.usage(plan.placeholder, "a nonempty placeholder")
+	}
+	if value, ok := x.inv.value("-P"); ok {
+		n, err := strconv.Atoi(value.Value)
+		if err != nil || n < 0 || strings.HasPrefix(value.Value, "+") {
+			return plan, x.inv.usage(value, "a process count from 0")
+		}
+		bound := int(x.inv.limit("concurrent_processes"))
+		if n == 0 || n > bound {
+			n = bound
+		}
+		plan.parallel = max(n, 1)
+	}
+	return plan, nil
+}
+
+func (x xargsRun) positive(key string) (int, error) {
+	value, ok := x.inv.value(key)
 	if !ok {
 		return 0, nil
 	}
+	return x.count(value)
+}
+
+func (x xargsRun) count(value commandprogram.Field) (int, error) {
 	count, err := strconv.Atoi(value.Value)
 	if err != nil || count < 1 || strings.HasPrefix(value.Value, "+") {
 		return 0, x.inv.usage(value, "a positive COUNT")
@@ -99,57 +146,39 @@ func (x xargsRun) batchCount() (int, error) {
 	return count, nil
 }
 
-// readAll buffers standard input under stream_bytes, charging memory first.
-func (x xargsRun) readAll() ([]byte, error) {
-	const chunk = 64 << 10
-	maximum := x.inv.limit("stream_bytes")
-	var buffer bytes.Buffer
-	for {
-		if err := x.inv.reserve(chunk); err != nil {
-			return nil, err
-		}
-		buffer.Grow(chunk)
-		n, err := io.CopyN(&buffer, x.inv.streams.Input, chunk)
-		if int64(buffer.Len()) > maximum {
-			return nil, nativeutility.LimitExceeded("stream_bytes", maximum, int64(buffer.Len()))
-		}
-		if errors.Is(err, io.EOF) || (err == nil && n < chunk) {
-			return buffer.Bytes(), nil
-		}
-		if err != nil {
-			return nil, err
-		}
+// lines splits input into its logical lines of items. -0 and -d give exact
+// items, one per line; -I gives one item per nonempty line without leading
+// blanks; otherwise blanks separate items, quotes group, a backslash quotes
+// one byte, and a line ending in a blank continues on the next (GNU -L).
+func (x xargsRun) lines(input []byte, replacing bool, eof *string) ([][]string, error) {
+	if delimiter, exact, err := x.delimiter(); err != nil || exact {
+		return exactItems(input, delimiter), err
 	}
-}
-
-// xargsItems splits input. -0 gives exact NUL-delimited items; -I gives one
-// item per nonempty line without leading blanks; otherwise blanks and
-// newlines separate items, quotes group and a backslash quotes one byte.
-func (x xargsRun) items(input []byte, lines bool) ([]string, error) {
-	if x.inv.flag("-0") {
-		if len(input) == 0 {
-			return nil, nil
-		}
-		items := strings.Split(string(input), "\x00")
-		if items[len(items)-1] == "" {
-			items = items[:len(items)-1]
-		}
-		return items, nil
-	}
-	if lines {
-		var items []string
+	if replacing {
+		var out [][]string
 		for _, line := range strings.Split(string(input), "\n") {
 			if line = strings.TrimLeft(line, " \t"); line != "" {
-				items = append(items, line)
+				out = append(out, []string{line})
 			}
 		}
-		return items, nil
+		return out, nil
 	}
-	var items []string
+	var out [][]string
+	var line []string
 	var item strings.Builder
-	present := false
-	quote := byte(0)
-	for i := 0; i < len(input); i++ {
+	present, quote, blankEnd, stopped := false, byte(0), false, false
+	end := func() {
+		if present {
+			if eof != nil && item.String() == *eof {
+				stopped = true
+			} else {
+				line = append(line, item.String())
+			}
+			item.Reset()
+			present = false
+		}
+	}
+	for i := 0; i < len(input) && !stopped; i++ {
 		c := input[i]
 		switch {
 		case quote != 0 && c == quote:
@@ -160,96 +189,75 @@ func (x xargsRun) items(input []byte, lines bool) ([]string, error) {
 			}
 			item.WriteByte(c)
 		case c == '\'' || c == '"':
-			quote, present = c, true
+			quote, present, blankEnd = c, true, false
 		case c == '\\' && i+1 < len(input):
 			i++
 			item.WriteByte(input[i])
-			present = true
-		case c == ' ' || c == '\t' || c == '\n':
-			if present {
-				items = append(items, item.String())
-				item.Reset()
-				present = false
+			present, blankEnd = true, false
+		case c == '\n':
+			end()
+			if !blankEnd && len(line) > 0 {
+				out, line = append(out, line), nil
 			}
+		case c == ' ' || c == '\t':
+			end()
+			blankEnd = true
 		default:
 			item.WriteByte(c)
-			present = true
+			present, blankEnd = true, false
 		}
 	}
-	if quote != 0 {
+	if quote != 0 && !stopped {
 		return nil, x.inv.usage(x.inv.commandWord(), "input with matched quotes")
 	}
-	if present {
-		items = append(items, item.String())
+	end()
+	if len(line) > 0 {
+		out = append(out, line)
 	}
-	return items, nil
+	return out, nil
 }
 
-// batches builds every argv before any runs, so a refused item or batch
-// launches nothing. Without -n a batch takes as many items as argv_bytes and
-// expanded_fields admit.
-func (x xargsRun) batches(command commandprogram.Fields, items []string, count int, placeholder commandprogram.Field, replacing bool) ([]commandprogram.Fields, error) {
-	span := x.inv.request.Invocation.Span
-	argumentLimit, argvLimit, fieldLimit := x.inv.limit("argument_bytes"), x.inv.limit("argv_bytes"), x.inv.limit("expanded_fields")
-	base := int64(0)
-	for _, word := range command {
-		base += int64(len(word.Value))
+// delimiter is the exact item terminator of -0 or -d, which accepts one byte
+// or a C escape (\n, \t, \0, \\, \NNN octal, \xHH).
+func (x xargsRun) delimiter() (byte, bool, error) {
+	if x.inv.flag("-0") {
+		return 0, true, nil
 	}
-	var out []commandprogram.Fields
-	for _, item := range items {
-		if int64(len(item)) > argumentLimit {
-			return nil, nativeutility.LimitExceeded("argument_bytes", argumentLimit, int64(len(item)))
-		}
-		if strings.IndexByte(item, 0) >= 0 {
-			return nil, x.inv.usage(x.inv.commandWord(), "items without NUL bytes")
-		}
+	value, ok := x.inv.value("-d")
+	if !ok {
+		return 0, false, nil
 	}
-	if replacing {
-		for _, item := range items {
-			argv := commandprogram.Fields{command[0]}
-			size := int64(len(command[0].Value))
-			for _, word := range command[1:] {
-				value := strings.ReplaceAll(word.Value, placeholder.Value, item)
-				if int64(len(value)) > argumentLimit {
-					return nil, nativeutility.LimitExceeded("argument_bytes", argumentLimit, int64(len(value)))
-				}
-				size += int64(len(value))
-				argv = append(argv, commandprogram.Field{Value: value, Span: word.Span})
+	text := value.Value
+	if len(text) == 1 {
+		return text[0], true, nil
+	}
+	if len(text) >= 2 && text[0] == '\\' {
+		if text == `\0` {
+			return 0, true, nil
+		}
+		if c, width, _ := trByte(text); width == len(text) {
+			return c, true, nil
+		}
+		if text[1] == 'x' {
+			if v, err := strconv.ParseUint(text[2:], 16, 8); err == nil && len(text) <= 4 {
+				return byte(v), true, nil
 			}
-			if size > argvLimit {
-				return nil, nativeutility.LimitExceeded("argv_bytes", argvLimit, size)
-			}
-			out = append(out, argv)
-		}
-		return out, x.childLimit(len(out))
-	}
-	var current commandprogram.Fields
-	size := base
-	flush := func() {
-		if len(current) > 0 {
-			out = append(out, append(append(commandprogram.Fields{}, command...), current...))
-			current, size = nil, base
 		}
 	}
-	for _, item := range items {
-		full := count > 0 && len(current) == count
-		tooLarge := size+int64(len(item)) > argvLimit || int64(len(command)+len(current)+1) > fieldLimit
-		if full || (len(current) > 0 && tooLarge) {
-			flush()
-		}
-		if size+int64(len(item)) > argvLimit || int64(len(command)+1) > fieldLimit {
-			return nil, nativeutility.LimitExceeded("argv_bytes", argvLimit, size+int64(len(item)))
-		}
-		current = append(current, commandprogram.Field{Value: item, Span: span})
-		size += int64(len(item))
-	}
-	flush()
-	return out, x.childLimit(len(out))
+	return 0, false, x.inv.usage(value, "one delimiter byte or a C escape")
 }
 
-func (x xargsRun) childLimit(batches int) error {
-	if limit := x.inv.limit("child_executions"); int64(batches) > limit {
-		return nativeutility.LimitExceeded("child_executions", limit, int64(batches))
+func exactItems(input []byte, delimiter byte) [][]string {
+	if len(input) == 0 {
+		return nil
 	}
-	return nil
+	items := strings.Split(string(input), string([]byte{delimiter}))
+	if items[len(items)-1] == "" {
+		items = items[:len(items)-1]
+	}
+	out := make([][]string, len(items))
+	for i, item := range items {
+		out[i] = []string{item}
+	}
+	return out
 }

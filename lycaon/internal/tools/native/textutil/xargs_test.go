@@ -43,9 +43,9 @@ func TestXargsBatchesAreLiteralChildren(t *testing.T) {
 	}
 }
 
-func TestXargsEmptyInputRunsNothing(t *testing.T) {
+func TestXargsEmptyInputRunsNothingWithRunIfNonEmptyOrReplace(t *testing.T) {
 	for _, c := range []struct{ source, stdin string }{
-		{"xargs echo", ""}, {"xargs echo", " \n\t\n"}, {"xargs -0 echo", ""}, {"xargs -I x echo x", "\n\n"},
+		{"xargs -r echo", ""}, {"xargs -r echo", " \n\t\n"}, {"xargs -0r echo", ""}, {"xargs -I x echo x", "\n\n"},
 	} {
 		h := newHarness(t)
 		log := &batchLog{}
@@ -56,14 +56,14 @@ func TestXargsEmptyInputRunsNothing(t *testing.T) {
 		}
 	}
 	h := newHarness(t)
-	h.run("xargs echo", "").expectOutput(t, "empty input without a runtime", "", 0)
+	h.run("xargs -r echo", "").expectOutput(t, "empty input without a runtime", "", 0)
 }
 
 func TestXargsBatchStatusesAndHostStops(t *testing.T) {
 	h := newHarness(t)
 	log := &batchLog{status: map[string]int{"2": 3}}
 	h.nested = log
-	h.run("xargs -n 1 echo", "1 2 3").expectOutput(t, "ordinary failure continues", "echo|1\necho|2\necho|3\n", 1)
+	h.run("xargs -n 1 echo", "1 2 3").expectOutput(t, "ordinary failure continues", "echo|1\necho|2\necho|3\n", 123)
 	log = &batchLog{stop: "2"}
 	h.nested = log
 	r := h.run("xargs -n 1 echo", "1 2 3")
@@ -85,8 +85,9 @@ func TestXargsRefusals(t *testing.T) {
 		{"xargs -I '' echo", "a", "COMMAND_OPERAND_INVALID"},
 		{"xargs echo", "'unterminated", "COMMAND_OPERAND_INVALID"},
 		{"xargs echo", "\"split\nline\"", "COMMAND_OPERAND_INVALID"},
-		{"xargs -P 2 echo", "a", "COMMAND_OPTION_UNSUPPORTED"},
-		{"xargs -r echo", "a", "COMMAND_OPTION_UNSUPPORTED"},
+		{"xargs -P x echo", "a", "COMMAND_OPERAND_INVALID"},
+		{"xargs -n 1 -L 1 echo", "a", "COMMAND_OPERAND_INVALID"},
+		{"xargs -d ab echo", "a", "COMMAND_OPERAND_INVALID"},
 	} {
 		h.run(c.source, c.stdin).expectRefusal(t, c.source, c.code)
 	}

@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
@@ -91,17 +92,32 @@ func (inv *invocation) fail(quiet bool, format string, args ...any) {
 	inv.status = max(inv.status, inv.failure)
 }
 
-// usage refuses a form the catalog admits syntactically but whose value is
-// invalid.
+// errUsage ends an invocation that already reported an ordinary usage or
+// pattern error on stderr.
+var errUsage = errors.New("search usage error")
+
+// usage reports an invalid argument, expression or option value on stderr and
+// stops the invocation with its ordinary failure status (2 for grep/rg, 1 for
+// find).
 func (inv *invocation) usage(word, reason string) error {
-	return &toolrejection.ToolReject{Code: "COMMAND_OPERAND_INVALID", Data: map[string]any{
-		"command": inv.spec.Name, "word": word, "expected": reason, "expected_form": inv.spec.Argv,
-	}}
+	if word == "" || word == inv.word() {
+		inv.fail(false, "%s", reason)
+	} else {
+		inv.fail(false, "%s: %s", word, reason)
+	}
+	return errUsage
+}
+
+func capitalizeFirst(s string) string {
+	if s == "" || s[0] < 'a' || s[0] > 'z' {
+		return s
+	}
+	return string(s[0]-'a'+'A') + s[1:]
 }
 
 // limitExceeded refuses work above a frozen catalog limit; nothing is truncated.
 func limitExceeded(id string, maximum, observed int64) error {
-	return &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"limit_id": id, "maximum": maximum, "observed": observed}}
+	return &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"limit_id": id, "resource_unit": nativeutility.ResourceUnit(id), "maximum": maximum, "observed": observed}}
 }
 
 // ordinary classifies an input failure the utility reports on stderr and
@@ -197,6 +213,17 @@ func (inv *invocation) readAll(r io.Reader) ([]byte, error) {
 
 // settle projects the run onto the producer contract.
 func (inv *invocation) settle(err error) (toolcontract.ProducerResult, error) {
+	var pattern *textsearch.PatternError
+	if errors.As(err, &pattern) && pattern.Code == textsearch.CodeRegexInvalid {
+		if inv.spec.Name == "find" {
+			inv.fail(false, "failed to compile regular expression '%s': %s", pattern.Pattern, capitalizeFirst(pattern.Detail))
+		} else {
+			inv.fail(false, "%s", capitalizeFirst(pattern.Detail))
+		}
+		err = nil
+	} else if errors.Is(err, errUsage) {
+		err = nil
+	}
 	err = projectpaths.WithPathRejection(patternRejection(err), inv.request.Invocation.Span)
 	if err != nil {
 		result := toolcontract.ProducerResult{Status: inv.failure, Terminal: toolcontract.ProducerFailed, EffectCertainty: inv.effects}
@@ -220,8 +247,6 @@ func (inv *invocation) settle(err error) (toolcontract.ProducerResult, error) {
 	}
 	return result, nil
 }
-
-const outputChunkBytes = 32 * 1024
 
 // output meters stdout against stream_bytes before each write and, when the
 // endpoint retains them, records exact source mappings for bytes copied from
@@ -279,30 +304,7 @@ func (o *output) flush() error {
 }
 
 func (o *output) Write(p []byte) (int, error) {
-	if o.maximum > 0 && o.written+int64(len(p)) > o.maximum {
-		return 0, limitExceeded("stream_bytes", o.maximum, o.written+int64(len(p)))
-	}
-	sent := 0
-	for len(p) > 0 {
-		if err := o.ctx.Err(); err != nil {
-			return sent, err
-		}
-		chunk := p[:min(len(p), outputChunkBytes)]
-		n, err := o.w.Write(chunk)
-		if n < 0 || n > len(chunk) {
-			return sent, io.ErrShortWrite
-		}
-		sent += n
-		o.written += int64(n)
-		if err != nil {
-			return sent, err
-		}
-		if n != len(chunk) {
-			return sent, io.ErrShortWrite
-		}
-		p = p[n:]
-	}
-	return sent, nil
+	return nativeutility.WriteChunked(o.ctx, o.w, o.maximum, &o.written, p)
 }
 
 func (o *output) text(parts ...string) error {

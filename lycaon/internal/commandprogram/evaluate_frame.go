@@ -12,9 +12,15 @@ import (
 // frameState is what statements sharing one frame observe and mutate: braces,
 // function bodies and sourced units share it; ( ), $( ), pipeline stages and
 // background jobs receive an isolated copy with their own status control.
+type declaredFunction struct {
+	decl       commandsurface.FunctionDeclaration
+	unit       string
+	sourceUnit string
+}
+
 type frameState struct {
 	vars      *Variables
-	functions map[string]commandsurface.FunctionDeclaration
+	functions map[string]declaredFunction
 	latch     *OutcomeLatch
 	control   *StatusControl
 	dispatch  Dispatch
@@ -22,8 +28,9 @@ type frameState struct {
 	hasJob    bool
 	// last is the most recent settled execution in this state; a pipeline
 	// stage reports it as the stage producer.
-	last    *ChildRecord
-	options shellOptions
+	last       *ChildRecord
+	pipeStatus []int
+	options    shellOptions
 }
 
 // shellOptions are the fixed set options: errexit and nounset. Pipelines
@@ -100,7 +107,7 @@ func (e *evaluation) rootFrame(ctx context.Context) (*frame, func(), error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	state := &frameState{vars: vars, functions: map[string]commandsurface.FunctionDeclaration{}, latch: latch, control: control, dispatch: e.ports.Dispatch}
+	state := &frameState{vars: vars, functions: map[string]declaredFunction{}, latch: latch, control: control, dispatch: e.ports.Dispatch}
 	f := &frame{e: e, state: state, parent: e.ports.Invocation, unit: e.programName, streams: e.ports.Streams.withDefaults(), publish: newEligibility()}
 	return f, vars.Close, nil
 }
@@ -115,6 +122,7 @@ func (f *frame) isolate(ctx context.Context, latch *OutcomeLatch) (*frame, func(
 	if err != nil {
 		return nil, nil, err
 	}
+	control.status = f.state.control.Status()
 	vars, err := f.state.vars.Clone(ctx)
 	if err != nil {
 		return nil, nil, err
@@ -133,12 +141,12 @@ func (f *frame) isolate(ctx context.Context, latch *OutcomeLatch) (*frame, func(
 		vars.Close()
 		return nil, nil, err
 	}
-	functions := make(map[string]commandsurface.FunctionDeclaration, len(f.state.functions))
+	functions := make(map[string]declaredFunction, len(f.state.functions))
 	for name, decl := range f.state.functions {
 		functions[name] = decl
 	}
 	g := *f
-	g.state = &frameState{vars: vars, functions: functions, latch: latch, control: control, dispatch: dispatch, lastJob: f.state.lastJob, hasJob: f.state.hasJob, options: f.state.options}
+	g.state = &frameState{vars: vars, functions: functions, latch: latch, control: control, dispatch: dispatch, lastJob: f.state.lastJob, hasJob: f.state.hasJob, pipeStatus: append([]int(nil), f.state.pipeStatus...), options: f.state.options}
 	g.publish, g.prefix, g.substs = newEligibility(), nil, nil
 	return &g, func() { releaseDispatch(); vars.Close() }, nil
 }
@@ -155,6 +163,12 @@ func (f *frame) ProgramName() string  { return f.unit }
 func (f *frame) Nounset() bool        { return f.state.options.nounset }
 func (f *frame) Positional() []string { return append([]string(nil), f.positional...) }
 func (f *frame) LastStatus() int      { return f.state.control.Status() }
+func (f *frame) PipeStatus() []int {
+	if len(f.state.pipeStatus) > 0 {
+		return append([]int(nil), f.state.pipeStatus...)
+	}
+	return []int{f.state.control.Status()}
+}
 func (f *frame) LastBackground() (string, bool) {
 	return f.state.lastJob, f.state.hasJob
 }

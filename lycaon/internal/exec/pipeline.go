@@ -64,13 +64,30 @@ func configureCmdEnv(cmd *exec.Cmd, opts ExecOpts) error {
 	return configureStageCmdEnv(cmd, opts, nil)
 }
 
-func configureStageCmdEnv(cmd *exec.Cmd, opts ExecOpts, stageEnv map[string]string) error {
-	if opts.Dir != "" {
-		cmd.Dir = opts.Dir
-	}
+// ProcessEnvironment builds the sanitized base environment for a process launch
+// before OS-specific sandbox confinement variables (such as proxy or SSH
+// wrappers) are attached. Both the command program's native env builtin and
+// external child launches build their environment here.
+func ProcessEnvironment(opts ExecOpts) ([]string, error) {
+	return processEnvironment(opts, nil)
+}
+
+func processEnvironment(opts ExecOpts, stageEnv map[string]string) ([]string, error) {
 	provided := opts.Env
-	if opts.Launch.reduced() {
+	if provided == nil && opts.Launch.reduced() {
 		provided = ReducedEnviron()
+	}
+	if len(opts.Launch.ExtraEnv) > 0 {
+		if provided == nil {
+			provided = InheritedEnviron()
+		}
+		var extras []string
+		for _, e := range opts.Launch.ExtraEnv {
+			if strings.TrimSpace(e) != "" {
+				extras = append(extras, e)
+			}
+		}
+		provided = overlayProcessEnv(provided, extras)
 	}
 	inline := opts.InlineEnv
 	if len(stageEnv) > 0 {
@@ -85,23 +102,29 @@ func configureStageCmdEnv(cmd *exec.Cmd, opts ExecOpts, stageEnv map[string]stri
 	}
 	env, err := buildProcessEnv(provided, inline, opts.PathExtra)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if env == nil && provided != nil {
 		// A non-nil empty environment prevents inheritance from the sidecar.
 		env = []string{}
 	}
-	cmd.Env = env
 	for _, e := range opts.AppendEnv {
 		if strings.TrimSpace(e) != "" {
-			cmd.Env = append(cmd.Env, e)
+			env = append(env, e)
 		}
 	}
-	for _, e := range opts.Launch.ExtraEnv {
-		if strings.TrimSpace(e) != "" {
-			cmd.Env = append(cmd.Env, e)
-		}
+	return env, nil
+}
+
+func configureStageCmdEnv(cmd *exec.Cmd, opts ExecOpts, stageEnv map[string]string) error {
+	if opts.Dir != "" {
+		cmd.Dir = opts.Dir
 	}
+	env, err := processEnvironment(opts, stageEnv)
+	if err != nil {
+		return err
+	}
+	cmd.Env = env
 	if opts.Launch.Confinement != nil {
 		confinement := opts.Launch.Confinement
 		cmd.Env = confine.ProcessEnvironment(cmd.Env, *confinement)

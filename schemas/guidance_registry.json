@@ -644,6 +644,12 @@
       "emit": "guard:command_composition_redirect",
       "summary": "Language admission stopped at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}."
     },
+    "COMMAND_TLS_VERIFICATION_REQUIRED": {
+      "branch_instruction": "Send the request without -k; do not retry through an external program.",
+      "category": "recoverable",
+      "emit": "guard:command_composition_redirect",
+      "summary": "The request asked to skip TLS certificate verification."
+    },
     "COMPLETE_LEG_ADDRESSED_SESSION": {
       "branch_instruction": "Branch on Code COMPLETE_LEG_ADDRESSED_SESSION; answer directly, do not retry here",
       "category": "recoverable",
@@ -1191,6 +1197,12 @@
       "category": "recoverable",
       "emit": "guard:tool",
       "summary": "{{ tool }} refused path {{ paintedwolf.path }} outside the allowed git scope."
+    },
+    "GIT_REMOTE_HOST_DENIED": {
+      "branch_instruction": "Do not reach the remote through another network client or an external git",
+      "category": "recoverable",
+      "emit": "guard:command_git_remote",
+      "summary": "The Git remote's host was not authorized."
     },
     "GIT_REPO_CONFIG_UNSAFE": {
       "branch_instruction": "Report the refusal to the user; do not retry the git tool for this repository",
@@ -3160,6 +3172,12 @@
       "emit": "guard:tool_owner",
       "summary": "The subsystem owner could not settle the action."
     },
+    "TOOL_OWNER_INTERRUPTED": {
+      "branch_instruction": "Branch on Code TOOL_OWNER_INTERRUPTED; inspect completed effects before starting new work",
+      "category": "recoverable",
+      "emit": "guard:tool_owner",
+      "summary": "The subsystem owner stopped the action before it settled."
+    },
     "TOOL_PROFILE_DENIED": {
       "branch_instruction": "Preserve the profile boundary and report unavailable work",
       "category": "recoverable",
@@ -3715,6 +3733,12 @@
       "category": "recoverable",
       "emit": "guard:write",
       "summary": "{{ tool }} refused the proposed text for {{ paintedwolf.path }} ({{ paintedwolf.bytes }} bytes)."
+    },
+    "WRITE_PATH_DENIED": {
+      "branch_instruction": "Branch on Code WRITE_PATH_DENIED; preserve the protected-path boundary",
+      "category": "recoverable",
+      "emit": "guard:write",
+      "summary": "Writing is denied for {{ paintedwolf.path }}."
     },
     "WRITE_SCOPE_DENIED": {
       "branch_instruction": "Preserve the intended destination and respect the active write scope",

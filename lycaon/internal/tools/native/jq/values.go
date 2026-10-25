@@ -78,6 +78,101 @@ func EncodeYAML(v any) ([]byte, error) {
 	return out.Bytes(), nil
 }
 
+// YAMLRoundtrip re-encodes query outputs against parsed YAML source documents
+// so comments, flow styles and scalar styles survive (-Y / --yaml-roundtrip).
+type YAMLRoundtrip struct {
+	edit *yamlEdit
+}
+
+// Add parses text and appends its YAML documents to the roundtrip source set.
+func (r *YAMLRoundtrip) Add(text string) {
+	parsed, err := parseYAMLEdit(text)
+	if err != nil {
+		return
+	}
+	if r.edit == nil {
+		r.edit = parsed
+		return
+	}
+	r.edit.docs = append(r.edit.docs, parsed.docs...)
+	r.edit.values = append(r.edit.values, parsed.values...)
+	for k, v := range parsed.nodeVals {
+		r.edit.nodeVals[k] = v
+	}
+}
+
+// EncodeDoc renders one query result v against the 0-based source document docIndex.
+func (r *YAMLRoundtrip) EncodeDoc(docIndex int, v any) ([]byte, error) {
+	if r == nil || r.edit == nil || docIndex < 0 || docIndex >= len(r.edit.docs) {
+		return EncodeYAML(v)
+	}
+	gv := gojq.ToGo(v)
+	m, isMap := gv.(map[string]any)
+	if !isMap {
+		return EncodeYAML(v)
+	}
+	src := r.edit.docs[docIndex]
+	if len(src.Content) == 0 {
+		return EncodeYAML(v)
+	}
+	content := findYAMLMapping(r.edit, src.Content[0], m)
+	if content == nil {
+		if !yamlMappingSharesKey(src.Content[0], m) {
+			return EncodeYAML(v)
+		}
+		content = src.Content[0]
+	}
+	merged, err := r.edit.merge(content, m, rootPos)
+	if err != nil {
+		return EncodeYAML(v)
+	}
+	target := merged
+	if content == src.Content[0] {
+		doc := *src
+		doc.Content = []*yaml.Node{merged}
+		target = &doc
+	}
+	var out bytes.Buffer
+	enc := yaml.NewEncoder(&out)
+	enc.SetIndent(r.edit.indent)
+	if err := enc.Encode(target); err != nil {
+		return nil, err
+	}
+	if err := enc.Close(); err != nil {
+		return nil, err
+	}
+	return out.Bytes(), nil
+}
+
+func findYAMLMapping(edit *yamlEdit, n *yaml.Node, m map[string]any) *yaml.Node {
+	if n == nil {
+		return nil
+	}
+	if n.Kind == yaml.MappingNode {
+		if sv, ok := edit.nodeVals[n]; ok && sameValue(sv, m) {
+			return n
+		}
+	}
+	for _, c := range n.Content {
+		if found := findYAMLMapping(edit, c, m); found != nil {
+			return found
+		}
+	}
+	return nil
+}
+
+func yamlMappingSharesKey(n *yaml.Node, m map[string]any) bool {
+	if n == nil || n.Kind != yaml.MappingNode {
+		return false
+	}
+	for i := 0; i+1 < len(n.Content); i += 2 {
+		if _, ok := m[n.Content[i].Value]; ok {
+			return true
+		}
+	}
+	return false
+}
+
 var errYAMLValue = errors.New("value has no YAML representation")
 
 func yamlNode(v any) (*yaml.Node, error) {

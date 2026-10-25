@@ -21,7 +21,7 @@ func TestEchoGolden(t *testing.T) {
 		{"echo -ne 'x\\n'", "", "x\n", 0},
 		{"echo -x -n", "", "-x -n\n", 0},
 		{"echo a -n", "", "a -n\n", 0},
-		{"echo -- -n", "", "-n\n", 0},
+		{"echo -- -n", "", "-- -n\n", 0},
 		{`echo '$(rm -rf /)' ';' '|'`, "", "$(rm -rf /) ; |\n", 0},
 	})
 }
@@ -76,6 +76,13 @@ func TestTrGolden(t *testing.T) {
 		{`tr 'a\-z' xyz`, "a-z m\n", "xyz m\n", 0},
 		{`tr '\101' z`, "AB\n", "zB\n", 0},
 		{"tr x y", "\xff\xfex\x00\n", "\xff\xfey\x00\n", 0},
+		{"tr -c a-z _", "ab-c 1\n", "ab_c___", 0},
+		{"tr -cd '[:digit:]'", "a1b2\n", "12", 0},
+		{"tr -t abc xy", "abc\n", "xyc\n", 0},
+		{"tr abc 'x[y*]'", "abc\n", "xyy\n", 0},
+		{"tr a-c '[x*2]z'", "abc\n", "xxz\n", 0},
+		{"tr '[=a=]' b", "aa\n", "bb\n", 0},
+		{"tr -cs '[:alnum:]' '\n'", "a  b,,c\n", "a\nb\nc\n", 0},
 	})
 }
 
@@ -84,7 +91,7 @@ func TestTrRefusals(t *testing.T) {
 	for _, source := range []string{"tr a", "tr -d a b", "tr a b c", "tr z-a x", "tr 'é' e", "tr '[:nope:]' x", "tr a ''", "tr"} {
 		h.run(source, "x").expectRefusal(t, source, "COMMAND_OPERAND_INVALID")
 	}
-	h.run("tr -c a b", "x").expectRefusal(t, "tr -c", "COMMAND_OPTION_UNSUPPORTED")
+	h.run("tr -x a b", "x").expectRefusal(t, "tr -x", "COMMAND_OPTION_UNSUPPORTED")
 }
 
 func TestCutGolden(t *testing.T) {
@@ -101,6 +108,13 @@ func TestCutGolden(t *testing.T) {
 		{"cut -c 1,3", "aéb\n", "ab\n", 0},
 		{"cut -c 2", "aéb\n", "é\n", 0},
 		{"cut -b 1-2", "no final newline", "no\n", 0},
+		{"cut -d : -f 2 -s", "a:b\nnone\n", "b\n", 0},
+		{"cut -d : -f 2 --complement", "a:b:c\n", "a:c\n", 0},
+		{"cut -d : -f 1,3 --output-delimiter=' | '", "a:b:c\n", "a | c\n", 0},
+		{"cut -b 1-2,4-5 --output-delimiter=:", "abcdef\n", "ab:de\n", 0},
+		{"cut -c 2- --complement", "aéb\n", "a\n", 0},
+		{"cut -n -b 1", "ab\n", "a\n", 0},
+		{"cut -z -f 1 -d ,", "a,b\x00c,d\x00", "a\x00c\x00", 0},
 	})
 }
 
@@ -117,11 +131,16 @@ func TestCutRefusals(t *testing.T) {
 func TestUniqGolden(t *testing.T) {
 	newHarness(t).goldens(t, []golden{
 		{"uniq", "a\na\nb\na\n", "a\nb\na\n", 0},
-		{"uniq -c", "a\na\nb\n", "2 a\n1 b\n", 0},
+		{"uniq -c", "a\na\nb\n", "      2 a\n      1 b\n", 0},
 		{"uniq -d", "a\na\nb\nc\nc\n", "a\nc\n", 0},
 		{"uniq -u", "a\na\nb\nc\nc\n", "b\n", 0},
 		{"uniq -du", "a\na\nb\n", "", 0},
-		{"uniq -c -d", "x\nx\nx\ny\n", "3 x\n", 0},
+		{"uniq -c -d", "x\nx\nx\ny\n", "      3 x\n", 0},
+		{"uniq -i", "a\nA\nb\n", "a\nb\n", 0},
+		{"uniq -f 1", "1 x\n2 x\n3 y\n", "1 x\n3 y\n", 0},
+		{"uniq -s 2", "aax\nbbx\nccy\n", "aax\nccy\n", 0},
+		{"uniq -w 2", "abX\nabY\nac\n", "abX\nac\n", 0},
+		{"uniq -z", "a\x00a\x00b\x00", "a\x00b\x00", 0},
 		{"uniq", "", "", 0},
 		{"uniq", "a\na", "a\n", 0},
 		{"uniq", "a\x00\na\x00\n\xff\n", "a\x00\n\xff\n", 0},
@@ -139,7 +158,7 @@ func TestUniqOperands(t *testing.T) {
 	}
 	h.seed("out.txt", "old\n")
 	h.run("uniq -c - out.txt", "s\ns\n").expectOutput(t, "uniq stdin to OUTPUT", "", 0)
-	if got := h.read("out.txt"); got != "2 s\n" {
+	if got := h.read("out.txt"); got != "      2 s\n" {
 		t.Fatalf("OUTPUT holds %q", got)
 	}
 	h.run("uniq a b c", "").expectRefusal(t, "uniq too many", "COMMAND_OPERAND_INVALID")
