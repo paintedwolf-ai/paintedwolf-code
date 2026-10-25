@@ -163,16 +163,12 @@ func (o *Owners) Prepare(paths *projectpaths.ProgramPaths, request commandprogra
 	if err != nil {
 		return Prepared{}, err
 	}
-	reviewID := o.ops[spec.Name]
-	if reviewID == "" {
-		reviewID = spec.Name
-	}
 	return Prepared{
 		Command:   spec.Name,
 		Operation: o.ops[spec.Name],
 		Mode:      effectMode(spec, parsed, bound),
 		Argv:      bound,
-		Review:    bound.Review(reviewID),
+		Review:    bound.Review(spec.Name),
 		command:   parsed,
 		owners:    o,
 		paths:     paths,
@@ -239,18 +235,15 @@ var blockedGitEnvKeys = map[string]bool{
 
 func validateGitEnvironment(spec toolcontract.CommandSpecification, entries []string) error {
 	for _, entry := range entries {
-		name, value, ok := strings.Cut(entry, "=")
+		name, _, ok := strings.Cut(entry, "=")
 		if !ok {
 			continue
 		}
 		trimmed := strings.TrimSpace(name)
-		if strings.EqualFold(trimmed, "PATH") {
-			continue
-		}
 		if blockedGitEnvKeys[strings.ToUpper(trimmed)] {
 			return operandInvalid(spec, entry, "an environment without SSH transport override variables")
 		}
-		if err := exec.ValidateInlineEnv(map[string]string{trimmed: value}); err != nil {
+		if _, err := exec.AgentLaunchOptions(exec.LaunchPlan{}, "", []string{entry}, nil, false); err != nil {
 			return operandInvalid(spec, entry, "an environment without host-reserved variables")
 		}
 	}
