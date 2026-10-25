@@ -22,7 +22,17 @@ def exchange(pipe, observer, execution, pending, *, timeout=15):
         raise ValueError('native unlock endpoint requires its closed current execution')
     protocol.nonce(request['transaction_id'])
     envelope = {key: request[key] for key in ('purpose', 'binding', 'transaction_id')}
-    initial = observer.observe()
+    while True:
+        try:
+            initial = observer.observe()
+            break
+        except CaseUnavailable as error:
+            if (time.monotonic() >= deadline
+                    or str(error) not in {
+                        'native-clock-window-has-no-positive-focus-proof',
+                        'native-locked-shell-window-missing-or-ambiguous'}):
+                raise
+            time.sleep(0.05)
     session_wire.same_runtime(pending['native_session'], initial['session'])
     unlock_wire.locked(initial, password=initial['password'] is not None)
     pipe.send_metadata({**envelope, 'target': initial})
