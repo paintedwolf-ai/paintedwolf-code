@@ -71,6 +71,12 @@ impl UpdateError {
         } else {
             UpdateErrorCode::CheckFailed
         };
+        #[cfg(target_os = "linux")]
+        return Self::new(
+            code,
+            "The update origin could not be reached through the configured network policy",
+        );
+        #[cfg(not(target_os = "linux"))]
         Self::new(code, error)
     }
 }
