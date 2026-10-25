@@ -1,7 +1,6 @@
 package literal
 
 import (
-	"bytes"
 	"crypto/md5"
 	"crypto/sha1"
 	"crypto/sha256"
@@ -84,22 +83,12 @@ func checkManifests(inv *invocation, newHash func() hash.Hash) error {
 	size := newHash().Size() * 2
 	failed, unreadable, malformed := 0, 0, 0
 	for _, manifest := range inv.operandsOrStdin() {
-		in, err := inv.open(manifest, true)
-		if err != nil {
-			return err
-		}
-		if in == nil {
-			continue
-		}
-		for number, line := range bytes.Split(bytes.TrimSuffix(in.data, []byte("\n")), []byte("\n")) {
-			if len(line) == 0 && len(in.data) == 0 {
-				break
-			}
-			want, name, ok := manifestLine(string(line), size)
+		err := inv.manifestRecords(manifest, func(number int, line string) error {
+			want, name, ok := manifestLine(line, size)
 			if !ok {
 				malformed++
-				_, _ = fmt.Fprintf(inv.stderr, "%s: %s: %d: improperly formatted checksum line\n", inv.name(), manifest, number+1)
-				continue
+				_, _ = fmt.Fprintf(inv.stderr, "%s: %s: %d: improperly formatted checksum line\n", inv.name(), manifest, number)
+				return nil
 			}
 			target, err := inv.open(name, false)
 			if err != nil {
@@ -110,7 +99,7 @@ func checkManifests(inv *invocation, newHash func() hash.Hash) error {
 				if err := inv.out.text(name + ": FAILED open or read\n"); err != nil {
 					return err
 				}
-				continue
+				return nil
 			}
 			got, err := digest(newHash, target)
 			if err != nil {
@@ -121,9 +110,10 @@ func checkManifests(inv *invocation, newHash func() hash.Hash) error {
 				verdict = "FAILED"
 				failed++
 			}
-			if err := inv.out.text(name + ": " + verdict + "\n"); err != nil {
-				return err
-			}
+			return inv.out.text(name + ": " + verdict + "\n")
+		})
+		if err != nil {
+			return err
 		}
 	}
 	warn := func(count int, singular, plural string) {

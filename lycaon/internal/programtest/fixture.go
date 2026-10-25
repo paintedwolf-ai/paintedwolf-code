@@ -6,13 +6,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/tooloutput"
+	"sync"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/blobstore"
 	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/evidence"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -35,6 +40,19 @@ type Options struct {
 	Session    string
 	Background *bgprocess.Registry
 	Natives    func(dir string) map[string]command.NativeOperation
+	// Context adjusts each call's tool context, for example its roots,
+	// scratch folder or root history.
+	Context func(dir string, tc *tools.ToolContext)
+	// Owners replaces the Natives-only owner set, for fixtures that compose
+	// real owners with the fixture's recorder and boundary.
+	Owners func(OwnerPorts) func(tools.ToolContext, *projectpaths.ProgramPaths, *toolcontract.ProgramMemory, tooloutput.SpillAdmission) (command.ProgramOwners, error)
+}
+
+// OwnerPorts are the fixture's shared dependencies for composed owners.
+type OwnerPorts struct {
+	Dir      string
+	Recorder *invocation.SQLRecorder
+	Boundary *sandbox.Boundary
 }
 
 // Fixture is one composed program entry rooted at Dir.
@@ -44,16 +62,38 @@ type Fixture struct {
 	Database   db.Handle
 	Session    string
 	Dir        string
+	ScratchDir string
+	OutputDir  string
 	Background *bgprocess.Registry
+	Context func(string, *tools.ToolContext)
 	// Configure adjusts each call's tool context before the entry runs.
 	Configure func(*tools.ToolContext)
 	calls     int
+	mu        sync.Mutex
+	delivered []evidence.Record
 }
 
-type sessions struct{}
+type sessions struct {
+	fixture *Fixture
+}
 
 func (sessions) Get(_ context.Context, id string) (*api.Session, error) {
 	return &api.Session{ID: id, OwnerPersonID: "fixture-person"}, nil
+}
+
+func (s sessions) CommitDeliveredSource(_ context.Context, _ string, observation evidence.DeliveredSourceObservation) (string, error) {
+	s.fixture.mu.Lock()
+	defer s.fixture.mu.Unlock()
+	rec := observation.Record()
+	s.fixture.delivered = append(s.fixture.delivered, rec)
+	return fmt.Sprintf("read#%d", len(s.fixture.delivered)), nil
+}
+
+// Delivered returns all confirmed source deliveries recorded in this fixture.
+func (f *Fixture) Delivered() []evidence.Record {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]evidence.Record(nil), f.delivered...)
 }
 
 type progressFacts struct{ store progress.Store }
@@ -65,6 +105,10 @@ func (p progressFacts) ProgramProgressState(ctx context.Context, id string) (pro
 // New composes the entry. Structured tools exist only as owner identities.
 func New(t *testing.T, options Options) *Fixture {
 	t.Helper()
+	confine.TestingSetAutoConfine(t)
+	t.Setenv("LYCAON_BYPASS_APPROVALS", "0")
+	t.Setenv("LYCAON_SANDBOX", "on")
+	t.Setenv("LYCAON_SANDBOX_NETWORK", "deny")
 	dir := t.TempDir()
 	database := testdbfixture.Open(t, "programs.db")
 	session := options.Session
@@ -94,16 +138,22 @@ func New(t *testing.T, options Options) *Fixture {
 	if options.Natives != nil {
 		natives = options.Natives(dir)
 	}
+	scratchDir := fspath.CanonicalPath(t.TempDir())
+	f := &Fixture{Recorder: recorder, Database: database, Session: session, Dir: dir, ScratchDir: scratchDir, OutputDir: t.TempDir(), Background: background}
 	runtime := &command.ProgramRuntime{
 		Executor: executor, Registry: registry, Recorder: recorder, Blobs: blobstore.Store{Root: t.TempDir()},
 		Projector: captureprojection.New(secretmatch.NewInertMatcher(), nil), Boundary: boundary,
 		Progress: progressFacts{owner}, Supervisor: &command.ProgramSupervisor{Interrupter: recorder, Background: background}, Evaluate: commandprogram.Evaluate,
-		Sessions: sessions{},
-		Owners: func(tools.ToolContext, *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
+		Sessions: sessions{fixture: f},
+		Owners: func(tools.ToolContext, *projectpaths.ProgramPaths, *toolcontract.ProgramMemory, tooloutput.SpillAdmission) (command.ProgramOwners, error) {
 			return command.ProgramOwners{Natives: natives}, nil
 		},
 	}
-	return &Fixture{Runtime: runtime, Recorder: recorder, Database: database, Session: session, Dir: dir, Background: background}
+	if options.Owners != nil {
+		runtime.Owners = options.Owners(OwnerPorts{Dir: dir, Recorder: recorder, Boundary: boundary})
+	}
+	f.Runtime, f.Context = runtime, options.Context
+	return f
 }
 
 // Call opens a real model receipt for one command call and runs the entry.
@@ -118,6 +168,10 @@ func (f *Fixture) Call(t *testing.T, ctx context.Context, source string) (string
 	tc := tools.ToolContext{Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: f.Dir, IsPrimary: true}}, ActiveRootID: "r1", SourceWorkspaceKind: api.SourceWorkspaceKindProject}}
 	tc.Identity.Agent, tc.Identity.ProjectID, tc.Identity.SessionID, tc.Identity.ToolCallID = "fixture", testdbseed.DefaultProjectID, f.Session, callID
 	tc.Invocation.ID = parent.ID
+	tc.Host.SessionScratchDir, tc.Host.SessionOutputDir = f.ScratchDir, f.OutputDir
+	if f.Context != nil {
+		f.Context(f.Dir, &tc)
+	}
 	if f.Configure != nil {
 		f.Configure(&tc)
 	}

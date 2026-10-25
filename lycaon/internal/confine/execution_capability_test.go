@@ -40,12 +40,12 @@ func TestHostExecutionSelectsExplicitUnconfinedCommand(t *testing.T) {
 	if report.Confined || !report.HostExecution {
 		t.Fatalf("misleading report: %+v", report)
 	}
-	command, cleanup, err := confine.Command(t.Context(), "not-the-helper", "/usr/bin/true", nil, *c)
+	self, err := os.Executable()
+	testutil.FailErr(t, "host launch helper", err)
+	command, cleanup, err := confine.Command(t.Context(), self, "/usr/bin/true", nil, *c)
 	testutil.FailErr(t, "build host command", err)
 	defer cleanup()
-	if command.Path != "/usr/bin/true" {
-		t.Fatalf("wrapped host executable: %s", command.Path)
-	}
+	testutil.FailErr(t, "execute explicit host command", command.Run())
 	if _, err := confine.BuildSeatbeltProfile(*c); err == nil {
 		t.Fatal("host execution produced sandbox profile")
 	}
@@ -73,7 +73,9 @@ func TestHostExecutionRunsSetuidProcessInspection(t *testing.T) {
 		t.Skip("macOS setuid process inspection fixture")
 	}
 	c, _ := confine.DefaultConfinement(confine.Request{HostExecution: true, Roots: []string{t.TempDir()}})
-	command, cleanup, err := confine.Command(t.Context(), "unused", "/bin/ps", []string{"-p", strconv.Itoa(os.Getpid()), "-o", "pid="}, *c)
+	self, err := os.Executable()
+	testutil.FailErr(t, "host launch helper", err)
+	command, cleanup, err := confine.Command(t.Context(), self, "/bin/ps", []string{"-p", strconv.Itoa(os.Getpid()), "-o", "pid="}, *c)
 	testutil.FailErr(t, "build setuid inspection", err)
 	defer cleanup()
 	output, err := command.CombinedOutput()

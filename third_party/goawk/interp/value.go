@@ -20,9 +20,10 @@ const (
 
 // An AWK value (these are passed around by value)
 type value struct {
-	typ valueType // Type of value
-	s   string    // String value (for typeStr and typeNumStr)
-	n   float64   // Numeric value (for typeNum)
+	typ     valueType // Type of value
+	s       string    // String value (for typeStr and typeNumStr)
+	backing string    // Full backing retained by a field or substring
+	n       float64   // Numeric value (for typeNum)
 }
 
 // Create a new null value
@@ -303,4 +304,23 @@ func isDigit(c byte) bool {
 
 func isHexDigit(c byte) bool {
 	return c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F'
+}
+
+// borrowedString retains the actual source allocation, including nested slices.
+// Value copies through assignments, calls and returns keep this owner intact.
+func borrowedString(text string, source value) value {
+	backing := source.backing
+	if backing == "" {
+		backing = source.s
+	}
+	v := str(text)
+	v.backing = backing
+	return v
+}
+
+func transformedString(text string, source value) value {
+	if text == source.s {
+		return borrowedString(text, source)
+	}
+	return str(text)
 }

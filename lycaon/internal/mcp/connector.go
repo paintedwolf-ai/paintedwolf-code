@@ -151,7 +151,7 @@ type trackedTransport struct {
 
 func (t *trackedTransport) Connect(ctx context.Context) (sdkmcp.Connection, error) {
 	var connection sdkmcp.Connection
-	err := execpkg.StartPreparedWith(t.Command, func() error {
+	err := execpkg.StartPreparedWith(ctx, t.Command, func() error {
 		var err error
 		connection, err = t.CommandTransport.Connect(ctx)
 		return err

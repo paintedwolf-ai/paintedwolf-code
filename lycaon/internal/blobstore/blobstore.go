@@ -244,7 +244,7 @@ func attachmentID(contentDigest, leaf string) string {
 
 // PutAt streams r to an explicit host-data-relative path. Callers that own their
 // own naming scheme use this; content addressing is not applied.
-func (s Store) PutAt(rel string, r io.Reader, limit bytebound.Materialization) (Blob, error) {
+func (s Store) PutAt(ctx context.Context, rel string, r io.Reader, limit bytebound.Materialization) (Blob, error) {
 	if strings.TrimSpace(s.Root) == "" {
 		return Blob{}, ErrNoStore
 	}
@@ -257,7 +257,7 @@ func (s Store) PutAt(rel string, r io.Reader, limit bytebound.Materialization) (
 	defer releaseState()
 	state.uploadMu.Lock()
 	defer state.uploadMu.Unlock()
-	tmpPath, digest, size, err := s.stage(context.Background(), state, r, limit, leaf, nil)
+	tmpPath, digest, size, err := s.stage(ctx, state, r, limit, leaf, nil)
 	if err != nil {
 		return Blob{}, err
 	}
@@ -266,6 +266,9 @@ func (s Store) PutAt(rel string, r io.Reader, limit bytebound.Materialization) (
 	state.mu.Lock()
 	defer state.mu.Unlock()
 	if err := s.pruneStagingLocked(state, time.Now()); err != nil {
+		return Blob{}, err
+	}
+	if err := ctx.Err(); err != nil {
 		return Blob{}, err
 	}
 	if err := s.commitReplacement(tmpPath, rel); err != nil {

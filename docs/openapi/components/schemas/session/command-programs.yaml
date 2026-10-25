@@ -20,6 +20,46 @@ components:
         progress_ref: {type: string}
         started_at: {type: string, format: date-time}
         settled_at: {type: string, format: date-time, x-go-pointer: true}
+        outputs:
+          type: array
+          maxItems: 2
+          description: Model delivery windows and full retained stream references. Window positions refer to the screened stream; omitted bytes are not delivered evidence.
+          items:
+            $ref: '#/components/schemas/CommandProgramOutputWindow'
+    CommandProgramOutputWindow:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [stream, ref, output_path, total_bytes, total_lines, complete, truncated, head_end_byte, head_end_line, tail_start_byte, tail_start_line, omitted_bytes, omitted_lines, inline_budget_bytes]
+      properties:
+        stream: {type: string, enum: [stdout, stderr]}
+        ref: {type: string}
+        output_path: {type: string, description: Session output address of the retained stream copy.}
+        total_bytes: {type: integer, format: int64, minimum: 0, description: Bytes in the saved stream. For an incomplete stream the final total is unknown.}
+        total_lines: {type: integer, minimum: 0, description: Lines in the saved stream. For an incomplete stream the final total is unknown.}
+        complete: {type: boolean}
+        truncated: {type: boolean}
+        head_end_byte: {type: integer, format: int64, minimum: 0}
+        head_end_line: {type: integer, minimum: 0}
+        tail_start_byte: {type: integer, format: int64, minimum: 0}
+        tail_start_line: {type: integer, minimum: 0}
+        omitted_bytes: {type: integer, format: int64, minimum: 0}
+        omitted_lines: {type: integer, minimum: 0}
+        inline_budget_bytes: {type: integer, minimum: 1}
+        limit:
+          x-go-pointer: true
+          $ref: '#/components/schemas/CommandProgramOutputLimit'
+    CommandProgramOutputLimit:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: Capture or delivery limit. Execution status and completed effects retain their original outcomes; saved bytes form an incomplete prefix.
+      required: [code, limit_id, maximum, observed]
+      properties:
+        code: {type: string, enum: [COMMAND_LIMIT_EXCEEDED]}
+        limit_id: {type: string, pattern: '^[A-Za-z0-9_.:-]+$'}
+        maximum: {type: integer, format: int64, minimum: 1}
+        observed: {type: integer, format: int64, minimum: 1}
     CommandExecutionReceipt:
       x-go-generate: true
       type: object

@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
@@ -153,6 +154,42 @@ func TestSupervisorStopAcknowledgesBeforeExitAndClosesAdmission(t *testing.T) {
 	}
 }
 
+func TestHeldSettlementPreservesEndpointCauseAndIndependentFailure(t *testing.T) {
+	for _, withSettlementFailure := range []bool{false, true} {
+		t.Run(map[bool]string{false: "sole owner cause", true: "independent settlement failure"}[withSettlementFailure], func(t *testing.T) {
+			budget, err := commandprogram.NewByteBudget("fixture", 1024)
+			testutil.FailErr(t, "admit byte stream", err)
+			pipe, err := commandprogram.NewBytePipe(t.Context(), budget)
+			testutil.FailErr(t, "open byte stream", err)
+			testutil.FailErr(t, "close satisfied consumer", pipe.CloseConsumer())
+			_, cause := pipe.Write([]byte("unconsumed"))
+			var settlement error
+			if withSettlementFailure {
+				settlement = errors.New("receipt settlement failed")
+			}
+			held := &command.ProgramHeldEffects{}
+			producer := toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}
+			effect := (&heldProbe{}).effect("producer")
+			effect.Invoke = func(context.Context) (toolcontract.ProducerResult, error) { return producer, cause }
+			effect.Settle = func(context.Context, toolcontract.ProducerResult, string) error { return settlement }
+			testutil.FailErr(t, "park prepared owner", held.Park(effect))
+			result, err := held.Resume(t.Context(), effect.Identity)
+			if !errors.Is(err, cause) || (settlement != nil && !errors.Is(err, settlement)) {
+				t.Fatalf("lost owner/settlement cause: %v", err)
+			}
+			stages := []commandprogram.PipelineStageOutcome{
+				{ExecutionID: "producer", Result: result, RequiredInputComplete: true, Closure: commandprogram.NativeConsumerClosure(pipe, err, "producer", "consumer")},
+				{ExecutionID: "consumer", Result: toolcontract.ProducerResult{Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.NoEffect}, RequiredInputComplete: true},
+			}
+			outcome, err := commandprogram.SettlePipeline("pipeline", stages, &commandprogram.OutcomeLatch{})
+			testutil.FailErr(t, "settle actual owner cause", err)
+			if outcome.Complete == withSettlementFailure || outcome.PublicationEligible == withSettlementFailure || outcome.Status != map[bool]int{false: 0, true: 1}[withSettlementFailure] {
+				t.Fatalf("settlement failure=%t outcome=%+v", withSettlementFailure, outcome)
+			}
+		})
+	}
+}
+
 type dirSources string
 
 func (d dirSources) Capture(_ context.Context, _ toolcontract.OperationInvocation, req commandprogram.SourceCaptureRequest) (commandprogram.CapturedSource, error) {
@@ -176,8 +213,8 @@ func (d dirSources) Capture(_ context.Context, _ toolcontract.OperationInvocatio
 func TestProgramEntrySourcesScriptAndDeduplicatesProgramDefinitions(t *testing.T) {
 	f := newProgramFixture(t)
 	baseOwners := f.Runtime.Owners
-	f.Runtime.Owners = func(tc tools.ToolContext, paths *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
-		owners, err := baseOwners(tc, paths)
+	f.Runtime.Owners = func(tc tools.ToolContext, paths *projectpaths.ProgramPaths, memory *toolcontract.ProgramMemory, admission tooloutput.SpillAdmission) (command.ProgramOwners, error) {
+		owners, err := baseOwners(tc, paths, memory, admission)
 		owners.Sources = dirSources(f.Dir)
 		return owners, err
 	}

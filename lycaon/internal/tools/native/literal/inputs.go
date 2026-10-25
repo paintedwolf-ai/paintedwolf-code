@@ -4,14 +4,13 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"slices"
 
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
-// input is one operand's bytes. A file is captured completely and pinned
-// before any output; stdin streams unless the utility needs it whole.
+// input serves one pinned operand. Ordinary disk files stream through a held
+// descriptor; only whole-file operations gather their input.
 type input struct {
 	label  string
 	data   []byte
@@ -40,8 +39,9 @@ func (inv *invocation) operandsOrStdin() []string {
 
 // open acquires one operand. It returns nil after reporting an ordinary
 // failure (missing, directory, permission) so the utility continues; any
-// other error is a typed stop. whole gathers stdin within the read budget.
+// other error is a typed stop. whole gathers within the whole-input bound.
 func (inv *invocation) open(operand string, whole bool) (*input, error) {
+	inv.closeCurrentStream()
 	if err := inv.ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -50,11 +50,12 @@ func (inv *invocation) open(operand string, whole bool) (*input, error) {
 		if !whole {
 			return in, nil
 		}
-		data, err := readBounded(in.stream, inv.owners.streamBytes(), "stream_bytes")
+		captured, err := inv.owners.Revisions.ReadWholeInput(inv.ctx, in.stream, inv.owners.readBytes())
 		if err != nil {
 			return nil, err
 		}
-		in.data, in.stream = data, nil
+		inv.releases = append(inv.releases, captured.Close)
+		in.data, in.stream = captured.Bytes, nil
 		return in, nil
 	}
 	bound, err := inv.paths.Bind(inv.ctx, operand, false)
@@ -64,10 +65,27 @@ func (inv *invocation) open(operand string, whole bool) (*input, error) {
 	if bound.Null {
 		return &input{label: operand, data: []byte{}, bound: bound}, nil
 	}
+	if !whole {
+		streamed, err := inv.owners.Revisions.OpenStream(inv.ctx, inv.tc, bound.Resolved.Abs, 0)
+		if err != nil {
+			return inv.ordinaryInput(operand, err)
+		}
+		inv.currentStream = streamed.Reader
+		if err := inv.recordPin(streamed.Revision); err != nil {
+			return nil, err
+		}
+		pin, ok := streamed.Revision.SourcePin()
+		in := &input{label: operand, stream: streamed.Reader, bound: bound}
+		if ok {
+			in.pin = &pin
+		}
+		return in, nil
+	}
 	captured, err := inv.owners.Revisions.CaptureBytes(inv.ctx, inv.tc, bound.Resolved.Abs, inv.owners.readBytes())
 	if err != nil {
 		return inv.ordinaryInput(operand, err)
 	}
+	inv.releases = append(inv.releases, captured.Close)
 	// A credential file's bytes reach no stream until their exposure is recorded.
 	if err := inv.tc.ObserveCredentialRead(inv.ctx, bound.Resolved.Abs, captured.Path, string(captured.Bytes)); err != nil {
 		return nil, fmt.Errorf("record credential file read: %w", err)
@@ -111,22 +129,9 @@ func (inv *invocation) recordPin(revision toolcontract.ExecutionRevision) error 
 	}
 	inv.pinMu.Lock()
 	defer inv.pinMu.Unlock()
-	if slices.Contains(inv.pins, revision) {
-		return nil
+	seen, err := inv.pins.remember(inv.ctx, inv.owners.Revisions.Memory, revision)
+	if err != nil || seen {
+		return err
 	}
-	inv.pins = append(inv.pins, revision)
 	return inv.owners.Pins.AppendRevisionPin(inv.ctx, execution, revision)
-}
-
-// readBounded gathers a stream whole, refusing rather than truncating input
-// above maximum.
-func readBounded(r io.Reader, maximum int64, limit string) ([]byte, error) {
-	data, err := io.ReadAll(io.LimitReader(r, maximum+1))
-	if err != nil {
-		return nil, err
-	}
-	if int64(len(data)) > maximum {
-		return nil, limitExceeded(limit, maximum, int64(len(data)))
-	}
-	return data, nil
 }

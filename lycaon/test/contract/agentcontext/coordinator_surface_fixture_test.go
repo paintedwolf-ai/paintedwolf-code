@@ -58,6 +58,7 @@ var implementPromptToolsNotOnWire = map[string]string{
 	"preview_overlay":                "landing is the overlay-promote surface's; other surfaces name it describing where a write leg ends up",
 	"reject_overlay":                 "landing is the overlay-promote surface's; other surfaces name it describing where a write leg ends up",
 	"delete":                         "orchestrate surfaces delegate destructive I/O via task()",
+	"jq":                             "survey-first-pass partial names jq inside command; investigate owns standalone jq",
 	"wc":                             "orchestrate surfaces delegate via task() — investigate has native wc",
 	"stat":                           "orchestrate surfaces delegate via task() — investigate has native stat",
 	"chmod":                          "orchestrate surfaces delegate via task()",

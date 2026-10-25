@@ -26,7 +26,6 @@ import (
 // Backend is the Git owner's read, mutation, worktree and network surface.
 type Backend interface {
 	git.GitManager
-	ReadCommand(ctx context.Context, dir string, args, config []string, stdout io.Writer) ([]byte, int, error)
 	NetworkCommand(ctx context.Context, dir string, args []string, stdout io.Writer) ([]byte, int, error)
 	RemoteURL(ctx context.Context, dir string, args []string) string
 	AddWorktree(ctx context.Context, toplevel, path, branch, baseRef string) error
@@ -163,12 +162,16 @@ func (o *Owners) Prepare(paths *projectpaths.ProgramPaths, request commandprogra
 	if err != nil {
 		return Prepared{}, err
 	}
+	reviewID := o.ops[spec.Name]
+	if reviewID == "" {
+		reviewID = spec.Name
+	}
 	return Prepared{
 		Command:   spec.Name,
 		Operation: o.ops[spec.Name],
 		Mode:      effectMode(spec, parsed, bound),
 		Argv:      bound,
-		Review:    bound.Review(spec.Name),
+		Review:    bound.Review(reviewID),
 		command:   parsed,
 		owners:    o,
 		paths:     paths,
@@ -235,7 +238,7 @@ var blockedGitEnvKeys = map[string]bool{
 
 func validateGitEnvironment(spec toolcontract.CommandSpecification, entries []string) error {
 	for _, entry := range entries {
-		name, value, ok := strings.Cut(entry, "=")
+		name, _, ok := strings.Cut(entry, "=")
 		if !ok {
 			continue
 		}
@@ -243,7 +246,7 @@ func validateGitEnvironment(spec toolcontract.CommandSpecification, entries []st
 		if blockedGitEnvKeys[strings.ToUpper(trimmed)] {
 			return operandInvalid(spec, entry, "an environment without SSH transport override variables")
 		}
-		if err := exec.ValidateInlineEnv(map[string]string{trimmed: value}); err != nil {
+		if _, err := exec.AgentLaunchOptions(exec.LaunchPlan{}, "", []string{entry}, nil); err != nil {
 			return operandInvalid(spec, entry, "an environment without host-reserved variables")
 		}
 	}

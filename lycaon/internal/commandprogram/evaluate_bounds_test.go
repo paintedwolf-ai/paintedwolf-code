@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"slices"
 	"strings"
 	"testing"
@@ -355,5 +356,63 @@ func TestEvaluateRejectsMismatchedPlanAndPorts(t *testing.T) {
 	f.ports.Invocation.Kind = toolcontract.StructuredToolInvocation
 	if _, err := f.run(t, t.Context(), "echo a"); err == nil {
 		t.Fatal("evaluated under a structured invocation")
+	}
+}
+
+// compoundCloseDispatch keeps the byte endpoint's close plus the utility's
+// original diagnostic; the evaluator must not replace it with a bare close.
+type compoundCloseDispatch struct {
+	Dispatch
+	joined  bool
+	failure error
+}
+
+func (d compoundCloseDispatch) Fork(ctx context.Context) (Dispatch, func(), error) {
+	child, release, err := d.Dispatch.Fork(ctx)
+	return compoundCloseDispatch{Dispatch: child, joined: d.joined, failure: d.failure}, release, err
+}
+func (d compoundCloseDispatch) Invoke(ctx context.Context, request OperationRequest, streams Streams) (toolcontract.ProducerResult, error) {
+	if request.Argv[0].Value != "cat" {
+		return d.Dispatch.Invoke(ctx, request, streams)
+	}
+	_, err := io.WriteString(streams.Output, "one\n")
+	if err == nil {
+		_, err = io.WriteString(streams.Output, "two\n")
+	}
+	result := toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}
+	if errors.Is(err, ErrConsumerClosed) {
+		if d.joined {
+			err = errors.Join(err, d.failure)
+		} else {
+			err = fmt.Errorf("synthetic utility diagnostic: %w", err)
+		}
+	}
+	return result, err
+}
+func TestPipelineWrappedCloseCannotPublish(t *testing.T) {
+	for _, joined := range []bool{false, true} {
+		t.Run(fmt.Sprint(joined), func(t *testing.T) {
+			f := newEvalFixture(t)
+			failure := errors.New("independent utility failure")
+			f.ports.Dispatch = compoundCloseDispatch{Dispatch: f.ports.Dispatch, joined: joined, failure: failure}
+			out, err := f.run(t, t.Context(), "echo kept > earlier; { cat <<EOF | head -n 1; } > result; echo $?\none\ntwo\nthree\nEOF\n")
+			if err != nil || out.Stop != nil || f.stdout.String() != "1\n" || f.publication.published["earlier"] != "kept\n" || f.publication.published["result"] != "" || !slices.Contains(f.publication.abandoned, "result") {
+				t.Fatalf("joined=%v outcome=%+v err=%v published=%v abandoned=%v calls=%v", joined, out, err, f.publication.published, f.publication.abandoned, f.log.argv())
+			}
+			found := false
+			for _, child := range out.Children {
+				if child.Command != "cat" {
+					continue
+				}
+				found = true
+				if child.Result.Status != 1 || child.Result.Complete || child.Result.PublicationEligible || !errors.Is(child.Diagnostic, ErrConsumerClosed) || (joined && !errors.Is(child.Diagnostic, failure)) {
+					t.Fatalf("lost producer diagnostic or failed settlement: %+v", child)
+				}
+			}
+			if !found {
+				t.Fatal("missing producer settlement")
+			}
+
+		})
 	}
 }
