@@ -78,6 +78,8 @@ def execute(binding, capability, case, root):
             started = time.monotonic()
             with first:
                 reservation.check_launch(first)
+                if first.observations.get('onboarding') or first.observations.get('fixed_input'):
+                    raise ValueError('quiet custody startup required an interaction')
                 observations['startup_before'] = {'elapsed_seconds': time.monotonic() - started,
                     'startup_input_performed': False, 'health': first.observations['health']}
                 observations['interactive_before'] = interactive_window(first)
@@ -94,6 +96,8 @@ def execute(binding, capability, case, root):
             started = time.monotonic()
             with second:
                 reservation.check_launch(second)
+                if second.observations.get('onboarding') or second.observations.get('fixed_input'):
+                    raise ValueError('quiet custody restart required a startup interaction')
                 if second.observations['engine_identity'] == first.observations['engine_identity']:
                     raise ValueError('quiet custody restart reused the prior engine identity')
                 observations['startup_after'] = {'elapsed_seconds': time.monotonic() - started,
