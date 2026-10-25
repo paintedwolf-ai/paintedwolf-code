@@ -237,7 +237,11 @@ func (h *harness) exec(stdin string, argv ...string) run {
 	h.t.Helper()
 	request := requestFor(h, argv...)
 	var stdout, stderr bytes.Buffer
-	streams := commandprogram.Streams{Input: io.NopCloser(strings.NewReader(stdin)), Output: &stdout, Error: &stderr}
+	input := commandprogram.NullInput()
+	if stdin != "" {
+		input = io.NopCloser(strings.NewReader(stdin))
+	}
+	streams := commandprogram.Streams{Input: input, Output: &stdout, Error: &stderr}
 	result, err := h.owners.Invoke(h.t.Context(), h.tc, mustPaths(h.t, h), h.dispatch, request, streams)
 	if invalid := result.Validate(); invalid != nil {
 		h.t.Fatalf("%v: invalid producer %+v: %v", argv, result, invalid)
