@@ -52,10 +52,19 @@ func inspect(pid int) (Process, error) {
 	return Process{PID: pid, ParentPID: parent, UID: stat.Uid, Name: string(raw[start+1 : end]), Executable: executable, Instance: fields[19]}, nil
 }
 
-func signalInstance(process Process, name string) error {
-	signal, ok := map[string]unix.Signal{"TERM": unix.SIGTERM, "KILL": unix.SIGKILL, "INT": unix.SIGINT, "HUP": unix.SIGHUP, "STOP": unix.SIGSTOP, "CONT": unix.SIGCONT, "USR1": unix.SIGUSR1, "USR2": unix.SIGUSR2}[name]
+func nativeSignal(kind signalKind) (unix.Signal, bool) {
+	signal, ok := map[signalKind]unix.Signal{
+		signalTerminate: unix.SIGTERM, signalKill: unix.SIGKILL, signalInterrupt: unix.SIGINT,
+		signalHangup: unix.SIGHUP, signalStop: unix.SIGSTOP, signalContinue: unix.SIGCONT,
+		signalUser1: unix.SIGUSR1, signalUser2: unix.SIGUSR2,
+	}[kind]
+	return signal, ok
+}
+
+func signalInstance(process Process, kind signalKind) error {
+	signal, ok := nativeSignal(kind)
 	if !ok {
-		return fmt.Errorf("unsupported signal %q", name)
+		return ErrUnsupported
 	}
 	fd, err := unix.PidfdOpen(process.PID, 0)
 	if err != nil {

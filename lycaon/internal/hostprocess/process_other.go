@@ -2,6 +2,6 @@
 
 package hostprocess
 
-func listPIDs() ([]int, error)             { return nil, ErrUnsupported }
-func inspect(int) (Process, error)         { return Process{}, ErrUnsupported }
-func signalInstance(Process, string) error { return ErrUnsupported }
+func listPIDs() ([]int, error)                 { return nil, ErrUnsupported }
+func inspect(int) (Process, error)             { return Process{}, ErrUnsupported }
+func signalInstance(Process, signalKind) error { return ErrUnsupported }
