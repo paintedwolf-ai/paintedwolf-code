@@ -92,6 +92,9 @@ func newDeliveryQuota(t *testing.T) *deliveryQuota {
 	t.Helper()
 	limits, err := toolcontract.CatalogProgramMemoryLimits()
 	testutil.FailErr(t, "catalog memory limits", err)
+	// Session output resources hold a spill read's decoder scratch, its
+	// screening window and a program's working storage at once.
+	limits.Working *= 3
 	memory, err := toolcontract.NewProgramMemory(limits)
 	testutil.FailErr(t, "program memory", err)
 	return &deliveryQuota{ProgramMemory: memory}
@@ -133,11 +136,8 @@ func newRetainedDeliveryFixture(t *testing.T) retainedDeliveryFixture {
 	parent, err := recorder.Begin(ctx, invocation.Start{ProjectID: testdbseed.DefaultProjectID, SessionID: session.ID, ToolCallID: "actual-source-call", ToolName: "command", Args: map[string]any{"command": command}, Contract: commandContract})
 	testutil.FailErr(t, "begin actual model parent", err)
 	quota := newDeliveryQuota(t)
-	parser, err := commandsurface.NewProgramParser(ctx, quota.ProgramMemory)
-	testutil.FailErr(t, "reserve real program parser", err)
-	parsed, err := parser.Parse([]byte(command), commandsurface.ParseOptions{})
+	parsed, err := commandsurface.ParseAdmitted(ctx, quota.ProgramMemory, []byte(command), commandsurface.ParseOptions{})
 	testutil.FailErr(t, "validate actual source-inspection program", err)
-	testutil.FailErr(t, "close parser scratch", parser.Close())
 	snapshot, err := parsed.SnapshotWithMemory(ctx, quota.ProgramMemory)
 	testutil.FailErr(t, "admit actual typed program snapshot", err)
 	defer snapshot.Close()

@@ -46,11 +46,8 @@ func TestProgramActualParserProgressOwnerAndReceiptRemainIndependent(t *testing.
 			}
 			f := newProgramReceiptFixtureWithArgs(t, submitted)
 			memory := progressMemory(t)
-			parser, err := commandsurface.NewProgramParser(t.Context(), memory)
-			testutil.FailErr(t, "reserve actual parser", err)
-			plan, err := parser.Parse([]byte("${op} arg"), commandsurface.ParseOptions{})
+			plan, err := commandsurface.ParseAdmitted(t.Context(), memory, []byte("${op} arg"), commandsurface.ParseOptions{})
 			testutil.FailErr(t, "validate whole actual program", err)
-			testutil.FailErr(t, "release parser scratch", parser.Close())
 			defer func() {
 				testutil.FailErr(t, "release actual plan", plan.Close())
 				if memory.InUse() != (toolcontract.ProgramMemoryUsage{}) {

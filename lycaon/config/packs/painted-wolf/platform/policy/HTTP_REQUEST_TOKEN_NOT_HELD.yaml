@@ -3,9 +3,9 @@ id: HTTP_REQUEST_TOKEN_NOT_HELD
 kind: schema
 anchor: tool.rejected
 selector:
-  tool: [http_request]
+  paintedwolf.operation: [http_request]
 requires:
-  facts: [paintedwolf.rejection_code]
+  facts: [paintedwolf.rejection_code, paintedwolf.operation]
   profiles: [tool]
 when: paintedwolf.rejection_code == "HTTP_REQUEST_TOKEN_NOT_HELD"
 effect: block

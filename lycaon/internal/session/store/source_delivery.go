@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/lycaon/lycaon/internal/bloblifecycle"
+	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/evidence"
 )
 
@@ -25,15 +26,18 @@ func (s *SQL) CommitDeliveredSource(ctx context.Context, sessionID string, obser
 	}
 	defer func() { _ = tx.Rollback() }()
 	fact := rec.SourceDelivery
-	var existing string
-	err = tx.QueryRowContext(ctx, `SELECT handle FROM evidence_records WHERE session_id=? AND json_extract(line_ranges,'$.source_delivery.response_id')=? AND json_extract(line_ranges,'$.source_delivery.delivery_id')=? AND json_extract(line_ranges,'$.source_delivery.source.SHA256')=? AND json_extract(line_ranges,'$.source_delivery.source.SourceID')=? AND json_extract(line_ranges,'$.source_delivery.source.Revision')=? AND json_extract(line_ranges,'$.source_delivery.source_start_byte')=? AND json_extract(line_ranges,'$.source_delivery.source_end_byte')=?`, sessionID, fact.ResponseID, fact.DeliveryID, fact.Source.SHA256, fact.Source.SourceID, fact.Source.Revision, fact.SourceStartByte, fact.SourceEndByte).Scan(&existing)
+	q := s.queries.WithTx(tx)
+	existing, err := q.FindSourceDeliveryHandle(ctx, db.FindSourceDeliveryHandleParams{
+		SessionID: sessionID, ResponseID: fact.ResponseID, DeliveryID: fact.DeliveryID,
+		SourceSha256: fact.Source.SHA256, SourceID: fact.Source.SourceID, SourceRevision: fact.Source.Revision,
+		SourceStartByte: fact.SourceStartByte, SourceEndByte: fact.SourceEndByte,
+	})
 	if err == nil {
 		return existing, tx.Commit()
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		return "", err
 	}
-	q := s.queries.WithTx(tx)
 	projectID, err := q.GetSessionProjectID(ctx, sessionID)
 	if err != nil {
 		return "", err

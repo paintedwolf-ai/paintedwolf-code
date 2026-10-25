@@ -13,11 +13,8 @@ import (
 
 func TestValidatedProgramIdentityRequiresLiveExecutionLease(t *testing.T) {
 	memory := programMemory(t, 4<<20)
-	parser, err := commandsurface.NewProgramParser(t.Context(), memory)
-	testutil.FailErr(t, "admit parser", err)
-	defer parser.Close()
 	source := []byte("true; false")
-	program, err := parser.Parse(source, commandsurface.ParseOptions{})
+	program, err := commandsurface.ParseAdmitted(t.Context(), memory, source, commandsurface.ParseOptions{})
 	testutil.FailErr(t, "validate execution unit", err)
 	defer program.Close()
 	before := memory.InUse().State
@@ -27,9 +24,8 @@ func TestValidatedProgramIdentityRequiresLiveExecutionLease(t *testing.T) {
 	if digest != hex.EncodeToString(sum[:]) || catalog != toolcontract.LanguageCatalogDigest() || memory.InUse().State != before {
 		t.Fatal("program identity differs or creates detached state")
 	}
-	testutil.FailErr(t, "close parser scratch", parser.Close())
-	if _, _, err := program.ValidatedProgramIdentity(t.Context()); err != nil {
-		t.Fatal("scratch release erased retained execution proof")
+	if memory.InUse().Working != 0 {
+		t.Fatal("parser scratch outlived lowering")
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()

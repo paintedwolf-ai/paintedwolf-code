@@ -5,9 +5,25 @@ import (
 	"errors"
 	"io"
 	"sync"
-
-	"github.com/lycaon/lycaon/internal/captureprojection"
 )
+
+// StreamScreen is the capture owner's bounded screening of one source. Its
+// adapter binds scope, label, memory admission and detector bounds, and must
+// emit only screened bytes to dst.
+type StreamScreen interface {
+	ScreenStream(ctx context.Context, src io.Reader, dst io.Writer) (ScreenedStreamFacts, error)
+}
+
+// ScreenedStreamFacts describe the bytes actually transferred, including a
+// terminal prefix. Complete holds only after EOF and the owner's final
+// generation/revision checks; publication rechecks those revisions.
+type ScreenedStreamFacts struct {
+	RawBytes, EmittedBytes                 int64
+	RawSHA256, EmittedSHA256               string
+	Redacted, Complete                     bool
+	CatalogVersion, ClassificationRevision string
+	ManagedGeneration                      uint64
+}
 
 // ScreenedPipe joins the capture owner's bounded screening to a backpressured
 // byte endpoint. Raw source bytes never enter the pipe or its retained output.
@@ -22,13 +38,13 @@ type ScreenedPipe struct {
 	mu          sync.Mutex
 	settled     bool
 	cancel      context.CancelCauseFunc
-	metadata    captureprojection.StreamMetadata
+	metadata    ScreenedStreamFacts
 	err         error
 }
 
-func NewScreenedPipe(ctx context.Context, projector *captureprojection.Projector, scope captureprojection.Scope, label string, source io.ReadCloser, options captureprojection.StreamOptions, budget *ByteBudget) (*ScreenedPipe, error) {
-	if ctx == nil || projector == nil || source == nil || options.WorkingMemory == nil {
-		return nil, errors.New("screened pipe requires context, capture screening, source and memory admission")
+func NewScreenedPipe(ctx context.Context, screen StreamScreen, source io.ReadCloser, budget *ByteBudget) (*ScreenedPipe, error) {
+	if ctx == nil || screen == nil || source == nil {
+		return nil, errors.New("screened pipe requires context, capture screening and source")
 	}
 	pipe, err := NewBytePipe(ctx, budget)
 	if err != nil {
@@ -46,7 +62,7 @@ func NewScreenedPipe(ctx context.Context, projector *captureprojection.Projector
 	go func() {
 		defer close(out.done)
 		defer out.closeSource()
-		metadata, err := projector.ScreenStream(screenCtx, scope, label, source, pipe, options)
+		metadata, err := screen.ScreenStream(screenCtx, source, pipe)
 		termination := StreamScreeningFailed
 		out.mu.Lock()
 		if cause := context.Cause(screenCtx); cause != nil && (err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
@@ -94,11 +110,11 @@ func (s *ScreenedPipe) closeSource() error {
 
 // Wait returns the capture owner's final hashes and revision facts separately
 // from all transferred bytes. It does not authorize effect publication.
-func (s *ScreenedPipe) Wait(ctx context.Context) (captureprojection.StreamMetadata, error) {
+func (s *ScreenedPipe) Wait(ctx context.Context) (ScreenedStreamFacts, error) {
 	select {
 	case <-s.done:
 		return s.metadata, s.err
 	case <-ctx.Done():
-		return captureprojection.StreamMetadata{}, ctx.Err()
+		return ScreenedStreamFacts{}, ctx.Err()
 	}
 }

@@ -28,6 +28,9 @@ func (predicateExpansionFunc) ExpandFields(context.Context, ExpansionScope, comm
 func (predicateExpansionFunc) ExpandScalar(context.Context, ExpansionScope, commandsurface.DeferredWord) (string, error) {
 	return "", errors.New("predicates expand patterns")
 }
+func (predicateExpansionFunc) ExpandDocument(context.Context, ExpansionScope, commandsurface.ProgramRedirect) (string, error) {
+	return "", errors.New("predicates have no here-documents")
+}
 func TestNativeBooleanOperandsAreData(t *testing.T) {
 	for _, name := range []string{"true", "false", ":"} {
 		got, err := BooleanBuiltin(t.Context(), name, []string{"--unknown", "$(never executed)"})

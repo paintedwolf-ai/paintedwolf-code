@@ -107,8 +107,9 @@ because the new parser accepts a form, or remove a recognizer while one of these
 consumers still uses it. Their replacement and obsolete-path cleanup accompany
 the introducing runtime integration.
 
-The syntax adapter reserves parser scratch before parsing and meters the selected
-upstream parser's allocations and recursive frames. Brace classification and
+The syntax adapter charges parser scratch to the enclosing program before each
+allocation and meters the selected upstream parser's allocations and recursive
+frames. Brace classification and
 static quote removal share that allocation pool; admission never invokes general
 field expansion or its account/environment/glob callbacks. The 8,192-node and
 64-edge limits count the completed selected syntax tree before host-plan
@@ -118,9 +119,13 @@ threshold. Host lowering reserves a conservative typed-node, slice-growth,
 cloned-text and frame envelope against the same pool before allocating its plan.
 
 Source capture receives an explicit byte ceiling and representation before
-materialization. Execution uses `NewProgramParser` with working and retained
-state admission. Retained source/plan storage is charged to `program_state_bytes`
-before host-plan insertion; closing parser scratch does not release that state.
+materialization. Execution uses `ParseAdmitted` with working and retained state
+admission. Parser scratch grows the program's working account in 64 KiB chunks
+up to the per-unit `evaluation_memory_bytes` ceiling and is released when
+lowering returns, so a `source` parse shares the account with background job
+streams rather than holding the whole ceiling. Retained source/plan storage is
+charged to `program_state_bytes` before host-plan insertion; releasing scratch
+does not release that state.
 Execution snapshots use `SnapshotWithMemory` and retain their own leases, including
 while the original parsed program is released. `ParseProgram`, `Snapshot` and
 `Source` are bounded inspection helpers and do not grant execution authority;

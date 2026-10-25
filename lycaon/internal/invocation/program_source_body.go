@@ -31,7 +31,7 @@ func (r *SQLRecorder) BeginProgramWithSource(ctx context.Context, in toolcontrac
 		if err = insertProgram(ctx, tx, in); err != nil {
 			return err
 		}
-		if err = insertProgramOutput(ctx, tx, in.Version.ProgramID, RetainedOutput{Stream: "source", Reference: in.Version.SourceReference, Complete: true, Redacted: redacted}, reference, ""); err != nil {
+		if err = insertProgramOutput(ctx, tx, in.Version.ProgramID, RetainedOutput{Stream: "source", Reference: in.Version.SourceReference, Complete: true, Redacted: redacted}, reference, "", nil); err != nil {
 			return err
 		}
 		return tx.Commit()

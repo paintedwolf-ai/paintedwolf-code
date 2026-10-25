@@ -23,11 +23,16 @@ type Streams struct {
 // OperationRequest is one reached simple command after expansion and before
 // per-child admission. Statement is the typed plan node; its span is the
 // invocation span. Argv is the complete expanded argv, command words included.
+// Environment is the frame's exported NAME=value list, including assignments
+// scoped to this one dispatch, sorted by name; it carries no ambient host state.
 type OperationRequest struct {
-	Invocation  toolcontract.OperationInvocation
+	Invocation toolcontract.OperationInvocation
+	// OperationID is the catalog command name ("external" for launches); the
+	// typed owner's operation identity is the owner's own fact.
 	OperationID string
 	Statement   commandsurface.Statement
 	Argv        Fields
+	Environment []string
 	EffectMode  string
 }
 
@@ -50,8 +55,11 @@ type OperationDispatcher interface {
 
 // ExpansionScope is the evaluator-visible state expansion may read. The
 // evaluator owns and mutates it; expansion never assigns or records status.
+// Variables is the invocation-local implementation.
 type ExpansionScope interface {
 	Variable(name string) (value string, set bool)
+	// ProgramName is $0, the program or sourced unit identity.
+	ProgramName() string
 	Positional() []string
 	LastStatus() int
 	LastBackground() (job string, set bool)
@@ -66,6 +74,41 @@ type Expander interface {
 	ExpandScalar(context.Context, ExpansionScope, commandsurface.DeferredWord) (string, error)
 	// ExpandPattern keeps quoted fragments literal for glob and ERE matching.
 	ExpandPattern(context.Context, ExpansionScope, commandsurface.DeferredWord) (PredicateValue, error)
+	// ExpandDocument yields a here-document body: literal when its delimiter
+	// is quoted, otherwise parameters and substitutions without splitting.
+	ExpandDocument(context.Context, ExpansionScope, commandsurface.ProgramRedirect) (string, error)
+}
+
+// SubstitutionRequest is one reached $() or backtick unit. Depth counts the
+// enclosing substitutions, starting at one for an outermost unit.
+type SubstitutionRequest struct {
+	Unit  commandsurface.SubstitutionPart
+	Depth int
+}
+
+// Substitution evaluates a reached unit through the evaluator's own admission,
+// dispatch and receipts, as a distinct child execution in an isolated frame.
+// Stdout receives the unit's complete output and refuses bytes past the
+// substitution ceiling. The implementation retains each ordinary status (the
+// last one is $? for an assignment-only command) and latches host stops; ctx
+// carries the substitution depth into nested expansion and must be passed on.
+type Substitution interface {
+	Substitute(ctx context.Context, scope ExpansionScope, request SubstitutionRequest, stdout io.Writer) (toolcontract.ProducerResult, error)
+}
+
+// NestedCommand runs a command operand of a native utility (env's COMMAND)
+// as its own child execution of the parent request, with exactly the given
+// environment. The implementer allocates the child identity and receipt and
+// dispatches through the same admission as any reached command.
+type NestedCommand interface {
+	RunNested(ctx context.Context, parent OperationRequest, argv Fields, environment map[string]string, streams Streams) (toolcontract.ProducerResult, error)
+}
+
+// ExecutionRecorder records an execution the evaluator runs itself before any
+// descendant is dispatched, and settles it with its record once.
+type ExecutionRecorder interface {
+	BeginExecution(context.Context, toolcontract.OperationInvocation, string) error
+	SettleExecution(context.Context, toolcontract.OperationInvocation, ChildRecord) error
 }
 
 // ProgramRecorder is the receipt owner's port (invocation.SQLRecorder): one
@@ -122,6 +165,13 @@ type SourceCapture interface {
 	Capture(context.Context, toolcontract.OperationInvocation, SourceCaptureRequest) (CapturedSource, error)
 }
 
+// SourceUnitRegistrar records a reached sourced unit's pin, bytes and static
+// nodes before its statements run so child executions validate against the
+// retained program.
+type SourceUnitRegistrar interface {
+	RegisterSourceUnit(context.Context, toolcontract.OperationInvocation, CapturedSource, commandsurface.ProgramSnapshot) error
+}
+
 // ExternalLauncher must enter the host launch-plan and confinement boundary.
 type ExternalLauncher interface {
 	Launch(context.Context, OperationRequest, Streams) (toolcontract.ProducerResult, error)
@@ -141,8 +191,36 @@ type ProgressAdmission interface {
 
 // ProgramSupervision is implemented at the existing process supervision boundary.
 // It settles one aggregate and preserves already-settled child owner facts.
+// StartJob supervises a statement-trailing & job: run receives the job's own
+// lifetime context and the bounded output streams the supervisor owns for it;
+// cwd and environment are already captured. The returned handle is the
+// session-scoped job identity that $! and wait/kill address.
 type ProgramSupervision interface {
 	RunProgram(context.Context, toolcontract.OperationInvocation, func(context.Context) (toolcontract.ProducerResult, error)) (toolcontract.ProducerResult, error)
+	StartJob(context.Context, toolcontract.OperationInvocation, func(context.Context, Streams) (toolcontract.ProducerResult, error)) (string, error)
+}
+
+// Dispatch reaches operation owners and confined launch from one directory
+// frame. Fork captures the frame's current directory for an isolated frame
+// (parentheses, substitutions, pipeline stages, background jobs); cd inside the
+// fork never reaches the parent. Release returns the fork's capture.
+type Dispatch interface {
+	OperationDispatcher
+	ExternalLauncher
+	Fork(context.Context) (Dispatch, func(), error)
+}
+
+// InputDestination is one reached `<` redirection after target expansion.
+type InputDestination struct {
+	Invocation toolcontract.OperationInvocation
+	Redirect   commandsurface.ProgramRedirect
+	Target     Field
+}
+
+// InputRedirection opens a `<` operand through the read owner. The returned
+// stream is stdin for one statement; closing it is a consumer stop.
+type InputRedirection interface {
+	OpenInput(context.Context, InputDestination) (io.ReadCloser, error)
 }
 
 // ResultProjection delegates remaining obligations to workflow/grounding

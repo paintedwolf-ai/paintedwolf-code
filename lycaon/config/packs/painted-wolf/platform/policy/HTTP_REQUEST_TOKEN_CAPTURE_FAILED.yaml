@@ -3,10 +3,11 @@ id: HTTP_REQUEST_TOKEN_CAPTURE_FAILED
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
   - http_request
 requires:
   facts:
+  - paintedwolf.operation
   - paintedwolf.rejection_code
   profiles:
   - tool
