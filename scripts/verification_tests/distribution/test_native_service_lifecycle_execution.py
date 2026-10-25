@@ -71,7 +71,7 @@ class NativeServiceLifecycle(unittest.TestCase):
         self.root = Path(temporary.name)
         self.bin = self.root / 'bin'
         self.bin.mkdir()
-        self.state_dir = self.root / 'var-lib'
+        self.state_dir = self.root / 'var/lib/painted-wolf-code'
         generation = self.bin / 'pw-generations'
         generation.write_text(f'#!{sys.executable}\n' + '''import json,os,sys
 from pathlib import Path
@@ -99,7 +99,7 @@ s.setdefault('generation_calls',[]).append(a);p.write_text(json.dumps(s))
         return self.execute_script(script, *arguments)
 
     def fixture_program(self, script):
-        return program(script.read_text(), self.bin / 'pw-generations', self.state_dir)
+        return program(script.read_text(), self.root, self.bin / 'pw-generations')
 
     def execute_script(self, script, *arguments):
         source = self.fixture_program(script)
@@ -230,7 +230,7 @@ s.setdefault('generation_calls',[]).append(a);p.write_text(json.dumps(s))
                           '/isolated-marker\nmkdir -p ' + STATE_DIR +
                           '\ntouch "$REINSTALL_MARKER"\n"$PW_GENERATIONS" install --family deb\n')
         self.assertNotIn(GENERATIONS, self.fixture_program(script))
-        self.assertNotIn(STATE_DIR, self.fixture_program(script))
+        self.assertIn(str(self.state_dir / 'isolated-marker'), self.fixture_program(script))
         result = self.execute_script(script)
         self.assertEqual(result['generation_calls'], [['install', '--family', 'deb']])
         self.assertTrue((self.state_dir / 'isolated-marker').is_file())
@@ -245,6 +245,6 @@ s.setdefault('generation_calls',[]).append(a);p.write_text(json.dumps(s))
         assignment = 'PW_GENERATIONS=' + GENERATIONS + '\n'
         for source in (assignment + assignment, 'PW_GENERATIONS=/some/other/program\n'):
             with self.assertRaisesRegex(ValueError, 'unbound host generation'):
-                program(source, self.bin / 'pw-generations', self.state_dir)
+                program(source, self.root, self.bin / 'pw-generations')
         with self.assertRaisesRegex(ValueError, 'shell-safe scratch path'):
-            program(assignment, self.bin / 'unsafe name', self.state_dir)
+            program(assignment, self.root, self.bin / 'unsafe name')
