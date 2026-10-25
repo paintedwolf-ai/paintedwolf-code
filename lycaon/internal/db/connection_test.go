@@ -242,18 +242,18 @@ func TestUncleanShutdownAuditsBehindBootAndRefusesNextOpen(t *testing.T) {
 	}
 }
 
-// A clean audit clears the stamp, and a clean shutdown owes no audit at all.
+// A clean audit clears pending work, and a clean shutdown owes no audit at all.
 func TestCleanAuditClearsStampAndCleanShutdownOwesNoAudit(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "store.db")
 	store, err := Open(dbPath)
 	testutil.FailErr(t, "open store", err)
-	_, err = store.writer.ExecContext(t.Context(), `INSERT INTO store_meta(key,value) VALUES(?,?)`, integrityAuditFailedMetaKey, "stale")
-	testutil.FailErr(t, "stamp a stale failure", err)
+	_, err = store.writer.ExecContext(t.Context(), `INSERT INTO store_meta(key,value) VALUES(?,?)`, integrityAuditFailedMetaKey, integrityAuditPendingValue)
+	testutil.FailErr(t, "stamp pending verification", err)
 	testutil.FailErr(t, "audit healthy store", AuditIntegrity(t.Context(), store))
 	stamped, err := integrityAuditState(t.Context(), store.writer)
 	testutil.FailErr(t, "read stamp", err)
 	if stamped != "" {
-		t.Fatal("a clean audit must clear the failure stamp")
+		t.Fatal("a clean audit must clear the pending stamp")
 	}
 	testutil.FailErr(t, "close store", store.Close())
 

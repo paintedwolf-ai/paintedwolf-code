@@ -33,6 +33,7 @@ type ReadHandle interface {
 
 // Store manages a serialized writer and concurrent readers.
 type Store struct {
+	audit   auditControl
 	health  storeHealth
 	dataDir string
 	writer  *sql.DB

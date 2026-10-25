@@ -70,13 +70,17 @@ func RunRetention(ctx context.Context, sqlDB Handle, cfg RetentionConfig) (Reten
 	if sqlDB == nil || !cfg.Enabled {
 		return rep, nil
 	}
+	release, err := maintenanceTurn(ctx, sqlDB)
+	if err != nil {
+		return rep, err
+	}
+	defer release()
 	now := time.Now().UTC()
 	batchSize := cfg.BatchSize
 	if batchSize <= 0 {
 		batchSize = DefaultRetentionBatchSize
 	}
 
-	var err error
 	rep.OperationJournals, err = purgeOperationJournals(ctx, sqlDB, now, cfg.OperationJournals, batchSize)
 	if err != nil {
 		return rep, err
