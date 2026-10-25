@@ -1274,10 +1274,25 @@ type CodeScanPage struct {
 	NextCursor string `json:"next_cursor,omitempty"`
 }
 
+// CommandExecutionOutput
+type CommandExecutionOutput struct {
+	Stream string `json:"stream"`
+	// Retained output handle owned by the program receipt.
+	Ref       string `json:"ref"`
+	SizeBytes int64  `json:"size_bytes"`
+	// The stream reached its end; false is a retained prefix.
+	Complete bool `json:"complete"`
+	Redacted bool `json:"redacted"`
+	// Leading screened bytes of the retained stream as UTF-8. Never the authoritative body.
+	Preview          string `json:"preview"`
+	PreviewTruncated bool   `json:"preview_truncated"`
+}
+
 // CommandExecutionReceipt Host dynamic execution. It has no assistant message or model tool-call identity.
 type CommandExecutionReceipt struct {
-	ID                              string   `json:"id"`
-	ProgramID                       string   `json:"program_id"`
+	ID        string `json:"id"`
+	ProgramID string `json:"program_id"`
+	// Host syntax node identity within its program.
 	NodeID                          string   `json:"node_id"`
 	ParentExecutionID               string   `json:"parent_execution_id"`
 	Owner                           string   `json:"owner"`
@@ -1315,6 +1330,11 @@ type CommandExecutionReceipt struct {
 	PublishedRevision   string `json:"published_revision,omitempty"`
 	DetailRef           string `json:"detail_ref"`
 	ApprovalRef         string `json:"approval_ref,omitempty"`
+	// Host background job this child started, for the existing background process views.
+	JobHandle string `json:"job_handle,omitempty"`
+	// Latest retained stdout and stderr of this child, each with a bounded screened preview. Absent streams retained nothing.
+	Outputs          []CommandExecutionOutput `json:"outputs,omitempty"`
+	RevisionConflict *CommandRevisionConflict `json:"revision_conflict,omitempty"`
 }
 
 // CommandInvokeContext Structured invocation coordinates. The host resolves and verifies these against machine state; a Den boolean is never authority.
@@ -1364,7 +1384,9 @@ type CommandInvokeResponse struct {
 
 // CommandProgramNode
 type CommandProgramNode struct {
-	ID           string `json:"id"`
+	// Host syntax node identity within its program.
+	ID string `json:"id"`
+	// Captured syntax unit identity within its program.
 	SourceUnitID string `json:"source_unit_id"`
 	StartByte    int64  `json:"start_byte"`
 	EndByte      int64  `json:"end_byte"`
@@ -1414,6 +1436,13 @@ type CommandProgramReceiptPage struct {
 	ExecutionsOmitted int                  `json:"executions_omitted"`
 	NodesOmitted      int                  `json:"nodes_omitted"`
 	NextCursor        string               `json:"next_cursor,omitempty"`
+}
+
+// CommandRevisionConflict Typed stale-destination fact from the destination owner. A conflict requires fresh preparation; it is never refreshed or replayed.
+type CommandRevisionConflict struct {
+	Path             string `json:"path"`
+	ExpectedRevision string `json:"expected_revision"`
+	ObservedRevision string `json:"observed_revision"`
 }
 
 // CommandUIEffect Closed typed UI effect returned by host-validated presentation actions.

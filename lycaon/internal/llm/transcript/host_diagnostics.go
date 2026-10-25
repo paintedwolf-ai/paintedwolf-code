@@ -18,13 +18,17 @@ const (
 
 // Order preserves effect certainty, identities and parser locations before
 // larger inventories.
-// Executable replacements and examples are deliberately absent: partial calls
-// cannot be presented as equivalent repairs.
+// Examples and partial calls are deliberately absent. The only replacement is
+// a validated exact byte span (toolcontract.ProgramRepair) for explicit
+// submission; it is never presented as an equivalent executed repair.
 var diagnosticFields = []string{
 	"program_completed_effects", "program_uncertain_effects", "program_replay_available", "program_effect_details_omitted",
 	"program_executed_children", "program_executed_reads", "native_operation", "native_command",
 	"operation_source_unit_id", "operation_source_start_byte", "operation_source_end_byte", "operation_source_line", "operation_source_column",
 	"source_start_byte", "source_end_byte", "source_line", "source_column",
+	"diagnostic_stage", "diagnostic_pre_evaluation", "command", "diagnostic_word", "expected_form",
+	"replacement_source_unit_id", "replacement_start_byte", "replacement_end_byte", "replacement_text", "replacement_submission",
+	"limit", "limit_unit", "limit_maximum", "limit_observed",
 	"program_id", "execution_id", "node_id", "source_unit_id", "model_tool_call_id", "program_detail_ref",
 	"program_replay_limitation", "program_static_not_started", "program_static_untaken",
 	"program_progress_state", "program_progress_ref", "program_progress_ref_omitted",

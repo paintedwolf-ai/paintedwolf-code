@@ -165,6 +165,13 @@ type SourceCapture interface {
 	Capture(context.Context, toolcontract.OperationInvocation, SourceCaptureRequest) (CapturedSource, error)
 }
 
+// SourceUnitRegistrar records a reached sourced unit's pin, bytes and static
+// nodes before its statements run so child executions validate against the
+// retained program.
+type SourceUnitRegistrar interface {
+	RegisterSourceUnit(context.Context, toolcontract.OperationInvocation, CapturedSource, commandsurface.ProgramSnapshot) error
+}
+
 // ExternalLauncher must enter the host launch-plan and confinement boundary.
 type ExternalLauncher interface {
 	Launch(context.Context, OperationRequest, Streams) (toolcontract.ProducerResult, error)
