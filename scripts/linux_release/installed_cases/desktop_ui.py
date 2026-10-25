@@ -83,10 +83,28 @@ class DesktopUI:
 
     def windows(self, deadline=None):
         deadline = time.monotonic() + 15 if deadline is None else deadline
+        while time.monotonic() < deadline:
+            try:
+                snapshot = self._window_snapshot(deadline)
+                break
+            except (ValueError, TypeError):
+                raise
+            except Exception as error:
+                if not retry_inventory(self.app, error):
+                    raise
+                time.sleep(0.05)
+        else:
+            raise CaseUnavailable('normal-native-window-observation-deadline')
+        # Publish once, after the entire inventory and its owners were checked.
+        yield from snapshot
+
+    def _window_snapshot(self, deadline):
         desktop = self.api.Registry.getDesktop(0)
-        if not 0 <= desktop.childCount <= 256:
+        application_count = desktop.childCount
+        if type(application_count) is not int or not 0 <= application_count <= 256:
             raise ValueError('native accessibility application inventory exceeds its bound')
-        for index in range(desktop.childCount):
+        snapshot = []
+        for index in range(application_count):
             if time.monotonic() >= deadline:
                 raise CaseUnavailable('normal-native-window-observation-deadline')
             application = desktop[index]
@@ -96,18 +114,27 @@ class DesktopUI:
             if not owned_process(pid, self.app):
                 continue
             identity = process_identity(pid)
-            if not 0 <= application.childCount <= 64:
+            window_count = application.childCount
+            if type(window_count) is not int or not 0 <= window_count <= 64:
                 raise ValueError('installed window inventory exceeds its bound')
-            for offset in range(application.childCount):
+            for offset in range(window_count):
                 if time.monotonic() >= deadline:
                     raise CaseUnavailable('normal-native-window-observation-deadline')
                 window = application[offset]
                 if window is None:
                     raise _InventoryChanged()
                 if window.getRole() in {self.api.ROLE_FRAME, self.api.ROLE_DIALOG} and self.visible(window):
-                    yield identity, window
+                    snapshot.append((identity, window))
             if process_identity(pid) != identity or not owned_process(pid, self.app):
                 raise ValueError('installed desktop owner changed during window observation')
+            if application.childCount != window_count:
+                raise _InventoryChanged()
+        if desktop.childCount != application_count:
+            raise _InventoryChanged()
+        launch = self.app.observations['launch_identity']
+        if process_identity(launch['pid']) != launch:
+            raise CaseFailed('captured installed desktop identity changed during window observation')
+        return snapshot
 
     def descendants(self, window, deadline=None, *, include=None):
         return accessibility.descendants(window, deadline, include=include)
