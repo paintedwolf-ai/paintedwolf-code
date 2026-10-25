@@ -3,10 +3,10 @@ id: EDITOR_DOCUMENT_READ_REQUIRED
 kind: policy
 anchor: tool.rejected
 selector:
-  tool: [write, edit, replace_lines, code_rewrite, jq_edit, restore_version]
+  paintedwolf.operation: [write, edit, replace_lines, code_rewrite, jq_edit, restore_version]
 requires:
   profiles: [tool]
-  facts: [paintedwolf.rejection_code, paintedwolf.path]
+  facts: [paintedwolf.rejection_code, paintedwolf.path, paintedwolf.operation]
 when: paintedwolf.rejection_code == "EDITOR_DOCUMENT_READ_REQUIRED"
 effect: block
 copy:

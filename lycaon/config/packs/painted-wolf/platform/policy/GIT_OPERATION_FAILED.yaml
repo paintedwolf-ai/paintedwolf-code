@@ -3,9 +3,10 @@ id: GIT_OPERATION_FAILED
 kind: policy
 anchor: tool.rejected
 selector:
-  tool: [git_checkout, git_merge, git_stash]
+  paintedwolf.operation: [git_checkout, git_merge, git_stash]
 requires:
   facts:
+    - paintedwolf.operation
     - paintedwolf.rejection_code
     - paintedwolf.git_after_observed
     - paintedwolf.git_merge_active

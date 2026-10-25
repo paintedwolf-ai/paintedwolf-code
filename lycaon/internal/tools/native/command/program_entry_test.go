@@ -89,7 +89,7 @@ func newProgramFixture(t *testing.T) *programFixture {
 		Progress: progressFacts{owner}, Supervisor: &command.ProgramSupervisor{Interrupter: recorder, Background: background}, Evaluate: commandprogram.Evaluate,
 		Sessions: fixtureSessions{},
 		Owners: func(tools.ToolContext, *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
-			return command.ProgramOwners{Natives: map[string]command.NativeOperation{"tee": teeOperation(dir), "head": firstLineOperation()}}, nil
+			return command.ProgramOwners{Natives: map[string]command.NativeOperation{"tee": teeOperation(dir), "head": firstLineOperation()}, Sources: dirSources(dir)}, nil
 		},
 	}
 	return &programFixture{runtime: runtime, recorder: recorder, database: database, session: session, dir: dir, background: background}
