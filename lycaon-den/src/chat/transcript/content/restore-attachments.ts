@@ -41,6 +41,7 @@ function chipToPending(
         projectId,
         rootId,
         path,
+        mediaType: chip.mime,
         startLine: chip.startLine,
         endLine: chip.endLine,
       };
@@ -59,6 +60,13 @@ function chipToPending(
         path,
       };
     }
+    case "external-file":
+    case "external-folder": {
+      const path = chip.path?.trim();
+      if (!path) return null;
+      return chip.kind === "external-folder" ? { id: newId(), kind: "external-folder", name: chip.label, projectId, path }
+        : { id: newId(), kind: "external-file", name: chip.label, projectId, path, mediaType: chip.mime, startLine: chip.startLine, endLine: chip.endLine };
+    }
     case "search-hit": {
       const sourceRef = chip.sourceRef?.trim();
       const sourceSessionId = chip.sourceSessionId?.trim();
@@ -74,6 +82,7 @@ function chipToPending(
         hitKind,
       };
     }
+    case "image":
     case "text":
     case "document":
     case "video": {
@@ -117,22 +126,21 @@ export function pendingAttachmentsFromRestore(args: {
   const roots = args.project?.roots ?? [];
   const out: ComposerPendingAttachment[] = [];
 
-  for (const id of args.artifactIds ?? []) {
-    const artifactId = id.trim();
-    if (!artifactId) continue;
-    out.push({
-      id: newId(),
-      kind: "artifact",
-      name: "Image",
-      projectId,
-      artifactId,
-    });
-  }
-
   const { chips } = projectUserMessageParts("", args.contentParts);
+  const sourcedArtifacts = new Set<string>();
+  const sources: ComposerPendingAttachment[] = [];
   for (const chip of chips) {
     const pending = chipToPending(chip, { projectId, roots });
-    if (pending) out.push(pending);
+    if (pending) {
+      sources.push(pending);
+      if (chip.artifactId) sourcedArtifacts.add(chip.artifactId);
+    }
   }
+  for (const id of args.artifactIds ?? []) {
+    const artifactId = id.trim();
+    if (!artifactId || sourcedArtifacts.has(artifactId)) continue;
+    out.push({ id: newId(), kind: "artifact", name: "Image", projectId, artifactId });
+  }
+  out.push(...sources);
   return out;
 }

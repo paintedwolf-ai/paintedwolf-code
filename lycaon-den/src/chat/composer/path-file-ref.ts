@@ -54,14 +54,14 @@ export function pathFileChipLabel(args: {
 export function samePathFileRange(
   a: {
     projectId: string;
-    rootId: string;
+    rootId?: string;
     path: string;
     startLine?: number | null;
     endLine?: number | null;
   },
   b: {
     projectId: string;
-    rootId: string;
+    rootId?: string;
     path: string;
     startLine?: number | null;
     endLine?: number | null;

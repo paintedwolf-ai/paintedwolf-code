@@ -7,11 +7,13 @@ import {
   attachmentReceiptToPending,
   attachmentRejectCode,
   byteAttachmentIntakeReject,
+  referenceAttachmentIntakeReject,
   fileToComposerAttachment,
   expectedPayloadKind,
   formatAttachmentBytes,
   isAllowedImageMime,
   mediaMimeFromPath,
+  nativeProjectionMimeFromPath,
   isSendablePendingAttachment,
   rejectMessageForCode,
   revokeComposerAttachment,
@@ -70,6 +72,7 @@ function capsProjection(
         byteLength: item.byteLength,
       };
     }
+    if (item.kind === "path" && !nativeProjectionMimeFromPath(item.absolutePath)) return { id: item.id, kind: "external-file", projectId: "", path: item.absolutePath, name: item.name, mediaType: mediaMimeFromPath(item.absolutePath) };
     if (item.kind === "path") {
       return {
         id: item.id,
@@ -134,7 +137,7 @@ async function intakePath(
   if (pathKind === "folder") return reject(name, HOME_IDEA_FOLDER_REJECT);
   if (pathKind === "missing") return reject(name, DROP_REJECT_MISSING);
   const mime = mediaMimeFromPath(absolutePath);
-  const refusal = byteAttachmentIntakeReject(capsProjection(taken), undefined, mime);
+  const refusal = nativeProjectionMimeFromPath(absolutePath) ? byteAttachmentIntakeReject(capsProjection(taken), undefined, mime) : referenceAttachmentIntakeReject(capsProjection(taken), mime);
   if (refusal) return reject(name, refusal);
   return {
     id: crypto.randomUUID(),
@@ -187,7 +190,7 @@ export function homeIdeaChipGlyph(item: HomeIdeaAttachment): string {
 export function homeIdeaChipDetail(item: HomeIdeaAttachment): string {
   if (item.kind === "reject") return item.reason;
   if (item.kind === "web-file") return formatAttachmentBytes(item.byteLength);
-  return "";
+  return item.absolutePath;
 }
 
 /** Imports buffered attachments into the project, retaining failures as chips. */
@@ -203,9 +206,13 @@ export async function stageHomeIdeaAttachments(
       continue;
     }
     if (item.kind === "path") {
+      const reference: ComposerPendingAttachment = { id: item.id, kind: "external-file", projectId, path: item.absolutePath, name: item.name, mediaType: mediaMimeFromPath(item.absolutePath) };
+      if (!nativeProjectionMimeFromPath(item.absolutePath)) { staged.push(reference); continue; }
       try {
         const receipt = await importExternalAttachment(projectId, item.absolutePath);
-        staged.push(attachmentReceiptToPending(receipt, { importedCopy: true }));
+        reference.mediaType = receipt.mime;
+        const payload = attachmentReceiptToPending(receipt, { importedCopy: true });
+        staged.push(...(receipt.kind === "document" || receipt.kind === "video" ? [payload, reference] : [reference]));
       } catch (error) {
         staged.push({
           id: crypto.randomUUID(),

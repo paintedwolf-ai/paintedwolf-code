@@ -13,6 +13,9 @@ export type ComposerAttachmentDrafts = Record<string, ComposerAttachmentDraft>;
 function text(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && value.length <= 4096;
 }
+function absolutePath(value: string): boolean {
+  return value.startsWith("/") || /^[a-zA-Z]:[\\/]/.test(value) || value.startsWith("\\\\");
+}
 function count(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
@@ -32,14 +35,18 @@ export function retainedComposerAttachment(value: unknown, projectId: string): C
       return { ...common, kind: value.kind, blobId: value.blobId, mime: value.mime,
         byteLength: value.byteLength, ...(value.importedCopy === true ? { importedCopy: true } : {}),
         ...(value.kind === "video" && videoFacts(value.video) ? { video: value.video } : {}) };
-    case "path-file": case "path-folder": {
-      if (value.projectId !== projectId || !text(value.rootId) || !text(value.path)) return;
-      const path = { ...common, projectId, rootId: value.rootId, path: value.path };
-      if (value.kind === "path-folder") return { ...path, kind: "path-folder" };
+    case "path-file": case "path-folder": case "external-file": case "external-folder": {
+      if (value.projectId !== projectId || !text(value.path)) return;
+      const external = value.kind === "external-file" || value.kind === "external-folder";
+      if (external ? !absolutePath(value.path) : !text(value.rootId)) return;
+      const path = { ...common, projectId, path: value.path };
+      if (value.kind === "external-folder") return { ...path, kind: "external-folder" };
+      if (value.kind === "path-folder") return { ...path, kind: "path-folder", rootId: value.rootId as string };
       if (value.startLine !== undefined && (!count(value.startLine) || value.startLine < 1)) return;
       if (value.endLine !== undefined && (!count(value.endLine) || value.endLine < 1 ||
         (typeof value.startLine === "number" && value.endLine < value.startLine))) return;
-      return { ...path, kind: "path-file",
+      return { ...path, ...(value.kind === "external-file" ? { kind: "external-file" as const } : { kind: "path-file" as const, rootId: value.rootId as string }),
+        ...(text(value.mediaType) ? { mediaType: value.mediaType } : {}),
         ...(typeof value.startLine === "number" ? { startLine: value.startLine } : {}),
         ...(typeof value.endLine === "number" ? { endLine: value.endLine } : {}) };
     }

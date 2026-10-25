@@ -5,6 +5,7 @@ import {
   byteAttachmentIntakeReject,
   fileToComposerAttachment,
   mediaMimeFromPath,
+  nativeProjectionMimeFromPath,
   composerAttachmentCapabilities,
   attachmentReceiptToPending,
   attachmentRejectCode,
@@ -14,6 +15,9 @@ import {
   type ComposerPendingAttachment,
   type ComposerPendingPathFile,
   type ComposerPendingPathFolder,
+  type ComposerPendingExternalFile,
+  type ComposerPendingExternalFolder,
+  revokeComposerAttachment,
   type ComposerPendingSearchHit,
 } from "./composer-attachments.ts";
 import { pendingAttachmentsForSession } from "./composer-attachment-store.ts";
@@ -47,6 +51,8 @@ import {
 export type ChatAttachmentRef =
   | Omit<ComposerPendingPathFile, "id">
   | Omit<ComposerPendingPathFolder, "id">
+  | Omit<ComposerPendingExternalFile, "id">
+  | Omit<ComposerPendingExternalFolder, "id">
   | Omit<ComposerPendingArtifact, "id">
   | Omit<ComposerPendingSearchHit, "id">;
 
@@ -160,7 +166,7 @@ export async function addToChat(
   if (refusal) return { ok: false, reason: refusal };
 
   let pending: ComposerPendingAttachment;
-  if (ref.kind === "path-file") {
+  if (ref.kind === "path-file" || ref.kind === "external-file") {
     const range = normalizeLineRange(ref.startLine, ref.endLine);
     const normalized = {
       ...ref,
@@ -170,16 +176,18 @@ export async function addToChat(
     if (
       pendingAttachmentsForSession(destination.sessionId).some(
         (attachment) =>
-          attachment.kind === "path-file" &&
+          attachment.kind === ref.kind &&
+          (attachment.kind === "path-file" || attachment.kind === "external-file") &&
           samePathFileRange(attachment, normalized),
       )
     ) {
+      revokeComposerAttachment({ id: "duplicate", ...normalized });
       revealDestination(destination);
       return { ok: true, destination };
     }
-    pending = { id: crypto.randomUUID(), ...normalized };
+    pending = { ...normalized, id: crypto.randomUUID() };
   } else {
-    pending = { id: crypto.randomUUID(), ...ref };
+    pending = { ...ref, id: crypto.randomUUID() };
   }
 
   const result = await stageComposerMutation(
@@ -382,6 +390,18 @@ export async function ingestDropClassification(
     case "reject":
       return stageComposerMutation(destination, [rejectChip(classification.reason)]);
     case "path-file": {
+      const mediaType = mediaMimeFromPath(classification.path);
+      let previewUrl: string | undefined;
+      if (mediaType?.startsWith("image/")) {
+        try {
+          const absolute = classification.absolutePath;
+          // Classification carries root-relative coordinates; preview failure never loses the reference.
+          if (absolute) {
+            const bytes = await readPathBytes(absolute, rootPaths, composerAttachmentCapabilities()?.max_image_bytes ?? 0);
+            previewUrl = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: mediaType }));
+          }
+        } catch { /* The host still reads and screens the original when sent. */ }
+      }
       const result = await addToChat(
         {
           kind: "path-file",
@@ -389,6 +409,7 @@ export async function ingestDropClassification(
           rootId: classification.rootId,
           path: classification.path,
           name: basenameOfPath(classification.path),
+          mediaType, previewUrl,
         },
         { destination },
       );
@@ -411,46 +432,43 @@ export async function ingestDropClassification(
       const pending = await stageFile(classification.file, destination);
       return stageComposerMutation(destination, [pending]);
     }
-    case "external-file":
-      try {
-        const preflight = byteAttachmentPreflight(
-          destination,
-          undefined,
-          mediaMimeFromPath(classification.absolutePath),
-        );
-        if (preflight) {
-          return stageComposerMutation(destination, [
-            rejectChip(preflight, basenameOfPath(classification.absolutePath)),
-          ]);
-        }
-        const receipt = await importExternalAttachment(
-          destination.projectId,
-          classification.absolutePath,
-        );
-        return stageComposerMutation(destination, [
-          attachmentReceiptToPending(receipt, { importedCopy: true }),
-        ]);
-      } catch (error) {
-        return stageComposerMutation(destination, [
-          rejectChip(
-            rejectMessageForCode(attachmentRejectCode(error)),
-            basenameOfPath(classification.absolutePath),
-          ),
-        ]);
+    case "external-folder":
+      return stageComposerMutation(destination, [{ id: crypto.randomUUID(), kind: "external-folder",
+        projectId: destination.projectId, path: classification.absolutePath, name: basenameOfPath(classification.absolutePath) }]);
+    case "external-file": {
+      const mediaType = mediaMimeFromPath(classification.absolutePath);
+      const reference: ComposerPendingExternalFile = { id: crypto.randomUUID(), kind: "external-file",
+        projectId: destination.projectId, path: classification.absolutePath, name: basenameOfPath(classification.absolutePath), mediaType };
+      if (!nativeProjectionMimeFromPath(classification.absolutePath)) {
+        const result = await addToChat(reference, { destination });
+        return result.ok ? { ok: true } : result;
       }
-    case "bytes-media":
+      try {
+        const preflight = byteAttachmentPreflight(destination, undefined, mediaType);
+        if (preflight) return stageComposerMutation(destination, [rejectChip(preflight, reference.name)]);
+        const receipt = await importExternalAttachment(destination.projectId, classification.absolutePath);
+        reference.mediaType = receipt.mime;
+        const payload = attachmentReceiptToPending(receipt, { importedCopy: true });
+        return stageComposerMutation(destination, receipt.kind === "document" || receipt.kind === "video" ? [payload, reference] : [reference]);
+      } catch (error) {
+        return stageComposerMutation(destination, [rejectChip(rejectMessageForCode(attachmentRejectCode(error)), reference.name)]);
+      }
+    }
+    case "projected-file":
       try {
         const bytes = await readPathBytes(
           classification.absolutePath,
           rootPaths,
           composerAttachmentCapabilities()?.max_upload_bytes ?? 0,
         );
-        const mime = mediaMimeFromPath(classification.absolutePath) ?? "application/octet-stream";
+        const mime = nativeProjectionMimeFromPath(classification.absolutePath) ?? "application/octet-stream";
         const name = basenameOfPath(classification.absolutePath);
         const file = new File([new Uint8Array(bytes)], name, { type: mime });
-        return stageComposerMutation(destination, [
-          await stageFile(file, destination),
-        ]);
+        const payload = await stageFile(file, destination);
+        if (payload.kind === "reject") return stageComposerMutation(destination, [payload]);
+        const reference: ComposerPendingPathFile = { id: crypto.randomUUID(), kind: "path-file", projectId: classification.projectId, rootId: classification.rootId, path: classification.path, name,
+          mediaType: "mime" in payload ? payload.mime : undefined };
+        return stageComposerMutation(destination, payload.kind === "document" || payload.kind === "video" ? [payload, reference] : [reference]);
       } catch (error) {
         return stageComposerMutation(destination, [
           rejectChip(

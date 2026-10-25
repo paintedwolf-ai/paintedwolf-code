@@ -56,6 +56,15 @@ function parseChatAttachmentRef(value: unknown): ChatAttachmentRef | null {
         ? { kind: "path-folder", projectId, rootId, path, name }
         : null;
     }
+    case "external-file":
+    case "external-folder": {
+      const path = requiredString(ref.path);
+      const startLine = optionalLine(ref.startLine);
+      const endLine = optionalLine(ref.endLine);
+      if (!path || startLine === null || endLine === null || (endLine !== undefined && startLine === undefined)) return null;
+      return ref.kind === "external-folder" ? { kind: "external-folder", projectId, name, path }
+        : { kind: "external-file", projectId, name, path, ...(startLine === undefined ? {} : { startLine }), ...(endLine === undefined ? {} : { endLine }) };
+    }
     case "artifact": {
       const artifactId = requiredString(ref.artifactId);
       const previewUrl =

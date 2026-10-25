@@ -35,6 +35,8 @@ export type ComposerPendingKind =
   | "reject"
   | "path-file"
   | "path-folder"
+  | "external-file"
+  | "external-folder"
   | "artifact"
   | "search-hit"
   | "secret";
@@ -66,6 +68,9 @@ export type ComposerPendingPathFile = {
   projectId: string;
   rootId: string;
   path: string;
+  /** Presentation hints; the host detects and screens the file at send. */
+  mediaType?: string;
+  previewUrl?: string;
   /** Inclusive 1-based start line when the chip is a selection range. */
   startLine?: number;
   /** Inclusive 1-based end line. */
@@ -78,6 +83,26 @@ export type ComposerPendingPathFolder = {
   name: string;
   projectId: string;
   rootId: string;
+  path: string;
+};
+
+export type ComposerPendingExternalFile = {
+  id: string;
+  kind: "external-file";
+  name: string;
+  projectId: string;
+  path: string;
+  mediaType?: string;
+  previewUrl?: string;
+  startLine?: number;
+  endLine?: number;
+};
+
+export type ComposerPendingExternalFolder = {
+  id: string;
+  kind: "external-folder";
+  name: string;
+  projectId: string;
   path: string;
 };
 
@@ -115,6 +140,8 @@ export type ComposerPendingAttachment =
   | ComposerPendingByteAttachment
   | ComposerPendingPathFile
   | ComposerPendingPathFolder
+  | ComposerPendingExternalFile
+  | ComposerPendingExternalFolder
   | ComposerPendingArtifact
   | ComposerPendingSearchHit
   | ComposerPendingSecret;
@@ -163,6 +190,20 @@ function videoMimeFromPath(path: string): string | undefined {
   return mime;
 }
 
+/** Native documents and recordings retain extraction alongside a live reference.
+ * These are picker hints; the host's upload receipt decides the content family.
+ */
+export function nativeProjectionMimeFromPath(path: string): string | undefined {
+  const documents: Readonly<Record<string, string>> = {
+    ".pdf": "application/pdf", ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ".odt": "application/vnd.oasis.opendocument.text", ".ods": "application/vnd.oasis.opendocument.spreadsheet",
+    ".odp": "application/vnd.oasis.opendocument.presentation", ".rtf": "application/rtf",
+  };
+  return videoMimeFromPath(path) ?? documents[extensionOf(path)];
+}
+
 /** The payload family a file is expected to land in before the host detects it: an extension or picker guess. */
 export function expectedPayloadKind(mime: string | undefined): "image" | "video" | "document" {
   if (mime && isAllowedImageMime(mime)) return "image";
@@ -205,8 +246,10 @@ export function isByteAttachmentKind(kind: ComposerPendingKind): boolean {
 }
 
 /** True when the chip reaches the model as one image: an image, or a video's frame sheet. */
-export function countsAsImage(kind: ComposerPendingKind): boolean {
-  return kind === "image" || kind === "video";
+export function countsAsImage(attachment: ComposerPendingKind | ComposerPendingAttachment): boolean {
+  const kind = typeof attachment === "string" ? attachment : attachment.kind;
+  return kind === "image" || kind === "video" || (typeof attachment !== "string" &&
+    "mediaType" in attachment && attachment.mediaType?.startsWith("image/") === true);
 }
 
 /** True when the chip is a coordinates-only reference. */
@@ -214,6 +257,8 @@ export function isReferenceKind(kind: ComposerPendingKind): boolean {
   return (
     kind === "path-file" ||
     kind === "path-folder" ||
+    kind === "external-file" ||
+    kind === "external-folder" ||
     kind === "artifact" ||
     kind === "search-hit" ||
     kind === "secret"
@@ -265,8 +310,19 @@ export function byteAttachmentIntakeReject(
   if (
     mime &&
     (isAllowedImageMime(mime) || isAllowedVideoMime(mime)) &&
-    current.filter((attachment) => countsAsImage(attachment.kind)).length >= caps.max_images
+    current.filter((attachment) => countsAsImage(attachment)).length >= caps.max_images
   ) {
+    return rejectMessageForCode("attachment_too_large");
+  }
+  return null;
+}
+
+/** Reference count and image affordances; the host decides file admission. */
+export function referenceAttachmentIntakeReject(current: readonly ComposerPendingAttachment[], mediaType?: string): string | null {
+  const caps = composerAttachmentCapabilities();
+  if (!caps) return "Attachments are unavailable until host readiness loads.";
+  if (current.filter(a => isReferenceKind(a.kind)).length >= caps.max_references ||
+      (mediaType?.startsWith("image/") && current.filter(countsAsImage).length >= caps.max_images)) {
     return rejectMessageForCode("attachment_too_large");
   }
   return null;
@@ -291,8 +347,10 @@ export function attachmentKindGlyph(kind: ComposerPendingKind): string {
     case "video":
       return "▶";
     case "path-file":
+    case "external-file":
       return "▢";
     case "path-folder":
+    case "external-folder":
       return "⊡";
     case "artifact":
       return "◈";
@@ -306,12 +364,17 @@ export function attachmentKindGlyph(kind: ComposerPendingKind): string {
 }
 
 export function attachmentChipLabel(att: ComposerPendingAttachment): string {
-  if (att.kind === "path-file") return pathFileChipLabel(att);
+  if (att.kind === "path-file" || att.kind === "external-file") return pathFileChipLabel(att);
   return att.name;
 }
 
 export function attachmentChipDetail(att: ComposerPendingAttachment): string {
   switch (att.kind) {
+    case "path-file":
+    case "path-folder":
+    case "external-file":
+    case "external-folder":
+      return att.path;
     case "secret":
       return att.shape || `${att.runeLength} characters`;
     case "reject":
@@ -340,10 +403,10 @@ export function attachmentPreviewSnippet(att: ComposerPendingAttachment, maxChar
   if (att.kind === "reject") {
     return att.rejectMessage || rejectMessageForCode(att.rejectCode ?? "unsupported_attachment");
   }
-  if (att.kind === "path-folder") {
+  if (att.kind === "path-folder" || att.kind === "external-folder") {
     return `folder · ${att.path}`;
   }
-  if (att.kind === "path-file") {
+  if (att.kind === "path-file" || att.kind === "external-file") {
     return pathFileChipLabel({ ...att, name: att.path });
   }
   if (att.kind === "artifact") {
@@ -476,7 +539,7 @@ export function attachmentRejectCode(err: unknown): AttachmentRejectCode {
 }
 
 export function revokeComposerAttachment(att: ComposerPendingAttachment): void {
-  if (att.kind === "image" || att.kind === "artifact") {
+  if ("previewUrl" in att) {
     if (att.previewUrl) URL.revokeObjectURL(att.previewUrl);
   }
 }
@@ -489,6 +552,8 @@ export function isSendablePendingAttachment(att: ComposerPendingAttachment): boo
   return (
     att.kind === "path-file" ||
     att.kind === "path-folder" ||
+    att.kind === "external-file" ||
+    att.kind === "external-folder" ||
     att.kind === "artifact" ||
     att.kind === "search-hit" ||
     att.kind === "secret"

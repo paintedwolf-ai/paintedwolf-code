@@ -69,6 +69,18 @@ describe("chat attachment drag", () => {
     detach();
   });
 
+  it.each(["external-file", "external-folder"] as const)("retains %s provenance on an in-app drop", (kind) => {
+    const target = document.createElement("section");
+    const drop = vi.fn();
+    const detach = registerChatAttachmentDrop(target, { onDragActive: () => {}, onDrop: drop });
+    const reference = { kind, projectId: "project-1", name: "notes", path: "/outside/notes" };
+    const data = new DragData();
+    startChatAttachmentDrag(dragEvent("dragstart", data), reference);
+    target.dispatchEvent(dragEvent("drop", data));
+    expect(drop).toHaveBeenCalledWith(reference);
+    detach();
+  });
+
   it("rejects malformed renderer payloads", () => {
     const target = document.createElement("section");
     const drop = vi.fn();

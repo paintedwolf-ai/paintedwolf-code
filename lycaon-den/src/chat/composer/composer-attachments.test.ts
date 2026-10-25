@@ -196,8 +196,8 @@ describe("composer-attachments", () => {
     expect(
       attachmentChipLabel({ ...ranged, startLine: undefined, endLine: undefined }),
     ).toBe("main.go");
-    // Path chips carry no detail — the glyph plus the title say the rest.
-    expect(attachmentChipDetail(ranged)).toBe("");
+    // Path details distinguish similarly named files.
+    expect(attachmentChipDetail(ranged)).toBe("cmd/server/main.go");
   });
 
   it("keeps chip detail short and plain for byte chips", () => {

@@ -41,6 +41,12 @@ export function promptPartsFromPendingAttachments(
         },
       ];
     }
+    if (a.kind === "external-file" || a.kind === "external-folder") {
+      return [{ kind: a.kind, project_id: a.projectId, path: a.path,
+        ...(a.kind === "external-file" && a.startLine != null ? { start_line: a.startLine } : {}),
+        ...(a.kind === "external-file" && a.endLine != null ? { end_line: a.endLine } : {}),
+      }];
+    }
     if (a.kind === "artifact") {
       return [
         {

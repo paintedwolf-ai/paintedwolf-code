@@ -22,6 +22,8 @@ type FramedPart struct {
 	Fence         string
 	Source        string
 	MediaType     string
+	// ArtifactID binds the visual derived from this source part.
+	ArtifactID string
 	// BlobID identifies a staged payload.
 	BlobID string
 	// Path is empty when no materialized body exists.
@@ -66,8 +68,10 @@ func (r IngestResult) Fences() []string { return Fences(r.Parts) }
 
 // InlineImage is a materialized raster.
 type InlineImage struct {
-	Mime  string
-	Bytes []byte
+	// PartIndex binds the raster to its source in the matching result Parts slice.
+	PartIndex int
+	Mime      string
+	Bytes     []byte
 }
 
 // IngestAttachments frames attachments within the turn preview budget.
@@ -142,7 +146,7 @@ func projectBlob(ctx context.Context, p projection, out *IngestResult) error {
 		if err != nil {
 			return err
 		}
-		out.Images = append(out.Images, InlineImage{Mime: p.detected.MIME, Bytes: raw})
+		out.Images = append(out.Images, InlineImage{PartIndex: len(out.Parts), Mime: p.detected.MIME, Bytes: raw})
 		attrs := []string{fmt.Sprintf("bytes=%q", strconv.FormatInt(p.blob.Size, 10)), fmt.Sprintf("path=%q", p.blob.Rel)}
 		fence := FormatFence(p.blob.Name, p.detected.MIME, fmt.Sprintf("[User attached image: %s]", p.blob.Rel), false, attrs...)
 		out.Parts = append(out.Parts, framedPayload(p.blob, p.detected.MIME, fence))

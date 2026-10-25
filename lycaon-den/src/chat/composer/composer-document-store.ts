@@ -120,6 +120,8 @@ function referenceProject(
   switch (attachment.kind) {
     case "path-file":
     case "path-folder":
+    case "external-file":
+    case "external-folder":
     case "artifact":
     case "search-hit":
       return attachment.projectId.trim();
