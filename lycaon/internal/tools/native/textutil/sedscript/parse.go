@@ -2,8 +2,26 @@ package sedscript
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/toolcontract"
+)
+
+const (
+	parserBaseBytes         = 256
+	commandStructBytes      = 128
+	addressStructBytes      = 64
+	substitutionStructBytes = 96
+	compiledRegexBytes      = 128
+	pointerElemBytes        = 8
+	intElemBytes            = 8
+	stringElemBytes         = 16
+	pieceElemBytes          = 32
+	runeElemBytes           = 4
+	labelMapEntryBytes      = 64
+	trMapEntryBytes         = 32
 )
 
 // scriptCursor scans tokens, delimited patterns, escapes and literal text
@@ -19,6 +37,7 @@ type scriptCursor struct {
 type parser struct {
 	scriptCursor
 	ctx      context.Context
+	memory   *toolcontract.ProgramMemory
 	extended bool
 	compiler Compiler
 	program  *Program
@@ -27,10 +46,34 @@ type parser struct {
 	branches []int
 }
 
-// Parse compiles a complete script. Scripts from several -e and -f sources
-// are joined with newlines by the caller.
-func Parse(ctx context.Context, script string, extended bool, compiler Compiler) (*Program, error) {
-	p := &parser{scriptCursor: scriptCursor{src: script}, ctx: ctx, extended: extended, compiler: compiler, program: &Program{}, labels: map[string]int{}}
+// Parse compiles a complete script and admits its parsed AST, slices, maps
+// and literal/delimited buffers against memory before allocation. Scripts from
+// several -e and -f sources are joined with newlines by the caller.
+func Parse(ctx context.Context, memory *toolcontract.ProgramMemory, script string, extended bool, compiler Compiler) (*Program, error) {
+	if memory == nil {
+		return nil, errors.New("sed script parse requires program memory admission")
+	}
+	baseRelease, err := memory.Reserve(ctx, parserBaseBytes)
+	if err != nil {
+		return nil, err
+	}
+	p := &parser{
+		scriptCursor: scriptCursor{src: script},
+		ctx:          ctx,
+		memory:       memory,
+		extended:     extended,
+		compiler:     compiler,
+		program:      &Program{releases: []func(){baseRelease}},
+		labels:       map[string]int{},
+	}
+	if err := p.parseAll(script); err != nil {
+		p.program.Close()
+		return nil, err
+	}
+	return p.program, nil
+}
+
+func (p *parser) parseAll(script string) error {
 	p.program.quiet = script == "#n" || strings.HasPrefix(script, "#n\n")
 	for {
 		p.skip(" \t\n;")
@@ -38,11 +81,11 @@ func Parse(ctx context.Context, script string, extended bool, compiler Compiler)
 			break
 		}
 		if err := p.command(); err != nil {
-			return nil, err
+			return err
 		}
 	}
 	if len(p.open) > 0 {
-		return nil, p.fail("a } closing every {")
+		return p.fail("a } closing every {")
 	}
 	for _, index := range p.branches {
 		c := p.program.commands[index]
@@ -52,11 +95,53 @@ func Parse(ctx context.Context, script string, extended bool, compiler Compiler)
 		}
 		target, ok := p.labels[c.arg]
 		if !ok {
-			return nil, p.fail("a :" + c.arg + " label for " + string(c.name))
+			return p.fail("a :" + c.arg + " label for " + string(c.name))
 		}
 		c.jump = target
 	}
-	return p.program, nil
+	return nil
+}
+
+func (p *parser) reserve(n int64) error {
+	if n <= 0 {
+		return nil
+	}
+	release, err := p.memory.Reserve(p.ctx, n)
+	if err != nil {
+		return err
+	}
+	p.program.releases = append(p.program.releases, release)
+	return nil
+}
+
+func appendAdmitted[T any](p *parser, slice []T, elem T, elemBytes int64) ([]T, error) {
+	if len(slice) < cap(slice) {
+		return append(slice, elem), nil
+	}
+	nextCap := max(4, cap(slice)*2)
+	if err := p.reserve(int64(nextCap) * elemBytes); err != nil {
+		return nil, err
+	}
+	grown := make([]T, len(slice), nextCap)
+	copy(grown, slice)
+	return append(grown, elem), nil
+}
+
+func appendAdmittedBytes(p *parser, slice []byte, elems ...byte) ([]byte, error) {
+	needed := len(slice) + len(elems)
+	if needed <= cap(slice) {
+		return append(slice, elems...), nil
+	}
+	nextCap := max(16, cap(slice)*2)
+	for nextCap < needed {
+		nextCap *= 2
+	}
+	if err := p.reserve(int64(nextCap)); err != nil {
+		return nil, err
+	}
+	grown := make([]byte, len(slice), nextCap)
+	copy(grown, slice)
+	return append(grown, elems...), nil
 }
 
 func (p *scriptCursor) fail(expected string) error {
@@ -81,6 +166,9 @@ func (p *scriptCursor) peek() byte {
 }
 
 func (p *parser) command() error {
+	if err := p.reserve(commandStructBytes); err != nil {
+		return err
+	}
 	c := &command{number: -1}
 	if err := p.addresses(c); err != nil {
 		return err
@@ -97,6 +185,7 @@ func (p *parser) command() error {
 		return p.fail(string(c.name) + " with at most one address")
 	}
 	index := len(p.program.commands)
+	var err error
 	switch c.name {
 	case '#':
 		for p.pos < len(p.src) && p.src[p.pos] != '\n' {
@@ -104,9 +193,11 @@ func (p *parser) command() error {
 		}
 		return nil
 	case '{':
-		p.open = append(p.open, index)
-		p.program.commands = append(p.program.commands, c)
-		return nil
+		if p.open, err = appendAdmitted(p, p.open, index, intElemBytes); err != nil {
+			return err
+		}
+		p.program.commands, err = appendAdmitted(p, p.program.commands, c, pointerElemBytes)
+		return err
 	case '}':
 		if len(p.open) == 0 {
 			return p.fail("a { before }")
@@ -120,14 +211,22 @@ func (p *parser) command() error {
 		if _, ok := p.labels[c.arg]; ok {
 			return p.fail("a label defined once")
 		}
+		if err := p.reserve(int64(len(c.arg)) + labelMapEntryBytes); err != nil {
+			return err
+		}
 		p.labels[c.arg] = index
-		p.program.commands = append(p.program.commands, c)
-		return nil
+		p.program.commands, err = appendAdmitted(p, p.program.commands, c, pointerElemBytes)
+		return err
 	case 'b', 't', 'T':
 		c.arg = p.label()
-		p.branches = append(p.branches, index)
-		p.program.commands = append(p.program.commands, c)
-		return nil
+		if err := p.reserve(int64(len(c.arg))); err != nil {
+			return err
+		}
+		if p.branches, err = appendAdmitted(p, p.branches, index, intElemBytes); err != nil {
+			return err
+		}
+		p.program.commands, err = appendAdmitted(p, p.program.commands, c, pointerElemBytes)
+		return err
 	case '=', 'd', 'D', 'g', 'G', 'h', 'H', 'n', 'N', 'p', 'P', 'x', 'z', 'F':
 	case 'l', 'q', 'Q':
 		c.number = p.number()
@@ -137,15 +236,17 @@ func (p *parser) command() error {
 			return err
 		}
 		c.text = text
-		p.program.commands = append(p.program.commands, c)
-		return nil
+		p.program.commands, err = appendAdmitted(p, p.program.commands, c, pointerElemBytes)
+		return err
 	case 'r', 'R', 'w', 'W':
 		if c.arg = p.filename(); c.arg == "" {
 			return p.fail("a file name after " + string(c.name))
 		}
-		p.file(c.name, c.arg)
-		p.program.commands = append(p.program.commands, c)
-		return nil
+		if err := p.file(c.name, c.arg); err != nil {
+			return err
+		}
+		p.program.commands, err = appendAdmitted(p, p.program.commands, c, pointerElemBytes)
+		return err
 	case 's':
 		sub, err := p.substitution()
 		if err != nil {
@@ -168,7 +269,9 @@ func (p *parser) command() error {
 		p.pos--
 		return p.fail("a sed command")
 	}
-	p.program.commands = append(p.program.commands, c)
+	if p.program.commands, err = appendAdmitted(p, p.program.commands, c, pointerElemBytes); err != nil {
+		return err
+	}
 	return p.end()
 }
 
@@ -230,19 +333,24 @@ func (p *scriptCursor) filename() string {
 	return p.src[start:p.pos]
 }
 
-func (p *parser) file(name byte, file string) {
+func (p *parser) file(name byte, file string) error {
 	list := &p.program.writes
 	if name == 'r' || name == 'R' {
 		list = &p.program.reads
 	} else if file == Stdout || file == Stderr {
-		return
+		return nil
 	}
 	for _, existing := range *list {
 		if existing == file {
-			return
+			return nil
 		}
 	}
-	*list = append(*list, file)
+	if err := p.reserve(int64(len(file))); err != nil {
+		return err
+	}
+	var err error
+	*list, err = appendAdmitted(p, *list, file, stringElemBytes)
+	return err
 }
 
 // number reads an optional decimal argument (q 5, l 40); -1 when absent.
@@ -265,7 +373,7 @@ func (p *scriptCursor) number() int {
 // text reads a, i and c text in the POSIX form (a\ then lines, a trailing
 // backslash continuing) and the GNU one-line form (a text, leading blanks
 // removed). A backslash quotes the next byte.
-func (p *scriptCursor) text() ([]byte, error) {
+func (p *parser) text() ([]byte, error) {
 	p.skip(" \t")
 	switch {
 	case strings.HasPrefix(p.src[p.pos:], "\\\n"):
@@ -276,6 +384,7 @@ func (p *scriptCursor) text() ([]byte, error) {
 		return nil, p.fail("text after a, i or c")
 	}
 	var out []byte
+	var err error
 	for p.pos < len(p.src) {
 		c := p.src[p.pos]
 		p.pos++
@@ -283,10 +392,14 @@ func (p *scriptCursor) text() ([]byte, error) {
 		case c == '\n':
 			return out, nil
 		case c == '\\' && p.pos < len(p.src):
-			out = append(out, p.src[p.pos])
+			if out, err = appendAdmittedBytes(p, out, p.src[p.pos]); err != nil {
+				return nil, err
+			}
 			p.pos++
 		default:
-			out = append(out, c)
+			if out, err = appendAdmittedBytes(p, out, c); err != nil {
+				return nil, err
+			}
 		}
 	}
 	return out, nil

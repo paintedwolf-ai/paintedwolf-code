@@ -1,6 +1,7 @@
 package search
 
 import (
+	"github.com/lycaon/lycaon/internal/tools"
 	"io/fs"
 	"strings"
 
@@ -19,8 +20,9 @@ type entry struct {
 	depth   int
 	// start is the starting point the entry was reached from.
 	start string
-	// link reports that the entry itself is a symbolic link.
-	link bool
+	// link reports that the entry itself is a symbolic link; followed that
+	// it was one whose target now describes it.
+	link, followed bool
 }
 
 func (e entry) dir() bool  { return e.stat.Mode.IsDir() }
@@ -44,7 +46,7 @@ func newWalker(inv *invocation) *walker {
 func (w *walker) visit() error {
 	w.visited++
 	if w.maximum > 0 && w.visited > w.maximum {
-		return limitExceeded("traversal_visits", w.maximum, w.visited)
+		return tools.CommandLimitExceeded("traversal_visits", w.maximum, w.visited)
 	}
 	return nil
 }
@@ -69,7 +71,7 @@ func (w *walker) operand(spelling string, follow bool) (entry, error) {
 	e := entry{display: spelling, name: baseName(spelling), bound: bound, stat: st, start: spelling, link: st.Mode&fs.ModeSymlink != 0}
 	if e.link && follow {
 		if target, err := bound.Stat(true); err == nil {
-			e.stat = target
+			e.stat, e.link, e.followed = target, false, true
 		}
 	}
 	return e, nil
@@ -106,7 +108,7 @@ func (w *walker) children(dir entry, follow bool) ([]entry, error) {
 		e := entry{display: joinDisplay(dir.display, name), name: name, bound: child, stat: st, depth: dir.depth + 1, start: dir.start, link: st.Mode&fs.ModeSymlink != 0}
 		if e.link && follow {
 			if target, err := child.Stat(true); err == nil {
-				e.stat = target
+				e.stat, e.link, e.followed = target, false, true
 			}
 		}
 		if filter != nil && !filter(child.Resolved.ScopeRel, e.dir()) {

@@ -2,9 +2,16 @@ package native
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
+	"github.com/lycaon/lycaon/internal/tools"
 	"io"
+
+	"github.com/lycaon/lycaon/internal/fseffect"
+	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
+	"github.com/lycaon/lycaon/internal/zstdcodec"
 )
 
 // Program captures use their existing aggregate accounts. Standalone host
@@ -20,6 +27,56 @@ func (e ExecutionRevisions) reserveWorking(ctx context.Context, n int64) (func()
 		return func() {}, ctx.Err()
 	}
 	return e.Memory.Reserve(ctx, n)
+}
+
+// readCapturedBytes owns whole-input capacity before allocation and preserves
+// one descriptor, decoder and capture lifetime for every command caller.
+func (e ExecutionRevisions) readCapturedBytes(ctx context.Context, resolved projectpaths.Resolved, maximum int64) (data []byte, release func(), finalErr error) {
+	if maximum <= 0 {
+		return nil, nil, fmt.Errorf("whole input capture requires a positive bound")
+	}
+	file, err := fseffect.OpenRead(resolved.EffectLocation())
+	if err != nil {
+		return nil, nil, err
+	}
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			if release != nil {
+				release()
+				data, release = nil, nil
+			}
+			if finalErr == nil {
+				finalErr = closeErr
+			} else {
+				finalErr = errors.Join(finalErr, closeErr)
+			}
+		}
+	}()
+	info, err := file.Stat()
+	if err != nil {
+		return nil, nil, err
+	}
+	if info.IsDir() {
+		return nil, nil, &toolrejection.ToolReject{Code: "READ_IS_DIRECTORY", Data: map[string]any{"path": resolved.DisplayPath}}
+	}
+	if !resolved.Compressed && info.Size() > maximum {
+		return nil, nil, sourceview.AccessCommand.SizeReject("read", resolved.DisplayPath, info.Size(), maximum)
+	}
+	var reader io.Reader = file
+	if resolved.Compressed {
+		release, err := e.reserveWorking(ctx, zstdcodec.StreamReaderMemoryReservation)
+		if err != nil {
+			return nil, nil, err
+		}
+		defer release()
+		decoder, err := zstdcodec.NewStreamDecoder(file)
+		if err != nil {
+			return nil, nil, err
+		}
+		defer decoder.Close()
+		reader = decoder
+	}
+	return e.readWholeInput(ctx, reader, maximum, resolved.DisplayPath)
 }
 
 // BufferedBytes owns one admitted whole operand or staged result. It carries
@@ -51,7 +108,7 @@ func (b *BufferedBytes) Write(p []byte) (int, error) {
 		return 0, err
 	}
 	if int64(len(p)) > b.buffer.maximum-int64(len(b.Bytes)) {
-		return 0, nativeutility.LimitExceeded(b.limitID, b.buffer.maximum, int64(len(b.Bytes))+int64(len(p)))
+		return 0, tools.CommandLimitExceeded(b.limitID, b.buffer.maximum, int64(len(b.Bytes))+int64(len(p)))
 	}
 	if err := b.buffer.Append(p); err != nil {
 		return 0, err
@@ -74,13 +131,49 @@ func (b *BufferedBytes) Reset() error {
 	return nil
 }
 
-func (b *BufferedBytes) Close() error {
+func (b *BufferedBytes) Close() {
 	if !b.closed {
 		b.closed = true
 		b.buffer.Close()
 		b.Bytes = nil
 	}
-	return nil
+}
+
+// ReadWholeInput gathers a genuinely buffered operand using the same capacity
+// owner as file capture. Admission precedes allocation and growth overlap.
+func (e ExecutionRevisions) ReadWholeInput(ctx context.Context, reader io.Reader, maximum int64) (*BufferedBytes, error) {
+	return e.readBufferedBytes(ctx, reader, maximum)
+}
+
+func (e ExecutionRevisions) readBufferedBytes(ctx context.Context, reader io.Reader, maximum int64) (*BufferedBytes, error) {
+	buffer, err := e.NewBufferedBytes(ctx, maximum, "whole_file_bytes")
+	if err != nil {
+		return nil, err
+	}
+	release, err := e.reserveWorking(ctx, 32<<10)
+	if err != nil {
+		buffer.Close()
+		return nil, err
+	}
+	defer release()
+	var chunk [32 << 10]byte
+	_, err = io.CopyBuffer(buffer, io.LimitReader(reader, maximum+1), chunk[:])
+	if err != nil {
+		buffer.Close()
+		return nil, err
+	}
+	return buffer, nil
+}
+
+func (e ExecutionRevisions) readWholeInput(ctx context.Context, reader io.Reader, maximum int64, displayPath string) ([]byte, func(), error) {
+	buffer, err := e.readBufferedBytes(ctx, reader, maximum)
+	if err != nil {
+		if reject := toolrejection.AsToolReject(err); reject != nil && reject.Code == "COMMAND_LIMIT_EXCEEDED" {
+			reject.Data["path"] = displayPath
+		}
+		return nil, nil, err
+	}
+	return buffer.Bytes, buffer.Close, nil
 }
 
 type captureBuffer struct {

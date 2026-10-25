@@ -1,17 +1,17 @@
 package search
 
 import (
-	"bytes"
 	"errors"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/litprefilter"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/textsearch"
-	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
 )
 
 type grepMode int
@@ -45,11 +45,14 @@ type grepRun struct {
 	follow       bool
 	selection    selection
 	searchBinary bool
-	walker       *walker
-	// prune holds the index requirement when acceleration applies; drafts
-	// are the unsaved documents the index cannot speak for.
+	// binaryMode is binary (notice), text (-a) or without-match (-I).
+	binaryMode      string
+	skipDirectories bool
+	walker          *walker
+	// json is rg --json's printer; nil for the plain forms.
+	json *rgJSON
+	// prune holds the index requirement when acceleration applies.
 	prune    litprefilter.Requirement
-	drafts   sourceview.DraftOverlay
 	pruned   int
 	selected bool
 	stopped  bool
@@ -64,6 +67,9 @@ func runGrep(inv *invocation) error {
 	}
 	r.recursive = inv.flag("-r") || inv.flag("-R")
 	r.follow = inv.flag("-R")
+	if err := r.bsdModes(); err != nil {
+		return err
+	}
 	r.quietErrors = inv.flag("-s")
 	r.names = lastChoice(inv, "-H", "-h")
 	r.selection = newSelection(inv, false)
@@ -132,7 +138,7 @@ func (r *grepRun) grepDialect() (textsearch.Dialect, error) {
 	case "fgrep":
 		chosen[textsearch.Fixed] = true
 	}
-	for key, dialect := range map[string]textsearch.Dialect{"-E": textsearch.Extended, "-F": textsearch.Fixed, "-P": textsearch.Perl} {
+	for key, dialect := range map[string]textsearch.Dialect{"-E": textsearch.Extended, "-F": textsearch.Fixed, "-P": textsearch.Perl, "-G": textsearch.Basic} {
 		if r.inv.flag(key) {
 			chosen[dialect] = true
 		}
@@ -269,7 +275,12 @@ func (r *grepRun) patternFile(spelling string) ([]byte, error) {
 	if bound.Null {
 		return nil, nil
 	}
-	return r.inv.capture(bound)
+	content, err := r.inv.capture(bound)
+	if reason, ok := ordinary(err); ok {
+		r.inv.fail(false, "%s: %s", spelling, reason)
+		return nil, errUsage
+	}
+	return content, err
 }
 
 func (r *grepRun) count(key string) (int, bool, error) {
@@ -321,6 +332,9 @@ func (r *grepRun) run(spec textsearch.Spec) error {
 	if r.matcher, err = textsearch.Compile(inv.ctx, spec, inv.owners.regex); err != nil {
 		return err
 	}
+	if r.rg && inv.flag("--json") && r.mode == modeLines {
+		r.json = &rgJSON{started: time.Now()}
+	}
 	r.indexAcceleration()
 	if r.replace != nil {
 		if err := checkReplacement(*r.replace, r.matcher.CaptureGroups()); err != nil {
@@ -329,6 +343,11 @@ func (r *grepRun) run(spec textsearch.Spec) error {
 	}
 	if err := r.searchOperands(); err != nil {
 		return err
+	}
+	if r.json != nil {
+		if err := inv.out.text(r.json.summary()); err != nil {
+			return err
+		}
 	}
 	switch {
 	case inv.status == inv.failure && !(r.mode == modeQuiet && r.selected):
@@ -382,7 +401,10 @@ func (r *grepRun) searchOperands() error {
 	operands := r.operands
 	implicit := false
 	if len(operands) == 0 {
-		if !r.recursive {
+		// rg searches an attached stdin, as it does a pipe; with no producer it
+		// walks the current directory. grep reads stdin unless recursive.
+		piped := r.rg && r.mode != modeFileList && !commandprogram.IsNullInput(inv.input)
+		if !r.recursive || piped {
 			return r.searchStdin()
 		}
 		operands, implicit = []string{"."}, true
@@ -410,15 +432,27 @@ func (r *grepRun) searchOperands() error {
 	return nil
 }
 
+func (r *grepRun) stdinLabel() string {
+	label := "(standard input)"
+	if r.json != nil {
+		label = "<stdin>"
+	}
+	if named, ok := r.inv.value("--label"); ok {
+		label = named
+	}
+	return label
+}
+
 func (r *grepRun) searchStdin() error {
 	if r.mode == modeFileList {
 		return nil
 	}
-	data, err := r.inv.readAll(r.inv.input)
-	if err != nil {
-		return err
+	var err error
+	if r.tabs {
+		err = r.searchAlignedStdin()
+	} else {
+		err = r.searchStream(r.stdinLabel(), r.inv.input, r.inv.owners.streamBytes(), 0, -1, nil, r.forcedNames(false))
 	}
-	err = r.searchContent("(standard input)", data, nil, r.forcedNames(false))
 	if errors.Is(err, errQuietMatch) {
 		r.stopped = true
 		return nil
@@ -450,6 +484,9 @@ func (r *grepRun) searchOperand(operand string, implicit, multiple bool) error {
 		return r.searchFile(e, r.forcedNames(multiple))
 	}
 	if !r.recursive {
+		if r.skipDirectories {
+			return nil
+		}
 		inv.fail(r.quietErrors, "%s: Is a directory", operand)
 		return nil
 	}
@@ -484,6 +521,9 @@ func (r *grepRun) walk(dir entry, ancestors map[[2]uint64]bool) error {
 	for _, child := range children {
 		if r.stopped {
 			return nil
+		}
+		if _, err := r.inv.out.w.Write(nil); err != nil {
+			return err
 		}
 		if child.link && !r.follow {
 			continue
@@ -526,7 +566,7 @@ func (r *grepRun) searchFile(e entry, names bool) error {
 		r.pruned++
 		return r.searchContent(e.display, nil, nil, names)
 	}
-	content, pin, err := r.inv.capturePinned(e.bound)
+	streamed, pin, err := r.inv.openPinnedStream(e.bound)
 	if err != nil {
 		if reason, ok := ordinary(err); ok {
 			r.inv.fail(r.quietErrors, "%s: %s", e.display, reason)
@@ -534,10 +574,11 @@ func (r *grepRun) searchFile(e entry, names bool) error {
 		}
 		return err
 	}
-	if r.rg && e.depth > 0 && !r.searchBinary && bytes.IndexByte(content, 0) >= 0 {
+	defer func() { _ = streamed.Reader.Close() }()
+	if r.rg && e.depth > 0 && !r.searchBinary && streamed.FirstNullOffset >= 0 {
 		return nil
 	}
-	return r.searchContent(e.display, content, pin, names)
+	return r.searchStream(e.display, streamed.Reader, 0, int(streamed.Revision.ContentBytes), streamed.FirstNullOffset, pin, names)
 }
 
 // indexAcceleration enables Bloom pruning when a missing record can only
@@ -545,23 +586,17 @@ func (r *grepRun) searchFile(e entry, names bool) error {
 // --files-without-match, whose walk skips binary files a pruned file would
 // not reveal.
 func (r *grepRun) indexAcceleration() {
-	if r.inv.owners.Catalog == nil || r.scan.Invert || r.rg && r.mode == modeFilesWithout {
+	if r.inv.owners.Catalog == nil || r.scan.Invert || r.json != nil || r.rg && r.mode == modeFilesWithout {
 		return
 	}
 	r.prune = r.matcher.Requirement()
-	if !r.prune.Empty() {
-		r.drafts = sourceview.DraftsFor(r.inv.ctx, r.inv.tc)
-	}
 }
 
 // indexProvesNoMatch asks the source catalog about one walked file. The
 // cached filter speaks only for the exact size, mode and mtime it was built
-// under, and never for an unsaved draft.
+// under.
 func (r *grepRun) indexProvesNoMatch(e entry) bool {
 	if r.prune.Empty() || e.depth == 0 || e.link || e.bound.Resolved.External {
-		return false
-	}
-	if _, draft := r.drafts.Lookup(e.bound.Resolved.Abs); draft {
 		return false
 	}
 	return r.inv.owners.Catalog.Literals.CanPrune(e.bound.Resolved.Root.Path, r.prune, sourcecatalog.Entry{
@@ -582,4 +617,53 @@ func (r *grepRun) color() error {
 		return nil
 	}
 	return r.inv.usage(option.Values[0].Value, "--color=never or --color=auto")
+}
+
+// bsdModes applies the GNU and BSD spellings that select binary, directory,
+// device and link handling; for each, the last occurrence wins.
+func (r *grepRun) bsdModes() error {
+	r.binaryMode = "binary"
+	for _, item := range r.inv.argv.Items {
+		option := item.Option
+		if option == nil {
+			continue
+		}
+		value := ""
+		if len(option.Values) > 0 {
+			value = option.Values[0].Value
+		}
+		switch option.Key {
+		case "-a":
+			r.binaryMode = "text"
+		case "-I":
+			r.binaryMode = "without-match"
+		case "--binary-files":
+			switch value {
+			case "binary", "text", "without-match":
+				r.binaryMode = value
+			default:
+				return r.inv.usage(value, "--binary-files=binary, text or without-match")
+			}
+		case "-d":
+			switch value {
+			case "read":
+				r.skipDirectories = false
+			case "skip":
+				r.skipDirectories = true
+			case "recurse":
+				r.recursive = true
+			default:
+				return r.inv.usage(value, "-d read, skip or recurse")
+			}
+		case "-D":
+			if value != "read" && value != "skip" {
+				return r.inv.usage(value, "-D read or skip")
+			}
+		case "-S":
+			r.follow = true
+		case "-p", "-O":
+			r.follow = false
+		}
+	}
+	return nil
 }

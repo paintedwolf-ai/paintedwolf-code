@@ -34,6 +34,7 @@ func runUniq(inv *invocation) error {
 	if err != nil {
 		return err
 	}
+	defer records.Close()
 	if len(operands) == 2 {
 		return uniqOutput(inv, operands, func(out *nativeutility.Output) error { return uniqRecords(inv, key, records, out) })
 	}

@@ -34,7 +34,7 @@ func resolveUnderBranch(ctx context.Context, b *sandbox.Boundary, tctx tools.Too
 		var err error
 		branchRel, displayPath, err = projectroot.WorkerBranchRelative(tctx.Source.Roots, tctx.Source.ActiveRootID, modelPath)
 		if err != nil {
-			return Resolved{}, mapResolveErr(err, modelPath)
+			return Resolved{}, rootResolveErr(tctx, err, modelPath)
 		}
 	}
 	scopeRel := filepath.ToSlash(filepath.Clean(branchRel))
@@ -57,7 +57,7 @@ func resolveUnderBranch(ctx context.Context, b *sandbox.Boundary, tctx tools.Too
 		}}, "worker-branch", branchRel)
 	}
 	if err != nil {
-		return Resolved{}, mapResolveErr(err, modelPath)
+		return Resolved{}, rootResolveErr(tctx, err, modelPath)
 	}
 	if op == sandbox.PathOpRead && settingsoverlay.IsRecoveryOnlyDir(abs) {
 		return Resolved{}, &os.PathError{Op: "stat", Path: modelPath, Err: os.ErrNotExist}
@@ -65,7 +65,7 @@ func resolveUnderBranch(ctx context.Context, b *sandbox.Boundary, tctx tools.Too
 	var root projectroot.RootRef
 	if len(tctx.Source.Roots) > 1 {
 		if _, _, resolveErr := projectroot.ResolveAbs(tctx.Source.Roots, tctx.Source.ActiveRootID, displayPath); resolveErr != nil {
-			return Resolved{}, mapResolveErr(resolveErr, modelPath)
+			return Resolved{}, rootResolveErr(tctx, resolveErr, modelPath)
 		}
 	}
 	root = projectroot.RootRef{ID: "worker-branch", Path: branch, IsPrimary: true}

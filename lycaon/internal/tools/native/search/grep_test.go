@@ -119,6 +119,21 @@ func TestGrepFormsProduceExactBytes(t *testing.T) {
 		{name: "color never", argv: []string{"grep", "--color=never", "alpha", "input"}, stdout: "alpha\n"},
 		{name: "colour auto", argv: []string{"grep", "--colour=auto", "alpha", "input"}, stdout: "alpha\n"},
 		{name: "line buffered", argv: []string{"grep", "--line-buffered", "alpha", "input"}, stdout: "alpha\n"},
+		{name: "text mode prints binary lines", argv: []string{"grep", "-a", "alpha", "bin.dat"}, stdout: "alpha\x00binary\n"},
+		{name: "binary files text", argv: []string{"grep", "--binary-files=text", "alpha", "bin.dat"}, stdout: "alpha\x00binary\n"},
+		{name: "ignore binary files", argv: []string{"grep", "-I", "alpha", "bin.dat", "input"}, stdout: "input:alpha\n"},
+		{name: "binary without match counts zero", argv: []string{"grep", "-c", "--binary-files=without-match", "alpha", "bin.dat"}, stdout: "0\n", status: 1},
+		{name: "explicit basic regexp", argv: []string{"grep", "-G", "-o", `\(ab\)\1`, "repeat"}, stdout: "abab\n"},
+		{name: "obsolete -y", argv: []string{"grep", "-y", "ALPHA", "sub/c.txt"}, stdout: "Alpha\nalphabet\n"},
+		{name: "silent", argv: []string{"grep", "--silent", "alpha", "a.txt"}},
+		{name: "numeric context shorthand", argv: []string{"grep", "-1", "six", "a.txt"}, stdout: "five\nsix alpha\n"},
+		{name: "skip directories", argv: []string{"grep", "-d", "skip", "alpha", "sub", "input"}, stdout: "input:alpha\n"},
+		{name: "recurse directories", argv: []string{"grep", "--directories=recurse", "deep", "sub"}, stdout: "sub/deep/d.md:alpha deep\n"},
+		{name: "devices", argv: []string{"grep", "-D", "skip", "alpha", "input"}, stdout: "alpha\n"},
+		{name: "include dir", argv: []string{"grep", "-r", "--include-dir=deep", "alpha", "sub"}, stdout: "sub/.hidden:alpha hidden\nsub/c.txt:alphabet\nsub/deep/d.md:alpha deep\n"},
+		{name: "include dir prunes", argv: []string{"grep", "-r", "--include-dir=none", "deep", "sub"}, status: 1},
+		{name: "no-op compatibility flags", argv: []string{"grep", "-u", "-U", "--mmap", "alpha", "input"}, stdout: "alpha\n"},
+		{name: "stdin label", argv: []string{"grep", "-H", "--label=piped", "b"}, stdin: "a\nb\n", stdout: "piped:b\n"},
 	})
 }
 
@@ -186,6 +201,8 @@ func TestGrepRecursionLinks(t *testing.T) {
 	r := h.exec("", "grep", "-R", "alpha", "d")
 	r.expect(t, "-R follows links", "d/f:alpha\nd/ld/t:alpha\nd/lf:alpha\nd/loop/target/t:alpha\n", "grep: d/loop/d: warning: recursive directory loop\n", 0)
 	h.exec("", "grep", "alpha", "d/lf").expect(t, "named link", "alpha\n", "", 0)
+	h.exec("", "grep", "-r", "-S", "alpha", "d/ld").expect(t, "BSD -S follows", "d/ld/t:alpha\n", "", 0)
+	h.exec("", "grep", "-R", "-p", "alpha", "d").expect(t, "BSD -p follows none", "d/f:alpha\n", "", 0)
 }
 
 func TestSearchPinsEveryRead(t *testing.T) {
@@ -233,19 +250,10 @@ func TestSearchRefusals(t *testing.T) {
 		code string
 	}{
 		{"unsupported option", []string{"grep", "--not-a-version-1-option", "x"}, "COMMAND_OPTION_UNSUPPORTED"},
-		{"conflicting matchers", []string{"grep", "-E", "-F", "x", "input"}, "COMMAND_OPERAND_INVALID"},
-		{"egrep with fixed", []string{"egrep", "-F", "x", "input"}, "COMMAND_OPERAND_INVALID"},
-		{"invalid BRE", []string{"grep", `\(`, "input"}, "GREP_REGEX_INVALID"},
 		{"unsupported PCRE", []string{"grep", "-P", "(?R)", "input"}, "GREP_REGEX_UNSUPPORTED"},
 		{"variable lookbehind", []string{"grep", "-P", "(?<=a+)b", "input"}, "GREP_REGEX_UNSUPPORTED"},
-		{"RE2 lacks references", []string{"rg", `(a)\1`, "input"}, "GREP_REGEX_INVALID"},
 		{"pattern budget", []string{"grep", string(make([]byte, 600)), "input"}, "GREP_MATCH_BUDGET"},
-		{"missing pattern", []string{"grep"}, "COMMAND_OPERAND_INVALID"},
-		{"bad max count", []string{"grep", "-m", "x", "a", "input"}, "COMMAND_OPERAND_INVALID"},
-		{"bad context", []string{"grep", "-A", "-1", "a", "input"}, "COMMAND_OPERAND_INVALID"},
-		{"unknown rg type", []string{"rg", "-t", "nope", "a"}, "COMMAND_OPERAND_INVALID"},
-		{"rg replacement group", []string{"rg", "-r", "$2", "(a)", "input"}, "COMMAND_OPERAND_INVALID"},
-		{"color always", []string{"grep", "--color=always", "a", "input"}, "COMMAND_OPERAND_INVALID"},
+		{"BSD decompression", []string{"grep", "-J", "a", "input"}, "COMMAND_OPTION_UNSUPPORTED"},
 		{"outside the roots", []string{"grep", "a", "/etc/hosts"}, ""},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -257,6 +265,45 @@ func TestSearchRefusals(t *testing.T) {
 				return
 			}
 			r.refused(t, c.name, c.code)
+		})
+	}
+}
+
+func TestSearchUtilityErrors(t *testing.T) {
+	h := newHarness(t, grepTree)
+	for _, c := range []struct {
+		name   string
+		argv   []string
+		stderr string
+	}{
+		{"invalid ERE", []string{"grep", "-E", "(", "input"}, "grep: Unmatched ( or \\(\n"},
+		{"invalid BRE", []string{"grep", `\(`, "input"}, "grep: Unmatched ( or \\(\n"},
+		{"RE2 lacks references", []string{"rg", `(a)\1`, "input"}, ""},
+		{"conflicting matchers", []string{"grep", "-E", "-F", "x", "input"}, "grep: one matcher; conflicting matchers specified\n"},
+		{"egrep with fixed", []string{"egrep", "-F", "x", "input"}, "egrep: one matcher; conflicting matchers specified\n"},
+		{"missing pattern", []string{"grep"}, "grep: a PATTERN operand or -e PATTERN\n"},
+		{"missing pattern option value", []string{"grep", "-e"}, "grep: -e: pattern value for -e\n"},
+		{"missing pattern file", []string{"grep", "-f", "missing", "input"}, "grep: missing: No such file or directory\n"},
+		{"bad max count", []string{"grep", "-m", "x", "a", "input"}, "grep: x: a nonnegative decimal count for -m\n"},
+		{"bad context", []string{"grep", "-A", "-1", "a", "input"}, "grep: -1: a nonnegative decimal count for -A\n"},
+		{"unknown rg type", []string{"rg", "-t", "nope", "a"}, ""},
+		{"rg replacement group", []string{"rg", "-r", "$2", "(a)", "input"}, "rg: $2: capture group $2 not defined by the pattern (it defines 1)\n"},
+		{"color always", []string{"grep", "--color=always", "a", "input"}, "grep: always: --color=never or --color=auto\n"},
+		{"basic with extended", []string{"grep", "-G", "-E", "a", "input"}, "grep: one matcher; conflicting matchers specified\n"},
+		{"bad binary mode", []string{"grep", "--binary-files=maybe", "a", "input"}, "grep: maybe: --binary-files=binary, text or without-match\n"},
+		{"bad directory action", []string{"grep", "-d", "maybe", "a", "input"}, "grep: maybe: -d read, skip or recurse\n"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			r := h.exec("", c.argv...)
+			if r.err != nil || r.result.Terminal != toolcontract.ProducerCompleted || r.result.Status != 2 || r.stdout != "" || r.result.PublicationEligible {
+				t.Fatalf("%s: want utility error status 2, got result %+v err %v stdout %q stderr %q", c.name, r.result, r.err, r.stdout, r.stderr)
+			}
+			if c.stderr != "" && r.stderr != c.stderr {
+				t.Fatalf("%s: stderr %q, want %q", c.name, r.stderr, c.stderr)
+			}
+			if r.stderr == "" {
+				t.Fatalf("%s: empty stderr", c.name)
+			}
 		})
 	}
 }
@@ -274,5 +321,5 @@ func TestSearchLimitsRefuseInsteadOfTruncating(t *testing.T) {
 	h.exec("", "grep", "alpha", "a.txt").refused(t, "stream", "COMMAND_LIMIT_EXCEEDED")
 	h.owners.StreamBytes = 0
 	h.owners.ReadBytes = 4
-	h.exec("", "grep", "alpha", "a.txt").refused(t, "read", "READ_FILE_TOO_LARGE")
+	h.exec("", "grep", "alpha", "a.txt").expect(t, "streaming ignores whole-file bound", "two alpha\nsix alpha\n", "", 0)
 }

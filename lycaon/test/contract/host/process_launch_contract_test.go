@@ -163,7 +163,7 @@ func TestPreparedCommandScanRejectsNativeStartBypasses(t *testing.T) {
  cmd,cleanup,err:=process.PrepareCommand(nil,"fixture",nil,process.ExecOpts{})
  _=cleanup;_=err
  cmd.Start();cmd.Run();cmd.Output();cmd.CombinedOutput();cmd.Wait()
- process.StartPrepared(cmd)
+ process.StartPrepared(nil, cmd)
  }`
 	f, err := parser.ParseFile(token.NewFileSet(), "fixture.go", source, 0)
 	contractcheck.FailErr(t, "parse launch scan fixture", err)

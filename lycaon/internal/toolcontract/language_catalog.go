@@ -154,6 +154,21 @@ func DecodeLanguageCatalog(data []byte) (LanguageCatalog, error) {
 	return result, nil
 }
 
+// Help renders focused catalog help for one command specification.
+func (c CommandSpecification) Help() string {
+	var out strings.Builder
+	out.WriteString(c.Name + "\n" + c.Argv + "\n")
+	for _, form := range c.Forms {
+		out.WriteString(strings.Join(form.Spellings, " | "))
+		if form.Arity != 0 {
+			out.WriteString(" " + form.ValueRole)
+		}
+		out.WriteByte('\n')
+	}
+	out.WriteString(c.Notes + "\n" + c.Encoding)
+	return out.String()
+}
+
 // CommandHelp derives focused help from the same facts consumed by admission.
 func (c LanguageCatalog) CommandHelp(name string) (string, bool) {
 	for _, command := range c.Commands {
@@ -164,17 +179,7 @@ func (c LanguageCatalog) CommandHelp(name string) (string, bool) {
 		if !found {
 			continue
 		}
-		var out strings.Builder
-		out.WriteString(command.Name + "\n" + command.Argv + "\n")
-		for _, form := range command.Forms {
-			out.WriteString(strings.Join(form.Spellings, " | "))
-			if form.Arity != 0 {
-				out.WriteString(" " + form.ValueRole)
-			}
-			out.WriteByte('\n')
-		}
-		out.WriteString(command.Notes + "\n" + command.Encoding)
-		return out.String(), true
+		return command.Help(), true
 	}
 	return "", false
 }

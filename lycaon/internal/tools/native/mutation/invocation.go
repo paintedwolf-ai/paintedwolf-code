@@ -12,18 +12,15 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
 // invocation is one utility run: its bound argv, streams and effects so far.
 type invocation struct {
-	memory  *toolcontract.ProgramMemory
 	ctx     context.Context
 	owners  *Owners
 	tc      tools.ToolContext
 	paths   *projectpaths.ProgramPaths
-	barrier *native.PublicationBarrier
 	request commandprogram.OperationRequest
 	spec    toolcontract.CommandSpecification
 	argv    commandprogram.BoundArgv
@@ -32,11 +29,12 @@ type invocation struct {
 	stderr  io.Writer
 	status  int
 	// effects counts mutations that committed, so a later stop reports them.
-	effects int
+	effects   int
+	uncertain bool
 }
 
 func newInvocation(ctx context.Context, p Prepared, tc tools.ToolContext, streams commandprogram.Streams) *invocation {
-	inv := &invocation{ctx: ctx, memory: p.program.Memory, owners: p.owners, tc: tc, paths: p.program.Paths, barrier: p.program.Barrier, request: p.request, spec: p.spec, argv: p.Argv,
+	inv := &invocation{ctx: ctx, owners: p.owners, tc: tc, paths: p.program.Paths, request: p.request, spec: p.spec, argv: p.Argv,
 		input: streams.Input, stdout: streams.Output, stderr: streams.Error}
 	if inv.input == nil {
 		inv.input = commandprogram.NullInput()
@@ -96,6 +94,11 @@ func (inv *invocation) bind(operand string, write bool) (projectpaths.BoundPath,
 	if bound.Null {
 		return projectpaths.BoundPath{}, inv.usage(operand, "a filesystem path, not the null device")
 	}
+	if write {
+		if err := inv.owners.Revisions.CheckUnsavedDraft(inv.ctx, inv.tc, bound.Resolved.Abs, false); err != nil {
+			return projectpaths.BoundPath{}, err
+		}
+	}
 	return bound, nil
 }
 
@@ -130,9 +133,16 @@ func ordinary(err error) (string, bool) {
 
 // settle turns the utility's ordinary status or stop into one producer result.
 func (inv *invocation) settle(err error) (toolcontract.ProducerResult, error) {
+	var domain toolcontract.ProducerFailure
+	if errors.As(err, &domain) {
+		return domain.ProducerResult(), err
+	}
+	err = tools.CommandResourceRejection(err)
 	certainty := toolcontract.NoEffect
 	if inv.effects > 0 {
 		certainty = toolcontract.EffectCompleted
+	} else if inv.uncertain {
+		certainty = toolcontract.EffectUnknown
 	}
 	switch {
 	case err == nil:
@@ -150,17 +160,16 @@ func (inv *invocation) settle(err error) (toolcontract.ProducerResult, error) {
 		if reject.Data["command"] == nil {
 			reject.Data["command"] = inv.name()
 		}
+		_, _ = fmt.Fprintf(inv.stderr, "%s: %s [%s]\n", inv.name(), reject.Error(), reject.Code)
 		return toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerRefused, StopCode: reject.Code, EffectCertainty: certainty}, err
 	}
 	var pathErr *projectpaths.PathError
 	if errors.As(err, &pathErr) {
-		reject := toolrejection.RejectInvalidArguments(pathErr.Code, map[string]any{
-			"command": inv.name(), "word": pathErr.Operand, "path": pathErr.Operand,
-			"limit_id": pathErr.LimitID, "maximum": pathErr.Maximum, "observed": pathErr.Observed,
-		})
-		return toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerRefused, StopCode: pathErr.Code, EffectCertainty: certainty}, errors.Join(err, reject)
+		err = wrapPathError(inv.name(), err)
+		_, _ = fmt.Fprintf(inv.stderr, "%s: %s [%s]\n", inv.name(), pathErr.Error(), pathErr.Code)
+		return toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerRefused, StopCode: pathErr.Code, EffectCertainty: certainty}, err
 	}
-	if certainty == toolcontract.NoEffect {
+	if certainty == toolcontract.NoEffect && !errors.Is(err, commandprogram.ErrConsumerClosed) {
 		certainty = toolcontract.EffectUnknown
 	}
 	return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: certainty}, err
@@ -168,6 +177,15 @@ func (inv *invocation) settle(err error) (toolcontract.ProducerResult, error) {
 
 // destinationEntry resolves a copy or move destination: an existing directory
 // receives the source's base name; several sources require one.
+// destinationDisplay names a destination entry as the program wrote DEST.
+func (inv *invocation) destinationDisplay(dest, to string) string {
+	bound, err := inv.paths.Bind(inv.ctx, dest, true)
+	if err != nil {
+		return to
+	}
+	return destinationDisplay(dest, bound.Resolved.Abs, to)
+}
+
 func (inv *invocation) destinationEntry(dest string, source string, many bool) (string, error) {
 	bound, err := inv.bind(dest, true)
 	if err != nil {
@@ -175,7 +193,11 @@ func (inv *invocation) destinationEntry(dest string, source string, many bool) (
 	}
 	info, statErr := os.Stat(bound.Resolved.Abs)
 	if statErr == nil && info.IsDir() {
-		return filepath.Join(bound.Resolved.Abs, filepath.Base(source)), nil
+		target := filepath.Join(bound.Resolved.Abs, filepath.Base(source))
+		if err := inv.owners.Revisions.CheckUnsavedDraft(inv.ctx, inv.tc, target, true); err != nil {
+			return "", err
+		}
+		return target, nil
 	}
 	if many {
 		return "", inv.usage(dest, "an existing directory for several sources")

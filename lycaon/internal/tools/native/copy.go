@@ -256,7 +256,7 @@ func preserveMetadata(ctx context.Context, tctx tools.ToolContext, source string
 }
 
 func (op *CopyOperation) stageCopyFileWithinLimit(ctx context.Context, tctx tools.ToolContext, source projectpaths.Resolved, target mutationTarget, maxBytes int64, copyBuffer []byte, knownAbsent bool) (*agentStreamStage, fseffect.Result, error) {
-	in, err := op.reads.Open(source)
+	in, err := op.reads.Open(ctx, source)
 	if err != nil {
 		return nil, fseffect.Result{}, err
 	}

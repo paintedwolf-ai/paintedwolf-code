@@ -94,23 +94,31 @@ func TestConfinementRefusesOutsideAuthorizedRoots(t *testing.T) {
 	refused(scoped, "stat", "-c", "%F", "../lines")
 }
 
-// TestInputsAboveTheReadBudgetFailExplicitly: a capture above its budget is
-// refused before any byte or outline reaches stdout.
-func TestInputsAboveTheReadBudgetFailExplicitly(t *testing.T) {
+func TestStreamingInputsIgnoreWholeFileBudget(t *testing.T) {
 	h := formHarness(t)
 	h.owners.ReadBytes = 64
-	seed(t, h.root, map[string]string{"large": strings.Repeat("0123456789\n", 20)})
-	for _, argv := range [][]string{{"cat", "large"}, {"tail", "-n", "1", "large"}, {"wc", "-l", "large"}, {"outline", "--path", "large"}, {"cat", "input", "large"}} {
-		r := h.exec("", argv...)
-		r.refused(t, strings.Join(argv, " "), "READ_FILE_TOO_LARGE")
-		if strings.Contains(r.stdout, "0123456789") {
-			t.Fatalf("%v emitted part of an over-budget input: %q", argv, r.stdout)
-		}
+	content := strings.Repeat("0123456789\n", 20)
+	seed(t, h.root, map[string]string{"large": content})
+	for _, test := range []struct {
+		argv []string
+		want string
+	}{
+		{[]string{"cat", "large"}, content},
+		{[]string{"tail", "-n", "1", "large"}, "0123456789\n"},
+		{[]string{"wc", "-l", "large"}, "20 large\n"},
+	} {
+		h.exec("", test.argv...).expect(t, strings.Join(test.argv, " "), test.want, "", 0)
+	}
+	result := h.exec("", "diff", "large", "input")
+	result.refused(t, "whole diff capture", "COMMAND_LIMIT_EXCEEDED")
+	reject := toolrejection.AsToolReject(result.err)
+	if reject.Data["limit_id"] != "whole_file_bytes" || reject.Data["maximum"] != int64(64) || reject.Data["observed"] != int64(len(content)) {
+		t.Fatalf("whole capture facts %+v", reject.Data)
 	}
 }
 
 // TestStreamsStayWithinTheirBound: output above the stream ceiling and
-// gathered stdin above it refuse rather than truncate.
+// streamed output above it refuses rather than truncating.
 func TestStreamsStayWithinTheirBound(t *testing.T) {
 	h := formHarness(t)
 	h.owners.StreamBytes = 8
@@ -134,7 +142,8 @@ func TestUnsupportedAndInvalidFormsRefuse(t *testing.T) {
 	}{
 		{"cat --not-a-version-1-option input", "COMMAND_OPTION_UNSUPPORTED"},
 		{"tail -f input", "COMMAND_OPTION_UNSUPPORTED"},
-		{"ls --color input", "COMMAND_OPTION_UNSUPPORTED"},
+		{"ls --hyperlink input", "COMMAND_OPTION_UNSUPPORTED"},
+		{"ls --color=always input", "COMMAND_OPERAND_INVALID"},
 		{"wc -x input", "COMMAND_OPTION_UNSUPPORTED"},
 		{"head -n abc input", "COMMAND_OPERAND_INVALID"},
 		{"head -n -1 input", "COMMAND_OPERAND_INVALID"},
@@ -160,7 +169,7 @@ func TestUnsupportedAndInvalidFormsRefuse(t *testing.T) {
 		{"file", "COMMAND_OPERAND_INVALID"},
 		{"outline", "COMMAND_OPERAND_INVALID"},
 		{"outline --path input lines", "COMMAND_OPERAND_INVALID"},
-		{"repo-map --depth 2", "COMMAND_OPERAND_INVALID"},
+		{"repo-map --depth invalid", "COMMAND_OPERAND_INVALID"},
 	} {
 		t.Run(c.argv, func(t *testing.T) {
 			r := h.exec("", strings.Fields(c.argv)...)

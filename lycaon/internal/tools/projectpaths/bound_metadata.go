@@ -100,3 +100,10 @@ func (p BoundPath) Readlink() (string, error) {
 	target, err := root.Readlink(p.exactRelative, p.admitEntry)
 	return target, PathOperationError(p.Resolved.DisplayPath, err)
 }
+
+func (p BoundPath) openEntryRoot() (*fseffect.ReadRoot, error) {
+	if p.Null {
+		return nil, invalidOperand(p.Resolved.DisplayPath, "null device is not a directory entry")
+	}
+	return p.openRoot()
+}

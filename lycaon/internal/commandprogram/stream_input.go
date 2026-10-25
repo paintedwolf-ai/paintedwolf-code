@@ -86,12 +86,12 @@ func (s *StreamInput) Close() error { s.finish(StreamConsumerClosed, ErrConsumer
 
 // NullInput and NullOutput are typed native endpoints. Path classification is
 // supplied by the path adapter; these endpoints never open an OS device path.
-func NullInput() io.ReadCloser { return emptyInput{} }
+func NullInput() io.ReadCloser { return nullInput{} }
 
 // IsNullInput reports whether r is the command program's null input endpoint.
 func IsNullInput(r io.Reader) bool {
 	switch in := r.(type) {
-	case emptyInput:
+	case nullInput:
 		return true
 	case *StreamInput:
 		return IsNullInput(in.source)
@@ -100,10 +100,10 @@ func IsNullInput(r io.Reader) bool {
 	}
 }
 
-type emptyInput struct{}
+type nullInput struct{}
 
-func (emptyInput) Read([]byte) (int, error) { return 0, io.EOF }
-func (emptyInput) Close() error             { return nil }
+func (nullInput) Read([]byte) (int, error) { return 0, io.EOF }
+func (nullInput) Close() error             { return nil }
 
 type NullOutput struct {
 	Context context.Context

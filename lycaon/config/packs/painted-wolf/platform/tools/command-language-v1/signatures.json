@@ -10,10 +10,10 @@
     "corpus": [
       {
         "name": "png",
-        "prefix_hex": "89504e470d0a1a0a",
+        "prefix_hex": "89504e470d0a1a0a0000000d49484452",
         "description": "PNG image data",
         "mime": "image/png",
-        "minimum_identification_bytes": 8
+        "minimum_identification_bytes": 29
       },
       {
         "name": "jpeg",
@@ -113,14 +113,14 @@
       "Mach-O32/64/fat both byte orders",
       "GIF87a/GIF89a"
     ],
-    "text": "UTF-8 validation and no NUL -> UTF-8 Unicode text/text/plain; empty -> empty/application/x-empty; unknown bytes -> data/application/octet-stream. Declared signature needs complete minimum header; truncated known prefix is data, never fabricate validity.",
+    "text": "Valid ASCII without NUL is ASCII text; other valid UTF-8 without NUL is UTF-8 Unicode text. MIME output includes the observed text charset, or binary for other data. Empty input is empty/application/x-empty. Unknown bytes are data/application/octet-stream. A declared signature needs its complete minimum header; truncated known prefixes never establish that format.",
     "fixtures": [
       {
         "id": "file-png-header",
-        "input_hex": "89504e470d0a1a0a",
+        "input_hex": "89504e470d0a1a0a0000000d4948445200000001000000010806000000",
         "description": "PNG image data",
         "mime": "image/png",
-        "qualification": "format identification only; not full-file integrity"
+        "qualification": "format identification from a complete IHDR header; not full-file integrity"
       },
       {
         "id": "file-png-short",

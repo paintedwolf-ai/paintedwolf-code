@@ -1,30 +1,22 @@
 oar: '1.0'
 id: PROCESS_NOT_OWNED
-kind: schema
+kind: policy
 anchor: tool.rejected
-selector:
-  tool:
-  - command
 requires:
-  profiles:
-  - tool
-  facts:
-  - paintedwolf.rejection_code
+  facts: [paintedwolf.rejection_code]
+  profiles: [tool]
 when: paintedwolf.rejection_code == "PROCESS_NOT_OWNED"
 effect: block
 copy:
-  what: This process is not owned by the current session.
-  cause: kill and pkill may only signal processes and background jobs started by this session.
-  why: Inspecting processes with ps or pgrep is read-only, while signalling is confined to this session's own jobs so other processes on the machine are never interrupted.
-  fix: Signal only jobs or PIDs owned by this session (use jobs or $! to find them).
-  instead: Use ps or pgrep to inspect non-session processes read-only; use kill or pkill only on this session's jobs
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:tool
-x-paintedwolf-message: process is not owned by the current session
+  what: The target process was not started by this session.
+  cause: The host signals only processes descended from this session's own launches, and no launch of this session started this one.
+  why: Other processes on this computer belong to the person or to other work; approval does not make them this session's to signal.
+  fix: Signal only processes this session started, using process_list references or command job handles. Ask the user to stop any other process themselves.
+  instead: Branch on Code; do not retry with another reference, PID, name, or command for the same process. Ask the user to stop it themselves.
+x-paintedwolf-category: policy
+x-paintedwolf-emit: guard:host_process
+x-paintedwolf-message: The target process was not started by this session.
 x-paintedwolf-scenarios:
 - id: default
-  vars:
-    tool: command
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: PROCESS_NOT_OWNED'
+  vars: {}
+  expect_contains: ['Rejected:', 'Code: PROCESS_NOT_OWNED']

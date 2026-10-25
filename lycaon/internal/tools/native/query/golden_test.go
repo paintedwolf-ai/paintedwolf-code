@@ -2,6 +2,7 @@ package query
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"strings"
@@ -96,13 +97,23 @@ var versionSpecific = map[string]bool{
 	"jq -n --slurpfile v missing.json $v": true,
 }
 
+func hostJqBinary() string {
+	for _, c := range []string{"/opt/homebrew/bin/jq", "/usr/local/bin/jq"} {
+		if out, err := exec.Command(c, "--version").Output(); err == nil && strings.HasPrefix(string(out), "jq-1.8") {
+			return c
+		}
+	}
+	binary, _ := exec.LookPath("jq")
+	return binary
+}
+
 // TestDifferentialAgainstHostJq runs every jqCase that jq 1.7 and 1.8 agree
 // on through an installed jq as well, so the recorded goldens are checked
 // against the real binary wherever one is available. Diagnostic wording
 // changed between releases, so stderr is compared only against jq 1.8.
 func TestDifferentialAgainstHostJq(t *testing.T) {
-	binary, err := exec.LookPath("jq")
-	if err != nil {
+	binary := hostJqBinary()
+	if binary == "" {
 		t.Log("no host jq; the recorded jq 1.8.1 goldens still apply")
 		return
 	}
@@ -125,7 +136,8 @@ func TestDifferentialAgainstHostJq(t *testing.T) {
 			cmd.Stderr = &stderr
 			out, err := cmd.Output()
 			status := 0
-			if exit, ok := err.(*exec.ExitError); ok {
+			var exit *exec.ExitError
+			if errors.As(err, &exit) {
 				status = exit.ExitCode()
 			} else if err != nil {
 				t.Fatal(err)

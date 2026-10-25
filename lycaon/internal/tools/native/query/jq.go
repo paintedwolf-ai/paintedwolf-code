@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/tools"
 	"io"
 	"strconv"
 	"strings"
@@ -33,7 +34,7 @@ type jqRun struct {
 	program *nativejq.Program
 	stream  *inputs
 	emitter *emitter
-	ctx     context.Context
+	elapsed time.Duration
 	// exitStatus is -e; ret and last follow jq's process/last_result.
 	exitStatus bool
 	ret, last  int
@@ -47,7 +48,8 @@ type jqDialect struct {
 	// with "...".
 	pythonYAML bool
 	// files replaces the operand files (python yq -i runs one at a time).
-	files []string
+	files    []string
+	captured *source
 }
 
 // runJq compiles QUERY once and evaluates it over the input stream
@@ -84,7 +86,8 @@ func runJqProgram(inv *invocation, dialect jqDialect) error {
 	if err != nil {
 		return err
 	}
-	stream := &inputs{inv: inv, operands: args.files, raw: inv.flag("-R"), yaml: dialect.yamlInput || inv.flag("--yaml-input"), limit: safecmd.JQCaps().InputBytes}
+	stream := &inputs{inv: inv, operands: args.files, raw: inv.flag("-R"), yaml: dialect.yamlInput || inv.flag("--yaml-input"), limit: safecmd.JQCaps().InputBytes, captured: dialect.captured}
+	defer stream.close()
 	if inv.flag("--stream") {
 		events, err := nativejq.CompileProgram("tostream", nativejq.ProgramOptions{})
 		if err != nil {
@@ -106,16 +109,16 @@ func runJqProgram(inv *invocation, dialect jqDialect) error {
 		inv.status = jqCompile
 		return nil
 	}
-	budget := time.Duration(inv.owners.limit("query_cpu_ms")) * time.Millisecond
-	ctx, cancel := context.WithTimeout(inv.ctx, budget)
-	defer cancel()
-	run := &jqRun{inv: inv, program: program, stream: stream, ctx: ctx, exitStatus: inv.flag("-e"), ret: jqOK, last: jqLastUnseen,
-		emitter: &emitter{inv: inv, layout: layout, maxOutputs: inv.owners.limit("query_outputs"), maxValue: inv.owners.limit("query_value_bytes")}}
+	run := &jqRun{inv: inv, program: program, stream: stream, exitStatus: inv.flag("-e"), ret: jqOK, last: jqLastUnseen,
+		emitter: &emitter{inv: inv, stream: stream, layout: layout, maxOutputs: inv.owners.limit("query_outputs"), maxValue: inv.owners.limit("query_value_bytes")}}
 	if err := run.evaluateAll(); err != nil {
 		return err
 	}
 	if stream.stop != nil {
 		return stream.stop
+	}
+	if err := run.emitter.finish(); err != nil {
+		return err
 	}
 	inv.status = run.status()
 	return nil
@@ -127,7 +130,7 @@ func (r *jqRun) evaluateAll() error {
 	case r.inv.flag("-n"):
 		_, err := r.evaluate(nil, false)
 		return err
-	case r.inv.flag("-s") && r.stream.raw:
+	case r.inv.flag("-s") && r.inv.flag("-R"):
 		text, ok := r.stream.slurpRaw()
 		if !ok {
 			return nil
@@ -139,7 +142,10 @@ func (r *jqRun) evaluateAll() error {
 		for v, ok := r.stream.Next(); ok; v, ok = r.stream.Next() {
 			all = append(all, v)
 		}
-		if r.stream.stop != nil || r.stream.broken {
+		if r.stream.stop != nil {
+			return r.stream.stop
+		}
+		if r.stream.broken {
 			return nil
 		}
 		_, err := r.evaluate(all, true)
@@ -160,7 +166,18 @@ func (r *jqRun) evaluateAll() error {
 // false when a halt ends the run.
 func (r *jqRun) evaluate(input any, positioned bool) (bool, error) {
 	r.emitter.produced = false
-	halt, err := r.program.Run(r.ctx, input, r.emitter.emit)
+	maximum := time.Duration(r.inv.owners.limit("query_elapsed_ms")) * time.Millisecond
+	// Only evaluation enters this cumulative clock. Reached-input preparation
+	// happens before evaluate; input/output callbacks invoked by the VM remain
+	// part of evaluation. Cancellation is cooperative at the existing VM boundary.
+	started := time.Now()
+	ctx, cancel := context.WithDeadline(r.inv.ctx, started.Add(max(time.Duration(0), maximum-r.elapsed)))
+	halt, err := r.program.Run(ctx, input, r.emitter.emit)
+	r.elapsed += time.Since(started)
+	cancel()
+	if err == nil && r.elapsed > maximum {
+		err = context.DeadlineExceeded
+	}
 	var queryErr *nativejq.QueryError
 	switch {
 	case errors.As(err, &queryErr):
@@ -168,8 +185,8 @@ func (r *jqRun) evaluate(input any, positioned bool) (bool, error) {
 		r.ret = jqRuntime
 		return true, nil
 	case errors.Is(err, context.DeadlineExceeded) && r.inv.ctx.Err() == nil:
-		maximum := r.inv.owners.limit("query_cpu_ms")
-		return false, limitExceeded("query_cpu_ms", maximum, maximum+1)
+		maximum := r.inv.owners.limit("query_elapsed_ms")
+		return false, tools.CommandLimitExceeded("query_elapsed_ms", maximum, int64((r.elapsed+time.Millisecond-1)/time.Millisecond))
 	case err != nil:
 		return false, err
 	case halt != nil:
@@ -430,17 +447,21 @@ type outputLayout struct {
 // emitter writes each result in jq's encoding within the output budgets.
 type emitter struct {
 	inv                  *invocation
+	stream               *inputs
 	layout               outputLayout
 	count                int64
-	produced             bool
+	produced, openEnded  bool
 	last                 any
 	maxOutputs, maxValue int64
 }
 
 func (e *emitter) emit(v any) error {
+	if err := e.inv.step(); err != nil {
+		return err
+	}
 	e.count++
 	if e.maxOutputs > 0 && e.count > e.maxOutputs {
-		return limitExceeded("query_outputs", e.maxOutputs, e.count)
+		return tools.CommandLimitExceeded("query_outputs", e.maxOutputs, e.count)
 	}
 	e.produced, e.last = true, v
 	encoded, err := e.encode(v)
@@ -448,9 +469,20 @@ func (e *emitter) emit(v any) error {
 		return err
 	}
 	if e.maxValue > 0 && int64(len(encoded)) > e.maxValue {
-		return limitExceeded("query_value_bytes", e.maxValue, int64(len(encoded)))
+		return tools.CommandLimitExceeded("query_value_bytes", e.maxValue, int64(len(encoded)))
 	}
 	_, err = e.inv.out.Write(encoded)
+	return err
+}
+
+// finish writes PyYAML's deferred scalar document-end marker ("...") when
+// the final emitted document was an unquoted scalar; preceding scalars are
+// closed by the next document's "---".
+func (e *emitter) finish() error {
+	if !e.openEnded {
+		return nil
+	}
+	_, err := e.inv.out.Write([]byte("...\n"))
 	return err
 }
 
@@ -464,23 +496,29 @@ func (e *emitter) encode(v any) ([]byte, error) {
 	case e.layout.join:
 		newline = ""
 	}
-	if s, ok := v.(string); ok && (e.layout.raw || e.layout.join || e.layout.nul) && !e.layout.ascii {
-		return []byte(s + newline), nil
-	}
 	if e.layout.yaml {
-		out, err := nativejq.EncodeYAML(v)
+		var (
+			out []byte
+			err error
+		)
+		if e.stream != nil && e.stream.roundtrip != nil {
+			out, err = e.stream.roundtrip.EncodeDoc(e.stream.yamlDoc-1, v)
+		} else {
+			out, err = nativejq.EncodeYAML(v)
+		}
 		if err != nil {
 			return nil, err
 		}
 		_, array := v.([]any)
 		_, object := v.(*gojq.OrderedObject)
-		if e.layout.pythonYAML && !array && !object {
-			out = append(out, "...\n"...)
-		}
+		e.openEnded = e.layout.pythonYAML && !array && !object && len(out) > 0 && out[0] != '\'' && out[0] != '"'
 		if e.count > 1 {
 			out = append([]byte("---\n"), out...)
 		}
 		return out, nil
+	}
+	if s, ok := v.(string); ok && (e.layout.raw || e.layout.join || e.layout.nul) && !e.layout.ascii {
+		return []byte(s + newline), nil
 	}
 	out, err := gojq.MarshalWith(v, gojq.MarshalOptions{Pretty: e.layout.pretty, Indent: e.layout.indent, SortKeys: e.layout.sortKeys, ASCII: e.layout.ascii})
 	if err != nil {

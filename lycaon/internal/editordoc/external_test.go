@@ -259,6 +259,20 @@ func TestOpenTextReturnsTheOpenDocument(t *testing.T) {
 	if ok {
 		t.Fatal("a path with no document reported one")
 	}
+	f.write(t, "bad-encoding.bin", string([]byte{0x78, 0x01, 0xfe, 0xff}))
+	_, ok, err = f.service.OpenText(t.Context(), f.project.ID, f.project.SourceBranch, f.rootID, "bad-encoding.bin")
+	testutil.FailErr(t, "open text for non-UTF-8 file without NUL", err)
+	if ok {
+		t.Fatal("an uneditable encoding reported a document")
+	}
+	readonly := filepath.Join(f.root, "readonly.txt")
+	testutil.FailErr(t, "write readonly", os.WriteFile(readonly, []byte("read only\n"), 0o444))
+	t.Cleanup(func() { _ = os.Chmod(readonly, 0o644) })
+	_, ok, err = f.service.OpenText(t.Context(), f.project.ID, f.project.SourceBranch, f.rootID, "readonly.txt")
+	testutil.FailErr(t, "open text for readonly path", err)
+	if ok {
+		t.Fatal("a read-only file without a draft reported an editable document")
+	}
 }
 
 func TestObserveExternalFollowsEncodingChangesWithoutLosingText(t *testing.T) {

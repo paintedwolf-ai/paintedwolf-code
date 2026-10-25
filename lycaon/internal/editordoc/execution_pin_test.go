@@ -1,6 +1,7 @@
 package editordoc
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -27,11 +28,6 @@ func TestPinnedEditPublishesWithoutAgentReadAtCapturedRevision(t *testing.T) {
 	}
 	if reads := f.service.FreezeAgentReads(f.project.ID, "chat-1"); len(reads) != 0 {
 		t.Fatalf("pinned edit seeded read bases: %+v", reads)
-	}
-	published, current, err := f.service.PublishedThrough(t.Context(), f.project.ID, document.ID, document.Revision+1)
-	testutil.FailErr(t, "publication state", err)
-	if !published || current.PublishedRevision != document.Revision+1 {
-		t.Fatalf("published=%v document=%+v", published, current)
 	}
 }
 
@@ -97,12 +93,20 @@ func TestPinnedEditRefusesDifferentReviewedRevision(t *testing.T) {
 	}
 }
 
-func TestPublishedThroughKeepsFailedPublicationRecoverable(t *testing.T) {
+func TestPublishAgentEditsSavesHeldAgentDraftWithoutTouchingHumanDraft(t *testing.T) {
 	f := newAgentFixture(t, nil)
 	dir := filepath.Join(f.root, "dir")
 	testutil.FailErr(t, "make directory", os.Mkdir(dir, 0o755))
 	f.write(t, "dir/a.txt", "base\n")
+	f.write(t, "dir/human.txt", "human-base\n")
 	document := f.open(t, "dir/a.txt")
+	humanDoc := f.open(t, "dir/human.txt")
+	_, err := f.service.ReplaceSnapshot(t.Context(), humanDoc.ID, f.project.ID, SnapshotReplacement{
+		DocumentCommand: DocumentCommand{ClientID: "window", OperationID: uuid.NewString(), ExpectedRevision: humanDoc.Revision},
+		Content:         "human-unsaved\n",
+		EOL:             "lf",
+	})
+	testutil.FailErr(t, "human types", err)
 	testutil.FailErr(t, "lock directory", os.Chmod(dir, 0o555))
 	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
 	result, err := f.service.ApplyAgentEdit(t.Context(), pinnedEdit(document, "accepted\n"))
@@ -110,22 +114,60 @@ func TestPublishedThroughKeepsFailedPublicationRecoverable(t *testing.T) {
 	if result.Saved || result.PublicationError == nil || result.HeldVersionID == "" || result.Document.Draft != "accepted\n" {
 		t.Fatalf("result=%+v", result)
 	}
-	published, _, err := f.service.PublishedThrough(t.Context(), f.project.ID, document.ID, document.Revision+1)
-	testutil.FailErr(t, "publication state", err)
-	if published || f.disk(t, "dir/a.txt") != "base\n" {
-		t.Fatalf("failed save reported published: %v", published)
-	}
 	testutil.FailErr(t, "unlock directory", os.Chmod(dir, 0o755))
-	current, err := f.store.Get(t.Context(), document.ID)
-	testutil.FailErr(t, "read held document", err)
-	_, err = f.service.Save(t.Context(), f.project, document.ID, "window", uuid.NewString(), "", 0, current.Revision)
-	testutil.FailErr(t, "person saves accepted state", err)
-	published, _, err = f.service.PublishedThrough(t.Context(), f.project.ID, document.ID, document.Revision+1)
-	testutil.FailErr(t, "publication state after save", err)
-	if !published || f.disk(t, "dir/a.txt") != "accepted\n" {
-		t.Fatalf("save did not publish accepted state: %v %q", published, f.disk(t, "dir/a.txt"))
+	testutil.FailErr(t, "publish agent edits", f.service.VisitAgentPublications(t.Context(), f.project.ID, f.project.SourceBranch, "chat-1", 1, "call-1", publishTestDraft))
+	if f.disk(t, "dir/a.txt") != "accepted\n" {
+		t.Fatalf("agent edit was not published to disk: %q", f.disk(t, "dir/a.txt"))
 	}
-	if _, _, err := f.service.PublishedThrough(t.Context(), "other-project", document.ID, 1); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("cross-project publication state: %v", err)
+	if f.disk(t, "dir/human.txt") != "human-base\n" {
+		t.Fatalf("human draft was overwritten on disk: %q", f.disk(t, "dir/human.txt"))
 	}
+}
+
+func TestPublishAgentEditsPreservesMixedAndOtherSessionDrafts(t *testing.T) {
+	for _, scenario := range []string{"human contribution", "another session"} {
+		t.Run(scenario, func(t *testing.T) {
+			f := newAgentFixture(t, map[string]string{"a.txt": "one\ntwo\n"})
+			doc := f.open(t, "a.txt")
+			if scenario == "human contribution" {
+				typed, err := f.service.ReplaceSnapshot(t.Context(), doc.ID, f.project.ID, SnapshotReplacement{DocumentCommand: DocumentCommand{ClientID: "window", OperationID: uuid.NewString(), ExpectedRevision: doc.Revision}, Content: "one\nhuman\n", EOL: "lf"})
+				testutil.FailErr(t, "human edit", err)
+				doc = typed
+			}
+			testutil.FailErr(t, "hold save", os.Chmod(f.root, 0o555))
+			t.Cleanup(func() { _ = os.Chmod(f.root, 0o755) })
+			content := "agent\ntwo\n"
+			if scenario == "human contribution" {
+				content = "agent\nhuman\n"
+			}
+			edit := agentEdit(doc, content)
+			if scenario == "another session" {
+				edit.SessionID = "chat-2"
+			}
+			applied, err := f.service.ApplyAgentEdit(t.Context(), edit)
+			testutil.FailErr(t, "accept held agent edit", err)
+			if applied.Saved || applied.HeldVersionID == "" {
+				t.Fatalf("held edit=%+v", applied)
+			}
+			testutil.FailErr(t, "permit save", os.Chmod(f.root, 0o755))
+			testutil.FailErr(t, "publish only own pure agent drafts", f.service.VisitAgentPublications(t.Context(), f.project.ID, f.project.SourceBranch, "chat-1", 1, "command-call", publishTestDraft))
+			if f.disk(t, "a.txt") != "one\ntwo\n" {
+				t.Fatal("command published protected draft")
+			}
+			stored, err := f.store.Get(t.Context(), doc.ID)
+			testutil.FailErr(t, "protected draft", err)
+			if !stored.Dirty || stored.Draft != applied.Document.Draft || stored.HeldAgentVersionID != applied.HeldVersionID {
+				t.Fatalf("protected draft changed=%+v", stored)
+			}
+		})
+	}
+}
+
+func publishTestDraft(_ DocumentPathState, load func(context.Context) (*Document, func(context.Context) (*Document, error), error)) error {
+	_, publish, err := load(context.Background())
+	if err != nil {
+		return err
+	}
+	_, err = publish(context.Background())
+	return err
 }

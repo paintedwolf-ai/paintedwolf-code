@@ -9,15 +9,12 @@ import (
 
 // blockedEnvKeys cannot cross into child processes.
 var blockedEnvKeys = map[string]struct{}{
-	"BASH_ENV":            {},
-	"ENV":                 {},
-	"NODE_OPTIONS":        {},
-	"PERL5OPT":            {},
-	"RUBYOPT":             {},
-	"SSLKEYLOGFILE":       {},
-	"SSH_ASKPASS":         {},
-	"SSH_ASKPASS_REQUIRE": {},
-	"GCM_INTERACTIVE":     {},
+	"BASH_ENV":      {},
+	"ENV":           {},
+	"NODE_OPTIONS":  {},
+	"PERL5OPT":      {},
+	"RUBYOPT":       {},
+	"SSLKEYLOGFILE": {},
 }
 
 // blockedEnvPrefixes are matched case-insensitively.
@@ -79,7 +76,8 @@ func InheritedEnviron() []string {
 	return withResolvedPath(SanitizeEnviron(os.Environ()))
 }
 
-// ReducedEnviron returns process plumbing without ambient credentials.
+// ReducedEnviron keeps identity, base directories and locale without ambient
+// credentials, and sets non-interactive terminal and pager defaults.
 func ReducedEnviron() []string {
 	allowed := map[string]struct{}{
 		"PATH": {},
@@ -104,7 +102,8 @@ func ReducedEnviron() []string {
 			out = append(out, entry)
 		}
 	}
-	return withResolvedPath(append(out, "TERM=dumb", "PAGER=cat", "EDITOR=false", "VISUAL=false"))
+	out = append(out, "TERM=dumb", "PAGER=cat")
+	return withResolvedPath(out)
 }
 
 func withResolvedPath(entries []string) []string {

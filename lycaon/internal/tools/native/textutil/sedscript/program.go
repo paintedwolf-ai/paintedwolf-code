@@ -2,7 +2,7 @@
 // script before any input is read; a Machine runs it over records with
 // pattern and hold space, branches, append queues and per-file state. The
 // host supplies the POSIX regex engine, the records, every output writer and
-// the contents of r and R files, so the language never opens a path itself.
+// the streams for r and R files, so the language never opens a path itself.
 package sedscript
 
 import (
@@ -27,12 +27,26 @@ const (
 	Stderr = "/dev/stderr"
 )
 
-// Program is one parsed script.
+// Program is one parsed script and its admitted memory leases.
 type Program struct {
 	commands []*command
 	quiet    bool
 	writes   []string
 	reads    []string
+	releases []func()
+}
+
+// Close releases all program memory leases admitted while parsing the script.
+func (p *Program) Close() {
+	if p == nil {
+		return
+	}
+	for i := len(p.releases) - 1; i >= 0; i-- {
+		if p.releases[i] != nil {
+			p.releases[i]()
+		}
+	}
+	p.releases = nil
 }
 
 // Quiet reports a script whose first line is exactly #n, which means -n.

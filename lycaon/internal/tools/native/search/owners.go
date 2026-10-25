@@ -20,11 +20,11 @@ import (
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/textsearch"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
-	"github.com/lycaon/lycaon/internal/tools/readcaps"
 )
 
 // PinRecorder retains the revisions one execution captured
@@ -54,6 +54,8 @@ func (d DeleteRemover) RemoveRecoverable(ctx context.Context, tc tools.ToolConte
 // Owners holds the shared operations behind every search utility. One value
 // serves many programs; per-invocation state lives in Prepared.
 type Owners struct {
+	// Admission is the invoking program's existing session spill quota.
+	Admission tooloutput.SpillAdmission
 	Revisions native.ExecutionRevisions
 	Pins      PinRecorder
 	// Remover is required for find -delete; without it -delete refuses
@@ -182,6 +184,7 @@ type Prepared struct {
 	request   commandprogram.OperationRequest
 	spec      toolcontract.CommandSpecification
 	run       utility
+	bindErr   *commandprogram.ArgvError
 }
 
 // Prepare binds a reached command through the catalog option grammar. It
@@ -199,11 +202,63 @@ func (o *Owners) Prepare(paths *projectpaths.ProgramPaths, dispatch commandprogr
 	if request.OperationID != spec.Name {
 		return Prepared{}, fmt.Errorf("request names operation %s, not command %s", request.OperationID, spec.Name)
 	}
-	bound, err := commandprogram.CatalogBinder{}.Bind(spec, request.Argv)
+	bound, err := bindSearchArgv(spec, request.Argv)
+	var bindErr *commandprogram.ArgvError
 	if err != nil {
-		return Prepared{}, argvRejection(err, spec)
+		if !errors.As(err, &bindErr) || bindErr.Code != "COMMAND_OPERAND_INVALID" {
+			return Prepared{}, argvRejection(err, spec)
+		}
 	}
-	return Prepared{Operation: o.ops[spec.Name], Argv: bound, Review: bound.Review(o.ops[spec.Name]), owners: o, paths: paths, dispatch: dispatch, request: request, spec: spec, run: utilities[spec.Name]}, nil
+	return Prepared{Operation: o.ops[spec.Name], Argv: bound, Review: bound.Review(o.ops[spec.Name]), owners: o, paths: paths, dispatch: dispatch, request: request, spec: spec, run: utilities[spec.Name], bindErr: bindErr}, nil
+}
+
+// bindSearchArgv binds argv through CatalogBinder, preserving a signed numeric
+// argument after BSD's "find ... -depth -N" as an operand rather than an
+// unknown option flag.
+func bindSearchArgv(spec toolcontract.CommandSpecification, argv commandprogram.Fields) (commandprogram.BoundArgv, error) {
+	if spec.Name != "find" {
+		return commandprogram.CatalogBinder{}.Bind(spec, argv)
+	}
+	var rewritten commandprogram.Fields
+	var restore map[int]string
+	for i := 1; i+1 < len(argv); i++ {
+		if argv[i].Value == "--" {
+			break
+		}
+		next := argv[i+1].Value
+		if argv[i].Value == "-depth" && len(next) > 1 && next[0] == '-' && isASCIIDigits(next[1:]) {
+			if rewritten == nil {
+				rewritten = append(commandprogram.Fields(nil), argv...)
+				restore = map[int]string{}
+			}
+			restore[i+1] = next
+			rewritten[i+1].Value = "+" + next[1:]
+		}
+	}
+	if rewritten == nil {
+		return commandprogram.CatalogBinder{}.Bind(spec, argv)
+	}
+	bound, err := commandprogram.CatalogBinder{}.Bind(spec, rewritten)
+	for i := range bound.Items {
+		if op := bound.Items[i].Operand; op != nil {
+			for _, orig := range restore {
+				if op.Value == "+"+orig[1:] {
+					op.Value = orig
+					break
+				}
+			}
+		}
+	}
+	return bound, err
+}
+
+func isASCIIDigits(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return s != ""
 }
 
 // InvokeOwner runs the bound utility once and settles its producer outcome.
@@ -211,8 +266,27 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 	if p.run == nil {
 		return toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, fmt.Errorf("search invocation is not prepared")
 	}
+	if p.Argv.Help && p.spec.Name != "rg" {
+		if streams.Input != nil {
+			_ = streams.Input.Close()
+		}
+		return commandprogram.WriteCatalogHelp(p.spec, streams.Output)
+	}
 	inv := newInvocation(ctx, p, tc, streams)
-	err := p.run(inv)
+	defer func() {
+		for _, release := range inv.releases {
+			release()
+		}
+	}()
+	if p.spec.Name == "find" {
+		inv.failure = 1
+	}
+	var err error
+	if p.bindErr != nil {
+		err = inv.usage(p.bindErr.Word, p.bindErr.Expected)
+	} else {
+		err = p.run(inv)
+	}
 	if err == nil {
 		err = ctx.Err()
 	}
@@ -243,14 +317,14 @@ func (o *Owners) readBytes() int64 {
 	if o.ReadBytes > 0 {
 		return o.ReadBytes
 	}
-	return readcaps.MaxFileBytes
+	return o.limit("whole_file_bytes")
 }
 
 func (o *Owners) streamBytes() int64 {
 	if o.StreamBytes > 0 {
 		return o.StreamBytes
 	}
-	return o.limit("stream_bytes")
+	return o.limit("stream_throughput_bytes")
 }
 
 func (o *Owners) limit(id string) int64 {

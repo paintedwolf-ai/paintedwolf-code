@@ -139,8 +139,13 @@ func (e *QueryError) Error() string { return e.Err.Error() }
 func (e *QueryError) Unwrap() error { return e.Err }
 
 // Run evaluates one input, passing each result to emit in order. Evaluation
-// observes ctx; a result emit refuses ends the run with that error. A halt
-// ends the run and is returned; a runtime error is a *QueryError.
+// observes ctx; because gojq exposes no VM instruction/step counter hook and
+// instead polls ctx.Done() at the start of every bytecode instruction in
+// Code.RunWithContext, the caller's context deadline (query_cpu_ms) bounds
+// intra-value VM work while emit and input decoding meter host-observable
+// value transitions (query_work_steps). A result emit refuses ends the run
+// with that error. A halt ends the run and is returned; a runtime error is a
+// *QueryError.
 func (p *Program) Run(ctx context.Context, input any, emit func(any) error) (*Halt, error) {
 	iter := p.code.RunWithContext(ctx, input, p.values...)
 	for {

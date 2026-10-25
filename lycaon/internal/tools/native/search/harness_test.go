@@ -3,6 +3,7 @@ package search
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -108,6 +109,17 @@ func (d *childDispatch) record(request commandprogram.OperationRequest) {
 }
 
 func (d *childDispatch) Invoke(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+	if request.StreamPreparation != nil {
+		var err error
+		streams, err = request.StreamPreparation.PrepareStreams(ctx)
+		if err != nil {
+			var failure toolcontract.ProducerFailure
+			if errors.As(err, &failure) {
+				return failure.ProducerResult(), err
+			}
+			return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, err
+		}
+	}
 	d.record(request)
 	if _, owned := d.h.owners.Operation(request.OperationID); owned {
 		return d.h.owners.Invoke(ctx, d.h.tc, mustPaths(d.h.t, d.h), d, request, streams)
@@ -115,7 +127,18 @@ func (d *childDispatch) Invoke(ctx context.Context, request commandprogram.Opera
 	return d.echo(request, streams)
 }
 
-func (d *childDispatch) Launch(_ context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+func (d *childDispatch) Launch(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+	if request.StreamPreparation != nil {
+		var err error
+		streams, err = request.StreamPreparation.PrepareStreams(ctx)
+		if err != nil {
+			var failure toolcontract.ProducerFailure
+			if errors.As(err, &failure) {
+				return failure.ProducerResult(), err
+			}
+			return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, err
+		}
+	}
 	d.record(request)
 	return d.echo(request, streams)
 }
@@ -190,6 +213,7 @@ func newHarness(t *testing.T, files map[string]string) *harness {
 	removed := &removals{}
 	owners, err := NewOwners(native.ExecutionRevisions{Boundary: boundary}, pins, removed)
 	testutil.FailErr(t, "build owners", err)
+	owners.Admission = &alignedSpillQuota{maximum: 512 << 20}
 	owners.Now = func() time.Time { return fixtureTime.Add(36 * time.Hour) }
 	h := &harness{t: t, boundary: boundary, root: resolved, tc: nativefixture.Context(resolved), owners: owners, pins: pins, removals: removed, cwd: "."}
 	h.dispatch = &childDispatch{h: h}
@@ -237,7 +261,11 @@ func (h *harness) exec(stdin string, argv ...string) run {
 	h.t.Helper()
 	request := requestFor(h, argv...)
 	var stdout, stderr bytes.Buffer
-	streams := commandprogram.Streams{Input: io.NopCloser(strings.NewReader(stdin)), Output: &stdout, Error: &stderr}
+	input := commandprogram.NullInput()
+	if stdin != "" {
+		input = io.NopCloser(strings.NewReader(stdin))
+	}
+	streams := commandprogram.Streams{Input: input, Output: &stdout, Error: &stderr}
 	result, err := h.owners.Invoke(h.t.Context(), h.tc, mustPaths(h.t, h), h.dispatch, request, streams)
 	if invalid := result.Validate(); invalid != nil {
 		h.t.Fatalf("%v: invalid producer %+v: %v", argv, result, invalid)
@@ -268,4 +296,19 @@ func (r run) refused(t *testing.T, label, code string) {
 func symlink(t *testing.T, target, path string) {
 	t.Helper()
 	testutil.FailErr(t, "symlink "+path, os.Symlink(target, path))
+}
+
+func (d *childDispatch) InvokeEvaluator(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams, body func(context.Context, commandprogram.Streams) (toolcontract.ProducerResult, error)) (toolcontract.ProducerResult, error) {
+	if request.StreamPreparation != nil {
+		var err error
+		streams, err = request.StreamPreparation.PrepareStreams(ctx)
+		if err != nil {
+			var failure toolcontract.ProducerFailure
+			if errors.As(err, &failure) {
+				return failure.ProducerResult(), err
+			}
+			return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, err
+		}
+	}
+	return body(ctx, streams)
 }

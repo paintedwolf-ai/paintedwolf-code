@@ -28,6 +28,7 @@ func validateGitRef(value, label string) error {
 }
 
 type Manager struct {
+	CommandReader
 	histories immutableCache[[]GitFileCommit]
 	commits   immutableCache[CommitDetails]
 	reviews   immutableCache[commitReviewSnapshot]
