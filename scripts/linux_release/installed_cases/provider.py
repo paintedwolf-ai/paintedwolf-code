@@ -62,6 +62,16 @@ def json_type(value):
             bool: 'boolean', type(None): 'null'}.get(type(value), 'other')
 
 
+def standalone_request(request):
+    if not isinstance(request, dict) or request.get('tools') is not None:
+        return False
+    messages = request.get('messages')
+    return (isinstance(messages, list) and len(messages) == 2
+            and all(isinstance(row, dict) and set(row) == {'role', 'content'} and row['role'] == role
+                    and isinstance(row['content'], str) and 0 < len(row['content'].encode()) <= 32768
+                    for row, role in zip(messages, ('system', 'user'))))
+
+
 def gui_endpoint(port: int) -> str:
     """The loopback endpoint a GUI-purpose fixture serves on its bound port."""
     if type(port) is not int or not 1024 <= port <= 65535:
@@ -84,6 +94,7 @@ class ProviderFixture:
                 raise ValueError('fixture tool call has an invalid typed shape')
         self.calls = copy.deepcopy(calls)
         self.observations = []
+        self.completion_count = 0
         self.discovery_observations = []
         self.transport_observations = []
         self.transport_clipped = False
@@ -125,7 +136,10 @@ class ProviderFixture:
     def completion(self, request: dict) -> dict:
         if not isinstance(request, dict) or request.get('model') != MODEL:
             raise FixtureRefusal('foreign-model')
+        standalone = standalone_request(request)
         messages, tools = request.get('messages'), request.get('tools', [])
+        if standalone:
+            tools = []
         if not isinstance(messages, list) or not messages or not isinstance(tools, list):
             raise FixtureRefusal('messages-or-tools-shape')
         if any(not isinstance(row, dict) or not isinstance(row.get('role'), str) for row in messages):
@@ -138,10 +152,10 @@ class ProviderFixture:
         results = {row.get('tool_call_id') for row in messages[last_user + 1:]
                    if row['role'] == 'tool' and isinstance(row.get('tool_call_id'), str)}
         expected = {f'qualification-{i}' for i in range(len(self.calls))}
-        finished = expected.issubset(results)
+        finished = standalone or expected.issubset(results)
         message = {'role': 'assistant', 'content': 'Fixture complete.' if finished else None}
-        acquisition = self.acquisition.advance(messages, available) if self.acquisition is not None else None
-        if self.acquisition is not None:
+        acquisition = self.acquisition.advance(messages, available) if self.acquisition is not None and not standalone else None
+        if self.acquisition is not None and not standalone:
             finished = self.acquisition.completed
             message['content'] = 'Fixture complete.' if finished else None
         if acquisition is not None:
@@ -156,13 +170,15 @@ class ProviderFixture:
                     'name': call['name'], 'arguments': json.dumps(call['arguments'])}}
                 for i, call in enumerate(self.calls)]
         with self.lock:
-            if len(self.observations) >= 64:
+            if self.completion_count >= 64:
                 raise FixtureRefusal('request-count-bound')
-            self.observations.append({'model': MODEL, 'roles': [row['role'] for row in messages],
-                                      'tools': sorted(available), 'completed': finished,
-                                      **({'schema_acquisition': self.acquisition.witness,
-                                          'acquisition_requested': acquisition is not None}
-                                         if self.acquisition is not None else {})})
+            self.completion_count += 1
+            if not standalone:
+                self.observations.append({'model': MODEL, 'roles': [row['role'] for row in messages],
+                                          'tools': sorted(available), 'completed': finished,
+                                          **({'schema_acquisition': self.acquisition.witness,
+                                              'acquisition_requested': acquisition is not None}
+                                             if self.acquisition is not None else {})})
         return {'id': 'qualification-completion', 'object': 'chat.completion', 'created': 1,
                 'model': MODEL, 'choices': [{'index': 0, 'message': message,
                 'finish_reason': 'stop' if finished else 'tool_calls'}],
@@ -175,7 +191,7 @@ class ProviderFixture:
             def log_message(self, *args):
                 pass
 
-            def observe_response(self, status, *, refusal=None, shape=None, detail=None):
+            def observe_response(self, status, *, refusal=None, shape=None, detail=None, completion_class=None):
                 with fixture.transport_lock:
                     if len(fixture.transport_observations) < 64:
                         record = {'method': self.command,
@@ -185,12 +201,14 @@ class ProviderFixture:
                             record.update(refusal_code=refusal, request_shape=shape)
                         if detail is not None:
                             record['refusal_detail'] = detail
+                        if completion_class is not None:
+                            record['completion_class'] = completion_class
                         fixture.transport_observations.append(record)
                     else:
                         fixture.transport_clipped = True
 
-            def respond(self, status, value, *, refusal=None, shape=None, detail=None):
-                self.observe_response(status, refusal=refusal, shape=shape, detail=detail)
+            def respond(self, status, value, *, refusal=None, shape=None, detail=None, completion_class=None):
+                self.observe_response(status, refusal=refusal, shape=shape, detail=detail, completion_class=completion_class)
                 raw = json.dumps(value).encode()
                 self.send_response(status)
                 self.send_header('Content-Type', 'application/json')
@@ -232,12 +250,13 @@ class ProviderFixture:
                     request = json.loads(raw)
                     shape = request_shape(request)
                     completion = fixture.completion(request)
-                    if barrier is not None:
+                    completion_class = 'standalone' if standalone_request(request) else None
+                    if barrier is not None and completion_class is None:
                         lease = barrier.capture(self.connection, raw)
                         if lease is not None and not barrier.wait(lease):
                             return
                     if not request.get('stream', False):
-                        self.respond(200, completion)
+                        self.respond(200, completion, completion_class=completion_class)
                         written = True
                         return
                     choice = completion['choices'][0]
@@ -247,7 +266,7 @@ class ProviderFixture:
                     chunk = {**completion, 'object': 'chat.completion.chunk',
                              'choices': [{'index': 0, 'delta': delta, 'finish_reason': choice['finish_reason']}]}
                     raw = ('data: ' + json.dumps(chunk) + '\n\ndata: [DONE]\n\n').encode()
-                    self.observe_response(200)
+                    self.observe_response(200, completion_class=completion_class)
                     self.send_response(200)
                     self.send_header('Content-Type', 'text/event-stream')
                     self.send_header('Content-Length', str(len(raw)))
