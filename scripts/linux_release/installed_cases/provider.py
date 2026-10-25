@@ -175,7 +175,7 @@ class ProviderFixture:
             def log_message(self, *args):
                 pass
 
-            def respond(self, status, value, *, refusal=None, shape=None, detail=None):
+            def observe_response(self, status, *, refusal=None, shape=None, detail=None):
                 with fixture.transport_lock:
                     if len(fixture.transport_observations) < 64:
                         record = {'method': self.command,
@@ -188,6 +188,9 @@ class ProviderFixture:
                         fixture.transport_observations.append(record)
                     else:
                         fixture.transport_clipped = True
+
+            def respond(self, status, value, *, refusal=None, shape=None, detail=None):
+                self.observe_response(status, refusal=refusal, shape=shape, detail=detail)
                 raw = json.dumps(value).encode()
                 self.send_response(status)
                 self.send_header('Content-Type', 'application/json')
@@ -244,6 +247,7 @@ class ProviderFixture:
                     chunk = {**completion, 'object': 'chat.completion.chunk',
                              'choices': [{'index': 0, 'delta': delta, 'finish_reason': choice['finish_reason']}]}
                     raw = ('data: ' + json.dumps(chunk) + '\n\ndata: [DONE]\n\n').encode()
+                    self.observe_response(200)
                     self.send_response(200)
                     self.send_header('Content-Type', 'text/event-stream')
                     self.send_header('Content-Length', str(len(raw)))
