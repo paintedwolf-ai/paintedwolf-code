@@ -123,7 +123,7 @@ func TestCommandGuidanceFactsMatchExecutionSurface(t *testing.T) {
 			facts := prompts.ExtractCommandGuidanceFacts(vars)
 			for key, want := range map[string]bool{
 				"profile_command_mutation":     !tc.readOnly,
-				"command_output_scratch_files": true,
+				"command_output_files": true,
 				"command_external_hidden":      tc.externalHidden,
 				"command_external_shown":       !tc.externalHidden,
 				"reviews_confined_writes":      tc.posture == gate.PostureStrict,
