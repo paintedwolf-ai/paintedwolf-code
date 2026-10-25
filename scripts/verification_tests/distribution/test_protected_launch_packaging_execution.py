@@ -15,6 +15,7 @@ import shutil
 import sys
 
 from linux_release import payload, protected_launch
+from verification_tests.distribution.maintainer_fixture import program
 
 ROOT = Path(__file__).resolve().parents[3]
 LINUX = ROOT / "packaging/linux"
@@ -198,8 +199,7 @@ class MaintainerScripts(unittest.TestCase):
 
     def run_script(self, family, name, *args):
         source = (LINUX / family / name).read_text()
-        self.assertEqual(source.count("PW_GENERATIONS=/opt/painted-wolf-code/bin/pw-generations"), int("PW_GENERATIONS" in source))
-        script = (source.replace("PW_GENERATIONS=/opt/painted-wolf-code/bin/pw-generations", f"PW_GENERATIONS={self.installer}")
+        script = (program(source, self.installer, self.root / "package-state")
                   .replace("/opt/painted-wolf-code", str(self.install))
                   .replace("/etc/paintedwolf", str(self.policy))
                   .replace("/run/paintedwolf", str(self.root / "run/paintedwolf")))
