@@ -29,6 +29,7 @@ const AUTHORITY_PATH: &str = "/org/freedesktop/PolicyKit1/Authority";
 const AUTHORITY_INTERFACE: &str = "org.freedesktop.PolicyKit1.Authority";
 const BUS_NAME: &str = "org.freedesktop.DBus";
 const BUS_PATH: &str = "/org/freedesktop/DBus";
+const NO_USER_INTERACTION: u32 = 0;
 const ALLOW_USER_INTERACTION: u32 = 1;
 const PROMPT_TIMEOUT: Duration = Duration::from_secs(120);
 const BUS_CALL_TIMEOUT: Duration = Duration::from_secs(10);
@@ -54,6 +55,21 @@ pub(super) fn outcome(is_authorized: bool, is_challenge: bool) -> Result<(), Pol
         )),
         (false, false) => Err(PolkitRefusal::Denied(
             "Authentication was canceled or did not succeed.".into(),
+        )),
+    }
+}
+
+/// Maps the authority's answer to a check that may not interact. Presence needs
+/// a challenge the person answers: a host policy that grants the action without
+/// one, or retains an earlier answer, cannot witness that someone is here now.
+pub(super) fn preflight(is_authorized: bool, is_challenge: bool) -> Result<(), PolkitRefusal> {
+    match (is_authorized, is_challenge) {
+        (true, _) => Err(PolkitRefusal::Unavailable(
+            "This computer's polkit policy grants the presence check without asking, so it cannot confirm you are here.".into(),
+        )),
+        (false, true) => Ok(()),
+        (false, false) => Err(PolkitRefusal::Denied(
+            "This computer's polkit policy refuses the presence check.".into(),
         )),
     }
 }
@@ -98,8 +114,29 @@ fn confirm_on(context: &glib::MainContext, action: &str) -> Result<(), PolkitRef
         })?;
     let owner = authority_owner(context, &bus, action)?;
     let subject = own_subject()?;
+    let probe_id = uuid::Uuid::new_v4().to_string();
+    let probe = linux_bus::call(
+        context,
+        &bus,
+        Some(&owner),
+        AUTHORITY_PATH,
+        AUTHORITY_INTERFACE,
+        "CheckAuthorization",
+        Some(&check_parameters(
+            subject.clone(),
+            action,
+            NO_USER_INTERACTION,
+            &probe_id,
+        )),
+        BUS_CALL_TIMEOUT,
+    )
+    .map_err(|error| PolkitRefusal::Failed(format!("The authority refused the check: {error}")))?;
+    let (authorized, challenge) = authorization_flags(&probe).ok_or_else(|| {
+        PolkitRefusal::Failed("the authority answered in an unknown shape".into())
+    })?;
+    preflight(authorized, challenge)?;
     let cancellation_id = uuid::Uuid::new_v4().to_string();
-    let parameters = check_parameters(subject, action, &cancellation_id);
+    let parameters = check_parameters(subject, action, ALLOW_USER_INTERACTION, &cancellation_id);
     let reply = linux_bus::call(
         context,
         &bus,
@@ -144,13 +181,14 @@ fn confirm_on(context: &glib::MainContext, action: &str) -> Result<(), PolkitRef
 fn check_parameters(
     subject: HashMap<String, glib::Variant>,
     action: &str,
+    flags: u32,
     cancellation_id: &str,
 ) -> glib::Variant {
     (
         ("unix-process".to_string(), subject),
         action.to_string(),
         HashMap::<String, String>::new(),
-        ALLOW_USER_INTERACTION,
+        flags,
         cancellation_id.to_string(),
     )
         .to_variant()
@@ -368,6 +406,23 @@ mod tests {
     }
 
     #[test]
+    fn only_a_challenged_policy_can_witness_presence() {
+        assert!(matches!(
+            preflight(true, false),
+            Err(PolkitRefusal::Unavailable(_))
+        ));
+        assert!(matches!(
+            preflight(true, true),
+            Err(PolkitRefusal::Unavailable(_))
+        ));
+        assert_eq!(preflight(false, true), Ok(()));
+        assert!(matches!(
+            preflight(false, false),
+            Err(PolkitRefusal::Denied(_))
+        ));
+    }
+
+    #[test]
     fn the_authority_must_be_owned_by_the_system() {
         assert!(authority_owner_accepted(0, None));
         assert!(authority_owner_accepted(998, Some(998)));
@@ -433,11 +488,26 @@ mod tests {
     fn the_check_carries_no_details() {
         let mut subject = HashMap::new();
         subject.insert("pid".to_string(), 42u32.to_variant());
-        let parameters = check_parameters(subject, "dev.paintedwolf.code.confirm-presence", "c1");
+        let parameters = check_parameters(
+            subject.clone(),
+            "dev.paintedwolf.code.confirm-presence",
+            ALLOW_USER_INTERACTION,
+            "c1",
+        );
         assert!(parameters.is_type(glib::VariantTy::new("((sa{sv})sa{ss}us)").unwrap()));
         assert_eq!(parameters.child_value(2).n_children(), 0);
-        assert_eq!(parameters.child_value(3).get::<u32>(), Some(ALLOW_USER_INTERACTION));
+        assert_eq!(
+            parameters.child_value(3).get::<u32>(),
+            Some(ALLOW_USER_INTERACTION)
+        );
         assert_eq!(parameters.child_value(4).str(), Some("c1"));
+        let probe = check_parameters(
+            subject,
+            "dev.paintedwolf.code.confirm-presence",
+            NO_USER_INTERACTION,
+            "c2",
+        );
+        assert_eq!(probe.child_value(3).get::<u32>(), Some(NO_USER_INTERACTION));
     }
 
     #[test]
