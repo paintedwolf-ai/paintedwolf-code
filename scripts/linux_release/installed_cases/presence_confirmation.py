@@ -10,7 +10,7 @@ from .records import CaseUnavailable
 PREFIX = 'Native presence confirmation: '
 FIELDS = {'format_version', 'challenge_id', 'purpose', 'window_label', 'generation',
           'status', 'authenticator', 'code', 'resolution'}
-AUTHENTICATORS = {'linux_user_presence', 'linux_app_password'}
+AUTHENTICATORS = {'linux_user_presence'}
 CODES = {'presence_unavailable', 'presence_denied', 'presence_failed'}
 
 

@@ -57,10 +57,12 @@ class NativeConfirmationObservationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'runtime changed'):
             confirmation.confirmation_rows(app)
 
-    def test_native_password_confirmation_has_no_host_completion_claim(self):
-        row = {**ROW, 'status': 'confirmed', 'authenticator': 'linux_app_password', 'code': None}
+    def test_system_confirmation_has_no_host_completion_claim_and_app_password_is_refused(self):
+        row = {**ROW, 'status': 'confirmed', 'authenticator': 'linux_user_presence', 'code': None}
         self.assertEqual(confirmation.confirmation_rows(self.app(stream(row))), [row])
         self.assertNotIn('host_completed', row)
+        with self.assertRaisesRegex(ValueError, 'contradictory outcome'):
+            confirmation.confirmation_rows(self.app(stream({**row, 'authenticator': 'linux_app_password'})))
 
     def test_new_reveal_boundary_excludes_old_outcomes_but_rejects_two_new_operations(self):
         row = {**ROW, 'challenge_id': '00000000-0000-4000-8000-000000000002'}
