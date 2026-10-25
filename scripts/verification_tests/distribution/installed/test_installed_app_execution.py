@@ -244,6 +244,7 @@ class InstalledAppPipeCaptureTests(unittest.TestCase):
         self.addCleanup(finish, process)
         with ExitStack() as patches:
             patches.enter_context(patch.object(owner, 'require_owned_guest'))
+            patches.enter_context(patch('scripts.linux_release.installed_generation.require_current'))
             patches.enter_context(patch.object(owner, 'graphical_session', return_value={}))
             patches.enter_context(patch.object(owner, 'session_environment', return_value={}))
             patches.enter_context(patch.object(owner, 'storage_for_launch', return_value=storage))
