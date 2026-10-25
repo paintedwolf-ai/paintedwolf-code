@@ -140,8 +140,8 @@ class DesktopUI:
             try:
                 for identity, window in self.windows(deadline):
                     for node in self.descendants(window, deadline):
-                        node_role = node.getRole()
-                        if self.visible(node) and node.name == name:
+                        if node.name == name and self.visible(node):
+                            node_role = node.getRole()
                             observed_roles.add(int(node_role))
                             if node_role == role:
                                 matches.append((identity, node))

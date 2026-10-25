@@ -32,6 +32,9 @@ def perform(execution: dict, vm_id: str, actor, mailbox=None, *, operation='edit
                 if time.monotonic() >= deadline:
                     raise CaseUnavailable('fixed-VM-input-acknowledgment-unavailable')
                 time.sleep(0.05)
+            if ordinal == len(sequence) - 1:
+                # Let the final Wayland key event drain to WebKit before focus moves.
+                time.sleep(0.2)
             after = actor.observe()
             if after != before:
                 raise ValueError('native input focus identity changed across a physical input step')
