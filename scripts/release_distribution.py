@@ -60,6 +60,9 @@ def storage_json(url: str, token: str) -> tuple[bytes, dict]:
 
 
 def read_storage_bytes(key: str) -> bytes | None:
+    if os.environ.get("RELEASE_R2_TRANSPORT") == "s3":
+        from release_storage.s3 import read_bytes
+        return read_bytes(key)
     account, bucket, token = (os.environ[name] for name in ("CLOUDFLARE_ACCOUNT_ID", "R2_BUCKET", "CLOUDFLARE_API_TOKEN"))
     base = f"https://api.cloudflare.com/client/v4/accounts/{account}/r2/buckets/{bucket}/objects"
     _, listing = storage_json(base + "?" + urllib.parse.urlencode({"prefix": key, "per_page": 20}), token)
