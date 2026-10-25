@@ -84,10 +84,19 @@ class NativeUnlockObserver:
                 count = desktop.childCount
                 if type(count) is not int or not 0 <= count <= 256:
                     raise ValueError('native shell application inventory exceeds its bound')
-                applications = [desktop[index] for index in range(count)]
-                if any(node is None for node in applications):
+                raw_apps = [desktop[index] for index in range(count)]
+                applications = []
+                for node in raw_apps:
+                    if node is None:
+                        continue
+                    try:
+                        node_pid = node.get_process_id()
+                    except Exception:
+                        continue
+                    if node_pid == pid:
+                        applications.append(node)
+                if not applications and any(node is None for node in raw_apps):
                     raise accessibility.InventoryChanged()
-                applications = [node for node in applications if node.get_process_id() == pid]
                 if len(applications) != 1:
                     raise CaseUnavailable('native-shell-accessibility-owner-missing-or-ambiguous')
                 rows = self._showing_tree(applications[0], deadline, skip_root=True)
@@ -112,7 +121,11 @@ class NativeUnlockObserver:
                         state.contains(self.api.STATE_FOCUSED)
                         or role == self.api.ROLE_WINDOW) for node, role, state in rows)))
                 break
-            except accessibility.InventoryChanged:
+            except Exception as error:
+                domain = getattr(error, 'domain', None)
+                if not isinstance(error, (IndexError, accessibility.InventoryChanged)) and domain not in {
+                        'atspi_error', 'g-dbus-error-quark', 'g-io-error-quark'}:
+                    raise
                 if time.monotonic() >= deadline:
                     raise CaseUnavailable('normal-native-control-observation-deadline') from None
                 time.sleep(0.05)

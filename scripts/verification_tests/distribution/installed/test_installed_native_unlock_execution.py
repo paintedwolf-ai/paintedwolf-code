@@ -173,7 +173,7 @@ class NativeUnlockObservationTests(unittest.TestCase):
         else:
             window.children, window.childCount = [hidden], 1
         app = Indexed(node('/application', 0, set(), children=[window], pid=201 if foreign else 200))
-        desktop = Indexed(node('/desktop', 0, set(), children=[app], pid=100))
+        desktop = Indexed(node('/desktop', 0, set(), children=[app] if foreign else [None, app], pid=100))
         api.Registry = SimpleNamespace(getDesktop=lambda _: desktop)
         locked = native_proof()
         locked['native_session'].update(locked_hint=True, locker_active=True)
