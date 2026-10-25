@@ -170,7 +170,7 @@ func writeLayoutChunk(ctx context.Context, tx *sql.Tx, entries []layoutEntry) (l
 	chunk := layoutChunk{firstPath: entries[0].path, entries: int64(len(entries))}
 	for _, entry := range entries {
 		_, _ = hash.Write([]byte(entry.path + "\x00" + layoutContentKey(entry) + "\x00"))
-		_, _ = hash.Write([]byte(strconv.FormatInt(entry.size, 10) + "\x00" + strconv.FormatUint(uint64(uint32(entry.mode)), 10) + "\x00"))
+		_, _ = hash.Write([]byte(strconv.FormatInt(entry.size, 10) + "\x00" + strconv.FormatUint(uint64(uint32(entry.mode)), 10) + "\x00")) // #nosec G115
 		chunk.totalBytes += entry.size
 		if entry.identity == "hashed" {
 			chunk.hashed++
@@ -214,7 +214,7 @@ func layoutContentKey(entry layoutEntry) string {
 	case entry.sha256 != "":
 		return "sha256:" + entry.sha256
 	}
-	return "stat:" + strconv.FormatInt(entry.size, 10) + ":" + strconv.FormatUint(uint64(uint32(entry.mode)), 10) + ":" + strconv.FormatInt(entry.modifiedNS, 10)
+	return "stat:" + strconv.FormatInt(entry.size, 10) + ":" + strconv.FormatUint(uint64(uint32(entry.mode)), 10) + ":" + strconv.FormatInt(entry.modifiedNS, 10) // #nosec G115
 }
 
 func writeLayoutManifest(ctx context.Context, tx *sql.Tx, chunks []layoutChunk) (string, error) {

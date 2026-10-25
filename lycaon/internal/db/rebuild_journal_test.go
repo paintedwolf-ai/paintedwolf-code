@@ -17,7 +17,7 @@ func preparedRebuildFixture(t *testing.T) (string, rebuildJournal) {
 	t.Helper()
 	root := t.TempDir()
 	path := filepath.Join(root, "custom.db")
-	work, err := os.MkdirTemp(root, StoreUpgradeDirectoryPrefix)
+	work, err := os.MkdirTemp(root, StoreUpgradeDirectoryPrefix) //nolint:usetesting // journal requires sibling prefix
 	testutil.FailErr(t, "create work directory", err)
 	identity, err := fspath.EntryIdentity(work)
 	testutil.FailErr(t, "identify work directory", err)

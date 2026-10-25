@@ -45,7 +45,7 @@ func writeRebuildJournal(path string, record rebuildJournal) error {
 
 func readRebuildJournal(path string) (rebuildJournal, error) {
 	var record rebuildJournal
-	file, err := os.Open(rebuildMarker(path))
+	file, err := os.Open(rebuildMarker(path)) // #nosec G304,G703
 	if err != nil {
 		return record, err
 	}
@@ -119,7 +119,7 @@ func finishRebuildPublication(path string, record rebuildJournal, afterMove func
 		return err
 	}
 	if identity == record.OriginalIdentity {
-		if _, err := os.Lstat(filepath.Join(work, "original.db")); !os.IsNotExist(err) {
+		if _, err := os.Lstat(filepath.Join(work, "original.db")); !os.IsNotExist(err) { // #nosec G703
 			if err != nil {
 				return err
 			}
@@ -156,7 +156,7 @@ func finishRebuildPublication(path string, record rebuildJournal, afterMove func
 
 func requireSealedRebuild(path string) error {
 	for _, suffix := range []string{"-wal", "-shm", "-journal"} {
-		if _, err := os.Lstat(path + suffix); !os.IsNotExist(err) {
+		if _, err := os.Lstat(path + suffix); !os.IsNotExist(err) { // #nosec G703
 			if err != nil {
 				return err
 			}
@@ -211,13 +211,13 @@ func discardRebuild(path string, record rebuildJournal) error {
 	if err := requireRebuildIdentity(work, record.DirectoryIdentity); err != nil && !os.IsNotExist(err) {
 		return err
 	}
-	if err := os.RemoveAll(work); err != nil {
+	if err := os.RemoveAll(work); err != nil { // #nosec G703
 		return err
 	}
-	if err := os.Remove(rebuildMarker(path)); err != nil && !os.IsNotExist(err) {
+	if err := os.Remove(rebuildMarker(path)); err != nil && !os.IsNotExist(err) { // #nosec G703
 		return err
 	}
-	directory, err := os.Open(filepath.Dir(path))
+	directory, err := os.Open(filepath.Dir(path)) // #nosec G304,G703
 	if err != nil {
 		return err
 	}

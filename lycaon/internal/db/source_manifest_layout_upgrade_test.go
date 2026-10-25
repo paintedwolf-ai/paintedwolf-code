@@ -107,6 +107,7 @@ func TestSourceManifestLayoutMigrationKeepsRetainedSnapshots(t *testing.T) {
 				JOIN source_manifest_entries e ON e.chunk_id = l.chunk_id
 				WHERE r.snapshot_id = ? AND r.root_path = ? ORDER BY e.path`, snapshot, root)
 			testutil.FailErr(t, "read converted entries", err)
+			defer func() { _ = rows.Close() }() //nolint:gocritic // bounded test loop
 			var converted []string
 			for rows.Next() {
 				var p, sha, oid, identity string
@@ -114,7 +115,7 @@ func TestSourceManifestLayoutMigrationKeepsRetainedSnapshots(t *testing.T) {
 				testutil.FailErr(t, "scan converted entry", rows.Scan(&p, &sha, &oid, &identity, &size, &mode, &mtime))
 				converted = append(converted, fmt.Sprintf("%s|%s|%s|%s|%d|%d|%d", p, sha, oid, identity, size, mode, mtime))
 			}
-			testutil.FailErr(t, "close converted rows", rows.Close())
+			testutil.FailErr(t, "iterate converted rows", rows.Err())
 			if strings.Join(converted, "\n") != strings.Join(entries, "\n") {
 				t.Fatalf("%s %s converted %d entries, want %d retained", snapshot, root, len(converted), len(entries))
 			}

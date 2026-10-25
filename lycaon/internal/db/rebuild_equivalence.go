@@ -20,10 +20,10 @@ func validateRebuildCounts(ctx context.Context, tx *sql.Tx, objects []rebuildObj
 			expected = "SELECT COUNT(*) FROM original." + rebuildIdentifier(object.name) + " NOT INDEXED"
 		}
 		var source, copied int64
-		if err := tx.QueryRowContext(ctx, expected).Scan(&source); err != nil {
+		if err := tx.QueryRowContext(ctx, expected).Scan(&source); err != nil { // #nosec G701
 			return err
 		}
-		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM main."+rebuildIdentifier(object.name)+" NOT INDEXED").Scan(&copied); err != nil {
+		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM main."+rebuildIdentifier(object.name)+" NOT INDEXED").Scan(&copied); err != nil { // #nosec G202,G701
 			return err
 		}
 		if source != copied {

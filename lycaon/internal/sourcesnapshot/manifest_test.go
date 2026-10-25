@@ -209,6 +209,7 @@ func TestManifestReadsStayWithinTheirManifest(t *testing.T) {
 	} {
 		rows, err := store.db.QueryContext(t.Context(), "EXPLAIN QUERY PLAN "+query)
 		testutil.FailErr(t, "explain "+name, err)
+		defer func() { _ = rows.Close() }() //nolint:gocritic // bounded test loop
 		var plan []string
 		for rows.Next() {
 			var id, parent, unused int
@@ -217,7 +218,6 @@ func TestManifestReadsStayWithinTheirManifest(t *testing.T) {
 			plan = append(plan, detail)
 		}
 		testutil.FailErr(t, "read plan", rows.Err())
-		_ = rows.Close()
 		joined := strings.Join(plan, "; ")
 		if strings.Contains(joined, "SCAN") || strings.Contains(joined, "TEMP B-TREE") {
 			t.Errorf("%s plan scans or sorts: %s", name, joined)

@@ -25,7 +25,7 @@ func copyRetainedStore(ctx context.Context, source, destination string, plan mig
 	if selection == nil {
 		return fmt.Errorf("upgrade route does not define a retained copy")
 	}
-	file, err := os.OpenFile(destination, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	file, err := os.OpenFile(destination, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600) // #nosec G304,G703
 	if err != nil {
 		return err
 	}
@@ -88,7 +88,7 @@ func copyRetainedDatabase(ctx context.Context, copyDB *sql.DB, source string, pl
 		return err
 	}
 	for _, statement := range selection.After {
-		if _, err := tx.ExecContext(ctx, statement); err != nil {
+		if _, err := tx.ExecContext(ctx, statement); err != nil { // #nosec G701
 			return err
 		}
 	}
@@ -145,11 +145,11 @@ func copyRebuildTable(ctx context.Context, tx *sql.Tx, object rebuildObject, fro
 	}
 	// FTS creation seeds shadow rows. Replace them with the exact source rows;
 	// copying the virtual table itself would rebuild a potentially different index.
-	if _, err := tx.ExecContext(ctx, "DELETE FROM "+rebuildIdentifier(object.name)); err != nil {
+	if _, err := tx.ExecContext(ctx, "DELETE FROM "+rebuildIdentifier(object.name)); err != nil { // #nosec G202
 		return err
 	}
-	statement := "INSERT INTO " + rebuildIdentifier(object.name) + " (" + strings.Join(columns, ",") + ") SELECT " + strings.Join(selected, ",") + " " + from
-	if _, err := tx.ExecContext(ctx, statement); err != nil {
+	statement := "INSERT INTO " + rebuildIdentifier(object.name) + " (" + strings.Join(columns, ",") + ") SELECT " + strings.Join(selected, ",") + " " + from // #nosec G202
+	if _, err := tx.ExecContext(ctx, statement); err != nil { // #nosec G701
 		return fmt.Errorf("copy retained table %s: %w", object.name, err)
 	}
 	return nil

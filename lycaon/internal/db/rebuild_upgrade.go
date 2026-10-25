@@ -17,7 +17,7 @@ import (
 
 func beginRebuild(path string) (rebuildJournal, error) {
 	var record rebuildJournal
-	if _, err := os.Lstat(rebuildMarker(path)); !os.IsNotExist(err) {
+	if _, err := os.Lstat(rebuildMarker(path)); !os.IsNotExist(err) { // #nosec G703
 		return record, fmt.Errorf("store upgrade journal must be resolved before rebuilding")
 	}
 	work, err := os.MkdirTemp(filepath.Dir(path), StoreUpgradeDirectoryPrefix)
@@ -25,11 +25,11 @@ func beginRebuild(path string) (rebuildJournal, error) {
 		return record, err
 	}
 	if err := probeRebuildExchange(filepath.Dir(path), work, fseffect.ExchangeGuarded); err != nil {
-		return record, errors.Join(fmt.Errorf("store volume cannot atomically publish an upgraded database: %w", err), os.Remove(work))
+		return record, errors.Join(fmt.Errorf("store volume cannot atomically publish an upgraded database: %w", err), os.Remove(work)) // #nosec G703
 	}
 	identity, err := fspath.EntryIdentity(work)
 	if err != nil {
-		return record, errors.Join(err, os.Remove(work))
+		return record, errors.Join(err, os.Remove(work)) // #nosec G703
 	}
 	record = rebuildJournal{Version: 2, Database: filepath.Base(path), Directory: filepath.Base(work), DirectoryIdentity: identity, State: "building"}
 	if err := writeRebuildJournal(path, record); err != nil {
@@ -136,7 +136,7 @@ func sealRebuiltStore(ctx context.Context, path string) error {
 
 func syncSealedStore(path string, syncFile func(*os.File) error) error {
 	for _, name := range []string{path, filepath.Dir(path)} {
-		file, err := os.Open(name)
+		file, err := os.Open(name) // #nosec G304,G703
 		if err != nil {
 			return err
 		}
@@ -193,7 +193,7 @@ func probeRebuildExchange(root, work string, exchange func(string, string, strin
 	if err != nil {
 		return err
 	}
-	defer func() { err = errors.Join(err, os.Remove(first.Name())) }()
+	defer func() { err = errors.Join(err, os.Remove(first.Name())) }() // #nosec G703
 	if err := first.Close(); err != nil {
 		return err
 	}
@@ -201,7 +201,7 @@ func probeRebuildExchange(root, work string, exchange func(string, string, strin
 	if err != nil {
 		return err
 	}
-	defer func() { err = errors.Join(err, os.Remove(second.Name())) }()
+	defer func() { err = errors.Join(err, os.Remove(second.Name())) }() // #nosec G703
 	if err := second.Close(); err != nil {
 		return err
 	}

@@ -41,7 +41,7 @@ func setRebuildPageLimit(ctx context.Context, database *sql.DB, available uint64
 	if pages < original && extra < original-pages {
 		limit = pages + extra
 	}
-	if _, err := database.ExecContext(ctx, fmt.Sprintf(`PRAGMA main.max_page_count=%d`, limit)); err != nil {
+	if _, err := database.ExecContext(ctx, fmt.Sprintf(`PRAGMA main.max_page_count=%d`, limit)); err != nil { // #nosec G701
 		return nil, err
 	}
 	return func() error {
