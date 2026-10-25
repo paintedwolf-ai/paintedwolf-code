@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
-	"github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/osprocess"
 	"github.com/lycaon/lycaon/internal/projectroot"
