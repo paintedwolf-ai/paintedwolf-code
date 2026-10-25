@@ -7,30 +7,33 @@ import json
 from pathlib import Path
 import sys
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from release_distribution_contract.platforms import parse_platforms
+
 
 def matrix(catalog: dict) -> dict:
-    if catalog.get("schema_version") != 2:
-        raise ValueError("unsupported release platform catalog version")
-    rows = [row for row in catalog["platforms"] if row.get("goos") == "linux"]
+    platforms = parse_platforms(json.dumps(catalog).encode())
+    rows = [row for row in platforms.values() if row.get("goos") == "linux"]
     if {row.get("goarch") for row in rows} != {"amd64", "arm64"} or len(rows) != 2:
         raise ValueError("Linux candidates require exactly one native row for each architecture")
     for row in rows:
-        verify(catalog, row["updater_key"], row["runner"], row["goarch"])
+        verify_row(row, row["updater_key"], row["runner"], row["goarch"])
     return {"include": rows}
 
 
 def verify(catalog: dict, key: str, runner: str, architecture: str) -> dict:
-    if catalog.get("schema_version") != 2:
-        raise ValueError("unsupported release platform catalog version")
-    matches = [row for row in catalog["platforms"] if row.get("updater_key") == key]
-    if len(matches) != 1:
+    platforms = parse_platforms(json.dumps(catalog).encode())
+    if key not in platforms:
         raise ValueError(f"candidate {key!r} must resolve to exactly one catalog row")
-    row = matches[0]
+    return verify_row(platforms[key], key, runner, architecture)
+
+
+def verify_row(row: dict, key: str, runner: str, architecture: str) -> dict:
     expected = {"amd64": "x86_64", "arm64": "aarch64"}
     if (architecture not in expected or row.get("goos") != "linux"
             or row.get("goarch") != architecture or row.get("artifact_arch") != expected[architecture]
             or row.get("runner") != runner or not isinstance(runner, str) or not runner
-            or row.get("publication") not in ("candidate", "public")
             or row.get("package_extensions") not in (["deb", "rpm"], ["deb", "rpm", "pkg.tar.zst"])
             or row.get("updater_extension") is not None):
         raise ValueError(f"candidate {key!r} disagrees with its native package contract")

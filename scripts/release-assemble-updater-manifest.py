@@ -7,10 +7,10 @@ import argparse
 import datetime as dt
 import json
 from pathlib import Path
-import re
 import sys
 
 from release_semver import parse
+from release_distribution_contract.platforms import load_platforms, public_updaters
 from update_keys import load_registry, release_binding
 from updater_signature import require_version
 
@@ -37,24 +37,7 @@ def main() -> int:
         published = dt.datetime.fromisoformat(args.pub_date.replace("Z", "+00:00"))
         if published.tzinfo is None:
             fail("publication date requires a timezone")
-        catalog = json.loads(args.catalog.read_text(encoding="utf-8"))
-        rows = catalog.get("platforms")
-        if catalog.get("schema_version") != 2 or not isinstance(rows, list) or not rows:
-            fail("release platform catalog has an unsupported shape")
-        expected = {row["updater_key"]: row for row in rows}
-        if len(expected) != len(rows):
-            fail("release platform catalog repeats an updater key")
-        for key, row in expected.items():
-            if not isinstance(key, str) or not re.fullmatch(r"[a-z0-9]+-[a-z0-9_]+", key):
-                fail("release platform catalog has an invalid updater key")
-            extension = row.get("updater_extension")
-            # Package-managed platforms carry no updater artifact and announce null.
-            if extension is not None and (not isinstance(extension, str) or not re.fullmatch(r"[A-Za-z0-9.]+", extension)):
-                fail(f"release platform {key} has an invalid updater extension")
-            if row.get("publication") not in {"public", "candidate"}:
-                fail(f"release platform {key} has an invalid publication state")
-            if row["publication"] == "public" and extension is None:
-                fail(f"public release platform {key} has no updater artifact")
+        expected = load_platforms(args.catalog)
         binding = release_binding(load_registry(), version)
         platforms: dict[str, dict[str, str]] = {}
         landed: set[str] = set()
@@ -84,7 +67,7 @@ def main() -> int:
                     "signature": fragment["signature"],
                     "url": f"{args.base_url}/releases/v{version}/{wanted_artifact}",
                 }
-        missing = sorted({key for key, row in expected.items() if row["publication"] == "public"} - landed)
+        missing = sorted(set(public_updaters(expected)) - landed)
         if missing:
             fail(f"missing release fragments: {', '.join(missing)}")
         if not platforms:
