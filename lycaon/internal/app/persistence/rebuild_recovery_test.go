@@ -59,7 +59,7 @@ func TestRebuiltUpgradeRetainsRestorableInstallation(t *testing.T) {
 	_, err = backup.StageLatestUpgradeRecovery(t.Context(), backup.StageOpts{ConfigDir: restored, SchemaVersion: db.SchemaVersion})
 	testutil.FailErr(t, "stage compact recovery", err)
 	testutil.FailErr(t, "apply compact recovery", backup.ApplyPending(t.Context(), restored))
-	result, err := db.Open(filepath.Join(restored, "store.db"))
+	result, err := db.OpenWithOptions(t.Context(), filepath.Join(restored, "store.db"), db.UpgradeHooks{}, db.StoreOptions{FastTestSync: true})
 	testutil.FailErr(t, "open restored installation", err)
 	defer func() { _ = result.Close() }()
 	testutil.FailErr(t, "validate restored history payloads", backup.ValidateLiveReferences(t.Context(), result, restored))
