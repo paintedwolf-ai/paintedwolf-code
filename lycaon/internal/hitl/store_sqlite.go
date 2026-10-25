@@ -81,7 +81,14 @@ func checkpointInsertParams(row StoredCheckpoint) (db.InsertCheckpointParams, er
 	if err != nil {
 		return db.InsertCheckpointParams{}, fmt.Errorf("marshal result: %w", err)
 	}
+	authority, err := storedAuthority(row.AuthorityFormat, row.nativeAuthority)
+	if err != nil {
+		return db.InsertCheckpointParams{}, err
+	}
 	return db.InsertCheckpointParams{
+		AuthorityFormat:    authority.format,
+		AuthorityDigest:    authority.digest,
+		AuthorityBody:      authority.body,
 		ID:                 row.ID,
 		SessionID:          row.SessionID,
 		ProjectID:          row.ProjectID,
@@ -212,7 +219,7 @@ func (s *SQLStore) ListBySession(ctx context.Context, sessionID string, status D
 	}
 	out := make([]StoredCheckpoint, 0, len(rows))
 	for _, r := range rows {
-		row, err := checkpointFromRow(r)
+		row, err := checkpointFromRow(db.GetCheckpointRow(r))
 		if err != nil {
 			return nil, err
 		}
@@ -232,7 +239,7 @@ func (s *SQLStore) ListPending(ctx context.Context) ([]StoredCheckpoint, error) 
 	}
 	out := make([]StoredCheckpoint, 0, len(rows))
 	for _, stored := range rows {
-		row, err := checkpointFromRow(stored)
+		row, err := checkpointFromRow(db.GetCheckpointRow(stored))
 		if err != nil {
 			return nil, err
 		}
@@ -377,7 +384,7 @@ func (s *SQLStore) mutatePendingPayload(ctx context.Context, checkpointID, op st
 }
 
 // checkpointFromRow maps a generated checkpoints row onto the store's domain type.
-func checkpointFromRow(r db.Checkpoints) (*StoredCheckpoint, error) {
+func checkpointFromRow(r db.GetCheckpointRow) (*StoredCheckpoint, error) {
 	row := StoredCheckpoint{
 		ID:          r.ID,
 		SessionID:   r.SessionID,
@@ -391,6 +398,7 @@ func checkpointFromRow(r db.Checkpoints) (*StoredCheckpoint, error) {
 		ToolName:    r.ToolName,
 		Path:        r.Path,
 	}
+	row.AuthorityFormat = r.AuthorityFormat
 	if err := db.UnmarshalJSON(r.ArgsJson, &row.Args); err != nil {
 		return nil, err
 	}
@@ -509,7 +517,7 @@ func (s *SQLStore) ListPendingForParent(ctx context.Context, sessionID string, k
 	}
 	out := make([]StoredCheckpoint, 0, len(rows))
 	for _, stored := range rows {
-		row, err := checkpointFromRow(stored)
+		row, err := checkpointFromRow(db.GetCheckpointRow(stored))
 		if err != nil {
 			return nil, err
 		}

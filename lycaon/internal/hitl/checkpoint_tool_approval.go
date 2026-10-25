@@ -12,36 +12,44 @@ func applyToolApprovalRequest(row *StoredCheckpoint, req CheckpointRequest) erro
 	if req.ProposedAction == nil {
 		return fmt.Errorf("proposed_action required for tool_approval")
 	}
-	row.ToolName = observability.RedactCaptureText(req.ProposedAction.Invocation.Tool)
-	if req.ProposedAction.Invocation.NativeInputs != nil {
-		inspection, err := req.ProposedAction.Invocation.NativeInputs.Inspection()
+	action := *req.ProposedAction
+	if action.Invocation.NativeInputs != nil {
+		var err error
+		action, err = redactedApprovalAction(action)
 		if err != nil {
 			return err
 		}
-		row.Args = inspection
-		row.Payload["native_arguments_representation"] = inspection["representation"]
+	}
+	textRequest := req
+	textRequest.Title, textRequest.Description = row.Title, row.Description
+	text, err := checkpointPresentationText(textRequest)
+	if err != nil {
+		return err
+	}
+	row.ToolName = action.Invocation.Tool
+	if req.ProposedAction.Invocation.NativeInputs != nil {
+		row.Args = action.Invocation.Args
+		row.Payload["native_arguments_representation"] = row.Args["representation"]
 	} else if scrubbed, ok := observability.RedactCaptureValue(req.ProposedAction.Invocation.Args).(map[string]any); ok {
 		row.Args = scrubbed
 	}
-	row.Files = append([]string(nil), req.ProposedAction.Invocation.Files...)
-	for i := range row.Files {
-		row.Files[i] = observability.RedactCaptureText(row.Files[i])
-	}
-	row.ProjectDir = observability.RedactCaptureText(req.ProposedAction.Scope.ProjectDir)
-	if req.ProposedAction.Invocation.NativeInputs != nil {
+	row.Files = append([]string(nil), action.Invocation.Files...)
+	row.ProjectDir = action.Scope.ProjectDir
+	if action.Invocation.NativeInputs == nil {
+		row.ToolName = observability.RedactCaptureText(row.ToolName)
 		for i := range row.Files {
-			row.Files[i] = reviewDisplayText(row.Files[i])
+			row.Files[i] = observability.RedactCaptureText(row.Files[i])
 		}
-		row.ProjectDir = reviewDisplayText(row.ProjectDir)
+		row.ProjectDir = observability.RedactCaptureText(row.ProjectDir)
 	}
-	row.Description = observability.RedactCaptureText(row.Description)
+	row.Description = text.description
 	if req.ToolCallID != "" {
 		row.Payload["tool_call_id"] = req.ToolCallID
 	}
+	row.Title = text.title
 	if row.Title == "" {
 		row.Title = fmt.Sprintf("Approve %s", row.ToolName)
 	}
-	row.Title = observability.RedactCaptureText(row.Title)
 	if req.AIRationalePending {
 		row.Payload["ai_rationale_pending"] = true
 	}
@@ -50,16 +58,12 @@ func applyToolApprovalRequest(row *StoredCheckpoint, req CheckpointRequest) erro
 	}
 	if req.Repeat != nil && (req.Repeat.Count > 1 || req.Repeat.Asks > 1) {
 		repeat := map[string]any{
-			"reason_key": observability.RedactCaptureText(req.Repeat.ReasonKey),
+			"reason_key": text.reason,
 			"count":      req.Repeat.Count,
 			"asks":       req.Repeat.Asks,
 		}
 		if len(req.Repeat.Subjects) > 0 {
-			subjects := append([]string(nil), req.Repeat.Subjects...)
-			for i := range subjects {
-				subjects[i] = observability.RedactCaptureText(subjects[i])
-			}
-			repeat["subjects"] = subjects
+			repeat["subjects"] = text.subjects
 		}
 		if req.Repeat.SubjectsTruncated {
 			repeat["subjects_truncated"] = true

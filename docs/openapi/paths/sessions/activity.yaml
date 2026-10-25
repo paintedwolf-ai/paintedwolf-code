@@ -110,6 +110,7 @@ paths:
     get:
       tags: [sessions]
       operationId: getCommandProgramReceipt
+      x-multi-stream-list: true
       summary: Inspect bounded program and host child receipts
       parameters:
       - $ref: ../../components/parameters.yaml#/components/parameters/SessionId

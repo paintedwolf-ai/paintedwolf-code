@@ -3,6 +3,7 @@ package invocation
 import (
 	"encoding/hex"
 	"fmt"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
@@ -79,11 +80,34 @@ type ChildSettlement struct {
 	DetailReference   string
 	AcceptedRevision  string
 	PublishedRevision string
+	// JobHandle names the host background job this child started.
+	JobHandle string
+	// Conflict is the destination owner's typed stale-destination fact.
+	Conflict *RevisionConflict
 }
+
+// RevisionConflict records a stale destination. It requires fresh preparation;
+// the host never refreshes, rebases or replays the transform.
+type RevisionConflict struct {
+	Path, ExpectedRevision, ObservedRevision string
+}
+
+const maxSettlementFactBytes = 4096
 
 func (c ChildSettlement) Validate() error {
 	if err := c.Result.Validate(); err != nil {
 		return err
+	}
+	if c.JobHandle != "" && (len(c.JobHandle) > 256 || strings.Trim(c.JobHandle, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.:-") != "") {
+		return fmt.Errorf("child job handle is not a host identifier")
+	}
+	if conflict := c.Conflict; conflict != nil {
+		if conflict.Path == "" || conflict.ExpectedRevision == "" || conflict.ObservedRevision == "" || conflict.ExpectedRevision == conflict.ObservedRevision {
+			return fmt.Errorf("revision conflict requires path and differing expected and observed revisions")
+		}
+		if len(conflict.Path)+len(conflict.ExpectedRevision)+len(conflict.ObservedRevision) > maxSettlementFactBytes {
+			return fmt.Errorf("revision conflict exceeds its receipt ceiling")
+		}
 	}
 	if c.OutputPublishable && (!c.Result.PublicationEligible || c.HostStopCode != "") {
 		return fmt.Errorf("stopped or ineligible output is not publishable")

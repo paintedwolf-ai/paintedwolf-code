@@ -13,7 +13,16 @@ import (
 //go:embed effect_permit_identity.go
 var effectPermitIdentityImplementation []byte
 
+//go:embed effect_permit_identity.sql
+var effectPermitIdentitySQL []byte
+
+// The step's immutable source is its column DDL followed by the data repair.
+var effectPermitIdentityStepSource = append(append([]byte(nil), effectPermitIdentitySQL...), effectPermitIdentityImplementation...)
+
 func migrateEffectPermitIdentity(ctx context.Context, tx *sql.Tx) error {
+	if _, err := tx.ExecContext(ctx, string(effectPermitIdentitySQL)); err != nil {
+		return fmt.Errorf("native authority columns: %w", err)
+	}
 	after := ""
 	for {
 		rows, err := tx.QueryContext(ctx, `SELECT id,payload_json FROM checkpoints

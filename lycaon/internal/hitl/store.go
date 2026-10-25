@@ -32,6 +32,12 @@ type StoredCheckpoint struct {
 	CreatedAt     time.Time
 	ResolvedAt    *time.Time
 	Resolution    *Resolution
+	// AuthorityFormat names lossless native authority stored beside Payload,
+	// whose approval plan is then only its screened display. Empty means the
+	// payload plan is the structured authority.
+	AuthorityFormat string
+	// nativeAuthority is written once at mint; readers use the native reader.
+	nativeAuthority NativeAuthorityProjection
 }
 
 // Resolution records how a checkpoint was settled and by whom.
@@ -74,10 +80,11 @@ type Store interface {
 	// SetPendingJoined writes joined_count / joined_tool_call_ids only while pending.
 	// joinerBand/joinerCode may raise consequence_band on the open card (never lower).
 	SetPendingJoined(ctx context.Context, checkpointID string, joinedCount int, joinedToolCallIDs []string, joinerBand string, joinerCode string) (applied bool, err error)
-	prepareApprovalOperation(context.Context, string, string, ApprovalOption) error
+	prepareApprovalOperation(context.Context, string, string, approvedAuthority) error
 	commitApprovalOperation(context.Context, StoredCheckpoint, *DecisionResult, time.Time, Resolution, func(*sql.Tx) error) (bool, error)
 	rollbackApprovalOperation(context.Context, string) error
 	preparedApprovalOperations(context.Context) ([]preparedApprovalOperation, error)
 	chatGrants(context.Context, time.Time) ([]ChatGrant, error)
 	forgetChatGrant(context.Context, string) (bool, error)
+	nativeAuthority() nativeAuthorityReader
 }
