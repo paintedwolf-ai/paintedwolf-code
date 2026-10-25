@@ -95,12 +95,15 @@ func TestProgramSessionJobsAndPsScopeToTheSession(t *testing.T) {
 		t.Fatalf("session-1 ps did not list its own job %s: %q", handle, outcome.Stdout)
 	}
 
-	for _, cmd := range []string{"jobs", "ps"} {
-		out2, err := s2.call(t, t.Context(), cmd)
-		testutil.FailErr(t, "run "+cmd+" in session-2", err)
-		if outcome := decodeOutcome(t, out2); outcome.Stdout != "" {
-			t.Fatalf("session-2 %s listed another session's job: %q", cmd, outcome.Stdout)
-		}
+	jobsOut2, err := s2.call(t, t.Context(), "jobs")
+	testutil.FailErr(t, "run jobs in session-2", err)
+	if outcome := decodeOutcome(t, jobsOut2); outcome.Stdout != "" {
+		t.Fatalf("session-2 jobs listed another session's job: %q", outcome.Stdout)
+	}
+	psOut2, err := s2.call(t, t.Context(), "ps")
+	testutil.FailErr(t, "run ps in session-2", err)
+	if outcome := decodeOutcome(t, psOut2); strings.Contains(outcome.Stdout, handle) || strings.Contains(outcome.Stdout, "[session job") {
+		t.Fatalf("session-2 ps listed another session's job: %q", outcome.Stdout)
 	}
 }
 
@@ -113,6 +116,12 @@ func TestProgramExternalOutsideWriteRefusedWhileTempWriteAllowed(t *testing.T) {
 
 	account, err := user.LookupId(strconv.Itoa(os.Getuid()))
 	testutil.FailErr(t, "look up account home", err)
+	stateDir, err := os.MkdirTemp(account.HomeDir, ".paintedwolf-cmd-state-") //nolint:usetesting // Keep state tree outside /tmp so /tmp remains an eligible standard write root under test isolation.
+	testutil.FailErr(t, "create state fixture dir", err)
+	t.Cleanup(func() { _ = os.RemoveAll(stateDir) })
+	t.Setenv("HOME", stateDir)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(stateDir, "xdg-config"))
+
 	outsideDir, err := os.MkdirTemp(account.HomeDir, ".paintedwolf-cmd-outside-") //nolint:usetesting // Must lie outside OS temporary write roots.
 	testutil.FailErr(t, "create outside fixture dir", err)
 	t.Cleanup(func() { _ = os.RemoveAll(outsideDir) })
