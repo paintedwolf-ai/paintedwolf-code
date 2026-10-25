@@ -55,7 +55,11 @@ func (s *supervisor) serveNotifications(listener int) {
 	for {
 		var n seccompNotif
 		if err := ioctlPtr(listener, unix.SECCOMP_IOCTL_NOTIF_RECV, unsafe.Pointer(&n)); err != nil {
-			if errors.Is(err, unix.EINTR) {
+			// ENOENT is a call whose caller was interrupted, for instance by
+			// the Go runtime's preemption signal, before it could be read;
+			// the caller retries it. Closing the listener would instead fail
+			// every later notified call with ENOSYS.
+			if errors.Is(err, unix.EINTR) || errors.Is(err, unix.ENOENT) {
 				continue
 			}
 			return
@@ -128,7 +132,16 @@ func (s *supervisor) decideAndPerform(target *targetProcess, n seccompNotif, fd,
 		return 0, unix.ENOSYS
 	}
 	if req.Op != OpListen {
-		if err := s.decodeAddress(&req, info, raw, target); err != nil {
+		err := s.decodeAddress(&req, info, raw, target)
+		if errors.Is(err, errUnresolvedSocketPath) {
+			// What a relative path names depends on a working directory the
+			// supervisor could not read, so it cannot decide the call.
+			if target.valid() {
+				s.refusals.report(Refusal{Unexamined: true, Process: target.comm()})
+			}
+			return 0, unix.EACCES
+		}
+		if err != nil {
 			return 0, unix.EINVAL
 		}
 	}
@@ -193,7 +206,11 @@ func (s *supervisor) decodeAddress(req *SocketRequest, info socketInfo, raw []by
 		if i := indexByte(path, 0); i >= 0 {
 			path = path[:i]
 		}
-		req.Unix = resolveSocketPath(string(path), target)
+		resolved, ok := resolveSocketPath(string(path), target)
+		if !ok {
+			return errUnresolvedSocketPath
+		}
+		req.Unix = resolved
 		return nil
 	case family == unix.AF_INET && len(raw) >= 8:
 		port := binary.BigEndian.Uint16(raw[2:4])
@@ -220,21 +237,26 @@ func indexByte(b []byte, c byte) int {
 	return -1
 }
 
+// errUnresolvedSocketPath marks a relative path-socket address whose working
+// directory the supervisor could not read.
+var errUnresolvedSocketPath = errors.New("relative socket path has no readable working directory")
+
 // resolveSocketPath gives a path-socket address the meaning the target's
 // working directory gives it, with symbolic links resolved, so a grant matches
-// the socket it names whatever spelling reaches it.
-func resolveSocketPath(path string, target *targetProcess) string {
+// the socket it names whatever spelling reaches it. A relative path whose
+// working directory cannot be read has no meaning the supervisor can decide.
+func resolveSocketPath(path string, target *targetProcess) (string, bool) {
 	if !filepath.IsAbs(path) {
 		cwd, err := os.Readlink("/proc/" + strconv.Itoa(target.pid) + "/cwd")
-		if err != nil {
-			return ""
+		if err != nil || !filepath.IsAbs(cwd) {
+			return "", false
 		}
 		path = filepath.Join(cwd, path)
 	}
 	if resolved, err := filepath.EvalSymlinks(path); err == nil {
-		return resolved
+		return resolved, true
 	}
-	return filepath.Clean(path)
+	return filepath.Clean(path), true
 }
 
 // hostSocketCall runs an admitted call on a fresh socket in the host's

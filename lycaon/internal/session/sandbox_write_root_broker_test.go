@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"slices"
@@ -515,4 +516,26 @@ func (*cannedWriteRootCheckpoints) ApprovalReviewSuppressed(context.Context, str
 
 func (unusedWriteRootCheckpoints) ApprovalReviewSuppressed(context.Context, string, string) (bool, error) {
 	return false, nil
+}
+
+func TestWriteRootBrokerRefusesInvalidScratchContainingState(t *testing.T) {
+	ancestor := t.TempDir()
+	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(ancestor, "state"))
+	broker := &WriteRootCheckpointBroker{Checkpoints: unusedWriteRootCheckpoints{t: t}, Runtime: approvalstate.NewSandboxPathGrantRuntime()}
+	result, err := broker.Authorize(t.Context(), command.SandboxWriteRootAsk{SessionID: "session", ProposedWriteRoot: ancestor, SessionScratchRoot: ancestor})
+	testutil.FailErr(t, "refuse scratch ancestor without asking", err)
+	if result.Authorized || result.Raised {
+		t.Fatalf("invalid scratch acquired authority: %+v", result)
+	}
+}
+
+func TestWriteRootBrokerRejectsInvalidAttachedAuthority(t *testing.T) {
+	ancestor := t.TempDir()
+	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(ancestor, "state"))
+	broker := &WriteRootCheckpointBroker{Checkpoints: unusedWriteRootCheckpoints{t: t}, Runtime: approvalstate.NewSandboxPathGrantRuntime()}
+	result, err := broker.Authorize(t.Context(), command.SandboxWriteRootAsk{SessionID: "session", ProjectDir: ancestor, ProposedWriteRoot: t.TempDir()})
+	var refusal *confine.WriteRootRefusalError
+	if !errors.As(err, &refusal) || refusal.Code != confine.WriteRootCodeContainsState || result.Authorized || result.Raised {
+		t.Fatalf("invalid attached authority reached approval: result=%+v error=%v", result, err)
+	}
 }

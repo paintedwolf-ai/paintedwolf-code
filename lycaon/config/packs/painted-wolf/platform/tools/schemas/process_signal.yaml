@@ -1,8 +1,10 @@
 tags: [process]
 description: >-
-  Send a signal to exact host process instances after approval. Pass opaque
-  references returned by process_list in this task. PID reuse or changed
-  identity rejects; names, bare PIDs, groups, and descendants are not targets.
+  Send a signal to exact process instances this session started, after
+  approval. Pass opaque references returned by process_list in this session.
+  A process this session did not start is refused whatever the approval. PID
+  reuse or changed identity rejects; names, bare PIDs, groups, and descendants
+  are not targets.
   TERM requests graceful termination; KILL can discard unsaved work. Delivered
   means the signal was accepted, not that exit was observed. Inspect the result
   for each target. Use command_stop for command job handles.

@@ -408,6 +408,50 @@ fn vault_password_frame_is_length_prefixed_and_exact() {
 }
 
 #[test]
+fn engine_command_keeps_the_api_token_out_of_the_environment() {
+    let cmd = engine_command(
+        Path::new("/opt/painted-wolf-code/bin/pw"),
+        "presence-key",
+        Path::new("/tmp/config"),
+    );
+    let envs: Vec<(String, Option<String>)> = cmd
+        .get_envs()
+        .map(|(k, v)| {
+            (
+                k.to_string_lossy().into_owned(),
+                v.map(|v| v.to_string_lossy().into_owned()),
+            )
+        })
+        .collect();
+    // Removed explicitly, so an inherited value cannot reach the engine either.
+    assert!(envs.contains(&("LYCAON_API_TOKEN".to_string(), None)));
+    assert!(envs.contains(&(
+        "LYCAON_API_TOKEN_STDIN".to_string(),
+        Some("1".to_string())
+    )));
+}
+
+#[test]
+fn api_token_frame_precedes_the_password_frame() {
+    let mut stream = Vec::new();
+    write_api_token(&mut stream, "abc-DEF_123").expect("write token frame");
+    write_vault_password(&mut stream, b"pw").expect("write password frame");
+    assert_eq!(&stream[..4], &11u32.to_be_bytes());
+    assert_eq!(&stream[4..15], b"abc-DEF_123");
+    assert_eq!(&stream[15..19], &2u32.to_be_bytes());
+    assert_eq!(&stream[19..], b"pw");
+}
+
+#[test]
+fn api_token_frame_rejects_tokens_the_engine_refuses() {
+    assert!(write_api_token(Vec::new(), "").is_err());
+    assert!(write_api_token(Vec::new(), "has space").is_err());
+    assert!(write_api_token(Vec::new(), "line\n").is_err());
+    assert!(write_api_token(Vec::new(), &"x".repeat(API_TOKEN_MAX_BYTES + 1)).is_err());
+    assert!(write_api_token(Vec::new(), &"x".repeat(API_TOKEN_MAX_BYTES)).is_ok());
+}
+
+#[test]
 fn vault_password_frame_rejects_empty_and_oversized_values() {
     assert!(write_vault_password(Vec::new(), b"").is_err());
     assert!(write_vault_password(Vec::new(), &vec![b'x'; VAULT_PASSWORD_MAX_BYTES + 1]).is_err());
@@ -644,7 +688,7 @@ fn an_engine_that_keeps_exiting_stops_being_restarted() {
         .filter(|engine| matches!(engine, supervisor::EngineState::Restarting { .. }))
         .count();
     assert_eq!(restarts, FAST_RESTARTS.delays.len());
-    let supervisor::EngineState::Stopped { exit, failure } = state.engine_state() else {
+    let supervisor::EngineState::Stopped { exit, failure, .. } = state.engine_state() else {
         unreachable!();
     };
     assert_eq!((exit.code, failure), (Some(3), None));
@@ -674,6 +718,7 @@ fn a_replacement_that_cannot_start_stops_with_its_reason() {
                 description: "was killed by signal 9 (SIGKILL)".into(),
             },
             failure: Some("another engine is already serving this store".into()),
+            restart_required: false,
         }
     );
 }
@@ -728,10 +773,48 @@ fn the_engine_log_records_each_unexpected_exit_once() {
         supervisor::log_line(&restarting).as_deref(),
         Some("--- engine was killed by signal 9 (SIGKILL); restarting (attempt 2) ---\n")
     );
-    let refused = supervisor::EngineState::Stopped { exit: exit.clone(), failure: Some("store locked".into()) };
+    let refused = supervisor::EngineState::Stopped { exit: exit.clone(), failure: Some("store locked".into()), restart_required: false };
     assert_eq!(
         supervisor::log_line(&refused).as_deref(),
         Some("--- replacement engine could not start: store locked ---\n")
     );
     assert!(supervisor::log_line(&supervisor::EngineState::Running { generation: 1 }).is_none());
+}
+
+
+#[cfg(unix)]
+#[test]
+fn a_package_replacement_stops_automatic_recovery_with_restart_required() {
+    let state = std::sync::Arc::new(SidecarState::new());
+    supervised(&state, |_| Err(SidecarStartError::DesktopRestartRequired("package changed".into())));
+    launch_fixture(&state, "exec sleep 30").expect("engine");
+    kill_engine(&state);
+    wait_until("the restart requirement", || matches!(state.engine_state(), supervisor::EngineState::Stopped { restart_required: true, .. }));
+    assert!(state.cached_info().is_none());
+}
+#[test]
+fn custody_failures_keep_distinct_startup_tags() {
+    for (failure, code) in [
+        (
+            SidecarStartError::CredentialVaultCustodianUnavailable("preserved".into()),
+            "credential_vault_custodian_unavailable",
+        ),
+        (
+            SidecarStartError::CredentialVaultCustodianAbsent("preserved".into()),
+            "credential_vault_custodian_absent",
+        ),
+        (
+            SidecarStartError::CredentialVaultLauncherRefused("preserved".into()),
+            "credential_vault_launcher_refused",
+        ),
+        (
+            SidecarStartError::CredentialVaultIdentityMissing("preserved".into()),
+            "credential_vault_identity_missing",
+        ),
+    ] {
+        assert_eq!(failure.message(), "preserved");
+        let serialized = serde_json::to_value(failure).expect("startup failure");
+        assert_eq!(serialized["code"], code);
+        assert_eq!(serialized["message"], "preserved");
+    }
 }

@@ -51,6 +51,14 @@ def build_dir(repo_root):
     return artifact_root(repo_root) / "bin"
 
 
+def compiler_cache_dir(repo_root):
+    """Checkout-scoped compiler intermediates retained across source snapshots."""
+    override = os.environ.get("PW_COMPILER_CACHE_DIR")
+    if override and override.strip():
+        return Path(override).resolve()
+    return artifact_root(repo_root) / "compiler-cache"
+
+
 def lock_root(repo_root):
     """Ephemeral lock directory in system temp storage."""
     override = os.environ.get("PW_LOCK_ROOT")
@@ -65,7 +73,7 @@ def lock_root(repo_root):
 
 def main():
     if len(sys.argv) < 2:
-        print("usage: artifact_paths.py {artifacts|bin|build|locks|cache} [repo_root]", file=sys.stderr)
+        print("usage: artifact_paths.py {artifacts|bin|build|compiler-cache|locks|cache} [repo_root]", file=sys.stderr)
         return 1
     kind = sys.argv[1]
     repo_root = Path(sys.argv[2] if len(sys.argv) > 2 else ".").resolve()
@@ -76,6 +84,8 @@ def main():
         target = bin_dir(repo_root)
     elif kind == "build":
         target = build_dir(repo_root)
+    elif kind == "compiler-cache":
+        target = compiler_cache_dir(repo_root)
     elif kind == "locks":
         target = lock_root(repo_root)
     elif kind == "cache":
