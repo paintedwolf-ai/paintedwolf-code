@@ -33,6 +33,12 @@ type fixtureHost struct {
 
 func (h fixtureHost) System(context.Context) (SystemFacts, error)     { return h.system, h.err }
 func (h fixtureHost) Identity(context.Context) (IdentityFacts, error) { return h.identity, h.err }
+func (h fixtureHost) Processors(_ context.Context, all bool) (int, error) {
+	if all {
+		return 8, h.err
+	}
+	return 6, h.err
+}
 
 func defaultHost() fixtureHost {
 	return fixtureHost{

@@ -98,6 +98,8 @@ type ToolInvocationOut struct {
 	Process *api.ToolProcessHandle
 	// Verdict is Den UI metadata for a recorded review_loop verdict.
 	Verdict *api.VerdictOutcome
+	// CommandProgram is the settled command program receipt for a portable command call.
+	CommandProgram *api.CommandProgramReceipt
 	// SourceRun is nil until a command or verify run exits.
 	SourceRun *SourceRunCapture
 	// RetrievedFrom is the final retrieval host after redirects.

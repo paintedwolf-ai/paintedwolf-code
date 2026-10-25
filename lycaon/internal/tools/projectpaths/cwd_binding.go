@@ -70,6 +70,9 @@ func callCwdReject(ctx context.Context, code, cwd string, cause error) error {
 	data := map[string]any{"cwd": cwd}
 	var binding *toolrejection.ToolReject
 	if errors.As(cause, &binding) {
+		if binding.Code == "PROJECT_HAS_NO_ROOTS" {
+			return binding
+		}
 		data["binding_code"] = binding.Code
 	}
 	return &toolrejection.ToolReject{Code: code, Data: data}

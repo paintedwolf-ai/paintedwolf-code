@@ -1,5 +1,6 @@
 // Package textutil is the command frontend for byte text transforms and
-// argument batching: echo, printf, sort, uniq, cut, tr and xargs. Every
+// argument batching: echo, printf, seq, yes, sort, uniq, cut, tr, paste,
+// join, comm, column, fold, tac, rev, sed, awk and xargs. Every
 // utility binds argv through the catalog, streams exact bytes through
 // commandprogram.Streams with no ambient locale, and charges working memory
 // to the program. xargs runs each batch as its own child through the
@@ -45,13 +46,17 @@ type Owners struct {
 type utility func(*invocation) error
 
 var utilities = map[string]utility{
-	"echo": runEcho, "printf": runPrintf, "sort": runSort, "uniq": runUniq,
-	"cut": runCut, "tr": runTr, "xargs": runXargs, "sed": runSed, "awk": runAwk,
+	"echo": runEcho, "printf": runPrintf, "seq": runSeq, "yes": runYes,
+	"sort": runSort, "uniq": runUniq, "cut": runCut, "tr": runTr,
+	"paste": runPaste, "join": runJoin, "comm": runComm, "column": runColumn,
+	"fold": runFold, "tac": runTac, "rev": runRev,
+	"xargs": runXargs, "sed": runSed, "awk": runAwk,
 }
 
 // leadingOptions are utilities whose options are only the declared leading
-// words; every later word, dash-prefixed or not, is data.
-var leadingOptions = map[string]bool{"echo": true, "printf": true}
+// words; every later word, dash-prefixed or not, is data. The value reports
+// whether "--" ends the options (printf) or is data (echo).
+var leadingOptions = map[string]bool{"echo": false, "printf": true}
 
 // NewOwners binds the frozen catalog's specifications and ceilings.
 func NewOwners(revisions native.ExecutionRevisions, pins PinRecorder) (*Owners, error) {
@@ -136,10 +141,21 @@ func (d dispatcher) Invoke(ctx context.Context, request commandprogram.Operation
 	return prepared.InvokeOwner(ctx, d.ports, streams)
 }
 
+func (d dispatcher) EffectMode(request commandprogram.OperationRequest) string {
+	prepared, err := d.owners.Prepare(request)
+	if err != nil {
+		return ""
+	}
+	return prepared.Mode
+}
+
 // Prepared is one bound utility invocation; it reads no input until run.
+// Mode is the catalog effect mode the bound form selects, or empty when the
+// command has one mode.
 type Prepared struct {
 	Argv    commandprogram.BoundArgv
 	Review  commandprogram.ArgvReview
+	Mode    string
 	owners  *Owners
 	request commandprogram.OperationRequest
 	spec    toolcontract.CommandSpecification
@@ -161,17 +177,18 @@ func (o *Owners) Prepare(request commandprogram.OperationRequest) (Prepared, err
 	}
 	var bound commandprogram.BoundArgv
 	var err error
-	if leadingOptions[command] {
-		bound = leadingBind(spec, request.Argv)
-	} else if bound, err = (commandprogram.CatalogBinder{}).Bind(spec, request.Argv); err != nil {
+	if doubleDash, ok := leadingOptions[command]; ok {
+		bound = leadingBind(spec, request.Argv, doubleDash)
+	} else if bound, err = (commandprogram.CatalogBinder{}).Bind(spec, numericOperands(command, request.Argv)); err != nil {
 		return Prepared{}, nativeutility.ArgvRejection(err, spec)
 	}
-	return Prepared{Argv: bound, Review: bound.Review(spec.Name), owners: o, request: request, spec: spec, run: utilities[command]}, nil
+	return Prepared{Argv: bound, Review: bound.Review(spec.Name), Mode: o.effectMode(bound), owners: o, request: request, spec: spec, run: utilities[command]}, nil
 }
 
 // leadingBind binds only leading words made entirely of declared boolean
-// options (echo -ne) and an optional "--"; the rest are operands.
-func leadingBind(spec toolcontract.CommandSpecification, argv commandprogram.Fields) commandprogram.BoundArgv {
+// options (echo -ne) and, when doubleDash, an optional "--"; the rest are
+// operands.
+func leadingBind(spec toolcontract.CommandSpecification, argv commandprogram.Fields, doubleDash bool) commandprogram.BoundArgv {
 	bound := commandprogram.BoundArgv{Command: spec.Name}
 	declared := map[string]string{}
 	for _, form := range spec.Forms {
@@ -182,7 +199,7 @@ func leadingBind(spec toolcontract.CommandSpecification, argv commandprogram.Fie
 	index := 1
 	for ; index < len(argv); index++ {
 		word := argv[index]
-		if word.Value == "--" {
+		if word.Value == "--" && doubleDash {
 			bound.EndOfOptions = true
 			index++
 			break
@@ -254,5 +271,9 @@ func (p Prepared) InvokeOwner(ctx context.Context, ports Ports, streams commandp
 	if inv.errors.Len() > 0 && streams.Error != nil {
 		_, _ = io.WriteString(streams.Error, inv.errors.String())
 	}
-	return nativeutility.Settle(err, inv.status, false), err
+	result := nativeutility.Settle(err, inv.status, false)
+	if (p.Mode == "-i" || p.Mode == "w-files" || p.Mode == "-o" || p.Mode == "OUTPUT-supplied") && result.Terminal == toolcontract.ProducerCompleted && inv.status == 0 {
+		result.EffectCertainty = toolcontract.EffectCompleted
+	}
+	return result, err
 }

@@ -41,4 +41,20 @@ func TestCommandToolSchemaIncludesIOParams(t *testing.T) {
 			t.Fatalf("command schema missing %q", field)
 		}
 	}
+	for _, retired := range []string{
+		"pipeline:",
+		"stdin:",
+		"stdin_from:",
+		"env:",
+		"stdout_to:",
+		"stderr_to:",
+		"append:",
+		"background:",
+		"wait_ms:",
+		"allow_concurrent:",
+	} {
+		if strings.Contains(commandText, "\n    "+retired) {
+			t.Fatalf("command schema still contains retired argv field %q", retired)
+		}
+	}
 }

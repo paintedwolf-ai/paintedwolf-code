@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -54,14 +55,59 @@ func ArgvRejection(err error, spec toolcontract.CommandSpecification) error {
 // Usage refuses a form the catalog admits syntactically but whose word is invalid.
 func Usage(spec toolcontract.CommandSpecification, word commandprogram.Field, expected string) error {
 	return toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{
-		"command": spec.Name, "word": word.Value, "expected": expected, "expected_form": spec.Argv,
+		"command": spec.Name, "word": word.Value, "expected": expected, "reason": expected, "expected_form": spec.Argv,
 		"source_start_byte": word.Span.StartByte, "source_end_byte": word.Span.EndByte, "source_line": word.Span.Line, "source_column": word.Span.Column,
 	})
 }
 
+// ResourceUnit returns the catalog unit for a resource limit id.
+func ResourceUnit(id string) string {
+	if catalog, err := toolcontract.LanguageV1(); err == nil {
+		for _, limit := range catalog.Language.Limits {
+			if limit.ID == id && limit.Unit != "" {
+				return limit.Unit
+			}
+		}
+	}
+	if strings.HasSuffix(id, "_bytes") {
+		return "bytes"
+	}
+	return "items"
+}
+
 // LimitExceeded refuses work above a frozen catalog limit; nothing is truncated.
 func LimitExceeded(id string, maximum, observed int64) error {
-	return toolrejection.RejectInvalidArguments("COMMAND_LIMIT_EXCEEDED", map[string]any{"limit_id": id, "maximum": maximum, "observed": observed})
+	return toolrejection.RejectInvalidArguments("COMMAND_LIMIT_EXCEEDED", map[string]any{"limit_id": id, "resource_unit": ResourceUnit(id), "maximum": maximum, "observed": observed})
+}
+
+const outputChunkBytes = 32 * 1024
+
+// WriteChunked meters writes against stream_bytes and flushes in 32 KiB chunks.
+func WriteChunked(ctx context.Context, w io.Writer, maximum int64, written *int64, p []byte) (int, error) {
+	if maximum > 0 && *written+int64(len(p)) > maximum {
+		return 0, LimitExceeded("stream_bytes", maximum, *written+int64(len(p)))
+	}
+	sent := 0
+	for len(p) > 0 {
+		if err := ctx.Err(); err != nil {
+			return sent, err
+		}
+		chunk := p[:min(len(p), outputChunkBytes)]
+		n, err := w.Write(chunk)
+		if n < 0 || n > len(chunk) {
+			return sent, io.ErrShortWrite
+		}
+		sent += n
+		*written += int64(n)
+		if err != nil {
+			return sent, err
+		}
+		if n != len(chunk) {
+			return sent, io.ErrShortWrite
+		}
+		p = p[n:]
+	}
+	return sent, nil
 }
 
 // Unsupported refuses a catalogued form this host does not run here.

@@ -233,6 +233,18 @@ func (b *argvBinding) global(subcommand []string) error {
 }
 
 func (b *argvBinding) options(scope string) error {
+	switch b.spec.Name {
+	case "echo":
+		return b.leadingOptions(func(word string) bool {
+			return len(word) > 1 && word[0] == '-' && strings.TrimLeft(word[1:], "neE") == ""
+		})
+	case "printf":
+		return b.leadingOptions(func(string) bool { return false })
+	case "jobs":
+		return b.jobsOptions()
+	case "ps":
+		return b.psOptions()
+	}
 	operandsOnly := false
 	for b.index < len(b.argv) {
 		word := b.argv[b.index]
@@ -250,6 +262,102 @@ func (b *argvBinding) options(scope string) error {
 			if err := b.option(word, scope); err != nil {
 				return err
 			}
+		}
+	}
+	return nil
+}
+
+func (b *argvBinding) leadingOptions(valid func(string) bool) error {
+	operandsOnly := false
+	for b.index < len(b.argv) {
+		word := b.argv[b.index]
+		b.index++
+		if !operandsOnly && word.Value == "--" {
+			b.bound.EndOfOptions = true
+			operandsOnly = true
+			continue
+		}
+		if !operandsOnly && valid(word.Value) {
+			for i := 1; i < len(word.Value); i++ {
+				flag := "-" + word.Value[i:i+1]
+				form, _ := b.exact(flag, "")
+				b.record(form, flag, word, nil, "")
+			}
+			continue
+		}
+		operandsOnly = true
+		operand := word
+		b.bound.Items = append(b.bound.Items, BoundItem{Operand: &operand})
+	}
+	return nil
+}
+
+func (b *argvBinding) jobsOptions() error {
+	operandsOnly := false
+	for b.index < len(b.argv) {
+		word := b.argv[b.index]
+		b.index++
+		switch {
+		case !operandsOnly && word.Value == "--":
+			b.bound.EndOfOptions = true
+			operandsOnly = true
+		case !operandsOnly && optionWord(word.Value):
+			if strings.TrimLeft(word.Value[1:], "lp") != "" {
+				return b.fail(argvOptionUnsupported, word, "catalogued option")
+			}
+			for i := 1; i < len(word.Value); i++ {
+				flag := "-" + word.Value[i:i+1]
+				b.record(toolcontract.OptionForm{Spellings: []string{flag}}, flag, word, nil, "")
+			}
+		default:
+			operand := word
+			b.bound.Items = append(b.bound.Items, BoundItem{Operand: &operand})
+		}
+	}
+	return nil
+}
+
+func (b *argvBinding) psOptions() error {
+	operandsOnly := false
+	for b.index < len(b.argv) {
+		word := b.argv[b.index]
+		b.index++
+		switch {
+		case !operandsOnly && word.Value == "--":
+			b.bound.EndOfOptions = true
+			operandsOnly = true
+		case !operandsOnly && optionWord(word.Value):
+			if strings.HasPrefix(word.Value, "--") {
+				return b.fail(argvOptionUnsupported, word, "catalogued option")
+			}
+			suffix := word.Value[1:]
+			for i := 0; i < len(suffix); i++ {
+				ch := suffix[i]
+				flag := "-" + suffix[i:i+1]
+				switch ch {
+				case 'e', 'f', 'a', 'u', 'x', 'l':
+					b.record(toolcontract.OptionForm{Spellings: []string{flag}}, flag, word, nil, "")
+				case 'o', 'p':
+					rest := suffix[i+1:]
+					var val Field
+					if rest != "" {
+						val = Field{Value: rest, Span: word.Span}
+					} else {
+						if b.index >= len(b.argv) {
+							return b.fail(argvOperandInvalid, word, "value for "+flag)
+						}
+						val = b.argv[b.index]
+						b.index++
+					}
+					b.record(toolcontract.OptionForm{Spellings: []string{flag}, Arity: 1}, flag, word, Fields{val}, "")
+					i = len(suffix)
+				default:
+					return b.fail(argvOptionUnsupported, word, "catalogued option")
+				}
+			}
+		default:
+			operand := word
+			b.bound.Items = append(b.bound.Items, BoundItem{Operand: &operand})
 		}
 	}
 	return nil
@@ -393,8 +501,8 @@ func (b *argvBinding) consume(form toolcontract.OptionForm, spelling string, wor
 }
 
 // optional handles forms that never take a following nonempty word: an
-// attached value (--porcelain=v1), or, for optional-empty-only, the BSD
-// spelling of -i followed by an empty word, which means the same as GNU -i.
+// attached value (--porcelain=v1), or, for optional-attached-or-empty, also
+// a following empty word (sed -i.bak in GNU spelling, -i '' in BSD spelling).
 func (b *argvBinding) optional(form toolcontract.OptionForm, spelling string, word Field, value string, attached bool) error {
 	switch form.Consumption {
 	case "optional-attached-value":
@@ -403,12 +511,11 @@ func (b *argvBinding) optional(form toolcontract.OptionForm, spelling string, wo
 			values = Fields{{Value: value, Span: word.Span}}
 		}
 		b.record(form, spelling, word, values, "")
-	case "optional-empty-only":
-		if attached && value != "" {
-			return b.fail(argvOptionUnsupported, word, "empty "+form.ValueRole+" for "+spelling)
-		}
+	case "optional-attached-or-empty":
 		values := Fields{}
-		if b.index < len(b.argv) && b.argv[b.index].Value == "" {
+		if attached {
+			values = append(values, Field{Value: value, Span: word.Span})
+		} else if b.index < len(b.argv) && b.argv[b.index].Value == "" {
 			values = append(values, b.argv[b.index])
 			b.index++
 		}

@@ -3,6 +3,7 @@ package toolcontract
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -190,8 +191,11 @@ func DecodeLanguageJSON(data []byte, target any) error {
 	if err := decoder.Decode(target); err != nil {
 		return err
 	}
-	if err := decoder.Decode(new(any)); err != io.EOF {
-		return fmt.Errorf("trailing language JSON: %v", err)
+	switch err := decoder.Decode(new(any)); {
+	case err == nil:
+		return errors.New("trailing language JSON payload")
+	case !errors.Is(err, io.EOF):
+		return fmt.Errorf("trailing language JSON: %w", err)
 	}
 	return nil
 }

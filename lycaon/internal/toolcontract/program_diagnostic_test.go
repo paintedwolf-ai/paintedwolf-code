@@ -50,8 +50,8 @@ func TestProgramRepairOffersOnlyProvenUniqueOptionCorrections(t *testing.T) {
 	accept := func([]byte) error { return nil }
 	for _, tc := range []struct {
 		name, source, word, text string
-		validate               func([]byte) error
-		offered                bool
+		validate                 func([]byte) error
+		offered                  bool
 	}{
 		{"unique abbreviation", "grep --recur x .", "--recur", "--recursive", accept, true},
 		{"value keeps its bytes", "grep --max=3 x", "--max=3", "--max-count=3", accept, true},

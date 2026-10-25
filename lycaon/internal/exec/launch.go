@@ -156,9 +156,13 @@ func AgentLaunchOptions(launch LaunchPlan, dir string, environment, pathExtra []
 	launch = launch.WithReducedEnvironment()
 	opts := ExecOpts{Launch: launch, Dir: dir, PathExtra: append([]string(nil), pathExtra...)}
 	if len(environment) > 0 {
+		defaultPath := defaultAgentPath(pathExtra)
 		opts.InlineEnv = make(map[string]string, len(environment))
 		for _, entry := range environment {
 			name, value, _ := strings.Cut(entry, "=")
+			if defaultPath != "" && strings.EqualFold(strings.TrimSpace(name), "PATH") && value == defaultPath {
+				continue
+			}
 			opts.InlineEnv[name] = value
 		}
 		if err := ValidateInlineEnv(opts.InlineEnv); err != nil {
@@ -166,4 +170,17 @@ func AgentLaunchOptions(launch LaunchPlan, dir string, environment, pathExtra []
 		}
 	}
 	return opts, nil
+}
+
+func defaultAgentPath(pathExtra []string) string {
+	env, err := buildProcessEnv(ReducedEnviron(), nil, pathExtra)
+	if err != nil {
+		return ""
+	}
+	for _, entry := range env {
+		if k, v, ok := strings.Cut(entry, "="); ok && k == "PATH" {
+			return v
+		}
+	}
+	return ""
 }

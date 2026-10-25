@@ -8,7 +8,9 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/confine"
 	lycexec "github.com/lycaon/lycaon/internal/exec"
+	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -38,11 +40,17 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		return refusedResult("COMMAND_OPERAND_INVALID"), fmt.Errorf("external launch requires a bound directory frame")
 	}
 	if err := tools.ValidateWorkerBranch(ctx, tctx); err != nil {
+		if ctx.Err() != nil {
+			return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.NoEffect}, errors.Join(ctx.Err(), err)
+		}
 		return refusedResult("COMMAND_OPERAND_INVALID"), err
 	}
 	commandLine := (lycexec.Stage{Name: argv[0], Args: argv[1:]}).CommandLine()
 	bound, err := bindCommandForegroundConfine(ctx, tctx, l.ExtraWriteRoots, commandLine, "command", true)
 	if err != nil {
+		if ctx.Err() != nil {
+			return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.NoEffect}, errors.Join(ctx.Err(), err)
+		}
 		return refusedResult("COMMAND_EXEC_DENIED"), err
 	}
 	defer bound.close(context.WithoutCancel(ctx))
@@ -55,12 +63,15 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		opts.Stdin = &lycexec.StdinSpec{Reader: streams.Input}
 	}
 	if err := tctx.Effects.Secrets.HandOff(ctx, nil); err != nil {
+		if ctx.Err() != nil {
+			return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.NoEffect}, errors.Join(ctx.Err(), err)
+		}
 		return refusedResult("COMMAND_EXEC_DENIED"), err
 	}
 	async, err := lycexec.StartPipelineAsync(ctx, []lycexec.Stage{{Name: argv[0], Args: argv[1:]}}, opts, nonNilWriter(streams.Output), nonNilWriter(streams.Error))
 	if err != nil {
 		if ctx.Err() != nil {
-			return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.NoEffect}, errors.Join(ctx.Err(), err)
+			return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.EffectUnknown}, errors.Join(ctx.Err(), err)
 		}
 		return toolcontract.ProducerResult{Status: 127, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, err
 	}
@@ -98,6 +109,23 @@ func (l ExternalStages) Installed(name string, environment []string) bool {
 	}
 	_, err = lycexec.LaunchLookup(name, opts)
 	return err == nil
+}
+
+// programEnvironment builds the program's initial environment from the same
+// AgentLaunchOptions and ProcessEnvironment pipeline that ExternalStages.Launch
+// uses for confined external child launches.
+func programEnvironment(tc tools.ToolContext) []string {
+	confinement, _ := confine.DefaultConfinement(hitl.ActionConfineRequest(tools.ActionConfineInputsForContext(tc, nil)))
+	launch := agentCommandLaunch(tc, "command", confinement, nil, "")
+	opts, err := lycexec.AgentLaunchOptions(launch, "", nil, tc.Host.HostResourcePathExtra)
+	if err != nil {
+		return lycexec.ReducedEnviron()
+	}
+	env, err := lycexec.ProcessEnvironment(opts)
+	if err != nil {
+		return lycexec.ReducedEnviron()
+	}
+	return env
 }
 
 // externalArgv drops the explicit "external --" selector.

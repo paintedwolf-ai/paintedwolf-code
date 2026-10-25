@@ -40,8 +40,8 @@ def outside_checks(case, retained):
     return [{'id': 'outside-artifact', 'passed': present and oracle.same(oracle.read_json(target), contract['expected'])}]
 
 
-def grade(project, baseline, case):
-    contract = CONTRACTS[case]
+def grade(project, baseline, case, *, contract=None):
+    contract = CONTRACTS[case] if contract is None else contract
     checks = []
     def check(name, passed): checks.append({'id': name, 'passed': bool(passed)})
     for name in contract.get('absent', []):
