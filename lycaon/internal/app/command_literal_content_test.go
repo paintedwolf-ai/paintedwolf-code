@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"strings"
 	"testing"
@@ -9,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/editordoc"
+	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -26,6 +28,12 @@ func (m *mappedOutput) RecordSourceMapping(mapping toolcontract.StreamSourceMapp
 	return nil
 }
 
+type pinRecorderAdapter struct{ *invocation.SQLRecorder }
+
+func (a pinRecorderAdapter) RecordRevisionPins(ctx context.Context, executionID string, pins []toolcontract.ExecutionRevision) error {
+	return a.SQLRecorder.RecordRevisionPins(ctx, executionID, 0, pins)
+}
+
 // TestCommandCatServesTheAcceptedDocumentNewerThanDisk: a native read of a
 // path with an unsaved draft returns the draft, encoded exactly as its save
 // would write it, records that accepted revision in the program receipt, and
@@ -37,7 +45,7 @@ func TestCommandCatServesTheAcceptedDocumentNewerThanDisk(t *testing.T) {
 	testutil.FailErr(t, "open notes", err)
 	draft, err := f.service.ReplaceSnapshot(ctx, opened.ID, f.project.ID, editordoc.SnapshotReplacement{DocumentCommand: editordoc.DocumentCommand{ClientID: "window", OperationID: uuid.NewString(), ExpectedRevision: opened.Revision}, Content: "draft line\nsecond\nthird", EOL: "crlf"})
 	testutil.FailErr(t, "type draft", err)
-	owners, err := literal.NewOwners(f.revisions, f.recorder, literal.DomainOwners{})
+	owners, err := literal.NewOwners(f.revisions, pinRecorderAdapter{f.recorder}, literal.DomainOwners{})
 	testutil.FailErr(t, "literal owners", err)
 	paths, err := projectpaths.NewProgramPaths(ctx, f.revisions.Boundary, f.tctx, ".")
 	testutil.FailErr(t, "program cwd", err)
