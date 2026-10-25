@@ -147,7 +147,7 @@ def prepare(actor, target, execution, checkout):
         raise ValueError('Polkit root capture differs from the physical actor guest lease')
     payload, expected = document(Path(checkout), execution['driver_tree'])
     arguments = ['/usr/bin/sudo', '-n', '/usr/bin/env', '-i', 'PATH=/usr/bin:/bin',
-                 'LANG=C.UTF-8', '/usr/bin/python3', '-I', '-B', '-c', PREPARE, execution['driver_tree']]
+                 'LANG=C.UTF-8', 'HOME=/root', '/usr/bin/python3', '-I', '-B', '-c', PREPARE, execution['driver_tree']]
     code, stdout, _ = bounded_command(command(target, arguments), timeout=30, limit=MAX_CAPTURE, input_bytes=payload)
     if code != 0:
         raise ValueError('Polkit root source preparation did not complete')

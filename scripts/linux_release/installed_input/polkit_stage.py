@@ -11,6 +11,7 @@ from .private_pipe import Pipe
 from .unlock_account import validate_account_shape
 
 PURPOSE = 'native-polkit-qa-authenticate-v1'
+CANCEL = 'native-polkit-qa-cancel-v1'
 
 
 def target(value):
@@ -67,12 +68,18 @@ def same_target(before, after):
 
 
 class Stage:
-    def __init__(self, actor, execution, account, credential, *, observer):
+    def __init__(self, actor, execution, account, credential, *, observer, purpose=PURPOSE):
         self.actor, self.execution = actor, protocol.binding(execution)
         if self.execution['execution_nonce'] != actor.nonce:
             raise ValueError('Polkit input execution differs from the captured physical actor')
         self.account = dict(validate_account_shape(account))
-        self.secret = bytearray(unlock_wire.secret(credential))
+        if purpose == PURPOSE:
+            self.secret = bytearray(unlock_wire.secret(credential))
+        elif purpose == CANCEL and credential is None:
+            self.secret = bytearray()
+        else:
+            raise ValueError('Polkit input requires its fixed authenticate or cancel operation')
+        self.purpose = purpose
         self.observer = observer
         self.used = False
 
@@ -95,16 +102,16 @@ class Stage:
             if transaction_id in actor.transactions or len(actor.transactions) >= 128:
                 raise ValueError('Polkit input exhausted the physical actor transaction bound')
             actor.transactions.add(transaction_id)
-            envelope = {'purpose': PURPOSE, 'binding': self.execution, 'transaction_id': transaction_id}
+            envelope = {'purpose': self.purpose, 'binding': self.execution, 'transaction_id': transaction_id}
             original = None
             try:
-                for ordinal in range(41):
+                for ordinal in range(41 if self.purpose == PURPOSE else 1):
                     # Live root observation is supplied by the owning controller,
                     # independently of the guest's AT-SPI target JSON.
                     pending = self.observer.observe()
                     if pending is None or 'host_release_verified' in pending:
                         raise ValueError('Polkit input has no live root-observed pending transaction')
-                    pipe.send_metadata({**envelope, 'ordinal': ordinal, 'phase': 'observe'})
+                    pipe.send_metadata({**envelope, 'ordinal': ordinal, 'phase': 'observe', 'pending': pending})
                     reply = pipe.receive_metadata()
                     if (not isinstance(reply, dict) or set(reply) != {*envelope, 'ordinal', 'target'}
                             or any(reply[key] != item for key, item in envelope.items())
@@ -123,7 +130,9 @@ class Stage:
                     if self.observer.observe() != pending:
                         raise ValueError('Polkit transaction changed before private delivery')
                     pipe.remaining()
-                    if ordinal == 40:
+                    if self.purpose == CANCEL:
+                        keys = ('esc',)
+                    elif ordinal == 40:
                         keys = ('ret',)
                     else:
                         byte = self.secret[ordinal]
@@ -132,7 +141,7 @@ class Stage:
                 pipe.send_metadata({**envelope, 'phase': 'complete'})
                 if pipe.receive_metadata() != {**envelope, 'phase': 'delivered'}:
                     raise ValueError('Polkit endpoint did not settle its exact private delivery')
-                return {'purpose': PURPOSE, 'transaction_id': transaction_id,
+                return {'purpose': self.purpose, 'transaction_id': transaction_id,
                         'delivered': True, 'text_readback': False, 'host_release_verified': False}
             except BaseException:
                 actor.failed = True

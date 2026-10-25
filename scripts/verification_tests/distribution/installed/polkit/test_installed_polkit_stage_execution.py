@@ -42,7 +42,7 @@ class PolkitStageTests(unittest.TestCase):
             value = target()
             if replace and request['ordinal'] == 1:
                 value['password']['path'] += '_replaced'
-            return {key: item for key, item in request.items() if key != 'phase'} | {'target': value}
+            return {key: item for key, item in request.items() if key not in {'phase', 'pending'}} | {'target': value}
         pipe.receive_metadata.side_effect = receive
         return actor, observer, private, pipe
 
@@ -112,6 +112,17 @@ class PolkitStageTests(unittest.TestCase):
                 value['pending']['agent']['process']['uid'] += 1
             with self.subTest(kind=kind), self.assertRaises(ValueError):
                 stage.target(value)
+
+    def test_cancel_is_a_distinct_one_use_fixed_escape_without_credential_custody(self):
+        actor, observer, _, pipe = self.fixture()
+        private = stage.Stage(actor, EXECUTION, ACCOUNT, None, observer=observer, purpose=stage.CANCEL)
+        self.assertEqual(self.perform(private, pipe)['purpose'], stage.CANCEL)
+        actor._deliver.assert_called_once_with(('esc',))
+        self.assertEqual(private.secret, bytearray())
+        with self.assertRaises(ValueError):
+            self.perform(private, pipe)
+        with self.assertRaises(ValueError):
+            stage.Stage(actor, EXECUTION, ACCOUNT, None, observer=observer, purpose='arbitrary-key')
 
 
 if __name__ == '__main__':

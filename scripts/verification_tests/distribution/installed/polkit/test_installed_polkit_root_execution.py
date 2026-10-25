@@ -23,8 +23,8 @@ class RootProxyTests(unittest.TestCase):
                 polkit_proxy.selectors, 'DefaultSelector'), patch.object(polkit_proxy.os, 'set_blocking'):
             polkit_proxy.Proxy(actor, selected, EXECUTION, ACCOUNT)
         arguments = command.call_args.args[1]
-        self.assertEqual(arguments[:9], ['/usr/bin/sudo', '-n', '/usr/bin/env', '-i',
-            'PATH=/usr/bin:/bin', 'LANG=C.UTF-8', '/usr/bin/python3', '-I', '-B'])
+        self.assertEqual(arguments[:10], ['/usr/bin/sudo', '-n', '/usr/bin/env', '-i',
+            'PATH=/usr/bin:/bin', 'LANG=C.UTF-8', 'HOME=/root', '/usr/bin/python3', '-I', '-B'])
         self.assertEqual(arguments[-1], EXECUTION['driver_tree'])
 
     def proxy(self):
