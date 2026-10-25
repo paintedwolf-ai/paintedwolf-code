@@ -19,7 +19,7 @@ class InputDiagnosticTests(unittest.TestCase):
             'final_artifacts': '/inputs/final-artifacts.json', 'file_root': '/inputs/packages',
             'install_root': '/opt/painted-wolf-code', 'output': '/fresh/guest-output',
             'nix_program': None, 'case_inputs': None, 'snapshot': {},
-            'input_adapter': {'format_version': 1, 'kind': 'qemu-fixed-input', 'lease': '/root/vm-lease', 'vm_id': 'owned'}}
+            'input_adapter': {'format_version': 1, 'kind': 'qemu-fixed-input', 'lease': '/root/vm-lease', 'vm_id': 'owned'}, 'case_selection': None}
         path = root / 'target.json'
         path.write_text(json.dumps(target))
         args = ['--target', str(path), '--candidate-inputs', '/inputs', '--candidate-run-id', '1',

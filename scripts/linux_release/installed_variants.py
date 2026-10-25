@@ -101,29 +101,3 @@ def gnome_monitors(session: dict) -> dict:
             raise ValueError('Mutter monitor scale is not an exact declared percentage')
         scales.append(int(percent))
     return {'scales_percent': sorted(set(scales)), 'state': state}
-
-
-def aggregate(catalog: dict, observations: dict[str, list[tuple[str, dict]]], known: dict) -> list[dict]:
-    results = []
-    for row_id, variants in sorted(observations.items()):
-        selected = known[row_id]
-        required = {item['id'] for item in requirements(catalog, selected['environment'], selected['capability'])}
-        actual = {identifier: row for identifier, row in variants}
-        if len(actual) != len(variants) or set(actual) - required:
-            raise ValueError('campaign repeats or invents a required support variant')
-        first = next(iter(actual.values()))
-        cases = []
-        for case_id in selected['cases']:
-            samples = [next(case for case in row['cases'] if case['id'] == case_id) for row in actual.values()]
-            status = ('failed' if any(case['status'] == 'failed' for case in samples) else
-                      'unverified' if set(actual) != required or any(case['status'] != 'passed' for case in samples) else 'passed')
-            cases.append({'id': case_id, 'status': status, 'evidence': [record for case in samples for record in case['evidence']]})
-        status = ('failed' if any(case['status'] == 'failed' for case in cases) else
-                  'unverified' if any(case['status'] != 'passed' for case in cases) else 'passed')
-        facts = {name: json.dumps({identifier: {'sha256': hashlib.sha256(row['environment_facts'][name].encode()).hexdigest(),
-                                               'bytes': len(row['environment_facts'][name].encode())}
-                                  for identifier, row in sorted(actual.items())}, sort_keys=True)
-                 for name in first['environment_facts']}
-        results.append({**first, 'status': status, 'cases': cases, 'environment_facts': facts,
-                        'variants': [entry for row in actual.values() for entry in row['variants']]})
-    return results

@@ -13,6 +13,7 @@ import time
 
 from . import protocol, session_wire, surface_wire, unlock_actor, unlock_wire
 from ..installed_cases.records import expand_physical_transactions
+from ..installed_cases.shipping_lifecycle import KEEP_AWAKE_CASES, PUBLIC_CASE_MODES
 from .mailbox import decode
 from .qemu import open_lease
 from .private_pipe import Pipe
@@ -45,7 +46,7 @@ def delivery_records(directory, execution, vm_id):
     cases = [('conversation/restart-and-reconnect', 'reply'), ('files/edit-search-review', 'editor'),
              ('windowing/workspace-activation-and-exit', 'workspace'),
              ('browser/browser-sandbox-composition', 'browser'),
-             ('session/inhibitor-lifetime', 'keepawake')]
+             *[('session/' + case, 'keepawake') for case in sorted(KEEP_AWAKE_CASES)]]
     for case, kind in cases:
         leaf = directory / ('leaf/evidence/' + case + '/execution.json')
         if not leaf.exists():
@@ -60,10 +61,18 @@ def delivery_records(directory, execution, vm_id):
             selected = observations.get(launch, {}).get('fixed_input', [])
             recovery = observations.get('provider_recovery')
             input_limit = 1 if recovery is not None else 4
-            if not isinstance(selected, list) or len(selected) > input_limit:
+            public = kind == 'keepawake' and case.rsplit('/', 1)[-1] in PUBLIC_CASE_MODES
+            if not isinstance(selected, list) or len(selected) > input_limit + int(public):
                 raise ValueError('reply input exceeds its fixed transaction count')
+            repeated = selected[input_limit:] if public else []
+            selected = selected[:input_limit]
             partial = observations.get('native_input')
             has_transitions = bool(observations.get('transitions') or observations.get('lock_transition'))
+            if public and partial is not None and has_transitions and partial.get('operation') == prompt:
+                repeated = [*repeated, partial]
+                partial = None
+            if len(repeated) > 1:
+                raise ValueError('keepawake input repeats its one fresh second-turn prompt')
             provider_partial = (kind in {'workspace', 'keepawake'} and partial is not None
                 and len(selected) < input_limit and not has_transitions)
             if partial is not None and (kind in {'reply', 'browser'} or provider_partial):
@@ -123,6 +132,11 @@ def delivery_records(directory, execution, vm_id):
                 transitions = expand_physical_transactions(leaf, transitions)
                 records.extend(transitions)
                 operations.extend(expected[:len(transitions)])
+                if repeated and (len(selected) != input_limit or not transitions):
+                    raise ValueError('repeated keepawake prompt precedes its initial turn and lock')
+                repeated = expand_physical_transactions(leaf, repeated)
+                records.extend(repeated)
+                operations.extend((prompt,) * len(repeated))
         else:
             selected = []
             for key in ('editor_keyboard', 'editor_search_keyboard'):
@@ -208,7 +222,13 @@ def verify_deliveries(directory, execution, selected):
                     raise ValueError('native input has no observed declared session transition')
             elif event['focus_after'] != pending['focus']:
                 raise ValueError('native input host and guest focus differ')
-    keepawake_leaf = directory / 'leaf/evidence/session/inhibitor-lifetime/execution.json'
+    selection = execution['case_selection']
+    unlock_cases = ['inhibitor-lifetime'] if selection is None else [item['case'] for item in selection['cases']
+                   if item['capability'] == 'session' and item['case'] in KEEP_AWAKE_CASES]
+    if len(unlock_cases) > 1 or unlock_rows and len(unlock_cases) != 1:
+        raise ValueError('native unlock requires one controller-bound selected case')
+    keepawake_leaf = (directory / 'leaf/evidence/session' / unlock_cases[0] / 'execution.json'
+                      if unlock_cases else directory / 'leaf/no-native-unlock-case')
     if unlock_rows or keepawake_leaf.exists():
         if len(unlock_rows) > 2:
             raise ValueError('native unlock exceeds its single prepare and unlock transactions')
@@ -219,7 +239,7 @@ def verify_deliveries(directory, execution, selected):
                 raise ValueError('native unlock retained delivery has an unknown shape')
             pending = unlock_wire.request(row['request'], execution)
             ack = unlock_wire.acknowledgment(row['acknowledgment'], pending, selected['vm_id'])
-            if pending['operation'] != expected_op:
+            if pending['operation'] != expected_op or pending['case'] != unlock_cases[0]:
                 raise ValueError('native unlock operations are out of order')
             transaction = protocol.nonce(pending['transaction_id'])
             if transaction in seen:
@@ -253,6 +273,22 @@ def verify_deliveries(directory, execution, selected):
                     session_wire.same_runtime(validated_unlock[1][1]['native_session'], after)
                     if any(after['native_session'][key] for key in ('locked_hint', 'locker_active')):
                         raise ValueError('native unlock independent guest session remained locked')
+        if keepawake_leaf.exists() and unlock_cases[0] in PUBLIC_CASE_MODES:
+            document = json.loads(keepawake_leaf.read_bytes())
+            observations = document['observations']
+            initial = 1 if observations.get('provider_recovery') is not None else 4
+            repeated = observations.get('launch', {}).get('fixed_input', [])[initial:]
+            partial = observations.get('native_input')
+            if partial is not None and observations.get('lock_transition') and partial.get('operation') == 'reply-fixture-prompt-v1':
+                repeated = [*repeated, partial]
+            if len(repeated) > 1 or document['status'] == 'passed' and len(repeated) != 1:
+                raise ValueError('public keepawake evidence lacks its single fresh second-turn prompt')
+            for record in repeated:
+                transaction = protocol.nonce(record.get('transaction_id'))
+                indices = [index for index, row in rows if row['request']['transaction_id'] == transaction]
+                if (indices and (len(validated_unlock) != 2 or min(indices) <= validated_unlock[1][0])
+                        or document['status'] == 'passed' and not indices):
+                    raise ValueError('public second-turn input did not follow its one-use native unlock')
         proof_path = directory / 'native-unlock.json'
         if proof_path.exists():
             proof = decode(proof_path.read_bytes())

@@ -265,7 +265,8 @@
         "lock-during-presence",
         "initial-lock-state",
         "suspend-and-resume",
-        "inhibitor-lifetime",
+        "inhibitor-desktop-entry-lifetime",
+        "inhibitor-cold-cli-lifetime",
         "provider-loss-and-reconnect"
       ]
     },

@@ -37,7 +37,7 @@ class SessionWireTests(unittest.TestCase):
         self.after['native_session'].update(locked_hint=True, locker_active=True)
         self.execution = {'format_version': 1, 'execution_nonce': 'a' * 32,
             'source_commit': 'b' * 40, 'driver_tree': 'c' * 40,
-            'artifact_id': 'app', 'environment_id': 'noble', 'variant_id': 'gnome-wayland'}
+            'artifact_id': 'app', 'environment_id': 'noble', 'variant_id': 'gnome-wayland', 'case_selection': None}
 
     def test_exact_configured_chord_requires_both_native_lock_observations(self):
         self.assertEqual(protocol.steps('session-lock-v1'), (('meta_l', 'l'),))

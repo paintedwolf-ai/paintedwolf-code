@@ -35,7 +35,7 @@ class NativeInputMailboxTests(unittest.TestCase):
         self.addCleanup(marker.stop)
         self.execution = {'format_version': 1, 'execution_nonce': 'a' * 32,
             'source_commit': 'b' * 40, 'driver_tree': 'c' * 40,
-            'artifact_id': 'native-rpm-amd64.rpm', 'environment_id': 'fedora', 'variant_id': 'gnome-wayland'}
+            'artifact_id': 'native-rpm-amd64.rpm', 'environment_id': 'fedora', 'variant_id': 'gnome-wayland', 'case_selection': None}
 
     def selected(self, directory):
         selected = mailbox.Mailbox(self.execution, 'owned-fedora')

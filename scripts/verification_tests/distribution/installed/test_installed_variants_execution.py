@@ -70,28 +70,6 @@ class InstalledEvidenceCapacityTests(unittest.TestCase):
             self.assertFalse((root / 'session').exists())
 
 
-class InstalledVariantAggregationTests(unittest.TestCase):
-    def test_missing_or_failed_required_variant_cannot_be_promoted_by_other_passes(self):
-        import copy
-        selected = {'environment': 'fedora', 'capability': 'windowing', 'cases': ['resize']}
-        row = {'row_id': 'row', 'status': 'passed', 'environment_facts': {'session': 'actual'},
-               'cases': [{'id': 'resize', 'status': 'passed', 'evidence': [{'path': 'first', 'sha256': 'a' * 64}]}],
-               'variants': [{'id': 'floor', 'status': 'passed', 'observed': {}}]}
-        with patch.object(owner, 'requirements', return_value=[{'id': 'floor'}, {'id': 'newer'}]):
-            missing = owner.aggregate({}, {'row': [('floor', row)]}, {'row': selected})[0]
-            self.assertEqual(missing['status'], 'unverified')
-            self.assertEqual(missing['cases'][0]['evidence'], row['cases'][0]['evidence'])
-            newer = {**copy.deepcopy(row), 'variants': [{'id': 'newer', 'status': 'passed', 'observed': {}}]}
-            complete = owner.aggregate({}, {'row': [('floor', row), ('newer', newer)]}, {'row': selected})[0]
-            self.assertEqual(complete['status'], 'passed')
-            self.assertEqual([entry['id'] for entry in complete['variants']], ['floor', 'newer'])
-            failed = copy.deepcopy(row)
-            failed['cases'][0]['status'] = 'failed'
-            self.assertEqual(owner.aggregate({}, {'row': [('floor', row), ('newer', failed)]}, {'row': selected})[0]['status'], 'failed')
-            with self.assertRaises(ValueError):
-                owner.aggregate({}, {'row': [('floor', row), ('floor', row)]}, {'row': selected})
-
-
 class InstalledPlanVariantTests(unittest.TestCase):
     def test_plan_rejects_legacy_ambiguous_or_repeated_variant_authority(self):
         import copy
@@ -101,9 +79,9 @@ class InstalledPlanVariantTests(unittest.TestCase):
                   'runtime_bin_dirs': [], 'artifact_id': 'selected', 'environment_id': 'fedora',
                   'final_artifacts': '/final.json', 'file_root': '/packages', 'install_root': '/opt/product',
                   'output': '/fresh/output', 'nix_program': None, 'case_inputs': None,
-                  'variant_id': 'floor-scale-100', 'snapshot': {'kind': 'package-inventory', 'value': 'f' * 64, 'channel': None}, 'input_adapter': None}
+                  'variant_id': 'floor-scale-100', 'snapshot': {'kind': 'package-inventory', 'value': 'f' * 64, 'channel': None}, 'input_adapter': None, 'case_selection': None}
         plan = {'format_version': campaign.PLAN_FORMAT_VERSION, 'source_commit': 'a' * 40, 'driver_tree': 'b' * 40, 'targets': [target]}
-        row = {'environment': 'fedora', 'installation': 'rpm', 'architecture': 'amd64', 'capability': 'windowing'}
+        row = {'environment': 'fedora', 'installation': 'rpm', 'architecture': 'amd64', 'capability': 'windowing', 'cases': ['resize']}
         variant = {'id': target['variant_id'], 'release': {'snapshot_kind': 'package-inventory', 'channel': None}}
         with patch.object(campaign.evidence, 'artifacts', return_value={'selected': {'installation': 'rpm', 'architecture': 'amd64'}}), \
                 patch.object(campaign, 'limits', return_value={'targets': 2}), \
@@ -129,8 +107,8 @@ class CatalogCapacityTests(unittest.TestCase):
                 patch.object(capacity, 'requirements', return_value=[{'id': 'floor-scale-100'}, {'id': 'newer-scale-100'}]):
             maximum = capacity.limits({})
             selected = capacity.limits({}, {'artifacts': [{'id': 'selected', 'installation': 'rpm', 'architecture': 'amd64'}]})
-            self.assertEqual((maximum['targets'], maximum['case_observations']), (4, 8))
-            self.assertEqual((selected['targets'], selected['case_observations']), (2, 4))
+            self.assertEqual((maximum['targets'], maximum['case_observations']), (8, 8))
+            self.assertEqual((selected['targets'], selected['case_observations']), (4, 4))
             self.assertGreater(maximum['max_files'], selected['max_files'])
             self.assertEqual((maximum['max_bytes'], maximum['max_file']), (64 << 30, 16 << 30))
             self.assertGreaterEqual(selected['max_files'], 4 * (capacity.MAX_STREAMS + 1) * 2)

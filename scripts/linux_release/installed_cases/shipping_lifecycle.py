@@ -8,9 +8,19 @@ from .application_scope import APP_SCOPE_RE, observe_engine_scope
 from .keepawake import await_inhibitor
 
 
-def selected_mode(binding):
+PUBLIC_CASE_MODES = {'inhibitor-desktop-entry-lifetime': 'desktop-entry',
+                     'inhibitor-cold-cli-lifetime': 'pw-open-cold-start'}
+KEEP_AWAKE_CASES = frozenset({'inhibitor-lifetime', *PUBLIC_CASE_MODES})
+
+
+def selected_mode(binding, case='inhibitor-lifetime'):
     desktop = binding.get('case_inputs', {}).get('desktop', {})
-    mode = desktop.get('sleep_launch_mode', 'controlled')
+    if case not in KEEP_AWAKE_CASES:
+        raise ValueError('unsupported keepawake case')
+    required = PUBLIC_CASE_MODES.get(case)
+    mode = desktop.get('sleep_launch_mode', required or 'controlled')
+    if required is not None and mode != required:
+        raise ValueError('public keepawake case cannot substitute another launch route')
     if mode not in {'controlled', 'unscoped-direct', 'desktop-entry', 'pw-open-cold-start'}:
         raise ValueError('unsupported keepawake shipping launch mode')
     return mode

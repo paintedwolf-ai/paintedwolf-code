@@ -14,7 +14,7 @@ EDITOR_TEXT = 'Installed editor fixture changed through the native UI.\nFind the
 MAX_TRANSACTIONS = 128
 MAX_DOCUMENT = 16 << 10
 _BINDING = {'format_version', 'execution_nonce', 'source_commit', 'driver_tree',
-            'artifact_id', 'environment_id', 'variant_id'}
+            'artifact_id', 'environment_id', 'variant_id', 'case_selection'}
 
 
 def _editor_steps() -> tuple[tuple[str, ...], ...]:
@@ -101,6 +101,9 @@ def binding(value: dict) -> dict:
     if (not isinstance(value, dict) or set(value) != _BINDING
             or type(value['format_version']) is not int or value['format_version'] != 1):
         raise ValueError('native input requires the exact execution binding')
+    from ..installed_case_selection import canonical as case_selection
+    if value['case_selection'] != case_selection(value['case_selection']):
+        raise ValueError('native input case selection is not canonical')
     nonce(value['execution_nonce'])
     for name in ('source_commit', 'driver_tree'):
         if not isinstance(value[name], str) or not re.fullmatch(r'[a-f0-9]{40}', value[name]):

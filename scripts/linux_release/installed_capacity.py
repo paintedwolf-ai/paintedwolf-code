@@ -20,7 +20,7 @@ def limits(catalog: dict, final: dict | None = None) -> dict:
         if not isinstance(artifacts, list) or not artifacts or any(not isinstance(item, dict) for item in artifacts):
             raise ValueError('campaign capacity requires independently selected final artifacts')
         selections = [(item['id'], item['installation'], item['architecture']) for item in artifacts]
-    targets, native_targets, cases = set(), set(), 0
+    targets, native_targets, cases = {}, set(), 0
     for artifact_id, installation, architecture in selections:
         for row in rows:
             if (row['installation'], row['architecture']) != (installation, architecture):
@@ -28,7 +28,8 @@ def limits(catalog: dict, final: dict | None = None) -> dict:
             variants = requirements(catalog, row['environment'], row['capability'])
             cases += len(variants) * len(row['cases'])
             selected_targets = {(artifact_id, row['environment'], item['id']) for item in variants}
-            targets.update(selected_targets)
+            for key in selected_targets:
+                targets[key] = targets.get(key, 0) + len(row['cases'])
             if installation in {'deb', 'rpm', 'pacman'}:
                 native_targets.update(selected_targets)
     if not targets:
@@ -41,7 +42,12 @@ def limits(catalog: dict, final: dict | None = None) -> dict:
     # aggregate documents. Control bytes remain under their separate fixed limits.
     # A native target may also own pre-bind installation and immediate first-launch journals, bounded by
     # the same stream contract, with both leaf and controller copies/directories.
-    transaction_files = len(native_targets) * 2 * (MAX_STREAMS + 3) * 2
-    maximum_files = case_files + cases * 4 + len(targets) * 32 + transaction_files + 128
+    # At most one partition per declared case. Every leaf also retains the
+    # unselected case records honestly, so that metadata grows quadratically
+    # within each catalog-bound artifact/environment/variant group.
+    leaf_case_records = sum(count * count for count in targets.values())
+    native_executions = sum(targets[key] for key in native_targets)
+    transaction_files = native_executions * 2 * (MAX_STREAMS + 3) * 2
+    maximum_files = case_files + leaf_case_records * 4 + cases * 32 + transaction_files + 128
     return {'max_files': maximum_files, 'max_bytes': MAX_BYTES, 'max_file': MAX_FILE,
-            'targets': len(targets), 'case_observations': cases}
+            'targets': cases, 'case_observations': cases}

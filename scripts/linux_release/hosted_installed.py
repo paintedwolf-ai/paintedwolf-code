@@ -106,7 +106,7 @@ def prepare(selected: dict, checkout: Path, candidate: Path, facts: dict) -> dic
     nonce = secrets.token_hex(16)
     request = {'format_version': 1, 'execution_nonce': nonce, 'source_commit': selected['source_commit'],
                'driver_tree': selected['controller_tree'], 'artifact_id': artifact['id'],
-               'environment_id': environment, 'variant_id': variants[0]['id']}
+               'environment_id': environment, 'variant_id': variants[0]['id'], 'case_selection': None}
     inputs = {'native_packages': {'format_version': 1, 'current_package': str(target),
                                  'installation': {'operation': 'fresh-install', 'expected_absent': True}}}
     output = Path(account.pw_dir) / 'installed-observations'

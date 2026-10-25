@@ -145,8 +145,8 @@ class InstalledLeafFailureTests(unittest.TestCase):
             driver = stack.enter_context(patch.object(leaf, 'execute_case', side_effect=lambda binding, cap, case, root:
                 retain(binding, cap, case, root, 'passed', {'actual_fixture': True})))
             output = Path(directory) / 'leaf'
-            result = self.invoke(output, case_inputs={'case_selection': {'format_version': 1, 'cases': [
-                {'capability': 'conversation', 'case': 'restart-and-reconnect'}]}})
+            result = self.invoke(output, case_selection={'format_version': 1, 'cases': [
+                {'capability': 'conversation', 'case': 'restart-and-reconnect'}]})
             self.assertEqual(driver.call_count, 1)
             self.assertEqual(driver.call_args.args[2], 'restart-and-reconnect')
             row = result['results'][0]
@@ -162,6 +162,15 @@ class InstalledLeafFailureTests(unittest.TestCase):
             self.fixture(stack, lambda *args: self.fail('invalid case selection reached installer'))
             output = Path(directory) / 'leaf'
             with self.assertRaises(ValueError):
+                self.invoke(output, case_selection={'format_version': 1, 'cases': [
+                    {'capability': 'conversation', 'case': 'undeclared'}]})
+            self.assertFalse(output.exists())
+
+    def test_guest_selection_cannot_replace_the_controller_authority(self):
+        with tempfile.TemporaryDirectory() as directory, ExitStack() as stack:
+            self.fixture(stack, lambda *args: self.fail('guest selection reached installer'))
+            output = Path(directory) / 'leaf'
+            with self.assertRaisesRegex(ValueError, 'controller-bound'):
                 self.invoke(output, case_inputs={'case_selection': {'format_version': 1, 'cases': [
-                    {'capability': 'conversation', 'case': 'undeclared'}]}})
+                    {'capability': 'conversation', 'case': 'chat-and-workflow'}]}})
             self.assertFalse(output.exists())

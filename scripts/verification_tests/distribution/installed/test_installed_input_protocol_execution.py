@@ -12,7 +12,7 @@ class InstalledInputProtocolTests(unittest.TestCase):
         identity = {'pid': 100, 'parent_pid': 50, 'start_time_ticks': 42}
         binding = {'format_version': 1, 'execution_nonce': 'a' * 32,
                    'source_commit': 'b' * 40, 'driver_tree': 'c' * 40,
-                   'artifact_id': 'native-rpm-amd64.rpm', 'environment_id': 'fedora-gnome', 'variant_id': 'fedora-wayland'}
+                   'artifact_id': 'native-rpm-amd64.rpm', 'environment_id': 'fedora-gnome', 'variant_id': 'fedora-wayland', 'case_selection': None}
         request = {'format_version': 1, 'binding': binding, 'transaction_id': 'd' * 32,
                    'operation': 'editor-replace-save-v1', 'ordinal': 0,
                    'focus': {'launch': identity, 'frame': dict(identity),

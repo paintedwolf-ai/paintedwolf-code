@@ -20,7 +20,7 @@ class NativeBootstrapTests(unittest.TestCase):
     def fixture(self, root):
         (root / 'home').mkdir(mode=0o700)
         execution = {'format_version': 1, 'execution_nonce': 'a' * 32, 'source_commit': 'b' * 40,
-            'driver_tree': 'c' * 40, 'artifact_id': 'app', 'environment_id': 'ubuntu', 'variant_id': 'baseline'}
+            'driver_tree': 'c' * 40, 'artifact_id': 'app', 'environment_id': 'ubuntu', 'variant_id': 'baseline', 'case_selection': None}
         artifact = {'id': 'app', 'installation': 'deb', 'identity': {'sha256': 'd' * 64}}
         binding = {'source_commit': 'b' * 40, 'artifact': artifact, 'images': {'/selected': {'device': 1, 'inode': 2}}}
         inventory = {'arguments': ['dpkg-query', '-W', '-f=${binary:Package}\t${Version}\n'],

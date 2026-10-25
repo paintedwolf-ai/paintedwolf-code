@@ -26,7 +26,7 @@ class GuestInputTests(unittest.TestCase):
         self.addCleanup(patcher.stop)
         self.execution = {'format_version': 1, 'execution_nonce': 'a' * 32,
             'source_commit': 'b' * 40, 'driver_tree': 'c' * 40,
-            'artifact_id': 'app', 'environment_id': 'fedora', 'variant_id': 'gnome-wayland'}
+            'artifact_id': 'app', 'environment_id': 'fedora', 'variant_id': 'gnome-wayland', 'case_selection': None}
         identity = {'pid': 123, 'parent_pid': 1, 'start_time_ticks': 42}
         self.focus = {'launch': identity, 'entry': identity, 'frame': identity,
             'frame_lineage': [dict(identity)], 'entry_lineage': [dict(identity)],

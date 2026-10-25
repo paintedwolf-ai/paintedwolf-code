@@ -18,7 +18,7 @@ class SurfaceTests(unittest.TestCase):
                       'surfaces': [self.row(self.main)]}
         self.execution = {'format_version': 1, 'execution_nonce': 'a' * 32,
             'source_commit': 'b' * 40, 'driver_tree': 'c' * 40,
-            'artifact_id': 'app', 'environment_id': 'fedora', 'variant_id': 'gnome-wayland'}
+            'artifact_id': 'app', 'environment_id': 'fedora', 'variant_id': 'gnome-wayland', 'case_selection': None}
 
     def row(self, identity, **changes):
         return {'identity': identity, 'kind': 'frame', 'visible': True, 'active': True,

@@ -83,7 +83,7 @@ class EngineInhibitorTests(unittest.TestCase):
                 'format_version': 1, 'vm_id': 'owned',
                 'binding': {'format_version': 1, 'execution_nonce': 'a' * 32, 'source_commit': 'b' * 40,
                             'driver_tree': 'c' * 40, 'artifact_id': 'app',
-                            'environment_id': 'noble', 'variant_id': 'gnome-wayland'}}}
+                            'environment_id': 'noble', 'variant_id': 'gnome-wayland', 'case_selection': None}}}
         unlocked_session = {'locked_hint': False, 'locker_active': False}
         locked_session = {'locked_hint': True, 'locker_active': True}
         held_row = {'what': 'sleep', 'mode': 'block', 'owner': OWNER}

@@ -103,7 +103,7 @@ class HostedRuntimeCustodyTests(unittest.TestCase):
             custody = root / 'custody'
             custody.mkdir()
             request = {'format_version': 1, 'execution_nonce': 'a' * 32, 'source_commit': '1' * 40,
-                'driver_tree': 'b' * 40, 'artifact_id': 'app', 'environment_id': 'ubuntu', 'variant_id': 'baseline'}
+                'driver_tree': 'b' * 40, 'artifact_id': 'app', 'environment_id': 'ubuntu', 'variant_id': 'baseline', 'case_selection': None}
             contract = {**request, 'controller_commit': 'a' * 40, 'bootstrap_frozen': False,
                 'snapshot': None, 'bootstrap_output': str(original)}
             import json, os

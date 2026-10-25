@@ -224,7 +224,7 @@ def diagnostic_main(arguments: list[str]) -> int:
                 from ..installed_input.mailbox import Mailbox
                 execution = {'format_version': 1, 'execution_nonce': args.execution_nonce,
                     'source_commit': source, 'driver_tree': driver_tree, 'artifact_id': args.artifact_id,
-                    'environment_id': 'diagnostic-desktop', 'variant_id': 'diagnostic-native-input'}
+                    'environment_id': 'diagnostic-desktop', 'variant_id': 'diagnostic-native-input', 'case_selection': None}
                 mailbox = Mailbox(execution, args.input_vm_id)
                 mailbox.create()
                 binding['native_input'] = {'format_version': 1, 'vm_id': args.input_vm_id, 'binding': execution}

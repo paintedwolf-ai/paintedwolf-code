@@ -18,7 +18,7 @@ from linux_release.installed_input import controller, protocol
 class ProviderRecoveryTests(unittest.TestCase):
     def fixture(self):
         execution = {'format_version': 1, 'execution_nonce': 'a' * 32, 'source_commit': 'b' * 40,
-            'driver_tree': 'c' * 40, 'artifact_id': 'owned.deb', 'environment_id': 'noble', 'variant_id': 'wayland'}
+            'driver_tree': 'c' * 40, 'artifact_id': 'owned.deb', 'environment_id': 'noble', 'variant_id': 'wayland', 'case_selection': None}
         current = dict(execution, execution_nonce='d' * 32, driver_tree='e' * 40)
         identity = {'pid': 100, 'parent_pid': 50, 'start_time_ticks': 42}
         focus = {'launch': identity, 'entry': identity, 'frame': identity, 'frame_lineage': [identity],

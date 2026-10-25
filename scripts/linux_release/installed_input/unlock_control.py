@@ -13,7 +13,8 @@ from ..installed_cases.records import CaseUnavailable
 
 
 class NativeUnlockControl:
-    def __init__(self, execution, vm_id, lock):
+    def __init__(self, execution, vm_id, lock, *, case='inhibitor-lifetime'):
+        self.case = case
         self.execution, self.vm_id, self.lock = execution, vm_id, lock
         account = pwd.getpwuid(os.getuid())
         self.account = {'name': account.pw_name, 'uid': account.pw_uid,
@@ -27,7 +28,7 @@ class NativeUnlockControl:
     def _request(self, operation):
         pending = unlock_wire.request({'format_version': 1, 'binding': self.execution,
             'transaction_id': secrets.token_hex(16), 'operation': operation,
-            'native_session': self.lock.observe(), 'account': self.account}, self.execution)
+            'native_session': self.lock.observe(), 'account': self.account, 'case': self.case}, self.execution)
         self.mailbox.write('request.json', pending)
         deadline = time.monotonic() + 40
         while True:

@@ -1,7 +1,7 @@
 """A bounded native case selection cannot omit unknown or duplicate identifiers."""
 import unittest
 
-from linux_release.installed_case_selection import selected_cases
+from linux_release.installed_case_selection import canonical, selected_cases
 
 ROWS = [{'capability': 'conversation', 'cases': ['restart-and-reconnect', 'provider-onboarding']}]
 
@@ -25,3 +25,13 @@ class CaseSelectionTests(unittest.TestCase):
                       {'format_version': 1, 'cases': [selected], 'skip': True}):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 selected_cases(value, ROWS)
+
+    def test_controller_selection_is_canonical_and_does_not_mutate_the_input(self):
+        value = {'format_version': 1, 'cases': [
+            {'capability': 'session', 'case': 'inhibitor-desktop-entry-lifetime'},
+            {'capability': 'session', 'case': 'inhibitor-cold-cli-lifetime'}]}
+        before = [dict(item) for item in value['cases']]
+        result = canonical(value)
+        self.assertEqual(value['cases'], before)
+        self.assertEqual([item['case'] for item in result['cases']],
+            ['inhibitor-cold-cli-lifetime', 'inhibitor-desktop-entry-lifetime'])

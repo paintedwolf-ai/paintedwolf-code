@@ -8,7 +8,7 @@ from linux_release.installed_input import unlock_actor, unlock_wire
 from verification_tests.distribution.installed.test_installed_session_lock_execution import native_proof
 
 EXECUTION = {'format_version': 1, 'execution_nonce': 'a' * 32, 'source_commit': 'b' * 40,
-    'driver_tree': 'c' * 40, 'artifact_id': 'app', 'environment_id': 'noble', 'variant_id': 'gnome-wayland'}
+    'driver_tree': 'c' * 40, 'artifact_id': 'app', 'environment_id': 'noble', 'variant_id': 'gnome-wayland', 'case_selection': None}
 ACCOUNT = {'name': 'pwqual058a1', 'uid': 30008, 'gid': 30008, 'home': '/home/pwqual058a1'}
 
 
@@ -64,6 +64,22 @@ class UnlockWireTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             unlock_wire.locked(value, password=False)
 
+    def test_public_route_unlock_requires_its_exact_controller_selected_case(self):
+        case = 'inhibitor-desktop-entry-lifetime'
+        execution = {**EXECUTION, 'case_selection': {'format_version': 1,
+            'cases': [{'capability': 'session', 'case': case}]}}
+        pending = {'format_version': 1, 'binding': execution, 'transaction_id': 'd' * 32,
+            'operation': unlock_wire.PURPOSE, 'native_session': target()['session'], 'account': ACCOUNT, 'case': case}
+        self.assertEqual(unlock_wire.request(pending, execution), pending)
+        for selected in (None, {'format_version': 1, 'cases': [
+                {'capability': 'session', 'case': 'inhibitor-cold-cli-lifetime'}]}):
+            foreign = {**execution, 'case_selection': selected}
+            with self.assertRaisesRegex(ValueError, 'controller selection'):
+                unlock_wire.request({**pending, 'binding': foreign}, foreign)
+        for substitute in ('inhibitor-cold-cli-lifetime', 'inhibitor-lifetime', [], 'invented'):
+            with self.subTest(case=substitute), self.assertRaises(ValueError):
+                unlock_wire.request({**pending, 'case': substitute}, execution)
+
 
 class UnlockActorTests(unittest.TestCase):
     def actor(self):
@@ -74,7 +90,7 @@ class UnlockActorTests(unittest.TestCase):
     def perform(self, private, pipe):
         with patch.object(unlock_actor, 'Pipe', return_value=pipe) as transport:
             pending = {'format_version': 1, 'binding': EXECUTION, 'transaction_id': 'd' * 32,
-                'operation': unlock_wire.PURPOSE, 'native_session': target()['session'], 'account': ACCOUNT}
+                'operation': unlock_wire.PURPOSE, 'native_session': target()['session'], 'account': ACCOUNT, 'case': 'inhibitor-lifetime'}
             result = private.perform('captured-process', 'owned-selector', 123, pending)
         transport.assert_called_once_with('captured-process', 'owned-selector', 123)
         return result
@@ -306,7 +322,7 @@ class UnlockAccountAndBridgeTests(unittest.TestCase):
 
             prep_req = {
                 'format_version': 1, 'binding': EXECUTION, 'transaction_id': '1' * 32,
-                'operation': unlock_wire.PREPARE, 'native_session': unlocked, 'account': ACCOUNT}
+                'operation': unlock_wire.PREPARE, 'native_session': unlocked, 'account': ACCOUNT, 'case': 'inhibitor-lifetime'}
             prep_ack = {
                 'format_version': 1, 'request_sha256': unlock_wire.digest(prep_req),
                 'vm_id': 'owned', 'result': {'prepared': True, 'account': ACCOUNT}}
@@ -330,7 +346,7 @@ class UnlockAccountAndBridgeTests(unittest.TestCase):
 
             unl_req = {
                 'format_version': 1, 'binding': EXECUTION, 'transaction_id': '3' * 32,
-                'operation': unlock_wire.PURPOSE, 'native_session': locked_session, 'account': ACCOUNT}
+                'operation': unlock_wire.PURPOSE, 'native_session': locked_session, 'account': ACCOUNT, 'case': 'inhibitor-lifetime'}
             unl_ack = {
                 'format_version': 1, 'request_sha256': unlock_wire.digest(unl_req),
                 'vm_id': 'owned', 'result': {
@@ -400,7 +416,7 @@ class UnlockAccountAndBridgeTests(unittest.TestCase):
         unlocked['native_session'].update(locked_hint=False, locker_active=False)
         pending = {
             'format_version': 1, 'binding': EXECUTION, 'transaction_id': '1' * 32,
-            'operation': unlock_wire.PREPARE, 'native_session': unlocked, 'account': ACCOUNT}
+            'operation': unlock_wire.PREPARE, 'native_session': unlocked, 'account': ACCOUNT, 'case': 'inhibitor-lifetime'}
 
         guest_in_r, host_out_w = os.pipe()
         host_in_r, guest_out_w = os.pipe()

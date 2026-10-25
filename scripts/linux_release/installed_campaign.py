@@ -19,15 +19,17 @@ from .installed_execution import read, registry
 from .installed_results import admit
 from .installed_transfer import receive
 from .support_matrix import CATALOG, expand
-from .installed_variants import requirements, snapshot, aggregate
+from .installed_variants import requirements, snapshot
 from .installed_capacity import limits
+from .installed_case_aggregation import aggregate
+from .installed_case_selection import canonical as case_selection, selected_cases
 from .installed_input.controller import Bridge, adapter, verify_deliveries, run_managed
 
-PLAN_FORMAT_VERSION = 3
+PLAN_FORMAT_VERSION = 4
 
 FIELDS = {"id", "host", "port", "user", "identity_file", "known_hosts", "checkout",
           "runtime_bin_dirs", "artifact_id", "environment_id", "final_artifacts", "file_root",
-          "install_root", "output", "nix_program", "case_inputs", "variant_id", "snapshot", "input_adapter"}
+          "install_root", "output", "nix_program", "case_inputs", "variant_id", "snapshot", "input_adapter", "case_selection"}
 
 
 def absolute(value):
@@ -59,9 +61,10 @@ def command(target: dict, arguments: list[str]) -> list[str]:
 
 def run_guest(target: dict, source: str, tree: str, output: Path) -> Path:
     request = {"format_version": 1, "execution_nonce": secrets.token_hex(16), "source_commit": source,
-               "driver_tree": tree, "artifact_id": target["artifact_id"], "environment_id": target["environment_id"], "variant_id": target["variant_id"]}
+               "driver_tree": tree, "artifact_id": target["artifact_id"], "environment_id": target["environment_id"], "variant_id": target["variant_id"], "case_selection": case_selection(target["case_selection"])}
     arguments = ["./task", "test:linux:installed", "--", "--run-cases", "--source-commit", source,
                  "--driver-tree", tree, "--variant-id", target["variant_id"], "--snapshot", json.dumps(target["snapshot"], sort_keys=True, separators=(",", ":")), "--execution-nonce", request["execution_nonce"], "--artifact-id", target["artifact_id"], "--environment-id", target["environment_id"]]
+    arguments.extend(['--case-selection', json.dumps(request['case_selection'], sort_keys=True, separators=(',', ':'))])
     for field in ("final_artifacts", "file_root", "install_root", "output", "nix_program", "case_inputs"):
         value = target[field]
         if value is None and field in {"nix_program", "case_inputs"}:
@@ -81,7 +84,7 @@ def run_guest(target: dict, source: str, tree: str, output: Path) -> Path:
         if bridge is not None and bridge.actor.value['ssh'] != {key: target[key] for key in ('host', 'port', 'user')}:
             raise ValueError('fixed native input lease differs from selected SSH guest')
         returncode = run_managed(bridge, command(target, arguments), directory / 'managed-execution.log')
-    if returncode not in {0, 1}:
+    if returncode not in {0, 1, 201}:
         raise ValueError("guest managed execution failed before retaining an installed campaign")
     archive = directory / "leaf.zip"
     with archive.open("xb") as stream, (directory / "transfer.log").open("xb") as log:
@@ -90,6 +93,12 @@ def run_guest(target: dict, source: str, tree: str, output: Path) -> Path:
     leaf = directory / "leaf"
     receive(archive, leaf)
     verify_execution_receipt(directory, target, source, tree)
+    campaign = read(leaf / 'campaign.json')
+    complete = all(row['status'] == 'passed' for row in campaign['results'])
+    if not campaign['results'] or (returncode == 0) != complete:
+        raise ValueError('managed exit status contradicts its retained complete campaign')
+    (directory / 'managed-result.json').write_text(json.dumps({'format_version': 1,
+        'guest_managed_exit_code': returncode, 'complete_campaign_passed': complete}, sort_keys=True) + '\n')
     return leaf
 
 
@@ -98,7 +107,8 @@ def verify_execution_receipt(directory: Path, target: dict, source: str, tree: s
     nonce = request.get("execution_nonce") if isinstance(request, dict) else None
     expected = {"format_version": 1, "execution_nonce": nonce, "source_commit": source,
                 "driver_tree": tree, "artifact_id": target["artifact_id"],
-                "environment_id": target["environment_id"], "variant_id": target.get("variant_id")}
+                "environment_id": target["environment_id"], "variant_id": target.get("variant_id"),
+                "case_selection": case_selection(target["case_selection"])}
     if (not isinstance(nonce, str) or not re.fullmatch(r"[a-f0-9]{32}", nonce)
             or type(request.get("format_version")) is not int or request != expected):
         raise ValueError("installed execution request differs from its independently selected plan")
@@ -126,7 +136,7 @@ def validate_plan(plan: dict, final: dict, catalog: dict | None = None) -> tuple
     catalog = read(CATALOG) if catalog is None else catalog
     if not isinstance(targets, list) or not targets or len(targets) > limits(catalog, final)["targets"]:
         raise ValueError("installed plan requires bounded explicit guest targets")
-    seen, bindings = set(), set()
+    seen, bindings = set(), {}
     for target in targets:
         command(target, ["true"])
         if target["id"] in seen or target["artifact_id"] not in expected:
@@ -138,10 +148,23 @@ def validate_plan(plan: dict, final: dict, catalog: dict | None = None) -> tuple
         if target["variant_id"] not in variants:
             raise ValueError("guest plan selected an undeclared qualification variant")
         snapshot(target["snapshot"], variants[target["variant_id"]])
+        applicable = [row for row in applicable if target['variant_id'] in {
+            item['id'] for item in requirements(catalog, row['environment'], row['capability'])}]
+        declared = {(row['capability'], case) for row in applicable for case in row['cases']}
+        canonical = case_selection(target['case_selection'])
+        if canonical != target['case_selection']:
+            raise ValueError('guest plan case selection is not canonical')
+        selected = selected_cases(canonical, applicable)
+        selected = declared if selected is None else set(selected)
+        from .installed_cases.shipping_lifecycle import KEEP_AWAKE_CASES
+        if target['input_adapter'] is not None and sum(
+                capability == 'session' and case in KEEP_AWAKE_CASES for capability, case in selected) > 1:
+            raise ValueError('guest plan must isolate each one-use native unlock case')
         binding = (target["artifact_id"], target["environment_id"], target["variant_id"])
-        if binding in bindings:
-            raise ValueError("guest plan repeats an artifact/environment/variant execution")
-        bindings.add(binding)
+        previous, prior_snapshot = bindings.get(binding, (set(), target['snapshot']))
+        if previous & selected or prior_snapshot != target['snapshot']:
+            raise ValueError('guest plan overlaps selected cases or changes a required variant snapshot')
+        bindings[binding] = (previous | selected, prior_snapshot)
         seen.add(target["id"])
     return source, tree, targets
 
@@ -153,10 +176,14 @@ def execute(plan: dict, final: dict, catalog: dict, output: Path) -> dict:
     root.mkdir(mode=0o700)
     registrations = {"format_version": 1, "installations": {item["id"]: registry(catalog, item["id"]) for item in catalog["installations"]}}
     (output / "driver-registry.json").write_text(json.dumps(registrations, sort_keys=True, separators=(",", ":")) + "\n")
-    variants = {}
+    variants, nonces = {}, set()
     known = {row["id"]: row for row in expand(catalog)}
     for target in targets:
         leaf = run_guest(target, source, tree, output)
+        execution = read(leaf / 'execution.json')
+        if execution['execution_nonce'] in nonces:
+            raise ValueError('guest campaign reuses an execution nonce or input custody')
+        nonces.add(execution['execution_nonce'])
         campaign = read(leaf / "campaign.json")
         # This validation preserves failed/unverified rows while rejecting malformed observations.
         admit(catalog, campaign, final, source, leaf / "evidence")
@@ -175,14 +202,16 @@ def execute(plan: dict, final: dict, catalog: dict, output: Path) -> dict:
                     record["path"] = target["id"] + "/" + record["path"]
             for case in row["cases"]:
                 for name, path in (("environment-facts.json", leaf / "environment-facts.json"), ("variant.json", leaf / "variant.json"), ("execution.json", leaf / "execution.json"),
-                                   ("execution-request.json", output / target["id"] / "execution-request.json")):
+                                   ("execution-request.json", output / target["id"] / "execution-request.json"),
+                                   ("managed-result.json", output / target["id"] / "managed-result.json")):
                     case["evidence"].append({"path": target["id"] + "/" + name, "sha256": hashlib.sha256(path.read_bytes()).hexdigest()})
-            variants.setdefault(row["row_id"], []).append((target["variant_id"], row))
+            variants.setdefault(row["row_id"], []).append((target["variant_id"], row, execution))
         shutil.copytree(leaf / "evidence", root / target["id"], symlinks=False)
         shutil.copyfile(leaf / "environment-facts.json", root / target["id"] / "environment-facts.json")
         shutil.copyfile(leaf / "variant.json", root / target["id"] / "variant.json")
         shutil.copyfile(leaf / "execution.json", root / target["id"] / "execution.json")
         shutil.copyfile(output / target["id"] / "execution-request.json", root / target["id"] / "execution-request.json")
+        shutil.copyfile(output / target["id"] / "managed-result.json", root / target["id"] / "managed-result.json")
     rows = aggregate(catalog, variants, known)
     campaign = {"format_version": 1, "source_commit": source, "artifacts": final["artifacts"], "results": rows}
     report = admit(catalog, campaign, final, source, root)

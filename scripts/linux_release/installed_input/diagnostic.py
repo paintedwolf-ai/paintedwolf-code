@@ -35,7 +35,7 @@ def main(arguments):
         raise ValueError('physical input diagnostic controller differs from the selected tree')
     request = {'format_version': 1, 'execution_nonce': secrets.token_hex(16), 'source_commit': runtime,
         'driver_tree': tree, 'artifact_id': target['artifact_id'], 'environment_id': target['environment_id'],
-        'variant_id': target['variant_id']}
+        'variant_id': target['variant_id'], 'case_selection': None}
     arguments = ['./task', 'test:linux:installed', '--', '--diagnose-first-launch', '--continue-installed',
         '--candidate-inputs', absolute(args.candidate_inputs), '--artifact-id', target['artifact_id'],
         '--candidate-run-id', str(args.candidate_run_id), '--candidate-artifact-id', str(args.candidate_artifact_id),

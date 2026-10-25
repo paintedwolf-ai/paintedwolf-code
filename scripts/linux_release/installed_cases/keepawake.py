@@ -77,11 +77,11 @@ def execute(binding, capability, case, root):
     from ..installed_input.unlock_account import run_privileged_disable, validate_account_shape
     from ..installed_input.unlock_control import NativeUnlockControl
     from ..installed_storage import resolve
-    from .shipping_lifecycle import selected_mode, capture, repeat_turn
+    from .shipping_lifecycle import KEEP_AWAKE_CASES, selected_mode, capture, repeat_turn
 
-    if (capability, case) != ('session', 'inhibitor-lifetime'):
-        raise ValueError('keepawake driver executes only session/inhibitor-lifetime')
-    mode = selected_mode(binding)
+    if capability != 'session' or case not in KEEP_AWAKE_CASES:
+        raise ValueError('keepawake driver requires a declared session inhibitor case')
+    mode = selected_mode(binding, case)
     launch_binding = {**binding, 'launcher': protected_launcher(binding)}
     project = Path(tempfile.mkdtemp(prefix='keepawake-project-', dir=root))
     app, observations, streams, barrier, reservation = None, {}, {}, None, None
@@ -120,7 +120,7 @@ def execute(binding, capability, case, root):
                                 app, native, held=False, expected=None, deadline=time.monotonic() + 10)
                             observations['inhibitor_initial'] = initial_inhibitor
                             captured_engine = initial_inhibitor['engine']
-                            unlock_ctl = NativeUnlockControl(execution, vm_id, lock)
+                            unlock_ctl = NativeUnlockControl(execution, vm_id, lock, case=case)
                             validate_account_shape(unlock_ctl.account)
                             observations['unlock_preparation'] = unlock_ctl.prepare()
                             try:

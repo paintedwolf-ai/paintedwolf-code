@@ -20,7 +20,8 @@ from .installed_runtime import bind
 from .support_matrix import CATALOG, expand
 from .installed_variants import requirements, observe, observed
 from .installed_monitors import prepare as prepare_monitors
-from .installed_case_selection import selected_cases
+from .installed_case_selection import canonical as canonical_selection, selected_cases
+from .installed_cases.shipping_lifecycle import KEEP_AWAKE_CASES
 
 # Each case runs within its own time budget; a driver family may declare a
 # longer one as TIME_BUDGET_SECONDS. A case past its budget fails and the
@@ -83,7 +84,7 @@ def case_family(capability: str, case: str, installation: str) -> str | None:
         return "workspace_activation"
     if (capability, case) == ("conversation", "restart-and-reconnect"):
         return "reply_restart"
-    if (capability, case) == ("session", "inhibitor-lifetime"):
+    if capability == "session" and case in KEEP_AWAKE_CASES:
         return "keepawake"
     if capability == "installation" and case in {"clean-install-and-launch", "launcher-arguments"}:
         return "desktop"
@@ -122,7 +123,7 @@ def execute_case(binding: dict, capability: str, case: str, root: Path) -> dict:
 
 def execute(catalog: dict, final: dict, source: str, artifact_id: str, file_root: Path,
             install_root: Path, environment_id: str, output: Path, driver_tree: str,
-            nix_program: Path | None = None, case_inputs: dict | None = None, execution_nonce: str | None = None, variant_id: str | None = None, snapshot: dict | None = None, input_vm_id: str | None = None) -> dict:
+            nix_program: Path | None = None, case_inputs: dict | None = None, execution_nonce: str | None = None, variant_id: str | None = None, snapshot: dict | None = None, input_vm_id: str | None = None, case_selection: dict | None = None) -> dict:
     if not isinstance(execution_nonce, str) or not re.fullmatch(r"[a-f0-9]{32}", execution_nonce):
         raise ValueError("installed execution requires its fresh controller nonce")
     expected = evidence.artifacts(final, source)
@@ -147,7 +148,15 @@ def execute(catalog: dict, final: dict, source: str, artifact_id: str, file_root
             or set(case_inputs) - {"native_packages", "nix", "security", "desktop", "case_selection"}
             or any(not isinstance(value, dict) for value in case_inputs.values())):
         raise ValueError("installed case inputs require known typed driver-family objects")
-    selection = selected_cases((case_inputs or {}).get('case_selection'), rows)
+    case_selection = canonical_selection(case_selection)
+    supplied_selection = canonical_selection((case_inputs or {}).get('case_selection'))
+    if supplied_selection is not None and supplied_selection != case_selection:
+        raise ValueError('guest case inputs differ from controller-bound case selection')
+    selection = selected_cases(case_selection, rows)
+    unlock_cases = {(row['capability'], case) for row in rows for case in row['cases']
+                    if row['capability'] == 'session' and case in KEEP_AWAKE_CASES}
+    if input_vm_id is not None and len(unlock_cases if selection is None else unlock_cases & selection) > 1:
+        raise ValueError('each native unlock case requires its own fresh guest execution')
     output.mkdir(parents=True, mode=0o700, exist_ok=False)
     retained = output / "evidence"
     retained.mkdir()
@@ -161,7 +170,7 @@ def execute(catalog: dict, final: dict, source: str, artifact_id: str, file_root
         from .installed_input.mailbox import Mailbox
         execution_binding = {'format_version': 1, 'execution_nonce': execution_nonce, 'source_commit': source,
             'driver_tree': driver_tree, 'artifact_id': artifact_id, 'environment_id': environment_id,
-            'variant_id': variant_id}
+            'variant_id': variant_id, 'case_selection': case_selection}
         mailbox = Mailbox(execution_binding, input_vm_id)
         mailbox.create()
         binding['native_input'] = {'format_version': 1, 'vm_id': input_vm_id, 'binding': execution_binding}
@@ -229,7 +238,7 @@ def execute(catalog: dict, final: dict, source: str, artifact_id: str, file_root
     campaign = {"format_version": 1, "source_commit": source, "artifacts": final["artifacts"], "results": results}
     (output / "campaign.json").write_text(json.dumps(campaign, indent=2, sort_keys=True) + "\n")
     execution = {"format_version": 1, "execution_nonce": execution_nonce, "source_commit": source,
-                 "driver_tree": driver_tree, "artifact_id": artifact_id, "environment_id": environment_id, "variant_id": variant_id}
+                 "driver_tree": driver_tree, "artifact_id": artifact_id, "environment_id": environment_id, "variant_id": variant_id, "case_selection": case_selection}
     with (output / "execution.json").open("x") as stream:
         json.dump(execution, stream, sort_keys=True)
         stream.write("\n")
@@ -253,11 +262,12 @@ def main(arguments: list[str]) -> int:
     parser.add_argument("--nix-program", type=Path)
     parser.add_argument("--case-inputs", type=Path)
     parser.add_argument('--input-vm-id')
+    parser.add_argument('--case-selection', type=json.loads)
     args = parser.parse_args(arguments)
     try:
         campaign = execute(read(args.catalog), read(args.final_artifacts), args.source_commit,
                            args.artifact_id, args.file_root, args.install_root, args.environment_id,
-                           args.output, args.driver_tree, args.nix_program, read(args.case_inputs) if args.case_inputs else None, args.execution_nonce, args.variant_id, args.snapshot, args.input_vm_id)
+                           args.output, args.driver_tree, args.nix_program, read(args.case_inputs) if args.case_inputs else None, args.execution_nonce, args.variant_id, args.snapshot, args.input_vm_id, args.case_selection)
     except (OSError, ValueError, TypeError, subprocess.SubprocessError) as error:
         print("Installed case execution refused: " + str(error), file=sys.stderr)
         return 2

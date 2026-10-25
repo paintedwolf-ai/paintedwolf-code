@@ -126,10 +126,19 @@ OPERATIONS = {PREPARE, PURPOSE}
 def request(value, execution):
     from . import protocol
     if (not isinstance(value, dict) or set(value) != {'format_version', 'binding', 'transaction_id',
-            'operation', 'native_session', 'account'} or type(value['format_version']) is not int
+            'operation', 'native_session', 'account', 'case'} or type(value['format_version']) is not int
             or value['format_version'] != 1 or value['binding'] != protocol.binding(execution)
             or value['operation'] not in OPERATIONS):
         raise ValueError('OS input requires its closed current execution request')
+    from ..installed_cases.shipping_lifecycle import KEEP_AWAKE_CASES, PUBLIC_CASE_MODES
+    case = value['case']
+    if not isinstance(case, str) or case not in KEEP_AWAKE_CASES:
+        raise ValueError('OS input requires its exact declared unlock case')
+    selection = value['binding']['case_selection']
+    selected = [] if selection is None else [item['case'] for item in selection['cases']
+               if item['capability'] == 'session' and item['case'] in KEEP_AWAKE_CASES]
+    if len(selected) > 1 or selected and selected != [case] or case in PUBLIC_CASE_MODES and selected != [case]:
+        raise ValueError('OS input case differs from its one-use controller selection')
     protocol.nonce(value['transaction_id'])
     native = session_wire.proof(value['native_session'])['native_session']
     account = value['account']
