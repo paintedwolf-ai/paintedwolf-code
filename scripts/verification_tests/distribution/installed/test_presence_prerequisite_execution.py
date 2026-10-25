@@ -36,13 +36,8 @@ class PresencePrerequisiteTests(unittest.TestCase):
             'DesktopUI': Mock(return_value=self.ui), 'activate_visible_frame': Mock(return_value={'same_frame_active': True}),
             'configure_provider': Mock(return_value={'provider_id': 'fixture'}),
             'await_session': Mock(return_value={'id': 'session', 'status': 'idle'}),
-            'open_project_configuration': Mock(return_value={
-                'maximize_actions': [{'name': 'App menu'}, {'name': 'Window'}, {'name': 'Maximize'}],
-                'project_configuration': {'name': 'Project configuration', 'visible': True, 'native_action_completed': True},
-                'native_action_completed': True,
-            }),
-            'physical_input': Mock(),
-            'alerts': Mock(return_value=[]), 'await_alert': Mock(return_value={'attributes': ['xml-roles:alert']}),
+            'prepare_secret': Mock(return_value={'phase': 'ready', 'reveal_ready': True}),
+            'await_alert': Mock(return_value={'attributes': ['xml-roles:alert']}),
             'run': Mock(return_value={'exit_code': 0, 'timed_out': False, 'output_limit': False})}
         self.values = values
         for name, value in values.items():
@@ -64,25 +59,23 @@ class PresencePrerequisiteTests(unittest.TestCase):
         self.values['await_session'].assert_called_once_with(
             self.app, Path('/fixture/project'), 'fixture', presence.MODEL, status='idle',
             reason='presence-project-session-not-opened')
-        self.values['open_project_configuration'].assert_called_once_with(self.app, self.ui)
-        self.assertTrue(facts['project_configuration_navigation']['project_configuration']['visible'])
+        self.values['prepare_secret'].assert_called_once_with(self.app, self.ui, self.reservation)
+        self.assertTrue(facts['secret_setup']['reveal_ready'])
         self.app.start.assert_not_called()
         self.app.launch.assert_called_once()
         self.app.wait_ready.assert_called_once()
         self.app.stop.assert_called_once()
         self.policy.__exit__.assert_called_once()
-        self.ui.click.assert_any_call('Secrets', tab=True)
         self.ui.click.assert_any_call('Reveal value')
         self.reservation.check.assert_called_once_with(empty=True)
         self.assertEqual(streams, {'app-stderr': b'bounded'})
-        self.assertEqual(len(self.values['physical_input'].call_args_list), 3)
 
     def test_service_readiness_refusal_never_invokes_onboarding_or_creates_a_secret(self):
         self.app.wait_ready.side_effect = CaseUnavailable('service unavailable')
         with self.assertRaises(CaseUnavailable) as failed:
             presence.unchallenged_presence({})
         self.app.start.assert_not_called()
-        self.values['physical_input'].assert_not_called()
+        self.values['prepare_secret'].assert_not_called()
         self.values['PresencePolicy'].assert_not_called()
         self.app.stop.assert_called_once()
         self.assertEqual(failed.exception.observations['fresh_storage'], {'retained': True})
@@ -92,7 +85,7 @@ class PresencePrerequisiteTests(unittest.TestCase):
         with self.assertRaises(CaseUnavailable) as refused:
             presence.unchallenged_presence({})
         self.values['configure_provider'].assert_not_called()
-        self.values['physical_input'].assert_not_called()
+        self.values['prepare_secret'].assert_not_called()
         self.values['PresencePolicy'].assert_not_called()
         self.app.start.assert_not_called()
         self.app.stop.assert_called_once()
@@ -103,7 +96,7 @@ class PresencePrerequisiteTests(unittest.TestCase):
         with self.assertRaises(CaseUnavailable) as refused:
             presence.unchallenged_presence({})
         self.values['await_session'].assert_not_called()
-        self.values['physical_input'].assert_not_called()
+        self.values['prepare_secret'].assert_not_called()
         self.values['PresencePolicy'].assert_not_called()
         self.assertEqual(refused.exception.observations['fresh_storage'], {'retained': True})
 
