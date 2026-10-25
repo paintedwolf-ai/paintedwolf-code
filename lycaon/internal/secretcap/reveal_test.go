@@ -62,7 +62,7 @@ func TestRevealValidExpiredProofReturnsNoValueAndLeavesAuditUnchanged(t *testing
 			personID := testOwner(t, service)
 			secret, err := service.CreateSettingsSecret(t.Context(), CreateSettingsSecretRequest{
 				ProjectID: testdbseed.DefaultProjectID, PersonID: personID, OperationID: "reveal-expiry",
-				Name: "Expiry fixture", Value: "opaque-expiry-fixture-value",
+				Name: "Expiry fixture", Purpose: "verify reveal expiry", Value: "opaque-expiry-fixture-value",
 			})
 			testutil.FailErr(t, "create secret", err)
 			key := configureRevealKey(t, service)
