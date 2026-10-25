@@ -89,14 +89,16 @@ class DesktopUIOwnershipTests(unittest.TestCase):
         actor = ui.DesktopUI(self.app, API)
         with self.assertRaises(ui._InventoryChanged):
             list(actor.descendants(window))
-        api, _ = surface([button])
-        api.Registry.getDesktop(0).children = [None]
-        with self.assertRaises(ui._InventoryChanged):
-            list(ui.DesktopUI(self.app, api).windows())
-        api, _ = surface([button])
-        api.Registry.getDesktop(0)[0].children = [None]
-        with self.assertRaises(ui._InventoryChanged):
-            list(ui.DesktopUI(self.app, api).windows())
+        for replace in ('application', 'window'):
+            api, _ = surface([button])
+            desktop = api.Registry.getDesktop(0)
+            if replace == 'application':
+                desktop.children = [None]
+            else:
+                desktop[0].children = [None]
+            with patch.object(ui.time, 'monotonic', side_effect=range(100)), patch.object(ui.time, 'sleep'):
+                with self.assertRaises(CaseUnavailable):
+                    list(ui.DesktopUI(self.app, api).windows())
         button.action.doAction.assert_not_called()
 
     def test_observer_bound_retains_exact_single_read_facts_without_authorizing_action(self):
@@ -264,3 +266,46 @@ class DesktopUIOwnershipTests(unittest.TestCase):
             with self.assertRaises(CaseFailed) as failure:
                 ui.interactive_window(self.app)
             self.assertNotIsInstance(failure.exception, CaseUnavailable)
+
+
+class CompleteWindowSnapshotTests(unittest.TestCase):
+    setUp = DesktopUIOwnershipTests.setUp
+    def test_disappearing_second_window_does_not_publish_or_duplicate_first_window(self):
+        first, second = Node(API.ROLE_FRAME), Node(API.ROLE_DIALOG)
+        class ReplacedApplication(Node):
+            changed = False
+            def __getitem__(self, index):
+                if index == 1 and not self.changed:
+                    self.changed = True
+                    self.children = [first]
+                    raise IndexError('dialog disappeared')
+                return super().__getitem__(index)
+        app = ReplacedApplication(0, children=[first, second])
+        desktop = Node(0, children=[app])
+        api = SimpleNamespace(**vars(API), Registry=SimpleNamespace(getDesktop=lambda index: desktop))
+        with patch.object(ui.time, 'sleep'):
+            windows = list(ui.DesktopUI(self.app, api).windows())
+        self.assertEqual(windows, [(IDENTITY, first)])
+        first.action.doAction.assert_not_called()
+        second.action.doAction.assert_not_called()
+
+    def test_repeated_replacement_uses_one_deadline_and_publishes_nothing(self):
+        actor = ui.DesktopUI(self.app, API)
+        with patch.object(actor, '_window_snapshot', side_effect=IndexError('replaced')) as snapshot, \
+                patch.object(ui.time, 'monotonic', side_effect=[0, 1, 2, 4]), patch.object(ui.time, 'sleep'):
+            with self.assertRaises(CaseUnavailable):
+                list(actor.windows(deadline=3))
+        self.assertEqual(snapshot.call_count, 3)
+        self.assertTrue(all(call.args == (3,) for call in snapshot.call_args_list))
+
+    def test_programming_errors_and_replaced_launch_do_not_retry(self):
+        actor = ui.DesktopUI(self.app, API)
+        for error in (AttributeError('programming error'), TypeError('invalid type')):
+            with patch.object(actor, '_window_snapshot', side_effect=error) as snapshot:
+                with self.assertRaises(type(error)):
+                    list(actor.windows())
+            snapshot.assert_called_once()
+        with patch.object(actor, '_window_snapshot', side_effect=IndexError()), \
+                patch.object(ui, 'process_identity', return_value={**IDENTITY, 'start_time_ticks': 43}):
+            with self.assertRaises(CaseFailed):
+                list(actor.windows())
