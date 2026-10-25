@@ -421,6 +421,7 @@ def execute(binding: dict, capability: str, case: str, root: Path) -> dict:
                         else:
                             with DesktopUI(app) as ui:
                                 prepare_composer(app, ui)
+                                ui.click('Widen window to restore sidebar')
                                 ui.click('Project configuration')
                                 ui.click('Secrets', tab=True)
                                 ui.click('Add secret')

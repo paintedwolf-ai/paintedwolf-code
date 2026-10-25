@@ -410,6 +410,8 @@ class LockMonitorExecutionTests(unittest.TestCase):
             obs['reason'],
             'pre-lock-refusal-and-fresh-confirmation-observed-structured-stale-invalidation-unverified')
         self.assertEqual(witness_mock.call_count, 2)
+        fake_ui.click.assert_any_call('Widen window to restore sidebar')
+        fake_ui.click.assert_any_call('Project configuration')
         fake_ui.click.assert_any_call('Hide now')
         disable_mock.assert_called_once_with(ACCOUNT, vm_id='owned')
 
@@ -442,6 +444,8 @@ class LockMonitorExecutionTests(unittest.TestCase):
         self.assertTrue(obs['fresh_confirmation_verified'])
         self.assertEqual(obs['reason'], 'pre-lock-stale-challenge-refusal-and-fresh-confirmation-verified')
         self.assertEqual(witness_mock.call_count, 2)
+        fake_ui.click.assert_any_call('Widen window to restore sidebar')
+        fake_ui.click.assert_any_call('Project configuration')
         fake_ui.click.assert_any_call('Hide now')
         disable_mock.assert_called_once_with(ACCOUNT, vm_id='owned')
 
