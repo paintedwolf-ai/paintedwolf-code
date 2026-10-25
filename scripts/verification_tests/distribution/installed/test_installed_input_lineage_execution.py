@@ -1,5 +1,6 @@
 """Native focus pins the actual UI frame separately from its bootstrap authority."""
 import copy
+import os
 from types import SimpleNamespace
 import unittest
 from unittest.mock import MagicMock, patch
@@ -79,3 +80,102 @@ class InputLineageTests(unittest.TestCase):
             frame.get_process_id.return_value = peer['pid']
             with self.assertRaises(focus_owner.CaseFailed):
                 actor.observe()
+
+
+class RefusalWindowDiagnosticsTests(unittest.TestCase):
+    def fixture(self, count=2):
+        actor = focus_owner.EntryFocus.__new__(focus_owner.EntryFocus)
+        actor.app = SimpleNamespace(observations={'session': {'User': str(os.getuid())}})
+        actor.ui = MagicMock()
+        actor.ui.api.ROLE_FRAME, actor.ui.api.ROLE_DIALOG, actor.ui.api.STATE_ACTIVE = 23, 16, 1
+        windows, applications = [], []
+        for index in range(count):
+            pid = 102 + index
+            window = SimpleNamespace(app=SimpleNamespace(bus_name=f':1.{index + 2}'), path=f'/window{index}',
+                get_process_id=Mock(return_value=pid), getRole=Mock(return_value=23),
+                getState=Mock(return_value=SimpleNamespace(contains=lambda value: True)))
+            application = MagicMock()
+            application.get_process_id.return_value, application.childCount = pid, 1
+            application.__getitem__.return_value = window
+            applications.append(application)
+            windows.append(window)
+        desktop = MagicMock()
+        desktop.childCount = count
+        desktop.__getitem__.side_effect = applications.__getitem__
+        actor.ui.api.Registry.getDesktop.return_value = desktop
+        actor.ui.visible.return_value = True
+        return actor, applications, windows
+
+    def test_same_uid_external_top_level_is_identified_without_names_text_or_input(self):
+        actor, applications, windows = self.fixture()
+        owner = lambda pid, uid: {'pid': pid, 'parent_pid': 1, 'start_time_ticks': pid, 'uid': uid}
+        with patch.object(focus_owner.Path, 'stat', return_value=SimpleNamespace(st_uid=os.getuid())), \
+                patch.object(focus_owner, 'kernel_owner', side_effect=owner), \
+                patch.object(focus_owner, 'owned_process', side_effect=lambda pid, app: pid == 102), \
+                patch.object(focus_owner.time, 'monotonic', return_value=0):
+            result = actor._diagnose_windows()
+        self.assertTrue(result['complete'])
+        self.assertEqual([row['app_owned'] for row in result['windows']], [True, False])
+        self.assertEqual([row['accessible']['path'] for row in result['windows']], ['/window0', '/window1'])
+        self.assertEqual(set(result['windows'][0]), {'process', 'accessible', 'role', 'active', 'visible', 'app_owned'})
+        self.assertFalse(any(hasattr(window, key) for window in windows for key in ('name', 'queryText', 'queryComponent')))
+        actor.ui.find.assert_not_called()
+
+    def test_other_uid_is_not_traversed_and_count_and_time_bounds_are_explicit(self):
+        actor, applications, windows = self.fixture()
+        with patch.object(focus_owner.Path, 'stat', return_value=SimpleNamespace(st_uid=os.getuid() + 1)), \
+                patch.object(focus_owner.time, 'monotonic', return_value=0):
+            result = actor._diagnose_windows()
+        self.assertTrue(result['complete'])
+        self.assertEqual(result['windows'], [])
+        for application in applications: application.__getitem__.assert_not_called()
+        for window in windows: window.getState.assert_not_called()
+        actor, _, _ = self.fixture(count=33)
+        with patch.object(focus_owner.Path, 'stat', return_value=SimpleNamespace(st_uid=os.getuid() + 1)), \
+                patch.object(focus_owner.time, 'monotonic', return_value=0):
+            result = actor._diagnose_windows()
+        self.assertFalse(result['complete'])
+        self.assertEqual(actor.ui.api.Registry.getDesktop.return_value.__getitem__.call_count, 32)
+        with patch.object(focus_owner.time, 'monotonic', side_effect=[0, 0, 0.3]):
+            result = actor._diagnose_windows()
+        self.assertFalse(result['complete'])
+        self.assertEqual(result['failure_type'], 'TimeoutError')
+
+    def test_window_limit_and_owner_replacement_keep_the_snapshot_incomplete(self):
+        actor, _, _ = self.fixture(count=17)
+        owner = lambda pid, uid: {'pid': pid, 'parent_pid': 1, 'start_time_ticks': pid, 'uid': uid}
+        with patch.object(focus_owner.Path, 'stat', return_value=SimpleNamespace(st_uid=os.getuid())), \
+                patch.object(focus_owner, 'kernel_owner', side_effect=owner), \
+                patch.object(focus_owner, 'owned_process', return_value=False), \
+                patch.object(focus_owner.time, 'monotonic', return_value=0):
+            result = actor._diagnose_windows()
+        self.assertFalse(result['complete'])
+        self.assertEqual(result['windows_examined'], 16)
+        self.assertEqual(len(result['windows']), 16)
+        first, replaced = owner(102, os.getuid()), {**owner(102, os.getuid()), 'start_time_ticks': 999}
+        actor, _, _ = self.fixture(count=1)
+        with patch.object(focus_owner.Path, 'stat', return_value=SimpleNamespace(st_uid=os.getuid())), \
+                patch.object(focus_owner, 'kernel_owner', side_effect=[first, replaced]), \
+                patch.object(focus_owner, 'owned_process', return_value=False), \
+                patch.object(focus_owner.time, 'monotonic', return_value=0):
+            result = actor._diagnose_windows()
+        self.assertFalse(result['complete'])
+        self.assertEqual(result['failure_type'], 'ValueError')
+        self.assertEqual(result['windows'], [])
+
+    def test_terminal_diagnostic_failure_preserves_original_focus_exception_and_retry_path(self):
+        actor, _, _ = self.fixture()
+        actor.deadline = 90
+        original = focus_owner._FocusUnavailable('original refusal')
+        original.observations = {'editor_focus': {'container_active': False}}
+        with patch.object(actor, '_observe_once', side_effect=original) as observe, \
+                patch.object(actor, '_diagnose_windows', side_effect=RuntimeError('private diagnostic prose')) as diagnostic, \
+                patch.object(focus_owner.time, 'monotonic', side_effect=[0, 1, 3]), \
+                patch.object(focus_owner.time, 'sleep'):
+            with self.assertRaises(focus_owner._FocusUnavailable) as refusal: actor.observe()
+        self.assertIs(refusal.exception, original)
+        self.assertEqual(observe.call_count, 2)
+        diagnostic.assert_called_once_with()
+        self.assertEqual(original.observations['editor_focus'], {'container_active': False})
+        self.assertEqual(original.observations['focus_diagnostics'], {'complete': False, 'failure_type': 'RuntimeError'})
+        self.assertNotIn('private diagnostic prose', str(original.observations))

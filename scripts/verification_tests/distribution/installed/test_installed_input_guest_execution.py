@@ -120,6 +120,32 @@ class GuestInputTests(unittest.TestCase):
             self.assertFalse(refusal.exception.observations['native_input']['completed'])
 
 
+    def test_refusal_retains_exact_pending_phase_without_claiming_unread_ack_was_not_delivered(self):
+        cases = [('before', 'observe-before-request', False, False),
+                 ('waiting', 'observe-awaiting-acknowledgment', True, False),
+                 ('after', 'observe-after-acknowledgment', True, True),
+                 ('invalid', 'validate-acknowledgment', True, False)]
+        for stage, phase, published, validated in cases:
+            with self.subTest(stage=stage):
+                actor, box = Mock(), self.mailbox(stale=stage == 'invalid')
+                original = ValueError('original native focus refusal')
+                actor.observe.side_effect = [original] if stage == 'before' else [self.focus, original]
+                if stage == 'waiting': box.read.return_value, box.read.side_effect = None, None
+                with self.assertRaises(ValueError) as refusal:
+                    guest.perform(self.execution, 'owned', actor, box)
+                if stage != 'invalid': self.assertIs(refusal.exception, original)
+                record = refusal.exception.observations['native_input']
+                self.assertEqual(record['failure_context'], {'ordinal': 0, 'phase': phase,
+                    'request_publication_confirmed': published, 'acknowledgment_validated': validated})
+                self.assertEqual(record['events'], [])
+                self.assertEqual(box.write.call_count, int(published))
+                box.clear_completed.assert_not_called()
+                from linux_release.installed_cases.records import compact_physical_input
+                compacted, streams = compact_physical_input({'native_input': record}, {})
+                self.assertEqual(compacted['native_input']['failure_context'], record['failure_context'])
+                self.assertNotIn('original native focus refusal', str(compacted))
+                self.assertIn('physical-input', streams)
+
     def test_reply_provider_and_prompt_transactions_match_the_independent_host_log(self):
         import copy, json
         actor = Mock()
