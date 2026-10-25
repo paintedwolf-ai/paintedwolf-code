@@ -15,7 +15,7 @@ from ..installed_process import process_identity
 
 # This runs in isolated Python before importing any captured project code. The
 # capture is prepared separately by the trusted controller, never by the QA UID.
-BOOTSTRAP = '''import hashlib,json,stat,sys
+CAPTURE_IMPORT = '''import hashlib,json,stat,sys
 from pathlib import Path
 tree=sys.argv.pop(1)
 root=Path('/var/lib/paintedwolf-qualification')/tree
@@ -47,10 +47,12 @@ for index,node in enumerate(root.rglob('*')):
 if actual!=capture['files_sha256']:
  raise SystemExit(2)
 sys.path.insert(0,str(root))
-from scripts.linux_release.installed_input.polkit_root import main
-main()
 '''
+BOOTSTRAP = CAPTURE_IMPORT + 'from scripts.linux_release.installed_input.polkit_root import main\nmain()\n'
+ACCOUNT_BOOTSTRAP = CAPTURE_IMPORT + 'from scripts.linux_release.installed_input.unlock_account import main\nmain()\n'
 BOOTSTRAP = 'try:\n' + ''.join(' ' + line for line in BOOTSTRAP.splitlines(keepends=True)) + \
+    'except BaseException:\n raise SystemExit(2) from None\n'
+ACCOUNT_BOOTSTRAP = 'try:\n' + ''.join(' ' + line for line in ACCOUNT_BOOTSTRAP.splitlines(keepends=True)) + \
     'except BaseException:\n raise SystemExit(2) from None\n'
 
 
@@ -70,7 +72,7 @@ class Proxy:
         try:
             from ..installed_campaign import command
             arguments = ['/usr/bin/sudo', '-n', '/usr/bin/env', '-i', 'PATH=/usr/bin:/bin',
-                         'LANG=C.UTF-8', '/usr/bin/python3', '-I', '-B', '-c', BOOTSTRAP,
+                         'LANG=C.UTF-8', 'HOME=/root', '/usr/bin/python3', '-I', '-B', '-c', BOOTSTRAP,
                          self.execution['driver_tree']]
             self.process = subprocess.Popen(command(target, arguments), stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, start_new_session=True, bufsize=0)

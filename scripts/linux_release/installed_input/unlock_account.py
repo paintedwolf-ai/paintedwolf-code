@@ -67,13 +67,9 @@ def _verify_root_binary(path: Path):
         raise ValueError(f'dedicated QA account helper is not a root-owned executable: {path}')
 
 
-def validate_account(account: dict, *, vm_id: str | None = None,
-                     marker_path: Path = Path('/etc/paintedwolf-input-qualification.json')) -> dict:
+def validate_account_identity(account: dict):
+    """Bind the exact marked name to current passwd/group facts before mutation."""
     validate_account_shape(account)
-    if os.geteuid() != 0:
-        raise ValueError('dedicated QA account custody requires root execution')
-    if vm_id is not None:
-        _verify_marker(vm_id, marker_path=marker_path)
     by_name = pwd.getpwnam(account['name'])
     by_uid = pwd.getpwuid(account['uid'])
     group = grp.getgrgid(account['gid'])
@@ -82,6 +78,15 @@ def validate_account(account: dict, *, vm_id: str | None = None,
             or by_uid.pw_name != account['name'] or group.gr_name != account['name']
             or group.gr_gid != account['gid']):
         raise ValueError('dedicated QA account passwd/group records do not match')
+
+def validate_account(account: dict, *, vm_id: str | None = None,
+                     marker_path: Path = Path('/etc/paintedwolf-input-qualification.json')) -> dict:
+    validate_account_shape(account)
+    if os.geteuid() != 0:
+        raise ValueError('dedicated QA account custody requires root execution')
+    if vm_id is not None:
+        _verify_marker(vm_id, marker_path=marker_path)
+    validate_account_identity(account)
     home = Path(account['home'])
     _verify_directory(home.parent, uid=0, gid=0, mode=0o755)
     _verify_directory(home, uid=account['uid'], gid=account['gid'], mode=(0o750, 0o755))
@@ -166,6 +171,7 @@ def disable_account(account: dict, *, vm_id: str | None = None, terminate_sessio
         raise ValueError('dedicated QA account custody requires root execution')
     if vm_id is not None:
         _verify_marker(vm_id, marker_path=marker_path)
+    validate_account_identity(account)
     _verify_root_binary(passwd_path)
     _verify_root_binary(usermod_path)
     passwd_rc, _, _ = native_command.command([str(passwd_path), '-l', account['name']], timeout=10, limit=4096)

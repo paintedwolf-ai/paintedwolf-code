@@ -262,6 +262,7 @@ class UnlockAccountAndBridgeTests(unittest.TestCase):
                 name: getattr(info, name) for name in ('st_dev', 'st_ino', 'st_size', 'st_mtime_ns', 'st_ctime_ns')
             } | {'st_uid': 0, 'st_gid': 0, 'st_mode': 0o100600})()
             with patch.object(unlock_account, 'validate_account', return_value=ACCOUNT), \
+                    patch.object(unlock_account, 'validate_account_identity'), \
                     patch.object(unlock_account, '_verify_root_binary'), \
                     patch.object(unlock_account.os, 'fstat', return_value=root_stat), \
                     patch.object(unlock_account.os, 'geteuid', return_value=0), \
