@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/lycaon/lycaon/internal/db/migrations"
@@ -15,9 +16,11 @@ var releasedBaselinesJSON []byte
 
 // Before captures recovery data; After records the upgrade commit.
 type UpgradeHooks struct {
-	Before   func(context.Context, *sql.DB, migrations.Plan) error
-	After    func(context.Context, migrations.Plan) error
-	Progress func(migrations.Phase)
+	Before func(context.Context, *sql.DB, migrations.Plan) error
+	// BeforeCurrentOpen captures application-version recovery using the existing reader.
+	BeforeCurrentOpen func(context.Context, *sql.DB, migrations.Plan) error
+	After             func(context.Context, migrations.Plan) error
+	Progress          func(migrations.Phase)
 }
 
 func schemaRegistry(ctx context.Context) (*migrations.Registry, error) {
@@ -107,15 +110,25 @@ func upgradeExistingUsing(ctx context.Context, path string, hooks UpgradeHooks, 
 	}
 	reader, err := openReader(ctx, path)
 	if err != nil {
-		return classifyStoreOpenFailure(err)
+		return ClassifyStoreFailure(err)
 	}
 	defer func() { _ = reader.Close() }()
 	plan, err := planUpgrade(ctx, reader, registry)
 	if err != nil {
 		return err
 	}
+	// Recorded damage is refused before any scan, capture, or migration.
+	if err := prepareIntegrity(ctx, reader); err != nil {
+		return err
+	}
 	if !plan.Required() {
-		return prepareIntegrity(ctx, reader)
+		if staged {
+			return validateStoreIntegrity(ctx, reader)
+		}
+		if hooks.BeforeCurrentOpen != nil {
+			return hooks.BeforeCurrentOpen(ctx, reader, plan)
+		}
+		return nil
 	}
 	if err := validateStoreIntegrity(ctx, reader); err != nil {
 		return err
@@ -128,18 +141,15 @@ func upgradeExistingUsing(ctx context.Context, path string, hooks UpgradeHooks, 
 			hooks.Progress(migrations.Snapshotting)
 		}
 		if err := hooks.Before(ctx, reader, plan); err != nil {
-			return storeIncompatible(RecoveryReasonIntegrityFailed, plan.Source.Revision, fmt.Sprintf("capture upgrade recovery: %v", err))
+			return upgradeOperationError(err, RecoveryReasonStorageUnavailable, plan.Source.Revision, "capture upgrade recovery")
 		}
 	}
-	if err := reader.Close(); err != nil {
-		return err
-	}
 	if err := executeUpgrade(ctx, path, plan, hooks.Progress, registry); err != nil {
-		return storeIncompatible(RecoveryReasonSchemaMismatch, plan.Source.Revision, err.Error())
+		return upgradeOperationError(err, RecoveryReasonSchemaMismatch, plan.Source.Revision, "migrate store")
 	}
 	if hooks.After != nil {
 		if err := hooks.After(ctx, plan); err != nil {
-			return storeIncompatible(RecoveryReasonIntegrityFailed, plan.Target.Revision, fmt.Sprintf("record upgrade commit: %v", err))
+			return upgradeOperationError(err, RecoveryReasonStorageUnavailable, plan.Target.Revision, "record upgrade commit")
 		}
 	}
 	return nil
@@ -152,4 +162,20 @@ func executeUpgrade(ctx context.Context, path string, plan migrations.Plan, prog
 	}
 	defer func() { _ = writer.Close() }()
 	return registry.Execute(ctx, writer, plan, inspectSchema, progress)
+}
+
+func upgradeOperationError(err error, fallback RecoveryReason, revision int, operation string) error {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+	classified := ClassifyStoreFailure(err)
+	var failure *StoreIncompatibleError
+	if errors.As(classified, &failure) {
+		result := *failure
+		if result.StoreSchemaVersion == 0 {
+			result.StoreSchemaVersion = revision
+		}
+		return &result
+	}
+	return storeIncompatible(fallback, revision, fmt.Sprintf("%s: %v", operation, err))
 }

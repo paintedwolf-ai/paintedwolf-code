@@ -107,8 +107,16 @@ func (s *Submission) HandlePrompt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	installed, err := s.grantPromptReferences(r.Context(), id, req.OperationID, prepared.input.ContentParts)
+	if err != nil {
+		_ = attachStore.Release(req.OperationID, acquired)
+		s.discardPromptImages(r.Context(), sess.ProjectID, prepared.createdArtifactIDs)
+		s.responses.InternalError(w, r, err)
+		return
+	}
 	row, _, err := s.Sessions.Submissions.AdmitPrompt(r.Context(), id, req.OperationID, req, prepared.input)
 	if err != nil {
+		s.revokePromptGrants(installed)
 		if releaseErr := attachStore.Release(req.OperationID, acquired); releaseErr != nil && s.responses.Logger != nil {
 			s.responses.Logger.WarnContext(r.Context(), "release unadmitted prompt attachments", "operation_id", req.OperationID, "error", releaseErr)
 		}
@@ -201,10 +209,6 @@ func (s *Submission) preparePromptAdmission(
 		s.WriteAttachmentError(w, err)
 		return promptAdmission{}, false
 	}
-	if len(ingested.Images) > caps.Counts.MaxImages {
-		s.responses.Fail(w, wire.ApiErrorCodeAttachmentTooLarge, fmt.Sprintf("at most %d images allowed", caps.Counts.MaxImages))
-		return promptAdmission{}, false
-	}
 	text = promptattach.JoinUserText(text, ingested.Fences())
 	refResult, err := promptattach.IngestReferences(s.References.ReferenceDeps(r.Context(), sess), previewBudget, req.References)
 	if err != nil {
@@ -220,19 +224,30 @@ func (s *Submission) preparePromptAdmission(
 	if secretFence != "" {
 		text = promptattach.JoinUserText(text, []string{secretFence})
 	}
-	if len(ingested.Images)+len(refResult.ArtifactIDs) > caps.Counts.MaxImages {
+	allImages := append(append([]promptattach.InlineImage(nil), ingested.Images...), refResult.Images...)
+	if len(allImages) > caps.Counts.MaxImages {
 		s.responses.Fail(w, wire.ApiErrorCodeAttachmentTooLarge, fmt.Sprintf("at most %d images allowed", caps.Counts.MaxImages))
 		return promptAdmission{}, false
 	}
-	if text == "" && len(ingested.Images) == 0 && len(refResult.ArtifactIDs) == 0 && !allowEmpty {
+	if len(allImages)+len(refResult.ArtifactIDs) > caps.Counts.MaxImages {
+		s.responses.Fail(w, wire.ApiErrorCodeAttachmentTooLarge, fmt.Sprintf("at most %d images allowed", caps.Counts.MaxImages))
+		return promptAdmission{}, false
+	}
+	if text == "" && len(allImages) == 0 && len(refResult.ArtifactIDs) == 0 && !allowEmpty {
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "text, attachments, or references required")
 		return promptAdmission{}, false
 	}
-	createdArtifactIDs, err := s.ingestPromptImages(r.Context(), sessionID, req.OperationID, "attached", ingested.Images)
+	createdArtifactIDs, err := s.ingestPromptImages(r.Context(), sessionID, req.OperationID, "attached", allImages)
 	if err != nil {
 		s.discardPromptImages(r.Context(), sess.ProjectID, createdArtifactIDs)
 		s.WriteAttachmentError(w, err)
 		return promptAdmission{}, false
+	}
+	for i, img := range ingested.Images {
+		ingested.Parts[img.PartIndex].ArtifactID = createdArtifactIDs[i]
+	}
+	for i, img := range refResult.Images {
+		refResult.Parts[img.PartIndex].ArtifactID = createdArtifactIDs[len(ingested.Images)+i]
 	}
 	artifactIDs := append([]string(nil), createdArtifactIDs...)
 	artifactIDs = append(artifactIDs, refResult.ArtifactIDs...)
@@ -242,6 +257,7 @@ func (s *Submission) preparePromptAdmission(
 			retainedBlobIDs = append(retainedBlobIDs, part.BlobID)
 		}
 	}
+
 	return promptAdmission{
 		input: promptinput.Input{
 			Text: text, ArtifactIDs: artifactIDs, Recovery: req.Recovery,
@@ -250,7 +266,7 @@ func (s *Submission) preparePromptAdmission(
 		},
 		createdArtifactIDs: createdArtifactIDs,
 		retainedBlobIDs:    retainedBlobIDs,
-		hasImages:          len(ingested.Images) > 0 || len(refResult.ArtifactIDs) > 0,
+		hasImages:          len(allImages) > 0 || len(refResult.ArtifactIDs) > 0,
 		scannedNoText:      ingested.ScannedNoText,
 	}, true
 }
@@ -308,15 +324,16 @@ func PromptContentParts(prose string, attachments, references []promptattach.Fra
 	})
 	for _, framed := range attachments {
 		parts = append(parts, wire.MessageContentPart{
-			Content:   strings.TrimSpace(framed.Fence),
-			Origin:    wire.MessageOriginAttachment,
-			Authority: wire.ContentAuthorityNone,
-			TrustTier: wire.ContentTrustTierUntrusted,
-			Source:    strings.TrimSpace(framed.Source),
-			MediaType: strings.TrimSpace(framed.MediaType),
-			BlobID:    strings.TrimSpace(framed.BlobID),
-			Path:      strings.TrimSpace(framed.Path),
-			SizeBytes: framed.SizeBytes,
+			Content:    strings.TrimSpace(framed.Fence),
+			Origin:     wire.MessageOriginAttachment,
+			Authority:  wire.ContentAuthorityNone,
+			TrustTier:  wire.ContentTrustTierUntrusted,
+			Source:     strings.TrimSpace(framed.Source),
+			MediaType:  strings.TrimSpace(framed.MediaType),
+			BlobID:     strings.TrimSpace(framed.BlobID),
+			ArtifactID: framed.ArtifactID,
+			Path:       strings.TrimSpace(framed.Path),
+			SizeBytes:  framed.SizeBytes,
 		})
 	}
 	for _, framed := range references {
@@ -331,6 +348,7 @@ func PromptContentParts(prose string, attachments, references []promptattach.Fra
 			RootID:          strings.TrimSpace(framed.RootID),
 			SizeBytes:       framed.SizeBytes,
 			ReferenceKind:   framed.ReferenceKind,
+			ArtifactID:      framed.ArtifactID,
 			HitKind:         strings.TrimSpace(framed.HitKind),
 			SourceRef:       strings.TrimSpace(framed.SourceRef),
 			SourceSessionID: strings.TrimSpace(framed.SourceSessionID),

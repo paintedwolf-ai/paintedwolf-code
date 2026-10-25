@@ -10,6 +10,9 @@ policy before editing. Start unfamiliar work at [docs](docs/README.md) and
 
 ## Operating rules
 
+- **Judge safety end to end:** a locally conservative safeguard must not create
+  greater overall risk, make successful use or recovery impractical, or shift
+  avoidable burden onto the user.
 - **Work in an isolated worktree and dedicated branch.** Reuse them for the same
   task. Unless the user requests local-only work, commit your changes, push to
   GitHub, and open a PR for CI. Stage only authored paths: `git add -- <paths>`.
@@ -29,11 +32,22 @@ policy before editing. Start unfamiliar work at [docs](docs/README.md) and
 - **Report the crux, changes, verification, and unresolved work.** Surface findings
   that contradict the request before changing direction. Report verification
   results once available; do not narrate queued or running checks.
-- **Never merge unmerged feature branches into an omnibus integration PR.**
-  If PR B depends on PR A, PR A must land on `main` through the merge queue
-  first. If PR A fails or stalls in the queue, fix PR A in isolation. Absorbing
-  dependent PRs into a single combined branch to bypass queue serialization is
-  forbidden.
+- **Keep PRs separate; automatic queue batching is the exception.** Do not
+  manually assemble omnibus PRs. The hosted queue coordinator may batch already
+  admitted waiting PRs in queue order, preserving active groups and explicit
+  campaign holds. Combined admission and merge-group checks remain required.
+  The `no-combine` label excludes a PR from batches while preserving its normal
+  tests and merge eligibility. Source head changes and draft decisions
+  invalidate a batch; failed batches fall back to individual checks. Keep the
+  originals open until the exact recorded heads land. A human draft decision
+  remains a handoff; never undo it automatically.
+- **Cancel superseded background Qualification when its source is obsolete.**
+  The hosted supersession controller may cancel queued or running background
+  main-push Qualification after validating source ancestry and rechecking run
+  identity. Preserve explicit candidate and release Qualification. Releases still
+  require passing Qualification on their exact source commit. This cancellation
+  policy needs no additional approval; local verification cancellation follows
+  the stuck-verification rules below.
 - **Keep backend and frontend presentation changes decoupled.** Backend PRs must
   not touch unrelated frontend presentation components. If an existing frontend
   file exceeds a maintainability threshold, leave it alone unless the PR is
@@ -101,7 +115,7 @@ limits remain absolute. Before editing large code, run
 boundary or a bounded retention decision. Warnings do not block
 admission; post-merge maintainability issues track the review. Resolve hard-limit
 failures by reshaping or trimming.
-`coverage:changes` and `den:coverage:changes` require tests for added statements.
+`coverage:changes`, `den:coverage:changes`, and `scripts:coverage:changes` require tests for added statements.
 See [size budgets and changed coverage](docs/test-strategy.md#size-budgets-and-changed-coverage).
 
 ### Architectural decisions from warnings

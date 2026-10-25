@@ -231,6 +231,9 @@ func (t *ReadTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 		if os.IsNotExist(err) {
 			return "", sourceview.PathNotFound("read", path, fullPath)
 		}
+		if toolrejection.AsToolReject(err) != nil {
+			return "", err
+		}
 		return "", fmt.Errorf("read failed: %w", err)
 	}
 	// A credential file's text reaches no one until its exposure is recorded.
