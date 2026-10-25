@@ -1,6 +1,7 @@
 """Root observer custody comes from a captured process, never a public receipt."""
 import copy
-from pathlib import Path
+import json
+import stat
 from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
@@ -11,6 +12,21 @@ from verification_tests.distribution.installed.polkit.test_installed_polkit_stag
 
 
 class RootProxyTests(unittest.TestCase):
+    def test_root_process_uses_fixed_empty_environment_and_isolated_no_bytecode_python(self):
+        from scripts.linux_release import installed_campaign
+        selected = {'host': '127.0.0.1', 'port': 2222, 'user': 'qa'}
+        actor = Mock(nonce=EXECUTION['execution_nonce'], value={'vm_id': 'owned', 'ssh': selected})
+        process = Mock(pid=901)
+        with patch.object(installed_campaign, 'command', return_value=['fixed-ssh']) as command, patch.object(
+                polkit_proxy.subprocess, 'Popen', return_value=process), patch.object(
+                polkit_proxy, 'process_identity', return_value={'pid': 901}), patch.object(
+                polkit_proxy.selectors, 'DefaultSelector'), patch.object(polkit_proxy.os, 'set_blocking'):
+            polkit_proxy.Proxy(actor, selected, EXECUTION, ACCOUNT)
+        arguments = command.call_args.args[1]
+        self.assertEqual(arguments[:9], ['/usr/bin/sudo', '-n', '/usr/bin/env', '-i',
+            'PATH=/usr/bin:/bin', 'LANG=C.UTF-8', '/usr/bin/python3', '-I', '-B'])
+        self.assertEqual(arguments[-1], EXECUTION['driver_tree'])
+
     def proxy(self):
         value = polkit_proxy.Proxy.__new__(polkit_proxy.Proxy)
         value.execution, value.account, value.vm_id = copy.deepcopy(EXECUTION), ACCOUNT, 'owned'
@@ -65,6 +81,28 @@ class RootProxyTests(unittest.TestCase):
             with self.assertRaises(SystemExit) as refused:
                 exec(polkit_proxy.BOOTSTRAP, {})
         self.assertEqual(refused.exception.code, 2)
+
+    def test_unhashed_importable_files_or_bytecode_directory_cannot_enter_root_capture(self):
+        class Entry:
+            def __init__(self, name, mode=stat.S_IFREG | 0o444):
+                self.name, self.mode = name, mode
+                self.suffix = '.' + name.rpartition('.')[2]
+                self.parents = []
+            def lstat(self):
+                return SimpleNamespace(st_mode=self.mode, st_uid=0, st_gid=0, st_size=100)
+            def read_bytes(self):
+                return json.dumps({'format_version': 1, 'driver_tree': 'c' * 40, 'files_sha256': {}}).encode()
+            def __truediv__(self, name):
+                return marker if name == 'capture.json' else root
+        marker = Entry('capture.json')
+        root = Entry('root', stat.S_IFDIR | 0o555)
+        for name, mode in [('module.pyc', stat.S_IFREG | 0o444), ('module.so', stat.S_IFREG | 0o444),
+                           ('extra.txt', stat.S_IFREG | 0o444), ('__pycache__', stat.S_IFDIR | 0o555)]:
+            root.rglob = lambda _: [Entry(name, mode)]
+            with patch('pathlib.Path', return_value=root), patch('sys.argv', ['fixed', 'c' * 40]):
+                with self.subTest(name=name), self.assertRaises(SystemExit) as refused:
+                    exec(polkit_proxy.BOOTSTRAP, {})
+            self.assertEqual(refused.exception.code, 2)
 
 
 class RootEndpointTests(unittest.TestCase):

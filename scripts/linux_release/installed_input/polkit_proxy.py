@@ -28,15 +28,22 @@ info=marker.lstat()
 if not stat.S_ISREG(info.st_mode) or info.st_uid!=0 or info.st_gid!=0 or info.st_mode&0o222 or info.st_size>1048576:
  raise SystemExit(2)
 capture=json.loads(marker.read_bytes())
-if set(capture)!={'format_version','driver_tree','files_sha256'} or capture['format_version']!=1 or capture['driver_tree']!=tree:
+if set(capture)!={'format_version','driver_tree','files_sha256'} or type(capture['format_version']) is not int or capture['format_version']!=1 or capture['driver_tree']!=tree:
  raise SystemExit(2)
 actual={}
-for node in root.rglob('*'):
+for index,node in enumerate(root.rglob('*')):
  info=node.lstat()
- if info.st_uid!=0 or info.st_gid!=0 or info.st_mode&0o022 or not (stat.S_ISDIR(info.st_mode) or stat.S_ISREG(info.st_mode)):
+ if index>=512 or info.st_uid!=0 or info.st_gid!=0 or info.st_mode&0o022 or not (stat.S_ISDIR(info.st_mode) or stat.S_ISREG(info.st_mode)):
   raise SystemExit(2)
- if node.suffix=='.py':
+ if stat.S_ISDIR(info.st_mode):
+  if node.name=='__pycache__':
+   raise SystemExit(2)
+ elif node==marker:
+  continue
+ elif node.suffix=='.py' and not info.st_mode&0o222 and info.st_size<=1048576:
   actual[node.relative_to(root).as_posix()]=hashlib.sha256(node.read_bytes()).hexdigest()
+ else:
+  raise SystemExit(2)
 if actual!=capture['files_sha256']:
  raise SystemExit(2)
 sys.path.insert(0,str(root))
@@ -60,7 +67,8 @@ class Proxy:
         self.selector = selectors.DefaultSelector()
         try:
             from ..installed_campaign import command
-            arguments = ['/usr/bin/sudo', '-n', '/usr/bin/python3', '-I', '-c', BOOTSTRAP,
+            arguments = ['/usr/bin/sudo', '-n', '/usr/bin/env', '-i', 'PATH=/usr/bin:/bin',
+                         'LANG=C.UTF-8', '/usr/bin/python3', '-I', '-B', '-c', BOOTSTRAP,
                          self.execution['driver_tree']]
             self.process = subprocess.Popen(command(target, arguments), stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, start_new_session=True, bufsize=0)
