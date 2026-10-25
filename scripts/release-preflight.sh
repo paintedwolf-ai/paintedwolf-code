@@ -118,7 +118,7 @@ if ! jq -e '
     and (.package_extensions | type == "array" and length > 0 and all(.[]; test("^[A-Za-z0-9.]+$")))
     and (.updater_extension == null or (.updater_extension | test("^[A-Za-z0-9.]+$")))
     and (.publication == "candidate" or .updater_extension != null))
-  and all(.platforms[] | select(.goos == "linux"); .package_extensions == ["deb", "rpm"] and .updater_extension == null)
+  and all(.platforms[] | select(.goos == "linux"); .package_extensions == ["deb", "rpm", "pkg.tar.zst"] and .updater_extension == null)
   and ([.platforms[] | select(.goos == "linux") | .updater_key] | sort
     == ["linux-aarch64", "linux-x86_64"])
   and ([.platforms[] | select(.goos == "windows") | .updater_key]
