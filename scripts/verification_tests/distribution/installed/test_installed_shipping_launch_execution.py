@@ -81,6 +81,42 @@ class ShippingLaunchTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'one existing project'):
                 launch_command('pw-open-cold-start', BOOTSTRAP, None, [], binding)
 
+    def test_public_command_uses_flat_package_identity_while_live_engine_uses_sealed_identity(self):
+        logical = '/opt/app/bin/pw'
+        flat = {'sha256': 'b' * 64, 'device': 1, 'inode': 42, 'bytes': 100, 'mode': 0o755}
+        sealed = {**flat, 'inode': 84}
+        binding = {'artifact': {}, 'source_commit': 'a' * 40, 'install_root': '/opt/app',
+                   'images': {logical: sealed}, 'package_images': {logical: flat}}
+        with tempfile.TemporaryDirectory() as directory:
+            with patch(PREFIX + 'shipping_launch.file_identity', return_value={**flat, 'header': b'ELF'}):
+                command, facts = launch_command('pw-open-cold-start', BOOTSTRAP, None, [directory], binding)
+            self.assertEqual(command, [logical, 'open', directory])
+            self.assertEqual(facts['cli_image'], flat)
+            for changed in ({**flat, 'inode': 84}, {**flat, 'device': 2}, {**flat, 'sha256': 'c' * 64},
+                            {**flat, 'bytes': 99}, {**flat, 'mode': 0o777}):
+                with patch(PREFIX + 'shipping_launch.file_identity', return_value={**changed, 'header': b'ELF'}):
+                    with self.assertRaisesRegex(ValueError, 'differs'):
+                        launch_command('pw-open-cold-start', BOOTSTRAP, None, [directory], binding)
+            app = InstalledApp(binding)
+            app.process = SimpleNamespace(pid=100)
+            app.require_engine = Mock()
+            engine = {'pid': 200, 'parent_pid': 100, 'start_time_ticks': 12}
+            record = {'pid': 200, 'host': '127.0.0.1', 'port': 12345}
+            with patch(PREFIX + 'app.process_identity', return_value=engine), \
+                    patch(PREFIX + 'app.descends', return_value=[engine]), \
+                    patch(PREFIX + 'app.engine_image', return_value=(1, 42, 100)), \
+                    patch(PREFIX + 'app.EngineAPI') as api:
+                with self.assertRaisesRegex(ValueError, 'running engine differs'):
+                    app._bind_engine(record, Path(directory))
+                api.assert_not_called()
+            with patch(PREFIX + 'app.process_identity', return_value=engine), \
+                    patch(PREFIX + 'app.descends', return_value=[engine]), \
+                    patch(PREFIX + 'app.engine_image', return_value=(1, 84, 100)), \
+                    patch(PREFIX + 'app.EngineAPI') as api:
+                api.return_value.request.return_value = {'status': 200}
+                self.assertTrue(app._bind_engine(record, Path(directory)))
+                self.assertEqual(app.observations['engine_identity'], engine)
+
     def test_desktop_route_invokes_gio_and_refuses_dbus_or_alternate_exec(self):
         text = ('[Desktop Entry]\nType=Application\nExec=' + str(BOOTSTRAP)
                 + ' %U\nStartupWMClass=' + APP + '\n')

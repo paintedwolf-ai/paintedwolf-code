@@ -17,7 +17,7 @@ def launch_command(mode, launcher, storage, arguments, binding):
         cli = Path(binding['install_root']) / 'bin/pw'
         actual = file_identity(cli)
         actual.pop('header')
-        if actual != binding['images'].get(str(cli)):
+        if actual != binding.get('package_images', binding['images']).get(str(cli)):
             raise ValueError('cold CLI differs from the selected installed image')
         return [str(cli), 'open', *arguments], {'desktop_entry_launch_proven': False, 'cli_image': actual}
     if mode != 'desktop-entry':
