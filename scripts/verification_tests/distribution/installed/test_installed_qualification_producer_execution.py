@@ -112,7 +112,7 @@ class InstalledQualificationProducerTests(unittest.TestCase):
             execution=root/"executed"
             leaf=execution/"guest/leaf"
             leaf.mkdir(parents=True)
-            target={"id":"guest","artifact_id":"app","environment_id":"fixture","variant_id":"fixture-variant",
+            target={"id":"guest","artifact_id":"app","environment_id":"fixture","variant_id":"fixture-variant","case_selection":None,
                     "snapshot":{"kind":"package-inventory","value":"e"*64,"channel":None}}
             plan={"targets":[target]}
             (execution/"plan.json").write_text(json.dumps(plan))

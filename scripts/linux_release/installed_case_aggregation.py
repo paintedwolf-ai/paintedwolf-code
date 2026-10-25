@@ -5,6 +5,7 @@ import hashlib
 import json
 
 from .installed_input.protocol import binding
+from .installed_coverage import mismatches
 from .installed_variants import requirements
 
 
@@ -23,14 +24,17 @@ def platform_facts(facts):
     return result
 
 
-def merge_variant(identifier, samples, selected):
+def merge_variant(variant, samples, selected):
+    identifier = variant['id']
     first, first_execution = samples[0]
     identity = {key: first_execution[key] for key in ('source_commit', 'driver_tree', 'artifact_id', 'environment_id')}
     claims, seen, facts = {}, set(), {}
+    explicit_failure, independent_unverified = False, False
     expected_facts = platform_facts(first['environment_facts'])
     if len(first['variants']) != 1:
         raise ValueError('case execution requires one exact support variant')
     observed = first['variants'][0]['observed']
+    platform_valid = not mismatches(observed, variant)
     fallback = {case['id']: [] for case in first['cases']}
     for row, execution in samples:
         binding(execution)
@@ -56,6 +60,12 @@ def merge_variant(identifier, samples, selected):
                      if selection is not None else set(selected['cases']))
         if set(claims) & requested or requested - set(selected['cases']):
             raise ValueError('case executions overlap or invent a declared case claim')
+        explicit_failure = explicit_failure or row['status'] == 'failed' or row['variants'][0]['status'] == 'failed'
+        independent_unverified = independent_unverified or row['status'] == 'skipped' or row['variants'][0]['status'] == 'skipped'
+        if all(case['status'] == 'passed' for case in row['cases']):
+            independent_unverified = independent_unverified or row['status'] == 'unverified' or row['variants'][0]['status'] == 'unverified'
+        elif row['status'] == 'passed':
+            raise ValueError('complete row pass contradicts a non-passing case result')
         actual = {case['id']: case for case in row['cases']}
         if len(actual) != len(row['cases']) or set(actual) != set(selected['cases']):
             raise ValueError('case execution omitted or repeated a declared case result')
@@ -68,8 +78,8 @@ def merge_variant(identifier, samples, selected):
         facts[nonce] = row['environment_facts']
     cases = [claims.get(key, {'id': key, 'status': 'unverified', 'evidence': fallback[key]})
              for key in selected['cases']]
-    status = ('failed' if any(case['status'] == 'failed' for case in cases) else
-              'unverified' if any(case['status'] != 'passed' for case in cases) else 'passed')
+    status = ('failed' if explicit_failure or any(case['status'] == 'failed' for case in cases) else
+              'unverified' if independent_unverified or not platform_valid or any(case['status'] != 'passed' for case in cases) else 'passed')
     return {**first, 'cases': cases, 'status': status,
             'variants': [{'id': identifier, 'status': status, 'observed': observed}]}, facts
 
@@ -78,10 +88,16 @@ def aggregate(catalog, observations, known):
     results = []
     for row_id, executions in sorted(observations.items()):
         selected = known[row_id]
-        required = {item['id'] for item in requirements(catalog, selected['environment'], selected['capability'])}
-        grouped, nonces, authority = {}, set(), None
+        required = {item['id']: item for item in requirements(catalog, selected['environment'], selected['capability'])}
+        grouped, nonces, authority, mode = {}, set(), None, None
         for identifier, row, execution in executions:
             binding(execution)
+            current_mode = row['tier'], row['execution']
+            if (row['tier'] != selected['tier'] or row['execution'] not in {'native', 'emulated'}
+                    or row['execution'] == 'emulated' and not selected['emulation_allowed']
+                    or mode is not None and mode != current_mode):
+                raise ValueError('case execution changed its tier/execution or violated its native floor')
+            mode = current_mode
             current = tuple(execution[key] for key in ('source_commit', 'driver_tree', 'artifact_id', 'environment_id'))
             if authority is not None and current != authority:
                 raise ValueError('case execution changed its artifact/source/driver/environment binding')
@@ -94,16 +110,27 @@ def aggregate(catalog, observations, known):
             grouped.setdefault(identifier, []).append((row, execution))
         actual, captured_facts = {}, {}
         for identifier, samples in grouped.items():
-            actual[identifier], captured_facts[identifier] = merge_variant(identifier, samples, selected)
+            actual[identifier], captured_facts[identifier] = merge_variant(required[identifier], samples, selected)
+        snapshots = {}
+        for identifier, row in actual.items():
+            snapshot = row['variants'][0]['observed']['snapshot']['value']
+            release = required[identifier]['release']['id']
+            snapshots.setdefault(snapshot, []).append((release, identifier))
+        for samples in snapshots.values():
+            if len({release for release, _ in samples}) > 1:
+                for _, identifier in samples:
+                    if actual[identifier]['status'] != 'failed':
+                        actual[identifier]['status'] = 'unverified'
+                        actual[identifier]['variants'][0]['status'] = 'unverified'
         first = next(iter(actual.values()))
         cases = []
         for key in selected['cases']:
             samples = [next(case for case in row['cases'] if case['id'] == key) for row in actual.values()]
             status = ('failed' if any(case['status'] == 'failed' for case in samples) else
-                      'unverified' if set(actual) != required or any(case['status'] != 'passed' for case in samples) else 'passed')
+                      'unverified' if set(actual) != set(required) or any(case['status'] != 'passed' for case in samples) else 'passed')
             cases.append({'id': key, 'status': status, 'evidence': [record for case in samples for record in case['evidence']]})
-        status = ('failed' if any(case['status'] == 'failed' for case in cases) else
-                  'unverified' if any(case['status'] != 'passed' for case in cases) else 'passed')
+        status = ('failed' if any(row['status'] == 'failed' for row in actual.values()) or any(case['status'] == 'failed' for case in cases) else
+                  'unverified' if any(row['status'] != 'passed' for row in actual.values()) or any(case['status'] != 'passed' for case in cases) else 'passed')
         facts = {name: json.dumps({identifier: {nonce: {
                     'sha256': hashlib.sha256(values[name].encode()).hexdigest(),
                     'bytes': len(values[name].encode())} for nonce, values in executions.items()}

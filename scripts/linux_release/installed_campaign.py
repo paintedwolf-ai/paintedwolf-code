@@ -169,6 +169,16 @@ def validate_plan(plan: dict, final: dict, catalog: dict | None = None) -> tuple
     return source, tree, targets
 
 
+
+def require_leaf_authority(row, selected, artifact, source):
+    """Partial cases do not waive the selected artifact or native execution floor."""
+    if (row['source_commit'] != source or row['tier'] != selected['tier']
+            or artifact['installation'] != selected['installation']
+            or artifact['architecture'] != selected['architecture']
+            or row['execution'] not in {'native', 'emulated'}
+            or row['execution'] == 'emulated' and not selected['emulation_allowed']):
+        raise ValueError('leaf admission refused source/artifact/tier/native authority')
+
 def execute(plan: dict, final: dict, catalog: dict, output: Path) -> dict:
     source, tree, targets = validate_plan(plan, final, catalog)
     output.mkdir(parents=True, mode=0o700, exist_ok=False)
@@ -177,6 +187,7 @@ def execute(plan: dict, final: dict, catalog: dict, output: Path) -> dict:
     registrations = {"format_version": 1, "installations": {item["id"]: registry(catalog, item["id"]) for item in catalog["installations"]}}
     (output / "driver-registry.json").write_text(json.dumps(registrations, sort_keys=True, separators=(",", ":")) + "\n")
     variants, nonces = {}, set()
+    artifacts = evidence.artifacts(final, source)
     known = {row["id"]: row for row in expand(catalog)}
     for target in targets:
         leaf = run_guest(target, source, tree, output)
@@ -193,6 +204,8 @@ def execute(plan: dict, final: dict, catalog: dict, output: Path) -> dict:
             selected = known.get(row["row_id"])
             if selected is None or selected["environment"] != target["environment_id"]:
                 raise ValueError("executed guest changed the selected support environment")
+            artifact = artifacts[row['artifact_id']]
+            require_leaf_authority(row, selected, artifact, source)
             required = {item["id"] for item in requirements(catalog, selected["environment"], selected["capability"])}
             if target["variant_id"] not in required:
                 raise ValueError("guest executed a row outside the selected variant applicability")
