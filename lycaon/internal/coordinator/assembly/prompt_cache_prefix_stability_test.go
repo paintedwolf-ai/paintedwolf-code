@@ -311,8 +311,8 @@ func TestPromptCacheMidTurnGateFlipsPreservePrefixCache(t *testing.T) {
 	eng.SetTurnSurfaceID(sess.ID, "implement_dispatch")
 	var firstStandingContent string
 	var firstStandingKey string
-	var firstStandingMarkIdx int = -1
-	var firstHistoryMarkIdx int = -1
+	firstStandingMarkIdx := -1
+	firstHistoryMarkIdx := -1
 
 	type testCase struct {
 		name            string

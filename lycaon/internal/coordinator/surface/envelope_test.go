@@ -211,11 +211,11 @@ func TestPartialWorkerSummaryJobIDs(t *testing.T) {
 		t.Fatalf("ids = %v want [j-partial]", ids)
 	}
 
-	superseded := append(history, api.Message{
+	history = append(history, api.Message{
 		Role:          api.MessageRoleAssistant,
 		WorkerSummary: &api.WorkerSummaryMeta{WorkerID: "j-partial", Status: api.WorkerSummaryStatusComplete},
 	})
-	if ids := surface.PartialWorkerSummaryJobIDs(superseded); len(ids) != 0 {
+	if ids := surface.PartialWorkerSummaryJobIDs(history); len(ids) != 0 {
 		t.Fatalf("superseded partial summary ids = %v, want []", ids)
 	}
 }
