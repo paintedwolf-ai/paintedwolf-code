@@ -1,0 +1,13 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/internal/sourcesnapshot/store_test.go",
+  "kind": "test_suite",
+  "workstream": "store-health",
+  "disposition": "retain",
+  "reason": "These tests exercise the public snapshot lifecycle, content identity, freshness, and incremental reuse. New migration and metadata-race contracts have separate files; retain the existing cohesive public API suite without adding more unrelated cases.",
+  "reviewed_commit": "1715fadedd158a5e720a137d0e4c243e95685783",
+  "ceiling": 643,
+  "boundaries": {
+    "lycaon/internal/sourcesnapshot/store_test.go": "1eff5bee001776283a67466d2bf48977e9528e3c76fe3e0336d880031f1852a3"
+  }
+}

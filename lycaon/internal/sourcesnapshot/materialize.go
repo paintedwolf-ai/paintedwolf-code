@@ -10,15 +10,12 @@ import (
 // substitutes a newer live body when the recorded content is unavailable.
 // The caller owns the returned tree and removes it after the consumer stops.
 func (s *Store) Materialize(ctx context.Context, id, root string, paths []string) (string, error) {
-	release, err := s.acquireStorage(ctx, false)
+	view, err := s.open(ctx, id)
 	if err != nil {
 		return "", err
 	}
-	defer release()
-	snapshot, err := s.Get(ctx, id)
-	if err != nil {
-		return "", err
-	}
+	defer view.release()
+	snapshot := view.Snapshot
 	releaseRoots, err := s.acquireRootStorage(ctx, snapshot.Roots, false)
 	if err != nil {
 		return "", err
@@ -33,16 +30,16 @@ func (s *Store) Materialize(ctx context.Context, id, root string, paths []string
 	if !rootFound {
 		return "", fmt.Errorf("root %q is outside snapshot %s", root, id)
 	}
-	tree := materializer{store: s, snapshotID: id, root: root}
+	tree := materializer{store: s, view: view, root: root}
 	return tree.create(ctx, paths)
 }
 
-// materializer owns one disposable execution tree while its snapshot is leased.
+// materializer owns one disposable execution tree while its snapshot is held.
 type materializer struct {
-	store      *Store
-	snapshotID string
-	root       string
-	dir        string
+	store *Store
+	view  *snapshotView
+	root  string
+	dir   string
 }
 
 func (m *materializer) create(ctx context.Context, paths []string) (string, error) {
@@ -58,10 +55,10 @@ func (m *materializer) create(ctx context.Context, paths []string) (string, erro
 		}
 	}()
 	if paths == nil {
-		err = m.store.ForEachEntry(ctx, m.snapshotID, func(entry Entry) error { return m.writeEntry(ctx, entry) })
+		err = m.store.forEachManifestEntry(ctx, m.view.manifests[m.root], m.root, func(entry Entry) error { return m.writeEntry(ctx, entry) })
 	} else {
 		for _, rel := range paths {
-			entry, found, lookupErr := m.store.Lookup(ctx, m.snapshotID, m.root, rel)
+			entry, found, lookupErr := m.store.lookup(ctx, m.view, m.root, rel)
 			if lookupErr != nil {
 				err = lookupErr
 				break

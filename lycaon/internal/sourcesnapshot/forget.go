@@ -1,44 +1,30 @@
 package sourcesnapshot
 
-import "context"
+import (
+	"context"
+
+	"github.com/lycaon/lycaon/internal/db"
+)
 
 // forgetBatch bounds one delete of vanished cache rows.
 const forgetBatch = 1024
 
-// forgetVanished removes cached paths absent from a complete survey.
+// forgetVanished removes cached paths absent from a complete survey. It
+// merges the observation index with the staged survey a page at a time.
 func (s *Store) forgetVanished(ctx context.Context, c *rootCandidate) error {
 	for _, b := range c.boundaries {
 		if b.Budgeted() {
 			return nil
 		}
 	}
-	admitted, err := s.db.QueryContext(ctx, `
-SELECT path FROM source_manifest_staging WHERE build_id = ? AND root_path = ? ORDER BY path`, c.build, c.root.Path)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = admitted.Close() }()
-	next := func() (string, bool, error) {
-		if !admitted.Next() {
-			return "", false, admitted.Err()
-		}
-		var path string
-		err := admitted.Scan(&path)
-		return path, err == nil, err
-	}
-	current, more, err := next()
-	if err != nil {
-		return err
-	}
+	admitted := stagedPaths{store: s, build: c.build}
 	var stale []string
-	err = s.observations.ForEachPath(ctx, c.root.Path, func(observed string) error {
-		for more && current < observed {
-			var err error
-			if current, more, err = next(); err != nil {
-				return err
-			}
+	err := s.observations.ForEachPath(ctx, c.root.Path, func(observed string) error {
+		held, err := admitted.holds(ctx, observed)
+		if err != nil {
+			return err
 		}
-		if !more || current != observed {
+		if !held {
 			stale = append(stale, observed)
 		}
 		return nil
@@ -46,10 +32,43 @@ SELECT path FROM source_manifest_staging WHERE build_id = ? AND root_path = ? OR
 	if err != nil {
 		return err
 	}
-	if err := admitted.Err(); err != nil {
-		return err
-	}
 	return s.forgetPaths(ctx, c.root.Path, stale)
+}
+
+// stagedPaths answers membership for paths asked in ascending order.
+type stagedPaths struct {
+	store *Store
+	build string
+	page  []string
+	after string
+	done  bool
+}
+
+func (p *stagedPaths) holds(ctx context.Context, path string) (bool, error) {
+	for {
+		for len(p.page) > 0 && p.page[0] < path {
+			p.page = p.page[1:]
+		}
+		if len(p.page) > 0 {
+			return p.page[0] == path, nil
+		}
+		if p.done {
+			return false, nil
+		}
+		rows, err := p.store.queries.ListSourceManifestStagingPage(ctx, db.ListSourceManifestStagingPageParams{
+			BuildID: p.build, After: p.after, PageSize: stagingPage,
+		})
+		if err != nil {
+			return false, err
+		}
+		for _, row := range rows {
+			p.page = append(p.page, row.Path)
+		}
+		p.done = len(rows) < stagingPage
+		if len(rows) > 0 {
+			p.after = rows[len(rows)-1].Path
+		}
+	}
 }
 
 // forgetPaths drops cache rows in bounded batches.

@@ -11,9 +11,11 @@ const (
 	// Retention keeps inactive snapshot cache entries available for reuse.
 	Retention          = 7 * 24 * time.Hour
 	snapshotSweepBatch = 128
-	// chunkSweepBatch bounds one delete of unreferenced chunks and their
-	// entries, so a sweep never holds the writer for long.
-	chunkSweepBatch = 16
+	manifestSweepBatch = 64
+	// chunkSweepEntries bounds the entries one sweep transaction deletes, so
+	// the sweep never holds the writer for long.
+	chunkSweepEntries = 16384
+	staleBuildBatch   = 16
 )
 
 // ReleaseRoots drops the observation index and the snapshots of roots
@@ -27,11 +29,6 @@ func (s *Store) ReleaseRoots(ctx context.Context, roots []Root) error {
 	if len(normalized) == 0 {
 		return nil
 	}
-	release, err := s.acquireStorage(ctx, false)
-	if err != nil {
-		return err
-	}
-	defer release()
 	rootRelease, err := s.acquireRootStorage(ctx, normalized, true)
 	if err != nil {
 		return err
@@ -90,34 +87,136 @@ func singleRootKeys(roots []Root) []string {
 	return out
 }
 
-// Sweep removes expired manifests, the chunks nothing names any more, and
-// staging rows an earlier process left behind.
+// Sweep removes expired snapshots, then the manifests and chunks nothing
+// names or pins any more, then staging an earlier process left behind. It
+// runs to completion in short transactions; concurrent sweeps share one run.
 func (s *Store) Sweep(ctx context.Context, createdBefore time.Time) error {
 	if s == nil {
 		return nil
 	}
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	gate := s.storageAdmission()
-	if !gate.TryAcquire(storageExclusive) {
-		return ErrMaintenanceDeferred
-	}
-	defer gate.Release(storageExclusive)
+	s.sweepMu.Lock()
+	defer s.sweepMu.Unlock()
 	cutoff := db.FormatTime(createdBefore.UTC())
-	if _, err := s.queries.DeleteExpiredSourceSnapshotHeads(ctx, db.DeleteExpiredSourceSnapshotHeadsParams{
-		CreatedBefore: cutoff, BatchLimit: snapshotSweepBatch,
-	}); err != nil {
+	for {
+		removed, err := s.queries.DeleteExpiredSourceSnapshotHeads(ctx, db.DeleteExpiredSourceSnapshotHeadsParams{
+			CreatedBefore: cutoff, BatchLimit: snapshotSweepBatch,
+		})
+		if err != nil {
+			return err
+		}
+		if removed < snapshotSweepBatch {
+			break
+		}
+	}
+	for {
+		removed, err := s.queries.DeleteUnreferencedSourceSnapshots(ctx, db.DeleteUnreferencedSourceSnapshotsParams{
+			CreatedBefore: cutoff, BatchLimit: snapshotSweepBatch,
+		})
+		if err != nil {
+			return err
+		}
+		if removed < snapshotSweepBatch {
+			break
+		}
+	}
+	if err := s.sweepManifests(ctx); err != nil {
 		return err
 	}
-	if _, err := s.queries.DeleteUnreferencedSourceSnapshots(ctx, db.DeleteUnreferencedSourceSnapshotsParams{
-		CreatedBefore: cutoff, BatchLimit: snapshotSweepBatch,
-	}); err != nil {
+	if err := s.sweepChunks(ctx); err != nil {
 		return err
 	}
-	if _, err := s.queries.DeleteUnreferencedSourceManifestChunks(ctx, chunkSweepBatch); err != nil {
+	return s.sweepStaleBuilds(ctx)
+}
+
+func (s *Store) sweepManifests(ctx context.Context) error {
+	after := ""
+	for {
+		ids, err := s.queries.ListUnreferencedSourceManifests(ctx, db.ListUnreferencedSourceManifestsParams{
+			After: after, BatchLimit: manifestSweepBatch,
+		})
+		if err != nil || len(ids) == 0 {
+			return err
+		}
+		err = s.pins.sweepUnpinned(ctx, func(manifestPinned, _ func(string) bool) error {
+			return s.inTx(ctx, func(q *db.Queries) error {
+				for _, id := range ids {
+					if manifestPinned(id) {
+						continue
+					}
+					if _, err := q.DeleteUnreferencedSourceManifest(ctx, id); err != nil {
+						return err
+					}
+				}
+				return nil
+			})
+		})
+		if err != nil {
+			return err
+		}
+		after = ids[len(ids)-1]
+	}
+}
+
+func (s *Store) sweepChunks(ctx context.Context) error {
+	after := ""
+	for {
+		rows, err := s.queries.ListUnreferencedSourceManifestChunks(ctx, db.ListUnreferencedSourceManifestChunksParams{
+			After: after, BatchLimit: chunkSweepEntries / chunkMinEntries,
+		})
+		if err != nil || len(rows) == 0 {
+			return err
+		}
+		// Stop each transaction once it carries chunkSweepEntries entries.
+		taken, entries := 0, int64(0)
+		for taken < len(rows) && (taken == 0 || entries+rows[taken].EntryCount <= chunkSweepEntries) {
+			entries += rows[taken].EntryCount
+			taken++
+		}
+		batch := rows[:taken]
+		err = s.pins.sweepUnpinned(ctx, func(_, chunkPinned func(string) bool) error {
+			return s.inTx(ctx, func(q *db.Queries) error {
+				for _, row := range batch {
+					if chunkPinned(row.ID) {
+						continue
+					}
+					if _, err := q.DeleteUnreferencedSourceManifestChunk(ctx, row.ID); err != nil {
+						return err
+					}
+				}
+				return nil
+			})
+		})
+		if err != nil {
+			return err
+		}
+		after = batch[len(batch)-1].ID
+	}
+}
+
+func (s *Store) sweepStaleBuilds(ctx context.Context) error {
+	for {
+		builds, err := s.queries.ListStaleSourceManifestBuilds(ctx, db.ListStaleSourceManifestBuildsParams{
+			Prefix: buildPrefix, BuildLimit: staleBuildBatch,
+		})
+		if err != nil || len(builds) == 0 {
+			return err
+		}
+		for _, build := range builds {
+			if err := s.releaseBuild(ctx, build); err != nil {
+				return err
+			}
+		}
+	}
+}
+
+func (s *Store) inTx(ctx context.Context, fn func(*db.Queries) error) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
 		return err
 	}
-	_, err := s.queries.DeleteStaleSourceManifestStaging(ctx, buildPrefix)
-	return err
+	defer func() { _ = tx.Rollback() }()
+	if err := fn(s.queries.WithTx(tx)); err != nil {
+		return err
+	}
+	return tx.Commit()
 }

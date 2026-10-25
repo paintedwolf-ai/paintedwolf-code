@@ -26,9 +26,11 @@ type deltaTracker struct {
 }
 
 type rootDelta struct {
-	// covered names the full observation needed for incremental publication.
-	covered string
-	scopeID string
+	// covered names the manifest incremental publication builds on, and
+	// coveredBoundaries the directories that observation did not enter.
+	covered           string
+	coveredBoundaries []Boundary
+	scopeID           string
 	// paths holds each changed path with the sequence it arrived at.
 	paths map[string]uint64
 	// overflow requires a full survey after path loss or scope changes.
@@ -119,10 +121,11 @@ func (t *deltaTracker) root(root string) *rootDelta {
 
 // A publication consumes changes through the plan's sequence.
 type deltaPlan struct {
-	// covered is the head the changes apply to; empty means survey the root.
-	covered string
-	scopeID string
-	paths   []string
+	// covered is the manifest the changes apply to; empty means survey the root.
+	covered    string
+	boundaries []Boundary
+	scopeID    string
+	paths      []string
 	// upTo leaves later changes pending for the next publication.
 	upTo uint64
 	// overflow requires a full survey of the candidate.
@@ -151,6 +154,7 @@ func (t *deltaTracker) begin(root, scopeID string) deltaPlan {
 		return plan
 	}
 	plan.covered = d.covered
+	plan.boundaries = append([]Boundary(nil), d.coveredBoundaries...)
 	plan.rescope = d.rescopedAt > 0
 	plan.paths = make([]string, 0, len(d.paths))
 	for rel := range d.paths {
@@ -161,6 +165,7 @@ func (t *deltaTracker) begin(root, scopeID string) deltaPlan {
 
 func (d *rootDelta) resetLocked() {
 	d.covered = ""
+	d.coveredBoundaries = nil
 	d.overflow = false
 	d.rescopedAt = 0
 	clear(d.paths)
@@ -189,7 +194,7 @@ func (t *deltaTracker) pending(root string, plan deltaPlan) deltaPlan {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	d := t.root(root)
-	next := deltaPlan{covered: plan.covered, upTo: t.seq, rescope: d.rescopedAt > plan.upTo}
+	next := deltaPlan{covered: plan.covered, boundaries: plan.boundaries, upTo: t.seq, rescope: d.rescopedAt > plan.upTo}
 	if d.overflow {
 		next.covered = ""
 		next.overflow = true
@@ -205,7 +210,7 @@ func (t *deltaTracker) pending(root string, plan deltaPlan) deltaPlan {
 }
 
 // Publication consumes observed changes through upTo.
-func (t *deltaTracker) coveredBy(root, head, scopeID string, upTo uint64, exact bool) {
+func (t *deltaTracker) coveredBy(root, manifest string, boundaries []Boundary, scopeID string, upTo uint64, exact bool) {
 	root = filepath.Clean(root)
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -220,7 +225,8 @@ func (t *deltaTracker) coveredBy(root, head, scopeID string, upTo uint64, exact 
 			delete(d.paths, rel)
 		}
 	}
-	d.covered = head
+	d.covered = manifest
+	d.coveredBoundaries = append([]Boundary(nil), boundaries...)
 	d.scopeID = scopeID
 	if d.overflowAt <= upTo {
 		d.overflow = false

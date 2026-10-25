@@ -43,6 +43,8 @@ func TestReleaseRootsGivesUpSnapshotsAndTheirManifests(t *testing.T) {
 	}{
 		{"snapshots", `SELECT COUNT(*) FROM source_snapshots`},
 		{"snapshot heads", `SELECT COUNT(*) FROM source_snapshot_heads`},
+		{"manifests", `SELECT COUNT(*) FROM source_manifests`},
+		{"manifest layout", `SELECT COUNT(*) FROM source_manifest_layout`},
 		{"manifest chunks", `SELECT COUNT(*) FROM source_manifest_chunks`},
 		{"manifest entries", `SELECT COUNT(*) FROM source_manifest_entries`},
 	} {
@@ -105,8 +107,8 @@ func TestPublishLeavesNoStagingBehind(t *testing.T) {
 		t.Fatalf("staging rows after publish = %d want 0", got)
 	}
 	_, err = store.db.ExecContext(t.Context(), `
-		INSERT INTO source_manifest_staging (build_id, bucket, root_path, path, sha256, git_oid, identity, size, mode, modified_ns)
-		VALUES ('deadbeef-1', 0, ?, 'stale.txt', '', '', 'stat', 1, 420, 0)`, root)
+		INSERT INTO source_manifest_staging (build_id, path, sha256, git_oid, identity, size, mode, modified_ns)
+		VALUES ('deadbeef-1', 'stale.txt', '', '', 'stat', 1, 420, 0), ('ffffffff-1', 'stale.txt', '', '', 'stat', 1, 420, 0)`)
 	testutil.FailErr(t, "plant an abandoned build", err)
 	_, err = store.Ensure(t.Context(), Request{Roots: []Root{{Path: root}}})
 	testutil.FailErr(t, "publish again", err)

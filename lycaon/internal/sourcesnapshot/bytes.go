@@ -138,10 +138,11 @@ func (e Entry) liveContentMatches(ctx context.Context) bool {
 // MovedSince compares live content for the requested paths, or all admitted files.
 // Matching metadata avoids a read; changed metadata requires the recorded digest.
 func (s *Store) MovedSince(ctx context.Context, id string, paths []string) ([]string, error) {
-	snapshot, err := s.Get(ctx, id)
+	view, err := s.open(ctx, id)
 	if err != nil {
 		return nil, err
 	}
+	defer view.release()
 	var moved []string
 	check := func(entry Entry) {
 		if !entry.liveContentMatches(ctx) {
@@ -149,15 +150,15 @@ func (s *Store) MovedSince(ctx context.Context, id string, paths []string) ([]st
 		}
 	}
 	if len(paths) == 0 {
-		err := s.ForEachEntry(ctx, id, func(entry Entry) error {
+		err := s.forEachViewEntry(ctx, view, func(entry Entry) error {
 			check(entry)
 			return nil
 		})
 		return moved, err
 	}
 	for _, rel := range paths {
-		for _, root := range snapshot.Roots {
-			entry, ok, err := s.Lookup(ctx, id, root.Path, cleanRelDir(rel))
+		for _, root := range view.Roots {
+			entry, ok, err := s.lookup(ctx, view, root.Path, cleanRelDir(rel))
 			if err != nil {
 				return nil, err
 			}
@@ -172,23 +173,17 @@ func (s *Store) MovedSince(ctx context.Context, id string, paths []string) ([]st
 
 // IsCurrent verifies the admitted file set and live content identities.
 func (s *Store) IsCurrent(ctx context.Context, id string) (bool, error) {
-	storageRelease, err := s.acquireStorage(ctx, false)
+	view, err := s.open(ctx, id)
 	if err != nil {
 		return false, err
 	}
-	defer storageRelease()
-	snapshot, err := s.Get(ctx, id)
-	if err != nil {
-		return false, err
-	}
+	defer view.release()
+	snapshot := view.Snapshot
 	rootRelease, err := s.acquireRootStorage(ctx, snapshot.Roots, false)
 	if err != nil {
 		return false, err
 	}
 	defer rootRelease()
-	if _, err := s.Get(ctx, id); err != nil {
-		return false, err
-	}
 	admitted := 0
 	for _, root := range snapshot.Roots {
 		if _, err := admittedFiles(ctx, root, s.scopeFor(ctx, Request{}, root), func(fileRef) error {
@@ -217,7 +212,7 @@ func (s *Store) IsCurrent(ctx context.Context, id string) (bool, error) {
 		ids[root.Path] = &identifier{root: root.Path}
 	}
 	current := true
-	err = s.ForEachEntry(ctx, id, func(entry Entry) error {
+	err = s.forEachViewEntry(ctx, view, func(entry Entry) error {
 		abs := absPath(entry.RootPath, entry.Path)
 		info, err := os.Lstat(abs)
 		if err != nil {

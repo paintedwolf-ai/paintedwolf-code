@@ -52,12 +52,14 @@ func TestSnapshotPublishesAManifestWithoutCopyingBytes(t *testing.T) {
 func TestSnapshotValidationQualityUpgrades(t *testing.T) {
 	store := openSnapshotStore(t)
 	request := Request{Roots: []Root{{Path: t.TempDir()}}}
+	empty, _ := buildEntries(t, store, nil)
+	roots := []publishedRoot{{root: request.Roots[0], manifest: empty}}
 
-	observed, err := store.publish(t.Context(), request, nil, nil, CaptureObserved, AdmissionScope)
+	observed, err := store.publish(t.Context(), request, roots, CaptureObserved, AdmissionScope)
 	testutil.FailErr(t, "publish observed snapshot", err)
-	_, err = store.publish(t.Context(), request, nil, nil, CaptureExact, AdmissionScope)
+	_, err = store.publish(t.Context(), request, roots, CaptureExact, AdmissionScope)
 	testutil.FailErr(t, "publish exact snapshot", err)
-	_, err = store.publish(t.Context(), request, nil, nil, CaptureObserved, AdmissionScope)
+	_, err = store.publish(t.Context(), request, roots, CaptureObserved, AdmissionScope)
 	testutil.FailErr(t, "republish observed snapshot", err)
 
 	loaded, err := store.Get(t.Context(), observed.ID)
@@ -164,82 +166,75 @@ func TestCommittingAFileKeepsTheGenerationIdentity(t *testing.T) {
 	}
 }
 
-func TestSnapshotManifestsShareUnchangedHashBuckets(t *testing.T) {
+func TestSnapshotManifestsShareUnchangedChunks(t *testing.T) {
 	store := openSnapshotStore(t)
 	root := t.TempDir()
 	// Content verification surveys every file, so the change is seen without
 	// waiting on a watcher event.
 	request := Request{Roots: []Root{{Path: root}}, Verify: VerifyContent}
-	for i := range 512 {
-		writeSource(t, root, fmt.Sprintf("src/file-%03d.go", i), fmt.Sprintf("package src // %d\n", i))
+	for i := range manyFiles {
+		writeSource(t, root, fmt.Sprintf("src/file-%04d.go", i), fmt.Sprintf("package src // %d\n", i))
 	}
 	first, err := store.Ensure(t.Context(), request)
 	testutil.FailErr(t, "publish first snapshot", err)
 
-	writeSource(t, root, "src/file-255.go", "package src // changed\n")
+	writeSource(t, root, "src/file-2555.go", "package src // changed\n")
 	second, err := store.Ensure(t.Context(), request)
 	testutil.FailErr(t, "publish second snapshot", err)
 	if first.ID == second.ID {
 		t.Fatal("changed source reused the previous snapshot id")
 	}
-
-	var firstChunks, secondChunks, sharedChunks, storedChunks int
-	testutil.FailErr(t, "count first chunks", store.db.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM source_snapshot_chunks WHERE snapshot_id = ?`, first.ID).Scan(&firstChunks))
-	testutil.FailErr(t, "count second chunks", store.db.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM source_snapshot_chunks WHERE snapshot_id = ?`, second.ID).Scan(&secondChunks))
-	testutil.FailErr(t, "count shared chunks", store.db.QueryRowContext(t.Context(), `
-		SELECT count(*) FROM source_snapshot_chunks a
-		JOIN source_snapshot_chunks b ON b.chunk_id = a.chunk_id
-		WHERE a.snapshot_id = ? AND b.snapshot_id = ?`, first.ID, second.ID).Scan(&sharedChunks))
-	testutil.FailErr(t, "count stored chunks", store.db.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM source_manifest_chunks`).Scan(&storedChunks))
-	if firstChunks < 100 || secondChunks != firstChunks {
-		t.Fatalf("bucket coverage first=%d second=%d", firstChunks, secondChunks)
+	firstChunks := snapshotChunks(t, store, first.ID)
+	secondChunks := snapshotChunks(t, store, second.ID)
+	shared := 0
+	for id := range firstChunks {
+		if secondChunks[id] {
+			shared++
+		}
 	}
-	if sharedChunks != firstChunks-1 {
-		t.Fatalf("shared chunks = %d, want %d", sharedChunks, firstChunks-1)
+	stored := countRows(t, store, `SELECT count(*) FROM source_manifest_chunks`)
+	if len(firstChunks) < 4 || len(secondChunks) != len(firstChunks) {
+		t.Fatalf("chunk coverage first=%d second=%d", len(firstChunks), len(secondChunks))
 	}
-	if storedChunks != firstChunks+1 {
-		t.Fatalf("stored chunks = %d, want %d", storedChunks, firstChunks+1)
+	if shared != len(firstChunks)-1 {
+		t.Fatalf("shared chunks = %d, want %d", shared, len(firstChunks)-1)
 	}
-	if second.FileCount != 512 || second.TotalBytes <= 0 {
+	if stored != len(firstChunks)+1 {
+		t.Fatalf("stored chunks = %d, want %d", stored, len(firstChunks)+1)
+	}
+	if second.FileCount != manyFiles || second.TotalBytes <= 0 {
 		t.Fatalf("second counts = %d files %d bytes", second.FileCount, second.TotalBytes)
 	}
 }
 
-// A delta over a covered base reads only the buckets it touches and reuses
+// A delta over a covered base reads only the chunks it touches and reuses
 // the rest by chunk id.
 func TestDeltaPublishReusesUntouchedChunksWithoutReadingThem(t *testing.T) {
 	store := openSnapshotStore(t)
 	root := t.TempDir()
 	coverRoot(t, root)
 	request := Request{Roots: []Root{{Path: root}}}
-	for i := range 512 {
-		writeSource(t, root, fmt.Sprintf("src/file-%03d.go", i), fmt.Sprintf("package src // %d\n", i))
+	for i := range manyFiles {
+		writeSource(t, root, fmt.Sprintf("src/file-%04d.go", i), fmt.Sprintf("package src // %d\n", i))
 	}
 	first, err := store.Ensure(t.Context(), request)
 	testutil.FailErr(t, "publish first", err)
-	writeSource(t, root, "src/file-007.go", "package src // changed\n")
-	notifyChange(root, "src/file-007.go")
+	writeSource(t, root, "src/file-0007.go", "package src // changed\n")
+	notifyChange(root, "src/file-0007.go")
 	second, err := store.Ensure(t.Context(), request)
 	testutil.FailErr(t, "publish delta", err)
-	var stored int
-	testutil.FailErr(t, "count stored chunks", store.db.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM source_manifest_chunks`).Scan(&stored))
-	var firstChunks int
-	testutil.FailErr(t, "count first chunks", store.db.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM source_snapshot_chunks WHERE snapshot_id = ?`, first.ID).Scan(&firstChunks))
-	if stored != firstChunks+1 {
-		t.Fatalf("stored chunks = %d want %d: a one-file delta rewrites one bucket", stored, firstChunks+1)
+	stored := countRows(t, store, `SELECT count(*) FROM source_manifest_chunks`)
+	firstChunks := snapshotChunks(t, store, first.ID)
+	if stored != len(firstChunks)+1 {
+		t.Fatalf("stored chunks = %d want %d: a one-file delta rewrites one chunk", stored, len(firstChunks)+1)
 	}
-	if second.FileCount != 512 {
+	if second.FileCount != manyFiles {
 		t.Fatalf("delta file count = %d", second.FileCount)
 	}
 	changes := 0
 	testutil.FailErr(t, "diff", store.Diff(t.Context(), first.ID, second.ID, func(change Change) error {
 		changes++
-		if change.Path() != "src/file-007.go" || change.Before == nil || change.After == nil {
+		if change.Path() != "src/file-0007.go" || change.Before == nil || change.After == nil {
 			t.Fatalf("unexpected change %+v", change)
 		}
 		return nil

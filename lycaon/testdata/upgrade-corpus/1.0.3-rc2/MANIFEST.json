@@ -1,0 +1,56 @@
+{
+  "app_version": "1.0.3-rc2",
+  "artifact_id": "af84f699-aaab-4cb1-af7b-dc2293b844e1",
+  "backup_sha256": "ade5ddd2bd4e72f1d2d7d91876f44048464196a5e5c7d3bda78b6eccf0eda360",
+  "created_at": "2026-10-23T22:26:59Z",
+  "editor_history": {
+    "accepted_operation_id": "82ac3cde-7bd2-4958-b841-53d9781eadd8",
+    "accepted_text": "editor base\nsaved window edit\nunsaved host edit\n",
+    "client_id": "window:upgrade-fixture",
+    "document_id": "73336763-da85-4d01-8f73-014fb3ec9728",
+    "epoch": 1,
+    "history_sha256": "b855afd75def2a12331d76e85d7b8a42d1e324e72b9c9ab7c4d2dc655878c062",
+    "local_text": "editor base\nsaved window edit\nunsaved host edit\noffline window edit\n",
+    "outbox_path": "document-outbox/fe4631f1860368f6c53cbefcebb8e2baf24b0032945563fd8027421cdd5bbe09/records-1.log",
+    "outbox_sha256": "9bc6dd0a238eb28d159e3fea2d989b58119629d3320cb68c355cfa46a358f791",
+    "pending_operation_id": "bf6a5473-1f16-4df0-a4c8-230797657d64",
+    "pending_save_operation_id": "e706e595-c88b-4a32-8de6-d57b1a7c87a4",
+    "pending_save_revision": 4,
+    "save_operation_id": "bb7b04b4-fa62-497f-891b-11e1fc685fb5",
+    "save_revision": 2,
+    "saved_text": "editor base\nsaved window edit\n"
+  },
+  "grant_id": "grant_vZryNRplPGGrAtV-Z93HbKuK3SxTPEYb3EnTg_rEkU0",
+  "project_id": "1fa77636-9f81-4c58-8e48-2c5a487c315a",
+  "recipe": "retained-history-v1",
+  "schema_identity": {
+    "revision": 5,
+    "shape": "75a4630362bee47170cf4c307b98d66630569ce3cbad397f71cd920e1efd2d54"
+  },
+  "schema_version": 5,
+  "seeded_secondary": "tool_result",
+  "semantics_sha256": "8e4785c594c51cfa958c8391ae145ef45ba857a18c5b11c1661aff077d693422",
+  "session_id": "8de87596-79bf-4d6c-92a3-5f30da05105e",
+  "source_history": {
+    "body_sha256": "c0e260b9905a67a0316311638aca3fd31627a1140e5425345d12d3084775ced9",
+    "checkpoint_anchor_id": "2597f5b7-342e-46f0-a9bb-46a632656ca4",
+    "checkpoint_root_key": "b398cba956d34dfd",
+    "current_version_id": "17f9ca5a-a68f-442e-ae99-7c718eebdc95",
+    "source_file_id": "9038bd4b-4f1a-4a57-9667-473235fcc735",
+    "source_version_id": "4b4daa2b-dc73-4b7b-a7c6-cfc3d26db82c"
+  },
+  "store_sha256": "b6005d7472cef15d28b3ebeeff6b8d3e3aa4a27666e49872a6b7c0537237a5b0",
+  "tool_result_message_id": "b53210b3-46bc-404b-ae4e-976a87f156b2",
+  "worker_history": {
+    "baseline": {
+      "README.md": "a3029032e8aa0af8caaa19eb98dec67afc16681ce76987b5b323b0c232dbcc13"
+    },
+    "child_session_id": "a7c27e04-2696-45f6-96ba-3f30f82fd480",
+    "job_id": "f57ea91a-7523-4874-bbea-77e45a9fd29c",
+    "overlay": {
+      "README.md": "2a0126e186199bedb9257b7b497a02d47bd362a5d7eee5874f662bd0af6504a3",
+      "worker-note.txt": "8496db272afc947125ca66b8c48d2c7151f1fba438a821ae3f77aad9b35f63ea"
+    },
+    "parent_session_id": "0a0c92b8-b753-4c45-960f-59be7949504c"
+  }
+}

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 for the host/desktop stream (`VERSION` + `v*` git tags). See
 [`docs/dev-tasks.md`](docs/dev-tasks.md) § Release & versioning.
 
+## [1.0.3-rc2]
+
+### Changed
+
+- Source snapshots share unchanged content across roots while preserving each observation's history and metadata.
+- Database upgrades rebuild retained history into a verified replacement, preserving a complete recovery snapshot and resuming interrupted publication safely.
+
 ## [1.0.3-rc1]
 
 ### Added

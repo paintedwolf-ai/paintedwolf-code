@@ -2,34 +2,12 @@ package sourcesnapshot
 
 import (
 	"context"
-	"errors"
 	"math"
 
 	"golang.org/x/sync/semaphore"
 )
 
-// ErrMaintenanceDeferred means active captures still own their source generations.
-var ErrMaintenanceDeferred = errors.New("source snapshot maintenance deferred behind capture")
-
 const storageExclusive = math.MaxInt64
-
-func (s *Store) storageAdmission() *semaphore.Weighted {
-	s.storageGateOnce.Do(func() { s.storageGate = semaphore.NewWeighted(storageExclusive) })
-	return s.storageGate
-}
-
-// Publication and deletion coordinate without making cancellation wait on a mutex.
-func (s *Store) acquireStorage(ctx context.Context, exclusive bool) (func(), error) {
-	weight := int64(1)
-	if exclusive {
-		weight = storageExclusive
-	}
-	gate := s.storageAdmission()
-	if err := gate.Acquire(ctx, weight); err != nil {
-		return nil, err
-	}
-	return func() { gate.Release(weight) }, nil
-}
 
 type rootStorageGate struct {
 	gate  *semaphore.Weighted

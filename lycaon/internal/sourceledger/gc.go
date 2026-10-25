@@ -100,7 +100,7 @@ func (s *Retention) SweepBlobs(ctx context.Context) error {
 }
 
 // RunBlobGC sweeps on interval until ctx ends, trying again after retry when
-// a sweep was deferred behind a capture.
+// a blob sweep was deferred behind a capture.
 func (s *Retention) RunBlobGC(ctx context.Context, interval, retry time.Duration) error {
 	timer := time.NewTimer(0)
 	defer timer.Stop()
@@ -112,11 +112,9 @@ func (s *Retention) RunBlobGC(ctx context.Context, interval, retry time.Duration
 		}
 		// Generations age out on the same cadence, so an idle engine still
 		// releases the snapshots nothing references.
-		snapshotDeferred := false
 		if s.snapshots != nil {
 			err := s.snapshots.Sweep(ctx, time.Now().UTC().Add(-sourcesnapshot.Retention))
-			snapshotDeferred = errors.Is(err, sourcesnapshot.ErrMaintenanceDeferred)
-			if err != nil && !snapshotDeferred && ctx.Err() == nil {
+			if err != nil && ctx.Err() == nil {
 				slog.WarnContext(ctx, "source snapshot sweep", "error", err)
 			}
 		}
@@ -132,8 +130,6 @@ func (s *Retention) RunBlobGC(ctx context.Context, interval, retry time.Duration
 			timer.Reset(retry)
 		case err != nil:
 			return err
-		case snapshotDeferred:
-			timer.Reset(retry)
 		default:
 			timer.Reset(interval)
 		}

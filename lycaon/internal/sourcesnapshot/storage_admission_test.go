@@ -10,21 +10,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-func TestMaintenanceDefersBehindCaptureAndDeletionCanCancel(t *testing.T) {
-	store := openSnapshotStore(t)
-	release, err := store.acquireStorage(t.Context(), false)
-	testutil.FailErr(t, "hold active source capture", err)
-	defer release()
-	if err := store.Sweep(t.Context(), time.Now()); !errors.Is(err, ErrMaintenanceDeferred) {
-		t.Fatalf("sweep waited for a capture: %v", err)
-	}
-	ctx, cancel := context.WithCancel(t.Context())
-	cancel()
-	if _, err := store.acquireStorage(ctx, true); !errors.Is(err, context.Canceled) {
-		t.Fatalf("exclusive acquisition lost cancellation: %v", err)
-	}
-}
-
 func TestCaptureLeavesIOAvailableOutsideFileReads(t *testing.T) {
 	store := openSnapshotStore(t)
 	root := t.TempDir()
@@ -47,20 +32,6 @@ func TestCaptureLeavesIOAvailableOutsideFileReads(t *testing.T) {
 	testutil.FailErr(t, "admit interactive I/O during repository survey", admissionErr)
 	if snapshot.FileCount != 2 {
 		t.Fatalf("captured %d files, want 2", snapshot.FileCount)
-	}
-}
-
-func TestCaptureSucceedsWhenMaintenanceDefers(t *testing.T) {
-	store := openSnapshotStore(t)
-	root := t.TempDir()
-	writeSource(t, root, "one.go", "package one\n")
-	release, err := store.acquireStorage(t.Context(), false)
-	testutil.FailErr(t, "retain another active capture", err)
-	defer release()
-	snapshot, err := store.EnsurePath(t.Context(), root, VerifyContent)
-	testutil.FailErr(t, "publish while another capture owns storage", err)
-	if snapshot.FileCount != 1 || snapshot.ID == "" {
-		t.Fatalf("published snapshot = %+v, want one retained file", snapshot)
 	}
 }
 

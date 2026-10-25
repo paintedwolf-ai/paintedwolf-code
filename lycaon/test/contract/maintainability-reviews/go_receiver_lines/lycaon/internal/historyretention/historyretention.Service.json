@@ -1,0 +1,15 @@
+{
+  "category": "go_receiver_lines",
+  "artifact": "lycaon/internal/historyretention/historyretention.Service",
+  "kind": "runtime_service",
+  "workstream": "store-health",
+  "disposition": "retain",
+  "reason": "Retention selection and execution keep their existing transaction and protection boundaries. This migration only adapts manifest references in storage queries; extracting another service would split the shared retention decision without reducing behavior.",
+  "reviewed_commit": "1715fadedd158a5e720a137d0e4c243e95685783",
+  "ceiling": 677,
+  "boundaries": {
+    "lycaon/internal/historyretention/groups.go": "74966898b4ffaeef19da125ca1a60ef6b8ec7051dcb463416417967c76bc58bf",
+    "lycaon/internal/historyretention/usage.go": "4156eb219d63162cf0f72a84aff10257f2048d549e78f9713eadc38280f07a11"
+  },
+  "reviewed_shape": "3a308160042bccc5606370f159d1ef989c76b731848604843a0c210c8a8eceb1"
+}

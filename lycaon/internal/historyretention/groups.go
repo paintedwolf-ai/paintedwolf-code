@@ -125,7 +125,7 @@ func groupReclaimable(ctx context.Context, database db.DBTX, class string, membe
 	AND NOT EXISTS(SELECT 1 FROM worker_baseline_objects w WHERE w.sha256=b.sha256)
 	AND NOT EXISTS(SELECT 1 FROM source_command_window_objects w WHERE w.sha256=b.sha256)
  AND NOT EXISTS(SELECT 1 FROM source_recovery_objects r WHERE r.sha256=b.sha256)
-	AND NOT EXISTS(SELECT 1 FROM source_manifest_entries e WHERE e.sha256=b.sha256)`, ids, ids).Scan(&size)
+	AND NOT EXISTS(SELECT 1 FROM source_manifest_entries e WHERE e.sha256=b.sha256 AND e.sha256!='')`, ids, ids).Scan(&size)
 	return size, err
 }
 

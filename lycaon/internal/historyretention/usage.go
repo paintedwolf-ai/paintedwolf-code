@@ -119,7 +119,7 @@ func (s *Service) refreshUsage(ctx context.Context) error {
 		OR EXISTS(SELECT 1 FROM source_versions v WHERE v.content_sha256=b.sha256 AND v.capture_state='stored')
 		OR EXISTS(SELECT 1 FROM worker_baseline_objects w WHERE w.sha256=b.sha256)
  OR EXISTS(SELECT 1 FROM source_recovery_objects r WHERE r.sha256=b.sha256)
-		OR EXISTS(SELECT 1 FROM source_manifest_entries e WHERE e.sha256=b.sha256))`).Scan(&lanes[i].SharedBytes); err != nil {
+		OR EXISTS(SELECT 1 FROM source_manifest_entries e WHERE e.sha256=b.sha256 AND e.sha256!=''))`).Scan(&lanes[i].SharedBytes); err != nil {
 			return err
 		}
 	}
