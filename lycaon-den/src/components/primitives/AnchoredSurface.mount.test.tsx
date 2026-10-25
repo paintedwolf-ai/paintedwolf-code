@@ -172,6 +172,10 @@ describe("AnchoredSurface", () => {
     await waitFor(() => expect(document.activeElement).toBe(item));
     fireEvent.keyDown(item, { key: "ArrowDown" });
     expect(navigate).toHaveBeenCalledOnce();
+    for (const composition of [{ isComposing: true }, { keyCode: 229 }]) {
+      fireEvent.keyDown(item, { key: "Escape", ...composition });
+      expect(screen.getByRole("menu").isConnected).toBe(true);
+    }
     fireEvent.keyDown(item, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
     expect(document.activeElement).toBe(trigger);
@@ -211,6 +215,12 @@ describe("AnchoredSurface", () => {
       const deleteItem = screen.getByRole("menuitem", { name: "Delete" });
       await waitFor(() => expect(document.activeElement).toBe(openItem));
 
+      for (const composition of [{ isComposing: true }, { keyCode: 229 }]) {
+        fireEvent.keyDown(openItem, { key: "ArrowDown", ...composition });
+        fireEvent.keyDown(openItem, { key: "Escape", ...composition });
+        expect(document.activeElement).toBe(openItem);
+        expect(screen.getByRole("menu").isConnected).toBe(true);
+      }
       fireEvent.keyDown(openItem, { key: "ArrowDown" });
       expect(document.activeElement).toBe(renameItem);
       fireEvent.keyDown(renameItem, { key: "End" });

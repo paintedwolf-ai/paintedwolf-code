@@ -17,6 +17,8 @@ CREATE TABLE IF NOT EXISTS invocation_programs (
     detail_ref TEXT NOT NULL DEFAULT '',
     progress_state TEXT NOT NULL DEFAULT 'unchanged' CHECK (progress_state IN ('unchanged','committed','rejected','unknown')),
     progress_ref TEXT NOT NULL DEFAULT '',
+    trace_events INTEGER NOT NULL DEFAULT 0 CHECK (trace_events >= 0),
+    trace_bytes INTEGER NOT NULL DEFAULT 0 CHECK (trace_bytes >= 0),
     started_at TEXT NOT NULL,
     settled_at TEXT
 ) STRICT;
@@ -68,6 +70,16 @@ CREATE TABLE IF NOT EXISTS invocation_program_nodes (
     FOREIGN KEY (program_id, source_unit_id) REFERENCES invocation_program_sources(program_id, source_unit_id) ON DELETE CASCADE
 ) STRICT, WITHOUT ROWID;
 
+CREATE TABLE IF NOT EXISTS invocation_program_definitions (
+    program_id TEXT NOT NULL REFERENCES invocation_programs(id) ON DELETE CASCADE,
+    definition_digest TEXT NOT NULL,
+    operation_id TEXT NOT NULL,
+    owner TEXT NOT NULL,
+    lifecycle TEXT NOT NULL,
+    definition_json TEXT NOT NULL CHECK (json_valid(definition_json)),
+    PRIMARY KEY (program_id, definition_digest)
+) STRICT, WITHOUT ROWID;
+
 CREATE TABLE IF NOT EXISTS invocation_program_executions (
     id TEXT PRIMARY KEY,
     program_id TEXT NOT NULL,
@@ -78,7 +90,6 @@ CREATE TABLE IF NOT EXISTS invocation_program_executions (
     scope_json TEXT NOT NULL CHECK (json_valid(scope_json)),
     operation_id TEXT NOT NULL,
     definition_digest TEXT NOT NULL,
-    definition_json TEXT NOT NULL CHECK (json_valid(definition_json)),
     arguments_representation TEXT NOT NULL CHECK (arguments_representation='operation_arguments_v1'),
     arguments_digest TEXT NOT NULL,
     reviewed_arguments_representation TEXT NOT NULL DEFAULT '' CHECK (reviewed_arguments_representation IN ('','operation_arguments_v1')),
@@ -121,7 +132,8 @@ CREATE TABLE IF NOT EXISTS invocation_program_executions (
     CHECK ((conflict_path = '') = (conflict_expected_revision = '') AND (conflict_path = '') = (conflict_observed_revision = '')),
     UNIQUE (program_id, id),
     UNIQUE (program_id, ordinal),
-    FOREIGN KEY (program_id, node_id) REFERENCES invocation_program_nodes(program_id, node_id) ON DELETE CASCADE
+    FOREIGN KEY (program_id, node_id) REFERENCES invocation_program_nodes(program_id, node_id) ON DELETE CASCADE,
+    FOREIGN KEY (program_id, definition_digest) REFERENCES invocation_program_definitions(program_id, definition_digest) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_invocation_program_executions_program_started
     ON invocation_program_executions(program_id, started_at, id);
