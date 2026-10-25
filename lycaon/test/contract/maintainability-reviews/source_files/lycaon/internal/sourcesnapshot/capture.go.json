@@ -6,7 +6,7 @@
   "disposition": "retain",
   "reason": "Capture owns the ordered survey, delta convergence, and publication sequence. Candidate construction and manifest storage are separate units; retain the sequencing together so coverage and pin release remain visible.",
   "reviewed_commit": "1715fadedd158a5e720a137d0e4c243e95685783",
-  "ceiling": 372,
+  "ceiling": 375,
   "boundaries": {
     "lycaon/internal/sourcesnapshot/manifest_test.go": "c1ef1507ade74e28c37fdd7568e350ffe97e050f8a406d54824add98aa3e3bf7",
     "lycaon/internal/sourcesnapshot/store_test.go": "1eff5bee001776283a67466d2bf48977e9528e3c76fe3e0336d880031f1852a3"

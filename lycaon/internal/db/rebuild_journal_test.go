@@ -140,6 +140,12 @@ func TestRebuildExchangeProbe(t *testing.T) {
 			if !errors.Is(err, failure) || calls != 1 {
 				t.Fatalf("probe error=%v calls=%d", err, calls)
 			}
+			if failure != nil {
+				var diagnosis *StoreIncompatibleError
+				if !errors.As(ClassifyStoreFailure(err), &diagnosis) || diagnosis.Reason != RecoveryReasonStorageUnavailable {
+					t.Fatalf("probe diagnosis = %v", diagnosis)
+				}
+			}
 			if errors.Is(failure, syscall.EINVAL) && !errors.Is(err, fseffect.ErrUnsupported) {
 				t.Fatal("unsupported exchange flag was not classified")
 			}

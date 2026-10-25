@@ -4,14 +4,15 @@
   "kind": "test_suite",
   "workstream": "store-health",
   "disposition": "retain",
-  "reason": "Retain the 47-file private database suite. Publication crash and journal fixtures cover the same pre-open authority as retained-copy and error-classification tests. Exchange removes empty-occupant behavior without adding a test subsystem. Focused process-exit, WAL preservation, copy SQLITE_FULL, and seal-connection operational-failure contracts passed; filesystem exchange identity contracts stay with fseffect. The sealed-file sync boundary now preserves injected ENOSPC and unchanged sealed contents; filesystem exchange tests independently cover either directory sync failing while both exchanged files remain identifiable.",
+  "reason": "Retain the 50-file private database suite. Publication crash, journal, and combined open-classification fixtures cover the same pre-open authority as retained-copy and error-classification tests. Exchange removes empty-occupant behavior without adding a test subsystem. Focused process-exit, WAL preservation, copy SQLITE_FULL, and seal-connection operational-failure contracts passed; filesystem exchange identity contracts stay with fseffect. The sealed-file sync boundary preserves injected ENOSPC and unchanged sealed contents; filesystem exchange tests independently cover either directory sync failing while both exchanged files remain identifiable.",
   "reviewed_commit": "9eda632f64d4f1a4728977973852653795bddada",
-  "ceiling": 47,
+  "ceiling": 50,
   "boundaries": {
     "lycaon/internal/db/rebuild_equivalence_test.go": "ad40b1e4101ac05338bf3b87ca593ae434a7ead5ceca01169859ec0642ac198e",
     "lycaon/internal/db/rebuild_crash_test.go": "fc637d9935806c84c8fc8166211ab9049cdaf945a89cbad920082cdb9609dfab",
     "lycaon/internal/db/rebuild_errors_test.go": "068ee8d208bd97d283e73e0afb5793f33d88767744451e3f01844805eb282765",
+    "lycaon/internal/db/rebuild_classification_integration_test.go": "56711ac30d190a3012ed2475b52b56cac6b1d6f93c3bf1e0d57dd3dabddd490a",
     "lycaon/internal/db/source_manifest_layout_upgrade_test.go": "e93ecffbb82a3d846c944650053ac500bb1ca65777258abe36d08eabbb06ad85"
   },
-  "reviewed_shape": "354442ef4f0bb0f17da9348cef8afa848fd14d0ce61e8d767d44a9e31f6af132"
+  "reviewed_shape": "0ce7341c1cbbe8492104019e4d8c2243a3e42a4164f5d35ad5f479ca91c3ce03"
 }

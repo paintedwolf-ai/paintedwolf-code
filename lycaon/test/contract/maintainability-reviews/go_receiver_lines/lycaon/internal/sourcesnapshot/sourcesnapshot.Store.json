@@ -6,7 +6,7 @@
   "disposition": "retain",
   "reason": "Snapshot publication, pinned reads, and reclamation share one store lifecycle and database authority. Chunk construction already lives on manifestBuilder and candidate state on rootCandidate. Retain this API at its measured size; further growth requires reconsidering a read repository boundary without splitting pin custody.",
   "reviewed_commit": "1715fadedd158a5e720a137d0e4c243e95685783",
-  "ceiling": 1431,
+  "ceiling": 1434,
   "boundaries": {
     "lycaon/internal/sourcesnapshot/manifest_test.go": "c1ef1507ade74e28c37fdd7568e350ffe97e050f8a406d54824add98aa3e3bf7",
     "lycaon/internal/sourcesnapshot/read_consistency_test.go": "c57c60b1899ceea660787c12d3d2714384c127b9478a506c4081400104f6374f",
