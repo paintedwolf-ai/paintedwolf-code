@@ -216,6 +216,7 @@ class LockMonitorExecutionTests(unittest.TestCase):
                     'stdout': b'opened\n', 'stderr': b''}),
                 (lock_monitor, 'perform_transition', {'operation': 'session-lock-v1', 'completed': True}),
                 (lock_monitor, 'await_session', {'id': 'sess-1', 'status': 'idle'}),
+                (lock_monitor, 'prepare_composer', {'first_time_tips_disabled': False}),
                 (lock_monitor, 'submit_project_turn', None),
                 (lock_monitor, 'await_fixture_reply', {'settled': True}),
                 (lock_monitor, 'physical_input', None),

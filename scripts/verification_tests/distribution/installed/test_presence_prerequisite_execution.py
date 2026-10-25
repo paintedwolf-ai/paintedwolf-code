@@ -36,6 +36,7 @@ class PresencePrerequisiteTests(unittest.TestCase):
             'DesktopUI': Mock(return_value=self.ui), 'activate_visible_frame': Mock(return_value={'same_frame_active': True}),
             'configure_provider': Mock(return_value={'provider_id': 'fixture'}),
             'await_session': Mock(return_value={'id': 'session', 'status': 'idle'}),
+            'prepare_composer': Mock(return_value={'first_time_tips_disabled': False}),
             'physical_input': Mock(),
             'alerts': Mock(return_value=[]), 'await_alert': Mock(return_value={'attributes': ['xml-roles:alert']}),
             'run': Mock(return_value={'exit_code': 0, 'timed_out': False, 'output_limit': False})}
@@ -59,6 +60,7 @@ class PresencePrerequisiteTests(unittest.TestCase):
         self.values['await_session'].assert_called_once_with(
             self.app, Path('/fixture/project'), 'fixture', presence.MODEL, status='idle',
             reason='presence-project-session-not-opened')
+        self.values['prepare_composer'].assert_called_once_with(self.app, self.ui)
         self.app.start.assert_not_called()
         self.app.launch.assert_called_once()
         self.app.wait_ready.assert_called_once()
