@@ -55,6 +55,54 @@ func TestRevealRequiresNativeProofAndRecordsDisclosure(t *testing.T) {
 	}
 }
 
+func TestRevealValidExpiredProofReturnsNoValueAndLeavesAuditUnchanged(t *testing.T) {
+	for _, offset := range []time.Duration{-time.Nanosecond, 0, time.Nanosecond} {
+		t.Run(offset.String(), func(t *testing.T) {
+			service, _, _ := testService(t)
+			personID := testOwner(t, service)
+			secret, err := service.CreateSettingsSecret(t.Context(), CreateSettingsSecretRequest{
+				ProjectID: testdbseed.DefaultProjectID, PersonID: personID, OperationID: "reveal-expiry",
+				Name: "Expiry fixture", Purpose: "verify reveal expiry", Value: "opaque-expiry-fixture-value",
+			})
+			testutil.FailErr(t, "create secret", err)
+			key := configureRevealKey(t, service)
+			started := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
+			service.presence.SetClock(func() time.Time { return started })
+			challenge, err := service.BeginReveal(t.Context(), testdbseed.DefaultProjectID, secret.Reference, "main", personID)
+			testutil.FailErr(t, "begin reveal", err)
+			deadline, err := time.Parse(time.RFC3339Nano, challenge.ExpiresAt)
+			testutil.FailErr(t, "parse reveal deadline", err)
+			proof := signedProof(key, challenge, presence.AuthenticatorLinux)
+			service.presence.SetClock(func() time.Time { return deadline.Add(offset) })
+			result, err := service.CompleteReveal(t.Context(), testdbseed.DefaultProjectID, secret.Reference, personID, proof)
+			var expectedReveals int64
+			if offset < 0 {
+				testutil.FailErr(t, "reveal just before deadline", err)
+				if result.Value != "opaque-expiry-fixture-value" {
+					t.Fatal("current valid proof did not release the fixture value")
+				}
+				expectedReveals = 1
+			} else if !errors.Is(err, presence.ErrChallengeNotFound) || result.Value != "" {
+				t.Fatalf("expired valid proof released a value or wrong refusal: %v", err)
+			}
+			if _, err := service.CompleteReveal(t.Context(), testdbseed.DefaultProjectID, secret.Reference, personID, proof); !errors.Is(err, presence.ErrChallengeNotFound) {
+				t.Fatalf("replayed expiry proof error = %v", err)
+			}
+			var audited int64
+			testutil.FailErr(t, "count reveal audit", service.handle.QueryRowContext(t.Context(),
+				`SELECT COUNT(*) FROM managed_secret_reveals WHERE id = ?`, challenge.ID).Scan(&audited))
+			listed, err := service.ListProject(t.Context(), testdbseed.DefaultProjectID)
+			testutil.FailErr(t, "list reveal metadata", err)
+			if audited != expectedReveals || len(listed) != 1 || listed[0].RevealCount != expectedReveals {
+				t.Fatalf("expiry or replay changed disclosure audit: rows=%d metadata=%+v", audited, listed)
+			}
+			if offset >= 0 && listed[0].LastRevealedAt != nil {
+				t.Fatal("expired proof changed last-reveal metadata")
+			}
+		})
+	}
+}
+
 func TestRevealAuditsLinuxAuthenticators(t *testing.T) {
 	for _, authenticator := range []string{presence.AuthenticatorLinux, presence.AuthenticatorLinuxAppPassword} {
 		t.Run(authenticator, func(t *testing.T) {
