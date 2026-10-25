@@ -376,7 +376,7 @@ class Bridge:
         if ready != {'state': 'native-unlock-ready', 'request_sha256': unlock_wire.digest(pending),
                      'vm_id': self.selected['vm_id']}:
             raise ValueError('fixed native input guest refused native unlock readiness')
-        result = self.unlock_actor.perform(self.process, self.selector, time.monotonic() + 25, pending)
+        result = self.unlock_actor.perform(self.process, self.selector, time.monotonic() + 30, pending)
         acknowledgment = {'format_version': 1, 'request_sha256': unlock_wire.digest(pending),
                           'vm_id': self.selected['vm_id'], 'result': result}
         unlock_wire.acknowledgment(acknowledgment, pending, self.selected['vm_id'])

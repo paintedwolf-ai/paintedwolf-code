@@ -170,8 +170,8 @@ def serve_mailbox(pending, execution, vm_id, mailbox):
                 os.set_blocking(stream.fileno(), False)
             with selectors.DefaultSelector() as selector:
                 selector.register(streams.stdout, selectors.EVENT_READ)
-                result = exchange(Pipe(streams, selector, time.monotonic() + 25), observer,
-                                  execution, pending, timeout=20)
+                result = exchange(Pipe(streams, selector, time.monotonic() + 30), observer,
+                                  execution, pending, timeout=25)
             if mailbox.read('request.json') != pending:
                 raise ValueError('native unlock publication changed during private delivery')
             mailbox.attach()

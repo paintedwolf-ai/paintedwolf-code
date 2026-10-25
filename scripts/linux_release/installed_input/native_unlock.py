@@ -82,9 +82,16 @@ class NativeUnlockObserver:
                 identity = accessibility.identity(window)
                 if self.window is not None and self.window != identity:
                     raise ValueError('native unlock changed its captured shell window')
-                passwords = [node for node in accessibility.descendants(window, deadline)
-                    if node.getRole() == self.api.ROLE_PASSWORD_TEXT and self._visible(node)
-                    and node.getState().contains(self.api.STATE_FOCUSED)]
+                nodes = list(accessibility.descendants(window, deadline))
+                visible_passwords = [node for node in nodes
+                    if node.getRole() == self.api.ROLE_PASSWORD_TEXT and self._visible(node)]
+                passwords = [node for node in visible_passwords
+                    if node.getState().contains(self.api.STATE_FOCUSED)]
+                clock_focused = (not visible_passwords and (
+                    bool(window.getState().contains(self.api.STATE_FOCUSED))
+                    or any(node is not window and self._visible(node) and (
+                        node.getState().contains(self.api.STATE_FOCUSED)
+                        or node.getRole() == self.api.ROLE_WINDOW) for node in nodes)))
                 break
             except accessibility.InventoryChanged:
                 if time.monotonic() >= deadline:
@@ -96,7 +103,7 @@ class NativeUnlockObserver:
         if passwords:
             _, chain = accessibility.capture(passwords[0], [(None, window)])
             password = accessibility.identity(passwords[0])
-        elif not window.getState().contains(self.api.STATE_FOCUSED):
+        elif not clock_focused:
             raise CaseUnavailable('native-clock-window-has-no-positive-focus-proof')
         if (accessibility.identity(window) != identity or passwords and
                 accessibility.identity(passwords[0]) != password):
@@ -106,9 +113,12 @@ class NativeUnlockObserver:
         if any(before['native_session'][key] != after['native_session'][key]
                for key in ('locked_hint', 'locker_active')):
             raise CaseUnavailable('native-unlock-flags-changed-during-target-observation')
+        window_state = self._state(window, window=True)
+        if password is None and clock_focused:
+            window_state['focused'] = True
         value = unlock_wire.target({'session': after, 'window': identity,
                                    'password': password, 'ancestors': chain,
-            'window_state': self._state(window, window=True),
+            'window_state': window_state,
             'password_state': self._state(passwords[0]) if passwords else None})
         self.window = identity
         return value

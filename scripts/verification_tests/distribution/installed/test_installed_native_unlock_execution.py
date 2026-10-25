@@ -144,7 +144,7 @@ class UnlockActorTests(unittest.TestCase):
 
 
 class NativeUnlockObservationTests(unittest.TestCase):
-    def observe(self, *, clock=False, foreign=False, focus=True, replaced=False):
+    def observe(self, *, clock=False, clock_child=False, foreign=False, focus=True, replaced=False):
         from contextlib import nullcontext
         from types import SimpleNamespace
         from linux_release.installed_input import native_unlock
@@ -161,10 +161,13 @@ class NativeUnlockObservationTests(unittest.TestCase):
                 self.__dict__.update(vars(value))
             def __getitem__(self, index):
                 return self.children[index]
-        window = Indexed(node('/window', 1, {4, 5, 6, 7, 8} | ({9} if clock else set())))
+        window = Indexed(node('/window', 1, {4, 5, 6, 7, 8} | ({9} if clock and not clock_child else set())))
         entry = Indexed(node('/password', 2, {4, 5, 6, 7} | ({9} if focus else set()), window))
+        shield = Indexed(node('/shield', 1, {4, 5, 6, 7} | ({9} if focus else set()), window))
         if not clock:
             window.children, window.childCount = [entry], 1
+        elif clock_child:
+            window.children, window.childCount = [shield], 1
         app = Indexed(node('/application', 0, set(), children=[window], pid=201 if foreign else 200))
         desktop = Indexed(node('/desktop', 0, set(), children=[app], pid=100))
         api.Registry = SimpleNamespace(getDesktop=lambda _: desktop)
@@ -186,6 +189,7 @@ class NativeUnlockObservationTests(unittest.TestCase):
         self.assertTrue(observed['password_state']['focused'])
         self.assertNotIn('name', observed['password'])
         self.assertIsNone(self.observe(clock=True)['password'])
+        self.assertIsNone(self.observe(clock=True, clock_child=True)['password'])
 
     def test_foreign_shell_missing_focus_and_replaced_accessible_refuse(self):
         from linux_release.installed_cases.records import CaseUnavailable
