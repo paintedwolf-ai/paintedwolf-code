@@ -6,7 +6,7 @@ from pathlib import Path
 
 from .app import InstalledApp, graphical_session, process_identity, session_environment
 from .desktop_launch import activate_visible_frame, protected_launcher
-from .desktop_turn import prepare_composer, submit_project_turn
+from .desktop_turn import open_project_configuration, submit_project_turn
 from .desktop_ui import DesktopUI, interactive_window
 from .fixture_turn import await_fixture_reply
 from .fresh_profile import Reservation
@@ -420,9 +420,7 @@ def execute(binding: dict, capability: str, case: str, root: Path) -> dict:
                                                             observations, provider, fixture, project, reservation)
                         else:
                             with DesktopUI(app) as ui:
-                                prepare_composer(app, ui)
-                                ui.click('Widen window to restore sidebar')
-                                ui.click('Project configuration')
+                                observations['project_configuration_navigation'] = open_project_configuration(app, ui)
                                 ui.click('Secrets', tab=True)
                                 ui.click('Add secret')
                                 for label, operation, _, password in FIELDS:
