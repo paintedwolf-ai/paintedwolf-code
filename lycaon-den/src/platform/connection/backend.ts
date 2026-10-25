@@ -85,9 +85,8 @@ export type SidecarStartFailure =
   | "store_locked"
   | "engine_not_started"
   | "cancelled"
-  | "credential_vault_locked"
-  | "credential_vault_uninitialized"
-  | "credential_vault_unlock_failed"
+  | "credential_vault_custodian_absent"
+  | "credential_vault_custodian_unavailable"
   | "credential_vault_corrupt";
 
 /** Mirrors the `SidecarStartError` tag in `sidecar.rs`. */
@@ -95,20 +94,12 @@ type TaggedStartError = { code: string; message?: string };
 
 let lastStartFailure: SidecarStartFailure | null = null;
 let lastStartDetail: string | null = null;
-let nextCredentialVaultPassword: string | null = null;
-
-/** Supplies one app password to the next managed engine start attempt. */
-export function provideCredentialVaultPassword(password: string): void {
-  nextCredentialVaultPassword = password;
-}
-
 /** Permanently removes the encrypted credential vault after UI confirmation. */
 export async function resetCredentialVault(): Promise<void> {
   if (!isTauriRuntime()) {
     throw new Error("Credential vault reset is available only in the desktop app.");
   }
   clearBackendConnection();
-  nextCredentialVaultPassword = null;
   await invoke<void>("reset_credential_vault");
 }
 
@@ -141,9 +132,8 @@ function noteStartFailure(err: unknown): void {
     tagged.code === "store_locked" ||
     tagged.code === "engine_not_started" ||
     tagged.code === "cancelled" ||
-    tagged.code === "credential_vault_locked" ||
-    tagged.code === "credential_vault_uninitialized" ||
-    tagged.code === "credential_vault_unlock_failed" ||
+    tagged.code === "credential_vault_custodian_absent" ||
+    tagged.code === "credential_vault_custodian_unavailable" ||
     tagged.code === "credential_vault_corrupt"
   ) {
     lastStartFailure = tagged.code;
@@ -158,9 +148,7 @@ async function discoverTauriBackend(): Promise<BackendConnection> {
   lastStartDetail = null;
 
   try {
-    const password = nextCredentialVaultPassword;
-    nextCredentialVaultPassword = null;
-    const info = await invokeManagedSidecar("start_sidecar", password);
+    const info = await invokeManagedSidecar("start_sidecar");
     return mapSidecarInfo(info);
   } catch (err) {
     noteStartFailure(err);
@@ -189,13 +177,10 @@ async function discoverTauriBackend(): Promise<BackendConnection> {
 
 async function invokeManagedSidecar(
   command: "start_sidecar" | "restart_sidecar",
-  password: string | null = null,
 ): Promise<SidecarInfo> {
   const stopObserving = await beginEngineStartupObservation();
   try {
-    return command === "start_sidecar"
-      ? await invoke<SidecarInfo>(command, { password })
-      : await invoke<SidecarInfo>(command);
+    return await invoke<SidecarInfo>(command);
   } finally {
     stopObserving();
     clearEngineStartupProgress();

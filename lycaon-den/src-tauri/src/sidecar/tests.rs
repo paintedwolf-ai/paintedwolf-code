@@ -395,24 +395,6 @@ fn stop_sidecar_clears_cached_token() {
     assert!(state.api_token.lock().unwrap().is_empty());
 }
 
-#[test]
-fn vault_password_frame_is_length_prefixed_and_exact() {
-    let mut frame = Vec::new();
-    write_vault_password(&mut frame, "correct horse battery staple".as_bytes())
-        .expect("write password frame");
-    assert_eq!(
-        &frame[..4],
-        &("correct horse battery staple".len() as u32).to_be_bytes()
-    );
-    assert_eq!(&frame[4..], b"correct horse battery staple");
-}
-
-#[test]
-fn vault_password_frame_rejects_empty_and_oversized_values() {
-    assert!(write_vault_password(Vec::new(), b"").is_err());
-    assert!(write_vault_password(Vec::new(), &vec![b'x'; VAULT_PASSWORD_MAX_BYTES + 1]).is_err());
-}
-
 #[cfg(unix)]
 #[test]
 fn startup_diagnostics_child_takes_no_input_and_answers_on_stdout() {

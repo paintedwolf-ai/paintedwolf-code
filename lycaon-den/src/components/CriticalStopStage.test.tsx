@@ -1,5 +1,5 @@
 import { updateFixture, stagedFixture } from "../settings/system/update-test-fixture.ts";
-import { fireEvent, findByTestId, render, waitFor } from "@solidjs/testing-library";
+import { findByTestId, render, waitFor } from "@solidjs/testing-library";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PreflightReport } from "../api/types.ts";
 import { LycaonApiError } from "../api/http.ts";
@@ -41,7 +41,6 @@ const runRestoreBackup = vi.fn();
 const confirmDestructive = vi.fn();
 const saveDiagnosticsBundle = vi.fn();
 const saveStartupDiagnosticsBundle = vi.fn();
-const provideCredentialVaultPassword = vi.fn();
 const resetCredentialVault = vi.fn();
 let startFailure: string | null = null;
 let recoveryClient: {
@@ -68,8 +67,6 @@ vi.mock("../platform/connection/backend.ts", () => ({
   // Startup causes are covered by the model tests.
   lastSidecarStartFailure: () => startFailure,
   lastSidecarStartDetail: () => null,
-  provideCredentialVaultPassword: (...args: unknown[]) =>
-    provideCredentialVaultPassword(...args),
   resetCredentialVault: () => resetCredentialVault(),
 }));
 
@@ -113,7 +110,6 @@ describe("createCriticalStop", () => {
     recoveryClient = null;
     saveDiagnosticsBundle.mockReset();
     saveStartupDiagnosticsBundle.mockReset();
-    provideCredentialVaultPassword.mockReset();
     resetCredentialVault.mockReset();
     resetCredentialVault.mockResolvedValue(undefined);
     startFailure = null;
@@ -202,57 +198,15 @@ describe("createCriticalStop", () => {
     ).toBeNull();
   });
 
-  it("unlocks the credential vault with an explicit app password", async () => {
-    startFailure = "credential_vault_locked";
-    connectAppBackend.mockResolvedValue({});
+  it("resets a corrupt credential vault only after confirmation", async () => {
+    startFailure = "credential_vault_corrupt";
+    connectAppBackend.mockRejectedValue(new Error("corrupt vault"));
     const { appStore, rendered } = mount();
     appStore.actions.setSidecarStatus("disconnected");
     const root = rendered.baseElement as HTMLElement;
 
-    const password = await findByTestId(root, "credential-vault-password");
-    fireEvent.input(password, { target: { value: "correct horse battery staple" } });
     (await findByTestId(root, "critical-stop-primary")).click();
-
-    await waitFor(() => {
-      expect(provideCredentialVaultPassword).toHaveBeenCalledWith(
-        "correct horse battery staple",
-      );
-      expect(connectAppBackend).toHaveBeenCalledWith(appStore, {
-        reportFailure: false,
-      });
-    });
-  });
-
-  it("requires matching passwords before creating a credential vault", async () => {
-    startFailure = "credential_vault_uninitialized";
-    const { appStore, rendered } = mount();
-    appStore.actions.setSidecarStatus("disconnected");
-    const root = rendered.baseElement as HTMLElement;
-
-    fireEvent.input(await findByTestId(root, "credential-vault-password"), {
-      target: { value: "correct horse battery staple" },
-    });
-    fireEvent.input(
-      await findByTestId(root, "credential-vault-password-confirmation"),
-      { target: { value: "different horse battery staple" } },
-    );
-    (await findByTestId(root, "critical-stop-primary")).click();
-
-    await waitFor(() => {
-      expect(root.querySelector(".den-critical-stop__message")?.textContent)
-        .toContain("The passwords do not match.");
-    });
-    expect(provideCredentialVaultPassword).not.toHaveBeenCalled();
-  });
-
-  it("resets a forgotten credential vault only after confirmation", async () => {
-    startFailure = "credential_vault_locked";
-    connectAppBackend.mockRejectedValue(new Error("password required"));
-    const { appStore, rendered } = mount();
-    appStore.actions.setSidecarStatus("disconnected");
-    const root = rendered.baseElement as HTMLElement;
-
-    (await findByTestId(root, "critical-stop-secondary")).click();
+    expect(root.querySelector('input[type="password"]')).toBeNull();
 
     await waitFor(() => expect(resetCredentialVault).toHaveBeenCalledOnce());
     expect(confirmDestructive).toHaveBeenCalledWith(

@@ -24,7 +24,6 @@ import {
   getBackendConnection,
   lastSidecarStartDetail,
   lastSidecarStartFailure,
-  provideCredentialVaultPassword,
   resetCredentialVault,
 } from "../platform/connection/backend.ts";
 import { engineState } from "../platform/connection/engine-supervision.ts";
@@ -39,8 +38,6 @@ import type { AppStore } from "../store/app-state-model.ts";
 import { CriticalStop } from "./CriticalStop.tsx";
 import { stopFactsLine } from "../platform/stop-facts.ts";
 import { WindowHost } from "./shell/WindowHost.tsx";
-import { DenField } from "./primitives/DenField.tsx";
-import { DenInput } from "./primitives/DenInput.tsx";
 import { DenButton } from "./primitives/DenButton.tsx";
 import { backupProgressMessage, type BackupTransferProgress } from "../platform/persistence/backup-transfer.ts";
 
@@ -50,14 +47,6 @@ export type CriticalStopHandle = {
 };
 
 type DiagnosticsSource = "startup" | "live";
-
-const MIN_VAULT_PASSWORD_BYTES = 12;
-const MAX_VAULT_PASSWORD_BYTES = 16 * 1024;
-
-function isVaultPasswordRecovery(recovery: CriticalStopRecovery): boolean {
-  return recovery === "unlock_credential_vault" ||
-    recovery === "create_credential_vault";
-}
 
 export function createCriticalStop(appStore: AppStore): CriticalStopHandle {
   const facts = () => ({
@@ -82,9 +71,6 @@ export function createCriticalStop(appStore: AppStore): CriticalStopHandle {
   onCleanup(() => restoreTransfer?.abort());
   const [freshStartInFlight, setFreshStartInFlight] = createSignal(false);
   const [vaultResetInFlight, setVaultResetInFlight] = createSignal(false);
-  const [vaultPassword, setVaultPassword] = createSignal("");
-  const [vaultPasswordConfirmation, setVaultPasswordConfirmation] =
-    createSignal("");
   const [restoreOutcome, setRestoreOutcome] = createSignal<
     CriticalStopSpec | undefined
   >();
@@ -113,18 +99,9 @@ export function createCriticalStop(appStore: AppStore): CriticalStopHandle {
         return "Finishing…";
       case "finish_fresh_start":
         return "Starting fresh…";
-      case "unlock_credential_vault":
-        return "Unlocking…";
-      case "create_credential_vault":
-        return "Creating…";
       case "reset_credential_vault":
         return "Resetting…";
     }
-  };
-
-  const clearVaultPasswordFields = (): void => {
-    setVaultPassword("");
-    setVaultPasswordConfirmation("");
   };
 
   const resetVault = async (stop: CriticalStopSpec): Promise<void> => {
@@ -141,7 +118,6 @@ export function createCriticalStop(appStore: AppStore): CriticalStopHandle {
     setVaultResetInFlight(true);
     try {
       await resetCredentialVault();
-      clearVaultPasswordFields();
       await connectAppBackend(appStore).catch(() => undefined);
     } catch {
       setAttemptError(stop.retryFailed);
@@ -177,39 +153,6 @@ export function createCriticalStop(appStore: AppStore): CriticalStopHandle {
         done(restartStop.retryFailed);
       }
     };
-    if (isVaultPasswordRecovery(stop.recovery)) {
-      const password = vaultPassword();
-      const passwordBytes = new TextEncoder().encode(password).byteLength;
-      if (
-        passwordBytes < MIN_VAULT_PASSWORD_BYTES ||
-        passwordBytes > MAX_VAULT_PASSWORD_BYTES ||
-        password.trim() === ""
-      ) {
-        done(
-          `Use an app password between ${MIN_VAULT_PASSWORD_BYTES} and ${MAX_VAULT_PASSWORD_BYTES} bytes.`,
-        );
-        return;
-      }
-      if (
-        stop.recovery === "create_credential_vault" &&
-        password !== vaultPasswordConfirmation()
-      ) {
-        done("The passwords do not match.");
-        return;
-      }
-      provideCredentialVaultPassword(password);
-      clearVaultPasswordFields();
-      void connectAppBackend(appStore, { reportFailure: false }).then(
-        () => done(),
-        () =>
-          done(
-            lastSidecarStartFailure()?.startsWith("credential_vault_")
-              ? undefined
-              : stop.retryFailed,
-          ),
-      );
-      return;
-    }
     if (stop.recovery === "reconnect") {
       void connectAppBackend(appStore, { reportFailure: true }).then(
         () =>
@@ -369,50 +312,6 @@ export function createCriticalStop(appStore: AppStore): CriticalStopHandle {
     }
   };
 
-  const vaultPasswordForm = (stop: CriticalStopSpec): JSX.Element | undefined => {
-    if (!isVaultPasswordRecovery(stop.recovery)) return undefined;
-    const creating = stop.recovery === "create_credential_vault";
-    return (
-      <form
-        class="den-critical-stop__vault-form"
-        data-testid="credential-vault-password-form"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (!attemptInFlight() && !vaultResetInFlight()) attempt(stop);
-        }}
-      >
-        <DenField
-          label="App password"
-          hint={creating
-            ? "Use at least 12 bytes. This password cannot be recovered."
-            : undefined}
-        >
-          <DenInput
-            type="password"
-            autocomplete={creating ? "new-password" : "current-password"}
-            data-testid="credential-vault-password"
-            value={vaultPassword()}
-            disabled={attemptInFlight() || vaultResetInFlight()}
-            onInput={(event) => setVaultPassword(event.currentTarget.value)}
-          />
-        </DenField>
-        <Show when={creating}>
-          <DenField label="Confirm app password">
-            <DenInput
-              type="password"
-              autocomplete="new-password"
-              data-testid="credential-vault-password-confirmation"
-              value={vaultPasswordConfirmation()}
-              disabled={attemptInFlight() || vaultResetInFlight()}
-              onInput={(event) =>
-                setVaultPasswordConfirmation(event.currentTarget.value)}
-            />
-          </DenField>
-        </Show>
-      </form>
-    );
-  };
-
   const view = (): JSX.Element => (
     <WindowHost testId="critical-stop-host">
       <Show when={spec()} keyed>
@@ -426,7 +325,7 @@ export function createCriticalStop(appStore: AppStore): CriticalStopHandle {
                 : stop.message
             }
             detail={stop.detail}
-            children={<>{vaultPasswordForm(stop)}
+            children={<>
               <Show when={restoreProgress()} keyed>{(progress) => <div>
                 <p role="status">{backupProgressMessage(progress)}</p>
                 <Show when={progress.cancellable}><DenButton variant="secondary" onClick={() => restoreTransfer?.abort()}>Cancel transfer</DenButton></Show>
@@ -441,15 +340,7 @@ export function createCriticalStop(appStore: AppStore): CriticalStopHandle {
               onClick: () => attempt(stop),
             }}
             secondaryAction={
-              isVaultPasswordRecovery(stop.recovery)
-                ? {
-                    label: vaultResetInFlight()
-                      ? "Resetting…"
-                      : "Forgot password? Reset vault…",
-                    disabled: attemptInFlight() || vaultResetInFlight(),
-                    onClick: () => resetVault(stop),
-                  }
-                : (stop.recovery === "restore_snapshot" ||
+              (stop.recovery === "restore_snapshot" ||
                 stop.recovery === "restore_backup")
                 ? {
                     label: freshStartInFlight()
