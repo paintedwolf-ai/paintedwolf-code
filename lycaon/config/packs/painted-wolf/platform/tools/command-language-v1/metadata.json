@@ -116,6 +116,193 @@
           "fixture_id": "ls-option-r",
           "consumption": "fixed",
           "sample_values": []
+        },
+        {
+          "spellings": [
+            "-p"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ls-option-p",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-i",
+            "--inode"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ls-option-i",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-s",
+            "--size"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ls-option-s",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-n",
+            "--numeric-uid-gid"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ls-option-n",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-L",
+            "--dereference"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ls-option-L",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-U"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ls-option-U",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ls-option-c",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-u"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ls-option-u",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--group-directories-first"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ls-option-group-directories-first",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--color",
+            "--colour"
+          ],
+          "arity": -1,
+          "value_role": "color-when",
+          "fixture_id": "ls-option-color",
+          "consumption": "optional-attached-value",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-G"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ls-option-G",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-o"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ls-option-o",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-g"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ls-option-g",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-f"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ls-option-f",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-k",
+            "--kibibytes"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ls-option-k",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-m"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ls-option-m",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-H",
+            "--dereference-command-line"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ls-option-H",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-P"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "ls-option-P",
+          "consumption": "fixed",
+          "sample_values": []
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. ls [OPTIONS] [--] [PATH ...]",
@@ -147,7 +334,7 @@
       ],
       "example": {
         "program": "ls -1 -- ./empty",
-        "stdout": "",
+        "stdout": "./empty\n",
         "status": 0,
         "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
         "setup": {
@@ -166,7 +353,7 @@
           }
         }
       },
-      "notes": "Default .; byte-sorted one name per LF (no terminal columns). -a includes . and ..; -A omits those; -t modified descending, -S size descending, -r reverses final order; stable byte tie-break. -l uses numeric uid/gid, UTC timestamps, permissions and byte size; -h IEC units. -R bounded, no symlink recursion.",
+      "notes": "Default .; byte-sorted one name per LF (no terminal columns). -a includes . and ..; -A omits those; -t modified descending, -S size descending, -r reverses final order; stable byte tie-break. -l names the owner and group through the platform account database (the decimal id when it has no name), with UTC timestamps, permissions and byte size; -h IEC units. -R bounded, no symlink recursion. -p appends / to directories; -i prefixes the inode and -s the allocated size in 1 KiB units (with -h, IEC), both right-aligned per listing, and -s adds the directory's total line; -n is -l with decimal uid and gid; -L describes link targets instead of links; -U keeps unsigned byte order (directory order is not deterministic); -c and -u select change and access time for -l, and sort by that time with -t or without -l; --group-directories-first lists directories before other entries; --color=never|auto prints plain names (output is never a terminal) and --color=always refuses; -G follows GNU: long listings omit the group column, and other listings are unchanged (BSD's color meaning does not apply). GNU, BSD and busybox spellings with one meaning are all accepted: -o is a long listing without the group and -g one without the owner; -f is -aU without long format; -k keeps -s in 1 KiB units (already the unit); -m separates names with ', ' and wraps before column 80; -H describes command-line links' targets; -P never follows links (the default).",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/survey/stat.go",
         "tests": [
@@ -196,12 +383,31 @@
         "ls-option-F",
         "ls-option-t",
         "ls-option-S",
-        "ls-option-r"
+        "ls-option-r",
+        "ls-option-p",
+        "ls-option-i",
+        "ls-option-s",
+        "ls-option-n",
+        "ls-option-L",
+        "ls-option-U",
+        "ls-option-c",
+        "ls-option-u",
+        "ls-option-group-directories-first",
+        "ls-option-color",
+        "ls-option-G",
+        "ls-option-o",
+        "ls-option-g",
+        "ls-option-f",
+        "ls-option-k",
+        "ls-option-m",
+        "ls-option-H",
+        "ls-option-P"
       ]
     },
     {
       "name": "stat",
       "aliases": [],
+      "default_format": "  File: %N\n  Size: %-10s\tBlocks: %-10b IO Block: %-6o %F\nDevice: %Hd,%Ld\tInode: %-10i  Links: %h\nAccess: (%04a/%10.10A)  Uid: (%5u/%8U)   Gid: (%5g/%8G)\nAccess: %x\nModify: %y\nChange: %z\n Birth: %w",
       "family": "metadata",
       "owner": "filesystem",
       "argv": "stat [-L] [-c GNU_FORMAT|-f BSD_FORMAT|--file-system] [--] PATH ...",
@@ -301,7 +507,7 @@
           }
         }
       },
-      "notes": "Default lstat, -L follows after authority. GNU %n %s %a %A %F %Y %u %g %i; BSD %N %z %Lp %Sp %HT %m %u %g %i; %% literal. Unknown directives reject. -f always BSD metadata, never OS-dependent filesystem mode. --file-system explicitly requests filesystem metadata and may return capability unavailable.",
+      "notes": "Default lstat, -L follows after authority. Without -c or -f prints default_format, GNU's multi-line description, in UTC. GNU %n %N %s %b %o %a %A %F %h %i %u %U %g %G %D %d %Hd %Ld %x %X %y %Y %z %Z %w %W with %[-0][WIDTH][.PRECISION]; BSD %N %z %Lp %Sp %HT %m %u %g %i; %% literal. Birth time is - and 0 when the file system does not report it. Unknown directives reject. -f always BSD metadata, never OS-dependent filesystem mode. --file-system explicitly requests filesystem metadata and may return capability unavailable.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/survey/stat.go",
         "tests": [
@@ -438,7 +644,7 @@
           }
         }
       },
-      "notes": "Default lines words bytes. -l counts LF bytes; -c same captured bytes, including recorded BOM. -w ASCII space/tab/LF/CR/VT/FF separators; -m decoded Unicode scalar count, invalid encoding rejects; -L max Unicode scalar line length excluding LF/CRLF. Single stdin scalar unpadded integer LF; multi values separated single space. Intentionally replaces existing CountLines/disk-size mixed representation.",
+      "notes": "GNU column widths use input byte sizes; unknown-size input uses seven columns when multiple counts are selected. -L counts display columns with eight-column tab stops. All counts come from the same captured representation.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/survey/wc.go",
         "tests": [

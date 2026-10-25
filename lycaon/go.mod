@@ -1,6 +1,6 @@
 module github.com/lycaon/lycaon
 
-go 1.26.9
+go 1.26.10
 
 require (
 	codeberg.org/readeck/go-readability/v2 v2.1.3
@@ -10,7 +10,6 @@ require (
 	github.com/alecthomas/chroma/v2 v2.27.0
 	github.com/andybalholm/brotli v1.2.6
 	github.com/atotto/clipboard v0.1.4
-	github.com/benhoyt/goawk v1.32.0
 	github.com/aws/aws-sdk-go-v2 v1.47.3
 	github.com/aws/aws-sdk-go-v2/config v1.33.9
 	github.com/aws/aws-sdk-go-v2/credentials v1.20.9
@@ -18,12 +17,14 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.63.4
 	github.com/aws/smithy-go v1.28.5
 	github.com/aymanbagabas/go-udiff v0.4.1
+	github.com/benhoyt/goawk v1.32.0
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/charmbracelet/x/ansi v0.11.9
 	github.com/charmbracelet/x/vt v0.0.0-20260713092006-0d683c34c74b
 	github.com/creack/pty v1.1.24
+	github.com/dlclark/regexp2/v2 v2.5.1
 	github.com/dsnet/compress v0.0.2-0.20230904184137-39efe44ab707
 	github.com/fatih/semgroup v1.3.0
 	github.com/flosch/pongo2/v6 v6.1.0
@@ -148,7 +149,6 @@ require (
 	github.com/diskfs/go-diskfs v1.7.0 // indirect
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/djherbis/times v1.6.0 // indirect
-	github.com/dlclark/regexp2/v2 v2.5.1 // indirect
 	github.com/docker/cli v29.5.3+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.9.8 // indirect
 	github.com/docker/go-connections v0.7.0 // indirect
@@ -328,6 +328,10 @@ replace mvdan.cc/sh/v3 => ../third_party/mvdan-sh
 // Bounded awk execution; provenance and patch in third_party/README.md.
 replace github.com/benhoyt/goawk => ../third_party/goawk
 
+// jq key order, number literals and error text; provenance and patch in third_party/README.md.
+replace github.com/itchyny/gojq => ../third_party/gojq
+
 replace github.com/zricethezav/gitleaks/v8 => ../third_party/gitleaks
+
 // Bounded typed ERE execution; provenance and patch in third_party/README.md.
 replace github.com/dlclark/regexp2/v2 => ../third_party/regexp2

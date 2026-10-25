@@ -2,6 +2,7 @@ package native
 
 import (
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -9,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
 // TestCaptureBytesPinsExactPublishedBytes: literal captures keep binary and
@@ -37,5 +39,32 @@ func TestCaptureBytesPinsExactPublishedBytes(t *testing.T) {
 	testutil.FailErr(t, "remove blob", os.Remove(filepath.Join(f.dir, "blob")))
 	if err := f.revisions.Verify(t.Context(), f.tctx, captured.Revision); !errors.As(err, &conflict) {
 		t.Fatalf("deleted byte pin = %v", err)
+	}
+}
+
+// TestPinOpenedNamesTheOpenedObject: a pin taken through another owner's
+// open descriptor hashes that object without moving its offset.
+func TestPinOpenedNamesTheOpenedObject(t *testing.T) {
+	f := newPinnedDiskFixture(t, map[string]string{"seen.txt": "seen bytes\n"})
+	resolved, err := projectpaths.ResolveRead(t.Context(), f.revisions.Boundary, f.tctx, "seen.txt")
+	testutil.FailErr(t, "resolve", err)
+	file, err := os.Open(resolved.Abs)
+	testutil.FailErr(t, "open", err)
+	defer file.Close()
+	revision, ok, err := f.revisions.PinOpened(resolved, file)
+	testutil.FailErr(t, "pin opened", err)
+	sum := textfile.SHA256([]byte("seen bytes\n"))
+	if !ok || revision.Path != "seen.txt" || revision.DiskSHA256 != sum || revision.ContentSHA256 != sum || revision.ContentBytes != 11 {
+		t.Fatalf("revision = %+v", revision)
+	}
+	rest, err := io.ReadAll(file)
+	if err != nil || string(rest) != "seen bytes\n" {
+		t.Fatalf("pin moved the owner's offset: %q %v", rest, err)
+	}
+	dir, err := os.Open(f.dir)
+	testutil.FailErr(t, "open dir", err)
+	defer dir.Close()
+	if _, ok, err := f.revisions.PinOpened(resolved, dir); ok || err != nil {
+		t.Fatalf("directory pinned: %v %v", ok, err)
 	}
 }

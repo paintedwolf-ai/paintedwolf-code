@@ -45,7 +45,9 @@ type Fixture struct {
 	Session    string
 	Dir        string
 	Background *bgprocess.Registry
-	calls      int
+	// Configure adjusts each call's tool context before the entry runs.
+	Configure func(*tools.ToolContext)
+	calls     int
 }
 
 type sessions struct{}
@@ -116,6 +118,9 @@ func (f *Fixture) Call(t *testing.T, ctx context.Context, source string) (string
 	tc := tools.ToolContext{Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: f.Dir, IsPrimary: true}}, ActiveRootID: "r1", SourceWorkspaceKind: api.SourceWorkspaceKindProject}}
 	tc.Identity.Agent, tc.Identity.ProjectID, tc.Identity.SessionID, tc.Identity.ToolCallID = "fixture", testdbseed.DefaultProjectID, f.Session, callID
 	tc.Invocation.ID = parent.ID
+	if f.Configure != nil {
+		f.Configure(&tc)
+	}
 	return f.Runtime.Run(ctx, args, tc)
 }
 

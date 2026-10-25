@@ -55,11 +55,11 @@ func NativeReplacesCommandSuffix(toolName, profileID string) string {
 	return entry.ReplacesLine
 }
 
-// CommandInverseSurveyLine lists native survey tools reserved for implementers.
 // ExternalSelectorLine is the command schema's copy for the explicit external
 // selector; the host omits it when the selector is hidden.
 const ExternalSelectorLine = "`external -- NAME` runs the installed binary that shares a native name."
 
+// CommandInverseSurveyLine lists native survey tools reserved for implementers.
 func CommandInverseSurveyLine(profileID string) string {
 	if profileID != toolprofiles.DefaultToolProfileID {
 		return ""

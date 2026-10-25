@@ -17,7 +17,7 @@ import (
 // dispatch: control, status, test, variable and source built-ins.
 func EvaluatorBuiltin(name string) bool {
 	switch name {
-	case "true", "false", ":", "test", "[", "unset", "set", "source", "export":
+	case "true", "false", ":", "test", "[", "unset", "set", "source", "export", "read":
 		return true
 	}
 	return controlBuiltins[name]
@@ -143,8 +143,8 @@ func (f *frame) simple(ctx context.Context, s commandsurface.Statement, c comman
 	if controlBuiltins[name] {
 		return f.controlBuiltin(s, name, fields)
 	}
-	if decl, ok := f.state.functions[name]; ok {
-		return signal{}, f.call(ctx, s, decl, fields, assigns)
+	if fn, ok := f.state.functions[name]; ok {
+		return signal{}, f.call(ctx, s, fn, fields, assigns)
 	}
 	switch name {
 	case "source":
@@ -161,6 +161,8 @@ func (f *frame) simple(ctx context.Context, s commandsurface.Statement, c comman
 		return signal{}, f.unset(s, fields)
 	case "set":
 		return signal{}, f.setOptions(s, fields)
+	case "read":
+		return signal{}, f.readBuiltin(ctx, s, fields)
 	}
 	return signal{}, f.dispatch(ctx, s, fields, assigns)
 }
@@ -173,6 +175,9 @@ func (f *frame) predicates() PredicateRuntime {
 	}
 	if runtime.Memory == nil && !runtime.LocalBoundsOnly {
 		runtime.Memory = f.e.ports.Memory
+	}
+	if runtime.Patterns == nil {
+		runtime.Patterns = NativePredicatePatterns{Memory: runtime.Memory, LocalBoundsOnly: runtime.LocalBoundsOnly}
 	}
 	return runtime
 }
@@ -221,7 +226,7 @@ func (f *frame) dispatch(ctx context.Context, s commandsurface.Statement, fields
 			}
 			gap = f.nativeGap(spec, argv, fields, assigns)
 			if gap == nil {
-				f.hostRefusal(spec.Name, argv.Word, argv.Code)
+				f.hostRefusal(spec.Name, argv.Word, argv.Expected, argv.Code)
 				child.settle(toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerRefused, StopCode: argv.Code, EffectCertainty: toolcontract.NoEffect}, err)
 				refusal := f.refuse(s.SyntaxLocation, argv.Code, argv.Expected, err).(*EvaluationRefusal)
 				refusal.Command, refusal.Option, refusal.Form = spec.Name, argv.Word, spec.Argv
@@ -269,6 +274,8 @@ func (f *frame) settle(child *childRun, result toolcontract.ProducerResult, err 
 	}
 	child.settle(result, err)
 	f.publish.mark(result.PublicationEligible)
+	f.state.pipeStatus = []int{result.Status}
+	f.state.vars.SetPipeStatus(f.state.pipeStatus)
 	recordErr := f.state.control.Record(child.inv.Identity.ExecutionID, result, true, false)
 	if stop, stopped := f.state.latch.Stop(); stopped {
 		if stop.ExecutionID == child.inv.Identity.ExecutionID && err != nil {
@@ -330,8 +337,7 @@ func builtinOperand(value string, status bool) (int, bool) {
 }
 
 func (f *frame) unset(s commandsurface.Statement, fields Fields) error {
-	args := fields.Values()[1:]
-	functions := false
+	args, functions := fields.Values()[1:], false
 	if len(args) > 0 && (args[0] == "-v" || args[0] == "-f") {
 		functions, args = args[0] == "-f", args[1:]
 	}
@@ -394,7 +400,8 @@ func (f *frame) exportDeclaration(ctx context.Context, s commandsurface.Statemen
 
 // call runs a declared function with invocation-local positional arguments.
 // The body shares variables, functions and exit control with its caller.
-func (f *frame) call(ctx context.Context, s commandsurface.Statement, decl commandsurface.FunctionDeclaration, fields Fields, assigns []assignment) error {
+func (f *frame) call(ctx context.Context, s commandsurface.Statement, fn declaredFunction, fields Fields, assigns []assignment) error {
+	decl := fn.decl
 	if int64(f.functions+1) > f.e.limits["function_depth"] {
 		return f.refuseLimit(s.SyntaxLocation, "function_depth", int64(f.functions+1))
 	}
@@ -405,6 +412,12 @@ func (f *frame) call(ctx context.Context, s commandsurface.Statement, decl comma
 	defer child.close()
 	g := *f
 	g.parent, g.positional, g.functions, g.loops, g.returnable = child.inv, fields.Values()[1:], f.functions+1, 0, true
+	if fn.sourceUnit != "" {
+		g.parent.SourceUnitID = fn.sourceUnit
+	}
+	if fn.unit != "" {
+		g.unit = fn.unit
+	}
 	if len(assigns) > 0 {
 		g.prefix = make(map[string]string, len(f.prefix)+len(assigns))
 		for name, value := range f.prefix {
@@ -487,13 +500,17 @@ func (f *frame) nativeGap(spec toolcontract.CommandSpecification, argv *ArgvErro
 }
 
 // hostRefusal writes a host refusal to the statement's stderr in shell voice.
-func (f *frame) hostRefusal(command, form, code string) {
+func (f *frame) hostRefusal(command, form, expected, code string) {
 	if f.streams.Error == nil {
 		return
 	}
 	subject := command
 	if form != "" {
 		subject += ": " + form
+	}
+	if expected != "" {
+		_, _ = fmt.Fprintf(f.streams.Error, "%s: not supported here (expected %s) [%s]\n", subject, expected, code)
+		return
 	}
 	_, _ = fmt.Fprintf(f.streams.Error, "%s: not supported here [%s]\n", subject, code)
 }

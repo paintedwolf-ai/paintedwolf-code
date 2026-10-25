@@ -9,8 +9,10 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
@@ -50,14 +52,27 @@ func (q *spillQuota) ReserveSpill(_ context.Context, n int64) (func(), error) {
 // batchLog is the evaluator's nested-command port: every batch is recorded
 // with its own execution identity, and fixture commands write their argv.
 type batchLog struct {
+	mu      sync.Mutex
 	batches [][]string
 	status  map[string]int
 	stop    string
 }
 
+// sorted returns the batches in argv order, since parallel batches launch
+// concurrently.
+func (b *batchLog) sorted() [][]string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	out := slices.Clone(b.batches)
+	slices.SortStableFunc(out, func(x, y []string) int { return strings.Compare(strings.Join(x, "\x00"), strings.Join(y, "\x00")) })
+	return out
+}
+
 func (b *batchLog) RunNested(_ context.Context, _ commandprogram.OperationRequest, argv commandprogram.Fields, _ map[string]string, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 	values := argv.Values()
+	b.mu.Lock()
 	b.batches = append(b.batches, values)
+	b.mu.Unlock()
 	if b.stop != "" && values[len(values)-1] == b.stop {
 		return toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerRefused, StopCode: "PERMISSION_DENIED", EffectCertainty: toolcontract.NoEffect}, errors.New("refused batch")
 	}

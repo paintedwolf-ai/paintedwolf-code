@@ -51,6 +51,27 @@ func TestPOSIXEngineFindsPositionedLongestMatchesWithSubexpressions(t *testing.T
 	}
 }
 
+func TestPOSIXEngineFoldsCaseOnRequest(t *testing.T) {
+	engine, err := NewPOSIXEngine()
+	if err != nil {
+		t.Fatal(err)
+	}
+	folded, err := engine.CompileFolded(t.Context(), `a[b-c]\(É\)`, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := folded.Find(t.Context(), []byte("xACé"), 0); err != nil || !slices.Equal(got, []int{1, 5, 3, 5}) {
+		t.Fatalf("folded find = %v, %v", got, err)
+	}
+	exact, err := engine.Compile(t.Context(), `a[b-c]`, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := exact.Find(t.Context(), []byte("AC"), 0); err != nil || got != nil {
+		t.Fatalf("exact find = %v, %v", got, err)
+	}
+}
+
 // TestPOSIXEngineSubstitutesGlobally drives the engine the way s///g does:
 // an empty match right after a previous match is skipped and the search
 // advances one scalar.

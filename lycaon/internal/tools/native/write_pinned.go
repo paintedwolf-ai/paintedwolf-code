@@ -18,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
+	"github.com/lycaon/lycaon/internal/tools/readcaps"
 )
 
 // applyPinned publishes a program's prepared bytes at the destination and
@@ -162,7 +163,9 @@ func (t *WriteTool) applyPinnedBytes(ctx context.Context, input WriteInput, tctx
 	exists := current.Mode != toolcontract.AbsentRevision
 	if st.Editor != nil {
 		if !utf8.Valid(input.Bytes) {
-			return WriteResult{}, &toolrejection.ToolReject{Code: "WRITE_BINARY_DENIED", Data: map[string]any{"path": resolved.DisplayPath, "reason": "binary output into an open text document"}}
+			return WriteResult{}, &toolrejection.ToolReject{Code: "WRITE_BINARY_DENIED", Data: map[string]any{
+				"path": resolved.DisplayPath, "bytes": len(input.Bytes), "reason": "binary output into an open text document", "max_file_bytes": readcaps.MaxMutationBytes,
+			}}
 		}
 		content := string(input.Bytes)
 		if input.Append && exists {
