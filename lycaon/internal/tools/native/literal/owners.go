@@ -158,6 +158,9 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 	if streams.Input != nil {
 		_ = streams.Input.Close()
 	}
+	for _, closer := range inv.closers {
+		_ = closer.Close()
+	}
 	return inv.settle(err)
 }
 

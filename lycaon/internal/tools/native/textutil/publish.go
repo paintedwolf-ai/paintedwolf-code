@@ -21,6 +21,9 @@ func newPaths(inv *invocation) (*projectpaths.ProgramPaths, error) {
 // position and later publishes exact bytes at that pin. A destination that
 // moved since capture is COMMAND_REVISION_CONFLICT; nothing reruns.
 func (inv *invocation) openDestination(operand commandprogram.Field) (commandprogram.StagedOutput, error) {
+	if writer, ok := operand.ProcessSubstitution().OpenWriter(); ok {
+		return commandprogram.NewProcessSubstitutionStagedOutput(writer), nil
+	}
 	if inv.ports.Publication == nil {
 		return nil, toolrejection.RejectInvalidArguments("COMMAND_PLATFORM_UNAVAILABLE", map[string]any{"command": inv.spec.Name, "capability": "the program's redirect publication owner"})
 	}

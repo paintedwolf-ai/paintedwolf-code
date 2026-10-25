@@ -5,13 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/hitl"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/approvaloutcome"
 	"github.com/lycaon/lycaon/internal/capabilityrequest"
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -78,7 +78,9 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	boundaryStarted := false
 	ownerStarted := false
 	defer func() {
-		completeNativeRejection(bound, err)
+		if !ownerStarted || result.Producer.Terminal == toolcontract.ProducerRefused {
+			completeNativeRejection(bound, err)
+		}
 		if !ownerStarted {
 			certainty := toolcontract.NoEffect
 			if boundaryStarted {
@@ -213,7 +215,7 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 		result.HostStopCode = approvaloutcome.CodeApprovalDenied
 		err = errors.Join(err, e.Approvals.approvalRefusal(approvaloutcome.CodeApprovalDenied))
 	}
-	if rejected := toolrejection.AsToolReject(err); rejected != nil {
+	if rejected := toolrejection.AsToolReject(err); rejected != nil && (!ownerStarted || result.Producer.Terminal == toolcontract.ProducerRefused) {
 		rejected = toolrejection.CompleteFailureMetadata(rejected, facts.Identity, facts.Contract.Owner)
 		err = e.Rejections.settleReject(ctx, facts.Identity, surface.profile, canonical, rejected)
 	}
@@ -250,17 +252,30 @@ func stageMatchesOperation(bound toolcontract.BoundOperation, argv []string) boo
 	if bound.Publication() != toolcontract.NoPublication {
 		return len(argv) == 2 && argv[0] == bound.Command() && argv[1] != ""
 	}
-	return stageMatchesCommand(bound.Command(), argv)
+	return stageMatchesCommand(bound.Command(), bound.Definition().ReadOnlyFacts().Commands, argv)
 }
 
 // stageMatchesCommand checks the stage against its catalog command. A confined
 // external launch runs the launched program's own argv, so its stage starts
 // with that program rather than the external selector.
-func stageMatchesCommand(command string, argv []string) bool {
+func stageMatchesCommand(command string, commands []toolcontract.CommandSpecification, argv []string) bool {
 	if command == "external" {
 		return len(argv) > 0 && argv[0] != ""
 	}
-	return nativeCommandPrefix(command, argv)
+	if nativeCommandPrefix(command, argv) {
+		return true
+	}
+	for _, spec := range commands {
+		if spec.Name != command {
+			continue
+		}
+		for _, alias := range spec.Aliases {
+			if nativeCommandPrefix(alias, argv) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // Command prefixes come from the immutable catalog, never parsed command prose.

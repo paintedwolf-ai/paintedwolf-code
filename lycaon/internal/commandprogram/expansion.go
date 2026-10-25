@@ -70,15 +70,27 @@ func (e *WordExpander) ExpandFields(ctx context.Context, scope ExpansionScope, w
 }
 
 func (e *WordExpander) ExpandScalar(ctx context.Context, scope ExpansionScope, word commandsurface.DeferredWord) (string, error) {
-	run, err := e.begin(ctx, scope, word, modeScalar)
+	field, err := e.ExpandScalarField(ctx, scope, word)
 	if err != nil {
 		return "", err
 	}
+	return field.Value, nil
+}
+
+func (e *WordExpander) ExpandScalarField(ctx context.Context, scope ExpansionScope, word commandsurface.DeferredWord) (Field, error) {
+	run, err := e.begin(ctx, scope, word, modeScalar)
+	if err != nil {
+		return Field{}, err
+	}
 	defer run.close()
 	if err := run.word(ctx, word.Parts); err != nil {
-		return "", err
+		return Field{}, err
 	}
-	return run.join(ctx, run.assembly.current, e.limits.valueBytes, "variable_value_bytes")
+	value, err := run.join(ctx, run.assembly.current, e.limits.valueBytes, "variable_value_bytes")
+	if err != nil {
+		return Field{}, err
+	}
+	return run.field(value, run.assembly.current), nil
 }
 
 func (e *WordExpander) ExpandPattern(ctx context.Context, scope ExpansionScope, word commandsurface.DeferredWord) (PredicateValue, error) {
