@@ -29,8 +29,11 @@ func PrepareWriteResource(request WriteResourceRequest) (WriteResource, error) {
 	if err != nil {
 		return WriteResource{}, err
 	}
-	return allocateWriteResource(request, filepath.Join(home, "shared-output"),
-		confine.WriteRootsForProject("", []string{request.Project}))
+	writeRoots, err := confine.WriteRootsForBoundary("", []string{request.Project}, nil, "")
+	if err != nil {
+		return WriteResource{}, err
+	}
+	return allocateWriteResource(request, filepath.Join(home, "shared-output"), writeRoots)
 }
 
 func allocateWriteResource(request WriteResourceRequest, base string, writeRoots []string) (WriteResource, error) {

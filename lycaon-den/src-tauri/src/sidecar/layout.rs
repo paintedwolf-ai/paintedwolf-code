@@ -64,7 +64,13 @@ pub(super) fn linux_package_engine_layout(install_root: &Path) -> Option<Bundled
 }
 
 pub(crate) fn setup_bundled_engine_layout(app: &tauri::AppHandle) {
-    let layout = if crate::linux_install::installed().is_some() {
+    let layout = if let Ok(Some(generation)) = crate::linux_generation::running() {
+        generation.engine_root().ok().and_then(|engine_root| {
+            generation.helper("pw").ok().map(|_| BundledEngineLayout {
+                binary: generation.root.join("bin/pw"), engine_root,
+            })
+        })
+    } else if crate::linux_install::installed().is_some() {
         linux_package_engine_layout(Path::new(crate::linux_install::INSTALL_ROOT))
     } else {
         std::env::current_exe()
@@ -87,6 +93,10 @@ pub(super) fn bundled_engine_layout() -> Option<BundledEngineLayout> {
 }
 
 pub(super) fn resolve_lycaon_binary() -> Result<PathBuf, String> {
+    if let Some(generation) = crate::linux_generation::running()? {
+        generation.engine_root()?;
+        return Ok(generation.root.join("bin/pw"));
+    }
     if let Some(layout) = bundled_engine_layout() {
         return Ok(layout.binary);
     }
