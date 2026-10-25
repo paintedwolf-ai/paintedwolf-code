@@ -24,13 +24,17 @@ func TestRecursiveCopyEntryCost(t *testing.T) {
 	if result.err != nil || result.result.Status != 0 {
 		t.Fatalf("copy outcome: %+v, %v, %s", result.result, result.err, result.stderr)
 	}
-	var mutations, uncommitted, effects, blobs int
+	var mutations, uncommitted, effects int
 	testutil.FailErr(t, "count mutations", h.db.QueryRowContext(t.Context(), `SELECT count(*) FROM source_mutations`).Scan(&mutations))
 	testutil.FailErr(t, "count uncommitted mutations", h.db.QueryRowContext(t.Context(), `SELECT count(*) FROM source_mutations WHERE status != 'committed'`).Scan(&uncommitted))
 	testutil.FailErr(t, "count effects", h.db.QueryRowContext(t.Context(), `SELECT count(*) FROM source_effects WHERE path LIKE 'target/%' AND entry_kind='file'`).Scan(&effects))
-	testutil.FailErr(t, "count blobs", h.db.QueryRowContext(t.Context(), `SELECT count(*) FROM source_blob_objects`).Scan(&blobs))
-	if effects != 1000 || uncommitted != 0 || blobs != 0 {
-		t.Fatalf("1000-file copy mutation_rows=%d uncommitted=%d file_effects=%d blobs=%d", mutations, uncommitted, effects, blobs)
+	if effects != 1000 || uncommitted != 0 {
+		t.Fatalf("1000-file copy mutation_rows=%d uncommitted=%d file_effects=%d", mutations, uncommitted, effects)
+	}
+	historyAfterCopy, err := h.service.History.State(t.Context(), h.project.ID)
+	testutil.FailErr(t, "history after copy", err)
+	if historyAfterCopy.Undo != nil {
+		t.Fatalf("copy into new destination recorded unnecessary recovery entry: %+v", historyAfterCopy.Undo)
 	}
 }
 

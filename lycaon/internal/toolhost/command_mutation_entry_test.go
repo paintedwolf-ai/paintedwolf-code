@@ -92,9 +92,14 @@ func runMutationEntryTree(t *testing.T, total int) {
 	var attributed, uncommitted, copyBlobs int
 	testutil.FailErr(t, "count attributed copied files", fixture.Database.QueryRowContext(t.Context(), `SELECT count(*) FROM source_effects WHERE path LIKE 'copied/%' AND entry_kind='file'`).Scan(&attributed))
 	testutil.FailErr(t, "count uncommitted copy mutations", fixture.Database.QueryRowContext(t.Context(), `SELECT count(*) FROM source_mutations WHERE status != 'committed'`).Scan(&uncommitted))
-	testutil.FailErr(t, "count copy recovery blobs", fixture.Database.QueryRowContext(t.Context(), `SELECT count(*) FROM source_blob_objects`).Scan(&copyBlobs))
-	if attributed != total || uncommitted != 0 || copyBlobs != 0 {
-		t.Fatalf("copied files=%d uncommitted=%d blobs=%d want=%d/0/0", attributed, uncommitted, copyBlobs, total)
+	testutil.FailErr(t, "count blobs after copy", fixture.Database.QueryRowContext(t.Context(), `SELECT count(*) FROM source_blob_objects`).Scan(&copyBlobs))
+	if attributed != total || uncommitted != 0 {
+		t.Fatalf("copied files=%d uncommitted=%d want=%d/0", attributed, uncommitted, total)
+	}
+	copyState, err := service.History.State(t.Context(), p.ID)
+	testutil.FailErr(t, "read history after copy", err)
+	if copyState.Undo != nil {
+		t.Fatalf("copy into new destination recorded recovery entry: %+v", copyState.Undo)
 	}
 	call("rm -rf copied")
 	if _, err := os.Lstat(filepath.Join(fixture.Dir, "copied")); !os.IsNotExist(err) {
@@ -108,9 +113,9 @@ func runMutationEntryTree(t *testing.T, total int) {
 	var deleteMutations, deleteEffects, deleteBlobs int
 	testutil.FailErr(t, "count delete mutations", fixture.Database.QueryRowContext(t.Context(), `SELECT count(*) FROM source_mutations WHERE kind='delete'`).Scan(&deleteMutations))
 	testutil.FailErr(t, "count delete effects", fixture.Database.QueryRowContext(t.Context(), `SELECT count(*) FROM source_effects WHERE op='delete'`).Scan(&deleteEffects))
-	testutil.FailErr(t, "count delete recovery blobs", fixture.Database.QueryRowContext(t.Context(), `SELECT count(*) FROM source_blob_objects`).Scan(&deleteBlobs))
-	if deleteMutations != 1 || deleteEffects != 1 || deleteBlobs != 0 {
-		t.Fatalf("delete mutations=%d effects=%d blobs=%d want=1/1/0", deleteMutations, deleteEffects, deleteBlobs)
+	testutil.FailErr(t, "count blobs after delete", fixture.Database.QueryRowContext(t.Context(), `SELECT count(*) FROM source_blob_objects`).Scan(&deleteBlobs))
+	if deleteMutations != 1 || deleteEffects != 1 || deleteBlobs != copyBlobs {
+		t.Fatalf("delete mutations=%d effects=%d blobs=%d want=1/1/%d", deleteMutations, deleteEffects, deleteBlobs, copyBlobs)
 	}
 	state, err := service.History.State(t.Context(), p.ID)
 	testutil.FailErr(t, "read actual undo history", err)
