@@ -7,6 +7,7 @@ import time
 
 from .app import InstalledApp, session_environment
 from .desktop_launch import protected_launcher, activate_visible_frame
+from .desktop_turn import prepare_composer
 from .desktop_ui import DesktopUI
 from .fresh_profile import Reservation
 from .polkit_policy import PresencePolicy
@@ -57,6 +58,7 @@ def unchallenged_presence(binding):
                 observations['opened_session'] = await_session(app, project, provider['provider_id'], MODEL, status='idle',
                                                                reason='presence-project-session-not-opened')
                 with DesktopUI(app) as ui:
+                    prepare_composer(app, ui)
                     ui.click('Project configuration')
                     ui.click('Secrets', tab=True)
                     ui.click('Add secret')
