@@ -15,7 +15,9 @@ func TestRepoMapAliasUsesCanonicalOwnerAndActualArguments(t *testing.T) {
 	request := requestFor(h, "repo-map", "--path", "pkg")
 	request.Argv[0].Value = "survey-repo"
 	streams := streamsFor("")
-	result, err := h.owners.Invoke(t.Context(), h.tc, paths, request, streams)
+	prepared, err := h.owners.Prepare(paths, request)
+	testutil.FailErr(t, "prepare repo-map alias", err)
+	result, err := prepared.InvokeOwner(t.Context(), h.tc, streams)
 	testutil.FailErr(t, "invoke repo-map alias", err)
 	if result.Status != 0 || result.Terminal != toolcontract.ProducerCompleted {
 		t.Fatalf("alias result = %+v", result)

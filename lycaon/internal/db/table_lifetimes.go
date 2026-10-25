@@ -120,6 +120,7 @@ var tableLifetimes = map[string]TableLifetime{
 	"invocation_program_progress":    cascadeOwnedBy("invocation_programs"),
 	"invocation_program_sources":     cascadeOwnedBy("invocation_programs"),
 	"invocation_program_nodes":       cascadeOwnedBy("invocation_program_sources"),
+	"invocation_program_definitions": cascadeOwnedBy("invocation_programs"),
 	"invocation_program_executions":  cascadeOwnedBy("invocation_program_nodes"),
 	"invocation_program_outputs":     cascadeOwnedBy("invocation_programs"),
 	"invocation_program_deliveries":  cascadeOwnedBy("invocation_program_outputs"),
