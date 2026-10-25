@@ -24,7 +24,7 @@ func FreshEnabled() bool {
 	return configdir.IsDevelopmentChannel()
 }
 
-// RemoveStore deletes the database and its SQLite journals.
+// RemoveStore deletes the database, its SQLite journals, and local quarantine.
 func RemoveStore(dbPath string) error {
 	if strings.TrimSpace(dbPath) == "" {
 		return nil
@@ -32,6 +32,11 @@ func RemoveStore(dbPath string) error {
 	var errs []error
 	if err := os.Remove(dbPath); err != nil && !os.IsNotExist(err) {
 		errs = append(errs, err)
+	}
+	if len(errs) == 0 {
+		if err := os.Remove(dbPath + IntegrityFailureSuffix); err != nil && !os.IsNotExist(err) {
+			errs = append(errs, err)
+		}
 	}
 	errs = append(errs, RemoveStoreSidecars(dbPath))
 	return errors.Join(errs...)

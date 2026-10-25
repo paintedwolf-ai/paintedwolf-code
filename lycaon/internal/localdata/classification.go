@@ -58,6 +58,7 @@ var sqliteJournalSuffixes = []string{"-wal", "-shm", "-journal"}
 
 var configRootRegistry = []ConfigRootEntry{
 	// Durable files
+	{Name: storeFileName + db.IntegrityFailureSuffix, IsDir: false, Class: ClassArchiveExcluded, StoreCoupled: true, IncludeInDiagnostics: true, Reason: "confirmed corruption bound to the physical store; excluded from restored history, included in diagnostics because it holds only the host-written diagnosis and a file identity"},
 	{Name: storeFileName, IsDir: false, Class: ClassDurableFile, StoreCoupled: true, IncludeInBackup: true, Reason: "primary durable SQLite database"},
 	{Name: storeFileName + "-wal", IsDir: false, Class: ClassDurableFile, StoreCoupled: true, Reason: "live SQLite write-ahead log for store.db"},
 	{Name: storeFileName + "-shm", IsDir: false, Class: ClassDurableFile, StoreCoupled: true, Reason: "live SQLite shared memory index for store.db"},
@@ -161,10 +162,10 @@ func entryNames(match func(ConfigRootEntry) bool) []string {
 	return out
 }
 
-// isStoreFile reports store.db and its journals, which db.RemoveStore owns.
+// isStoreFile reports the database, journals, and quarantine that db.RemoveStore owns.
 func isStoreFile(name string) bool {
 	rest, ok := strings.CutPrefix(name, storeFileName)
-	return ok && (rest == "" || slices.Contains(sqliteJournalSuffixes, rest))
+	return ok && (rest == "" || rest == db.IntegrityFailureSuffix || slices.Contains(sqliteJournalSuffixes, rest))
 }
 
 // IsDiagnosticsAllowed reports whether a config-root file may enter a diagnostics bundle.

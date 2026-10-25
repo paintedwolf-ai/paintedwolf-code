@@ -10,32 +10,29 @@ import (
 	"time"
 )
 
-// A nonempty audit marker requires full verification before the next open.
-const integrityAuditFailedMetaKey = "integrity_audit_failed"
+// This reserved host-written value shipped as the unfinished-audit marker.
+// Other nonempty values record confirmed damage, never unfinished work.
+const (
+	integrityAuditFailedMetaKey = "integrity_audit_failed"
+	integrityAuditPendingValue  = "integrity audit pending"
+)
 
-// prepareIntegrity is the boot gate for an existing store: nothing after a
-// clean shutdown, quick_check after an unclean one with the whole-store audit
-// deferred until serving starts, and the whole check for an unfinished audit.
+// prepareIntegrity refuses recorded damage without scanning historical rows.
+// SQLite recovers its WAL; unclean shutdowns and unfinished audits are verified
+// asynchronously after serving starts.
 func prepareIntegrity(ctx context.Context, sqlDB *sql.DB) error {
-	stamped, err := integrityAuditFailed(ctx, sqlDB)
+	value, err := integrityAuditState(ctx, sqlDB)
 	if err != nil {
 		return fmt.Errorf("read integrity audit state: %w", err)
 	}
-	if stamped {
-		return validateStoreIntegrity(ctx, sqlDB)
-	}
-	clean, err := lastShutdownWasClean(ctx, sqlDB)
-	if err != nil {
-		return fmt.Errorf("read shutdown state: %w", err)
-	}
-	if clean {
+	if value == "" || value == integrityAuditPendingValue {
 		return nil
 	}
-	return quickCheck(ctx, sqlDB)
+	ver, _ := ReadUserVersion(ctx, sqlDB)
+	return storeIncompatible(RecoveryReasonIntegrityFailed, ver, "A previous integrity audit confirmed damage: "+value)
 }
 
-// IntegrityAuditDue reports whether this open followed an unclean shutdown,
-// so the whole-store audit still has to run in the background.
+// IntegrityAuditDue reports an unclean shutdown or an unfinished background audit.
 func (s *Store) IntegrityAuditDue() bool {
 	return s != nil && s.integrityAuditDue
 }
@@ -77,20 +74,13 @@ func AuditIntegrity(ctx context.Context, store *Store) error {
 	return nil
 }
 
-func integrityAuditFailed(ctx context.Context, sqlDB DBTX) (bool, error) {
+func integrityAuditState(ctx context.Context, sqlDB DBTX) (string, error) {
 	var value string
 	err := sqlDB.QueryRowContext(ctx, `SELECT value FROM store_meta WHERE key = ?`, integrityAuditFailedMetaKey).Scan(&value)
 	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
+		return "", nil
 	}
-	return err == nil && value != "", err
-}
-
-func stampIntegrityAuditFailed(ctx context.Context, sqlDB DBTX, auditErr error) error {
-	_, err := sqlDB.ExecContext(ctx, `
-INSERT INTO store_meta(key, value) VALUES(?, ?)
-ON CONFLICT(key) DO UPDATE SET value = excluded.value`, integrityAuditFailedMetaKey, auditErr.Error())
-	return err
+	return value, err
 }
 
 func clearIntegrityAuditFailed(ctx context.Context, sqlDB DBTX) error {
@@ -98,24 +88,17 @@ func clearIntegrityAuditFailed(ctx context.Context, sqlDB DBTX) error {
 	return err
 }
 
-// quickCheck verifies page and B-tree structure without cross-checking index
-// content against tables; damage that leaves the structure intact is caught
-// by the whole-store audit after boot.
-func quickCheck(ctx context.Context, sqlDB *sql.DB) error {
-	return scanCheck(ctx, sqlDB, "quick_check")
-}
-
 func validateStoreIntegrity(ctx context.Context, sqlDB *sql.DB) error {
-	if err := scanCheck(ctx, sqlDB, "integrity_check"); err != nil {
+	if err := scanCheck(ctx, sqlDB); err != nil {
 		return err
 	}
 	return foreignKeyCheck(ctx, sqlDB)
 }
 
-// scanCheck runs one of SQLite's self-check pragmas, which report "ok" as a
-// single row and otherwise one row per problem.
-func scanCheck(ctx context.Context, sqlDB *sql.DB, pragma string) error {
-	rows, err := sqlDB.QueryContext(ctx, "PRAGMA "+pragma) // #nosec G202 -- pragma is one of two package constants
+// scanCheck reads SQLite's integrity check: one "ok" row or one row per problem.
+func scanCheck(ctx context.Context, sqlDB *sql.DB) error {
+	const pragma = "integrity_check"
+	rows, err := sqlDB.QueryContext(ctx, "PRAGMA integrity_check")
 	if err != nil {
 		return integrityCheckError(err, pragma)
 	}

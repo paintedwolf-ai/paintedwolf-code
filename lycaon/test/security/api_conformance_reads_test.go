@@ -172,9 +172,16 @@ func (e *hostEffects) since(ctx context.Context, mark int64) ([]string, error) {
 	return changes, nil
 }
 
-// quiesce waits for detached work, then publishes debounced events.
+// quiesce waits for detached work and outbox delivery, then flushes debounced events.
 func (e *hostEffects) quiesce(ctx context.Context) {
-	e.settle(ctx)
+	for {
+		e.settle(ctx)
+		var pending int64
+		if err := e.conn.QueryRowContext(ctx, "SELECT COUNT(*) FROM event_outbox").Scan(&pending); err != nil || pending == 0 {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
 	e.hub.FlushDebounced()
 }
 
@@ -201,35 +208,40 @@ func (e *hostEffects) drain() []string {
 }
 
 // settleSourceWatcher waits until the project's watcher has delivered every
-// filesystem change the fixtures made. Watcher events arrive in order, so the
-// report of a file written last follows every earlier one; the reads then start
-// from a host with no filesystem change still in flight.
-func settleSourceWatcher(t *testing.T, hub *events.MemoryHub, projectDir string) {
+// filesystem change the fixtures made, so reads start with none in flight.
+func settleSourceWatcher(t *testing.T, settle func(context.Context), hub *events.MemoryHub, projectDir string) {
 	t.Helper()
+	settle(t.Context())
 	ch, unsubscribe, err := hub.Subscribe(t.Context(), events.Subscription{Viewer: testutil.HostOwner()})
 	testutil.FailErr(t, "subscribe to source changes", err)
 	defer unsubscribe()
 	const barrier = "conformance-barrier.txt"
-	testutil.FailErr(t, "write the watcher barrier", os.WriteFile(filepath.Join(projectDir, barrier), []byte("barrier\n"), 0o644))
+	barrierPath := filepath.Join(projectDir, barrier)
+	writeBarrier := func(step int) {
+		testutil.FailErr(t, "write the watcher barrier", os.WriteFile(barrierPath, fmt.Appendf(nil, "barrier-%d\n", step), 0o644))
+	}
+	step := 1
+	writeBarrier(step)
+	retry := time.NewTicker(time.Second)
+	defer retry.Stop()
 	deadline := time.After(30 * time.Second)
 	for {
 		select {
 		case envelope := <-ch:
-			if envelope.Topic != wire.EventTopicSourceChanged {
-				continue
-			}
 			var changed wire.SourceChangesEvent
-			if json.Unmarshal(envelope.Data, &changed) != nil {
+			if envelope.Topic != wire.EventTopicSourceChanged || json.Unmarshal(envelope.Data, &changed) != nil {
 				continue
 			}
-			if changed.Resync {
+			if slices.ContainsFunc(changed.Changes, func(c wire.SourceChange) bool { return c.Path == barrier }) {
 				return
 			}
-			for _, change := range changed.Changes {
-				if change.Path == barrier {
-					return
-				}
+			if changed.Resync {
+				step++
+				writeBarrier(step)
 			}
+		case <-retry.C:
+			step++
+			writeBarrier(step)
 		case <-deadline:
 			t.Fatal("the source watcher did not report the barrier file")
 		}

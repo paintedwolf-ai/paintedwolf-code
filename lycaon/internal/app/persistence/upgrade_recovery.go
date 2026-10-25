@@ -16,6 +16,9 @@ import (
 )
 
 func (b *Runtime) openUpgradeableStore(ctx context.Context, path string) (*db.Store, error) {
+	if err := db.CheckStoreHealth(path); err != nil {
+		return nil, err
+	}
 	hooks := db.UpgradeHooks{
 		Before: func(ctx context.Context, source *sql.DB, plan migrations.Plan) error {
 			previous, _, err := db.ReadAppVersion(ctx, source)

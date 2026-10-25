@@ -52,7 +52,7 @@ func layeringRules() []layeringRule {
 			why:       "internal/api is the HTTP layer; lower packages must not reach back into the handler tree",
 		},
 		{
-			name:      "internal/db is the bottom — no internal cross-deps",
+			name:      "internal/db depends only on shared storage leaves",
 			fromGlob:  modulePath + "/internal/db",
 			forbidden: modulePath + "/internal/",
 			// DB imports only shared storage leaves. Snapshot cloning and
@@ -61,10 +61,24 @@ func layeringRules() []layeringRule {
 				modulePath + "/internal/configdir",
 				modulePath + "/internal/fileclone",
 				modulePath + "/internal/fseffect",
+				modulePath + "/internal/fspath",
 				modulePath + "/internal/fssync",
 				modulePath + "/internal/timelayout",
 			},
 			why: "db is the SQL adapter; depending on other internal/* packages would create cycles via every storage user",
+		},
+		{
+			name:         "fseffect stays below database and domain packages",
+			fromGlob:     modulePath + "/internal/fseffect",
+			forbidden:    modulePath + "/internal/",
+			allowImports: []string{modulePath + "/internal/fspath", modulePath + "/internal/fssync"},
+			why:          "durable replacement is shared filesystem machinery; quarantine must not create a database back-edge",
+		},
+		{
+			name:      "fspath remains a filesystem leaf",
+			fromGlob:  modulePath + "/internal/fspath",
+			forbidden: modulePath + "/internal/",
+			why:       "physical identity must not depend on storage or domain state",
 		},
 		{
 			name:      "prompts must not import tools hub",
