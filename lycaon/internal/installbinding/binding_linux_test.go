@@ -51,16 +51,24 @@ func (in *install) write(path, content string) {
 func (in *install) seal(paths ...string) {
 	in.t.Helper()
 	var executables []pkgmanifest.Executable
+	payload := []pkgmanifest.PayloadEntry{{Path: "bin", Kind: "directory", Mode: 0o755}}
 	for _, path := range paths {
 		raw, err := os.ReadFile(path)
 		if err != nil {
 			in.t.Fatal(err)
 		}
 		sum := sha256.Sum256(raw)
-		executables = append(executables, pkgmanifest.Executable{Path: path, SHA256: hex.EncodeToString(sum[:]), Size: int64(len(raw))})
+		digest := hex.EncodeToString(sum[:])
+		size := int64(len(raw))
+		rel, err := filepath.Rel(in.root, path)
+		if err != nil {
+			in.t.Fatal(err)
+		}
+		executables = append(executables, pkgmanifest.Executable{Path: path, SHA256: digest, Size: size})
+		payload = append(payload, pkgmanifest.PayloadEntry{Path: filepath.ToSlash(rel), Kind: "file", Mode: 0o755, SHA256: &digest, Size: &size})
 	}
 	raw, err := json.Marshal(pkgmanifest.Manifest{FormatVersion: pkgmanifest.FormatVersion, Package: "painted-wolf-code",
-		Version: "1.0.2", Architecture: "x86_64", InstallRoot: in.root, Executables: executables})
+		Version: "1.0.2", Architecture: "x86_64", InstallRoot: in.root, Executables: executables, Payload: payload})
 	if err != nil {
 		in.t.Fatal(err)
 	}

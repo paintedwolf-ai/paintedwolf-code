@@ -34,13 +34,18 @@ func TestLaunchesFromAReplacedInstallationAreRefused(t *testing.T) {
 	write(engine, "engine")
 	write(helper, "#!/bin/sh\nexit 0\n")
 	var executables []pkgmanifest.Executable
+	payload := []pkgmanifest.PayloadEntry{{Path: "bin", Kind: "directory", Mode: 0o755}}
 	for _, path := range []string{engine, helper} {
 		raw, _ := os.ReadFile(path)
 		sum := sha256.Sum256(raw)
-		executables = append(executables, pkgmanifest.Executable{Path: path, SHA256: hex.EncodeToString(sum[:]), Size: int64(len(raw))})
+		digest := hex.EncodeToString(sum[:])
+		size := int64(len(raw))
+		rel, _ := filepath.Rel(root, path)
+		executables = append(executables, pkgmanifest.Executable{Path: path, SHA256: digest, Size: size})
+		payload = append(payload, pkgmanifest.PayloadEntry{Path: filepath.ToSlash(rel), Kind: "file", Mode: 0o755, SHA256: &digest, Size: &size})
 	}
 	raw, err := json.Marshal(pkgmanifest.Manifest{FormatVersion: pkgmanifest.FormatVersion, Package: "painted-wolf-code",
-		Version: "1.0.2", Architecture: "x86_64", InstallRoot: root, Executables: executables})
+		Version: "1.0.2", Architecture: "x86_64", InstallRoot: root, Executables: executables, Payload: payload})
 	testutil.FailErr(t, "json.Marshal failed", err)
 	manifest := filepath.Join(root, "manifest.json")
 	write(manifest, string(raw))
