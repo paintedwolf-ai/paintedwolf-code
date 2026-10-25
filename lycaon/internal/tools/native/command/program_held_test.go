@@ -15,7 +15,9 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -173,6 +175,12 @@ func (d dirSources) Capture(_ context.Context, _ toolcontract.OperationInvocatio
 
 func TestProgramEntrySourcesScriptAndDeduplicatesProgramDefinitions(t *testing.T) {
 	f := newProgramFixture(t)
+	baseOwners := f.Runtime.Owners
+	f.Runtime.Owners = func(tc tools.ToolContext, paths *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
+		owners, err := baseOwners(tc, paths)
+		owners.Sources = dirSources(f.Dir)
+		return owners, err
+	}
 	testutil.FailErr(t, "write sourced script", os.WriteFile(filepath.Join(f.Dir, "lib.sh"), []byte("greet() { external -- /bin/echo \"$1\"; }\n"), 0o600))
 	out, err := f.call(t, t.Context(), "source -- lib.sh; greet first; greet second")
 	testutil.FailErr(t, "run sourced function calls", err)

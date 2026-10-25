@@ -93,10 +93,7 @@ func (d *BoundDir) StatChildFollowed(child BoundPath) (fseffect.EntryStat, error
 // Without follow it reports the final entry itself, including a dangling or
 // outward-pointing link; follow resolves contained links only.
 func (p BoundPath) Stat(follow bool) (fseffect.EntryStat, error) {
-	if p.Null {
-		return fseffect.EntryStat{}, invalidOperand(p.Resolved.DisplayPath, "null device is not a directory entry")
-	}
-	root, err := p.openRoot()
+	root, err := p.openEntryRoot()
 	if err != nil {
 		return fseffect.EntryStat{}, PathOperationError(p.Resolved.DisplayPath, err)
 	}
@@ -150,14 +147,19 @@ func (p BoundPath) Child(name string) BoundPath {
 // Readlink reads a link entry's target text, admitted at the entry itself, without
 // authorizing or following the target.
 func (p BoundPath) Readlink() (string, error) {
-	if p.Null {
-		return "", invalidOperand(p.Resolved.DisplayPath, "null device is not a directory entry")
-	}
-	root, err := p.openRoot()
+	root, err := p.openEntryRoot()
 	if err != nil {
 		return "", PathOperationError(p.Resolved.DisplayPath, err)
 	}
 	defer root.Close()
 	target, err := root.Readlink(p.exactRelative, p.admitEntry)
 	return target, PathOperationError(p.Resolved.DisplayPath, err)
+}
+
+// openEntryRoot distinguishes namespace metadata from the null byte stream.
+func (p BoundPath) openEntryRoot() (*fseffect.ReadRoot, error) {
+	if p.Null {
+		return nil, invalidOperand(p.Resolved.DisplayPath, "null device is not a directory entry")
+	}
+	return p.openRoot()
 }

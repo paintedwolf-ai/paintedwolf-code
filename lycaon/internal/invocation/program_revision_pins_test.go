@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -48,7 +47,7 @@ func TestProgramReceiptsRecordExactRevisionPins(t *testing.T) {
 		t.Fatal("pins crossed session scope")
 	}
 	result := toolcontract.ProducerResult{Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.NoEffect, Evidence: toolcontract.OperationEvidence{Owner: "filesystem", Kind: "result"}}
-	testutil.FailErr(t, "settle child", f.recorder.SettleChild(t.Context(), execution, invocation.ChildSettlement{Result: result, DetailReference: "output:conflict"}))
+	testutil.FailErr(t, "settle child", f.recorder.SettleChild(t.Context(), execution, toolcontract.ProgramChildSettlement{Result: result, DetailReference: "output:conflict"}))
 	if err := f.recorder.RecordRevisionPins(t.Context(), execution, 3, pins[:1]); err == nil {
 		t.Fatal("settled execution gained pins")
 	}
@@ -117,6 +116,30 @@ func TestExecutionRevisionProjectsMappingPins(t *testing.T) {
 	}
 }
 
+// Independent owners of one execution append without assigning ordinals:
+// a redirect destination, a second destination and a later source capture.
+func TestProgramReceiptsAppendRevisionPinsInCaptureOrder(t *testing.T) {
+	f := newProgramReceiptFixture(t)
+	execution := f.childFor(t, "write").Invocation().Identity.ExecutionID
+	pins := revisionPinsFixture()
+	for _, pin := range []toolcontract.ExecutionRevision{pins[1], pins[1], pins[0]} {
+		testutil.FailErr(t, "append capture", f.recorder.AppendRevisionPin(t.Context(), execution, pin))
+	}
+	testutil.FailErr(t, "resubmit the recorded prefix", f.recorder.RecordRevisionPins(t.Context(), execution, 0, []toolcontract.ExecutionRevision{pins[1]}))
+	got, err := f.recorder.RevisionPins(t.Context(), f.session, execution)
+	testutil.FailErr(t, "read appended pins", err)
+	if len(got) != 3 || got[0] != pins[1] || got[1] != pins[1] || got[2] != pins[0] {
+		t.Fatalf("pins = %+v", got)
+	}
+	invalid := pins[0]
+	invalid.Role = ""
+	if err := f.recorder.AppendRevisionPin(t.Context(), execution, invalid); err == nil {
+		t.Fatal("invalid capture appended")
+	}
+	if err := f.recorder.AppendRevisionPin(t.Context(), "", pins[0]); err == nil {
+		t.Fatal("capture appended without an execution")
+	}
+}
 // TestProgramReceiptsPinAWalkAtTheVisitLimit pins as many captures as one
 // execution may hold (every traversal visit plus every expanded operand),
 // in small appends as a walking owner records them. Full runs seal into
@@ -175,30 +198,5 @@ func TestProgramReceiptsPinAWalkAtTheVisitLimit(t *testing.T) {
 	testutil.FailErr(t, "corrupt digest", err)
 	if _, err := f.recorder.RevisionPins(t.Context(), f.session, execution); err == nil || !strings.Contains(err.Error(), "digest") {
 		t.Fatalf("corrupt segment read: %v", err)
-	}
-}
-
-// Independent owners of one execution append without assigning ordinals:
-// a redirect destination, a second destination and a later source capture.
-func TestProgramReceiptsAppendRevisionPinsInCaptureOrder(t *testing.T) {
-	f := newProgramReceiptFixture(t)
-	execution := f.childFor(t, "write").Invocation().Identity.ExecutionID
-	pins := revisionPinsFixture()
-	for _, pin := range []toolcontract.ExecutionRevision{pins[1], pins[1], pins[0]} {
-		testutil.FailErr(t, "append capture", f.recorder.AppendRevisionPin(t.Context(), execution, pin))
-	}
-	testutil.FailErr(t, "resubmit the recorded prefix", f.recorder.RecordRevisionPins(t.Context(), execution, 0, []toolcontract.ExecutionRevision{pins[1]}))
-	got, err := f.recorder.RevisionPins(t.Context(), f.session, execution)
-	testutil.FailErr(t, "read appended pins", err)
-	if len(got) != 3 || got[0] != pins[1] || got[1] != pins[1] || got[2] != pins[0] {
-		t.Fatalf("pins = %+v", got)
-	}
-	invalid := pins[0]
-	invalid.Role = ""
-	if err := f.recorder.AppendRevisionPin(t.Context(), execution, invalid); err == nil {
-		t.Fatal("invalid capture appended")
-	}
-	if err := f.recorder.AppendRevisionPin(t.Context(), "", pins[0]); err == nil {
-		t.Fatal("capture appended without an execution")
 	}
 }

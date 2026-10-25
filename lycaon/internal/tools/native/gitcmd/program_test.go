@@ -60,7 +60,7 @@ func TestProgramEntryRunsGitReadFormsThroughTheUmbrella(t *testing.T) {
 	gitRun("commit", "-q", "-m", "seed commit")
 	testutil.FailErr(t, "dirty", os.WriteFile(filepath.Join(f.dir, "new.txt"), []byte("n\n"), 0o644))
 
-	owners, err := gitcmd.NewOwners(git.CommandReader{})
+	owners, err := gitcmd.NewOwners(git.NewManager())
 	testutil.FailErr(t, "git owners", err)
 	natives := map[string]command.NativeOperation{"git": {Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
 		prepared, err := owners.PrepareGit(frame, request)

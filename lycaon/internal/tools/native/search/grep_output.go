@@ -22,9 +22,15 @@ var errBinaryStop = errors.New("binary file matched")
 // (GNU 3.5 and later). A selected line with invalid UTF-8 is binary from that
 // line on, as GNU grep does in a UTF-8 locale.
 func (r *grepRun) searchContent(label string, content []byte, pin *toolcontract.SourcePin, names bool) error {
+	if r.json != nil {
+		return r.jsonContent(label, content)
+	}
 	inv := r.inv
 	r.numberWidth = len(strconv.Itoa(len(content)))
-	binary := !r.scan.NullData && bytes.IndexByte(content, 0) >= 0
+	binary := !r.scan.NullData && r.binaryMode != "text" && bytes.IndexByte(content, 0) >= 0
+	if binary && r.binaryMode == "without-match" {
+		content, binary = nil, false
+	}
 	listing := r.mode != modeLines
 	separator := false
 	emitted := false
@@ -48,7 +54,7 @@ func (r *grepRun) searchContent(label string, content []byte, pin *toolcontract.
 			return nil
 		}
 		record := content[line.Start:line.End]
-		if binary || (line.Kind == textsearch.SelectedLine && !utf8.Valid(record)) {
+		if binary || (r.binaryMode != "text" && line.Kind == textsearch.SelectedLine && !utf8.Valid(record)) {
 			if line.Kind != textsearch.SelectedLine {
 				return nil
 			}

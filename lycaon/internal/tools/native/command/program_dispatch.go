@@ -349,14 +349,15 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 	tracker := &trackingWriter{w: nonNilWriter(streams.Error)}
 	runStreams := streams
 	runStreams.Error = tracker
+	inputs := d.run.nativeArguments(review.Arguments(), operationDef.ReadOnlyFacts().Contract)
 	effect := toolexecution.NativeEffect{
-		Operation: bound, Streams: runStreams, Argv: &review, Inspection: d.run.capture,
+		Operation: bound, Streams: runStreams, Arguments: inputs, Argv: &review, Inspection: d.run.capture,
 		Stage: toolcontract.ExecutionStage{ExecutionID: request.Invocation.Identity.ExecutionID, OperationID: opIdentity, Argv: request.Argv.Values()},
 		PrepareReviewed: func(context.Context, map[string]any, tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
 			return toolexecution.PreparedNativeEffect{Operation: bound, InvokeOwner: prepared.Invoke}, nil
 		},
 	}
-	child, err := d.prepareDefinition(ctx, operationDef, request, review.Arguments())
+	child, err := d.prepareDefinition(ctx, operationDef, request, inputs)
 	if err != nil {
 		return refusedResult("COMMAND_OPERAND_INVALID"), err
 	}
@@ -648,4 +649,3 @@ func commandIndex(catalog toolcontract.LanguageCatalog) map[string]toolcontract.
 	}
 	return index
 }
-

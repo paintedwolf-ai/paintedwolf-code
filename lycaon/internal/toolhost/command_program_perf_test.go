@@ -129,7 +129,7 @@ func newPerfFixture(tb testing.TB, catalog *sourcecatalog.Catalog) *perfFixture 
 			operations := mutation.Operations{Write: &native.WriteTool{Boundary: boundary}, Delete: &native.DeleteTool{Boundary: boundary}, Move: &native.MoveTool{Boundary: boundary},
 				Copy: &native.CopyTool{Boundary: boundary}, Mkdir: &native.MkdirTool{Boundary: boundary}, Chmod: &native.ChmodTool{Boundary: boundary},
 				Chown: &native.ChownTool{Boundary: boundary}, Times: &native.TimesTool{Boundary: boundary}, Extract: &native.ExtractArchiveTool{Boundary: boundary}}
-			return programOwnerTools{boundary: boundary, operations: operations, catalog: catalog, spills: f.wrapSpills}.compose(recorder)
+			return programOwnerTools{boundary: boundary, operations: operations, catalog: catalog, spills: f.wrapSpills}.compose(ProgramServices{Recorder: recorder})
 		}})
 	return f
 }
