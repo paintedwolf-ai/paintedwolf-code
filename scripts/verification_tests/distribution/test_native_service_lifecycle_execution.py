@@ -226,14 +226,25 @@ s.setdefault('generation_calls',[]).append(a);p.write_text(json.dumps(s))
     def test_generation_installer_runs_only_the_exact_fixture_executable(self):
         self.service()
         script = self.root / 'generation-postinst'
-        script.write_text('PW_GENERATIONS=' + GENERATIONS + '\n"$PW_GENERATIONS" install --family deb\n')
+        script.write_text('PW_GENERATIONS=' + GENERATIONS + '\nREINSTALL_MARKER=' + STATE_DIR +
+                          '/isolated-marker\nmkdir -p ' + STATE_DIR +
+                          '\ntouch "$REINSTALL_MARKER"\n"$PW_GENERATIONS" install --family deb\n')
         self.assertNotIn(GENERATIONS, self.fixture_program(script))
         self.assertNotIn(STATE_DIR, self.fixture_program(script))
         result = self.execute_script(script)
         self.assertEqual(result['generation_calls'], [['install', '--family', 'deb']])
+        self.assertTrue((self.state_dir / 'isolated-marker').is_file())
 
     def test_unbound_host_generation_command_is_rejected_before_execution(self):
         script = self.root / 'unbound-generation'
         script.write_text('"' + GENERATIONS + '" remove\n')
         with self.assertRaisesRegex(ValueError, 'unbound host generation'):
             self.execute_script(script)
+
+    def test_fixture_bindings_refuse_unsafe_paths_or_ambiguous_assignments(self):
+        assignment = 'PW_GENERATIONS=' + GENERATIONS + '\n'
+        for source in (assignment + assignment, 'PW_GENERATIONS=/some/other/program\n'):
+            with self.assertRaisesRegex(ValueError, 'unbound host generation'):
+                program(source, self.bin / 'pw-generations', self.state_dir)
+        with self.assertRaisesRegex(ValueError, 'shell-safe scratch path'):
+            program(assignment, self.bin / 'unsafe name', self.state_dir)
