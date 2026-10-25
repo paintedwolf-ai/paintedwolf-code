@@ -71,7 +71,9 @@ func TestDefaultWriteRootsHoldNoExecutableInstallDirectory(t *testing.T) {
 	}
 
 	underHome := 0
-	for _, root := range confine.WriteRootsForProject("", nil) {
+	writeRoots, err := confine.WriteRootsForBoundary("", nil, nil, "")
+	contractcheck.FailErr(t, "admit standard write roots", err)
+	for _, root := range writeRoots {
 		if !within(root, canonHome) {
 			continue
 		}

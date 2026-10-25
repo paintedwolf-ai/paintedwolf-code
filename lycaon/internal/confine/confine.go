@@ -101,7 +101,7 @@ func BoundaryOf(c *Confinement) Boundary {
 	if c == nil {
 		return Boundary{}
 	}
-	writeRoots, err := validatedWriteRoots(c.ProjectID, c.Roots, c.GrantedWriteRoots, c.SessionScratchRoot)
+	writeRoots, err := WriteRootsForBoundary(c.ProjectID, c.Roots, c.GrantedWriteRoots, c.SessionScratchRoot)
 	if err != nil {
 		return Boundary{}
 	}
@@ -439,7 +439,7 @@ func writeFilesystemRules(b *strings.Builder, c Confinement, deny string) error 
 // Later rules override earlier decisions.
 func filesystemRules(c Confinement) (FilesystemRules, error) {
 	rules := FilesystemRules{roots: append([]string(nil), c.Roots...)}
-	writeRoots, err := validatedWriteRoots(c.ProjectID, c.Roots, c.GrantedWriteRoots, c.SessionScratchRoot)
+	writeRoots, err := WriteRootsForBoundary(c.ProjectID, c.Roots, c.GrantedWriteRoots, c.SessionScratchRoot)
 	if err != nil {
 		return rules, err
 	}
@@ -549,7 +549,7 @@ func denySpecRule(specs []HardDenyWriteSpec, layers ...FloorLayer) fsRule {
 
 // workspaceAllowBacks re-allows validated control-plane workspaces.
 func workspaceAllowBacks(c Confinement) []string {
-	dir, err := configdir.UserConfigDir()
+	dir, err := configdir.Root()
 	if err != nil || strings.TrimSpace(dir) == "" {
 		return nil
 	}

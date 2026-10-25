@@ -43,7 +43,7 @@ The floor is systemic and covers unknown actions. Packs are openly partial and u
 
 Two bundled packs are named exceptions to the layer table. `key-material` and `credential-stores` are the single answer to "what is key material" and "what is a credential store", and the filesystem boundary reads their `TargetFile` literals directly (`detectionpack.BundledKeyMaterialPaths`, `detectionpack.BundledCredentialStorePaths`). Any pack may *match* on `TargetFile`; only these two define those catalogs.
 
-Those literals are a write floor, not a matcher. A path a bundled rule names is refused for writing unless an approval names that exact path, and the same list refuses a project root that would swallow one; see [`internal/confine/hard_deny_writes.go`](../lycaon/internal/confine/hard_deny_writes.go) and [`internal/confine/credential_subject.go`](../lycaon/internal/confine/credential_subject.go). The catalog sits in pack YAML because a protected-path list is data a person should be able to read and extend, not because the ask overlay owns it.
+Those literals are a write floor, not a matcher. A path a bundled rule names is refused for writing unless an approval names that exact path; project roots cannot be stores or lie inside them; see [`internal/confine/hard_deny_writes.go`](../lycaon/internal/confine/hard_deny_writes.go) and [`internal/confine/credential_subject.go`](../lycaon/internal/confine/credential_subject.go). The catalog sits in pack YAML because a protected-path list is data a person should be able to read and extend, not because the ask overlay owns it.
 
 | Property | Why |
 |---|---|

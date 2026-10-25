@@ -8,7 +8,7 @@ import (
 )
 
 // resolvedTempDir mirrors what the boundary hands the resolver: production write
-// roots arrive from confine.WriteRootsForProject, which has already resolved
+// roots arrive from confine.WriteRootsForBoundary, which has already validated and resolved
 // symlinks, so a raw /var/folders temp path would never match its own /private
 // counterpart.
 func resolvedTempDir(t *testing.T) string {

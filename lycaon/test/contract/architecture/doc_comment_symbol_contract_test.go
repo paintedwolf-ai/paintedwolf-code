@@ -15,7 +15,7 @@ import (
 // docSubjectExceptions lists declarations whose docs lead with another subject.
 var docSubjectExceptions = map[string]string{
 	"internal/llm/providers/vertexexpress/vertex_express_wire_test.go#TestTokenUsageFromVertexExpress":             "leads with the promptTokenCount wire field it decodes",
-	"test/contract/security/balanced_boundary_invariants_test.go#TestInvariantWriteRootSSOTSharedByGateAndConfine": "leads with WriteRootsForProject, the shared symbol under test",
+	"test/contract/security/balanced_boundary_invariants_test.go#TestInvariantWriteRootSSOTSharedByGateAndConfine": "leads with WriteRootsForBoundary, the shared symbol under test",
 }
 
 // TestDocCommentNamesItsSymbol rejects docs that begin with another symbol.

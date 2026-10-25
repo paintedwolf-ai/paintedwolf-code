@@ -33,13 +33,16 @@ func verdictFixture(t *testing.T, outside string) (confine.Confinement, []bounda
 	t.Setenv("LYCAON_SANDBOX_DENY_READ", "")
 	project := t.TempDir()
 	workerSource := t.TempDir()
+	scratch := filepath.Join(home, "scratch")
+	testutil.FailErr(t, "create scratch root", os.MkdirAll(scratch, 0o700))
 	granted := filepath.Join(project, "pkg", "granted", "AGENTS.md")
 	writeFixtureFile(t, granted)
 
 	c := confine.Confinement{
-		Roots:             []string{project},
-		ReadDenyPaths:     []string{workerSource},
-		PolicyWriteGrants: []confine.ProtectedPathGrant{confine.NewProtectedPathGrant(granted)},
+		Roots:              []string{project},
+		SessionScratchRoot: scratch,
+		ReadDenyPaths:      []string{workerSource},
+		PolicyWriteGrants:  []confine.ProtectedPathGrant{confine.NewProtectedPathGrant(granted)},
 	}
 	overlaySink := filepath.Join(project, settingsoverlay.DirName(), settingsoverlay.BasenameApprovals)
 	allowed := confine.FloorVerdict{Allowed: true}

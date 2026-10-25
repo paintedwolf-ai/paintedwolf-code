@@ -12,15 +12,14 @@ requires:
 when: paintedwolf.rejection_code == "SANDBOX_CONTROL_PLANE_DENIED"
 effect: block
 copy:
-  what: '{{ paintedwolf.path }} is part of the agent host''s control plane.'
-  cause: Agents cannot read or rewrite the configuration that defines their own tools, policy, credentials, and authority. No approval covers this path, so none was asked for.
-  why: An approval cannot make self-inspection or self-modification of the active control plane coherent.
+  what: 'This operation would reach the app''s own state through {{ paintedwolf.path }}.'
+  cause: File and folder approvals do not cover the app's settings, credentials, tool definitions or policy.
+  why: The app uses those files to decide what tools may do.
   fix: >-
-    Use `@scratch` for working files. Continue without that path and tell the user plainly that the app's own state
-    folder is not reachable by tools. If they need something from it, ask them to
-    copy or export it into an attached folder. If the host configuration needs to
-    change, ask the user to change it in Settings.
-  instead: Branch on Code; do not retry access to the host control plane with this or any other tool or capability, including host_execution
+    Choose a working folder outside the app's own state. If needed, ask the person
+    to copy or export content into an attached folder. Changes to the app's
+    configuration belong in Settings.
+  instead: Continue without this path. Ask the person to export needed content or change the app settings.
 x-paintedwolf-category: control-plane
 x-paintedwolf-emit: guard:sandbox_control_plane
 x-paintedwolf-message: host control-plane access is unavailable to agents
@@ -32,7 +31,6 @@ x-paintedwolf-scenarios:
       tool: command
     expect_contains:
       - 'Code: SANDBOX_CONTROL_PLANE_DENIED'
-      - control plane
       - ${config_dir}/approvals.yaml
   - id: survey
     vars:
@@ -41,7 +39,6 @@ x-paintedwolf-scenarios:
       tool: list_dir
     expect_contains:
       - 'Code: SANDBOX_CONTROL_PLANE_DENIED'
-      - control plane
       - ${config_dir}/debug/sessions
   - id: write
     vars:
@@ -50,4 +47,4 @@ x-paintedwolf-scenarios:
       tool: write
     expect_contains:
       - 'Code: SANDBOX_CONTROL_PLANE_DENIED'
-      - Settings
+      - ${config_dir}/packs/stock/skills/verify-a-change/SKILL.md

@@ -18,9 +18,17 @@ func TestConfineRequestForSpawnRefusesUnsafeRoot(t *testing.T) {
 	}
 }
 
-func TestConfineRequestForSpawnKeepsExplicitFilesystemRoot(t *testing.T) {
-	req, reject := ConfineRequestForSpawn(t.Context(), ToolContext{}, []string{string(filepath.Separator)})
-	if reject != nil || !slices.Contains(req.GrantedWriteRoots, string(filepath.Separator)) {
-		t.Fatalf("root request=%+v rejection=%+v", req, reject)
+func TestConfineRequestForSpawnRefusesStateAncestorAndKeepsOrdinaryRoot(t *testing.T) {
+	_, reject := ConfineRequestForSpawn(t.Context(), ToolContext{}, []string{string(filepath.Separator)})
+	if reject == nil || reject.Code != "SANDBOX_CONTROL_PLANE_DENIED" {
+		t.Fatalf("reject = %+v, want SANDBOX_CONTROL_PLANE_DENIED", reject)
+	}
+	if reject.Data["reason"] != confine.WriteRootCodeContainsState {
+		t.Fatalf("reject data = %+v, want reason %q", reject.Data, confine.WriteRootCodeContainsState)
+	}
+	ordinary := t.TempDir()
+	req, reject := ConfineRequestForSpawn(t.Context(), ToolContext{}, []string{ordinary})
+	if reject != nil || !slices.Contains(req.GrantedWriteRoots, ordinary) {
+		t.Fatalf("ordinary root request=%+v rejection=%+v", req, reject)
 	}
 }

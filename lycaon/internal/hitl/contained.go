@@ -164,12 +164,16 @@ func ContainedFromConfinement(c *confine.Confinement, ok bool) Contained {
 	if !ok || c == nil {
 		return Contained{}
 	}
+	writeRoots, err := confine.WriteRootsForBoundary(c.ProjectID, c.Roots, c.GrantedWriteRoots, c.SessionScratchRoot)
+	if err != nil {
+		return Contained{}
+	}
 	contained := Contained{
 		ProcessControl:    c.ProcessControl,
 		FSJailed:          true,
 		Egress:            ContainedEgressLabel(c.Network),
 		Roots:             append([]string(nil), c.Roots...),
-		WriteRoots:        confine.WriteRootsForBoundary(c.ProjectID, c.Roots, c.GrantedWriteRoots, c.SessionScratchRoot),
+		WriteRoots:        writeRoots,
 		SocketPathsDigest: confine.SocketPathsDigest(c.SocketGrants),
 		SocketCount:       len(c.SocketGrants),
 		DirectIP:          c.Network == confine.NetworkDirectIP,

@@ -18,7 +18,7 @@ func underSecretReadAllowBack(path string) bool {
 	return underAny(path, SecretReadAllowBackRoots())
 }
 
-// Standing roots may contain stores; the per-path floors still protect them.
+// Store descendants stay protected within an admitted standing root.
 func attachedWriteRootForbidden(path string) bool {
 	return underSecretReadDeny(path) || underAny(path, KeyMaterialWritePaths()) || underAny(path, CredentialStorePaths())
 }
@@ -26,4 +26,14 @@ func attachedWriteRootForbidden(path string) bool {
 // NormalizeWriteRootKey returns a stable deny-set / pending-map key for a write root.
 func NormalizeWriteRootKey(root string) string {
 	return filepath.Clean(strings.TrimSpace(root))
+}
+
+// writeRootContainsStateTree prevents an ancestor rename from moving host state.
+func writeRootContainsStateTree(path string) bool {
+	for _, state := range resolveEach(controlPlaneReadDenyRoots()) {
+		if PathAtOrUnder(state, path) {
+			return true
+		}
+	}
+	return false
 }

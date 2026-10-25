@@ -52,12 +52,15 @@ func validateWriteRootList(roots []string, refusal func(string) (bool, string)) 
 	return nil
 }
 
-// validateEffectiveWriteRoots validates resolved roots; floors apply inside broad roots.
+// validateEffectiveWriteRoots checks the final canonical write authority.
 func validateEffectiveWriteRoots(roots []string) *WriteRootRefusalError {
 	for _, root := range normalizePathList(roots) {
 		resolved := fspath.CanonicalPath(root)
 		if resolved == "" || !filepath.IsAbs(resolved) {
 			return &WriteRootRefusalError{Path: root, Code: WriteRootCodeNotAbsolute}
+		}
+		if writeRootContainsStateTree(resolved) {
+			return &WriteRootRefusalError{Path: root, Code: WriteRootCodeContainsState}
 		}
 	}
 	return nil

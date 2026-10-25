@@ -12,13 +12,14 @@ import (
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-// WriteRootsForProject and BuildProfile share the same write-root union.
+// WriteRootsForBoundary and BuildProfile share the same write-root union.
 func TestInvariantWriteRootSSOTSharedByGateAndConfine(t *testing.T) {
-	t.Parallel()
+	t.Setenv("LYCAON_CONFIG_DIR", "/opt/paintedwolf-fixture-state")
 	proj := t.TempDir()
-	writeRoots := confine.WriteRootsForProject("", []string{proj})
+	writeRoots, err := confine.WriteRootsForBoundary("", []string{proj}, nil, "")
+	contractcheck.FailErr(t, "admit write roots", err)
 	if len(writeRoots) == 0 {
-		t.Fatal("WriteRootsForProject returned no roots")
+		t.Fatal("WriteRootsForBoundary returned no roots")
 	}
 
 	// /tmp survives EvalSymlinks (→ /private/tmp on darwin) and is in the union.

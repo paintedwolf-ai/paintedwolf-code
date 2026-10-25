@@ -315,7 +315,7 @@ func TestBuildProfileAllowsReadingAgentWorkspaces(t *testing.T) {
 func TestBuildProfileDeniesWritingSecretStoresEvenWhenHomeIsGranted(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(home, ".config", "paintedwolf"))
+	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(t.TempDir(), "state"))
 	// The test installs the catalog normally supplied at startup.
 	confine.SetCredentialStorePathsSource(func() []string {
 		return []string{
@@ -336,7 +336,7 @@ func TestBuildProfileDeniesWritingSecretStoresEvenWhenHomeIsGranted(t *testing.T
 	}
 	// The ancestor is present in the write allow block.
 	allowWrite, _ := profileBlock(t, p, blockAllowWrite, 0)
-	assertBlockCoversPath(t, allowWrite, resolvedHome, "write-root allow (attached $HOME)")
+	assertBlockCoversPath(t, allowWrite, resolvedHome, "write-root allow (reviewed home)")
 
 	// Protected descendants remain in the deny block.
 	denyWrite, _ := profileBlock(t, p, blockDenyWrite, 0)

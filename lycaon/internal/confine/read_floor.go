@@ -129,7 +129,7 @@ func SecretReadAllowBackRoots() []string {
 // agentWorkspaceRootsUnderControlPlane returns the engine-managed workspaces
 // inside the state tree, independent of the read-floor switch.
 func agentWorkspaceRootsUnderControlPlane() []string {
-	dir, err := configdir.UserConfigDir()
+	dir, err := configdir.Root()
 	if err != nil || strings.TrimSpace(dir) == "" {
 		return nil
 	}
@@ -138,7 +138,7 @@ func agentWorkspaceRootsUnderControlPlane() []string {
 
 // controlPlaneReadDenyRoots returns the host-managed configuration tree.
 func controlPlaneReadDenyRoots() []string {
-	dir, err := configdir.UserConfigDir()
+	dir, err := configdir.Root()
 	if err != nil || strings.TrimSpace(dir) == "" {
 		return nil
 	}
