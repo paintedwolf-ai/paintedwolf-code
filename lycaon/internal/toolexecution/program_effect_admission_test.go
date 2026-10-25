@@ -84,7 +84,7 @@ func TestProgramSurfaceFreezesProductionProfileAndWorkerOverlayTogether(t *testi
 			return "", nil
 		}}))
 	}
-	executor := NewExecutor(toolprofiles.NewGuidanceRejectPolicy(NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), nil)), registry, "fixture")
+	executor := NewExecutor(NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), nil), registry, "fixture")
 	ctx := sandbox.WithSessionID(t.Context(), "worker-session")
 	surface, err := executor.Metadata.FreezeProgramSurface(ctx, platform.ToolFilter{ProfileID: "fixture"}, []toolcontract.OperationDefinition{nativeDefinition(t, "read"), nativeDefinition(t, "write")})
 	testutil.FailErr(t, "freeze production approval/profile boundary", err)
