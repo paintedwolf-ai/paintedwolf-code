@@ -20,8 +20,9 @@ class LiveGoBatchTests(support.BatchFixture):
 
     def setUp(self):
         super().setUp()
-        for name in ["task.sh", "go-test-digest.sh", "go-test-exec.py", "test-digest.py", "test-run-manifest.py",
-                     "test-host-capacity.sh", "process-group-watchdog.py", "verification_timings.py"]:
+        for name in ["task.sh", "analysis_tools.py", "go-test-digest.sh", "go-test-exec.py", "test-digest.py",
+                     "test-run-manifest.py", "test-host-capacity.sh", "process-group-watchdog.py",
+                     "verification_timings.py"]:
             shutil.copy2(SCRIPT.with_name(name), self.scripts / name)
         shutil.copytree(SCRIPT.parent / "ci_policy", self.scripts / "ci_policy",
                         ignore=shutil.ignore_patterns("__pycache__"))

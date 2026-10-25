@@ -21,9 +21,7 @@ if [[ ! -f "${TASKFILE}" ]]; then
 fi
 
 if ! "${TASK_BIN}" --version 2>/dev/null | grep -qF "${TASK_VERSION#v}"; then
-  echo "Installing task ${TASK_VERSION} to ${BIN_DIR}..." >&2
-  mkdir -p "${BIN_DIR}"
-  GOBIN="${BIN_DIR}" go install "github.com/go-task/task/v3/cmd/task@${TASK_VERSION}"
+  python3 "${ROOT}/scripts/analysis_tools.py" ensure task >&2
 fi
 
 exec python3 "${ROOT}/scripts/test-execution.py" task -- "${TASK_BIN}" "${ROOT}" "$@"

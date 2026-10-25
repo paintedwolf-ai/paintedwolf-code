@@ -11,13 +11,18 @@ from artifact_paths import bin_dir
 
 ROOT = Path(__file__).resolve().parent.parent
 TOOLS = {
+    "task": ("scripts/task.sh", "TASK_VERSION", "github.com/go-task/task/v3/cmd/task", "github.com/go-task/task/v3"),
     "golangci-lint": ("scripts/lint-go.sh", "GOLANGCI_VERSION", "github.com/golangci/golangci-lint/v2/cmd/golangci-lint", "github.com/golangci/golangci-lint/v2"),
     "deadcode": ("scripts/deadcode-check.sh", "DEADCODE_VERSION", "golang.org/x/tools/cmd/deadcode", "golang.org/x/tools"),
     "govulncheck": ("scripts/govulncheck-gate.py", "GOVULNCHECK_VERSION", "golang.org/x/vuln/cmd/govulncheck", "golang.org/x/vuln"),
     "sqlc": ("scripts/sqlc-version.sh", "SQLC_VERSION", "github.com/sqlc-dev/sqlc/cmd/sqlc", "github.com/sqlc-dev/sqlc"),
 }
-# Analyzer sets name the cached analysis tools; sqlc is provisioned with the other generator inputs.
-SETS = {"lint": ["golangci-lint", "deadcode"], "vulnerabilities": ["govulncheck"], "all": ["golangci-lint", "deadcode", "govulncheck"]}
+SETS = {
+    "base": ["task", "sqlc"],
+    "lint": ["golangci-lint", "deadcode"],
+    "vulnerabilities": ["govulncheck"],
+    "all": ["task", "sqlc", "golangci-lint", "deadcode", "govulncheck"],
+}
 
 
 def pin(name, root=ROOT):
