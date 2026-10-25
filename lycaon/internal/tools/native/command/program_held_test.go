@@ -2,10 +2,18 @@ package command_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/approvaloutcome"
+	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/invocation"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
@@ -140,5 +148,66 @@ func TestSupervisorStopAcknowledgesBeforeExitAndClosesAdmission(t *testing.T) {
 	}
 	if _, err := supervisor.Lost(t.Context(), "s1", "output:lost"); err == nil {
 		t.Fatal("loss reconciled without a receipt owner")
+	}
+}
+
+type dirSources string
+
+func (d dirSources) Capture(_ context.Context, _ toolcontract.OperationInvocation, req commandprogram.SourceCaptureRequest) (commandprogram.CapturedSource, error) {
+	raw, err := os.ReadFile(filepath.Join(string(d), req.Path))
+	if err != nil {
+		return commandprogram.CapturedSource{}, err
+	}
+	hash := sha256.Sum256(raw)
+	return commandprogram.CapturedSource{
+		Bytes: raw,
+		Pin: toolcontract.SourcePin{
+			SourceID:       req.Path,
+			Revision:       "rev-1",
+			Representation: toolcontract.UTF8SourceBytes,
+			SHA256:         hex.EncodeToString(hash[:]),
+			EndByte:        int64(len(raw)),
+		},
+	}, nil
+}
+
+func TestProgramEntrySourcesScriptAndDeduplicatesProgramDefinitions(t *testing.T) {
+	f := newProgramFixture(t)
+	testutil.FailErr(t, "write sourced script", os.WriteFile(filepath.Join(f.dir, "lib.sh"), []byte("greet() { external -- /bin/echo \"$1\"; }\n"), 0o600))
+	out, err := f.call(t, t.Context(), "source lib.sh; greet first; greet second")
+	testutil.FailErr(t, "run sourced function calls", err)
+	if !strings.Contains(out, `"stdout":"first\nsecond\n"`) || !strings.Contains(out, `"state":"completed"`) {
+		t.Fatalf("sourced program outcome %s", out)
+	}
+	var programID string
+	testutil.FailErr(t, "read program id", f.database.QueryRowContext(t.Context(), `SELECT id FROM invocation_programs`).Scan(&programID))
+	page, err := f.recorder.ReadProgramPage(t.Context(), f.session, programID, invocation.ProgramExecutionPageQuery{Limit: 10})
+	testutil.FailErr(t, "read program page", err)
+	if len(page.Sources) != 2 {
+		t.Fatalf("sources = %+v, want root and sourced unit", page.Sources)
+	}
+	var externalExecs []invocation.ProgramExecutionSummary
+	for _, exec := range page.Executions {
+		if exec.OperationID == "external" {
+			externalExecs = append(externalExecs, exec)
+		}
+	}
+	if len(externalExecs) != 2 || externalExecs[0].DefinitionDigest == "" || externalExecs[0].DefinitionDigest != externalExecs[1].DefinitionDigest {
+		t.Fatalf("external executions = %+v", externalExecs)
+	}
+	var defCount int
+	testutil.FailErr(t, "count deduplicated definitions", f.database.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM invocation_program_definitions WHERE program_id = ? AND definition_digest = ?`,
+		programID, externalExecs[0].DefinitionDigest,
+	).Scan(&defCount))
+	if defCount != 1 {
+		t.Fatalf("invocation_program_definitions rows for external digest = %d, want 1", defCount)
+	}
+	for _, exec := range externalExecs {
+		binding, err := f.recorder.ReadProgramExecutionBinding(t.Context(), exec.ExecutionID)
+		testutil.FailErr(t, "read child binding", err)
+		if binding.DefinitionDigest != exec.DefinitionDigest || binding.DefinitionJSON == "" {
+			t.Fatalf("binding %s = %+v", exec.ExecutionID, binding)
+		}
 	}
 }

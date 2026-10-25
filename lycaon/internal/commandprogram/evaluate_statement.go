@@ -79,7 +79,7 @@ func (f *frame) command(ctx context.Context, s commandsurface.Statement) (signal
 	case commandsurface.ForLoop:
 		return f.forLoop(ctx, s, c)
 	case commandsurface.FunctionDeclaration:
-		f.state.functions[c.Name] = c
+		f.state.functions[c.Name] = declaredFunction{decl: c, unit: f.unit, sourceUnit: f.parent.SourceUnitID}
 		return signal{}, f.builtinStatus(s.SyntaxLocation, "function", 0)
 	case commandsurface.TestExpression:
 		return signal{}, f.testExpression(ctx, s, c)
