@@ -223,7 +223,7 @@ class RepositoryRehearsalContracts(unittest.TestCase):
             self.assertFalse(result["application_qualified"])
             self.assertEqual(len(observed["setup"]), 2)
             self.assertEqual(len(observed["upgrade"]), 2)
-            self.assertIn(("deb", "0.0.2", "withdraw"), observed["publish"])
+            self.assertIn(("deb", "0.0.1", "withdraw"), observed["publish"])
             self.assertIn(("rpm", "0.0.3", "rotate"), observed["publish"])
             self.assertTrue(any(row[-1] == "stage" for row in observed["remote"]))
             self.assertTrue(any(row[0].endswith("wrong-key-root") for row in observed["install"]))
