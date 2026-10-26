@@ -9,6 +9,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 )
 
@@ -33,10 +34,22 @@ func TestCommandCatalogRefusalsHaveShellVoice(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	language, err := toolcontract.LanguageV1()
+	if err != nil {
+		t.Fatal(err)
+	}
+	nativeNames := make(map[string]bool, len(language.Commands))
+	for _, command := range language.Commands {
+		nativeNames[command.Name] = true
+	}
 	count := 0
 	for code, entry := range catalog.HintCodes {
 		view := guidance.NormalizeRejectCodeView(code, entry)
-		if view.Effect != "block" || !slices.Contains(view.Tools, "command") {
+		nativeOperation := false
+		for _, operation := range entry.Operations() {
+			nativeOperation = nativeOperation || nativeNames[operation]
+		}
+		if view.Effect != "block" || (!slices.Contains(view.Tools, "command") && !nativeOperation) {
 			continue
 		}
 		count++
@@ -56,7 +69,7 @@ func TestCommandCatalogRefusalsHaveShellVoice(t *testing.T) {
 	for code, word := range map[string]string{
 		"SANDBOX_LOOPBACK_CONNECT_DENIED": "declined",
 		"COMMAND_NATIVE_FORM_UNSUPPORTED": "does not provide",
-		"GREP_MATCH_BUDGET": "limit",
+		"GREP_MATCH_BUDGET":               "limit",
 	} {
 		var stderr bytes.Buffer
 		writeShellRefusal(&stderr, "command", "config.json", code, nil, nil)
