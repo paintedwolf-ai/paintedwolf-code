@@ -1,7 +1,8 @@
 """Exact request rendering and completion-only labels, without truncation."""
 import json
 
-from common import digest, read_rows
+from common import digest
+from admission import verify_file
 from jsonschema import Draft202012Validator
 
 
@@ -100,8 +101,9 @@ def encode(tokenizer, row, target, max_length):
     return {"input_ids": ids, "labels": [-100] * len(prefix) + ids[len(prefix):]}
 
 
-def load_split(path):
-    rows = [check_row(row) for row in read_rows(path)]
+def load_split(path, partition):
+    approved, _ = verify_file(path, expected_partition=partition)
+    rows = [check_row(row) for row in approved]
     if not rows:
         raise ValueError("empty training split")
     return rows
