@@ -17,11 +17,11 @@ import (
 func TestWorkflowScratchLoopPublishesOnlyFinalResult(t *testing.T) {
 	f := newCommandWorkflowFixture(t, []workflowTurn{{
 		callID:  "scratch-loop",
-		command: `for item in alpha beta gamma; do printf '%s\n' "$item" >> "$SCRATCH_DIR/items"; done; sort "$SCRATCH_DIR/items" > result.txt; wc -l result.txt`,
+		command: `seq 1 2000 | while read -r n; do :; done; for item in alpha beta gamma; do printf '%s\n' "$item" >> "$SCRATCH_DIR/items"; done; sort "$SCRATCH_DIR/items" > result.txt; wc -l result.txt`,
 	}})
 	f.run(t)
 	out := f.outcome(t, "scratch-loop")
-	if out.State != "completed" || out.Status != 0 || out.NativeGaps != 0 || !strings.HasSuffix(out.Stdout, "3 result.txt\n") {
+	if out.State != "completed" || out.Status != 0 || out.NativeGaps != 0 || out.ExecutedChildren < 2000 || !strings.HasSuffix(out.Stdout, "3 result.txt\n") {
 		t.Fatalf("scratch loop outcome = %+v", out)
 	}
 	if got := f.readFile(t, "result.txt"); got != "alpha\nbeta\ngamma\n" {
