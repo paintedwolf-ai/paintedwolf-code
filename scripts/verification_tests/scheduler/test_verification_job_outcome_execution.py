@@ -77,6 +77,17 @@ class ManagedTaskVerdictTests(unittest.TestCase):
             with self.assertRaises(ManagedCaseOutcome):
                 require_case_success(0, result, terminal)
 
+    def test_wait_timestamp_cannot_use_boolean_equality_or_malformed_values(self):
+        for timestamp in (True, None, '1', float('nan'), float('inf'), 0):
+            with self.subTest(timestamp=timestamp):
+                result, terminal = self.records()
+                terminal['finished_at'] = 1.0
+                result['finished_at'] = timestamp
+                with self.assertRaises(ManagedCaseOutcome) as failed:
+                    require_case_success(0, result, terminal)
+                self.assertFalse(failed.exception.facts['consistent'])
+                self.assertEqual(failed.exception.facts['outcome'], 'unverified')
+
     def test_exception_keeps_only_closed_verdict_facts(self):
         failure = ManagedCaseOutcome('private text', {'state': 'private text',
             'task_exit_code': 'secret'}, {'exit_code': 'secret', 'reason': 'secret'}, consistent=False)
