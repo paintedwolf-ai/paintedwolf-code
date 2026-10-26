@@ -59,7 +59,7 @@ func mutationProgramFixture(t *testing.T) *programtest.Fixture {
 func TestProgramProjectProgressAndScratchMove(t *testing.T) {
 	f := mutationProgramFixture(t)
 	testutil.FailErr(t, "clear checklist", f.SetProgress(""))
-	for _, source := range []string{"touch config.json", "echo project > config.json"} {
+	for _, source := range []string{"touch config.json", "true > config.json"} {
 		raw, err := f.Call(t, t.Context(), source)
 		testutil.FailErr(t, "run refused project write", err)
 		outcome := decodeOutcome(t, raw)
