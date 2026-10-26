@@ -128,7 +128,7 @@ func TestCatalogBinderOptionGrammar(t *testing.T) {
 	}{
 		{name: "separate value", command: "head", argv: []string{"head", "-n", "5", "file"}, want: []string{"-n[5]", "=file"}},
 		{name: "attached short value", command: "head", argv: []string{"head", "-n5"}, want: []string{"-n[5]"}},
-		{name: "legacy numeric shorthand", command: "head", argv: []string{"head", "-12", "file"}, want: []string{"-n[12]", "=file"}},
+		{name: "numeric shorthand", command: "head", argv: []string{"head", "-12", "file"}, want: []string{"-n[12]", "=file"}},
 		{name: "long equals value", command: "head", argv: []string{"head", "--lines=3"}, want: []string{"-n[3]"}},
 		{name: "long separate value", command: "head", argv: []string{"head", "--bytes", "7"}, want: []string{"-c[7]"}},
 		{name: "cluster ending in value", command: "head", argv: []string{"head", "-qn", "3", "a", "b"}, want: []string{"-q[]", "-n[3]", "=a", "=b"}},
