@@ -4,11 +4,13 @@ package linuxsandbox
 
 import (
 	"bufio"
+	"fmt"
 	"os"
 	"os/exec"
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -69,9 +71,22 @@ func TestTargetHandlesFollowAProcessThroughExecAndExit(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	buf := make([]byte, 16)
-	if n, err := first.readAt(pid, buf, int64(start)); err != nil || n != len(buf) {
-		t.Fatalf("read the new address space through a handle opened before exec: %d %v", n, err)
+	var readers sync.WaitGroup
+	errors := make(chan error, 32)
+	for range 32 {
+		readers.Add(1)
+		go func() {
+			defer readers.Done()
+			buf := make([]byte, 16)
+			if n, err := first.readAt(pid, buf, int64(start)); err != nil || n != len(buf) {
+				errors <- fmt.Errorf("read the new address space through a shared handle: %d %v", n, err)
+			}
+		}()
+	}
+	readers.Wait()
+	close(errors)
+	for err := range errors {
+		t.Error(err)
 	}
 	cache.release(first)
 

@@ -116,29 +116,23 @@ func (h *processHandles) closeLocked() {
 // names an address space the process left by exec.
 func (h *processHandles) readAt(tgid int, buf []byte, addr int64) (int, error) {
 	h.mu.Lock()
-	mem := h.mem
-	h.mu.Unlock()
-	n, err := mem.ReadAt(buf, addr)
-	if n > 0 || (err != nil && !isEmptyRead(err)) {
+	defer h.mu.Unlock()
+	n, err := h.mem.ReadAt(buf, addr)
+	if n > 0 || (err != nil && !isStaleAddressSpaceRead(err)) {
 		return n, err
 	}
 	fresh, openErr := os.Open("/proc/" + strconv.Itoa(tgid) + "/mem")
 	if openErr != nil {
 		return n, err
 	}
-	h.mu.Lock()
-	if h.mem == mem {
-		h.mem = fresh
-		_ = mem.Close()
-	} else {
-		_ = fresh.Close()
-	}
-	mem = h.mem
-	h.mu.Unlock()
-	return mem.ReadAt(buf, addr)
+	_ = h.mem.Close()
+	h.mem = fresh
+	return h.mem.ReadAt(buf, addr)
 }
 
-func isEmptyRead(err error) bool { return errors.Is(err, io.EOF) }
+func isStaleAddressSpaceRead(err error) bool {
+	return errors.Is(err, io.EOF) || errors.Is(err, unix.EIO)
+}
 
 // maxCachedThreads bounds the threads whose status files stay open.
 const maxCachedThreads = 1024
@@ -157,8 +151,10 @@ func newStatusFiles() *statusFiles { return &statusFiles{byTID: map[int]*os.File
 // facts reads tid's status through its cached file, opening it once.
 func (c *statusFiles) facts(tid int) (callerFacts, error) {
 	buf := make([]byte, 4096)
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	for attempt := 0; attempt < 2; attempt++ {
-		file, err := c.open(tid)
+		file, err := c.openLocked(tid)
 		if err != nil {
 			return callerFacts{umask: 0o777}, err
 		}
@@ -166,14 +162,12 @@ func (c *statusFiles) facts(tid int) (callerFacts, error) {
 		if n > 0 && (err == nil || errors.Is(err, io.EOF)) && n < len(buf) {
 			return parseCallerFacts(buf[:n])
 		}
-		c.drop(tid, file)
+		c.dropLocked(tid, file)
 	}
 	return callerFactsOf(tid)
 }
 
-func (c *statusFiles) open(tid int) (*os.File, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+func (c *statusFiles) openLocked(tid int) (*os.File, error) {
 	if file, ok := c.byTID[tid]; ok {
 		return file, nil
 	}
@@ -191,9 +185,7 @@ func (c *statusFiles) open(tid int) (*os.File, error) {
 	return file, nil
 }
 
-func (c *statusFiles) drop(tid int, file *os.File) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+func (c *statusFiles) dropLocked(tid int, file *os.File) {
 	if c.byTID[tid] == file {
 		delete(c.byTID, tid)
 	}
