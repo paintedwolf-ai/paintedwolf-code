@@ -20,6 +20,15 @@ type sessionOutputResources struct {
 	spill, limit int64
 }
 
+func (s *sessionOutputResources) ReserveProgramState(ctx context.Context, n int64) (func(), error) {
+	release, err := s.ProgramMemory.ReserveProgramState(ctx, n)
+	var limit *toolcontract.ProgramMemoryLimitError
+	if errors.As(err, &limit) {
+		return nil, &toolcontract.ProgramMemoryLimitError{Account: "session_output_state", Maximum: limit.Maximum, Observed: limit.Observed}
+	}
+	return release, err
+}
+
 func (s *sessionOutputResources) ReserveSpill(ctx context.Context, n int64) (func(), error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -68,15 +77,22 @@ func newSessionOutputResources() *sessionOutputResources {
 	// A spill read's decoder scratch, its screening window and one program's
 	// working storage can be held at once by the session's output lifetime.
 	limits.Working *= 3
-	memory, _ := toolcontract.NewProgramMemory(limits)
+	// Durable output handles outlive one program. Their own session account can
+	// retain a full child-execution budget and a later command without charging
+	// the settled program's 64 MiB state account.
+	limits.State = 256 << 20
 	spill := int64(1 << 30)
 	if catalog, err := toolcontract.LanguageV1(); err == nil {
 		for _, limit := range catalog.Language.Limits {
-			if limit.ID == "session_spill_bytes" {
+			switch limit.ID {
+			case "session_spill_bytes":
 				spill = limit.Maximum
+			case "session_output_state_bytes":
+				limits.State = limit.Maximum
 			}
 		}
 	}
+	memory, _ := toolcontract.NewProgramMemory(limits)
 	return &sessionOutputResources{ProgramMemory: memory, limit: spill}
 }
 

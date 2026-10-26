@@ -17,8 +17,32 @@ import (
 
 type spillAdmissionFunc func(context.Context, int64) (func(), error)
 
+type retainedPreviewBytes struct{ current, peak int64 }
+
+func (q *retainedPreviewBytes) ReserveProgramState(_ context.Context, n int64) (func(), error) {
+	q.current += n
+	q.peak = max(q.peak, q.current)
+	return func() { q.current -= n }, nil
+}
+
 func (f spillAdmissionFunc) ReserveSpill(ctx context.Context, n int64) (func(), error) {
 	return f(ctx, n)
+}
+
+func TestSettledStreamChargesActualPreviewBytes(t *testing.T) {
+	state := &retainedPreviewBytes{}
+	out, err := RetainScreenedStream(t.Context(), ScreenedReader(io.NopCloser(bytes.NewReader(nil))), StreamSpillOptions{
+		Store: blobstore.Store{Root: t.TempDir()}, ClaimID: "empty-child-output", MaximumBytes: 1024, PreviewBytes: 4096,
+		RetainedState: state, WorkingMemory: fixtureStreamMemory{}, Admission: spillAdmissionFunc(func(context.Context, int64) (func(), error) { return func() {}, nil }),
+	})
+	testutil.FailErr(t, "retain empty output", err)
+	if len(out.Preview) != 0 || state.current > 2048 || state.peak < 4096 {
+		t.Fatalf("empty settled output retained its maximum preview: current=%d peak=%d", state.current, state.peak)
+	}
+	testutil.FailErr(t, "release empty output", out.Close())
+	if state.current != 0 {
+		t.Fatalf("retained state after release: %d", state.current)
+	}
 }
 
 func TestScreenedStreamSpillKeepsCompleteBinarySeparateFromPreview(t *testing.T) {
@@ -48,7 +72,7 @@ func TestScreenedStreamSpillKeepsCompleteBinarySeparateFromPreview(t *testing.T)
 	if !bytes.Equal(got, want) || !out.Complete || out.Failure != nil || !bytes.Equal(out.Preview, want[:3]) || cap(out.Preview) > 3 || out.EmittedSHA256 != hex.EncodeToString(sum[:]) {
 		t.Fatalf("spill confused preview and content: %+v bytes=%d", out, len(got))
 	}
-	if len(reservations) != 2 || reservations[1] != out.Blob.Size+retainedFrameBytes {
+	if len(reservations) != 2 || reservations[1] != out.Blob.Size+RetainedFrameBytes {
 		t.Fatalf("retention reserved %v, want the stored %d bytes after staging", reservations, out.Blob.Size)
 	}
 	if err := out.Close(); err == nil || released != 1 {

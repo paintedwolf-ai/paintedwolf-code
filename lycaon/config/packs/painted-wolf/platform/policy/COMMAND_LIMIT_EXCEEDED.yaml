@@ -18,11 +18,11 @@ requires:
 when: paintedwolf.rejection_code == "COMMAND_LIMIT_EXCEEDED"
 effect: block
 copy:
-  what: 'Resource ceiling {{ paintedwolf.limit_id }} stopped new admission: observed {{ paintedwolf.observed }}, maximum {{ paintedwolf.maximum }} {{ paintedwolf.resource_unit }}.'
-  cause: 'A declared host resource ceiling stopped new admission. Earlier completed effects remain authoritative.'
-  why: 'Started operations retain their terminal settlement and recovery contracts. Exhaustion cannot erase completed effects or authorize replay.'
-  fix: 'Reduce the requested work within the declared limit. Earlier parent effects remain recorded; inspect them before proposing a new action.'
-  instead: 'Inspect completed effects and recovery facts before submitting a smaller new action; do not replay the whole program.'
+  what: 'This command reached its {{ paintedwolf.limit_id }} limit ({{ paintedwolf.observed }} {{ paintedwolf.resource_unit }}; maximum {{ paintedwolf.maximum }}).'
+  cause: 'The command stopped at this statement. Earlier completed steps and their results remain recorded.'
+  why: 'The host cannot run another step once the limit is reached.'
+  fix: 'Check the completed steps, then process the remaining items in fewer, larger steps or write intermediate results to a file.'
+  instead: 'Check the recorded results before retrying the remaining work.'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_composition_redirect
 x-paintedwolf-message: command resource admission stopped
@@ -37,4 +37,4 @@ x-paintedwolf-scenarios:
   expect_contains:
   - 'Code: COMMAND_LIMIT_EXCEEDED'
   - ast_nodes
-  - Earlier parent effects
+  - Check the recorded results

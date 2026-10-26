@@ -114,6 +114,8 @@ func (d *fakeDispatch) run(ctx context.Context, argv, env []string, streams Stre
 		return completed(0), nil
 	}
 	switch argv[0] {
+	case "basename":
+		return write("item\n")
 	case "echo":
 		return write(strings.Join(argv[1:], " ") + "\n")
 	case "pwd":
@@ -309,7 +311,7 @@ type evalFixture struct {
 	jobs        *fakeJobs
 }
 
-func newEvalFixture(t *testing.T) *evalFixture {
+func newEvalFixture(t testing.TB) *evalFixture {
 	t.Helper()
 	log := &dispatchLog{}
 	stdout := &bytes.Buffer{}
@@ -322,7 +324,7 @@ func newEvalFixture(t *testing.T) *evalFixture {
 	return f
 }
 
-func (f *evalFixture) run(t *testing.T, ctx context.Context, program string) (ProgramOutcome, error) {
+func (f *evalFixture) run(t testing.TB, ctx context.Context, program string) (ProgramOutcome, error) {
 	t.Helper()
 	parsed, err := commandsurface.ParseAdmitted(ctx, f.ports.Memory, []byte(program), commandsurface.ParseOptions{SourceName: "program"})
 	testutil.FailErr(t, "parse fixture program", err)
@@ -332,4 +334,3 @@ func (f *evalFixture) run(t *testing.T, ctx context.Context, program string) (Pr
 	defer lease.Close()
 	return Evaluate(ctx, lease.Plan, f.ports)
 }
-

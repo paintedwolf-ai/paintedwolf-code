@@ -40,6 +40,37 @@ func newProgramFixture(t *testing.T) *programFixture {
 	}})}
 }
 
+func newLoopFixture(t *testing.T) *programFixture {
+	t.Helper()
+	return &programFixture{programtest.New(t, programtest.Options{
+		Input:       func(dir string) commandprogram.InputRedirection { return loopInput{dir: dir} },
+		Publication: func(string) commandprogram.OutputPublication { return nullPublication{} },
+	})}
+}
+
+type loopInput struct{ dir string }
+
+func (i loopInput) OpenInput(_ context.Context, destination commandprogram.InputDestination) (io.ReadCloser, error) {
+	return os.Open(filepath.Join(i.dir, destination.Target.Value))
+}
+
+type nullPublication struct{}
+
+func (nullPublication) Open(_ context.Context, destination commandprogram.OutputDestination) (commandprogram.StagedOutput, error) {
+	if destination.Target.Value != "/dev/null" {
+		return nil, fmt.Errorf("fixture only supports /dev/null output")
+	}
+	return nullStage{}, nil
+}
+
+type nullStage struct{}
+
+func (nullStage) Write(p []byte) (int, error) { return len(p), nil }
+func (nullStage) Publish(context.Context) (commandprogram.OutputPublished, error) {
+	return commandprogram.OutputPublished{}, nil
+}
+func (nullStage) Abandon(context.Context) error { return nil }
+
 func (f *programFixture) call(t *testing.T, ctx context.Context, source string) (string, error) {
 	t.Helper()
 	return f.Call(t, ctx, source)
@@ -359,6 +390,40 @@ func TestProgramEntryRunsManyProgramsWithinTheSessionSpillQuota(t *testing.T) {
 		if err != nil || !strings.Contains(out, `"state":"completed"`) {
 			t.Fatalf("program %d: %v %s", i, err, out)
 		}
+	}
+}
+
+func TestProgramEntryLargeLoopsKeepTheSessionUsable(t *testing.T) {
+	f := newLoopFixture(t)
+	const items = 12000
+	data := strings.Repeat("item\n", items)
+	testutil.FailErr(t, "write loop input", os.WriteFile(filepath.Join(f.Dir, "items.txt"), []byte(data), 0o600))
+	for _, form := range []struct {
+		program       string
+		children      int
+		receiptBodies int
+	}{
+		{`while read -r i; do basename "$i" >/dev/null; done < items.txt`, items, 3*items + 1},
+		{`for i in $(external -- /bin/cat items.txt); do basename "$i" >/dev/null; done`, items + 1, 2*items + 1},
+	} {
+		out, err := f.call(t, t.Context(), form.program)
+		testutil.FailErr(t, "run large loop", err)
+		result := decodeOutcome(t, out)
+		if result.State != "completed" || result.Status != 0 || result.Refusal != nil || result.Stdout != "" || result.ExecutedChildren != form.children {
+			var events, bytes int64
+			testutil.FailErr(t, "read trace usage", f.Database.QueryRowContext(t.Context(), `SELECT trace_events, trace_bytes FROM invocation_programs WHERE id=?`, result.ProgramID).Scan(&events, &bytes))
+			t.Fatalf("large loop state=%s status=%d refusal=%+v output=%d children=%d trace=%d/%d", result.State, result.Status, result.Refusal, len(result.Stdout), result.ExecutedChildren, events, bytes)
+		}
+		var receipts int
+		testutil.FailErr(t, "count loop child receipts", f.Database.QueryRowContext(t.Context(), `SELECT count(*) FROM invocation_program_executions WHERE program_id=?`, result.ProgramID).Scan(&receipts))
+		if receipts != form.receiptBodies {
+			t.Fatalf("loop child receipts=%d, want %d for %q", receipts, form.receiptBodies, form.program)
+		}
+	}
+	out, err := f.call(t, t.Context(), "echo hi")
+	testutil.FailErr(t, "run later program", err)
+	if result := decodeOutcome(t, out); result.State != "completed" || result.Stdout != "hi\n" {
+		t.Fatalf("later program failed: %+v", result)
 	}
 }
 

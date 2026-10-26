@@ -32,9 +32,11 @@ import (
 
 // Options select the fixture's session, process registry and native owners.
 type Options struct {
-	Session    string
-	Background *bgprocess.Registry
-	Natives    func(dir string) map[string]command.NativeOperation
+	Session     string
+	Background  *bgprocess.Registry
+	Natives     func(dir string) map[string]command.NativeOperation
+	Input       func(dir string) commandprogram.InputRedirection
+	Publication func(dir string) commandprogram.OutputPublication
 }
 
 // Fixture is one composed program entry rooted at Dir.
@@ -94,13 +96,21 @@ func New(t *testing.T, options Options) *Fixture {
 	if options.Natives != nil {
 		natives = options.Natives(dir)
 	}
+	var input commandprogram.InputRedirection
+	if options.Input != nil {
+		input = options.Input(dir)
+	}
+	var publication commandprogram.OutputPublication
+	if options.Publication != nil {
+		publication = options.Publication(dir)
+	}
 	runtime := &command.ProgramRuntime{
 		Executor: executor, Registry: registry, Recorder: recorder, Blobs: blobstore.Store{Root: t.TempDir()},
 		Projector: captureprojection.New(secretmatch.NewInertMatcher(), nil), Boundary: boundary,
 		Progress: progressFacts{owner}, Supervisor: &command.ProgramSupervisor{Interrupter: recorder, Background: background}, Evaluate: commandprogram.Evaluate,
 		Sessions: sessions{},
 		Owners: func(tools.ToolContext, *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
-			return command.ProgramOwners{Natives: natives}, nil
+			return command.ProgramOwners{Natives: natives, Input: input, Publication: publication}, nil
 		},
 	}
 	return &Fixture{Runtime: runtime, Recorder: recorder, Database: database, Session: session, Dir: dir, Background: background}

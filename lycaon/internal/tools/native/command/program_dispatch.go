@@ -187,7 +187,7 @@ func (d *ProgramDispatcher) invokeBuiltin(ctx context.Context, spec toolcontract
 	}
 	child, err := d.prepare(ctx, spec, request, nil)
 	if err != nil {
-		return refusedResult("COMMAND_OPERAND_INVALID"), err
+		return prepareChildFailure(streams, spec.Name, request, err)
 	}
 	defer child.release()
 	if err := d.start(ctx, child); err != nil {
@@ -235,7 +235,7 @@ func (d *ProgramDispatcher) invokeExternal(ctx context.Context, request commandp
 	line := (lycexec.Stage{Name: argv[0], Args: argv[1:]}).CommandLine()
 	child, err := d.prepareDefinition(ctx, definition, request, map[string]any{"command": line, "cwd": display})
 	if err != nil {
-		return refusedResult("COMMAND_OPERAND_INVALID"), err
+		return prepareChildFailure(streams, "external", request, err)
 	}
 	defer child.release()
 	if d.run.externalHidden && request.Argv[0].Value == "external" {
@@ -367,7 +367,7 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 	}
 	child, err := d.prepareDefinition(ctx, operationDef, request, inputs)
 	if err != nil {
-		return refusedResult("COMMAND_OPERAND_INVALID"), err
+		return prepareChildFailure(streams, spec.Name, request, err)
 	}
 	defer child.release()
 	marker := &admissionMarker{ProgramAdmissionRecorder: invocation.ProgramAdmissionRecorder{Recorder: d.run.recorder, Inputs: d.run.capture}}
@@ -395,7 +395,7 @@ func (d *ProgramDispatcher) invokeHosted(ctx context.Context, spec toolcontract.
 	}
 	child, err := d.prepare(ctx, spec, request, prepared.Review.Arguments())
 	if err != nil {
-		return refusedResult("COMMAND_OPERAND_INVALID"), err
+		return prepareChildFailure(streams, spec.Name, request, err)
 	}
 	defer child.release()
 	if err := d.start(ctx, child); err != nil {
@@ -447,6 +447,36 @@ type programChild struct {
 	bound     toolcontract.BoundOperation
 	review    toolcontract.ReviewedOperationInputs
 	release   func()
+}
+
+func prepareChildFailure(streams commandprogram.Streams, command string, request commandprogram.OperationRequest, cause error) (toolcontract.ProducerResult, error) {
+	reject := toolrejection.AsToolReject(cause)
+	if reject == nil {
+		var limit *toolcontract.ProgramMemoryLimitError
+		if errors.As(cause, &limit) {
+			limitID := "program_state_bytes"
+			switch limit.Account {
+			case "working":
+				limitID = "evaluation_memory_bytes"
+			case "session_output_state":
+				limitID = "session_output_state_bytes"
+			}
+			cause = toolrejection.RejectInvalidArguments("COMMAND_LIMIT_EXCEEDED", map[string]any{"command": command, "limit_id": limitID, "resource_unit": "bytes", "maximum": limit.Maximum, "observed": limit.Observed})
+			reject = toolrejection.AsToolReject(cause)
+		}
+	}
+	if reject != nil {
+		if reject.Data == nil {
+			reject.Data = map[string]any{}
+		}
+		reject.Data["command"] = command
+		span := request.Invocation.Span
+		reject.Data["source_start_byte"], reject.Data["source_end_byte"] = span.StartByte, span.EndByte
+		reject.Data["source_line"], reject.Data["source_column"] = span.Line, span.Column
+		writeRejectRefusal(streams, command, request, reject)
+		return refusedResult(reject.Code), cause
+	}
+	return refusedResult("COMMAND_OPERAND_INVALID"), cause
 }
 
 // prepare records a child of a catalog command that has no registered tool.

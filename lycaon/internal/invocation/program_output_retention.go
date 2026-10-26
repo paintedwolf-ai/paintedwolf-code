@@ -83,7 +83,7 @@ func (r *ProgramOutputRetention) Attach(ctx context.Context, program string, out
 	if r.entries[claim] != nil {
 		return fmt.Errorf("output retention claim is already owned")
 	}
-	release, err := r.resources.ReserveProgramState(ctx, 8192+int64(len(claim)+len(program)+len(output.Reference))*4)
+	release, err := r.resources.ReserveProgramState(ctx, 512+int64(len(claim)+len(program)+len(output.Reference))*2)
 	if err != nil {
 		return err
 	}
@@ -252,7 +252,7 @@ func (r *ProgramOutputRetention) BeginProgram(ctx context.Context, in toolcontra
 	if r.entries[spill.RetentionClaimID()] != nil {
 		return fmt.Errorf("program source claim is already owned")
 	}
-	release, err := r.resources.ReserveProgramState(ctx, 8192+int64(len(spill.RetentionClaimID())+len(in.Version.ProgramID))*4)
+	release, err := r.resources.ReserveProgramState(ctx, 512+int64(len(spill.RetentionClaimID())+len(in.Version.ProgramID))*2)
 	if err != nil {
 		return err
 	}

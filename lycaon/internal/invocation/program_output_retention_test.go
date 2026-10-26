@@ -65,6 +65,9 @@ func TestProgramOutputLifetimeReconstructsActualClaimsAndKeepsReachableBodies(t 
 	recovered, err := invocation.NewProgramOutputRetention(t.Context(), f.recorder, store, f.session, recoveredQuota)
 	testutil.FailErr(t, "prepare new host output lifecycle", err)
 	testutil.FailErr(t, "restore actual durable body and quota", recovered.Restore(t.Context()))
+	if want := spill.Blob.Size + tooloutput.RetainedFrameBytes; int64(recoveredQuota.disk) != want {
+		t.Fatalf("restored disk charge=%d, want live body charge=%d", recoveredQuota.disk, want)
+	}
 	reader, err = recovered.Open(t.Context(), f.session, f.program, output.Reference)
 	testutil.FailErr(t, "open exact recovered output", err)
 	testutil.FailErr(t, "close recovered reader", reader.Close())

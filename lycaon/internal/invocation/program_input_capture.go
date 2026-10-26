@@ -109,11 +109,10 @@ func (p ProgramInputCapture) retain(ctx context.Context, execution string, revie
 		return "", err
 	}
 	reference := "output:operation-input:" + uuid.NewString()
-	limits, err := receiptLimits()
-	if err != nil {
-		return "", err
-	}
-	err = p.Outputs.retainInput(ctx, execution, reference, screened.CanonicalArguments(), limits.bytes, metadata.RedactedCount > 0, attach)
+	// This is the bound for one screened input body, independent of the
+	// cumulative receipt trace bound for the whole program.
+	const maximumInputBodyBytes = 8 << 20
+	err = p.Outputs.retainInput(ctx, execution, reference, screened.CanonicalArguments(), maximumInputBodyBytes, metadata.RedactedCount > 0, attach)
 	if err != nil {
 		return "", err
 	}
@@ -128,7 +127,9 @@ func (r *ProgramOutputRetention) retainInput(ctx context.Context, execution, ref
 	}
 	// Reserve the ownership slot BEFORE storage begins, including failure paths.
 	// No generated spill or ambiguous commit can outlive an uncharged local value.
-	release, err := r.resources.ReserveProgramState(ctx, 16384+int64(len(execution)+len(reference))*8)
+	// The canonical arguments live in the durable stream. This lease covers the
+	// retained claim and body handle, not another copy of the arguments.
+	release, err := r.resources.ReserveProgramState(ctx, 512+int64(len(execution)+len(reference))*2)
 	if err != nil {
 		return err
 	}

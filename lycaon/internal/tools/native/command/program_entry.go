@@ -342,7 +342,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	default:
 		// & jobs still run under supervision; the program settles when they end.
 	}
-	feedback := r.feedback(ctx, run, dispatcher, result.StopCode, evalErr)
+	feedback := r.feedback(ctx, run, dispatcher, stderr, result.StopCode, evalErr)
 	refusal := toolrejection.AsToolReject(feedback)
 	if (feedback != nil && refusal == nil) || settleErr != nil {
 		return "", errors.Join(feedback, settleErr)
@@ -408,7 +408,7 @@ func (r *ProgramRuntime) retainScreened(ctx context.Context, memory *toolcontrac
 		return nil, false, err
 	}
 	spill, err := tooloutput.RetainScreenedStream(ctx, tooloutput.ScreenedReader(io.NopCloser(bytes.NewReader(screened.Bytes()))), tooloutput.StreamSpillOptions{
-		Store: r.Recorder.ProgramBlobStore(r.Blobs), ClaimID: claim, MaximumBytes: 1 << 20, PreviewBytes: 4 << 10, Admission: r.sessionResources(scope.SessionID), WorkingMemory: memory, RetainedState: memory,
+		Store: r.Recorder.ProgramBlobStore(r.Blobs), ClaimID: claim, MaximumBytes: 1 << 20, PreviewBytes: 4 << 10, Admission: r.sessionResources(scope.SessionID), WorkingMemory: memory, RetainedState: r.sessionResources(scope.SessionID),
 	})
 	if err != nil {
 		return nil, false, err
@@ -437,17 +437,38 @@ func evaluatedResult(outcome commandprogram.ProgramOutcome) toolcontract.Produce
 
 // feedback renders the first native owner rejection through the program
 // feedback boundary, with the program's completed and uncertain effects.
-func (r *ProgramRuntime) feedback(ctx context.Context, run *programRun, dispatcher *ProgramDispatcher, stopCode string, evalErr error) error {
+func (r *ProgramRuntime) feedback(ctx context.Context, run *programRun, dispatcher *ProgramDispatcher, stderr *boundedBuffer, stopCode string, evalErr error) error {
 	rejection := dispatcher.firstRejection()
 	if rejection == nil {
 		var refusal *commandprogram.EvaluationRefusal
 		if errors.As(evalErr, &refusal) {
 			span := refusal.Node.Span
 			data := map[string]any{"tool": "command", "source_start_byte": span.StartByte, "source_end_byte": span.EndByte, "source_line": span.Line, "source_column": span.Column, "expected": refusal.Expected, "expected_form": refusal.Expected, "reason": refusal.Expected}
+			var limit *commandprogram.ProgramLimitError
+			if errors.As(refusal, &limit) {
+				data["limit_id"], data["maximum"], data["observed"] = limit.Limit, limit.Maximum, limit.Observed
+				for _, declared := range run.catalog.Language.Limits {
+					if declared.ID == limit.Limit {
+						data["resource_unit"] = declared.Unit
+						break
+					}
+				}
+			}
+			var memoryLimit *toolcontract.ProgramMemoryLimitError
+			if errors.As(refusal, &memoryLimit) {
+				limitID := "program_state_bytes"
+				if memoryLimit.Account == "working" {
+					limitID = "evaluation_memory_bytes"
+				}
+				data["limit_id"], data["resource_unit"], data["maximum"], data["observed"] = limitID, "bytes", memoryLimit.Maximum, memoryLimit.Observed
+			}
 			if refusal.Command != "" {
 				data["command"], data["word"], data["expected_form"] = refusal.Command, refusal.Option, refusal.Form
 			}
 			reject := toolrejection.RejectInvalidArguments(refusal.Code, data)
+			if refusal.Code == "COMMAND_LIMIT_EXCEEDED" {
+				writeRejectRefusal(commandprogram.Streams{Error: stderr}, "command", commandprogram.OperationRequest{}, reject)
+			}
 			enrichProgramReject(reject, refusal.Command, span)
 			return ensureProgramRefusalText(toolrejection.RenderReject(reject, nil), reject)
 		}

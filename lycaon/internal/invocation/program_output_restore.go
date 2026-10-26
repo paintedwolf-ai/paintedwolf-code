@@ -47,7 +47,7 @@ func (r *ProgramOutputRetention) Restore(ctx context.Context) error {
 	if bytes < 0 || bytes > 1<<30 || count < 0 || count > 1<<20 {
 		return fmt.Errorf("retained output metadata exceeds supported recovery bound")
 	}
-	release, err := r.resources.ReserveProgramState(ctx, 64<<10+bytes*32+count*4096)
+	release, err := r.resources.ReserveProgramState(ctx, 64<<10+bytes*4+count*128)
 	if err != nil {
 		return err
 	}
@@ -90,7 +90,7 @@ func beginOutputRead(ctx context.Context, database db.Handle) (*sql.Tx, error) {
 }
 
 func (r *ProgramOutputRetention) restoreBody(ctx context.Context, claim, initiating, encoded string) error {
-	releaseEntry, err := r.resources.ReserveProgramState(ctx, 4096+int64(len(claim)+len(initiating)+len(encoded))*32)
+	releaseEntry, err := r.resources.ReserveProgramState(ctx, 512+int64(len(claim)+len(initiating)+len(encoded))*4)
 	if err != nil {
 		return err
 	}
@@ -131,14 +131,14 @@ func (r *ProgramOutputRetention) restoreBody(ctx context.Context, claim, initiat
 	if blob.Size < 0 || blob.Size > 256<<20 {
 		return fmt.Errorf("invalid retained output size")
 	}
-	releaseDisk, err := r.resources.ReserveSpill(ctx, 3*blob.Size+(1<<20))
+	releaseDisk, err := r.resources.ReserveSpill(ctx, blob.Size+tooloutput.RetainedFrameBytes)
 	if err != nil {
 		return err
 	}
 	if releaseDisk == nil {
 		return fmt.Errorf("output recovery disk admission returned no lease")
 	}
-	releaseBody, err := r.resources.ReserveProgramState(ctx, int64(len(claim)+len(initiating))*2+4096)
+	releaseBody, err := r.resources.ReserveProgramState(ctx, int64(len(claim)+len(initiating))*2+512)
 	if err != nil || releaseBody == nil {
 		releaseDisk()
 		if err == nil {
