@@ -98,6 +98,9 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		return toolcontract.ProducerResult{Status: 127, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.EffectUnknown}, waitErr
 	}
 	status := run.ExitCode
+	if len(run.Stages) == 1 {
+		status = run.Stages[0].ExitStatus()
+	}
 	if status < 0 || status > 255 {
 		status = 255
 	}

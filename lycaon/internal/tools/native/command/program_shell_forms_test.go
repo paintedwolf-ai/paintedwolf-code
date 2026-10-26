@@ -90,13 +90,12 @@ func TestProgramEntryMissingExternalUsesShellStatus(t *testing.T) {
 	}
 }
 
-func TestProgramEntryPipeStatusReportsBothStages(t *testing.T) {
+func TestProgramEntryPipeStatusReportsClosedProducer(t *testing.T) {
 	f := newProgramFixture(t)
 	out, err := f.call(t, t.Context(), `yes | head -1; printf '%s\n' "${PIPESTATUS[*]}"`)
 	testutil.FailErr(t, "run closed-reader pipeline", err)
 	got := decodeOutcome(t, out)
-	// The producer may finish its final write before head closes its reader.
-	if got.Status != 0 || (got.Stdout != "y\n141 0\n" && got.Stdout != "y\n0 0\n") {
+	if got.Status != 0 || got.Stdout != "y\n141 0\n" {
 		t.Fatalf("pipeline status outcome: %+v", got)
 	}
 }
