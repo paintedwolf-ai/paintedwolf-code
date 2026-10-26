@@ -906,191 +906,27 @@ Program, static node and dynamic execution identity are distinct. Loops allocate
 Producer results separate ordinary status, typed terminal/host-stop facts, completeness and publication eligibility. Status one from complete grep/diff can be eligible; status zero with partial output cannot. Accepted document edits expose saved publication and publication errors separately. Progress, child effects and process aggregate settle independently. Workflow and grounding project remaining obligations from authoritative facts. [Record classification and retention](compatibility.md#portable-command-records) govern persistence and wire producers.
 ---
 
-## Portable command cutover inventory (P33)
+## Portable command cutover inventory
 
-The complete 119-row audit is checked in at [`tool-audit.csv`](../tool-audit.csv), generated from [`dispositions.json`](../lycaon/config/packs/painted-wolf/platform/tools/command-language-v1/dispositions.json), the utility catalogs under [`command-language-v1/`](../lycaon/config/packs/painted-wolf/platform/tools/command-language-v1/), the P32 OAR rejection inventory, and the Go registration and owner packages under `lycaon/internal/toolhost/` and `lycaon/internal/tools/native/`.
+[`tool-audit.csv`](../tool-audit.csv) enumerates the 119 tool declarations in the [command disposition catalog](../lycaon/config/packs/painted-wolf/platform/tools/command-language-v1/dispositions.json). Its `runtime_authority` column names the subsystem that governs each operation; `surface_disposition` says how the tool is presented. The catalog has one primary `command` entry, 80 retained domain tools, six structured tools also available as command forms, and 32 routine-schema replacements. `process_list` and `process_signal` are in the last group for session job commands, while their separate host-process capabilities remain structured and approval-gated.
 
-### Summary of 119 catalog tools by disposition
+The current command entry parses and admits ordinary bash programs, dispatches cataloged utilities natively, and launches other programs through confinement. It returns child output and status, effects, a program receipt, and typed host refusals. Utility errors retain the utility's stderr and exit status. OAR renders host decisions from typed facts; it does not classify a command by reading its output. The stopped statement's shell-voice stderr accompanies the structured refusal, and earlier child results remain available. The [feedback contract](agent-tool-feedback.md) and [command language](../lycaon/config/packs/painted-wolf/platform/tools/command-language-v1/) define those surfaces.
 
-| Surface disposition | Audit disposition | Count | Summary |
-|---|---|---|---|
-| `primary-routine-command` | `retained` | 1 | `command`: primary routine execution and composition entry (`lycaon/internal/toolhost/command_programs.go`, `lycaon/internal/commandprogram/`, `lycaon/internal/commandsurface/`) |
-| `retain-domain-structured` | `retained` | 80 | 77 host-coupled domain tools (workflow, delegation, overlays, findings, checkpoints, browser, terminals, scans, secrets, recall, web research, decisions) plus `git_compare` (P17 #1221), `verify` (P21 #1197), and `wait` (P22 #1173) |
-| `retain-structured-and-command` | `retained` | 6 | `code_rewrite` (`code-rewrite`), `edit` (`edit`, `sed -i`), `jq_edit` (`jq-edit`), `replace_lines` (`replace-lines`, `sed`), `summarize` (`summarize`), `survey_repo` (`repo-map`) |
-| `replace-routine-schema` | `replaced` | 32 | 30 routine file, search, query, archive, git, and HTTP schemas replaced by `command` utilities (retaining history decoding and named public retirement in P24 #1206), plus 2 host-process tools (`process_list`, `process_signal`) whose host-level approval-gated schemas remain while session-scoped `ps`, `lsof`, `jobs`, `wait`, and `kill` run in `command` (P22 #1173) |
-
-### Replaced routine schemas and dual-surface tools
-
-| Tool | Surface disposition | Selected disposition | Command replacement (`command-language-v1`) | Go command implementation | Implementing PRs | OAR disposition |
-|---|---|---|---|---|---|---|
-| `chmod` | `replace-routine-schema` | Explicit platform capability | `chmod` (`metadata.json`) | `lycaon/internal/tools/native/mutation/metadata.go` | P06 #1093, P16 #1186, P30 #1081, P32 #1110, P33 #1084 | Retire `USE_CHMOD_NATIVE`; translate `CHMOD_BULK_DENIED`, `CHMOD_INVALID_MODE`, `CHMOD_PATH_ESCAPE`, `CHMOD_SYMLINK_DENIED` |
-| `chown` | `replace-routine-schema` | Explicit platform capability | `chown` (`metadata.json`) | `lycaon/internal/tools/native/mutation/metadata.go` | P06 #1093, P16 #1186, P30 #1081, P32 #1110, P33 #1084 | Retire `USE_CHOWN_NATIVE`; translate `CHOWN_BULK_DENIED`, `CHOWN_CROSS_USER_DENIED`, `CHOWN_GROUP_UNAVAILABLE`, `CHOWN_INVALID_SPEC`, `CHOWN_PATH_ESCAPE`, `CHOWN_SYMLINK_DENIED`, `CHOWN_UNSUPPORTED_PLATFORM` |
-| `copy` | `replace-routine-schema` | Native command utility | `cp` (`mutation.json`) | `lycaon/internal/tools/native/mutation/copy_move.go` | P03 #1088, P06 #1093, P16 #1186, P24 #1206, P32 #1110, P33 #1084 | Retire `USE_COPY_NATIVE`; translate `COPY_OVERWRITE_DENIED`, `COPY_RECURSIVE_REQUIRED`, `COPY_SAME_FILE`, `COPY_SOURCE_NOT_FOUND` |
-| `delete` | `replace-routine-schema` | Native command utility | `rm`, `rmdir` (`mutation.json`) | `lycaon/internal/tools/native/mutation/delete.go` | P03 #1088, P06 #1093, P16 #1186, P24 #1206, P32 #1110, P33 #1084 | Retire `USE_DELETE_NATIVE`; translate `DELETE_BULK_DENIED`, `DELETE_DIR_NOT_EMPTY`, `DELETE_NOT_FOUND`, `DELETE_PROTECTED_PATH`, `DELETE_RECURSIVE_REQUIRED`, `DELETE_ROOT_DENIED` |
-| `diff` | `replace-routine-schema` | Native command utility | `diff`, `cmp` (`inspect.json`) | `lycaon/internal/tools/native/literal/diff_command.go`, `lycaon/internal/tools/native/textutil/cmp.go` | P05 #1087, P12 #1180, P14 #1189, P24 #1206, P32 #1110, P33 #1084 | Retire `USE_DIFF_NATIVE`; translate `DIFF_BINARY_FILE`, `DIFF_IDENTICAL_PATHS`, `DIFF_MISSING_SOURCE`, `DIFF_READ_FAILED`, `DIFF_TOO_LARGE` |
-| `extract_archive` | `replace-routine-schema` | Native command utility | `tar`, `unzip`, `zip`, `gzip`, `gunzip`, `zcat` (`archive.json`) | `lycaon/internal/tools/native/mutation/archive.go`, `archive_create.go` | P06 #1093, P16 #1186, P18 #1198, P24 #1206, P32 #1110, P33 #1084 | Retire `USE_EXTRACT_ARCHIVE_NATIVE`; translate `ARCHIVE_BOMB_DETECTED`, `ARCHIVE_CORRUPT`, `ARCHIVE_ENCRYPTED`, `ARCHIVE_ENTRY_COUNT_EXCEEDED`, `ARCHIVE_PATH_TRAVERSAL`, `ARCHIVE_SPECIAL_FILE_DENIED`, `ARCHIVE_SYMLINK_ESCAPE`, `ARCHIVE_TOTAL_BYTES_EXCEEDED`, `ARCHIVE_UNSUPPORTED_FORMAT` |
-| `find` | `replace-routine-schema` | Native command utility | `find` (`search.json`) | `lycaon/internal/tools/native/search/find.go` | P05 #1087, P13 #1188, P24 #1206, P32 #1110, P33 #1084 | Retire `USE_FIND_NATIVE` |
-| `git_blame` | `replace-routine-schema` | Native command utility | `git blame` (`git.json`) | `lycaon/internal/tools/native/gitcmd/commands.go` | P17 #1221, P24 #1206, P32 #1110, P33 #1084 | Retire `USE_GIT_BLAME_NATIVE`; translate `GIT_BLAME_INVALID_RANGE` |
-| `git_branches` | `replace-routine-schema` | Native command utility | `git branch`, `git tag`, `git for-each-ref` (`git.json`) | `lycaon/internal/tools/native/gitcmd/commands.go` | P17 #1221, P24 #1206, P32 #1110, P33 #1084 | Retire `USE_GIT_BRANCHES_NATIVE` |
-| `git_checkout` | `replace-routine-schema` | Reviewed command mutation | `git checkout`, `git switch` (`git.json`) | `lycaon/internal/tools/native/gitcmd/commands.go` | P03 #1088, P09 #1094, P17 #1221, P23 #1228, P24 #1206, P32 #1110, P33 #1084 | Retire `USE_GIT_CHECKOUT_NATIVE`; translate `GIT_CHECKOUT_CONFLICT`, `GIT_CHECKOUT_DETACHED_DENIED`, `GIT_CHECKOUT_DIRTY_WORKTREE`, `GIT_CHECKOUT_REF_NOT_FOUND` |
-| `git_commit` | `replace-routine-schema` | Reviewed command mutation | `git add`, `git commit` (`git.json`) | `lycaon/internal/tools/native/gitcmd/commands.go` | P03 #1088, P09 #1094, P17 #1221, P23 #1228, P24 #1206, P32 #1110, P33 #1084 | Retire `USE_GIT_COMMIT_NATIVE`; translate `GIT_COMMIT_EMPTY_MESSAGE`, `GIT_COMMIT_NOTHING_TO_COMMIT`, `GIT_COMMIT_PATHS_REQUIRED`, `GIT_COMMIT_SECRET_DETECTED`, `GIT_COMMIT_UNTRACKED_PATH` |
-| `git_diff` | `replace-routine-schema` | Native command utility | `git diff` (`git.json`) | `lycaon/internal/tools/native/gitcmd/commands.go` | P05 #1087, P17 #1221, P24 #1206, P32 #1110, P33 #1084 | Retire `USE_GIT_DIFF_NATIVE` |
-| `git_log` | `replace-routine-schema` | Native command utility | `git log` (`git.json`) | `lycaon/internal/tools/native/gitcmd/commands.go` | P17 #1221, P24 #1206, P32 #1110, P33 #1084 | Retire `USE_GIT_LOG_NATIVE` |
-| `git_merge` | `replace-routine-schema` | Reviewed command mutation | `git merge` (`git.json`) | `lycaon/internal/tools/native/gitcmd/commands.go` | P03 #1088, P09 #1094, P17 #1221, P23 #1228, P24 #1206, P32 #1110, P33 #1084 | Retire `USE_GIT_MERGE_NATIVE`; translate `GIT_MERGE_CONFLICT`, `GIT_MERGE_DIRTY_WORKTREE`, `GIT_MERGE_FF_ONLY_FAILED` |
-| `git_ref` | `replace-routine-schema` | Native command utility | `git rev-parse`, `git symbolic-ref`, `git show-ref`, `git merge-base` (`git.json`) | `lycaon/internal/tools/native/gitcmd/commands.go` | P17 #1221, P24 #1206, P32 #1110, P33 #1084 | Retire `USE_GIT_REF_NATIVE` |
-| `git_restore` | `replace-routine-schema` | Reviewed command mutation | `git restore`, `git clean`, `git rm`, `git mv` (`git.json`) | `lycaon/internal/tools/native/gitcmd/commands.go` | P03 #1088, P09 #1094, P17 #1221, P23 #1228, P24 #1206, P32 #1110, P33 #1084 | Retire `USE_GIT_RESTORE_NATIVE`; translate `GIT_RESTORE_PATHS_REQUIRED`, `GIT_RESTORE_UNTRACKED` |
-| `git_show` | `replace-routine-schema` | Native command utility | `git show` (`git.json`) | `lycaon/internal/tools/native/gitcmd/commands.go` | P05 #1087, P17 #1221, P24 #1206, P32 #1110, P33 #1084 | Retire `USE_GIT_SHOW_NATIVE` |
-| `git_stash` | `replace-routine-schema` | Reviewed command mutation | `git stash` (`git.json`) | `lycaon/internal/tools/native/gitcmd/commands.go` | P03 #1088, P09 #1094, P17 #1221, P23 #1228, P24 #1206, P32 #1110, P33 #1084 | Retire `USE_GIT_STASH_NATIVE`; translate `GIT_STASH_CONFLICT`, `GIT_STASH_EMPTY`, `GIT_STASH_NOT_FOUND` |
-| `git_stash_list` | `replace-routine-schema` | Native command utility | `git stash list` (`git.json`) | `lycaon/internal/tools/native/gitcmd/commands.go` | P17 #1221, P24 #1206, P32 #1110, P33 #1084 | Retire `USE_GIT_STASH_LIST_NATIVE` |
-| `git_status` | `replace-routine-schema` | Native command utility | `git status` (`git.json`) | `lycaon/internal/tools/native/gitcmd/commands.go` | P17 #1221, P24 #1206, P32 #1110, P33 #1084 | Retire `USE_GIT_STATUS_NATIVE` |
-| `grep` | `replace-routine-schema` | Native command utility | `grep`, `egrep`, `fgrep`, `rg`, `structural-grep` (`search.json`) | `lycaon/internal/tools/native/search/grep.go`, `structural_grep.go` | P05 #1087, P13 #1188, P24 #1206, P32 #1110, P33 #1084 | Retire `USE_GREP_NATIVE`; translate `GREP_DEADLINE_EXCEEDED`, `GREP_INVALID_REGEX`, `GREP_MATCH_BUDGET`, `GREP_PATH_NOT_FOUND`, `GREP_REGEX_UNSUPPORTED` |
-| `http_request` | `replace-routine-schema` | Native command utility | `curl` (`http.json`) | `lycaon/internal/tools/native/curl/commands.go` | P03 #1088, P07 #1091, P18 #1198, P23 #1228, P24 #1206, P32 #1110, P33 #1084 | Retire `USE_HTTP_REQUEST_NATIVE`; translate `HTTP_REQUEST_*` owner codes |
-| `jq` | `replace-routine-schema` | Native command utility | `jq`, `yq` (`query.json`) | `lycaon/internal/tools/native/query/commands.go` | P05 #1087, P15 #1196, P24 #1206, P32 #1110, P33 #1084 | Retire `USE_JQ_NATIVE`; translate `JQ_COMPILE_ERROR`, `JQ_INPUT_TOO_LARGE`, `JQ_PARSE_ERROR`, `JQ_RUNTIME_ERROR`, `JQ_TIMEOUT` |
-| `list_dir` | `replace-routine-schema` | Native command utility | `ls`, `tree`, `du` (`inspect.json`) | `lycaon/internal/tools/native/literal/metadata_commands.go` | P12 #1180, P24 #1206, P32 #1110, P33 #1084 | Retire `USE_LIST_DIR_NATIVE`; translate `LIST_DIR_NOT_DIRECTORY`, `LIST_DIR_NOT_FOUND` |
-| `mkdir` | `replace-routine-schema` | Native command utility | `mkdir`, `touch`, `mktemp` (`mutation.json`) | `lycaon/internal/tools/native/mutation/create.go` | P06 #1093, P16 #1186, P24 #1206, P32 #1110, P33 #1084 | Retire `USE_MKDIR_NATIVE`; translate `MKDIR_ALREADY_EXISTS_FILE`, `MKDIR_PARENTS_REQUIRED`, `MKDIR_PATH_ESCAPE` |
-| `move` | `replace-routine-schema` | Native command utility | `mv` (`mutation.json`) | `lycaon/internal/tools/native/mutation/copy_move.go` | P03 #1088, P06 #1093, P16 #1186, P24 #1206, P32 #1110, P33 #1084 | Retire `USE_MOVE_NATIVE`; translate `MOVE_CROSS_ROOT_DENIED`, `MOVE_OVERWRITE_DENIED`, `MOVE_PROTECTED_PATH`, `MOVE_SAME_FILE`, `MOVE_SOURCE_NOT_FOUND` |
-| `process_list` | `replace-routine-schema` | Retain domain capability | Session `ps`, `lsof`, `jobs` in `command` (`process.json`); retain host `process_list` | `lycaon/internal/commandprogram/job_builtins.go`, `lycaon/internal/toolhost/process_tools.go` | P06 #1093, P22 #1173, P30 #1081, P32 #1110, P33 #1084 | Retire `USE_PROCESS_LIST_NATIVE` for session jobs; preserve host `PROCESS_LIST_*` |
-| `process_signal` | `replace-routine-schema` | Retain domain capability | Session `kill`, `wait` in `command` (`process.json`); retain host `process_signal` | `lycaon/internal/commandprogram/job_builtins.go`, `lycaon/internal/toolhost/process_tools.go` | P06 #1093, P22 #1173, P30 #1081, P32 #1110, P33 #1084 | Retire `USE_PROCESS_SIGNAL_NATIVE` for session jobs; preserve host `PROCESS_SIGNAL_*` |
-| `read` | `replace-routine-schema` | Native command utility | `cat`, `head`, `tail`, `nl`, `outline`, `xxd`, `hexdump`, `base64`, `sha256sum` (`inspect.json`, `pure.json`) | `lycaon/internal/tools/native/literal/read_commands.go`, `builtin_commands.go` | P05 #1087, P10 #1107, P12 #1180, P24 #1206, P32 #1110, P33 #1084 | Retire `USE_READ_NATIVE`; translate `READ_BINARY_FILE`, `READ_DIRECTORY`, `READ_FILE_TOO_LARGE`, `READ_INVALID_RANGE`, `READ_NOT_FOUND` |
-| `stat` | `replace-routine-schema` | Native command utility | `stat`, `file`, `readlink`, `realpath`, `ln` (`inspect.json`, `paths.json`, `metadata.json`) | `lycaon/internal/tools/native/literal/metadata_commands.go`, `lycaon/internal/tools/native/mutation/links.go` | P06 #1093, P12 #1180, P16 #1186, P19 #1181, P24 #1206, P30 #1081, P32 #1110, P33 #1084 | Retire `USE_STAT_NATIVE`; translate `STAT_NOT_FOUND` |
-| `wc` | `replace-routine-schema` | Native command utility | `wc` (`inspect.json`) | `lycaon/internal/tools/native/literal/wc_command.go` | P12 #1180, P24 #1206, P32 #1110, P33 #1084 | Retire `USE_WC_NATIVE` |
-| `write` | `replace-routine-schema` | Native command utility | `>`, `>>`, `<<EOF`, `tee`, `sed -i` (`language.json`, `mutation.json`, `sed.json`) | `lycaon/internal/tools/native/mutation/write.go`, `redirection.go`, `tee.go` | P03 #1088, P06 #1093, P10 #1107, P16 #1186, P23 #1228, P24 #1206, P32 #1110, P33 #1084 | Retire `USE_WRITE_NATIVE`; translate `WRITE_*` and `EDIT_SYNTAX_REGRESSION` |
-| `code_rewrite` | `retain-structured-and-command` | Retain structured + command built-in | `code-rewrite` (`search.json`) + structured `code_rewrite` | `lycaon/internal/tools/native/search/commands.go`, `mutation/structured_mutations.go` | P03 #1088, P10 #1107, P13 #1188, P16 #1186, P23 #1228, P24 #1206, P32 #1110, P33 #1084 | Translate `CODE_REWRITE_*` and `EDIT_*` across both surfaces |
-| `edit` | `retain-structured-and-command` | Retain structured + command built-in | `edit` (`mutation.json`), `sed -i` (`sed.json`) + structured `edit` | `lycaon/internal/tools/native/mutation/structured_mutations.go`, `textutil/sed.go` | P03 #1088, P10 #1107, P14 #1189, P16 #1186, P23 #1228, P24 #1206, P32 #1110, P33 #1084 | Retire `USE_EDIT_NATIVE`; translate `EDIT_*` across both surfaces |
-| `jq_edit` | `retain-structured-and-command` | Retain structured + command built-in | `jq-edit` (`query.json`) + structured `jq_edit` | `lycaon/internal/tools/native/mutation/structured_mutations.go`, `query/commands.go` | P03 #1088, P10 #1107, P15 #1196, P16 #1186, P23 #1228, P24 #1206, P32 #1110, P33 #1084 | Retire `USE_JQ_EDIT_NATIVE`; translate `JQ_EDIT_*` across both surfaces |
-| `replace_lines` | `retain-structured-and-command` | Retain structured + command built-in | `replace-lines` (`mutation.json`), `sed` (`sed.json`) + structured `replace_lines` | `lycaon/internal/tools/native/mutation/structured_mutations.go`, `textutil/sed.go` | P03 #1088, P10 #1107, P14 #1189, P16 #1186, P23 #1228, P24 #1206, P32 #1110, P33 #1084 | Retire `USE_REPLACE_LINES_NATIVE`; translate `REPLACE_LINES_*` across both surfaces |
-| `summarize` | `retain-structured-and-command` | Retain structured + command built-in | `summarize` (`inspect.json`) + structured `summarize` | `lycaon/internal/tools/native/literal/builtin_commands.go` | P12 #1180, P24 #1206, P32 #1110, P33 #1084 | Retire `USE_SUMMARIZE_NATIVE`; translate `SUMMARIZE_*` across both surfaces |
-| `survey_repo` | `retain-structured-and-command` | Retain structured + command built-in | `repo-map` (`inspect.json`) + structured `survey_repo` | `lycaon/internal/tools/native/literal/builtin_commands.go` | P12 #1180, P24 #1206, P32 #1110, P33 #1084 | Retire `USE_SURVEY_REPO_NATIVE`; translate `SURVEY_*` across both surfaces |
-
-### Unwired command-program owners on the integration branch
-
-On `feat/portable-command-external-execution` (`73fb670a28`), [`lycaon/internal/toolhost/command_programs.go`](../lycaon/internal/toolhost/command_programs.go) wires five command-program owner groups (`literal.NewOwners`, `mutation.NewOwners`, `search.NewOwners`, `textutil.NewOwners`, and `hostenv.NewOwners`). Three sibling PR branches must be merged and wired into `command_programs.go` before their replaced routine schemas can be retired from active surfaces:
-
-1. **Query owner (`P15 #1196`, `lycaon/internal/tools/native/query`):** `query.NewOwners` (`jq`, `yq`, and `jq-edit`).
-2. **Git command owner (`P17 #1221`, `lycaon/internal/tools/native/gitcmd`):** `gitcmd.NewOwners` (`git status`, `git diff`, `git log`, `git show`, `git blame`, `git rev-parse`, `git symbolic-ref`, `git show-ref`, `git merge-base`, `git branch`, `git tag`, `git for-each-ref`, `git stash`, `git add`, `git commit`, `git restore`, `git clean`, `git rm`, `git mv`, `git checkout`, `git switch`, `git merge`, and `git rev-list --left-right --count`).
-3. **HTTP and archive-creation owners (`P18 #1198`, `lycaon/internal/tools/native/curl` and `mutation/archive_create.go`):** `curl.NewOwners` (`curl`) and archive creation flags in `mutation.NewOwners` (`tar -c`, `zip`, `gzip`).
-
-### Live rendered prompt audit (`llm-requests.jsonl`)
-
-Inspection of the live provider request captures (`run1/dlive`, `run1/live-unpatched`, and `run2/dlive`) reveals why the coordinator and workers continued calling structured routine tools (`read`, `grep`, `find`, `list_dir`, `wc`, `git_status`, `git_log`, `git_show`) or requesting them via `request_tools`:
-
-1. **Initial tool floor (`req[0]`):** On `73fb670a28`, `implement_investigate.floor` in `lycaon/config/packs/painted-wolf/platform/host/coordinator-surfaces.yaml` exposes 14 tools (`ask_user`, `delegate_init`, `find`, `grep`, `list_dir`, `pack_board`, `read`, `recall`, `request_decision`, `request_tools`, `state_query`, `summarize`, `survey_repo`, `task`) and omits `command`. The model must call `request_tools` to obtain `command`.
-2. **Dynamic procedure injection when `command` loads (`req[2]`, `req[5]`, `req[20]`, `req[25]`, `msg[1]`):** When `command` is activated, the host injects `lycaon/config/packs/painted-wolf/platform/shared/units/runner-operating-procedure.md` under `### Available tool procedures`. That unit still states:
-   - `Use http_request for API, webhook, and development-service actions; reserve runner networking for a process whose protocol is not represented by that schema.`
-   - `Runs as an argv sequence without a shell; pipelines (|), redirections (2>&1, > /dev/null), and leading NAME=value scope to their stage; pass shared variables in env.`
-3. **Worker command partial (`lycaon/config/packs/painted-wolf/platform/shared/partials/command-surface.md`):** Included into every worker prompt via `shared/partials/agent-tool-surface.md` whenever `profile_has_command` is true. It still renders `## command (profile ...) — argv host runner` and instructs workers that `here-documents (<<) reject`, `$()/backticks reject`, `create a file with write`, `stop it with command_stop, never kill/pkill/lsof via command`, and `shell fragments or unsplit strings reject with COMMAND_NOT_ARGV`.
-4. **Rendered system prompt fragments (`req[0]`, `msg[0]`):** Even after static edits to `coordinator-tool-discipline.md` and `coordinator-Floor.md` on `feat/portable-command-guidance` (`6dec08046a`), the rendered system prompt (`msg[0]`) still contains replaced-tool instructions assembled from untouched partials and units:
-   - `shared/partials/workspace-roots.md:17` (rendered at `msg[0]` line 20): `User absolute paths: call read/list_dir/grep with them — expect an Approvals card or Code:; never refuse in prose or ask them to paste the file.`
-   - `shared/partials/coordinator-turn-recipe.md:5` (rendered at `msg[0]` line 28): `For unfamiliar repository layout, list_dir({"path":"."}) returns the map; omit depth and pagination fields.`
-   - `shared/units/secure-by-default-read.md:4` (rendered at `msg[0]` line 38): frontmatter `attaches: [read, grep, jq]` omits `command`, so removing `read`, `grep`, and `jq` from the floor detaches the read-confinement guidance altogether.
-   - `shared/partials/surface-note-discipline.md:4` (rendered at `msg[0]` line 134): `cited_evidence takes strings, e.g. ["write#1"], using observed handles.`
-   - `shared/partials/coordinator-final-report.md:17` (rendered at `msg[0]` line 173): `{"cited_evidence": [{"evidence": "read#3"}], ...}`
-   - `shared/units/native-summarize-tool.md:10` (rendered at `msg[0]` line 211): `Use bounded read/grep for more detail... Otherwise, use read before editing.`
-   - `shared/units/native-recall-tool.md:10-11` (rendered at `msg[0]` lines 224-225): `Not the tree: grep/find say what files hold now... Known handle: query handle:read#3 alone`.
-
-### Complete inventory of prompts, units, partials, skills, profiles, surfaces, OAR rules, and registrations requiring cutover cleanup
-
-#### 1. Shared units (`lycaon/config/packs/painted-wolf/platform/shared/units/`)
-
-| File | Replaced tools taught or attached on `HEAD` (`73fb670a28`) | Status on `feat/portable-command-guidance` (`6dec08046a`) | Required cutover action |
-|---|---|---|---|
-| `runner-operating-procedure.md` | `http_request`, legacy argv-only `command` grammar | **Unchanged** (still teaches argv-only without a shell and `http_request`) | Rewrite for portable command language v1 and `curl` |
-| `secure-by-default-read.md` | `attaches: [read, grep, jq]` | **Unchanged** (loses attachment when `read`/`grep`/`jq` leave floor) | Attach to `command` and update prose |
-| `secure-by-default-run.md` | `http_request` (lines 11-12) | **Unchanged** | Replace `http_request` guidance with `command` (`curl`) |
-| `git-mutation-user-consent.md` | `attaches: [git_status, git_diff, git_log, git_show, git_blame, git_compare, git_commit, git_restore, git_checkout, git_merge, git_stash, git_stash_list]`; body redirects `git status → git_status`, `git diff → git_diff`, `git commit → git_commit`, etc. | **Unchanged** | Attach to `command` (`git` subcommands) and `git_compare`; remove redirect table to retired `git_*` schemas |
-| `http-operating-procedure.md` | `attaches: [http_request]`; teaches `http_request` schema | **Unchanged** | Rewrite for `curl` in `command` and attach to `command` |
-| `http-request-tools.md` | `attaches: [http_request, fetch_url]`; teaches `http_request` vs `fetch_url` | **Unchanged** | Update to contrast `curl` in `command` with `fetch_url` |
-| `managed-secret-tools.md` | References `http_request` and `write` as secret reference surfaces | **Unchanged** | Update to include `command` (`curl`, redirections) |
-| `native-edit-tool.md` | `attaches: [write, edit, replace_lines, restore_version, code_rewrite]`; teaches `New file → write` and `call read in a prior response` | **Unchanged** | Update new-file and read-before-edit guidance for `command` + retained structured edit tools |
-| `native-summarize-tool.md` | Teaches `Use bounded read/grep for more detail` and `use read before editing` | **Unchanged** | Update to reference `command` (`cat`/`head`/`tail`/`grep`/`rg`) |
-| `native-recall-tool.md` | Teaches `grep/find say what files hold now` and `handle:read#3` | **Unchanged** | Update examples to `command` (`grep`/`find`) and `handle:command#3` |
-| `coordinator-progress-procedure.md` | `attaches` includes `write` | **Unchanged** | Attach to `command` for file mutations |
-
-#### 2. Shared partials (`lycaon/config/packs/painted-wolf/platform/shared/partials/`)
-
-| File | Replaced tools taught on `HEAD` (`73fb670a28`) | Status on `feat/portable-command-guidance` (`6dec08046a`) | Required cutover action |
-|---|---|---|---|
-| `command-surface.md` | Teaches `argv host runner`, `pipeline`, `here-documents (<<) reject`, `create a file with write`, `never kill/pkill/lsof via command`, `COMMAND_NOT_ARGV` | **Unchanged** | Rewrite for portable command language v1 |
-| `agent-tool-surface.md` | Conditionally renders `profile_has_read`, `profile_has_grep`, `profile_has_find`, `profile_has_list_dir`, `profile_has_stat`, `profile_has_wc`, `profile_has_diff`, `profile_has_jq`, `profile_has_write`, `profile_has_git_*`, `profile_has_http_request` | **Unchanged** | Remove retired routine tool bullets; teach `command` utilities and retained structured tools |
-| `workspace-roots.md` | Line 17: `call read/list_dir/grep with them` | **Unchanged** | Update to `command` |
-| `coordinator-turn-recipe.md` | Line 5: `list_dir({"path":"."}) returns the map` | **Unchanged** | Update to `survey_repo` / `command` (`repo-map`, `ls`) |
-| `multi-root-addressing.md` | References `read`, `write`, `grep`, `find`, `list_dir`, `stat`, `git_status` | **Unchanged** | Update to `command` and retained structured tools |
-| `large-file-write-discipline.md` | Teaches `write` size limits and chunking | **Unchanged** | Update for `command` redirections/heredocs and retained edit tools |
-| `surface-note-discipline.md` | Example `["write#1"]` | **Unchanged** | Update example handle to `["command#1"]` or `["edit#1"]` |
-| `coordinator-final-report.md` | Example `{"evidence": "read#3"}` | **Unchanged** | Update example handle to `{"evidence": "command#3"}` |
-| `coordinator-synthesis-wrapup.md` | References `read`, `grep`, `git_diff`, `git_status` | **Unchanged** | Update to `command` |
-| `coordinator-synthesis-citation-grounding.md` | References `read#`, `grep#` handles | **Unchanged** | Update examples to `command#` |
-| `coordinator-primary-tree-vs-workers.md` | References `read`, `grep`, `git_status`, `git_diff`, `write` | **Unchanged** | Update to `command` and retained edit tools |
-| `coordinator-mode-orchestrate-invariants-edits.md` | References `write`, `delete`, `move`, `copy`, `mkdir`, `git_commit`, `git_checkout`, `git_merge`, `git_restore`, `git_stash` | **Unchanged** | Update to `command` and retained edit tools |
-| `worker-complete-leg.md` | References `read#1`, `write#2`, `git_diff` | **Unchanged** | Update to `command` and `edit` handles |
-| `coordinator-tool-discipline.md` | Taught `read`, `grep`, `find`, `list_dir`, `stat`, `wc`, `jq` over `command` | Updated in `6dec08046a` | Keep `6dec08046a` update |
-| `coordinator-floor.md` | Taught `read`, `grep`, `find`, `list_dir` on floor | Updated in `6dec08046a` | Keep `6dec08046a` update |
-| `coordinator-mode-implement-direct.md` | Taught `read`, `grep`, `write`, `git_diff`, `git_status` | Partially updated in `6dec08046a` (`write` still mentioned) | Replace remaining `write` reference |
-| `worker-tool-discipline.md` | Taught `read`, `grep`, `find`, `list_dir`, `write`, `http_request` | Partially updated in `6dec08046a` (`write`, `http_request` remain) | Replace remaining `write` and `http_request` references |
-
-#### 3. Agent definitions and prompts (`lycaon/config/packs/painted-wolf/platform/agents/`)
-
-| File | Replaced tools referenced on `HEAD` (`73fb670a28`) | Status on `feat/portable-command-guidance` (`6dec08046a`) |
-|---|---|---|
-| `implementer.yaml`, `plan-writer.yaml`, `code-reviewer.yaml`, `path-explorer.yaml`, `repo-researcher.yaml`, `security-reviewer.yaml`, `web-researcher.yaml` | `examples` / descriptions reference `read`, `grep`, `find`, `list_dir`, `write`, `git_diff`, `git_log`, `git_blame`, `http_request` | **Unchanged** |
-| `prompts/coordinator/coordinator-mode-implement-routing.md` | References `read`, `grep`, `find`, `list_dir`, `write`, `git_status`, `git_diff` | Partially updated in `6dec08046a` (`write` remains) |
-| `prompts/coordinator/coordinator-mode-plan-stub.md` | References `read`, `write`, `list_dir`, `grep` | **Unchanged** |
-| `prompts/workers/code-reviewer.md` | References `read`, `grep`, `git_diff`, `git_log`, `git_blame` | **Unchanged** |
-| `prompts/workers/path-explorer.md` | References `read`, `grep`, `find`, `list_dir`, `stat` | **Unchanged** |
-| `prompts/workers/web-researcher.md` | References `http_request` vs `fetch_url` | **Unchanged** |
-| `prompts/workers/implementer.md`, `repo-researcher.md`, `security-reviewer.md`, `plan-reviewer.md`, `plan-writer.md` | Referenced `read`, `grep`, `find`, `list_dir`, `jq` | Updated in `6dec08046a` (`implementer.md` still mentions `write`) |
-
-#### 4. Bundled skills (`lycaon/config/packs/painted-wolf/platform/skills/`)
-
-15 skill files still teach replaced routine tools on both `HEAD` (`73fb670a28`) and `feat/portable-command-guidance` (`6dec08046a`):
-- `commit-in-logical-groups/SKILL.md` (`git_status`, `git_diff`, `git_commit`, `git_restore`, `git_stash`, `git_log`)
-- `investigate-code-history/SKILL.md` (`git_log`, `git_show`, `git_blame`, `git_diff`, `git_ref`, `read`, `grep`)
-- `prepare-a-release/SKILL.md` (`git_status`, `git_log`, `git_branches`, `git_diff`, `git_commit`, `read`, `write`)
-- `reach-a-network-service/SKILL.md` (`http_request`, `read`, `jq`)
-- `run-a-local-model/SKILL.md` (`http_request`)
-- `query-local-observability/SKILL.md` (`http_request`, `jq`, `read`, `grep`)
-- `deploy-to-a-hosting-platform/SKILL.md` (`http_request`, `read`, `write`, `git_status`)
-- `evolve-a-system/SKILL.md` (`read`, `grep`, `find`, `list_dir`, `write`, `git_status`, `git_diff`)
-- `use-secrets-without-reading-them/SKILL.md` (`http_request`, `write`)
-- `verify-a-change/SKILL.md` (`git_diff`, `git_status`, `read`, `http_request`)
-- `analyze-a-profiler-trace/SKILL.md` (`read`, `grep`, `jq`)
-- `apply-a-structural-codemod/SKILL.md` (`grep`, `find`, `read`, `git_diff`)
-- `triage-security-findings/SKILL.md` (`read`, `grep`, `git_blame`, `git_log`)
-- `work-with-containers/SKILL.md` (`read`, `write`, `http_request`)
-- `verify-terminal-change/SKILL.md` (`read`)
-
-#### 5. Tool profiles (`lycaon/config/packs/painted-wolf/platform/tools/profiles/*.yaml`) and coordinator surfaces (`host/coordinator-surfaces.yaml`)
-
-- **On `HEAD` (`73fb670a28`):** All 30 retiring routine schemas (`read`, `list_dir`, `stat`, `wc`, `diff`, `grep`, `find`, `jq`, `write`, `chmod`, `chown`, `copy`, `delete`, `mkdir`, `move`, `extract_archive`, `http_request`, and the 13 `git_*` schemas) are active (`sticky` or `true`) across `coordinator.yaml`, `implement.yaml`, `explore_readonly.yaml`, `worker_readonly.yaml`, `plan_review_readonly.yaml`, `plan_write_only.yaml`, and `editor_file.yaml`, and are listed on floors/loadable sets in `host/coordinator-surfaces.yaml`.
-- **On `feat/portable-command-guidance` (`6dec08046a`):**
-  - Only 5 schemas (`read`, `grep`, `find`, `list_dir`, `jq`) were demoted from `sticky` to `true` in profiles, and they remain `loadable` in `implement_investigate` and on the `floor` of `observe_investigate`, `plan_stub`, `plan_research`, `plan_approve`, `plan_review`, `plan_execute`, and `decision_adjudicate` in `host/coordinator-surfaces.yaml`.
-  - The other 25 retiring routine schemas (`write`, `stat`, `wc`, `chmod`, `chown`, `copy`, `delete`, `move`, `mkdir`, `diff`, `extract_archive`, `http_request`, `git_status`, `git_diff`, `git_log`, `git_show`, `git_blame`, `git_ref`, `git_branches`, `git_checkout`, `git_merge`, `git_stash`, `git_stash_list`, `git_restore`, `git_commit`) remain untouched in `profiles/*.yaml` (`write` is still `sticky` in `implement.yaml`, `plan_write_only.yaml`, and `editor_file.yaml`, and on the floor of `plan_stub` and `plan_approve`) and `host/coordinator-surfaces.yaml`.
-
-#### 6. OAR policies (`lycaon/config/packs/painted-wolf/platform/policy/*.yaml`)
-
-Per the P32 inventory (131 entries across `policy/*.yaml`), `feat/portable-command-guidance` (`6dec08046a`) has not yet retired the `USE_*_NATIVE` redirect rules (`USE_READ_NATIVE`, `USE_GREP_NATIVE`, `USE_FIND_NATIVE`, `USE_LIST_DIR_NATIVE`, `USE_STAT_NATIVE`, `USE_WC_NATIVE`, `USE_DIFF_NATIVE`, `USE_JQ_NATIVE`, `USE_WRITE_NATIVE`, `USE_CHMOD_NATIVE`, `USE_CHOWN_NATIVE`, `USE_COPY_NATIVE`, `USE_DELETE_NATIVE`, `USE_MKDIR_NATIVE`, `USE_MOVE_NATIVE`, `USE_EXTRACT_ARCHIVE_NATIVE`, `USE_HTTP_REQUEST_NATIVE`, `USE_GIT_*_NATIVE`, `USE_NATIVE_TOOL`) or completed the P32 rule selector translations for the unwired owners (`P15`, `P17`, `P18`).
-
-#### 7. Go tool registrations (`lycaon/internal/toolhost/` and `lycaon/internal/tools/native/`)
-
-| File | Current state on `HEAD` (`73fb670a28`) | Cutover disposition |
-|---|---|---|
-| `lycaon/internal/toolhost/command_programs.go` | Wires `literal`, `mutation`, `search`, `textutil`, `hostenv` | Must wire `query.NewOwners` (P15 #1196), `gitcmd.NewOwners` (P17 #1221), and `curl.NewOwners` (P18 #1198) |
-| `lycaon/internal/toolhost/native_registration.go` & `lycaon/internal/tools/native/register.go` | Registers structured handlers for `read`, `list_dir`, `stat`, `wc`, `diff`, `grep`, `find`, `jq`, `write`, `chmod`, `chown`, `copy`, `delete`, `mkdir`, `move`, `extract_archive`, and the 6 retained dual-surface tools | Keep the 6 `retain-structured-and-command` tools (`code_rewrite`, `edit`, `jq_edit`, `replace_lines`, `summarize`, `survey_repo`) + `restore_version` + `source_history`; retire the 16 routine file/search/query/archive schemas from active registration once P24 #1206 named public retirement and history decoding are active |
-| `lycaon/internal/toolhost/git_status_registration.go`, `git_tools.go`, `git_operations.go` | Registers 14 `git_*` structured tools | Retain `git_compare` (`retain-domain-structured`); retire the other 13 `git_*` routine schemas from active offers once `gitcmd.NewOwners` (P17 #1221) and P24 #1206 land |
-| `lycaon/internal/toolhost/http_request_registration.go` | Registers `http_request` | Retire from active offers once `curl.NewOwners` (P18 #1198) and P24 #1206 land |
-| `lycaon/internal/toolhost/process_tools.go` | Registers `process_list` and `process_signal` | Retain both as approval-gated host-process domain tools (`selected_disposition: Retain domain capability`) alongside session-scoped job built-ins in `command` (P22 #1173) |
-
-### Command schema and guidance
-
-`command` is offered on the routine floor across coordinator surfaces and bundled profiles. Read-only surfaces declare `command_effects: [read_only]` and admit read-only native utilities and pipelines. Specialized source tools remain loadable where the profile offers them. Native `CMD --help` runs through the admitted owner and returns the catalog's `CommandSpecification.Help`.
-
-The schema describes ordinary bash programs, including pipes, loops, variables, functions, command substitutions, here-documents, redirects and background jobs. Native utility grammars accept their declared GNU and BSD forms. External toolchains use the process launch and confinement owners. Per-call guidance renders attached roots, the current directory, available effects and output delivery from structured host facts.
-
-| Surface | Source |
+| Area | Current path and cutover decision |
 |---|---|
-| Tool arguments and capability requests | `platform/tools/schemas/command.yaml` |
-| Syntax, utility forms, help and limits | `platform/tools/command-language-v1/*.json` and their generated catalog |
-| Per-call guidance | `platform/shared/partials/command-surface.md` |
-| Available command effects | `platform/host/coordinator-surfaces.yaml` and `platform/tools/profiles/*.yaml` |
+| Native utilities | `internal/toolhost/command_programs.go` composes literal, mutation, query, search, text, host-environment, Git, and HTTP operations. The catalog accepts common GNU and BSD spellings. Unsupported syntax is a typed admission refusal; utility option and input errors use native status and stderr. |
+| External programs | The command program's process launcher applies the configured confinement and capability decisions at launch. A utility gap that falls through to an installed binary records `native_gap` for repair in the corresponding utility branch. |
+| Results and receipts | Invocation records identify program and child executions, source pins, delivered ranges, effects, completeness, and host-stop facts. An incomplete result cannot become successful evidence merely because one child exited zero. |
+| Approvals | Host decisions use structured operation and effect facts. Balanced cards and recommended options follow [authorization](authorization.md) and [security usability](security.md#security-usability); this cutover does not change their frequency. |
+| Guidance and workflow | The command schema, per-call prompt, OAR policies, and workflow consumers use the current tool surface. The final live request capture must confirm rendered wording and model selection on the rebuilt composition. |
+| Retired routine tools | The routine schemas leave the normal offer; named compatibility and history decoding remain for their durable public names. The six dual-surface edit and analysis tools and domain tools remain callable under their structured contracts. |
 
-OAR policies select the actual operation and typed rejection facts. A host refusal preserves the results already produced and identifies the stopped execution. Source pins describe computation inputs; only confirmed delivery of mapped source bytes establishes observation evidence.
+### Source-index behavior
+
+A ready index accelerates the parts of a query it can prove current. The native `grep` and `rg` paths consult exact-revision Bloom filters per walked file; uncovered, changed, out-of-scope, still-indexing, symlink, and otherwise undecidable files are read live. Native survey and listing combine indexed covered entries with live directory reconciliation, including additions and deletions. `find` currently walks and stats live entries because its expression and traversal semantics require current filesystem facts beyond the safe index projection. The native search tests and the source-index coverage PR #1466 exercise mixed indexed and live scopes through direct tools and the `command` entry. An index miss is never evidence that a live area is empty.
+
+### Qualification and default cutover
+
+The focused implementation receipts belong to their exact PR trees. The isolated run-3 report is historical diagnostic evidence: it identified the state-retention, refusal, native-form, Git, guidance, and approval gaps addressed by the subsequent PRs. The conformance corpus in #1238 and workflow evidence in #1229 must be reviewed on their final trees. The final merge-only composition still needs its exact-tree checks and an isolated live GLM Flash run with current prompts and recommended approval options. Until those results exist, this inventory records implementation and focused evidence, not final milestone qualification.
+
+P29 can make `command` the default after the dependent PRs are ready and the rebuilt composition demonstrates the complete command path: natural bash, native utilities, confined external programs, accurate results and receipts, designed approvals, shell-voice OAR, partial-index/live reconciliation, workflow behavior, and the final conformance corpus. The remaining platform limit is Windows-host qualification; shared code keeps Windows-capable seams. No release is part of this cutover.
