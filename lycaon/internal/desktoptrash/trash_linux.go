@@ -36,7 +36,7 @@ func platformMove(path string) (Receipt, error) {
 	}
 	name := uuid.NewString()
 	infoPath := filepath.Join(metadata, name+".trashinfo")
-	info, err := os.OpenFile(infoPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+	info, err := os.OpenFile(infoPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600) // #nosec G703 -- UUID name under the checked private trash directory.
 	if err != nil {
 		return Receipt{}, err
 	}
@@ -45,10 +45,10 @@ func platformMove(path string) (Receipt, error) {
 		writeErr = fssync.File(info)
 	}
 	if err := errors.Join(writeErr, info.Close()); err != nil {
-		_ = os.Remove(infoPath)
+		_ = os.Remove(infoPath) // #nosec G703 -- Removes only the UUID metadata file created above.
 		return Receipt{}, err
 	}
-	directory, err := os.Open(metadata)
+	directory, err := os.Open(metadata) // #nosec G703 -- metadata was checked as a private directory above.
 	if err != nil {
 		return Receipt{}, err
 	}
