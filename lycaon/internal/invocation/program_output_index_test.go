@@ -14,12 +14,12 @@ func TestProgramBlobRetentionUsesIndexedReceiptReferences(t *testing.T) {
 	tx, err := f.database.BeginTx(t.Context(), nil)
 	testutil.FailErr(t, "begin unrelated output rows", err)
 	statement, err := tx.PrepareContext(t.Context(), `INSERT INTO invocation_program_outputs
-		(id,program_id,stream,reference,retention_claim_id,initiating_claim_id,blob_json,complete,redacted,mappings_json,created_at)
-		VALUES(?,?, 'stdout', ?, ?, ?, ?, 1, 0, '[]', '2026-01-01T00:00:00Z')`)
+		(id,program_id,stream,reference,retention_claim_id,initiating_claim_id,blob_id,blob_json,complete,redacted,mappings_json,created_at)
+		VALUES(?,?, 'stdout', ?, ?, ?, ?, ?, 1, 0, '[]', '2026-01-01T00:00:00Z')`)
 	testutil.FailErr(t, "prepare output rows", err)
 	for i := range 1024 {
 		id := fmt.Sprintf("blob-%04d", i)
-		_, err = statement.ExecContext(t.Context(), fmt.Sprintf("output-%04d", i), f.program, id, "retention-"+id, "initiating-"+id, fmt.Sprintf(`{"ID":%q}`, id))
+		_, err = statement.ExecContext(t.Context(), fmt.Sprintf("output-%04d", i), f.program, id, "retention-"+id, "initiating-"+id, id, fmt.Sprintf(`{"ID":%q}`, id))
 		testutil.FailErr(t, "insert output row", err)
 	}
 	testutil.FailErr(t, "close output statement", statement.Close())
@@ -42,7 +42,7 @@ func TestProgramBlobRetentionUsesIndexedReceiptReferences(t *testing.T) {
 		}
 	}
 
-	rows, err := f.database.QueryContext(t.Context(), `EXPLAIN QUERY PLAN SELECT EXISTS (SELECT 1 FROM invocation_program_outputs WHERE json_extract(blob_json,'$.ID')=?)`, "blob-1023")
+	rows, err := f.database.QueryContext(t.Context(), `EXPLAIN QUERY PLAN SELECT EXISTS (SELECT 1 FROM invocation_program_outputs WHERE blob_id=?)`, "blob-1023")
 	testutil.FailErr(t, "explain retention lookup", err)
 	defer rows.Close()
 	indexed := false
@@ -59,6 +59,6 @@ func TestProgramBlobRetentionUsesIndexedReceiptReferences(t *testing.T) {
 	}
 	testutil.FailErr(t, "finish retention plan", rows.Err())
 	if !indexed {
-		t.Fatalf("retention lookup did not use the blob ID expression index: %v", plan)
+		t.Fatalf("retention lookup did not use the blob ID index: %v", plan)
 	}
 }
