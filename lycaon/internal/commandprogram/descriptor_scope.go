@@ -16,13 +16,25 @@ import (
 // must not replace a pipe or substitution endpoint created inside its scope.
 type descriptorFrame struct {
 	streams     Streams
-	generations [3]uint64
+	generations [10]uint64
 	scope       *descriptorScope
 }
 
-func (d *descriptorFrame) setInput(r io.ReadCloser) { d.streams.Input = r; d.generations[0]++ }
-func (d *descriptorFrame) setOutput(w io.Writer)    { d.streams.Output = w; d.generations[1]++ }
-func (d *descriptorFrame) setError(w io.Writer)     { d.streams.Error = w; d.generations[2]++ }
+func (d *descriptorFrame) setReader(fd int, r io.ReadCloser) {
+	d.streams.SetReader(fd, r)
+	if fd >= 0 && fd < len(d.generations) {
+		d.generations[fd]++
+	}
+}
+func (d *descriptorFrame) setWriter(fd int, w io.Writer) {
+	d.streams.SetWriter(fd, w)
+	if fd >= 0 && fd < len(d.generations) {
+		d.generations[fd]++
+	}
+}
+func (d *descriptorFrame) setInput(r io.ReadCloser) { d.setReader(0, r) }
+func (d *descriptorFrame) setOutput(w io.Writer)    { d.setWriter(1, w) }
+func (d *descriptorFrame) setError(w io.Writer)     { d.setWriter(2, w) }
 func (d descriptorFrame) PrepareStreams(ctx context.Context) (Streams, error) {
 	streams := d.streams
 	if d.scope == nil {
@@ -50,13 +62,10 @@ func (d descriptorFrame) PrepareStreams(ctx context.Context) (Streams, error) {
 		if !changed || d.generations[fd] != d.scope.base.generations[fd] {
 			continue
 		}
-		switch fd {
-		case 0:
-			streams.Input = bound.Input
-		case 1:
-			streams.Output = bound.Output
-		case 2:
-			streams.Error = bound.Error
+		if bound.hasReader(fd) {
+			streams.SetReader(fd, bound.Reader(fd))
+		} else if bound.hasWriter(fd) {
+			streams.SetWriter(fd, bound.Writer(fd))
 		}
 	}
 	return streams, nil
@@ -66,7 +75,7 @@ func (d descriptorFrame) PrepareStreams(ctx context.Context) (Streams, error) {
 // changes. Already opened endpoints do not make a local assignment an I/O child.
 func (d descriptorFrame) pending() bool {
 	for scope := d.scope; scope != nil; scope = scope.base.scope {
-		if scope.opened.Load() {
+		if scope.opened.Load() || !scope.needsAdmission() {
 			continue
 		}
 		for fd, changed := range scope.changed {
@@ -78,10 +87,32 @@ func (d descriptorFrame) pending() bool {
 	return false
 }
 
+func isNullRedirectTarget(v string) bool {
+	return v == "/dev/null" || strings.EqualFold(v, "NUL")
+}
+
+func (s *descriptorScope) needsAdmission() bool {
+	for _, plan := range s.plans {
+		switch plan.redirect.Operator {
+		case "<<", "<<-", ">&", "<&":
+			continue
+		default:
+			if plan.target.ProcessSubstitution() == nil && isNullRedirectTarget(plan.target.Value) {
+				continue
+			}
+			return true
+		}
+	}
+	return false
+}
+
 // RequiredEffects describes the descriptors this reached endpoint inherits.
 func (d descriptorFrame) RequiredEffects() toolcontract.CommandEffects {
 	endpoints := d.endpointEffects()
-	effects := endpoints[1] | endpoints[2]
+	var effects toolcontract.CommandEffects
+	for fd := 1; fd < len(endpoints); fd++ {
+		effects |= endpoints[fd]
+	}
 	for scope := d.scope; scope != nil; scope = scope.base.scope {
 		if scope.opened.Load() {
 			continue
@@ -96,9 +127,9 @@ func (d descriptorFrame) RequiredEffects() toolcontract.CommandEffects {
 	return effects
 }
 
-func (d descriptorFrame) endpointEffects() [3]toolcontract.CommandEffects {
-	var effects [3]toolcontract.CommandEffects
-	var selected [3]bool
+func (d descriptorFrame) endpointEffects() [10]toolcontract.CommandEffects {
+	var effects [10]toolcontract.CommandEffects
+	var selected [10]bool
 	for scope := d.scope; scope != nil; scope = scope.base.scope {
 		for fd, changed := range scope.changed {
 			if changed && d.generations[fd] == scope.base.generations[fd] && !selected[fd] {
@@ -123,8 +154,8 @@ type descriptorScope struct {
 	frame          frame
 	base           descriptorFrame
 	plans          []descriptorPlan
-	changed        [3]bool
-	writes         [3]toolcontract.CommandEffects
+	changed        [10]bool
+	writes         [10]toolcontract.CommandEffects
 	openingEffects toolcontract.CommandEffects
 	statementID    commandsurface.NodeID
 	lifetime       sync.Mutex
@@ -171,7 +202,7 @@ func (s *descriptorScope) prepare(ctx context.Context, f *frame, statement comma
 	for _, r := range statement.Redirects {
 		plan := descriptorPlan{redirect: r}
 		switch r.Operator {
-		case ">&":
+		case ">&", "<&":
 		case "<<", "<<-":
 			prevented, err := f.expanding(r.SyntaxLocation, func(scope *frame) error {
 				var err error
@@ -184,8 +215,7 @@ func (s *descriptorScope) prepare(ctx context.Context, f *frame, statement comma
 		default:
 			prevented, err := f.expanding(r.SyntaxLocation, func(scope *frame) error {
 				var err error
-				plan.target.Value, err = f.e.expander.ExpandScalar(ctx, scope, r.Target)
-				plan.target.Span = r.Target.Span
+				plan.target, err = f.e.expander.ExpandScalarField(ctx, scope, r.Target)
 				return err
 			})
 			if prevented || err != nil {
@@ -200,33 +230,33 @@ func (s *descriptorScope) prepare(ctx context.Context, f *frame, statement comma
 		s.releases = append(s.releases, release)
 		s.plans = append(s.plans, plan)
 		mutation, _ := toolcontract.NewCommandEffects(toolcontract.CommandMutation)
+		fd := redirectDescriptor(r)
 		switch r.Operator {
 		case ">", ">>":
-			s.openingEffects |= mutation
-			fd := 1
-			if r.Descriptor == 2 {
-				fd = 2
+			if plan.target.ProcessSubstitution() == nil && !isNullRedirectTarget(plan.target.Value) {
+				s.openingEffects |= mutation
+				if fd >= 0 && fd < len(s.writes) {
+					s.writes[fd] = mutation
+				}
 			}
-			s.writes[fd] = mutation
 		case "&>", "&>>":
-			s.openingEffects |= mutation
-			s.writes[1], s.writes[2] = mutation, mutation
+			if plan.target.ProcessSubstitution() == nil && !isNullRedirectTarget(plan.target.Value) {
+				s.openingEffects |= mutation
+				s.writes[1], s.writes[2] = mutation, mutation
+			}
 		case ">&":
-			if r.Descriptor == 2 {
-				s.writes[2] = s.writes[1]
-			} else {
-				s.writes[1] = s.writes[2]
+			src, _ := strconv.Atoi(staticWord(r.Target))
+			if fd >= 0 && fd < len(s.writes) && src >= 0 && src < len(s.writes) {
+				s.writes[fd] = s.writes[src]
 			}
 		}
-		switch {
-		case r.Operator == "<" || r.Operator == "<<" || r.Operator == "<<-":
-			s.changed[0] = true
-		case r.Operator == "&>" || r.Operator == "&>>":
+		switch r.Operator {
+		case "&>", "&>>":
 			s.changed[1], s.changed[2] = true, true
-		case r.Descriptor == 2:
-			s.changed[2] = true
 		default:
-			s.changed[1] = true
+			if fd >= 0 && fd < len(s.changed) {
+				s.changed[fd] = true
+			}
 		}
 	}
 	f.io.scope = s
@@ -247,7 +277,7 @@ func (s *descriptorScope) open(ctx context.Context) (Streams, error) {
 		for _, plan := range s.plans {
 			r := plan.redirect
 			if r.Operator == "<<" || r.Operator == "<<-" {
-				g.io.streams.Input = io.NopCloser(strings.NewReader(plan.body))
+				g.io.streams.SetReader(redirectDescriptor(r), io.NopCloser(strings.NewReader(plan.body)))
 				continue
 			}
 			out, failed, err := s.bind(ctx, &g, r, plan.target)
@@ -265,6 +295,20 @@ func (s *descriptorScope) open(ctx context.Context) (Streams, error) {
 		s.streams = g.io.streams
 	})
 	return s.streams, s.err
+}
+
+// closeEndpoints closes opened inputs and process-substitution writers before
+// waiting on process substitutions to finish.
+func (s *descriptorScope) closeEndpoints() {
+	for _, input := range s.inputs {
+		_ = input.Close()
+	}
+	s.inputs = nil
+	for _, out := range s.staged {
+		if ps, ok := out.output.(*procSubstStagedOutput); ok {
+			_ = ps.closeOnce()
+		}
+	}
 }
 
 // retain keeps inherited descriptors alive while a supervised child uses them.
