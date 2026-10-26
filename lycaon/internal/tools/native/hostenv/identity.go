@@ -6,20 +6,10 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
-	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
 // runPwd delegates to the path owner that also serves cd and native_path, in
 // a frame bound to the request's directory; it prints the logical cwd.
-func runPwd(inv *invocation) error {
-	paths, err := projectpaths.NewProgramPaths(inv.ctx, inv.owners.Boundary, inv.tc, inv.request.Invocation.Scope.Directory)
-	if err != nil {
-		return err
-	}
-	_, err = paths.Invoke(inv.ctx, inv.request, commandprogram.Streams{Output: &inv.out})
-	return err
-}
-
 func (inv *invocation) system() (SystemFacts, error) {
 	facts, err := inv.owners.Host.System(inv.ctx)
 	if errors.Is(err, ErrHostFactUnavailable) {
@@ -198,4 +188,22 @@ func pad(value, width int) string {
 		text = "0" + text
 	}
 	return text
+}
+
+// runNproc prints the available processing units (--all: installed) less
+// --ignore N, never below one.
+func runNproc(inv *invocation) error {
+	ignore := 0
+	if option, ok := inv.argv.Last("--ignore"); ok {
+		n, err := strconv.Atoi(option.Values[0].Value)
+		if err != nil || n < 0 {
+			return inv.usage(option.Values[0], "a count from 0")
+		}
+		ignore = n
+	}
+	units, err := inv.owners.Host.Processors(inv.ctx, inv.flag("--all"))
+	if err != nil {
+		return inv.unavailable("processor count", err)
+	}
+	return inv.line(strconv.Itoa(max(units-ignore, 1)))
 }

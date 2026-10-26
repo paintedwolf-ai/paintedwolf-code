@@ -554,7 +554,7 @@ func denySpecRule(specs []HardDenyWriteSpec, layers ...FloorLayer) fsRule {
 
 // workspaceAllowBacks re-allows validated control-plane workspaces.
 func workspaceAllowBacks(c Confinement) []string {
-	dir, err := configdir.UserConfigDir()
+	dir, err := configdir.Root()
 	if err != nil || strings.TrimSpace(dir) == "" {
 		return nil
 	}

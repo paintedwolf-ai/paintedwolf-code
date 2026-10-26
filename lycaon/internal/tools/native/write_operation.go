@@ -23,6 +23,12 @@ type WriteInput struct {
 	// the destination revision or absence, and the inputs Content came from.
 	Destination toolcontract.ExecutionRevision
 	Sources     []toolcontract.ExecutionRevision
+	// Memory is the invoking program's existing admission; conversational writes omit it.
+	Memory *toolcontract.ProgramMemory
+	// Exact publishes Bytes verbatim instead of encoding Content: a program's
+	// redirect output, text or not. It requires the execution-pinned admission.
+	Exact bool
+	Bytes []byte
 }
 
 type WriteAdmission uint8
@@ -56,7 +62,7 @@ type WriteResult struct {
 
 // Apply performs the complete native write operation, including scope, review,
 // revision, syntax, attribution and the existing source write door.
-func (t *WriteTool) Apply(ctx context.Context, input WriteInput, tctx tools.ToolContext) (WriteResult, error) {
+func (t *WriteTool) Apply(ctx context.Context, input WriteInput, tctx tools.ToolContext) (result WriteResult, err error) {
 	if input.Admission != WriteConversational && input.Admission != WriteExecutionPinned {
 		return WriteResult{}, unsupportedWriteAdmission()
 	}
@@ -75,7 +81,19 @@ func (t *WriteTool) Apply(ctx context.Context, input WriteInput, tctx tools.Tool
 		return WriteResult{}, err
 	}
 	if input.Admission == WriteExecutionPinned {
+		defer func() {
+			if err == nil && result.Accepted && !result.Saved {
+				err = &UnpublishedWrite{Result: result}
+			}
+		}()
+
+		if input.Exact {
+			return t.applyPinnedBytes(ctx, input, tctx, resolved)
+		}
 		return t.applyPinned(ctx, input, tctx, resolved)
+	}
+	if input.Exact {
+		return WriteResult{}, unsupportedWriteAdmission()
 	}
 	return retryEditorOperation(ctx, resolved.DisplayPath, func() (WriteResult, error) {
 		// A missing file is a create; otherwise the base is the served source text.
@@ -88,7 +106,11 @@ func (t *WriteTool) Apply(ctx context.Context, input WriteInput, tctx tools.Tool
 			return WriteResult{}, fmt.Errorf("read failed: %w", err)
 		}
 		return t.writeText(ctx, tctx, resolved, st, before, input, func(final string) (landing, error) {
-			return landEditedText(ctx, tctx, "write", resolved, st, final)
+			authored := input.Content
+			if input.Append && before != nil {
+				authored = *before + input.Content
+			}
+			return landEditedText(ctx, tctx, "write", resolved, st, editorTextProposal{Authored: authored, Reviewed: final})
 		})
 	})
 }

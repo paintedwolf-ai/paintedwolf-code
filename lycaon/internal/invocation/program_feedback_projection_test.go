@@ -3,15 +3,18 @@ package invocation_test
 import (
 	"context"
 	"errors"
+	"io"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/anchorcatalog"
 	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/httpaction"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/llm/transcript"
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/outboundhttp"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -20,6 +23,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolfeedback"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native/curl"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -28,6 +32,15 @@ func feedbackMemory(t *testing.T, state int64) *toolcontract.ProgramMemory {
 	memory, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: 32 << 20, State: state})
 	testutil.FailErr(t, "program memory", err)
 	return memory
+}
+
+func feedbackFrame(t *testing.T, f programReceiptFixture, memory *toolcontract.ProgramMemory, tc tools.ToolContext, operation toolcontract.BoundOperation) toolexecution.ProgramFrame {
+	t.Helper()
+	parent := operation.Invocation()
+	parent.Identity.ExecutionID, parent.Identity.ParentExecutionID = f.root, ""
+	frame, err := toolexecution.FreezeProgramFrame(t.Context(), parent, tc, toolexecution.ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"command": "${op} arg"}}, memory)
+	testutil.FailErr(t, "capture actual feedback frame", err)
+	return frame
 }
 
 const feedbackProtected = "fixture-protected-diagnostic"
@@ -54,7 +67,12 @@ func TestProgramFailureKeepsActualParentAndEffectsOnProviderProjection(t *testin
 	cause := &toolrejection.ToolReject{Code: code, OwnerRef: denied.Definition().Facts().Contract.Owner, Data: map[string]any{"field": "path", "path": "input", "source_unit_id": "owner-input", "source_start_byte": 2, "source_end_byte": 3, "source_line": 9, "source_column": 4, "large": strings.Repeat("x", 40<<10), "owner_detail": "denied for " + feedbackProtected}}
 	tc := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: f.session, ToolCallID: "actual-model-call"}}
 	memory := feedbackMemory(t, 64<<20)
-	prepared, err := toolexecution.PrepareProgramFailure(t.Context(), f.recorder, memory, diagnosticScreen(f), tc, denied, cause)
+	parent := denied.Invocation()
+	parent.Identity.ExecutionID, parent.Identity.ParentExecutionID = f.root, ""
+	frame, err := toolexecution.FreezeProgramFrame(t.Context(), parent, tc, toolexecution.ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"command": "${op} arg"}}, memory)
+	testutil.FailErr(t, "freeze actual model envelope", err)
+	defer frame.Close()
+	prepared, err := toolexecution.PrepareProgramFailure(t.Context(), frame, f.recorder, memory, diagnosticScreen(f), tc, denied, cause)
 	testutil.FailErr(t, "prepare actual ledger feedback", err)
 	defer prepared.Close()
 	if memory.InUse().State == 0 || prepared.Rejection.Code != code || prepared.Rejection.OwnerRef != cause.OwnerRef {
@@ -88,11 +106,6 @@ func TestProgramFailureKeepsActualParentAndEffectsOnProviderProjection(t *testin
 	releaseExact()
 	// Exercise the actual OAR boundary with the captured outer arguments. The
 	// native path operand must never replace the submitted command object.
-	parent := denied.Invocation()
-	parent.Identity.ExecutionID, parent.Identity.ParentExecutionID = f.root, ""
-	frame, err := toolexecution.FreezeProgramFrame(t.Context(), parent, tc, toolexecution.ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"command": "${op} arg"}}, memory)
-	testutil.FailErr(t, "freeze actual model envelope", err)
-	defer frame.Close()
 	testutil.FailErr(t, "install actual OAR anchors", anchorcatalog.InstallBundled())
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
 	policy := &oar.Rule{ID: code, Kind: oar.KindPolicy, Anchor: oar.AnchorToolRejected, Effect: oar.EffectBlock, Enforcement: "enforce", When: `tool == "command" && paintedwolf.native_operation == "write" && tool_arg_string("command") == "${op} arg" && tool_arg_string("path") == ""`, Copy: oar.Copy{What: "Actual command envelope selected", Fix: "Inspect the permitted source before preparing the remaining action."}}
@@ -103,7 +116,11 @@ func TestProgramFailureKeepsActualParentAndEffectsOnProviderProjection(t *testin
 	// A changed worker execution root can be the cause of refusal. Rendering
 	// settled authoritative facts does not attempt to authorize that root again.
 	tc.Source.WorkerBranchRoot = "changed-worker-tree"
+	beforeRendering := memory.InUse()
 	rendered := executor.Rejections.RenderProgramFailure(t.Context(), frame, tc, prepared)
+	if memory.InUse().State <= beforeRendering.State {
+		t.Fatal("native model envelope admission ended before delivery")
+	}
 	refusal, ok := guidance.RefusalFromError(rendered)
 	if !ok || refusal.Code() != code || !strings.Contains(refusal.Body, "Actual command envelope selected") || toolrejection.AsToolReject(rendered) == nil {
 		t.Fatalf("OAR lost actual model identity or typed owner cause: %v", rendered)
@@ -125,7 +142,7 @@ func TestProgramFailureKeepsActualParentAndEffectsOnProviderProjection(t *testin
 		}
 	}
 	tc.Identity.ToolCallID = "different-model-call"
-	if wrong, err := toolexecution.PrepareProgramFailure(t.Context(), f.recorder, memory, diagnosticScreen(f), tc, denied, cause); wrong != nil || err == nil {
+	if wrong, err := toolexecution.PrepareProgramFailure(t.Context(), frame, f.recorder, memory, diagnosticScreen(f), tc, denied, cause); wrong != nil || err == nil {
 		t.Fatal("unpaired model call received child feedback")
 	}
 	prepared.Close()
@@ -146,7 +163,7 @@ func TestExternalDiagnosticTextCannotCreateNativeProgramRejection(t *testing.T) 
 	memory := feedbackMemory(t, 64<<20)
 	var empty toolexecution.PreparedProgramFailure
 	empty.Close()
-	prepared, err := toolexecution.PrepareProgramFailure(t.Context(), nil, memory, nil, tools.ToolContext{}, toolcontract.BoundOperation{}, errors.New("Code: COMMAND_EFFECT_NOT_ALLOWED; retry the entire program"))
+	prepared, err := toolexecution.PrepareProgramFailure(t.Context(), toolexecution.ProgramFrame{}, nil, memory, nil, tools.ToolContext{}, toolcontract.BoundOperation{}, errors.New("Code: COMMAND_EFFECT_NOT_ALLOWED; retry the entire program"))
 	if err != nil || prepared != nil || memory.Reservations() != 0 {
 		t.Fatal("external diagnostic text selected native feedback")
 	}
@@ -161,11 +178,22 @@ func TestProgramFailureCompactProjectionRetainsCompletedAndUnknownEffects(t *tes
 	testutil.FailErr(t, "retain completed write outcome", f.recorder.SettleChild(t.Context(), write.Invocation().Identity.ExecutionID, toolcontract.ProgramChildSettlement{Result: toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.EffectCompleted, Evidence: toolcontract.OperationEvidence{Owner: write.Definition().Facts().Contract.Owner, Kind: "journal", OwnerRef: "journal:completed-write", RecoveryRef: "journal:completed-write"}}, OwnerInvoked: true, DetailReference: "output:completed-write", AcceptedRevision: "revision2", PublishedRevision: "revision2"}))
 	remote := f.childFor(t, "http_request")
 	f.start(t, remote)
-	testutil.FailErr(t, "retain unknown HTTP outcome", f.recorder.SettleChild(t.Context(), remote.Invocation().Identity.ExecutionID, toolcontract.ProgramChildSettlement{Result: toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, StopCode: toolrejection.ToolOwnerFailedCode, EffectCertainty: toolcontract.EffectUnknown}, OwnerInvoked: true, DetailReference: "output:remote-unknown"}))
+	// The curl frontend owns the conversion: a request the owner started
+	// with no response received settles as an unknown effect, never retried.
+	// The host stop here is the program's, recorded beside that outcome.
+	_, sent := curl.TransportOutcome(&httpaction.TransportFailure{Reject: &toolrejection.ToolReject{Code: toolrejection.ToolOwnerFailedCode},
+		Cause: &outboundhttp.ExchangeError{Method: "POST", RequestsStarted: 1, Err: io.ErrUnexpectedEOF}})
+	if sent.EffectCertainty != toolcontract.EffectUnknown {
+		t.Fatalf("curl settled a sent request without a response as %+v", sent)
+	}
+	testutil.FailErr(t, "retain unknown HTTP outcome", f.recorder.SettleChild(t.Context(), remote.Invocation().Identity.ExecutionID, toolcontract.ProgramChildSettlement{Result: sent, HostStopCode: toolrejection.ToolOwnerFailedCode, OwnerInvoked: true, DetailReference: "output:remote-unknown"}))
 	testutil.FailErr(t, "retain failed aggregate", f.recorder.SettleProgram(t.Context(), f.program, toolcontract.ProgramSettlement{State: "failed", StopCode: toolrejection.ToolOwnerFailedCode, DetailReference: "output:program-partial"}))
 	cause := &toolrejection.ToolReject{Code: toolrejection.ToolOwnerFailedCode, OwnerRef: remote.Definition().Facts().Contract.Owner, Data: map[string]any{"large": strings.Repeat("diagnostic", 10<<10)}}
 	memory := feedbackMemory(t, 64<<20)
-	prepared, err := toolexecution.PrepareProgramFailure(t.Context(), f.recorder, memory, diagnosticScreen(f), tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: f.session, ToolCallID: "actual-model-call"}}, remote, cause)
+	tc := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: f.session, ToolCallID: "actual-model-call"}}
+	frame := feedbackFrame(t, f, memory, tc, remote)
+	defer frame.Close()
+	prepared, err := toolexecution.PrepareProgramFailure(t.Context(), frame, f.recorder, memory, diagnosticScreen(f), tc, remote, cause)
 	testutil.FailErr(t, "prepare partial effect projection", err)
 	defer prepared.Close()
 	details := prepared.Rejection.Data
@@ -213,7 +241,10 @@ func TestProgramFeedbackFreezesOwnerDetailsBeforeRetainingThem(t *testing.T) {
 	nested := map[string]any{"path": "original", "items": []any{map[string]any{"ranges": []string{"original-range"}}}, "raw": string([]byte{0xff})}
 	cause := &toolrejection.ToolReject{Code: code, Data: map[string]any{"details": nested}}
 	memory := feedbackMemory(t, 64<<20)
-	prepared, err := toolexecution.PrepareProgramFailure(t.Context(), f.recorder, memory, diagnosticScreen(f), tc, read, cause)
+	frame := feedbackFrame(t, f, memory, tc, read)
+	defer frame.Close()
+	baseline := memory.InUse().State
+	prepared, err := toolexecution.PrepareProgramFailure(t.Context(), frame, f.recorder, memory, diagnosticScreen(f), tc, read, cause)
 	testutil.FailErr(t, "capture actual nested owner diagnostic", err)
 	defer prepared.Close()
 	nested["path"] = "changed-after-preparation"
@@ -241,19 +272,22 @@ func TestProgramFeedbackFreezesOwnerDetailsBeforeRetainingThem(t *testing.T) {
 	}
 	releaseExact()
 	prepared.Close()
-	if memory.InUse().State != 0 || memory.InUse().State != 0 {
+	if memory.InUse().State != baseline || memory.InUse().State != baseline {
 		t.Fatal("diagnostic snapshot leaked state")
 	}
 	limited := feedbackMemory(t, 1<<20)
+	limitedFrame := feedbackFrame(t, f, limited, tc, read)
+	defer limitedFrame.Close()
+	limitedBaseline := limited.InUse().State
 	cause.Data["details"] = map[string]any{"oversized": strings.Repeat("x", 2<<20)}
-	if refused, err := toolexecution.PrepareProgramFailure(t.Context(), f.recorder, limited, diagnosticScreen(f), tc, read, cause); refused != nil || err == nil || limited.InUse().State != 0 || limited.InUse().State != 0 {
+	if refused, err := toolexecution.PrepareProgramFailure(t.Context(), limitedFrame, f.recorder, limited, diagnosticScreen(f), tc, read, cause); refused != nil || err == nil || limited.InUse().State != limitedBaseline || limited.InUse().State != limitedBaseline {
 		t.Fatal("oversized nested diagnostic escaped admission or leaked partial snapshot")
 	}
-	if refused, err := toolexecution.PrepareProgramFailure(t.Context(), f.recorder, memory, unretainedScreen{}, tc, read, cause); refused != nil || err == nil || memory.InUse().State != 0 {
+	if refused, err := toolexecution.PrepareProgramFailure(t.Context(), frame, f.recorder, memory, unretainedScreen{}, tc, read, cause); refused != nil || err == nil || memory.InUse().State != baseline {
 		t.Fatal("diagnostic screening without a retained projection published feedback")
 	}
 	cause.Data["details"] = make(chan string)
-	if refused, err := toolexecution.PrepareProgramFailure(t.Context(), f.recorder, limited, diagnosticScreen(f), tc, read, cause); refused != nil || err == nil || limited.InUse().State != 0 {
+	if refused, err := toolexecution.PrepareProgramFailure(t.Context(), limitedFrame, f.recorder, limited, diagnosticScreen(f), tc, read, cause); refused != nil || err == nil || limited.InUse().State != limitedBaseline {
 		t.Fatal("unsupported mutable diagnostic escaped snapshot")
 	}
 }

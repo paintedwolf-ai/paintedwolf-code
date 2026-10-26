@@ -1551,6 +1551,7 @@
       "existing_rejection_code": "",
       "command_forms": [
         "ps",
+        "pgrep",
         "lsof"
       ]
     },
@@ -1575,7 +1576,8 @@
       ],
       "existing_rejection_code": "",
       "command_forms": [
-        "kill"
+        "kill",
+        "pkill"
       ]
     },
     {

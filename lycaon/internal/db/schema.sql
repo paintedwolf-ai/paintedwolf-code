@@ -1593,6 +1593,9 @@ CREATE TABLE IF NOT EXISTS invocation_program_executions (
     conflict_path TEXT NOT NULL DEFAULT '',
     conflict_expected_revision TEXT NOT NULL DEFAULT '',
     conflict_observed_revision TEXT NOT NULL DEFAULT '',
+    -- A native name launched as its installed program: the command and the
+    -- unsupported form, counted so native coverage gaps stay visible.
+    native_gap_json TEXT NOT NULL DEFAULT '' CHECK (native_gap_json = '' OR json_valid(native_gap_json)),
     started_at TEXT NOT NULL,
     settled_at TEXT,
     CHECK (id != parent_execution_id),

@@ -26,29 +26,26 @@ import (
 // fixtureTime is the deterministic mtime every seeded entry carries.
 var fixtureTime = time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 
-// pinLog follows the receipt store's contract: each call resubmits the
-// execution's captures in order and may only append.
+// pinLog follows the receipt store's contract: each call appends one capture
+// at the execution's next position.
 type pinLog struct {
 	mu   sync.Mutex
 	pins map[string][]toolcontract.ExecutionRevision
 }
 
-func (l *pinLog) RecordRevisionPins(_ context.Context, execution string, pins []toolcontract.ExecutionRevision) error {
+func (l *pinLog) AppendRevisionPin(_ context.Context, execution string, pin toolcontract.ExecutionRevision) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	for _, pin := range pins {
-		if err := pin.Validate(); err != nil {
-			return err
-		}
-	}
-	existing := l.pins[execution]
-	if len(pins) < len(existing) || !slices.Equal(existing, pins[:len(existing)]) {
+	if execution == "" {
 		return io.ErrUnexpectedEOF
+	}
+	if err := pin.Validate(); err != nil {
+		return err
 	}
 	if l.pins == nil {
 		l.pins = map[string][]toolcontract.ExecutionRevision{}
 	}
-	l.pins[execution] = slices.Clone(pins)
+	l.pins[execution] = append(l.pins[execution], pin)
 	return nil
 }
 

@@ -60,25 +60,37 @@ func (e *WordExpander) ExpandFields(ctx context.Context, scope ExpansionScope, w
 		return nil, err
 	}
 	defer run.close()
-	if err := run.word(word.Parts); err != nil {
+	if err := run.word(ctx, word.Parts); err != nil {
 		return nil, err
 	}
 	if err := run.assembly.finish(); err != nil {
 		return nil, err
 	}
-	return run.fields()
+	return run.fields(ctx)
 }
 
 func (e *WordExpander) ExpandScalar(ctx context.Context, scope ExpansionScope, word commandsurface.DeferredWord) (string, error) {
-	run, err := e.begin(ctx, scope, word, modeScalar)
+	field, err := e.ExpandScalarField(ctx, scope, word)
 	if err != nil {
 		return "", err
 	}
-	defer run.close()
-	if err := run.word(word.Parts); err != nil {
-		return "", err
+	return field.Value, nil
+}
+
+func (e *WordExpander) ExpandScalarField(ctx context.Context, scope ExpansionScope, word commandsurface.DeferredWord) (Field, error) {
+	run, err := e.begin(ctx, scope, word, modeScalar)
+	if err != nil {
+		return Field{}, err
 	}
-	return run.join(run.assembly.current, e.limits.valueBytes, "variable_value_bytes")
+	defer run.close()
+	if err := run.word(ctx, word.Parts); err != nil {
+		return Field{}, err
+	}
+	value, err := run.join(ctx, run.assembly.current, e.limits.valueBytes, "variable_value_bytes")
+	if err != nil {
+		return Field{}, err
+	}
+	return run.field(value, run.assembly.current), nil
 }
 
 func (e *WordExpander) ExpandPattern(ctx context.Context, scope ExpansionScope, word commandsurface.DeferredWord) (PredicateValue, error) {
@@ -87,7 +99,7 @@ func (e *WordExpander) ExpandPattern(ctx context.Context, scope ExpansionScope, 
 		return nil, err
 	}
 	defer run.close()
-	if err := run.word(word.Parts); err != nil {
+	if err := run.word(ctx, word.Parts); err != nil {
 		return nil, err
 	}
 	var size int64
@@ -116,10 +128,10 @@ func (e *WordExpander) ExpandDocument(ctx context.Context, scope ExpansionScope,
 	}
 	defer run.close()
 	run.document = &documentText{literal: delimiterQuoted(redirect.Target), stripTabs: redirect.Operator == "<<-", lineStart: true}
-	if err := run.word(body.Parts); err != nil {
+	if err := run.word(ctx, body.Parts); err != nil {
 		return "", err
 	}
-	return run.join(run.assembly.current, e.limits.documentBytes, "here_document_bytes")
+	return run.join(ctx, run.assembly.current, e.limits.documentBytes, "here_document_bytes")
 }
 
 // delimiterQuoted reports any quoting in a here-document delimiter, which makes
@@ -154,13 +166,13 @@ func (e *WordExpander) begin(ctx context.Context, scope ExpansionScope, word com
 		return nil, errors.New("word expansion requires an invocation scope")
 	}
 	run := &expansionRun{ctx: ctx, expander: e, scope: scope, span: word.Span, mode: mode}
-	run.assembly = fieldAssembly{limits: &e.limits, span: word.Span, charge: run.charge}
+	run.assembly = fieldAssembly{limits: &e.limits, span: word.Span, charge: func(n int64) error { return run.charge(ctx, n) }}
 	return run, nil
 }
 
 // charge admits n bytes of live intermediate storage for one run.
-func (r *expansionRun) charge(n int64) error {
-	if err := r.ctx.Err(); err != nil {
+func (r *expansionRun) charge(ctx context.Context, n int64) error {
+	if err := ctx.Err(); err != nil {
 		return err
 	}
 	e := r.expander
@@ -174,7 +186,7 @@ func (r *expansionRun) charge(n int64) error {
 	e.mu.Unlock()
 	r.charged += n
 	if e.memory != nil {
-		release, err := e.memory.Reserve(r.ctx, n)
+		release, err := e.memory.Reserve(ctx, n)
 		if err != nil {
 			return err
 		}

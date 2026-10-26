@@ -7,8 +7,15 @@ import (
 )
 
 func TestExpandFamiliesGrantsCompanions(t *testing.T) {
-	got := toolcontract.ExpandFamilies([]string{"command", "read"})
-	want := map[string]bool{"command": true, "command_output": true, "command_stop": true, "read": true}
+	got := toolcontract.ExpandFamilies([]string{"terminal_open", "read"})
+	want := map[string]bool{
+		"terminal_open":     true,
+		"terminal_read":     true,
+		"terminal_send":     true,
+		"terminal_snapshot": true,
+		"terminal_close":    true,
+		"read":              true,
+	}
 	if len(got) != len(want) {
 		t.Fatalf("expand = %v", got)
 	}

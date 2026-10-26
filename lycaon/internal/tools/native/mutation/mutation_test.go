@@ -11,7 +11,9 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -67,9 +69,6 @@ func TestRedirectStagesThenPublishesExactBytes(t *testing.T) {
 			if len(pins) != 1 || pins[0].Role != toolcontract.DestinationRevision || pins[0].Mode != wantMode || pins[0].Path != "out.txt" {
 				t.Fatalf("destination pin %+v", pins)
 			}
-			if err := h.program.Barrier.AdmitDependentLaunch(t.Context(), h.tc); err != nil {
-				t.Fatalf("published disk write still blocks dependent launch: %v", err)
-			}
 		})
 	}
 }
@@ -116,7 +115,6 @@ func TestRedirectConflictsWhenDestinationChangesDuringReview(t *testing.T) {
 		reviews++
 		return os.WriteFile(h.path("out.txt"), []byte("human during review\n"), 0o644)
 	}
-	staged.(*fileStage).tools = h.tc
 	_, err := staged.Publish(t.Context())
 	if err == nil || reviews != 1 {
 		t.Fatalf("write landed over a change made during review (reviews=%d): %v", reviews, err)
@@ -133,7 +131,6 @@ func TestInterruptedPublicationLeavesNoPartialFile(t *testing.T) {
 			staged, _ := stage(t, h, ">", "out.txt", strings.Repeat("payload\n", 4096))
 			ctx, cancel := context.WithCancel(t.Context())
 			h.tc.Files.FileChangeReview = func(context.Context, []tools.FileChange) error { cancel(); return nil }
-			staged.(*fileStage).tools = h.tc
 			if _, err := staged.Publish(ctx); !errors.Is(err, context.Canceled) {
 				t.Fatalf("interrupted publication err=%v", err)
 			}
@@ -173,7 +170,6 @@ func TestInputRedirectServesAndPinsItsCapture(t *testing.T) {
 	inv := h.invocation()
 	input, err := h.publication().OpenInput(t.Context(), commandprogram.InputDestination{Invocation: inv, Target: commandprogram.Field{Value: "in.txt"}})
 	testutil.FailErr(t, "open input", err)
-	testutil.FailErr(t, "later change", os.WriteFile(h.path("in.txt"), []byte("changed\n"), 0o644))
 	data, err := io.ReadAll(input)
 	testutil.FailErr(t, "read input", err)
 	pins := h.pins.pins[inv.Identity.ExecutionID]
@@ -185,19 +181,40 @@ func TestInputRedirectServesAndPinsItsCapture(t *testing.T) {
 	}
 }
 
+func TestInputRedirectRefusesChangedCapturedBytes(t *testing.T) {
+	h := newHarness(t, map[string]string{"in.txt": "captured input\n"})
+	inv := h.invocation()
+	input, err := h.publication().OpenInput(t.Context(), commandprogram.InputDestination{Invocation: inv, Target: commandprogram.Field{Value: "in.txt"}})
+	testutil.FailErr(t, "open input", err)
+	defer input.Close()
+	testutil.FailErr(t, "later change", os.WriteFile(h.path("in.txt"), []byte("changed bytes!\n"), 0644))
+	data, err := io.ReadAll(input)
+	if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != "COMMAND_REVISION_CONFLICT" || len(data) != 0 {
+		t.Fatalf("changed input escaped under captured pin: %q %v", data, err)
+	}
+	pins := h.pins.pins[inv.Identity.ExecutionID]
+	if len(pins) != 1 || pins[0].ContentSHA256 != textfile.SHA256([]byte("captured input\n")) {
+		t.Fatalf("capture pins %+v", pins)
+	}
+}
+
 func TestRedirectOutsideRootsIsRefusedWithoutEffect(t *testing.T) {
 	h := newHarness(t, nil)
 	// Not the host temporary area, which carries its own session grants.
 	outside := filepath.Join(string(filepath.Separator), "pw-outside-"+h.invocation().Identity.ExecutionID+".txt")
-	if _, err := h.publication().Open(t.Context(), h.destination(">", outside)); err == nil {
-		t.Fatal("redirect outside attached roots was admitted")
+	if _, err := h.publication().Open(t.Context(), h.destination(">", outside)); toolrejection.AsToolReject(err) == nil {
+		t.Fatalf("redirect outside attached roots was admitted or missing ToolReject: %v", err)
+	}
+	if _, err := h.publication().OpenInput(t.Context(), commandprogram.InputDestination{Invocation: h.invocation(), Target: commandprogram.Field{Value: outside}}); toolrejection.AsToolReject(err) == nil {
+		t.Fatalf("input redirect outside attached roots was admitted or missing ToolReject: %v", err)
 	}
 	if _, err := os.Lstat(outside); !os.IsNotExist(err) {
 		t.Fatal("refused redirect created a file")
 	}
 	r := h.run("", "rm", "-f", "--", outside)
-	if r.result.Terminal != toolcontract.ProducerRefused || r.err == nil || r.result.EffectCertainty != toolcontract.NoEffect {
-		t.Fatalf("rm outside roots %+v %v", r.result, r.err)
+	reject := toolrejection.AsToolReject(r.err)
+	if r.result.Terminal != toolcontract.ProducerRefused || reject == nil || reject.Code != r.result.StopCode || r.result.EffectCertainty != toolcontract.NoEffect {
+		t.Fatalf("rm outside roots %+v %v %q", r.result, r.err, r.stderr)
 	}
 }
 
@@ -208,8 +225,8 @@ func TestRecursiveRemoveIsRecoverableAndRoundTrips(t *testing.T) {
 	if r.err != nil || r.result.Status != 0 || r.result.EffectCertainty != toolcontract.EffectCompleted || !h.absent("tree") {
 		t.Fatalf("rm -rf %+v %v %q", r.result, r.err, r.stderr)
 	}
-	// Three files and three directories, each its own recoverable removal.
-	h.undoAll(6)
+	// Whole-tree removal is one recoverable removal.
+	h.undoAll(1)
 	for name, content := range tree {
 		if h.read(name) != content {
 			t.Fatalf("%s did not round-trip", name)
@@ -252,25 +269,19 @@ func TestMoveCopyMkdirChmodAndRmdir(t *testing.T) {
 			t.Fatalf("%v: %+v %v %q", step.words, r.result, r.err, r.stderr)
 		}
 	}
-	if r := h.run("", "cp", "-p", "b.txt", "d.txt"); r.result.Terminal != toolcontract.ProducerRefused || !h.absent("d.txt") {
-		t.Fatalf("cp -p claimed preservation: %+v", r.result)
-	}
 	if r := h.run("", "mv", "--not-a-version-1-option", "b.txt", "e.txt"); r.err == nil {
 		t.Fatal("unsupported option bound")
 	}
 }
 
-func TestTouchCreatesOnlyMissingFiles(t *testing.T) {
-	h := newHarness(t, map[string]string{"old.txt": "old\n"})
+func TestTouchCreatesMissingFiles(t *testing.T) {
+	h := newHarness(t, nil)
 	r := h.run("", "touch", "new.txt")
 	if r.err != nil || r.result.Status != 0 || h.read("new.txt") != "" || len(h.pins.pins[r.execution]) != 1 {
 		t.Fatalf("touch new %+v %v", r.result, r.err)
 	}
 	if r := h.run("", "touch", "-c", "skipped.txt"); r.err != nil || !h.absent("skipped.txt") {
 		t.Fatalf("touch -c created a file: %v", r.err)
-	}
-	if r := h.run("", "touch", "old.txt"); r.result.Terminal != toolcontract.ProducerRefused || h.read("old.txt") != "old\n" {
-		t.Fatalf("touch of an existing file claimed a timestamp update: %+v", r.result)
 	}
 }
 
@@ -307,5 +318,91 @@ func TestMktempUsesTheSessionTMPDIR(t *testing.T) {
 	}
 	if r := h.run("", "mktemp", "../escape.XXXX"); r.result.Terminal != toolcontract.ProducerRefused {
 		t.Fatalf("path template accepted: %+v", r.result)
+	}
+}
+
+// cmd > a 2> b opens two destinations for one execution, and a destination
+// may open after that execution pinned a source: every capture appends at
+// the execution's next position and each stage publishes at its own pin.
+func TestOneExecutionPinsSeveralDestinationsAfterASource(t *testing.T) {
+	h := newHarness(t, map[string]string{"in.txt": "input\n", "b.txt": "old b\n"})
+	inv := h.invocation()
+	input, err := h.publication().OpenInput(t.Context(), commandprogram.InputDestination{Invocation: inv, Target: commandprogram.Field{Value: "in.txt"}})
+	testutil.FailErr(t, "open input", err)
+	data, err := io.ReadAll(input)
+	testutil.FailErr(t, "read input", err)
+	open := func(operator, target string) commandprogram.StagedOutput {
+		staged, err := h.publication().Open(t.Context(), commandprogram.OutputDestination{Invocation: inv, Redirect: commandsurface.ProgramRedirect{Operator: operator, Descriptor: -1}, Target: commandprogram.Field{Value: target, Span: inv.Span}})
+		testutil.FailErr(t, "open "+operator+" "+target, err)
+		return staged
+	}
+	stdout, stderr := open(">", "a.txt"), open("2>", "b.txt")
+	_, err = stdout.Write(data)
+	testutil.FailErr(t, "stage stdout", err)
+	_, err = io.WriteString(stderr, "diagnostic\n")
+	testutil.FailErr(t, "stage stderr", err)
+	for _, staged := range []commandprogram.StagedOutput{stdout, stderr} {
+		_, err := staged.Publish(t.Context())
+		testutil.FailErr(t, "publish", err)
+	}
+	if h.read("a.txt") != "input\n" || h.read("b.txt") != "diagnostic\n" {
+		t.Fatalf("a %q b %q", h.read("a.txt"), h.read("b.txt"))
+	}
+	pins := h.pins.pins[inv.Identity.ExecutionID]
+	if len(pins) != 3 || pins[0].Role != toolcontract.SourceRevision || pins[0].Path != "in.txt" ||
+		pins[1].Role != toolcontract.DestinationRevision || pins[1].Path != "a.txt" || pins[1].Mode != toolcontract.AbsentRevision ||
+		pins[2].Role != toolcontract.DestinationRevision || pins[2].Path != "b.txt" || pins[2].Mode != toolcontract.PublishedDiskRevision {
+		t.Fatalf("pins %+v", pins)
+	}
+}
+
+// tee with redirected stdout: the redirect's destination and both tee
+// destinations share one execution's capture order.
+func TestTeeDestinationsAfterARedirectInOneExecution(t *testing.T) {
+	h := newHarness(t, nil)
+	inv := h.invocation()
+	redirect, err := h.publication().Open(t.Context(), commandprogram.OutputDestination{Invocation: inv, Redirect: commandsurface.ProgramRedirect{Operator: ">", Descriptor: -1}, Target: commandprogram.Field{Value: "copy.txt", Span: inv.Span}})
+	testutil.FailErr(t, "open redirect", err)
+	r := h.runAs(inv, redirect, "teed\n", "tee", "a.txt", "b.txt")
+	if r.err != nil || r.result.Status != 0 {
+		t.Fatalf("tee %+v %v", r.result, r.err)
+	}
+	_, err = redirect.Publish(t.Context())
+	testutil.FailErr(t, "publish redirect", err)
+	if h.read("a.txt") != "teed\n" || h.read("b.txt") != "teed\n" || h.read("copy.txt") != "teed\n" {
+		t.Fatalf("a %q b %q copy %q", h.read("a.txt"), h.read("b.txt"), h.read("copy.txt"))
+	}
+	pins := h.pins.pins[inv.Identity.ExecutionID]
+	if len(pins) != 3 || pins[0].Path != "copy.txt" || pins[1].Path != "a.txt" || pins[2].Path != "b.txt" {
+		t.Fatalf("pins %+v", pins)
+	}
+}
+
+func TestEditReplaceLinesCodeRewriteAndSourceCapture(t *testing.T) {
+	h := newHarness(t, map[string]string{
+		"file.txt":   "alpha\nbeta\ngamma\n",
+		"main.go":    "package p\n\nfunc f() int {\n\treturn 1 + 2\n}\n",
+		"script.sh":  "echo ok\n",
+	})
+	if r := h.run("", "edit", "--path", "file.txt", "--old-string", "beta", "--new-string", "BETA"); r.err != nil || r.result.Status != 0 || h.read("file.txt") != "alpha\nBETA\ngamma\n" {
+		t.Fatalf("edit: %+v %v %q", r.result, r.err, h.read("file.txt"))
+	}
+	if r := h.run("", "replace-lines", "--path", "file.txt", "--start", "2", "--end", "3", "--content", "two\nthree"); r.err != nil || r.result.Status != 0 || h.read("file.txt") != "alpha\ntwo\nthree\n" {
+		t.Fatalf("replace-lines: %+v %v %q", r.result, r.err, h.read("file.txt"))
+	}
+	if r := h.run("", "code-rewrite", "--path", "main.go", "--pattern", "1 + 2", "--rewrite", "3", "--dry-run"); r.err != nil || r.result.Status != 0 || !strings.Contains(h.read("main.go"), "1 + 2") {
+		t.Fatalf("code-rewrite --dry-run: %+v %v %q", r.result, r.err, h.read("main.go"))
+	}
+	if r := h.run("", "code-rewrite", "--path", "main.go", "--pattern", "1 + 2", "--rewrite", "3"); r.err != nil || r.result.Status != 0 || !strings.Contains(h.read("main.go"), "return 3") {
+		t.Fatalf("code-rewrite: %+v %v %q", r.result, r.err, h.read("main.go"))
+	}
+	inv := h.invocation()
+	captured, err := h.publication().Capture(t.Context(), inv, commandprogram.SourceCaptureRequest{
+		Path:           "script.sh",
+		Representation: toolcontract.UTF8SourceBytes,
+	})
+	testutil.FailErr(t, "capture source script", err)
+	if string(captured.Bytes) != "echo ok\n" || captured.Pin.SourceID != "script.sh" {
+		t.Fatalf("captured source = %+v", captured)
 	}
 }

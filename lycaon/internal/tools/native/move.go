@@ -7,8 +7,11 @@ import (
 	"path/filepath"
 
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/sourceeffect"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 )
 
@@ -27,10 +30,14 @@ type moveResponse struct {
 }
 
 // MoveInput is one complete move operation. NoClobber leaves an existing
-// destination in place and skips that pair.
+// destination in place and skips that pair. Directories admits directory
+// sources, renamed whole within one root onto an absent destination; the
+// rename is journaled like a file rename, so Files history can undo it.
 type MoveInput struct {
-	Pairs     []FilePair
-	NoClobber bool
+	Memory      *toolcontract.ProgramMemory `json:"-"`
+	Pairs       []FilePair
+	NoClobber   bool
+	Directories bool
 }
 
 // MoveResult lists completed and skipped pairs in order.
@@ -68,14 +75,24 @@ func (t *MoveTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 // Move renames each pair within one root under scope, review and recovery.
 func (t *MoveTool) Move(ctx context.Context, in MoveInput, tctx tools.ToolContext) (MoveResult, error) {
 	var result MoveResult
+	if in.Memory == nil {
+		limits, err := toolcontract.CatalogProgramMemoryLimits()
+		if err != nil {
+			return result, err
+		}
+		memory, err := toolcontract.NewProgramMemory(limits)
+		if err != nil {
+			return result, err
+		}
+		in.Memory = memory
+	}
 	prof := tctx.ProfileID()
 	for _, pair := range in.Pairs {
 		if err := ctx.Err(); err != nil {
 			return result, err
 		}
 		fromSlash, toSlash := filepath.ToSlash(pair.From), filepath.ToSlash(pair.To)
-		srcResolved, err := assertMutationFileSource(ctx, t.Boundary, tctx, pair.From, prof, "move",
-			"MOVE_NOT_FOUND", "MOVE_IS_DIRECTORY", "MOVE_SYMLINK_ESCAPE", assertMoveWritePath)
+		srcResolved, err := t.moveSource(ctx, tctx, pair.From, in.Directories)
 		if err != nil {
 			return result, err
 		}
@@ -93,11 +110,53 @@ func (t *MoveTool) Move(ctx context.Context, in MoveInput, tctx tools.ToolContex
 				continue
 			}
 		}
-		if err := renameAgentPath(ctx, tctx, resolvedMutationTarget(srcResolved), resolvedMutationTarget(dstResolved)); err != nil {
+		var displacedBytes int64
+		var reviewDisplacedPolicy func() ([]sourceeffect.ReviewedFile, error)
+		if srcInfo, srcErr := os.Lstat(srcResolved.Abs); srcErr == nil && srcInfo.IsDir() {
+			if dstInfo, dstErr := os.Lstat(dstResolved.Abs); dstErr == nil && dstInfo.IsDir() {
+				summary, inspectErr := inspectDeleteTree(ctx, t.Boundary, tctx, dstResolved, prof, in.Memory, nil)
+				if inspectErr != nil {
+					return result, fmt.Errorf("move %s -> %s: %w", pair.From, pair.To, inspectErr)
+				}
+				displacedBytes = summary.bytes
+				if len(summary.policyTargets) > 0 {
+					policyTargets := summary.policyTargets
+					reviewDisplacedPolicy = func() ([]sourceeffect.ReviewedFile, error) {
+						reviewed := make([]sourceeffect.ReviewedFile, 0, len(policyTargets))
+						for _, target := range policyTargets {
+							item, err := reviewAgentTreePolicyRemoval(ctx, tctx, target, in.Memory)
+							if err != nil {
+								return nil, err
+							}
+							reviewed = append(reviewed, item)
+						}
+						return reviewed, nil
+					}
+				}
+			}
+		}
+		if err := renameAgentEntry(ctx, tctx, resolvedMutationTarget(srcResolved), resolvedMutationTarget(dstResolved), displacedBytes, in.Memory, reviewDisplacedPolicy); err != nil {
 			return result, fmt.Errorf("move %s -> %s: %w", pair.From, pair.To, err)
 		}
 		result.Moved = append(result.Moved, FilePair{From: fromSlash, To: toSlash})
 		afterSuccessfulMutation(ctx, tctx, fromSlash, toSlash)
 	}
 	return result, nil
+}
+
+// moveSource resolves a file source, or with directories a directory entry
+// itself; a link to a directory stays a file-style entry.
+func (t *MoveTool) moveSource(ctx context.Context, tctx tools.ToolContext, from string, directories bool) (projectpaths.Resolved, error) {
+	prof := tctx.ProfileID()
+	if directories {
+		resolved, err := assertMoveWritePath(ctx, t.Boundary, tctx, from, prof)
+		if err != nil {
+			return projectpaths.Resolved{}, err
+		}
+		if info, err := os.Lstat(resolved.Abs); err == nil && info.IsDir() {
+			return resolved, nil
+		}
+	}
+	return assertMutationFileSource(ctx, t.Boundary, tctx, from, prof, "move",
+		"MOVE_NOT_FOUND", "MOVE_IS_DIRECTORY", "MOVE_SYMLINK_ESCAPE", assertMoveWritePath)
 }

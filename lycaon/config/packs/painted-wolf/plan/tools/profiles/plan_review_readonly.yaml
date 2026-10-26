@@ -1,19 +1,20 @@
 id: plan_review_readonly
-description: Read-only plan review — read and grep on plan paths
+description: Read-only plan review — command in read-only mode on plan paths
 command_effects: [read_only]
 tools:
+  command: sticky
   complete_leg: sticky
   recall: sticky
-  read: sticky
+  read: true
   record_finding: sticky
   pack_board: sticky
   request_decision: sticky
   request_budget: sticky
-  grep: sticky
-  find: sticky
+  grep: true
+  find: true
   summarize: sticky
-  jq: sticky
-  list_dir: sticky
+  jq: true
+  list_dir: true
   stat: sticky
   wc: sticky
   git_status: sticky
@@ -45,7 +46,6 @@ deny_tools:
   - git_checkout
   - git_merge
   - git_stash
-  - command
   - secret_*
   - delegate_*
   - state_*

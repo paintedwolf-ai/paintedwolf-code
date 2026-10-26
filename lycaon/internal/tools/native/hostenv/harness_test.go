@@ -33,6 +33,12 @@ type fixtureHost struct {
 
 func (h fixtureHost) System(context.Context) (SystemFacts, error)     { return h.system, h.err }
 func (h fixtureHost) Identity(context.Context) (IdentityFacts, error) { return h.identity, h.err }
+func (h fixtureHost) Processors(_ context.Context, all bool) (int, error) {
+	if all {
+		return 8, h.err
+	}
+	return 6, h.err
+}
 
 func defaultHost() fixtureHost {
 	return fixtureHost{
@@ -86,14 +92,14 @@ func newHarness(t *testing.T, host HostFacts) *harness {
 	t.Helper()
 	root, bin := t.TempDir(), t.TempDir()
 	testutil.FailErr(t, "mkdir pkg", os.MkdirAll(filepath.Join(root, "pkg"), 0o755))
-	for _, name := range []string{"cat", "pwtool"} {
+	for _, name := range []string{"cat", "git", "pwtool"} {
 		testutil.FailErr(t, "write "+name, os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\nexit 0\n"), 0o755))
 	}
 	testutil.FailErr(t, "write plain file", os.WriteFile(filepath.Join(bin, "plain"), nil, 0o644))
 	exec.SetResolvedPathSource(func() string { return bin })
 	t.Cleanup(func() { exec.SetResolvedPathSource(nil) })
 	clock := &fixtureClock{at: time.Date(2026, 1, 2, 3, 4, 5, 0, time.FixedZone("fixture", 5*3600))}
-	owners, err := NewOwners(host, clock.now, nil)
+	owners, err := NewOwners(host, clock.now)
 	testutil.FailErr(t, "owners", err)
 	tc := tools.ToolContext{
 		Source:   tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "ws", Path: root, IsPrimary: true}}, ActiveRootID: "r1"},
@@ -136,7 +142,7 @@ func (h *harness) run(source string) run {
 		},
 		OperationID: argv[0].Value, Statement: statement, Argv: argv, Environment: environment,
 	}
-	builtins := h.owners.Builtins(h.tc, h.nested)
+	builtins := h.owners.Builtins(h.tc, h.nested, catalogBindings{})
 	var stdout, stderr bytes.Buffer
 	result, err := builtins[argv[0].Value].Invoke(h.t.Context(), request, commandprogram.Streams{Output: &stdout, Error: &stderr})
 	if validation := result.Validate(); validation != nil {
@@ -168,3 +174,8 @@ func (r run) expectRefusal(t *testing.T, source, code string) *toolrejection.Too
 	}
 	return reject
 }
+
+// catalogBindings binds every catalog native, as a fully wired program does.
+type catalogBindings struct{}
+
+func (catalogBindings) NativeBound(string) bool { return true }

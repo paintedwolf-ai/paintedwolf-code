@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -17,47 +16,49 @@ import (
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/desktoptrash"
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectsource"
+	"github.com/lycaon/lycaon/internal/prompts/promptstest"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
-// pinLog follows the receipt store's contract: each call resubmits the
-// execution's captures in order and may only append.
+// pinLog follows the receipt store's contract: each capture appends at the
+// execution's next position.
 type pinLog struct {
 	mu   sync.Mutex
 	pins map[string][]toolcontract.ExecutionRevision
 }
 
-func (l *pinLog) RecordRevisionPins(_ context.Context, execution string, pins []toolcontract.ExecutionRevision) error {
+func (l *pinLog) AppendRevisionPin(_ context.Context, execution string, pin toolcontract.ExecutionRevision) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	for _, pin := range pins {
-		if err := pin.Validate(); err != nil {
-			return err
-		}
+	if err := pin.Validate(); err != nil {
+		return err
 	}
-	existing := l.pins[execution]
-	if len(pins) < len(existing) || !slices.Equal(existing, pins[:len(existing)]) {
+	if execution == "" {
 		return io.ErrUnexpectedEOF
 	}
 	if l.pins == nil {
 		l.pins = map[string][]toolcontract.ExecutionRevision{}
 	}
-	l.pins[execution] = slices.Clone(pins)
+	l.pins[execution] = append(l.pins[execution], pin)
 	return nil
 }
 
 type harness struct {
 	t       *testing.T
+	db      *db.Store
 	root    string
 	tc      tools.ToolContext
 	owners  *Owners
@@ -72,6 +73,7 @@ type harness struct {
 // be reached, and a real session scratch directory.
 func newHarness(t *testing.T, files map[string]string) *harness {
 	t.Helper()
+	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	raw := t.TempDir()
 	root, err := filepath.EvalSymlinks(raw)
 	testutil.FailErr(t, "resolve temp root", err)
@@ -102,15 +104,31 @@ func newHarness(t *testing.T, files map[string]string) *harness {
 	scratch, err := filepath.EvalSymlinks(t.TempDir())
 	testutil.FailErr(t, "resolve scratch", err)
 	tc.Host.SessionScratchDir = scratch
-	boundary := nativefixture.Boundary(t)
+	boundary := mutationBoundary()
 	pins := &pinLog{}
 	owners, err := NewOwners(native.ExecutionRevisions{Boundary: boundary}, pins, Operations{Write: &native.WriteTool{Boundary: boundary}, Delete: &native.DeleteTool{Boundary: boundary},
-		Move: &native.MoveTool{Boundary: boundary}, Copy: &native.CopyTool{Boundary: boundary}, Mkdir: &native.MkdirTool{Boundary: boundary}, Chmod: &native.ChmodTool{Boundary: boundary}})
+		Move: &native.MoveTool{Boundary: boundary}, Copy: &native.CopyTool{Boundary: boundary}, Mkdir: &native.MkdirTool{Boundary: boundary}, Chmod: &native.ChmodTool{Boundary: boundary},
+		Chown: &native.ChownTool{Boundary: boundary}, Times: &native.TimesTool{Boundary: boundary}, Extract: &native.ExtractArchiveTool{Boundary: boundary}})
 	testutil.FailErr(t, "build owners", err)
 	paths, err := projectpaths.NewProgramPaths(t.Context(), boundary, tc, "")
 	testutil.FailErr(t, "bind program paths", err)
 	p := &project.Project{ID: "p1", Roots: []project.Root{{ID: "r1", ProjectID: "p1", Path: root, IsPrimary: true}}}
-	return &harness{t: t, root: root, tc: tc, owners: owners, pins: pins, program: Program{Paths: paths, Barrier: &native.PublicationBarrier{}}, service: service, project: p}
+	limits, memoryErr := toolcontract.CatalogProgramMemoryLimits()
+	testutil.FailErr(t, "load program memory limits", memoryErr)
+	memory, memoryErr := toolcontract.NewProgramMemory(limits)
+	testutil.FailErr(t, "create program memory", memoryErr)
+	owners.Revisions.Memory = memory
+	return &harness{t: t, db: sqlDB, root: root, tc: tc, owners: owners, pins: pins, program: Program{Paths: paths}, service: service, project: p}
+}
+
+// mutationBoundary admits every operation the frontend reaches for the default
+// profile, so refusals in these tests come from scope and confinement.
+func mutationBoundary() *sandbox.Boundary {
+	allowed := map[string]bool{}
+	for _, name := range []string{"read", "write", "edit", "delete", "copy", "move", "mkdir", "chmod", "chown", "extract_archive", "stat", "list_dir"} {
+		allowed[name] = true
+	}
+	return sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{ID: toolprofiles.DefaultToolProfileID, Tools: allowed}})
 }
 
 func (h *harness) invocation() toolcontract.OperationInvocation {
@@ -129,7 +147,15 @@ type run struct {
 // run binds and invokes one utility the way native dispatch does.
 func (h *harness) run(stdin string, words ...string) run {
 	h.t.Helper()
-	inv := h.invocation()
+	var stdout bytes.Buffer
+	r := h.runAs(h.invocation(), &stdout, stdin, words...)
+	r.stdout = stdout.String()
+	return r
+}
+
+// runAs invokes one utility as the given execution with stdout bound to out.
+func (h *harness) runAs(inv toolcontract.OperationInvocation, out io.Writer, stdin string, words ...string) run {
+	h.t.Helper()
 	argv := make(commandprogram.Fields, len(words))
 	for i, word := range words {
 		argv[i] = commandprogram.Field{Value: word, Span: inv.Span}
@@ -140,12 +166,12 @@ func (h *harness) run(stdin string, words ...string) run {
 	if err != nil {
 		return run{err: err, execution: inv.Identity.ExecutionID}
 	}
-	var stdout, stderr bytes.Buffer
-	result, err := prepared.InvokeOwner(h.t.Context(), h.tc, commandprogram.Streams{Input: io.NopCloser(strings.NewReader(stdin)), Output: &stdout, Error: &stderr})
+	var stderr bytes.Buffer
+	result, err := prepared.InvokeOwner(h.t.Context(), h.tc, commandprogram.Streams{Input: io.NopCloser(strings.NewReader(stdin)), Output: out, Error: &stderr})
 	if validErr := result.Validate(); validErr != nil {
 		h.t.Fatalf("%v produced an invalid result %+v: %v", words, result, validErr)
 	}
-	return run{stdout: stdout.String(), stderr: stderr.String(), result: result, err: err, execution: inv.Identity.ExecutionID}
+	return run{stderr: stderr.String(), result: result, err: err, execution: inv.Identity.ExecutionID}
 }
 
 func (h *harness) path(rel string) string { return filepath.Join(h.root, filepath.FromSlash(rel)) }
@@ -163,7 +189,11 @@ func (h *harness) absent(rel string) bool {
 }
 
 func (h *harness) publication() *Publication {
-	return &Publication{Owners: h.owners, Program: h.program, Tools: h.tc}
+	return &Publication{Owners: h.owners, Program: h.program, Tools: h.tc, Admission: func(_ context.Context, _ commandprogram.OutputDestination, _ string) (tools.CommandOutputWrite, error) {
+		return tools.CommandOutputWrite{Publish: func(ctx context.Context, apply func(context.Context, tools.ToolContext) (commandprogram.OutputPublished, error)) (commandprogram.OutputPublished, error) {
+			return apply(ctx, h.tc)
+		}, Abandon: func(context.Context, error) error { return nil }}, nil
+	}}
 }
 
 func (h *harness) destination(operator, target string) commandprogram.OutputDestination {

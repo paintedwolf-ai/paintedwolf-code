@@ -4,21 +4,28 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"io"
 	"math"
 	"os"
 	"path/filepath"
+	"time"
 
+	"github.com/lycaon/lycaon/internal/contextio"
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/sourceeffect"
+	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 )
 
 // CopyTool copies regular files, and bounded directory trees, within write scope.
 type CopyTool struct {
 	Boundary *sandbox.Boundary
+	// Caps overrides the catalog recursive mutation ceilings; zero uses them.
+	Caps RecursiveCaps
 }
 
 type copyResult struct {
@@ -35,15 +42,19 @@ type copyResponse struct {
 // parents first, measured against the catalog's recursive mutation caps before
 // any entry is written. NoClobber keeps existing destination files.
 type CopyInput struct {
-	Pairs        []FilePair
-	Recursive    bool
-	NoClobber    bool
+	Pairs     []FilePair
+	Recursive bool
+	NoClobber bool
+	// Preserve copies permission bits and access/modification times.
+	Preserve     bool
 	MaxFileBytes int64
 }
 
 // CopyResult lists written files in order, including those already written
 // when a later entry fails.
 type CopyResult struct {
+	// Effects counts observed file publications and directory creations, even on error.
+	Effects int
 	Copied  []copyResult
 	Skipped []FilePair
 }
@@ -74,38 +85,109 @@ func (t *CopyTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 	return string(raw), nil
 }
 
-// Copy writes each destination through the reviewed, recoverable stream door.
-func (t *CopyTool) Copy(ctx context.Context, in CopyInput, tctx tools.ToolContext) (CopyResult, error) {
-	var result CopyResult
+// CopyOperation keeps recursive admission across every source in one utility
+// invocation, including sources handled after an ordinary operand failure.
+type CopyOperation struct {
+	memory         *toolcontract.ProgramMemory
+	reads          *projectpaths.ReadSession
+	tool           *CopyTool
+	input          CopyInput
+	caps, used     RecursiveCaps
+	maxFileBytes   int64
+	resultReleases []func()
+	pending        []sourceeffect.PendingEffects
+	pendingRecords int
+	pendingBytes   int64
+	pendingRelease func()
+}
+
+func (t *CopyTool) Begin(in CopyInput, memory *toolcontract.ProgramMemory) (*CopyOperation, error) {
+	if memory == nil {
+		limits, err := toolcontract.CatalogProgramMemoryLimits()
+		if err != nil {
+			return nil, err
+		}
+		memory, err = toolcontract.NewProgramMemory(limits)
+		if err != nil {
+			return nil, err
+		}
+	}
+	caps, err := t.Caps.resolve()
+	if err != nil {
+		return nil, err
+	}
 	maxBytes := in.MaxFileBytes
 	if maxBytes <= 0 {
-		maxBytes = defaultCopyMaxBytes
-	}
-	prof := tctx.ProfileID()
-	for _, pair := range in.Pairs {
-		if err := ctx.Err(); err != nil {
-			return result, err
-		}
 		if in.Recursive {
-			source, err := assertCopyWritePath(ctx, t.Boundary, tctx, pair.From, prof)
-			if err != nil {
-				return result, err
-			}
-			if info, err := os.Lstat(source.Abs); err == nil && info.IsDir() {
-				if err := t.copyTree(ctx, tctx, source.Abs, pair, in.NoClobber, maxBytes, &result); err != nil {
-					return result, err
-				}
-				continue
-			}
+			maxBytes = caps.Bytes
+		} else {
+			maxBytes = defaultCopyMaxBytes
 		}
-		if err := t.copyFile(ctx, tctx, pair, in.NoClobber, maxBytes, &result); err != nil {
+	}
+	in.Pairs = nil
+	return &CopyOperation{memory: memory, tool: t, input: in, caps: caps, maxFileBytes: maxBytes}, nil
+}
+
+// Copy writes a complete batch through one operation's mutation streams.
+func (t *CopyTool) Copy(ctx context.Context, in CopyInput, tctx tools.ToolContext) (CopyResult, error) {
+	var result CopyResult
+	op, err := t.Begin(in, nil)
+	if err != nil {
+		return result, err
+	}
+	defer op.Close()
+	for _, pair := range in.Pairs {
+		copied, err := op.CopyPair(ctx, pair, tctx)
+		result.Effects += copied.Effects
+		result.Copied = append(result.Copied, copied.Copied...)
+		result.Skipped = append(result.Skipped, copied.Skipped...)
+		if err != nil {
 			return result, err
 		}
 	}
 	return result, nil
 }
 
-func (t *CopyTool) copyFile(ctx context.Context, tctx tools.ToolContext, pair FilePair, noClobber bool, maxBytes int64, result *CopyResult) error {
+// CopyPair retains operation use while the caller handles utility diagnostics.
+func (op *CopyOperation) CopyPair(ctx context.Context, pair FilePair, tctx tools.ToolContext) (result CopyResult, resultErr error) {
+	defer func() {
+		resultErr = errors.Join(resultErr, op.settlePending(ctx, tctx))
+	}()
+	if err := ctx.Err(); err != nil {
+		return result, err
+	}
+	if op.reads == nil {
+		// Mutation scope still resolves every source; only its held read root is reused.
+		op.reads = projectpaths.NewReadSession(nil, tctx)
+	}
+	in, t := op.input, op.tool
+	if in.Recursive {
+		source, err := assertCopyWritePath(ctx, t.Boundary, tctx, pair.From, tctx.ProfileID())
+		if err != nil {
+			return result, err
+		}
+		if info, err := os.Lstat(source.Abs); err == nil && info.IsDir() {
+			err := op.copyTree(ctx, tctx, source, pair, &result)
+			return result, err
+		}
+	}
+	limit := op.maxFileBytes
+	if in.Recursive {
+		op.used.Files++
+		if err := copyTreeWithinCaps(op.used.Files, op.used.Bytes, op.caps, filepath.ToSlash(pair.From)); err != nil {
+			return result, err
+		}
+		limit = min(limit, op.caps.Bytes-op.used.Bytes)
+	}
+	err := op.copyFile(ctx, tctx, pair, limit, &result)
+	if in.Recursive && len(result.Copied) > 0 {
+		op.used.Bytes += result.Copied[len(result.Copied)-1].Bytes
+	}
+	return result, err
+}
+
+func (op *CopyOperation) copyFile(ctx context.Context, tctx tools.ToolContext, pair FilePair, maxBytes int64, result *CopyResult) error {
+	t, in := op.tool, op.input
 	prof := tctx.ProfileID()
 	fromSlash, toSlash := filepath.ToSlash(pair.From), filepath.ToSlash(pair.To)
 	srcResolved, err := assertMutationFileSource(ctx, t.Boundary, tctx, pair.From, prof, "copy",
@@ -117,13 +199,24 @@ func (t *CopyTool) copyFile(ctx context.Context, tctx tools.ToolContext, pair Fi
 	if err != nil {
 		return err
 	}
-	if noClobber {
+	if in.NoClobber {
 		if _, err := os.Lstat(dstResolved.Abs); err == nil {
+			if err := op.retainResult(ctx, pair); err != nil {
+				return err
+			}
 			result.Skipped = append(result.Skipped, FilePair{From: fromSlash, To: toSlash})
 			return nil
 		}
 	}
-	n, err := copyFileWithinLimit(ctx, tctx, resolvedMutationTarget(srcResolved), resolvedMutationTarget(dstResolved), maxBytes)
+	if err := op.retainResult(ctx, pair); err != nil {
+		return err
+	}
+	publication, err := op.copyFileWithinLimit(ctx, tctx, srcResolved, resolvedMutationTarget(dstResolved), maxBytes)
+	if publication.Publication.Committed() {
+		result.Effects++
+		result.Copied = append(result.Copied, copyResult{From: fromSlash, To: toSlash, Bytes: publication.Bytes})
+		afterSuccessfulMutation(ctx, tctx, toSlash)
+	}
 	if err != nil {
 		reject := &toolrejection.ToolReject{}
 		if errors.As(err, &reject) {
@@ -131,63 +224,49 @@ func (t *CopyTool) copyFile(ctx context.Context, tctx tools.ToolContext, pair Fi
 		}
 		return fmt.Errorf("copy %s -> %s: %w", pair.From, pair.To, err)
 	}
-	result.Copied = append(result.Copied, copyResult{From: fromSlash, To: toSlash, Bytes: n})
-	afterSuccessfulMutation(ctx, tctx, toSlash)
+	if in.Preserve {
+		return preserveMetadata(ctx, tctx, srcResolved.Abs, resolvedMutationTarget(dstResolved))
+	}
 	return nil
 }
 
-// copyTree recreates a directory tree at the destination, parents first.
-func (t *CopyTool) copyTree(ctx context.Context, tctx tools.ToolContext, sourceRoot string, pair FilePair, noClobber bool, maxBytes int64, result *CopyResult) error {
-	type entry struct {
-		path  string
-		isDir bool
-	}
-	var order []entry
-	if err := walkRecursiveTree(sourceRoot, filepath.ToSlash(pair.From), func(path string, isDir bool) error {
-		order = append(order, entry{path, isDir})
-		return nil
-	}); err != nil {
+// preserveMetadata copies permission bits and times from source to target
+// through the reviewed metadata path. A platform without timestamp support
+// refuses rather than leaving -p half applied silently.
+func preserveMetadata(ctx context.Context, tctx tools.ToolContext, source string, target mutationTarget) error {
+	info, err := os.Stat(source)
+	if err != nil {
 		return err
 	}
-	prof := tctx.ProfileID()
-	for i := len(order) - 1; i >= 0; i-- {
-		if err := ctx.Err(); err != nil {
-			return err
+	if err := chmodAgentPath(ctx, tctx, target, info.Mode().Perm()); err != nil {
+		return err
+	}
+	modify := info.ModTime()
+	var access *time.Time
+	if at, ok := fseffect.AccessTime(info); ok {
+		access = &at
+	}
+	if err := timesAgentPath(ctx, tctx, target, access, &modify); err != nil {
+		if errors.Is(err, fseffect.ErrUnsupported) {
+			return &toolrejection.ToolReject{Code: "COMMAND_PLATFORM_UNAVAILABLE", Data: map[string]any{"path": target.Abs, "capability": "timestamps"}}
 		}
-		rel, err := filepath.Rel(sourceRoot, order[i].path)
-		if err != nil {
-			return err
-		}
-		to := filepath.Join(pair.To, rel)
-		if !order[i].isDir {
-			if err := t.copyFile(ctx, tctx, FilePair{From: order[i].path, To: to}, noClobber, maxBytes, result); err != nil {
-				return err
-			}
-			continue
-		}
-		target, err := assertCopyWritePath(ctx, t.Boundary, tctx, to, prof)
-		if err != nil {
-			return err
-		}
-		if err := mkdirAgentPath(ctx, tctx, resolvedMutationTarget(target), 0o755); err != nil {
-			return fmt.Errorf("copy %s: %w", filepath.ToSlash(to), err)
-		}
+		return err
 	}
 	return nil
 }
 
-func copyFileWithinLimit(ctx context.Context, tctx tools.ToolContext, source, target mutationTarget, maxBytes int64) (int64, error) {
-	in, err := fseffect.OpenRead(source.Location)
+func (op *CopyOperation) stageCopyFileWithinLimit(ctx context.Context, tctx tools.ToolContext, source projectpaths.Resolved, target mutationTarget, maxBytes int64, copyBuffer []byte, knownAbsent bool) (*agentStreamStage, fseffect.Result, error) {
+	in, err := op.reads.Open(ctx, source)
 	if err != nil {
-		return 0, err
+		return nil, fseffect.Result{}, err
 	}
 	defer func() { _ = in.Close() }()
 	info, err := in.Stat()
 	if err != nil {
-		return 0, err
+		return nil, fseffect.Result{}, err
 	}
 	if info.Size() > maxBytes {
-		return 0, &toolrejection.ToolReject{
+		return nil, fseffect.Result{}, &toolrejection.ToolReject{
 			Code: "COPY_SIZE_EXCEEDED",
 			Data: map[string]any{
 				"max_file_bytes": maxBytes,
@@ -199,8 +278,10 @@ func copyFileWithinLimit(ctx context.Context, tctx tools.ToolContext, source, ta
 	if readLimit < math.MaxInt64 {
 		readLimit++
 	}
-	result, err := applyAgentStream(ctx, tctx, agentStreamRequest{
-		Target: target, Source: io.LimitReader(in, readLimit),
+	mode := info.Mode().Perm()
+	stage, result, err := stageAgentStream(ctx, tctx, agentStreamRequest{
+		Mode: &mode, Memory: op.memory, CopyBuffer: copyBuffer, KnownAbsent: knownAbsent,
+		Target: target, Source: contextio.Reader{Context: ctx, Source: io.LimitReader(in, readLimit)},
 		BeforeCommit: func(_ fseffect.Target, staged fseffect.Result) error {
 			if staged.Bytes <= maxBytes {
 				return nil
@@ -215,7 +296,50 @@ func copyFileWithinLimit(ctx context.Context, tctx tools.ToolContext, source, ta
 		},
 	})
 	if err != nil {
-		return 0, err
+		return nil, fseffect.Result{}, err
 	}
-	return result.Bytes, nil
+	return stage, result, nil
+}
+
+func (op *CopyOperation) copyFileWithinLimit(ctx context.Context, tc tools.ToolContext, source projectpaths.Resolved, target mutationTarget, maximum int64) (fseffect.Result, error) {
+	staged, result, err := op.stageCopyFileWithinLimit(ctx, tc, source, target, maximum, nil, false)
+	if err != nil {
+		return result, err
+	}
+	defer staged.Close()
+	return staged.Commit(ctx, tc)
+}
+
+// retainResult admits result backing overlap and retained path bytes before the
+// effect that will append them. Slice growth copies headers, not string backing
+// bytes. The invocation owns these leases until Close.
+func (op *CopyOperation) retainResult(ctx context.Context, pair FilePair) error {
+	bound := int64(3*48 + len(pair.From) + len(pair.To) + 128)
+	release, err := op.memory.ReserveProgramState(ctx, bound)
+	if err != nil {
+		return err
+	}
+	op.resultReleases = append(op.resultReleases, release)
+	return nil
+}
+
+// Close returns retained result storage after the caller consumes the result.
+func (op *CopyOperation) Close() {
+	for _, pending := range op.pending {
+		pending.Close()
+	}
+	op.pending = nil
+	if op.pendingRelease != nil {
+		op.pendingRelease()
+		op.pendingRelease = nil
+	}
+	op.pendingRecords, op.pendingBytes = 0, 0
+	if op.reads != nil {
+		op.reads.Close()
+		op.reads = nil
+	}
+	for _, release := range op.resultReleases {
+		release()
+	}
+	op.resultReleases = nil
 }

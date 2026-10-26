@@ -3,24 +3,137 @@ package projectpaths
 import (
 	"errors"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
+	"github.com/lycaon/lycaon/internal/settingsoverlay"
 )
+
+// BoundDir holds a bound directory and its root descriptor open while listing
+// and inspecting its immediate entries.
+type BoundDir struct {
+	dir      BoundPath
+	root     *fseffect.ReadRoot
+	ownsRoot bool
+	file     *os.File
+	names    []string
+}
+
+// OpenDir opens a bound directory and lists its entry names in unsigned byte order.
+func (p BoundPath) OpenDir() (*BoundDir, error) {
+	return p.OpenDirWithRoot(nil)
+}
+
+// OpenDirWithRoot opens a bound directory using shared when non-nil instead of opening a fresh ReadRoot.
+func (p BoundPath) OpenDirWithRoot(shared *fseffect.ReadRoot) (*BoundDir, error) {
+	if p.Null {
+		return nil, &PathError{Code: "COMMAND_OPERAND_INVALID", Cause: errors.New("null input is an empty stream, not a file")}
+	}
+	root := shared
+	ownsRoot := false
+	if root == nil {
+		var err error
+		root, err = p.openRoot()
+		if err != nil {
+			return nil, PathOperationError(p.Resolved.DisplayPath, err)
+		}
+		ownsRoot = true
+	}
+	closeRoot := func() {
+		if ownsRoot {
+			_ = root.Close()
+		}
+	}
+	file, err := root.OpenExact(p.exactRelative)
+	if err != nil {
+		closeRoot()
+		return nil, PathOperationError(p.Resolved.DisplayPath, err)
+	}
+	if p.admitRead != nil {
+		if err := p.admitRead(file.Name()); err != nil {
+			_ = file.Close()
+			closeRoot()
+			return nil, PathOperationError(p.Resolved.DisplayPath, err)
+		}
+	}
+	info, err := file.Stat()
+	if err != nil {
+		_ = file.Close()
+		closeRoot()
+		return nil, PathOperationError(p.Resolved.DisplayPath, err)
+	}
+	if !info.IsDir() {
+		_ = file.Close()
+		closeRoot()
+		return nil, PathOperationError(p.Resolved.DisplayPath, &fs.PathError{Op: "readdir", Path: p.Resolved.DisplayPath, Err: errors.New("not a directory")})
+	}
+	names, err := file.Readdirnames(-1)
+	if err != nil {
+		_ = file.Close()
+		closeRoot()
+		return nil, PathOperationError(p.Resolved.DisplayPath, err)
+	}
+	parentHasRecovery := strings.Contains(p.Resolved.Abs, ".paintedwolf")
+	kept := names[:0]
+	for _, name := range names {
+		if parentHasRecovery || name == ".paintedwolf" || name == settingsoverlay.RecoveryDirName {
+			childAbs := p.Resolved.Abs + string(filepath.Separator) + name
+			if settingsoverlay.HasRecoverySegment(childAbs) || settingsoverlay.IsRecoveryOnlyDir(childAbs) {
+				continue
+			}
+		}
+		kept = append(kept, name)
+	}
+	names = kept
+	slices.Sort(names)
+	return &BoundDir{dir: p, root: root, ownsRoot: ownsRoot, file: file, names: names}, nil
+}
+
+// Names returns the sorted entry names in the held directory.
+func (d *BoundDir) Names() []string { return d.names }
+
+// Close releases the held directory and root descriptors.
+func (d *BoundDir) Close() error {
+	if !d.ownsRoot {
+		return d.file.Close()
+	}
+	return errors.Join(d.file.Close(), d.root.Close())
+}
+
+// StatChild binds and stats one immediate entry of the held directory without following links.
+func (d *BoundDir) StatChild(name string) (BoundPath, fseffect.EntryStat, error) {
+	child := d.dir.Child(name)
+	st, err := d.root.StatChildAt(d.file, child.exactRelative, name, child.admitEntry)
+	if err != nil {
+		return child, fseffect.EntryStat{}, PathOperationError(child.Resolved.DisplayPath, err)
+	}
+	return child, st, nil
+}
+
+// StatChildFollowed resolves a symlink child's target through the held root.
+func (d *BoundDir) StatChildFollowed(child BoundPath) (fseffect.EntryStat, error) {
+	st, err := d.root.Stat(child.exactRelative, true, child.admitRead)
+	if err != nil {
+		return fseffect.EntryStat{}, PathOperationError(child.Resolved.DisplayPath, err)
+	}
+	return st, nil
+}
 
 // Stat reads entry metadata through the held root without opening content.
 // Without follow it reports the final entry itself, including a dangling or
 // outward-pointing link; follow resolves contained links only.
 func (p BoundPath) Stat(follow bool) (fseffect.EntryStat, error) {
-	if p.Null {
-		return fseffect.EntryStat{}, invalidOperand(p.Resolved.DisplayPath, "null device is not a directory entry")
+	if settingsoverlay.IsRecoveryRelPath(p.Resolved.ScopeRel) || settingsoverlay.HasRecoverySegment(p.Resolved.Abs) || settingsoverlay.IsRecoveryOnlyDir(p.Resolved.Abs) {
+		return fseffect.EntryStat{}, PathOperationError(p.Resolved.DisplayPath, &fs.PathError{Op: "stat", Path: p.Resolved.DisplayPath, Err: fs.ErrNotExist})
 	}
-	root, err := p.openRoot()
+	root, err := p.openEntryRoot()
 	if err != nil {
 		return fseffect.EntryStat{}, PathOperationError(p.Resolved.DisplayPath, err)
 	}
-	defer root.Close()
+	defer func() { _ = root.Close() }()
 	admit := p.admitRead
 	if !follow {
 		admit = p.admitEntry
@@ -35,54 +148,54 @@ func (p BoundPath) Stat(follow bool) (fseffect.EntryStat, error) {
 // ReadDir lists a directory's entry names in unsigned byte order. The
 // listing is the directory itself: no ignore rules, catalog or map apply.
 func (p BoundPath) ReadDir() ([]string, error) {
-	file, err := p.Open()
+	dir, err := p.OpenDir()
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
-	info, err := file.Stat()
-	if err != nil {
-		return nil, PathOperationError(p.Resolved.DisplayPath, err)
-	}
-	if !info.IsDir() {
-		return nil, PathOperationError(p.Resolved.DisplayPath, &fs.PathError{Op: "readdir", Path: p.Resolved.DisplayPath, Err: errors.New("not a directory")})
-	}
-	names, err := file.Readdirnames(-1)
-	if err != nil {
-		return nil, PathOperationError(p.Resolved.DisplayPath, err)
-	}
-	slices.Sort(names)
-	return names, nil
+	defer dir.Close()
+	return dir.Names(), nil
 }
 
 // Child binds one entry beneath a bound directory with the same authority.
 func (p BoundPath) Child(name string) BoundPath {
 	child := p
-	if p.exactRelative == "." || p.exactRelative == "" {
-		child.exactRelative = name
-	} else {
-		child.exactRelative = p.exactRelative + string(filepath.Separator) + name
-	}
-	child.Resolved.Abs = p.Resolved.Abs + string(filepath.Separator) + name
-	child.Resolved.DisplayPath = filepath.ToSlash(filepath.Join(p.Resolved.DisplayPath, name))
 	if p.Resolved.ScopeRel == "" || p.Resolved.ScopeRel == "." {
 		child.Resolved.ScopeRel = name
 	} else {
 		child.Resolved.ScopeRel = p.Resolved.ScopeRel + "/" + name
 	}
+	if filepath.Separator == '/' && p.exactRelative == p.Resolved.ScopeRel {
+		child.exactRelative = child.Resolved.ScopeRel
+	} else if p.exactRelative == "." || p.exactRelative == "" {
+		child.exactRelative = name
+	} else {
+		child.exactRelative = p.exactRelative + string(filepath.Separator) + name
+	}
+	child.Resolved.Abs = p.Resolved.Abs + string(filepath.Separator) + name
+	if p.Resolved.DisplayPath == p.Resolved.ScopeRel && name != "" && name != "." && name != ".." && !strings.ContainsAny(name, `/\`) {
+		child.Resolved.DisplayPath = child.Resolved.ScopeRel
+	} else {
+		child.Resolved.DisplayPath = filepath.ToSlash(filepath.Join(p.Resolved.DisplayPath, name))
+	}
 	return child
 }
 
-// Readlink reads a link entry's target without authorizing access to it.
+// Readlink reads a link entry's target text, admitted at the entry itself, without
+// authorizing or following the target.
 func (p BoundPath) Readlink() (string, error) {
-	if p.Null {
-		return "", invalidOperand(p.Resolved.DisplayPath, "null device is not a directory entry")
-	}
-	root, err := p.openRoot()
+	root, err := p.openEntryRoot()
 	if err != nil {
 		return "", PathOperationError(p.Resolved.DisplayPath, err)
 	}
-	defer root.Close()
-	target, err := root.Readlink(p.exactRelative, p.admitRead)
+	defer func() { _ = root.Close() }()
+	target, err := root.Readlink(p.exactRelative, p.admitEntry)
 	return target, PathOperationError(p.Resolved.DisplayPath, err)
+}
+
+// openEntryRoot distinguishes namespace metadata from the null byte stream.
+func (p BoundPath) openEntryRoot() (*fseffect.ReadRoot, error) {
+	if p.Null {
+		return nil, invalidOperand(p.Resolved.DisplayPath, "null device is not a directory entry")
+	}
+	return p.openRoot()
 }

@@ -2,7 +2,6 @@ package app
 
 import (
 	"bytes"
-	"context"
 	"io"
 	"strings"
 	"testing"
@@ -10,7 +9,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/editordoc"
-	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -28,24 +26,16 @@ func (m *mappedOutput) RecordSourceMapping(mapping toolcontract.StreamSourceMapp
 	return nil
 }
 
-type pinRecorderAdapter struct{ *invocation.SQLRecorder }
-
-func (a pinRecorderAdapter) RecordRevisionPins(ctx context.Context, executionID string, pins []toolcontract.ExecutionRevision) error {
-	return a.SQLRecorder.RecordRevisionPins(ctx, executionID, 0, pins)
-}
-
-// TestCommandCatServesTheAcceptedDocumentNewerThanDisk: a native read of a
-// path with an unsaved draft returns the draft, encoded exactly as its save
-// would write it, records that accepted revision in the program receipt, and
-// leaves conversational read bases untouched.
-func TestCommandCatServesTheAcceptedDocumentNewerThanDisk(t *testing.T) {
+// Native owners capture disk even while an editor draft holds newer text.
+// Program entry owns publication and delivered content owns read evidence.
+func TestCommandCatCapturesDiskWhileEditorHasUnsavedChanges(t *testing.T) {
 	f := newRevisionFixture(t, map[string]string{"notes.txt": "disk line\r\nsecond\r\n"})
 	ctx := t.Context()
 	opened, err := f.service.Open(ctx, f.project, "notes.txt", f.rootID, "", "window", nil)
 	testutil.FailErr(t, "open notes", err)
-	draft, err := f.service.ReplaceSnapshot(ctx, opened.ID, f.project.ID, editordoc.SnapshotReplacement{DocumentCommand: editordoc.DocumentCommand{ClientID: "window", OperationID: uuid.NewString(), ExpectedRevision: opened.Revision}, Content: "draft line\nsecond\nthird", EOL: "crlf"})
+	_, err = f.service.ReplaceSnapshot(ctx, opened.ID, f.project.ID, editordoc.SnapshotReplacement{DocumentCommand: editordoc.DocumentCommand{ClientID: "window", OperationID: uuid.NewString(), ExpectedRevision: opened.Revision}, Content: "draft line\nsecond\nthird", EOL: "crlf"})
 	testutil.FailErr(t, "type draft", err)
-	owners, err := literal.NewOwners(f.revisions, pinRecorderAdapter{f.recorder}, literal.DomainOwners{})
+	owners, err := literal.NewOwners(f.revisions, f.recorder, literal.DomainOwners{})
 	testutil.FailErr(t, "literal owners", err)
 	paths, err := projectpaths.NewProgramPaths(ctx, f.revisions.Boundary, f.tctx, ".")
 	testutil.FailErr(t, "program cwd", err)
@@ -64,9 +54,9 @@ func TestCommandCatServesTheAcceptedDocumentNewerThanDisk(t *testing.T) {
 	}
 
 	stdout, result, mappings := run("cat", "notes.txt")
-	want := "draft line\r\nsecond\r\nthird"
+	want := "disk line\r\nsecond\r\n"
 	if stdout != want || result.Status != 0 || !result.PublicationEligible {
-		t.Fatalf("cat served %q (%+v), want the accepted draft", stdout, result)
+		t.Fatalf("cat served %q (%+v), want the saved file", stdout, result)
 	}
 	if disk := f.disk(t, "notes.txt"); disk != "disk line\r\nsecond\r\n" {
 		t.Fatalf("native read published the draft: %q", disk)
@@ -77,20 +67,20 @@ func TestCommandCatServesTheAcceptedDocumentNewerThanDisk(t *testing.T) {
 		t.Fatalf("pins = %+v", pins)
 	}
 	pin := pins[0]
-	if pin.Mode != toolcontract.AcceptedDocumentRevision || pin.DocumentID != draft.ID || pin.DocumentRevision != draft.Revision ||
+	if pin.Mode != toolcontract.PublishedDiskRevision || pin.DocumentID != "" || pin.DocumentRevision != 0 ||
 		pin.Representation != toolcontract.OriginalEncodedBytes || pin.ContentSHA256 != textfile.SHA256([]byte(want)) || pin.ContentBytes != int64(len(want)) ||
 		pin.DiskSHA256 != textfile.SHA256([]byte("disk line\r\nsecond\r\n")) || pin.Path != "notes.txt" {
-		t.Fatalf("accepted revision pin = %+v", pin)
+		t.Fatalf("disk revision pin = %+v", pin)
 	}
 	source, _ := pin.SourcePin()
 	if len(mappings) != 1 || mappings[0].Source != source || mappings[0].SourceStartByte != 0 || mappings[0].SourceEndByte != int64(len(want)) {
-		t.Fatalf("draft mappings = %+v", mappings)
+		t.Fatalf("disk mappings = %+v", mappings)
 	}
 	f.noReadBases(t)
 
 	counted, _, _ := run("wc", "-l", "notes.txt")
 	if counted != "2 notes.txt\n" {
-		t.Fatalf("wc counted %q over the captured draft", counted)
+		t.Fatalf("wc counted %q over the saved file", counted)
 	}
 	digest, _, _ := run("sha256sum", "notes.txt")
 	if digest != textfile.SHA256([]byte(want))+"  notes.txt\n" {
@@ -98,7 +88,7 @@ func TestCommandCatServesTheAcceptedDocumentNewerThanDisk(t *testing.T) {
 	}
 	pins, err = f.recorder.RevisionPins(ctx, f.session, f.execution)
 	testutil.FailErr(t, "read pins after later reads", err)
-	if len(pins) != 1 {
-		t.Fatalf("each run resubmits its own captures as a prefix: %+v", pins)
+	if len(pins) != 3 || pins[1] != pin || pins[2] != pin {
+		t.Fatalf("each run appends its capture: %+v", pins)
 	}
 }

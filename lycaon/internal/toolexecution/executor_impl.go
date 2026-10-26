@@ -41,6 +41,9 @@ func (e *Executor) Invoke(ctx context.Context, qualifiedName string, args map[st
 	}
 	tc.Identity.Agent = profileID
 	ctx = invocationContext(ctx, tc)
+	if retained, entry := e.programEntries[qualifiedName]; entry && (retained == nil || !retained(args)) {
+		return e.invokeProgramEntry(ctx, qualifiedName, profileID, args, tc)
+	}
 	if reject := e.validateInvocation(ctx, qualifiedName, profileID, args, &tc); reject != nil {
 		ctx = tools.WithRecoveryTools(ctx, tc.Turn.TurnOfferedToolNames)
 		return "", e.Rejections.rejectBeforeInvoke(ctx, qualifiedName, profileID, args, reject)
@@ -126,12 +129,6 @@ func (e *Executor) validateInvocation(
 	if reject := tools.ValidateCallArguments(qualifiedName, args, e.Metadata.argsSchemaFor(ctx, tc.Identity.SessionID, qualifiedName), *tc); reject != nil {
 		return reject
 	}
-	if reject := e.exactCommandReplacementReject(ctx, qualifiedName, profileID, args, *tc); reject != nil {
-		return reject
-	}
-	if reject := commandFileWriteReject(ctx, e, qualifiedName, profileID, args, tc); reject != nil {
-		return reject
-	}
 	if reject := toolcommand.ArgvShapeReject(qualifiedName, args); reject != nil {
 		return reject
 	}
@@ -160,7 +157,7 @@ func (e *Executor) validateInvocation(
 	if reject := capabilityrequest.ValidateCapabilityContract(tc.Invocation.Contract, args); reject != nil {
 		return reject
 	}
-	return tools.ValidateCapabilityPathAuthority(args, tc.Host.SessionScratchDir)
+	return tools.ValidateCapabilityPathAuthority(args, tc.Host.SessionScratchDir, tc.Host.SessionOutputDir)
 }
 
 // definitionFor reads the registry snapshot dispatch will run.
@@ -198,4 +195,26 @@ func (e *Executor) ensureWorkerBranchIfNeeded(ctx context.Context, tool string, 
 		}
 	}
 	return tc.Source.WorkerCoord.EnsureBranch(ctx, tc)
+}
+
+// invokeProgramEntry validates only the command envelope against its schema
+// (TOOL_ARGS_INVALID with native-channel repair) and hands the program to its
+// entry. The entry validates the whole program before any effect; each reached
+// child then passes the full per-operation boundary through InvokeNative.
+func (e *Executor) invokeProgramEntry(ctx context.Context, tool, profileID string, args map[string]any, tc tools.ToolContext) (string, error) {
+	if reject := tools.ValidateCallArguments(tool, args, e.Metadata.argsSchemaFor(ctx, tc.Identity.SessionID, tool), tc); reject != nil {
+		ctx = tools.WithRecoveryTools(ctx, tc.Turn.TurnOfferedToolNames)
+		return "", e.Rejections.rejectBeforeInvoke(ctx, tool, profileID, args, reject)
+	}
+	if strings.TrimSpace(tc.Invocation.Contract.Owner) == "" {
+		if def, ok := e.definitionFor(tool); ok {
+			tc.Invocation.Contract = def.Contract
+		}
+	}
+	tc.Files.FileChangeReview = e.Boundary.fileChangeReviewer(tool, args, tc)
+	out, err := e.Metadata.registry.Run(ctx, tool, args, tc)
+	if tr := toolrejection.AsToolReject(err); tr != nil {
+		return out, e.Rejections.settleReject(ctx, tool, profileID, args, toolrejection.CompleteFailureMetadata(tr, tool, tc.Invocation.Contract.Owner))
+	}
+	return out, err
 }

@@ -1,0 +1,56 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/luskaner/ageLANServer/server"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.8.2-0.20260809203301-1dd40166a593"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-107839",
+  "GHSA-4jfq-pmq9-257h"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6716"
+ },
+ "details": "ageLANServer: Unbounded JSON Array Allocation in AoE3 Cloud `getFileURL` Endpoint Leads to Remote Denial of Service in github.com/luskaner/ageLANServer/server",
+ "id": "GO-2026-6716",
+ "modified": "2026-10-19T21:08:26Z",
+ "published": "2026-10-19T21:08:26Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/luskaner/ageLANServer/security/advisories/GHSA-4jfq-pmq9-257h"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-107839"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/luskaner/ageLANServer/commit/1dd40166a59356865c0a4b1800f32d05dc8bec79"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/luskaner/ageLANServer/releases/tag/v1.15.2"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "ageLANServer: Unbounded JSON Array Allocation in AoE3 Cloud `getFileURL` Endpoint Leads to Remote Denial of Service in github.com/luskaner/ageLANServer/server"
+}

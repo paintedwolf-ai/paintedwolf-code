@@ -28,8 +28,16 @@ type frameState struct {
 	hasJob    bool
 	// last is the most recent settled execution in this state; a pipeline
 	// stage reports it as the stage producer.
-	last *ChildRecord
+	last       *ChildRecord
+	pipeStatus []int
+	options    shellOptions
+	directory  string
+	exitTrap   []commandsurface.Statement
 }
+
+// shellOptions are the fixed set options: errexit and nounset. Pipelines
+// always report the rightmost failure, so pipefail is not a toggle.
+type shellOptions struct{ errexit, nounset bool }
 
 // frame is one lexical evaluation context. Values are copied for nested
 // contexts; state, publication and the shared evaluation are pointers.
@@ -38,25 +46,31 @@ type frame struct {
 	state      *frameState
 	parent     toolcontract.OperationInvocation
 	unit       string
-	streams    Streams
+	io         descriptorFrame
+	activeHost *childRun
 	publish    *eligibility
 	positional []string
 	// prefix holds a function call's NAME=value prefixes: visible to the body
 	// and exported to its dispatches, never stored in the caller's frame.
-	prefix     map[string]string
-	substs     *substitutionStatus
-	loops      int
+	prefix       map[string]string
+	substs       *substitutionStatus
+	procSubst    *procSubstScope
+	producerPipe *BytePipe
+	loops        int
 	functions  int
 	sources    int
 	returnable bool
+	// errexitIgnored marks contexts whose failure never exits: conditions,
+	// the non-final side of && and ||, and negated statements.
+	errexitIgnored bool
 }
 
 // substitutionStatus retains the ordinary statuses of the substitutions one
 // command's expansion reached. The first nonzero one prevents its dispatch.
 type substitutionStatus struct {
-	mu                   sync.Mutex
-	last, failed         int
-	lastID, failedID     string
+	mu                  sync.Mutex
+	last, failed        int
+	lastID, failedID    string
 	reached, hasFailure bool
 }
 
@@ -99,7 +113,14 @@ func (e *evaluation) rootFrame(ctx context.Context) (*frame, func(), error) {
 		return nil, nil, err
 	}
 	state := &frameState{vars: vars, functions: map[string]declaredFunction{}, latch: latch, control: control, dispatch: e.ports.Dispatch}
-	f := &frame{e: e, state: state, parent: e.ports.Invocation, unit: e.programName, streams: e.ports.Streams.withDefaults(), publish: newEligibility()}
+	f := &frame{e: e, state: state, parent: e.ports.Invocation, unit: e.programName, io: descriptorFrame{streams: e.ports.Streams.withDefaults()}, publish: newEligibility()}
+	if dir, ok := e.ports.Dispatch.(DirectoryFrame); ok {
+		state.directory = dir.Directory()
+		if err := f.exportVariable(ctx, "PWD", state.directory); err != nil {
+			vars.Close()
+			return nil, nil, err
+		}
+	}
 	return f, vars.Close, nil
 }
 
@@ -113,13 +134,16 @@ func (f *frame) isolate(ctx context.Context, latch *OutcomeLatch) (*frame, func(
 	if err != nil {
 		return nil, nil, err
 	}
-	control.status = f.state.control.Status()
+	if f.state.control != nil {
+		control.status = f.state.control.Status()
+	}
 	vars, err := f.state.vars.Clone(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
 	for name, value := range f.prefix {
-		if err := vars.Assign(ctx, name, value); err == nil {
+		err := vars.Assign(ctx, name, value)
+		if err == nil {
 			err = vars.Export(ctx, name)
 		}
 		if err != nil {
@@ -137,12 +161,48 @@ func (f *frame) isolate(ctx context.Context, latch *OutcomeLatch) (*frame, func(
 		functions[name] = decl
 	}
 	g := *f
-	g.state = &frameState{vars: vars, functions: functions, latch: latch, control: control, dispatch: dispatch, lastJob: f.state.lastJob, hasJob: f.state.hasJob}
-	g.publish, g.prefix, g.substs = newEligibility(), nil, nil
+	g.state = &frameState{vars: vars, functions: functions, latch: latch, control: control, dispatch: dispatch, lastJob: f.state.lastJob, hasJob: f.state.hasJob, pipeStatus: append([]int(nil), f.state.pipeStatus...), options: f.state.options, directory: f.state.directory}
+	g.publish, g.prefix, g.substs, g.procSubst, g.producerPipe = newEligibility(), nil, nil, nil, nil
 	return &g, func() { releaseDispatch(); vars.Close() }, nil
 }
 
+// syncDirectory records a directory change of the frame's dispatch the way
+// cd does in a shell: OLDPWD takes the old directory and PWD the new one,
+// both exported. An assignment to PWD stays until the next change.
+func (f *frame) syncDirectory(ctx context.Context, moved bool) error {
+	dir, ok := f.state.dispatch.(DirectoryFrame)
+	if !ok {
+		return nil
+	}
+	current := dir.Directory()
+	if !moved && current == f.state.directory {
+		return nil
+	}
+	previous := f.state.directory
+	f.state.directory = current
+	if err := f.exportVariable(ctx, "OLDPWD", previous); err != nil {
+		return err
+	}
+	return f.exportVariable(ctx, "PWD", current)
+}
+
+func (f *frame) exportVariable(ctx context.Context, name, value string) error {
+	if err := f.state.vars.Assign(ctx, name, value); err != nil {
+		return err
+	}
+	return f.state.vars.Export(ctx, name)
+}
+
 // ExpansionScope implementation: expansion reads, never assigns.
+
+// Address converts an @label prefix through the frame's directory owner.
+func (f *frame) Address(ctx context.Context, label string) (string, bool, error) {
+	addresses, ok := f.state.dispatch.(LogicalAddresses)
+	if !ok {
+		return "", false, nil
+	}
+	return addresses.Address(ctx, label)
+}
 
 func (f *frame) Variable(name string) (string, bool) {
 	if value, ok := f.prefix[name]; ok {
@@ -151,8 +211,15 @@ func (f *frame) Variable(name string) (string, bool) {
 	return f.state.vars.Variable(name)
 }
 func (f *frame) ProgramName() string  { return f.unit }
-func (f *frame) Positional() []string { return append([]string(nil), f.positional...) }
+func (f *frame) Nounset() bool        { return f.state.options.nounset }
+func (f *frame) Positional() []string { return f.positional }
 func (f *frame) LastStatus() int      { return f.state.control.Status() }
+func (f *frame) PipeStatus() []int {
+	if len(f.state.pipeStatus) > 0 {
+		return f.state.pipeStatus
+	}
+	return []int{f.state.control.Status()}
+}
 func (f *frame) LastBackground() (string, bool) {
 	return f.state.lastJob, f.state.hasJob
 }
@@ -160,7 +227,12 @@ func (f *frame) LastBackground() (string, bool) {
 // environment is the exported NAME=value list for one dispatch, with this
 // frame's function prefixes and the statement's own prefixes applied to that
 // dispatch only.
-func (f *frame) environment(prefix []assignment) ([]string, error) {
+func (f *frame) environment(ctx context.Context, prefix []assignment) ([]string, func(), error) {
+	release, err := f.e.ports.Memory.Reserve(ctx, int64(len(f.prefix)+len(prefix))*64)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer release()
 	overrides := make(map[string]string, len(f.prefix)+len(prefix))
 	for name, value := range f.prefix {
 		overrides[name] = value
@@ -168,12 +240,17 @@ func (f *frame) environment(prefix []assignment) ([]string, error) {
 	for _, a := range prefix {
 		overrides[a.name] = a.value
 	}
-	return f.state.vars.Environment(overrides)
+	return f.state.vars.Environment(ctx, overrides)
 }
 
 type assignment struct {
 	loc         commandsurface.SyntaxLocation
 	name, value string
+	index       int64
+	hasIndex    bool
+	appendMode  bool
+	array       bool
+	items       []string
 }
 
 // syncWriter serializes concurrent stage writes to one shared stream.

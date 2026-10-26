@@ -24,13 +24,15 @@ func (f spillAdmissionFunc) ReserveSpill(ctx context.Context, n int64) (func(), 
 func TestScreenedStreamSpillKeepsCompleteBinarySeparateFromPreview(t *testing.T) {
 	want := bytes.Repeat([]byte{'a', 0, '\r', '\n', 0xff}, 20000)
 	released := 0
+	var held, peak int64
+	var reservations []int64
 	out, err := RetainScreenedStream(t.Context(), ScreenedReader(io.NopCloser(bytes.NewReader(want))), StreamSpillOptions{
 		Store: blobstore.Store{Root: t.TempDir()}, ClaimID: "fixture-stream-1", MaximumBytes: int64(len(want)), PreviewBytes: 3,
 		RetainedState: fixtureStreamMemory{}, WorkingMemory: fixtureStreamMemory{}, Admission: spillAdmissionFunc(func(_ context.Context, n int64) (func(), error) {
-			if n < 3*int64(len(want)) {
-				t.Fatal("staging overlap was not reserved")
-			}
-			return func() { released++ }, nil
+			reservations = append(reservations, n)
+			held += n
+			peak = max(peak, held)
+			return func() { released++; held -= n }, nil
 		}),
 	})
 	testutil.FailErr(t, "retain screened byte stream", err)
@@ -43,13 +45,16 @@ func TestScreenedStreamSpillKeepsCompleteBinarySeparateFromPreview(t *testing.T)
 	if !bytes.Equal(got, want) || !out.Complete || out.Failure != nil || !bytes.Equal(out.Preview, want[:3]) || cap(out.Preview) > 3 || out.EmittedSHA256 != hex.EncodeToString(sum[:]) {
 		t.Fatalf("spill confused preview and content: %+v bytes=%d", out, len(got))
 	}
-	if err := out.Close(); err == nil || released != 0 {
+	if held != out.Blob.Size+retainedFrameBytes || peak < 3*int64(len(want))+(1<<20) {
+		t.Fatalf("retention reserved %v, want the stored %d bytes after staging", reservations, out.Blob.Size)
+	}
+	if err := out.Close(); err == nil || held != out.Blob.Size+retainedFrameBytes {
 		t.Fatal("released quota with an active reader")
 	}
 	testutil.FailErr(t, "close full stream reader", reader.Close())
 	testutil.FailErr(t, "discard unreferenced spill", out.Close())
 	testutil.FailErr(t, "repeat spill cleanup", out.Close())
-	if released != 1 {
+	if held != 0 || released != len(reservations) {
 		t.Fatalf("quota released %d times", released)
 	}
 	if _, err := out.Open(t.Context()); err == nil {
@@ -85,8 +90,8 @@ func TestSpillQuotaRefusesBeforeStorageAndOtherClaimsKeepAccounting(t *testing.T
 	if len(entries) != 0 {
 		t.Fatal("quota refusal wrote storage")
 	}
-	released := false
-	options.Admission = spillAdmissionFunc(func(context.Context, int64) (func(), error) { return func() { released = true }, nil })
+	released := 0
+	options.Admission = spillAdmissionFunc(func(context.Context, int64) (func(), error) { return func() { released++ }, nil })
 	out, err := RetainScreenedStream(t.Context(), ScreenedReader(io.NopCloser(bytes.NewReader([]byte("data")))), options)
 	testutil.FailErr(t, "retain claimed output", err)
 	defer out.Close()
@@ -94,12 +99,12 @@ func TestSpillQuotaRefusesBeforeStorageAndOtherClaimsKeepAccounting(t *testing.T
 	store.Dir = ToolOutputSpillDir
 	_, err = store.Retain("fixture-recovery", []string{out.Blob.ID})
 	testutil.FailErr(t, "retain recovery reference", err)
-	if err := out.Close(); err == nil || released {
+	if err := out.Close(); err == nil || released != 1 {
 		t.Fatal("freed disk accounting while recovery retained body")
 	}
 	testutil.FailErr(t, "release recovery reference", store.Release("fixture-recovery", []string{out.Blob.ID}))
 	testutil.FailErr(t, "collect released output", out.Close())
-	if !released {
+	if released != 2 {
 		t.Fatal("collected output did not return quota")
 	}
 }
@@ -175,4 +180,36 @@ func (f streamMemoryFunc) Reserve(ctx context.Context, n int64) (func(), error) 
 
 func (fixtureStreamMemory) ReserveProgramState(context.Context, int64) (func(), error) {
 	return func() {}, nil
+}
+
+func TestMidStreamSpillQuotaRetainsOnlyAdmittedPrefixAndReleasesLeases(t *testing.T) {
+	cause := errors.New("synthetic incremental quota")
+	ceiling := int64((1 << 20) + 3*(64<<10))
+	var held int64
+	admission := spillAdmissionFunc(func(_ context.Context, n int64) (func(), error) {
+		if n > ceiling-held {
+			return nil, cause
+		}
+		held += n
+		return func() { held -= n }, nil
+	})
+	data := bytes.Repeat([]byte("x"), 256<<10)
+	out, err := RetainScreenedStream(t.Context(), ScreenedReader(io.NopCloser(bytes.NewReader(data))), StreamSpillOptions{Store: blobstore.Store{Root: t.TempDir()}, ClaimID: "quota-prefix", MaximumBytes: 256 << 20, PreviewBytes: 32, Admission: admission, WorkingMemory: fixtureStreamMemory{}, RetainedState: fixtureStreamMemory{}})
+	testutil.FailErr(t, "retain quota prefix", err)
+	defer out.Close()
+	if out.Complete || !errors.Is(out.Failure, cause) || out.Blob.Size <= 0 || out.Blob.Size >= int64(len(data)) || held != out.Blob.Size+retainedFrameBytes {
+		t.Fatalf("prefix=%+v held=%d", out, held)
+	}
+	reader, err := out.Open(t.Context())
+	testutil.FailErr(t, "open quota prefix", err)
+	got, err := io.ReadAll(reader)
+	testutil.FailErr(t, "read quota prefix", err)
+	testutil.FailErr(t, "close quota prefix", reader.Close())
+	if !bytes.Equal(got, data[:len(got)]) {
+		t.Fatal("quota prefix changed bytes")
+	}
+	testutil.FailErr(t, "release quota prefix", out.Close())
+	if held != 0 {
+		t.Fatalf("quota leaked %d", held)
+	}
 }

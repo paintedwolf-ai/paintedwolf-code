@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"os"
+	"sync"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -20,17 +22,37 @@ type invocation struct {
 	owners  *Owners
 	tc      tools.ToolContext
 	paths   *projectpaths.ProgramPaths
-	request commandprogram.OperationRequest
-	spec    toolcontract.CommandSpecification
-	argv    commandprogram.BoundArgv
-	input   io.Reader
-	stderr  io.Writer
-	out     *output
-	status  int
+	request    commandprogram.OperationRequest
+	spec       toolcontract.CommandSpecification
+	argv       commandprogram.BoundArgv
+	closers    []io.Closer
+	input      io.Reader
+	stderr     io.Writer
+	out        *output
+	status     int
 	// comparison marks diff's complete status-one result as publishable.
-	comparison bool
-	diffVisits int64
-	pins       []toolcontract.ExecutionRevision
+	comparison    bool
+	diffVisits    int64
+	releases      []func()
+	currentStream io.Closer
+	pinMu         sync.Mutex
+	pins          revisionIndex
+}
+
+func (inv *invocation) closeCurrentStream() {
+	if inv.currentStream != nil {
+		_ = inv.currentStream.Close()
+		inv.currentStream = nil
+	}
+}
+
+func (inv *invocation) closeInputs() {
+	inv.pins.close()
+	inv.closeCurrentStream()
+	for _, release := range inv.releases {
+		release()
+	}
+	inv.releases = nil
 }
 
 func newInvocation(ctx context.Context, p Prepared, tc tools.ToolContext, streams commandprogram.Streams) *invocation {
@@ -87,13 +109,17 @@ var failureForms = map[string]string{
 // usage refuses a form the catalog admits syntactically but whose value is invalid.
 func (inv *invocation) usage(word, reason string) error {
 	return &toolrejection.ToolReject{Code: "COMMAND_OPERAND_INVALID", Data: map[string]any{
-		"command": inv.name(), "word": word, "expected": reason, "expected_form": inv.spec.Argv,
+		"command": inv.name(), "word": word, "expected": reason, "reason": reason, "expected_form": inv.spec.Argv,
 	}}
 }
 
-// limitExceeded refuses work above a frozen catalog limit; nothing is truncated.
-func limitExceeded(id string, maximum, observed int64) error {
-	return &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"limit_id": id, "maximum": maximum, "observed": observed}}
+// pinOpened records the published revision of a file a domain owner opens.
+func (inv *invocation) pinOpened(resolved projectpaths.Resolved, file *os.File) error {
+	revision, ok, err := inv.owners.Revisions.PinOpened(inv.ctx, resolved, file)
+	if err != nil || !ok {
+		return err
+	}
+	return inv.recordPin(revision)
 }
 
 // platformUnavailable refuses metadata this platform cannot observe; it never
@@ -129,6 +155,7 @@ func ordinary(err error) (string, bool) {
 
 // settle projects the run onto the producer contract.
 func (inv *invocation) settle(err error) (toolcontract.ProducerResult, error) {
+	err = tools.CommandResourceRejection(err)
 	err = projectpaths.WithPathRejection(err, inv.request.Invocation.Span)
 	if err != nil {
 		result := toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}

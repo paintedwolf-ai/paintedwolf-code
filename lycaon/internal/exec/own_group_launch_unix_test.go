@@ -18,7 +18,7 @@ func TestRunInOwnGroupReportsACommandRemovedAfterPreparation(t *testing.T) {
 	testutil.FailErr(t, "prepare executable", err)
 	defer cleanup()
 	testutil.FailErr(t, "remove prepared executable", os.Remove(path))
-	if err := RunInOwnGroup(cmd); !errors.Is(err, os.ErrNotExist) {
+	if err := RunInOwnGroup(t.Context(), cmd); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("removed executable launch = %v", err)
 	}
 }

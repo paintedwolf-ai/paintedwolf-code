@@ -610,26 +610,25 @@
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     },
     {
-      "id": "excluded-process-substitution",
-      "program": "printf x > ./never; cat <(echo x)",
+      "id": "process-substitution",
+      "program": "cat <(printf 'x\\n')",
       "setup": {
         "files": {},
         "host_facts": {},
         "helpers": {}
       },
       "expected": {
-        "stdout": "",
+        "stdout": "x\n",
         "stderr": "",
-        "status": 2,
-        "diagnostic": "COMMAND_SYNTAX_UNSUPPORTED",
-        "source_span": {
-          "start_byte": 24,
-          "end_byte": 26
-        },
+        "status": 0,
+        "diagnostic": null,
+        "source_span": null,
         "semantic_effects": [],
         "receipts": {
           "zero_program_effects": true,
-          "required_completed_operations": [],
+          "required_completed_operations": [
+            "read"
+          ],
           "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
         }
       },
@@ -637,7 +636,7 @@
     },
     {
       "id": "excluded-trap",
-      "program": "printf x > ./never; trap x EXIT",
+      "program": "printf x > ./never; trap x INT",
       "setup": {
         "files": {},
         "host_facts": {},
@@ -650,7 +649,7 @@
         "diagnostic": "COMMAND_SYNTAX_UNSUPPORTED",
         "source_span": {
           "start_byte": 20,
-          "end_byte": 24
+          "end_byte": 30
         },
         "semantic_effects": [],
         "receipts": {
@@ -663,7 +662,7 @@
     },
     {
       "id": "excluded-array",
-      "program": "printf x > ./never; a=(x y)",
+      "program": "printf x > ./never; a=([k]=x)",
       "setup": {
         "files": {},
         "host_facts": {},
@@ -675,8 +674,8 @@
         "status": 2,
         "diagnostic": "COMMAND_SYNTAX_UNSUPPORTED",
         "source_span": {
-          "start_byte": 20,
-          "end_byte": 23
+          "start_byte": 23,
+          "end_byte": 28
         },
         "semantic_effects": [],
         "receipts": {
@@ -1081,6 +1080,29 @@
     {
       "id": "xargs-empty",
       "program": "printf '' | xargs echo",
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
+      "expected": {
+        "stdout": "\n",
+        "stderr": "",
+        "status": 0,
+        "diagnostic": null,
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
+      },
+      "qualification": "normative definition; P04/P02 must execute against parser/native owners"
+    },
+    {
+      "id": "xargs-empty-no-run",
+      "program": "printf '' | xargs -r echo",
       "setup": {
         "files": {},
         "host_facts": {},
