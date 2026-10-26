@@ -12,6 +12,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 from contextlib import nullcontext
 
 from . import installed_evidence as evidence
@@ -22,6 +23,7 @@ from .support_matrix import CATALOG, expand
 from .installed_variants import requirements, snapshot, aggregate
 from .installed_capacity import limits
 from .installed_input.controller import Bridge, adapter, verify_deliveries, run_managed
+from .installed_input import protocol
 
 PLAN_FORMAT_VERSION = 3
 
@@ -57,6 +59,23 @@ def command(target: dict, arguments: list[str]) -> list[str]:
             "-p", str(target["port"]), target["user"] + "@" + target["host"], script]
 
 
+def publish_execution(directory: Path, request: dict):
+    raw = protocol.canonical(protocol.binding(request))
+    # The publisher creates this private directory exclusively; a prior attempt is never replaced.
+    directory.mkdir(mode=0o700)
+    descriptor, temporary = tempfile.mkstemp(prefix='.execution-pending-', dir=directory)
+    try:
+        with os.fdopen(descriptor, 'wb') as stream:
+            os.fchmod(stream.fileno(), 0o600)
+            if stream.write(raw) != len(raw):
+                raise OSError('execution binding write did not complete')
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, directory / 'execution-request.json')
+    finally:
+        Path(temporary).unlink(missing_ok=True)
+
+
 def run_guest(target: dict, source: str, tree: str, output: Path) -> Path:
     request = {"format_version": 1, "execution_nonce": secrets.token_hex(16), "source_commit": source,
                "driver_tree": tree, "artifact_id": target["artifact_id"], "environment_id": target["environment_id"], "variant_id": target["variant_id"]}
@@ -71,8 +90,7 @@ def run_guest(target: dict, source: str, tree: str, output: Path) -> Path:
     if selected_input is not None:
         arguments.extend(['--input-vm-id', selected_input['vm_id']])
     directory = output / target["id"]
-    directory.mkdir(mode=0o700)
-    (directory / "execution-request.json").write_text(json.dumps(request, sort_keys=True) + "\n")
+    publish_execution(directory, request)
     mailbox_command = command(target, ['python3', '-m', 'scripts.linux_release.installed_input.mailbox',
         '--binding', json.dumps(request, sort_keys=True, separators=(',', ':')),
         '--vm-id', selected_input['vm_id']]) if selected_input else None
