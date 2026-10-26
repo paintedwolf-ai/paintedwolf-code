@@ -396,7 +396,6 @@ func seedResourceCeilingInputs(t *testing.T, f *perfFixture) {
 func TestCommandProgramResourceCeilings(t *testing.T) {
 	f := newPerfFixture(t, nil)
 	seedResourceCeilingInputs(t, f)
-
 	find250k := "find" + strings.Repeat(" visits/d", 250) + " -maxdepth 1 -name none"
 	find250kPast := "find" + strings.Repeat(" visits/d", 250) + " visits/one -maxdepth 1 -name none"
 
