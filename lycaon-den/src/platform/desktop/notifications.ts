@@ -115,7 +115,7 @@ export async function sendNotification(
         body: n.body,
         sessionId: n.sessionId ?? null,
       });
-      return outcome === "inhibited" ? "inhibited" : "delivered";
+      return outcome === "delivered" || outcome === "inhibited" ? outcome : "skipped";
     }
     const plugin = await loadPlugin();
     if (!plugin) return "skipped";

@@ -239,10 +239,12 @@ describe.each(["macos", "linux"] as const)("notifications wrapper (%s native bri
     await expect(
       send({ title: "Painted Wolf Code", body: "Finished", sessionId: "sess-dnd" }),
     ).resolves.toBe("inhibited");
-    outcome = undefined;
-    await expect(
-      send({ title: "Painted Wolf Code", body: "Finished" }),
-    ).resolves.toBe("delivered");
+    for (const unexpected of [undefined, null, {}, true, "unknown"]) {
+      outcome = unexpected;
+      await expect(
+        send({ title: "Painted Wolf Code", body: "Finished" }),
+      ).resolves.toBe("skipped");
+    }
     expect(sendNotification).not.toHaveBeenCalled();
   });
 
