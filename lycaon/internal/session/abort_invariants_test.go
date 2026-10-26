@@ -7,7 +7,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/session/lifecycle"
@@ -79,12 +78,12 @@ func TestAbortSignalsAndStopsWorkersBeforeSessionRuntimeGate(t *testing.T) {
 	go func() { done <- mgr.Stops.Abort(ctx, sess.ID, "stop") }()
 	select {
 	case <-canceled:
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("abort did not signal prompt cancellation before waiting for the session gate")
 	}
 	select {
 	case <-abort.calledCh:
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("worker teardown did not begin while the turn was releasing the session gate")
 	}
 	got, err := st.Get(ctx, sess.ID)

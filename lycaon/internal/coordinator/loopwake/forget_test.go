@@ -63,7 +63,7 @@ func TestForgetSessionWaitsForFiringTimerBeforeFinalSweep(t *testing.T) {
 		close(finished)
 	}()
 
-	testutil.WaitFor(t, time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		_, ok := loop.Waits.sleep.Load(sessionID)
 		return !ok
 	})
@@ -78,7 +78,7 @@ func TestForgetSessionWaitsForFiringTimerBeforeFinalSweep(t *testing.T) {
 
 	select {
 	case <-finished:
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("cleanup did not finish after timer callback completed")
 	}
 	if _, ok := loop.Waits.sleep.Load(sessionID); ok {

@@ -144,9 +144,8 @@ func TestDigestRunLockSmoke(t *testing.T) {
 func TestVitestDigestReportsRunnerFailureWithNoFailingTests(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
 	digest := filepath.Join(root, "scripts", "vitest-digest.py")
-	if _, err := os.Stat(digest); err != nil {
-		t.Skipf("vitest-digest.py not present: %v", err)
-	}
+	_, err := os.Stat(digest)
+	contractcheck.FailErr(t, "locate required Vitest digest", err)
 
 	dir := t.TempDir()
 	report := filepath.Join(dir, "report.json")
@@ -188,9 +187,8 @@ func TestVitestDigestReportsRunnerFailureWithNoFailingTests(t *testing.T) {
 func TestVitestDigestExplainsFromVitestOwnOutcomeRecord(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
 	digest := filepath.Join(root, "scripts", "vitest-digest.py")
-	if _, err := os.Stat(digest); err != nil {
-		t.Skipf("vitest-digest.py not present: %v", err)
-	}
+	_, err := os.Stat(digest)
+	contractcheck.FailErr(t, "locate required Vitest digest", err)
 
 	dir := t.TempDir()
 	report := filepath.Join(dir, "report.json")
@@ -248,9 +246,8 @@ func TestVitestDigestExplainsFromVitestOwnOutcomeRecord(t *testing.T) {
 func TestVitestDigestReportsFileLevelFailures(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
 	digest := filepath.Join(root, "scripts", "vitest-digest.py")
-	if _, err := os.Stat(digest); err != nil {
-		t.Skipf("vitest-digest.py not present: %v", err)
-	}
+	_, err := os.Stat(digest)
+	contractcheck.FailErr(t, "locate required Vitest digest", err)
 
 	dir := t.TempDir()
 	report := filepath.Join(dir, "report.json")
