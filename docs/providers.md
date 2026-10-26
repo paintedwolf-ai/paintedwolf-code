@@ -638,6 +638,20 @@ Exhausting the envelope means the model was too slow for that service class, not
 
 Background compaction never spends the coordinator as a fallback. A failed attempt leaves canonical history and any prior valid compaction view unchanged; a later turn retries. Prompt fitting, authorization, and store recovery never depend on a successful utility completion.
 
+## Tool schema projection
+
+The full tool schema governs execution. Provider schemas are derived generation
+guidance: they preserve supported local constraints without changing the catalog
+or excluding arguments the full schema accepts. Function roots remain objects.
+Nested required fields name properties declared on that same node; cross-field
+conditions remain in host validation.
+
+Self-contained type unions survive. An unrepresentable alternative removes the
+whole union, while an unrepresentable intersection member can be omitted. An
+exclusive union survives only when its branches are unchanged: widening branches
+could create overlaps that reject valid arguments. Projection never invents a
+property type to replace an omitted condition.
+
 ## Feature projection
 
 Feature flags come from admitted catalog facts or local capability evidence. Undeclared features are false. Examples include vision input, tool use, structured output, prompt caching, and context size. A live discovery response that lists an id does not prove any of them.

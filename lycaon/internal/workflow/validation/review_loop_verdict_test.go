@@ -282,8 +282,7 @@ func catalogVerdictSchema(t *testing.T) map[string]any {
 	return meta.ArgsSchema
 }
 
-// offeredVerdictSchema is the phase's call as the coordinator is offered it,
-// which is also the schema admission checks.
+// Project the phase schema as provider generation guidance.
 func offeredVerdictSchema(t *testing.T, f reviewLoopFixture) map[string]any {
 	t.Helper()
 	manifests, err := workflowdef.RegistryFromDirs("")
@@ -292,7 +291,7 @@ func offeredVerdictSchema(t *testing.T, f reviewLoopFixture) map[string]any {
 	testutil.FailErr(t, "manifests.Get "+f.workflowID, err)
 	schema, err := verdictcall.Compose(catalogVerdictSchema(t), reviewLoopDef(t, f), m.ReportBrief())
 	testutil.FailErr(t, "PhaseVerdictArgsSchema", err)
-	return tools.TrimCoordinatorToolMeta(tools.ToolMeta{Name: "submit_verdict", ArgsSchema: schema}).ArgsSchema
+	return tools.ProjectProviderToolMeta(tools.ToolMeta{Name: "submit_verdict", ArgsSchema: schema}).ArgsSchema
 }
 
 // verdictCall turns a stored verdict back into the call that produced it.

@@ -161,7 +161,7 @@ func marshalToolSurface(t *testing.T, label string, metas []tools.ToolMeta, coor
 	views := make([]toolSurfaceWireView, 0, len(metas))
 	for _, meta := range metas {
 		if coordinator {
-			meta = tools.TrimCoordinatorToolMeta(meta)
+			meta = tools.ProjectProviderToolMeta(meta)
 		}
 		views = append(views, toolSurfaceWireView{Name: meta.Name, Description: meta.Description, Parameters: meta.ArgsSchema})
 	}
@@ -194,7 +194,7 @@ func withLargestPhaseVerdictCall(t *testing.T, metas []tools.ToolMeta) []tools.T
 			}
 			schema, err := verdictcall.Compose(catalog, *phase.ReviewLoop, manifest.ReportBrief())
 			contractcheck.FailErr(t, "compose "+manifest.ID+" "+phase.ID+" verdict schema", err)
-			raw, err := json.Marshal(tools.TrimCoordinatorToolMeta(tools.ToolMeta{ArgsSchema: schema}).ArgsSchema)
+			raw, err := json.Marshal(tools.ProjectProviderToolMeta(tools.ToolMeta{ArgsSchema: schema}).ArgsSchema)
 			contractcheck.FailErr(t, "marshal "+manifest.ID+" "+phase.ID+" verdict schema", err)
 			if len(raw) > largestBytes {
 				largest, largestBytes = schema, len(raw)

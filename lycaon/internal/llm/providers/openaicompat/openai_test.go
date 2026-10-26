@@ -604,7 +604,7 @@ func TestConvertOpenAIToolsDoesNotSanitizeFunctionRoot(t *testing.T) {
 		t.Fatalf("parameters = %T", out[0].Function.Parameters)
 	}
 	if _, has := params["anyOf"]; !has {
-		t.Fatal("convertOpenAITools must not strip root anyOf; TrimCoordinatorToolMeta is the gate")
+		t.Fatal("convertOpenAITools must not strip root anyOf; ProjectProviderToolMeta is the gate")
 	}
 }
 
@@ -631,7 +631,7 @@ func TestEncodeOpenAIToolsUsesTrimmedFunctionRoots(t *testing.T) {
 	body, err := encodeChatCompletionRequest(modelcall.CompletionRequest{
 		Model:    "gpt-5.6-terra",
 		Messages: []api.Message{{Role: api.MessageRoleUser, Content: "hi"}},
-		Tools:    []tools.ToolMeta{tools.TrimCoordinatorToolMeta(untrimmed)},
+		Tools:    []tools.ToolMeta{tools.ProjectProviderToolMeta(untrimmed)},
 	}, provider, false, controlOpts{})
 	testutil.FailErr(t, "encode OpenAI tools", err)
 	params := openAIWireFunctionParameters(t, body, "code_rewrite")

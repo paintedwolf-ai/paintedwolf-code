@@ -149,7 +149,7 @@ func TestRenderViewSchemaEncouragesMockupsAndExplanatoryVisuals(t *testing.T) {
 	}
 }
 
-func TestTrimCoordinatorToolMetaPreservesRequiredFields(t *testing.T) {
+func TestProjectProviderToolMetaPreservesRequiredFields(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
 	cfg, err := toolschema.LoadSchemaDir(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
@@ -159,7 +159,7 @@ func TestTrimCoordinatorToolMetaPreservesRequiredFields(t *testing.T) {
 		t.Fatal("missing read schema")
 	}
 	full := tools.ToolMeta{Name: "read", Description: meta.Description, ArgsSchema: meta.ArgsSchema}
-	trimmed := tools.TrimCoordinatorToolMeta(full)
+	trimmed := tools.ProjectProviderToolMeta(full)
 	if trimmed.ArgsSchema == nil {
 		t.Fatal("trimmed schema nil")
 	}
