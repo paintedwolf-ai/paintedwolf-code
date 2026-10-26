@@ -170,9 +170,7 @@ func phaseVerdictSchema(frame inject.CoordinatorTurnFrame) map[string]any {
 	return nil
 }
 
-// trimCoordinatorToolMetasForPlan narrows the offered tools to the plan. A
-// review phase's submit_verdict carries that phase's call schema, which is
-// also the schema admission checks.
+// Project the plan's callable tools and phase-specific verdict guidance.
 func trimCoordinatorToolMetasForPlan(plan toolsurface.Plan, all []tools.ToolMeta, taskAllowlist []string, verdictSchema map[string]any) []tools.ToolMeta {
 	out := make([]tools.ToolMeta, 0, len(all))
 	for _, meta := range all {
