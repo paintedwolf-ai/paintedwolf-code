@@ -45,6 +45,7 @@ class GitHub:
         self.behind = {n['number']: 3 for n in nodes}
         self.update = {}       # number -> 'merge' | 'conflict' | 'refused'
         self.pushes = {}       # number -> owner pushes that race the next update requests
+        self.settle_pushes = {}  # number -> owner pushes after an update request was accepted
         self.pushed_behind = {}  # number -> how far behind main the owner's pushes leave it
         self.read_push = {}    # number -> an owner push seen first by the next PR read
         self.mergeable = {}    # number -> value after the first read
@@ -56,6 +57,7 @@ class GitHub:
 
     def merge_appears(self, number, pull):
         head = pull['head']['sha'] = pull.pop('pending')
+        self.behind[number] = 0
         decoys = [{'id': number * 100 + 1, 'head_sha': head, 'path': '.github/workflows/dco.yml', 'triggering_actor': {'login': d.BOT}},
                   {'id': number * 100 + 2, 'head_sha': head, 'path': '.github/workflows/ci.yml', 'triggering_actor': {'login': 'someone'}}]
         held = [] if number in self.unheld else [{'id': number * 100, 'head_sha': head, 'path': '.github/workflows/ci.yml',
@@ -100,7 +102,11 @@ class GitHub:
             if self.read_push.pop(number, False):
                 self.push(number, pull)
             if 'pending' in pull:
-                if self.lag[number] == 0:
+                if self.settle_pushes.get(number):
+                    self.settle_pushes[number] -= 1
+                    pull.pop('pending')
+                    self.push(number, pull)
+                elif self.lag[number] == 0:
                     self.merge_appears(number, pull)
                 else:
                     self.lag[number] -= 1
@@ -193,6 +199,25 @@ class LandedTests(unittest.TestCase):
         self.assertEqual(github.writes('pulls/4/update-branch'), [])
         self.assertEqual(sorted(body['inputs'].get('pull_request', body['ref']) for _, body in github.writes('dispatches')),
                          ['2', '3', '4', 'feat/2', 'feat/3', 'feat/4'])
+
+    def test_owner_push_after_accepted_update_is_not_mistaken_for_the_main_merge(self):
+        github = GitHub(node(2))
+        github.settle_pushes = {2: 1}
+        record, _ = github.run(landed())
+        self.assertEqual(record['state'], 'reconciled')
+        self.assertEqual(record['outcomes'], {'2': 'updated_and_checked'})
+        requests = [body['expected_head_sha'] for _, body in github.writes('pulls/2/update-branch')]
+        self.assertEqual(len(requests), 2)
+        self.assertNotEqual(requests[0], requests[1])
+        self.assertEqual(len(github.writes('dispatches')), 2)
+
+    def test_repeated_owner_pushes_after_accepted_updates_leave_checks_undispatched(self):
+        github = GitHub(node(2))
+        github.settle_pushes = {2: d.ATTEMPTS}
+        record, _ = github.run(landed())
+        self.assertEqual(record['state'], 'incomplete')
+        self.assertEqual(record['outcomes'], {'2': 'contended'})
+        self.assertEqual(github.writes('dispatches'), [])
 
     def test_a_branch_that_keeps_moving_fails_the_run_instead_of_reporting_success(self):
         github = GitHub(node(2))

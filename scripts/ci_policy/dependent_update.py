@@ -115,17 +115,40 @@ def dispatch(repository, pull):
         {'ref': 'main', 'inputs': {'pull_request': str(pull['number'])}})
 
 
-def settle(repository, requested, sleep):
-    """Wait for each requested merge to land on its branch, then start its checks."""
+def settle(repository, requested, landed, sleep):
+    """Wait for each requested merge; follow owner pushes that still need main."""
     waiting = dict(requested)
     outcomes, merged = {}, {}
+    retries = {number: 0 for number in requested}
     for _ in range(POLLS):
         for number, head in list(waiting.items()):
             pull = api(f'repos/{repository}/pulls/{number}')
             if pull['head']['sha'] == head:
                 continue
+            new_head = pull['head']['sha']
+            if behind(repository, new_head):
+                retries[number] += 1
+                if retries[number] >= ATTEMPTS:
+                    del waiting[number]
+                    outcomes[number] = 'contended'
+                    continue
+                try:
+                    outcome, current_head = request(repository, {'number': number, 'headRefOid': new_head,
+                                                                 'baseRefName': 'main'}, landed, sleep)
+                except subprocess.CalledProcessError:
+                    del waiting[number]
+                    outcomes[number] = 'unconfirmed'
+                    continue
+                if outcome == 'requested':
+                    waiting[number] = current_head
+                else:
+                    del waiting[number]
+                    outcomes[number] = outcome
+                    if outcome == 'current_and_checked':
+                        merged[number] = current_head
+                continue
             del waiting[number]
-            merged[number] = pull['head']['sha']
+            merged[number] = new_head
             if pull['draft']:
                 outcomes[number] = 'updated'
                 continue
@@ -178,7 +201,7 @@ def update_dependents(repository, event, sleep=time.sleep):
             requested[candidate['number']] = head
         else:
             outcomes[candidate['number']] = outcome
-    settled, merged = settle(repository, requested, sleep)
+    settled, merged = settle(repository, requested, pull, sleep)
     outcomes.update(settled)
     record = {'state': 'reconciled', 'landed': pull['number'], 'outcomes': {str(n): o for n, o in sorted(outcomes.items())},
               'failed': failures, 'held_runs_remaining': release(repository, merged, sleep)}
