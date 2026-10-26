@@ -120,6 +120,31 @@ class RepositoryOriginContracts(unittest.TestCase):
 
 
 class RepositoryRehearsalContracts(unittest.TestCase):
+    def test_fixture_rejects_unsupported_architecture_before_building_packages(self):
+        with tempfile.TemporaryDirectory() as temporary, \
+             patch.object(repository_rehearsal.platform, "machine", return_value="s390x"), \
+             patch.object(repository_rehearsal.subprocess, "run") as run:
+            with self.assertRaisesRegex(ValueError, "Linux amd64 or arm64"):
+                repository_rehearsal.fixtures(Path(temporary), "0.0.1")
+        run.assert_not_called()
+
+    def test_candidate_receipt_cannot_be_written_into_an_input_or_retained_root(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            candidate = root / "candidates"
+            retained = root / "retained"
+            for receipt in (candidate / "receipt.json", retained / "receipt.json"):
+                arguments = ["repository_rehearsal", "candidates", "--receipt", str(receipt),
+                             "--candidate-dir", str(candidate), "--retain-repositories", str(retained),
+                             "--source-commit", "f" * 40, "--version", "0.0.1",
+                             "--channel", "preview", "--release-build", "1"]
+                with self.subTest(receipt=receipt), patch.object(sys, "argv", arguments), \
+                     patch.object(repository_rehearsal, "retain_candidates") as retain:
+                    with self.assertRaises(SystemExit) as error:
+                        repository_rehearsal.main()
+                    self.assertEqual(error.exception.code, 2)
+                    retain.assert_not_called()
+
     def test_generation_recovery_rotation_and_remote_refusal_use_disposable_roots(self):
         with tempfile.TemporaryDirectory() as temporary, ExitStack() as patches:
             work = Path(temporary)
