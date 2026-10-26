@@ -1,7 +1,8 @@
-package command_test
+package mutation_test
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -56,13 +57,20 @@ func mutationProgramFixture(t *testing.T) *programtest.Fixture {
 	}})
 }
 
+func decodeMutationOutcome(t *testing.T, raw string) command.ProgramOutcome {
+	t.Helper()
+	var outcome command.ProgramOutcome
+	testutil.FailErr(t, "decode program outcome", json.Unmarshal([]byte(raw), &outcome))
+	return outcome
+}
+
 func TestProgramProjectProgressAndScratchMove(t *testing.T) {
 	f := mutationProgramFixture(t)
 	testutil.FailErr(t, "clear checklist", f.SetProgress(""))
 	for _, source := range []string{"touch config.json", "true > config.json"} {
 		raw, err := f.Call(t, t.Context(), source)
 		testutil.FailErr(t, "run refused project write", err)
-		outcome := decodeOutcome(t, raw)
+		outcome := decodeMutationOutcome(t, raw)
 		if outcome.Refusal == nil || outcome.Refusal.Code != "PROGRESS_MISSING" || !strings.Contains(outcome.Stderr, "[PROGRESS_MISSING]") {
 			page, pageErr := f.Recorder.ReadProgramPage(t.Context(), f.Session, outcome.ProgramID, "", 100)
 			t.Fatalf("%q: %+v, receipts=%+v, receipt error=%v", source, outcome, page.Executions, pageErr)
@@ -73,7 +81,7 @@ func TestProgramProjectProgressAndScratchMove(t *testing.T) {
 	}
 	raw, err := f.Call(t, t.Context(), `touch "$TMPDIR/temporary.txt"`)
 	testutil.FailErr(t, "touch scratch", err)
-	if outcome := decodeOutcome(t, raw); outcome.Refusal != nil || outcome.Status != 0 {
+	if outcome := decodeMutationOutcome(t, raw); outcome.Refusal != nil || outcome.Status != 0 {
 		t.Fatalf("scratch write = %+v", outcome)
 	}
 	scratchFile := filepath.Join(f.ScratchDir, "temporary.txt")
@@ -82,7 +90,7 @@ func TestProgramProjectProgressAndScratchMove(t *testing.T) {
 	}
 	raw, err = f.Call(t, t.Context(), `mv "$TMPDIR/temporary.txt" config.json`)
 	testutil.FailErr(t, "move scratch without progress", err)
-	if outcome := decodeOutcome(t, raw); outcome.Refusal == nil || outcome.Refusal.Code != "PROGRESS_MISSING" {
+	if outcome := decodeMutationOutcome(t, raw); outcome.Refusal == nil || outcome.Refusal.Code != "PROGRESS_MISSING" {
 		t.Fatalf("move admitted without checklist: %+v", outcome)
 	}
 	if _, err := os.Stat(scratchFile); err != nil {
@@ -91,7 +99,7 @@ func TestProgramProjectProgressAndScratchMove(t *testing.T) {
 	testutil.FailErr(t, "record checklist", f.SetProgress("- [ ] Publish config.json"))
 	raw, err = f.Call(t, t.Context(), `mv "$TMPDIR/temporary.txt" config.json`)
 	testutil.FailErr(t, "move scratch with progress", err)
-	if outcome := decodeOutcome(t, raw); outcome.Refusal != nil || outcome.Status != 0 {
+	if outcome := decodeMutationOutcome(t, raw); outcome.Refusal != nil || outcome.Status != 0 {
 		t.Fatalf("approved move = %+v", outcome)
 	}
 	if _, err := os.Stat(filepath.Join(f.Dir, "config.json")); err != nil {
