@@ -104,6 +104,7 @@ func (o *Owners) Builtins(tc tools.ToolContext, nested commandprogram.NestedComm
 // type, which and command -v describe what dispatch actually does.
 type NativeBindings interface {
 	NativeBound(name string) bool
+	BaseEnvironment() []string
 }
 
 type dispatcher struct {

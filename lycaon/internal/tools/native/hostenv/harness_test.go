@@ -178,4 +178,5 @@ func (r run) expectRefusal(t *testing.T, source, code string) *toolrejection.Too
 // catalogBindings binds every catalog native, as a fully wired program does.
 type catalogBindings struct{}
 
-func (catalogBindings) NativeBound(string) bool { return true }
+func (catalogBindings) NativeBound(string) bool   { return true }
+func (catalogBindings) BaseEnvironment() []string { return nil }
