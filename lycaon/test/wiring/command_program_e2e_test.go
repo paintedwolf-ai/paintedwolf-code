@@ -34,6 +34,13 @@ type commandProgramSession struct {
 
 func newCommandProgramSession(t *testing.T, program, approvals string) *commandProgramSession {
 	t.Helper()
+	s := newCommandProgramSessionWithoutProgress(t, program, approvals)
+	s.h.SeedProgress(t, t.Context(), s.session)
+	return s
+}
+
+func newCommandProgramSessionWithoutProgress(t *testing.T, program, approvals string) *commandProgramSession {
+	t.Helper()
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{
 		Pattern:      "run the program",
 		ToolCalls:    []llm.MockToolCall{{ID: "program-1", Name: "command", Args: map[string]any{"command": program}}},
@@ -446,23 +453,28 @@ func TestCommandProgramEnvMatchesExternalChildEnv(t *testing.T) {
 }
 
 func TestCommandProgramTeeAndRedirectConsistentWithoutProgress(t *testing.T) {
-	s := newCommandProgramSession(t, `echo via_redirect > redirected.txt && printf 'via_tee\n' | tee teed.txt`, "")
-	state, err := s.h.Sessions.Manager.Coordinator.Guards.ProgramProgressState(t.Context(), s.session)
-	testutil.FailErr(t, "progress state", err)
-	if !progress.PrerequisiteMissing(state.Content, state.WorkerChild, state.ReviewLoopActive) {
-		t.Fatal("expected root session to start without progress")
-	}
-	testutil.FailErr(t, "prompt", s.prompt(t.Context()))
-	result := s.result(t)
-	if strings.Contains(result, "PROGRESS_MISSING") {
-		t.Fatalf("unexpected PROGRESS_MISSING: %s", result)
-	}
-	redirected, err := os.ReadFile(filepath.Join(s.dir, "redirected.txt"))
-	testutil.FailErr(t, "read redirected.txt", err)
-	teed, err := os.ReadFile(filepath.Join(s.dir, "teed.txt"))
-	testutil.FailErr(t, "read teed.txt", err)
-	if string(redirected) != "via_redirect\n" || string(teed) != "via_tee\n" {
-		t.Fatalf("redirected=%q teed=%q", redirected, teed)
+	for _, tc := range []struct {
+		name, program, target string
+	}{
+		{"redirect", `echo via_redirect > redirected.txt`, "redirected.txt"},
+		{"tee", `printf 'via_tee\n' | tee teed.txt`, "teed.txt"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newCommandProgramSessionWithoutProgress(t, tc.program, "")
+			state, err := s.h.Sessions.Manager.Coordinator.Guards.ProgramProgressState(t.Context(), s.session)
+			testutil.FailErr(t, "progress state", err)
+			if !progress.PrerequisiteMissing(state.Content, state.WorkerChild, state.ReviewLoopActive) {
+				t.Fatal("expected root session to start without progress")
+			}
+			testutil.FailErr(t, "prompt", s.prompt(t.Context()))
+			result := s.result(t)
+			if !strings.Contains(result, "PROGRESS_MISSING") {
+				t.Fatalf("expected PROGRESS_MISSING for %s without progress: %s", tc.name, result)
+			}
+			if _, err := os.Stat(filepath.Join(s.dir, tc.target)); !os.IsNotExist(err) {
+				t.Fatalf("expected %s not to be written when progress is missing, stat err=%v", tc.target, err)
+			}
+		})
 	}
 }
 
