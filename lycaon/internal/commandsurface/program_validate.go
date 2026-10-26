@@ -171,7 +171,7 @@ func (c *programCompiler) validateCall(call *syntax.CallExpr) {
 	switch name {
 	case "set":
 		c.validateSet(call)
-	case "eval", "trap", "shopt", "declare", "typeset", "local", "readonly", "let", "exec", ".":
+	case "trap", "shopt", "declare", "typeset", "local", "readonly", "let", "exec", ".":
 		c.unsupported(call.Args[0], "version 1 built-ins; source -- PATH for explicit scripts")
 	}
 }

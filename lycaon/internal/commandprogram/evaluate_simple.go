@@ -17,7 +17,7 @@ import (
 // dispatch: control, status, test, variable and source built-ins.
 func EvaluatorBuiltin(name string) bool {
 	switch name {
-	case "true", "false", ":", "test", "[", "unset", "set", "source", "export", "read":
+	case "true", "false", ":", "test", "[", "unset", "set", "source", "export", "read", "eval":
 		return true
 	}
 	return controlBuiltins[name]
@@ -140,6 +140,17 @@ func (f *frame) simple(ctx context.Context, s commandsurface.Statement, c comman
 		return signal{}, f.builtinStatus(s.SyntaxLocation, "assignment", 0)
 	}
 	name := fields[0].Value
+	if len(assigns) > 0 {
+		g := *f
+		g.prefix = make(map[string]string, len(f.prefix)+len(assigns))
+		for name, value := range f.prefix {
+			g.prefix[name] = value
+		}
+		for _, a := range assigns {
+			g.prefix[a.name] = a.value
+		}
+		f = &g
+	}
 	if controlBuiltins[name] {
 		return f.controlBuiltin(s, name, fields)
 	}
@@ -147,6 +158,8 @@ func (f *frame) simple(ctx context.Context, s commandsurface.Statement, c comman
 		return signal{}, f.call(ctx, s, fn, fields, assigns)
 	}
 	switch name {
+	case "eval":
+		return f.eval(ctx, s, fields)
 	case "source":
 		return signal{}, f.source(ctx, s, fields)
 	case "true", "false", ":":
