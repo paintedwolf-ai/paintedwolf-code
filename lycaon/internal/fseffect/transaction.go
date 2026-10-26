@@ -47,7 +47,9 @@ type Target interface {
 type ReplaceRequest struct {
 	Location
 	Source io.Reader
-	Mode   os.FileMode
+	// CopyBuffer is caller-admitted stream scratch, retained through Commit.
+	CopyBuffer []byte
+	Mode       os.FileMode
 	// PreserveMode resolves the destination mode under the target lock.
 	PreserveMode bool
 	// DirMode applies to created parents; zero uses defaultDirMode.
@@ -79,14 +81,15 @@ type LinkRequest struct {
 // Link creates or atomically replaces a symbolic link through a held parent.
 func Link(req LinkRequest) error { return platformLink(req) }
 
-// ModeUpdateRequest describes a guarded permission change on one held file.
+// ModeUpdateRequest describes a guarded permission change on one held entry.
+
 type ModeUpdateRequest struct {
 	Location
 	Update       func(os.FileMode) os.FileMode
 	BeforeCommit func(*os.File, os.FileInfo) error
 }
 
-// ModeUpdateResult reports the permission transition applied to the held file.
+// ModeUpdateResult reports the permission transition applied to the held entry.
 type ModeUpdateResult struct {
 	Before os.FileMode
 	After  os.FileMode
@@ -186,7 +189,7 @@ func lockTarget(loc Location) func() {
 
 // Replace atomically commits a stream through one held parent.
 func Replace(req ReplaceRequest) (Result, error) {
-	return platformReplace(req)
+	return replace(req, nil)
 }
 
 // PathLocation scopes an effect to a file's immediate parent.

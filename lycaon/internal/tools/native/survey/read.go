@@ -2,8 +2,10 @@ package survey
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"io"
 	"os"
 	"strings"
 
@@ -27,10 +29,16 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
+// OutputViewReader supplies verified retained bytes for host output reads.
+type OutputViewReader interface {
+	OpenOutputView(context.Context, tools.ToolContext, projectpaths.Resolved) (io.ReadCloser, error)
+}
+
 // ReadTool reads file contents under the attached project roots.
 type ReadTool struct {
-	Boundary   *sandbox.Boundary
-	Escalation *ReadEscalationStore
+	OutputViews OutputViewReader
+	Boundary    *sandbox.Boundary
+	Escalation  *ReadEscalationStore
 	// Age attaches file-age context to read receipts; nil disables it.
 	Age *fileage.Provider
 	// Ledger lets read receipts report which named references this session read.
@@ -218,7 +226,20 @@ func (t *ReadTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 	fullPath := resolved.Abs
 	path = resolved.DisplayPath
 	target, isTarget := sourceview.ReportTarget(tctx, resolved, api.AgentActivityKindReading)
-	st, err := sourceview.LoadText(ctx, "read", sourceview.AccessRead, tctx, resolved)
+	var st sourceview.Text
+	if resolved.Root.ID == projectroot.VirtualOutputLabel {
+		if t.OutputViews == nil {
+			return "", toolrejection.RejectInvalidArguments(tools.CommandOutputReadUnavailableCode, map[string]any{"path": path})
+		}
+		reader, openErr := t.OutputViews.OpenOutputView(ctx, tctx, resolved)
+		if openErr != nil {
+			return "", outputReadError(path, openErr)
+		}
+		st, err = sourceview.LoadTextStream("read", sourceview.AccessRead, tctx, resolved, reader)
+		err = outputReadError(path, errors.Join(err, reader.Close()))
+	} else {
+		st, err = sourceview.LoadText(ctx, "read", sourceview.AccessRead, tctx, resolved)
+	}
 	if os.IsNotExist(err) {
 		// The result carries the spill's own path, so the next read names it directly.
 		if spill, ok := projectpaths.ResolveMisplacedSpill(tctx, path); ok {

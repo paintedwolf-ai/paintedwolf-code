@@ -241,101 +241,109 @@ func OpenWrite(loc Location, appendMode bool, mode os.FileMode) (*os.File, error
 	return f, nil
 }
 
-func platformReplace(req ReplaceRequest) (Result, error) {
-	return replace(req, nil)
-}
-
-func replace(req ReplaceRequest, inject func(stage) error) (Result, error) {
+func stageReplace(req ReplaceRequest, inject func(stage) error) (*Replacement, Result, error) {
 	if req.Source == nil {
-		return Result{}, fmt.Errorf("atomic filesystem effect request is incomplete")
+		return nil, Result{}, fmt.Errorf("atomic filesystem effect request is incomplete")
 	}
 	parent, err := openWindowsParent(req.Location, true, true)
 	if err != nil {
-		return Result{}, err
+		return nil, Result{}, err
 	}
-	defer parent.close()
 	tmpName, tmp, held, err := createWindowsTemp(parent)
 	if err != nil {
-		return Result{}, err
+		parent.close()
+		return nil, Result{}, err
 	}
-	defer held.retire()
 	committed := false
-	defer func() {
+	cleanup := func() {
 		if !committed {
 			_ = deleteWindowsHandle(windows.Handle(tmp.Fd()))
 		}
 		_ = tmp.Close()
+		held.retire()
+		parent.close()
+	}
+	ready := false
+	defer func() {
+		if !ready {
+			cleanup()
+		}
 	}()
 	if err := injectAt(inject, stageCreated); err != nil {
-		return Result{}, err
+		return nil, Result{}, err
 	}
 	hasher := sha256.New()
-	n, err := io.Copy(io.MultiWriter(tmp, hasher), req.Source)
+	n, err := io.CopyBuffer(io.MultiWriter(tmp, hasher), req.Source, req.CopyBuffer)
 	result := Result{Bytes: n, SHA256: hex.EncodeToString(hasher.Sum(nil))}
 	if err != nil {
-		return result, fmt.Errorf("write replacement: %w", err)
+		return nil, result, fmt.Errorf("write replacement: %w", err)
 	}
 	if err := injectAt(inject, stageWritten); err != nil {
-		return result, err
+		return nil, result, err
 	}
 	if req.ReviewStaged != nil {
 		if err := req.ReviewStaged(windowsTarget{parent: parent, name: parent.name}, result); err != nil {
+			return nil, result, err
+		}
+	}
+	ready = true
+	staged := &Replacement{result: result, close: cleanup}
+	staged.publish = func() (Result, error) {
+		unlock := lockTarget(req.Location)
+		defer unlock()
+		mode, err := req.resolvedMode(windowsTarget{parent: parent, name: parent.name})
+		if err != nil {
 			return result, err
 		}
-	}
-	unlock := lockTarget(req.Location)
-	defer unlock()
-	mode, err := req.resolvedMode(windowsTarget{parent: parent, name: parent.name})
-	if err != nil {
-		return result, err
-	}
-	if err := tmp.Chmod(chmodMode(mode)); err != nil {
-		return result, fmt.Errorf("chmod replacement: %w", err)
-	}
-	if err := injectAt(inject, stageModeSet); err != nil {
-		return result, err
-	}
-	if err := fssync.File(tmp); err != nil {
-		return result, fmt.Errorf("sync replacement: %w", err)
-	}
-	// The staged handle remains open across rename.
-	if err := injectAt(inject, stageFileSynced); err != nil {
-		return result, err
-	}
-	if err := injectAt(inject, stageFileClosed); err != nil {
-		return result, err
-	}
-	if err := req.precondition(windowsTarget{parent: parent, name: parent.name}, result); err != nil {
-		return result, err
-	}
-	if err := injectAt(inject, stageValidated); err != nil {
-		return result, err
-	}
-	if req.ReviewStaged != nil {
-		if err := verifyWindowsTarget(windowsTarget{parent: parent, name: tmpName}, result); err != nil {
-			return result, fmt.Errorf("reviewed staging changed: %w", err)
+		if err := tmp.Chmod(chmodMode(mode)); err != nil {
+			return result, fmt.Errorf("chmod replacement: %w", err)
 		}
+		if err := injectAt(inject, stageModeSet); err != nil {
+			return result, err
+		}
+		if err := fssync.File(tmp); err != nil {
+			return result, fmt.Errorf("sync replacement: %w", err)
+		}
+		// The staged handle remains open across rename.
+		if err := injectAt(inject, stageFileSynced); err != nil {
+			return result, err
+		}
+		if err := injectAt(inject, stageFileClosed); err != nil {
+			return result, err
+		}
+		if err := req.precondition(windowsTarget{parent: parent, name: parent.name}, result); err != nil {
+			return result, err
+		}
+		if err := injectAt(inject, stageValidated); err != nil {
+			return result, err
+		}
+		if req.ReviewStaged != nil {
+			if err := verifyWindowsTarget(windowsTarget{parent: parent, name: tmpName}, result, req.CopyBuffer); err != nil {
+				return result, fmt.Errorf("reviewed staging changed: %w", err)
+			}
+		}
+		if err := renameWindowsHandle(windows.Handle(tmp.Fd()), parent.handle, parent.name); err != nil {
+			return result, fmt.Errorf("commit replacement: %w", err)
+		}
+		committed = true
+		result.Publication = PublicationReplaced
+		if err := injectAt(inject, stageRenamed); err != nil {
+			return result, err
+		}
+		if err := flushHandle(parent.handle); err != nil {
+			return result, fmt.Errorf("sync replacement directory: %w", err)
+		}
+		result.Publication = PublicationDurable
+		if err := injectAt(inject, stageDirSynced); err != nil {
+			return result, err
+		}
+		if err := verifyWindowsTarget(windowsTarget{parent: parent, name: parent.name}, result, req.CopyBuffer); err != nil {
+			return result, err
+		}
+		result.Publication = PublicationVerified
+		return result, injectAt(inject, stageVerified)
 	}
-	if err := renameWindowsHandle(windows.Handle(tmp.Fd()), parent.handle, parent.name); err != nil {
-		return result, fmt.Errorf("commit replacement: %w", err)
-	}
-	committed = true
-	result.Publication = PublicationReplaced
-	if err := injectAt(inject, stageRenamed); err != nil {
-		return result, err
-	}
-	if err := flushHandle(parent.handle); err != nil {
-		return result, fmt.Errorf("sync replacement directory: %w", err)
-	}
-	result.Publication = PublicationDurable
-	if err := injectAt(inject, stageDirSynced); err != nil {
-		return result, err
-	}
-	if err := verifyWindowsTarget(windowsTarget{parent: parent, name: parent.name}, result); err != nil {
-		return result, err
-	}
-	result.Publication = PublicationVerified
-	return result, injectAt(inject, stageVerified)
+	return staged, result, nil
 }
 
 // createWindowsTemp holds the staging name before creating it so no listing
@@ -415,14 +423,14 @@ func deleteWindowsHandle(handle windows.Handle) error {
 	return err
 }
 
-func verifyWindowsTarget(target windowsTarget, want Result) error {
+func verifyWindowsTarget(target windowsTarget, want Result, buffer []byte) error {
 	f, err := target.Open()
 	if err != nil {
 		return fmt.Errorf("%w: open destination: %v", ErrPostcondition, err)
 	}
 	defer func() { _ = f.Close() }()
 	hasher := sha256.New()
-	n, err := io.Copy(hasher, f)
+	n, err := io.CopyBuffer(hasher, struct{ io.Reader }{f}, buffer)
 	if err != nil || n != want.Bytes || hex.EncodeToString(hasher.Sum(nil)) != want.SHA256 {
 		return fmt.Errorf("%w: destination bytes differ", ErrPostcondition)
 	}
@@ -572,7 +580,7 @@ func UpdateMode(req ModeUpdateRequest) (ModeUpdateResult, error) {
 	if err != nil {
 		return ModeUpdateResult{}, err
 	}
-	if !info.Mode().IsRegular() {
+	if !info.Mode().IsRegular() && !info.IsDir() {
 		return ModeUpdateResult{}, ErrInvalidPath
 	}
 	if req.BeforeCommit != nil {
@@ -595,18 +603,18 @@ func platformChown(Location, int, int) error { return ErrUnsupported }
 func platformTimes(Location, *time.Time, *time.Time) error { return ErrUnsupported }
 
 // MkdirAll creates and flushes directories through held handles.
-func MkdirAll(loc Location, _ os.FileMode) error {
+func MkdirAll(loc Location, _ os.FileMode) (createdCount int, err error) {
 	clean, err := cleanLocation(loc)
 	if err != nil {
-		return err
+		return createdCount, err
 	}
 	root, err := filepath.EvalSymlinks(clean.Root)
 	if err != nil {
-		return err
+		return createdCount, err
 	}
 	handle, err := openWindowsRoot(root, true)
 	if err != nil {
-		return err
+		return createdCount, err
 	}
 	defer func() { _ = windows.CloseHandle(handle) }()
 	anyCreated := false
@@ -620,24 +628,27 @@ func MkdirAll(loc Location, _ os.FileMode) error {
 				windows.FILE_GENERIC_READ|windows.FILE_GENERIC_WRITE,
 				windows.FILE_CREATE, windows.FILE_DIRECTORY_FILE|windows.FILE_WRITE_THROUGH)
 			created = err == nil
+			if created {
+				createdCount++
+			}
 		}
 		if err != nil {
-			return err
+			return createdCount, err
 		}
 		if created {
 			anyCreated = true
 			if err := flushHandle(handle); err != nil {
 				_ = windows.CloseHandle(next)
-				return err
+				return createdCount, err
 			}
 		}
 		_ = windows.CloseHandle(handle)
 		handle = next
 	}
 	if !anyCreated {
-		return nil
+		return createdCount, nil
 	}
-	return flushHandle(handle)
+	return createdCount, flushHandle(handle)
 }
 
 func platformAccessTime(os.FileInfo) (time.Time, bool) { return time.Time{}, false }

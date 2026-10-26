@@ -88,11 +88,16 @@ func (s *StreamInput) Close() error { s.finish(StreamConsumerClosed, ErrConsumer
 // supplied by the path adapter; these endpoints never open an OS device path.
 func NullInput() io.ReadCloser { return nullInput{} }
 
-// IsNullInput reports the typed null stdin: no producer is attached, so a
-// utility that defaults to stdin (rg without paths) may choose its own source.
+// IsNullInput reports whether r is the command program's null input endpoint.
 func IsNullInput(r io.Reader) bool {
-	_, ok := r.(nullInput)
-	return ok
+	switch in := r.(type) {
+	case nullInput:
+		return true
+	case *StreamInput:
+		return IsNullInput(in.source)
+	default:
+		return false
+	}
 }
 
 type nullInput struct{}

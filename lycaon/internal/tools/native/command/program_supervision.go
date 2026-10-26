@@ -152,6 +152,11 @@ func (s *ProgramSupervisor) end(sessionID string, cause error) []string {
 		return nil
 	}
 	s.mu.Lock()
+	if sessionID == "" {
+		clear(s.sessions)
+	} else {
+		delete(s.sessions, sessionID)
+	}
 	var ids []string
 	var cancels []context.CancelCauseFunc
 	var jobs []*supervisedJob

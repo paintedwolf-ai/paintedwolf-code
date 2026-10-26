@@ -117,37 +117,37 @@ func New(sqlDB db.Handle, contentDir string) *Store {
 // RecordInput is one exact consequence within a causal operation.
 type RecordInput struct {
 	RecordLocation
-	TextBefore, TextAfter *TextState
-	ProjectID             string
+	TextBefore, TextAfter *TextState `json:",omitempty"`
+	ProjectID             string     `json:",omitempty"`
 	// BranchID is the line of history this lands on; the zero value is the trunk.
-	BranchID             sourcebranch.ID
-	FileID               string
-	DerivedFromVersionID string
-	Op                   api.SourceChangeOp
-	Origin               api.SourceChangeOrigin
+	BranchID             sourcebranch.ID        `json:",omitempty"`
+	FileID               string                 `json:",omitempty"`
+	DerivedFromVersionID string                 `json:",omitempty"`
+	Op                   api.SourceChangeOp     `json:",omitempty"`
+	Origin               api.SourceChangeOrigin `json:",omitempty"`
 	// An empty PersonID uses the acting person for user-origin operations.
-	PersonID       string
-	SessionID      string
-	JobID          string
-	Turn           int
-	ToolCallID     string
-	ToolName       string
-	BatchID        string
-	BeforeSHA256   string
-	AfterSHA256    string
-	Before         []byte
-	After          []byte
-	BeforeSize     int64
-	AfterSize      int64
-	OperationID    string
-	Cause          string
-	CaptureQuality string
-	ActorLabel     string
+	PersonID       string `json:",omitempty"`
+	SessionID      string `json:",omitempty"`
+	JobID          string `json:",omitempty"`
+	Turn           int    `json:",omitempty"`
+	ToolCallID     string `json:",omitempty"`
+	ToolName       string `json:",omitempty"`
+	BatchID        string `json:",omitempty"`
+	BeforeSHA256   string `json:",omitempty"`
+	AfterSHA256    string `json:",omitempty"`
+	Before         []byte `json:",omitempty"`
+	After          []byte `json:",omitempty"`
+	BeforeSize     int64  `json:",omitempty"`
+	AfterSize      int64  `json:",omitempty"`
+	OperationID    string `json:",omitempty"`
+	Cause          string `json:",omitempty"`
+	CaptureQuality string `json:",omitempty"`
+	ActorLabel     string `json:",omitempty"`
 	// Reconciliation binds these effects to the observed ref transition.
-	GitTransitionID string
+	GitTransitionID string    `json:",omitempty"`
 	// Reconciliation attributes effects to the active command window.
-	CommandWindowID string
-	TS              time.Time
+	CommandWindowID string    `json:",omitempty"`
+	TS              time.Time `json:",omitempty"`
 }
 
 type Recorder interface {
@@ -405,6 +405,7 @@ func nullableString(value string) sql.NullString {
 	return sql.NullString{String: value, Valid: value != ""}
 }
 
+// Ordered opaque keys keep successive row inserts close in their indexes.
 func newID() string {
-	return uuid.NewString()
+	return uuid.Must(uuid.NewV7()).String()
 }

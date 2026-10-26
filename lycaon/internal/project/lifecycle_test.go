@@ -382,13 +382,14 @@ func TestRegistryRootLifecycleParity(t *testing.T) {
 			label := "Backend"
 			change, err := reg.PatchRoot(ctx, p.ID, p.Roots[1].ID, project.PatchRootParams{Label: &label})
 			testutil.FailErr(t, "rename root", err)
-			if !change.Changed || change.RootContextChanged || change.Before.RootsGeneration != change.After.RootsGeneration {
+			// A rename retires the old @label spelling, so it advances the generation.
+			if !change.Changed || !change.RootContextChanged || change.After.RootsGeneration != beforeGeneration+1 {
 				t.Fatalf("label change = %#v", change)
 			}
 			primary := true
 			change, err = reg.PatchRoot(ctx, p.ID, p.Roots[0].ID, project.PatchRootParams{IsPrimary: &primary})
 			testutil.FailErr(t, "primary no-op", err)
-			if change.Changed || change.After.RootsGeneration != beforeGeneration {
+			if change.Changed || change.After.RootsGeneration != beforeGeneration+1 {
 				t.Fatalf("primary no-op = %#v", change)
 			}
 			duplicate := "api"

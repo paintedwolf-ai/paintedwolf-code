@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"golang.org/x/sys/unix"
 )
@@ -95,7 +96,12 @@ func readLinkAt(dirFD int, name string) (string, error) {
 // ReadRoot holds an admitted root open, so every read beneath it resolves from
 // one descriptor instead of re-walking the root's own path. It is safe for
 // concurrent use.
-type ReadRoot struct{ root *openedRoot }
+type ReadRoot struct {
+	root      *openedRoot
+	mu        sync.Mutex
+	lastDir   string
+	lastDirFD int
+}
 
 // OpenReadRoot opens the directory at path.
 func OpenReadRoot(path string) (*ReadRoot, error) {
@@ -107,7 +113,7 @@ func OpenReadRoot(path string) (*ReadRoot, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &ReadRoot{root: root}, nil
+	return &ReadRoot{root: root, lastDirFD: -1}, nil
 }
 
 // Path is the root's canonical path.
@@ -120,23 +126,101 @@ func (r *ReadRoot) Open(rel string) (*os.File, error) {
 		return nil, err
 	}
 	if clean.Rel == "." {
-		fd, err := unix.Dup(int(r.root.file.Fd()))
+		fd, err := unix.Dup(r.root.fd)
 		if err != nil {
 			return nil, fmt.Errorf("duplicate effect root: %w", err)
 		}
 		return os.NewFile(uintptr(fd), r.root.path), nil
 	}
-	return openReadContained(r.root, clean.Rel)
+	return r.openReadContained(clean.Rel)
 }
 
 // Close releases the root descriptor; files it opened stay open.
 func (r *ReadRoot) Close() error {
+	r.mu.Lock()
+	if r.lastDirFD >= 0 {
+		_ = unix.Close(r.lastDirFD)
+		r.lastDirFD = -1
+		r.lastDir = ""
+	}
+	r.mu.Unlock()
 	r.root.close()
 	return nil
 }
 
+func openLeafReadAt(dirFD int, leaf string) (int, error) {
+	return unix.Openat(dirFD, leaf, unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW|unix.O_NONBLOCK, 0)
+}
+
 // openReadContained resolves every symlink hop beneath a held root descriptor.
-func openReadContained(root *openedRoot, relPath string) (*os.File, error) {
+func (r *ReadRoot) openReadContained(relPath string) (*os.File, error) {
+	root := r.root
+	slashed := filepath.ToSlash(relPath)
+	if idx := strings.LastIndexByte(slashed, '/'); idx > 0 {
+		dirRel := slashed[:idx]
+		leaf := slashed[idx+1:]
+		if leaf != "" && leaf != "." && leaf != ".." {
+			r.mu.Lock()
+			if r.lastDirFD >= 0 && r.lastDir == dirRel {
+				fd, err := openLeafReadAt(r.lastDirFD, leaf)
+				r.mu.Unlock()
+				if err == nil {
+					return os.NewFile(uintptr(fd), filepath.Join(root.path, filepath.FromSlash(relPath))), nil
+				}
+			} else {
+				r.mu.Unlock()
+			}
+		}
+	}
+	parts := strings.Split(slashed, "/")
+	if len(parts) > 0 {
+		curFD := root.fd
+		ownsCur := false
+		ok := true
+		for _, comp := range parts[:len(parts)-1] {
+			if comp == "" || comp == "." || comp == ".." {
+				ok = false
+				break
+			}
+			nextFD, err := unix.Openat(curFD, comp, metadataOpenFlags(true)|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
+			if err != nil {
+				ok = false
+				break
+			}
+			if ownsCur {
+				_ = unix.Close(curFD)
+			}
+			curFD = nextFD
+			ownsCur = true
+		}
+		if ok {
+			leaf := parts[len(parts)-1]
+			if leaf != "" && leaf != "." && leaf != ".." {
+				fd, err := openLeafReadAt(curFD, leaf)
+				if ownsCur {
+					if err == nil {
+						dirRel := strings.Join(parts[:len(parts)-1], "/")
+						r.mu.Lock()
+						if r.lastDirFD >= 0 {
+							_ = unix.Close(r.lastDirFD)
+						}
+						r.lastDir = dirRel
+						r.lastDirFD = curFD
+						r.mu.Unlock()
+					} else {
+						_ = unix.Close(curFD)
+					}
+				}
+				if err == nil {
+					return os.NewFile(uintptr(fd), filepath.Join(root.path, filepath.FromSlash(relPath))), nil
+				}
+			} else if ownsCur {
+				_ = unix.Close(curFD)
+			}
+		} else if ownsCur {
+			_ = unix.Close(curFD)
+		}
+	}
 	return walkReadContained(root, relPath, true, func(dir *os.File, name string, _ *unix.Stat_t) (*os.File, error) {
 		fd, err := unix.Openat(int(dir.Fd()), name, unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW|unix.O_NONBLOCK, 0)
 		if err != nil {
@@ -149,7 +233,7 @@ func openReadContained(root *openedRoot, relPath string) (*os.File, error) {
 // walkReadContained shares the same held-directory confinement for content and
 // metadata operations. Only an explicit no-follow query receives link metadata.
 func walkReadContained(root *openedRoot, relPath string, follow bool, visit func(*os.File, string, *unix.Stat_t) (*os.File, error)) (*os.File, error) {
-	baseFD, err := unix.Dup(int(root.file.Fd()))
+	baseFD, err := unix.Dup(root.fd)
 	if err != nil {
 		return nil, fmt.Errorf("duplicate effect root: %w", err)
 	}

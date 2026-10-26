@@ -555,7 +555,7 @@ preserve the target in the most recent protected tool exchange.
 
 | Path | When | Author writes |
 |------|------|---------------|
-| **Native Go** | First-party operation | Handler under `internal/tools/native`; schema, catalog, profile/surface membership, transcript presentation, and one pack `policy/<CODE>.yaml` per structured reject; command-equivalence → OAR `USE_*_NATIVE` when replacing a command habit |
+| **Native Go** | First-party operation | Handler under `internal/tools/native`; schema, catalog, profile/surface membership, transcript presentation, and one pack `policy/<CODE>.yaml` per structured reject |
 | **Confined MCP** | External / arbitrary logic | Ordinary MCP server + gate + hints; host supplies confined spawn, `roots`, per-call caps, and bridges declared `code` → hint + `mcp_error_code` |
 | **Host-coupled Go** | `read` / `write` / `edit` / `command` (and anything that touches `WorkerCoord` / `Out` / session) | Go handler plus the additional subsystem-owner wiring required by its live host dependencies ([Tools § Classification](adding-tools.md#classification-which-tools-may-use-the-envelope)) |
 

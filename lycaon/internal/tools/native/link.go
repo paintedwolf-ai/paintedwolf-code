@@ -18,6 +18,7 @@ type LinkInput struct {
 	Path, Target string
 	Force        bool
 	Destination  toolcontract.ExecutionRevision
+	Memory       *toolcontract.ProgramMemory
 }
 
 // Link publishes one reviewed link through the existing source mutation door.
@@ -36,9 +37,12 @@ func (t *WriteTool) Link(ctx context.Context, in LinkInput, tc tools.ToolContext
 		return err
 	}
 	loc := resolved.EffectLocation()
-	before, err := captureRemovedEntry(loc)
+	before, err := captureRemovedEntry(ctx, loc, in.Memory, true)
 	if err != nil {
 		return err
+	}
+	if before.release != nil {
+		defer before.release()
 	}
 	if before.isDir {
 		return os.ErrExist
@@ -51,7 +55,7 @@ func (t *WriteTool) Link(ctx context.Context, in LinkInput, tc tools.ToolContext
 	if before.exists {
 		op = api.SourceChangeOpWrite
 	}
-	change := agentMutation{Op: op, AbsPath: resolved.Abs, IsLink: true,
+	change := agentMutation{Memory: in.Memory, Op: op, AbsPath: resolved.Abs, IsLink: true,
 		Before: before.content, BeforeSHA256: before.sha256, BeforeSize: before.size,
 		After: content, AfterSHA256: textfile.SHA256(content), AfterSize: int64(len(content))}
 	if err := reviewAgentMutation(ctx, tc, change, loc, fseffect.Location{}, false); err != nil {
@@ -63,7 +67,7 @@ func (t *WriteTool) Link(ctx context.Context, in LinkInput, tc tools.ToolContext
 	// A regular file keeps its own identity and recoverable removal. The link
 	// starts a new identity after that entry is set aside under the one review.
 	if before.exists && !before.isLink {
-		removed := agentMutation{Op: api.SourceChangeOpDelete, AbsPath: resolved.Abs,
+		removed := agentMutation{Memory: in.Memory, Op: api.SourceChangeOpDelete, AbsPath: resolved.Abs,
 			Before: before.content, BeforeSHA256: before.sha256, BeforeSize: before.size}
 		if err := discardAgentEntry(ctx, tc, resolvedMutationTarget(resolved), removed); err != nil {
 			return err
@@ -87,9 +91,12 @@ func (t *WriteTool) Link(ctx context.Context, in LinkInput, tc tools.ToolContext
 					return err
 				}
 			}
-			current, err := captureRemovedEntry(loc)
+			current, err := captureRemovedEntry(ctx, loc, in.Memory, false)
 			if err != nil {
 				return err
+			}
+			if current.release != nil {
+				defer current.release()
 			}
 			if current.exists != (change.Op == api.SourceChangeOpWrite) || current.sha256 != change.BeforeSHA256 || current.isDir || (current.exists && !current.isLink) {
 				return fmt.Errorf("%w: link entry changed before publication", errMutationSnapshotMoved)

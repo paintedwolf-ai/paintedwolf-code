@@ -50,7 +50,7 @@ func runLn(inv *invocation) error {
 	if err := inv.recordPin(pin); err != nil {
 		return err
 	}
-	if err := inv.owners.Operations.Write.Link(inv.ctx, native.LinkInput{Path: to, Target: target, Force: inv.flag("-f"), Destination: pin}, inv.tc); err != nil {
+	if err := inv.owners.Operations.Write.Link(inv.ctx, native.LinkInput{Path: to, Target: target, Force: inv.flag("-f"), Destination: pin, Memory: inv.owners.Revisions.Memory}, inv.tc); err != nil {
 		if reason, ok := ordinary(err); ok {
 			inv.fail(link, reason)
 			return nil

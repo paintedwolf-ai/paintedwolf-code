@@ -91,7 +91,7 @@ func TestCoordinatorPromptDietE2E(t *testing.T) {
 				t.Errorf("investigate turn %d missing progress procedure %q", i, want)
 			}
 		}
-		for _, want := range []string{"summarize(path=…, task=…)", `list_dir({"path":"."})`} {
+		for _, want := range []string{"summarize(path=…, task=…)", "find . -maxdepth 2 -type d"} {
 			if !strings.Contains(sp, want) {
 				t.Errorf("investigate turn %d missing always-on survey route %q", i, want)
 			}

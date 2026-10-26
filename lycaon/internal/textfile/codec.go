@@ -3,8 +3,6 @@ package textfile
 
 import (
 	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"math"
 	"strings"
@@ -189,12 +187,6 @@ func (d UntrustedDocument) Encode(text string) ([]byte, error) {
 	})
 }
 
-// SHA256 is the stable identity of the exact on-disk bytes.
-func SHA256(content []byte) string {
-	sum := sha256.Sum256(content)
-	return hex.EncodeToString(sum[:])
-}
-
 // TrimIncompleteTail removes a partial trailing codepoint from a byte-capped prefix.
 // Complete payloads are validated unchanged by Open.
 func TrimIncompleteTail(raw []byte) []byte {
@@ -269,46 +261,6 @@ func decode(content []byte, encoding string) (string, bool) {
 	}
 }
 
-// EncodeBounded encodes valid text within explicit resource bounds.
-func EncodeBounded(content, encoding string, limits Limits) ([]byte, error) {
-	if limits.MaxRawBytes <= 0 || limits.MaxTextBytes <= 0 {
-		return nil, ErrLimitsInvalid
-	}
-	if !utf8.ValidString(content) || strings.IndexByte(content, 0) >= 0 {
-		return nil, ErrBinary
-	}
-	if int64(len(content)) > limits.MaxTextBytes {
-		return nil, ErrTextTooLarge
-	}
-	encoded, ok := encodeUnchecked(content, encoding)
-	if !ok {
-		return nil, ErrUnsupported
-	}
-	if int64(len(encoded)) > limits.MaxRawBytes {
-		return nil, ErrRawTooLarge
-	}
-	return encoded, nil
-}
-
-func encodeUnchecked(content, encoding string) ([]byte, bool) {
-	switch encoding {
-	case UTF8:
-		return []byte(content), true
-	case UTF8BOM:
-		return append(append([]byte{}, bomUTF8...), []byte(content)...), true
-	case UTF16LE:
-		return encodeUTF16(content, false, false), true
-	case UTF16LEBOM:
-		return encodeUTF16(content, false, true), true
-	case UTF16BE:
-		return encodeUTF16(content, true, false), true
-	case UTF16BEBOM:
-		return encodeUTF16(content, true, true), true
-	default:
-		return nil, false
-	}
-}
-
 func decodeUTF16(content []byte, bigEndian, bom bool) (string, bool) {
 	if bom {
 		prefix := bomUTF16LE
@@ -348,28 +300,4 @@ func decodeUTF16(content []byte, bigEndian, bom bool) (string, bool) {
 		}
 	}
 	return out.String(), true
-}
-
-func encodeUTF16(content string, bigEndian, bom bool) []byte {
-	units := utf16.Encode([]rune(content))
-	capacity := len(units) * 2
-	if bom {
-		capacity += 2
-	}
-	out := make([]byte, 0, capacity)
-	if bom {
-		if bigEndian {
-			out = append(out, bomUTF16BE...)
-		} else {
-			out = append(out, bomUTF16LE...)
-		}
-	}
-	for _, unit := range units {
-		if bigEndian {
-			out = append(out, byte(unit>>8), byte(unit&0x00FF))
-		} else {
-			out = append(out, byte(unit&0x00FF), byte(unit>>8))
-		}
-	}
-	return out
 }

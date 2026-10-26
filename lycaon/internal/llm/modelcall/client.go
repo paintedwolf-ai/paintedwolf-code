@@ -30,6 +30,15 @@ type RequestDebug struct {
 	WorkflowRevision int64
 	// Purpose labels one-shot utility completions.
 	Purpose string
+	// CommandGuidance records rendered command-guidance templates and facts.
+	CommandGuidance *CommandGuidanceDebug
+}
+
+// CommandGuidanceDebug records the command guidance templates/partials/units
+// rendered and the structured facts branched on for one turn request.
+type CommandGuidanceDebug struct {
+	Templates []string       `json:"templates,omitempty"`
+	Facts     map[string]any `json:"facts,omitempty"`
 }
 
 // RequestComposition says who composed a provider request.

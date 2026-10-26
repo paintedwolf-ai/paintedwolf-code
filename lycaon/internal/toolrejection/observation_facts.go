@@ -312,6 +312,7 @@ var rejectCodeObservation = map[string]string{
 	"TOOL_REQUEST_UNMATCHED":                    "unknown_target",
 	"TOOL_RESULT_TOO_LARGE":                     "resource_limit",
 	"UNKNOWN_ROOT_LABEL":                        "root_label",
+	"ROOT_NOT_ATTACHED":                         "root_label",
 	"VERIFY_COMMAND_UNDECLARED":                 "verify_command_undeclared",
 	"VERIFY_DECLARED_COMMAND_OVERRIDE":          "verify_declared_command_override",
 	VerifyUnverifiableCode:                      "verify_unverifiable",

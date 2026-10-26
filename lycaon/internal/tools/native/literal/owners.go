@@ -15,7 +15,6 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
-	"github.com/lycaon/lycaon/internal/tools/readcaps"
 )
 
 // PinRecorder retains the revisions one execution captured
@@ -56,7 +55,7 @@ var utilities = map[string]utility{
 
 // NewOwners binds the frozen catalog's specifications and operation identities.
 func NewOwners(revisions native.ExecutionRevisions, pins PinRecorder, domain DomainOwners) (*Owners, error) {
-	catalog, err := toolcontract.LanguageV1()
+	catalog, err := toolcontract.ReadOnlyLanguageV1()
 	if err != nil {
 		return nil, err
 	}
@@ -85,6 +84,17 @@ func NewOwners(revisions native.ExecutionRevisions, pins PinRecorder, domain Dom
 		}
 	}
 	return o, nil
+}
+
+// ForProgram binds the program memory while giving it a fresh account cache.
+func (o *Owners) ForProgram(memory *toolcontract.ProgramMemory) *Owners {
+	revisions := o.Revisions
+	revisions.Memory = memory
+	return &Owners{
+		Revisions: revisions, Pins: o.Pins, Domain: o.Domain,
+		ReadBytes: o.ReadBytes, StreamBytes: o.StreamBytes,
+		catalog: o.catalog, specs: o.specs, ops: o.ops, signatures: o.signatures,
+	}
 }
 
 // Operation returns the catalog operation identity that owns a command.
@@ -140,7 +150,14 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 	if p.run == nil {
 		return toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, fmt.Errorf("literal invocation is not prepared")
 	}
+	if p.Argv.Help {
+		if streams.Input != nil {
+			_ = streams.Input.Close()
+		}
+		return commandprogram.WriteCatalogHelp(p.spec, streams.Output)
+	}
 	inv := newInvocation(ctx, p, tc, streams)
+	defer inv.closeInputs()
 	err := p.run(inv)
 	if err == nil {
 		err = ctx.Err()
@@ -152,6 +169,9 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 	if streams.Input != nil {
 		_ = streams.Input.Close()
 	}
+	for _, closer := range inv.closers {
+		_ = closer.Close()
+	}
 	return inv.settle(err)
 }
 
@@ -159,14 +179,14 @@ func (o *Owners) readBytes() int64 {
 	if o.ReadBytes > 0 {
 		return o.ReadBytes
 	}
-	return readcaps.MaxFileBytes
+	return o.limit("whole_file_bytes")
 }
 
 func (o *Owners) streamBytes() int64 {
 	if o.StreamBytes > 0 {
 		return o.StreamBytes
 	}
-	return o.limit("stream_bytes")
+	return o.limit("stream_throughput_bytes")
 }
 
 func (o *Owners) limit(id string) int64 {

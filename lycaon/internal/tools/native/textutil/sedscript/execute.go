@@ -73,14 +73,16 @@ func (m *Machine) run(c *command, ends bool) (ending, bool, error) {
 		if i < 0 {
 			return endDelete, true, nil
 		}
-		m.space.pattern = append(pattern[:0], pattern[i+1:]...)
+		pattern = append(pattern[:0], pattern[i+1:]...)
+		m.space.pattern = pattern
+		m.stream.pin = nil
 		return endRestart, true, nil
 	case 'n', 'N':
 		if !m.stream.aheadOK {
 			return endCycle, true, nil
 		}
 		if c.name == 'n' && !m.config.Quiet {
-			if err := out.emit(pattern, delimiter, m.stream.terminated); err != nil {
+			if err := out.emitRecord(pattern, delimiter, m.stream.terminated, m.stream.pin, m.stream.offset); err != nil {
 				return endCycle, true, err
 			}
 		}
@@ -97,7 +99,7 @@ func (m *Machine) run(c *command, ends bool) (ending, bool, error) {
 		}
 		return endDelete, true, err
 	case 'p':
-		err = out.emit(pattern, delimiter, m.stream.terminated)
+		err = out.emitRecord(pattern, delimiter, m.stream.terminated, m.stream.pin, m.stream.offset)
 	case 'P', 'W':
 		if c.name == 'W' {
 			out = m.outputs[c.arg]
@@ -105,64 +107,66 @@ func (m *Machine) run(c *command, ends bool) (ending, bool, error) {
 		if i := bytes.IndexByte(pattern, delimiter); i >= 0 {
 			err = out.emit(pattern[:i], delimiter, true)
 		} else {
-			err = out.emit(pattern, delimiter, m.stream.terminated)
+			err = out.emitRecord(pattern, delimiter, m.stream.terminated, m.stream.pin, m.stream.offset)
 		}
 	case 'w':
 		err = m.outputs[c.arg].emit(pattern, delimiter, m.stream.terminated)
 	case 'a':
-		m.appends = append(m.appends, appendItem{text: c.text})
+		err = m.queueAppend(appendItem{text: c.text})
 	case 'i':
 		err = out.text(c.text)
 	case 'r':
-		m.appends = append(m.appends, appendItem{file: c.arg})
+		err = m.queueAppend(appendItem{file: c.arg})
 	case 'R':
-		if line, ok := m.readLine(c.arg); ok {
-			m.appends = append(m.appends, appendItem{text: line})
-		}
+		err = m.queueAppend(appendItem{file: c.arg, line: true})
 	case '=':
 		err = out.text(strconv.AppendInt(nil, int64(m.stream.line), 10))
 	case 'F':
 		err = out.text([]byte(m.stream.source))
 	case 'l':
-		err = out.raw(list(pattern, c.number))
+		err = m.list(pattern, c.number)
 	case 's':
 		err = c.sub.apply(m)
 	default:
-		err = m.space.edit(c, delimiter, m.config.SpaceLimit, m.config.Reserve)
+		switch c.name {
+		case 'g', 'G', 'x', 'z', 'y':
+			m.stream.pin = nil
+		}
+		err = m.space.edit(c, delimiter)
 	}
 	return endCycle, false, err
 }
 
 // edit runs the commands that only change pattern or hold space.
-func (s *spaces) edit(c *command, delimiter byte, limit int64, reserve func(int64) error) error {
+func (s *spaces) edit(c *command, delimiter byte) error {
 	switch c.name {
 	case 'g':
-		s.pattern = append(s.pattern[:0], s.hold...)
+		return s.assign(&s.pattern, s.hold)
 	case 'G':
-		s.pattern = append(append(s.pattern, delimiter), s.hold...)
+		return s.join(&s.pattern, delimiter, s.hold)
 	case 'h':
-		s.hold = append(s.hold[:0], s.pattern...)
+		return s.assign(&s.hold, s.pattern)
 	case 'H':
-		s.hold = append(append(s.hold, delimiter), s.pattern...)
+		return s.join(&s.hold, delimiter, s.pattern)
 	case 'x':
 		s.pattern, s.hold = s.hold, s.pattern
 	case 'z':
 		s.pattern = s.pattern[:0]
 	case 'y':
-		var out []byte
+		s.scratch = s.scratch[:0]
 		for text := s.pattern; len(text) > 0; {
 			r, size := decodeScalar(text)
 			if to, ok := c.translate[r]; ok {
 				r = to
 			}
-			out = appendScalar(out, r)
+			if err := s.appendRune(r); err != nil {
+				return err
+			}
 			text = text[size:]
 		}
-		s.pattern = out
-	default:
-		return nil
+		s.swapScratch()
 	}
-	return s.account(limit, reserve)
+	return nil
 }
 
 // selects applies the command's addresses and reports whether this line ends
@@ -198,6 +202,10 @@ func (c *command) selects(m *Machine) (selected, ends bool, err error) {
 			return c.startRange(m)
 		}
 		closes = closes || m.stream.line == end
+	case addrLast:
+		// The shared last-line check above closes this range.
+	case addrZero, addrStep:
+		// The parser excludes these as second addresses.
 	case addrMultiple:
 		closes = closes || second.step <= 0 || m.stream.line%second.step == 0
 	}
@@ -212,6 +220,10 @@ func (c *command) startRange(m *Machine) (bool, bool, error) {
 	}
 	active := true
 	switch second := c.second; second.kind {
+	case addrRegex, addrLast:
+		// These ranges include their first matching line.
+	case addrZero, addrStep:
+		// The parser excludes these as second addresses.
 	case addrLine:
 		active = second.line > m.stream.line
 	case addrRelative:
@@ -227,6 +239,8 @@ func (c *command) startRange(m *Machine) (bool, bool, error) {
 func (a *address) matches(m *Machine) (bool, error) {
 	line := m.stream.line
 	switch a.kind {
+	case addrZero, addrRelative, addrMultiple:
+		return false, nil
 	case addrLine:
 		return line == a.line, nil
 	case addrLast:
@@ -258,36 +272,3 @@ func (m *Machine) regex(regex Regex) (Regex, error) {
 	m.last = regex
 	return regex, nil
 }
-
-// list renders l output: C escapes, \ooo for other unprintable bytes, lines
-// wrapped with a trailing \ at width-1 characters (0 or 1 never wraps,
-// absent is 70), and $ at the end.
-func list(pattern []byte, width int) []byte {
-	if width < 0 {
-		width = 70
-	}
-	var out []byte
-	column := 0
-	for _, c := range pattern {
-		var item []byte
-		switch {
-		case c == '\\':
-			item = []byte(`\\`)
-		case listEscapes[c] != 0:
-			item = []byte{'\\', listEscapes[c]}
-		case c < 0x20 || c >= 0x7f:
-			item = []byte{'\\', '0' + c>>6, '0' + c>>3&7, '0' + c&7}
-		default:
-			item = []byte{c}
-		}
-		if width > 1 && column+len(item) > width-1 {
-			out = append(out, '\\', '\n')
-			column = 0
-		}
-		out = append(out, item...)
-		column += len(item)
-	}
-	return append(out, '$', '\n')
-}
-
-var listEscapes = [256]byte{'\a': 'a', '\b': 'b', '\f': 'f', '\n': 'n', '\r': 'r', '\t': 't', '\v': 'v'}
