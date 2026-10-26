@@ -1056,7 +1056,7 @@ Each case runs within its own time budget, 900 seconds unless its driver family 
 
 The dispatch-only `Linux installed desktop rehearsal` workflow exercises the same case runner on a GitHub-hosted Ubuntu desktop for amd64 or arm64. Its candidate is chosen through dispatch inputs; nothing is pinned in the repository. It fails unless the retained campaign is accepted, or, for partial diagnostic packages, unless the first-launch diagnosis passed. It grants no qualification or publication authority. Confinement boundaries have one installed smoke each; the confinement contract itself is `./task test:confine:linux`.
 
-Release consumption of the retained campaign, architecture-specific performance limits (#455) and the full matrix (#456) remain tracked there; the campaign closes only after its required rows pass.
+Release consumption of the retained campaign, architecture-specific performance limits (#455) and the full matrix (#456) remain tracked there; the campaign closes only after its required rows pass. Local execution records do not carry protected workflow provenance. Release publication requires an authenticated handoff that binds the exact retained observations to the protected attempt; that handoff is not implemented. A local producer record or accepted report cannot substitute for it.
 
 ### Updates
 
