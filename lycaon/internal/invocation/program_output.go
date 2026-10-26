@@ -159,7 +159,7 @@ func insertProgramOutput(ctx context.Context, tx *sql.Tx, program string, output
 	}
 	preview, truncated := outputPreview(screenedPreview, reference.Blob.Size)
 	events := int64(1 + len(output.Mappings))
-	bytes := int64(len(program) + len(output.ExecutionID) + len(output.Stream) + len(output.Reference) + len(reference.RetentionClaimID) + len(reference.InitiatingClaimID) + len(blob) + len(mappings) + len(preview))
+	bytes := int64(len(program) + len(output.ExecutionID) + len(output.Stream) + len(output.Reference) + len(reference.RetentionClaimID) + len(reference.InitiatingClaimID) + len(reference.Blob.ID) + len(blob) + len(mappings) + len(preview))
 	if err = chargeProgramTrace(ctx, tx, program, events, bytes, traceChargeNonTerminal); err != nil {
 		return err
 	}
