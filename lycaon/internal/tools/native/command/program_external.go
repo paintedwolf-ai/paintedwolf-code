@@ -23,6 +23,7 @@ type ExternalStages struct {
 	ToolContext     tools.ToolContext
 	Dir             string
 	ExtraWriteRoots []string
+	BaseEnvironment []string
 }
 
 var _ commandprogram.ExternalLauncher = ExternalStages{}
@@ -54,7 +55,8 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		return refusedResult("COMMAND_EXEC_DENIED"), err
 	}
 	defer bound.close(context.WithoutCancel(ctx))
-	opts, err := lycexec.AgentLaunchOptions(agentCommandLaunch(tctx, "command", bound.confinement, bound.lease, commandLine), cwd, request.Environment, tctx.Host.HostResourcePathExtra)
+	launch := agentCommandLaunch(tctx, "command", bound.confinement, bound.lease, commandLine).WithTrustedEnvironment(l.BaseEnvironment)
+	opts, err := lycexec.AgentLaunchOptions(launch, cwd, request.Environment, tctx.Host.HostResourcePathExtra)
 	if err != nil {
 		return refusedResult("COMMAND_OPERAND_INVALID"), toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"command": "external", "reason": err.Error(), "expected": "an environment without host-reserved keys"})
 	}
@@ -104,7 +106,7 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 // Installed reports whether the confined launch would find name: the same
 // final PATH, launch directory and environment as Launch.
 func (l ExternalStages) Installed(name string, environment []string) bool {
-	opts, err := lycexec.AgentLaunchOptions(lycexec.LaunchPlan{}, l.Dir, environment, l.ToolContext.Host.HostResourcePathExtra)
+	opts, err := lycexec.AgentLaunchOptions(lycexec.LaunchPlan{}.WithTrustedEnvironment(l.BaseEnvironment), l.Dir, environment, l.ToolContext.Host.HostResourcePathExtra)
 	if err != nil {
 		return false
 	}
@@ -115,18 +117,14 @@ func (l ExternalStages) Installed(name string, environment []string) bool {
 // programEnvironment builds the program's initial environment from the same
 // AgentLaunchOptions and ProcessEnvironment pipeline that ExternalStages.Launch
 // uses for confined external child launches.
-func programEnvironment(tc tools.ToolContext) []string {
+func programEnvironment(tc tools.ToolContext) ([]string, error) {
 	confinement, _ := confine.DefaultConfinement(hitl.ActionConfineRequest(tools.ActionConfineInputsForContext(tc, nil)))
 	launch := agentCommandLaunch(tc, "command", confinement, nil, "")
 	opts, err := lycexec.AgentLaunchOptions(launch, "", nil, tc.Host.HostResourcePathExtra)
 	if err != nil {
-		return lycexec.ReducedEnviron()
+		return nil, err
 	}
-	env, err := lycexec.ProcessEnvironment(opts)
-	if err != nil {
-		return lycexec.ReducedEnviron()
-	}
-	return env
+	return lycexec.FinalProcessEnvironment(opts, nil)
 }
 
 // externalArgv drops the explicit "external --" selector.
