@@ -18,6 +18,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/lycaon/lycaon/internal/confine/linuxsandbox"
+	"github.com/lycaon/lycaon/internal/installbinding"
 	"github.com/lycaon/lycaon/internal/lineage"
 	"github.com/lycaon/lycaon/internal/protectedpath"
 )
@@ -69,6 +70,9 @@ func probeHelper() (string, error) {
 	}
 	pr, pw, err := os.Pipe()
 	if err != nil {
+		return "", err
+	}
+	if err := installbinding.Verify(self); err != nil {
 		return "", err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), probeTimeout)
