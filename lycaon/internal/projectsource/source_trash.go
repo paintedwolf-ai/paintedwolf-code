@@ -217,11 +217,18 @@ func (s *SourceEffects) restoreNativeTrash(ctx context.Context, row *sourceMutat
 	if err := s.startSourceEffect(ctx, row); err != nil {
 		return err
 	}
-	err := desktoptrash.Restore(ctx, plan.NativeTrash.Receipt, fseffect.Location{Root: plan.RootPath, Rel: filepath.FromSlash(plan.Path)})
-	if errors.Is(err, desktoptrash.ErrUnavailable) {
-		return fmt.Errorf("%w: %w", ErrSourceTrashUnavailable, err)
+	if err := desktoptrash.Restore(ctx, plan.NativeTrash.Receipt, fseffect.Location{Root: plan.RootPath, Rel: filepath.FromSlash(plan.Path)}); err != nil {
+		if errors.Is(err, desktoptrash.ErrUnavailable) {
+			return fmt.Errorf("%w: %w", ErrSourceTrashUnavailable, err)
+		}
+		return err
 	}
-	return err
+	identity, err := fspath.EntryIdentity(plan.AbsPath)
+	if err != nil {
+		return err
+	}
+	plan.DestinationIdentity = identity
+	return s.Journal.update(ctx, row)
 }
 
 // A completed native move needs its acknowledged location before recovery can promise Undo.
