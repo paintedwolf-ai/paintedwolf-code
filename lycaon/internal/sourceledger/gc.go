@@ -40,21 +40,6 @@ func (s *Retention) StorageUsage(ctx context.Context) (storageusage.Usage, error
 	}, nil
 }
 
-// MaintainBlobs runs bounded recovery, orphan, and object reclamation batches.
-func (s *Retention) MaintainBlobs(ctx context.Context) error {
-	if s == nil || s.sqlDB == nil {
-		return nil
-	}
-	if _, err := s.reclaimRecoveryBatch(ctx); err != nil {
-		return err
-	}
-	if _, err := s.pruneOrphanBatch(ctx); err != nil {
-		return err
-	}
-	_, err := s.reclaimBlobBatch(ctx)
-	return err
-}
-
 // SweepBlobs scans shards and drains reclamation in batches. Releasing the
 // lease between batches lets captures proceed; the cursor preserves progress.
 func (s *Retention) SweepBlobs(ctx context.Context) error {
@@ -99,8 +84,7 @@ func (s *Retention) SweepBlobs(ctx context.Context) error {
 	}
 }
 
-// RunBlobGC sweeps on interval until ctx ends, trying again after retry when
-// a blob sweep was deferred behind a capture.
+// RunBlobGC schedules collection and retries deferred maintenance.
 func (s *Retention) RunBlobGC(ctx context.Context, interval, retry time.Duration) error {
 	timer := time.NewTimer(0)
 	defer timer.Stop()
