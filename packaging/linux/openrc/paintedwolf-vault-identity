@@ -1,0 +1,54 @@
+#!/sbin/openrc-run
+
+description="Painted Wolf Code vault identity service"
+supervisor="supervise-daemon"
+command="/usr/bin/setpriv"
+command_args="--reuid=paintedwolf-vault --regid=paintedwolf-vault --clear-groups --bounding-set=-all,+sys_ptrace --inh-caps=-all,+sys_ptrace --ambient-caps=-all,+sys_ptrace --no-new-privs --reset-env -- /opt/painted-wolf-code/bin/pw-vault-identity --socket /run/painted-wolf-code/vault-identity.sock --state /var/lib/paintedwolf-vault-openrc --idle-exit=0 --require-dedicated-protection"
+pidfile="/run/paintedwolf-vault-identity.pid"
+umask="0077"
+respawn_delay=1
+respawn_max=5
+respawn_period=60
+retry="TERM/10/KILL/5"
+
+depend() {
+    need localmount
+    after bootmisc
+}
+
+private_directory() {
+    local path="$1" mode="$2" uid="$3" gid="$4"
+    if [ -e "$path" ] || [ -L "$path" ]; then
+        if [ -L "$path" ] || [ ! -d "$path" ] ||
+            [ "$(/usr/bin/stat -c %u "$path")" != "$uid" ] ||
+            [ "$(/usr/bin/stat -c %g "$path")" != "$gid" ]; then
+            eerror "Refusing to reassign existing custody state at $path. Preserve it and resolve its service ownership before starting."
+            return 1
+        fi
+        /usr/bin/chmod "$mode" "$path" || return 1
+    else
+        /usr/bin/install -d -m "$mode" -o "$uid" -g "$gid" "$path" || return 1
+    fi
+}
+
+start_pre() {
+    [ -x "$command" ] && [ -x /opt/painted-wolf-code/bin/pw-vault-identity ] || return 1
+    if ! /usr/bin/getent group paintedwolf-vault >/dev/null; then
+        /usr/bin/groupadd --system paintedwolf-vault || return 1
+    fi
+    if ! /usr/bin/getent passwd paintedwolf-vault >/dev/null; then
+        /usr/bin/useradd --system --gid paintedwolf-vault --home-dir /var/empty --shell /usr/bin/nologin --no-create-home paintedwolf-vault || return 1
+    fi
+    local name password uid gid comment home shell
+    IFS=: read -r name password uid gid comment home shell <<EOF
+$(/usr/bin/getent passwd paintedwolf-vault)
+EOF
+    if [ "$name" != paintedwolf-vault ] || [ "$uid" -le 0 ] || [ "$gid" -le 0 ] ||
+        [ "$home" != /var/empty ] || [ "$shell" != /usr/bin/nologin ] ||
+        [ "$gid" != "$(/usr/bin/getent group paintedwolf-vault | /usr/bin/cut -d: -f3)" ]; then
+        eerror "The custody account must be a dedicated non-root account with no login shell."
+        return 1
+    fi
+    private_directory /var/lib/paintedwolf-vault-openrc 0700 "$uid" "$gid" || return 1
+    private_directory /run/painted-wolf-code 0755 "$uid" "$gid" || return 1
+}
