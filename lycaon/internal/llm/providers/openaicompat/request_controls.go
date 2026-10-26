@@ -55,10 +55,10 @@ func (p *Provider) resolveRequestControls(req modelcall.CompletionRequest, model
 	}
 	if fallback == reasoningFallbackOff {
 		// Only effort levels declare an explicit off token.
-		if mt.AlwaysOn || mt.Style != modelinfo.ThinkStyleEffortLevels || p.profile.ReasoningEffortOff == "" {
+		if mt.AlwaysOn || mt.Style != modelinfo.ThinkStyleEffortLevels || mt.OffEffort(p.profile) == "" {
 			return out
 		}
-		out.ReasoningEffort = p.profile.ReasoningEffortOff
+		out.ReasoningEffort = mt.OffEffort(p.profile)
 		return out
 	}
 
@@ -170,7 +170,7 @@ func applyFixedOpenAIThinking(out *requestControls, mt modelcall.ModelThinking, 
 		if enabled {
 			out.ReasoningEffort = override.Effort
 		} else {
-			out.ReasoningEffort = profile.ReasoningEffortOff
+			out.ReasoningEffort = mt.OffEffort(profile)
 		}
 	case modelinfo.ThinkStyleThinkingType:
 		typ := "disabled"

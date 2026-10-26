@@ -44,7 +44,18 @@ func ResolveModelThinking(profile providerprofile.Profile, entry modelinfo.Entry
 	return out
 }
 
+// OffEffort resolves the model's explicit disable token before transport defaults.
+func (thinking ModelThinking) OffEffort(profile providerprofile.Profile) string {
+	if thinking.EffortLevels.Off != "" {
+		return thinking.EffortLevels.Off
+	}
+	return profile.ReasoningEffortOff
+}
+
 func (thinking ModelThinking) EffortString(level ThinkLevel) (string, bool) {
+	if level == ThinkOff && !thinking.AlwaysOn && thinking.EffortLevels.Off != "" {
+		return thinking.EffortLevels.Off, true
+	}
 	if thinking.EffortLevels == (modelinfo.ReasoningEffortLevels{}) {
 		return level.EffortString()
 	}
@@ -88,7 +99,7 @@ func ResolveThinkingCapabilities(profile providerprofile.Profile, entry modelinf
 		if mt.Style == modelinfo.ThinkStyleEffortLevels {
 			out.CanEnable = false
 		}
-		if mt.Style == modelinfo.ThinkStyleEffortLevels && profile.ReasoningEffortOff == "" && profile.Thinking != modelinfo.ThinkStyleBooleanThink {
+		if mt.Style == modelinfo.ThinkStyleEffortLevels && mt.OffEffort(profile) == "" && profile.Thinking != modelinfo.ThinkStyleBooleanThink {
 			out.CanDisable = false
 		}
 	case modelinfo.ThinkStyleBudgetTokens:

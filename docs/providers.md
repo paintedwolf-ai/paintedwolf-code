@@ -316,7 +316,7 @@ Families disagree about what omitting the control means, so two flags carry that
 
 #### Named effort mapping
 
-`providers.local.yaml` can map the host's low, medium, and high intent to a provider's named protocol values. Family rules use `effort_levels`; a specific provider's model uses `reasoning_effort_levels` to override the family mapping. All three values are required. Values are protocol tokens of lowercase letters, digits, underscores, or hyphens, up to 32 characters.
+`providers.local.yaml` can map the host's low, medium, and high intent to a provider's named protocol values. Family rules use `effort_levels`; a specific provider's model uses `reasoning_effort_levels` to override the family mapping. All three values are required. An optional `off` value declares the endpoint’s explicit disable token, for example `off: none` for llama.cpp. This permits a fixed `enabled: false` policy when the model also declares `thinking: {state: supported, can_disable: true}`. Omit `off` when the endpoint does not support disabling reasoning. Values are protocol tokens of lowercase letters, digits, underscores, or hyphens, up to 32 characters.
 
 ```yaml
 model_thinking:
