@@ -16,6 +16,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/installbinding"
 	"github.com/lycaon/lycaon/internal/osprocess"
 )
 
@@ -33,6 +34,9 @@ var reaper struct {
 // closing it at exit is the trigger. The companion leads its own process group,
 // out of reach of signals sent to the engine's group.
 func StartReaper(name string, args ...string) error {
+	if err := installbinding.Verify(name); err != nil {
+		return err
+	}
 	read, write, err := os.Pipe()
 	if err != nil {
 		return fmt.Errorf("reaper pipe: %w", err)
