@@ -13,6 +13,9 @@ requires:
   - paintedwolf.rejection_code
   - paintedwolf.command
   - paintedwolf.expected_form
+  - paintedwolf.word
+  - paintedwolf.source_line
+  - paintedwolf.source_column
 when: paintedwolf.rejection_code == "COMMAND_OPTION_UNSUPPORTED"
 effect: block
 copy:
