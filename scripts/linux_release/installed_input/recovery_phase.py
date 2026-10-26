@@ -128,13 +128,15 @@ def guest_exchange():
     # Match the normal mailbox poll's waiting state; only reads may await publication.
     if value['action'] == 'read' and ((not box.path.exists() and not box.path.is_symlink())
             or box.read('binding.json') is None):
-        print(json.dumps({'request': None}), flush=True)
+        print(json.dumps({'request': None, 'case_execution': None}), flush=True)
         return
     box.attach()
     pending = box.read('recovery-request.json')
     if pending is not None: request(pending, value['execution'])
     if value['action'] == 'read':
-        result = {'request': pending}
+        observation = Mailbox(value['execution'], value['vm_id']).read_case_execution(
+            'vault', 'service-unavailable-retry')
+        result = {'request': pending, 'case_execution': observation}
     else:
         ack = value['document']
         if (pending is None or not isinstance(ack, dict)

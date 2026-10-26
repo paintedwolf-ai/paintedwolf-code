@@ -145,7 +145,7 @@ class PublicationTests(unittest.TestCase):
             box.path.exists.return_value = exists
             box.path.is_symlink.return_value = False
             box.read.return_value = None
-            self.assertEqual(json.loads(self.read(box)), {'request': None})
+            self.assertEqual(json.loads(self.read(box)), {'request': None, 'case_execution': None})
             box.marker.assert_called_once()
             box.attach.assert_not_called()
             box.write.assert_not_called()
@@ -164,4 +164,18 @@ class PublicationTests(unittest.TestCase):
         box = Mock()
         box.attach.side_effect = FileNotFoundError('not published')
         with self.assertRaises(FileNotFoundError): self.read(box, action='acknowledge')
+        box.write.assert_not_called()
+
+    def test_read_projects_only_the_exact_case_fact_through_base_mailbox(self):
+        box=Mock()
+        box.path.exists.return_value=True
+        box.read.side_effect=lambda name:BINDING if name=='binding.json' else None
+        observed={'format_version':1,'binding':BINDING,'vm_id':'owned',
+                  'capability':'vault','case':'service-unavailable-retry','phase':'executing'}
+        base=Mock();base.read_case_execution.return_value=observed
+        with patch.object(owner,'Mailbox',return_value=base) as mailbox:
+            result=json.loads(self.read(box))
+        self.assertEqual(result,{'request':None,'case_execution':observed})
+        mailbox.assert_called_once_with(BINDING,'owned')
+        base.read_case_execution.assert_called_once_with('vault','service-unavailable-retry')
         box.write.assert_not_called()
