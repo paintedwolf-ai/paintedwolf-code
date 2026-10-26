@@ -21,7 +21,7 @@
  *   window's first commit): that toplevel is attached before it maps.
  *
  * If libwayland's entry point cannot be found, or the ABI is not one of the
- * above, the feature stays off and drags behave as before.
+ * above, drags use ordinary compositor placement.
  */
 #define _GNU_SOURCE
 #include <dlfcn.h>
