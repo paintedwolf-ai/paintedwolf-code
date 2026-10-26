@@ -9,7 +9,9 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
+	"time"
 
 	"golang.org/x/sys/unix"
 )
@@ -55,7 +57,72 @@ func inspect(pid int) (Process, error) {
 	if err != nil {
 		return Process{}, err
 	}
-	return Process{StartOrder: started, PID: pid, ParentPID: parent, UID: stat.Uid, Name: string(raw[start+1 : end]), Executable: executable, Instance: fields[19]}, nil
+	stats := linuxProcessStats(fields, started)
+	return Process{StartOrder: started, PID: pid, ParentPID: parent, UID: stat.Uid, Name: string(raw[start+1 : end]), Executable: executable, Instance: fields[19], Stats: stats}, nil
+}
+
+var linuxBootTime = sync.OnceValue(func() time.Time {
+	raw, err := os.ReadFile("/proc/stat")
+	if err != nil {
+		return time.Time{}
+	}
+	for _, line := range strings.Split(string(raw), "\n") {
+		if value, ok := strings.CutPrefix(line, "btime "); ok {
+			seconds, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
+			if err == nil {
+				return time.Unix(seconds, 0)
+			}
+		}
+	}
+	return time.Time{}
+})
+
+func linuxProcessStats(fields []string, started uint64) ProcessStats {
+	if len(fields) < 22 {
+		return ProcessStats{}
+	}
+	user, e1 := strconv.ParseUint(fields[11], 10, 64)
+	system, e2 := strconv.ParseUint(fields[12], 10, 64)
+	virtual, e3 := strconv.ParseUint(fields[20], 10, 64)
+	resident, e4 := strconv.ParseUint(fields[21], 10, 64)
+	if e1 != nil || e2 != nil || e3 != nil || e4 != nil {
+		return ProcessStats{}
+	}
+	stats := ProcessStats{Available: true, State: fields[0], TTY: "?", VirtualBytes: virtual,
+		ResidentBytes: resident * uint64(os.Getpagesize()), CPUTime: time.Duration(user+system) * time.Second / 100}
+	if boot := linuxBootTime(); !boot.IsZero() {
+		stats.Started = boot.Add(time.Duration(started) * time.Second / 100)
+	}
+	if tty, err := strconv.ParseUint(fields[4], 10, 64); err == nil && tty != 0 {
+		major := (tty >> 8) & 0xfff
+		minor := (tty & 0xff) | ((tty >> 12) & 0xfff00)
+		switch {
+		case major >= 136 && major <= 143:
+			stats.TTY = "pts/" + strconv.FormatUint(minor, 10)
+		case major == 4:
+			stats.TTY = "tty" + strconv.FormatUint(minor, 10)
+		default:
+			stats.TTY = fmt.Sprintf("%d:%d", major, minor)
+		}
+	}
+	return stats
+}
+
+func PhysicalMemoryBytes() uint64 {
+	raw, err := os.ReadFile("/proc/meminfo")
+	if err != nil {
+		return 0
+	}
+	for _, line := range strings.Split(string(raw), "\n") {
+		if value, ok := strings.CutPrefix(line, "MemTotal:"); ok {
+			fields := strings.Fields(value)
+			if len(fields) > 0 {
+				n, _ := strconv.ParseUint(fields[0], 10, 64)
+				return n * 1024
+			}
+		}
+	}
+	return 0
 }
 
 func signalInstance(process Process, name string) error {

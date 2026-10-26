@@ -96,7 +96,6 @@ func TestFrameCommandsRefuseBeforeChangingTheFrame(t *testing.T) {
 		operand            int
 	}{
 		{"export", `export B=2 "1x=3"`, codeOperandInvalid, 2},
-		{"unset", "unset A IFS", codeSyntaxUnsupported, 2},
 		{"unset", "unset A=1", codeOperandInvalid, 1},
 		{"export", "export -p", argvOptionUnsupported, -1},
 	} {

@@ -47,6 +47,7 @@ type PipelineStageOutcome struct {
 type PipelineOutcome struct {
 	Status                        int
 	Complete, PublicationEligible bool
+	PipeStatuses                  []int
 }
 
 var pipelineStageMaximum = sync.OnceValues(func() (int, error) {
@@ -132,6 +133,11 @@ func SettlePipeline(executionID string, stages []PipelineStageOutcome, latch *Ou
 		}
 		// Normalize only the control/byte-plane exception. Never rewrite the original
 		// owner result or its effect/recovery references in the supplied stage record.
+		reported := result.Status
+		if expected && !closure.external {
+			reported = 141 // Bash reports a producer stopped by a closed pipe as SIGPIPE.
+		}
+		out.PipeStatuses = append(out.PipeStatuses, reported)
 		effective := result
 		inputComplete := stage.RequiredInputComplete
 		if expected {
