@@ -473,7 +473,7 @@ func TestProgramEntryChildLimitKeepsPartialResultsAndSessionUsable(t *testing.T)
 			}
 			continue
 		}
-		if result.Refusal == nil || result.Refusal.Code != form.refusal || !strings.Contains(result.Stderr, "limit exceeded [COMMAND_LIMIT_EXCEEDED]") {
+		if result.Refusal == nil || result.Refusal.Code != form.refusal || !strings.Contains(result.Stderr, "child_executions limit") || !strings.Contains(result.Stderr, "[COMMAND_LIMIT_EXCEEDED]") {
 			t.Fatalf("%q: untyped or silent child refusal: %+v", form.program, result)
 		}
 	}

@@ -467,7 +467,7 @@ func (r *ProgramRuntime) feedback(ctx context.Context, run *programRun, dispatch
 			}
 			reject := toolrejection.RejectInvalidArguments(refusal.Code, data)
 			if refusal.Code == "COMMAND_LIMIT_EXCEEDED" {
-				writeRejectRefusal(commandprogram.Streams{Error: stderr}, "command", commandprogram.OperationRequest{}, reject)
+				writeLimitRefusal(commandprogram.Streams{Error: stderr}, "command", reject)
 			}
 			enrichProgramReject(reject, refusal.Command, span)
 			return ensureProgramRefusalText(toolrejection.RenderReject(reject, nil), reject)

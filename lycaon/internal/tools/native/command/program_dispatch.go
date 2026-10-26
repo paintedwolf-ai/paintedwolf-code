@@ -473,7 +473,11 @@ func prepareChildFailure(streams commandprogram.Streams, command string, request
 		span := request.Invocation.Span
 		reject.Data["source_start_byte"], reject.Data["source_end_byte"] = span.StartByte, span.EndByte
 		reject.Data["source_line"], reject.Data["source_column"] = span.Line, span.Column
-		writeRejectRefusal(streams, command, request, reject)
+		if reject.Code == "COMMAND_LIMIT_EXCEEDED" {
+			writeLimitRefusal(streams, command, reject)
+		} else {
+			writeRejectRefusal(streams, command, request, reject)
+		}
 		return refusedResult(reject.Code), cause
 	}
 	return refusedResult("COMMAND_OPERAND_INVALID"), cause
