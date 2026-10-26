@@ -29,7 +29,7 @@ func (r *SQLRecorder) ProgramBlobStore(store blobstore.Store) blobstore.Store {
 			return false, fmt.Errorf("invocation recorder is not configured")
 		}
 		var present bool
-		err := r.database.QueryRowContext(context.Background(), `SELECT EXISTS (SELECT 1 FROM invocation_program_outputs WHERE json_extract(blob_json,'$.ID')=?)`, id).Scan(&present)
+		err := r.database.QueryRowContext(context.Background(), `SELECT EXISTS (SELECT 1 FROM invocation_program_outputs WHERE blob_id=?)`, id).Scan(&present)
 		return present, err
 	}
 	return store
@@ -137,6 +137,6 @@ func insertProgramOutput(ctx context.Context, tx *sql.Tx, program string, output
 	if err = chargeProgramTrace(ctx, tx, program, events, bytes, traceChargeNonTerminal); err != nil {
 		return err
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO invocation_program_outputs(id,program_id,execution_id,stream,reference,retention_claim_id,initiating_claim_id,blob_json,complete,redacted,mappings_json,preview,preview_truncated,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, uuid.NewString(), program, execution, output.Stream, output.Reference, reference.RetentionClaimID, reference.InitiatingClaimID, string(blob), output.Complete, output.Redacted, mappings, preview, truncated, time.Now().UTC().Format(time.RFC3339Nano))
+	_, err = tx.ExecContext(ctx, `INSERT INTO invocation_program_outputs(id,program_id,execution_id,stream,reference,retention_claim_id,initiating_claim_id,blob_id,blob_json,complete,redacted,mappings_json,preview,preview_truncated,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, uuid.NewString(), program, execution, output.Stream, output.Reference, reference.RetentionClaimID, reference.InitiatingClaimID, reference.Blob.ID, string(blob), output.Complete, output.Redacted, mappings, preview, truncated, time.Now().UTC().Format(time.RFC3339Nano))
 	return err
 }
