@@ -2,8 +2,7 @@ package tools
 
 import "testing"
 
-// TestTrimCoordinatorToolMetaKeepsGuidance preserves schema guidance and constraints.
-func TestTrimCoordinatorToolMetaKeepsGuidance(t *testing.T) {
+func TestProjectProviderToolMetaKeepsGuidance(t *testing.T) {
 	longDesc := "Abort overlay (like git merge --abort). overlay_id == job_id. Wrong approach or superseded — not for landable conflicts. Example: {\"overlay_id\":\"<job_id>\",\"reason\":\"Superseded\"}."
 	meta := ToolMeta{
 		Name:        "reject_overlay",
@@ -33,7 +32,7 @@ func TestTrimCoordinatorToolMetaKeepsGuidance(t *testing.T) {
 		},
 	}
 
-	out := TrimCoordinatorToolMeta(meta)
+	out := ProjectProviderToolMeta(meta)
 	if out.Description != longDesc {
 		t.Fatalf("tool description was capped: got %q", out.Description)
 	}
@@ -62,7 +61,7 @@ func TestTrimCoordinatorToolMetaKeepsGuidance(t *testing.T) {
 	}
 }
 
-func TestTrimCoordinatorToolMetaKeepsNestedArgumentContracts(t *testing.T) {
+func TestProjectProviderToolMetaKeepsNestedArgumentContracts(t *testing.T) {
 	t.Parallel()
 	meta := ToolMeta{
 		Name: "command",
@@ -105,7 +104,7 @@ func TestTrimCoordinatorToolMetaKeepsNestedArgumentContracts(t *testing.T) {
 		},
 	}
 
-	out := TrimCoordinatorToolMeta(meta)
+	out := ProjectProviderToolMeta(meta)
 	props := schemaProperties(t, out.ArgsSchema)
 	env := schemaMap(t, props["env"])
 	envValues := schemaMap(t, env["additionalProperties"])
@@ -132,7 +131,7 @@ func TestTrimCoordinatorToolMetaKeepsNestedArgumentContracts(t *testing.T) {
 	}
 }
 
-func TestTrimCoordinatorToolMetaKeepsDirectIPUnion(t *testing.T) {
+func TestProjectProviderToolMetaKeepsDirectIPUnion(t *testing.T) {
 	t.Parallel()
 	meta := ToolMeta{
 		Name: "command",
@@ -153,7 +152,7 @@ func TestTrimCoordinatorToolMetaKeepsDirectIPUnion(t *testing.T) {
 			},
 		},
 	}
-	out := TrimCoordinatorToolMeta(meta)
+	out := ProjectProviderToolMeta(meta)
 	directIP := schemaMap(t, schemaProperties(t, schemaMap(t, schemaProperties(t, out.ArgsSchema)["capability_request"]))["direct_ip"])
 	if _, hasType := directIP["type"]; hasType {
 		t.Fatalf("union must not invent type: %v", directIP)
@@ -167,12 +166,12 @@ func TestTrimCoordinatorToolMetaKeepsDirectIPUnion(t *testing.T) {
 	}
 }
 
-func TestTrimCoordinatorToolMetaDropsEveryRootForbiddenKey(t *testing.T) {
+func TestProjectProviderToolMetaDropsEveryRootForbiddenKey(t *testing.T) {
 	t.Parallel()
 	for _, key := range FunctionParametersRootForbiddenKeys() {
 		t.Run(key, func(t *testing.T) {
 			t.Parallel()
-			out := TrimCoordinatorToolMeta(ToolMeta{
+			out := ProjectProviderToolMeta(ToolMeta{
 				Name: "probe",
 				ArgsSchema: map[string]any{
 					"type": "object",
@@ -192,7 +191,7 @@ func TestTrimCoordinatorToolMetaDropsEveryRootForbiddenKey(t *testing.T) {
 	}
 }
 
-func TestTrimCoordinatorToolMetaDropsRootAnyOf(t *testing.T) {
+func TestProjectProviderToolMetaDropsRootAnyOf(t *testing.T) {
 	t.Parallel()
 	meta := ToolMeta{
 		Name: "code_rewrite",
@@ -211,7 +210,7 @@ func TestTrimCoordinatorToolMetaDropsRootAnyOf(t *testing.T) {
 			},
 		},
 	}
-	out := TrimCoordinatorToolMeta(meta)
+	out := ProjectProviderToolMeta(meta)
 	if _, has := out.ArgsSchema["anyOf"]; has {
 		t.Fatalf("root anyOf survived trim: %v", out.ArgsSchema["anyOf"])
 	}
