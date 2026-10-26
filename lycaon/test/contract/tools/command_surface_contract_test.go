@@ -45,25 +45,18 @@ func TestCommandEnabledToolProfilesRenderCommandSurface(t *testing.T) {
 			out, err := engine.Render(context.Background(), prompts.AgentToolSurfacePartialRef, prompts.AgentToolSurfaceTemplateVars(data))
 			contractcheck.FailErr(t, "Render agent-tool-surface", err)
 			for _, want := range []string{
-				"argv host runner",
-				"stage lines",
-				"pipeline",
-				// Sequencing is part of the grammar the surface must teach, and
-				// substitution is the boundary it must state stays rejected.
-				"`&&`",
-				"$()",
-				"skipped",
-				"background:true",
-				"command_stop",
-				"COMMAND_NOT_ARGV",
-				"COMMAND_ARGV_REQUIRED",
-				"Omit `stdout_to`",
+				"## command",
+				"pipelines",
+				"$(...)",
+				"GNU and BSD",
+				"--help",
+				"@scratch",
 			} {
 				if !strings.Contains(out, want) {
 					t.Fatalf("profile %q surface missing %q", profile.ID, want)
 				}
 			}
-			for _, forbid := range []string{"separate command calls", "separate `command` calls", "pipes never execute"} {
+			for _, forbid := range []string{"argv host runner", "not a shell", "COMMAND_NOT_ARGV", "COMMAND_ARGV_REQUIRED", "external --", "separate command calls", "separate `command` calls", "pipes never execute"} {
 				if strings.Contains(strings.ToLower(out), strings.ToLower(forbid)) {
 					t.Fatalf("profile %q surface must not include %q", profile.ID, forbid)
 				}
@@ -133,8 +126,8 @@ func TestWorkerPersonasWithCommandIncludeCommandSurface(t *testing.T) {
 			got, err := prompts.RenderPersona(context.Background(), engine, agentID, nil)
 			contractcheck.FailErr(t, "RenderPersona", err)
 			for _, want := range []string{
-				"argv host runner", "stage lines", "pipeline", "`&&`", "$()",
-				"COMMAND_NOT_ARGV", "COMMAND_ARGV_REQUIRED",
+				"## command", "pipelines", "$(...)",
+				"GNU and BSD", "--help",
 			} {
 				if !strings.Contains(got, want) {
 					t.Fatalf("persona missing %q", want)

@@ -52,11 +52,55 @@ func (f *frame) statement(ctx context.Context, s commandsurface.Statement) (sign
 	if s.Background {
 		return signal{}, f.background(ctx, s)
 	}
-	sig, err := f.redirected(ctx, s, func(g *frame) (signal, error) { return g.command(ctx, s) })
+	inner := *f
+	inner.errexitIgnored = f.errexitIgnored || s.Negated
+	inner.procSubst = newProcSubstScope(f.procSubst)
+	var descriptors *descriptorScope
+	if len(s.Redirects) > 0 {
+		descriptors = &descriptorScope{}
+		prevented, err := descriptors.prepare(ctx, &inner, s)
+		if prevented || err != nil {
+			_ = inner.procSubst.finish(ctx, &inner, err)
+			return signal{}, err
+		}
+	}
+	sig, err := inner.command(ctx, s)
+	if descriptors != nil {
+		if !descriptors.opened.Load() && !descriptors.prevented && err == nil {
+			_, err = (&evaluatorOperation{frame: &inner, statement: s, fields: Fields{{Value: ":", Span: s.Span}}}).invoke(ctx)
+		}
+		descriptors.closeEndpoints()
+	}
+	if procErr := inner.procSubst.finish(ctx, &inner, err); procErr != nil && err == nil {
+		err = procErr
+	}
+	if descriptors != nil {
+		_, stopped := f.state.latch.Stop()
+		eligible := err == nil && !stopped && inner.publish.eligible()
+		f.publish.mark(eligible)
+		if finishErr := descriptors.finish(ctx, eligible); finishErr != nil && err == nil {
+			err = finishErr
+		}
+	}
 	if err == nil && s.Negated {
 		f.state.control.Negate()
 	}
+	if err == nil && sig.kind == signalNext && f.exitsOnError(s) {
+		return signal{}, f.state.control.Exit(f.state.control.Status())
+	}
 	return sig, err
+}
+
+// exitsOnError applies set -e after a statement: a nonzero status outside an
+// ignored context exits. An && or || list is judged by its final command.
+func (f *frame) exitsOnError(s commandsurface.Statement) bool {
+	if !f.state.options.errexit || f.errexitIgnored || s.Negated || f.state.control.Exited() || f.state.control.Status() == 0 {
+		return false
+	}
+	if binary, ok := s.Command.(commandsurface.BinaryCommand); ok && binary.Operator != "|" {
+		return false
+	}
+	return true
 }
 
 func (f *frame) command(ctx context.Context, s commandsurface.Statement) (signal, error) {
@@ -64,7 +108,7 @@ func (f *frame) command(ctx context.Context, s commandsurface.Statement) (signal
 	case commandsurface.SimpleCommand:
 		return f.simple(ctx, s, c)
 	case commandsurface.EnvironmentDeclaration:
-		return signal{}, f.exportDeclaration(ctx, s, c)
+		return (&evaluatorOperation{frame: f, statement: s, fields: Fields{{Value: "export", Span: s.Span}}, body: func(ctx context.Context, g *frame) (signal, error) { return signal{}, g.exportDeclaration(ctx, s, c) }}).invoke(ctx)
 	case commandsurface.StatementGroup:
 		if !c.Isolated {
 			return f.statements(ctx, c.Statements)
@@ -78,11 +122,17 @@ func (f *frame) command(ctx context.Context, s commandsurface.Statement) (signal
 		return f.whileLoop(ctx, s, c)
 	case commandsurface.ForLoop:
 		return f.forLoop(ctx, s, c)
+	case commandsurface.CaseStatement:
+		return f.caseStatement(ctx, s, c)
 	case commandsurface.FunctionDeclaration:
 		f.state.functions[c.Name] = declaredFunction{decl: c, unit: f.unit, sourceUnit: f.parent.SourceUnitID}
 		return signal{}, f.builtinStatus(s.SyntaxLocation, "function", 0)
 	case commandsurface.TestExpression:
-		return signal{}, f.testExpression(ctx, s, c)
+		return (&evaluatorOperation{frame: f, statement: s, fields: Fields{{Value: "[[", Span: s.Span}}, body: func(ctx context.Context, g *frame) (signal, error) { return signal{}, g.testExpression(ctx, s, c) }}).invoke(ctx)
+	case commandsurface.ArithmeticCommand:
+		return (&evaluatorOperation{frame: f, statement: s, fields: Fields{{Value: "((", Span: s.Span}}, body: func(ctx context.Context, g *frame) (signal, error) { return signal{}, runArithmeticCommand(ctx, g, s, c) }}).invoke(ctx)
+	case commandsurface.TrapCommand:
+		return (&evaluatorOperation{frame: f, statement: s, fields: Fields{{Value: "trap", Span: s.Span}}, body: func(_ context.Context, g *frame) (signal, error) { return signal{}, runTrapCommand(g, s, c) }}).invoke(ctx)
 	case nil:
 		return signal{}, nil
 	default:
@@ -101,7 +151,9 @@ func (f *frame) binary(ctx context.Context, s commandsurface.Statement, c comman
 	default:
 		return signal{}, f.refuse(c.SyntaxLocation, "COMMAND_SYNTAX_UNSUPPORTED", "|, && or ||", nil)
 	}
-	sig, err := f.statement(ctx, c.Left)
+	left := *f
+	left.errexitIgnored = true
+	sig, err := left.statement(ctx, c.Left)
 	if err != nil || sig.kind != signalNext {
 		return sig, err
 	}
@@ -114,7 +166,9 @@ func (f *frame) binary(ctx context.Context, s commandsurface.Statement, c comman
 
 // condition evaluates a test list; its ordinary status selects the branch.
 func (f *frame) condition(ctx context.Context, list []commandsurface.Statement) (bool, signal, error) {
-	sig, err := f.statements(ctx, list)
+	test := *f
+	test.errexitIgnored = true
+	sig, err := test.statements(ctx, list)
 	if err != nil || sig.kind != signalNext || f.state.control.Exited() {
 		return false, sig, err
 	}
@@ -159,6 +213,7 @@ func (f *frame) loopBody(ctx context.Context, body []commandsurface.Statement) (
 		}
 	case signalReturn:
 		return sig, true, nil
+	case signalNext:
 	}
 	return signal{}, false, nil
 }
@@ -244,7 +299,7 @@ func (f *frame) isolated(ctx context.Context, s commandsurface.Statement, list [
 	if err != nil {
 		return err
 	}
-	defer run.close()
+	defer run.close(ctx)
 	g, release, err := f.isolate(ctx, nil)
 	if err != nil {
 		return f.stateRefusal(s.SyntaxLocation, err)
@@ -252,17 +307,20 @@ func (f *frame) isolated(ctx context.Context, s commandsurface.Statement, list [
 	defer release()
 	g.parent, g.loops, g.returnable = run.inv, 0, false
 	_, err = g.statements(ctx, list)
+	if trapErr := runExitTrap(ctx, g, err); trapErr != nil && err == nil {
+		err = trapErr
+	}
 	f.publish.mark(g.publish.eligible())
-	return f.settleFrame(run, g, err)
+	return f.settleFrame(ctx, run, g, err)
 }
 
 // settleFrame records a nested frame's status in this frame as one execution.
-func (f *frame) settleFrame(run *childRun, g *frame, err error) error {
+func (f *frame) settleFrame(ctx context.Context, run *childRun, g *frame, err error) error {
 	result := ordinaryResult(g.state.control.Status())
 	if stop, ok := g.state.latch.Stop(); ok {
 		result = stop.Result
 	}
-	run.settle(result, err)
+	run.settle(ctx, result, err)
 	if err != nil {
 		return err
 	}
@@ -273,12 +331,36 @@ func (f *frame) settleFrame(run *childRun, g *frame, err error) error {
 // invokes no operation (assignments, declarations, loop and branch results,
 // builtin usage errors). It is not a child execution and adds no trace event.
 func (f *frame) builtinStatus(loc commandsurface.SyntaxLocation, command string, status int) error {
-	return f.state.control.Record(uuid.NewString(), ordinaryResult(status), true, false)
+	if len(f.state.pipeStatus) == 1 {
+		f.state.pipeStatus[0] = status
+	} else {
+		f.state.pipeStatus = []int{status}
+	}
+	f.state.vars.SetPipeStatus(f.state.pipeStatus)
+	id := string(loc.ID)
+	if id == "" {
+		id = command
+	}
+	if id == "" || status < 0 || status > 255 {
+		id = uuid.NewString()
+	}
+	return f.state.control.Record(id, ordinaryResult(status), true, false)
 }
 
 // stateRefusal turns an expansion, variable or memory admission refusal into a
 // latched stop located at the refused word when the refusal names one.
 func (f *frame) stateRefusal(loc commandsurface.SyntaxLocation, err error) error {
+	var address *AddressError
+	var coded interface{ MachineErrorCode() string }
+	if errors.As(err, &address) && errors.As(address.Cause, &coded) {
+		if address.Span != (toolcontract.SourceSpan{}) {
+			loc.Span = address.Span
+		}
+		if f.io.streams.Error != nil {
+			_, _ = fmt.Fprintf(f.io.streams.Error, "@%s: not attached here [%s]\n", address.Label, coded.MachineErrorCode())
+		}
+		return f.refuse(loc, coded.MachineErrorCode(), "an attached folder label", err)
+	}
 	var expansion *ExpansionError
 	if errors.As(err, &expansion) {
 		if expansion.Span != (toolcontract.SourceSpan{}) {
@@ -298,4 +380,46 @@ func (f *frame) stateRefusal(loc commandsurface.SyntaxLocation, err error) error
 		return f.interrupt(err)
 	}
 	return err
+}
+
+// caseStatement matches the expanded word against each item's glob patterns
+// in order and runs the first matching body; no match is status 0.
+func (f *frame) caseStatement(ctx context.Context, s commandsurface.Statement, c commandsurface.CaseStatement) (signal, error) {
+	var subject string
+	prevented, err := f.expanding(s.SyntaxLocation, func(g *frame) error {
+		var err error
+		subject, err = g.e.expander.ExpandScalar(ctx, g, c.Word)
+		return err
+	})
+	if prevented || err != nil {
+		return signal{}, err
+	}
+	patterns := f.predicates().Patterns
+	if patterns == nil {
+		return signal{}, f.refuse(s.SyntaxLocation, "COMMAND_SYNTAX_UNSUPPORTED", "a predicate pattern owner for case", nil)
+	}
+	for _, item := range c.Items {
+		for _, word := range item.Patterns {
+			var value PredicateValue
+			prevented, err := f.expanding(item.SyntaxLocation, func(g *frame) error {
+				var err error
+				value, err = g.e.expander.ExpandPattern(ctx, g, word)
+				return err
+			})
+			if prevented || err != nil {
+				return signal{}, err
+			}
+			matched, err := patterns.MatchPredicate(ctx, "glob", subject, value)
+			if err != nil {
+				return signal{}, f.stateRefusal(item.SyntaxLocation, err)
+			}
+			if matched {
+				if len(item.Body) == 0 {
+					return signal{}, f.builtinStatus(s.SyntaxLocation, "case", 0)
+				}
+				return f.statements(ctx, item.Body)
+			}
+		}
+	}
+	return signal{}, f.builtinStatus(s.SyntaxLocation, "case", 0)
 }

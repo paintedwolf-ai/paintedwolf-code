@@ -72,6 +72,22 @@ type ProgramChildStart struct {
 	ArgumentsReference string
 	ExpandedInputs     ReviewedOperationInputs
 	Canonical          string
+	// NativeGap marks a native name launched as its installed program.
+	NativeGap *NativeGap
+	// StartOwner commits the durable owner-start marker in the same transaction
+	// when a host-run child starts immediately after preparation.
+	StartOwner      *BoundOperation
+	ModelToolCallID string
+}
+
+// NativeGap is a native command whose form had no native owner, launched as
+// the installed program instead. Each one is a native implementation task.
+type NativeGap struct {
+	Command string `json:"command"`
+	// Code is the typed refusal the native path would have returned.
+	Code string `json:"code"`
+	// Form is the unsupported option or word; empty when the name has no owner.
+	Form string `json:"form,omitempty"`
 }
 
 // Validate checks structure; the receipt owner also bounds encoded input size.
@@ -85,7 +101,7 @@ func (c ProgramChildStart) Validate() error {
 	if err := c.Invocation.Validate(); err != nil {
 		return err
 	}
-	facts := c.Definition.Facts()
+	facts := c.Definition.ReadOnlyFacts()
 	if c.Definition.Digest() == "" || facts.CatalogDigest != c.Invocation.CatalogDigest {
 		return fmt.Errorf("child receipt requires its frozen offered definition")
 	}

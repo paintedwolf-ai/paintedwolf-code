@@ -15,13 +15,14 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
-	"github.com/lycaon/lycaon/internal/tools/readcaps"
 )
 
 // PinRecorder retains the revisions one execution captured
-// (invocation.SQLRecorder.RecordRevisionPins). Pins append in capture order.
+// (invocation.SQLRecorder.AppendRevisionPin). Each capture appends at the
+// execution's next position, so redirects and the utility's own captures in
+// one execution never contend for an ordinal.
 type PinRecorder interface {
-	RecordRevisionPins(ctx context.Context, executionID string, pins []toolcontract.ExecutionRevision) error
+	AppendRevisionPin(ctx context.Context, executionID string, pin toolcontract.ExecutionRevision) error
 }
 
 // Owners holds the shared typed operations behind every literal utility.
@@ -35,6 +36,7 @@ type Owners struct {
 	// StreamBytes bounds one invocation's stdout; zero selects stream_bytes.
 	StreamBytes int64
 
+	accounts   accounts
 	catalog    toolcontract.LanguageCatalog
 	specs      map[string]toolcontract.CommandSpecification
 	ops        map[string]string
@@ -53,7 +55,7 @@ var utilities = map[string]utility{
 
 // NewOwners binds the frozen catalog's specifications and operation identities.
 func NewOwners(revisions native.ExecutionRevisions, pins PinRecorder, domain DomainOwners) (*Owners, error) {
-	catalog, err := toolcontract.LanguageV1()
+	catalog, err := toolcontract.ReadOnlyLanguageV1()
 	if err != nil {
 		return nil, err
 	}
@@ -120,13 +122,10 @@ func (o *Owners) Prepare(paths *projectpaths.ProgramPaths, request commandprogra
 	if err := request.Validate(); err != nil {
 		return Prepared{}, err
 	}
-	command := request.Argv[0].Value
+	command := request.OperationID
 	spec, ok := o.specs[command]
 	if !ok || paths == nil {
 		return Prepared{}, fmt.Errorf("%s is not a literal content command", command)
-	}
-	if request.OperationID != command {
-		return Prepared{}, fmt.Errorf("request names operation %s, not command %s", request.OperationID, command)
 	}
 	bound, err := commandprogram.CatalogBinder{}.Bind(spec, request.Argv)
 	if err != nil {
@@ -140,7 +139,14 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 	if p.run == nil {
 		return toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, fmt.Errorf("literal invocation is not prepared")
 	}
+	if p.Argv.Help {
+		if streams.Input != nil {
+			_ = streams.Input.Close()
+		}
+		return commandprogram.WriteCatalogHelp(p.spec, streams.Output)
+	}
 	inv := newInvocation(ctx, p, tc, streams)
+	defer inv.closeInputs()
 	err := p.run(inv)
 	if err == nil {
 		err = ctx.Err()
@@ -152,6 +158,9 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 	if streams.Input != nil {
 		_ = streams.Input.Close()
 	}
+	for _, closer := range inv.closers {
+		_ = closer.Close()
+	}
 	return inv.settle(err)
 }
 
@@ -159,14 +168,14 @@ func (o *Owners) readBytes() int64 {
 	if o.ReadBytes > 0 {
 		return o.ReadBytes
 	}
-	return readcaps.MaxFileBytes
+	return o.limit("whole_file_bytes")
 }
 
 func (o *Owners) streamBytes() int64 {
 	if o.StreamBytes > 0 {
 		return o.StreamBytes
 	}
-	return o.limit("stream_bytes")
+	return o.limit("stream_throughput_bytes")
 }
 
 func (o *Owners) limit(id string) int64 {

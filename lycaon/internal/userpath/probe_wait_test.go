@@ -63,8 +63,8 @@ func TestProbeAcceptsAnswerWithBackgroundChildHoldingStdout(t *testing.T) {
 		"SHELL": "/bin/sh", "PATH": "/usr/bin",
 	}, fakeShell{})
 	var runErr error
-	p.run = func(cmd *osexec.Cmd) error {
-		runErr = defaultRun(cmd)
+	p.run = func(ctx context.Context, cmd *osexec.Cmd) error {
+		runErr = defaultRun(ctx, cmd)
 		return runErr
 	}
 	snap := p.Resolve(context.Background())

@@ -80,16 +80,16 @@ func TestProgramTraceReservesProtectTerminalSettlementUnderExhaustion(t *testing
 	expanded, releaseExpanded, err := toolcontract.NewReviewedOperationInputs(t.Context(), progressMemory(t), map[string]any{"path": "input"})
 	testutil.FailErr(t, "freeze extra child inputs", err)
 	defer releaseExpanded()
-	if err := f.recorder.PrepareChild(t.Context(), invocation.ChildStart{ParentReceiptID: f.parent, Invocation: extraIn, Definition: def, ArgumentsReference: "output:extra", ExpandedInputs: expanded, Canonical: "grep input"}); err == nil {
+	if err := f.recorder.PrepareChild(t.Context(), toolcontract.ProgramChildStart{ParentReceiptID: f.parent, Invocation: extraIn, Definition: def, ArgumentsReference: "output:extra", ExpandedInputs: expanded, Canonical: "grep input"}); err == nil {
 		t.Fatal("PrepareChild admitted child without settlement reserve")
 	}
 
 	// Non-terminal output attachment must also be refused when non-terminal trace events are exhausted.
 	quota := &outputQuota{}
-	store := f.recorder.ProgramBlobStore(blobstore.Store{Root: t.TempDir(), Dir: tooloutput.ToolOutputSpillDir})
+	store := f.recorder.ProgramBlobStore(t.Context(), blobstore.Store{Root: t.TempDir(), Dir: tooloutput.ToolOutputSpillDir})
 	spill, err := tooloutput.RetainScreenedStream(t.Context(), tooloutput.ScreenedReader(io.NopCloser(bytes.NewBufferString("blocked output"))), tooloutput.StreamSpillOptions{Store: store, ClaimID: runningChild.Invocation().Identity.ExecutionID + ":blocked", MaximumBytes: 64, Admission: quota, WorkingMemory: quota, RetainedState: quota})
 	testutil.FailErr(t, "retain candidate stream", err)
-	if _, err := f.recorder.AttachProgramOutput(t.Context(), f.program, invocation.RetainedOutput{ExecutionID: runningChild.Invocation().Identity.ExecutionID, Stream: "stdout", Reference: "output:blocked", Complete: true}, spill, quota); err == nil {
+	if _, _, err := f.recorder.AttachProgramOutput(t.Context(), f.program, invocation.RetainedOutput{ExecutionID: runningChild.Invocation().Identity.ExecutionID, Stream: "stdout", Reference: "output:blocked", Complete: true}, spill, quota); err == nil {
 		t.Fatal("AttachProgramOutput consumed terminal settlement reserve")
 	}
 	testutil.FailErr(t, "close unattached candidate stream", spill.Close())
@@ -100,15 +100,15 @@ func TestProgramTraceReservesProtectTerminalSettlementUnderExhaustion(t *testing
 
 	// Started work (runningChild, heldChild, progress, and parent program) must all settle from reserved capacity.
 	completed := toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.NoEffect, Evidence: toolcontract.OperationEvidence{Owner: "filesystem", Kind: "result"}}
-	testutil.FailErr(t, "settle running child from reserve", f.recorder.SettleChild(t.Context(), runningChild.Invocation().Identity.ExecutionID, invocation.ChildSettlement{Result: completed, OwnerInvoked: true, OutputPublishable: true, DetailReference: "output:running-done"}))
+	testutil.FailErr(t, "settle running child from reserve", f.recorder.SettleChild(t.Context(), runningChild.Invocation().Identity.ExecutionID, toolcontract.ProgramChildSettlement{Result: completed, OwnerInvoked: true, OutputPublishable: true, DetailReference: "output:running-done"}))
 
 	denied := toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerRefused, StopCode: "APPROVAL_DENIED", EffectCertainty: toolcontract.NoEffect}
-	testutil.FailErr(t, "settle held child from reserve", f.recorder.SettleChild(t.Context(), heldChild.Invocation().Identity.ExecutionID, invocation.ChildSettlement{Result: denied, OwnerInvoked: false, DetailReference: "output:approval-denied"}))
+	testutil.FailErr(t, "settle held child from reserve", f.recorder.SettleChild(t.Context(), heldChild.Invocation().Identity.ExecutionID, toolcontract.ProgramChildSettlement{Result: denied, OwnerInvoked: false, DetailReference: "output:approval-denied"}))
 
 	testutil.FailErr(t, "settle live progress from reserve", f.recorder.SettleProgramProgress(t.Context(), invocation.ProgressSettlement{Identity: progressID, OwnerInvoked: true, State: "committed", DetailReference: "output:progress-done"}))
 
 	status := 1
-	testutil.FailErr(t, "settle parent program from reserve", f.recorder.SettleProgram(t.Context(), f.program, invocation.ProgramSettlement{State: "rejected", Status: &status, StopCode: "APPROVAL_DENIED", DetailReference: "output:program-done"}))
+	testutil.FailErr(t, "settle parent program from reserve", f.recorder.SettleProgram(t.Context(), f.program, toolcontract.ProgramSettlement{State: "rejected", Status: &status, StopCode: "APPROVAL_DENIED", DetailReference: "output:program-done"}))
 }
 
 func TestProgramApprovalWaitDenialAndHeldVersionFaults(t *testing.T) {
@@ -126,7 +126,7 @@ func TestProgramApprovalWaitDenialAndHeldVersionFaults(t *testing.T) {
 
 	// Approval denial settles the waiting child without owner_started or owner_invoked.
 	refused := toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerRefused, StopCode: "APPROVAL_DENIED", EffectCertainty: toolcontract.NoEffect}
-	testutil.FailErr(t, "settle denied approval child", f.recorder.SettleChild(t.Context(), deniedChild.Invocation().Identity.ExecutionID, invocation.ChildSettlement{Result: refused, OwnerInvoked: false, DetailReference: "output:denied"}))
+	testutil.FailErr(t, "settle denied approval child", f.recorder.SettleChild(t.Context(), deniedChild.Invocation().Identity.ExecutionID, toolcontract.ProgramChildSettlement{Result: refused, OwnerInvoked: false, DetailReference: "output:denied"}))
 
 	// Second child waits for approval, resumes to owner seam, and is refused on held-version conflict.
 	testutil.FailErr(t, "hold stale child for approval", f.recorder.WaitChild(t.Context(), staleHeldChild.Invocation().Identity.ExecutionID, "approval:stale-1"))
@@ -138,8 +138,8 @@ func TestProgramApprovalWaitDenialAndHeldVersionFaults(t *testing.T) {
 		EffectCertainty: toolcontract.NoEffect,
 		Evidence:        toolcontract.OperationEvidence{Owner: "filesystem", Kind: "refusal", HeldVersionID: "held-ver-7"},
 	}
-	conflict := &invocation.RevisionConflict{Path: "src/app.go", ExpectedRevision: "rev:1", ObservedRevision: "rev:2"}
-	testutil.FailErr(t, "settle held-version conflict", f.recorder.SettleChild(t.Context(), staleHeldChild.Invocation().Identity.ExecutionID, invocation.ChildSettlement{Result: staleRefused, OwnerInvoked: true, DetailReference: "output:stale-conflict", AcceptedRevision: "editor:1", Conflict: conflict}))
+	conflict := &toolcontract.RevisionConflict{Path: "src/app.go", ExpectedRevision: "rev:1", ObservedRevision: "rev:2"}
+	testutil.FailErr(t, "settle held-version conflict", f.recorder.SettleChild(t.Context(), staleHeldChild.Invocation().Identity.ExecutionID, toolcontract.ProgramChildSettlement{Result: staleRefused, OwnerInvoked: true, DetailReference: "output:stale-conflict", AcceptedRevision: "editor:1", Conflict: conflict}))
 
 	// A fresh invocation after conflict gets a new ExecutionID and ordinal while preserving the held execution receipt.
 	freshChild := f.childFor(t, "write")
@@ -169,7 +169,7 @@ func TestProgramChildAndSettlementLedgerFaultsRollBackCleanly(t *testing.T) {
 	expanded, releaseExpanded, err := toolcontract.NewReviewedOperationInputs(t.Context(), progressMemory(t), map[string]any{"path": "input"})
 	testutil.FailErr(t, "freeze expanded inputs", err)
 	defer releaseExpanded()
-	if err := f.recorder.PrepareChild(t.Context(), invocation.ChildStart{ParentReceiptID: f.parent, Invocation: in, Definition: def, ArgumentsReference: "output:fault", ExpandedInputs: expanded, Canonical: "grep input"}); err == nil {
+	if err := f.recorder.PrepareChild(t.Context(), toolcontract.ProgramChildStart{ParentReceiptID: f.parent, Invocation: in, Definition: def, ArgumentsReference: "output:fault", ExpandedInputs: expanded, Canonical: "grep input"}); err == nil {
 		t.Fatal("PrepareChild succeeded despite node fault")
 	}
 	_, err = f.database.ExecContext(t.Context(), `DROP TRIGGER fixture_node_fault`)
@@ -190,12 +190,12 @@ func TestProgramChildAndSettlementLedgerFaultsRollBackCleanly(t *testing.T) {
 	_, err = f.database.ExecContext(t.Context(), `CREATE TRIGGER fixture_settle_fault BEFORE UPDATE ON invocation_program_executions WHEN NEW.state='completed' BEGIN SELECT RAISE(ABORT,'fixture settle fault'); END`)
 	testutil.FailErr(t, "install settle fault trigger", err)
 	completed := toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.NoEffect}
-	if err := f.recorder.SettleChild(t.Context(), child.Invocation().Identity.ExecutionID, invocation.ChildSettlement{Result: completed, OwnerInvoked: true, DetailReference: "output:done"}); err == nil {
+	if err := f.recorder.SettleChild(t.Context(), child.Invocation().Identity.ExecutionID, toolcontract.ProgramChildSettlement{Result: completed, OwnerInvoked: true, DetailReference: "output:done"}); err == nil {
 		t.Fatal("SettleChild succeeded despite settle fault")
 	}
 	_, err = f.database.ExecContext(t.Context(), `DROP TRIGGER fixture_settle_fault`)
 	testutil.FailErr(t, "drop settle fault trigger", err)
-	testutil.FailErr(t, "SettleChild succeeds after fault cleared", f.recorder.SettleChild(t.Context(), child.Invocation().Identity.ExecutionID, invocation.ChildSettlement{Result: completed, OwnerInvoked: true, DetailReference: "output:done"}))
+	testutil.FailErr(t, "SettleChild succeeds after fault cleared", f.recorder.SettleChild(t.Context(), child.Invocation().Identity.ExecutionID, toolcontract.ProgramChildSettlement{Result: completed, OwnerInvoked: true, DetailReference: "output:done"}))
 }
 
 type stubSourceObserver struct {
@@ -211,7 +211,7 @@ func TestProgramDeliveryReceiptFaultPreservesOwnerAcknowledgementAndReconcilesOn
 	f := newProgramReceiptFixture(t)
 	child := f.child(t)
 	quota := &outputQuota{}
-	store := f.recorder.ProgramBlobStore(blobstore.Store{Root: t.TempDir(), Dir: tooloutput.ToolOutputSpillDir})
+	store := f.recorder.ProgramBlobStore(t.Context(), blobstore.Store{Root: t.TempDir(), Dir: tooloutput.ToolOutputSpillDir})
 	lifetime, err := invocation.NewProgramOutputRetention(t.Context(), f.recorder, store, f.session, quota)
 	testutil.FailErr(t, "admit output lifetime", err)
 	testutil.FailErr(t, "restore empty output set", lifetime.Restore(t.Context()))
@@ -223,7 +223,8 @@ func TestProgramDeliveryReceiptFaultPreservesOwnerAcknowledgementAndReconcilesOn
 	mapping := toolcontract.StreamSourceMapping{Source: pin, SourceStartByte: 0, SourceEndByte: int64(len(body)), OutputStartByte: 0, OutputEndByte: int64(len(body))}
 	spill, err := tooloutput.RetainScreenedStream(t.Context(), tooloutput.ScreenedReader(io.NopCloser(bytes.NewBufferString(body))), tooloutput.StreamSpillOptions{Store: store, ClaimID: child.Invocation().Identity.ExecutionID + ":mapped", MaximumBytes: 1024, PreviewBytes: 64, Admission: quota, WorkingMemory: quota, RetainedState: quota})
 	testutil.FailErr(t, "retain mapped stream", err)
-	testutil.FailErr(t, "attach mapped stream", lifetime.Attach(t.Context(), f.program, invocation.RetainedOutput{ExecutionID: child.Invocation().Identity.ExecutionID, Stream: "stdout", Reference: "output:mapped", Complete: true, Mappings: []toolcontract.StreamSourceMapping{mapping}}, spill))
+	_, err = lifetime.Attach(t.Context(), f.program, invocation.RetainedOutput{ExecutionID: child.Invocation().Identity.ExecutionID, Stream: "stdout", Reference: "output:mapped", Complete: true, Mappings: []toolcontract.StreamSourceMapping{mapping}}, spill)
+	testutil.FailErr(t, "attach mapped stream", err)
 
 	obs, err := evidence.ConfirmDeliveredSource("src/input.txt", pin, []byte(body), []byte(body), mapping, "resp-1", "deliv-1")
 	testutil.FailErr(t, "construct delivered source observation", err)
@@ -267,7 +268,7 @@ func TestProgramFeedbackReadsRejectedProgressEnvelopeWithoutExecution(t *testing
 	}
 	testutil.FailErr(t, "record progress refusal", f.recorder.RecordProgressRefusal(t.Context(), f.program, "output:progress-refused"))
 	status := 1
-	testutil.FailErr(t, "settle program on progress refusal", f.recorder.SettleProgram(t.Context(), f.program, invocation.ProgramSettlement{State: "rejected", Status: &status, StopCode: "CLOSED_PLAN_STATE", DetailReference: "output:progress-refused"}))
+	testutil.FailErr(t, "settle program on progress refusal", f.recorder.SettleProgram(t.Context(), f.program, toolcontract.ProgramSettlement{State: "rejected", Status: &status, StopCode: "CLOSED_PLAN_STATE", DetailReference: "output:progress-refused"}))
 	lease, err := f.recorder.ReadProgramFeedback(t.Context(), f.session, f.program, "", 2, admission)
 	testutil.FailErr(t, "read progress refusal feedback without execution", err)
 	defer lease.Close()

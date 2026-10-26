@@ -13,9 +13,9 @@ import (
 // port is absent; it never substitutes a shell or another owner.
 type EvaluationPorts struct {
 	// Invocation is the program's root execution; every child derives from it.
-	Invocation  toolcontract.OperationInvocation
-	Dispatch    Dispatch
-	Binder      ArgvBinder
+	Invocation toolcontract.OperationInvocation
+	Dispatch   Dispatch
+	Binder     ArgvBinder
 	// Files is the logical-path view pathname expansion lists; Evaluate builds
 	// the program's WordExpander over it with itself as the Substitution port.
 	Files       commandsurface.GlobFiles
@@ -31,8 +31,11 @@ type EvaluationPorts struct {
 	// operations are recorded by their owners. Nil records none.
 	Executions ExecutionRecorder
 	Streams    Streams
+	Refusals   RefusalWriter
 	// Environment is the captured child environment; its entries start exported.
 	Environment []string
+	// ScratchDir is the session scratch directory used for process-substitution files.
+	ScratchDir string
 }
 
 // ProgramOutcome is the evaluated program's ordinary status plus the first host
@@ -58,6 +61,8 @@ type ChildRecord struct {
 	Executed     bool
 	Result       toolcontract.ProducerResult
 	Diagnostic   error
+	// JobHandle is the session job a trailing & statement started.
+	JobHandle string
 }
 
 // SourceRecord binds a reached source statement to its exact captured bytes.
@@ -91,6 +96,9 @@ type EvaluationRefusal struct {
 	Node     commandsurface.SyntaxLocation
 	Expected string
 	Cause    error
+	// Command, Option and Form name a refused native form: the command, the
+	// refused word and the command's supported form.
+	Command, Option, Form string
 }
 
 func (e *EvaluationRefusal) Error() string {
@@ -130,6 +138,9 @@ func Evaluate(ctx context.Context, plan commandsurface.ProgramSnapshot, ports Ev
 	}
 	defer release()
 	_, err = root.statements(ctx, plan.Statements)
+	if trapErr := runExitTrap(ctx, root, err); trapErr != nil && err == nil {
+		err = trapErr
+	}
 	return e.outcome(root), err
 }
 

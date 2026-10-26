@@ -69,6 +69,7 @@ func DirectIPReview(tool string, args map[string]any, tc tools.ToolContext, decl
 			SessionID:          tc.Identity.SessionID,
 			RootSessionID:      rootSession,
 			SessionScratchRoot: tc.Host.SessionScratchDir,
+			SessionOutputRoot:  tc.Host.SessionOutputDir,
 		},
 		Sockets: hitl.ActionSockets{
 			SocketGrants:            append([]confine.SocketGrant(nil), tc.Socket.SocketGrants...),

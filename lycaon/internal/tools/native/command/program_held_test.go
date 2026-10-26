@@ -14,8 +14,11 @@ import (
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -151,6 +154,42 @@ func TestSupervisorStopAcknowledgesBeforeExitAndClosesAdmission(t *testing.T) {
 	}
 }
 
+func TestHeldSettlementPreservesEndpointCauseAndIndependentFailure(t *testing.T) {
+	for _, withSettlementFailure := range []bool{false, true} {
+		t.Run(map[bool]string{false: "sole owner cause", true: "independent settlement failure"}[withSettlementFailure], func(t *testing.T) {
+			budget, err := commandprogram.NewByteBudget("fixture", 1024)
+			testutil.FailErr(t, "admit byte stream", err)
+			pipe, err := commandprogram.NewBytePipe(t.Context(), budget)
+			testutil.FailErr(t, "open byte stream", err)
+			testutil.FailErr(t, "close satisfied consumer", pipe.CloseConsumer())
+			_, cause := pipe.Write([]byte("unconsumed"))
+			var settlement error
+			if withSettlementFailure {
+				settlement = errors.New("receipt settlement failed")
+			}
+			held := &command.ProgramHeldEffects{}
+			producer := toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}
+			effect := (&heldProbe{}).effect("producer")
+			effect.Invoke = func(context.Context) (toolcontract.ProducerResult, error) { return producer, cause }
+			effect.Settle = func(context.Context, toolcontract.ProducerResult, string) error { return settlement }
+			testutil.FailErr(t, "park prepared owner", held.Park(effect))
+			result, err := held.Resume(t.Context(), effect.Identity)
+			if !errors.Is(err, cause) || (settlement != nil && !errors.Is(err, settlement)) {
+				t.Fatalf("lost owner/settlement cause: %v", err)
+			}
+			stages := []commandprogram.PipelineStageOutcome{
+				{ExecutionID: "producer", Result: result, RequiredInputComplete: true, Closure: commandprogram.NativeConsumerClosure(pipe, err, "producer", "consumer")},
+				{ExecutionID: "consumer", Result: toolcontract.ProducerResult{Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.NoEffect}, RequiredInputComplete: true},
+			}
+			outcome, err := commandprogram.SettlePipeline("pipeline", stages, &commandprogram.OutcomeLatch{})
+			testutil.FailErr(t, "settle actual owner cause", err)
+			if outcome.Complete == withSettlementFailure || outcome.PublicationEligible == withSettlementFailure || outcome.Status != map[bool]int{false: 0, true: 1}[withSettlementFailure] {
+				t.Fatalf("settlement failure=%t outcome=%+v", withSettlementFailure, outcome)
+			}
+		})
+	}
+}
+
 type dirSources string
 
 func (d dirSources) Capture(_ context.Context, _ toolcontract.OperationInvocation, req commandprogram.SourceCaptureRequest) (commandprogram.CapturedSource, error) {
@@ -173,20 +212,26 @@ func (d dirSources) Capture(_ context.Context, _ toolcontract.OperationInvocatio
 
 func TestProgramEntrySourcesScriptAndDeduplicatesProgramDefinitions(t *testing.T) {
 	f := newProgramFixture(t)
-	testutil.FailErr(t, "write sourced script", os.WriteFile(filepath.Join(f.dir, "lib.sh"), []byte("greet() { external -- /bin/echo \"$1\"; }\n"), 0o600))
+	prevOwners := f.Runtime.Owners
+	f.Runtime.Owners = func(tc tools.ToolContext, paths *projectpaths.ProgramPaths, mem *toolcontract.ProgramMemory, adm tooloutput.SpillAdmission) (command.ProgramOwners, error) {
+		owners, err := prevOwners(tc, paths, mem, adm)
+		owners.Sources = dirSources(f.Dir)
+		return owners, err
+	}
+	testutil.FailErr(t, "write sourced script", os.WriteFile(filepath.Join(f.Dir, "lib.sh"), []byte("greet() { external -- /bin/echo \"$1\"; }\n"), 0o600))
 	out, err := f.call(t, t.Context(), "source -- lib.sh; greet first; greet second")
 	testutil.FailErr(t, "run sourced function calls", err)
 	if !strings.Contains(out, `"stdout":"first\nsecond\n"`) || !strings.Contains(out, `"state":"completed"`) {
 		t.Fatalf("sourced program outcome %s", out)
 	}
 	var programID string
-	testutil.FailErr(t, "read program id", f.database.QueryRowContext(t.Context(), `SELECT id FROM invocation_programs`).Scan(&programID))
+	testutil.FailErr(t, "read program id", f.Database.QueryRowContext(t.Context(), `SELECT id FROM invocation_programs`).Scan(&programID))
 	var sourceCount int
-	testutil.FailErr(t, "count program sources", f.database.QueryRowContext(t.Context(), `SELECT count(*) FROM invocation_program_sources WHERE program_id = ?`, programID).Scan(&sourceCount))
+	testutil.FailErr(t, "count program sources", f.Database.QueryRowContext(t.Context(), `SELECT count(*) FROM invocation_program_sources WHERE program_id = ?`, programID).Scan(&sourceCount))
 	if sourceCount != 2 {
 		t.Fatalf("sourceCount = %d, want 2 (root and sourced unit)", sourceCount)
 	}
-	page, err := f.recorder.ReadProgramPage(t.Context(), f.session, programID, "", 10)
+	page, err := f.Recorder.ReadProgramPage(t.Context(), f.Session, programID, "", 10)
 	testutil.FailErr(t, "read program page", err)
 	var externalExecs []api.CommandExecutionReceipt
 	for _, exec := range page.Executions {
@@ -198,7 +243,7 @@ func TestProgramEntrySourcesScriptAndDeduplicatesProgramDefinitions(t *testing.T
 		t.Fatalf("external executions = %+v (all = %+v)", externalExecs, page.Executions)
 	}
 	var defCount int
-	testutil.FailErr(t, "count deduplicated definitions", f.database.QueryRowContext(t.Context(),
+	testutil.FailErr(t, "count deduplicated definitions", f.Database.QueryRowContext(t.Context(),
 		`SELECT count(*) FROM invocation_program_definitions WHERE program_id = ? AND definition_digest = ?`,
 		programID, externalExecs[0].DefinitionDigest,
 	).Scan(&defCount))
@@ -206,7 +251,7 @@ func TestProgramEntrySourcesScriptAndDeduplicatesProgramDefinitions(t *testing.T
 		t.Fatalf("invocation_program_definitions rows for external digest = %d, want 1", defCount)
 	}
 	for _, exec := range externalExecs {
-		binding, err := f.recorder.ReadProgramExecutionBinding(t.Context(), f.session, exec.ID)
+		binding, err := f.Recorder.ReadProgramExecutionBinding(t.Context(), f.Session, exec.ID)
 		testutil.FailErr(t, "read child binding", err)
 		if binding.DefinitionDigest != exec.DefinitionDigest || binding.DefinitionJSON == "" || binding.Invocation.SourceUnitID != "lib.sh" {
 			t.Fatalf("binding %s = %+v", exec.ID, binding)

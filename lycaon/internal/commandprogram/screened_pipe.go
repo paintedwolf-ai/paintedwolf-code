@@ -61,17 +61,23 @@ func NewScreenedPipe(ctx context.Context, screen StreamScreen, source io.ReadClo
 	}()
 	go func() {
 		defer close(out.done)
-		defer out.closeSource()
 		metadata, err := screen.ScreenStream(screenCtx, source, pipe)
+		closeErr := out.closeSource()
 		termination := StreamScreeningFailed
 		out.mu.Lock()
 		if cause := context.Cause(screenCtx); cause != nil && (err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
 			err = cause
 			metadata.Complete = false
-			termination = StreamCanceled
-			if errors.Is(cause, ErrConsumerClosed) {
-				termination = StreamConsumerClosed
+			if closeErr == nil {
+				termination = StreamCanceled
+				if errors.Is(cause, ErrConsumerClosed) {
+					termination = StreamConsumerClosed
+				}
 			}
+		}
+		if closeErr != nil {
+			err = errors.Join(err, closeErr)
+			metadata.Complete = false
 		}
 		out.metadata, out.err, out.settled = metadata, err, true
 		out.mu.Unlock()

@@ -1,6 +1,7 @@
 package prompts
 
 import (
+	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/pongoplain"
 	"github.com/lycaon/lycaon/internal/projectroot"
 )
@@ -9,6 +10,9 @@ import (
 func MergeWorkspaceRootsVars(vars map[string]any, roots []projectroot.RootRef, activePath string) {
 	if vars == nil {
 		return
+	}
+	if _, ok := vars["reviews_confined_writes"].(bool); !ok {
+		vars["reviews_confined_writes"] = true
 	}
 	vars["root_count"] = len(roots)
 	if activePath != "" {
@@ -36,52 +40,37 @@ func MergeWorkspaceRootsVars(vars map[string]any, roots []projectroot.RootRef, a
 	vars["workspace_roots_omitted_count"] = len(roots) - len(out)
 }
 
-// RootsChangedKickNeeded reports whether coordinator-roots-changed.md would emit guidance.
-func RootsChangedKickNeeded(before, after []projectroot.RootRef) bool {
-	added := diffRoots(after, before)
-	removed := diffRoots(before, after)
-	if len(removed) > 0 {
-		return true
+// RootsChangedKickData builds the root-change notice context: one row per
+// added, removed, moved or renamed root in the change, then the root set the
+// next turn resolves against.
+func RootsChangedKickData(change projectroot.RootChange, after []projectroot.RootRef, activeRootID string) map[string]any {
+	changes := make([]map[string]any, 0, len(change.Added)+len(change.Retired))
+	for _, r := range change.Added {
+		changes = append(changes, map[string]any{"kind": "added", "label": r.Label, "path": r.Path})
 	}
-	if len(added) > 0 && len(before) <= 1 && len(after) >= 2 {
-		return true
+	for _, r := range change.Retired {
+		row := map[string]any{"kind": string(r.Reason), "label": r.Root.Label, "old_label": r.Root.Label, "old_path": r.Root.Path}
+		if r.Reason != projectroot.RootDetached {
+			row["label"], row["path"] = r.Successor.Label, r.Successor.Path
+		}
+		changes = append(changes, row)
 	}
-	beforePrimary, _ := projectroot.PrimaryRoot(before)
-	afterPrimary, _ := projectroot.PrimaryRoot(after)
-	primaryChanged := beforePrimary.ID != "" && afterPrimary.ID != "" && beforePrimary.ID != afterPrimary.ID
-	if len(before) == 1 && len(after) == 1 && before[0].ID == after[0].ID && before[0].Path != after[0].Path {
-		return true
+	if len(changes) > pongoplain.MaxCollectionItems {
+		changes = changes[:pongoplain.MaxCollectionItems]
 	}
-	return primaryChanged && len(after) >= 2
-}
-
-// RootsChangedKickData builds kick template context for roots-changed.md.
-func RootsChangedKickData(before, after []projectroot.RootRef, activeRootID string) map[string]any {
-	added := diffRoots(after, before)
-	removed := diffRoots(before, after)
-	beforeRows := rootsKickRows(before)
 	afterRows := rootsKickRows(after)
 	data := map[string]any{
-		"before":        beforeRows,
-		"before_count":  len(before),
-		"after":         afterRows,
-		"after_count":   len(after),
-		"added_count":   len(added),
-		"removed_count": len(removed),
+		"changes":             changes,
+		"changes_omitted":     len(change.Added) + len(change.Retired) - len(changes),
+		"generation":          change.Generation,
+		"primary_changed":     change.Primary.ID != "",
+		"new_primary":         map[string]any{"label": change.Primary.Label, "path": change.Primary.Path},
+		"after":               afterRows,
+		"after_count":         len(after),
+		"after_omitted_count": len(after) - len(afterRows),
 	}
-	data["after_omitted_count"] = len(after) - len(afterRows)
 	if active, err := projectroot.ActiveRoot(after, activeRootID); err == nil {
 		data["active_root"] = map[string]any{"id": active.ID, "label": active.Label, "path": active.Path}
-	}
-	beforePrimary, _ := projectroot.PrimaryRoot(before)
-	afterPrimary, _ := projectroot.PrimaryRoot(after)
-	data["primary_changed"] = beforePrimary.ID != "" && afterPrimary.ID != "" && beforePrimary.ID != afterPrimary.ID
-	if afterPrimary.ID != "" {
-		data["new_primary"] = map[string]any{
-			"label":      afterPrimary.Label,
-			"path":       afterPrimary.Path,
-			"is_primary": afterPrimary.IsPrimary,
-		}
 	}
 	return data
 }
@@ -103,16 +92,15 @@ func rootsKickRows(roots []projectroot.RootRef) []map[string]any {
 	return out
 }
 
-func diffRoots(want, have []projectroot.RootRef) []projectroot.RootRef {
-	haveIDs := make(map[string]struct{}, len(have))
-	for _, r := range have {
-		haveIDs[r.ID] = struct{}{}
+// PostureChangedKickNeeded reports whether a posture change alters whether
+// writes outside the project (including temporary and cache folders) ask first.
+func PostureChangedKickNeeded(before, after gate.Posture) bool {
+	return before.ReviewsConfinedWrites() != after.ReviewsConfinedWrites()
+}
+
+// PostureChangedKickData builds the posture-change notice context.
+func PostureChangedKickData(after gate.Posture) map[string]any {
+	return map[string]any{
+		"reviews_confined_writes": after.ReviewsConfinedWrites(),
 	}
-	var out []projectroot.RootRef
-	for _, r := range want {
-		if _, ok := haveIDs[r.ID]; !ok {
-			out = append(out, r)
-		}
-	}
-	return out
 }

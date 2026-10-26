@@ -3,15 +3,19 @@ package sourceblob
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
+	"sync/atomic"
 
-	"github.com/lycaon/lycaon/internal/contextio"
-	"github.com/lycaon/lycaon/internal/fseffect"
-	"github.com/lycaon/lycaon/internal/zstdcodec"
+	"github.com/lycaon/lycaon/internal/fssync"
 )
+
+var putTempSeq atomic.Uint64
 
 // Put stores a complete payload already held in memory.
 func (s *Store) Put(ctx context.Context, sha string, plain []byte) (rel string, stored int64, oids GitOIDs, err error) {
@@ -31,12 +35,12 @@ func (s *Store) Put(ctx context.Context, sha string, plain []byte) (rel string, 
 	if err != nil {
 		return "", 0, GitOIDs{}, err
 	}
-	compressed, err := zstdcodec.Compress(contextio.Reader{Context: ctx, Source: bytes.NewReader(plain)})
+	compressed, err := compressBytes(ctx, plain)
 	if err != nil {
 		return "", 0, GitOIDs{}, err
 	}
 	stored = int64(len(compressed))
-	matched, err := s.matchesObject(ctx, rel, stored, ContentSHA(compressed))
+	matched, err := s.matchesObjectBytes(ctx, rel, compressed)
 	if err != nil {
 		return "", 0, GitOIDs{}, err
 	}
@@ -49,23 +53,76 @@ func (s *Store) Put(ctx context.Context, sha string, plain []byte) (rel string, 
 	return rel, int64(len(compressed)), oids, nil
 }
 
+func compressBytes(ctx context.Context, plain []byte) ([]byte, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	var out bytes.Buffer
+	out.Grow(len(plain) + 32)
+	encoder, err := acquireEncoder(&out)
+	if err != nil {
+		return nil, err
+	}
+	defer releaseEncoder(encoder)
+	if _, err := encoder.Write(plain); err != nil {
+		_ = encoder.Close()
+		return nil, err
+	}
+	if err := encoder.Close(); err != nil {
+		return nil, err
+	}
+	return out.Bytes(), ctx.Err()
+}
+
 // commitBytes atomically publishes a complete object.
 func (s *Store) commitBytes(ctx context.Context, rel string, compressed []byte) error {
-	if err := os.MkdirAll(s.root, 0o700); err != nil {
-		return fmt.Errorf("create content object directory: %w", err)
+	if err := ctx.Err(); err != nil {
+		return err
 	}
-	restoreMode, err := prepareObjectPublication(filepath.Join(s.root, rel))
+	dest := filepath.Join(s.root, rel)
+	dir := filepath.Dir(dest)
+	tempPath := filepath.Join(dir, ".put-"+strconv.FormatUint(putTempSeq.Add(1), 36))
+	openMode := os.FileMode(0o400)
+	if runtime.GOOS == "windows" {
+		openMode = 0o600
+	}
+	temp, err := os.OpenFile(tempPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, openMode)
+	if os.IsNotExist(err) {
+		if mkErr := os.MkdirAll(dir, 0o700); mkErr != nil {
+			return fmt.Errorf("create content object directory: %w", mkErr)
+		}
+		temp, err = os.OpenFile(tempPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, openMode)
+	}
+	if err != nil {
+		return fmt.Errorf("create content object temp: %w", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = os.Remove(tempPath)
+		}
+	}()
+	_, writeErr := temp.Write(compressed)
+	var chmodErr error
+	if runtime.GOOS == "windows" {
+		chmodErr = temp.Chmod(0o400)
+	}
+	syncErr := fssync.File(temp)
+	closeErr := temp.Close()
+	if err := errors.Join(writeErr, chmodErr, syncErr, closeErr); err != nil {
+		return fmt.Errorf("write content object: %w", err)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	restoreMode, err := prepareObjectPublication(dest)
 	if err != nil {
 		return err
 	}
 	defer restoreMode()
-	if _, err := fseffect.Replace(fseffect.ReplaceRequest{
-		Location: fseffect.Location{Root: s.root, Rel: rel},
-		Source:   contextio.Reader{Context: ctx, Source: bytes.NewReader(compressed)},
-		Mode:     0o400,
-		DirMode:  0o700,
-	}); err != nil {
+	if err := os.Rename(tempPath, dest); err != nil {
 		return fmt.Errorf("commit content object: %w", err)
 	}
-	return nil
+	committed = true
+	return syncDir(dir)
 }

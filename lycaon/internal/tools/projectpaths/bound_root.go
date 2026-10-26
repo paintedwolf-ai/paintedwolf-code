@@ -20,11 +20,10 @@ func (p BoundPath) openRoot() (*fseffect.ReadRoot, error) {
 	}
 	file, err := root.OpenExact(".")
 	if err != nil {
-		root.Close()
-		return nil, err
+		return nil, errors.Join(err, root.Close())
 	}
 	info, err := file.Stat()
-	file.Close()
+	err = errors.Join(err, file.Close())
 	if err == nil && !os.SameFile(info, p.rootInfo) {
 		err = invalidOperand(p.Resolved.DisplayPath, "held root identity changed")
 	}
@@ -32,8 +31,7 @@ func (p BoundPath) openRoot() (*fseffect.ReadRoot, error) {
 		err = p.Validate()
 	}
 	if err != nil {
-		root.Close()
-		return nil, err
+		return nil, errors.Join(err, root.Close())
 	}
 	return root, nil
 }
@@ -71,7 +69,7 @@ func (p BoundPath) OpenLaunchMetadata(directory bool) (*os.File, error) {
 	if err != nil {
 		return nil, PathOperationError(p.Resolved.DisplayPath, err)
 	}
-	defer root.Close()
+	defer func() { _ = root.Close() }()
 	held, err := root.OpenExact(".", true)
 	if err != nil {
 		return nil, err

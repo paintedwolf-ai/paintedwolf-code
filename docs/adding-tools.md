@@ -76,7 +76,6 @@ Tool metadata is catalog data under `lycaon/config/packs/painted-wolf/platform/`
 | Managed-secret reference resolution and its outbound screen | `secret_reference_surface` in `native-tools.yaml`; MCP contracts set `mcp` |
 | Agent availability | `tools/profiles/*.yaml` and explicit coordinator surfaces |
 | Per-code recovery hint | `policy/<CODE>.yaml` |
-| Exact command equivalence and its `USE_*_NATIVE` redirect | `tools/tool-command-equivalence.yaml` + OAR policy |
 | MCP failure guidance | OAR conditions over `mcp_error_code` and `mcp_call_ok` |
 | Transcript presentation | `tools/tool-presentation.yaml` |
 
@@ -110,17 +109,15 @@ Native Go returns `ToolReject.Code`, normally through `safecmd.Reject`. MCP retu
 
 Registry and guidance contracts close native reject codes over the hint catalog. An undeclared external error falls back to the generic MCP error contract rather than inventing a meaning.
 
-## Structured command redirects
+## Command and structured tools
 
-`USE_*_NATIVE` redirects are OAR policy on `tool.rejected` for free-form command runners, with a structured `habit_redirect_match` and `effect: block`. The command grammar lives in `tool-command-equivalence.yaml`. Before execution, the host parses only that closed grammar, constructs one or more native calls, confirms every call is on the active surface, and validates every argument object against the native schema. It redirects only a lossless translation and returns the validated `replacement_calls`; an inexact command continues through the ordinary command boundary.
-
-The runner envelope around the command line is part of that translation (`internal/toolcommand/command_envelope.go`). Each field is carried onto the native call, dropped because the native tool cannot need it, or refuses the translation because it contradicts the replacement: `cwd` joins onto every project path the call names (`command_replacement_paths.go` is the one list of those arguments), `timeout_ms` becomes the deadline of tools that own one, `capability_request` keeps only the authority a request can use and refuses `direct_ip`, and `env` always refuses. A new path-taking replacement is added to the path list before its grammar.
-
-A tool that a runner habit stands in for is also listed under `request_companions` in `native-tools.yaml`, so `request_tools` loads it beside the runner and the teaching partial can point at it.
-
-Catalog `replaces[].examples` are parser fixtures and may name the intercepted command vocabulary. When that vocabulary should not be taught back to the agent, set `replacement_example` to a first-class native call; generated rejection data uses it instead of the parser fixture. Tool descriptions and OAR copy teach the native capability directly.
-
-`USE_READ_NATIVE` uses the same pre-execution path because equivalent shell reads are otherwise allowed. `confine.ReadHabitFor` parses only catalogued argv grammar and redirects when `read` can serve the exact span. Do not add a reactive stderr matcher or a program denylist to make a redirect fire.
+`command` is the routine floor: programs call native utilities through the
+command language catalog, and no structured schema stands in for a shell habit.
+The host never redirects a command program to a structured tool. Structured
+tools stay loadable or requestable by exact name for the work they own, and
+their descriptions describe that work without steering away from `command`.
+The retired `USE_*_NATIVE`, `USE_FIND_NOT_COMMAND`, `USE_GREP_REGEX` and
+`USE_NATIVE_TOOL` codes keep their historical meaning and are never reused.
 
 ## Author checklist: first-party Go tool
 

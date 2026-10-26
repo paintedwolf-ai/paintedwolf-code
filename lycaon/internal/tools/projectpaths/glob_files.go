@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/settingsoverlay"
 )
 
 // GlobFiles is pathname expansion's view of one invocation's logical paths.
@@ -37,6 +38,10 @@ func (g GlobFiles) ListDir(ctx context.Context, dir string, maximum int) ([]comm
 	}
 	entries := make([]commandsurface.GlobEntry, 0, len(listed))
 	for _, entry := range listed {
+		childAbs := bound.Resolved.Abs + string(filepath.Separator) + entry.Name()
+		if settingsoverlay.HasRecoverySegment(childAbs) || settingsoverlay.IsRecoveryOnlyDir(childAbs) {
+			continue
+		}
 		link := entry.Type()&os.ModeSymlink != 0
 		entries = append(entries, commandsurface.GlobEntry{Name: entry.Name(), Dir: entry.IsDir() && !link, Link: link})
 	}
@@ -58,24 +63,15 @@ func (g GlobFiles) Entry(ctx context.Context, path string) (commandsurface.GlobE
 	if bound.Null {
 		return commandsurface.GlobEntry{}, false, nil
 	}
-	root, err := bound.openRoot()
+	if settingsoverlay.IsRecoveryRelPath(bound.Resolved.ScopeRel) || settingsoverlay.HasRecoverySegment(bound.Resolved.Abs) || settingsoverlay.IsRecoveryOnlyDir(bound.Resolved.Abs) {
+		return commandsurface.GlobEntry{}, false, nil
+	}
+	stat, err := bound.Stat(false)
 	if err != nil {
 		return commandsurface.GlobEntry{}, false, globRefusal(err)
 	}
-	defer root.Close()
-	for _, probe := range []struct {
-		operator string
-		entry    commandsurface.GlobEntry
-	}{{"-L", commandsurface.GlobEntry{Link: true}}, {"-d", commandsurface.GlobEntry{Dir: true}}, {"-e", commandsurface.GlobEntry{}}} {
-		found, err := root.TestPath(bound.exactRelative, probe.operator)
-		if err != nil {
-			return commandsurface.GlobEntry{}, false, globRefusal(err)
-		}
-		if found {
-			return probe.entry, true, nil
-		}
-	}
-	return commandsurface.GlobEntry{}, false, nil
+	link := stat.Mode&os.ModeSymlink != 0
+	return commandsurface.GlobEntry{Dir: stat.Mode.IsDir() && !link, Link: link}, true, nil
 }
 
 // Admit applies the invocation's read authority, with its boundary, to the

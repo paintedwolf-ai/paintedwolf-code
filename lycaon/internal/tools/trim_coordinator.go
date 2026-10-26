@@ -20,6 +20,25 @@ func TrimCoordinatorToolMeta(meta ToolMeta) ToolMeta {
 	return out
 }
 
+// PruneCommandReadOnlySchema strips mutating, external-execution, and capture
+// parameters from the command schema when a profile or surface restricts
+// command to read-only native utilities.
+func PruneCommandReadOnlySchema(schema map[string]any) map[string]any {
+	out := trimArgsSchema(schema)
+	props, _ := out["properties"].(map[string]any)
+	for _, key := range []string{
+		"capability_request",
+		"secret_use",
+		"snapshot_capture",
+		"socks_proxy",
+		"terminal_capture",
+		"verification",
+	} {
+		delete(props, key)
+	}
+	return out
+}
+
 func trimArgsSchema(schema map[string]any) map[string]any {
 	if schema == nil {
 		return map[string]any{"type": "object"}

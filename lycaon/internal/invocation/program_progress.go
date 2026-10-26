@@ -51,7 +51,7 @@ func (r ProgramAdmissionRecorder) BeforeProgressOwner(ctx context.Context, ident
 	if err != nil {
 		return err
 	}
-	if err = oneProgramTransition(result); err != nil {
+	if err := oneProgramTransition(result); err != nil {
 		return err
 	}
 	_, err = tx.ExecContext(ctx, `UPDATE invocation_programs SET progress_state='unknown',progress_ref=? WHERE id=?`, identity.ExecutionID, identity.ProgramID)
@@ -101,7 +101,7 @@ func (r *SQLRecorder) SettleProgramProgress(ctx context.Context, in ProgressSett
 	if err != nil {
 		return err
 	}
-	if err = oneProgramTransition(result); err != nil {
+	if err := oneProgramTransition(result); err != nil {
 		return err
 	}
 	_, err = tx.ExecContext(ctx, `UPDATE invocation_programs SET progress_state=?,progress_ref=? WHERE id=?`, in.State, id.ExecutionID, id.ProgramID)

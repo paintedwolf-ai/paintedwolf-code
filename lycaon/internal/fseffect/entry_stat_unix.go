@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"golang.org/x/sys/unix"
@@ -22,7 +23,7 @@ func (r *ReadRoot) Stat(rel string, follow bool, admit func(string) error) (Entr
 	}
 	if relative == "." || relative == "" {
 		var st unix.Stat_t
-		if err := unix.Fstat(int(r.root.file.Fd()), &st); err != nil {
+		if err := unix.Fstat(r.root.fd, &st); err != nil {
 			return EntryStat{}, err
 		}
 		if admit != nil {
@@ -30,7 +31,9 @@ func (r *ReadRoot) Stat(rel string, follow bool, admit func(string) error) (Entr
 				return EntryStat{}, err
 			}
 		}
-		return entryStat(filepath.Base(r.root.path), &st), nil
+		out := entryStat(filepath.Base(r.root.path), &st)
+		out.BirthTime = birthTime(r.root.fd, "", true, &st)
+		return out, nil
 	}
 	var out EntryStat
 	_, err = walkReadContained(r.root, relative, follow, func(dir *os.File, name string, st *unix.Stat_t) (*os.File, error) {
@@ -40,9 +43,30 @@ func (r *ReadRoot) Stat(rel string, follow bool, admit func(string) error) (Entr
 			}
 		}
 		out = entryStat(name, st)
+		out.BirthTime = birthTime(int(dir.Fd()), name, follow, st)
 		return nil, nil
 	})
 	return out, err
+}
+
+// StatChildAt reports an immediate child's no-follow metadata through a held
+// contained directory descriptor.
+func (r *ReadRoot) StatChildAt(dir *os.File, _ string, name string, admit func(string) error) (EntryStat, error) {
+	var st unix.Stat_t
+	if err := unix.Fstatat(int(dir.Fd()), name, &st, unix.AT_SYMLINK_NOFOLLOW); err != nil {
+		return EntryStat{}, &fs.PathError{Op: "open effect path", Path: name, Err: err}
+	}
+	if admit != nil {
+		dirName := dir.Name()
+		actual := dirName + string(filepath.Separator) + name
+		if dirName == "" || name == "" || name == "." || name == ".." || strings.ContainsRune(name, filepath.Separator) || strings.HasSuffix(dirName, string(filepath.Separator)) {
+			actual = filepath.Join(dirName, name)
+		}
+		if err := admit(actual); err != nil {
+			return EntryStat{}, err
+		}
+	}
+	return entryStat(name, &st), nil
 }
 
 func entryStat(name string, st *unix.Stat_t) EntryStat {
@@ -73,5 +97,8 @@ func entryStat(name string, st *unix.Stat_t) EntryStat {
 	return EntryStat{
 		Name: name, Mode: mode, Size: st.Size, ModTime: time.Unix(int64(st.Mtim.Sec), int64(st.Mtim.Nsec)).UTC(),
 		POSIX: true, UID: st.Uid, GID: st.Gid, Inode: uint64(st.Ino), Links: uint64(st.Nlink), Device: uint64(st.Dev),
+		DeviceMajor: unix.Major(uint64(st.Dev)), DeviceMinor: unix.Minor(uint64(st.Dev)),
+		Blocks: int64(st.Blocks), BlockSize: int64(st.Blksize),
+		AccessTime: time.Unix(int64(st.Atim.Sec), int64(st.Atim.Nsec)).UTC(), ChangeTime: time.Unix(int64(st.Ctim.Sec), int64(st.Ctim.Nsec)).UTC(),
 	}
 }

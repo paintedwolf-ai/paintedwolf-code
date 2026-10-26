@@ -1,5 +1,5 @@
 tags: [git, mutation]
-description: "Restore explicit paths in the Git worktree, index, or both. Defaults to Git's ordinary worktree-from-index behavior. This discards selected state — use only when the user explicitly asked to revert named paths. Replaces command: git restore."
+description: "Restore explicit paths in the Git worktree, index, or both. Defaults to Git's ordinary worktree-from-index behavior. This discards selected state — use only when the user explicitly asked to revert named paths."
 schema:
   type: object
   properties:

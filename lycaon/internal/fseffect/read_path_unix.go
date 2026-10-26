@@ -49,7 +49,7 @@ func (r *ReadRoot) OpenExact(rel string) (*os.File, error) {
 	if err != nil {
 		return nil, err
 	}
-	return openReadContained(r.root, relative)
+	return r.openReadContained(relative)
 }
 
 // MetadataRoot holds descriptor-relative launch metadata authority. Entry opens

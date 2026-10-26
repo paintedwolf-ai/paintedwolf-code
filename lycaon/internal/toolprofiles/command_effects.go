@@ -59,31 +59,3 @@ func (p *ProfilePolicyEngine) CommandOperationAllowed(ctx context.Context, profi
 	}
 	return boundary.CommandOperationAllowed(ctx, profileID, identity, command)
 }
-
-// FreezeCommandProfile delegates command profile freezing through the guidance wrapper.
-func (p *GuidanceRejectPolicy) FreezeCommandProfile(ctx context.Context, profileID string) (context.Context, toolcontract.CommandEffects, error) {
-	if p == nil || p.inner == nil {
-		return ctx, 0, fmt.Errorf("command profile policy required")
-	}
-	source, ok := p.inner.(interface {
-		FreezeCommandProfile(context.Context, string) (context.Context, toolcontract.CommandEffects, error)
-	})
-	if !ok {
-		return ctx, 0, fmt.Errorf("command profile effect boundary required")
-	}
-	return source.FreezeCommandProfile(ctx, profileID)
-}
-
-// CommandOperationAllowed delegates native binding exclusions through the guidance wrapper.
-func (p *GuidanceRejectPolicy) CommandOperationAllowed(ctx context.Context, profileID, identity, command string) (bool, error) {
-	if p == nil || p.inner == nil {
-		return false, fmt.Errorf("command profile policy required")
-	}
-	source, ok := p.inner.(interface {
-		CommandOperationAllowed(context.Context, string, string, string) (bool, error)
-	})
-	if !ok {
-		return false, fmt.Errorf("native operation profile boundary required")
-	}
-	return source.CommandOperationAllowed(ctx, profileID, identity, command)
-}

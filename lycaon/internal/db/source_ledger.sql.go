@@ -722,7 +722,7 @@ SELECT id, project_id, branch_id, origin, cause, actor_label,
        capture_quality, started_ts, committed_ts,
        COALESCE(git_transition_id, '') AS git_transition_id,
        COALESCE(command_window_id, '') AS command_window_id
-FROM source_operations WHERE project_id = ? AND operation_key = ?
+FROM source_operations WHERE project_id = ? AND operation_key = ? AND operation_key != ''
 `
 
 type GetSourceOperationByKeyParams struct {

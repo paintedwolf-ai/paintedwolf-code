@@ -12,10 +12,11 @@ import (
 // NativeOperationSelection freezes host-selected typed definitions independently
 // of retained JSON handlers. Definitions carry no execution grants.
 type NativeOperationSelection struct {
-	offered     commandprogram.OfferedOperations
-	known       commandprogram.OfferedOperations
-	definitions []toolcontract.OperationDefinition
-	denied      map[string]map[string]bool
+	offered        commandprogram.OfferedOperations
+	known          commandprogram.OfferedOperations
+	definitions    []toolcontract.OperationDefinition
+	denied         map[string]map[string]bool
+	identityDenied map[string]bool
 }
 
 // Definitions returns detached immutable declarations for catalog presentation.
@@ -35,17 +36,22 @@ func (e *Metadata) SelectNativeOperations(ctx context.Context, filter platform.T
 	if !ok {
 		return NativeOperationSelection{}, fmt.Errorf("native operation profile policy required")
 	}
-	selected := NativeOperationSelection{denied: map[string]map[string]bool{}}
+	selected := NativeOperationSelection{denied: map[string]map[string]bool{}, identityDenied: map[string]bool{}}
 	seen := map[string]bool{}
 	for _, definition := range active {
 		if err := definition.ValidateNativeCommands(); err != nil {
 			return NativeOperationSelection{}, err
 		}
-		facts := definition.Facts()
+		facts := definition.ReadOnlyFacts()
 		if seen[facts.Identity] {
 			return NativeOperationSelection{}, fmt.Errorf("duplicate native operation %q", facts.Identity)
 		}
 		seen[facts.Identity] = true
+		identityAllowed, err := policy.CommandOperationAllowed(ctx, filter.ProfileID, facts.Identity, "")
+		if err != nil {
+			return NativeOperationSelection{}, err
+		}
+		selected.identityDenied[facts.Identity] = !identityAllowed
 		denied := map[string]bool{}
 		anyAllowed := false
 		for _, command := range facts.Commands {

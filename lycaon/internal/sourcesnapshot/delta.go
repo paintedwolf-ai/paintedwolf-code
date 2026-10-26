@@ -18,7 +18,7 @@ type deltaTracker struct {
 	roots map[string]*rootDelta
 	seq   uint64
 	// admit excludes changes outside the capture scope.
-	admit func(ctx context.Context, root, rel string) bool
+	admit func(ctx context.Context, root string) func(rel string) bool
 }
 
 type rootDelta struct {
@@ -43,6 +43,7 @@ func (t *deltaTracker) observe(ctx context.Context, ev repochange.Event) {
 	root := filepath.Clean(ev.ProjectDir)
 	// Scope decisions read ignore files; they run before the lock.
 	overflow := false
+	var admit func(string) bool
 	rels := make([]string, 0, len(ev.Paths))
 	for _, raw := range ev.Paths {
 		if ctx.Err() != nil {
@@ -56,8 +57,13 @@ func (t *deltaTracker) observe(ctx context.Context, ev repochange.Event) {
 		}
 		if ignoreFileChanged(rel) {
 			overflow = true
-		} else if t.admit != nil && !t.admit(ctx, root, rel) {
-			continue
+		} else if t.admit != nil {
+			if admit == nil {
+				admit = t.admit(ctx, root)
+			}
+			if !admit(rel) {
+				continue
+			}
 		}
 		rels = append(rels, rel)
 	}

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"slices"
 	"strings"
 	"testing"
@@ -53,7 +54,7 @@ func TestPipelineKeepsEveryProducerOutcome(t *testing.T) {
 
 func TestPipelineExternalClosureIsNotNativeClosure(t *testing.T) {
 	f := newEvalFixture(t)
-	out, err := f.run(t, t.Context(), "yes | head -n 1")
+	out, err := f.run(t, t.Context(), "external -- yes | head -n 1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,9 +154,10 @@ func TestLoopIterationCeilingAtBoundaryAndOnePast(t *testing.T) {
 
 func TestEmptyInfiniteLoopTerminatesOnHostCounters(t *testing.T) {
 	for program, binding := range map[string]string{
-		"while x=1; do x=2; done; echo never": "loop_iterations",
-		"f() { while x=1; do continue; done; }; f": "loop_iterations",
-		"while :; do :; done; echo never": "child_executions",
+		"while x=1; do x=2; done; echo never":        "loop_iterations",
+		"f() { while x=1; do continue; done; }; f":   "loop_iterations",
+		"while :; do :; done; echo never":            "loop_iterations",
+		"while echo a; do echo b; done; echo never":  "child_executions",
 	} {
 		f := newEvalFixture(t)
 		out, err := f.run(t, t.Context(), program)
@@ -163,9 +165,49 @@ func TestEmptyInfiniteLoopTerminatesOnHostCounters(t *testing.T) {
 		if !errors.As(err, &limit) || limit.Limit != binding || out.Stop == nil {
 			t.Fatalf("%q: %v", program, err)
 		}
-		if len(f.log.calls) != 0 {
+		if slices.Contains(f.log.argv(), "echo never") {
 			t.Fatalf("%q admitted a child after exhaustion", program)
 		}
+	}
+}
+
+func childDispatchProgram(dispatches int64) string {
+	const (
+		inner   = 100
+		perIter = 5
+		chunk   = inner * perIter
+	)
+	outer := dispatches / chunk
+	rest := dispatches % chunk
+	var b strings.Builder
+	// Precede the dispatches with AST frames, evaluator builtins and redirects
+	// so they would overflow child_executions if charged there.
+	b.WriteString("for k in" + strings.Repeat(" k", 20) + "; do { : >/dev/null; true; test -n x; [[ a == a ]]; }; done\n")
+	if outer > 0 {
+		body := strings.Repeat("echo tick >/dev/null; ", perIter)
+		b.WriteString("for a in" + strings.Repeat(" a", int(outer)) + "; do for b in" + strings.Repeat(" b", inner) + "; do " + body + "done; done\n")
+	}
+	for i := int64(0); i < rest; i++ {
+		b.WriteString("echo tick >/dev/null\n")
+	}
+	return b.String()
+}
+
+func TestChildExecutionCeilingAtBoundaryAndOnePast(t *testing.T) {
+	limits, err := catalogEvaluationLimits()
+	if err != nil {
+		t.Fatal(err)
+	}
+	maximum := limits["child_executions"]
+	f := newEvalFixture(t)
+	if _, err := f.run(t, t.Context(), childDispatchProgram(maximum)); err != nil || int64(len(f.log.calls)) != maximum {
+		t.Fatalf("boundary refused: %v calls=%d", err, len(f.log.calls))
+	}
+	f = newEvalFixture(t)
+	out, err := f.run(t, t.Context(), childDispatchProgram(maximum+1))
+	assertLimit(t, err, "child_executions", maximum, maximum+1)
+	if out.Stop == nil || int64(len(f.log.calls)) != maximum {
+		t.Fatalf("one past the ceiling admitted work: calls=%d", len(f.log.calls))
 	}
 }
 
@@ -279,8 +321,13 @@ func TestSourceSyntaxRefusalKeepsEarlierParentEffects(t *testing.T) {
 
 func TestSourceUsageAndDepth(t *testing.T) {
 	f := newEvalFixture(t)
-	if _, err := f.run(t, t.Context(), "source ./x; echo $?"); err != nil || f.stdout.String() != "2\n" {
-		t.Fatalf("missing -- was not usage: %v %q", err, f.stdout.String())
+	if _, err := f.run(t, t.Context(), "source -x; echo $?"); err != nil || f.stdout.String() != "2\n" {
+		t.Fatalf("an option operand was not usage: %v %q", err, f.stdout.String())
+	}
+	f = newEvalFixture(t)
+	f.sources.files["./lib.sh"] = "echo sourced\n"
+	if _, err := f.run(t, t.Context(), "source ./lib.sh; echo $?"); err != nil || !strings.HasSuffix(f.stdout.String(), "0\n") {
+		t.Fatalf("plain source path: %v %q", err, f.stdout.String())
 	}
 	limits, _ := catalogEvaluationLimits()
 	f = newEvalFixture(t)
@@ -350,5 +397,63 @@ func TestEvaluateRejectsMismatchedPlanAndPorts(t *testing.T) {
 	f.ports.Invocation.Kind = toolcontract.StructuredToolInvocation
 	if _, err := f.run(t, t.Context(), "echo a"); err == nil {
 		t.Fatal("evaluated under a structured invocation")
+	}
+}
+
+// compoundCloseDispatch keeps the byte endpoint's close plus the utility's
+// original diagnostic; the evaluator must not replace it with a bare close.
+type compoundCloseDispatch struct {
+	Dispatch
+	joined  bool
+	failure error
+}
+
+func (d compoundCloseDispatch) Fork(ctx context.Context) (Dispatch, func(), error) {
+	child, release, err := d.Dispatch.Fork(ctx)
+	return compoundCloseDispatch{Dispatch: child, joined: d.joined, failure: d.failure}, release, err
+}
+func (d compoundCloseDispatch) Invoke(ctx context.Context, request OperationRequest, streams Streams) (toolcontract.ProducerResult, error) {
+	if request.Argv[0].Value != "cat" {
+		return d.Dispatch.Invoke(ctx, request, streams)
+	}
+	_, err := io.WriteString(streams.Output, "one\n")
+	if err == nil {
+		_, err = io.WriteString(streams.Output, "two\n")
+	}
+	result := toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}
+	if errors.Is(err, ErrConsumerClosed) {
+		if d.joined {
+			err = errors.Join(err, d.failure)
+		} else {
+			err = fmt.Errorf("synthetic utility diagnostic: %w", err)
+		}
+	}
+	return result, err
+}
+func TestPipelineWrappedCloseCannotPublish(t *testing.T) {
+	for _, joined := range []bool{false, true} {
+		t.Run(fmt.Sprint(joined), func(t *testing.T) {
+			f := newEvalFixture(t)
+			failure := errors.New("independent utility failure")
+			f.ports.Dispatch = compoundCloseDispatch{Dispatch: f.ports.Dispatch, joined: joined, failure: failure}
+			out, err := f.run(t, t.Context(), "echo kept > earlier; { cat <<EOF | head -n 1; } > result; echo $?\none\ntwo\nthree\nEOF\n")
+			if err != nil || out.Stop != nil || f.stdout.String() != "1\n" || f.publication.published["earlier"] != "kept\n" || f.publication.published["result"] != "" || !slices.Contains(f.publication.abandoned, "result") {
+				t.Fatalf("joined=%v outcome=%+v err=%v published=%v abandoned=%v calls=%v", joined, out, err, f.publication.published, f.publication.abandoned, f.log.argv())
+			}
+			found := false
+			for _, child := range out.Children {
+				if child.Command != "cat" {
+					continue
+				}
+				found = true
+				if child.Result.Status != 1 || child.Result.Complete || child.Result.PublicationEligible || !errors.Is(child.Diagnostic, ErrConsumerClosed) || (joined && !errors.Is(child.Diagnostic, failure)) {
+					t.Fatalf("lost producer diagnostic or failed settlement: %+v", child)
+				}
+			}
+			if !found {
+				t.Fatal("missing producer settlement")
+			}
+
+		})
 	}
 }
