@@ -43,6 +43,24 @@ func TestProgramEntryPsReportsObservedColumns(t *testing.T) {
 	}
 }
 
+func TestProgramEntryJobsLongAndPsUseNumericBackgroundPID(t *testing.T) {
+	f := newProgramFixture(t)
+	out, err := f.call(t, t.Context(), `external -- /bin/sleep 30 & pid=$!; jobs -l; ps -p "$pid" -o pid=; kill "$pid"; wait "$pid"`)
+	testutil.FailErr(t, "inspect background process", err)
+	got := decodeOutcome(t, out)
+	if got.Status != 143 || !strings.Contains(got.Stdout, "[1] ") {
+		t.Fatalf("background process outcome: %+v", got)
+	}
+	lines := strings.Split(strings.TrimSpace(got.Stdout), "\n")
+	if len(lines) < 2 {
+		t.Fatalf("missing jobs or ps output: %q", got.Stdout)
+	}
+	fields := strings.Fields(lines[0])
+	if len(fields) < 3 || fields[1] != strings.TrimSpace(lines[1]) {
+		t.Fatalf("jobs and ps disagree on PID: %q", got.Stdout)
+	}
+}
+
 func TestProgramEntrySedTextCommandsAndBSDInPlace(t *testing.T) {
 	f := newProgramFixture(t)
 	path := filepath.Join(f.Dir, "lines.txt")
