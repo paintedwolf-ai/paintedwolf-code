@@ -105,7 +105,7 @@ components:
       properties:
         reason:
           type: string
-          enum: [screen_locked, sleep, app_quit]
+          enum: [screen_locked, sleep, away, app_quit]
     LockVaultResponse:
       x-go-generate: true
       type: object

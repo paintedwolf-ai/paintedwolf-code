@@ -214,9 +214,11 @@ pub(super) fn subscribe_system(
             }
             let changed = glib::VariantDict::new(Some(&parameters.child_value(1)));
             let mut next = inner.current();
+            let mut hint_true = false;
             if let Some(session) = &mut next.session {
                 if let Ok(Some(locked)) = changed.lookup::<bool>("LockedHint") {
                     session.locked = locked;
+                    hint_true = locked;
                 }
                 if let Ok(Some(active)) = changed.lookup::<bool>("Active") {
                     session.active = active;
@@ -225,6 +227,8 @@ pub(super) fn subscribe_system(
                     session.can_lock = can_lock;
                 }
             }
+            // Something maintains the hint: the session's locker is observable.
+            next.locked_hint_seen |= hint_true;
             if parameters.child_value(2).n_children() > 0
                 || ["Type", "Class", "User"]
                     .iter()

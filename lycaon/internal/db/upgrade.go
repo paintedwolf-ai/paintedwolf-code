@@ -32,10 +32,11 @@ func schemaRegistry(ctx context.Context) (*migrations.Registry, error) {
 	if err := json.Unmarshal(releasedBaselinesJSON, &released); err != nil {
 		return nil, fmt.Errorf("decode released schemas: %w", err)
 	}
+	away := migrations.VaultUnlockAway(current)
 	resultPaths := migrations.ToolResultPaths()
 	steps := []migrations.Step{
 		migrations.SourceNamespace(), migrations.PresenceAuthenticators(resultPaths.From), resultPaths,
-		migrations.SourceManifestLayout(current),
+		migrations.SourceManifestLayout(away.From), away,
 	}
 	return migrations.New(current, released, steps)
 }

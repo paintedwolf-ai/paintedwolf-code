@@ -10,7 +10,7 @@ import (
 )
 
 func TestStepAwayInvalidatesPendingAndAlreadyVerifiedPresence(t *testing.T) {
-	for _, reason := range []EndReason{EndScreenLocked, EndSleep, EndAppQuit} {
+	for _, reason := range []EndReason{EndScreenLocked, EndSleep, EndAway, EndAppQuit} {
 		t.Run(string(reason), func(t *testing.T) {
 			broker, key := configuredBroker(t)
 			unlocks := NewUnlocks(broker)
