@@ -721,16 +721,16 @@ func (s Store) pruneExpiredLocked(state *storeState, now time.Time) error {
 		if !entry.IsDir() || !isHexDigest(entry.Name()) {
 			continue
 		}
+		info, err := entry.Info()
+		if err != nil || !info.ModTime().Before(cutoff) {
+			continue
+		}
 		dir := filepath.Join(root, entry.Name())
 		retained, err := s.hasRetentions(entry.Name())
 		if err != nil {
 			return err
 		}
 		if retained {
-			continue
-		}
-		info, err := entry.Info()
-		if err != nil || !info.ModTime().Before(cutoff) {
 			continue
 		}
 		if _, err := s.removeBlob(entry.Name(), dir); err != nil {
