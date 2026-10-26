@@ -259,7 +259,7 @@ func TestSourceRunsCapturedUnitInCurrentFrame(t *testing.T) {
 // Q10: a sourced unit with excluded syntax runs nothing, and earlier parent
 // work stays recorded as executed rather than replayable.
 func TestSourceSyntaxRefusalKeepsEarlierParentEffects(t *testing.T) {
-	for name, script := range map[string]string{"excluded": "echo inner\neval x\n", "invalid": "echo inner\nif then\n", "bom": "\xef\xbb\xbfecho inner\n"} {
+	for name, script := range map[string]string{"excluded": "echo inner\ntrap x EXIT\n", "invalid": "echo inner\nif then\n", "bom": "\xef\xbb\xbfecho inner\n"} {
 		t.Run(name, func(t *testing.T) {
 			f := newEvalFixture(t)
 			f.sources.files["./bad.sh"] = script

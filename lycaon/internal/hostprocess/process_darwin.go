@@ -7,6 +7,8 @@ package hostprocess
 #include <errno.h>
 #include <signal.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <stdlib.h>
 
 // Public SDK headers omit the 56-byte PROC_PIDUNIQIDENTIFIERINFO layout.
 struct pw_identity {
@@ -37,6 +39,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"golang.org/x/sys/unix"
@@ -77,10 +80,46 @@ func inspect(pid int) (Process, error) {
 	if before.unique_id != after.unique_id || before.version != after.version {
 		return Process{}, ErrStale
 	}
+	stats := ProcessStats{
+		Started: time.Unix(int64(info.pbi_start_tvsec), int64(info.pbi_start_tvusec)*1000),
+		State:   darwinProcessState(uint32(info.pbi_status)), TTY: "?",
+	}
+	if info.e_tdev != 0 && info.e_tdev != ^C.uint32_t(0) {
+		if name := C.devname(C.dev_t(info.e_tdev), C.mode_t(C.S_IFCHR)); name != nil {
+			stats.TTY = C.GoString(name)
+		}
+	}
+	var task C.struct_proc_taskinfo
+	if C.proc_pidinfo(C.int(pid), C.PROC_PIDTASKINFO, 0, unsafe.Pointer(&task), C.int(C.sizeof_struct_proc_taskinfo)) == C.int(C.sizeof_struct_proc_taskinfo) {
+		stats.Available = true
+		stats.VirtualBytes = uint64(task.pti_virtual_size)
+		stats.ResidentBytes = uint64(task.pti_resident_size)
+		stats.CPUTime = time.Duration(uint64(task.pti_total_user) + uint64(task.pti_total_system))
+	}
 	return Process{PID: pid, ParentPID: int(info.pbi_ppid), UID: uint32(info.pbi_uid),
 		Name: C.GoString(&info.pbi_comm[0]), Executable: C.GoString(&path[0]),
 		StartOrder: uint64(info.pbi_start_tvsec)*1_000_000 + uint64(info.pbi_start_tvusec),
-		Instance:   fmt.Sprintf("%d:%d", uint64(before.unique_id), uint32(before.version))}, nil
+		Instance:   fmt.Sprintf("%d:%d", uint64(before.unique_id), uint32(before.version)), Stats: stats}, nil
+}
+
+func darwinProcessState(code uint32) string {
+	switch code {
+	case 2:
+		return "R"
+	case 3:
+		return "S"
+	case 4:
+		return "T"
+	case 5:
+		return "Z"
+	default:
+		return "I"
+	}
+}
+
+func PhysicalMemoryBytes() uint64 {
+	n, _ := unix.SysctlUint64("hw.memsize")
+	return n
 }
 
 func signalInstance(process Process, name string) error {

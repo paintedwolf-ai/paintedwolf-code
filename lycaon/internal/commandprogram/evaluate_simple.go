@@ -17,7 +17,7 @@ import (
 // dispatch: control, status, test, variable and source built-ins.
 func EvaluatorBuiltin(name string) bool {
 	switch name {
-	case "true", "false", ":", "test", "[", "unset", "set", "source", "export", "read":
+	case "true", "false", ":", "test", "[", "unset", "set", "source", "export", "read", "eval":
 		return true
 	}
 	return controlBuiltins[name]
@@ -150,25 +150,6 @@ func (f *frame) simple(ctx context.Context, s commandsurface.Statement, c comman
 				return WriteCatalogHelp(spec, f.io.streams.Output)
 			})
 		}
-	}
-	name := fields[0].Value
-	switch name {
-	case "source":
-		return signal{}, f.source(ctx, s, fields)
-	case "true", "false", ":":
-		return signal{}, f.inProcess(ctx, s, name, func(context.Context, toolcontract.OperationInvocation) (toolcontract.ProducerResult, error) {
-			return BooleanBuiltin(ctx, name, fields.Values()[1:])
-		})
-	case "test", "[":
-		return signal{}, f.inProcess(ctx, s, name, func(ctx context.Context, inv toolcontract.OperationInvocation) (toolcontract.ProducerResult, error) {
-			return f.predicates().TestBuiltin(ctx, inv, name, fields.Values()[1:])
-		})
-	case "unset":
-		return signal{}, f.unset(s, fields)
-	case "set":
-		return signal{}, f.setOptions(s, fields)
-	case "read":
-		return signal{}, f.readBuiltin(ctx, s, fields)
 	}
 	return signal{}, f.dispatch(ctx, s, fields, assigns)
 }

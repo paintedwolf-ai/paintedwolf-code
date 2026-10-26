@@ -38,13 +38,12 @@ type grepRun struct {
 	offsets, tabs, nullNames bool
 	numberWidth              int
 	// names is the forced -H/-h choice; nil decides per file.
-	names        *bool
-	quietErrors  bool
-	replace      *string
-	recursive    bool
-	follow       bool
-	selection    selection
-	searchBinary bool
+	names       *bool
+	quietErrors bool
+	replace     *string
+	recursive   bool
+	follow      bool
+	selection   selection
 	// binaryMode is binary (notice), text (-a) or without-match (-I).
 	binaryMode      string
 	skipDirectories bool
@@ -114,7 +113,6 @@ func runRg(inv *invocation) error {
 		r.replace = &replacement
 	}
 	r.selection = newSelection(inv, true)
-	r.searchBinary = r.selection.unrestricted >= 3
 	if err := r.selection.compileRg(); err != nil {
 		return err
 	}
@@ -575,9 +573,6 @@ func (r *grepRun) searchFile(e entry, names bool) error {
 		return err
 	}
 	defer func() { _ = streamed.Reader.Close() }()
-	if r.rg && e.depth > 0 && !r.searchBinary && streamed.FirstNullOffset >= 0 {
-		return nil
-	}
 	return r.searchStream(e.display, streamed.Reader, 0, int(streamed.Revision.ContentBytes), streamed.FirstNullOffset, pin, names)
 }
 
