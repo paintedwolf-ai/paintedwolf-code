@@ -10,14 +10,14 @@ A training row pairs the request the student will be served with the response
 a student should emit, and every rule below follows from that.
 
 Capture runs only when `PW_TRAINING_CAPTURE_DIR` (an existing private absolute
-directory), `PW_TRAINING_EPOCH`, `PW_TRAINING_STUDENT_PROVIDER` and
-`PW_TRAINING_STUDENT_MODEL` are all set on the isolated host. The student
-provider is a configured provider entry describing how the student will be
-served, with its model's `context_length`; collections declare it but never
-drive it. The Bialy runner writes that entry and creates the directory inside
+directory), `PW_TRAINING_EPOCH`, and `PW_TRAINING_STUDENTS` are set on the
+isolated host. The student list contains unique `provider` and `model` objects.
+Each provider entry declares its serving controls and model `context_length`.
+Every student request must explicitly disable thinking. Collections render each
+student from the same host state without dispatching student calls. The Bialy runner writes that entry and creates the directory inside
 its shard.
 
-`pw-training-turn/1` records, per settled model output:
+`pw-training-turn/1` records, per student and settled model output:
 
 - the exact teacher dispatch, as provenance;
 - the request rendered offline through the student's provider entry

@@ -40,7 +40,7 @@ class Contracts(unittest.TestCase):
         self.args = {"path": "file.txt"}
         self.db.execute("INSERT INTO invocation_receipts VALUES(?,?,?,?,?,?,?,?,?,?)",
                         ('receipt', 'session', 'message', 'call', 'read', 'completed', 1, 'now', digest(self.args), '2'))
-        student = {"model": "student-e4b", "stream": True, "tools": TOOLS, "messages": [
+        student = {"model": "student-e4b", "reasoning_effort": "none", "stream": True, "tools": TOOLS, "messages": [
             {"role": "system", "content": "Be precise"},
             {"role": "user", "content": "Read file"},
             {"role": "assistant", "content": None, "tool_calls": [{"id": "earlier", "type": "function", "function": {"name": "read", "arguments": "{\"path\":\"README.md\"}"}}]},
@@ -59,6 +59,13 @@ class Contracts(unittest.TestCase):
 
     def row(self):
         return accepted_row(self.record, self.db, self.identity, "c" * 64, self.commits)
+
+    def test_student_thinking_must_be_explicitly_disabled(self):
+        for effort in (None, "minimal", "low", "high"):
+            with self.subTest(effort=effort):
+                self.record["student_request"]["reasoning_effort"] = effort
+                with self.assertRaisesRegex(ValueError, "request control"):
+                    self.row()
 
     def test_receipt_is_necessary_and_quality_is_separate(self):
         row = self.row()

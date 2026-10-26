@@ -14,7 +14,7 @@ from test_contracts import Tokenizer
 def row(group, text="question"):
     return {"schema": "pw-custom-sft/1", "split_group": group,
             "prompt": [{"role": "system", "content": "host"}, {"role": "user", "content": group + text}],
-            "request_capture": {"sha256": group, "tools": [], "controls": {}},
+            "request_capture": {"sha256": group, "tools": [], "controls": {"reasoning_effort": "none"}},
             "target": {"role": "assistant", "text": "answer", "tool_calls": []}}
 
 

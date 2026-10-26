@@ -31,16 +31,20 @@ type Policy struct {
 }
 
 type Turn struct {
-	root    string
-	student student
-	record  Record
-	wire    *modelcall.WireCapture
-	raw     *response
-	policy  Policy
+	root     string
+	students []student
+	record   Record
+	records  []Record
+	wire     *modelcall.WireCapture
+	raw      *response
+	policy   Policy
 }
 
 // student is the configured provider and model the student will be served through.
-type student struct{ provider, model string }
+type student struct {
+	Provider string `json:"provider"`
+	Model    string `json:"model"`
+}
 
 type Record struct {
 	Schema     string `json:"schema"`
@@ -78,10 +82,19 @@ type response struct {
 
 // config is the opt-in collection: a private absolute directory, an epoch, and
 // the configured provider and model the student will be served through.
-func config() (root, epoch string, s student, ok bool) {
+func config() (root, epoch string, students []student, ok bool) {
 	root, epoch = os.Getenv("PW_TRAINING_CAPTURE_DIR"), os.Getenv("PW_TRAINING_EPOCH")
-	s = student{provider: os.Getenv("PW_TRAINING_STUDENT_PROVIDER"), model: os.Getenv("PW_TRAINING_STUDENT_MODEL")}
-	return root, epoch, s, filepath.IsAbs(root) && epoch != "" && s.provider != "" && s.model != ""
+	if json.Unmarshal([]byte(os.Getenv("PW_TRAINING_STUDENTS")), &students) != nil || len(students) == 0 {
+		return root, epoch, nil, false
+	}
+	seen := map[student]bool{}
+	for _, s := range students {
+		if s.Provider == "" || s.Model == "" || seen[s] {
+			return root, epoch, nil, false
+		}
+		seen[s] = true
+	}
+	return root, epoch, students, filepath.IsAbs(root) && epoch != ""
 }
 
 // Begin is disabled unless the collection is fully configured. It does not
@@ -91,9 +104,9 @@ func Begin(ctx context.Context, session, message, output string) (context.Contex
 	if !ok {
 		return ctx, nil
 	}
-	t := &Turn{root: root, student: s, wire: &modelcall.WireCapture{}, record: Record{
+	t := &Turn{root: root, students: s, wire: &modelcall.WireCapture{}, record: Record{
 		Schema: "pw-training-turn/1", Epoch: epoch, SessionID: session,
-		MessageID: message, OutputID: output, StudentProvider: s.provider, StudentModel: s.model,
+		MessageID: message, OutputID: output,
 	}}
 	return context.WithValue(ctx, contextKey{}, t), t
 }
@@ -109,8 +122,8 @@ func Prepare(ctx context.Context, req modelcall.CompletionRequest, policy Policy
 	return req
 }
 
-// Observe snapshots the provider response before host normalization. A failed,
-// scripted, or reasoning-bearing response cannot become a non-thinking target.
+// Observe captures visible output before host normalization. Reasoning remains
+// outside the target; scripted or failed responses are excluded.
 // The provider and model are the ones the call was dispatched to; a collected
 // stream does not always carry them on the completion.
 func Observe(ctx context.Context, completion *modelcall.Completion, failed bool, provider, model string) {
@@ -123,7 +136,7 @@ func Observe(ctx context.Context, completion *modelcall.Completion, failed bool,
 		t.record.Reason = "provider_failed"
 		return
 	}
-	if completion.Scripted || completion.Reasoning != "" || len(completion.ReasoningDetails) > 0 {
+	if completion.Scripted {
 		t.record.Reason = "unsupported_response"
 		return
 	}
@@ -170,15 +183,19 @@ func Settled(ctx context.Context, output string, message api.Message) {
 			return
 		}
 	}
-	// A request the student could not be served (an unconfigured provider, or one
-	// over its declared window) is not a training input for it.
-	kind, rendered, err := t.policy.Render(ctx, t.student.provider, t.student.model, *source)
-	if err != nil {
-		t.record.Reason = "student_cannot_be_served"
-		return
+	t.records = nil
+	for _, student := range t.students {
+		record := t.record
+		record.StudentProvider, record.StudentModel = student.Provider, student.Model
+		kind, rendered, err := t.policy.Render(ctx, student.Provider, student.Model, *source)
+		if err != nil {
+			record.Reason = "student_cannot_be_served"
+		} else {
+			record.StudentKind, record.StudentRequest = kind, rendered
+			record.Response, _ = json.Marshal(settled)
+		}
+		t.records = append(t.records, record)
 	}
-	t.record.StudentKind, t.record.StudentRequest = kind, rendered
-	t.record.Response, _ = json.Marshal(settled)
 }
 
 // compareResponses separates host normalizations from changes to emitted text,

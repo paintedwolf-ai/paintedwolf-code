@@ -21,6 +21,7 @@ class OversizeRow(EncodingExclusion):
 
 def check_row(row):
     capture, validation = row["request_capture"], row["validation"]
+    check_controls(capture.get("controls", {}))
     if capture.get("schema") not in ("pw-model-request-capture/1", "pw-model-request-capture/2") or validation.get("schema") != "pw-training-validation/1":
         raise ValueError("unsupported evidence schema")
     if not capture.get("messages") or any(m.get("content") is not None and not isinstance(m["content"], str) for m in capture["messages"]):
@@ -80,11 +81,14 @@ def assistant(target):
         for c in target["tool_calls"]]}
 
 
+def check_controls(controls):
+    if controls.get("tool_choice") not in (None, "auto") or controls.get("parallel_tool_calls") is False or controls.get("reasoning_effort") != "none":
+        raise ValueError("request control needs a model-specific renderer")
+
+
 def encode(tokenizer, row, target, max_length):
     capture = row["request_capture"]
-    controls = capture.get("controls", {})
-    if controls.get("tool_choice") not in (None, "auto") or controls.get("parallel_tool_calls") is False or controls.get("reasoning_effort") not in (None, "none", "minimal"):
-        raise ValueError("request control needs a model-specific renderer")
+    check_controls(capture.get("controls", {}))
     kwargs = {"tools": capture["tools"], "tokenize": False, "enable_thinking": False}
     prompt = tokenizer.apply_chat_template(row["prompt"], add_generation_prompt=True, **kwargs)
     full = tokenizer.apply_chat_template(row["prompt"] + [assistant(target)], add_generation_prompt=False, **kwargs)

@@ -19,13 +19,12 @@ func configure(t *testing.T, root string) {
 	t.Helper()
 	t.Setenv("PW_TRAINING_CAPTURE_DIR", root)
 	t.Setenv("PW_TRAINING_EPOCH", "fixture")
-	t.Setenv("PW_TRAINING_STUDENT_PROVIDER", "student")
-	t.Setenv("PW_TRAINING_STUDENT_MODEL", "student-e4b")
+	t.Setenv("PW_TRAINING_STUDENTS", `[{"provider":"student","model":"student-e4b"}]`)
 }
 
 func TestCollectionRequiresExplicitConfiguration(t *testing.T) {
 	configure(t, t.TempDir())
-	t.Setenv("PW_TRAINING_STUDENT_PROVIDER", "")
+	t.Setenv("PW_TRAINING_STUDENTS", "")
 	ctx, capture := Begin(context.Background(), "s", "m", "o")
 	req := Prepare(ctx, modelcall.CompletionRequest{}, Policy{})
 	if capture != nil || req.ControlCapture != nil {
@@ -207,5 +206,54 @@ func TestTurnCommittedWritesAHostFact(t *testing.T) {
 	testutil.FailErr(t, "decode", json.Unmarshal(data, &fact))
 	if fact.Schema != "pw-training-fact/1" || fact.Kind != "turn_committed" || fact.SessionID != "session" || fact.MessageID != "message" || fact.DecidedAt == "" {
 		t.Fatalf("fact = %+v", fact)
+	}
+}
+
+func TestSharedTurnRendersEachStudentAndExcludesReasoning(t *testing.T) {
+	root := t.TempDir()
+	configure(t, root)
+	t.Setenv("PW_TRAINING_STUDENTS", `[{"provider":"student","model":"e4b"},{"provider":"student","model":"12b"}]`)
+	ctx, capture := Begin(t.Context(), "session", "message", "output")
+	req := Prepare(ctx, modelcall.CompletionRequest{Messages: []api.Message{{Role: api.MessageRoleUser, Content: "inspect"}}, Debug: modelcall.RequestDebug{CallID: "shared"}}, fixturePolicy(nil))
+	req.ControlCapture.RecordDispatch(req, []byte(`{"teacher":true}`))
+	Observe(ctx, &modelcall.Completion{Content: "answer", Reasoning: "private reasoning"}, false, "teacher", "model")
+	Settled(ctx, "output", api.Message{Content: "answer"})
+	if err := capture.Finish(); err != nil {
+		t.Fatal(err)
+	}
+	paths, err := filepath.Glob(filepath.Join(root, "*.json"))
+	if err != nil || len(paths) != 2 {
+		t.Fatalf("captures = %v, error = %v", paths, err)
+	}
+	students := map[string]bool{}
+	for _, path := range paths {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var record Record
+		if err := json.Unmarshal(body, &record); err != nil {
+			t.Fatal(err)
+		}
+		if record.Reason != "" || record.CallID != "shared" || strings.Contains(string(body), "private reasoning") {
+			t.Fatalf("unexpected capture: %s", body)
+		}
+		if !strings.Contains(string(record.StudentRequest), "student/"+record.StudentModel) {
+			t.Fatalf("wrong student request: %s", record.StudentRequest)
+		}
+		students[record.StudentModel] = true
+	}
+	if !students["e4b"] || !students["12b"] {
+		t.Fatalf("students = %v", students)
+	}
+}
+
+func TestInvalidStudentSetDisablesCapture(t *testing.T) {
+	configure(t, t.TempDir())
+	for _, value := range []string{`null`, `[]`, `{}`, `[{"provider":"student"}]`, `[{"provider":"p","model":"m"},{"provider":"p","model":"m"}]`} {
+		t.Setenv("PW_TRAINING_STUDENTS", value)
+		if _, capture := Begin(t.Context(), "s", "m", "o"); capture != nil {
+			t.Fatalf("accepted invalid student set %s", value)
+		}
 	}
 }
