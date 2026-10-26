@@ -560,10 +560,8 @@ func (r *grepRun) searchFile(e entry, names, walked bool) error {
 	if r.mode == modeFileList {
 		return r.inv.out.text(e.display, "\n")
 	}
-	// A recursive rg walk excludes binary files before applying an indexed
-	// no-match result, including for --files-without-match.
 	checkBinary := r.rg && walked && r.selection.unrestricted < 3 && r.binaryMode != "text"
-	if !checkBinary && r.indexProvesNoMatch(e) {
+	if r.indexProvesNoMatch(e) {
 		r.pruned++
 		return r.searchContent(e.display, nil, nil, names)
 	}
@@ -579,10 +577,6 @@ func (r *grepRun) searchFile(e entry, names, walked bool) error {
 	if checkBinary {
 		if streamed.FirstNullOffset >= 0 {
 			return nil
-		}
-		if r.indexProvesNoMatch(e) {
-			r.pruned++
-			return r.searchContent(e.display, nil, nil, names)
 		}
 	}
 	return r.searchStream(e.display, streamed.Reader, 0, int(streamed.Revision.ContentBytes), streamed.FirstNullOffset, pin, names)
