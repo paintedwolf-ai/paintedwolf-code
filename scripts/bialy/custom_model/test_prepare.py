@@ -1,11 +1,13 @@
 """Encoding admission drops whole oversize rows and preserves split authority."""
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
 
 from prepare import prepare
+from test_admission import fixture_source
 from test_contracts import Tokenizer
 
 
@@ -22,9 +24,13 @@ class Preparation(unittest.TestCase):
         paths = {key: root / (key + ".jsonl") for key in values}
         for name, path in paths.items():
             path.write_text("".join(json.dumps(value) + "\n" for value in values[name]))
+        key = fixture_source(root, paths)
+        environment = patch.dict(os.environ, {"PW_TRAINING_SOURCE_KEY": str(key)})
+        environment.start()
+        self.addCleanup(environment.stop)
         return paths
 
-    def read(self, path):
+    def read(self, path, partition):
         # Receipt and quality authority are covered by load_split contract tests.
         return [json.loads(line) for line in path.read_text().splitlines()]
 

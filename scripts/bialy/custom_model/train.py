@@ -40,8 +40,8 @@ def train_owned(args):
     # Start DPO at the SFT reference; a separate base is an explicit future ablation.
     if reference_source is not None and source != reference_source:
         raise ValueError("DPO policy must start from the frozen SFT reference")
-    train_rows, validation_rows = load_split(args.train), load_split(args.validation)
-    holdout_rows = load_split(args.holdout)
+    train_rows, validation_rows = load_split(args.train, "train"), load_split(args.validation, "validation")
+    holdout_rows = load_split(args.holdout, "system_test")
     assert_disjoint(train_rows, validation_rows)
     assert_disjoint(train_rows, holdout_rows)
     assert_disjoint(validation_rows, holdout_rows)

@@ -1,10 +1,13 @@
 """Random tiny-model smoke test: no downloaded weights or provider calls."""
 import json
+import os
+from unittest.mock import patch
 from pathlib import Path
 import tempfile
 import unittest
 
 from common import digest
+from test_admission import fixture_source
 from train import parser, train
 from export import export
 
@@ -54,6 +57,10 @@ class Smoke(unittest.TestCase):
             for mode in ("sft","dpo"):
                 for group in ("train","validation","holdout"):
                     (root / (group+".jsonl")).write_text(json.dumps(fixture(group,mode))+"\n")
+                key = fixture_source(root, {name: root / (name + ".jsonl") for name in ("train", "validation", "holdout")})
+                environment = patch.dict(os.environ, {"PW_TRAINING_SOURCE_KEY": str(key)})
+                environment.start()
+                self.addCleanup(environment.stop)
                 base = model_path if mode == "sft" else root / "merged/model"
                 argv = ["--model",str(base),"--mode",mode,"--train",str(root/"train.jsonl"),
                         "--validation",str(root/"validation.jsonl"),"--holdout",str(root/"holdout.jsonl"),"--out",str(root/mode),"--targets","q_proj,v_proj","--rank","2","--max-length","256","--epochs","2","--checkpoint-every","1"]

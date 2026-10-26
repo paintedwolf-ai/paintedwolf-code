@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 from checkpoint import exclusive_run
+from admission import derive
 from common import digest, file_digest, inventory, write_new
 from data import EncodingExclusion, assert_disjoint, encode, load_split
 
@@ -14,7 +15,7 @@ def prepare(paths, out, tokenizer, max_length, model_identity, checkpoint_matche
         raise ValueError("preparation requires three splits and a valid token limit")
     with exclusive_run(out, False):
         inputs = {name: file_digest(path) for name, path in paths.items()}
-        rows = {name: load_split(path) for name, path in paths.items()}
+        rows = {name: load_split(path, "system_test" if name == "holdout" else name) for name, path in paths.items()}
         for first, second in (("train", "validation"), ("train", "holdout"), ("validation", "holdout")):
             assert_disjoint(rows[first], rows[second])
         report = {"schema": "pw-training-preparation/1", "inputs": inputs, "model": model_identity,
@@ -40,6 +41,7 @@ def prepare(paths, out, tokenizer, max_length, model_identity, checkpoint_matche
         if checkpoint_matches is not None and not checkpoint_matches():
             raise ValueError("checkpoint changed during preparation")
         report["ready"] = all(value["kept_rows"] for value in report["splits"].values())
+        derive([Path(out) / (name + ".jsonl") for name in paths], paths.values(), Path(out) / "source.json")
         write_new(Path(out) / "manifest.json", report)
         return report
 
