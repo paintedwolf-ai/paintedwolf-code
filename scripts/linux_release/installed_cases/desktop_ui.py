@@ -6,6 +6,7 @@ import time
 from .. import scripts_module
 from ..installed_input import accessibility
 from .app import session_environment
+from .control_observation import ControlObservation
 from ..installed_process import process_identity
 from .records import CaseFailed, CaseUnavailable
 
@@ -149,7 +150,7 @@ class DesktopUI:
 
     def settings_provider_command(self, deadline):
         return self._find(self.api.ROLE_PUSH_BUTTON, 'Settings: AI providers',
-                          lambda node: self.settings_provider_command_matches(node, deadline), deadline)
+                          lambda node: self.settings_provider_command_matches(node, deadline), deadline, public_result=True)
 
     def settings_provider_command_matches(self, node, deadline):
         if node.getRole() != self.api.ROLE_PUSH_BUTTON or not self.visible(node):
@@ -161,23 +162,27 @@ class DesktopUI:
                     if child.name in expected and self.visible(child)}
         return observed == expected
 
-    def _find(self, role, name, matches_control, deadline):
+    def _find(self, role, name, matches_control, deadline, *, public_result=False):
         deadline = time.monotonic() + 15 if deadline is None else deadline
         matches, observed_roles = [], set()
+        observation = ControlObservation(deadline, public_result)
         while self.app.process.poll() is None and time.monotonic() < deadline:
             matches = []
+            observation.begin()
             try:
                 for identity, window in self.windows(deadline):
                     for node in self.descendants(window, deadline):
+                        observation.observe(self, node)
                         if matches_control(node) and self.visible(node):
                             node_role = node.getRole()
                             observed_roles.add(int(node_role))
                             if node_role == role:
                                 matches.append((identity, node))
+                observation.finished()
             except CaseUnavailable as error:
                 error.observations = {**getattr(error, 'observations', {}), 'desktop_control': {
                     'role': int(role), 'name': name, 'match_count': len(matches),
-                    'inventory_complete': False, 'observed_roles': sorted(observed_roles)}}
+                    'observed_roles': sorted(observed_roles), **observation.facts()}}
                 raise
             except (ValueError, TypeError):
                 raise
@@ -186,7 +191,7 @@ class DesktopUI:
                     time.sleep(0.05)
                     continue
                 refusal = CaseUnavailable('normal-native-control-inventory-unavailable')
-                refusal.observations = {'desktop_control': {'role': int(role), 'name': name},
+                refusal.observations = {'desktop_control': {'role': int(role), 'name': name, **observation.facts()},
                                         'exception_type': type(error).__name__}
                 raise refusal from None
             if len(matches) > 1:
@@ -204,7 +209,7 @@ class DesktopUI:
             raise error
         error = CaseUnavailable('normal-native-control-is-missing-or-ambiguous')
         error.observations = {'desktop_control': {'role': int(role), 'name': name, 'match_count': len(matches),
-            'observed_roles': sorted(observed_roles)}}
+            'observed_roles': sorted(observed_roles), **observation.facts()}}
         raise error
 
     def click(self, name: str, *, tab=False):

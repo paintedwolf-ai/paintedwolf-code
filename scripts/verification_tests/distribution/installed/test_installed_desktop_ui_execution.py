@@ -156,7 +156,9 @@ class DesktopUIOwnershipTests(unittest.TestCase):
         with ui.DesktopUI(self.app, api) as actor, self.assertRaises(CaseUnavailable) as refusal:
             actor.click('Send')
         self.assertEqual(refusal.exception.observations['desktop_control'],
-                         {'role': API.ROLE_PUSH_BUTTON, 'name': 'Send', 'match_count': 2, 'observed_roles': [API.ROLE_PUSH_BUTTON]})
+                         {'role': API.ROLE_PUSH_BUTTON, 'name': 'Send', 'match_count': 2, 'observed_roles': [API.ROLE_PUSH_BUTTON],
+                          'completed_inventory_polls': 1, 'inventory_complete': True,
+                          'deadline_expired_before_lookup': False, 'deadline_expired_at_refusal': False})
         api, _ = surface([button])
         with patch.object(ui, 'process_identity', return_value={**IDENTITY, 'start_time_ticks': 43}), \
                 patch.object(ui.time, 'monotonic', side_effect=iter(range(100))), patch.object(ui.time, 'sleep'):
@@ -223,7 +225,8 @@ class DesktopUIOwnershipTests(unittest.TestCase):
                     actor.click('Send')
         self.assertEqual(refusal.exception.observations['desktop_control'], {
             'role': API.ROLE_PUSH_BUTTON, 'name': 'Send', 'match_count': 0,
-            'inventory_complete': False, 'observed_roles': []})
+            'inventory_complete': False, 'observed_roles': [], 'completed_inventory_polls': 0,
+            'deadline_expired_before_lookup': False, 'deadline_expired_at_refusal': False})
         button.action.doAction.assert_not_called()
 
     def test_typed_native_inventory_race_retries_but_unknown_error_is_retained(self):

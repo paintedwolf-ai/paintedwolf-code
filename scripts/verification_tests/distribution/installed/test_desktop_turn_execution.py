@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import MagicMock, Mock, patch
 
 from linux_release.installed_cases import desktop_turn as owner
-from linux_release.installed_cases import settings_query
+from linux_release.installed_cases import settings_query, desktop_ui
 from linux_release.installed_cases.records import CaseUnavailable
 
 ROOT = {'pid': 10, 'parent_pid': 2, 'start_time_ticks': 1}
@@ -256,3 +256,77 @@ class ClosedSettingsQueryTests(unittest.TestCase):
             with self.assertRaisesRegex(CaseUnavailable, 'query-deadline'):
                 query.require_current()
         text.getText.assert_not_called()
+
+
+class ClosedResultObservationTests(unittest.TestCase):
+    def refusal(self, nodes=(), *, expired=False, incomplete=False):
+        clock = [1 if expired else 0]
+        actor = desktop_ui.DesktopUI.__new__(desktop_ui.DesktopUI)
+        actor.app = SimpleNamespace(process=SimpleNamespace(poll=lambda: None))
+        actor.api = SimpleNamespace(ROLE_PUSH_BUTTON=43, STATE_DEFUNCT=0,
+                                   STATE_SHOWING=1, STATE_SENSITIVE=2, STATE_ENABLED=3)
+        window = object()
+        actor.windows = lambda deadline: iter([(ROOT, window)])
+        def descendants(node, deadline):
+            if node is not window:
+                return iter(())
+            if incomplete:
+                def interrupted():
+                    yield from nodes
+                    raise CaseUnavailable('incomplete owned snapshot')
+                return interrupted()
+            return iter(nodes)
+        actor.descendants = descendants
+        with patch.object(desktop_ui.time, 'monotonic', side_effect=lambda: clock[0]), \
+                patch.object(desktop_ui.time, 'sleep', side_effect=lambda _: clock.__setitem__(0, 1)):
+            with self.assertRaises(CaseUnavailable) as refusal:
+                actor.settings_provider_command(1)
+        for node in nodes:
+            node.queryAction.assert_not_called()
+        return refusal.exception.observations['desktop_control']
+
+    def node(self, name, role=43):
+        node = Mock(name='owned public row')
+        node.name = name
+        node.getRole.return_value = role
+        node.getState.return_value.contains.side_effect = lambda state: state in (1, 2, 3)
+        return node
+
+    def test_zero_budget_and_complete_zero_match_inventory_are_distinct(self):
+        zero = self.refusal(expired=True)
+        complete = self.refusal()
+        self.assertEqual(zero['completed_inventory_polls'], 0)
+        self.assertTrue(zero['deadline_expired_before_lookup'])
+        self.assertFalse(zero['inventory_complete'])
+        self.assertTrue(zero['public_command_results']['unverified'])
+        self.assertEqual(complete['completed_inventory_polls'], 1)
+        self.assertFalse(complete['deadline_expired_before_lookup'])
+        self.assertTrue(complete['inventory_complete'])
+        self.assertTrue(complete['deadline_expired_at_refusal'])
+        self.assertEqual(complete['match_count'], 0)
+
+    def test_closed_name_representation_and_role_facts_never_authorize_an_action(self):
+        private = 'arbitrary private label must not be retained'
+        nodes = [self.node(private), self.node('Settings: AI providers', 61),
+                 self.node('Other · painted-wolf/platform', 61),
+                 self.node('Settings: AI providers Other · painted-wolf/platform', 61)]
+        result = self.refusal(nodes)
+        rows = result['public_command_results']['rows']
+        self.assertEqual(result['observed_roles'], [])  # Existing match predicate remains strict.
+        self.assertEqual(result['match_count'], 0)
+        self.assertTrue(any(row['role'] == 61 and row['name_is_combined'] for row in rows))
+        self.assertTrue(any(row['name_is_title'] for row in rows))
+        self.assertTrue(any(row['name_is_provider'] for row in rows))
+        self.assertNotIn(private, repr(result))
+        self.assertNotIn('Settings:', repr(rows))
+
+    def test_partial_and_clipped_diagnostics_are_explicitly_unverified(self):
+        partial = self.refusal([self.node('Settings: AI providers', 61)], incomplete=True)
+        self.assertFalse(partial['inventory_complete'])
+        self.assertEqual(partial['completed_inventory_polls'], 0)
+        self.assertTrue(partial['public_command_results']['unverified'])
+        clipped = self.refusal([self.node('not exported', 61) for _ in range(513)])
+        self.assertTrue(clipped['inventory_complete'])
+        self.assertEqual(clipped['public_command_results']['observed_nodes'], 512)
+        self.assertTrue(clipped['public_command_results']['clipped'])
+        self.assertTrue(clipped['public_command_results']['unverified'])
