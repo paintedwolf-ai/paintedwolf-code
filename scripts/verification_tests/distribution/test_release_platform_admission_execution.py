@@ -12,7 +12,10 @@ ROOT = Path(__file__).resolve().parents[3]
 
 class ReleasePlatformAdmissionTests(unittest.TestCase):
     def setUp(self):
-        self.catalog = json.loads((ROOT / 'packaging/release-platforms.json').read_bytes())
+        self.repository_catalog = json.loads((ROOT / 'packaging/release-platforms.json').read_bytes())
+        self.catalog = copy.deepcopy(self.repository_catalog)
+        for row in self.linux():
+            row['publication'] = 'candidate'
 
     def validate(self):
         return validate_release_catalog(json.dumps(self.catalog).encode())
@@ -20,7 +23,11 @@ class ReleasePlatformAdmissionTests(unittest.TestCase):
     def linux(self):
         return [row for row in self.catalog['platforms'] if row['goos'] == 'linux']
 
-    def test_current_candidates_do_not_require_linux_publication(self):
+    def test_repository_catalog_has_supported_adapters_and_mac_os_updater(self):
+        platforms = validate_release_catalog(json.dumps(self.repository_catalog).encode())
+        self.assertEqual(set(public_updaters(platforms)), {'darwin-aarch64'})
+
+    def test_candidate_state_does_not_require_linux_publication(self):
         platforms = self.validate()
         self.assertEqual({key for key, row in platforms.items() if row['publication'] == 'public'},
                          {'darwin-aarch64'})
