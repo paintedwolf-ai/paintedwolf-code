@@ -328,6 +328,7 @@ where
         .presence_gate
         .lock()
         .map_err(|_| PresenceCommandError::failed("confirmation lock is unavailable"))?;
+    let step_away = crate::vault_lock::confirmation_generation();
     require_active_window(window)?;
     let challenge: Challenge =
         send_json(engine.agent.post(begin_url), &engine.api_token, begin_body)?;
@@ -339,10 +340,12 @@ where
         std::thread::sleep(Duration::from_millis(20));
     }
     require_active_window(window)?;
+    require_current_confirmation(step_away)?;
     let signature = state.sign_presence(&challenge.proof_payload, authenticator);
     let (url, body) = complete(&challenge, authenticator, &signature);
     let result = send_json(engine.agent.post(&url), &engine.api_token, body)?;
     require_active_window(window)?;
+    require_current_confirmation(step_away)?;
     Ok(result)
 }
 
@@ -370,7 +373,18 @@ fn check_payload(
     Ok(())
 }
 
+fn require_current_confirmation(generation: u64) -> Result<(), PresenceCommandError> {
+    if crate::vault_lock::confirmation_unchanged(generation) {
+        return Ok(());
+    }
+    Err(PresenceCommandError::denied("The device locked or suspended during confirmation. Try again."))
+}
+
 fn require_active_window(window: &tauri::Window) -> Result<(), PresenceCommandError> {
+    #[cfg(target_os = "linux")]
+    if !crate::vault_lock::confirmation_allowed() {
+        return Err(PresenceCommandError::unavailable("The graphical session is locked, inactive, or its lock state is unavailable."));
+    }
     if window.is_visible().unwrap_or(false)
         && window.is_focused().unwrap_or(false)
         && !window.is_minimized().unwrap_or(true)
@@ -531,24 +545,14 @@ fn verify_user_presence(
     }
 }
 
-/// polkit confirms the person through the desktop's agent. Without one, the
-/// native app-password dialog stands in only while the vault is on the
-/// app-password path; a click never does.
+/// The system authentication agent confirms the person independently of vault custody.
 #[cfg(target_os = "linux")]
 fn verify_user_presence(
     window: &tauri::Window,
-    prompt: &str,
+    _prompt: &str,
 ) -> Result<&'static str, PresenceCommandError> {
     let identifier = window.app_handle().config().identifier.clone();
-    match linux::confirm_with_polkit(&identifier) {
-        Ok(()) => Ok(linux::AUTHENTICATOR_POLKIT),
-        Err(linux::PolkitRefusal::Denied(message)) => Err(PresenceCommandError::denied(message)),
-        Err(linux::PolkitRefusal::Failed(message)) => Err(PresenceCommandError::failed(message)),
-        Err(linux::PolkitRefusal::Unavailable(reason)) => {
-            linux::confirm_app_password(window, prompt, &reason)
-                .map(|()| linux::AUTHENTICATOR_APP_PASSWORD)
-        }
-    }
+    linux::confirmation_result(linux::confirm_with_polkit(&identifier))
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
@@ -649,4 +653,13 @@ mod tests {
         let wire = serde_json::to_value(PresenceCommandError::from(host)).unwrap();
         assert!(wire.get("actions").is_none());
     }
+    #[test]
+    fn stepping_away_during_confirmation_refuses_the_native_proof() {
+        let generation = crate::vault_lock::confirmation_generation();
+        let state = SidecarState::new();
+        crate::vault_lock::lock_now(&state, crate::vault_lock::LockReason::Sleep);
+        let error = require_current_confirmation(generation).expect_err("stale confirmation");
+        assert_eq!(error.code, "presence_denied");
+    }
+
 }

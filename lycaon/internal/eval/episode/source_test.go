@@ -78,7 +78,7 @@ func TestGitIndexIdentityMatchesRetainedBytes(t *testing.T) {
 	snapshot, err := snapshots.Ensure(t.Context(), sourcesnapshot.Request{Roots: []sourcesnapshot.Root{{Path: root}}})
 	testutil.FailErr(t, "capture git index", err)
 	var indexed int
-	testutil.FailErr(t, "count index identities", database.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM source_snapshot_chunks c JOIN source_manifest_entries e ON e.chunk_id=c.chunk_id WHERE c.snapshot_id=? AND e.identity='index'`, snapshot.ID).Scan(&indexed))
+	testutil.FailErr(t, "count index identities", database.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM source_snapshot_roots r JOIN source_manifest_layout l ON l.manifest_id=r.manifest_id JOIN source_manifest_entries e ON e.chunk_id=l.chunk_id WHERE r.snapshot_id=? AND e.identity='index'`, snapshot.ID).Scan(&indexed))
 	if indexed != 1 {
 		t.Fatalf("index identities: got %d", indexed)
 	}

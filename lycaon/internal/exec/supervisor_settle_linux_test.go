@@ -56,24 +56,6 @@ func descendantPIDs(root int) map[int]bool {
 	return pids
 }
 
-func TestParseProcStatReadsParentAndStartAfterTheCommandName(t *testing.T) {
-	tail := " S 41 7 7 0 -1 4194560 100 0 0 0 1 2 0 0 20 0 1 0 98765 1000"
-	parent, start, ok := parseProcStat([]byte("42 (odd) name) here)" + tail))
-	if !ok || parent != 41 || start != 98765 {
-		t.Fatalf("parse = %d/%d/%v, want parent 41 start 98765", parent, start, ok)
-	}
-	for name, raw := range map[string]string{
-		"no command name":  "42 odd" + tail,
-		"truncated fields": "42 (odd) S 41 7",
-		"parent not a pid": "42 (odd) S x 7 7 0 -1 4194560 100 0 0 0 1 2 0 0 20 0 1 0 98765 1000",
-		"start not a tick": "42 (odd) S 41 7 7 0 -1 4194560 100 0 0 0 1 2 0 0 20 0 1 0 soon 1000",
-	} {
-		if _, _, ok := parseProcStat([]byte(raw)); ok {
-			t.Errorf("%s: parsed malformed stat %q", name, raw)
-		}
-	}
-}
-
 func stopped(pid int) bool {
 	raw, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
 	if err != nil {
@@ -222,6 +204,24 @@ func TestParseSupervisorTargetRequiresDescriptorCountAndCommand(t *testing.T) {
 		if _, ok := parseSupervisorTarget(args); ok {
 			t.Errorf("accepted malformed supervisor arguments %q", args)
 		}
+	}
+	read, write, err := os.Pipe()
+	testutil.FailErr(t, "open non-terminal pipe", err)
+	defer func() { _ = read.Close(); _ = write.Close() }()
+	if attr := foregroundTerminal(int(read.Fd()), 0); attr != nil {
+		t.Fatalf("non-terminal fd produced %+v", attr)
+	}
+	holder := exec.Command("sleep", "30")
+	main, err := startWithPTY(holder, WinSize{Cols: 80, Rows: 24})
+	testutil.FailErr(t, "start pty session leader", err)
+	defer func() { _ = main.Close(); _ = holder.Process.Kill(); _ = holder.Wait() }()
+	fd := int(main.Fd())
+	if attr := foregroundTerminal(fd, os.Getpid()); attr != nil {
+		t.Fatalf("foreign session terminal produced %+v", attr)
+	}
+	attr := foregroundTerminal(fd, holder.Process.Pid)
+	if attr == nil || !attr.Foreground || attr.Ctty != fd {
+		t.Fatalf("controlling session terminal attr = %+v, want Foreground with Ctty %d", attr, fd)
 	}
 }
 

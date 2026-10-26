@@ -34,6 +34,14 @@ REQUIRED = {
         "xkbcommon": {"libxkbcommon"},
         "ALSA": {"alsa-lib"},
     },
+    "pacman": {
+        "NSS": {"nss"},
+        "NSPR": {"nspr"},
+        "ATK bridge": {"at-spi2-core"},
+        "GBM": {"mesa"},
+        "xkbcommon": {"libxkbcommon"},
+        "ALSA": {"alsa-lib"},
+    },
 }
 PACKAGE_NAME = re.compile(r"\s*([^\s(<>=]+)")
 
