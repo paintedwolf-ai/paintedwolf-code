@@ -27,24 +27,31 @@ func TestSessionPromptCacheStableHit(t *testing.T) {
 }
 
 func TestStablePromptKeyFollowsEveryRenderedRoot(t *testing.T) {
-	vars := func(label, path, scratch string, reviewsConfinedWrites bool) map[string]any {
-		return map[string]any{"root_count": 2, "session_scratch_dir": scratch, "reviews_confined_writes": reviewsConfinedWrites, "workspace_roots": []map[string]any{
-			{"label": "api", "path": "/abs/api", "is_primary": true},
-			{"label": label, "path": path, "is_primary": false},
-		}}
+	vars := func(label, path, scratch string, reviewsConfinedWrites, externalHidden bool) map[string]any {
+		return map[string]any{
+			"root_count":              2,
+			"session_scratch_dir":     scratch,
+			"reviews_confined_writes": reviewsConfinedWrites,
+			"command_external_hidden": externalHidden,
+			"workspace_roots": []map[string]any{
+				{"label": "api", "path": "/abs/api", "is_primary": true},
+				{"label": label, "path": path, "is_primary": false},
+			},
+		}
 	}
-	base := rootsFingerprint(vars("web", "/abs/web", "/scratch/s1", false))
+	base := rootsFingerprint(vars("web", "/abs/web", "/scratch/s1", false, false))
 	for name, changed := range map[string]map[string]any{
-		"renamed":                 vars("site", "/abs/web", "/scratch/s1", false),
-		"moved":                   vars("web", "/abs/new-web", "/scratch/s1", false),
-		"scratch":                 vars("web", "/abs/web", "/scratch/s2", false),
-		"reviews_confined_writes": vars("web", "/abs/web", "/scratch/s1", true),
+		"renamed":                 vars("site", "/abs/web", "/scratch/s1", false, false),
+		"moved":                   vars("web", "/abs/new-web", "/scratch/s1", false, false),
+		"scratch":                 vars("web", "/abs/web", "/scratch/s2", false, false),
+		"reviews_confined_writes": vars("web", "/abs/web", "/scratch/s1", true, false),
+		"command_external_hidden": vars("web", "/abs/web", "/scratch/s1", false, true),
 	} {
 		if rootsFingerprint(changed) == base {
 			t.Fatalf("%s root set kept the cached stable prompt", name)
 		}
 	}
-	if rootsFingerprint(vars("web", "/abs/web", "/scratch/s1", false)) != base {
+	if rootsFingerprint(vars("web", "/abs/web", "/scratch/s1", false, false)) != base {
 		t.Fatal("identical root set changed the stable prompt key")
 	}
 }

@@ -45,7 +45,7 @@ func NewOwners(host HostFacts, clock func() time.Time) (*Owners, error) {
 	if host == nil || clock == nil {
 		return nil, errors.New("host environment utilities require host facts and a clock")
 	}
-	catalog, err := toolcontract.LanguageV1()
+	catalog, err := toolcontract.ReadOnlyLanguageV1()
 	if err != nil {
 		return nil, err
 	}
@@ -104,6 +104,7 @@ func (o *Owners) Builtins(tc tools.ToolContext, nested commandprogram.NestedComm
 // type, which and command -v describe what dispatch actually does.
 type NativeBindings interface {
 	NativeBound(name string) bool
+	BaseEnvironment() []string
 }
 
 type dispatcher struct {
@@ -182,6 +183,9 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, nested 
 	}
 	if err := ctx.Err(); err != nil {
 		return settle(err, 0), err
+	}
+	if p.Argv.Help {
+		return commandprogram.WriteCatalogHelp(p.spec, streams.Output)
 	}
 	inv := &invocation{ctx: ctx, owners: p.owners, tc: tc, nested: nested, bound: bound, request: p.request, spec: p.spec, argv: p.Argv, streams: streams}
 	err := p.run(inv)

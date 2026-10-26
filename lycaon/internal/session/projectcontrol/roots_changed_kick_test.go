@@ -241,6 +241,9 @@ func TestRepositoryApprovalsOverlayTighteningChangesPromptAndEnqueuesNotice(t *t
 	prof.SetProjects(reg)
 	prof.SetApprovals(approvals)
 	prof.SetPostureObserver(svc.ObserveSessionPosture)
+	prof.SetExternalObserver(svc.ObserveSessionCommandExternal)
+	externalHidden := false
+	prof.SetCommandExternalHidden(func() bool { return externalHidden })
 
 	renderPrompt := func(surface prompts.AgentPromptSurface) string {
 		vars := prompts.AgentPromptSurfaceTemplateVars(surface)
@@ -290,4 +293,26 @@ func TestRepositoryApprovalsOverlayTighteningChangesPromptAndEnqueuesNotice(t *t
 		t.Fatalf("overlay tightening notice = %q (ok=%v)", notice, ok)
 	}
 	kicks.AckPendingNudge(sess.ID, lease)
+
+	// Turn 3: hiding the external selector queues project.posture.changed; reverting before consumption drops it.
+	externalHidden = true
+	_ = prof.PromptSurface(ctx, sess, nil, hostresources.Snapshot{}, nil, true)
+	if got := kicks.TakePendingKickID(sess.ID); got != "coordinator-posture-changed" {
+		t.Fatalf("pending kick after external hidden = %q want coordinator-posture-changed", got)
+	}
+	extNotice, extLease, ok, err := kicks.RenderPendingNudge(ctx, sess.ID, kick.CoordinatorKickRenderContext{})
+	testutil.FailErr(t, "render external hidden notice", err)
+	if !ok || !strings.Contains(extNotice, "The `external` selector is now hidden on `command`.") {
+		t.Fatalf("external hidden notice = %q (ok=%v)", extNotice, ok)
+	}
+	kicks.AckPendingNudge(sess.ID, extLease)
+
+	// Toggle true -> false -> true before consumption drops the no-op notice.
+	externalHidden = false
+	_ = prof.PromptSurface(ctx, sess, nil, hostresources.Snapshot{}, nil, true)
+	externalHidden = true
+	_ = prof.PromptSurface(ctx, sess, nil, hostresources.Snapshot{}, nil, true)
+	if _, ok := kicks.PeekPendingKickID(sess.ID); ok {
+		t.Fatal("reverted external selector visibility left a pending notice")
+	}
 }

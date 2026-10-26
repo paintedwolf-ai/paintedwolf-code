@@ -5,20 +5,21 @@ import (
 	"io"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/tools/safecmd"
 )
 
 // reader leaves stdin incremental. eval-all retains decoded documents because
 // its expression may combine them; ordinary eval needs only the current one.
-func (r *yqRun) reader(file string) (io.Reader, string, error) {
-	if file == "-" {
+func (r *yqRun) reader(file commandprogram.Field) (io.Reader, string, error) {
+	if file.Value == "-" {
 		return &yqInput{ctx: r.inv.ctx, source: r.inv.input, maximum: safecmd.JQCaps().InputBytes}, "-", nil
 	}
 	captured, err := r.capture(file)
 	if err != nil {
-		return nil, file, err
+		return nil, file.Value, err
 	}
-	return strings.NewReader(captured.text), file, nil
+	return strings.NewReader(captured.text), file.Value, nil
 }
 
 type yqInput struct {

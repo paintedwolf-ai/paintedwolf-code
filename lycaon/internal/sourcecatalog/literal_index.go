@@ -540,5 +540,5 @@ func (c *LiteralSearch) CanPrune(rootPath string, req litprefilter.Requirement, 
 	if !cached || !searchable {
 		return false
 	}
-	return !bloom.admits(foldRequirement(req))
+	return !bloom.admitsRequirement(req)
 }

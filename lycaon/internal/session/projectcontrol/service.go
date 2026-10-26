@@ -65,9 +65,11 @@ type Service struct {
 	anchors                 Anchors
 	overlayPromoter         OverlayPromoter
 	rootHistory             *projectroot.History
-	pendingRootBaselines    sync.Map
-	lastSessionPosture      sync.Map
-	pendingPostureBaselines sync.Map
+	pendingRootBaselines      sync.Map
+	lastSessionPosture        sync.Map
+	pendingPostureBaselines   sync.Map
+	lastSessionExternalHidden sync.Map
+	pendingExternalBaselines  sync.Map
 }
 
 func New(store Sessions, stops Stops, status Status, admission Admission, batch Batch, instructions Instructions, transcript Transcript) *Service {

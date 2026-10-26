@@ -152,6 +152,12 @@ func (d *ProgramDispatcher) Invoke(ctx context.Context, request commandprogram.O
 	if err := d.run.supervisor.AdmitChild(ctx); err != nil {
 		return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, StopCode: toolrejection.ToolOwnerInterruptedCode, EffectCertainty: toolcontract.NoEffect}, err
 	}
+	if resolved, ok, err := commandprogram.ResolveCommand(request.Argv); err == nil && ok && resolved.Name != "external" {
+		if bound, err := d.binder.Bind(resolved, request.Argv); err == nil && bound.Help {
+			request.OperationID = resolved.Name
+			return d.invokeBuiltin(ctx, resolved, commandprogram.HelpDispatcher(resolved), request, streams)
+		}
+	}
 	spec, native := d.run.commands[request.Argv[0].Value]
 	switch {
 	case !native || spec.Name == "external":
@@ -177,6 +183,7 @@ func (d *ProgramDispatcher) invokeBuiltin(ctx context.Context, spec toolcontract
 		}
 	}
 	return d.InvokeEvaluator(ctx, request, streams, func(ctx context.Context, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+		noteJobNative(ctx, request.Argv.Values())
 		return builtin.Invoke(ctx, request, streams)
 	})
 }
@@ -229,11 +236,11 @@ func (d *ProgramDispatcher) invokeExternal(ctx context.Context, request commandp
 		Operation: bound, Streams: streams, Inspection: d.run.capture,
 		// The existing command review, detection and policy read these fields.
 		Arguments: d.run.launchArguments(line, display),
-		Stage:     toolcontract.ExecutionStage{ExecutionID: request.Invocation.Identity.ExecutionID, OperationID: definition.Facts().Identity, Argv: argv, CommandLine: line, PipelineCommandLine: line},
+		Stage:     toolcontract.ExecutionStage{ExecutionID: request.Invocation.Identity.ExecutionID, OperationID: definition.ReadOnlyFacts().Identity, Argv: argv, CommandLine: line, PipelineCommandLine: line},
 		PrepareReviewed: func(context.Context, map[string]any, tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
 			return toolexecution.PreparedNativeEffect{Operation: bound, InvokeOwner: func(ctx context.Context, admitted tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 				return d.runProducer(ctx, request, streams, func(ctx context.Context, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-					return ExternalStages{ToolContext: admitted, Dir: cwd}.Launch(ctx, request, streams)
+					return ExternalStages{ToolContext: admitted, Dir: cwd, BaseEnvironment: d.run.baseEnv}.Launch(ctx, request, streams)
 				})
 			}}, nil
 		},
@@ -325,19 +332,21 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 		return refusedResult("COMMAND_NATIVE_FORM_UNSUPPORTED"), err
 	}
 	review := prepared.Review
-	review.OperationID = operationDef.Facts().Identity
+	opIdentity := operationDef.ReadOnlyFacts().Identity
+	review.OperationID = opIdentity
 	tracker := &trackingWriter{w: nonNilWriter(streams.Error)}
 	runStreams := streams
 	runStreams.Error = tracker
-	inputs := d.run.nativeArguments(review.Arguments(), operationDef.Facts().Contract)
+	inputs := d.run.nativeArguments(review.Arguments(), operationDef.ReadOnlyFacts().Contract)
 	effect := toolexecution.NativeEffect{
 		Operation: bound, Streams: runStreams, Arguments: inputs, Argv: &review, Inspection: d.run.capture,
-		Stage: toolcontract.ExecutionStage{ExecutionID: request.Invocation.Identity.ExecutionID, OperationID: operationDef.Facts().Identity, Argv: request.Argv.Values()},
+		Stage: toolcontract.ExecutionStage{ExecutionID: request.Invocation.Identity.ExecutionID, OperationID: opIdentity, Argv: request.Argv.Values()},
 		PrepareReviewed: func(context.Context, map[string]any, tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
 			return toolexecution.PreparedNativeEffect{Operation: bound, InvokeOwner: func(ctx context.Context, tc tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 				return d.runProducer(ctx, request, streams, func(ctx context.Context, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 					tracker.w = nonNilWriter(streams.Error)
 					streams.Error = tracker
+					noteJobNative(ctx, request.Argv.Values())
 					return prepared.Invoke(ctx, tc, streams)
 				})
 			}}, nil
@@ -372,6 +381,7 @@ func (d *ProgramDispatcher) invokeHosted(ctx context.Context, spec toolcontract.
 		request.EffectMode = prepared.Mode
 	}
 	return d.invokeHost(ctx, request, streams, func(ctx context.Context, tc tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+		noteJobNative(ctx, request.Argv.Values())
 		return prepared.Invoke(ctx, tc, streams)
 	})
 }
@@ -449,12 +459,21 @@ func (d *ProgramDispatcher) prepareDefinition(ctx context.Context, definition to
 }
 
 func (d *ProgramDispatcher) prepareInvocation(ctx context.Context, definition toolcontract.OperationDefinition, invocation toolcontract.OperationInvocation, display string, inputs map[string]any, gap *toolcontract.NativeGap) (programChild, error) {
+	return d.prepareInvocationWithOwner(ctx, definition, invocation, display, inputs, gap, nil)
+}
+
+func (d *ProgramDispatcher) prepareInvocationWithOwner(ctx context.Context, definition toolcontract.OperationDefinition, invocation toolcontract.OperationInvocation, display string, inputs map[string]any, gap *toolcontract.NativeGap, startOwner *toolcontract.BoundOperation) (programChild, error) {
 	prepareCtx := context.WithoutCancel(ctx)
 	review, release, err := toolcontract.NewReviewedOperationInputs(prepareCtx, d.run.memory, inputs)
 	if err != nil {
 		return programChild{}, err
 	}
-	reference, err := d.run.capture.PrepareChild(prepareCtx, toolcontract.ProgramChildStart{ParentReceiptID: d.run.parentReceipt, Invocation: invocation, Definition: definition, ExpandedInputs: review, Canonical: display, NativeGap: gap})
+	start := toolcontract.ProgramChildStart{ParentReceiptID: d.run.parentReceipt, Invocation: invocation, Definition: definition, ExpandedInputs: review, Canonical: display, NativeGap: gap}
+	if startOwner != nil {
+		start.StartOwner = startOwner
+		start.ModelToolCallID = d.run.tc.Identity.ToolCallID
+	}
+	reference, err := d.run.capture.PrepareChild(prepareCtx, start)
 	if err != nil {
 		release()
 		return programChild{}, err
@@ -466,19 +485,6 @@ func (d *ProgramDispatcher) prepareInvocation(ctx context.Context, definition to
 func (d *ProgramDispatcher) start(ctx context.Context, child programChild) error {
 	marker := invocation.ProgramAdmissionRecorder{Recorder: d.run.recorder, Inputs: d.run.capture}
 	return marker.BeforeNativeOwner(ctx, child.bound, d.run.tc.Identity.ToolCallID, child.review)
-}
-
-type admissionMarker struct {
-	invocation.ProgramAdmissionRecorder
-	started bool
-}
-
-func (m *admissionMarker) BeforeNativeOwner(ctx context.Context, operation toolcontract.BoundOperation, modelToolCallID string, inputs toolcontract.ReviewedOperationInputs) error {
-	if err := m.ProgramAdmissionRecorder.BeforeNativeOwner(ctx, operation, modelToolCallID, inputs); err != nil {
-		return err
-	}
-	m.started = true
-	return nil
 }
 
 func (d *ProgramDispatcher) settle(ctx context.Context, child programChild, result toolcontract.ProducerResult, ownerInvoked bool, hostStop string) error {
@@ -496,9 +502,14 @@ func (d *ProgramDispatcher) settleWith(ctx context.Context, child programChild, 
 	return d.run.recorder.SettleChild(context.WithoutCancel(ctx), child.id, settlement)
 }
 
+var compiledCatalogDefinitions sync.Map
+
 // catalogDefinition compiles one definition per catalog command without a
 // registered tool, attributed to the command's declared owner.
 func (d *ProgramDispatcher) catalogDefinition(spec toolcontract.CommandSpecification) (toolcontract.OperationDefinition, error) {
+	if cached, ok := compiledCatalogDefinitions.Load(spec.Name); ok {
+		return cached.(toolcontract.OperationDefinition), nil
+	}
 	d.shared.mu.Lock()
 	defer d.shared.mu.Unlock()
 	if definition, ok := d.shared.definitions[spec.Name]; ok {
@@ -532,6 +543,7 @@ func (d *ProgramDispatcher) catalogDefinition(spec toolcontract.CommandSpecifica
 		d.shared.definitions = map[string]toolcontract.OperationDefinition{}
 	}
 	d.shared.definitions[spec.Name] = definition
+	compiledCatalogDefinitions.Store(spec.Name, definition)
 	return definition, nil
 }
 
@@ -565,10 +577,10 @@ func (r *programRun) catalogCommand(name string) (toolcontract.CommandSpecificat
 func commandIndex(catalog toolcontract.LanguageCatalog) map[string]toolcontract.CommandSpecification {
 	index := map[string]toolcontract.CommandSpecification{}
 	for _, spec := range catalog.Commands {
+		index[spec.Name] = spec
 		if strings.Contains(spec.Name, " ") {
 			continue
 		}
-		index[spec.Name] = spec
 		for _, alias := range spec.Aliases {
 			index[alias] = spec
 		}

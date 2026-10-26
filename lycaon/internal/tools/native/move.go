@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/sourceeffect"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
@@ -32,6 +34,7 @@ type moveResponse struct {
 // sources, renamed whole within one root onto an absent destination; the
 // rename is journaled like a file rename, so Files history can undo it.
 type MoveInput struct {
+	Memory      *toolcontract.ProgramMemory `json:"-"`
 	Pairs       []FilePair
 	NoClobber   bool
 	Directories bool
@@ -76,6 +79,17 @@ func (t *MoveTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 // Move applies each pair under scope, review and recovery.
 func (t *MoveTool) Move(ctx context.Context, in MoveInput, tctx tools.ToolContext) (MoveResult, error) {
 	var result MoveResult
+	if in.Memory == nil {
+		limits, err := toolcontract.CatalogProgramMemoryLimits()
+		if err != nil {
+			return result, err
+		}
+		memory, err := toolcontract.NewProgramMemory(limits)
+		if err != nil {
+			return result, err
+		}
+		in.Memory = memory
+	}
 	prof := tctx.ProfileID()
 	for _, pair := range in.Pairs {
 		if err := ctx.Err(); err != nil {
@@ -101,9 +115,14 @@ func (t *MoveTool) Move(ctx context.Context, in MoveInput, tctx tools.ToolContex
 		if crossRoot {
 			// The copy operation stages and reviews the destination before publication.
 			// Remove the source only after that publication succeeds.
-			copyResult, err := (&CopyTool{Boundary: t.Boundary}).Copy(ctx, CopyInput{
+			copyOperation, err := (&CopyTool{Boundary: t.Boundary}).Begin(CopyInput{
 				Pairs: []FilePair{pair}, Recursive: in.Directories, NoClobber: in.NoClobber,
-			}, tctx)
+			}, in.Memory)
+			if err != nil {
+				return result, err
+			}
+			copyResult, err := copyOperation.CopyPair(ctx, pair, tctx)
+			copyOperation.Close()
 			if err != nil {
 				for _, copied := range copyResult.Copied {
 					result.DestinationCopied = append(result.DestinationCopied, FilePair{From: copied.From, To: copied.To})
@@ -115,7 +134,7 @@ func (t *MoveTool) Move(ctx context.Context, in MoveInput, tctx tools.ToolContex
 				continue
 			}
 			if _, err := (&DeleteTool{Boundary: t.Boundary}).Delete(ctx, DeleteInput{
-				Paths: []string{pair.From}, Recursive: in.Directories,
+				Memory: in.Memory, Paths: []string{pair.From}, Recursive: in.Directories,
 			}, tctx); err != nil {
 				result.DestinationCopied = append(result.DestinationCopied, FilePair{From: fromSlash, To: toSlash})
 				return result, fmt.Errorf("move %s -> %s after copy: %w", pair.From, pair.To, err)
@@ -123,7 +142,32 @@ func (t *MoveTool) Move(ctx context.Context, in MoveInput, tctx tools.ToolContex
 			result.Moved = append(result.Moved, FilePair{From: fromSlash, To: toSlash})
 			continue
 		}
-		if err := renameAgentPath(ctx, tctx, resolvedMutationTarget(srcResolved), resolvedMutationTarget(dstResolved)); err != nil {
+		var displacedBytes int64
+		var reviewDisplacedPolicy func() ([]sourceeffect.ReviewedFile, error)
+		if srcInfo, srcErr := os.Lstat(srcResolved.Abs); srcErr == nil && srcInfo.IsDir() {
+			if dstInfo, dstErr := os.Lstat(dstResolved.Abs); dstErr == nil && dstInfo.IsDir() {
+				summary, inspectErr := inspectDeleteTree(ctx, t.Boundary, tctx, dstResolved, prof, in.Memory, nil)
+				if inspectErr != nil {
+					return result, fmt.Errorf("move %s -> %s: %w", pair.From, pair.To, inspectErr)
+				}
+				displacedBytes = summary.bytes
+				if len(summary.policyTargets) > 0 {
+					policyTargets := summary.policyTargets
+					reviewDisplacedPolicy = func() ([]sourceeffect.ReviewedFile, error) {
+						reviewed := make([]sourceeffect.ReviewedFile, 0, len(policyTargets))
+						for _, target := range policyTargets {
+							item, err := reviewAgentTreePolicyRemoval(ctx, tctx, target, in.Memory)
+							if err != nil {
+								return nil, err
+							}
+							reviewed = append(reviewed, item)
+						}
+						return reviewed, nil
+					}
+				}
+			}
+		}
+		if err := renameAgentEntry(ctx, tctx, resolvedMutationTarget(srcResolved), resolvedMutationTarget(dstResolved), displacedBytes, in.Memory, reviewDisplacedPolicy); err != nil {
 			return result, fmt.Errorf("move %s -> %s: %w", pair.From, pair.To, err)
 		}
 		result.Moved = append(result.Moved, FilePair{From: fromSlash, To: toSlash})

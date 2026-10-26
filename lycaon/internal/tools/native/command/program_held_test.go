@@ -212,9 +212,9 @@ func (d dirSources) Capture(_ context.Context, _ toolcontract.OperationInvocatio
 
 func TestProgramEntrySourcesScriptAndDeduplicatesProgramDefinitions(t *testing.T) {
 	f := newProgramFixture(t)
-	baseOwners := f.Runtime.Owners
-	f.Runtime.Owners = func(tc tools.ToolContext, paths *projectpaths.ProgramPaths, memory *toolcontract.ProgramMemory, admission tooloutput.SpillAdmission) (command.ProgramOwners, error) {
-		owners, err := baseOwners(tc, paths, memory, admission)
+	prevOwners := f.Runtime.Owners
+	f.Runtime.Owners = func(tc tools.ToolContext, paths *projectpaths.ProgramPaths, mem *toolcontract.ProgramMemory, adm tooloutput.SpillAdmission) (command.ProgramOwners, error) {
+		owners, err := prevOwners(tc, paths, mem, adm)
 		owners.Sources = dirSources(f.Dir)
 		return owners, err
 	}

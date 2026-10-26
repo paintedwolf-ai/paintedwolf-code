@@ -14,10 +14,11 @@ func runJqEdit(inv *invocation) error {
 	if operands := inv.argv.Operands().Values(); len(operands) > 0 {
 		return inv.usage(operands[0], "no operands")
 	}
-	path, ok := inv.value("--path")
+	pathField, ok := inv.valueField("--path")
 	if !ok {
 		return inv.usage(inv.name(), "--path PATH")
 	}
+	path := pathField.Value
 	query, ok := inv.value("--query")
 	if !ok {
 		return inv.usage(inv.name(), "--query QUERY")
@@ -30,7 +31,7 @@ func runJqEdit(inv *invocation) error {
 	if bound.Null {
 		return inv.usage(path, "a document PATH")
 	}
-	source, err := inv.capture(path)
+	source, err := inv.capture(pathField)
 	if err != nil || source == nil {
 		return err
 	}

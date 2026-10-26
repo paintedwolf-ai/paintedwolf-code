@@ -57,8 +57,8 @@ func TestCommandInputResourceRefusalPreservesActualStopAndPriorEffects(t *testin
 					return bound, err
 				}
 				redirections := bound.Redirections
-				bound.Redirections = func(frame *projectpaths.ProgramPaths) (commandprogram.InputRedirection, commandprogram.OutputPublication) {
-					input, output := redirections(frame)
+				bound.Redirections = func(frame *projectpaths.ProgramPaths, admit tools.CommandOutputAdmission) (commandprogram.InputRedirection, commandprogram.OutputPublication) {
+					input, output := redirections(frame, admit)
 					return constrainedRedirectInput{InputRedirection: input, open: func(ctx context.Context, d commandprogram.InputDestination) (io.ReadCloser, error) {
 						usage := pool.InUse()
 						var release func()

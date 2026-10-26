@@ -18,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
@@ -110,16 +111,16 @@ func newPathsFixture(t *testing.T) *pathsFixture {
 
 // owners uses the production owner set. The observation hooks place a root
 // change during an actual reached owner; its result and refusal stay untouched.
-func (f *pathsFixture) owners() func(programtest.OwnerPorts) func(tools.ToolContext, *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
-	return func(ports programtest.OwnerPorts) func(tools.ToolContext, *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
+func (f *pathsFixture) owners() func(programtest.OwnerPorts) func(tools.ToolContext, *projectpaths.ProgramPaths, *toolcontract.ProgramMemory, tooloutput.SpillAdmission) (command.ProgramOwners, error) {
+	return func(ports programtest.OwnerPorts) func(tools.ToolContext, *projectpaths.ProgramPaths, *toolcontract.ProgramMemory, tooloutput.SpillAdmission) (command.ProgramOwners, error) {
 		factory, initErr := (programOwnerTools{boundary: ports.Boundary, operations: mutation.Operations{
 			Write: &native.WriteTool{Boundary: ports.Boundary}, Delete: &native.DeleteTool{Boundary: ports.Boundary}, Move: &native.MoveTool{Boundary: ports.Boundary}, Copy: &native.CopyTool{Boundary: ports.Boundary}, Mkdir: &native.MkdirTool{Boundary: ports.Boundary}, Chmod: &native.ChmodTool{Boundary: ports.Boundary}, Chown: &native.ChownTool{Boundary: ports.Boundary}, Times: &native.TimesTool{Boundary: ports.Boundary}, Extract: &native.ExtractArchiveTool{Boundary: ports.Boundary},
 		}}).compose(ports.Recorder)
-		return func(tc tools.ToolContext, paths *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
+		return func(tc tools.ToolContext, paths *projectpaths.ProgramPaths, memory *toolcontract.ProgramMemory, admission tooloutput.SpillAdmission) (command.ProgramOwners, error) {
 			if initErr != nil {
 				return command.ProgramOwners{}, initErr
 			}
-			owners, err := factory(tc, paths)
+			owners, err := factory(tc, paths, memory, admission)
 			if err != nil {
 				return command.ProgramOwners{}, err
 			}

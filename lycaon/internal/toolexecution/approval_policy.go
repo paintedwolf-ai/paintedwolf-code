@@ -33,6 +33,14 @@ func (p *ApprovalPolicyEngine) WaitConditions(profileID string) []string {
 	return p.profile.WaitConditions(profileID)
 }
 
+// CommandEffects delegates to the underlying profile policy engine.
+func (p *ApprovalPolicyEngine) CommandEffects(ctx context.Context, profileID string) (toolcontract.CommandEffects, error) {
+	if p == nil || p.profile == nil {
+		return 0, nil
+	}
+	return p.profile.CommandEffects(ctx, profileID)
+}
+
 // EvaluateForList returns tools allowed by the sandbox profile only (not approval ask/deny).
 func (p *ApprovalPolicyEngine) EvaluateForList(ctx context.Context, eval platform.PolicyContext) (*platform.PolicyDecision, error) {
 	if p == nil || p.profile == nil {

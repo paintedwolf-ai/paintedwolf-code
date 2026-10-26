@@ -4,12 +4,10 @@
   "kind": "projection",
   "workstream": "reachable-verification-guidance",
   "disposition": "retain",
-  "reason": "Retain the cohesive tool-surface projection: offered schemas and the compiled deferred set determine template facts. The requestability entry delegates availability precedence to toolsurface.Plan and does not own loading, permission, or execution. The 402-line ceiling bounds the projection; full coordinator and worker inclusion-site tests cover offered, deferred, unavailable, loader, and project-check states.",
-  "reviewed_commit": "8a733cc9b857e8e65f266cdeebf1eb992e887a9e",
-  "ceiling": 402,
+  "reason": "Retain the 545-line projection of offered schemas and compiled tool availability into template facts. Terminal routes derive from the complete offered-tool set; loading, permission and execution remain with their existing owners. Keep one projection so the debug snapshot and rendered guidance use the same facts. The command guidance matrix covers offered, deferred and unavailable execution surfaces and all capture or held-terminal routes. Growth beyond 545 lines requires renewed review.",
+  "reviewed_commit": "29e597ef299ecf4bf9022ea66b1dcb92a76fc56b",
+  "ceiling": 545,
   "boundaries": {
-    "lycaon/internal/prompts/tool_profile_prompt_vars_test.go": "3d6f0330049bac004d8f91d7eba8256de6dd5787b7367f60694ea31269351850",
-    "lycaon/internal/prompts/visual_partials_test.go": "d4af5e0537b3b64d90f07f2a508cb85cc63dde85ec2dbed809f7751941b671f7",
-    "lycaon/internal/prompts/validation_execution_test.go": "4b716e62aa9f36d74ccafa7073ffcc1f79e270c1b581548af051c45c6aec8590"
+    "lycaon/test/contract/agentcontext/command_guidance_facts_test.go": "c58b8b067e3a26cff776691ad85e6a7f88e1a1c04ef82348a94cb4cd56ef5f37"
   }
 }

@@ -112,7 +112,7 @@ func (f ProgramFrame) ChildContext(ctx context.Context, definition toolcontract.
 	if definition.Digest() == "" {
 		return tools.ToolContext{}, fmt.Errorf("program child requires frozen operation definition")
 	}
-	facts := definition.Facts()
+	facts := definition.ReadOnlyFacts()
 	if facts.CatalogDigest != child.CatalogDigest {
 		return tools.ToolContext{}, fmt.Errorf("program child catalog changed")
 	}

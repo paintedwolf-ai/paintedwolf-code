@@ -9,12 +9,20 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"sync"
 
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
 const sourceBlockBytes = 32 << 10
+
+var sourceBlockBufferPool = sync.Pool{
+	New: func() any {
+		buf := new([sourceBlockBytes]byte)
+		return buf
+	},
+}
 
 // verifiedSource owns the capture's ordered block proofs and its one reusable
 // block buffer. The full pin hashes those same ordered bytes. A disk capture is
@@ -26,6 +34,7 @@ type verifiedSource struct {
 	firstNull      int
 	blocks         [][sha256.Size]byte
 	buffer         []byte
+	pooled         *[sourceBlockBytes]byte
 	working, state func()
 	position       int64
 	cached         int64
@@ -38,7 +47,8 @@ func (e ExecutionRevisions) scanSource(ctx context.Context, resolved projectpath
 	if err != nil {
 		return nil, err
 	}
-	capture := &verifiedSource{ctx: ctx, path: resolved.DisplayPath, firstNull: -1, buffer: make([]byte, sourceBlockBytes), working: release, cached: -1}
+	pooled := sourceBlockBufferPool.Get().(*[sourceBlockBytes]byte)
+	capture := &verifiedSource{ctx: ctx, path: resolved.DisplayPath, firstNull: -1, buffer: pooled[:], pooled: pooled, working: release, cached: -1}
 	defer func() {
 		if err != nil {
 			capture.Close()
@@ -147,6 +157,10 @@ func (r *verifiedSource) Close() {
 	if !r.closed {
 		r.closed = true
 		r.blocks, r.buffer = nil, nil
+		if r.pooled != nil {
+			sourceBlockBufferPool.Put(r.pooled)
+			r.pooled = nil
+		}
 		if r.state != nil {
 			r.state()
 			r.state = nil

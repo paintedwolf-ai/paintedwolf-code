@@ -838,6 +838,20 @@ func ProcessEnvironment(base []string, c Confinement) []string {
 	return OverlayEnv(clean, ProxyEnv(c))
 }
 
+// EnvironmentBoundary supplies the broker addresses before a program expands
+// variables. It registers no action; launches still bind their own leases.
+func EnvironmentBoundary(c Confinement) (Confinement, error) {
+	if c.Network != NetworkProxyOnly || c.ProxyAddr != "" {
+		return c, nil
+	}
+	addrs, err := brokerAddrs()
+	if err != nil {
+		return c, err
+	}
+	c.ProxyAddr, c.SocksProxyAddr = addrs.HTTP, addrs.SOCKS
+	return c, nil
+}
+
 // GitSSHEnv returns mediated SSH environment variables.
 func GitSSHEnv(c Confinement, selfPath, knownHosts string) []string {
 	if c.Network != NetworkProxyOnly || c.SocksProxyAddr == "" {
