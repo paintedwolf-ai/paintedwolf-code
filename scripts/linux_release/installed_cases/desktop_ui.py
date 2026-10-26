@@ -5,7 +5,8 @@ import time
 
 from .. import scripts_module
 from ..installed_input import accessibility
-from .app import process_identity, session_environment
+from .app import session_environment
+from ..installed_process import process_identity
 from .records import CaseFailed, CaseUnavailable
 
 _InventoryChanged = accessibility.InventoryChanged
