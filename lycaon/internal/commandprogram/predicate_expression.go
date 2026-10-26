@@ -162,7 +162,7 @@ func (p *predicateParser) expression(level int) (*predicateExpr, error) {
 }
 func predicateUnary(op string) bool {
 	switch op {
-	case "-n", "-z", "-e", "-f", "-d", "-L", "-r", "-w", "-x":
+	case "-n", "-z", "-e", "-f", "-d", "-L", "-r", "-w", "-x", "-s":
 		return true
 	}
 	return false
@@ -216,9 +216,8 @@ func (r PredicateRuntime) TestBuiltin(ctx context.Context, invocation toolcontra
 	if len(args) == 0 {
 		return predicateResult(1), nil
 	}
-	// Unlike [[, these operator nodes are utility argv data, not the selected
-	// syntax unit. Reserve parser/evaluator frames from the admitted operand
-	// count instead of imposing syntax-unit AST node/depth limits on them.
+	// Test operands are argv data, so their count determines the evaluator
+	// reservation without consuming shell syntax-unit depth.
 	if err := r.quota.alloc(int64(len(args)+1) * 2048); err != nil {
 		return toolcontract.ProducerResult{}, err
 	}

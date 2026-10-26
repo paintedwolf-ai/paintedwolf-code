@@ -71,7 +71,7 @@ func newSessionOutputResources() *sessionOutputResources {
 	limits.Working *= 3
 	memory, _ := toolcontract.NewProgramMemory(limits)
 	spill := int64(1 << 30)
-	if catalog, err := toolcontract.LanguageV1(); err == nil {
+	if catalog, err := toolcontract.ReadOnlyLanguageV1(); err == nil {
 		for _, limit := range catalog.Language.Limits {
 			if limit.ID == "session_spill_bytes" {
 				spill = limit.Maximum

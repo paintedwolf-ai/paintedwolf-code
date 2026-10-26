@@ -34,7 +34,7 @@ func (s ProgramSurface) ValidateOperation(bound toolcontract.BoundOperation) err
 	if err := s.selection.known.Validate(definition, invocation); err != nil {
 		return err
 	}
-	facts := definition.Facts()
+	facts := definition.ReadOnlyFacts()
 	if s.selection.identityDenied[facts.Identity] || bound.Publication() == toolcontract.NoPublication && s.selection.denied[facts.Identity][bound.Command()] {
 		return s.profileReject("COMMAND_OPERATION_NOT_ALLOWED", facts, invocation)
 	}
@@ -92,7 +92,7 @@ func (s ProgramSurface) ValidateBound(definition toolcontract.OperationDefinitio
 	if err := s.selection.known.Validate(definition, invocation); err != nil {
 		return err
 	}
-	facts := definition.Facts()
+	facts := definition.ReadOnlyFacts()
 	if s.selection.denied[facts.Identity][command] {
 		return s.profileReject("COMMAND_OPERATION_NOT_ALLOWED", facts, invocation)
 	}

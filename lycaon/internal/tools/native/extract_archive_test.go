@@ -308,3 +308,62 @@ func TestExtractSizeLimitPrecedesCommit(t *testing.T) {
 		t.Fatalf("empty entry bytes: %d", n)
 	}
 }
+
+func TestExtractArchiveCatalogCeilingsAtBoundaryAndOnePast(t *testing.T) {
+	if got := archiveLimit("archive_expansion_ratio"); got != 100 {
+		t.Fatalf("archive_expansion_ratio = %d, want 100", got)
+	}
+	if got := archiveLimit("archive_extract_entries"); got != 25_000 {
+		t.Fatalf("archive_extract_entries = %d, want 25000", got)
+	}
+	if got := archiveLimit("archive_extract_bytes"); got != 128<<20 {
+		t.Fatalf("archive_extract_bytes = %d, want %d", got, 128<<20)
+	}
+
+	tmpDir := t.TempDir()
+	tctx := nativefixture.Context(tmpDir)
+	tool := &ExtractArchiveTool{Boundary: extractTestBoundary(t)}
+	dest, _, err := tool.prepareDest(t.Context(), tctx, "out", tctx.ProfileID())
+	testutil.FailErr(t, "prepare destination", err)
+	sink := extractSink{ctx: t.Context(), tctx: tctx, dest: resolvedMutationTarget(dest)}
+
+	// 1. archive_expansion_ratio = 100: compressed size 64 allows 6,400 bytes and refuses 6,401.
+	ratioBudget, err := newExtractBudget(64)
+	testutil.FailErr(t, "newExtractBudget", err)
+	if ratioBudget.byteLimit() != 6400 {
+		t.Fatalf("byteLimit = %d, want 6400", ratioBudget.byteLimit())
+	}
+	n, err := writeExtractFile(sink, sink.target("at-ratio.txt"), strings.NewReader(strings.Repeat("a", 6400)), ratioBudget)
+	testutil.FailErr(t, "at expansion ratio", err)
+	ratioBudget.addEntry("at-ratio.txt", n)
+	var reject *toolrejection.ToolReject
+	if _, err := writeExtractFile(sink, sink.target("past-ratio.txt"), strings.NewReader("a"), ratioBudget); !errors.As(err, &reject) || reject.Code != "EXTRACT_SIZE_EXCEEDED" {
+		t.Fatalf("one byte past expansion ratio: %v", err)
+	}
+
+	// 2. archive_extract_entries = 25,000: entry 25,000 succeeds and entry 25,001 refuses.
+	entryBudget, err := newExtractBudget(0)
+	testutil.FailErr(t, "newExtractBudget", err)
+	entryBudget.entries = 24_999
+	testutil.FailErr(t, "at entry 25,000", entryBudget.checkEntry())
+	entryBudget.addEntry("e25000.txt", 1)
+	reject = nil
+	if err := entryBudget.checkEntry(); !errors.As(err, &reject) || reject.Code != "EXTRACT_ENTRY_LIMIT" {
+		t.Fatalf("entry 25,001: %v", err)
+	}
+
+	// 3. archive_extract_bytes = 128 MiB: exact 128 MiB succeeds and 128 MiB + 1 byte refuses.
+	byteBudget, err := newExtractBudget(2 << 20)
+	testutil.FailErr(t, "newExtractBudget", err)
+	if byteBudget.byteLimit() != 128<<20 {
+		t.Fatalf("byteLimit = %d, want %d", byteBudget.byteLimit(), 128<<20)
+	}
+	byteBudget.bytes = (128 << 20) - 8
+	n, err = writeExtractFile(sink, sink.target("at-bytes.txt"), strings.NewReader("12345678"), byteBudget)
+	testutil.FailErr(t, "at 128 MiB", err)
+	byteBudget.addEntry("at-bytes.txt", n)
+	reject = nil
+	if _, err := writeExtractFile(sink, sink.target("past-bytes.txt"), strings.NewReader("x"), byteBudget); !errors.As(err, &reject) || reject.Code != "EXTRACT_SIZE_EXCEEDED" {
+		t.Fatalf("one byte past 128 MiB: %v", err)
+	}
+}

@@ -51,8 +51,11 @@ func (SimpleCommand) commandNode() {}
 // Assignment changes a variable or scopes its value to a single dispatch.
 type Assignment struct {
 	SyntaxLocation
-	Name  string
-	Value DeferredWord
+	Name   string
+	Index  ArithmeticNode
+	Append bool
+	Value  DeferredWord
+	Array  []DeferredWord
 }
 
 // EnvironmentDeclaration retains export assignments without joining or reparsing words.
@@ -146,6 +149,22 @@ type TestExpression struct {
 
 func (TestExpression) commandNode() {}
 
+// ArithmeticCommand evaluates (( expression )) for numeric status and mutations.
+type ArithmeticCommand struct {
+	SyntaxLocation
+	Expression ArithmeticNode
+}
+
+func (ArithmeticCommand) commandNode() {}
+
+// TrapCommand registers or clears the invocation-exit handler.
+type TrapCommand struct {
+	SyntaxLocation
+	Statements []Statement
+}
+
+func (TrapCommand) commandNode() {}
+
 // TestNode is a word, unary predicate, binary predicate or parenthesized test.
 type TestNode interface{ testNode() }
 
@@ -214,6 +233,12 @@ type DoubleQuotedPart struct {
 
 func (DoubleQuotedPart) wordNode() {}
 
+// ParameterSlice retains ${name:offset} and ${name:offset:length} bounds.
+type ParameterSlice struct {
+	Offset ArithmeticNode
+	Length ArithmeticNode
+}
+
 // ParameterPart is $name, ${name}, ${#name}, or ${name OP word}. Operator is
 // one of -, :-, +, :+, ?, :?, #, ##, %, %%, ^, ^^, ",", ",,", /, //, /# or
 // /%; Argument is its word or pattern and Replacement the replacement of a
@@ -221,10 +246,13 @@ func (DoubleQuotedPart) wordNode() {}
 type ParameterPart struct {
 	SyntaxLocation
 	Name        string
+	Subscript   string
+	Index       ArithmeticNode
 	Length      bool
 	Operator    string
 	Argument    *DeferredWord
 	Replacement *DeferredWord
+	Slice       *ParameterSlice
 }
 
 func (ParameterPart) wordNode() {}
@@ -232,6 +260,13 @@ func (ParameterPart) wordNode() {}
 // Words lists the operator words nested in the parameter.
 func (p ParameterPart) Words() []DeferredWord {
 	var out []DeferredWord
+	if p.Index != nil {
+		out = append(out, arithmeticWords(p.Index)...)
+	}
+	if p.Slice != nil {
+		out = append(out, arithmeticWords(p.Slice.Offset)...)
+		out = append(out, arithmeticWords(p.Slice.Length)...)
+	}
 	for _, word := range []*DeferredWord{p.Argument, p.Replacement} {
 		if word != nil {
 			out = append(out, *word)
@@ -242,6 +277,7 @@ func (p ParameterPart) Words() []DeferredWord {
 
 type SubstitutionPart struct {
 	SyntaxLocation
+	Operator   string
 	Backquotes bool
 	Statements []Statement
 }

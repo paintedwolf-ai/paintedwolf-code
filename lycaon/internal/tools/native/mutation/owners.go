@@ -72,7 +72,7 @@ func NewOwners(revisions native.ExecutionRevisions, pins PinRecorder, operations
 		operations.Chmod == nil || operations.Chown == nil || operations.Times == nil || operations.Extract == nil || pins == nil {
 		return nil, errors.New("mutation owners require every shared operation and a pin recorder")
 	}
-	catalog, err := toolcontract.LanguageV1()
+	catalog, err := toolcontract.ReadOnlyLanguageV1()
 	if err != nil {
 		return nil, err
 	}

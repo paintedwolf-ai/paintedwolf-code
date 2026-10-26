@@ -76,10 +76,11 @@ func TestFrameCommandsExportAndUnset(t *testing.T) {
 			t.Fatalf("%s: %+v %v", step.source, result, err)
 		}
 	}
-	env, err := frame.Environment(nil)
+	env, release, err := frame.Environment(t.Context(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer release()
 	if want := []string{"KEEP=1", "LOCAL=x", "NEW=a b"}; !reflect.DeepEqual(env, want) {
 		t.Fatalf("environment %q, want %q", env, want)
 	}

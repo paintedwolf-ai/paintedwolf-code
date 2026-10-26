@@ -18,13 +18,30 @@ type evaluatorOperation struct {
 }
 
 func (o *evaluatorOperation) invoke(ctx context.Context) (signal, error) {
-	f, s, fields := o.frame, o.statement, o.fields
+	f := o.frame
 	if o.localState() && !f.io.pending() {
+		if f.io.scope != nil {
+			streams, err := f.io.PrepareStreams(ctx)
+			if err != nil {
+				return signal{}, err
+			}
+			g := *f
+			g.io.streams = streams
+			if o.body != nil {
+				return o.body(ctx, &g)
+			}
+			return o.execute(ctx, &g)
+		}
 		if o.body != nil {
 			return o.body(ctx, f)
 		}
 		return o.execute(ctx, f)
 	}
+	return o.invokeHost(ctx)
+}
+
+func (o *evaluatorOperation) invokeHost(ctx context.Context) (signal, error) {
+	f, s, fields := o.frame, o.statement, o.fields
 	if len(fields) == 0 {
 		fields = Fields{{Value: ":", Span: s.Span}}
 	}
@@ -62,7 +79,7 @@ func (o *evaluatorOperation) execute(ctx context.Context, f *frame) (signal, err
 	s, fields, assigns := o.statement, o.fields, o.assignments
 	if len(fields) == 0 {
 		for _, a := range assigns {
-			if err := f.state.vars.Assign(ctx, a.name, a.value); err != nil {
+			if err := a.apply(ctx, f.state.vars); err != nil {
 				return signal{}, f.expansionRefusal(a.loc, err)
 			}
 		}
@@ -120,8 +137,46 @@ func (o *evaluatorOperation) localState() bool {
 		return true
 	}
 	switch name {
-	case "set", "unset", "export":
+	case ":":
+		return !(len(o.fields) == 2 && o.fields[1].Value == "--help")
+	case "true", "false":
+		return len(o.fields) == 1
+	case "set", "unset", "export", "trap", "((":
 		return true
+	case "test", "[":
+		for _, f := range o.fields[1:] {
+			if predicateFileUnary(f.Value) {
+				return false
+			}
+		}
+		return true
+	case "[[":
+		if c, ok := o.statement.Command.(commandsurface.TestExpression); ok {
+			return !testNodeUsesFiles(c.Expression)
+		}
+	}
+	return false
+}
+
+func predicateFileUnary(op string) bool {
+	switch op {
+	case "-e", "-f", "-d", "-L", "-r", "-w", "-x", "-s":
+		return true
+	}
+	return false
+}
+
+func testNodeUsesFiles(n commandsurface.TestNode) bool {
+	switch n := n.(type) {
+	case commandsurface.GroupedPredicate:
+		return testNodeUsesFiles(n.Expression)
+	case commandsurface.UnaryPredicate:
+		if predicateFileUnary(n.Operator) {
+			return true
+		}
+		return testNodeUsesFiles(n.Operand)
+	case commandsurface.BinaryPredicate:
+		return testNodeUsesFiles(n.Left) || testNodeUsesFiles(n.Right)
 	}
 	return false
 }

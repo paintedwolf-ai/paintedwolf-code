@@ -436,6 +436,76 @@ func TestRecursiveMutationCapsAtBoundaryAndOnePast(t *testing.T) {
 	}
 }
 
+func paddedGzipBytes(t *testing.T, payloadLen, targetGzLen int) []byte {
+	t.Helper()
+	payload := bytes.Repeat([]byte("a"), payloadLen)
+	build := func(commentLen int) []byte {
+		var buf bytes.Buffer
+		gz := gzip.NewWriter(&buf)
+		if commentLen > 0 {
+			gz.Comment = strings.Repeat("c", commentLen)
+		}
+		_, err := gz.Write(payload)
+		testutil.FailErr(t, "gzip write", err)
+		testutil.FailErr(t, "gzip close", gz.Close())
+		return buf.Bytes()
+	}
+	base := build(0)
+	if len(base) > targetGzLen {
+		t.Fatalf("base gzip len %d > target %d", len(base), targetGzLen)
+	}
+	if len(base) == targetGzLen {
+		return base
+	}
+	// A non-empty gzip comment adds len(comment)+1 bytes (null-terminated).
+	got := build(targetGzLen - len(base) - 1)
+	if len(got) != targetGzLen {
+		t.Fatalf("padded gzip len %d, want %d", len(got), targetGzLen)
+	}
+	return got
+}
+
+func TestArchiveCeilingsAtBoundaryAndOnePast(t *testing.T) {
+	h := newHarness(t, nil)
+	ratio := h.owners.limit("archive_expansion_ratio")
+	maxEntries := h.owners.limit("archive_extract_entries")
+	maxBytes := h.owners.limit("archive_extract_bytes")
+	if ratio != 100 || maxEntries != 25_000 || maxBytes != 128<<20 {
+		t.Fatalf("limits ratio=%d entries=%d bytes=%d", ratio, maxEntries, maxBytes)
+	}
+
+	// 1. archive_expansion_ratio = 100 via zcat: 100-byte .gz expanding to 10,000 bytes succeeds; 10,001 refuses.
+	testutil.FailErr(t, "write at-ratio.gz", os.WriteFile(h.path("at-ratio.gz"), paddedGzipBytes(t, int(100*ratio), 100), 0o644))
+	if r := h.run("", "zcat", "at-ratio.gz"); r.err != nil || len(r.stdout) != int(100*ratio) {
+		t.Fatalf("zcat at 100x ratio: err=%v len=%d", r.err, len(r.stdout))
+	}
+	testutil.FailErr(t, "write past-ratio.gz", os.WriteFile(h.path("past-ratio.gz"), paddedGzipBytes(t, int(100*ratio)+1, 100), 0o644))
+	if r := h.run("", "zcat", "past-ratio.gz"); toolrejection.AsToolReject(r.err) == nil || toolrejection.AsToolReject(r.err).Code != "COMMAND_LIMIT_EXCEEDED" {
+		t.Fatalf("zcat one byte past 100x ratio: %v", r.err)
+	}
+
+	// 2. archive_extract_entries = 25,000 via tar -tf: 25,000 entries succeeds; 25,001 refuses.
+	writeEmptyEntryTar := func(name string, count int) {
+		var buf bytes.Buffer
+		tw := tar.NewWriter(&buf)
+		for i := range count {
+			testutil.FailErr(t, "tar header", tw.WriteHeader(&tar.Header{Name: fmt.Sprintf("f%05d", i), Mode: 0o644, Size: 0, Typeflag: tar.TypeReg}))
+		}
+		testutil.FailErr(t, "tar close", tw.Close())
+		testutil.FailErr(t, "write tar", os.WriteFile(h.path(name), buf.Bytes(), 0o644))
+	}
+	writeEmptyEntryTar("entries-at.tar", int(maxEntries))
+	if r := h.run("", "tar", "-t", "-f", "entries-at.tar"); r.err != nil || r.result.Status != 0 {
+		t.Fatalf("tar -tf at 25,000 entries: %+v %v", r.result, r.err)
+	}
+	writeEmptyEntryTar("entries-past.tar", int(maxEntries)+1)
+	r := h.run("", "tar", "-t", "-f", "entries-past.tar")
+	reject := toolrejection.AsToolReject(r.err)
+	if reject == nil || reject.Code != "COMMAND_LIMIT_EXCEEDED" || reject.Data["limit_id"] != "archive_extract_entries" {
+		t.Fatalf("tar -tf at 25,001 entries: %+v %v", r.result, r.err)
+	}
+}
+
 func TestTarAndGzipInteroperateWithGNU(t *testing.T) {
 	var gtar string
 	for _, candidate := range []string{"/opt/homebrew/bin/gtar", "/usr/local/bin/gtar"} {
