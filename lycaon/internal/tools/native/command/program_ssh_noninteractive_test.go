@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http/httptest"
 	"os/user"
+	"strconv"
 	"testing"
 	"time"
 
@@ -52,6 +53,11 @@ func TestProgramSSHReachesPasswordAuthenticationWithoutPrompting(t *testing.T) {
 	person, err := user.Current()
 	testutil.FailErr(t, "read current process identity", err)
 	f := newProgramFixture(t)
+	portNumber, err := strconv.ParseUint(port, 10, 16)
+	testutil.FailErr(t, "parse fixture listener port", err)
+	f.Runtime.Executor.Boundary.SetSessionLoopbackGrant(func(context.Context, string, string) (bool, []uint16) {
+		return true, []uint16{uint16(portNumber)}
+	})
 	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
 	defer cancel()
 	out, err := f.call(t, ctx, externalProgram(binary, "-F", "/dev/null", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "PubkeyAuthentication=no", "-o", "PreferredAuthentications=password", "-o", "ConnectTimeout=3", "-p", port, "-l", person.Username, host, "true"))
@@ -60,20 +66,17 @@ func TestProgramSSHReachesPasswordAuthenticationWithoutPrompting(t *testing.T) {
 	if got.Status != 255 || got.Stderr == "" || ctx.Err() != nil {
 		t.Fatalf("SSH did not settle authentication failure: %+v context=%v", got, ctx.Err())
 	}
+	// Closing the listener makes a missing connection complete the server goroutine.
+	testutil.FailErr(t, "close SSH fixture listener", listener.Close())
+	if err := <-served; err == nil || errors.Is(err, net.ErrClosed) {
+		t.Fatalf("SSH did not complete authentication with the fixture: %v; stderr=%q", err, got.Stderr)
+	}
 	select {
 	case method := <-attempts:
 		if method != "none" && method != "password" {
 			t.Fatalf("unexpected authentication method %q", method)
 		}
-	case <-t.Context().Done():
+	default:
 		t.Fatal("SSH failed before reaching the authentication fixture")
-	}
-	select {
-	case err := <-served:
-		if err == nil {
-			t.Fatal("password-only server accepted an unauthenticated command")
-		}
-	case <-t.Context().Done():
-		t.Fatal("SSH fixture connection did not close")
 	}
 }

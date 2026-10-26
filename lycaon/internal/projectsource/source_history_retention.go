@@ -292,6 +292,71 @@ func persistMutationTrashState(ctx context.Context, database db.Handle, id strin
 	return nil
 }
 
+func reclaimDiscardedMutationSlots(ctx context.Context, database db.Handle, recoveryRoots, liveSlotPaths map[string]bool) error {
+	type mutationDiscardRow struct {
+		id   string
+		plan sourceMutationPlan
+	}
+	mutRows, err := database.QueryContext(ctx, `SELECT id, plan_json FROM source_mutations WHERE status NOT IN ('prepared', 'file_applied') AND json_extract(plan_json,'$.disposal')='discard' AND json_type(plan_json,'$.native_trash')='object' ORDER BY created_at ASC, id ASC`)
+	if err != nil {
+		return err
+	}
+	var discards []mutationDiscardRow
+	for mutRows.Next() {
+		var id, planJSON string
+		if err := mutRows.Scan(&id, &planJSON); err != nil {
+			_ = mutRows.Close()
+			return err
+		}
+		var plan sourceMutationPlan
+		if err := json.Unmarshal([]byte(planJSON), &plan); err != nil {
+			_ = mutRows.Close()
+			return err
+		}
+		discards = append(discards, mutationDiscardRow{id: id, plan: plan})
+	}
+	if err := errors.Join(mutRows.Err(), mutRows.Close()); err != nil {
+		return err
+	}
+
+	for i := range discards {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		row := &discards[i]
+		if row.plan.RootPath != "" {
+			recoveryRoots[filepath.Clean(row.plan.RootPath)] = true
+		}
+		if row.plan.NativeTrash == nil || row.plan.NativeTrash.Reclaimed {
+			continue
+		}
+		slotPath := filepath.Clean(row.plan.NativeTrash.Receipt.Path)
+		if (slotPath == "" || slotPath == ".") && row.plan.RootPath != "" {
+			slotPath = filepath.Clean(filepath.Join(settingsoverlay.RecoveryDir(row.plan.RootPath), recoverySlotName(row.id)))
+		}
+		if liveSlotPaths[slotPath] {
+			continue
+		}
+		if !row.plan.NativeTrash.Reclaiming {
+			row.plan.NativeTrash.Reclaiming = true
+			if err := persistMutationTrashState(ctx, database, row.id, row.plan.NativeTrash); err != nil {
+				return err
+			}
+		}
+		if slotPath != "" && slotPath != "." {
+			if err := removeRecoverySlot(slotPath, row.plan.NativeTrash.Receipt.Identity); err != nil {
+				return err
+			}
+		}
+		row.plan.NativeTrash.Reclaimed = true
+		if err := persistMutationTrashState(ctx, database, row.id, row.plan.NativeTrash); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func reclaimMovedAsideRecovery(ctx context.Context, s *SourceMutationService) error {
 	if s == nil || s.History.db == nil {
 		return nil
@@ -444,65 +509,8 @@ func reclaimMovedAsideRecovery(ctx context.Context, s *SourceMutationService) er
 		return err
 	}
 
-	type mutationDiscardRow struct {
-		id   string
-		plan sourceMutationPlan
-	}
-	mutRows, err := s.History.db.QueryContext(ctx, `SELECT id, plan_json FROM source_mutations WHERE status NOT IN ('prepared', 'file_applied') AND json_extract(plan_json,'$.disposal')='discard' AND json_type(plan_json,'$.native_trash')='object' ORDER BY created_at ASC, id ASC`)
-	if err != nil {
+	if err := reclaimDiscardedMutationSlots(ctx, s.History.db, recoveryRoots, liveSlotPaths); err != nil {
 		return err
-	}
-	var discards []mutationDiscardRow
-	for mutRows.Next() {
-		var id, planJSON string
-		if err := mutRows.Scan(&id, &planJSON); err != nil {
-			_ = mutRows.Close()
-			return err
-		}
-		var plan sourceMutationPlan
-		if err := json.Unmarshal([]byte(planJSON), &plan); err != nil {
-			_ = mutRows.Close()
-			return err
-		}
-		discards = append(discards, mutationDiscardRow{id: id, plan: plan})
-	}
-	if err := errors.Join(mutRows.Err(), mutRows.Close()); err != nil {
-		return err
-	}
-
-	for i := range discards {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		row := &discards[i]
-		if row.plan.RootPath != "" {
-			recoveryRoots[filepath.Clean(row.plan.RootPath)] = true
-		}
-		if row.plan.NativeTrash == nil || row.plan.NativeTrash.Reclaimed {
-			continue
-		}
-		slotPath := filepath.Clean(row.plan.NativeTrash.Receipt.Path)
-		if (slotPath == "" || slotPath == ".") && row.plan.RootPath != "" {
-			slotPath = filepath.Clean(filepath.Join(settingsoverlay.RecoveryDir(row.plan.RootPath), recoverySlotName(row.id)))
-		}
-		if liveSlotPaths[slotPath] {
-			continue
-		}
-		if !row.plan.NativeTrash.Reclaiming {
-			row.plan.NativeTrash.Reclaiming = true
-			if err := persistMutationTrashState(ctx, s.History.db, row.id, row.plan.NativeTrash); err != nil {
-				return err
-			}
-		}
-		if slotPath != "" && slotPath != "." {
-			if err := removeRecoverySlot(slotPath, row.plan.NativeTrash.Receipt.Identity); err != nil {
-				return err
-			}
-		}
-		row.plan.NativeTrash.Reclaimed = true
-		if err := persistMutationTrashState(ctx, s.History.db, row.id, row.plan.NativeTrash); err != nil {
-			return err
-		}
 	}
 
 	for rootPath := range recoveryRoots {
@@ -518,6 +526,49 @@ func reclaimMovedAsideRecovery(ctx context.Context, s *SourceMutationService) er
 
 // Memory reclamation observes history and pending receipts only after all
 // captures have published or released their references.
+func measureMemoryRecoverySlots(ctx context.Context, history *SourceHistory) (map[string]int64, error) {
+	type unmeasuredSlot struct {
+		id   string
+		path string
+	}
+	var toMeasure []unmeasuredSlot
+	history.stateMu.Lock()
+	for _, entry := range history.history {
+		if isActiveMovedAsidePlan(entry.State, entry.UndoPlan) && !entry.UndoPlan.NativeTrash.SizeMeasured {
+			toMeasure = append(toMeasure, unmeasuredSlot{id: entry.ID, path: entry.UndoPlan.NativeTrash.Receipt.Path})
+		}
+	}
+	history.stateMu.Unlock()
+
+	measuredBytes := make(map[string]int64, len(toMeasure))
+	memory, err := newSourceOperationMemory()
+	if err != nil {
+		return nil, err
+	}
+	for _, item := range toMeasure {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		var allocated int64
+		if item.path != "" {
+			bytes, err := measureEntryAllocation(ctx, item.path, memory)
+			if err != nil {
+				if ctx.Err() != nil {
+					return nil, ctx.Err()
+				}
+				if !errors.Is(err, os.ErrNotExist) {
+					return nil, err
+				}
+			} else {
+				allocated = bytes
+			}
+		}
+		measuredBytes[item.id] = allocated
+	}
+
+	return measuredBytes, nil
+}
+
 func reclaimMemoryRecovery(ctx context.Context, s *SourceMutationService) error {
 	s.recovery.lifecycle.Lock()
 	defer s.recovery.lifecycle.Unlock()
@@ -525,43 +576,9 @@ func reclaimMemoryRecovery(ctx context.Context, s *SourceMutationService) error 
 		return err
 	}
 
-	type unmeasuredSlot struct {
-		id   string
-		path string
-	}
-	var toMeasure []unmeasuredSlot
-	s.History.stateMu.Lock()
-	for _, entry := range s.History.history {
-		if isActiveMovedAsidePlan(entry.State, entry.UndoPlan) && !entry.UndoPlan.NativeTrash.SizeMeasured {
-			toMeasure = append(toMeasure, unmeasuredSlot{id: entry.ID, path: entry.UndoPlan.NativeTrash.Receipt.Path})
-		}
-	}
-	s.History.stateMu.Unlock()
-
-	measuredBytes := make(map[string]int64, len(toMeasure))
-	memory, err := newSourceOperationMemory()
+	measuredBytes, err := measureMemoryRecoverySlots(ctx, s.History)
 	if err != nil {
 		return err
-	}
-	for _, item := range toMeasure {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		var allocated int64
-		if item.path != "" {
-			bytes, err := measureEntryAllocation(ctx, item.path, memory)
-			if err != nil {
-				if ctx.Err() != nil {
-					return ctx.Err()
-				}
-				if !errors.Is(err, os.ErrNotExist) {
-					return err
-				}
-			} else {
-				allocated = bytes
-			}
-		}
-		measuredBytes[item.id] = allocated
 	}
 
 	retained := map[string]bool{}
