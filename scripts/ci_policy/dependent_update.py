@@ -52,7 +52,7 @@ def dependent(pull, landed, repository):
 def auto_retarget_candidate(pull, landed, repository):
     """GitHub may silently retarget a child when its base branch lands."""
     return ((pull['headRepository'] or {}).get('nameWithOwner') == repository and not pull['mergeQueueEntry']
-            and pull['baseRefName'] == 'main' and pull['createdAt'] >= landed['created_at']
+            and pull['baseRefName'] == 'main' and landed['created_at'] <= pull['createdAt'] <= landed['merged_at']
             and pull['updatedAt'] >= landed['merged_at'])
 
 

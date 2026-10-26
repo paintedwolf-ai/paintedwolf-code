@@ -155,6 +155,8 @@ class DependentSelectionTests(unittest.TestCase):
         self.assertTrue(d.auto_retarget_candidate(recent, event, REPO))
         for candidate in [node(3, base='main'), node(4, base='main', createdAt='2026-10-19T00:00:00Z',
                                                       updatedAt='2026-10-26T22:52:06Z'),
+                          node(7, base='main', createdAt='2026-10-26T22:52:33Z',
+                               updatedAt='2026-10-26T22:52:34Z'),
                           node(5, base='main', updatedAt='2026-10-26T22:52:06Z', mergeQueueEntry={'id': 'queued'}),
                           node(6, base='main', updatedAt='2026-10-26T22:52:06Z',
                                headRepository={'nameWithOwner': 'fork/r'})]:
