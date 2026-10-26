@@ -357,6 +357,35 @@ func reclaimDiscardedMutationSlots(ctx context.Context, database db.Handle, reco
 	return nil
 }
 
+func loadHistoryReclaimEntries(ctx context.Context, history *SourceHistory) ([]*historyReclaimEntry, error) {
+	rows, err := history.db.QueryContext(ctx, `SELECT seq, id, project_id, state, availability, undo_plan_json, redo_plan_json FROM source_history_entries ORDER BY seq ASC`)
+	if err != nil {
+		return nil, err
+	}
+	var entries []*historyReclaimEntry
+	for rows.Next() {
+		var e historyReclaimEntry
+		var undoJSON, redoJSON string
+		if err := rows.Scan(&e.seq, &e.id, &e.projectID, &e.state, &e.availability, &undoJSON, &redoJSON); err != nil {
+			_ = rows.Close()
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(undoJSON), &e.undoPlan); err != nil {
+			_ = rows.Close()
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(redoJSON), &e.redoPlan); err != nil {
+			_ = rows.Close()
+			return nil, err
+		}
+		entries = append(entries, &e)
+	}
+	if err := errors.Join(rows.Err(), rows.Close()); err != nil {
+		return nil, err
+	}
+	return entries, nil
+}
+
 func reclaimMovedAsideRecovery(ctx context.Context, s *SourceMutationService) error {
 	if s == nil || s.History.db == nil {
 		return nil
@@ -366,30 +395,8 @@ func reclaimMovedAsideRecovery(ctx context.Context, s *SourceMutationService) er
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-
-	rows, err := s.History.db.QueryContext(ctx, `SELECT seq, id, project_id, state, availability, undo_plan_json, redo_plan_json FROM source_history_entries ORDER BY seq ASC`)
+	entries, err := loadHistoryReclaimEntries(ctx, s.History)
 	if err != nil {
-		return err
-	}
-	var entries []*historyReclaimEntry
-	for rows.Next() {
-		var e historyReclaimEntry
-		var undoJSON, redoJSON string
-		if err := rows.Scan(&e.seq, &e.id, &e.projectID, &e.state, &e.availability, &undoJSON, &redoJSON); err != nil {
-			_ = rows.Close()
-			return err
-		}
-		if err := json.Unmarshal([]byte(undoJSON), &e.undoPlan); err != nil {
-			_ = rows.Close()
-			return err
-		}
-		if err := json.Unmarshal([]byte(redoJSON), &e.redoPlan); err != nil {
-			_ = rows.Close()
-			return err
-		}
-		entries = append(entries, &e)
-	}
-	if err := errors.Join(rows.Err(), rows.Close()); err != nil {
 		return err
 	}
 
