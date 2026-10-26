@@ -165,19 +165,35 @@ func (d dispatcher) EffectMode(ctx context.Context, request commandprogram.Opera
 // Mode is the catalog effect mode the bound form selects, or empty when the
 // command has one mode.
 type Prepared struct {
-	Argv    commandprogram.BoundArgv
-	Review  commandprogram.ArgvReview
-	Mode    string
-	owners  *Owners
-	request commandprogram.OperationRequest
-	spec    toolcontract.CommandSpecification
-	run     utility
-	sed     *preparedSed
+	Argv           commandprogram.BoundArgv
+	Review         commandprogram.ArgvReview
+	Mode           string
+	DeferredSource bool
+	owners         *Owners
+	request        commandprogram.OperationRequest
+	spec           toolcontract.CommandSpecification
+	run            utility
+	sed            *preparedSed
 }
 
 // Close releases any admitted resources retained by the prepared invocation.
 func (p Prepared) Close() {
 	p.sed.close()
+}
+
+// RecordSourceRead records a source revision after its own path was admitted,
+// even if approval for the parsed script's effects is later declined.
+func (p Prepared) RecordSourceRead(ctx context.Context) error {
+	if p.sed == nil || p.sed.pinsRecorded {
+		return nil
+	}
+	for _, pin := range p.sed.pins {
+		if err := p.owners.Pins.AppendRevisionPin(ctx, p.request.Invocation.Identity.ExecutionID, pin); err != nil {
+			return err
+		}
+	}
+	p.sed.pinsRecorded = true
+	return nil
 }
 
 // Prepare binds a reached command. The operation identity is the command name.
@@ -224,6 +240,19 @@ func (o *Owners) PrepareNative(ctx context.Context, frame *projectpaths.ProgramP
 	p, err := o.Prepare(ctx, request)
 	if err != nil || p.Argv.Command != "sed" || !argvFlag(p.Argv, "-f") {
 		return p, err
+	}
+	for _, item := range p.Argv.Items {
+		if item.Option == nil || item.Option.Key != "-f" {
+			continue
+		}
+		for _, value := range item.Option.Values {
+			if _, err := frame.Bind(ctx, value.Value, false); err != nil {
+				// The bound -f operand is already a typed read target. Defer
+				// loading until that target has passed child admission.
+				p.DeferredSource = true
+				return p, nil
+			}
+		}
 	}
 	ports.ToolContext = frame.ToolContext()
 	inv := newInvocation(ctx, p, ports, commandprogram.Streams{})

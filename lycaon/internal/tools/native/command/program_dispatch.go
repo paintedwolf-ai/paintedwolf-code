@@ -43,10 +43,14 @@ type NativeOperation struct {
 type NativePrepared struct {
 	// Mode is the catalog effect mode the bound form selects; empty uses the
 	// evaluator's single declared mode.
-	Mode          string
-	Review        commandprogram.ArgvReview
-	LoopbackPorts []uint16
-	Invoke        func(context.Context, tools.ToolContext, commandprogram.Streams) (toolcontract.ProducerResult, error)
+	Mode string
+	// DeferredSource marks an owner-bound source whose contents can only be
+	// classified after the source path's first typed read approval.
+	DeferredSource   bool
+	RecordSourceRead func(context.Context) error
+	Review           commandprogram.ArgvReview
+	LoopbackPorts    []uint16
+	Invoke           func(context.Context, tools.ToolContext, commandprogram.Streams) (toolcontract.ProducerResult, error)
 	// Command is the catalog command the bound form resolved to (git status
 	// for git -C DIR status); empty keeps the dispatched command.
 	Command string
@@ -375,6 +379,13 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 	runStreams.Error = tracker
 	autoLoopback := prepared.LoopbackPorts
 	inputs := d.run.nativeArguments(review.Arguments(), operationDef.Facts().Contract, autoLoopback)
+	expectedMode := prepared.Mode
+	var disclosed *NativePrepared
+	defer func() {
+		if disclosed != nil && disclosed.Release != nil {
+			disclosed.Release()
+		}
+	}()
 	effect := toolexecution.NativeEffect{
 		Operation: bound, Streams: runStreams, Arguments: inputs, Argv: &review, Inspection: d.run.capture,
 		Stage: toolcontract.ExecutionStage{ExecutionID: request.Invocation.Identity.ExecutionID, OperationID: operationDef.Facts().Identity, Argv: request.Argv.Values()},
@@ -386,17 +397,65 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 			if err != nil {
 				return toolexecution.PreparedNativeEffect{}, err
 			}
-			actual, err := operation.Prepare(ctx, frame, d, prepareReq)
-			if err != nil {
-				return toolexecution.PreparedNativeEffect{}, err
+			var actual NativePrepared
+			if disclosed != nil {
+				actual = *disclosed
+			} else {
+				actual, err = operation.Prepare(ctx, frame, d, prepareReq)
+				if err != nil {
+					return toolexecution.PreparedNativeEffect{}, err
+				}
+				actual.Review.OperationID = operationDef.Facts().Identity
+				actual.Review.PathTargets = absolutePathTargets(frame.Cwd().Abs, admitted.Host.SessionScratchDir, actual.Review.PathTargets)
 			}
-			actual.Review.OperationID = operationDef.Facts().Identity
-			actual.Review.PathTargets = absolutePathTargets(frame.Cwd().Abs, admitted.Host.SessionScratchDir, actual.Review.PathTargets)
-			if !reflect.DeepEqual(actual.Review, review) || !slices.Equal(actual.LoopbackPorts, prepared.LoopbackPorts) || actual.Mode != prepared.Mode || actual.Tool != prepared.Tool || actual.Command != prepared.Command {
+			if prepared.DeferredSource && disclosed == nil && !reflect.DeepEqual(actual.Review.PathTargets, review.PathTargets) {
+				prior := actual.Review
+				prior.PathTargets = review.PathTargets
+				if !reflect.DeepEqual(prior, review) || !slices.Equal(actual.LoopbackPorts, prepared.LoopbackPorts) || actual.Tool != prepared.Tool || actual.Command != prepared.Command {
+					if actual.Release != nil {
+						actual.Release()
+					}
+					return toolexecution.PreparedNativeEffect{}, fmt.Errorf("native source binding changed after approval")
+				}
+				for _, target := range review.PathTargets {
+					if !slices.Contains(actual.Review.PathTargets, target) {
+						if actual.Release != nil {
+							actual.Release()
+						}
+						return toolexecution.PreparedNativeEffect{}, fmt.Errorf("native source removed an approved path target")
+					}
+				}
+				newMode := selectEffectMode(spec, actual.Mode)
+				newBound, bindErr := toolcontract.BindOperation(operationDef, request.Invocation, spec.Name, newMode, d.childEffectSet(spec, newMode, request))
+				if bindErr != nil {
+					if actual.Release != nil {
+						actual.Release()
+					}
+					return toolexecution.PreparedNativeEffect{}, bindErr
+				}
+				if actual.RecordSourceRead == nil {
+					if actual.Release != nil {
+						actual.Release()
+					}
+					return toolexecution.PreparedNativeEffect{}, fmt.Errorf("deferred native source has no revision recorder")
+				}
+				if err := actual.RecordSourceRead(ctx); err != nil {
+					if actual.Release != nil {
+						actual.Release()
+					}
+					return toolexecution.PreparedNativeEffect{}, err
+				}
+				disclosed = &actual
+				review = actual.Review
+				expectedMode = actual.Mode
+				bound = newBound
+				return toolexecution.PreparedNativeEffect{Operation: newBound, DisclosedArgv: &review}, nil
+			}
+			if !reflect.DeepEqual(actual.Review, review) || !slices.Equal(actual.LoopbackPorts, prepared.LoopbackPorts) || actual.Mode != expectedMode || actual.Tool != prepared.Tool || actual.Command != prepared.Command {
 				return toolexecution.PreparedNativeEffect{}, fmt.Errorf("native binding changed after approval")
 			}
 			return toolexecution.PreparedNativeEffect{Operation: bound, InvokeOwner: func(ctx context.Context, tc tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-				if actual.Release != nil {
+				if disclosed == nil && actual.Release != nil {
 					defer actual.Release()
 				}
 				return d.runProducer(ctx, request, streams, func(ctx context.Context, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {

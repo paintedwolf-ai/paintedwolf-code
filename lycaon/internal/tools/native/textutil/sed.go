@@ -26,9 +26,10 @@ type PosixRegexEngine interface {
 type sedCompiler struct{ engine PosixRegexEngine }
 
 type preparedSed struct {
-	source  sedSource
-	program *sedscript.Program
-	pins    []toolcontract.ExecutionRevision
+	source       sedSource
+	program      *sedscript.Program
+	pins         []toolcontract.ExecutionRevision
+	pinsRecorded bool
 }
 
 func (c sedCompiler) Compile(ctx context.Context, pattern string, extended, fold bool) (sedscript.Regex, error) {
@@ -62,9 +63,11 @@ func runSed(inv *invocation) error {
 	}
 	script := plan.source
 	program := plan.program
-	for _, pin := range plan.pins {
-		if err := inv.owners.Pins.AppendRevisionPin(inv.ctx, inv.request.Invocation.Identity.ExecutionID, pin); err != nil {
-			return err
+	if !plan.pinsRecorded {
+		for _, pin := range plan.pins {
+			if err := inv.owners.Pins.AppendRevisionPin(inv.ctx, inv.request.Invocation.Identity.ExecutionID, pin); err != nil {
+				return err
+			}
 		}
 	}
 	if program == nil {
