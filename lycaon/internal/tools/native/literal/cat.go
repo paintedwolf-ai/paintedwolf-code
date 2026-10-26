@@ -1,6 +1,8 @@
 package literal
 
 import (
+	"errors"
+	"io"
 	"strconv"
 	"strings"
 )
@@ -45,6 +47,30 @@ func runCat(inv *invocation) error {
 }
 
 func catInput(inv *invocation, in *input, opts catOptions, state *lineState) error {
+	if opts == (catOptions{}) {
+		if in.stream == nil {
+			return inv.out.literal(in, in.data, 0)
+		}
+		var (
+			buf    [lineBufferBytes]byte
+			offset int64
+		)
+		for {
+			n, err := in.stream.Read(buf[:])
+			if n > 0 {
+				if writeErr := inv.out.literal(in, buf[:n], offset); writeErr != nil {
+					return writeErr
+				}
+				offset += int64(n)
+			}
+			if err != nil {
+				if errors.Is(err, io.EOF) {
+					return nil
+				}
+				return err
+			}
+		}
+	}
 	return eachLine(in, func(f fragment) error {
 		starts := f.starts && !state.midLine
 		state.midLine = !f.terminated()
