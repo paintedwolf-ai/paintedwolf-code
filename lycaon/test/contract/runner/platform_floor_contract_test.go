@@ -196,8 +196,8 @@ func TestLinuxFloorFeedsPackagingAndCatalog(t *testing.T) {
 		if !ok || elf != platform.ArtifactArch {
 			t.Fatalf("Linux row %s/%s is not a shipped architecture (%v, %q)", platform.GOOS, platform.GOARCH, ok, elf)
 		}
-		if strings.Join(platform.PackageExts, ",") != "deb,rpm" {
-			t.Fatalf("Linux row %s ships %v, want both package families", platform.ArtifactArch, platform.PackageExts)
+		if strings.Join(platform.PackageExts, ",") != "deb,rpm,pkg.tar.zst" {
+			t.Fatalf("Linux row %s ships %v, want the deb, rpm, and pacman package families", platform.ArtifactArch, platform.PackageExts)
 		}
 		got = append(got, platform.ArtifactArch)
 	}

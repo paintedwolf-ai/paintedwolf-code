@@ -37,6 +37,7 @@ export type ClientNoticeKind =
   | "model_catalog_refresh_failed"
   | "offline"
   | "project_removal_incomplete"
+  | "project_removal_running"
   | "project_removal_unconfirmed"
   | "provider_check_unfinished"
   | "readiness_recheck_failed"
@@ -178,6 +179,11 @@ export const CLIENT_NOTICES: Readonly<Record<ClientNoticeKind, ClientNoticeCopy>
   project_removal_incomplete: {
     title: "Project removal needs review",
     message: "Review the project and extension settings to confirm the removal outcome.",
+    scope: "app",
+  },
+  project_removal_running: {
+    title: "Deleting project",
+    message: "Project deletion is running. Large histories can take several minutes. You can keep using other projects.",
     scope: "app",
   },
   project_removal_unconfirmed: {
