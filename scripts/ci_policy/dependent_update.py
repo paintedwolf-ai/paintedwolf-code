@@ -12,6 +12,7 @@ from ci_policy.github import api
 
 LABEL = 'update-conflict'
 POLLS = 30
+ATTEMPTS = 3
 CONFLICT_POLLS = 12
 HELD_POLLS = 6
 INTERVAL = 5
@@ -58,14 +59,15 @@ def refused(repository, number, head, sleep):
     for _ in range(CONFLICT_POLLS):
         pull = api(f'repos/{repository}/pulls/{number}')
         if pull['head']['sha'] != head:
-            return 'superseded'
+            return 'superseded', pull
         if pull['mergeable'] is not None:
-            return 'conflict' if pull['mergeable'] is False else 'unexplained'
+            return ('conflict' if pull['mergeable'] is False else 'unexplained'), pull
         sleep(INTERVAL)
-    return 'unexplained'
+    return 'unexplained', pull
 
 
 def request(repository, pull, landed, sleep):
+    """Update one dependent from main, following its head when its owner pushes meanwhile."""
     number, head = pull['number'], pull['headRefOid']
     if pull['baseRefName'] != 'main':
         try:
@@ -73,22 +75,35 @@ def request(repository, pull, landed, sleep):
         except subprocess.CalledProcessError:
             if api(f'repos/{repository}/pulls/{number}')['base']['ref'] != 'main':
                 raise
-    if behind(repository, head) == 0:
-        return 'current'
-    try:
-        api(f'repos/{repository}/pulls/{number}/update-branch', 'PUT', {'expected_head_sha': head})
-        return 'requested'
-    except subprocess.CalledProcessError:
-        outcome = refused(repository, number, head, sleep)
+    for _ in range(ATTEMPTS):
+        if behind(repository, head) == 0:
+            # A retarget starts no CI, so a current ready branch still needs its checks.
+            current = api(f'repos/{repository}/pulls/{number}')
+            if current['head']['sha'] != head:
+                head = current['head']['sha']
+                continue
+            if current['draft']:
+                return 'current', head
+            dispatch(repository, current)
+            return 'current_and_checked', head
+        try:
+            api(f'repos/{repository}/pulls/{number}/update-branch', 'PUT', {'expected_head_sha': head})
+            return 'requested', head
+        except subprocess.CalledProcessError as error:
+            refusal = error
+        outcome, current = refused(repository, number, head, sleep)
+        if outcome == 'superseded':
+            head = current['head']['sha']
+            continue
         if outcome == 'unexplained':
-            raise
-        if outcome == 'conflict':
-            api(f'repos/{repository}/issues/{number}/labels', 'POST', {'labels': [LABEL]})
-            api(f'repos/{repository}/issues/{number}/comments', 'POST', {'body': (
-                f'#{landed["number"]} landed on `main`, so this PR now targets `main`. Updating this branch from `main` '
-                f'stopped on a merge conflict. Merge `main` into this branch, resolve the conflict and push; '
-                f'the `{LABEL}` label clears on that push.')})
-        return outcome
+            raise refusal
+        api(f'repos/{repository}/issues/{number}/labels', 'POST', {'labels': [LABEL]})
+        api(f'repos/{repository}/issues/{number}/comments', 'POST', {'body': (
+            f'#{landed["number"]} landed on `main`, so this PR now targets `main`. Updating this branch from `main` '
+            f'stopped on a merge conflict. Merge `main` into this branch, resolve the conflict and push; '
+            f'the `{LABEL}` label clears on that push.')})
+        return 'conflict', head
+    return 'contended', head
 
 
 def dispatch(repository, pull):
@@ -154,20 +169,20 @@ def update_dependents(repository, event, sleep=time.sleep):
         if not dependent(candidate, pull, repository):
             continue
         try:
-            outcome = request(repository, candidate, pull, sleep)
+            outcome, head = request(repository, candidate, pull, sleep)
         except subprocess.CalledProcessError as error:
             failures.append(candidate['number'])
             print(f'#{candidate["number"]}: {error.stderr}')
             continue
         if outcome == 'requested':
-            requested[candidate['number']] = candidate['headRefOid']
+            requested[candidate['number']] = head
         else:
             outcomes[candidate['number']] = outcome
     settled, merged = settle(repository, requested, sleep)
     outcomes.update(settled)
     record = {'state': 'reconciled', 'landed': pull['number'], 'outcomes': {str(n): o for n, o in sorted(outcomes.items())},
               'failed': failures, 'held_runs_remaining': release(repository, merged, sleep)}
-    if failures or 'unconfirmed' in outcomes.values():
+    if failures or {'unconfirmed', 'contended'} & set(outcomes.values()):
         record['state'] = 'incomplete'
     return record
 

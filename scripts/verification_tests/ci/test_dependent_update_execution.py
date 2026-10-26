@@ -43,7 +43,10 @@ class GitHub:
                                     'head': {'sha': n['headRefOid'], 'ref': n['headRefName']}, 'mergeable': None}
                       for n in nodes}
         self.behind = {n['number']: 3 for n in nodes}
-        self.update = {}       # number -> 'merge' | 'conflict' | 'stale' | 'refused'
+        self.update = {}       # number -> 'merge' | 'conflict' | 'refused'
+        self.pushes = {}       # number -> owner pushes that race the next update requests
+        self.pushed_behind = {}  # number -> how far behind main the owner's pushes leave it
+        self.read_push = {}    # number -> an owner push seen first by the next PR read
         self.mergeable = {}    # number -> value after the first read
         self.lag = {}          # number -> reads before a requested merge appears
         self.base_refusal = {}
@@ -59,6 +62,10 @@ class GitHub:
                                                   'triggering_actor': {'login': d.BOT}}]
         self.runs[head] = held + decoys
 
+    def push(self, number, pull):
+        pull['head']['sha'] = f'{number:04d}{len(self.calls):036d}'
+        self.behind[number] = self.pushed_behind.get(number, self.behind[number])
+
     def api(self, path, method='GET', body=None):
         self.calls.append((method, path, body))
         parts = path.split('/')
@@ -72,11 +79,12 @@ class GitHub:
             number = int(parts[4])
             pull = self.pulls[number]
             if path.endswith('/update-branch'):
-                assert body == {'expected_head_sha': pull['head']['sha']} or self.update.get(number) == 'stale'
-                outcome = self.update.get(number, 'merge')
-                if outcome == 'stale':
-                    pull['head']['sha'] = 'f' * 40
+                assert body == {'expected_head_sha': pull['head']['sha']}
+                if self.pushes.get(number):
+                    self.pushes[number] -= 1
+                    self.push(number, pull)
                     raise failure()
+                outcome = self.update.get(number, 'merge')
                 if outcome in {'conflict', 'refused'}:
                     raise failure()
                 self.lag.setdefault(number, 0)
@@ -89,6 +97,8 @@ class GitHub:
                     raise failure()
                 pull['base']['ref'] = body['base']
                 return pull
+            if self.read_push.pop(number, False):
+                self.push(number, pull)
             if 'pending' in pull:
                 if self.lag[number] == 0:
                     self.merge_appears(number, pull)
@@ -158,27 +168,54 @@ class LandedTests(unittest.TestCase):
             ('dco.yml', {'ref': 'main', 'inputs': {'pull_request': '2'}})])
         self.assertEqual(sleeps, [d.INTERVAL, d.INTERVAL])
 
-    def test_drafts_are_updated_without_dispatching_checks_and_current_branches_are_left_alone(self):
-        github = GitHub(node(2, isDraft=True), node(3))
-        github.behind[3] = 0
+    def test_a_retargeted_ready_branch_gets_checks_even_when_already_current(self):
+        github = GitHub(node(2, isDraft=True), node(3), node(4, isDraft=True))
+        github.behind.update({3: 0, 4: 0})
         record, _ = github.run(landed())
-        self.assertEqual(record['outcomes'], {'2': 'updated', '3': 'current'})
-        self.assertEqual(github.writes('dispatches'), [])
+        self.assertEqual(record['outcomes'], {'2': 'updated', '3': 'current_and_checked', '4': 'current'})
+        self.assertEqual([body for _, body in github.writes('dispatches')], [
+            {'ref': 'feat/3', 'inputs': {'profile': 'fast'}}, {'ref': 'main', 'inputs': {'pull_request': '3'}}])
         self.assertEqual(github.writes('update-branch'), [(f'repos/{REPO}/pulls/2/update-branch', {'expected_head_sha': node(2)['headRefOid']})])
 
-    def test_a_concurrent_push_is_kept_and_a_conflict_is_labelled_for_the_owner(self):
+    def test_an_owner_push_during_the_update_is_kept_and_the_new_head_is_brought_current(self):
+        github = GitHub(node(2), node(3), node(4))
+        github.pushes = {2: 1, 3: 1}
+        github.pushed_behind = {3: 0}
+        github.read_push = {4: True}
+        github.behind[4] = 0
+        record, _ = github.run(landed())
+        self.assertEqual(record['state'], 'reconciled')
+        self.assertEqual(record['outcomes'], {'2': 'updated_and_checked', '3': 'current_and_checked', '4': 'current_and_checked'})
+        requests = [body['expected_head_sha'] for _, body in github.writes('pulls/2/update-branch')]
+        self.assertEqual(requests[0], node(2)['headRefOid'])
+        self.assertEqual(len(requests), 2)
+        self.assertNotEqual(requests[1], requests[0])
+        self.assertEqual(github.writes('pulls/4/update-branch'), [])
+        self.assertEqual(sorted(body['inputs'].get('pull_request', body['ref']) for _, body in github.writes('dispatches')),
+                         ['2', '3', '4', 'feat/2', 'feat/3', 'feat/4'])
+
+    def test_a_branch_that_keeps_moving_fails_the_run_instead_of_reporting_success(self):
+        github = GitHub(node(2))
+        github.pushes = {2: d.ATTEMPTS}
+        record, _ = github.run(landed())
+        self.assertEqual(record['state'], 'incomplete')
+        self.assertEqual(record['outcomes'], {'2': 'contended'})
+        self.assertEqual(len(github.writes('update-branch')), d.ATTEMPTS)
+        self.assertEqual(github.writes('dispatches'), [])
+
+    def test_a_conflict_is_labelled_for_the_owner(self):
         github = GitHub(node(2), node(3))
-        github.update = {2: 'stale', 3: 'conflict'}
+        github.update = {3: 'conflict'}
         github.mergeable = {3: False}
         record, _ = github.run(landed())
         self.assertEqual(record, {'state': 'reconciled', 'landed': 1, 'failed': [], 'held_runs_remaining': [],
-                                  'outcomes': {'2': 'superseded', '3': 'conflict'}})
+                                  'outcomes': {'2': 'updated_and_checked', '3': 'conflict'}})
         self.assertEqual(github.writes('issues/2'), [])
         labels, comment = github.writes('issues/3')
         self.assertEqual(labels, (f'repos/{REPO}/issues/3/labels', {'labels': [d.LABEL]}))
         self.assertIn('#1 landed on `main`', comment[1]['body'])
         self.assertIn(f'`{d.LABEL}` label clears on that push', comment[1]['body'])
-        self.assertEqual(github.writes('dispatches'), [])
+        self.assertFalse(any('3' in json.dumps(body) for _, body in github.writes('dispatches')))
 
     def test_an_unexplained_refusal_fails_the_run_without_stopping_other_dependents(self):
         for mergeable in (True, None):
