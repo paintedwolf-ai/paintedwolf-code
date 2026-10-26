@@ -900,7 +900,7 @@ func UpdateMode(req ModeUpdateRequest) (ModeUpdateResult, error) {
 	if err != nil {
 		return ModeUpdateResult{}, err
 	}
-	if !info.Mode().IsRegular() {
+	if !info.Mode().IsRegular() && !info.IsDir() {
 		return ModeUpdateResult{}, &fs.PathError{Op: "chmod effect target", Path: parent.name, Err: unix.EINVAL}
 	}
 	if req.BeforeCommit != nil {

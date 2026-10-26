@@ -133,6 +133,24 @@ func TestTouchAndCopyPreserveTimestamps(t *testing.T) {
 	}
 }
 
+func TestRecursiveCopyPreservesDirectoryMetadata(t *testing.T) {
+	h := newHarness(t, map[string]string{"src/nested/item.txt": "content\n"})
+	past := time.Date(2020, 1, 2, 3, 4, 5, 0, time.UTC)
+	testutil.FailErr(t, "source directory mode", os.Chmod(h.path("src/nested"), 0o700))
+	testutil.FailErr(t, "source directory time", os.Chtimes(h.path("src/nested"), past, past))
+	if r := h.run("", "cp", "-r", "-p", "src", "dst"); r.err != nil || r.result.Status != 0 {
+		t.Fatalf("cp -r -p: %+v %v %q", r.result, r.err, r.stderr)
+	}
+	info, err := os.Stat(h.path("dst/nested"))
+	testutil.FailErr(t, "copied directory", err)
+	if !info.IsDir() || info.Mode().Perm() != 0o700 || !info.ModTime().Equal(past) {
+		t.Fatalf("copied directory mode=%v mtime=%v", info.Mode(), info.ModTime())
+	}
+	if got := h.read("dst/nested/item.txt"); got != "content\n" {
+		t.Fatalf("copied content = %q", got)
+	}
+}
+
 // A directory move is one journaled rename of the entry itself; moving it
 // back restores the tree exactly.
 func TestDirectoryMoveIsJournaledAndReversible(t *testing.T) {
