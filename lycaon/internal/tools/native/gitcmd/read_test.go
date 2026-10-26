@@ -45,6 +45,23 @@ type harness struct {
 }
 
 func newHarness(t *testing.T) *harness {
+	h := newEmptyHarness(t)
+	h.write("a.txt", "one\ntwo\n")
+	h.write("sub/b.txt", "bee\n")
+	h.git("add", ".")
+	h.git("commit", "-q", "-m", "first commit")
+	h.git("tag", "v1")
+	h.write("a.txt", "one\ntwo\nthree\n")
+	h.git("commit", "-q", "-am", "second commit")
+	h.git("branch", "topic")
+	h.write("a.txt", "one\nTWO\nthree\n")
+	h.write("staged.txt", "s\n")
+	h.git("add", "staged.txt")
+	h.write("new.txt", "untracked\n")
+	return h
+}
+
+func newEmptyHarness(t *testing.T) *harness {
 	t.Helper()
 	bin, err := gitengine.BinaryPath()
 	testutil.FailErr(t, "bundled git", err)
@@ -61,18 +78,6 @@ func newHarness(t *testing.T) *harness {
 	h.git("init", "-q", "-b", "main")
 	h.git("config", "user.name", "Ann Author")
 	h.git("config", "user.email", "ann@example.test")
-	h.write("a.txt", "one\ntwo\n")
-	h.write("sub/b.txt", "bee\n")
-	h.git("add", ".")
-	h.git("commit", "-q", "-m", "first commit")
-	h.git("tag", "v1")
-	h.write("a.txt", "one\ntwo\nthree\n")
-	h.git("commit", "-q", "-am", "second commit")
-	h.git("branch", "topic")
-	h.write("a.txt", "one\nTWO\nthree\n")
-	h.write("staged.txt", "s\n")
-	h.git("add", "staged.txt")
-	h.write("new.txt", "untracked\n")
 	return h
 }
 
