@@ -1,7 +1,7 @@
 """Managed task verdicts remain independent of terminal process settlement."""
 import unittest
 
-from verification_job_outcome import ManagedCaseOutcome, require_case_success
+from verification_jobs import ManagedCaseOutcome, require_case_success
 
 
 class ManagedTaskVerdictTests(unittest.TestCase):
