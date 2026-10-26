@@ -131,8 +131,9 @@ func (h *harness) run(source string) run {
 		testutil.FailErr(h.t, "expand", err)
 		argv = append(argv, fields...)
 	}
-	entries, err := frame.Environment(nil)
+	entries, release, err := frame.Environment(h.t.Context(), nil)
 	testutil.FailErr(h.t, "environment", err)
+	defer release()
 	environment := entries
 	request := commandprogram.OperationRequest{
 		Invocation: toolcontract.OperationInvocation{
