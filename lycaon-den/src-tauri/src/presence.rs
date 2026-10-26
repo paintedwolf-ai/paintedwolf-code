@@ -377,13 +377,15 @@ fn require_current_confirmation(generation: u64) -> Result<(), PresenceCommandEr
     if crate::vault_lock::confirmation_unchanged(generation) {
         return Ok(());
     }
-    Err(PresenceCommandError::denied("The device locked or suspended during confirmation. Try again."))
+    Err(PresenceCommandError::denied(
+        "The device locked or suspended during confirmation. Try again.",
+    ))
 }
 
 fn require_active_window(window: &tauri::Window) -> Result<(), PresenceCommandError> {
     #[cfg(target_os = "linux")]
-    if !crate::vault_lock::confirmation_allowed() {
-        return Err(PresenceCommandError::unavailable("The graphical session is locked, inactive, or its lock state is unavailable."));
+    if let Some(reason) = crate::vault_lock::confirmation_refusal() {
+        return Err(PresenceCommandError::unavailable(reason));
     }
     if window.is_visible().unwrap_or(false)
         && window.is_focused().unwrap_or(false)
@@ -661,5 +663,4 @@ mod tests {
         let error = require_current_confirmation(generation).expect_err("stale confirmation");
         assert_eq!(error.code, "presence_denied");
     }
-
 }

@@ -9,7 +9,6 @@ import (
 	"runtime"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -352,12 +351,17 @@ func TestReplaceSerializesConcurrentReplacementsOfSameTarget(t *testing.T) {
 
 	<-entered // Writer A holds the target lock.
 
+	bStaged := make(chan struct{})
 	bDone := make(chan struct{})
 	go func() {
 		defer close(bDone)
 		_, err := fseffect.Replace(fseffect.ReplaceRequest{
 			Location: loc, Mode: 0o600,
 			Source: bytes.NewReader([]byte("from-B")),
+			ReviewStaged: func(fseffect.Target, fseffect.Result) error {
+				close(bStaged)
+				return nil
+			},
 			BeforeCommit: func(fseffect.Target, fseffect.Result) error {
 				if !atomic.CompareAndSwapInt32(&active, 0, 1) {
 					t.Error("writer B entered its critical section while writer A still held the target")
@@ -369,10 +373,12 @@ func TestReplaceSerializesConcurrentReplacementsOfSameTarget(t *testing.T) {
 		testutil.FailErr(t, "writer B replace", err)
 	}()
 
+	<-bStaged
+	runtime.Gosched()
 	select {
 	case <-bDone:
 		t.Fatal("writer B completed its Replace before writer A released the target")
-	case <-time.After(50 * time.Millisecond):
+	default:
 	}
 
 	close(release)
@@ -403,9 +409,11 @@ func TestUpdateModeSerializesWithReplacement(t *testing.T) {
 	}()
 	<-replaceEntered
 
+	modeStarted := make(chan struct{})
 	modeEntered := make(chan struct{})
 	modeDone := make(chan error, 1)
 	go func() {
+		close(modeStarted)
 		_, err := fseffect.UpdateMode(fseffect.ModeUpdateRequest{
 			Location: loc,
 			Update:   func(mode os.FileMode) os.FileMode { return mode | 0o044 },
@@ -417,10 +425,12 @@ func TestUpdateModeSerializesWithReplacement(t *testing.T) {
 		modeDone <- err
 	}()
 
+	<-modeStarted
+	runtime.Gosched()
 	select {
 	case <-modeEntered:
 		t.Fatal("UpdateMode entered before Replace released the target")
-	case <-time.After(50 * time.Millisecond):
+	default:
 	}
 	close(releaseReplace)
 	testutil.FailErr(t, "replace", <-replaceDone)
