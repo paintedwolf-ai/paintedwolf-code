@@ -5,7 +5,7 @@ import { CLIENT_NOTICES } from "../../notices/client-notices.generated.ts";
 import { nativeUpdateState, type createUpdateState } from "./update-state.ts";
 import type { NativeUpdateState } from "./update-service.ts";
 
-const codes = ["update_available", "update_ready", "update_failed", "update_feed_rejected"] as const;
+const codes = ["update_available", "package_update_listed", "update_ready", "update_failed", "update_feed_rejected"] as const;
 type UpdateNotice = (typeof codes)[number];
 
 function noticeFor(state: NativeUpdateState | null): UpdateNotice | undefined {
@@ -13,15 +13,29 @@ function noticeFor(state: NativeUpdateState | null): UpdateNotice | undefined {
   if (state.last_error?.code === "feed_rejected") return "update_feed_rejected";
   if (state.capabilities.can_restart_to_update && state.offer_confirmed_at !== null) return "update_ready";
   if (state.installation === "failed" && state.last_error && state.last_error.code !== "check_failed" && state.last_error.code !== "cancelled") return "update_failed";
+  if (state.install_source === "system_package") {
+    // The host selects candidates through the native policy, so pins and priorities are already
+    // applied; an explicit hold or ignore rule must be observed absent.
+    const source = state.package?.source;
+    return source?.availability === "candidate_found"
+      && source.owner === "system_package_manager" && source.held === false
+      && source.candidate?.newer_than_installed === true
+      ? "package_update_listed" : undefined;
+  }
   if (state.candidate?.rollout_eligibility !== "eligible") return undefined;
-  // The upstream release notice does not assert package-source availability.
-  if (state.install_source === "system_package" || state.install_source === "homebrew_cask") return "update_available";
+  if (state.install_source === "homebrew_cask") return "update_available";
   if (!state.automatic_updates_enabled && state.capabilities.can_download) return "update_available";
   return undefined;
 }
 
 // A notice is about one release: the staged or committed one when there is one, else the offer.
 function noticeIdentity(state: NativeUpdateState | null, code: UpdateNotice): string {
+  if (code === "package_update_listed") {
+    const installed = state?.package;
+    const candidate = installed?.source.candidate;
+    return JSON.stringify([code, installed?.family, installed?.name, candidate?.version,
+      candidate?.architecture, candidate?.repositories]);
+  }
   return `${state?.staged_release_id ?? state?.candidate?.release_id}:${code}`;
 }
 

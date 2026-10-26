@@ -1,0 +1,25 @@
+{
+  "owner": "system_package_manager",
+  "pinned": null,
+  "checked_at": null,
+  "database_owner": null,
+  "cached_only": true,
+  "availability": "unknown",
+  "database_version": "1.0.2~rc.1-1",
+  "architecture": "x86_64",
+  "candidate": {
+    "version": "1.0.2-1",
+    "architecture": "x86_64",
+    "repositories": [
+      {
+        "id": "painted-wolf-code-stable",
+        "suite": null,
+        "trusted": null
+      }
+    ],
+    "newer_than_installed": true
+  },
+  "held": null,
+  "selection_priority": null,
+  "reason": "policy_unobserved"
+}
