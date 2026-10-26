@@ -7,6 +7,15 @@ import verification_plan as planning
 
 
 class HostedPlanTests(unittest.TestCase):
+    def test_native_admission_cannot_omit_targets_or_accept_unsafe_roots(self):
+        for declaration in (None, {}, [], {'den:test:rust': ['lycaon-den/src-tauri/']},
+                {'den:test:rust': [], 'decide:test': ['lycaon/internal/decide/native/']},
+                {'den:test:rust': ['../outside/'], 'decide:test': ['lycaon/internal/decide/native/']}):
+            data = copy.deepcopy(planning.catalog())
+            data['ci']['ready']['compile_targets'] = declaration
+            with patch.object(ci, 'catalog', return_value=data), self.assertRaises(ValueError):
+                ci.matrix('fast')
+
     def test_tier_partitions_cover_every_local_gate_stage_once(self):
         lanes = ci.lanes()
         expected = sorted(stage["name"] for stage in planning.expand(["check"]))

@@ -43,8 +43,8 @@ def lanes():
                 or lane['targets'] != ['den:test:rust', 'decide:test']):
             raise ValueError(f"CI lane {name} requires runtime engines for host checks")
         compilation = lane.get('compile_targets', {})
-        if compilation and (name != 'ready' or not isinstance(compilation, dict)
-                or not set(compilation).issubset({'den:test:rust', 'decide:test'})
+        if (name == 'ready' or 'compile_targets' in lane) and (name != 'ready' or not isinstance(compilation, dict)
+                or set(compilation) != {'den:test:rust', 'decide:test'}
                 or any(not isinstance(roots, list) or not roots
                        or any(not isinstance(root, str) or not root.endswith('/') or '..' in root for root in roots)
                        for roots in compilation.values())):

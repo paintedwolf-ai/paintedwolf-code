@@ -7,7 +7,6 @@ from ci_policy import hosted_plan, hosted_schedule
 
 class HostedScheduleTests(unittest.TestCase):
     def test_cancelled_qualification_uses_one_basis_for_the_whole_matrix(self):
-        # Qualification 39672112947 recorded shard 1 but ended before shard 2.
         measured = {"lanes": {"behavior 1/2": 1287.2, "limits": 226.1, "lint": 822.5}}
         original = copy.deepcopy(measured)
         rows = hosted_plan.matrix("integration", timings=measured)["include"]

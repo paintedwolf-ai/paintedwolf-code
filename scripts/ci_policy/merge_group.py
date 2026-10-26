@@ -14,7 +14,7 @@ def branch_exists(url, ref, token=''):
     """True or False from the remote's answer; None when the remote could not answer."""
     environment = dict(os.environ, GIT_TERMINAL_PROMPT='0')
     if token:
-        # Through the environment, so the token never appears in a process's arguments.
+        # Keep credentials out of process arguments.
         credential = base64.b64encode(f'x-access-token:{token}'.encode()).decode()
         environment.update(GIT_CONFIG_COUNT='1', GIT_CONFIG_KEY_0='http.extraHeader',
                            GIT_CONFIG_VALUE_0=f'AUTHORIZATION: basic {credential}')
