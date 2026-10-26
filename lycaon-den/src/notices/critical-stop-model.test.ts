@@ -132,6 +132,10 @@ describe("resolveCriticalStop", () => {
 
   it.each([
     ["credential_vault_corrupt", "reset_credential_vault"],
+    ["desktop_restart_required", "quit_desktop"],
+    ["installation_unverified", "reconnect"],
+    ["credential_vault_launcher_refused", "reconnect"],
+    ["credential_vault_identity_missing", "reconnect"],
     ["credential_vault_custodian_absent", "reconnect"],
     ["credential_vault_custodian_unavailable", "reconnect"],
   ] as const)("maps %s to its vault recovery", (startFailure, recovery) => {

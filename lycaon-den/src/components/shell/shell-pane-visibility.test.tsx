@@ -1,27 +1,36 @@
 import { createRoot } from "solid-js";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { EMPTY_APP_STATE_V1, type SplitOrder, type WorkspaceOrientation } from "../../../shared/app-state-types.ts";
 import { resetAppStateSnapshotForTests } from "../../store/app-state-snapshot.ts";
 import { resetLayoutForTests } from "../../layout/layout-test-support.ts";
-import { syncLayoutFromSnapshot } from "../../layout/layout-preferences.ts";
+import { commitPreferences, currentPreferences, syncLayoutFromSnapshot } from "../../layout/layout-preferences.ts";
 import { setLayoutViewportWidth } from "../../shell/workspace-layout.ts";
 import { createShellPaneVisibility } from "./shell-pane-visibility.ts";
+
+vi.mock("../../platform/windows/window-chrome.ts", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../../platform/windows/window-chrome.ts")>(),
+  widenWindowBy: vi.fn(async () => "no-room" as const),
+}));
+vi.mock("../../store/app-state-background-write.ts", () => ({
+  persistAppStateInBackground: vi.fn(async () => {}),
+}));
 
 afterEach(() => resetLayoutForTests());
 
 function panes(orientation: WorkspaceOrientation, splitOrder: SplitOrder, hidden: boolean, opts?: {
   navCollapsed?: boolean; splitLive?: boolean; stageOccupied?: boolean; hiddenPane?: "stage" | "conversation";
+  viewportWidth?: number; fileWindow?: boolean;
 }) {
   resetAppStateSnapshotForTests({ ...EMPTY_APP_STATE_V1,
     layout: { workspaceOrientation: orientation, splitOrder, navCollapsed: opts?.navCollapsed ?? true,
       hiddenSplitPane: hidden ? "conversation" : opts?.hiddenPane } });
   syncLayoutFromSnapshot();
-  // Wide enough that nothing collapses on its own.
-  setLayoutViewportWidth(2400);
+  setLayoutViewportWidth(opts?.viewportWidth ?? 2400);
   let dispose!: () => void;
   const value = createRoot((d) => {
     dispose = d;
-    return createShellPaneVisibility({ windowSubject: null, splitLive: () => opts?.splitLive ?? true,
+    return createShellPaneVisibility({ windowSubject: opts?.fileWindow
+      ? { kind: "file", projectId: "project", rootId: "root", path: "file.txt", viewId: "view" } : null, splitLive: () => opts?.splitLive ?? true,
       presentedSplitLive: () => opts?.splitLive ?? true, presentedStageId: () => "files",
       stageColumnOccupied: () => opts?.stageOccupied ?? true });
   });
@@ -108,5 +117,98 @@ describe("window edge hosts", () => {
     const chat = panes("standard", "context-first", false, { splitLive: false, stageOccupied: false });
     expect(hosts(chat.value)).toEqual([{ owner: "chat", narrow: "chat" }, { owner: "chat", narrow: "chat" }]);
     chat.dispose();
+  });
+});
+
+
+describe("explicit navigation and responsive fit", () => {
+  const narrow = (orientation: WorkspaceOrientation = "standard", fileWindow = false) =>
+    panes(orientation, "context-first", false, {
+      navCollapsed: false, splitLive: false, viewportWidth: 800, fileWindow,
+    });
+
+  it.each(["standard", "mirrored"] as const)("keeps explicit no-room restore reachable in %s", async (orientation) => {
+    const { value, dispose } = narrow(orientation);
+    try {
+      expect(value.navAutomaticallyCollapsed()).toBe(true);
+      expect(value.windowNavCollapsed()).toBe(true);
+      await expect(value.showWindowNav()).resolves.toBe(true);
+      expect(value.navAutomaticallyCollapsed()).toBe(false);
+      expect(value.windowNavCollapsed()).toBe(false);
+      await commitPreferences({ ...currentPreferences(), workspaceOrientation: orientation === "standard" ? "mirrored" : "standard" });
+      expect(value.windowNavCollapsed()).toBe(false);
+      expect(value.navAutomaticallyCollapsed()).toBe(false);
+    } finally { dispose(); }
+  });
+
+  it("reapplies responsive policy only after genuine viewport or fit changes", async () => {
+    const { value, dispose } = narrow();
+    try {
+      await value.showWindowNav();
+      setLayoutViewportWidth(799);
+      expect(value.navAutomaticallyCollapsed()).toBe(true);
+      await value.showWindowNav();
+      await commitPreferences({ ...currentPreferences(), navWidthPx: 320 });
+      expect(value.navAutomaticallyCollapsed()).toBe(true);
+      setLayoutViewportWidth(2400);
+      expect(value.navAutomaticallyCollapsed()).toBe(false);
+      expect(value.windowNavCollapsed()).toBe(false);
+    } finally { dispose(); }
+  });
+
+  it("keeps fit changes subscribed when navigation starts manually hidden", async () => {
+    const { value, dispose } = panes("standard", "context-first", false, {
+      navCollapsed: true, splitLive: false, viewportWidth: 800,
+    });
+    try {
+      expect(value.navAutomaticallyCollapsed()).toBe(false);
+      await value.showWindowNav();
+      expect(value.windowNavCollapsed()).toBe(false);
+      await commitPreferences({ ...currentPreferences(), navWidthPx: 320 });
+      expect(value.navAutomaticallyCollapsed()).toBe(true);
+    } finally { dispose(); }
+  });
+
+  it("manual hide and hydration clear automatic state without fighting open intent", async () => {
+    const { value, dispose } = narrow();
+    const hydrate = (navCollapsed: boolean) => {
+      resetAppStateSnapshotForTests({ ...EMPTY_APP_STATE_V1, layout: { ...currentPreferences(), navCollapsed } });
+      syncLayoutFromSnapshot();
+    };
+    try {
+      expect(value.navAutomaticallyCollapsed()).toBe(true);
+      value.hideWindowNav();
+      expect(value.windowNavCollapsed()).toBe(true);
+      expect(value.navAutomaticallyCollapsed()).toBe(false);
+      await value.showWindowNav();
+      expect(value.windowNavCollapsed()).toBe(false);
+      setLayoutViewportWidth(799);
+      expect(value.navAutomaticallyCollapsed()).toBe(true);
+      hydrate(true);
+      expect(value.windowNavCollapsed()).toBe(true);
+      expect(value.navAutomaticallyCollapsed()).toBe(false);
+      hydrate(false);
+      expect(value.windowNavCollapsed()).toBe(false);
+      expect(value.navAutomaticallyCollapsed()).toBe(false);
+      setLayoutViewportWidth(798);
+      expect(value.navAutomaticallyCollapsed()).toBe(true);
+    } finally { dispose(); }
+  });
+
+  it("keeps file-window navigation local and independent of automatic fit collapse", async () => {
+    const { value, dispose } = narrow("standard", true);
+    try {
+      expect(value.windowNavCollapsed()).toBe(true);
+      expect(value.navAutomaticallyCollapsed()).toBe(false);
+      await value.showWindowNav();
+      expect(value.windowNavCollapsed()).toBe(false);
+      setLayoutViewportWidth(600);
+      expect(value.windowNavCollapsed()).toBe(false);
+      expect(value.navAutomaticallyCollapsed()).toBe(false);
+      value.hideWindowNav();
+      expect(value.windowNavCollapsed()).toBe(true);
+      expect(value.navAutomaticallyCollapsed()).toBe(false);
+      expect(currentPreferences().navCollapsed).toBe(false);
+    } finally { dispose(); }
   });
 });

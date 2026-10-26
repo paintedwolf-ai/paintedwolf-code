@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/approvaloutcome"
@@ -98,7 +97,7 @@ func deniedCopy(t *testing.T) string {
 func (h *approvalHITLHarness) waitPending(t *testing.T) string {
 	t.Helper()
 	var checkpointID string
-	testutil.WaitFor(t, 15*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		kind := wire.CheckpointKindToolApproval
 		pending, err := h.checkpointMgr.ListPending(h.ctx, h.sess.ID, &kind)
 		if err == nil && len(pending) == 1 {

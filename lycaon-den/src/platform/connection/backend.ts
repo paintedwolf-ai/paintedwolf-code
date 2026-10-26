@@ -89,6 +89,7 @@ export type SidecarStartFailure =
   | "credential_vault_custodian_unavailable"
   | "credential_vault_corrupt"
   | "desktop_restart_required"
+  | "installation_unverified"
   | "credential_vault_launcher_refused"
   | "credential_vault_identity_missing";
 
@@ -139,6 +140,7 @@ function noteStartFailure(err: unknown): void {
     tagged.code === "credential_vault_custodian_unavailable" ||
     tagged.code === "credential_vault_corrupt" ||
     tagged.code === "desktop_restart_required" ||
+    tagged.code === "installation_unverified" ||
     tagged.code === "credential_vault_launcher_refused" ||
     tagged.code === "credential_vault_identity_missing"
   ) {
