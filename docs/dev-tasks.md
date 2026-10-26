@@ -957,6 +957,8 @@ flowchart TD
     activate --> clients["Direct-download updater verifies signature;<br/>Homebrew installs get the notifier"]
 ```
 
+The public artifact collector requires every catalog-public package, its checksum, and its scanner audit. Only platforms with a non-null `updater_extension` contribute signed updater archives and feed entries; package-managed platforms require no synthetic updater. Website confirmation compares the complete package link set for the selected catalog, including architecture and version, while preserving the signed receipt and uncached page checks. `release_distribution.py website --catalog PATH` and `release-validate-updater-manifest.sh --catalog PATH` allow verification against the release source's catalog. Candidate packages remain excluded. A recovery operation must select the catalog belonging to the restored release; current-source catalog changes do not establish historical distribution contents.
+
 ### Bump and tag (example `1.0.0-rc.1` → `1.0.0-rc.2`)
 
 1. Set `VERSION` to `1.0.0-rc.2` and increment `RELEASE_BUILD`.
@@ -972,9 +974,79 @@ flowchart TD
 
 Local release packaging uses `./task den:bundle`, which injects `VERSION` into the sidecar and syncs Den package/Tauri/Cargo versions. On macOS it requires the Developer ID identity and engine provisioning profile enforced by the [bundle build](../scripts/den-build-bundle.sh). Use `./task den:app -- --debug` for local development without provisioning.
 
+### Nix development and package builds
+
+The pinned [flake](../flake.nix) defines Linux amd64 and arm64 development
+shells from the repository's Rust toolchain, Go module and Bun version. Enter
+with `nix develop`, then use the existing root `./task` commands. The shell
+supplies GTK3/WebKitGTK4.1 development libraries and pkg-config inputs; ordinary
+application feature code still uses native capability facts.
+
+Hosts that restrict unprivileged user namespaces to profiled programs (Ubuntu
+24.04 and later) need an administrator to load the generation's engine grant
+before confinement is available. Each generation ships
+`share/painted-wolf-code/apparmor/paintedwolf-engine-<hash>`, which grants user
+namespaces to that generation's exact `pw` executable only: install it under
+`/etc/apparmor.d/` and load it with `apparmor_parser -r`. A new generation has
+a new path and needs its own grant; remove the previous one once nothing runs it.
+A source build on such a host also needs the scanner builder's grant: build the
+scanner tools first (`./task nix:build -- --component scanner-host-tools`), load
+the `paintedwolf-scanner-builder-<hash>` profile its output ships the same way,
+then build the application. Substituting the qualified closure needs neither.
+
+Outside NixOS the launchers select the closure's Mesa as the EGL, GBM and
+Vulkan driver unless those variables are already set: host-installed drivers
+are not part of the generation, so they would be foreign modules. NixOS uses
+the system's configured driver environment.
+
+Consumers without flakes use [default.nix](../default.nix): `nix-build` or
+`pkgs.callPackage <checkout> { }` evaluates the same flake graph with the
+inputs pinned in `flake.lock`; the caller's package set selects only the
+platform.
+
+`./task nix:check` evaluates all declared systems without building or updating
+the lock file, and requires `default.nix` to instantiate the flake's exact
+application derivation for each system. `./task nix:build` builds the host's native Linux package under
+normal exclusive admission with one Nix job/core and sandboxing enabled. Its
+report binds the source tree, flake lock, derivations, outputs and recursive
+closure. Missing Nix, missing outputs and incompatible inputs fail the target.
+For a focused package input build, use `./task nix:build -- --component bun-lock`;
+the declared component list is checked by the build driver. The generated Bun
+dependency expression is a build output to review and commit, never an
+evaluation-time download or an automatic lock-file mutation.
+These tasks do not publish a cache or authorize daemon access from an agent
+command. Nix build sandboxing and application command confinement are separate.
+The package closure and installed system integration remain under implementation
+in #927/#928/#929; evaluation does not establish installed support.
+
 ### Linux packages
 
-Linux ships as native packages only: a `.deb` for Debian and Ubuntu families and an `.rpm` for Fedora and RHEL-compatible families, for x86_64 and aarch64. `./task den:bundle` on Linux compiles the shell with `tauri build --no-bundle`, writes the package manifest, and stages the install tree with `tauri bundle --bundles deb`. `scripts/linux-package-assemble.py` then builds both families from that one tree with the distributions' tools: it seals the package manifest against the staged bytes (bundling patches the shell executable after the manifest is first written), builds the `.deb` with `dpkg-deb` (xz level 6 on every core; Tauri's control file with the release's Debian version, since Tauri writes the native app version and drops the prerelease), and builds the `.rpm` with `rpmbuild` (from the `rpm` package on Debian and Ubuntu) and a spec generated from the same dependency catalog, the `packaging/linux/rpm` scriptlets and the Tauri metadata. Tauri's own rpm target is not used: it holds the 1.7 GB payload in memory and compresses it on one thread, which did not finish within 30 minutes at zstd level 3; `rpmbuild` streams the payload through zstd level 19 on every core (`w19T0.zstdio`). Staging compares the two extracted trees file by file (type, mode, link target), apart from fragments only one family ships. The package is the installation identity: the installed layout is
+The native pacman adapter is available with `./task den:bundle -- --pacman` on
+an unprivileged Linux builder with `makepkg` and its packaging prerequisites.
+`./task den:bundle -- --pacman-container` instead prepares the pinned official Arch
+or Arch Linux ARM substrate on the matching native CPU, then runs makepkg offline
+as the invoking user. Docker is required; no QEMU or cross-CPU packaging is admitted.
+It consumes the same sealed application tree as deb/rpm, removes Debian-only
+policy fragments, validates required resources and the final executable manifest,
+and emits a `.pkg.tar.zst`, its payload archive, generated `PKGBUILD` and `.SRCINFO`
+under `bundle/pacman`. Package-time stripping/debug extraction is disabled so the
+launcher manifest continues to describe the final bytes. Checksums bind the
+recipe to its payload. This build path does not install packages or configure
+repositories; the native Arch/Artix owner/service and delivery work is #941/#942.
+`pacman-candidate.json` records the selected source, final package SHA-256/size,
+sealed payload hash, native CPU, official substrate identity and installed packaging
+toolchain. Staging checks native package identity, exact dependency declarations,
+safe archive contents and the same complete payload/ELF audits as deb/rpm. Retained
+`candidate-packages.json` binds all three families to exact source, architecture and
+final hashes. Native amd64 and Arch Linux ARM aarch64 installed qualification remains #943.
+
+Pacman uses the shared product version, mapping supported preview labels to
+`<core>pre.<label>` (for example `1.2.3-rc6` becomes `1.2.3pre.rc6`) and the shared
+`RELEASE_BUILD` as `pkgrel`. The full product version stays in the installed
+`release-version` and executable manifest. Unsupported prerelease labels fail
+construction rather than risk an incorrect package upgrade order.
+
+Linux ships native `.deb` packages for Debian/Ubuntu, `.rpm` packages for Fedora/RHEL-compatible families, and `.pkg.tar.zst` packages for Arch and Arch Linux ARM, for x86_64 and aarch64. `./task den:bundle` on Linux compiles the shell with `tauri build --no-bundle`, writes the package manifest, and stages the install tree with `tauri bundle --bundles deb`. `scripts/linux-package-assemble.py` then builds both families from that one tree with the distributions' tools: it seals the package manifest against the staged bytes (bundling patches the shell executable after the manifest is first written), builds the `.deb` with `dpkg-deb` (xz level 6 on every core; Tauri's control file with the release's Debian version, since Tauri writes the native app version and drops the prerelease), and builds the `.rpm` with `rpmbuild` (from the `rpm` package on Debian and Ubuntu) and a spec generated from the same dependency catalog, the `packaging/linux/rpm` scriptlets and the Tauri metadata. Tauri's own rpm target is not used: it holds the 1.7 GB payload in memory and compresses it on one thread, which did not finish within 30 minutes at zstd level 3; `rpmbuild` streams the payload through zstd level 19 on every core (`w19T0.zstdio`). Staging compares the two extracted trees file by file (type, mode, link target), apart from fragments only one family ships. The package is the installation identity: the installed layout is
 
 | Path | Contents |
 |------|----------|
@@ -985,9 +1057,21 @@ Linux ships as native packages only: a `.deb` for Debian and Ubuntu families and
 | `/opt/painted-wolf-code/release-version`, `THIRD-PARTY-NOTICES.md` | release resources |
 | `/usr/share/applications/dev.paintedwolf.code.desktop`, `/usr/share/icons/hicolor/` | the desktop entry named by the bundle identifier and icons. The shell sets its GTK program name to that identifier, which GTK 3 uses as the Wayland app id and the X11 window class (`StartupWMClass=dev.paintedwolf.code`), and `enableGTKAppId` registers it as the GTK application id, so a second launch activates the running instance and exits. It is the only desktop entry; the assembler drops the product-named one Tauri always writes |
 
-`lycaon-den/src-tauri/tauri.linux.conf.json` restricts the bundle target to the `.deb` stage, disables updater artifacts, and drops Tauri's `externalBin` and `resources` placement so nothing lands in `/usr/lib`; `scripts/linux-package-config.py` renders the `files` map and the dependency constraints from [`packaging/linux/dependencies.json`](../packaging/linux/dependencies.json) and the measured floor in `lycaon/internal/platformfloor/linux_floor.txt` (kernel 6.2, glibc 2.35, WebKitGTK 2.44, GTK 3.24.41 for Wayland activation). GTK, WebKitGTK, libsoup and the C library are distribution dependencies; staging refuses a package that bundles them. Optional fragments other subsystems ship are wired when present: `packaging/linux/polkit/*.policy`, `systemd/*.{service,socket}`, `apparmor/*` (deb only). Maintainer scripts in `packaging/linux/{deb,rpm}/` do exactly: enable `paintedwolf-vault-identity.socket` when it is packaged and restart its service on upgrade, refresh desktop and icon caches, load the AppArmor profile when shipped; on removal they stop the unit and remove empty package directories. They never touch user files or add repositories. No SELinux module ships, and packaging has no module-installation or removal path. The app runs as an ordinary user program, which the targeted policy leaves unconfined. The vault identity service runs under a systemd `DynamicUser` rather than an account the package creates. A Fedora install with SELinux enforcing showed no denials from the app or the service. Installed-package qualification keeps an enforcing Fedora run so a denial introduced by a later change fails release rather than reaching users ([#456](https://github.com/paintedwolf-ai/paintedwolf-code/issues/456)). Package versions follow each family's grammar through `release-metadata.py`'s `linux_package_version` (`1.0.2-rc.1` becomes `1.0.2~rc.1`).
+`lycaon-den/src-tauri/tauri.linux.conf.json` restricts the bundle target to the `.deb` stage, disables updater artifacts, and drops Tauri's `externalBin` and `resources` placement so nothing lands in `/usr/lib`; `scripts/linux-package-config.py` renders the `files` map and the dependency constraints from [`packaging/linux/dependencies.json`](../packaging/linux/dependencies.json) and the measured floor in `lycaon/internal/platformfloor/linux_floor.txt` (kernel 6.2, glibc 2.39, WebKitGTK 2.44, GTK 3.24.41 for Wayland activation). GTK, WebKitGTK, libsoup and the C library are distribution dependencies; staging refuses a package that bundles them. Optional fragments other subsystems ship are wired when present: `packaging/linux/polkit/*.policy`, `systemd/*.{service,socket}`, `apparmor/*` (deb only). Maintainer scripts in `packaging/linux/{deb,rpm}/` do exactly: enable `paintedwolf-vault-identity.socket` when it is packaged and restart its service on upgrade, refresh desktop and icon caches, load the AppArmor profile when shipped; on removal they stop the unit and remove empty package directories. They never touch user files or add repositories. No SELinux module ships, and packaging has no module-installation or removal path. The app runs as an ordinary user program, which the targeted policy leaves unconfined. The vault identity service runs under a systemd `DynamicUser` rather than an account the package creates. A Fedora install with SELinux enforcing showed no denials from the app or the service. Installed-package qualification keeps an enforcing Fedora run so a denial introduced by a later change fails release rather than reaching users ([#456](https://github.com/paintedwolf-ai/paintedwolf-code/issues/456)). Package versions follow each family's grammar through `release-metadata.py`'s `linux_package_version` (`1.0.2-rc.1` becomes `1.0.2~rc.1`).
 
 The staging script extracts both packages, verifies the manifest against the extracted bytes, checks every ELF payload is native, compares metadata and dependencies with the catalog, requires the maintainer scripts and that they enable every packaged socket, requires every packaged service to run a manifest-listed helper under `/opt/painted-wolf-code/bin/`, runs `lintian --fail-on error` and `rpmlint` when installed, and refuses anything other than exactly `deb,rpm`. The Linux updater adapter is check-only (see [Updates](#updates)).
+
+The ABI audit reads every ELF's loadable dynamic tables without executing it or
+requiring section headers. It checks imported `GLIBC`, `GLIBCXX` and `CXXABI`
+versions against `linux_floor.txt`, fails malformed objects and foreign
+architectures, and retains object hashes, `DT_NEEDED`, RPATH/RUNPATH and version
+requirements under the staged `linux-abi/` directory. The glibc 2.39 envelope
+matches Ubuntu 24.04 and RHEL 10; GCC 14's
+[ABI ceilings](https://gcc.gnu.org/onlinedocs/libstdc++/manual/abi.html) are
+GLIBCXX 3.4.33 and CXXABI 1.3.15. Kernel 6.2 remains the confinement baseline;
+the oldest supported Ubuntu installation uses its 6.8 GA kernel. These ceilings
+are admission limits, not claims that the full installed dependency closure or
+every distribution has been qualified. #731 retains that measurement work.
 
 #### Nix installations
 
@@ -1073,7 +1157,7 @@ install receipt, and the user can change that preference in Settings.
 
 **Staged rollout.** Automatic checks admit a release to a growing fraction of devices as the published manifest ages (10% in its first 24 h, 50% until 48 h, then everyone). Each install draws one random bucket, stored locally in `updates/preferences.json` and never transmitted — the check request stays identifier-free. A user-initiated **Check now** bypasses the ramp, and a release the user has already been shown never disappears behind it. The ramp is an operational stagger for catching a bad release early, not a security boundary.
 
-The Rust shell owns discovery, preferences, downloads, staging, and activation. The WebView receives separate discovery and installation states, a service instance and monotonic revision, and native action capabilities. Commands bind to a release identity covering version, channel, target, key generation, URL, and signature; they never accept a local artifact path. The feed and artifacts are fetched directly from `downloads.paintedwolf.dev` with no redirects and no system proxy, so the origin must serve them itself and proxy-only networks cannot update. Pointer reads are capped at 1 MiB and their signatures at 16 KiB; the check request times out after 30 s and a download after 30 min. Background preparation streams at most 2 GiB of artifact bytes and verifies the signed version. macOS expands at most 8 GiB with bounded archive entries and contained links; Linux downloads nothing. Disk checks reserve another 256 MiB. The scheduler checks 30 s after launch and every 6 h; after a failure it retries after 30 min, doubling to a 6 h cap with up to 255 s of jitter, and a check that stepped aside for in-flight work retries after 5 min. With automatic updates off it re-reads the preference hourly.
+The Rust shell owns discovery, preferences, downloads, staging, and activation. The WebView receives separate discovery and installation states, a service instance and monotonic revision, and native action capabilities. Commands bind to a release identity covering version, channel, target, key generation, URL, and signature; they never accept a local artifact path. The feed and artifacts come from `downloads.paintedwolf.dev` without redirects. Native Linux feed checks resolve each pointer and signature URL through the host's environment and desktop proxy policy, using a bounded private engine child from the running package generation. The shell retains and verifies its engine descriptor against the package manifest; a mismatched installation requires a restart. Proxy credentials stay in the child output pipe and the transport, and policy errors refuse the check instead of connecting directly. Automatic proxy scripts require manual configuration. Other native transports continue to connect directly. Pointer reads are capped at 1 MiB and their signatures at 16 KiB; the check request times out after 30 s and a download after 30 min. Background preparation streams at most 2 GiB of artifact bytes and verifies the signed version. macOS expands at most 8 GiB with bounded archive entries and contained links; Linux downloads nothing. Disk checks reserve another 256 MiB. The scheduler checks 30 s after launch and every 6 h; after a failure it retries after 30 min, doubling to a 6 h cap with up to 255 s of jitter, and a check that stepped aside for in-flight work retries after 5 min. With automatic updates off it re-reads the preference hourly.
 
 Native device files live under `updates/`: versioned preferences (`preferences.json`), the newest accepted pointer timestamp per feed (`feed-state.json`), and, per installed application path under `installations/<path-sha256>/`, the verified staging directory, `ready.json`, `rejected.json`, the activation journal `transaction.json` with its `receipts/`, and the private `records.lock` and `preparation.lock` files. `install-source.json` beside them is the Homebrew receipt. Unknown preference and journal formats are refused unchanged; an unreadable preference file disables automatic updating for that run and reports why. Unreadable ephemeral records (`ready.json`, `rejected.json`, `feed-state.json`) are moved aside as `*-quarantined-<uuid>.json` and rebuilt. Records written by other releases follow [Compatibility § Device configuration](compatibility.md#device-configuration).
 
@@ -1298,6 +1382,28 @@ credentials; `BENCHMARK=run -- --prepared DIR --allow-live` executes against tho
 retained artifacts. `--cadence major-minor` is an optional filter. `--mode release`
 selects the full measurement protocol; `--tier` and `--cases` narrow diagnostics.
 Target selection, repair, grading, and sampling: [Coordinator benchmark](coordinator-benchmark.md).
+
+Native pacman candidate packaging uses the shared sealed payload and matching native
+CPU. `packaging/linux/arch/substrates.json` pins the official Arch image and the
+Arch Linux ARM root filesystem. The ARM archive is authenticated by the pinned
+[Arch Linux ARM build key](https://archlinuxarm.org/about/package-signing) before
+container import; its SHA-256 is fixed independently of the mutable download URL.
+An upstream rootfs replacement fails until the reviewed pin is updated. A container
+package build establishes package construction only; installed Arch/Artix desktop
+and service qualification remains separate.
+
+Native package rehearsals are declared verification targets, each admitted under
+its own lock rather than through `release:live-test`.
+`./task release:rehearse:rpm-metadata -- --receipt PATH [--container]` builds and
+lints production RPM metadata around a tiny nonapplication payload with rpmlint
+2.5.0, and requires the historical spelling regression to fail.
+`./task release:rehearse:pacman-construction -- --receipt PATH` builds and admits a
+sealed tiny fixture with native makepkg in the pinned substrate.
+`./task release:rehearse:package-probe -- --tree DIR` runs the extracted-package
+engine diagnostic under the host's unchanged userns policy. Only an owned guest's
+root-owned marker and exact `--lease` admit an owned transient AppArmor userns
+profile; runner environment variables never do. The probe removes the exact
+profile it loaded and fails if the global userns restriction changes.
 
 ### Upgrade source evidence
 

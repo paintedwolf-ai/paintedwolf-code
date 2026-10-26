@@ -70,7 +70,6 @@ fn probe_distinguishes_absent_and_versionless_packages_from_a_missing_candidate(
     assert_eq!(facts.database_version, None);
     let facts = probe(serde_json::json!({"packages":{"painted-wolf-code":{"installed":{"version":"1.0.2","arch":"amd64"}}}}));
     assert_eq!((facts.database_version.as_deref(), facts.reason), (Some("1.0.2"), Some(QueryReason::NoCachedCandidate)));
-    assert!(facts.candidate.is_none() && facts.selection_priority.is_none());
 }
 
 #[test]

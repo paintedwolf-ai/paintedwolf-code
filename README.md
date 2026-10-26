@@ -27,7 +27,7 @@ Painted Wolf Code ships as a desktop app. Releases are published on the [Release
 
 Linux packages (`.deb`, `.rpm` and pacman) are release candidates: no package repository is published yet. A package installed from a candidate file receives no updates through the package manager until its signed repository is configured. The app never installs anything itself. It reports a newer release from its channel, and says whether the configured package source offers that release, rather than printing an upgrade command. Supported distribution releases are listed in the [Linux capability contract](docs/den.md#linux-capability-contract).
 
-The package installs the engine under `/opt/painted-wolf-code`, the `pw` and `pw-logs` commands in `/usr/bin`, and a desktop entry; it needs kernel 6.2+, glibc 2.35+, and WebKitGTK 4.1 (2.44+). See [Linux packages](docs/dev-tasks.md#linux-packages).
+The package installs the engine under `/opt/painted-wolf-code`, the `pw` and `pw-logs` commands in `/usr/bin`, and a desktop entry; it needs kernel 6.2+, glibc 2.39+, and WebKitGTK 4.1 (2.44+). See [Linux packages](docs/dev-tasks.md#linux-packages).
 
 1. Download the release for your platform from the [Releases](https://github.com/paintedwolf-ai/paintedwolf-code/releases) page.
 2. Launch the app. The Go sidecar starts with it — no separate service to run.

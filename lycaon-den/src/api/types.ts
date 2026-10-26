@@ -773,7 +773,7 @@ export interface paths {
         put?: never;
         /**
          * Lock every chat when the person steps away
-         * @description The desktop shell calls this when the screen locks, the computer sleeps, or the app quits. Locking can only take authority away, so any authenticated caller may request it.
+         * @description The desktop shell calls this when the screen locks, the computer sleeps, the app quits, or, on a Linux desktop whose screen lock cannot be observed, the person's input stays idle for the unlock idle period (`away`). Locking can only take authority away, so any authenticated caller may request it.
          */
         post: operations["lockVault"];
         delete?: never;
@@ -11525,7 +11525,7 @@ export interface components {
             checkpoints: components["schemas"]["CheckpointEvent"][];
         };
         /**
-         * @description User-presence verifier that confirmed the person before the shell signed: the operating system's own prompt, or on Linux without a polkit agent, the shell's native app-password dialog.
+         * @description User-presence verifier that confirmed the person before the shell signed. New Linux confirmations use the operating system's polkit authentication agent; credential-vault passwords do not confirm presence.
          * @enum {string}
          */
         PresenceAuthenticator: "macos_user_presence" | "windows_user_presence" | "linux_user_presence" | "linux_app_password";
@@ -11574,7 +11574,7 @@ export interface components {
         };
         LockVaultRequest: {
             /** @enum {string} */
-            reason: "screen_locked" | "sleep" | "app_quit";
+            reason: "screen_locked" | "sleep" | "away" | "app_quit";
         };
         LockVaultResponse: {
             /** @description Chats whose unlock ended. */

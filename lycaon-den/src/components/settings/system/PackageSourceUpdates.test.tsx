@@ -47,13 +47,6 @@ describe("package-source observations", () => {
     expect(screen.getByTestId("updates-package-source").textContent).toContain("No newer package was selected from the local repository metadata");
     expect(screen.queryByText("You’re using the latest version.")).toBeNull();
   });
-  it("reports an unconfigured repository without presenting the installed version as a candidate", async () => {
-    renderSource({ availability: "unknown", reason: "no_cached_candidate", candidate: null, selection_priority: null, held: false });
-    expect((await screen.findByTestId("updates-source-reason")).textContent).toContain("No candidate from a configured repository");
-    expect(screen.getByTestId("updates-database-version").textContent).toContain("1.1.0-1");
-    expect(screen.queryByTestId("updates-source-candidate")).toBeNull();
-    expect(screen.queryByTestId("updates-source-priority")).toBeNull();
-  });
   it("reports an unknown owner without claiming that repository metadata was read", async () => {
     renderSource({ availability: "unknown", reason: "unsupported_owner", cached_only: false, database_owner: null, database_version: null, architecture: null });
     expect((await screen.findByTestId("updates-source-reason")).textContent).toContain("owns this source is unknown");

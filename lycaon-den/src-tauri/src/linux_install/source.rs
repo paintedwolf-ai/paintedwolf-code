@@ -90,14 +90,14 @@ pub struct PackageSourceFacts {
     pub availability: SourceAvailability,
     /// None means no structured fact identifies the installation owner.
     pub owner: Option<PackageOwner>,
+    /// None means the app has not established whether the source is pinned.
+    pub pinned: Option<bool>,
     pub checked_at: Option<u64>,
     /// A fresh package-database observation; the captured running version is unchanged.
     pub database_version: Option<String>,
     pub database_owner: Option<String>,
     pub architecture: Option<String>,
     pub candidate: Option<PackageCandidate>,
-    /// The native hold or ignore rule that excludes this package from upgrades (APT hold,
-    /// pacman IgnorePkg). Pins and priorities are already part of the selected candidate.
     pub held: Option<bool>,
     pub selection_priority: Option<i64>,
     /// Queries never refresh metadata. This is not a claim about the remote repository.
@@ -113,6 +113,7 @@ impl PackageSourceFacts {
                 PackageFamily::Deb | PackageFamily::Rpm | PackageFamily::Pacman => Some(PackageOwner::SystemPackageManager),
                 PackageFamily::Nix => None,
             },
+            pinned: None,
             ..Self::default()
         }
     }

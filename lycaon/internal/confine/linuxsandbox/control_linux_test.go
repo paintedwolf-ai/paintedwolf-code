@@ -5,6 +5,7 @@ package linuxsandbox
 import (
 	"errors"
 	"os"
+	"runtime"
 	"testing"
 	"time"
 
@@ -30,13 +31,14 @@ func TestControlCloseInterruptsDescriptorReceive(t *testing.T) {
 		}()
 		if attempt == 0 {
 			<-started
+			runtime.Gosched()
 			// Leave the empty socket blocked before testing close wakeup.
 			select {
 			case err := <-done:
 				_ = parent.Close()
 				_ = child.Close()
 				t.Fatalf("empty control receive returned before close: %v", err)
-			case <-time.After(20 * time.Millisecond):
+			default:
 			}
 		}
 		if err := parent.Close(); err != nil {
@@ -47,7 +49,7 @@ func TestControlCloseInterruptsDescriptorReceive(t *testing.T) {
 			if !errors.Is(err, os.ErrClosed) {
 				t.Errorf("closed receive: got %v, want closed file", err)
 			}
-		case <-time.After(5 * time.Second):
+		case <-t.Context().Done():
 			t.Error("control receive outlived its closed endpoint")
 		}
 		if err := child.Close(); err != nil {
@@ -107,7 +109,7 @@ func TestControlWriteRacesSafelyWithClose(t *testing.T) {
 			if err != nil && !errors.Is(err, os.ErrClosed) {
 				t.Errorf("control send: %v", err)
 			}
-		case <-time.After(5 * time.Second):
+		case <-t.Context().Done():
 			t.Error("control send outlived its closed endpoint")
 		}
 		_ = child.Close()

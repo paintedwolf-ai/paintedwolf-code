@@ -73,8 +73,7 @@ func TestDetachableCallOutlivingItsBudgetReturnsAHandleAndKeepsRunning(t *testin
 	}
 
 	close(release)
-	deadline := time.After(2 * time.Second)
-	for {
+	for t.Context().Err() == nil {
 		status, err := held.Status("s1", "held-1")
 		if err == nil && status.Settled != nil {
 			if status.Settled.Content != `{"results":["a.rs"]}` {
@@ -82,12 +81,9 @@ func TestDetachableCallOutlivingItsBudgetReturnsAHandleAndKeepsRunning(t *testin
 			}
 			return
 		}
-		select {
-		case <-deadline:
-			t.Fatal("the held call did not settle")
-		case <-time.After(5 * time.Millisecond):
-		}
+		time.Sleep(5 * time.Millisecond)
 	}
+	t.Fatal("the held call did not settle")
 }
 
 func TestDetachableCallInsideItsBudgetReturnsItsOwnResult(t *testing.T) {
@@ -119,8 +115,7 @@ func TestHeldCallSettlesWithTheOutcomeOfItsOwnResult(t *testing.T) {
 	runHeldTestCall(heldTestLoop(held), call)
 	close(release)
 
-	deadline := time.After(2 * time.Second)
-	for {
+	for t.Context().Err() == nil {
 		status, err := held.Status("s1", "held-1")
 		if err == nil && status.Settled != nil {
 			if status.Settled.Outcome != api.ToolResultOutcomeRejected || len(status.Settled.Facts.Codes) != 1 {
@@ -128,10 +123,7 @@ func TestHeldCallSettlesWithTheOutcomeOfItsOwnResult(t *testing.T) {
 			}
 			return
 		}
-		select {
-		case <-deadline:
-			t.Fatal("the held call did not settle")
-		case <-time.After(5 * time.Millisecond):
-		}
+		time.Sleep(5 * time.Millisecond)
 	}
+	t.Fatal("the held call did not settle")
 }

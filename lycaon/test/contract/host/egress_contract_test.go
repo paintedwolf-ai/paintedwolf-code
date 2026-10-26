@@ -104,7 +104,7 @@ func TestEgressClassesMatchInventory(t *testing.T) {
 		}
 		switch c.Transport {
 		case egressclass.HTTPBounded, egressclass.HTTPStreaming, egressclass.HTTPDownload,
-			egressclass.GitCLI, egressclass.LibraryDownload:
+			egressclass.GitCLI:
 		default:
 			t.Fatalf("%s has unknown transport %q", c.ID, c.Transport)
 		}
@@ -230,7 +230,7 @@ func TestNonHTTPOutboundAdaptersBindInventoryClasses(t *testing.T) {
 
 	osv := egressclass.RequireSingleFixedEndpoint(
 		egressclass.OSVAdvisoryDownload,
-		egressclass.LibraryDownload,
+		egressclass.HTTPDownload,
 	)
 	scanner := contractcheck.ReadRepoFile(t, root, "internal/scan/drivers/library/scanners.go")
 	if !strings.Contains(scanner,
@@ -261,11 +261,14 @@ func TestNonHTTPOutboundAdaptersBindInventoryClasses(t *testing.T) {
 		t.Fatal("shared native HTTP transport must initialize TLS before constructing its client")
 	}
 	feed := contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), "lycaon-den/src-tauri/src/update_service/feed.rs")
-	// The feed is read directly, without proxies or redirects, and verified before any field is used.
+	// Every feed target gets its own proxy decision; signed bytes are verified before use.
+	for _, needle := range []string{".no_proxy()", ".redirect(reqwest::redirect::Policy::none())", "linux_proxy::resolve(target)"} {
+		if !strings.Contains(transport, needle) {
+			t.Fatalf("native update transport is missing %q", needle)
+		}
+	}
 	for _, needle := range []string{
-		"crate::http_transport::client_builder()",
-		".no_proxy()",
-		".redirect(reqwest::redirect::Policy::none())",
+		"crate::http_transport::update_client(url, CHECK_REQUEST_TIMEOUT)",
 		"verification::verify_feed(",
 		"feed_state::accept(",
 	} {

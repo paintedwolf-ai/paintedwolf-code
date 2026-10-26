@@ -157,7 +157,7 @@ func TestOverflowDropsPathsAndPreservesLaterInvalidation(t *testing.T) {
 	if !d.overflow || len(d.paths) != 0 || d.overflowAt <= before {
 		t.Fatalf("overflow retained paths or lost a later change: %+v", d)
 	}
-	tracker.coveredBy(root, "old", "scope", before, true)
+	tracker.coveredBy(root, "old", nil, "scope", before, true)
 	if !d.overflow {
 		t.Fatal("an earlier publication cleared a later overflow")
 	}

@@ -25,7 +25,7 @@ use objc2_user_notifications::{
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
-pub const ACTIVATED_EVENT: &str = "notifications://activated";
+use super::{ActivatedPayload, PresentationOwner, ACTIVATED_EVENT};
 const SESSION_KEY: &str = "sessionId";
 
 #[derive(Debug, Clone, Copy, Serialize)]
@@ -64,12 +64,6 @@ impl From<UNAuthorizationStatus> for AuthState {
             _ => AuthState::NotDetermined,
         }
     }
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ActivatedPayload {
-    pub session_id: Option<String>,
 }
 
 static APP_HANDLE: Mutex<Option<AppHandle>> = Mutex::new(None);
@@ -128,7 +122,13 @@ fn session_id_from_response(response: &UNNotificationResponse) -> Option<String>
 fn emit_activated(session_id: Option<String>) {
     let guard = APP_HANDLE.lock().unwrap_or_else(|e| e.into_inner());
     if let Some(app) = guard.as_ref() {
-        let _ = app.emit(ACTIVATED_EVENT, ActivatedPayload { session_id });
+        let _ = app.emit(
+            ACTIVATED_EVENT,
+            ActivatedPayload {
+                session_id,
+                presentation: PresentationOwner::Renderer,
+            },
+        );
     }
 }
 

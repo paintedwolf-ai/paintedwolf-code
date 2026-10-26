@@ -48,9 +48,8 @@ pub(super) fn project(raw: &str, facts: &mut PackageSourceFacts) -> Result<(), Q
     facts.database_version = Some(installed);
     facts.architecture = Some(architecture.clone());
     facts.held = Some(held);
-    let missing = if held { QueryReason::Held } else { QueryReason::NoCachedCandidate };
     let Some(candidate) = report.candidate else {
-        select(facts, None, Some(missing)); return Ok(());
+        select(facts, None, Some(QueryReason::NoCachedCandidate)); return Ok(());
     };
     if !field(&candidate.version) || !field(&candidate.architecture) || candidate.origins.len() > 16 {
         return Err(QueryReason::InvalidResponse);
@@ -58,16 +57,14 @@ pub(super) fn project(raw: &str, facts: &mut PackageSourceFacts) -> Result<(), Q
     if candidate.architecture != architecture && candidate.architecture != "all" {
         return Err(QueryReason::WrongArchitecture);
     }
+    facts.selection_priority = Some(candidate.priority);
     let mut repositories = Vec::new();
     for origin in candidate.origins {
         if (!origin.id.is_empty() && !field(&origin.id)) || (!origin.suite.is_empty() && !field(&origin.suite)) { return Err(QueryReason::InvalidResponse); }
         repositories.push(Repository { id: origin.id, suite: (!origin.suite.is_empty()).then_some(origin.suite), trusted: Some(origin.trusted) });
     }
-    if repositories.is_empty() {
-        select(facts, None, Some(missing)); return Ok(());
-    }
-    facts.selection_priority = Some(candidate.priority);
     let reason = if held { Some(QueryReason::Held) }
+        else if repositories.is_empty() { Some(QueryReason::NoCachedCandidate) }
         else if repositories.iter().any(|r| r.trusted != Some(true)) { Some(QueryReason::UntrustedSource) }
         else { None };
     select(facts, Some(PackageCandidate { version: candidate.version, architecture: candidate.architecture,
