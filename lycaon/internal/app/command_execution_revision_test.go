@@ -107,7 +107,9 @@ func (f *revisionFixture) beginExecution(t *testing.T) {
 
 type reviewMemory struct{}
 
-func (reviewMemory) ReserveProgramState(context.Context, int64) (func(), error) { return func() {}, nil }
+func (reviewMemory) ReserveProgramState(context.Context, int64) (func(), error) {
+	return func() {}, nil
+}
 
 func (f *revisionFixture) disk(t *testing.T, name string) string {
 	t.Helper()
@@ -170,7 +172,7 @@ func TestCommandTransformsUnseenFileThroughExecutionPins(t *testing.T) {
 	ctx := t.Context()
 	source, err := f.revisions.CaptureSource(ctx, f.tctx, "config.json")
 	testutil.FailErr(t, "capture unseen source", err)
-	if source.Revision.Mode != toolcontract.AcceptedDocumentRevision || source.Revision.DocumentRevision <= 0 || source.Revision.DiskSHA256 != textfile.SHA256([]byte(f.disk(t, "config.json"))) || source.Content != f.disk(t, "config.json") {
+	if source.Revision.Mode != toolcontract.PublishedDiskRevision || source.Revision.DiskSHA256 != textfile.SHA256([]byte(f.disk(t, "config.json"))) || source.Content != f.disk(t, "config.json") {
 		t.Fatalf("source = %+v", source)
 	}
 	f.noReadBases(t)
@@ -259,7 +261,7 @@ func TestCommandTransformConflictsWhenDestinationMovesDuringReview(t *testing.T)
 	}
 }
 
-func TestCommandCapturesAcceptedDraftWhileExternalLaunchDeclaresDisk(t *testing.T) {
+func TestCommandCapturesDiskWhilePreservingHumanDraft(t *testing.T) {
 	f := newRevisionFixture(t, map[string]string{"a.txt": "base\n", "b.txt": "other\n"})
 	ctx := t.Context()
 	f.personTypes(t, ctx, "a.txt", "unsaved draft\n")
@@ -268,7 +270,7 @@ func TestCommandCapturesAcceptedDraftWhileExternalLaunchDeclaresDisk(t *testing.
 	declared, err := f.revisions.DeclareLaunchInput(ctx, f.tctx, "a.txt")
 	testutil.FailErr(t, "declare launch input", err)
 	diskSHA := textfile.SHA256([]byte("base\n"))
-	if source.Content != "unsaved draft\n" || source.Revision.Mode != toolcontract.AcceptedDocumentRevision || source.Revision.DiskSHA256 != diskSHA || source.Revision.ContentSHA256 != textfile.SHA256([]byte("unsaved draft\n")) {
+	if source.Content != "base\n" || source.Revision.Mode != toolcontract.PublishedDiskRevision || source.Revision.DiskSHA256 != diskSHA || source.Revision.ContentSHA256 != diskSHA {
 		t.Fatalf("native capture = %+v", source)
 	}
 	if declared.Mode != toolcontract.PublishedDiskRevision || declared.Basis != toolcontract.DeclaredAtLaunch || declared.DiskSHA256 != diskSHA || declared.ContentSHA256 != diskSHA || declared.ContentBytes != 5 {
@@ -278,7 +280,7 @@ func TestCommandCapturesAcceptedDraftWhileExternalLaunchDeclaresDisk(t *testing.
 	testutil.FailErr(t, "capture destination", err)
 	result, err := f.write.Apply(ctx, f.pinnedWrite("b.txt", strings.ToUpper(source.Content), destination, source.Revision), f.tctx)
 	testutil.FailErr(t, "publish from draft", err)
-	if !result.Saved || f.disk(t, "b.txt") != "UNSAVED DRAFT\n" {
+	if !result.Saved || f.disk(t, "b.txt") != "BASE\n" {
 		t.Fatalf("result = %+v", result)
 	}
 	testutil.FailErr(t, "record native and launch provenance", f.recorder.RecordRevisionPins(ctx, f.execution, 0, []toolcontract.ExecutionRevision{source.Revision, destination, declared}))
@@ -302,7 +304,9 @@ func TestCommandPinsConflictOnDeleteRenameAndCreateRaces(t *testing.T) {
 	}
 	cases := map[string]race{
 		"source deleted": {source: "input.txt", destination: "out.txt", role: toolcontract.SourceRevision,
-			move:  func(t *testing.T, f *revisionFixture) { testutil.FailErr(t, "delete", os.Remove(filepath.Join(f.root, "input.txt"))) },
+			move: func(t *testing.T, f *revisionFixture) {
+				testutil.FailErr(t, "delete", os.Remove(filepath.Join(f.root, "input.txt")))
+			},
 			after: func(t *testing.T, f *revisionFixture) { f.absent(t, "out.txt") }},
 		"source renamed": {source: "input.txt", destination: "out.txt", role: toolcontract.SourceRevision,
 			move: func(t *testing.T, f *revisionFixture) {
@@ -357,7 +361,7 @@ func TestCommandAliasedTransformPublishesOnceAndNeverReplays(t *testing.T) {
 	testutil.FailErr(t, "capture source", err)
 	destination, err := f.revisions.CaptureDestination(ctx, f.tctx, "a.json")
 	testutil.FailErr(t, "capture aliased destination", err)
-	if !source.Revision.Same(destination) {
+	if source.Revision.DiskSHA256 != destination.DiskSHA256 {
 		t.Fatalf("aliased captures differ: %+v %+v", source.Revision, destination)
 	}
 	transforms := 0
@@ -377,66 +381,42 @@ func TestCommandAliasedTransformPublishesOnceAndNeverReplays(t *testing.T) {
 	}
 	next, err := f.revisions.CaptureSource(ctx, f.tctx, "a.json")
 	testutil.FailErr(t, "later statement capture", err)
-	if next.Content != output || next.Revision.DocumentRevision <= destination.DocumentRevision {
+	if next.Content != output || next.Revision.DiskSHA256 != textfile.SHA256([]byte(output)) {
 		t.Fatalf("later statement did not see published write: %+v", next)
 	}
 	f.noReadBases(t)
 }
 
-func TestCommandPublicationBarrierBlocksDependentLaunch(t *testing.T) {
+func TestCommandPublishesAgentDraftBeforeNextProgram(t *testing.T) {
 	f := newRevisionFixture(t, map[string]string{"dir/a.txt": "base\n", "b.txt": "saved\n"})
-	ctx := t.Context()
-	f.personTypes(t, ctx, "b.txt", "unrelated draft\n")
-	source, err := f.revisions.CaptureSource(ctx, f.tctx, "dir/a.txt")
-	testutil.FailErr(t, "capture source", err)
-	destination, err := f.revisions.CaptureDestination(ctx, f.tctx, "dir/a.txt")
-	testutil.FailErr(t, "capture destination", err)
+	f.personTypes(t, t.Context(), "b.txt", "human draft\n")
+	destination, err := f.revisions.CaptureDestination(t.Context(), f.tctx, "dir/a.txt")
+	testutil.FailErr(t, "pin destination", err)
 	dir := filepath.Join(f.root, "dir")
 	testutil.FailErr(t, "lock directory", os.Chmod(dir, 0o555))
 	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
-	result, err := f.write.Apply(ctx, f.pinnedWrite("dir/a.txt", "accepted\n", destination, source.Revision), f.tctx)
-	testutil.FailErr(t, "accept pinned write", err)
-	if !result.Accepted || result.Saved || result.PublicationError == nil || result.HeldVersionID == "" {
-		t.Fatalf("result = %+v", result)
+	result, err := f.write.Apply(t.Context(), f.pinnedWrite("dir/a.txt", "accepted\n", destination), f.tctx)
+	if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != "COMMAND_PUBLICATION_PENDING" {
+		t.Fatalf("expected accepted unsaved stop: %v", err)
 	}
-	if _, published := result.SettlementRevisions(); published != "" {
-		t.Fatalf("unpublished write reported %q", published)
-	}
-	var barrier native.PublicationBarrier
-	testutil.FailErr(t, "track accepted write", barrier.Track(result))
-	launched := false
-	launch := func() error {
-		if err := barrier.AdmitDependentLaunch(ctx, f.tctx); err != nil {
-			return err
-		}
-		launched = true
-		return nil
-	}
-	err = launch()
-	var pending *native.PublicationPending
-	reject := toolrejection.AsToolReject(err)
-	if !errors.As(err, &pending) || reject == nil || reject.Code != "COMMAND_PUBLICATION_PENDING" || launched || !slices.Equal(pending.Paths, []string{"dir/a.txt"}) {
-		t.Fatalf("launch admitted: launched=%v err=%v", launched, err)
-	}
-	if f.disk(t, "dir/a.txt") != "base\n" || f.disk(t, "b.txt") != "saved\n" {
-		t.Fatal("barrier saved a draft")
-	}
-	held, ok, err := f.adapter.OpenDocument(ctx, f.project.ID, f.project.SourceBranch, f.rootID, "dir/a.txt")
-	testutil.FailErr(t, "inspect accepted state", err)
-	if !ok || held.Text != "accepted\n" || !held.Dirty {
-		t.Fatalf("accepted state not recoverable: %+v", held)
+	if !result.Accepted || result.Saved {
+		t.Fatalf("result=%+v", result)
 	}
 	testutil.FailErr(t, "unlock directory", os.Chmod(dir, 0o755))
-	_, err = f.service.Save(ctx, f.project, held.ID, "window", uuid.NewString(), "", 0, held.Revision)
-	testutil.FailErr(t, "person saves accepted state", err)
-	testutil.FailErr(t, "dependent launch after publication", launch())
-	if !launched || f.disk(t, "dir/a.txt") != "accepted\n" {
-		t.Fatal("published write did not release the barrier")
+	testutil.FailErr(t, "publish agent drafts", f.adapter.VisitAgentPublications(t.Context(), f.project.ID, f.project.SourceBranch, f.session, 1, "command", func(candidate tools.EditorDocumentPublicationCandidate) error {
+		publication, err := candidate.Load(t.Context())
+		if err != nil {
+			return err
+		}
+		publication.Path = filepath.Join(f.root, publication.Path)
+		_, err = f.write.PublishAccepted(t.Context(), f.tctx, nil, publication)
+		return err
+	}))
+	source, err := f.revisions.CaptureSource(t.Context(), f.tctx, "dir/a.txt")
+	testutil.FailErr(t, "capture saved input", err)
+	if source.Content != "accepted\n" || f.disk(t, "b.txt") != "saved\n" {
+		t.Fatal("agent publication changed another draft")
 	}
-	if f.disk(t, "b.txt") != "saved\n" {
-		t.Fatal("unrelated draft was saved")
-	}
-	f.noReadBases(t)
 }
 
 func TestCommandInterruptedPinnedWriteLeavesNoPartialFile(t *testing.T) {

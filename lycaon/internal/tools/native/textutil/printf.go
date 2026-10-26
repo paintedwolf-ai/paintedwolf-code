@@ -2,9 +2,13 @@ package textutil
 
 import (
 	"bytes"
-	"fmt"
+	"context"
+	"errors"
+	"io"
 	"strconv"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
 // runPrintf validates the whole format, then applies it repeatedly until
@@ -15,24 +19,33 @@ func runPrintf(inv *invocation) error {
 	if len(operands) == 0 {
 		return inv.usage(inv.commandWord(), "a FORMAT operand")
 	}
-	format, err := parseFormat(operands[0].Value)
+	format, release, err := parseFormat(inv.ctx, inv.ports.Memory, operands[0].Value)
 	if err != nil {
-		return inv.usage(operands[0], err.Error())
-	}
-	args := operands[1:].Values()
-	var out bytes.Buffer
-	for {
-		consumed, stopped := format.apply(inv, &out, args)
-		args = args[consumed:]
-		if stopped || len(args) == 0 || consumed == 0 {
-			break
+		var invalid formatError
+		if errors.As(err, &invalid) {
+			return inv.usage(operands[0], err.Error())
 		}
-	}
-	if err := inv.reserve(int64(out.Cap())); err != nil {
 		return err
 	}
-	_, err = inv.out.Write(out.Bytes())
-	return err
+	defer release()
+	args := operands[1:].Values()
+	workspace := int64(32<<10 + 2*len(operands[0].Value))
+	for _, arg := range args {
+		workspace = max(workspace, int64(32<<10+2*len(operands[0].Value)+2*len(arg)))
+	}
+	if err := inv.reserve(workspace); err != nil {
+		return err
+	}
+	for {
+		consumed, stopped, err := format.apply(inv, inv.out, args)
+		if err != nil {
+			return err
+		}
+		args = args[consumed:]
+		if stopped || len(args) == 0 || consumed == 0 {
+			return nil
+		}
+	}
 }
 
 // directive is literal text or one conversion of a printf format.
@@ -50,8 +63,20 @@ type formatError string
 
 func (e formatError) Error() string { return string(e) }
 
-func parseFormat(text string) (printfFormat, error) {
-	var out printfFormat
+func parseFormat(ctx context.Context, memory *toolcontract.ProgramMemory, text string) (out printfFormat, release func(), err error) {
+	// Every percent can introduce a conversion and adjacent literal. Reserve
+	// the complete directive capacity and literal-buffer overlap before allocating.
+	slots := 2*strings.Count(text, "%") + 1
+	bound := int64(96*slots + 4*len(text) + 1024)
+	if err := memory.ReserveBytes(ctx, bound); err != nil {
+		return nil, nil, err
+	}
+	defer func() {
+		if err != nil {
+			memory.ReleaseBytes(bound)
+		}
+	}()
+	out = make(printfFormat, 0, slots)
 	var literal bytes.Buffer
 	flush := func() {
 		if literal.Len() > 0 {
@@ -84,7 +109,7 @@ func parseFormat(text string) (printfFormat, error) {
 			d.precision = "." + text[start:j]
 		}
 		if j == len(text) {
-			return nil, formatError("a complete % conversion")
+			return nil, nil, formatError("a complete % conversion")
 		}
 		d.verb = text[j]
 		if d.verb == '%' && j == i+1 {
@@ -93,82 +118,64 @@ func parseFormat(text string) (printfFormat, error) {
 			continue
 		}
 		if strings.IndexByte("sbcdiouxXfFeEgG", d.verb) < 0 {
-			return nil, formatError("a %s %b %c %d %i %o %u %x %X %f %F %e %E %g %G or %% conversion")
+			return nil, nil, formatError("a %s %b %c %d %i %o %u %x %X %f %F %e %E %g %G or %% conversion")
 		}
 		flush()
 		out = append(out, d)
 		i = j
 	}
 	flush()
-	return out, nil
+	actual := int64(96*cap(out) + 2*len(text))
+	memory.ReleaseBytes(bound - actual)
+	return out, func() { memory.ReleaseBytes(actual) }, nil
 }
 
 // apply writes one pass of the format and reports the arguments it consumed.
-func (f printfFormat) apply(inv *invocation, out *bytes.Buffer, args []string) (consumed int, stopped bool) {
+func (f printfFormat) apply(inv *invocation, out io.Writer, args []string) (consumed int, stopped bool, err error) {
 	numbers := printfNumbers{inv: inv}
-	next := func() (string, bool) {
+	next := func() string {
 		if consumed < len(args) {
 			consumed++
-			return args[consumed-1], true
+			return args[consumed-1]
 		}
-		return "", false
+		return ""
 	}
 	for _, d := range f {
 		if d.verb == 0 {
-			decodeEscapes(out, d.literal, escapeFormat)
-			continue
+			var literal bytes.Buffer
+			decodeEscapes(&literal, d.literal, escapeFormat)
+			_, err = out.Write(literal.Bytes())
+		} else {
+			arg := next()
+			switch d.verb {
+			case 's':
+				err = pad(out, d, arg)
+			case 'b':
+				var decoded bytes.Buffer
+				stopped = decodeEscapes(&decoded, arg, escapeEcho)
+				err = pad(out, d, decoded.String())
+			case 'c':
+				if arg != "" {
+					arg = arg[:1]
+				}
+				err = pad(out, d, arg)
+			case 'd', 'i':
+				err = writeNumber(inv, out, d, "d", numbers.integer(arg))
+			case 'o', 'u', 'x', 'X':
+				verb := map[byte]string{'o': "o", 'u': "d", 'x': "x", 'X': "X"}[d.verb]
+				err = writeNumber(inv, out, d, verb, uint64(numbers.integer(arg)))
+			default:
+				if d.precision == "" {
+					d.precision = ".6"
+				}
+				err = writeNumber(inv, out, d, string(d.verb), numbers.float(arg))
+			}
 		}
-		arg, _ := next()
-		switch d.verb {
-		case 's':
-			pad(out, d, arg)
-		case 'b':
-			var decoded bytes.Buffer
-			stopped = decodeEscapes(&decoded, arg, escapeEcho)
-			pad(out, d, decoded.String())
-			if stopped {
-				return consumed, true
-			}
-		case 'c':
-			if arg != "" {
-				arg = arg[:1]
-			}
-			pad(out, d, arg)
-		case 'd', 'i':
-			out.WriteString(formatGo(d, "d", numbers.integer(arg)))
-		case 'o', 'u', 'x', 'X':
-			verb := map[byte]string{'o': "o", 'u': "d", 'x': "x", 'X': "X"}[d.verb]
-			out.WriteString(formatGo(d, verb, uint64(numbers.integer(arg))))
-		default:
-			precision := d.precision
-			if precision == "" {
-				precision = ".6"
-			}
-			d.precision = precision
-			out.WriteString(formatGo(d, string(d.verb), numbers.float(arg)))
-		}
-	}
-	return consumed, false
-}
-
-// pad applies width and precision to text by bytes, never by characters.
-func pad(out *bytes.Buffer, d directive, text string) {
-	if d.precision != "" {
-		if limit, _ := strconv.Atoi(d.precision[1:]); limit < len(text) {
-			text = text[:limit]
+		if err != nil || stopped {
+			return consumed, stopped, err
 		}
 	}
-	width, _ := strconv.Atoi(d.width)
-	fill := strings.Repeat(" ", max(width-len(text), 0))
-	if strings.Contains(d.flags, "-") {
-		out.WriteString(text + fill)
-		return
-	}
-	out.WriteString(fill + text)
-}
-
-func formatGo(d directive, verb string, value any) string {
-	return fmt.Sprintf("%"+d.flags+d.width+d.precision+verb, value)
+	return consumed, false, nil
 }
 
 // printfNumbers converts numeric arguments, reporting invalid ones on the

@@ -146,19 +146,23 @@ func (p LaunchPlan) validate() error {
 // ErrBlockedEnvKey rather than being dropped.
 func AgentLaunchOptions(launch LaunchPlan, dir string, environment, pathExtra []string, reduced bool) (ExecOpts, error) {
 	launch = launch.WithReducedEnvironment()
-	opts := ExecOpts{Launch: launch, Dir: dir, PathExtra: append([]string(nil), pathExtra...)}
+	opts := ExecOpts{Launch: launch, Dir: dir, PathExtra: append([]string(nil), pathExtra...), AppendEnv: []string{"GIT_PAGER=cat"}}
 	if len(environment) > 0 {
 		defaultPath := defaultAgentPath(pathExtra)
 		opts.InlineEnv = make(map[string]string, len(environment))
 		for _, entry := range environment {
 			name, value, _ := strings.Cut(entry, "=")
-			if defaultPath != "" && strings.EqualFold(strings.TrimSpace(name), "PATH") && value == defaultPath {
+			trimmed := strings.TrimSpace(name)
+			if defaultPath != "" && strings.EqualFold(trimmed, "PATH") && value == defaultPath {
+				continue
+			}
+			if strings.EqualFold(trimmed, "GIT_PAGER") && value == "cat" {
 				continue
 			}
 			opts.InlineEnv[name] = value
 		}
 		if err := ValidateInlineEnv(opts.InlineEnv); err != nil {
-			return ExecOpts{}, err
+			return ExecOpts{Launch: launch}, err
 		}
 	}
 	return opts, nil

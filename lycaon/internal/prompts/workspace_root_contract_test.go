@@ -16,7 +16,7 @@ func TestRootKickTracksSessionPathResolution(t *testing.T) {
 	a.IsPrimary, b.IsPrimary = false, true
 	for _, roots := range [][]projectroot.RootRef{{a, b}, {b}, nil} {
 		for _, activeID := range []string{"", "a", "b", "removed"} {
-			data := prompts.RootsChangedKickData(before, roots, activeID)
+			data := prompts.RootsChangedKickData(projectroot.DiffRoots(before, roots), roots, activeID)
 			abs, resolved, err := projectroot.ResolveAbs(roots, activeID, "file.txt")
 			active, present := data["active_root"].(map[string]any)
 			if err != nil {

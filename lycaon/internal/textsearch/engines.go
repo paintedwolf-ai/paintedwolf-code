@@ -4,13 +4,12 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"regexp"
 	"regexp/syntax"
 	"strings"
-	"time"
 	"unicode/utf8"
 
 	"github.com/dlclark/regexp2/v2"
+	"github.com/lycaon/lycaon/internal/litprefilter"
 )
 
 type engine interface {
@@ -21,7 +20,7 @@ type engine interface {
 }
 
 func (l Limits) syntaxBudget() regexp2.SyntaxBudget {
-	return regexp2.SyntaxBudget{MaxBytes: l.MemoryBytes, MaxSteps: l.WorkSteps, Timeout: l.CPU}
+	return regexp2.SyntaxBudget{MaxBytes: l.MemoryBytes, MaxSteps: l.WorkSteps}
 }
 
 // budgetError maps the bounded engine's stop onto the catalog limit names.
@@ -30,11 +29,8 @@ func budgetError(err error) error {
 	if !errors.As(err, &stopped) {
 		return err
 	}
-	switch stopped.Resource {
-	case "steps":
+	if stopped.Resource == "steps" {
 		return &BudgetError{Resource: "regex_work_steps", Maximum: stopped.Maximum, Observed: stopped.Observed}
-	case "time":
-		return &BudgetError{Resource: "regex_cpu_ms", Maximum: stopped.Maximum / int64(time.Millisecond), Observed: (stopped.Observed + int64(time.Millisecond) - 1) / int64(time.Millisecond)}
 	}
 	return &BudgetError{Resource: "evaluation_memory_bytes", Maximum: stopped.Maximum, Observed: stopped.Observed}
 }
@@ -53,11 +49,12 @@ func parseError(pattern string, err error) error {
 type literalEngine struct {
 	patterns [][]byte
 	line     bool
+	limits   Limits
 }
 
 func compileFixed(ctx context.Context, patterns []string, spec Spec, limits Limits) (engine, error) {
 	if !spec.IgnoreCase && !spec.Word {
-		e := literalEngine{line: spec.Line}
+		e := literalEngine{line: spec.Line, limits: limits}
 		for _, p := range patterns {
 			e.patterns = append(e.patterns, []byte(p))
 		}
@@ -96,9 +93,18 @@ func quotedPOSIX(texts []string) []posixPattern {
 
 // leftmost finds the leftmost occurrence at or after from, preferring the
 // longest pattern at that offset.
-func (e literalEngine) leftmost(record []byte, from int) (Span, bool) {
+func (e literalEngine) leftmost(ctx context.Context, record []byte, from int, work *int64) (Span, bool, error) {
 	best := Span{-1, -1}
 	for _, p := range e.patterns {
+		if err := ctx.Err(); err != nil {
+			return Span{}, false, err
+		}
+		// Admit the worst-case byte comparisons before calling the byte matcher.
+		cost := int64(len(record)-from+1) * int64(max(1, len(p)))
+		if cost > e.limits.WorkSteps-*work {
+			return Span{}, false, &BudgetError{Resource: "regex_work_steps", Maximum: e.limits.WorkSteps, Observed: *work + cost}
+		}
+		*work += cost
 		i := bytes.Index(record[from:], p)
 		if i < 0 {
 			continue
@@ -108,7 +114,7 @@ func (e literalEngine) leftmost(record []byte, from int) (Span, bool) {
 			best = Span{start, start + len(p)}
 		}
 	}
-	return best, best.Start >= 0
+	return best, best.Start >= 0, nil
 }
 
 func (e literalEngine) first(ctx context.Context, record []byte) (Span, bool, error) {
@@ -123,8 +129,8 @@ func (e literalEngine) first(ctx context.Context, record []byte) (Span, bool, er
 		}
 		return Span{}, false, nil
 	}
-	span, ok := e.leftmost(record, 0)
-	return span, ok, nil
+	var work int64
+	return e.leftmost(ctx, record, 0, &work)
 }
 
 func (e literalEngine) each(ctx context.Context, record []byte, yield func(Span) error) error {
@@ -135,11 +141,15 @@ func (e literalEngine) each(ctx context.Context, record []byte, yield func(Span)
 		}
 		return yield(span)
 	}
+	var work int64
 	for from := 0; from <= len(record); {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		span, ok := e.leftmost(record, from)
+		span, ok, err := e.leftmost(ctx, record, from, &work)
+		if err != nil {
+			return err
+		}
 		if !ok {
 			return nil
 		}
@@ -189,7 +199,7 @@ func compilePOSIX(ctx context.Context, patterns []string, spec Spec, limits Limi
 }
 
 // compileTranslated joins translated POSIX alternatives, applies -x and -w,
-// and selects the linear engine whenever no marker requires the bounded one.
+// and lowers the validated tree into the metered VM.
 func compileTranslated(ctx context.Context, raw []string, translated []posixPattern, spec Spec, limits Limits) (engine, error) {
 	var text strings.Builder
 	marked := spec.Word
@@ -217,19 +227,20 @@ func compileTranslated(ctx context.Context, raw []string, translated []posixPatt
 	if err != nil {
 		return nil, parseError(strings.Join(raw, "\n"), err)
 	}
-	if !marked {
-		re, err := regexp.Compile(tree.String())
-		if err != nil {
-			return nil, &PatternError{Code: CodeRegexInvalid, Pattern: strings.Join(raw, "\n"), Detail: err.Error()}
-		}
-		re.Longest()
-		return goEngine{re: re, limits: limits, longest: true}, nil
+	compile := regexp2.CompileSyntaxBounded
+	if marked {
+		compile = regexp2.CompileMarkedBounded
 	}
-	program, err := regexp2.CompileMarkedBounded(ctx, tree, limits.syntaxBudget())
+	program, err := compile(ctx, tree, limits.syntaxBudget())
 	if err != nil {
 		return nil, budgetError(err)
 	}
-	return vmEngine{program: program, limits: limits, longest: true, groupCount: groups}, nil
+	var required litprefilter.Requirement
+	if !marked {
+		groups = 0
+		required = litprefilter.Extract(tree.String(), false)
+	}
+	return vmEngine{program: program, limits: limits, longest: true, groupCount: groups, required: required}, nil
 }
 
 // --- RE2 -------------------------------------------------------------------
@@ -257,25 +268,23 @@ func compileRE2(ctx context.Context, patterns []string, spec Spec, limits Limits
 	if spec.Line {
 		combined = "^" + combined + "$"
 	}
-	if !spec.Word {
-		re, err := regexp.Compile(combined)
-		if err != nil {
-			return nil, &PatternError{Code: CodeRegexInvalid, Pattern: strings.Join(patterns, "\n"), Detail: err.Error()}
-		}
-		return goEngine{re: re, limits: limits}, nil
-	}
 	tree, err := regexp2.ParseSyntaxBounded(ctx, combined, syntax.Perl, limits.syntaxBudget())
 	if err != nil {
 		return nil, parseError(strings.Join(patterns, "\n"), err)
 	}
-	wrapped := &syntax.Regexp{Op: syntax.OpConcat, Sub: []*syntax.Regexp{
-		{Op: syntax.OpLiteral, Rune: []rune{regexp2.MarkerNotAfterWord}}, tree, {Op: syntax.OpLiteral, Rune: []rune{regexp2.MarkerNotBeforeWord}},
-	}}
-	program, err := regexp2.CompileMarkedBounded(ctx, wrapped, limits.syntaxBudget())
+	compile := regexp2.CompileSyntaxBounded
+	if spec.Word {
+		compile = regexp2.CompileWordSyntaxBounded
+	}
+	program, err := compile(ctx, tree, limits.syntaxBudget())
 	if err != nil {
 		return nil, budgetError(err)
 	}
-	return vmEngine{program: program, limits: limits, groupCount: tree.MaxCap()}, nil
+	var required litprefilter.Requirement
+	if !spec.Word {
+		required = litprefilter.Extract(combined, false)
+	}
+	return vmEngine{program: program, limits: limits, groupCount: tree.MaxCap(), required: required}, nil
 }
 
 // --- pcre-common-v1 -----------------------------------------------------------
@@ -319,88 +328,6 @@ func compilePerl(ctx context.Context, patterns []string, spec Spec, limits Limit
 	return vmEngine{program: program, limits: limits, groupCount: offset}, nil
 }
 
-// --- linear Go engine ---------------------------------------------------------
-
-// goEngine runs Go's linear-time engine. Its work is charged as one step per
-// record scalar, the bound its automaton guarantees; elapsed time above the
-// CPU ceiling discards the result.
-type goEngine struct {
-	re      *regexp.Regexp
-	limits  Limits
-	longest bool
-}
-
-func (e goEngine) charge(record []byte) error {
-	steps := int64(utf8.RuneCount(record)) + 1
-	if steps > e.limits.WorkSteps {
-		return &BudgetError{Resource: "regex_work_steps", Maximum: e.limits.WorkSteps, Observed: steps}
-	}
-	return nil
-}
-
-func (e goEngine) timed(ctx context.Context, record []byte, run func()) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	if err := e.charge(record); err != nil {
-		return err
-	}
-	started := time.Now()
-	run()
-	if elapsed := time.Since(started); elapsed > e.limits.CPU {
-		return &BudgetError{Resource: "regex_cpu_ms", Maximum: e.limits.CPU.Milliseconds(), Observed: (elapsed + time.Millisecond - 1).Milliseconds()}
-	}
-	return ctx.Err()
-}
-
-func (e goEngine) first(ctx context.Context, record []byte) (Span, bool, error) {
-	var loc []int
-	if err := e.timed(ctx, record, func() { loc = e.re.FindIndex(record) }); err != nil || loc == nil {
-		return Span{}, false, err
-	}
-	return Span{loc[0], loc[1]}, true, nil
-}
-
-func (e goEngine) each(ctx context.Context, record []byte, yield func(Span) error) error {
-	var all [][]int
-	if err := e.timed(ctx, record, func() { all = e.re.FindAllIndex(record, -1) }); err != nil {
-		return err
-	}
-	for _, loc := range all {
-		if loc[1] > loc[0] {
-			if err := yield(Span{loc[0], loc[1]}); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-func (e goEngine) groups(ctx context.Context, record []byte, yield func([]int) error) error {
-	var all [][]int
-	if err := e.timed(ctx, record, func() { all = e.re.FindAllSubmatchIndex(record, -1) }); err != nil {
-		return err
-	}
-	for _, loc := range all {
-		if loc[1] > loc[0] {
-			if e.longest {
-				loc = loc[:2]
-			}
-			if err := yield(loc); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-func (e goEngine) captureGroups() int {
-	if e.longest {
-		return 0
-	}
-	return e.re.NumSubexp()
-}
-
 // --- bounded backtracking engine ----------------------------------------------
 
 type vmEngine struct {
@@ -408,6 +335,7 @@ type vmEngine struct {
 	limits     Limits
 	longest    bool
 	groupCount int
+	required   litprefilter.Requirement
 }
 
 // record is one search input as scalars with the byte offset of each.
@@ -440,9 +368,12 @@ func (e vmEngine) search(ctx context.Context, b []byte, all bool, yield func([]i
 	if err := session.Charge(int64(len(b))); err != nil {
 		return budgetError(err)
 	}
+	if err := session.ReserveMemory(int64(len(b))*12 + 8); err != nil {
+		return budgetError(err)
+	}
 	rec := decodeRecord(b)
 	for pos := 0; pos <= len(rec.runes); {
-		groups, err := session.Find(rec.runes, pos, e.longest && all)
+		groups, err := session.Find(rec.runes, pos, e.longest)
 		if err != nil {
 			return budgetError(err)
 		}
@@ -487,7 +418,12 @@ func (e vmEngine) each(ctx context.Context, b []byte, yield func(Span) error) er
 }
 
 func (e vmEngine) groups(ctx context.Context, b []byte, yield func([]int) error) error {
-	return e.search(ctx, b, true, yield)
+	return e.search(ctx, b, true, func(g []int) error {
+		if e.groupCount == 0 {
+			g = g[:2]
+		}
+		return yield(g)
+	})
 }
 
 func (e vmEngine) captureGroups() int { return e.groupCount }
