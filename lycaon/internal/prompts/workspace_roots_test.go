@@ -21,16 +21,16 @@ func TestWorkspaceRootsPartialSingleRoot(t *testing.T) {
 	}, "/tmp/lycaon")
 	out, err := engine.Render(context.Background(), "partials/workspace-roots.md", vars)
 	testutil.FailErr(t, "render prompt template", err)
-	if !strings.Contains(out, "Workspace: /tmp/lycaon") {
+	if !strings.Contains(out, "Project folder: /tmp/lycaon") {
 		t.Fatalf("output = %q want single workspace line", out)
 	}
 	if strings.Contains(out, "@") {
 		t.Fatalf("single-root output must not mention @label: %q", out)
 	}
-	if !strings.Contains(out, "User absolute paths") {
+	if !strings.Contains(out, "For a path the person gives you") {
 		t.Fatalf("single-root output missing absolute-path grant rule: %q", out)
 	}
-	if !strings.Contains(out, "`src/main.py` for files, `.` for root") {
+	if !strings.Contains(out, "`src/main.py` for files, `.` for the folder") {
 		t.Fatalf("single-root output must distinguish file paths from folder root: %q", out)
 	}
 }
@@ -44,7 +44,7 @@ func TestWorkspaceRootsPartialMultiRoot(t *testing.T) {
 	}, "/tmp/lycaon")
 	out, err := engine.Render(context.Background(), "partials/workspace-roots.md", vars)
 	testutil.FailErr(t, "render prompt template", err)
-	for _, want := range []string{"lycaon", "lycaon-den", "spans 2 folders", "@<label>", "User absolute paths"} {
+	for _, want := range []string{"lycaon", "lycaon-den", "spans 2 folders", "@<label>", "For a path the person gives you"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("output missing %q: %s", want, out)
 		}
