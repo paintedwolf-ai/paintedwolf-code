@@ -128,9 +128,17 @@ class Contracts(unittest.TestCase):
         self.db.execute("UPDATE invocation_receipts SET tool_name='command', args_digest=?", (digest(self.args),))
 
     def children(self, receipt_id, *effects):
-        self.db.executescript("CREATE TABLE IF NOT EXISTS program_operations(program_receipt_id, operation, status, effect);")
-        for index, effect in enumerate(effects):
-            self.db.execute("INSERT INTO program_operations VALUES(?,?,?,?)", (receipt_id, "%s-op%d" % (receipt_id, index), "completed", effect))
+        self.db.executescript("""
+            CREATE TABLE IF NOT EXISTS invocation_programs(id PRIMARY KEY, parent_receipt_id UNIQUE, state, status_code,
+              progress_state, source_exact, syntax_validated, settled_at);
+            CREATE TABLE IF NOT EXISTS invocation_program_executions(id PRIMARY KEY, program_id, ordinal, state,
+              status_code, effect_certainty, settled_at);
+        """)
+        self.db.execute("INSERT OR IGNORE INTO invocation_programs VALUES(?,?,'completed',0,'unchanged',1,1,'now')", (receipt_id, receipt_id))
+        offset = self.db.execute("SELECT count(*) FROM invocation_program_executions WHERE program_id=?", (receipt_id,)).fetchone()[0]
+        for index, effect in enumerate(effects, offset):
+            self.db.execute("INSERT INTO invocation_program_executions VALUES(?,?,?,'completed',0,?,'now')",
+                            ("%s-op%d" % (receipt_id, index), receipt_id, index+1, effect))
 
     def test_command_surface_requires_settled_child_effects(self):
         self.command_call("command-v1")
@@ -145,12 +153,19 @@ class Contracts(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "partial or unknown effects"):
             self.row()
 
+    def test_nonzero_exit_is_not_successful_invocation(self):
+        self.command_call("command-v1")
+        self.children("receipt", "none")
+        self.db.execute("UPDATE invocation_program_executions SET status_code=127")
+        with self.assertRaisesRegex(ValueError, "did not succeed"):
+            self.row()
+
     def test_whole_program_replay_after_partial_effects_is_excluded(self):
         self.command_call("command-v1")
         self.children("receipt", "completed")
         self.db.execute("INSERT INTO invocation_receipts VALUES(?,?,?,?,?,?,?,?,?,?)",
                         ('earlier', 'session', 'message', 'call0', 'command', 'error', 1, 'then', digest(self.args), '1'))
-        self.children("earlier", "completed", "partial")
+        self.children("earlier", "completed", "attempted")
         with self.assertRaisesRegex(ValueError, "whole-program replay"):
             self.row()
 
