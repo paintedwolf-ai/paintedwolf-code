@@ -32,8 +32,9 @@ def atomic_json(path, value):
 
 
 class Checkpoints:
-    def __init__(self, root, identity, keep=3):
+    def __init__(self, root, identity, keep=3, mirror=None):
         self.root, self.identity, self.keep = Path(root), identity, keep
+        self.mirror = mirror
         if keep < 2:
             raise ValueError("retain at least two recovery checkpoints")
         self.root.mkdir(exist_ok=True)
@@ -83,6 +84,9 @@ class Checkpoints:
         sync_directory(staged)
         os.rename(staged, target)
         sync_directory(self.root)
+        if self.mirror is not None:
+            from replication import replicate
+            replicate(target, self.mirror, self.identity)
         # Only complete checkpoints from this run are eligible for retention.
         verified = []
         for candidate in self.directories():

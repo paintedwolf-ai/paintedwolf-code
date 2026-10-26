@@ -12,11 +12,12 @@ from common import digest, file_digest, inventory
 from data import assert_disjoint, encode, load_split
 from checkpoint import atomic_json, ReferenceCache, sync_directory, exclusive_run
 from training_loop import run_loop
+from terminal import execute
 
 
 def train(args):
     with exclusive_run(args.out, args.resume):
-        return train_owned(args)
+        return execute(args, train_owned)
 
 
 def train_owned(args):
@@ -56,7 +57,7 @@ def train_owned(args):
         return [[encode(tokenizer, row, row[k], args.max_length) for k in
                  (("target",) if args.mode == "sft" else ("chosen", "rejected"))] for row in rows]
     training, validation = prepare(train_rows), prepare(validation_rows)
-    config = {k:v for k,v in vars(args).items() if k not in {"resume","max_seconds","max_updates","checkpoint_every","keep_checkpoints"}}
+    config = {k:v for k,v in vars(args).items() if k not in {"resume","max_seconds","max_updates","checkpoint_every","keep_checkpoints","checkpoint_mirror"}}
     config = {k:str(v) if isinstance(v, Path) else v for k,v in config.items()}
     manifest = {"schema":"pw-custom-training/1", "config":config, "model":source,
                 "reference":reference_source, "template_sha256":digest(tokenizer.chat_template),
@@ -180,6 +181,7 @@ def parser():
     p.add_argument("--max-updates", type=int, default=0, help="Bounded pilot updates per invocation; resume continues")
     p.add_argument("--checkpoint-every", type=int, default=10)
     p.add_argument("--keep-checkpoints", type=int, default=3)
+    p.add_argument("--checkpoint-mirror", type=Path, help="Independent durable filesystem for verified checkpoint generations")
     return p
 
 
