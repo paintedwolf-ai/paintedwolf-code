@@ -92,10 +92,10 @@ scenarios:
     vars:
       reason: below_floor
       component: glibc
-      want: "2.35"
+      want: "2.39"
       got: "2.31"
     expect_contains:
-      - glibc 2.35 or later
+      - glibc 2.39 or later
       - package manager
   - id: glibc_unreadable
     resolution: unreadable

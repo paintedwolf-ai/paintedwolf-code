@@ -32,7 +32,7 @@ sudo apt install ./painted-wolf-code_v<version>_linux-x86_64.deb   # Ubuntu 24.0
 sudo dnf install ./painted-wolf-code_v<version>_linux-x86_64.rpm   # Fedora 41+, RHEL 10+ compatibles
 ```
 
-The package installs the engine under `/opt/painted-wolf-code`, the `pw` and `pw-logs` commands in `/usr/bin`, and a desktop entry; it needs kernel 6.2+, glibc 2.35+, and WebKitGTK 4.1 (2.44+). See [Linux packages](docs/dev-tasks.md#linux-packages).
+The package installs the engine under `/opt/painted-wolf-code`, the `pw` and `pw-logs` commands in `/usr/bin`, and a desktop entry; it needs kernel 6.2+, glibc 2.39+, and WebKitGTK 4.1 (2.44+). See [Linux packages](docs/dev-tasks.md#linux-packages).
 
 1. Download the release for your platform from the [Releases](https://github.com/paintedwolf-ai/paintedwolf-code/releases) page.
 2. Launch the app. The Go sidecar starts with it — no separate service to run.

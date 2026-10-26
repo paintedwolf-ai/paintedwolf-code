@@ -2,14 +2,16 @@
   "category": "source_files",
   "artifact": "scripts/release-stage-platform-artifacts.sh",
   "kind": "construction",
-  "workstream": "linux-native-packages",
+  "workstream": "linux-release-staging",
   "disposition": "retain",
-  "reason": "Retain the measured 465-line cross-platform staging transaction within its existing 480-line ceiling. Final package names, complete tree audits and signature admission remain one transaction; the fixed extracted-engine diagnostic delegates root lease, sealed-byte identity, exact transient AppArmor attachment and cleanup to package_probe, which admits profile changes only through the root-owned guest marker and exact operation lease, never runner environment variables. No confinement policy or package-format parsing is duplicated in the shell. The pinned probe contracts drive the lease, manifest, ELF and attachment refusals and exact-profile cleanup through real fixture packages and a stand-in sudo; the pacman candidate contracts bind the final retained bytes of every native family.",
-  "reviewed_commit": "42fcdf5736e798e8a3a95b781afc1804d05a85db",
-  "ceiling": 480,
+  "reason": "Retain the measured 472 code-bearing lines of the cross-platform staging transaction within a 490-line ceiling. The shell selects, audits and stages final package outputs; Linux ABI parsing and floor decisions live in linux_release.abi_audit, while the installed helper probe and pacman candidate checks live in their own modules. Keeping one staging entry point preserves final artifact identity and signature admission without duplicating package-format parsing. The pinned contracts cover ABI refusals, package probing, native family selection and release-channel invariants.",
+  "reviewed_commit": "ca6c21a9d42756f194a41b1767aef8ed20aa6847",
+  "ceiling": 490,
   "boundaries": {
     "packaging/release-platforms.json": "789b4d6207230d8f82e6e533dac6b2d87d05af07f22fcd44843f3c80b27a5ba3",
-    "scripts/verification_tests/distribution/test_pacman_candidate_execution.py": "be9b6f3dcc7cea9f3660cb6cf9898338a5ce5525fe31ca226c4e91b49a012a63",
-    "scripts/verification_tests/distribution/test_package_probe_execution.py": "8e53cdf5e94d0cc0df57bfe2a2d09f0a3dcb618e818ef377ed1e1181fa85a035"
+    "scripts/verification_tests/distribution/test_linux_abi_execution.py": "8c1ff7423a3075089c9906ad0f628d6d57c046d8036414d6fe1e833fb1116965",
+    "scripts/verification_tests/distribution/test_pacman_candidate_execution.py": "fa08f86e7469e5e8856069ad48ef4b0f8a372a4b68c3146700627c017a4b7195",
+    "scripts/verification_tests/distribution/test_package_probe_execution.py": "8e53cdf5e94d0cc0df57bfe2a2d09f0a3dcb618e818ef377ed1e1181fa85a035",
+    "lycaon/test/contract/runner/release_channel_invariants_test.go": "88f51bb0998d34fc5b274623cebe7f0be700a836dcd201a3a1ac9040d0c74689"
   }
 }
