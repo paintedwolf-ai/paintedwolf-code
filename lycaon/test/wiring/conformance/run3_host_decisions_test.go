@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/gate"
@@ -44,5 +46,49 @@ func TestRun3EvalSyntaxRefusalPreservesEarlierOutput(t *testing.T) {
 	}
 	if obs.Outcome.Stdout != "before\n" || obs.Outcome.Status == 0 || obs.Outcome.Stderr == "" {
 		t.Fatalf("eval refusal lost its earlier result or shell diagnostic: %+v", obs.Outcome)
+	}
+}
+
+func TestRun3NativeJobPIDAndPsAux(t *testing.T) {
+	c := fixtureCase{
+		ID:      "run3-native-job-inspection",
+		Program: `sleep 30 & pid=$!; printf 'pid:%s\n' "$pid"; jobs -l; ps aux; ps -p "$pid" -o pid=; kill "$pid"; wait "$pid"; printf 'wait:%s\n' "$?"`,
+	}
+	runner := newConformanceRunnerWithConfig(t, fixtureCorpus{Cases: []fixtureCase{c}}, gate.PostureLight, true)
+	obs := runner.runCase(t, c)
+	if obs.TopLevelReject != "" || obs.Outcome.Refusal != nil || obs.Outcome.Status != 0 {
+		t.Fatalf("native job inspection = %+v", obs)
+	}
+	lines := strings.Split(strings.TrimSpace(obs.Outcome.Stdout), "\n")
+	if len(lines) < 5 || !strings.HasPrefix(lines[0], "pid:") || lines[len(lines)-1] != "wait:143" {
+		t.Fatalf("job and ps output = %q", obs.Outcome.Stdout)
+	}
+	pid := strings.TrimPrefix(lines[0], "pid:")
+	if n, err := strconv.Atoi(pid); err != nil || n <= 0 {
+		t.Fatalf("$! is not a positive numeric job ID: %q", pid)
+	}
+	if fields := strings.Fields(lines[1]); len(fields) < 3 || fields[1] != pid {
+		t.Fatalf("jobs -l did not report $!: %q", lines[1])
+	}
+	if strings.TrimSpace(lines[len(lines)-2]) != pid {
+		t.Fatalf("ps -p did not report $!: %q", lines[len(lines)-2])
+	}
+	var header, row string
+	for i := 2; i < len(lines)-2; i++ {
+		if strings.Contains(lines[i], "%CPU") && strings.Contains(lines[i], "%MEM") {
+			header = lines[i]
+			if i+1 < len(lines)-2 {
+				row = lines[i+1]
+			}
+			break
+		}
+	}
+	if header == "" || row == "" {
+		t.Fatalf("ps aux omitted its columns or job row: %q", obs.Outcome.Stdout)
+	}
+	for _, field := range strings.Fields(row) {
+		if field == "-" {
+			t.Fatalf("ps aux left an observable column blank: %q", row)
+		}
 	}
 }
