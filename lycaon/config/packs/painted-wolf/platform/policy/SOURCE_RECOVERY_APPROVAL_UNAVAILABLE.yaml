@@ -20,7 +20,9 @@ x-paintedwolf-message: approval is required before deleting without recovery
 x-paintedwolf-scenarios:
 - id: default
   vars:
-    tool: command
+    tool: delete
     path: build
   expect_contains:
   - 'Code: SOURCE_RECOVERY_APPROVAL_UNAVAILABLE'
+  - 'Deleting build without recovery needs approval.'
+  - 'Do not discard the source through another command without recovery approval.'
