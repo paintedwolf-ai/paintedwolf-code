@@ -14,6 +14,8 @@ mod query;
 mod tests;
 #[cfg(test)]
 mod apt_probe_tests;
+#[cfg(test)]
+mod produced_fixtures;
 pub use query::refresh;
 
 pub(super) use command::{Output, Reader};
