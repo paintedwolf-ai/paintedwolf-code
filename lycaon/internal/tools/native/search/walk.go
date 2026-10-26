@@ -112,7 +112,7 @@ func (w *walker) operand(spelling string, follow bool) (entry, error) {
 // follow reports the target metadata of contained links; a link whose
 // target cannot be reached stays a link.
 func (w *walker) children(dir entry, follow bool) ([]entry, error) {
-	opened, err := dir.bound.OpenDir()
+	opened, err := dir.bound.OpenDirWithRoot(w.readRoot(dir.bound))
 	if err != nil {
 		return nil, err
 	}
