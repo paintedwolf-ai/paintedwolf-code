@@ -336,6 +336,9 @@ type InvocationLocal struct {
 
 // InvocationEffects carries invocation results and observations.
 type InvocationEffects struct {
+	// CheckMutationProgress admits a reached project file creation or edit.
+	// Command programs install this at their native write boundary.
+	CheckMutationProgress func(context.Context, string, string) error
 	// ReportProgress publishes host-measured work on this invocation's activity.
 	ReportProgress func(api.ToolProgress)
 	// ArgsTruncated marks arguments cut before parsing.
