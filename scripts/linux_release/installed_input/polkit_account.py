@@ -6,8 +6,7 @@ import secrets
 
 from . import protocol, session_wire, unlock_wire
 from .mailbox import decode
-from .polkit_proxy import ACCOUNT_BOOTSTRAP
-from .unlock_account import validate_account_shape
+from .unlock_account import helper_python_arguments, validate_account_shape
 from ..installed_cases.native_command import command as bounded_command
 
 
@@ -27,10 +26,8 @@ class Credential:
         from ..installed_campaign import command
         if action not in {'prepare', 'disable'}:
             raise ValueError('Polkit QA credential requires its fixed prepare or disable action')
-        arguments = ['/usr/bin/sudo', '-n', '/usr/bin/env', '-i', 'PATH=/usr/bin:/bin',
-            'LANG=C.UTF-8', 'HOME=/root', '/usr/bin/python3', '-I', '-B', '-c', ACCOUNT_BOOTSTRAP,
-            self.execution['driver_tree'], action, '--account', protocol.canonical(self.account).decode().strip(),
-            '--vm-id', self.actor.value['vm_id']]
+        arguments = ['/usr/bin/sudo', '-n', *helper_python_arguments(action, self.account,
+            driver_tree=self.execution['driver_tree'], vm_id=self.actor.value['vm_id'])]
         code, stdout, _ = bounded_command(command(self.target, arguments), timeout=20, limit=4096, input_bytes=frame)
         if code != 0:
             raise ValueError('Polkit QA OS credential operation did not settle')

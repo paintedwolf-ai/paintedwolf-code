@@ -13,47 +13,7 @@ from .private_pipe import Pipe
 from .unlock_account import validate_account_shape
 from ..installed_process import process_identity
 
-# This runs in isolated Python before importing any captured project code. The
-# capture is prepared separately by the trusted controller, never by the QA UID.
-CAPTURE_IMPORT = '''import hashlib,json,stat,sys
-from pathlib import Path
-tree=sys.argv.pop(1)
-root=Path('/var/lib/paintedwolf-qualification')/tree
-for node in [*reversed(root.parents),root]:
- info=node.lstat()
- if not stat.S_ISDIR(info.st_mode) or info.st_uid!=0 or info.st_gid!=0 or info.st_mode&0o022:
-  raise SystemExit(2)
-marker=root/'capture.json'
-info=marker.lstat()
-if not stat.S_ISREG(info.st_mode) or info.st_uid!=0 or info.st_gid!=0 or info.st_mode&0o222 or info.st_size>1048576:
- raise SystemExit(2)
-capture=json.loads(marker.read_bytes())
-if set(capture)!={'format_version','driver_tree','files_sha256'} or type(capture['format_version']) is not int or capture['format_version']!=1 or capture['driver_tree']!=tree:
- raise SystemExit(2)
-actual={}
-for index,node in enumerate(root.rglob('*')):
- info=node.lstat()
- if index>=512 or info.st_uid!=0 or info.st_gid!=0 or info.st_mode&0o022 or not (stat.S_ISDIR(info.st_mode) or stat.S_ISREG(info.st_mode)):
-  raise SystemExit(2)
- if stat.S_ISDIR(info.st_mode):
-  if node.name=='__pycache__':
-   raise SystemExit(2)
- elif node==marker:
-  continue
- elif node.suffix=='.py' and not info.st_mode&0o222 and info.st_size<=1048576:
-  actual[node.relative_to(root).as_posix()]=hashlib.sha256(node.read_bytes()).hexdigest()
- else:
-  raise SystemExit(2)
-if actual!=capture['files_sha256']:
- raise SystemExit(2)
-sys.path.insert(0,str(root))
-'''
-BOOTSTRAP = CAPTURE_IMPORT + 'from scripts.linux_release.installed_input.polkit_root import main\nmain()\n'
-ACCOUNT_BOOTSTRAP = CAPTURE_IMPORT + 'from scripts.linux_release.installed_input.unlock_account import main\nmain()\n'
-BOOTSTRAP = 'try:\n' + ''.join(' ' + line for line in BOOTSTRAP.splitlines(keepends=True)) + \
-    'except BaseException:\n raise SystemExit(2) from None\n'
-ACCOUNT_BOOTSTRAP = 'try:\n' + ''.join(' ' + line for line in ACCOUNT_BOOTSTRAP.splitlines(keepends=True)) + \
-    'except BaseException:\n raise SystemExit(2) from None\n'
+from .captured_driver import OBSERVER_BOOTSTRAP
 
 
 class Proxy:
@@ -72,7 +32,7 @@ class Proxy:
         try:
             from ..installed_campaign import command
             arguments = ['/usr/bin/sudo', '-n', '/usr/bin/env', '-i', 'PATH=/usr/bin:/bin',
-                         'LANG=C.UTF-8', 'HOME=/root', '/usr/bin/python3', '-I', '-B', '-c', BOOTSTRAP,
+                         'LANG=C.UTF-8', 'HOME=/root', '/usr/bin/python3', '-I', '-B', '-c', OBSERVER_BOOTSTRAP,
                          self.execution['driver_tree']]
             self.process = subprocess.Popen(command(target, arguments), stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, start_new_session=True, bufsize=0)

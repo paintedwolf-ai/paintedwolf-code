@@ -173,7 +173,7 @@ def execute(binding, capability, case, root):
                                         app, native, held=False, expected=captured_engine, deadline=time.monotonic() + 15)
                             finally:
                                 observations['credential_cleanup'] = run_privileged_disable(
-                                    unlock_ctl.account, vm_id=vm_id)
+                                    unlock_ctl.account, driver_tree=execution['driver_tree'], vm_id=vm_id)
                         observations['provider_requests'] = list(fixture.observations)
                     finally:
                         app.stop()

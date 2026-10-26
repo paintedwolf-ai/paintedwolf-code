@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
-from scripts.linux_release.installed_input import polkit_proxy, polkit_root, polkit_runtime
+from scripts.linux_release.installed_input import captured_driver, polkit_proxy, polkit_root, polkit_runtime
 from verification_tests.distribution.installed.test_installed_native_unlock_execution import ACCOUNT, EXECUTION
 from verification_tests.distribution.installed.polkit.test_installed_polkit_stage_execution import target
 
@@ -77,10 +77,11 @@ class RootProxyTests(unittest.TestCase):
                 pass
             def __truediv__(self, _):
                 return fake
-        with patch('pathlib.Path', FakePath), patch('sys.argv', ['fixed', 'c' * 40]):
-            with self.assertRaises(SystemExit) as refused:
-                exec(polkit_proxy.BOOTSTRAP, {})
-        self.assertEqual(refused.exception.code, 2)
+        for bootstrap in (captured_driver.OBSERVER_BOOTSTRAP, captured_driver.ACCOUNT_BOOTSTRAP):
+            with patch('pathlib.Path', FakePath), patch('sys.argv', ['fixed', 'c' * 40]):
+                with self.assertRaises(SystemExit) as refused:
+                    exec(bootstrap, {})
+            self.assertEqual(refused.exception.code, 2)
 
     def test_unhashed_importable_files_or_bytecode_directory_cannot_enter_root_capture(self):
         class Entry:
@@ -99,10 +100,11 @@ class RootProxyTests(unittest.TestCase):
         for name, mode in [('module.pyc', stat.S_IFREG | 0o444), ('module.so', stat.S_IFREG | 0o444),
                            ('extra.txt', stat.S_IFREG | 0o444), ('__pycache__', stat.S_IFDIR | 0o555)]:
             root.rglob = lambda _: [Entry(name, mode)]
-            with patch('pathlib.Path', return_value=root), patch('sys.argv', ['fixed', 'c' * 40]):
-                with self.subTest(name=name), self.assertRaises(SystemExit) as refused:
-                    exec(polkit_proxy.BOOTSTRAP, {})
-            self.assertEqual(refused.exception.code, 2)
+            for bootstrap in (captured_driver.OBSERVER_BOOTSTRAP, captured_driver.ACCOUNT_BOOTSTRAP):
+                with patch('pathlib.Path', return_value=root), patch('sys.argv', ['fixed', 'c' * 40]):
+                    with self.subTest(name=name), self.assertRaises(SystemExit) as refused:
+                        exec(bootstrap, {})
+                self.assertEqual(refused.exception.code, 2)
 
 
 class RootEndpointTests(unittest.TestCase):

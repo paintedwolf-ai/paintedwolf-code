@@ -21,7 +21,7 @@ class PolkitLifecycleTests(unittest.TestCase):
         self.credential = Mock()
         self.credential.take.return_value = bytearray(b'A1' * 20)
         self.observer = Mock()
-        self.capture = patch.object(control.polkit_capture, 'prepare', return_value={'prepared': True})
+        self.capture = patch.object(control.captured_driver, 'prepare', return_value={'prepared': True})
         self.make_credential = patch.object(control, 'Credential', return_value=self.credential)
         self.make_observer = patch.object(control, 'Proxy', return_value=self.observer)
         for patcher in (self.capture, self.make_credential, self.make_observer):
@@ -129,7 +129,7 @@ class PolkitLifecycleTests(unittest.TestCase):
 
     def test_bridge_owns_prepare_and_transport_failure_cleanup_without_guest_secret_frame(self):
         from scripts.linux_release.installed_input import controller, polkit_account, unlock_wire
-        from scripts.linux_release.installed_input import polkit_capture
+        from scripts.linux_release.installed_input import captured_driver
         from verification_tests.distribution.installed.test_installed_native_unlock_execution import target as unlock_target
         selected = {'format_version': 1, 'kind': 'qemu-fixed-input', 'lease': '/tmp/lease', 'vm_id': 'owned'}
         bridge = controller.Bridge(selected, EXECUTION, [], Mock(), target=self.target)
@@ -142,7 +142,7 @@ class PolkitLifecycleTests(unittest.TestCase):
                    'operation': unlock_wire.STALE_PREPARE, 'native_session': native, 'account': ACCOUNT}
         lifetime = Mock()
         with patch.object(polkit_account, 'StaleCredential', return_value=lifetime), \
-                patch.object(polkit_capture, 'prepare'):
+                patch.object(captured_driver, 'prepare'):
             acknowledgment = bridge.prepare_stale(pending)
         lifetime.prepare.assert_called_once_with()
         self.assertNotIn('secret', str(acknowledgment))
@@ -156,7 +156,7 @@ class PolkitLifecycleTests(unittest.TestCase):
         self.assertIsInstance(bridge.error, OSError)
 
     def test_bridge_uncertain_preparation_disables_without_publishing_success(self):
-        from scripts.linux_release.installed_input import controller, polkit_account, polkit_capture, unlock_wire
+        from scripts.linux_release.installed_input import controller, polkit_account, captured_driver, unlock_wire
         from verification_tests.distribution.installed.test_installed_native_unlock_execution import target as unlock_target
         bridge = controller.Bridge({'format_version': 1, 'kind': 'qemu-fixed-input',
             'lease': '/tmp/lease', 'vm_id': 'owned'}, EXECUTION, [], Mock(), target=self.target)
@@ -170,7 +170,7 @@ class PolkitLifecycleTests(unittest.TestCase):
         lifetime = Mock()
         lifetime.prepare.side_effect = OSError('preparation uncertain')
         with patch.object(polkit_account, 'StaleCredential', return_value=lifetime), \
-                patch.object(polkit_capture, 'prepare'), self.assertRaises(OSError):
+                patch.object(captured_driver, 'prepare'), self.assertRaises(OSError):
             bridge.prepare_stale(pending)
         lifetime.close.assert_called_once_with()
         bridge.exchange.assert_not_called()

@@ -93,7 +93,7 @@ def prepare_exchange(pipe, observer, execution, pending, *, vm_id=None):
     secret_raw = bytearray(pipe.receive_frame(40))
     try:
         unlock_wire.secret(secret_raw)
-        unlock_account.run_privileged_prepare(pending['account'], secret_raw, vm_id=vm_id)
+        unlock_account.run_privileged_prepare(pending['account'], secret_raw, driver_tree=execution['driver_tree'], vm_id=vm_id)
     finally:
         secret_raw[:] = b'\0' * len(secret_raw)
     pipe.send_metadata({**envelope, 'phase': 'prepared', 'account': pending['account'],
@@ -180,4 +180,4 @@ def serve_mailbox(pending, execution, vm_id, mailbox):
             for stream, blocking in zip((streams.stdin, streams.stdout), previous):
                 os.set_blocking(stream.fileno(), blocking)
             if pending['operation'] == unlock_wire.PURPOSE:
-                unlock_account.run_privileged_disable(pending['account'], vm_id=vm_id)
+                unlock_account.run_privileged_disable(pending['account'], driver_tree=execution['driver_tree'], vm_id=vm_id)

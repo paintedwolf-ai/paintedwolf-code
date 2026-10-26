@@ -420,14 +420,14 @@ class Bridge:
         self.bytes += len(raw)
 
     def prepare_stale(self, pending):
-        from . import polkit_capture
+        from . import captured_driver
         from .polkit_account import StaleCredential
         unlock_wire.request(pending, self.execution)
         if (pending['operation'] != unlock_wire.STALE_PREPARE or self.polkit_target is None
                 or self.prepared_request is not None or self.unlock_actor is not None
                 or self.stale_credential is not None or self.polkit_session is not None):
             raise ValueError('stale credential cannot overlap or replace existing custody')
-        polkit_capture.prepare(self.actor, self.polkit_target, self.execution,
+        captured_driver.prepare(self.actor, self.polkit_target, self.execution,
                                Path(__file__).resolve().parents[3])
         self.stale_credential = StaleCredential(self.actor, self.polkit_target, self.execution,
             pending['account'], pending['native_session']['native_session'])

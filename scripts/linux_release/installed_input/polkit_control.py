@@ -6,7 +6,7 @@ from pathlib import Path
 import time
 import threading
 
-from . import polkit_capture, protocol, session_wire
+from . import captured_driver, protocol, session_wire
 from .polkit_account import Credential
 from .polkit_proxy import Proxy
 from .polkit_stage import CANCEL, PURPOSE, Stage
@@ -111,7 +111,7 @@ class Session:
                 if self.identity is not None:
                     raise ValueError('Polkit lifecycle cannot restart its observer')
                 self.identity = identity
-                capture = polkit_capture.prepare(self.actor, self.target, self.execution, self.checkout)
+                capture = captured_driver.prepare(self.actor, self.target, self.execution, self.checkout)
                 self._live()
                 if operation == START_STALE:
                     if self.stale_credential is None:

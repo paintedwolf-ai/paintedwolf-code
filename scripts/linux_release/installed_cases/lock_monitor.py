@@ -319,7 +319,7 @@ def execute(binding: dict, capability: str, case: str, root: Path) -> dict:
                 finally:
                     lock.close()
                     native.close()
-                    observations['credential_cleanup'] = run_privileged_disable(unlock_ctl.account, vm_id=vm_id)
+                    observations['credential_cleanup'] = run_privileged_disable(unlock_ctl.account, driver_tree=native_input['binding']['driver_tree'], vm_id=vm_id)
     except (OSError, ValueError, TypeError, KeyError) as error:
         observations.update(getattr(error, 'observations', {}))
         observations['failure_type'], observations['failure_detail'] = type(error).__name__, str(error)[:512]

@@ -302,7 +302,7 @@ def serve(execution: dict, vm_id: str):
     finally:
         if prepared is not None and prepare_delivered and not credential_disabled:
             from . import unlock_account
-            unlock_account.run_privileged_disable(prepared['account'], vm_id=vm_id)
+            unlock_account.run_privileged_disable(prepared['account'], driver_tree=execution['driver_tree'], vm_id=vm_id)
 
 
 def main():

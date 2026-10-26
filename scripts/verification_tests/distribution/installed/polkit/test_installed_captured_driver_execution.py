@@ -9,9 +9,9 @@ import subprocess
 import sys
 import tarfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
-from scripts.linux_release.installed_input import polkit_capture
+from scripts.linux_release.installed_input import captured_driver
 
 
 def archive(files):
@@ -32,8 +32,8 @@ def listing(files, *, mode='100644', size=None):
 class PolkitCaptureTests(unittest.TestCase):
     def test_frozen_git_python_bytes_and_manifest_digest_are_exact(self):
         files = {'scripts/__init__.py': b'', 'scripts/linux_release/installed_process.py': b'# fixture\n'}
-        with patch.object(polkit_capture.subprocess, 'check_output', side_effect=[listing(files), archive(files)]) as git:
-            payload, digest = polkit_capture.document(Path('/owned'), 'c' * 40)
+        with patch.object(captured_driver.subprocess, 'check_output', side_effect=[listing(files), archive(files)]) as git:
+            payload, digest = captured_driver.document(Path('/owned'), 'c' * 40)
         document = json.loads(payload)
         self.assertEqual({name: base64.b64decode(body) for name, body in document['files'].items()}, files)
         manifest = {'format_version': 1, 'driver_tree': 'c' * 40,
@@ -47,19 +47,19 @@ class PolkitCaptureTests(unittest.TestCase):
     def test_nonregular_oversized_or_escaping_sources_refuse_before_root_transport(self):
         files = {'scripts/linux_release/fixture.py': b'# fixture\n'}
         for metadata in (listing(files, mode='120000'), listing(files, size=(1 << 20) + 1)):
-            with patch.object(polkit_capture.subprocess, 'check_output', return_value=metadata) as git:
+            with patch.object(captured_driver.subprocess, 'check_output', return_value=metadata) as git:
                 with self.assertRaises(ValueError):
-                    polkit_capture.document(Path('/owned'), 'c' * 40)
+                    captured_driver.document(Path('/owned'), 'c' * 40)
                 self.assertEqual(git.call_count, 1)
         escaped = {'../escape.py': b'# fixture\n'}
-        with patch.object(polkit_capture.subprocess, 'check_output', side_effect=[listing(escaped), archive(escaped)]):
+        with patch.object(captured_driver.subprocess, 'check_output', side_effect=[listing(escaped), archive(escaped)]):
             with self.assertRaises(ValueError):
-                polkit_capture.document(Path('/owned'), 'c' * 40)
+                captured_driver.document(Path('/owned'), 'c' * 40)
 
     def test_root_copy_requires_actual_privilege_before_read_or_write(self):
         with patch.object(os, 'geteuid', return_value=1000), patch('sys.argv', ['fixed', 'c' * 40]):
             with self.assertRaises(SystemExit) as refused:
-                exec(polkit_capture.PREPARE, {})
+                exec(captured_driver.PREPARE, {})
         self.assertEqual(refused.exception.code, 2)
 
     def test_privileged_observer_import_does_not_load_application_or_scheduler(self):
@@ -76,3 +76,32 @@ class PolkitCaptureTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class AccountCaptureCommandTests(unittest.TestCase):
+    def test_unsafe_tree_refuses_before_any_privileged_command(self):
+        from scripts.linux_release.installed_input import unlock_account
+        from verification_tests.distribution.installed.test_installed_native_unlock_execution import ACCOUNT
+        for tree in ('../other', 'A' * 40, '', None):
+            with self.subTest(tree=tree), patch.object(unlock_account.native_command, 'command') as command:
+                with self.assertRaises(ValueError):
+                    unlock_account.run_privileged_prepare(ACCOUNT, b'A' * 40, driver_tree=tree, vm_id='owned')
+                command.assert_not_called()
+                with self.assertRaises(ValueError):
+                    unlock_account.run_privileged_disable(ACCOUNT, driver_tree=tree, vm_id='owned')
+                command.assert_not_called()
+
+    def test_polkit_and_gnome_commands_share_exact_capture_validation(self):
+        from scripts.linux_release.installed_input import polkit_account, unlock_account
+        from verification_tests.distribution.installed.test_installed_native_unlock_execution import ACCOUNT, EXECUTION
+        target={'host':'127.0.0.1','port':2222,'user':'qa'}
+        actor=Mock(nonce=EXECUTION['execution_nonce'],value={'vm_id':'owned','ssh':target})
+        value=polkit_account.Credential(actor,target,EXECUTION,ACCOUNT)
+        ready={'disabled':True,'account':ACCOUNT,'shadow_locked':True,
+               'credential_state':'locked','sessions_terminated':False}
+        with patch.object(polkit_account,'bounded_command',return_value=(0,json.dumps(ready).encode(),b'')) as command, \
+                patch('scripts.linux_release.installed_campaign.command',side_effect=lambda target,args:args):
+            value._command('disable')
+        self.assertEqual(command.call_args.args[0],['/usr/bin/sudo','-n',*unlock_account.helper_python_arguments(
+            'disable',ACCOUNT,driver_tree=EXECUTION['driver_tree'],vm_id='owned')])
+        self.assertIn(captured_driver.ACCOUNT_BOOTSTRAP,command.call_args.args[0])
