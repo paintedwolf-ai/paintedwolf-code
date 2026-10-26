@@ -272,10 +272,6 @@ func TestProgramEntryDisableStopsOwnedWorkAndRefusesNewPrograms(t *testing.T) {
 	if _, stopped, err := f.Background.Lifecycle.Wait(ctx, f.Session, handle); err != nil || !stopped {
 		t.Fatalf("owned job after disable stopped=%v err=%v", stopped, err)
 	}
-	deadline := time.Now().Add(10 * time.Second)
-	for f.programRows(t)[0] == "running" && time.Now().Before(deadline) {
-		time.Sleep(20 * time.Millisecond)
-	}
 	_, err = f.call(t, t.Context(), "external -- /bin/echo after")
 	if rejected := toolrejection.AsToolReject(err); rejected == nil || rejected.Code != "COMMAND_PROGRAMS_DISABLED" {
 		t.Fatalf("disabled entry admitted a program: %v", err)
