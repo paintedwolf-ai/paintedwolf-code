@@ -225,22 +225,12 @@ func (h *harness) execWithEnv(env []string, words ...string) run {
 	return run{stdout: stdout.String(), stderr: stderr.String(), result: result, err: err}
 }
 
-func TestNetworkCommandsOverSSHRemotesAndEgressGate(t *testing.T) {
-	h := newHarness(t)
-	h.git("reset", "--hard", "HEAD")
-	h.git("clean", "-fd")
-
-	bareParent, err := filepath.EvalSymlinks(t.TempDir())
-	testutil.FailErr(t, "eval bare parent", err)
-	bareDir := filepath.Join(bareParent, "remote.git")
-	if out, errOut, code := h.direct(bareParent, "init", "--bare", "-q", "-b", "main", bareDir); code != 0 {
-		t.Fatalf("init bare: %d %s %s", code, out, errOut)
-	}
-
+func configureSSHTransport(t *testing.T, h *harness, bareParent, bareDir string) (sockPath, argvLog, envLog string) {
+	t.Helper()
 	sockDir, err := os.MkdirTemp(os.TempDir(), "pws-")
 	testutil.FailErr(t, "mkdir socket dir", err)
 	t.Cleanup(func() { _ = os.RemoveAll(sockDir) })
-	sockPath := filepath.Join(sockDir, "agent.sock")
+	sockPath = filepath.Join(sockDir, "agent.sock")
 	ln, err := net.Listen("unix", sockPath)
 	testutil.FailErr(t, "listen unix socket", err)
 	t.Cleanup(func() { _ = ln.Close() })
@@ -254,8 +244,8 @@ func TestNetworkCommandsOverSSHRemotesAndEgressGate(t *testing.T) {
 	testutil.FailErr(t, "read .git/config", err)
 	testutil.FailErr(t, "plant repo-local sshCommand", os.WriteFile(cfgPath, append(origCfg, []byte("\n[core]\n\tsshCommand = /bin/false\n")...), 0o644))
 
-	argvLog := filepath.Join(bareParent, "ssh-argv.log")
-	envLog := filepath.Join(bareParent, "ssh-env.log")
+	argvLog = filepath.Join(bareParent, "ssh-argv.log")
+	envLog = filepath.Join(bareParent, "ssh-env.log")
 	sshShim := filepath.Join(bareParent, "ssh")
 	shimBody := fmt.Sprintf(`#!/bin/sh
 case "$*" in
@@ -273,6 +263,23 @@ esac
 
 	gitexec.SetHostConfig(sshTestHostConfig{sshCmd: sshShim})
 	t.Cleanup(func() { gitexec.SetHostConfig(nil) })
+
+	return sockPath, argvLog, envLog
+}
+
+func TestNetworkCommandsOverSSHRemotesAndEgressGate(t *testing.T) {
+	h := newHarness(t)
+	h.git("reset", "--hard", "HEAD")
+	h.git("clean", "-fd")
+
+	bareParent, err := filepath.EvalSymlinks(t.TempDir())
+	testutil.FailErr(t, "eval bare parent", err)
+	bareDir := filepath.Join(bareParent, "remote.git")
+	if out, errOut, code := h.direct(bareParent, "init", "--bare", "-q", "-b", "main", bareDir); code != 0 {
+		t.Fatalf("init bare: %d %s %s", code, out, errOut)
+	}
+
+	sockPath, argvLog, envLog := configureSSHTransport(t, h, bareParent, bareDir)
 
 	scpRemote := "git@ssh.example.test:org/remote.git"
 	urlRemote := "ssh://git@ssh-alt.example.test:2222/org/remote.git"
