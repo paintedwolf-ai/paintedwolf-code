@@ -30,7 +30,7 @@ func TestScheduleLiveProjectionSurvivesCallerContextCancellation(t *testing.T) {
 	// Simulate Stop canceling the in-flight turn's context inside the debounce window.
 	cancel()
 
-	testutil.WaitFor(t, time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		msg, err := mem.GetMessage(context.Background(), sess.ID, "msg-live")
 		return err == nil && msg.Content == "partial before stop"
 	})
@@ -58,7 +58,7 @@ func TestLiveStreamFansContentAndDone(t *testing.T) {
 		if frame.Content != "hello world" {
 			t.Fatalf("frame = %+v", frame)
 		}
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("timeout waiting for live stream frame")
 	}
 
@@ -72,7 +72,7 @@ func TestLiveStreamFansContentAndDone(t *testing.T) {
 		if !frame.Done {
 			t.Fatalf("expected Done, got %+v", frame)
 		}
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("timeout waiting for Done")
 	}
 }
@@ -144,15 +144,12 @@ func TestLiveStreamStopsAdvertisingActiveBeforeTerminalFanout(t *testing.T) {
 		mgr.Finish(t.Context(), sessionID)
 	}()
 
-	deadline := time.After(time.Second)
 	for mgr.ActiveMessageID(sessionID) != "" {
-		select {
-		case <-deadline:
+		if t.Context().Err() != nil {
 			hub.flushMu.Unlock()
 			t.Fatal("stream stayed active while terminal fanout was blocked")
-		default:
-			time.Sleep(time.Millisecond)
 		}
+		time.Sleep(time.Millisecond)
 	}
 	hub.flushMu.Unlock()
 	<-finished

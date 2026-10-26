@@ -104,6 +104,7 @@ func TestSeccompProgramDecides(t *testing.T) {
 	allow := int(unix.SECCOMP_RET_ALLOW)
 	enosys := int(uint32(unix.SECCOMP_RET_ERRNO) | uint32(unix.ENOSYS))
 	eacces := int(uint32(unix.SECCOMP_RET_ERRNO) | uint32(unix.EACCES))
+	eafnosupport := int(uint32(unix.SECCOMP_RET_ERRNO) | uint32(unix.EAFNOSUPPORT))
 	notify := int(uint32(unix.SECCOMP_RET_USER_NOTIF))
 	argsRecord := func(nr uint32, args ...uint32) []byte {
 		b := make([]byte, 64)
@@ -140,6 +141,15 @@ func TestSeccompProgramDecides(t *testing.T) {
 		{"unix raw datagram alias socketpair nonblocking", record(unix.SYS_SOCKETPAIR, unix.AF_UNIX, unix.SOCK_RAW|unix.SOCK_NONBLOCK, 0), eacces},
 		{"unix raw datagram alias socketpair cloexec nonblocking", record(unix.SYS_SOCKETPAIR, unix.AF_UNIX, unix.SOCK_RAW|unix.SOCK_CLOEXEC|unix.SOCK_NONBLOCK, 0), eacces},
 		{"unix seqpacket socket", record(unix.SYS_SOCKET, unix.AF_UNIX, unix.SOCK_SEQPACKET, 0), allow},
+		{"inet6 stream socket", record(unix.SYS_SOCKET, unix.AF_INET6, unix.SOCK_STREAM, 0), allow},
+		{"netlink route socket", record(unix.SYS_SOCKET, unix.AF_NETLINK, unix.SOCK_RAW|unix.SOCK_CLOEXEC, 0), allow},
+		{"vsock stream socket", record(unix.SYS_SOCKET, unix.AF_VSOCK, unix.SOCK_STREAM, 0), eafnosupport},
+		{"vsock datagram socket", record(unix.SYS_SOCKET, unix.AF_VSOCK, unix.SOCK_DGRAM, 0), eafnosupport},
+		{"vsock socketpair", record(unix.SYS_SOCKETPAIR, unix.AF_VSOCK, unix.SOCK_STREAM, 0), eafnosupport},
+		{"bluetooth socket", record(unix.SYS_SOCKET, unix.AF_BLUETOOTH, unix.SOCK_STREAM, 0), eafnosupport},
+		{"packet socket", record(unix.SYS_SOCKET, unix.AF_PACKET, unix.SOCK_RAW, 0), eafnosupport},
+		{"tipc socket", record(unix.SYS_SOCKET, unix.AF_TIPC, unix.SOCK_RDM, 0), eafnosupport},
+		{"family with high bits set", record(unix.SYS_SOCKET, unix.AF_INET|0x10000, unix.SOCK_STREAM, 0), eafnosupport},
 		{"inet datagram socket", record(unix.SYS_SOCKET, unix.AF_INET, unix.SOCK_DGRAM, 0), allow},
 		{"connect", record(unix.SYS_CONNECT, 3, 0, 0), notify},
 		{"bind", record(unix.SYS_BIND, 3, 0, 0), notify},

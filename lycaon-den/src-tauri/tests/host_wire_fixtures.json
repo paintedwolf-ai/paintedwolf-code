@@ -82,6 +82,18 @@
         }
       ]
     },
+    "power_settings_response": {
+      "source": "pkg/api.PowerSettingsResponse",
+      "examples": [
+        {
+          "active_work_count": 1,
+          "inhibiting": true,
+          "keep_awake_while_working": true,
+          "last_error": "last_error",
+          "supported": true
+        }
+      ]
+    },
     "presence_challenge": {
       "source": "pkg/api.PresenceChallenge",
       "examples": [
