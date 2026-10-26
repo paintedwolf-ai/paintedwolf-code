@@ -39,6 +39,7 @@ func TestProviderProjectionDoesNotNarrowAlternatives(t *testing.T) {
 		{"exclusive widening", map[string]any{"oneOf": []any{map[string]any{"type": "string", "const": "a"}, map[string]any{"type": "string", "const": "b"}}}, []any{"a", "b"}},
 		{"nested alternatives", map[string]any{"anyOf": []any{map[string]any{"type": "string"}, map[string]any{"anyOf": []any{map[string]any{"required": []any{"id"}}}}}}, []any{"ok", map[string]any{"id": 1}}},
 		{"conditional", map[string]any{"allOf": []any{map[string]any{"if": map[string]any{"type": "object"}, "then": map[string]any{"required": []any{"id"}}}}}, []any{true, map[string]any{"id": 1}}},
+		{"pattern properties", map[string]any{"type": "object", "patternProperties": map[string]any{"^x": map[string]any{"type": "integer"}}, "additionalProperties": false}, []any{map[string]any{"x": 1}}},
 		{"untyped property", map[string]any{}, []any{true, 1, "ok", map[string]any{}}},
 	}
 	for _, tc := range cases {
@@ -62,7 +63,7 @@ func TestProviderProjectionKeepsSelfContainedUnions(t *testing.T) {
 	for _, kind := range []string{"anyOf", "oneOf", "allOf"} {
 		t.Run(kind, func(t *testing.T) {
 			node := map[string]any{kind: []any{map[string]any{"type": "string"}, map[string]any{"type": "array", "items": map[string]any{"type": "integer"}}}}
-			if got := trimSchemaNode(node); !reflect.DeepEqual(got, node) {
+			if got := projectSchemaNode(node); !reflect.DeepEqual(got, node) {
 				t.Fatalf("union changed: %v", got)
 			}
 		})
@@ -71,15 +72,15 @@ func TestProviderProjectionKeepsSelfContainedUnions(t *testing.T) {
 
 func TestProviderProjectionBranchAndPropertyShapes(t *testing.T) {
 	for _, raw := range []any{nil, []any{}, []any{true}} {
-		if got, ok := trimSchemaBranchList("anyOf", raw); ok {
+		if got, ok := projectSchemaBranches("anyOf", raw); ok {
 			t.Fatalf("unsupported branches survived: %v", got)
 		}
 	}
-	if got := trimPropertySchema(true); len(got) != 0 {
+	if got := projectPropertySchema(true); len(got) != 0 {
 		t.Fatalf("boolean schema invented constraints: %v", got)
 	}
 	node := map[string]any{"type": "object", "required": []string{"declared", "elsewhere"}, "properties": map[string]any{"declared": map[string]any{"type": "string"}}}
-	if got := trimSchemaNode(node)["required"]; !reflect.DeepEqual(got, []any{"declared"}) {
+	if got := projectSchemaNode(node)["required"]; !reflect.DeepEqual(got, []any{"declared"}) {
 		t.Fatalf("required = %v", got)
 	}
 	if got := ProjectProviderToolMeta(ToolMeta{}).ArgsSchema; got["type"] != "object" {

@@ -6,7 +6,7 @@ import (
 )
 
 // Scalar constraints survive projection at every depth.
-var coordinatorSchemaValueKeys = []string{
+var providerSchemaValueKeys = []string{
 	"description", "enum", "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum",
 	"multipleOf", "minLength", "maxLength", "pattern", "format", "minItems", "maxItems",
 	"uniqueItems", "minProperties", "maxProperties", "default", "examples",
@@ -16,15 +16,15 @@ var coordinatorSchemaValueKeys = []string{
 func ProjectProviderToolMeta(meta ToolMeta) ToolMeta {
 	out := meta
 	out.Description = strings.TrimSpace(meta.Description)
-	out.ArgsSchema = trimArgsSchema(meta.ArgsSchema)
+	out.ArgsSchema = projectArgsSchema(meta.ArgsSchema)
 	return out
 }
 
-func trimArgsSchema(schema map[string]any) map[string]any {
+func projectArgsSchema(schema map[string]any) map[string]any {
 	if schema == nil {
 		return map[string]any{"type": "object"}
 	}
-	out := trimSchemaNode(schema)
+	out := projectSchemaNode(schema)
 	for _, key := range functionParametersRootForbiddenKeys {
 		delete(out, key)
 	}
@@ -34,55 +34,47 @@ func trimArgsSchema(schema map[string]any) map[string]any {
 	return out
 }
 
-func trimSchemaNode(schema map[string]any) map[string]any {
+func projectSchemaNode(schema map[string]any) map[string]any {
 	out := map[string]any{}
 	if typ, ok := schemaTypeValue(schema); ok {
 		out["type"] = typ
 	}
-	for _, key := range coordinatorSchemaValueKeys {
+	for _, key := range providerSchemaValueKeys {
 		if val, ok := schema[key]; ok {
 			out[key] = val
 		}
 	}
-	if req, ok := copySchemaList(schema["required"]); ok {
-		props, _ := schema["properties"].(map[string]any)
-		required := make([]any, 0, len(req))
-		for _, raw := range req {
-			if name, ok := raw.(string); ok {
-				if _, declared := props[name]; declared {
-					required = append(required, name)
-				}
-			}
-		}
-		if len(required) > 0 {
-			out["required"] = required
-		}
+	if required := projectRequiredProperties(schema); len(required) > 0 {
+		out["required"] = required
 	}
 	if props, ok := schema["properties"].(map[string]any); ok {
 		trimmed := make(map[string]any, len(props))
 		for name, raw := range props {
-			trimmed[name] = trimPropertySchema(raw)
+			trimmed[name] = projectPropertySchema(raw)
 		}
 		out["properties"] = trimmed
 	}
-	if items, ok := schema["items"].(map[string]any); ok {
-		out["items"] = trimSchemaNode(items)
+	if items, ok := schema["items"].(map[string]any); ok && schema["prefixItems"] == nil {
+		out["items"] = projectSchemaNode(items)
 	}
-	switch additional := schema["additionalProperties"].(type) {
-	case bool:
-		out["additionalProperties"] = additional
-	case map[string]any:
-		out["additionalProperties"] = trimSchemaNode(additional)
+	// Pattern properties are omitted, so their values cannot become additional.
+	if schema["patternProperties"] == nil {
+		switch additional := schema["additionalProperties"].(type) {
+		case bool:
+			out["additionalProperties"] = additional
+		case map[string]any:
+			out["additionalProperties"] = projectSchemaNode(additional)
+		}
 	}
 	for _, combinator := range []string{"oneOf", "anyOf", "allOf"} {
-		if trimmed, ok := trimSchemaBranchList(combinator, schema[combinator]); ok {
+		if trimmed, ok := projectSchemaBranches(combinator, schema[combinator]); ok {
 			out[combinator] = trimmed
 		}
 	}
 	return out
 }
 
-func trimSchemaBranchList(combinator string, raw any) ([]any, bool) {
+func projectSchemaBranches(combinator string, raw any) ([]any, bool) {
 	items, ok := raw.([]any)
 	if !ok || len(items) == 0 {
 		return nil, false
@@ -93,7 +85,7 @@ func trimSchemaBranchList(combinator string, raw any) ([]any, bool) {
 		if !ok {
 			return nil, false
 		}
-		projected := trimSchemaNode(branch)
+		projected := projectSchemaNode(branch)
 		_, typed := schemaTypeValue(projected)
 		if !typed && !hasSchemaCombinator(projected) {
 			// Dropping one alternative would exclude valid arguments.
@@ -137,12 +129,12 @@ func hasSchemaCombinator(schema map[string]any) bool {
 	return false
 }
 
-func trimPropertySchema(raw any) map[string]any {
+func projectPropertySchema(raw any) map[string]any {
 	prop, ok := raw.(map[string]any)
 	if !ok {
 		return map[string]any{}
 	}
-	return trimSchemaNode(prop)
+	return projectSchemaNode(prop)
 }
 
 func copySchemaList(raw any) ([]any, bool) {
@@ -158,4 +150,18 @@ func copySchemaList(raw any) ([]any, bool) {
 	default:
 		return nil, false
 	}
+}
+
+func projectRequiredProperties(schema map[string]any) []any {
+	required, _ := copySchemaList(schema["required"])
+	props, _ := schema["properties"].(map[string]any)
+	out := make([]any, 0, len(required))
+	for _, raw := range required {
+		if name, ok := raw.(string); ok {
+			if _, declared := props[name]; declared {
+				out = append(out, name)
+			}
+		}
+	}
+	return out
 }
