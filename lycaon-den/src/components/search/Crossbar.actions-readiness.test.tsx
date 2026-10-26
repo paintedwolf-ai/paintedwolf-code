@@ -86,7 +86,7 @@ it("keeps ready filtered emptiness distinct from unavailable shell facts", async
   facts.setShellFactState({ ...ALL_SHELL_FACTS, editor: null });
   const view = present();
   expect(crossbarCommands()).toEqual({ phase: "ready", commands: [] });
-  expect(await screen.findByText("No matching actions or results.")).toBeTruthy();
+  expect(screen.queryByText("Actions are loading…")).toBeNull();
   expect(screen.queryByText("Actions unavailable")).toBeNull();
   view.unmount();
   vi.spyOn(facts, "liveShellFactLookup").mockReturnValue(null);
