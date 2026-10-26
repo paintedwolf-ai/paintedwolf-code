@@ -40,7 +40,7 @@ func TestProbeAnswersWhenTheEngineHoldsATerminal(t *testing.T) {
 		if err != nil {
 			t.Fatalf("helper: %v", err)
 		}
-	case <-time.After(20 * time.Second):
+	case <-t.Context().Done():
 		_ = helper.Process.Kill()
 		t.Fatal("helper never finished")
 	}

@@ -139,8 +139,7 @@ func TestWakeQueuedDuringHostTurnDrainsOnRelease(t *testing.T) {
 	if !engine.Turns.runPromptSync(context.Background(), "s1", pendingLoopWake{wake: anchor.WorkerTaskFinished, seq: engine.Nudges.nudgeSeq.Add(1)}) {
 		t.Fatal("outer host turn should run")
 	}
-	deadline := time.Now().Add(5 * time.Second)
-	for prompts.Load() < 2 && time.Now().Before(deadline) {
+	for prompts.Load() < 2 && t.Context().Err() == nil {
 		time.Sleep(10 * time.Millisecond)
 	}
 	if got := prompts.Load(); got != 2 {
@@ -175,7 +174,7 @@ func TestWakeQueuedDuringPromptExecutionDrainsOnRelease(t *testing.T) {
 		t.Fatal("a wake during execution must wait for the turn")
 	}
 	finishExecution()
-	testutil.WaitFor(t, 2*time.Second, func() bool { return prompts.Load() == 1 })
+	testutil.WaitFor(t, func() bool { return prompts.Load() == 1 })
 	if _, ok := engine.Nudges.Pending("s1"); ok {
 		t.Fatal("the released turn must drain the parked wake")
 	}

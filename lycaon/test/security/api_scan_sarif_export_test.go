@@ -6,7 +6,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	wire "github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/wiring"
@@ -18,7 +17,7 @@ func TestAPIScanSARIFExportHappyPath(t *testing.T) {
 	cancel := h.StartBackgroundWorkers(t, context.Background())
 	t.Cleanup(cancel)
 	created := enqueueCodeScan(t, h.Server, projectDir, []wire.ScanCategory{wire.ScanCategorySecret})
-	got := waitScanComplete(t, h.Server, created.ProjectID, created.ID, 90*time.Second)
+	got := waitScanComplete(t, h.Server, created.ProjectID, created.ID)
 	if got.Status != wire.CodeScanStatusComplete {
 		t.Fatalf("scan status = %q", got.Status)
 	}

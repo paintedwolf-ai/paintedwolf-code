@@ -23,7 +23,7 @@ func TestCadenceDeadlineWakesWithoutAnotherWrite(t *testing.T) {
 	scantest.RunService(t, cadence.Run)
 	testutil.FailErr(t, "write source", os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n"), 0o600))
 	testutil.FailErr(t, "note source", noteCadenceWrites(t.Context(), cadence, root, []string{"main.go"}))
-	testutil.WaitFor(t, 10*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		rows, err := store.ListByCanonicalPath(t.Context(), canonical)
 		return err == nil && len(rows) == 3
 	})
@@ -36,7 +36,7 @@ func TestCadenceSleepsAfterBaseline(t *testing.T) {
 	database := &scantest.CountedDB{Handle: store.DB()}
 	cadence.Store = scanbase.NewSQLStore(database)
 	scantest.RunService(t, cadence.Run)
-	testutil.WaitFor(t, 5*time.Second, func() bool { return database.Reads.Load() > 0 })
+	testutil.WaitFor(t, func() bool { return database.Reads.Load() > 0 })
 	scantest.AssertQuiet(t, database)
 }
 

@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -53,19 +52,15 @@ func TestPromptReferencePathFileAccepted(t *testing.T) {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
 	}
 
-	var messages []wire.Message
-	if !testutil.WaitForNoFatal(5*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		msgs := listMessagesHTTP(t, srv, sess.ID)
-		messages = msgs
 		for _, m := range msgs {
 			if m.Role == wire.MessageRoleUser && strings.Contains(m.Content, "[User attached file: readme.md]") {
 				return true
 			}
 		}
 		return false
-	}) {
-		t.Fatalf("timed out waiting for reference fence; messages=%+v", messages)
-	}
+	})
 }
 
 func TestPromptReferencePathOutOfJail(t *testing.T) {
@@ -140,10 +135,8 @@ func TestPromptReferenceArtifactRelink(t *testing.T) {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
 	}
 
-	var messages []wire.Message
-	if !testutil.WaitForNoFatal(5*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		msgs := listMessagesHTTP(t, srv, sess.ID)
-		messages = msgs
 		for _, m := range msgs {
 			if m.Role == wire.MessageRoleUser {
 				for _, id := range m.ArtifactIDs {
@@ -154,9 +147,7 @@ func TestPromptReferenceArtifactRelink(t *testing.T) {
 			}
 		}
 		return false
-	}) {
-		t.Fatalf("timed out waiting for artifact re-link; messages=%+v", messages)
-	}
+	})
 }
 
 func TestPromptReferenceSearchHitMissing(t *testing.T) {

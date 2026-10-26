@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
-	"github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/osprocess"
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -75,21 +74,17 @@ func TestAbortEndsATurnBlockedInACommand(t *testing.T) {
 	}()
 	job := waitForJobPID(t, pidFile)
 
-	started := time.Now()
 	testutil.FailErr(t, "abort", mgr.Stops.Abort(ctx, sess.ID, "user stopped"))
-	if elapsed := time.Since(started); elapsed > exec.TerminateGrace+10*time.Second {
-		t.Fatalf("abort took %v", elapsed)
-	}
 	var turn commandTurnResult
 	select {
 	case turn = <-turnDone:
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("the turn did not unwind after abort")
 	}
 	if !errors.Is(turn.err, context.Canceled) {
 		t.Fatalf("turn result = %q, %v; want the cancelled command", turn.output, turn.err)
 	}
-	testutil.WaitFor(t, 5*time.Second, func() bool { return !osprocess.Alive(job) })
+	testutil.WaitFor(t, func() bool { return !osprocess.Alive(job) })
 	got, err := st.Get(ctx, sess.ID)
 	testutil.FailErr(t, "get session", err)
 	if got.Status != api.SessionStatusIdle {
@@ -111,11 +106,7 @@ func TestAbortStopsWithoutATurnThatNeverReleases(t *testing.T) {
 
 	stuck := mgr.Runner.Execution.Prompt.Acquire(sess.ID)
 	stuck.Lock()
-	started := time.Now()
 	testutil.FailErr(t, "abort", mgr.Stops.Abort(ctx, sess.ID, "user stopped"))
-	if elapsed := time.Since(started); elapsed > 5*time.Second {
-		t.Fatalf("abort waited %v on a turn that never released", elapsed)
-	}
 	got, err := st.Get(ctx, sess.ID)
 	testutil.FailErr(t, "get session", err)
 	if got.Status != api.SessionStatusIdle {
@@ -123,7 +114,7 @@ func TestAbortStopsWithoutATurnThatNeverReleases(t *testing.T) {
 	}
 	stuck.Unlock()
 	// The abandoned acquisition releases the lock once the turn does.
-	testutil.WaitFor(t, 5*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		probe := mgr.Runner.Execution.Prompt.Acquire(sess.ID)
 		if !probe.TryLock() {
 			return false
@@ -136,7 +127,7 @@ func TestAbortStopsWithoutATurnThatNeverReleases(t *testing.T) {
 func waitForJobPID(t *testing.T, path string) int {
 	t.Helper()
 	var pid int
-	testutil.WaitFor(t, 20*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		raw, err := os.ReadFile(path)
 		if err != nil {
 			return false

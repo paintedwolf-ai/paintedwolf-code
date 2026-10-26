@@ -88,9 +88,8 @@ func TestProbeAcceptsAnswerWithBackgroundChildHoldingStdout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse background pid %q: %v", raw, err)
 	}
-	deadline := time.Now().Add(5 * time.Second)
 	for osprocess.Alive(background) {
-		if time.Now().After(deadline) {
+		if t.Context().Err() != nil {
 			_ = (&os.Process{Pid: background}).Kill()
 			t.Fatalf("profile helper %d outlived the probe that started it", background)
 		}

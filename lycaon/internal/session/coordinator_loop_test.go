@@ -293,7 +293,7 @@ func TestLoopDefersUntilIdle(t *testing.T) {
 	}
 	finishExecution()
 	fix.mgr.Runner.Coordinator.CoordinatorLoop().Nudges.DrainPending(ctx, fix.sess.ID)
-	testutil.WaitFor(t, 3*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		msgs, err := fix.store.GetMessages(ctx, fix.sess.ID)
 		if err != nil {
 			return false
@@ -374,7 +374,7 @@ func TestImplementWorkerSummaryLoopWakesWithCompletingJobStillRunning(t *testing
 	}
 	simulateWorkerJobComplete(t, mgr, q, jobID)
 
-	testutil.WaitFor(t, 5*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		msgs, err := store.GetMessages(ctx, sess.ID)
 		if err != nil {
 			return false
@@ -455,7 +455,7 @@ func TestImplementWorkerCompleteFiresSingleLoopWake(t *testing.T) {
 	}
 	simulateWorkerJobComplete(t, mgr, q, jobID)
 
-	testutil.WaitFor(t, 5*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		msgs, err := store.GetMessages(ctx, sess.ID)
 		if err != nil {
 			return false
@@ -569,7 +569,7 @@ func TestImplementWorkerSummaryLoopWakesCoordinator(t *testing.T) {
 	}
 	simulateWorkerJobComplete(t, mgr, q, jobID)
 
-	testutil.WaitFor(t, 5*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		msgs, err := store.GetMessages(ctx, sess.ID)
 		if err != nil {
 			return false

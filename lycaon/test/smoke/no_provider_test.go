@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -79,7 +78,7 @@ func TestServeWithoutMockLLMPromptFails(t *testing.T) {
 		t.Fatalf("decode prompt accept: %v", err)
 	}
 	assertSmokePromptIdentity(t, accepted, operationID)
-	waitSmokePromptComplete(t, baseURL, apiToken, sessionID, accepted.MessageID, "hello", 30*time.Second)
+	waitSmokePromptComplete(t, baseURL, apiToken, sessionID, accepted.MessageID, "hello")
 
 	msgsReq, err := http.NewRequestWithContext(t.Context(), http.MethodGet, baseURL+"/v1/sessions/"+sessionID+"/messages", nil)
 	if err != nil {

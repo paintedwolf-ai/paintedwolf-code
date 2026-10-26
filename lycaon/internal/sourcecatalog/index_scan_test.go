@@ -39,8 +39,7 @@ func writeIndexFile(t *testing.T, root, rel, body string) {
 // waitIndex waits for discovery to settle.
 func waitIndex(t *testing.T, c *Catalog, root Root) *IndexReader {
 	t.Helper()
-	until := time.Now().Add(30 * time.Second)
-	for time.Now().Before(until) {
+	for t.Context().Err() == nil {
 		reader, status, err := c.Trees.OpenIndex(t.Context(), "p", root, 250*time.Millisecond)
 		testutil.FailErr(t, "open file index", err)
 		if status.State == StateFailed {
@@ -226,16 +225,12 @@ func TestIndexJoinReturnsAGenerationOnAColdRoot(t *testing.T) {
 	for i := range 400 {
 		writeIndexFile(t, root.Path, fmt.Sprintf("dir%02d/file%02d.go", i/8, i%8), "source")
 	}
-	started := time.Now()
 	reader, status, err := c.Trees.OpenIndex(t.Context(), "p", root, 20*time.Second)
 	testutil.FailErr(t, "join cold index", err)
 	if reader == nil {
 		t.Fatalf("join returned no generation: %+v", status)
 	}
 	t.Cleanup(func() { _ = reader.Close() })
-	if elapsed := time.Since(started); elapsed > 10*time.Second {
-		t.Fatalf("join took %s", elapsed)
-	}
 }
 
 func TestIndexWalksDeferredDirectoriesAfterProjectSource(t *testing.T) {

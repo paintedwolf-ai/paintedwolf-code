@@ -5,13 +5,13 @@ package exec
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"syscall"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -44,14 +44,14 @@ func TestUnixGuardTerminateEndsJobsOutsideTheLeadersGroup(t *testing.T) {
 	job := waitForPIDFile(t, pidFile)
 	requireOwnGroup(t, cmd.Process.Pid, job)
 
-	started := time.Now()
 	guard.terminate(cmd)
-	_ = cmd.Wait()
+	waitErr := cmd.Wait()
 	guard.release()
-	if elapsed := time.Since(started); elapsed > TerminateGrace {
-		t.Fatalf("a tree that honours SIGTERM took %v, want under the %v kill grace", elapsed, TerminateGrace)
+	var exitErr *exec.ExitError
+	if !errors.As(waitErr, &exitErr) || exitErr.Sys().(syscall.WaitStatus).Signal() != syscall.SIGTERM {
+		t.Fatalf("leader exit = %v, want SIGTERM before kill escalation", waitErr)
 	}
-	if err := waitForProcessGone(job, 5*time.Second); err != nil {
+	if err := waitForProcessGone(t.Context(), job); err != nil {
 		_ = syscall.Kill(job, syscall.SIGKILL)
 		testutil.FailErr(t, "job outside the leader's group outlived terminate", err)
 	}
@@ -71,15 +71,14 @@ func TestUnixGuardTerminateKillsATreeIgnoringTerm(t *testing.T) {
 	testutil.FailErr(t, "guard onStarted", guard.onStarted(cmd))
 	job := waitForPIDFile(t, pidFile)
 
-	started := time.Now()
 	guard.terminate(cmd)
-	_ = cmd.Wait()
+	waitErr := cmd.Wait()
 	guard.release()
-	elapsed := time.Since(started)
-	if elapsed < TerminateGrace/2 || elapsed > TerminateGrace+5*time.Second {
-		t.Fatalf("kill fallback fired after %v, want about the %v grace", elapsed, TerminateGrace)
+	var exitErr *exec.ExitError
+	if !errors.As(waitErr, &exitErr) || exitErr.Sys().(syscall.WaitStatus).Signal() != syscall.SIGKILL {
+		t.Fatalf("leader exit = %v, want SIGKILL after grace escalation", waitErr)
 	}
-	if err := waitForProcessGone(job, 5*time.Second); err != nil {
+	if err := waitForProcessGone(t.Context(), job); err != nil {
 		_ = syscall.Kill(job, syscall.SIGKILL)
 		testutil.FailErr(t, "job ignoring SIGTERM outlived the kill fallback", err)
 	}
@@ -96,7 +95,6 @@ func TestAsyncPipelineKillEndsJobsHoldingItsOutputPipe(t *testing.T) {
 	testutil.FailErr(t, "start async", err)
 	job := waitForPIDFile(t, pidFile)
 
-	started := time.Now()
 	run.Kill()
 	done := make(chan struct{})
 	go func() {
@@ -105,14 +103,11 @@ func TestAsyncPipelineKillEndsJobsHoldingItsOutputPipe(t *testing.T) {
 	}()
 	select {
 	case <-done:
-	case <-time.After(TerminateGrace + 10*time.Second):
+	case <-t.Context().Done():
 		_ = syscall.Kill(job, syscall.SIGKILL)
 		t.Fatal("async pipeline never settled after Kill")
 	}
-	if elapsed := time.Since(started); elapsed > TerminateGrace+5*time.Second {
-		t.Fatalf("settling took %v", elapsed)
-	}
-	if err := waitForProcessGone(job, 5*time.Second); err != nil {
+	if err := waitForProcessGone(t.Context(), job); err != nil {
 		_ = syscall.Kill(job, syscall.SIGKILL)
 		testutil.FailErr(t, "job holding the output pipe outlived Kill", err)
 	}

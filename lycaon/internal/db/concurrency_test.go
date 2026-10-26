@@ -46,7 +46,7 @@ func TestWALReaderContinuesWhileWriterTransactionIsOpen(t *testing.T) {
 		if value != "before" {
 			t.Fatalf("reader saw %q, want committed snapshot before", value)
 		}
-	case <-time.After(2 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("reader blocked behind writer transaction; WAL read concurrency is not active")
 	}
 	testutil.FailErr(t, "commit writer", tx.Commit())

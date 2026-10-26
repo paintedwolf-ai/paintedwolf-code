@@ -68,8 +68,7 @@ func newBlockingCadence(t *testing.T, clock *testClock) (*Service, *scanbase.SQL
 
 func waitFor(t *testing.T, ready func() bool) {
 	t.Helper()
-	deadline := time.Now().Add(10 * time.Second)
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		if ready() {
 			return
 		}
@@ -77,4 +76,3 @@ func waitFor(t *testing.T, ready func() bool) {
 	}
 	t.Fatal("condition not reached in time")
 }
-

@@ -12,23 +12,31 @@ import (
 )
 
 func TestPoliteAcquirePacesRequestStarts(t *testing.T) {
-	resetPoliteness(40 * time.Millisecond)
+	const interval = 40 * time.Millisecond
+	resetPoliteness(interval)
 	t.Cleanup(func() { resetPoliteness(5 * time.Millisecond) })
 
-	start := time.Now()
-	var starts []time.Duration
+	stats := newSearchStats("t-polite")
+	ctx := withSearchStats(t.Context(), stats)
+	var nextSlots []time.Time
 	for i := 0; i < 3; i++ {
-		release, err := politeAcquire(t.Context(), "paced.example")
+		release, err := politeAcquire(ctx, "paced.example")
 		if err != nil {
 			t.Fatalf("acquire %d: %v", i, err)
 		}
-		starts = append(starts, time.Since(start))
+		g := gateFor("paced.example")
+		g.mu.Lock()
+		nextSlots = append(nextSlots, g.nextAt)
+		g.mu.Unlock()
 		release()
 	}
-	for i := 1; i < len(starts); i++ {
-		if gap := starts[i] - starts[i-1]; gap < 30*time.Millisecond {
-			t.Fatalf("starts = %v want >= interval between request starts", starts)
+	for i := 1; i < len(nextSlots); i++ {
+		if nextSlots[i].Before(nextSlots[i-1].Add(interval)) {
+			t.Fatalf("nextSlots = %v want >= %v between scheduled slots", nextSlots, interval)
 		}
+	}
+	if stats.politeWaitNs.Load() <= 0 {
+		t.Fatalf("politeWaitNs = %d want paced wait recorded across consecutive acquires", stats.politeWaitNs.Load())
 	}
 }
 

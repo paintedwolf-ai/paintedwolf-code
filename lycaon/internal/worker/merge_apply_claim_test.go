@@ -75,7 +75,7 @@ func TestMergeApplyLeaseLossCancelsActiveWriter(t *testing.T) {
 		if !errors.Is(context.Cause(claimCtx), errMergeApplyClaimLost) {
 			t.Fatalf("claim cause = %v", context.Cause(claimCtx))
 		}
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("active writer was not canceled after losing its merge lease")
 	}
 	if err := store.ReleaseMergeApply(t.Context(), "job-lease-loss", claim.token); !errors.Is(err, errMergeApplyClaimLost) {

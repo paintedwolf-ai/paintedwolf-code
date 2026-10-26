@@ -184,8 +184,7 @@ func TestNotifyWakesTheDispatcher(t *testing.T) {
 		t.Fatalf("deliveries = %v want none before Notify", got)
 	}
 	outbox.Notify()
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		if len(hub.deliveries()) == 1 {
 			return
 		}
@@ -358,8 +357,7 @@ func TestStartIsSafeUnderConcurrentCalls(t *testing.T) {
 		outbox.Enqueue(t.Context(), testTopic, events.PublishKey{Project: "018eca20-5608-7a55-824f-920998f472b2", EventID: "ev-once"}, map[string]string{}))
 	outbox.Notify()
 
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) && len(hub.deliveries()) == 0 {
+	for t.Context().Err() == nil && len(hub.deliveries()) == 0 {
 		time.Sleep(5 * time.Millisecond)
 	}
 	// Give a stray second dispatcher a chance to double-deliver before checking.

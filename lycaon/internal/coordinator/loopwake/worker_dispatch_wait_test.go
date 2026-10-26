@@ -105,12 +105,12 @@ func TestWorkerWaitDeliveryFollowsHostLaneRelease(t *testing.T) {
 	testutil.FailErr(t, "arm worker wait", err)
 	f.loop.Turns.promptActive.Store("session", struct{}{})
 	f.loop.Cycles.OnWorkerCycleTerminal(t.Context(), "session", "research")
-	f.loop.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, 2*time.Second))
+	f.loop.Turns.WaitForAsyncTurns(t.Context())
 	if resumes.Load() != 0 {
 		t.Fatal("wait delivery overlapped the host lane")
 	}
 	f.loop.Turns.releasePromptActiveAndRedrain(t.Context(), "session")
-	f.loop.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, 2*time.Second))
+	f.loop.Turns.WaitForAsyncTurns(t.Context())
 	if resumes.Load() != 1 || f.loop.Nudges.HasPendingLoopWakes("session") {
 		t.Fatalf("resumes=%d pending=%v", resumes.Load(), f.loop.Nudges.HasPendingLoopWakes("session"))
 	}

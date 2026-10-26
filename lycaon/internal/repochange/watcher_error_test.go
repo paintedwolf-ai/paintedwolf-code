@@ -5,7 +5,6 @@ import (
 	"errors"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -40,7 +39,7 @@ func TestWatcherErrorInvalidatesRootAndCoverage(t *testing.T) {
 	go func() { w.loop(t.Context()); close(finished) }()
 	defer func() { close(w.done); <-finished }()
 	platform.errors <- errors.New("watch stream failed")
-	testutil.WaitFor(t, time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		ResetDebouncerForTest(t.Context())
 		return observed.Load()
 	})

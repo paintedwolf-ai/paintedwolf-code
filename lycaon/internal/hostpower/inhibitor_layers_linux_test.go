@@ -6,10 +6,10 @@ import (
 	"errors"
 	"io"
 	"os"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/godbus/dbus/v5"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -22,7 +22,7 @@ func (s *staticInhibitor) Acquire() (lease, error) { return s.held, nil }
 
 // descriptorsClosed reports whether every inhibitor descriptor the login
 // manager fixture handed out has been closed, once the fixture drops its own.
-func descriptorsClosed(t *testing.T, fixture *fixtureLogind, reader *os.File, within time.Duration) bool {
+func descriptorsClosed(t *testing.T, fixture *fixtureLogind, reader *os.File) bool {
 	t.Helper()
 	fixture.mu.Lock()
 	_ = fixture.writer.Close()
@@ -35,7 +35,7 @@ func descriptorsClosed(t *testing.T, fixture *fixtureLogind, reader *os.File, wi
 			t.Fatalf("inhibitor pipe = %v", err)
 		}
 		return true
-	case <-time.After(within):
+	case <-t.Context().Done():
 		return false
 	}
 }
@@ -70,16 +70,29 @@ func TestLegacyLoginManagerHoldsTheSessionSuspendLayerToo(t *testing.T) {
 	if status := controller.Snapshot(); !status.Inhibiting || status.Provider != "login1+portal" {
 		t.Fatalf("status = %+v", status)
 	}
-	if descriptorsClosed(t, logind, reader, 50*time.Millisecond) {
-		t.Fatal("system layer ended while the assertion was held")
+	logind.mu.Lock()
+	_ = logind.writer.Close()
+	logind.mu.Unlock()
+	ended := make(chan error, 1)
+	go func() { var data [1]byte; _, err := reader.Read(data[:]); ended <- err }()
+	runtime.Gosched()
+	select {
+	case err := <-ended:
+		t.Fatalf("system layer ended while the assertion was held: %v", err)
+	default:
 	}
 	testutil.FailErr(t, "release both layers", controller.Close())
 	select {
 	case <-portal.closed:
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("release left the session layer open")
 	}
-	if !descriptorsClosed(t, logind, reader, time.Second) {
+	select {
+	case err := <-ended:
+		if !errors.Is(err, io.EOF) {
+			t.Fatalf("inhibitor pipe = %v", err)
+		}
+	case <-t.Context().Done():
 		t.Fatal("release left the system layer open")
 	}
 }
@@ -103,7 +116,7 @@ func TestLegacyLoginManagerAloneCannotKeepTheDesktopFromSuspending(t *testing.T)
 	if held != nil || err == nil || !strings.Contains(err.Error(), "override sleep locks") {
 		t.Fatalf("legacy login manager alone lease=%v error=%v", held, err)
 	}
-	if !descriptorsClosed(t, logind, reader, time.Second) {
+	if !descriptorsClosed(t, logind, reader) {
 		t.Fatal("refused assertion left a sleep lock behind")
 	}
 }
@@ -123,7 +136,7 @@ func TestBindingLoginManagerHoldsAloneAndProbesOncePerInstance(t *testing.T) {
 		t.Fatalf("login manager modes = %v", got)
 	}
 	testutil.FailErr(t, "release", held.Release())
-	if !descriptorsClosed(t, logind, reader, time.Second) {
+	if !descriptorsClosed(t, logind, reader) {
 		t.Fatal("mode probe or lease left a sleep lock behind")
 	}
 }
@@ -138,7 +151,7 @@ func TestRefusedSessionLayerFallsBackOnlyToABindingLoginManager(t *testing.T) {
 			if held != nil || err == nil || !strings.Contains(err.Error(), "inhibit denied") {
 				t.Fatalf("legacy with refused portal lease=%v error=%v", held, err)
 			}
-			if !descriptorsClosed(t, logind, reader, time.Second) {
+			if !descriptorsClosed(t, logind, reader) {
 				t.Fatal("refused assertion left a sleep lock behind")
 			}
 			continue
@@ -166,10 +179,10 @@ func TestLosingOneLayerReleasesTheWholeAssertion(t *testing.T) {
 		if err == nil || !strings.HasPrefix(err.Error(), "portal: ") {
 			t.Fatalf("layer loss = %v", err)
 		}
-	case <-time.After(2 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("session layer loss did not end the assertion")
 	}
-	if !descriptorsClosed(t, logind, reader, time.Second) {
+	if !descriptorsClosed(t, logind, reader) {
 		t.Fatal("session layer loss left the system layer held")
 	}
 	testutil.FailErr(t, "release after loss", held.Release())

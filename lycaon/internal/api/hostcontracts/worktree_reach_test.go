@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	hostapi "github.com/lycaon/lycaon/internal/api"
@@ -163,7 +162,7 @@ func TestWorktreeReach_tabAndBoardAgree(t *testing.T) {
 	// The board reads Git status through the status cache, which fills after
 	// its first revalidation.
 	var snap *wire.BoardSnapshot
-	testutil.WaitFor(t, 10*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		built, err := srv.Admin.Project.Sandboxes.Board.Build(t.Context(), projectID, binding.WorktreePath, sess.ID, wire.BoardDetailLevelCompact, agentRoots)
 		testutil.FailErr(t, "board Build", err)
 		snap = built

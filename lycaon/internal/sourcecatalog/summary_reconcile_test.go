@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -216,15 +217,19 @@ func TestClearTreeStoresExcludesNewAdmissionAndRetiresCapturedStore(t *testing.T
 	}
 	opened := make(chan *indexStore, 1)
 	openErr := make(chan error, 1)
+	started := make(chan struct{})
 	go func() {
+		close(started)
 		store, err := c.Trees.indexStore(t.Context(), "p", root)
 		opened <- store
 		openErr <- err
 	}()
+	<-started
+	runtime.Gosched()
 	select {
 	case <-opened:
 		t.Fatal("new store admitted before catalog storage clear completed")
-	case <-time.After(20 * time.Millisecond):
+	default:
 	}
 	close(release)
 	testutil.FailErr(t, "clear tree stores", <-cleared)
@@ -264,10 +269,19 @@ func TestClearTreeStoresJoinsPreviouslyAdmittedWriter(t *testing.T) {
 			return nil
 		})
 	}()
+	for t.Context().Err() == nil {
+		store.core().mu.Lock()
+		retired := store.core().retired
+		store.core().mu.Unlock()
+		if retired {
+			break
+		}
+		runtime.Gosched()
+	}
 	select {
 	case <-clearing:
 		t.Fatal("storage clear overtook an admitted writer")
-	case <-time.After(20 * time.Millisecond):
+	default:
 	}
 	unwrite()
 	select {

@@ -10,7 +10,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	"testing"
-	"time"
 )
 
 func TestBuildPublishesDeclaredOAREventThroughAcquiredStream(t *testing.T) {
@@ -35,8 +34,6 @@ func TestBuildPublishesDeclaredOAREventThroughAcquiredStream(t *testing.T) {
 	if len(result.PublishedEvents) != 1 || result.Decision == nil || result.Decision.Code != rule.ID || result.Decision.Rule != rule.Qualified() || result.Decision.Effect != oar.EffectWarn {
 		t.Fatalf("declared event was not applied: %#v", result)
 	}
-	deadline := time.NewTimer(time.Second)
-	defer deadline.Stop()
 	for {
 		select {
 		case envelope := <-stream:
@@ -59,7 +56,7 @@ func TestBuildPublishesDeclaredOAREventThroughAcquiredStream(t *testing.T) {
 			default:
 			}
 			return
-		case <-deadline.C:
+		case <-t.Context().Done():
 			t.Fatal("declared OAR event did not reach the host stream")
 		}
 	}

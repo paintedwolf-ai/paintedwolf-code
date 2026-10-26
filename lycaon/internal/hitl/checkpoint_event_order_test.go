@@ -3,7 +3,6 @@ package hitl_test
 import (
 	"encoding/json"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/authzcontext"
 	"github.com/lycaon/lycaon/internal/eventoutbox"
@@ -35,10 +34,10 @@ func TestCheckpointEventsFollowWorkerRegistration(t *testing.T) {
 	manager := hitl.NewCheckpoints(store, &events.Publisher{Hub: hub}, authzcontext.SQLRecorder(database))
 	response, err := requestExplicitApprovalCheckpoint(t, testdbseed.OwnerCaller(t, t.Context(), database), manager, hitl.CheckpointRequest{
 		SessionID: "child", Kind: api.CheckpointKindToolApproval, ProposedAction: &hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-},
-},
+			Invocation: hitl.ActionInvocation{
+				Tool: "command",
+			},
+		},
 	})
 	testutil.FailErr(t, "create child approval", err)
 	testutil.FailErr(t, "update rationale", manager.PatchPendingToolApprovalAIRationale(testdbseed.OwnerCaller(t, t.Context(), database), response.CheckpointID, "Fixture rationale"))
@@ -71,7 +70,7 @@ func nextCheckpointLifecycleEvent(t *testing.T, stream <-chan api.EventEnvelope)
 	select {
 	case event := <-stream:
 		return event
-	case <-time.After(2 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("checkpoint lifecycle event was not delivered")
 		return api.EventEnvelope{}
 	}
@@ -84,10 +83,10 @@ func TestCheckpointMutationRollsBackWhenEventCannotBeCommitted(t *testing.T) {
 	store.SetEventOutbox(eventoutbox.New(database, events.NewMemoryHub()))
 	manager := hitl.NewCheckpoints(store, nil, authzcontext.SQLRecorder(database))
 	req := hitl.CheckpointRequest{SessionID: sid, Kind: api.CheckpointKindToolApproval, ProposedAction: &hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-},
-}}
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+		},
+	}}
 	response, err := requestExplicitApprovalCheckpoint(t, testdbseed.OwnerCaller(t, t.Context(), database), manager, req)
 	testutil.FailErr(t, "create initial checkpoint", err)
 	_, err = database.ExecContext(testdbseed.OwnerCaller(t, t.Context(), database), `CREATE TRIGGER fail_checkpoint_event BEFORE INSERT ON event_outbox BEGIN SELECT RAISE(ABORT, 'fixture event failure'); END`)

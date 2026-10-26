@@ -46,7 +46,7 @@ func TestLoopSkipScheduledWhenBatchClosed(t *testing.T) {
 	engine.SetDeps(deps)
 	engine.Waits.EnterSleep(context.Background(), "s1", time.Now().UTC().Add(30*time.Minute), "wait", []WaitTrigger{WaitTriggerTimer}, nil, SleepMoverHost)
 	engine.Nudges.Nudge(context.Background(), "s1", anchor.WaitTimerFired, anchor.WaitTimerFired, "", anchor.Envelope{})
-	engine.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, 5*time.Second))
+	engine.Turns.WaitForAsyncTurns(t.Context())
 	if prompts.Load() != 0 {
 		t.Fatalf("prompts = %d want 0 when batch closed", prompts.Load())
 	}
@@ -85,7 +85,7 @@ func TestLoopDropScheduledWhenNonActionable(t *testing.T) {
 	deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) bool { return false }
 	engine.SetDeps(deps)
 	engine.Nudges.Nudge(context.Background(), "s1", anchor.WaitTimerFired, anchor.WaitTimerFired, "", anchor.Envelope{})
-	engine.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, 5*time.Second))
+	engine.Turns.WaitForAsyncTurns(t.Context())
 	if prompts.Load() != 0 {
 		t.Fatalf("prompts = %d want 0 for non-actionable scheduled wake", prompts.Load())
 	}
@@ -136,7 +136,7 @@ func TestLoopDropPhaseAdvanceWhenIntentAlreadySettled(t *testing.T) {
 	engine.SetDeps(deps)
 
 	engine.Nudges.Nudge(context.Background(), "s1", anchor.PhaseAdvanced, anchor.PhaseAdvanced, "", anchor.Envelope{})
-	engine.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, 5*time.Second))
+	engine.Turns.WaitForAsyncTurns(t.Context())
 	if prompts.Load() != 0 {
 		t.Fatalf("prompts = %d want 0 after settled intent", prompts.Load())
 	}
@@ -185,7 +185,7 @@ func TestLoopPhaseAdvanceKeepsNewWorkflowWorkActionable(t *testing.T) {
 	engine.SetDeps(deps)
 
 	engine.Nudges.Nudge(context.Background(), "s1", anchor.PhaseAdvanced, anchor.PhaseAdvanced, "", anchor.Envelope{})
-	testutil.WaitFor(t, 2*time.Second, func() bool { return prompts.Load() == 1 })
+	testutil.WaitFor(t, func() bool { return prompts.Load() == 1 })
 }
 
 func TestLoopPhaseAdvanceStartsEnteredPhaseBeforeCloseout(t *testing.T) {
@@ -222,7 +222,7 @@ func TestLoopPhaseAdvanceStartsEnteredPhaseBeforeCloseout(t *testing.T) {
 	engine.SetDeps(deps)
 
 	engine.Nudges.Nudge(context.Background(), "s1", anchor.PhaseAdvanced, anchor.PhaseAdvanced, "", anchor.Envelope{})
-	testutil.WaitFor(t, 2*time.Second, func() bool { return prompts.Load() == 1 })
+	testutil.WaitFor(t, func() bool { return prompts.Load() == 1 })
 }
 
 func TestLoopDropStaleBatchSeqWake(t *testing.T) {
@@ -256,7 +256,7 @@ func TestLoopDropStaleBatchSeqWake(t *testing.T) {
 		"",
 		anchor.Envelope{BatchSeq: 2, BatchSeqSet: true},
 	)
-	engine.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, 5*time.Second))
+	engine.Turns.WaitForAsyncTurns(t.Context())
 	if prompts.Load() != 0 {
 		t.Fatalf("prompts = %d want 0 for stale batch_seq wake", prompts.Load())
 	}
@@ -281,7 +281,7 @@ func TestLoopScheduledDroppedDuringPromptExecution(t *testing.T) {
 	finishExecution := engine.Admission.BeginPromptExecution(t.Context(), "s1")
 	defer finishExecution()
 	engine.Nudges.Nudge(context.Background(), "s1", anchor.WaitTimerFired, anchor.WaitTimerFired, "", anchor.Envelope{})
-	engine.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, 5*time.Second))
+	engine.Turns.WaitForAsyncTurns(t.Context())
 	if prompts.Load() != 0 {
 		t.Fatalf("scheduled wake during prompt execution should drop, prompts = %d", prompts.Load())
 	}
@@ -327,7 +327,7 @@ func TestLoopScheduledRunsWhenObligationsOpenOnClosedBatch(t *testing.T) {
 	engine.SetDeps(deps)
 	engine.Waits.EnterSleep(context.Background(), "s1", time.Now().UTC().Add(30*time.Minute), "wait", []WaitTrigger{WaitTriggerTimer}, nil, SleepMoverHost)
 	engine.Nudges.Nudge(context.Background(), "s1", anchor.WaitTimerFired, anchor.WaitTimerFired, "", anchor.Envelope{})
-	engine.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, 5*time.Second))
+	engine.Turns.WaitForAsyncTurns(t.Context())
 	if prompts.Load() != 1 {
 		t.Fatalf("prompts = %d want 1 for timer wake with open obligations", prompts.Load())
 	}

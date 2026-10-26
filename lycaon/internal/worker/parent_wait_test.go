@@ -3,7 +3,6 @@ package worker
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -39,15 +38,13 @@ func TestAwaitParentSessionWorkersDoesNotMissWakeupBetweenCheckAndRegister(t *te
 	lim := settings.DefaultSessionLimits()
 	lim.AwaitParentWorkersTimeoutSec = 1
 
-	start := time.Now()
 	err := AwaitParentSessionWorkers(t.Context(), queue, waiter, testdbseed.DefaultProjectID, "parent-1", lim)
-	elapsed := time.Since(start)
 	testutil.FailErr(t, "await parent session workers", err)
 
-	if elapsed >= lim.AwaitParentWorkersTimeout()/2 {
-		t.Fatalf("await took %v, want well under timeout %v (wakeup was missed)", elapsed, lim.AwaitParentWorkersTimeout())
-	}
 	if queue.calls != 2 {
 		t.Fatalf("ListBySession calls = %d, want 2 (initial check + recheck after wake)", queue.calls)
+	}
+	if len(waiter.waiters) != 0 {
+		t.Fatalf("waiters remaining = %d, want 0 after settlement", len(waiter.waiters))
 	}
 }

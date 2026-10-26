@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/inspector"
@@ -27,7 +26,7 @@ func TestAPIScanFeedbackAsyncEvidenceAndSummary(t *testing.T) {
 	created := enqueueSingleScanner(t, srv, project.ID, []wire.ScanCategory{wire.ScanCategorySCA})
 
 	var got wire.CodeScan
-	testutil.WaitFor(t, 15*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		getReq := authedRequest(t, http.MethodGet, scanURL(project.ID, created.ID)+"?view=summary", nil)
 		getW := httptest.NewRecorder()
 		srv.ServeHTTP(getW, getReq)

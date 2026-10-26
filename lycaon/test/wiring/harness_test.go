@@ -3,7 +3,6 @@ package wiring
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -56,7 +55,7 @@ func TestBuildForTestBackgroundWorkersCompleteJob(t *testing.T) {
 		testutil.FailErr(t, "h.Delegations.Manager.DispatchLeg failed", err)
 	}
 
-	testutil.WaitFor(t, 8*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		st, err := h.Delegations.Manager.GetStatus(ctx, r.ID)
 		return err == nil && st.Phase == wire.DelegationPhaseDone
 	})

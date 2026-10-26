@@ -5,7 +5,6 @@ import (
 
 	"context"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/coordinator/batch"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
@@ -62,7 +61,7 @@ func TestInvestigateTaskFanOutBlocksInvestigateUntilWorkersIdle(t *testing.T) {
 	}
 
 	var state surface.ImplementSessionState
-	testutil.WaitFor(t, 5*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		state = h.Sessions.Manager.Workers.State.ForSession(ctx, sess)
 		if state.WorkersInFlight > 0 {
 			return true
@@ -162,7 +161,7 @@ func TestInvestigateReturnsAfterWorkersCompleteAndNoQueuedPromotion(t *testing.T
 
 	// Wait for the batch ledger and follow-up surface to settle.
 	var followProfile surface.TurnProfile
-	settled := testutil.WaitForNoFatal(15*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		state = h.Sessions.Manager.Workers.State.ForSession(ctx, sess)
 		if state.WorkersInFlight == 0 && state.BatchPhase != batch.PhaseDispatch {
 			msgs, err = h.Sessions.Manager.Runner.Transcript.GetMessages(ctx, sess.ID)
@@ -178,11 +177,7 @@ func TestInvestigateReturnsAfterWorkersCompleteAndNoQueuedPromotion(t *testing.T
 		}
 		return false
 	})
-	if !settled {
-		runCtx, _ := h.Sessions.Manager.Coordinator.Context.RunContext(ctx, sess.ID)
-		jobs, _ := h.Delegations.Queue.ListBySession(ctx, sess.ProjectID, sess.ID)
-		t.Fatalf("follow-up surface did not settle: profile=%q state=%+v run=%+v jobs=%+v", followProfile.SurfaceID, state, runCtx, jobs)
-	}
+
 	if followProfile.SurfaceID != toolcontract.SurfaceImplementInvestigate {
 		runCtx, _ := h.Sessions.Manager.Coordinator.Context.RunContext(ctx, sess.ID)
 		jobs, _ := h.Delegations.Queue.ListBySession(ctx, sess.ProjectID, sess.ID)

@@ -38,7 +38,7 @@ func TestMaintenanceYieldsToReferencesWithoutQueueingBehindThem(t *testing.T) {
 	}()
 	select {
 	case <-done:
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("a second reference lease waited behind a refused maintenance try")
 	}
 	releaseReference()

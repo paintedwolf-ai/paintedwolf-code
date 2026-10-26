@@ -9,7 +9,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 	"weak"
 
 	"github.com/lycaon/lycaon/internal/backgroundwork"
@@ -151,7 +150,7 @@ func TestCatalogCurrentStartsColdGenerationWithoutWaiting(t *testing.T) {
 	}
 	select {
 	case <-started:
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("cold catalog build did not start")
 	}
 	close(release)

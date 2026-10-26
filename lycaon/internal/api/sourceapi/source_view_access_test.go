@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/project"
@@ -31,7 +30,7 @@ func TestSourceViewWorkspaceMismatchReturnsExpired(t *testing.T) {
 		WorkspaceID: physical.WorkspaceID(),
 	}
 	created := readSourceViewResponse(t, callSourceViewHandler(t, server.Views.HandleCreateSourceView, proj.ID, "", request), http.StatusCreated).Tree
-	testutil.WaitFor(t, 5*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		state := readSourceViewResponse(t, callSourceViewHandler(t, server.Views.HandleGetSourceView, proj.ID, created.ID, nil), http.StatusOK).Tree
 		return state.State == "ready"
 	})

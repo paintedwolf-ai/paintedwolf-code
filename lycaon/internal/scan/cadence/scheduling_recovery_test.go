@@ -31,7 +31,7 @@ func TestCadenceSettlesWholeBurstBeforeScanning(t *testing.T) {
 			t.Fatalf("unsettled burst already enqueued %d scans", len(rows))
 		}
 	}
-	testutil.WaitFor(t, 10*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		rows, err := store.ListByCanonicalPath(t.Context(), canonical)
 		return err == nil && len(rows) == 3
 	})
@@ -57,7 +57,7 @@ func TestCadenceRecoversPersistedDeadlineWithoutNotification(t *testing.T) {
 	// A newly constructed repository has no process-local notifications.
 	cadence.Store = scanbase.NewSQLStore(store.DB())
 	scantest.RunService(t, cadence.Run)
-	testutil.WaitFor(t, 10*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		rows, err := store.ListByCanonicalPath(t.Context(), canonical)
 		return err == nil && len(rows) == 3
 	})

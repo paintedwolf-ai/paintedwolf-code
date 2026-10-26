@@ -37,8 +37,7 @@ func activationBus(t *testing.T) (string, string) {
 	cmd.Stderr = &stderr
 	testutil.FailErr(t, "start activation bus", cmd.Start())
 	t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait() })
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		if _, err := os.Stat(path); err == nil {
 			return path, marker
 		}

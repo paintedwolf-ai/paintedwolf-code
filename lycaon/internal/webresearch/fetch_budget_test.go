@@ -294,7 +294,7 @@ func TestFetchBudgetConcurrentStartsRespectHostInterval(t *testing.T) {
 	testutil.FailErr(t, "initial fetch", err)
 	first()
 	b.mu.Lock()
-	started := b.hosts["example.test"].lastStart
+	initialStart := b.hosts["example.test"].lastStart
 	b.mu.Unlock()
 	results := make(chan error, 3)
 	for i := 0; i < 3; i++ {
@@ -310,10 +310,10 @@ func TestFetchBudgetConcurrentStartsRespectHostInterval(t *testing.T) {
 		testutil.FailErr(t, "spaced fetch", <-results)
 	}
 	b.mu.Lock()
-	elapsed := b.hosts["example.test"].lastStart.Sub(started)
+	finalStart := b.hosts["example.test"].lastStart
 	b.mu.Unlock()
-	if elapsed < 3*gap {
-		t.Fatalf("concurrent starts bypassed host interval: %v", elapsed)
+	if finalStart.Before(initialStart.Add(3 * gap)) {
+		t.Fatalf("concurrent starts bypassed host interval: initial=%v final=%v", initialStart, finalStart)
 	}
 }
 

@@ -74,7 +74,7 @@ func TestRepoSetCacheDoesNotCoalesceDifferentCheckouts(t *testing.T) {
 	for range 2 {
 		select {
 		case <-started:
-		case <-time.After(5 * time.Second):
+		case <-t.Context().Done():
 			close(release)
 			t.Fatal("different checkout discovery incorrectly joined one flight")
 		}

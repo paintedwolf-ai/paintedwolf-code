@@ -12,7 +12,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 )
 
 // recordDeliveries captures each resumed wait's winner.
@@ -50,8 +49,8 @@ func TestRefusalEndsTheProcessWaitWithItsReport(t *testing.T) {
 	}
 	report := "handle=command-1 state=running\nsandbox_refusals:\n- network-bind /tmp/u.sock (limactl) count=1 recovery=host_execution"
 	loop.Nudges.NudgeProcessRefused(t.Context(), "s1", "command-1", anchor.Envelope{CommandRefusalDigest: report})
-	testutil.WaitFor(t, time.Second, func() bool { return len(delivered()) == 1 })
-	loop.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, time.Second))
+	testutil.WaitFor(t, func() bool { return len(delivered()) == 1 })
+	loop.Turns.WaitForAsyncTurns(t.Context())
 	winner := delivered()[0]
 	if winner.Outcome != "refused" || winner.Report != report || winner.Handles[0] != "command-1" {
 		t.Fatalf("refusal winner = %+v", winner)
@@ -69,8 +68,8 @@ func TestCompletionWakeCarriesTheCompletionReport(t *testing.T) {
 	testutil.FailErr(t, "park process wait", err)
 	report := "handle=command-1 termination=timed_out exit_code=-1"
 	loop.Nudges.NudgeProcessFinished(t.Context(), "s1", "command-1", anchor.Envelope{CommandCompletionDigest: report})
-	testutil.WaitFor(t, time.Second, func() bool { return len(delivered()) == 1 })
-	loop.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, time.Second))
+	testutil.WaitFor(t, func() bool { return len(delivered()) == 1 })
+	loop.Turns.WaitForAsyncTurns(t.Context())
 	if winner := delivered()[0]; winner.Outcome != "satisfied" || winner.Report != report {
 		t.Fatalf("completion winner = %+v", winner)
 	}
@@ -100,8 +99,8 @@ func TestReconciliationWaitsForThePublishedCompletion(t *testing.T) {
 	if done := reconcileWaitConditions(t.Context(), loop.Subscriptions, store, lease); !done {
 		t.Fatal("reconciliation did not settle the published completion")
 	}
-	testutil.WaitFor(t, time.Second, func() bool { return len(delivered()) == 1 })
-	loop.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, time.Second))
+	testutil.WaitFor(t, func() bool { return len(delivered()) == 1 })
+	loop.Turns.WaitForAsyncTurns(t.Context())
 	if winner := delivered()[0]; winner.Report == "" || winner.Outcome != "satisfied" {
 		t.Fatalf("reconciled winner = %+v", winner)
 	}

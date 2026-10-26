@@ -25,8 +25,7 @@ func agentFixtureBus(t *testing.T) string {
 		t.Fatalf("start private bus: %v", err)
 	}
 	t.Cleanup(func() { _ = command.Process.Kill(); _ = command.Wait() })
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		if _, err := os.Stat(path); err == nil {
 			return path
 		}

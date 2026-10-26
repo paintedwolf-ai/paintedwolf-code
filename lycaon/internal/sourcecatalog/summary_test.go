@@ -38,7 +38,6 @@ func readySummary(t *testing.T, c *Catalog, root Root, scope TreeScope) *Summary
 // readyIndex joins the file index until its discovery has covered the tree.
 func readyIndex(t *testing.T, c *Catalog, root Root) *IndexReader {
 	t.Helper()
-	deadline := time.Now().Add(30 * time.Second)
 	for {
 		r, status, err := c.Trees.OpenIndex(t.Context(), "project", root, 5*time.Second)
 		testutil.FailErr(t, "open file index", err)
@@ -47,7 +46,7 @@ func readyIndex(t *testing.T, c *Catalog, root Root) *IndexReader {
 			return r
 		}
 		_ = r.Close()
-		if time.Now().After(deadline) {
+		if t.Context().Err() != nil {
 			t.Fatalf("index status=%+v", status)
 		}
 	}

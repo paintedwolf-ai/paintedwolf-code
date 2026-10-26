@@ -8,7 +8,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -17,7 +16,11 @@ func TestOrderedScansBoundLookahead(t *testing.T) {
 	for _, preview := range []bool{false, true} {
 		t.Run(fmt.Sprintf("preview=%v", preview), func(t *testing.T) {
 			window := codeWorkerCount() * 2
-			gate := &scanOrderGate{calls: make(chan struct{}, window*4), release: make(chan struct{})}
+			gate := &scanOrderGate{
+				calls:    make(chan struct{}, window*4),
+				finished: make(chan struct{}, window*4),
+				release:  make(chan struct{}),
+			}
 			var release sync.Once
 			defer release.Do(func() { close(gate.release) })
 			files := orderedScanFixture(t, window*4)
@@ -38,14 +41,21 @@ func TestOrderedScansBoundLookahead(t *testing.T) {
 			for range window {
 				select {
 				case <-gate.calls:
-				case <-time.After(30 * time.Second):
+				case <-t.Context().Done():
 					t.Fatal("scan did not fill its lookahead window")
+				}
+			}
+			for range window - 1 {
+				select {
+				case <-gate.finished:
+				case <-t.Context().Done():
+					t.Fatal("non-first workers did not finish their lookahead window")
 				}
 			}
 			select {
 			case <-gate.calls:
 				t.Error("scan advanced beyond the bounded lookahead window")
-			case <-time.After(100 * time.Millisecond):
+			default:
 			}
 			release.Do(func() { close(gate.release) })
 			select {
@@ -53,7 +63,7 @@ func TestOrderedScansBoundLookahead(t *testing.T) {
 				if count != 1 {
 					t.Fatalf("retained %d results, want 1", count)
 				}
-			case <-time.After(30 * time.Second):
+			case <-t.Context().Done():
 				t.Fatal("scan did not join workers after reaching the result cap")
 			}
 		})
@@ -78,8 +88,9 @@ func orderedScanFixture(t *testing.T, count int) []codeFile {
 }
 
 type scanOrderGate struct {
-	calls   chan struct{}
-	release chan struct{}
+	calls    chan struct{}
+	finished chan struct{}
+	release  chan struct{}
 }
 
 func (g *scanOrderGate) visit(text string) {
@@ -93,6 +104,7 @@ type gatedCodeMatcher struct{ gate *scanOrderGate }
 
 func (m gatedCodeMatcher) matches(candidate codeCandidate) bool {
 	m.gate.visit(candidate.text)
+	m.gate.finished <- struct{}{}
 	return true
 }
 
@@ -102,6 +114,7 @@ func (gatedReplaceMatcher) matches(string) bool { return true }
 
 func (m gatedReplaceMatcher) findAll(content, replacement string) []replacementMatch {
 	m.gate.visit(content)
+	m.gate.finished <- struct{}{}
 	return []replacementMatch{{start: 0, end: len(content), fragment: replacement}}
 }
 

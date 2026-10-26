@@ -32,8 +32,7 @@ func TestWriteTool_EmitsWorktreeChanged(t *testing.T) {
 	}, nativefixture.Context(dir))
 	testutil.FailErr(t, "write", err)
 
-	deadline := time.Now().Add(time.Second)
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		repochange.ResetDebouncerForTest(t.Context())
 		if got.Kind == repochange.WorktreeChanged {
 			break

@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"syscall"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/llm/failure"
@@ -108,116 +109,121 @@ func TestSlotHealthCooldownExpires(t *testing.T) {
 }
 
 func TestUtilityLaneGiftWaitsForHolder(t *testing.T) {
-	lanes := newUtilityLanes()
-	ctx := context.Background()
-	release, err := lanes.acquire(ctx, "ollama-1", true, UtilityClassQuality)
-	testutil.FailErr(t, "first acquire", err)
+	synctest.Test(t, func(t *testing.T) {
+		lanes := newUtilityLanes()
+		ctx := context.Background()
+		release, err := lanes.acquire(ctx, "ollama-1", true, UtilityClassQuality)
+		testutil.FailErr(t, "first acquire", err)
 
-	got := make(chan error, 1)
-	go func() {
-		rel, err := lanes.acquire(ctx, "ollama-1", true, UtilityClassGift)
-		if err == nil {
-			rel()
+		got := make(chan error, 1)
+		go func() {
+			rel, err := lanes.acquire(ctx, "ollama-1", true, UtilityClassGift)
+			if err == nil {
+				rel()
+			}
+			got <- err
+		}()
+		synctest.Wait()
+		select {
+		case err := <-got:
+			t.Fatalf("gift returned early: %v", err)
+		default:
 		}
-		got <- err
-	}()
-	select {
-	case err := <-got:
-		t.Fatalf("gift returned early: %v", err)
-	case <-time.After(50 * time.Millisecond):
-	}
-	release()
-	select {
-	case err := <-got:
-		testutil.FailErr(t, "gift after release", err)
-	case <-time.After(time.Second):
-		t.Fatal("gift did not acquire after release")
-	}
+		release()
+		select {
+		case err := <-got:
+			testutil.FailErr(t, "gift after release", err)
+		case <-t.Context().Done():
+			t.Fatal("gift did not acquire after release")
+		}
+	})
 }
 
 func TestUtilityLaneGiftWaitsForCoordinatorHold(t *testing.T) {
-	lanes := newUtilityLanes()
-	ctx := context.Background()
-	release, err := lanes.acquireForeground(ctx, "ollama-1", true)
-	testutil.FailErr(t, "foreground admission", err)
+	synctest.Test(t, func(t *testing.T) {
+		lanes := newUtilityLanes()
+		ctx := context.Background()
+		release, err := lanes.acquireForeground(ctx, "ollama-1", true)
+		testutil.FailErr(t, "foreground admission", err)
 
-	got := make(chan error, 1)
-	go func() {
-		rel, err := lanes.acquire(ctx, "ollama-1", true, UtilityClassGift)
-		if err == nil {
-			rel()
+		got := make(chan error, 1)
+		go func() {
+			rel, err := lanes.acquire(ctx, "ollama-1", true, UtilityClassGift)
+			if err == nil {
+				rel()
+			}
+			got <- err
+		}()
+		synctest.Wait()
+		select {
+		case err := <-got:
+			t.Fatalf("gift returned during coordinator hold: %v", err)
+		default:
 		}
-		got <- err
-	}()
-	select {
-	case err := <-got:
-		t.Fatalf("gift returned during coordinator hold: %v", err)
-	case <-time.After(50 * time.Millisecond):
-	}
-	release()
-	select {
-	case err := <-got:
-		testutil.FailErr(t, "gift after coordinator release", err)
-	case <-time.After(time.Second):
-		t.Fatal("gift did not acquire after coordinator release")
-	}
+		release()
+		select {
+		case err := <-got:
+			testutil.FailErr(t, "gift after coordinator release", err)
+		case <-t.Context().Done():
+			t.Fatal("gift did not acquire after coordinator release")
+		}
+	})
 }
 
-// Short waits exercise busy outcomes without delaying the suite.
-const testOverlayWait = 50 * time.Millisecond
-
 func TestUtilityLaneOverlaySkipsWhenCoordinatorHeld(t *testing.T) {
-	lanes := newUtilityLanes()
-	lanes.overlayWait = testOverlayWait
-	ctx := context.Background()
-	release, err := lanes.acquireForeground(ctx, "ollama-1", true)
-	testutil.FailErr(t, "foreground admission", err)
-	t.Cleanup(release)
+	synctest.Test(t, func(t *testing.T) {
+		lanes := newUtilityLanes()
+		ctx := context.Background()
+		release, err := lanes.acquireForeground(ctx, "ollama-1", true)
+		testutil.FailErr(t, "foreground admission", err)
+		t.Cleanup(release)
 
-	var gotBusy atomic.Bool
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		_, err := lanes.acquire(ctx, "ollama-1", true, UtilityClassOverlay)
-		if errors.Is(err, ErrLiteBusy) {
-			gotBusy.Store(true)
+		var gotBusy atomic.Bool
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			_, err := lanes.acquire(ctx, "ollama-1", true, UtilityClassOverlay)
+			if errors.Is(err, ErrLiteBusy) {
+				gotBusy.Store(true)
+			}
+		}()
+		select {
+		case <-done:
+		case <-t.Context().Done():
+			t.Fatal("overlay wait exceeded")
 		}
-	}()
-	select {
-	case <-done:
-	case <-time.After(testOverlayWait + time.Second):
-		t.Fatal("overlay wait exceeded")
-	}
-	if !gotBusy.Load() {
-		t.Fatal("overlay must skip while a coordinator stream occupies the instance")
-	}
+		if !gotBusy.Load() {
+			t.Fatal("overlay must skip while a coordinator stream occupies the instance")
+		}
+	})
 }
 
 func TestUtilityLaneOverlaySkipsWhenBusy(t *testing.T) {
-	lanes := newUtilityLanes()
-	lanes.overlayWait = testOverlayWait
-	ctx := context.Background()
-	release, err := lanes.acquire(ctx, "ollama-1", true, UtilityClassQuality)
-	testutil.FailErr(t, "first acquire", err)
+	synctest.Test(t, func(t *testing.T) {
+		lanes := newUtilityLanes()
+		ctx := context.Background()
+		release, err := lanes.acquire(ctx, "ollama-1", true, UtilityClassQuality)
+		testutil.FailErr(t, "first acquire", err)
 
-	var gotBusy atomic.Bool
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		_, err := lanes.acquire(ctx, "ollama-1", true, UtilityClassOverlay)
-		if errors.Is(err, ErrLiteBusy) {
-			gotBusy.Store(true)
+		var gotBusy atomic.Bool
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			_, err := lanes.acquire(ctx, "ollama-1", true, UtilityClassOverlay)
+			if errors.Is(err, ErrLiteBusy) {
+				gotBusy.Store(true)
+			}
+		}()
+		select {
+		case <-done:
+		case <-t.Context().Done():
+			t.Fatal("overlay wait exceeded")
 		}
-	}()
-	select {
-	case <-done:
-	case <-time.After(testOverlayWait + time.Second):
-		t.Fatal("overlay wait exceeded")
-	}
-	if !gotBusy.Load() {
-		t.Fatal("overlay must skip when the lane is held")
-	}
-	release()
+		if !gotBusy.Load() {
+			t.Fatal("overlay must skip when the lane is held")
+		}
+		release()
+	})
 }
 
 func TestUtilityLaneAllowsConcurrentHosted(t *testing.T) {

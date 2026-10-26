@@ -14,7 +14,6 @@ import (
 
 func waitMessageAppend(t *testing.T, ch <-chan wire.EventEnvelope, sessionID string) wire.MessageEvent {
 	t.Helper()
-	deadline := time.After(2 * time.Second)
 	for {
 		select {
 		case env, ok := <-ch:
@@ -32,7 +31,7 @@ func waitMessageAppend(t *testing.T, ch <-chan wire.EventEnvelope, sessionID str
 				continue
 			}
 			return ev
-		case <-deadline:
+		case <-t.Context().Done():
 			t.Fatal("timeout waiting for message append SSE")
 			return wire.MessageEvent{}
 		}

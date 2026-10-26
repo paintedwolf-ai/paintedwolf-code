@@ -321,7 +321,7 @@ func TestExecutorCommandStopApprovalShowsRecordedCommand(t *testing.T) {
 
 	select {
 	case <-mgr.requested:
-	case <-time.After(3 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("timed out waiting for command_stop approval")
 	}
 	if mgr.request.ProposedAction == nil || mgr.request.ProposedAction.Presentation.Command != "npm run dev" {

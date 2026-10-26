@@ -517,7 +517,7 @@ func TestSlowUploadDoesNotBlockOtherStores(t *testing.T) {
 	select {
 	case err := <-quick:
 		testutil.FailErr(t, "put into independent store", err)
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("independent store was blocked by a streaming upload")
 	}
 	close(release)

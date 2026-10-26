@@ -82,7 +82,7 @@ func TestCancelMidRun(t *testing.T) {
 
 	select {
 	case <-exec.started:
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("execute did not start")
 	}
 
@@ -147,7 +147,7 @@ func TestConcurrencyCapEnforced(t *testing.T) {
 	defer cancel()
 	go poller.Run(pollCtx)
 
-	testutil.WaitFor(t, time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		return atomic.LoadInt32(&running) >= 2
 	})
 
@@ -190,7 +190,7 @@ func TestParentMessageCapAfterWorkers(t *testing.T) {
 		testutil.FailErr(t, "queue.EnqueueWithProjectID failed", err)
 	}
 
-	testutil.WaitFor(t, 8*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		tasks, _ := queue.List(ctx, testdbseed.DefaultProjectID, api.WorkerStatusComplete)
 		return len(tasks) >= 5
 	})
@@ -238,14 +238,14 @@ func TestLocalWorkerPollerRunWaitsForInflightOnCancel(t *testing.T) {
 
 	select {
 	case <-block.started:
-	case <-time.After(2 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("execute did not start")
 	}
 
 	cancel()
 	select {
 	case <-runDone:
-	case <-time.After(2 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("Run did not return after cancel while job in flight")
 	}
 }

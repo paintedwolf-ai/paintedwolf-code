@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/session"
@@ -49,7 +48,6 @@ func TestAppendMessagesPublishesMessageSSE(t *testing.T) {
 		testutil.FailErr(t, "mgr.AppendWorkerSummary failed", err)
 	}
 
-	deadline := time.After(2 * time.Second)
 	for {
 		select {
 		case env, ok := <-ch:
@@ -69,7 +67,7 @@ func TestAppendMessagesPublishesMessageSSE(t *testing.T) {
 			if ev.Message.WorkerSummary != nil {
 				return
 			}
-		case <-deadline:
+		case <-t.Context().Done():
 			t.Fatal("timeout waiting for message topic event")
 		}
 	}

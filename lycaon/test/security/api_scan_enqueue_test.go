@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -29,7 +28,7 @@ func TestAPIScanEnqueuePollLedgerAndSSE(t *testing.T) {
 	created := enqueueSingleScanner(t, srv, project.ID, []wire.ScanCategory{wire.ScanCategorySecret})
 
 	var sawSSE bool
-	testutil.WaitFor(t, 15*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		for {
 			select {
 			case envelope := <-ch:

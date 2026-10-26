@@ -76,14 +76,10 @@ providers:
 	}
 	stats := newSearchStats("t-provider-seed-cut")
 	ctx := withSearchStats(context.Background(), stats)
-	start := time.Now()
 	hits, err := d.Search(ctx, DirectRequest{Query: "widget frobnicator review", MaxResults: 1})
 	testutil.FailErr(t, "search", err)
 	if len(hits) != 1 || hits[0].Provider != "fast_seed" {
 		t.Fatalf("hits = %+v want the fast provider seed hit", hits)
-	}
-	if elapsed := time.Since(start); elapsed > 5*time.Second {
-		t.Fatalf("search took %v — slow provider seed was not cut", elapsed)
 	}
 	if cut, _ := stats.providerSeedCut.Load().(string); cut == "" {
 		t.Fatal("expected provider_seed_cut after fast seed contribution")

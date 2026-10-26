@@ -386,7 +386,7 @@ while IFS=`, 1)
 				}()
 				select {
 				case <-waiting.observed:
-				case <-time.After(5 * time.Second):
+				case <-t.Context().Done():
 					t.Fatal("caller did not enter process admission")
 				}
 			}
@@ -408,7 +408,7 @@ while IFS=`, 1)
 					} else if err == nil {
 						t.Fatal("native exit did not fail waiting request")
 					}
-				case <-time.After(5 * time.Second):
+				case <-t.Context().Done():
 					t.Fatal("native terminal event did not release waiting caller")
 				}
 			}
@@ -426,7 +426,6 @@ while IFS=`, 1)
 
 func waitForEngineMarker(t *testing.T, path string) {
 	t.Helper()
-	deadline := time.After(5 * time.Second)
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
 	for {
@@ -434,7 +433,7 @@ func waitForEngineMarker(t *testing.T, path string) {
 			return
 		}
 		select {
-		case <-deadline:
+		case <-t.Context().Done():
 			t.Fatalf("native engine did not create %s", path)
 		case <-ticker.C:
 		}

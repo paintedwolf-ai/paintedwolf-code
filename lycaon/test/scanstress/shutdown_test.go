@@ -125,8 +125,7 @@ func runShutdownCase(t *testing.T, sig syscall.Signal, handler bool) {
 	})
 
 	var engine []procRow
-	deadline := time.Now().Add(5 * time.Minute)
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		engine = engineProcesses(descendants(processTable(t), victim))
 		if len(engine) > 0 {
 			break
@@ -152,7 +151,7 @@ func runShutdownCase(t *testing.T, sig syscall.Signal, handler bool) {
 	select {
 	case <-waitErr:
 		reaped = true
-	case <-time.After(90 * time.Second):
+	case <-t.Context().Done():
 		t.Fatalf("victim %d did not exit within 90s of %s", victim, sig)
 	}
 	hostGone := time.Since(killAt)
@@ -161,7 +160,6 @@ func runShutdownCase(t *testing.T, sig syscall.Signal, handler bool) {
 	// abrupt exit the reaper removes the directories once the engine is gone.
 	var survivors []int
 	var leaked []string
-	drainDeadline := time.Now().Add(60 * time.Second)
 	for {
 		survivors = survivors[:0]
 		table := processTable(t)
@@ -171,7 +169,7 @@ func runShutdownCase(t *testing.T, sig syscall.Signal, handler bool) {
 			}
 		}
 		leaked = survivingDirs(runDirs)
-		if (len(survivors) == 0 && len(leaked) == 0) || time.Now().After(drainDeadline) {
+		if (len(survivors) == 0 && len(leaked) == 0) || t.Context().Err() != nil {
 			break
 		}
 		time.Sleep(250 * time.Millisecond)

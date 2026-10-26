@@ -13,7 +13,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -57,7 +56,7 @@ func TestCancelledCommandDrainsEscapedOutputInline(t *testing.T) {
 		result <- runErr
 	}()
 	var pid int
-	testutil.WaitFor(t, 10*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		select {
 		case runErr := <-result:
 			t.Fatalf("command returned before fixture spawned: %v", runErr)
@@ -77,7 +76,7 @@ func TestCancelledCommandDrainsEscapedOutputInline(t *testing.T) {
 		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("cancel command: %v", err)
 		}
-	case <-time.After(exec.TerminateGrace + exec.PipelineWaitDelay + 10*time.Second):
+	case <-t.Context().Done():
 		t.Fatal("cancelled command did not settle")
 	}
 	if jobs := registry.ActiveJobs("pipe-cancel"); len(jobs) != 0 {

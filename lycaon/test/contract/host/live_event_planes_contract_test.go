@@ -48,9 +48,9 @@ func TestParentOnlyProjectSubscriberCannotSeeWorkerLiveBodies(t *testing.T) {
 	testutil.FailErr(t, "subscribe", err)
 	t.Cleanup(unsub)
 
-	drain := func(wait time.Duration) []api.MessageEvent {
+	drain := func() []api.MessageEvent {
+		hub.FlushDebounced()
 		var out []api.MessageEvent
-		deadline := time.After(wait)
 		for {
 			select {
 			case env := <-ch:
@@ -62,12 +62,12 @@ func TestParentOnlyProjectSubscriberCannotSeeWorkerLiveBodies(t *testing.T) {
 					testutil.FailErr(t, "decode", err)
 				}
 				out = append(out, ev)
-			case <-deadline:
+			default:
 				return out
 			}
 		}
 	}
-	_ = drain(50 * time.Millisecond)
+	_ = drain()
 
 	childMsg := "child-live-1"
 	testutil.FailErr(t, "append child placeholder", st.AppendMessages(ctx, child.ID, api.Message{
@@ -76,15 +76,14 @@ func TestParentOnlyProjectSubscriberCannotSeeWorkerLiveBodies(t *testing.T) {
 		Visibility: api.MessageVisibilityInternal,
 		CreatedAt:  time.Now().UTC(),
 	}))
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		var count int
 		if err := sqlDB.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM event_outbox`).Scan(&count); err == nil && count == 0 {
 			break
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	_ = drain(200 * time.Millisecond)
+	_ = drain()
 
 	liveCh, liveUnsub := mgr.Runner.Transcript.Streams.Subscribe(childMsg)
 	t.Cleanup(liveUnsub)
@@ -98,7 +97,7 @@ func TestParentOnlyProjectSubscriberCannotSeeWorkerLiveBodies(t *testing.T) {
 	}
 	mgr.Runner.Transcript.Streams.Flush(ctx, child.ID)
 
-	hubAfterLive := drain(200 * time.Millisecond)
+	hubAfterLive := drain()
 	for _, ev := range hubAfterLive {
 		if ev.SessionID == child.ID && ev.Op == api.MessageChangePatch {
 			t.Fatalf("parent-only hub saw child live patch: content=%q", ev.Message.Content)
@@ -110,7 +109,7 @@ func TestParentOnlyProjectSubscriberCannotSeeWorkerLiveBodies(t *testing.T) {
 		if frame.Content == "" {
 			t.Fatalf("expected live stream frame, got %+v", frame)
 		}
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("painted session stream did not receive child live content")
 	}
 }

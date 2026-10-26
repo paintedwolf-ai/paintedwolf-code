@@ -79,7 +79,7 @@ func TestWrapLLMClientIfDebugCapturesStreamTiming(t *testing.T) {
 	_, _, _ = modelcall.CollectStream(ch)
 
 	var data []byte
-	testutil.WaitFor(t, 2*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		var err error
 		data, err = os.ReadFile(logPath)
 		return err == nil && len(data) > 0

@@ -34,7 +34,7 @@ func TestBackgroundHandleOutlivesInvocationAndStopsThroughTool(t *testing.T) {
 	}
 	cancel()
 	outputTool := &command.CommandOutputTool{Registry: registry}
-	testutil.WaitFor(t, 5*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		output, readErr := outputTool.Run(t.Context(), map[string]any{"handle": started.Handle}, tctx)
 		return readErr == nil && strings.Contains(output, "background-ready")
 	})

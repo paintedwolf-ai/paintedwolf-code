@@ -161,7 +161,7 @@ func TestLoopNeedsDecisionWakesThroughAllWorkersIdleWait(t *testing.T) {
 		"",
 		env,
 	)
-	testutil.WaitFor(t, 2*time.Second, func() bool { return prompts.Load() >= 1 })
+	testutil.WaitFor(t, func() bool { return prompts.Load() >= 1 })
 	if loop.Waits.IsSleeping("s1") {
 		t.Fatal("needs_decision must break sleep")
 	}

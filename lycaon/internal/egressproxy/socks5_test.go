@@ -7,7 +7,6 @@ import (
 	"net"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/egressproxy"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -296,7 +295,7 @@ func TestCloseStopsAuthenticatedConnectionAwaitingRequest(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Close: %v", err)
 		}
-	case <-time.After(2 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("Close waited on an authenticated idle connection")
 	}
 }

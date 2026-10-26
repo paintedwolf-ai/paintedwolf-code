@@ -137,8 +137,7 @@ func TestSessionPreparationRejectsInvalidProjectRules(t *testing.T) {
 	}
 	var sess wire.Session
 	testutil.FailErr(t, "decode preparing session", json.Unmarshal(w.Body.Bytes(), &sess))
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		req = authedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID, nil)
 		w = httptest.NewRecorder()
 		srv.ServeHTTP(w, req)

@@ -6,7 +6,6 @@ import (
 	"context"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
@@ -81,7 +80,7 @@ func TestFinishPromptExecutionDrainsLoopPendingAfterCanceledRequestCtx(t *testin
 		_ = mgr.Runner.Settlement.Drain(canceled, sess.ID)
 	}()
 
-	testutil.WaitFor(t, 5*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		msgs, err := store.GetMessages(ctx, sess.ID)
 		if err != nil {
 			return false

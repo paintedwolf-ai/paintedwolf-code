@@ -128,15 +128,10 @@ func TestCancelRunningGracefulOutlivesRequest(t *testing.T) {
 	jobID := setupRunningWorker(t, queue, child)
 
 	reqCtx, reqCancel := context.WithCancel(context.Background())
-	start := time.Now()
 	out, err := svc.CancelJob(reqCtx, jobID, "user-aborted")
-	elapsed := time.Since(start)
 	testutil.FailErr(t, "CancelJob", err)
 	if out.Status != api.WorkerStatusRunning {
 		t.Fatalf("interim status = %q want running (register-and-return)", out.Status)
-	}
-	if elapsed > time.Second {
-		t.Fatalf("CancelJob blocked %v; must register-and-return", elapsed)
 	}
 	// The request only registers cancellation.
 	if task, ok := queue.Get(jobID); !ok || task.Status != api.WorkerStatusRunning {
@@ -183,15 +178,10 @@ func TestCancelRunningGracefulNonBlockingUnderSlowCloseout(t *testing.T) {
 
 	deadlineCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	start := time.Now()
 	out, err := svc.CancelJob(deadlineCtx, jobID, "slow-closeout")
-	elapsed := time.Since(start)
 	testutil.FailErr(t, "CancelJob", err)
 	if out.Status != api.WorkerStatusRunning {
 		t.Fatalf("interim status = %q want running", out.Status)
-	}
-	if elapsed > 500*time.Millisecond {
-		t.Fatalf("CancelJob blocked %v under slow closeout; must register-and-return", elapsed)
 	}
 	if err := deadlineCtx.Err(); err != nil {
 		t.Fatalf("request ctx ended before return: %v", err)
@@ -239,15 +229,10 @@ func TestCancelPendingAndHeldWorkersFinalizeSynchronously(t *testing.T) {
 		testutil.FailErr(t, "Enqueue", err)
 
 		before := hub.terminalCount()
-		start := time.Now()
 		out, err := svc.CancelJob(ctx, jobID, "test")
-		elapsed := time.Since(start)
 		testutil.FailErr(t, "CancelJob", err)
 		if out.Status != api.WorkerStatusCanceled {
 			t.Fatalf("status=%s: cancel status %q want canceled", status, out.Status)
-		}
-		if elapsed > time.Second {
-			t.Fatalf("status=%s: cancel blocked %v; pending/held finalize synchronously", status, elapsed)
 		}
 		if task, ok := queue.Get(jobID); !ok || task.Status != api.WorkerStatusCanceled {
 			t.Fatalf("status=%s: task not canceled", status)

@@ -344,7 +344,6 @@ func TestGitReposAgedStatusStaysSettledWhileRefreshing(t *testing.T) {
 	})
 
 	var settled wire.GitRepoEntry
-	deadline := time.Now().Add(5 * time.Second)
 	for {
 		view := contractfixture.GitReposViaAPI(t, srv, projectID, "")
 		if len(view.Repos) != 1 {
@@ -353,7 +352,7 @@ func TestGitReposAgedStatusStaysSettledWhileRefreshing(t *testing.T) {
 		if settled = view.Repos[0]; !settled.StatusPending {
 			break
 		}
-		if time.Now().After(deadline) {
+		if t.Context().Err() != nil {
 			t.Fatal("first status snapshot did not settle")
 		}
 		time.Sleep(5 * time.Millisecond)

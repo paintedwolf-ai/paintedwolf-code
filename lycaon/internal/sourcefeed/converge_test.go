@@ -4,71 +4,79 @@ import (
 	"context"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
 func TestChangeConvergerCollapsesWritesWithoutClassifyingPaths(t *testing.T) {
-	flushed := make(chan pendingExternalBatch, 1)
-	c := newChangeConverger(10*time.Millisecond, 50*time.Millisecond, func(_ context.Context, changes pendingExternalBatch) {
-		flushed <- changes
-	})
-	t.Cleanup(func() { c.close(t.Context()) })
-	root := RootSpec{ID: "root", WorkspaceID: "ws", Path: t.TempDir()}
-	for range 20 {
-		c.queue(t.Context(), root, ".ignored/unknown-language.scratch")
-	}
-	select {
-	case batch := <-flushed:
-		changes := batch.changes
-		if batch.resync || len(changes) != 1 || changes[0].rel != ".ignored/unknown-language.scratch" {
-			t.Fatalf("converged changes = %+v", changes)
+	synctest.Test(t, func(t *testing.T) {
+		flushed := make(chan pendingExternalBatch, 1)
+		c := newChangeConverger(10*time.Millisecond, 50*time.Millisecond, func(_ context.Context, changes pendingExternalBatch) {
+			flushed <- changes
+		})
+		t.Cleanup(func() { c.close(t.Context()) })
+		root := RootSpec{ID: "root", WorkspaceID: "ws", Path: t.TempDir()}
+		for range 20 {
+			c.queue(t.Context(), root, ".ignored/unknown-language.scratch")
 		}
-	case <-time.After(time.Second):
-		t.Fatal("converged change was not flushed")
-	}
-}
-
-func TestChangeConvergerFlushesContinuousWritesAtMaximumDelay(t *testing.T) {
-	flushed := make(chan pendingExternalBatch, 1)
-	c := newChangeConverger(40*time.Millisecond, 80*time.Millisecond, func(_ context.Context, changes pendingExternalBatch) {
-		flushed <- changes
-	})
-	t.Cleanup(func() { c.close(t.Context()) })
-	root := RootSpec{ID: "root", WorkspaceID: "ws", Path: t.TempDir()}
-	deadline := time.Now().Add(140 * time.Millisecond)
-	for time.Now().Before(deadline) {
-		c.queue(t.Context(), root, "continuous.data")
 		select {
 		case batch := <-flushed:
 			changes := batch.changes
-			if batch.resync || len(changes) != 1 || changes[0].rel != "continuous.data" {
-				t.Fatalf("maximum-delay changes = %+v", changes)
+			if batch.resync || len(changes) != 1 || changes[0].rel != ".ignored/unknown-language.scratch" {
+				t.Fatalf("converged changes = %+v", changes)
 			}
-			return
-		case <-time.After(10 * time.Millisecond):
+		case <-t.Context().Done():
+			t.Fatal("converged change was not flushed")
 		}
-	}
-	t.Fatal("continuous writes starved convergence")
+	})
+}
+
+func TestChangeConvergerFlushesContinuousWritesAtMaximumDelay(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		flushed := make(chan pendingExternalBatch, 1)
+		c := newChangeConverger(40*time.Millisecond, 80*time.Millisecond, func(_ context.Context, changes pendingExternalBatch) {
+			flushed <- changes
+		})
+		t.Cleanup(func() { c.close(t.Context()) })
+		root := RootSpec{ID: "root", WorkspaceID: "ws", Path: t.TempDir()}
+		for range 14 {
+			c.queue(t.Context(), root, "continuous.data")
+			time.Sleep(10 * time.Millisecond)
+			synctest.Wait()
+			select {
+			case batch := <-flushed:
+				changes := batch.changes
+				if batch.resync || len(changes) != 1 || changes[0].rel != "continuous.data" {
+					t.Fatalf("maximum-delay changes = %+v", changes)
+				}
+				return
+			default:
+			}
+		}
+		t.Fatal("continuous writes starved convergence")
+	})
 }
 
 func TestChangeConvergerKeepsEveryDistinctPath(t *testing.T) {
-	flushed := make(chan pendingExternalBatch, 1)
-	c := newChangeConverger(10*time.Millisecond, 50*time.Millisecond, func(_ context.Context, changes pendingExternalBatch) {
-		flushed <- changes
-	})
-	t.Cleanup(func() { c.close(t.Context()) })
-	root := RootSpec{ID: "root", WorkspaceID: "ws", Path: t.TempDir()}
-	c.queue(t.Context(), root, "z.any")
-	c.queue(t.Context(), root, "a.any")
-	select {
-	case batch := <-flushed:
-		changes := batch.changes
-		if batch.resync || len(changes) != 2 || changes[0].rel != "a.any" || changes[1].rel != "z.any" {
-			t.Fatalf("distinct changes = %+v", changes)
+	synctest.Test(t, func(t *testing.T) {
+		flushed := make(chan pendingExternalBatch, 1)
+		c := newChangeConverger(10*time.Millisecond, 50*time.Millisecond, func(_ context.Context, changes pendingExternalBatch) {
+			flushed <- changes
+		})
+		t.Cleanup(func() { c.close(t.Context()) })
+		root := RootSpec{ID: "root", WorkspaceID: "ws", Path: t.TempDir()}
+		c.queue(t.Context(), root, "z.any")
+		c.queue(t.Context(), root, "a.any")
+		select {
+		case batch := <-flushed:
+			changes := batch.changes
+			if batch.resync || len(changes) != 2 || changes[0].rel != "a.any" || changes[1].rel != "z.any" {
+				t.Fatalf("distinct changes = %+v", changes)
+			}
+		case <-t.Context().Done():
+			t.Fatal("distinct changes were not flushed")
 		}
-	case <-time.After(time.Second):
-		t.Fatal("distinct changes were not flushed")
-	}
+	})
 }
 
 func TestChangeConvergerBoundsDistinctPathsAndRequestsResync(t *testing.T) {
@@ -110,66 +118,74 @@ func TestChangeConvergerRecoversPathsAfterOverflowFlush(t *testing.T) {
 
 // A held window outlasts the maximum delay and flushes once the hold lifts.
 func TestChangeConvergerHoldsTheWindowWhileHeld(t *testing.T) {
-	flushed := make(chan pendingExternalBatch, 1)
-	c := newChangeConverger(10*time.Millisecond, 30*time.Millisecond, func(_ context.Context, batch pendingExternalBatch) {
-		flushed <- batch
-	})
-	t.Cleanup(func() { c.close(t.Context()) })
-	var held atomic.Bool
-	held.Store(true)
-	c.holdWhile(held.Load, time.Second)
-	root := RootSpec{ID: "root", WorkspaceID: "ws", Path: t.TempDir()}
-	c.queue(t.Context(), root, "first.txt")
-	select {
-	case batch := <-flushed:
-		t.Fatalf("held window flushed: %+v", batch)
-	case <-time.After(120 * time.Millisecond):
-	}
-	c.queue(t.Context(), root, "second.txt")
-	c.queueHeadMoved(t.Context())
-	held.Store(false)
-	select {
-	case batch := <-flushed:
-		if len(batch.changes) != 2 || !batch.headMoved {
-			t.Fatalf("released window = {changes:%d headMoved:%t}", len(batch.changes), batch.headMoved)
+	synctest.Test(t, func(t *testing.T) {
+		flushed := make(chan pendingExternalBatch, 1)
+		c := newChangeConverger(10*time.Millisecond, 30*time.Millisecond, func(_ context.Context, batch pendingExternalBatch) {
+			flushed <- batch
+		})
+		t.Cleanup(func() { c.close(t.Context()) })
+		var held atomic.Bool
+		held.Store(true)
+		c.holdWhile(held.Load, time.Second)
+		root := RootSpec{ID: "root", WorkspaceID: "ws", Path: t.TempDir()}
+		c.queue(t.Context(), root, "first.txt")
+		time.Sleep(120 * time.Millisecond)
+		synctest.Wait()
+		select {
+		case batch := <-flushed:
+			t.Fatalf("held window flushed: %+v", batch)
+		default:
 		}
-	case <-time.After(time.Second):
-		t.Fatal("released window was not flushed")
-	}
+		c.queue(t.Context(), root, "second.txt")
+		c.queueHeadMoved(t.Context())
+		held.Store(false)
+		select {
+		case batch := <-flushed:
+			if len(batch.changes) != 2 || !batch.headMoved {
+				t.Fatalf("released window = {changes:%d headMoved:%t}", len(batch.changes), batch.headMoved)
+			}
+		case <-t.Context().Done():
+			t.Fatal("released window was not flushed")
+		}
+	})
 }
 
 // The hold has a ceiling, so a lock left behind cannot stall observation.
 func TestChangeConvergerHoldCeilingFlushesAnyway(t *testing.T) {
-	flushed := make(chan pendingExternalBatch, 1)
-	c := newChangeConverger(10*time.Millisecond, 30*time.Millisecond, func(_ context.Context, batch pendingExternalBatch) {
-		flushed <- batch
-	})
-	t.Cleanup(func() { c.close(t.Context()) })
-	c.holdWhile(func() bool { return true }, 60*time.Millisecond)
-	c.queue(t.Context(), RootSpec{ID: "root", WorkspaceID: "ws", Path: t.TempDir()}, "stuck.txt")
-	select {
-	case batch := <-flushed:
-		if len(batch.changes) != 1 {
-			t.Fatalf("ceiling flush = %+v", batch)
+	synctest.Test(t, func(t *testing.T) {
+		flushed := make(chan pendingExternalBatch, 1)
+		c := newChangeConverger(10*time.Millisecond, 30*time.Millisecond, func(_ context.Context, batch pendingExternalBatch) {
+			flushed <- batch
+		})
+		t.Cleanup(func() { c.close(t.Context()) })
+		c.holdWhile(func() bool { return true }, 60*time.Millisecond)
+		c.queue(t.Context(), RootSpec{ID: "root", WorkspaceID: "ws", Path: t.TempDir()}, "stuck.txt")
+		select {
+		case batch := <-flushed:
+			if len(batch.changes) != 1 {
+				t.Fatalf("ceiling flush = %+v", batch)
+			}
+		case <-t.Context().Done():
+			t.Fatal("held window never reached its ceiling")
 		}
-	case <-time.After(time.Second):
-		t.Fatal("held window never reached its ceiling")
-	}
+	})
 }
 
 func TestChangeConvergerFlushesPathlessResync(t *testing.T) {
-	flushed := make(chan pendingExternalBatch, 1)
-	c := newChangeConverger(10*time.Millisecond, 50*time.Millisecond, func(_ context.Context, batch pendingExternalBatch) {
-		flushed <- batch
-	})
-	t.Cleanup(func() { c.close(t.Context()) })
-	c.queueResync(t.Context())
-	select {
-	case batch := <-flushed:
-		if !batch.resync || len(batch.changes) != 0 {
-			t.Fatalf("pathless resync = {changes:%d resync:%t}", len(batch.changes), batch.resync)
+	synctest.Test(t, func(t *testing.T) {
+		flushed := make(chan pendingExternalBatch, 1)
+		c := newChangeConverger(10*time.Millisecond, 50*time.Millisecond, func(_ context.Context, batch pendingExternalBatch) {
+			flushed <- batch
+		})
+		t.Cleanup(func() { c.close(t.Context()) })
+		c.queueResync(t.Context())
+		select {
+		case batch := <-flushed:
+			if !batch.resync || len(batch.changes) != 0 {
+				t.Fatalf("pathless resync = {changes:%d resync:%t}", len(batch.changes), batch.resync)
+			}
+		case <-t.Context().Done():
+			t.Fatal("pathless resync was not flushed")
 		}
-	case <-time.After(time.Second):
-		t.Fatal("pathless resync was not flushed")
-	}
+	})
 }

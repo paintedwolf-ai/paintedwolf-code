@@ -95,6 +95,7 @@ func TestAbandonedTurnClockSettlesAtLastTurnActivityParity(t *testing.T) {
 			testutil.FailErr(t, "begin turn", err)
 
 			settled, err := st.SettleAbandonedTurnClocks(ctx)
+			after := time.Now().UTC().Add(time.Second)
 			testutil.FailErr(t, "settle abandoned clocks", err)
 			if settled != 1 {
 				t.Fatalf("settled = %d, want 1", settled)
@@ -104,8 +105,8 @@ func TestAbandonedTurnClockSettlesAtLastTurnActivityParity(t *testing.T) {
 			if !ok || clock.RunningAt != nil || clock.SettledAt == nil {
 				t.Fatalf("recovered clock = %+v, want paused and settled", clock)
 			}
-			if clock.SettledAt.Before(since) || time.Since(*clock.SettledAt) > 30*time.Second {
-				t.Fatalf("settled at %s, want the turn's last update after %s", clock.SettledAt, since)
+			if clock.SettledAt.Before(since) || clock.SettledAt.After(after) {
+				t.Fatalf("settled at %s, want within [%s, %s]", clock.SettledAt, since, after)
 			}
 			elapsed := clock.SettledAt.Sub(since).Milliseconds()
 			if clock.ActiveMs != 2000+elapsed || clock.WorkMs != 1000+elapsed {

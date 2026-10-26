@@ -68,14 +68,14 @@ func TestProgressiveBriefReturnsBeforeSlowAnalyze(t *testing.T) {
 	case res := <-done:
 		testutil.FailErr(t, "Brief", res.err)
 		brief = res.b
-	case <-time.After(500 * time.Millisecond):
+	case <-t.Context().Done():
 		t.Fatal("Brief blocked waiting for slow Analyze")
 	}
 	// A cold root returns an unmeasured brief at once, carrying no count.
 	if brief.Materialized || brief.FileCount != 0 {
 		t.Fatalf("cold brief = %+v, want an unmeasured placeholder", brief)
 	}
-	testutil.WaitFor(t, 2*time.Second, func() bool { return started.Load() > 0 })
+	testutil.WaitFor(t, func() bool { return started.Load() > 0 })
 	if starts := started.Load(); starts != 1 {
 		t.Fatalf("analyze starts while blocked = %d want 1", starts)
 	}
@@ -189,11 +189,10 @@ refreshRunning:
 		if refreshed.Materialized && refreshed.FileCount == 2 {
 			break
 		}
-		select {
-		case <-ctx.Done():
+		if ctx.Err() != nil {
 			t.Fatal("refreshed brief was not published")
-		case <-time.After(time.Millisecond):
 		}
+		time.Sleep(time.Millisecond)
 	}
 }
 
@@ -230,11 +229,10 @@ func TestProgressiveBriefPublishesConcurrentObservationAsStale(t *testing.T) {
 		if observed.Materialized {
 			break
 		}
-		select {
-		case <-ctx.Done():
+		if ctx.Err() != nil {
 			t.Fatal("concurrent observation was discarded")
-		case <-time.After(time.Millisecond):
 		}
+		time.Sleep(time.Millisecond)
 	}
 	if observed.FileCount != 0 || !observed.Materialized {
 		t.Fatalf("concurrent observation = %+v", observed)
@@ -274,7 +272,7 @@ func TestAnalyzeRootsDoesNotAwaitFullWalk(t *testing.T) {
 	case res := <-done:
 		testutil.FailErr(t, "AnalyzeRoots", res.err)
 		mrb = res.m
-	case <-time.After(500 * time.Millisecond):
+	case <-t.Context().Done():
 		t.Fatal("AnalyzeRoots blocked on full Analyze")
 	}
 	if mrb.PrimaryMaterialized() {
@@ -316,12 +314,12 @@ func TestWarmDoesNotBlockOnSlowAnalyze(t *testing.T) {
 	}()
 	select {
 	case <-returned:
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("Warm waited for analysis")
 	}
 	select {
 	case <-started:
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("Warm did not start analysis")
 	}
 	close(release)

@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/fspath"
@@ -109,7 +108,7 @@ func TestSourceRecoveryAllowsUnrelatedSave(t *testing.T) {
 	}()
 	select {
 	case <-started:
-	case <-time.After(10 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("capture did not start")
 	}
 	if releasePath, err := service.Paths.ReserveSourcePath(root, "large"); !errors.Is(err, ErrSourceBusy) {
@@ -130,14 +129,14 @@ func TestSourceRecoveryAllowsUnrelatedSave(t *testing.T) {
 	select {
 	case err := <-saved:
 		testutil.FailErr(t, "unrelated save", err)
-	case <-time.After(10 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("unrelated save waited for recovery")
 	}
 	unblock()
 	select {
 	case err := <-done:
 		testutil.FailErr(t, "finish capture", err)
-	case <-time.After(10 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("capture did not finish")
 	}
 	releasePath, err := service.Paths.ReserveSourcePath(root, "large")

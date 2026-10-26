@@ -68,10 +68,10 @@ func TestPlanSlashReplacesActivePlanRun(t *testing.T) {
 	if len(history) < 1 {
 		t.Fatal("expected run history")
 	}
-	first := waitActiveWorkflowRunHTTP(t, srv, sess.ID, "plan", promptIdleBudget)
+	first := waitActiveWorkflowRunHTTP(t, srv, sess.ID, "plan")
 
 	acceptPromptHTTP(t, srv, sess.ID, "/plan")
-	waitWorkflowRunCountHTTP(t, srv, sess.ID, len(history)+1, promptIdleBudget)
+	waitWorkflowRunCountHTTP(t, srv, sess.ID, len(history)+1)
 
 	req = authedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID+"/workflow-runs", nil)
 	w = httptest.NewRecorder()
@@ -110,7 +110,7 @@ func TestNonSlashPromptAcceptedHTTP(t *testing.T) {
 	sess := createSessionHTTP(t, srv, t.TempDir())
 	exitAmbientRunHTTP(t, srv, sess.ID)
 
-	postPromptAndWaitTranscriptHTTP(t, srv, sess.ID, "/notatrigger please explain", "I understand", promptIdleBudget)
+	postPromptAndWaitTranscriptHTTP(t, srv, sess.ID, "/notatrigger please explain", "I understand")
 }
 
 func TestSlashPlanStartsWorkflow(t *testing.T) {
@@ -121,5 +121,5 @@ func TestSlashPlanStartsWorkflow(t *testing.T) {
 
 	// The active run is observable before the mock coordinator turn settles.
 	acceptPromptHTTP(t, srv, sess.ID, "/plan")
-	waitActiveWorkflowRunHTTP(t, srv, sess.ID, "plan", promptIdleBudget)
+	waitActiveWorkflowRunHTTP(t, srv, sess.ID, "plan")
 }

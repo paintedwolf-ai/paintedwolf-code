@@ -43,7 +43,7 @@ func TestRunnerSurvivesCallerCancel(t *testing.T) {
 	cancel()
 	select {
 	case <-done:
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("background pass did not finish")
 	}
 	r.Wait()

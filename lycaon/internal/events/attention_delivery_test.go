@@ -3,9 +3,9 @@ package events
 import (
 	"context"
 	"encoding/json"
+	"runtime"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -41,7 +41,8 @@ func TestAttentionDeliveryCannotReorderAcceptedViews(t *testing.T) {
 	stream, unsubscribe, err := hub.Subscribe(t.Context(), Subscription{Project: "", Viewer: testutil.HostOwner()})
 	testutil.FailErr(t, "subscribe to attention", err)
 	defer unsubscribe()
-	pub := &Publisher{Hub: hub, Attention: &sequencedAttention{}}
+	seq := &sequencedAttention{}
+	pub := &Publisher{Hub: hub, Attention: seq}
 	firstDone := make(chan struct{})
 	go func() {
 		defer close(firstDone)
@@ -53,10 +54,19 @@ func TestAttentionDeliveryCannotReorderAcceptedViews(t *testing.T) {
 		defer close(secondDone)
 		pub.FlushAttention(t.Context())
 	}()
+	for t.Context().Err() == nil {
+		if seq.calls.Load() == 2 {
+			if !pub.attentionDeliveryMu.TryLock() {
+				break
+			}
+			pub.attentionDeliveryMu.Unlock()
+		}
+		runtime.Gosched()
+	}
 	select {
 	case <-secondDone:
 		t.Error("newer attention bypassed a pending publication")
-	case <-time.After(100 * time.Millisecond):
+	default:
 	}
 	close(hub.release)
 	<-firstDone

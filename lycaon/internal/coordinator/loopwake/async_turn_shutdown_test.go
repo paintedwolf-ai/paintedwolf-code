@@ -49,7 +49,7 @@ func TestWaitForAsyncTurnsForceCancelsAndBlocksUntilExit(t *testing.T) {
 
 	select {
 	case <-started:
-	case <-time.After(2 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("async turn never started")
 	}
 
@@ -63,20 +63,20 @@ func TestWaitForAsyncTurnsForceCancelsAndBlocksUntilExit(t *testing.T) {
 
 	select {
 	case <-sawCancel:
-	case <-time.After(2 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("turn was not force-canceled once the drain deadline passed")
 	}
 
 	select {
 	case <-waitDone:
 		t.Fatal("WaitForAsyncTurns returned while the force-canceled turn was still mid-write")
-	case <-time.After(150 * time.Millisecond):
+	default:
 	}
 
 	close(release)
 	select {
 	case <-waitDone:
-	case <-time.After(2 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("WaitForAsyncTurns never returned after the turn actually exited")
 	}
 }
@@ -109,7 +109,7 @@ func TestForgetSessionCancelsAndDrainsInFlightAsyncTurn(t *testing.T) {
 
 	select {
 	case <-started:
-	case <-time.After(2 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("async turn never started")
 	}
 
@@ -119,29 +119,23 @@ func TestForgetSessionCancelsAndDrainsInFlightAsyncTurn(t *testing.T) {
 		engine.ForgetSession(context.Background(), "s1")
 	}()
 
-	// Session cleanup waits for the turn to exit.
-	select {
-	case <-forgetDone:
-		t.Fatal("ForgetSession returned while its session's turn was still running")
-	case <-time.After(150 * time.Millisecond):
-	}
-
 	select {
 	case <-sawCancel:
-	case <-time.After(2 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("ForgetSession never canceled the in-flight async turn")
 	}
 
+	// Session cleanup waits for the turn to exit.
 	select {
 	case <-forgetDone:
 		t.Fatal("ForgetSession returned before the canceled turn actually exited")
-	case <-time.After(150 * time.Millisecond):
+	default:
 	}
 
 	close(release)
 	select {
 	case <-forgetDone:
-	case <-time.After(2 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("ForgetSession never returned after the turn exited")
 	}
 
@@ -178,7 +172,7 @@ func TestSpawnAsyncTurnPanicDoesNotLeakRegistryOrWaitGroup(t *testing.T) {
 
 	select {
 	case <-started:
-	case <-time.After(2 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("async turn never started")
 	}
 

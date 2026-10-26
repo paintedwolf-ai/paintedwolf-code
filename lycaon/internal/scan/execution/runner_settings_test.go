@@ -110,7 +110,7 @@ func TestRunnerClaimsOnlyAvailableCapacity(t *testing.T) {
 	testutil.FailErr(t, "service scan work", runner.serviceWork(ctx))
 	select {
 	case <-probe.started:
-	case <-time.After(testutil.Timeout(15 * time.Second)):
+	case <-t.Context().Done():
 		t.Fatal("scanner did not start")
 	}
 
@@ -148,14 +148,14 @@ func TestRunnerMainOffCancelsRunningScannerContext(t *testing.T) {
 	}()
 	select {
 	case <-probe.started:
-	case <-time.After(testutil.Timeout(15 * time.Second)):
+	case <-t.Context().Done():
 		t.Fatal("scanner did not start")
 	}
 	off := false
 	testutil.FailErr(t, "PutGlobal", settingsStore.PutGlobal(settings.SecurityScannersUserOverlay{Enabled: &off}))
 	select {
 	case <-probe.stopped:
-	case <-time.After(testutil.Timeout(15 * time.Second)):
+	case <-t.Context().Done():
 		t.Fatal("main switch did not cancel scanner context")
 	}
 	<-done
@@ -212,17 +212,13 @@ func TestRunnerInterruptedExecutionCommitsTerminalState(t *testing.T) {
 			}()
 			t.Cleanup(func() {
 				cancel()
-				select {
-				case <-done:
-				case <-time.After(testutil.Timeout(15 * time.Second)):
-					t.Error("runner cleanup did not drain execution")
-				}
+				<-done
 			})
 			select {
 			case <-probe.started:
 			case <-done:
 				t.Fatalf("runner stopped before scanner started: %v", runErr)
-			case <-time.After(testutil.Timeout(15 * time.Second)):
+			case <-t.Context().Done():
 				t.Fatal("scanner did not start")
 			}
 			if tc.shutdown {
@@ -231,7 +227,7 @@ func TestRunnerInterruptedExecutionCommitsTerminalState(t *testing.T) {
 			var notified notification
 			select {
 			case notified = <-terminal:
-			case <-time.After(testutil.Timeout(15 * time.Second)):
+			case <-t.Context().Done():
 				t.Fatal("interrupted scan did not notify terminal consumers")
 			}
 			cancel()
@@ -240,7 +236,7 @@ func TestRunnerInterruptedExecutionCommitsTerminalState(t *testing.T) {
 				if !errors.Is(runErr, context.Canceled) {
 					t.Fatalf("runner shutdown = %v", runErr)
 				}
-			case <-time.After(testutil.Timeout(15 * time.Second)):
+			case <-t.Context().Done():
 				t.Fatal("runner did not drain its scanner on shutdown")
 			}
 			if notified.contextErr != nil || !notified.bounded {

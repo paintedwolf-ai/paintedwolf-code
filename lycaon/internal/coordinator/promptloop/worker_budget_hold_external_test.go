@@ -54,7 +54,7 @@ type budgetHoldRun struct {
 	assistants int
 	raised     int
 	declined   int
-	elapsed    time.Duration
+	polls      int
 }
 
 // runBudgetHold runs a two-round worker that asks for more rounds after its
@@ -76,7 +76,10 @@ func runBudgetHold(t *testing.T, wait time.Duration, answer func(*budgetJob)) bu
 	deps.Context.Tools = tools.NewStubRegistry()
 	deps.Context.Policy = &recordingToolPolicy{}
 	deps.Nudges.WorkerBudgetAnswerWait = wait
-	deps.Nudges.WorkerJob = func(context.Context, string) (*api.WorkerTask, bool) { return job.task(), true }
+	deps.Nudges.WorkerJob = func(context.Context, string) (*api.WorkerTask, bool) {
+		run.polls++
+		return job.task(), true
+	}
 	var asked sync.Once
 	deps.Nudges.PublishWorkerProgress = func(_ context.Context, _ string, snap workerprogress.Snapshot, _ bool) {
 		if snap.ToolLoopsUsed != 1 {
@@ -104,7 +107,6 @@ func runBudgetHold(t *testing.T, wait time.Duration, answer func(*budgetJob)) bu
 	sess.AgentType = orchestration.ProfilePathExplorer
 	sess.ParentSessionID = "parent-1"
 	sess.MaxToolLoops = 2
-	started := time.Now()
 	_, err = loop.Run(ctx, promptloop.PromptRunInput{
 		SessionID: sess.ID, Session: sess, History: userHistory("go"), ProfileID: "explore_readonly",
 		ToolCtx: tools.ToolContext{
@@ -112,7 +114,6 @@ func runBudgetHold(t *testing.T, wait time.Duration, answer func(*budgetJob)) bu
 				WorkerJobID: "job-1"},
 		},
 	})
-	run.elapsed = time.Since(started)
 	testutil.FailErr(t, "loop.Run failed", err)
 	msgs, err := mem.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "store.GetMessages failed", err)
@@ -133,21 +134,15 @@ func TestFinalRoundWaitsForAGrantAndContinues(t *testing.T) {
 
 func TestFinalRoundWaitsForADeclineAndReportsIt(t *testing.T) {
 	run := runBudgetHold(t, time.Minute, (*budgetJob).decline)
-	if run.assistants != 2 || run.declined != 1 || run.raised != 0 {
-		t.Fatalf("run = %+v, want the two-round ceiling kept and one declined notice", run)
-	}
-	if run.elapsed >= time.Minute {
-		t.Fatalf("elapsed = %v, want the decline to end the wait", run.elapsed)
+	if run.assistants != 2 || run.declined != 1 || run.raised != 0 || run.polls < 2 {
+		t.Fatalf("run = %+v, want the two-round ceiling kept and one declined notice after polling", run)
 	}
 }
 
 func TestUnansweredRequestHoldsTheFinalRoundOnceForItsBound(t *testing.T) {
 	const wait = 300 * time.Millisecond
 	run := runBudgetHold(t, wait, nil)
-	if run.assistants != 2 || run.raised != 0 || run.declined != 0 {
-		t.Fatalf("run = %+v, want the final round to run at the ceiling with no answer notice", run)
-	}
-	if run.elapsed < wait {
-		t.Fatalf("elapsed = %v, want the final round held for %v", run.elapsed, wait)
+	if run.assistants != 2 || run.raised != 0 || run.declined != 0 || run.polls < 2 {
+		t.Fatalf("run = %+v, want the final round held across polls and run at the ceiling with no answer notice", run)
 	}
 }

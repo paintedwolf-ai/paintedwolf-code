@@ -113,11 +113,7 @@ func TestScanPackToolCanWaitForSummary(t *testing.T) {
 	runnerDone := make(chan struct{})
 	t.Cleanup(func() {
 		cancel()
-		select {
-		case <-runnerDone:
-		case <-time.After(2 * time.Second):
-			t.Error("scan runner did not stop")
-		}
+		<-runnerDone
 	})
 	go func() {
 		defer close(runnerDone)

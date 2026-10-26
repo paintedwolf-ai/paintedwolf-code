@@ -6,7 +6,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -42,7 +41,7 @@ func TestApprovalHITLSSEPendingAndResolved(t *testing.T) {
 
 func assertCheckpointSSE(t *testing.T, ch <-chan wire.EventEnvelope, checkpointID string, status wire.CheckpointStatus) {
 	t.Helper()
-	testutil.WaitFor(t, 3*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		select {
 		case envelope, ok := <-ch:
 			if !ok {

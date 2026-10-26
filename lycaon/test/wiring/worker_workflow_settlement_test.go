@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -109,7 +108,7 @@ func TestWorkerOutcomesAdvancePlannedWorkflow(t *testing.T) {
 			if reject == nil || reject.Data["reason"] != "workflow_phase_changed" {
 				t.Fatalf("queue accepted stale workflow phase: %v", reject)
 			}
-			testutil.WaitFor(t, 5*time.Second, func() bool {
+			testutil.WaitFor(t, func() bool {
 				pending, err := h.Delegations.Queue.ListPendingOutcomes(ctx)
 				return err == nil && len(pending) == 0
 			})

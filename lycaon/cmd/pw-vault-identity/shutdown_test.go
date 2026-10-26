@@ -4,7 +4,6 @@ import (
 	"context"
 	"net"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/vaultidentity"
@@ -31,7 +30,7 @@ func TestPolicyRestartClosesAlreadyVerifiedConnections(t *testing.T) {
 	select {
 	case err := <-done:
 		testutil.FailErr(t, "shutdown verified service", err)
-	case <-time.After(2 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("service cancellation retained a verified connection")
 	}
 	if err := vaultidentity.ReadFrame(conn, &response); err == nil {

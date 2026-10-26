@@ -135,7 +135,6 @@ func TestMarkingAProjectSecretRescreensExistingTaskHistory(t *testing.T) {
 			if cancelOnCommit && requestCtx.Err() == nil {
 				t.Fatal("fixture did not cancel the committed request")
 			}
-			deadline := time.Now().Add(5 * time.Second)
 			for {
 				messages, err := store.GetMessages(t.Context(), "root-1")
 				testutil.FailErr(t, "read rescreened history", err)
@@ -143,7 +142,7 @@ func TestMarkingAProjectSecretRescreensExistingTaskHistory(t *testing.T) {
 					assertManagedMessageScreened(t, messages[0], raw)
 					return
 				}
-				if time.Now().After(deadline) {
+				if t.Context().Err() != nil {
 					t.Fatal("marking a project secret left earlier tool plaintext in storage")
 				}
 				time.Sleep(10 * time.Millisecond)

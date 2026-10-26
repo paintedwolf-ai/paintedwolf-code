@@ -14,8 +14,6 @@ func TestTreeReviewWaitCoalescesBurstAndBoundsContinuousChanges(t *testing.T) {
 	}()
 	ticker := time.NewTicker(5 * time.Millisecond)
 	defer ticker.Stop()
-	deadline := time.NewTimer(3 * time.Second)
-	defer deadline.Stop()
 	notices := 0
 	for {
 		select {
@@ -30,7 +28,7 @@ func TestTreeReviewWaitCoalescesBurstAndBoundsContinuousChanges(t *testing.T) {
 				notices++
 			default:
 			}
-		case <-deadline.C:
+		case <-t.Context().Done():
 			t.Fatal("continuous changes starved review convergence")
 		}
 	}

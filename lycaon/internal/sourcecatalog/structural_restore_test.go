@@ -27,7 +27,7 @@ func watchRestoreRoot(t *testing.T, path string) {
 func awaitQuietStructure(t *testing.T, store *indexStore) {
 	t.Helper()
 	settled := int64(-1)
-	testutil.WaitFor(t, 30*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		pin, err := store.retainGeneration(headGeneration, true)
 		testutil.FailErr(t, "read head generation", err)
 		current := pin.Generation

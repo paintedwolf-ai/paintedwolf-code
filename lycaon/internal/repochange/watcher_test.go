@@ -48,8 +48,7 @@ func TestWatcher_EmitsWorktreeChanged(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 	testutil.FailErr(t, "write file", os.WriteFile(filepath.Join(dir, "watched.txt"), []byte("hi"), 0o644))
 
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		repochange.ResetDebouncerForTest(t.Context())
 		if n.Load() > 0 {
 			break
@@ -108,8 +107,7 @@ func TestWatcherEmitsForFilesNamedLikeDirectories(t *testing.T) {
 		}
 		return missing
 	}
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		repochange.ResetDebouncerForTest(t.Context())
 		if len(missingNames()) == 0 {
 			break
@@ -160,8 +158,7 @@ func TestWatcherObservesHiddenAndMetadataChildren(t *testing.T) {
 	for _, name := range []string{".hidden/new.txt", ".paintedwolf/new.txt", ".git/objects/new.txt", ".git/config"} {
 		testutil.FailErr(t, "write metadata child", os.WriteFile(filepath.Join(dir, name), nil, 0600))
 	}
-	until := time.Now().Add(5 * time.Second)
-	for time.Now().Before(until) {
+	for t.Context().Err() == nil {
 		repochange.ResetDebouncerForTest(t.Context())
 		mu.Lock()
 		complete := seen[".hidden/new.txt"] && seen[".paintedwolf/new.txt"]

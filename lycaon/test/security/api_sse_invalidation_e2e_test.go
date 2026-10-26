@@ -10,7 +10,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 
@@ -40,12 +39,12 @@ func TestSSETopicInvalidationE2E(t *testing.T) {
 	// Prompt events.
 	acceptPromptOpenAPI(t, base, sess.ID, `{"text":"hub probe"}`)
 
-	sessionEnv := hub.waitForField(t, wire.EventTopicSession, "last_message", 10*time.Second)
+	sessionEnv := hub.waitForField(t, wire.EventTopicSession, "last_message")
 	assertField(t, sessionEnv, "id", sess.ID)
 	assertField(t, sessionEnv, "status", "") // status is enum string but value varies; just assert key present
 	assertField(t, sessionEnv, "last_message", "")
 
-	msgEnv := hub.waitFor(t, wire.EventTopicMessage, 3*time.Second)
+	msgEnv := hub.waitFor(t, wire.EventTopicMessage)
 	assertField(t, msgEnv, "session_id", sess.ID)
 	assertField(t, msgEnv, "op", "")
 	assertField(t, msgEnv, "message", "")
@@ -55,19 +54,19 @@ func TestSSETopicInvalidationE2E(t *testing.T) {
 	if memHub := h.MemoryHub(); memHub != nil {
 		memHub.FlushDebounced()
 	}
-	llmEnv := hub.waitFor(t, wire.EventTopicLLM, 5*time.Second)
+	llmEnv := hub.waitFor(t, wire.EventTopicLLM)
 	assertField(t, llmEnv, "call_id", "")
 	assertField(t, llmEnv, "status", "")
 	assertFieldAbsent(t, llmEnv, "token") // no per-token deltas here
 
 	// Workflow event.
 	exitAmbientRunHTTP(t, h.Server, sess.ID)
-	hub.waitFor(t, wire.EventTopicWorkflow, 3*time.Second) // drain ambient exit envelope
+	hub.waitFor(t, wire.EventTopicWorkflow) // drain ambient exit envelope
 	run := journeyPostJSON[wire.WorkflowRun](t, base,
 		"/v1/sessions/"+sess.ID+"/workflow-runs",
 		`{"workflow_id":"plan","workflow_version":"1.0.0"}`, http.StatusCreated)
 
-	wfEnv := hub.waitForWorkflowRunID(t, run.ID, 3*time.Second)
+	wfEnv := hub.waitForWorkflowRunID(t, run.ID)
 	assertField(t, wfEnv, "workflow_id", "plan")
 	assertField(t, wfEnv, "workflow_run_id", run.ID)
 	assertField(t, wfEnv, "status", "")
@@ -75,12 +74,12 @@ func TestSSETopicInvalidationE2E(t *testing.T) {
 	// Provider events.
 	_ = openAPIPostJSON[wire.ProviderMeta](t, base, "/v1/providers", nil,
 		`{"id":"sse-test","base_url":"https://x.example/v1","models":[{"id":"m1"}]}`, http.StatusCreated)
-	createdEnv := hub.waitFor(t, wire.EventTopicProviders, 3*time.Second)
+	createdEnv := hub.waitFor(t, wire.EventTopicProviders)
 	assertField(t, createdEnv, "provider_id", "sse-test")
 	assertField(t, createdEnv, "action", "created")
 	journeyPatch(t, base, "/v1/providers/sse-test",
 		`{"base_url":"https://x2.example/v1","models":[{"id":"m1"}]}`, http.StatusOK)
-	provEnv := hub.waitFor(t, wire.EventTopicProviders, 3*time.Second)
+	provEnv := hub.waitFor(t, wire.EventTopicProviders)
 	assertField(t, provEnv, "provider_id", "sse-test")
 	assertField(t, provEnv, "action", "updated")
 
@@ -97,14 +96,14 @@ func TestSSETopicInvalidationE2E(t *testing.T) {
 	policyBody, err := json.Marshal(policy)
 	testutil.FailErr(t, "marshal policy", err)
 	journeyPatch(t, base, "/v1/settings/model-policy", string(policyBody), http.StatusOK)
-	mpEnv := hub.waitFor(t, wire.EventTopicModelPolicy, 3*time.Second)
+	mpEnv := hub.waitFor(t, wire.EventTopicModelPolicy)
 	assertField(t, mpEnv, "scope", "global")
 	assertField(t, mpEnv, "action", "updated")
 
 	// Settings event.
 	journeyPatch(t, base, "/v1/settings/approvals",
 		`{"rules":[],"approval_posture":"strict"}`, http.StatusOK)
-	setEnv := hub.waitForSettingsArea(t, "approvals", 5*time.Second)
+	setEnv := hub.waitForSettingsArea(t, "approvals")
 	assertField(t, setEnv, "area", "approvals")
 	assertField(t, setEnv, "scope", "global")
 	assertField(t, setEnv, "action", "updated")
@@ -115,7 +114,7 @@ func TestSSETopicInvalidationE2E(t *testing.T) {
 	queueBody, err := json.Marshal(wire.QueueMutateRequest{Op: "hold", Hold: &hold, ExpectedRevision: queue.Revision})
 	testutil.FailErr(t, "encode queue hold", err)
 	journeyPatch(t, base, "/v1/sessions/"+sess.ID+"/queue", string(queueBody), http.StatusOK)
-	queueEnv := hub.waitFor(t, wire.EventTopicQueue, 3*time.Second)
+	queueEnv := hub.waitFor(t, wire.EventTopicQueue)
 	assertField(t, queueEnv, "revision", "")
 }
 
@@ -174,7 +173,7 @@ func newProjectHub(t *testing.T, ctx context.Context, base, projectID string) *p
 }
 
 // waitFor preserves envelopes from other topics.
-func (h *projectHub) waitFor(t *testing.T, topic wire.EventTopic, deadline time.Duration) wire.EventEnvelope {
+func (h *projectHub) waitFor(t *testing.T, topic wire.EventTopic) wire.EventEnvelope {
 	t.Helper()
 
 	// Check the already-queued buffer first.
@@ -188,8 +187,6 @@ func (h *projectHub) waitFor(t *testing.T, topic wire.EventTopic, deadline time.
 	}
 	h.mu.Unlock()
 
-	timer := time.NewTimer(deadline)
-	defer timer.Stop()
 	for {
 		select {
 		case env, ok := <-h.ch:
@@ -202,22 +199,17 @@ func (h *projectHub) waitFor(t *testing.T, topic wire.EventTopic, deadline time.
 			h.mu.Lock()
 			h.queued = append(h.queued, env)
 			h.mu.Unlock()
-		case <-timer.C:
+		case <-t.Context().Done():
 			t.Fatalf("timeout waiting for topic %q (queued topics: %v)", topic, h.queuedTopics())
 		}
 	}
 }
 
 // waitForField skips earlier envelopes that lack the requested field.
-func (h *projectHub) waitForField(t *testing.T, topic wire.EventTopic, field string, deadline time.Duration) wire.EventEnvelope {
+func (h *projectHub) waitForField(t *testing.T, topic wire.EventTopic, field string) wire.EventEnvelope {
 	t.Helper()
-	deadlineAt := time.Now().Add(deadline)
-	for {
-		remaining := time.Until(deadlineAt)
-		if remaining <= 0 {
-			t.Fatalf("timeout waiting for topic %q field %q", topic, field)
-		}
-		env := h.waitFor(t, topic, remaining)
+	for t.Context().Err() == nil {
+		env := h.waitFor(t, topic)
 		var raw map[string]any
 		if err := json.Unmarshal(env.Data, &raw); err != nil {
 			t.Fatalf("topic %s data not an object: %v", topic, err)
@@ -226,19 +218,16 @@ func (h *projectHub) waitForField(t *testing.T, topic wire.EventTopic, field str
 			return env
 		}
 	}
+	t.Fatalf("timeout waiting for topic %q field %q", topic, field)
+	return wire.EventEnvelope{}
 }
 
 // waitForWorkflowRunID selects one run's workflow envelope.
-func (h *projectHub) waitForWorkflowRunID(t *testing.T, runID string, deadline time.Duration) wire.EventEnvelope {
+func (h *projectHub) waitForWorkflowRunID(t *testing.T, runID string) wire.EventEnvelope {
 	t.Helper()
 	runID = strings.TrimSpace(runID)
-	deadlineAt := time.Now().Add(deadline)
-	for {
-		remaining := time.Until(deadlineAt)
-		if remaining <= 0 {
-			t.Fatalf("timeout waiting for workflow_run_id %q", runID)
-		}
-		env := h.waitFor(t, wire.EventTopicWorkflow, remaining)
+	for t.Context().Err() == nil {
+		env := h.waitFor(t, wire.EventTopicWorkflow)
 		var raw map[string]any
 		if err := json.Unmarshal(env.Data, &raw); err != nil {
 			t.Fatalf("workflow data not an object: %v", err)
@@ -247,19 +236,16 @@ func (h *projectHub) waitForWorkflowRunID(t *testing.T, runID string, deadline t
 			return env
 		}
 	}
+	t.Fatalf("timeout waiting for workflow_run_id %q", runID)
+	return wire.EventEnvelope{}
 }
 
 // waitForSettingsArea selects one settings area.
-func (h *projectHub) waitForSettingsArea(t *testing.T, area string, deadline time.Duration) wire.EventEnvelope {
+func (h *projectHub) waitForSettingsArea(t *testing.T, area string) wire.EventEnvelope {
 	t.Helper()
-	deadlineAt := time.Now().Add(deadline)
 	var seen []string
-	for {
-		remaining := time.Until(deadlineAt)
-		if remaining <= 0 {
-			t.Fatalf("timeout waiting for settings area %q (saw: %v)", area, seen)
-		}
-		env := h.waitFor(t, wire.EventTopicSettings, remaining)
+	for t.Context().Err() == nil {
+		env := h.waitFor(t, wire.EventTopicSettings)
 		var raw map[string]any
 		if err := json.Unmarshal(env.Data, &raw); err != nil {
 			t.Fatalf("settings data not an object: %v", err)
@@ -270,6 +256,8 @@ func (h *projectHub) waitForSettingsArea(t *testing.T, area string, deadline tim
 		}
 		seen = append(seen, got)
 	}
+	t.Fatalf("timeout waiting for settings area %q (saw: %v)", area, seen)
+	return wire.EventEnvelope{}
 }
 
 func stringField(raw map[string]any, key string) string {

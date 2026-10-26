@@ -58,7 +58,7 @@ func TestDetachedDrainIncludesNestedWorkAndHonorsCancellation(t *testing.T) {
 	close(release)
 	select {
 	case <-drained:
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("drain did not return after nested work completed")
 	}
 }
@@ -92,14 +92,13 @@ func TestServerCleanupReliablyReleasesResourcesInvariant(t *testing.T) {
 		t.Fatalf("drain source catalog after server cleanup: %v", err)
 	}
 
-	deadline := time.Now().Add(5 * time.Second)
 	for {
 		runtime.GC()
 		growth := runtime.NumGoroutine() - baselineGoroutines
 		if growth <= 2 {
 			break
 		}
-		if time.Now().After(deadline) {
+		if t.Context().Err() != nil {
 			t.Fatalf("goroutines did not settle after cleanup: baseline %d, now %d (growth %d)",
 				baselineGoroutines, runtime.NumGoroutine(), growth)
 		}

@@ -48,7 +48,7 @@ func TestAwaitParentSessionWorkersReturnsWhenIdle(t *testing.T) {
 	waiter.NotifyParent(parent)
 	select {
 	case <-done:
-	case <-time.After(2 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("await did not return after job completed")
 	}
 }
@@ -119,7 +119,7 @@ func TestAwaitParentSessionWorkersWaitsForRunning(t *testing.T) {
 	}()
 	select {
 	case <-done:
-	case <-time.After(2 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("await did not return after running job completed")
 	}
 }

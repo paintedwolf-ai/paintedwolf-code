@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 // idleWindow must outlast any polling loop the quiet assertion rules out.
@@ -45,13 +44,8 @@ func RunService(t *testing.T, run func(context.Context) error) {
 	go func() { done <- run(ctx) }()
 	t.Cleanup(func() {
 		cancel()
-		select {
-		case err := <-done:
-			if !errors.Is(err, context.Canceled) {
-				t.Errorf("scan service stopped: %v", err)
-			}
-		case <-time.After(testutil.Timeout(10 * time.Second)):
-			t.Error("scan service did not stop")
+		if err := <-done; !errors.Is(err, context.Canceled) {
+			t.Errorf("scan service stopped: %v", err)
 		}
 	})
 }

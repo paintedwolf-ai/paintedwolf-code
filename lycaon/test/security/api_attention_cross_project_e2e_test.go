@@ -6,7 +6,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -26,7 +25,7 @@ func TestAttentionCrossProjectE2E(t *testing.T) {
 	done := h.runPrompt(t)
 	decisionID := h.waitPending(t)
 
-	row := waitNeedsYouAttentionRow(t, ch, h.sess.ID, 20*time.Second)
+	row := waitNeedsYouAttentionRow(t, ch, h.sess.ID)
 	if row.Reason != wire.AttentionReasonCheckpoint {
 		t.Fatalf("reason = %q, want checkpoint", row.Reason)
 	}
@@ -46,7 +45,7 @@ func TestAttentionCrossProjectE2E(t *testing.T) {
 	if err := <-done; err != nil {
 		testutil.FailErr(t, "prompt", err)
 	}
-	waitAttentionClear(t, ch, h.sess.ID, 20*time.Second)
+	waitAttentionClear(t, ch, h.sess.ID)
 }
 
 // Transient attention snapshots can precede the pending checkpoint.
@@ -54,10 +53,8 @@ func waitNeedsYouAttentionRow(
 	t *testing.T,
 	ch <-chan wire.EventEnvelope,
 	sessionID string,
-	deadline time.Duration,
 ) wire.AttentionRow {
 	t.Helper()
-	timeout := time.After(deadline)
 	for {
 		select {
 		case env, ok := <-ch:
@@ -76,7 +73,7 @@ func waitNeedsYouAttentionRow(
 					return row
 				}
 			}
-		case <-timeout:
+		case <-t.Context().Done():
 			t.Fatalf("no attention row for session %s reached a subscriber of another project", sessionID)
 		}
 	}
@@ -86,10 +83,8 @@ func waitAttentionClear(
 	t *testing.T,
 	ch <-chan wire.EventEnvelope,
 	sessionID string,
-	deadline time.Duration,
 ) {
 	t.Helper()
-	timeout := time.After(deadline)
 	for {
 		select {
 		case env, ok := <-ch:
@@ -112,7 +107,7 @@ func waitAttentionClear(
 			if !blocked {
 				return
 			}
-		case <-timeout:
+		case <-t.Context().Done():
 			t.Fatalf("session %s stayed on the attention list after its checkpoint was resolved", sessionID)
 		}
 	}

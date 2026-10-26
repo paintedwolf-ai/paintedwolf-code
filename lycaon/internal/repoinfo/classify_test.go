@@ -45,9 +45,8 @@ func testCatalog(t *testing.T) *sourcecatalog.Catalog {
 // indexOf returns a reader over root's index once no rescan is pending.
 func indexOf(t *testing.T, c *sourcecatalog.Catalog, root string) *sourcecatalog.IndexReader {
 	t.Helper()
-	until := time.Now().Add(30 * time.Second)
-	for time.Now().Before(until) {
-		reader, status, err := c.Trees.OpenIndex(context.Background(), "p", sourcecatalog.Root{ID: "r", Path: root}, time.Second)
+	for t.Context().Err() == nil {
+		reader, status, err := c.Trees.OpenIndex(t.Context(), "p", sourcecatalog.Root{ID: "r", Path: root}, time.Second)
 		testutil.FailErr(t, "open index", err)
 		if reader != nil {
 			if status.Complete && !status.Refreshing {

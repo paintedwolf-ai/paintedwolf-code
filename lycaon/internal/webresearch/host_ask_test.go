@@ -89,7 +89,7 @@ func TestDoProviderHTTPHostAskSurvivesShortTimeout(t *testing.T) {
 		if err != nil {
 			t.Fatalf("after Allow, dial must succeed: %v", err)
 		}
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("doProviderHTTP hung after Allow")
 	}
 	if status != 200 || string(body) != "ok" {
@@ -146,7 +146,7 @@ func TestRunProviderTasksSkipsEarlyCancelDuringHostAsk(t *testing.T) {
 		if len(outs) != 2 {
 			t.Fatalf("outcomes = %d", len(outs))
 		}
-	case <-time.After(3 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("runProviderTasks hung")
 	}
 }

@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/backgroundwork"
 	"github.com/lycaon/lycaon/internal/pagedview"
@@ -85,7 +84,7 @@ func TestReviewPreparationDoesNotBlockConcurrentReads(t *testing.T) {
 	}
 	select {
 	case <-entered:
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("review builder did not start")
 	}
 	_, _, err = review.projection(view.ctx, source, "intent", nil)
@@ -95,7 +94,7 @@ func TestReviewPreparationDoesNotBlockConcurrentReads(t *testing.T) {
 	close(unblock)
 	var projection *ReviewProjection
 	var release func()
-	testutil.WaitFor(t, 5*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		projection, release, err = review.projection(view.ctx, source, "intent", nil)
 		return !errors.Is(err, pagedview.ErrPreparing)
 	})
@@ -142,7 +141,7 @@ func TestReviewProjectionSurvivesUnrelatedDiscovery(t *testing.T) {
 	testutil.FailErr(t, "finish review", err)
 	testutil.FailErr(t, "install review", view.SetReview(review))
 	var frame Frame
-	testutil.WaitFor(t, 5*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		frame, err = frameForTest(t, view, t.Context(), FrameRequest{Limit: 10, Anchor: &Address{Root: root.ID, Path: "."}})
 		return !errors.Is(err, pagedview.ErrPreparing)
 	})

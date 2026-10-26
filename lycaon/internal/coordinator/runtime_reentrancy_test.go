@@ -3,7 +3,6 @@ package coordinator
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -30,14 +29,14 @@ func TestBuildCompletionMessagesAllowsReentryFromAssembly(t *testing.T) {
 
 	select {
 	case <-reentered:
-	case <-time.After(1 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("BuildCompletionMessages blocked Runtime.CoordinatorLoop re-entry")
 	}
 
 	select {
 	case err := <-done:
 		testutil.FailErr(t, "BuildCompletionMessages", err)
-	case <-time.After(1 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("BuildCompletionMessages did not return after re-entry")
 	}
 }
@@ -96,7 +95,7 @@ func TestRuntimeLockFreeAccessorsRemainReentrant(t *testing.T) {
 			}()
 			select {
 			case <-done:
-			case <-time.After(time.Second):
+			case <-t.Context().Done():
 				t.Fatalf("%s blocked on depsMu", c.name)
 			}
 		})

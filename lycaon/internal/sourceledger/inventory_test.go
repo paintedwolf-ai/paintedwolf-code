@@ -41,7 +41,7 @@ func TestSuspendInventoryCancelsAllBranchesAndBlocksAdmission(t *testing.T) {
 	for range 3 {
 		select {
 		case <-started:
-		case <-time.After(5 * time.Second):
+		case <-t.Context().Done():
 			t.Fatal("inventory did not start")
 		}
 	}
@@ -94,7 +94,7 @@ func TestEnsureInventoryCoalescesAndRunsNewestRootsGeneration(t *testing.T) {
 	}()
 	select {
 	case <-started:
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("first inventory generation did not start")
 	}
 
@@ -110,7 +110,7 @@ func TestEnsureInventoryCoalescesAndRunsNewestRootsGeneration(t *testing.T) {
 	select {
 	case err := <-firstDone:
 		testutil.FailErr(t, "finish inventory", err)
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("inventory generations did not finish")
 	}
 	if got := calls.Load(); got != 2 {
@@ -168,7 +168,7 @@ func TestEnsureInventoryCompletesForEmptyFolder(t *testing.T) {
 	select {
 	case err := <-done:
 		testutil.FailErr(t, "ensure inventory", err)
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("empty-folder inventory did not finish within 5s")
 	}
 	state, err := st.Inventory.InventoryState(ctx, "p1", "", 1)

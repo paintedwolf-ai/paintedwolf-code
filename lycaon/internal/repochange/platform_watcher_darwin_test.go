@@ -73,15 +73,13 @@ func TestFSEventsWatcherCloseDoesNotDependOnConsumerDrain(t *testing.T) {
 	}()
 	select {
 	case <-closed:
-	case <-time.After(2 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("Close blocked behind an undrained event consumer")
 	}
 }
 
 func wantWatcherEvent(t *testing.T, w platformWatcher, target string) {
 	t.Helper()
-	deadline := time.NewTimer(2 * time.Second)
-	defer deadline.Stop()
 	var seen []fsnotify.Event
 	for {
 		select {
@@ -90,7 +88,7 @@ func wantWatcherEvent(t *testing.T, w platformWatcher, target string) {
 			if event.Name == target && event.Op&(fsnotify.Create|fsnotify.Write|fsnotify.Rename) != 0 {
 				return
 			}
-		case <-deadline.C:
+		case <-t.Context().Done():
 			t.Fatalf("no event for %q; received %+v", target, seen)
 		}
 	}

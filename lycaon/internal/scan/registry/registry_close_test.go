@@ -5,7 +5,6 @@ import (
 	"errors"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/scan"
@@ -53,7 +52,7 @@ func TestReloadStopsReplacedAdapters(t *testing.T) {
 	testutil.FailErr(t, "register adapter", reg.Register(adapter))
 
 	testutil.FailErr(t, "reload", reg.Reload())
-	testutil.WaitFor(t, 5*time.Second, func() bool { return adapter.closed.Load() == 1 })
+	testutil.WaitFor(t, func() bool { return adapter.closed.Load() == 1 })
 	testutil.FailErr(t, "close registry", reg.Close(t.Context()))
 }
 

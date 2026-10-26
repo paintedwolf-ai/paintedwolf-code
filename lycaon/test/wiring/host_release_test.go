@@ -27,9 +27,8 @@ func TestClosedHostIsCollectable(t *testing.T) {
 		BuildForTest(t)
 	})
 
-	deadline := time.Now().Add(testutil.Timeout(10 * time.Second))
 	for closed.Value() != nil {
-		if time.Now().After(deadline) {
+		if t.Context().Err() != nil {
 			t.Fatal("closed host is still reachable: a process-wide registry (observer list, hook, or cache) " +
 				"still references it; return a release from the registration and track it in the host's resources")
 		}

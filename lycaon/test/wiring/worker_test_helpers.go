@@ -144,11 +144,10 @@ func DrainPendingWorkerJobs(ctx context.Context, h *Harness, projectID, parentSe
 				}
 				return nil
 			}
-			select {
-			case <-drainCtx.Done():
+			if drainCtx.Err() != nil {
 				return drainCtx.Err()
-			case <-time.After(25 * time.Millisecond):
 			}
+			time.Sleep(25 * time.Millisecond)
 			continue
 		}
 		if err != nil {
@@ -212,12 +211,8 @@ func executeWorkerWithinDrain(
 		if ok && current != nil && current.ChildSessionID != "" {
 			h.Sessions.Manager.Runner.Execution.Cancel(current.ChildSessionID)
 		}
-		select {
-		case out := <-done:
-			if out.err != nil {
-				return out.result, out.err
-			}
-		case <-time.After(time.Second):
+		if out := <-done; out.err != nil {
+			return out.result, out.err
 		}
 		return api.WorkerResult{}, ctx.Err()
 	}

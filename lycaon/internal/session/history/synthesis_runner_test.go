@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -29,7 +28,7 @@ func TestSynthesisRunnerBoundsStalledWorkAndCancelsWithoutJoining(t *testing.T) 
 	runner.Stop()
 	select {
 	case <-first.Done():
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("synthesis cancellation did not reach the provider")
 	}
 	if runner.Start(t.Context(), "after stop", func(context.Context) { t.Error("sealed work ran") }) {

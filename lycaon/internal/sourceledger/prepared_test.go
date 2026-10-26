@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/sourceblob"
@@ -99,7 +98,7 @@ func TestPreparedContentDoesNotNeedTheDatabaseWriter(t *testing.T) {
 			select {
 			case err := <-done:
 				testutil.FailErr(t, "prepare while writer occupied", err)
-			case <-time.After(5 * time.Second):
+			case <-t.Context().Done():
 				_ = tx.Rollback()
 				<-done
 				if recording != nil {

@@ -36,18 +36,17 @@ func TestDisposeSessionEndsJobsOutsideTheLeadersGroup(t *testing.T) {
 	testutil.FailErr(t, "start background", err)
 	job := waitForJobPID(t, pidFile)
 
-	started := time.Now()
-	testutil.FailErr(t, "dispose session processes", reg.Lifecycle.DisposeSession(context.Background(), "sess-1"))
-	if elapsed := time.Since(started); elapsed > exec.TerminateGrace+5*time.Second {
-		t.Fatalf("dispose took %v", elapsed)
+	testutil.FailErr(t, "dispose session processes", reg.Lifecycle.DisposeSession(t.Context(), "sess-1"))
+	if reg.HasRunning("sess-1") {
+		t.Fatal("session still has running processes after dispose")
 	}
-	testutil.WaitFor(t, 5*time.Second, func() bool { return !osprocess.Alive(job) })
+	testutil.WaitFor(t, func() bool { return !osprocess.Alive(job) })
 }
 
 func waitForJobPID(t *testing.T, path string) int {
 	t.Helper()
 	var pid int
-	testutil.WaitFor(t, 20*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		raw, err := os.ReadFile(path)
 		if err != nil {
 			return false

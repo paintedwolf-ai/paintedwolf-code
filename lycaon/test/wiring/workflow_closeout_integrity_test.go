@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/llm"
@@ -60,7 +59,6 @@ func TestWorkflowCloseoutCannotPromiseUncommittedAdvancement(t *testing.T) {
 					t.Fatalf("unsupported closeout published: %s", msg.Content)
 				}
 			}
-			deadline := time.After(2 * time.Second)
 			for {
 				select {
 				case event := <-eventsCh:
@@ -74,7 +72,7 @@ func TestWorkflowCloseoutCannotPromiseUncommittedAdvancement(t *testing.T) {
 						t.Fatalf("idle disposition=%s", status.IdleDisposition)
 					}
 					return
-				case <-deadline:
+				case <-t.Context().Done():
 					t.Fatal("missing failed turn settlement")
 				}
 			}

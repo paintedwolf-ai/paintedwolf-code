@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/authzcontext"
 	"github.com/lycaon/lycaon/internal/events"
@@ -36,13 +35,13 @@ func TestManagerPublishCheckpointSSE(t *testing.T) {
 		SessionID: sessionID,
 		Kind:      api.CheckpointKindToolApproval,
 		ProposedAction: &hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "write",
-},
-Scope: hitl.ActionScope{
-ProjectDir: projectDir,
-},
-},
+			Invocation: hitl.ActionInvocation{
+				Tool: "write",
+			},
+			Scope: hitl.ActionScope{
+				ProjectDir: projectDir,
+			},
+		},
 	})
 	testutil.FailErr(t, "mgr.RequestCheckpoint failed", err)
 	assertCheckpointEvent(t, ch, resp.CheckpointID, api.CheckpointStatusPending)
@@ -73,14 +72,14 @@ func TestManagerCheckpointRoutesByProjectID(t *testing.T) {
 		Kind:      api.CheckpointKindToolApproval,
 		ProjectID: projectID,
 		ProposedAction: &hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": "git push origin main"},
-},
-Scope: hitl.ActionScope{
-ProjectDir: "/on/disk/project/path",
-},
-},
+			Invocation: hitl.ActionInvocation{
+				Tool: "command",
+				Args: map[string]any{"command": "git push origin main"},
+			},
+			Scope: hitl.ActionScope{
+				ProjectDir: "/on/disk/project/path",
+			},
+		},
 	})
 	testutil.FailErr(t, "mgr.RequestCheckpoint failed", err)
 	assertCheckpointEvent(t, ch, resp.CheckpointID, api.CheckpointStatusPending)
@@ -131,15 +130,15 @@ func TestPatchPendingAIRationaleNoSSEAfterResolve(t *testing.T) {
 	defer unsub()
 
 	resp, err := requestExplicitApprovalCheckpoint(t, ctx, mgr, hitl.CheckpointRequest{
-		SessionID:      sessionID,
-		Kind:           api.CheckpointKindToolApproval,
-		ProjectID:      projectID,
+		SessionID: sessionID,
+		Kind:      api.CheckpointKindToolApproval,
+		ProjectID: projectID,
 		ProposedAction: &hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": "git push"},
-},
-},
+			Invocation: hitl.ActionInvocation{
+				Tool: "command",
+				Args: map[string]any{"command": "git push"},
+			},
+		},
 	})
 	testutil.FailErr(t, "RequestCheckpoint", err)
 	assertCheckpointEvent(t, ch, resp.CheckpointID, api.CheckpointStatusPending)
@@ -160,7 +159,7 @@ Args: map[string]any{"command": "git push"},
 		if ev.ToolApproval == nil || ev.ToolApproval.AIRationale != "Pushes the fix the user asked for." {
 			t.Fatalf("ai_rationale = %+v", ev.ToolApproval)
 		}
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("timeout waiting for ai_rationale SSE")
 	}
 
@@ -174,7 +173,7 @@ Args: map[string]any{"command": "git push"},
 	select {
 	case envelope := <-ch:
 		t.Fatalf("unexpected SSE after resolved patch: %+v", envelope)
-	case <-time.After(150 * time.Millisecond):
+	default:
 	}
 
 	row, err := mgr.Store.Get(ctx, resp.CheckpointID)
@@ -200,15 +199,15 @@ func TestClearPendingAIRationale(t *testing.T) {
 	defer unsub()
 
 	resp, err := requestExplicitApprovalCheckpoint(t, ctx, mgr, hitl.CheckpointRequest{
-		SessionID:          sessionID,
-		Kind:               api.CheckpointKindToolApproval,
-		ProjectID:          projectID,
-		ProposedAction:     &hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": "git push"},
-},
-},
+		SessionID: sessionID,
+		Kind:      api.CheckpointKindToolApproval,
+		ProjectID: projectID,
+		ProposedAction: &hitl.ProposedAction{
+			Invocation: hitl.ActionInvocation{
+				Tool: "command",
+				Args: map[string]any{"command": "git push"},
+			},
+		},
 		AIRationalePending: true,
 	})
 	testutil.FailErr(t, "RequestCheckpoint", err)
@@ -234,7 +233,7 @@ Args: map[string]any{"command": "git push"},
 		if ev.ToolApproval == nil || ev.ToolApproval.AIRationalePending {
 			t.Fatalf("ai_rationale_pending should be cleared: %+v", ev.ToolApproval)
 		}
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("timeout waiting for cleared SSE")
 	}
 
@@ -245,7 +244,7 @@ Args: map[string]any{"command": "git push"},
 	select {
 	case envelope := <-ch:
 		t.Fatalf("unexpected SSE on idempotent clear: %+v", envelope)
-	case <-time.After(150 * time.Millisecond):
+	default:
 	}
 }
 
@@ -259,13 +258,13 @@ func TestJoinerBandEscalationReachesWire(t *testing.T) {
 		Kind:      api.CheckpointKindToolApproval,
 		Type:      hitl.DecisionTypeApprove,
 		ProposedAction: &hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-},
-Presentation: hitl.ActionPresentation{
-Command: "git status",
-},
-},
+			Invocation: hitl.ActionInvocation{
+				Tool: "command",
+			},
+			Presentation: hitl.ActionPresentation{
+				Command: "git status",
+			},
+		},
 		ConsequenceBand: api.ConsequenceBandStandard,
 	})
 	testutil.FailErr(t, "RequestCheckpoint", err)

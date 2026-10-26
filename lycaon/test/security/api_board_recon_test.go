@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -28,7 +27,7 @@ func TestBoardRepoBriefPopulated(t *testing.T) {
 
 	var board wire.BoardView
 	var boardBody string
-	testutil.WaitFor(t, 5*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		req := authedRequest(t, http.MethodGet, "/v1/projects/"+p.ID+"/board?session_id="+sess.ID, nil)
 		w := httptest.NewRecorder()
 		srv.ServeHTTP(w, req)

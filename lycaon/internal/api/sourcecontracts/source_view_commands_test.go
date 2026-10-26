@@ -3,7 +3,6 @@ package sourcecontracts
 import (
 	"net/http"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
@@ -33,7 +32,7 @@ func TestSourceViewCreateReplayAndComparisonCommands(t *testing.T) {
 		t.Fatalf("request body conflict=%d %s", conflict.Code, conflict.Body.String())
 	}
 	var ready wire.SourceView
-	testutil.WaitFor(t, 10*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		ready = contractfixture.ReadSourceViewResponse(t, contractfixture.CallSourceViewHandler(t, server.Sources.Views.HandleGetSourceView, p.ID, id, nil), http.StatusOK)
 		return ready.Comparison.State != "preparing"
 	})

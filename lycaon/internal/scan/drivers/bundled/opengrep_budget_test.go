@@ -75,13 +75,9 @@ func TestOpenGrepCancellationRejectsUnfinishedReport(t *testing.T) {
 	}()
 	t.Cleanup(func() {
 		cancel()
-		select {
-		case <-done:
-		case <-time.After(testutil.Timeout(15 * time.Second)):
-			t.Error("scanner process did not stop after cancellation")
-		}
+		<-done
 	})
-	testutil.WaitFor(t, 15*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		select {
 		case <-done:
 			t.Fatalf("scanner exited before report readiness: %v", err)
@@ -96,7 +92,7 @@ func TestOpenGrepCancellationRejectsUnfinishedReport(t *testing.T) {
 	cancel()
 	select {
 	case <-done:
-	case <-time.After(testutil.Timeout(5 * time.Second)):
+	case <-t.Context().Done():
 		t.Fatal("scanner did not return after cancellation")
 	}
 	if result != nil || !errors.Is(err, context.Canceled) || !errors.Is(ctx.Err(), context.Canceled) {

@@ -95,9 +95,8 @@ func TestRealServerPromptRoutes(t *testing.T) {
 		t.Fatalf("prompt status = %d body = %s", promptRec.code, promptRec.body.String())
 	}
 
-	deadline := time.Now().Add(10 * time.Second)
 	var messageID string
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		getReq, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/sessions/"+sessionID, nil)
 		contractcheck.FailErr(t, "http.NewRequest failed", err)
 		api.WithTestAuth(getReq)

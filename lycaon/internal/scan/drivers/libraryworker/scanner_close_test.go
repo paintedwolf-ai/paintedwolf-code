@@ -6,7 +6,6 @@ import (
 	"errors"
 	"io"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/scan"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -88,7 +87,7 @@ func TestRetireAllowsAdmittedScanToFinish(t *testing.T) {
 	<-entered
 	retired := make(chan error, 1)
 	go func() { retired <- scanner.Retire(t.Context()) }()
-	testutil.WaitFor(t, 5*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		_, finish, err := scanner.work.Begin(t.Context())
 		if err == nil {
 			finish()

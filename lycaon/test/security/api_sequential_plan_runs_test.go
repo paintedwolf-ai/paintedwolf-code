@@ -52,7 +52,7 @@ func TestSequentialPlanRunsE2E(t *testing.T) {
 	}
 	var accepted wire.PromptAcceptedResponse
 	testutil.FailErr(t, "decode admitted prompt", json.Unmarshal(w.Body.Bytes(), &accepted))
-	if !testutil.WaitForNoFatal(promptIdleBudget, func() bool {
+	testutil.WaitFor(t, func() bool {
 		submission, err := sessionStore.GetPromptSubmission(ctx, accepted.OperationID)
 		testutil.FailErr(t, "read admitted prompt", err)
 		if !submission.Status.Terminal() {
@@ -62,18 +62,7 @@ func TestSequentialPlanRunsE2E(t *testing.T) {
 			t.Fatalf("prompt status = %s: %s", submission.Status, submission.Error)
 		}
 		return true
-	}) {
-		submission, readErr := sessionStore.GetPromptSubmission(ctx, accepted.OperationID)
-		last := h.Recording.LastRequest()
-		t.Logf("last prompt context: %+v", last.Debug)
-		for _, message := range last.Messages {
-			if message.Role != wire.MessageRoleSystem {
-				t.Logf("prompt message: role=%s kind=%s content=%s tools=%+v", message.Role, message.Kind,
-					message.Content[:min(len(message.Content), 500)], message.ToolCalls)
-			}
-		}
-		t.Fatalf("plan A prompt did not finish: submission=%+v read_err=%v", submission, readErr)
-	}
+	})
 
 	exitReq := workflowExitRequest(t, srv, sess.ID, "user_exit")
 	w = httptest.NewRecorder()

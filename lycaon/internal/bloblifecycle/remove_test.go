@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -30,7 +29,7 @@ func TestManagedRemovalWaitsForCaptureAndRejectsOutsidePaths(t *testing.T) {
 	select {
 	case err := <-done:
 		testutil.FailErr(t, "finish deferred removal", err)
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("cleanup did not finish after capture")
 	}
 	if err := RemoveTree(root, root); err == nil {

@@ -32,7 +32,7 @@ func TestAttachPromptCancelStopContextSurvivesTurnDeadline(t *testing.T) {
 	m.Cancel("sess-1")
 	select {
 	case <-stop.Done():
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("stop context not canceled by CancelInFlightPrompt")
 	}
 }
@@ -45,7 +45,7 @@ func TestDetachPromptCancelReleasesStopContext(t *testing.T) {
 	m.Cancel("sess-2")
 	select {
 	case <-stop.Done():
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("detachPromptCancel must release (cancel) the stop context")
 	}
 }

@@ -27,7 +27,7 @@ func TestAPIScanRetainsTargetFailureAlongsideUsableFindings(t *testing.T) {
 	cancel := h.StartBackgroundWorkers(t, t.Context())
 	t.Cleanup(cancel)
 	created := enqueueCodeScan(t, h.Server, root, []wire.ScanCategory{wire.ScanCategorySAST})
-	got := waitScanComplete(t, h.Server, created.ProjectID, created.ID, bundledScannerWaitBudget)
+	got := waitScanComplete(t, h.Server, created.ProjectID, created.ID)
 	assertScanFindings(t, got, "vuln.go", 1)
 	if got.CoverageStatus != wire.ScanCoveragePartial {
 		t.Fatalf("invalid source claimed %s coverage: %+v", got.CoverageStatus, got.Warnings)

@@ -19,7 +19,7 @@ func assertStreamClosed(t *testing.T, ch <-chan modelcall.StreamChunk, what stri
 		if ok {
 			t.Fatalf("%s: producer was stranded on a send after the consumer abandoned the stream (delivered %+v)", what, chunk)
 		}
-	case <-time.After(2 * time.Second):
+	case <-t.Context().Done():
 		t.Fatalf("%s: stream neither closed nor delivered after abandonment", what)
 	}
 }
@@ -57,7 +57,7 @@ func TestGuardStreamStallReleasesAbandonedStream(t *testing.T) {
 
 	select {
 	case <-producerDone:
-	case <-time.After(2 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("provider goroutine stranded behind the stall guard")
 	}
 }

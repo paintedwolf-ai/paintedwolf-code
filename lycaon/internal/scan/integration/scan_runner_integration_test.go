@@ -40,7 +40,7 @@ func TestScanRunnerIntegrationPendingToComplete(t *testing.T) {
 		t.Fatalf("status = %q", created.Status)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	go func() { _ = runner.Run(ctx) }()
 
@@ -56,10 +56,9 @@ func TestScanRunnerIntegrationPendingToComplete(t *testing.T) {
 			}
 			return
 		}
-		select {
-		case <-ctx.Done():
+		if ctx.Err() != nil {
 			t.Fatalf("timed out at status %q", got.Status)
-		case <-time.After(25 * time.Millisecond):
 		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }

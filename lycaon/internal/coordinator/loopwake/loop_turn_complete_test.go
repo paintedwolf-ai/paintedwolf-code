@@ -5,7 +5,6 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/settings"
-	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 	"testing"
 	"time"
@@ -360,7 +359,7 @@ func TestUserTurnSettlementClaimOrdersLaterWakeAfterBoundary(t *testing.T) {
 		t.Fatal("wake arriving after settlement claim was not ordered for redrain")
 	}
 	release()
-	loop.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, 5*time.Second))
+	loop.Turns.WaitForAsyncTurns(t.Context())
 	if prompts != 1 {
 		t.Fatalf("redrained prompts = %d want 1", prompts)
 	}

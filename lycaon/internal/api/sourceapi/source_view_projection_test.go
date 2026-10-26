@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/pagedview"
 	"github.com/lycaon/lycaon/internal/sourcecomparison"
@@ -68,7 +67,7 @@ func TestComparisonReadRetainsProjectionWithoutBlockingIntent(t *testing.T) {
 	select {
 	case err := <-done:
 		testutil.FailErr(t, "update during frame read", err)
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("frame read held the intent lock")
 	}
 	if budget.Used() <= before {

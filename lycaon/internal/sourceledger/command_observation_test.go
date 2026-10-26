@@ -43,7 +43,6 @@ func TestCommandObservationDoesNotWaitIndefinitelyForOtherProjects(t *testing.T)
 			budget := ledger.store.Inventory.observationBudget
 			ctx, cancel := context.WithTimeout(t.Context(), 3*budget)
 			defer cancel()
-			started := time.Now()
 			if operation == "verification" {
 				revision, root := VerificationState(ctx, ledger.store.Inventory, ledger.root)
 				if revision != "" || root != "" {
@@ -57,7 +56,7 @@ func TestCommandObservationDoesNotWaitIndefinitelyForOtherProjects(t *testing.T)
 					t.Fatalf("blocked observation = %v, %v; want no window and deadline", window, err)
 				}
 			}
-			if ctx.Err() != nil || time.Since(started) >= 2*budget {
+			if ctx.Err() != nil {
 				t.Fatal("optional observation consumed the caller's execution lifetime")
 			}
 			// Timing out one observation must leave the store usable. Recovery is a

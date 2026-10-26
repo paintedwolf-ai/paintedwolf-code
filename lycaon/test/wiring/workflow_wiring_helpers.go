@@ -22,11 +22,9 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-const topologyWaitBudget = 30 * time.Second
-
 func waitTopologyStageComplete(t *testing.T, mgr *workflow.RunManager, runID, stage string) {
 	t.Helper()
-	testutil.WaitFor(t, topologyWaitBudget, func() bool {
+	testutil.WaitFor(t, func() bool {
 		vars, err := mgr.Store.Runs.GetScaffoldVars(context.Background(), runID)
 		if err != nil {
 			return false
@@ -40,16 +38,14 @@ func waitTopologyStageComplete(t *testing.T, mgr *workflow.RunManager, runID, st
 func waitWorkflowPhase(t *testing.T, ctx context.Context, mgr *workflow.RunManager, runID, phase string) {
 	t.Helper()
 	got := ""
-	if !testutil.WaitForNoFatal(topologyWaitBudget, func() bool {
+	testutil.WaitFor(t, func() bool {
 		run, err := mgr.Store.Runs.Get(ctx, runID)
 		if err != nil || run == nil {
 			return false
 		}
 		got = run.CurrentPhase
 		return got == phase
-	}) {
-		t.Fatalf("workflow phase = %q, want %q", got, phase)
-	}
+	})
 }
 
 func startTopologyWorkflowRun(t *testing.T, h *Harness, ctx context.Context, sess *api.Session, workflowID string) *api.WorkflowRun {

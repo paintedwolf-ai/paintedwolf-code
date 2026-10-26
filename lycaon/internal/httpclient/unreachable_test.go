@@ -42,10 +42,7 @@ func TestUnreachableOnRefusedConnection(t *testing.T) {
 
 func TestUnreachableOnBoundElapsed(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		select {
-		case <-time.After(2 * time.Second):
-		case <-r.Context().Done():
-		}
+		<-r.Context().Done()
 	}))
 	defer srv.Close()
 

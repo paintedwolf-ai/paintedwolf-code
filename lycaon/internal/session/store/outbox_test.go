@@ -63,8 +63,7 @@ func TestSQLMutationOutboxCommitsObserverEvents(t *testing.T) {
 
 func waitOutboxEmpty(t *testing.T, database db.Handle) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		var count int
 		if err := database.QueryRowContext(t.Context(), "SELECT COUNT(*) FROM event_outbox").Scan(&count); err == nil && count == 0 {
 			return

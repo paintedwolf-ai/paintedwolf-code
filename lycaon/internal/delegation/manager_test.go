@@ -115,7 +115,7 @@ func TestDelegationSingleLegDispatchAndCloseout(t *testing.T) {
 	defer cancel()
 	go poller.Run(pollCtx)
 
-	testutil.WaitFor(t, 5*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		st, err := delegationMgr.GetStatus(ctx, r.ID)
 		testutil.FailErr(t, "delegationMgr.GetStatus failed", err)
 		return st.Phase == api.DelegationPhaseDone

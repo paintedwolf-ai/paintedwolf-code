@@ -93,8 +93,7 @@ func TestRegistryIdleReap(t *testing.T) {
 	e, err := reg.Open(context.Background(), "sess-idle", held)
 	testutil.FailErr(t, "Open", err)
 
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		reg.reapIdle()
 		if reg.CountLive("sess-idle") == 0 {
 			break

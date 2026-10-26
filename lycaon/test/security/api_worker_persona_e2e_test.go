@@ -4,7 +4,6 @@ import (
 	"context"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -38,7 +37,7 @@ func TestDelegateImplementerPromptContainsPersona(t *testing.T) {
 		testutil.FailErr(t, "delMgr.DispatchLeg failed", err)
 	}
 
-	testutil.WaitFor(t, 10*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		st, err := delMgr.GetStatus(ctx, r.ID)
 		if err != nil {
 			return false
@@ -90,7 +89,7 @@ func TestDelegatePlanReviewerDistinctFromImplementer(t *testing.T) {
 		testutil.FailErr(t, "delMgr.DispatchLeg failed", err)
 	}
 
-	testutil.WaitFor(t, 10*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		st, _ := delMgr.GetStatus(ctx, r.ID)
 		return st.Phase == api.DelegationPhaseDone
 	})

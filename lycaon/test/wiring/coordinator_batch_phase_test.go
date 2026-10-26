@@ -3,7 +3,6 @@ package wiring
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/coordinator/batch"
 	"github.com/lycaon/lycaon/internal/llm"
@@ -42,7 +41,7 @@ func TestCoordinatorBatchPhaseAdvancesOnTaskDispatch(t *testing.T) {
 	}
 
 	var phase string
-	testutil.WaitFor(t, 5*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		state := h.Sessions.Manager.Workers.State.ForSession(ctx, sess)
 		phase = state.BatchPhase
 		return phase == batch.PhaseDispatch
@@ -99,10 +98,8 @@ func TestCoordinatorBatchPhaseSynthesizeAfterWorkerDrain(t *testing.T) {
 
 	// Worker completion wakes integration asynchronously.
 	state := h.Sessions.Manager.Workers.State.ForSession(ctx, sess)
-	if !testutil.WaitForNoFatal(5*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		state = h.Sessions.Manager.Workers.State.ForSession(ctx, sess)
 		return state.BatchPhase == batch.PhaseIntegrate
-	}) {
-		t.Fatalf("implement state = %+v, want integrate after write worker drain with pending overlay", state)
-	}
+	})
 }

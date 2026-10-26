@@ -458,12 +458,12 @@ func TestLoopPublishesParallelResultAsEachFinishes(t *testing.T) {
 	}()
 	select {
 	case <-slowStarted:
-	case <-time.After(2 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("slow sibling never started")
 	}
 	select {
 	case <-fastAppended:
-	case <-time.After(2 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("fast sibling was not appended before the slow sibling finished")
 	}
 	close(releaseSlow)

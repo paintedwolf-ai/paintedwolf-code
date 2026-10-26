@@ -1,9 +1,6 @@
 package events
 
-import (
-	"testing"
-	"time"
-)
+import "testing"
 
 func TestBurstEndOwesCommentsOnlyAfterAnEvent(t *testing.T) {
 	burst := NewBurstEnd()
@@ -17,7 +14,7 @@ func TestBurstEndOwesCommentsOnlyAfterAnEvent(t *testing.T) {
 		for comment := range burstEndDelays {
 			select {
 			case <-burst.C():
-			case <-time.After(5 * time.Second):
+			case <-t.Context().Done():
 				t.Fatalf("round %d: burst-end comment %d never came due", round, comment)
 			}
 			burst.Ended()
@@ -34,19 +31,22 @@ func TestBurstEndRestartsWhenEventsContinue(t *testing.T) {
 	burst.Wrote()
 	select {
 	case <-burst.C():
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("the first burst-end comment never came due")
 	}
 	burst.Ended()
 	// A new event replaces the remaining schedule with a fresh one.
 	burst.Wrote()
-	started := time.Now()
+	if burst.next != 0 {
+		t.Fatalf("restarted schedule next = %d, want 0", burst.next)
+	}
 	select {
 	case <-burst.C():
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("the restarted burst-end comment never came due")
 	}
-	if waited := time.Since(started); waited >= burstEndDelays[1] {
-		t.Fatalf("restarted schedule waited %s, want its first delay %s", waited, burstEndDelays[0])
+	burst.Ended()
+	if burst.next != 1 || burst.C() == nil {
+		t.Fatalf("after first restarted comment: next = %d, C = %v, want next=1 and second comment still scheduled", burst.next, burst.C())
 	}
 }

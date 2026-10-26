@@ -4,10 +4,8 @@ import (
 	"context"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/promptresult"
-	"github.com/lycaon/lycaon/internal/testutil"
 	"sync/atomic"
 	"testing"
-	"time"
 )
 
 func TestFailedTurnHoldsQueuedPhaseWakeUntilExplicitExecution(t *testing.T) {
@@ -30,7 +28,7 @@ func TestFailedTurnHoldsQueuedPhaseWakeUntilExplicitExecution(t *testing.T) {
 	release()
 	blocked.Store(false)
 	f.loop.Nudges.DrainPending(t.Context(), "session")
-	f.loop.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, 2*time.Second))
+	f.loop.Turns.WaitForAsyncTurns(t.Context())
 	if f.prompts.Load() != 1 {
 		t.Fatalf("resumed prompts=%d", f.prompts.Load())
 	}
@@ -60,7 +58,7 @@ func TestFailedTurnPreservesUndeliveredWaitResultWithoutRetry(t *testing.T) {
 	}
 	blocked.Store(false)
 	f.loop.Nudges.DrainPending(t.Context(), "session")
-	f.loop.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, 2*time.Second))
+	f.loop.Turns.WaitForAsyncTurns(t.Context())
 	if _, ok := f.loop.Deliveries.waitWinner("session"); ok || resumes.Load() != 1 {
 		t.Fatalf("wait delivery: pending=%v resumes=%d", ok, resumes.Load())
 	}

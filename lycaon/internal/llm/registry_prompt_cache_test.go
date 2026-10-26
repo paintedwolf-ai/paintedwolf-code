@@ -107,17 +107,14 @@ func TestRegistryListCachedServesStaleWhileRefreshing(t *testing.T) {
 		t.Fatalf("stale len=%d warm=%d", len(stale), len(warm))
 	}
 	// Background refresh should repopulate without blocking this call.
-	deadline := time.Now().Add(2 * time.Second)
-	for {
+	for t.Context().Err() == nil {
 		_, _, fresh, _ := reg.listCache.Read()
 		if fresh {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("list cache did not refresh in background")
+			return
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+	t.Fatal("list cache did not refresh in background")
 }
 
 func TestWorkerChildCompactionConfigTightensBudget(t *testing.T) {

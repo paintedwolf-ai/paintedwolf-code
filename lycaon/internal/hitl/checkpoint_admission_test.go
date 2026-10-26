@@ -351,7 +351,7 @@ func assertCheckpointEvent(t *testing.T, ch <-chan api.EventEnvelope, checkpoint
 		if ev.ID != checkpointID || ev.Status != status {
 			t.Fatalf("event = %+v want checkpoint=%s status=%s", ev, checkpointID, status)
 		}
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("timeout waiting for checkpoint SSE event")
 	}
 }

@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/board"
 	"github.com/lycaon/lycaon/internal/git"
@@ -72,12 +71,12 @@ func TestColdBoardWarmsSharedGitStatusWithoutBlocking(t *testing.T) {
 	select {
 	case err := <-buildDone:
 		testutil.FailErr(t, "board build", err)
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("cold board blocked on git status")
 	}
 	select {
 	case <-loader.started:
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("cold board did not start background git warm")
 	}
 

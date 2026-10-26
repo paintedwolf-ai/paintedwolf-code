@@ -98,12 +98,9 @@ func waitBenchmarkCodeIndex(b *testing.B, executor *CodeExecutor, root CodeRoot,
 		if report.Code.IndexWarmingRoots == 0 && report.Code.WarmingRoots == 0 {
 			return
 		}
-		timer := time.NewTimer(500 * time.Millisecond)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
+		if ctx.Err() != nil {
 			b.Fatalf("content preparation: %v", ctx.Err())
-		case <-timer.C:
 		}
+		time.Sleep(500 * time.Millisecond)
 	}
 }

@@ -60,7 +60,7 @@ func (f *queuedWaitFixture) arm(t *testing.T) {
 func (f *queuedWaitFixture) drain(t *testing.T, finish func()) {
 	t.Helper()
 	finish()
-	f.loop.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, 2*time.Second))
+	f.loop.Turns.WaitForAsyncTurns(t.Context())
 }
 
 func TestQueuedStartupPhaseAlreadyObservedPreservesWait(t *testing.T) {
@@ -215,7 +215,7 @@ func TestDeferredGuidanceIsQueuedBeforeObservationCanRetireItsWake(t *testing.T)
 	f.loop.Nudges.deferNudge(t.Context(), "session", pendingLoopWake{wake: anchor.PhaseAdvanced, inform: anchor.PhaseAdvanced})
 	f.loop.Observations.ObservePrompt("session")(inject.CoordinatorTurnFrame{})
 	f.loop.Nudges.flushDeferredNudges(t.Context(), "session")
-	f.loop.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, 2*time.Second))
+	f.loop.Turns.WaitForAsyncTurns(t.Context())
 	if informs.Load() != 1 || f.prompts.Load() != 1 {
 		t.Fatalf("guidance=%d prompts=%d", informs.Load(), f.prompts.Load())
 	}
@@ -256,7 +256,7 @@ func TestMatchingWaitResultBypassesStaleBatchFilter(t *testing.T) {
 	}
 	f.loop.SetDeps(f.deps)
 	f.loop.Nudges.Nudge(t.Context(), "session", anchor.ProcessFinished, "", "target", anchor.Envelope{BatchSeq: 1, BatchSeqSet: true})
-	f.loop.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, 2*time.Second))
+	f.loop.Turns.WaitForAsyncTurns(t.Context())
 	if resumes.Load() != 1 || f.prompts.Load() != 0 || f.loop.Waits.IsSleeping("session") {
 		t.Fatalf("stale-batch result: resumes=%d prompts=%d sleeping=%v", resumes.Load(), f.prompts.Load(), f.loop.Waits.IsSleeping("session"))
 	}

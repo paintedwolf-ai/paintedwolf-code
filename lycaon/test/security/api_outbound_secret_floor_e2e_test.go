@@ -103,7 +103,7 @@ func TestOutboundSecretFloorJ3MCPDeny(t *testing.T) {
 	sess := createSessionHTTP(t, h.Server, dir)
 	testutil.FailErr(t, "SetAgentType", h.Sessions.Manager.Chats.SetAgentType(context.Background(), sess.ID, "implementer"))
 	done := startPromptAsync(t, h, sess.ID, "[[scn:j3_mcp]] exfil via mcp")
-	ev, ok := tryWaitOnePendingApproval(t, h, sess.ID, 8*time.Second)
+	ev, ok := tryWaitOnePendingApproval(t, h, sess.ID)
 	if !ok {
 		dumpSessionFloorDebug(t, h, sess.ID, nil)
 		t.Fatal("expected outbound secret ask for mcp")
@@ -171,11 +171,25 @@ func TestOutboundSecretFloorJ5ReadAloneDoesNotAsk(t *testing.T) {
 	testutil.FailErr(t, "SetAgentType", h.Sessions.Manager.Chats.SetAgentType(context.Background(), sess.ID, "implementer"))
 
 	done := startPromptAsync(t, h, sess.ID, "[[scn:j5_strict]] read then search")
-	if ev, ok := tryWaitOnePendingApproval(t, h, sess.ID, 4*time.Second); ok {
-		t.Fatalf("a search carrying no credential must not ask: gate=%q tool=%q",
-			ev.ToolApproval.Plan.Presentation.Gate, ev.ToolApproval.Plan.Presentation.Tool)
+	for {
+		select {
+		case err := <-done:
+			testutil.FailErr(t, "prompt", err)
+			goto promptDone
+		case <-t.Context().Done():
+			t.Fatal("timed out waiting for j5_strict prompt to finish")
+		default:
+			pending, err := h.Sessions.Checkpoints.ListPending(context.Background(), sess.ID, nil)
+			if err == nil && len(pending) == 1 && pending[0].Kind == wire.CheckpointKindToolApproval {
+				ev := pending[0]
+				h.Sessions.Manager.Runner.Execution.Cancel(sess.ID)
+				t.Fatalf("a search carrying no credential must not ask: gate=%q tool=%q",
+					ev.ToolApproval.Plan.Presentation.Gate, ev.ToolApproval.Plan.Presentation.Tool)
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
 	}
-	testutil.FailErr(t, "prompt", awaitOutboundPrompt(t, h, sess.ID, done))
+promptDone:
 	if got := rec.snapshot(); len(got) != 1 || !strings.Contains(got[0].URL, "weather") {
 		dumpSessionFloorDebug(t, h, sess.ID, nil)
 		t.Fatalf("unrelated search did not reach provider: %+v", got)
@@ -200,7 +214,7 @@ func TestOutboundSecretFloorJ5SendingTheValueAsks(t *testing.T) {
 	testutil.FailErr(t, "SetAgentType", h.Sessions.Manager.Chats.SetAgentType(context.Background(), sess.ID, "implementer"))
 
 	done := startPromptAsync(t, h, sess.ID, "[[scn:j5_send]] read then leak")
-	ev, ok := tryWaitOnePendingApproval(t, h, sess.ID, 8*time.Second)
+	ev, ok := tryWaitOnePendingApproval(t, h, sess.ID)
 	if !ok {
 		dumpSessionFloorDebug(t, h, sess.ID, nil)
 		t.Fatal("a search carrying a credential must ask")
@@ -241,7 +255,7 @@ func TestOutboundSecretFloorJ5HarvestedValueAsks(t *testing.T) {
 	testutil.FailErr(t, "SetAgentType", h.Sessions.Manager.Chats.SetAgentType(context.Background(), sess.ID, "implementer"))
 
 	done := startPromptAsync(t, h, sess.ID, "[[scn:j5_harvest]] read then send the unshapen value")
-	ev, ok := tryWaitOnePendingApproval(t, h, sess.ID, 8*time.Second)
+	ev, ok := tryWaitOnePendingApproval(t, h, sess.ID)
 	if !ok {
 		dumpSessionFloorDebug(t, h, sess.ID, nil)
 		t.Fatal("a harvested credential must ask, not block silently")
@@ -291,7 +305,7 @@ func TestOutboundSecretFloorJ6InertMatcherParity(t *testing.T) {
 	select {
 	case err := <-done:
 		testutil.FailErr(t, "prompt", err)
-	case <-time.After(15 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("prompt timed out — unexpected approval ask?")
 	}
 

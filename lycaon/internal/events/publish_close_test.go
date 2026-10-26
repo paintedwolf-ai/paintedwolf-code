@@ -5,7 +5,6 @@ import (
 	"errors"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -39,7 +38,7 @@ func TestPublisherCloseDrainsRunningAttention(t *testing.T) {
 	p.PublishAttention(t.Context())
 	select {
 	case <-source.entered:
-	case <-time.After(3 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("attention rebuild did not start")
 	}
 	ctx, cancel := context.WithCancel(t.Context())
@@ -98,7 +97,7 @@ func TestPublisherCloseDrainsRunningPatch(t *testing.T) {
 	p.messagePatchCoalescer().schedule(t.Context(), PublishKey{Session: "session"}, api.MessageEvent{Message: api.Message{ID: "message"}})
 	select {
 	case <-hub.entered:
-	case <-time.After(3 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("patch delivery did not start")
 	}
 	ctx, cancel := context.WithCancel(t.Context())
@@ -116,7 +115,7 @@ func TestPublisherCloseDeadlineCoversAttentionDelivery(t *testing.T) {
 	p.PublishAttention(t.Context())
 	select {
 	case <-hub.entered:
-	case <-time.After(3 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("attention delivery did not start")
 	}
 	ctx, cancel := context.WithCancel(t.Context())
@@ -128,7 +127,7 @@ func TestPublisherCloseDeadlineCoversAttentionDelivery(t *testing.T) {
 		if !errors.Is(err, context.Canceled) {
 			t.Errorf("close with active delivery = %v", err)
 		}
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Error("attention delivery blocked the shutdown deadline")
 	}
 	close(hub.release)

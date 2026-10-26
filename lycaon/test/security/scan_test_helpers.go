@@ -221,7 +221,7 @@ func enqueueSingleScanner(t *testing.T, srv *api.Server, projectID string, categ
 func waitFullPassMemberScan(t *testing.T, srv *api.Server, projectID string, pass wire.SecurityFullPass) wire.CodeScan {
 	t.Helper()
 	member := pass.Members[0]
-	testutil.WaitFor(t, 15*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		switch member.Phase {
 		case wire.FullPassMemberStarted:
 			if member.Scan == nil {
@@ -249,10 +249,10 @@ func waitFullPassMemberScan(t *testing.T, srv *api.Server, projectID string, pas
 	return *member.Scan
 }
 
-func waitScanComplete(t *testing.T, srv *api.Server, projectID, scanID string, timeout time.Duration) wire.CodeScan {
+func waitScanComplete(t *testing.T, srv *api.Server, projectID, scanID string) wire.CodeScan {
 	t.Helper()
 	var got wire.CodeScan
-	if !testutil.WaitForNoFatal(timeout, func() bool {
+	testutil.WaitFor(t, func() bool {
 		getReq := authedRequest(t, http.MethodGet, scanURL(projectID, scanID)+"?view=full", nil)
 		getW := httptest.NewRecorder()
 		srv.ServeHTTP(getW, getReq)
@@ -269,10 +269,7 @@ func waitScanComplete(t *testing.T, srv *api.Server, projectID, scanID string, t
 		default:
 			return false
 		}
-	}) {
-		t.Fatalf("scan %s did not finish within %s: scanner=%s status=%s error=%s",
-			scanID, timeout, got.ScannerID, got.Status, got.Error)
-	}
+	})
 	return got
 }
 

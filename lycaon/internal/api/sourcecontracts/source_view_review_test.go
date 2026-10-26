@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -34,7 +33,7 @@ func TestSourceViewTreeReviewAndScopeReplacement(t *testing.T) {
 	waitReady := func() *wire.SourceTreeView {
 		t.Helper()
 		var ready *wire.SourceTreeView
-		testutil.WaitFor(t, 10*time.Second, func() bool {
+		testutil.WaitFor(t, func() bool {
 			ready = contractfixture.ReadSourceViewResponse(t, contractfixture.CallSourceViewHandler(t, server.Sources.Views.HandleGetSourceView, p.ID, id, nil), http.StatusOK).Tree
 			return ready.State != "preparing"
 		})

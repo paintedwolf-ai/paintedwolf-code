@@ -50,7 +50,7 @@ func activityEventFromStream(t *testing.T, stream <-chan api.EventEnvelope) api.
 		var event api.ActivityEvent
 		testutil.FailErr(t, "decode activity", json.Unmarshal(envelope.Data, &event))
 		return event
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("timeout waiting for activity event")
 		return api.ActivityEvent{}
 	}

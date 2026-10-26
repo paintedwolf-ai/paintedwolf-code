@@ -94,7 +94,7 @@ func assertOrdinaryProjectScan(t *testing.T, h *wiring.Harness, manifest *bundle
 	expected := ordinaryScanExpectedDiagnostics(t, fixture)
 	project := materializeOrdinaryScanProject(t, fixture)
 	created := enqueueCodeScan(t, h.Server, project, []wire.ScanCategory{wire.ScanCategorySAST})
-	got := waitScanComplete(t, h.Server, created.ProjectID, created.ID, bundledScannerWaitBudget)
+	got := waitScanComplete(t, h.Server, created.ProjectID, created.ID)
 	if got.Status != wire.CodeScanStatusComplete || got.CoverageStatus != wire.ScanCoveragePartial {
 		t.Fatalf("ordinary scan status=%s coverage=%s error=%s", got.Status, got.CoverageStatus, got.Error)
 	}

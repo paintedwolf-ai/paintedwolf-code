@@ -97,7 +97,7 @@ func TestCapsWithTimeout(t *testing.T) {
 	defer cancel()
 	select {
 	case <-ctx.Done():
-	case <-time.After(200 * time.Millisecond):
+	case <-t.Context().Done():
 		t.Fatal("timeout did not fire")
 	}
 

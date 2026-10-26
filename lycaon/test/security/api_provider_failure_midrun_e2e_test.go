@@ -7,7 +7,6 @@ import (
 	"os"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/httpclient"
 	"github.com/lycaon/lycaon/internal/llm/failure"
@@ -118,28 +117,23 @@ func TestProviderFailureMidRunIsRecoverable(t *testing.T) {
 
 			assertProgressToolRoundSurvived(t, h, sess.ID)
 
-			waitSessionIdle(t, h, sess.ID, 10*time.Second)
+			waitSessionIdle(t, h, sess.ID)
 
 			if _, err := h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID,
 				"[[scn:"+tc.marker+"_after]] try again"); err != nil {
 				t.Fatalf("session unusable after a recoverable provider failure: %v", err)
 			}
-			waitTranscriptContainsHTTP(t, h.Server, sess.ID, "Recovered and finished.", 10*time.Second)
+			waitTranscriptContainsHTTP(t, h.Server, sess.ID, "Recovered and finished.")
 		})
 	}
 }
 
-func waitSessionIdle(t *testing.T, h *wiring.Harness, sessionID string, timeout time.Duration) {
+func waitSessionIdle(t *testing.T, h *wiring.Harness, sessionID string) {
 	t.Helper()
-	var last wire.SessionStatus
-	ok := testutil.WaitForNoFatal(timeout, func() bool {
-		last = getSessionHTTP(t, h.Server, sessionID).Status
-		return last == wire.SessionStatusIdle
+	testutil.WaitFor(t, func() bool {
+		return getSessionHTTP(t, h.Server, sessionID).Status == wire.SessionStatusIdle
 	})
-	if !ok {
-		t.Fatalf("session status = %q after provider failure, want idle — the failed "+
-			"turn never released the session", last)
-	}
+
 }
 
 // Recovery retains both the tool call and its result.

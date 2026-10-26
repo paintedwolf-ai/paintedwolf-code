@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/invocation"
@@ -46,7 +45,6 @@ func TestRecoverOrphanedTurnsClearsStuckBusy(t *testing.T) {
 
 func awaitIdleDisposition(t *testing.T, ch <-chan api.EventEnvelope) api.SessionIdleDisposition {
 	t.Helper()
-	deadline := time.After(2 * time.Second)
 	for {
 		select {
 		case envelope, ok := <-ch:
@@ -63,7 +61,7 @@ func awaitIdleDisposition(t *testing.T, ch <-chan api.EventEnvelope) api.Session
 				continue
 			}
 			return ev.IdleDisposition
-		case <-deadline:
+		case <-t.Context().Done():
 			t.Fatal("no session idle event published")
 			return ""
 		}

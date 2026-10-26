@@ -1,6 +1,7 @@
 package editordoc
 
 import (
+	"runtime"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -18,13 +19,15 @@ func TestClientLivenessRepresencePresenceOnceTheLastStreamIsGone(t *testing.T) {
 		clients := NewClientLiveness(10*time.Millisecond, func(clientID string) { represenced <- clientID })
 
 		clients.Connected("window-a")()
+		time.Sleep(10 * time.Millisecond)
+		synctest.Wait()
 
 		select {
 		case client := <-represenced:
 			if client != "window-a" {
 				t.Fatalf("represenced presence for %q, want window-a", client)
 			}
-		case <-time.After(5 * time.Second):
+		default:
 			t.Fatal("a client whose last stream ended kept its presence")
 		}
 	})
@@ -38,11 +41,13 @@ func TestClientLivenessKeepsPresenceWhileAnotherStreamRemains(t *testing.T) {
 		disconnectFirst := clients.Connected("window-a")
 		clients.Connected("window-a")
 		disconnectFirst()
+		time.Sleep(quietFor)
+		synctest.Wait()
 
 		select {
 		case client := <-represenced:
 			t.Fatalf("represenced %q while it still had a live stream", client)
-		case <-time.After(quietFor):
+		default:
 		}
 		if count := clients.StreamCount("window-a"); count != 1 {
 			t.Fatalf("stream count %d, want 1", count)
@@ -57,11 +62,13 @@ func TestClientLivenessReconnectInsideTheGraceKeepsPresence(t *testing.T) {
 
 		clients.Connected("window-a")()
 		clients.Connected("window-a")
+		time.Sleep(2 * quietFor)
+		synctest.Wait()
 
 		select {
 		case client := <-represenced:
 			t.Fatalf("represenced %q after it reconnected inside the grace", client)
-		case <-time.After(2 * quietFor):
+		default:
 		}
 	})
 }
@@ -92,7 +99,6 @@ func TestClientLivenessIgnoresSupersededExpiry(t *testing.T) {
 }
 
 func TestClientLivenessReconnectWaitsForPresenceRepresence(t *testing.T) {
-	// Mutex waits do not let synctest advance its clock.
 	releasing, finish := make(chan struct{}), make(chan struct{})
 	clients := NewClientLiveness(0, func(string) {
 		close(releasing)
@@ -101,7 +107,7 @@ func TestClientLivenessReconnectWaitsForPresenceRepresence(t *testing.T) {
 	clients.Connected("window")()
 	select {
 	case <-releasing:
-	case <-time.After(testutil.Timeout(5 * time.Second)):
+	case <-t.Context().Done():
 		close(finish)
 		t.Fatal("presence represence did not start")
 	}
@@ -112,15 +118,16 @@ func TestClientLivenessReconnectWaitsForPresenceRepresence(t *testing.T) {
 		close(reconnected)
 	}()
 	<-attempting
+	runtime.Gosched()
 	select {
 	case <-reconnected:
 		t.Error("reconnect returned before the presence represence completed")
-	case <-time.After(testutil.Timeout(quietFor)):
+	default:
 	}
 	close(finish)
 	select {
 	case <-reconnected:
-	case <-time.After(testutil.Timeout(5 * time.Second)):
+	case <-t.Context().Done():
 		t.Fatal("reconnect did not finish after presence represence")
 	}
 	if got := clients.StreamCount("window"); got != 1 {

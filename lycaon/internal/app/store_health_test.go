@@ -27,12 +27,12 @@ func TestIntegrityFailureStopsRunnerAndStoreCoupledMaintenance(t *testing.T) {
 	go func() { defer close(done); app.superviseRunner(t.Context(), runner) }()
 	select {
 	case <-app.storeFailed():
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("serve loop did not receive the integrity failure")
 	}
 	select {
 	case <-done:
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("integrity runner did not settle")
 	}
 	if err := (&persistence.Runtime{Database: store}).Verify(); !errors.Is(err, db.ErrStoreIncompatible) {

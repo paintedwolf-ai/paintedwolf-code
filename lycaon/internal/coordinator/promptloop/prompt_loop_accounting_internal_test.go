@@ -6,7 +6,6 @@ import (
 	"errors"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/cost"
@@ -140,7 +139,6 @@ func TestRecordUsagePublishesRootScopedRollupForWorkerTurns(t *testing.T) {
 		&modelcall.Completion{Usage: modelcall.TokenUsage{PromptTokens: 5, CompletionTokens: 2}}))
 	hub.FlushDebounced()
 
-	deadline := time.After(time.Second)
 	for {
 		select {
 		case env := <-ch:
@@ -156,7 +154,7 @@ func TestRecordUsagePublishesRootScopedRollupForWorkerTurns(t *testing.T) {
 				t.Fatalf("workers totals = %+v", ev.Workers.TokenTotals)
 			}
 			return
-		case <-deadline:
+		case <-t.Context().Done():
 			t.Fatal("no cost event published for worker turn")
 		}
 	}

@@ -12,8 +12,9 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-	"time"
 
+	hostapi "github.com/lycaon/lycaon/internal/api"
+	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/api/sourceapi"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectsource"
@@ -23,8 +24,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/watchfd"
 	"github.com/lycaon/lycaon/internal/worker"
-	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
-	hostapi "github.com/lycaon/lycaon/internal/api"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -160,7 +159,7 @@ func TestProjectSourceIndexWarmsOffRequestPath(t *testing.T) {
 	testutil.FailErr(t, "create project", err)
 
 	var summary wire.SourceIndexSummary
-	ready := testutil.WaitForNoFatal(time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		req := contractfixture.NewAuthedRequest(http.MethodGet, "/v1/projects/"+p.ID+"/source/index", nil)
 		w := httptest.NewRecorder()
 		srv.ServeHTTP(w, req)
@@ -173,7 +172,7 @@ func TestProjectSourceIndexWarmsOffRequestPath(t *testing.T) {
 		}
 		return false
 	})
-	if !ready || summary.FileCount != 1 || summary.Revision == 0 {
+	if summary.FileCount != 1 || summary.Revision == 0 {
 		t.Fatalf("summary = %+v", summary)
 	}
 	if len(summary.Coverage) != 1 || summary.Coverage[0].RootID != p.Roots[0].ID ||
@@ -193,7 +192,7 @@ func TestSourceSearchRestrictsCoverageToRequestedRoot(t *testing.T) {
 	testutil.FailErr(t, "attach unavailable root", err)
 	testutil.FailErr(t, "remove unavailable root", os.Remove(other))
 	var result wire.SourceSearchResponse
-	ready := testutil.WaitForNoFatal(5*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		w := httptest.NewRecorder()
 		srv.ServeHTTP(w, contractfixture.NewAuthedRequest(http.MethodGet, "/v1/projects/"+p.ID+"/source/search?q=match&root_id="+p.Roots[0].ID, nil))
 		if w.Code != http.StatusOK && w.Code != http.StatusAccepted {
@@ -202,7 +201,7 @@ func TestSourceSearchRestrictsCoverageToRequestedRoot(t *testing.T) {
 		testutil.FailErr(t, "decode scoped search", json.Unmarshal(w.Body.Bytes(), &result))
 		return result.State == wire.SourceIndexStateReady && !result.Refreshing
 	})
-	if !ready || len(result.Matches) != 1 || len(result.Coverage) != 1 || result.Coverage[0].RootID != p.Roots[0].ID || result.Coverage[0].Error != "" {
+	if len(result.Matches) != 1 || len(result.Coverage) != 1 || result.Coverage[0].RootID != p.Roots[0].ID || result.Coverage[0].Error != "" {
 		t.Fatalf("scoped search includes unavailable root: %+v", result)
 	}
 }
@@ -217,7 +216,7 @@ func TestSourceSearchReadsAPastedFullPathAndLocation(t *testing.T) {
 	search := func(q string) (wire.SourceSearchResponse, string) {
 		var result wire.SourceSearchResponse
 		var body string
-		ready := testutil.WaitForNoFatal(5*time.Second, func() bool {
+		testutil.WaitFor(t, func() bool {
 			w := httptest.NewRecorder()
 			srv.ServeHTTP(w, contractfixture.NewAuthedRequest(http.MethodGet, "/v1/projects/"+p.ID+"/source/search?q="+url.QueryEscape(q), nil))
 			if w.Code != http.StatusOK && w.Code != http.StatusAccepted {
@@ -227,9 +226,7 @@ func TestSourceSearchReadsAPastedFullPathAndLocation(t *testing.T) {
 			testutil.FailErr(t, "decode search", json.Unmarshal(w.Body.Bytes(), &result))
 			return result.State == wire.SourceIndexStateReady && !result.Refreshing
 		})
-		if !ready {
-			t.Fatalf("source index never settled: %s", body)
-		}
+
 		return result, body
 	}
 

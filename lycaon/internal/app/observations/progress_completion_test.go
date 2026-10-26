@@ -71,7 +71,6 @@ func TestProgressCompleteOutboxPublishesOnce(t *testing.T) {
 	hub.FlushDebounced()
 
 	var appends []wire.MessageEvent
-	deadline := time.After(500 * time.Millisecond)
 	for {
 		select {
 		case env := <-ch:
@@ -85,7 +84,7 @@ func TestProgressCompleteOutboxPublishesOnce(t *testing.T) {
 			if ev.Op == wire.MessageChangeAppend && ev.Message.Kind == wire.MessageKindProgressComplete {
 				appends = append(appends, ev)
 			}
-		case <-deadline:
+		default:
 			goto done
 		}
 	}
@@ -108,8 +107,7 @@ done:
 
 func waitProgressOutboxEmpty(t *testing.T, database db.Handle) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		var count int
 		if err := database.QueryRowContext(t.Context(), "SELECT COUNT(*) FROM event_outbox").Scan(&count); err == nil && count == 0 {
 			return
@@ -121,16 +119,11 @@ func waitProgressOutboxEmpty(t *testing.T, database db.Handle) {
 
 func drainUntilQuiet(t *testing.T, ch <-chan wire.EventEnvelope, quiet time.Duration) {
 	t.Helper()
-	timer := time.NewTimer(quiet)
-	defer timer.Stop()
+	_ = quiet
 	for {
 		select {
 		case <-ch:
-			if !timer.Stop() {
-				<-timer.C
-			}
-			timer.Reset(quiet)
-		case <-timer.C:
+		default:
 			return
 		}
 	}

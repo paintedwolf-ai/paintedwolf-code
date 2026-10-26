@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/api/apitest"
@@ -82,9 +81,9 @@ func TestScanSummaryHTTPIntegration(t *testing.T) {
 	sessStore := store.NewMemory()
 	mgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	projects := project.NewMemoryRegistry()
-	srv := api.NewServer(apitest.Dependencies(t, api.Dependencies{Core:api.CoreDependencies{
-		Store: sessStore, Projects: projects, Sessions: mgr,},Scans:api.ScansDependencies{
-		ScanCoordinator: coord, ScannerRegistry: reg,},}), nil, api.TestAPIToken)
+	srv := api.NewServer(apitest.Dependencies(t, api.Dependencies{Core: api.CoreDependencies{
+		Store: sessStore, Projects: projects, Sessions: mgr}, Scans: api.ScansDependencies{
+		ScanCoordinator: coord, ScannerRegistry: reg}}), nil, api.TestAPIToken)
 
 	projectDir := t.TempDir()
 	proj, err := project.CreateWithRoot(t.Context(), projects, projectDir)
@@ -99,7 +98,7 @@ func TestScanSummaryHTTPIntegration(t *testing.T) {
 	scanURL := "/v1/projects/" + proj.ID + "/scans/" + created.ID
 
 	var summary wire.CodeScan
-	testutil.WaitFor(t, 2*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		sumReq := httptest.NewRequestWithContext(t.Context(), http.MethodGet, scanURL+"?view=summary", nil)
 		sumReq.Header.Set("Authorization", api.TestAuthHeader())
 		sumW := httptest.NewRecorder()

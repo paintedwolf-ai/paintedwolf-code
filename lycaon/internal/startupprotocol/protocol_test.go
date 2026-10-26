@@ -60,7 +60,7 @@ func TestReporterPublishesPhasesHeartbeatsAndReady(t *testing.T) {
 	for range 3 {
 		select {
 		case <-protocol.writes:
-		case <-time.After(time.Second):
+		case <-t.Context().Done():
 			t.Fatal("startup heartbeat was not published")
 		}
 	}

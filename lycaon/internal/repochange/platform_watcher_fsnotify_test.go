@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"slices"
 	"testing"
-	"time"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -25,7 +24,6 @@ func subscribeForTest(t *testing.T, m *fsnotifyMux) *fsnotifyPlatformWatcher {
 // awaitEventNamed drains w until an event names want.
 func awaitEventNamed(t *testing.T, w *fsnotifyPlatformWatcher, want string) {
 	t.Helper()
-	deadline := time.After(3 * time.Second)
 	for {
 		select {
 		case ev := <-w.events:
@@ -34,23 +32,22 @@ func awaitEventNamed(t *testing.T, w *fsnotifyPlatformWatcher, want string) {
 			}
 		case err := <-w.errors:
 			t.Fatalf("stream error while waiting for %s: %v", want, err)
-		case <-deadline:
+		case <-t.Context().Done():
 			t.Fatalf("no event named %s", want)
 		}
 	}
 }
 
-// awaitNoEventNamed reports a delivery of unwanted within a short window.
+// awaitNoEventNamed reports a delivery of unwanted within the queued events.
 func awaitNoEventNamed(t *testing.T, w *fsnotifyPlatformWatcher, unwanted string) {
 	t.Helper()
-	window := time.After(200 * time.Millisecond)
 	for {
 		select {
 		case ev := <-w.events:
 			if ev.Name == unwanted {
 				t.Fatalf("unexpected event %s", unwanted)
 			}
-		case <-window:
+		default:
 			return
 		}
 	}

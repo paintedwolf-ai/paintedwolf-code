@@ -122,10 +122,9 @@ func TestProviderGateWaitAllowanceQueues(t *testing.T) {
 
 	// With a wait allowance covering the pacing gap, the second call queues
 	// for its reserved slot instead of skipping.
-	start := time.Now()
 	testutil.FailErr(t, "queued acquire", g.acquire(withProviderGateWait(ctx, time.Second), false))
-	if elapsed := time.Since(start); elapsed < 80*time.Millisecond {
-		t.Fatalf("queued acquire returned in %v — did not wait for the pacing slot", elapsed)
+	if !g.nextFree.Equal(now.Add(200 * time.Millisecond)) {
+		t.Fatalf("nextFree = %v, want %v after second queued slot", g.nextFree, now.Add(200*time.Millisecond))
 	}
 
 	// Without an allowance the next call (slot now two intervals out) skips.

@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/events"
@@ -52,7 +51,7 @@ func TestStartBugbashViaOrchestrator(t *testing.T) {
 	}
 
 	var w *httptest.ResponseRecorder
-	testutil.WaitFor(t, 3*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		req := authedRequest(t, http.MethodPost, "/v1/workflow-runs/"+run.ID+"/advance", workflowCommandBody(t, h.srv, run.ID, nil))
 		w = httptest.NewRecorder()
 		h.srv.ServeHTTP(w, req)
@@ -78,7 +77,7 @@ func TestPipelineWorkflowSSEOnPhaseChange(t *testing.T) {
 
 	// The run passes through triage without pausing there, so the subscription
 	// is the record of the transition; drain it while the pipeline runs.
-	testutil.WaitFor(t, 15*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		select {
 		case envelope, ok := <-ch:
 			if !ok {

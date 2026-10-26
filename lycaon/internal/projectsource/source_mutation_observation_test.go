@@ -117,7 +117,7 @@ func TestMutationCommitRacingObservationDoesNotCreateOutsideEffect(t *testing.T)
 	}()
 	select {
 	case <-scope.observed:
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		close(scope.resume)
 		t.Fatal("observation did not read pending registry")
 	}

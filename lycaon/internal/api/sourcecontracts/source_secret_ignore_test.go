@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
@@ -46,7 +45,7 @@ func TestComparisonRefreshesWithdrawnSecretException(t *testing.T) {
 	}
 	previous := view.ProjectionRevision
 	accepted.Store(false)
-	testutil.WaitFor(t, 5*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		response := httptest.NewRecorder()
 		server.ServeHTTP(response, contractfixture.NewAuthedRequest(http.MethodGet, sourceapi.SourceViewURL(p.ID, initial.ID), nil))
 		view = *contractfixture.ReadSourceViewResponse(t, response, http.StatusOK).Comparison

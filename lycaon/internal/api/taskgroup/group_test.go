@@ -23,7 +23,7 @@ func TestGoDetachedSurvivesPanic(t *testing.T) {
 	}()
 	select {
 	case <-done:
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("detached work never drained after a panicking detached goroutine")
 	}
 
@@ -32,7 +32,7 @@ func TestGoDetachedSurvivesPanic(t *testing.T) {
 	s.Go(context.Background(), func(context.Context) { close(ran) })
 	select {
 	case <-ran:
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("server did not run work scheduled after a panic")
 	}
 	s.Wait(context.Background())
@@ -54,7 +54,7 @@ func TestGoDetachedOutlivesRequestAndStopsWithServer(t *testing.T) {
 	select {
 	case err := <-stopped:
 		t.Fatalf("request cancellation stopped detached work: %v", err)
-	case <-time.After(25 * time.Millisecond):
+	default:
 	}
 
 	s.Stop()
@@ -63,7 +63,7 @@ func TestGoDetachedOutlivesRequestAndStopsWithServer(t *testing.T) {
 		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("shutdown err = %v, want context.Canceled", err)
 		}
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("server shutdown did not stop detached work")
 	}
 	s.Wait(context.Background())

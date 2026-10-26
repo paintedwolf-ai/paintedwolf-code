@@ -378,19 +378,18 @@ func TestStatusCache_RevalidateServesStaleWhileReloading(t *testing.T) {
 
 	select {
 	case <-loader.entered:
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("background revalidate never started")
 	}
 	close(loader.release)
 
-	deadline := time.Now().Add(5 * time.Second)
 	for {
 		got, err := cache.GetOrRevalidate(t.Context(), dir)
 		testutil.FailErr(t, "post-reload read", err)
 		if got.Status.Dirty {
 			break
 		}
-		if time.Now().After(deadline) {
+		if t.Context().Err() != nil {
 			t.Fatal("background revalidate never landed the new status")
 		}
 		time.Sleep(10 * time.Millisecond)
@@ -430,7 +429,7 @@ func TestStatusCache_InvalidationDuringLoadRetriesBeforePublishingFresh(t *testi
 	}()
 	select {
 	case <-loader.entered:
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("reload never started")
 	}
 	cache.InvalidateWithSource(dir, repochange.SourceWatcher)
@@ -439,7 +438,7 @@ func TestStatusCache_InvalidationDuringLoadRetriesBeforePublishingFresh(t *testi
 	select {
 	case err := <-errs:
 		testutil.FailErr(t, "reload after invalidation", err)
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("reload did not finish")
 	}
 	got := <-done
@@ -467,19 +466,18 @@ func TestStatusCache_PeekOrRevalidateColdWarmsInBackground(t *testing.T) {
 	}
 	select {
 	case <-loader.entered:
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("cold peek did not start a background status load")
 	}
 	close(loader.release)
 
-	deadline := time.Now().Add(5 * time.Second)
 	for {
 		cached, found, err = cache.PeekOrRevalidate(t.Context(), dir)
 		testutil.FailErr(t, "peek warmed status", err)
 		if found && cached.Status != nil {
 			return
 		}
-		if time.Now().After(deadline) {
+		if t.Context().Err() != nil {
 			t.Fatal("background status load did not populate cache")
 		}
 		time.Sleep(10 * time.Millisecond)

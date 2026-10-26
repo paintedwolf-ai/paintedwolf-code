@@ -53,7 +53,7 @@ func TestLoopDefersPhaseAdvancedWhileWorkersInFlight(t *testing.T) {
 	}
 	engine.SetDeps(deps)
 	engine.Cycles.OnWorkerCycleTerminal(context.Background(), "s1", "")
-	testutil.WaitFor(t, 2*time.Second, func() bool { return prompts.Load() >= 1 })
+	testutil.WaitFor(t, func() bool { return prompts.Load() >= 1 })
 }
 
 func TestWorkerOutcomeAcknowledgementDrainsDeferredPhaseWake(t *testing.T) {
@@ -105,7 +105,7 @@ func TestWorkerAcknowledgementRunsAnUnconsumedTerminalWake(t *testing.T) {
 	engine.SetDeps(deps)
 	engine.Nudges.enqueuePending("s1", pendingLoopWake{wake: anchor.WorkerTaskFinished, seq: 1})
 	engine.Cycles.OnWorkerCycleTerminal(t.Context(), "s1", "job")
-	testutil.WaitFor(t, 2*time.Second, func() bool { return prompts.Load() == 1 })
+	testutil.WaitFor(t, func() bool { return prompts.Load() == 1 })
 	if engine.Nudges.HasPendingLoopWakes("s1") {
 		t.Fatal("delivered terminal wake remained queued")
 	}
@@ -143,7 +143,7 @@ func TestLoopNudgeAfterWorkerJobTerminalRunsPerJobWake(t *testing.T) {
 		"",
 		anchor.Envelope{},
 	)
-	testutil.WaitFor(t, 2*time.Second, func() bool { return prompts.Load() >= 1 })
+	testutil.WaitFor(t, func() bool { return prompts.Load() >= 1 })
 	if prompts.Load() != 1 {
 		t.Fatalf("prompts = %d want per-job wake while siblings in flight", prompts.Load())
 	}
@@ -170,7 +170,7 @@ func TestWorkerCompletionBreaksSleep(t *testing.T) {
 		t.Fatal("expected sleeping after wait")
 	}
 	engine.Nudges.NudgeAfterWorkerJobTerminal(context.Background(), "s1", "job-1", anchor.WorkerTaskFinished, anchor.WorkerTaskFinished, "", anchor.Envelope{})
-	testutil.WaitFor(t, 2*time.Second, func() bool { return prompts.Load() >= 1 })
+	testutil.WaitFor(t, func() bool { return prompts.Load() >= 1 })
 	if engine.Waits.IsSleeping("s1") {
 		t.Fatal("worker completion should break sleep")
 	}
@@ -194,7 +194,7 @@ func TestWorkerTaskFinishedKickDedupPerJob(t *testing.T) {
 	engine.SetDeps(deps)
 	engine.Nudges.NudgeAfterWorkerJobTerminal(context.Background(), "s1", "job-1", anchor.WorkerTaskFinished, anchor.WorkerTaskFinished, "", anchor.Envelope{})
 	engine.Nudges.NudgeAfterWorkerJobTerminal(context.Background(), "s1", "job-2", anchor.WorkerTaskFinished, anchor.WorkerTaskFinished, "", anchor.Envelope{})
-	testutil.WaitFor(t, 2*time.Second, func() bool { return kicks.Load() >= 2 })
+	testutil.WaitFor(t, func() bool { return kicks.Load() >= 2 })
 	if kicks.Load() != 2 {
 		t.Fatalf("kicks = %d want 2 (per-job dedup)", kicks.Load())
 	}
@@ -252,7 +252,7 @@ func TestPromptExecutionQueuesMultipleNudgesWithoutLoss(t *testing.T) {
 	engine.Nudges.Nudge(context.Background(), "s1", anchor.LegFinished, anchor.LegFinished, "leg-1", anchor.Envelope{})
 	finishExecution()
 	engine.Cycles.OnWorkerCycleTerminal(context.Background(), "s1", "")
-	testutil.WaitFor(t, 2*time.Second, func() bool { return prompts.Load() >= 2 })
+	testutil.WaitFor(t, func() bool { return prompts.Load() >= 2 })
 	if prompts.Load() != 2 {
 		t.Fatalf("prompts = %d want 2 distinct deferred nudges", prompts.Load())
 	}
@@ -283,7 +283,7 @@ func TestOnWorkerCycleTerminalFlushesPromptExecutionDeferral(t *testing.T) {
 	}
 	finishExecution()
 	engine.Cycles.OnWorkerCycleTerminal(context.Background(), "s1", "")
-	testutil.WaitFor(t, 2*time.Second, func() bool { return prompts.Load() >= 1 })
+	testutil.WaitFor(t, func() bool { return prompts.Load() >= 1 })
 	if _, ok := engine.Nudges.Pending("s1"); ok {
 		t.Fatal("deferral should be cleared after terminal flush")
 	}

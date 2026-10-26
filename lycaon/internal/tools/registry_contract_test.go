@@ -3,8 +3,8 @@ package tools
 import (
 	"context"
 	"errors"
+	"runtime"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -42,10 +42,17 @@ func TestRegistryPrefixLeaseMakesSourceStateAndDefinitionsAtomic(t *testing.T) {
 		})
 	}()
 	<-started
+	for t.Context().Err() == nil {
+		if !reg.dynamicMu.TryRLock() {
+			break
+		}
+		reg.dynamicMu.RUnlock()
+		runtime.Gosched()
+	}
 	select {
 	case <-callbackEntered:
 		t.Fatal("definition transaction crossed a live invocation lease")
-	case <-time.After(50 * time.Millisecond):
+	default:
 	}
 	if _, ok := reg.Definition("mcp_old_read"); !ok {
 		t.Fatal("leased definition changed before invocation release")
@@ -54,7 +61,7 @@ func TestRegistryPrefixLeaseMakesSourceStateAndDefinitionsAtomic(t *testing.T) {
 	select {
 	case err := <-done:
 		testutil.FailErr(t, "replace after invocation release", err)
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("definition transaction did not resume after release")
 	}
 	if _, ok := reg.Definition("mcp_new_read"); !ok {

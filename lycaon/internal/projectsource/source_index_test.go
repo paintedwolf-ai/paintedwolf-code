@@ -81,7 +81,6 @@ func sourceIndexTestCatalog(t *testing.T) *sourcecatalog.Catalog {
 func warmSourceIndex(t *testing.T, catalog *sourcecatalog.Catalog, p *Project) {
 	t.Helper()
 	for _, root := range p.Roots {
-		until := time.Now().Add(time.Minute)
 		for {
 			reader, status, err := catalog.Trees.OpenIndex(t.Context(), p.ID, sourcecatalog.Root{ID: root.ID, Path: root.Path}, time.Second)
 			testutil.FailErr(t, "discover source index", err)
@@ -91,7 +90,7 @@ func warmSourceIndex(t *testing.T, catalog *sourcecatalog.Catalog, p *Project) {
 					break
 				}
 			}
-			if time.Now().After(until) {
+			if t.Context().Err() != nil {
 				t.Fatalf("source index not ready: %+v", status)
 			}
 		}

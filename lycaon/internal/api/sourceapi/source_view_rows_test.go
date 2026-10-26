@@ -7,7 +7,6 @@ import (
 	"net/url"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/pagedview"
@@ -39,7 +38,7 @@ func TestSourceViewComparisonFramesPreserveSourceAnchors(t *testing.T) {
 	go func() { view.touch(); close(progress) }()
 	select {
 	case <-progress:
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("retained reader blocked progress publication")
 	}
 	r := httptest.NewRequest("GET", "/rows", nil)

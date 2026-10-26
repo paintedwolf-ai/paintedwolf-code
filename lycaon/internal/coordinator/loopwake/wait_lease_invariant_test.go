@@ -162,11 +162,11 @@ func TestWaitLeaseRetiresWhenTimerFires(t *testing.T) {
 		t.Fatal("expected an open lease while the sleep is armed")
 	}
 
-	testutil.WaitFor(t, time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		return rec.openCount() == 0 && !waitLeaseOpenForTest(loop.Waits, "sess")
 	})
 
-	loop.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, 5*time.Second))
+	loop.Turns.WaitForAsyncTurns(t.Context())
 	leaseMatchesSleep(t, "after timer fire", loop, rec, "sess")
 }
 

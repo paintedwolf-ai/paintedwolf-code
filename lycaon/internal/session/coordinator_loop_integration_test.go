@@ -6,7 +6,6 @@ import (
 	"context"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
@@ -36,7 +35,7 @@ func TestLoopSkippedInApprovePhase(t *testing.T) {
 	testutil.FailErr(t, "UpdateVars", fix.wfMgr.Store.State.UpdateVars(ctx, run, t.TempDir(), vars))
 	before, _ := fix.store.GetMessages(ctx, fix.sess.ID)
 	fix.mgr.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(ctx, fix.sess.ID, anchor.LegFinished, anchor.LegFinished, "leg-1", anchor.Envelope{})
-	fix.mgr.Coordinator.WaitForTurns(testutil.BoundedContext(t, 5*time.Second))
+	fix.mgr.Coordinator.WaitForTurns(t.Context())
 	after, err := fix.store.GetMessages(ctx, fix.sess.ID)
 	testutil.FailErr(t, "fix.store.GetMessages failed", err)
 	if len(after) != len(before) {
@@ -48,7 +47,7 @@ func TestLoopNoKickPlusSentinel(t *testing.T) {
 	fix := setupLoopFixture(t, settings.DefaultSessionLimits())
 	ctx := context.Background()
 	fix.mgr.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(ctx, fix.sess.ID, anchor.LegFinished, anchor.LegFinished, "leg-1", anchor.Envelope{})
-	fix.mgr.Coordinator.WaitForTurns(testutil.BoundedContext(t, 5*time.Second))
+	fix.mgr.Coordinator.WaitForTurns(t.Context())
 	msgs, err := fix.store.GetMessages(ctx, fix.sess.ID)
 	testutil.FailErr(t, "fix.store.GetMessages failed", err)
 	for _, msg := range msgs {

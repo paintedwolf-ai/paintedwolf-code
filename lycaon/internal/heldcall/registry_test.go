@@ -43,7 +43,7 @@ func awaitSettleCallback(t *testing.T, rec *recorder, handle string) {
 		if got != handle {
 			t.Fatalf("settled handle = %q, want %q", got, handle)
 		}
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("the held call did not settle")
 	}
 }
@@ -216,8 +216,7 @@ func TestStopCancelsTheHeldCall(t *testing.T) {
 	if err != nil || !stop.Running {
 		t.Fatalf("stop = %+v, %v", stop, err)
 	}
-	deadline := time.After(2 * time.Second)
-	for {
+	for t.Context().Err() == nil {
 		status, statusErr := registry.Status("s", outcome.Handle)
 		if statusErr != nil {
 			testutil.FailErr(t, "status", statusErr)
@@ -228,12 +227,9 @@ func TestStopCancelsTheHeldCall(t *testing.T) {
 			}
 			return
 		}
-		select {
-		case <-deadline:
-			t.Fatal("stop did not cancel the call")
-		case <-time.After(5 * time.Millisecond):
-		}
+		time.Sleep(5 * time.Millisecond)
 	}
+	t.Fatal("stop did not cancel the call")
 }
 
 func TestTurnCancellationCancelsAnUnheldCall(t *testing.T) {
@@ -295,17 +291,13 @@ func TestSettledResultsAreRetainedUpToTheBound(t *testing.T) {
 
 func waitSettled(t *testing.T, registry *Registry, handle string) {
 	t.Helper()
-	deadline := time.After(2 * time.Second)
-	for {
+	for t.Context().Err() == nil {
 		if known, running := registry.State("s", handle); !known || !running {
 			return
 		}
-		select {
-		case <-deadline:
-			t.Fatalf("%s did not settle", handle)
-		case <-time.After(2 * time.Millisecond):
-		}
+		time.Sleep(2 * time.Millisecond)
 	}
+	t.Fatalf("%s did not settle", handle)
 }
 
 func TestDisposeSessionCancelsAndForgetsHeldCalls(t *testing.T) {

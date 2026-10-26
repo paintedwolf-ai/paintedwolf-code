@@ -93,7 +93,7 @@ func TestFailedHostTurnReportsItself(t *testing.T) {
 	finishExecution()
 	mgr.Runner.Coordinator.CoordinatorLoop().Nudges.DrainPending(ctx, sess.ID)
 
-	testutil.WaitFor(t, 10*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		mu.Lock()
 		defer mu.Unlock()
 		return len(reported) > 0

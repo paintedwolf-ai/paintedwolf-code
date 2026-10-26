@@ -31,7 +31,7 @@ func registerMDNSName(t *testing.T) string {
 		_ = reg.Wait()
 	})
 	var last string
-	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(100 * time.Millisecond) {
+	for ; t.Context().Err() == nil; time.Sleep(100 * time.Millisecond) {
 		out, err := exec.Command(resolveProbe[0], append(resolveProbe[1:], name)...).CombinedOutput()
 		last = string(out)
 		if err == nil && strings.TrimSpace(last) == mdnsProbeAddr {

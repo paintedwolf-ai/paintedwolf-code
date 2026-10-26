@@ -48,7 +48,7 @@ func startSmokeProcess(t *testing.T, proc *exec.Cmd) *smokeProcess {
 func (p *smokeProcess) waitForHealth(t *testing.T, baseURL string) {
 	t.Helper()
 	client := &http.Client{Timeout: 2 * time.Second}
-	ready := testutil.WaitForNoFatal(30*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		select {
 		case <-p.done:
 			t.Fatalf("sidecar exited before health: %v", p.err)
@@ -62,9 +62,7 @@ func (p *smokeProcess) waitForHealth(t *testing.T, baseURL string) {
 		}
 		return err == nil && resp.StatusCode == http.StatusOK
 	})
-	if !ready {
-		t.Fatalf("server at %s did not become healthy", baseURL)
-	}
+
 }
 
 func TestSmokeStartupFailureReportsExitAndOutput(t *testing.T) {
@@ -79,7 +77,7 @@ func TestSmokeStartupFailureReportsExitAndOutput(t *testing.T) {
 		startSmokeProcess(t, proc).waitForHealth(t, "http://127.0.0.1:0")
 		return
 	}
-	ctx := testutil.BoundedContext(t, 10*time.Second)
+	ctx := t.Context()
 	probe := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestSmokeStartupFailureReportsExitAndOutput$", "-test.short=true")
 	probe.Env = append(os.Environ(), mode+"=probe")
 	output, err := probe.CombinedOutput()
