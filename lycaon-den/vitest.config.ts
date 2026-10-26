@@ -24,6 +24,7 @@ function maxWorkers(): number {
 
 const VITEST_FAST_INCLUDE = [
   "src/api/events.test.ts",
+  "src/platform/connection/tauri-ipc-parity.contract.test.ts",
   "src/store/app-state.test.ts",
   "src/store/app-state.activity.test.ts",
   "src/store/app-state.transcript.test.ts",

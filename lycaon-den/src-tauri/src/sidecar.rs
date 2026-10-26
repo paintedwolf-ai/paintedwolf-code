@@ -18,12 +18,16 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{mpsc, Mutex};
 use std::time::Instant;
 
+#[cfg(target_os = "linux")]
+pub(crate) mod captured_engine;
 pub(crate) mod commands;
 pub(crate) mod custody;
 pub(crate) mod daemon;
+mod installation;
 mod diagnostics;
 pub(crate) mod layout;
 mod logging;
+pub(crate) mod manifest;
 mod process;
 mod startup;
 pub(crate) mod supervisor;
@@ -50,6 +54,12 @@ pub enum SidecarStartError {
     CredentialVaultUninitialized(String),
     CredentialVaultUnlockFailed(String),
     CredentialVaultCorrupt(String),
+    DesktopRestartRequired(String),
+    InstallationUnverified(String),
+    CredentialVaultCustodianUnavailable(String),
+    CredentialVaultCustodianAbsent(String),
+    CredentialVaultLauncherRefused(String),
+    CredentialVaultIdentityMissing(String),
     Failed(String),
 }
 
@@ -69,6 +79,12 @@ impl SidecarStartError {
             | Self::CredentialVaultUninitialized(message)
             | Self::CredentialVaultUnlockFailed(message)
             | Self::CredentialVaultCorrupt(message)
+            | Self::DesktopRestartRequired(message)
+            | Self::InstallationUnverified(message)
+            | Self::CredentialVaultCustodianUnavailable(message)
+            | Self::CredentialVaultCustodianAbsent(message)
+            | Self::CredentialVaultLauncherRefused(message)
+            | Self::CredentialVaultIdentityMissing(message)
             | Self::Failed(message) => message,
         }
     }
@@ -213,7 +229,8 @@ impl SidecarState {
     /// vault. None when the vault is not on the app-password path.
     pub(crate) fn verify_vault_password(&self, candidate: &[u8]) -> Option<bool> {
         let held = self.vault_password.lock().unwrap();
-        held.as_ref().map(|held| constant_time_eq(&held.0, candidate))
+        held.as_ref()
+            .map(|held| constant_time_eq(&held.0, candidate))
     }
 
     pub(crate) fn sign_presence(&self, proof_payload: &str, authenticator: &str) -> String {
@@ -304,6 +321,8 @@ where
     if let Some(info) = state.cached_info() {
         return Ok(info);
     }
+    installation::ensure_current()
+        .map_err(installation::RestartReason::start_error)?;
     stop_sidecar_locked(state);
 
     launch_sidecar_locked(state, password, emit)
@@ -317,6 +336,8 @@ fn launch_sidecar_locked<F>(
 where
     F: Fn(StartupProgress),
 {
+    installation::ensure_current()
+        .map_err(installation::RestartReason::start_error)?;
     state.cancel_start.store(false, Ordering::Release);
     state.starting.store(true, Ordering::Release);
     let _starting = StartingGuard(&state.starting);
@@ -430,6 +451,8 @@ where
     if attach_only_requested() {
         return attach_or_explain(&crate::config_dir::host_config_dir()?);
     }
+    installation::ensure_current()
+        .map_err(installation::RestartReason::start_error)?;
     state.crashes.lock().unwrap().clear();
     stop_sidecar_locked(state);
     launch_sidecar_locked(state, None, &emit)
@@ -446,9 +469,11 @@ fn reset_credential_vault(state: &SidecarState) -> Result<(), String> {
     if child_alive(state.process.lock().unwrap().as_mut()) {
         return Err("The credential vault cannot be reset while the engine is running.".into());
     }
+    installation::ensure_current().map_err(|reason| reason.guidance())?;
     let bin = resolve_lycaon_binary()?;
+    let image = crate::linux_generation::capture_helper(&bin)?;
     let config_dir = crate::config_dir::host_config_dir()?;
-    let status = Command::new(&bin)
+    let status = Command::new(&image.path)
         .args(["credentials", "purge", "--yes"])
         .env("LYCAON_CONFIG_DIR", config_dir)
         .stdin(Stdio::null())

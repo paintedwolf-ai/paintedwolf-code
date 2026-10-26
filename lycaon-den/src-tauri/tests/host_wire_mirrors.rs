@@ -48,6 +48,50 @@ struct Entry {
 
 const HOST_WIRE_MIRRORS: &[Entry] = &[
     Entry {
+        file: "src/app_exit/confirmation.rs",
+        rust_type: "WorkFacts",
+        binding: Binding::Mirror {
+            fixture: "power_settings_response",
+            ignored: &[
+                ("keep_awake_while_working", "Quit reads active work independently of the sleep preference"),
+                ("supported", "active work exists even when the OS inhibitor is unavailable"),
+                ("inhibiting", "the native sleep lease is not the work lifetime"),
+                ("last_error", "inhibitor diagnostics do not determine active work"),
+            ],
+            forward: None,
+        },
+    },
+    Entry {
+        file: "src/http_transport/linux_proxy.rs",
+        rust_type: "Reply",
+        binding: Binding::Mirror {
+            fixture: "native_proxy_response",
+            ignored: &[],
+            forward: None,
+        },
+    },
+    Entry {
+        file: "src/sidecar/manifest.rs",
+        rust_type: "Manifest",
+        binding: Binding::NotHostWire {
+            reason: "reads the package manager's on-disk manifest for installation verification, never engine output",
+        },
+    },
+    Entry {
+        file: "src/sidecar/manifest.rs",
+        rust_type: "Executable",
+        binding: Binding::NotHostWire {
+            reason: "reads an executable entry from the package manager's on-disk manifest, never engine output",
+        },
+    },
+    Entry {
+        file: "src/sidecar/manifest.rs",
+        rust_type: "PayloadEntry",
+        binding: Binding::NotHostWire {
+            reason: "reads a payload seal entry from the package manager's on-disk manifest, never engine output",
+        },
+    },
+    Entry {
         file: "src/presence.rs",
         rust_type: "HostError",
         binding: Binding::Mirror {
@@ -333,6 +377,7 @@ fn production_source(path: &Path) -> Option<String> {
 
 fn is_host_facing(relative: &str, source: &str) -> bool {
     relative.starts_with("src/sidecar/")
+        || relative == "src/http_transport/linux_proxy.rs"
         || HOST_FACING_MARKERS.iter().any(|marker| source.contains(marker))
 }
 

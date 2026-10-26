@@ -8,7 +8,7 @@ import shutil
 import signal
 import tempfile
 
-from release_upgrade.case import run_case
+from release_upgrade.case import run_case, probe_committed_recovery
 from release_upgrade.host import local_origin, require_disposable_host
 from release_upgrade.prepare import file_digest
 
@@ -51,7 +51,7 @@ def verify_requests(path: Path, case: dict, start: int):
             raise ValueError("upgrade did not fetch every authenticated fixture route")
 
 
-def rehearse(root: Path, evidence: Path, case_id: str):
+def rehearse(root: Path, evidence: Path, case_id: str, recovery_probe=False):
     evidence.mkdir(parents=True, exist_ok=False)
     receipt = {"format_version": 1, "result": "failed", "case_id": case_id, "cases": []}
     config = None
@@ -87,6 +87,11 @@ def rehearse(root: Path, evidence: Path, case_id: str):
                     verify_requests(request_log, case, start)
                 except (Exception, KeyboardInterrupt) as error:
                     receipt["cases"][-1]["error"] = str(error)
+                    if recovery_probe and not isinstance(error, KeyboardInterrupt):
+                        try:
+                            receipt["recovery_probe"] = probe_committed_recovery(case, plan, root, case_work, config, evidence / "next-launch-recovery")
+                        except Exception as diagnostic_error:
+                            receipt["recovery_probe"] = {"result": "failed", "error": str(diagnostic_error)}
                     raise
                 receipt["cases"][-1] = result
                 shutil.rmtree(config)
@@ -108,12 +113,13 @@ def main():
     parser.add_argument("--fixtures", type=Path, required=True)
     parser.add_argument("--case", dest="case_id", required=True)
     parser.add_argument("--evidence", type=Path, required=True)
+    parser.add_argument("--recovery-probe", action="store_true", help="diagnose an explicit next launch while retaining upgrade failure")
     args = parser.parse_args()
     def interrupted(number, _frame):
         raise KeyboardInterrupt(f"Desktop rehearsal interrupted by signal {number}")
     previous = {number: signal.signal(number, interrupted) for number in (signal.SIGINT, signal.SIGTERM)}
     try:
-        rehearse(args.fixtures.resolve(), args.evidence.resolve(), args.case_id)
+        rehearse(args.fixtures.resolve(), args.evidence.resolve(), args.case_id, args.recovery_probe)
     finally:
         for number, handler in previous.items():
             signal.signal(number, handler)

@@ -1,4 +1,5 @@
 name: Original commit certification
+run-name: ${{ inputs.pull_request == '' && inputs.queue_ref != '' && inputs.queue_sha != '' && format('DCO queue {0}', inputs.queue_sha) || 'Original commit certification' }}
 on:
   pull_request_target:
     types: [opened, synchronize, reopened, ready_for_review, edited]
@@ -11,7 +12,13 @@ on:
     inputs:
       pull_request:
         description: Ready pull request number to certify again
-        required: true
+        required: false
+        type: string
+      queue_ref:
+        description: Exact live merge-queue ref to recover
+        type: string
+      queue_sha:
+        description: Exact live merge-group head to certify
         type: string
 permissions:
   contents: read
@@ -29,5 +36,34 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
+      - name: Check out the trusted queue controller
+        if: github.event_name == 'workflow_dispatch' && (inputs.queue_ref != '' || inputs.queue_sha != '')
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: refs/heads/main
+          persist-credentials: false
+      - name: Check out the immutable shared checker
+        if: github.event_name == 'workflow_dispatch' && (inputs.queue_ref != '' || inputs.queue_sha != '')
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: paintedwolf-ai/dco-checker
+          ref: 82d6997588764ead443a819de36ec373b8cbca4f
+          path: .queue-dco-checker
+          persist-credentials: false
+      - name: Certify the exact recovered queue group
+        if: github.event_name == 'workflow_dispatch' && (inputs.queue_ref != '' || inputs.queue_sha != '')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PYTHONPATH: scripts
+          PULL_REQUEST: ${{ inputs.pull_request }}
+          QUEUE_REF: ${{ inputs.queue_ref }}
+          QUEUE_SHA: ${{ inputs.queue_sha }}
+          DCO_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          DCO_RUN_ID: ${{ github.run_id }}
+          DCO_RUN_ATTEMPT: ${{ github.run_attempt }}
+          DCO_CALLER_REVISION: ${{ github.workflow_sha }}
+          DCO_CHECKER_REVISION: 82d6997588764ead443a819de36ec373b8cbca4f
+        run: python3 -m ci_policy.queue_certification .queue-dco-checker/scripts/dco_check.py
       - name: Certify original PR commits
+        if: github.event_name != 'workflow_dispatch' || (inputs.queue_ref == '' && inputs.queue_sha == '')
         uses: paintedwolf-ai/dco-checker@82d6997588764ead443a819de36ec373b8cbca4f

@@ -8,6 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/exec"
@@ -70,10 +71,11 @@ func (f *fakeToolchainHost) host() toolchainHost {
 					break
 				}
 			}
-			select {
-			case <-time.After(f.delay):
-			case <-ctx.Done():
-				return ""
+			if f.delay > 0 {
+				time.Sleep(f.delay)
+				if ctx.Err() != nil {
+					return ""
+				}
 			}
 			return f.versions[filepath.Base(binary)]
 		},
@@ -89,51 +91,57 @@ func newFakeToolchainHost(delay time.Duration) *fakeToolchainHost {
 }
 
 func TestToolchainsNeverBlockAssemblyAndUseResolvedPath(t *testing.T) {
-	fake := newFakeToolchainHost(200 * time.Millisecond)
-	probes := newToolchainProbes(fake.host())
-	start := time.Now()
-	if got := probes.toolchains(t.Context(), []string{"TypeScript", "Go"}); len(got) != 0 {
-		t.Fatalf("first read returned %v before any probe completed", got)
-	}
-	if elapsed := time.Since(start); elapsed > 100*time.Millisecond {
-		t.Fatalf("assembly read blocked for %v", elapsed)
-	}
-	probes.wg.Wait()
-	got := probes.toolchains(t.Context(), []string{"Go", "TypeScript"})
-	if want := []string{"node 22.1.0", "pnpm 9.1.0", "go 1.26.6"}; !slices.Equal(got, want) {
-		t.Fatalf("toolchains = %v, want %v", got, want)
-	}
-	for _, path := range fake.lookups {
-		if path != "/resolved/bin" {
-			t.Fatalf("lookup used PATH %q instead of the resolved PATH", path)
+	synctest.Test(t, func(t *testing.T) {
+		fake := newFakeToolchainHost(200 * time.Millisecond)
+		probes := newToolchainProbes(fake.host())
+		if got := probes.toolchains(t.Context(), []string{"TypeScript", "Go"}); len(got) != 0 {
+			t.Fatalf("first read returned %v before any probe completed", got)
 		}
-	}
-	if fake.peak.Load() < 2 {
-		t.Fatalf("probes ran sequentially (peak concurrency %d)", fake.peak.Load())
-	}
+		probes.mu.Lock()
+		settledDuringFirstRead := len(probes.results)
+		probes.mu.Unlock()
+		if settledDuringFirstRead != 0 {
+			t.Fatalf("first read waited for %d probes to settle instead of returning immediately", settledDuringFirstRead)
+		}
+		probes.wg.Wait()
+		got := probes.toolchains(t.Context(), []string{"Go", "TypeScript"})
+		if want := []string{"node 22.1.0", "pnpm 9.1.0", "go 1.26.6"}; !slices.Equal(got, want) {
+			t.Fatalf("toolchains = %v, want %v", got, want)
+		}
+		for _, path := range fake.lookups {
+			if path != "/resolved/bin" {
+				t.Fatalf("lookup used PATH %q instead of the resolved PATH", path)
+			}
+		}
+		if fake.peak.Load() < 2 {
+			t.Fatalf("probes ran sequentially (peak concurrency %d)", fake.peak.Load())
+		}
+	})
 }
 
 func TestInterruptedToolchainProbeIsNotCached(t *testing.T) {
-	// Each version query outlives its timeout, as a hung binary would.
-	fake := newFakeToolchainHost(time.Hour)
-	probes := newToolchainProbes(fake.host())
-	probes.toolchains(t.Context(), []string{"Go"})
-	probes.wg.Wait()
-	probes.mu.Lock()
-	_, cached := probes.results[pathHash("/resolved/bin")+":go"]
-	_, retry := probes.failed[pathHash("/resolved/bin")+":go"]
-	probes.mu.Unlock()
-	if cached || !retry {
-		t.Fatalf("interrupted probe cached=%v retry scheduled=%v", cached, retry)
-	}
-	// The retry waits out its interval instead of re-probing on every assembly.
-	probes.toolchains(t.Context(), []string{"Go"})
-	probes.mu.Lock()
-	inflight := probes.inflight[pathHash("/resolved/bin")+":go"]
-	probes.mu.Unlock()
-	if inflight {
-		t.Fatal("interrupted probe was retried before its interval")
-	}
+	synctest.Test(t, func(t *testing.T) {
+		// Each version query outlives its timeout, as a hung binary would.
+		fake := newFakeToolchainHost(time.Hour)
+		probes := newToolchainProbes(fake.host())
+		probes.toolchains(t.Context(), []string{"Go"})
+		probes.wg.Wait()
+		probes.mu.Lock()
+		_, cached := probes.results[pathHash("/resolved/bin")+":go"]
+		_, retry := probes.failed[pathHash("/resolved/bin")+":go"]
+		probes.mu.Unlock()
+		if cached || !retry {
+			t.Fatalf("interrupted probe cached=%v retry scheduled=%v", cached, retry)
+		}
+		// The retry waits out its interval instead of re-probing on every assembly.
+		probes.toolchains(t.Context(), []string{"Go"})
+		probes.mu.Lock()
+		inflight := probes.inflight[pathHash("/resolved/bin")+":go"]
+		probes.mu.Unlock()
+		if inflight {
+			t.Fatal("interrupted probe was retried before its interval")
+		}
+	})
 }
 
 func TestCanceledCallerDoesNotCancelTheRefresh(t *testing.T) {

@@ -58,6 +58,7 @@ var sqliteJournalSuffixes = []string{"-wal", "-shm", "-journal"}
 
 var configRootRegistry = []ConfigRootEntry{
 	// Durable files
+	{Name: storeFileName + db.IntegrityFailureSuffix, IsDir: false, Class: ClassArchiveExcluded, StoreCoupled: true, IncludeInDiagnostics: true, Reason: "confirmed corruption bound to the physical store; excluded from restored history, included in diagnostics because it holds only the host-written diagnosis and a file identity"},
 	{Name: storeFileName, IsDir: false, Class: ClassDurableFile, StoreCoupled: true, IncludeInBackup: true, Reason: "primary durable SQLite database"},
 	{Name: storeFileName + "-wal", IsDir: false, Class: ClassDurableFile, StoreCoupled: true, Reason: "live SQLite write-ahead log for store.db"},
 	{Name: storeFileName + "-shm", IsDir: false, Class: ClassDurableFile, StoreCoupled: true, Reason: "live SQLite shared memory index for store.db"},
@@ -99,6 +100,7 @@ var configRootRegistry = []ConfigRootEntry{
 	{Name: extpacks.DeviceDesiredName, IsDir: false, Class: ClassArchiveExcluded, IncludeInDiagnostics: true, Reason: "device-specific installed extension pack list"},
 	{Name: extpacks.DeviceLockName, IsDir: false, Class: ClassArchiveExcluded, IncludeInDiagnostics: true, Reason: "lockfile pinning locally installed extension versions"},
 	{Name: db.UpgradeRecoveryDirName, IsDir: true, Class: ClassArchiveExcluded, Reason: "pre-upgrade recovery snapshots preserved outside backups"},
+	{Name: storeFileName + db.StoreUpgradeJournalSuffix, Class: ClassArchiveExcluded, Reason: "journal for atomic store upgrade publication; resolved under the installation lease"},
 
 	// Rebuildable state keyed by store.db identities
 	{Name: webIndexFileName, IsDir: false, Class: ClassStoreCoupled, StoreCoupled: true, Bucket: BucketWebIndex, Reason: "rebuildable personal web index SQLite database"},
@@ -141,6 +143,9 @@ func AllClassifiedEntries() []ConfigRootEntry {
 // LookupConfigRootEntry classifies name by its base name.
 func LookupConfigRootEntry(name string) (ConfigRootEntry, bool) {
 	base := filepath.Base(filepath.Clean(name))
+	if strings.HasPrefix(base, db.StoreUpgradeDirectoryPrefix) {
+		return ConfigRootEntry{Name: base, IsDir: true, Class: ClassArchiveExcluded, Reason: "unpublished replacement and original store files held by the upgrade journal"}, true
+	}
 	for _, e := range configRootRegistry {
 		if e.Name == base {
 			return e, true
@@ -161,10 +166,10 @@ func entryNames(match func(ConfigRootEntry) bool) []string {
 	return out
 }
 
-// isStoreFile reports store.db and its journals, which db.RemoveStore owns.
+// isStoreFile reports the database, journals, and quarantine that db.RemoveStore owns.
 func isStoreFile(name string) bool {
 	rest, ok := strings.CutPrefix(name, storeFileName)
-	return ok && (rest == "" || slices.Contains(sqliteJournalSuffixes, rest))
+	return ok && (rest == "" || rest == db.IntegrityFailureSuffix || slices.Contains(sqliteJournalSuffixes, rest))
 }
 
 // IsDiagnosticsAllowed reports whether a config-root file may enter a diagnostics bundle.

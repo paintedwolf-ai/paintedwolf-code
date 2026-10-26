@@ -53,6 +53,7 @@ command -p "$fixture_name" "$@"
 fixture_test() {
 case "$1:$2" in
 -f:/usr/lib/systemd/system/paintedwolf-vault-identity.socket|-d:/run/systemd/system) return 0;;
+-d:/sys/kernel/security/apparmor) return 1;;
 esac
 fixture_command [ "$@"
 }
