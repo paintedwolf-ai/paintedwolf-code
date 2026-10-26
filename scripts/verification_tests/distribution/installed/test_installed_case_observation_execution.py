@@ -63,3 +63,24 @@ class CaseExecutionObservationTests(unittest.TestCase):
         with patch.object(observation,'Mailbox',return_value=box):
             with self.assertRaises(ValueError):observation.observe(BINDING,'owned','vault','service-unavailable-retry')
         box.read.assert_not_called()
+
+
+class NativeBindingObservationTests(unittest.TestCase):
+    def test_private_physical_complete_binding_is_required(self):
+        import json
+        from pathlib import Path
+        import tempfile
+        for changed in (None,'mode','symlink','shape'):
+            with self.subTest(changed=changed),tempfile.TemporaryDirectory() as directory:
+                root=Path(directory).resolve();request=root/'execution-request.json'
+                request.write_text(json.dumps(BINDING));request.chmod(0o600)
+                if changed=='mode':request.chmod(0o664)
+                elif changed=='symlink':
+                    target=root/'target';request.rename(target);request.symlink_to(target)
+                elif changed=='shape':request.write_text(json.dumps({**BINDING,'format_version':True}))
+                with patch.object(observation.time,'monotonic',return_value=1):
+                    if changed:
+                        with self.assertRaises((OSError,ValueError)):
+                            observation.await_binding(request,10,Mock(return_value=None))
+                    else:
+                        self.assertEqual(observation.await_binding(request,10,Mock(return_value=None)),BINDING)
