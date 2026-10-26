@@ -57,6 +57,16 @@ func TestCommandSurfaceRejectsRenderGuidance(t *testing.T) {
 			want:   []string{"4", "awaited-command-7"},
 		},
 		{
+			tool:   "command",
+			reject: &toolrejection.ToolReject{Code: "SANDBOX_TRY_LOOPBACK_CONNECT", Data: map[string]any{"port": uint16(8080), "url": "http://127.0.0.1:8080/health"}},
+			want:   []string{"capability_request.loopback_connect", "8080"},
+		},
+		{
+			tool:   "command",
+			reject: &toolrejection.ToolReject{Code: "HTTP_REQUEST_HOST_DENIED", Data: map[string]any{"host": "api.example.test"}},
+			want:   []string{"The HTTP destination was not authorized"},
+		},
+		{
 			tool:   "wait",
 			reject: &toolrejection.ToolReject{Code: "WAIT_CONDITION_NOT_ALLOWED", Data: map[string]any{"condition": "process_done", "profile": "worker_readonly", "wait_allowed_conditions": []string{"timer"}}},
 			want:   []string{"process_done", "worker_readonly", "timer"},
@@ -128,6 +138,7 @@ func TestSandboxCapabilityRejectsRenderGuidance(t *testing.T) {
 		"SANDBOX_SOCKET_PATH_NOT_FOUND",
 		"SANDBOX_SOCKET_PATH_NOT_SOCKET",
 		"SANDBOX_SOCKET_PATH_REFUSED",
+		"SANDBOX_TRY_LOOPBACK_CONNECT",
 	}
 	for _, code := range codes {
 		t.Run(code, func(t *testing.T) {

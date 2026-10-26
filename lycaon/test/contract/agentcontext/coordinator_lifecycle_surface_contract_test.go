@@ -30,7 +30,7 @@ func TestCoordinatorSurfaceInvariants_overlayPromoteResolveWorkflow(t *testing.T
 	t.Parallel()
 	surfaces := loadImplementSurfaces(t)
 	promote := surfaces[surfaceImplementOverlayPromote]
-	for _, required := range []string{"promote_overlay", "reject_overlay", "preview_overlay", "answer_decision", "extend_worker_budget", "decline_worker_budget", "update_progress", "task", "wait", "read"} {
+	for _, required := range []string{"promote_overlay", "reject_overlay", "preview_overlay", "answer_decision", "extend_worker_budget", "decline_worker_budget", "update_progress", "task", "wait", "command"} {
 		if !contractcheck.ContainsString(promote, required) {
 			t.Fatalf("%s must include %q", surfaceImplementOverlayPromote, required)
 		}

@@ -1,0 +1,26 @@
+oar: '1.0'
+id: COMMAND_PUBLICATION_PENDING
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles: [tool]
+  facts: [paintedwolf.rejection_code, paintedwolf.path]
+when: paintedwolf.rejection_code == "COMMAND_PUBLICATION_PENDING"
+effect: block
+copy:
+  what: 'This command stopped after accepting its edit: {{ paintedwolf.path }} holds an accepted edit that is not saved to disk.'
+  cause: The editor accepted the change, but it could not save the file.
+  why: Commands read saved files. Continuing now would hide this accepted change from later commands.
+  fix: Keep the accepted edit. Once the file can be saved, start a new program to continue the work.
+  instead: Do not repeat the accepted write or save other drafts
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_write_publication
+x-paintedwolf-message: command stopped after an accepted edit could not be saved
+x-paintedwolf-scenarios:
+  - id: save-failed
+    vars:
+      tool: command
+      path: config/app.json
+    expect_contains:
+      - 'Code: COMMAND_PUBLICATION_PENDING'
+      - config/app.json holds an accepted edit that is not saved to disk

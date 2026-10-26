@@ -35,7 +35,7 @@ type PreparedProgramEnvelope struct {
 	contractDigest string
 	frame          ProgramFrame
 	update         *nativeArguments
-	admission      ProgramStateAdmission
+	admission      *toolcontract.ProgramMemory
 	identity       toolcontract.ProgramProgressIdentity
 	closed         bool
 	attempted      bool
@@ -52,7 +52,7 @@ type ProgramProgressResult struct {
 
 // PrepareProgramEnvelope validates both complete syntax and progress before
 // either owner may apply an effect. A missing update preserves existing progress.
-func (e *Executor) PrepareProgramEnvelope(ctx context.Context, frame ProgramFrame, program ValidatedProgramIdentity, update *ProgramProgressUpdate, admission ProgramStateAdmission, tc tools.ToolContext) (*PreparedProgramEnvelope, error) {
+func (e *Executor) PrepareProgramEnvelope(ctx context.Context, frame ProgramFrame, program ValidatedProgramIdentity, update *ProgramProgressUpdate, admission *toolcontract.ProgramMemory, tc tools.ToolContext) (*PreparedProgramEnvelope, error) {
 	end, err := frame.beginUse()
 	if err != nil {
 		return nil, err

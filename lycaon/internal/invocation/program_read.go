@@ -72,10 +72,10 @@ func (r *SQLRecorder) ReadProgramPage(ctx context.Context, sessionID, programID,
 	if err != nil {
 		return out, err
 	}
-	if err = tx.QueryRowContext(ctx, `SELECT count(*) FROM invocation_program_executions WHERE program_id=? AND ordinal>?`, programID, next.Execution).Scan(&out.ExecutionsOmitted); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM invocation_program_executions WHERE program_id=? AND ordinal>?`, programID, next.Execution).Scan(&out.ExecutionsOmitted); err != nil {
 		return out, err
 	}
-	if err = tx.QueryRowContext(ctx, `SELECT count(*) FROM invocation_program_nodes WHERE program_id=? AND node_id>?`, programID, next.Node).Scan(&out.NodesOmitted); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM invocation_program_nodes WHERE program_id=? AND node_id>?`, programID, next.Node).Scan(&out.NodesOmitted); err != nil {
 		return out, err
 	}
 	if out.ExecutionsOmitted > 0 || out.NodesOmitted > 0 {
@@ -99,6 +99,10 @@ func readProgram(ctx context.Context, tx *sql.Tx, session, program string) (api.
 	if err != nil {
 		return out, err
 	}
+	out.Outputs, err = readDeliveryWindows(ctx, tx, program)
+	if err != nil {
+		return out, err
+	}
 	out.StatusCode = optionalStatus(status)
 	out.StartedAt, err = time.Parse(time.RFC3339Nano, started)
 	if err != nil {
@@ -115,7 +119,7 @@ func readProgram(ctx context.Context, tx *sql.Tx, session, program string) (api.
 }
 
 func readExecutions(ctx context.Context, tx *sql.Tx, program string, after int64, limit int) ([]api.CommandExecutionReceipt, int64, error) {
-	rows, err := tx.QueryContext(ctx, `SELECT id,program_id,node_id,parent_execution_id,owner,lifecycle,definition_digest,arguments_representation,arguments_digest,reviewed_arguments_representation,reviewed_arguments_digest,reviewed_arguments_ref,native_command,effect_mode,effect_classes_json,arguments_ref,canonical,state,owner_started,owner_invoked,status_code,stop_code,host_stop_code,complete,publication_eligible,output_publishable,effect_certainty,evidence_kind,evidence_ref,owner_ref,recovery_ref,held_version_id,accepted_revision,published_revision,detail_ref,approval_ref,job_handle,conflict_path,conflict_expected_revision,conflict_observed_revision,ordinal FROM invocation_program_executions WHERE program_id=? AND ordinal>? ORDER BY ordinal LIMIT ?`, program, after, limit)
+	rows, err := tx.QueryContext(ctx, `SELECT e.id,e.program_id,e.node_id,e.parent_execution_id,d.owner,d.lifecycle,e.definition_digest,e.arguments_representation,e.arguments_digest,e.reviewed_arguments_representation,e.reviewed_arguments_digest,e.reviewed_arguments_ref,e.native_command,e.effect_mode,e.effect_classes_json,e.arguments_ref,e.canonical,e.state,e.owner_started,e.owner_invoked,e.status_code,e.stop_code,e.host_stop_code,e.complete,e.publication_eligible,e.output_publishable,e.effect_certainty,e.evidence_kind,e.evidence_ref,e.owner_ref,e.recovery_ref,e.held_version_id,e.accepted_revision,e.published_revision,e.detail_ref,e.approval_ref,e.job_handle,e.conflict_path,e.conflict_expected_revision,e.conflict_observed_revision,e.ordinal FROM invocation_program_executions e JOIN invocation_program_definitions d ON d.program_id=e.program_id AND d.definition_digest=e.definition_digest WHERE e.program_id=? AND e.ordinal>? ORDER BY e.ordinal LIMIT ?`, program, after, limit)
 	if err != nil {
 		return nil, after, err
 	}
@@ -130,7 +134,7 @@ func readExecutions(ctx context.Context, tx *sql.Tx, program string, after int64
 		if err != nil {
 			return nil, after, err
 		}
-		if err = json.Unmarshal([]byte(classes), &value.EffectClasses); err != nil {
+		if err := json.Unmarshal([]byte(classes), &value.EffectClasses); err != nil {
 			return nil, after, err
 		}
 		value.StatusCode = optionalStatus(status)
@@ -139,10 +143,10 @@ func readExecutions(ctx context.Context, tx *sql.Tx, program string, after int64
 		}
 		out = append(out, value)
 	}
-	if err = rows.Err(); err != nil {
+	if err := rows.Err(); err != nil {
 		return nil, after, err
 	}
-	if err = rows.Close(); err != nil {
+	if err := rows.Close(); err != nil {
 		return nil, after, err
 	}
 	return out, after, readExecutionOutputs(ctx, tx, program, out)
@@ -152,27 +156,33 @@ func readExecutions(ctx context.Context, tx *sql.Tx, program string, after int64
 // handle with its stored screened preview. The body stays behind its handle.
 func readExecutionOutputs(ctx context.Context, tx *sql.Tx, program string, executions []api.CommandExecutionReceipt) error {
 	for i := range executions {
-		rows, err := tx.QueryContext(ctx, `SELECT o.stream,o.reference,json_extract(o.blob_json,'$.Size'),o.complete,o.redacted,o.preview,o.preview_truncated FROM invocation_program_outputs o WHERE o.program_id=? AND o.execution_id=? AND o.stream IN ('stdout','stderr') AND NOT EXISTS (SELECT 1 FROM invocation_program_outputs later WHERE later.program_id=o.program_id AND later.execution_id=o.execution_id AND later.stream=o.stream AND (later.created_at>o.created_at OR (later.created_at=o.created_at AND later.id>o.id))) ORDER BY o.stream`, program, executions[i].ID)
+		outputs, err := readExecutionOutput(ctx, tx, program, executions[i].ID)
 		if err != nil {
 			return err
 		}
-		for rows.Next() {
-			var output api.CommandExecutionOutput
-			if err = rows.Scan(&output.Stream, &output.Ref, &output.SizeBytes, &output.Complete, &output.Redacted, &output.Preview, &output.PreviewTruncated); err != nil {
-				_ = rows.Close()
-				return err
-			}
-			executions[i].Outputs = append(executions[i].Outputs, output)
-		}
-		if err = rows.Err(); err != nil {
-			_ = rows.Close()
-			return err
-		}
-		if err = rows.Close(); err != nil {
-			return err
-		}
+		executions[i].Outputs = outputs
 	}
 	return nil
+}
+
+func readExecutionOutput(ctx context.Context, tx *sql.Tx, program, execution string) ([]api.CommandExecutionOutput, error) {
+	rows, err := tx.QueryContext(ctx, `SELECT o.stream,o.reference,json_extract(o.blob_json,'$.Size'),o.complete,o.redacted,o.preview,o.preview_truncated FROM invocation_program_outputs o WHERE o.program_id=? AND o.execution_id=? AND o.stream IN ('stdout','stderr') AND NOT EXISTS (SELECT 1 FROM invocation_program_outputs later WHERE later.program_id=o.program_id AND later.execution_id=o.execution_id AND later.stream=o.stream AND (later.created_at>o.created_at OR (later.created_at=o.created_at AND later.id>o.id))) ORDER BY o.stream`, program, execution)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var outputs []api.CommandExecutionOutput
+	for rows.Next() {
+		var output api.CommandExecutionOutput
+		if err := rows.Scan(&output.Stream, &output.Ref, &output.SizeBytes, &output.Complete, &output.Redacted, &output.Preview, &output.PreviewTruncated); err != nil {
+			return nil, err
+		}
+		outputs = append(outputs, output)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return outputs, rows.Close()
 }
 
 func readProgramNodes(ctx context.Context, tx *sql.Tx, program, after string, limit int) ([]api.CommandProgramNode, string, error) {
@@ -184,7 +194,7 @@ func readProgramNodes(ctx context.Context, tx *sql.Tx, program, after string, li
 	out := make([]api.CommandProgramNode, 0, limit)
 	for rows.Next() {
 		var node api.CommandProgramNode
-		if err = rows.Scan(&node.ID, &node.SourceUnitID, &node.StartByte, &node.EndByte, &node.Line, &node.Column, &node.State); err != nil {
+		if err := rows.Scan(&node.ID, &node.SourceUnitID, &node.StartByte, &node.EndByte, &node.Line, &node.Column, &node.State); err != nil {
 			return nil, after, err
 		}
 		after = node.ID

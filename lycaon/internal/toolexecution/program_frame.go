@@ -31,7 +31,7 @@ type programRoot struct {
 
 // FreezeProgramFrame captures immutable attribution before any child starts.
 // The host resolves its actor and project/session identity before calling this.
-func FreezeProgramFrame(ctx context.Context, parent toolcontract.OperationInvocation, tc tools.ToolContext, model ProgramModelInvocation, admission ProgramStateAdmission) (ProgramFrame, error) {
+func FreezeProgramFrame(ctx context.Context, parent toolcontract.OperationInvocation, tc tools.ToolContext, model ProgramModelInvocation, admission *toolcontract.ProgramMemory) (ProgramFrame, error) {
 	if err := parent.Validate(); err != nil {
 		return ProgramFrame{}, err
 	}
@@ -112,7 +112,7 @@ func (f ProgramFrame) ChildContext(ctx context.Context, definition toolcontract.
 	if definition.Digest() == "" {
 		return tools.ToolContext{}, fmt.Errorf("program child requires frozen operation definition")
 	}
-	facts := definition.Facts()
+	facts := definition.ReadOnlyFacts()
 	if facts.CatalogDigest != child.CatalogDigest {
 		return tools.ToolContext{}, fmt.Errorf("program child catalog changed")
 	}

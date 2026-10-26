@@ -191,6 +191,8 @@ func wireAskSpamGuards(r *Runtime, authority *toolhost.AuthorityServices) *appro
 }
 
 func wireToolApprovalCheckpointHooks(ctx context.Context, mgr *hitl.Checkpoints, toolApprovalRT *approvalstate.ToolApprovalCoalesce) error {
+	// Native approval authority restores against the host's aggregate state
+	// ledger, sized from the frozen command catalog.
 	limits, err := toolcontract.CatalogProgramMemoryLimits()
 	if err != nil {
 		return err

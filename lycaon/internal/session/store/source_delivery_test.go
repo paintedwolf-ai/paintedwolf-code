@@ -81,25 +81,28 @@ func TestDeliveredSourcePersistsExactWindowAndDoesNotQualifyUnseenBytes(t *testi
 	}
 }
 
+// deliveryQuota pairs the program's aggregate memory with spill and detector accounting.
 type deliveryQuota struct {
-	state, disk, scratch int
-	detector             int64
+	*toolcontract.ProgramMemory
+	disk     int
+	detector int64
 }
 
-func (q *deliveryQuota) ReserveProgramState(context.Context, int64) (func(), error) {
-	q.state++
-	return func() { q.state-- }, nil
+func newDeliveryQuota(t *testing.T) *deliveryQuota {
+	t.Helper()
+	limits, err := toolcontract.CatalogProgramMemoryLimits()
+	testutil.FailErr(t, "catalog memory limits", err)
+	// Session output resources hold a spill read's decoder scratch, its
+	// screening window and a program's working storage at once.
+	limits.Working *= 3
+	memory, err := toolcontract.NewProgramMemory(limits)
+	testutil.FailErr(t, "program memory", err)
+	return &deliveryQuota{ProgramMemory: memory}
 }
+
 func (q *deliveryQuota) ReserveSpill(context.Context, int64) (func(), error) {
 	q.disk++
 	return func() { q.disk-- }, nil
-}
-func (q *deliveryQuota) Reserve(context.Context, int64) (func(), error) {
-	q.scratch++
-	return func() { q.scratch-- }, nil
-}
-func (q *deliveryQuota) ReserveParserScratch(ctx context.Context, n int64) (func(), error) {
-	return q.Reserve(ctx, n)
 }
 func (q *deliveryQuota) ReserveBytes(_ context.Context, n int64) error { q.detector += n; return nil }
 func (q *deliveryQuota) ReleaseBytes(n int64)                          { q.detector -= n }
@@ -132,13 +135,10 @@ func newRetainedDeliveryFixture(t *testing.T) retainedDeliveryFixture {
 	const command = "cat fixture.txt"
 	parent, err := recorder.Begin(ctx, invocation.Start{ProjectID: testdbseed.DefaultProjectID, SessionID: session.ID, ToolCallID: "actual-source-call", ToolName: "command", Args: map[string]any{"command": command}, Contract: commandContract})
 	testutil.FailErr(t, "begin actual model parent", err)
-	quota := &deliveryQuota{}
-	parser, err := commandsurface.NewProgramParser(ctx, quota)
-	testutil.FailErr(t, "reserve real program parser", err)
-	parsed, err := parser.Parse([]byte(command), commandsurface.ParseOptions{})
+	quota := newDeliveryQuota(t)
+	parsed, err := commandsurface.ParseAdmitted(ctx, quota.ProgramMemory, []byte(command), commandsurface.ParseOptions{})
 	testutil.FailErr(t, "validate actual source-inspection program", err)
-	testutil.FailErr(t, "close parser scratch", parser.Close())
-	snapshot, err := parsed.SnapshotWithMemory(ctx, quota)
+	snapshot, err := parsed.SnapshotWithMemory(ctx, quota.ProgramMemory)
 	testutil.FailErr(t, "admit actual typed program snapshot", err)
 	defer snapshot.Close()
 	defer parsed.Close()
@@ -154,12 +154,12 @@ func newRetainedDeliveryFixture(t *testing.T) retainedDeliveryFixture {
 		var screened bytes.Buffer
 		_, err := projector.ScreenStream(ctx, scope, "capture.native", bytes.NewReader(content), &screened, stream)
 		testutil.FailErr(t, "screen actual native bytes", err)
-		spill, err := tooloutput.RetainScreenedStream(ctx, tooloutput.ScreenedReader(io.NopCloser(bytes.NewReader(screened.Bytes()))), tooloutput.StreamSpillOptions{Store: recorder.ProgramBlobStore(blobstore.Store{Root: dataDir}), ClaimID: claim, MaximumBytes: 1 << 20, PreviewBytes: preview, Admission: quota, WorkingMemory: quota, RetainedState: quota})
+		spill, err := tooloutput.RetainScreenedStream(ctx, tooloutput.ScreenedReader(io.NopCloser(bytes.NewReader(screened.Bytes()))), tooloutput.StreamSpillOptions{Store: recorder.ProgramBlobStore(ctx, blobstore.Store{Root: dataDir}), ClaimID: claim, MaximumBytes: 1 << 20, PreviewBytes: preview, Admission: quota, WorkingMemory: quota, RetainedState: quota})
 		testutil.FailErr(t, "retain complete actual screened stream", err)
 		return spill
 	}
 	sourceRef := "output:submitted-source"
-	start := invocation.ProgramStart{Version: invocation.ProgramVersion{ProgramID: program, ParentReceiptID: parent.ID, RootExecutionID: rootExecution, LanguageVersion: snapshot.Plan.Version, CatalogDigest: snapshot.Plan.CatalogDigest, SourceUnitID: "submitted", SourceDigest: snapshot.Plan.SourceDigest, SourceReference: sourceRef}, PlanReference: sourceRef, SourceExact: true, SyntaxValidated: true, Sources: []invocation.ProgramSource{{UnitID: "submitted", Pin: toolcontract.SourcePin{SourceID: "submitted", Revision: snapshot.Plan.SourceDigest, Representation: toolcontract.UTF8SourceBytes, SHA256: snapshot.Plan.SourceDigest, EndByte: int64(len(command))}, DetailReference: sourceRef}}, Nodes: []invocation.ProgramNode{{ID: string(statement.ID), SourceUnitID: "submitted", Span: statement.Span}}}
+	start := toolcontract.ProgramStart{Version: toolcontract.ProgramVersion{ProgramID: program, ParentReceiptID: parent.ID, RootExecutionID: rootExecution, LanguageVersion: snapshot.Plan.Version, CatalogDigest: snapshot.Plan.CatalogDigest, SourceUnitID: "submitted", SourceDigest: snapshot.Plan.SourceDigest, SourceReference: sourceRef}, PlanReference: sourceRef, SourceExact: true, SyntaxValidated: true, Sources: []toolcontract.ProgramSource{{UnitID: "submitted", Pin: toolcontract.SourcePin{SourceID: "submitted", Revision: snapshot.Plan.SourceDigest, Representation: toolcontract.UTF8SourceBytes, SHA256: snapshot.Plan.SourceDigest, EndByte: int64(len(command))}, DetailReference: sourceRef}}, Nodes: []toolcontract.ProgramNode{{ID: string(statement.ID), SourceUnitID: "submitted", Span: statement.Span}}}
 	testutil.FailErr(t, "attach actual source/program without synthetic child", outputs.BeginProgram(ctx, start, retain(program, []byte(command), 0), false))
 	schemas, err := toolschema.LoadSchemaDir(filepath.Join("..", "..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	testutil.FailErr(t, "load actual native read schema", err)
@@ -181,7 +181,7 @@ func newRetainedDeliveryFixture(t *testing.T) retainedDeliveryFixture {
 	bound, err := toolcontract.BindOperation(definition, in, declaration.Name, declaration.Effects[0].Mode, nil)
 	testutil.FailErr(t, "bind actual catalog read form", err)
 	capture := invocation.ProgramInputCapture{State: quota, Outputs: outputs, Projector: projector, ProgramID: program, Scope: scope, Screening: stream, MaximumNodes: 1024, MaximumDepth: 64}
-	_, err = capture.PrepareChild(ctx, invocation.ChildStart{ParentReceiptID: parent.ID, Invocation: in, Definition: definition, ExpandedInputs: review, Canonical: command})
+	_, err = capture.PrepareChild(ctx, toolcontract.ProgramChildStart{ParentReceiptID: parent.ID, Invocation: in, Definition: definition, ExpandedInputs: review, Canonical: command})
 	testutil.FailErr(t, "atomically retain actual expanded input and dynamic read child", err)
 	marker := invocation.ProgramAdmissionRecorder{Recorder: recorder, Inputs: capture}
 	testutil.FailErr(t, "retain actual read input before owner", marker.BeforeNativeOwner(ctx, bound, "actual-source-call", review))
@@ -199,9 +199,13 @@ func newRetainedDeliveryFixture(t *testing.T) retainedDeliveryFixture {
 	mapping := toolcontract.StreamSourceMapping{Source: pin, SourceEndByte: int64(len(source)), OutputEndByte: int64(len(source))}
 	reference := "output:actual-native-source"
 	spill := retain(in.Identity.ExecutionID, source, 13)
-	testutil.FailErr(t, "retain actual native source mapping outside stdout", outputs.Attach(ctx, program, invocation.RetainedOutput{ExecutionID: in.Identity.ExecutionID, Stream: "stdout", Reference: reference, Complete: true, Mappings: []toolcontract.StreamSourceMapping{mapping}}, spill))
+	admitted, err := outputs.Attach(ctx, program, invocation.RetainedOutput{ExecutionID: in.Identity.ExecutionID, Stream: "stdout", Reference: reference, Complete: true, Mappings: []toolcontract.StreamSourceMapping{mapping}}, spill)
+	testutil.FailErr(t, "retain actual native source mapping outside stdout", err)
+	if len(admitted) != 1 || admitted[0] != mapping {
+		t.Fatal("actual source mapping was not admitted")
+	}
 	result := toolcontract.ProducerResult{Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, PublicationBasis: toolcontract.ZeroStatusPublication, EffectCertainty: toolcontract.NoEffect, Evidence: toolcontract.OperationEvidence{Owner: contract.Owner, Kind: "source_snapshot", EvidenceRef: pin.SourceID}}
-	testutil.FailErr(t, "settle actual executed read independently of delivery", recorder.SettleChild(ctx, in.Identity.ExecutionID, invocation.ChildSettlement{Result: result, OwnerInvoked: true, OutputPublishable: true, DetailReference: reference}))
+	testutil.FailErr(t, "settle actual executed read independently of delivery", recorder.SettleChild(ctx, in.Identity.ExecutionID, toolcontract.ProgramChildSettlement{Result: result, OwnerInvoked: true, OutputPublishable: true, DetailReference: reference}))
 	return retainedDeliveryFixture{owner: owner, recorder: recorder, outputs: outputs, source: source, pin: pin, mapping: mapping, session: session.ID, program: program, execution: in.Identity.ExecutionID, reference: reference, quota: quota}
 }
 
@@ -216,13 +220,13 @@ func TestProgramRetainedNativeSourceOnlyQualifiesActuallyDeliveredExactPages(t *
 	deliver := func(start, end int64, response string) (string, evidence.DeliveredSourceObservation) {
 		reader, err := f.outputs.Open(ctx, f.session, f.program, f.reference)
 		testutil.FailErr(t, "fetch real retained source stream", err)
-		_, err = io.CopyN(io.Discard, reader, start)
+		_, err = io.CopyN(io.Discard, reader.Reader, start)
 		testutil.FailErr(t, "skip actual retained prefix", err)
 		page := make([]byte, end-start)
-		_, err = io.ReadFull(reader, page)
+		_, err = io.ReadFull(reader.Reader, page)
 		testutil.FailErr(t, "read actual retained page", err)
-		testutil.FailErr(t, "close actual output reader", reader.Close())
-		projection, err := commandprogram.ProjectStreamMappings(ctx, f.quota, []toolcontract.StreamSourceMapping{f.mapping}, start, end-start, commandprogram.MappingExactSlice)
+		testutil.FailErr(t, "close actual output reader", reader.Reader.Close())
+		projection, err := commandprogram.ProjectStreamMappings(ctx, f.quota.ProgramMemory, []toolcontract.StreamSourceMapping{f.mapping}, start, end-start, commandprogram.MappingExactSlice)
 		testutil.FailErr(t, "clip native mapping to emitted page", err)
 		defer projection.Close()
 		if len(projection.Mappings) != 1 {
@@ -244,7 +248,7 @@ func TestProgramRetainedNativeSourceOnlyQualifiesActuallyDeliveredExactPages(t *
 	// A transform deliberately drops mapping candidates; stdout text naming a
 	// file or matching a captured string cannot replace that producer fact.
 	transformed := strings.ToUpper(string(f.source))
-	transformedMapping, err := commandprogram.ProjectStreamMappings(ctx, f.quota, []toolcontract.StreamSourceMapping{f.mapping}, 0, int64(len(transformed)), commandprogram.MappingArbitrary)
+	transformedMapping, err := commandprogram.ProjectStreamMappings(ctx, f.quota.ProgramMemory, []toolcontract.StreamSourceMapping{f.mapping}, 0, int64(len(transformed)), commandprogram.MappingArbitrary)
 	testutil.FailErr(t, "drop arbitrary transform mappings", err)
 	defer transformedMapping.Close()
 	if len(transformedMapping.Mappings) != 0 {
@@ -288,7 +292,7 @@ func TestProgramRetainedNativeSourceOnlyQualifiesActuallyDeliveredExactPages(t *
 	if _, ok = evidence.ResolveHandle(after, shown); !ok {
 		t.Fatal("receipt/output collection erased independent delivered evidence")
 	}
-	if f.quota.state != 0 || f.quota.disk != 0 || f.quota.scratch != 0 || f.quota.detector != 0 {
+	if f.quota.InUse() != (toolcontract.ProgramMemoryUsage{}) || f.quota.disk != 0 || f.quota.detector != 0 {
 		t.Fatalf("source delivery lifetime leaked: %+v", f.quota)
 	}
 }

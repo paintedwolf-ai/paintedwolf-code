@@ -287,14 +287,14 @@ func TestIsolationBypassReachesEffectsButNotControlPlane(t *testing.T) {
 	contractcheck.FailErr(t, "load approval store", err)
 	gate := settings.NewRuleApprovalGate(store, settings.NoSources())
 	result, err := gate.Evaluate(t.Context(), hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "write",
-Files: []string{"/etc/hosts"},
-},
-Scope: hitl.ActionScope{
-ProjectDir: project,
-},
-})
+		Invocation: hitl.ActionInvocation{
+			Tool:  "write",
+			Files: []string{"/etc/hosts"},
+		},
+		Scope: hitl.ActionScope{
+			ProjectDir: project,
+		},
+	})
 	contractcheck.FailErr(t, "evaluate bypassed action", err)
 	if !result.AutoApproved() || result.Denied {
 		t.Fatalf("approval bypass did not reach the effect: %+v", result)
@@ -304,14 +304,14 @@ ProjectDir: project,
 	t.Setenv("LYCAON_CONFIG_DIR", configDir)
 	for _, write := range []bool{false, true} {
 		path := filepath.Join(configDir, "approvals.yaml")
-		if !confine.ControlPlanePathDenied(path, write, "") {
+		if !confine.ControlPlanePathDenied(path, write, "", "") {
 			t.Errorf("write=%t: approval bypass opened the host control plane", write)
 		}
 		scratch := filepath.Join(configDir, "debug", "sessions", "mine")
-		if confine.ControlPlanePathDenied(filepath.Join(scratch, "output.txt"), write, scratch) {
+		if confine.ControlPlanePathDenied(filepath.Join(scratch, "output.txt"), write, scratch, "") {
 			t.Errorf("write=%t: own invocation scratch was refused", write)
 		}
-		if !confine.ControlPlanePathDenied(filepath.Join(configDir, "debug", "sessions", "other", "output.txt"), write, scratch) {
+		if !confine.ControlPlanePathDenied(filepath.Join(configDir, "debug", "sessions", "other", "output.txt"), write, scratch, "") {
 			t.Errorf("write=%t: another invocation scratch was admitted", write)
 		}
 	}

@@ -67,6 +67,8 @@ type Request struct {
 	Roots []string
 	// SessionScratchRoot is the session-owned scratch root for this execution.
 	SessionScratchRoot string
+	// SessionOutputRoot is a host-owned read capability, never a write root.
+	SessionOutputRoot string
 	// GrantedWriteRoots are reviewed write-root leases for this action. They
 	// expand the write profile without becoming attached jail identity.
 	GrantedWriteRoots []string
@@ -136,7 +138,7 @@ func prepareRequest(req Request) (preparedRequest, error) {
 	if err := ValidateGrantedWriteRoots(grantedWriteRoots); err != nil {
 		return preparedRequest{}, err
 	}
-	readRoots := normalizePathList(req.ReadRoots)
+	readRoots := normalizePathList(append(append([]string(nil), req.ReadRoots...), req.SessionOutputRoot))
 	readDenyPaths := normalizePathList(req.ReadDenyPaths)
 	grants, err := normalizeSocketGrantList(req.SocketGrants)
 	if err != nil {

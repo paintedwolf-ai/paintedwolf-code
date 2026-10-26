@@ -10,32 +10,8 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
-// ProgramSource records an exact capture. Recording input is not a delivered read.
-type ProgramSource struct {
-	UnitID          string
-	Pin             toolcontract.SourcePin
-	DetailReference string
-}
-
-// ProgramNode describes known syntax, not a speculative loop iteration.
-type ProgramNode struct {
-	ID           string
-	SourceUnitID string
-	Span         toolcontract.SourceSpan
-}
-
-// ProgramStart retains a validated plan and exact source before child admission.
-// PlanReference and SourceReference name screened durable bodies, not inline text.
-type ProgramStart struct {
-	Version         ProgramVersion
-	PlanReference   string
-	SourceExact     bool
-	SyntaxValidated bool
-	Sources         []ProgramSource
-	Nodes           []ProgramNode
-}
-
-func (s ProgramStart) validate() error {
+// validateProgramStart bounds receipt metadata by the catalog trace ceilings.
+func validateProgramStart(s toolcontract.ProgramStart) error {
 	if err := s.Version.Validate(); err != nil {
 		return err
 	}
@@ -94,8 +70,8 @@ func (s ProgramStart) validate() error {
 
 // BeginProgram attaches to the real running model receipt in one writer transaction.
 // It neither opens another model call nor settles the outer invocation.
-func (r *SQLRecorder) BeginProgram(ctx context.Context, in ProgramStart) error {
-	if err := in.validate(); err != nil {
+func (r *SQLRecorder) BeginProgram(ctx context.Context, in toolcontract.ProgramStart) error {
+	if err := validateProgramStart(in); err != nil {
 		return err
 	}
 	if r == nil || r.database == nil {
@@ -106,13 +82,13 @@ func (r *SQLRecorder) BeginProgram(ctx context.Context, in ProgramStart) error {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if err = insertProgram(ctx, tx, in); err != nil {
+	if err := insertProgram(ctx, tx, in); err != nil {
 		return err
 	}
 	return tx.Commit()
 }
 
-func (s ProgramStart) traceFootprint() (int64, int64) {
+func programTraceFootprint(s toolcontract.ProgramStart) (int64, int64) {
 	bytes := int64(len(s.PlanReference) + len(s.Version.SourceReference))
 	for _, source := range s.Sources {
 		bytes += 512 + int64(len(source.UnitID)+len(source.Pin.SourceID)+len(source.Pin.Revision)+len(source.DetailReference))
@@ -123,7 +99,7 @@ func (s ProgramStart) traceFootprint() (int64, int64) {
 	return int64(1 + len(s.Sources) + len(s.Nodes)), bytes
 }
 
-func insertProgram(ctx context.Context, tx *sql.Tx, in ProgramStart) error {
+func insertProgram(ctx context.Context, tx *sql.Tx, in toolcontract.ProgramStart) error {
 	var state string
 	if err := tx.QueryRowContext(ctx, "SELECT status FROM invocation_receipts WHERE id = ?", in.Version.ParentReceiptID).Scan(&state); err != nil {
 		return fmt.Errorf("program parent: %w", err)
@@ -131,7 +107,7 @@ func insertProgram(ctx context.Context, tx *sql.Tx, in ProgramStart) error {
 	if state != "running" {
 		return fmt.Errorf("program parent is not running")
 	}
-	events, bytes := in.traceFootprint()
+	events, bytes := programTraceFootprint(in)
 	v := in.Version
 	_, err := tx.ExecContext(ctx, `INSERT INTO invocation_programs (id,parent_receipt_id,root_execution_id,language_version,catalog_digest,source_unit_id,source_digest,source_ref,source_exact,plan_ref,syntax_validated,state,trace_events,trace_bytes,started_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,'running',?,?,?)`, v.ProgramID, v.ParentReceiptID, v.RootExecutionID, v.LanguageVersion, v.CatalogDigest, v.SourceUnitID, v.SourceDigest, v.SourceReference, in.SourceExact, in.PlanReference, in.SyntaxValidated, events, bytes, time.Now().UTC().Format(time.RFC3339Nano))
 	if err != nil {
@@ -153,10 +129,35 @@ func insertProgram(ctx context.Context, tx *sql.Tx, in ProgramStart) error {
 	return nil
 }
 
+// RegisterSourceUnit records a reached sourced unit and its static nodes on a
+// running program before any statement in that unit prepares a child execution.
+func (r *SQLRecorder) RegisterSourceUnit(ctx context.Context, programID string, source toolcontract.ProgramSource, nodes []toolcontract.ProgramNode) error {
+	if r == nil || r.database == nil {
+		return fmt.Errorf("invocation recorder is not configured")
+	}
+	tx, err := r.database.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	pin := source.Pin
+	_, err = tx.ExecContext(ctx, `INSERT INTO invocation_program_sources (program_id,source_unit_id,source_id,revision,representation,sha256,start_byte,end_byte,detail_ref) VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(program_id,source_unit_id) DO UPDATE SET source_id=excluded.source_id,revision=excluded.revision,representation=excluded.representation,sha256=excluded.sha256,start_byte=excluded.start_byte,end_byte=excluded.end_byte,detail_ref=excluded.detail_ref`, programID, source.UnitID, pin.SourceID, pin.Revision, pin.Representation, pin.SHA256, pin.StartByte, pin.EndByte, source.DetailReference)
+	if err != nil {
+		return err
+	}
+	for _, node := range nodes {
+		_, err = tx.ExecContext(ctx, `INSERT INTO invocation_program_nodes (program_id,node_id,source_unit_id,start_byte,end_byte,line,column_number) VALUES (?,?,?,?,?,?,?) ON CONFLICT(program_id,node_id) DO NOTHING`, programID, node.ID, node.SourceUnitID, node.Span.StartByte, node.Span.EndByte, node.Span.Line, node.Span.Column)
+		if err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
 // PrepareChild records the independently addressed dynamic execution before
 // approval, including rejected admission and held calls. Reuse its ID on resume.
-func (r *SQLRecorder) PrepareChild(ctx context.Context, in ChildStart) error {
-	if err := in.Validate(); err != nil {
+func (r *SQLRecorder) PrepareChild(ctx context.Context, in toolcontract.ProgramChildStart) error {
+	if err := validateChildStart(in); err != nil {
 		return err
 	}
 	if r == nil || r.database == nil {
@@ -167,35 +168,52 @@ func (r *SQLRecorder) PrepareChild(ctx context.Context, in ChildStart) error {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if err = insertProgramChild(ctx, tx, in); err != nil {
+	if err := insertProgramChild(ctx, tx, in); err != nil {
 		return err
 	}
 	return tx.Commit()
 }
 
-func insertProgramChild(ctx context.Context, tx *sql.Tx, in ChildStart) error {
-	if err := in.Validate(); err != nil {
+func insertProgramChild(ctx context.Context, tx *sql.Tx, in toolcontract.ProgramChildStart) error {
+	if err := validateChildStart(in); err != nil {
 		return err
 	}
 	var err error
-	if err = validateChildParent(ctx, tx, in); err != nil {
+	if err := validateChildParent(ctx, tx, in); err != nil {
 		return err
 	}
-	facts := in.Definition.Facts()
+	facts := in.Definition.ReadOnlyFacts()
 	identity := in.Invocation.Identity
 	scope, err := json.Marshal(in.Invocation.Scope)
 	if err != nil {
 		return err
+	}
+	gap := ""
+	if in.NativeGap != nil {
+		encoded, err := json.Marshal(in.NativeGap)
+		if err != nil {
+			return err
+		}
+		gap = string(encoded)
 	}
 	var definitionPresent int
 	if err = tx.QueryRowContext(ctx, `SELECT count(*) FROM invocation_program_definitions WHERE program_id=? AND definition_digest=?`, identity.ProgramID, in.Definition.Digest()).Scan(&definitionPresent); err != nil {
 		return err
 	}
 	events := int64(2)
-	bytes := int64(len(identity.ExecutionID) + len(identity.NodeID) + len(identity.ParentExecutionID) + len(in.Invocation.ActorID) + len(scope) + len(facts.Identity) + len(in.Definition.Digest()) + len(in.ExpandedInputs.Representation()) + len(in.ExpandedInputs.ArgumentsDigest()) + len(in.ArgumentsReference) + len(in.Canonical) + len(facts.Contract.Owner) + len(facts.Contract.Lifecycle.String()))
+	bytes := int64(len(identity.ExecutionID) + len(identity.NodeID) + len(identity.ParentExecutionID) + len(in.Invocation.ActorID) + len(scope) + len(facts.Identity) + len(in.Definition.Digest()) + len(in.ExpandedInputs.Representation()) + len(in.ExpandedInputs.ArgumentsDigest()) + len(in.ArgumentsReference) + len(in.Canonical) + len(facts.Contract.Owner) + len(facts.Contract.Lifecycle.String()) + len(gap))
 	if definitionPresent == 0 {
 		events++
 		bytes += int64(len(in.Definition.Serialized()))
+	}
+	var classes []byte
+	if in.StartOwner != nil {
+		classes, err = json.Marshal(in.StartOwner.Effects().Classes())
+		if err != nil {
+			return err
+		}
+		events++
+		bytes += int64(len(in.ExpandedInputs.ArgumentsDigest()) + len(in.ArgumentsReference) + len(in.ExpandedInputs.Representation()) + len(in.StartOwner.Command()) + len(in.StartOwner.Mode()) + len(classes))
 	}
 	if err = chargeProgramTrace(ctx, tx, identity.ProgramID, events, bytes, traceChargeChildStart); err != nil {
 		return err
@@ -204,7 +222,12 @@ func insertProgramChild(ctx context.Context, tx *sql.Tx, in ChildStart) error {
 	if err != nil {
 		return fmt.Errorf("record program definition: %w", err)
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO invocation_program_executions (id,program_id,node_id,ordinal,parent_execution_id,actor_id,scope_json,operation_id,definition_digest,arguments_representation,arguments_digest,arguments_ref,canonical,state,owner,lifecycle,started_at) VALUES (?,?,?,(SELECT COALESCE(MAX(ordinal),0)+1 FROM invocation_program_executions WHERE program_id=?),?,?,?,?,?,?,?,?,?,'prepared',?,?,?)`, identity.ExecutionID, identity.ProgramID, identity.NodeID, identity.ProgramID, identity.ParentExecutionID, in.Invocation.ActorID, string(scope), facts.Identity, in.Definition.Digest(), in.ExpandedInputs.Representation(), in.ExpandedInputs.ArgumentsDigest(), in.ArgumentsReference, in.Canonical, facts.Contract.Owner, facts.Contract.Lifecycle.String(), time.Now().UTC().Format(time.RFC3339Nano))
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if in.StartOwner != nil {
+		_, err = tx.ExecContext(ctx, `INSERT INTO invocation_program_executions (id,program_id,node_id,ordinal,parent_execution_id,actor_id,scope_json,operation_id,definition_digest,arguments_representation,arguments_digest,arguments_ref,canonical,state,owner_started,effect_certainty,reviewed_arguments_digest,reviewed_arguments_ref,reviewed_arguments_representation,native_command,effect_mode,effect_classes_json,owner,lifecycle,native_gap_json,started_at) VALUES (?,?,?,(SELECT COALESCE(MAX(ordinal),0)+1 FROM invocation_program_executions WHERE program_id=?),?,?,?,?,?,?,?,?,?,'running',1,'unknown',?,?,?,?,?,?,?,?,?,?)`, identity.ExecutionID, identity.ProgramID, identity.NodeID, identity.ProgramID, identity.ParentExecutionID, in.Invocation.ActorID, string(scope), facts.Identity, in.Definition.Digest(), in.ExpandedInputs.Representation(), in.ExpandedInputs.ArgumentsDigest(), in.ArgumentsReference, in.Canonical, in.ExpandedInputs.ArgumentsDigest(), in.ArgumentsReference, in.ExpandedInputs.Representation(), in.StartOwner.Command(), in.StartOwner.Mode(), string(classes), facts.Contract.Owner, facts.Contract.Lifecycle.String(), gap, now)
+	} else {
+		_, err = tx.ExecContext(ctx, `INSERT INTO invocation_program_executions (id,program_id,node_id,ordinal,parent_execution_id,actor_id,scope_json,operation_id,definition_digest,arguments_representation,arguments_digest,arguments_ref,canonical,state,owner,lifecycle,native_gap_json,started_at) VALUES (?,?,?,(SELECT COALESCE(MAX(ordinal),0)+1 FROM invocation_program_executions WHERE program_id=?),?,?,?,?,?,?,?,?,?,'prepared',?,?,?,?)`, identity.ExecutionID, identity.ProgramID, identity.NodeID, identity.ProgramID, identity.ParentExecutionID, in.Invocation.ActorID, string(scope), facts.Identity, in.Definition.Digest(), in.ExpandedInputs.Representation(), in.ExpandedInputs.ArgumentsDigest(), in.ArgumentsReference, in.Canonical, facts.Contract.Owner, facts.Contract.Lifecycle.String(), gap, now)
+	}
 	if err != nil {
 		return fmt.Errorf("prepare program child: %w", err)
 	}
@@ -215,18 +238,24 @@ func insertProgramChild(ctx context.Context, tx *sql.Tx, in ChildStart) error {
 	return err
 }
 
-func validateChildParent(ctx context.Context, tx *sql.Tx, in ChildStart) error {
-	var parent, root, session, state, catalog, unit string
+func validateChildParent(ctx context.Context, tx *sql.Tx, in toolcontract.ProgramChildStart) error {
+	var parent, root, session, state, catalog, unit, receiptStatus, receiptToolCall string
 	var start, end int64
 	var line, column int
 	id := in.Invocation.Identity
-	err := tx.QueryRowContext(ctx, `SELECT p.parent_receipt_id,p.root_execution_id,r.session_id,p.state,p.catalog_digest,n.source_unit_id,n.start_byte,n.end_byte,n.line,n.column_number FROM invocation_programs p JOIN invocation_receipts r ON r.id=p.parent_receipt_id JOIN invocation_program_nodes n ON n.program_id=p.id AND n.node_id=? WHERE p.id=? AND p.syntax_validated=1`, id.NodeID, id.ProgramID).Scan(&parent, &root, &session, &state, &catalog, &unit, &start, &end, &line, &column)
+	err := tx.QueryRowContext(ctx, `SELECT p.parent_receipt_id,p.root_execution_id,r.session_id,p.state,p.catalog_digest,n.source_unit_id,n.start_byte,n.end_byte,n.line,n.column_number,r.status,r.tool_call_id FROM invocation_programs p JOIN invocation_receipts r ON r.id=p.parent_receipt_id JOIN invocation_program_nodes n ON n.program_id=p.id AND n.node_id=? WHERE p.id=? AND p.syntax_validated=1`, id.NodeID, id.ProgramID).Scan(&parent, &root, &session, &state, &catalog, &unit, &start, &end, &line, &column, &receiptStatus, &receiptToolCall)
 	if err != nil {
 		return fmt.Errorf("child program identity: %w", err)
 	}
 	v := in.Invocation
 	if parent != in.ParentReceiptID || session != v.SessionID || catalog != v.CatalogDigest || unit != v.SourceUnitID || start != int64(v.Span.StartByte) || end != int64(v.Span.EndByte) || line != v.Span.Line || column != v.Span.Column || (state != "running" && state != "waiting") {
 		return fmt.Errorf("child differs from its retained program")
+	}
+	if in.StartOwner != nil {
+		ownerIn := in.StartOwner.Invocation()
+		if in.ModelToolCallID == "" || receiptStatus != "running" || receiptToolCall != in.ModelToolCallID || ownerIn.Identity != v.Identity || ownerIn.ActorID != v.ActorID || ownerIn.Scope != v.Scope || in.StartOwner.Definition().Digest() != in.Definition.Digest() {
+			return fmt.Errorf("child owner start differs from its retained program")
+		}
 	}
 	if id.ParentExecutionID == root {
 		return nil

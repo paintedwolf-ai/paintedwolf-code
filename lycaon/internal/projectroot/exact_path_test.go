@@ -22,14 +22,14 @@ func TestResolvePreservesExactOperandNames(t *testing.T) {
 	}
 }
 
-func TestScratchAddressPreservesExactOperandNames(t *testing.T) {
+func TestSessionAddressPreservesExactOperandNames(t *testing.T) {
 	for _, name := range []string{" leading", "trailing ", "line\nbreak"} {
-		got, ok := ScratchAddress("@scratch/" + name)
+		_, got, ok := SessionAddress("@scratch/" + name)
 		if !ok || got != name {
 			t.Fatalf("scratch operand %q = %q, %v", name, got, ok)
 		}
 	}
-	if _, ok := ScratchAddress(" @scratch/file"); ok {
+	if _, _, ok := SessionAddress(" @scratch/file"); ok {
 		t.Fatal("a leading space must remain part of an ordinary filename")
 	}
 }

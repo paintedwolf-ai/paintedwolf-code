@@ -1,0 +1,16 @@
+{
+  "category": "source_directories",
+  "artifact": "lycaon/internal/confine",
+  "kind": "module",
+  "workstream": "portable-command-platforms",
+  "disposition": "retain",
+  "reason": "Retain exactly71 immediate source files, with no growth allowance. This is the existing confinement boundary: typed requested policy, action-bound egress lifetime, platform profile/helper transport, current metadata capture and private pre-exec gate belong to the same enforcement operation. Linux sandbox algorithms remain in their existing member package; executor supervision remains outside this package. Removing the superseded observer/procfd/tracing design reduced the directory below its hard75 limit. Further splitting these platform variants into public services would widen authority interfaces without separating a lifecycle. Exact typed action identity and current native authority/refusal/owned-gate fixtures passed; native Linux privilege qualification remains a separate CI obligation. Any added member requires renewed review.",
+  "reviewed_commit": "1a67d321f5407974132123273767f9097a3e1cc9",
+  "ceiling": 71,
+  "boundaries": {
+    "lycaon/internal/confine/action_launch_test.go": "0a39805d9b791e44e0e4b0f271563f1be06006f503470a273cd050adaeff0bb8",
+    "lycaon/internal/exec/prepared_launch_unix_test.go": "baf009ac4f07a8ce1bca5325f914f0a520289ea582f6d32cd4d6ac4615b84089",
+    "lycaon/internal/exec/owned_group_unix_test.go": "a0be3c178f6e19b122e12216e93f3b2a6934cc88931e9bfc15aee0925f78c28c"
+  },
+  "reviewed_shape": "a77d7d40f59b33d9c5428659cfefa606321d9297396f3ef3062184c77dfa6b64"
+}

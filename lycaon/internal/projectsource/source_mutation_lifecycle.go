@@ -19,6 +19,11 @@ func (s *SourceMutationService) Copy(ctx context.Context, operationID string, p 
 }
 
 func (s *SourceMutationService) lifecycle(ctx context.Context, operationID string, p ProjectSource, kind, rootID, from, to string, recursive bool, sessionID string, turn int, prepareRename func(context.Context, SourceRenamePlan) error) (*SourceLifecycleResult, error) {
+	memory, err := newSourceOperationMemory()
+	if err != nil {
+		return nil, err
+	}
+
 	if p == nil || len(p.SourceRoots()) == 0 {
 		return nil, ErrSourceNoRoot
 	}
@@ -36,7 +41,7 @@ func (s *SourceMutationService) lifecycle(ctx context.Context, operationID strin
 	if err != nil {
 		return nil, err
 	}
-	response, err := s.execute(ctx, operationID, p.SourceID(), digest, func() (*sourceMutationPlan, error) {
+	response, err := s.execute(ctx, operationID, p.SourceID(), digest, memory, func() (*sourceMutationPlan, error) {
 		root, fromAbs, fromRel, locateErr := locateLifecycleSource(p, rootID, from)
 		if locateErr != nil {
 			return nil, locateErr
@@ -100,6 +105,11 @@ func (s *SourceMutationService) lifecycle(ctx context.Context, operationID strin
 }
 
 func (s *SourceMutationService) Delete(ctx context.Context, operationID string, p ProjectSource, req SourceDeleteRequest) error {
+	memory, err := newSourceOperationMemory()
+	if err != nil {
+		return err
+	}
+
 	if p == nil || len(p.SourceRoots()) == 0 {
 		return ErrSourceNoRoot
 	}
@@ -122,7 +132,7 @@ func (s *SourceMutationService) Delete(ctx context.Context, operationID string, 
 	if err != nil {
 		return err
 	}
-	_, err = s.execute(ctx, operationID, p.SourceID(), digest, func() (*sourceMutationPlan, error) {
+	_, err = s.execute(ctx, operationID, p.SourceID(), digest, memory, func() (*sourceMutationPlan, error) {
 		root, abs, rel, locateErr := locateLifecycleSource(p, req.RootID, req.Path)
 		if locateErr != nil {
 			return nil, locateErr

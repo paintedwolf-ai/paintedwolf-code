@@ -9,6 +9,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+
+	"github.com/lycaon/lycaon/internal/fspath"
 	"strings"
 	"testing"
 	"time"
@@ -27,7 +29,7 @@ func TestProgramPathSharesActualTemporaryBytesWithAProcess(t *testing.T) {
 	tc, scratch, _ := scratchToolContext(t)
 	p, err := projectpaths.NewProgramPaths(t.Context(), nil, tc, "")
 	testutil.FailErr(t, "bind invocation", err)
-	native, err := p.Bind(t.Context(), "@scratch/native file\n", true)
+	native, err := p.Bind(t.Context(), filepath.Join(scratch, "native file\n"), true)
 	testutil.FailErr(t, "bind native destination", err)
 	target, err := native.MutationTarget()
 	testutil.FailErr(t, "admit actual native fixture destination", err)
@@ -43,7 +45,7 @@ func TestProgramPathSharesActualTemporaryBytesWithAProcess(t *testing.T) {
 	if code != 0 || string(output) != "native bytes" {
 		t.Fatalf("process code=%d output=%q", code, output)
 	}
-	bound, err := p.Bind(t.Context(), "@scratch/external file", false)
+	bound, err := p.Bind(t.Context(), filepath.Join(scratch, "external file"), false)
 	testutil.FailErr(t, "bind process-produced file", err)
 	file, err := bound.Open()
 	testutil.FailErr(t, "open process-produced bytes natively", err)
@@ -139,12 +141,18 @@ func TestNativeAbsoluteOperandPreservesSymlinkParentTraversal(t *testing.T) {
 	if target.Abs != filepath.Join(root, "nested", "new") {
 		t.Fatalf("mutation selected lexical decoy: %+v", target)
 	}
-	testutil.FailErr(t, "enter exact native directory", p.Chdir(t.Context(), root+"/link/.."))
+	// cd -P walks the link like the operand does; the default logical cd
+	// resolves .. against the directory text, as POSIX cd -L does.
+	testutil.FailErr(t, "enter physical directory", p.Chdir(t.Context(), root+"/link/..", true))
 	var cwd bytes.Buffer
-	_, err = p.Invoke(t.Context(), commandprogram.OperationRequest{OperationID: "pwd"}, commandprogram.Streams{Output: &cwd})
-	testutil.FailErr(t, "report logical actual cwd", err)
-	if cwd.String() != "nested\n" {
-		t.Fatalf("logical cwd names lexical decoy: %q", cwd.String())
+	_, err = p.Invoke(t.Context(), commandprogram.OperationRequest{OperationID: "pwd", Argv: pathArgv("pwd")}, commandprogram.Streams{Output: &cwd})
+	testutil.FailErr(t, "report physical cwd", err)
+	if cwd.String() != filepath.Join(fspath.CanonicalPath(root), "nested")+"\n" {
+		t.Fatalf("physical cwd names lexical decoy: %q", cwd.String())
+	}
+	testutil.FailErr(t, "enter logical directory", p.Chdir(t.Context(), root+"/link/..", false))
+	if p.Directory() != root {
+		t.Fatalf("logical cd followed the link: %q", p.Directory())
 	}
 	external, err := os.ReadFile(operand)
 	testutil.FailErr(t, "read physical OS identity", err)

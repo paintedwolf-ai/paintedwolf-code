@@ -7,7 +7,7 @@ import (
 	"sync"
 	"unicode/utf8"
 
-	"github.com/lycaon/lycaon/internal/authzcontext"
+	"github.com/lycaon/lycaon/internal/jsonvalue"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 )
@@ -28,17 +28,20 @@ type ProgramModelObservation struct {
 }
 
 type programFrameLifetime struct {
-	mu        sync.Mutex
-	closed    bool
-	active    int
-	facts     programFrameFacts
-	admission ProgramStateAdmission
-	model     ProgramModelObservation
-	arguments *nativeArguments
-	releases  []func()
+	mu            sync.Mutex
+	closed        bool
+	active        int
+	facts         programFrameFacts
+	admission     *toolcontract.ProgramMemory
+	model         ProgramModelObservation
+	arguments     *nativeArguments
+	releases      []func()
+	feedbackMu    sync.Mutex
+	feedback      *programRefusalMemo
+	feedbackTaken bool
 }
 
-func captureProgramModel(ctx context.Context, parent toolcontract.OperationInvocation, tc tools.ToolContext, model ProgramModelInvocation, admission ProgramStateAdmission) (*programFrameLifetime, error) {
+func captureProgramModel(ctx context.Context, parent toolcontract.OperationInvocation, tc tools.ToolContext, model ProgramModelInvocation, admission *toolcontract.ProgramMemory) (*programFrameLifetime, error) {
 	if ctx == nil || admission == nil || model.ToolName != "command" || model.Arguments == nil {
 		return nil, fmt.Errorf("program frame requires actual command invocation and retained state admission")
 	}
@@ -46,8 +49,10 @@ func captureProgramModel(ctx context.Context, parent toolcontract.OperationInvoc
 		return nil, err
 	}
 	// Reserve the root map and scalar attribution before the addressed map is
-	// allocated. Strings remain immutable host values; this accounts retention.
-	bound := int64(4096)
+	// allocated. The fixed feedback allowance survives effects so a reached
+	// refusal can still deliver a bounded failure descriptor. Strings remain
+	// immutable host values; this accounts retention.
+	bound := int64(4096 + programFeedbackAllowance)
 	add := func(value string) bool {
 		if int64(len(value)) > (math.MaxInt64-bound)/8 {
 			return false
@@ -80,9 +85,6 @@ func captureProgramModel(ctx context.Context, parent toolcontract.OperationInvoc
 	if err != nil {
 		return nil, err
 	}
-	if release == nil {
-		return nil, fmt.Errorf("program frame admission returned no lease")
-	}
 	lifetime := &programFrameLifetime{releases: []func(){release}, admission: admission}
 	snapshot, err := prepareNativeArguments(ctx, admission, model.Arguments)
 	if err != nil {
@@ -94,7 +96,7 @@ func captureProgramModel(ctx context.Context, parent toolcontract.OperationInvoc
 		lifetime.close()
 		return nil, fmt.Errorf("submitted model arguments require valid JSON text strings")
 	}
-	canonical, err := authzcontext.CanonicalJSON(snapshot.values)
+	canonical, err := jsonvalue.CanonicalJSON(snapshot.values)
 	if err != nil {
 		lifetime.close()
 		return nil, err
@@ -251,9 +253,6 @@ func (f ProgramFrame) retainProgramFacts(ctx context.Context, n int64) error {
 	release, err := l.admission.ReserveProgramState(ctx, n)
 	if err != nil {
 		return err
-	}
-	if release == nil {
-		return fmt.Errorf("program fact admission returned no retained lease")
 	}
 	l.releases = append(l.releases, release)
 	return nil

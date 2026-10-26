@@ -29,10 +29,12 @@ type Location struct {
 	Rel  string
 }
 
-// Result identifies the byte stream staged and committed by Replace.
+// Result identifies staged bytes and the publication state actually reached.
+// An error does not imply that the destination remained unchanged.
 type Result struct {
-	Bytes  int64
-	SHA256 string
+	Bytes       int64
+	SHA256      string
+	Publication PublicationState
 }
 
 // Target exposes the destination through its held parent.
@@ -45,7 +47,9 @@ type Target interface {
 type ReplaceRequest struct {
 	Location
 	Source io.Reader
-	Mode   os.FileMode
+	// CopyBuffer is caller-admitted stream scratch, retained through Commit.
+	CopyBuffer []byte
+	Mode       os.FileMode
 	// PreserveMode resolves the destination mode under the target lock.
 	PreserveMode bool
 	// DirMode applies to created parents; zero uses defaultDirMode.
@@ -170,7 +174,7 @@ func lockTarget(loc Location) func() {
 
 // Replace atomically commits a stream through one held parent.
 func Replace(req ReplaceRequest) (Result, error) {
-	return platformReplace(req)
+	return replace(req, nil)
 }
 
 // PathLocation scopes an effect to a file's immediate parent.

@@ -20,11 +20,10 @@ func (p BoundPath) openRoot() (*fseffect.ReadRoot, error) {
 	}
 	file, err := root.OpenExact(".")
 	if err != nil {
-		root.Close()
-		return nil, err
+		return nil, errors.Join(err, root.Close())
 	}
 	info, err := file.Stat()
-	file.Close()
+	err = errors.Join(err, file.Close())
 	if err == nil && !os.SameFile(info, p.rootInfo) {
 		err = invalidOperand(p.Resolved.DisplayPath, "held root identity changed")
 	}
@@ -32,13 +31,14 @@ func (p BoundPath) openRoot() (*fseffect.ReadRoot, error) {
 		err = p.Validate()
 	}
 	if err != nil {
-		root.Close()
-		return nil, err
+		return nil, errors.Join(err, root.Close())
 	}
 	return root, nil
 }
 
-func pathOperationError(operand string, err error) error {
+// PathOperationError joins a confinement failure with its public rejection;
+// ordinary filesystem errors pass through unchanged.
+func PathOperationError(operand string, err error) error {
 	var reject *toolrejection.ToolReject
 	var pathErr *PathError
 	if errors.As(err, &reject) || errors.As(err, &pathErr) {
@@ -55,4 +55,45 @@ func pathOperationError(operand string, err error) error {
 		return errors.Join(err, mapResolveErr(err, operand))
 	}
 	return err
+}
+
+// OpenLaunchMetadata retains executable or cwd identity without source reads.
+func (p BoundPath) OpenLaunchMetadata(directory bool) (*os.File, error) {
+	if p.Null {
+		return nil, invalidOperand(p.Resolved.DisplayPath, "null is not a metadata file")
+	}
+	if err := p.Validate(); err != nil {
+		return nil, err
+	}
+	root, err := fseffect.OpenMetadataRoot(p.Resolved.Root.Path)
+	if err != nil {
+		return nil, PathOperationError(p.Resolved.DisplayPath, err)
+	}
+	defer func() { _ = root.Close() }()
+	held, err := root.OpenExact(".", true)
+	if err != nil {
+		return nil, err
+	}
+	info, err := held.Stat()
+	_ = held.Close()
+	if err != nil {
+		return nil, err
+	}
+	if !os.SameFile(info, p.rootInfo) {
+		return nil, invalidOperand(p.Resolved.DisplayPath, "held root identity changed")
+	}
+	if err := p.Validate(); err != nil {
+		return nil, err
+	}
+	file, err := root.OpenExact(p.exactRelative, directory)
+	if err != nil {
+		return nil, PathOperationError(p.Resolved.DisplayPath, err)
+	}
+	if p.admitRead != nil {
+		if err := p.admitRead(file.Name()); err != nil {
+			_ = file.Close()
+			return nil, PathOperationError(p.Resolved.DisplayPath, err)
+		}
+	}
+	return file, nil
 }

@@ -98,6 +98,8 @@ type ToolInvocationOut struct {
 	Process *api.ToolProcessHandle
 	// Verdict is Den UI metadata for a recorded review_loop verdict.
 	Verdict *api.VerdictOutcome
+	// CommandProgram is the settled command program receipt for a portable command call.
+	CommandProgram *api.CommandProgramReceipt
 	// SourceRun is nil until a command or verify run exits.
 	SourceRun *SourceRunCapture
 	// RetrievedFrom is the final retrieval host after redirects.
@@ -165,8 +167,11 @@ type InvocationSource struct {
 	ModelSourceContext *api.SourceContext
 	// EditorReadBases freezes reads known before this response executes tools;
 	// the response's own accepted writes advance it.
-	EditorReadBases     *AgentReadBases
-	Roots               []projectroot.RootRef
+	EditorReadBases *AgentReadBases
+	Roots           []projectroot.RootRef
+	// RootHistory is the project's attachment generation when Roots was
+	// captured; it answers stale spellings and later removals from facts.
+	RootHistory         projectroot.HistoryView
 	ActiveRootID        string
 	SourceWorkspaceKind api.SourceWorkspaceKind
 	WorkerBranchRoot    string
@@ -237,8 +242,12 @@ type InvocationHost struct {
 	HostDataDir string
 	// SessionScratchDir contains writable session-scoped scratch data.
 	SessionScratchDir string
+	// SessionOutputDir contains host-published session output, never a command write root.
+	SessionOutputDir string
 	// MaxToolSpillBytes shares the retention bound with recovery reads.
 	MaxToolSpillBytes int
+	// ModelContextWindow is the active model's context window in tokens.
+	ModelContextWindow int
 	// HostResources are exact catalog ids attached to the structured action.
 	HostResources        []string
 	HostResourceFamilies []string

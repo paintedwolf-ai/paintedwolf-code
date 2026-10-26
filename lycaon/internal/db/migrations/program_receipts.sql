@@ -126,6 +126,9 @@ CREATE TABLE IF NOT EXISTS invocation_program_executions (
     conflict_path TEXT NOT NULL DEFAULT '',
     conflict_expected_revision TEXT NOT NULL DEFAULT '',
     conflict_observed_revision TEXT NOT NULL DEFAULT '',
+    -- A native name launched as its installed program: the command and the
+    -- unsupported form, counted so native coverage gaps stay visible.
+    native_gap_json TEXT NOT NULL DEFAULT '' CHECK (native_gap_json = '' OR json_valid(native_gap_json)),
     started_at TEXT NOT NULL,
     settled_at TEXT,
     CHECK (id != parent_execution_id),
@@ -175,6 +178,44 @@ CREATE TABLE IF NOT EXISTS invocation_program_deliveries (
     UNIQUE (output_id, response_id, delivery_id)
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_invocation_program_deliveries_output ON invocation_program_deliveries(output_id);
+
+-- What each execution captured before preparing an effect: accepted document
+-- revisions, published disk identities, absence preconditions and the disk
+-- identity declared to an external launch. Never a conversational read base.
+-- Rows hold the newest pins; full runs move into pin segments.
+CREATE TABLE IF NOT EXISTS invocation_program_revision_pins (
+    program_id TEXT NOT NULL,
+    execution_id TEXT NOT NULL,
+    ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+    role TEXT NOT NULL CHECK (role IN ('source','destination')),
+    mode TEXT NOT NULL CHECK (mode IN ('accepted_document','published_disk','absent')),
+    basis TEXT NOT NULL CHECK (basis IN ('captured','declared_at_launch')),
+    root_id TEXT NOT NULL,
+    path TEXT NOT NULL,
+    document_id TEXT NOT NULL,
+    document_revision INTEGER NOT NULL CHECK (document_revision >= 0),
+    disk_sha256 TEXT NOT NULL,
+    representation TEXT NOT NULL,
+    content_sha256 TEXT NOT NULL,
+    content_bytes INTEGER NOT NULL CHECK (content_bytes >= 0),
+    captured_at TEXT NOT NULL,
+    PRIMARY KEY (execution_id, ordinal),
+    FOREIGN KEY (program_id, execution_id) REFERENCES invocation_program_executions(program_id, id) ON DELETE CASCADE
+) STRICT, WITHOUT ROWID;
+
+-- Sealed runs of an execution's pins: revisionPinSegment consecutive pins as
+-- gzip-compressed JSON with the SHA-256 of the exact uncompressed body.
+CREATE TABLE IF NOT EXISTS invocation_program_revision_pin_segments (
+    program_id TEXT NOT NULL,
+    execution_id TEXT NOT NULL,
+    first_ordinal INTEGER NOT NULL CHECK (first_ordinal >= 0),
+    pin_count INTEGER NOT NULL CHECK (pin_count > 0),
+    encoding TEXT NOT NULL CHECK (encoding IN ('gzip-json-v1')),
+    body BLOB NOT NULL,
+    body_sha256 TEXT NOT NULL CHECK (length(body_sha256) = 64),
+    PRIMARY KEY (execution_id, first_ordinal),
+    FOREIGN KEY (program_id, execution_id) REFERENCES invocation_program_executions(program_id, id) ON DELETE CASCADE
+) STRICT, WITHOUT ROWID;
 
 -- Exact delivered-window identity makes retries idempotent without weakening
 -- historical handle identity or manufacturing a model response.
