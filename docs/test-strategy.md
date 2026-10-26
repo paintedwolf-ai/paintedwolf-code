@@ -969,6 +969,23 @@ A human draft decision on the batch stops automatic promotion. On landing,
 originals close only if their heads still match the manifest. Later heads stay
 open. Agents do not manually assemble batches.
 
+#### Dependent PR updates
+
+CI runs only for PRs that target `main`, so a PR based on another PR's branch is
+untested until that base lands. When a PR lands on `main`, the `Dependent PR
+update` workflow finds the open PRs that targeted its branch, including those
+GitHub has already moved to `main`, and makes sure each targets `main`. It then
+asks GitHub to merge `main` into each branch, bound to the head it read: a push
+in the meantime refuses the update, and no commit is rewritten. GitHub performs
+the merge, so `main`'s workflow changes do not block it. Once each merge appears,
+it dispatches CI and original-commit certification for ready PRs, so a ready PR
+with auto-merge enters the queue when it passes. PRs already in the merge queue
+are left alone.
+
+A conflict is never resolved automatically: the PR gets the `update-conflict`
+label and a comment, and the owner's next push clears the label. A refusal the
+PR's state does not explain, or a merge that does not appear, fails the run.
+
 #### Throughput choices
 
 Prefer automatic queue batching and cancellation of obsolete background work before adding
