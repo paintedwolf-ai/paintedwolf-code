@@ -43,6 +43,17 @@ type programOwnerTools struct {
 	spills func(textutil.SpillStorage) textutil.SpillStorage
 }
 
+func directProgramOutputAdmission(current *tools.ToolContext) tools.CommandOutputAdmission {
+	return func(_ context.Context, _ commandprogram.OutputDestination, _ string) (tools.CommandOutputWrite, error) {
+		return tools.CommandOutputWrite{
+			Publish: func(ctx context.Context, apply func(context.Context, tools.ToolContext) (commandprogram.OutputPublished, error)) (commandprogram.OutputPublished, error) {
+				return apply(ctx, *current)
+			},
+			Abandon: func(context.Context, error) error { return nil },
+		}, nil
+	}
+}
+
 // compose builds the literal and mutation owners once and returns the
 // per-program factory: one redirect owner per program.
 func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools.ToolContext, *projectpaths.ProgramPaths, *toolcontract.ProgramMemory, tooloutput.SpillAdmission) (command.ProgramOwners, error), error) {
@@ -98,16 +109,6 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 		if t.spills != nil {
 			spills = t.spills(spills)
 		}
-		directAdmission := func(current *tools.ToolContext) tools.CommandOutputAdmission {
-			return func(_ context.Context, _ commandprogram.OutputDestination, _ string) (tools.CommandOutputWrite, error) {
-				return tools.CommandOutputWrite{
-					Publish: func(ctx context.Context, apply func(context.Context, tools.ToolContext) (commandprogram.OutputPublished, error)) (commandprogram.OutputPublished, error) {
-						return apply(ctx, *current)
-					},
-					Abandon: func(context.Context, error) error { return nil },
-				}, nil
-			}
-		}
 		owners := command.ProgramOwners{
 			PublishDocument: mutationOwners.Operations.Write.PublishAccepted,
 			Natives:         map[string]command.NativeOperation{},
@@ -118,7 +119,7 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 			Sources: &mutation.Publication{Owners: mutationOwners, Program: program, Tools: tc},
 			Builtins: func(ports command.BuiltinPorts) (map[string]commandprogram.OperationDispatcher, func(), error) {
 				builtinTC := ports.ToolContext
-				builtinPub := &mutation.Publication{Owners: mutationOwners, Program: program, Tools: builtinTC, Admission: directAdmission(&builtinTC)}
+				builtinPub := &mutation.Publication{Owners: mutationOwners, Program: program, Tools: builtinTC, Admission: directProgramOutputAdmission(&builtinTC)}
 				text := textutil.Ports{ToolContext: ports.ToolContext, Memory: ports.Memory, Admission: ports.Admission, Nested: ports.Nested, Publication: builtinPub, Spills: spills}
 				release := func() { _ = baseSpills.Close() }
 				builtins := textOwners.Builtins(text)
@@ -145,7 +146,7 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 				return command.NativePrepared{}, err
 			}
 			currentTC := tc
-			publication := &mutation.Publication{Owners: mutationOwners, Program: mutation.Program{Paths: frame}, Tools: tc, Admission: directAdmission(&currentTC)}
+			publication := &mutation.Publication{Owners: mutationOwners, Program: mutation.Program{Paths: frame}, Tools: tc, Admission: directProgramOutputAdmission(&currentTC)}
 			ports := textutil.Ports{ToolContext: tc, Memory: memory, Admission: admission, Publication: publication, Spills: spills}
 			return command.NativePrepared{
 				Mode:    prepared.Mode,
