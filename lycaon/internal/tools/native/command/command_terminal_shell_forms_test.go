@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/captureprojection"
+	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -28,7 +30,8 @@ func TestCommandTerminalCaptureMissingProgramUsesShellStatus(t *testing.T) {
 }
 
 func TestCommandTerminalCaptureExitedNonzeroReportsFailure(t *testing.T) {
-	cmd, _ := newCommandTool(t)
+	cmd, registry := newCommandTool(t)
+	registry.Output.SetCaptureProjector(captureprojection.New(secretmatch.NewInertMatcher(), nil))
 	out, err := cmd.Run(context.Background(), map[string]any{
 		"command":          "/bin/sh -c 'exit 7'",
 		"terminal_capture": map[string]any{},
