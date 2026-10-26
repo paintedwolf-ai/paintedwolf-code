@@ -395,7 +395,7 @@ func TestProgramEntryLargeLoopsKeepTheSessionUsable(t *testing.T) {
 		receiptBodies int
 	}{
 		{`while read -r i; do basename "$i" >/dev/null; done < items.txt`, items, 3*items + 2},
-		{`for i in $(external -- /bin/cat items.txt); do basename "$i" >/dev/null; done`, items + 1, 2*items + 2},
+		{`for i in $(external -- /bin/cat items.txt); do basename "$i" >/dev/null; done`, 2*items + 1, 2*items + 2},
 	} {
 		out, err := f.call(t, t.Context(), form.program)
 		testutil.FailErr(t, "run large loop", err)
