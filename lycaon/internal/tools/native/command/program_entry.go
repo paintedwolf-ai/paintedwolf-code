@@ -261,7 +261,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	run.baseEnv = programEnvironment(tc)
 	ports := commandprogram.EvaluationPorts{
 		Invocation: run.root, Dispatch: dispatcher, Refusals: dispatcher.reportRefusal, Binder: commandprogram.CatalogBinder{}, Files: projectpaths.GlobFiles{Paths: paths},
-		Publication: publication, Input: owners.Input,
+		Publication: publication, Input: owners.Input, Sources: owners.Sources,
 		Executions: dispatcher, Supervision: r.Supervisor, Predicates: commandprogram.PredicateRuntime{Patterns: commandprogram.NativePredicatePatterns{Memory: memory}},
 		Memory:      memory,
 		Environment: run.baseEnv,
