@@ -48,17 +48,25 @@ func (f *fakeInhibitor) acquireCount() int {
 type fakeLease struct {
 	done     chan error
 	released bool
+	release  sync.Once
+	end      sync.Once
 }
 
 func (l *fakeLease) Done() <-chan error { return l.done }
 func (*fakeLease) Provider() string     { return "fake" }
 func (l *fakeLease) Release() error {
-	if !l.released {
+	l.release.Do(func() {
 		l.released = true
-		l.done <- errors.New("released")
-		close(l.done)
-	}
+		l.finish(errors.New("released"))
+	})
 	return nil
+}
+
+func (l *fakeLease) finish(err error) {
+	l.end.Do(func() {
+		l.done <- err
+		close(l.done)
+	})
 }
 
 func TestControllerHoldsOneLeaseAcrossOverlappingWork(t *testing.T) {
@@ -175,8 +183,7 @@ func TestControllerReacquiresAfterUnexpectedExit(t *testing.T) {
 		inhibitor.mu.Lock()
 		first := inhibitor.leases[0]
 		inhibitor.mu.Unlock()
-		first.done <- errors.New("assertion exited")
-		close(first.done)
+		first.finish(errors.New("assertion exited"))
 
 		synctest.Wait()
 		time.Sleep(time.Millisecond)
@@ -184,6 +191,9 @@ func TestControllerReacquiresAfterUnexpectedExit(t *testing.T) {
 		status := controller.Snapshot()
 		if inhibitor.acquireCount() < 2 || !status.Inhibiting || status.LastError != "" {
 			t.Fatalf("assertion was not reacquired: %+v", status)
+		}
+		if !first.released {
+			t.Fatal("the controller abandoned the ended lease without releasing its resources")
 		}
 	})
 }
