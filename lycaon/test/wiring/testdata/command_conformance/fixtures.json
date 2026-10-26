@@ -2753,11 +2753,11 @@
         "files": {},
         "status": 0,
         "stderr": "",
-        "stdout": "sub/nested/todo.bin: binary file matches (found \"\\0\" byte around offset 4)\n"
+        "stdout": "binary file matches (found \"\\0\" byte around offset 4)\n"
       },
       "bsd": {
         "status": 0,
-        "stdout": "sub/nested/todo.bin: binary file matches (found \"\\0\" byte around offset 4)\n",
+        "stdout": "binary file matches (found \"\\0\" byte around offset 4)\n",
         "stderr": "",
         "files": {}
       },
@@ -2931,16 +2931,16 @@
         "mkdir",
         "cd",
         "git init",
-        "git config",
         "printf",
         "git add",
         "git commit",
         "git log"
       ],
       "forms": [
-        "git commit:-m"
+        "git commit:-m",
+        "git commit:-c"
       ],
-      "program": "mkdir fresh && cd fresh && git init -q && git config user.name Test && git config user.email test@example.invalid && printf 'new\\n' > README.txt && git add README.txt && git commit -qm first && git log -1 --format=%s",
+      "program": "mkdir fresh && cd fresh && git init -q && printf 'new\\n' > README.txt && git add README.txt && git -c user.name=Test -c user.email=test@example.invalid commit -qm first && git log -1 --format=%s",
       "tracked_files": [
         "fresh/README.txt"
       ],
