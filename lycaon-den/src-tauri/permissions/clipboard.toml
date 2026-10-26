@@ -12,3 +12,8 @@ commands.allow = ["write_clipboard_text"]
 identifier = "allow-paste-into-focused-view"
 description = "Run the system Paste action in the focused web view for context-menu Paste on macOS."
 commands.allow = ["paste_into_focused_view"]
+
+[[permission]]
+identifier = "allow-read-clipboard-image"
+description = "Read the clipboard image for paste on Linux, where WebKitGTK paste events carry no images."
+commands.allow = ["read_clipboard_image"]
