@@ -121,7 +121,7 @@ func (t *DeleteTool) Delete(ctx context.Context, in DeleteInput, tctx tools.Tool
 				}
 			}
 			if in.Recursive {
-				summary, inspectErr := inspectDeleteTree(ctx, t.Boundary, tctx, resolved, prof, in.Memory, nil)
+				summary, inspectErr := inspectDeleteTree(ctx, t.Boundary, tctx, resolved, prof, in.Memory, nil, true)
 				if inspectErr != nil {
 					return result, inspectErr
 				}
@@ -147,6 +147,7 @@ func (t *DeleteTool) Delete(ctx context.Context, in DeleteInput, tctx tools.Tool
 				}); err != nil {
 					return result, fmt.Errorf("delete %s: %w", relSlash, err)
 				}
+				result.Deleted = append(result.Deleted, summary.deleted...)
 				result.Deleted = append(result.Deleted, relSlash)
 				afterSuccessfulMutation(ctx, tctx, relSlash)
 				continue
@@ -165,9 +166,10 @@ type deleteTreeSummary struct {
 	files         int64
 	bytes         int64
 	policyTargets []projectpaths.Resolved
+	deleted       []string
 }
 
-func inspectDeleteTree(ctx context.Context, b *sandbox.Boundary, tctx tools.ToolContext, selected projectpaths.Resolved, prof string, memory *toolcontract.ProgramMemory, reviewPolicy func(projectpaths.Resolved) error) (deleteTreeSummary, error) {
+func inspectDeleteTree(ctx context.Context, b *sandbox.Boundary, tctx tools.ToolContext, selected projectpaths.Resolved, prof string, memory *toolcontract.ProgramMemory, reviewPolicy func(projectpaths.Resolved) error, recordDeleted bool) (deleteTreeSummary, error) {
 	var summary deleteTreeSummary
 	checkPins := len(tctx.Turn.TurnWritePinGlobs) > 0
 	classifyPolicy := confine.AgentPolicyClassifier(tools.ConfineRootsForAction(tctx)...)
@@ -203,10 +205,22 @@ func inspectDeleteTree(ctx context.Context, b *sandbox.Boundary, tctx tools.Tool
 			if info.Mode().IsRegular() {
 				summary.bytes += info.Size()
 			}
+			if recordDeleted {
+				summary.deleted = append(summary.deleted, childRel)
+			}
 		}
 		return nil
 	}
-	err = walkMutationTree(ctx, root, selected.EffectLocation().Rel, ".", visit, nil, memory)
+	var after func(string, os.FileInfo) error
+	if recordDeleted {
+		after = func(rel string, _ os.FileInfo) error {
+			if rel != "." {
+				summary.deleted = append(summary.deleted, filepath.ToSlash(filepath.Join(selected.ScopeRel, rel)))
+			}
+			return nil
+		}
+	}
+	err = walkMutationTree(ctx, root, selected.EffectLocation().Rel, ".", visit, after, memory)
 	return summary, err
 }
 
