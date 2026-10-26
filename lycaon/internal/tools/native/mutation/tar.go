@@ -59,7 +59,7 @@ func runTar(inv *invocation) error {
 	case inv.flag("-t"):
 		return inv.tarList(archive, strip)
 	}
-	format := "tar"
+	var format string
 	switch {
 	case inv.flag("-z"):
 		format = "tar.gz"
@@ -158,7 +158,7 @@ func (inv *invocation) tarReader(archive string) (*tar.Reader, error) {
 	case "tar.bz2":
 		stream = bzip2.NewReader(stream)
 	}
-	return tar.NewReader(&boundedReader{r: stream, remaining: inv.decodeLimit(int64(len(data)))}), nil
+	return tar.NewReader(&boundedReader{r: stream, maximum: inv.decodeLimit(int64(len(data)))}), nil
 }
 
 func (inv *invocation) tarList(archive string, strip int) error {

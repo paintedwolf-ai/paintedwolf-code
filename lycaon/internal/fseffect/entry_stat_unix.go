@@ -22,7 +22,7 @@ func (r *ReadRoot) Stat(rel string, follow bool, admit func(string) error) (Entr
 	}
 	if relative == "." || relative == "" {
 		var st unix.Stat_t
-		if err := unix.Fstat(int(r.root.file.Fd()), &st); err != nil {
+		if err := unix.Fstat(r.root.fd, &st); err != nil {
 			return EntryStat{}, err
 		}
 		if admit != nil {
@@ -31,7 +31,7 @@ func (r *ReadRoot) Stat(rel string, follow bool, admit func(string) error) (Entr
 			}
 		}
 		out := entryStat(filepath.Base(r.root.path), &st)
-		out.BirthTime = birthTime(r.root.file, "", true, &st)
+		out.BirthTime = birthTime(r.root.fd, "", true, &st)
 		return out, nil
 	}
 	var out EntryStat
@@ -42,7 +42,7 @@ func (r *ReadRoot) Stat(rel string, follow bool, admit func(string) error) (Entr
 			}
 		}
 		out = entryStat(name, st)
-		out.BirthTime = birthTime(dir, name, follow, st)
+		out.BirthTime = birthTime(int(dir.Fd()), name, follow, st)
 		return nil, nil
 	})
 	return out, err

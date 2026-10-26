@@ -14,9 +14,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/lycaon/lycaon/internal/authzcontext"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/isolation"
+	"github.com/lycaon/lycaon/internal/jsonvalue"
 	"github.com/lycaon/lycaon/internal/pagecursor"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -407,7 +407,7 @@ func (r *SQLRecorder) InterruptRunningSession(ctx context.Context, sessionID str
 
 // ArgsDigest identifies the exact structured argument object.
 func ArgsDigest(args map[string]any) (string, error) {
-	digest, err := authzcontext.CanonicalDigest(args)
+	digest, err := jsonvalue.CanonicalDigest(args)
 	if err != nil {
 		return "", fmt.Errorf("canonical invocation args: %w", err)
 	}

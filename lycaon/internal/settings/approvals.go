@@ -303,6 +303,41 @@ type ProjectRef struct {
 	Dir string
 }
 
+// ScopeForProjectRef resolves the settings scope and cleaned reference for ref.
+// A reference carrying either project identity reads the project layer.
+func ScopeForProjectRef(ref ProjectRef) (llm.SettingsScope, ProjectRef) {
+	ref.ID = strings.TrimSpace(ref.ID)
+	ref.Dir = strings.TrimSpace(ref.Dir)
+	if ref.Dir != "" && filepath.Clean(ref.Dir) != "." {
+		ref.Dir = filepath.Clean(ref.Dir)
+		return llm.SettingsScopeProject, ref
+	}
+	ref.Dir = ""
+	if ref.ID != "" {
+		return llm.SettingsScopeProject, ref
+	}
+	return llm.SettingsScopeGlobal, ref
+}
+
+// EffectiveConfig returns the merged device-and-project approval policy for ref.
+func (s *ApprovalStore) EffectiveConfig(ref ProjectRef) ApprovalConfig {
+	scope, ref := ScopeForProjectRef(ref)
+	if s == nil {
+		posture := gate.DefaultPosture
+		if scope == llm.SettingsScopeProject && ref.Dir != "" {
+			posture = gate.Stricter(posture, readProjectApprovals(ref.Dir).Config.Posture)
+		}
+		return ApprovalConfig{Posture: posture}
+	}
+	return s.Get(scope, ref)
+}
+
+// EffectivePosture returns the effective approval posture for ref after
+// applying any repository .paintedwolf/approvals.yaml tightening.
+func (s *ApprovalStore) EffectivePosture(ref ProjectRef) gate.Posture {
+	return s.EffectiveConfig(ref).Posture
+}
+
 // Get returns effective approval policy for a scope.
 func (s *ApprovalStore) Get(scope llm.SettingsScope, ref ProjectRef) ApprovalConfig {
 	s.mu.RLock()

@@ -1,7 +1,9 @@
 package commandprogram
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -55,6 +57,7 @@ type BoundArgv struct {
 	Command      string
 	Items        []BoundItem
 	EndOfOptions bool
+	Help         bool
 }
 
 func (b BoundArgv) Operands() Fields {
@@ -332,7 +335,10 @@ func (b *argvBinding) psOptions() error {
 				ch := suffix[i]
 				flag := "-" + suffix[i:i+1]
 				switch ch {
-				case 'e', 'f', 'a', 'u', 'x', 'l':
+				case 'e', 'A', 'f', 'a', 'u', 'x', 'l':
+					if ch == 'A' {
+						flag = "-e"
+					}
 					b.record(toolcontract.OptionForm{Spellings: []string{flag}}, flag, word, nil, "")
 				case 'o', 'p':
 					rest := suffix[i+1:]
@@ -366,7 +372,15 @@ func optionWord(word string) bool { return len(word) > 1 && word[0] == '-' }
 func (b *argvBinding) option(word Field, scope string) error {
 	b.index++
 	if form, ok := b.exact(word.Value, scope); ok {
+		if word.Value == "--help" && b.spec.Name != "external" {
+			b.bound.Help = true
+		}
 		return b.consume(form, word.Value, word, "", false)
+	}
+	if word.Value == "--help" && b.spec.Name != "external" {
+		b.bound.Help = true
+		b.record(toolcontract.OptionForm{Spellings: []string{"--help"}, Scope: scope, ValueRole: "boolean"}, "--help", word, nil, "")
+		return nil
 	}
 	if strings.HasPrefix(word.Value, "--") {
 		name, value, attached := strings.Cut(word.Value, "=")
@@ -456,15 +470,15 @@ func (b *argvBinding) shorthandValue(form toolcontract.OptionForm, word Field, v
 // consume takes the form's values. attached reports an inline value: the
 // remaining short-cluster suffix or a long option's "=value".
 func (b *argvBinding) consume(form toolcontract.OptionForm, spelling string, word Field, value string, attached bool) error {
-	switch {
-	case form.Arity == 0:
+	switch form.Arity {
+	case 0:
 		if attached {
 			return b.fail(argvOperandInvalid, word, "no value for "+spelling)
 		}
 		b.record(form, spelling, word, nil, "")
-	case form.Arity == -1:
+	case -1:
 		return b.optional(form, spelling, word, value, attached)
-	case form.Arity == -2:
+	case -2:
 		if attached {
 			return b.fail(argvOperandInvalid, word, "separate words for "+spelling)
 		}
@@ -491,7 +505,7 @@ func (b *argvBinding) consume(form toolcontract.OptionForm, spelling string, wor
 
 // optional handles forms that never take a following nonempty word: an
 // attached value (--porcelain=v1), or, for optional-attached-or-empty, also
-// a following empty word (sed -i.bak in GNU spelling, -i '' in BSD spelling).
+// a following empty word (sed -i.bak in GNU spelling, -i ” in BSD spelling).
 func (b *argvBinding) optional(form toolcontract.OptionForm, spelling string, word Field, value string, attached bool) error {
 	switch form.Consumption {
 	case "optional-attached-value":
@@ -554,4 +568,27 @@ func decimal(value string) bool {
 		}
 	}
 	return true
+}
+
+// WriteCatalogHelp writes a catalog command's help to out and returns a completed read-only result.
+func WriteCatalogHelp(spec toolcontract.CommandSpecification, out io.Writer) (toolcontract.ProducerResult, error) {
+	if out != nil {
+		if _, err := io.WriteString(out, spec.Help()+"\n"); err != nil {
+			return ownerResult(err), err
+		}
+	}
+	return ordinaryResult(0), nil
+}
+
+type helpDispatcher struct {
+	spec toolcontract.CommandSpecification
+}
+
+func (h helpDispatcher) Invoke(_ context.Context, _ OperationRequest, streams Streams) (toolcontract.ProducerResult, error) {
+	return WriteCatalogHelp(h.spec, streams.Output)
+}
+
+// HelpDispatcher returns an in-process dispatcher that writes spec's catalog help.
+func HelpDispatcher(spec toolcontract.CommandSpecification) OperationDispatcher {
+	return helpDispatcher{spec: spec}
 }

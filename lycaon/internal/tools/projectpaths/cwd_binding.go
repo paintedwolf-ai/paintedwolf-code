@@ -21,7 +21,7 @@ func (p *ProgramPaths) directoryBinding(ctx context.Context, bound BoundPath) (B
 		return BoundPath{}, nil, err
 	}
 	if !info.IsDir() {
-		return BoundPath{}, nil, invalidOperand(bound.Resolved.DisplayPath, "directory required")
+		return BoundPath{}, nil, &PathError{Code: "COMMAND_OPERAND_INVALID", Operand: bound.Resolved.DisplayPath, Cause: errNotDirectory}
 	}
 	authority, err := authorityAddress(bound.Resolved.Root.Path, file.Name())
 	if err != nil {

@@ -104,7 +104,7 @@ func TestLinuxNativePrivilegeQualification(t *testing.T) {
 			defer cleanup()
 			var output bytes.Buffer
 			cmd.Stdout = &output
-			testutil.FailErr(t, "execute through typed native door", RunPrepared(cmd))
+			testutil.FailErr(t, "execute through typed native door", RunPrepared(t.Context(), cmd))
 			var prepared nativePrivilegeFacts
 			testutil.FailErr(t, "decode actual prepared native facts", json.Unmarshal(output.Bytes(), &prepared))
 			if !reflect.DeepEqual(prepared.Credentials, baseline.Credentials) {
@@ -226,7 +226,7 @@ func assertRevokedPrivilegeLaunch(t *testing.T, plan LaunchPlan, lease *confine.
 	defer cleanup()
 	var output bytes.Buffer
 	cmd.Stdout = &output
-	err = StartPreparedWith(cmd, cmd.Start, func(pid int) func() { release := TrackProcess(pid); lease.Close(context.Background()); return release })
+	err = StartPreparedWith(t.Context(), cmd, cmd.Start, func(pid int) func() { release := TrackProcess(pid); lease.Close(context.Background()); return release })
 	if err == nil || cmd.ProcessState == nil || output.Len() != 0 {
 		t.Fatal("revoked privileged action reported accepted execution")
 	}

@@ -20,6 +20,7 @@ func runPaste(inv *invocation) error {
 	}
 	defer closeSources(sources)
 	readers := make([]*records, len(sources))
+	defer closeRecords(readers)
 	var stdin *records
 	for i, source := range sources {
 		if source.name == "-" && stdin != nil {
@@ -130,6 +131,7 @@ func runComm(inv *invocation) error {
 		return nil
 	}
 	var readers [2]*records
+	defer closeRecords(readers[:])
 	for i, source := range sources {
 		if readers[i], err = inv.records(source.reader, '\n'); err != nil {
 			return err

@@ -74,7 +74,7 @@ func marshalEvidenceBody(ctx context.Context, q *db.Queries, dataDir, projectID 
 		return "", fmt.Errorf("marshal evidence body: %w", err)
 	}
 	blobStore := contentblob.StoreFor(dataDir, projectID)
-	sha, byteSize, storedSize, err := contentblob.Write(blobStore, raw)
+	sha, byteSize, storedSize, err := contentblob.Write(ctx, blobStore, raw)
 	if err != nil {
 		return "", fmt.Errorf("write evidence body blob: %w", err)
 	}

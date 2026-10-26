@@ -7,13 +7,20 @@ import (
 	"slices"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
+	"github.com/lycaon/lycaon/internal/settingsoverlay"
 )
 
 // Stat reads entry metadata through the held root without opening content.
 // Without follow it reports the final entry itself, including a dangling or
 // outward-pointing link; follow resolves contained links only.
 func (p BoundPath) Stat(follow bool) (fseffect.EntryStat, error) {
-	root, err := p.openEntryRoot()
+	if p.Null {
+		return fseffect.EntryStat{}, invalidOperand(p.Resolved.DisplayPath, "null device is not a directory entry")
+	}
+	if settingsoverlay.IsRecoveryRelPath(p.Resolved.ScopeRel) || settingsoverlay.HasRecoverySegment(p.Resolved.Abs) || settingsoverlay.IsRecoveryOnlyDir(p.Resolved.Abs) {
+		return fseffect.EntryStat{}, PathOperationError(p.Resolved.DisplayPath, &fs.PathError{Op: "stat", Path: p.Resolved.DisplayPath, Err: fs.ErrNotExist})
+	}
+	root, err := p.openRoot()
 	if err != nil {
 		return fseffect.EntryStat{}, PathOperationError(p.Resolved.DisplayPath, err)
 	}
@@ -48,6 +55,15 @@ func (p BoundPath) ReadDir() ([]string, error) {
 	if err != nil {
 		return nil, PathOperationError(p.Resolved.DisplayPath, err)
 	}
+	kept := names[:0]
+	for _, name := range names {
+		childAbs := p.Resolved.Abs + string(filepath.Separator) + name
+		if settingsoverlay.HasRecoverySegment(childAbs) || settingsoverlay.IsRecoveryOnlyDir(childAbs) {
+			continue
+		}
+		kept = append(kept, name)
+	}
+	names = kept
 	slices.Sort(names)
 	return names, nil
 }
@@ -73,7 +89,10 @@ func (p BoundPath) Child(name string) BoundPath {
 // Readlink reads a link entry's target text, admitted at the entry itself, without
 // authorizing or following the target.
 func (p BoundPath) Readlink() (string, error) {
-	root, err := p.openEntryRoot()
+	if p.Null {
+		return "", invalidOperand(p.Resolved.DisplayPath, "null device is not a directory entry")
+	}
+	root, err := p.openRoot()
 	if err != nil {
 		return "", PathOperationError(p.Resolved.DisplayPath, err)
 	}
@@ -82,7 +101,6 @@ func (p BoundPath) Readlink() (string, error) {
 	return target, PathOperationError(p.Resolved.DisplayPath, err)
 }
 
-// openEntryRoot distinguishes namespace metadata from the null byte stream.
 func (p BoundPath) openEntryRoot() (*fseffect.ReadRoot, error) {
 	if p.Null {
 		return nil, invalidOperand(p.Resolved.DisplayPath, "null device is not a directory entry")
