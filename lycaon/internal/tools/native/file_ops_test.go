@@ -233,11 +233,14 @@ func TestMoveAcrossRootsKeepsBothFilesWhenSourceRemovalIsDeclined(t *testing.T) 
 		}
 		return nil
 	}
-	_, err := (&MoveTool{Boundary: nativefixture.Boundary(t)}).Move(t.Context(), MoveInput{
+	result, err := (&MoveTool{Boundary: nativefixture.Boundary(t)}).Move(t.Context(), MoveInput{
 		Pairs: []FilePair{{From: "AGENTS.md", To: "@other/copied.txt"}},
 	}, tctx)
 	if !errors.Is(err, declined) {
 		t.Fatalf("source removal = %v, want decline", err)
+	}
+	if len(result.Moved) != 0 || len(result.DestinationCopied) != 1 {
+		t.Fatalf("partial move result = %+v", result)
 	}
 	for _, path := range []string{source, destination} {
 		data, readErr := os.ReadFile(path)

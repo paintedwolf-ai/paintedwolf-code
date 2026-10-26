@@ -24,7 +24,8 @@ type moveResult struct {
 }
 
 type moveResponse struct {
-	Moved []moveResult `json:"moved"`
+	Moved             []moveResult `json:"moved"`
+	DestinationCopied []moveResult `json:"destination_copied,omitempty"`
 }
 
 // MoveInput is one complete move operation. NoClobber leaves an existing
@@ -39,8 +40,9 @@ type MoveInput struct {
 
 // MoveResult lists completed and skipped pairs in order.
 type MoveResult struct {
-	Moved   []FilePair
-	Skipped []FilePair
+	Moved             []FilePair
+	Skipped           []FilePair
+	DestinationCopied []FilePair
 }
 
 func (t *MoveTool) Run(ctx context.Context, args map[string]any, tctx tools.ToolContext) (output string, runErr error) {
@@ -56,8 +58,11 @@ func (t *MoveTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 	for _, pair := range result.Moved {
 		resp.Moved = append(resp.Moved, moveResult{From: pair.From, To: pair.To})
 	}
+	for _, pair := range result.DestinationCopied {
+		resp.DestinationCopied = append(resp.DestinationCopied, moveResult{From: pair.From, To: pair.To})
+	}
 	if err != nil {
-		if len(resp.Moved) > 0 {
+		if len(resp.Moved)+len(resp.DestinationCopied) > 0 {
 			return interruptedMutationBatch(resp, err)
 		}
 		return "", err
@@ -101,6 +106,9 @@ func (t *MoveTool) Move(ctx context.Context, in MoveInput, tctx tools.ToolContex
 				Pairs: []FilePair{pair}, Recursive: in.Directories, NoClobber: in.NoClobber, MaxFileBytes: math.MaxInt64,
 			}, tctx)
 			if err != nil {
+				for _, copied := range copyResult.Copied {
+					result.DestinationCopied = append(result.DestinationCopied, FilePair{From: copied.From, To: copied.To})
+				}
 				return result, err
 			}
 			if len(copyResult.Skipped) > 0 {
@@ -110,6 +118,7 @@ func (t *MoveTool) Move(ctx context.Context, in MoveInput, tctx tools.ToolContex
 			if _, err := (&DeleteTool{Boundary: t.Boundary}).Delete(ctx, DeleteInput{
 				Paths: []string{pair.From}, Recursive: in.Directories,
 			}, tctx); err != nil {
+				result.DestinationCopied = append(result.DestinationCopied, FilePair{From: fromSlash, To: toSlash})
 				return result, fmt.Errorf("move %s -> %s after copy: %w", pair.From, pair.To, err)
 			}
 			result.Moved = append(result.Moved, FilePair{From: fromSlash, To: toSlash})
