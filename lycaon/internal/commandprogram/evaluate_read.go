@@ -24,7 +24,7 @@ func (f *frame) readBuiltin(ctx context.Context, s commandsurface.Statement, fie
 	if err != nil {
 		var argv *ArgvError
 		if errors.As(err, &argv) {
-			if gap := f.nativeGap(spec, argv, fields, nil); gap != nil {
+			if gap := f.nativeGap(ctx, spec, argv, fields, nil); gap != nil {
 				return f.dispatch(ctx, s, fields, nil)
 			}
 			f.hostRefusal(spec.Name, argv.Word, argv.Expected, argv.Code)

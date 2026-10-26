@@ -3,6 +3,7 @@ package commandprogram
 import (
 	"context"
 	"io"
+	"strconv"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/commandsurface"
@@ -45,18 +46,28 @@ func (o *stagedRedirect) finish(ctx context.Context, publish bool) error {
 // (for example a failed target substitution or a refused open) after which the
 // command is not run; err reports a host stop.
 func (s *descriptorScope) bind(ctx context.Context, g *frame, r commandsurface.ProgramRedirect, field Field) (*stagedRedirect, bool, error) {
+	if err := g.e.charge(g, r.SyntaxLocation, "statement_visits", 1); err != nil {
+		return nil, false, err
+	}
 	switch r.Operator {
 	case ">&":
-		if r.Descriptor == 2 {
-			g.io.streams.Error = g.io.streams.Output
-		} else {
-			g.io.streams.Output = g.io.streams.Error
+		src, _ := strconv.Atoi(staticWord(r.Target))
+		if !g.io.streams.hasWriter(src) {
+			return nil, true, g.builtinStatus(r.SyntaxLocation, r.Operator, 1)
 		}
+		g.io.streams.SetWriter(redirectDescriptor(r), g.io.streams.Writer(src))
+		return nil, false, nil
+	case "<&":
+		src, _ := strconv.Atoi(staticWord(r.Target))
+		if !g.io.streams.hasReader(src) {
+			return nil, true, g.builtinStatus(r.SyntaxLocation, r.Operator, 1)
+		}
+		g.io.streams.SetReader(redirectDescriptor(r), g.io.streams.Reader(src))
 		return nil, false, nil
 	}
 	var child *childRun
 	var err error
-	if r.Operator == "<" {
+	if r.Operator == "<" && field.ProcessSubstitution() == nil && field.Value != "/dev/null" && !strings.EqualFold(field.Value, "NUL") {
 		child, err = g.beginRecorded(ctx, r.SyntaxLocation, r.Operator)
 	} else {
 		child, err = g.begin(r.SyntaxLocation, r.Operator)
@@ -66,6 +77,14 @@ func (s *descriptorScope) bind(ctx context.Context, g *frame, r commandsurface.P
 	}
 	child.producer = false
 	if r.Operator == "<" {
+		if subst := field.ProcessSubstitution(); subst != nil {
+			if input, ok := subst.OpenReader(); ok {
+				s.inputs = append(s.inputs, input)
+				g.io.streams.SetReader(redirectDescriptor(r), input)
+				child.settle(ctx, ordinaryResult(0), nil)
+				return nil, false, nil
+			}
+		}
 		input, err := s.input.OpenInput(ctx, InputDestination{Invocation: child.inv, Redirect: r, Target: field})
 		if err != nil {
 			if stop := g.redirectFailure(ctx, child, r.Operator, field.Value, err); stop != nil {
@@ -74,29 +93,47 @@ func (s *descriptorScope) bind(ctx context.Context, g *frame, r commandsurface.P
 			return nil, true, &descriptorOpenFailure{Status: g.state.control.Status(), Cause: err}
 		}
 		s.inputs = append(s.inputs, input)
-		g.io.streams.Input = input
+		g.io.streams.SetReader(redirectDescriptor(r), io.NopCloser(input))
 		child.settle(ctx, ordinaryResult(0), nil)
 		return nil, false, nil
 	}
-	staged, err := s.output.Open(ctx, OutputDestination{Invocation: child.inv, Redirect: r, Target: field})
-	if err != nil {
-		if stop := g.redirectFailure(ctx, child, r.Operator, field.Value, err); stop != nil {
-			return nil, true, stop
+	var staged StagedOutput
+	if subst := field.ProcessSubstitution(); subst != nil {
+		if writer, ok := subst.OpenWriter(); ok {
+			staged = NewProcessSubstitutionStagedOutput(writer)
 		}
-		return nil, true, &descriptorOpenFailure{Status: g.state.control.Status(), Cause: err}
+	}
+	if staged == nil {
+		var openErr error
+		staged, openErr = s.output.Open(ctx, OutputDestination{Invocation: child.inv, Redirect: r, Target: field})
+		if openErr != nil {
+			if stop := g.redirectFailure(ctx, child, r.Operator, field.Value, openErr); stop != nil {
+				return nil, true, stop
+			}
+			return nil, true, &descriptorOpenFailure{Status: g.state.control.Status(), Cause: openErr}
+		}
 	}
 	errorStream := g.io.streams.Error
 	switch r.Operator {
 	case "&>", "&>>":
-		g.io.streams.Output, g.io.streams.Error = staged, staged
+		g.io.streams.SetWriter(1, staged)
+		g.io.streams.SetWriter(2, staged)
 	default:
-		if r.Descriptor == 2 {
-			g.io.streams.Error = staged
-		} else {
-			g.io.streams.Output = staged
-		}
+		g.io.streams.SetWriter(redirectDescriptor(r), staged)
 	}
 	return &stagedRedirect{frame: g, run: child, operator: r.Operator, target: field.Value, errorStream: errorStream, output: staged}, false, nil
+}
+
+func redirectDescriptor(r commandsurface.ProgramRedirect) int {
+	if r.Descriptor >= 0 {
+		return r.Descriptor
+	}
+	switch r.Operator {
+	case "<", "<&", "<<", "<<-":
+		return 0
+	default:
+		return 1
+	}
 }
 
 // redirectFailure records a refused open: owner stops latch, other failures
@@ -111,7 +148,6 @@ func (g *frame) redirectFailure(ctx context.Context, child *childRun, operator, 
 	}
 	return nil
 }
-
 // preflight refuses, before the first statement, every reachable construct
 // this evaluation cannot run: reserved function names and constructs whose
 // owner port is absent. Nothing has been dispatched when it refuses.
@@ -170,7 +206,7 @@ func preflight(list []commandsurface.Statement, ports EvaluationPorts) error {
 			}
 			switch r.Operator {
 			case "<":
-				if ports.Input == nil || r.Descriptor > 0 {
+				if ports.Input == nil || r.Descriptor == 1 || r.Descriptor == 2 {
 					refuse(r.SyntaxLocation, "< with an input owner on descriptor 0")
 				}
 			case ">", ">>", "&>", "&>>":
@@ -182,7 +218,11 @@ func preflight(list []commandsurface.Statement, ports EvaluationPorts) error {
 		switch c := s.Command.(type) {
 		case commandsurface.SimpleCommand:
 			for _, a := range c.Assignments {
+				if a.Index != nil {
+					words(commandsurface.ArithmeticPart{Expression: a.Index}.Words())
+				}
 				words([]commandsurface.DeferredWord{a.Value})
+				words(a.Array)
 			}
 			words(c.Words)
 			if len(c.Words) > 0 && staticWord(c.Words[0]) == "source" && ports.Sources == nil {
@@ -222,6 +262,10 @@ func preflight(list []commandsurface.Statement, ports EvaluationPorts) error {
 			statement(c.Body)
 		case commandsurface.TestExpression:
 			test(c.Expression)
+		case commandsurface.ArithmeticCommand:
+			words(c.Words())
+		case commandsurface.TrapCommand:
+			statements(c.Statements)
 		}
 	}
 	statements = func(items []commandsurface.Statement) {

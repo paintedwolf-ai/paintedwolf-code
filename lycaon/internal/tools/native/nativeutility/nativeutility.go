@@ -6,12 +6,12 @@ package nativeutility
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/tools"
 	"io"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools"
 )
 
 // Settle projects one utility run onto the producer contract: a typed

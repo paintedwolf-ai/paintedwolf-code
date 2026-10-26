@@ -78,11 +78,13 @@ type sourceMutationPublication struct {
 }
 
 type sourceMutationRecovery struct {
-	NativeTrash   *sourceTrashRecovery `json:"native_trash,omitempty"`
-	RecoveryID    string               `json:"recovery_id,omitempty"`
-	RecoveryCount int64                `json:"recovery_count,omitempty"`
-	Disposal      sourceDisposal       `json:"disposal,omitempty"`
-	TreeSHA       string               `json:"tree_sha256,omitempty"`
+	EntryRecoveryKey string               `json:"entry_recovery_key,omitempty"`
+	NativeTrash      *sourceTrashRecovery `json:"native_trash,omitempty"`
+	RecoveryID       string               `json:"recovery_id,omitempty"`
+	RecoveryCount    int64                `json:"recovery_count,omitempty"`
+	Disposal         sourceDisposal       `json:"disposal,omitempty"`
+	TreeSHA          string               `json:"tree_sha256,omitempty"`
+	Unrecoverable    bool                 `json:"unrecoverable,omitempty"`
 }
 
 type sourceMutationPlan struct {
@@ -111,6 +113,8 @@ type sourceMutationPlan struct {
 }
 
 type sourceMutationRow struct {
+	memory                           sourceeffect.Memory
+	freshOperation                   bool
 	ID, ProjectID, Kind, InputDigest string
 	Plan                             sourceMutationPlan
 	Status                           sourceMutationStatus

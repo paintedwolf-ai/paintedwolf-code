@@ -39,6 +39,24 @@ func (r *grepRun) searchContent(label string, content []byte, pin *toolcontract.
 	return r.searchStream(label, bytes.NewReader(content), 0, len(content), bytes.IndexByte(content, 0), pin, names)
 }
 
+// searchNoMatch emits the zero-match file outcome when the index prunes a file.
+func (r *grepRun) searchNoMatch(label string, names bool) error {
+	switch r.mode {
+	case modeCount:
+		if r.rg {
+			return nil
+		}
+		if names {
+			return r.inv.out.text(label, r.nameEnd(":"), "0\n")
+		}
+		return r.inv.out.text("0\n")
+	case modeFilesWithout:
+		return r.inv.out.text(label, r.nameEnd("\n"))
+	default:
+		return nil
+	}
+}
+
 // searchStream selects records of one input and prints them in GNU form:
 // PATH:LINE:TEXT for selected lines, PATH-LINE-TEXT for context and "--"
 // between non-adjacent groups. A file holding NUL bytes is binary: its first
@@ -46,30 +64,21 @@ func (r *grepRun) searchContent(label string, content []byte, pin *toolcontract.
 // (GNU 3.5 and later). A selected line with invalid UTF-8 is binary from that
 // line on, as GNU grep does in a UTF-8 locale.
 func (r *grepRun) searchStream(label string, reader io.Reader, maxBytes int64, totalBytes int, firstNull int, pin *toolcontract.SourcePin, names bool) error {
+	inv := r.inv
 	if r.json != nil {
-		var data []byte
-		var err error
-		if maxBytes > 0 {
-			data, err = io.ReadAll(io.LimitReader(reader, maxBytes+1))
-			if err == nil && int64(len(data)) > maxBytes {
-				err = tools.CommandLimitExceeded("stream_throughput_bytes", maxBytes, int64(len(data)))
-			}
-		} else {
-			data, err = io.ReadAll(reader)
-		}
+		content, err := inv.readAll(reader)
 		if err != nil {
 			return err
 		}
-		return r.jsonContent(label, data)
+		return r.jsonContent(label, content)
 	}
-	inv := r.inv
+	if r.binaryMode == "without-match" && firstNull >= 0 {
+		reader = bytes.NewReader(nil)
+		firstNull = -1
+	}
 	r.numberWidth = len(strconv.Itoa(totalBytes))
-	if !r.scan.NullData && r.binaryMode != "text" {
-		if r.binaryMode == "without-match" && firstNull >= 0 {
-			reader, firstNull = bytes.NewReader(nil), -1
-		} else if firstNull < 0 {
-			reader = &nullTrackingReader{r: reader, firstNull: &firstNull}
-		}
+	if !r.scan.NullData && firstNull < 0 {
+		reader = &nullTrackingReader{r: reader, firstNull: &firstNull}
 	}
 	listing := r.mode != modeLines
 	separator := false
@@ -86,11 +95,6 @@ func (r *grepRun) searchStream(label string, reader io.Reader, maxBytes int64, t
 		return tools.CommandLimitExceeded("stream_throughput_bytes", maximum, observed)
 	}
 	n, err := textsearch.ScanReader(inv.ctx, reader, maxBytes, onExceed, r.matcher, scan, func(line textsearch.Line) error {
-		record := line.Text
-		binary := !r.scan.NullData && r.binaryMode != "text" && firstNull >= 0
-		if r.binaryMode == "without-match" && (binary || (line.Kind == textsearch.SelectedLine && !utf8.Valid(record))) {
-			return errBinaryStop
-		}
 		if line.Kind == textsearch.SelectedLine {
 			selectedHere++
 			r.selected = true
@@ -101,6 +105,8 @@ func (r *grepRun) searchStream(label string, reader io.Reader, maxBytes int64, t
 		if listing {
 			return nil
 		}
+		record := line.Text
+		binary := !r.scan.NullData && r.binaryMode != "text" && firstNull >= 0
 		if binary || (r.binaryMode != "text" && line.Kind == textsearch.SelectedLine && !utf8.Valid(record)) {
 			if line.Kind != textsearch.SelectedLine {
 				return nil
@@ -219,6 +225,17 @@ func (r *grepRun) printLine(label string, names bool, line textsearch.Line, reco
 // writeRecord prints one output record; text copied from a pinned capture
 // at offset is mapped back to it.
 func (r *grepRun) writeRecord(prefix string, text []byte, pin *toolcontract.SourcePin, offset int) error {
+	if r.inv.out.mappings == nil || pin == nil {
+		term := byte('\n')
+		if r.scan.NullData {
+			term = 0
+		}
+		r.inv.out.scratch = append(r.inv.out.scratch[:0], prefix...)
+		r.inv.out.scratch = append(r.inv.out.scratch, text...)
+		r.inv.out.scratch = append(r.inv.out.scratch, term)
+		_, err := r.inv.out.Write(r.inv.out.scratch)
+		return err
+	}
 	if err := r.inv.out.text(prefix); err != nil {
 		return err
 	}

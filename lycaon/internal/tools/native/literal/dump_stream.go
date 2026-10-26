@@ -3,6 +3,8 @@ package literal
 import (
 	"errors"
 	"io"
+
+	"github.com/lycaon/lycaon/internal/commandprogram"
 )
 
 // dumpRange selects bytes without gathering the source. Negative PATH offsets
@@ -40,7 +42,7 @@ func (inv *invocation) dumpRange(reader io.Reader, size int64, lengthKey string,
 // The invocation closes the previous stream before acquiring the next one.
 type operandSequence struct {
 	inv      *invocation
-	operands []string
+	operands commandprogram.Fields
 	current  io.Reader
 }
 
@@ -52,7 +54,7 @@ func (s *operandSequence) Read(p []byte) (int, error) {
 			}
 			operand := s.operands[0]
 			s.operands = s.operands[1:]
-			in, err := s.inv.open(operand, false)
+			in, err := s.inv.openField(operand, false)
 			if err != nil {
 				return 0, err
 			}

@@ -28,7 +28,7 @@ func EvaluatorBuiltin(name string) bool {
 var controlBuiltins = map[string]bool{"exit": true, "return": true, "break": true, "continue": true}
 
 var catalogCommands = sync.OnceValues(func() ([]toolcontract.CommandSpecification, error) {
-	catalog, err := toolcontract.LanguageV1()
+	catalog, err := toolcontract.ReadOnlyLanguageV1()
 	return catalog.Commands, err
 })
 
@@ -46,13 +46,13 @@ func ResolveCommand(argv Fields) (toolcontract.CommandSpecification, bool, error
 		if len(names) == 0 || len(names) > len(argv) || len(names) <= words || !commandWord(spec, names[0], argv[0].Value) {
 			continue
 		}
-		match := true
-		for i := 1; i < len(names); i++ {
-			match = match && argv[i].Value == names[i]
+		if len(names) > 1 {
+			b := argvBinding{spec: spec, argv: argv, index: 1, bound: &BoundArgv{}}
+			if b.global(names[1:]) != nil {
+				continue
+			}
 		}
-		if match {
-			best, words = spec, len(names)
-		}
+		best, words = spec, len(names)
 	}
 	return best, words > 0, nil
 }
@@ -69,28 +69,18 @@ func (f *frame) expandWords(ctx context.Context, words []commandsurface.Deferred
 	return out, nil
 }
 
-func (f *frame) expandAssignments(ctx context.Context, items []commandsurface.Assignment) ([]assignment, error) {
-	out := make([]assignment, 0, len(items))
-	for _, item := range items {
-		value, err := f.e.expander.ExpandScalar(ctx, f, item.Value)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, assignment{loc: item.SyntaxLocation, name: item.Name, value: value})
-	}
-	return out, nil
-}
-
 // expanding runs one command's expansion with the statuses of the
 // substitutions it reaches retained. A nonzero unit prevents the containing
-// command (P08 AdmitSubstitution) and becomes its status; prevented reports
-// that the command must not run. Expansion refusals latch at the word.
+// command and becomes its status; prevented reports that the command must not
+// run. Expansion refusals latch at the word.
 func (f *frame) expanding(loc commandsurface.SyntaxLocation, expand func(scope *frame) error) (prevented bool, err error) {
-	g := *f
-	tracker := &substitutionStatus{}
-	g.substs = tracker
-	if err := expand(&g); err != nil {
-		return true, f.expansionRefusal(loc, err)
+	prev := f.substs
+	var tracker substitutionStatus
+	f.substs = &tracker
+	expandErr := expand(f)
+	f.substs = prev
+	if expandErr != nil {
+		return true, f.expansionRefusal(loc, expandErr)
 	}
 	if !tracker.hasFailure {
 		return false, nil
@@ -121,14 +111,16 @@ func (f *frame) expansionRefusal(loc commandsurface.SyntaxLocation, err error) e
 func (f *frame) simple(ctx context.Context, s commandsurface.Statement, c commandsurface.SimpleCommand) (signal, error) {
 	var fields Fields
 	var assigns []assignment
-	expansion := *f
+	expansion := f
 	if scope := f.io.scope; scope != nil && scope.statementID == s.ID {
-		expansion.io = scope.base
+		copied := *f
+		copied.io = scope.base
+		expansion = &copied
 	}
 	prevented, err := expansion.expanding(s.SyntaxLocation, func(g *frame) error {
 		var err error
 		if fields, err = g.expandWords(ctx, c.Words); err == nil {
-			assigns, err = g.expandAssignments(ctx, c.Assignments)
+			assigns, err = expandAssignmentList(ctx, g, c.Assignments)
 		}
 		return err
 	})
@@ -143,32 +135,6 @@ func (f *frame) simple(ctx context.Context, s commandsurface.Statement, c comman
 	}
 	if fn, ok := f.state.functions[fields[0].Value]; ok {
 		return signal{}, f.call(ctx, s, fn, fields, assigns)
-	}
-	if spec, native, err := ResolveCommand(fields); err == nil && native && spec.Name != "external" {
-		if bound, err := f.e.ports.Binder.Bind(spec, fields); err == nil && bound.Help {
-			return signal{}, f.inProcess(ctx, s, spec.Name, func(context.Context, toolcontract.OperationInvocation) (toolcontract.ProducerResult, error) {
-				return WriteCatalogHelp(spec, f.io.streams.Output)
-			})
-		}
-	}
-	name := fields[0].Value
-	switch name {
-	case "source":
-		return signal{}, f.source(ctx, s, fields)
-	case "true", "false", ":":
-		return signal{}, f.inProcess(ctx, s, name, func(context.Context, toolcontract.OperationInvocation) (toolcontract.ProducerResult, error) {
-			return BooleanBuiltin(ctx, name, fields.Values()[1:])
-		})
-	case "test", "[":
-		return signal{}, f.inProcess(ctx, s, name, func(ctx context.Context, inv toolcontract.OperationInvocation) (toolcontract.ProducerResult, error) {
-			return f.predicates().TestBuiltin(ctx, inv, name, fields.Values()[1:])
-		})
-	case "unset":
-		return signal{}, f.unset(s, fields)
-	case "set":
-		return signal{}, f.setOptions(s, fields)
-	case "read":
-		return signal{}, f.readBuiltin(ctx, s, fields)
 	}
 	return signal{}, f.dispatch(ctx, s, fields, assigns)
 }
@@ -196,9 +162,15 @@ func (f *frame) testExpression(ctx context.Context, s commandsurface.Statement, 
 
 // inProcess runs a native host builtin as its own dynamic execution.
 func (f *frame) inProcess(ctx context.Context, s commandsurface.Statement, name string, run func(context.Context, toolcontract.OperationInvocation) (toolcontract.ProducerResult, error)) error {
-	child, err := f.beginRecorded(ctx, s.SyntaxLocation, name)
-	if err != nil {
-		return err
+	child := f.activeHost
+	if child != nil && child.inv.Identity.NodeID == string(s.SyntaxLocation.ID) && child.inv.SourceUnitID == f.unit {
+		f.activeHost = nil
+	} else {
+		var err error
+		child, err = f.begin(s.SyntaxLocation, name)
+		if err != nil {
+			return err
+		}
 	}
 	result, err := run(ctx, child.inv)
 	if err != nil && result.Validate() != nil {
@@ -218,6 +190,9 @@ func (f *frame) dispatch(ctx context.Context, s commandsurface.Statement, fields
 	if native {
 		operation = spec.Name
 	}
+	if err := f.e.charge(f, s.SyntaxLocation, "child_executions", 1); err != nil {
+		return err
+	}
 	child, err := f.begin(s.SyntaxLocation, operation)
 	if err != nil {
 		return err
@@ -230,7 +205,7 @@ func (f *frame) dispatch(ctx context.Context, s commandsurface.Statement, fields
 				child.close(ctx)
 				return err
 			}
-			gap = f.nativeGap(spec, argv, fields, assigns)
+			gap = f.nativeGap(ctx, spec, argv, fields, assigns)
 			if gap == nil {
 				f.hostRefusal(spec.Name, argv.Word, argv.Expected, argv.Code)
 				child.settle(ctx, toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerRefused, StopCode: argv.Code, EffectCertainty: toolcontract.NoEffect}, err)
@@ -240,16 +215,17 @@ func (f *frame) dispatch(ctx context.Context, s commandsurface.Statement, fields
 			}
 		}
 	}
-	environment, err := f.environment(assigns)
+	environment, releaseEnvironment, err := f.environment(ctx, assigns)
 	if err != nil {
 		child.close(ctx)
 		return f.expansionRefusal(s.SyntaxLocation, err)
 	}
+	defer releaseEnvironment()
 	request := OperationRequest{Invocation: child.inv, OperationID: operation, Statement: s, Argv: fields, Environment: environment, EffectMode: effectMode(spec, native), Gap: gap, StreamPreparation: f.io}
 	var result toolcontract.ProducerResult
 	if native && spec.Name != "external" && gap == nil {
 		result, err = f.state.dispatch.Invoke(ctx, request, f.io.streams)
-		if syncErr := f.state.syncDirectory(ctx, spec.Name == "cd" && err == nil && result.Status == 0); syncErr != nil {
+		if syncErr := f.syncDirectory(ctx, spec.Name == "cd" && err == nil && result.Status == 0); syncErr != nil {
 			child.settle(ctx, result, errors.Join(err, syncErr))
 			return f.expansionRefusal(s.SyntaxLocation, syncErr)
 		}
@@ -277,6 +253,13 @@ func effectMode(spec toolcontract.CommandSpecification, native bool) string {
 // handleable; refusal, interruption, owner stops and invalid results latch and
 // return the owner's own error so its rejection code reaches feedback.
 func (f *frame) settle(ctx context.Context, child *childRun, result toolcontract.ProducerResult, err error) error {
+	var streamLimit *StreamLimitError
+	if errors.As(err, &streamLimit) {
+		loc := commandsurface.SyntaxLocation{ID: commandsurface.NodeID(child.inv.Identity.NodeID), Span: child.inv.Span}
+		refusal := f.refuseLimit(loc, streamLimit.Limit, streamLimit.Observed)
+		child.settle(ctx, toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerFailed, StopCode: limitExceeded, EffectCertainty: result.EffectCertainty}, refusal)
+		return refusal
+	}
 	if invalid := result.Validate(); invalid != nil {
 		child.settle(ctx, result, errors.Join(err, invalid))
 		_ = f.state.latch.Record(child.inv.Identity.ExecutionID, result, true)
@@ -292,6 +275,9 @@ func (f *frame) settle(ctx context.Context, child *childRun, result toolcontract
 			return err
 		}
 		return errors.Join(err, &AdmissionStoppedError{Stop: stop})
+	}
+	if recordErr == nil && f.producerPipe != nil && errors.Is(err, ErrConsumerClosed) && f.producerPipe.Completion().Termination == StreamConsumerClosed {
+		return ErrConsumerClosed
 	}
 	return recordErr
 }
@@ -370,7 +356,7 @@ func (f *frame) exportDeclaration(ctx context.Context, s commandsurface.Statemen
 	var assigns, names []assignment
 	prevented, err := f.expanding(s.SyntaxLocation, func(g *frame) error {
 		var err error
-		if assigns, err = g.expandAssignments(ctx, c.Assignments); err != nil {
+		if assigns, err = expandAssignmentList(ctx, g, c.Assignments); err != nil {
 			return err
 		}
 		for _, word := range c.Words {
@@ -403,7 +389,7 @@ func (f *frame) exportDeclaration(ctx context.Context, s commandsurface.Statemen
 		}
 	}
 	for _, a := range assigns {
-		if err := f.state.vars.Assign(ctx, a.name, a.value); err != nil {
+		if err := a.apply(ctx, f.state.vars); err != nil {
 			return f.expansionRefusal(a.loc, err)
 		}
 	}
@@ -497,7 +483,7 @@ func (f *frame) setOptions(s commandsurface.Statement, fields Fields) error {
 
 // nativeGap is the gap an unsupported native form becomes when dispatch can
 // run the installed program instead; nil keeps the refusal.
-func (f *frame) nativeGap(spec toolcontract.CommandSpecification, argv *ArgvError, fields Fields, assigns []assignment) *toolcontract.NativeGap {
+func (f *frame) nativeGap(ctx context.Context, spec toolcontract.CommandSpecification, argv *ArgvError, fields Fields, assigns []assignment) *toolcontract.NativeGap {
 	if argv.Code != argvOptionUnsupported && argv.Code != "COMMAND_NATIVE_FORM_UNSUPPORTED" {
 		return nil
 	}
@@ -505,10 +491,11 @@ func (f *frame) nativeGap(spec toolcontract.CommandSpecification, argv *ArgvErro
 	if !ok {
 		return nil
 	}
-	environment, err := f.environment(assigns)
+	environment, releaseEnvironment, err := f.environment(ctx, assigns)
 	if err != nil {
 		return nil
 	}
+	defer releaseEnvironment()
 	gap := &toolcontract.NativeGap{Command: spec.Name, Code: argv.Code, Form: argv.Word}
 	if !gaps.GapLaunchable(OperationRequest{OperationID: "external", Argv: fields, Environment: environment, Gap: gap, StreamPreparation: f.io}) {
 		return nil

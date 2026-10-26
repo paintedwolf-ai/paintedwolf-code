@@ -110,9 +110,14 @@ func (d *ProgramDispatcher) RegisterSourceUnit(ctx context.Context, _ toolcontra
 // redirection) owns no effect of its own.
 func (d *ProgramDispatcher) BeginExecution(ctx context.Context, invocation toolcontract.OperationInvocation, command string) error {
 	spec, native := d.run.commands[command]
-	definition, err := d.structuralDefinition(command)
+	var (
+		definition toolcontract.OperationDefinition
+		err        error
+	)
 	if native {
 		definition, err = d.catalogDefinition(spec)
+	} else {
+		definition, err = d.structuralDefinition(command)
 	}
 	if err != nil {
 		return err
@@ -121,23 +126,41 @@ func (d *ProgramDispatcher) BeginExecution(ctx context.Context, invocation toolc
 	if span := invocation.Span; span.StartByte >= 0 && span.EndByte <= len(display) && span.StartByte <= span.EndByte {
 		display = display[span.StartByte:span.EndByte]
 	}
-	child, err := d.prepareInvocation(ctx, definition, invocation, display, map[string]any{"operation_id": command}, nil)
-	if err != nil {
-		return err
-	}
+	inputs := map[string]any{"operation_id": command}
 	invoked := false
+	var child programChild
 	if native && len(spec.Effects) > 0 {
-		mode := selectEffectMode(spec, "")
-		if child.bound, err = toolcontract.BindOperation(definition, invocation, spec.Name, mode, d.childEffectSet(spec, mode, commandprogram.OperationRequest{Invocation: invocation})); err == nil {
-			err = d.start(ctx, child)
+		bound, bindErr := toolcontract.BindOperation(definition, invocation, spec.Name, spec.Effects[0].Mode, nil)
+		if bindErr == nil && d.run.tc.Identity.ToolCallID != "" {
+			if prepared, prepErr := d.prepareInvocationWithOwner(ctx, definition, invocation, display, inputs, nil, &bound); prepErr == nil {
+				prepared.bound = bound
+				child = prepared
+				invoked = true
+			}
 		}
+		if !invoked {
+			child, err = d.prepareInvocation(ctx, definition, invocation, display, inputs, nil)
+			if err != nil {
+				return err
+			}
+			child.bound = bound
+			if bindErr != nil {
+				err = bindErr
+			} else {
+				err = d.start(ctx, child)
+			}
+			if err != nil {
+				_ = d.settle(ctx, child, ownerFailure(err), false, "")
+				child.release()
+				return err
+			}
+			invoked = true
+		}
+	} else {
+		child, err = d.prepareInvocation(ctx, definition, invocation, display, inputs, nil)
 		if err != nil {
-			_ = d.settle(ctx, child, ownerFailure(err), false, "")
-			child.release()
 			return err
 		}
-		invoked = true
-
 	}
 	d.shared.mu.Lock()
 	if d.shared.evaluated == nil {
@@ -169,11 +192,16 @@ func (d *ProgramDispatcher) SettleExecution(ctx context.Context, invocation tool
 	return d.settleWith(ctx, entry.child, toolcontract.ProgramChildSettlement{Result: result, OwnerInvoked: entry.ownerInvoked, JobHandle: record.JobHandle, Conflict: revisionConflict(record.Diagnostic)})
 }
 
+var compiledStructuralDefinitions sync.Map
+
 // structuralDefinition compiles one definition per evaluator construct.
 func (d *ProgramDispatcher) structuralDefinition(construct string) (toolcontract.OperationDefinition, error) {
+	key := "construct " + construct
+	if cached, ok := compiledStructuralDefinitions.Load(key); ok {
+		return cached.(toolcontract.OperationDefinition), nil
+	}
 	d.shared.mu.Lock()
 	defer d.shared.mu.Unlock()
-	key := "construct " + construct
 	if definition, ok := d.shared.definitions[key]; ok {
 		return definition, nil
 	}
@@ -194,6 +222,7 @@ func (d *ProgramDispatcher) structuralDefinition(construct string) (toolcontract
 		d.shared.definitions = map[string]toolcontract.OperationDefinition{}
 	}
 	d.shared.definitions[key] = definition
+	compiledStructuralDefinitions.Store(key, definition)
 	return definition, nil
 }
 
@@ -311,6 +340,8 @@ func writeRejectRefusal(streams commandprogram.Streams, command string, request 
 		}
 	case "COMMAND_JOB_UNKNOWN":
 		detail = "no such job in this session; check active jobs with jobs"
+	case "PROCESS_NOT_OWNED":
+		detail = "process is not owned by this session; signal only background jobs started in this session"
 	case "COMMAND_OPTION_UNSUPPORTED", "COMMAND_NATIVE_FORM_UNSUPPORTED":
 		if detail != "" {
 			detail = "not supported here (expected " + detail + ")"
@@ -325,7 +356,7 @@ func writeRejectRefusal(streams commandprogram.Streams, command string, request 
 }
 
 func definitionHasCommand(definition toolcontract.OperationDefinition, name string) bool {
-	for _, cmd := range definition.Facts().Commands {
+	for _, cmd := range definition.ReadOnlyFacts().Commands {
 		if cmd.Name == name {
 			return true
 		}
@@ -510,6 +541,8 @@ func enrichProgramReject(reject *toolrejection.ToolReject, defaultCommand string
 		remedy = "invalid regular expression; use -F for fixed strings or escape regex metacharacters"
 	case "COMMAND_JOB_UNKNOWN":
 		remedy = "no such job in this session; use jobs to list this session's background jobs, then pass %N, %% or $!"
+	case "PROCESS_NOT_OWNED":
+		remedy = "process is not owned by this session; signal only background jobs started in this session"
 	}
 	if remedy == "" {
 		remedy = "rewrite the command with a supported form"

@@ -240,7 +240,34 @@ func compileTranslated(ctx context.Context, raw []string, translated []posixPatt
 		groups = 0
 		required = litprefilter.Extract(tree.String(), false)
 	}
-	return vmEngine{program: program, limits: limits, longest: true, groupCount: groups, required: required}, nil
+	return vmEngine{
+		program:    program,
+		limits:     limits,
+		longest:    true,
+		groupCount: groups,
+		required:   required,
+		literal:    pureLiteralEngine(raw, translated, spec, limits),
+	}, nil
+}
+
+func pureLiteralEngine(raw []string, translated []posixPattern, spec Spec, limits Limits) *literalEngine {
+	if spec.IgnoreCase || spec.Word || len(raw) == 0 || len(raw) != len(translated) {
+		return nil
+	}
+	e := literalEngine{line: spec.Line, limits: limits, patterns: make([][]byte, len(raw))}
+	for i, p := range raw {
+		t := translated[i]
+		if t.groups != 0 || t.marked || t.text != p || !utf8.ValidString(p) || strings.ContainsRune(p, utf8.RuneError) || strings.ContainsAny(p, `\.+*?()|[]{}^$`) {
+			return nil
+		}
+		for _, r := range p {
+			if regexp2.IsMarker(r) {
+				return nil
+			}
+		}
+		e.patterns[i] = []byte(p)
+	}
+	return &e
 }
 
 // --- RE2 -------------------------------------------------------------------
@@ -284,7 +311,11 @@ func compileRE2(ctx context.Context, patterns []string, spec Spec, limits Limits
 	if !spec.Word {
 		required = litprefilter.Extract(combined, false)
 	}
-	return vmEngine{program: program, limits: limits, groupCount: tree.MaxCap(), required: required}, nil
+	var lit *literalEngine
+	if len(patterns) == 1 && tree.MaxCap() == 0 {
+		lit = pureLiteralEngine(patterns, quotedPOSIX(patterns), spec, limits)
+	}
+	return vmEngine{program: program, limits: limits, groupCount: tree.MaxCap(), required: required, literal: lit}, nil
 }
 
 // --- pcre-common-v1 -----------------------------------------------------------
@@ -336,6 +367,16 @@ type vmEngine struct {
 	longest    bool
 	groupCount int
 	required   litprefilter.Requirement
+	literal    *literalEngine
+}
+
+func (e vmEngine) canUseLiteral(b []byte) (literalEngine, bool) {
+	if e.literal == nil || int64(len(b)) > e.limits.WorkSteps || int64(len(b))*12+8 > e.limits.MemoryBytes {
+		return literalEngine{}, false
+	}
+	lit := *e.literal
+	lit.limits = e.limits
+	return lit, true
 }
 
 // record is one search input as scalars with the byte offset of each.
@@ -359,6 +400,9 @@ func decodeRecord(b []byte) record {
 func (e vmEngine) search(ctx context.Context, b []byte, all bool, yield func([]int) error) error {
 	if err := ctx.Err(); err != nil {
 		return err
+	}
+	if !e.required.Empty() && int64(len(b)) <= e.limits.WorkSteps && int64(len(b))*12+8 <= e.limits.MemoryBytes && !e.required.Matches(b) {
+		return nil
 	}
 	session, err := e.program.Session(ctx, e.limits.syntaxBudget())
 	if err != nil {
@@ -404,6 +448,9 @@ func (e vmEngine) search(ctx context.Context, b []byte, all bool, yield func([]i
 }
 
 func (e vmEngine) first(ctx context.Context, b []byte) (Span, bool, error) {
+	if lit, ok := e.canUseLiteral(b); ok {
+		return lit.first(ctx, b)
+	}
 	var span Span
 	found := false
 	err := e.search(ctx, b, false, func(g []int) error {
@@ -414,10 +461,16 @@ func (e vmEngine) first(ctx context.Context, b []byte) (Span, bool, error) {
 }
 
 func (e vmEngine) each(ctx context.Context, b []byte, yield func(Span) error) error {
+	if lit, ok := e.canUseLiteral(b); ok {
+		return lit.each(ctx, b, yield)
+	}
 	return e.search(ctx, b, true, func(g []int) error { return yield(Span{g[0], g[1]}) })
 }
 
 func (e vmEngine) groups(ctx context.Context, b []byte, yield func([]int) error) error {
+	if lit, ok := e.canUseLiteral(b); ok {
+		return lit.groups(ctx, b, yield)
+	}
 	return e.search(ctx, b, true, func(g []int) error {
 		if e.groupCount == 0 {
 			g = g[:2]
