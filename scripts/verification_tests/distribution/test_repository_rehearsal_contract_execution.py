@@ -249,7 +249,7 @@ class RepositorySetupRehearsalContracts(unittest.TestCase):
                 config = work / (family + "-setup-root/etc/repository-fixture")
                 actions = []
 
-                def build(_manifest, _directory, _catalog, output, url, _private, rehearsal=True):
+                def build(_manifest, _directory, _catalog, output, url, _private, rehearsal=False):
                     if url != origin or output == directory / "setup" or not rehearsal:
                         raise ValueError("unsafe setup origin or destination")
                     output.mkdir()
