@@ -2,10 +2,18 @@ package textsearch
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"io"
+	"sync"
 )
+
+var scanReaderPool = sync.Pool{
+	New: func() any {
+		return bufio.NewReaderSize(nil, 64*1024)
+	},
+}
 
 // LineKind separates selected records from context around them.
 type LineKind int
@@ -60,7 +68,12 @@ func ScanReader(ctx context.Context, r io.Reader, maxBytes int64, onExceed func(
 	if opts.NullData {
 		separator = 0
 	}
-	br := bufio.NewReaderSize(r, 64*1024)
+	br := scanReaderPool.Get().(*bufio.Reader)
+	br.Reset(r)
+	defer func() {
+		br.Reset(nil)
+		scanReaderPool.Put(br)
+	}()
 	for start, number := 0, 1; ; number++ {
 		if err := ctx.Err(); err != nil {
 			return s.selected, err
@@ -68,22 +81,28 @@ func ScanReader(ctx context.Context, r io.Reader, maxBytes int64, onExceed func(
 		if trailing && s.after == 0 {
 			break
 		}
-		var raw []byte
-		var readErr error
-		for {
-			if err := ctx.Err(); err != nil {
-				return s.selected, err
+		chunk, readErr := br.ReadSlice(separator)
+		raw := chunk
+		if maxBytes > 0 && int64(start+len(raw)) > maxBytes {
+			return s.selected, onExceed(maxBytes, int64(start+len(raw)))
+		}
+		if errors.Is(readErr, bufio.ErrBufferFull) {
+			raw = append([]byte(nil), chunk...)
+			for {
+				if err := ctx.Err(); err != nil {
+					return s.selected, err
+				}
+				chunk, err := br.ReadSlice(separator)
+				raw = append(raw, chunk...)
+				if maxBytes > 0 && int64(start+len(raw)) > maxBytes {
+					return s.selected, onExceed(maxBytes, int64(start+len(raw)))
+				}
+				if errors.Is(err, bufio.ErrBufferFull) {
+					continue
+				}
+				readErr = err
+				break
 			}
-			chunk, err := br.ReadSlice(separator)
-			raw = append(raw, chunk...)
-			if maxBytes > 0 && int64(start+len(raw)) > maxBytes {
-				return s.selected, onExceed(maxBytes, int64(start+len(raw)))
-			}
-			if errors.Is(err, bufio.ErrBufferFull) {
-				continue
-			}
-			readErr = err
-			break
 		}
 		if len(raw) == 0 && errors.Is(readErr, io.EOF) {
 			break
@@ -171,6 +190,7 @@ func (s *lineScan) unselected(line Line) error {
 	}
 	if s.opts.Before > 0 {
 		line.Kind = ContextLine
+		line.Text = bytes.Clone(line.Text)
 		s.pending = append(s.pending, line)
 		if len(s.pending) > s.opts.Before {
 			s.pending = s.pending[1:]
