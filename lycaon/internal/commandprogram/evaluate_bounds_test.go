@@ -153,7 +153,7 @@ func TestLoopIterationCeilingAtBoundaryAndOnePast(t *testing.T) {
 	}
 }
 
-func TestChildExecutionCeilingAtBoundaryAndOnePast(t *testing.T) {
+func TestChildExecutionCounterChargeAtBoundaryAndOnePast(t *testing.T) {
 	limits, err := catalogEvaluationLimits()
 	if err != nil {
 		t.Fatal(err)
