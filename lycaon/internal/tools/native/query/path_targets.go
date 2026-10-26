@@ -40,7 +40,7 @@ func queryPathTargets(argv commandprogram.BoundArgv, paths *projectpaths.Program
 		}
 		// Use the evaluator's file-versus-expression decision before projecting
 		// file operands. An expression never becomes a path approval target.
-		if _, explicit := argv.Last("--expression"); !explicit && len(operands) > 0 && operands[0] != "-" && !regularYqFile(context.Background(), paths, operands[0]) {
+		if _, explicit := argv.Last("--expression"); !explicit && len(operands) > 0 && operands[0] != "-" && !yqImplicitFile(context.Background(), paths, argv, operands[0]) {
 			operands = operands[1:]
 		}
 		for _, path := range operands {

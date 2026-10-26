@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/mikefarah/yq/v4/pkg/yqlib"
 
+	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools/native"
@@ -102,7 +104,7 @@ func newYqRun(inv *invocation) (*yqRun, error) {
 	}
 	if expression, ok := inv.value("--expression"); ok {
 		run.expression = expression
-	} else if len(operands) > 0 && operands[0] != "-" && !regularYqFile(inv.ctx, inv.paths, operands[0]) {
+	} else if len(operands) > 0 && operands[0] != "-" && !yqImplicitFile(inv.ctx, inv.paths, inv.argv, operands[0]) {
 		run.expression, operands = operands[0], operands[1:]
 	}
 	if inv.flag("-P") {
@@ -169,8 +171,21 @@ func yqOption(inv *invocation, key, fallback string) string {
 	return strings.TrimPrefix(value, "=")
 }
 
-// regularFile is yq's maybeFile: an operand naming an existing regular file
-// is a file, not the expression.
+// yqImplicitFile decides whether the first positional operand is a file.
+// Explicit path syntax is a file identity before path authority is checked;
+// otherwise yq's existing regular-file rule distinguishes a bare filename
+// from an expression. Null input takes the first operand as an expression.
+func yqImplicitFile(ctx context.Context, paths *projectpaths.ProgramPaths, argv commandprogram.BoundArgv, operand string) bool {
+	if _, nullInput := argv.Last("-n"); nullInput {
+		return false
+	}
+	if filepath.IsAbs(operand) || strings.HasPrefix(operand, "./") || strings.HasPrefix(operand, "../") || operand == "@scratch" || strings.HasPrefix(operand, "@scratch/") {
+		return true
+	}
+	return regularYqFile(ctx, paths, operand)
+}
+
+// regularYqFile is yq's maybeFile for an unmarked first operand.
 func regularYqFile(ctx context.Context, paths *projectpaths.ProgramPaths, operand string) bool {
 	bound, err := paths.Bind(ctx, operand, false)
 	if err != nil || bound.Null {

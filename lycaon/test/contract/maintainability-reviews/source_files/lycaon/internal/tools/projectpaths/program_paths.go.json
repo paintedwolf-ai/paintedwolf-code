@@ -11,6 +11,6 @@
     "lycaon/internal/tools/projectpaths/program_paths_test.go": "214a0edf92b38e1eff246c3ef701b002a7f676196a9d5600350922b0f90dd922",
     "lycaon/internal/tools/projectpaths/path_output_test.go": "d2e336465aa71b629c262fc995f0d7b96636d6d985502044ad2fcd5fcbd44483",
     "lycaon/internal/tools/projectpaths/program_interchange_test.go": "e4b421254633eeaec332579b023d2044d02fdd6b33e5fe22215a245974144538",
-    "lycaon/test/wiring/command_native_outside_approval_e2e_test.go": "d76615e08866a14392ae786152e964d0fba5d6b5f436ce274d4c9b13f303613d"
+    "lycaon/test/wiring/command_native_outside_approval_e2e_test.go": "9f6719e4e4c81702f076686f2959b78b8a13451508ba17bd92904ea61d208edf"
   }
 }

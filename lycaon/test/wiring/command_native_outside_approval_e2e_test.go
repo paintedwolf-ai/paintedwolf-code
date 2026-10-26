@@ -316,6 +316,16 @@ func TestYqExpressionAndFileApprovalCounts(t *testing.T) {
 			if got := input.outcome(t, "program-1"); got.Status != 0 || got.Stdout != "2\n" {
 				t.Fatalf("file result = %+v", got)
 			}
+			fileOnly := newCommandProgramSession(t, "yq '"+file+"'", "", posture)
+			fileCards := runCommandWithApprovals(t, fileOnly, "recommended")
+			plan := fileCards[0].ToolApproval.Plan
+			face := slices.IndexFunc(plan.Options, func(option wire.ApprovalOption) bool { return option.ID == plan.RecommendedOptionID })
+			if face < 0 || plan.Options[face].Rung != "chat" || !slices.Contains(plan.Reasons, wire.GateOutsideRootsRead) || len(plan.DirectoryScopes) == 0 || plan.DirectoryScopes[0] != outside {
+				t.Fatalf("file-only yq did not face a containing-folder Chat grant: %+v", plan)
+			}
+			if got := fileOnly.outcome(t, "program-1"); got.Status != 0 || got.Stdout != "x: 2\n" {
+				t.Fatalf("file-only result = %+v", got)
+			}
 		})
 	}
 }
