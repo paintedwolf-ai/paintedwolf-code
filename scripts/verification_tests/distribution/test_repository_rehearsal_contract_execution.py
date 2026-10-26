@@ -124,6 +124,8 @@ class RepositoryRehearsalContracts(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary, ExitStack() as patches:
             work = Path(temporary)
             observed = {"install": [], "publish": [], "remote": [], "setup": [], "upgrade": [], "tampered": False}
+            local_active, remote_active = {}, {}
+            local_withdrawn, remote_withdrawn = set(), set()
             serial = 0
 
             def fixture(directory, version):
@@ -143,21 +145,53 @@ class RepositoryRehearsalContracts(unittest.TestCase):
                 destination.mkdir()
                 source = manifest["packages"][0]
                 (destination / source["file"]).write_bytes(b"package")
-                return {**manifest, "family": family, "channel": "preview", "objects": ["object"]}
+                return {**manifest, "family": family, "channel": "preview", "objects": ["object"],
+                        "signer": str(_args[1])}
 
-            def publish(receipt, _directory, _store, _origin, _catalog, _previous, _rehearsal, operation="publish"):
+            def admit(receipt, destination, catalog, rehearsal=False):
+                selected = destination / receipt["packages"][0]["file"]
+                if (not rehearsal or str(catalog) != receipt["signer"] or not selected.is_file()
+                        or selected.read_bytes() != b"package"):
+                    raise ValueError("repository receipt did not match selected bytes and trust")
+
+            def publish(receipt, _directory, _store, _origin, catalog, previous, _rehearsal, operation="publish"):
                 nonlocal serial
+                family = receipt["family"]
+                if previous != local_active.get(family, {}).get("generation"):
+                    raise ValueError("stale repository activation")
+                if str(catalog) != receipt["signer"]:
+                    raise ValueError("wrong signing catalog")
+                if operation == "publish" and ((family, receipt["version"]) in local_withdrawn or
+                                               (family in local_active and local_active[family]["signer"] != receipt["signer"])):
+                    raise ValueError("withdrawn version or changed signer")
+                if operation == "withdraw":
+                    local_withdrawn.add((family, local_active[family]["version"]))
                 serial += 1
-                observed["publish"].append((receipt["family"], receipt["version"], operation))
+                observed["publish"].append((family, receipt["version"], operation))
+                local_active[family] = {"generation": str(serial), "version": receipt["version"],
+                                        "signer": receipt["signer"]}
                 return {"generation": str(serial)}
 
-            def publish_remote(receipt, _directory, _catalog, _prefix, _origin, _previous, _rehearsal,
+            def publish_remote(receipt, _directory, catalog, _prefix, _origin, previous, _rehearsal,
                                operation="publish", phase="activate"):
                 if observed["tampered"]:
                     raise subprocess.CalledProcessError(1, "put")
                 nonlocal serial
+                family = receipt["family"]
+                if previous != remote_active.get(family, {}).get("generation"):
+                    raise ValueError("stale remote activation")
+                if str(catalog) != receipt["signer"]:
+                    raise ValueError("wrong remote signing catalog")
+                if operation == "publish" and ((family, receipt["version"]) in remote_withdrawn or
+                                               (family in remote_active and remote_active[family]["signer"] != receipt["signer"])):
+                    raise ValueError("withdrawn remote version or changed signer")
+                if operation == "withdraw":
+                    remote_withdrawn.add((family, remote_active[family]["version"]))
                 serial += 1
-                observed["remote"].append((receipt["family"], receipt["version"], operation, phase))
+                observed["remote"].append((family, receipt["version"], operation, phase))
+                if phase == "activate":
+                    remote_active[family] = {"generation": str(serial), "version": receipt["version"],
+                                             "signer": receipt["signer"]}
                 return {"generation": str(serial)}
 
             def tamper(*_args):
@@ -173,7 +207,7 @@ class RepositoryRehearsalContracts(unittest.TestCase):
 
             for name, replacement in {
                     "fixtures": fixture, "ephemeral": catalog, "assemble": assemble,
-                    "admit": Mock(), "publish": publish, "publish_r2": publish_remote,
+                    "admit": admit, "publish": publish, "publish_r2": publish_remote,
                     "install_apt": install, "install_dnf": install, "warm_absence": Mock(),
                     "tamper_fixture_object": tamper, "delete_fixture_object": delete,
                     "rehearse_setup": lambda *args: observed["setup"].append(args),
