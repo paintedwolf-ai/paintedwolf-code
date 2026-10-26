@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import subprocess
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -46,15 +47,61 @@ class JobSettlementTests(unittest.TestCase):
                     patch.object(value,'_observers',return_value=(lambda pid:birth,lambda pid:None)):
                 self.assertIsNone(value.invocation({}, {'runs':[own]}))
 
-    def test_foreign_cached_source_refuses_before_observer_import(self):
-        value,_=self.fixture()
-        with tempfile.TemporaryDirectory() as temporary:
-            value.checkout=Path(temporary).resolve()
-            foreign=SimpleNamespace(__file__='/different/source/scripts/__init__.py')
-            with patch.dict(sys.modules,{'scripts':foreign}), \
-                    patch.object(module.importlib,'import_module') as imported:
-                with self.assertRaises(ValueError):value._observers()
-                imported.assert_not_called()
+    def test_actual_repository_namespace_and_repeated_validation_preserve_one_physical_location(self):
+        checkout=Path(__file__).resolve().parents[3]
+        script="""
+from pathlib import Path
+import sys
+checkout=Path(sys.argv[1]).resolve()
+namespace=checkout/'scripts'
+assert not (namespace/'__init__.py').exists()
+sys.path[:0]=[str(namespace),str(checkout),str(checkout)]
+from managed_job_settlement import JobSettlement
+import scripts
+assert scripts.__file__ is None
+value=JobSettlement(checkout=checkout,arguments=[],save=None,command=None)
+value.validate_checkout()
+value.validate_checkout()
+assert sys.path.count(str(namespace))==1
+assert sys.path.count(str(checkout))==1
+import scripts.artifact_paths
+value.validate_checkout()
+"""
+        result=subprocess.run([sys.executable,'-I','-B','-c',script,str(checkout)],
+                              capture_output=True,text=True,timeout=15)
+        self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+
+    def test_extra_namespace_or_regular_package_refuses_before_import_or_path_mutation(self):
+        value,_=self.fixture();value.checkout=Path(__file__).resolve().parents[3]
+        for regular in (False,True):
+            with self.subTest(regular=regular),tempfile.TemporaryDirectory() as temporary:
+                foreign=Path(temporary)/'scripts';foreign.mkdir()
+                if regular:(foreign/'__init__.py').write_text('raise AssertionError("must not import")')
+                original=[str(value.checkout),temporary]
+                state=SimpleNamespace(modules={},path=list(original))
+                with patch.object(module,'sys',state), \
+                        patch.object(module.importlib,'import_module') as imported:
+                    with self.assertRaises(ValueError):value.validate_checkout()
+                    self.assertEqual(state.path,original)
+                    imported.assert_not_called()
+
+    def test_cached_namespace_or_concrete_module_origin_cannot_escape_exact_checkout(self):
+        value,_=self.fixture();value.checkout=Path(__file__).resolve().parents[3]
+        namespace=value.checkout/'scripts'
+        native=module.PathFinder.find_spec('scripts',[str(value.checkout)])
+        candidates=[{'scripts':SimpleNamespace(__file__=None,__spec__=native,
+                                              __path__=[str(namespace),'/foreign/scripts'])},
+                    {'scripts':SimpleNamespace(__file__='/foreign/scripts/__init__.py')},
+                    {'scripts.artifact_paths':SimpleNamespace(__file__=str(namespace/'verification_health.py'))}]
+        for cached in candidates:
+            with self.subTest(cached=list(cached)):
+                original=[str(value.checkout)]
+                state=SimpleNamespace(modules=cached,path=list(original))
+                with patch.object(module,'sys',state), \
+                        patch.object(module.importlib,'import_module') as imported:
+                    with self.assertRaises(ValueError):value.validate_checkout()
+                    self.assertEqual(state.path,original)
+                    imported.assert_not_called()
 
     def test_result_cannot_settle_until_its_inherited_completion_lock_releases(self):
         value,_=self.fixture()
