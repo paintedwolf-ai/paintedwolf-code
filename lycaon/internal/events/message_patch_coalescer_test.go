@@ -30,6 +30,9 @@ func TestMessagePatchCoalescerCoalescesBursts(t *testing.T) {
 			})
 		}
 
+		time.Sleep(DebounceMessagePatch)
+		synctest.Wait()
+
 		select {
 		case envelope := <-ch:
 			if envelope.Topic != api.EventTopicMessage {
@@ -42,14 +45,17 @@ func TestMessagePatchCoalescerCoalescesBursts(t *testing.T) {
 			if ev.Message.Content != "partial" {
 				t.Fatalf("content = %q", ev.Message.Content)
 			}
-		case <-time.After(time.Second):
+		case <-t.Context().Done():
 			t.Fatal("timeout waiting for coalesced patch")
 		}
+
+		time.Sleep(2 * DebounceMessagePatch)
+		synctest.Wait()
 
 		select {
 		case envelope := <-ch:
 			t.Fatalf("unexpected extra event: %+v", envelope)
-		case <-time.After(2 * DebounceMessagePatch):
+		default:
 		}
 	})
 }
@@ -71,6 +77,8 @@ func TestMessagePatchCoalescerSurvivesCallerContextCancellation(t *testing.T) {
 		})
 		// Cancel before the debounce fires.
 		cancel()
+		time.Sleep(DebounceMessagePatch)
+		synctest.Wait()
 
 		select {
 		case envelope := <-ch:
@@ -84,7 +92,7 @@ func TestMessagePatchCoalescerSurvivesCallerContextCancellation(t *testing.T) {
 			if ev.Message.Content != "partial before stop" {
 				t.Fatalf("content = %q", ev.Message.Content)
 			}
-		case <-time.After(2 * DebounceMessagePatch):
+		case <-t.Context().Done():
 			t.Fatal("debounced patch was dropped after caller context cancellation")
 		}
 	})

@@ -504,6 +504,12 @@ func watchTerminal(master *os.File) *terminalWatch {
 	return w
 }
 
+func (w *terminalWatch) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.buf.Write(p)
+}
+
 func (w *terminalWatch) text() string {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -512,9 +518,8 @@ func (w *terminalWatch) text() string {
 
 func (w *terminalWatch) await(t *testing.T, marker string) {
 	t.Helper()
-	deadline := time.Now().Add(15 * time.Second)
 	for !strings.Contains(w.text(), marker) {
-		if time.Now().After(deadline) {
+		if t.Context().Err() != nil {
 			t.Fatalf("terminal never showed %q:\n%q", marker, w.text())
 		}
 		time.Sleep(20 * time.Millisecond)
@@ -649,8 +654,9 @@ func interruptedProbe() int {
 			select {
 			case <-stop:
 				return
-			case <-time.After(200 * time.Microsecond):
+			default:
 				_ = unix.Kill(os.Getpid(), unix.SIGURG)
+				time.Sleep(200 * time.Microsecond)
 			}
 		}
 	}()
@@ -782,7 +788,7 @@ func TestLinuxExitStatusAndSignalsAreMirrored(t *testing.T) {
 	go func() { done <- cmd.Wait() }()
 	select {
 	case <-done:
-	case <-time.After(10 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("forwarded SIGTERM did not end the command")
 	}
 	if ws := cmd.ProcessState.Sys().(syscall.WaitStatus); !ws.Signaled() || ws.Signal() != syscall.SIGTERM {

@@ -21,13 +21,13 @@ import (
 func commandCheckpoint(sessionID string) hitl.CheckpointRequest {
 	return hitl.CheckpointRequest{
 		SessionID: sessionID, Kind: api.CheckpointKindToolApproval, Type: hitl.DecisionTypeApprove,
-		Title:          "Approve command",
+		Title: "Approve command",
 		ProposedAction: &hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": "echo hi"},
-},
-},
+			Invocation: hitl.ActionInvocation{
+				Tool: "command",
+				Args: map[string]any{"command": "echo hi"},
+			},
+		},
 	}
 }
 
@@ -78,14 +78,13 @@ func TestStoppingRecordsThePersonAndExpiryRecordsNobody(t *testing.T) {
 	mgr.SetCheckpointExpiry(func() time.Duration { return 10 * time.Millisecond })
 	expiring, err := requestExplicitApprovalCheckpoint(t, ctx, mgr, commandCheckpoint(sessionID))
 	testutil.FailErr(t, "request expiring checkpoint", err)
-	deadline := time.Now().Add(2 * time.Second)
 	for {
 		final, err := mgr.PollCheckpoint(ctx, expiring.CheckpointID)
 		testutil.FailErr(t, "poll expiring checkpoint", err)
 		if final.Status == hitl.DecisionStatusExpired {
 			break
 		}
-		if time.Now().After(deadline) {
+		if t.Context().Err() != nil {
 			t.Fatal("checkpoint never expired")
 		}
 		time.Sleep(5 * time.Millisecond)
