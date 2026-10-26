@@ -19,10 +19,11 @@ policy before editing. Start unfamiliar work at [docs](docs/README.md) and
   This authorizes ordinary task commits, branch pushes, and PRs, not publication
   to sibling repos, tags, force pushes, releases, deployments, or merging.
 - **Keep PRs draft only while their own work is unfinished**, independently of
-  CI results. Mark a complete PR ready even while it waits on another PR, and
-  list each unlanded prerequisite as `Depends on #N` in its description. Return
-  to draft if more implementation is needed. Merge only on request: auto-merge
-  on a ready PR enqueues it; never bypass required checks.
+  CI results. Mark a complete PR ready even while it waits on another PR. Its
+  description must state the landing order of every unlanded prerequisite, for
+  example `Depends on #12 → #15`. Return to draft if more implementation is
+  needed. Merge only on request: auto-merge on a ready PR enqueues it; never
+  bypass required checks.
 - **Use root `./task` for repository dev and verification targets.** Use digest
   targets for test output; never truncate raw results with `tail` or `grep FAIL`.
 - **Ask first** for destructive Git/shared-state operations, discarding others'
