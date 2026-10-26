@@ -16,10 +16,11 @@ import (
 func TestAppliedSocketCreationFloor(t *testing.T) {
 	if os.Getenv("PW_TEST_APPLIED_SOCKET_FILTER") != "1" {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-		defer cancel()
 		cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestAppliedSocketCreationFloor$")
 		cmd.Env = append(os.Environ(), "PW_TEST_APPLIED_SOCKET_FILTER=1")
-		if output, err := cmd.CombinedOutput(); err != nil {
+		output, err := cmd.CombinedOutput()
+		cancel()
+		if err != nil {
 			t.Fatalf("applied filter subprocess: %v\n%s", err, output)
 		}
 		return
