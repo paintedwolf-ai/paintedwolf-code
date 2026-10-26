@@ -130,6 +130,11 @@ type supervisor struct {
 	setupDone bool
 	// refusals reports each refused call to the action's feed.
 	refusals *refusalLines
+	// performer creates, links, and moves names inside the sandbox; it
+	// arrives before the seccomp listener.
+	performer *performerClient
+	// targets keeps sandbox processes' handles across their calls.
+	targets *targetHandles
 }
 
 func newSupervisor(control *os.File, network Network, refusals io.Writer) *supervisor {
@@ -137,7 +142,7 @@ func newSupervisor(control *os.File, network Network, refusals io.Writer) *super
 	return &supervisor{
 		control: control, network: network, factory: factory,
 		relays: newDatagramRelays(network, factory), host: newHostSockets(),
-		refusals: &refusalLines{w: refusals},
+		refusals: &refusalLines{w: refusals}, targets: newTargetHandles(),
 	}
 }
 
@@ -194,6 +199,9 @@ func (s *supervisor) accept(h handoff, fd int) {
 		return
 	}
 	switch h.Kind {
+	case handoffPerformer:
+		s.performer = newPerformerClient(fd)
+		s.track(fdCloser(fd))
 	case handoffProxy:
 		ap, err := netip.ParseAddrPort(h.Addr)
 		if err != nil || !ap.Addr().IsLoopback() {
@@ -222,6 +230,11 @@ func (s *supervisor) accept(h handoff, fd int) {
 		s.run(tun, func() { serveGateway(tun, s.network, s.refusals) })
 	case handoffNotify:
 		s.setupDone = true
+		// A performer that cannot take the listener answers nothing; its
+		// calls are then refused as unexamined, never left waiting.
+		if s.performer != nil {
+			_ = s.performer.lend(fd, s.reportPerformed)
+		}
 		s.run(nil, func() { s.serveNotifications(fd) })
 		// The inner helper answers socket requests until it is told the
 		// launch relays are in place, and starts the target only then.

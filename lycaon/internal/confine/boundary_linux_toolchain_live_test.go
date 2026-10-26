@@ -3,11 +3,14 @@
 package confine_test
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -68,4 +71,54 @@ func TestLinuxToolchainsWorkInsideTheBoundary(t *testing.T) {
 			t.Fatalf("%s inside the boundary: %v\n%s", tc.name, err, out)
 		}
 	}
+}
+
+// benchCreates is how many files one measured command creates.
+const benchCreates = 20000
+
+// benchFileCreates times commands that each create benchCreates files and
+// reports the cost per create; prepare returns the command and its cleanup.
+func benchFileCreates(b *testing.B, prepare func(root string) (*exec.Cmd, func(), error)) {
+	for i := 0; i < b.N; i++ {
+		root := b.TempDir()
+		cmd, cleanup, err := prepare(root)
+		if err != nil {
+			b.Fatalf("prepare: %v", err)
+		}
+		cmd.Env = append(probeEnv("floors"), floorsScriptEnv+"=bulk "+root+" "+strconv.Itoa(benchCreates))
+		out, err := cmd.CombinedOutput()
+		cleanup()
+		if err != nil || !strings.Contains(string(out), ": ok") {
+			b.Fatalf("creates: %v\n%s", err, out)
+		}
+	}
+	b.ReportMetric(float64(b.Elapsed().Microseconds())/float64(b.N*benchCreates), "us/create")
+}
+
+// BenchmarkLinuxConfinedFileCreates measures a create-heavy command under the
+// boundary, where the supervisor performs each create; compare
+// BenchmarkLinuxUnconfinedFileCreates.
+func BenchmarkLinuxConfinedFileCreates(b *testing.B) {
+	if caps, _ := confine.LinuxCapabilities(); !caps.Available() {
+		b.Fatalf("linux confinement unavailable: %+v", caps)
+	}
+	self, err := os.Executable()
+	if err != nil {
+		b.Fatalf("test binary: %v", err)
+	}
+	benchFileCreates(b, func(root string) (*exec.Cmd, func(), error) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		cmd, cleanup, err := confine.Command(ctx, self, self, []string{probeTestFlag}, denyConfinement(root))
+		return cmd, func() { cleanup(); cancel() }, err
+	})
+}
+
+func BenchmarkLinuxUnconfinedFileCreates(b *testing.B) {
+	self, err := os.Executable()
+	if err != nil {
+		b.Fatalf("test binary: %v", err)
+	}
+	benchFileCreates(b, func(string) (*exec.Cmd, func(), error) {
+		return exec.Command(self, probeTestFlag), func() {}, nil
+	})
 }

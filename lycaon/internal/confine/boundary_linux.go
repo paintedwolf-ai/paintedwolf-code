@@ -301,6 +301,11 @@ func (pc *planCompiler) writeRule(rule fsRule) error {
 		if err != nil {
 			return err
 		}
+		if name := loaderName(m); name != "" && !rule.allow && coveredByList(pc.grants, m.subpath) {
+			// Files named at any depth are also held by name, so one created
+			// after launch cannot bypass the floor.
+			pc.fs.ReadOnlyNames = append(pc.fs.ReadOnlyNames, linuxsandbox.NamedFloor{Below: m.subpath, Name: name})
+		}
 		for _, path := range paths {
 			if rule.allow {
 				pc.allowWrite(path)
@@ -342,16 +347,28 @@ func (pc *planCompiler) denyWrite(path string, except []string) {
 	}
 }
 
+// loaderName is the basename a write filter protects at any depth below its
+// root, or empty for any other filter.
+func loaderName(m fsMatch) string {
+	if m.regex == "" || m.subpath == "" {
+		return ""
+	}
+	for _, location := range protectedpath.AgentPolicyLocations() {
+		if location.Name != "" && location.NameRegex() == m.regex {
+			return location.Name
+		}
+	}
+	return ""
+}
+
 // writeMatchPaths lists the paths one write filter names. A basename family
-// below a root is the one structural pattern the plan can express, by naming
-// the files present at launch.
+// below a root is the one structural pattern the plan can express: the files
+// present at launch are masked, and the plan holds the name for the rest.
 func writeMatchPaths(m fsMatch) ([]string, error) {
 	switch {
 	case m.regex != "" && m.subpath != "":
-		for _, location := range protectedpath.AgentPolicyLocations() {
-			if location.Name != "" && location.NameRegex() == m.regex {
-				return namedFilesBelow(m.subpath, location.Name), nil
-			}
+		if name := loaderName(m); name != "" {
+			return namedFilesBelow(m.subpath, name), nil
 		}
 		return nil, &linuxsandbox.Unsupported{Code: linuxsandbox.UnsupportedFilesystemRule, Detail: m.regex}
 	case m.regex != "":

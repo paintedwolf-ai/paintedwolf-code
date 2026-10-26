@@ -146,6 +146,8 @@ func runLinuxProbe(mode string) int {
 		_, err = unix.Socketpair(unix.AF_UNIX, unix.SOCK_DGRAM|unix.SOCK_CLOEXEC, 0)
 		fmt.Println("datagram socketpair:", errnoName(err))
 		return 0
+	case "floors":
+		return floorsProbe()
 	case "longcwd":
 		return longcwdProbe()
 	case "interrupted":

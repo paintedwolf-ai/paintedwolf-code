@@ -8,10 +8,11 @@ import (
 	"fmt"
 	"path/filepath"
 	"sort"
+	"strings"
 )
 
 // PlanVersion is the plan shape this helper reads.
-const PlanVersion = 1
+const PlanVersion = 2
 
 // Plan is the typed boundary the helper applies. The host renders it from the
 // same policy inputs as the macOS profile; the helper never widens it.
@@ -71,6 +72,9 @@ type Filesystem struct {
 	// Restored re-exposes real paths below a hidden or read-only ancestor. The
 	// Landlock rules decide what the process may do there.
 	Restored []string `json:"restored"`
+	// ReadOnlyNames are basenames protected at any depth below a directory,
+	// including entries created after launch.
+	ReadOnlyNames []NamedFloor `json:"read_only_names,omitempty"`
 }
 
 // Network modes, matching the confinement's network mode names.
@@ -196,6 +200,11 @@ func (p Plan) Validate() error {
 	default:
 		return &Unsupported{Code: UnsupportedNetworkMode, Detail: n.Mode}
 	}
+	for _, named := range p.Filesystem.ReadOnlyNames {
+		if !filepath.IsAbs(named.Below) || named.Name == "" || strings.ContainsRune(named.Name, '/') {
+			return &Unsupported{Code: UnsupportedFilesystemRule, Detail: "protected name " + named.Name + " below " + named.Below}
+		}
+	}
 	for _, path := range n.SocketPaths {
 		if !filepath.IsAbs(path) {
 			return &Unsupported{Code: UnsupportedNetworkGrant, Detail: "socket path " + path + " is not absolute"}
@@ -209,6 +218,10 @@ func (f Filesystem) sorted() Filesystem {
 	for _, list := range []*[]string{&f.WriteRoots, &f.WriteFiles, &f.ReadOnly, &f.Hidden, &f.Restored} {
 		*list = dedupeSorted(*list)
 	}
+	sort.Slice(f.ReadOnlyNames, func(i, j int) bool {
+		a, b := f.ReadOnlyNames[i], f.ReadOnlyNames[j]
+		return a.Below < b.Below || (a.Below == b.Below && a.Name < b.Name)
+	})
 	return f
 }
 
