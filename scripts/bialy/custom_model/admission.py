@@ -111,3 +111,14 @@ def derive(paths, inputs, out, key_path=None):
         for entry in payload["files"].values():
             approved.update(entry["rows"])
     return seal(paths, approved, sources, authority, out, key_path)
+
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--request", type=Path, required=True)
+    parser.add_argument("--key", type=Path, required=True)
+    parser.add_argument("--out", type=Path, required=True)
+    args = parser.parse_args()
+    request = json.loads(args.request.read_text())
+    seal(request["files"], request["approved"], request["sources"], request["authority"], args.out, args.key)

@@ -1,49 +1,50 @@
-"""Admission of native command programs on the command tool surface.
-
-Written ahead of the command rework against the P32 (#1083) and P33 (#1084)
-contracts: a command call keeps its real tool-call identity, its child
-operations carry persisted receipts with effect certainty (completed, failed,
-not started, unknown), and whole-program replay is never a positive after
-partial or unknown effects. The child-receipt table and column names below are
-the adaptation point once P10/P32 persist them; the rules do not change. On the
-legacy surface command receipts are admitted as any other tool's.
-"""
+"""Admission against persisted native program and child execution receipts."""
 import sqlite3
 
-COMMAND_TOOL = "command"
-CHILD_TABLE = "program_operations"
-EFFECTS = {"none", "completed", "failed", "not_started", "partial", "unknown"}
-UNSAFE_EFFECTS = {"partial", "unknown"}
+EFFECTS = {"none", "completed", "attempted", "unknown"}
+UNSAFE_EFFECTS = {"attempted", "unknown"}
+SETTLED = {"completed", "refused", "failed", "interrupted"}
 
 
-def _children(db, receipt_id):
+def program(db, receipt_id):
     try:
-        rows = db.execute("SELECT operation, status, effect FROM %s WHERE program_receipt_id=? ORDER BY rowid" % CHILD_TABLE,
-                          (receipt_id,)).fetchall()
+        value = db.execute("SELECT * FROM invocation_programs WHERE parent_receipt_id=?", (receipt_id,)).fetchone()
+        if value is None:
+            raise ValueError("command program receipt unavailable")
+        children = [dict(row) for row in db.execute(
+            "SELECT id, state, status_code, effect_certainty, settled_at FROM invocation_program_executions WHERE program_id=? ORDER BY ordinal", (value['id'],))]
     except sqlite3.OperationalError as exc:
         raise ValueError("command child receipts unavailable in this store") from exc
-    children = [dict(r) for r in rows]
-    if any(c["effect"] not in EFFECTS for c in children):
-        raise ValueError("command child receipt carries an unknown effect certainty")
-    return children
+    if any(child['effect_certainty'] not in EFFECTS for child in children):
+        raise ValueError("command child has an unknown effect certainty")
+    return dict(value), children
+
+
+def unsafe(value, children):
+    return (any(child['effect_certainty'] in UNSAFE_EFFECTS for child in children)
+            or value['progress_state'] == 'unknown'
+            or (value['state'] != 'completed' and any(child['effect_certainty'] == 'completed' for child in children)))
 
 
 def admit_program(db, receipt, call_args_digest):
-    """Admit one completed command invocation; return its child operation ids."""
-    if receipt["tool_name"] != COMMAND_TOOL:
+    if receipt['tool_name'] != 'command':
         return []
-    children = _children(db, receipt["id"])
+    value, children = program(db, receipt['id'])
     if not children:
-        raise ValueError("command program has no child operation receipts")
-    if any(c["status"] not in ("completed", "rejected", "error", "interrupted") for c in children):
-        raise ValueError("command child operation did not settle")
-    if any(c["effect"] in UNSAFE_EFFECTS for c in children):
-        raise ValueError("command program left partial or unknown effects")
-    # A program identical to an earlier one in the session whose effects were partial
-    # or unknown is a whole-program replay, which recovery guidance never offers.
-    earlier = db.execute("SELECT id FROM invocation_receipts WHERE session_id=? AND tool_name=? AND args_digest=? AND started_at<?",
-                         (receipt["session_id"], COMMAND_TOOL, call_args_digest, receipt["started_at"])).fetchall()
+        raise ValueError('command program has no child operation receipts')
+    if (not value['source_exact'] or not value['syntax_validated'] or not value['settled_at']
+            or any(child['state'] not in SETTLED or not child['settled_at'] for child in children)):
+        raise ValueError('command program or child operation did not settle')
+    if unsafe(value, children):
+        raise ValueError('command program left partial or unknown effects')
+    if value['state'] != 'completed' or value['status_code'] != 0:
+        raise ValueError('command program did not succeed')
+    if any(child['state'] != 'completed' or child['status_code'] != 0 for child in children):
+        raise ValueError('command child operation did not succeed')
+    earlier = db.execute('SELECT id FROM invocation_receipts WHERE session_id=? AND tool_name=? AND args_digest=? AND started_at<?',
+                         (receipt['session_id'], 'command', call_args_digest, receipt['started_at'])).fetchall()
     for prior in earlier:
-        if any(c["effect"] in UNSAFE_EFFECTS for c in _children(db, prior["id"])):
-            raise ValueError("whole-program replay after partial or unknown effects")
-    return [c["operation"] for c in children]
+        old, old_children = program(db, prior['id'])
+        if unsafe(old, old_children):
+            raise ValueError('whole-program replay after partial or unknown effects')
+    return [child['id'] for child in children]
