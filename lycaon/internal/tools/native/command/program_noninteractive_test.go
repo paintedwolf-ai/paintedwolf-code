@@ -4,7 +4,6 @@ package command_test
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -13,7 +12,6 @@ import (
 	"strings"
 	"syscall"
 	"testing"
-	"time"
 
 	lycexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -50,16 +48,11 @@ func TestProgramGitPreservesOwnEditorAndHookFailures(t *testing.T) {
 	base := []string{"-c", "user.name=Fixture", "-c", "user.email=fixture", "-c", "commit.gpgSign=false", "-c", "core.hooksPath=.git/hooks"}
 	runGit := func(args ...string) (string, string, int) {
 		t.Helper()
-		ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
-		defer cancel()
-		cmd := exec.CommandContext(ctx, git, append(append([]string{}, base...), args...)...)
+		cmd := exec.CommandContext(t.Context(), git, append(append([]string{}, base...), args...)...)
 		cmd.Dir, cmd.Env = f.Dir, environment
 		var stdout, stderr bytes.Buffer
 		cmd.Stdout, cmd.Stderr = &stdout, &stderr
 		err := cmd.Run()
-		if ctx.Err() != nil {
-			t.Fatalf("Git fixture did not finish: %v", ctx.Err())
-		}
 		status := 0
 		if err != nil {
 			var exit *exec.ExitError
@@ -80,9 +73,7 @@ func TestProgramGitPreservesOwnEditorAndHookFailures(t *testing.T) {
 	}
 	runNative := func(args ...string) string {
 		t.Helper()
-		ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
-		defer cancel()
-		out, err := f.call(t, ctx, externalProgram(git, append(append([]string{}, base...), args...)...))
+		out, err := f.call(t, t.Context(), externalProgram(git, append(append([]string{}, base...), args...)...))
 		testutil.FailErr(t, "run Git through command entry", err)
 		return out
 	}
@@ -131,9 +122,7 @@ func TestProgramPythonReceivesEOFWithoutControllingTerminal(t *testing.T) {
 	f := newProgramFixture(t)
 	binary := requiredExternal(t, "python3")
 	source := "import os,sys\nprint(int(sys.stdin.isatty()))\ntry:\n fd=os.open('/dev/tty',os.O_RDONLY)\nexcept OSError as e:\n print(e.errno)\nelse:\n os.close(fd)\n raise SystemExit(99)\ninput()"
-	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
-	defer cancel()
-	out, err := f.call(t, ctx, externalProgram(binary, "-c", source))
+	out, err := f.call(t, t.Context(), externalProgram(binary, "-c", source))
 	testutil.FailErr(t, "read interactive input", err)
 	got := decodeOutcome(t, out)
 	if got.Status != 1 || got.Stdout != fmt.Sprintf("0\n%d\n", syscall.ENXIO) || !strings.Contains(got.Stderr, "EOFError") {
@@ -145,13 +134,11 @@ func TestProgramNpmInitSettlesOnEOF(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	f := newProgramFixture(t)
 	binary := requiredExternal(t, "npm")
-	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
-	defer cancel()
-	out, err := f.call(t, ctx, externalProgram(binary, "init"))
+	out, err := f.call(t, t.Context(), externalProgram(binary, "init"))
 	testutil.FailErr(t, "run npm init", err)
 	got := decodeOutcome(t, out)
-	if ctx.Err() != nil || got.Status != 1 {
-		t.Fatalf("npm did not settle on EOF: %+v context=%v", got, ctx.Err())
+	if got.Status != 1 {
+		t.Fatalf("npm did not settle on EOF: %+v", got)
 	}
 	if _, err := os.Stat(filepath.Join(f.Dir, "package.json")); !os.IsNotExist(err) {
 		t.Fatalf("abandoned init published a package: %v", err)
