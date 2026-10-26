@@ -420,6 +420,11 @@ func TestProgramEntryLargeLoopsKeepTheSessionUsable(t *testing.T) {
 		if receipts != form.receiptBodies {
 			t.Fatalf("loop child receipts=%d, want %d for %q", receipts, form.receiptBodies, form.program)
 		}
+		var inline, spilled int
+		testutil.FailErr(t, "count durable loop input bodies", f.Database.QueryRowContext(t.Context(), `SELECT count(*) FILTER (WHERE inline_body IS NOT NULL),count(*) FILTER (WHERE inline_body IS NULL) FROM invocation_program_outputs WHERE program_id=? AND stream='arguments'`, result.ProgramID).Scan(&inline, &spilled))
+		if inline < receipts || spilled != 0 {
+			t.Fatalf("loop input retention: %d inline, %d blob-backed for %d children", inline, spilled, receipts)
+		}
 	}
 	out, err := f.call(t, t.Context(), "echo hi")
 	testutil.FailErr(t, "run later program", err)

@@ -1625,6 +1625,8 @@ CREATE TABLE IF NOT EXISTS invocation_program_outputs (
     preview TEXT NOT NULL DEFAULT '',
     preview_truncated INTEGER NOT NULL DEFAULT 0 CHECK (preview_truncated IN (0,1)),
     created_at TEXT NOT NULL,
+    inline_digest TEXT NOT NULL DEFAULT '' CHECK (length(inline_digest) IN (0,64)),
+    inline_body BLOB CHECK (inline_body IS NULL OR (stream='arguments' AND length(inline_body)<=16384 AND blob_json='{}' AND length(inline_digest)=64)),
     FOREIGN KEY (program_id, execution_id) REFERENCES invocation_program_executions(program_id, id) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_invocation_program_outputs_program ON invocation_program_outputs(program_id, id);

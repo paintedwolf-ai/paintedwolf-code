@@ -68,6 +68,8 @@ func (p ProgramInputCapture) RetainReviewedProgramInputs(ctx context.Context, in
 	}
 	return p.retain(ctx, in.Identity.ExecutionID, review, func(reference string, spill *tooloutput.StreamSpill, redacted bool) (*tooloutput.RetainedStreamBody, error) {
 		return p.Outputs.recorder.AttachProgramOutput(ctx, p.ProgramID, RetainedOutput{ExecutionID: in.Identity.ExecutionID, Stream: "arguments", Reference: reference, Complete: true, Redacted: redacted}, spill, p.Outputs.resources)
+	}, func(reference string, body []byte, redacted bool) error {
+		return p.Outputs.attachInlineInput(ctx, p.ProgramID, in.Identity.ExecutionID, in.Identity.ExecutionID, reference, body, redacted)
 	})
 }
 
@@ -80,10 +82,12 @@ func (p ProgramInputCapture) RetainReviewedProgressInputs(ctx context.Context, i
 	}
 	return p.retain(ctx, in.ExecutionID, review, func(reference string, spill *tooloutput.StreamSpill, redacted bool) (*tooloutput.RetainedStreamBody, error) {
 		return p.Outputs.recorder.attachProgressInput(ctx, in, reference, spill, redacted)
+	}, func(reference string, body []byte, redacted bool) error {
+		return p.Outputs.attachInlineInput(ctx, p.ProgramID, "", in.ExecutionID, reference, body, redacted)
 	})
 }
 
-func (p ProgramInputCapture) retain(ctx context.Context, execution string, review toolcontract.ReviewedOperationInputs, attach func(string, *tooloutput.StreamSpill, bool) (*tooloutput.RetainedStreamBody, error)) (string, error) {
+func (p ProgramInputCapture) retain(ctx context.Context, execution string, review toolcontract.ReviewedOperationInputs, attach func(string, *tooloutput.StreamSpill, bool) (*tooloutput.RetainedStreamBody, error), inline func(string, []byte, bool) error) (string, error) {
 	if p.Outputs == nil || p.Outputs.resources == nil || p.State == nil || p.Scope.SessionID != p.Outputs.sessionID || ctx == nil {
 		return "", fmt.Errorf("reviewed input capture requires invocation output lifetime")
 	}
@@ -109,10 +113,17 @@ func (p ProgramInputCapture) retain(ctx context.Context, execution string, revie
 		return "", err
 	}
 	reference := "output:operation-input:" + uuid.NewString()
+	canonical := screened.CanonicalArguments()
+	if inline != nil && len(canonical) <= maxInlineProgramInput {
+		if err := inline(reference, []byte(canonical), metadata.RedactedCount > 0); err != nil {
+			return "", err
+		}
+		return reference, nil
+	}
 	// This is the bound for one screened input body, independent of the
 	// cumulative receipt trace bound for the whole program.
 	const maximumInputBodyBytes = 8 << 20
-	err = p.Outputs.retainInput(ctx, execution, reference, screened.CanonicalArguments(), maximumInputBodyBytes, metadata.RedactedCount > 0, attach)
+	err = p.Outputs.retainInput(ctx, execution, reference, canonical, maximumInputBodyBytes, metadata.RedactedCount > 0, attach)
 	if err != nil {
 		return "", err
 	}
@@ -173,5 +184,8 @@ func (p ProgramInputCapture) PrepareChild(ctx context.Context, in toolcontract.P
 	return p.retain(ctx, invocation.Identity.ExecutionID, in.ExpandedInputs, func(reference string, spill *tooloutput.StreamSpill, redacted bool) (*tooloutput.RetainedStreamBody, error) {
 		in.ArgumentsReference = reference
 		return p.Outputs.recorder.prepareChildBody(ctx, in, spill, redacted)
+	}, func(reference string, body []byte, redacted bool) error {
+		in.ArgumentsReference = reference
+		return p.Outputs.prepareChildInline(ctx, in, body, redacted)
 	})
 }
