@@ -252,7 +252,10 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	stdout, stderr := r.newProgramStreams(ctx, run)
 	releaseOutputs := release
 	release = func() { _ = stdout.Close(); _ = stderr.Close(); releaseOutputs() }
-	run.baseEnv = programEnvironment(tc)
+	run.baseEnv, err = programEnvironment(tc)
+	if err != nil {
+		return "", err
+	}
 	ports := commandprogram.EvaluationPorts{
 		Invocation: run.root, Dispatch: dispatcher, Refusals: dispatcher.reportRefusal, Binder: commandprogram.CatalogBinder{}, Files: projectpaths.GlobFiles{Paths: paths},
 		Publication: publication, Input: owners.Input, Sources: owners.Sources,
