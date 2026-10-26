@@ -210,6 +210,7 @@ func (d *ProgramDispatcher) Redirections() (commandprogram.InputRedirection, com
 // NativeBindings reports whether a program binds a name to a native owner.
 type NativeBindings interface {
 	NativeBound(name string) bool
+	BaseEnvironment() []string
 }
 
 // NativeBound reports whether dispatch reaches a native owner for name:
@@ -225,13 +226,17 @@ func (d *ProgramDispatcher) NativeBound(name string) bool {
 	return d.natives[spec.Name].Prepare != nil || pathCommands[spec.Name] || d.builtins[spec.Name] != nil
 }
 
+func (d *ProgramDispatcher) BaseEnvironment() []string {
+	return d.run.baseEnv
+}
+
 // GapLaunchable reports whether a native name may run as its installed
 // program: a request that names one, found by the launch's own lookup.
 func (d *ProgramDispatcher) GapLaunchable(request commandprogram.OperationRequest) bool {
 	if len(request.Argv) == 0 || request.Argv[0].Value == "external" {
 		return false
 	}
-	return (ExternalStages{ToolContext: d.run.tc, Dir: d.paths.Cwd().Abs}).Installed(request.Argv[0].Value, request.Environment)
+	return (ExternalStages{ToolContext: d.run.tc, Dir: d.paths.Cwd().Abs, BaseEnvironment: d.run.baseEnv}).Installed(request.Argv[0].Value, request.Environment)
 }
 
 // unsupportedForm is the native gap a typed unsupported-form refusal names;
