@@ -367,8 +367,8 @@ func writePerfTarHeaders(tb testing.TB, path string, count int) {
 // TestCommandProgramResourceCeilings exercises the declared resource limits
 // through the real command entry, verifying that memory, spill files, process
 // count and goroutines stay bounded, limit refusals fire at 1 past each bound,
-// and cleanup leaves nothing behind. Wall-clock elapsed time is logged for
-// inspection here; time gates are enforced in the perf:bench lane.
+// and cleanup leaves nothing behind. Elapsed time is logged for manual
+// inspection; automated gates use deterministic resource counts.
 func TestCommandProgramResourceCeilings(t *testing.T) {
 	f := newPerfFixture(t, nil)
 	writeLines(t, filepath.Join(f.Dir, "small.txt"), 100, func(i int) string { return fmt.Sprintf("line %d", i) })
