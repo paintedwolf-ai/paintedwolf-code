@@ -16,7 +16,7 @@ import (
 const maxCachedTargets = 256
 
 // processHandles retains one process's pidfd and address space across notified
-// calls. The pidfd prevents PID reuse; exec empties the retained address space,
+// calls. The pidfd binds process identity; exec empties the retained address space,
 // so an empty memory read reopens it.
 type processHandles struct {
 	pidfd int
