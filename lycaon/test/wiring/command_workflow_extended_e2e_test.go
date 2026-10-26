@@ -5,6 +5,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testdbseed"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestWorkflowScratchLoopPublishesOnlyFinalResult(t *testing.T) {
@@ -30,6 +33,37 @@ func TestWorkflowScratchLoopPublishesOnlyFinalResult(t *testing.T) {
 	execs := f.executions(t, progs[0].id)
 	if !hasExec(execs, "sort", "completed") || !hasExec(execs, "wc", "completed") {
 		t.Fatalf("executions = %+v", execs)
+	}
+}
+
+func TestWorkflowMoveAcrossAttachedRoots(t *testing.T) {
+	f := newCommandWorkflowFixture(t, []workflowTurn{{
+		callID:  "move-roots",
+		command: `printf 'from project\n' > source.txt; mv source.txt @assets/arrived.txt; cat @assets/arrived.txt`,
+	}})
+	assets := t.TempDir()
+	rootID := testdbseed.InsertProjectRoot(t, f.h.DB, testdbseed.DefaultProjectID, assets)
+	_, err := f.h.DB.ExecContext(t.Context(), `UPDATE project_roots SET label = 'assets' WHERE id = ?`, rootID)
+	testutil.FailErr(t, "label assets root", err)
+	f.run(t)
+	out := f.outcome(t, "move-roots")
+	if out.State != "completed" || out.Status != 0 || out.NativeGaps != 0 || out.CompletedEffects != 2 || out.Stdout != "from project\n" {
+		t.Fatalf("cross-root move outcome = %+v", out)
+	}
+	if _, err := os.Stat(filepath.Join(f.dir, "source.txt")); !os.IsNotExist(err) {
+		t.Fatalf("source still present: %v", err)
+	}
+	body, err := os.ReadFile(filepath.Join(assets, "arrived.txt"))
+	testutil.FailErr(t, "read moved file", err)
+	if string(body) != "from project\n" {
+		t.Fatalf("moved bytes = %q", body)
+	}
+	progs := f.programs(t)
+	if len(progs) != 1 || progs[0].status != 0 {
+		t.Fatalf("programs = %+v", progs)
+	}
+	if !hasExec(f.executions(t, progs[0].id), "mv", "completed") {
+		t.Fatalf("move receipt = %+v", f.executions(t, progs[0].id))
 	}
 }
 
