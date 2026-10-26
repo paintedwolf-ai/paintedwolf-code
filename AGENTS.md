@@ -34,20 +34,19 @@ policy before editing. Start unfamiliar work at [docs](docs/README.md) and
 - **Report the crux, changes, verification, and unresolved work.** Surface findings
   that contradict the request before changing direction. Report verification
   results once available; do not narrate queued or running checks.
-- **Keep PRs separate; automatic queue batching is the exception.** Do not
-  manually assemble omnibus PRs. The hosted queue coordinator may batch already
-  admitted waiting PRs in queue order, preserving active groups and explicit
+- **Keep PRs separate; automatic queue batching is the exception.** Never
+  combine PRs: do not assemble omnibus PRs, merge a PR into any branch other
+  than `main`, or bring an open PR's commits into another PR's branch. Stacked
+  PRs, based on another PR's branch for review, are allowed; after the base PR
+  lands, retarget the dependent PR to `main` and rebase it onto the landed
+  commit before it enters the queue. The hosted queue coordinator may batch
+  already admitted waiting PRs in queue order, preserving active groups and explicit
   campaign holds. Combined admission and merge-group checks remain required.
   The `no-combine` label excludes a PR from batches while preserving its normal
   tests and merge eligibility. Source head changes and draft decisions
   invalidate a batch; failed batches fall back to individual checks. Keep the
   originals open until the exact recorded heads land. A human draft decision
   remains a handoff; never undo it automatically.
-- **Land each PR on `main` by itself.** A PR may be based on another PR's
-  branch for review, but never merge a PR into any branch other than `main`,
-  and never fold an open PR's commits into another PR's branch. After the base
-  PR lands, retarget the dependent PR to `main` and rebase it onto the landed
-  commit before it enters the queue.
 - **Cancel superseded background Qualification when its source is obsolete.**
   The hosted supersession controller may cancel queued or running background
   main-push Qualification after validating source ancestry and rechecking run
