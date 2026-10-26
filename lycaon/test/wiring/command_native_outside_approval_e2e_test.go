@@ -292,6 +292,95 @@ func TestSedScriptFileProjectsOutsideEffects(t *testing.T) {
 	}
 }
 
+func TestSedOutsideScriptFileRequiresReadApproval(t *testing.T) {
+	for _, posture := range []gate.Posture{gate.PostureLight, gate.PostureBalanced, gate.PostureStrict} {
+		t.Run(string(posture), func(t *testing.T) {
+			outside := outsideCommandFolder(t)
+			script := filepath.Join(outside, "replace.sed")
+			testutil.FailErr(t, "seed outside sed script", os.WriteFile(script, []byte("s/first/changed/\n"), 0o600))
+			s := newCommandProgramSession(t, "sed -f '"+script+"' notes.txt", "", posture)
+			cards := runCommandWithApprovals(t, s, "recommended")
+			if len(cards) != 1 || !slices.Contains(cards[0].ToolApproval.Plan.Reasons, wire.GateOutsideRootsRead) {
+				t.Fatalf("outside sed script approval = %+v", cards)
+			}
+			if got := s.outcome(t, "program-1"); got.Status != 0 || got.Stdout != "changed note\nsecond note\n" {
+				t.Fatalf("outside sed script result = %+v", got)
+			}
+		})
+	}
+}
+
+func TestSedOutsideScriptDisclosesOutsideEffects(t *testing.T) {
+	for _, posture := range []gate.Posture{gate.PostureLight, gate.PostureBalanced, gate.PostureStrict} {
+		t.Run(string(posture), func(t *testing.T) {
+			sourceFolder := outsideCommandFolder(t)
+			effectFolder := outsideCommandFolder(t)
+			input := filepath.Join(effectFolder, "input.txt")
+			testutil.FailErr(t, "seed sed input", os.WriteFile(input, []byte("outside sed\n"), 0o600))
+			script := filepath.Join(sourceFolder, "read.sed")
+			testutil.FailErr(t, "seed outside sed script", os.WriteFile(script, []byte("1r "+input+"\n"), 0o600))
+			s := newCommandProgramSession(t, "sed -f '"+script+"' notes.txt", "", posture)
+			cards := runCommandWithApprovals(t, s, "recommended", "recommended")
+			for i, card := range cards {
+				if !slices.Contains(card.ToolApproval.Plan.Reasons, wire.GateOutsideRootsRead) {
+					t.Fatalf("sed read card %d = %+v", i, card.ToolApproval.Plan)
+				}
+			}
+			if got := s.outcome(t, "program-1"); got.Status != 0 || got.Stdout != "first note\noutside sed\nsecond note\n" {
+				t.Fatalf("outside sed read result = %+v", got)
+			}
+		})
+	}
+}
+
+func TestSedOutsideScriptWriteReceiptAfterStagedApproval(t *testing.T) {
+	for _, posture := range []gate.Posture{gate.PostureLight, gate.PostureBalanced, gate.PostureStrict} {
+		t.Run(string(posture), func(t *testing.T) {
+			sourceFolder := outsideCommandFolder(t)
+			writeFolder := outsideCommandFolder(t)
+			written := filepath.Join(writeFolder, "written.txt")
+			script := filepath.Join(sourceFolder, "write.sed")
+			testutil.FailErr(t, "seed outside sed script", os.WriteFile(script, []byte("w "+written+"\n"), 0o600))
+			s := newCommandProgramSession(t, "sed -f '"+script+"' notes.txt", "", posture)
+			cards := runCommandWithApprovals(t, s, "recommended", "recommended")
+			if !slices.Contains(cards[0].ToolApproval.Plan.Reasons, wire.GateOutsideRootsRead) || !slices.Contains(cards[1].ToolApproval.Plan.Reasons, wire.GateOutsideRootsWrite) {
+				t.Fatalf("staged sed cards = %+v", cards)
+			}
+			if got := s.outcome(t, "program-1"); got.Status != 0 {
+				t.Fatalf("staged sed write result = %+v", got)
+			}
+			data, err := os.ReadFile(written)
+			testutil.FailErr(t, "read staged sed output", err)
+			if string(data) != "first note\nsecond note\n" {
+				t.Fatalf("staged sed write = %q", data)
+			}
+			var operation, command, mode, certainty string
+			var started, pins int
+			err = s.h.DB.QueryRowContext(t.Context(), `SELECT e.operation_id,e.native_command,e.effect_mode,e.owner_started,e.effect_certainty,
+				(SELECT count(*) FROM invocation_program_revision_pins pin WHERE pin.execution_id=e.id AND pin.path=?)
+				FROM invocation_program_executions e JOIN invocation_programs p ON p.id=e.program_id
+				JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE r.session_id=? AND e.operation_id='sed'`, script, s.session).Scan(&operation, &command, &mode, &started, &certainty, &pins)
+			testutil.FailErr(t, "read staged sed receipt", err)
+			if operation != "sed" || command != "sed" || mode != "w-command" || started != 1 || certainty != "completed" || pins != 1 {
+				t.Fatalf("staged sed receipt = %q %q %q started=%d certainty=%q pins=%d", operation, command, mode, started, certainty, pins)
+			}
+			declined := newCommandProgramSession(t, "sed -f '"+script+"' notes.txt", "", posture)
+			runCommandWithApprovals(t, declined, "recommended", "decline")
+			if got := declined.outcome(t, "program-1"); got.CompletedEffects != 0 || got.Status == 0 {
+				t.Fatalf("declined staged sed effect = %+v", got)
+			}
+			err = declined.h.DB.QueryRowContext(t.Context(), `SELECT e.owner_started,e.effect_certainty,
+				(SELECT count(*) FROM invocation_program_revision_pins pin WHERE pin.execution_id=e.id AND pin.path=?)
+				FROM invocation_program_executions e JOIN invocation_programs p ON p.id=e.program_id
+				JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE r.session_id=? AND e.operation_id='sed'`, script, declined.session).Scan(&started, &certainty, &pins)
+			testutil.FailErr(t, "read declined staged sed receipt", err)
+			if started != 0 || certainty == "completed" || pins != 1 {
+				t.Fatalf("declined staged sed receipt: started=%d certainty=%q pins=%d", started, certainty, pins)
+			}
+		})
+	}
+}
+
 func TestYqExpressionAndFileApprovalCounts(t *testing.T) {
 	for _, posture := range []gate.Posture{gate.PostureLight, gate.PostureBalanced, gate.PostureStrict} {
 		t.Run(string(posture), func(t *testing.T) {

@@ -153,7 +153,8 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 					return command.NativePrepared{}, err
 				}
 				return command.NativePrepared{
-					Mode: prepared.Mode, Review: prepared.Review, Release: prepared.Close,
+					Mode: prepared.Mode, Review: prepared.Review, Release: prepared.Close, DeferredSource: prepared.DeferredSource,
+					RecordSourceRead: prepared.RecordSourceRead,
 					Invoke: func(ctx context.Context, admitted tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 						currentTC = admitted
 						publication.Tools = admitted
