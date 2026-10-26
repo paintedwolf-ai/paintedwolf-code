@@ -37,18 +37,14 @@ import (
 
 // Options select the fixture's session, process registry and native owners.
 type Options struct {
-	Session    string
-	Background *bgprocess.Registry
-	Natives    func(dir string) map[string]command.NativeOperation
-	// Context adjusts each call's tool context, for example its roots,
-	// scratch folder or root history.
-	Context func(dir string, tc *tools.ToolContext)
-	// Owners replaces the Natives-only owner set, for fixtures that compose
-	// real owners with the fixture's recorder and boundary.
-	Owners func(OwnerPorts) func(tools.ToolContext, *projectpaths.ProgramPaths, *toolcontract.ProgramMemory, tooloutput.SpillAdmission) (command.ProgramOwners, error)
-	// Tools are structured tool identities the owners name; each registers
-	// as an unexercised stub so operation definitions resolve.
-	Tools []string
+	Session     string
+	Background  *bgprocess.Registry
+	Natives     func(dir string) map[string]command.NativeOperation
+	Input       func(dir string) commandprogram.InputRedirection
+	Publication func(dir string) commandprogram.OutputPublication
+	Context     func(dir string, tc *tools.ToolContext)
+	Owners      func(OwnerPorts) func(tools.ToolContext, *projectpaths.ProgramPaths, *toolcontract.ProgramMemory, tooloutput.SpillAdmission) (command.ProgramOwners, error)
+	Tools       []string
 }
 
 // OwnerPorts are the fixture's shared dependencies for composed owners.
@@ -145,6 +141,14 @@ func New(t testing.TB, options Options) *Fixture {
 	if options.Natives != nil {
 		natives = options.Natives(dir)
 	}
+	var input commandprogram.InputRedirection
+	if options.Input != nil {
+		input = options.Input(dir)
+	}
+	var publication commandprogram.OutputPublication
+	if options.Publication != nil {
+		publication = options.Publication(dir)
+	}
 	scratchDir := fspath.CanonicalPath(t.TempDir())
 	f := &Fixture{Recorder: recorder, Database: database, Session: session, Dir: dir, ScratchDir: scratchDir, OutputDir: t.TempDir(), Background: background, Boundary: boundary, progress: owner}
 	runtime := &command.ProgramRuntime{
@@ -153,7 +157,7 @@ func New(t testing.TB, options Options) *Fixture {
 		Progress: progressFacts{owner}, Supervisor: &command.ProgramSupervisor{Interrupter: recorder, Background: background}, Evaluate: commandprogram.Evaluate,
 		Sessions: sessions{fixture: f},
 		Owners: func(tools.ToolContext, *projectpaths.ProgramPaths, *toolcontract.ProgramMemory, tooloutput.SpillAdmission) (command.ProgramOwners, error) {
-			return command.ProgramOwners{Natives: natives}, nil
+			return command.ProgramOwners{Natives: natives, Input: input, Publication: func(tools.CommandOutputAdmission) commandprogram.OutputPublication { return publication }}, nil
 		},
 	}
 	if options.Owners != nil {
