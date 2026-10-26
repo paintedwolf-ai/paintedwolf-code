@@ -78,8 +78,10 @@ func TestTargetHandlesFollowAProcessThroughExecAndExit(t *testing.T) {
 		go func() {
 			defer readers.Done()
 			buf := make([]byte, 16)
-			if n, err := first.readAt(pid, buf, int64(start)); err != nil || n != len(buf) {
-				errors <- fmt.Errorf("read the new address space through a shared handle: %d %v", n, err)
+			if n, err := first.readAt(pid, buf, int64(start)); err != nil {
+				errors <- fmt.Errorf("read the new address space through a shared handle: %w", err)
+			} else if n != len(buf) {
+				errors <- fmt.Errorf("short read through a shared handle: %d bytes", n)
 			}
 		}()
 	}
