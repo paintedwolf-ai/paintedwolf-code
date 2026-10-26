@@ -66,6 +66,13 @@ assert sys.path.count(str(namespace))==1
 assert sys.path.count(str(checkout))==1
 import scripts.artifact_paths
 value.validate_checkout()
+from scripts.linux_release.installed_campaign import command
+import scripts.harness
+assert callable(command)
+assert scripts.harness.__file__ is None
+assert list(scripts.harness.__path__)==[str(namespace/'harness')]
+value.validate_checkout()
+value.validate_checkout()
 """
         result=subprocess.run([sys.executable,'-I','-B','-c',script,str(checkout)],
                               capture_output=True,text=True,timeout=15)
@@ -89,9 +96,12 @@ value.validate_checkout()
         value,_=self.fixture();value.checkout=Path(__file__).resolve().parents[3]
         namespace=value.checkout/'scripts'
         native=module.PathFinder.find_spec('scripts',[str(value.checkout)])
+        nested=module.PathFinder.find_spec('scripts.harness',[str(namespace)])
         candidates=[{'scripts':SimpleNamespace(__file__=None,__spec__=native,
                                               __path__=[str(namespace),'/foreign/scripts'])},
                     {'scripts':SimpleNamespace(__file__='/foreign/scripts/__init__.py')},
+                    {'scripts.harness':SimpleNamespace(__file__=None,__spec__=nested,
+                                              __path__=[str(namespace/'harness'),'/foreign/scripts/harness'])},
                     {'scripts.artifact_paths':SimpleNamespace(__file__=str(namespace/'verification_health.py'))}]
         for cached in candidates:
             with self.subTest(cached=list(cached)):
