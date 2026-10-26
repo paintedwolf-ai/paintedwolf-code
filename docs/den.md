@@ -57,6 +57,7 @@ implementation owns the workflow on every platform. Verification has three tiers
 |--------------|--------------------------------|--------------|-------|
 | Chats, workflows, approvals, provider setup, and MCP | Host `internal/session`, `internal/workflow`, `internal/llm`, `internal/mcp`; Den stores and feature surfaces render in WebKitGTK; engine-keyed crash avoidance in `platform/desktop/webkit-atspi-workaround.ts` ([Accessibility](accessibility.md#webkitgtk-at-spi-workaround)) | CI: `test:full`, `den:test`, `den:webkit:atspi`. Installed: reconnect, cancellation, tool refusal, and provider authentication journeys | [#456](https://github.com/paintedwolf-ai/paintedwolf-code/issues/456) |
 | Files, editor, search, review, and watching | Host `internal/editordoc`, `internal/projectsource`, `internal/search`, `internal/repochange`; Den `files/`; inotify watching reports `watch_limit_reached` on the wire, but Den does not show it yet | CI: `test:full`. Installed: outside edits, atomic save, rename, watch overflow, permissions, recovery | [#452](https://github.com/paintedwolf-ai/paintedwolf-code/issues/452) |
+| Local decision model (Bialy) | Host `internal/decide/bialy`; the engine runs on a hardware Vulkan GPU on Linux, as on MLX on macOS, never on the processor or a software rasterizer. Without one it reports `no_gpu`, the app says a Vulkan graphics card is needed, and decisions fall back to their lexical and default paths ([Decision engine](decision-engine.md#where-it-runs)) | CI: `decide:test`, `test:full`. Installed: GPU host meets the 1000 ms reference budget on Vulkan; a GPU-less guest shows the `no_gpu` notice | [#455](https://github.com/paintedwolf-ai/paintedwolf-code/issues/455) |
 | Command, terminal, background work, and authenticated Git | Host `internal/exec`, `internal/userpath`, `internal/gitexec`, `internal/gitcredential`; the desktop launch resolves the account's login shell; SSH-agent discovery; bundled static Git with `GIT_SSL_CAINFO` and a per-host proxy ([Git](git.md)) | CI: `test:full`. Installed: desktop-launched PATH, SSH and signing, HTTPS and LFS, on KDE and arm64 | [#47](https://github.com/paintedwolf-ai/paintedwolf-code/issues/47), [#733](https://github.com/paintedwolf-ai/paintedwolf-code/issues/733) |
 | Stored credentials survive restart and recovery | Host `internal/credentialstore`; on packaged installs the `pw-vault-identity` system service holds the identity, with the app-password identity as the fallback ([Secrets § Credential vault](secrets.md#credential-vault)); launcher verification and non-dumpable processes protect it | CI: `test:full` (`vaultidentity`, `launchverify`, custody). Installed: fresh, existing, and damaged vaults; wrong password; backup and restore; moves both ways; refused launchers; ptrace denial | [#448](https://github.com/paintedwolf-ai/paintedwolf-code/issues/448), [#756](https://github.com/paintedwolf-ai/paintedwolf-code/issues/756), [#754](https://github.com/paintedwolf-ai/paintedwolf-code/issues/754) |
 | Confirm the person before reveal or unlock | Den `src-tauri/src/presence/linux.rs`: polkit `CheckAuthorization` on `dev.paintedwolf.code.confirm-presence` (`linux_user_presence`); unavailable system authentication refuses reveal and unlock ([Secrets § Unlocking a chat](secrets.md#unlocking-a-chat-and-revealing-a-value)) | CI: `den:test:rust`, `test:full`. Installed: a typed-password reveal and unlock, the KDE agent, cancel, expiry, wrong window, and lock during the prompt | [#755](https://github.com/paintedwolf-ai/paintedwolf-code/issues/755) |
@@ -89,6 +90,15 @@ representative environments. Its expansion in
 each required row a stable identity, scenarios, implementing issues and required
 execution tier. Qualification and release admission must consume these same rows;
 they must not maintain independent workflow inventories.
+
+Conversation semantics, including provider setup, tool receipts and durable reply
+recovery, are qualified once at 100% scaling for each required environment,
+installation, architecture and release. Their host state does not vary with
+monitor scale. Fractional-scale and mixed-monitor requirements remain with the
+scale-sensitive capabilities. Input and accessibility checks must include provider
+and approval dialogs: visible controls, keyboard focus, text overflow and usable
+actions at the declared scales. Existing campaign evidence retains its captured
+requirements; changing this catalog does not promote an older partial campaign.
 
 The scope covers Linux amd64 and arm64 on Ubuntu 24.04 and later, Debian 13 and
 later, maintained Fedora releases satisfying the declared floors, RHEL 10

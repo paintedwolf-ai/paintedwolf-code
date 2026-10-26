@@ -137,6 +137,7 @@ jobs:
           containers: ${{ matrix.containers && (inputs.profile == 'fast' || inputs.profile == 'integration') }}
           browser: ${{ matrix.browser }}
           repository-tools: ${{ matrix.repository_tools }}
+          nix: ${{ matrix.nix }}
 
       # Shell lanes stage the engine, including the decision engine heads.
       - uses: ./.github/actions/setup-bialy

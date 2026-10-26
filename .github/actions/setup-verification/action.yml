@@ -23,6 +23,8 @@ inputs:
     default: 'false'
   repository-tools:
     description: Install the native apt, dnf and pacman tools the distribution fixture tests drive
+  nix:
+    description: Provision the pinned Nix toolchain and locked flake inputs before an offline Nix lane
     default: 'false'
   save-caches:
     description: Save the toolchain and build caches (main's warm job only); every other run restores without saving
@@ -223,6 +225,11 @@ runs:
       if: inputs.browser == 'true'
       shell: bash
       run: ./task test:confine:linux -- --prepare
+
+    - name: Provision pinned Nix and locked inputs
+      if: inputs.nix == 'true'
+      shell: bash
+      run: ./task nix:check -- --prepare
 
     - name: Save pinned frontend packages
       if: inputs.save-caches == 'true' && github.ref == 'refs/heads/main'

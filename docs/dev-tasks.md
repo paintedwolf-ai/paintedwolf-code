@@ -957,6 +957,8 @@ flowchart TD
     activate --> clients["Direct-download updater verifies signature;<br/>Homebrew installs get the notifier"]
 ```
 
+The public artifact collector requires every catalog-public package, its checksum, and its scanner audit. Only platforms with a non-null `updater_extension` contribute signed updater archives and feed entries; package-managed platforms require no synthetic updater. Website confirmation compares the complete package link set for the selected catalog, including architecture and version, while preserving the signed receipt and uncached page checks. `release_distribution.py website --catalog PATH` and `release-validate-updater-manifest.sh --catalog PATH` allow verification against the release source's catalog. Candidate packages remain excluded. A recovery operation must select the catalog belonging to the restored release; current-source catalog changes do not establish historical distribution contents.
+
 ### Bump and tag (example `1.0.0-rc.1` → `1.0.0-rc.2`)
 
 1. Set `VERSION` to `1.0.0-rc.2` and increment `RELEASE_BUILD`.
@@ -971,6 +973,51 @@ flowchart TD
 **Third-party notices.** `./task licenses:notices` generates `THIRD-PARTY-NOTICES.md` at the repo root from Go, Den npm, and Tauri crate dependency manifests plus a bundled-binaries catalog. Opengrep's catalog entry refers to the selected verified release artifact, so its version, license, notices, and corresponding-source path follow that pin. The file is gitignored and never hand-maintained. The release workflow runs generation before bundling; the fast and full verification gates run it explicitly (fail-closed on unknown licenses); the artifact audit asserts presence. About → **Third-party software** opens the shipped file.
 
 Local release packaging uses `./task den:bundle`, which injects `VERSION` into the sidecar and syncs Den package/Tauri/Cargo versions. On macOS it requires the Developer ID identity and engine provisioning profile enforced by the [bundle build](../scripts/den-build-bundle.sh). Use `./task den:app -- --debug` for local development without provisioning.
+
+### Nix development and package builds
+
+The pinned [flake](../flake.nix) defines Linux amd64 and arm64 development
+shells from the repository's Rust toolchain, Go module and Bun version. Enter
+with `nix develop`, then use the existing root `./task` commands. The shell
+supplies GTK3/WebKitGTK4.1 development libraries and pkg-config inputs; ordinary
+application feature code still uses native capability facts.
+
+Hosts that restrict unprivileged user namespaces to profiled programs (Ubuntu
+24.04 and later) need an administrator to load the generation's engine grant
+before confinement is available. Each generation ships
+`share/painted-wolf-code/apparmor/paintedwolf-engine-<hash>`, which grants user
+namespaces to that generation's exact `pw` executable only: install it under
+`/etc/apparmor.d/` and load it with `apparmor_parser -r`. A new generation has
+a new path and needs its own grant; remove the previous one once nothing runs it.
+A source build on such a host also needs the scanner builder's grant: build the
+scanner tools first (`./task nix:build -- --component scanner-host-tools`), load
+the `paintedwolf-scanner-builder-<hash>` profile its output ships the same way,
+then build the application. Substituting the qualified closure needs neither.
+
+Outside NixOS the launchers select the closure's Mesa as the EGL, GBM and
+Vulkan driver unless those variables are already set: host-installed drivers
+are not part of the generation, so they would be foreign modules. NixOS uses
+the system's configured driver environment.
+
+Consumers without flakes use [default.nix](../default.nix): `nix-build` or
+`pkgs.callPackage <checkout> { }` evaluates the same flake graph with the
+inputs pinned in `flake.lock`; the caller's package set selects only the
+platform.
+
+`./task nix:check` evaluates all declared systems without building or updating
+the lock file, and requires `default.nix` to instantiate the flake's exact
+application derivation for each system. `./task nix:build` builds the host's native Linux package under
+normal exclusive admission with one Nix job/core and sandboxing enabled. Its
+report binds the source tree, flake lock, derivations, outputs and recursive
+closure. Missing Nix, missing outputs and incompatible inputs fail the target.
+For a focused package input build, use `./task nix:build -- --component bun-lock`;
+the declared component list is checked by the build driver. The generated Bun
+dependency expression is a build output to review and commit, never an
+evaluation-time download or an automatic lock-file mutation.
+These tasks do not publish a cache or authorize daemon access from an agent
+command. Nix build sandboxing and application command confinement are separate.
+The package closure and installed system integration remain under implementation
+in #927/#928/#929; evaluation does not establish installed support.
 
 ### Linux packages
 
