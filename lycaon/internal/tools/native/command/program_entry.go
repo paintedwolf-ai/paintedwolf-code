@@ -293,7 +293,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	default:
 		// & jobs still run under supervision; the program settles when they end.
 	}
-	refusal, releaseFeedback, feedbackErr := r.feedback(ctx, run, dispatcher, evalErr)
+	refusal, releaseFeedback, feedbackErr := r.feedback(ctx, run, dispatcher, stderr, evalErr)
 	defer releaseFeedback()
 	if feedbackErr != nil || settleErr != nil {
 		return "", errors.Join(feedbackErr, settleErr)
@@ -516,7 +516,7 @@ func (r *ProgramRuntime) retainScreened(ctx context.Context, memory *toolcontrac
 		return nil, false, err
 	}
 	spill, err := tooloutput.RetainScreenedStream(ctx, tooloutput.ScreenedReader(io.NopCloser(bytes.NewReader(screened.Bytes()))), tooloutput.StreamSpillOptions{
-		Store: r.Recorder.ProgramBlobStore(ctx, r.Blobs), ClaimID: claim, MaximumBytes: 1 << 20, PreviewBytes: 4 << 10, Admission: r.sessionResources(scope.SessionID), WorkingMemory: memory, RetainedState: memory,
+		Store: r.Recorder.ProgramBlobStore(ctx, r.Blobs), ClaimID: claim, MaximumBytes: 1 << 20, PreviewBytes: 4 << 10, Admission: r.sessionResources(scope.SessionID), WorkingMemory: memory, RetainedState: r.sessionResources(scope.SessionID),
 	})
 	if err != nil {
 		return nil, false, err
@@ -545,7 +545,7 @@ func evaluatedResult(outcome commandprogram.ProgramOutcome) toolcontract.Produce
 
 // feedback renders the first native owner rejection through the program
 // feedback boundary, with the program's completed and uncertain effects.
-func (r *ProgramRuntime) feedback(ctx context.Context, run *programRun, dispatcher *ProgramDispatcher, evalErr error) (refusal *ProgramRefusal, release func(), err error) {
+func (r *ProgramRuntime) feedback(ctx context.Context, run *programRun, dispatcher *ProgramDispatcher, stderr io.Writer, evalErr error) (refusal *ProgramRefusal, release func(), err error) {
 	defer func() {
 		if release == nil {
 			release = func() {}
@@ -577,6 +577,9 @@ func (r *ProgramRuntime) feedback(ctx context.Context, run *programRun, dispatch
 				rejection = &copy
 			}
 			enrichProgramReject(rejection, evaluationRefusal.Command, span)
+			if rejection.Code == "COMMAND_LIMIT_EXCEEDED" {
+				writeLimitRefusal(commandprogram.Streams{Error: stderr}, "command", rejection)
+			}
 		} else if rejection = toolrejection.AsToolReject(evalErr); rejection != nil {
 			enrichProgramReject(rejection, "", run.root.Span)
 		} else {
