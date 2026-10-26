@@ -1,5 +1,8 @@
 """Source-only closed recovery exchange fixtures; no SSH, account or unit effects."""
 import time
+import io
+import json
+from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
@@ -123,3 +126,42 @@ class GuestPhasesTests(unittest.TestCase):
         box.completed.assert_not_called()
         with self.assertRaises(ValueError): control.phase(owner.ABSENT)
         box.write.assert_called_once()
+
+
+class PublicationTests(unittest.TestCase):
+    def read(self, box, *, action='read'):
+        payload = dict(action=action, execution=BINDING, vm_id='owned')
+        if action == 'acknowledge': payload['document'] = {}
+        output = io.StringIO()
+        with patch.object(owner, 'RecoveryMailbox', return_value=box), \
+                patch.object(owner.sys, 'stdin', SimpleNamespace(buffer=io.BytesIO(json.dumps(payload).encode()))), \
+                patch.object(owner.sys, 'stdout', output):
+            owner.guest_exchange()
+        return output.getvalue()
+
+    def test_absent_and_partially_published_read_wait_without_any_ack_or_effect(self):
+        for exists in (False, True):
+            box = Mock()
+            box.path.exists.return_value = exists
+            box.path.is_symlink.return_value = False
+            box.read.return_value = None
+            self.assertEqual(json.loads(self.read(box)), {'request': None})
+            box.marker.assert_called_once()
+            box.attach.assert_not_called()
+            box.write.assert_not_called()
+
+    def test_foreign_marker_or_attached_binding_and_early_ack_never_wait_or_publish(self):
+        box = Mock()
+        box.marker.side_effect = ValueError('foreign marker')
+        with self.assertRaises(ValueError): self.read(box)
+        box.attach.assert_not_called()
+        box = Mock()
+        box.path.exists.return_value = True
+        box.read.return_value = {'foreign': True}
+        box.attach.side_effect = ValueError('foreign binding')
+        with self.assertRaises(ValueError): self.read(box)
+        box.write.assert_not_called()
+        box = Mock()
+        box.attach.side_effect = FileNotFoundError('not published')
+        with self.assertRaises(FileNotFoundError): self.read(box, action='acknowledge')
+        box.write.assert_not_called()

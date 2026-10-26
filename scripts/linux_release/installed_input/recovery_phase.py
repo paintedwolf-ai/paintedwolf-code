@@ -123,6 +123,13 @@ def guest_exchange():
     if set(value) != allowed or value.get('action') not in {'read', 'acknowledge'}:
         raise ValueError('unknown recovery exchange')
     box = RecoveryMailbox(value['execution'], value['vm_id'])
+    box.marker()
+    # The native campaign publishes its nonce before the guest creates its mailbox.
+    # Match the normal mailbox poll's waiting state; only reads may await publication.
+    if value['action'] == 'read' and ((not box.path.exists() and not box.path.is_symlink())
+            or box.read('binding.json') is None):
+        print(json.dumps({'request': None}), flush=True)
+        return
     box.attach()
     pending = box.read('recovery-request.json')
     if pending is not None: request(pending, value['execution'])
