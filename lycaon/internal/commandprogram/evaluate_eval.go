@@ -2,9 +2,12 @@ package commandprogram
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
@@ -21,8 +24,9 @@ func (f *frame) eval(ctx context.Context, s commandsurface.Statement, fields Fie
 	}
 	defer run.close(ctx)
 	source := strings.Join(fields.Values()[1:], " ")
+	unitID := "eval:" + uuid.NewString()
 	parsed, err := commandsurface.ParseAdmitted(ctx, f.e.ports.Memory, []byte(source), commandsurface.ParseOptions{
-		SourceName: "eval", Version: toolcontract.LanguageVersion, CatalogDigest: run.inv.CatalogDigest,
+		SourceName: unitID, Version: toolcontract.LanguageVersion, CatalogDigest: run.inv.CatalogDigest,
 	})
 	if err != nil {
 		return signal{}, f.sourceRefusal(ctx, run, s, err)
@@ -42,8 +46,17 @@ func (f *frame) eval(ctx context.Context, s commandsurface.Statement, fields Fie
 		}
 		return signal{}, err
 	}
+	if registrar, ok := f.e.ports.Executions.(SourceUnitRegistrar); ok {
+		sum := sha256.Sum256([]byte(source))
+		pin := toolcontract.SourcePin{SourceID: unitID, Revision: hex.EncodeToString(sum[:]), Representation: toolcontract.UTF8SourceBytes, SHA256: hex.EncodeToString(sum[:]), EndByte: int64(len(source))}
+		if err := registrar.RegisterSourceUnit(ctx, run.inv, CapturedSource{Pin: pin, Bytes: []byte(source)}, lease.Plan); err != nil {
+			run.settle(ctx, ownerResult(err), err)
+			return signal{}, err
+		}
+	}
 	g := *f
-	g.parent, g.unit, g.sources = run.inv, "eval", f.sources+1
+	g.parent, g.unit, g.sources = run.inv, unitID, f.sources+1
+	g.parent.SourceUnitID = unitID
 	sig, err := g.statements(ctx, lease.Plan.Statements)
 	result := ordinaryResult(f.state.control.Status())
 	if stop, ok := f.state.latch.Stop(); ok {

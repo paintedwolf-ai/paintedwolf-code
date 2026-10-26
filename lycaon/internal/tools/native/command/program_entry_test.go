@@ -130,6 +130,15 @@ func (f *programFixture) jobHandle(t *testing.T) string {
 	return fields[1]
 }
 
+func (f *programFixture) registryHandle(t *testing.T) string {
+	t.Helper()
+	jobs := f.Background.ActiveJobs(f.Session)
+	if len(jobs) != 1 {
+		t.Fatalf("expected one active background job, got %+v", jobs)
+	}
+	return jobs[0].Handle
+}
+
 func TestProgramEntryRunsNativeAndExternalStagesWithChildReceipts(t *testing.T) {
 	f := newProgramFixture(t)
 	out, err := f.call(t, t.Context(), "external -- /bin/echo hello | tee out.txt")
@@ -173,12 +182,13 @@ func TestProgramEntryBackgroundJobIsListedAndKilled(t *testing.T) {
 	_, err := f.call(t, t.Context(), "external -- /bin/sleep 30 &")
 	testutil.FailErr(t, "launch background job", err)
 	handle := f.jobHandle(t)
+	registryHandle := f.registryHandle(t)
 	_, err = f.call(t, t.Context(), "kill -TERM "+handle)
 	testutil.FailErr(t, "kill session job", err)
 	jobs := &command.SessionJobs{Registry: f.Background, SessionID: f.Session}
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
-	exit, stopped, err := f.Background.Lifecycle.Wait(ctx, f.Session, handle)
+	exit, stopped, err := f.Background.Lifecycle.Wait(ctx, f.Session, registryHandle)
 	if err != nil || !stopped || exit == 0 {
 		t.Fatalf("killed job exit=%d stopped=%v err=%v", exit, stopped, err)
 	}
@@ -263,13 +273,13 @@ func TestProgramEntryDisableStopsOwnedWorkAndRefusesNewPrograms(t *testing.T) {
 	f := newProgramFixture(t)
 	_, err := f.call(t, t.Context(), "external -- /bin/sleep 30 &")
 	testutil.FailErr(t, "launch owned job", err)
-	handle := f.jobHandle(t)
+	registryHandle := f.registryHandle(t)
 	if stopped := f.Runtime.SetDisabled(true); len(stopped) != 1 {
 		t.Fatalf("disable stopped %v", stopped)
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
-	if _, stopped, err := f.Background.Lifecycle.Wait(ctx, f.Session, handle); err != nil || !stopped {
+	if _, stopped, err := f.Background.Lifecycle.Wait(ctx, f.Session, registryHandle); err != nil || !stopped {
 		t.Fatalf("owned job after disable stopped=%v err=%v", stopped, err)
 	}
 	deadline := time.Now().Add(10 * time.Second)
