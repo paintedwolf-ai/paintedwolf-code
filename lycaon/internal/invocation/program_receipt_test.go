@@ -109,7 +109,7 @@ func (f programReceiptFixture) start(t *testing.T, bound toolcontract.BoundOpera
 	defer release()
 	observer := invocation.ProgramAdmissionRecorder{Recorder: f.recorder, Inputs: inputs}
 	testutil.FailErr(t, "record before owner", observer.BeforeNativeOwner(t.Context(), bound, "actual-model-call", review))
-	if inputs.calls != 1 {
+	if inputs.calls != 1 || !observer.OwnerStartRecorded {
 		t.Fatalf("review retention calls=%d", inputs.calls)
 	}
 }

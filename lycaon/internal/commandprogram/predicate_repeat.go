@@ -33,31 +33,7 @@ func normalizePredicateRepeats(ctx context.Context, source string) (string, map[
 			atom = out.Len()
 			out.WriteString(source[start:i])
 		case '[':
-			i++
-			if i < len(source) && source[i] == '^' {
-				i++
-			}
-			if i < len(source) && source[i] == ']' {
-				i++
-			}
-			for i < len(source) {
-				if source[i] == '\\' && i+1 < len(source) {
-					i += 2
-					continue
-				}
-				if source[i] == '[' && i+1 < len(source) && strings.ContainsRune(":.=", rune(source[i+1])) {
-					end := "" + string(source[i+1]) + "]"
-					if j := strings.Index(source[i+2:], end); j >= 0 {
-						i += j + 4
-						continue
-					}
-				}
-				if source[i] == ']' {
-					i++
-					break
-				}
-				i++
-			}
+			i = predicateClassEnd(source, i)
 			atom = out.Len()
 			out.WriteString(source[start:i])
 		case '(':
@@ -127,6 +103,12 @@ func normalizePredicateRepeats(ctx context.Context, source string) (string, map[
 		}
 	}
 	skeleton := out.String()
+	captures, err := predicateRepeatCaptures(ctx, skeleton, tags)
+	return skeleton, captures, err
+}
+
+// predicateRepeatCaptures indexes admitted repeat tags in the parser skeleton.
+func predicateRepeatCaptures(ctx context.Context, skeleton string, tags []repeatTag) (map[int]repeatTag, error) {
 	byOffset := map[int]repeatTag{}
 	for _, tag := range tags {
 		byOffset[tag.at] = tag
@@ -137,37 +119,14 @@ func normalizePredicateRepeats(ctx context.Context, source string) (string, map[
 	// openings here ignores quoted delimiters and POSIX bracket subexpressions.
 	for i := 0; i < len(skeleton); i++ {
 		if err := ctx.Err(); err != nil {
-			return "", nil, err
+			return nil, err
 		}
 		if skeleton[i] == '\\' {
 			i++
 			continue
 		}
 		if skeleton[i] == '[' {
-			i++
-			if i < len(skeleton) && skeleton[i] == '^' {
-				i++
-			}
-			if i < len(skeleton) && skeleton[i] == ']' {
-				i++
-			}
-			for i < len(skeleton) {
-				if skeleton[i] == '\\' && i+1 < len(skeleton) {
-					i += 2
-					continue
-				}
-				if skeleton[i] == '[' && i+1 < len(skeleton) && strings.ContainsRune(":.=", rune(skeleton[i+1])) {
-					ending := string(skeleton[i+1]) + "]"
-					if j := strings.Index(skeleton[i+2:], ending); j >= 0 {
-						i += j + 4
-						continue
-					}
-				}
-				if skeleton[i] == ']' {
-					break
-				}
-				i++
-			}
+			i = predicateClassEnd(skeleton, i) - 1
 			continue
 		}
 		if skeleton[i] == '(' {
@@ -177,8 +136,39 @@ func normalizePredicateRepeats(ctx context.Context, source string) (string, map[
 			}
 		}
 	}
-	return skeleton, captures, nil
+	return captures, nil
 }
+
+// predicateClassEnd consumes a bracket expression as one lexical atom,
+// including quoted brackets and POSIX character-class subexpressions.
+func predicateClassEnd(source string, start int) int {
+	i := start + 1
+	if i < len(source) && source[i] == '^' {
+		i++
+	}
+	if i < len(source) && source[i] == ']' {
+		i++
+	}
+	for i < len(source) {
+		if source[i] == '\\' && i+1 < len(source) {
+			i += 2
+			continue
+		}
+		if source[i] == '[' && i+1 < len(source) && strings.ContainsRune(":.=", rune(source[i+1])) {
+			end := string(source[i+1]) + "]"
+			if j := strings.Index(source[i+2:], end); j >= 0 {
+				i += j + 4
+				continue
+			}
+		}
+		if source[i] == ']' {
+			return i + 1
+		}
+		i++
+	}
+	return i
+}
+
 func predicateRepeatRange(text string) (int, int, bool) {
 	fields := strings.Split(text, ",")
 	if len(fields) > 2 || fields[0] == "" {

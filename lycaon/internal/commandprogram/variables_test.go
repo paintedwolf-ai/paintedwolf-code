@@ -24,8 +24,9 @@ func TestVariablesExportUnsetAndDispatchEnvironment(t *testing.T) {
 	testutil.FailErr(t, "assign exported", scope.Assign(ctx, "LATER", "two"))
 	testutil.FailErr(t, "reassign exported", scope.Assign(ctx, "HOME", "/home/v"))
 	scope.Unset("PATH")
-	env, err := scope.Environment(map[string]string{"ONCE": "3", "LATER": "override"})
+	env, release, err := scope.Environment(ctx, map[string]string{"ONCE": "3", "LATER": "override"})
 	testutil.FailErr(t, "dispatch environment", err)
+	defer release()
 	want := []string{"HOME=/home/v", "LATER=override", "ONCE=3", "SECRET=" + secretToken}
 	if !reflect.DeepEqual(env, want) {
 		t.Fatalf("environment %q, want %q", env, want)
@@ -56,7 +57,8 @@ func TestVariablesCloneIsolatesFrames(t *testing.T) {
 	testutil.FailErr(t, "clone", err)
 	defer child.Close()
 	testutil.FailErr(t, "child assign", child.Assign(t.Context(), "A", "2"))
-	child.SetPositional([]string{"c1", "c2"})
+	positional := []string{"c1", "c2"}
+	testutil.FailErr(t, "child positional", child.SetPositional(t.Context(), positional))
 	child.SetStatus(9)
 	if value, _ := parent.Variable("A"); value != "1" || len(parent.Positional()) != 1 || parent.LastStatus() != 4 {
 		t.Fatalf("child frame leaked into parent: A=%q positional=%q status=%d", value, parent.Positional(), parent.LastStatus())
@@ -64,7 +66,6 @@ func TestVariablesCloneIsolatesFrames(t *testing.T) {
 	if job, set := child.LastBackground(); !set || job != "%2" || child.ProgramName() != "inline" {
 		t.Fatalf("clone lost frame facts: job=%q set=%v program=%q", job, set, child.ProgramName())
 	}
-	positional := child.Positional()
 	positional[0] = "mutated"
 	if child.Positional()[0] != "c1" {
 		t.Fatal("positional parameters share caller storage")
@@ -81,7 +82,7 @@ func TestVariablesRefuseInvalidAndOversizedState(t *testing.T) {
 		"ifs":      scope.Assign(ctx, "IFS", ":"),
 		"nul":      scope.Assign(ctx, "V", "a\x00b"),
 		"export":   scope.Export(ctx, "bad-name"),
-		"override": func() error { _, err := scope.Environment(map[string]string{"IFS": " "}); return err }(),
+		"override": func() error { _, _, err := scope.Environment(ctx, map[string]string{"IFS": " "}); return err }(),
 	} {
 		var refused *ExpansionError
 		if !errors.As(err, &refused) || refused.Code == codeLimitExceeded {
@@ -103,10 +104,12 @@ func TestVariablesRefuseInvalidAndOversizedState(t *testing.T) {
 	testutil.FailErr(t, "replacing within count", scope.Assign(ctx, "V0", "replaced"))
 	big := strings.Repeat("e", int(limits.maximum["environment_bytes"])/2)
 	envScope := testScope(t, memory, []string{"A=" + big})
-	if _, err := envScope.Environment(map[string]string{"B": big[:len(big)-4]}); err != nil {
+	if _, release, err := envScope.Environment(ctx, map[string]string{"B": big[:len(big)-4]}); err != nil {
 		t.Fatalf("environment at limit refused: %v", err)
+	} else {
+		release()
 	}
-	if _, err := envScope.Environment(map[string]string{"B": big[:len(big)-3]}); !errors.As(err, &refused) || refused.Limit != "environment_bytes" {
+	if _, _, err := envScope.Environment(ctx, map[string]string{"B": big[:len(big)-3]}); !errors.As(err, &refused) || refused.Limit != "environment_bytes" {
 		t.Fatalf("environment over limit: %v", err)
 	}
 }
@@ -137,5 +140,40 @@ func TestVariablesChargeProgramState(t *testing.T) {
 	}
 	if _, err := NewVariables(t.Context(), memory, "inline", []string{"A=" + strings.Repeat("a", 512)}, nil); !errors.As(err, &exhausted) {
 		t.Fatalf("environment past the state limit: %v", err)
+	}
+}
+
+func TestIsolatedPrefixRefusesStateExhaustionBeforeDispatch(t *testing.T) {
+	const parentBytes = variableBytes + 2
+	const prefixBytes = variableBytes + 1 + 32
+	for _, step := range []struct {
+		name  string
+		state int64
+	}{
+		{"assign", 2*parentBytes + prefixBytes - 1},
+		{"export", 2*parentBytes + 2*prefixBytes - 1},
+	} {
+		t.Run(step.name, func(t *testing.T) {
+			memory, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: 1 << 20, State: step.state})
+			testutil.FailErr(t, "create memory", err)
+			parent, err := NewVariables(t.Context(), memory, "inline", []string{"A=1"}, nil)
+			testutil.FailErr(t, "create parent", err)
+			defer parent.Close()
+			clone, err := parent.Clone(t.Context())
+			testutil.FailErr(t, "clone fits before prefix", err)
+			clone.Close()
+			f := &frame{state: &frameState{vars: parent, latch: &OutcomeLatch{}}, prefix: map[string]string{"B": strings.Repeat("b", 32)}}
+			child, closeChild, err := f.isolate(t.Context(), nil)
+			var exhausted *toolcontract.ProgramMemoryLimitError
+			if !errors.As(err, &exhausted) || child != nil || closeChild != nil {
+				t.Fatalf("prefix exhaustion admitted isolated dispatch: child=%v cleanup=%v error=%v", child != nil, closeChild != nil, err)
+			}
+			if got := memory.InUse().State; got != parentBytes {
+				t.Fatalf("failed prefix retained clone state: %d, want %d", got, parentBytes)
+			}
+			if _, set := parent.Variable("B"); set {
+				t.Fatal("failed prefix changed parent")
+			}
+		})
 	}
 }

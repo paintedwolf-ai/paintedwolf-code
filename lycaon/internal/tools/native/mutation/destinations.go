@@ -51,7 +51,7 @@ func (d *Destinations) Publish(ctx context.Context, destination Destination, dat
 	if destination.null {
 		return nil
 	}
-	_, err := d.owners.publish(ctx, d.tools, d.program.Barrier, destination.target, data)
+	_, err := d.owners.publish(ctx, d.tools, destination.target, data)
 	return err
 }
 

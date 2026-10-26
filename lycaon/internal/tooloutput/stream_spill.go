@@ -86,29 +86,21 @@ func RetainScreenedStream(ctx context.Context, input ScreenedStream, options Str
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	// Plaintext and compressed stages overlap, followed by two compressed copies
-	// during replacement. Three plaintext ceilings plus a frame allowance cover
-	// that bounded-window encoder's worst-case storage, including tiny inputs.
-	release, err := options.Admission.ReserveSpill(ctx, 3*options.MaximumBytes+(1<<20))
+	staging, err := newStreamSpillStaging(ctx, options.Admission, options.MaximumBytes)
 	if err != nil {
 		return nil, err
 	}
-	if release == nil {
-		return nil, fmt.Errorf("spill admission returned no release")
-	}
+	defer staging.Close()
 	releaseState, err := options.RetainedState.ReserveProgramState(ctx, int64(len(options.ClaimID))*2+512)
 	if err != nil {
-		release()
 		return nil, err
 	}
 	if releaseState == nil {
-		release()
 		return nil, fmt.Errorf("stream state admission returned no release")
 	}
 	releasePreview, err := options.RetainedState.ReserveProgramState(ctx, int64(options.PreviewBytes)+256)
 	if err != nil || releasePreview == nil {
 		releaseState()
-		release()
 		if err == nil {
 			err = fmt.Errorf("preview state admission returned no release")
 		}
@@ -133,9 +125,9 @@ func RetainScreenedStream(ctx context.Context, input ScreenedStream, options Str
 	store := options.Store
 	store.Dir = ToolOutputSpillDir
 	store.StagedTTL = 7 * 24 * time.Hour
-	reader := &spillInput{ctx: ctx, source: input.reader, maximum: options.MaximumBytes, previewMaximum: options.PreviewBytes, preview: make([]byte, 0, options.PreviewBytes), digest: sha256.New()}
+	reader := &spillInput{ctx: ctx, source: input.reader, maximum: options.MaximumBytes, previewMaximum: options.PreviewBytes, preview: make([]byte, 0, options.PreviewBytes), digest: sha256.New(), staging: staging}
 	blob, err := store.PutStream(ctx, "command-stream.bin", reader, bytebound.Materialization(options.MaximumBytes), options.WorkingMemory)
-	release()
+	staging.Close()
 	if err != nil {
 		return nil, err
 	}
@@ -152,12 +144,13 @@ func RetainScreenedStream(ctx context.Context, input ScreenedStream, options Str
 	}
 	releasePreview = settledPreview
 	// Retention holds the stored bytes, not the encoder's worst case.
-	release, err = options.Admission.ReserveSpill(ctx, blob.Size+RetainedFrameBytes)
-	if err != nil {
-		return nil, err
-	}
-	if release == nil {
-		return nil, fmt.Errorf("spill admission returned no release")
+	release, err := options.Admission.ReserveSpill(ctx, blob.Size+RetainedFrameBytes)
+	if err != nil || release == nil {
+		if err == nil {
+			err = fmt.Errorf("spill admission returned no release")
+		}
+		_, discardErr := store.DiscardStagedBefore(blob.ID, time.Now().Add(time.Second))
+		return nil, errors.Join(err, discardErr)
 	}
 	if ctx.Err() != nil {
 		reader.failure = ctx.Err()
@@ -185,6 +178,7 @@ type spillInput struct {
 	digest            hash.Hash
 	failure           error
 	eof               bool
+	staging           *streamSpillStaging
 }
 
 func (r *spillInput) Read(b []byte) (int, error) {
@@ -192,6 +186,11 @@ func (r *spillInput) Read(b []byte) (int, error) {
 		return 0, io.EOF
 	}
 	if err := r.ctx.Err(); err != nil {
+		r.failure = err
+		return 0, io.EOF
+	}
+	b = b[:min(int64(len(b)), 64<<10, r.maximum-r.received+1)]
+	if err := r.staging.Grow(min(r.maximum, r.received+int64(len(b)))); err != nil {
 		r.failure = err
 		return 0, io.EOF
 	}

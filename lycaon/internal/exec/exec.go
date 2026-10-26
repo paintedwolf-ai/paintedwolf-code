@@ -53,6 +53,8 @@ type ExecOpts struct {
 	HostConsumer bool
 	// ProcessPriority applies ScanProcessPolicy / engine below-normal posture when set.
 	ProcessPriority ProcessPriority
+	// Started observes the launched process before any waiter can reap it.
+	Started func(pid int)
 }
 
 // DefaultVerifyTimeout is the default verify subprocess timeout.

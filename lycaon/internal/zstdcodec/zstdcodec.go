@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sync"
 
 	"github.com/klauspost/compress/zstd"
 )
@@ -34,10 +35,31 @@ func compressAt(r io.Reader, opts []zstd.EOption) ([]byte, error) {
 // retained bodies, which remain in the storage quota, and is not a Go heap cap.
 const StreamMemoryReservation int64 = 32 << 20
 
+var streamEncoderPool sync.Pool
+
 // CompressTo streams a bounded-window frame without retaining its encoded body.
 // Storage callers account staging bytes separately from encoder working memory.
 func CompressTo(w io.Writer, r io.Reader) error {
-	return compressTo(w, r, []zstd.EOption{zstd.WithEncoderConcurrency(1), zstd.WithWindowSize(64 << 10), zstd.WithLowerEncoderMem(true)})
+	var encoder *zstd.Encoder
+	if pooled := streamEncoderPool.Get(); pooled != nil {
+		encoder = pooled.(*zstd.Encoder)
+		encoder.Reset(w)
+	} else {
+		var err error
+		encoder, err = zstd.NewWriter(w, zstd.WithEncoderConcurrency(1), zstd.WithWindowSize(64<<10), zstd.WithLowerEncoderMem(true))
+		if err != nil {
+			return fmt.Errorf("zstd writer: %w", err)
+		}
+	}
+	defer func() {
+		encoder.Reset(nil)
+		streamEncoderPool.Put(encoder)
+	}()
+	if _, err := io.Copy(encoder, r); err != nil {
+		_ = encoder.Close()
+		return err
+	}
+	return encoder.Close()
 }
 
 func compressTo(w io.Writer, r io.Reader, opts []zstd.EOption) error {

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/fspath"
+	"github.com/lycaon/lycaon/internal/projectroot"
 )
 
 // exactRelativeOperand retains OS component order for native operands. Logical
@@ -45,11 +46,55 @@ func exactRelativeOperand(resolved Resolved, operand string) (string, error) {
 // authorityAddress maps a reached canonical name back to the same admitted root
 // coordinates, so OS aliases cannot evade that root's read profile.
 func authorityAddress(rootPath, actual string) (string, error) {
-	rel, err := filepath.Rel(fspath.CanonicalPath(rootPath), actual)
+	return authorityAddressWithCanonical(rootPath, fspath.CanonicalPath(rootPath), actual)
+}
+
+func authorityAddressWithCanonical(rootPath, canonicalRoot, actual string) (string, error) {
+	if canonicalRoot == "" {
+		canonicalRoot = fspath.CanonicalPath(rootPath)
+	}
+	if len(actual) > len(canonicalRoot) && strings.HasPrefix(actual, canonicalRoot) && os.IsPathSeparator(actual[len(canonicalRoot)]) {
+		rel := actual[len(canonicalRoot)+1:]
+		if isCleanRelativeSubpath(rel) && rootPath != "" && !strings.HasSuffix(rootPath, string(filepath.Separator)) && filepath.Clean(rootPath) == rootPath {
+			return rootPath + string(filepath.Separator) + rel, nil
+		}
+	}
+	rel, err := filepath.Rel(canonicalRoot, actual)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return "", invalidOperand(actual, "reached identity left admitted root")
 	}
 	return filepath.Join(rootPath, rel), nil
+}
+
+func entryScopeRel(root projectroot.RootRef, canonicalRoot, actual string) (string, error) {
+	if canonicalRoot != "" && len(actual) > len(canonicalRoot) && strings.HasPrefix(actual, canonicalRoot) && os.IsPathSeparator(actual[len(canonicalRoot)]) {
+		rel := actual[len(canonicalRoot)+1:]
+		if isCleanRelativeSubpath(rel) {
+			return filepath.ToSlash(rel), nil
+		}
+	}
+	authority, err := authorityAddressWithCanonical(root.Path, canonicalRoot, actual)
+	if err != nil {
+		return "", err
+	}
+	return projectroot.ScopeRel(root, authority), nil
+}
+
+func isCleanRelativeSubpath(rel string) bool {
+	if rel == "" {
+		return false
+	}
+	start := 0
+	for i := 0; i <= len(rel); i++ {
+		if i == len(rel) || os.IsPathSeparator(rel[i]) {
+			seg := rel[start:i]
+			if seg == "" || seg == "." || seg == ".." {
+				return false
+			}
+			start = i + 1
+		}
+	}
+	return true
 }
 
 // rootAddress keeps native aliases of attached roots inside that same root's

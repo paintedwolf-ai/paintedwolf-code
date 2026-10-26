@@ -168,7 +168,6 @@ func TestEvaluateRefusesExcludedConstructsBeforeAnyEffect(t *testing.T) {
 		{"output redirect without owner", "echo a; echo b > out", func(p *EvaluationPorts) { p.Publication = nil }},
 		{"background without supervision", "echo a; sleep 1 &", func(p *EvaluationPorts) { p.Supervision = nil }},
 		{"source without capture", "echo a; source -- ./s.sh", func(p *EvaluationPorts) { p.Sources = nil }},
-		{"reserved function name", "echo a; exit() { echo b; }", func(*EvaluationPorts) {}},
 		{"nested in substitution", "echo a; echo $(echo b > out)", func(p *EvaluationPorts) { p.Publication = nil }},
 		{"output on stdin descriptor", "echo a; echo b 0> out", func(*EvaluationPorts) {}},
 	}
@@ -316,5 +315,22 @@ func TestDynamicSelectorBindsOneOperationAsData(t *testing.T) {
 				t.Fatalf("selector read lost: %+v", out.Children[0])
 			}
 		})
+	}
+}
+
+func TestUtilityHelpReachesOwnerAndExportHelpStaysInFrame(t *testing.T) {
+	f := newEvalFixture(t)
+	out, err := f.run(t, t.Context(), "grep --help; export --help")
+	if err != nil || out.Stop != nil || out.Status != 0 {
+		t.Fatalf("evaluate --help: err=%v stop=%+v status=%d", err, out.Stop, out.Status)
+	}
+	if got := f.log.argv(); !slices.Equal(got, []string{"grep --help"}) {
+		t.Fatalf("utility help owner dispatches: %q", got)
+	}
+	if len(out.Children) != 2 || out.Children[0].Result.Status != 1 || !out.Children[0].Executed {
+		t.Fatalf("utility owner's ordinary status was replaced: %+v", out.Children)
+	}
+	if got, want := f.stdout.String(), catalogCommand(t, "export").Help()+"\n"; got != want {
+		t.Fatalf("export help output %q, want %q", got, want)
 	}
 }

@@ -48,7 +48,7 @@ func TestRenderInvestigateSurfaceRoutesSummarizeFirst(t *testing.T) {
 		t.Fatalf("Render coordinator-surface-investigate: %v", err)
 	}
 	for _, want := range []string{
-		"summarize(", "list_dir(", "summarize#N",
+		"summarize(", "find . -maxdepth 2 -type d", "summarize#N",
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("investigate surface missing floor survey route %q:\n%s", want, rendered)
@@ -65,8 +65,18 @@ func TestMergeCoordinatorSurfacePathVarsHasListDirOnInvestigate(t *testing.T) {
 	if err := prompts.MergeCoordinatorSurfacePathVars(toolcontract.SurfaceImplementInvestigate, nil, vars, prompts.SurfaceTurn{}); err != nil {
 		t.Fatalf("MergeCoordinatorSurfacePathVars: %v", err)
 	}
+	if !vars["profile_has_command"].(bool) {
+		t.Fatalf("profile_has_command = %v want true on implement_investigate", vars["profile_has_command"])
+	}
+	if vars["profile_has_list_dir"].(bool) {
+		t.Fatalf("profile_has_list_dir = %v want false on implement_investigate floor", vars["profile_has_list_dir"])
+	}
+	vars = map[string]any{}
+	if err := prompts.MergeCoordinatorSurfacePathVars(toolcontract.SurfaceImplementInvestigate, nil, vars, prompts.SurfaceTurn{Loaded: map[string]bool{"list_dir": true}}); err != nil {
+		t.Fatalf("MergeCoordinatorSurfacePathVars: %v", err)
+	}
 	if !vars["profile_has_list_dir"].(bool) {
-		t.Fatalf("profile_has_list_dir = %v want true on implement_investigate", vars["profile_has_list_dir"])
+		t.Fatalf("profile_has_list_dir = %v want true when list_dir is loaded", vars["profile_has_list_dir"])
 	}
 }
 
@@ -119,7 +129,7 @@ func TestMergeCoordinatorSurfacePathVarsListsRequestableToolsWithSummaries(t *te
 	if summary, ok := byName["http_request"]; !ok || summary == "" {
 		t.Fatalf("the investigate floor leaves http_request requestable with a summary: %+v", rows)
 	}
-	if _, ok := byName["read"]; ok {
+	if _, ok := byName["command"]; ok {
 		t.Fatalf("a floor tool is offered, not requestable: %+v", rows)
 	}
 	vars = map[string]any{}

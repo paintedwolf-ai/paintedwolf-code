@@ -783,6 +783,7 @@ type InvocationProgramOutputs struct {
 	CreatedAt         string         `json:"created_at"`
 	InlineDigest      string         `json:"inline_digest"`
 	InlineBody        []byte         `json:"inline_body"`
+	BlobID            sql.NullString `json:"blob_id"`
 }
 
 type InvocationProgramProgress struct {

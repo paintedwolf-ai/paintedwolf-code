@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/tooloutput"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -69,7 +70,7 @@ func TestProgramEntryRunsGitReadFormsThroughTheUmbrella(t *testing.T) {
 		}
 		return command.NativePrepared{Command: prepared.Command, Review: prepared.Review, Invoke: prepared.InvokeOwner}, nil
 	}}}
-	f.runtime.Owners = func(tools.ToolContext, *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
+	f.runtime.Owners = func(tools.ToolContext, *projectpaths.ProgramPaths, *toolcontract.ProgramMemory, tooloutput.SpillAdmission) (command.ProgramOwners, error) {
 		return command.ProgramOwners{Natives: natives}, nil
 	}
 	out, err := f.call(t, t.Context(), "git status -sb; git -C sub ls-files; git --no-pager log --format=%s")

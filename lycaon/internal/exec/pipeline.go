@@ -60,10 +60,6 @@ func buildExecCmd(ctx context.Context, name string, args []string, opts ExecOpts
 	return prepareNativeCommand(ctx, name, args, opts, stageEnv, false)
 }
 
-func configureCmdEnv(cmd *exec.Cmd, opts ExecOpts) error {
-	return configureStageCmdEnv(cmd, opts, nil)
-}
-
 // ProcessEnvironment builds the sanitized base environment for a process launch
 // before OS-specific sandbox confinement variables (such as proxy or SSH
 // wrappers) are attached. Both the command program's native env builtin and
@@ -72,9 +68,29 @@ func ProcessEnvironment(opts ExecOpts) ([]string, error) {
 	return processEnvironment(opts, nil)
 }
 
+// FinalProcessEnvironment is the environment a launched program receives,
+// including its confinement's proxy and Git SSH entries.
+func FinalProcessEnvironment(opts ExecOpts, stageEnv map[string]string) ([]string, error) {
+	env, err := processEnvironment(opts, stageEnv)
+	if err != nil || opts.Launch.Confinement == nil {
+		return env, err
+	}
+	boundary, err := confine.EnvironmentBoundary(*opts.Launch.Confinement)
+	if err != nil {
+		return nil, err
+	}
+	env = confine.ProcessEnvironment(env, boundary)
+	if boundary.Network != confine.NetworkDeny {
+		if self, err := os.Executable(); err == nil {
+			env = overlayProcessEnv(env, confine.GitSSHEnv(boundary, self, confine.SSHKnownHostsPath(boundary)))
+		}
+	}
+	return env, nil
+}
+
 func processEnvironment(opts ExecOpts, stageEnv map[string]string) ([]string, error) {
 	provided := opts.Env
-	if provided == nil && (opts.Launch.Environment == EnvironmentReduced || opts.Launch.Kind == LaunchAgentCommand) {
+	if opts.Launch.reduced() {
 		provided = ReducedEnviron()
 	}
 	if len(opts.Launch.ExtraEnv) > 0 {
@@ -120,21 +136,11 @@ func configureStageCmdEnv(cmd *exec.Cmd, opts ExecOpts, stageEnv map[string]stri
 	if opts.Dir != "" {
 		cmd.Dir = opts.Dir
 	}
-	env, err := processEnvironment(opts, stageEnv)
+	env, err := FinalProcessEnvironment(opts, stageEnv)
 	if err != nil {
 		return err
 	}
 	cmd.Env = env
-	if opts.Launch.Confinement != nil {
-		confinement := opts.Launch.Confinement
-		cmd.Env = confine.ProcessEnvironment(cmd.Env, *confinement)
-		if confinement.Network != confine.NetworkDeny {
-			if self, err := os.Executable(); err == nil {
-				cmd.Env = overlayProcessEnv(cmd.Env,
-					confine.GitSSHEnv(*confinement, self, confine.SSHKnownHostsPath(*confinement)))
-			}
-		}
-	}
 	return nil
 }
 
@@ -371,9 +377,9 @@ func stageSinkWriter(sink argv.Sink, pipe *os.File, call callStreams, files *sta
 	}
 }
 
-func startWiredStages(wired []wiredStage) error {
+func startWiredStages(ctx context.Context, wired []wiredStage) error {
 	for i := range wired {
-		err := confine.ValidateProcessInputs(wired[i].cmd)
+		err := confine.ValidateProcessInputs(ctx, wired[i].cmd)
 		if err == nil {
 			err = wired[i].cmd.Start()
 		}
@@ -389,7 +395,7 @@ func startWiredStages(wired []wiredStage) error {
 		}
 		err = wired[i].guard.onStarted(wired[i].cmd)
 		if err == nil {
-			err = confine.ConfirmProcessLaunch(wired[i].cmd)
+			err = confine.ConfirmProcessLaunch(ctx, wired[i].cmd)
 		}
 		if err != nil {
 			killWired(wired[:i+1])
