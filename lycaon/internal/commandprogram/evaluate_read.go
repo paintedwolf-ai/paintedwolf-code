@@ -11,8 +11,8 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
-// readBuiltin reads one record from the frame's input stream, splits it by
-// fixed IFS whitespace (space, tab, newline) and assigns the target variables.
+// readBuiltin reads one record from the frame's input stream, splits it using
+// the reached command's IFS, and assigns the target variables.
 func (f *frame) readBuiltin(ctx context.Context, s commandsurface.Statement, fields Fields) error {
 	spec, ok, err := ResolveCommand(fields)
 	if err != nil {
@@ -159,12 +159,6 @@ func splitReadFields(record []byte, escaped []bool, count int, preserveAll bool,
 		end--
 	}
 	for field := range count {
-		for i < end && !escaped[i] && isIFSByte(record[i], ifs) {
-			i++
-		}
-		if i >= end {
-			break
-		}
 		if field == count-1 {
 			out[field] = string(record[i:end])
 			break
@@ -174,6 +168,22 @@ func splitReadFields(record []byte, escaped []bool, count int, preserveAll bool,
 			i++
 		}
 		out[field] = string(record[start:i])
+		if i >= end {
+			break
+		}
+		if isIFSWhitespace(record[i]) {
+			for i < end && !escaped[i] && isIFSByte(record[i], ifs) && isIFSWhitespace(record[i]) {
+				i++
+			}
+			if i < end && !escaped[i] && isIFSByte(record[i], ifs) && !isIFSWhitespace(record[i]) {
+				i++
+			}
+		} else {
+			i++
+		}
+		for i < end && !escaped[i] && isIFSByte(record[i], ifs) && isIFSWhitespace(record[i]) {
+			i++
+		}
 	}
 	return out
 }

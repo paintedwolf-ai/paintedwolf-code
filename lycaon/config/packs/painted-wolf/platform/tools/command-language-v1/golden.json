@@ -560,7 +560,7 @@
       "program": "printf 'parent\\n'; source -- ./bad.sh",
       "setup": {
         "files": {
-          "bad.sh": "echo x; eval data"
+          "bad.sh": "echo x; trap data EXIT"
         },
         "host_facts": {},
         "helpers": {}
@@ -584,8 +584,8 @@
       "qualification": "normative definition; P04/P02 must execute against parser/native owners"
     },
     {
-      "id": "excluded-eval",
-      "program": "printf x > ./never; eval data",
+      "id": "excluded-trap",
+      "program": "printf x > ./never; trap data EXIT",
       "setup": {
         "files": {},
         "host_facts": {},
@@ -1441,7 +1441,7 @@
     },
     {
       "id": "untaken-excluded-syntax",
-      "program": "if false; then eval x; fi; printf never",
+      "program": "if false; then trap x EXIT; fi; printf never",
       "setup": {
         "files": {},
         "host_facts": {},

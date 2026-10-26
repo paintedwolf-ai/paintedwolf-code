@@ -152,7 +152,7 @@ func TestProgramEntryRunsNativeAndExternalStagesWithChildReceipts(t *testing.T) 
 
 func TestProgramEntryRefusesExcludedConstructBeforeEarlierWrite(t *testing.T) {
 	f := newProgramFixture(t)
-	_, err := f.call(t, t.Context(), "external -- /bin/echo x | tee first.txt; eval ls")
+	_, err := f.call(t, t.Context(), "external -- /bin/echo x | tee first.txt; trap ls")
 	rejected := toolrejection.AsToolReject(err)
 	if rejected == nil || !strings.HasPrefix(rejected.Code, "COMMAND_SYNTAX_") || rejected.Data["source_start_byte"] == nil || rejected.Data["source_line"] != 1 {
 		t.Fatalf("excluded construct %v", err)

@@ -77,11 +77,12 @@ func (t *CommandTool) Run(ctx context.Context, args map[string]any, tctx tools.T
 	var payload any = res
 	if outcome.Terminal != nil {
 		caption := terminalCaptureCaption(args)
-		capture := terminaltool.CaptureFromScreen(ctx, t.Background, tctx, outcome.Terminal.Screen, caption)
+		capture := terminaltool.CaptureFromScreen(ctx, t.Background, tctx, outcome.Terminal.Screen, caption, outcome.Terminal.TimedOut)
 		payload = struct {
 			*hostcmd.Result
-			TerminalCapture terminaltool.SnapshotResult `json:"terminal_capture"`
-		}{Result: res, TerminalCapture: capture}
+			TerminalCapture         terminaltool.SnapshotResult `json:"terminal_capture"`
+			ProgramRunningAtCapture bool                        `json:"program_running_at_capture"`
+		}{Result: res, TerminalCapture: capture, ProgramRunningAtCapture: outcome.Terminal.TimedOut}
 	} else if outcome.SnapshotCapture != nil {
 		payload = struct {
 			*hostcmd.Result
@@ -139,7 +140,7 @@ func CommandResultFromOutcome(
 		Stages:            outcome.Snapshot.Stages,
 		ExitCode:          outcome.Snapshot.ExitCode,
 		Tail:              outcome.Snapshot.Tail,
-		OK:                outcome.Snapshot.ExitCode == 0 && outcome.Snapshot.Failure == nil && outcome.Snapshot.TerminationReason != bgprocess.TerminationStopped && outcome.Snapshot.TerminationReason != bgprocess.TerminationTimedOut,
+		OK:                outcome.Snapshot.ExitCode == 0 && outcome.Snapshot.Failure == nil && outcome.Snapshot.TerminationReason != bgprocess.TerminationStopped && (outcome.Snapshot.TerminationReason != bgprocess.TerminationTimedOut || outcome.Terminal != nil),
 		ExecFailure:       outcome.Snapshot.Failure,
 		TerminationReason: string(outcome.Snapshot.TerminationReason),
 		Network:           outcome.Network,

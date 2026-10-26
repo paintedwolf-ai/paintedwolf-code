@@ -19,23 +19,23 @@ func (f *frame) eval(ctx context.Context, s commandsurface.Statement, fields Fie
 	if err != nil {
 		return signal{}, err
 	}
-	defer run.close()
+	defer run.close(ctx)
 	source := strings.Join(fields.Values()[1:], " ")
 	parsed, err := commandsurface.ParseAdmitted(ctx, f.e.ports.Memory, []byte(source), commandsurface.ParseOptions{
 		SourceName: "eval", Version: toolcontract.LanguageVersion, CatalogDigest: run.inv.CatalogDigest,
 	})
 	if err != nil {
-		return signal{}, f.sourceRefusal(run, s, err)
+		return signal{}, f.sourceRefusal(ctx, run, s, err)
 	}
 	lease, err := parsed.SnapshotWithMemory(ctx, f.e.ports.Memory)
 	_ = parsed.Close()
 	if err != nil {
-		run.settle(ownerResult(err), err)
+		run.settle(ctx, ownerResult(err), err)
 		return signal{}, f.stateRefusal(s.SyntaxLocation, err)
 	}
 	defer lease.Close()
 	if err := preflight(lease.Plan.Statements, f.e.ports); err != nil {
-		run.settle(toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerRefused, StopCode: "COMMAND_SYNTAX_UNSUPPORTED", EffectCertainty: toolcontract.NoEffect}, err)
+		run.settle(ctx, toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerRefused, StopCode: "COMMAND_SYNTAX_UNSUPPORTED", EffectCertainty: toolcontract.NoEffect}, err)
 		var refusal *EvaluationRefusal
 		if errors.As(err, &refusal) {
 			return signal{}, f.refuse(refusal.Node, refusal.Code, refusal.Expected, nil)
@@ -49,6 +49,6 @@ func (f *frame) eval(ctx context.Context, s commandsurface.Statement, fields Fie
 	if stop, ok := f.state.latch.Stop(); ok {
 		result = stop.Result
 	}
-	run.settle(result, err)
+	run.settle(ctx, result, err)
 	return sig, err
 }

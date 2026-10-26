@@ -201,6 +201,12 @@ func (o *Owners) prepareSed(ctx context.Context, spec toolcontract.CommandSpecif
 			}
 		}
 	}
+	// BSD sed spells an empty in-place backup suffix as a separate argument.
+	// With -e/-f, that empty argument precedes the file operands and cannot be
+	// mistaken for a file name.
+	if option, ok := bound.Last("-i"); ok && len(option.Values) == 0 && len(operands) > 0 && operands[0].Value == "" && (len(bound.Options("-e")) > 0 || len(bound.Options("-f")) > 0) {
+		operands = operands[1:]
+	}
 	var parts []string
 	for _, item := range bound.Items {
 		option := item.Option

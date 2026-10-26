@@ -128,9 +128,9 @@ func jobBuiltins(jobs *SessionJobs, commands map[string]toolcontract.CommandSpec
 		var out strings.Builder
 		for _, job := range statuses {
 			if showCmd && job.CommandLine != "" {
-				fmt.Fprintf(&out, "[%d] %s running %s\n", jobs.Number(job.Handle), job.Handle, job.CommandLine)
+				fmt.Fprintf(&out, "[%d] %d running %s\n", jobs.Number(job.Handle), jobs.publicID(job.Handle), job.CommandLine)
 			} else {
-				fmt.Fprintf(&out, "[%d] %s running\n", jobs.Number(job.Handle), job.Handle)
+				fmt.Fprintf(&out, "[%d] %d running\n", jobs.Number(job.Handle), jobs.publicID(job.Handle))
 			}
 		}
 		if _, err := fmt.Fprint(nonNilWriter(streams.Output), out.String()); err != nil {

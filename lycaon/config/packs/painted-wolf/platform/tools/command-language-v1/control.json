@@ -75,6 +75,81 @@
       ]
     },
     {
+      "name": "eval",
+      "aliases": [],
+      "family": "pure",
+      "owner": "processes",
+      "argv": "eval [ARG ...]",
+      "forms": [],
+      "operands": "Expanded arguments are joined with spaces, parsed and admitted as a command program in the current shell state.",
+      "encoding": "Input bytes retain exact record delimiters; scalar values must be valid UTF-8 and contain no NUL.",
+      "statuses": {
+        "0": "Completed the evaluated program.",
+        "1": "Ordinary evaluated program failure.",
+        "2": "Invalid or refused evaluated program."
+      },
+      "effects": [
+        {
+          "requires": [],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "eval \"printf '%s\\n' alpha\"",
+        "stdout": "alpha\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Reparses reached expanded arguments with the top-level parser and admission; no extra grants.",
+      "reuse": {
+        "implementation": "lycaon/internal/commandprogram/evaluate_eval.go",
+        "tests": [
+          "lycaon/internal/commandprogram/evaluate_test.go"
+        ],
+        "extension": "Reached dynamic parse and admission.",
+        "evidence_kind": "Behavioral evaluator fixtures"
+      },
+      "unsupported": {
+        "kind": "scalar-operand",
+        "words": [
+          "\u0000"
+        ],
+        "code": "COMMAND_OPERAND_INVALID",
+        "fallback": false
+      },
+      "fixture_ids": [
+        "eval-operands-valid",
+        "eval-rejection"
+      ]
+    },
+    {
       "name": "read",
       "aliases": [],
       "family": "pure",

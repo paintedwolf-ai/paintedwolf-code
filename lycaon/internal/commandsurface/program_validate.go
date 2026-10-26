@@ -83,9 +83,6 @@ func (c *programCompiler) validateNode(n syntax.Node) {
 		if v.Append || v.Index != nil || v.Array != nil {
 			c.unsupported(n, "scalar NAME=value assignments")
 		}
-		if v.Name != nil && v.Name.Value == "IFS" {
-			c.unsupported(n, "fixed space/tab/newline splitting")
-		}
 		if v.Name != nil && v.Name.Value == "PIPESTATUS" {
 			c.unsupported(n, "read-only PIPESTATUS")
 		}

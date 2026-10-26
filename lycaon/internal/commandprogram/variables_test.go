@@ -78,10 +78,8 @@ func TestVariablesRefuseInvalidAndOversizedState(t *testing.T) {
 	ctx := t.Context()
 	for name, err := range map[string]error{
 		"name":     scope.Assign(ctx, "1x", "v"),
-		"ifs":      scope.Assign(ctx, "IFS", ":"),
 		"nul":      scope.Assign(ctx, "V", "a\x00b"),
 		"export":   scope.Export(ctx, "bad-name"),
-		"override": func() error { _, err := scope.Environment(map[string]string{"IFS": " "}); return err }(),
 	} {
 		var refused *ExpansionError
 		if !errors.As(err, &refused) || refused.Code == codeLimitExceeded {
