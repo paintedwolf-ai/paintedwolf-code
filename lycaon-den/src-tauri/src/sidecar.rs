@@ -18,6 +18,8 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{mpsc, Mutex};
 use std::time::Instant;
 
+#[cfg(target_os = "linux")]
+pub(crate) mod captured_engine;
 pub(crate) mod commands;
 pub(crate) mod custody;
 pub(crate) mod daemon;
@@ -467,8 +469,9 @@ fn reset_credential_vault(state: &SidecarState) -> Result<(), String> {
     }
     installation::ensure_current().map_err(|reason| reason.guidance())?;
     let bin = resolve_lycaon_binary()?;
+    let image = crate::linux_generation::capture_helper(&bin)?;
     let config_dir = crate::config_dir::host_config_dir()?;
-    let status = Command::new(&bin)
+    let status = Command::new(&image.path)
         .args(["credentials", "purge", "--yes"])
         .env("LYCAON_CONFIG_DIR", config_dir)
         .stdin(Stdio::null())

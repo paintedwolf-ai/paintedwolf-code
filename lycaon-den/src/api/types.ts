@@ -10192,6 +10192,11 @@ export interface components {
             source?: string;
             /** @description Optional MIME type for this text projection. */
             media_type?: string;
+            /**
+             * Format: uuid
+             * @description Host-stamped visual derived from this attachment or path reference. Edit restoration keeps the original source part instead of relinking this derived image again.
+             */
+            artifact_id?: string;
             /** @description Stable blob ID for a payload attachment, used to restage Edit/rewind. */
             blob_id?: string;
             /** @description Host-stamped locator the agent can open. Payload attachments use a host-data-relative path (`prompt-attachments/{blob_id}/{name}`). path_file / path_folder retrieval parts use the path relative to `root_id`, qualified with `@label/` when that root is not primary. Absent when the part has no openable body (search_hit, user prose, host notices). */
@@ -11520,7 +11525,7 @@ export interface components {
             checkpoints: components["schemas"]["CheckpointEvent"][];
         };
         /**
-         * @description User-presence verifier that confirmed the person before the shell signed: the operating system's own prompt, or on Linux without a polkit agent, the shell's native app-password dialog.
+         * @description User-presence verifier that confirmed the person before the shell signed. New Linux confirmations use the operating system's polkit authentication agent; credential-vault passwords do not confirm presence.
          * @enum {string}
          */
         PresenceAuthenticator: "macos_user_presence" | "windows_user_presence" | "linux_user_presence" | "linux_app_password";

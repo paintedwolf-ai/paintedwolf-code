@@ -46,6 +46,30 @@ class LinuxCandidateTests(unittest.TestCase):
             with self.subTest(rows=rows), self.assertRaises(ValueError):
                 matrix({"schema_version": 2, "platforms": rows})
 
+    def test_candidates_share_full_catalog_admission(self):
+        malformed = []
+        catalog = copy.deepcopy(self.catalog)
+        catalog["schema_version"] = 2.0
+        malformed.append(catalog)
+        catalog = copy.deepcopy(self.catalog)
+        catalog["platforms"].append(copy.deepcopy(catalog["platforms"][0]))
+        malformed.append(catalog)
+        for field, value in [("package_extensions", ["dmg", "dmg"]),
+                             ("updater_extension", "invalid extension"),
+                             ("publication", "unknown")]:
+            catalog = copy.deepcopy(self.catalog)
+            catalog["platforms"][0][field] = value
+            malformed.append(catalog)
+        catalog = copy.deepcopy(self.catalog)
+        del catalog["platforms"][1]["updater_extension"]
+        malformed.append(catalog)
+        for catalog in malformed:
+            with self.subTest(catalog=catalog):
+                with self.assertRaises(ValueError):
+                    matrix(catalog)
+                with self.assertRaises(ValueError):
+                    verify(catalog, "linux-x86_64", "ubuntu-24.04", "amd64")
+
     def test_runner_identity_variable_does_not_replace_the_catalog_label(self):
         command = [sys.executable, str(ROOT / "scripts/linux_release/candidates.py"),
                    "--catalog", str(ROOT / "packaging/release-platforms.json"),

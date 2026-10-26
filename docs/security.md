@@ -199,6 +199,24 @@ One broker serves the host, at an address recorded in the state directory and re
 
 No credential travels in that environment. Identity is the calling process: the broker resolves the peer of each loopback connection to the launch it descends from, through an inherited descriptor that fork, exec, and setsid all preserve. A process cannot forge descent it does not have, and one it does have cannot be lost by reparenting. Where descendants cannot be observed, mediated egress is not offered at all rather than offered without attribution.
 
+### Host proxy policy
+
+[`internal/hostproxy`](../lycaon/internal/hostproxy) owns proxy selection for each effective destination: loopback destinations and `NO_PROXY` exceptions remain direct, explicit environment settings take precedence, and desktop settings supply the remaining policy. Invalid settings, unavailable configured readers, and unsupported PAC/WPAD return a failure; they never authorize a direct retry. Linux GNOME settings use a fixed, bounded native read. Nix packaging binds that reader to its retained GLib executable, without an environment or agent-selected command override.
+
+| Network path | Proxy owner |
+|---|---|
+| Provider, MCP, browser metadata, model provisioning and ordinary host HTTP | Purpose-bound `httpclient` transports select policy for each request and redirect |
+| OSV advisory exports | The scanner HTTP factory supplies the host download transport |
+| First-party mediated HTTP and feed requests | Authorization and address validation precede `hostproxy.DialPinned` for every hop |
+| Command and managed-browser broker connections | The existing action lease and destination grant precede the same pinned dialer |
+| Linux native update discovery | A bounded private engine child resolves each pointer/signature URL; native requests refuse redirects |
+| Exact loopback, Unix sockets and local native services | Explicit local transports retain their existing capability boundary |
+| Release artifact generation tooling | Build-time clients retain their own supplied transport; they are not an application network path |
+
+Pinned routes send the approved numeric address and port through HTTP/HTTPS CONNECT or SOCKS5. They preserve the original HTTP host and TLS server identity, so proxy-side DNS cannot change the approved destination. Proxy setup has bounded replies and cancellation, normal certificate verification, and no authentication or direct fallback. Proxy credentials belong only to the selected proxy connection; they do not enter origin headers, command environments or transport diagnostics. Selecting a proxy does not grant a destination, local socket or loopback capability.
+
+The native updater captures an engine descriptor against the package manifest and running desktop before using it for auxiliary children. A package mismatch requires restart; an installation without a qualified capture refuses the helper. Nix generation admission is supplied by the separate generation owner. Signed feed verification and HTTPS validation remain independent checks.
+
 ### Processes a command leaves behind
 
 Build tooling reuses daemons by design: a build server, a test supervisor, a watcher, a language server. On macOS a process that outlives the command which started it keeps the boundary applied at spawn, so the host tracks whose it is rather than losing sight of it. On Linux a command's processes end with the command: the helper is the first process of the command's PID namespace, and when it exits the kernel ends everything left inside.
@@ -235,7 +253,7 @@ The intended policy is platform-independent; enforcement adapters differ. macOS 
 
 | Boundary | macOS (Seatbelt) | Linux (namespaces, Landlock, seccomp) |
 |---|---|---|
-| Delivery | SBPL profile over an inherited pipe; one helper exec | Typed boundary plan over the same pipe; the helper re-executes itself once as the first process of fresh user, mount, PID, and network namespaces, and the outer helper relays signals and exit status |
+| Delivery | SBPL profile over an inherited pipe; one helper exec | Typed boundary plan over the same pipe; the helper re-executes itself once as the first process of fresh user, mount, PID, network, and IPC namespaces, and the outer helper relays signals and exit status |
 | Reads | `file-read*` allowed, then denied subtrees with allow-backs | Landlock grants read and execute below `/`; each denied subtree is covered by an empty read-only placeholder, and each allow-back beneath one is bound back over it |
 | Writes | `file-write*` to write roots, then layered denies and grants | Landlock grants every filesystem access the kernel's ABI knows, including rename and truncation, below each write root and exact grant; a denied path inside a grant is covered by a read-only copy of itself, and a grant beneath that is bound back |
 | Devices | Named device sinks | `/dev` is rebuilt: `null`, `zero`, `full`, `random`, `urandom`, `tty`, the host's `pts` and `ptmx`, a fresh 64 MiB `shm` per launch, and the descriptor links; other devices are absent |
@@ -245,6 +263,7 @@ The intended policy is platform-independent; enforcement adapters differ. macOS 
 | Loopback connect, direct IP | `localhost` and port rules | An admitted stream connection runs on a socket the supervisor creates in the host's namespace and connects before it replaces the process's own; a destination inside the sandbox stays there. Datagram sockets never leave the namespace, because a host datagram socket sends wherever a later call names. The outer helper relays each granted host loopback datagram service from the same address inside the sandbox: those the host serves at launch below the ephemeral port range before the command starts, any other when the process connects to it. A `udp` permit, or direct IP without permits, adds a gateway interface that carries every route off the sandbox; the outer helper forwards each datagram a permit covers from a socket of its own and writes the replies back, and refuses a connect no permit covers. Direct IP reaches names through a stub at `127.0.0.53` inside the sandbox that the supervisor relays to the host's resolver |
 | Local listener | `localhost` bind and inbound rules | A granted stream listener is a socket the supervisor binds to loopback in the host's namespace and puts listening at once; the wildcard address is narrowed to loopback. A granted datagram listener on a fixed port binds inside the sandbox, and the outer helper first takes the same port on the host's loopback and relays from it, so a port the host already uses refuses the bind. Any other listener stays inside the sandbox |
 | Unix-domain sockets | Path connects denied except exact grants, including sockets the program created itself; `socketpair` allowed | The supervisor connects an exact grant by its resolved path and refuses every other path with `EACCES`, binding a path included; abstract names stay in the sandbox's namespace. A datagram Unix socket, even a connected end of a pair, sends to whatever path a later call names, which the filter cannot read, so neither `socket` nor `socketpair` creates one; stream and seqpacket pairs are allowed; `io_uring` answers `ENOSYS`, since its operations bypass the filter; a send that would open a connection by TCP Fast Open is refused |
+| System V IPC | Denied by the ordinary profile; POSIX shared memory allowed | A private IPC namespace isolates shared-memory segments, semaphores, and message queues from the host and other actions; descendants of one action share its objects, and namespace teardown removes them |
 | Signals | Same-sandbox descendants, or any process with `process_control` | The PID namespace: a confined process can signal only processes inside it, with or without `process_control`; the native `process_signal` tool reaches the session's own processes outside it |
 | Escape | Profile denies | seccomp kills a process that calls `unshare`, `setns`, `mount` or the mount API, `pivot_root`, `ptrace`, `process_vm_*`, `bpf`, `perf_event_open`, `kexec_*`, module loading, or the key-management syscalls, `ioctl` with `TIOCSTI` or `TIOCLINUX` (compared as the kernel does, on the request's low 32 bits), so an inherited terminal cannot be fed input, or `clone` with a namespace flag; `clone3` answers `ENOSYS` so libraries fall back to `clone`; no capability remains and privileges cannot grow |
 | Attestation | `sandbox_check` membership | Landlock refuses a probe write, seccomp mode 2, no-new-privs set, empty capability sets, and every namespace differs from the engine's; any miss ends the helper before the target runs |
@@ -270,6 +289,8 @@ on the next system switch. Re-select the required generation and rebuild the
 system to recover a missing attachment. The module does not enable AppArmor,
 relax namespace sysctls, admit arbitrary store executables or grant vault trust
 through an AppArmor profile. Missing kernel capabilities still fail closed.
+
+The native `test:confine:linux` gate includes a required helper leg: a stdio MCP process must stay inside its write grant, a bundled-scanner boundary must keep source input read-only while permitting output, and the source-qualified native document core must round-trip its edit/restore/undo protocol under applied confinement. Missing kernel capabilities fail these fixtures. Browser admission and unsafe-root cases are included in the pinned-browser leg. These boundary fixtures complement producer and installed-package qualification; the scanner probe does not qualify the shipped scanner binary.
 
 What the Linux adapter cannot express yet, and what it expresses differently, is bounded:
 
@@ -370,7 +391,7 @@ That catalog is two bundled detection packs, `key-material` and `credential-stor
 
 The managed browser renders untrusted pages under the same floors as any confined process (the protected, agent-policy, and control-plane write floors and the key-material read floor) while its own cache and profile directories stay writable.
 
-Attached roots and reviewed write-root grants may name broad folders, including the home directory and filesystem root. They may contain protected stores, but cannot be a store or lie inside it. Per-path floors remain independent: the control plane is refused, key material and credential stores need exact-path approval, and agent-policy writes need their own review. Native reads of catalogued protected locations remain reviewable even inside attached roots; a broad read-tree grant never covers them.
+A writable root cannot equal or contain the app's state tree. Attached folders, reviewed and durable grants, and session scratch pass that rule before launch; unsafe default temporary and cache roots are excluded. Canonical path comparison covers aliases, and the rule remains active when state reads are enabled. This prevents a program from moving the state tree by renaming an ancestor. Other broad folders may contain protected stores, but cannot be a store or lie inside it. Per-path floors remain independent: the control plane is refused, key material and credential stores need exact-path approval, and agent-policy writes need their own review. Native reads of catalogued protected locations remain reviewable even inside attached roots; a broad read-tree grant never covers them.
 
 File-read cards offer host-approved ancestor directory scopes, beginning at the target's containing directory. Each scope has its own opaque option for every duration. Sensitive targets and all writes retain exact-path grants. Choosing a broader directory updates the host-authored coverage and never accepts a caller-written path.
 

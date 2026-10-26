@@ -412,6 +412,15 @@
     ],
     "release:live-test": [
       "release:live-test"
+    ],
+    "release:rehearse:package-probe": [
+      "release:rehearse:package-probe"
+    ],
+    "release:rehearse:rpm-metadata": [
+      "release:rehearse:rpm-metadata"
+    ],
+    "release:rehearse:pacman-construction": [
+      "release:rehearse:pacman-construction"
     ]
   },
   "private": [
@@ -441,7 +450,10 @@
     "test:confine:linux": "passthrough",
     "release:rehearse:linux-signing": "passthrough",
     "test:linux:installed": "passthrough",
-    "release:live-test": "passthrough"
+    "release:live-test": "passthrough",
+    "release:rehearse:package-probe": "passthrough",
+    "release:rehearse:rpm-metadata": "passthrough",
+    "release:rehearse:pacman-construction": "passthrough"
   },
   "resources": {
     "den:harness:test": {
@@ -781,6 +793,24 @@
     "release:live-test": {
       "locks": [
         "*"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:package-probe": {
+      "locks": [
+        "linux-package-probe"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:rpm-metadata": {
+      "locks": [
+        "rpm-metadata-fixture"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:pacman-construction": {
+      "locks": [
+        "pacman-substrate"
       ],
       "workers": 1
     }
