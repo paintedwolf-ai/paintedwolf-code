@@ -249,13 +249,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	if err := r.beginProgram(ctx, run, outputs, snapshot.Plan, scope, screening); err != nil {
 		return "", err
 	}
-	var outputLimit int64
-	for _, limit := range run.catalog.Language.Limits {
-		if limit.ID == "spill_bytes" {
-			outputLimit = limit.Maximum
-		}
-	}
-	stdout, stderr := newProgramStream(ctx, outputLimit, r.sessionResources(tc.Identity.SessionID), memory), newProgramStream(ctx, outputLimit, r.sessionResources(tc.Identity.SessionID), memory)
+	stdout, stderr := r.newProgramStreams(ctx, run)
 	releaseOutputs := release
 	release = func() { _ = stdout.Close(); _ = stderr.Close(); releaseOutputs() }
 	run.baseEnv = programEnvironment(tc)
