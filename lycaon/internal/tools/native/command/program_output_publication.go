@@ -21,10 +21,7 @@ func (d *ProgramDispatcher) beginOutput(ctx context.Context, destination command
 	if !ok {
 		return tools.CommandOutputWrite{}, fmt.Errorf("output publication requires write owner")
 	}
-	operation, err := commandPublicationDefinition(definition.Operation)
-	if err != nil {
-		return tools.CommandOutputWrite{}, err
-	}
+	operation := definition.Operation
 	bound, err := toolcontract.BindPublication(operation, destination.Invocation, toolcontract.RedirectPublication, destination.Redirect.Operator)
 	if err != nil {
 		return tools.CommandOutputWrite{}, err
