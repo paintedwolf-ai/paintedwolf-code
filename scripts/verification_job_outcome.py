@@ -9,6 +9,11 @@ def _code(value):
     return type(value) is int and 0 <= value <= 255
 
 
+def _finished(value):
+    return type(value) in (int, float) and value > 0 and (
+        type(value) is int or math.isfinite(value))
+
+
 class ManagedCaseOutcome(RuntimeError):
     def __init__(self, wait_exit, result, terminal, *, consistent):
         result = result if isinstance(result, dict) else {}
@@ -43,8 +48,7 @@ def require_case_success(wait_exit, result, terminal):
             isinstance(job, str) and re.fullmatch('[a-f0-9]{32}', job) is not None
             and isinstance(terminal.get('log'), str) and bool(terminal['log'])
             and state in ('completed', 'unverified') and _code(code)
-            and type(terminal.get('finished_at')) in (int, float)
-            and math.isfinite(terminal['finished_at']) and terminal['finished_at'] > 0
+            and _finished(terminal.get('finished_at')) and _finished(result.get('finished_at'))
             and not (state == 'unverified' and code == 0)
             and all(result.get(key) == terminal.get(key) for key in ('job_id', 'log', 'state', 'finished_at'))
             and _code(result.get('task_exit_code')) and result['task_exit_code'] == code
