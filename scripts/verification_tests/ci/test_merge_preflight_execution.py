@@ -1,5 +1,7 @@
 """Merge phases preserve the full recipe and stop before expensive work on failure."""
 import json
+from datetime import datetime, timedelta, timezone
+import os
 import subprocess
 from pathlib import Path
 import tempfile
@@ -87,7 +89,8 @@ class MergePreflightTests(unittest.TestCase):
         from ci_policy.health import throughput
         runs = [dict(id=n, conclusion=conclusion, created_at="2026-10-22T10:00:00Z", updated_at="2026-10-22T10:10:00Z")
                 for n, conclusion in enumerate(("success", "success", "failure", "cancelled"))]
-        jobs = lambda run: [dict(id=run["id"], runner_id=1, started_at="2026-10-22T10:01:00Z", completed_at="2026-10-22T10:10:00Z")]
+        jobs = lambda run: [dict(id=run["id"], runner_id=1, started_at="2026-10-22T10:01:00Z", completed_at="2026-10-22T10:10:00Z"),
+                            dict(id=100 + run["id"], runner_id=1, conclusion="skipped", started_at="2026-10-22T10:01:00Z", completed_at="2026-10-22T10:10:00Z")]
         report = throughput(runs, [{"number": 1}, {"number": 1}], "2026-10-22T10:00:00Z", "2026-10-22T12:00:00Z", jobs)
         self.assertEqual(report["main_merges_per_hour"], .5)
         self.assertEqual(report["decided_groups"], 3)
@@ -95,3 +98,51 @@ class MergePreflightTests(unittest.TestCase):
         self.assertEqual(report["merge_group_outcomes"]["cancelled"], 1)
         self.assertEqual(report["created_to_failure_p95_seconds"], 600)
         self.assertEqual(report["observed_runner_minutes"], 36)
+
+    def test_queue_health_queries_batch_identity_for_original_delivery(self):
+        from ci_policy import health
+        pull = {"number": 12, "baseRefName": "main", "mergedAt": "2026-10-22T12:00:00Z",
+                "updatedAt": "2026-10-22T12:00:00Z"}
+        response = {"data": {"repository": {"pullRequests": {
+            "pageInfo": {"hasNextPage": False, "endCursor": None}, "nodes": [pull]}}}}
+        with patch.dict(os.environ, {"GITHUB_REPOSITORY": "o/r"}), patch.object(health, "api", return_value=response) as api:
+            self.assertEqual(health.recent_merges("2026-10-22T10:00:00Z"), [pull])
+        query = api.call_args.args[2]["query"]
+        for field in ("headRefName", "body", "author {login}"):
+            self.assertIn(field, query)
+
+    def test_queue_health_report_counts_queue_dispatches_and_reuses_job_inventory(self):
+        from ci_policy import health
+        now = datetime.now(timezone.utc)
+        stamp = lambda minutes: (now - timedelta(minutes=minutes)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        def run(number, event, branch):
+            return {"id": number, "event": event, "head_branch": branch, "status": "completed",
+                    "conclusion": "success", "created_at": stamp(8), "updated_at": stamp(2),
+                    "html_url": f"https://example.test/runs/{number}"}
+        runs = [run(1, "merge_group", "gh-readonly-queue/main/pr-1"),
+                run(2, "workflow_dispatch", "gh-readonly-queue/main/pr-2"),
+                run(3, "workflow_dispatch", "main")]
+        calls = []
+        def pages(path, *_):
+            calls.append(path)
+            if "/workflows/ci.yml/runs?" in path:
+                return iter(runs)
+            return iter([{"id": int(path.split("/runs/")[1].split("/")[0]), "runner_id": 1,
+                          "name": "integration / limits", "conclusion": "success", "steps": [],
+                          "created_at": stamp(8), "started_at": stamp(7), "completed_at": stamp(2)}])
+        with tempfile.TemporaryDirectory() as directory, patch.object(health, "pages", side_effect=pages), \
+                patch.object(health, "repository", return_value="repos/o/r"), \
+                patch.object(health, "recent_merges", return_value=[]), \
+                patch.object(health, "evidence", return_value=([], [])), \
+                patch.dict(os.environ, {"GITHUB_STEP_SUMMARY": str(Path(directory) / "summary.md")}):
+            before = Path.cwd()
+            try:
+                os.chdir(directory)
+                health.main()
+                report = json.loads(Path("queue-health.json").read_text())
+            finally:
+                os.chdir(before)
+        self.assertEqual(report["runs_observed"], 2)
+        self.assertEqual(report["throughput"]["decided_groups"], 2)
+        self.assertEqual(report["job_costs"]["totals"]["runner_seconds"], 600)
+        self.assertEqual(sum("/jobs?filter=all" in path for path in calls), 2)
