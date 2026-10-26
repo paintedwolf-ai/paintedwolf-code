@@ -115,9 +115,14 @@ func (t *MoveTool) Move(ctx context.Context, in MoveInput, tctx tools.ToolContex
 		if crossRoot {
 			// The copy operation stages and reviews the destination before publication.
 			// Remove the source only after that publication succeeds.
-			copyResult, err := (&CopyTool{Boundary: t.Boundary}).Copy(ctx, CopyInput{
+			copyOperation, err := (&CopyTool{Boundary: t.Boundary}).Begin(CopyInput{
 				Pairs: []FilePair{pair}, Recursive: in.Directories, NoClobber: in.NoClobber,
-			}, tctx)
+			}, in.Memory)
+			if err != nil {
+				return result, err
+			}
+			copyResult, err := copyOperation.CopyPair(ctx, pair, tctx)
+			copyOperation.Close()
 			if err != nil {
 				for _, copied := range copyResult.Copied {
 					result.DestinationCopied = append(result.DestinationCopied, FilePair{From: copied.From, To: copied.To})
@@ -129,7 +134,7 @@ func (t *MoveTool) Move(ctx context.Context, in MoveInput, tctx tools.ToolContex
 				continue
 			}
 			if _, err := (&DeleteTool{Boundary: t.Boundary}).Delete(ctx, DeleteInput{
-				Paths: []string{pair.From}, Recursive: in.Directories,
+				Memory: in.Memory, Paths: []string{pair.From}, Recursive: in.Directories,
 			}, tctx); err != nil {
 				result.DestinationCopied = append(result.DestinationCopied, FilePair{From: fromSlash, To: toSlash})
 				return result, fmt.Errorf("move %s -> %s after copy: %w", pair.From, pair.To, err)
