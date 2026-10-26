@@ -69,7 +69,7 @@ type Limits struct {
 
 // CatalogLimits reads the frozen language catalog's regex ceilings.
 func CatalogLimits() (Limits, error) {
-	catalog, err := toolcontract.LanguageV1()
+	catalog, err := toolcontract.ReadOnlyLanguageV1()
 	if err != nil {
 		return Limits{}, err
 	}

@@ -107,7 +107,7 @@ func (p progressFacts) ProgramProgressState(ctx context.Context, id string) (pro
 }
 
 // New composes the entry. Structured tools exist only as owner identities.
-func New(t *testing.T, options Options) *Fixture {
+func New(t testing.TB, options Options) *Fixture {
 	t.Helper()
 	confine.TestingSetAutoConfine(t)
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "0")

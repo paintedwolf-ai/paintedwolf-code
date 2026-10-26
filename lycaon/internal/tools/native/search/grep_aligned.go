@@ -80,5 +80,5 @@ func (r *grepRun) searchAlignedStdin() (finalErr error) {
 	if err != nil {
 		return err
 	}
-	return r.searchStream(r.stdinLabel(), reader, 0, int(size), firstNull, nil, r.forcedNames(false))
+	return r.searchStream("(standard input)", reader, 0, int(size), firstNull, nil, r.forcedNames(false))
 }

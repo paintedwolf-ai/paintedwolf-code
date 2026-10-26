@@ -31,6 +31,19 @@ func (a *fieldAssembly) add(text string, quoted bool) error {
 	return nil
 }
 
+func (a *fieldAssembly) addSubstitution(subst *ProcessSubstitution) error {
+	text := subst.Path()
+	if strings.IndexByte(text, 0) >= 0 {
+		return invalidValue(a.span, "expanded values without NUL bytes")
+	}
+	if err := a.charge(pieceBytes); err != nil {
+		return err
+	}
+	a.current = append(a.current, expansionPiece{text: text, quoted: true, subst: subst})
+	a.present = true
+	return nil
+}
+
 func (a *fieldAssembly) split(text string) error {
 	start := 0
 	for i := 0; i <= len(text); i++ {

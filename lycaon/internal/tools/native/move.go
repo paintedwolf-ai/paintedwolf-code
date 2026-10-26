@@ -141,7 +141,7 @@ func (t *MoveTool) Move(ctx context.Context, in MoveInput, tctx tools.ToolContex
 		var reviewDisplacedPolicy func() ([]sourceeffect.ReviewedFile, error)
 		if srcInfo, srcErr := os.Lstat(srcResolved.Abs); srcErr == nil && srcInfo.IsDir() {
 			if dstInfo, dstErr := os.Lstat(dstResolved.Abs); dstErr == nil && dstInfo.IsDir() {
-				summary, inspectErr := inspectDeleteTree(ctx, t.Boundary, tctx, dstResolved, prof, in.Memory, nil)
+				summary, inspectErr := inspectDeleteTree(ctx, t.Boundary, tctx, dstResolved, prof, in.Memory, nil, false)
 				if inspectErr != nil {
 					return result, fmt.Errorf("move %s -> %s: %w", pair.From, pair.To, inspectErr)
 				}

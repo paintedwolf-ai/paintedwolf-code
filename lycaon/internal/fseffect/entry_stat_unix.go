@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"golang.org/x/sys/unix"
@@ -46,6 +47,26 @@ func (r *ReadRoot) Stat(rel string, follow bool, admit func(string) error) (Entr
 		return nil, nil
 	})
 	return out, err
+}
+
+// StatChildAt reports an immediate child's no-follow metadata through a held
+// contained directory descriptor.
+func (r *ReadRoot) StatChildAt(dir *os.File, _ string, name string, admit func(string) error) (EntryStat, error) {
+	var st unix.Stat_t
+	if err := unix.Fstatat(int(dir.Fd()), name, &st, unix.AT_SYMLINK_NOFOLLOW); err != nil {
+		return EntryStat{}, &fs.PathError{Op: "open effect path", Path: name, Err: err}
+	}
+	if admit != nil {
+		dirName := dir.Name()
+		actual := dirName + string(filepath.Separator) + name
+		if dirName == "" || name == "" || name == "." || name == ".." || strings.ContainsRune(name, filepath.Separator) || strings.HasSuffix(dirName, string(filepath.Separator)) {
+			actual = filepath.Join(dirName, name)
+		}
+		if err := admit(actual); err != nil {
+			return EntryStat{}, err
+		}
+	}
+	return entryStat(name, &st), nil
 }
 
 func entryStat(name string, st *unix.Stat_t) EntryStat {

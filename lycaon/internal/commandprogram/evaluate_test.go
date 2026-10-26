@@ -320,19 +320,19 @@ func TestDynamicSelectorBindsOneOperationAsData(t *testing.T) {
 	}
 }
 
-func TestCatalogHelpPrintsWithoutDispatchingOwner(t *testing.T) {
+func TestUtilityHelpReachesOwnerAndExportHelpStaysInFrame(t *testing.T) {
 	f := newEvalFixture(t)
-	out, err := f.run(t, t.Context(), "grep --help; git status --help; export --help")
+	out, err := f.run(t, t.Context(), "grep --help; export --help")
 	if err != nil || out.Stop != nil || out.Status != 0 {
 		t.Fatalf("evaluate --help: err=%v stop=%+v status=%d", err, out.Stop, out.Status)
 	}
-	if len(f.log.argv()) != 0 {
-		t.Fatalf("--help dispatched to owner: %q", f.log.argv())
+	if got := f.log.argv(); !slices.Equal(got, []string{"grep --help"}) {
+		t.Fatalf("utility help owner dispatches: %q", got)
 	}
-	wantGrep := catalogCommand(t, "grep").Help() + "\n"
-	wantGitStatus := catalogCommand(t, "git status").Help() + "\n"
-	wantExport := catalogCommand(t, "export").Help() + "\n"
-	if got, want := f.stdout.String(), wantGrep+wantGitStatus+wantExport; got != want {
-		t.Fatalf("help output %q, want %q", got, want)
+	if len(out.Children) != 2 || out.Children[0].Result.Status != 1 || !out.Children[0].Executed {
+		t.Fatalf("utility owner's ordinary status was replaced: %+v", out.Children)
+	}
+	if got, want := f.stdout.String(), catalogCommand(t, "export").Help()+"\n"; got != want {
+		t.Fatalf("export help output %q, want %q", got, want)
 	}
 }

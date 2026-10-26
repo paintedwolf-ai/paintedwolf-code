@@ -116,10 +116,6 @@ type programRun struct {
 
 	// envelope carries the call's launch capability requests to each launch.
 	envelope map[string]any
-
-	externalOnce sync.Once
-	external     toolcontract.OperationDefinition
-	externalErr  error
 }
 
 // ProgramOutcome is the command tool's result for a settled program.
@@ -173,7 +169,11 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	if r == nil || r.Executor == nil || r.Recorder == nil || r.Evaluate == nil || r.Supervisor == nil || r.Sessions == nil || r.Projector == nil {
 		return "", fmt.Errorf("command program runtime is not configured")
 	}
-	catalog, err := toolcontract.LanguageV1()
+	catalog, err := toolcontract.ReadOnlyLanguageV1()
+	if err != nil {
+		return "", err
+	}
+	commands, err := compiledCommandIndex()
 	if err != nil {
 		return "", err
 	}
@@ -199,7 +199,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 		}
 	}()
 
-	run := &programRun{catalog: catalog, commands: commandIndex(catalog), envelope: launchEnvelope(args), tc: tc, memory: memory, source: source, parentReceipt: tc.Invocation.ID}
+	run := &programRun{catalog: catalog, commands: commands, envelope: launchEnvelope(args), tc: tc, memory: memory, source: source, parentReceipt: tc.Invocation.ID}
 	paths, err := r.bindProgramFrame(ctx, run, args, snapshot.Plan.CatalogDigest)
 	if err != nil {
 		return "", err
@@ -252,11 +252,14 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	stdout, stderr := r.newProgramStreams(ctx, run)
 	releaseOutputs := release
 	release = func() { _ = stdout.Close(); _ = stderr.Close(); releaseOutputs() }
-	run.baseEnv = programEnvironment(tc)
+	run.baseEnv, err = programEnvironment(tc)
+	if err != nil {
+		return "", err
+	}
 	sources := owners.Sources
 	if sources == nil {
-		if capture, ok := owners.Input.(commandprogram.SourceCapture); ok {
-			sources = capture
+		if sc, ok := owners.Input.(commandprogram.SourceCapture); ok {
+			sources = sc
 		}
 	}
 	ports := commandprogram.EvaluationPorts{
@@ -265,6 +268,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 		Executions: dispatcher, Supervision: r.Supervisor, Predicates: commandprogram.PredicateRuntime{Patterns: commandprogram.NativePredicatePatterns{Memory: memory}},
 		Memory:      memory,
 		Environment: run.baseEnv,
+		ScratchDir:  tc.Host.SessionScratchDir,
 		Streams:     commandprogram.Streams{Input: commandprogram.NullInput(), Output: stdout, Error: stderr},
 	}
 	var evaluated commandprogram.ProgramOutcome
@@ -423,7 +427,7 @@ func (r *ProgramRuntime) bindProgramSurface(ctx context.Context, run *programRun
 	if write, ok := r.Registry.Definition("write"); ok {
 		active = append(active, write.Operation)
 	}
-	seen := map[string]bool{external.Facts().Identity: true, "write": true}
+	seen := map[string]bool{external.ReadOnlyFacts().Identity: true, "write": true}
 	for _, operation := range owners.Natives {
 		for _, tool := range append([]string{operation.Tool}, operation.Tools...) {
 			if tool == "" || seen[tool] {
@@ -557,7 +561,7 @@ func (r *ProgramRuntime) feedback(ctx context.Context, run *programRun, dispatch
 			data := map[string]any{"tool": "command", "source_start_byte": span.StartByte, "source_end_byte": span.EndByte, "source_line": span.Line, "source_column": span.Column, "expected": evaluationRefusal.Expected, "expected_form": evaluationRefusal.Expected, "reason": evaluationRefusal.Expected}
 			var expansion *commandprogram.ExpansionError
 			if errors.As(evaluationRefusal.Cause, &expansion) && expansion.Limit != "" {
-				data["limit_id"], data["maximum"], data["observed"] = expansion.Limit, expansion.Maximum, expansion.Observed
+				data["limit_id"], data["maximum"], data["observed"] = expansion.Limit, expansion.Maximum, expansion.ObservedValue()
 			}
 			if evaluationRefusal.Command != "" {
 				data["command"], data["word"], data["expected_form"] = evaluationRefusal.Command, evaluationRefusal.Option, evaluationRefusal.Form
@@ -713,6 +717,15 @@ func programNodes(statements []commandsurface.Statement) []commandsurface.Syntax
 		case commandsurface.SimpleCommand:
 			words(node.Words)
 			for _, assignment := range node.Assignments {
+				if assignment.Index != nil {
+					words(commandsurface.ArithmeticPart{Expression: assignment.Index}.Words())
+				}
+				words([]commandsurface.DeferredWord{assignment.Value})
+				words(assignment.Array)
+			}
+		case commandsurface.EnvironmentDeclaration:
+			words(node.Words)
+			for _, assignment := range node.Assignments {
 				words([]commandsurface.DeferredWord{assignment.Value})
 			}
 		case commandsurface.BinaryCommand:
@@ -739,6 +752,10 @@ func programNodes(statements []commandsurface.Statement) []commandsurface.Syntax
 			}
 		case commandsurface.FunctionDeclaration:
 			statement(node.Body)
+		case commandsurface.ArithmeticCommand:
+			words(node.Words())
+		case commandsurface.TrapCommand:
+			list(node.Statements)
 		}
 	}
 	list(statements)
@@ -753,23 +770,39 @@ func programNodes(statements []commandsurface.Statement) []commandsurface.Syntax
 	return unique
 }
 
+var compiledCommandIndex = sync.OnceValues(func() (map[string]toolcontract.CommandSpecification, error) {
+	catalog, err := toolcontract.ReadOnlyLanguageV1()
+	if err != nil {
+		return nil, err
+	}
+	return commandIndex(catalog), nil
+})
+
+var compiledExternalDefinition = sync.OnceValues(func() (toolcontract.OperationDefinition, error) {
+	catalog, err := toolcontract.ReadOnlyLanguageV1()
+	if err != nil {
+		return toolcontract.OperationDefinition{}, err
+	}
+	commands, err := compiledCommandIndex()
+	if err != nil {
+		return toolcontract.OperationDefinition{}, err
+	}
+	contract, ok := toolcontract.Lookup("command")
+	if !ok {
+		return toolcontract.OperationDefinition{}, fmt.Errorf("command contract missing")
+	}
+	return toolcontract.NewOperationDefinition(toolcontract.OperationFacts{
+		Identity: "command", Version: 1, Contract: contract, Arguments: json.RawMessage(`{"type":"object"}`),
+		Commands: []toolcontract.CommandSpecification{commands["external"]}, Resources: catalog.Language.Limits,
+		ProgressGate: toolcontract.ProgressExistingAdmission, RejectionContract: "command",
+		Streams: toolcontract.StreamContract{Input: "exact process stdin bytes", Output: "exact process stdout bytes", Error: "process stderr; typed host refusals", Statuses: map[int]string{0: "process exit status"}},
+	})
+})
+
 // externalDefinition is the command tool's operation for confined launches:
 // the existing command review, detection and policy admit each launch.
 func (r *programRun) externalDefinition() (toolcontract.OperationDefinition, error) {
-	r.externalOnce.Do(func() {
-		contract, ok := toolcontract.Lookup("command")
-		if !ok {
-			r.externalErr = fmt.Errorf("command contract missing")
-			return
-		}
-		r.external, r.externalErr = toolcontract.NewOperationDefinition(toolcontract.OperationFacts{
-			Identity: "command", Version: 1, Contract: contract, Arguments: json.RawMessage(`{"type":"object"}`),
-			Commands: []toolcontract.CommandSpecification{r.commands["external"]}, Resources: r.catalog.Language.Limits,
-			ProgressGate: toolcontract.ProgressExistingAdmission, RejectionContract: "command",
-			Streams: toolcontract.StreamContract{Input: "exact process stdin bytes", Output: "exact process stdout bytes", Error: "process stderr; typed host refusals", Statuses: map[int]string{0: "process exit status"}},
-		})
-	})
-	return r.external, r.externalErr
+	return compiledExternalDefinition()
 }
 
 // programLifetime releases a program's plan and frame once both the tool call

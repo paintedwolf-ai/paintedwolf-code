@@ -1,6 +1,7 @@
 package search
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 )
 
 // grepTree is the shared corpus of the grep and rg form fixtures.
@@ -322,4 +324,39 @@ func TestSearchLimitsRefuseInsteadOfTruncating(t *testing.T) {
 	h.owners.StreamBytes = 0
 	h.owners.ReadBytes = 4
 	h.exec("", "grep", "alpha", "a.txt").expect(t, "streaming ignores whole-file bound", "two alpha\nsix alpha\n", "", 0)
+}
+
+func TestTraversalVisitsCatalogCeilingAtBoundaryAndOnePast(t *testing.T) {
+	files := make(map[string]string, 1000)
+	for i := range 999 {
+		files[fmt.Sprintf("d/f%03d", i)] = ""
+	}
+	files["one"] = ""
+	h := newHarness(t, files)
+	maximum := h.owners.limit("traversal_visits")
+	if maximum != 250_000 {
+		t.Fatalf("traversal_visits = %d, want 250000", maximum)
+	}
+	// Each "d" operand visits d plus its 999 children = 1,000 entries.
+	reps := int(maximum / 1000)
+	atLimit := make([]string, 0, reps+5)
+	atLimit = append(atLimit, "find")
+	for range reps {
+		atLimit = append(atLimit, "d")
+	}
+	atLimit = append(atLimit, "-maxdepth", "1", "-name", "none")
+	h.exec("", atLimit...).expect(t, "at 250k traversal_visits", "", "", 0)
+
+	pastLimit := make([]string, 0, reps+6)
+	pastLimit = append(pastLimit, "find")
+	for range reps {
+		pastLimit = append(pastLimit, "d")
+	}
+	pastLimit = append(pastLimit, "one", "-maxdepth", "1", "-name", "none")
+	r := h.exec("", pastLimit...)
+	r.refused(t, "one past 250k traversal_visits", "COMMAND_LIMIT_EXCEEDED")
+	reject := toolrejection.AsToolReject(r.err)
+	if reject == nil || reject.Data["limit_id"] != "traversal_visits" || reject.Data["maximum"] != maximum || reject.Data["observed"] != maximum+1 {
+		t.Fatalf("unexpected refusal data: %+v", reject)
+	}
 }

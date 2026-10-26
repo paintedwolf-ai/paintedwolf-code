@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
@@ -59,8 +60,8 @@ func TestProgramPublicationRespectsCurrentEffectAuthority(t *testing.T) {
 			reviewCalls := 0
 			if c.review {
 				original := f.Runtime.Owners
-				f.Runtime.Owners = func(tc tools.ToolContext, paths *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
-					owners, err := original(tc, paths)
+				f.Runtime.Owners = func(tc tools.ToolContext, paths *projectpaths.ProgramPaths, memory *toolcontract.ProgramMemory, spill tooloutput.SpillAdmission) (command.ProgramOwners, error) {
+					owners, err := original(tc, paths, memory, spill)
 					owners.PublishDocument = (&native.WriteTool{Boundary: f.Runtime.Boundary, ContentApply: publicationReviewGate{calls: &reviewCalls}}).PublishAccepted
 					return owners, err
 				}
@@ -206,8 +207,8 @@ func TestProgramPublicationReviewRaceStopsBeforeRead(t *testing.T) {
 	testutil.FailErr(t, "permit", os.Chmod(dir, 0o755))
 	calls := 0
 	original := f.Runtime.Owners
-	f.Runtime.Owners = func(tc tools.ToolContext, paths *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
-		owners, err := original(tc, paths)
+	f.Runtime.Owners = func(tc tools.ToolContext, paths *projectpaths.ProgramPaths, memory *toolcontract.ProgramMemory, spill tooloutput.SpillAdmission) (command.ProgramOwners, error) {
+		owners, err := original(tc, paths, memory, spill)
 		owners.PublishDocument = (&native.WriteTool{Boundary: f.Runtime.Boundary, ContentApply: publicationRaceGate{change: func(ctx context.Context) error {
 			calls++
 			current, err := service.CurrentSnapshot(ctx, p.ID, doc.ID)

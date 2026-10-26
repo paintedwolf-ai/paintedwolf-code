@@ -16,6 +16,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/egressproxy"
 	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -175,26 +176,10 @@ func TestProgramExternalMacOSShimToolsWriteDarwinUserTempWithoutStderr(t *testin
 	}
 }
 
-// sandboxOnlyEnvKeys lists the environment keys that confine.ProcessEnvironment
-// and confine.GitSSHEnv may inject onto an external child process when proxy
-// confinement is active. Aside from these sandbox-injected keys, native `env`
-// and `external -- /usr/bin/env` receive the exact same environment from
-// ProcessEnvironment.
-var sandboxOnlyEnvKeys = map[string]bool{
-	"HTTP_PROXY":             true,
-	"HTTPS_PROXY":            true,
-	"ALL_PROXY":              true,
-	"NO_PROXY":               true,
-	"http_proxy":             true,
-	"https_proxy":            true,
-	"all_proxy":              true,
-	"no_proxy":               true,
-	"GIT_SSH_COMMAND":        true,
-	"LYCAON_SOCKS_PROXY":     true,
-	"LYCAON_SSH_KNOWN_HOSTS": true,
-}
-
 func TestProgramEnvNeverLeaksEngineOrSecretVarsAndMatchesExternalChild(t *testing.T) {
+	restoreBroker := confine.SetBrokerForTest(nil, egressproxy.Addrs{HTTP: "127.0.0.1:18472", SOCKS: "127.0.0.1:18473"})
+	t.Cleanup(restoreBroker)
+	t.Setenv("LYCAON_SANDBOX_NETWORK", "")
 	envBin, err := exec.LookPath("env")
 	if err != nil {
 		t.Skip("env binary not found")
@@ -265,24 +250,36 @@ func TestProgramEnvNeverLeaksEngineOrSecretVarsAndMatchesExternalChild(t *testin
 		}
 	}
 
-	nativeLines := sortedEnvLines(nativeStdout, false)
-	externalLines := sortedEnvLines(externalStdout, true)
+	nativeLines := sortedEnvLines(nativeStdout)
+	externalLines := sortedEnvLines(externalStdout)
 	if !slices.Equal(nativeLines, externalLines) {
-		t.Fatalf("native env != external env (modulo sandbox vars):\nnative:   %v\nexternal: %v", nativeLines, externalLines)
+		t.Fatalf("native env != external env:\nnative:   %v\nexternal: %v", nativeLines, externalLines)
+	}
+	for _, name := range []string{"PATH", "HTTP_PROXY", "GIT_SSH_COMMAND", "LYCAON_SOCKS_PROXY"} {
+		out, err := f.call(t, t.Context(), "printenv "+name)
+		testutil.FailErr(t, "run native printenv "+name, err)
+		got := decodeOutcome(t, out).Stdout
+		for _, line := range nativeLines {
+			if key, value, ok := strings.Cut(line, "="); ok && key == name && got != value+"\n" {
+				t.Fatalf("printenv %s = %q, want %q", name, got, value+"\n")
+			}
+		}
+	}
+	for _, line := range nativeLines {
+		if key, value, ok := strings.Cut(line, "="); ok && key == "HTTP_PROXY" {
+			out, err := f.call(t, t.Context(), `printf '%s\n' "$HTTP_PROXY"`)
+			testutil.FailErr(t, "expand HTTP_PROXY", err)
+			if got := decodeOutcome(t, out).Stdout; got != value+"\n" {
+				t.Fatalf("$HTTP_PROXY = %q, want %q", got, value+"\n")
+			}
+		}
 	}
 }
 
-func sortedEnvLines(stdout string, stripSandbox bool) []string {
+func sortedEnvLines(stdout string) []string {
 	var out []string
 	for _, line := range strings.Split(strings.TrimSpace(stdout), "\n") {
 		if line == "" {
-			continue
-		}
-		key, _, ok := strings.Cut(line, "=")
-		if !ok {
-			continue
-		}
-		if stripSandbox && sandboxOnlyEnvKeys[key] {
 			continue
 		}
 		out = append(out, line)

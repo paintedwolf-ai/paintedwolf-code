@@ -111,9 +111,14 @@ func (d *ProgramDispatcher) RegisterSourceUnit(ctx context.Context, _ toolcontra
 // redirection) owns no effect of its own.
 func (d *ProgramDispatcher) BeginExecution(ctx context.Context, invocation toolcontract.OperationInvocation, command string) error {
 	spec, native := d.run.commands[command]
-	definition, err := d.structuralDefinition(command)
+	var (
+		definition toolcontract.OperationDefinition
+		err        error
+	)
 	if native {
 		definition, err = d.catalogDefinition(spec)
+	} else {
+		definition, err = d.structuralDefinition(command)
 	}
 	if err != nil {
 		return err
@@ -122,23 +127,41 @@ func (d *ProgramDispatcher) BeginExecution(ctx context.Context, invocation toolc
 	if span := invocation.Span; span.StartByte >= 0 && span.EndByte <= len(display) && span.StartByte <= span.EndByte {
 		display = display[span.StartByte:span.EndByte]
 	}
-	child, err := d.prepareInvocation(ctx, definition, invocation, display, map[string]any{"operation_id": command}, nil)
-	if err != nil {
-		return err
-	}
+	inputs := map[string]any{"operation_id": command}
 	invoked := false
+	var child programChild
 	if native && len(spec.Effects) > 0 {
-		mode := selectEffectMode(spec, "")
-		if child.bound, err = toolcontract.BindOperation(definition, invocation, spec.Name, mode, d.childEffectSet(spec, mode, commandprogram.OperationRequest{Invocation: invocation})); err == nil {
-			err = d.start(ctx, child)
+		bound, bindErr := toolcontract.BindOperation(definition, invocation, spec.Name, spec.Effects[0].Mode, nil)
+		if bindErr == nil && d.run.tc.Identity.ToolCallID != "" {
+			if prepared, prepErr := d.prepareInvocationWithOwner(ctx, definition, invocation, display, inputs, nil, &bound); prepErr == nil {
+				prepared.bound = bound
+				child = prepared
+				invoked = true
+			}
 		}
+		if !invoked {
+			child, err = d.prepareInvocation(ctx, definition, invocation, display, inputs, nil)
+			if err != nil {
+				return err
+			}
+			child.bound = bound
+			if bindErr != nil {
+				err = bindErr
+			} else {
+				err = d.start(ctx, child)
+			}
+			if err != nil {
+				_ = d.settle(ctx, child, ownerFailure(err), false, "")
+				child.release()
+				return err
+			}
+			invoked = true
+		}
+	} else {
+		child, err = d.prepareInvocation(ctx, definition, invocation, display, inputs, nil)
 		if err != nil {
-			_ = d.settle(ctx, child, ownerFailure(err), false, "")
-			child.release()
 			return err
 		}
-		invoked = true
-
 	}
 	d.shared.mu.Lock()
 	if d.shared.evaluated == nil {
@@ -170,11 +193,16 @@ func (d *ProgramDispatcher) SettleExecution(ctx context.Context, invocation tool
 	return d.settleWith(ctx, entry.child, toolcontract.ProgramChildSettlement{Result: result, OwnerInvoked: entry.ownerInvoked, JobHandle: record.JobHandle, Conflict: revisionConflict(record.Diagnostic)})
 }
 
+var compiledStructuralDefinitions sync.Map
+
 // structuralDefinition compiles one definition per evaluator construct.
 func (d *ProgramDispatcher) structuralDefinition(construct string) (toolcontract.OperationDefinition, error) {
+	key := "construct " + construct
+	if cached, ok := compiledStructuralDefinitions.Load(key); ok {
+		return cached.(toolcontract.OperationDefinition), nil
+	}
 	d.shared.mu.Lock()
 	defer d.shared.mu.Unlock()
-	key := "construct " + construct
 	if definition, ok := d.shared.definitions[key]; ok {
 		return definition, nil
 	}
@@ -195,6 +223,7 @@ func (d *ProgramDispatcher) structuralDefinition(construct string) (toolcontract
 		d.shared.definitions = map[string]toolcontract.OperationDefinition{}
 	}
 	d.shared.definitions[key] = definition
+	compiledStructuralDefinitions.Store(key, definition)
 	return definition, nil
 }
 
@@ -211,6 +240,7 @@ func (d *ProgramDispatcher) Redirections() (commandprogram.InputRedirection, com
 // NativeBindings reports whether a program binds a name to a native owner.
 type NativeBindings interface {
 	NativeBound(name string) bool
+	BaseEnvironment() []string
 }
 
 // NativeBound reports whether dispatch reaches a native owner for name:
@@ -226,13 +256,17 @@ func (d *ProgramDispatcher) NativeBound(name string) bool {
 	return d.natives[spec.Name].Prepare != nil || pathCommands[spec.Name] || d.builtins[spec.Name] != nil
 }
 
+func (d *ProgramDispatcher) BaseEnvironment() []string {
+	return d.run.baseEnv
+}
+
 // GapLaunchable reports whether a native name may run as its installed
 // program: a request that names one, found by the launch's own lookup.
 func (d *ProgramDispatcher) GapLaunchable(request commandprogram.OperationRequest) bool {
 	if len(request.Argv) == 0 || request.Argv[0].Value == "external" {
 		return false
 	}
-	return (ExternalStages{ToolContext: d.run.tc, Dir: d.paths.Cwd().Abs}).Installed(request.Argv[0].Value, request.Environment)
+	return (ExternalStages{ToolContext: d.run.tc, Dir: d.paths.Cwd().Abs, BaseEnvironment: d.run.baseEnv}).Installed(request.Argv[0].Value, request.Environment)
 }
 
 // unsupportedForm is the native gap a typed unsupported-form refusal names;
@@ -330,7 +364,7 @@ func writeRejectRefusal(streams commandprogram.Streams, command string, cause er
 }
 
 func definitionHasCommand(definition toolcontract.OperationDefinition, name string) bool {
-	for _, cmd := range definition.Facts().Commands {
+	for _, cmd := range definition.ReadOnlyFacts().Commands {
 		if cmd.Name == name {
 			return true
 		}

@@ -24,6 +24,7 @@ type ExternalStages struct {
 	ToolContext     tools.ToolContext
 	Dir             string
 	ExtraWriteRoots []string
+	BaseEnvironment []string
 }
 
 var _ commandprogram.ExternalLauncher = ExternalStages{}
@@ -31,7 +32,8 @@ var _ commandprogram.ExternalLauncher = ExternalStages{}
 // Launch runs argv (after an optional "external --") with the request's
 // streams and settles with the process's actual status.
 func (l ExternalStages) Launch(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-	argv := externalArgv(request.Argv.Values())
+	fields := externalFields(request.Argv)
+	argv := fields.Values()
 	if len(argv) == 0 {
 		return refusedResult("COMMAND_OPERAND_INVALID"), fmt.Errorf("external launch requires a program")
 	}
@@ -55,7 +57,8 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		return refusedResult("COMMAND_EXEC_DENIED"), err
 	}
 	defer bound.close(context.WithoutCancel(ctx))
-	opts, err := lycexec.AgentLaunchOptions(agentCommandLaunch(tctx, "command", bound.confinement, bound.lease, commandLine), cwd, request.Environment, tctx.Host.HostResourcePathExtra)
+	launch := agentCommandLaunch(tctx, "command", bound.confinement, bound.lease, commandLine).WithTrustedEnvironment(l.BaseEnvironment)
+	opts, err := lycexec.AgentLaunchOptions(launch, cwd, request.Environment, tctx.Host.HostResourcePathExtra)
 	if err != nil {
 		return refusedResult("COMMAND_OPERAND_INVALID"), toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"command": "external", "reason": err.Error(), "expected": "an environment without host-reserved keys"})
 	}
@@ -73,8 +76,13 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		}
 		return refusedResult("COMMAND_EXEC_DENIED"), err
 	}
-	opts.Started = func(pid int) { noteJobProcess(ctx, pid, argv) }
-	async, err := lycexec.StartPipelineAsync(ctx, []lycexec.Stage{{Name: argv[0], Args: argv[1:]}}, opts, nonNilWriter(streams.Output), nonNilWriter(streams.Error))
+	launchArgv, cleanupProcSubst, err := materializeExternalArgv(tctx.Host.SessionScratchDir, fields)
+	if err != nil {
+		return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, err
+	}
+	defer cleanupProcSubst()
+	opts.Started = func(pid int) { noteJobProcess(ctx, pid, launchArgv) }
+	async, err := lycexec.StartPipelineAsync(ctx, []lycexec.Stage{{Name: launchArgv[0], Args: launchArgv[1:]}}, opts, nonNilWriter(streams.Output), nonNilWriter(streams.Error))
 	if err != nil {
 		if ctx.Err() != nil {
 			return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.EffectUnknown}, errors.Join(ctx.Err(), err)
@@ -119,7 +127,7 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 // Installed reports whether the confined launch would find name: the same
 // final PATH, launch directory and environment as Launch.
 func (l ExternalStages) Installed(name string, environment []string) bool {
-	opts, err := lycexec.AgentLaunchOptions(lycexec.LaunchPlan{}, l.Dir, environment, l.ToolContext.Host.HostResourcePathExtra)
+	opts, err := lycexec.AgentLaunchOptions(lycexec.LaunchPlan{}.WithTrustedEnvironment(l.BaseEnvironment), l.Dir, environment, l.ToolContext.Host.HostResourcePathExtra)
 	if err != nil {
 		return false
 	}
@@ -130,18 +138,14 @@ func (l ExternalStages) Installed(name string, environment []string) bool {
 // programEnvironment builds the program's initial environment from the same
 // AgentLaunchOptions and ProcessEnvironment pipeline that ExternalStages.Launch
 // uses for confined external child launches.
-func programEnvironment(tc tools.ToolContext) []string {
+func programEnvironment(tc tools.ToolContext) ([]string, error) {
 	confinement, _ := confine.DefaultConfinement(hitl.ActionConfineRequest(tools.ActionConfineInputsForContext(tc, nil)))
 	launch := agentCommandLaunch(tc, "command", confinement, nil, "")
 	opts, err := lycexec.AgentLaunchOptions(launch, "", nil, tc.Host.HostResourcePathExtra)
 	if err != nil {
-		return lycexec.ReducedEnviron()
+		return nil, err
 	}
-	env, err := lycexec.ProcessEnvironment(opts)
-	if err != nil {
-		return lycexec.ReducedEnviron()
-	}
-	return env
+	return lycexec.FinalProcessEnvironment(opts, nil)
 }
 
 // externalArgv drops the explicit "external --" selector.
@@ -150,6 +154,79 @@ func externalArgv(argv []string) []string {
 		return argv[2:]
 	}
 	return argv
+}
+
+// externalFields drops the explicit "external --" selector while keeping the
+// remaining Field values and any attached ProcessSubstitution references.
+func externalFields(argv commandprogram.Fields) commandprogram.Fields {
+	if len(argv) >= 2 && argv[0].Value == "external" && argv[1].Value == "--" {
+		return argv[2:]
+	}
+	return argv
+}
+
+// materializeExternalArgv creates one FIFO per distinct ProcessSubstitution
+// referenced in fields and replaces only the FieldPart spans carrying a
+// non-nil Substitution with the corresponding FIFO path. Literal /dev/fd/N
+// strings in ordinary fields remain untouched.
+func materializeExternalArgv(scratchDir string, fields commandprogram.Fields) ([]string, func(), error) {
+	var streams []lycexec.ProcessSubstitutionStream
+	indexBySubst := map[*commandprogram.ProcessSubstitution]int{}
+	for _, field := range fields {
+		for _, part := range field.Parts() {
+			subst := part.Substitution
+			if subst == nil {
+				continue
+			}
+			if _, seen := indexBySubst[subst]; seen {
+				continue
+			}
+			stream := lycexec.ProcessSubstitutionStream{}
+			switch {
+			case subst.IsInput():
+				reader, ok := subst.OpenReader()
+				if !ok {
+					continue
+				}
+				stream.Reader = reader
+			case subst.IsOutput():
+				writer, ok := subst.OpenWriter()
+				if !ok {
+					continue
+				}
+				stream.Writer = writer
+			default:
+				continue
+			}
+			indexBySubst[subst] = len(streams)
+			streams = append(streams, stream)
+		}
+	}
+	if len(streams) == 0 {
+		return fields.Values(), func() {}, nil
+	}
+	fifoPaths, cleanup, err := lycexec.BindProcessSubstitutions(scratchDir, streams)
+	if err != nil {
+		return nil, func() {}, err
+	}
+	argv := make([]string, len(fields))
+	for i, field := range fields {
+		parts := field.Parts()
+		if len(parts) == 0 {
+			argv[i] = field.Value
+			continue
+		}
+		var b strings.Builder
+		for _, part := range parts {
+			if idx, ok := indexBySubst[part.Substitution]; ok {
+				b.WriteString(fifoPaths[idx])
+			} else {
+				b.WriteString(part.Value)
+			}
+		}
+		argv[i] = b.String()
+	}
+	return argv, cleanup, nil
 }
 
 func nonNilWriter(w io.Writer) io.Writer {

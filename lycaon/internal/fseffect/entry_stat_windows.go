@@ -21,3 +21,8 @@ func (r *ReadRoot) Stat(rel string, _ bool, admit func(string) error) (EntryStat
 	}
 	return EntryStat{Name: info.Name(), Mode: info.Mode(), Size: info.Size(), ModTime: info.ModTime().UTC()}, nil
 }
+
+// StatChildAt reports an immediate child's metadata through the held root.
+func (r *ReadRoot) StatChildAt(_ *os.File, childRel, _ string, admit func(string) error) (EntryStat, error) {
+	return r.Stat(childRel, false, admit)
+}

@@ -31,6 +31,16 @@ func (c *programCompiler) command(cmd syntax.Command) CommandNode {
 	loc := c.location(cmd)
 	switch v := cmd.(type) {
 	case *syntax.CallExpr:
+		if span, ok := c.trapSpans[v]; ok {
+			out := TrapCommand{SyntaxLocation: loc}
+			if file := c.traps[v]; file != nil {
+				prev := c.spanOverride
+				c.spanOverride = &span
+				out.Statements = c.statements(file.Stmts)
+				c.spanOverride = prev
+			}
+			return out
+		}
 		return SimpleCommand{SyntaxLocation: loc, Assignments: c.assignments(v.Assigns), Words: c.words(v.Args)}
 	case *syntax.DeclClause:
 		result := EnvironmentDeclaration{SyntaxLocation: loc}
@@ -69,6 +79,8 @@ func (c *programCompiler) command(cmd syntax.Command) CommandNode {
 		return FunctionDeclaration{SyntaxLocation: loc, Name: strings.Clone(v.Name.Value), Body: c.statement(v.Body)}
 	case *syntax.TestClause:
 		return TestExpression{SyntaxLocation: loc, Expression: c.test(v.X)}
+	case *syntax.ArithmCmd:
+		return ArithmeticCommand{SyntaxLocation: loc, Expression: c.arithmetic(v.X)}
 	}
 	c.unsupported(cmd, "supported command syntax")
 	return nil
@@ -89,9 +101,18 @@ func (c *programCompiler) assignments(items []*syntax.Assign) []Assignment {
 	return out
 }
 func (c *programCompiler) assignment(a *syntax.Assign) Assignment {
-	out := Assignment{SyntaxLocation: c.location(a), Name: strings.Clone(a.Name.Value)}
+	out := Assignment{SyntaxLocation: c.location(a), Name: strings.Clone(a.Name.Value), Append: a.Append}
+	if a.Index != nil {
+		out.Index = c.arithmetic(a.Index)
+	}
 	if a.Value != nil {
 		out.Value = c.word(a.Value)
+	}
+	if a.Array != nil {
+		out.Array = make([]DeferredWord, 0, len(a.Array.Elems))
+		for _, elem := range a.Array.Elems {
+			out.Array = append(out.Array, c.word(elem.Value))
+		}
 	}
 	return out
 }
@@ -137,20 +158,21 @@ func (c *programCompiler) parts(parts []syntax.WordPart) []WordNode {
 			out = append(out, ArithmeticPart{SyntaxLocation: loc, Expression: c.arithmetic(p.X)})
 		case *syntax.CmdSubst:
 			out = append(out, SubstitutionPart{SyntaxLocation: loc, Backquotes: p.Backquotes, Statements: c.statements(p.Stmts)})
+		case *syntax.ProcSubst:
+			out = append(out, SubstitutionPart{SyntaxLocation: loc, Operator: p.Op.String(), Statements: c.statements(p.Stmts)})
 		}
 	}
 	return out
 }
 func (c *programCompiler) parameter(p *syntax.ParamExp, loc SyntaxLocation) ParameterPart {
-	name := strings.Clone(p.Param.Value)
+	out := ParameterPart{SyntaxLocation: loc, Name: strings.Clone(p.Param.Value), Length: p.Length}
 	if p.Index != nil {
-		if w, ok := p.Index.(*syntax.Word); ok && len(w.Parts) == 1 {
-			if lit, ok := w.Parts[0].(*syntax.Lit); ok {
-				name += "[" + strings.Clone(lit.Value) + "]"
-			}
+		if sym := subscriptAllSymbol(p.Index); sym != "" {
+			out.Subscript = sym
+		} else {
+			out.Index = c.arithmetic(p.Index)
 		}
 	}
-	out := ParameterPart{SyntaxLocation: loc, Name: name, Length: p.Length}
 	operand := func(w *syntax.Word) *DeferredWord {
 		word := c.word(w)
 		if w == nil {
@@ -159,6 +181,11 @@ func (c *programCompiler) parameter(p *syntax.ParamExp, loc SyntaxLocation) Para
 		return &word
 	}
 	switch {
+	case p.Slice != nil:
+		out.Slice = &ParameterSlice{
+			Offset: c.arithmetic(p.Slice.Offset),
+			Length: c.arithmetic(p.Slice.Length),
+		}
 	case p.Exp != nil:
 		out.Operator = p.Exp.Op.String()
 		if p.Exp.Word != nil || parameterNeedsWord(out.Operator) {

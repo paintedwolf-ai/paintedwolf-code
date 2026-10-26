@@ -1,6 +1,8 @@
 package literal
 
 import (
+	"errors"
+	"io"
 	"strconv"
 	"strings"
 )
@@ -30,7 +32,7 @@ func runCat(inv *invocation) error {
 	}
 	state := &lineState{next: 1}
 	for _, operand := range inv.operandsOrStdin() {
-		in, err := inv.open(operand, false)
+		in, err := inv.openField(operand, false)
 		if err != nil {
 			return err
 		}
@@ -45,6 +47,30 @@ func runCat(inv *invocation) error {
 }
 
 func catInput(inv *invocation, in *input, opts catOptions, state *lineState) error {
+	if opts == (catOptions{}) {
+		if in.stream == nil {
+			return inv.out.literal(in, in.data, 0)
+		}
+		var (
+			buf    [lineBufferBytes]byte
+			offset int64
+		)
+		for {
+			n, err := in.stream.Read(buf[:])
+			if n > 0 {
+				if writeErr := inv.out.literal(in, buf[:n], offset); writeErr != nil {
+					return writeErr
+				}
+				offset += int64(n)
+			}
+			if err != nil {
+				if errors.Is(err, io.EOF) {
+					return nil
+				}
+				return err
+			}
+		}
+	}
 	return eachLine(in, func(f fragment) error {
 		starts := f.starts && !state.midLine
 		state.midLine = !f.terminated()
@@ -152,9 +178,9 @@ func runNl(inv *invocation) error {
 	}
 	operands := inv.operandsOrStdin()
 	if len(operands) > 1 {
-		return inv.usage(operands[1], "at most one PATH")
+		return inv.usage(operands[1].Value, "at most one PATH")
 	}
-	in, err := inv.open(operands[0], false)
+	in, err := inv.openField(operands[0], false)
 	if err != nil || in == nil {
 		return err
 	}

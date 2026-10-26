@@ -149,6 +149,23 @@ func (b literalBloom) admits(req foldedRequirement) bool {
 	return true
 }
 
+func (b literalBloom) admitsRequirement(req litprefilter.Requirement) bool {
+	var buf [128]byte
+	for _, clause := range req.Clauses {
+		matched := false
+		for _, lit := range clause {
+			if b.mayContain(litprefilter.AppendCanonicalFold(buf[:0], lit.Bytes)) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return false
+		}
+	}
+	return true
+}
+
 func (b literalBloom) mayContain(folded []byte) bool {
 	if len(b) == 0 {
 		return false

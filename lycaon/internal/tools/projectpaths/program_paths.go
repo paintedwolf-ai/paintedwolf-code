@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -114,28 +115,43 @@ type ProgramPaths struct {
 	outputLimit   int64
 }
 
+type catalogPathFacts struct {
+	specs         map[string]toolcontract.CommandSpecification
+	argumentLimit int64
+	outputLimit   int64
+}
+
+var compiledProgramPathFacts = sync.OnceValues(func() (catalogPathFacts, error) {
+	catalog, err := toolcontract.ReadOnlyLanguageV1()
+	if err != nil {
+		return catalogPathFacts{}, err
+	}
+	facts := catalogPathFacts{specs: make(map[string]toolcontract.CommandSpecification, len(catalog.Commands))}
+	for _, command := range catalog.Commands {
+		facts.specs[command.Name] = command
+	}
+	for _, limit := range catalog.Language.Limits {
+		if limit.ID == "argument_bytes" {
+			facts.argumentLimit = limit.Maximum
+		}
+		if limit.ID == "stream_bytes" {
+			facts.outputLimit = limit.Maximum
+		}
+	}
+	if facts.argumentLimit <= 0 || facts.outputLimit <= 0 {
+		return catalogPathFacts{}, errors.New("path limits missing from language contract")
+	}
+	return facts, nil
+})
+
 // NewProgramPaths binds the invocation directory through current path authority.
 func NewProgramPaths(ctx context.Context, boundary *sandbox.Boundary, tc tools.ToolContext, cwd string) (*ProgramPaths, error) {
-	catalog, err := toolcontract.LanguageV1()
+	facts, err := compiledProgramPathFacts()
 	if err != nil {
 		return nil, err
 	}
 	tc.Source.Roots = append([]projectroot.RootRef(nil), tc.Source.Roots...)
-	p := &ProgramPaths{boundary: boundary, context: tc, specs: map[string]toolcontract.CommandSpecification{}}
-	for _, command := range catalog.Commands {
-		p.specs[command.Name] = command
-	}
-	for _, limit := range catalog.Language.Limits {
-		if limit.ID == "argument_bytes" {
-			p.argumentLimit = limit.Maximum
-		}
-		if limit.ID == "stream_bytes" {
-			p.outputLimit = limit.Maximum
-		}
-	}
-	if p.argumentLimit <= 0 || p.outputLimit <= 0 {
-		return nil, errors.New("path limits missing from language contract")
-	}
+	p := &ProgramPaths{boundary: boundary, context: tc, specs: facts.specs, argumentLimit: facts.argumentLimit, outputLimit: facts.outputLimit}
 	if cwd == "" {
 		cwd = "."
 	}
@@ -212,13 +228,14 @@ func (p *ProgramPaths) Bind(ctx context.Context, operand string, write bool) (Bo
 	if err != nil {
 		return BoundPath{}, err
 	}
+	canonicalRoot := fspath.CanonicalPath(resolved.Root.Path)
 	bound := BoundPath{Resolved: resolved, rootIdentity: identity, rootInfo: rootInfo, exactRelative: relative}
 	bound.attached = func() error { return currentRootReject(p.context, resolved.Root, resolved.Abs) }
 	bound.admitRead = func(actual string) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		authority, err := authorityAddress(resolved.Root.Path, actual)
+		authority, err := authorityAddressWithCanonical(resolved.Root.Path, canonicalRoot, actual)
 		if err != nil {
 			return err
 		}
@@ -235,11 +252,10 @@ func (p *ProgramPaths) Bind(ctx context.Context, operand string, write bool) (Bo
 		if err := bound.attached(); err != nil {
 			return err
 		}
-		authority, err := authorityAddress(resolved.Root.Path, actual)
+		scope, err := entryScopeRel(resolved.Root, canonicalRoot, actual)
 		if err != nil {
 			return err
 		}
-		scope := projectroot.ScopeRel(resolved.Root, authority)
 		if scope == "." || scope == "" {
 			return bound.admitRead(actual)
 		}
@@ -253,7 +269,7 @@ func (p *ProgramPaths) Bind(ctx context.Context, operand string, write bool) (Bo
 			if err := ctx.Err(); err != nil {
 				return Resolved{}, err
 			}
-			authority, err := authorityAddress(resolved.Root.Path, actual)
+			authority, err := authorityAddressWithCanonical(resolved.Root.Path, canonicalRoot, actual)
 			if err != nil {
 				return Resolved{}, err
 			}
