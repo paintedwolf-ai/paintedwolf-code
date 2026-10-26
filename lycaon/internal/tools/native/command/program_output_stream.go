@@ -33,6 +33,17 @@ func newProgramStream(ctx context.Context, limit int64, admission tooloutput.Spi
 	return &programStream{ctx: ctx, limit: limit, admission: admission, mappings: newSourceMappingBuffer(ctx, memory)}
 }
 
+func (r *ProgramRuntime) newProgramStreams(ctx context.Context, run *programRun) (*programStream, *programStream) {
+	var outputLimit int64
+	for _, limit := range run.catalog.Language.Limits {
+		if limit.ID == "spill_bytes" {
+			outputLimit = limit.Maximum
+		}
+	}
+	admission := r.sessionResources(run.tc.Identity.SessionID)
+	return newProgramStream(ctx, outputLimit, admission, run.memory), newProgramStream(ctx, outputLimit, admission, run.memory)
+}
+
 func (s *programStream) Write(p []byte) (int, error) {
 	n, _, err := s.writeLocated(p)
 	return n, err
