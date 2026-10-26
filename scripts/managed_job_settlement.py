@@ -29,7 +29,7 @@ class JobSettlement:
         self.command = command
 
     def directory(self, job):
-        self._bind_checkout()
+        self.validate_checkout()
         from scripts.artifact_paths import artifact_root
         _require(isinstance(job, dict) and set(job) == {'job_id', 'pid', 'state', 'wait', 'log'}, 'submitted job shape differs')
         _require(
@@ -97,11 +97,10 @@ class JobSettlement:
         finally:
             os.close(fd)
 
-    def _bind_checkout(self):
+    def validate_checkout(self):
         _require(self.checkout.is_absolute() and self.checkout.resolve(strict=True) == self.checkout,
                  'process observation requires the physical reviewed checkout')
         expected = {
-            'scripts': 'scripts/__init__.py',
             'scripts.artifact_paths': 'scripts/artifact_paths.py',
             'scripts.linux_release': 'scripts/linux_release/__init__.py',
             'scripts.linux_release.installed_cases': 'scripts/linux_release/installed_cases/__init__.py',
@@ -109,12 +108,32 @@ class JobSettlement:
             'scripts.linux_release.installed_process': 'scripts/linux_release/installed_process.py',
             'verification_health': 'scripts/verification_health.py',
         }
+        namespace = self.checkout / 'scripts'
+        namespace_search = [str(namespace), str(self.checkout),
+                  *[entry for entry in sys.path if entry not in {str(namespace), str(self.checkout)}]]
+
+        def require_namespace(spec, locations):
+            paths = [Path(location) for location in locations] if locations is not None else []
+            _require(spec is not None and spec.origin is None and paths
+                     and all(path == namespace and path.resolve(strict=True) == namespace for path in paths),
+                     'scripts namespace differs from the reviewed checkout')
+
+        # Namespace packages have no __file__; identical search roots add no authority.
+        candidate = PathFinder.find_spec('scripts', namespace_search)
+        require_namespace(candidate, candidate.submodule_search_locations if candidate else None)
         # Reject a cached dependency from another checkout before importing any observer.
         for name, loaded in list(sys.modules.items()):
             if name == 'scripts' or name.startswith('scripts.') or name.startswith('verification_'):
                 source = getattr(loaded, '__file__', None)
+                if name == 'scripts':
+                    _require(source is None, 'scripts must remain the reviewed namespace package')
+                    require_namespace(getattr(loaded, '__spec__', None), getattr(loaded, '__path__', None))
+                    continue
                 _require(source is not None and Path(source).resolve().is_relative_to(self.checkout),
                          'cached observation dependency is outside the reviewed checkout')
+                if name in expected:
+                    _require(Path(source).resolve() == (self.checkout / expected[name]).resolve(strict=True),
+                             'cached observation dependency has the wrong concrete origin')
         for name, relative in expected.items():
             source = self.checkout / relative
             search = source.parent.parent if source.name == '__init__.py' else source.parent
@@ -122,11 +141,10 @@ class JobSettlement:
             _require(spec is not None and spec.origin is not None
                      and Path(spec.origin).resolve() == source.resolve(strict=True),
                      'observation dependency differs from the reviewed checkout')
-        sys.path.insert(0, str(self.checkout))
-        sys.path.insert(0, str(self.checkout / 'scripts'))
+        sys.path[:] = namespace_search
 
     def _observers(self):
-        self._bind_checkout()
+        self.validate_checkout()
         process = importlib.import_module('scripts.linux_release.installed_process')
         health = importlib.import_module('verification_health')
         return process.process_identity, health.identity
