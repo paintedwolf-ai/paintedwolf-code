@@ -268,6 +268,7 @@ func writeShellRefusal(w io.Writer, command, subject, code string, policyCopy ma
 	if reason == "" {
 		return
 	}
+	reason = strings.Join(strings.Fields(reason), " ")
 	_, _ = fmt.Fprintf(w, "%s: %s: %s [%s]\n", command, subject, strings.TrimSuffix(reason, "."), code)
 }
 

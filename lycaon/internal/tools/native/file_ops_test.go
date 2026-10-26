@@ -251,6 +251,27 @@ func TestMoveAcrossRootsKeepsBothFilesWhenSourceRemovalIsDeclined(t *testing.T) 
 	}
 }
 
+func TestMoveAcrossRootsKeepsCopyByteLimit(t *testing.T) {
+	primary, other := t.TempDir(), t.TempDir()
+	source := filepath.Join(primary, "large.bin")
+	testutil.FailErr(t, "seed oversized source", os.WriteFile(source, []byte(strings.Repeat("x", int(defaultCopyMaxBytes)+1)), 0o644))
+	tctx := nativefixture.Context(primary)
+	tctx.Source.Roots = append(tctx.Source.Roots, projectroot.RootRef{ID: "r2", Label: "other", Path: other})
+	result, err := (&MoveTool{Boundary: nativefixture.Boundary(t)}).Move(t.Context(), MoveInput{
+		Pairs: []FilePair{{From: "large.bin", To: "@other/large.bin"}},
+	}, tctx)
+	reject := toolrejection.AsToolReject(err)
+	if reject == nil || reject.Code != "COPY_SIZE_EXCEEDED" || len(result.Moved)+len(result.DestinationCopied) != 0 {
+		t.Fatalf("oversized move result = %+v, err = %v", result, err)
+	}
+	if _, err := os.Stat(source); err != nil {
+		t.Fatalf("source was lost: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(other, "large.bin")); !os.IsNotExist(err) {
+		t.Fatalf("destination crossed byte limit: %v", err)
+	}
+}
+
 func TestMkdirToolCreatesPath(t *testing.T) {
 	tmpDir := t.TempDir()
 	tool := &MkdirTool{Boundary: nativefixture.Boundary(t)}

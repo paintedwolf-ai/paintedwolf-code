@@ -3,7 +3,6 @@ package native
 import (
 	"context"
 	"fmt"
-	"math"
 	"os"
 	"path/filepath"
 
@@ -103,7 +102,7 @@ func (t *MoveTool) Move(ctx context.Context, in MoveInput, tctx tools.ToolContex
 			// The copy operation stages and reviews the destination before publication.
 			// Remove the source only after that publication succeeds.
 			copyResult, err := (&CopyTool{Boundary: t.Boundary}).Copy(ctx, CopyInput{
-				Pairs: []FilePair{pair}, Recursive: in.Directories, NoClobber: in.NoClobber, MaxFileBytes: math.MaxInt64,
+				Pairs: []FilePair{pair}, Recursive: in.Directories, NoClobber: in.NoClobber,
 			}, tctx)
 			if err != nil {
 				for _, copied := range copyResult.Copied {

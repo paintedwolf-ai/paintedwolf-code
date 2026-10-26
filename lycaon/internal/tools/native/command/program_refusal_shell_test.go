@@ -59,8 +59,15 @@ func TestCommandCatalogRefusalsHaveShellVoice(t *testing.T) {
 			"source_line": 1, "source_column": 1, "path": "config.json",
 		})
 		line := stderr.String()
-		if !strings.HasPrefix(line, "command: config.json: ") || !strings.HasSuffix(line, fmt.Sprintf(" [%s]\n", code)) {
+		prefix, suffix := "command: config.json: ", fmt.Sprintf(" [%s]\n", code)
+		reason := strings.TrimSuffix(strings.TrimPrefix(line, prefix), suffix)
+		if !strings.HasPrefix(line, prefix) || !strings.HasSuffix(line, suffix) || strings.TrimSpace(reason) == "" || strings.Count(line, "\n") != 1 {
 			t.Errorf("%s stderr = %q", code, line)
+		}
+		stderr.Reset()
+		writeShellRefusal(&stderr, "command", "-s", code, nil, map[string]any{"reason": "invalid operand", "expected_form": "a supported form"})
+		if !strings.HasPrefix(stderr.String(), "command: request: ") {
+			t.Errorf("%s option subject = %q", code, stderr.String())
 		}
 	}
 	if count == 0 {
@@ -76,5 +83,15 @@ func TestCommandCatalogRefusalsHaveShellVoice(t *testing.T) {
 		if !strings.Contains(strings.ToLower(stderr.String()), word) {
 			t.Errorf("%s stderr = %q, want %q", code, stderr.String(), word)
 		}
+	}
+}
+
+func TestHostRefusalUsesTypedURLInsteadOfOption(t *testing.T) {
+	var stderr bytes.Buffer
+	writeRejectRefusal(commandprogram.Streams{Error: &stderr}, "curl", commandprogram.OperationRequest{Argv: commandprogram.Fields{
+		{Value: "curl"}, {Value: "-s"}, {Value: "http://127.0.0.1:8080"},
+	}}, &toolrejection.ToolReject{Code: "SANDBOX_LOOPBACK_CONNECT_DENIED", Data: map[string]any{"url": "http://127.0.0.1:8080"}})
+	if got := stderr.String(); got != "curl: http://127.0.0.1:8080: The person declined this connection to the local service [SANDBOX_LOOPBACK_CONNECT_DENIED]\n" {
+		t.Fatalf("stderr = %q", got)
 	}
 }

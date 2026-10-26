@@ -64,6 +64,7 @@ type Fixture struct {
 	Dir        string
 	ScratchDir string
 	OutputDir  string
+	progress   progress.Store
 	Background *bgprocess.Registry
 	Context    func(string, *tools.ToolContext)
 	calls      int
@@ -137,7 +138,7 @@ func New(t *testing.T, options Options) *Fixture {
 		natives = options.Natives(dir)
 	}
 	scratchDir := fspath.CanonicalPath(t.TempDir())
-	f := &Fixture{Recorder: recorder, Database: database, Session: session, Dir: dir, ScratchDir: scratchDir, OutputDir: t.TempDir(), Background: background}
+	f := &Fixture{Recorder: recorder, Database: database, Session: session, Dir: dir, ScratchDir: scratchDir, OutputDir: t.TempDir(), Background: background, progress: owner}
 	runtime := &command.ProgramRuntime{
 		Executor: executor, Registry: registry, Recorder: recorder, Blobs: blobstore.Store{Root: t.TempDir()},
 		Projector: captureprojection.New(secretmatch.NewInertMatcher(), nil), Boundary: boundary,
@@ -153,6 +154,9 @@ func New(t *testing.T, options Options) *Fixture {
 	f.Runtime, f.Context = runtime, options.Context
 	return f
 }
+
+// SetProgress changes the session checklist observed by reached command writes.
+func (f *Fixture) SetProgress(content string) error { return f.progress.Set(f.Session, content) }
 
 // Call opens a real model receipt for one command call and runs the entry.
 func (f *Fixture) Call(t *testing.T, ctx context.Context, source string) (string, error) {
