@@ -7,6 +7,31 @@ from checkpoint import Checkpoints, ReferenceCache, exclusive_run
 
 
 class Recovery(unittest.TestCase):
+    def test_replica_survives_loss_of_local_generation(self):
+        import shutil
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            store = Checkpoints(root / "local", "identity", mirror=root / "durable")
+            source = store.save({"cursor": {"step": 7}, "value": 42})
+            shutil.rmtree(source)
+            restored, rejected = Checkpoints(root / "durable", "identity").restore()
+            self.assertEqual(restored["value"], 42)
+            self.assertEqual(rejected, [])
+
+    def test_replication_failure_preserves_local_checkpoints(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            store = Checkpoints(root / "local", "identity", keep=2, mirror=root / "durable")
+            first = store.save({"cursor": {"step": 1}})
+            store.save({"cursor": {"step": 2}})
+            with patch("replication.shutil.copyfile", side_effect=ConnectionResetError):
+                with self.assertRaises(ConnectionResetError):
+                    store.save({"cursor": {"step": 3}})
+            self.assertTrue(first.exists())
+            restored, _ = Checkpoints(root / "durable", "identity").restore()
+            self.assertEqual(restored["cursor"]["step"], 2)
+
     def test_partial_and_corrupt_latest_fall_back(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

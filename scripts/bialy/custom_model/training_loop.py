@@ -13,7 +13,7 @@ from common import digest
 def run_loop(model, optimizer, training, validation, loss, args, manifest, started):
     import torch
     from peft import get_peft_model_state_dict, set_peft_model_state_dict
-    checkpoints = Checkpoints(args.out / "checkpoints", digest(manifest), args.keep_checkpoints)
+    checkpoints = Checkpoints(args.out / "checkpoints", digest(manifest), args.keep_checkpoints, args.checkpoint_mirror)
     restored, rejected = checkpoints.restore() if args.resume else (None, [])
     cursor = {"epoch":0,"position":0,"step":0,"total":0.,"history":[],"validation_position":0,"validation_total":0.}
     if restored is not None:
