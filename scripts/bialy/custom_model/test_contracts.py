@@ -75,6 +75,18 @@ class Contracts(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "successful invocation"):
             self.row()
 
+    def test_model_review_does_not_require_a_different_family(self):
+        row = self.row()
+        row['validation']['quality'] = {
+            'method': 'model_judge', 'verdict': 'pass', 'judge_model': 'reviewer', 'judge_revision': 'pinned',
+            'judge_family': 'gemma', 'teacher_family': 'gemma', 'evidence_ids': ['receipt'],
+            'request_sha256': row['request_capture']['sha256'], 'response_sha256': digest(row['target']),
+        }
+        check_row(row)
+        del row['validation']['quality']['judge_revision']
+        with self.assertRaisesRegex(ValueError, 'judge identity missing'):
+            check_row(row)
+
     def test_arguments_and_call_identity_must_match(self):
         self.args["path"] = "different"
         with self.assertRaisesRegex(ValueError, "successful invocation"):

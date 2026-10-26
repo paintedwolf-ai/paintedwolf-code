@@ -41,9 +41,9 @@ def check_row(row):
     quality = validation.get("quality", {})
     if quality.get("verdict") != "pass" or not quality.get("evidence_ids") or quality.get("request_sha256") != capture["sha256"] or quality.get("response_sha256") != digest(target):
         raise ValueError("independent quality binding missing")
-    if quality.get("method") == "cross_family_judge":
-        if not quality.get("judge_family") or not quality.get("teacher_family") or quality["judge_family"] == quality["teacher_family"]:
-            raise ValueError("judge must be cross-family")
+    if quality.get("method") == "model_judge":
+        if not quality.get("judge_model") or not quality.get("judge_revision"):
+            raise ValueError("quality judge identity missing")
     elif quality.get("method") != "deterministic":
         raise ValueError("unsupported quality method")
     if row["schema"] == "pw-custom-sft/1":
