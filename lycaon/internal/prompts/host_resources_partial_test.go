@@ -26,7 +26,7 @@ func TestHostResourcesPartialGroupsPresenceAndCap(t *testing.T) {
 	if !strings.Contains(got, "## Host resources") {
 		t.Fatal("expected Host resources section")
 	}
-	if !strings.Contains(got, "Not a grant and not a closed set") {
+	if !strings.Contains(got, "Observed on this device") {
 		t.Fatal("missing presence contract copy")
 	}
 	cloud := strings.Index(got, "- Cloud:")

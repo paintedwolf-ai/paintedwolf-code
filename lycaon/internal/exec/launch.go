@@ -24,14 +24,22 @@ const (
 
 // LaunchPlan carries mandatory process authority and attribution.
 type LaunchPlan struct {
-	Kind             LaunchKind
-	Subject          string
-	Confinement      *confine.Confinement
-	Environment      EnvironmentMode
-	ExtraEnv         []string
-	PathAuthority    confine.LaunchPaths
-	InputLimits      confine.LaunchVectorLimits
-	CurrentAuthority func(context.Context) error
+	Kind        LaunchKind
+	Subject     string
+	Confinement *confine.Confinement
+	Environment EnvironmentMode
+	ExtraEnv    []string
+	// TrustedEnvironment is the program's host-built starting environment.
+	// AgentLaunchOptions uses it to distinguish host plumbing from exports.
+	TrustedEnvironment []string
+	PathAuthority      confine.LaunchPaths
+	InputLimits        confine.LaunchVectorLimits
+	CurrentAuthority   func(context.Context) error
+}
+
+func (p LaunchPlan) WithTrustedEnvironment(entries []string) LaunchPlan {
+	p.TrustedEnvironment = append([]string(nil), entries...)
+	return p
 }
 
 // EnvironmentMode selects the process environment.
@@ -157,10 +165,21 @@ func AgentLaunchOptions(launch LaunchPlan, dir string, environment, pathExtra []
 	opts := ExecOpts{Launch: launch, Dir: dir, PathExtra: append([]string(nil), pathExtra...), AppendEnv: []string{"GIT_PAGER=cat"}}
 	if len(environment) > 0 {
 		defaultPath := defaultAgentPath(pathExtra)
+		trusted := make(map[string]string, len(launch.TrustedEnvironment))
+		for _, entry := range launch.TrustedEnvironment {
+			name, value, ok := strings.Cut(entry, "=")
+			if ok {
+				trusted[name] = value
+			}
+		}
 		opts.InlineEnv = make(map[string]string, len(environment))
 		for _, entry := range environment {
 			name, value, _ := strings.Cut(entry, "=")
 			trimmed := strings.TrimSpace(name)
+			if original, ok := trusted[name]; ok && original == value &&
+				(hasBlockedPrefix(strings.ToUpper(name)) || strings.EqualFold(name, "GIT_PAGER")) {
+				continue
+			}
 			if defaultPath != "" && strings.EqualFold(trimmed, "PATH") && value == defaultPath {
 				continue
 			}
