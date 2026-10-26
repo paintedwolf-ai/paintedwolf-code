@@ -43,6 +43,37 @@ class NativeInputMailboxTests(unittest.TestCase):
         selected.create()
         return selected
 
+    def test_case_observations_are_immutable_separate_and_exactly_bound(self):
+        with tempfile.TemporaryDirectory() as directory:
+            selected = self.selected(directory)
+            self.assertIsNone(selected.read_case_execution('vault', 'service-onboarding'))
+            for case in ('service-onboarding', 'service-unavailable-retry'):
+                selected.publish_case_execution('vault', case)
+                fact = selected.read_case_execution('vault', case)
+                self.assertEqual(fact['phase'], 'executing')
+                with self.assertRaises(FileExistsError):
+                    selected.publish_case_execution('vault', case)
+            self.assertNotEqual(protocol.case_execution_name('a-b', 'c'),
+                                protocol.case_execution_name('a', 'b-c'))
+            fact = selected.read_case_execution('vault', 'service-onboarding')
+            for changes in ({'phase': 'ready'}, {'format_version': True}, {'vm_id': 'foreign'},
+                            {'case': 'other'}, {'binding': {**self.execution, 'execution_nonce': 'd' * 32}},
+                            {'binding': {**self.execution, 'format_version': True}},
+                            {'extra': True}):
+                with self.subTest(changes=changes), self.assertRaises(ValueError):
+                    protocol.case_execution({**fact, **changes}, self.execution, 'owned-fedora',
+                                            'vault', 'service-onboarding')
+            selected.execution = {**self.execution, 'case_selection': {'format_version': 1,
+                'cases': [{'capability': 'vault', 'case': 'different'}]}}
+            with self.assertRaises(ValueError):
+                protocol.case_execution(fact, selected.execution, 'owned-fedora', 'vault', 'service-onboarding')
+            with self.assertRaises(ValueError):
+                selected.publish_case_execution('vault', 'service-onboarding')
+            with self.assertRaises(ValueError):
+                protocol.case_execution_name('../outside', 'case')
+            with self.assertRaises(ValueError):
+                selected.read('case-execution-outside.json')
+
     def test_private_bounded_atomic_files_and_no_replacement(self):
         with tempfile.TemporaryDirectory() as directory:
             selected = self.selected(directory)

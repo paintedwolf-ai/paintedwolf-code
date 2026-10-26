@@ -42,6 +42,56 @@ class InstalledLeafFailureTests(unittest.TestCase):
                             'guest', output, TREE, execution_nonce='c' * 32, variant_id='baseline',
                             snapshot={}, **values)
 
+    def test_case_execution_observation_follows_all_preparation_and_precedes_driver(self):
+        from linux_release.installed_input.mailbox import Mailbox
+        class HeldPreparation(Exception):
+            pass
+        for held in ('bind', 'environment', 'variant', None):
+            with self.subTest(held=held), tempfile.TemporaryDirectory() as directory, ExitStack() as stack:
+                binder = self.fixture(stack, lambda *args: None)
+                original_binding = binder.return_value
+                actor = None
+                events = []
+                def selected(execution, vm_id):
+                    nonlocal actor
+                    actor = Mailbox(execution, vm_id)
+                    actor.path = Path(directory) / 'mailbox'
+                    return actor
+                def checkpoint(phase, result):
+                    events.append(phase)
+                    if actor is not None:
+                        self.assertIsNone(actor.read_case_execution('conversation', 'chat-and-workflow'))
+                    if held == phase:
+                        raise HeldPreparation(phase)
+                    return result
+                binder.side_effect = lambda *args: checkpoint('bind', original_binding)
+                stack.enter_context(patch.object(leaf, 'collect', side_effect=lambda *args:
+                    checkpoint('environment', ({'OS': 'fixture'}, {'session': {'Type': 'x11'},
+                                                                            'os_release': {'ID': 'fixture'}}))))
+                stack.enter_context(patch.object(leaf, 'observe', side_effect=lambda *args:
+                    checkpoint('variant', {'variant': {'id': 'baseline'}})))
+                stack.enter_context(patch('linux_release.installed_input.mailbox.Mailbox', side_effect=selected))
+                stack.enter_context(patch.object(Mailbox, 'marker'))
+                stack.enter_context(patch.object(leaf, 'case_family', return_value='fixture_family'))
+                stack.enter_context(patch.object(leaf.importlib.util, 'find_spec', return_value=object()))
+                def run(binding, capability, case, root):
+                    self.assertEqual(events, ['bind', 'environment', 'variant'])
+                    fact = actor.read_case_execution(capability, case)
+                    self.assertEqual(fact['binding'], binding['native_input']['binding'])
+                    events.append('execute')
+                    return retain(binding, capability, case, root, 'passed', {'fixture': True})
+                family = SimpleNamespace(execute=run)
+                stack.enter_context(patch.dict(sys.modules, {leaf.__package__ + '.installed_cases.fixture_family': family}))
+                if held:
+                    with self.assertRaises(HeldPreparation):
+                        self.invoke(Path(directory) / 'leaf', input_vm_id='owned-fedora')
+                    if actor is not None:
+                        self.assertIsNone(actor.read_case_execution('conversation', 'chat-and-workflow'))
+                    self.assertNotIn('execute', events)
+                else:
+                    self.invoke(Path(directory) / 'leaf', input_vm_id='owned-fedora')
+                    self.assertEqual(events[-1], 'execute')
+
     def test_captured_crash_keeps_status_observations_and_streams_even_after_partial_evidence(self):
         for partial in (False, True):
             with self.subTest(partial=partial), tempfile.TemporaryDirectory() as directory, ExitStack() as stack:

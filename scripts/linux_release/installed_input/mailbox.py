@@ -8,6 +8,7 @@ from pathlib import Path
 import stat
 import sys
 import tempfile
+import re
 
 from . import protocol, session_wire, unlock_wire
 
@@ -79,7 +80,7 @@ class Mailbox:
 
     @staticmethod
     def _name(name):
-        if name not in {'binding.json', 'request.json', 'ack.json'}:
+        if name not in {'binding.json', 'request.json', 'ack.json'} and not re.fullmatch(r'case-execution-[a-f0-9]{64}\.json', name):
             raise ValueError('native input mailbox refuses caller-selected paths')
 
     def read(self, name: str) -> dict | None:
@@ -118,6 +119,20 @@ class Mailbox:
             os.link(temporary, self.path / name, follow_symlinks=False)
         finally:
             Path(temporary).unlink()
+
+    def publish_case_execution(self, capability: str, case: str):
+        self.attach()
+        document = {'format_version': 1, 'binding': self.execution, 'vm_id': self.vm_id,
+                    'capability': capability, 'case': case, 'phase': 'executing'}
+        protocol.case_execution(document, self.execution, self.vm_id, capability, case)
+        self.write(protocol.case_execution_name(capability, case), document)
+
+    def read_case_execution(self, capability: str, case: str) -> dict | None:
+        self.attach()
+        document = self.read(protocol.case_execution_name(capability, case))
+        if document is None:
+            return None
+        return protocol.case_execution(document, self.execution, self.vm_id, capability, case)
 
     def clear_completed(self, pending: dict):
         if self.read('request.json') != pending:
