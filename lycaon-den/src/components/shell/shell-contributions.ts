@@ -21,9 +21,8 @@ import { workspaceKindOf, type PeerOpenSubject } from "../../shortcuts/peer-view
 import { selectedFileVersion } from "../../files/history/files-version-selection.ts";
 import { projectFilesState } from "../../files/documents/files-buffer-state.ts";
 import { stageFeatureEnabled, type StageFeatureFlags } from "../stage/stage-registry.tsx";
-import { type ContributionCommand } from "../../api/types.ts";
 import { runComposerPrefillEffect } from "../../chat/composer/add-to-chat.ts";
-import { contributionCommand, dispatchContributionCommand, registerUIEffectSink, registerCommandContextProvider, reportDispatchFailure, crossbarCommands } from "../../contributions/dispatch.ts";
+import { contributionCommand, dispatchContributionCommand, registerUIEffectSink, registerCommandContextProvider, reportDispatchFailure, crossbarCommands, type CrossbarCommandState } from "../../contributions/dispatch.ts";
 import { attachAppMenuCommands, invalidateAppMenuProjection, syncAppMenu } from "../../platform/desktop/app-menu.ts";
 import { shortcutOverrides } from "../../settings/system/shortcut-prefs.ts";
 
@@ -183,7 +182,7 @@ export function createShellContributions(options: Pick<ShellScope, "shell" | "ap
     setShellFactState(currentShellFacts());
   });
   // Crossbar commands read the published fact state.
-  const crossbarActions = createMemo<ContributionCommand[]>(() => {
+  const crossbarActions = createMemo<CrossbarCommandState>(() => {
     return crossbarCommands();
   });
   onMount(() => {
