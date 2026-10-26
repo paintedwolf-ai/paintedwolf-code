@@ -28,7 +28,7 @@ fn resolve_notices_path(app: &AppHandle) -> Result<PathBuf, String> {
     if let Some(generation) = crate::linux_generation::running()? {
         return Ok(generation.root.join(NOTICES_NAME));
     }
-    if crate::linux_install::installed().is_some() {
+    if crate::linux_install::installed().package().is_some() {
         let candidate = Path::new(crate::linux_install::INSTALL_ROOT).join(NOTICES_NAME);
         if candidate.is_file() {
             return Ok(candidate);

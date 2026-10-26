@@ -7,6 +7,7 @@ export type VaultCustodyMode =
   | "development"
   // Shell-only state when the installed package no longer matches this process.
   | "restart_required"
+  | "installation_unverified"
   | "unavailable"
   | "refused";
 

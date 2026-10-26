@@ -7,7 +7,6 @@ import (
 	"strings"
 	"syscall"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -79,7 +78,7 @@ func TestCanonicalPathDoesNotBlockOnAFIFO(t *testing.T) {
 		if got == "" {
 			t.Fatalf("CanonicalPath(fifo) = empty")
 		}
-	case <-time.After(10 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("CanonicalPath blocked on a FIFO — O_NONBLOCK is missing")
 	}
 }

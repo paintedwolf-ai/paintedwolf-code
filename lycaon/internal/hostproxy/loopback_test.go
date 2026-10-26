@@ -1,4 +1,4 @@
-package httpclient
+package hostproxy
 
 import (
 	"net/url"

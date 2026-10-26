@@ -8,6 +8,8 @@ use std::sync::atomic::Ordering;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
+mod observation;
+
 pub(super) const STARTUP_PROTOCOL_VERSION: u8 = 1;
 pub(super) const STARTUP_RECORD_MAX_BYTES: usize = 16 * 1024;
 pub(super) const STARTUP_RECV_POLL: Duration = Duration::from_millis(100);
@@ -266,12 +268,14 @@ where
                 if let Err(err) = validate_startup_record(&record, child_pid, sequence) {
                     return Err(SidecarStartError::Failed(engine_failure_message(err)));
                 }
+                let previous_sequence = sequence;
                 sequence = record.sequence;
                 phase = record.phase;
                 last_record_at = Instant::now();
                 last_stall_update = None;
                 match record.kind {
                     StartupKind::Failed => {
+                        observation::failed(&record, child_pid, previous_sequence);
                         let failure = match record.code.as_str() {
                             "store_locked" => {
                                 SidecarStartError::StoreLocked(engine_failure_message(

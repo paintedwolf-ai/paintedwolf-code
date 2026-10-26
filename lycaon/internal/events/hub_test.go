@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/people"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -38,7 +37,7 @@ func TestHubPublishSubscribe(t *testing.T) {
 		if event.ID != "session-1" {
 			t.Fatalf("id=%q want session-1", event.ID)
 		}
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("timeout waiting for event")
 	}
 }
@@ -120,7 +119,7 @@ func TestHubDebounceBoard(t *testing.T) {
 		if envelope.Topic != api.EventTopicBoard {
 			t.Fatalf("topic=%q want board", envelope.Topic)
 		}
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("timeout waiting for debounced board event")
 	}
 
@@ -151,7 +150,7 @@ func TestHubNoDebounceWorker(t *testing.T) {
 			if envelope.Topic != api.EventTopicWorker {
 				t.Fatalf("topic=%q want worker", envelope.Topic)
 			}
-		case <-time.After(time.Second):
+		case <-t.Context().Done():
 			t.Fatalf("timeout waiting for worker event %d", i)
 		}
 	}
@@ -262,12 +261,12 @@ func TestHubMultipleSubscribers(t *testing.T) {
 
 	select {
 	case <-ch1:
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("subscriber 1 timeout")
 	}
 	select {
 	case <-ch2:
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("subscriber 2 timeout")
 	}
 }
@@ -293,7 +292,7 @@ func TestHubDebounceLLM(t *testing.T) {
 		if envelope.Topic != api.EventTopicLLM {
 			t.Fatalf("topic=%q want llm", envelope.Topic)
 		}
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("timeout waiting for debounced llm event")
 	}
 
@@ -326,12 +325,12 @@ func TestViewerWithoutEventAuthorityReceivesNothing(t *testing.T) {
 
 	select {
 	case <-owner:
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("owner did not receive the event")
 	}
 	select {
 	case env := <-stranger:
 		t.Fatalf("viewer without authority received %s", env.Topic)
-	case <-time.After(50 * time.Millisecond):
+	default:
 	}
 }

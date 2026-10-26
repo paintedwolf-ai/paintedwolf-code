@@ -68,7 +68,7 @@ func runAgentsMDWriteApproval(t *testing.T, call llm.MockToolCall, kind wire.Che
 		done <- err
 	}()
 	var checkpoint wire.CheckpointEvent
-	testutil.WaitFor(t, 15*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		pending, err := h.Sessions.Checkpoints.ListPending(ctx, sess.ID, nil)
 		if err == nil && len(pending) > 0 {
 			checkpoint = pending[0]

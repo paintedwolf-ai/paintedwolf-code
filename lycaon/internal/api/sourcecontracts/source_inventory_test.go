@@ -7,6 +7,8 @@ import (
 
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
+	"github.com/lycaon/lycaon/internal/sourcefeed"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestSourceReadEndpointsDoNotScheduleInventory(t *testing.T) {
@@ -14,7 +16,9 @@ func TestSourceReadEndpointsDoNotScheduleInventory(t *testing.T) {
 	fake := &contractfixture.RecordingInventoryService{}
 	srv := contractfixture.NewTestServer(t, withLedger, func(d *hostapi.Dependencies) { d.Source.SourceInventory = fake })
 	p := contractfixture.CreateProjectForTest(t, srv, t.TempDir())
-	// Root attach schedules its own inventory in the background.
+	// Root attach starts a source watch whose first callback can arrive after
+	// background work drains. Stop it before attributing new work to the reads.
+	testutil.FailErr(t, "stop project source watch", sourcefeed.StopProjectWatch(t.Context(), p.ID))
 	contractfixture.DrainBackground(t, srv)
 	scheduled := len(fake.Snapshot())
 

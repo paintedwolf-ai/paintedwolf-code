@@ -35,11 +35,34 @@ const BUS_CONNECT_TIMEOUT: Duration = Duration::from_millis(1500);
 /// Why polkit did not confirm the person.
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum PolkitRefusal {
-    /// Nothing on this host can run the check: no system bus, no authority,
-    /// no installed action, or no agent in this session.
-    Unavailable(String),
+    /// A prerequisite for fresh system authentication is unavailable.
+    Unavailable(UnavailableReason, String),
     Denied(String),
     Failed(String),
+}
+
+/// The failed prerequisite, chosen at the observing branch rather than from prose.
+#[derive(Debug, PartialEq, Eq)]
+pub(super) enum UnavailableReason {
+    SystemBus,
+    AuthorityUnavailable,
+    AuthorityUntrusted,
+    ActionMissing,
+    FreshAuthenticationRequired,
+    AgentMissing,
+}
+
+impl UnavailableReason {
+    fn suggested_action(&self) -> &'static str {
+        match self {
+            Self::SystemBus => "Restore access to the system D-Bus service, then try again.",
+            Self::AuthorityUnavailable => "Restore access to the system polkit authentication service, then try again.",
+            Self::AuthorityUntrusted => "Ask your administrator to repair the system polkit service's ownership, then try again.",
+            Self::ActionMissing => "Repair or reinstall the installed Painted Wolf Code package to restore its presence action, then try again.",
+            Self::FreshAuthenticationRequired => "Ask your administrator to restore this action's policy requiring fresh authentication. Do not use unconditional or retained authorization.",
+            Self::AgentMissing => "Start the system authentication agent for this desktop, then try again.",
+        }
+    }
 }
 
 /// Maps the authority's answer. With user interaction allowed, an unmet
@@ -48,6 +71,7 @@ pub(super) fn outcome(is_authorized: bool, is_challenge: bool) -> Result<(), Pol
     match (is_authorized, is_challenge) {
         (true, _) => Ok(()),
         (false, true) => Err(PolkitRefusal::Unavailable(
+            UnavailableReason::AgentMissing,
             "No authentication agent is running in this desktop session.".into(),
         )),
         (false, false) => Err(PolkitRefusal::Denied(
@@ -62,6 +86,7 @@ pub(super) fn outcome(is_authorized: bool, is_challenge: bool) -> Result<(), Pol
 pub(super) fn preflight(is_authorized: bool, is_challenge: bool) -> Result<(), PolkitRefusal> {
     match (is_authorized, is_challenge) {
         (true, _) => Err(PolkitRefusal::Unavailable(
+            UnavailableReason::FreshAuthenticationRequired,
             "This computer's polkit policy grants the presence check without asking, so it cannot confirm you are here.".into(),
         )),
         (false, true) => Ok(()),
@@ -107,7 +132,10 @@ pub(super) fn confirm_with_polkit(identifier: &str, binding: &ConfirmationChalle
 fn confirm_on(context: &glib::MainContext, action: &str, binding: &ConfirmationChallenge<'_>) -> Result<(), PolkitRefusal> {
     let bus = linux_bus::connect(context, linux_bus::SYSTEM_BUS_ADDRESS, BUS_CONNECT_TIMEOUT)
         .map_err(|error| {
-            PolkitRefusal::Unavailable(format!("The system bus is unavailable: {error}"))
+            PolkitRefusal::Unavailable(
+                UnavailableReason::SystemBus,
+                format!("The system bus is unavailable: {error}"),
+            )
         })?;
     let owner = authority_owner(context, &bus, action)?;
     let subject = own_subject()?;
@@ -209,7 +237,12 @@ fn authority_owner(
         Some(&(AUTHORITY_NAME.to_string(),).to_variant()),
         BUS_CALL_TIMEOUT,
     )
-    .map_err(|_| PolkitRefusal::Unavailable("The polkit authority is not running.".into()))?
+    .map_err(|_| {
+        PolkitRefusal::Unavailable(
+            UnavailableReason::AuthorityUnavailable,
+            "The system polkit authority is unavailable.".into(),
+        )
+    })?
     .child_value(0)
     .str()
     .map(str::to_owned)
@@ -229,6 +262,7 @@ fn authority_owner(
     .ok_or_else(|| PolkitRefusal::Failed("the authority owner's user is unknown".into()))?;
     if !authority_owner_accepted(owner_uid, user_id("polkitd")) {
         return Err(PolkitRefusal::Unavailable(
+            UnavailableReason::AuthorityUntrusted,
             "The polkit authority is not owned by the system.".into(),
         ));
     }
@@ -247,6 +281,7 @@ fn authority_owner(
     })?;
     if !lists_action(&actions.child_value(0), action) {
         return Err(PolkitRefusal::Unavailable(
+            UnavailableReason::ActionMissing,
             "The Painted Wolf Code presence action is not installed.".into(),
         ));
     }
@@ -298,10 +333,8 @@ pub(super) fn confirmation_result(
         Ok(()) => Ok(AUTHENTICATOR_POLKIT),
         Err(PolkitRefusal::Denied(message)) => Err(PresenceCommandError::denied(message)),
         Err(PolkitRefusal::Failed(message)) => Err(PresenceCommandError::failed(message)),
-        Err(PolkitRefusal::Unavailable(message)) => Err(
-            PresenceCommandError::unavailable(message).with_suggested_action(
-                "Start the system authentication agent for this desktop, then try again.",
-            ),
+        Err(PolkitRefusal::Unavailable(reason, message)) => Err(
+            PresenceCommandError::unavailable(message).with_suggested_action(reason.suggested_action()),
         ),
     }
 }
@@ -314,15 +347,50 @@ mod tests {
     fn system_authentication_is_required_independently_of_vault_custody() {
         assert_eq!(confirmation_result(Ok(())).unwrap(), AUTHENTICATOR_POLKIT);
         for (refusal, expected) in [
-            (PolkitRefusal::Unavailable("no agent".into()), "presence_unavailable"),
+            (
+                PolkitRefusal::Unavailable(UnavailableReason::AgentMissing, "no agent".into()),
+                "presence_unavailable",
+            ),
             (PolkitRefusal::Denied("canceled".into()), "presence_denied"),
             (PolkitRefusal::Failed("bus failed".into()), "presence_failed"),
         ] {
             assert_eq!(confirmation_result(Err(refusal)).unwrap_err().code, expected);
         }
-        let unavailable = confirmation_result(preflight(true, false)).unwrap_err();
-        assert_eq!(unavailable.code, "presence_unavailable");
-        assert!(unavailable.suggested_action.unwrap().contains("system authentication agent"));
+        for retained in [false, true] {
+            let unavailable = confirmation_result(preflight(true, retained)).unwrap_err();
+            assert_eq!(unavailable.code, "presence_unavailable");
+            assert_eq!(
+                unavailable.suggested_action.as_deref(),
+                Some(UnavailableReason::FreshAuthenticationRequired.suggested_action())
+            );
+        }
+        let no_agent = confirmation_result(outcome(false, true)).unwrap_err();
+        assert_eq!(
+            no_agent.suggested_action.as_deref(),
+            Some(UnavailableReason::AgentMissing.suggested_action())
+        );
+    }
+
+    #[test]
+    fn unavailable_repair_follows_the_structured_cause_not_the_error_message() {
+        let cases = [
+            (UnavailableReason::SystemBus, "Restore access to the system D-Bus service, then try again."),
+            (UnavailableReason::AuthorityUnavailable, "Restore access to the system polkit authentication service, then try again."),
+            (UnavailableReason::AuthorityUntrusted, "Ask your administrator to repair the system polkit service's ownership, then try again."),
+            (UnavailableReason::ActionMissing, "Repair or reinstall the installed Painted Wolf Code package to restore its presence action, then try again."),
+            (UnavailableReason::FreshAuthenticationRequired, "Ask your administrator to restore this action's policy requiring fresh authentication. Do not use unconditional or retained authorization."),
+            (UnavailableReason::AgentMissing, "Start the system authentication agent for this desktop, then try again."),
+        ];
+        for (reason, expected) in cases {
+            // A deliberately misleading diagnostic cannot select the repair.
+            let refusal =
+                PolkitRefusal::Unavailable(reason, "No authentication agent is running.".into());
+            let error = confirmation_result(Err(refusal)).unwrap_err();
+            assert_eq!(error.code, "presence_unavailable");
+            assert_eq!(error.suggested_action.as_deref(), Some(expected));
+            assert!(error.actions.is_empty());
+            assert_eq!(error.resolution, None);
+        }
     }
 
     #[test]
@@ -331,7 +399,7 @@ mod tests {
         assert_eq!(outcome(true, true), Ok(()));
         assert!(matches!(
             outcome(false, true),
-            Err(PolkitRefusal::Unavailable(_))
+            Err(PolkitRefusal::Unavailable(_, _))
         ));
         assert!(matches!(
             outcome(false, false),
@@ -343,11 +411,11 @@ mod tests {
     fn only_a_challenged_policy_can_witness_presence() {
         assert!(matches!(
             preflight(true, false),
-            Err(PolkitRefusal::Unavailable(_))
+            Err(PolkitRefusal::Unavailable(_, _))
         ));
         assert!(matches!(
             preflight(true, true),
-            Err(PolkitRefusal::Unavailable(_))
+            Err(PolkitRefusal::Unavailable(_, _))
         ));
         assert_eq!(preflight(false, true), Ok(()));
         assert!(matches!(
