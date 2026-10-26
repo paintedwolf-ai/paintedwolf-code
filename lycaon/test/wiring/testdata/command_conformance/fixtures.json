@@ -3043,6 +3043,61 @@
         }
       },
       "reference_provenance": "Captured with GNU tools in Debian Linux and BSD system tools on macOS."
+    },
+    {
+      "id": "run3-sed-next-line-insert-and-change",
+      "category": "live-run-3",
+      "description": "Sed inserts and changes text with the POSIX next-line spelling.",
+      "commands": [
+        "sed"
+      ],
+      "forms": [
+        "sed:-e"
+      ],
+      "program": "sed -e '/first/i\\\nstart' -e '/second/c\\\nchanged' sub/a.txt",
+      "tracked_files": [],
+      "gnu": {
+        "files": {},
+        "status": 0,
+        "stderr": "",
+        "stdout": "start\nfirst\nchanged\n"
+      },
+      "bsd": {
+        "status": 0,
+        "stdout": "start\nfirst\nchanged\n",
+        "stderr": "",
+        "files": {}
+      },
+      "reference_provenance": "Captured with GNU tools in Debian Linux and BSD system tools on macOS."
+    },
+    {
+      "id": "run3-binary-rg-implicit-walk",
+      "category": "live-run-3",
+      "description": "Ripgrep skips binary files during its ordinary recursive walk.",
+      "commands": [
+        "rg"
+      ],
+      "forms": [
+        "rg:-n"
+      ],
+      "program": "rg -n TODO sub",
+      "seed_binary_files": {
+        "sub/nested/todo.bin": "VE9ETwBiaW5hcnkK"
+      },
+      "tracked_files": [],
+      "gnu": {
+        "files": {},
+        "status": 0,
+        "stderr": "",
+        "stdout": "sub/nested/deep.go:3:// TODO: fix OldName\n"
+      },
+      "bsd": {
+        "status": 0,
+        "stdout": "sub/nested/deep.go:3:// TODO: fix OldName\n",
+        "stderr": "",
+        "files": {}
+      },
+      "reference_provenance": "Captured with GNU tools in Debian Linux and BSD system tools on macOS."
     }
   ]
 }
