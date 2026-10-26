@@ -1630,6 +1630,8 @@ CREATE TABLE IF NOT EXISTS invocation_program_outputs (
 CREATE INDEX IF NOT EXISTS idx_invocation_program_outputs_program ON invocation_program_outputs(program_id, id);
 CREATE INDEX IF NOT EXISTS idx_invocation_program_outputs_execution ON invocation_program_outputs(execution_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_invocation_program_outputs_reference ON invocation_program_outputs(program_id,reference);
+CREATE INDEX IF NOT EXISTS idx_invocation_program_outputs_blob_id
+    ON invocation_program_outputs(json_extract(blob_json,'$.ID'));
 
 -- Only source-owner-confirmed delivered pages become observation records.
 CREATE TABLE IF NOT EXISTS invocation_program_deliveries (
