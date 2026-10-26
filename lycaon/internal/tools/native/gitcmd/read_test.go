@@ -36,12 +36,13 @@ var fixtureEnv = []string{
 }
 
 type harness struct {
-	t      *testing.T
-	root   string
-	bin    string
-	owners *Owners
-	paths  *projectpaths.ProgramPaths
-	tc     tools.ToolContext
+	t        *testing.T
+	root     string
+	bin      string
+	template string
+	owners   *Owners
+	paths    *projectpaths.ProgramPaths
+	tc       tools.ToolContext
 }
 
 func newHarness(t *testing.T) *harness {
@@ -62,6 +63,14 @@ func newHarness(t *testing.T) *harness {
 }
 
 func newEmptyHarness(t *testing.T) *harness {
+	h := newUninitializedHarness(t)
+	h.git("init", "-q", "-b", "main")
+	h.git("config", "user.name", "Ann Author")
+	h.git("config", "user.email", "ann@example.test")
+	return h
+}
+
+func newUninitializedHarness(t *testing.T) *harness {
 	t.Helper()
 	bin, err := gitengine.BinaryPath()
 	testutil.FailErr(t, "bundled git", err)
@@ -74,10 +83,7 @@ func newEmptyHarness(t *testing.T) *harness {
 	tc := nativefixture.Context(root)
 	paths, err := projectpaths.NewProgramPaths(t.Context(), boundary, tc, "")
 	testutil.FailErr(t, "program paths", err)
-	h := &harness{t: t, root: root, bin: bin, owners: owners, paths: paths, tc: tc}
-	h.git("init", "-q", "-b", "main")
-	h.git("config", "user.name", "Ann Author")
-	h.git("config", "user.email", "ann@example.test")
+	h := &harness{t: t, root: root, bin: bin, template: t.TempDir(), owners: owners, paths: paths, tc: tc}
 	return h
 }
 
@@ -102,7 +108,7 @@ func (h *harness) git(args ...string) string {
 func (h *harness) direct(dir string, args ...string) (string, string, int) {
 	cmd := exec.Command(h.bin, append([]string{"-c", "color.ui=false"}, args...)...)
 	cmd.Dir = dir
-	cmd.Env = append([]string{"PATH=" + os.Getenv("PATH"), "HOME=" + h.root}, fixtureEnv...)
+	cmd.Env = append([]string{"PATH=" + os.Getenv("PATH"), "HOME=" + h.root, "GIT_TEMPLATE_DIR=" + h.template}, fixtureEnv...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	err := cmd.Run()

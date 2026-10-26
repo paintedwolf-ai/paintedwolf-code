@@ -10,8 +10,17 @@ import (
 )
 
 func TestCommandGitFirstCommitMatchesGit(t *testing.T) {
-	h := newEmptyHarness(t)
-	reference := newEmptyHarness(t)
+	h := newUninitializedHarness(t)
+	reference := newUninitializedHarness(t)
+	gotInit := h.exec("git", "init", "-q", "-b", "main")
+	refOut, refErr, refCode := reference.direct(reference.root, "init", "-q", "-b", "main")
+	if gotInit.err != nil || gotInit.result.Status != refCode || gotInit.stdout != refOut || gotInit.stderr != refErr {
+		t.Fatalf("init = %+v err=%v, reference stdout=%q stderr=%q status=%d", gotInit, gotInit.err, refOut, refErr, refCode)
+	}
+	for _, fixture := range []*harness{h, reference} {
+		fixture.git("config", "user.name", "Ann Author")
+		fixture.git("config", "user.email", "ann@example.test")
+	}
 	h.write("a", "a\n")
 	reference.write("a", "a\n")
 	if add := h.exec("git", "add", "a"); add.err != nil || add.result.Status != 0 {
@@ -36,6 +45,46 @@ func TestCommandGitFirstCommitMatchesGit(t *testing.T) {
 	}
 	if got, want := h.git("status", "--porcelain=v1"), reference.git("status", "--porcelain=v1"); got != want {
 		t.Fatalf("first commit status = %q, reference = %q", got, want)
+	}
+}
+
+func TestCommandGitInitDirectoryAndFlagsMatchGit(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args []string
+	}{
+		{"directory", []string{"init", "-q", "-b", "main", "nested"}},
+		{"bare", []string{"init", "-q", "--bare", "bare.git"}},
+		{"output", []string{"init", "-b", "main", "nested"}},
+		{"invalid-branch", []string{"init", "-b", "bad..name", "nested"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newUninitializedHarness(t)
+			reference := newUninitializedHarness(t)
+			words := append([]string{"git"}, tc.args...)
+			got := h.exec(words...)
+			refOut, refErr, refCode := reference.direct(reference.root, tc.args...)
+			gotStdout := strings.ReplaceAll(got.stdout, h.root, "<root>")
+			refStdout := strings.ReplaceAll(refOut, reference.root, "<root>")
+			if got.err != nil || got.result.Status != refCode || got.stderr != refErr || gotStdout != refStdout {
+				t.Fatalf("init = %+v err=%v, reference stdout=%q stderr=%q status=%d", got, got.err, refOut, refErr, refCode)
+			}
+			if refCode != 0 {
+				return
+			}
+			if gotPath, wantPath := filepath.Join(h.root, tc.args[len(tc.args)-1]), filepath.Join(reference.root, tc.args[len(tc.args)-1]); tc.name == "bare" {
+				if _, err := os.Stat(filepath.Join(gotPath, "HEAD")); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := os.Stat(filepath.Join(wantPath, "HEAD")); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				if gotHead, wantHead := h.git("-C", gotPath, "symbolic-ref", "HEAD"), reference.git("-C", wantPath, "symbolic-ref", "HEAD"); gotHead != wantHead {
+					t.Fatalf("HEAD = %q, reference %q", gotHead, wantHead)
+				}
+			}
+		})
 	}
 }
 

@@ -39,6 +39,8 @@ func invokeMutation(ctx context.Context, p Prepared, tc tools.ToolContext, strea
 			status, err := p.run(ctx, streams)
 			return settle(status, err, spec.Name)
 		}
+	case "git init":
+		return runInit(ctx, p, out, stderr)
 	case "git clone":
 		return runClone(ctx, p, tc, out, stderr)
 	}

@@ -1069,6 +1069,7 @@
     "file",
     "find",
     "git",
+    "git init",
     "git add",
     "git blame",
     "git branch",
