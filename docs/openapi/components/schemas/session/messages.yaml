@@ -241,6 +241,10 @@ components:
         media_type:
           type: string
           description: Optional MIME type for this text projection.
+        artifact_id:
+          type: string
+          format: uuid
+          description: Host-stamped visual derived from this attachment or path reference. Edit restoration keeps the original source part instead of relinking this derived image again.
         blob_id:
           type: string
           pattern: '^[0-9a-f]{64}$'

@@ -16,13 +16,20 @@ import (
 )
 
 func (b *Runtime) openUpgradeableStore(ctx context.Context, path string) (*db.Store, error) {
+	if err := db.CheckStoreHealth(path); err != nil {
+		return nil, err
+	}
 	hooks := db.UpgradeHooks{
 		Before: func(ctx context.Context, source *sql.DB, plan migrations.Plan) error {
+			var sourcePath string
+			if err := source.QueryRowContext(ctx, `SELECT file FROM pragma_database_list WHERE name='main'`).Scan(&sourcePath); err != nil {
+				return err
+			}
 			previous, _, err := db.ReadAppVersion(ctx, source)
 			if err != nil {
 				return err
 			}
-			return backup.CaptureUpgradeRecovery(ctx, backup.CreateOpts{ConfigDir: filepath.Dir(path), DBPath: path,
+			return backup.CaptureUpgradeRecovery(ctx, backup.CreateOpts{ConfigDir: filepath.Dir(path), DBPath: sourcePath,
 				SQLDB: source, AppVersion: previous, SchemaUserVersion: plan.Source.Revision}, plan, version.Version)
 		},
 		Progress: func(phase migrations.Phase) {
@@ -51,14 +58,15 @@ func (b *Runtime) openUpgradeableStore(ctx context.Context, path string) (*db.St
 	if err != nil {
 		return nil, err
 	}
-	if err := b.prepareUpgradeReadiness(ctx, database, filepath.Dir(path)); err != nil {
+	if err := b.prepareUpgradeReadiness(ctx, database, path); err != nil {
 		_ = database.Shutdown(ctx)
 		return nil, recoveryStateFailure(err, db.SchemaVersion, "Could not preserve upgrade recovery state before startup.")
 	}
 	return database, nil
 }
 
-func (b *Runtime) prepareUpgradeReadiness(ctx context.Context, database *db.Store, dataDir string) error {
+func (b *Runtime) prepareUpgradeReadiness(ctx context.Context, database *db.Store, path string) error {
+	dataDir := filepath.Dir(path)
 	recoveryDir := filepath.Join(dataDir, db.UpgradeRecoveryDirName)
 	pending := filepath.Join(recoveryDir, "pending.json")
 	if _, err := os.Stat(pending); err == nil {
@@ -78,7 +86,12 @@ func (b *Runtime) prepareUpgradeReadiness(ctx context.Context, database *db.Stor
 			var prune *backup.RecoveryPruneError
 			if errors.As(err, &prune) {
 				b.logger.WarnContext(ctx, "could not remove older recovery snapshots; cleanup deferred", "error", err)
-				return nil
+				err = nil
+			}
+			if err == nil {
+				if cleanupErr := db.CompleteStoreUpgrade(path); cleanupErr != nil {
+					b.logger.DebugContext(ctx, "store upgrade pre-image cleanup deferred", "error", cleanupErr)
+				}
 			}
 			return err
 		}

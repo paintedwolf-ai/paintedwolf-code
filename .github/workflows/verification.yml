@@ -136,10 +136,20 @@ jobs:
           # build them from each distribution as it ships that day.
           containers: ${{ matrix.containers && (inputs.profile == 'fast' || inputs.profile == 'integration') }}
           browser: ${{ matrix.browser }}
+          nix: ${{ matrix.nix }}
 
       # Shell lanes stage the engine, including the decision engine heads.
       - uses: ./.github/actions/setup-bialy
         if: ${{ matrix.setup == 'shell' }}
+
+      # Python repository fixtures run in the limits lane before the offline gate.
+      - name: Install repository metadata tool
+        if: ${{ runner.os == 'Linux' && matrix.lane == 'limits' }}
+        run: |
+          if ! command -v createrepo_c >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends createrepo-c
+          fi
 
       - name: Run verification
         timeout-minutes: ${{ matrix.minutes }}
