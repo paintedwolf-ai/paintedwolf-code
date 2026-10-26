@@ -64,7 +64,8 @@ func TestProgramProjectProgressAndScratchMove(t *testing.T) {
 		testutil.FailErr(t, "run refused project write", err)
 		outcome := decodeOutcome(t, raw)
 		if outcome.Refusal == nil || outcome.Refusal.Code != "PROGRESS_MISSING" || !strings.Contains(outcome.Stderr, "[PROGRESS_MISSING]") {
-			t.Fatalf("%q: %+v", source, outcome)
+			page, pageErr := f.Recorder.ReadProgramPage(t.Context(), f.Session, outcome.ProgramID, "", 100)
+			t.Fatalf("%q: %+v, receipts=%+v, receipt error=%v", source, outcome, page.Executions, pageErr)
 		}
 		if _, err := os.Stat(filepath.Join(f.Dir, "config.json")); !os.IsNotExist(err) {
 			t.Fatalf("%q created project file: %v", source, err)
