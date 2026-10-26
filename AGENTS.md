@@ -43,11 +43,11 @@ policy before editing. Start unfamiliar work at [docs](docs/README.md) and
   invalidate a batch; failed batches fall back to individual checks. Keep the
   originals open until the exact recorded heads land. A human draft decision
   remains a handoff; never undo it automatically.
-- **Stacked PRs land on `main` one at a time.** A PR may target another PR's
+- **Land each PR on `main` by itself.** A PR may be based on another PR's
   branch for review, but never merge a PR into any branch other than `main`,
-  and never fold an open PR's commits into another PR's branch. After the parent
-  lands, retarget the child to `main` and rebase it onto the landed commit
-  before it enters the queue.
+  and never fold an open PR's commits into another PR's branch. After the base
+  PR lands, retarget the dependent PR to `main` and rebase it onto the landed
+  commit before it enters the queue.
 - **Cancel superseded background Qualification when its source is obsolete.**
   The hosted supersession controller may cancel queued or running background
   main-push Qualification after validating source ancestry and rechecking run
