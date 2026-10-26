@@ -49,7 +49,7 @@ def package_tree(root, machine=62):
         path.chmod(0o755)
         rows.append({'path': '/' + owner.INSTALL + '/bin/' + name,
                      'sha256': hashlib.sha256(path.read_bytes()).hexdigest(), 'size': path.stat().st_size})
-    manifest = {'format_version': 1, 'install_root': '/' + owner.INSTALL, 'executables': rows}
+    manifest = {'format_version': 2, 'install_root': '/' + owner.INSTALL, 'executables': rows}
     write_manifest(tree, manifest)
     return tree, manifest
 
@@ -115,7 +115,7 @@ class SelectedPackageTests(unittest.TestCase):
                 owner.selected(self.tree, HOST)
 
     def test_manifest_must_describe_this_install_root(self):
-        for change in ({'install_root': '/opt/other'}, {'format_version': 2}):
+        for change in ({'install_root': '/opt/other'}, {'format_version': 1}):
             write_manifest(self.tree, dict(self.manifest, **change))
             with self.subTest(change=change), self.assertRaisesRegex(ValueError, 'unsupported identity'):
                 owner.selected(self.tree, HOST)
