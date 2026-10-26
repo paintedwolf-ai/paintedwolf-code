@@ -62,9 +62,10 @@ struct Outcome {
     message: String,
 }
 
-fn engine_command(args: &[&str]) -> Result<Command, String> {
+fn engine_command(args: &[&str]) -> Result<(Command, crate::linux_generation::HelperImage), String> {
     super::installation::ensure_current().map_err(|reason| reason.guidance())?;
-    let mut cmd = Command::new(resolve_lycaon_binary()?);
+    let image = crate::linux_generation::capture_helper(&resolve_lycaon_binary()?)?;
+    let mut cmd = Command::new(&image.path);
     cmd.arg("credentials")
         .args(args)
         .env(
@@ -72,18 +73,19 @@ fn engine_command(args: &[&str]) -> Result<Command, String> {
             crate::config_dir::ensure_host_config_dir()?,
         )
         .stderr(Stdio::null());
-    Ok(cmd)
+    Ok((cmd, image))
 }
 
 fn read_custody() -> Result<CustodyReport, String> {
     if let Err(reason) = super::installation::ensure_current() {
         return Ok(CustodyReport {
-            mode: "restart_required".into(),
+            mode: if reason.restart_required() { "restart_required" } else { "installation_unverified" }.into(),
             service_verified: false,
             detail: Some(reason.guidance()),
         });
     }
-    let output = engine_command(&["custody"])?
+    let (mut command, _image) = engine_command(&["custody"])?;
+    let output = command
         .stdin(Stdio::null())
         .output()
         .map_err(|err| format!("read vault custody: {err}"))?;
@@ -118,8 +120,8 @@ pub(super) fn parse_outcome(output: &Output) -> Result<(), CustodyError> {
 }
 
 fn run_move(target: CustodyTarget, password: &[u8]) -> Result<(), CustodyError> {
-    let mut child = engine_command(&[target.command(), "--yes"])
-        .map_err(CustodyError::failed)?
+    let (mut command, _image) = engine_command(&[target.command(), "--yes"]).map_err(CustodyError::failed)?;
+    let mut child = command
         .env("LYCAON_CREDENTIAL_UNLOCK_STDIN", "1")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -157,7 +159,7 @@ fn move_custody(
         });
     }
     super::installation::ensure_current().map_err(|reason| CustodyError {
-        code: "desktop_restart_required".into(),
+        code: if reason.restart_required() { "desktop_restart_required" } else { "installation_unverified" }.into(),
         message: reason.guidance(),
         engine_stopped: false,
     })?;

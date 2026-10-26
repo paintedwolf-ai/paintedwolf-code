@@ -30,9 +30,16 @@ class LaneProofTests(unittest.TestCase):
 
     def test_seal_requires_complete_successful_merge_execution(self):
         self.assertEqual(self.proof()["source_tree"], self.tree)
+        recovered = {**self.environment, "GITHUB_EVENT_NAME": "workflow_dispatch",
+                     "GITHUB_REF": "refs/heads/gh-readonly-queue/main/pr-1-aaaa"}
+        with patch.object(lane_proof.subprocess, "check_output", side_effect=["a" * 40, self.tree]), \
+                patch.object(lane_proof.subprocess, "run"):
+            self.assertEqual(lane_proof.seal(Path("/source"), self.record, recovered)["source_tree"], self.tree)
         for changes in ({"status": "failed"}, {"lane": "limits"}, {"packages": ["./internal/foo"]}, {"execution_error": "failure"}):
             self.assertIsNone(lane_proof.seal(Path("/source"), {**self.record, **changes}, self.environment))
         self.assertIsNone(lane_proof.seal(Path("/source"), self.record, {**self.environment, "GITHUB_EVENT_NAME": "pull_request"}))
+        self.assertIsNone(lane_proof.seal(Path("/source"), self.record,
+                                          {**self.environment, "GITHUB_EVENT_NAME": "workflow_dispatch", "GITHUB_REF": "refs/heads/main"}))
         with patch.object(lane_proof.subprocess, "check_output", return_value="c" * 40), self.assertRaises(ValueError):
             lane_proof.seal(Path("/source"), self.record, self.environment)
         with patch.object(lane_proof.subprocess, "check_output", return_value="a" * 40), \
@@ -87,10 +94,18 @@ class LaneProofTests(unittest.TestCase):
     def test_lookup_requires_trusted_successful_workflow_and_equal_tree(self):
         valid = {**self.run, "event": "merge_group", "conclusion": "success", "path": ".github/workflows/ci.yml",
                  "head_repository": {"full_name": "org/repo"}}
-        invalid = [{**valid, "event": "pull_request"}, {**valid, "conclusion": "failure"},
-                   {**valid, "path": ".github/workflows/other.yml"}, {**valid, "head_repository": {"full_name": "fork/repo"}}]
-        with patch.object(proof_reuse, "api", side_effect=[{"workflow_runs": invalid + [valid]}, {"tree": {"sha": self.tree}}]):
-            self.assertEqual(list(proof_reuse.candidates("org/repo", self.tree)), [valid])
+        dispatched = {**valid, "event": "workflow_dispatch", "head_branch": "gh-readonly-queue/main/pr-1-aaaa"}
+        invalid = [{**valid, "event": "pull_request"},
+                   {**valid, "event": "workflow_dispatch", "head_branch": "main"},
+                   {**valid, "conclusion": "failure"},
+                   {**valid, "path": ".github/workflows/other.yml"},
+                   {**valid, "head_repository": {"full_name": "fork/repo"}}]
+        with patch.object(proof_reuse, "api", side_effect=[
+            {"workflow_runs": invalid + [valid, dispatched]},
+            {"tree": {"sha": self.tree}},
+            {"tree": {"sha": self.tree}},
+        ]):
+            self.assertEqual(list(proof_reuse.candidates("org/repo", self.tree)), [valid, dispatched])
         with patch.object(proof_reuse, "api", side_effect=[{"workflow_runs": [valid]}, {"tree": {"sha": "other"}}]):
             self.assertEqual(list(proof_reuse.candidates("org/repo", self.tree)), [])
 
@@ -141,7 +156,10 @@ class LaneProofTests(unittest.TestCase):
     def test_workflow_records_proof_only_after_success_and_keeps_reuse_in_qualification(self):
         root = Path(__file__).resolve().parents[3]
         workflow = (root / ".github/workflows/verification.yml").read_text()
-        self.assertIn("if: success() && github.event_name == 'merge_group'", workflow)
+        self.assertIn(
+            "if: success() && (github.event_name == 'merge_group' || startsWith(github.ref, 'refs/heads/gh-readonly-queue/main/'))",
+            workflow,
+        )
         self.assertLess(workflow.index("Run verification"), workflow.index("Seal complete merge-group lane proof"))
         self.assertIn('[[ "$PROFILE" == check && "$AFFECTED" != true && "$PLATFORM" != true ]]', workflow)
         self.assertIn("if-no-files-found: error", workflow.split("Retain qualification coverage sources", 1)[1])

@@ -21,6 +21,9 @@ inputs:
   browser:
     description: Provision the pinned browser before an offline lane runs test:confine:linux
     default: 'false'
+  nix:
+    description: Provision the pinned Nix toolchain and locked flake inputs before an offline Nix lane
+    default: 'false'
   save-caches:
     description: Save the toolchain and build caches (main's warm job only); every other run restores without saving
     default: 'false'
@@ -65,6 +68,11 @@ runs:
       uses: ./.github/actions/cache-go
       with:
         exact: ${{ inputs.save-caches }}
+
+    - name: Restore analysis tools
+      uses: ./.github/actions/cache-analysis-tools
+      with:
+        tools: ${{ inputs.analysis }}
 
     - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
       with:
@@ -112,6 +120,11 @@ runs:
       if: inputs.setup == 'shell'
       uses: ./.github/actions/cache-decide
 
+    - name: Provision pinned Go modules
+      if: inputs.setup != 'frontend'
+      shell: bash
+      run: ./task setup-dev -- --ci-inputs
+
     - name: Set up maintained OpenGrep
       if: inputs.setup != 'frontend'
       uses: ./.github/actions/setup-opengrep
@@ -149,11 +162,6 @@ runs:
         path: ~/.bun/install/cache
         key: bun-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.bun-version', 'lycaon-den/bun.lock') }}
 
-    - name: Provision pinned Go modules
-      if: inputs.setup != 'frontend'
-      shell: bash
-      run: ./task setup-dev -- --ci-inputs
-
     - name: Provision frontend native test inputs
       if: inputs.setup == 'frontend'
       shell: bash
@@ -188,12 +196,6 @@ runs:
       shell: bash
       run: ./task setup-dev -- --notices-tools
 
-    - name: Restore analysis tools
-      if: inputs.analysis != 'none'
-      uses: ./.github/actions/cache-analysis-tools
-      with:
-        tools: ${{ inputs.analysis }}
-
     # Offline lanes cannot reach the module proxy, so a cache miss builds the analyzers here.
     - name: Provision analysis tools
       if: inputs.analysis != 'none'
@@ -214,6 +216,11 @@ runs:
       if: inputs.browser == 'true'
       shell: bash
       run: ./task test:confine:linux -- --prepare
+
+    - name: Provision pinned Nix and locked inputs
+      if: inputs.nix == 'true'
+      shell: bash
+      run: ./task nix:check -- --prepare
 
     - name: Save pinned frontend packages
       if: inputs.save-caches == 'true' && github.ref == 'refs/heads/main'

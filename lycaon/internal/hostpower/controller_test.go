@@ -4,6 +4,7 @@ import (
 	"errors"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/lycaon/lycaon/pkg/api"
@@ -172,33 +173,29 @@ func TestControllerRejectsNilLease(t *testing.T) {
 }
 
 func TestControllerReacquiresAfterUnexpectedExit(t *testing.T) {
-	inhibitor := &fakeInhibitor{}
-	controller := newController(true, inhibitor)
-	controller.retryDelay = time.Millisecond
-	defer func() { _ = controller.Close() }()
+	synctest.Test(t, func(t *testing.T) {
+		inhibitor := &fakeInhibitor{}
+		controller := newController(true, inhibitor)
+		controller.retryDelay = time.Millisecond
+		defer func() { _ = controller.Close() }()
 
-	controller.SetActive("worker:one", true)
-	inhibitor.mu.Lock()
-	first := inhibitor.leases[0]
-	inhibitor.mu.Unlock()
-	first.finish(errors.New("assertion exited"))
+		controller.SetActive("worker:one", true)
+		inhibitor.mu.Lock()
+		first := inhibitor.leases[0]
+		inhibitor.mu.Unlock()
+		first.finish(errors.New("assertion exited"))
 
-	deadline := time.After(time.Second)
-	for {
+		synctest.Wait()
+		time.Sleep(time.Millisecond)
+		synctest.Wait()
 		status := controller.Snapshot()
-		if inhibitor.acquireCount() >= 2 && status.Inhibiting && status.LastError == "" {
-			if !first.released {
-				t.Fatal("the controller abandoned the ended lease without releasing its resources")
-			}
-			break
-		}
-		select {
-		case <-deadline:
+		if inhibitor.acquireCount() < 2 || !status.Inhibiting || status.LastError != "" {
 			t.Fatalf("assertion was not reacquired: %+v", status)
-		default:
-			time.Sleep(time.Millisecond)
 		}
-	}
+		if !first.released {
+			t.Fatal("the controller abandoned the ended lease without releasing its resources")
+		}
+	})
 }
 
 func TestControllerCloseIsTerminal(t *testing.T) {
@@ -216,34 +213,29 @@ func TestControllerCloseIsTerminal(t *testing.T) {
 }
 
 func TestControllerReacquiresAfterPlatformServiceReturns(t *testing.T) {
-	platform := &fakeInhibitor{unsupported: true}
-	controller := newController(true, platform)
-	controller.retryDelay = time.Millisecond
-	defer func() { _ = controller.Close() }()
-	controller.SetActive("turn:one", true)
-	if got := controller.Snapshot(); got.Supported || got.Inhibiting || got.ActiveWorkCount != 1 ||
-		got.Unavailable != "no sleep inhibition provider is available (fake: service stopped)" {
-		t.Fatalf("unavailable platform status = %+v", got)
-	}
-	platform.mu.Lock()
-	platform.unsupported = false
-	platform.mu.Unlock()
-	deadline := time.After(time.Second)
-	for {
+	synctest.Test(t, func(t *testing.T) {
+		platform := &fakeInhibitor{unsupported: true}
+		controller := newController(true, platform)
+		controller.retryDelay = time.Millisecond
+		defer func() { _ = controller.Close() }()
+		controller.SetActive("turn:one", true)
+		if got := controller.Snapshot(); got.Supported || got.Inhibiting || got.ActiveWorkCount != 1 ||
+			got.Unavailable != "no sleep inhibition provider is available (fake: service stopped)" {
+			t.Fatalf("unavailable platform status = %+v", got)
+		}
+		platform.mu.Lock()
+		platform.unsupported = false
+		platform.mu.Unlock()
+		time.Sleep(time.Millisecond)
+		synctest.Wait()
 		status := controller.Snapshot()
-		if status.Supported && status.Inhibiting {
-			if status.Unavailable != "" {
-				t.Fatalf("supported status kept a stale reason: %+v", status)
-			}
-			break
-		}
-		select {
-		case <-deadline:
+		if !status.Supported || !status.Inhibiting {
 			t.Fatalf("platform service return did not resume inhibition: %+v", status)
-		default:
-			time.Sleep(time.Millisecond)
 		}
-	}
+		if status.Unavailable != "" {
+			t.Fatalf("supported status kept a stale reason: %+v", status)
+		}
+	})
 }
 
 func TestControllerWithoutPlatformReportsUnavailable(t *testing.T) {

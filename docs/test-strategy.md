@@ -833,6 +833,11 @@ pinned browser under confinement) runs on both. Platform qualification's
 sandbox, its helper, or the command supervisor's Linux files change. Setup
 provisions the pinned browser before the lane goes offline.
 
+The `nix` lane runs `nix:check` nightly. It informs and gates no merge or
+release. A lane's `arguments` reach its single target. Setup installs the pinned
+Nix release and fetches every locked input with `nix:check -- --prepare` before
+the lane goes offline.
+
 Drafts spend no verification runners and cannot pass `check`. Manual dispatch
 runs the complete check and platform tier, or with `profile: fast` the fast
 tier for a pull request whose events start no CI, such as the dependency
@@ -844,14 +849,13 @@ the `release` profile's platform lanes, then browser and desktop journeys on
 main. One qualification runs at a time. Its `queue: max` concurrency queue
 retains up to 100 pending requests and preserves explicit candidate runs.
 [`qualification-supersession.yml`](../.github/workflows/qualification-supersession.yml)
-uses the existing maintenance runner reservation to cancel queued or running
-background push qualifications superseded by newer main. It reads live main,
-requires the old source to be an ancestor, and rechecks each run before
-cancellation. Manual candidate requests are never canceled by this controller.
-If maintenance is busy or its pending request is replaced, cancellation can be
-delayed until a later push; selection still drops obsolete pushes at admission.
-Canceled runs produce no qualification evidence. The executor queue limit is a
-bound, not a reservation: GitHub cancels additional requests when it is full.
+runs per main push (`qualification-supersession-${{ github.sha }}`) to cancel
+queued or running background push qualifications superseded by newer main. It
+reads live main, requires the old source to be an ancestor, and rechecks each
+run before cancellation. Manual candidate requests are never canceled by this
+controller. Selection also drops obsolete pushes at admission. Canceled runs
+produce no qualification evidence. The executor queue limit is a bound, not a
+reservation: GitHub cancels additional requests when it is full.
 
 A manual request selects a full `source-sha` from main's history, or the dispatch
 commit when omitted. The main workflow remains the controller; each verification,
@@ -1111,10 +1115,11 @@ remain a coverage gap; cancellation is reported separately from an attributed te
 ### Reusing completed source verification
 
 Qualification reuses complete source lanes from successful merge-group CI runs
+(including recovered `workflow_dispatch` runs on `gh-readonly-queue/main/`)
 whose Git tree exactly matches the selected landed source. Each compact proof
 binds repository, source commit and tree, workflow run and attempt, lane recipe,
 runner label, shard, and successful full-scope execution. The lookup considers
-up to twenty successful merge-group runs within fourteen days. PR-only results,
+up to forty recent successful CI runs within fourteen days. PR-only results,
 partial package selections, missing evidence, and failed runs grant no reuse.
 
 All shards of a lane must have matching proofs from one run attempt. Qualification
