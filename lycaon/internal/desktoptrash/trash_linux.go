@@ -59,8 +59,8 @@ func platformMove(path string) (Receipt, error) {
 	receipt := Receipt{Path: filepath.Join(files, name), Metadata: infoPath}
 	err = relocateLinuxEntry(fseffect.Location{Root: filepath.Dir(path), Rel: filepath.Base(path)}, fseffect.Location{Root: files, Rel: name}, identity)
 	if err != nil {
-		if _, statErr := os.Lstat(path); statErr == nil {
-			_ = os.Remove(infoPath)
+		if _, statErr := os.Lstat(path); statErr == nil { // #nosec G703 -- This checks the caller's selected source after a guarded move failed.
+			_ = os.Remove(infoPath) // #nosec G703 -- Removes only the UUID metadata file created above.
 		}
 		return receipt, err
 	}
@@ -160,7 +160,7 @@ func volumeTopWalk(dir string) (string, error) {
 func volumeTrashDir(top string) string {
 	uid := os.Getuid()
 	shared := filepath.Join(top, ".Trash")
-	info, err := os.Lstat(shared)
+	info, err := os.Lstat(shared) // #nosec G703 -- shared is the fixed .Trash name at the resolved mount root.
 	if err == nil && info.IsDir() && info.Mode()&os.ModeSticky != 0 {
 		perUser := filepath.Join(shared, fmt.Sprint(uid))
 		if privateTrashDirectory(perUser) == nil {
