@@ -116,11 +116,11 @@ func (f *pathsFixture) owners() func(programtest.OwnerPorts) func(tools.ToolCont
 		factory, initErr := (programOwnerTools{boundary: ports.Boundary, operations: mutation.Operations{
 			Write: &native.WriteTool{Boundary: ports.Boundary}, Delete: &native.DeleteTool{Boundary: ports.Boundary}, Move: &native.MoveTool{Boundary: ports.Boundary}, Copy: &native.CopyTool{Boundary: ports.Boundary}, Mkdir: &native.MkdirTool{Boundary: ports.Boundary}, Chmod: &native.ChmodTool{Boundary: ports.Boundary}, Chown: &native.ChownTool{Boundary: ports.Boundary}, Times: &native.TimesTool{Boundary: ports.Boundary}, Extract: &native.ExtractArchiveTool{Boundary: ports.Boundary},
 		}}).compose(ports.Recorder)
-		return func(tc tools.ToolContext, paths *projectpaths.ProgramPaths, pool *toolcontract.ProgramMemory, spill tooloutput.SpillAdmission) (command.ProgramOwners, error) {
+		return func(tc tools.ToolContext, paths *projectpaths.ProgramPaths, memory *toolcontract.ProgramMemory, admission tooloutput.SpillAdmission) (command.ProgramOwners, error) {
 			if initErr != nil {
 				return command.ProgramOwners{}, initErr
 			}
-			owners, err := factory(tc, paths, pool, spill)
+			owners, err := factory(tc, paths, memory, admission)
 			if err != nil {
 				return command.ProgramOwners{}, err
 			}
