@@ -100,6 +100,9 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 	status := run.ExitCode
 	if len(run.Stages) == 1 {
 		status = run.Stages[0].ExitStatus()
+		if run.Stages[0].ExpectedConsumerClosure() {
+			status = 141
+		}
 	}
 	if status < 0 || status > 255 {
 		status = 255

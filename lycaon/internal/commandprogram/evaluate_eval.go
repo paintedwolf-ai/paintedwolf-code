@@ -26,7 +26,7 @@ func (f *frame) eval(ctx context.Context, s commandsurface.Statement, fields Fie
 	source := strings.Join(fields.Values()[1:], " ")
 	unitID := "eval:" + uuid.NewString()
 	parsed, err := commandsurface.ParseAdmitted(ctx, f.e.ports.Memory, []byte(source), commandsurface.ParseOptions{
-		SourceName: unitID, Version: toolcontract.LanguageVersion, CatalogDigest: run.inv.CatalogDigest,
+		SourceName: unitID, Sourced: true, Version: toolcontract.LanguageVersion, CatalogDigest: run.inv.CatalogDigest,
 	})
 	if err != nil {
 		return signal{}, f.sourceRefusal(ctx, run, s, err)
