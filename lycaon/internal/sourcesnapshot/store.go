@@ -12,7 +12,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/backgroundwork"
 	"github.com/lycaon/lycaon/internal/db"

@@ -112,24 +112,30 @@ func (s *Retention) RunBlobGC(ctx context.Context, interval, retry time.Duration
 		}
 		// Generations age out on the same cadence, so an idle engine still
 		// releases the snapshots nothing references.
+		var snapshotErr error
 		if s.snapshots != nil {
-			err := s.snapshots.Sweep(ctx, time.Now().UTC().Add(-sourcesnapshot.Retention))
-			if err != nil && ctx.Err() == nil {
-				slog.WarnContext(ctx, "source snapshot sweep", "error", err)
-			}
+			snapshotErr = s.snapshots.Sweep(ctx, time.Now().UTC().Add(-sourcesnapshot.Retention))
 		}
-		err := s.SweepBlobs(ctx)
+		blobErr := s.SweepBlobs(ctx)
+		deferred := errors.Is(snapshotErr, sourcesnapshot.ErrSweepInProgress) || errors.Is(blobErr, ErrBlobMaintenanceDeferred)
+		if errors.Is(snapshotErr, sourcesnapshot.ErrSweepInProgress) {
+			snapshotErr = nil
+		}
+		if errors.Is(blobErr, ErrBlobMaintenanceDeferred) {
+			blobErr = nil
+		}
+		err := errors.Join(snapshotErr, blobErr)
 		if ctx.Err() != nil {
 			// A batch cut off mid-transaction reports the rollback; the
 			// cancellation is the reason.
 			return ctx.Err()
 		}
 		switch {
-		case errors.Is(err, ErrBlobMaintenanceDeferred):
-			slog.DebugContext(ctx, "source blob sweep deferred behind a capture", "retry_in", retry)
-			timer.Reset(retry)
 		case err != nil:
 			return err
+		case deferred:
+			slog.DebugContext(ctx, "source maintenance deferred", "retry_in", retry)
+			timer.Reset(retry)
 		default:
 			timer.Reset(interval)
 		}
