@@ -10,22 +10,23 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
 )
 
-// visibleEnvironment is the request's environment as a child would receive it:
-// host-internal keys a launch strips never appear. Values stay opaque text,
-// so a secret reference is listed as its reference, never resolved.
-func visibleEnvironment(environment []string) map[string]string {
+// visibleEnvironment is the program's exported environment. Its starting
+// values came from the same final environment constructor as child launches.
+func (inv *invocation) visibleEnvironment() (map[string]string, error) {
+	launch := exec.LaunchPlan{}
+	if inv.bound != nil {
+		launch = launch.WithTrustedEnvironment(inv.bound.BaseEnvironment())
+	}
+	if _, err := exec.AgentLaunchOptions(launch, "", inv.request.Environment, inv.tc.Host.HostResourcePathExtra); err != nil {
+		return nil, inv.usage(inv.request.Argv[0], "an environment without host-reserved keys")
+	}
+	environment := inv.request.Environment
 	visible := make(map[string]string, len(environment))
-	for _, entry := range exec.SanitizeEnviron(environment) {
+	for _, entry := range environment {
 		name, value, _ := strings.Cut(entry, "=")
 		visible[name] = value
 	}
-	for _, entry := range environment {
-		if entry == "GIT_PAGER=cat" {
-			visible["GIT_PAGER"] = "cat"
-			break
-		}
-	}
-	return visible
+	return visible, nil
 }
 
 // list emits NAME=VALUE lines in byte order.
@@ -49,7 +50,11 @@ func (inv *invocation) list(environment map[string]string) error {
 func runEnv(inv *invocation) error {
 	environment := map[string]string{}
 	if !inv.flag("-i") {
-		environment = visibleEnvironment(inv.request.Environment)
+		var err error
+		environment, err = inv.visibleEnvironment()
+		if err != nil {
+			return err
+		}
 	}
 	for _, option := range inv.argv.Options("-u") {
 		for _, name := range option.Values {
@@ -95,7 +100,10 @@ func runEnv(inv *invocation) error {
 // runPrintenv lists the environment, or prints each named value; a missing
 // name is status 1 and the rest still print.
 func runPrintenv(inv *invocation) error {
-	environment := visibleEnvironment(inv.request.Environment)
+	environment, err := inv.visibleEnvironment()
+	if err != nil {
+		return err
+	}
 	operands := inv.operands()
 	if len(operands) == 0 {
 		return inv.list(environment)

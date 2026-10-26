@@ -75,6 +75,22 @@ func decodePipeOutcome(t *testing.T, out string) command.ProgramOutcome {
 	return outcome
 }
 
+func TestProgramDiscoveryReportsWiredNativeUtilities(t *testing.T) {
+	env := newPipeSemanticsEnv(t)
+	for source, want := range map[string]string{
+		"which jq":      "jq: native\n",
+		"type jq":       "jq is a native built-in\n",
+		"command -v jq": "jq\n",
+	} {
+		out, err := env.Call(t, t.Context(), source)
+		testutil.FailErr(t, "run "+source, err)
+		result := decodePipeOutcome(t, out)
+		if result.Status != 0 || result.Refusal != nil || result.Stdout != want {
+			t.Fatalf("%s: %+v, want stdout %q", source, result, want)
+		}
+	}
+}
+
 // TestPipeSemanticsSecretScreeningPreservesExactBytesAcrossPipesAndRedirects
 // proves P07 stream screening applies only at model-facing output and retained
 // child/program outputs, never on inter-stage pipes or file redirects.

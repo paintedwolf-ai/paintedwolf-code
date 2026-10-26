@@ -71,6 +71,15 @@ func TestAgentLaunchOptionsReduceAndRefuseReservedExports(t *testing.T) {
 			t.Errorf("reserved export %s: %v", reserved, err)
 		}
 	}
+	trusted := LaunchPlan{}.WithTrustedEnvironment([]string{"HTTP_PROXY=http://127.0.0.1:18472", "GIT_SSH_COMMAND=/trusted/ssh"})
+	if _, err := AgentLaunchOptions(trusted, t.TempDir(), []string{"HTTP_PROXY=http://127.0.0.1:18472", "GIT_SSH_COMMAND=/trusted/ssh"}, nil); err != nil {
+		t.Fatalf("trusted host environment rejected: %v", err)
+	}
+	for _, changed := range []string{"GIT_SSH_COMMAND=/user/ssh"} {
+		if _, err := AgentLaunchOptions(trusted, t.TempDir(), []string{changed}, nil); !errors.Is(err, ErrBlockedEnvKey) {
+			t.Errorf("changed host entry %s: %v", changed, err)
+		}
+	}
 }
 
 func TestAgentCommandPlanStatesItsReducedEnvironment(t *testing.T) {
