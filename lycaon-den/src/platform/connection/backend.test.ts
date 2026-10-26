@@ -25,7 +25,7 @@ describe("discoverBackend", () => {
     invokeMock.mockResolvedValueOnce({ port: 9123, api_token: "tok-abc" });
     const { discoverBackend } = await import("./backend.ts");
     const conn = await discoverBackend();
-    expect(invokeMock).toHaveBeenCalledWith("start_sidecar", { password: null });
+    expect(invokeMock).toHaveBeenCalledWith("start_sidecar");
     expect(conn).toEqual({
       baseUrl: "http://127.0.0.1:9123",
       apiToken: "tok-abc",
@@ -38,21 +38,9 @@ describe("discoverBackend", () => {
       .mockResolvedValueOnce({ port: 8787, api_token: "attach-tok" });
     const { discoverBackend } = await import("./backend.ts");
     const conn = await discoverBackend();
-    expect(invokeMock).toHaveBeenNthCalledWith(1, "start_sidecar", { password: null });
+    expect(invokeMock).toHaveBeenNthCalledWith(1, "start_sidecar");
     expect(invokeMock).toHaveBeenNthCalledWith(2, "attach_existing_daemon");
     expect(conn.apiToken).toBe("attach-tok");
-  });
-
-  it("sends a supplied vault password to one managed start only", async () => {
-    invokeMock.mockResolvedValueOnce({ port: 9123, api_token: "tok-abc" });
-    const { discoverBackend, provideCredentialVaultPassword } = await import(
-      "./backend.ts"
-    );
-    provideCredentialVaultPassword("correct horse battery staple");
-    await discoverBackend();
-    expect(invokeMock).toHaveBeenCalledWith("start_sidecar", {
-      password: "correct horse battery staple",
-    });
   });
 
   it("falls back to VITE dev token when tauri invoke paths fail", async () => {

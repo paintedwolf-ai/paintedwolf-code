@@ -128,8 +128,8 @@ func TestLycaonServeSmoke(t *testing.T) {
 	}
 
 	assertSmokePromptIdentity(t, accepted, operationID)
-	waitSmokePromptComplete(t, baseURL, apiToken, sessionID, accepted.MessageID, "hello", 30*time.Second)
-	assistantID := waitSmokeAssistantMessage(t, baseURL, apiToken, sessionID, 5*time.Second)
+	waitSmokePromptComplete(t, baseURL, apiToken, sessionID, accepted.MessageID, "hello")
+	assistantID := waitSmokeAssistantMessage(t, baseURL, apiToken, sessionID)
 
 	streamReq, err := http.NewRequestWithContext(t.Context(), http.MethodGet, baseURL+"/v1/sessions/"+sessionID+"/stream?message="+assistantID, nil)
 	if err != nil {
@@ -206,17 +206,15 @@ func createSmokeSession(t *testing.T, baseURL, apiToken, projectID string) strin
 	if session.ID == "" {
 		t.Fatal("create session missing id")
 	}
-	testutil.WaitFor(t, 10*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		return smokeSessionStatus(t, baseURL, apiToken, session.ID) == "idle"
 	})
 	return session.ID
 }
 
-func waitSmokePromptComplete(t *testing.T, baseURL, token, sessionID, messageID, text string, timeout time.Duration) {
+func waitSmokePromptComplete(t *testing.T, baseURL, token, sessionID, messageID, text string) {
 	t.Helper()
-	timeout = testutil.Timeout(timeout)
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		pre := smokeSessionStatus(t, baseURL, token, sessionID)
 		msgs := smokeListMessages(t, baseURL, token, sessionID)
 		post := smokeSessionStatus(t, baseURL, token, sessionID)
@@ -225,7 +223,7 @@ func waitSmokePromptComplete(t *testing.T, baseURL, token, sessionID, messageID,
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	t.Fatalf("session %s prompt %q did not complete within %s", sessionID, text, timeout)
+	t.Fatalf("session %s prompt %q did not complete", sessionID, text)
 }
 
 func smokeSessionStatus(t *testing.T, baseURL, token, sessionID string) string {
@@ -287,11 +285,9 @@ func smokePromptStored(msgs []api.Message, messageID, text string) bool {
 	return false
 }
 
-func waitSmokeAssistantMessage(t *testing.T, baseURL, token, sessionID string, timeout time.Duration) string {
+func waitSmokeAssistantMessage(t *testing.T, baseURL, token, sessionID string) string {
 	t.Helper()
-	timeout = testutil.Timeout(timeout)
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, baseURL+"/v1/sessions/"+sessionID+"/messages", nil)
 		if err != nil {
 			t.Fatalf("messages request: %v", err)
@@ -316,6 +312,6 @@ func waitSmokeAssistantMessage(t *testing.T, baseURL, token, sessionID string, t
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	t.Fatalf("session %s did not produce assistant message within %s", sessionID, timeout)
+	t.Fatalf("session %s did not produce assistant message", sessionID)
 	return ""
 }

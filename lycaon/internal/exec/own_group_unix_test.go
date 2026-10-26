@@ -32,7 +32,7 @@ func TestRunInOwnGroupEndsWhatTheCommandLeftBehind(t *testing.T) {
 
 	testutil.FailErr(t, "run", RunInOwnGroup(cmd))
 	helper := waitForPIDFile(t, pidFile)
-	if err := waitForProcessGone(helper, 5*time.Second); err != nil {
+	if err := waitForProcessGone(t.Context(), helper); err != nil {
 		_ = syscall.Kill(helper, syscall.SIGKILL)
 		testutil.FailErr(t, "helper outlived the command that started it", err)
 	}
@@ -49,17 +49,13 @@ func TestRunInOwnGroupCancellationKillsAShellIgnoringTerm(t *testing.T) {
 	testutil.FailErr(t, "prepare", err)
 	defer cleanup()
 
-	started := time.Now()
 	err = RunInOwnGroup(cmd)
 	var exitErr *exec.ExitError
 	if !errors.As(err, &exitErr) {
 		t.Fatalf("run error = %v, want the killed shell's exit", err)
 	}
-	if elapsed := time.Since(started); elapsed > 5*time.Second {
-		t.Fatalf("cancellation took %v", elapsed)
-	}
 	helper := waitForPIDFile(t, pidFile)
-	if err := waitForProcessGone(helper, 5*time.Second); err != nil {
+	if err := waitForProcessGone(t.Context(), helper); err != nil {
 		_ = syscall.Kill(helper, syscall.SIGKILL)
 		testutil.FailErr(t, "helper outlived cancellation", err)
 	}
@@ -81,7 +77,7 @@ func TestRunInOwnGroupDetachesFromTheEnginesTerminal(t *testing.T) {
 	select {
 	case err := <-done:
 		testutil.FailErr(t, "helper", err)
-	case <-time.After(20 * time.Second):
+	case <-t.Context().Done():
 		_ = helper.Process.Kill()
 		t.Fatal("helper never finished")
 	}

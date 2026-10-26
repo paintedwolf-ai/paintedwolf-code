@@ -27,8 +27,10 @@ func TestUnlockAuditRecordsHowEachUnlockEnded(t *testing.T) {
 	}
 	ended := record("11111111-1111-4111-8111-111111111111")
 	record("22222222-2222-4222-8222-222222222222")
+	away := record("33333333-3333-4333-8333-333333333333")
 
 	service.RecordUnlockEnd(t.Context(), ended, presence.EndScreenLocked, at.Add(time.Minute))
+	service.RecordUnlockEnd(t.Context(), away, presence.EndAway, at.Add(time.Minute))
 	// The first end stands.
 	service.RecordUnlockEnd(t.Context(), ended, presence.EndIdle, at.Add(time.Hour))
 	testutil.FailErr(t, "close left open", service.CloseUnlocksLeftOpen(t.Context()))
@@ -44,7 +46,8 @@ func TestUnlockAuditRecordsHowEachUnlockEnded(t *testing.T) {
 	}
 	testutil.FailErr(t, "iterate unlocks", rows.Err())
 	if reasons["11111111-1111-4111-8111-111111111111"] != string(presence.EndScreenLocked) ||
-		reasons["22222222-2222-4222-8222-222222222222"] != string(presence.EndRestart) {
+		reasons["22222222-2222-4222-8222-222222222222"] != string(presence.EndRestart) ||
+		reasons["33333333-3333-4333-8333-333333333333"] != string(presence.EndAway) {
 		t.Fatalf("end reasons = %v", reasons)
 	}
 }

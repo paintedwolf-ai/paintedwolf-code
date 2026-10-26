@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/url"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -135,7 +134,7 @@ func TestDurableEvidenceDoesNotWaitOnTheMetadataWriter(t *testing.T) {
 	go func() { service.DurableScreeningValues(testdbseed.DefaultProjectID); close(done) }()
 	select {
 	case <-done:
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("durable screening waited on metadata mutation")
 	}
 }

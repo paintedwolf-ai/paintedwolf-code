@@ -31,6 +31,7 @@ export type ClientNoticeKind =
   | "engine_stopped"
   | "fetch_failure"
   | "host_incompatible"
+  | "installation_unverified"
   | "model_catalog_refresh_failed"
   | "offline"
   | "project_removal_incomplete"
@@ -142,6 +143,12 @@ export const CLIENT_NOTICES: Readonly<Record<ClientNoticeKind, ClientNoticeCopy>
     title: "This app can't use this engine",
     message: "The engine speaks a version of the app contract this build does not support. Update the app or the engine so they match, then try again.",
     suggestedAction: "The versions still do not match. Update the app or the engine first.",
+    scope: "app",
+  },
+  installation_unverified: {
+    title: "Installation check unfinished",
+    message: "Painted Wolf Code could not confirm which package owns this installation, so it did not start the engine. Your saved credentials are preserved.",
+    suggestedAction: "Wait for any package operation to finish, then try again.",
     scope: "app",
   },
   model_catalog_refresh_failed: {
