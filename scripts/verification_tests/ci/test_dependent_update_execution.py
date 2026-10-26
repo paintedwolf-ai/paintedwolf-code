@@ -12,6 +12,7 @@ from ci_policy import dependent_update as d
 ROOT = Path(__file__).resolve().parents[3]
 REPO = 'o/r'
 LANDED_OPENED = '2026-10-20T00:00:00Z'
+LANDED_MERGED = '2026-10-26T22:52:04Z'
 
 
 def failure():
@@ -19,13 +20,15 @@ def failure():
 
 
 def landed(**change):
-    pull = {'number': 1, 'merged': True, 'created_at': LANDED_OPENED, 'base': {'ref': 'main'},
-            'head': {'ref': 'feat/parent', 'repo': {'full_name': REPO}}, 'labels': []}
+    pull = {'number': 1, 'merged': True, 'created_at': LANDED_OPENED, 'merged_at': LANDED_MERGED,
+            'base': {'ref': 'main', 'sha': 'b' * 40},
+            'head': {'ref': 'feat/parent', 'sha': 'a' * 40, 'repo': {'full_name': REPO}}, 'labels': []}
     return {'action': 'closed', 'pull_request': {**pull, **change}}
 
 
 def node(number, base='feat/parent', moved=None, **change):
     return {'number': number, 'headRefOid': f'{number:040x}', 'headRefName': f'feat/{number}', 'baseRefName': base,
+            'createdAt': '2026-10-21T00:00:00Z', 'updatedAt': '2026-10-21T00:00:00Z',
             'isDraft': False, 'headRepository': {'nameWithOwner': REPO}, 'mergeQueueEntry': None,
             'timelineItems': {'nodes': [moved] if moved else []}, **change}
 
@@ -52,6 +55,7 @@ class GitHub:
         self.lag = {}          # number -> reads before a requested merge appears
         self.base_refusal = {}
         self.unheld = set()    # numbers whose bot merge leaves no held CI run
+        self.inherited = set() # numbers whose heads contain the landed parent's unique commit
         self.runs = {}         # head -> runs GitHub reports for that head
         self.calls = []
 
@@ -71,6 +75,12 @@ class GitHub:
     def api(self, path, method='GET', body=None):
         self.calls.append((method, path, body))
         parts = path.split('/')
+        if path.endswith('?per_page=1') and path.startswith(f'repos/{REPO}/compare/'):
+            return {'ahead_by': 1, 'commits': [{'sha': 'c' * 40}]}
+        if path.startswith(f'repos/{REPO}/compare/{"c" * 40}...'):
+            sha = path.rsplit('...', 1)[1]
+            number = next(n for n, p in self.pulls.items() if p['head']['sha'] == sha)
+            return {'behind_by': 0 if number in self.inherited else 1}
         if path.startswith(f'repos/{REPO}/actions/runs?'):
             return {'workflow_runs': self.runs.get(path.rsplit('head_sha=', 1)[1], [])}
         if path.startswith(f'repos/{REPO}/compare/main...'):
@@ -139,6 +149,19 @@ class DependentSelectionTests(unittest.TestCase):
                    node(11, mergeQueueEntry={'id': 'queued'})]
         self.assertEqual([p['number'] for p in chosen + refused if d.dependent(p, event, REPO)], [2, 3])
 
+    def test_auto_retarget_candidate_requires_recent_same_repository_main_target(self):
+        event = landed()['pull_request']
+        recent = node(2, base='main', updatedAt='2026-10-26T22:52:06Z')
+        self.assertTrue(d.auto_retarget_candidate(recent, event, REPO))
+        for candidate in [node(3, base='main'), node(4, base='main', createdAt='2026-10-19T00:00:00Z',
+                                                      updatedAt='2026-10-26T22:52:06Z'),
+                          node(7, base='main', createdAt='2026-10-26T22:52:33Z',
+                               updatedAt='2026-10-26T22:52:34Z'),
+                          node(5, base='main', updatedAt='2026-10-26T22:52:06Z', mergeQueueEntry={'id': 'queued'}),
+                          node(6, base='main', updatedAt='2026-10-26T22:52:06Z',
+                               headRepository={'nameWithOwner': 'fork/r'})]:
+            self.assertFalse(d.auto_retarget_candidate(candidate, event, REPO))
+
     def test_open_pulls_follows_pages_and_refuses_graphql_errors(self):
         pages = [{'data': {'repository': {'pullRequests': {'pageInfo': {'hasNextPage': True, 'endCursor': 'c1'}, 'nodes': [node(2)]}}}},
                  {'data': {'repository': {'pullRequests': {'pageInfo': {'hasNextPage': False, 'endCursor': None}, 'nodes': [node(3)]}}}}]
@@ -157,6 +180,22 @@ class LandedTests(unittest.TestCase):
             github = GitHub(node(2))
             self.assertEqual(github.run(landed(**change))[0], {'state': 'not_applicable'})
             self.assertEqual(github.calls, [])
+
+    def test_auto_retarget_without_timeline_event_updates_only_inherited_history(self):
+        github = GitHub(node(2, base='main', isDraft=True, updatedAt='2026-10-26T22:52:06Z'),
+                        node(3, base='main', updatedAt='2026-10-26T22:52:06Z'))
+        github.inherited.add(2)
+        record, _ = github.run(landed())
+        self.assertEqual(record['outcomes'], {'2': 'updated'})
+        self.assertEqual(github.writes('pulls/2/update-branch'), [
+            (f'repos/{REPO}/pulls/2/update-branch', {'expected_head_sha': node(2)['headRefOid']})])
+        self.assertEqual(github.writes('pulls/3/update-branch'), [])
+        self.assertEqual(github.writes('dispatches'), [])
+        comparisons = [path for _, path, _ in github.calls if '/compare/' in path and not '/compare/main...' in path]
+        self.assertEqual(comparisons, [
+            f'repos/{REPO}/compare/{"b" * 40}...{"a" * 40}?per_page=1',
+            f'repos/{REPO}/compare/{"c" * 40}...{node(2)["headRefOid"]}',
+            f'repos/{REPO}/compare/{"c" * 40}...{node(3)["headRefOid"]}'])
 
     def test_retargets_merges_the_exact_head_and_dispatches_checks_once_the_merge_appears(self):
         github = GitHub(node(2), node(3, base='main', moved=moved()))
