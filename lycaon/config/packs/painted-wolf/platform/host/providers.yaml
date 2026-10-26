@@ -2,11 +2,10 @@
 # Models are discovered unless an instance supplies overrides.
 # Thinking rules are ordered; the first match wins.
 model_thinking:
-  - match: ["glm-5.3-flash", "glm-5p3-flash"]
+  - match: ["glm-5.3-flash", "glm-5p3-flash", "glm-flash-latest"]
     style: effort_levels
     always_on: true
-    # Z.ai's template maps unrecognized levels (including medium) to max, so
-    # every host level is sent explicitly and rounds down: medium runs low.
+    # Send supported efforts explicitly; medium rounds down to low.
     effort_levels: {low: low, medium: low, high: high}
     controls: {state: supported, efforts: [low, high, max], default_effort: max}
   - match: ["kimi-k2p7-code", "kimi-k2.7-code"]
