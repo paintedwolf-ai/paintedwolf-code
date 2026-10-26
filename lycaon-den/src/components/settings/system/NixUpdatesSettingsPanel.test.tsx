@@ -43,7 +43,7 @@ describe("Nix update ownership", () => {
     const state = nix();
     const check = async () => ({ ...state, candidate: null, discovery: "up_to_date" as const });
     render(() => <UpdatesSettingsPanel updateService={updateServiceFixture({ getState: async () => state, check })} />);
-    expect((await screen.findByTestId("updates-nix-pin")).textContent).toContain("does not change your Nix inputs");
+    expect((await screen.findByTestId("updates-nix-pin")).textContent).toContain("pinned is unknown");
     fireEvent.click(screen.getByRole("button", { name: "Check now" }));
     await waitFor(() => expect(screen.queryByTestId("updates-package-upgrade")).toBeNull());
     expect(screen.getByTestId("updates-nix-pin").textContent).toContain("pinned is unknown");
