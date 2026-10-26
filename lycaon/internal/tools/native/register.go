@@ -91,7 +91,7 @@ func commitCommandOutput(ctx context.Context, tc tools.ToolContext, loc fseffect
 			hash := sha256.New()
 			req.Source = io.MultiReader(io.TeeReader(before, hash), output)
 			req.BeforeCommit = func(fseffect.Target, fseffect.Result) error {
-				return verifyMutationSnapshot(loc, hex.EncodeToString(hash.Sum(nil)), false)
+				return verifyMutationSnapshot(ctx, loc, hex.EncodeToString(hash.Sum(nil)), false)
 			}
 		} else if !os.IsNotExist(err) {
 			return err

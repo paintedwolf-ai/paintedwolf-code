@@ -32,12 +32,14 @@ type Service struct {
 	workspace          *sessionscope.Service
 	projects           Projects
 	Agents             AgentProfileResolver
-	skillsGate         *settings.ProjectSurfaceGate
-	skillsCache        skills.ProjectCache
-	hostResources      *hostresources.Service
-	approvals          *settings.ApprovalStore
-	postureObserver    func(context.Context, string, gate.Posture)
-	coordinatorProfile func(context.Context, string) string
+	skillsGate            *settings.ProjectSurfaceGate
+	skillsCache           skills.ProjectCache
+	hostResources         *hostresources.Service
+	approvals             *settings.ApprovalStore
+	postureObserver       func(context.Context, string, gate.Posture)
+	externalObserver      func(context.Context, string, gate.Posture, bool)
+	commandExternalHidden func() bool
+	coordinatorProfile    func(context.Context, string) string
 }
 
 func New(store SessionReader, catalog *catalog.Service, workspace *sessionscope.Service) *Service {
@@ -50,6 +52,12 @@ func (m *Service) SetApprovals(approvals *settings.ApprovalStore) {
 }
 func (m *Service) SetPostureObserver(observer func(context.Context, string, gate.Posture)) {
 	m.postureObserver = observer
+}
+func (m *Service) SetExternalObserver(observer func(context.Context, string, gate.Posture, bool)) {
+	m.externalObserver = observer
+}
+func (m *Service) SetCommandExternalHidden(fn func() bool) {
+	m.commandExternalHidden = fn
 }
 func (m *Service) SetCoordinatorProfile(resolve func(context.Context, string) string) {
 	m.coordinatorProfile = resolve

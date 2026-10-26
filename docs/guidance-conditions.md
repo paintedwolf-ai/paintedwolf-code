@@ -25,7 +25,6 @@ when: session_posture == "spec" && paintedwolf.tool_is_state
 when: path_outside_scope("read")
 when: !paintedwolf.stub_valid && tool == "task"
 when: is_directory
-when: paintedwolf.habit_redirect_match == "USE_GREP_REGEX"
 ```
 
 ### Two fact tiers

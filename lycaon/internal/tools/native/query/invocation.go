@@ -66,11 +66,16 @@ func (inv *invocation) flag(key string) bool {
 }
 
 func (inv *invocation) value(key string) (string, bool) {
+	field, ok := inv.valueField(key)
+	return field.Value, ok
+}
+
+func (inv *invocation) valueField(key string) (commandprogram.Field, bool) {
 	option, ok := inv.argv.Last(key)
 	if !ok || len(option.Values) == 0 {
-		return "", false
+		return commandprogram.Field{}, false
 	}
-	return option.Values[0].Value, true
+	return option.Values[0], true
 }
 
 func (inv *invocation) usage(word, reason string) error {
@@ -120,21 +125,33 @@ func (e *unreadable) Error() string { return e.operand + ": " + e.reason }
 
 // capture pins one PATH operand's published text for jq. An unreadable
 // operand is reported as jq does and returns nil.
-func (inv *invocation) capture(operand string) (*source, error) {
+func (inv *invocation) capture(operand commandprogram.Field) (*source, error) {
 	captured, err := inv.captureSource(operand)
 	var failure *unreadable
 	if errors.As(err, &failure) {
-		inv.fail("Could not open file %s: %s", operand, failure.reason)
+		inv.fail("Could not open file %s: %s", operand.Value, failure.reason)
 		return nil, nil
 	}
 	return captured, err
 }
 
 // captureSource pins one PATH operand's accepted text before it is read.
-func (inv *invocation) captureSource(operand string) (*source, error) {
-	bound, err := inv.paths.Bind(inv.ctx, operand, false)
+func (inv *invocation) captureSource(operand commandprogram.Field) (*source, error) {
+	if reader, ok := operand.ProcessSubstitution().OpenReader(); ok {
+		maximum := safecmd.JQCaps().InputBytes
+		data, err := io.ReadAll(io.LimitReader(reader, maximum+1))
+		_ = reader.Close()
+		if err != nil {
+			return nil, err
+		}
+		if int64(len(data)) > maximum {
+			return nil, safecmd.Reject("JQ_INPUT_TOO_LARGE", map[string]any{"path": operand.Value, "max_bytes": maximum})
+		}
+		return &source{label: operand.Value, text: string(data)}, nil
+	}
+	bound, err := inv.paths.Bind(inv.ctx, operand.Value, false)
 	if err == nil && bound.Null {
-		return &source{label: operand}, nil
+		return &source{label: operand.Value}, nil
 	}
 	var captured native.ExecutionSource
 	if err == nil {
@@ -144,9 +161,9 @@ func (inv *invocation) captureSource(operand string) (*source, error) {
 		captured, err = inv.owners.Revisions.CaptureSource(inv.ctx, inv.tc, bound.Resolved.Abs)
 	}
 	if err != nil {
-		err = projectpaths.PathOperationError(operand, err)
+		err = projectpaths.PathOperationError(operand.Value, err)
 		if reason, ok := ordinary(err); ok {
-			return nil, &unreadable{operand: operand, reason: reason}
+			return nil, &unreadable{operand: operand.Value, reason: reason}
 		}
 		return nil, err
 	}
@@ -160,7 +177,7 @@ func (inv *invocation) captureSource(operand string) (*source, error) {
 	if err := inv.recordPin(captured.Revision); err != nil {
 		return nil, err
 	}
-	return &source{label: operand, abs: bound.Resolved.Abs, text: captured.Content, encoding: captured.Encoding, revision: captured.Revision}, nil
+	return &source{label: operand.Value, abs: bound.Resolved.Abs, text: captured.Content, encoding: captured.Encoding, revision: captured.Revision}, nil
 }
 
 // recordPin records each capture before its bytes are used; the invocation

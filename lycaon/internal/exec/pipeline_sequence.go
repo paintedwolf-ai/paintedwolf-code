@@ -36,6 +36,7 @@ type sequenceRun struct {
 
 	// lastExit is the exit code of the most recently executed group.
 	lastExit int
+	lastPID  int
 }
 
 func newSequenceRun(
@@ -151,7 +152,18 @@ func (s *sequenceRun) startGroup(ctx context.Context, group StageGroup) error {
 	for i := group.Start; i < group.End; i++ {
 		s.skipped[i] = false
 	}
+	if len(wired) > 0 && wired[len(wired)-1].cmd != nil && wired[len(wired)-1].cmd.Process != nil {
+		s.mu.Lock()
+		s.lastPID = wired[len(wired)-1].cmd.Process.Pid
+		s.mu.Unlock()
+	}
 	return nil
+}
+
+func (s *sequenceRun) pid() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.lastPID
 }
 
 // wireStdin feeds each stage its own redirection, the previous stage's pipe,

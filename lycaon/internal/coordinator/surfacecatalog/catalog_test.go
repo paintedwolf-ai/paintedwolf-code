@@ -32,12 +32,12 @@ func TestBundledInvestigateLoadsEveryCapabilityItNames(t *testing.T) {
 	testutil.FailErr(t, "load coordinator surfaces", err)
 	row, err := catalog.Surface("implement_investigate")
 	testutil.FailErr(t, "implement_investigate", err)
-	for _, want := range []string{"write", "command", "command_output", "git_commit", "task", "capture_page", "web_search", "secret_generate"} {
+	for _, want := range []string{"write", "read", "git_commit", "task", "capture_page", "web_search", "secret_generate"} {
 		if !contains(row.LoadableTools(), want) {
 			t.Fatalf("implement_investigate loadable tools lack %s", want)
 		}
 	}
-	for _, floor := range []string{"read", "grep", "request_tools"} {
+	for _, floor := range []string{"command", "request_tools"} {
 		if !contains(row.Floor, floor) {
 			t.Fatalf("implement_investigate floor lacks %s", floor)
 		}

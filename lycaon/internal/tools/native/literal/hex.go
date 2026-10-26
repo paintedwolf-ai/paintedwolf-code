@@ -39,9 +39,9 @@ func printable(c byte) byte {
 func (inv *invocation) singleInput() (*input, error) {
 	operands := inv.operandsOrStdin()
 	if len(operands) > 1 {
-		return nil, inv.usage(operands[1], "at most one PATH")
+		return nil, inv.usage(operands[1].Value, "at most one PATH")
 	}
-	return inv.open(operands[0], false)
+	return inv.openField(operands[0], false)
 }
 
 func runXxd(inv *invocation) error {
