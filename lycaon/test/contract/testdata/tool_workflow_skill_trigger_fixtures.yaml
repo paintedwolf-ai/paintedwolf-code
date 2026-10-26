@@ -119,3 +119,10 @@ diagnose-a-tls-failure:
   should_not_trigger:
     - "Add HTTPS support to the local dev server"
     - "Why is the API returning 500s?"
+write-a-skill:
+  should_trigger:
+    - "Write a skill that teaches agents our release checklist"
+    - "Tighten this SKILL.md description so it activates for database migrations"
+  should_not_trigger:
+    - "Build me a tic tac toe game with an AI I can beat"
+    - "Add a settings page to the app"
