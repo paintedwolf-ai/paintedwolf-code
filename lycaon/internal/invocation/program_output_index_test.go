@@ -55,7 +55,7 @@ func TestProgramBlobRetentionUsesIndexedReceiptReferences(t *testing.T) {
 		if strings.Contains(detail, "SCAN invocation_program_outputs") {
 			t.Fatalf("retention lookup scans output rows: %s", detail)
 		}
-		indexed = indexed || strings.Contains(detail, "USING INDEX idx_invocation_program_outputs_blob_id")
+		indexed = indexed || strings.Contains(detail, "SEARCH invocation_program_outputs USING ") && strings.Contains(detail, "INDEX idx_invocation_program_outputs_blob_id")
 	}
 	testutil.FailErr(t, "finish retention plan", rows.Err())
 	if !indexed {
