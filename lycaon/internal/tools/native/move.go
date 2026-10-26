@@ -3,11 +3,11 @@ package native
 import (
 	"context"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 
 	"github.com/lycaon/lycaon/internal/sandbox"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
@@ -86,15 +86,34 @@ func (t *MoveTool) Move(ctx context.Context, in MoveInput, tctx tools.ToolContex
 		if err != nil {
 			return result, err
 		}
-		if srcResolved.External != dstResolved.External || srcResolved.Root.ID != dstResolved.Root.ID ||
-			filepath.Clean(srcResolved.Root.Path) != filepath.Clean(dstResolved.Root.Path) {
-			return result, &toolrejection.ToolReject{Code: "MOVE_CROSS_ROOT", Data: map[string]any{"from": fromSlash, "to": toSlash}}
-		}
+		crossRoot := srcResolved.External != dstResolved.External || srcResolved.Root.ID != dstResolved.Root.ID ||
+			filepath.Clean(srcResolved.Root.Path) != filepath.Clean(dstResolved.Root.Path)
 		if in.NoClobber {
 			if _, err := os.Lstat(dstResolved.Abs); err == nil {
 				result.Skipped = append(result.Skipped, FilePair{From: fromSlash, To: toSlash})
 				continue
 			}
+		}
+		if crossRoot {
+			// The copy owner stages and reviews the destination before publication.
+			// Remove the source only after that publication succeeds.
+			copyResult, err := (&CopyTool{Boundary: t.Boundary}).Copy(ctx, CopyInput{
+				Pairs: []FilePair{pair}, Recursive: in.Directories, NoClobber: in.NoClobber, MaxFileBytes: math.MaxInt64,
+			}, tctx)
+			if err != nil {
+				return result, err
+			}
+			if len(copyResult.Skipped) > 0 {
+				result.Skipped = append(result.Skipped, FilePair{From: fromSlash, To: toSlash})
+				continue
+			}
+			if _, err := (&DeleteTool{Boundary: t.Boundary}).Delete(ctx, DeleteInput{
+				Paths: []string{pair.From}, Recursive: in.Directories,
+			}, tctx); err != nil {
+				return result, fmt.Errorf("move %s -> %s after copy: %w", pair.From, pair.To, err)
+			}
+			result.Moved = append(result.Moved, FilePair{From: fromSlash, To: toSlash})
+			continue
 		}
 		if err := renameAgentPath(ctx, tctx, resolvedMutationTarget(srcResolved), resolvedMutationTarget(dstResolved)); err != nil {
 			return result, fmt.Errorf("move %s -> %s: %w", pair.From, pair.To, err)

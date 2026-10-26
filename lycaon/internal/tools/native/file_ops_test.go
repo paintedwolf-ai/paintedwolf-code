@@ -190,7 +190,7 @@ func TestMoveToolRejectsNotFound(t *testing.T) {
 	}
 }
 
-func TestMoveToolRejectsCrossRootRename(t *testing.T) {
+func TestMoveToolCopiesThenRemovesAcrossRoots(t *testing.T) {
 	primary := t.TempDir()
 	other := t.TempDir()
 	if err := os.WriteFile(filepath.Join(primary, "old.go"), []byte("package old"), 0o644); err != nil {
@@ -199,18 +199,20 @@ func TestMoveToolRejectsCrossRootRename(t *testing.T) {
 	tctx := nativefixture.Context(primary)
 	tctx.Source.Roots = append(tctx.Source.Roots, projectroot.RootRef{ID: "r2", Label: "other", Path: other})
 	tool := &MoveTool{Boundary: nativefixture.Boundary(t)}
-	_, err := tool.Run(context.Background(), map[string]any{
+	out, err := tool.Run(context.Background(), map[string]any{
 		"moves": []any{map[string]any{"from": "old.go", "to": "@other/new.go"}},
 	}, tctx)
-	var reject *toolrejection.ToolReject
-	if !errors.As(err, &reject) || reject.Code != "MOVE_CROSS_ROOT" {
-		t.Fatalf("err = %v want MOVE_CROSS_ROOT", err)
+	testutil.FailErr(t, "cross-root move", err)
+	if !strings.Contains(out, `"moved"`) {
+		t.Fatalf("out = %q", out)
 	}
-	if _, statErr := os.Stat(filepath.Join(primary, "old.go")); statErr != nil {
-		testutil.FailErr(t, "source changed after rejection", statErr)
+	if _, statErr := os.Stat(filepath.Join(primary, "old.go")); !os.IsNotExist(statErr) {
+		t.Fatalf("source remains after move: %v", statErr)
 	}
-	if _, statErr := os.Stat(filepath.Join(other, "new.go")); !os.IsNotExist(statErr) {
-		t.Fatalf("destination exists after rejection: %v", statErr)
+	data, err := os.ReadFile(filepath.Join(other, "new.go"))
+	testutil.FailErr(t, "read moved destination", err)
+	if string(data) != "package old" {
+		t.Fatalf("destination = %q", data)
 	}
 }
 
