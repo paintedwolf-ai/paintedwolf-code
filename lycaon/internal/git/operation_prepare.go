@@ -14,18 +14,24 @@ import (
 
 type preparedOperation struct {
 	operationPlan
-	scratch      string
-	result       OperationResult
-	files        []RestoreFile
-	inputs       map[string]RestoreContent
-	status       string
-	copied       int64
-	previewBytes int64
-	nestedHeads  map[string]string
-	// Paths and tree records processed by the review's selection walks.
-	visitedEntries int
-	expectedIndex  operationIndex
-	expectedState  RepositoryState
+	scratch       string
+	result        OperationResult
+	files         []RestoreFile
+	inputs        map[string]RestoreContent
+	status        string
+	copied        int64
+	previewBytes  int64
+	nestedHeads   map[string]string
+	expectedIndex operationIndex
+	expectedState RepositoryState
+}
+
+type operationVisitKey struct{}
+
+func recordOperationVisits(ctx context.Context, count int) {
+	if observe, ok := ctx.Value(operationVisitKey{}).(func(int)); ok {
+		observe(count)
+	}
 }
 
 func (p *preparedOperation) close() { _ = os.RemoveAll(p.scratch) }
@@ -55,7 +61,7 @@ func prepareOperation(ctx context.Context, repo gitrepo.Repo, req OperationReque
 		return nil, err
 	}
 	p.status = string(raw)
-	p.visitedEntries += strings.Count(p.status, "\x00")
+	recordOperationVisits(ctx, strings.Count(p.status, "\x00"))
 	p.scratch, err = os.MkdirTemp("", "git-operation-*")
 	if err != nil {
 		return nil, err
@@ -229,14 +235,14 @@ func (p *preparedOperation) copyLocalChanges(ctx context.Context, repo gitrepo.R
 	if err != nil {
 		return nil, err
 	}
-	p.visitedEntries += len(dirty)
+	recordOperationVisits(ctx, len(dirty))
 	if paths := p.addPaths(); len(paths) > 0 {
 		trackedArgs := append([]string{"ls-files", "--cached", "-z", "--"}, paths...)
 		tracked, err := gitPaths(ctx, repo.Root, trackedArgs...)
 		if err != nil {
 			return nil, err
 		}
-		p.visitedEntries += len(tracked)
+		recordOperationVisits(ctx, len(tracked))
 		dirty = append(dirty, tracked...)
 	}
 	var staged []string
@@ -249,7 +255,7 @@ func (p *preparedOperation) copyLocalChanges(ctx context.Context, repo gitrepo.R
 	if err != nil {
 		return nil, err
 	}
-	p.visitedEntries += len(staged)
+	recordOperationVisits(ctx, len(staged))
 	dirty = uniquePaths(append(dirty, staged...))
 	for _, path := range dirty {
 		if err := assertOperationParents(repo.Root, path); err != nil {
@@ -425,7 +431,7 @@ func (p *preparedOperation) validate(ctx context.Context, repo gitrepo.Repo) err
 	if string(raw) != p.status {
 		return operationRefusal("repository_changed_during_review")
 	}
-	p.visitedEntries += strings.Count(string(raw), "\x00")
+	recordOperationVisits(ctx, strings.Count(string(raw), "\x00"))
 	for _, file := range p.files {
 		if file.IndexOnly {
 			continue

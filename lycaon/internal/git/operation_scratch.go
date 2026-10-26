@@ -169,7 +169,7 @@ func (p *preparedOperation) checkTreeBudget(ctx context.Context, dir string) err
 	entries := 0
 	for _, ref := range uniquePaths(refs) {
 		err := gitexec.RunRecords(ctx, dir, []string{"ls-tree", "-r", "-l", "-z", ref}, p.opts, func(raw []byte) error {
-			p.visitedEntries++
+			recordOperationVisits(ctx, 1)
 			meta, _, ok := strings.Cut(string(raw), "\t")
 			fields := strings.Fields(meta)
 			if !ok || len(fields) != 4 {
