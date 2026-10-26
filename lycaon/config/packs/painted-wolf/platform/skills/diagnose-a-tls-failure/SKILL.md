@@ -5,11 +5,13 @@ description: Diagnose TLS certificate, expiry, chain, hostname, trust, or clock 
 
 # Diagnose a TLS failure
 
-Use this workflow when a connection fails on certificate verification. Several causes produce nearly the same error text, and turning verification off hides all of them. **Identify the cause below before proposing anything;** only one is ever "trust something new".
+Use this workflow when a connection fails on certificate verification. Several distinct causes produce nearly the same error text, and the reflex fix for all of them is to turn verification off — which converts a visible trust failure into a silent one that stays in the codebase.
+
+**Identify which of the causes below it is before proposing anything.** The right fix differs completely between them, and only one of them is ever "trust something new".
 
 ## Read the actual chain first
 
-Run `date -u; openssl s_client -connect host:443 -servername host -showcerts </dev/null` in one `command` with `capability_request.direct_ip` `{"declared_destinations": ["tcp://host:443"]}`: `s_client` ignores proxy variables, and the direct route shows the chain the peer serves. Without `-servername`, a shared host serves a default certificate. Read the verify return code, the chain the server sent, the subject/SAN, and the validity dates beside the local clock.
+`openssl s_client -connect host:443 -servername host` is the one command that answers most of this. Run it as a `command` with `capability_request.direct_ip` `{"declared_destinations": ["tcp://host:443"]}`: `s_client` ignores proxy variables, and the direct route also shows the chain the peer actually serves. `-servername` matters: without SNI a shared host serves a default certificate and you will diagnose the wrong one. Print the local clock (`date -u`) in the same command, joined with `;`, so a skew shows beside `notAfter` on the first turn. Read three things from the output — the verify return code, the chain the server actually sent, and the subject/SAN and validity dates.
 
 ## The causes, and how to tell them apart
 
@@ -23,9 +25,7 @@ Run `date -u; openssl s_client -connect host:443 -servername host -showcerts </d
 | **TLS-inspecting proxy** | Issuer is your employer or a security vendor rather than a public CA | The connection is intercepted and re-signed. Use the CA bundle the organisation provides, scoped — and report that interception is happening. |
 | **Protocol or cipher mismatch** | The handshake fails before any certificate appears | An old client against a server that dropped TLS 1.0/1.1, or the reverse. Nothing here is a certificate problem. |
 
-## Inside this sandbox
-
-The host's proxy tunnels TLS without replacing the origin certificate; a corporate proxy may inspect it. `curl -k` is refused in `command`. Use reach-a-network-service for routing failures.
+Proxies, internal CAs, and per-client trust settings: [scoped trust](references/scoped-trust.md).
 
 ## Do not
 

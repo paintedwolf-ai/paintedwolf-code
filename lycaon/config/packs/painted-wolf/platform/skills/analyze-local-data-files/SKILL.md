@@ -7,7 +7,7 @@ metadata:
 
 # Analyze local data files
 
-Use this workflow to turn "what's in this file" into exact SQL and captured results. Run DuckDB from `command`, e.g. `duckdb -c "DESCRIBE SELECT * FROM read_csv_auto('data/orders.csv')"`, and declare `duckdb` in `capability_request.host_resources` on that call.
+Use this workflow to turn "what's in this file" into exact SQL and captured results. On a process start that runs DuckDB, declare `duckdb` in `capability_request.host_resources`.
 
 ## Workflow
 
@@ -16,7 +16,7 @@ Use this workflow to turn "what's in this file" into exact SQL and captured resu
 3. Profile before querying — `DESCRIBE` for the inferred schema, DuckDB SQL `SUMMARIZE` for per-column statistics, `count(*)` for scale. State row counts and types before drawing any conclusion from the data.
 4. Answer with aggregates. Prefer `GROUP BY`, window functions, and joins across files over row dumps; sample with an explicit `LIMIT` when rows must be shown, and select the fewest columns that make the point.
 5. Capture evidence as the exact SQL and its result. Distinguish what the data shows from what it suggests; a column that parses as text when it should be numeric is a finding, not a nuisance.
-6. Write an output file only when the task calls for one, with `COPY … TO` into the workspace for a deliverable; intermediate extracts go under `@scratch`, never in the repository.
+6. Write an output file only when the task calls for one, with `COPY … TO` into the workspace for a deliverable; intermediate extracts go under session scratch (`$SCRATCH_DIR` is in the child's environment), never in the repository.
 
 ## Boundaries
 

@@ -11,3 +11,5 @@ description: Test whether a vulnerability or hardening claim is exploitable unde
 4. Existence of a line, a missing header, or a checklist miss is not exploitability. Read the path and say whether an in-scope adversary can actually use it.
 5. Ground every challenge in `path:line`. A challenge you cannot tie to observed code is an Unknown.
 6. Verdict per claim: `survives` (exploitable under the model) or `refuted` (not exploitable under the model, or ungrounded). Do not assign severity.
+
+Report one row per claim: claim, adversary, precondition, `path:line`, verdict, and the reason.

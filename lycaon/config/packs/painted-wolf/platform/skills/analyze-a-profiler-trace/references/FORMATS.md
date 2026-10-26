@@ -1,30 +1,25 @@
-# Trace formats: identification
+# Trace formats
 
-Query the top-level keys first (`jq 'keys' <trace>` in `command` for an uncompressed file; otherwise print `sorted(d)` from the script), then the container's keys. Match the first row that fits.
+## Identify by shape
 
-| Shape you see | Format | Unit | Stack order | Details |
-|---|---|---|---|---|
-| `{version, recording:{records, sampleStackTraces, sampleDurations}}` | Safari Web Inspector timeline | seconds | leaf first | [safari-timeline.md](safari-timeline.md) |
-| `{traceEvents:[…]}` or a bare array of `{ph, ts, name}` | Trace Event Format (Chrome DevTools, Perfetto JSON, `chrome://tracing`) | µs | tree of events | [json-profile-formats.md](json-profile-formats.md#trace-event-format) |
-| `{nodes:[{callFrame, hitCount, children}], samples, timeDeltas}` | V8 `.cpuprofile` (`node --cpu-prof`, DevTools CPU profile) | µs | node tree | [json-profile-formats.md](json-profile-formats.md#v8-cpuprofile) |
-| `{meta:{interval}, threads:[{stackTable, frameTable, funcTable}]}` | Gecko / Firefox Profiler, often `.json.gz` | ms | leaf first via `prefix` | [json-profile-formats.md](json-profile-formats.md#gecko--firefox-profiler) |
-| `{shared:{frames}, profiles:[{unit, samples, weights}]}` | speedscope | stated in `unit` | root first | [json-profile-formats.md](json-profile-formats.md#speedscope) |
-| gzip magic `1f 8b`, not JSON after decompression | pprof protobuf | per profile | — | below |
-| protobuf, `.perfetto-trace` | Perfetto | ns | — | below |
-| text lines beginning `tick,` / `code-creation,` | V8 `--prof` log | — | — | below |
+Query the top-level keys first (`jq 'keys' <trace>` in `command` for uncompressed files up to 64 MiB; otherwise print `sorted(d)` from the script), then the container's keys. Match the first row that fits.
 
-Extensions do not distinguish these: Safari, Chrome, cpuprofile, Gecko, and speedscope files are all `.json`. Check the first two bytes with `xxd -l 2 <trace>` before assuming JSON.
+| Shape you see | Format | Producer |
+|---|---|---|
+| `{version, recording:{records, sampleStackTraces, sampleDurations}}` | Safari Web Inspector timeline | Safari / WKWebView Timelines tab → Export |
+| `{traceEvents:[…]}` or a bare array of `{ph, ts, name}` | Trace Event Format | Chrome DevTools Performance, Perfetto JSON export, `chrome://tracing`, many tracers |
+| `{nodes:[{callFrame, hitCount, children}], samples, timeDeltas}` | V8 `.cpuprofile` | DevTools CPU profile, `node --cpu-prof`, `v8-profiler` |
+| `{meta:{interval}, threads:[{stackTable, frameTable, funcTable}]}` | Gecko / Firefox Profiler | Firefox Profiler export (often `.json.gz`) |
+| `{shared:{frames}, profiles:[{unit, samples, weights}]}` | speedscope | speedscope, and many exporters targeting it |
+| gzip magic `1f 8b`, not JSON after `gunzip` | pprof protobuf | Go `pprof`, many non-JS runtimes |
+| protobuf, `.perfetto-trace` | Perfetto | Perfetto / Android systrace |
+| Text lines beginning `tick,` / `code-creation,` | V8 `--prof` log | `node --prof` |
 
-## Non-JSON formats
+Extensions are worthless here: Safari, Chrome, cpuprofile, Gecko, and speedscope files are all `.json`.
 
-Do not hand-parse them. Use the producer's own tooling and declare its runtime in `capability_request.host_resources`:
+Non-JSON formats are not worth hand-parsing. Use `go tool pprof -top -nodecount=40` or `-traces` for pprof (declare `go` in `capability_request.host_resources`), `trace_processor_shell` with SQL for Perfetto, and `node --prof-process` for a V8 log (declare `node`).
 
-- pprof: `go tool pprof -top -nodecount=40 <file>` or `-traces` (declare `go`).
-- Perfetto: `trace_processor_shell` with SQL over the slice and sample tables.
-- V8 log: `node --prof-process <isolate-log>` (declare `node`).
+## Field maps and aggregations
 
-## Checks that apply to every format
-
-- The denominator is the recording's own span: end minus start in the format's unit.
-- Exclude pseudo-frames `(idle)`, `(program)`, and `(root)` from hot lists; report `(garbage collector)` separately.
-- Confirm stack orientation from the data: the root end holds entry points (`(root)`, an event handler, `promiseReactionJob`, a dispatch or flush function).
+- [Safari Web Inspector timeline](references/safari-timeline.md): record and sample paths, containers, and the self/total-time script.
+- [Chrome, V8, Firefox, and speedscope](references/json-profile-formats.md): Trace Event phases and threads, `.cpuprofile` nodes and deltas, Gecko column tables, speedscope units and stack order.

@@ -1,37 +1,39 @@
 # Structural rewrite reference
 
-The live `code_rewrite` schema is the source of truth for arguments and supported grammars. Tool confinement, write scope, mutation receipts, and rejection `Code:` values remain authoritative.
+Maintained sources of truth: the live `grep` and `code_rewrite` schemas for arguments and supported grammars, and the project's own verification policy for completion. Tool confinement, write scope, mutation receipts, and structured rejection `Code:` values remain authoritative.
 
 ## Pattern shape
 
-A pattern is example syntax for one complete parser node. `$VALUE` captures one node and `$$$ARGS` captures a sequence. Reuse capture names in the rewrite when their source text must survive.
+A structural pattern is example syntax representing one complete parser node. `$VALUE` captures one node and `$$$ARGS` captures a sequence. Reuse the same capture names in the replacement when their source text must survive.
 
 ```text
-old_api($VALUE)      ->  new_api($VALUE)
-old_api($$$ARGS)     ->  new_api($$$ARGS)
+old_api($VALUE)
+new_api($VALUE)
+
+old_api($$$ARGS)
+new_api($$$ARGS)
 ```
 
-Use the singular capture when arity is part of the claim, and the sequence capture when arguments pass through unchanged. Include required receivers, declaration bodies, return forms, and delimiters rather than a keyword or node prefix. A bare `$A | $B` pattern is too broad and is refused.
-
-Use text search (`rg -n`, `grep -rn`) when the target is a name, literal, comment, or formatting token rather than a syntax shape.
+Use the singular capture when arity is part of the claim and the sequence capture when arguments should pass through unchanged. Include required receivers, declaration bodies, return forms, delimiters, and surrounding syntax rather than supplying a keyword or node prefix. Use text `grep` when the target is a name, literal, comment, or formatting token rather than syntax shape.
 
 ## Safe rewrite loop
 
-1. Bound the scope with text search and note the candidate count.
-2. Preview the pattern, paths, recursion setting, and `lang` with `dry_run: true`.
-3. Compare the preview's sites and paths with the candidates.
-4. Apply exactly the reviewed call.
-5. Inspect the resulting diff (`git diff -- <paths>` in `command`) and verify behavior.
+1. Search the exact target paths structurally.
+2. Inspect representative matches and the total blast radius.
+3. Preview the same pattern, paths, recursion setting, and language with `code_rewrite(dry_run: true)`.
+4. Compare the preview count and paths with the search result.
+5. Apply exactly the reviewed call.
+6. Inspect the resulting diff and verify behavior.
 
-Preview and candidate counts can differ when the rewrite cannot render at a captured site or text search matched comments and strings. Resolve the difference before applying.
+Search and preview counts can differ when the replacement cannot be rendered at every captured site. Resolve that discrepancy before applying.
 
 ## Stop using one codemod when
 
-- identical syntax means different things at different sites;
-- the rewrite needs type, import, data-flow, or runtime knowledge the match does not establish;
+- identical syntax has different meanings at different sites;
+- the replacement needs type, import, data-flow, or runtime knowledge the syntax match does not establish;
 - generated or vendored material dominates the matches;
-- one capture needs a different rewrite depending on its contents;
-- parsing is unsupported or incomplete for files in scope; or
+- one capture would need a different replacement depending on its contents;
+- parsing is unsupported or structurally incomplete for material in scope; or
 - the preview touches any path or node outside the stated change.
 
 Split along real semantic variants or use targeted edits. Do not compensate with a broader pattern.

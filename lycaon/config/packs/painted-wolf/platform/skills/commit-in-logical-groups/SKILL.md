@@ -2,61 +2,44 @@
 name: commit-in-logical-groups
 description: When the user asks to commit, split the working tree into coherent Git commits by explicit path and leave other people's uncommitted work alone.
 optional_tools:
+  - git_status
+  - git_diff
+  - git_log
+  - git_show
   - update_progress
+  - git_commit
 ---
 
 # Commit in logical groups
 
 **Entry check:** the user asked for the work to be committed. Committing is never an implicit part of finishing a change.
 
-## 1. Survey once
+Use the native Git tools; load any missing `git_diff`, `git_log`, or `git_commit` schema with `request_tools` before the survey. `git_commit` owns staging and review, so do not run `git add` or `git commit` through `command`.
 
-Run one `command` program for the inventory; do not read every hunk:
+## Mechanics
 
-```bash
-git status --short
-git diff --stat; git diff --cached --stat
-git status --short | awk '{print $NF}' | cut -d/ -f1-2 | sort | uniq -c | sort -rn
-git log --oneline -n 10
-```
+- [Survey at the scale of the tree](references/survey-at-tree-scale.md): open before the inventory on any tree larger than a few dozen files. Covers `git_status` `group_depth`, paging, `stat` diffs, and the single hunk-read batch.
+- [Batch and amend](references/batch-and-amend.md): open before issuing the commits. Covers one response of `git_commit` calls, retrying only a rejected call, and amending this session's own latest commit.
 
-The area counts are the first draft of the groups; the log shows the message style. Note which paths this session wrote. The rest is the user's finished work or someone else's live work. When the user says the tree holds nobody else's live work, that settles ownership for every path.
+## Workflow
 
-## 2. Declare groups before reading hunks
+1. **Survey once, before staging anything.** The inventory is `git_status` (with `group_depth` 2–3 on a large tree) plus `git_diff` `stat: true` and `git_log` for message style, issued together; never a read of every hunk. Write the groups in `update_progress`, one line each, before reading any hunk, then read hunks in one batch only for files whose group is ambiguous. Note which paths this session wrote; the rest is the user's finished work or someone else's live work in a shared tree.
+2. **Leave what is not yours.** Work you did not write and the user has not claimed is omitted from the commit: not reverted, not stashed, not finished on their behalf. A repository-wide stash is never the way to get a clean view — it empties every concurrent worker's tree at once.
+3. **Leave live work alone even when it is yours.** A file still being changed belongs in a later commit. Half a change under a confident message is worse than no commit.
+4. **Group by the change, not by the directory.** One commit is one reason: a feature with its tests and docs, a fix with its regression, a rename across every file it touched. Generated output travels with the source that produced it. State each group in one line; if you cannot, it is more than one commit. A group that needs a hunk to describe gets that hunk read, not the whole tree.
+5. **Order them so each stands alone.** Prefer a sequence where every commit leaves the project building — a refactor before the feature that needs it, not after.
+6. **Stage by explicit path, every time.** Never stage by wildcard, "all changes", or directory sweep; a large group is still an explicit list. Issue the declared groups together: several `git_commit` calls in one response, in group order, each with its own paths and message.
+7. **Write messages in the project's existing style.** State what changed and why; do not narrate the process or add trailers the project does not use.
+8. **Verify once and finish.** Commit receipts confirm hashes and committed paths; omitted `uncommitted_*` fields do not prove a clean tree. Run one final `git_status`; if it fails, report cleanliness as unverified and do not infer the cause. Once the declared groups are committed, report that status and stop. List later arrivals as remaining work; do not reopen the survey without a new user request.
 
-Write the groups in `update_progress`, one line each: the reason and the explicit paths. Then read hunks (`git diff -- <path>`) only for a file whose group is ambiguous from its path and size. Budget one batch of hunk reads for the whole tree, none when the user said the tree is finished work. A hunk read may move a file between groups; it never starts a second survey.
+## Boundaries
 
-- One commit is one reason: a feature with its tests and docs, a fix with its regression, a rename across every file it touched. Generated output travels with its source.
-- A file carrying changes for two groups goes whole into the group that needs it first; the message says so. Do not split files by hunk.
-- Order groups so each commit leaves the project building.
-- Leave live work in a later commit, even your own.
-- Leave work you did not write and the user has not claimed: do not revert, stash, or finish it.
-
-## 3. Commit by explicit path
-
-Each group is `git add` of its new files plus `git commit` limited to its paths, so unrelated staged work stays staged:
-
-```bash
-git add -- src/billing/refund.go src/billing/refund_test.go
-git commit -m "Refund partial captures" -- src/billing/refund.go src/billing/refund_test.go
-```
-
-Put every declared group in one program, in group order, with `&&` between groups. Never stage by wildcard, `git add -A`, `git add .`, or a directory sweep. Each commit is reviewed by the host; a refused or failed commit leaves earlier commits in place. Correct and retry only the failed group, and do not replay successful commits.
-
-Use `git commit --amend -m "<message>" -- <paths>` only for this session's own latest, unpushed commit, after `git log -n 1` shows it is still HEAD. If another commit intervened, make a follow-up commit. Rewriting older, published, or someone else's commits needs the user's explicit instruction.
-
-## 4. Verify and finish
-
-Run `git status --short` and `git log --oneline -n <groups>` once. If status fails, report cleanliness as unverified. Report later arrivals as remaining work; do not reopen the survey without a new request.
-
-## Do not
-
-- Commit work you cannot describe in one line from its paths and stat.
-- Run a repository-wide `git stash`; it empties every concurrent worker's tree.
-- Amend, rebase, reset, or rewrite history beyond this session's own commits.
-- Bypass hooks or signing (`--no-verify`, `-c commit.gpgsign=false`). A failing hook or signing refusal is a finding to report.
-- Stage secrets, credentials, local configuration, or scratch files. Read content when the path alone leaves doubt.
+- Do not commit work you cannot describe in one line from its paths and stat.
+- Do not read on to be certain once the groups are declared. When the host reports a run of read-only batches, the next call stages a group.
+- Do not amend, rebase, reset, or rewrite history beyond your own commits from this session.
+- Do not bypass hooks, verification, or signing to make a commit succeed. A failing hook or a rejection such as `GIT_SIGNING_UNSUPPORTED` is a finding to report.
+- Do not stage secrets, credentials, local configuration, or scratch files. Path and stat identify these; read a file's content when the path alone leaves doubt.
 
 ## Report
 
-The commits in order with their paths; what you left uncommitted and whose it is; anything you could not group confidently; and the tree state you hand back.
+The commits made, in order, with the paths in each; what you deliberately left uncommitted and whose it is; anything you could not group confidently; and the state of the tree you are handing back.
