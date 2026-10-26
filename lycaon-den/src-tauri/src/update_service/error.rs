@@ -13,6 +13,7 @@ pub enum UpdateErrorCode {
     CandidateChanged,
     PackageManaged,
     InstallSourceUnavailable,
+    PackageOwnershipUnknown,
     PreferencesUnavailable,
     JournalUnavailable,
     Interrupted,

@@ -9,10 +9,10 @@ use std::{
 pub const CHECK_ONLY: bool = true;
 
 fn refusal() -> UpdateError {
-    if crate::linux_install::installed().is_some() {
-        Failure::PackageManaged.into()
-    } else {
-        Failure::UnsupportedInstallation.into()
+    match crate::linux_install::installed() {
+        crate::linux_install::Ownership::Package(_) => Failure::PackageManaged.into(),
+        crate::linux_install::Ownership::Unknown(_) => Failure::PackageOwnershipUnknown.into(),
+        crate::linux_install::Ownership::Unpackaged => Failure::UnsupportedInstallation.into(),
     }
 }
 pub fn supported() -> bool {
@@ -41,7 +41,7 @@ mod tests {
         let code = bundle().unwrap_err().code;
         assert!(matches!(
             code,
-            Failure::PackageManaged | Failure::UnsupportedInstallation
+            Failure::PackageManaged | Failure::PackageOwnershipUnknown | Failure::UnsupportedInstallation
         ));
         assert_eq!(
             verify_bundle(Path::new("/opt/painted-wolf-code/bin/painted-wolf-code"))

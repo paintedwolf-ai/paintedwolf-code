@@ -47,20 +47,7 @@ pub(super) struct InstallFacts {
 
 pub(super) fn detect_install_source() -> InstallFacts {
     if cfg!(target_os = "linux") {
-        return match crate::linux_install::installed() {
-            Some(package) => InstallFacts {
-                source: InstallSource::SystemPackage,
-                channel: None,
-                package: Some(package.clone()),
-                error: None,
-            },
-            None => InstallFacts {
-                source: InstallSource::Unpackaged,
-                channel: None,
-                package: None,
-                error: None,
-            },
-        };
+        return linux_install_facts(crate::linux_install::installed());
     }
     let Some(dir) = crate::config_dir::host_config_dir().ok() else {
         return InstallFacts {
@@ -84,6 +71,16 @@ pub(super) fn detect_install_source() -> InstallFacts {
             error: Some(err),
         },
     }
+}
+
+pub(super) fn linux_install_facts(ownership: crate::linux_install::Ownership) -> InstallFacts {
+    use crate::linux_install::Ownership;
+    let (source, package) = match ownership {
+        Ownership::Package(package) => (InstallSource::SystemPackage, Some(package.clone())),
+        Ownership::Unpackaged => (InstallSource::Unpackaged, None),
+        Ownership::Unknown(_) => (InstallSource::PackageOwnershipUnknown, None),
+    };
+    InstallFacts { source, channel: None, package, error: None }
 }
 
 pub(super) fn write_json_atomic<T: Serialize>(

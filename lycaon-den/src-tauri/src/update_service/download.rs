@@ -100,6 +100,7 @@ async fn prepare(
                 super::InstallSource::HomebrewCask | super::InstallSource::SystemPackage => {
                     Failure::PackageManaged.into()
                 }
+                super::InstallSource::PackageOwnershipUnknown => Failure::PackageOwnershipUnknown.into(),
                 _ => Failure::UnsupportedInstallation.into(),
             });
         }
