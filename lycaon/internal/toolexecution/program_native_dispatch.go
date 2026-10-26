@@ -100,6 +100,9 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	if err != nil {
 		return result, err
 	}
+	tc.Effects.CheckMutationProgress = func(ctx context.Context, rootID, path string) error {
+		return checkReachedMutationProgress(ctx, progressFacts, definition, invocation, rootID, path)
+	}
 	if !facts.Contract.AdmitsSession(tc.Identity.ParentSessionID != "") {
 		return result, fmt.Errorf("native operation is outside its declared session scope")
 	}

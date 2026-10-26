@@ -21,12 +21,16 @@ func (d *ProgramDispatcher) beginOutput(ctx context.Context, destination command
 	if !ok {
 		return tools.CommandOutputWrite{}, fmt.Errorf("output publication requires write owner")
 	}
-	bound, err := toolcontract.BindPublication(definition.Operation, destination.Invocation, toolcontract.RedirectPublication, destination.Redirect.Operator)
+	operation, err := commandPublicationDefinition(definition.Operation)
 	if err != nil {
 		return tools.CommandOutputWrite{}, err
 	}
-	review := commandprogram.ArgvReview{OperationID: definition.Operation.Facts().Identity, Command: destination.Redirect.Operator, Operands: []string{path}, Options: []commandprogram.ReviewedOption{}}
-	child, err := d.prepareInvocation(ctx, definition.Operation, destination.Invocation, destination.Redirect.Operator+" "+path, review.Arguments(), nil)
+	bound, err := toolcontract.BindPublication(operation, destination.Invocation, toolcontract.RedirectPublication, destination.Redirect.Operator)
+	if err != nil {
+		return tools.CommandOutputWrite{}, err
+	}
+	review := commandprogram.ArgvReview{OperationID: operation.Facts().Identity, Command: destination.Redirect.Operator, Operands: []string{path}, Options: []commandprogram.ReviewedOption{}}
+	child, err := d.prepareInvocation(ctx, operation, destination.Invocation, destination.Redirect.Operator+" "+path, review.Arguments(), nil)
 	if err != nil {
 		return tools.CommandOutputWrite{}, err
 	}

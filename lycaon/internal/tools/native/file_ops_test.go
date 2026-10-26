@@ -12,6 +12,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 )
 
@@ -213,6 +214,37 @@ func TestMoveToolCopiesThenRemovesAcrossRoots(t *testing.T) {
 	testutil.FailErr(t, "read moved destination", err)
 	if string(data) != "package old" {
 		t.Fatalf("destination = %q", data)
+	}
+}
+
+func TestMoveAcrossRootsKeepsBothFilesWhenSourceRemovalIsDeclined(t *testing.T) {
+	primary, other := t.TempDir(), t.TempDir()
+	source := filepath.Join(primary, "AGENTS.md")
+	destination := filepath.Join(other, "copied.txt")
+	testutil.FailErr(t, "seed source", os.WriteFile(source, []byte("instructions"), 0o644))
+	tctx := nativefixture.Context(primary)
+	tctx.Source.Roots = append(tctx.Source.Roots, projectroot.RootRef{ID: "r2", Label: "other", Path: other})
+	declined := errors.New("source removal declined")
+	tctx.Files.FileChangeReview = func(_ context.Context, changes []tools.FileChange) error {
+		for _, change := range changes {
+			if change.Preview.Operation == "delete" && change.Path == source {
+				return declined
+			}
+		}
+		return nil
+	}
+	_, err := (&MoveTool{Boundary: nativefixture.Boundary(t)}).Move(t.Context(), MoveInput{
+		Pairs: []FilePair{{From: "AGENTS.md", To: "@other/copied.txt"}},
+	}, tctx)
+	if !errors.Is(err, declined) {
+		t.Fatalf("source removal = %v, want decline", err)
+	}
+	for _, path := range []string{source, destination} {
+		data, readErr := os.ReadFile(path)
+		testutil.FailErr(t, "read retained file", readErr)
+		if string(data) != "instructions" {
+			t.Fatalf("%s = %q", path, data)
+		}
 	}
 }
 

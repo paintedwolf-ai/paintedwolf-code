@@ -13,6 +13,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 )
@@ -247,14 +248,46 @@ func unsupportedForm(spec toolcontract.CommandSpecification, cause error) *toolc
 // writeHostRefusal adds the host's refusal to the stopped statement's stderr
 // in shell voice beside the structured refusal.
 func writeHostRefusal(streams commandprogram.Streams, command, form, code string) {
-	if streams.Error == nil {
+	writeShellRefusal(streams.Error, command, form, code, nil, nil)
+}
+
+func writeShellRefusal(w io.Writer, command, subject, code string, policyCopy map[string]string, facts map[string]any) {
+	if w == nil || code == "" {
 		return
 	}
-	subject := command
-	if form != "" {
-		subject += ": " + form
+	if subject == "" || strings.HasPrefix(subject, "-") {
+		subject = "request"
 	}
-	_, _ = fmt.Fprintf(streams.Error, "%s: not supported here [%s]\n", subject, code)
+	reason := strings.TrimSpace(policyCopy["cause"])
+	if reason == "" {
+		reason = strings.TrimSpace(policyCopy["what"])
+	}
+	if reason == "" {
+		reason = catalogShellReason(code, command, facts)
+	}
+	if reason == "" {
+		return
+	}
+	_, _ = fmt.Fprintf(w, "%s: %s: %s [%s]\n", command, subject, strings.TrimSuffix(reason, "."), code)
+}
+
+func catalogShellReason(code, command string, facts map[string]any) string {
+	catalog, err := guidance.LoadHintConfigStock()
+	if err != nil || catalog == nil {
+		return ""
+	}
+	entry, ok := catalog.HintCodes[code]
+	if !ok {
+		return ""
+	}
+	data := make(map[string]any, len(facts)+2)
+	for key, value := range facts {
+		data[key] = value
+	}
+	data["command"] = command
+	data["rejection_code"] = code
+	_, cause, _ := guidance.RenderHintFields(code, entry, data)
+	return strings.TrimSpace(cause)
 }
 
 type trackingWriter struct {
@@ -269,52 +302,31 @@ func (t *trackingWriter) Write(p []byte) (int, error) {
 	return t.w.Write(p)
 }
 
-func writeRejectRefusal(streams commandprogram.Streams, command string, request commandprogram.OperationRequest, reject *toolrejection.ToolReject) {
+func writeRejectRefusal(streams commandprogram.Streams, command string, request commandprogram.OperationRequest, cause error) {
+	reject := toolrejection.AsToolReject(cause)
 	if streams.Error == nil || reject == nil {
 		return
 	}
-	if programResourceRefusal(reject) {
-		// Resource refusals render once through settled program feedback, where
-		// the original limit facts and completed effects are available.
-		return
-	}
-	subject := command
-	for _, key := range []string{"word", "path", "operand", "job", "signal", "pattern"} {
+	subject := ""
+	for _, key := range []string{"path", "destination", "url", "host", "operand", "job", "signal", "pattern"} {
 		if val, _ := reject.Data[key].(string); val != "" {
-			subject += ": " + val
+			subject = val
 			break
 		}
 	}
-	if subject == command && len(request.Argv) > 1 {
-		subject += ": " + request.Argv[1].Value
-	}
-	detail := ""
-	for _, key := range []string{"expected", "reason", "remedy", "expected_form"} {
-		if val, _ := reject.Data[key].(string); val != "" {
-			detail = val
-			break
+	if subject == "" {
+		for _, operand := range request.Argv[1:] {
+			if operand.Value != "" && !strings.HasPrefix(operand.Value, "-") {
+				subject = operand.Value
+				break
+			}
 		}
 	}
-	switch reject.Code {
-	case "SURVEY_PATH_ESCAPE":
-		detail = "path is outside the project root; use a relative path inside the workspace"
-	case "GREP_REGEX_INVALID":
-		if detail == "" {
-			detail = "invalid regular expression; use -F for fixed strings or escape regex metacharacters"
-		}
-	case "COMMAND_JOB_UNKNOWN":
-		detail = "no such job in this session; check active jobs with jobs"
-	case "COMMAND_OPTION_UNSUPPORTED", "COMMAND_NATIVE_FORM_UNSUPPORTED":
-		if detail != "" {
-			detail = "not supported here (expected " + detail + ")"
-		} else {
-			detail = "not supported here"
-		}
+	var policyCopy map[string]string
+	if refusal, ok := guidance.RefusalFromError(cause); ok {
+		policyCopy = refusal.Copy
 	}
-	if detail == "" {
-		detail = "not supported here"
-	}
-	_, _ = fmt.Fprintf(streams.Error, "%s: %s [%s]\n", subject, detail, reject.Code)
+	writeShellRefusal(streams.Error, command, subject, reject.Code, policyCopy, reject.Data)
 }
 
 func definitionHasCommand(definition toolcontract.OperationDefinition, name string) bool {

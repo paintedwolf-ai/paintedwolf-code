@@ -6,10 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"maps"
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolexecution"
@@ -132,17 +132,9 @@ func (d *ProgramDispatcher) reportRefusal(w io.Writer, report commandprogram.Ref
 	if reject == nil {
 		reject = &toolrejection.ToolReject{Code: report.Code}
 	}
-	if programResourceRefusal(reject) {
-		return
+	var policyCopy map[string]string
+	if refusal, ok := guidance.RefusalFromError(report.Cause); ok {
+		policyCopy = refusal.Copy
 	}
-	copy := *reject
-	copy.Data = maps.Clone(reject.Data)
-	if copy.Data == nil {
-		copy.Data = map[string]any{}
-	}
-	copy.Data["tool"], copy.Data["command"], copy.Data["path"] = "command", report.Operation, report.Operand
-	copy.Data["source_start_byte"], copy.Data["source_end_byte"], copy.Data["source_line"], copy.Data["source_column"] = report.Span.StartByte, report.Span.EndByte, report.Span.Line, report.Span.Column
-	if rendered := toolrejection.RenderReject(&copy, nil); rendered != nil {
-		_, _ = fmt.Fprintln(w, rendered)
-	}
+	writeShellRefusal(w, report.Operation, report.Operand, reject.Code, policyCopy, map[string]any{"expected_form": report.Expected})
 }

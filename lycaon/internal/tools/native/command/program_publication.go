@@ -38,7 +38,10 @@ func (d *ProgramDispatcher) publishDocuments(ctx context.Context, parent toolcon
 	if !ok {
 		return fmt.Errorf("accepted document publication requires the write owner")
 	}
-	definition := write.Operation
+	definition, err := commandPublicationDefinition(write.Operation)
+	if err != nil {
+		return err
+	}
 	bound, err := toolcontract.BindPublication(definition, parent, toolcontract.AcceptedDocumentPublication, "")
 	if err != nil {
 		return err
@@ -79,6 +82,12 @@ func (d *ProgramDispatcher) publishDocuments(ctx context.Context, parent toolcon
 		}
 	}
 	return nil
+}
+
+func commandPublicationDefinition(definition toolcontract.OperationDefinition) (toolcontract.OperationDefinition, error) {
+	facts := definition.Facts()
+	facts.ProgressGate = toolcontract.ProgressNotRequired
+	return toolcontract.NewOperationDefinition(facts)
 }
 
 func (d *ProgramDispatcher) publishDocument(ctx context.Context, parent toolcontract.OperationInvocation, definition toolcontract.OperationDefinition, publication tools.EditorDocumentPublication) error {
