@@ -1,6 +1,6 @@
 ---
 name: work-with-containers
-description: Dockerfiles, container images, Compose files, volumes, and container networking: build, run, debug, size, test in, or publish Docker and Podman containers.
+description: Write Dockerfiles and Compose files, and build, run, debug, size, test in, or publish Docker and Podman container images, volumes, and networks.
 metadata:
   paintedwolf.template_resources: references/author_a_compose_file.md|references/build_a_container_image.md|references/connect_services_in_containers.md|references/debug_a_failing_container.md|references/handle_container_shutdown.md|references/manage_container_data.md|references/publish_a_container_image.md|references/reproduce_in_a_container.md|references/size_container_resources.md|references/test_in_a_container.md
   host_resources: docker|kubectl|podman
