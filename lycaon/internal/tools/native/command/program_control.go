@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"maps"
 	"strings"
 	"sync"
 
@@ -127,7 +126,7 @@ func (d *ProgramDispatcher) invokeHost(ctx context.Context, request commandprogr
 	result, runErr := d.run.executor.InvokeNative(ctx, d.run.frame, d.run.surface, d.run.memory, d.run.progress, marker, effect, d.run.tc)
 	if reject := toolrejection.AsToolReject(runErr); reject != nil && (!result.OwnerInvoked || result.Producer.Terminal == toolcontract.ProducerRefused) {
 		if !tracker.wrote {
-			writeRejectRefusal(streams, spec.Name, request, reject)
+			writeRejectRefusal(streams, spec.Name, runErr)
 		}
 		d.shared.mu.Lock()
 		if d.shared.rejected == nil {
