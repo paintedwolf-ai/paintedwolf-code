@@ -369,8 +369,8 @@ func writePerfTarHeaders(tb testing.TB, path string, count int) {
 // count and goroutines stay bounded, limit refusals fire at 1 past each bound,
 // and cleanup leaves nothing behind. Elapsed time is logged for manual
 // inspection; automated gates use deterministic resource counts.
-func TestCommandProgramResourceCeilings(t *testing.T) {
-	f := newPerfFixture(t, nil)
+func seedResourceCeilingInputs(t *testing.T, f *perfFixture) {
+	t.Helper()
 	writeLines(t, filepath.Join(f.Dir, "small.txt"), 100, func(i int) string { return fmt.Sprintf("line %d", i) })
 	bigText(t, f.Dir)
 	sortInput(t, f.Dir)
@@ -390,6 +390,12 @@ func TestCommandProgramResourceCeilings(t *testing.T) {
 	testutil.FailErr(t, "write past-ratio.gz", os.WriteFile(filepath.Join(f.Dir, "past-ratio.gz"), paddedPerfGzip(t, 10_001, 100), 0o644))
 	writePerfTarHeaders(t, filepath.Join(f.Dir, "entries-at.tar"), 25_000)
 	writePerfTarHeaders(t, filepath.Join(f.Dir, "entries-past.tar"), 25_001)
+
+}
+
+func TestCommandProgramResourceCeilings(t *testing.T) {
+	f := newPerfFixture(t, nil)
+	seedResourceCeilingInputs(t, f)
 
 	find250k := "find" + strings.Repeat(" visits/d", 250) + " -maxdepth 1 -name none"
 	find250kPast := "find" + strings.Repeat(" visits/d", 250) + " visits/one -maxdepth 1 -name none"
