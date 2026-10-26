@@ -39,6 +39,9 @@ var v1SpecificCases = map[string]v1SpecificExpectation{
 		ExpectedFiles:  map[string]*string{"config.json": strPtr("{\"enabled\":true,\"version\":1,\"items\":[\"a\",\"b\"]}\n")},
 	},
 	"git-diff-separated-u-flag": {ExpectedStatus: 0, ExpectedStdout: "diff --git a/sub/a.txt b/sub/a.txt\nindex 66a52ee..48f6562 100644\n--- a/sub/a.txt\n+++ b/sub/a.txt\n@@ -2 +2,2 @@ first\n second\n+modified\n", ExpectedFiles: map[string]*string{"sub/a.txt": strPtr("first\nsecond\nmodified\n")}},
+	"run3-paths-and-scratch":    {ExpectedStatus: 0, ExpectedStdout: "paths-ok\n"},
+	"run3-native-discovery":     {ExpectedStatus: 0, ExpectedStdout: "jq is a native built-in\njq\n"},
+	"run3-command-not-found":    {ExpectedStatus: 0, ExpectedStdout: "missing:127\n", ExpectedStderr: "bash: pw-missing-program-039: command not found\n"},
 
 	"lang-same-file-redirect-publish": {
 		ExpectedStatus: 0,

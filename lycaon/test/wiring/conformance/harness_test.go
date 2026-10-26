@@ -5,12 +5,15 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/gate"
+	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -32,17 +35,18 @@ type fixtureCorpus struct {
 }
 
 type fixtureCase struct {
-	CapabilityRequest map[string]any  `json:"capability_request,omitempty"`
-	ID                string          `json:"id"`
-	Category          string          `json:"category"`
-	Description       string          `json:"description"`
-	Commands          []string        `json:"commands"`
-	Forms             []string        `json:"forms"`
-	Program           string          `json:"program"`
-	TrackedFiles      []string        `json:"tracked_files"`
-	NeedsGit          bool            `json:"needs_git"`
-	GNU               fixtureSnapshot `json:"gnu"`
-	BSD               fixtureSnapshot `json:"bsd"`
+	CapabilityRequest map[string]any    `json:"capability_request,omitempty"`
+	SeedBinaryFiles   map[string]string `json:"seed_binary_files,omitempty"`
+	ID                string            `json:"id"`
+	Category          string            `json:"category"`
+	Description       string            `json:"description"`
+	Commands          []string          `json:"commands"`
+	Forms             []string          `json:"forms"`
+	Program           string            `json:"program"`
+	TrackedFiles      []string          `json:"tracked_files"`
+	NeedsGit          bool              `json:"needs_git"`
+	GNU               fixtureSnapshot   `json:"gnu"`
+	BSD               fixtureSnapshot   `json:"bsd"`
 }
 
 type fixtureSnapshot struct {
@@ -57,6 +61,7 @@ type runtimeObservation struct {
 	TopLevelReject string
 	Files          map[string]*string
 	ChildReceipts  []string
+	ApprovalPlans  []wire.ApprovalPlan
 }
 
 type conformanceRunner struct {
@@ -79,7 +84,11 @@ func loadFixtureCorpus(t *testing.T) fixtureCorpus {
 
 func newConformanceRunner(t *testing.T) *conformanceRunner {
 	t.Helper()
-	corpus := loadFixtureCorpus(t)
+	return newConformanceRunnerWithConfig(t, loadFixtureCorpus(t), gate.PostureLight, true)
+}
+
+func newConformanceRunnerWithConfig(t *testing.T, corpus fixtureCorpus, posture gate.Posture, neverAsk bool) *conformanceRunner {
+	t.Helper()
 	entries := make([]llm.MockResponseEntry, 0, len(corpus.Cases))
 	for _, c := range corpus.Cases {
 		args := map[string]any{"command": c.Program}
@@ -94,9 +103,8 @@ func newConformanceRunner(t *testing.T) *conformanceRunner {
 	}
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: entries})
 	h := wiring.BuildForTest(t, wiring.WithLLMClient(mock))
-	neverAsk := true
 	testutil.FailErr(t, "enable never_ask", h.Server.Admin.Settings.Service.Approvals.PutGlobal(settings.ApprovalConfig{
-		Posture:  gate.PostureLight,
+		Posture:  posture,
 		NeverAsk: &neverAsk,
 	}))
 	m, err := h.Workflows.Manager.Resolver.ForSession(t.Context(), "", "", "implement", "1.0.0")
@@ -121,6 +129,13 @@ func (r *conformanceRunner) seedCaseWorkspace(t *testing.T, c fixtureCase) strin
 		testutil.FailErr(t, "mkdir seed binary parent", os.MkdirAll(filepath.Dir(target), 0o755))
 		testutil.FailErr(t, "write seed binary file", os.WriteFile(target, decoded, 0o644))
 	}
+	for rel, encoded := range c.SeedBinaryFiles {
+		decoded, err := base64.StdEncoding.DecodeString(encoded)
+		testutil.FailErr(t, "decode case binary file", err)
+		target := filepath.Join(dir, filepath.FromSlash(rel))
+		testutil.FailErr(t, "mkdir case binary parent", os.MkdirAll(filepath.Dir(target), 0o755))
+		testutil.FailErr(t, "write case binary file", os.WriteFile(target, decoded, 0o644))
+	}
 	if c.NeedsGit {
 		for rel, encoded := range r.corpus.SeedGitFiles {
 			decoded, err := base64.StdEncoding.DecodeString(encoded)
@@ -134,6 +149,10 @@ func (r *conformanceRunner) seedCaseWorkspace(t *testing.T, c fixtureCase) strin
 }
 
 func (r *conformanceRunner) runCase(t *testing.T, c fixtureCase) runtimeObservation {
+	return r.runCaseWithRecommendedApprovals(t, c, 0)
+}
+
+func (r *conformanceRunner) runCaseWithRecommendedApprovals(t *testing.T, c fixtureCase, expectedCards int) runtimeObservation {
 	t.Helper()
 	dir := r.seedCaseWorkspace(t, c)
 	projectID := uuid.NewString()
@@ -142,8 +161,47 @@ func (r *conformanceRunner) runCase(t *testing.T, c fixtureCase) runtimeObservat
 	testutil.FailErr(t, "create session", err)
 	testutil.FailErr(t, "set implementer agent", r.h.Sessions.Manager.Chats.SetAgentType(t.Context(), sess.ID, "implementer"))
 	r.h.SeedProgress(t, t.Context(), sess.ID)
-	_, err = r.h.Sessions.Manager.Submissions.Prompt(t.Context(), sess.ID, "run case "+c.ID)
-	testutil.FailErr(t, "prompt conformance case", err)
+	var plans []wire.ApprovalPlan
+	if expectedCards == 0 {
+		_, err = r.h.Sessions.Manager.Submissions.Prompt(t.Context(), sess.ID, "run case "+c.ID)
+		testutil.FailErr(t, "prompt conformance case", err)
+	} else {
+		done := make(chan error, 1)
+		go func() {
+			_, promptErr := r.h.Sessions.Manager.Submissions.Prompt(t.Context(), sess.ID, "run case "+c.ID)
+			done <- promptErr
+		}()
+		kind := wire.CheckpointKindToolApproval
+		var runErr error
+		testutil.WaitFor(t, 30*time.Second, func() bool {
+			select {
+			case runErr = <-done:
+				return true
+			default:
+			}
+			pending, listErr := r.h.Sessions.Checkpoints.ListPending(t.Context(), sess.ID, &kind)
+			if listErr != nil || len(pending) == 0 {
+				return false
+			}
+			for _, checkpoint := range pending {
+				if checkpoint.ToolApproval == nil || len(plans) >= expectedCards {
+					t.Fatalf("unexpected approval card: %+v", checkpoint)
+				}
+				plan := checkpoint.ToolApproval.Plan
+				if !slices.ContainsFunc(plan.Options, func(option wire.ApprovalOption) bool { return option.ID == plan.RecommendedOptionID }) {
+					t.Fatalf("recommended option missing from plan: %+v", plan)
+				}
+				plans = append(plans, plan)
+				_, resolveErr := r.h.Sessions.Checkpoints.(*hitl.Checkpoints).Authority.ResolveApprovalOption(r.h.OwnerCtx(t, t.Context()), sess.ID, checkpoint.ID, plan.RecommendedOptionID)
+				testutil.FailErr(t, "answer recommended approval", resolveErr)
+			}
+			return false
+		})
+		testutil.FailErr(t, "prompt conformance case", runErr)
+		if len(plans) != expectedCards {
+			t.Fatalf("approval cards = %d, want %d: %+v", len(plans), expectedCards, plans)
+		}
+	}
 
 	callID := "call-" + c.ID
 	msgs, err := r.h.Store.GetMessages(t.Context(), sess.ID)
@@ -164,6 +222,7 @@ func (r *conformanceRunner) runCase(t *testing.T, c fixtureCase) runtimeObservat
 	obs := runtimeObservation{
 		Files:         snapshotTrackedFiles(dir, c.TrackedFiles),
 		ChildReceipts: r.queryChildReceipts(t, sess.ID),
+		ApprovalPlans: plans,
 	}
 	if strings.Contains(content, `"program_id"`) {
 		idx := strings.Index(content, "{")

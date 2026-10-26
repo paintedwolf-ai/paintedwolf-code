@@ -20,6 +20,7 @@ from typing import Any
 
 DOCKER_IMAGE = "floryn90/hugo:0.162.1-ext"
 PNG_SAMPLE = bytes([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x01, 0x02, 0x03])
+BINARY_TODO = b"TODO\x00binary\n"
 
 SEED_TEXT_FILES: dict[str, str] = {
     "notes.txt": "alpha line 1\nbeta line 2\n\nalpha line 4\ngamma\twith\ttabs\n",
@@ -41,6 +42,91 @@ SEED_TEXT_FILES: dict[str, str] = {
 
 def corpus_cases() -> list[dict[str, Any]]:
     return [
+        {'id': 'run3-prefix-ifs-read', 'category': 'live-run-3',
+         'description': 'A temporary IFS assignment applies to read without changing later commands.',
+         'commands': ['read', 'printf'], 'forms': ['read:-r'],
+         'program': "printf '  first  second  \\n' | while IFS= read -r line; do printf '<%s>\\n' \"$line\"; done",
+         'tracked_files': []},
+        {'id': 'run3-eval-admitted-program', 'category': 'live-run-3',
+         'description': 'Eval runs a parsed program with the ordinary shell status.',
+         'commands': ['eval', 'printf'], 'forms': [],
+         'program': "eval \"printf 'inner:%s\\\\n' value\"",
+         'tracked_files': []},
+        {'id': 'run3-sed-bsd-next-line-append', 'category': 'live-run-3',
+         'description': 'Sed appends text with the BSD next-line spelling.',
+         'commands': ['sed'], 'forms': ['sed:-e'],
+         'program': "sed -e '/second/a\\\nend' sub/a.txt",
+         'tracked_files': []},
+        {'id': 'run3-sed-gnu-one-line-append', 'category': 'live-run-3',
+         'description': 'Sed appends text with the GNU one-line spelling.',
+         'commands': ['sed'], 'forms': ['sed:-e'],
+         'program': "sed -e '/second/a end' sub/a.txt",
+         'tracked_files': []},
+        {'id': 'run3-sed-deleted-last-line', 'category': 'live-run-3',
+         'description': 'A deleted last line does not trigger the last-line append address.',
+         'commands': ['sed'], 'forms': ['sed:-e'],
+         'program': "sed -e '/second/d' -e '$a\\\nend' sub/a.txt",
+         'tracked_files': []},
+        {'id': 'run3-binary-grep-walk', 'category': 'live-run-3',
+         'description': 'Recursive grep reports matching binary files and continues.',
+         'commands': ['grep'], 'forms': ['grep:-r', 'grep:-n'],
+         'program': "grep -rn TODO sub | sort",
+         'seed_binary_files': {'sub/nested/todo.bin': base64.b64encode(BINARY_TODO).decode('ascii')},
+         'tracked_files': []},
+        {'id': 'run3-binary-rg-explicit', 'category': 'live-run-3',
+         'description': 'Ripgrep uses its own binary behavior for an explicit file.',
+         'commands': ['rg'], 'forms': ['rg:-n'],
+         'program': "rg -n TODO sub/nested/todo.bin",
+         'seed_binary_files': {'sub/nested/todo.bin': base64.b64encode(BINARY_TODO).decode('ascii')},
+         'tracked_files': []},
+        {'id': 'run3-pipestatus-sigpipe', 'category': 'live-run-3',
+         'description': 'An early reader gives the producer a SIGPIPE status.',
+         'commands': ['yes', 'head', 'printf'], 'forms': ['head:-n'],
+         'program': "yes | head -n 1; printf 'pipe:%s\\n' \"${PIPESTATUS[*]}\"",
+         'tracked_files': []},
+        {'id': 'run3-gnu-errors', 'category': 'live-run-3',
+         'description': 'Common utility errors retain native exit statuses and stderr.',
+         'commands': ['grep', 'cat', 'printf'], 'forms': ['grep:-E'],
+         'program': "grep -E '(' notes.txt 2>&1; printf 'grep:%s\\n' \"$?\"; cat missing.txt 2>&1; printf 'cat:%s\\n' \"$?\"",
+         'tracked_files': []},
+        {'id': 'run3-command-not-found', 'category': 'live-run-3',
+         'description': 'An unavailable external program returns 127 with shell stderr.',
+         'commands': ['printf'], 'forms': [],
+         'program': "pw-missing-program-039; printf 'missing:%s\\n' \"$?\"",
+         'tracked_files': []},
+        {'id': 'run3-native-discovery', 'category': 'live-run-3',
+         'description': 'Discovery describes a native command as native.',
+         'commands': ['type', 'command'], 'forms': [],
+         'program': "type jq; command -v jq",
+         'tracked_files': []},
+        {'id': 'run3-sed-hold-reversal', 'category': 'live-run-3',
+         'description': 'Sed hold space supports the reversal program used live.',
+         'commands': ['sed'], 'forms': [],
+         'program': "sed '1!G;h;$!d' sub/a.txt", 'tracked_files': []},
+        {'id': 'run3-sort-key-separated', 'category': 'live-run-3',
+         'description': 'Sort accepts a separated key as well as the attached spelling.',
+         'commands': ['sort'], 'forms': ['sort:-k', 'sort:-n', 'sort:-r'],
+         'program': "sort -k 3,3 -n -r table.tsv", 'tracked_files': []},
+        {'id': 'run3-paths-and-scratch', 'category': 'live-run-3',
+         'description': 'PWD and scratch variables are usable absolute paths.',
+         'commands': ['test', 'printf', 'pwd'], 'forms': [],
+         'program': "test \"$PWD\" = \"$(pwd)\" && test -d \"$TMPDIR\" && test -d \"$SCRATCH_DIR\" && printf 'paths-ok\\n'",
+         'tracked_files': []},
+        {'id': 'run3-pipeline-hash', 'category': 'live-run-3',
+         'description': 'Pipeline hashing matches a direct file hash.',
+         'commands': ['cat', 'sha256sum', 'printf'], 'forms': [],
+         'program': "cat notes.txt | sha256sum | cut -d ' ' -f 1; sha256sum notes.txt | cut -d ' ' -f 1",
+         'tracked_files': []},
+        {'id': 'run3-git-initial-commit', 'category': 'live-run-3',
+         'description': 'A new repository can make its first commit.',
+         'commands': ['git init', 'git add', 'git commit', 'git log'], 'forms': ['git commit:-m'],
+         'program': "mkdir fresh && cd fresh && git init -q && git config user.name Test && git config user.email test@example.invalid && printf 'new\\n' > README.txt && git add README.txt && git commit -qm first && git log -1 --format=%s",
+         'tracked_files': ['fresh/README.txt']},
+        {'id': 'run3-scratch-atomic-move', 'category': 'live-run-3',
+         'description': 'A temporary file can be moved into the project.',
+         'commands': ['mktemp', 'printf', 'mv', 'cat'], 'forms': [],
+         'program': "p=$(mktemp) && printf 'saved\\n' > \"$p\" && mv \"$p\" saved.txt && cat saved.txt",
+         'tracked_files': ['saved.txt']},
         # Natural programs from the live-run findings.
         {'id': 'natural-find-xargs',
          'category': 'natural-programs',
@@ -820,6 +906,10 @@ def run_case(case: dict[str, Any], bash_bin: str, path_env: str) -> dict[str, An
     with tempfile.TemporaryDirectory(prefix=f"pw-conf-{case['id']}-") as tmp:
         root = Path(tmp)
         seed_workspace(root, needs_git=bool(case.get("needs_git")))
+        for rel, encoded in case.get("seed_binary_files", {}).items():
+            p = root / rel
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_bytes(base64.b64decode(encoded))
         env = {
             "PATH": path_env,
             "HOME": str(root),
@@ -851,7 +941,7 @@ def run_case(case: dict[str, Any], bash_bin: str, path_env: str) -> dict[str, An
         }
 
 
-def capture_suite(mode: str) -> dict[str, dict[str, Any]]:
+def capture_suite(mode: str, case_ids: set[str] | None = None) -> dict[str, dict[str, Any]]:
     if mode == "bsd":
         bash_bin = "/opt/homebrew/bin/bash" if Path("/opt/homebrew/bin/bash").exists() else "/bin/bash"
         path_env = str(Path.home() / ".local" / "bin") + ":/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin"
@@ -860,6 +950,8 @@ def capture_suite(mode: str) -> dict[str, dict[str, Any]]:
         path_env = "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
     results: dict[str, dict[str, Any]] = {}
     for case in corpus_cases():
+        if case_ids is not None and case["id"] not in case_ids:
+            continue
         results[case["id"]] = run_case(case, bash_bin, path_env)
     return results
 
@@ -885,10 +977,14 @@ def capture_gnu_in_docker(script_path: Path) -> dict[str, dict[str, Any]]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--mode", choices=["all", "bsd", "gnu-inner"], default="all")
+    parser.add_argument("--case-id", action="append", default=[])
     args = parser.parse_args()
 
     if args.mode == "gnu-inner":
-        print(json.dumps(capture_suite("gnu"), indent=2, sort_keys=True))
+        print(json.dumps(capture_suite("gnu", set(args.case_id) if args.case_id else None), indent=2, sort_keys=True))
+        return
+    if args.mode == "bsd":
+        print(json.dumps(capture_suite("bsd", set(args.case_id) if args.case_id else None), indent=2, sort_keys=True))
         return
 
     script_path = Path(__file__).resolve()

@@ -2572,6 +2572,472 @@
         "files": {}
       },
       "reference_provenance": "Captured on macOS with GNU-prefixed Homebrew utilities and BSD system utilities; jq and Git are shared reference binaries."
+    },
+    {
+      "id": "run3-prefix-ifs-read",
+      "category": "live-run-3",
+      "description": "A temporary IFS assignment applies to read without changing later commands.",
+      "commands": [
+        "read",
+        "printf"
+      ],
+      "forms": [
+        "read:-r"
+      ],
+      "program": "printf '  first  second  \\n' | while IFS= read -r line; do printf '<%s>\\n' \"$line\"; done",
+      "tracked_files": [],
+      "gnu": {
+        "files": {},
+        "status": 0,
+        "stderr": "",
+        "stdout": "<  first  second  >\n"
+      },
+      "bsd": {
+        "status": 0,
+        "stdout": "<  first  second  >\n",
+        "stderr": "",
+        "files": {}
+      },
+      "reference_provenance": "Captured with GNU tools in Debian Linux and BSD system tools on macOS; host-only contracts have explicit v1 expectations."
+    },
+    {
+      "id": "run3-eval-admitted-program",
+      "category": "live-run-3",
+      "description": "Eval runs a parsed program with the ordinary shell status.",
+      "commands": [
+        "eval",
+        "printf"
+      ],
+      "forms": [],
+      "program": "eval \"printf 'inner:%s\\\\n' value\"",
+      "tracked_files": [],
+      "gnu": {
+        "files": {},
+        "status": 0,
+        "stderr": "",
+        "stdout": "inner:value\n"
+      },
+      "bsd": {
+        "status": 0,
+        "stdout": "inner:value\n",
+        "stderr": "",
+        "files": {}
+      },
+      "reference_provenance": "Captured with GNU tools in Debian Linux and BSD system tools on macOS; host-only contracts have explicit v1 expectations."
+    },
+    {
+      "id": "run3-sed-bsd-next-line-append",
+      "category": "live-run-3",
+      "description": "Sed appends text with the BSD next-line spelling.",
+      "commands": [
+        "sed"
+      ],
+      "forms": [
+        "sed:-e"
+      ],
+      "program": "sed -e '/second/a\\\nend' sub/a.txt",
+      "tracked_files": [],
+      "gnu": {
+        "files": {},
+        "status": 0,
+        "stderr": "",
+        "stdout": "first\nsecond\nend\n"
+      },
+      "bsd": {
+        "status": 0,
+        "stdout": "first\nsecond\nend\n",
+        "stderr": "",
+        "files": {}
+      },
+      "reference_provenance": "Captured with GNU tools in Debian Linux and BSD system tools on macOS; host-only contracts have explicit v1 expectations."
+    },
+    {
+      "id": "run3-sed-gnu-one-line-append",
+      "category": "live-run-3",
+      "description": "Sed appends text with the GNU one-line spelling.",
+      "commands": [
+        "sed"
+      ],
+      "forms": [
+        "sed:-e"
+      ],
+      "program": "sed -e '/second/a end' sub/a.txt",
+      "tracked_files": [],
+      "gnu": {
+        "files": {},
+        "status": 0,
+        "stderr": "",
+        "stdout": "first\nsecond\nend\n"
+      },
+      "bsd": {
+        "status": 1,
+        "stdout": "",
+        "stderr": "sed: 1: \"/second/a end\n\": command a expects \\ followed by text\n",
+        "files": {}
+      },
+      "reference_provenance": "Captured with GNU tools in Debian Linux and BSD system tools on macOS; host-only contracts have explicit v1 expectations."
+    },
+    {
+      "id": "run3-sed-deleted-last-line",
+      "category": "live-run-3",
+      "description": "A deleted last line does not trigger the last-line append address.",
+      "commands": [
+        "sed"
+      ],
+      "forms": [
+        "sed:-e"
+      ],
+      "program": "sed -e '/second/d' -e '$a\\\nend' sub/a.txt",
+      "tracked_files": [],
+      "gnu": {
+        "files": {},
+        "status": 0,
+        "stderr": "",
+        "stdout": "first\n"
+      },
+      "bsd": {
+        "status": 0,
+        "stdout": "first\n",
+        "stderr": "",
+        "files": {}
+      },
+      "reference_provenance": "Captured with GNU tools in Debian Linux and BSD system tools on macOS; host-only contracts have explicit v1 expectations."
+    },
+    {
+      "id": "run3-binary-grep-walk",
+      "category": "live-run-3",
+      "description": "Recursive grep reports matching binary files and continues.",
+      "commands": [
+        "grep"
+      ],
+      "forms": [
+        "grep:-r",
+        "grep:-n"
+      ],
+      "program": "grep -rn TODO sub | sort",
+      "seed_binary_files": {
+        "sub/nested/todo.bin": "VE9ETwBiaW5hcnkK"
+      },
+      "tracked_files": [],
+      "gnu": {
+        "files": {},
+        "status": 0,
+        "stderr": "grep: sub/nested/todo.bin: binary file matches\n",
+        "stdout": "sub/nested/deep.go:3:// TODO: fix OldName\n"
+      },
+      "bsd": {
+        "status": 0,
+        "stdout": "Binary file sub/nested/todo.bin matches\nsub/nested/deep.go:3:// TODO: fix OldName\n",
+        "stderr": "",
+        "files": {}
+      },
+      "reference_provenance": "Captured with GNU tools in Debian Linux and BSD system tools on macOS; host-only contracts have explicit v1 expectations."
+    },
+    {
+      "id": "run3-binary-rg-explicit",
+      "category": "live-run-3",
+      "description": "Ripgrep uses its own binary behavior for an explicit file.",
+      "commands": [
+        "rg"
+      ],
+      "forms": [
+        "rg:-n"
+      ],
+      "program": "rg -n TODO sub/nested/todo.bin",
+      "seed_binary_files": {
+        "sub/nested/todo.bin": "VE9ETwBiaW5hcnkK"
+      },
+      "tracked_files": [],
+      "gnu": {
+        "files": {},
+        "status": 0,
+        "stderr": "",
+        "stdout": "sub/nested/todo.bin: binary file matches (found \"\\0\" byte around offset 4)\n"
+      },
+      "bsd": {
+        "status": 0,
+        "stdout": "sub/nested/todo.bin: binary file matches (found \"\\0\" byte around offset 4)\n",
+        "stderr": "",
+        "files": {}
+      },
+      "reference_provenance": "Captured with GNU tools in Debian Linux and BSD system tools on macOS; host-only contracts have explicit v1 expectations."
+    },
+    {
+      "id": "run3-pipestatus-sigpipe",
+      "category": "live-run-3",
+      "description": "An early reader gives the producer a SIGPIPE status.",
+      "commands": [
+        "yes",
+        "head",
+        "printf"
+      ],
+      "forms": [
+        "head:-n"
+      ],
+      "program": "yes | head -n 1; printf 'pipe:%s\\n' \"${PIPESTATUS[*]}\"",
+      "tracked_files": [],
+      "gnu": {
+        "files": {},
+        "status": 0,
+        "stderr": "",
+        "stdout": "y\npipe:141 0\n"
+      },
+      "bsd": {
+        "status": 0,
+        "stdout": "y\npipe:141 0\n",
+        "stderr": "",
+        "files": {}
+      },
+      "reference_provenance": "Captured with GNU tools in Debian Linux and BSD system tools on macOS; host-only contracts have explicit v1 expectations."
+    },
+    {
+      "id": "run3-gnu-errors",
+      "category": "live-run-3",
+      "description": "Common utility errors retain native exit statuses and stderr.",
+      "commands": [
+        "grep",
+        "cat",
+        "printf"
+      ],
+      "forms": [
+        "grep:-E"
+      ],
+      "program": "grep -E '(' notes.txt 2>&1; printf 'grep:%s\\n' \"$?\"; cat missing.txt 2>&1; printf 'cat:%s\\n' \"$?\"",
+      "tracked_files": [],
+      "gnu": {
+        "files": {},
+        "status": 0,
+        "stderr": "",
+        "stdout": "grep: Unmatched ( or \\(\ngrep:2\ncat: missing.txt: No such file or directory\ncat:1\n"
+      },
+      "bsd": {
+        "status": 0,
+        "stdout": "grep: parentheses not balanced\ngrep:2\ncat: missing.txt: No such file or directory\ncat:1\n",
+        "stderr": "",
+        "files": {}
+      },
+      "reference_provenance": "Captured with GNU tools in Debian Linux and BSD system tools on macOS; host-only contracts have explicit v1 expectations."
+    },
+    {
+      "id": "run3-sed-hold-reversal",
+      "category": "live-run-3",
+      "description": "Sed hold space supports the reversal program used live.",
+      "commands": [
+        "sed"
+      ],
+      "forms": [],
+      "program": "sed '1!G;h;$!d' sub/a.txt",
+      "tracked_files": [],
+      "gnu": {
+        "files": {},
+        "status": 0,
+        "stderr": "",
+        "stdout": "second\nfirst\n"
+      },
+      "bsd": {
+        "status": 0,
+        "stdout": "second\nfirst\n",
+        "stderr": "",
+        "files": {}
+      },
+      "reference_provenance": "Captured with GNU tools in Debian Linux and BSD system tools on macOS; host-only contracts have explicit v1 expectations."
+    },
+    {
+      "id": "run3-sort-key-separated",
+      "category": "live-run-3",
+      "description": "Sort accepts a separated key as well as the attached spelling.",
+      "commands": [
+        "sort"
+      ],
+      "forms": [
+        "sort:-k",
+        "sort:-n",
+        "sort:-r"
+      ],
+      "program": "sort -k 3,3 -n -r table.tsv",
+      "tracked_files": [],
+      "gnu": {
+        "files": {},
+        "status": 0,
+        "stderr": "",
+        "stdout": "3\tgamma\t30\n2\tbeta\t20\n1\talpha\t10\nid\tname\tcount\n"
+      },
+      "bsd": {
+        "status": 0,
+        "stdout": "3\tgamma\t30\n2\tbeta\t20\n1\talpha\t10\nid\tname\tcount\n",
+        "stderr": "",
+        "files": {}
+      },
+      "reference_provenance": "Captured with GNU tools in Debian Linux and BSD system tools on macOS; host-only contracts have explicit v1 expectations."
+    },
+    {
+      "id": "run3-paths-and-scratch",
+      "category": "live-run-3",
+      "description": "PWD and scratch variables are usable absolute paths.",
+      "commands": [
+        "test",
+        "printf",
+        "pwd"
+      ],
+      "forms": [],
+      "program": "test \"$PWD\" = \"$(pwd)\" && test -d \"$TMPDIR\" && test -d \"$SCRATCH_DIR\" && printf 'paths-ok\\n'",
+      "tracked_files": [],
+      "gnu": {
+        "files": {},
+        "status": 1,
+        "stderr": "",
+        "stdout": ""
+      },
+      "bsd": {
+        "status": 1,
+        "stdout": "",
+        "stderr": "",
+        "files": {}
+      },
+      "reference_provenance": "Captured with GNU tools in Debian Linux and BSD system tools on macOS; host-only contracts have explicit v1 expectations."
+    },
+    {
+      "id": "run3-pipeline-hash",
+      "category": "live-run-3",
+      "description": "Pipeline hashing matches a direct file hash.",
+      "commands": [
+        "cat",
+        "sha256sum",
+        "printf"
+      ],
+      "forms": [],
+      "program": "cat notes.txt | sha256sum | cut -d ' ' -f 1; sha256sum notes.txt | cut -d ' ' -f 1",
+      "tracked_files": [],
+      "gnu": {
+        "files": {},
+        "status": 0,
+        "stderr": "",
+        "stdout": "fd3bb4507bf80ed1acd1ba468c25e570bf6eda6d0a8372a81eb3496bb40316dc\nfd3bb4507bf80ed1acd1ba468c25e570bf6eda6d0a8372a81eb3496bb40316dc\n"
+      },
+      "bsd": {
+        "status": 0,
+        "stdout": "fd3bb4507bf80ed1acd1ba468c25e570bf6eda6d0a8372a81eb3496bb40316dc\nfd3bb4507bf80ed1acd1ba468c25e570bf6eda6d0a8372a81eb3496bb40316dc\n",
+        "stderr": "",
+        "files": {}
+      },
+      "reference_provenance": "Captured with GNU tools in Debian Linux and BSD system tools on macOS; host-only contracts have explicit v1 expectations."
+    },
+    {
+      "id": "run3-git-initial-commit",
+      "category": "live-run-3",
+      "description": "A new repository can make its first commit.",
+      "commands": [
+        "git init",
+        "git add",
+        "git commit",
+        "git log"
+      ],
+      "forms": [
+        "git commit:-m"
+      ],
+      "program": "mkdir fresh && cd fresh && git init -q && git config user.name Test && git config user.email test@example.invalid && printf 'new\\n' > README.txt && git add README.txt && git commit -qm first && git log -1 --format=%s",
+      "tracked_files": [
+        "fresh/README.txt"
+      ],
+      "gnu": {
+        "files": {
+          "fresh/README.txt": "new\n"
+        },
+        "status": 0,
+        "stderr": "",
+        "stdout": "first\n"
+      },
+      "bsd": {
+        "status": 0,
+        "stdout": "first\n",
+        "stderr": "",
+        "files": {
+          "fresh/README.txt": "new\n"
+        }
+      },
+      "reference_provenance": "Captured with GNU tools in Debian Linux and BSD system tools on macOS; host-only contracts have explicit v1 expectations."
+    },
+    {
+      "id": "run3-command-not-found",
+      "category": "live-run-3",
+      "description": "An unavailable external program returns 127 with shell stderr.",
+      "commands": [
+        "printf"
+      ],
+      "forms": [],
+      "program": "pw-missing-program-039; printf 'missing:%s\\n' \"$?\"",
+      "tracked_files": [],
+      "gnu": {
+        "files": {},
+        "status": 0,
+        "stderr": "/bin/bash: line 3: pw-missing-program-039: command not found\n",
+        "stdout": "missing:127\n"
+      },
+      "bsd": {
+        "status": 0,
+        "stdout": "missing:127\n",
+        "stderr": "/opt/homebrew/bin/bash: line 3: pw-missing-program-039: command not found\n",
+        "files": {}
+      },
+      "reference_provenance": "Captured with GNU tools in Debian Linux and BSD system tools on macOS; native dispatch uses its explicit v1 expectation."
+    },
+    {
+      "id": "run3-native-discovery",
+      "category": "live-run-3",
+      "description": "Discovery describes a native command as native.",
+      "commands": [
+        "type",
+        "command"
+      ],
+      "forms": [],
+      "program": "type jq; command -v jq",
+      "tracked_files": [],
+      "gnu": {
+        "files": {},
+        "status": 0,
+        "stderr": "",
+        "stdout": "jq is /usr/bin/jq\n/usr/bin/jq\n"
+      },
+      "bsd": {
+        "status": 0,
+        "stdout": "jq is /usr/bin/jq\n/usr/bin/jq\n",
+        "stderr": "",
+        "files": {}
+      },
+      "reference_provenance": "Captured with GNU tools in Debian Linux and BSD system tools on macOS; native dispatch uses its explicit v1 expectation."
+    },
+    {
+      "id": "run3-scratch-atomic-move",
+      "category": "live-run-3",
+      "description": "A temporary file can be moved into the project.",
+      "commands": [
+        "mktemp",
+        "printf",
+        "mv",
+        "cat"
+      ],
+      "forms": [],
+      "program": "p=$(mktemp) && printf 'saved\\n' > \"$p\" && mv \"$p\" saved.txt && cat saved.txt",
+      "tracked_files": [
+        "saved.txt"
+      ],
+      "gnu": {
+        "files": {
+          "saved.txt": "saved\n"
+        },
+        "status": 0,
+        "stderr": "",
+        "stdout": "saved\n"
+      },
+      "bsd": {
+        "status": 0,
+        "stdout": "saved\n",
+        "stderr": "",
+        "files": {
+          "saved.txt": "saved\n"
+        }
+      },
+      "reference_provenance": "Captured with GNU tools in Debian Linux and BSD system tools on macOS."
     }
   ]
 }
