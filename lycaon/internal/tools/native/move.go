@@ -13,7 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 )
 
-// MoveTool renames files within one held write-root capability.
+// MoveTool moves files through the reviewed write capabilities.
 type MoveTool struct {
 	Boundary *sandbox.Boundary
 }
@@ -74,7 +74,7 @@ func (t *MoveTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 	return string(raw), nil
 }
 
-// Move renames each pair within one root under scope, review and recovery.
+// Move applies each pair under scope, review and recovery.
 func (t *MoveTool) Move(ctx context.Context, in MoveInput, tctx tools.ToolContext) (MoveResult, error) {
 	var result MoveResult
 	prof := tctx.ProfileID()
@@ -100,7 +100,7 @@ func (t *MoveTool) Move(ctx context.Context, in MoveInput, tctx tools.ToolContex
 			}
 		}
 		if crossRoot {
-			// The copy owner stages and reviews the destination before publication.
+			// The copy operation stages and reviews the destination before publication.
 			// Remove the source only after that publication succeeds.
 			copyResult, err := (&CopyTool{Boundary: t.Boundary}).Copy(ctx, CopyInput{
 				Pairs: []FilePair{pair}, Recursive: in.Directories, NoClobber: in.NoClobber, MaxFileBytes: math.MaxInt64,
