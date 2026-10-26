@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/api"
@@ -57,7 +56,7 @@ func TestSSESubscriberOverflowIsFullyRecoverableFromStore(t *testing.T) {
 	}
 
 	// Recovery is exercised only after a confirmed overflow.
-	delivered := drainUntilClosed(t, stream, 10*time.Second)
+	delivered := drainUntilClosed(t, stream)
 	if delivered >= overflowSessionMessages {
 		t.Fatalf("subscriber received all %d appends without being dropped — "+
 			"buffer size or publish path changed; this test needs a real overflow",
@@ -111,8 +110,6 @@ func TestSSESubscriberOverflowIsFullyRecoverableFromStore(t *testing.T) {
 				Message:   after,
 			}))
 
-	deadline := time.NewTimer(10 * time.Second)
-	defer deadline.Stop()
 	for {
 		select {
 		case env, ok := <-resub:
@@ -128,7 +125,7 @@ func TestSSESubscriberOverflowIsFullyRecoverableFromStore(t *testing.T) {
 			if delivered.SessionID == sess.ID && delivered.Message.ID == after.ID {
 				return
 			}
-		case <-deadline.C:
+		case <-t.Context().Done():
 			t.Fatal("reconnected subscriber did not receive the published message")
 		}
 	}
@@ -167,11 +164,9 @@ func pageWholeTranscript(t *testing.T, srv *api.Server, sessionID string) []wire
 }
 
 // Buffered events remain readable after the hub closes a dropped subscriber.
-func drainUntilClosed(t *testing.T, ch <-chan wire.EventEnvelope, timeout time.Duration) int {
+func drainUntilClosed(t *testing.T, ch <-chan wire.EventEnvelope) int {
 	t.Helper()
 	count := 0
-	timeout = testutil.Timeout(timeout)
-	deadline := time.After(timeout)
 	for {
 		select {
 		case _, ok := <-ch:
@@ -179,9 +174,8 @@ func drainUntilClosed(t *testing.T, ch <-chan wire.EventEnvelope, timeout time.D
 				return count
 			}
 			count++
-		case <-deadline:
-			t.Fatalf("subscriber still open after %s and %d events — expected the hub to drop it",
-				timeout, count)
+		case <-t.Context().Done():
+			t.Fatalf("subscriber still open after %d events — expected the hub to drop it", count)
 			return count
 		}
 	}

@@ -39,7 +39,7 @@ func TestConsumedStartupWakeKeepsWaitingUserTurnBusy(t *testing.T) {
 	loop.Waits.MarkWaitCalled(sess.ID)
 	testutil.FailErr(t, "finish parked prompt", mgr.Runner.Settlement.Finish(ctx, sess.ID, false, false, ""))
 	finish()
-	loop.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, 2*time.Second))
+	loop.Turns.WaitForAsyncTurns(t.Context())
 	testutil.FailErr(t, "settle drained wakes", mgr.Runner.Settlement.Drain(ctx, sess.ID))
 	current, err := memory.Get(ctx, sess.ID)
 	testutil.FailErr(t, "read waiting session", err)

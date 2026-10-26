@@ -74,7 +74,7 @@ func TestPollerContinuesAfterInitialMaintenanceFailure(t *testing.T) {
 	defer cancel()
 	done := make(chan error, 1)
 	go func() { done <- poller.Run(ctx) }()
-	testutil.WaitFor(t, 3*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		task, ok := base.Get(id)
 		return ok && task.Status == api.WorkerStatusComplete && queue.calls.Load() >= 2
 	})

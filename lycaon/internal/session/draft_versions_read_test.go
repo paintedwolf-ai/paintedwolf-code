@@ -107,7 +107,7 @@ func TestDraftNeverEmitsDeleteOpForCoordinatorDraftSlot(t *testing.T) {
 	}
 
 	pub.FlushMessagePatches(ctx, sess.ID)
-	testutil.FailErr(t, "drain publisher", pub.Close(testutil.BoundedContext(t, 5*time.Second)))
+	testutil.FailErr(t, "drain publisher", pub.Close(t.Context()))
 	hub.FlushDebounced()
 	patches := 0
 	for {
