@@ -1,6 +1,6 @@
 ---
 name: evolve-a-system
-description: Design or change a production surface: API contracts, state machines, retries and idempotency, concurrency, or a defect class behind several related findings.
+description: Design or change production API contracts, state machines, retry and idempotency rules, or concurrency, or fix the defect class behind several related findings.
 metadata:
   paintedwolf.template_resources: references/finish_a_surface.md|references/raise_the_fix_altitude.md|references/evolve_an_api_contract.md|references/design_a_state_machine.md|references/review_failure_and_retry_semantics.md|references/design_concurrent_code.md|references/find_a_concurrency_bug.md
 ---
