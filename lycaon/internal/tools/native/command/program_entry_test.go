@@ -273,6 +273,7 @@ func TestProgramEntryDisableStopsOwnedWorkAndRefusesNewPrograms(t *testing.T) {
 	f := newProgramFixture(t)
 	_, err := f.call(t, t.Context(), "external -- /bin/sleep 30 &")
 	testutil.FailErr(t, "launch owned job", err)
+	_ = f.jobHandle(t)
 	registryHandle := f.registryHandle(t)
 	if stopped := f.Runtime.SetDisabled(true); len(stopped) != 1 {
 		t.Fatalf("disable stopped %v", stopped)
