@@ -62,6 +62,32 @@ func LookPathIn(name, pathValue string) (string, error) {
 	return "", ErrNotInPath
 }
 
+// LookPathAt resolves the final child PATH against its captured native cwd.
+// Empty entries mean cwd; relative entries retain native component traversal.
+func LookPathAt(name, pathValue, cwd string) (string, error) {
+	if name == "" || filepath.Base(name) != name || !filepath.IsAbs(cwd) {
+		return "", ErrNotInPath
+	}
+	for _, nativeDir := range strings.Split(pathValue, string(os.PathListSeparator)) {
+		dir := nativeDir
+		if !filepath.IsAbs(dir) {
+			if dir == "" {
+				dir = cwd
+			} else {
+				dir = cwd + string(filepath.Separator) + dir
+			}
+		}
+		candidate := dir + string(filepath.Separator) + name
+		if _, err := osexec.LookPath(candidate); err == nil {
+			if nativeDir == "" {
+				return name, nil
+			}
+			return nativeDir + string(filepath.Separator) + name, nil
+		}
+	}
+	return "", ErrNotInPath
+}
+
 // LookPath resolves a program the way a child launched now finds it: a name
 // with a path separator is checked as written, and a bare name is searched on
 // EffectivePathValue.

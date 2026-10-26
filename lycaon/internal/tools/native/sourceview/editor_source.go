@@ -2,7 +2,6 @@ package sourceview
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"strings"
 
@@ -11,7 +10,6 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/internal/tools/surveyreceipt"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // The receipt note for text served from an unsaved document.
@@ -37,46 +35,28 @@ func (s Text) SHA256() string {
 	return ""
 }
 
-// ProjectDocuments returns the shared-document view when this invocation
-// reads the project tree itself; a worker on a private branch reads a copy.
-func ProjectDocuments(tctx tools.ToolContext) (tools.EditorDocuments, bool) {
-	if tctx.Source.EditorDocuments == nil || strings.TrimSpace(tctx.Identity.ProjectID) == "" {
-		return nil, false
-	}
-	if tctx.Source.SourceWorkspaceKind != api.SourceWorkspaceKindProject || strings.TrimSpace(tctx.Source.WorkerBranchRoot) != "" {
-		return nil, false
-	}
-	return tctx.Source.EditorDocuments, true
-}
-
 // DocumentsFor narrows ProjectDocuments to one resolved path:
 // granted paths outside the roots have no document.
 func DocumentsFor(tctx tools.ToolContext, resolved projectpaths.Resolved) (tools.EditorDocuments, bool) {
 	if resolved.External || strings.TrimSpace(resolved.Root.ID) == "" {
 		return nil, false
 	}
-	return ProjectDocuments(tctx)
+	return tools.ProjectDocuments(tctx)
 }
 
 // LoadText serves the accepted document when one exists; a failed lookup
 // cannot authorize a filesystem write that would bypass an unknown draft.
 // The document is held to the file's access budget.
 func LoadText(ctx context.Context, tool string, access Access, tctx tools.ToolContext, resolved projectpaths.Resolved) (Text, error) {
-	if documents, ok := DocumentsFor(tctx, resolved); ok {
-		branch, err := tctx.SourceBranch(resolved.Root.ID)
-		if err != nil {
-			return Text{}, err
+	doc, open, err := OpenDocument(ctx, tctx, resolved)
+	if err != nil {
+		return Text{}, err
+	}
+	if open {
+		if size := int64(len(doc.Text)); size > access.MaxBytes() {
+			return Text{}, access.SizeReject(tool, resolved.DisplayPath, size, access.MaxBytes())
 		}
-		doc, open, err := documents.OpenDocument(ctx, tctx.Identity.ProjectID, branch, resolved.Root.ID, resolved.ScopeRel)
-		if err != nil {
-			return Text{}, fmt.Errorf("read collaborative document: %w", err)
-		}
-		if open {
-			if size := int64(len(doc.Text)); size > access.MaxBytes() {
-				return Text{}, access.SizeReject(tool, resolved.DisplayPath, size, access.MaxBytes())
-			}
-			return Text{Content: doc.Text, Editor: &doc}, nil
-		}
+		return Text{Content: doc.Text, Editor: &doc}, nil
 	}
 	disk, err := ReadTextDocument(tool, access, resolved, tctx.Host.MaxToolSpillBytes)
 	if err != nil {
@@ -116,7 +96,7 @@ type DraftOverlay map[string]string
 // DraftsFor loads the project's unsaved documents for one invocation.
 // Empty when the invocation is not reading the project tree.
 func DraftsFor(ctx context.Context, tctx tools.ToolContext) DraftOverlay {
-	documents, ok := ProjectDocuments(tctx)
+	documents, ok := tools.ProjectDocuments(tctx)
 	if !ok {
 		return nil
 	}

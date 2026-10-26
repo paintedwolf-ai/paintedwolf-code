@@ -37,6 +37,9 @@ func (m *Service) nudgeProcessWait(ctx context.Context, sessionID, handle string
 // HandleCommandCompletion records a settled command or verify and wakes a matching wait.
 func (m *Service) HandleCommandCompletion(ctx context.Context, completion bgprocess.Completion) {
 	defer completion.IndexWatch.Release()
+	if completion.ReleaseNotices != nil {
+		defer completion.ReleaseNotices()
+	}
 	if m == nil || strings.TrimSpace(completion.SessionID) == "" {
 		return
 	}
@@ -51,6 +54,11 @@ func (m *Service) HandleCommandCompletion(ctx context.Context, completion bgproc
 		}, completion.FinishedAt)
 	}
 	digest := CommandCompletionDigest(completion)
+	for _, path := range completion.UnsavedDocumentPaths {
+		if note, err := guidance.RenderCatalog(ctx, guidance.SurveyCommandUnsavedDraftRef, map[string]any{"path": path}); err == nil {
+			digest += "\n" + note
+		}
+	}
 	if sess != nil {
 		digest = m.withPostToolGuidance(ctx, sess, completion.OriginTool, digest, guidance.ToolResultFacts{
 			Confine: completion.Observation, IndexWatch: completion.IndexWatch,

@@ -3,13 +3,14 @@ package commandsurface
 import (
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"mvdan.cc/sh/v3/syntax"
 )
 
 // validate counts upstream syntax nodes, including words and redirects, and
 // rejects excluded nodes throughout the unit without evaluating any word.
 func (c *programCompiler) validate(file *syntax.File) {
-	var depth, count int64
+	var depth int64
 	syntax.Walk(file, func(n syntax.Node) bool {
 		if n == nil {
 			depth--
@@ -18,10 +19,9 @@ func (c *programCompiler) validate(file *syntax.File) {
 		if c.err != nil {
 			return false
 		}
-		count++
-		c.nodeCount = count
+		c.nodeCount++
 		c.maximumDepth = max(c.maximumDepth, depth)
-		c.limit(n, "ast_nodes", count)
+		c.limit(n, "ast_nodes", c.nodeCount)
 		c.limit(n, "ast_depth", depth)
 		depth++
 		c.validateNode(n)
@@ -31,7 +31,11 @@ func (c *programCompiler) validate(file *syntax.File) {
 
 func (c *programCompiler) validateNode(n syntax.Node) {
 	switch v := n.(type) {
-	case *syntax.File, *syntax.Block, *syntax.Subshell, *syntax.IfClause, *syntax.WordIter, *syntax.Lit:
+	case *syntax.File, *syntax.Block, *syntax.Subshell, *syntax.IfClause, *syntax.WordIter, *syntax.Lit, *syntax.ArrayExpr, *syntax.ParenArithm, *syntax.UnaryArithm, *syntax.BinaryArithm:
+	case *syntax.ArrayElem:
+		if v.Index != nil {
+			c.unsupported(n, "unindexed array elements")
+		}
 	case *syntax.Word:
 		c.validateTilde(v)
 		if !c.literalContext[v] && !c.testWords[v] && !c.staticProof[v] {
@@ -63,17 +67,34 @@ func (c *programCompiler) validateNode(n syntax.Node) {
 		if v.Select || v.Braces {
 			c.unsupported(n, "for NAME in WORDS; do ...; done")
 		}
+	case *syntax.CaseClause:
+		c.markPatternWord(v.Word)
+		for _, item := range v.Items {
+			if item.Op != syntax.Break {
+				c.unsupported(item, "case items ending with ;;")
+			}
+			for _, pattern := range item.Patterns {
+				c.markPatternWord(pattern)
+			}
+		}
+	case *syntax.CaseItem:
 	case *syntax.FuncDecl:
 		_, block := v.Body.Cmd.(*syntax.Block)
 		if v.RsrvWord || !v.Parens || v.Name == nil || !block || c.nativeName(v.Name.Value) {
 			c.unsupported(n, "NAME() { ...; } with a non-reserved name")
 		}
 	case *syntax.Assign:
-		if v.Append || v.Index != nil || v.Array != nil {
-			c.unsupported(n, "scalar NAME=value assignments")
-		}
 		if v.Name != nil && v.Name.Value == "IFS" {
 			c.unsupported(n, "fixed space/tab/newline splitting")
+		}
+		if v.Name != nil && v.Name.Value == "PIPESTATUS" {
+			c.unsupported(n, "read-only PIPESTATUS")
+		}
+		if v.Index != nil {
+			if subscriptAllSymbol(v.Index) != "" {
+				c.unsupported(n, "numeric array subscript")
+			}
+			c.validateArithmeticExpr(v.Index, false)
 		}
 	case *syntax.Redirect:
 		c.validateRedirect(v)
@@ -89,11 +110,22 @@ func (c *programCompiler) validateNode(n syntax.Node) {
 		if v.TempFile || v.ReplyVar {
 			c.unsupported(n, "$() or bounded backticks")
 		}
+	case *syntax.ProcSubst:
+		if v.Op != syntax.CmdIn && v.Op != syntax.CmdOut {
+			c.unsupported(n, "<(list) or >(list)")
+		}
 	case *syntax.ParamExp:
 		c.validateParameter(v)
+	case *syntax.ArithmExp, *syntax.ArithmCmd:
+		c.validateArithmetic(v)
 	case *syntax.DeclClause:
 		if v.Variant.Value != "export" {
 			c.unsupported(n, "export")
+		}
+		for _, a := range v.Args {
+			if a.Append || a.Index != nil || a.Array != nil {
+				c.unsupported(a, "scalar export assignments")
+			}
 		}
 	case *syntax.TestClause:
 		c.markTestWord(v.X)
@@ -148,18 +180,144 @@ func (c *programCompiler) validateCall(call *syntax.CallExpr) {
 	if len(call.Args) == 0 {
 		return
 	}
+	for _, a := range call.Assigns {
+		if a.Append || a.Index != nil || a.Array != nil {
+			c.unsupported(a, "scalar prefix assignments")
+			return
+		}
+	}
 	name, known := c.literal(call.Args[0])
 	if !known {
 		return
 	}
 	switch name {
-	case "eval", "trap", "set", "shopt", "declare", "typeset", "local", "readonly", "let", "exec", ".":
+	case "set":
+		c.validateSet(call)
+	case "trap":
+		c.validateTrap(call)
+	case "eval", "shopt", "declare", "typeset", "local", "readonly", "let", "exec", ".":
 		c.unsupported(call.Args[0], "version 1 built-ins; source -- PATH for explicit scripts")
 	}
 }
+
+func (c *programCompiler) validateTrap(call *syntax.CallExpr) {
+	const expected = "trap '...' EXIT"
+	args := call.Args[1:]
+	if len(args) > 0 {
+		if first, ok := c.literal(args[0]); ok && first == "--" {
+			args = args[1:]
+		}
+	}
+	if len(args) != 2 {
+		c.unsupported(call.Args[0], expected)
+		return
+	}
+	handler, okHandler := c.literal(args[0])
+	signal, okSignal := c.literal(args[1])
+	if !okHandler || !okSignal || (signal != "EXIT" && signal != "0") {
+		c.unsupported(call.Args[0], expected)
+		return
+	}
+	span := c.span(args[0])
+	if !c.reserveHeap(int64(len(handler))+512, args[0]) {
+		return
+	}
+	if c.trapSpans == nil {
+		c.trapSpans = make(map[*syntax.CallExpr]toolcontract.SourceSpan)
+	}
+	c.trapSpans[call] = span
+	if handler == "" || handler == "-" {
+		return
+	}
+	file, err := syntax.NewParser(syntax.Variant(syntax.LangBash), syntax.WithBudget(syntax.Budget{Pool: c.pool})).Parse(strings.NewReader(handler), "trap")
+	if err != nil {
+		diag := parserDiagnostic(err, len(handler))
+		if sd, ok := diag.(*SyntaxDiagnostic); ok {
+			sd.Span = span
+		}
+		c.err = diag
+		return
+	}
+	prev := c.spanOverride
+	c.spanOverride = &span
+	c.validate(file)
+	c.spanOverride = prev
+	if c.err != nil {
+		return
+	}
+	if c.traps == nil {
+		c.traps = make(map[*syntax.CallExpr]*syntax.File)
+	}
+	c.traps[call] = file
+}
+
+// validateSet admits literal -e, -u, -o errexit, -o nounset, -o pipefail and
+// their + forms (except +o pipefail), combined as in set -euo pipefail.
+func (c *programCompiler) validateSet(call *syntax.CallExpr) {
+	const expected = "set with literal -e, -u or -o errexit/nounset/pipefail options"
+	args := call.Args[1:]
+	if len(args) == 0 {
+		c.unsupported(call.Args[0], expected)
+	}
+	for i := 0; i < len(args); i++ {
+		value, ok := c.literal(args[i])
+		flags, enable := strings.CutPrefix(value, "-")
+		if !enable {
+			flags, _ = strings.CutPrefix(value, "+")
+		}
+		if !ok || flags == "" || flags == value {
+			c.unsupported(call.Args[0], expected)
+			return
+		}
+		for _, flag := range flags {
+			switch flag {
+			case 'e', 'u':
+			case 'o':
+				if i+1 >= len(args) {
+					return
+				}
+				i++
+				name, ok := c.literal(args[i])
+				if !ok || (name != "errexit" && name != "nounset" && (name != "pipefail" || !enable)) {
+					c.unsupported(call.Args[0], expected)
+					return
+				}
+			default:
+				c.unsupported(call.Args[0], expected)
+				return
+			}
+		}
+	}
+}
+
 func (c *programCompiler) validateParameter(p *syntax.ParamExp) {
-	if p.Flags != nil || p.Excl || p.Width || p.IsSet || p.Split != syntax.OptUnset || p.GlobSubst != syntax.OptUnset || p.RcExpand != syntax.OptUnset || p.Param == nil || p.NestedParam != nil || p.Index != nil || len(p.Modifiers) > 0 || p.Slice != nil || p.Repl != nil || p.Names != 0 || p.Exp != nil {
-		c.unsupported(p, "$name, ${name}, ${#name} or supported positional/status parameters")
+	if p.Flags != nil || p.Excl || p.Width || p.IsSet || p.Split != syntax.OptUnset || p.GlobSubst != syntax.OptUnset || p.RcExpand != syntax.OptUnset || p.Param == nil || p.NestedParam != nil || len(p.Modifiers) > 0 || p.Names != 0 || (p.Length && (p.Exp != nil || p.Repl != nil || p.Slice != nil)) {
+		c.unsupported(p, parameterForms)
+		return
+	}
+	if p.Index != nil {
+		if !validIndexedVariable(p.Param.Value) {
+			c.unsupported(p, parameterForms)
+			return
+		}
+		if subscriptAllSymbol(p.Index) == "" {
+			c.validateArithmeticExpr(p.Index, c.arithmeticIndexes[p])
+		}
+	}
+	if p.Slice != nil {
+		if p.Exp != nil || p.Repl != nil {
+			c.unsupported(p, parameterForms)
+			return
+		}
+		c.validateArithmeticExpr(p.Slice.Offset, false)
+		c.validateArithmeticExpr(p.Slice.Length, false)
+	}
+	if p.Exp != nil && !supportedParameterOperators[p.Exp.Op.String()] {
+		c.unsupported(p, parameterForms)
+		return
+	}
+	if p.Exp != nil && !parameterNeedsWord(p.Exp.Op.String()) && p.Exp.Word != nil {
+		c.unsupported(p, "case conversion without a pattern")
 		return
 	}
 	name := p.Param.Value
@@ -167,16 +325,34 @@ func (c *programCompiler) validateParameter(p *syntax.ParamExp) {
 		c.unsupported(p, "invocation variables and supported positional/status parameters")
 	}
 }
+
+func validIndexedVariable(name string) bool {
+	return name == "PIPESTATUS" || validWritableVariable(name)
+}
+
+const parameterForms = "$name, ${name}, ${#name}, ${name:-word}, ${name:+word}, ${name:?word}, ${name#pattern}, ${name%pattern}, ${name/pattern/word}, ${name:offset:length}, ${name^^} or supported array/positional/status parameters"
+
+// supportedParameterOperators have fixed semantics that never assign state.
+var supportedParameterOperators = map[string]bool{
+	"-": true, ":-": true, "+": true, ":+": true, "?": true, ":?": true,
+	"#": true, "##": true, "%": true, "%%": true, "^": true, "^^": true, ",": true, ",,": true,
+}
+
 func (c *programCompiler) validateRedirect(r *syntax.Redirect) {
 	fd := ""
 	if r.N != nil {
 		fd = r.N.Value
 	}
-	if fd != "" && fd != "0" && fd != "1" && fd != "2" {
-		c.unsupported(r, "descriptors 0, 1 and 2")
+	if fd != "" && !validRedirectDescriptor(fd) {
+		c.unsupported(r, "descriptors 0 through 9")
+		return
 	}
 	switch r.Op {
-	case syntax.RdrOut, syntax.AppOut, syntax.RdrAll, syntax.AppAll, syntax.RdrIn:
+	case syntax.RdrOut, syntax.AppOut, syntax.RdrIn:
+	case syntax.RdrAll, syntax.AppAll:
+		if fd != "" {
+			c.unsupported(r, "unnumbered &> or &>>")
+		}
 	case syntax.Hdoc, syntax.DashHdoc:
 		if !c.reserveHeap(512, r) {
 			return
@@ -189,14 +365,18 @@ func (c *programCompiler) validateRedirect(r *syntax.Redirect) {
 		if r.Hdoc != nil && len(r.Hdoc.Parts) > 0 {
 			c.limit(r, "here_document_bytes", int64(r.Hdoc.End().Offset()-r.Hdoc.Pos().Offset()))
 		}
-	case syntax.DplOut:
+	case syntax.DplOut, syntax.DplIn:
 		target, ok := c.literal(r.Word)
-		if !ok || !((fd == "2" && target == "1") || ((fd == "" || fd == "1") && target == "2")) {
-			c.unsupported(r, "2>&1 or 1>&2")
+		if !ok || !validRedirectDescriptor(target) {
+			c.unsupported(r, "descriptor duplication N>&M or N<&M for descriptors 0 through 9")
 		}
 	default:
 		c.unsupported(r, "version 1 redirects and here-documents")
 	}
+}
+
+func validRedirectDescriptor(fd string) bool {
+	return len(fd) == 1 && fd[0] >= '0' && fd[0] <= '9'
 }
 
 func (c *programCompiler) validateTilde(w *syntax.Word) {

@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/heldcall"
 	"github.com/lycaon/lycaon/internal/hostcmd"
+	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 	"os"
@@ -47,11 +48,13 @@ func (f *completionFixture) NudgeProcessRefused(context.Context, string, string,
 
 func TestCommandSettlementRetainsReportAndWakesOnlySubscribedWait(t *testing.T) {
 	f := &completionFixture{waiting: true}
+	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	service := New(f, f, f, f)
 	service.SetLoop(f, f)
 	now := time.Now()
-	service.HandleCommandCompletion(t.Context(), bgprocess.Completion{SessionID: "session", Handle: "handle", OriginTool: "verify", RunID: "run", ToolCallID: "call", ExitCode: 1, FinishedAt: now, Tail: "failed check"})
+	service.HandleCommandCompletion(t.Context(), bgprocess.Completion{SessionID: "session", Handle: "handle", OriginTool: "verify", RunID: "run", ToolCallID: "call", ExitCode: 1, FinishedAt: now, Tail: "failed check", UnsavedDocumentPaths: []string{"source.txt"}})
 	report, ok := service.Report("session", "handle")
+	t.Logf("completion report for manual render inspection:\n%s", report)
 	if !ok || !strings.Contains(report, "failed check") || !strings.Contains(report, "policy guidance") {
 		t.Fatalf("retained report=%q found=%v", report, ok)
 	}

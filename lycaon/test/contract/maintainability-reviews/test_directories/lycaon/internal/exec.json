@@ -1,0 +1,17 @@
+{
+  "category": "test_directories",
+  "artifact": "lycaon/internal/exec",
+  "kind": "test_suite",
+  "workstream": "portable-command-platforms",
+  "disposition": "retain",
+  "reason": "Retain exactly35 immediate test files without growth allowance. Tests separate native preparation/authority handoff, pipeline drains, PTY semantics, owned process groups, engine-death reaping and platform identity rather than creating another execution implementation. Same-package fixtures exercise consumed/removed captures and native guard registration without exposing product bypasses. Native Darwin group/pipeline/PTY and required browser-backed execution passed; Linux privileged baseline fixtures have explicit CI-only setup and remain unqualified until that lane executes them. Moving these tests for a directory count would weaken direct private-lifetime assertions. Any additional member needs another review.",
+  "reviewed_commit": "1a67d321f5407974132123273767f9097a3e1cc9",
+  "ceiling": 35,
+  "boundaries": {
+    "lycaon/internal/exec/prepared_launch_unix_test.go": "baf009ac4f07a8ce1bca5325f914f0a520289ea582f6d32cd4d6ac4615b84089",
+    "lycaon/internal/exec/owned_group_unix_test.go": "a0be3c178f6e19b122e12216e93f3b2a6934cc88931e9bfc15aee0925f78c28c",
+    "lycaon/internal/exec/pipeline_test.go": "a1755106920ac66fbc3e559e6e6eedaf26d97a00d6beb13e18f5fc230be9ec78",
+    "lycaon/internal/exec/pty_test.go": "b449e3f47fbcef83b85a50c31cebe38115e2ee49090d7aa21d51fcf4f2e973e1"
+  },
+  "reviewed_shape": "d03eb82480bfe113a48ee8758fcf0d5a4d8cc40228b49e7cbde3e996574f9e62"
+}

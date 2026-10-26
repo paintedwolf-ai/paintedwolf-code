@@ -47,45 +47,67 @@ func (t *MkdirTool) Run(ctx context.Context, args map[string]any, tctx tools.Too
 		}
 		return "", err
 	}
-	prof := tctx.ProfileID()
-	resp := mkdirResponse{Created: make([]string, 0, len(paths))}
-	defer func() {
-		if runErr != nil && len(resp.Created) > 0 {
-			output, runErr = interruptedMutationBatch(resp, runErr)
+	result, err := t.Mkdir(ctx, MkdirInput{Paths: paths, Mode: mode}, tctx)
+	resp := mkdirResponse{Created: result.Created}
+	if resp.Created == nil {
+		resp.Created = []string{}
+	}
+	if err != nil {
+		if result.Effects > 0 {
+			return interruptedMutationBatch(resp, err)
 		}
-	}()
-	for _, relPath := range paths {
-		if err := ctx.Err(); err != nil {
-			return "", err
-		}
-		relSlash := filepath.ToSlash(relPath)
-		resolved, err := assertMkdirWritePath(ctx, t.Boundary, tctx, relPath, prof)
-		if err != nil {
-			return "", err
-		}
-		fullPath := resolved.Abs
-		info, err := os.Lstat(fullPath)
-		if err == nil {
-			if !info.IsDir() {
-				return "", &toolrejection.ToolReject{
-					Code: "MKDIR_FILE_EXISTS",
-					Data: map[string]any{"path": relSlash},
-				}
-			}
-		} else if !os.IsNotExist(err) {
-			return "", fmt.Errorf("mkdir %s: %w", relPath, err)
-		}
-		if err := mkdirAgentPath(ctx, tctx, resolvedMutationTarget(resolved), mode); err != nil {
-			return "", fmt.Errorf("mkdir %s: %w", relPath, err)
-		}
-		if info == nil {
-			resp.Created = append(resp.Created, relSlash)
-		}
-		afterSuccessfulMutation(ctx, tctx, relSlash)
+		return "", err
 	}
 	raw, err := surveyjson.Marshal(resp)
 	if err != nil {
 		return "", err
 	}
 	return string(raw), nil
+}
+
+// MkdirInput is one complete mkdir operation; missing parents are created.
+type MkdirInput struct {
+	Paths []string
+	Mode  os.FileMode
+}
+
+// MkdirResult retains requested directories and actual creations, including partial errors.
+type MkdirResult struct {
+	Created []string
+	Effects int
+}
+
+// Mkdir creates each directory under scope, review and the source journal.
+// It returns the directories it created, in order, also when a later one fails.
+func (t *MkdirTool) Mkdir(ctx context.Context, in MkdirInput, tctx tools.ToolContext) (MkdirResult, error) {
+	var result MkdirResult
+	prof := tctx.ProfileID()
+	for _, relPath := range in.Paths {
+		if err := ctx.Err(); err != nil {
+			return result, err
+		}
+		relSlash := filepath.ToSlash(relPath)
+		resolved, err := assertMkdirWritePath(ctx, t.Boundary, tctx, relPath, prof)
+		if err != nil {
+			return result, err
+		}
+		info, err := os.Lstat(resolved.Abs)
+		if err == nil {
+			if !info.IsDir() {
+				return result, &toolrejection.ToolReject{Code: "MKDIR_FILE_EXISTS", Data: map[string]any{"path": relSlash}}
+			}
+		} else if !os.IsNotExist(err) {
+			return result, fmt.Errorf("mkdir %s: %w", relPath, err)
+		}
+		count, err := mkdirAgentPath(ctx, tctx, resolvedMutationTarget(resolved), in.Mode)
+		result.Effects += count
+		if err == nil && info == nil && count > 0 {
+			result.Created = append(result.Created, relSlash)
+		}
+		if err != nil {
+			return result, fmt.Errorf("mkdir %s: %w", relPath, err)
+		}
+		afterSuccessfulMutation(ctx, tctx, relSlash)
+	}
+	return result, nil
 }

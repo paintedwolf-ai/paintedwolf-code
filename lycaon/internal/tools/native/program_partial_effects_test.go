@@ -17,6 +17,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/egressclass"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/outboundhttp"
@@ -54,47 +56,11 @@ func TestProgramPartialEffectsSurviveSupervisorLossWithoutReplay(t *testing.T) {
 	testdbseed.InsertSession(t, database, "s1", "p1")
 	recorder := invocation.NewSQLRecorder(database)
 
-	var requests atomic.Int32
-	received := make(chan struct{})
-	release := make(chan struct{})
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if requests.Add(1) == 1 {
-			close(received)
-		}
-		// The request reached the remote side; its response never returns.
-		select {
-		case <-release:
-		case <-r.Context().Done():
-		}
-	}))
-	t.Cleanup(server.Close)
-	t.Cleanup(func() { close(release) })
+	server, requests, received := partialEffectsHTTPServer(t)
 	serverAddr := netip.MustParseAddrPort(server.Listener.Addr().(*net.TCPAddr).String())
 
 	source := "tee new.txt\ncurl " + server.URL + "\nprintf never\n"
-	digest := sha256.Sum256([]byte(source))
-	sourceDigest := hex.EncodeToString(digest[:])
-	spans := map[string]toolcontract.SourceSpan{
-		"write-node":   {StartByte: 0, EndByte: 11, Line: 1, Column: 1},
-		"http-node":    {StartByte: 12, EndByte: 17 + len(server.URL), Line: 2, Column: 1},
-		"untaken-node": {StartByte: 18 + len(server.URL), EndByte: len(source) - 1, Line: 3, Column: 1},
-	}
-	commandContract, ok := toolcontract.Lookup("command")
-	if !ok {
-		t.Fatal("command contract missing")
-	}
-	parentReceipt, err := recorder.Begin(t.Context(), invocation.Start{ProjectID: "p1", SessionID: "s1", ToolCallID: "actual-model-call", ToolName: "command", Args: map[string]any{"script": source}, Contract: commandContract})
-	testutil.FailErr(t, "begin actual model call", err)
-	programID, rootID := uuid.NewString(), uuid.NewString()
-	start := invocation.ProgramStart{
-		Version:       invocation.ProgramVersion{ProgramID: programID, ParentReceiptID: parentReceipt.ID, RootExecutionID: rootID, LanguageVersion: toolcontract.LanguageVersion, CatalogDigest: toolcontract.LanguageCatalogDigest(), SourceUnitID: "submitted", SourceDigest: sourceDigest, SourceReference: "output:exact-program"},
-		PlanReference: "output:validated-plan", SourceExact: true, SyntaxValidated: true,
-		Sources: []invocation.ProgramSource{{UnitID: "submitted", Pin: toolcontract.SourcePin{SourceID: "submitted-program", Revision: sourceDigest, Representation: toolcontract.UTF8SourceBytes, SHA256: sourceDigest, EndByte: int64(len(source))}, DetailReference: "output:exact-program"}},
-	}
-	for _, id := range []string{"write-node", "http-node", "untaken-node"} {
-		start.Nodes = append(start.Nodes, invocation.ProgramNode{ID: id, SourceUnitID: "submitted", Span: spans[id]})
-	}
-	testutil.FailErr(t, "attach validated program", recorder.BeginProgram(t.Context(), start))
+	programID, rootID, parentReceiptID, spans := beginPartialEffectsProgram(t, recorder, source, server.URL)
 
 	tc := nativefixture.Context(dir)
 	tc.Identity.ProjectID, tc.Identity.SessionID, tc.Identity.ToolCallID, tc.Identity.Agent, tc.Identity.UserTurn = "p1", "s1", "actual-model-call", "fixture", 1
@@ -106,28 +72,11 @@ func TestProgramPartialEffectsSurviveSupervisorLossWithoutReplay(t *testing.T) {
 	testutil.FailErr(t, "compile fixture profile", err)
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{ID: "fixture", CommandEffects: classes}})
 	executor := toolexecution.NewExecutor(toolprofiles.NewProfilePolicyEngine(boundary), tools.NewDefaultRegistry(), "fixture")
-	schemas, err := toolschema.LoadSchemaDir(filepath.Join("..", "..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
-	testutil.FailErr(t, "read actual schemas", err)
-	definitionFor := func(name string) toolcontract.OperationDefinition {
-		meta, ok := schemas.ToolMeta(name)
-		if !ok {
-			t.Fatalf("actual %s schema missing", name)
-		}
-		encoded, err := json.Marshal(meta.ArgsSchema)
-		testutil.FailErr(t, "freeze actual schema", err)
-		contract, ok := toolcontract.Lookup(name)
-		if !ok {
-			t.Fatalf("%s contract missing", name)
-		}
-		definition, err := toolcontract.ToolOperation(name, encoded, contract)
-		testutil.FailErr(t, "compile actual declaration", err)
-		return definition
-	}
-	writeDefinition, httpDefinition := definitionFor("write"), definitionFor("http_request")
+	writeDefinition, httpDefinition := partialEffectsDefinitions(t)
 	scope := toolcontract.OperationScope{Kind: toolcontract.ProjectOperationScope, ProjectID: "p1", RootID: "r1"}
 	parent := toolcontract.OperationInvocation{Kind: toolcontract.ProgramChildInvocation, Identity: toolcontract.ExecutionIdentity{ProgramID: programID, NodeID: "submitted", ExecutionID: rootID}, ActorID: "fixture-person", SessionID: "s1", Scope: scope, SourceUnitID: "submitted", Span: toolcontract.SourceSpan{Line: 1, Column: 1}, CatalogDigest: toolcontract.LanguageCatalogDigest()}
-	frameMemory := &programDoorMemory{}
-	frame, err := toolexecution.FreezeProgramFrame(t.Context(), parent, tc, toolexecution.ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"script": source}}, frameMemory)
+	frameMemory := programDoorMemory(t)
+	frame, err := toolexecution.FreezeProgramFrame(t.Context(), parent, tc, toolexecution.ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"command": source}}, frameMemory)
 	testutil.FailErr(t, "capture actual tree", err)
 	t.Cleanup(frame.Close)
 	surface, err := executor.Metadata.FreezeProgramSurface(t.Context(), platform.ToolFilter{ProfileID: "fixture"}, []toolcontract.OperationDefinition{writeDefinition, httpDefinition})
@@ -135,8 +84,8 @@ func TestProgramPartialEffectsSurviveSupervisorLossWithoutReplay(t *testing.T) {
 	owner := progress.NewMemoryStore()
 	testutil.FailErr(t, "set actual progress owner", owner.Set("s1", "- [ ] Create fixture"))
 	retention := &retainedReviewInputs{}
-	observer := invocation.ProgramAdmissionRecorder{Recorder: recorder, Inputs: retention}
-	memory := &programDoorMemory{}
+	observer := &invocation.ProgramAdmissionRecorder{Recorder: recorder, Inputs: retention}
+	memory := programDoorMemory(t)
 
 	prepare := func(definition toolcontract.OperationDefinition, node, command, canonical string, args map[string]any) toolcontract.BoundOperation {
 		child := parent
@@ -145,7 +94,7 @@ func TestProgramPartialEffectsSurviveSupervisorLossWithoutReplay(t *testing.T) {
 		expanded, releaseExpanded, err := toolcontract.NewReviewedOperationInputs(t.Context(), memory, args)
 		testutil.FailErr(t, "freeze expanded arguments", err)
 		defer releaseExpanded()
-		testutil.FailErr(t, "prepare dynamic child", recorder.PrepareChild(t.Context(), invocation.ChildStart{ParentReceiptID: parentReceipt.ID, Invocation: child, Definition: definition, ArgumentsReference: "output:expanded-" + node, ExpandedInputs: expanded, Canonical: canonical}))
+		testutil.FailErr(t, "prepare dynamic child", recorder.PrepareChild(t.Context(), toolcontract.ProgramChildStart{ParentReceiptID: parentReceiptID, Invocation: child, Definition: definition, ArgumentsReference: "output:expanded-" + node, ExpandedInputs: expanded, Canonical: canonical}))
 		var mode string
 		for _, c := range definition.Facts().Commands {
 			if c.Name == command {
@@ -159,42 +108,18 @@ func TestProgramPartialEffectsSurviveSupervisorLossWithoutReplay(t *testing.T) {
 
 	writeArgs := map[string]any{"path": "new.txt", "content": "created before the loss\n"}
 	write := prepare(writeDefinition, "write-node", "tee", "tee new.txt", writeArgs)
-	var journal string
-	writeEffect := toolexecution.NativeEffect{Operation: write, Stage: toolcontract.ExecutionStage{OperationID: "write", ExecutionID: write.Invocation().Identity.ExecutionID, Argv: []string{"tee", "new.txt"}}, Arguments: writeArgs}
-	writeEffect.PrepareReviewed = func(ctx context.Context, args map[string]any, actual tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
-		paths, err := projectpaths.NewProgramPaths(ctx, boundary, actual, "")
-		if err != nil {
-			return toolexecution.PreparedNativeEffect{}, err
-		}
-		operand, err := paths.Bind(ctx, args["path"].(string), true)
-		if err != nil {
-			return toolexecution.PreparedNativeEffect{}, err
-		}
-		content := []byte(args["content"].(string))
-		return toolexecution.PreparedNativeEffect{Operation: write, InvokeOwner: func(ctx context.Context, actual tools.ToolContext) (toolcontract.ProducerResult, error) {
-			target, err := operand.MutationTarget()
-			if err != nil {
-				return toolcontract.ProducerResult{}, err
-			}
-			if err = applyAgentFile(ctx, actual, resolvedMutationTarget(target), content, nil, ""); err != nil {
-				return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.EffectUnknown}, err
-			}
-			if err = ledger.LedgerDB().QueryRowContext(ctx, `SELECT id FROM source_effects WHERE project_id='p1' AND path='new.txt'`).Scan(&journal); err != nil {
-				return toolcontract.ProducerResult{}, err
-			}
-			return toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.EffectCompleted, Evidence: toolcontract.OperationEvidence{Owner: "filesystem", Kind: "journal", OwnerRef: journal, RecoveryRef: journal}}, nil
-		}}, nil
-	}
+	writeEffect := partialEffectsWriteEffect(boundary, database, write, writeArgs)
 	written, err := executor.InvokeNative(t.Context(), frame, surface, memory, programDoorProgress{owner}, observer, writeEffect, tc)
 	testutil.FailErr(t, "invoke actual mutation door", err)
-	testutil.FailErr(t, "settle completed write", recorder.SettleChild(t.Context(), write.Invocation().Identity.ExecutionID, invocation.ChildSettlement{Result: written.Producer, OwnerInvoked: written.OwnerInvoked, OutputPublishable: written.OutputPublishable, DetailReference: "output:write-result", PublishedRevision: journal}))
+	journal := written.Producer.Evidence.RecoveryRef
+	testutil.FailErr(t, "settle completed write", recorder.SettleChild(t.Context(), write.Invocation().Identity.ExecutionID, toolcontract.ProgramChildSettlement{Result: written.Producer, OwnerInvoked: written.OwnerInvoked, OutputPublishable: written.OutputPublishable, DetailReference: "output:write-result", PublishedRevision: journal}))
 
 	httpArgs := map[string]any{"url": server.URL, "method": "POST"}
 	attempt := prepare(httpDefinition, "http-node", "curl", "curl "+server.URL, httpArgs)
 	httpEffect := toolexecution.NativeEffect{Operation: attempt, Stage: toolcontract.ExecutionStage{OperationID: "http_request", ExecutionID: attempt.Invocation().Identity.ExecutionID, Argv: []string{"curl", server.URL}}, Arguments: httpArgs}
 	httpEffect.PrepareReviewed = func(_ context.Context, args map[string]any, _ tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
 		target := args["url"].(string)
-		return toolexecution.PreparedNativeEffect{Operation: attempt, InvokeOwner: func(ctx context.Context, _ tools.ToolContext) (toolcontract.ProducerResult, error) {
+		return toolexecution.PreparedNativeEffect{Operation: attempt, InvokeOwner: func(ctx context.Context, _ tools.ToolContext, _ commandprogram.Streams) (toolcontract.ProducerResult, error) {
 			_, err := outboundhttp.Do(ctx, outboundhttp.Request{Class: egressclass.AgentHTTPRequest, Method: "POST", URL: target, Body: []byte("once"), Timeout: time.Minute,
 				AllowAddress: func(addr netip.Addr, port uint16) bool { return addr == serverAddr.Addr() && port == serverAddr.Port() }})
 			// A request that left the host has an unknown remote outcome.
@@ -233,7 +158,7 @@ func TestProgramPartialEffectsSurviveSupervisorLossWithoutReplay(t *testing.T) {
 	if late.err == nil || !late.result.OwnerInvoked || late.result.Producer.EffectCertainty != toolcontract.EffectUnknown {
 		t.Fatalf("lost attempt claimed a known outcome: %+v %v", late.result, late.err)
 	}
-	if err := recorder.SettleChild(t.Context(), attempt.Invocation().Identity.ExecutionID, invocation.ChildSettlement{Result: late.result.Producer, OwnerInvoked: true, DetailReference: "output:late-result"}); err == nil {
+	if err := recorder.SettleChild(t.Context(), attempt.Invocation().Identity.ExecutionID, toolcontract.ProgramChildSettlement{Result: late.result.Producer, OwnerInvoked: true, DetailReference: "output:late-result"}); err == nil {
 		t.Fatal("late owner result rewrote reconciled host-loss facts")
 	}
 	if again, err := recorder.InterruptPrograms(t.Context(), "s1", "output:second-recovery"); err != nil || again != 0 {
@@ -268,7 +193,109 @@ func TestProgramPartialEffectsSurviveSupervisorLossWithoutReplay(t *testing.T) {
 	if path != "new.txt" || op != "create" || string(data) != "created before the loss\n" || ledgerRows(t, ledger) != 1 {
 		t.Fatalf("journal %s %s does not match landed %q", path, op, data)
 	}
-	if requests.Load() != 1 || retention.calls != 2 || memory.held != 0 {
-		t.Fatalf("replayed or leaked: requests=%d retained=%d held=%d", requests.Load(), retention.calls, memory.held)
+	if requests.Load() != 1 || retention.calls != 2 || memory.InUse().State != 0 {
+		t.Fatalf("replayed or leaked: requests=%d retained=%d held=%d", requests.Load(), retention.calls, memory.InUse().State)
 	}
+}
+
+func beginPartialEffectsProgram(t *testing.T, recorder *invocation.SQLRecorder, source, address string) (programID, rootID, parentReceiptID string, spans map[string]toolcontract.SourceSpan) {
+	t.Helper()
+	digest := sha256.Sum256([]byte(source))
+	sourceDigest := hex.EncodeToString(digest[:])
+	spans = map[string]toolcontract.SourceSpan{
+		"write-node":   {StartByte: 0, EndByte: 11, Line: 1, Column: 1},
+		"http-node":    {StartByte: 12, EndByte: 17 + len(address), Line: 2, Column: 1},
+		"untaken-node": {StartByte: 18 + len(address), EndByte: len(source) - 1, Line: 3, Column: 1},
+	}
+	commandContract, ok := toolcontract.Lookup("command")
+	if !ok {
+		t.Fatal("command contract missing")
+	}
+	parentReceipt, err := recorder.Begin(t.Context(), invocation.Start{ProjectID: "p1", SessionID: "s1", ToolCallID: "actual-model-call", ToolName: "command", Args: map[string]any{"command": source}, Contract: commandContract})
+	testutil.FailErr(t, "begin actual model call", err)
+	parentReceiptID = parentReceipt.ID
+	programID, rootID = uuid.NewString(), uuid.NewString()
+	start := toolcontract.ProgramStart{
+		Version:       toolcontract.ProgramVersion{ProgramID: programID, ParentReceiptID: parentReceiptID, RootExecutionID: rootID, LanguageVersion: toolcontract.LanguageVersion, CatalogDigest: toolcontract.LanguageCatalogDigest(), SourceUnitID: "submitted", SourceDigest: sourceDigest, SourceReference: "output:exact-program"},
+		PlanReference: "output:validated-plan", SourceExact: true, SyntaxValidated: true,
+		Sources: []toolcontract.ProgramSource{{UnitID: "submitted", Pin: toolcontract.SourcePin{SourceID: "submitted-program", Revision: sourceDigest, Representation: toolcontract.UTF8SourceBytes, SHA256: sourceDigest, EndByte: int64(len(source))}, DetailReference: "output:exact-program"}},
+	}
+	for _, id := range []string{"write-node", "http-node", "untaken-node"} {
+		start.Nodes = append(start.Nodes, toolcontract.ProgramNode{ID: id, SourceUnitID: "submitted", Span: spans[id]})
+	}
+	testutil.FailErr(t, "attach validated program", recorder.BeginProgram(t.Context(), start))
+
+	return
+}
+
+func partialEffectsDefinitions(t *testing.T) (toolcontract.OperationDefinition, toolcontract.OperationDefinition) {
+	t.Helper()
+	schemas, err := toolschema.LoadSchemaDir(filepath.Join("..", "..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
+	testutil.FailErr(t, "read actual schemas", err)
+	definitionFor := func(name string) toolcontract.OperationDefinition {
+		meta, ok := schemas.ToolMeta(name)
+		if !ok {
+			t.Fatalf("actual %s schema missing", name)
+		}
+		encoded, err := json.Marshal(meta.ArgsSchema)
+		testutil.FailErr(t, "freeze actual schema", err)
+		contract, ok := toolcontract.Lookup(name)
+		if !ok {
+			t.Fatalf("%s contract missing", name)
+		}
+		definition, err := toolcontract.ToolOperation(name, encoded, contract)
+		testutil.FailErr(t, "compile actual declaration", err)
+		return definition
+	}
+	return definitionFor("write"), definitionFor("http_request")
+}
+
+func partialEffectsHTTPServer(t *testing.T) (*httptest.Server, *atomic.Int32, <-chan struct{}) {
+	t.Helper()
+	requests := &atomic.Int32{}
+	received := make(chan struct{})
+	release := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if requests.Add(1) == 1 {
+			close(received)
+		}
+		// The request reached the remote side; its response never returns.
+		select {
+		case <-release:
+		case <-r.Context().Done():
+		}
+	}))
+	t.Cleanup(server.Close)
+	t.Cleanup(func() { close(release) })
+	return server, requests, received
+}
+
+func partialEffectsWriteEffect(boundary *sandbox.Boundary, database db.Handle, write toolcontract.BoundOperation, arguments map[string]any) toolexecution.NativeEffect {
+	effect := toolexecution.NativeEffect{Operation: write, Stage: toolcontract.ExecutionStage{OperationID: "write", ExecutionID: write.Invocation().Identity.ExecutionID, Argv: []string{"tee", "new.txt"}}, Arguments: arguments}
+	effect.PrepareReviewed = func(ctx context.Context, args map[string]any, actual tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
+		paths, err := projectpaths.NewProgramPaths(ctx, boundary, actual, "")
+		if err != nil {
+			return toolexecution.PreparedNativeEffect{}, err
+		}
+		operand, err := paths.Bind(ctx, args["path"].(string), true)
+		if err != nil {
+			return toolexecution.PreparedNativeEffect{}, err
+		}
+		content := []byte(args["content"].(string))
+		return toolexecution.PreparedNativeEffect{Operation: write, InvokeOwner: func(ctx context.Context, actual tools.ToolContext, _ commandprogram.Streams) (toolcontract.ProducerResult, error) {
+			target, err := operand.MutationTarget()
+			if err != nil {
+				return toolcontract.ProducerResult{}, err
+			}
+			if err = applyAgentFile(ctx, actual, resolvedMutationTarget(target), content, nil, ""); err != nil {
+				return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.EffectUnknown}, err
+			}
+			var journal string
+			if err = database.QueryRowContext(ctx, `SELECT id FROM source_effects WHERE project_id='p1' AND path='new.txt'`).Scan(&journal); err != nil {
+				return toolcontract.ProducerResult{}, err
+			}
+			return toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.EffectCompleted, Evidence: toolcontract.OperationEvidence{Owner: "filesystem", Kind: "journal", OwnerRef: journal, RecoveryRef: journal}}, nil
+		}}, nil
+	}
+	return effect
 }

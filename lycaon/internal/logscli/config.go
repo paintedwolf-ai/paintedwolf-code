@@ -79,7 +79,8 @@ func editConfig(cfg logview.Config) error {
 	if editor == "" {
 		editor = "vi"
 	}
-	cmd, cleanup, err := execpkg.PrepareCommand(context.Background(), editor, []string{path}, execpkg.ExecOpts{
+	ctx := context.Background()
+	cmd, cleanup, err := execpkg.PrepareCommand(ctx, editor, []string{path}, execpkg.ExecOpts{
 		Launch: execpkg.HostLaunch("log_config_editor"),
 	})
 	if err != nil {
@@ -87,5 +88,5 @@ func editConfig(cfg logview.Config) error {
 	}
 	defer cleanup()
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
-	return cmd.Run()
+	return execpkg.RunPrepared(ctx, cmd)
 }

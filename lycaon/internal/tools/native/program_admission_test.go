@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/projectsource"
@@ -21,14 +22,13 @@ import (
 	"github.com/lycaon/lycaon/internal/toolschema"
 )
 
-type programDoorMemory struct{ held int64 }
-
-func (m *programDoorMemory) ReserveProgramState(ctx context.Context, n int64) (func(), error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	m.held += n
-	return func() { m.held -= n }, nil
+func programDoorMemory(t *testing.T) *toolcontract.ProgramMemory {
+	t.Helper()
+	limits, err := toolcontract.CatalogProgramMemoryLimits()
+	testutil.FailErr(t, "catalog memory limits", err)
+	memory, err := toolcontract.NewProgramMemory(limits)
+	testutil.FailErr(t, "program memory", err)
+	return memory
 }
 
 type programDoorProgress struct{ store progress.Store }
@@ -76,7 +76,7 @@ func TestProgramAdmissionPreservesActualFirstCreationAndMissingProgress(t *testi
 	definition, err := toolcontract.ToolOperation("write", encoded, contract)
 	testutil.FailErr(t, "compile actual write declaration", err)
 	parent := toolcontract.OperationInvocation{Kind: toolcontract.ProgramChildInvocation, Identity: toolcontract.ExecutionIdentity{ProgramID: "program", NodeID: "unit", ExecutionID: "parent"}, ActorID: "fixture-person", SessionID: "s1", Scope: toolcontract.OperationScope{Kind: toolcontract.ProjectOperationScope, ProjectID: "p1", RootID: "r1"}, SourceUnitID: "source", Span: toolcontract.SourceSpan{Line: 1, Column: 1}, CatalogDigest: toolcontract.LanguageCatalogDigest()}
-	frame, err := toolexecution.FreezeProgramFrame(t.Context(), parent, tc, toolexecution.ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"script": "fixture"}}, &programDoorMemory{})
+	frame, err := toolexecution.FreezeProgramFrame(t.Context(), parent, tc, toolexecution.ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"script": "fixture"}}, programDoorMemory(t))
 	testutil.FailErr(t, "capture actual tree", err)
 	t.Cleanup(frame.Close)
 	child := parent
@@ -89,7 +89,7 @@ func TestProgramAdmissionPreservesActualFirstCreationAndMissingProgress(t *testi
 	owner := progress.NewMemoryStore()
 	facts := programDoorProgress{owner}
 	marker := &programDoorStart{}
-	memory := &programDoorMemory{}
+	memory := programDoorMemory(t)
 	effect := toolexecution.NativeEffect{Operation: bound, Stage: toolcontract.ExecutionStage{OperationID: "write", ExecutionID: "write-child", Argv: []string{"tee", "new.txt"}}, Arguments: map[string]any{"path": "new.txt", "content": "created through existing owner\n"}}
 	prepared := 0
 	effect.PrepareReviewed = func(ctx context.Context, args map[string]any, actual tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
@@ -103,7 +103,7 @@ func TestProgramAdmissionPreservesActualFirstCreationAndMissingProgress(t *testi
 			return toolexecution.PreparedNativeEffect{}, err
 		}
 		content := []byte(args["content"].(string))
-		return toolexecution.PreparedNativeEffect{Operation: bound, InvokeOwner: func(ctx context.Context, actual tools.ToolContext) (toolcontract.ProducerResult, error) {
+		return toolexecution.PreparedNativeEffect{Operation: bound, InvokeOwner: func(ctx context.Context, actual tools.ToolContext, _ commandprogram.Streams) (toolcontract.ProducerResult, error) {
 			target, err := operand.MutationTarget()
 			if err != nil {
 				return toolcontract.ProducerResult{}, err
@@ -127,7 +127,7 @@ func TestProgramAdmissionPreservesActualFirstCreationAndMissingProgress(t *testi
 	testutil.FailErr(t, "invoke actual admitted mutation door", err)
 	data, err := os.ReadFile(filepath.Join(dir, "new.txt"))
 	testutil.FailErr(t, "read actual effect", err)
-	if !result.OwnerInvoked || !result.OutputPublishable || result.Producer.EffectCertainty != toolcontract.EffectCompleted || string(data) != "created through existing owner\n" || ledgerRows(t, ledger) != 1 || probeRows(t, ledger) != 1 || marker.starts != 1 || memory.held != 0 {
-		t.Fatalf("lost effect, attribution or reservation: %+v held%d", result, memory.held)
+	if !result.OwnerInvoked || !result.OutputPublishable || result.Producer.EffectCertainty != toolcontract.EffectCompleted || string(data) != "created through existing owner\n" || ledgerRows(t, ledger) != 1 || probeRows(t, ledger) != 1 || marker.starts != 1 || memory.InUse().State != 0 {
+		t.Fatalf("lost effect, attribution or reservation: %+v held%d", result, memory.InUse().State)
 	}
 }

@@ -1,0 +1,26 @@
+oar: '1.0'
+id: COMMAND_REVISION_CONFLICT
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles: [tool]
+  facts: [paintedwolf.rejection_code, paintedwolf.path, paintedwolf.unsaved_draft]
+when: paintedwolf.rejection_code == "COMMAND_REVISION_CONFLICT"
+effect: block
+copy:
+  what: '{% if paintedwolf.unsaved_draft %}{{ paintedwolf.path }} has unsaved changes in the editor, so this operation did not write there.{% else %}{{ paintedwolf.path }} changed after the program captured it, so this operation did not publish.{% endif %}'
+  cause: '{% if paintedwolf.unsaved_draft %}The editor has unsaved changes in {{ paintedwolf.path }}; commands must keep those changes safe.{% else %}A person, editor or another process changed the input or output file while this command prepared its change.{% endif %}'
+  why: '{% if paintedwolf.unsaved_draft %}Overwriting {{ paintedwolf.path }} on disk could conflict with its unsaved editor changes.{% else %}Saving now could overwrite a newer change. The command stopped instead of trying again automatically.{% endif %}'
+  fix: '{% if paintedwolf.unsaved_draft %}Leave {{ paintedwolf.path }} unchanged until its draft is saved or discarded.{% else %}Keep the current file and the results of commands that already ran. Read the current file before preparing a new change.{% endif %}'
+  instead: '{% if paintedwolf.unsaved_draft %}Keep the unsaved editor changes{% else %}Keep the newer file; do not run the same write again{% endif %}'
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_revision_pin
+x-paintedwolf-message: command stopped to preserve a file revision or unsaved editor changes
+x-paintedwolf-scenarios:
+  - id: destination-moved
+    vars:
+      tool: command
+      path: config/app.json
+    expect_contains:
+      - 'Code: COMMAND_REVISION_CONFLICT'
+      - config/app.json changed after the program captured it

@@ -23,6 +23,8 @@ type AgentEdit struct {
 	Turn             int
 	ToolCallID       string
 	ToolName         string
+	// Pin admits a program edit only at its captured state, without anchoring.
+	Pin *ExecutionPin `json:",omitempty"`
 }
 
 // An edit held against an externally changed file stays dirty and diverged.
@@ -45,7 +47,7 @@ func (s *Service) OpenText(ctx context.Context, projectID string, branch sourceb
 		return nil, false, err
 	}
 	snapshot, err := s.ResolveSourceSnapshot(ctx, p, projectsource.SourceReadRequest{Path: path, RootID: rootID}, AdmitEditable)
-	if errors.Is(err, projectsource.ErrSourceNotFound) || errors.Is(err, projectsource.ErrSourceBinary) || errors.Is(err, projectsource.ErrSourceWriteTooLarge) {
+	if errors.Is(err, projectsource.ErrSourceNotFound) || errors.Is(err, projectsource.ErrSourceBinary) || errors.Is(err, projectsource.ErrSourceUnsupportedEncoding) || errors.Is(err, projectsource.ErrSourceWriteTooLarge) || errors.Is(err, ErrReadOnly) {
 		return nil, false, nil
 	}
 	if err != nil {
@@ -58,7 +60,7 @@ func (s *Service) OpenText(ctx context.Context, projectID string, branch sourceb
 	return d, true, nil
 }
 
-// DirtyDocuments lists the documents holding unsaved edits for files that exist.
+// DirtyDocuments lists documents holding unsaved edits, including deleted files.
 func (s *Service) DirtyDocuments(ctx context.Context, projectID string, branch sourcebranch.ID) ([]*Document, error) {
 	if s == nil || s.store == nil {
 		return nil, nil
@@ -67,7 +69,7 @@ func (s *Service) DirtyDocuments(ctx context.Context, projectID string, branch s
 	if err != nil {
 		return nil, err
 	}
-	documents, err := s.store.queryDocuments(ctx, `SELECT `+documentColumns+` FROM editor_documents WHERE project_id=? AND dirty=1 AND absent=0 ORDER BY path,id`, p.ID)
+	documents, err := s.store.queryDocuments(ctx, `SELECT `+documentColumns+` FROM editor_documents WHERE project_id=? AND dirty=1 ORDER BY path,id`, p.ID)
 	if err != nil {
 		return nil, err
 	}

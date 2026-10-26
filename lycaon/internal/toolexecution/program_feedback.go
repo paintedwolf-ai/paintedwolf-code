@@ -33,7 +33,7 @@ type PreparedProgramFailure struct {
 	operation     toolcontract.BoundOperation
 	progress      bool
 	identity      tools.InvocationIdentity
-	memory        ProgramStateAdmission
+	memory        *toolcontract.ProgramMemory
 	policy        *toolfeedback.ProgramPolicyBlock
 	release       func()
 	mu            sync.Mutex
@@ -82,7 +82,7 @@ func (p *PreparedProgramFailure) Diagnostic() (toolcontract.NativeValue, error) 
 // PrepareProgramFailure supplements an actual native rejection. External output
 // and ordinary utility failures are never converted into host policy codes.
 // The introducing command entry calls this after the existing owner settles.
-func PrepareProgramFailure(ctx context.Context, ledger ProgramFeedbackLedger, memory ProgramStateAdmission, screen ProgramDiagnosticScreen, tc tools.ToolContext, operation toolcontract.BoundOperation, cause error) (prepared *PreparedProgramFailure, err error) {
+func PrepareProgramFailure(ctx context.Context, frame ProgramFrame, ledger ProgramFeedbackLedger, memory *toolcontract.ProgramMemory, screen ProgramDiagnosticScreen, tc tools.ToolContext, operation toolcontract.BoundOperation, cause error) (prepared *PreparedProgramFailure, err error) {
 	rejected := toolrejection.AsToolReject(cause)
 	if rejected == nil {
 		return nil, nil
@@ -91,12 +91,44 @@ func PrepareProgramFailure(ctx context.Context, ledger ProgramFeedbackLedger, me
 	if ctx == nil || ledger == nil || memory == nil || screen == nil || tc.Identity.ToolCallID == "" || tc.Identity.SessionID != inv.SessionID {
 		return nil, fmt.Errorf("program feedback requires actual parent, ledger, diagnostic screening and memory admission")
 	}
-	if err = inv.Validate(); err != nil {
+	if err := inv.Validate(); err != nil {
 		return nil, err
 	}
-	if err = operation.Definition().ValidateNativeCommands(); err != nil {
+	if err := operation.Definition().ValidateNativeCommands(); err != nil {
 		return nil, err
 	}
+	end, err := frame.beginUse()
+	if err != nil {
+		return nil, err
+	}
+	if memory != frame.lifetime.admission {
+		end()
+		return nil, fmt.Errorf("program feedback admission changed")
+	}
+	if err := validateFeedbackFrame(frame, &PreparedProgramFailure{operation: operation}, tc); err != nil {
+		end()
+		return nil, err
+	}
+	lifetime := frame.lifetime
+	lifetime.feedbackMu.Lock()
+	if lifetime.feedbackTaken {
+		lifetime.feedbackMu.Unlock()
+		end()
+		return nil, fmt.Errorf("program feedback allowance is already borrowed")
+	}
+	lifetime.feedbackTaken = true
+	lifetime.feedbackMu.Unlock()
+	releaseFrame := func() {
+		lifetime.feedbackMu.Lock()
+		lifetime.feedbackTaken = false
+		lifetime.feedbackMu.Unlock()
+		end()
+	}
+	defer func() {
+		if prepared == nil {
+			releaseFrame()
+		}
+	}()
 	// The ledger returns at most two complete and two uncertain details plus one
 	// stopped row. Retained bodies are referenced, never hydrated here.
 	for _, identity := range []string{tc.Identity.ToolCallID, inv.Identity.ProgramID, inv.Identity.NodeID, inv.Identity.ExecutionID, inv.Identity.ParentExecutionID, inv.SourceUnitID} {
@@ -113,6 +145,8 @@ func PrepareProgramFailure(ctx context.Context, ledger ProgramFeedbackLedger, me
 			releaseDiag()
 		}
 	}()
+	// The frame prepaid supplemental facts and render overlap before effects;
+	// SQL still holds its separately measured lease.
 	retained, err := ledger.ReadProgramFeedback(ctx, inv.SessionID, inv.Identity.ProgramID, inv.Identity.ExecutionID, 2, memory)
 	if err != nil {
 		return nil, err
@@ -135,7 +169,7 @@ func PrepareProgramFailure(ctx context.Context, ledger ProgramFeedbackLedger, me
 		return nil, fmt.Errorf("program feedback rejection does not match settled execution")
 	}
 	projection := retained.Projection
-	if err = validateProgramFeedbackBinding(tc, operation, retained.Binding, projection); err != nil {
+	if err := validateProgramFeedbackBinding(tc, operation, retained.Binding, projection); err != nil {
 		return nil, err
 	}
 	facts, err := programOutcomeFacts(projection)
@@ -168,12 +202,12 @@ func PrepareProgramFailure(ctx context.Context, ledger ProgramFeedbackLedger, me
 	if policy != nil && !policy.MatchesOperation(operation) {
 		return nil, fmt.Errorf("program policy copy belongs to another execution")
 	}
-	return &PreparedProgramFailure{policy: policy, Rejection: &clone, diagnostic: diagnostic, operation: operation, identity: tc.Identity, memory: memory, release: func() { retained.Close(); releaseDiag() }}, nil
+	return &PreparedProgramFailure{policy: policy, Rejection: &clone, diagnostic: diagnostic, operation: operation, identity: tc.Identity, memory: memory, release: func() { retained.Close(); releaseDiag(); releaseFrame() }}, nil
 }
 
 // PrepareProgramProgressFailure supplements a progress-envelope refusal from
 // PrepareProgramEnvelope or ApplyProgramProgress after receipt settlement.
-func PrepareProgramProgressFailure(ctx context.Context, ledger ProgramFeedbackLedger, memory ProgramStateAdmission, screen ProgramDiagnosticScreen, frame ProgramFrame, tc tools.ToolContext, cause error) (prepared *PreparedProgramFailure, err error) {
+func PrepareProgramProgressFailure(ctx context.Context, ledger ProgramFeedbackLedger, memory *toolcontract.ProgramMemory, screen ProgramDiagnosticScreen, frame ProgramFrame, tc tools.ToolContext, cause error) (prepared *PreparedProgramFailure, err error) {
 	rejected := toolrejection.AsToolReject(cause)
 	if rejected == nil {
 		return nil, nil
@@ -250,7 +284,7 @@ func PrepareProgramProgressFailure(ctx context.Context, ledger ProgramFeedbackLe
 	return &PreparedProgramFailure{progress: true, policy: policy, Rejection: &clone, diagnostic: diagnostic, identity: tc.Identity, memory: memory, release: func() { retained.Close(); releaseDiag() }}, nil
 }
 
-func prepareFeedbackDiagnostic(ctx context.Context, memory ProgramStateAdmission, screen ProgramDiagnosticScreen, ownerData map[string]any) (toolcontract.NativeValue, map[string]any, func(), error) {
+func prepareFeedbackDiagnostic(ctx context.Context, memory *toolcontract.ProgramMemory, screen ProgramDiagnosticScreen, ownerData map[string]any) (toolcontract.NativeValue, map[string]any, func(), error) {
 	if ownerData == nil {
 		ownerData = map[string]any{}
 	}
@@ -260,6 +294,9 @@ func prepareFeedbackDiagnostic(ctx context.Context, memory ProgramStateAdmission
 	}
 	screened, releaseScreened, err := screen.ProjectOperationDiagnostic(ctx, memory, ownerData)
 	if err != nil {
+		if releaseScreened != nil {
+			releaseScreened()
+		}
 		releaseDiagnostic()
 		return toolcontract.NativeValue{}, nil, nil, err
 	}
@@ -267,18 +304,7 @@ func prepareFeedbackDiagnostic(ctx context.Context, memory ProgramStateAdmission
 		releaseDiagnostic()
 		return toolcontract.NativeValue{}, nil, nil, fmt.Errorf("diagnostic screening returned no retained projection")
 	}
-	release, err := memory.ReserveProgramState(ctx, 128<<10)
-	if err != nil {
-		releaseScreened()
-		releaseDiagnostic()
-		return toolcontract.NativeValue{}, nil, nil, err
-	}
-	if release == nil {
-		releaseScreened()
-		releaseDiagnostic()
-		return toolcontract.NativeValue{}, nil, nil, fmt.Errorf("program feedback admission returned no lease")
-	}
-	return diagnostic, screened, func() { release(); releaseScreened(); releaseDiagnostic() }, nil
+	return diagnostic, screened, func() { releaseScreened(); releaseDiagnostic() }, nil
 }
 
 func validateProgramFeedbackBinding(tc tools.ToolContext, operation toolcontract.BoundOperation, b invocation.ProgramExecutionBinding, p invocation.ProgramProjection) error {

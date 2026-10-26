@@ -48,8 +48,13 @@ type ExecOpts struct {
 	// Stdout streams complete output to a host-owned consumer instead of capture.
 	// Stderr remains bounded diagnostics. The consumer must not block indefinitely.
 	Stdout io.Writer
+	// HostConsumer marks the final stage's stdout as read by a host consumer
+	// that may stop early, so its SIGPIPE death is an expected closure too.
+	HostConsumer bool
 	// ProcessPriority applies ScanProcessPolicy / engine below-normal posture when set.
 	ProcessPriority ProcessPriority
+	// Started observes the launched process before any waiter can reap it.
+	Started func(pid int)
 }
 
 // DefaultVerifyTimeout is the default verify subprocess timeout.

@@ -31,9 +31,9 @@ func testSummarizeTool(t *testing.T, dir string) *SummarizeTool {
 	}
 }
 
-func decodeSummarizeResponse(t *testing.T, raw string) summarizeResponse {
+func decodeSummarizeResponse(t *testing.T, raw string) SummarizeResponse {
 	t.Helper()
-	var resp summarizeResponse
+	var resp SummarizeResponse
 	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
 		t.Fatalf("decode summarize response: %v", err)
 	}

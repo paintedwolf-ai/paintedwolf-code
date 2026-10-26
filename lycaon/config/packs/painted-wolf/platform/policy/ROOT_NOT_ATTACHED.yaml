@@ -1,0 +1,38 @@
+oar: '1.0'
+id: ROOT_NOT_ATTACHED
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.path
+  - paintedwolf.root_label
+  - paintedwolf.root_status
+  - paintedwolf.former_path
+  - paintedwolf.attached_folders
+when: paintedwolf.rejection_code == "ROOT_NOT_ATTACHED"
+effect: block
+copy:
+  what: '{{ paintedwolf.path }} names folder {{ paintedwolf.root_label }}, which was {{ paintedwolf.root_status }}; it was attached at {{ paintedwolf.former_path }}.'
+  cause: The project's folders changed after this path or label was written. The old path and label no longer carry the folder's access.
+  why: A folder that is no longer attached is not treated as an arbitrary host path, so the path is refused rather than reviewed for approval.
+  fix: 'Use a folder attached now: {{ paintedwolf.attached_folders }}. A moved or renamed folder keeps its files under its new path or label.'
+  instead: Address the folder by its current absolute path or @label
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:path
+x-paintedwolf-message: folder no longer attached at this path or label
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    path: '@web/src/main.go'
+    root_label: web
+    root_status: removed
+    former_path: /work/web
+    attached_folders: [api → /work/api]
+    tool: command
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: ROOT_NOT_ATTACHED'
+  - 'api → /work/api'

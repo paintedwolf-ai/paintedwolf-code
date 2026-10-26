@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/anchorcatalog"
+	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/llm/transcript"
@@ -90,7 +91,7 @@ func TestProgramPolicyBlockSettlesBeforeRenderingEarlierEffects(t *testing.T) {
 	tc := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: f.session, ToolCallID: "actual-model-call", Agent: "fixture"}}
 	parent := read.Invocation()
 	parent.Identity.ExecutionID, parent.Identity.ParentExecutionID = f.root, ""
-	memory := &feedbackMemory{}
+	memory := feedbackMemory(t, 64<<20)
 	frame, err := toolexecution.FreezeProgramFrame(t.Context(), parent, tc, toolexecution.ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"command": "${op} arg"}}, memory)
 	testutil.FailErr(t, "capture actual program envelope", err)
 	defer frame.Close()
@@ -122,7 +123,7 @@ func TestProgramPolicyBlockSettlesBeforeRenderingEarlierEffects(t *testing.T) {
 	}
 	testutil.FailErr(t, "settle actual policy-stopped child", f.recorder.SettleChild(t.Context(), read.Invocation().Identity.ExecutionID, invocation.ChildSettlement{Result: result.Producer, DetailReference: "output:policy-stop"}))
 	testutil.FailErr(t, "settle stopped program", f.recorder.SettleProgram(t.Context(), f.program, invocation.ProgramSettlement{State: "rejected", StopCode: code, DetailReference: "output:program-stop"}))
-	prepared, err := toolexecution.PrepareProgramFailure(t.Context(), f.recorder, memory, diagnosticScreen(f), tc, read, cause)
+	prepared, err := toolexecution.PrepareProgramFailure(t.Context(), frame, f.recorder, memory, diagnosticScreen(f), tc, read, cause)
 	testutil.FailErr(t, "prepare settled policy feedback", err)
 	defer prepared.Close()
 	executor.Rejections.SetBlockPlane(&toolfeedback.BlockPlane{Pipeline: oar.NewGuardPipeline(oar.NewRuleSet(nil), nil, nil), Renderer: oar.NewRenderer(nil, nil)})
@@ -131,13 +132,13 @@ func TestProgramPolicyBlockSettlesBeforeRenderingEarlierEffects(t *testing.T) {
 	if !ok || refusal.Code() != code || !strings.Contains(refusal.Body, "Frozen actual policy occurrence") || refusal.Facts.Feedback[0].Details["program_completed_effects"] != 1 || refusal.Facts.Feedback[0].Details["program_replay_available"] != false {
 		t.Fatalf("settled policy lost frozen copy or earlier effects: %v", rendered)
 	}
-	baseline := memory.calls
-	if repeated := executor.Rejections.RenderProgramFailure(t.Context(), frame, tc, prepared); repeated != rendered || memory.calls != baseline {
+	baseline := memory.Reservations()
+	if repeated := executor.Rejections.RenderProgramFailure(t.Context(), frame, tc, prepared); repeated != rendered || memory.Reservations() != baseline {
 		t.Fatal("repeated delivery re-evaluated policy or allocated another frozen result")
 	}
 	prepared.Close()
 	frame.Close()
-	if memory.active != 0 {
+	if memory.InUse().State != 0 {
 		t.Fatal("settled policy feedback leaked captured frame or SQL leases")
 	}
 }
@@ -156,7 +157,7 @@ func TestProgramProgressEnvelopeRefusalFeedbackThroughRealEntry(t *testing.T) {
 	executor.Rejections.SetBlockPlane(stockFeedbackBlockPlane(t))
 	tc := tools.ToolContext{Identity: tools.InvocationIdentity{Agent: "fixture", SessionID: f.session, ToolCallID: "actual-model-call"}}
 	parent := toolcontract.OperationInvocation{Kind: toolcontract.ProgramChildInvocation, Identity: toolcontract.ExecutionIdentity{ProgramID: f.program, NodeID: "cat-node", ExecutionID: f.root}, ActorID: "fixture-person", SessionID: f.session, Scope: toolcontract.OperationScope{Kind: toolcontract.SessionOperationScope}, SourceUnitID: "submitted", Span: f.span, CatalogDigest: toolcontract.LanguageCatalogDigest()}
-	memory := &feedbackMemory{}
+	memory := feedbackMemory(t, 64<<20)
 	frame, err := toolexecution.FreezeProgramFrame(t.Context(), parent, tc, toolexecution.ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"command": "${op} arg"}}, memory)
 	testutil.FailErr(t, "freeze frame", err)
 	defer frame.Close()
@@ -183,7 +184,7 @@ func TestProgramNativeDispatchRealEntryFixtures(t *testing.T) {
 	testutil.FailErr(t, "readonly command effects", err)
 	plane := stockFeedbackBlockPlane(t)
 
-	runNative := func(t *testing.T, f programReceiptFixture, profile string, effects toolcontract.CommandEffects, bound toolcontract.BoundOperation, argv []string, offered []string, ownerFn func(context.Context, tools.ToolContext) (toolcontract.ProducerResult, error)) (toolexecution.NativeInvocationResult, error, *toolexecution.Executor, toolexecution.ProgramFrame, tools.ToolContext, *feedbackMemory) {
+	runNative := func(t *testing.T, f programReceiptFixture, profile string, effects toolcontract.CommandEffects, bound toolcontract.BoundOperation, argv []string, offered []string, ownerFn func(context.Context, tools.ToolContext) (toolcontract.ProducerResult, error)) (toolexecution.NativeInvocationResult, error, *toolexecution.Executor, toolexecution.ProgramFrame, tools.ToolContext, *toolcontract.ProgramMemory) {
 		t.Helper()
 		executor := toolexecution.NewExecutor(&dispatchPolicy{effects: effects}, tools.NewDefaultRegistry(), profile)
 		executor.Rejections.SetBlockPlane(plane)
@@ -192,7 +193,7 @@ func TestProgramNativeDispatchRealEntryFixtures(t *testing.T) {
 		tc := tools.ToolContext{Identity: tools.InvocationIdentity{Agent: profile, SessionID: f.session, ToolCallID: "actual-model-call"}, Turn: tools.InvocationTurn{TurnOfferedToolNames: offered}}
 		parent := bound.Invocation()
 		parent.Identity.ExecutionID, parent.Identity.ParentExecutionID = f.root, ""
-		memory := &feedbackMemory{}
+		memory := feedbackMemory(t, 64<<20)
 		frame, err := toolexecution.FreezeProgramFrame(t.Context(), parent, tc, toolexecution.ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"command": "${op} arg"}}, memory)
 		testutil.FailErr(t, "freeze frame", err)
 		t.Cleanup(frame.Close)
@@ -201,19 +202,21 @@ func TestProgramNativeDispatchRealEntryFixtures(t *testing.T) {
 			Stage:     toolcontract.ExecutionStage{ExecutionID: bound.Invocation().Identity.ExecutionID, OperationID: bound.Definition().Facts().Identity, Argv: argv},
 			Arguments: map[string]any{"path": "input"},
 			PrepareReviewed: func(context.Context, map[string]any, tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
-				return toolexecution.PreparedNativeEffect{Operation: bound, InvokeOwner: ownerFn}, nil
+				return toolexecution.PreparedNativeEffect{Operation: bound, InvokeOwner: func(ctx context.Context, tc tools.ToolContext, _ commandprogram.Streams) (toolcontract.ProducerResult, error) {
+					return ownerFn(ctx, tc)
+				}}, nil
 			},
 		}
 		observer := invocation.ProgramAdmissionRecorder{Recorder: f.recorder, Inputs: &retainedInputsFixture{}}
-		res, invokeErr := executor.InvokeNative(t.Context(), frame, surface, memory, dispatchProgress{content: "- [ ] Active step"}, observer, effect, tc)
+		res, invokeErr := executor.InvokeNative(t.Context(), frame, surface, memory, dispatchProgress{content: "- [ ] Active step"}, &observer, effect, tc)
 		return res, invokeErr, executor, frame, tc, memory
 	}
 
-	assertRenderedFeedback := func(t *testing.T, f programReceiptFixture, bound toolcontract.BoundOperation, res toolexecution.NativeInvocationResult, invokeErr error, executor *toolexecution.Executor, frame toolexecution.ProgramFrame, tc tools.ToolContext, memory *feedbackMemory, state, wantCode string) (*guidance.Refusal, string) {
+	assertRenderedFeedback := func(t *testing.T, f programReceiptFixture, bound toolcontract.BoundOperation, res toolexecution.NativeInvocationResult, invokeErr error, executor *toolexecution.Executor, frame toolexecution.ProgramFrame, tc tools.ToolContext, memory *toolcontract.ProgramMemory, state, wantCode string) (*guidance.Refusal, string) {
 		t.Helper()
 		testutil.FailErr(t, "settle child", f.recorder.SettleChild(t.Context(), bound.Invocation().Identity.ExecutionID, invocation.ChildSettlement{Result: res.Producer, OwnerInvoked: res.OwnerInvoked, DetailReference: "output:child"}))
 		testutil.FailErr(t, "settle program", f.recorder.SettleProgram(t.Context(), f.program, invocation.ProgramSettlement{State: state, StopCode: wantCode, DetailReference: "output:program"}))
-		prepared, err := toolexecution.PrepareProgramFailure(t.Context(), f.recorder, memory, diagnosticScreen(f), tc, bound, invokeErr)
+		prepared, err := toolexecution.PrepareProgramFailure(t.Context(), frame, f.recorder, memory, diagnosticScreen(f), tc, bound, invokeErr)
 		testutil.FailErr(t, "prepare program failure", err)
 		t.Cleanup(prepared.Close)
 		rendered := executor.Rejections.RenderProgramFailure(t.Context(), frame, tc, prepared)
@@ -245,7 +248,7 @@ func TestProgramNativeDispatchRealEntryFixtures(t *testing.T) {
 		t.Fatalf("readonly refusal lost replayability: %s", proj1)
 	}
 
-	// 2. Scope denial (MOVE_PATH_DENIED), 3. Stale destination (TEXT_WRITE_CONFLICT), 4. Deferred domain tool (USE_WRITE_NATIVE with tool_loadable=true).
+	// 2. Scope denial (MOVE_PATH_DENIED), 3. Stale destination (TEXT_WRITE_CONFLICT), 4. Deferred domain tool (TOOL_NOT_OFFERED with tool_loadable=true).
 	cases := []struct {
 		op, cmd, code string
 		offered       []string
@@ -253,7 +256,7 @@ func TestProgramNativeDispatchRealEntryFixtures(t *testing.T) {
 	}{
 		{op: "move", cmd: "mv", code: "MOVE_PATH_DENIED", reject: &toolrejection.ToolReject{Code: "MOVE_PATH_DENIED", Data: map[string]any{"path": "../outside", "reason": "outside project root", "scope": "project root"}}},
 		{op: "write", cmd: "tee", code: "TEXT_WRITE_CONFLICT", reject: &toolrejection.ToolReject{Code: "TEXT_WRITE_CONFLICT", Data: map[string]any{"path": "input", "text_base_changed": true}}},
-		{op: "write", cmd: "tee", code: "USE_WRITE_NATIVE", offered: []string{"command", "request_tools"}, reject: &toolrejection.ToolReject{Code: "USE_WRITE_NATIVE", Data: map[string]any{"tool": "command", "command": "tee input", "path": "input", "tool_loadable": true, "native_replacement_tools": []string{"write"}}}},
+		{op: "write", cmd: "tee", code: "TOOL_NOT_OFFERED", offered: []string{"command", "request_tools"}, reject: &toolrejection.ToolReject{Code: "TOOL_NOT_OFFERED", Data: map[string]any{"tool": "write", "tool_loadable": true}}},
 	}
 	for _, tcCase := range cases {
 		fc := newProgramReceiptFixture(t)
@@ -262,7 +265,7 @@ func TestProgramNativeDispatchRealEntryFixtures(t *testing.T) {
 			return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerRefused, StopCode: tcCase.code, EffectCertainty: toolcontract.NoEffect}, tcCase.reject
 		})
 		refusal, proj := assertRenderedFeedback(t, fc, child, res, invokeErr, ex, fr, tc, mem, "rejected", tcCase.code)
-		if tcCase.code == "USE_WRITE_NATIVE" && (!strings.Contains(refusal.Body, "request_tools") || !strings.Contains(proj, `"tool_loadable":true`)) {
+		if tcCase.code == "TOOL_NOT_OFFERED" && (!strings.Contains(refusal.Body, "request_tools") || !strings.Contains(proj, `"tool_loadable":true`)) {
 			t.Fatalf("deferred domain tool lost request_tools recovery: body=%q proj=%s", refusal.Body, proj)
 		}
 	}
@@ -287,10 +290,10 @@ func TestProgramNativeDispatchRealEntryFixtures(t *testing.T) {
 	}
 	f6 := newProgramReceiptFixture(t)
 	g6 := f6.childFor(t, "grep")
-	_, err6, _, _, tc6, mem6 := runNative(t, f6, "fixture", g6.Effects(), g6, []string{"grep", "input"}, nil, func(context.Context, tools.ToolContext) (toolcontract.ProducerResult, error) {
+	_, err6, _, fr6, tc6, mem6 := runNative(t, f6, "fixture", g6.Effects(), g6, []string{"grep", "input"}, nil, func(context.Context, tools.ToolContext) (toolcontract.ProducerResult, error) {
 		return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, errors.New("stderr: Code: COMMAND_EFFECT_NOT_ALLOWED")
 	})
-	if prep6, prepErr := toolexecution.PrepareProgramFailure(t.Context(), f6.recorder, mem6, diagnosticScreen(f6), tc6, g6, err6); prep6 != nil || prepErr != nil {
+	if prep6, prepErr := toolexecution.PrepareProgramFailure(t.Context(), fr6, f6.recorder, mem6, diagnosticScreen(f6), tc6, g6, err6); prep6 != nil || prepErr != nil {
 		t.Fatalf("misleading stderr fabricated native program failure: %+v %v", prep6, prepErr)
 	}
 }

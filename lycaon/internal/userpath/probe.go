@@ -57,7 +57,7 @@ func (p *Provider) probeShell(ctx context.Context) (string, error) {
 	cmd.Stderr = nil
 
 	// ErrWaitDelay preserves the successful shell's captured output.
-	if err := p.run(cmd); err != nil && !errors.Is(err, osexec.ErrWaitDelay) {
+	if err := p.run(ctx, cmd); err != nil && !errors.Is(err, osexec.ErrWaitDelay) {
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			return "", fmt.Errorf("login shell did not answer within %s", probe.Timeout)
 		}
@@ -196,4 +196,4 @@ func defaultStat(path string) (fs.FileInfo, error) { return os.Stat(path) }
 
 // defaultRun kills the shell and any profile helpers as one group on timeout,
 // after answering, or with the engine; interactive shells ignore SIGTERM.
-func defaultRun(cmd *osexec.Cmd) error { return execpkg.RunInOwnGroup(cmd) }
+func defaultRun(ctx context.Context, cmd *osexec.Cmd) error { return execpkg.RunInOwnGroup(ctx, cmd) }

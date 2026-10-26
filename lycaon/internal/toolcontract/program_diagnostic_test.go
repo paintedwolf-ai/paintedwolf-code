@@ -13,16 +13,16 @@ func optionDiagnostic(source, word string) ProgramDiagnostic {
 }
 
 func TestProgramDiagnosticFeedbackCarriesSpanAndCatalogHelp(t *testing.T) {
-	d := optionDiagnostic("grep --colour x", "--colour")
+	d := optionDiagnostic("grep --sparkle x", "--sparkle")
 	facts, err := d.Feedback()
 	if err != nil {
 		t.Fatal(err)
 	}
 	options, _ := facts["supported_options"].([]string)
-	if facts["diagnostic_stage"] != "option" || facts["command"] != "grep" || facts["diagnostic_word"] != "--colour" || facts["source_start_byte"] != 5 || facts["source_end_byte"] != 13 || facts["diagnostic_pre_evaluation"] != false {
+	if facts["diagnostic_stage"] != "option" || facts["command"] != "grep" || facts["diagnostic_word"] != "--sparkle" || facts["source_start_byte"] != 5 || facts["source_end_byte"] != 14 || facts["diagnostic_pre_evaluation"] != false {
 		t.Fatalf("option feedback = %+v", facts)
 	}
-	if !strings.HasPrefix(facts["expected_form"].(string), "grep [OPTIONS]") || !slices.Contains(options, "--recursive") || slices.Contains(options, "--colour") {
+	if !strings.HasPrefix(facts["expected_form"].(string), "grep [OPTIONS]") || !slices.Contains(options, "--recursive") || slices.Contains(options, "--sparkle") {
 		t.Fatalf("catalog help = %v %v", facts["expected_form"], options)
 	}
 	syntax := ProgramDiagnostic{Stage: SyntaxDiagnosticStage, Code: "COMMAND_SYNTAX_INVALID", Expected: "closing quote", SourceUnitID: "submitted", Span: SourceSpan{StartByte: 4, EndByte: 9, Line: 1, Column: 5}, Limit: "source_bytes", Unit: "bytes", Maximum: 8, Observed: 9}
@@ -50,8 +50,8 @@ func TestProgramRepairOffersOnlyProvenUniqueOptionCorrections(t *testing.T) {
 	accept := func([]byte) error { return nil }
 	for _, tc := range []struct {
 		name, source, word, text string
-		validate               func([]byte) error
-		offered                bool
+		validate                 func([]byte) error
+		offered                  bool
 	}{
 		{"unique abbreviation", "grep --recur x .", "--recur", "--recursive", accept, true},
 		{"value keeps its bytes", "grep --max=3 x", "--max=3", "--max-count=3", accept, true},
