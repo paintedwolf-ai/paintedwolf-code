@@ -48,6 +48,32 @@ def parse_platforms(raw: bytes) -> dict[str, dict]:
     return result
 
 
+def validate_release_catalog(raw: bytes) -> dict[str, dict]:
+    """Validate shipping inputs while keeping package publication separate from updates."""
+    platforms = parse_platforms(raw)
+    fields = {'artifact_arch', 'goarch', 'goos', 'package_extensions', 'publication',
+              'runner', 'updater_extension', 'updater_key'}
+    linux = {'linux-aarch64', 'linux-x86_64'}
+    for key, row in platforms.items():
+        if (set(row) != fields or not isinstance(row['runner'], str) or not row['runner']
+                or row['artifact_arch'] not in {'aarch64', 'x86_64'}
+                or row['goos'] not in {'darwin', 'linux', 'windows'}
+                or row['goarch'] not in {'arm64', 'amd64'}):
+            raise ValueError('release platform execution fields are invalid')
+        if row['goos'] == 'linux':
+            if row['package_extensions'] != ['deb', 'rpm', 'pkg.tar.zst'] or row['updater_extension'] is not None:
+                raise ValueError('native Linux requires every package form and no automatic updater')
+        elif row['publication'] == 'public' and row['updater_extension'] is None:
+            raise ValueError('public non-Linux platform requires its automatic updater')
+    if ({key for key, row in platforms.items() if row['goos'] == 'linux'} != linux
+            or {key for key, row in platforms.items() if row['goos'] == 'windows'} != {'windows-x86_64'}):
+        raise ValueError('release platform architecture set differs')
+    public = {key for key, row in platforms.items() if row['publication'] == 'public'}
+    if public not in ({'darwin-aarch64'}, {'darwin-aarch64', *linux}):
+        raise ValueError('release must retain macOS and publish both Linux architectures together')
+    return platforms
+
+
 def public_updaters(platforms: dict[str, dict]) -> dict[str, dict]:
     return {key: row for key, row in platforms.items()
             if row["publication"] == "public" and row["updater_extension"] is not None}
