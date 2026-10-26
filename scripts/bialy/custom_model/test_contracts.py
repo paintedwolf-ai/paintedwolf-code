@@ -35,11 +35,11 @@ class Contracts(unittest.TestCase):
         self.db.executescript("""
         CREATE TABLE model_outputs(id,session_id,message_id,scripted,settled_at,turn_attempt_id);
         INSERT INTO model_outputs VALUES('output','session','message',0,'2026-10-22T10:00:00.123456789Z','attempt');
-        CREATE TABLE invocation_receipts(id,session_id,assistant_message_id,tool_call_id,tool_name,status,invoked,settled_at,args_digest,started_at);
+        CREATE TABLE invocation_receipts(id,session_id,assistant_message_id,tool_call_id,tool_name,status,invoked,settled_at,args_digest,started_at,source_verdict);
         """)
         self.args = {"path": "file.txt"}
-        self.db.execute("INSERT INTO invocation_receipts VALUES(?,?,?,?,?,?,?,?,?,?)",
-                        ('receipt', 'session', 'message', 'call', 'read', 'completed', 1, 'now', digest(self.args), '2'))
+        self.db.execute("INSERT INTO invocation_receipts VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                        ('receipt', 'session', 'message', 'call', 'read', 'completed', 1, 'now', digest(self.args), '2', 'passed'))
         student = {"model": "student-e4b", "reasoning_effort": "none", "stream": True, "tools": TOOLS, "messages": [
             {"role": "system", "content": "Be precise"},
             {"role": "user", "content": "Read file"},
@@ -182,8 +182,8 @@ class Contracts(unittest.TestCase):
     def test_whole_program_replay_after_partial_effects_is_excluded(self):
         self.command_call("command-v1")
         self.children("receipt", "completed")
-        self.db.execute("INSERT INTO invocation_receipts VALUES(?,?,?,?,?,?,?,?,?,?)",
-                        ('earlier', 'session', 'message', 'call0', 'command', 'error', 1, 'then', digest(self.args), '1'))
+        self.db.execute("INSERT INTO invocation_receipts VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                        ('earlier', 'session', 'message', 'call0', 'command', 'error', 1, 'then', digest(self.args), '1', 'failed'))
         self.children("earlier", "completed", "attempted")
         with self.assertRaisesRegex(ValueError, "whole-program replay"):
             self.row()
@@ -191,6 +191,14 @@ class Contracts(unittest.TestCase):
     def test_legacy_surface_admits_command_receipts_without_child_facts(self):
         self.command_call("legacy")
         self.assertEqual(self.row()["validation"]["invocation_receipt_ids"], ["receipt"])
+
+    def test_legacy_command_requires_a_passed_terminal_verdict(self):
+        self.command_call('legacy')
+        for verdict in (None, '', 'failed', 'unverifiable'):
+            with self.subTest(verdict=verdict):
+                self.db.execute('UPDATE invocation_receipts SET source_verdict=?', (verdict,))
+                with self.assertRaisesRegex(ValueError, 'successful terminal verdict'):
+                    self.row()
 
     def test_masks_prompt_and_preserves_tool_arguments(self):
         row = self.row()

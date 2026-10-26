@@ -121,6 +121,9 @@ def accepted_row(record, db, identity, catalog_sha256, commits):
         receipt_ids.append(receipt["id"])
         if identity["tool_surface"] == "command-v1":
             receipt_ids.extend(admit_program(db, receipt, digest_))
+        elif receipt['tool_name'] == 'command' and (
+                'source_verdict' not in receipt.keys() or receipt['source_verdict'] != 'passed'):
+            raise ValueError('command receipt lacks a successful terminal verdict')
     if not target["tool_calls"]:
         committed = commits.get((record["session_id"], record["message_id"]))
         if committed is None:
