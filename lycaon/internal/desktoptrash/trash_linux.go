@@ -175,11 +175,11 @@ func privateTrashDirectory(path string) error {
 	if uid < 0 || uid > math.MaxUint32 {
 		return fmt.Errorf("unsafe trash directory: %s", path)
 	}
-	mkdirErr := os.Mkdir(path, 0700)
+	mkdirErr := os.Mkdir(path, 0700) // #nosec G703 -- path is the selected home or mount Trash directory, created private.
 	if mkdirErr != nil && !os.IsExist(mkdirErr) {
 		return mkdirErr
 	}
-	info, err := os.Lstat(path)
+	info, err := os.Lstat(path) // #nosec G703 -- Check ownership and mode of that exact directory without following its final link.
 	if err != nil {
 		return err
 	}
@@ -188,7 +188,7 @@ func privateTrashDirectory(path string) error {
 		return fmt.Errorf("unsafe trash directory: %s", path)
 	}
 	if mkdirErr == nil {
-		parent, err := os.Open(filepath.Dir(path))
+		parent, err := os.Open(filepath.Dir(path)) // #nosec G703 -- Sync the parent of the private directory just created.
 		if err != nil {
 			return err
 		}
