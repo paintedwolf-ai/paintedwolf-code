@@ -67,54 +67,93 @@ def follow(app, expected, deadline):
 
 
 def capture_target(api, shell_process, delivery, geometry, deadline, expected=None):
-    desktop = api.Registry.getDesktop(0)
-    count = desktop.childCount
-    if type(count) is not int or not 0 <= count <= 256:
-        raise ValueError('notification accessible application count exceeds its bound')
-    apps = [desktop[index] for index in range(count) if desktop[index].get_process_id() == shell_process['pid']]
-    if desktop.childCount != count or len(apps) != 1:
-        raise CaseUnavailable('captured-shell-accessible-application-is-missing-or-ambiguous')
-    app, matches = apps[0], []
-    nodes = [follow(app, expected['ancestry'], deadline)] if expected is not None else accessibility.descendants(app, deadline)
-    for node in nodes:
-        if node.getRole() != api.ROLE_NOTIFICATION:
-            continue
-        state = node.getState()
-        if state.contains(api.STATE_DEFUNCT) or not state.contains(api.STATE_SHOWING):
-            continue
-        candidates = {key: [] for key in ('title_sha256', 'body_sha256')}
-        for label in accessibility.descendants(node, deadline):
-            if label.getRole() != api.ROLE_LABEL:
+    facts = {'phase': 'application-inventory', 'mode': 'discovery' if expected is None else 'pinned-target',
+        'application_count': None, 'application_inventory_complete': False, 'shell_application_matches': 0,
+        'notification_inventory_complete': False, 'notification_count': 0, 'defunct_count': 0,
+        'not_showing_count': 0, 'match_count': 0, 'candidates': [], 'clipped': False, 'target_verified': False}
+    try:
+        desktop = api.Registry.getDesktop(0)
+        count = desktop.childCount
+        facts['application_count'] = count if type(count) is int and 0 <= count <= 256 else None
+        if type(count) is not int or not 0 <= count <= 256:
+            raise ValueError('notification accessible application count exceeds its bound')
+        apps = [desktop[index] for index in range(count) if desktop[index].get_process_id() == shell_process['pid']]
+        facts.update(application_inventory_complete=desktop.childCount == count, shell_application_matches=len(apps))
+        if not facts['application_inventory_complete'] or len(apps) != 1:
+            raise CaseUnavailable('captured-shell-accessible-application-is-missing-or-ambiguous')
+        app, matches = apps[0], []
+        facts['phase'] = 'notification-inventory'
+        nodes = [follow(app, expected['ancestry'], deadline)] if expected is not None else accessibility.descendants(app, deadline)
+        for node in nodes:
+            if node.getRole() != api.ROLE_NOTIFICATION:
                 continue
-            digest = hashlib.sha256(label.name.encode()).hexdigest()
+            facts['notification_count'] += 1
+            state = node.getState()
+            defunct, showing = bool(state.contains(api.STATE_DEFUNCT)), bool(state.contains(api.STATE_SHOWING))
+            if defunct or not showing:
+                facts['defunct_count'] += int(defunct)
+                facts['not_showing_count'] += int(not showing)
+                continue
+            candidate = {'role': int(api.ROLE_NOTIFICATION), 'labels_complete': False, 'label_count': 0,
+                'title_matches': 0, 'body_matches': 0, 'ancestry_verified': False,
+                'label_ancestry_verified': False, 'showing': showing, 'defunct': defunct,
+                'visible': bool(state.contains(api.STATE_VISIBLE)), 'enabled': bool(state.contains(api.STATE_ENABLED)),
+                'sensitive': bool(state.contains(api.STATE_SENSITIVE))}
+            if len(facts['candidates']) < 16:
+                facts['candidates'].append(candidate)
+            else:
+                facts['clipped'] = True
+            facts['phase'] = 'notification-labels'
+            candidates = {key: [] for key in ('title_sha256', 'body_sha256')}
+            for label in accessibility.descendants(node, deadline):
+                if label.getRole() != api.ROLE_LABEL:
+                    continue
+                candidate['label_count'] += 1
+                digest = hashlib.sha256(label.name.encode()).hexdigest()
+                for key in candidates:
+                    if digest == delivery[key]:
+                        candidates[key].append(label)
+                        candidate['title_matches' if key == 'title_sha256' else 'body_matches'] = len(candidates[key])
+            candidate.update(labels_complete=True, title_matches=len(candidates['title_sha256']),
+                             body_matches=len(candidates['body_sha256']))
+            if any(len(items) != 1 for items in candidates.values()):
+                continue
+            facts['phase'] = 'notification-ancestry'
+            parents, parent_nodes = ancestry(node, app)
+            candidate.update(ancestry_verified=True, ancestor_count=len(parents))
+            labels = []
             for key in candidates:
-                if digest == delivery[key]:
-                    candidates[key].append(label)
-        if any(len(items) != 1 for items in candidates.values()):
-            continue
-        parents, parent_nodes = ancestry(node, app)
-        labels = []
-        for key in candidates:
-            label = candidates[key][0]
-            chain, _ = ancestry(label, node)
-            labels.append({'identity': accessibility.identity(label), 'ancestry': chain,
-                'role': label.getRole(), 'name_sha256': hashlib.sha256(label.name.encode()).hexdigest()})
-        screen = geometry['logical_extent']
-        observed = []
-        for parent in parent_nodes:
-            try:
-                observed.append(extent(parent, api))
-            except NotImplementedError:
-                pass
-        if screen not in observed:
-            raise CaseUnavailable('notification-shell-ancestor-does-not-match-observed-display-geometry')
-        matches.append({'identity': accessibility.identity(node), 'ancestry': parents,
-            'role': node.getRole(), 'extent': extent(node, api), 'visible': bool(state.contains(api.STATE_VISIBLE)),
-            'showing': bool(state.contains(api.STATE_SHOWING)), 'enabled': bool(state.contains(api.STATE_ENABLED)),
-            'sensitive': bool(state.contains(api.STATE_SENSITIVE)), 'labels': labels})
-    if len(matches) != 1:
-        raise CaseUnavailable('delivered-shell-notification-is-missing-or-ambiguous')
-    return matches[0]
+                label = candidates[key][0]
+                chain, _ = ancestry(label, node)
+                labels.append({'identity': accessibility.identity(label), 'ancestry': chain,
+                    'role': label.getRole(), 'name_sha256': hashlib.sha256(label.name.encode()).hexdigest()})
+            candidate['label_ancestry_verified'] = True
+            facts['phase'] = 'notification-geometry'
+            screen = geometry['logical_extent']
+            observed = []
+            for parent in parent_nodes:
+                try:
+                    observed.append(extent(parent, api))
+                except NotImplementedError:
+                    pass
+            candidate['display_ancestor_matches'] = screen in observed
+            if not candidate['display_ancestor_matches']:
+                raise CaseUnavailable('notification-shell-ancestor-does-not-match-observed-display-geometry')
+            matches.append({'identity': accessibility.identity(node), 'ancestry': parents,
+                'role': node.getRole(), 'extent': extent(node, api), 'visible': bool(state.contains(api.STATE_VISIBLE)),
+                'showing': bool(state.contains(api.STATE_SHOWING)), 'enabled': bool(state.contains(api.STATE_ENABLED)),
+                'sensitive': bool(state.contains(api.STATE_SENSITIVE)), 'labels': labels})
+            facts['match_count'] = len(matches)
+            facts['phase'] = 'notification-inventory'
+        facts.update(phase='target-selection', notification_inventory_complete=True, match_count=len(matches))
+        if len(matches) != 1:
+            raise CaseUnavailable('delivered-shell-notification-is-missing-or-ambiguous')
+        return matches[0]
+    except Exception as error:
+        facts.update(deadline_expired=time.monotonic() >= deadline,
+            unverified=not facts['notification_inventory_complete'] or facts['clipped'])
+        error.observations = {**getattr(error, 'observations', {}), 'notification_shell_observation': facts}
+        raise
 
 
 def observe(surface, service, shell, delivery, deadline=None, expected=None):

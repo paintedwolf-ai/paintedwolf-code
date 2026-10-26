@@ -61,5 +61,17 @@ class NotificationGuestTests(unittest.TestCase):
         with self.assertRaises(ValueError):guest.perform(EXECUTION,'vm',self.observer,self.mailbox)
         self.mailbox.write.assert_not_called()
 
+    def test_initial_and_pinned_capture_failures_retain_phase_without_publication(self):
+        for phase in ('initial-observation', 'pinned-observation'):
+            self.mailbox.reset_mock()
+            refusal = CaseUnavailable('shell snapshot did not select a target')
+            self.observer.observe.side_effect = [refusal] if phase == 'initial-observation' else [self.before, refusal]
+            with self.subTest(phase=phase), self.assertRaises(CaseUnavailable) as raised:
+                guest.perform(EXECUTION, 'vm', self.observer, self.mailbox)
+            self.assertEqual(raised.exception.observations['notification_input_phase'], phase)
+            self.assertEqual(raised.exception.observations['native_input']['events'], [])
+            self.mailbox.write.assert_not_called()
+            self.mailbox.clear_completed.assert_not_called()
+
 
 if __name__=='__main__':unittest.main()
