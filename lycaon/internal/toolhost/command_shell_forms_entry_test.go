@@ -45,12 +45,20 @@ func TestCommandEntryBinarySearchContinuesWithoutMatchBudget(t *testing.T) {
 	f := newPathsFixture(t)
 	data := append([]byte("TODO\x00"), make([]byte, 300<<10)...)
 	testutil.FailErr(t, "seed binary input", os.WriteFile(filepath.Join(f.Dir, "binary.dat"), data, 0o600))
-	for _, program := range []string{"grep -rn TODO .", "rg -n TODO"} {
-		out, err := f.Call(t, t.Context(), program)
+	for _, tc := range []struct {
+		program, notice string
+		status          int
+	}{
+		{"grep -rn TODO .", "binary.dat: binary file matches", 0},
+		{"rg -n TODO", "", 1},
+		{"rg -n TODO binary.dat", "Binary file binary.dat matches", 0},
+		{"rg -uuu -n TODO", "Binary file binary.dat matches", 0},
+	} {
+		out, err := f.Call(t, t.Context(), tc.program)
 		testutil.FailErr(t, "run native binary search", err)
 		got := decodeProgramOutcome(t, out)
-		if got.Status != 0 || !strings.Contains(got.Stdout+got.Stderr, "Binary file ") || strings.Contains(got.Stderr, "GREP_MATCH_BUDGET") {
-			t.Fatalf("%s: %+v", program, got)
+		if got.Status != tc.status || (tc.notice != "" && !strings.Contains(got.Stdout+got.Stderr, tc.notice)) || strings.Contains(got.Stderr, "GREP_MATCH_BUDGET") {
+			t.Fatalf("%s: %+v", tc.program, got)
 		}
 	}
 }
