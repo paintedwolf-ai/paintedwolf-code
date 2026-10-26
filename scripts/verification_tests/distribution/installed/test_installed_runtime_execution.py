@@ -119,9 +119,7 @@ class InstalledRuntimeTests(unittest.TestCase):
             self.assertIn(str(root / "bin/pw-launch-entry"), result["images"])
             v1 = {k: v for k, v in base.items() if k != "payload"}
             v1["format_version"] = 1
-            path.write_text(json.dumps(v1))
-            self.assertIn(str(root / "bin/pw-launch-entry"), manifest(root, "amd64")["images"])
-            for invalid in ({**base, "format_version": 0}, {**base, "format_version": 3},
+            for invalid in (v1, {**base, "format_version": 0}, {**base, "format_version": 3},
                             {**base, "format_version": True}, {**base, "format_version": "2"},
                             {**base, "format_version": 1},
                             {k: v for k, v in base.items() if k != "payload"},
