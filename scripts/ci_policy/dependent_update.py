@@ -13,7 +13,9 @@ from ci_policy.github import api
 LABEL = 'update-conflict'
 POLLS = 30
 CONFLICT_POLLS = 12
+HELD_POLLS = 6
 INTERVAL = 5
+BOT = 'github-actions[bot]'
 
 OPEN_PULLS = '''query($owner:String!,$name:String!,$cursor:String){repository(owner:$owner,name:$name){
   pullRequests(states:OPEN,first:100,after:$cursor){pageInfo{hasNextPage endCursor}
@@ -90,7 +92,8 @@ def request(repository, pull, landed, sleep):
 
 
 def dispatch(repository, pull):
-    # Merges made with the Actions token start no workflows; dispatch is the supported exception.
+    # A merge by the Actions token starts no certification and only a CI run held
+    # for approval; dispatch is the supported way to run both.
     api(f'repos/{repository}/actions/workflows/ci.yml/dispatches', 'POST',
         {'ref': pull['head']['ref'], 'inputs': {'profile': 'fast'}})
     api(f'repos/{repository}/actions/workflows/dco.yml/dispatches', 'POST',
@@ -100,13 +103,14 @@ def dispatch(repository, pull):
 def settle(repository, requested, sleep):
     """Wait for each requested merge to land on its branch, then start its checks."""
     waiting = dict(requested)
-    outcomes = {}
+    outcomes, merged = {}, {}
     for _ in range(POLLS):
         for number, head in list(waiting.items()):
             pull = api(f'repos/{repository}/pulls/{number}')
             if pull['head']['sha'] == head:
                 continue
             del waiting[number]
+            merged[number] = pull['head']['sha']
             if pull['draft']:
                 outcomes[number] = 'updated'
                 continue
@@ -116,7 +120,29 @@ def settle(repository, requested, sleep):
             break
         sleep(INTERVAL)
     outcomes.update({number: 'unconfirmed' for number in waiting})
-    return outcomes
+    return outcomes, merged
+
+
+def held(repository, head):
+    runs = api(f'repos/{repository}/actions/runs?event=pull_request&status=action_required&head_sha={head}')['workflow_runs']
+    return [run for run in runs if run['head_sha'] == head and run['path'] == '.github/workflows/ci.yml'
+            and (run.get('triggering_actor') or {}).get('login') == BOT]
+
+
+def release(repository, merged, sleep):
+    """Delete the CI run GitHub holds for approval after each bot merge; dispatched checks replace it."""
+    waiting = dict(merged)
+    for _ in range(HELD_POLLS):
+        for number, head in list(waiting.items()):
+            runs = held(repository, head)
+            for run in runs:
+                api(f'repos/{repository}/actions/runs/{run["id"]}', 'DELETE')
+            if runs:
+                del waiting[number]
+        if not waiting:
+            break
+        sleep(INTERVAL)
+    return sorted(waiting)
 
 
 def update_dependents(repository, event, sleep=time.sleep):
@@ -137,9 +163,10 @@ def update_dependents(repository, event, sleep=time.sleep):
             requested[candidate['number']] = candidate['headRefOid']
         else:
             outcomes[candidate['number']] = outcome
-    outcomes.update(settle(repository, requested, sleep))
+    settled, merged = settle(repository, requested, sleep)
+    outcomes.update(settled)
     record = {'state': 'reconciled', 'landed': pull['number'], 'outcomes': {str(n): o for n, o in sorted(outcomes.items())},
-              'failed': failures}
+              'failed': failures, 'held_runs_remaining': release(repository, merged, sleep)}
     if failures or 'unconfirmed' in outcomes.values():
         record['state'] = 'incomplete'
     return record

@@ -979,8 +979,10 @@ asks GitHub to merge `main` into each branch, bound to the head it read: a push
 in the meantime refuses the update, and no commit is rewritten. GitHub performs
 the merge, so `main`'s workflow changes do not block it. Once each merge appears,
 it dispatches CI and original-commit certification for ready PRs, so a ready PR
-with auto-merge enters the queue when it passes. PRs already in the merge queue
-are left alone.
+with auto-merge enters the queue when it passes. GitHub holds the ordinary CI run
+for a bot's merge until someone approves it; the workflow deletes that held run,
+since the dispatched checks replace it. PRs already in the merge queue are left
+alone.
 
 A conflict is never resolved automatically: the PR gets the `update-conflict`
 label and a comment, and the owner's next push clears the label. A refusal the

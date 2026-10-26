@@ -47,11 +47,23 @@ class GitHub:
         self.mergeable = {}    # number -> value after the first read
         self.lag = {}          # number -> reads before a requested merge appears
         self.base_refusal = {}
+        self.unheld = set()    # numbers whose bot merge leaves no held CI run
+        self.runs = {}         # head -> runs GitHub reports for that head
         self.calls = []
+
+    def merge_appears(self, number, pull):
+        head = pull['head']['sha'] = pull.pop('pending')
+        decoys = [{'id': number * 100 + 1, 'head_sha': head, 'path': '.github/workflows/dco.yml', 'triggering_actor': {'login': d.BOT}},
+                  {'id': number * 100 + 2, 'head_sha': head, 'path': '.github/workflows/ci.yml', 'triggering_actor': {'login': 'someone'}}]
+        held = [] if number in self.unheld else [{'id': number * 100, 'head_sha': head, 'path': '.github/workflows/ci.yml',
+                                                  'triggering_actor': {'login': d.BOT}}]
+        self.runs[head] = held + decoys
 
     def api(self, path, method='GET', body=None):
         self.calls.append((method, path, body))
         parts = path.split('/')
+        if path.startswith(f'repos/{REPO}/actions/runs?'):
+            return {'workflow_runs': self.runs.get(path.rsplit('head_sha=', 1)[1], [])}
         if path.startswith(f'repos/{REPO}/compare/main...'):
             sha = parts[-1].split('...')[-1]
             number = next(n for n, p in self.pulls.items() if p['head']['sha'] == sha)
@@ -79,7 +91,7 @@ class GitHub:
                 return pull
             if 'pending' in pull:
                 if self.lag[number] == 0:
-                    pull['head']['sha'] = pull.pop('pending')
+                    self.merge_appears(number, pull)
                 else:
                     self.lag[number] -= 1
             if number in self.mergeable:
@@ -134,7 +146,7 @@ class LandedTests(unittest.TestCase):
         github = GitHub(node(2), node(3, base='main', moved=moved()))
         github.lag = {2: 2, 3: 0}
         record, sleeps = github.run(landed())
-        self.assertEqual(record, {'state': 'reconciled', 'landed': 1, 'failed': [],
+        self.assertEqual(record, {'state': 'reconciled', 'landed': 1, 'failed': [], 'held_runs_remaining': [],
                                   'outcomes': {'2': 'updated_and_checked', '3': 'updated_and_checked'}})
         self.assertEqual(github.writes('pulls/2')[0], (f'repos/{REPO}/pulls/2', {'base': 'main'}))
         self.assertFalse(any(path == f'repos/{REPO}/pulls/3' for path, _ in github.writes('pulls/3')))
@@ -159,7 +171,8 @@ class LandedTests(unittest.TestCase):
         github.update = {2: 'stale', 3: 'conflict'}
         github.mergeable = {3: False}
         record, _ = github.run(landed())
-        self.assertEqual(record, {'state': 'reconciled', 'landed': 1, 'failed': [], 'outcomes': {'2': 'superseded', '3': 'conflict'}})
+        self.assertEqual(record, {'state': 'reconciled', 'landed': 1, 'failed': [], 'held_runs_remaining': [],
+                                  'outcomes': {'2': 'superseded', '3': 'conflict'}})
         self.assertEqual(github.writes('issues/2'), [])
         labels, comment = github.writes('issues/3')
         self.assertEqual(labels, (f'repos/{REPO}/issues/3/labels', {'labels': [d.LABEL]}))
@@ -191,6 +204,16 @@ class LandedTests(unittest.TestCase):
         self.assertEqual(record['outcomes'], {'2': 'updated_and_checked'})
         self.assertEqual(record['failed'], [3])
         self.assertEqual(github.writes('pulls/3/update-branch'), [])
+
+    def test_deletes_only_the_ci_run_github_holds_for_each_bot_merge(self):
+        github = GitHub(node(2), node(3, isDraft=True), node(4))
+        github.unheld = {4}
+        record, sleeps = github.run(landed())
+        self.assertEqual(record['state'], 'reconciled')
+        self.assertEqual(record['held_runs_remaining'], [4])
+        deleted = [path for method, path, _ in github.calls if method == 'DELETE']
+        self.assertEqual(deleted, [f'repos/{REPO}/actions/runs/200', f'repos/{REPO}/actions/runs/300'])
+        self.assertEqual(sleeps, [d.INTERVAL] * d.HELD_POLLS)
 
     def test_a_merge_that_never_appears_is_reported_without_dispatching_checks(self):
         github = GitHub(node(2))
