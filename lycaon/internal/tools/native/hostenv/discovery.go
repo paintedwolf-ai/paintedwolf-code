@@ -41,7 +41,11 @@ func (inv *invocation) discover(name string, needPath bool) (discovery, error) {
 		return d, err
 	}
 	// These are the environment inputs of the confined external launch.
-	opts, err := lyexec.AgentLaunchOptions(lyexec.LaunchPlan{}, cwd, inv.request.Environment, inv.tc.Host.HostResourcePathExtra)
+	launch := lyexec.LaunchPlan{}
+	if inv.bound != nil {
+		launch = launch.WithTrustedEnvironment(inv.bound.BaseEnvironment())
+	}
+	opts, err := lyexec.AgentLaunchOptions(launch, cwd, inv.request.Environment, inv.tc.Host.HostResourcePathExtra)
 	path := ""
 	if err == nil {
 		path, err = lyexec.LaunchLookup(name, opts)
