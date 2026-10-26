@@ -17,7 +17,6 @@ const CONTROL_STDIN_ENV: &str = "LYCAON_CONTROL_STDIN";
 const API_TOKEN_STDIN_ENV: &str = "LYCAON_API_TOKEN_STDIN";
 pub(super) const API_TOKEN_MAX_BYTES: usize = 512;
 const CONTROL_SHUTDOWN_FRAME: &[u8] = b"shutdown\n";
-pub(super) const VAULT_PASSWORD_MAX_BYTES: usize = 16 * 1024;
 /// Exceeds the engine's ordered shutdown budget.
 pub(super) const GRACEFUL_STOP_TIMEOUT: Duration = Duration::from_secs(20);
 pub(super) const GRACEFUL_STOP_POLL: Duration = Duration::from_millis(50);
@@ -106,15 +105,11 @@ pub(super) fn wait_for_exit(proc: &mut Child, timeout: Duration) -> bool {
 pub(super) fn spawn_sidecar_process(
     api_token: &str,
     presence_public_key: &str,
-    password: Option<&[u8]>,
 ) -> Result<SpawnedSidecar, String> {
     let bin = resolve_lycaon_binary()?;
     let image = crate::linux_generation::capture_helper(&bin)?;
     let config_dir = crate::config_dir::ensure_host_config_dir()?;
     let mut cmd = engine_command(&image.path, presence_public_key, &config_dir);
-    if password.is_some() {
-        cmd.env("LYCAON_CREDENTIAL_UNLOCK_STDIN", "1");
-    }
     write_engine_log_header(&bin);
     cmd.stderr(Stdio::piped());
     if let Some(layout) = bundled_engine_layout() {
@@ -135,10 +130,7 @@ pub(super) fn spawn_sidecar_process(
         let _ = child.wait();
         return Err("engine startup pipe unavailable".to_string());
     };
-    let delivered = write_api_token(&mut *stdin, api_token).and_then(|()| match password {
-        Some(password) => write_vault_password(&mut *stdin, password),
-        None => Ok(()),
-    });
+    let delivered = write_api_token(&mut *stdin, api_token);
     if let Err(err) = delivered {
         let _ = child.kill();
         let _ = child.wait();
@@ -182,20 +174,6 @@ pub(super) fn write_api_token<W: Write>(mut writer: W, token: &str) -> Result<()
         .write_all(&size.to_be_bytes())
         .and_then(|_| writer.write_all(token.as_bytes()))
         .map_err(|err| format!("write engine api token: {err}"))
-}
-
-pub(super) fn write_vault_password<W: Write>(mut writer: W, password: &[u8]) -> Result<(), String> {
-    if password.is_empty() || password.len() > VAULT_PASSWORD_MAX_BYTES {
-        return Err(format!(
-            "credential vault password must be between 1 and {VAULT_PASSWORD_MAX_BYTES} bytes"
-        ));
-    }
-    let size = u32::try_from(password.len())
-        .map_err(|_| "credential vault password is too large".to_string())?;
-    writer
-        .write_all(&size.to_be_bytes())
-        .and_then(|_| writer.write_all(password))
-        .map_err(|err| format!("write credential vault password: {err}"))
 }
 
 pub(super) fn apply_full_debug_logging_env(cmd: &mut Command) {
