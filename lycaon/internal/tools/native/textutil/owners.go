@@ -20,7 +20,6 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
-	"github.com/lycaon/lycaon/internal/tools/native/textutil/sedscript"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
@@ -65,7 +64,7 @@ func NewOwners(revisions native.ExecutionRevisions, pins PinRecorder) (*Owners, 
 	if pins == nil {
 		return nil, errors.New("text utilities require a revision pin recorder")
 	}
-	catalog, err := toolcontract.LanguageV1()
+	catalog, err := toolcontract.ReadOnlyLanguageV1()
 	if err != nil {
 		return nil, err
 	}
@@ -87,7 +86,7 @@ func NewOwners(revisions native.ExecutionRevisions, pins PinRecorder) (*Owners, 
 	for _, limit := range catalog.Language.Limits {
 		o.limits[limit.ID] = limit.Maximum
 	}
-	for _, id := range []string{"stream_bytes", "record_bytes", "sort_memory_bytes", "sort_merge_fan_in", "spill_bytes", "argv_bytes", "argument_bytes", "expanded_fields", "child_executions", "query_work_steps", "evaluation_memory_bytes"} {
+	for _, id := range []string{"stream_throughput_bytes", "whole_file_bytes", "stream_bytes", "record_bytes", "sort_memory_bytes", "sort_merge_fan_in", "spill_bytes", "argv_bytes", "argument_bytes", "expanded_fields", "child_executions", "query_work_steps", "evaluation_memory_bytes"} {
 		if o.limits[id] < 1 {
 			return nil, fmt.Errorf("language catalog is missing %s", id)
 		}
@@ -136,18 +135,29 @@ type dispatcher struct {
 }
 
 func (d dispatcher) Invoke(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-	prepared, err := d.owners.Prepare(request)
+	owners := *d.owners
+	if d.ports.Memory != nil {
+		owners.Revisions.Memory = d.ports.Memory
+	}
+	prepared, err := owners.Prepare(ctx, request)
 	if err != nil {
+		err = tools.CommandResourceRejection(err)
 		return nativeutility.Settle(err, 0, false), err
 	}
+	defer prepared.Close()
 	return prepared.InvokeOwner(ctx, d.ports, streams)
 }
 
-func (d dispatcher) EffectMode(request commandprogram.OperationRequest) string {
-	prepared, err := d.owners.Prepare(request)
+func (d dispatcher) EffectMode(ctx context.Context, request commandprogram.OperationRequest) string {
+	owners := *d.owners
+	if d.ports.Memory != nil {
+		owners.Revisions.Memory = d.ports.Memory
+	}
+	prepared, err := owners.Prepare(ctx, request)
 	if err != nil {
 		return ""
 	}
+	defer prepared.Close()
 	return prepared.Mode
 }
 
@@ -165,8 +175,13 @@ type Prepared struct {
 	sed     *preparedSed
 }
 
+// Close releases any admitted resources retained by the prepared invocation.
+func (p Prepared) Close() {
+	p.sed.close()
+}
+
 // Prepare binds a reached command. The operation identity is the command name.
-func (o *Owners) Prepare(request commandprogram.OperationRequest) (Prepared, error) {
+func (o *Owners) Prepare(ctx context.Context, request commandprogram.OperationRequest) (Prepared, error) {
 	if err := request.Validate(); err != nil {
 		return Prepared{}, err
 	}
@@ -185,36 +200,42 @@ func (o *Owners) Prepare(request commandprogram.OperationRequest) (Prepared, err
 	} else if bound, err = (commandprogram.CatalogBinder{}).Bind(spec, numericOperands(command, request.Argv)); err != nil {
 		return Prepared{}, nativeutility.ArgvRejection(err, spec)
 	}
-	review := bound.Review(spec.Name)
-	if PathUtility(command) {
-		review.PathTargets = o.pathTargets(bound, nil)
+	prepared := Prepared{Argv: bound, Review: bound.Review(spec.Name), owners: o, request: request, spec: spec, run: utilities[command]}
+	if command == "sed" {
+		sedPlan, mode, err := o.prepareSed(ctx, spec, request, bound)
+		if err != nil {
+			return Prepared{}, tools.CommandResourceRejection(err)
+		}
+		prepared.sed = sedPlan
+		prepared.Mode = mode
+		prepared.Review.PathTargets = o.pathTargets(bound, sedPlan)
+		return prepared, nil
 	}
-	return Prepared{Argv: bound, Review: review, Mode: o.effectMode(bound), owners: o, request: request, spec: spec, run: utilities[command]}, nil
+	prepared.Mode = o.effectMode(bound)
+	if PathUtility(command) {
+		prepared.Review.PathTargets = o.pathTargets(bound, nil)
+	}
+	return prepared, nil
 }
 
-// PrepareNative captures a sed script file through the same source owner used
-// at execution and projects the parsed script's file effects before admission.
+// PrepareNative projects script-file effects before the child approval while
+// preserving the streaming invocation's source capture and execution pin.
 func (o *Owners) PrepareNative(ctx context.Context, frame *projectpaths.ProgramPaths, ports Ports, request commandprogram.OperationRequest) (Prepared, error) {
-	p, err := o.Prepare(request)
+	p, err := o.Prepare(ctx, request)
 	if err != nil || p.Argv.Command != "sed" || !argvFlag(p.Argv, "-f") {
 		return p, err
 	}
 	ports.ToolContext = frame.ToolContext()
 	inv := newInvocation(ctx, p, ports, commandprogram.Streams{})
 	inv.preparing = true
-	inv.sed = &preparedSed{}
-	defer inv.close()
-	source, err := sedScript(inv)
+	source, program, err := loadSedFileScript(inv, p.sed.source)
+	inv.close()
 	if err != nil {
+		p.Close()
 		return Prepared{}, err
 	}
-	program, err := sedscript.Parse(ctx, source.text, inv.flag("-E"), sedCompiler{o.Regex})
-	if err != nil {
-		return Prepared{}, sedRefusal(inv, source.word, err)
-	}
-	inv.sed.source, inv.sed.program = source, program
-	p.sed = inv.sed
-	p.Review.PathTargets = o.pathTargets(p.Argv, program)
+	p.sed.source, p.sed.program = source, program
+	p.Review.PathTargets = o.pathTargets(p.Argv, p.sed)
 	if len(program.WriteFiles()) > 0 && p.Mode == "stream-script" {
 		p.Mode = "w-command"
 	}
@@ -239,6 +260,11 @@ func leadingBind(spec toolcontract.CommandSpecification, argv commandprogram.Fie
 			bound.EndOfOptions = true
 			index++
 			break
+		}
+		if word.Value == "--help" {
+			bound.Help = true
+			bound.Items = append(bound.Items, commandprogram.BoundItem{Option: &commandprogram.BoundOption{Key: "--help", Spelling: "--help", ValueRole: "boolean", Span: word.Span}})
+			continue
 		}
 		keys, ok := shortCluster(word.Value, declared)
 		if !ok {
@@ -272,6 +298,7 @@ func shortCluster(word string, declared map[string]string) ([]string, bool) {
 
 // InvokeOwner runs the bound utility once and settles its producer outcome.
 func (p Prepared) InvokeOwner(ctx context.Context, ports Ports, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+	defer p.Close()
 	if p.run == nil {
 		err := errors.New("text utility invocation is not prepared")
 		return nativeutility.Settle(err, 0, false), err
@@ -280,24 +307,42 @@ func (p Prepared) InvokeOwner(ctx context.Context, ports Ports, streams commandp
 		err := errors.New("text utilities require program memory admission")
 		return nativeutility.Settle(err, 0, false), err
 	}
+	if p.Argv.Help {
+		if streams.Input != nil {
+			_ = streams.Input.Close()
+		}
+		return commandprogram.WriteCatalogHelp(p.spec, streams.Output)
+	}
 	inv := newInvocation(ctx, p, ports, streams)
 	err := p.run(inv)
 	if err == nil {
+		err = inv.out.Flush()
+	}
+	if err == nil && inv.stoppedBatch == nil {
 		err = ctx.Err()
 	}
 	inv.close()
 	if streams.Input != nil {
 		_ = streams.Input.Close()
 	}
-	var stopped *batchStop
-	if errors.As(err, &stopped) {
-		return stopped.result, err
+	if inv.stoppedBatch != nil {
+		return *inv.stoppedBatch, err
 	}
 	if inv.errors.Len() > 0 && streams.Error != nil {
 		_, _ = io.WriteString(streams.Error, inv.errors.String())
 	}
+	var domain toolcontract.ProducerFailure
+	if errors.As(err, &domain) {
+		return domain.ProducerResult(), err
+	}
+	err = tools.CommandResourceRejection(err)
 	result := nativeutility.Settle(err, inv.status, false)
-	if (p.Mode == "-i" || p.Mode == "w-command" || p.Mode == "w-files" || p.Mode == "-o" || p.Mode == "OUTPUT-supplied") && result.Terminal == toolcontract.ProducerCompleted && inv.status == 0 {
+	if (p.Mode == "-i" || p.Mode == "w-files" || p.Mode == "w-command" || p.Mode == "-o" || p.Mode == "OUTPUT-supplied") && result.Terminal == toolcontract.ProducerCompleted && inv.status == 0 {
+		result.EffectCertainty = toolcontract.EffectCompleted
+	}
+	if inv.uncertain {
+		result.EffectCertainty = toolcontract.EffectUnknown
+	} else if inv.published {
 		result.EffectCertainty = toolcontract.EffectCompleted
 	}
 	return result, err

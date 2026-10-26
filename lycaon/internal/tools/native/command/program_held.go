@@ -2,6 +2,7 @@ package command
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -98,5 +99,5 @@ func joinSettle(err, settle error) error {
 	if err == nil {
 		return settle
 	}
-	return fmt.Errorf("%w; settlement: %v", err, settle)
+	return errors.Join(err, settle)
 }

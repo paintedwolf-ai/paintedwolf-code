@@ -61,6 +61,7 @@ func captureLLMComplete(providerID string, profile providerprofile.Profile, req 
 		Iteration:         req.Debug.Iteration,
 		MaxIterations:     req.Debug.MaxIterations,
 		WorkflowRevision:  req.Debug.WorkflowRevision,
+		CommandGuidance:   captureCommandGuidance(req.Debug.CommandGuidance),
 	}, summary, errString(err))
 	return out, err
 }
@@ -162,7 +163,18 @@ func logStreamCapture(providerID string, req modelcall.CompletionRequest, start 
 		Iteration:         req.Debug.Iteration,
 		MaxIterations:     req.Debug.MaxIterations,
 		WorkflowRevision:  req.Debug.WorkflowRevision,
+		CommandGuidance:   captureCommandGuidance(req.Debug.CommandGuidance),
 	}, summary, errString(responseErr))
+}
+
+func captureCommandGuidance(in *modelcall.CommandGuidanceDebug) *observability.LLMCommandGuidanceCapture {
+	if in == nil || (len(in.Templates) == 0 && len(in.Facts) == 0) {
+		return nil
+	}
+	return &observability.LLMCommandGuidanceCapture{
+		Templates: append([]string(nil), in.Templates...),
+		Facts:     in.Facts,
+	}
 }
 
 func captureTools(toolMetas []tools.ToolMeta) []observability.LLMToolCapture {

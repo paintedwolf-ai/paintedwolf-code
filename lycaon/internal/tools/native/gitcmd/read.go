@@ -67,7 +67,7 @@ func parseCommand(spec toolcontract.CommandSpecification, argv commandprogram.Fi
 				"command": spec.Name, "word": kv, "expected": "an allowlisted -c override (core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false)", "expected_form": spec.Argv}}
 		}
 	}
-	c.args = append(append([]string{}, names[1:]...), argv[i:].Values()...)
+	c.args = normalizeAttachedGitOptions(spec.Name, append(append([]string{}, names[1:]...), argv[i:].Values()...))
 	c.beforeDash, c.afterDash = splitDashOperands(spec, c.args, bound)
 	rule := readForms[spec.Name]
 	if rule == nil {
@@ -93,6 +93,37 @@ func (c *command) addGlobal(flag, value string) {
 		return
 	}
 	c.config = append(c.config, value)
+}
+
+func normalizeAttachedGitOptions(name string, args []string) []string {
+	if name != "git diff" && name != "git status" {
+		return args
+	}
+	out := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--" {
+			out = append(out, args[i:]...)
+			break
+		}
+		if i+1 < len(args) && args[i+1] != "--" {
+			switch {
+			case name == "git diff" && args[i] == "-U":
+				out = append(out, "-U"+args[i+1])
+				i++
+				continue
+			case name == "git diff" && args[i] == "--unified":
+				out = append(out, "--unified="+args[i+1])
+				i++
+				continue
+			case name == "git status" && args[i] == "--untracked-files":
+				out = append(out, "--untracked-files="+args[i+1])
+				i++
+				continue
+			}
+		}
+		out = append(out, args[i])
+	}
+	return out
 }
 
 // operandRule refuses operand shapes that would make a read form write or

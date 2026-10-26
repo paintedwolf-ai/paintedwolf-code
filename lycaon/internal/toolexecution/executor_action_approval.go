@@ -44,6 +44,7 @@ func (e *Approvals) awaitApproval(
 			SessionID:          tc.Identity.SessionID,
 			RootSessionID:      tc.ChatSessionID(),
 			SessionScratchRoot: tc.Host.SessionScratchDir,
+			SessionOutputRoot:  tc.Host.SessionOutputDir,
 		},
 		Sockets: hitl.ActionSockets{
 			SocketGrants:            append([]confine.SocketGrant(nil), tc.Socket.SocketGrants...),

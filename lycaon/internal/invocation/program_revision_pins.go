@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 	"time"
 
@@ -32,7 +33,7 @@ const (
 // entry a walk may visit plus every operand an argv may name. No owner reads
 // more inputs than that in one execution.
 var maxExecutionRevisionPins = sync.OnceValues(func() (int, error) {
-	catalog, err := toolcontract.LanguageV1()
+	catalog, err := toolcontract.ReadOnlyLanguageV1()
 	if err != nil {
 		return 0, err
 	}
@@ -116,7 +117,7 @@ func (r *SQLRecorder) recordRevisionPins(ctx context.Context, executionID string
 	}
 	defer func() { _ = tx.Rollback() }()
 	var program, state string
-	if err = tx.QueryRowContext(ctx, `SELECT program_id,state FROM invocation_program_executions WHERE id=?`, executionID).Scan(&program, &state); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT program_id,state FROM invocation_program_executions WHERE id=?`, executionID).Scan(&program, &state); err != nil {
 		return err
 	}
 	if state != "prepared" && state != "waiting" && state != "running" {
@@ -139,8 +140,8 @@ func (r *SQLRecorder) recordRevisionPins(ctx context.Context, executionID string
 		if err != nil {
 			return err
 		}
-		for i, pin := range existing {
-			if pin != pins[i] {
+		for i, pin := range pins[:overlap] {
+			if pin != existing[i] {
 				return fmt.Errorf("revision pin %d conflicts with the recorded capture", first+i)
 			}
 		}
@@ -150,12 +151,22 @@ func (r *SQLRecorder) recordRevisionPins(ctx context.Context, executionID string
 		return fmt.Errorf("execution exceeds %d revision pins", maximum)
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	for i, pin := range pins {
-		if _, err = tx.ExecContext(ctx, `INSERT INTO invocation_program_revision_pins(program_id,execution_id,ordinal,`+pinColumns+`,captured_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-			program, executionID, recorded+i, string(pin.Role), string(pin.Mode), string(pin.Basis), pin.RootID, pin.Path, pin.DocumentID, pin.DocumentRevision, pin.DiskSHA256, string(pin.Representation), pin.ContentSHA256, pin.ContentBytes, now); err != nil {
+	for i := 0; i < len(pins); {
+		if unsealed == 0 && len(pins)-i >= revisionPinSegment {
+			if err := insertRevisionPinSegment(ctx, tx, program, executionID, sealed, pins[i:i+revisionPinSegment], now); err != nil {
+				return err
+			}
+			sealed += revisionPinSegment
+			i += revisionPinSegment
+			continue
+		}
+		batch := min(len(pins)-i, revisionPinSegment-unsealed)
+		if err := insertRevisionPinRows(ctx, tx, program, executionID, recorded+i, pins[i:i+batch], now); err != nil {
 			return err
 		}
-		if unsealed++; unsealed == revisionPinSegment {
+		unsealed += batch
+		i += batch
+		if unsealed == revisionPinSegment {
 			if err := sealRevisionPins(ctx, tx, program, executionID, sealed); err != nil {
 				return err
 			}
@@ -163,6 +174,40 @@ func (r *SQLRecorder) recordRevisionPins(ctx context.Context, executionID string
 		}
 	}
 	return tx.Commit()
+}
+
+func insertRevisionPinRows(ctx context.Context, tx *sql.Tx, program, executionID string, first int, pins []toolcontract.ExecutionRevision, capturedAt string) error {
+	const maxRowsPerInsert = 64
+	for start := 0; start < len(pins); start += maxRowsPerInsert {
+		chunk := pins[start:min(start+maxRowsPerInsert, len(pins))]
+		var query strings.Builder
+		query.WriteString(`INSERT INTO invocation_program_revision_pins(program_id,execution_id,ordinal,` + pinColumns + `,captured_at) VALUES`)
+		args := make([]any, 0, len(chunk)*15)
+		for idx, pin := range chunk {
+			if idx > 0 {
+				query.WriteByte(',')
+			}
+			query.WriteString(`(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+			args = append(args, program, executionID, first+start+idx, string(pin.Role), string(pin.Mode), string(pin.Basis), pin.RootID, pin.Path, pin.DocumentID, pin.DocumentRevision, pin.DiskSHA256, string(pin.Representation), pin.ContentSHA256, pin.ContentBytes, capturedAt)
+		}
+		if _, err := tx.ExecContext(ctx, query.String(), args...); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func insertRevisionPinSegment(ctx context.Context, tx *sql.Tx, program, executionID string, first int, pins []toolcontract.ExecutionRevision, capturedAt string) error {
+	stored := make([]storedPin, len(pins))
+	for i, pin := range pins {
+		stored[i] = storedPin{
+			Role: pin.Role, Mode: pin.Mode, Basis: pin.Basis, RootID: pin.RootID, Path: pin.Path,
+			DocumentID: pin.DocumentID, DocumentRevision: pin.DocumentRevision, DiskSHA256: pin.DiskSHA256,
+			Representation: pin.Representation, ContentSHA256: pin.ContentSHA256, ContentBytes: pin.ContentBytes,
+			CapturedAt: capturedAt,
+		}
+	}
+	return writeRevisionPinSegment(ctx, tx, program, executionID, first, stored)
 }
 
 // RevisionPins returns one session's execution captures in recorded order.
@@ -176,7 +221,7 @@ func (r *SQLRecorder) RevisionPins(ctx context.Context, sessionID, executionID s
 	}
 	defer func() { _ = tx.Rollback() }()
 	var count int
-	if err = tx.QueryRowContext(ctx, `SELECT count(*) FROM invocation_program_executions e JOIN invocation_programs p ON p.id=e.program_id JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE e.id=? AND r.session_id=?`, executionID, sessionID).Scan(&count); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM invocation_program_executions e JOIN invocation_programs p ON p.id=e.program_id JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE e.id=? AND r.session_id=?`, executionID, sessionID).Scan(&count); err != nil {
 		return nil, err
 	}
 	if count != 1 {
@@ -189,9 +234,46 @@ func (r *SQLRecorder) RevisionPins(ctx context.Context, sessionID, executionID s
 	return readRevisionPinRange(ctx, tx, executionID, 0, sealed+unsealed)
 }
 
+// ProgramRevisionPins returns every execution capture recorded under a program
+// in this session.
+func (r *SQLRecorder) ProgramRevisionPins(ctx context.Context, sessionID, programID string) ([]toolcontract.ExecutionRevision, error) {
+	if r == nil || r.database == nil {
+		return nil, fmt.Errorf("invocation recorder is not configured")
+	}
+	rows, err := r.database.QueryContext(ctx, `SELECT e.id FROM invocation_program_executions e JOIN invocation_programs p ON p.id=e.program_id JOIN invocation_receipts rec ON rec.id=p.parent_receipt_id WHERE e.program_id=? AND rec.session_id=? ORDER BY e.created_at, e.id`, programID, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var execIDs []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			_ = rows.Close()
+			return nil, err
+		}
+		execIDs = append(execIDs, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	var all []toolcontract.ExecutionRevision
+	for _, id := range execIDs {
+		pins, err := r.RevisionPins(ctx, sessionID, id)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, pins...)
+	}
+	return all, nil
+}
+
 // revisionPinCounts reports the sealed segment prefix and the rows after it.
 func revisionPinCounts(ctx context.Context, tx *sql.Tx, executionID string) (sealed, unsealed int, err error) {
-	if err = tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(first_ordinal+pin_count),0) FROM invocation_program_revision_pin_segments WHERE execution_id=?`, executionID).Scan(&sealed); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(first_ordinal+pin_count),0) FROM invocation_program_revision_pin_segments WHERE execution_id=?`, executionID).Scan(&sealed); err != nil {
 		return 0, 0, err
 	}
 	err = tx.QueryRowContext(ctx, `SELECT count(*) FROM invocation_program_revision_pins WHERE execution_id=?`, executionID).Scan(&unsealed)
@@ -211,6 +293,7 @@ func readRevisionPinRange(ctx context.Context, tx *sql.Tx, executionID string, f
 	if err != nil {
 		return nil, err
 	}
+	defer func() { _ = segments.Close() }()
 	var found []pinSegment
 	for segments.Next() {
 		var s pinSegment
@@ -219,6 +302,9 @@ func readRevisionPinRange(ctx context.Context, tx *sql.Tx, executionID string, f
 			return nil, err
 		}
 		found = append(found, s)
+	}
+	if err := segments.Err(); err != nil {
+		return nil, err
 	}
 	if err := segments.Close(); err != nil {
 		return nil, err
@@ -261,6 +347,7 @@ func sealRevisionPins(ctx context.Context, tx *sql.Tx, program, executionID stri
 	if err != nil {
 		return err
 	}
+	defer func() { _ = rows.Close() }()
 	pins := make([]storedPin, 0, revisionPinSegment)
 	for rows.Next() {
 		var p storedPin
@@ -270,12 +357,23 @@ func sealRevisionPins(ctx context.Context, tx *sql.Tx, program, executionID stri
 		}
 		pins = append(pins, p)
 	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
 	if err := rows.Close(); err != nil {
 		return err
 	}
 	if len(pins) != revisionPinSegment {
 		return fmt.Errorf("revision pin segment at %d holds %d of %d rows", first, len(pins), revisionPinSegment)
 	}
+	if err := writeRevisionPinSegment(ctx, tx, program, executionID, first, pins); err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `DELETE FROM invocation_program_revision_pins WHERE execution_id=? AND ordinal>=? AND ordinal<?`, executionID, first, first+revisionPinSegment)
+	return err
+}
+
+func writeRevisionPinSegment(ctx context.Context, tx *sql.Tx, program, executionID string, first int, pins []storedPin) error {
 	plain, err := json.Marshal(pins)
 	if err != nil {
 		return err
@@ -289,11 +387,8 @@ func sealRevisionPins(ctx context.Context, tx *sql.Tx, program, executionID stri
 		return err
 	}
 	digest := sha256.Sum256(plain)
-	if _, err := tx.ExecContext(ctx, `INSERT INTO invocation_program_revision_pin_segments(program_id,execution_id,first_ordinal,pin_count,encoding,body,body_sha256) VALUES(?,?,?,?,?,?,?)`,
-		program, executionID, first, len(pins), revisionPinEncoding, body.Bytes(), hex.EncodeToString(digest[:])); err != nil {
-		return err
-	}
-	_, err = tx.ExecContext(ctx, `DELETE FROM invocation_program_revision_pins WHERE execution_id=? AND ordinal>=? AND ordinal<?`, executionID, first, first+revisionPinSegment)
+	_, err = tx.ExecContext(ctx, `INSERT INTO invocation_program_revision_pin_segments(program_id,execution_id,first_ordinal,pin_count,encoding,body,body_sha256) VALUES(?,?,?,?,?,?,?)`,
+		program, executionID, first, len(pins), revisionPinEncoding, body.Bytes(), hex.EncodeToString(digest[:]))
 	return err
 }
 

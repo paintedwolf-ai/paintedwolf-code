@@ -62,11 +62,11 @@ func (b *WriteRootCheckpointBroker) Authorize(ctx context.Context, in command.Sa
 		return out, nil
 	}
 	// The invocation's own scratch is already inside its boundary.
-	if confine.WithinSessionScratch(proposed, in.SessionScratchRoot) {
+	if confine.WithinSessionDirectory(proposed, in.SessionScratchRoot) {
 		return command.SandboxWriteRootResult{Authorized: true, ProposedWriteRoot: proposed}, nil
 	}
 	// Control-plane writes are denied without prompting.
-	if confine.ControlPlanePathDenied(proposed, true, in.SessionScratchRoot) {
+	if confine.ControlPlanePathDenied(proposed, true, in.SessionScratchRoot, in.SessionOutputRoot) {
 		return out, nil
 	}
 	subject := confine.ClassifyBlockedWrite(proposed)

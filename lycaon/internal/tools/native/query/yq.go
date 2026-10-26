@@ -1,7 +1,6 @@
 package query
 
 import (
-	"bytes"
 	"container/list"
 	"context"
 	"errors"
@@ -11,16 +10,12 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/mikefarah/yq/v4/pkg/yqlib"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
-	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
-	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
-	"github.com/lycaon/lycaon/internal/tools/safecmd"
 )
 
 // yqlib keeps its preferences, expression parser and filename state in
@@ -42,19 +37,17 @@ type yqRun struct {
 	inv        *invocation
 	all        bool
 	expression string
-	files      []string
+	files      commandprogram.Fields
 	input      string
 	output     string
 	// sources holds each file captured once, so -i reads and publishes
 	// against the same revision.
-	sources map[string]*source
+	sources map[commandprogram.Field]*source
 }
 
 // runYq evaluates a yq expression with the yq v4 library. Errors print
 // "Error: ..." and exit 1, as yq does; -i publishes the first file's result
-// at its captured revisions. Like gojq, yqlib exposes no internal VM step
-// counter hook, so evaluation is bounded by query_cpu_ms on the output stream
-// while read/printed documents meter query_work_steps.
+// at its captured revisions.
 func runYq(inv *invocation) error {
 	if inv.pythonYq() {
 		return runPythonYq(inv)
@@ -69,10 +62,6 @@ func runYq(inv *invocation) error {
 	}
 	yqEvaluation.Lock()
 	defer yqEvaluation.Unlock()
-	budget := time.Duration(inv.owners.limit("query_cpu_ms")) * time.Millisecond
-	ctx, cancel := context.WithTimeout(inv.ctx, budget)
-	defer cancel()
-	inv.out.ctx = ctx
 	if inv.flag("-i") {
 		return run.inPlace()
 	}
@@ -92,10 +81,10 @@ func runYq(inv *invocation) error {
 // newYqRun applies yq's argument rules: an optional eval/eval-all word, then
 // the expression unless the first word is "-" or an existing file.
 func newYqRun(inv *invocation) (*yqRun, error) {
-	operands := inv.argv.Operands().Values()
-	run := &yqRun{inv: inv, sources: map[string]*source{}}
+	operands := inv.argv.Operands()
+	run := &yqRun{inv: inv, sources: map[commandprogram.Field]*source{}}
 	if len(operands) > 0 {
-		switch operands[0] {
+		switch operands[0].Value {
 		case "eval", "e":
 			operands = operands[1:]
 		case "eval-all", "ea":
@@ -104,8 +93,8 @@ func newYqRun(inv *invocation) (*yqRun, error) {
 	}
 	if expression, ok := inv.value("--expression"); ok {
 		run.expression = expression
-	} else if len(operands) > 0 && operands[0] != "-" && !yqImplicitFile(inv.ctx, inv.paths, inv.argv, operands[0]) {
-		run.expression, operands = operands[0], operands[1:]
+	} else if len(operands) > 0 && operands[0].Value != "-" && operands[0].ProcessSubstitution() == nil && !yqImplicitFile(inv.ctx, inv.paths, inv.argv, operands[0].Value) {
+		run.expression, operands = operands[0].Value, operands[1:]
 	}
 	if inv.flag("-P") {
 		if run.expression == "" {
@@ -116,12 +105,12 @@ func newYqRun(inv *invocation) (*yqRun, error) {
 	}
 	run.files = operands
 	switch {
-	case inv.flag("-i") && (len(run.files) == 0 || run.files[0] == "-"):
+	case inv.flag("-i") && (len(run.files) == 0 || run.files[0].Value == "-"):
 		return nil, run.fail(errors.New("write in place flag only applicable when giving an expression and at least one file"))
 	case inv.flag("-n") && len(run.files) > 0:
 		return nil, run.fail(errors.New("cannot pass files in when using null-input flag"))
 	case len(run.files) == 0 && !inv.flag("-n"):
-		run.files = []string{"-"}
+		run.files = commandprogram.Fields{{Value: "-"}}
 	}
 	if err := run.formats(); err != nil {
 		return nil, run.fail(err)
@@ -141,7 +130,7 @@ func (r *yqRun) formats() error {
 	automatic := func(format string) bool { return format == "" || format == "auto" || format == "a" }
 	first := ""
 	if len(r.files) > 0 {
-		first = r.files[0]
+		first = r.files[0].Value
 	}
 	if automatic(r.input) {
 		r.input = yqlib.FormatStringFromFilename(first)
@@ -198,11 +187,7 @@ func regularYqFile(ctx context.Context, paths *projectpaths.ProgramPaths, operan
 // fail reports an ordinary yq error; typed refusals and interruption stop
 // the run instead.
 func (r *yqRun) fail(err error) error {
-	if errors.Is(err, context.DeadlineExceeded) && r.inv.ctx.Err() == nil {
-		maximum := r.inv.owners.limit("query_cpu_ms")
-		return limitExceeded("query_cpu_ms", maximum, maximum+1)
-	}
-	if toolrejection.AsToolReject(err) != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+	if toolrejection.AsToolReject(err) != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, commandprogram.ErrConsumerClosed) {
 		return err
 	}
 	_, _ = fmt.Fprintf(r.inv.stderr, "Error: %s\n", err)
@@ -288,22 +273,19 @@ func (r *yqRun) evaluate(printer yqlib.Printer) error {
 	documents := list.New()
 	var processed uint
 	for index, file := range r.files {
-		if err := r.inv.step(); err != nil {
-			return err
-		}
-		text, label, err := r.read(file)
+		reader, label, err := r.reader(file)
 		if err != nil {
 			return err
 		}
 		if !r.all {
-			count, err := evaluator.Evaluate(label, strings.NewReader(text), node, printer, decoder)
+			count, err := evaluator.Evaluate(label, reader, node, printer, decoder)
 			processed += count
 			if err != nil {
 				return err
 			}
 			continue
 		}
-		if err := readYqDocuments(documents, text, label, index, decoder); err != nil {
+		if err := readYqDocuments(documents, reader, label, index, decoder); err != nil {
 			return err
 		}
 	}
@@ -325,8 +307,8 @@ func (r *yqRun) evaluate(printer yqlib.Printer) error {
 
 // readYqDocuments decodes one file for eval-all, marking each document with
 // its file as yq's own reader does.
-func readYqDocuments(documents *list.List, text, label string, fileIndex int, decoder yqlib.Decoder) error {
-	if err := decoder.Init(strings.NewReader(text)); err != nil {
+func readYqDocuments(documents *list.List, reader io.Reader, label string, fileIndex int, decoder yqlib.Decoder) error {
+	if err := decoder.Init(reader); err != nil {
 		return err
 	}
 	for index := uint(0); ; index++ {
@@ -345,36 +327,15 @@ func readYqDocuments(documents *list.List, text, label string, fileIndex int, de
 	}
 }
 
-// read returns one operand's text: stdin within the input bound, or a
-// captured and pinned file.
-func (r *yqRun) read(file string) (string, string, error) {
-	limit := safecmd.JQCaps().InputBytes
-	if file == "-" {
-		data, err := io.ReadAll(io.LimitReader(r.inv.input, limit+1))
-		if err != nil {
-			return "", "-", err
-		}
-		if int64(len(data)) > limit {
-			return "", "-", safecmd.Reject("JQ_INPUT_TOO_LARGE", map[string]any{"path": "<stdin>", "max_bytes": limit})
-		}
-		return string(data), "-", nil
-	}
-	captured, err := r.capture(file)
-	if err != nil {
-		return "", file, err
-	}
-	return captured.text, file, nil
-}
-
 // capture pins a file once; an unreadable file is yq's open error.
-func (r *yqRun) capture(file string) (*source, error) {
+func (r *yqRun) capture(file commandprogram.Field) (*source, error) {
 	if captured, ok := r.sources[file]; ok {
 		return captured, nil
 	}
 	captured, err := r.inv.captureSource(file)
 	var failure *unreadable
 	if errors.As(err, &failure) {
-		return nil, fmt.Errorf("open %s: %s", file, strings.ToLower(failure.reason))
+		return nil, fmt.Errorf("open %s: %s", file.Value, strings.ToLower(failure.reason))
 	}
 	if err != nil {
 		return nil, err
@@ -387,12 +348,12 @@ func (r *yqRun) capture(file string) (*source, error) {
 // revisions it read, as jq-edit does; unchanged text publishes nothing.
 func (r *yqRun) inPlace() error {
 	target := r.files[0]
-	bound, err := r.inv.paths.Bind(r.inv.ctx, target, true)
+	bound, err := r.inv.paths.Bind(r.inv.ctx, target.Value, true)
 	if err != nil {
 		return err
 	}
 	if bound.Null {
-		return r.inv.usage(target, "a document PATH for -i")
+		return r.inv.usage(target.Value, "a document PATH for -i")
 	}
 	source, err := r.capture(target)
 	if err != nil {
@@ -405,22 +366,20 @@ func (r *yqRun) inPlace() error {
 	if err := r.inv.recordPin(destination); err != nil {
 		return err
 	}
-	var result bytes.Buffer
-	printer, err := r.printer(&output{ctx: r.inv.ctx, w: &result, maximum: r.inv.owners.limit("stream_bytes")})
+	result, err := r.inv.owners.Revisions.NewBufferedBytes(r.inv.ctx, r.inv.owners.limit("whole_file_bytes"), "whole_file_bytes")
+	if err != nil {
+		return err
+	}
+	defer result.Close()
+	printer, err := r.printer(result)
 	if err != nil {
 		return r.fail(err)
 	}
 	if err := r.evaluate(printer); err != nil {
 		return r.fail(err)
 	}
-	if result.String() == source.text {
+	if string(result.Bytes) == source.text {
 		return nil
 	}
-	written, err := r.inv.owners.Write.Apply(r.inv.ctx, native.WriteInput{Path: bound.Resolved.Abs, Content: result.String(),
-		Admission: native.WriteExecutionPinned, Destination: destination, Sources: []toolcontract.ExecutionRevision{source.revision}}, r.inv.tc)
-	if err != nil {
-		return err
-	}
-	r.inv.published = written.Accepted || written.Saved
-	return r.inv.barrier.Track(written)
+	return r.inv.publishBytes(source, destination, result.Bytes)
 }

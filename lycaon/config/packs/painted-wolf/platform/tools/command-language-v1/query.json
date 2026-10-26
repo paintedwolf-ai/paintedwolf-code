@@ -266,7 +266,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. jq [-rjacesnRSM] [--tab | --indent N] [--raw-output0] [--stream] [--yaml-input] [--yaml-output] [--arg NAME VALUE] [--argjson NAME JSON] [--slurpfile NAME PATH] [--rawfile NAME PATH] [-f PATH] [QUERY] [--] [PATH ...] [--args VALUE ... | --jsonargs JSON ...]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete output; -e last output truthy",
         "1": "-e last output false or null",
@@ -701,7 +701,7 @@
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; the expression is the first operand unless it is - or an existing regular file. yq [eval|e|eval-all|ea] [-i] [-n] [-e] [-r] [-P] [-N] [-M] [-0] [-j] [-I N] [-o FORMAT] [-p FORMAT] [--expression EXPR] [EXPRESSION] [--] [PATH ...]; python yq: yq [-y|-Y] [-c] [-s] [-S] [-a] [-R] [--tab] [--arg NAME VALUE] [--argjson NAME JSON] [--slurpfile NAME PATH] [--rawfile NAME PATH] [-i] FILTER [PATH ...]",
-      "encoding": "Exact bytes for streams; accepted source encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete output",
         "1": "mikefarah: error or -e with no match other than null or false; python yq: -e last output false or null",

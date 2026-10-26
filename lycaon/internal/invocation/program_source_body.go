@@ -28,10 +28,10 @@ func (r *SQLRecorder) BeginProgramWithSource(ctx context.Context, in toolcontrac
 			return err
 		}
 		defer func() { _ = tx.Rollback() }()
-		if err = insertProgram(ctx, tx, in); err != nil {
+		if err := insertProgram(ctx, tx, in); err != nil {
 			return err
 		}
-		if err = insertProgramOutput(ctx, tx, in.Version.ProgramID, RetainedOutput{Stream: "source", Reference: in.Version.SourceReference, Complete: true, Redacted: redacted}, reference, "", nil); err != nil {
+		if err := insertProgramOutput(ctx, tx, in.Version.ProgramID, RetainedOutput{Stream: "source", Reference: in.Version.SourceReference, Complete: true, Redacted: redacted}, reference, "", nil); err != nil {
 			return err
 		}
 		return tx.Commit()
