@@ -52,8 +52,8 @@ func TestCommandFeedbackDeliveryFailurePreservesActualPartialResult(t *testing.T
 						return bound, err
 					}
 					redirections := bound.Redirections
-					bound.Redirections = func(frame *projectpaths.ProgramPaths, admission tools.CommandOutputAdmission) (commandprogram.InputRedirection, commandprogram.OutputPublication) {
-						input, output := redirections(frame, admission)
+					bound.Redirections = func(frame *projectpaths.ProgramPaths, admit tools.CommandOutputAdmission) (commandprogram.InputRedirection, commandprogram.OutputPublication) {
+						input, output := redirections(frame, admit)
 						return constrainedRedirectInput{InputRedirection: input, open: func(ctx context.Context, d commandprogram.InputDestination) (io.ReadCloser, error) {
 							release, err := pool.Reserve(ctx, limits.Working-pool.InUse().Working-((32<<10)-1))
 							if err != nil {
