@@ -40,7 +40,8 @@ class ReleasePlatformAdmissionTests(unittest.TestCase):
     def test_partial_architecture_package_and_updater_changes_refuse(self):
         original = copy.deepcopy(self.catalog)
         for change in ('one-public', 'missing-architecture', 'missing-package', 'linux-updater',
-                       'windows-public', 'macos-candidate', 'unknown-field', 'missing-runner'):
+                       'windows-public', 'macos-candidate', 'unknown-field', 'missing-runner',
+                       'swapped-linux-cpu', 'wrong-artifact-cpu', 'wrong-os', 'extra-candidate'):
             with self.subTest(change=change):
                 self.catalog = copy.deepcopy(original)
                 if change == 'one-public':
@@ -55,6 +56,17 @@ class ReleasePlatformAdmissionTests(unittest.TestCase):
                     self.catalog['platforms'][-1]['publication'] = 'public'
                 elif change == 'macos-candidate':
                     self.catalog['platforms'][0]['publication'] = 'candidate'
+                elif change == 'swapped-linux-cpu':
+                    for row in self.linux():
+                        row['goarch'] = 'amd64' if row['goarch'] == 'arm64' else 'arm64'
+                        row['artifact_arch'] = 'x86_64' if row['artifact_arch'] == 'aarch64' else 'aarch64'
+                elif change == 'wrong-artifact-cpu':
+                    self.linux()[0]['artifact_arch'] = 'aarch64'
+                elif change == 'wrong-os':
+                    self.linux()[0]['goos'] = 'darwin'
+                elif change == 'extra-candidate':
+                    self.catalog['platforms'].append({**self.catalog['platforms'][0],
+                        'updater_key': 'darwin-x86_64', 'publication': 'candidate'})
                 elif change == 'unknown-field':
                     self.linux()[0]['allow_partial'] = True
                 else:
