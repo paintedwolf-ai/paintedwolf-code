@@ -18,9 +18,12 @@ policy before editing. Start unfamiliar work at [docs](docs/README.md) and
   GitHub, and open a PR for CI. Stage only authored paths: `git add -- <paths>`.
   This authorizes ordinary task commits, branch pushes, and PRs, not publication
   to sibling repos, tags, force pushes, releases, deployments, or merging.
-- **Keep PRs draft until we believe the work is complete**, independently of CI
-  results. Return to draft if more implementation is needed. Merge only on
-  request: auto-merge on a ready PR enqueues it; never bypass required checks.
+- **Keep PRs draft only while their own work is unfinished**, independently of
+  CI results. Mark a complete PR ready even while it waits on another PR. Its
+  description must state the landing order of every unlanded prerequisite, for
+  example `Depends on #12 → #15`. Return to draft if more implementation is
+  needed. Merge only on request: auto-merge on a ready PR enqueues it; never
+  bypass required checks.
 - **Use root `./task` for repository dev and verification targets.** Use digest
   targets for test output; never truncate raw results with `tail` or `grep FAIL`.
 - **Base a PR on `main` unless it needs code from an unlanded PR.** A PR based
@@ -37,9 +40,13 @@ policy before editing. Start unfamiliar work at [docs](docs/README.md) and
 - **Report the crux, changes, verification, and unresolved work.** Surface findings
   that contradict the request before changing direction. Report verification
   results once available; do not narrate queued or running checks.
-- **Keep PRs separate; automatic queue batching is the exception.** Do not
-  manually assemble omnibus PRs. The hosted queue coordinator may batch already
-  admitted waiting PRs in queue order, preserving active groups and explicit
+- **Keep PRs separate; automatic queue batching is the exception.** Never
+  combine PRs: do not assemble omnibus PRs, merge a PR into any branch other
+  than `main`, or bring an open PR's commits into another PR's branch. Stacked
+  PRs, based on another PR's branch for review, are allowed; after the base PR
+  lands, retarget the dependent PR to `main` and rebase it onto the landed
+  commit before it enters the queue. The hosted queue coordinator may batch
+  already admitted waiting PRs in queue order, preserving active groups and explicit
   campaign holds. Combined admission and merge-group checks remain required.
   The `no-combine` label excludes a PR from batches while preserving its normal
   tests and merge eligibility. Source head changes and draft decisions
