@@ -20,7 +20,7 @@ BOT = 'github-actions[bot]'
 
 OPEN_PULLS = '''query($owner:String!,$name:String!,$cursor:String){repository(owner:$owner,name:$name){
   pullRequests(states:OPEN,first:100,after:$cursor){pageInfo{hasNextPage endCursor}
-  nodes{number headRefOid headRefName baseRefName isDraft headRepository{nameWithOwner} mergeQueueEntry{id}
+  nodes{number headRefOid headRefName baseRefName createdAt updatedAt isDraft headRepository{nameWithOwner} mergeQueueEntry{id}
   timelineItems(itemTypes:[BASE_REF_CHANGED_EVENT],last:1){nodes{... on BaseRefChangedEvent{previousRefName currentRefName createdAt}}}}}}}'''
 
 
@@ -47,6 +47,23 @@ def dependent(pull, landed, repository):
     moved = pull['timelineItems']['nodes']
     return (pull['baseRefName'] == 'main' and bool(moved) and moved[0]['previousRefName'] == landed['head']['ref']
             and moved[0]['currentRefName'] == 'main' and moved[0]['createdAt'] >= landed['created_at'])
+
+
+def auto_retarget_candidate(pull, landed, repository):
+    """GitHub may silently retarget a child when its base branch lands."""
+    return ((pull['headRepository'] or {}).get('nameWithOwner') == repository and not pull['mergeQueueEntry']
+            and pull['baseRefName'] == 'main' and landed['created_at'] <= pull['createdAt'] <= landed['merged_at']
+            and pull['updatedAt'] >= landed['merged_at'])
+
+
+def parent_commit(repository, landed):
+    """Use a commit unique to the landed branch to identify inherited history."""
+    comparison = api(f'repos/{repository}/compare/{landed["base"]["sha"]}...{landed["head"]["sha"]}?per_page=1')
+    return comparison['commits'][0]['sha'] if comparison['ahead_by'] and comparison['commits'] else None
+
+
+def inherits_commit(repository, commit, head):
+    return api(f'repos/{repository}/compare/{commit}...{head}')['behind_by'] == 0
 
 
 def behind(repository, head):
@@ -188,9 +205,16 @@ def update_dependents(repository, event, sleep=time.sleep):
     if not pull['merged'] or pull['base']['ref'] != 'main' or (pull['head']['repo'] or {}).get('full_name') != repository:
         return {'state': 'not_applicable'}
     outcomes, requested, failures = {}, {}, []
+    anchor, anchor_checked = None, False
     for candidate in open_pulls(repository):
         if not dependent(candidate, pull, repository):
-            continue
+            if not auto_retarget_candidate(candidate, pull, repository):
+                continue
+            if not anchor_checked:
+                anchor = parent_commit(repository, pull)
+                anchor_checked = True
+            if not anchor or not inherits_commit(repository, anchor, candidate['headRefOid']):
+                continue
         try:
             outcome, head = request(repository, candidate, pull, sleep)
         except subprocess.CalledProcessError as error:
