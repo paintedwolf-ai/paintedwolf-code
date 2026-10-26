@@ -14,33 +14,45 @@ import (
 	"github.com/lycaon/lycaon/internal/fseffect"
 )
 
-// Finish persists one immutable artifact. Exclusions contain identifiers and
+// Finish persists one immutable artifact per student. Exclusions contain identifiers and
 // field names only; no payload of an excluded turn is written.
 func (t *Turn) Finish() error {
 	if t == nil {
 		return nil
 	}
 	body, source, count := t.wire.Snapshot()
-	t.record.Dispatches = count
-	if t.record.Reason == "" {
-		switch {
-		case count != 1:
-			t.record.Reason = "ambiguous_dispatch"
-		case len(body) == 0:
-			t.record.Reason = "request_too_large"
-		case source == nil:
-			t.record.Reason = "dispatch_source_unrecorded"
-		case !t.record.Settled:
-			t.record.Reason = "unsettled_output"
-		case len(t.record.Response) == 0 || len(t.record.StudentRequest) == 0:
-			t.record.Reason = "missing_response"
+	records := t.records
+	if len(records) == 0 {
+		for _, student := range t.students {
+			record := t.record
+			record.StudentProvider, record.StudentModel = student.Provider, student.Model
+			records = append(records, record)
 		}
 	}
-	t.record.Request = body
-	if t.record.Reason != "" {
-		t.record.Request, t.record.StudentRequest, t.record.Response = nil, nil, nil
+	var result error
+	for _, record := range records {
+		record.Dispatches = count
+		if record.Reason == "" {
+			switch {
+			case count != 1:
+				record.Reason = "ambiguous_dispatch"
+			case len(body) == 0:
+				record.Reason = "request_too_large"
+			case source == nil:
+				record.Reason = "dispatch_source_unrecorded"
+			case !record.Settled:
+				record.Reason = "unsettled_output"
+			case len(record.Response) == 0 || len(record.StudentRequest) == 0:
+				record.Reason = "missing_response"
+			}
+		}
+		record.Request = body
+		if record.Reason != "" {
+			record.Request, record.StudentRequest, record.Response = nil, nil, nil
+		}
+		result = errors.Join(result, writeArtifact(t.root, record))
 	}
-	return writeArtifact(t.root, t.record)
+	return result
 }
 
 func (t *Turn) Flush(ctx context.Context) {

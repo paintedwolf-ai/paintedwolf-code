@@ -14,7 +14,7 @@ from export import export
 
 def fixture(group, mode):
     prompt = [{"role":"system","content":"Be precise"},{"role":"user","content":group}]
-    capture = {"schema":"pw-model-request-capture/2","messages":prompt,"tools":[],"controls":{},
+    capture = {"schema":"pw-model-request-capture/2","messages":prompt,"tools":[],"controls":{"reasoning_effort":"none"},
                "host_revision":"a"*40,"epoch":"fixture","tool_surface":"legacy","state_sha256":"b"*64,"catalog_sha256":"c"*64}
     capture["sha256"] = digest(capture)
     target = {"role":"assistant","text":"answer","tool_calls":[]}

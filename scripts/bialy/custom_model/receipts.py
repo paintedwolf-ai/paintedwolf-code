@@ -26,7 +26,7 @@ def openai_chat(wire):
     if set(wire) - supported or not isinstance(wire.get("messages"), list):
         raise ValueError("unsupported student request shape")
     controls = {k: v for k, v in wire.items() if k not in {"model", "messages", "tools", "stream", "stream_options"}}
-    if controls.get("tool_choice") not in (None, "auto") or controls.get("parallel_tool_calls") is False or controls.get("reasoning_effort") not in (None, "none", "minimal"):
+    if controls.get("tool_choice") not in (None, "auto") or controls.get("parallel_tool_calls") is False or controls.get("reasoning_effort") != "none":
         raise ValueError("request control needs a model-specific renderer")
     messages = []
     for m in wire["messages"]:
