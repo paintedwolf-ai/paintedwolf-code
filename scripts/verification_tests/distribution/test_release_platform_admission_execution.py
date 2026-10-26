@@ -58,7 +58,7 @@ class ReleasePlatformAdmissionTests(unittest.TestCase):
                 elif change == 'missing-package':
                     self.linux()[0]['package_extensions'].pop()
                 elif change == 'linux-updater':
-                    self.linux()[0]['updater_extension'] = 'AppImage'
+                    self.linux()[0]['updater_extension'] = 'unsupported-updater'
                 elif change == 'windows-public':
                     self.catalog['platforms'][-1]['publication'] = 'public'
                 elif change == 'macos-candidate':
