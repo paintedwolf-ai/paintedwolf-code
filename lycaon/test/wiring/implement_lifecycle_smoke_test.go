@@ -144,9 +144,6 @@ func TestImplementLifecycleSmokePathsForward(t *testing.T) {
 		t.Fatalf("phase after board orient = %q want work", run.CurrentPhase)
 	}
 
-	// Each lifecycle stage has a wall-clock bound.
-	const perStageBudget = workerDrainQuiescenceTimeout
-
 	// Fixture phase preparation must not dispatch work ahead of the human ask.
 	if len(recording.AllRequests()) != 0 {
 		t.Fatal("model ran during fixture preparation")

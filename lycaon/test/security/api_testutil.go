@@ -284,8 +284,6 @@ func listMessagesHTTP(t *testing.T, srv *api.Server, sessionID string) []wire.Me
 	return msgs
 }
 
-const promptIdleBudget = 30 * time.Second
-
 func postPromptAndWaitIdle(t *testing.T, srv *api.Server, sessionID, text string) {
 	t.Helper()
 	accepted := acceptPromptHTTP(t, srv, sessionID, text)
