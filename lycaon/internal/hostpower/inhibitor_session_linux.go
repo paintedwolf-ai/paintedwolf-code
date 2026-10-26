@@ -158,7 +158,7 @@ func (p portalProvider) Acquire(ctx context.Context) (lease, error) {
 		return nil, fmt.Errorf("acquire portal inhibitor: %w", err)
 	}
 	if err := awaitGrant(ctx, service, request); err != nil {
-		cleanup, cancel := context.WithTimeout(context.Background(), busDeadline)
+		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), busDeadline)
 		_ = bus.Object(service.owner, request).CallWithContext(cleanup, portalRequest+".Close", 0).Err
 		cancel()
 		_ = bus.Close()
