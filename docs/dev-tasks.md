@@ -1049,6 +1049,8 @@ Installed GUI qualification is a local pre-release lane on the native qualificat
 
 Each case runs within its own time budget, 900 seconds unless its driver family declares `TIME_BUDGET_SECONDS`. A case past its budget fails, and the campaign continues with the next case.
 
+Before seating a GNOME unlock or Polkit qualification case, its trusted root preparation must materialize the exact frozen `driver_tree` Python capture under `/var/lib/paintedwolf-qualification`. Both privileged entry points validate that capture's root-controlled paths, complete file inventory and byte digests before importing credential or observer code. A missing or mismatched capture refuses the case; the QA account and input helpers cannot prepare it implicitly.
+
 The dispatch-only `Linux installed desktop rehearsal` workflow exercises the same case runner on a GitHub-hosted Ubuntu desktop for amd64 or arm64. Its candidate is chosen through dispatch inputs; nothing is pinned in the repository. It fails unless the retained campaign is accepted, or, for partial diagnostic packages, unless the first-launch diagnosis passed. It grants no qualification or publication authority. Confinement boundaries have one installed smoke each; the confinement contract itself is `./task test:confine:linux`.
 
 Release consumption of the retained campaign, architecture-specific performance limits (#455) and the full matrix (#456) remain tracked there; the campaign closes only after its required rows pass.

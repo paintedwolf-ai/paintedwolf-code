@@ -1,14 +1,17 @@
 """Root code preparation consumes only frozen, bounded Python source objects."""
 import base64
+import builtins
 import hashlib
 import io
 import json
 import os
+import stat
 from pathlib import Path
 import subprocess
 import sys
 import tarfile
 import unittest
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from scripts.linux_release.installed_input import captured_driver
@@ -74,10 +77,6 @@ class PolkitCaptureTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr.decode())
 
 
-if __name__ == '__main__':
-    unittest.main()
-
-
 class AccountCaptureCommandTests(unittest.TestCase):
     def test_unsafe_tree_refuses_before_any_privileged_command(self):
         from scripts.linux_release.installed_input import unlock_account
@@ -105,3 +104,59 @@ class AccountCaptureCommandTests(unittest.TestCase):
         self.assertEqual(command.call_args.args[0],['/usr/bin/sudo','-n',*unlock_account.helper_python_arguments(
             'disable',ACCOUNT,driver_tree=EXECUTION['driver_tree'],vm_id='owned')])
         self.assertIn(captured_driver.ACCOUNT_BOOTSTRAP,command.call_args.args[0])
+
+
+class CaptureImportRefusalTests(unittest.TestCase):
+    def test_missing_mismatched_or_changed_capture_never_imports_privileged_project_code(self):
+        tree = 'c' * 40
+        original_import = builtins.__import__
+        for failure in ('missing', 'tree', 'digest'):
+            class Entry:
+                parents = []
+                name, suffix = 'fixture.py', '.py'
+
+                def __truediv__(self, name):
+                    return marker if name == 'capture.json' else self
+
+                def lstat(self):
+                    if self is root and failure == 'missing':
+                        raise FileNotFoundError('missing fixed capture')
+                    mode = stat.S_IFDIR | 0o555 if self is root else stat.S_IFREG | 0o444
+                    return SimpleNamespace(st_mode=mode, st_uid=0, st_gid=0, st_size=100)
+
+                def read_bytes(self):
+                    if self is marker:
+                        return json.dumps({'format_version': 1,
+                            'driver_tree': 'd' * 40 if failure == 'tree' else tree,
+                            'files_sha256': {'scripts/linux_release/fixture.py': '0' * 64}}).encode()
+                    return b'# changed captured bytes\n'
+
+                def rglob(self, _):
+                    return [marker, source]
+
+                def relative_to(self, _):
+                    return self
+
+                def as_posix(self):
+                    return 'scripts/linux_release/fixture.py'
+
+            root, marker, source = Entry(), Entry(), Entry()
+            for bootstrap in (captured_driver.OBSERVER_BOOTSTRAP, captured_driver.ACCOUNT_BOOTSTRAP):
+                imports = []
+                def checked_import(name, *args, **kwargs):
+                    if name == 'scripts' or name.startswith('scripts.'):
+                        imports.append(name)
+                        raise AssertionError('unvalidated project import')
+                    return original_import(name, *args, **kwargs)
+                with self.subTest(failure=failure, bootstrap=bootstrap[-80:]), \
+                        patch('pathlib.Path', return_value=root), \
+                        patch('sys.argv', ['fixed', tree]), \
+                        patch('builtins.__import__', side_effect=checked_import):
+                    with self.assertRaises(SystemExit) as refused:
+                        exec(bootstrap, {})
+                    self.assertEqual(refused.exception.code, 2)
+                    self.assertEqual(imports, [])
+
+
+if __name__ == '__main__':
+    unittest.main()
