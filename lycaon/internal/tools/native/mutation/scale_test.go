@@ -59,7 +59,7 @@ func TestDirectoryDeletesRespectQuotaAndPruneRetainedTrees(t *testing.T) {
 			testutil.FailErr(t, "write "+full, os.WriteFile(full, []byte(chunk), 0o644))
 		}
 		if round == 0 {
-			measured, err := h.service.InspectRemoval(t.Context(), fseffect.Location{Root: h.root, Rel: "node_modules"}, h.program.Memory)
+			measured, err := h.service.InspectRemoval(t.Context(), fseffect.Location{Root: h.root, Rel: "node_modules"}, h.owners.Revisions.Memory)
 			testutil.FailErr(t, "measure retained tree allocation", err)
 			if !measured.RecoverySizeKnown || measured.RecoveryBytes < 1 {
 				t.Fatalf("unavailable fixture allocation: %+v", measured)
@@ -240,7 +240,7 @@ func TestRecursivePolicyReviewUsesAndReleasesInvocationMemory(t *testing.T) {
 		h := newHarness(t, map[string]string{"tree/AGENTS.md": "instructions"})
 		memory, err := toolcontract.NewProgramMemory(limits)
 		testutil.FailErr(t, "constrain invocation memory", err)
-		h.program.Memory = memory
+		h.owners.Revisions.Memory = memory
 		result := h.run("", "rm", "-rf", "tree")
 		var limit *toolcontract.ProgramMemoryLimitError
 		if !errors.As(result.err, &limit) || h.absent("tree") {
@@ -264,7 +264,7 @@ func TestRecursiveRemovalTraversalUsesInvocationState(t *testing.T) {
 			testutil.FailErr(t, "seed leaf", os.WriteFile(h.path(filepath.Join(path, "leaf")), []byte("body"), 0o644))
 			memory, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: 32 << 20, State: 768 << 10})
 			testutil.FailErr(t, "create invocation budget", err)
-			h.program.Memory = memory
+			h.owners.Revisions.Memory = memory
 			result := h.run("", "rm", "-rf", "tree")
 			if depth == 0 {
 				if result.err != nil || !h.absent("tree") {
@@ -291,7 +291,7 @@ func TestMoveReleasesSourceSnapshotWhenDestinationAdmissionFails(t *testing.T) {
 	h := newHarness(t, map[string]string{"source": "new", "destination": "old"})
 	memory, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: 128 << 10, State: 64 << 10})
 	testutil.FailErr(t, "bound move snapshots", err)
-	h.program.Memory = memory
+	h.owners.Revisions.Memory = memory
 	result := h.run("", "mv", "source", "destination")
 	var limit *toolcontract.ProgramMemoryLimitError
 	if !errors.As(result.err, &limit) || limit.Account != "state" {
