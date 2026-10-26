@@ -23,6 +23,11 @@ policy before editing. Start unfamiliar work at [docs](docs/README.md) and
   request: auto-merge on a ready PR enqueues it; never bypass required checks.
 - **Use root `./task` for repository dev and verification targets.** Use digest
   targets for test output; never truncate raw results with `tail` or `grep FAIL`.
+- **Base a PR on `main` unless it needs code from an unlanded PR.** A PR based
+  on another PR's branch gets no CI until it targets `main`. When its base PR
+  lands, automation retargets it and merges `main` into it, so fetch before your
+  next push and never force-push over that merge. An `update-conflict` label
+  means that merge conflicted: merge `main` yourself, resolve, and push.
 - **Ask first** for destructive Git/shared-state operations, discarding others'
   work, `--no-verify`, new top-level docs or task targets, and major dependency
   bumps. Prefer existing [documentation hubs](docs/README.md).

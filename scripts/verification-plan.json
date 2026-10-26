@@ -1254,7 +1254,8 @@
       "issue-intake.yml": 1,
       "maintainability-issues.yml": 1,
       "verification-recovery.yml": 1,
-      "dco.yml": 1
+      "dco.yml": 1,
+      "dependent-update.yml": 1
     }
   }
 }
