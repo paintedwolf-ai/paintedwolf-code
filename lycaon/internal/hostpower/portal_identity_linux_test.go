@@ -124,7 +124,7 @@ func TestPortalWithoutRegistryEntersApplicationScopeOnceWhenUnscoped(t *testing.
 	case <-time.After(time.Second):
 		t.Fatal("release left the session layer open")
 	}
-	if !descriptorsClosed(t, logind, reader, time.Second) {
+	if !descriptorsClosed(t, logind, reader) {
 		t.Fatal("release left the system layer open")
 	}
 }

@@ -63,7 +63,7 @@ func TestManualProviderInterceptAndRespond(t *testing.T) {
 		if len(c.ToolCalls) != 1 || c.ToolCalls[0].Name != "read" {
 			t.Fatalf("tool calls = %+v", c.ToolCalls)
 		}
-	case <-time.After(2 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("Complete did not return after Respond")
 	}
 }
@@ -125,7 +125,7 @@ func TestManualProviderDirtyStreamChunks(t *testing.T) {
 		if got[0].Content != "Hel" || got[1].Content != "lo" || !got[1].Done {
 			t.Fatalf("unexpected chunks: %+v", got)
 		}
-	case <-time.After(2 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("Stream did not finish after RespondWithChunks")
 	}
 }
@@ -172,7 +172,7 @@ func TestManualProviderStreamsPlainContentByteForByte(t *testing.T) {
 		if b.String() != content || len(r.chunks) < 2 || !r.chunks[len(r.chunks)-1].Done {
 			t.Fatalf("streamed %q in %d chunk(s), want the content verbatim across line chunks", b.String(), len(r.chunks))
 		}
-	case <-time.After(2 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("stream did not finish after Respond")
 	}
 }
@@ -204,7 +204,7 @@ func TestManualProviderPendingFiltersBySession(t *testing.T) {
 		if pend == nil || pend.SessionID != "current" {
 			t.Fatalf("filtered pending = %+v; want the current session's request", pend)
 		}
-	case <-time.After(3 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("filtered pending did not receive the current session's request")
 	}
 }
@@ -229,7 +229,7 @@ func TestManualProviderAutoReplyReleasesWaitingRequests(t *testing.T) {
 		if c == nil || c.Content != "resumed" {
 			t.Fatalf("released completion = %+v; want the auto reply", c)
 		}
-	case <-time.After(2 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("waiting request was not released when auto-reply resumed")
 	}
 	if _, ok := p.Pending(context.Background(), "", 0); ok {
