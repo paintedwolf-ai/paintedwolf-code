@@ -95,11 +95,11 @@ class HostedExecutionTests(unittest.TestCase):
             with self.subTest(code=preflight_code), tempfile.TemporaryDirectory() as directory, \
                     patch("ci_policy.impact.change", return_value=scope), \
                     patch.object(ci, "artifact_root", return_value=Path(directory)), \
-                    patch.object(ci.subprocess, "call", side_effect=[preflight_code, 0]) as run:
+                    patch.object(ci.subprocess, "call", side_effect=[preflight_code, 0, 0, 0]) as run:
                 self.assertEqual(ci.run_lane("ready"), preflight_code)
                 self.assertEqual(run.call_args_list[0].args[0],
                                  ["./task", *hosted_plan.lanes()["ready"]["preflight"]])
-                self.assertEqual(run.call_count, 2 if preflight_code == 0 else 1)
+                self.assertEqual(run.call_count, 4 if preflight_code == 0 else 1)
                 record = json.loads((Path(directory) / "ci/run.json").read_text())
                 self.assertEqual(record["preflight"]["exit_code"], preflight_code)
                 self.assertIn("finished_at", record["preflight"])

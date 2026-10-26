@@ -76,6 +76,9 @@ def run_lane(name, shard="", merge_group=False):
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / "run.json"
     record = {"lane": name, "shard": shard, "targets": targets, "started_at": time.time(), "status": "running", "scope": scope}
+    record['identity'] = {'run': os.environ.get('GITHUB_RUN_ID', ''),
+                          'attempt': os.environ.get('GITHUB_RUN_ATTEMPT', ''),
+                          'sha': os.environ.get('GITHUB_SHA', '')}
     record["oom_before"] = oom_events()
     path.write_text(json.dumps(record, indent=2) + "\n")
     # Hosted runners are slower than development hosts; the lane budget, not the local default, bounds Go runs.
@@ -119,6 +122,9 @@ def run_lane(name, shard="", merge_group=False):
             code = subprocess.call(preflight, cwd=ROOT, env=environment)
             record["preflight"].update(exit_code=code, finished_at=time.time())
         commands = [command]
+        if name == 'ready':
+            from ci_policy.native_admission import commands as native_commands
+            commands = [*native_commands(scope), command]
         if code == 0 and merge_group:
             from ci_policy.merge_preflight import commands as ordered_commands
             commands = ordered_commands(lane, hosted_plan.invocation(targets), packages)

@@ -446,6 +446,8 @@
     "test:race": "go",
     "den:test:digest": "vitest",
     "den:harness:test": "playwright",
+    "den:test:rust": "passthrough",
+    "decide:test": "passthrough",
     "lint:fast": "passthrough",
     "lint:full": "passthrough",
     "oar:conformance": "passthrough",
@@ -875,6 +877,10 @@
   },
   "ci": {
     "ready": {
+      "compile_targets": {
+        "den:test:rust": ["lycaon-den/src-tauri/"],
+        "decide:test": ["lycaon/internal/decide/native/"]
+      },
       "targets": [
         "build",
         "lint:full",
@@ -913,7 +919,7 @@
       ],
       "suite": "all",
       "setup": "verification",
-      "first": true
+      "priority": "reject"
     },
     "build": {
       "targets": [
@@ -958,7 +964,7 @@
       ],
       "suite": "all",
       "setup": "analysis",
-      "first": true,
+      "priority": "reject",
       "early_targets": [
         "comments:check",
         "test:fail-messages:check"
@@ -1004,7 +1010,8 @@
       "setup": "verification",
       "workers": 3,
       "shards": 2,
-      "contract_first": true
+      "contract_first": true,
+      "priority": "critical"
     },
     "frontend": {
       "targets": [
@@ -1033,7 +1040,9 @@
         "integration"
       ],
       "suite": "all",
-      "setup": "shell"
+      "setup": "shell",
+      "runtime_engines": false,
+      "priority": "compile"
     },
     "webkit": {
       "targets": [

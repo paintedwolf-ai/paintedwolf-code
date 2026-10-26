@@ -48,4 +48,4 @@ class HostedScheduleTests(unittest.TestCase):
         self.assertIn("Estimate basis: `catalog-budget`", summary)
         self.assertIn("`behavior 2/2`", summary)
         self.assertIn("Qualification timing sources: 30, 20", summary)
-        self.assertIn("| 3 | behavior | 1/2 | 9000 |", summary)
+        self.assertIn("| 3 | behavior | 1/2 | critical | 9000 |", summary)

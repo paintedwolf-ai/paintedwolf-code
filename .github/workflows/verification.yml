@@ -130,6 +130,7 @@ jobs:
         if: matrix.setup != 'analysis'
         with:
           setup: ${{ matrix.setup }}
+          runtime-engines: ${{ matrix.runtime_engines }}
           notices: ${{ matrix.notices }}
           analysis: ${{ matrix.analysis }}
           # An admission lane runs offline, so it cannot fetch its container images; other lanes

@@ -4,6 +4,8 @@ from collections import Counter
 from ci_policy.timings import valid_seconds
 from verification_plan import expand
 
+PRIORITIES = {"reject": 0, "critical": 1, "compile": 2, "normal": 3}
+
 
 def validate_sources(lanes):
     for name, lane in lanes.items():
@@ -33,9 +35,10 @@ def order(rows, lanes, timings=None):
         seconds = measured[row["timing_row"]] if complete else row["minutes"] * 60
         estimates[row["lane"]] = max(estimates.get(row["lane"], 0), seconds)
     result = [{**row, "expected_seconds": estimates[row["lane"]],
-               "timing_basis": "measured" if complete else "catalog-budget"} for row in rows]
+               "timing_basis": "measured" if complete else "catalog-budget",
+               "priority": lanes[row["lane"]].get("priority", "normal")} for row in rows]
     # Package balancing changes shard assignments; siblings share the lane's longest estimate.
-    return sorted(result, key=lambda row: (0 if lanes[row["lane"]].get("first") else 1 if lanes[row["lane"]].get("contract_first") else 2,
+    return sorted(result, key=lambda row: (PRIORITIES[lanes[row["lane"]].get("priority", "normal")],
                                           -row["expected_seconds"], row["lane"], row["shard"]))
 
 
@@ -50,11 +53,11 @@ def summarize(matrix, timings=None):
     runs = (timings or {}).get("runs", [])
     if runs:
         lines += ["Qualification timing sources: " + ", ".join(str(run) for run in runs) + ".", ""]
-    lines += ["| Order | Lane | Shard | Execution estimate (seconds) | Timing row | Measurement run |",
-              "|---|---|---|---|---|---|"]
+    lines += ["| Order | Lane | Shard | Priority | Execution estimate (seconds) | Timing row | Measurement run |",
+              "|---|---|---|---|---|---|---|"]
     for index, row in enumerate(rows, 1):
         source = (timings or {}).get("lane_runs", {}).get(row["timing_row"], "")
         if row["timing_basis"] != "measured":
             source = ""
-        lines.append(f"| {index} | {row['lane']} | {row['shard']} | {row['expected_seconds']} | {row['timing_row']} | {source} |")
+        lines.append(f"| {index} | {row['lane']} | {row['shard']} | {row['priority']} | {row['expected_seconds']} | {row['timing_row']} | {source} |")
     return "\n".join(lines) + "\n"

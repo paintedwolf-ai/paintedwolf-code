@@ -87,7 +87,7 @@ class MergePreflightTests(unittest.TestCase):
         from ci_policy.health import throughput
         runs = [dict(id=n, conclusion=conclusion, created_at="2026-10-22T10:00:00Z", updated_at="2026-10-22T10:10:00Z")
                 for n, conclusion in enumerate(("success", "success", "failure", "cancelled"))]
-        jobs = lambda run: [dict(id=run["id"], started_at="2026-10-22T10:01:00Z", completed_at="2026-10-22T10:10:00Z")]
+        jobs = lambda run: [dict(id=run["id"], runner_id=1, started_at="2026-10-22T10:01:00Z", completed_at="2026-10-22T10:10:00Z")]
         report = throughput(runs, [{"number": 1}, {"number": 1}], "2026-10-22T10:00:00Z", "2026-10-22T12:00:00Z", jobs)
         self.assertEqual(report["main_merges_per_hour"], .5)
         self.assertEqual(report["decided_groups"], 3)

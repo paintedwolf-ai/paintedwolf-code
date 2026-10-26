@@ -144,8 +144,8 @@ class MeasuredTimingsTests(unittest.TestCase):
         selection = lambda rows: sorted((row["lane"], row["shard"], row["minutes"]) for row in rows)
         self.assertEqual(selection(rows), selection(unmeasured))
         self.assertEqual({row["lane"] for row in rows[:2]}, {"limits", "lint"})
-        rest = [row["lane"] for row in rows if not lanes[row["lane"]].get("first") and not lanes[row["lane"]].get("contract_first")]
-        self.assertEqual(rest[:4], ["webkit-gtk", "frontend", "native", "runner"])
+        rest = [row["lane"] for row in rows if lanes[row["lane"]].get("priority", "normal") in {"compile", "normal"}]
+        self.assertEqual(rest[:4], ["native", "webkit-gtk", "frontend", "runner"])
         self.assertLess(rest.index("runner"), rest.index("contracts"))
 
     def test_plan_without_measurements_orders_by_budget(self):
@@ -153,7 +153,7 @@ class MeasuredTimingsTests(unittest.TestCase):
         with patch.object(hosted_plan, "catalog", return_value=data):
             rows = hosted_plan.matrix("check", timings={})["include"]
         lanes = hosted_plan.lanes()
-        order = [(not lanes[row["lane"]].get("first"), -row["minutes"]) for row in rows]
+        order = [(hosted_plan.PRIORITIES[lanes[row["lane"]].get("priority", "normal")], -row["minutes"]) for row in rows]
         self.assertEqual(order, sorted(order))
 
 
