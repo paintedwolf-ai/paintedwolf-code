@@ -166,6 +166,10 @@ Project deletion with optional extension cleanup is settled by `internal/project
 
 Den shows this evidence and defaults to keeping every extension. A submitted selection carries the host's assessment token and a UUID operation id. The host rejects changed evidence, runs the ordinary lifecycle checks, deletes the project, and only then attempts cleanup, which revalidates the references and commits the selected set in one extension transaction. Deletion and cleanup have separate outcomes: a failed or declined deletion removes no extensions, and a cleanup failure does not undo or misreport a committed deletion.
 
+The removal request durably accepts the operation and returns without waiting for deletion. The existing server task group tracks the work through shutdown. While it runs, the result endpoint answers from live progress without waiting for database writes: preparation, completed chat counts, project data, managed files, and optional extensions. Chat selection pages project summaries and indexed tree identities instead of hydrating every chat in the store. Physical history deletion still scales with retained data; counts advance as each chat's runtime is released, not after each database page. A second removal request for a project whose operation is still running is refused as busy rather than recorded as a failed operation. If the host stops while deletion runs, the receipt records the project state it observed.
+
+Den polls the accepted operation and updates the existing app notice rail. Opening a project during its lifecycle transition shows a project change wait in the existing editor opening surface. No separate notification system is introduced. Live progress is ephemeral and is never written into the durable receipt. The additive progress field belongs to the co-versioned bundle wire; the persisted journal shape is unchanged.
+
 Receipts retain the reviewed assessment and exact request independently of the deleted project. An exact retry returns the recorded outcome; reusing an id with different input is refused. A process interruption leaves an explicit interrupted outcome, and the host never repeats destructive work on its own. Settled receipts follow the operation-journal retention period; unsettled ones are kept.
 
 ### Idle storage tiering
@@ -200,6 +204,8 @@ The bundled `pw` command addresses the same host and project identities as Den. 
 | `pw ls` | List projects and attached roots |
 | `pw logs` | Open the local diagnostic log viewer |
 | `pw --version` | Print the installed Painted Wolf Code version |
+
+When Painted Wolf Code is not running, `pw .`, `pw open` and `pw ls` start it and wait for it to accept the request. macOS asks Launch Services for the installed app. Linux starts the installed desktop program in its own session; it requires a graphical session in the terminal's environment and a launcher owned by root and not writable by others. A start that exits early, is cancelled, or does not become ready in time is reported as such, and only the session that command started is stopped.
 
 Commands use stable ids internally and may accept unambiguous display selectors; ambiguity is reported rather than resolved by recency or path guessing. The CLI may request project actions available to the human operator; it grants an agent no new tool authority and bypasses no approval, confinement, or project trust. It discovers the local sidecar and authenticates with the same device-local API token: loopback is transport, the token is the caller boundary.
 
