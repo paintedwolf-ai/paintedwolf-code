@@ -112,22 +112,27 @@ class JobSettlement:
         namespace_search = [str(namespace), str(self.checkout),
                   *[entry for entry in sys.path if entry not in {str(namespace), str(self.checkout)}]]
 
-        def require_namespace(spec, locations):
+        def require_namespace(name, spec, locations):
+            physical = self.checkout.joinpath(*name.split('.'))
             paths = [Path(location) for location in locations] if locations is not None else []
             _require(spec is not None and spec.origin is None and paths
-                     and all(path == namespace and path.resolve(strict=True) == namespace for path in paths),
+                     and physical.is_dir() and physical.resolve(strict=True) == physical
+                     and all(path == physical and path.resolve(strict=True) == physical for path in paths),
                      'scripts namespace differs from the reviewed checkout')
 
         # Namespace packages have no __file__; identical search roots add no authority.
         candidate = PathFinder.find_spec('scripts', namespace_search)
-        require_namespace(candidate, candidate.submodule_search_locations if candidate else None)
+        require_namespace('scripts', candidate, candidate.submodule_search_locations if candidate else None)
         # Reject a cached dependency from another checkout before importing any observer.
         for name, loaded in list(sys.modules.items()):
             if name == 'scripts' or name.startswith('scripts.') or name.startswith('verification_'):
                 source = getattr(loaded, '__file__', None)
-                if name == 'scripts':
+                if name == 'scripts' or (name.startswith('scripts.') and source is None):
                     _require(source is None, 'scripts must remain the reviewed namespace package')
-                    require_namespace(getattr(loaded, '__spec__', None), getattr(loaded, '__path__', None))
+                    physical = self.checkout.joinpath(*name.split('.'))
+                    candidate = PathFinder.find_spec(name, [str(physical.parent)])
+                    require_namespace(name, candidate, candidate.submodule_search_locations if candidate else None)
+                    require_namespace(name, getattr(loaded, '__spec__', None), getattr(loaded, '__path__', None))
                     continue
                 _require(source is not None and Path(source).resolve().is_relative_to(self.checkout),
                          'cached observation dependency is outside the reviewed checkout')
