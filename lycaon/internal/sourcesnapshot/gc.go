@@ -46,7 +46,6 @@ type snapshotCollector struct {
 }
 
 func (s *snapshotCollector) sweep(ctx context.Context, cutoff string) error {
-
 	for {
 		removed, err := s.queries.DeleteExpiredSourceSnapshotHeads(ctx, db.DeleteExpiredSourceSnapshotHeadsParams{
 			CreatedBefore: cutoff, BatchLimit: snapshotSweepBatch,

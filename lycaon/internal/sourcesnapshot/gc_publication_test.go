@@ -87,3 +87,25 @@ func TestSweepCandidatePagesIncludeRetainedRows(t *testing.T) {
 		}
 	}
 }
+
+func TestSweepStagingKeepsActiveProcessAcrossPages(t *testing.T) {
+	s := openSnapshotStore(t)
+	ctx := t.Context()
+	_, err := s.db.ExecContext(ctx, `WITH RECURSIVE entries(n) AS (
+ SELECT 1 UNION ALL SELECT n+1 FROM entries WHERE n < ?)
+ INSERT INTO source_manifest_staging (build_id,path,identity,size,mode)
+ SELECT 'previous-process',printf('%06d',n),'stat',0,0 FROM entries`, 2*stagingPage+1)
+	testutil.FailErr(t, "seed abandoned pages", err)
+	_, err = s.db.ExecContext(ctx, `INSERT INTO source_manifest_staging (build_id,path,identity,size,mode)
+ VALUES (?, 'active', 'stat', 0, 0)`, newBuildID())
+	testutil.FailErr(t, "seed active build", err)
+	testutil.FailErr(t, "sweep staging", s.Sweep(ctx, time.Now()))
+	if got := countRows(t, s, `SELECT COUNT(*) FROM source_manifest_staging`); got != 1 {
+		t.Fatalf("staging rows = %d, want active build only", got)
+	}
+	var path string
+	testutil.FailErr(t, "read retained staging", s.db.QueryRowContext(ctx, `SELECT path FROM source_manifest_staging`).Scan(&path))
+	if path != "active" {
+		t.Fatalf("retained staging = %q", path)
+	}
+}
