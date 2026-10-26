@@ -33,3 +33,4 @@ metadata:
 - [UI chrome and containers](references/ui-chrome-and-containers.md): window headers, palettes, segmented controls, docks, cards, toasts; specimens in `assets/`.
 - [Chrome elevation and tokens](references/chrome-elevation-and-tokens.md): shadows, `<kbd>` badges, and `--kit-*` token mapping.
 - [Visual inspection workflow](references/visual-inspection-workflow.md): the `render_view` and `view_image` loop in detail.
+- [Worked example](references/worked-example.md): a duotone search icon inside elevated palette chrome.
