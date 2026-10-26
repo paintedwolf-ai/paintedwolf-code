@@ -19,7 +19,7 @@ import (
 )
 
 func TestOutputViewHostReadRepairsChangedDeletedAndHardlinkedCopies(t *testing.T) {
-	for _, mode := range []string{"modified", "deleted", "hardlinked"} {
+	for _, mode := range []string{"modified", "deleted", "hard-link"} {
 		t.Run(mode, func(t *testing.T) {
 			f := newOutputDeliveryFixture(t)
 			var tc tools.ToolContext
@@ -44,7 +44,7 @@ func TestOutputViewHostReadRepairsChangedDeletedAndHardlinkedCopies(t *testing.T
 				testutil.FailErr(t, "delete view", os.Remove(target))
 			} else {
 				writePath := target
-				if mode == "hardlinked" {
+				if mode == "hard-link" {
 					testutil.FailErr(t, "plant alias", os.Link(target, alias))
 					writePath = alias
 				}
@@ -71,7 +71,7 @@ func TestOutputViewHostReadRepairsChangedDeletedAndHardlinkedCopies(t *testing.T
 			if got := len(f.Delivered()); got != before {
 				t.Fatalf("repair manufactured source credit: %d", got)
 			}
-			if mode == "hardlinked" {
+			if mode == "hard-link" {
 				prior, err := os.ReadFile(alias)
 				testutil.FailErr(t, "read detached alias", err)
 				if string(prior) == original {
@@ -141,7 +141,7 @@ func TestOutputViewHostReadRejectsRetainedDigestMismatchBeforePublication(t *tes
 	testutil.FailErr(t, "decode retained identity", json.Unmarshal([]byte(encoded), &blob))
 	bad, err := zstdcodec.Compress(strings.NewReader("tampered bytes\n"))
 	testutil.FailErr(t, "compress wrong retained content", err)
-	store := f.Recorder.ProgramBlobStore(f.Runtime.Blobs)
+	store := f.Recorder.ProgramBlobStore(t.Context(), f.Runtime.Blobs)
 	testutil.FailErr(t, "corrupt retained physical bytes", os.WriteFile(filepath.Join(store.Root, filepath.FromSlash(blob.Rel)), bad, 0600))
 	target := filepath.Join(f.OutputDir, out.ProgramID+".stdout")
 	testutil.FailErr(t, "remove view", os.Remove(target))
