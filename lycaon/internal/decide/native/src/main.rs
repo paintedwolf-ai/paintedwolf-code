@@ -5,7 +5,7 @@ use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
 use bialy::engine::{HEAD_CODE_RANK, HEAD_NAMES, REFERENCE_TASK, reference_candidates};
-use bialy::protocol::{EXIT_NO_CAPABLE_DEVICE, ProbeReport};
+use bialy::protocol::{EXIT_NO_CAPABLE_DEVICE, EXIT_NO_GPU, ProbeReport};
 use bialy::{DeviceChoice, Engine, EngineOptions, Error};
 use clap::{Parser, Subcommand};
 
@@ -97,6 +97,7 @@ impl From<Error> for Failure {
     fn from(e: Error) -> Self {
         let status = match e {
             Error::NoCapableDevice(_) => EXIT_NO_CAPABLE_DEVICE,
+            Error::NoGpu => EXIT_NO_GPU,
             _ => 1,
         };
         Failure { message: e.to_string(), status }

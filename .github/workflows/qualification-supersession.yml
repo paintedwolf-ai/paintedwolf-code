@@ -6,9 +6,8 @@ permissions:
   contents: read
   actions: write
 # Separate from the executor so a new push can stop its obsolete snapshot.
-# Share the existing maintenance runner reservation; each request reads live main.
 concurrency:
-  group: maintenance
+  group: qualification-supersession-${{ github.sha }}
   cancel-in-progress: false
 jobs:
   reconcile:

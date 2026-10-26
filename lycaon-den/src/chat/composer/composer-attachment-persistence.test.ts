@@ -44,6 +44,16 @@ describe("staged composer restart retention", () => {
     expect((await resolveSharedComposerDocument({ ...seed, draft: "" })).attachments).toEqual([]);
   });
 
+  it("restores live external paths and ranges across restart without preview URLs", async () => {
+    const files = [{ id: "external", kind: "external-file" as const, projectId: "project-1", name: "notes.txt", path: "/outside/notes.txt", startLine: 2, endLine: 4, mediaType: "text/plain", previewUrl: "blob:temporary" },
+      { id: "folder", kind: "external-folder" as const, projectId: "project-1", name: "folder", path: "/outside/folder" }];
+    await applySharedComposerMutation(seed, files);
+    await restart();
+    const restored = await resolveSharedComposerDocument(seed);
+    expect(restored.attachments).toMatchObject([{ kind: "external-file", path: "/outside/notes.txt", startLine: 2, endLine: 4, mediaType: "text/plain" }, { kind: "external-folder", path: "/outside/folder" }]);
+    expect(JSON.stringify(restored.attachments)).not.toContain("blob:temporary");
+  });
+
   it("retains removal across restart without affecting another chat", async () => {
     await applySharedComposerMutation(seed, [attachment]);
     const other = { ...seed, sessionId: "session-2" };
