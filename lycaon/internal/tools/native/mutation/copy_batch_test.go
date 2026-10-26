@@ -34,7 +34,7 @@ func TestRecursiveCopyPageAdmitsIntentBeforeEffectsAndSettlesPartialPublication(
 	testutil.FailErr(t, "load memory limits", err)
 	memory, err := toolcontract.NewProgramMemory(limits)
 	testutil.FailErr(t, "create memory", err)
-	h.program.Memory = memory
+	h.owners.Revisions.Memory = memory
 	var ids []string
 	var plans []sourceeffect.Plan
 	h.tc.Source.SourceMutations = observedCopyJournal{Journal: h.service, afterPrepare: func(pending sourceeffect.PendingEffects, page []sourceeffect.Plan) {
@@ -97,7 +97,7 @@ func TestCopyAdmissionRefusesBeforeUnadmittedStorageOrPublication(t *testing.T) 
 			h := newHarness(t, map[string]string{"source.txt": "data", "tree/a": "first"})
 			memory, err := toolcontract.NewProgramMemory(tc.limits)
 			testutil.FailErr(t, "create constrained program memory", err)
-			h.program.Memory = memory
+			h.owners.Revisions.Memory = memory
 			result := h.run("", tc.argv...)
 			var limit *toolcontract.ProgramMemoryLimitError
 			if !errors.As(result.err, &limit) {
@@ -120,7 +120,7 @@ func TestRecursiveCopyFlushesRetainedBodiesBeforeTheNextLargeFile(t *testing.T) 
 	testutil.FailErr(t, "load program memory", err)
 	memory, err := toolcontract.NewProgramMemory(limits)
 	testutil.FailErr(t, "create program memory", err)
-	h.program.Memory = memory
+	h.owners.Revisions.Memory = memory
 	result := h.run("", "cp", "-r", "tree", "copy")
 	if result.err != nil || result.result.Status != 0 {
 		t.Fatalf("large copy=%+v error=%v", result.result, result.err)
@@ -139,7 +139,7 @@ func TestCopyDirectoryCreationRemainsAnEffectAfterMemoryRefusal(t *testing.T) {
 	h := newHarness(t, map[string]string{"tree/": ""})
 	memory, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: 1 << 20, State: int64(2*128*(2048+len("tree")+len(".")) + 100)})
 	testutil.FailErr(t, "create constrained memory", err)
-	h.program.Memory = memory
+	h.owners.Revisions.Memory = memory
 	r := h.run("", "cp", "-r", "tree", "target")
 	var limit *toolcontract.ProgramMemoryLimitError
 	if !errors.As(r.err, &limit) || r.result.EffectCertainty != toolcontract.EffectCompleted {
@@ -221,7 +221,7 @@ func TestRecursiveCopyCancellationSettlesEarlierPublicationPages(t *testing.T) {
 		files[fmt.Sprintf("tree/f%03d", i)] = "original"
 	}
 	h := newHarness(t, files)
-	memory := h.program.Memory
+	memory := h.owners.Revisions.Memory
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	var pages [][]string

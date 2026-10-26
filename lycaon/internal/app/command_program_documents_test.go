@@ -21,6 +21,8 @@ import (
 	reposurvey "github.com/lycaon/lycaon/internal/survey"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
@@ -56,7 +58,7 @@ func documentProgram(t *testing.T) (*programtest.Fixture, *editordoc.Service, *p
 		Write: &native.WriteTool{Boundary: boundary}, Delete: &native.DeleteTool{Boundary: boundary}, Move: &native.MoveTool{Boundary: boundary}, Copy: &native.CopyTool{Boundary: boundary}, Mkdir: &native.MkdirTool{Boundary: boundary}, Chmod: &native.ChmodTool{Boundary: boundary}, Chown: &native.ChownTool{Boundary: boundary}, Times: &native.TimesTool{Boundary: boundary}, Extract: &native.ExtractArchiveTool{Boundary: boundary},
 	})
 	testutil.FailErr(t, "mutation owners", err)
-	f.Runtime.Owners = func(tc tools.ToolContext, paths *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
+	f.Runtime.Owners = func(tc tools.ToolContext, paths *projectpaths.ProgramPaths, _ *toolcontract.ProgramMemory, _ tooloutput.SpillAdmission) (command.ProgramOwners, error) {
 		publication := &mutation.Publication{Owners: mutations, Program: mutation.Program{Paths: paths}, Tools: tc}
 		prepare := func(_ context.Context, paths *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
 			prepared, err := owners.Prepare(paths, request)
