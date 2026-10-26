@@ -114,6 +114,10 @@ def execute_case(binding: dict, capability: str, case: str, root: Path) -> dict:
         return retain(binding, capability, case, root, "unverified", {"reason": "native-case-driver-required"})
     module = importlib.import_module(module_name)
     budget = getattr(module, "TIME_BUDGET_SECONDS", CASE_TIME_BUDGET_SECONDS)
+    native = binding.get('native_input')
+    if native is not None:
+        from .installed_input.mailbox import Mailbox
+        Mailbox(native['binding'], native['vm_id']).publish_case_execution(capability, case)
     result = within_budget(budget, lambda: module.execute(binding, capability, case, root))
     if result.get("status") == "unverified" and not result.get("evidence"):
         return retain(binding, capability, case, root, "unverified", {"reason": result.get("reason", "native-case-driver-required")})

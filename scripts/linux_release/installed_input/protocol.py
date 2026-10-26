@@ -114,6 +114,26 @@ def binding(value: dict) -> dict:
     return value
 
 
+def case_execution_name(capability: str, case: str) -> str:
+    if any(not isinstance(value, str) or not IDENTIFIER.fullmatch(value) for value in (capability, case)):
+        raise ValueError('case execution requires exact capability and case identifiers')
+    digest = hashlib.sha256(canonical({'capability': capability, 'case': case})).hexdigest()
+    return 'case-execution-' + digest + '.json'
+
+
+def case_execution(value: dict, execution: dict, vm_id: str, capability: str, case: str) -> dict:
+    binding(execution)
+    case_execution_name(capability, case)
+    if not isinstance(vm_id, str) or not IDENTIFIER.fullmatch(vm_id):
+        raise ValueError('case execution requires its selected VM identity')
+    expected = {'format_version': 1, 'binding': execution, 'vm_id': vm_id,
+                'capability': capability, 'case': case, 'phase': 'executing'}
+    if (not isinstance(value, dict) or type(value.get('format_version')) is not int
+            or binding(value.get('binding')) != execution or value != expected):
+        raise ValueError('case execution differs from its exact execution, case or phase')
+    return value
+
+
 def focus(value: dict) -> dict:
     fields = {'launch', 'entry', 'frame', 'frame_lineage', 'entry_lineage', 'accessible_chain', 'entry_focused', 'frame_active', 'frame_visible'}
     if not isinstance(value, dict) or set(value) != fields:
