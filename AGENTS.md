@@ -18,9 +18,11 @@ policy before editing. Start unfamiliar work at [docs](docs/README.md) and
   GitHub, and open a PR for CI. Stage only authored paths: `git add -- <paths>`.
   This authorizes ordinary task commits, branch pushes, and PRs, not publication
   to sibling repos, tags, force pushes, releases, deployments, or merging.
-- **Keep PRs draft until we believe the work is complete**, independently of CI
-  results. Return to draft if more implementation is needed. Merge only on
-  request: auto-merge on a ready PR enqueues it; never bypass required checks.
+- **Keep PRs draft only while their own work is unfinished**, independently of
+  CI results. Mark a complete PR ready even while it waits on another PR, and
+  list each unlanded prerequisite as `Depends on #N` in its description. Return
+  to draft if more implementation is needed. Merge only on request: auto-merge
+  on a ready PR enqueues it; never bypass required checks.
 - **Use root `./task` for repository dev and verification targets.** Use digest
   targets for test output; never truncate raw results with `tail` or `grep FAIL`.
 - **Ask first** for destructive Git/shared-state operations, discarding others'
@@ -41,6 +43,11 @@ policy before editing. Start unfamiliar work at [docs](docs/README.md) and
   invalidate a batch; failed batches fall back to individual checks. Keep the
   originals open until the exact recorded heads land. A human draft decision
   remains a handoff; never undo it automatically.
+- **Stacked PRs land on `main` one at a time.** A PR may target another PR's
+  branch for review, but never merge a PR into any branch other than `main`,
+  and never fold an open PR's commits into another PR's branch. After the parent
+  lands, retarget the child to `main` and rebase it onto the landed commit
+  before it enters the queue.
 - **Cancel superseded background Qualification when its source is obsolete.**
   The hosted supersession controller may cancel queued or running background
   main-push Qualification after validating source ancestry and rechecking run
