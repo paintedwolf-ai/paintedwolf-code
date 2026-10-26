@@ -10,16 +10,19 @@ import (
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-// Bundled skill bodies and resources fit the context a preload or resource
-// read spends beside a small model's standing prompt.
-func TestBundledSkillsFitContextBudgets(t *testing.T) {
+// Every bundled skill loads, and its body and resources fit the context a
+// preload or resource read spends beside a small model's standing prompt.
+func TestBundledSkillsLoadWithinContextBudgets(t *testing.T) {
 	contractcheck.ActivateStockCatalog(t)
-	loaded, _ := extpacks.LoadEffectiveSkills(extpacks.Active())
+	loaded, diags := extpacks.LoadEffectiveSkills(extpacks.Active())
 	if len(loaded) == 0 {
 		t.Fatal("expected stock pack skills")
 	}
 
 	var failed []string
+	for _, d := range diags {
+		failed = append(failed, fmt.Sprintf("%s: %s (%s)", d.UnitID, d.Message, d.Code))
+	}
 	for _, sk := range loaded {
 		if sk.Project || sk.UserProvided {
 			continue
@@ -42,7 +45,7 @@ func TestBundledSkillsFitContextBudgets(t *testing.T) {
 		}
 	}
 	if len(failed) > 0 {
-		t.Fatalf("bundled skills exceed context budgets (%d); move detail to references or split them:\n  - %s",
+		t.Fatalf("bundled skills fail to load or exceed context budgets (%d); move detail to references or split them:\n  - %s",
 			len(failed), strings.Join(failed, "\n  - "))
 	}
 }
