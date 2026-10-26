@@ -10,7 +10,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
@@ -388,7 +387,7 @@ func TestRegistryListCacheReadDuringCredentialRebuildDoesNotPinStaleList(t *test
 	go func() { reloadDone <- registry.ReloadProviderMutation(t.Context(), "test-provider") }()
 	select {
 	case <-discoveryStarted:
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("credential rebuild never reached discovery")
 	}
 	_ = registry.ListCached(t.Context())

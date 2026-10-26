@@ -512,12 +512,13 @@ func (l *modelTurn) buildTurnRequest(
 	if st != nil && st.spendSoftStopGranted {
 		turnTools = filterSpendSoftStopToolMetas(turnTools)
 	}
-	// A prose-only turn keeps its tool definitions, which transports validate
-	// tool history against, and forbids calling them: a final turn with no
-	// completion tool, or a report-document repair that asks for one fence.
+	// A final turn with no completion tool keeps its tool definitions, which
+	// transports validate tool history against, and forbids calling them.
+	// Closeout repairs on earlier turns keep the surface callable: the repair
+	// kick offers resuming work, which retires the pinned report.
 	toolUse := modelcall.ToolUseAllowed
 	callable := turnTools
-	if l.Closeout.repairsReportDocument(ctx, sessionID) || (st != nil && st.proseFinish && len(workerProseOfferedTools(sess)) == 0) {
+	if st != nil && st.proseFinish && len(workerProseOfferedTools(sess)) == 0 {
 		toolUse = modelcall.ToolUseForbidden
 		callable = []tools.ToolMeta{}
 	}

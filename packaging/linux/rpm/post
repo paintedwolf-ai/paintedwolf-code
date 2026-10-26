@@ -4,9 +4,10 @@ SOCKET_UNIT=paintedwolf-vault-identity.socket
 SERVICE_UNIT=paintedwolf-vault-identity.service
 if [ -f "/usr/lib/systemd/system/${SOCKET_UNIT}" ] && [ -d /run/systemd/system ]; then
   systemctl daemon-reload || :
-  systemctl enable --now "${SOCKET_UNIT}" || :
-  # An upgrade replaces the service binary; a running instance restarts on it.
-  if [ "$1" -ge 2 ]; then
+  if [ "$1" -eq 1 ]; then
+    systemctl enable --now "${SOCKET_UNIT}" || :
+  elif [ "$1" -ge 2 ]; then
+    # Restart an active instance without changing the administrator's enablement.
     systemctl try-restart "${SERVICE_UNIT}" || :
   fi
 fi
@@ -15,12 +16,5 @@ if command -v update-desktop-database >/dev/null 2>&1; then
 fi
 if command -v gtk-update-icon-cache >/dev/null 2>&1 && [ -f /usr/share/icons/hicolor/index.theme ]; then
   gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor || :
-fi
-if [ -f /usr/share/selinux/packages/painted-wolf-code.pp ] && command -v semodule >/dev/null 2>&1 && command -v selinuxenabled >/dev/null 2>&1 && selinuxenabled; then
-  semodule -n -i /usr/share/selinux/packages/painted-wolf-code.pp || :
-  if command -v load_policy >/dev/null 2>&1; then
-    load_policy || :
-  fi
-  restorecon -R /opt/painted-wolf-code /usr/bin/pw /usr/bin/pw-logs 2>/dev/null || :
 fi
 exit 0

@@ -29,8 +29,8 @@ func feedTLSNetwork(t *testing.T, srv *httptest.Server) feedNetwork {
 		resolve: func(context.Context, string) ([]netip.Addr, error) {
 			return []netip.Addr{netip.MustParseAddr("127.0.0.1")}, nil
 		},
-		transport: func(host string, ips []netip.Addr) feedTransport {
-			tr := egress.PinnedTransport(host, ips, 0)
+		transport: func(target *url.URL, ips []netip.Addr) feedTransport {
+			tr := egress.PinnedTransport(target, ips, 0)
 			if tr.Proxy != nil {
 				t.Fatal("pinned transport enables a proxy")
 			}
@@ -40,8 +40,9 @@ func feedTLSNetwork(t *testing.T, srv *httptest.Server) feedNetwork {
 	}
 }
 
-func TestFeedTLSRetainsHostnameAndDisablesProxies(t *testing.T) {
+func TestFeedTLSRetainsHostnameAndHonorsNoProxy(t *testing.T) {
 	t.Setenv("HTTPS_PROXY", "http://127.0.0.1:1")
+	t.Setenv("NO_PROXY", "*")
 	var hosts, serverNames []string
 	var mu sync.Mutex
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

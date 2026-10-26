@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync/atomic"
 
 	"modernc.org/sqlite"
@@ -12,8 +13,10 @@ import (
 )
 
 type storeHealth struct {
-	failure atomic.Pointer[StoreIncompatibleError]
-	failed  chan struct{}
+	failure  atomic.Pointer[StoreIncompatibleError]
+	failed   chan struct{}
+	path     string
+	identity string
 }
 
 // Failure is permanent for this store handle.
@@ -39,6 +42,9 @@ func (s *Store) quarantine(failure *StoreIncompatibleError) {
 	if !s.health.failure.CompareAndSwap(nil, failure) {
 		return
 	}
+	if err := recordIntegrityFailure(&s.health, failure); err != nil {
+		slog.Error("could not persist confirmed store damage", "component", "db", "error", err)
+	}
 	close(s.health.failed)
 	// Closing also refuses retained statements and queued writer calls.
 	_ = s.writer.Close()
@@ -46,9 +52,19 @@ func (s *Store) quarantine(failure *StoreIncompatibleError) {
 
 func prepareAuditState(ctx context.Context, writer *sql.DB, due bool) error {
 	if due {
-		return stampIntegrityAuditFailed(ctx, writer, errors.New("integrity audit pending"))
+		_, err := writer.ExecContext(ctx, `INSERT INTO store_meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`, integrityAuditFailedMetaKey, integrityAuditPendingValue)
+		return err
 	}
-	return clearIntegrityAuditFailed(ctx, writer)
+	return nil
+}
+
+func integrityAuditNeeded(ctx context.Context, sqlDB DBTX) (bool, error) {
+	clean, err := lastShutdownWasClean(ctx, sqlDB)
+	if err != nil {
+		return false, err
+	}
+	value, err := integrityAuditState(ctx, sqlDB)
+	return !clean || value == integrityAuditPendingValue, err
 }
 
 func integrityCheckError(cause error, operation string) error {

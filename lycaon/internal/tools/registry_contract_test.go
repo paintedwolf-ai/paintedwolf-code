@@ -3,8 +3,8 @@ package tools
 import (
 	"context"
 	"errors"
+	"runtime"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -42,10 +42,17 @@ func TestRegistryPrefixLeaseMakesSourceStateAndDefinitionsAtomic(t *testing.T) {
 		})
 	}()
 	<-started
+	for t.Context().Err() == nil {
+		if !reg.dynamicMu.TryRLock() {
+			break
+		}
+		reg.dynamicMu.RUnlock()
+		runtime.Gosched()
+	}
 	select {
 	case <-callbackEntered:
 		t.Fatal("definition transaction crossed a live invocation lease")
-	case <-time.After(50 * time.Millisecond):
+	default:
 	}
 	if _, ok := reg.Definition("mcp_old_read"); !ok {
 		t.Fatal("leased definition changed before invocation release")
@@ -54,7 +61,7 @@ func TestRegistryPrefixLeaseMakesSourceStateAndDefinitionsAtomic(t *testing.T) {
 	select {
 	case err := <-done:
 		testutil.FailErr(t, "replace after invocation release", err)
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("definition transaction did not resume after release")
 	}
 	if _, ok := reg.Definition("mcp_new_read"); !ok {
@@ -193,5 +200,23 @@ func TestToolMetaIsMCP(t *testing.T) {
 	}
 	if (ToolMeta{Name: "read"}).IsMCP() {
 		t.Fatal("native tools are not MCP")
+	}
+}
+
+func TestRegistryDetachesContractSecretSlots(t *testing.T) {
+	registry := NewDefaultRegistry()
+	contract, _ := toolcontract.Lookup("write")
+	contract.SecretReferenceArgs = []string{"content"}
+	err := registry.RegisterDefinition(Definition{Meta: ToolMeta{Name: "write", ArgsSchema: map[string]any{"type": "object"}}, Contract: contract, Handler: func(context.Context, map[string]any, ToolContext) (string, error) { return "ok", nil }})
+	testutil.FailErr(t, "register immutable contract", err)
+	contract.SecretReferenceArgs[0] = "caller-mutated"
+	first, _ := registry.Definition("write")
+	if first.Contract.SecretReferenceArgs[0] != "content" {
+		t.Fatal("publication aliased contract")
+	}
+	first.Contract.SecretReferenceArgs[0] = "lookup-mutated"
+	second, _ := registry.Definition("write")
+	if second.Contract.SecretReferenceArgs[0] != "content" || second.Operation.Facts().Contract.SecretReferenceArgs[0] != "content" {
+		t.Fatal("lookup aliased contract")
 	}
 }
