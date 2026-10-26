@@ -425,6 +425,9 @@
     "release:rehearse:native-candidates": [
       "release:rehearse:native-candidates"
     ],
+    "release:live-test": [
+      "release:live-test"
+    ],
     "release:rehearse:package-probe": [
       "release:rehearse:package-probe"
     ],
@@ -467,6 +470,7 @@
     "release:rehearse:native-repositories": "passthrough",
     "release:rehearse:native-repositories-r2": "passthrough",
     "release:rehearse:native-candidates": "passthrough",
+    "release:live-test": "passthrough",
     "release:rehearse:package-probe": "passthrough",
     "release:rehearse:rpm-metadata": "passthrough",
     "release:rehearse:pacman-construction": "passthrough"
@@ -834,6 +838,12 @@
     "release:rehearse:native-candidates": {
       "locks": [
         "native-candidates"
+      ],
+      "workers": 1
+    },
+    "release:live-test": {
+      "locks": [
+        "*"
       ],
       "workers": 1
     },

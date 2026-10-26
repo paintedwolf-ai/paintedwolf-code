@@ -8,6 +8,7 @@ export type VaultCustodyMode =
   | "development"
   | "refused"
   | "restart_required"
+  | "installation_unverified"
   | "unavailable";
 
 export type VaultCustody = {
