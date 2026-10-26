@@ -137,25 +137,21 @@ func TestTargetHandlesBoundTheirCache(t *testing.T) {
 	}
 }
 
-func TestStatusFilesReadTheCurrentRecordEachTime(t *testing.T) {
-	statuses := newStatusFiles()
+func TestCallerFactsReadTheCurrentRecordEachTime(t *testing.T) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	tid := unix.Gettid()
 	old := unix.Umask(0o027)
 	defer unix.Umask(old)
-	first, err := statuses.facts(tid)
+	first, err := callerFactsOf(tid)
 	testutil.FailErr(t, "first facts", err)
 	unix.Umask(0o077)
-	second, err := statuses.facts(tid)
+	second, err := callerFactsOf(tid)
 	testutil.FailErr(t, "second facts", err)
 	if first.umask != 0o027 || second.umask != 0o077 || second.tgid != os.Getpid() {
 		t.Fatalf("cached status read %o then %o (tgid %d), want 027 then 077", first.umask, second.umask, second.tgid)
 	}
-	if len(statuses.byTID) != 1 {
-		t.Fatalf("status files cached: %d", len(statuses.byTID))
-	}
-	if _, err := statuses.facts(-1); err == nil {
+	if _, err := callerFactsOf(-1); err == nil {
 		t.Fatal("read facts for no thread")
 	}
 }
