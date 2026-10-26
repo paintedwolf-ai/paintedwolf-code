@@ -65,6 +65,23 @@ class ExecutionPublicationTests(unittest.TestCase):
                 campaign.publish_execution(directory, request)
             self.assertEqual(observations, [False])
 
+    def test_short_write_is_never_published_as_an_execution_binding(self):
+        fdopen = os.fdopen
+        @contextmanager
+        def short_writer(descriptor, mode):
+            with fdopen(descriptor, mode) as stream:
+                class Writer:
+                    def write(self, raw):return stream.write(raw[:len(raw) // 2])
+                    def flush(self):stream.flush()
+                    def fileno(self):return stream.fileno()
+                yield Writer()
+        with tempfile.TemporaryDirectory() as temporary, \
+                patch.object(campaign.os, 'fdopen', side_effect=short_writer):
+            directory = Path(temporary) / 'guest'
+            with self.assertRaises(OSError):campaign.publish_execution(directory, binding())
+            self.assertFalse((directory / 'execution-request.json').exists())
+            self.assertEqual(list(directory.iterdir()), [])
+
     def test_noncanonical_binding_or_existing_attempt_is_never_published_or_replaced(self):
         for change in ({'format_version':True}, {'source_commit':'A' * 40}, {'extra':1},
                 {'case_selection':{'format_version':1, 'cases':[
