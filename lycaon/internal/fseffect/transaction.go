@@ -67,14 +67,14 @@ type RemoveRequest struct {
 	BeforeCommit func(Target) error
 }
 
-// ModeUpdateRequest describes a guarded permission change on one held file.
+// ModeUpdateRequest describes a guarded permission change on one held entry.
 type ModeUpdateRequest struct {
 	Location
 	Update       func(os.FileMode) os.FileMode
 	BeforeCommit func(*os.File, os.FileInfo) error
 }
 
-// ModeUpdateResult reports the permission transition applied to the held file.
+// ModeUpdateResult reports the permission transition applied to the held entry.
 type ModeUpdateResult struct {
 	Before os.FileMode
 	After  os.FileMode
