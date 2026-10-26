@@ -158,6 +158,9 @@ func (p *ProgramPaths) AdoptCwd(frame *ProgramPaths) {
 	p.cwd, p.cwdInfo = frame.cwd, frame.cwdInfo
 }
 
+// ToolContext returns the path authority bound to this program frame.
+func (p *ProgramPaths) ToolContext() tools.ToolContext { return p.context }
+
 // Bind resolves one exact native operand. A write binding checks mutation scope
 // but does not record a mutation before a complete operation actually runs.
 func (p *ProgramPaths) Bind(ctx context.Context, operand string, write bool) (BoundPath, error) {

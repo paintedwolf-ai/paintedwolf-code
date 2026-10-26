@@ -1,8 +1,13 @@
 package query
 
-import "github.com/lycaon/lycaon/internal/commandprogram"
+import (
+	"context"
 
-func queryPathTargets(argv commandprogram.BoundArgv) []commandprogram.PathTarget {
+	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
+)
+
+func queryPathTargets(argv commandprogram.BoundArgv, paths *projectpaths.ProgramPaths) []commandprogram.PathTarget {
 	targets := []commandprogram.PathTarget{}
 	add := func(path string, write bool) {
 		if path != "" && path != "-" {
@@ -33,9 +38,11 @@ func queryPathTargets(argv commandprogram.BoundArgv) []commandprogram.PathTarget
 		if len(operands) > 0 && (operands[0] == "eval" || operands[0] == "e" || operands[0] == "eval-all" || operands[0] == "ea") {
 			operands = operands[1:]
 		}
-		// Without --expression the first operand is either a file or an
-		// expression. Project the complete typed operand set; the owner uses
-		// its existing file-versus-expression rule after admission.
+		// Use the evaluator's file-versus-expression decision before projecting
+		// file operands. An expression never becomes a path approval target.
+		if _, explicit := argv.Last("--expression"); !explicit && len(operands) > 0 && operands[0] != "-" && !regularYqFile(context.Background(), paths, operands[0]) {
+			operands = operands[1:]
+		}
 		for _, path := range operands {
 			add(path, flag("-i"))
 		}

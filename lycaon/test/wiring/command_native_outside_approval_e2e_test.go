@@ -76,7 +76,11 @@ func runCommandWithApprovals(t *testing.T, s *commandProgramSession, options ...
 		for _, checkpoint := range checkpoints {
 			plans = append(plans, checkpoint.ToolApproval.Plan)
 		}
-		t.Fatalf("approval cards = %d, want %d; plans: %+v; outcome: %+v", len(checkpoints), len(options), plans, s.outcome(t, "program-1"))
+		outcome := s.outcome(t, "program-1")
+		if outcome.Refusal != nil {
+			t.Logf("refusal detail: %+v", *outcome.Refusal)
+		}
+		t.Fatalf("approval cards = %d, want %d; plans: %+v; outcome: %+v", len(checkpoints), len(options), plans, outcome)
 	}
 	return checkpoints
 }
@@ -249,6 +253,68 @@ func TestNativePathBuiltinsUseAdmittedFolder(t *testing.T) {
 			}
 			if got := s.outcome(t, "program-1"); got.Status != 0 || got.Stdout != tc.want {
 				t.Fatalf("path builtin outcome = %+v", got)
+			}
+		})
+	}
+}
+
+func TestSedScriptFileProjectsOutsideEffects(t *testing.T) {
+	for _, posture := range []gate.Posture{gate.PostureLight, gate.PostureBalanced, gate.PostureStrict} {
+		t.Run(string(posture), func(t *testing.T) {
+			outside := outsideCommandFolder(t)
+			input := filepath.Join(outside, "input.txt")
+			testutil.FailErr(t, "seed sed input", os.WriteFile(input, []byte("outside sed\n"), 0o600))
+			s := newCommandProgramSession(t, "sed -f script.sed notes.txt", "", posture)
+			testutil.FailErr(t, "seed sed script", os.WriteFile(filepath.Join(s.dir, "script.sed"), []byte("1r "+input+"\n"), 0o600))
+			cards := runCommandWithApprovals(t, s, "recommended")
+			if !slices.Contains(cards[0].ToolApproval.Plan.Reasons, wire.GateOutsideRootsRead) {
+				t.Fatalf("sed -f read was not projected: %+v", cards[0].ToolApproval.Plan)
+			}
+			if got := s.outcome(t, "program-1"); got.Status != 0 || got.Stdout != "first note\noutside sed\nsecond note\n" {
+				t.Fatalf("sed -f result = %+v", got)
+			}
+			written := filepath.Join(outside, "written.txt")
+			writer := newCommandProgramSession(t, "sed -f script.sed notes.txt", "", posture)
+			testutil.FailErr(t, "seed sed write script", os.WriteFile(filepath.Join(writer.dir, "script.sed"), []byte("w "+written+"\n"), 0o600))
+			writeCards := runCommandWithApprovals(t, writer, "recommended")
+			if !slices.Contains(writeCards[0].ToolApproval.Plan.Reasons, wire.GateOutsideRootsWrite) {
+				t.Fatalf("sed -f write was not projected: %+v", writeCards[0].ToolApproval.Plan)
+			}
+			if got := writer.outcome(t, "program-1"); got.Status != 0 {
+				t.Fatalf("sed -f write result = %+v", got)
+			}
+			data, err := os.ReadFile(written)
+			testutil.FailErr(t, "read sed output", err)
+			if string(data) != "first note\nsecond note\n" {
+				t.Fatalf("sed -f write = %q", data)
+			}
+		})
+	}
+}
+
+func TestYqExpressionAndFileApprovalCounts(t *testing.T) {
+	for _, posture := range []gate.Posture{gate.PostureLight, gate.PostureBalanced, gate.PostureStrict} {
+		t.Run(string(posture), func(t *testing.T) {
+			expression := newCommandProgramSession(t, "printf 'x: 1\\n' | yq .x", "", posture)
+			runCommandWithApprovals(t, expression)
+			if got := expression.outcome(t, "program-1"); got.Status != 0 || got.Stdout != "1\n" {
+				t.Fatalf("expression result = %+v", got)
+			}
+			outside := outsideCommandFolder(t)
+			file := filepath.Join(outside, "data.yaml")
+			testutil.FailErr(t, "seed yq input", os.WriteFile(file, []byte("x: 2\n"), 0o600))
+			ambiguous := newCommandProgramSession(t, "yq -n '"+file+"'", "", posture)
+			runCommandWithApprovals(t, ambiguous)
+			if got := ambiguous.outcome(t, "program-1"); got.Status == 0 {
+				t.Fatalf("path-shaped expression unexpectedly read a file: %+v", got)
+			}
+			input := newCommandProgramSession(t, "yq .x '"+file+"'", "", posture)
+			cards := runCommandWithApprovals(t, input, "recommended")
+			if !slices.Contains(cards[0].ToolApproval.Plan.Reasons, wire.GateOutsideRootsRead) {
+				t.Fatalf("yq file was not projected: %+v", cards[0].ToolApproval.Plan)
+			}
+			if got := input.outcome(t, "program-1"); got.Status != 0 || got.Stdout != "2\n" {
+				t.Fatalf("file result = %+v", got)
 			}
 		})
 	}

@@ -151,7 +151,7 @@ func (o *Owners) Prepare(program Program, request commandprogram.OperationReques
 		}
 	}
 	review := bound.Review(o.ops[command])
-	review.PathTargets = queryPathTargets(bound)
+	review.PathTargets = queryPathTargets(bound, program.Paths)
 	return Prepared{Operation: o.ops[command], Mode: mode, Argv: bound, Review: review, owners: o, program: program, request: request, spec: spec, run: utilities[command]}, nil
 }
 

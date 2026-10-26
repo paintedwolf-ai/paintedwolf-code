@@ -124,12 +124,9 @@ func (t programOwnerTools) compose(services ProgramServices) (func(tools.ToolCon
 			if !textutil.PathUtility(name) {
 				continue
 			}
-			owners.Natives[name] = command.NativeOperation{Tool: name, Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
-				prepared, err := textOwners.Prepare(request)
+			owners.Natives[name] = command.NativeOperation{Tool: name, Prepare: func(ctx context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
+				prepared, err := textOwners.PrepareNative(ctx, frame, textPorts, request)
 				if err != nil {
-					return command.NativePrepared{}, err
-				}
-				if err := prepared.NativeAdmissionError(); err != nil {
 					return command.NativePrepared{}, err
 				}
 				return command.NativePrepared{Mode: prepared.Mode, Review: prepared.Review, Invoke: func(ctx context.Context, admitted tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {

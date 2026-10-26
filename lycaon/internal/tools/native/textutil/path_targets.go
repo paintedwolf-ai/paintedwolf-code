@@ -15,10 +15,9 @@ var fileUtilities = map[string]bool{
 
 func PathUtility(name string) bool { return fileUtilities[name] }
 
-// pathTargets projects file operands from the same bound grammar the utility
-// executes. A script file whose effects are not yet known is refused before
-// admission, rather than silently omitting paths named by its contents.
-func (o *Owners) pathTargets(argv commandprogram.BoundArgv) []commandprogram.PathTarget {
+// pathTargets projects file operands and parsed script effects from the same
+// bound grammar the utility executes.
+func (o *Owners) pathTargets(argv commandprogram.BoundArgv, parsed *sedscript.Program) []commandprogram.PathTarget {
 	targets := []commandprogram.PathTarget{}
 	add := func(path string, write bool) {
 		if path != "" && path != "-" {
@@ -61,7 +60,7 @@ func (o *Owners) pathTargets(argv commandprogram.BoundArgv) []commandprogram.Pat
 			}
 		}
 		bsdSuffix := ""
-		if len(scripts) == 0 && len(operands) > 0 {
+		if len(scripts) == 0 && !argvFlag(argv, "-f") && len(operands) > 0 {
 			// BSD's separate backup suffix is part of the bound sed form.
 			fields := argv.Operands()
 			if o.bsdSuffix(context.Background(), argv, fields) {
@@ -73,14 +72,15 @@ func (o *Owners) pathTargets(argv commandprogram.BoundArgv) []commandprogram.Pat
 				operands = operands[1:]
 			}
 		}
-		if o.Regex != nil {
-			if script, err := sedscript.Parse(context.Background(), strings.Join(scripts, "\n"), argvFlag(argv, "-E"), sedCompiler{o.Regex}); err == nil {
-				for _, path := range script.ReadFiles() {
-					add(path, false)
-				}
-				for _, path := range script.WriteFiles() {
-					add(path, true)
-				}
+		if parsed == nil && o.Regex != nil && !argvFlag(argv, "-f") {
+			parsed, _ = sedscript.Parse(context.Background(), strings.Join(scripts, "\n"), argvFlag(argv, "-E"), sedCompiler{o.Regex})
+		}
+		if parsed != nil {
+			for _, path := range parsed.ReadFiles() {
+				add(path, false)
+			}
+			for _, path := range parsed.WriteFiles() {
+				add(path, true)
 			}
 		}
 		inPlace := argvFlag(argv, "-i") || argvFlag(argv, "-I")

@@ -32,10 +32,12 @@ type invocation struct {
 	status    int
 	published bool
 	releases  []func()
+	sed       *preparedSed
+	preparing bool
 }
 
 func newInvocation(ctx context.Context, p Prepared, ports Ports, streams commandprogram.Streams) *invocation {
-	inv := &invocation{ctx: ctx, owners: p.owners, ports: ports, request: p.request, spec: p.spec, argv: p.Argv, streams: streams}
+	inv := &invocation{ctx: ctx, owners: p.owners, ports: ports, request: p.request, spec: p.spec, argv: p.Argv, streams: streams, sed: p.sed}
 	if inv.streams.Input == nil {
 		inv.streams.Input = commandprogram.NullInput()
 	}
@@ -167,7 +169,9 @@ func (inv *invocation) capture(paths *projectpaths.ProgramPaths, operand command
 	if execution == "" {
 		return nil, nil, errors.New("file operands require a program execution identity")
 	}
-	if err := inv.owners.Pins.AppendRevisionPin(inv.ctx, execution, captured.Revision); err != nil {
+	if inv.preparing {
+		inv.sed.pins = append(inv.sed.pins, captured.Revision)
+	} else if err := inv.owners.Pins.AppendRevisionPin(inv.ctx, execution, captured.Revision); err != nil {
 		return nil, nil, err
 	}
 	return io.NopCloser(strings.NewReader(captured.Content)), &captured.Revision, nil

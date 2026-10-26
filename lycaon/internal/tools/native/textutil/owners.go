@@ -20,6 +20,8 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
+	"github.com/lycaon/lycaon/internal/tools/native/textutil/sedscript"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
 // PinRecorder retains the revisions one execution captured
@@ -160,17 +162,7 @@ type Prepared struct {
 	request commandprogram.OperationRequest
 	spec    toolcontract.CommandSpecification
 	run     utility
-}
-
-// NativeAdmissionError refuses forms whose script file may name additional
-// paths that cannot be projected from the bound command before admission.
-func (p Prepared) NativeAdmissionError() error {
-	if p.Argv.Command == "sed" {
-		if option, ok := p.Argv.Last("-f"); ok {
-			return nativeutility.Unsupported(p.spec, option.Values[0], "a script file with unprojected file effects")
-		}
-	}
-	return nil
+	sed     *preparedSed
 }
 
 // Prepare binds a reached command. The operation identity is the command name.
@@ -195,9 +187,38 @@ func (o *Owners) Prepare(request commandprogram.OperationRequest) (Prepared, err
 	}
 	review := bound.Review(spec.Name)
 	if PathUtility(command) {
-		review.PathTargets = o.pathTargets(bound)
+		review.PathTargets = o.pathTargets(bound, nil)
 	}
 	return Prepared{Argv: bound, Review: review, Mode: o.effectMode(bound), owners: o, request: request, spec: spec, run: utilities[command]}, nil
+}
+
+// PrepareNative captures a sed script file through the same source owner used
+// at execution and projects the parsed script's file effects before admission.
+func (o *Owners) PrepareNative(ctx context.Context, frame *projectpaths.ProgramPaths, ports Ports, request commandprogram.OperationRequest) (Prepared, error) {
+	p, err := o.Prepare(request)
+	if err != nil || p.Argv.Command != "sed" || !argvFlag(p.Argv, "-f") {
+		return p, err
+	}
+	ports.ToolContext = frame.ToolContext()
+	inv := newInvocation(ctx, p, ports, commandprogram.Streams{})
+	inv.preparing = true
+	inv.sed = &preparedSed{}
+	defer inv.close()
+	source, err := sedScript(inv)
+	if err != nil {
+		return Prepared{}, err
+	}
+	program, err := sedscript.Parse(ctx, source.text, inv.flag("-E"), sedCompiler{o.Regex})
+	if err != nil {
+		return Prepared{}, sedRefusal(inv, source.word, err)
+	}
+	inv.sed.source, inv.sed.program = source, program
+	p.sed = inv.sed
+	p.Review.PathTargets = o.pathTargets(p.Argv, program)
+	if len(program.WriteFiles()) > 0 && p.Mode == "stream-script" {
+		p.Mode = "w-command"
+	}
+	return p, nil
 }
 
 // leadingBind binds only leading words made entirely of declared boolean
@@ -276,7 +297,7 @@ func (p Prepared) InvokeOwner(ctx context.Context, ports Ports, streams commandp
 		_, _ = io.WriteString(streams.Error, inv.errors.String())
 	}
 	result := nativeutility.Settle(err, inv.status, false)
-	if (p.Mode == "-i" || p.Mode == "w-files" || p.Mode == "-o" || p.Mode == "OUTPUT-supplied") && result.Terminal == toolcontract.ProducerCompleted && inv.status == 0 {
+	if (p.Mode == "-i" || p.Mode == "w-command" || p.Mode == "w-files" || p.Mode == "-o" || p.Mode == "OUTPUT-supplied") && result.Terminal == toolcontract.ProducerCompleted && inv.status == 0 {
 		result.EffectCertainty = toolcontract.EffectCompleted
 	}
 	return result, err

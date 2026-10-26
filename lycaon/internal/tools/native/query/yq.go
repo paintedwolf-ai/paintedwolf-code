@@ -17,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools/native"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/internal/tools/safecmd"
 )
 
@@ -101,7 +102,7 @@ func newYqRun(inv *invocation) (*yqRun, error) {
 	}
 	if expression, ok := inv.value("--expression"); ok {
 		run.expression = expression
-	} else if len(operands) > 0 && operands[0] != "-" && !inv.regularFile(operands[0]) {
+	} else if len(operands) > 0 && operands[0] != "-" && !regularYqFile(inv.ctx, inv.paths, operands[0]) {
 		run.expression, operands = operands[0], operands[1:]
 	}
 	if inv.flag("-P") {
@@ -170,8 +171,8 @@ func yqOption(inv *invocation, key, fallback string) string {
 
 // regularFile is yq's maybeFile: an operand naming an existing regular file
 // is a file, not the expression.
-func (inv *invocation) regularFile(operand string) bool {
-	bound, err := inv.paths.Bind(inv.ctx, operand, false)
+func regularYqFile(ctx context.Context, paths *projectpaths.ProgramPaths, operand string) bool {
+	bound, err := paths.Bind(ctx, operand, false)
 	if err != nil || bound.Null {
 		return false
 	}

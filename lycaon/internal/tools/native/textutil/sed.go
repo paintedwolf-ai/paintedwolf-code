@@ -9,6 +9,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/textsearch"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
 	"github.com/lycaon/lycaon/internal/tools/native/textutil/sedscript"
@@ -23,6 +24,12 @@ type PosixRegexEngine interface {
 }
 
 type sedCompiler struct{ engine PosixRegexEngine }
+
+type preparedSed struct {
+	source  sedSource
+	program *sedscript.Program
+	pins    []toolcontract.ExecutionRevision
+}
 
 func (c sedCompiler) Compile(ctx context.Context, pattern string, extended, fold bool) (sedscript.Regex, error) {
 	if fold {
@@ -39,19 +46,34 @@ func runSed(inv *invocation) error {
 	if inv.owners.Regex == nil {
 		return toolrejection.RejectInvalidArguments("COMMAND_PLATFORM_UNAVAILABLE", map[string]any{"command": "sed", "capability": "the shared POSIX regex engine"})
 	}
-	script, err := sedScript(inv)
-	if err != nil {
-		return err
-	}
-	program, err := sedscript.Parse(inv.ctx, script.text, inv.flag("-E"), sedCompiler{inv.owners.Regex})
-	if err != nil {
-		return sedRefusal(inv, script.word, err)
-	}
-	if script.fromFile && len(program.WriteFiles()) > 0 {
-		return unsupported(inv, script.word, "w files named in an inline script (-e or SCRIPT), so the write is reviewed with the command")
+	var script sedSource
+	var program *sedscript.Program
+	if inv.sed != nil {
+		if err := inv.reserve(int64(len(inv.sed.source.text))); err != nil {
+			return err
+		}
+		for _, pin := range inv.sed.pins {
+			if err := inv.owners.Pins.AppendRevisionPin(inv.ctx, inv.request.Invocation.Identity.ExecutionID, pin); err != nil {
+				return err
+			}
+		}
+		script, program = inv.sed.source, inv.sed.program
+	} else {
+		var err error
+		script, err = sedScript(inv)
+		if err != nil {
+			return err
+		}
+		program, err = sedscript.Parse(inv.ctx, script.text, inv.flag("-E"), sedCompiler{inv.owners.Regex})
+		if err != nil {
+			return sedRefusal(inv, script.word, err)
+		}
+		if script.fromFile && len(program.WriteFiles()) > 0 {
+			return unsupported(inv, script.word, "a script file with reviewed write effects")
+		}
 	}
 	run := &sedRun{inv: inv, program: program, word: script.word, stages: map[string]commandprogram.StagedOutput{}}
-	err = run.execute(script)
+	err := run.execute(script)
 	if settled := run.settleWrites(err); settled != nil {
 		return settled
 	}
@@ -266,7 +288,8 @@ func (o *Owners) sedMode(ctx context.Context, argv commandprogram.BoundArgv) str
 		return "stream-script"
 	}
 	if _, ok := argv.Last("-f"); ok {
-		// Writes named in script files refuse at run time.
+		// Native preparation replaces this mode after capturing a script with
+		// write effects. Direct invocation lacks that admission projection.
 		return "stream-script"
 	}
 	var parts []string
