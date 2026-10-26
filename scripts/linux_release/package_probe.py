@@ -69,7 +69,7 @@ def selected(tree, host=None):
     manifest_path = tree / INSTALL / 'manifest.json'
     manifest_identity = physical(manifest_path, owner=(0, uid), limit=2 << 20)
     manifest = json.loads(manifest_path.read_bytes())
-    if manifest.get('format_version') != 1 or manifest.get('install_root') != '/' + INSTALL:
+    if manifest.get('format_version') != 2 or manifest.get('install_root') != '/' + INSTALL:
         raise ValueError('extracted package manifest has an unsupported identity')
     result = {'tree': str(tree), 'manifest': manifest_identity}
     for name in ('pw', 'pw-document-core'):
