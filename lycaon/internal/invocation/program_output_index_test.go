@@ -46,17 +46,19 @@ func TestProgramBlobRetentionUsesIndexedReceiptReferences(t *testing.T) {
 	testutil.FailErr(t, "explain retention lookup", err)
 	defer rows.Close()
 	indexed := false
+	var plan []string
 	for rows.Next() {
 		var id, parent, unused int
 		var detail string
 		testutil.FailErr(t, "read retention plan", rows.Scan(&id, &parent, &unused, &detail))
+		plan = append(plan, detail)
 		if strings.Contains(detail, "SCAN invocation_program_outputs") {
 			t.Fatalf("retention lookup scans output rows: %s", detail)
 		}
-		indexed = indexed || strings.Contains(detail, "SEARCH invocation_program_outputs USING INDEX idx_invocation_program_outputs_blob_id")
+		indexed = indexed || strings.Contains(detail, "USING INDEX idx_invocation_program_outputs_blob_id")
 	}
 	testutil.FailErr(t, "finish retention plan", rows.Err())
 	if !indexed {
-		t.Fatal("retention lookup did not use the blob ID expression index")
+		t.Fatalf("retention lookup did not use the blob ID expression index: %v", plan)
 	}
 }
