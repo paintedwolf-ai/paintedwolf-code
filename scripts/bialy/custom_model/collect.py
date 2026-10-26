@@ -34,8 +34,15 @@ def collect(fleets, identity, catalog, out, quality=()):
         records.append((path, value))
     counts = Counter(turn_commits=len(commits))
     seen = set()
+    selected = tuple(identity.get("student_" + key) for key in ("provider", "kind", "model"))
+    peers = {tuple(student[key] for key in ("provider", "kind", "model"))
+             for student in identity.get("students", {}).values()} - {selected}
     with (out / "sft.receipts.jsonl").open("x") as stream:
         for path, record in records:
+            student = tuple(record.get("student_" + key) for key in ("provider", "kind", "model"))
+            if student in peers:
+                counts["other_student"] += 1
+                continue
             try:
                 with closing(open_store(path.parent.parent / "store.db")) as db:
                     db.execute("BEGIN")
