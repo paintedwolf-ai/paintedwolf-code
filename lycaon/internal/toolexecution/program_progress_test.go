@@ -1,6 +1,7 @@
 package toolexecution
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -9,6 +10,27 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 )
+
+type fixedMutationProgress struct{ state progress.PrerequisiteState }
+
+func (f fixedMutationProgress) ProgramProgressState(context.Context, string) (progress.PrerequisiteState, error) {
+	return f.state, nil
+}
+
+func TestReachedMutationProgressUsesResolvedProjectTarget(t *testing.T) {
+	invocation, _ := frameFixture(t)
+	definition := nativeDefinition(t, "write")
+	state := progress.PrerequisiteState{SessionID: invocation.SessionID, RootSessionID: invocation.SessionID}
+	provider := fixedMutationProgress{state}
+	testutil.FailErr(t, "scratch write", checkReachedMutationProgress(t.Context(), provider, definition, invocation, "", "/tmp/output"))
+	err := checkReachedMutationProgress(t.Context(), provider, definition, invocation, "r1", "/project/config.json")
+	var refusal *toolrejection.ToolReject
+	if !errors.As(err, &refusal) || refusal.Code != "PROGRESS_MISSING" || refusal.Data["path"] != "/project/config.json" {
+		t.Fatalf("project write refusal = %v", err)
+	}
+	provider.state.Content = "- [ ] Update config"
+	testutil.FailErr(t, "planned project write", checkReachedMutationProgress(t.Context(), provider, definition, invocation, "r1", "/project/config.json"))
+}
 
 func TestOperationProgressUsesMetadataAndExistingExemptions(t *testing.T) {
 	invocation, _ := frameFixture(t)

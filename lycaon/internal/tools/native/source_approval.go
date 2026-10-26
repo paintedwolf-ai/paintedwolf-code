@@ -18,7 +18,19 @@ func reviewAgentMutation(ctx context.Context, tc tools.ToolContext, m agentMutat
 	if metadata {
 		preview.PreviewNote = m.MetadataChange
 	}
+	checkProgress := func() error {
+		if tc.Effects.CheckMutationProgress == nil || preview.RootID == "" || m.Op == api.SourceChangeOpDelete {
+			return nil
+		}
+		return tc.Effects.CheckMutationProgress(ctx, preview.RootID, m.AbsPath)
+	}
+	if err := checkProgress(); err != nil {
+		return err
+	}
 	if err := tc.ReviewFileChanges(ctx, tools.FileChange{Preview: preview, Path: m.AbsPath, FromPath: m.FromAbsPath, RecoveryLoss: m.Unrecoverable}); err != nil {
+		return err
+	}
+	if err := checkProgress(); err != nil {
 		return err
 	}
 	verifyTarget := verifyMutationSnapshot

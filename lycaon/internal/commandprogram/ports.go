@@ -24,6 +24,7 @@ type Streams struct {
 // Diagnostic text is never a permission or effect discriminator.
 type RefusalReport struct {
 	Operation, Operand, Code string
+	Expected                 string
 	Span                     toolcontract.SourceSpan
 	Cause                    error
 }
