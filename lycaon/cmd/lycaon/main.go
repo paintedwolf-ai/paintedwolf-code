@@ -21,6 +21,7 @@ import (
 	"github.com/lycaon/lycaon/internal/gitcredential"
 	"github.com/lycaon/lycaon/internal/hostlock"
 	"github.com/lycaon/lycaon/internal/httpclient"
+	"github.com/lycaon/lycaon/internal/installbinding"
 	"github.com/lycaon/lycaon/internal/nativeproxy"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/osprocess"
@@ -164,6 +165,12 @@ func runServe(signals context.Context, dbPath string) error {
 	if err := httpclient.PinSystemTrust(); err != nil {
 		return fmt.Errorf("load system trust: %w", err)
 	}
+	// Shipped helpers must come from the installation this engine started from.
+	binding, err := installbinding.CaptureRunning()
+	if err != nil {
+		return fmt.Errorf("bind the running installation: %w", err)
+	}
+	installbinding.Install(binding)
 	ctx, cancel := context.WithCancel(signals)
 	defer cancel()
 	startReaper() //nolint:contextcheck // the reaper outlives the serve context

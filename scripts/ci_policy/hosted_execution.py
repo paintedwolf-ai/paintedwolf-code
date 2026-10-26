@@ -99,6 +99,9 @@ def run_lane(name, shard="", merge_group=False):
     if os.environ.get("PW_TEST_HOST") == "dedicated" and Path("/proc/meminfo").exists():
         threading.Thread(target=sample_resources, args=(stop,), daemon=True).start()
     command = ["./task", *hosted_plan.invocation(targets)]
+    if "arguments" in lane:
+        command += ["--", *lane["arguments"]]
+
     try:
         code = 0
         record["phases"] = []

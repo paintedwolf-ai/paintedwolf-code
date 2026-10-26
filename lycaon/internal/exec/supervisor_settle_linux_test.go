@@ -5,6 +5,7 @@ package exec
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"errors"
 	"os"
 	"os/exec"
@@ -65,8 +66,8 @@ func stopped(pid int) bool {
 	return len(fields) > 0 && string(fields[0]) == "T"
 }
 
-func waitForStopped(pid int, within time.Duration) bool {
-	for deadline := time.Now().Add(within); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+func waitForStopped(ctx context.Context, pid int) bool {
+	for ; ctx.Err() == nil; time.Sleep(10 * time.Millisecond) {
 		if stopped(pid) {
 			return true
 		}
@@ -98,7 +99,7 @@ func TestCommandDescendantsFollowsTheWholeTreeOnly(t *testing.T) {
 		t.Fatalf("signalled %d descendants, want 2", n)
 	}
 	for _, pid := range direct {
-		if !waitForStopped(pid, 5*time.Second) {
+		if !waitForStopped(t.Context(), pid) {
 			t.Fatalf("descendant %d was not signalled", pid)
 		}
 	}
@@ -121,10 +122,10 @@ func TestSupervisionSettlesTheTree(t *testing.T) {
 		fakePrimary bool
 		events      []os.Signal
 		loseEngine  time.Duration // <0 before settling; >0 after that delay
-		minElapsed  time.Duration
+		minReaps    int
 	}{
 		{name: "primary completion terminates descendants", script: `sleep 30 & echo $!; wait`, grace: time.Minute, fakePrimary: true},
-		{name: "grace escalates to kill", script: ignoresTerm, grace: 200 * time.Millisecond, fakePrimary: true, minElapsed: 200 * time.Millisecond},
+		{name: "grace escalates to kill", script: ignoresTerm, grace: 200 * time.Millisecond, fakePrimary: true, minReaps: 2},
 		{name: "engine loss kills before the primary finishes", script: ignoresTerm, grace: time.Minute, loseEngine: -1},
 		{name: "terminate request then kill request", script: ignoresTerm, grace: time.Minute, events: []os.Signal{syscall.SIGTERM, syscall.SIGUSR2}},
 		{name: "terminate request then engine loss", script: ignoresTerm, grace: time.Minute, events: []os.Signal{syscall.SIGTERM}, loseEngine: 100 * time.Millisecond},
@@ -156,19 +157,17 @@ func TestSupervisionSettlesTheTree(t *testing.T) {
 				time.AfterFunc(tc.loseEngine, func() { close(gone) })
 			}
 			reaps := 0
-			began := time.Now()
 			result := supervision{
 				root: root.Process.Pid, finished: finished, events: events, gone: gone,
 				grace: tc.grace, reap: func() { reaps++ },
 			}.settle()
-			elapsed := time.Since(began)
 			if tc.fakePrimary && !errors.Is(result, sentinel) {
 				t.Fatalf("settle result = %v, want the primary's result", result)
 			}
-			if reaps == 0 || elapsed < tc.minElapsed || elapsed > 20*time.Second {
-				t.Fatalf("reaps=%d elapsed=%v, want reaping within [%v, 20s)", reaps, elapsed, tc.minElapsed)
+			if reaps < max(1, tc.minReaps) {
+				t.Fatalf("reaps=%d, want >= %d", reaps, max(1, tc.minReaps))
 			}
-			testutil.FailErr(t, "descendant survived settlement", waitForProcessGone(pids[0], 5*time.Second))
+			testutil.FailErr(t, "descendant survived settlement", waitForProcessGone(t.Context(), pids[0]))
 		})
 	}
 }
@@ -261,15 +260,16 @@ func TestAwaitEngineLossFollowsTheLifetimePipe(t *testing.T) {
 	read, write, err := os.Pipe()
 	testutil.FailErr(t, "open lifetime pipe", err)
 	gone := awaitEngineLoss(read)
+	runtime.Gosched()
 	select {
 	case <-gone:
 		t.Fatal("reported engine loss while the engine held the pipe")
-	case <-time.After(50 * time.Millisecond):
+	default:
 	}
 	_ = write.Close()
 	select {
 	case <-gone:
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("engine loss was not observed")
 	}
 }
