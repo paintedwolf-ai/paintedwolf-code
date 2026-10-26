@@ -1,4 +1,4 @@
-package command_test
+package search_test
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/litprefilter"
+	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/sourcescope"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -29,7 +30,7 @@ func (partialCommandIndexScope) Catalog(_ context.Context, root string) *sources
 }
 
 func TestProgramEntrySearchesIndexedAndLiveSource(t *testing.T) {
-	f := newProgramFixture(t)
+	f := programtest.New(t, programtest.Options{})
 	for name, body := range map[string]string{
 		"src/indexed.go":      "NeedleToken\n",
 		"src/noise.go":        "plain source\n",
@@ -69,7 +70,7 @@ func TestProgramEntrySearchesIndexedAndLiveSource(t *testing.T) {
 	}
 	check := func(want ...string) {
 		t.Helper()
-		out, err := f.call(t, t.Context(), "grep -rl NeedleToken .")
+		out, err := f.Call(t, t.Context(), "grep -rl NeedleToken .")
 		testutil.FailErr(t, "run command search", err)
 		var result struct {
 			Stdout string `json:"stdout"`
@@ -94,7 +95,7 @@ func TestProgramEntrySearchesIndexedAndLiveSource(t *testing.T) {
 	check("src/indexed.go", "src/noise.go", "vendor/unindexed.go")
 	find := func(want ...string) {
 		t.Helper()
-		out, err := f.call(t, t.Context(), "find . -name '*.go'")
+		out, err := f.Call(t, t.Context(), "find . -name '*.go'")
 		testutil.FailErr(t, "run command find", err)
 		var result struct {
 			Stdout string `json:"stdout"`
