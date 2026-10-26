@@ -2,6 +2,7 @@ package wiring
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -116,9 +117,10 @@ func TestWorkflowGitFreshRepositoryIgnoresUnrelatedNestedRepository(t *testing.T
 		{callID: "git-inspect", command: `git log -1 --format=%s; git show --format= --name-only HEAD`},
 	})
 	f.seed(t, "README.txt", "hello\n")
-	nested := filepath.Join(f.dir, "vendor", "nested", ".git")
-	if err := os.MkdirAll(nested, 0o755); err != nil {
-		t.Fatal(err)
+	nested := filepath.Join(f.dir, "vendor", "nested")
+	testutil.FailErr(t, "create nested repository", os.MkdirAll(nested, 0o755))
+	if output, err := exec.CommandContext(t.Context(), "git", "init", "-q", nested).CombinedOutput(); err != nil {
+		t.Fatalf("initialize nested repository: %v: %s", err, output)
 	}
 	f.seed(t, "vendor/nested/file.txt", "unrelated\n")
 	f.run(t)
