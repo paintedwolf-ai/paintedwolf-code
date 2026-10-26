@@ -23,7 +23,7 @@ func ImplementDeferUntilUserReplyTools() []string {
 func LaneSyncTool(toolName string) bool {
 	toolName = strings.TrimSpace(strings.ToLower(toolName))
 	switch toolName {
-	case "read", "grep", "find", "list_dir":
+	case "command", "read", "grep", "find", "list_dir":
 		return true
 	default:
 		return strings.HasPrefix(toolName, "pack_") || strings.HasPrefix(toolName, "git_")

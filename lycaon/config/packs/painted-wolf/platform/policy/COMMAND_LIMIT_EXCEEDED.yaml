@@ -25,7 +25,7 @@ copy:
   instead: 'Check the recorded results before retrying the remaining work.'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_composition_redirect
-x-paintedwolf-message: command resource admission stopped
+x-paintedwolf-message: command reached a resource limit
 x-paintedwolf-scenarios:
 - id: captured_unit
   vars:

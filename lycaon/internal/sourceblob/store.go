@@ -12,8 +12,10 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/contextio"
@@ -41,7 +43,8 @@ const stagingDirName = ".staging"
 
 // Store is the content-addressed object root.
 type Store struct {
-	root string
+	root        string
+	rootCreated atomic.Bool
 	// mu orders object removal against readers and writers of one object.
 	mu sync.RWMutex
 	// Captures hold lifecycle through reference commit; maintenance only tries the lock.
@@ -164,13 +167,20 @@ func GitBlobSHA1(size int64) hash.Hash {
 }
 
 func gitBlobHeader(size int64) []byte {
-	return []byte(fmt.Sprintf("blob %d\x00", size))
+	var buf [32]byte
+	b := append(buf[:0], "blob "...)
+	b = strconv.AppendInt(b, size, 10)
+	b = append(b, 0)
+	return b
 }
 
 func newGitBlobHashers(size int64) (hash.Hash, hash.Hash) {
+	hdr := gitBlobHeader(size)
+	h1 := sha1.New() //nolint:gosec // SHA-1 identifies source objects.
+	h1.Write(hdr)
 	h256 := sha256.New()
-	h256.Write(gitBlobHeader(size))
-	return GitBlobSHA1(size), h256
+	h256.Write(hdr)
+	return h1, h256
 }
 
 func RelPath(sha string) (string, error) {
@@ -178,8 +188,11 @@ func RelPath(sha string) (string, error) {
 	if len(sha) != shaHexLen {
 		return "", fmt.Errorf("invalid content sha")
 	}
-	if _, err := hex.DecodeString(sha); err != nil {
-		return "", fmt.Errorf("invalid content sha: %w", err)
+	for i := 0; i < len(sha); i++ {
+		c := sha[i]
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return "", fmt.Errorf("invalid content sha")
+		}
 	}
 	return filepath.Join(sha[:2], sha[2:]+".zst"), nil
 }
@@ -578,6 +591,9 @@ func sameFileVersion(left, right os.FileInfo) bool {
 }
 
 func syncDir(path string) error {
+	if fssync.Relaxed() {
+		return nil
+	}
 	dir, err := os.Open(path)
 	if err != nil {
 		return err

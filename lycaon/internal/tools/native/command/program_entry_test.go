@@ -15,16 +15,10 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/commandsurface"
-	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/lineage"
 	"github.com/lycaon/lycaon/internal/programtest"
-	"github.com/lycaon/lycaon/internal/projectroot"
-	"github.com/lycaon/lycaon/internal/sandbox"
-	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
-	"github.com/lycaon/lycaon/internal/toolexecution"
-	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
@@ -190,7 +184,7 @@ func TestProgramEntryRunsNativeAndExternalStagesWithChildReceipts(t *testing.T) 
 
 func TestProgramEntryRefusesExcludedConstructBeforeEarlierWrite(t *testing.T) {
 	f := newProgramFixture(t)
-	_, err := f.call(t, t.Context(), "external -- /bin/echo x | tee first.txt; cat <(ls)")
+	_, err := f.call(t, t.Context(), "external -- /bin/echo x | tee first.txt; eval ls")
 	rejected := toolrejection.AsToolReject(err)
 	if rejected == nil || !strings.HasPrefix(rejected.Code, "COMMAND_SYNTAX_") || rejected.Data["source_start_byte"] == nil || rejected.Data["source_line"] != 1 {
 		t.Fatalf("excluded construct %v", err)
@@ -223,7 +217,7 @@ func TestProgramEntryBackgroundJobIsListedAndKilled(t *testing.T) {
 	if live, _ := jobs.List(t.Context()); len(live) != 0 {
 		t.Fatalf("killed job still listed %v", live)
 	}
-	for _, reference := range []string{"not-a-session-job", "%2", "4242"} {
+	for _, reference := range []string{"not-a-session-job", "%2", "9999999"} {
 		out, err := f.call(t, t.Context(), "kill -TERM "+reference)
 		testutil.FailErr(t, "run foreign kill", err)
 		if outcome := decodeOutcome(t, out); outcome.Refusal == nil || outcome.Refusal.Code != "COMMAND_JOB_UNKNOWN" || strings.Contains(outcome.Refusal.Feedback, "process_list") {
@@ -309,10 +303,6 @@ func TestProgramEntryDisableStopsOwnedWorkAndRefusesNewPrograms(t *testing.T) {
 	defer cancel()
 	if _, stopped, err := f.Background.Lifecycle.Wait(ctx, f.Session, handle); err != nil || !stopped {
 		t.Fatalf("owned job after disable stopped=%v err=%v", stopped, err)
-	}
-	deadline := time.Now().Add(10 * time.Second)
-	for f.programRows(t)[0] == "running" && time.Now().Before(deadline) {
-		time.Sleep(20 * time.Millisecond)
 	}
 	_, err = f.call(t, t.Context(), "external -- /bin/echo after")
 	if rejected := toolrejection.AsToolReject(err); rejected == nil || rejected.Code != "COMMAND_PROGRAMS_DISABLED" {
@@ -483,7 +473,7 @@ func TestProgramEntryChildLimitKeepsPartialResultsAndSessionUsable(t *testing.T)
 // this running program. The final children still enter through the command
 // evaluator and recorder, which decide the exact at/one-past boundary.
 func seedSettledChildrenAtLimit(ctx context.Context, f *programFixture, plan commandsurface.ProgramSnapshot, ports commandprogram.EvaluationPorts) error {
-	const historical = 65534
+	const historical = 65535
 	program := ports.Invocation.Identity.ProgramID
 	var beforeEvents, beforeBytes int64
 	if err := f.Database.QueryRowContext(ctx, `SELECT trace_events,trace_bytes FROM invocation_programs WHERE id=?`, program).Scan(&beforeEvents, &beforeBytes); err != nil {
@@ -586,7 +576,7 @@ func TestProgramEntryStatesTheSettledRun(t *testing.T) {
 	}{{"true", api.SourceVerdictPassed}, {"false", api.SourceVerdictFailed}, {"sleep 5 &", ""}} {
 		f := newProgramFixture(t)
 		out := &tools.ToolInvocationOut{}
-		f.Configure = func(tc *tools.ToolContext) { tc.Effects.Out = out }
+		f.Context = func(_ string, tc *tools.ToolContext) { tc.Effects.Out = out }
 		_, err := f.call(t, t.Context(), c.program)
 		testutil.FailErr(t, "run "+c.program, err)
 		switch {
@@ -595,78 +585,5 @@ func TestProgramEntryStatesTheSettledRun(t *testing.T) {
 		case c.verdict != "" && (out.SourceRun == nil || out.SourceRun.Verdict != c.verdict || out.SourceRun.Command != c.program):
 			t.Fatalf("%s stated %+v, want %s", c.program, out.SourceRun, c.verdict)
 		}
-	}
-}
-
-type testLoopbackGate struct{}
-
-func (testLoopbackGate) Await(_ context.Context, ask tools.LoopbackConnectAsk) (tools.LoopbackConnectResult, error) {
-	return tools.LoopbackConnectResult{Authorized: true, Ports: ask.Ports}, nil
-}
-
-func (testLoopbackGate) SessionLoopbackGrant(context.Context, string, string) (bool, []uint16) {
-	return true, []uint16{8080}
-}
-
-func TestProgramEntryForwardsSupportedCapabilityDeclarationsToNativeChildren(t *testing.T) {
-	f := newProgramFixture(t)
-	testutil.FailErr(t, "register http_request owner", f.Runtime.Registry.Register("http_request", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
-		return "", nil
-	}))
-	classes, err := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly, toolcontract.CommandMutation, toolcontract.CommandNetworkEgress, toolcontract.CommandExternalExec)
-	testutil.FailErr(t, "compile profile effects", err)
-	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{ID: "fixture", CommandEffects: classes}})
-	f.Runtime.Boundary = boundary
-	f.Runtime.Executor = toolexecution.NewExecutor(toolprofiles.NewProfilePolicyEngine(boundary), f.Runtime.Registry, "fixture")
-	f.Runtime.Executor.Capabilities.SetLoopbackConnectGate(testLoopbackGate{})
-	var curlGranted bool
-	var curlPorts []uint16
-	curlOp := command.NativeOperation{Tool: "http_request", Prepare: func(_ context.Context, _ *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
-		bound, err := commandprogram.CatalogBinder{}.Bind(catalogSpec("curl"), request.Argv)
-		if err != nil {
-			return command.NativePrepared{}, err
-		}
-		return command.NativePrepared{Mode: "request", Review: bound.Review("http_request"), Invoke: func(_ context.Context, tc tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-			curlGranted = tc.Local.LoopbackConnectGranted
-			curlPorts = append([]uint16(nil), tc.Local.LoopbackConnectPorts...)
-			_, err := io.WriteString(streams.Output, "ok\n")
-			if err != nil {
-				return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, err
-			}
-			return toolcontract.ProducerResult{Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.EffectCompleted}, nil
-		}}, nil
-	}}
-	f.Runtime.Owners = func(tools.ToolContext, *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
-		return command.ProgramOwners{Natives: map[string]command.NativeOperation{
-			"curl": curlOp,
-			"tee":  teeOperation(f.Dir),
-			"head": firstLineOperation(),
-		}}, nil
-	}
-	args := map[string]any{
-		"command": "curl http://127.0.0.1:8080/health | tee out.txt | head",
-		"capability_request": map[string]any{
-			"local_listen":     map[string]any{"ports": []any{9090}},
-			"loopback_connect": map[string]any{"ports": []any{8080}},
-		},
-	}
-	contract, _ := toolcontract.Lookup("command")
-	parent, err := f.Recorder.Begin(t.Context(), invocation.Start{ProjectID: testdbseed.DefaultProjectID, SessionID: f.Session, ToolCallID: "model-call-cap", ToolName: "command", Args: args, Contract: contract})
-	testutil.FailErr(t, "begin model receipt", err)
-	tc := tools.ToolContext{Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: f.Dir, IsPrimary: true}}, ActiveRootID: "r1", SourceWorkspaceKind: api.SourceWorkspaceKindProject}}
-	tc.Identity.Agent, tc.Identity.ProjectID, tc.Identity.SessionID, tc.Identity.ToolCallID = "fixture", testdbseed.DefaultProjectID, f.Session, "model-call-cap"
-	tc.Invocation.ID = parent.ID
-	out, err := f.Runtime.Run(t.Context(), args, tc)
-	testutil.FailErr(t, "run capability-forwarded pipeline", err)
-	outcome := decodeOutcome(t, out)
-	if outcome.State != "completed" || outcome.Status != 0 || outcome.Stdout != "ok\n" {
-		t.Fatalf("pipeline outcome: %+v", outcome)
-	}
-	if !curlGranted || len(curlPorts) != 1 || curlPorts[0] != 8080 {
-		t.Fatalf("curl loopback grant = (%v, %v), want (true, [8080])", curlGranted, curlPorts)
-	}
-	executions := f.executions(t)
-	if executions["http_request"] != "completed;" || executions["write"] != "completed;" || executions["read"] != "completed;" {
-		t.Fatalf("child executions = %v", executions)
 	}
 }

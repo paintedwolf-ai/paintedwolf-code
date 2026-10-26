@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/jsonvalue"
 )
 
 type eventChainPayload struct {
@@ -43,7 +44,7 @@ func eventChainPayloadFromEvent(e Event) eventChainPayload {
 
 // ComputeEventRowHash implements D2 row_hash for authz_events hash_version=1.
 func ComputeEventRowHash(hashVersion int, sessionID string, seq int, ts string, payload eventChainPayload, prevHash string) (string, error) {
-	canonical, err := CanonicalJSON(payload)
+	canonical, err := jsonvalue.CanonicalJSON(payload)
 	if err != nil {
 		return "", err
 	}

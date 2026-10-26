@@ -8,14 +8,14 @@ requires:
 when: paintedwolf.rejection_code == "COMMAND_PUBLICATION_PENDING"
 effect: block
 copy:
-  what: 'The dependent process did not start: {{ paintedwolf.path }} holds an accepted edit that is not saved to disk.'
-  cause: The program's earlier write was accepted in the shared editor document, but its save failed or waits for the person's merge.
-  why: External processes read the files on disk, so starting now would run against content the program did not produce.
-  fix: Preserve the accepted edit. Report the unsaved path; once the file is saved, run the dependent step in a new program.
-  instead: Branch on Code; do not save other drafts or relaunch the process until the file holds the accepted edit
+  what: 'This command stopped after accepting its edit: {{ paintedwolf.path }} holds an accepted edit that is not saved to disk.'
+  cause: The editor accepted the change, but it could not save the file.
+  why: Commands read saved files. Continuing now would hide this accepted change from later commands.
+  fix: Keep the accepted edit. Once the file can be saved, start a new program to continue the work.
+  instead: Do not repeat the accepted write or save other drafts
 x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:command_publication_barrier
-x-paintedwolf-message: dependent process blocked on unpublished program write
+x-paintedwolf-emit: guard:command_write_publication
+x-paintedwolf-message: command stopped after an accepted edit could not be saved
 x-paintedwolf-scenarios:
   - id: save-failed
     vars:
@@ -24,4 +24,3 @@ x-paintedwolf-scenarios:
     expect_contains:
       - 'Code: COMMAND_PUBLICATION_PENDING'
       - config/app.json holds an accepted edit that is not saved to disk
-      - do not save other drafts

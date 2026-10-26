@@ -1627,13 +1627,14 @@ CREATE TABLE IF NOT EXISTS invocation_program_outputs (
     created_at TEXT NOT NULL,
     inline_digest TEXT NOT NULL DEFAULT '' CHECK (length(inline_digest) IN (0,64)),
     inline_body BLOB CHECK (inline_body IS NULL OR (stream='arguments' AND length(inline_body)<=16384 AND blob_json='{}' AND length(inline_digest)=64)),
+    blob_id TEXT CHECK (blob_id IS NULL OR blob_id <> ''),
     FOREIGN KEY (program_id, execution_id) REFERENCES invocation_program_executions(program_id, id) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_invocation_program_outputs_program ON invocation_program_outputs(program_id, id);
 CREATE INDEX IF NOT EXISTS idx_invocation_program_outputs_execution ON invocation_program_outputs(execution_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_invocation_program_outputs_reference ON invocation_program_outputs(program_id,reference);
 CREATE INDEX IF NOT EXISTS idx_invocation_program_outputs_blob_id
-    ON invocation_program_outputs(json_extract(blob_json,'$.ID'));
+    ON invocation_program_outputs(blob_id);
 
 -- Only source-owner-confirmed delivered pages become observation records.
 CREATE TABLE IF NOT EXISTS invocation_program_deliveries (

@@ -52,7 +52,15 @@ func New(store Store, workspace *sessionscope.Service, limits *limits.Service, p
 	return &Service{store: store, workspace: workspace, limits: limits, profiles: profiles, captures: captures, execution: execution}
 }
 func (m *Service) SetProjects(projects Projects) { m.projects = projects }
-func (m *Service) SetDataDir(dir string)         { m.dataDir = strings.TrimSpace(dir) }
+
+// ScratchDir is the session's scratch folder, as tool contexts carry it.
+func (m *Service) ScratchDir(ctx context.Context, sess *api.Session) string {
+	if m == nil {
+		return ""
+	}
+	return m.execution.SessionDirectories(ctx, sess).Scratch
+}
+func (m *Service) SetDataDir(dir string) { m.dataDir = strings.TrimSpace(dir) }
 func (m *Service) SetContainers(containers tools.ContainerRecorder) {
 	m.loopbackProv = containers
 }
