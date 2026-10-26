@@ -479,7 +479,7 @@ func (r *grepRun) searchOperand(operand string, implicit, multiple bool) error {
 		if !r.selection.commandLineFile(operand) {
 			return nil
 		}
-		return r.searchFile(e, r.forcedNames(multiple))
+		return r.searchFile(e, r.forcedNames(multiple), false)
 	}
 	if !r.recursive {
 		if r.skipDirectories {
@@ -539,7 +539,7 @@ func (r *grepRun) walk(dir entry, ancestors map[[2]uint64]bool) error {
 				return err
 			}
 		case child.file():
-			if err := r.searchFile(child, r.forcedNames(true)); err != nil {
+			if err := r.searchFile(child, r.forcedNames(true), true); err != nil {
 				return err
 			}
 		}
@@ -556,11 +556,14 @@ func displayOr(display string) string {
 
 // searchFile pins and searches one regular file. rg's recursion skips binary
 // files unless -uuu asks for them.
-func (r *grepRun) searchFile(e entry, names bool) error {
+func (r *grepRun) searchFile(e entry, names, walked bool) error {
 	if r.mode == modeFileList {
 		return r.inv.out.text(e.display, "\n")
 	}
-	if r.indexProvesNoMatch(e) {
+	// A recursive rg walk excludes binary files before applying an indexed
+	// no-match result, including for --files-without-match.
+	checkBinary := r.rg && walked && r.selection.unrestricted < 3 && r.binaryMode != "text"
+	if !checkBinary && r.indexProvesNoMatch(e) {
 		r.pruned++
 		return r.searchContent(e.display, nil, nil, names)
 	}
@@ -573,6 +576,15 @@ func (r *grepRun) searchFile(e entry, names bool) error {
 		return err
 	}
 	defer func() { _ = streamed.Reader.Close() }()
+	if checkBinary {
+		if streamed.FirstNullOffset >= 0 {
+			return nil
+		}
+		if r.indexProvesNoMatch(e) {
+			r.pruned++
+			return r.searchContent(e.display, nil, nil, names)
+		}
+	}
 	return r.searchStream(e.display, streamed.Reader, 0, int(streamed.Revision.ContentBytes), streamed.FirstNullOffset, pin, names)
 }
 

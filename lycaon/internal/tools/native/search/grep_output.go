@@ -57,7 +57,7 @@ func (r *grepRun) searchContent(label string, content []byte, pin *toolcontract.
 // searchStream selects records of one input and prints them in GNU form:
 // PATH:LINE:TEXT for selected lines, PATH-LINE-TEXT for context and "--"
 // between non-adjacent groups. A file holding NUL bytes is binary: its first
-// output line becomes one "Binary file PATH matches" notice on stdout.
+// output line becomes one binary-match notice on the utility's normal stream.
 // A selected line with invalid UTF-8 is binary from that
 // line on, as GNU grep does in a UTF-8 locale.
 func (r *grepRun) searchStream(label string, reader io.Reader, maxBytes int64, totalBytes int, firstNull int, pin *toolcontract.SourcePin, names bool) error {
@@ -175,6 +175,10 @@ func (r *grepRun) searchStream(label string, reader io.Reader, maxBytes int64, t
 }
 
 func (r *grepRun) binaryNotice(label string) error {
+	if !r.rg {
+		r.inv.warn(false, "%s: binary file matches", label)
+		return nil
+	}
 	return r.inv.out.text(fmt.Sprintf("Binary file %s matches\n", label))
 }
 
