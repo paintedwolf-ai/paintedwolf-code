@@ -78,7 +78,7 @@ func projectProgram(ctx context.Context, tx *sql.Tx, sessionID, programID string
 	if err != nil {
 		return out, err
 	}
-	if err = tx.QueryRowContext(ctx, `SELECT r.tool_call_id,r.tool_name,r.session_id,p.source_unit_id FROM invocation_programs p JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE p.id=? AND r.session_id=?`, programID, sessionID).Scan(&out.ParentToolCallID, &out.ParentTool, &out.ParentSessionID, &out.RootSourceUnitID); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT r.tool_call_id,r.tool_name,r.session_id,p.source_unit_id FROM invocation_programs p JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE p.id=? AND r.session_id=?`, programID, sessionID).Scan(&out.ParentToolCallID, &out.ParentTool, &out.ParentSessionID, &out.RootSourceUnitID); err != nil {
 		return out, err
 	}
 	var reached, unsettled int
@@ -108,7 +108,7 @@ func projectProgram(ctx context.Context, tx *sql.Tx, sessionID, programID string
 	out.OmittedEffects = out.CompletedEffects - len(out.Effects)
 	out.OmittedUnknown = out.UncertainEffects - len(out.Unknown)
 	var exact bool
-	if err = tx.QueryRowContext(ctx, `SELECT source_exact FROM invocation_programs WHERE id=?`, programID).Scan(&exact); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT source_exact FROM invocation_programs WHERE id=?`, programID).Scan(&exact); err != nil {
 		return out, err
 	}
 	switch {
@@ -127,14 +127,14 @@ func projectProgram(ctx context.Context, tx *sql.Tx, sessionID, programID string
 }
 
 func selectExecutionProjection(ctx context.Context, tx *sql.Tx, program, kind string, maximum int) ([]ExecutionProjection, error) {
-	condition, err := executionProjectionCondition(kind)
+	if err := validateExecutionProjectionKind(kind); err != nil {
+		return nil, err
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT e.ordinal,n.source_unit_id,n.start_byte,n.end_byte,n.line,n.column_number FROM invocation_program_executions e JOIN invocation_program_nodes n ON n.program_id=e.program_id AND n.node_id=e.node_id WHERE e.program_id=? AND `+executionProjectionSelection+` ORDER BY e.ordinal DESC LIMIT ?`, program, kind, kind, kind, maximum)
 	if err != nil {
 		return nil, err
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT e.ordinal,n.source_unit_id,n.start_byte,n.end_byte,n.line,n.column_number FROM invocation_program_executions e JOIN invocation_program_nodes n ON n.program_id=e.program_id AND n.node_id=e.node_id WHERE e.program_id=? AND `+condition+` ORDER BY e.ordinal DESC LIMIT ?`, program, maximum)
-	if err != nil {
-		return nil, err
-	}
+	defer func() { _ = rows.Close() }()
 	type selected struct {
 		ordinal    int64
 		projection ExecutionProjection
@@ -173,18 +173,13 @@ func selectExecutionProjection(ctx context.Context, tx *sql.Tx, program, kind st
 	return out, nil
 }
 
-func executionProjectionCondition(kind string) (string, error) {
-	// This selector is host-owned closed data, never a caller-supplied SQL clause.
-	var condition string
+const executionProjectionSelection = `((?='completed' AND e.effect_certainty='completed') OR (?='uncertain' AND e.effect_certainty IN ('unknown','attempted')) OR (?='stopped' AND (e.host_stop_code<>'' OR e.stop_code<>'' OR e.state IN ('refused','failed','interrupted'))))`
+
+func validateExecutionProjectionKind(kind string) error {
 	switch kind {
-	case "completed":
-		condition = "e.effect_certainty='completed'"
-	case "uncertain":
-		condition = "e.effect_certainty IN ('unknown','attempted')"
-	case "stopped":
-		condition = "(e.host_stop_code<>'' OR e.stop_code<>'' OR e.state IN ('refused','failed','interrupted'))"
+	case "completed", "uncertain", "stopped":
+		return nil
 	default:
-		return "", fmt.Errorf("unknown execution projection selector")
+		return fmt.Errorf("unknown execution projection selector")
 	}
-	return condition, nil
 }

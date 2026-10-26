@@ -13,9 +13,9 @@ func TestCommandToolSchemaIncludesIOParams(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
 	dir := filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas")
-	verifyRaw, err := os.ReadFile(filepath.Join(dir, "verify.yaml"))
+	rawVerify, err := os.ReadFile(filepath.Join(dir, "verify.yaml"))
 	contractcheck.FailErr(t, "read tools/schemas/verify", err)
-	verifyText := string(verifyRaw)
+	verifyText := string(rawVerify)
 	for _, field := range []string{
 		"stdin:",
 		"stdin_from:",
@@ -28,10 +28,19 @@ func TestCommandToolSchemaIncludesIOParams(t *testing.T) {
 			t.Fatalf("verify schema missing %q", field)
 		}
 	}
-
-	commandRaw, err := os.ReadFile(filepath.Join(dir, "command.yaml"))
+	rawCommand, err := os.ReadFile(filepath.Join(dir, "command.yaml"))
 	contractcheck.FailErr(t, "read tools/schemas/command", err)
-	commandText := string(commandRaw)
+	commandText := string(rawCommand)
+	for _, field := range []string{
+		"command:",
+		"cwd:",
+		"timeout_ms:",
+		"capability_request:",
+	} {
+		if !strings.Contains(commandText, field) {
+			t.Fatalf("command schema missing %q", field)
+		}
+	}
 	for _, retired := range []string{
 		"pipeline:",
 		"stdin:",

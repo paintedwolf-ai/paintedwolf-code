@@ -5,3 +5,5 @@ package hostprocess
 func listPIDs() ([]int, error)             { return nil, ErrUnsupported }
 func inspect(int) (Process, error)         { return Process{}, ErrUnsupported }
 func signalInstance(Process, string) error { return ErrUnsupported }
+func readCommandLine(int) string           { return "" }
+func processExistsFallback(int) bool       { return false }

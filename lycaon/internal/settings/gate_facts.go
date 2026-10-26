@@ -73,6 +73,11 @@ func (g *RuleApprovalGate) factsForAction(
 		ProcessAccess: action.Execution.ProcessAccess,
 		Recoverable:   ClassifyTier(action) != TierIrreversible,
 	}
+	if action.Mutations.RecoveryLoss {
+		facts.Ran |= gate.ProducerApprovalRequest
+		facts.ApprovalRequest = &gate.ApprovalRequest{Count: 1}
+		facts.Recoverable = false
+	}
 	facts.ExecutionCapabilityLeased = g.executionCapabilityCovers(action)
 	facts.AgentPolicyPaths = hitl.AgentPolicyPaths(action.Mutations.AgentPolicy)
 	// Preserve the distinction between absent and empty detection results.

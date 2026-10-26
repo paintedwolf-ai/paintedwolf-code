@@ -2,17 +2,18 @@ package toolhost
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/httpaction"
+	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	reposurvey "github.com/lycaon/lycaon/internal/survey"
 	"github.com/lycaon/lycaon/internal/textsearch"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
@@ -38,12 +39,24 @@ type programOwnerTools struct {
 	// git is the Git owner; nil leaves git to its unsupported refusal.
 	git      *git.Manager
 	registry *tools.DefaultRegistry
+	// spills wraps each program's textutil spill storage when set.
+	spills func(textutil.SpillStorage) textutil.SpillStorage
+}
+
+func directProgramOutputAdmission(current *tools.ToolContext) tools.CommandOutputAdmission {
+	return func(_ context.Context, _ commandprogram.OutputDestination, _ string) (tools.CommandOutputWrite, error) {
+		return tools.CommandOutputWrite{
+			Publish: func(ctx context.Context, apply func(context.Context, tools.ToolContext) (commandprogram.OutputPublished, error)) (commandprogram.OutputPublished, error) {
+				return apply(ctx, *current)
+			},
+			Abandon: func(context.Context, error) error { return nil },
+		}, nil
+	}
 }
 
 // compose builds the literal and mutation owners once and returns the
-// per-program factory: one publication barrier and redirect owner per program.
-func (t programOwnerTools) compose(services ProgramServices) (func(tools.ToolContext, *projectpaths.ProgramPaths) (command.ProgramOwners, error), error) {
-	recorder := services.Recorder
+// per-program factory: one redirect owner per program.
+func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools.ToolContext, *projectpaths.ProgramPaths, *toolcontract.ProgramMemory, tooloutput.SpillAdmission) (command.ProgramOwners, error), error) {
 	revisions := native.ExecutionRevisions{Boundary: t.boundary}
 	literalOwners, err := literal.NewOwners(revisions, recorder, literal.DomainOwners{Summarize: t.summarize, Repo: t.repo})
 	if err != nil {
@@ -69,7 +82,7 @@ func (t programOwnerTools) compose(services ProgramServices) (func(tools.ToolCon
 	if textOwners.Regex, err = textsearch.NewPOSIXEngine(); err != nil {
 		return nil, err
 	}
-	hostenvOwners, err := hostenv.NewOwners(hostenv.OSHost{}, time.Now, t.boundary)
+	hostenvOwners, err := hostenv.NewOwners(hostenv.OSHost{}, time.Now)
 	if err != nil {
 		return nil, err
 	}
@@ -77,32 +90,38 @@ func (t programOwnerTools) compose(services ProgramServices) (func(tools.ToolCon
 	if err != nil {
 		return nil, err
 	}
-	return func(tc tools.ToolContext, paths *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
-		barrier := &native.PublicationBarrier{}
-		var textPorts textutil.Ports
-		httpNative, err := t.httpOperation(services.HTTP, mutationOwners, barrier)
+	return func(tc tools.ToolContext, paths *projectpaths.ProgramPaths, memory *toolcontract.ProgramMemory, admission tooloutput.SpillAdmission) (command.ProgramOwners, error) {
+		literalOwners := literalOwners.ForProgram(memory)
+		searchProgram, queryProgram, mutationProgram, textProgram := *searchOwners, *queryOwners, *mutationOwners, *textOwners
+		searchProgram.Revisions.Memory = memory
+		searchProgram.Admission = admission
+		queryProgram.Revisions.Memory = memory
+		mutationProgram.Revisions.Memory = memory
+		textProgram.Revisions.Memory = memory
+		searchOwners, queryOwners, mutationOwners, textOwners := &searchProgram, &queryProgram, &mutationProgram, &textProgram
+		program := mutation.Program{Paths: paths}
+		httpNative, err := t.httpOperation(mutationOwners)
 		if err != nil {
 			return command.ProgramOwners{}, err
 		}
-		program := mutation.Program{Paths: paths, Barrier: barrier}
+		baseSpills := &textutil.Spills{}
+		var spills textutil.SpillStorage = baseSpills
+		if t.spills != nil {
+			spills = t.spills(spills)
+		}
 		owners := command.ProgramOwners{
-			Natives:     map[string]command.NativeOperation{},
-			Publication: &mutation.Publication{Owners: mutationOwners, Program: program, Tools: tc},
-			Input:       &mutation.Publication{Owners: mutationOwners, Program: program, Tools: tc},
-			Sources:     &mutation.Publication{Owners: mutationOwners, Program: program, Tools: tc},
-			AdmitLaunch: barrier.AdmitDependentLaunch,
+			PublishDocument: mutationOwners.Operations.Write.PublishAccepted,
+			Natives:         map[string]command.NativeOperation{},
+			Publication: func(admit tools.CommandOutputAdmission) commandprogram.OutputPublication {
+				return &mutation.Publication{Owners: mutationOwners, Program: program, Tools: tc, Admission: admit}
+			},
+			Input:   &mutation.Publication{Owners: mutationOwners, Program: program, Tools: tc},
+			Sources: &mutation.Publication{Owners: mutationOwners, Program: program, Tools: tc},
 			Builtins: func(ports command.BuiltinPorts) (map[string]commandprogram.OperationDispatcher, func(), error) {
-				spills, err := textutil.NewSessionSpills(ports.ToolContext, ports.ProgramID)
-				if err != nil && !errors.Is(err, tools.ErrSessionScratchUnavailable) {
-					return nil, nil, err
-				}
-				text := textutil.Ports{ToolContext: ports.ToolContext, Memory: ports.Memory, Admission: ports.Admission, Nested: ports.Nested, Publication: ports.Publication}
-				release := func() {}
-				if spills != nil {
-					text.Spills = spills
-					release = func() { _ = spills.Close() }
-				}
-				textPorts = text
+				builtinTC := ports.ToolContext
+				builtinPub := &mutation.Publication{Owners: mutationOwners, Program: program, Tools: builtinTC, Admission: directProgramOutputAdmission(&builtinTC)}
+				text := textutil.Ports{ToolContext: ports.ToolContext, Memory: ports.Memory, Admission: ports.Admission, Nested: ports.Nested, Publication: builtinPub, Spills: spills}
+				release := func() { _ = baseSpills.Close() }
 				builtins := textOwners.Builtins(text)
 				var bound hostenv.NativeBindings
 				if b, ok := ports.Nested.(hostenv.NativeBindings); ok {
@@ -115,8 +134,8 @@ func (t programOwnerTools) compose(services ProgramServices) (func(tools.ToolCon
 				}
 				return builtins, release, nil
 			},
-			Redirections: func(frame *projectpaths.ProgramPaths) (commandprogram.InputRedirection, commandprogram.OutputPublication) {
-				publication := &mutation.Publication{Owners: mutationOwners, Program: mutation.Program{Paths: frame, Barrier: barrier}, Tools: tc}
+			Redirections: func(frame *projectpaths.ProgramPaths, admit tools.CommandOutputAdmission) (commandprogram.InputRedirection, commandprogram.OutputPublication) {
+				publication := &mutation.Publication{Owners: mutationOwners, Program: mutation.Program{Paths: frame}, Tools: tc, Admission: admit}
 				return publication, publication
 			},
 		}
@@ -124,17 +143,24 @@ func (t programOwnerTools) compose(services ProgramServices) (func(tools.ToolCon
 			if !textutil.PathUtility(name) {
 				continue
 			}
-			owners.Natives[name] = command.NativeOperation{Tool: name, Prepare: func(ctx context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
-				prepared, err := textOwners.PrepareNative(ctx, frame, textPorts, request)
+			owners.Natives[name] = command.NativeOperation{Tool: name, ClosedForms: name == "sed", Prepare: func(ctx context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
+				request.Invocation.Scope.Directory = frame.Cwd().DisplayPath
+				currentTC := frame.ToolContext()
+				publication := &mutation.Publication{Owners: mutationOwners, Program: mutation.Program{Paths: frame}, Tools: currentTC, Admission: directProgramOutputAdmission(&currentTC)}
+				ports := textutil.Ports{ToolContext: currentTC, Memory: memory, Admission: admission, Publication: publication, Spills: spills}
+				prepared, err := textOwners.PrepareNative(ctx, frame, ports, request)
 				if err != nil {
 					return command.NativePrepared{}, err
 				}
-				return command.NativePrepared{Mode: prepared.Mode, Review: prepared.Review, Invoke: func(ctx context.Context, admitted tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-					ports := textPorts
-					ports.ToolContext = admitted
-					ports.Publication = &mutation.Publication{Owners: mutationOwners, Program: mutation.Program{Paths: frame, Barrier: barrier}, Tools: admitted}
-					return prepared.InvokeOwner(ctx, ports, streams)
-				}}, nil
+				return command.NativePrepared{
+					Mode: prepared.Mode, Review: prepared.Review, Release: prepared.Close,
+					Invoke: func(ctx context.Context, admitted tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+						currentTC = admitted
+						publication.Tools = admitted
+						ports.ToolContext = admitted
+						return prepared.InvokeOwner(ctx, ports, streams)
+					},
+				}, nil
 			}}
 		}
 		for _, name := range literalOwners.Commands() {
@@ -160,7 +186,7 @@ func (t programOwnerTools) compose(services ProgramServices) (func(tools.ToolCon
 		for _, name := range mutationOwners.Commands() {
 			tool, _ := mutationOwners.Operation(name)
 			owners.Natives[name] = command.NativeOperation{Tool: tool, Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
-				prepared, err := mutationOwners.Prepare(mutation.Program{Paths: frame, Barrier: barrier}, request)
+				prepared, err := mutationOwners.Prepare(mutation.Program{Paths: frame}, request)
 				if err != nil {
 					return command.NativePrepared{}, err
 				}
@@ -170,7 +196,7 @@ func (t programOwnerTools) compose(services ProgramServices) (func(tools.ToolCon
 		for _, name := range queryOwners.Commands() {
 			tool, _ := queryOwners.Operation(name)
 			owners.Natives[name] = command.NativeOperation{Tool: tool, Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
-				prepared, err := queryOwners.Prepare(query.Program{Paths: frame, Barrier: barrier}, request)
+				prepared, err := queryOwners.Prepare(query.Program{Paths: frame}, request)
 				if err != nil {
 					return command.NativePrepared{}, err
 				}

@@ -1,11 +1,7 @@
 package textutil
 
 import (
-	"context"
-	"strings"
-
 	"github.com/lycaon/lycaon/internal/commandprogram"
-	"github.com/lycaon/lycaon/internal/tools/native/textutil/sedscript"
 )
 
 var fileUtilities = map[string]bool{
@@ -17,7 +13,7 @@ func PathUtility(name string) bool { return fileUtilities[name] }
 
 // pathTargets projects file operands and parsed script effects from the same
 // bound grammar the utility executes.
-func (o *Owners) pathTargets(argv commandprogram.BoundArgv, parsed *sedscript.Program) []commandprogram.PathTarget {
+func (o *Owners) pathTargets(argv commandprogram.BoundArgv, plan *preparedSed) []commandprogram.PathTarget {
 	targets := []commandprogram.PathTarget{}
 	add := func(path string, write bool) {
 		if path != "" && path != "-" {
@@ -53,47 +49,21 @@ func (o *Owners) pathTargets(argv commandprogram.BoundArgv, parsed *sedscript.Pr
 			add(operand, false)
 		}
 	case "sed":
-		var scripts []string
-		for _, item := range argv.Items {
-			if item.Option != nil && item.Option.Key == "-e" {
-				scripts = append(scripts, item.Option.Values[0].Value)
-			}
+		if plan == nil {
+			break
 		}
-		bsdSuffix := ""
-		if len(scripts) == 0 && !argvFlag(argv, "-f") && len(operands) > 0 {
-			// BSD's separate backup suffix is part of the bound sed form.
-			fields := argv.Operands()
-			if o.bsdSuffix(context.Background(), argv, fields) {
-				bsdSuffix = operands[0]
-				operands = operands[1:]
-			}
-			if len(operands) > 0 {
-				scripts = append(scripts, operands[0])
-				operands = operands[1:]
-			}
-		}
-		if parsed == nil && o.Regex != nil && !argvFlag(argv, "-f") {
-			parsed, _ = sedscript.Parse(context.Background(), strings.Join(scripts, "\n"), argvFlag(argv, "-E"), sedCompiler{o.Regex})
-		}
-		if parsed != nil {
-			for _, path := range parsed.ReadFiles() {
+		if plan.program != nil {
+			for _, path := range plan.program.ReadFiles() {
 				add(path, false)
 			}
-			for _, path := range parsed.WriteFiles() {
+			for _, path := range plan.program.WriteFiles() {
 				add(path, true)
 			}
 		}
-		inPlace := argvFlag(argv, "-i") || argvFlag(argv, "-I")
-		suffix := bsdSuffix
-		for _, key := range []string{"-i", "-I"} {
-			if option, ok := argv.Last(key); ok && len(option.Values) > 0 {
-				suffix = option.Values[0].Value
-			}
-		}
-		for _, operand := range operands {
-			add(operand, inPlace)
-			if inPlace && suffix != "" {
-				add(backupName(operand, suffix), true)
+		for _, file := range plan.source.files {
+			add(file.Value, plan.source.inPlace)
+			if plan.source.inPlace && plan.source.suffix != "" {
+				add(backupName(file.Value, plan.source.suffix), true)
 			}
 		}
 	}

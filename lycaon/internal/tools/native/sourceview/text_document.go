@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools"
+	"io"
 	"path/filepath"
 	"strings"
 
@@ -18,13 +20,34 @@ import (
 // Retained tool output keeps the session's spill bound for either access.
 func ReadTextDocument(tool string, access Access, resolved projectpaths.Resolved, maxSpillBytes int) (textfile.UntrustedDocument, error) {
 	maxBytes := access.MaxBytes()
-	if resolved.ToolOutput {
+	if resolved.ToolOutput && access != AccessCommand {
 		maxBytes = int64(tooloutput.EffectiveMaxSpillFileBytes(maxSpillBytes))
 	}
 	raw, err := ReadContentCapped(tool, access, resolved.EffectLocation(), resolved.DisplayPath, resolved.Compressed, maxBytes)
 	if err != nil {
 		return textfile.UntrustedDocument{}, err
 	}
+	return textDocument(tool, access, resolved, raw, maxBytes)
+}
+
+// LoadTextStream decodes an already authorized reader under the same text limits.
+func LoadTextStream(tool string, access Access, tc tools.ToolContext, resolved projectpaths.Resolved, reader io.Reader) (Text, error) {
+	maxBytes := access.MaxBytes()
+	if resolved.ToolOutput {
+		maxBytes = int64(tooloutput.EffectiveMaxSpillFileBytes(tc.Host.MaxToolSpillBytes))
+	}
+	raw, err := readPlainContentCapped(tool, access, reader, resolved.DisplayPath, maxBytes)
+	if err != nil {
+		return Text{}, err
+	}
+	doc, err := textDocument(tool, access, resolved, raw, maxBytes)
+	if err != nil {
+		return Text{}, err
+	}
+	return Text{Content: doc.Text(), Disk: &doc}, nil
+}
+
+func textDocument(tool string, access Access, resolved projectpaths.Resolved, raw []byte, maxBytes int64) (textfile.UntrustedDocument, error) {
 	doc, _, err := textfile.Open(raw, textfile.LimitsForRaw(maxBytes))
 	if err == nil {
 		return doc, nil

@@ -24,6 +24,10 @@ type versionSpec struct {
 }
 
 func (s *Store) insertVersion(ctx context.Context, q *db.Queries, spec versionSpec) (string, error) {
+	return s.insertVersionWithCache(ctx, q, spec, nil)
+}
+
+func (s *Store) insertVersionWithCache(ctx context.Context, q *db.Queries, spec versionSpec, cache *TxBatchCache) (string, error) {
 	state := spec.State
 	if state == "" {
 		if spec.EntryKind == EntryKindDirectory {
@@ -47,8 +51,13 @@ func (s *Store) insertVersion(ctx context.Context, q *db.Queries, spec versionSp
 			captureReason = "content_too_large"
 		}
 		if spec.Object != nil {
-			if err := q.UpsertSourceBlobObject(ctx, *spec.Object); err != nil {
-				return "", err
+			if cache == nil || !cache.upsertedBlobs[spec.Object.Sha256] {
+				if err := q.UpsertSourceBlobObject(ctx, *spec.Object); err != nil {
+					return "", err
+				}
+				if cache != nil {
+					cache.upsertedBlobs[spec.Object.Sha256] = true
+				}
 			}
 			captureState, captureReason, spec.Size = "stored", "", spec.Object.Size
 		} else if object, err := q.GetSourceBlobObject(ctx, spec.SHA256); err == nil {
@@ -60,7 +69,7 @@ func (s *Store) insertVersion(ctx context.Context, q *db.Queries, spec versionSp
 		captureState, captureReason = "metadata_only", "state_unresolved"
 	}
 	// Every retained state advances the source-history clock.
-	seq, err := q.AdvanceSourceOrdinal(ctx, spec.ProjectID)
+	seq, err := cache.advanceOrdinal(ctx, q, spec.ProjectID)
 	if err != nil {
 		return "", err
 	}
@@ -87,6 +96,10 @@ func (s *Store) insertVersion(ctx context.Context, q *db.Queries, spec versionSp
 }
 
 func (s *Store) preserveObservedPreimage(ctx context.Context, q *db.Queries, in preparedRecord, tracked TrackedFile, head *db.SourceBranchHeads) (string, error) {
+	return s.preserveObservedPreimageWithCache(ctx, q, in, tracked, head, nil)
+}
+
+func (s *Store) preserveObservedPreimageWithCache(ctx context.Context, q *db.Queries, in preparedRecord, tracked TrackedFile, head *db.SourceBranchHeads, cache *TxBatchCache) (string, error) {
 	// Preserve the observed pre-image when it differs from the tracked head.
 	preSHA, preSize, preRoot, prePath := in.BeforeSHA256, in.BeforeSize, in.RootID, in.Path
 	if in.Op == api.SourceChangeOpRename {
@@ -112,14 +125,14 @@ func (s *Store) preserveObservedPreimage(ctx context.Context, q *db.Queries, in 
 		}
 	}
 	if needsPreimage {
-		return s.insertVersion(ctx, q, versionSpec{
+		return s.insertVersionWithCache(ctx, q, versionSpec{
 			FileID: tracked.FileID, ProjectID: in.ProjectID, BranchID: in.BranchID,
 			ParentVersionID:      tracked.VersionID,
 			DerivedFromVersionID: in.DerivedFromVersionID,
 			RootID:               preRoot, Path: prePath, EntryKind: in.EntryKind,
 			SHA256: preSHA, Object: in.objects[preSHA], Size: preSize,
 			CaptureQuality: in.CaptureQuality, TS: in.TS,
-		})
+		}, cache)
 	}
 
 	return tracked.VersionID, nil

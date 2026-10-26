@@ -14,7 +14,7 @@ const secretToken = "{{paintedwolf-secret:0f8fad5b-d9cb-469f-a165-70867728950e}}
 
 func TestEnvironmentUtilitiesListTheFrozenEnvironment(t *testing.T) {
 	h := newHarness(t, defaultHost())
-	h.env = []string{"B=two words", "A=1", "GIT_PAGER=cat", "SECRET=" + secretToken, "LD_PRELOAD=/tmp/x.so", "NODE_OPTIONS=--require x"}
+	h.env = []string{"B=two words", "A=1", "GIT_PAGER=cat", "SECRET=" + secretToken}
 	listing := "A=1\nB=two words\nGIT_PAGER=cat\nSECRET=" + secretToken + "\n"
 	cases := []struct {
 		source, stdout string
@@ -22,7 +22,7 @@ func TestEnvironmentUtilitiesListTheFrozenEnvironment(t *testing.T) {
 	}{
 		{"printenv", listing, 0},
 		{"printenv -- B A", "two words\n1\n", 0},
-		{"printenv B missing A LD_PRELOAD", "two words\n1\n", 1},
+		{"printenv B missing A", "two words\n1\n", 1},
 		{"printenv SECRET", secretToken + "\n", 0},
 		{"printenv GIT_PAGER", "cat\n", 0},
 		{"env", listing, 0},
@@ -47,6 +47,10 @@ func TestEnvRefusesReservedAndMalformedAssignments(t *testing.T) {
 		}
 		h.run(source).expectRefusal(t, source, code)
 	}
+	h.env = []string{"LD_PRELOAD=/tmp/x.so"}
+	h.run("env").expectRefusal(t, "native env with blocked export", "COMMAND_OPERAND_INVALID")
+	h.run("printenv").expectRefusal(t, "native printenv with blocked export", "COMMAND_OPERAND_INVALID")
+	h.run("env -i").expectOutput(t, "env -i", "", "", 0)
 }
 
 func TestEnvRunsCommandThroughTheNestedPort(t *testing.T) {

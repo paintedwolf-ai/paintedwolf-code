@@ -102,7 +102,6 @@ var factDecls = []factDecl{
 	{"pending_user_input", oarcore.TypeBool, FactTierHost, ""},
 	{"stub_valid", oarcore.TypeBool, FactTierHost, ""},
 	{"tool_allowed_for_profile", oarcore.TypeBool, FactTierHost, ""},
-	{"habit_redirect_match", oarcore.TypeString, FactTierHost, ""},
 	{"write_roots", oarcore.TypeListString, FactTierHost, ""},
 	{"pattern_parse_ok", oarcore.TypeBool, FactTierHost, ""},
 	{"arg_validation_errors", oarcore.TypeListString, FactTierStandard, ProfileTool},

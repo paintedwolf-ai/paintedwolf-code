@@ -1,10 +1,19 @@
 package textsearch
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"errors"
+	"io"
+	"sync"
 )
+
+var scanReaderPool = sync.Pool{
+	New: func() any {
+		return bufio.NewReaderSize(nil, 64*1024)
+	},
+}
 
 // LineKind separates selected records from context around them.
 type LineKind int
@@ -19,6 +28,7 @@ const (
 type Line struct {
 	Number     int
 	Start, End int
+	Text       []byte
 	Kind       LineKind
 	// Gap reports that a non-adjacent group starts here: an earlier line was
 	// yielded and context is in use (grep prints "--").
@@ -41,13 +51,14 @@ type ScanOptions struct {
 	NullData bool
 }
 
-// StopScan ends a scan early without error when a yield returns it.
-var StopScan = errors.New("stop line scan")
+// ErrStopScan ends a scan early without error when a yield returns it.
+var ErrStopScan = errors.New("stop line scan")
 
-// ScanLines selects records of content with sel and yields selected and
-// context lines in order. It returns how many lines were selected. A record
-// error (pattern budget, cancellation) stops the scan and is returned.
-func ScanLines(ctx context.Context, content []byte, sel Selector, opts ScanOptions, yield func(Line) error) (int, error) {
+// ScanReader selects records from r with sel and yields selected and context
+// lines in order without materializing the entire input in memory. If maxBytes
+// is positive and the stream exceeds maxBytes before selection completes,
+// onExceed(maxBytes, observed) is returned.
+func ScanReader(ctx context.Context, r io.Reader, maxBytes int64, onExceed func(maximum, observed int64) error, sel Selector, opts ScanOptions, yield func(Line) error) (int, error) {
 	s := lineScan{opts: opts, yield: yield}
 	if opts.MaxSelected == 0 {
 		return 0, nil
@@ -57,37 +68,77 @@ func ScanLines(ctx context.Context, content []byte, sel Selector, opts ScanOptio
 	if opts.NullData {
 		separator = 0
 	}
-	for start, number := 0, 1; start < len(content); number++ {
+	br := scanReaderPool.Get().(*bufio.Reader)
+	br.Reset(r)
+	defer func() {
+		br.Reset(nil)
+		scanReaderPool.Put(br)
+	}()
+	for start, number := 0, 1; ; number++ {
 		if err := ctx.Err(); err != nil {
 			return s.selected, err
 		}
-		end := len(content)
-		if i := bytes.IndexByte(content[start:], separator); i >= 0 {
-			end = start + i
+		if trailing && s.after == 0 {
+			break
 		}
-		next := end + 1
-		recordEnd := end
-		if opts.TrimCR && !opts.NullData && recordEnd > start && content[recordEnd-1] == '\r' {
-			recordEnd--
+		chunk, readErr := br.ReadSlice(separator)
+		raw := chunk
+		if maxBytes > 0 && int64(start+len(raw)) > maxBytes {
+			return s.selected, onExceed(maxBytes, int64(start+len(raw)))
 		}
-		line := Line{Number: number, Start: start, End: recordEnd}
-		start = next
-		if trailing {
-			if s.after == 0 {
+		if errors.Is(readErr, bufio.ErrBufferFull) {
+			raw = append([]byte(nil), chunk...)
+			for {
+				if err := ctx.Err(); err != nil {
+					return s.selected, err
+				}
+				chunk, err := br.ReadSlice(separator)
+				raw = append(raw, chunk...)
+				if maxBytes > 0 && int64(start+len(raw)) > maxBytes {
+					return s.selected, onExceed(maxBytes, int64(start+len(raw)))
+				}
+				if errors.Is(err, bufio.ErrBufferFull) {
+					continue
+				}
+				readErr = err
 				break
 			}
+		}
+		if len(raw) == 0 && errors.Is(readErr, io.EOF) {
+			break
+		}
+		if readErr != nil && !errors.Is(readErr, io.EOF) {
+			return s.selected, readErr
+		}
+		next := start + len(raw)
+		text := raw
+		if len(text) > 0 && text[len(text)-1] == separator {
+			text = text[:len(text)-1]
+		}
+		if opts.TrimCR && !opts.NullData && len(text) > 0 && text[len(text)-1] == '\r' {
+			text = text[:len(text)-1]
+		}
+		line := Line{Number: number, Start: start, End: start + len(text), Text: text}
+		start = next
+		if trailing {
 			if err := s.context(line); err != nil {
 				return s.finish(err)
 			}
+			if s.after == 0 || errors.Is(readErr, io.EOF) {
+				break
+			}
 			continue
 		}
-		span, matched, err := sel.Select(ctx, content[line.Start:line.End])
+		span, matched, err := sel.Select(ctx, line.Text)
 		if err != nil {
 			return s.selected, err
 		}
 		if matched == opts.Invert {
 			if err := s.unselected(line); err != nil {
 				return s.finish(err)
+			}
+			if errors.Is(readErr, io.EOF) {
+				break
 			}
 			continue
 		}
@@ -98,6 +149,9 @@ func ScanLines(ctx context.Context, content []byte, sel Selector, opts ScanOptio
 			return s.finish(err)
 		}
 		trailing = opts.MaxSelected > 0 && s.selected >= opts.MaxSelected
+		if (trailing && s.after == 0) || errors.Is(readErr, io.EOF) {
+			break
+		}
 	}
 	return s.selected, nil
 }
@@ -112,7 +166,7 @@ type lineScan struct {
 }
 
 func (s *lineScan) finish(err error) (int, error) {
-	if errors.Is(err, StopScan) {
+	if errors.Is(err, ErrStopScan) {
 		return s.selected, nil
 	}
 	return s.selected, err
@@ -136,6 +190,7 @@ func (s *lineScan) unselected(line Line) error {
 	}
 	if s.opts.Before > 0 {
 		line.Kind = ContextLine
+		line.Text = bytes.Clone(line.Text)
 		s.pending = append(s.pending, line)
 		if len(s.pending) > s.opts.Before {
 			s.pending = s.pending[1:]

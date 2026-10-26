@@ -70,6 +70,9 @@ func StartPipelineAsync(
 		done:   make(chan struct{}),
 		cancel: cancel,
 	}
+	if opts.Started != nil {
+		opts.Started(async.PID())
+	}
 	go async.wait(runCtx, opts, stdinReader, redirect)
 	return async, nil
 }
@@ -123,4 +126,12 @@ func (a *AsyncPipeline) Done() <-chan struct{} {
 		return ch
 	}
 	return a.done
+}
+
+// PID returns the OS process ID of the launched stage, or 0.
+func (a *AsyncPipeline) PID() int {
+	if a == nil || a.run == nil {
+		return 0
+	}
+	return a.run.pid()
 }

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -29,7 +30,7 @@ var readOnlyNativeSurvey = []string{
 
 var readOnlyNativeMutations = []string{
 	"write", "edit", "replace_lines", "restore_version", "code_rewrite", "jq_edit", "chmod", "delete",
-	"git_commit", "git_restore", "command", "extract_archive",
+	"git_commit", "git_restore", "extract_archive",
 }
 
 func loadToolProfileByID(t *testing.T, id string) sandbox.ToolProfile {
@@ -90,6 +91,7 @@ func TestProfileToolTier_implementHasScanDrillDown(t *testing.T) {
 
 func TestProfileToolTier_readOnlyProfilesDenyMutations(t *testing.T) {
 	t.Parallel()
+	readOnly, _ := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly)
 	for _, id := range []string{"explore_readonly", "worker_readonly", "plan_review_readonly", "web_research"} {
 		prof := loadToolProfileByID(t, id)
 		for _, tool := range readOnlyNativeMutations {
@@ -97,10 +99,16 @@ func TestProfileToolTier_readOnlyProfilesDenyMutations(t *testing.T) {
 				t.Fatalf("%s must not grant mutation tool %q", id, tool)
 			}
 		}
-		for _, tool := range readOnlyNativeSurvey {
-			if id == "web_research" {
-				continue
+		if id == "web_research" {
+			if profileGrants(prof, "command") {
+				t.Fatalf("%s must not grant command", id)
 			}
+			continue
+		}
+		if !prof.Tools["command"] || !prof.ToolSticky("command") || prof.CommandEffects != readOnly {
+			t.Fatalf("%s must grant sticky read_only command; got allowed=%v sticky=%v effects=%v", id, prof.Tools["command"], prof.ToolSticky("command"), prof.CommandEffects.Classes())
+		}
+		for _, tool := range readOnlyNativeSurvey {
 			if !prof.Tools[tool] {
 				t.Fatalf("%s missing read-only survey tool %q", id, tool)
 			}
@@ -114,19 +122,6 @@ func TestProfileToolTier_coordinatorCeilingIncludesInvestigateNativeTools(t *tes
 	for _, tool := range coordinatorNativeCeiling {
 		if !prof.Tools[tool] {
 			t.Fatalf("coordinator profile missing native ceiling tool %q", tool)
-		}
-	}
-}
-
-func TestProfileToolTier_commandEquivalenceProfilesMatchYAML(t *testing.T) {
-	t.Parallel()
-	eq := loadToolCommandEquivalenceYAML(t)
-	for _, entry := range eq.Entries {
-		for _, profileID := range entry.Profiles {
-			prof := loadToolProfileByID(t, profileID)
-			if !prof.Tools[entry.Native] {
-				t.Fatalf("tool-command-equivalence lists %q on %q but profile omits it", entry.Native, profileID)
-			}
 		}
 	}
 }

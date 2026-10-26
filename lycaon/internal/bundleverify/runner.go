@@ -27,7 +27,7 @@ func (execRunner) Run(ctx context.Context, name string, args ...string) ([]byte,
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	err = execpkg.RunPrepared(cmd)
+	err = execpkg.RunPrepared(ctx, cmd)
 	return stdout.Bytes(), stderr.Bytes(), err
 }
 

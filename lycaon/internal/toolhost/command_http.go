@@ -6,7 +6,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/httpaction"
-	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"github.com/lycaon/lycaon/internal/tools/native/curl"
 	"github.com/lycaon/lycaon/internal/tools/native/mutation"
@@ -27,23 +26,16 @@ func (r *Runtime) RegisterHTTP(deps httpaction.Deps) error {
 	return nil
 }
 
-func (t programOwnerTools) httpOperation(servicesHTTP httpaction.Deps, mutations *mutation.Owners, barrier *native.PublicationBarrier) (command.NativeOperation, error) {
-	httpDeps := t.http
-	if httpDeps.Boundary == nil {
-		httpDeps = servicesHTTP
-	}
-	if httpDeps.Boundary == nil {
-		httpDeps.Boundary = t.boundary
-	}
-	if httpDeps.Boundary == nil {
+func (t programOwnerTools) httpOperation(mutations *mutation.Owners) (command.NativeOperation, error) {
+	if t.http.Boundary == nil {
 		return command.NativeOperation{}, nil
 	}
-	owner, err := curl.NewOwners(httpDeps, mutations)
+	owner, err := curl.NewOwners(t.http, mutations)
 	if err != nil {
 		return command.NativeOperation{}, err
 	}
 	return command.NativeOperation{Tool: owner.Operation(), Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
-		prepared, err := owner.Prepare(mutation.Program{Paths: frame, Barrier: barrier}, request)
+		prepared, err := owner.Prepare(mutation.Program{Paths: frame}, request)
 		if err != nil {
 			return command.NativePrepared{}, err
 		}
