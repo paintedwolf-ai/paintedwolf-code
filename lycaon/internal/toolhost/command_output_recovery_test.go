@@ -19,7 +19,7 @@ import (
 )
 
 func TestOutputViewHostReadRepairsChangedDeletedAndHardlinkedCopies(t *testing.T) {
-	for _, mode := range []string{"modified", "deleted", "hardlinked"} {
+	for _, mode := range []string{"modified", "deleted", "hard-link"} {
 		t.Run(mode, func(t *testing.T) {
 			f := newOutputDeliveryFixture(t)
 			var tc tools.ToolContext
@@ -44,7 +44,7 @@ func TestOutputViewHostReadRepairsChangedDeletedAndHardlinkedCopies(t *testing.T
 				testutil.FailErr(t, "delete view", os.Remove(target))
 			} else {
 				writePath := target
-				if mode == "hardlinked" {
+				if mode == "hard-link" {
 					testutil.FailErr(t, "plant alias", os.Link(target, alias))
 					writePath = alias
 				}
@@ -71,7 +71,7 @@ func TestOutputViewHostReadRepairsChangedDeletedAndHardlinkedCopies(t *testing.T
 			if got := len(f.Delivered()); got != before {
 				t.Fatalf("repair manufactured source credit: %d", got)
 			}
-			if mode == "hardlinked" {
+			if mode == "hard-link" {
 				prior, err := os.ReadFile(alias)
 				testutil.FailErr(t, "read detached alias", err)
 				if string(prior) == original {
