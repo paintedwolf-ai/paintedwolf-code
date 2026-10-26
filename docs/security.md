@@ -199,6 +199,24 @@ One broker serves the host, at an address recorded in the state directory and re
 
 No credential travels in that environment. Identity is the calling process: the broker resolves the peer of each loopback connection to the launch it descends from, through an inherited descriptor that fork, exec, and setsid all preserve. A process cannot forge descent it does not have, and one it does have cannot be lost by reparenting. Where descendants cannot be observed, mediated egress is not offered at all rather than offered without attribution.
 
+### Host proxy policy
+
+[`internal/hostproxy`](../lycaon/internal/hostproxy) owns proxy selection for each effective destination: loopback destinations and `NO_PROXY` exceptions remain direct, explicit environment settings take precedence, and desktop settings supply the remaining policy. Invalid settings, unavailable configured readers, and unsupported PAC/WPAD return a failure; they never authorize a direct retry. Linux GNOME settings use a fixed, bounded native read. Nix packaging binds that reader to its retained GLib executable, without an environment or agent-selected command override.
+
+| Network path | Proxy owner |
+|---|---|
+| Provider, MCP, browser metadata, model provisioning and ordinary host HTTP | Purpose-bound `httpclient` transports select policy for each request and redirect |
+| OSV advisory exports | The scanner HTTP factory supplies the host download transport |
+| First-party mediated HTTP and feed requests | Authorization and address validation precede `hostproxy.DialPinned` for every hop |
+| Command and managed-browser broker connections | The existing action lease and destination grant precede the same pinned dialer |
+| Linux native update discovery | A bounded private engine child resolves each pointer/signature URL; native requests refuse redirects |
+| Exact loopback, Unix sockets and local native services | Explicit local transports retain their existing capability boundary |
+| Release artifact generation tooling | Build-time clients retain their own supplied transport; they are not an application network path |
+
+Pinned routes send the approved numeric address and port through HTTP/HTTPS CONNECT or SOCKS5. They preserve the original HTTP host and TLS server identity, so proxy-side DNS cannot change the approved destination. Proxy setup has bounded replies and cancellation, normal certificate verification, and no authentication or direct fallback. Proxy credentials belong only to the selected proxy connection; they do not enter origin headers, command environments or transport diagnostics. Selecting a proxy does not grant a destination, local socket or loopback capability.
+
+The native updater captures an engine descriptor against the package manifest and running desktop before using it for auxiliary children. A package mismatch requires restart; an installation without a qualified capture refuses the helper. Nix generation admission is supplied by the separate generation owner. Signed feed verification and HTTPS validation remain independent checks.
+
 ### Processes a command leaves behind
 
 Build tooling reuses daemons by design: a build server, a test supervisor, a watcher, a language server. On macOS a process that outlives the command which started it keeps the boundary applied at spawn, so the host tracks whose it is rather than losing sight of it. On Linux a command's processes end with the command: the helper is the first process of the command's PID namespace, and when it exits the kernel ends everything left inside.
@@ -270,6 +288,8 @@ on the next system switch. Re-select the required generation and rebuild the
 system to recover a missing attachment. The module does not enable AppArmor,
 relax namespace sysctls, admit arbitrary store executables or grant vault trust
 through an AppArmor profile. Missing kernel capabilities still fail closed.
+
+The native `test:confine:linux` gate includes a required helper leg: a stdio MCP process must stay inside its write grant, a bundled-scanner boundary must keep source input read-only while permitting output, and the source-qualified native document core must round-trip its edit/restore/undo protocol under applied confinement. Missing kernel capabilities fail these fixtures. Browser admission and unsafe-root cases are included in the pinned-browser leg. These boundary fixtures complement producer and installed-package qualification; the scanner probe does not qualify the shipped scanner binary.
 
 What the Linux adapter cannot express yet, and what it expresses differently, is bounded:
 
@@ -370,7 +390,7 @@ That catalog is two bundled detection packs, `key-material` and `credential-stor
 
 The managed browser renders untrusted pages under the same floors as any confined process (the protected, agent-policy, and control-plane write floors and the key-material read floor) while its own cache and profile directories stay writable.
 
-Attached roots and reviewed write-root grants may name broad folders, including the home directory and filesystem root. They may contain protected stores, but cannot be a store or lie inside it. Per-path floors remain independent: the control plane is refused, key material and credential stores need exact-path approval, and agent-policy writes need their own review. Native reads of catalogued protected locations remain reviewable even inside attached roots; a broad read-tree grant never covers them.
+A writable root cannot equal or contain the app's state tree. Attached folders, reviewed and durable grants, and session scratch pass that rule before launch; unsafe default temporary and cache roots are excluded. Canonical path comparison covers aliases, and the rule remains active when state reads are enabled. This prevents a program from moving the state tree by renaming an ancestor. Other broad folders may contain protected stores, but cannot be a store or lie inside it. Per-path floors remain independent: the control plane is refused, key material and credential stores need exact-path approval, and agent-policy writes need their own review. Native reads of catalogued protected locations remain reviewable even inside attached roots; a broad read-tree grant never covers them.
 
 File-read cards offer host-approved ancestor directory scopes, beginning at the target's containing directory. Each scope has its own opaque option for every duration. Sensitive targets and all writes retain exact-path grants. Choosing a broader directory updates the host-authored coverage and never accepts a caller-written path.
 

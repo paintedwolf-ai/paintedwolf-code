@@ -12,7 +12,7 @@ import (
 func TestSeatbeltProtectedWriteApprovalScope(t *testing.T) {
 	self := requireSeatbelt(t)
 	parent := t.TempDir()
-	configDir := filepath.Join(parent, "control")
+	configDir := t.TempDir()
 	t.Setenv("LYCAON_CONFIG_DIR", configDir)
 	data := filepath.Join(parent, "data")
 	certificate := filepath.Join(data, "certificate.pem")
