@@ -23,12 +23,12 @@ func TestRegexBudgets(t *testing.T) {
 	limits := catalogLimits(t)
 	ctx := t.Context()
 
-	catastrophic := []byte(strings.Repeat("a", 40))
+	catastrophic := []byte(strings.Repeat("a", 40) + "bc" + strings.Repeat("a", 40))
 	for _, spec := range []Spec{
-		{Patterns: []string{`(a*)*b`}, Dialect: Perl},
-		{Patterns: []string{`\(a*\)*\1b`}, Dialect: Basic},
-		{Patterns: []string{`(a|aa)*c`}, Dialect: Extended},
-		{Patterns: []string{`(a|aa)*c`}, Dialect: RE2},
+		{Patterns: []string{`^(a*)*b$`}, Dialect: Perl},
+		{Patterns: []string{`^\(a*\)*\1b$`}, Dialect: Basic},
+		{Patterns: []string{`^(a|aa)*c$`}, Dialect: Extended},
+		{Patterns: []string{`^(a|aa)*c$`}, Dialect: RE2},
 	} {
 		m, err := Compile(ctx, spec, limits)
 		if err != nil {
