@@ -7,6 +7,7 @@ import re
 import uuid
 
 from . import accessibility, lineage, surface_wire
+from .. import notification_display
 
 OPERATION = 'notification-click-v1'
 _HASH = re.compile(r'[a-f0-9]{64}')
@@ -53,14 +54,17 @@ def before(value):
     fields(value, ('surface', 'service', 'shell', 'delivery', 'geometry', 'target'))
     surface_wire.proof(value['surface'])
     service, shell = owner(value['service']), owner(value['shell'])
-    delivery = fields(value['delivery'], ('notification_id', 'request_serial', 'sender', 'session_id', 'title_sha256', 'body_sha256'))
+    delivery = fields(value['delivery'], ('notification_id', 'request_serial', 'request_sequence', 'sender', 'session_id',
+        'wire_title_sha256', 'wire_body_sha256', 'display_title_sha256', 'display_body_sha256', 'capabilities', 'server'))
     if not isinstance(delivery['session_id'], str) or str(uuid.UUID(delivery['session_id'])) != delivery['session_id']:
         raise ValueError('notification click requires its canonical expected chat identity')
     positive(delivery['notification_id'], (1 << 32) - 1)
     positive(delivery['request_serial'], (1 << 32) - 1)
+    positive(delivery['request_sequence'], 64)
+    notification_display.validate(delivery)
     if (not isinstance(delivery['sender'], str) or not _UNIQUE.fullmatch(delivery['sender'])
             or any(not isinstance(delivery[key], str) or not _HASH.fullmatch(delivery[key])
-                   for key in ('title_sha256', 'body_sha256'))):
+                   for key in ('wire_title_sha256', 'wire_body_sha256', 'display_title_sha256', 'display_body_sha256'))):
         raise ValueError('notification click has no captured typed delivery identity')
     geometry = fields(value['geometry'], ('display_owner', 'serial', 'logical_extent', 'pixel_size',
         'scale_percent', 'transform', 'layout_mode', 'shell_extent'))
@@ -87,7 +91,7 @@ def before(value):
     labels = target['labels']
     if not isinstance(labels, list) or len(labels) != 2:
         raise ValueError('notification click requires unique delivered title and body labels')
-    for label, key in zip(labels, ('title_sha256', 'body_sha256')):
+    for label, key in zip(labels, ('display_title_sha256', 'display_body_sha256')):
         fields(label, ('identity', 'ancestry', 'role', 'name_sha256'))
         accessibility.validate_identity(label['identity'])
         ancestry = chain(label['ancestry'], label['identity'], shell['process']['pid'])

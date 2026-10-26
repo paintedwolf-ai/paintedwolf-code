@@ -22,7 +22,7 @@ class NotificationBus:
         self.rows, self.lock = deque(), threading.Lock()
         self.error, self.trace, self.monitoring = None, None, False
         self.owner, self.service_process = None, None
-        self.pending_calls, self.signal_owners = set(), set()
+        self.pending_calls, self.signal_owners = {}, set()
 
     def _call(self, name, signature, values, deadline=None):
         if name not in {'GetNameOwner', 'GetConnectionUnixUser', 'GetConnectionUnixProcessID'}:
@@ -58,7 +58,8 @@ class NotificationBus:
             self.require_owners()
             self.monitor = self.reader.connect('/run/user/' + str(os.getuid()) + '/bus', os.getuid())
             self.filter_id = self.monitor.add_filter(self._filter, None)
-            rules = [f"type='method_call',interface='{SERVICE}',member='Notify'",
+            rules = [f"type='method_call',interface='{SERVICE}',path='{PATH}',member='{member}'"
+                for member in ('Notify', 'GetCapabilities')] + [
                 "type='method_return'",
                 f"type='signal',interface='{SERVICE}',path='{PATH}'"]
             self.monitor.call_sync(BUS, BUS_PATH, BUS + '.Monitoring', 'BecomeMonitor',
@@ -80,27 +81,35 @@ class NotificationBus:
             kind, sender = kinds.get(message.get_message_type()), message.get_sender()
             with self.lock:
                 relevant = False
-                if kind == 'call' and message.get_interface() == SERVICE and message.get_member() == 'Notify':
+                if (kind == 'call' and message.get_interface() == SERVICE and message.get_path() == PATH
+                        and message.get_member() in {'Notify', 'GetCapabilities'}):
                     if len(self.pending_calls) >= 16:
                         raise ValueError('notification observed call count exceeds its bound')
-                    self.pending_calls.add((sender, message.get_serial()))
                     destination = message.get_destination()
                     if isinstance(destination, str) and destination.startswith(':'):
+                        unique(destination)
+                        key = (unique(sender), message.get_serial())
+                        if key in self.pending_calls:
+                            raise ValueError('notification observed request header was duplicated')
+                        self.pending_calls[key] = destination
                         self.signal_owners.add(destination)
-                    relevant = True
-                elif kind == 'return' and (message.get_destination(), message.get_reply_serial()) in self.pending_calls:
+                        relevant = True
+                elif (kind == 'return' and self.pending_calls.get(
+                        (message.get_destination(), message.get_reply_serial())) == sender):
                     self.signal_owners.add(sender)
                     relevant = True
                 elif kind == 'signal' and sender in self.signal_owners and message.get_interface() == SERVICE:
                     relevant = True
             if relevant:
                 body = message.get_body()
-                if body is None or body.get_size() > 64 << 10:
+                empty = body is None and kind == 'call' and message.get_member() == 'GetCapabilities'
+                if not empty and (body is None or body.get_size() > 64 << 10):
                     raise ValueError('notification bus message exceeds its body bound')
                 row = {'type': kind, 'sender': sender, 'destination': message.get_destination(),
                     'serial': message.get_serial(), 'reply_serial': message.get_reply_serial(),
                     'path': message.get_path(), 'interface': message.get_interface(),
-                    'member': message.get_member(), 'signature': body.get_type_string(), 'body': body.unpack()}
+                    'member': message.get_member(), 'signature': '()' if empty else body.get_type_string(),
+                    'body': () if empty else body.unpack()}
                 with self.lock:
                     if len(self.rows) >= 128:
                         raise ValueError('notification bus observation queue exceeds its bound')

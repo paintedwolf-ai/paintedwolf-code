@@ -10,7 +10,7 @@ from ..installed_cases.app import process_identity
 from ..installed_cases.desktop_ui import load_api
 from ..installed_cases.records import CaseFailed, CaseUnavailable
 from ..installed_cases.logind_context import Reader
-from .. import installed_gnome
+from .. import installed_gnome, notification_display
 from .. import scripts_module
 
 BUS = 'org.freedesktop.DBus'
@@ -104,7 +104,7 @@ def capture_target(api, shell_process, delivery, geometry, deadline, expected=No
             else:
                 facts['clipped'] = True
             facts['phase'] = 'notification-labels'
-            candidates = {key: [] for key in ('title_sha256', 'body_sha256')}
+            candidates = {key: [] for key in ('display_title_sha256', 'display_body_sha256')}
             for label in accessibility.descendants(node, deadline):
                 if label.getRole() != api.ROLE_LABEL:
                     continue
@@ -113,9 +113,9 @@ def capture_target(api, shell_process, delivery, geometry, deadline, expected=No
                 for key in candidates:
                     if digest == delivery[key]:
                         candidates[key].append(label)
-                        candidate['title_matches' if key == 'title_sha256' else 'body_matches'] = len(candidates[key])
-            candidate.update(labels_complete=True, title_matches=len(candidates['title_sha256']),
-                             body_matches=len(candidates['body_sha256']))
+                        candidate['title_matches' if key == 'display_title_sha256' else 'body_matches'] = len(candidates[key])
+            candidate.update(labels_complete=True, title_matches=len(candidates['display_title_sha256']),
+                             body_matches=len(candidates['display_body_sha256']))
             if any(len(items) != 1 for items in candidates.values()):
                 continue
             facts['phase'] = 'notification-ancestry'
@@ -183,6 +183,9 @@ def observe(surface, service, shell, delivery, deadline=None, expected=None):
                     raise CaseFailed('notification product runtime changed before physical dispatch')
 
         require_owners()
+        notification_display.validate(delivery)
+        if notification_display.server_information(reader, service['bus_name'], deadline) != delivery['server']:
+            raise CaseUnavailable('notification-renderer-changed-before-physical-dispatch')
         result = reader.call(MUTTER_PATH, MUTTER, 'GetCurrentState', None, STATE_SIGNATURE,
             user=True, destination=shell['bus_name'])
         if result.get_type_string() != STATE_SIGNATURE:

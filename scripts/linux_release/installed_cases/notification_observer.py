@@ -7,7 +7,7 @@ from .profile_observer import identifier, physical, profile
 from .profile_setup import slice_document, LAST_ACTIVE_PROJECT, LAST_SESSION_SNAPSHOT
 from .records import CaseFailed, CaseUnavailable
 from ..installed_input import notification_shell, notification_wire
-from .. import installed_gnome
+from .. import installed_gnome, notification_display
 
 
 def selected_chat(app):
@@ -58,8 +58,12 @@ class NotificationObserver:
             raise CaseFailed('notification shell changed while binding its native authority')
         self.delivery = {'notification_id': bus.trace.delivery['notification_id'],
             'request_serial': bus.trace.call['serial'], 'sender': bus.trace.sender,
-            'session_id': self.session_id, 'title_sha256': bus.trace.call['title_sha256'],
-            'body_sha256': bus.trace.call['body_sha256']}
+            'session_id': self.session_id, 'request_sequence': bus.trace.call['sequence'],
+            'capabilities': dict(bus.trace.capabilities),
+            'server': notification_display.server_information(bus.reader, bus.owner, time.monotonic() + 15),
+            **{key: bus.trace.call[key] for key in ('wire_title_sha256', 'wire_body_sha256',
+                'display_title_sha256', 'display_body_sha256')}}
+        bus.require_owners()
 
     def require_runtime(self, deadline=None):
         self.app.require_engine()

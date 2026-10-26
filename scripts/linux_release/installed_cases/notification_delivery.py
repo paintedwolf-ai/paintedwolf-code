@@ -6,6 +6,7 @@ import hashlib
 import re
 
 from .records import CaseFailed, CaseUnavailable
+from .. import notification_display
 
 SERVICE = 'org.freedesktop.Notifications'
 PATH = '/org/freedesktop/Notifications'
@@ -32,6 +33,7 @@ class DeliveryTrace:
             raise ValueError('notification sender and service must have distinct captured identities')
         self.desktop_entry = desktop_entry
         self.call, self.delivery, self.activation = None, None, None
+        self.capability_call, self.capabilities = None, None
         self.armed, self.token, self.sequence = False, None, 0
         self.events = []
 
@@ -43,13 +45,23 @@ class DeliveryTrace:
         if self.sequence > 64:
             raise CaseUnavailable('notification-bus-observation-limit')
         if row['type'] == 'call':
-            self._notify(row)
+            self._capabilities(row) if row['member'] == 'GetCapabilities' else self._notify(row)
         elif row['type'] == 'return':
             self._delivered(row)
         elif row['type'] == 'signal':
             self._signal(row)
         else:
             raise ValueError('notification observation requires a declared message type')
+
+    def _capabilities(self, row):
+        if (row['sender'] != self.sender or row['destination'] not in {self.owner, SERVICE}
+                or row['path'] != PATH or row['interface'] != SERVICE):
+            raise CaseFailed('native capability request changed its captured bus authority')
+        if self.capability_call is not None or self.call is not None:
+            raise CaseUnavailable('native-notification-capability-exchange-is-ambiguous')
+        if row['signature'] != '()' or row['body'] not in ((), []):
+            raise ValueError('native capability request has an invalid typed body')
+        self.capability_call = {'request_serial': uint(row['serial']), 'request_sequence': self.sequence}
 
     def _notify(self, row):
         if (row['sender'] != self.sender or row['destination'] not in {self.owner, SERVICE}
@@ -68,11 +80,27 @@ class DeliveryTrace:
                 or hints.get('desktop-entry') != self.desktop_entry or type(timeout) is not int):
             raise CaseUnavailable('notification-request-is-not-the-declared-actionable-delivery')
         self.call = {'serial': uint(row['serial']), 'sender': self.sender, 'owner': self.owner,
-            'desktop_entry': self.desktop_entry, 'title_sha256': hashlib.sha256(title.encode()).hexdigest(),
-            'body_sha256': hashlib.sha256(content.encode()).hexdigest(), 'sequence': self.sequence}
+            'desktop_entry': self.desktop_entry, 'wire_title_sha256': hashlib.sha256(title.encode()).hexdigest(),
+            'wire_body_sha256': hashlib.sha256(content.encode()).hexdigest(), 'sequence': self.sequence}
+        if self.capabilities is None:
+            raise CaseUnavailable('native-notification-capabilities-were-not-captured-before-Notify')
+        if self.capabilities['request_serial'] == self.call['serial']:
+            raise CaseFailed('native notification reused its capability request serial')
+        self.call.update(notification_display.digests(title, content, self.capabilities))
         self.events.append({'kind': 'notify', **self.call})
 
     def _delivered(self, row):
+        if self.capability_call is not None and row['reply_serial'] == self.capability_call['request_serial']:
+            if row['sender'] != self.owner or row['destination'] != self.sender:
+                raise CaseFailed('native capability reply changed its captured bus authority')
+            if self.capabilities is not None or self.call is not None:
+                raise CaseUnavailable('native-notification-capability-reply-is-ambiguous-or-late')
+            if row['signature'] != '(as)' or not isinstance(row['body'], (list, tuple)) or len(row['body']) != 1:
+                raise ValueError('native capability reply has an invalid typed body')
+            self.capabilities = {**self.capability_call, 'reply_sequence': self.sequence,
+                **notification_display.capabilities(row['body'][0])}
+            notification_display.capability_proof(self.capabilities)
+            return
         if self.call is None or row['reply_serial'] != self.call['serial']:
             return
         if row['sender'] != self.owner or row['destination'] != self.sender:
@@ -125,4 +153,4 @@ class DeliveryTrace:
 
     def snapshot(self):
         return copy.deepcopy({'sender': self.sender, 'owner': self.owner, 'request': self.call,
-            'delivery': self.delivery, 'activation': self.activation, 'events': self.events})
+            'capabilities': self.capabilities, 'delivery': self.delivery, 'activation': self.activation, 'events': self.events})

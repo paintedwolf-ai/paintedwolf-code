@@ -51,40 +51,40 @@ def execute(binding, capability, case, root):
             with app:
                 observations['launch'] = app.observations
                 observations['interactive'] = interactive_window(app)
-                provider = configure_provider(app, fixture)['provider_id']
-                target = open_project(app, binding, project, provider)
-                observations['target_session'] = target
-                submit_project_turn(app)
-                await_session(app, project, provider, MODEL, reason='notification-fixture-turn-did-not-start')
-                held = observations['provider_held'] = barrier.await_held()
-                observations['active_before'] = require_active(app, project, provider, MODEL)
-                observations['decoy_session'] = open_project(app, binding, decoy, provider)
-                before = observations['selected_before'] = selected_chat(app)
-                if before is None or before['project_id'] == target['project_id'] or before['session_id'] == target['id']:
-                    raise CaseUnavailable('notification-fixture-did-not-select-a-different-chat-before-delivery')
-                with DesktopUI(app) as ui, FrameObserver(app, ui) as frames:
+                with DesktopUI(app) as ui, FrameObserver(app, ui) as frames, \
+                        NotificationBus(app, frames.main['process']) as bus:
+                    provider = configure_provider(app, fixture)['provider_id']
+                    target = open_project(app, binding, project, provider)
+                    observations['target_session'] = target
+                    submit_project_turn(app)
+                    await_session(app, project, provider, MODEL, reason='notification-fixture-turn-did-not-start')
+                    held = observations['provider_held'] = barrier.await_held()
+                    observations['active_before'] = require_active(app, project, provider, MODEL)
+                    observations['decoy_session'] = open_project(app, binding, decoy, provider)
+                    before = observations['selected_before'] = selected_chat(app)
+                    if before is None or before['project_id'] == target['project_id'] or before['session_id'] == target['id']:
+                        raise CaseUnavailable('notification-fixture-did-not-select-a-different-chat-before-delivery')
                     transitions = observations['transitions'] = []
                     transitions.append(perform_transition(native['binding'], native['vm_id'], frames, 'workspace-open-peer-v1'))
                     observations['return_to_main_before_hide'] = reopen(app, frames)
                     transitions.append(perform_transition(native['binding'], native['vm_id'], frames, 'workspace-hide-main-v1'))
                     require_active(app, project, provider, MODEL, observations['active_before'])
                     barrier.require_held()
-                    with NotificationBus(app, frames.main['process']) as bus:
-                        # The product's settled turn clock requires four seconds
-                        # before a finished-work notification is meaningful.
-                        remaining = 4.1 - (time.monotonic() - held['received_at'])
-                        if remaining > 0:
-                            time.sleep(remaining)
-                        barrier.release()
-                        observations['provider_response_written'] = barrier.await_response_written()
-                        observations['notification_delivered'] = bus.await_delivery(time.monotonic() + 20)
-                        observer = NotificationObserver(app, frames, bus, target['id'], target['project_id'], project)
-                        observations['notification_click'] = perform(native['binding'], native['vm_id'], observer)
-                        observations['notification_result'] = bus.snapshot()
-                        after = observations['selected_after'] = selected_chat(app)
-                        if (after is None or after['project_id'] != target['project_id']
-                                or after['session_id'] != target['id'] or after['workspace_path'] != str(project)):
-                            raise CaseFailed('real notification activation selected a different project or chat')
+                    # The product's settled turn clock requires four seconds
+                    # before a finished-work notification is meaningful.
+                    remaining = 4.1 - (time.monotonic() - held['received_at'])
+                    if remaining > 0:
+                        time.sleep(remaining)
+                    barrier.release()
+                    observations['provider_response_written'] = barrier.await_response_written()
+                    observations['notification_delivered'] = bus.await_delivery(time.monotonic() + 20)
+                    observer = NotificationObserver(app, frames, bus, target['id'], target['project_id'], project)
+                    observations['notification_click'] = perform(native['binding'], native['vm_id'], observer)
+                    observations['notification_result'] = bus.snapshot()
+                    after = observations['selected_after'] = selected_chat(app)
+                    if (after is None or after['project_id'] != target['project_id']
+                            or after['session_id'] != target['id'] or after['workspace_path'] != str(project)):
+                        raise CaseFailed('real notification activation selected a different project or chat')
                     observations['provider_requests'] = list(fixture.observations)
             streams.update(app.streams())
     except Exception as error:

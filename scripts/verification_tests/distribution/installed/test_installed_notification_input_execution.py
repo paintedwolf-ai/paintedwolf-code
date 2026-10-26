@@ -58,6 +58,18 @@ class NotificationInputTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             protocol.event_sha256('editor-replace-save-v1', 0, proof())
 
+    def test_unknown_renderer_or_late_capability_reply_never_reaches_qmp(self):
+        for change in ('server', 'late', 'missing'):
+            value = proof()
+            if change == 'server':value['delivery']['server'][2] = '47.0'
+            elif change == 'late':value['delivery']['capabilities']['reply_sequence'] = 4
+            else:value['delivery'].pop('capabilities')
+            actor = self.actor()
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                actor.send(notification_wire.OPERATION, 0, transaction_id='d' * 32,
+                    notification=value, dispatch_deadline=time.monotonic() + 5)
+            actor.command.assert_not_called()
+
     def test_one_actual_vector_follows_current_absolute_pointer_observation(self):
         actor = self.actor()
         delivery = actor.send(notification_wire.OPERATION, 0, transaction_id='d' * 32, notification=proof(), dispatch_deadline=time.monotonic() + 5)

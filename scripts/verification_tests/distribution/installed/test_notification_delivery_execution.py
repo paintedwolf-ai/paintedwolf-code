@@ -16,6 +16,16 @@ def message(kind, **values):
     return row
 
 
+def capability_messages(values=('body', 'body-markup', 'actions')):
+    return [message('call', member='GetCapabilities', serial=8, signature='()', body=()),
+        message('return', reply_serial=8, signature='(as)', body=(list(values),))]
+
+
+def capture_capabilities(trace):
+    for row in capability_messages():
+        trace.observe(row)
+
+
 def delivered(trace):
     trace.observe(message('call'))
     trace.observe(message('return', reply_serial=10, signature='(u)', body=(41,)))
@@ -28,6 +38,7 @@ def signal(name, value, identity=41):
 class NotificationDeliveryTests(unittest.TestCase):
     def setUp(self):
         self.trace = DeliveryTrace(':1.12', ':1.7', 'dev.paintedwolf.code')
+        capture_capabilities(self.trace)
 
     def test_real_delivery_token_then_action_after_physical_arm(self):
         delivered(self.trace)
@@ -105,9 +116,43 @@ class NotificationDeliveryTests(unittest.TestCase):
     def test_refuses_invalid_delivered_identifier(self):
         for identity in (0, True, -1, 1 << 32):
             trace = DeliveryTrace(':1.12', ':1.7', 'dev.paintedwolf.code')
+            capture_capabilities(trace)
             trace.observe(message('call'))
             with self.subTest(identity=identity), self.assertRaises(ValueError):
                 trace.observe(message('return', reply_serial=10, signature='(u)', body=(identity,)))
+
+    def test_missing_cached_capabilities_are_unverified_with_original_wire_hashes(self):
+        trace = DeliveryTrace(':1.12', ':1.7', 'dev.paintedwolf.code')
+        with self.assertRaises(CaseUnavailable):
+            trace.observe(message('call'))
+        self.assertIn('wire_body_sha256', trace.snapshot()['request'])
+        self.assertNotIn('display_body_sha256', trace.snapshot()['request'])
+        self.assertIsNone(trace.delivery)
+        with self.assertRaises(CaseUnavailable):trace.arm()
+
+    def test_capability_reply_requires_exact_typed_headers_order_and_bounds(self):
+        for change, failure in (({'sender': ':1.8'}, CaseFailed),
+                ({'destination': ':1.13'}, CaseFailed), ({'signature': '(s)'}, ValueError),
+                ({'body': (['body'] * 65,)}, ValueError), ({'body': (['a' * 129],)}, ValueError)):
+            trace = DeliveryTrace(':1.12', ':1.7', 'dev.paintedwolf.code')
+            call, reply = capability_messages()
+            trace.observe(call)
+            with self.subTest(change=change), self.assertRaises(failure):trace.observe({**reply, **change})
+            self.assertIsNone(trace.delivery)
+        with self.assertRaises(CaseUnavailable):self.trace.observe(capability_messages()[1])
+        trace = DeliveryTrace(':1.12', ':1.7', 'dev.paintedwolf.code')
+        trace.observe(capability_messages()[1])
+        with self.assertRaises(CaseUnavailable):trace.observe(message('call'))
+
+    def test_wire_and_display_hashes_remain_distinct_and_private(self):
+        row = message('call')
+        row['body'] = list(row['body'])
+        row['body'][3:5] = ['Fixture\nchat', 'Finished &lt;task&gt;\n&amp;lt;']
+        self.trace.observe(row)
+        request = self.trace.snapshot()['request']
+        self.assertNotEqual(request['wire_title_sha256'], request['display_title_sha256'])
+        self.assertNotEqual(request['wire_body_sha256'], request['display_body_sha256'])
+        self.assertNotIn('Finished', str(self.trace.snapshot()))
 
 
 if __name__ == '__main__':

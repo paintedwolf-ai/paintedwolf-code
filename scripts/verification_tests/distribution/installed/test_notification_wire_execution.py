@@ -16,7 +16,10 @@ def proof():
     return {'surface':{'launch':launch,'engine':engine,'main':main,'control':None,'surfaces':[
         {'identity':main,'kind':'frame','visible':False,'active':False,'defunct':False,'modal':False,'parent':None}]},
         'service':service,'shell':shell,'delivery':{'notification_id':1,'request_serial':32,
-            'sender':':1.60','session_id':'11111111-1111-4111-8111-111111111111','title_sha256':'a'*64,'body_sha256':'b'*64},
+            'sender':':1.60','session_id':'11111111-1111-4111-8111-111111111111','wire_title_sha256':'c'*64,'wire_body_sha256':'d'*64,
+            'display_title_sha256':'a'*64,'display_body_sha256':'b'*64, 'request_sequence':3,
+            'capabilities':{'request_serial':8,'request_sequence':1,'reply_sequence':2,
+                'body':True,'body-markup':True,'actions':True}, 'server':['gnome-shell','GNOME','46.0','1.2']},
         'geometry':{'display_owner':shell,'serial':9,'logical_extent':[0,0,1024,768],
             'pixel_size':[1024,768],'scale_percent':100,'transform':0,'layout_mode':2,'shell_extent':[0,0,1024,768]},
         'target':{'identity':target,'ancestry':[target,app],'role':101,'extent':[295,36,500,96],
@@ -95,6 +98,19 @@ class NotificationWireTests(unittest.TestCase):
             elif kind=='owner':wrong['service']['bus_name']=':1.99'
             else:wrong['activation']['token']['sequence']=5
             with self.subTest(kind=kind),self.assertRaises(ValueError):wire.finished(initial,wrong)
+
+    def test_changed_display_descriptor_cannot_authorize_click(self):
+        initial = proof()
+        for kind in ('server', 'capabilities', 'display', 'wire', 'late', 'old-shape'):
+            current = copy.deepcopy(initial)
+            delivery = current['delivery']
+            if kind == 'server':delivery['server'][2] = '47.0'
+            elif kind == 'capabilities':delivery['capabilities']['body-markup'] = False
+            elif kind == 'display':delivery['display_body_sha256'] = 'e' * 64
+            elif kind == 'wire':delivery['wire_body_sha256'] = 'e' * 64
+            elif kind == 'late':delivery['capabilities']['reply_sequence'] = 4
+            else:delivery['body_sha256'] = delivery.pop('display_body_sha256')
+            with self.subTest(kind=kind), self.assertRaises(ValueError):wire.same_target(initial, current)
 
 
 if __name__=='__main__':unittest.main()

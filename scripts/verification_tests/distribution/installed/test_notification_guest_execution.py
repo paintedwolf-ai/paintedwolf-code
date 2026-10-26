@@ -73,5 +73,18 @@ class NotificationGuestTests(unittest.TestCase):
             self.mailbox.write.assert_not_called()
             self.mailbox.clear_completed.assert_not_called()
 
+    def test_renderer_or_capability_change_does_not_publish_or_replay_click(self):
+        for change in ('server', 'capabilities', 'display'):
+            self.mailbox.reset_mock()
+            changed = proof()
+            if change == 'server':changed['delivery']['server'][2] = '47.0'
+            elif change == 'capabilities':changed['delivery']['capabilities']['body-markup'] = False
+            else:changed['delivery']['display_body_sha256'] = 'e' * 64
+            self.observer.observe.side_effect = [self.before, changed]
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                guest.perform(EXECUTION, 'vm', self.observer, self.mailbox)
+            self.mailbox.write.assert_not_called()
+            self.mailbox.clear_completed.assert_not_called()
+
 
 if __name__=='__main__':unittest.main()

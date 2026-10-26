@@ -38,6 +38,9 @@ class NotificationShellTests(unittest.TestCase):
         reader.__enter__.return_value = reader
         names = {'org.freedesktop.Notifications': before['service'], shell.MUTTER: before['shell']}
         def call(path, interface, method, args, signature, **kwargs):
+            if method == 'GetServerInformation':
+                self.assertEqual(kwargs['destination'], before['service']['bus_name'])
+                return SimpleNamespace(get_type_string=lambda: '(ssss)', unpack=lambda: before['delivery']['server'])
             if method == 'GetCurrentState':
                 self.assertEqual(kwargs['destination'], before['shell']['bus_name'])
                 self.assertEqual(signature, shell.STATE_SIGNATURE)
@@ -114,7 +117,7 @@ class ShellInventoryFactsTests(unittest.TestCase):
         self.app = self.node('app', self.desktop)
         self.api.Registry = SimpleNamespace(getDesktop=lambda _: self.desktop)
         self.delivery = {key: hashlib.sha256(value.encode()).hexdigest()
-                        for key, value in [('title_sha256', 'public title'), ('body_sha256', 'public body')]}
+                        for key, value in [('display_title_sha256', 'public title'), ('display_body_sha256', 'public body')]}
         self.deadline = time.monotonic() + 10
 
     def node(self, path, parent, role=0, name='private text must not escape', states=(11, 12, 13, 14)):
