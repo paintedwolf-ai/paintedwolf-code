@@ -102,14 +102,22 @@ type pinRow struct {
 }
 
 func newCommandWorkflowFixture(t *testing.T, turns []workflowTurn) *commandWorkflowFixture {
+	return newCommandWorkflowFixtureWithApprovalRules(t, turns, "", true)
+}
+
+func newCommandWorkflowFixtureWithApprovalRules(t *testing.T, turns []workflowTurn, approvalRules string, bypass bool) *commandWorkflowFixture {
 	t.Helper()
-	t.Setenv("LYCAON_BYPASS_APPROVALS", "1")
+	if bypass {
+		t.Setenv("LYCAON_BYPASS_APPROVALS", "1")
+	} else {
+		t.Setenv("LYCAON_BYPASS_APPROVALS", "0")
+	}
 	f := &commandWorkflowFixture{dir: t.TempDir()}
 	llmClient := &workflowScriptLLM{t: t, fixture: f, turns: turns}
 	f.h = BuildForTest(t, WithLLMClient(llmClient))
 	overlay := filepath.Join(f.dir, settingsoverlay.DirName())
 	testutil.FailErr(t, "create overlay", os.MkdirAll(overlay, 0o700))
-	rules := "rules:\n  - category: tool\n    pattern: command\n    effect: allow\n  - category: tool\n    pattern: write\n    effect: allow\n"
+	rules := "rules:\n  - category: tool\n    pattern: command\n    effect: allow\n  - category: tool\n    pattern: write\n    effect: allow\n" + approvalRules
 	testutil.FailErr(t, "write approvals", os.WriteFile(filepath.Join(overlay, "approvals.yaml"), []byte(rules), 0o600))
 	sess, err := f.h.CreateHarnessSession(t, wire.CreateSessionRequest{}, f.dir)
 	testutil.FailErr(t, "create session", err)

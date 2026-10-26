@@ -5,9 +5,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestWorkflowScratchLoopPublishesOnlyFinalResult(t *testing.T) {
@@ -33,6 +36,48 @@ func TestWorkflowScratchLoopPublishesOnlyFinalResult(t *testing.T) {
 	execs := f.executions(t, progs[0].id)
 	if !hasExec(execs, "sort", "completed") || !hasExec(execs, "wc", "completed") {
 		t.Fatalf("executions = %+v", execs)
+	}
+}
+
+func TestWorkflowRecommendedApprovalRunsExternalCommand(t *testing.T) {
+	f := newCommandWorkflowFixtureWithApprovalRules(t, []workflowTurn{
+		{callID: "approved-launch", command: `go env GOOS`},
+	}, "  - category: command\n    pattern: \"go env*\"\n    effect: ask\n", false)
+	ctx := t.Context()
+	done := make(chan error, 1)
+	go func() {
+		_, err := f.h.Sessions.Manager.Submissions.Prompt(ctx, f.session, "execute workflow")
+		done <- err
+	}()
+	kind := wire.CheckpointKindToolApproval
+	var checkpoint wire.CheckpointEvent
+	testutil.WaitFor(t, 30*time.Second, func() bool {
+		pending, err := f.h.Sessions.Checkpoints.ListPending(ctx, f.session, &kind)
+		if err == nil && len(pending) == 1 {
+			checkpoint = pending[0]
+			return true
+		}
+		return false
+	})
+	if checkpoint.ToolApproval == nil || checkpoint.ToolApproval.Plan.RecommendedOptionID == "" {
+		t.Fatalf("approval plan = %+v", checkpoint.ToolApproval)
+	}
+	_, err := f.h.Sessions.Checkpoints.(*hitl.Checkpoints).Authority.ResolveApprovalOption(
+		f.h.OwnerCtx(t, ctx), f.session, checkpoint.ID, checkpoint.ToolApproval.Plan.RecommendedOptionID)
+	testutil.FailErr(t, "approve recommended option", err)
+	testutil.FailErr(t, "complete workflow", <-done)
+	out := f.outcome(t, "approved-launch")
+	if out.State != "completed" || out.Status != 0 || out.NativeGaps != 0 || out.Stdout == "" {
+		t.Fatalf("approved launch outcome = %+v", out)
+	}
+	pending, err := f.h.Sessions.Checkpoints.ListPending(ctx, f.session, &kind)
+	testutil.FailErr(t, "list pending approvals", err)
+	if len(pending) != 0 {
+		t.Fatalf("approval cards left pending = %d", len(pending))
+	}
+	progs := f.programs(t)
+	if len(progs) != 1 || !hasExec(f.executions(t, progs[0].id), "command", "completed") {
+		t.Fatalf("approved launch receipts = %+v", progs)
 	}
 }
 
