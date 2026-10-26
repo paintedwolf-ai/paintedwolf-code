@@ -39,7 +39,7 @@ func TestWorkflowScratchLoopPublishesOnlyFinalResult(t *testing.T) {
 func TestWorkflowMoveAcrossAttachedRoots(t *testing.T) {
 	f := newCommandWorkflowFixture(t, []workflowTurn{{
 		callID:  "move-roots",
-		command: `printf 'from project\n' > source.txt; mv source.txt @assets/arrived.txt; cat @assets/arrived.txt`,
+		command: `printf 'from scratch\n' > "$SCRATCH_DIR/source.txt"; mv "$SCRATCH_DIR/source.txt" @assets/arrived.txt; test ! -e "$SCRATCH_DIR/source.txt"; cat @assets/arrived.txt`,
 	}})
 	assets := t.TempDir()
 	rootID := testdbseed.InsertProjectRoot(t, f.h.DB, testdbseed.DefaultProjectID, assets)
@@ -47,15 +47,12 @@ func TestWorkflowMoveAcrossAttachedRoots(t *testing.T) {
 	testutil.FailErr(t, "label assets root", err)
 	f.run(t)
 	out := f.outcome(t, "move-roots")
-	if out.State != "completed" || out.Status != 0 || out.NativeGaps != 0 || out.CompletedEffects != 2 || out.Stdout != "from project\n" {
+	if out.State != "completed" || out.Status != 0 || out.NativeGaps != 0 || out.CompletedEffects != 2 || out.Stdout != "from scratch\n" {
 		t.Fatalf("cross-root move outcome = %+v", out)
-	}
-	if _, err := os.Stat(filepath.Join(f.dir, "source.txt")); !os.IsNotExist(err) {
-		t.Fatalf("source still present: %v", err)
 	}
 	body, err := os.ReadFile(filepath.Join(assets, "arrived.txt"))
 	testutil.FailErr(t, "read moved file", err)
-	if string(body) != "from project\n" {
+	if string(body) != "from scratch\n" {
 		t.Fatalf("moved bytes = %q", body)
 	}
 	progs := f.programs(t)
