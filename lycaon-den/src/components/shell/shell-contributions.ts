@@ -181,7 +181,6 @@ export function createShellContributions(options: Pick<ShellScope, "shell" | "ap
   createEffect(() => {
     setShellFactState(currentShellFacts());
   });
-  // Crossbar commands read the published fact state.
   const crossbarActions = createMemo<CrossbarCommandState>(() => {
     return crossbarCommands();
   });
