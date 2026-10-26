@@ -24,12 +24,11 @@ const (
 	portalFlagSuspend = uint32(4)
 )
 
-// sessionLease holds an inhibition that lives as long as its bus connection.
+// sessionLease holds an inhibition while its unique service owner stays present.
 type sessionLease struct {
-	bus          *dbus.Conn
+	service      *sessionService
 	name         string
 	release      func(context.Context) error
-	responses    chan *dbus.Signal
 	request      dbus.ObjectPath
 	done         chan error
 	stop         chan struct{}
@@ -38,8 +37,8 @@ type sessionLease struct {
 	releaseError error
 }
 
-func newSessionLease(bus *dbus.Conn, name string, release func(context.Context) error, responses chan *dbus.Signal, request dbus.ObjectPath) *sessionLease {
-	held := &sessionLease{bus: bus, name: name, release: release, responses: responses, request: request, done: make(chan error, 1), stop: make(chan struct{}), stopped: make(chan struct{})}
+func newSessionLease(service *sessionService, name string, release func(context.Context) error, request dbus.ObjectPath) *sessionLease {
+	held := &sessionLease{service: service, name: name, release: release, request: request, done: make(chan error, 1), stop: make(chan struct{}), stopped: make(chan struct{})}
 	go held.watch()
 	return held
 }
@@ -55,16 +54,19 @@ func (l *sessionLease) watch() {
 		select {
 		case <-l.stop:
 			return
-		case <-l.bus.Context().Done():
-			l.done <- errors.New("sleep inhibitor service disconnected")
+		case <-l.service.bus.Context().Done():
+			l.done <- unavailable(ReasonDisconnected, "sleep inhibitor bus disconnected")
 			return
-		case response, ok := <-l.responses:
-			if !ok {
-				l.done <- errors.New("sleep inhibitor service disconnected")
+		case response, ok := <-l.service.signals:
+			if !ok || response == nil || l.service.lost(response) {
+				l.done <- unavailable(ReasonDisconnected, "sleep inhibitor service owner disconnected")
 				return
 			}
 			// Every signal on the connection arrives here; only a later
-			// Response on the request ends the granted inhibition.
+			// Response from the service owner on the request ends the granted inhibition.
+			if response.Sender != l.service.owner {
+				continue
+			}
 			code, isResponse := responseCode(response, l.request)
 			if !isResponse || code == 0 {
 				continue
@@ -79,12 +81,16 @@ func (l *sessionLease) Release() error {
 	l.once.Do(func() {
 		close(l.stop)
 		<-l.stopped
-		if l.bus.Context().Err() == nil {
+		if l.service.bus.Context().Err() == nil {
 			ctx, cancel := context.WithTimeout(context.Background(), busDeadline)
 			l.releaseError = l.release(ctx)
 			cancel()
+			var remote dbus.Error
+			if errors.As(l.releaseError, &remote) && (remote.Name == "org.freedesktop.DBus.Error.NameHasNoOwner" || remote.Name == "org.freedesktop.DBus.Error.ServiceUnknown" || remote.Name == "org.freedesktop.DBus.Error.Disconnected") {
+				l.releaseError = nil
+			}
 		}
-		_ = l.bus.Close()
+		_ = l.service.bus.Close()
 	})
 	return l.releaseError
 }
@@ -112,15 +118,16 @@ func (p portalProvider) Check(ctx context.Context) error {
 	if err := nameAvailableOn(ctx, bus, portalName); err != nil {
 		return err
 	}
-	return p.attribute(ctx, bus)
+	return p.attribute(ctx, bus, portalName)
 }
 
 func (p portalProvider) Acquire(ctx context.Context) (lease, error) {
-	bus, err := p.connect(ctx)
+	service, err := openSessionService(ctx, p.connect, portalName)
 	if err != nil {
 		return nil, fmt.Errorf("connect to desktop portal: %w", err)
 	}
-	if err := p.attribute(ctx, bus); err != nil {
+	bus := service.bus
+	if err := p.attribute(ctx, bus, service.owner); err != nil {
 		_ = bus.Close()
 		return nil, err
 	}
@@ -129,12 +136,10 @@ func (p portalProvider) Acquire(ctx context.Context) (lease, error) {
 		_ = bus.Close()
 		return nil, err
 	}
-	responses := make(chan *dbus.Signal, 4)
-	bus.Signal(responses)
 	// The portal answers on the request object it is about to create, often
 	// before Inhibit returns, so observe that path before asking.
 	predicted := requestPath(bus, token)
-	if err := bus.AddMatchSignalContext(ctx, dbus.WithMatchObjectPath(predicted), dbus.WithMatchInterface(portalRequest), dbus.WithMatchMember("Response")); err != nil {
+	if err := bus.AddMatchSignalContext(ctx, dbus.WithMatchSender(service.owner), dbus.WithMatchObjectPath(predicted), dbus.WithMatchInterface(portalRequest), dbus.WithMatchMember("Response")); err != nil {
 		_ = bus.Close()
 		return nil, fmt.Errorf("observe portal inhibitor: %w", err)
 	}
@@ -143,23 +148,23 @@ func (p portalProvider) Acquire(ctx context.Context) (lease, error) {
 		"reason":       dbus.MakeVariant("Painted Wolf Code: active work"),
 	}
 	var request dbus.ObjectPath
-	err = bus.Object(portalName, portalPath).CallWithContext(ctx, portalInhibit+".Inhibit", 0, "", portalFlagSuspend, options).Store(&request)
+	err = bus.Object(service.owner, portalPath).CallWithContext(ctx, portalInhibit+".Inhibit", 0, "", portalFlagSuspend, options).Store(&request)
 	if err != nil {
 		_ = bus.Close()
 		return nil, fmt.Errorf("acquire portal inhibitor: %w", err)
 	}
-	if err := awaitGrant(ctx, responses, request); err != nil {
-		_ = bus.Object(portalName, request).CallWithContext(ctx, portalRequest+".Close", 0).Err
+	if err := awaitGrant(ctx, service, request); err != nil {
+		_ = bus.Object(service.owner, request).CallWithContext(ctx, portalRequest+".Close", 0).Err
 		_ = bus.Close()
 		return nil, err
 	}
 	release := func(ctx context.Context) error {
-		if err := bus.Object(portalName, request).CallWithContext(ctx, portalRequest+".Close", 0).Err; err != nil {
+		if err := bus.Object(service.owner, request).CallWithContext(ctx, portalRequest+".Close", 0).Err; err != nil {
 			return fmt.Errorf("release portal inhibitor: %w", err)
 		}
 		return nil
 	}
-	return newSessionLease(bus, p.Name(), release, responses, request), nil
+	return newSessionLease(service, p.Name(), release, request), nil
 }
 
 // requestPath is the request object the portal creates for token on bus.
@@ -170,14 +175,17 @@ func requestPath(bus *dbus.Conn, token string) dbus.ObjectPath {
 
 // awaitGrant waits for the request's first Response: 0 grants the inhibition,
 // which then lasts until the request is closed; any other code refuses it.
-func awaitGrant(ctx context.Context, responses <-chan *dbus.Signal, request dbus.ObjectPath) error {
+func awaitGrant(ctx context.Context, service *sessionService, request dbus.ObjectPath) error {
 	for {
 		select {
 		case <-ctx.Done():
 			return fmt.Errorf("desktop portal did not answer the inhibitor request: %w", ctx.Err())
-		case response, ok := <-responses:
-			if !ok {
-				return errors.New("desktop portal disconnected before answering the inhibitor request")
+		case response, ok := <-service.signals:
+			if !ok || response == nil || service.lost(response) {
+				return unavailable(ReasonDisconnected, "sleep inhibitor service owner disconnected")
+			}
+			if response.Sender != service.owner {
+				continue
 			}
 			code, isResponse := responseCode(response, request)
 			if !isResponse {

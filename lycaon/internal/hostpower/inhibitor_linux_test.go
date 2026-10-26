@@ -279,7 +279,7 @@ type fixturePortal struct {
 	options  map[string]dbus.Variant
 	request  dbus.ObjectPath
 	closed   chan struct{}
-	exported bool
+	releases int
 }
 
 func (f *fixturePortal) Inhibit(caller dbus.Sender, window string, flags uint32, options map[string]dbus.Variant) (dbus.ObjectPath, *dbus.Error) {
@@ -296,11 +296,8 @@ func (f *fixturePortal) Inhibit(caller dbus.Sender, window string, flags uint32,
 	// Like the portal, answer as soon as the backend does, which can precede
 	// the method reply.
 	go func() { _ = f.server.Emit(request, portalRequest+".Response", grant, map[string]dbus.Variant{}) }()
-	if !f.exported {
-		f.exported = true
-		if err := f.server.Export(f, f.request, portalRequest); err != nil {
-			return "", dbus.MakeFailedError(err)
-		}
+	if err := f.server.Export(f, f.request, portalRequest); err != nil {
+		return "", dbus.MakeFailedError(err)
 	}
 	return f.request, nil
 }
@@ -308,6 +305,7 @@ func (f *fixturePortal) Inhibit(caller dbus.Sender, window string, flags uint32,
 func (f *fixturePortal) Close() *dbus.Error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.releases++
 	select {
 	case <-f.closed:
 	default:

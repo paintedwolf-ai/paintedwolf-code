@@ -80,6 +80,8 @@ implementation owns the workflow on every platform. Verification has three tiers
 
 The Go session transport lives in `internal/linuxbus`; native feature owners select protocol names and authorize operations. Discovery reports the current unique owner or an installed activation contract without starting the service. Power inhibition can request an idle activatable provider, and its actual call still determines whether inhibition succeeds. Permission denial, unsupported operations, service disconnection, and cancellation retain structured causes. Tauri adapters own their separate connections and shell authority; shared protocol discovery does not grant an effect in either process.
 
+Session power inhibition binds acquisition, portal attribution, and release to one unique D-Bus owner. Owner loss ends that inhibition even when the bus remains connected, and the controller releases the ended connection before recovering active work. A replacement service receives a fresh request; an earlier cookie or portal request cannot release its inhibition. These protocol contracts work without a systemd user manager. Installed elogind, Artix/OpenRC custody, real lock/suspend, and desktop-launch qualification remain tracked in #733 and their feature issues.
+
 ### Native qualification matrix
 
 The authoritative scope is
