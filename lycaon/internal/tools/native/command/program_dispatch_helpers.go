@@ -303,24 +303,16 @@ func (t *trackingWriter) Write(p []byte) (int, error) {
 	return t.w.Write(p)
 }
 
-func writeRejectRefusal(streams commandprogram.Streams, command string, request commandprogram.OperationRequest, cause error) {
+func writeRejectRefusal(streams commandprogram.Streams, command string, cause error) {
 	reject := toolrejection.AsToolReject(cause)
 	if streams.Error == nil || reject == nil {
 		return
 	}
 	subject := ""
-	for _, key := range []string{"path", "destination", "url", "host", "operand", "job", "signal", "pattern"} {
+	for _, key := range []string{"word", "path", "destination", "url", "host", "operand", "job", "signal", "pattern"} {
 		if val, _ := reject.Data[key].(string); val != "" {
 			subject = val
 			break
-		}
-	}
-	if subject == "" {
-		for _, operand := range request.Argv[1:] {
-			if operand.Value != "" && !strings.HasPrefix(operand.Value, "-") {
-				subject = operand.Value
-				break
-			}
 		}
 	}
 	var policyCopy map[string]string
@@ -447,14 +439,6 @@ func revisionConflict(err error) *toolcontract.RevisionConflict {
 	return &toolcontract.RevisionConflict{Path: path, ExpectedRevision: expected, ObservedRevision: observed}
 }
 
-type renderedProgramRefusal struct {
-	text  string
-	cause error
-}
-
-func (r *renderedProgramRefusal) Error() string { return r.text }
-func (r *renderedProgramRefusal) Unwrap() error { return r.cause }
-
 func programResourceRefusal(reject *toolrejection.ToolReject) bool {
 	if reject == nil {
 		return false
@@ -505,49 +489,6 @@ func enrichProgramReject(reject *toolrejection.ToolReject, defaultCommand string
 	if _, ok := reject.Data["source_end_byte"]; !ok {
 		reject.Data["source_end_byte"] = defaultSpan.EndByte
 	}
-	if programResourceRefusal(reject) {
-		return
-	}
-	remedy := firstStringFact(reject.Data, "expected_form", "expected", "remedy", "reason")
-	if remedy == "" {
-		remedy = catalogShellReason(reject.Code, cmd, reject.Data)
-	}
-	if _, ok := reject.Data["expected_form"]; !ok {
-		reject.Data["expected_form"] = remedy
-	}
-	reject.Data["reason"] = programRefusalLine(cmd, word, line, col, remedy)
-}
-
-func ensureProgramRefusalText(rendered error, reject *toolrejection.ToolReject) error {
-	if reject == nil {
-		return rendered
-	}
-	if rendered == nil {
-		rendered = toolrejection.RenderReject(reject, nil)
-	}
-	if programResourceRefusal(reject) {
-		return rendered
-	}
-	text := rendered.Error()
-	cmd := firstStringFact(reject.Data, "command", "native_command", "operation")
-	word := firstStringFact(reject.Data, "word", "path", "operand", "job", "signal", "pattern")
-	line := firstIntFact(reject.Data, 1, "source_line", "operation_source_line")
-	col := firstIntFact(reject.Data, 1, "source_column", "operation_source_column")
-	remedy := firstStringFact(reject.Data, "expected_form", "expected", "remedy", "reason")
-	spanText := fmt.Sprintf("%d:%d", line, col)
-	summary := programRefusalLine(cmd, word, line, col, remedy)
-	if !strings.Contains(text, cmd) || (word != "" && !strings.Contains(text, word)) || !strings.Contains(text, spanText) || (remedy != "" && !strings.Contains(text, remedy)) {
-		text = text + "\nStop: " + summary
-	}
-	return &renderedProgramRefusal{text: text, cause: rendered}
-}
-
-func programRefusalLine(cmd, word string, line, col int, remedy string) string {
-	subject := cmd
-	if word != "" {
-		subject += " (" + word + ")"
-	}
-	return fmt.Sprintf("%s at %d:%d: %s", subject, line, col, remedy)
 }
 
 func firstStringFact(data map[string]any, keys ...string) string {

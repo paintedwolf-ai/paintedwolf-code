@@ -75,7 +75,7 @@ func TestCommandCatalogRefusalsHaveShellVoice(t *testing.T) {
 	}
 	for code, word := range map[string]string{
 		"SANDBOX_LOOPBACK_CONNECT_DENIED": "declined",
-		"COMMAND_NATIVE_FORM_UNSUPPORTED": "does not provide",
+		"COMMAND_NATIVE_FORM_UNSUPPORTED": "run this form",
 		"GREP_MATCH_BUDGET":               "limit",
 	} {
 		var stderr bytes.Buffer
@@ -88,10 +88,16 @@ func TestCommandCatalogRefusalsHaveShellVoice(t *testing.T) {
 
 func TestHostRefusalUsesTypedURLInsteadOfOption(t *testing.T) {
 	var stderr bytes.Buffer
-	writeRejectRefusal(commandprogram.Streams{Error: &stderr}, "curl", commandprogram.OperationRequest{Argv: commandprogram.Fields{
-		{Value: "curl"}, {Value: "-s"}, {Value: "http://127.0.0.1:8080"},
-	}}, &toolrejection.ToolReject{Code: "SANDBOX_LOOPBACK_CONNECT_DENIED", Data: map[string]any{"url": "http://127.0.0.1:8080"}})
+	writeRejectRefusal(commandprogram.Streams{Error: &stderr}, "curl", &toolrejection.ToolReject{Code: "SANDBOX_LOOPBACK_CONNECT_DENIED", Data: map[string]any{"url": "http://127.0.0.1:8080"}})
 	if got := stderr.String(); got != "curl: http://127.0.0.1:8080: The person declined this connection to the local service [SANDBOX_LOOPBACK_CONNECT_DENIED]\n" {
+		t.Fatalf("stderr = %q", got)
+	}
+}
+
+func TestHostRefusalDoesNotTreatOptionAsSubject(t *testing.T) {
+	var stderr bytes.Buffer
+	writeRejectRefusal(commandprogram.Streams{Error: &stderr}, "sed", &toolrejection.ToolReject{Code: "COMMAND_OPTION_UNSUPPORTED", Data: map[string]any{"word": "-z", "expected_form": "sed [-n] SCRIPT [FILE...]"}})
+	if got := stderr.String(); !strings.HasPrefix(got, "sed: request: ") {
 		t.Fatalf("stderr = %q", got)
 	}
 }

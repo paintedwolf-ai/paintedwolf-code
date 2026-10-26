@@ -35,4 +35,4 @@ x-paintedwolf-scenarios:
   expect_contains:
   - 'Code: COMMAND_SYNTAX_UNSUPPORTED'
   - '3:7'
-  - earlier parent effects
+  - Earlier commands that finished still count.
