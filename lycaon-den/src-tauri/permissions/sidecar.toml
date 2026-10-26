@@ -24,11 +24,6 @@ description = "Read who holds the credential vault identity."
 commands.allow = ["vault_custody"]
 
 [[permission]]
-identifier = "allow-move-vault-custody"
-description = "Move the credential vault identity between the identity service and the app password after confirmation."
-commands.allow = ["move_vault_custody"]
-
-[[permission]]
 identifier = "allow-cancel-sidecar-start"
 description = "Cancel an in-progress bundled engine launch."
 commands.allow = ["cancel_sidecar_start"]
