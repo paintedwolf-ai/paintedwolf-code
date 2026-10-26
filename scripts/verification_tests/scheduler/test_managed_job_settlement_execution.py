@@ -102,6 +102,9 @@ value.validate_checkout()
                     {'scripts':SimpleNamespace(__file__='/foreign/scripts/__init__.py')},
                     {'scripts.harness':SimpleNamespace(__file__=None,__spec__=nested,
                                               __path__=[str(namespace/'harness'),'/foreign/scripts/harness'])},
+                    {'scripts.harness':SimpleNamespace(__file__=None,
+                        __spec__=SimpleNamespace(origin=None,submodule_search_locations=['/foreign/scripts/harness']),
+                        __path__=[str(namespace/'harness')])},
                     {'scripts.artifact_paths':SimpleNamespace(__file__=str(namespace/'verification_health.py'))}]
         for cached in candidates:
             with self.subTest(cached=list(cached)):

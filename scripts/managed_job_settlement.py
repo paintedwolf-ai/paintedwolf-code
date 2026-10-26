@@ -115,9 +115,13 @@ class JobSettlement:
         def require_namespace(name, spec, locations):
             physical = self.checkout.joinpath(*name.split('.'))
             paths = [Path(location) for location in locations] if locations is not None else []
+            declared = getattr(spec, 'submodule_search_locations', None)
+            declared_paths = [Path(location) for location in declared] if declared is not None else []
             _require(spec is not None and spec.origin is None and paths
+                     and declared_paths
                      and physical.is_dir() and physical.resolve(strict=True) == physical
-                     and all(path == physical and path.resolve(strict=True) == physical for path in paths),
+                     and all(path == physical and path.resolve(strict=True) == physical
+                             for path in [*paths, *declared_paths]),
                      'scripts namespace differs from the reviewed checkout')
 
         # Namespace packages have no __file__; identical search roots add no authority.
