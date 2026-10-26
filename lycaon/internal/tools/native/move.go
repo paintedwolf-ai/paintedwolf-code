@@ -168,7 +168,6 @@ func (t *MoveTool) Move(ctx context.Context, in MoveInput, tctx tools.ToolContex
 			}
 		}
 		if err := renameAgentEntry(ctx, tctx, resolvedMutationTarget(srcResolved), resolvedMutationTarget(dstResolved), displacedBytes, in.Memory, reviewDisplacedPolicy); err != nil {
-
 			return result, fmt.Errorf("move %s -> %s: %w", pair.From, pair.To, err)
 		}
 		result.Moved = append(result.Moved, FilePair{From: fromSlash, To: toSlash})
