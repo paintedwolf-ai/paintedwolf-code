@@ -170,7 +170,7 @@ def matrix(profile, suite="all", scope=None, platform=False, timings=None):
                            "runner": lane.get("runner", "ubuntu-latest")})
     if not result:
         raise ValueError("CI selection contains no verification")
-    return {"include": order(result, values, timings)}
+    return {"include": order(result, values, timings, max_parallel(profile))}
 
 
 def invocation(targets):

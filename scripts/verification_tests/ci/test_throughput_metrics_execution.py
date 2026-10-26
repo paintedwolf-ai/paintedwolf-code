@@ -2,7 +2,7 @@
 import json
 import unittest
 
-from ci_policy import delivery_metrics, job_metrics
+from ci_policy import health_metrics
 from ci_policy.queue_batching.selection import MARKER, PREFIX
 
 
@@ -12,7 +12,7 @@ class ThroughputMetricsTests(unittest.TestCase):
             {'number': n, 'headRefOid': 'b' * 40} for n in (1, 2)]}
         batch = {'number': 3, 'headRefName': PREFIX + 'abc', 'author': {'login': 'github-actions'},
                  'body': MARKER + json.dumps(record) + '\n-->'}
-        result = delivery_metrics.delivered([{'number': 1}, batch,
+        result = health_metrics.delivered([{'number': 1}, batch,
             {**batch, 'number': 4, 'author': {'login': 'someone'}},
             {**batch, 'number': 5, 'body': MARKER + '{}\n-->'}])
         self.assertEqual(result, {'original_prs': [1, 2], 'batch_prs': [3], 'unresolved_batch_prs': [4, 5]})
@@ -25,7 +25,7 @@ class ThroughputMetricsTests(unittest.TestCase):
         runs = [{'id': 1, 'conclusion': 'cancelled'}, {'id': 2, 'conclusion': 'failure'}]
         jobs = lambda run: [job, job, {'id': 2, 'runner_id': 1, 'started_at': stamp(2)},
                             {'id': 3, 'conclusion': 'skipped'}]
-        report = job_metrics.summarize(runs, jobs)
+        report = health_metrics.summarize_jobs(runs, jobs)
         self.assertEqual(report['totals'], {'runner_seconds': 600, 'cancelled_runner_seconds': 600,
                          'setup_seconds': 180, 'execution_seconds': 360, 'completion_seconds': 60})
         self.assertEqual(report['lanes']['native']['created_to_start_seconds'], [120])
@@ -35,15 +35,15 @@ class ThroughputMetricsTests(unittest.TestCase):
     def test_incomplete_steps_and_absent_creation_time_do_not_invent_measurements(self):
         job = {'id': 1, 'runner_id': 1, 'started_at': '2026-10-26T10:00:00Z', 'completed_at': '2026-10-26T10:02:00Z',
                'steps': [{'name': 'Run verification'}]}
-        report = job_metrics.summarize([{'conclusion': 'failure'}], lambda _: [job])
+        report = health_metrics.summarize_jobs([{'conclusion': 'failure'}], lambda _: [job])
         self.assertEqual(report['totals'], {'runner_seconds': 120, 'failed_run_runner_seconds': 120})
         self.assertEqual(report['lanes']['unknown'], {'job_seconds': [120]})
-        self.assertIsNone(job_metrics.elapsed(None, '2026-10-26T10:00:00Z'))
-        self.assertEqual(job_metrics.elapsed(job['completed_at'], job['started_at']), 0)
+        self.assertIsNone(health_metrics.elapsed(None, '2026-10-26T10:00:00Z'))
+        self.assertEqual(health_metrics.elapsed(job['completed_at'], job['started_at']), 0)
 
     def test_cancelled_waiter_timestamps_are_not_charged_as_runner_time(self):
         job = {'id': 8, 'runner_id': 0, 'steps': [], 'conclusion': 'cancelled',
                'started_at': '2026-10-26T10:00:00Z', 'completed_at': '2026-10-26T10:30:00Z'}
-        result = job_metrics.summarize([{'conclusion': 'cancelled'}], lambda _: [job])
+        result = health_metrics.summarize_jobs([{'conclusion': 'cancelled'}], lambda _: [job])
         self.assertEqual(result['totals'], {})
         self.assertEqual(result['jobs_without_runner_evidence'], [8])

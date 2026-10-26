@@ -1,6 +1,7 @@
-"""Account for hosted job time without treating dependency waits as runner waits."""
+"""Account for original PR delivery and observed hosted job costs."""
 from collections import defaultdict
 from datetime import datetime
+from .queue_batching.selection import manifest, PREFIX
 
 
 def elapsed(start, end):
@@ -14,7 +15,7 @@ def assigned(job):
     return bool(job.get('runner_id')) or any(step.get('started_at') for step in job.get('steps', []))
 
 
-def summarize(runs, jobs):
+def summarize_jobs(runs, jobs):
     totals = defaultdict(float)
     lanes = defaultdict(lambda: defaultdict(list))
     missing, unassigned = [], []
@@ -56,3 +57,24 @@ def summarize(runs, jobs):
                     lanes[lane][name].append(value)
     return {'totals': dict(totals), 'lanes': dict(lanes), 'jobs_without_complete_timestamps': missing, 'jobs_without_runner_evidence': unassigned,
             'wait_definition': 'Job creation to start includes dependencies and matrix admission; runner-only wait is unavailable.'}
+
+
+def delivered(pulls):
+    originals, batches, unresolved = set(), [], []
+    for pull in pulls:
+        if not pull.get('headRefName', '').startswith(PREFIX):
+            originals.add(pull['number'])
+            continue
+        if (pull.get('author') or {}).get('login') != 'github-actions':
+            unresolved.append(pull['number'])
+            continue
+        try:
+            record = manifest(pull.get('body', ''))
+            if record is None:
+                raise ValueError('missing batch manifest')
+        except (ValueError, KeyError, TypeError):
+            unresolved.append(pull['number'])
+            continue
+        originals.update(row['number'] for row in record['sources'])
+        batches.append(pull['number'])
+    return {'original_prs': sorted(originals), 'batch_prs': sorted(batches), 'unresolved_batch_prs': sorted(unresolved)}

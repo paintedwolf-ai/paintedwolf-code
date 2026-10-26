@@ -256,10 +256,10 @@ class HostedPlanTests(unittest.TestCase):
         self.assertEqual({row["lane"] for row in rows[:2]}, {"limits", "lint"})
         self.assertEqual([row["lane"] for row in rows[2:4]], ["behavior", "behavior"])
         for profile in ci.PROFILES:
-            with self.subTest(profile=profile):
-                order = [(ci.PRIORITIES[lanes[row["lane"]].get("priority", "normal")], -row["minutes"])
-                         for row in ci.matrix(profile)["include"]]
-                self.assertEqual(order, sorted(order))
+            rows = ci.matrix(profile)['include']
+            ordinary = [row for row in rows if row['priority'] != 'compile']
+            order = [(ci.PRIORITIES[row['priority']], -row['minutes']) for row in ordinary]
+            self.assertEqual(order, sorted(order))
         data = copy.deepcopy(planning.catalog())
         data["ci"]["limits"]["priority"] = "invalid"
         with patch.object(ci, "catalog", return_value=data), self.assertRaises(ValueError):

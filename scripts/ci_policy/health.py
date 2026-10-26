@@ -7,7 +7,7 @@ from pathlib import Path
 
 from .github import api, pages, repository
 from .recovery import evidence
-from . import job_metrics, delivery_metrics
+from . import health_metrics
 
 
 def seconds(start, end):
@@ -81,13 +81,13 @@ def throughput(runs, merges, start, end, jobs):
             if job["id"] in seen_jobs:
                 continue
             seen_jobs.add(job["id"])
-            if not job_metrics.assigned(job) or job.get("conclusion") == "skipped":
+            if not health_metrics.assigned(job) or job.get("conclusion") == "skipped":
                 continue
             if job.get("started_at") and job.get("completed_at"):
                 runner_seconds += max(0, seconds(job["started_at"], job["completed_at"]))
             elif job.get("started_at"):
                 unfinished_jobs += 1
-    delivery = delivery_metrics.delivered(merges)
+    delivery = health_metrics.delivered(merges)
     delivered = len(delivery['original_prs'])
     failures = sum(outcomes[name] for name in ("failure", "timed_out", "startup_failure", "action_required"))
     decided = outcomes["success"] + failures
@@ -117,7 +117,7 @@ def main():
     report['window_end'] = end
     jobs = {run['id']: list(pages(f"{repository()}/actions/runs/{run['id']}/jobs?filter=all", 'jobs')) for run in runs}
     report['throughput'] = throughput(runs, merges, since, end, lambda run: jobs[run['id']])
-    report['job_costs'] = job_metrics.summarize(runs, lambda run: jobs[run['id']])
+    report['job_costs'] = health_metrics.summarize_jobs(runs, lambda run: jobs[run['id']])
     report['queue_to_merge'] = queue_times(merges)
     report['queue_p95_seconds'] = quantile([r['seconds'] for r in report['queue_to_merge']], .95)
     report['unsuccessful_runs'] = [{'run': r['id'], 'conclusion': r['conclusion'], 'url': r['html_url']}

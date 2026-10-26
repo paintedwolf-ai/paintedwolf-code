@@ -1,5 +1,6 @@
 """Native admission compiles affected targets without executing their tests."""
 import unittest
+import verification_plan
 from unittest.mock import patch
 from ci_policy import native_admission, native_verify, hosted_plan
 
@@ -30,6 +31,14 @@ class NativeAdmissionTests(unittest.TestCase):
         rows = {row['lane']: row for row in hosted_plan.matrix('integration')['include']}
         self.assertFalse(rows['native']['runtime_engines'])
         self.assertTrue(rows['behavior']['runtime_engines'])
+
+    def test_native_selection_is_checked_before_admission_and_cannot_reuse_full_tests(self):
+        for target in ('den:test:rust', 'decide:test'):
+            verification_plan.validate_selection([target], ['--compile-only'])
+            self.assertIsNone(verification_plan.request([target, '--', '--compile-only'], {}))
+            for arguments in (['--compile-only', '--ignored'], ['--manifest-path', '/other'], ['-p', 'other']):
+                with self.assertRaisesRegex(ValueError, 'No verification was queued'):
+                    verification_plan.validate_selection([target], arguments)
 
     def test_compile_mode_preserves_workspace_and_test_targets(self):
         den = native_verify.commands('den', ['--compile-only'])

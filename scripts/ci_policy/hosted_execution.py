@@ -79,6 +79,10 @@ def run_lane(name, shard="", merge_group=False):
     record['identity'] = {'run': os.environ.get('GITHUB_RUN_ID', ''),
                           'attempt': os.environ.get('GITHUB_RUN_ATTEMPT', ''),
                           'sha': os.environ.get('GITHUB_SHA', '')}
+    try:
+        record['job_started_at'] = float(os.environ['PW_CI_JOB_STARTED_AT'])
+    except (KeyError, ValueError):
+        record['job_started_at'] = None
     record["oom_before"] = oom_events()
     path.write_text(json.dumps(record, indent=2) + "\n")
     # Hosted runners are slower than development hosts; the lane budget, not the local default, bounds Go runs.

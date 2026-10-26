@@ -1,5 +1,6 @@
 """Comparable execution estimates for a capped hosted matrix."""
 from collections import Counter
+import heapq
 
 from ci_policy.timings import valid_seconds
 from verification_plan import expand
@@ -25,7 +26,7 @@ def validate_sources(lanes):
             raise ValueError(f"CI lane {name} timing source must cover its stages")
 
 
-def order(rows, lanes, timings=None):
+def order(rows, lanes, timings=None, capacity=4):
     measured = (timings or {}).get("lanes", {})
     missing = [row["timing_row"] for row in rows
                if not valid_seconds(measured.get(row["timing_row"]))]
@@ -38,8 +39,30 @@ def order(rows, lanes, timings=None):
                "timing_basis": "measured" if complete else "catalog-budget",
                "priority": lanes[row["lane"]].get("priority", "normal")} for row in rows]
     # Package balancing changes shard assignments; siblings share the lane's longest estimate.
-    return sorted(result, key=lambda row: (PRIORITIES[lanes[row["lane"]].get("priority", "normal")],
-                                          -row["expected_seconds"], row["lane"], row["shard"]))
+    baseline = sorted(result, key=lambda row: (min(PRIORITIES[row['priority']], 2),
+                                               -row['expected_seconds'], row['lane'], row['shard']))
+    return promote_compilation(baseline, capacity)
+
+
+def duration(rows, capacity):
+    slots = [0] * capacity
+    for row in rows:
+        finish = heapq.heappop(slots) + row['expected_seconds']
+        heapq.heappush(slots, finish)
+    return max(slots)
+
+
+def promote_compilation(rows, capacity):
+    limit = duration(rows, capacity)
+    boundary = sum(row['priority'] in {'reject', 'critical'} for row in rows)
+    for row in [row for row in rows if row['priority'] == 'compile']:
+        index = rows.index(row)
+        for position in range(boundary, index):
+            candidate = [*rows[:position], row, *rows[position:index], *rows[index + 1:]]
+            if duration(candidate, capacity) <= limit:
+                rows = candidate
+                break
+    return rows
 
 
 def summarize(matrix, timings=None):

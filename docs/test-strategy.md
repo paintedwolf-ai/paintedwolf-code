@@ -794,19 +794,25 @@ Partial receipts from a cancelled run cannot
 mix short measured times with large timeout fallbacks. Shards share their lane's
 longest estimate because package balancing changes which packages each shard runs.
 The catalog orders lanes by explicit priority: `reject` for limits and lint,
-`critical` for both behavior shards, `compile` for native verification, then
-`normal` for remaining work. Duration ordering applies within each priority.
-With four slots, both behavior shards start beside the rejection checks; native
-verification receives the next slot before longer-budget build and platform
-work. Scheduling never removes a lane or changes its verification recipe.
+`critical` for both behavior shards, and `normal` for remaining work. Native
+verification is a `compile` candidate: the planner moves it to the earliest
+position after rejection and critical lanes that does not increase the predicted
+whole-matrix duration at the profile's runner cap. The baseline orders remaining
+work longest first. With four slots, both behavior shards start beside rejection
+checks. Compilation promotion preserves that start and never removes a lane or
+changes its verification recipe. Timing estimates are advisory; the model is not
+a guarantee of hosted runtime.
 The catalog declares `integration-build` with `timing_source: build`: qualification
 measures build plus cross compilation, a conservative estimate for the smaller
 integration build. Timing sources must run in qualification, cover the receiving
 lane's stages, and use the same execution configuration.
 
 Lanes and shards are planned from measured durations. Each lane of main's
-qualification records its elapsed time beside its receipts in `ci/timings.json`;
-a sharded lane also records its packages' durations. The plan job reads the
+qualification records setup plus execution time beside its receipts in `ci/timings.json`;
+a sharded lane also records its packages' durations. A job-start marker precedes
+checkout and provisioning. Measurements without that timing basis supply package
+weights only; they cannot mix execution-only times with setup-inclusive estimates.
+Evidence-upload time is accounted for separately by queue health. The plan job reads the
 newest valid measurement for each row and package from check and release platform
 receipts in at most 20 completed qualifications, filling gaps from older runs.
 History stops once the rows qualification actually runs have measurements. The
@@ -953,6 +959,29 @@ Merge-group CI is the only CI granted `actions: write`, for that call; pull
 request CI, which runs unreviewed code, keeps a read-only token. Queue-to-merge
 time and lane durations are measured service objectives, not claims
 established by timeout settings.
+
+#### CI throughput accounting
+
+Queue health reports completed merge-group runs and their recovered dispatches.
+Job timestamps are charged only when a runner assignment or started step is
+observed; canceled matrix waiters can have timestamps without using a runner.
+The report separates setup, verification, completion, canceled runner time, and
+runner time in failed runs. Job creation-to-start includes dependency and matrix
+admission waits; it is not labeled as runner-only waiting. Missing timestamps,
+runner evidence, and lane receipts remain explicit gaps.
+
+Delivery counts deduplicate original PR numbers across ordinary merges and
+trusted automatic-batch manifests. Batch PRs are reported separately and malformed
+or untrusted batch records remain unresolved rather than inflating delivery.
+Runner minutes per original PR describe the observed window, including failed
+and canceled work; they are not a per-PR attribution or a throughput guarantee.
+
+Infrastructure retry requires one matching receipt for every failed executable
+job, bound to the run, attempt, source SHA, lane, and shard. Duplicate, missing,
+foreign, or source-failure receipts cannot authorize retry. A removed or replaced
+merge-group branch cannot retry, and an unreadable branch receives no automatic
+retry. The one-retry limit remains in force.
+
 
 #### Automatic queue batching
 
@@ -1363,25 +1392,3 @@ Fixtures are deterministic, repository-local, and safe to run without credential
 The paid coordinator benchmark drives the real application with candidate
 models and grades environment outcomes, not transcripts. It is opt-in, never
 part of `check` or CI, and has its own page: [Coordinator benchmark](coordinator-benchmark.md).
-
-### CI throughput accounting
-
-Queue health reports completed merge-group runs and their recovered dispatches.
-Job timestamps are charged only when a runner assignment or started step is
-observed; canceled matrix waiters can have timestamps without using a runner.
-The report separates setup, verification, completion, canceled runner time, and
-runner time in failed runs. Job creation-to-start includes dependency and matrix
-admission waits; it is not labeled as runner-only waiting. Missing timestamps,
-runner evidence, and lane receipts remain explicit gaps.
-
-Delivery counts deduplicate original PR numbers across ordinary merges and
-trusted automatic-batch manifests. Batch PRs are reported separately and malformed
-or untrusted batch records remain unresolved rather than inflating delivery.
-Runner minutes per original PR describe the observed window, including failed
-and canceled work; they are not a per-PR attribution or a throughput guarantee.
-
-Infrastructure retry requires one matching receipt for every failed executable
-job, bound to the run, attempt, source SHA, lane, and shard. Duplicate, missing,
-foreign, or source-failure receipts cannot authorize retry. A removed or replaced
-merge-group branch cannot retry, and an unreadable branch receives no automatic
-retry. The one-retry limit remains in force.

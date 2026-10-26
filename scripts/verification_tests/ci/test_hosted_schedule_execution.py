@@ -49,3 +49,22 @@ class HostedScheduleTests(unittest.TestCase):
         self.assertIn("`behavior 2/2`", summary)
         self.assertIn("Qualification timing sources: 30, 20", summary)
         self.assertIn("| 3 | behavior | 1/2 | critical | 9000 |", summary)
+
+    def test_compile_promotion_preserves_work_and_predicted_completion(self):
+        import itertools
+        for capacity in range(1, 5):
+            for durations in itertools.product((1, 5, 20), repeat=4):
+                rows = [{'lane': str(i), 'priority': 'normal', 'expected_seconds': value}
+                        for i, value in enumerate(sorted(durations, reverse=True))]
+                rows[-1]['priority'] = 'compile'
+                baseline = copy.deepcopy(rows)
+                result = hosted_schedule.promote_compilation(rows, capacity)
+                self.assertEqual(sorted(row['lane'] for row in result), ['0', '1', '2', '3'])
+                self.assertLessEqual(hosted_schedule.duration(result, capacity),
+                                     hosted_schedule.duration(baseline, capacity))
+        fixed = [{'lane': 'limits', 'priority': 'reject', 'expected_seconds': 2},
+                 {'lane': 'behavior', 'priority': 'critical', 'expected_seconds': 20}]
+        rows = fixed + [{'lane': 'build', 'priority': 'normal', 'expected_seconds': 10},
+                        {'lane': 'native', 'priority': 'compile', 'expected_seconds': 3}]
+        self.assertEqual(hosted_schedule.promote_compilation(rows, 4)[:2], fixed)
+        self.assertEqual(hosted_schedule.promote_compilation(rows, 4)[2]['lane'], 'native')
