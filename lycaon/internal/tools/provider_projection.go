@@ -1,19 +1,19 @@
 package tools
 
 import (
+	"reflect"
 	"strings"
 )
 
-// coordinatorSchemaValueKeys are provider-safe JSON Schema constraints that do
-// not contain nested schemas. They are preserved verbatim at every depth.
+// Scalar constraints survive projection at every depth.
 var coordinatorSchemaValueKeys = []string{
 	"description", "enum", "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum",
 	"multipleOf", "minLength", "maxLength", "pattern", "format", "minItems", "maxItems",
 	"uniqueItems", "minProperties", "maxProperties", "default", "examples",
 }
 
-// TrimCoordinatorToolMeta removes unsupported schema structure while preserving argument constraints and descriptions.
-func TrimCoordinatorToolMeta(meta ToolMeta) ToolMeta {
+// ProjectProviderToolMeta derives generation guidance without changing execution schemas.
+func ProjectProviderToolMeta(meta ToolMeta) ToolMeta {
 	out := meta
 	out.Description = strings.TrimSpace(meta.Description)
 	out.ArgsSchema = trimArgsSchema(meta.ArgsSchema)
@@ -24,7 +24,7 @@ func trimArgsSchema(schema map[string]any) map[string]any {
 	if schema == nil {
 		return map[string]any{"type": "object"}
 	}
-	out := trimSchemaNode(schema, "object")
+	out := trimSchemaNode(schema)
 	for _, key := range functionParametersRootForbiddenKeys {
 		delete(out, key)
 	}
@@ -34,20 +34,29 @@ func trimArgsSchema(schema map[string]any) map[string]any {
 	return out
 }
 
-func trimSchemaNode(schema map[string]any, fallbackType string) map[string]any {
+func trimSchemaNode(schema map[string]any) map[string]any {
 	out := map[string]any{}
 	if typ, ok := schemaTypeValue(schema); ok {
 		out["type"] = typ
-	} else if !hasSchemaCombinator(schema) {
-		out["type"] = fallbackType
 	}
 	for _, key := range coordinatorSchemaValueKeys {
 		if val, ok := schema[key]; ok {
 			out[key] = val
 		}
 	}
-	if req, ok := copySchemaList(schema["required"]); ok && len(req) > 0 {
-		out["required"] = req
+	if req, ok := copySchemaList(schema["required"]); ok {
+		props, _ := schema["properties"].(map[string]any)
+		required := make([]any, 0, len(req))
+		for _, raw := range req {
+			if name, ok := raw.(string); ok {
+				if _, declared := props[name]; declared {
+					required = append(required, name)
+				}
+			}
+		}
+		if len(required) > 0 {
+			out["required"] = required
+		}
 	}
 	if props, ok := schema["properties"].(map[string]any); ok {
 		trimmed := make(map[string]any, len(props))
@@ -57,23 +66,23 @@ func trimSchemaNode(schema map[string]any, fallbackType string) map[string]any {
 		out["properties"] = trimmed
 	}
 	if items, ok := schema["items"].(map[string]any); ok {
-		out["items"] = trimSchemaNode(items, "string")
+		out["items"] = trimSchemaNode(items)
 	}
 	switch additional := schema["additionalProperties"].(type) {
 	case bool:
 		out["additionalProperties"] = additional
 	case map[string]any:
-		out["additionalProperties"] = trimSchemaNode(additional, "string")
+		out["additionalProperties"] = trimSchemaNode(additional)
 	}
 	for _, combinator := range []string{"oneOf", "anyOf", "allOf"} {
-		if trimmed, ok := trimSchemaBranchList(schema[combinator]); ok {
+		if trimmed, ok := trimSchemaBranchList(combinator, schema[combinator]); ok {
 			out[combinator] = trimmed
 		}
 	}
 	return out
 }
 
-func trimSchemaBranchList(raw any) ([]any, bool) {
+func trimSchemaBranchList(combinator string, raw any) ([]any, bool) {
 	items, ok := raw.([]any)
 	if !ok || len(items) == 0 {
 		return nil, false
@@ -82,9 +91,22 @@ func trimSchemaBranchList(raw any) ([]any, bool) {
 	for _, item := range items {
 		branch, ok := item.(map[string]any)
 		if !ok {
+			return nil, false
+		}
+		projected := trimSchemaNode(branch)
+		_, typed := schemaTypeValue(projected)
+		if !typed && !hasSchemaCombinator(projected) {
+			// Dropping one alternative would exclude valid arguments.
+			if combinator != "allOf" {
+				return nil, false
+			}
 			continue
 		}
-		out = append(out, trimSchemaNode(branch, "object"))
+		// Widened exclusive branches can overlap and reject valid arguments.
+		if combinator == "oneOf" && !reflect.DeepEqual(branch, projected) {
+			return nil, false
+		}
+		out = append(out, projected)
 	}
 	if len(out) == 0 {
 		return nil, false
@@ -118,9 +140,9 @@ func hasSchemaCombinator(schema map[string]any) bool {
 func trimPropertySchema(raw any) map[string]any {
 	prop, ok := raw.(map[string]any)
 	if !ok {
-		return map[string]any{"type": "string"}
+		return map[string]any{}
 	}
-	return trimSchemaNode(prop, "string")
+	return trimSchemaNode(prop)
 }
 
 func copySchemaList(raw any) ([]any, bool) {

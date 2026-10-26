@@ -182,7 +182,7 @@ func trimCoordinatorToolMetasForPlan(plan toolsurface.Plan, all []tools.ToolMeta
 		if meta.Name == "submit_verdict" && verdictSchema != nil {
 			meta.ArgsSchema = verdictSchema
 		}
-		outMeta := tools.TrimCoordinatorToolMeta(meta)
+		outMeta := tools.ProjectProviderToolMeta(meta)
 		if meta.Name == "task" {
 			if taskAllowlist != nil && len(taskAllowlist) == 0 {
 				continue
@@ -299,7 +299,7 @@ func appendMissingMetas(all, extras []tools.ToolMeta) []tools.ToolMeta {
 func trimPromptToolMetas(metas []tools.ToolMeta) []tools.ToolMeta {
 	out := make([]tools.ToolMeta, len(metas))
 	for i, meta := range metas {
-		out[i] = tools.TrimCoordinatorToolMeta(meta)
+		out[i] = tools.ProjectProviderToolMeta(meta)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out

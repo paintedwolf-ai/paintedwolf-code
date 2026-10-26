@@ -292,7 +292,7 @@ func offeredVerdictSchema(t *testing.T, f reviewLoopFixture) map[string]any {
 	testutil.FailErr(t, "manifests.Get "+f.workflowID, err)
 	schema, err := verdictcall.Compose(catalogVerdictSchema(t), reviewLoopDef(t, f), m.ReportBrief())
 	testutil.FailErr(t, "PhaseVerdictArgsSchema", err)
-	return tools.TrimCoordinatorToolMeta(tools.ToolMeta{Name: "submit_verdict", ArgsSchema: schema}).ArgsSchema
+	return tools.ProjectProviderToolMeta(tools.ToolMeta{Name: "submit_verdict", ArgsSchema: schema}).ArgsSchema
 }
 
 // verdictCall turns a stored verdict back into the call that produced it.
