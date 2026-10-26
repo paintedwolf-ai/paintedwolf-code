@@ -40,7 +40,7 @@ func TestLinuxCandidateRequestsShareMaintenanceWithoutBlockingRelease(t *testing
 		t.Fatal("standalone package builds must not add another capacity class")
 	}
 	call := requests.Jobs["candidates"]
-	if call.If != "${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}" {
+	if call.If != "${{ github.event_name != 'pull_request' || !github.event.pull_request.draft || github.event.action == 'ready_for_review' }}" {
 		t.Fatal("packaging pull requests must wait until ready")
 	}
 	if call.Uses != "./.github/workflows/linux-candidates.yml" || call.With["source_sha"] != "${{ github.sha }}" {

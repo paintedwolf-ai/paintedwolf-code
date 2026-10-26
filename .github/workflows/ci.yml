@@ -28,7 +28,7 @@ concurrency:
 
 jobs:
   fast:
-    if: ${{ github.event_name == 'pull_request' && !github.event.pull_request.draft || inputs.profile == 'fast' }}
+    if: ${{ github.event_name == 'pull_request' && (!github.event.pull_request.draft || github.event.action == 'ready_for_review') || inputs.profile == 'fast' }}
     uses: ./.github/workflows/verification.yml
     with:
       profile: fast
@@ -63,7 +63,7 @@ jobs:
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
           SKIPPED: ${{ inputs.profile == 'check' && 'fast' || format('{0},platform', (github.event_name == 'merge_group' || inputs.profile == 'integration') && 'fast' || 'integration') }}
-          DRAFT: ${{ github.event.pull_request.draft == true }}
+          DRAFT: ${{ github.event.pull_request.draft == true && github.event.action != 'ready_for_review' }}
         run: python3 scripts/ci_verification.py gate --skipped "$SKIPPED" --draft "$DRAFT"
 
   dispatched-check:
