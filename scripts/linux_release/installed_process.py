@@ -42,5 +42,3 @@ def engine_image(pid: int) -> tuple:
         identity = tuple(int(value) for value in result.stdout.strip().split(b":"))
     if process_identity(pid) != before: raise ValueError("selected engine changed during image observation")
     return identity
-
-
