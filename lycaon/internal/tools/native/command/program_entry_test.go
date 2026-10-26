@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/lineage"
 	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -33,6 +34,37 @@ func newProgramFixture(t *testing.T) *programFixture {
 		return map[string]command.NativeOperation{"tee": teeOperation(dir), "head": firstLineOperation()}
 	}})}
 }
+
+func newLoopFixture(t *testing.T) *programFixture {
+	t.Helper()
+	return &programFixture{programtest.New(t, programtest.Options{
+		Input:       func(dir string) commandprogram.InputRedirection { return loopInput{dir: dir} },
+		Publication: func(string) commandprogram.OutputPublication { return nullPublication{} },
+	})}
+}
+
+type loopInput struct{ dir string }
+
+func (i loopInput) OpenInput(_ context.Context, destination commandprogram.InputDestination) (io.ReadCloser, error) {
+	return os.Open(filepath.Join(i.dir, destination.Target.Value))
+}
+
+type nullPublication struct{}
+
+func (nullPublication) Open(_ context.Context, destination commandprogram.OutputDestination) (commandprogram.StagedOutput, error) {
+	if destination.Target.Value != "/dev/null" {
+		return nil, fmt.Errorf("fixture only supports /dev/null output")
+	}
+	return nullStage{}, nil
+}
+
+type nullStage struct{}
+
+func (nullStage) Write(p []byte) (int, error) { return len(p), nil }
+func (nullStage) Publish(context.Context) (commandprogram.OutputPublished, error) {
+	return commandprogram.OutputPublished{}, nil
+}
+func (nullStage) Abandon(context.Context) error { return nil }
 
 func (f *programFixture) call(t *testing.T, ctx context.Context, source string) (string, error) {
 	t.Helper()
@@ -361,6 +393,128 @@ func TestProgramEntryRunsManyProgramsWithinTheSessionSpillQuota(t *testing.T) {
 			t.Fatalf("program %d: %v %s", i, err, out)
 		}
 	}
+}
+
+func TestProgramEntryLargeLoopsKeepTheSessionUsable(t *testing.T) {
+	f := newLoopFixture(t)
+	const items = 12000
+	data := strings.Repeat("item\n", items)
+	testutil.FailErr(t, "write loop input", os.WriteFile(filepath.Join(f.Dir, "items.txt"), []byte(data), 0o600))
+	for _, form := range []struct {
+		program       string
+		children      int
+		receiptBodies int
+	}{
+		{`while read -r i; do basename "$i" >/dev/null; done < items.txt`, 2*items + 1, 2*items + 2},
+		{`for i in $(external -- /bin/cat items.txt); do basename "$i" >/dev/null; done`, items + 1, items + 2},
+	} {
+		out, err := f.call(t, t.Context(), form.program)
+		testutil.FailErr(t, "run large loop", err)
+		result := decodeOutcome(t, out)
+		if result.State != "completed" || result.Status != 0 || result.Refusal != nil || result.Stdout != "" || result.ExecutedChildren != form.children {
+			var events, bytes int64
+			testutil.FailErr(t, "read trace usage", f.Database.QueryRowContext(t.Context(), `SELECT trace_events, trace_bytes FROM invocation_programs WHERE id=?`, result.ProgramID).Scan(&events, &bytes))
+			t.Fatalf("large loop state=%s status=%d refusal=%+v output=%d children=%d trace=%d/%d", result.State, result.Status, result.Refusal, len(result.Stdout), result.ExecutedChildren, events, bytes)
+		}
+		var receipts int
+		testutil.FailErr(t, "count loop child receipts", f.Database.QueryRowContext(t.Context(), `SELECT count(*) FROM invocation_program_executions WHERE program_id=?`, result.ProgramID).Scan(&receipts))
+		if receipts != form.receiptBodies {
+			t.Fatalf("loop child receipts=%d, want %d for %q", receipts, form.receiptBodies, form.program)
+		}
+		var inline, spilled int
+		testutil.FailErr(t, "count durable loop input bodies", f.Database.QueryRowContext(t.Context(), `SELECT count(*) FILTER (WHERE inline_body IS NOT NULL),count(*) FILTER (WHERE inline_body IS NULL) FROM invocation_program_outputs WHERE program_id=? AND stream='arguments'`, result.ProgramID).Scan(&inline, &spilled))
+		if inline < receipts || spilled != 0 {
+			t.Fatalf("loop input retention: %d inline, %d blob-backed for %d children", inline, spilled, receipts)
+		}
+	}
+	out, err := f.call(t, t.Context(), "echo hi")
+	testutil.FailErr(t, "run later program", err)
+	if result := decodeOutcome(t, out); result.State != "completed" || result.Stdout != "hi\n" {
+		t.Fatalf("later program failed: %+v", result)
+	}
+}
+
+func TestProgramEntryChildLimitKeepsPartialResultsAndSessionUsable(t *testing.T) {
+	f := newProgramFixture(t)
+	seeded := 0
+	f.Runtime.Evaluate = func(ctx context.Context, plan commandsurface.ProgramSnapshot, ports commandprogram.EvaluationPorts) (commandprogram.ProgramOutcome, error) {
+		if seeded < 2 {
+			if err := seedSettledChildrenAtLimit(ctx, f, plan, ports); err != nil {
+				return commandprogram.ProgramOutcome{}, err
+			}
+			seeded++
+		}
+		return commandprogram.Evaluate(ctx, plan, ports)
+	}
+	for _, form := range []struct {
+		program, state, stdout, refusal string
+	}{
+		{":; echo before", "completed", "before\n", ""},
+		{":; echo before; echo after", "rejected", "before\n", "COMMAND_LIMIT_EXCEEDED"},
+		{"echo hi", "completed", "hi\n", ""},
+	} {
+		out, err := f.call(t, t.Context(), form.program)
+		testutil.FailErr(t, "run child-limit program", err)
+		result := decodeOutcome(t, out)
+		if result.State != form.state || result.Stdout != form.stdout {
+			t.Fatalf("%q: state=%q stdout=%q refusal=%+v", form.program, result.State, result.Stdout, result.Refusal)
+		}
+		var count int64
+		testutil.FailErr(t, "count durable child receipts", f.Database.QueryRowContext(t.Context(), `SELECT count(*) FROM invocation_program_executions WHERE program_id=?`, result.ProgramID).Scan(&count))
+		expectedCount := int64(65536)
+		if form.program == "echo hi" {
+			expectedCount = 1
+		}
+		if count != expectedCount {
+			t.Fatalf("%q: child receipts=%d", form.program, count)
+		}
+		if form.refusal == "" {
+			if result.Refusal != nil || result.Status != 0 {
+				t.Fatalf("%q: unexpected refusal %+v status=%d", form.program, result.Refusal, result.Status)
+			}
+			continue
+		}
+		if result.Refusal == nil || result.Refusal.Code != form.refusal || !strings.Contains(result.Stderr, "child_executions limit") || !strings.Contains(result.Stderr, "[COMMAND_LIMIT_EXCEEDED]") {
+			t.Fatalf("%q: untyped or silent child refusal: %+v", form.program, result)
+		}
+	}
+}
+
+// seedSettledChildrenAtLimit composes a valid, contiguous receipt history for
+// this running program. The final children still enter through the command
+// evaluator and recorder, which decide the exact at/one-past boundary.
+func seedSettledChildrenAtLimit(ctx context.Context, f *programFixture, plan commandsurface.ProgramSnapshot, ports commandprogram.EvaluationPorts) error {
+	const historical = 65535
+	program := ports.Invocation.Identity.ProgramID
+	var beforeEvents, beforeBytes int64
+	if err := f.Database.QueryRowContext(ctx, `SELECT trace_events,trace_bytes FROM invocation_programs WHERE id=?`, program).Scan(&beforeEvents, &beforeBytes); err != nil {
+		return err
+	}
+	loc := plan.Statements[0].SyntaxLocation
+	seed := commandprogram.NextExecution(ports.Invocation, string(loc.ID), loc.Span)
+	if err := ports.Executions.BeginExecution(ctx, seed, ":"); err != nil {
+		return err
+	}
+	if err := ports.Executions.SettleExecution(ctx, seed, commandprogram.ChildRecord{Identity: seed.Identity, Command: ":", Executed: true, Result: toolcontract.ProducerResult{Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.NoEffect}}); err != nil {
+		return err
+	}
+	var afterEvents, afterBytes int64
+	if err := f.Database.QueryRowContext(ctx, `SELECT trace_events,trace_bytes FROM invocation_programs WHERE id=?`, program).Scan(&afterEvents, &afterBytes); err != nil {
+		return err
+	}
+	var definitionBytes int64
+	if err := f.Database.QueryRowContext(ctx, `SELECT length(definition_json) FROM invocation_program_definitions WHERE program_id=?`, program).Scan(&definitionBytes); err != nil {
+		return err
+	}
+	_, err := f.Database.ExecContext(ctx, `WITH RECURSIVE seq(n) AS (VALUES(2) UNION ALL SELECT n+1 FROM seq WHERE n<?)
+		INSERT INTO invocation_program_executions (id,program_id,node_id,ordinal,parent_execution_id,actor_id,scope_json,operation_id,definition_digest,arguments_representation,arguments_digest,arguments_ref,canonical,state,owner,lifecycle,started_at,settled_at,status_code,complete,publication_eligible,effect_certainty)
+		SELECT printf('%s-%s-%s-%s-%012d',substr(replace(e.program_id,'-',''),1,8),substr(replace(e.program_id,'-',''),9,4),substr(replace(e.program_id,'-',''),13,4),substr(replace(e.program_id,'-',''),17,4),n),e.program_id,e.node_id,n,e.parent_execution_id,e.actor_id,e.scope_json,e.operation_id,e.definition_digest,e.arguments_representation,e.arguments_digest,e.arguments_ref,e.canonical,'completed',e.owner,e.lifecycle,e.started_at,e.settled_at,0,1,1,'none'
+		FROM seq CROSS JOIN invocation_program_executions e WHERE e.id=?`, historical, seed.Identity.ExecutionID)
+	if err != nil {
+		return err
+	}
+	_, err = f.Database.ExecContext(ctx, `UPDATE invocation_programs SET trace_events=trace_events+?,trace_bytes=trace_bytes+? WHERE id=?`, (afterEvents-beforeEvents-1)*(historical-1), (afterBytes-beforeBytes-definitionBytes)*(historical-1), program)
+	return err
 }
 
 // A native name without a native owner runs as its installed program, marked

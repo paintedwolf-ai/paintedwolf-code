@@ -94,7 +94,7 @@ func TestSourceCaptureRefusalAndSyntaxFailureNeverReturnPartialPlan(t *testing.T
 	}
 }
 
-func fixtureScratch(t *testing.T) *toolcontract.ProgramMemory {
+func fixtureScratch(t testing.TB) *toolcontract.ProgramMemory {
 	t.Helper()
 	limits, err := toolcontract.CatalogProgramMemoryLimits()
 	if err != nil {

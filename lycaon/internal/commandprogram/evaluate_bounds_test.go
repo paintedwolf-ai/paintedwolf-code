@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
@@ -149,6 +150,25 @@ func TestLoopIterationCeilingAtBoundaryAndOnePast(t *testing.T) {
 	assertLimit(t, err, "loop_iterations", maximum, maximum+1)
 	if out.Stop == nil || len(f.log.calls) != 0 {
 		t.Fatalf("one past the ceiling admitted work: %q", f.log.argv())
+	}
+}
+
+func TestChildExecutionCeilingAtBoundaryAndOnePast(t *testing.T) {
+	limits, err := catalogEvaluationLimits()
+	if err != nil {
+		t.Fatal(err)
+	}
+	maximum := limits["child_executions"]
+	e := &evaluation{limits: limits, counters: map[string]int64{"child_executions": maximum - 1}}
+	f := &frame{e: e, state: &frameState{latch: &OutcomeLatch{}}}
+	loc := commandsurface.SyntaxLocation{}
+	if err := e.charge(f, loc, "child_executions", 1); err != nil || e.counters["child_executions"] != maximum {
+		t.Fatalf("at limit: counter=%d err=%v", e.counters["child_executions"], err)
+	}
+	err = e.charge(f, loc, "child_executions", 1)
+	assertLimit(t, err, "child_executions", maximum, maximum+1)
+	if e.counters["child_executions"] != maximum {
+		t.Fatalf("over limit changed count to %d", e.counters["child_executions"])
 	}
 }
 

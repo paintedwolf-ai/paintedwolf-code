@@ -4,7 +4,7 @@ kind: policy
 anchor: tool.rejected
 requires:
   profiles: [tool]
-  facts: [paintedwolf.rejection_code]
+  facts: [paintedwolf.rejection_code, paintedwolf.command, paintedwolf.source_line, paintedwolf.source_column]
 when: paintedwolf.rejection_code == "COMMAND_NATIVE_FORM_UNSUPPORTED"
 effect: block
 copy:

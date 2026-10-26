@@ -286,7 +286,7 @@
     },
     {
       "id": "child_executions",
-      "maximum": 10000,
+      "maximum": 65536,
       "unit": "executions",
       "scope": "program",
       "exceeded": "COMMAND_LIMIT_EXCEEDED",
@@ -426,7 +426,7 @@
     },
     {
       "id": "loop_iterations",
-      "maximum": 10000,
+      "maximum": 16384,
       "unit": "iterations",
       "scope": "program",
       "exceeded": "COMMAND_LIMIT_EXCEEDED",
@@ -663,6 +663,20 @@
       "boundary_model": "Isolated injected-counter at/over transition. A complete program also obeys every enclosing/remaining budget; raw maxima are not independently guaranteed launch or admission sizes."
     },
     {
+      "id": "session_output_state_bytes",
+      "maximum": 268435456,
+      "unit": "bytes",
+      "scope": "session",
+      "exceeded": "COMMAND_LIMIT_EXCEEDED",
+      "boundary_fixtures": [
+        "session_output_state_bytes-at",
+        "session_output_state_bytes-over"
+      ],
+      "enforcement": "Reserve retained output handles before attachment or restoration; release only after durable references and active readers are collected.",
+      "overflow": "terminal structured refusal; retain earlier effects and readable durable output",
+      "boundary_model": "Isolated injected-counter at/over transition. A complete program also obeys every enclosing/remaining budget; raw maxima are not independently guaranteed launch or admission sizes."
+    },
+    {
       "id": "session_spill_bytes",
       "maximum": 1073741824,
       "unit": "bytes",
@@ -818,7 +832,7 @@
     },
     {
       "id": "trace_bytes",
-      "maximum": 8388608,
+      "maximum": 536870912,
       "unit": "bytes",
       "scope": "program",
       "exceeded": "COMMAND_LIMIT_EXCEEDED",
@@ -832,7 +846,7 @@
     },
     {
       "id": "trace_events",
-      "maximum": 100000,
+      "maximum": 2097152,
       "unit": "events",
       "scope": "program",
       "exceeded": "COMMAND_LIMIT_EXCEEDED",
@@ -1098,6 +1112,7 @@
     "find",
     "fold",
     "git",
+    "git init",
     "git add",
     "git blame",
     "git branch",
