@@ -1,6 +1,6 @@
 ---
 name: orchestrate-a-large-task
-description: Decompose and integrate broad work, staged research, independent fixes, configuration matrices, and alternatives.
+description: Split broad work across task workers and integrate it: staged research, parallel independent fixes, configuration matrices, competing approaches, or repo-wide rule sweeps.
 optional_tools:
   - decline_worker_budget
   - extend_worker_budget
@@ -13,11 +13,11 @@ metadata:
 
 # Orchestrate a large task
 
-Check the offered tool surface before choosing a procedure. When `task` is available, follow the dispatch and integration steps below. Without `task`, apply the decomposition, dependency, and verification steps within your assigned scope; report any work needing another role to the parent coordinator. Do not issue dispatch calls, invent worker results, or widen your assignment. The parent owns dispatch and integration across workers.
+Check the offered tool surface before choosing a procedure. When `task` is available, follow the dispatch and integration steps in the procedure. Without `task`, apply the decomposition, dependency, and verification steps within your assigned scope; report any work needing another role to the parent coordinator. Do not issue dispatch calls, invent worker results, or widen your assignment. The parent owns dispatch and integration across workers.
 
 Use the request and observed project/environment to choose the matching procedure below. Read that procedure before acting; load only the variants needed for this task. Read the orchestration procedure before the first dispatch; it owns briefing, width, and integration mechanics. Resource paths are relative to this skill directory.
 
-- [Orchestrate a large task](references/orchestrate_a_large_task.md) — Prepare, decompose, dispatch, and integrate substantial work with task workers for broad features, multi-component changes, or fix sets needing parallel or staged delegation.; supporting [briefs-and-topologies.md](references/orchestrate_a_large_task-briefs-and-topologies.md).
+- [Orchestrate a large task](references/orchestrate_a_large_task.md) — Prepare, decompose, dispatch, and integrate substantial work with task workers for broad features, multi-component changes, or fix sets needing parallel or staged delegation; supporting [briefs-and-topologies.md](references/orchestrate_a_large_task-briefs-and-topologies.md).
 - [Research then implement](references/research_then_implement.md) — Turn external or repository research into decided constraints and staged worker briefs when versions, APIs, standards, or unfamiliar architecture could change a build.
 - [Compare implementation approaches](references/compare_implementation_approaches.md) — Produce and evaluate isolated implementation alternatives against a frozen rubric when architecture, library choice, algorithm, or migration shape remains uncertain.
 - [Parallelize a configuration matrix](references/parallelize_a_configuration_matrix.md) — Coordinate builds, tests, migrations, or validations across platforms, versions, providers, or feature flags when independent outcomes share one acceptance contract.

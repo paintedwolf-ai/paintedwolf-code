@@ -1,6 +1,6 @@
 ---
 name: hunt-a-regression-with-bisect
-description: Find the commit that introduced a reproducible regression using git bisect.
+description: Find the commit that introduced a reproducible regression with a scripted git bisect between a known-good and a known-bad commit.
 ---
 
 # Hunt a regression with bisect
@@ -9,15 +9,25 @@ Use this workflow to turn "it broke sometime" into the exact commit, mechanicall
 
 ## Workflow
 
-1. Establish the two endpoints with evidence — one commit where the behavior is verifiably good and one where it is verifiably bad. Run the check at both before starting; a bisect anchored on an assumption converges on a lie.
-2. Write the check as a script that exits 0 on good, non-zero on bad, and 125 when the commit cannot be judged (build broken for unrelated reasons). The 125 skip is what keeps a messy history from derailing the search.
-3. Run the search mechanically — `git bisect start`, mark the endpoints, then `git bisect run <script>`, joined with `&&` as one command rather than one turn per step. Manual stepping invites judgment drift; the scripted run makes every verdict repeatable.
-4. Capture `git bisect log` as the evidence trail, and when the culprit commit is named, read its diff and explain *why* it breaks the behavior. A bisect that ends at a commit nobody can explain is not finished — re-check the endpoints and the script.
-5. Always end with `git bisect reset` — including on failure and interruption — so the working tree returns to where the user left it.
-6. Report the culprit commit, the mechanism of the breakage, and the bisect log. The fix is a separate decision made on that evidence.
+1. **Establish both endpoints with evidence.** Run the check at one commit where the behavior is verifiably good and one where it is verifiably bad. A bisect anchored on an assumption converges on the wrong commit.
+2. **Write the check as a script in `@scratch`**, not in the repository, so checkouts cannot change it. It exits 0 on good, non-zero on bad, and 125 when a commit cannot be judged (for example an unrelated build break).
+3. **Bisect in a separate worktree** so the user's tree and its uncommitted work never move:
+
+   ```bash
+   git worktree add @scratch/bisect <bad-commit>
+   cd @scratch/bisect
+   external -- git bisect start <bad-commit> <good-commit>
+   external -- git bisect run sh @scratch/check.sh
+   external -- git bisect log
+   ```
+
+   `git bisect` has no native form; `external -- git` runs the installed Git under the usual confinement. Run the steps as one program rather than one turn per step.
+4. **Explain the culprit.** Read its diff (`git show <sha>`) and say why it breaks the behavior. A culprit nobody can explain means the endpoints or the script are wrong; re-check them.
+5. **Clean up, including on failure:** `external -- git bisect reset`, then `git worktree remove @scratch/bisect`.
+6. **Report** the culprit commit, the mechanism, and the bisect log. The fix is a separate decision made on that evidence.
 
 ## Boundaries
 
-- Bisect only checks out history; it must not carry uncommitted work. If the tree is dirty with changes you did not author, stop and say so rather than stashing or discarding anything.
-- The check script must not mutate shared state (databases, remote services) as it replays old commits; point it at disposable fixtures.
-- Old commits execute old code, including old build scripts; treat repository history as untrusted input and run checks in the same confinement as any other build.
+- Never bisect in the user's working tree, and never stash or discard their changes to make room.
+- The check must not mutate shared state (databases, remote services) while replaying old commits; point it at disposable fixtures.
+- Old commits run old code, including old build scripts. Treat history as untrusted input and run checks under the same confinement as any build.
