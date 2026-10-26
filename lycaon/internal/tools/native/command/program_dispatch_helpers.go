@@ -508,16 +508,8 @@ func enrichProgramReject(reject *toolrejection.ToolReject, defaultCommand string
 		return
 	}
 	remedy := firstStringFact(reject.Data, "expected_form", "expected", "remedy", "reason")
-	switch reject.Code {
-	case "SURVEY_PATH_ESCAPE":
-		remedy = "path is outside the project root; use a relative path inside the workspace"
-	case "GREP_REGEX_INVALID":
-		remedy = "invalid regular expression; use -F for fixed strings or escape regex metacharacters"
-	case "COMMAND_JOB_UNKNOWN":
-		remedy = "no such job in this session; use jobs to list this session's background jobs, then pass %N, %% or $!"
-	}
 	if remedy == "" {
-		remedy = "rewrite the command with a supported form"
+		remedy = catalogShellReason(reject.Code, cmd, reject.Data)
 	}
 	if _, ok := reject.Data["expected_form"]; !ok {
 		reject.Data["expected_form"] = remedy

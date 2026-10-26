@@ -384,7 +384,7 @@ func TestProgramEntryLaunchesNativeGapsAndRecordsThem(t *testing.T) {
 	if outcome.Refusal == nil || outcome.Refusal.Code != "COMMAND_NATIVE_FORM_UNSUPPORTED" || !strings.Contains(outcome.Refusal.Feedback, "COMMAND_NATIVE_FORM_UNSUPPORTED") {
 		t.Fatalf("uninstalled native name: %s", out)
 	}
-	if outcome.Stdout != "before\n" || outcome.ProgramID == "" || !strings.Contains(outcome.Stderr, "repo-map: not supported here [COMMAND_NATIVE_FORM_UNSUPPORTED]") {
+	if outcome.Stdout != "before\n" || outcome.ProgramID == "" || !strings.Contains(outcome.Stderr, "repo-map: request: ") || !strings.Contains(outcome.Stderr, "[COMMAND_NATIVE_FORM_UNSUPPORTED]") {
 		t.Fatalf("refusal replaced the partial result: %+v", outcome)
 	}
 }
@@ -420,7 +420,7 @@ func TestProgramEntryHiddenExternalSelectorRefusesButGapsRun(t *testing.T) {
 	if outcome.Refusal == nil || outcome.Refusal.Code != "COMMAND_EXTERNAL_HIDDEN" || outcome.Stdout != "" || outcome.NativeGaps != 1 {
 		t.Fatalf("hidden external outcome %s", out)
 	}
-	if !strings.Contains(outcome.Stderr, "external: not supported here [COMMAND_EXTERNAL_HIDDEN]") {
+	if !strings.Contains(outcome.Stderr, "external: request: ") || !strings.Contains(outcome.Stderr, "[COMMAND_EXTERNAL_HIDDEN]") {
 		t.Fatalf("hidden external stderr %q", outcome.Stderr)
 	}
 }
