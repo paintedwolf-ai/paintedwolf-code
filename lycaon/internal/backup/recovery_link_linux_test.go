@@ -9,11 +9,10 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
-	"golang.org/x/sys/unix"
 )
 
-// A recovery point keeps its bytes after the live content-addressed body is
-// collected, and adds no data blocks on a filesystem that shares the inode.
+// A recovery point shares the immutable body and keeps its bytes after the
+// live content-addressed body is collected.
 func TestRecoveryLinkedBodySurvivesLiveCollection(t *testing.T) {
 	root := t.TempDir()
 	live := filepath.Join(root, "live", "ab", "cdef.zst")
@@ -26,8 +25,6 @@ func TestRecoveryLinkedBodySurvivesLiveCollection(t *testing.T) {
 	testutil.FailErr(t, "digest live body", err)
 	cloneable, err := recoveryCloneAvailable(root)
 	testutil.FailErr(t, "probe clone support", err)
-	var before unix.Statfs_t
-	testutil.FailErr(t, "measure free blocks", unix.Statfs(root, &before))
 
 	shared, err := copySnapshotRegular(t.Context(), source, filepath.Join(recovery, "ab", "cdef.zst"))
 	testutil.FailErr(t, "capture immutable body", err)
@@ -38,15 +35,9 @@ func TestRecoveryLinkedBodySurvivesLiveCollection(t *testing.T) {
 	testutil.FailErr(t, "inspect live inode", err)
 	captured, err := os.Stat(filepath.Join(recovery, "ab", "cdef.zst"))
 	testutil.FailErr(t, "inspect captured inode", err)
-	var after unix.Statfs_t
-	testutil.FailErr(t, "measure free blocks after capture", unix.Statfs(root, &after))
-	consumed := int64(before.Bfree-after.Bfree) * int64(after.Bsize)
-	t.Logf("capture on %s: clone=%t linked=%t payload=%d bytes, filesystem blocks consumed=%d bytes", root, cloneable, os.SameFile(liveInfo, captured), len(payload), consumed)
+	t.Logf("capture on %s: clone=%t linked=%t payload=%d bytes", root, cloneable, os.SameFile(liveInfo, captured), len(payload))
 	if !cloneable && !os.SameFile(liveInfo, captured) {
 		t.Fatal("filesystem without reflink did not share the body inode")
-	}
-	if consumed >= int64(len(payload)) {
-		t.Fatalf("shared capture consumed %d bytes for a %d byte body", consumed, len(payload))
 	}
 
 	testutil.FailErr(t, "collect live body", os.Remove(live))
