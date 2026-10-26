@@ -8,10 +8,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 )
@@ -44,6 +46,8 @@ type BoundPath struct {
 	admitRead     func(string) error
 	admitEntry    func(string) error
 	admitMutation func(string) (Resolved, error)
+	// attached refuses once the bound root is removed or moved.
+	attached func() error
 }
 
 // Validate rejects a root replaced since binding. Descriptor-relative effect
@@ -51,6 +55,11 @@ type BoundPath struct {
 func (p BoundPath) Validate() error {
 	if p.Null {
 		return nil
+	}
+	if p.attached != nil {
+		if err := p.attached(); err != nil {
+			return err
+		}
 	}
 	identity, err := directoryIdentity(p.Resolved.Root.Path)
 	if err != nil {
@@ -66,6 +75,9 @@ func (p BoundPath) Validate() error {
 func (p BoundPath) Open() (*os.File, error) {
 	if p.Null {
 		return nil, &PathError{Code: "COMMAND_OPERAND_INVALID", Cause: errors.New("null input is an empty stream, not a file")}
+	}
+	if settingsoverlay.IsRecoveryRelPath(p.Resolved.ScopeRel) || settingsoverlay.HasRecoverySegment(p.Resolved.Abs) || settingsoverlay.IsRecoveryOnlyDir(p.Resolved.Abs) {
+		return nil, PathOperationError(p.Resolved.DisplayPath, &os.PathError{Op: "open", Path: p.Resolved.DisplayPath, Err: os.ErrNotExist})
 	}
 	root, err := p.openRoot()
 	if err != nil {
@@ -88,39 +100,58 @@ func (p BoundPath) Open() (*os.File, error) {
 // ProgramPaths is one invocation's logical cwd. It never changes process cwd,
 // mutates grants, or rewrites external argv. Each invocation has a separate value.
 type ProgramPaths struct {
-	boundary      *sandbox.Boundary
-	context       tools.ToolContext
-	cwd           BoundPath
-	initial       BoundPath
-	initialInfo   os.FileInfo
-	specs         map[string]toolcontract.CommandSpecification
-	cwdInfo       os.FileInfo
+	boundary    *sandbox.Boundary
+	context     tools.ToolContext
+	cwd         BoundPath
+	initial     BoundPath
+	initialInfo os.FileInfo
+	specs       map[string]toolcontract.CommandSpecification
+	cwdInfo     os.FileInfo
+	// previous is OLDPWD, the directory the last cd left.
+	previous      BoundPath
+	previousInfo  os.FileInfo
+	hasPrevious   bool
 	argumentLimit int64
 	outputLimit   int64
 }
 
+type catalogPathFacts struct {
+	specs         map[string]toolcontract.CommandSpecification
+	argumentLimit int64
+	outputLimit   int64
+}
+
+var compiledProgramPathFacts = sync.OnceValues(func() (catalogPathFacts, error) {
+	catalog, err := toolcontract.ReadOnlyLanguageV1()
+	if err != nil {
+		return catalogPathFacts{}, err
+	}
+	facts := catalogPathFacts{specs: make(map[string]toolcontract.CommandSpecification, len(catalog.Commands))}
+	for _, command := range catalog.Commands {
+		facts.specs[command.Name] = command
+	}
+	for _, limit := range catalog.Language.Limits {
+		if limit.ID == "argument_bytes" {
+			facts.argumentLimit = limit.Maximum
+		}
+		if limit.ID == "stream_bytes" {
+			facts.outputLimit = limit.Maximum
+		}
+	}
+	if facts.argumentLimit <= 0 || facts.outputLimit <= 0 {
+		return catalogPathFacts{}, errors.New("path limits missing from language contract")
+	}
+	return facts, nil
+})
+
 // NewProgramPaths binds the invocation directory through current path authority.
 func NewProgramPaths(ctx context.Context, boundary *sandbox.Boundary, tc tools.ToolContext, cwd string) (*ProgramPaths, error) {
-	catalog, err := toolcontract.LanguageV1()
+	facts, err := compiledProgramPathFacts()
 	if err != nil {
 		return nil, err
 	}
 	tc.Source.Roots = append([]projectroot.RootRef(nil), tc.Source.Roots...)
-	p := &ProgramPaths{boundary: boundary, context: tc, specs: map[string]toolcontract.CommandSpecification{}}
-	for _, command := range catalog.Commands {
-		p.specs[command.Name] = command
-	}
-	for _, limit := range catalog.Language.Limits {
-		if limit.ID == "argument_bytes" {
-			p.argumentLimit = limit.Maximum
-		}
-		if limit.ID == "stream_bytes" {
-			p.outputLimit = limit.Maximum
-		}
-	}
-	if p.argumentLimit <= 0 || p.outputLimit <= 0 {
-		return nil, errors.New("path limits missing from language contract")
-	}
+	p := &ProgramPaths{boundary: boundary, context: tc, specs: facts.specs, argumentLimit: facts.argumentLimit, outputLimit: facts.outputLimit}
 	if cwd == "" {
 		cwd = "."
 	}
@@ -160,8 +191,8 @@ func (p *ProgramPaths) Bind(ctx context.Context, operand string, write bool) (Bo
 		if err != nil {
 			return BoundPath{}, err
 		}
-		held.Close()
-		if !filepath.IsAbs(operand) && !strings.HasPrefix(operand, "@") {
+		_ = held.Close()
+		if !filepath.IsAbs(operand) {
 			addressed = p.cwd.Resolved.Abs + string(filepath.Separator) + operand
 		}
 	}
@@ -197,12 +228,14 @@ func (p *ProgramPaths) Bind(ctx context.Context, operand string, write bool) (Bo
 	if err != nil {
 		return BoundPath{}, err
 	}
+	canonicalRoot := fspath.CanonicalPath(resolved.Root.Path)
 	bound := BoundPath{Resolved: resolved, rootIdentity: identity, rootInfo: rootInfo, exactRelative: relative}
+	bound.attached = func() error { return currentRootReject(p.context, resolved.Root, resolved.Abs) }
 	bound.admitRead = func(actual string) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		authority, err := authorityAddress(resolved.Root.Path, actual)
+		authority, err := authorityAddressWithCanonical(resolved.Root.Path, canonicalRoot, actual)
 		if err != nil {
 			return err
 		}
@@ -216,11 +249,13 @@ func (p *ProgramPaths) Bind(ctx context.Context, operand string, write bool) (Bo
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		authority, err := authorityAddress(resolved.Root.Path, actual)
+		if err := bound.attached(); err != nil {
+			return err
+		}
+		scope, err := entryScopeRel(resolved.Root, canonicalRoot, actual)
 		if err != nil {
 			return err
 		}
-		scope := projectroot.ScopeRel(resolved.Root, authority)
 		if scope == "." || scope == "" {
 			return bound.admitRead(actual)
 		}
@@ -234,7 +269,7 @@ func (p *ProgramPaths) Bind(ctx context.Context, operand string, write bool) (Bo
 			if err := ctx.Err(); err != nil {
 				return Resolved{}, err
 			}
-			authority, err := authorityAddress(resolved.Root.Path, actual)
+			authority, err := authorityAddressWithCanonical(resolved.Root.Path, canonicalRoot, actual)
 			if err != nil {
 				return Resolved{}, err
 			}
@@ -242,21 +277,6 @@ func (p *ProgramPaths) Bind(ctx context.Context, operand string, write bool) (Bo
 		}
 	}
 	return bound, nil
-}
-
-// Chdir changes only this invocation's cwd after descriptor-relative inspection.
-func (p *ProgramPaths) Chdir(ctx context.Context, operand string) error {
-	bound, err := p.Bind(ctx, operand, false)
-	if err != nil {
-		return err
-	}
-	bound, info, err := p.directoryBinding(ctx, bound)
-	if err != nil {
-		return err
-	}
-	p.cwdInfo = info
-	p.cwd = bound
-	return nil
 }
 
 // Cwd reports both the addressed root and native directory without a global cwd.
@@ -325,6 +345,14 @@ func (p *ProgramPaths) NativePaths(ctx context.Context, operands []string, nul b
 }
 
 func (p *ProgramPaths) nativePath(ctx context.Context, operand string, nul bool) (string, error) {
+	// Explicit conversion accepts addressed text, including computed values.
+	if _, addressed := rootLabel(operand); addressed {
+		resolved, err := ResolveRead(ctx, p.boundary, p.context, operand)
+		if err != nil {
+			return "", err
+		}
+		operand = resolved.Abs
+	}
 	bound, err := p.Bind(ctx, operand, false)
 	if err != nil {
 		return "", err
@@ -360,7 +388,7 @@ func (p *ProgramPaths) TemporaryDirectory(ctx context.Context) (string, error) {
 	if p.context.Host.SessionScratchDir == "" {
 		return "", tools.ErrSessionScratchUnavailable
 	}
-	bound, err := p.Bind(ctx, "@scratch", false)
+	bound, err := p.Bind(ctx, p.context.Host.SessionScratchDir, false)
 	if err != nil {
 		return "", err
 	}

@@ -77,3 +77,18 @@ func TestPlainQueryOutputIsNotFormatPreserving(t *testing.T) {
 	}
 	h.exec("", "yq", ".port = 9090", "svc.yaml").expect(t, "plain yq", "# settings\nport: 9090 # public\n", 0)
 }
+
+func TestJqEditKeepsCapturedDiskEncoding(t *testing.T) {
+	for _, encoding := range []string{textfile.UTF8BOM, textfile.UTF16LEBOM, textfile.UTF16BEBOM} {
+		raw, err := textfile.EncodeBounded("{\"x\":1}\n", encoding, textfile.LimitsForRaw(1024))
+		if err != nil {
+			t.Fatal(err)
+		}
+		h := newHarness(t, map[string]string{"encoded.json": string(raw)})
+		h.exec("", "jq-edit", "--path", "encoded.json", "--query", ".x=2").expect(t, encoding, "", 0)
+		want, err := textfile.EncodeBounded("{\"x\":2}\n", encoding, textfile.LimitsForRaw(1024))
+		if err != nil || h.disk("encoded.json") != string(want) {
+			t.Fatalf("%s encoding changed err %v", encoding, err)
+		}
+	}
+}

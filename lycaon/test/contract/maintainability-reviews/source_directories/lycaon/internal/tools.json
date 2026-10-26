@@ -4,14 +4,16 @@
   "kind": "module",
   "workstream": "tool-domains",
   "disposition": "retain",
-  "reason": "The root tools package defines handler contracts, registry and invocation context consumed by executor and native families. Implementations already live in native domain packages, while execution policy lives in toolexecution. Further splitting the shared contract package would create dependency cycles or duplicate contract vocabulary.",
-  "reviewed_commit": "f9991b89ce895dc20f77aa80611c2e2217518cdb",
-  "ceiling": 49,
+  "reason": "Retain the measured 52 immediate source members after reviewing the shared command resource-rejection owner. The root tools package already supplies the invocation context, registry and host contracts consumed by evaluator and native domains. Catalog units and typed memory/program causes now project once here; native filesystem work and executor screening, identity and delivery lifetimes remain with their existing owners. Moving this pure fact projection into a native utility would invert dependencies for the evaluator; a forwarding port would add no authority boundary. Exact cause/unit tests, actual evaluator low-memory and canceled partial-result delivery, registry, source-context and command import-boundary contracts support this measured shape. Further membership or structural growth requires review.",
+  "reviewed_commit": "65c5651c89b4444fcda787a453d4c07899d68a2a",
+  "ceiling": 52,
   "boundaries": {
     "lycaon/internal/tools/catalog_registry_test.go": "49c960f1e5ac9cec5d62967b6dc340524dbc66487064975248fe2e3792da89ca",
-    "lycaon/internal/tools/confine_request_parity_test.go": "c571018230a22c0985b430376cc7216a66c98065a6aa39a92a3ffe9f2a819415",
+    "lycaon/internal/tools/confine_request_parity_test.go": "ce799f896cc55fd277d69a411aa5c27bfafe6d8c06538f395854d12b83bfb50c",
     "lycaon/internal/tools/source_context_test.go": "bd7d89bb3ad46c1dc63f198f906e0a35b9f4f1dabae33b0a1c743cfc2281bef6",
-    "lycaon/internal/tools/file_change_review_test.go": "5909d66ac6b182e59a85077f11e04c8543923791444085f791f58554f945796b"
+    "lycaon/internal/tools/file_change_review_test.go": "5909d66ac6b182e59a85077f11e04c8543923791444085f791f58554f945796b",
+    "lycaon/internal/tools/command_resource_test.go": "335f248c5d79c13cfd3aabed981cf62be8e7670ef756ea29110cec6bcef9044f",
+    "lycaon/internal/toolexecution/program_evaluator_refusal_test.go": "9836168dd1146162324e18ec6f98ce7a67411fbf4a81646147f1a3c90e275813"
   },
-  "reviewed_shape": "3c2eb225350090cf877140965e48daf2ac95ef5a394ad56a4c54387c3f23a4b8"
+  "reviewed_shape": "77b30bd1595cb2c5dae026baa346b6ffd520b019482ed6feb36c9252c516480c"
 }

@@ -36,12 +36,12 @@ func TestPathExplorerChildSchemaIsCommandFree(t *testing.T) {
 	for _, meta := range policy.ListForPrompt(ctx, child, prof.ToolProfile) {
 		schema = append(schema, meta.Name)
 	}
-	for _, name := range schema {
-		if name == "command" {
-			t.Fatalf("path-explorer schema must not include command: %v", schema)
+	for _, forbidden := range []string{"write", "replace_lines", "delete", "mkdir", "copy", "move"} {
+		if containsString(schema, forbidden) {
+			t.Fatalf("path-explorer schema must not include mutation tool %q: %v", forbidden, schema)
 		}
 	}
-	for _, want := range []string{"find", "grep", "read"} {
+	for _, want := range []string{"command", "find", "grep", "read"} {
 		if !containsString(schema, want) {
 			t.Fatalf("path-explorer schema missing %q: %v", want, schema)
 		}

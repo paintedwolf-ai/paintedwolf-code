@@ -13,7 +13,7 @@ import (
 // formFiles is the fixture tree every form case runs against. Expected bytes
 // were observed from GNU coreutils 8.32, diffutils 3.8, xxd and util-linux
 // hexdump over the same files, except where the catalog fixes a different
-// representation (wc separators, file's corpus, malformed manifests).
+// representation (file's corpus and malformed manifests).
 var formFiles = map[string]string{
 	"input": "alpha\nbeta", "lines": "a\nb\n\n\n\nc\td\x01\x7f\xc3\xa9\xff\n", "crlf": "one\r\ntwo\r\n",
 	"empty": "", "same-a": "same\n", "same-b": "same\n",

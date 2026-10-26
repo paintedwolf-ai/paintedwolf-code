@@ -31,8 +31,11 @@ type EvaluationPorts struct {
 	// operations are recorded by their owners. Nil records none.
 	Executions ExecutionRecorder
 	Streams    Streams
+	Refusals   RefusalWriter
 	// Environment is the captured child environment; its entries start exported.
 	Environment []string
+	// ScratchDir is the session scratch directory used for process-substitution files.
+	ScratchDir string
 }
 
 // ProgramOutcome is the evaluated program's ordinary status plus the first host
@@ -135,6 +138,9 @@ func Evaluate(ctx context.Context, plan commandsurface.ProgramSnapshot, ports Ev
 	}
 	defer release()
 	_, err = root.statements(ctx, plan.Statements)
+	if trapErr := runExitTrap(ctx, root, err); trapErr != nil && err == nil {
+		err = trapErr
+	}
 	return e.outcome(root), err
 }
 

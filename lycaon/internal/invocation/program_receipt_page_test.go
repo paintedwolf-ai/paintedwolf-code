@@ -27,7 +27,8 @@ func attachStream(t *testing.T, f programReceiptFixture, lifetime *invocation.Pr
 	t.Helper()
 	spill, err := tooloutput.RetainScreenedStream(t.Context(), tooloutput.ScreenedReader(io.NopCloser(bytes.NewBufferString(body))), tooloutput.StreamSpillOptions{Store: store, ClaimID: execution + ":" + reference, MaximumBytes: 1 << 20, PreviewBytes: previewBytes, Admission: quota, WorkingMemory: quota, RetainedState: quota})
 	testutil.FailErr(t, "retain screened "+stream, err)
-	testutil.FailErr(t, "attach "+stream, lifetime.Attach(t.Context(), f.program, invocation.RetainedOutput{ExecutionID: execution, Stream: stream, Reference: reference, Complete: true}, spill))
+	_, err = lifetime.Attach(t.Context(), f.program, invocation.RetainedOutput{ExecutionID: execution, Stream: stream, Reference: reference, Complete: true}, spill)
+	testutil.FailErr(t, "attach "+stream, err)
 }
 
 func conflictedWrite(t *testing.T, f programReceiptFixture) (string, string) {
@@ -47,7 +48,7 @@ func TestProgramPageCarriesChildOutputsJobsAndConflicts(t *testing.T) {
 	f := newProgramReceiptFixture(t)
 	writeID, backgroundID := conflictedWrite(t, f)
 	quota := &outputQuota{}
-	store := f.recorder.ProgramBlobStore(blobstore.Store{Root: t.TempDir(), Dir: tooloutput.ToolOutputSpillDir})
+	store := f.recorder.ProgramBlobStore(t.Context(), blobstore.Store{Root: t.TempDir(), Dir: tooloutput.ToolOutputSpillDir})
 	lifetime, err := invocation.NewProgramOutputRetention(t.Context(), f.recorder, store, f.session, quota)
 	testutil.FailErr(t, "admit output lifetime", err)
 	testutil.FailErr(t, "restore empty output set", lifetime.Restore(t.Context()))

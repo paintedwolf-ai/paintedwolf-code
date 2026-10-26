@@ -15,11 +15,12 @@ type ReviewedProgramInputRetention interface {
 // ProgramAdmissionRecorder connects the existing admission start port to durable
 // invocation facts. Capture and screening finish before its writer transaction.
 type ProgramAdmissionRecorder struct {
-	Recorder *SQLRecorder
-	Inputs   ReviewedProgramInputRetention
+	Recorder           *SQLRecorder
+	Inputs             ReviewedProgramInputRetention
+	OwnerStartRecorded bool
 }
 
-func (r ProgramAdmissionRecorder) BeforeNativeOwner(ctx context.Context, bound toolcontract.BoundOperation, modelCallID string, inputs toolcontract.ReviewedOperationInputs) error {
+func (r *ProgramAdmissionRecorder) BeforeNativeOwner(ctx context.Context, bound toolcontract.BoundOperation, modelCallID string, inputs toolcontract.ReviewedOperationInputs) error {
 	if r.Recorder == nil || r.Inputs == nil || !validDigest(inputs.ArgumentsDigest()) {
 		return fmt.Errorf("program start requires screened reviewed-input retention")
 	}
@@ -27,7 +28,7 @@ func (r ProgramAdmissionRecorder) BeforeNativeOwner(ctx context.Context, bound t
 		return err
 	}
 	var err error
-	if err = bound.Invocation().Validate(); err != nil {
+	if err := bound.Invocation().Validate(); err != nil {
 		return err
 	}
 	reference, err := r.Inputs.RetainReviewedProgramInputs(ctx, bound.Invocation(), inputs)
@@ -37,7 +38,11 @@ func (r ProgramAdmissionRecorder) BeforeNativeOwner(ctx context.Context, bound t
 	if reference == "" {
 		return fmt.Errorf("reviewed input retention returned no reference")
 	}
-	return r.Recorder.startNativeOwner(ctx, bound, modelCallID, inputs.ArgumentsDigest(), reference, inputs.Representation())
+	if err := r.Recorder.startNativeOwner(ctx, bound, modelCallID, inputs.ArgumentsDigest(), reference, inputs.Representation()); err != nil {
+		return err
+	}
+	r.OwnerStartRecorded = true
+	return nil
 }
 
 func validateReviewedInputs(inputs toolcontract.ReviewedOperationInputs) error {

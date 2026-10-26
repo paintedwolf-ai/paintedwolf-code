@@ -32,7 +32,7 @@ type commandProgramSession struct {
 	session string
 }
 
-func newCommandProgramSession(t *testing.T, program, approvals string) *commandProgramSession {
+func newCommandProgramSession(t *testing.T, program, approvals string, progressUpdate ...string) *commandProgramSession {
 	t.Helper()
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{
 		Pattern:      "run the program",
@@ -61,6 +61,9 @@ func newCommandProgramSession(t *testing.T, program, approvals string) *commandP
 		Key:           string(wire.GateUnobservedChannel) + ":unconfined",
 	}, 0)
 	testutil.FailErr(t, "set agent type", h.Sessions.Manager.Chats.SetAgentType(t.Context(), sess.ID, "implementer"))
+	if len(progressUpdate) != 0 {
+		testutil.FailErr(t, "seed progress prerequisite", progress.NewSQLStore(h.DB).Set(sess.ID, progressUpdate[0]))
+	}
 	return &commandProgramSession{h: h, dir: dir, session: sess.ID}
 }
 

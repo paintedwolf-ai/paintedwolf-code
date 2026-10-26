@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/settingsoverlay"
 )
 
 // SourceDirEntry is one resolved child of a browsed directory.
@@ -69,9 +70,15 @@ func browseProjectSourceAt(root sourceBrowseRoot, dir string) (SourceDirListing,
 	if err != nil {
 		return SourceDirListing{}, "", err
 	}
+	if settingsoverlay.IsRecoveryRelPath(relDir) {
+		return SourceDirListing{}, "", ErrSourceNotFound
+	}
 	dirAbs, resolved, err := resolveSourceDir(root.path, root.resolved, relDir)
 	if err != nil {
 		return SourceDirListing{}, "", err
+	}
+	if settingsoverlay.IsRecoveryOnlyDir(dirAbs) {
+		return SourceDirListing{}, "", ErrSourceNotFound
 	}
 	children, err := sandbox.SurveyReadDir(dirAbs, relDir, sandbox.HumanFilesSurveyOptions())
 	if err != nil {

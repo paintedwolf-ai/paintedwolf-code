@@ -3,20 +3,12 @@ package commandprogram
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
-
-var readSpec = toolcontract.CommandSpecification{
-	Name: "read",
-	Argv: "read [-r] [-d DELIM] [NAME ...]",
-	Forms: []toolcontract.OptionForm{
-		{Spellings: []string{"-r"}, Arity: 0},
-		{Spellings: []string{"-d"}, Arity: 1, ValueRole: "DELIM"},
-	},
-}
 
 // readBuiltin reads one record from the frame's input stream, splits it by
 // fixed IFS whitespace (space, tab, newline) and assigns the target variables.
@@ -26,17 +18,17 @@ func (f *frame) readBuiltin(ctx context.Context, s commandsurface.Statement, fie
 		return err
 	}
 	if !ok {
-		spec = readSpec
+		return fmt.Errorf("read command is missing from the language catalog")
 	}
 	bound, err := f.e.ports.Binder.Bind(spec, fields)
 	if err != nil {
 		var argv *ArgvError
 		if errors.As(err, &argv) {
-			if gap := f.nativeGap(spec, argv, fields, nil); gap != nil {
+			if gap := f.nativeGap(ctx, spec, argv, fields, nil); gap != nil {
 				return f.dispatch(ctx, s, fields, nil)
 			}
 			f.hostRefusal(spec.Name, argv.Word, argv.Expected, argv.Code)
-			refusal := f.refuse(s.SyntaxLocation, argv.Code, argv.Expected, err).(*EvaluationRefusal)
+			refusal := f.refuse(s.SyntaxLocation, argv.Code, argv.Expected, err)
 			refusal.Command, refusal.Option, refusal.Form = spec.Name, argv.Word, spec.Argv
 			return refusal
 		}
@@ -59,7 +51,7 @@ func (f *frame) readBuiltin(ctx context.Context, s commandsurface.Statement, fie
 		for i, op := range operands {
 			if !VariableName(op.Value) {
 				f.hostRefusal("read", op.Value, "a valid variable name", argvOperandInvalid)
-				refusal := f.refuse(s.SyntaxLocation, argvOperandInvalid, "a valid variable name", nil).(*EvaluationRefusal)
+				refusal := f.refuse(s.SyntaxLocation, argvOperandInvalid, "a valid variable name", nil)
 				refusal.Command, refusal.Option, refusal.Form = "read", op.Value, spec.Argv
 				return refusal
 			}
@@ -86,7 +78,7 @@ func (f *frame) readBuiltin(ctx context.Context, s commandsurface.Statement, fie
 }
 
 func (f *frame) readRecord(ctx context.Context, loc commandsurface.SyntaxLocation, delim byte, raw bool) ([]byte, []bool, bool, error) {
-	if f.streams.Input == nil {
+	if f.io.streams.Input == nil {
 		return nil, nil, false, nil
 	}
 	limit := f.e.limits["record_bytes"]
@@ -97,11 +89,11 @@ func (f *frame) readRecord(ctx context.Context, loc commandsurface.SyntaxLocatio
 		if err := ctx.Err(); err != nil {
 			return nil, nil, false, f.interrupt(err)
 		}
-		n, err := f.streams.Input.Read(b[:])
+		n, err := f.io.streams.Input.Read(b[:])
 		if n > 0 {
 			c := b[0]
 			if !raw && c == '\\' {
-				n2, err2 := f.streams.Input.Read(b[:])
+				n2, err2 := f.io.streams.Input.Read(b[:])
 				if n2 > 0 {
 					if b[0] == '\n' {
 						continue

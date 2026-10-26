@@ -195,6 +195,7 @@ func TestLoopTruncatesLargeToolResult(t *testing.T) {
 	}})
 	deps := promptloop.StoreDeps(store)
 	deps.Context.Limits = func(context.Context, *api.Session) settings.SessionLimits { return limits }
+	deps.Context.LoadedTools = workersLoaded
 	deps.Model.LLM = client
 	deps.Context.Tools = reg
 	deps.Context.CoordinatorFrame = investigateCoordinatorContext()
