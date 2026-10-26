@@ -86,6 +86,17 @@ func NewOwners(revisions native.ExecutionRevisions, pins PinRecorder, domain Dom
 	return o, nil
 }
 
+// ForProgram binds the program memory while giving it a fresh account cache.
+func (o *Owners) ForProgram(memory *toolcontract.ProgramMemory) *Owners {
+	revisions := o.Revisions
+	revisions.Memory = memory
+	return &Owners{
+		Revisions: revisions, Pins: o.Pins, Domain: o.Domain,
+		ReadBytes: o.ReadBytes, StreamBytes: o.StreamBytes,
+		catalog: o.catalog, specs: o.specs, ops: o.ops, signatures: o.signatures,
+	}
+}
+
 // Operation returns the catalog operation identity that owns a command.
 func (o *Owners) Operation(command string) (string, bool) {
 	op, ok := o.ops[command]

@@ -30,11 +30,11 @@ func TestControlPlaneClassificationDoesNotChangeStorage(t *testing.T) {
 		}
 		scratch := enginepaths.SessionScratchUnder(root, "current")
 		path := filepath.Join(scratch, "entry")
-		if confine.ControlPlanePathDenied(path, true, scratch) || confine.ControlPlanePathDenied(path, false, scratch) {
+		if confine.ControlPlanePathDenied(path, true, scratch, "") || confine.ControlPlanePathDenied(path, false, scratch, "") {
 			t.Fatal("current session scratch was denied")
 		}
 		other := enginepaths.SessionScratchUnder(root, "other")
-		if !confine.ControlPlanePathDenied(other, true, scratch) || !confine.ControlPlanePathDenied(other, false, scratch) {
+		if !confine.ControlPlanePathDenied(other, true, scratch, "") || !confine.ControlPlanePathDenied(other, false, scratch, "") {
 			t.Fatal("another session's scratch was exposed")
 		}
 	}
