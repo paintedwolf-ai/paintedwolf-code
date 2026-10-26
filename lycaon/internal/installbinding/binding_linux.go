@@ -15,7 +15,6 @@ import (
 	"sync/atomic"
 	"syscall"
 
-	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/pkgmanifest"
 )
 
@@ -64,7 +63,8 @@ func CaptureRunning() (*Binding, error) {
 	if err != nil {
 		return nil, err
 	}
-	if filepath.Dir(resolved) != filepath.Join(configlayout.LinuxInstallRoot, "bin") {
+	root := filepath.Dir(pkgmanifest.DefaultPath)
+	if filepath.Dir(resolved) != filepath.Join(root, "bin") {
 		return nil, nil
 	}
 	// The running image, even if its pathname has already been replaced.
@@ -73,7 +73,7 @@ func CaptureRunning() (*Binding, error) {
 		return nil, err
 	}
 	defer func() { _ = image.Close() }()
-	return Capture(configlayout.LinuxInstallRoot, pkgmanifest.DefaultPath, resolved, image)
+	return Capture(root, pkgmanifest.DefaultPath, resolved, image)
 }
 
 // Capture binds the installation at root, described by manifestPath, after
