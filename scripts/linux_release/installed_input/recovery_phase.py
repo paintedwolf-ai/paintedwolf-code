@@ -9,6 +9,7 @@ import time
 
 from . import protocol
 from .mailbox import Mailbox
+from .case_execution import observe as observe_case_execution
 
 ABSENT, RESTORE = 'temporary-custodian-absence-v1', 'restore-custodian-baseline-v1'
 OPERATIONS = (ABSENT, RESTORE)
@@ -134,8 +135,8 @@ def guest_exchange():
     pending = box.read('recovery-request.json')
     if pending is not None: request(pending, value['execution'])
     if value['action'] == 'read':
-        observation = Mailbox(value['execution'], value['vm_id']).read_case_execution(
-            'vault', 'service-unavailable-retry')
+        observation = observe_case_execution(value['execution'], value['vm_id'],
+                                             'vault', 'service-unavailable-retry')
         result = {'request': pending, 'case_execution': observation}
     else:
         ack = value['document']

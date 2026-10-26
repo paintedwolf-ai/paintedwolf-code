@@ -127,6 +127,7 @@ class Mailbox:
         if self.read('request.json') != pending or self.read('ack.json') is not None:
             raise ValueError('private fixture publication changed before completion')
         (self.path / 'request.json').unlink()
+
     def publish_case_execution(self, capability: str, case: str):
         self.attach()
         document = {'format_version': 1, 'binding': self.execution, 'vm_id': self.vm_id,

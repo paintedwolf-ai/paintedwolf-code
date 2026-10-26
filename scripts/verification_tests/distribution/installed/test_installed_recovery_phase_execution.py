@@ -172,10 +172,8 @@ class PublicationTests(unittest.TestCase):
         box.read.side_effect=lambda name:BINDING if name=='binding.json' else None
         observed={'format_version':1,'binding':BINDING,'vm_id':'owned',
                   'capability':'vault','case':'service-unavailable-retry','phase':'executing'}
-        base=Mock();base.read_case_execution.return_value=observed
-        with patch.object(owner,'Mailbox',return_value=base) as mailbox:
+        with patch.object(owner,'observe_case_execution',return_value=observed) as mailbox:
             result=json.loads(self.read(box))
         self.assertEqual(result,{'request':None,'case_execution':observed})
-        mailbox.assert_called_once_with(BINDING,'owned')
-        base.read_case_execution.assert_called_once_with('vault','service-unavailable-retry')
+        mailbox.assert_called_once_with(BINDING,'owned','vault','service-unavailable-retry')
         box.write.assert_not_called()
