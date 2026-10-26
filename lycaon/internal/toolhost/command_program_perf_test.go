@@ -18,15 +18,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/litprefilter"
 	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/projectroot"
-	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
@@ -124,12 +123,14 @@ func newPerfFixture(tb testing.TB, catalog *sourcecatalog.Catalog) *perfFixture 
 		names = append(names, row.Tool)
 	}
 	f := &perfFixture{catalog: catalog}
-	f.Fixture = programtest.New(tb, programtest.Options{Tools: names, Scratch: true,
-		Owners: func(boundary *sandbox.Boundary, recorder *invocation.SQLRecorder) (func(tools.ToolContext, *projectpaths.ProgramPaths) (command.ProgramOwners, error), error) {
-			operations := mutation.Operations{Write: &native.WriteTool{Boundary: boundary}, Delete: &native.DeleteTool{Boundary: boundary}, Move: &native.MoveTool{Boundary: boundary},
-				Copy: &native.CopyTool{Boundary: boundary}, Mkdir: &native.MkdirTool{Boundary: boundary}, Chmod: &native.ChmodTool{Boundary: boundary},
-				Chown: &native.ChownTool{Boundary: boundary}, Times: &native.TimesTool{Boundary: boundary}, Extract: &native.ExtractArchiveTool{Boundary: boundary}}
-			return programOwnerTools{boundary: boundary, operations: operations, catalog: catalog, spills: f.wrapSpills}.compose(ProgramServices{Recorder: recorder})
+	f.Fixture = programtest.New(tb, programtest.Options{Tools: names,
+		Owners: func(ports programtest.OwnerPorts) func(tools.ToolContext, *projectpaths.ProgramPaths, *toolcontract.ProgramMemory, tooloutput.SpillAdmission) (command.ProgramOwners, error) {
+			operations := mutation.Operations{Write: &native.WriteTool{Boundary: ports.Boundary}, Delete: &native.DeleteTool{Boundary: ports.Boundary}, Move: &native.MoveTool{Boundary: ports.Boundary},
+				Copy: &native.CopyTool{Boundary: ports.Boundary}, Mkdir: &native.MkdirTool{Boundary: ports.Boundary}, Chmod: &native.ChmodTool{Boundary: ports.Boundary},
+				Chown: &native.ChownTool{Boundary: ports.Boundary}, Times: &native.TimesTool{Boundary: ports.Boundary}, Extract: &native.ExtractArchiveTool{Boundary: ports.Boundary}}
+			owners, err := programOwnerTools{boundary: ports.Boundary, operations: operations, catalog: catalog, spills: f.wrapSpills}.compose(ports.Recorder)
+			testutil.FailErr(tb, "compose program owners", err)
+			return owners
 		}})
 	return f
 }
@@ -482,7 +483,7 @@ func TestCommandProgramResourceCeilings(t *testing.T) {
 				t.Fatalf("%s leaked %d active background jobs", c.name, len(active))
 			}
 			for _, sub := range []string{"command-spills", ".painted-wolf-sort-spills"} {
-				spillsDir := filepath.Join(f.ScratchDir(), sub)
+				spillsDir := filepath.Join(f.ScratchDir, sub)
 				if entries, readErr := os.ReadDir(spillsDir); readErr == nil && len(entries) != 0 {
 					t.Fatalf("%s left %d spill entries in %s", c.name, len(entries), spillsDir)
 				}

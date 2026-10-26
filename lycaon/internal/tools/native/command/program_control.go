@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"strings"
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
@@ -24,30 +25,57 @@ type programControlDefinition struct {
 	err         error
 }
 
+type compiledControlCatalog struct {
+	direct   map[string]toolcontract.OperationDefinition
+	prefixed map[string]toolcontract.OperationDefinition
+}
+
+var compiledControlCatalogs = sync.OnceValues(func() (compiledControlCatalog, error) {
+	catalog, err := toolcontract.ReadOnlyLanguageV1()
+	if err != nil {
+		return compiledControlCatalog{}, err
+	}
+	contract, ok := toolcontract.Lookup("command")
+	if !ok {
+		return compiledControlCatalog{}, fmt.Errorf("command contract missing")
+	}
+	direct := make(map[string]toolcontract.OperationDefinition, len(catalog.Commands))
+	prefixed := make(map[string]toolcontract.OperationDefinition, len(catalog.Commands))
+	for _, spec := range catalog.Commands {
+		owned := contract
+		owned.Owner = spec.Owner
+		defDirect, err := toolcontract.NewOperationDefinition(toolcontract.OperationFacts{Identity: spec.Name, Version: 1, Contract: owned, Arguments: json.RawMessage(`{"type":"object"}`), Commands: []toolcontract.CommandSpecification{spec}, Resources: catalog.Language.Limits, ProgressGate: toolcontract.ProgressNotRequired, RejectionContract: "command", Streams: toolcontract.StreamContract{Input: "complete command input", Output: "complete command output", Error: "typed host refusal", Statuses: map[int]string{0: "completed"}}})
+		if err != nil {
+			return compiledControlCatalog{}, err
+		}
+		defPrefixed, err := toolcontract.NewOperationDefinition(toolcontract.OperationFacts{Identity: "command-host:" + spec.Name, Version: 1, Contract: owned, Arguments: json.RawMessage(`{"type":"object"}`), Commands: []toolcontract.CommandSpecification{spec}, Resources: catalog.Language.Limits, ProgressGate: toolcontract.ProgressNotRequired, RejectionContract: "command", Streams: toolcontract.StreamContract{Input: "complete command input", Output: "complete command output", Error: "typed host refusal", Statuses: map[int]string{0: "completed"}}})
+		if err != nil {
+			return compiledControlCatalog{}, err
+		}
+		direct[spec.Name] = defDirect
+		prefixed[spec.Name] = defPrefixed
+	}
+	return compiledControlCatalog{direct: direct, prefixed: prefixed}, nil
+})
+
 func (r *programRun) controlDefinitions() (map[string]toolcontract.OperationDefinition, error) {
 	r.control.once.Do(func() {
-		contract, ok := toolcontract.Lookup("command")
-		if !ok {
-			r.control.err = fmt.Errorf("command contract missing")
+		compiled, err := compiledControlCatalogs()
+		if err != nil {
+			r.control.err = err
 			return
 		}
-		r.control.definitions = map[string]toolcontract.OperationDefinition{}
+		r.control.definitions = make(map[string]toolcontract.OperationDefinition, len(r.catalog.Commands))
 		for _, spec := range r.catalog.Commands {
-			if !r.control.available[spec.Name] && !commandprogram.EvaluatorBuiltin(spec.Name) && spec.Name != "[[" {
+			first, _, _ := strings.Cut(spec.Name, " ")
+			if !r.control.available[spec.Name] && !r.control.available[first] && !commandprogram.EvaluatorBuiltin(spec.Name) && spec.Name != "[[" {
 				continue
 			}
-			owned := contract
-			owned.Owner = spec.Owner
-			identity := spec.Name
-			if r.control.taken[identity] {
-				identity = "command-host:" + spec.Name
+			if r.control.taken[spec.Name] {
+				r.control.definitions[spec.Name] = compiled.prefixed[spec.Name]
+			} else {
+				r.control.definitions[spec.Name] = compiled.direct[spec.Name]
 			}
-			definition, err := toolcontract.NewOperationDefinition(toolcontract.OperationFacts{Identity: identity, Version: 1, Contract: owned, Arguments: json.RawMessage(`{"type":"object"}`), Commands: []toolcontract.CommandSpecification{spec}, Resources: r.catalog.Language.Limits, ProgressGate: toolcontract.ProgressNotRequired, RejectionContract: "command", Streams: toolcontract.StreamContract{Input: "complete command input", Output: "complete command output", Error: "typed host refusal", Statuses: map[int]string{0: "completed"}}})
-			if err != nil {
-				r.control.err = err
-				return
-			}
-			r.control.definitions[spec.Name] = definition
 		}
 	})
 	return r.control.definitions, r.control.err
@@ -85,7 +113,7 @@ func (d *ProgramDispatcher) invokeHost(ctx context.Context, request commandprogr
 	tracker := &trackingWriter{w: nonNilWriter(streams.Error)}
 	runStreams := streams
 	runStreams.Error = tracker
-	effect := toolexecution.NativeEffect{Operation: bound, Arguments: arguments, Streams: runStreams, Inspection: d.run.capture, Stage: toolcontract.ExecutionStage{ExecutionID: request.Invocation.Identity.ExecutionID, OperationID: definition.Facts().Identity, Argv: request.Argv.Values()}, PrepareReviewed: func(context.Context, map[string]any, tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
+	effect := toolexecution.NativeEffect{Operation: bound, Arguments: arguments, Streams: runStreams, Inspection: d.run.capture, Stage: toolcontract.ExecutionStage{ExecutionID: request.Invocation.Identity.ExecutionID, OperationID: definition.ReadOnlyFacts().Identity, Argv: request.Argv.Values()}, PrepareReviewed: func(context.Context, map[string]any, tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
 		return toolexecution.PreparedNativeEffect{Operation: bound, InvokeOwner: func(ctx context.Context, tc tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 			return d.runProducer(ctx, request, streams, func(ctx context.Context, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 				tracker.w = nonNilWriter(streams.Error)
