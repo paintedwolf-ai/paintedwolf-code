@@ -15,11 +15,17 @@ func TestCommandEntrySedTextForms(t *testing.T) {
 	f := newPathsFixture(t)
 	path := filepath.Join(f.Dir, "lines.txt")
 	testutil.FailErr(t, "seed sed input", os.WriteFile(path, []byte("alpha\ngamma\n"), 0o600))
-	out, err := f.Call(t, t.Context(), "sed -i '' -e 's/alpha/ALPHA/g' -e '/gamma/d' -e '$a\\\nend' lines.txt; cat lines.txt")
+	out, err := f.Call(t, t.Context(), "sed -i '' -e 's/alpha/ALPHA/g' -e '/gamma/d' -e '1a\\\nend' lines.txt; cat lines.txt")
 	testutil.FailErr(t, "run native BSD sed form", err)
 	got := decodeProgramOutcome(t, out)
 	if got.Status != 0 || got.Stdout != "ALPHA\nend\n" {
 		t.Fatalf("sed outcome: %+v", got)
+	}
+	out, err = f.Call(t, t.Context(), "printf 'alpha\\ngamma\\n' | sed -e '/gamma/d' -e '$a\\\nend'")
+	testutil.FailErr(t, "run append after deleting addressed last line", err)
+	got = decodeProgramOutcome(t, out)
+	if got.Status != 0 || got.Stdout != "alpha\n" {
+		t.Fatalf("sed deleted-line outcome: %+v", got)
 	}
 	for _, tc := range []struct{ script, want string }{
 		{"1a next", "alpha\nnext\n"},
