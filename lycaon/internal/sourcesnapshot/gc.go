@@ -144,7 +144,7 @@ func (s *snapshotCollector) sweepStaleBuilds(ctx context.Context) error {
 				if strings.HasPrefix(row.BuildID, buildPrefix+"-") {
 					continue
 				}
-				if err := q.DeleteSourceManifestStagingPath(ctx, db.DeleteSourceManifestStagingPathParams{BuildID: row.BuildID, Path: row.Path}); err != nil {
+				if err := q.DeleteSourceManifestStagingPath(ctx, db.DeleteSourceManifestStagingPathParams(row)); err != nil {
 					return err
 				}
 			}
