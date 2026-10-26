@@ -15,12 +15,9 @@ import (
 // maxCachedTargets bounds the processes whose handles the supervisor keeps.
 const maxCachedTargets = 256
 
-// processHandles are one sandbox process's pidfd and memory, kept across its
-// notified calls: opening both again for every create cost more than the
-// create. A pidfd names one process for its whole life, so a live one cannot
-// stand for another that reused its number. A memory handle reads the address
-// space it was opened on; after an exec that space has no users and reads
-// return nothing, which reopens it.
+// processHandles retains one process's pidfd and address space across notified
+// calls. The pidfd prevents PID reuse; exec empties the retained address space,
+// so an empty memory read reopens it.
 type processHandles struct {
 	pidfd int
 	mu    sync.Mutex
