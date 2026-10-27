@@ -1,0 +1,26 @@
+name: Set up Go analysis
+description: Provision the pinned Go inputs and analyzers for source-only checks
+inputs:
+  analysis:
+    description: Analyzer set selected by the verification catalog
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@90ad2b35f69faf97585ad74d28fa006d2739b7af # v7.0.0
+      with:
+        go-version-file: lycaon/go.mod
+        cache: false
+    - uses: ./.github/actions/cache-go
+    - uses: ./.github/actions/cache-analysis-tools
+      with:
+        tools: ${{ inputs.analysis }}
+    - name: Provision Go analysis inputs
+      shell: bash
+      env:
+        TOOLS: ${{ inputs.analysis }}
+      run: |
+        ./task setup-dev -- --ci-inputs analysis
+        python3 scripts/analysis_tools.py ensure "$TOOLS"
+    - uses: ./.github/actions/cache-lint-diagnostics
+      if: inputs.analysis == 'lint' || inputs.analysis == 'all'

@@ -34,8 +34,10 @@ export function createTranscriptKeyboard(options: {
   const [focusedKey, setFocusedKey] = createSignal<string>();
   let revision = 0;
   let focusFrame = 0;
+  let navigatingMessages = false;
   onCleanup(() => { revision++; cancelAnimationFrame(focusFrame); });
   const navigate = async (direction: "first" | "last" | 1 | -1) => {
+    navigatingMessages = true;
     const token = ++revision;
     const active = document.activeElement;
     const key = active instanceof HTMLElement ? active.closest<HTMLElement>("[data-msg-id]")?.dataset.msgId ?? focusedKey() : focusedKey();
@@ -70,11 +72,34 @@ export function createTranscriptKeyboard(options: {
   };
   const run = (direction: Parameters<typeof navigate>[0]) => { void navigate(direction).catch(options.reportError); };
   createEffect(() => {
-    if (!options.active()) { revision++; return; }
+    if (!options.active()) { revision++; navigatingMessages = false; return; }
     for (const [id, direction] of [["chat.nextMessage", 1], ["chat.previousMessage", -1],
       ["chat.firstMessage", "first"], ["chat.lastMessage", "last"]] as const) {
       onCleanup(registerCommandHandler(id, () => run(direction)));
     }
+  });
+  createEffect(() => {
+    const viewport = options.viewport();
+    if (!options.active() || !viewport) return;
+    // Direct reading input releases the mode entered by message-navigation commands.
+    const read = () => {
+      navigatingMessages = false;
+      revision++;
+      cancelAnimationFrame(focusFrame);
+    };
+    const keydown = (event: KeyboardEvent) => {
+      if (["PageUp", "PageDown", "Home", "End", " "].includes(event.key)) read();
+    };
+    viewport.addEventListener("pointerdown", read, { capture: true });
+    viewport.addEventListener("touchstart", read, { passive: true });
+    viewport.addEventListener("wheel", read, { passive: true });
+    viewport.addEventListener("keydown", keydown, { capture: true });
+    onCleanup(() => {
+      viewport.removeEventListener("pointerdown", read, true);
+      viewport.removeEventListener("touchstart", read);
+      viewport.removeEventListener("wheel", read);
+      viewport.removeEventListener("keydown", keydown, true);
+    });
   });
   return {
     bindRow(element: HTMLElement, key: string) {
@@ -83,7 +108,7 @@ export function createTranscriptKeyboard(options: {
       element.addEventListener("focusin", focused);
       const keydown = (event: KeyboardEvent) => {
         if (event.target !== element || event.altKey || event.ctrlKey || event.metaKey) return;
-        if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        if (navigatingMessages && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
           event.preventDefault(); run(event.key === "ArrowDown" ? 1 : -1);
         } else if (event.key === "Escape") { event.preventDefault(); focusRegion("composer"); }
       };

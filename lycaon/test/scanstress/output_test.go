@@ -3,7 +3,7 @@
 package scanstress
 
 import (
-	"os"
+	"encoding/json"
 	"sync"
 	"testing"
 	"time"
@@ -14,22 +14,11 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// TestLargeOutputStaysBounded drives the engine at a corpus dense enough to
-// produce a large machine-readable report, and records how large the on-disk
-// report and the in-process result actually get. The driver caps console
-// capture at exec.DefaultMaxOutputBytes; the JSON report on disk and the parsed
-// findings in memory carry no cap of their own, so this measures them.
+// TestLargeOutputStaysBounded crosses console capture size with real findings.
 func TestLargeOutputStaysBounded(t *testing.T) {
-	files := corpusFiles()
-	vulns := 40
-	if v := os.Getenv("SCANSTRESS_VULNS"); v != "" {
-		var n int
-		if _, err := fmtSscan(v, &n); err == nil && n > 0 {
-			vulns = n
-		}
-	}
+	const files, vulns = 24, 100
 	scanner := newScanner(t, "stress-output", scancatalog.RuntimePolicy{})
-	project := writeCorpus(t, corpusSpec{Files: files, VulnPerFile: vulns})
+	project := writeResourceCorpus(t, files, vulns)
 	projectBytes := dirBytes(t, project)
 
 	obs := startObserver(t, 250*time.Millisecond)
@@ -46,6 +35,16 @@ func TestLargeOutputStaysBounded(t *testing.T) {
 		t.Fatalf("dense-corpus scan: %v", err)
 	}
 
+	requireResourceFindings(t, result, files, vulns)
+	requireResourceBounds(t, samples, 1)
+	encoded, err := json.Marshal(result.Findings)
+	if err != nil {
+		t.Fatalf("encode resource findings: %v", err)
+	}
+	const reportBudget = 32 << 20
+	if len(encoded) <= exec.DefaultMaxOutputBytes || len(encoded) > reportBudget || peakRunDir > reportBudget+projectBytes {
+		t.Errorf("dense output must cross console capture within its fixture budget: findings=%d console_cap=%d run_dir=%d report_budget=%d", len(encoded), exec.DefaultMaxOutputBytes, peakRunDir, reportBudget)
+	}
 	top := peak(samples)
 	reportf(t, "files=%d vulns_per_file=%d project_bytes=%d latency=%s findings=%d warnings=%d",
 		files, vulns, projectBytes, elapsed.Round(time.Millisecond), result.FindingsCount, len(result.Warnings))

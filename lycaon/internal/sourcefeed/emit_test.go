@@ -440,7 +440,7 @@ func TestHostEmitContinuesWhileWatcherIsActive(t *testing.T) {
 func waitForWatcherBarrier(t *testing.T, cap *capturePub, path string) bool {
 	t.Helper()
 	resynced := false
-	ready := testutil.WaitForNoFatal(2*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		for _, batch := range cap.batches() {
 			if batch.Resync {
 				resynced = true
@@ -454,8 +454,6 @@ func waitForWatcherBarrier(t *testing.T, cap *capturePub, path string) bool {
 		}
 		return false
 	})
-	if !ready {
-		t.Fatalf("watcher did not acknowledge %q: batches=%+v", path, cap.batches())
-	}
+
 	return resynced
 }

@@ -367,16 +367,10 @@ tasks:
     cmds:
       - python3 {{.SCRIPTS_DIR}}/test-execution.py plan -- test:contract -- {{.CLI_ARGS}}
 
-  # Confinement and gated integration tests use separate filters.
   test:seatbelt:
-    desc: 'Applied Seatbelt + Available()-gated confinement (--full, darwin)'
+    desc: 'Applied Seatbelt and confinement consumers (--full, darwin)'
     cmds:
-      - bash {{.SCRIPTS_DIR}}/go-test-digest.sh --full --name test:seatbelt-confine -- ./internal/confine/...
-      # The scope contract derives this applied-confinement inventory.
-      - bash {{.SCRIPTS_DIR}}/go-test-digest.sh --full --name test:seatbelt-gated -- ./cmd/opengrep-artifact/... ./test/contract/... ./internal/mcp/... ./internal/scan/... ./internal/hitl/... ./internal/exec/... ./internal/webresearch/... ./internal/tools/... ./internal/toolexecution/... -run '^(TestArtifactCLIRequiresConfinement|TestEngineLossFixtureProcess|TestLaunchPlanRefusesUnavailableLinuxBoundary|TestConfinementIntegrityCompositeChain|TestConfinementIntegrityConfigTokenUnreadable|TestConfinementIntegrityForeignVarFoldersWriteDenied|TestConfinementIntegrityLauncherUntamperable|TestConfinementIntegrityNoProfileStagingFile|TestNonHTTPContractContainedDerivesFromSameRequestAsProfile|TestNonHTTPContractProxyStartupFailureDeniesAndRollsBack|TestPrepareStdioCommandConfinedWhenAvailable|TestPrepareStdioCommandHandsTheServerNoCredential|TestPrepareStdioCommandRequiresRootsWhenAvailable|TestBundledScannerConfinementDeniesNetwork|TestExternalScannerWritesProjectTree|TestContainedCarriesDirectIPNarrowing|TestContainedProvenanceMatchesDefaultConfinement|TestContainedTaskOverlayStaysOutOfRoots|TestContainedWriteRootsCarryDurableGrants|TestExternalScannerLaunchIsValidWhileEnforcing|TestWebToolsUnaffectedByCommandProxyOnlyDefault|TestOpenGrepBundledAdapterFixture|TestIngesterBundledSASTProducesGuidance|TestOpenGrepScopesExcludesToProjectNotAncestorDirectories|TestOpenGrepEmbeddedSourceRecovery|TestExecutionCapabilityAsksBeforeSpawnAndConsumesOnce|TestConsumerFinalizationNativeScanner|TestInstalledScannerProductCases|TestSelectedScannerCannotQualifyAnEmptySuccessfulReport)$'
-      - |
-        bash {{.SCRIPTS_DIR}}/with-bundled-scanners.sh -- \
-          bash {{.SCRIPTS_DIR}}/go-test-digest.sh --full --tags scanstress --name test:seatbelt-scanstress -- ./test/scanstress/...
+      - python3 {{.SCRIPTS_DIR}}/test-execution.py plan -- test:seatbelt -- {{.CLI_ARGS}}
 
   test:linux:installed:
     desc: 'Admit an exact-artifact Linux installed campaign and retain its required-row checklist'
@@ -621,6 +615,7 @@ tasks:
     dir: lycaon-den/src-tauri
     sources:
       - 'src/**/*.rs'
+      - 'src/linux_install/source/**/*.py'
       - 'examples/**/*.rs'
       - 'crates/**/*.rs'
       - 'crates/**/Cargo.toml'
@@ -640,21 +635,7 @@ tasks:
       - sh: command -v cargo
         msg: cargo required — install rustup from https://rustup.rs; rust-toolchain.toml selects the version
     cmds:
-      - |
-        component='{{.CLI_ARGS}}'
-        case "$component" in
-          "")
-            bash {{.SCRIPTS_DIR}}/ensure-tauri-binaries.sh
-            cargo test --workspace --all-targets --quiet
-            ;;
-          desktop-settings-observer)
-            cargo test --package desktop-settings-observer --all-targets --quiet
-            retained="$(mktemp -d '{{.ARTIFACT_DIR}}/desktop-settings-component.XXXXXX')"
-            cp Cargo.lock "$retained/Cargo.lock"
-            echo "Desktop settings component lock retained at $retained/Cargo.lock"
-            ;;
-          *) echo "unsupported Rust test component" >&2; exit 2 ;;
-        esac
+      - python3 {{.SCRIPTS_DIR}}/ci_policy/native_verify.py den {{.CLI_ARGS}}
 
   decide:test:
     desc: Decision engine (bialy) Rust tests
@@ -670,8 +651,7 @@ tasks:
       - sh: command -v cargo
         msg: cargo required — install rustup from https://rustup.rs; rust-toolchain.toml selects the version
     cmds:
-      # Parity tests use the shipped binary's features.
-      - cargo test --all-targets --quiet --features "$(bash {{.SCRIPTS_DIR}}/decide-features.sh)"
+      - python3 {{.SCRIPTS_DIR}}/ci_policy/native_verify.py decide {{.CLI_ARGS}}
 
   den:test:coverage:
     desc: Frontend Vitest with v8 coverage report
@@ -1039,6 +1019,16 @@ tasks:
     cmds:
       - bash {{.SCRIPTS_DIR}}/stage-engine.sh --minimal {{.CLI_ARGS}}
 
+  nix:check:
+    desc: Evaluate pinned Linux Nix package and development-shell contracts
+    cmds:
+      - python3 -m scripts.linux_release.nix check {{.CLI_ARGS}}
+
+  nix:build:
+    desc: Build the native Linux Nix closure from pinned inputs
+    cmds:
+      - python3 -m scripts.linux_release.nix build {{.CLI_ARGS}}
+
   den:bundle:
     desc: 'Build desktop bundle (.dmg on macOS; .deb and .rpm on Linux) with embedded engine sidecar; signs + notarizes when APPLE_SIGNING_IDENTITY is a Developer ID'
     preconditions:
@@ -1049,7 +1039,7 @@ tasks:
       - sh: command -v cargo
         msg: cargo required — install Rust from https://rustup.rs
     cmds:
-      - bash {{.SCRIPTS_DIR}}/den-build-bundle.sh
+      - bash {{.SCRIPTS_DIR}}/den-build-bundle.sh {{.CLI_ARGS}}
 
   bundle:verify:
     desc: 'Audit a built .app/.dmg — arch slices, macOS floor, dylib paths, signing, hardened runtime, staple'
@@ -1828,17 +1818,47 @@ tasks:
       - python3 -m scripts.linux_release.candidate_diagnostics {{.CLI_ARGS}}
 
   release:live-test:
-    desc: 'Credentialed live R2 rehearsal (isolated + self-cleaning; never part of normal gates)'
-    preconditions:
-      - sh: command -v bun && command -v curl && command -v jq && command -v python3 && command -v ruby && command -v aws
-        msg: bun, curl, jq, python3, ruby, and AWS CLI v2 required for release:live-test
+    desc: 'Isolated release:live-test rehearsal; --local-nix-cache uses disposable local keys, default uses test R2 credentials'
     cmds:
-      - bash {{.SCRIPTS_DIR}}/release-r2-live-test.sh
+      - bash {{.SCRIPTS_DIR}}/release-r2-live-test.sh {{.CLI_ARGS}}
 
   release:rehearse:linux-signing:
     desc: 'Local Linux signature rehearsal with disposable keys and a tiny RPM fixture; never reads production credentials or R2 (-- --receipt PATH [--candidate-dir DIR --require-architectures x86_64,aarch64])'
     cmds:
       - python3 -m scripts.linux_release.signing_rehearsal {{.CLI_ARGS}}
+
+  release:rehearse:native-repositories:
+    desc: 'Signed apt/dnf repository fixtures through isolated package-manager roots and a local TLS origin. Pass --receipt PATH after --'
+    cmds:
+      - python3 -m scripts.linux_release.repository_rehearsal fixtures {{.CLI_ARGS}}
+
+  release:rehearse:native-repositories-r2:
+    desc: 'The native repository fixtures also published under an isolated release-system-tests/ R2 prefix with test credentials. Pass --receipt PATH after --'
+    cmds:
+      - python3 -m scripts.linux_release.repository_rehearsal r2 {{.CLI_ARGS}}
+
+  release:rehearse:native-candidates:
+    desc: 'Retain actual DEB/RPM candidates as signed repositories under disposable test trust. Pass --candidate-dir, --retain-repositories, --source-commit, --version, --channel, --release-build, --architecture and --receipt after --'
+    cmds:
+      - python3 -m scripts.linux_release.repository_rehearsal candidates {{.CLI_ARGS}}
+  release:rehearse:package-probe:
+    desc: 'Run the extracted-package engine diagnostic under an owned transient AppArmor userns profile on a disposable native Linux host (-- --tree DIR [--lease PATH --output PATH --require-baseline-refusal])'
+    cmds:
+      - python3 -m scripts.linux_release.package_probe {{.CLI_ARGS}}
+
+  release:rehearse:rpm-metadata:
+    desc: 'Build and rpmlint production RPM metadata around a tiny nonapplication payload on native Linux (-- --receipt PATH [--container])'
+    env:
+      PYTHONPATH: '{{.SCRIPTS_DIR}}'
+    cmds:
+      - python3 -m scripts.linux_release.rpm_metadata_rehearsal {{.CLI_ARGS}}
+
+  release:rehearse:pacman-construction:
+    desc: 'Build and admit a sealed tiny pacman fixture with native makepkg in the pinned official substrate (-- --receipt PATH)'
+    env:
+      PYTHONPATH: '{{.SCRIPTS_DIR}}'
+    cmds:
+      - python3 -m scripts.linux_release.arch_substrate_rehearsal {{.CLI_ARGS}}
 
   openapi:diff:
     desc: 'Report OpenAPI breaking changes against the release-review baseline'

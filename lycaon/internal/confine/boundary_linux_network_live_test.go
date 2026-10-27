@@ -295,18 +295,24 @@ func TestLinuxLocalListenGrantIsReachableFromTheHost(t *testing.T) {
 		cmd, cleanup, err := confine.Command(ctx, helperBinary(t, self), self, []string{probeTestFlag}, c)
 		testutil.FailErr(t, "confine.Command", err)
 		cmd.Env = append(probeEnv("serve"), linuxProbePathsEnv+"="+addr)
-		var out strings.Builder
+		var out terminalWatch
 		cmd.Stdout, cmd.Stderr = &out, &out
 		testutil.FailErr(t, "start server", cmd.Start())
 		cleanup()
+		out.await(t, "listening ")
 		reached := ""
-		deadline := time.Now().Add(10 * time.Second)
-		for time.Now().Before(deadline) && reached == "" {
-			conn, err := net.DialTimeout("tcp", addr, time.Second)
-			if err != nil {
-				time.Sleep(100 * time.Millisecond)
-				continue
+		if granted {
+			for t.Context().Err() == nil && reached == "" {
+				conn, err := net.DialTimeout("tcp", addr, time.Second)
+				if err != nil {
+					time.Sleep(100 * time.Millisecond)
+					continue
+				}
+				body, _ := io.ReadAll(conn)
+				_ = conn.Close()
+				reached = string(body)
 			}
+		} else if conn, err := net.DialTimeout("tcp", addr, 200*time.Millisecond); err == nil {
 			body, _ := io.ReadAll(conn)
 			_ = conn.Close()
 			reached = string(body)
@@ -315,10 +321,10 @@ func TestLinuxLocalListenGrantIsReachableFromTheHost(t *testing.T) {
 		_ = cmd.Wait()
 		cancel()
 		if granted && reached != "served" {
-			t.Fatalf("granted listener not reachable from the host (got %q):\n%s", reached, out.String())
+			t.Fatalf("granted listener not reachable from the host (got %q):\n%s", reached, out.text())
 		}
 		if !granted && reached != "" {
-			t.Fatalf("ungranted listener reachable from the host (got %q):\n%s", reached, out.String())
+			t.Fatalf("ungranted listener reachable from the host (got %q):\n%s", reached, out.text())
 		}
 	}
 }
@@ -467,14 +473,13 @@ func TestLinuxSupervisorLossEndsTheSandbox(t *testing.T) {
 	time.Sleep(time.Second)
 	testutil.FailErr(t, "kill outer helper", cmd.Process.Kill())
 	_ = cmd.Wait()
-	deadline := time.Now().Add(10 * time.Second)
 	for {
 		survivors, err := lease.Survivors()
 		testutil.FailErr(t, "survivors", err)
 		if len(survivors) == 0 {
 			return
 		}
-		if time.Now().After(deadline) {
+		if t.Context().Err() != nil {
 			t.Fatalf("processes outlived the killed supervisor: %v", survivors)
 		}
 		time.Sleep(100 * time.Millisecond)
