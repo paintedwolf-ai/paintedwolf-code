@@ -69,6 +69,7 @@ func EnterDesktop() error {
 func enterDesktop(image, frame, origin *os.File, brokerFD int, lifetime, gate *os.File) error {
 	// Keep the seal, verification, Landlock restriction and execve on one OS thread.
 	runtime.LockOSThread()
+	defer runtime.KeepAlive(lifetime)
 	defer func() { _ = origin.Close() }()
 	defer func() { _ = frame.Close() }()
 	defer func() { _ = image.Close() }()
