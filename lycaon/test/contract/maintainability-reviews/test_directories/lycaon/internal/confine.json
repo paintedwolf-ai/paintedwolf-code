@@ -2,16 +2,18 @@
   "category": "test_directories",
   "artifact": "lycaon/internal/confine",
   "kind": "test_suite",
-  "workstream": "linux-private-filesystem-mounts",
+  "workstream": "linux-future-path-floors",
   "disposition": "retain",
-  "reason": "Retain the current 59-member platform confinement test suite: shared admission and write-floor contracts remain beside real kernel, filesystem, socket and helper-boundary controls. The new file-mask suite is a cohesive applied older-kernel regression with positive allowed I/O and two-file read/write denials, including read-only temporary roots. Moving it solely to reduce membership would expose internal security setup or separate the real boundary from its existing fixture. No production authority owner or public test API is added.",
-  "reviewed_commit": "95cc72c3e76ba49fc96cb81f09648a771488869a",
-  "ceiling": 59,
+  "reason": "Retain the 61-member platform confinement test suite: shared admission and write-floor contracts remain beside real kernel, filesystem, socket and helper-boundary controls. The file-mask, shared-memory, and floors suites apply the real boundary to older-kernel masks, 64 MiB private shared-memory capacity, and protected names absent at launch, parent renames, approved grants and absent read-denied paths through the shared probe process and live-boundary fixtures; moving these suites solely to reduce membership would expose internal security setup or separate the real boundary from its existing fixture. No production authority owner or public test API is added.",
+  "reviewed_commit": "f992b0ae28c8d2b787226a8410f21c13991d7004",
+  "ceiling": 61,
   "boundaries": {
-    "lycaon/internal/confine/host_capability_test.go": "9c338afb37c750fee0ee1ab249d8363569571c1b9d78fe6ded8b305fba305441",
-    "lycaon/internal/confine/policy_write_grants_test.go": "f431e10ffbd201a31a4681a07b0d34d27bf56cd6d5d6528d12458d95cff9ff81",
+    "lycaon/internal/confine/boundary_linux_file_masks_live_test.go": "904e4909c99a9ea924edd517ba71c035807dc2f15c5caec9d451fb7d25639126",
+    "lycaon/internal/confine/boundary_linux_floors_live_test.go": "807c1fa96d2f7d07c2135cf273f1bbddf086399c664485b3b58bfd66722f7712",
+    "lycaon/internal/confine/boundary_linux_shm_live_test.go": "f9f20c77850bbfa86c205ce0b938711edbec0462776a74861da22a316f3f1924",
     "lycaon/internal/confine/execution_capability_test.go": "5013f76e840641d5daa5528a63545d249425d7bf4c77356090d9dba54b2d2dad",
-    "lycaon/internal/confine/boundary_linux_file_masks_live_test.go": "904e4909c99a9ea924edd517ba71c035807dc2f15c5caec9d451fb7d25639126"
+    "lycaon/internal/confine/host_capability_test.go": "9c338afb37c750fee0ee1ab249d8363569571c1b9d78fe6ded8b305fba305441",
+    "lycaon/internal/confine/policy_write_grants_test.go": "f431e10ffbd201a31a4681a07b0d34d27bf56cd6d5d6528d12458d95cff9ff81"
   },
-  "reviewed_shape": "bf1548fd76b2292a3c5fcfa177a4201e3773595a91745ac6f74294d8db6f3081"
+  "reviewed_shape": "a91ea04a0c2047e476dccd75e10535481578e04f112a17ce1d76422c62ba6fde"
 }

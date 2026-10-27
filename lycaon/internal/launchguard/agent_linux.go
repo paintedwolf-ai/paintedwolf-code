@@ -34,6 +34,10 @@ const (
 // running generation at the logical installation root. Started as uid 0 inside
 // the module view, it runs the module-view mount watcher instead.
 func RunBrokerAgent() error {
+	// Reject unrelated runtime descriptors before taking ownership of the inherited frame.
+	if seals, err := unix.FcntlInt(agentSpecFD, unix.F_GET_SEALS, 0); err != nil || seals&entrySeals != entrySeals {
+		return errors.New("entry specification is not sealed")
+	}
 	if err := unix.Prctl(unix.PR_SET_DUMPABLE, 0, 0, 0, 0); err != nil {
 		return err
 	}

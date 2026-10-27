@@ -15,7 +15,7 @@ import (
 // WritePolicy atomically selects a verified generation. The installer calls it
 // while retaining its full-payload verification and shared generation lock.
 func WritePolicy(policy GenerationPolicy) error {
-	if uint32(os.Geteuid()) != trustedOwner {
+	if os.Geteuid() != int(trustedOwner) {
 		return errors.New("launch policy selection requires administrator authority")
 	}
 	raw, err := json.Marshal(policy)

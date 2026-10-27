@@ -318,7 +318,7 @@ func installLaunchFixture(t *testing.T) launchFixture {
 	testutil.FailErr(t, "fixture nonce", err)
 	// The fixture's whole ancestry from "/" must be root-owned and neither
 	// sticky nor group/world-writable.
-	dir := filepath.Join("/opt", "pw-protected-launch-"+hex.EncodeToString(nonce[:]))
+	dir := filepath.Join("/var/lib", "pw-protected-launch-"+hex.EncodeToString(nonce[:]))
 	build := t.TempDir()
 	module := "github.com/lycaon/lycaon/internal/launchguard"
 	layout := fmt.Sprintf("-X %s.policyPath=%s -X %s.lockDirectory=%s", module, filepath.Join(dir, "launch.json"), module, filepath.Join(dir, "locks"))

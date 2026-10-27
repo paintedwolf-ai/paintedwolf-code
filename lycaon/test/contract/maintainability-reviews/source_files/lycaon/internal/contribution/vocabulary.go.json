@@ -1,0 +1,14 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/contribution/vocabulary.go",
+  "kind": "module",
+  "workstream": "linux-shortcut-reservations",
+  "disposition": "retain",
+  "reason": "Retain the 381-line typed contribution vocabulary as one compiler and generated-facts authority. Linux OS reservations extend its existing declarative chord catalog without new effects, imports, or permission authority. Splitting this small catalog would separate validation from the facts generated for Den. The focused contracts verify Linux defaults and reservations, preserved macOS and Windows defaults, valid overrides, and actual dispatch. The measured ceiling allows no growth; reconsider this boundary when its structure changes.",
+  "reviewed_commit": "6ada07491c55c180617bbbdc549b1f54d7693425",
+  "ceiling": 381,
+  "boundaries": {
+    "lycaon/internal/contribution/linux_shortcuts_test.go": "48ec90ed2a3a57e737f86ba0c53f0465ed6a46ced21da06e44bf8a595d394c53",
+    "lycaon-den/src/shortcuts/linux-defaults.test.ts": "55a3332104d94df38946798a5ab4647199bba7d2842e0ad8ce5bc653b16713c5"
+  }
+}

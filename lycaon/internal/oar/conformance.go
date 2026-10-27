@@ -259,7 +259,7 @@ func factsToContext(facts map[string]any) *GuardContext {
 	for k, v := range facts {
 		gc.Published[k] = v
 		if !strings.HasPrefix(k, oarcopy.HostFactNamespace+".") {
-			if factTiers()[k] == FactTierHost {
+			if bareFactTiers[k] == FactTierHost {
 				gc.Published[publishedName(k, FactTierHost)] = v
 			}
 		}
