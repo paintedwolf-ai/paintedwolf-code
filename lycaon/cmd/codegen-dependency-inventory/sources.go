@@ -8,9 +8,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// sourceRef locates one pinned or upstream value. Policy files write it as a
-// one-line spec such as "shell scripts/lint-go.sh GOLANGCI_VERSION", or as
-// {label, from} when the cell needs a label.
 type sourceRef struct {
 	Kind    string
 	Label   string
@@ -31,8 +28,7 @@ const (
 	kindCrate    = "crate"
 )
 
-// sourceGrammar lists each kind's positional arguments; a trailing "?" marks
-// an optional one.
+// A trailing "?" marks an optional positional argument.
 var sourceGrammar = map[string][]string{
 	"file":               {"file"},
 	"shell":              {"file", "name"},

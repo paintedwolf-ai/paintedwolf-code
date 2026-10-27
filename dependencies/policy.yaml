@@ -16,13 +16,14 @@ quadrants:
     Opportunistic maintenance during routine windows.
 
 dependabot:
-  interval: weekly
-  cooldown_days: 3
+  interval: monthly
+  cooldown_days: 7
   extra:
     # Workflows live at the root; composite actions each have their own directory.
     - ecosystem: github-actions
       directories: [/, /.github/actions/*]
       group: github-actions
+      update_types: [major, minor, patch]
 
 # Render order.
 sections:

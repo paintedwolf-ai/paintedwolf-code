@@ -12,18 +12,16 @@ import (
 	"golang.org/x/mod/modfile"
 )
 
-// row is one rendered inventory entry.
 type row struct {
 	key        string // annotation key within its section
 	name       string // markdown, with qualifiers
-	dependency string // Dependabot dependency name; empty when Dependabot does not manage it
+	dependency string // empty when unmanaged by Dependabot
 	pins       []value
 	pinNote    string
 	upstream   []upstreamRef
 	judgement
 }
 
-// upstreamRef names the snapshot entry that holds one upstream value.
 type upstreamRef struct {
 	key    string
 	label  string
@@ -261,7 +259,6 @@ func sortRows(rows []row) []row {
 	return rows
 }
 
-// manifestDirectory is the Dependabot directory for a manifest path.
 func manifestDirectory(manifestPath string) string {
 	dir := path.Dir(manifestPath)
 	if dir == "." {

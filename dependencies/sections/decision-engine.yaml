@@ -7,7 +7,7 @@ manifest:
   kind: cargo
   path: lycaon/internal/decide/native/Cargo.toml
   lock: lycaon/internal/decide/native/Cargo.lock
-  dependabot_group: bialy-dependencies
+  dependabot_group: cargo-dependencies
 packages:
   candle-core:
     urgency: moderate

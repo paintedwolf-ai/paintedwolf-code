@@ -33,7 +33,7 @@ func TestGitHubActionsAreCommitPinnedAndMaintained(t *testing.T) {
 		}
 	}
 	dependabot := contractcheck.ReadRepoFile(t, root, ".github/dependabot.yml")
-	for _, needle := range []string{"package-ecosystem: github-actions", "interval: weekly"} {
+	for _, needle := range []string{"package-ecosystem: github-actions", "interval: monthly"} {
 		if !strings.Contains(dependabot, needle) {
 			t.Fatalf("dependabot.yml missing %q", needle)
 		}

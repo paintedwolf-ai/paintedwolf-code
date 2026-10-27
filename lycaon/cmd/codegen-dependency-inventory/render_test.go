@@ -12,17 +12,41 @@ import (
 
 func TestDependabotSeparatesMajorsAndPreservesHolds(t *testing.T) {
 	t.Parallel()
-	p := &policy{Dependabot: dependabotConfig{Interval: "weekly", CooldownDays: 3}}
+	p := &policy{Dependabot: dependabotConfig{
+		Interval:     "monthly",
+		CooldownDays: 7,
+		Extra: []dependabotEntry{{
+			Ecosystem:   "github-actions",
+			Directories: []string{"/"},
+			Group:       "github-actions",
+			UpdateTypes: []string{"major", "minor", "patch"},
+		}},
+	}}
 	sections := []section{{
 		cfg: &sectionConfig{Manifest: &manifestConfig{
 			Kind: manifestCargo, Path: "engine/Cargo.toml", DependabotGroup: "engine-dependencies",
 		}},
 		rows: []row{{dependency: "held", judgement: judgement{Updates: updatesHold}}},
+	}, {
+		cfg: &sectionConfig{Manifest: &manifestConfig{
+			Kind: manifestCargo, Path: "core/Cargo.toml", DependabotGroup: "engine-dependencies",
+		}},
+		rows: []row{
+			{dependency: "held", judgement: judgement{Updates: updatesHold}},
+			{dependency: "pinned-major", judgement: judgement{Updates: updatesNoMajor}},
+		},
 	}}
 	var document struct {
 		Updates []struct {
+			Ecosystem   string   `yaml:"package-ecosystem"`
 			Directories []string `yaml:"directories"`
-			Groups      map[string]struct {
+			Schedule    struct {
+				Interval string `yaml:"interval"`
+			} `yaml:"schedule"`
+			Cooldown struct {
+				DefaultDays int `yaml:"default-days"`
+			} `yaml:"cooldown"`
+			Groups map[string]struct {
 				AppliesTo   string   `yaml:"applies-to"`
 				Patterns    []string `yaml:"patterns"`
 				UpdateTypes []string `yaml:"update-types"`
@@ -33,17 +57,27 @@ func TestDependabotSeparatesMajorsAndPreservesHolds(t *testing.T) {
 		} `yaml:"updates"`
 	}
 	testutil.FailErr(t, "decode generated Dependabot config", yaml.Unmarshal(renderDependabot(p, sections), &document))
-	if len(document.Updates) != 1 || !reflect.DeepEqual(document.Updates[0].Directories, []string{"/engine"}) {
+	if len(document.Updates) != 2 {
 		t.Fatalf("unexpected ecosystem entries: %+v", document.Updates)
 	}
-	u := document.Updates[0]
+	actions := document.Updates[0].Groups["github-actions"]
+	if !reflect.DeepEqual(actions.UpdateTypes, []string{"major", "minor", "patch"}) {
+		t.Errorf("actions group update-types = %v", actions.UpdateTypes)
+	}
+	u := document.Updates[1]
+	if !reflect.DeepEqual(u.Directories, []string{"/engine", "/core"}) {
+		t.Fatalf("coalesced directories = %v", u.Directories)
+	}
+	if u.Schedule.Interval != "monthly" || u.Cooldown.DefaultDays != 7 {
+		t.Errorf("unexpected schedule/cooldown: %+v %+v", u.Schedule, u.Cooldown)
+	}
 	g := u.Groups["engine-dependencies"]
 	if g.AppliesTo != "version-updates" || !reflect.DeepEqual(g.Patterns, []string{"*"}) ||
 		!reflect.DeepEqual(g.UpdateTypes, []string{"minor", "patch"}) {
 		t.Errorf("routine group includes unintended updates: %+v", g)
 	}
-	if len(u.Ignore) != 1 || u.Ignore[0].Name != "held" {
-		t.Errorf("held dependency missing: %+v", u.Ignore)
+	if len(u.Ignore) != 2 || u.Ignore[0].Name != "held" || u.Ignore[1].Name != "pinned-major" {
+		t.Errorf("ignored dependencies = %+v", u.Ignore)
 	}
 }
 

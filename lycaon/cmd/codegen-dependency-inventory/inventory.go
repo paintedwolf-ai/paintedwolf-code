@@ -11,7 +11,6 @@ type section struct {
 	rows []row
 }
 
-// collect resolves every section's rows from the tree and applies judgement.
 func collect(repo string, p *policy) ([]section, error) {
 	reader := newPinReader(repo)
 	var sections []section
@@ -42,8 +41,7 @@ func collect(repo string, p *policy) ([]section, error) {
 	return sections, errors.Join(errs...)
 }
 
-// annotate attaches each package judgement to its discovered row and rejects
-// judgement for packages the manifest no longer lists.
+// annotate applies package judgements and rejects entries absent from the manifest.
 func annotate(sc *sectionConfig, rows []row) error {
 	judged := map[string]judgement{}
 	for name, j := range sc.Packages {
@@ -89,7 +87,7 @@ func declaredRow(p *pinReader, rc rowConfig) (row, error) {
 	return rw, errors.Join(errs...)
 }
 
-// comparablePin is the pin an upstream value at index i is measured against.
+// comparablePin returns the pin compared against upstream index i, falling back to the first pin.
 func (r row) comparablePin(i int) string {
 	switch {
 	case i < len(r.pins):
@@ -100,7 +98,6 @@ func (r row) comparablePin(i int) string {
 	return ""
 }
 
-// behind lists pinned→upstream pairs where upstream is a newer release.
 func (r row) behind(snap snapshot) [][2]string {
 	var out [][2]string
 	for i, ref := range r.upstream {

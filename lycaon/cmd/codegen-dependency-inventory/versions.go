@@ -13,14 +13,11 @@ var (
 	shortCommitPattern = regexp.MustCompile(`^[0-9a-f]{7,40}$`)
 )
 
-// versionLike reports whether s is a release number rather than a
-// range, commit, or build id.
 func versionLike(s string) bool {
 	return versionLikePattern.MatchString(s)
 }
 
-// compareVersions orders two release strings by their numeric components, so
-// four-part versions and build suffixes compare too.
+// compareVersions compares numeric runs across release strings.
 func compareVersions(a, b string) int {
 	x, y := digitRuns.FindAllString(a, -1), digitRuns.FindAllString(b, -1)
 	for i := 0; i < len(x) || i < len(y); i++ {
@@ -51,7 +48,6 @@ func sameVersion(a, b string) bool {
 		(strings.HasPrefix(a, b) || strings.HasPrefix(b, a)))
 }
 
-// display shortens full commit hashes.
 func display(s string) string {
 	if commitPattern.MatchString(s) {
 		return s[:10]
@@ -59,9 +55,7 @@ func display(s string) string {
 	return s
 }
 
-// cargoMatches reports whether version satisfies a Cargo requirement such as
-// "2", "^0.13", "~1.2", "=0.27.4", ">=1", or "*". Only the first comparator
-// of a compound requirement is considered.
+// cargoMatches evaluates the first comparator of a Cargo version requirement.
 func cargoMatches(req, version string) bool {
 	req = strings.TrimSpace(strings.SplitN(req, ",", 2)[0])
 	if req == "" || req == "*" {

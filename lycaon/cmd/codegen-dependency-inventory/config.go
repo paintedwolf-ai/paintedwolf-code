@@ -12,8 +12,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// policy is the hand-authored dependency policy: policy.yaml, the prose
-// Markdown beside it, and one file per section under sections/.
 type policy struct {
 	Title      string           `yaml:"title"`
 	Quadrants  quadrantStances  `yaml:"quadrants"`
@@ -37,11 +35,11 @@ type dependabotConfig struct {
 	Extra        []dependabotEntry `yaml:"extra"`
 }
 
-// dependabotEntry is one ecosystem block that no manifest section produces.
 type dependabotEntry struct {
 	Ecosystem   string   `yaml:"ecosystem"`
 	Directories []string `yaml:"directories"`
 	Group       string   `yaml:"group"`
+	UpdateTypes []string `yaml:"update_types"`
 }
 
 type sectionConfig struct {
@@ -69,7 +67,6 @@ type groupConfig struct {
 	Rows     []rowConfig          `yaml:"rows"`
 }
 
-// judgement is everything a person decides about an entry; every field may be blank.
 type judgement struct {
 	Urgency        string `yaml:"urgency"`
 	UrgencyReason  string `yaml:"urgency_reason"`
@@ -200,7 +197,6 @@ func (j judgement) validate(where string, dependabot bool) error {
 	return errors.Join(errs...)
 }
 
-// notes renders the reasons and free notes as one table cell's prose.
 func (j judgement) notes() string {
 	var parts []string
 	if r := strings.TrimSpace(j.UrgencyReason); r != "" {

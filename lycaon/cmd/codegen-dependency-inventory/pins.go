@@ -17,13 +17,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// value is one labeled cell entry.
 type value struct {
 	label string
 	text  string
 }
 
-// pinReader resolves pin sources against one checkout, caching parsed files.
 type pinReader struct {
 	repo  string
 	locks map[string]map[string][]string
@@ -223,7 +221,6 @@ func (p *pinReader) goMod(ref sourceRef) (string, error) {
 	return "", fmt.Errorf("%s does not require %s", ref.File, ref.Name)
 }
 
-// bunLock maps each hoisted package name to its resolved version.
 func (p *pinReader) bunLock(rel string) (map[string][]string, error) {
 	if lock, ok := p.locks[rel]; ok {
 		return lock, nil
@@ -290,7 +287,6 @@ func stripTrailingCommas(data []byte) []byte {
 	return out
 }
 
-// cargoLock maps each crate name to every locked version.
 func (p *pinReader) cargoLock(rel string) (map[string][]string, error) {
 	if lock, ok := p.locks[rel]; ok {
 		return lock, nil

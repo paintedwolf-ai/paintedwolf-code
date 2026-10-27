@@ -20,7 +20,6 @@ import (
 	"golang.org/x/mod/module"
 )
 
-// snapshot is the checked-in record of upstream versions.
 type snapshot struct {
 	Fetched  string            `json:"fetched"`
 	Versions map[string]string `json:"versions"`
@@ -53,8 +52,7 @@ type fetcher struct {
 	token  string
 }
 
-// refreshSnapshot queries every upstream source. Any failure aborts the
-// refresh so a partial snapshot is never written.
+// refreshSnapshot fails if any source fails so partial snapshots are never written.
 func refreshSnapshot(ctx context.Context, sections []section, now time.Time) (snapshot, error) {
 	type job struct {
 		ref upstreamRef
@@ -287,7 +285,6 @@ func (f fetcher) goRelease(ctx context.Context, track, pin string) (string, erro
 	return best, nil
 }
 
-// nodeRelease returns the newest release in the pinned major line.
 func (f fetcher) nodeRelease(ctx context.Context, pin string) (string, error) {
 	var releases []struct{ Version string }
 	if err := f.getJSON(ctx, "https://nodejs.org/dist/index.json", &releases); err != nil {

@@ -15,9 +15,11 @@ dependencies or this directory change on main, and refreshes upstream versions w
 `./task check` runs `codegen:dependency-inventory:check`, which fails only when this policy
 no longer matches the manifests or `.github/dependabot.yml` is stale. Run
 `./task codegen:dependency-inventory` after editing the policy so `dependabot.yml` follows.
-The default group includes minor and patch version updates. Majors and security updates
-remain separate PRs; existing package holds still apply. Registry freshness is distinct from
-vulnerability scanning; see the inventory's release-review runbook.
+Manifest sections sharing a `kind` and `dependabot_group` coalesce into one ecosystem block.
+The default group includes minor and patch version updates (`extra` entries may override
+`update_types`). Majors and security updates remain separate PRs; existing package holds still
+apply. Registry freshness is distinct from vulnerability scanning; see the inventory's
+release-review runbook.
 
 When adding a manifest, add its section to `policy.yaml` and its manifest and lockfile paths
 to `.github/workflows/dependency-inventory.yml`. Add each declared pin source there too, so
