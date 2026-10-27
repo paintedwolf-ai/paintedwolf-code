@@ -42,8 +42,14 @@ func TestStartupFailureSeparatesCustodyFromCorruption(t *testing.T) {
 		credentialstore.ErrVaultCorrupt:         "credential_vault_corrupt",
 		errors.New("unclassified"):              "build_failed",
 	} {
-		if got := startupFailureCode(fmt.Errorf("initialize credentials: %w", err)); got != want {
-			t.Errorf("%v: got %q, want %q", err, got, want)
+		for _, wrapped := range []error{
+			err,
+			fmt.Errorf("initialize credentials: %w", err),
+			fmt.Errorf("initialize credentials: %w", errors.Join(err, errors.New("custodian response"))),
+		} {
+			if got := startupFailureCode(wrapped); got != want {
+				t.Errorf("%v: got %q, want %q", wrapped, got, want)
+			}
 		}
 	}
 }
