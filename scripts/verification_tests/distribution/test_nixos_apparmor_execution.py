@@ -1,10 +1,15 @@
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
+import shutil
+import subprocess
+import sys
 import tempfile
 import unittest
 
+from linux_release import nix_apparmor
 
 SOURCE = Path(__file__).resolve().parents[3] / "packaging/nix/apparmor.py"
 SPEC = importlib.util.spec_from_file_location("selected_apparmor", SOURCE)
@@ -104,3 +109,27 @@ class SelectedEngineAppArmorTests(unittest.TestCase):
         for value in ("", "/x\ny", "/x\0y"):
             with self.assertRaises(ValueError):
                 APPARMOR.literal(value)
+
+    def test_both_consumers_use_the_same_literal_contract(self):
+        path = '/nix/store/a"b\\c*d?e[f]g{h}i^j/bin/pw'
+        expected = '"/nix/store/a\\"b\\\\c\\*d\\?e\\[f\\]g\\{h\\}i\\^j/bin/pw"'
+        for encoder in (APPARMOR.literal, nix_apparmor.literal):
+            self.assertEqual(encoder(path), expected)
+            for character in [*(chr(value) for value in range(32)), chr(127)]:
+                with self.subTest(character=ord(character)), self.assertRaises(ValueError):
+                    encoder('/nix/store/a' + character + '/bin/pw')
+
+    def test_standalone_renderer_needs_only_the_staged_shared_grammar(self):
+        with tempfile.TemporaryDirectory() as directory:
+            staged = Path(directory)
+            grammar = staged / 'modules/linux_release'
+            grammar.mkdir(parents=True)
+            shutil.copyfile(SOURCE.parents[1].parent / 'scripts/linux_release/apparmor_attachment.py',
+                            grammar / 'apparmor_attachment.py')
+            renderer = staged / 'renderer.py'
+            shutil.copyfile(SOURCE, renderer)
+            result = subprocess.run([sys.executable, str(renderer), str(self.package)], cwd=staged,
+                env={'PATH': os.defpath, 'PYTHONPATH': str(grammar.parent)},
+                capture_output=True, text=True, timeout=10)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout, 'abi <abi/4.0>,\n' + APPARMOR.profile(self.package) + '\n')
