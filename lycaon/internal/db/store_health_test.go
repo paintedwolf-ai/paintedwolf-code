@@ -12,7 +12,6 @@ import (
 	"strings"
 	"syscall"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -117,7 +116,7 @@ func TestIntegrityQuarantineNotifiesBeforeActiveTransactionDrains(t *testing.T) 
 	go func() { done <- AuditIntegrity(t.Context(), store) }()
 	select {
 	case <-store.Failed():
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("active transaction blocked the failure signal")
 	}
 	testutil.FailErr(t, "drain active transaction", tx.Rollback())
@@ -126,7 +125,7 @@ func TestIntegrityQuarantineNotifiesBeforeActiveTransactionDrains(t *testing.T) 
 		if !errors.Is(err, ErrStoreIncompatible) {
 			t.Fatalf("audit = %v", err)
 		}
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("quarantine did not finish draining")
 	}
 }
@@ -377,5 +376,37 @@ func TestQuarantinePublicationFailureStillStopsWrites(t *testing.T) {
 	}
 	if _, err := store.ExecContext(t.Context(), `INSERT INTO store_meta(key,value) VALUES('unsafe','unsafe')`); !errors.Is(err, ErrStoreIncompatible) {
 		t.Fatalf("write after failure=%v", err)
+	}
+}
+
+func TestConfirmedAuditDamageSurvivesCancellation(t *testing.T) {
+	path, store := uncleanAuditStore(t)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	damage := storeIncompatible(RecoveryReasonIntegrityFailed, SchemaVersion, "confirmed before cancellation")
+	if err := finishIntegrityAudit(ctx, store, damage); !errors.Is(err, ErrStoreIncompatible) {
+		t.Fatalf("cancellation replaced confirmed damage: %v", err)
+	}
+	if store.Failure() == nil {
+		t.Fatal("confirmed damage did not quarantine writes")
+	}
+	testutil.FailErr(t, "close quarantined store", store.Close())
+	if _, err := Open(path); !errors.Is(err, ErrStoreIncompatible) {
+		t.Fatalf("restart lost confirmed damage: %v", err)
+	}
+}
+
+func TestAuditStampClearFailureDoesNotReportCompletion(t *testing.T) {
+	_, store := uncleanAuditStore(t)
+	_, err := store.writer.Exec(`PRAGMA query_only=ON`)
+	testutil.FailErr(t, "refuse audit stamp writes", err)
+	defer func() { _, _ = store.writer.Exec(`PRAGMA query_only=OFF`) }()
+	if err := finishIntegrityAudit(t.Context(), store, nil); err == nil || errors.Is(err, ErrStoreIncompatible) {
+		t.Fatalf("stamp failure must remain retryable: %v", err)
+	}
+	state, err := integrityAuditState(t.Context(), store.reader)
+	testutil.FailErr(t, "read unfinished audit marker", err)
+	if state != integrityAuditPendingValue {
+		t.Fatalf("unfinished audit marker=%q", state)
 	}
 }

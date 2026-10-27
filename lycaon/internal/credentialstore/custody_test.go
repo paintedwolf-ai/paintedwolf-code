@@ -14,4 +14,7 @@ func TestIsolatedProcessesReportDevelopmentCustody(t *testing.T) {
 	if report.Mode != CustodyDevelopment || report.ServiceVerified {
 		t.Fatalf("report = %+v", report)
 	}
+	if (unavailableIdentityProvider{}).Describe() == "" {
+		t.Fatal("unavailable identity provider has no description")
+	}
 }

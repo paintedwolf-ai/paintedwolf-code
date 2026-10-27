@@ -15,6 +15,8 @@ pub enum InstallSource {
     SystemPackage,
     /// A Linux build no package owns: a developer or scratch installation.
     Unpackaged,
+    /// The Linux package database did not answer whether a package owns this build.
+    PackageOwnershipUnknown,
     Unknown,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -239,6 +241,7 @@ impl NativeUpdateState {
                             "package_managed"
                         }
                         InstallSource::Unpackaged => "unpackaged_installation",
+                        InstallSource::PackageOwnershipUnknown => "package_ownership_unknown",
                         InstallSource::DirectDownload | InstallSource::Unknown => {
                             "install_source_unavailable"
                         }
@@ -292,6 +295,7 @@ mod availability_tests {
             InstallSource::HomebrewCask,
             InstallSource::SystemPackage,
             InstallSource::Unpackaged,
+            InstallSource::PackageOwnershipUnknown,
             InstallSource::Unknown,
         ] {
             let mut state = NativeUpdateState::new("1.0.2".into(), UpdateChannel::Stable, source);
@@ -327,5 +331,14 @@ mod availability_tests {
         let value = serde_json::to_value(&state).unwrap();
         assert_eq!(value["install_source"], "unpackaged");
         assert!(value["package"].is_null());
+        state.install_source = InstallSource::PackageOwnershipUnknown;
+        state.refresh_capabilities(true);
+        assert_eq!(
+            state.capabilities.blocked_reason.as_deref(),
+            Some("package_ownership_unknown")
+        );
+        assert!(state.capabilities.can_check);
+        assert!(!state.capabilities.can_download);
+        assert_eq!(serde_json::to_value(&state).unwrap()["install_source"], "package_ownership_unknown");
     }
 }

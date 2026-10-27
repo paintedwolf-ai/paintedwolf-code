@@ -9,7 +9,7 @@ import {
   serializeSequence,
 } from "./chord.ts";
 import {
-  DEFAULT_NAV_LEADER_CHORD,
+  DEFAULT_NAV_LEADER_CHORDS,
   detectSequenceConflicts,
   leaderCollidesWithCatalog,
   leaderIsPrefix,
@@ -192,7 +192,7 @@ describe("resolveKeymap sequences", () => {
 
   it("drops a corrupted Shift-only leader and retains the safe default", () => {
     const map = resolveKeymap({ [NAV_LEADER_ID]: "Shift+;" }, source("macos"));
-    expect(map.leaderChord).toBe(DEFAULT_NAV_LEADER_CHORD);
+    expect(map.leaderChord).toBe(DEFAULT_NAV_LEADER_CHORDS.macos);
     expect(map.byCommand.get(GO_CHAT)).toEqual(["Mod+; C"]);
   });
 
