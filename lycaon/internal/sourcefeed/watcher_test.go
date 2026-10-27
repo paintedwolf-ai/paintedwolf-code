@@ -34,7 +34,7 @@ func TestProjectWatchOverflowPublishesOneInvalidation(t *testing.T) {
 	for i := 0; i <= maxChangesPerEvent; i++ {
 		w.changes.queue(t.Context(), root, fmt.Sprintf("churn/file-%d.txt", i))
 	}
-	testutil.WaitFor(t, time.Second, func() bool { return len(cap.batches()) == 1 })
+	testutil.WaitFor(t, func() bool { return len(cap.batches()) == 1 })
 	batch := cap.batches()[0]
 	if !batch.Resync || len(batch.Changes) != 0 {
 		t.Fatalf("overflow published a path list: resync=%t changes=%d", batch.Resync, len(batch.Changes))
@@ -194,7 +194,7 @@ func TestProjectWatchPublishesWatcherResyncWithoutPaths(t *testing.T) {
 		ProjectDir: root, Kind: repochange.WorktreeChanged,
 		Paths: []string{"."}, Source: repochange.SourceWatcher,
 	})
-	testutil.WaitFor(t, time.Second, func() bool { return len(cap.batches()) == 1 })
+	testutil.WaitFor(t, func() bool { return len(cap.batches()) == 1 })
 	batches := cap.batches()
 	if !batches[0].Resync || len(batches[0].Changes) != 0 {
 		t.Fatalf("watcher resync event = %+v", batches[0])
@@ -212,7 +212,7 @@ func TestProjectWatchIndexChangeRefreshesWithoutFileOrHeadEvents(t *testing.T) {
 	w.changes = newChangeConverger(10*time.Millisecond, 50*time.Millisecond, w.flushExternalChanges)
 	t.Cleanup(func() { w.changes.close(t.Context()) })
 	w.observe(t.Context(), repochange.Event{ProjectDir: root, Kind: repochange.IndexChanged, Source: repochange.SourceWatcher})
-	testutil.WaitFor(t, time.Second, func() bool { return len(cap.batches()) == 1 })
+	testutil.WaitFor(t, func() bool { return len(cap.batches()) == 1 })
 	batch := cap.batches()[0]
 	if !batch.Resync || len(batch.Changes) != 0 || batch.GitChanged {
 		t.Fatalf("index refresh fabricated changes: %+v", batch)
@@ -292,7 +292,7 @@ func TestProjectWatchKeepsBothCheckoutScopes(t *testing.T) {
 		select {
 		case id := <-seen:
 			observed[id] = true
-		case <-time.After(3 * time.Second):
+		case <-t.Context().Done():
 			t.Fatalf("lost checkout coverage: %v", observed)
 		}
 	}
@@ -359,13 +359,13 @@ func TestWatchLifetimeStopCancelsAndDrainsCopiedCallback(t *testing.T) {
 	go func() { defer close(done); copied(t.Context(), "lifetime-drain", ExternalBatch{Resync: true}) }()
 	select {
 	case <-entered:
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("copied callback did not enter")
 	}
 	lifetime.Stop(t.Context())
 	select {
 	case <-canceled:
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("stop did not cancel copied callback")
 	}
 	ctx, cancel := context.WithCancel(t.Context())
@@ -429,13 +429,13 @@ func TestWatchLifetimeStopDrainsWholeFlushPublication(t *testing.T) {
 	go func() { defer close(done); watch.flushExternalChanges(t.Context(), pendingExternalBatch{resync: true}) }()
 	select {
 	case <-pub.entered:
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("flush publication did not enter")
 	}
 	lifetime.Stop(t.Context())
 	select {
 	case <-pub.cancelled:
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("shutdown did not cancel publication")
 	}
 	ctx, cancel := context.WithCancel(t.Context())

@@ -2,6 +2,7 @@ package linuxsandbox
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
 	"testing"
 )
@@ -39,10 +40,10 @@ func TestPlanRoundTripSortsAndDedupes(t *testing.T) {
 
 func TestDecodePlanRefusesOtherVersions(t *testing.T) {
 	t.Parallel()
-	_, err := DecodePlan([]byte(`{"version":2}`))
+	_, err := DecodePlan([]byte(fmt.Sprintf(`{"version":%d}`, PlanVersion+1)))
 	var unsupported *Unsupported
 	if !errors.As(err, &unsupported) || unsupported.Code != UnsupportedPlanVersion {
-		t.Fatalf("version 2: %v", err)
+		t.Fatalf("version %d: %v", PlanVersion+1, err)
 	}
 	if _, err := DecodePlan([]byte(`{`)); err == nil {
 		t.Fatal("malformed plan decoded")

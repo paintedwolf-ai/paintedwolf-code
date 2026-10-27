@@ -31,8 +31,10 @@ export type ClientNoticeKind =
   | "engine_stopped"
   | "fetch_failure"
   | "host_incompatible"
+  | "installation_unverified"
   | "model_catalog_refresh_failed"
   | "offline"
+  | "package_update_listed"
   | "project_removal_incomplete"
   | "project_removal_running"
   | "project_removal_unconfirmed"
@@ -144,6 +146,12 @@ export const CLIENT_NOTICES: Readonly<Record<ClientNoticeKind, ClientNoticeCopy>
     suggestedAction: "The versions still do not match. Update the app or the engine first.",
     scope: "app",
   },
+  installation_unverified: {
+    title: "Installation check unfinished",
+    message: "Painted Wolf Code could not confirm which package owns this installation, so it did not start the engine. Your saved credentials are preserved.",
+    suggestedAction: "Wait for any package operation to finish, then try again.",
+    scope: "app",
+  },
   model_catalog_refresh_failed: {
     title: "Could not refresh the model list",
     message: "The models you already saved for this provider are still listed and still work.",
@@ -153,6 +161,12 @@ export const CLIENT_NOTICES: Readonly<Record<ClientNoticeKind, ClientNoticeCopy>
     title: "Cannot connect",
     message: "The app cannot reach its local engine. Try again to reconnect.",
     suggestedAction: "That did not work. Reopening the app is the next thing to try.",
+    scope: "app",
+  },
+  package_update_listed: {
+    title: "Newer package listed",
+    message: "Your configured package metadata lists a newer Painted Wolf Code package. This does not confirm that its repository is currently reachable.",
+    suggestedAction: "Open Settings → General → Updates to review the package source and update command.",
     scope: "app",
   },
   project_removal_incomplete: {
