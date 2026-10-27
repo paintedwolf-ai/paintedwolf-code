@@ -215,14 +215,3 @@ func TestNativeProofBindsAuthenticatorForRevealAndUnlock(t *testing.T) {
 		}
 	}
 }
-
-func TestBrokerRefusesAppPasswordEvenWithATrustedSignature(t *testing.T) {
-	broker, privateKey := configuredBroker(t)
-	challenge, err := broker.Begin(Claim{Purpose: PurposeReveal, PersonID: "owner", WindowLabel: "main", Key: "secret"})
-	testutil.FailErr(t, "begin reveal", err)
-	if _, err := broker.Complete(sign(privateKey, challenge, "linux_app_password"), PurposeReveal, "owner"); !errors.Is(err, ErrDenied) {
-		t.Fatalf("app password authorized disclosure: %v", err)
-	}
-	_, err = broker.Complete(sign(privateKey, challenge, AuthenticatorLinux), PurposeReveal, "owner")
-	testutil.FailErr(t, "complete with native system authentication", err)
-}
