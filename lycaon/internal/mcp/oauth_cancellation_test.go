@@ -82,7 +82,7 @@ func TestOAuthLateExchangeCannotPublishAfterRetirement(t *testing.T) {
 			}()
 			select {
 			case <-entered:
-			case <-time.After(3 * time.Second):
+			case <-t.Context().Done():
 				t.Fatal("exchange did not reach token endpoint")
 			}
 			switch action {
