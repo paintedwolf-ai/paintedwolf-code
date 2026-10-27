@@ -35,7 +35,7 @@ func TestGatedCloseoutStopsWhenInvokeGated(t *testing.T) {
 	mgr, sess := newSynthesisDelayManager(t)
 	mgr.SetWorkflowDomains(workflowDomainFixture(gatedCloseoutView{state: gatedExecuteState()}))
 
-	if reject, block := mgr.Coordinator.Guards.OpenGates(context.Background(), sess, true, false); !block || !errors.Is(reject, guidance.ErrCloseoutStopped) {
+	if reject, block := mgr.Coordinator.Guards.OpenGates(context.Background(), sess, true, false); !block || !errors.Is(reject, guidance.ErrCloseoutStopped) || !errors.Is(reject, guidance.ErrCloseoutNeedsRepairTurn) {
 		t.Fatal("forced finish must stop with open gates")
 	}
 }
@@ -92,6 +92,10 @@ func TestGatedCloseoutBoundedPerPrompt(t *testing.T) {
 		t.Fatal("repair exhaustion must stop without authorizing completion")
 	}
 
+	if reject, _ := mgr.Coordinator.Guards.OpenGates(ctx, sess, true, false); errors.Is(reject, guidance.ErrCloseoutNeedsRepairTurn) {
+		t.Fatal("exhausted repairs must not grant another acting round")
+	}
+
 	mgr.Runner.Closeouts.BeginPrompt(ctx, sess, promptinput.Input{Text: "continue"})
 	if _, block := mgr.Coordinator.Guards.OpenGates(ctx, sess, true, true); !block {
 		t.Fatal("a fresh prompt should hold the closeout again")
@@ -113,7 +117,7 @@ func TestGatedCloseoutRejectsUnreadableState(t *testing.T) {
 	failure := errors.New("workflow ledger unavailable")
 	mgr.SetWorkflowDomains(workflowDomainFixture(gatedCloseoutView{err: failure}))
 	reject, block := mgr.Coordinator.Guards.OpenGates(t.Context(), sess, true, true)
-	if !block || !errors.Is(reject, guidance.ErrCloseoutStopped) || !errors.Is(reject, failure) {
+	if !block || !errors.Is(reject, guidance.ErrCloseoutStopped) || !errors.Is(reject, failure) || errors.Is(reject, guidance.ErrCloseoutNeedsRepairTurn) {
 		t.Fatalf("closeout=%v block=%t", reject, block)
 	}
 }

@@ -1308,7 +1308,7 @@ environment with their explicitly selected test trust. This mode performs no R2 
 installation, production signing or application qualification.
 
 `python3 -m scripts.linux_release.native_repositories` assembles selected native
-packages into a new generation. `python3 -m scripts.linux_release.repository_publication`
+packages into a new generation. `python3 -m scripts.linux_release.repository_transaction`
 accepts `--directory`, `--store`, `--base-url`, `--catalog`, and
 `--expected-generation` (omit only for a new channel). This publisher owns a local
 origin directory; it does not upload to R2. All referenced objects are copied and
