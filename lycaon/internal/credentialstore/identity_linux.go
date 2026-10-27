@@ -90,6 +90,8 @@ func (s serviceItems) exchange(req vaultidentity.Request) (vaultidentity.Respons
 		return resp, errIdentityExists
 	case vaultidentity.StatusRefused:
 		return resp, errors.Join(ErrLauncherRefused, resp.Err())
+	case vaultidentity.StatusCorrupt:
+		return resp, errors.Join(ErrVaultCorrupt, resp.Err())
 	default:
 		return resp, errors.Join(ErrCustodianUnavailable, resp.Err())
 	}
