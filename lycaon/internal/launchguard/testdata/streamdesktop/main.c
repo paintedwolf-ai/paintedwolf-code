@@ -14,7 +14,7 @@ int main(int argc, char **argv) {
     GtkWidget *chooser = gtk_file_chooser_dialog_new("Stream fixture", NULL,
         GTK_FILE_CHOOSER_ACTION_OPEN, "Close", GTK_RESPONSE_CANCEL, NULL);
     gtk_widget_show_all(chooser);
-    for (int attempt = 0; attempt < 100; attempt++) {
+    for (int attempt = 0; attempt < 5000; attempt++) {
         while (gtk_events_pending()) gtk_main_iteration();
         if (gtk_widget_get_mapped(chooser)) break;
         g_usleep(1000);
