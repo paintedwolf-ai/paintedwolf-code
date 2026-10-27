@@ -1,7 +1,9 @@
 package projectadmin
 
 import (
+	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -17,12 +19,17 @@ import (
 // path. It captures s, so call it once the handler is at its final address.
 func (s *Removal) InitProjectRemoval() {
 	s.Owner = &projectremoval.Owner{
-		Projects: s.Registry, Store: projectremoval.NewStore(s.Database), Delete: s.deleteProject,
+		Run: s.background.Go, Projects: s.Registry, Store: projectremoval.NewStore(s.Database), Delete: s.deleteProject,
 		Extensions: s.Extensions.Owner,
 		SuggestionsApply: func(p project.Project) bool {
 			return s.Settings.TrustSurfaces.Applies(projectcontrib.SurfaceExtensionSuggestions, p)
 		},
 	}
+	s.background.Go(s.background.Context(), func(ctx context.Context) {
+		if err := s.Owner.Recover(ctx); err != nil {
+			slog.ErrorContext(ctx, "recover interrupted project removals", "err", err)
+		}
+	})
 }
 
 func (s *Removal) HandleAssessProjectRemoval(w http.ResponseWriter, r *http.Request) {

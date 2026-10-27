@@ -27,7 +27,7 @@ manifest, retaining domain operations and naming the future replacement work.
 No routine schema is retired by publishing these contracts.
 
 `./task codegen:tool-command-equivalence` compiles the same catalog into
-`commandsurface.LanguageV1`; its existing `:check` target detects drift.
+`toolcontract.LanguageV1`; its existing `:check` target detects drift.
 `CommandHelp` derives option help from these facts rather than maintaining a
 second executor/prompt option map. P04 consumes the typed facts in its parser;
 P03 binds executable operations through existing subsystem contracts. Pure catalog
@@ -299,7 +299,7 @@ Provenance rows are ledger facts, not prose inference ([Host behavior](dispatch-
 
 ## Host process tools
 
-`process_list` discovers or inspects host processes and `process_signal` signals the returned task-bound instance references. Both request approval before their host operation. `process_signal` returns per-target delivery results, so partial failure is visible, and never expands a name, process group, or descendant set after approval. Command jobs keep their own handle controls.
+`process_list` discovers or inspects host processes and `process_signal` signals the returned session-bound instance references. Only processes the session started carry a reference; any other target is refused with `PROCESS_NOT_OWNED` whatever the approval. Both request approval before their host operation. `process_signal` returns per-target delivery results, so partial failure is visible, and never expands a name, process group, or descendant set after approval. Command jobs keep their own handle controls.
 
 For command behavior native tools cannot express, declare `capability_request.process_control` to keep the sandbox while permitting external signaling, or `capability_request.host_execution` to run the approved command outside it, including passwordless `sudo -n`. Declare the requirement on each invocation, as with `direct_ip`. See [host processes and exceptional execution](security.md#host-processes-and-exceptional-execution).
 
@@ -502,3 +502,11 @@ Requesting `command` does not automatically load `http_request`; the coordinator
 Direct search uses a catalogued set of keyless sources with declared roles, pacing, and normalization; user-configured providers join the effective set according to settings. Provider ids, endpoints, and enablement live in the generated catalog (`lycaon/config/packs/painted-wolf/web-research/host/web-research-providers.yaml`), not this page.
 
 Search results are untrusted inbound content. Provider text is normalized at one fan-in, provenance is retained, and fetched bodies are marked as data before entering model context. Outbound destination and secret policy still apply. Caching and pacing are explicit and bounded: a cached result states that it is a repeat, and provider cooldown does not turn one failure into a permanent absence. Privacy behavior and the outbound inventory are in [Privacy](privacy.md).
+
+### Shared operation invocation contracts
+
+The registry publishes one immutable operation declaration with the existing schema, owner/lifecycle contract, OAR identity/rejection contract and selected command forms. Lookup is discovery, not permission: the evaluator binding checks the invocation's frozen offered definition digest before invoking the complete typed owner API. Each child still requires its own host effect admission; an outer command permit is insufficient. This contract is preparatory until P08 binds production admission.
+
+Program, static node and dynamic execution identity are distinct. Loops allocate fresh execution ids, held approvals retain their exact execution and prepared input, and a new invocation allocates new ids. Actor, session, addressed scope, source unit/span and catalog digest are explicit. Source pins describe computation inputs. Delivery mappings describe exact source ranges represented in a response actually delivered; one cannot substitute for the other.
+
+Producer results separate ordinary status, typed terminal/host-stop facts, completeness and publication eligibility. Status one from complete grep/diff can be eligible; status zero with partial output cannot. Accepted document edits expose saved publication and publication errors separately. Progress, child effects and process aggregate settle independently. Workflow and grounding project remaining obligations from authoritative facts. [Record classification and retention](compatibility.md#portable-command-records) precede future persistence and wire producers.

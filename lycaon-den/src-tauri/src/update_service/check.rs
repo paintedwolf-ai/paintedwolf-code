@@ -127,10 +127,27 @@ pub(super) async fn run_check(app: &AppHandle, automatic: bool) -> Result<Check,
             inner.state.channel,
         )
     };
-    let checked = tokio::select! {
-        result = feed::fetch(channel, &version) => result.map_err(feed::FeedFailure::error),
-        _ = wake.wait_for(|_| !service.current(generation)) => Err(super::Failure::Cancelled.into()),
+    // Ownership that was not established is queried again, off the async workers.
+    let mut facts = tauri::async_runtime::spawn_blocking(super::persistence::detect_install_source)
+        .await
+        .unwrap_or_else(|_| super::persistence::InstallFacts {
+            source: super::InstallSource::Unknown,
+            channel: None,
+            package: None,
+            error: Some(super::Failure::StateUnavailable.into()),
+        });
+    let package = facts.package.take();
+    let result = tokio::select! {
+        result = async {
+            tokio::join!(feed::fetch(channel, &version), crate::linux_install::refresh_source(package))
+        } => Some(result),
+        _ = wake.wait_for(|_| !service.current(generation)) => None,
     };
+    let Some((checked, package)) = result else {
+        return Ok(Check::Skipped(service.inner.lock().await.state.clone()));
+    };
+    facts.package = package;
+    let checked = checked.map_err(feed::FeedFailure::error);
     let failure = checked.as_ref().err().cloned();
     let mut inner = service.inner.lock().await;
     if !service.current(generation) {
@@ -138,7 +155,6 @@ pub(super) async fn run_check(app: &AppHandle, automatic: bool) -> Result<Check,
         return Ok(Check::Skipped(inner.state.clone()));
     }
     let bucket = inner.preferences.rollout_bucket;
-    let facts = super::persistence::detect_install_source();
     inner.state.install_source = facts.source;
     inner.state.package = facts.package;
     let now = super::now();
