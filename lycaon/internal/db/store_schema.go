@@ -25,7 +25,7 @@ var (
 )
 
 // SchemaVersion identifies the baseline schema.
-const SchemaVersion = 4
+const SchemaVersion = 6
 
 const cleanShutdownMetaKey = "clean_shutdown"
 
@@ -61,21 +61,11 @@ func CreateSnapshot(ctx context.Context, sqlDB DBTX, destPath string) error {
 	if err != nil {
 		return fmt.Errorf("create snapshot: read source version: %w", err)
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(destPath), "."+filepath.Base(destPath)+".snapshot-*")
+	tmpPath, cleanup, err := stageSnapshotPath(destPath)
 	if err != nil {
-		return fmt.Errorf("create snapshot: create staging path: %w", err)
+		return err
 	}
-	tmpPath := tmp.Name()
-	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("create snapshot: close staging path: %w", err)
-	}
-	if err := os.Remove(tmpPath); err != nil {
-		return fmt.Errorf("create snapshot: prepare staging path: %w", err)
-	}
-	defer func() {
-		_ = os.Remove(tmpPath)
-		_ = RemoveStoreSidecars(tmpPath)
-	}()
+	defer cleanup()
 
 	connectionDB, err := snapshotConnectionDB(sqlDB)
 	if err != nil {
@@ -124,13 +114,42 @@ func CreateSnapshot(ctx context.Context, sqlDB DBTX, destPath string) error {
 	if err != nil {
 		return fmt.Errorf("create snapshot: online backup: %w", err)
 	}
+	return installSnapshot(ctx, tmpPath, destPath, version)
+}
+
+// stageSnapshotPath reserves an unused name beside destPath; cleanup removes
+// whatever is left there and its SQLite sidecars.
+func stageSnapshotPath(destPath string) (string, func(), error) {
+	tmp, err := os.CreateTemp(filepath.Dir(destPath), "."+filepath.Base(destPath)+".snapshot-*")
+	if err != nil {
+		return "", nil, fmt.Errorf("create snapshot: create staging path: %w", err)
+	}
+	tmpPath := tmp.Name()
+	if err := tmp.Close(); err != nil {
+		return "", nil, fmt.Errorf("create snapshot: close staging path: %w", err)
+	}
+	if err := os.Remove(tmpPath); err != nil {
+		return "", nil, fmt.Errorf("create snapshot: prepare staging path: %w", err)
+	}
+	return tmpPath, func() {
+		_ = os.Remove(tmpPath)
+		_ = RemoveStoreSidecars(tmpPath)
+	}, nil
+}
+
+// installSnapshot verifies a staged copy and publishes it durably at destPath.
+func installSnapshot(ctx context.Context, tmpPath, destPath string, version int) error {
 	if err := verifySnapshot(ctx, tmpPath, version); err != nil {
 		return err
 	}
+	return publishSnapshot(tmpPath, destPath)
+}
+
+func publishSnapshot(tmpPath, destPath string) error {
 	if err := os.Chmod(tmpPath, defaultDBFileMode); err != nil {
 		return fmt.Errorf("create snapshot: chmod: %w", err)
 	}
-	// #nosec G304 -- os.CreateTemp produced tmpPath.
+	// #nosec G304 -- the caller staged tmpPath beside destPath.
 	file, err := os.Open(tmpPath)
 	if err != nil {
 		return fmt.Errorf("create snapshot: open for sync: %w", err)

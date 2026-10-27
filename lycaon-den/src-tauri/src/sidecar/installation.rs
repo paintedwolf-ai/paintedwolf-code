@@ -6,25 +6,42 @@ use super::manifest::{Manifest, VerifyError, MANIFEST_LIMIT};
 use std::io::Read;
 use std::path::Path;
 
+use super::SidecarStartError;
+use crate::linux_install::{Ownership, QueryReason};
+
 pub(super) const RESTART_GUIDANCE: &str = "The installed package changed while this desktop was running. Quit Painted Wolf Code, finish any package operation, then open it from the installed desktop launcher. Your saved credentials are preserved.";
+pub(super) const UNVERIFIED_GUIDANCE: &str = "Painted Wolf Code could not confirm which package owns this installation, so it did not start new engine work. Wait for any package operation to finish, then try again. Your saved credentials are preserved.";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum RestartReason {
     ManifestUnavailable,
     DesktopIdentityChanged,
     RunningImageUnavailable,
+    /// Not a restart requirement: the replacement check could not run, and a retry asks again.
+    OwnershipUnknown(QueryReason),
 }
 
 impl RestartReason {
     pub(super) fn guidance(self) -> String {
-        format!(
-            "{RESTART_GUIDANCE} ({})",
-            match self {
-                Self::ManifestUnavailable => "manifest_unavailable",
-                Self::DesktopIdentityChanged => "desktop_identity_changed",
-                Self::RunningImageUnavailable => "running_image_unavailable",
-            }
-        )
+        let (copy, code) = match self {
+            Self::ManifestUnavailable => (RESTART_GUIDANCE, "manifest_unavailable"),
+            Self::DesktopIdentityChanged => (RESTART_GUIDANCE, "desktop_identity_changed"),
+            Self::RunningImageUnavailable => (RESTART_GUIDANCE, "running_image_unavailable"),
+            Self::OwnershipUnknown(_) => (UNVERIFIED_GUIDANCE, "package_ownership_unknown"),
+        };
+        format!("{copy} ({code})")
+    }
+
+    pub(super) fn restart_required(self) -> bool {
+        !matches!(self, Self::OwnershipUnknown(_))
+    }
+
+    pub(super) fn start_error(self) -> SidecarStartError {
+        if self.restart_required() {
+            SidecarStartError::DesktopRestartRequired(self.guidance())
+        } else {
+            SidecarStartError::InstallationUnverified(self.guidance())
+        }
     }
 }
 
@@ -32,11 +49,18 @@ impl RestartReason {
 /// against the running desktop before admitting child work.
 pub(super) fn ensure_current() -> Result<(), RestartReason> {
     selected_generation_current(crate::protected_launch::generation(), || {
-        if cfg!(target_os = "linux") && crate::linux_install::installed().is_some() {
-            let root = Path::new(crate::linux_install::INSTALL_ROOT);
-            return verify_root(root, Path::new("/proc/self/exe"));
+        if !cfg!(target_os = "linux") {
+            return Ok(());
         }
-        Ok(())
+        match crate::linux_generation::running() {
+            Ok(Some(_)) => return Ok(()),
+            Err(_) => return Err(RestartReason::RunningImageUnavailable),
+            Ok(None) => {}
+        }
+        admit(crate::linux_install::installed(), || {
+            let root = Path::new(crate::linux_install::INSTALL_ROOT);
+            verify_root(root, Path::new("/proc/self/exe"))
+        })
     })
 }
 
@@ -50,6 +74,18 @@ fn selected_generation_current(
     match generation.map_err(|_| RestartReason::RunningImageUnavailable)? {
         Some(_) => Ok(()),
         None => mutable_package(),
+    }
+}
+
+/// Unknown ownership fails closed: the replacement check cannot be skipped by a slow database.
+fn admit(
+    ownership: Ownership,
+    verify_package: impl FnOnce() -> Result<(), RestartReason>,
+) -> Result<(), RestartReason> {
+    match ownership {
+        Ownership::Package(_) => verify_package(),
+        Ownership::Unpackaged => Ok(()),
+        Ownership::Unknown(reason) => Err(RestartReason::OwnershipUnknown(reason)),
     }
 }
 
@@ -137,26 +173,10 @@ mod tests {
     }
 
     #[test]
-    fn fresh_install_with_format_1_or_2_manifest_starts_without_restart() {
+    fn fresh_install_with_sealed_manifest_starts_without_restart() {
         let dir = crate::test_support::TempDir::new("fresh-install-v2");
         let desktop = stage_generation(dir.path(), b"fresh desktop image");
         assert_eq!(verify_root(dir.path(), &desktop), Ok(()));
-
-        let root = Path::new("/opt/painted-wolf-code");
-        let desktop_path = root.join("bin/painted-wolf-code");
-        let mut v1 = fixture_json(
-            root,
-            std::env::consts::ARCH,
-            &[(&desktop_path, b"desktop v1")],
-            &[],
-        );
-        v1["format_version"] = serde_json::json!(1);
-        v1.as_object_mut().unwrap().remove("payload");
-        let raw = serde_json::to_vec(&v1).unwrap();
-        assert_eq!(
-            verify_current(root, raw.as_slice(), b"desktop v1".as_slice()),
-            Ok(())
-        );
     }
 
     #[test]
@@ -194,6 +214,19 @@ mod tests {
             ),
             Err(RestartReason::ManifestUnavailable)
         );
+    }
+
+    #[test]
+    fn unknown_ownership_refuses_without_skipping_to_unpackaged_admission() {
+        let refused = admit(Ownership::Unknown(QueryReason::TimedOut), || panic!("no package to verify"));
+        assert_eq!(refused, Err(RestartReason::OwnershipUnknown(QueryReason::TimedOut)));
+        let reason = refused.unwrap_err();
+        assert!(!reason.restart_required());
+        assert!(matches!(reason.start_error(), SidecarStartError::InstallationUnverified(message)
+            if message.starts_with(UNVERIFIED_GUIDANCE) && message.ends_with("(package_ownership_unknown)")));
+        assert_eq!(admit(Ownership::Unpackaged, || panic!("no package to verify")), Ok(()));
+        let changed = RestartReason::DesktopIdentityChanged;
+        assert!(matches!(changed.start_error(), SidecarStartError::DesktopRestartRequired(message) if message.starts_with(RESTART_GUIDANCE)));
     }
 
     #[test]

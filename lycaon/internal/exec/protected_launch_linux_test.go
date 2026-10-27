@@ -27,7 +27,6 @@ func TestProtectedLaunchIsDecidedByNamespaceFacts(t *testing.T) {
 		"caller-owned nested": {owner: 1000, nested: true, identity: true},
 		"remapped nested":     {owner: 0, nested: true, identity: false},
 	} {
-		facts := facts
 		state := detectProtectedLaunch(func() (userNamespaceFacts, error) { return facts, nil }, "6")
 		if state.protected || state.err != nil || state.broker != nil {
 			t.Fatalf("%s treated as the protected launch: %+v", name, state)
