@@ -7,12 +7,7 @@ import stat
 import struct
 import sys
 
-
-def literal(value):
-    if not value or any(ord(char) < 32 or ord(char) == 127 for char in value):
-        raise ValueError("AppArmor attachment contains a control character")
-    return '"' + ''.join('\\' + char if char in '\\"*?[]{}^' else char
-                         for char in value) + '"'
+from linux_release.apparmor_attachment import literal
 
 
 def profile(package):
