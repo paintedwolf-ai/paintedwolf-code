@@ -92,9 +92,12 @@ func startFixtureBus(t *testing.T) *fixtureDaemon {
 	testutil.FailErr(t, "start isolated bus", cmd.Start())
 	daemon := &fixtureDaemon{path: path, cmd: cmd}
 	t.Cleanup(daemon.stop)
+	deadline := time.Now().Add(2 * time.Second)
+	ctx, cancel := context.WithDeadline(t.Context(), deadline)
+	defer cancel()
 	var lastErr error
-	for t.Context().Err() == nil {
-		connection, err := linuxbus.Connect(t.Context(), path)
+	for ctx.Err() == nil {
+		connection, err := linuxbus.Connect(ctx, path)
 		if err == nil {
 			_ = connection.Close()
 			return daemon
@@ -167,7 +170,7 @@ func TestLogindLeaseTransfersDescriptorAndBlocksAutomaticSuspend(t *testing.T) {
 		if !errors.Is(err, io.EOF) {
 			t.Fatalf("released inhibitor pipe = %v", err)
 		}
-	case <-t.Context().Done():
+	case <-time.After(time.Second):
 		t.Fatal("release left an inhibitor descriptor open")
 	}
 }
@@ -183,7 +186,7 @@ func TestLogindLeaseReportsServiceLossAndClosesItsDescriptor(t *testing.T) {
 		if err == nil {
 			t.Fatal("lost inhibitor had no failure")
 		}
-	case <-t.Context().Done():
+	case <-time.After(time.Second):
 		t.Fatal("service loss was not detected")
 	}
 	testutil.FailErr(t, "release lost inhibitor", held.Release())
@@ -204,7 +207,7 @@ func TestLogindLeaseRejectsAClosedDescriptor(t *testing.T) {
 		if err == nil {
 			t.Fatal("closed descriptor had no failure")
 		}
-	case <-t.Context().Done():
+	case <-time.After(time.Second):
 		t.Fatal("closed descriptor was not detected")
 	}
 	if err := held.Release(); !errors.Is(err, os.ErrClosed) {
@@ -260,8 +263,12 @@ func TestLogindAuthenticationCannotHangHostStartup(t *testing.T) {
 	defer func() { _ = listener.Close() }()
 	accepted := make(chan *net.UnixConn, 1)
 	go func() { connection, _ := listener.AcceptUnix(); accepted <- connection }()
-	if bus, err := linuxbus.Connect(t.Context(), path); bus != nil || err == nil || t.Context().Err() != nil {
-		t.Fatalf("silent bus connect: bus=%v err=%v ctxErr=%v", bus, err, t.Context().Err())
+	started := time.Now()
+	if bus, err := linuxbus.Connect(t.Context(), path); bus != nil || err == nil {
+		t.Fatal("silent bus authenticated")
+	}
+	if time.Since(started) > 2*busDeadline {
+		t.Fatal("silent bus exceeded the authentication deadline")
 	}
 	connection := <-accepted
 	if connection != nil {
@@ -275,11 +282,13 @@ type fixturePortal struct {
 	deny   bool
 	// grant is the Response code the portal sends once the backend answers.
 	grant    uint32
+	response []any
+	withhold bool
 	flags    uint32
 	options  map[string]dbus.Variant
 	request  dbus.ObjectPath
 	closed   chan struct{}
-	exported bool
+	releases int
 }
 
 func (f *fixturePortal) Inhibit(caller dbus.Sender, window string, flags uint32, options map[string]dbus.Variant) (dbus.ObjectPath, *dbus.Error) {
@@ -292,15 +301,18 @@ func (f *fixturePortal) Inhibit(caller dbus.Sender, window string, flags uint32,
 	token, _ := options["handle_token"].Value().(string)
 	sender := strings.TrimPrefix(strings.ReplaceAll(string(caller), ".", "_"), ":")
 	f.request = dbus.ObjectPath("/org/freedesktop/portal/desktop/request/" + sender + "/" + token)
-	request, grant := f.request, f.grant
+	request := f.request
+	response := f.response
+	if response == nil {
+		response = []any{f.grant, map[string]dbus.Variant{}}
+	}
 	// Like the portal, answer as soon as the backend does, which can precede
 	// the method reply.
-	go func() { _ = f.server.Emit(request, portalRequest+".Response", grant, map[string]dbus.Variant{}) }()
-	if !f.exported {
-		f.exported = true
-		if err := f.server.Export(f, f.request, portalRequest); err != nil {
-			return "", dbus.MakeFailedError(err)
-		}
+	if !f.withhold {
+		go func() { _ = f.server.Emit(request, portalRequest+".Response", response...) }()
+	}
+	if err := f.server.Export(f, f.request, portalRequest); err != nil {
+		return "", dbus.MakeFailedError(err)
 	}
 	return f.request, nil
 }
@@ -308,6 +320,7 @@ func (f *fixturePortal) Inhibit(caller dbus.Sender, window string, flags uint32,
 func (f *fixturePortal) Close() *dbus.Error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.releases++
 	select {
 	case <-f.closed:
 	default:
@@ -362,13 +375,13 @@ func TestPortalInhibitorRequestsOnlySuspendAndClosesOnRelease(t *testing.T) {
 	select {
 	case err := <-held.Done():
 		t.Fatalf("lease ended before release: %v", err)
-	default:
+	case <-time.After(50 * time.Millisecond):
 	}
 	testutil.FailErr(t, "release portal inhibitor", held.Release())
 	testutil.FailErr(t, "repeat release", held.Release())
 	select {
 	case <-fixture.closed:
-	case <-t.Context().Done():
+	case <-time.After(time.Second):
 		t.Fatal("release did not close the portal request")
 	}
 	if _, open := <-held.Done(); open {
@@ -398,7 +411,7 @@ func TestPortalDenialAndResponseEndTheLease(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "response 2") {
 			t.Fatalf("portal response = %v", err)
 		}
-	case <-t.Context().Done():
+	case <-time.After(2 * time.Second):
 		t.Fatal("portal response did not end the lease")
 	}
 }
@@ -415,7 +428,7 @@ func TestPortalGrantDecidesTheInhibition(t *testing.T) {
 	}
 	select {
 	case <-fixture.closed:
-	case <-t.Context().Done():
+	case <-time.After(time.Second):
 		t.Fatal("refused request was not closed")
 	}
 }
@@ -431,7 +444,7 @@ func TestSessionLeaseReportsBusDisconnection(t *testing.T) {
 		if err == nil {
 			t.Fatal("bus loss had no failure")
 		}
-	case <-t.Context().Done():
+	case <-time.After(2 * time.Second):
 		t.Fatal("bus loss was not detected")
 	}
 	testutil.FailErr(t, "release after bus loss", held.Release())

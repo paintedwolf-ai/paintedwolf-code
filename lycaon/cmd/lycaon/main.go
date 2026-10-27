@@ -16,10 +16,10 @@ import (
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/credentialstore"
 	execpkg "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/gitcredential"
 	"github.com/lycaon/lycaon/internal/hostlock"
+	"github.com/lycaon/lycaon/internal/httpclient"
 	"github.com/lycaon/lycaon/internal/installbinding"
 	"github.com/lycaon/lycaon/internal/nativeproxy"
 	"github.com/lycaon/lycaon/internal/observability"
@@ -161,6 +161,9 @@ func parseServeDBFlag(args []string) (string, error) {
 // in-flight children and stops between steps; once serving, Run drains.
 func runServe(signals context.Context, dbPath string) error {
 	defer observability.FlushConsole() //nolint:contextcheck // flushing must outlive the serve context
+	if err := httpclient.PinSystemTrust(); err != nil {
+		return fmt.Errorf("load system trust: %w", err)
+	}
 	// Shipped helpers must come from the installation this engine started from.
 	binding, err := installbinding.CaptureRunning()
 	if err != nil {
@@ -183,11 +186,6 @@ func runServe(signals context.Context, dbPath string) error {
 	if err := readStartupAPIToken(os.Stdin, &cfg); err != nil {
 		return err
 	}
-	if strings.TrimSpace(os.Getenv(credentialstore.UnlockStdinEnv)) != "" {
-		if err := credentialstore.ReadUnlockFrame(os.Stdin); err != nil {
-			return err
-		}
-	}
 	if strings.TrimSpace(os.Getenv(startupprotocol.ControlStdinEnv)) != "" {
 		go func() {
 			_ = startupprotocol.ReadControlShutdown(os.Stdin)
@@ -198,7 +196,6 @@ func runServe(signals context.Context, dbPath string) error {
 		cfg.ConfigRoot = root
 	}
 	serveApp, err := app.Build(ctx, cfg)
-	credentialstore.ClearUnlockSecret()
 	if ctx.Err() != nil {
 		// Shutdown was requested during startup, which is not a startup failure.
 		if serveApp != nil {

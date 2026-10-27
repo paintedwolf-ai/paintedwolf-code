@@ -437,7 +437,9 @@ type targetProcess struct {
 func (s *supervisor) openTarget(listener int, n seccompNotif) (*targetProcess, error) {
 	// The notification names the calling thread; descriptors and memory
 	// belong to its thread group.
-	caller, err := s.statuses.facts(int(n.PID))
+	// Resolve the current notifying thread. A cached /proc status descriptor
+	// may still refer to a task that exited before this notification.
+	caller, err := callerFactsOf(int(n.PID))
 	if err != nil {
 		return nil, err
 	}

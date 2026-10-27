@@ -2,11 +2,11 @@ components:
   schemas:
     PresenceAuthenticator:
       type: string
-      enum: [macos_user_presence, windows_user_presence, linux_user_presence, linux_app_password]
+      enum: [macos_user_presence, windows_user_presence, linux_user_presence]
       description: >-
         User-presence verifier that confirmed the person before the shell
-        signed. New Linux confirmations use the operating system's polkit
-        authentication agent; credential-vault passwords do not confirm presence.
+        signed after fresh authentication through the operating system's
+        native prompt. Unavailable system authentication refuses the operation.
     PresenceChallenge:
       x-go-generate: true
       type: object
@@ -105,7 +105,7 @@ components:
       properties:
         reason:
           type: string
-          enum: [screen_locked, sleep, app_quit]
+          enum: [screen_locked, sleep, away, app_quit]
     LockVaultResponse:
       x-go-generate: true
       type: object

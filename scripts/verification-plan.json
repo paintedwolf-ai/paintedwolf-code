@@ -416,6 +416,18 @@
     "release:rehearse:linux-signing": [
       "release:rehearse:linux-signing"
     ],
+    "release:rehearse:native-repositories": [
+      "release:rehearse:native-repositories"
+    ],
+    "release:rehearse:native-repositories-r2": [
+      "release:rehearse:native-repositories-r2"
+    ],
+    "release:rehearse:native-candidates": [
+      "release:rehearse:native-candidates"
+    ],
+    "release:live-test": [
+      "release:live-test"
+    ],
     "release:rehearse:package-probe": [
       "release:rehearse:package-probe"
     ],
@@ -446,6 +458,8 @@
     "test:race": "go",
     "den:test:digest": "vitest",
     "den:harness:test": "playwright",
+    "den:test:rust": "passthrough",
+    "decide:test": "passthrough",
     "lint:fast": "passthrough",
     "lint:full": "passthrough",
     "oar:conformance": "passthrough",
@@ -455,6 +469,10 @@
     "nix:check": "passthrough",
     "release:rehearse:linux-signing": "passthrough",
     "test:linux:installed": "passthrough",
+    "release:rehearse:native-repositories": "passthrough",
+    "release:rehearse:native-repositories-r2": "passthrough",
+    "release:rehearse:native-candidates": "passthrough",
+    "release:live-test": "passthrough",
     "release:rehearse:package-probe": "passthrough",
     "release:rehearse:rpm-metadata": "passthrough",
     "release:rehearse:pacman-construction": "passthrough"
@@ -806,6 +824,31 @@
       ],
       "workers": 1
     },
+    "release:rehearse:native-repositories": {
+      "locks": [
+        "native-repository-roots"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:native-repositories-r2": {
+      "locks": [
+        "native-repository-roots",
+        "r2-rehearsal"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:native-candidates": {
+      "locks": [
+        "native-candidates"
+      ],
+      "workers": 1
+    },
+    "release:live-test": {
+      "locks": [
+        "*"
+      ],
+      "workers": 1
+    },
     "release:rehearse:package-probe": {
       "locks": [
         "linux-package-probe"
@@ -875,6 +918,10 @@
   },
   "ci": {
     "ready": {
+      "compile_targets": {
+        "den:test:rust": ["lycaon-den/src-tauri/"],
+        "decide:test": ["lycaon/internal/decide/native/"]
+      },
       "targets": [
         "build",
         "lint:full",
@@ -913,7 +960,7 @@
       ],
       "suite": "all",
       "setup": "verification",
-      "first": true
+      "priority": "reject"
     },
     "build": {
       "targets": [
@@ -958,7 +1005,7 @@
       ],
       "suite": "all",
       "setup": "analysis",
-      "first": true,
+      "priority": "reject",
       "early_targets": [
         "comments:check",
         "test:fail-messages:check"
@@ -1004,7 +1051,8 @@
       "setup": "verification",
       "workers": 3,
       "shards": 2,
-      "contract_first": true
+      "contract_first": true,
+      "priority": "critical"
     },
     "frontend": {
       "targets": [
@@ -1033,7 +1081,9 @@
         "integration"
       ],
       "suite": "all",
-      "setup": "shell"
+      "setup": "shell",
+      "runtime_engines": false,
+      "priority": "compile"
     },
     "webkit": {
       "targets": [
@@ -1244,7 +1294,8 @@
       "issue-intake.yml": 1,
       "maintainability-issues.yml": 1,
       "verification-recovery.yml": 1,
-      "dco.yml": 1
+      "dco.yml": 1,
+      "dependent-update.yml": 1
     }
   }
 }

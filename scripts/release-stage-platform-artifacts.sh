@@ -220,11 +220,14 @@ case "${GOOS}" in
       GIT_ENGINE="$(readlink -f "${GIT_ENGINE_LINK}")"
       assert_native_arch "${label} bundled Git" "${GIT_ENGINE}"
       assert_native_arch "${label} bundled Git LFS" "${GIT_LFS}"
-      while IFS= read -r -d '' payload; do
-        if [[ "$(file -b "${payload}")" == *"ELF"* ]]; then
-          assert_native_arch "packaged native payload" "${payload}"
-        fi
-      done < <(find "${tree}" -type f -print0)
+      # Every packaged native payload must match the target ELF machine and the glibc/libstdc++ floor.
+      (cd "${ROOT}" && python3 -m scripts.linux_release.abi_audit \
+        --tree "${tree}" --architecture "${ARCH}" \
+        --floors "${ROOT}/lycaon/internal/platformfloor/linux_floor.txt" \
+        --output "${EXTRACT}/linux-abi-${label#.}.json") || {
+        echo "error: ${PLATFORM} ${label} packaged native payload fails the ELF architecture and ABI audit" >&2
+        exit 1
+      }
       # Nothing the package installs may be writable by other users or carry setuid bits.
       [[ -z "$(find "${tree}" -type f \( -perm -o+w -o -perm -4000 -o -perm -2000 \) -print -quit)" ]] || {
         echo "error: ${PLATFORM} ${label} installs world-writable or setuid files" >&2
@@ -457,6 +460,10 @@ fi
 
 mkdir -p "${OUTPUT}/opengrep"
 OUTPUT="$(cd "${OUTPUT}" && pwd)"
+if [[ "${GOOS}" == linux ]]; then
+  mkdir -p "${OUTPUT}/linux-abi"
+  cp "${EXTRACT}"/linux-abi-*.json "${OUTPUT}/linux-abi/"
+fi
 STEM="painted-wolf-code_v${VERSION}_${PLATFORM}"
 OPENGREP_ARTIFACT="$(bash "${ROOT}/scripts/resolve-opengrep.sh" --artifact-dir-only --offline)"
 (

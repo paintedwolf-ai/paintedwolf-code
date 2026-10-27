@@ -217,22 +217,6 @@ const HOST_WIRE_MIRRORS: &[Entry] = &[
         },
     },
     Entry {
-        file: "src/sidecar/custody.rs",
-        rust_type: "Outcome",
-        binding: Binding::Mirror {
-            fixture: "vault_custody_outcome",
-            ignored: &[],
-            forward: None,
-        },
-    },
-    Entry {
-        file: "src/sidecar/custody.rs",
-        rust_type: "CustodyTarget",
-        binding: Binding::NotHostWire {
-            reason: "the frontend names the move; the shell turns it into an engine command",
-        },
-    },
-    Entry {
         file: "src/sidecar/startup.rs",
         rust_type: "StartupKind",
         binding: Binding::ObservedValues {

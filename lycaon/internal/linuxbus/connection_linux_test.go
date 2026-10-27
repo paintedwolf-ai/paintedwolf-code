@@ -23,21 +23,29 @@ func TestConnectionCancellationBoundsSilentAuthentication(t *testing.T) {
 	if err != nil {
 		t.Fatalf("listen on authentication fixture: %v", err)
 	}
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
 	stop, done := make(chan struct{}), make(chan struct{})
+	authRead := make(chan error, 1)
 	go func() {
 		defer close(done)
 		connection, err := listener.Accept()
 		if err != nil {
+			authRead <- err
 			return
 		}
 		defer func() { _ = connection.Close() }()
+		_, err = connection.Read(make([]byte, 1))
+		authRead <- err
+		cancel()
 		<-stop
 	}()
 	t.Cleanup(func() { close(stop); _ = listener.Close(); <-done })
-	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
-	defer cancel()
-	if bus, err := Connect(ctx, path); bus != nil || (!errors.Is(err, context.DeadlineExceeded) && !os.IsTimeout(err)) || !errors.Is(ctx.Err(), context.DeadlineExceeded) {
-		t.Fatalf("silent connection = %v, %v (ctxErr=%v)", bus, err, ctx.Err())
+	if bus, err := Connect(ctx, path); bus != nil || !errors.Is(err, context.Canceled) {
+		t.Fatalf("silent connection = %v, %v", bus, err)
+	}
+	if err := <-authRead; err != nil {
+		t.Fatalf("read authentication attempt: %v", err)
 	}
 }
 
