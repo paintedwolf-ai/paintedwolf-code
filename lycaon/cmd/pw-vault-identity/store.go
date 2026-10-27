@@ -14,8 +14,9 @@ import (
 )
 
 var (
-	errNotFound = errors.New("identity not found")
-	errExists   = errors.New("identity exists")
+	errNotFound              = errors.New("identity not found")
+	errExists                = errors.New("identity exists")
+	errStoredIdentityCorrupt = errors.New("stored identity is corrupt")
 )
 
 // Store keeps identities as owner-only files under one directory per uid.
@@ -46,7 +47,7 @@ func (s *Store) Read(uid int, account string) ([]byte, error) {
 		return nil, err
 	}
 	if len(value) == 0 || len(value) > vaultidentity.MaxValueBytes {
-		return nil, fmt.Errorf("stored identity has %d bytes", len(value))
+		return nil, fmt.Errorf("%w: has %d bytes", errStoredIdentityCorrupt, len(value))
 	}
 	return value, nil
 }

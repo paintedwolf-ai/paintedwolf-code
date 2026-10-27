@@ -52,6 +52,9 @@ const (
 	StatusOK       Status = "ok"
 	StatusNotFound Status = "not_found"
 	StatusExists   Status = "exists"
+	// StatusCorrupt means the selected stored identity has invalid bytes;
+	// it does not describe a request error or a temporary store failure.
+	StatusCorrupt Status = "corrupt"
 	// StatusRefused: the caller is not a verified engine under the installed
 	// desktop app. Code carries the launchverify reason.
 	StatusRefused Status = "refused"

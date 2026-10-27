@@ -1,6 +1,7 @@
 package credentialstore
 
 import (
+	"bytes"
 	"errors"
 	"net"
 	"os"
@@ -113,15 +114,25 @@ func TestServiceCustodyReportsEmptyAndFailedResponses(t *testing.T) {
 	svc, client := startFakeService(t, vaultidentity.Response{Status: vaultidentity.StatusOK, LauncherPID: 42})
 	svc.values[identityAccount("/cfg/credential-vault.age")] = []byte{}
 	p := probeCustody(client).provider("/cfg/credential-vault.age")
-	if _, err := p.LoadOrCreate(true); !errors.Is(err, ErrVaultCorrupt) {
-		t.Fatalf("empty identity: %v", err)
-	}
+	_, err := p.LoadOrCreate(true)
+	assertIdentityRecoveryError(t, err, ErrVaultCorrupt)
 	svc.probe = vaultidentity.Response{Status: vaultidentity.StatusUnavailable, Code: "store"}
-	if _, err := p.LoadOrCreate(true); vaultidentity.StatusOf(err) != vaultidentity.StatusUnavailable {
+	_, err = p.LoadOrCreate(true)
+	assertIdentityRecoveryError(t, err, ErrCustodianUnavailable)
+	if vaultidentity.StatusOf(err) != vaultidentity.StatusUnavailable {
 		t.Fatalf("store failure: %v", err)
 	}
-	if err := p.Purge(); vaultidentity.StatusOf(err) != vaultidentity.StatusUnavailable {
+	err = p.Purge()
+	assertIdentityRecoveryError(t, err, ErrCustodianUnavailable)
+	if vaultidentity.StatusOf(err) != vaultidentity.StatusUnavailable {
 		t.Fatalf("purge during store failure: %v", err)
+	}
+	svc.probe = vaultidentity.Response{Status: vaultidentity.StatusRefused, Code: "executable_mismatch"}
+	_, err = p.LoadOrCreate(true)
+	assertIdentityRecoveryError(t, err, ErrLauncherRefused)
+	assertIdentityRecoveryError(t, p.Purge(), ErrLauncherRefused)
+	if len(svc.values) != 1 {
+		t.Fatal("failed service operations changed the retained identity")
 	}
 }
 
@@ -166,5 +177,49 @@ func TestRefusedEngineCannotOpenTheVaultOnAnyPath(t *testing.T) {
 func TestCredentialProtectionProbeRefusesIsolatedProvider(t *testing.T) {
 	if err := VerifyIdentityProtection(); err == nil {
 		t.Fatal("an isolated test process qualified the release credential provider")
+	}
+}
+
+func TestServiceCorruptionPreservesIdentityAndCiphertext(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		status vaultidentity.Status
+		want   error
+	}{
+		{"stored corruption", vaultidentity.StatusCorrupt, ErrVaultCorrupt},
+		{"store I/O failure", vaultidentity.StatusUnavailable, ErrCustodianUnavailable},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, client := startFakeService(t, vaultidentity.Response{Status: vaultidentity.StatusOK, LauncherPID: 42})
+			custody := probeCustody(client)
+			path := filepath.Join(t.TempDir(), VaultBasename)
+			backend := func() *namespaceBackend {
+				return &namespaceBackend{vault: &vaultFile{path: path, provider: custody.provider(path)}, namespace: "providers"}
+			}
+			testutil.FailErr(t, "save credential before damage", backend().Set("openai", "kept"))
+			ciphertext, err := os.ReadFile(path)
+			testutil.FailErr(t, "read original ciphertext", err)
+			before, err := os.Stat(path)
+			testutil.FailErr(t, "stat original ciphertext", err)
+			identity := append([]byte(nil), svc.values[identityAccount(path)]...)
+			svc.probe = vaultidentity.Response{Status: tt.status}
+			_, err = backend().Snapshot()
+			assertIdentityRecoveryError(t, err, tt.want)
+			assertIdentityRecoveryError(t, backend().Set("openai", "replacement"), tt.want)
+			after, err := os.Stat(path)
+			testutil.FailErr(t, "stat preserved ciphertext", err)
+			current, err := os.ReadFile(path)
+			testutil.FailErr(t, "read preserved ciphertext", err)
+			if !os.SameFile(before, after) || !bytes.Equal(ciphertext, current) ||
+				len(svc.values) != 1 || !bytes.Equal(identity, svc.values[identityAccount(path)]) {
+				t.Fatal("failed custody access replaced the identity or ciphertext")
+			}
+			svc.probe = vaultidentity.Response{Status: vaultidentity.StatusOK, LauncherPID: 42}
+			loaded, err := backend().Snapshot()
+			testutil.FailErr(t, "read after custodian recovery", err)
+			if loaded.Values["openai"] != "kept" {
+				t.Fatal("recovery did not retain the saved credential")
+			}
+		})
 	}
 }
