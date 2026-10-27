@@ -131,7 +131,7 @@ func TestMigrationsDropReleasedNamesOnlyThroughTheHelper(t *testing.T) {
 // fixture must hold the rows, and after the upgrade Rebuild returns exactly
 // what Capture read before it.
 func TestRegisteredRetirementsReproduceReleasedCorpusRows(t *testing.T) {
-	for step, retirements := range migrations.Retirements {
+	for step, retirements := range migrations.RegisteredRetirements() {
 		for _, r := range retirements {
 			t.Run(step+"/"+r.Table+"/"+r.Column, func(t *testing.T) {
 				populated := 0
