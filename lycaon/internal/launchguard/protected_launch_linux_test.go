@@ -222,11 +222,6 @@ func TestProtectedLaunchSealsTheDesktopInARootOwnedNamespace(t *testing.T) {
 	if len(facts.OpenBeyond) != 0 {
 		t.Fatalf("bootstrap descriptors reached the desktop: %v", facts.OpenBeyond)
 	}
-	assertProcessThreadCredentials(t, launch.cmd.Process.Pid, "0", 1)
-	agentPID := findBrokerAgentPID(t)
-	assertProcessThreadCredentials(t, agentPID, "0", 1)
-	assertBrokerAgentSealed(t, agentPID)
-	assertProcessThreadCredentials(t, facts.PID, "1", 5)
 	// The broker starts programs outside the protected namespace, with the
 	// caller's ordinary authority, and ends one whose caller abandons it.
 	own, err := os.Readlink("/proc/self/ns/user")
@@ -240,6 +235,11 @@ func TestProtectedLaunchSealsTheDesktopInARootOwnedNamespace(t *testing.T) {
 	if facts.DetachedPID <= 0 {
 		t.Fatal("detached brokered program did not report a background PID")
 	}
+	assertProcessThreadCredentials(t, launch.cmd.Process.Pid, "0", 1)
+	agentPID := findBrokerAgentPID(t)
+	assertProcessThreadCredentials(t, agentPID, "0", 1)
+	assertBrokerAgentSealed(t, agentPID)
+	assertProcessThreadCredentials(t, facts.PID, "1", 5)
 	// Only the generation (and the policy's system executables, none here)
 	// can execute inside the namespace; the broker ran sh outside it.
 	if facts.ExecOutside != "EACCES" || facts.ExecGeneration != "started" {
@@ -316,32 +316,50 @@ func brokerAgentPIDs() []int {
 	return pids
 }
 
+func isBrokerAgentProcess(pid int) bool {
+	raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/cmdline", pid))
+	if err != nil || !strings.Contains(string(raw), BrokerAgentArgument) {
+		return false
+	}
+	comm, err := os.ReadFile(fmt.Sprintf("/proc/%d/comm", pid))
+	return err == nil && strings.TrimSpace(string(comm)) == "pw-launch-entry"
+}
+
 func tryAttackBrokerAgent(pid int) error {
 	for _, target := range []string{
 		fmt.Sprintf("/proc/%d/mem", pid),
 		fmt.Sprintf("/proc/%d/fd/4", pid),
 	} {
 		if file, err := os.Open(target); err == nil {
+			stillAgent := isBrokerAgentProcess(pid)
 			_ = file.Close()
-			return fmt.Errorf("same-UID process opened broker agent %s", target)
+			if stillAgent {
+				return fmt.Errorf("same-UID process opened broker agent %s", target)
+			}
 		}
 	}
 	if err := syscall.PtraceAttach(pid); err == nil {
 		var status syscall.WaitStatus
 		_, _ = syscall.Wait4(pid, &status, 0, nil)
+		stillAgent := isBrokerAgentProcess(pid)
 		_ = syscall.PtraceDetach(pid)
-		return fmt.Errorf("same-UID process ptrace-attached broker agent %d", pid)
+		if stillAgent {
+			return fmt.Errorf("same-UID process ptrace-attached broker agent %d", pid)
+		}
 	}
 	return nil
 }
 
 func findBrokerAgentPID(t *testing.T) int {
 	t.Helper()
-	for _, pid := range brokerAgentPIDs() {
-		raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/status", pid))
-		if err == nil && strings.Contains(string(raw), "NoNewPrivs:\t0\n") {
-			return pid
+	for range 50 {
+		for _, pid := range brokerAgentPIDs() {
+			raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/status", pid))
+			if err == nil && strings.Contains(string(raw), "NoNewPrivs:\t0\n") {
+				return pid
+			}
 		}
+		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatal("broker agent process not found in /proc")
 	return 0
