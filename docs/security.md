@@ -82,6 +82,12 @@ The host serves its owner over loopback. Loopback prevents ordinary LAN access b
 
 The host trusts the installed binary and its shipped catalogs, the operating system's enforcement primitives, protected credential storage, and explicit human decisions over host-authored plans.
 
+The Linux custodian keeps its unwrapped vault identity under a separate system identity. This prevents ordinary login-user programs from reading that key as a home-directory file; protected launch and caller verification guard its socket. It does not protect an unencrypted disk against offline copying, a root or kernel compromise, or a compromised trusted application. A system backup that includes both the custodian identity and encrypted vault contains both parts needed to recover the credentials; application backup exclusions cannot control administrator backups. Host disk encryption remains a host responsibility.
+
+Native authentication confirms an operation through the desktop's authentication agent. It does not establish secure input against arbitrary same-session software on every display system. Chat locking revokes person-held reveal and release authority; it does not erase every credential already cached in process memory or stop authorized background provider use.
+
+An API bearer carries device-owner authority, not proof of a fresh human gesture. A bearer caller can approve held sends while their chat is already unlocked and can configure providers and initiate credential-backed requests without another presence challenge. Provider endpoint changes therefore matter even when metadata never returns the raw key. Credential custody and locked-chat release checks do not establish isolation from these owner-authorized effects.
+
 Linux native presence also requires an observed active graphical session with an unlocked state. Screen lock, suspend and lock-observer loss invalidate in-flight native confirmations; the host invalidates pending challenges and rejects delayed unlock commits from before that boundary.
 
 Primary risks are unauthorized local API use, path escape, subprocess boundary failure, unmediated egress, secret disclosure, runaway work, and treating untrusted content as authority.
