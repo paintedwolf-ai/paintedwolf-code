@@ -61,6 +61,10 @@ type vaultCommand struct {
 	Request vaultidentity.Request `json:"request"`
 }
 
+// desktopBroker owns descriptor 6 for the lifetime of the protected desktop so
+// a GC finalizer cannot close the broker socket while the desktop is running.
+var desktopBroker *os.File
+
 func main() {
 	if len(os.Args) == 5 && os.Args[1] == "--browser-engine-victim" {
 		os.Exit(runBrowserEngineVictim(os.Args[2], os.Args[3], os.Args[4]))
@@ -69,6 +73,7 @@ func main() {
 		runEngineVault(os.Args[2])
 		return
 	}
+	desktopBroker = os.NewFile(6, "broker")
 	ready := make(chan struct{}, 4)
 	for range 4 {
 		go func() {
@@ -145,6 +150,7 @@ func main() {
 		}
 		_, _ = os.Stdout.Write(out)
 	}
+	runtime.KeepAlive(desktopBroker)
 }
 
 func runEngineVault(raw string) {
@@ -167,7 +173,7 @@ func runEngineVault(raw string) {
 // starts a detached background child that must outlive the launch without
 // holding the supervisor or generation lock open.
 func brokerProbe(facts *Facts) {
-	broker := os.NewFile(6, "broker")
+	broker := desktopBroker
 	null, err := os.Open("/dev/null")
 	if err != nil {
 		facts.BrokerError = err.Error()
