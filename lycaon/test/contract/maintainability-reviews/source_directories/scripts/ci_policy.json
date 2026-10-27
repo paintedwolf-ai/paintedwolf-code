@@ -1,0 +1,17 @@
+{
+  "category": "source_directories",
+  "artifact": "scripts/ci_policy",
+  "kind": "module",
+  "workstream": "ci-throughput",
+  "disposition": "retain",
+  "reason": "The 42 modules own hosted verification planning, execution, recovery, and observation. Queue batching remains a separate subpackage. Admission and native execution have distinct contracts; job and delivery accounting share one observational module. Retain this bounded directory without adding a second scheduler or policy state owner.",
+  "reviewed_commit": "4abb13f929e3510f25810fad41e2b9a88d3a8eb3",
+  "ceiling": 42,
+  "reviewed_shape": "9eb0f750e0fbc7bb9e5299553f58d43b8af93462c214d6398b98cead47374a08",
+  "boundaries": {
+    "scripts/verification_tests/ci/test_hosted_plan_execution.py": "372d2e74fd4f111ff1174107ec1e522fcac3728d7671a38680b2baf1975a1a8a",
+    "scripts/verification_tests/ci/test_hosted_schedule_execution.py": "7b909c4495cd7bb3afb6f47daa7fd8ad98519d961136e7f7be5d0b10563fa60c",
+    "scripts/verification_tests/ci/test_retry_evidence_execution.py": "0f65e345aae47f2afb2f338c2ec164e352f323024216a02d0144ddf338f00d5b",
+    "scripts/verification_tests/ci/test_throughput_metrics_execution.py": "1bab3e2cb512ab7cb1684abf2ca71df73455a09c78c0ce43ab1adea302330bdc"
+  }
+}

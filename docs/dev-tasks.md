@@ -723,6 +723,12 @@ Background submissions validate these flags before creating a job.
 
 ### Selection arguments
 
+`./task den:test:rust -- --compile-only` and
+`./task decide:test -- --compile-only` compile all normal test targets without
+executing them. They use the same resources and pinned features as the complete
+test targets; a compile-only pass does not establish runtime verification.
+No other native selection flags are accepted.
+
 Arguments after `--` reach a catalog target only when the catalog's `selection`
 section declares a grammar for it; anything else is refused before admission,
 because Task drops arguments a recipe does not reference and the whole target

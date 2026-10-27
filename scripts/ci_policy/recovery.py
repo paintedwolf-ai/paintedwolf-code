@@ -12,7 +12,7 @@ import subprocess
 import zipfile
 
 from .github import api, pages, repository
-from .evidence import retryable
+from .retry_evidence import permits_retry, current_group
 
 MAX_ARTIFACT_BYTES = 32 * 1024 * 1024
 
@@ -103,9 +103,7 @@ def recover(run):
         return
     records, failures = evidence(run)
     jobs = list(pages(f"{repository()}/actions/runs/{run['id']}/attempts/{run['run_attempt']}/jobs", 'jobs'))
-    # Every failed executable lane must have evidence. Missing evidence cannot prove a runner fault.
-    failed_jobs = [j for j in jobs if j['conclusion'] in {'failure', 'timed_out'} and j['name'] not in {'check', 'qualification'}]
-    if len(failed_jobs) == len([r for r in records if r.get('classification') != 'passed']) and retryable(records, run['run_attempt']):
+    if permits_retry(run, records, jobs) and current_group(run):
         api(f"{repository()}/actions/runs/{run['id']}/rerun-failed-jobs", 'POST')
         return
     if run.get('path') == '.github/workflows/qualification.yml':

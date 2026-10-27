@@ -20,7 +20,7 @@ class QualificationHistoryTests(unittest.TestCase):
             for name, row in zip(artifacts, qualified):
                 path = Path(directory) / name / "ci/timings.json"
                 path.parent.mkdir(parents=True)
-                path.write_text(json.dumps({"lane": row["lane"], "shard": row["shard"], "status": "passed",
+                path.write_text(json.dumps({"basis": "setup-and-execution", "lane": row["lane"], "shard": row["shard"], "status": "passed",
                                             "seconds": 1500 if row["lane"] == "behavior" else 600, "packages": {}}))
 
         with patch.object(timings.github, "api", return_value={"workflow_runs": [{"id": 3}, {"id": 2}]}), \
@@ -37,7 +37,7 @@ class QualificationHistoryTests(unittest.TestCase):
         build = next(row for row in matrix["include"] if row["lane"] == "integration-build")
         self.assertEqual((build["timing_row"], build["expected_seconds"]), ("build", 600))
         self.assertEqual([row["lane"] for row in matrix["include"][:4]], ["limits", "lint", "behavior", "behavior"])
-        self.assertIn("| integration-build |  | 600 | build | 3 |", hosted_schedule.summarize(matrix, measured))
+        self.assertIn("| integration-build |  | normal | 600 | build | 3 |", hosted_schedule.summarize(matrix, measured))
         del measured["lanes"]["behavior 2/2"]
         fallback = hosted_plan.matrix("integration", scope=scope, timings=measured)
         self.assertEqual({row["timing_basis"] for row in fallback["include"]}, {"catalog-budget"})

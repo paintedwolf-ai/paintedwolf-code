@@ -635,8 +635,7 @@ tasks:
       - sh: command -v cargo
         msg: cargo required — install rustup from https://rustup.rs; rust-toolchain.toml selects the version
     cmds:
-      - bash {{.SCRIPTS_DIR}}/ensure-tauri-binaries.sh
-      - cargo test --workspace --all-targets --quiet
+      - python3 {{.SCRIPTS_DIR}}/ci_policy/native_verify.py den {{.CLI_ARGS}}
 
   decide:test:
     desc: Decision engine (bialy) Rust tests
@@ -652,8 +651,7 @@ tasks:
       - sh: command -v cargo
         msg: cargo required — install rustup from https://rustup.rs; rust-toolchain.toml selects the version
     cmds:
-      # Parity tests use the shipped binary's features.
-      - bash {{.SCRIPTS_DIR}}/toolchain/decide-test.sh --quiet
+      - python3 {{.SCRIPTS_DIR}}/ci_policy/native_verify.py decide {{.CLI_ARGS}}
 
   den:test:coverage:
     desc: Frontend Vitest with v8 coverage report

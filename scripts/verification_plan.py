@@ -305,6 +305,8 @@ def validate_selection(names, arguments):
     if len(names) != 1:
         raise ValueError("pass verification selection arguments to one target at a time")
     grammar = data["selection"][names[0]]
+    if names[0] in {"den:test:rust", "decide:test"} and arguments != ["--compile-only"]:
+        raise ValueError(f"{names[0]} accepts only --compile-only. No verification was queued")
     if grammar == "go":
         requested = go_selection(arguments, names[0])["packages"]
         scoped_packages(names[0], requested, data["go"][names[0]]["packages"])

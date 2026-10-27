@@ -25,6 +25,17 @@ class MergeGroupTests(unittest.TestCase):
         self.assertEqual(polls, [('https://github.example/owner/repo', QUEUE_REF)] * 4)
         self.assertEqual(sleeps, [merge_group.INTERVAL_SECONDS] * 4)
 
+    def test_cancellation_failure_keeps_watching_without_cancelling_a_live_branch(self):
+        from unittest.mock import Mock
+        cancel = Mock(side_effect=[subprocess.CalledProcessError(1, ['gh']), None])
+        exists = Mock(side_effect=[False, None, True, False])
+        sleeps = []
+        with patch('builtins.print'):
+            merge_group.watch(QUEUE_REF, 'https://example.test/repo', cancel,
+                              exists=exists, sleep=sleeps.append)
+        self.assertEqual(cancel.call_count, 2)
+        self.assertEqual(len(sleeps), 4)
+
     def test_only_a_missing_ref_reads_as_gone(self):
         for code, state in [(0, True), (2, False), (128, None), (1, None)]:
             with self.subTest(code=code), patch.object(merge_group.subprocess, 'run',
