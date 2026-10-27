@@ -38,4 +38,12 @@ case "$1" in
     fi
     ;;
 esac
+case "$1" in
+  purge|abort-install)
+    rm -f /var/lib/painted-wolf-code/reinstall-after-remove
+    if [ -d /var/lib/painted-wolf-code ]; then
+      rmdir /var/lib/painted-wolf-code 2>/dev/null || true
+    fi
+    ;;
+esac
 exit 0

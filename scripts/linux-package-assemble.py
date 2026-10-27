@@ -35,6 +35,7 @@ import tempfile
 import textwrap
 import time
 
+from linux_release.arch import build as build_arch
 from linux_release.payload import load as load_payload
 
 PACKAGE_NAME = "painted-wolf-code"
@@ -227,7 +228,12 @@ def rpm_tree(root: Path, deb_tree: Path, destination: Path) -> Path:
     rpm_only = config.optional_files(root, "rpm")
     subprocess.run(["cp", "-al", f"{deb_tree}/.", str(destination)], check=True)
     for installed in deb_only.keys() - rpm_only.keys():
-        (destination / installed.lstrip("/")).unlink()
+        target = destination / installed.lstrip("/")
+        target.unlink()
+        parent = target.parent
+        while parent != destination and not any(parent.iterdir()):
+            parent.rmdir()
+            parent = parent.parent
     for installed in rpm_only.keys() - deb_only.keys():
         target = destination / installed.lstrip("/")
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -369,6 +375,14 @@ def assemble(args: argparse.Namespace) -> int:
                 f"{resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss // 1024} MiB",
                 file=sys.stderr,
             )
+            if args.pacman or args.pacman_container:
+                tree = rpm_tree(root, staged / "data", Path(workdir) / "pacman-tree")
+                for installed, source in load_package_config(root).optional_files(root, "pacman").items():
+                    destination = tree / installed.lstrip("/")
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(source, destination)
+                package = build_arch(root, tree, args.arch, bundle_dir / "pacman", args.pacman_container)
+                print(f"linux-package-assemble: {package}", file=sys.stderr)
     except (OSError, ValueError, KeyError, json.JSONDecodeError, subprocess.CalledProcessError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
@@ -384,6 +398,8 @@ def main() -> int:
     build.add_argument("--arch", required=True, choices=sorted(DEB_ARCHES))
     build.add_argument("--version", required=True, help="Linux package version (release-metadata.py)")
     build.add_argument("--zstd-level", type=int, default=19)
+    build.add_argument("--pacman", action="store_true", help="also construct the native pacman package with makepkg")
+    build.add_argument("--pacman-container", action="store_true", help="use the pinned native CPU Arch packaging substrate")
     build.set_defaults(run=assemble)
     check = commands.add_parser("compare", help="require two extracted package trees to match")
     check.add_argument("--root", type=Path, default=Path(__file__).resolve().parent.parent)

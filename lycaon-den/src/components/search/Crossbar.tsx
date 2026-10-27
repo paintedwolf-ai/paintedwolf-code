@@ -68,7 +68,6 @@ import {
 import {
   ariaKeyShortcutsForHandler,
   bindingForHandler,
-  displayBindingFor,
 } from "../../shortcuts/display-binding-for.ts";
 import { attachDispatcher, registerCommandHandler } from "../../shortcuts/dispatcher.ts";
 import { ChromeDragSurface } from "../shell/ChromeDragSurface.tsx";
@@ -77,10 +76,10 @@ import {
   contributionCommandEnabled,
   dispatchContributionCommand,
   reportDispatchFailure,
+  type CrossbarCommandState,
 } from "../../contributions/dispatch.ts";
 import { contributionFrame } from "../../contributions/contribution-store.ts";
 import {
-  ActionCommandIcon,
   EscalateArrowIcon,
   GotoTargetIcon,
   PaletteSlotIcon,
@@ -91,7 +90,8 @@ import { ContributionCommandFlow } from "./ContributionCommandFlow.tsx";
 import { Scrollport } from "../primitives/Scrollport.tsx";
 import { createTablistKeyboard } from "../../platform/interaction/roving-focus.ts";
 import {
-  commandDisabledReason,
+  CrossbarActionRow,
+  actionStatusLabel,
   ContributionSearchLane,
   sourceDisabledLabel,
   globIndicatorTitle,
@@ -111,8 +111,8 @@ export type CrossbarProps = {
   initialCommandId?: string;
   /** Most-recent shell navigation targets. */
   gotoTargets?: readonly CrossbarGotoTarget[];
-  /** Availability-filtered contribution commands from the hydrated frame. */
-  contributionCommands?: readonly ContributionCommand[];
+  /** One availability snapshot and its filtered commands. */
+  contributionActions?: CrossbarCommandState;
   onClose: () => void;
   onEscalate: (args: {
     query: string;
@@ -545,7 +545,7 @@ export function Crossbar(props: CrossbarProps) {
       outside: indexPage().query === query().trim() ? indexPage().outside ?? null : null,
       canRevealOutside: canRevealOutside(),
       revisions: revisions().query === query().trim() ? revisions().comparisons : [],
-      contributionCommands: props.contributionCommands,
+      contributionCommands: props.contributionActions?.commands,
     }),
   );
 
@@ -1118,6 +1118,9 @@ export function Crossbar(props: CrossbarProps) {
             data-testid="crossbar-list"
             viewport={{ onScroll: syncListEdges }}
           >
+            <Show when={actionStatusLabel(props.contributionActions, query(), mode())}>
+              {(label) => <li class="den-crossbar__status" role="status">{label()}</li>}
+            </Show>
             <Show when={!showHitStatusRow() && coverageNote()}>
               <li class="den-crossbar__status den-crossbar__coverage" role="status" data-testid="crossbar-coverage">
                 {coverageNote()}
@@ -1163,35 +1166,8 @@ export function Crossbar(props: CrossbarProps) {
                 const active = () => selIdx() === activeIndex();
                 if (row.kind === "action") {
                   return (
-                    <li>
-                      <button
-                        type="button"
-                        class="den-crossbar__row"
-                        classList={{ "den-crossbar__row--active": active() }}
-                        data-testid={`crossbar-action-${row.command.id}`}
-                        aria-disabled={!contributionCommandEnabled(row.command)}
-                        onMouseEnter={() => setActiveTo(selIdx())}
-                        onClick={() => activateRow(row)}
-                      >
-                        <span class="den-crossbar__glyph" aria-hidden="true">
-                          <ActionCommandIcon icon={row.command.icon} />
-                        </span>
-                        <span class="den-crossbar__primary">
-                          {row.command.title}
-                        </span>
-                        <span class="den-crossbar__secondary">
-                          {row.command.category || "Other"} · {row.command.provider}
-                        </span>
-                        <Show when={!contributionCommandEnabled(row.command)}>
-                          <span class="den-crossbar__disabled-reason">
-                            {commandDisabledReason(row.command)}
-                          </span>
-                        </Show>
-                        <span class="den-crossbar__chord">
-                          {displayBindingFor(row.command.id)}
-                        </span>
-                      </button>
-                    </li>
+                    <CrossbarActionRow command={row.command} active={active()}
+                      onHover={() => setActiveTo(selIdx())} onActivate={() => activateRow(row)} />
                   );
                 }
                 if (row.kind === "recent") {
@@ -1436,7 +1412,7 @@ export function Crossbar(props: CrossbarProps) {
                 return null;
               }}
             </For>
-            <Show when={rows().length === 0 && !showHitStatusRow()}>
+            <Show when={rows().length === 0 && !showHitStatusRow() && !actionStatusLabel(props.contributionActions, query(), mode())}>
               <li class="den-crossbar__empty" data-testid="crossbar-empty">
                 {query().trim()
                   ? "No matching actions or results."

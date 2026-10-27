@@ -58,6 +58,7 @@ func startBrokered(request launchbroker.Request, fds []int) (int, error) {
 		Files: files,
 		Sys:   &syscall.SysProcAttr{Setsid: true, Setctty: request.Terminal, Ctty: 0},
 	}
+	// #nosec G204 -- the broker intentionally executes the validated host-program request without a shell.
 	return syscall.ForkExec(path, request.Argv, attributes)
 }
 

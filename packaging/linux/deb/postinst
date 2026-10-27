@@ -9,13 +9,21 @@ fi
 # Register the package-authored units and refresh desktop caches; nothing else.
 SOCKET_UNIT=paintedwolf-vault-identity.socket
 SERVICE_UNIT=paintedwolf-vault-identity.service
+# Removal disabled the socket, so a reinstall enables it like a first install.
+REINSTALL_MARKER=/var/lib/painted-wolf-code/reinstall-after-remove
 if [ -f "/usr/lib/systemd/system/${SOCKET_UNIT}" ] && [ -d /run/systemd/system ]; then
   systemctl daemon-reload || true
-  systemctl enable --now "${SOCKET_UNIT}" || true
-  # An upgrade replaces the service binary; a running instance restarts on it.
-  if [ "$1" = "configure" ] && [ -n "$2" ]; then
-    systemctl try-restart "${SERVICE_UNIT}" || true
+  if [ "$1" = "configure" ]; then
+    if [ -z "${2:-}" ] || [ -f "${REINSTALL_MARKER}" ]; then
+      systemctl enable --now "${SOCKET_UNIT}" || true
+    else
+      # Restart an active instance without changing the administrator's enablement.
+      systemctl try-restart "${SERVICE_UNIT}" || true
+    fi
   fi
+fi
+if [ "$1" = "configure" ]; then
+  rm -f "${REINSTALL_MARKER}"
 fi
 if command -v update-desktop-database >/dev/null 2>&1; then
   update-desktop-database -q /usr/share/applications || true

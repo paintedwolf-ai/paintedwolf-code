@@ -16,6 +16,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/installbinding"
 	"github.com/lycaon/lycaon/internal/osprocess"
 )
 
@@ -59,6 +60,9 @@ func ensureReaper() error {
 }
 
 func startReaperLocked(name string, args ...string) error {
+	if err := installbinding.Verify(name); err != nil {
+		return err
+	}
 	read, write, err := os.Pipe()
 	if err != nil {
 		return fmt.Errorf("reaper pipe: %w", err)

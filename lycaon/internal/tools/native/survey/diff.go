@@ -133,6 +133,9 @@ func (t *DiffTool) loadDiffFile(ctx context.Context, tctx tools.ToolContext, rel
 	}
 	st, err := sourceview.LoadText(ctx, "diff", sourceview.AccessRead, tctx, resolved)
 	if err != nil {
+		if toolrejection.AsToolReject(err) != nil {
+			return "", "", err
+		}
 		return "", "", fmt.Errorf("diff %s: %w", relPath, err)
 	}
 	return st.Content, relSlash, nil

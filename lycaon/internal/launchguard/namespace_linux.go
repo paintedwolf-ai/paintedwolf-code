@@ -28,11 +28,11 @@ type Identity struct {
 // setuid bootstrap. A traced or no_new_privs launch cannot obtain this state.
 func CaptureCaller() (Identity, error) {
 	uid, effective, saved := unix.Getresuid()
-	if uid <= 0 || effective != 0 || saved != 0 {
+	if uid <= 0 || uint64(uid) > uint64(^uint32(0)) || effective != 0 || saved != 0 {
 		return Identity{}, errors.New("the installed privileged bootstrap transition is unavailable")
 	}
 	gid, effectiveGID, savedGID := unix.Getresgid()
-	if gid < 0 || effectiveGID != gid || savedGID != gid {
+	if gid < 0 || uint64(gid) > uint64(^uint32(0)) || effectiveGID != gid || savedGID != gid {
 		return Identity{}, errors.New("bootstrap group identity differs from the original caller")
 	}
 	groups, err := os.Getgroups()
@@ -41,6 +41,9 @@ func CaptureCaller() (Identity, error) {
 	}
 	caller := Identity{UID: uint32(uid), GID: uint32(gid)}
 	for _, group := range groups {
+		if group < 0 || uint64(group) > uint64(^uint32(0)) {
+			return Identity{}, errors.New("supplementary group exceeds the kernel identity range")
+		}
 		caller.Groups = append(caller.Groups, uint32(group))
 	}
 	return caller, nil
@@ -74,6 +77,7 @@ func prctlAllThreads(option, arg2, arg3, arg4, arg5 uintptr) error {
 }
 
 func capsetAllThreads(header *unix.CapUserHeader, data *unix.CapUserData) error {
+	// #nosec G103 -- both pointers name fixed-layout capability structures copied synchronously by the kernel.
 	if _, _, errno := syscall.AllThreadsSyscall(
 		unix.SYS_CAPSET,
 		uintptr(unsafe.Pointer(header)),
