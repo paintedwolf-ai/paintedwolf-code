@@ -163,11 +163,16 @@ class LinuxReleaseRepositoryTests(unittest.TestCase):
             calls.append(("pacman", channel, catalog, private))
             destination.mkdir()
             return {"family": "pacman", "architecture": manifest["architecture"]}
-        with patch.object(release_repositories, "native_version", return_value="1.2.3-1"), \
+        # Each assembly host reads only its own package format.
+        read = []
+        with patch.object(release_repositories, "native_version", side_effect=lambda family, path: read.append(family) or "1.2.3-1"), \
                 patch.object(release_repositories.native_repositories, "assemble", side_effect=native), \
                 patch.object(release_repositories.pacman_repository, "assemble", side_effect=pacman):
             assemble({"deb", "rpm"}, self.artifacts, self.work / "native", VERSION, SOURCE, "stable", Path("key"))
+            self.assertEqual(sorted(set(read)), ["deb", "rpm"])
+            read.clear()
             assemble({"pacman"}, self.artifacts, self.work / "pacman", VERSION, SOURCE, "stable", Path("key"))
+            self.assertEqual(set(read), {"pacman"})
         self.assertEqual(calls, [("deb", "stable", CATALOG, Path("key")), ("rpm", "stable", CATALOG, Path("key")),
                                  ("pacman", "stable", CATALOG, Path("key")), ("pacman", "stable", CATALOG, Path("key"))])
         index = json.loads((self.work / "pacman/generations.json").read_text())

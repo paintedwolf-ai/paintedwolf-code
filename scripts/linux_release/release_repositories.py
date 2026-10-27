@@ -51,19 +51,21 @@ def native_version(family: str, path: Path) -> str:
     return subprocess.check_output(arguments, text=True, timeout=60).strip()
 
 
-def plan(artifacts: Path, version: str, source_commit: str, catalog: Path | None = None, *, read_version=None) -> list[dict]:
+def plan(artifacts: Path, version: str, source_commit: str, catalog: Path | None = None, *, read_version=None,
+         families=frozenset(FAMILIES)) -> list[dict]:
     """One apt and one dnf generation for every architecture, one pacman generation per architecture."""
     read_version = read_version or native_version
     generations = []
     if not public_linux(catalog):
         return generations
-    for family in ["deb", "rpm"]:
+    for family in [name for name in ["deb", "rpm"] if name in families]:
         rows = [{"file": name, "sha256": row["sha256"], "architecture": row["goarch"],
                  "native_version": read_version(family, row["path"])}
                 for name, row in sorted(public_packages(artifacts, version, family, catalog).items())]
         generations.append({"name": family, "family": family, "manifest": {
             "format_version": 1, "source_commit": source_commit, "version": version, "packages": rows}})
-    for name, row in sorted(public_packages(artifacts, version, "pacman", catalog).items()):
+    pacman = public_packages(artifacts, version, "pacman", catalog) if "pacman" in families else {}
+    for name, row in sorted(pacman.items()):
         generations.append({"name": "pacman-" + row["architecture"], "family": "pacman", "manifest": {
             "format_version": 1, "source_commit": source_commit, "version": version,
             "architecture": row["architecture"], "packages": [
@@ -74,7 +76,7 @@ def plan(artifacts: Path, version: str, source_commit: str, catalog: Path | None
 def assemble(families: set[str], artifacts: Path, output: Path, version: str, source_commit: str, channel: str,
              private: Path, catalog: Path = CATALOG, platforms: Path | None = None) -> list[dict]:
     output.mkdir(parents=True, exist_ok=False)
-    selected = [row for row in plan(artifacts, version, source_commit, platforms) if row["family"] in families]
+    selected = plan(artifacts, version, source_commit, platforms, families=families)
     for row in selected:
         destination = output / row["name"]
         if row["family"] == "pacman":
