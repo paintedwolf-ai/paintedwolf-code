@@ -1,0 +1,14 @@
+{
+  "category": "source_files",
+  "artifact": "scripts/verification_plan.py",
+  "kind": "module",
+  "workstream": "ci-throughput",
+  "disposition": "retain",
+  "reason": "The catalog validator owns selection grammar and rejects unsupported arguments before admission. Native compile-only mode adds one exact selector without arbitrary Cargo flags or shared receipt reuse. Retain this owner within its existing 375-line ceiling.",
+  "reviewed_commit": "4abb13f929e3510f25810fad41e2b9a88d3a8eb3",
+  "ceiling": 375,
+  "boundaries": {
+    "scripts/verification_tests/scheduler/test_planning_execution.py": "e42f5f1e607fecf44d7dc5a9a825372afc023e1792769110a4e403e6e914fb38",
+    "scripts/verification_tests/ci/test_native_admission_execution.py": "78995df1ddf95a3b14b4f416cf855885ad9629f6e4911e31dc8239f245a2cf87"
+  }
+}

@@ -28,15 +28,15 @@ let
 in
 assert lib.assertMsg (bunVersion == "1.3.14" && nodeVersion == "26.3.0")
   "Update the hash-checked Nix toolchain inputs when repository pins change";
-assert lib.assertMsg (lib.hasInfix "\ngo 1.26.9\n" (builtins.readFile (source + "/lycaon/go.mod")))
+assert lib.assertMsg (lib.hasInfix "\ngo 1.26.10\n" (builtins.readFile (source + "/lycaon/go.mod")))
   "Update the Nix Go source hash when go.mod changes";
 {
   rust = rust-bin.fromRustupToolchainFile (source + "/rust-toolchain.toml");
   go = go_1_26.overrideAttrs {
-    version = "1.26.9";
+    version = "1.26.10";
     src = fetchurl {
-      url = "https://go.dev/dl/go1.26.9.src.tar.gz";
-      sha256 = "9735d7dcdb65b35d3fa577f04064737c03b89cf1a2b71e6e69fe2f3c6f9fd4ca";
+      url = "https://go.dev/dl/go1.26.10.src.tar.gz";
+      sha256 = "fd63e883ba2f2bfca93c1646b31ebef63e2b1e4d2b317c9789d976a68d81f36f";
     };
   };
   bun = bun.overrideAttrs {

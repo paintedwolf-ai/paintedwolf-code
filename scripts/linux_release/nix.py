@@ -14,25 +14,32 @@ import time
 import tempfile
 
 from ..artifact_paths import artifact_root
-from . import nix_archive, factory_source, nix_scanner_tools
+from . import nix_archive, factory_source, nix_runner, nix_scanner_tools, nix_progress
 
 ROOT = Path(__file__).resolve().parents[2]
 SYSTEMS = {"x86_64": "x86_64-linux", "aarch64": "aarch64-linux"}
 NIX = ["nix", "--extra-experimental-features", "nix-command flakes"]
+CREDENTIALS = ("GH_TOKEN", "GITHUB_TOKEN", "LINUX_PACKAGE_SIGNING_KEY", "FEED_SIGNING_KEYS_JSON",
+               "TAURI_SIGNING_PRIVATE_KEY", "TAURI_SIGNING_PRIVATE_KEY_PASSWORD")
 COMPONENTS = ("default", "bun-lock", "frontend", "shell", "engine", "bound-engine", "bialy", "document-core",
-              "resources", "browser", "gitengine", "ocr", "decision-resources", "scanner-original", "scanner-finalized", "notices", "notice-tools",
+              "resources", "browser", "gitengine", "ocr", "decision-resources", "scanner-original", "scanner-finalized", "notices", "notice-tools", "closure-notices",
               "scanner-host-tools", "nixos-module", "nixos-gnome-vm", "nixos-plasma-vm", "nix-workflow-fixture")
+
+
+def credential_free_environment() -> dict:
+    """Nix evaluation and builds never receive publication or repository credentials."""
+    return {name: value for name, value in os.environ.items() if name not in CREDENTIALS}
 
 
 def command(operation: str, root: Path, component: str = "default", source: str | None = None) -> list[str]:
     source = source or "git+file://" + str(root)
     if operation == "check":
-        return NIX + ["flake", "check", "--no-build", "--all-systems", "--no-write-lock-file", source]
+        return NIX + ["flake", "check", "-L", "--no-build", "--all-systems", "--no-write-lock-file", source]
     if platform.system() != "Linux" or platform.machine() not in SYSTEMS:
         raise ValueError("native Nix package builds require Linux amd64 or arm64")
     system = SYSTEMS[platform.machine()]
     section = "checks" if component == "nixos-module" else "packages"
-    return NIX + ["build", "--json", "--no-link", "--no-write-lock-file",
+    return NIX + ["build", "-L", "--json", "--no-link", "--no-write-lock-file",
                   "--option", "sandbox", "true", "--max-jobs", "1", "--cores", "1",
                   source + "#" + section + "." + system + "." + component]
 
@@ -73,10 +80,7 @@ def execute(operation: str, root: Path = ROOT, component: str = "default",
     source = None if role is None else ("git+file://" + str(factory_root) + "?rev=" +
                                        factory_commit + "&dir=" + role["subdirectory"])
     invocation = command(operation, root, component, source)
-    environment = dict(os.environ)
-    for name in ("GH_TOKEN", "GITHUB_TOKEN", "LINUX_PACKAGE_SIGNING_KEY",
-                 "FEED_SIGNING_KEYS_JSON", "TAURI_SIGNING_PRIVATE_KEY", "TAURI_SIGNING_PRIVATE_KEY_PASSWORD"):
-        environment.pop(name, None)
+    environment = credential_free_environment()
     report = {
         "format_version": 1, "operation": operation, "component": component,
         "lock_sha256": hashlib.sha256(lock.read_bytes()).hexdigest(),
@@ -99,8 +103,11 @@ def execute(operation: str, root: Path = ROOT, component: str = "default",
     if component == "scanner-host-tools" and operation == "check":
         report["passed"] = True
         return retain_report(root, report, 0)
-    result = subprocess.run(invocation, cwd=root, env=environment, text=True, stdout=subprocess.PIPE)
+    result = nix_progress.run(invocation, cwd=root, env=environment)
     report["passed"] = result.returncode == 0
+    if result.returncode == 0 and operation == "check" and role is None:
+        result, report["nonflake"] = nonflake_identity(root, environment)
+        report["passed"] = result.returncode == 0
     if result.returncode == 0 and operation == "build":
         report["builds"] = json.loads(result.stdout)
         outputs = [path for build in report["builds"] for path in build["outputs"].values()]
@@ -118,6 +125,27 @@ def execute(operation: str, root: Path = ROOT, component: str = "default",
             report["archive"] = {"path": str(archive), "publication": "nonrelease"}
             report["passed"] = result.returncode == 0
     return retain_report(root, report, result.returncode)
+
+
+def nonflake_identity(root, environment):
+    """Require default.nix to instantiate the flake's exact application for every system."""
+    identities = {}
+    for system in SYSTEMS.values():
+        flake = subprocess.run(NIX + ["eval", "--raw", "--no-write-lock-file",
+                                      f"git+file://{root}#packages.{system}.default.drvPath"],
+                               cwd=root, env=environment, text=True, stdout=subprocess.PIPE)
+        if flake.returncode != 0:
+            return flake, identities
+        entry = subprocess.run(["nix-instantiate", "--arg", "stdenv", f'{{ hostPlatform.system = "{system}"; }}',
+                                str(root / "default.nix")],
+                               cwd=root, env=environment, text=True, stdout=subprocess.PIPE)
+        identities[system] = {"flake": flake.stdout.strip(), "nonflake": entry.stdout.strip()}
+        if entry.returncode != 0:
+            return entry, identities
+        if identities[system]["flake"] != identities[system]["nonflake"]:
+            print(f"error: default.nix selects a different {system} derivation than flake.nix", file=sys.stderr)
+            return subprocess.CompletedProcess(entry.args, 1), identities
+    return subprocess.CompletedProcess([], 0), identities
 
 
 def retain_report(root, report, status):
@@ -159,8 +187,14 @@ def main() -> int:
     parser.add_argument("--prepare-factory-lock", action="store_true")
     parser.add_argument("--application-source-root", type=Path)
     parser.add_argument("--application-source-commit")
+    parser.add_argument("--prepare", action="store_true",
+                        help="provision pinned Nix and every locked input, then evaluate nothing")
     args = parser.parse_args()
     try:
+        if args.prepare:
+            if args.operation != "check":
+                raise ValueError("--prepare provisions evaluation inputs for check")
+            return nix_runner.prepare(NIX, ROOT, credential_free_environment())
         return execute(args.operation, component=args.component, archive_dir=args.archive_dir,
                        factory_root=args.factory_source_root, factory_commit=args.factory_source_commit,
                        factory_channel=args.factory_channel, prepare_factory_lock=args.prepare_factory_lock,

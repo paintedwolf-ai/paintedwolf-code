@@ -68,6 +68,13 @@ class PlanningTests(unittest.TestCase):
         different = {**stage, "flags": ["-run=TestOther"]}
         self.assertNotEqual(planning.stage_key(stage), planning.stage_key(different))
 
+    def test_rust_workspace_tests_accept_no_component_or_cargo_arguments(self):
+        planning.validate_selection(["den:test:rust"], [])
+        for arguments in (["desktop-settings-observer"], ["--manifest-path", "/foreign/Cargo.toml"],
+                          ["-p", "anything"]):
+            with self.subTest(arguments=arguments), self.assertRaises(ValueError):
+                planning.validate_selection(["den:test:rust"], arguments)
+
     def test_harness_filters_use_bounded_resources_and_reject_unsupported_flags(self):
         args = ["den:harness:test", "--", "recording-encoding-measurement.spec.ts", "--grep", "capture",
                 "--retries=0"]

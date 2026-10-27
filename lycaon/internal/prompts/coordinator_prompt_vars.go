@@ -2,28 +2,19 @@ package prompts
 
 import "strings"
 
-// CoordinatorPromptGates are turn-scoped prompt conditions.
-type CoordinatorPromptGates struct {
-	PendingOverlayPromote bool
-	// VerifyRequired reflects the active phase evidence gate.
-	VerifyRequired bool
-	// VerifyCommand is the project's declared test command, or empty when undeclared.
-	VerifyCommand string
-}
-
 // MergeCoordinatorPromptVars adds ordered turn-surface variables. The offered
 // set comes from MergeCoordinatorSurfacePathVars when it ran first; otherwise
 // the surface floor is what this call offers.
 func MergeCoordinatorPromptVars(
 	surfaceID string,
 	transition ExecutionModePromptTransition,
-	gates CoordinatorPromptGates,
+	verifyCommand string,
 	into map[string]any,
 ) error {
 	if into == nil {
 		return nil
 	}
-	MergeCoordinatorTurnSurfaceVars(surfaceID, gates.PendingOverlayPromote, into)
+	into["surface_id"] = strings.TrimSpace(surfaceID)
 	into["execution_mode"] = strings.TrimSpace(transition.ExecutionMode)
 	into["execution_mode_previous"] = strings.TrimSpace(transition.ExecutionModePrevious)
 	into["execution_mode_entered"] = strings.TrimSpace(transition.ExecutionModeEntered)
@@ -55,8 +46,7 @@ func MergeCoordinatorPromptVars(
 	}
 	MergeVisualShowVars(offered, requestable, into)
 	into["more_tools_loadable"] = len(requestable) > 0
-	into["verify_required"] = gates.VerifyRequired
-	into["verify_command"] = strings.TrimSpace(gates.VerifyCommand)
+	into["verify_command"] = strings.TrimSpace(verifyCommand)
 	return nil
 }
 

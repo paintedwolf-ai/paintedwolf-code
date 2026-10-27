@@ -32,6 +32,17 @@ class NixFinalLayoutTests(unittest.TestCase):
     def seal(self, output, architecture="x86_64"):
         return nix_layout.seal(output, architecture, "1.0.2-rc6", Path("/selected-nix/bin/nix-store"))
 
+    def test_generation_ships_a_user_namespace_grant_for_its_exact_engine_only(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output, root = self.fixture(directory)
+            self.seal(output)
+            engine = str(root / "bin/pw")
+            name = "paintedwolf-engine-" + hashlib.sha256(engine.encode()).hexdigest()
+            profiles = list((output / "share/painted-wolf-code/apparmor").iterdir())
+            self.assertEqual([path.name for path in profiles], [name])
+            self.assertEqual(profiles[0].read_text(), "abi <abi/4.0>,\n\n"
+                             f'profile {name} "{engine}" flags=(unconfined) {{\n  userns,\n}}\n')
+
     def test_both_native_architectures_retain_final_fixup_bytes_and_generation_paths(self):
         for architecture in nix_layout.MACHINES:
             with self.subTest(architecture=architecture), tempfile.TemporaryDirectory() as directory:
@@ -39,10 +50,15 @@ class NixFinalLayoutTests(unittest.TestCase):
                 executable = root / "bin/pw"
                 with executable.open("ab") as target:
                     target.write(b"final ELF fixup bytes")
-                rows = self.seal(output, architecture)["executables"]
+                manifest = self.seal(output, architecture)
+                self.assertEqual(manifest["format_version"], 2)
+                rows = manifest["executables"]
                 row = next(row for row in rows if row["path"] == str(executable))
                 self.assertEqual(row["sha256"], hashlib.sha256(executable.read_bytes()).hexdigest())
                 self.assertEqual(row["size"], executable.stat().st_size)
+                payload_row = next(item for item in manifest["payload"] if item["path"] == "bin/pw")
+                self.assertEqual(payload_row["sha256"], row["sha256"])
+                self.assertEqual(payload_row["size"], row["size"])
                 receipt = json.loads((root / "nix-layout.json").read_text())
                 self.assertEqual(receipt, {"format_version": 1, "output": str(output),
                     "nix_store": "/selected-nix/bin/nix-store"})

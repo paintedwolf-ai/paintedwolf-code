@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
@@ -114,7 +113,7 @@ func TestMCPSettingsSSEOnToggle(t *testing.T) {
 		if evt.Topic != wire.EventTopicSettings {
 			t.Fatalf("topic = %q", evt.Topic)
 		}
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("expected settings SSE event")
 	}
 }

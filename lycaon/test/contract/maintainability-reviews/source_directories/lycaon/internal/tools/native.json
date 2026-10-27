@@ -4,12 +4,12 @@
   "kind": "module",
   "workstream": "tool-domains",
   "disposition": "retain",
-  "reason": "Native tools already extract command, page, survey and other bounded families. The root retains host-coupled workspace reads and the single source write door, with contract tests beside callers. Further package extraction solely to reduce counts would expose internal effect machinery.",
-  "reviewed_commit": "f9991b89ce895dc20f77aa80611c2e2217518cdb",
-  "ceiling": 45,
+  "reason": "The native hub retains host-coupled reads and its single complete source write door. P03 extracts the existing write algorithm into write_operation.go so structured and typed entry points share admission, review, retry, attribution and publication. Retain the measured 47 source files; moving this operation into a child package would invert the existing effect boundary. Real native write/refusal and mixed editor-owner fixtures passed. Future growth needs a fresh cohesion review.",
+  "reviewed_commit": "f66017977c2500399b4e4ca07e6fff3ee8c3ca76",
+  "ceiling": 47,
   "boundaries": {
     "lycaon/internal/tools/native/source_write_contract_test.go": "9787a70ac8836316cc9692eace9f647a1c78ba3d2eaf09c31175fe2a0c87a2a6",
-    "lycaon/internal/tools/native/read_blobstore_compressed_test.go": "25d3a535342e58cdcd8ee3cff809fa2bcc990059869378b9948131a656dbfe80"
+    "lycaon/internal/tools/native/write_operation_test.go": "ff658d65608cdaf3f50ce3990a5b98bc8c60158c94ab410b946f78a7ab826805"
   },
-  "reviewed_shape": "c72506b10cdf213702dd00cfaed3f4ef56e3d7810f41d660374a5dd714e4942f"
+  "reviewed_shape": "4611bb71cb1f5aea7c7dd6e03ad4e786690aa14b804a78ea2921d44ff81d73d1"
 }

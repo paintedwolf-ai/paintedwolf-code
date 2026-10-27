@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -33,9 +32,9 @@ func TestPromptWithoutProviderPublishesRenderedHostError(t *testing.T) {
 	hub := newProjectHub(t, subCtx, base, project.ID)
 
 	acceptPromptOpenAPI(t, base, sess.ID, `{"text":"hello"}`)
-	waitPromptIdleHTTP(t, base, sess.ID, 10*time.Second)
+	waitPromptIdleHTTP(t, base, sess.ID)
 
-	env := waitForSessionHostError(t, hub, 10*time.Second)
+	env := waitForSessionHostError(t, hub)
 	var sessionEv wire.SessionEvent
 	if err := json.Unmarshal(env.Data, &sessionEv); err != nil {
 		t.Fatalf("decode session event: %v", err)
@@ -53,15 +52,10 @@ func TestPromptWithoutProviderPublishesRenderedHostError(t *testing.T) {
 	}
 }
 
-func waitForSessionHostError(t *testing.T, hub *projectHub, deadline time.Duration) wire.EventEnvelope {
+func waitForSessionHostError(t *testing.T, hub *projectHub) wire.EventEnvelope {
 	t.Helper()
-	deadlineAt := time.Now().Add(deadline)
-	for {
-		remaining := time.Until(deadlineAt)
-		if remaining <= 0 {
-			t.Fatal("timeout waiting for session envelope with host_error")
-		}
-		env := hub.waitFor(t, wire.EventTopicSession, remaining)
+	for t.Context().Err() == nil {
+		env := hub.waitFor(t, wire.EventTopicSession)
 		var raw map[string]any
 		if err := json.Unmarshal(env.Data, &raw); err != nil {
 			t.Fatalf("session data not an object: %v", err)
@@ -70,15 +64,15 @@ func waitForSessionHostError(t *testing.T, hub *projectHub, deadline time.Durati
 			return env
 		}
 	}
+	t.Fatal("timeout waiting for session envelope with host_error")
+	return wire.EventEnvelope{}
 }
 
-func waitPromptIdleHTTP(t *testing.T, base, sessionID string, timeout time.Duration) {
+func waitPromptIdleHTTP(t *testing.T, base, sessionID string) {
 	t.Helper()
-	var status wire.SessionStatus
-	testutil.WaitFor(t, timeout, func() bool {
+	testutil.WaitFor(t, func() bool {
 		sess := openAPIGetJSON[wire.Session](t, base, "/v1/sessions/{id}",
 			map[string]string{"id": sessionID}, http.StatusOK)
-		status = sess.Status
-		return status == wire.SessionStatusIdle
+		return sess.Status == wire.SessionStatusIdle
 	})
 }

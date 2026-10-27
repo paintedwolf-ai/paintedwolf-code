@@ -77,10 +77,7 @@ func mergeCoordinatorPromptVarsForTripartite(
 			ExecutionModeEntered:  transition.ExecutionModeEntered,
 			ExecutionModeLeft:     transition.ExecutionModeLeft,
 		},
-		prompts.CoordinatorPromptGates{
-			PendingOverlayPromote: len(state.PendingOverlayIDs) > 0,
-			VerifyCommand:         state.VerifyCommand,
-		},
+		state.VerifyCommand,
 		vars,
 	)
 	contractcheck.FailErr(t, "merge coordinator prompt vars", err)

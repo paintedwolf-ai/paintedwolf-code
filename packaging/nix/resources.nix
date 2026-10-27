@@ -22,7 +22,10 @@ stdenvNoCC.mkDerivation {
     test -s "$out/THIRD-PARTY-NOTICES.md"
     runHook postInstall
   '';
-  passthru = { inherit inputs scanner notices; };
+  passthru = {
+    inherit inputs scanner notices;
+    noticeRuntimeInputs = [ inputs.browser inputs.gitengine inputs.ocr inputs.decision scanner notices ];
+  };
   meta = {
     description = "Immutable complete runtime resources for Painted Wolf Code";
     license = lib.licenses.asl20;

@@ -13,10 +13,17 @@ requires:
 when: paintedwolf.progress_gated_tool && paintedwolf.progress_missing && !paintedwolf.review_loop_active && session_posture != "spec"
 effect: block
 copy:
-  what: '**`{{ tool }}`** did not run: this session has no progress checklist yet.'
-  cause: Edits and delegated work start only after the deliverables are recorded with update_progress.
+  what: '**`{{ tool }}`** did not run: the current request has no progress checklist.'
+  cause: >-
+    Edits and delegated work start only after the deliverables are recorded with update_progress.
+    A checklist completed for an earlier request does not cover a new request.
   why: A checklist update does not run the rejected call.
-  fix: Call **`update_progress`** with a **`## Progress`** heading and one pending **`- [ ]`** row for each deliverable in the request (use **`- [>]`** for optional report-only rows). After that succeeds, retry the rejected **`{{ tool }}`** call with its original arguments. Do not switch to a different edit or dispatch tool to avoid this step.
+  fix: >-
+    Call **`update_progress`** with JSON arguments including at least one open **`- [ ]`** step, for example
+    `{"content":"## Progress\n- [ ] Deliver the requested changes\n- [ ] Verify the result"}`.
+    Replace the row text with the requested deliverables; use **`- [>]`** for optional report-only rows.
+    After it succeeds, retry the rejected **`{{ tool }}`** call with its original arguments.
+    A different edit or dispatch tool has the same prerequisite.
   instead: Call **`update_progress`**, then retry the same rejected call
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator
@@ -29,10 +36,15 @@ x-paintedwolf-scenarios:
     expect_contains:
       - 'Rejected:'
       - 'Code: PROGRESS_MISSING'
+      - the current request has no progress checklist
+      - earlier request does not cover a new request
+      - at least one open
       - update_progress
       - '## Progress'
       - did not run
       - retry
+      - '\n- [ ]'
+      - '{"content":'
   - id: missing_checklist_write
     vars:
       session_posture: build
@@ -40,7 +52,12 @@ x-paintedwolf-scenarios:
     expect_contains:
       - 'Rejected:'
       - 'Code: PROGRESS_MISSING'
+      - the current request has no progress checklist
+      - earlier request does not cover a new request
+      - at least one open
       - update_progress
       - '## Progress'
       - did not run
       - retry
+      - '\n- [ ]'
+      - '{"content":'

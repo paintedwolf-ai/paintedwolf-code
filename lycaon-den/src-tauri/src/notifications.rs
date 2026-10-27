@@ -5,8 +5,26 @@ pub(crate) mod native;
 
 #[cfg(target_os = "linux")]
 mod linux;
+#[cfg(target_os = "linux")]
+pub(crate) use linux::present_main_window;
 
 use tauri::{AppHandle, Manager};
+
+pub(crate) const ACTIVATED_EVENT: &str = "notifications://activated";
+
+#[derive(Debug, Clone, Copy, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum PresentationOwner {
+    Native,
+    Renderer,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ActivatedPayload {
+    pub session_id: Option<String>,
+    pub presentation: PresentationOwner,
+}
 
 /// Runs notification work off the main thread.
 #[cfg(target_os = "macos")]
@@ -86,12 +104,25 @@ pub(crate) async fn den_notify_send(
 
 /// Nonpositive counts clear the dock badge.
 #[tauri::command]
-pub(crate) fn den_set_badge_count(app: tauri::AppHandle, count: i64) -> Result<(), String> {
-    let Some(window) = app.get_webview_window("main") else {
-        return Err("Main window is unavailable".into());
-    };
-    let value = if count > 0 { Some(count) } else { None };
-    window.set_badge_count(value).map_err(|e| e.to_string())
+pub(crate) async fn den_set_badge_count(app: tauri::AppHandle, count: i64) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    {
+        // Linux launchers read the LauncherEntry protocol the shell publishes.
+        let (reply, receiver) = tokio::sync::oneshot::channel();
+        app.run_on_main_thread(move || {
+            let _ = reply.send(linux::launcher::set_on_main_thread(count));
+        })
+        .map_err(|e| e.to_string())?;
+        receiver.await.map_err(|_| "launcher count was not published".to_string())?
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let Some(window) = app.get_webview_window("main") else {
+            return Err("Main window is unavailable".into());
+        };
+        let value = if count > 0 { Some(count) } else { None };
+        window.set_badge_count(value).map_err(|e| e.to_string())
+    }
 }
 
 #[tauri::command]
@@ -137,4 +168,27 @@ pub(crate) fn shutdown(app: &AppHandle) {
     linux::shutdown(app);
     #[cfg(not(target_os = "linux"))]
     let _ = app;
+}
+
+#[cfg(test)]
+mod activation_contract_tests {
+    use super::{ActivatedPayload, PresentationOwner};
+
+    #[test]
+    fn activation_wire_keeps_session_and_presentation_responsibility_together() {
+        let native = ActivatedPayload {
+            session_id: Some("session".into()),
+            presentation: PresentationOwner::Native,
+        };
+        assert_eq!(serde_json::to_value(native).unwrap(), serde_json::json!({
+            "sessionId": "session", "presentation": "native"
+        }));
+        let fallback = ActivatedPayload {
+            session_id: None,
+            presentation: PresentationOwner::Renderer,
+        };
+        assert_eq!(serde_json::to_value(fallback).unwrap(), serde_json::json!({
+            "sessionId": null, "presentation": "renderer"
+        }));
+    }
 }

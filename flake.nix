@@ -35,6 +35,13 @@
       packages = eachSystem (system:
         let
           pkgs = packagesFor system;
+          runtimeEdges = import ./packaging/nix/closure-runtime-edges.nix { inherit pkgs nixpkgs; source = self; };
+          noticesOutputsValid = import ./packaging/nix/closure-notices-check.nix {
+            inherit pkgs runtimeEdges;
+            nixpkgsRevision = nixpkgs.rev;
+            roots = [ application shell bound-engine bialy document-core resources frontend ]
+              ++ application.noticeRuntimeInputs;
+          };
           converter = bun2nix.packages.${system}.default;
           frontend = pkgs.callPackage ./packaging/nix/frontend.nix {
             source = self;
@@ -49,15 +56,22 @@
             scannerIdentityFile = "${resources}/scanner-identity.base64";
             gsettingsExecutable = "${pkgs.glib.bin}/bin/gsettings";
           };
-        in {
+          application = pkgs.callPackage ./packaging/nix/application.nix {
+            source = self;
+            engine = bound-engine;
+            inherit shell bialy document-core resources;
+          };
+        in assert noticesOutputsValid; {
           engine = pkgs.callPackage ./packaging/nix/engine.nix {
             source = self;
           };
           inherit frontend resources shell bialy document-core bound-engine;
-          default = pkgs.callPackage ./packaging/nix/application.nix {
+          default = application;
+          closure-notices = pkgs.callPackage ./packaging/nix/closure-notices.nix {
             source = self;
-            engine = bound-engine;
-            inherit shell bialy document-core resources;
+            inherit application runtimeEdges;
+            components = [ shell bound-engine bialy document-core resources frontend ];
+            nixpkgsRevision = nixpkgs.rev;
           };
           browser = resources.inputs.browser;
           gitengine = resources.inputs.gitengine;

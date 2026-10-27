@@ -1,4 +1,4 @@
-{ lib, stdenvNoCC, callPackage, python3, makeWrapper, wrapGAppsHook3, gtk3
+{ lib, stdenvNoCC, callPackage, python3, makeShellWrapper, wrapGAppsHook3, gtk3, apparmor-parser, apparmor-profiles, mesa
 , gsettings-desktop-schemas, glib-networking, nix, source, shell, engine
 , bialy, document-core, resources
 , scannerTools ? callPackage ./scanner-tools.nix { inherit source; }
@@ -13,7 +13,7 @@ stdenvNoCC.mkDerivation {
   pname = "painted-wolf-code";
   inherit version;
   dontUnpack = true;
-  nativeBuildInputs = [ python3 makeWrapper wrapGAppsHook3 ];
+  nativeBuildInputs = [ python3 makeShellWrapper wrapGAppsHook3 ];
   buildInputs = [ gtk3 gsettings-desktop-schemas glib-networking ];
   dontStrip = true;
   dontPatchELF = true;
@@ -32,8 +32,22 @@ stdenvNoCC.mkDerivation {
     done
     install -m755 ${bialy}/bin/bialy "$root/bin/bialy"
     install -m755 ${document-core}/bin/pw-document-core "$root/bin/pw-document-core"
+    # Outside NixOS no driver environment is selected by the system configuration, and
+    # host-installed drivers are foreign to the generation, so the closure's Mesa is the
+    # explicit EGL, GBM and Vulkan driver. An explicitly set variable is kept.
+    for driver in ${mesa}/share/glvnd/egl_vendor.d/50_mesa.json ${mesa}/lib/gbm ${mesa}/lib/dri; do
+      test -e "$driver"
+    done
+    vulkan_drivers=$(printf '%s:' ${mesa}/share/vulkan/icd.d/*.json)
+    test -e "''${vulkan_drivers%%:*}"
+    graphics='[ -e /run/opengl-driver ] || {
+      export __EGL_VENDOR_LIBRARY_DIRS="''${__EGL_VENDOR_LIBRARY_DIRS:-${mesa}/share/glvnd/egl_vendor.d}"
+      export GBM_BACKENDS_PATH="''${GBM_BACKENDS_PATH:-${mesa}/lib/gbm}"
+      export LIBGL_DRIVERS_PATH="''${LIBGL_DRIVERS_PATH:-${mesa}/lib/dri}"
+      export VK_DRIVER_FILES="''${VK_DRIVER_FILES:-'"''${vulkan_drivers%:}"'}"
+    }'
     for executable in painted-wolf-code pw pw-logs; do
-      makeWrapper "$root/bin/$executable" "$out/bin/$executable"
+      makeShellWrapper "$root/bin/$executable" "$out/bin/$executable" --run "$graphics"
     done
     install -m644 ${source}/lycaon-den/src-tauri/icons/128x128.png "$out/share/icons/hicolor/128x128/apps/painted-wolf-code.png"
     substitute ${source}/packaging/linux/dev.paintedwolf.code.desktop \
@@ -50,10 +64,16 @@ stdenvNoCC.mkDerivation {
       -consumer-identity-file ${resources}/scanner-identity.base64 \
       -evidence-root ${source}/lycaon/config/runtime/scanners \
       -audit-output "$out/lib/painted-wolf-code/scanner-audit.json" > /dev/null
-    python3 ${source}/scripts/linux_release/nix_layout.py \
+    (cd ${source} && python3 -m scripts.linux_release.nix_layout \
       --output "$out" --architecture ${lib.escapeShellArg architecture} \
-      --version ${lib.escapeShellArg version} --nix-store ${nix}/bin/nix-store
+      --version ${lib.escapeShellArg version} --nix-store ${nix}/bin/nix-store)
+    # The shipped engine grant must parse; administrators load it unchanged.
+    for profile in "$out"/share/painted-wolf-code/apparmor/*; do
+      ${apparmor-parser}/bin/apparmor_parser --skip-kernel-load --skip-cache --skip-read-cache \
+        -I ${apparmor-profiles}/etc/apparmor.d "$profile"
+    done
   '';
+  passthru.noticeRuntimeInputs = [ mesa nix ];
   meta = {
     description = "Painted Wolf Code desktop application and complete immutable runtime resources";
     license = lib.licenses.asl20;

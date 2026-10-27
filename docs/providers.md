@@ -448,7 +448,7 @@ latency alone.
 
 ### Prose-only requests
 
-A request can forbid tool use while keeping its tool definitions: a coordinator's final closeout turn, or a report-document repair that asks for one fence. Transports validate tool-call history against the declared tools, so dropping them would break a conversation that already used tools. Each adapter maps the restriction onto its own control: OpenAI-compatible endpoints receive `tool_choice: "none"`, Anthropic `tool_choice: {"type": "none"}`, and Vertex express `functionCallingConfig.mode: NONE`. Ollama has no such control and renders tool history without definitions, so its request omits them. Bedrock Converse has neither a no-call choice nor tolerance for tool history without its tool configuration; its requests keep the tools, and the host refuses any call such a turn returns. A worker's final turn is not prose-only: it offers only its completion tool.
+A coordinator's final closeout turn forbids tool use while keeping its tool definitions. Closeout repairs on earlier turns keep the surface callable so the coordinator can resume work. Transports validate tool-call history against the declared tools, so dropping them would break a conversation that already used tools. Each adapter maps the restriction onto its own control: hosted OpenAI-compatible endpoints receive `tool_choice: "none"`, Anthropic `tool_choice: {"type": "none"}`, and Vertex express `functionCallingConfig.mode: NONE`. Ollama and local OpenAI-compatible inference servers omit the definitions instead: Ollama renders tool history without them, and a local chat template would otherwise render tool-call instructions the server will not parse. Bedrock Converse has neither a no-call choice nor tolerance for tool history without its tool configuration; its requests keep the tools, and the host refuses any call such a turn returns. A worker's final turn is not prose-only: it offers only its completion tool.
 
 ### Fallback tool-call grammar
 
@@ -473,6 +473,7 @@ tool_call_rejection_profiles:
         source: ollama/ollama model/parsers/ministral.go (toolByName)
         grammar: 'tool ''([a-zA-Z0-9_-]{1,64})'' not found'
       - kind: arguments_unparsed
+        diagnostic: unexpected_end
         source: ollama/ollama model/parsers/ministral.go (Add); Go encoding/json scanner.go
         grammar: 'unexpected end of JSON input'
 
@@ -483,6 +484,7 @@ providers:
 
 - **Ship catalog only.** Local instances inherit their kind's profile; they cannot define profiles or select a different one.
 - **Exact grammars.** Each `grammar` must span the whole message and every rule cites its `source`. `kind` is a closed set with host handling behind each value, and fixes how many names its grammar captures.
+- **Bounded diagnostics.** An `arguments_unparsed` rule may declare `diagnostic`: `unescaped_newline`, `unexpected_end`, or `invalid_escape`. The matched enum supplies a typed observation to OAR; provider text is not interpolated into guidance. Omitted diagnostics keep generic feedback. Rules are ordered, so specific grammars precede generic ones.
 - **Only when a call is possible.** The request must offer callable tools and set no structured output. Anything else, including unmatched text, keeps the provider's original error.
 - **`tool_not_offered`** captures exactly one name, which must be a function-name token outside the offered set; an offered name stays an error. The adapter restores a bare call with that name, and the prompt loop refuses it with `TOOL_NOT_OFFERED` before any definition lookup, so it never executes.
 - **`arguments_unparsed`** captures nothing and never becomes a call. A match becomes `ProviderToolCallUnparsedError`, which keeps the original message. The prompt loop answers it with `TOOL_CALL_UNPARSED` repair feedback ([tool feedback](agent-tool-feedback.md#model-response-repair)) for at most two consecutive responses, then fails with that error.
@@ -635,6 +637,20 @@ The budget is a hard host envelope around each attempt. The default (2 minutes) 
 Exhausting the envelope means the model was too slow for that service class, not that its endpoint is down: it records an unknown or incomplete usage receipt but does not open the lite-slot circuit. Neither does an attempt its caller ended, whether by canceling or by its own shorter deadline: that measures the caller's patience, not the endpoint. The circuit reads the same typed transport faults the [capacity gate](#capacity-and-concurrency) cools on, which the transport classifies from delivery state with caller cancellation outranking it. A model refusal, an unreachable endpoint, a silent one (delivered, no response within the header bound), and an overloaded one (still at capacity after its retries) open the cooling circuit, and the notice names which it saw. Every adapter, local or hosted, reports through that classification. A provider-reported output limit is distinct: partial usage is booked, the structured result is rejected, and the calling feature may retry with less input.
 
 Background compaction never spends the coordinator as a fallback. A failed attempt leaves canonical history and any prior valid compaction view unchanged; a later turn retries. Prompt fitting, authorization, and store recovery never depend on a successful utility completion.
+
+## Tool schema projection
+
+The full tool schema governs execution. Provider schemas are derived generation
+guidance: they preserve supported local constraints without changing the catalog
+or excluding arguments the full schema accepts. Function roots remain objects.
+Nested required fields name properties declared on that same node; cross-field
+conditions remain in host validation.
+
+Self-contained type unions survive. An unrepresentable alternative removes the
+whole union, while an unrepresentable intersection member can be omitted. An
+exclusive union survives only when its branches are unchanged: widening branches
+could create overlaps that reject valid arguments. Projection never invents a
+property type to replace an omitted condition.
 
 ## Feature projection
 

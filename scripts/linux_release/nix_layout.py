@@ -5,10 +5,14 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import stat
 import struct
 
+from . import nix_apparmor
+
+FORMAT_VERSION = 2
 ROLES = ("painted-wolf-code", "pw", "pw-logs", "pw-vault-identity", "pw-document-core", "bialy")
 MACHINES = {"x86_64": 62, "aarch64": 183}
 
@@ -55,21 +59,37 @@ def seal(output: Path, architecture: str, version: str, nix_store: Path) -> dict
         raise ValueError("resource and application product versions differ")
     if not (root / "THIRD-PARTY-NOTICES.md").is_file() or not (root / "THIRD-PARTY-NOTICES.md").stat().st_size:
         raise ValueError("complete dependency notices are required")
+    receipt = {"format_version": 1, "output": str(output), "nix_store": str(nix_store)}
+    (root / "nix-layout.json").write_text(json.dumps(receipt, indent=2) + "\n")
     executables = []
+    payload = []
     for path in sorted(root.rglob("*")):
-        if path.is_symlink() or not path.is_file():
+        rel = path.relative_to(root).as_posix()
+        if rel == "manifest.json":
             continue
-        mode = path.stat().st_mode
+        info = path.lstat()
+        mode = stat.S_IMODE(info.st_mode)
         if mode & (stat.S_ISUID | stat.S_ISGID):
             raise ValueError(f"Nix application payload must not install privileged executable modes: {path}")
+        if stat.S_ISLNK(info.st_mode):
+            payload.append({"path": rel, "kind": "symlink", "mode": mode, "target": os.readlink(path)})
+            continue
+        if stat.S_ISDIR(info.st_mode):
+            payload.append({"path": rel, "kind": "directory", "mode": mode})
+            continue
+        if not stat.S_ISREG(info.st_mode):
+            continue
         elf_architecture(path, architecture)
+        file_entry = entry(path)
         if mode & 0o111:
-            executables.append(entry(path))
-    manifest = {"format_version": 1, "package": "painted-wolf-code", "version": version,
-                "architecture": architecture, "install_root": str(root), "executables": executables}
-    receipt = {"format_version": 1, "output": str(output), "nix_store": str(nix_store)}
+            executables.append(file_entry)
+        payload.append({"path": rel, "kind": "file", "mode": mode,
+                        "sha256": file_entry["sha256"], "size": file_entry["size"]})
+    manifest = {"format_version": FORMAT_VERSION, "package": "painted-wolf-code", "version": version,
+                "architecture": architecture, "install_root": str(root),
+                "executables": executables, "payload": payload}
     (root / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
-    (root / "nix-layout.json").write_text(json.dumps(receipt, indent=2) + "\n")
+    nix_apparmor.write("engine", root / "bin/pw", output)
     return manifest
 
 

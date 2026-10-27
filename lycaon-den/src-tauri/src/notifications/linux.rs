@@ -3,6 +3,9 @@
 mod activation;
 mod delivery;
 mod identity;
+pub(super) mod launcher;
+
+pub(crate) use activation::present_main_window;
 
 use std::{
     cell::RefCell,
