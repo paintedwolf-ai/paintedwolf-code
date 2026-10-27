@@ -26,6 +26,11 @@ After changing a frontend dependency patch, run `./task setup-dev -- --frontend`
 to refresh the pinned packages before verification. Captured test trees share
 the workspace's installed dependencies.
 
+In a fresh worktree, run `./task gitengine:fetch` before tests that create or
+inspect Git repositories. This downloads and verifies the pinned Git bundle.
+Verification copies the staged bundle into its captured tree; it does not
+provision a missing bundle.
+
 Hosted shell preparation uses `./task setup-dev -- --shell-resources` to write
 qualified notices into the build checkout. `licenses:notices` is the isolated
 verification check; its snapshot outputs do not prepare a subsequent invocation.
