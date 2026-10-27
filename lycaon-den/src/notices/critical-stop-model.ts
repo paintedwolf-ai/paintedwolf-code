@@ -96,6 +96,10 @@ const NAMED_START_FAILURES: Record<
     code: "credential_vault_custodian_absent",
     copy: CLIENT_NOTICES.credential_vault_custodian_absent,
   },
+  installation_unverified: {
+    code: "installation_unverified",
+    copy: CLIENT_NOTICES.installation_unverified,
+  },
   credential_vault_custodian_unavailable: {
     code: "credential_vault_custodian_unavailable",
     copy: CLIENT_NOTICES.credential_vault_custodian_unavailable,

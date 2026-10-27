@@ -17,8 +17,8 @@ import (
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/test/wiring"
 	wire "github.com/lycaon/lycaon/pkg/api"
+	"github.com/lycaon/lycaon/test/wiring"
 )
 
 // conformanceEffects observes host state changes around one read. The sweep
@@ -239,6 +239,8 @@ func settleSourceWatcher(t *testing.T, settle func(context.Context), hub *events
 				step++
 				writeBarrier(step)
 			}
+		case <-t.Context().Done():
+			t.Fatal("the source watcher did not report the barrier file")
 		case <-retry.C:
 			step++
 			writeBarrier(step)

@@ -36,8 +36,7 @@ def profile(package):
     payload = facts.get("payload")
     valid_version = (
         type(version) is int
-        and ((version == 1 and "payload" not in facts)
-             or (version == 2 and isinstance(payload, list) and bool(payload)))
+        and version == 2 and isinstance(payload, list) and bool(payload)
     )
     if (not valid_version
             or facts.get("package") != "painted-wolf-code"
@@ -56,14 +55,13 @@ def profile(package):
         raise ValueError("selected engine must be the manifest's native ELF")
     entries = [entry for entry in facts.get("executables", [])
                if isinstance(entry, dict) and entry.get("path") == str(engine)]
-    payload_entries = [entry for entry in (payload or [])
+    payload_entries = [entry for entry in payload
                        if isinstance(entry, dict) and entry.get("path") == "bin/pw"]
     if (len(entries) != 1 or entries[0].get("sha256") != digest
             or entries[0].get("size") != engine.stat().st_size
-            or (version == 2 and (
-                len(payload_entries) != 1 or payload_entries[0].get("kind") != "file"
-                or payload_entries[0].get("sha256") != digest
-                or payload_entries[0].get("size") != engine.stat().st_size))):
+            or len(payload_entries) != 1 or payload_entries[0].get("kind") != "file"
+            or payload_entries[0].get("sha256") != digest
+            or payload_entries[0].get("size") != engine.stat().st_size):
         raise ValueError("selected engine bytes differ from final manifest")
     name = "paintedwolf-engine-" + hashlib.sha256(str(engine).encode()).hexdigest()
     return (f"profile {name} {literal(str(engine))} flags=(unconfined) {{\n"
