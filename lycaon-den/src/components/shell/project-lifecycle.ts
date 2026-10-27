@@ -1,3 +1,5 @@
+import { withdrawNotice } from "../../notices/notice-store.ts";
+import { CLIENT_NOTICES } from "../../notices/client-notices.generated.ts";
 import { type ShellProps } from "./shell-scope.ts";
 import { createProjectRemovalReview } from "./ProjectRemovalDialog.tsx";
 import { createProjectRemoval } from "./project-removal.ts";
@@ -235,6 +237,25 @@ export function createWorkspaceProjectRemoval(props: Pick<ShellProps, "projects"
     },
     report: (error) => noticeReporterFor(APP_SCOPE).reportError(error),
     notify: (notice) => noticeReporterFor(APP_SCOPE).publish(notice),
+    progress: (projectId, progress) => {
+      if (!progress) {
+        withdrawNotice("project_removal_running");
+        return;
+      }
+      const phase = {
+        preparing: "Preparing deletion",
+        chats: `Deleting chats: ${progress.completed} of ${progress.total} complete`,
+        project_data: "Deleting project data",
+        files: "Removing managed project files",
+        extensions: "Removing selected extensions",
+      }[progress.phase];
+      noticeReporterFor(APP_SCOPE).publish({
+        code: "project_removal_running",
+        title: CLIENT_NOTICES.project_removal_running.title,
+        message: `${props.projects.summary(projectId)?.displayName ?? "Project"}: ${phase}. You can keep using other projects.`,
+        severity: "info",
+      });
+    },
     extensionsChanged: () => { void invalidateContributionFrame(); },
   });
 

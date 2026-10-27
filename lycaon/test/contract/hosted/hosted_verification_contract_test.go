@@ -10,6 +10,7 @@ import (
 )
 
 type hostedStep struct {
+	Name     string
 	Uses     string
 	Run      string
 	If       string
@@ -19,7 +20,7 @@ type hostedStep struct {
 	With     map[string]string
 }
 
-const mergeGroupFailFast = "${{ github.event_name == 'merge_group' }}"
+const mergeGroupFailFast = "${{ github.event_name == 'merge_group' || startsWith(github.ref, 'refs/heads/gh-readonly-queue/main/') }}"
 
 type hostedJob struct {
 	Uses        string
@@ -75,6 +76,12 @@ func requireHostedGate(t *testing.T, jobs map[string]hostedJob, gate string, dep
 	slices.Sort(got)
 	slices.Sort(dependencies)
 	expectedCondition := "${{ !cancelled() }}"
+	if gate == "check" {
+		expectedCondition = "${{ !cancelled() && !(github.event_name == 'pull_request' && github.event.pull_request.draft) }}"
+	}
+	if gate == "ship-gates" {
+		expectedCondition = "${{ !cancelled() && inputs.rehearsal_run_id == '' }}"
+	}
 	if gate == "qualification" {
 		expectedCondition = "${{ !cancelled() && needs.select.outputs.admitted == 'true' }}"
 	}
@@ -282,6 +289,11 @@ func TestHostedProfilesAndSetupAreReachable(t *testing.T) {
 		for _, step := range hostedJobs(t, workflow)[job].Steps {
 			setup = setup || step.Uses == "./.github/actions/setup-verification"
 			if step.Run != "" && !setup {
+				// The timestamp records setup time without invoking a verification target.
+				const jobStart = `python3 -c 'import os, time; open(os.environ["GITHUB_ENV"], "a").write(f"PW_CI_JOB_STARTED_AT={time.time()}\n")'`
+				if workflow == "verification" && job == "verify" && step.Name == "Record job start" && step.Run == jobStart {
+					continue
+				}
 				t.Errorf("%s/%s must stage dependencies and notices before verification", workflow, job)
 			}
 		}

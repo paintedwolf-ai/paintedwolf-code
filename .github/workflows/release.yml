@@ -11,6 +11,14 @@ on:
         type: string
         required: false
         default: ''
+      rehearsal_run_id:
+        description: 'Diagnostic replay of retained signed upgrade fixtures; never publishes'
+        type: string
+        default: ''
+      rehearsal_case:
+        description: 'Exact prepared upgrade case to replay'
+        type: string
+        default: '1.0.2-preview'
 
 permissions:
   contents: read
@@ -26,7 +34,61 @@ env:
   DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
 
 jobs:
+  replay-bundle-upgrade:
+    if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && inputs.rehearsal_run_id != '' }}
+    needs: [ship-gates, bundle-upgrade, linux-candidates, publish-github-release]
+    runs-on: macos-15
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - name: Resolve retained upgrade fixtures
+        id: fixtures
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REHEARSAL_RUN_ID: ${{ inputs.rehearsal_run_id }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: PYTHONPATH=scripts python3 -m release_upgrade.replay
+      - uses: actions/setup-go@90ad2b35f69faf97585ad74d28fa006d2739b7af
+        with:
+          go-version-file: lycaon/go.mod
+          cache: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version-file: .bun-version
+          no-cache: true
+      - name: Install rehearsal dependencies
+        working-directory: lycaon-den
+        run: bun install --frozen-lockfile
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.rehearsal_run_id }}
+          artifact-ids: ${{ steps.fixtures.outputs.artifact_id }}
+          path: ${{ runner.temp }}/bundle-upgrade-fixtures
+          merge-multiple: true
+      - name: Replay signed installed upgrades without rebuilding
+        env:
+          REHEARSAL_CASE: ${{ inputs.rehearsal_case }}
+        run: |
+          ./task upgrade:rehearse -- --bundle --recovery-probe --case "${REHEARSAL_CASE}" \
+            --fixtures "${RUNNER_TEMP}/bundle-upgrade-fixtures" \
+            --evidence "${RUNNER_TEMP}/bundle-upgrade-evidence"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with:
+          name: replay-bundle-upgrade-evidence-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/bundle-upgrade-evidence
+          if-no-files-found: error
+          retention-days: 14
+
   classify:
+    if: ${{ inputs.rehearsal_run_id == '' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -205,6 +267,7 @@ jobs:
           ref: ${{ needs.classify.outputs.source_sha }}
           fetch-depth: 0
       - uses: ./.github/actions/setup-verification
+      - uses: ./.github/actions/cache-decide
       - uses: ./.github/actions/setup-bialy
       - name: Validate release inputs
         timeout-minutes: 60
@@ -242,7 +305,7 @@ jobs:
 
   ship-gates:
     # Judges failed and timed-out jobs, but a cancelled run must not wait for a runner to do so.
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && inputs.rehearsal_run_id == '' }}
     needs: [classify, validate-source]
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -355,6 +418,13 @@ jobs:
       - name: Restore the decision engine build
         if: ${{ matrix.goos == 'darwin' }}
         uses: ./.github/actions/cache-decide
+
+      - uses: ./.github/actions/cache-go
+        if: ${{ matrix.goos == 'darwin' }}
+      - uses: ./.github/actions/cache-notices-tools
+        if: ${{ matrix.goos == 'darwin' }}
+      - uses: ./.github/actions/cache-document-core
+        if: ${{ matrix.goos == 'darwin' }}
 
       - name: Restore the release build warmed on main
         if: ${{ matrix.goos == 'darwin' }}

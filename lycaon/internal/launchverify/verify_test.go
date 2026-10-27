@@ -217,14 +217,23 @@ func TestRecheckRefusesReusedPIDsAndReparenting(t *testing.T) {
 	}
 }
 
-func TestParseStatHandlesCommandNamesWithSpacesAndParentheses(t *testing.T) {
-	snap, err := parseStat([]byte("42 (a (b) c) S 7 42 42 0 -1 4194560 1 0 0 0 0 0 0 0 20 0 1 0 12345 1 1 1"))
-	testutil.FailErr(t, "parse stat", err)
-	if snap.PID != 42 || snap.PPID != 7 || snap.StartTime != 12345 {
+func TestSnapshotReadsStatThroughConfiguredProcRoot(t *testing.T) {
+	proc, verifier := newFixture(t)
+	proc.add(fakeProcess{pid: 42, ppid: 7, uid: 1000, euid: 1001, start: 12345})
+	path := verifier.procPath(42, "stat")
+	testutil.FailErr(t, "write command stat", os.WriteFile(path, []byte("42 (a (b) c) S 7 42 42 0 -1 4194560 1 0 0 0 0 0 0 0 20 0 1 0 12345 1 1 1"), 0o644))
+	snap, err := verifier.snapshot(42)
+	testutil.FailErr(t, "snapshot stat", err)
+	if snap.PID != 42 || snap.PPID != 7 || snap.StartTime != 12345 || snap.UID != 1000 || snap.EUID != 1001 {
 		t.Fatalf("snapshot = %+v", snap)
 	}
+	testutil.FailErr(t, "write mismatched pid", os.WriteFile(path, []byte("43 (pw) S 7 42 42 0 -1 4194560 1 0 0 0 0 0 0 0 20 0 1 0 12345"), 0o644))
+	if _, err := verifier.snapshot(42); err == nil {
+		t.Fatal("accepted another process record")
+	}
 	for _, bad := range []string{"", "42 S 7", "42 (x) S 7 1", "x (x) S 7 42 42 0 -1 4194560 1 0 0 0 0 0 0 0 20 0 1 0 1 1 1 1"} {
-		if _, err := parseStat([]byte(bad)); err == nil {
+		testutil.FailErr(t, "write invalid stat", os.WriteFile(path, []byte(bad), 0o644))
+		if _, err := verifier.snapshot(42); err == nil {
 			t.Fatalf("accepted %q", bad)
 		}
 	}

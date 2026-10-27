@@ -10,16 +10,27 @@ policy before editing. Start unfamiliar work at [docs](docs/README.md) and
 
 ## Operating rules
 
+- **Judge safety end to end:** a locally conservative safeguard must not create
+  greater overall risk, make successful use or recovery impractical, or shift
+  avoidable burden onto the user.
 - **Work in an isolated worktree and dedicated branch.** Reuse them for the same
   task. Unless the user requests local-only work, commit your changes, push to
   GitHub, and open a PR for CI. Stage only authored paths: `git add -- <paths>`.
   This authorizes ordinary task commits, branch pushes, and PRs, not publication
   to sibling repos, tags, force pushes, releases, deployments, or merging.
-- **Keep PRs draft until we believe the work is complete**, independently of CI
-  results. Return to draft if more implementation is needed. Merge only on
-  request: auto-merge on a ready PR enqueues it; never bypass required checks.
+- **Keep PRs draft only while their own work is unfinished**, independently of
+  CI results. Mark a complete PR ready even while it waits on another PR. Its
+  description must state the landing order of every unlanded prerequisite, for
+  example `Depends on #12 → #15`. Return to draft if more implementation is
+  needed. Merge only on request: auto-merge on a ready PR enqueues it; never
+  bypass required checks.
 - **Use root `./task` for repository dev and verification targets.** Use digest
   targets for test output; never truncate raw results with `tail` or `grep FAIL`.
+- **Base a PR on `main` unless it needs code from an unlanded PR.** A PR based
+  on another PR's branch gets no CI until it targets `main`. When its base PR
+  lands, automation retargets it and merges `main` into it, so fetch before your
+  next push and never force-push over that merge. An `update-conflict` label
+  means that merge conflicted: merge `main` yourself, resolve, and push.
 - **Ask first** for destructive Git/shared-state operations, discarding others'
   work, `--no-verify`, new top-level docs or task targets, and major dependency
   bumps. Prefer existing [documentation hubs](docs/README.md).
@@ -29,11 +40,26 @@ policy before editing. Start unfamiliar work at [docs](docs/README.md) and
 - **Report the crux, changes, verification, and unresolved work.** Surface findings
   that contradict the request before changing direction. Report verification
   results once available; do not narrate queued or running checks.
-- **Never merge unmerged feature branches into an omnibus integration PR.**
-  If PR B depends on PR A, PR A must land on `main` through the merge queue
-  first. If PR A fails or stalls in the queue, fix PR A in isolation. Absorbing
-  dependent PRs into a single combined branch to bypass queue serialization is
-  forbidden.
+- **Keep PRs separate; automatic queue batching is the exception.** Never
+  combine PRs: do not assemble omnibus PRs, merge a PR into any branch other
+  than `main`, or bring an open PR's commits into another PR's branch. Stacked
+  PRs, based on another PR's branch for review, are allowed; after the base PR
+  lands, retarget the dependent PR to `main` and rebase it onto the landed
+  commit before it enters the queue. The hosted queue coordinator may batch
+  already admitted waiting PRs in queue order, preserving active groups and explicit
+  campaign holds. Combined admission and merge-group checks remain required.
+  The `no-combine` label excludes a PR from batches while preserving its normal
+  tests and merge eligibility. Source head changes and draft decisions
+  invalidate a batch; failed batches fall back to individual checks. Keep the
+  originals open until the exact recorded heads land. A human draft decision
+  remains a handoff; never undo it automatically.
+- **Cancel superseded background Qualification when its source is obsolete.**
+  The hosted supersession controller may cancel queued or running background
+  main-push Qualification after validating source ancestry and rechecking run
+  identity. Preserve explicit candidate and release Qualification. Releases still
+  require passing Qualification on their exact source commit. This cancellation
+  policy needs no additional approval; local verification cancellation follows
+  the stuck-verification rules below.
 - **Keep backend and frontend presentation changes decoupled.** Backend PRs must
   not touch unrelated frontend presentation components. If an existing frontend
   file exceeds a maintainability threshold, leave it alone unless the PR is

@@ -77,10 +77,19 @@ func inspect(pid int) (Process, error) {
 		Instance: fmt.Sprintf("%d:%d", uint64(before.unique_id), uint32(before.version))}, nil
 }
 
-func signalInstance(process Process, name string) error {
-	signal, ok := map[string]C.int{"TERM": C.SIGTERM, "KILL": C.SIGKILL, "INT": C.SIGINT, "HUP": C.SIGHUP, "STOP": C.SIGSTOP, "CONT": C.SIGCONT, "USR1": C.SIGUSR1, "USR2": C.SIGUSR2}[name]
+func nativeSignal(kind signalKind) (C.int, bool) {
+	signal, ok := map[signalKind]C.int{
+		signalTerminate: C.SIGTERM, signalKill: C.SIGKILL, signalInterrupt: C.SIGINT,
+		signalHangup: C.SIGHUP, signalStop: C.SIGSTOP, signalContinue: C.SIGCONT,
+		signalUser1: C.SIGUSR1, signalUser2: C.SIGUSR2,
+	}[kind]
+	return signal, ok
+}
+
+func signalInstance(process Process, kind signalKind) error {
+	signal, ok := nativeSignal(kind)
 	if !ok {
-		return fmt.Errorf("unsupported signal %q", name)
+		return ErrUnsupported
 	}
 	_, version, ok := strings.Cut(process.Instance, ":")
 	if !ok {

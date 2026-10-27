@@ -9,6 +9,9 @@ inputs:
       ripgrep, and document-core dependencies)
     default: verification
     required: false
+  runtime-engines:
+    description: Provision Git and OCR engines used by host behavior checks
+    default: 'true'
   notices:
     description: Restore tools for the lane's explicit licenses:notices check
     default: 'false'
@@ -32,6 +35,9 @@ outputs:
   decide-cache-hit:
     description: Whether the decision engine's exact build cache was restored
     value: ${{ steps.decide.outputs.cache-hit }}
+  document-cache-hit:
+    description: Whether the document compiler cache was restored
+    value: ${{ steps.document.outputs.cache-hit }}
   artifact-root:
     description: Checkout artifact directory
     value: ${{ steps.paths.outputs.artifact-root }}
@@ -65,6 +71,11 @@ runs:
       uses: ./.github/actions/cache-go
       with:
         exact: ${{ inputs.save-caches }}
+
+    - name: Restore analysis tools
+      uses: ./.github/actions/cache-analysis-tools
+      with:
+        tools: ${{ inputs.analysis }}
 
     - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
       with:
@@ -100,6 +111,9 @@ runs:
       with:
         save: ${{ inputs.save-caches }}
 
+    - uses: ./.github/actions/cache-document-core
+      id: document
+
     - uses: ./.github/actions/cache-rust
       id: rust
       if: inputs.setup == 'shell' || inputs.setup == 'harness'
@@ -108,6 +122,11 @@ runs:
       id: decide
       if: inputs.setup == 'shell'
       uses: ./.github/actions/cache-decide
+
+    - name: Provision pinned Go modules
+      if: inputs.setup != 'frontend'
+      shell: bash
+      run: ./task setup-dev -- --ci-inputs
 
     - name: Set up maintained OpenGrep
       if: inputs.setup != 'frontend'
@@ -130,13 +149,13 @@ runs:
 
     # Git integration tests resolve the pinned engine from engine-root.
     - name: Fetch pinned git engine
-      if: inputs.setup != 'frontend'
+      if: inputs.setup != 'frontend' && inputs.runtime-engines == 'true'
       shell: bash
       run: ./task gitengine:fetch
 
     # Text recognition tests resolve the pinned engine from engine-root on Linux.
     - name: Fetch pinned text recognition engine
-      if: runner.os == 'Linux' && inputs.setup != 'frontend'
+      if: runner.os == 'Linux' && inputs.setup != 'frontend' && inputs.runtime-engines == 'true'
       shell: bash
       run: bash scripts/ocrengine-fetch.sh
 
@@ -145,11 +164,6 @@ runs:
       with:
         path: ~/.bun/install/cache
         key: bun-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.bun-version', 'lycaon-den/bun.lock') }}
-
-    - name: Provision pinned Go modules
-      if: inputs.setup != 'frontend'
-      shell: bash
-      run: ./task setup-dev -- --ci-inputs
 
     - name: Provision frontend native test inputs
       if: inputs.setup == 'frontend'
@@ -184,12 +198,6 @@ runs:
       if: inputs.setup != 'shell' && inputs.notices == 'true'
       shell: bash
       run: ./task setup-dev -- --notices-tools
-
-    - name: Restore analysis tools
-      if: inputs.analysis != 'none'
-      uses: ./.github/actions/cache-analysis-tools
-      with:
-        tools: ${{ inputs.analysis }}
 
     # Offline lanes cannot reach the module proxy, so a cache miss builds the analyzers here.
     - name: Provision analysis tools

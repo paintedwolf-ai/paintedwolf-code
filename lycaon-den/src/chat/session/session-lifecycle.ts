@@ -363,6 +363,7 @@ export async function sendChatPrompt(
       if (r.kind === "path-file" || r.kind === "path-folder") {
         return Boolean(r.root_id?.trim() && r.path?.trim());
       }
+      if (r.kind === "external-file" || r.kind === "external-folder") return Boolean(r.path?.trim());
       if (r.kind === "artifact") return Boolean(r.artifact_id?.trim());
       if (r.kind === "search-hit") {
         return Boolean(r.session_id?.trim() && r.source_ref?.trim() && r.hit_kind?.trim());

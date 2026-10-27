@@ -12,7 +12,7 @@ from ci_policy.cache_payload import compressed_size
 
 LIMIT = 8 * 1024**3
 GO_BUILD_LIMIT = 1024**3
-FAMILY = re.compile(r"^(go(?:-v[0-9]+)?|decide-v[0-9]+|den-rust-v[0-9]+|release-build)-(Linux|macOS)-(X64|ARM64)-")
+FAMILY = re.compile(r"^(go(?:-v[0-9]+)?|decide-v[0-9]+|den-rust-v[0-9]+|release-build|document-core-v[0-9]+)-(Linux|macOS)-(X64|ARM64)-")
 
 
 def family(key):
@@ -65,16 +65,14 @@ def plan(rows, key, size, limit=LIMIT):
     total = sum(row["size_in_bytes"] for row in rows)
     owned = [row for row in rows if row["ref"] == "refs/heads/main" and family(row["key"]) is not None]
     replaced = [row for row in owned if family(row["key"]) == owner]
-    others = sorted([row for row in owned if family(row["key"]) != owner],
-                    key=lambda row: (row.get("last_accessed_at", ""), -row["size_in_bytes"]))
     remove = []
-    for row in replaced + others:
+    for row in replaced:
         if total + reserve <= limit:
             break
         total -= row["size_in_bytes"]
         remove.append(row["id"])
     allowed = total + reserve <= limit
-    return {"allowed": allowed, "reason": "within budget" if allowed else "payload or unowned caches exceed budget",
+    return {"allowed": allowed, "reason": "within budget" if allowed else "payload cannot fit without displacing another cache family",
             "delete": remove if allowed else [],
             "retire_after_save": [row["id"] for row in replaced if row["id"] not in remove] if allowed else [],
             "stored_bytes": sum(row["size_in_bytes"] for row in rows),

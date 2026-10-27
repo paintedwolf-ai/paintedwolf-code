@@ -14,11 +14,15 @@
 //! `options` | `levels` | `true`/`false`) and are translated to the checkpoint's.
 //!
 //! An engine that cannot load exits before reading a request. Exit status
-//! [`EXIT_NO_CAPABLE_DEVICE`] means `auto` found no device fast enough; any other failure exits
-//! with status 1.
+//! [`EXIT_NO_CAPABLE_DEVICE`] means `auto` found no device fast enough, [`EXIT_NO_GPU`] that it
+//! found no device to run on at all; any other failure exits with status 1.
 
 /// The exit status for `auto` finding no device that meets the speed requirement.
 pub const EXIT_NO_CAPABLE_DEVICE: u8 = 3;
+
+/// The exit status for `auto` finding no device the engine runs on: on Linux, no hardware
+/// Vulkan GPU.
+pub const EXIT_NO_GPU: u8 = 4;
 
 /// What `bialy probe` prints on stdout: one device's reference batch time.
 #[derive(Debug, Serialize, Deserialize)]
