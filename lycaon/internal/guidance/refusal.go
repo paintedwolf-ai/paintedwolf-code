@@ -10,6 +10,9 @@ import (
 // ErrCloseoutStopped ends repair without authorizing a completion.
 var ErrCloseoutStopped = errors.New("closeout cannot complete")
 
+// ErrCloseoutNeedsRepairTurn marks a first refusal on a turn unable to invoke tools.
+var ErrCloseoutNeedsRepairTurn = errors.New("closeout needs a tool-enabled repair turn")
+
 // Refusal carries a rendered body and structured facts.
 type Refusal struct {
 	// Body is the rendered reject block the agent reads.

@@ -2,6 +2,8 @@ package promptloop_test
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
@@ -60,5 +62,73 @@ func TestRepeatedProseRejectionEndsWithBoundedHandoff(t *testing.T) {
 	}
 	if result == nil || result.LastAssistantID == "" {
 		t.Fatal("missing final handoff")
+	}
+}
+
+// Exercise the actual request surface, not only the retry counter.
+func TestGatedCloseoutGetsOneActingRepairRound(t *testing.T) {
+	for _, barrier := range []bool{false, true} {
+		for _, repaired := range []bool{false, true} {
+			t.Run(fmt.Sprintf("barrier=%t/repaired=%t", barrier, repaired), func(t *testing.T) {
+				messages := store.NewMemory()
+				sess, err := messages.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "")
+				testutil.FailErr(t, "create session", err)
+				gateOpen := true
+				registry := tools.NewStubRegistry()
+				calls := 0
+				testutil.FailErr(t, "register read", registry.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
+					calls++
+					gateOpen = false
+					return "required evidence", nil
+				}))
+				acting := &modelcall.Completion{Content: "Still unresolved"}
+				if repaired {
+					acting = &modelcall.Completion{ToolCalls: []api.ToolCall{{ID: "repair-read", Name: "read", Args: map[string]any{"path": "a.txt"}}}}
+				}
+				client := &sequentialLLMClient{completions: []*modelcall.Completion{{Content: "Premature closeout"}, acting, {Content: "Final report"}}}
+				deps := promptloop.StoreDeps(messages)
+				deps.Model.LLM = client
+				deps.Context.Tools = registry
+				deps.Context.Policy = &recordingToolPolicy{}
+				deps.Context.Limits = loopTestLimits(1)
+				deps.Context.CoordinatorFrame = investigateCoordinatorContext()
+				refusal := func() *guidance.Refusal {
+					return guidance.NewRefusal("WORKFLOW_GATES_OPEN_BEFORE_CLOSEOUT", "Required workflow evidence remains open").WithCause(errors.Join(guidance.ErrCloseoutStopped, guidance.ErrCloseoutNeedsRepairTurn))
+				}
+				if barrier {
+					deps.Closeout.AssertCompletion = func(context.Context, *api.Session) error {
+						if gateOpen {
+							return refusal()
+						}
+						return nil
+					}
+				} else {
+					deps.Closeout.BeforeFinishNoToolTurn = func(_ context.Context, _ *api.Session, _ []api.Message, _, _, _ string, _ bool, _ []string, invoke bool) (*guidance.Refusal, bool) {
+						if !gateOpen {
+							return nil, false
+						}
+						if invoke {
+							return guidance.NewRefusal("WORKFLOW_GATES_OPEN_BEFORE_CLOSEOUT", "Required workflow evidence remains open"), true
+						}
+						return refusal(), true
+					}
+				}
+				result, err := promptloop.NewPromptLoopForTest(deps).Run(t.Context(), promptloop.PromptRunInput{
+					SessionID: sess.ID, Session: sess, History: userHistory("Complete the workflow"), ProfileID: "coordinator",
+					ToolCtx: tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}},
+				})
+				if repaired {
+					testutil.FailErr(t, "repair closeout", err)
+					if result == nil || calls != 1 {
+						t.Fatalf("result=%+v calls=%d", result, calls)
+					}
+				} else if err == nil || !errors.Is(err, guidance.ErrCloseoutStopped) || result != nil || calls != 0 {
+					t.Fatalf("unresolved closeout result=%+v error=%v calls=%d", result, err, calls)
+				}
+				if client.idx < 2 || client.idx > 3 || client.requests[0].ToolUse != modelcall.ToolUseForbidden || client.requests[1].ToolUse != modelcall.ToolUseAllowed || client.toolsPerRequest[1] == 0 {
+					t.Fatalf("repair request tools=%v calls=%d", client.toolsPerRequest, client.idx)
+				}
+			})
+		}
 	}
 }

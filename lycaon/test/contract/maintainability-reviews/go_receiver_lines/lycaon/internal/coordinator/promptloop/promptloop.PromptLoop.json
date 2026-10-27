@@ -1,0 +1,16 @@
+{
+  "category": "go_receiver_lines",
+  "artifact": "lycaon/internal/coordinator/promptloop/promptloop.PromptLoop",
+  "kind": "runtime_service",
+  "workstream": "workflow-closeout-repair",
+  "disposition": "retain",
+  "reason": "The prompt-run owner retains preparation, bounded iteration and final settlement. One repair re-entry adds no dependency or independent operation authority. Retain at most 440 receiver lines; request-surface and completion-barrier contracts require a tool-enabled repair and a single retry while completion remains gated.",
+  "reviewed_commit": "523225a96c92addace7f2f0d6e05d34f4b53a365",
+  "ceiling": 440,
+  "boundaries": {
+    "lycaon/internal/coordinator/promptloop/prose_reject_loop_test.go": "814d434fca9059c66275eb65e99907c7b919b033844bb8978e2523e8332d2ea9",
+    "lycaon/internal/coordinator/promptloop/completion_barrier_test.go": "2227b197a748cb370e64a243674362cb595c60d58d0595c55a721e2419d2c2ef",
+    "lycaon/internal/session/closeout_gate_guard_test.go": "a1094802f6537cea0822414ba7ee6c09cb791774626ca2f784318cdb0e4678c3"
+  },
+  "reviewed_shape": "89ba6c55ae6e832b5b1b1722100d7aa37ecbe8d0b9928598cb1c5c3ec5bcb877"
+}

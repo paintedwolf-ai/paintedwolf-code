@@ -1,0 +1,13 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/coordinator/promptloop/turn_closeout.go",
+  "kind": "algorithm",
+  "workstream": "workflow-closeout-repair",
+  "disposition": "retain",
+  "reason": "Retain the existing 536-line closeout lifecycle with one response-accounting line, bounded at 540 measured lines. Forced closeouts must consume their persisted model-output iteration before repair re-entry. The SQL-backed regression preserves output uniqueness and completion admission without creating another lifecycle owner.",
+  "reviewed_commit": "07d8d771723fd1338881928290b45bb1965cd638",
+  "ceiling": 540,
+  "boundaries": {
+    "lycaon/internal/coordinator/promptloop/execution_closeout_test.go": "a3bd782cb42d2107f011c9e65814add30dd282d44889a122f044e4f004a3c009"
+  }
+}
