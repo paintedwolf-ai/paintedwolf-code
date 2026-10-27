@@ -7,7 +7,9 @@
 
 use super::linux::{startup_facts, GlibMainThread, NativeClipboard};
 use super::service::{ClipboardError, ClipboardService, DisplayProtocol, MainThread};
-use crate::test_support::private_display::{fixture_command, run_fixture, start_sway, start_xvfb};
+use crate::test_support::private_display::{
+    fixture_command, run_fixture, start_sway, start_xvfb, OwnedChild,
+};
 use crate::test_support::TempDir;
 use gtk::prelude::*;
 use std::io::Write;
@@ -146,7 +148,7 @@ fn owner_child(peer: &str) -> Command {
 }
 
 #[test]
-fn x11_display_fixture_exercises_the_gtk_adapter() {
+fn private_x11_preserves_text_rich_text_and_image_paste() {
     let (_server, display) = start_xvfb();
     run_fixture(
         owner_child("x11")
@@ -168,7 +170,7 @@ fn x11_display_fixture_exercises_the_gtk_adapter() {
 }
 
 #[test]
-fn wayland_display_fixture_exercises_the_gtk_adapter() {
+fn private_wayland_preserves_text_rich_text_and_image_paste() {
     let runtime = TempDir::new("wayland-clipboard");
     let (_server, socket) = start_sway(&runtime);
     run_fixture(
@@ -204,7 +206,26 @@ fn clipboard_owner_child() {
     window.set_default_size(320, 200);
     window.show_all();
     let worker = std::thread::spawn(move || {
-        let outcome = std::panic::catch_unwind(|| exercise_adapter(peer));
+        let outcome = std::panic::catch_unwind(|| {
+            exercise_adapter(peer);
+            // The compositor activates a surface only while the seat has a
+            // keyboard; one virtual keyboard stays present for the pastes.
+            let keyboard = (peer == Peer::Wayland).then(|| {
+                OwnedChild(
+                    Command::new("wtype")
+                        .args(["-k", "Shift_L", "-s", "60000", "-k", "Shift_L"])
+                        .stdin(Stdio::null())
+                        .spawn()
+                        .expect("hold a virtual keyboard for the native pastes"),
+                )
+            });
+            super::tests_native_paste::exercise(move || {
+                if peer == Peer::Wayland {
+                    peer.send_key_to_owner_window();
+                }
+            });
+            drop(keyboard);
+        });
         gtk::glib::MainContext::default().invoke(gtk::main_quit);
         outcome
     });
@@ -212,6 +233,12 @@ fn clipboard_owner_child() {
     if let Err(panic) = worker.join().unwrap() {
         std::panic::resume_unwind(panic);
     }
+    // WebKitGTK aborts in its exit-time teardown once a web context has run in
+    // the process; the child's verdict is complete, so it leaves without it.
+    use std::io::Write as _;
+    let _ = std::io::stdout().flush();
+    // SAFETY: _exit ends this fixture process immediately; nothing runs after it.
+    unsafe { libc::_exit(0) }
 }
 
 fn exercise_adapter(peer: Peer) {

@@ -292,3 +292,7 @@ mod tests {
         assert!(Image::open(&fixture.shell).is_err());
     }
 }
+
+#[cfg(test)]
+#[path = "image_producer_tests.rs"]
+mod producer_contract_tests;

@@ -2,7 +2,6 @@
 //! returns, which selections it refuses, and how it sizes and configures.
 
 use super::super::pick_path::{PickFilter, PickOptions, PickTarget};
-use super::super::picked_file::GrantMode;
 use super::{show, Selection, Shown};
 use crate::test_support::private_display::{fixture_command, run_fixture, start_xvfb};
 use crate::test_support::TempDir;
@@ -77,7 +76,7 @@ fn folder_accepts_the_current_folder_without_byte_access(parent: &gtk::Window, r
     shown.chooser.set_current_folder(root);
     settle(|| shown.chooser.filename().as_deref() == Some(root), "folder never became current");
     shown.dialog.response(ResponseType::Accept);
-    assert_eq!(reply.try_recv().unwrap(), Ok(Some((root.to_path_buf(), None))));
+    assert_eq!(reply.try_recv().unwrap(), Ok(Some(root.to_path_buf())));
 }
 
 fn open_returns_read_access_and_refuses_a_folder(parent: &gtk::Window, root: &Path, file: &Path) {
@@ -99,7 +98,7 @@ fn open_returns_read_access_and_refuses_a_folder(parent: &gtk::Window, root: &Pa
     shown.chooser.select_filename(file);
     settle(|| shown.chooser.filename().as_deref() == Some(file), "file never became selected");
     shown.dialog.response(ResponseType::Accept);
-    assert_eq!(reply.try_recv().unwrap(), Ok(Some((file.to_path_buf(), Some(GrantMode::Read)))));
+    assert_eq!(reply.try_recv().unwrap(), Ok(Some(file.to_path_buf())));
 }
 
 fn save_offers_the_name_confirms_overwrite_and_returns_write_access(parent: &gtk::Window, root: &Path) {
@@ -111,7 +110,7 @@ fn save_offers_the_name_confirms_overwrite_and_returns_write_access(parent: &gtk
     let target = root.join("draft é.md");
     settle(|| shown.chooser.filename().as_deref() == Some(target.as_path()), "save location never settled");
     shown.dialog.response(ResponseType::Accept);
-    assert_eq!(reply.try_recv().unwrap(), Ok(Some((target, Some(GrantMode::Write)))));
+    assert_eq!(reply.try_recv().unwrap(), Ok(Some(target)));
 }
 
 fn closing_the_chooser_is_a_cancellation(parent: &gtk::Window) {
