@@ -44,8 +44,6 @@ func TestServiceOutagePreservesCredentialsAndRecovers(t *testing.T) {
 				lost = probeCustody(badClient)
 				want = ErrLauncherRefused
 			}
-			setUnlockPassword(t, "a password cannot recover a service identity")
-			defer ClearUnlockSecret()
 			backend := &namespaceBackend{vault: &vaultFile{path: path, provider: lost.provider(path)}, namespace: "providers"}
 			if _, err := backend.Snapshot(); !errors.Is(err, want) || errors.Is(err, ErrVaultCorrupt) {
 				t.Fatalf("outage classification: %v", err)
@@ -55,10 +53,11 @@ func TestServiceOutagePreservesCredentialsAndRecovers(t *testing.T) {
 			if !bytes.Equal(original, current) {
 				t.Fatal("outage changed ciphertext")
 			}
-			if _, err := os.Lstat(identityPath(path)); !os.IsNotExist(err) {
+			if _, err := os.Lstat(filepath.Join(filepath.Dir(path), "credential-vault-identity.age")); !os.IsNotExist(err) {
 				t.Fatalf("outage created a wrapper: %v", err)
 			}
-			report := reportOf(t, lost, path)
+			report, err := lost.report(path)
+			testutil.FailErr(t, "report outage custody", err)
 			if outage != "launcher refused" && report.Mode != CustodyUnavailable {
 				t.Fatalf("custody = %+v", report)
 			}
@@ -69,44 +68,30 @@ func TestServiceOutagePreservesCredentialsAndRecovers(t *testing.T) {
 	}
 }
 
-func TestAbsentServiceSupportsOnlyNewOrWrappedPasswordVaults(t *testing.T) {
-	lost := unavailableCustody(t)
-	fresh := filepath.Join(t.TempDir(), VaultBasename)
-	p := lost.provider(fresh)
-	ClearUnlockSecret()
-	if _, err := p.LoadOrCreate(false); !errors.Is(err, ErrVaultUninitialized) {
-		t.Fatalf("first launch: %v", err)
-	}
-	path := wrappedVault(t, "correct horse battery staple")
-	if got := readThrough(t, lost, path); got != "sk-kept" {
-		t.Fatalf("password vault = %q", got)
-	}
-	if report := reportOf(t, lost, path); report.Mode != CustodyAppPassword {
-		t.Fatalf("password custody = %+v", report)
-	}
-	if _, err := p.LoadOrCreate(false); err != nil {
-		t.Fatalf("password setup: %v", err)
-	}
-}
-
-func TestInterruptedMoveToPasswordRemainsRecoverable(t *testing.T) {
-	_, client := startFakeService(t, vaultidentity.Response{Status: vaultidentity.StatusOK, LauncherPID: 42})
-	healthy := probeCustody(client)
-	path := wrappedVault(t, "correct horse battery staple")
-	testutil.FailErr(t, "move to service", healthy.moveToService(path))
-	host := healthy.serviceHost(path)
-	doc, err := host.service.LoadOrCreate(true)
-	testutil.FailErr(t, "load held identity", err)
-	testutil.FailErr(t, "write verified wrapper before interruption", host.wrapped.commit(doc, configuredUnlockSecret()))
-	if got := readThrough(t, unavailableCustody(t), path); got != "sk-kept" {
-		t.Fatalf("interrupted password copy = %q", got)
-	}
-	testutil.FailErr(t, "finish move", healthy.moveToAppPassword(path))
-	if got := readThrough(t, unavailableCustody(t), path); got != "sk-kept" {
-		t.Fatalf("exported password copy = %q", got)
-	}
-	if reportOf(t, healthy, path).Mode != CustodyAppPassword {
-		t.Fatal("re-enabled service silently took custody")
+func TestUnavailableServiceNeverCreatesAnAlternateIdentity(t *testing.T) {
+	installedService(t, true)
+	for name, lost := range map[string]custody{
+		"absent":      unavailableCustody(t),
+		"unreachable": probeCustody(hangingUpService(t)),
+		"unknown":     {},
+	} {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, VaultBasename)
+			if _, err := lost.provider(path).LoadOrCreate(false); !errors.Is(err, ErrCustodianAbsent) && !errors.Is(err, ErrCustodianUnavailable) {
+				t.Fatalf("missing service did not refuse identity creation: %v", err)
+			}
+			entries, err := os.ReadDir(dir)
+			testutil.FailErr(t, "read unchanged config root", err)
+			if len(entries) != 0 {
+				t.Fatal("missing service created a credential artifact")
+			}
+			report, err := lost.report(path)
+			testutil.FailErr(t, "report unavailable custody", err)
+			if report.Mode != CustodyUnavailable || report.ServiceVerified {
+				t.Fatalf("unavailable custody = %+v", report)
+			}
+		})
 	}
 }
 
@@ -161,56 +146,33 @@ func TestCustodianAbsenceComesFromStructuredFacts(t *testing.T) {
 	}
 }
 
-func TestAbsentServiceOffersResetWhileAnUnreachableOneRefusesIt(t *testing.T) {
+func TestServiceOutageCannotPurgeRecoverableCredentials(t *testing.T) {
 	_, client := startFakeService(t, vaultidentity.Response{Status: vaultidentity.StatusOK, LauncherPID: 42})
 	healthy := probeCustody(client)
-	vault := func() (string, []byte) {
-		path := filepath.Join(t.TempDir(), VaultBasename)
-		backend := &namespaceBackend{vault: &vaultFile{path: path, provider: healthy.provider(path)}, namespace: "providers"}
-		testutil.FailErr(t, "store credential", backend.Set("openai", "sk-kept"))
-		original, err := os.ReadFile(path)
-		testutil.FailErr(t, "read ciphertext", err)
-		return path, original
-	}
-
-	installedService(t, true)
-	path, original := vault()
-	unreachable := probeCustody(hangingUpService(t))
-	backend := &namespaceBackend{vault: &vaultFile{path: path, provider: unreachable.provider(path)}, namespace: "providers"}
-	if _, err := backend.Snapshot(); !errors.Is(err, ErrCustodianUnavailable) || errors.Is(err, ErrCustodianAbsent) {
-		t.Fatalf("briefly unreachable service: %v", err)
-	}
-	if err := (&vaultFile{path: path, provider: unreachable.provider(path)}).purge(); !errors.Is(err, ErrCustodianUnavailable) {
-		t.Fatalf("purge with the service briefly unreachable: %v, want a refusal", err)
-	}
-	current, err := os.ReadFile(path)
-	testutil.FailErr(t, "read preserved ciphertext", err)
-	if !bytes.Equal(original, current) {
-		t.Fatal("a refused purge changed the vault")
+	path := filepath.Join(t.TempDir(), VaultBasename)
+	backend := &namespaceBackend{vault: &vaultFile{path: path, provider: healthy.provider(path)}, namespace: "providers"}
+	testutil.FailErr(t, "store credential", backend.Set("openai", "sk-kept"))
+	original, err := os.ReadFile(path)
+	testutil.FailErr(t, "read ciphertext", err)
+	for _, lost := range []custody{unavailableCustody(t), probeCustody(hangingUpService(t))} {
+		if err := (&vaultFile{path: path, provider: lost.provider(path)}).purge(); err == nil {
+			t.Fatal("an unavailable custodian allowed credential removal")
+		}
+		current, err := os.ReadFile(path)
+		testutil.FailErr(t, "read preserved ciphertext", err)
+		if !bytes.Equal(original, current) {
+			t.Fatal("a refused purge changed credentials")
+		}
 	}
 	if got := readThrough(t, healthy, path); got != "sk-kept" {
-		t.Fatalf("after the service returns = %q", got)
+		t.Fatalf("service recovery = %q", got)
 	}
+}
 
-	// Uninstalled: the person may reset, and a new vault opens.
-	path, _ = vault()
-	installedService(t, false)
-	gone := unavailableCustody(t)
-	backend = &namespaceBackend{vault: &vaultFile{path: path, provider: gone.provider(path)}, namespace: "providers"}
-	if _, err := backend.Snapshot(); !errors.Is(err, ErrCustodianAbsent) {
-		t.Fatalf("uninstalled service: %v, want an absent custodian", err)
-	}
-	testutil.FailErr(t, "reset with the service gone", (&vaultFile{path: path, provider: gone.provider(path)}).purge())
-	if _, err := os.Lstat(path); !os.IsNotExist(err) {
-		t.Fatalf("reset left the unopenable vault: %v", err)
-	}
-
-	// A vault the person moved to the app password does not depend on the
-	// service, so it resets whatever the service's state.
-	installedService(t, true)
-	wrapped := wrappedVault(t, "correct horse battery staple")
-	testutil.FailErr(t, "reset a password vault", (&vaultFile{path: wrapped, provider: unreachable.provider(wrapped)}).purge())
-	if _, err := os.Lstat(wrapped); !os.IsNotExist(err) {
-		t.Fatalf("password vault not reset: %v", err)
-	}
+func readThrough(t *testing.T, c custody, path string) string {
+	t.Helper()
+	backend := &namespaceBackend{vault: &vaultFile{path: path, provider: c.provider(path)}, namespace: "providers"}
+	snapshot, err := backend.Snapshot()
+	testutil.FailErr(t, "read credential", err)
+	return snapshot.Values["openai"]
 }

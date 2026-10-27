@@ -91,7 +91,7 @@ var configRootRegistry = []ConfigRootEntry{
 
 	// Durable but outside backups
 	{Name: credentialstore.VaultBasename, IsDir: false, Class: ClassArchiveExcluded, IsSecret: true, Reason: "age-encrypted secret credential vault"},
-	{Name: credentialstore.IdentityBasename, IsDir: false, Class: ClassArchiveExcluded, IsSecret: true, Reason: "passphrase-wrapped vault identity for Linux/Windows"},
+	{Name: "credential-vault-identity.age", IsDir: false, Class: ClassArchiveExcluded, IsSecret: true, Reason: "retired private identity artifact; never archive secret material"},
 	{Name: credentialstore.DevelopmentIdentityBasename, IsDir: false, Class: ClassArchiveExcluded, IsSecret: true, Reason: "plain identity file used only in development"},
 	{Name: "api.token", IsDir: false, Class: ClassArchiveExcluded, IsSecret: true, Reason: "local bearer token authorizing sidecar API calls"},
 	{Name: hostidentity.FileName, IsDir: false, Class: ClassArchiveExcluded, IsSecret: true, Reason: "local host identity private key"},

@@ -17,7 +17,3 @@ func selectIdentityProvider(path string, isolated, release bool) identityProvide
 func describeCustody(string) (CustodyReport, error) {
 	return CustodyReport{Mode: CustodyKeychain}, nil
 }
-
-func moveToService(string) error { return ErrCustodyUnsupported }
-
-func moveToAppPassword(string) error { return ErrCustodyUnsupported }

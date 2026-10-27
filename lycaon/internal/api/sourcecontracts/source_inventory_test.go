@@ -16,8 +16,10 @@ func TestSourceReadEndpointsDoNotScheduleInventory(t *testing.T) {
 	setupInventory := &contractfixture.RecordingInventoryService{}
 	srv := contractfixture.NewTestServer(t, withLedger, func(d *hostapi.Dependencies) { d.Source.SourceInventory = setupInventory })
 	p := contractfixture.CreateProjectForTest(t, srv, t.TempDir())
-	// Root attach starts a source watch whose first callback can arrive after
-	// background work drains. Stop it before attributing new work to the reads.
+	// Root attach binds the source watch on the server background group; wait
+	// for that binding to finish before stopping the watch and draining any
+	// callback work it admitted.
+	contractfixture.DrainBackground(t, srv)
 	testutil.FailErr(t, "stop project source watch", sourcefeed.StopProjectWatch(t.Context(), p.ID))
 	contractfixture.DrainBackground(t, srv)
 	// Already scheduled attachment work holds the setup service. Record only

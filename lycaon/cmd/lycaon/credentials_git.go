@@ -5,10 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/credentialstore"
 	"github.com/lycaon/lycaon/internal/gitcredential"
 )
 
@@ -17,10 +15,7 @@ const gitCredentialsUsage = `usage: pw credentials git {list|set <remote> --user
 Git HTTPS credentials the host's own helper serves on Linux:
   list                       name each stored remote and its username
   set <remote> --username N  store the token read from the first line of stdin
-  remove <remote>            forget the remote's credential
-
-With LYCAON_CREDENTIAL_UNLOCK_STDIN set, the app password frame precedes the
-token on stdin, as it does for the engine.`
+  remove <remote>            forget the remote's credential`
 
 // gitCredentialStore is the vault the CLI edits; tests replace it.
 var gitCredentialStore = func() gitCredentialBackend { return gitcredential.VaultBackend() }
@@ -88,11 +83,7 @@ func setGitCredential(args []string, store gitCredentialBackend, in io.Reader) e
 		return err
 	}
 	reader := bufio.NewReader(in)
-	if os.Getenv(credentialstore.UnlockStdinEnv) != "" {
-		if err := credentialstore.ReadUnlockFrame(reader); err != nil {
-			return err
-		}
-	}
+
 	token, err := reader.ReadString('\n')
 	if err != nil && !errors.Is(err, io.EOF) {
 		return fmt.Errorf("read token: %w", err)

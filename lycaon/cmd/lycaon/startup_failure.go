@@ -12,12 +12,6 @@ func startupFailureCode(err error) string {
 	switch {
 	case errors.Is(err, hostlock.ErrStoreInstanceLocked):
 		code = "store_locked"
-	case errors.Is(err, credentialstore.ErrVaultLocked):
-		code = "credential_vault_locked"
-	case errors.Is(err, credentialstore.ErrVaultUninitialized):
-		code = "credential_vault_uninitialized"
-	case errors.Is(err, credentialstore.ErrVaultUnlockFailed):
-		code = "credential_vault_unlock_failed"
 	case errors.Is(err, credentialstore.ErrCustodianAbsent):
 		code = "credential_vault_custodian_absent"
 	case errors.Is(err, credentialstore.ErrCustodianUnavailable):
