@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from scripts.linux_release.repository_objects import encoded, immutable
 from scripts.linux_release.repository_operations import identity
-from scripts.linux_release.repository_publication import publish
+from scripts.linux_release.repository_transaction import publish
 from scripts.linux_release.repository_r2 import publish_r2
 from scripts.verification_tests.distribution.native_repository_fixtures import generation, native_tools, trust
 
