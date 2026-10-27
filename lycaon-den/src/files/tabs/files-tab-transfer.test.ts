@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createRoot } from "solid-js";
 import type { FileTabTransferSettled, FileTabWindowDrag } from "../../platform/windows/item-windows.ts";
+import { createShellPeerWindows } from "../../components/shell/shell-peer-windows.ts";
 import { createFilesTabTransfers } from "./files-tab-transfer.ts";
 import { createFilesTabDrag } from "./files-tab-drag.ts";
 import { applyFilesBufferDraft, applyFilesBufferLoad, filesBufferText, openFilesBuffer, resetProjectFilesForTests, type FilesBufferRelease } from "../documents/project-files-buffers.ts";
@@ -11,6 +13,7 @@ import { required } from "../../test/at.ts";
 const shell = vi.hoisted(() => {
   let listener: ((event: FileTabTransferSettled) => void) | undefined;
   return {
+    beginTransfer: vi.fn(async () => "transfer-token"),
     ready: vi.fn(async (_token: string) => {}),
     abandon: vi.fn(async (_token: string) => {}),
     listen: vi.fn(async (handler: (event: FileTabTransferSettled) => void) => {
@@ -29,6 +32,7 @@ const effects = vi.hoisted(() => ({
 }));
 vi.mock("../../platform/windows/item-windows.ts", async (original) => ({
   ...await original<typeof import("../../platform/windows/item-windows.ts")>(),
+  beginFileTabTransfer: shell.beginTransfer,
   readyFileTabTransfer: shell.ready,
   abandonFileTabTransfer: shell.abandon,
   listenFileTabTransfer: shell.listen,
@@ -182,5 +186,39 @@ describe("coordinate tab handoff", () => {
     expect(f.close).not.toHaveBeenCalled();
     expect(effects.persist).not.toHaveBeenCalled();
     if (failure === "publication") expect(controller.finish).not.toHaveBeenCalled();
+  });
+
+  it("transfers an open file tab through shell peer windows and rejects missing context", async () => {
+    const f = fixture();
+    let currentProjectId: string | null = null;
+    const peerWindows = createRoot((dispose) => {
+      const created = createShellPeerWindows({
+        shell: { state: { activeProjectId: null }, beginStageSwitch: vi.fn() } as never,
+        appStore: { state: { currentSession: null, sidecarStatus: "disconnected" } } as never,
+        projects: { byId: () => undefined } as never,
+        activeProjectId: () => currentProjectId,
+        activeProject: () => undefined,
+        stageAvailable: () => false,
+        itemSubject: null,
+        stageColumnStageId: () => null,
+        placeableStageId: () => null,
+        splitLive: () => false,
+        projectSessions: { state: { rows: [] } } as never,
+        activeChat: () => null,
+        openStage: vi.fn(),
+      });
+      dispose();
+      return created;
+    });
+    await expect(peerWindows.transferFileTab(f.key)).rejects.toThrow("No project is bound to the file tab.");
+    currentProjectId = PROJECT;
+    await expect(peerWindows.transferFileTab("missing-key")).rejects.toThrow("The file tab is no longer open.");
+    await expect(peerWindows.transferFileTab(f.key)).resolves.toBe("transfer-token");
+    expect(shell.beginTransfer).toHaveBeenCalledWith({
+      projectId: PROJECT,
+      rootId: "root",
+      path: "draft.txt",
+      title: "draft.txt",
+    });
   });
 });
