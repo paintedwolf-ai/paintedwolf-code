@@ -19,8 +19,6 @@ export type CriticalStopRecovery =
   | "finish_restore"
   | "finish_fresh_start"
   | "retry_upgrade"
-  | "unlock_credential_vault"
-  | "create_credential_vault"
   | "reset_credential_vault";
 
 export type CriticalStopSpec = {
@@ -63,10 +61,6 @@ export function criticalStopRecoveryLabel(
       return "Finish starting fresh";
     case "retry_upgrade":
       return "Try again";
-    case "unlock_credential_vault":
-      return "Unlock vault";
-    case "create_credential_vault":
-      return "Create vault";
     case "reset_credential_vault":
       return "Reset vault…";
   }
@@ -98,29 +92,21 @@ const NAMED_START_FAILURES: Record<
     code: STARTUP_CANCELLED_STOP_CODE,
     copy: CLIENT_NOTICES.startup_cancelled,
   },
-  credential_vault_locked: {
-    code: "credential_vault_locked",
-    copy: CLIENT_NOTICES.credential_vault_locked,
+  credential_vault_custodian_absent: {
+    code: "credential_vault_custodian_absent",
+    copy: CLIENT_NOTICES.credential_vault_custodian_absent,
   },
-  credential_vault_uninitialized: {
-    code: "credential_vault_uninitialized",
-    copy: CLIENT_NOTICES.credential_vault_uninitialized,
-  },
-  credential_vault_unlock_failed: {
-    code: "credential_vault_unlock_failed",
-    copy: CLIENT_NOTICES.credential_vault_unlock_failed,
-  },
-  desktop_restart_required: {
-    code: "desktop_restart_required",
-    copy: CLIENT_NOTICES.desktop_restart_required,
+  installation_unverified: {
+    code: "installation_unverified",
+    copy: CLIENT_NOTICES.installation_unverified,
   },
   credential_vault_custodian_unavailable: {
     code: "credential_vault_custodian_unavailable",
     copy: CLIENT_NOTICES.credential_vault_custodian_unavailable,
   },
-  credential_vault_custodian_absent: {
-    code: "credential_vault_custodian_absent",
-    copy: CLIENT_NOTICES.credential_vault_custodian_absent,
+  desktop_restart_required: {
+    code: "desktop_restart_required",
+    copy: CLIENT_NOTICES.desktop_restart_required,
   },
   credential_vault_launcher_refused: {
     code: "credential_vault_launcher_refused",
@@ -144,25 +130,18 @@ function offlineCriticalStop(
   const copy = named?.copy ?? CLIENT_NOTICES.offline;
   const recovery: CriticalStopRecovery = startFailure === "desktop_restart_required"
     ? "quit_desktop"
-    : startFailure === "credential_vault_uninitialized"
-    ? "create_credential_vault"
-    : startFailure === "credential_vault_locked" ||
-        startFailure === "credential_vault_unlock_failed"
-      ? "unlock_credential_vault"
-      : startFailure === "credential_vault_corrupt"
-        ? "reset_credential_vault"
-        : "reconnect";
+    : startFailure === "credential_vault_corrupt"
+    ? "reset_credential_vault"
+    : "reconnect";
   return {
     code: named?.code ?? OFFLINE_STOP_CODE,
     title: copy.title,
     message: copy.message,
     retryFailed: copy.suggestedAction,
     recovery,
-    // A key the custodian says is gone, or a custodian that is not installed,
-    // not running or cannot serve, cannot be waited out; a briefly unreachable
-    // or refusing one can, so it never offers destruction.
-    ...(startFailure === "credential_vault_identity_missing" ||
-      startFailure === "credential_vault_custodian_absent"
+    // A missing key permits explicit recovery; an unavailable custodian
+    // preserves ciphertext while the person repairs the service.
+    ...(startFailure === "credential_vault_identity_missing"
       ? { resettable: true }
       : {}),
     // Known startup failures already have actionable catalog copy.

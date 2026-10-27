@@ -1,0 +1,11 @@
+scope: app
+title: Newer package listed
+message: >-
+  Your configured package metadata lists a newer Painted Wolf Code package.
+  This does not confirm that its repository is currently reachable.
+suggested_action: >-
+  Open Settings → General → Updates to review the package source and update command.
+scenarios:
+  - id: default
+    expect_contains:
+      - Painted Wolf Code

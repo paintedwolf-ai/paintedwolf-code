@@ -144,8 +144,7 @@ func TestAnalysisCacheJoinsConcurrentBuild(t *testing.T) {
 	}
 	close(start)
 	<-buildStarted
-	deadline := time.Now().Add(time.Second)
-	for cache.stats().Joins != callers-1 && time.Now().Before(deadline) {
+	for cache.stats().Joins != callers-1 && t.Context().Err() == nil {
 		time.Sleep(time.Millisecond)
 	}
 	close(releaseBuild)
@@ -239,7 +238,7 @@ func TestAnalysisCancellationDoesNotPoisonSharedSource(t *testing.T) {
 			return Result{Language: "go", Source: "rebuilt"}
 		})
 	}()
-	testutil.WaitFor(t, time.Second, func() bool { return cache.stats().Joins == 1 })
+	testutil.WaitFor(t, func() bool { return cache.stats().Joins == 1 })
 	cancel()
 	close(release)
 	first, second := <-firstDone, <-secondDone
@@ -266,7 +265,7 @@ func TestAnalysisWaiterCanCancelIndependently(t *testing.T) {
 	go func() {
 		waiter <- cache.analyze(ctx, "a.go", []byte("same"), func() Result { t.Error("joined caller started parsing"); return Result{} })
 	}()
-	testutil.WaitFor(t, time.Second, func() bool { return cache.stats().Joins == 1 })
+	testutil.WaitFor(t, func() bool { return cache.stats().Joins == 1 })
 	cancel()
 	result := <-waiter
 	close(release)

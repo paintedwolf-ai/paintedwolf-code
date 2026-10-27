@@ -61,13 +61,13 @@ func TestStopSleepTimersCancelsAndDrainsFiringCallback(t *testing.T) {
 	waits.EnterSleep(t.Context(), "session-1", time.Now().Add(time.Millisecond), "fixture", []WaitTrigger{WaitTriggerTimer}, nil, SleepMoverHost)
 	select {
 	case <-entered:
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("timer did not deliver")
 	}
 	waits.StopSleepTimers()
 	select {
 	case <-cancelled:
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("shutdown did not cancel firing delivery")
 	}
 	ctx, cancel := context.WithCancel(t.Context())

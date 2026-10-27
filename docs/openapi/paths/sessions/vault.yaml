@@ -54,8 +54,10 @@ paths:
       summary: Lock every chat when the person steps away
       description: >-
         The desktop shell calls this when the screen locks, the computer
-        sleeps, or the app quits. Locking can only take authority away, so any
-        authenticated caller may request it.
+        sleeps, the app quits, or, on a Linux desktop whose screen lock cannot
+        be observed, the person's input stays idle for the unlock idle period
+        (`away`). Locking can only take authority away, so
+        any authenticated caller may request it.
       requestBody:
         required: true
         content:

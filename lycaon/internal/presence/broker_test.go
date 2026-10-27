@@ -102,6 +102,36 @@ func TestBrokerChallengeOutlivesTheNativePrompt(t *testing.T) {
 	testutil.FailErr(t, "complete after a slow prompt", err)
 }
 
+func TestBrokerValidProofExpiresAtTheChallengeDeadline(t *testing.T) {
+	for _, purpose := range []Purpose{PurposeReveal, PurposeUnlock} {
+		for _, offset := range []time.Duration{-time.Nanosecond, 0, time.Nanosecond} {
+			t.Run(string(purpose)+"/"+offset.String(), func(t *testing.T) {
+				broker, key := configuredBroker(t)
+				started := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
+				broker.SetClock(func() time.Time { return started })
+				challenge, err := broker.Begin(Claim{Purpose: purpose, PersonID: "owner", WindowLabel: "main", Key: "deadline"})
+				testutil.FailErr(t, "begin challenge", err)
+				deadline, err := time.Parse(time.RFC3339Nano, challenge.ExpiresAt)
+				testutil.FailErr(t, "parse challenge deadline", err)
+				proof := sign(key, challenge, AuthenticatorLinux)
+				broker.SetClock(func() time.Time { return deadline.Add(offset) })
+				verified, err := broker.Complete(proof, purpose, "owner")
+				if offset < 0 {
+					testutil.FailErr(t, "complete just before deadline", err)
+					if verified.ChallengeID != challenge.ID {
+						t.Fatal("valid proof lost its challenge binding")
+					}
+				} else if !errors.Is(err, ErrChallengeNotFound) || verified.ChallengeID != "" {
+					t.Fatalf("expired valid proof produced authority: %v", err)
+				}
+				if _, err := broker.Complete(proof, purpose, "owner"); !errors.Is(err, ErrChallengeNotFound) {
+					t.Fatalf("reused deadline proof error = %v", err)
+				}
+			})
+		}
+	}
+}
+
 func TestBrokerPoolNeverDisplacesAnIssuedChallenge(t *testing.T) {
 	broker, privateKey := configuredBroker(t)
 	pending, err := broker.Begin(Claim{Purpose: PurposeReveal, PersonID: "owner", WindowLabel: "den-main", Key: "secret"})
