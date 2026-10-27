@@ -12,7 +12,11 @@ use tauri::{
 use tauri::{Position, TitleBarStyle};
 
 pub(crate) mod drag;
+#[cfg(target_os = "linux")]
+pub(crate) mod native_drag;
 pub(crate) mod presentation;
+#[cfg(any(target_os = "linux", test))]
+mod transfer;
 #[cfg(test)]
 mod tests;
 
@@ -38,7 +42,7 @@ const FIRST_PEER_VIEW_NUMBER: u64 = MAIN_VIEW_NUMBER + 1;
 
 static NEXT_VIEW_ID: AtomicU64 = AtomicU64::new(FIRST_PEER_VIEW_NUMBER);
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ItemWindowView {
     pub label: String,
@@ -118,6 +122,8 @@ struct FileTabDragEvent {
     title: String,
     position_x: f64,
     position_y: f64,
+    /// A native drag delivery the recipient must commit or return.
+    transfer: bool,
 }
 
 fn valid_id(value: &str) -> bool {
@@ -320,6 +326,8 @@ fn open_item_window(
         }
     }
     crate::windows::window_appearance::prepare(&window);
+    #[cfg(target_os = "linux")]
+    native_drag::install(&window);
     let view = ItemWindowView {
         label: label.clone(),
         title,
@@ -367,6 +375,8 @@ fn open_item_window(
         }
         // Destroyed windows leave their pending drags for cleanup.
         let _ = discard_pending_drags_for(&app_on_destroy, &label_on_destroy);
+        #[cfg(target_os = "linux")]
+        native_drag::window_destroyed(&app_on_destroy, &label_on_destroy);
         if let Ok(mut targets) = FILE_TAB_DROP_TARGETS.lock() {
             targets.remove(&label_on_destroy);
         }

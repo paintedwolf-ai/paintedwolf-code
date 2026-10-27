@@ -45,6 +45,17 @@ export type FileTabWindowDrag = {
     position: ItemWindowDropPosition,
   ) => Promise<boolean>;
   cancel: (label: string) => Promise<boolean>;
+  /**
+   * Carries the tab with a native drag (Linux, where windows have no global
+   * position) and resolves to the shell's transfer token.
+   */
+  transfer?: (bufferKey: string) => Promise<string>;
+};
+
+/** How a native tab transfer settled for its initiating window. */
+export type FileTabTransferSettled = {
+  token: string;
+  outcome: "committed" | "cancelled";
 };
 
 export type FileTabWindowDragEvent = {
@@ -54,8 +65,11 @@ export type FileTabWindowDragEvent = {
   rootId: string;
   path: string;
   title: string;
+  /** Client coordinates in the receiving window. */
   positionX: number;
   positionY: number;
+  /** A native drag delivery the recipient commits or returns; `dragLabel` is its token. */
+  transfer: boolean;
 };
 
 export type ItemWindowView = {
@@ -114,6 +128,46 @@ export async function beginFileItemWindowDrag(
     positionX: args.position.x,
     positionY: args.position.y,
   });
+}
+
+/** Starts a native drag for the tab while the pointer button is held. */
+export async function beginFileTabTransfer(args: Omit<Extract<OpenItemWindowArgs, { kind: "file" }>, "kind" | "position">): Promise<string> {
+  if (!isTauriRuntime()) throw new Error("Item windows require the desktop shell");
+  return await invoke<string>("begin_native_file_tab_drag", {
+    projectId: args.projectId,
+    rootId: args.rootId,
+    path: args.path,
+    title: args.title,
+  });
+}
+
+/** The tab's latest draft is published; the recipient may open it. */
+export async function readyFileTabTransfer(token: string): Promise<void> {
+  await invoke("ready_file_tab_transfer", { token });
+}
+
+/** The draft could not be published; the tab stays with this window. */
+export async function abandonFileTabTransfer(token: string): Promise<void> {
+  await invoke("abandon_file_tab_transfer", { token });
+}
+
+/** This window opened the delivered tab. */
+export async function commitFileTabTransfer(token: string): Promise<void> {
+  await invoke("commit_file_tab_transfer", { token });
+}
+
+/** This window could not open the delivered tab. */
+export async function returnFileTabTransfer(token: string): Promise<void> {
+  await invoke("return_file_tab_transfer", { token });
+}
+
+export async function listenFileTabTransfer(
+  handler: (event: FileTabTransferSettled) => void,
+): Promise<() => void> {
+  return await listenHostEvent<FileTabTransferSettled>(
+    "file-tab-transfer",
+    ({ payload }) => handler(payload),
+  );
 }
 
 export async function moveItemWindowDrag(

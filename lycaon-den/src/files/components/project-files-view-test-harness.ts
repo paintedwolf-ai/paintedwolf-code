@@ -42,6 +42,14 @@ const fileTabDragListeners = vi.hoisted(
   () => new Set<(event: Record<string, unknown>) => void>(),
 );
 
+const fileTabTransfer = vi.hoisted(() => ({
+  listeners: new Set<(event: { token: string; outcome: "committed" | "cancelled" }) => void>(),
+  ready: vi.fn(async (_token: string) => undefined),
+  abandon: vi.fn(async (_token: string) => undefined),
+  commit: vi.fn(async (_token: string) => undefined),
+  giveBack: vi.fn(async (_token: string) => undefined),
+}));
+
 const scopeFixture = vi.hoisted(() => ({ files: [] as unknown[] }));
 
 vi.mock("../../chat/composer/add-to-chat.ts", () => ({
@@ -66,6 +74,16 @@ vi.mock("../../platform/windows/item-windows.ts", async (importOriginal) => {
         return () => fileTabDragListeners.delete(handler);
       },
     ),
+    listenFileTabTransfer: vi.fn(
+      async (handler: (event: { token: string; outcome: "committed" | "cancelled" }) => void) => {
+        fileTabTransfer.listeners.add(handler);
+        return () => fileTabTransfer.listeners.delete(handler);
+      },
+    ),
+    readyFileTabTransfer: (token: string) => fileTabTransfer.ready(token),
+    abandonFileTabTransfer: (token: string) => fileTabTransfer.abandon(token),
+    commitFileTabTransfer: (token: string) => fileTabTransfer.commit(token),
+    returnFileTabTransfer: (token: string) => fileTabTransfer.giveBack(token),
   };
 });
 
@@ -255,6 +273,7 @@ export function filesViewTestFakes() {
     openInExternalEditor,
     revealInFileManager,
     fileTabDragListeners,
+    fileTabTransfer,
     scopeFixture,
   };
 }
@@ -295,6 +314,8 @@ export function resetProjectFilesViewTest() {
   openInExternalEditor.mockClear();
   revealInFileManager.mockClear();
   fileTabDragListeners.clear();
+  fileTabTransfer.listeners.clear();
+  for (const spy of [fileTabTransfer.ready, fileTabTransfer.abandon, fileTabTransfer.commit, fileTabTransfer.giveBack]) spy.mockClear();
   scopeFixture.files = [];
   resetProjectFilesForTests();
   sharedBufferLoadRequests.clear();

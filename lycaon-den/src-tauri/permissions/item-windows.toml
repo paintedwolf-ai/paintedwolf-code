@@ -5,8 +5,8 @@ commands.allow = ["open_item_window"]
 
 [[permission]]
 identifier = "allow-drag-item-window"
-description = "Create, move, finish, or cancel a native file-tab drag window for the calling workspace."
-commands.allow = ["begin_file_item_window_drag", "move_item_window_drag", "finish_item_window_drag", "cancel_item_window_drag", "discard_pending_item_window_drags", "update_file_tab_drop_target", "clear_file_tab_drop_target"]
+description = "Carry a file tab out of the calling workspace with a native drag window or a native drag transfer, and receive one."
+commands.allow = ["begin_file_item_window_drag", "move_item_window_drag", "finish_item_window_drag", "cancel_item_window_drag", "discard_pending_item_window_drags", "update_file_tab_drop_target", "clear_file_tab_drop_target", "begin_native_file_tab_drag", "ready_file_tab_transfer", "abandon_file_tab_transfer", "commit_file_tab_transfer", "return_file_tab_transfer"]
 
 [[permission]]
 identifier = "allow-list-item-window-views"

@@ -26,7 +26,8 @@ vi.mock("../project/ProjectContextView.tsx", () => ({ ProjectContextView: (p: ty
 vi.mock("../stage/stage-registry.tsx", () => ({ stageDefinition: () => ({ render: (p: typeof seams.stage) => { createEffect(() => { seams.stage = { ...p }; }); return null; } }) }));
 vi.mock("../../chat/session/session-retirement.ts", () => ({ setSessionArchived: seams.archived, setSessionPinned: seams.pinned, deleteSession: seams.deleted }));
 vi.mock("../../chat/session/session-lifecycle.ts", () => ({ recordCreatedSessionInRecents: seams.record }));
-vi.mock("../../platform/runtime.ts", () => ({ isTauriRuntime: () => true }));
+const platform = vi.hoisted(() => ({ name: "macos" as "macos" | "linux" }));
+vi.mock("../../platform/runtime.ts", () => ({ isTauriRuntime: () => true, tauriPlatform: () => platform.name }));
 vi.mock("../../platform/windows/window-subject.ts", () => ({ windowSubject: () => null }));
 
 type Props = ComponentProps<typeof WorkspaceStage>;
@@ -53,7 +54,7 @@ function mountStage(surfaceKey: string) {
     settingsStore: {}, costStore: {}, navigation: { settingsSection: () => "general", generalInitialTab: () => undefined,
       advancedInitialTab: () => undefined, contextSection: () => "trust", closeSettingsNav: vi.fn(), openContextSection: vi.fn(), ...callbacks },
     sessionNavigation: { sessionRetirementDeps: () => ({ client: "host" }), ...callbacks }, projectLifecycle: callbacks,
-    peerWindows: { beginFileWindowDrag: vi.fn(), ...callbacks }, workspaceContext: { backFor: vi.fn(), stageBack: vi.fn() },
+    peerWindows: { beginFileWindowDrag: vi.fn(), transferFileTab: vi.fn(async () => "token"), ...callbacks }, workspaceContext: { backFor: vi.fn(), stageBack: vi.fn() },
     settingsProjectDir: () => "/garden", setSecurityScannersFeature: vi.fn(), openProjectTrustSettings: vi.fn(),
     openExtensionsSettings: vi.fn(), searchArgs: () => ({ originProjectId: "project", seed: "needle", serial: 7 }), ...callbacks,
   } as unknown as Props;
@@ -132,5 +133,17 @@ describe("workspace resident stage routing", () => {
     mountStage(stageSurfaceKey("project", "search"));
     expect(seams.stage.search?.seed).toBe("needle"); expect(seams.stage.search?.serial).toBe(7);
     expect(seams.stage.callbacks.onOpenInNewWindow).toBeUndefined();
+  });
+
+  it("carries Files tabs with native transfers only on Linux", () => {
+    platform.name = "macos";
+    const mac = mountStage(stageSurfaceKey("project", "files"));
+    expect(seams.stage.callbacks.fileTabWindowDrag?.begin).toBeDefined();
+    expect(seams.stage.callbacks.fileTabWindowDrag?.transfer).toBeUndefined();
+    mac.unmount();
+    platform.name = "linux";
+    const linux = mountStage(stageSurfaceKey("project", "files"));
+    expect(seams.stage.callbacks.fileTabWindowDrag?.transfer).toBe((linux.props.peerWindows as { transferFileTab: unknown }).transferFileTab);
+    platform.name = "macos";
   });
 });

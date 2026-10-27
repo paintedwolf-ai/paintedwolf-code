@@ -64,7 +64,19 @@ fn every_invoke_command_is_reachable_from_the_default_capability() {
     let marker = "tauri::generate_handler![";
     let start = lib_src.find(marker).expect("generate_handler! block") + marker.len();
     let rest = &lib_src[start..];
-    let end = rest.find(']').expect("generate_handler! close");
+    // Entries may carry `#[cfg(...)]` attributes, so close on the matching bracket.
+    let mut depth = 1usize;
+    let end = rest
+        .char_indices()
+        .find_map(|(at, ch)| {
+            match ch {
+                '[' => depth += 1,
+                ']' => depth -= 1,
+                _ => {}
+            }
+            (depth == 0).then_some(at)
+        })
+        .expect("generate_handler! close");
 
     let capabilities =
         fs::read_to_string(root.join("capabilities/default.json")).expect("read default.json");
@@ -73,7 +85,7 @@ fn every_invoke_command_is_reachable_from_the_default_capability() {
     let mut unreachable = Vec::new();
     for line in rest[..end].lines() {
         let entry = line.trim().trim_end_matches(',');
-        if entry.is_empty() || entry.starts_with("//") {
+        if entry.is_empty() || entry.starts_with("//") || entry.starts_with("#[") {
             continue;
         }
         let (module, func) = match entry.rsplit_once("::") {
