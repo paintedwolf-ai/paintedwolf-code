@@ -9,9 +9,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
-	"time"
 
-	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
@@ -146,22 +144,11 @@ func TestApprovePlanHTTPPersistsBeforeAdvanceAndWakesCoordinator(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("approve status = %d body = %s", w.Code, w.Body.String())
 	}
-	testutil.WaitFor(t, 5*time.Second, sawApprovalAdvance.Load)
+	testutil.WaitFor(t, sawApprovalAdvance.Load)
 
-	if !testutil.WaitForNoFatal(promptIdleBudget, func() bool {
+	testutil.WaitFor(t, func() bool {
 		return len(h.Recording.AllRequests()) > requestCountBeforeApproval
-	}) {
-		active, activeErr := h.Workflows.Manager.Store.Runs.ActiveBySession(ctx, sess.ID)
-		testutil.FailErr(t, "get active run after approval wake", activeErr)
-		if active == nil {
-			t.Fatal("approval did not leave an active workflow")
-		}
-		vars, varsErr := h.Workflows.Manager.Store.Runs.GetScaffoldVars(ctx, active.ID)
-		messages, messageErr := h.Store.GetMessages(ctx, sess.ID)
-		allowed, reason, wakeErr := h.Sessions.Manager.Coordinator.Runtime.CoordinatorLoop().Admission.ShouldLoopWake(ctx, sess.ID, anchor.PhaseAdvanced)
-		t.Fatalf("approval did not wake coordinator: allowed=%v reason=%q wake_err=%v active=%+v vars=%+v messages=%+v active_err=%v vars_err=%v message_err=%v",
-			allowed, reason, wakeErr, active, vars, messages, activeErr, varsErr, messageErr)
-	}
+	})
 	h.Sessions.Manager.Coordinator.WaitForTurns(ctx)
 	history, err := h.Workflows.Manager.Store.Runs.ListBySession(ctx, sess.ID, 100, nil)
 	testutil.FailErr(t, "list workflows after approval", err)

@@ -97,6 +97,16 @@ describe("update settings", () => {
     expect(screen.queryByTestId("updates-package-identity")).toBeNull();
     expect(screen.queryByTestId("updates-install")).toBeNull();
   });
+  it("reports unknown package ownership without claiming an unpackaged copy", async () => {
+    const capabilities = { can_check: true, can_download: false, can_restart_to_update: false, can_install_automatically: false, blocked_reason: "package_ownership_unknown" };
+    const state = updateFixture({ install_source: "package_ownership_unknown", candidate: null, discovery: "idle", capabilities });
+    render(() => <UpdatesSettingsPanel updateService={updateServiceFixture({ getState: async () => state })} />);
+    expect((await screen.findByTestId("updates-ownership-unknown")).textContent).toContain("could not confirm which package owns this installation");
+    expect(screen.queryByTestId("updates-unpackaged")).toBeNull();
+    expect(screen.queryByTestId("updates-package-identity")).toBeNull();
+    expect(screen.queryByTestId("updates-package-upgrade")).toBeNull();
+    expect(screen.queryByTestId("updates-install")).toBeNull();
+  });
   it("retains the existing preference control and changes its native authority", async () => {
     const setAutomaticUpdatesEnabled = vi.fn(async (enabled: boolean) => updateFixture({ automatic_updates_enabled: enabled }));
     render(() => <UpdatesSettingsPanel updateService={updateServiceFixture({ setAutomaticUpdatesEnabled })} />);

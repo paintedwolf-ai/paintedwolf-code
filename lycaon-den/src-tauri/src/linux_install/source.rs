@@ -4,11 +4,81 @@
 use super::PackageFamily;
 use serde::Serialize;
 
+mod apt;
+mod command;
+mod dnf;
+mod pacman;
+mod ownership;
+mod query;
+#[cfg(test)]
+mod tests;
+#[cfg(test)]
+mod apt_probe_tests;
+#[cfg(test)]
+mod produced_fixtures;
+pub use query::refresh;
+
+pub(super) use command::{Output, Reader};
+
+/// Each query gets its own deadline, so one slow package manager cannot spend another's.
+pub(super) struct PerQuery(pub(super) std::time::Duration);
+
+impl Reader for PerQuery {
+    fn read(&mut self, program: &str, args: &[&str]) -> Result<Output, QueryReason> {
+        command::OsReader::new(self.0, std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false))).read(program, args)
+    }
+}
+
+pub(super) fn valid_package_name(value: &str) -> bool {
+    !value.is_empty() && value.len() <= 255 && value.bytes().all(|c| c.is_ascii_alphanumeric() || b"+._-".contains(&c)) && !value.starts_with('-')
+}
+
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SourceAvailability {
     #[default]
     NotChecked,
+    CandidateFound,
+    NoNewerCandidate,
+    Blocked,
+    Unknown,
+    Failed,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum QueryReason {
+    UnsupportedOwner,
+    AdapterUnavailable,
+    NotInstalled,
+    NoCachedCandidate,
+    PolicyUnobserved,
+    Held,
+    UntrustedSource,
+    AmbiguousCandidate,
+    WrongArchitecture,
+    QueryFailed,
+    TimedOut,
+    OutputLimit,
+    Cancelled,
+    InvalidResponse,
+    OwnerChanged,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Repository {
+    pub id: String,
+    /// The repository's declared suite, never an inference from a version or URL.
+    pub suite: Option<String>,
+    pub trusted: Option<bool>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct PackageCandidate {
+    pub version: String,
+    pub architecture: String,
+    pub repositories: Vec<Repository>,
+    pub newer_than_installed: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -24,6 +94,17 @@ pub struct PackageSourceFacts {
     pub owner: Option<PackageOwner>,
     /// None means the app has not established whether the source is pinned.
     pub pinned: Option<bool>,
+    pub checked_at: Option<u64>,
+    /// A fresh package-database observation; the captured running version is unchanged.
+    pub database_version: Option<String>,
+    pub database_owner: Option<String>,
+    pub architecture: Option<String>,
+    pub candidate: Option<PackageCandidate>,
+    pub held: Option<bool>,
+    pub selection_priority: Option<i64>,
+    /// Queries never refresh metadata. This is not a claim about the remote repository.
+    pub cached_only: bool,
+    pub reason: Option<QueryReason>,
 }
 
 impl PackageSourceFacts {
@@ -31,40 +112,18 @@ impl PackageSourceFacts {
         Self {
             availability: SourceAvailability::NotChecked,
             owner: match family {
-                PackageFamily::Deb | PackageFamily::Rpm | PackageFamily::Pacman => {
-                    Some(PackageOwner::SystemPackageManager)
-                }
+                PackageFamily::Deb | PackageFamily::Rpm | PackageFamily::Pacman => Some(PackageOwner::SystemPackageManager),
                 PackageFamily::Nix => None,
             },
             pinned: None,
+            ..Self::default()
         }
     }
-}
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_nix_generation_establishes_neither_source_availability_nor_owner() {
-        let package = super::super::InstalledPackage::new(
-            PackageFamily::Nix,
-            "painted-wolf-code".into(),
-            "1.0.2".into(),
-        );
-        let facts = &package.source;
-        assert_eq!(facts.availability, SourceAvailability::NotChecked);
-        assert_eq!(facts.owner, None);
-        assert_eq!(facts.pinned, None);
-    }
-
-    #[test]
-    fn native_package_database_ownership_is_not_a_source_check_or_pin_check() {
-        for family in [PackageFamily::Deb, PackageFamily::Rpm] {
-            let facts = PackageSourceFacts::for_family(family);
-            assert_eq!(facts.owner, Some(PackageOwner::SystemPackageManager));
-            assert_eq!(facts.availability, SourceAvailability::NotChecked);
-            assert_eq!(facts.pinned, None);
-        }
+    fn fail(mut self, reason: QueryReason) -> Self {
+        self.availability = SourceAvailability::Failed;
+        self.reason = Some(reason);
+        self.candidate = None;
+        self
     }
 }

@@ -22,6 +22,7 @@ class ManifestHistoryTests(unittest.TestCase):
         (self.root / "packaging").mkdir()
         for name in ("release-validate-updater-manifest.sh", "semver-compare.py", "release_semver.py", "update_keys.py", "updater_signature.py"):
             shutil.copyfile(ROOT / "scripts" / name, self.root / "scripts" / name)
+        shutil.copytree(ROOT / "scripts/release_distribution_contract", self.root / "scripts/release_distribution_contract")
         shutil.copyfile(ROOT / "packaging/update-keys.json", self.root / "packaging/update-keys.json")
         catalog = json.loads((ROOT / "packaging/release-platforms.json").read_text())
         for row in catalog["platforms"]:
