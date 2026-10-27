@@ -3,7 +3,6 @@ package credentialstore
 import (
 	"errors"
 	"fmt"
-	"os"
 
 	"github.com/lycaon/lycaon/internal/vaultidentity"
 )
@@ -28,17 +27,6 @@ type custody struct {
 	absent bool
 }
 
-// serviceExecutable is the packaged identity service; a test points it at a
-// fixture.
-var serviceExecutable = "/opt/painted-wolf-code/bin/pw-vault-identity"
-
-// serviceInstalled reports the structured fact that the identity service
-// program is installed.
-func serviceInstalled() bool {
-	info, err := os.Stat(serviceExecutable)
-	return err == nil && info.Mode().IsRegular()
-}
-
 func newServiceClient() *vaultidentity.Client {
 	return vaultidentity.NewClient(vaultidentity.SocketPath)
 }
@@ -50,7 +38,7 @@ func probeCustody(client *vaultidentity.Client) custody {
 		_ = client.Close()
 		// No socket or nobody listening on it means the service is not
 		// enabled or not installed; a failure on a live socket is transient.
-		absent := errors.Is(err, vaultidentity.ErrServiceAbsent) || !serviceInstalled()
+		absent := errors.Is(err, vaultidentity.ErrServiceAbsent)
 		return custody{mode: custodyUnavailable, refusal: err, absent: absent}
 	}
 	switch resp.Status {

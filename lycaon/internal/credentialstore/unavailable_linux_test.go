@@ -69,7 +69,6 @@ func TestServiceOutagePreservesCredentialsAndRecovers(t *testing.T) {
 }
 
 func TestUnavailableServiceNeverCreatesAnAlternateIdentity(t *testing.T) {
-	installedService(t, true)
 	for name, lost := range map[string]custody{
 		"absent":      unavailableCustody(t),
 		"unreachable": probeCustody(hangingUpService(t)),
@@ -118,18 +117,7 @@ func hangingUpService(t *testing.T) *vaultidentity.Client {
 	return vaultidentity.NewClient(socket)
 }
 
-func installedService(t *testing.T, installed bool) {
-	t.Helper()
-	previous := serviceExecutable
-	serviceExecutable = filepath.Join(t.TempDir(), "pw-vault-identity")
-	if installed {
-		testutil.FailErr(t, "install service fixture", os.WriteFile(serviceExecutable, []byte("fixture"), 0o755))
-	}
-	t.Cleanup(func() { serviceExecutable = previous })
-}
-
 func TestCustodianAbsenceComesFromStructuredFacts(t *testing.T) {
-	installedService(t, true)
 	if c := unavailableCustody(t); c.mode != custodyUnavailable || !c.absent {
 		t.Fatalf("no socket: %+v, want an absent custodian", c)
 	}
@@ -139,10 +127,6 @@ func TestCustodianAbsenceComesFromStructuredFacts(t *testing.T) {
 	}
 	if c := probeCustody(hangingUpService(t)); c.mode != custodyUnavailable || c.absent {
 		t.Fatalf("live socket failing: %+v, want briefly unreachable", c)
-	}
-	installedService(t, false)
-	if c := probeCustody(hangingUpService(t)); !c.absent {
-		t.Fatalf("live socket without the installed service: %+v, want absent", c)
 	}
 }
 
