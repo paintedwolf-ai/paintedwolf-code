@@ -23,6 +23,7 @@ var preflightInputs = []string{
 	"packaging/homebrew/painted-wolf-code.rb.tmpl",
 	"scripts/release-preflight.sh", "scripts/release-metadata.py",
 	"scripts/release_semver.py", "scripts/update_keys.py",
+	"scripts/release_distribution_contract/platforms.py",
 }
 
 func TestReleasePreflightVerifiesOnlyACompleteCorpus(t *testing.T) {
