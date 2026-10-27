@@ -85,7 +85,7 @@ func TestAPIConformance(t *testing.T) {
 	testutil.FailErr(t, "load the server's notice catalog", err)
 
 	sweep := newConformanceSweep(doc, validator, h.Server, usernotice.NewCatalog(noticeCfg))
-	settleSourceWatcher(t, hub, projectDir)
+	settleSourceWatcher(t, h.Server.WaitForBackground, hub, projectDir)
 	sweep.effects = openConformanceEffects(t, h, hub)
 	bindConformanceFixtures(sweep.values, project, sess, "README.md")
 	sweep.values.bind("/v1/providers/{provider_id}", "", provider)

@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -44,7 +43,6 @@ func TestRecordFindingPublishesFindingsSSE(t *testing.T) {
 	})
 	testutil.FailErr(t, "record_finding", err)
 
-	deadline := time.After(3 * time.Second)
 	for {
 		select {
 		case env := <-ch:
@@ -69,7 +67,7 @@ func TestRecordFindingPublishesFindingsSSE(t *testing.T) {
 				t.Fatalf("findings = %+v", digest.Findings)
 			}
 			return
-		case <-deadline:
+		case <-t.Context().Done():
 			t.Fatal("timed out waiting for findings SSE")
 		}
 	}

@@ -152,7 +152,7 @@ func (f *socketFactory) send(m controlMessage) error {
 	if err != nil {
 		return err
 	}
-	_, err = unix.Write(int(f.control.Fd()), raw)
+	_, err = f.control.Write(raw)
 	return err
 }
 

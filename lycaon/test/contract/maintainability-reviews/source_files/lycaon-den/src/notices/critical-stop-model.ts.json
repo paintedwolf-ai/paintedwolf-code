@@ -1,0 +1,13 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon-den/src/notices/critical-stop-model.ts",
+  "kind": "projection",
+  "workstream": "store-health",
+  "disposition": "retain",
+  "reason": "One exhaustive projection maps typed host failures to notices and permitted actions. Keeping corruption and operational retry decisions together makes destructive-action exclusion reviewable.",
+  "reviewed_commit": "fedf80ee7b88765c50c795dd50c8db432ae2c0d9",
+  "ceiling": 317,
+  "boundaries": {
+    "lycaon-den/src/notices/critical-stop-model.test.ts": "69d6354e01cbb3cca30c7219083fb1a61653c29590bc11e7cca5b762c024676e"
+  }
+}

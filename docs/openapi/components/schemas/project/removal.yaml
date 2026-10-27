@@ -65,12 +65,27 @@ components:
           maxItems: 256
           items: {type: string}
         force: {type: boolean}
+    ProjectRemovalProgress:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: Live host-owned progress; absent once the recorded operation settles.
+      required: [phase, completed, total]
+      properties:
+        phase: {type: string, enum: [preparing, chats, project_data, files, extensions]}
+        completed: {type: integer, minimum: 0}
+        total: {type: integer, minimum: 0}
     ProjectRemovalResult:
       x-go-generate: true
       type: object
       additionalProperties: false
       required: [operation_id, project_id, project_state, cleanup_state, extensions, reason, failure_code, documents, sessions, workers, overlays]
       properties:
+        progress:
+          x-go-type: "*ProjectRemovalProgress"
+          oneOf:
+          - $ref: "#/components/schemas/ProjectRemovalProgress"
+          - type: "null"
         assessment:
           x-go-type: "*ProjectRemovalAssessment"
           oneOf:

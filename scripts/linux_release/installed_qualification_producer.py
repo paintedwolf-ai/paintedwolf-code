@@ -18,7 +18,7 @@ from .installed_capacity import limits as campaign_limits
 from .installed_artifact_bundle import Limits, download, retain_tree
 from .installed_execution import current_tree, read, registry
 from .installed_campaign import validate_plan, verify_execution_receipt
-from .installed_provenance import controller_context, select_control, select_plan, verify_producer
+from .installed_provenance import local_controller_context, select_control, select_plan, verify_producer
 from .installed_results import admit
 from .support_matrix import CATALOG
 
@@ -42,7 +42,7 @@ def api(path):
 def context(repository: str):
     commit = subprocess.check_output(["git", "-C", str(ROOT), "rev-parse", "HEAD"], text=True, timeout=15).strip()
     identity = api(f"repos/{repository}").get("id")
-    selected = controller_context(commit, identity, socket.gethostname())
+    selected = local_controller_context(commit, identity, socket.gethostname())
     expected_tree = subprocess.check_output(["git", "-C", str(ROOT), "rev-parse", commit + "^{tree}"], text=True, timeout=15).strip()
     tree = current_tree(ROOT)
     if tree != expected_tree:
