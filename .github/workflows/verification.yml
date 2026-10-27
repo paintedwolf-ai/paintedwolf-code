@@ -114,6 +114,9 @@ jobs:
       PW_CI_AFFECTED: ${{ inputs.affected && '1' || '0' }}
       PW_CHANGE_BASE: ${{ needs.plan.outputs.change-base }}
     steps:
+      - name: Record job start
+        run: python3 -c 'import os, time; open(os.environ["GITHUB_ENV"], "a").write(f"PW_CI_JOB_STARTED_AT={time.time()}\n")'
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.source-sha || github.sha }}
@@ -130,6 +133,7 @@ jobs:
         if: matrix.setup != 'analysis'
         with:
           setup: ${{ matrix.setup }}
+          runtime-engines: ${{ matrix.runtime_engines }}
           notices: ${{ matrix.notices }}
           analysis: ${{ matrix.analysis }}
           # An admission lane runs offline, so it cannot fetch its container images; other lanes
