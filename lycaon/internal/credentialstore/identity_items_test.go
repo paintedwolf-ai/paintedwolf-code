@@ -197,7 +197,7 @@ func assertIdentityRecoveryError(t *testing.T, got, want error) {
 		ErrCustodianAbsent, ErrCustodianUnavailable, ErrLauncherRefused,
 		ErrIdentityMissing, ErrVaultCorrupt, ErrCustodianUnsupported,
 	} {
-		if errors.Is(got, outcome) != (outcome == want) {
+		if errors.Is(got, outcome) != errors.Is(outcome, want) {
 			t.Fatalf("recovery error = %v; expected only %v, checking %v", got, want, outcome)
 		}
 	}
