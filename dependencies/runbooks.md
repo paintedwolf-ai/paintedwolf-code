@@ -1,9 +1,10 @@
 ### Update automation
 
-`.github/dependabot.yml` is generated from the policy. Each manifest section becomes one weekly
-ecosystem block with the configured cooldown. Minor and patch version updates share a group;
-major updates remain individual PRs. Security updates remain independent of that group and
-the version-update cooldown. A 0.x minor update can still be breaking and needs review.
+`.github/dependabot.yml` is generated from the policy. Manifest sections sharing an ecosystem
+and group coalesce into one monthly ecosystem block with the configured cooldown. Minor and
+patch library updates share a group while major library updates remain individual PRs; GitHub
+Actions updates group all semver levels together. Security updates remain independent of that
+group and the version-update cooldown. A 0.x minor update can still be breaking and needs review.
 A package's `updates` value becomes an
 ignore rule: `hold` ignores every update, `no-major` ignores major releases, and `patch-only`
 ignores major and minor releases. Ignore rules also suppress Dependabot security updates for
