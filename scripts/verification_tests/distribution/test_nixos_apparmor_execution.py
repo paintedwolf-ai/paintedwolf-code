@@ -13,8 +13,8 @@ from linux_release import nix_apparmor
 
 SOURCE = Path(__file__).resolve().parents[3] / "packaging/nix/apparmor.py"
 SPEC = importlib.util.spec_from_file_location("selected_apparmor", SOURCE)
-OWNER = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(OWNER)
+APPARMOR = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(APPARMOR)
 
 
 class SelectedEngineAppArmorTests(unittest.TestCase):
@@ -42,30 +42,31 @@ class SelectedEngineAppArmorTests(unittest.TestCase):
     def save(self):
         (self.root / "manifest.json").write_text(json.dumps(self.manifest))
 
-    def test_accepts_format_1_and_2_and_refuses_unknown_or_mismatched_versions(self):
+    def test_requires_sealed_format_2_and_refuses_other_versions(self):
         v1 = {k: v for k, v in self.manifest.items() if k != "payload"}
         v1["format_version"] = 1
         (self.root / "manifest.json").write_text(json.dumps(v1))
-        self.assertIn(str(self.engine), OWNER.profile(self.package))
+        with self.assertRaisesRegex(ValueError, "manifest does not identify"):
+            APPARMOR.profile(self.package)
 
         for bad_version in (0, 1, 3, 99, True, "2"):
             with self.subTest(format_version=bad_version):
                 self.manifest["format_version"] = bad_version
                 self.save()
                 with self.assertRaisesRegex(ValueError, "manifest does not identify"):
-                    OWNER.profile(self.package)
+                    APPARMOR.profile(self.package)
         self.manifest["format_version"] = 2
         self.manifest["payload"] = []
         self.save()
         with self.assertRaisesRegex(ValueError, "manifest does not identify"):
-            OWNER.profile(self.package)
+            APPARMOR.profile(self.package)
         del self.manifest["payload"]
         self.save()
         with self.assertRaisesRegex(ValueError, "manifest does not identify"):
-            OWNER.profile(self.package)
+            APPARMOR.profile(self.package)
 
     def test_only_exact_engine_receives_userns(self):
-        result = OWNER.profile(self.package)
+        result = APPARMOR.profile(self.package)
         self.assertIn('"' + str(self.engine) + '" flags=(unconfined)', result)
         self.assertEqual(result.count("userns,"), 1)
         self.assertNotIn("**", result)
@@ -74,45 +75,45 @@ class SelectedEngineAppArmorTests(unittest.TestCase):
     def test_changed_bytes_refused(self):
         self.engine.write_bytes(self.engine.read_bytes() + b"changed")
         with self.assertRaisesRegex(ValueError, "bytes differ"):
-            OWNER.profile(self.package)
+            APPARMOR.profile(self.package)
 
     def test_symlink_refused(self):
         target = self.engine.with_name("other")
         self.engine.rename(target)
         self.engine.symlink_to(target)
         with self.assertRaisesRegex(ValueError, "physical"):
-            OWNER.profile(self.package)
+            APPARMOR.profile(self.package)
 
     def test_duplicate_manifest_identity_refused(self):
         self.manifest["executables"] *= 2
         self.save()
         with self.assertRaisesRegex(ValueError, "bytes differ"):
-            OWNER.profile(self.package)
+            APPARMOR.profile(self.package)
 
     def test_foreign_architecture_refused(self):
         self.manifest["architecture"] = "aarch64"
         self.save()
         with self.assertRaisesRegex(ValueError, "native ELF"):
-            OWNER.profile(self.package)
+            APPARMOR.profile(self.package)
 
     def test_manifest_directory_refused(self):
         manifest = self.root / "manifest.json"
         manifest.unlink()
         manifest.mkdir()
         with self.assertRaisesRegex(ValueError, "regular file"):
-            OWNER.profile(self.package)
+            APPARMOR.profile(self.package)
 
     def test_literal_path_metacharacters_and_controls(self):
-        self.assertEqual(OWNER.literal('/nix/store/x*[a]?{b}^"\\/pw'),
+        self.assertEqual(APPARMOR.literal('/nix/store/x*[a]?{b}^"\\/pw'),
                          '"/nix/store/x\\*\\[a\\]\\?\\{b\\}\\^\\"\\\\/pw"')
         for value in ("", "/x\ny", "/x\0y"):
             with self.assertRaises(ValueError):
-                OWNER.literal(value)
+                APPARMOR.literal(value)
 
     def test_both_consumers_use_the_same_literal_contract(self):
         path = '/nix/store/a"b\\c*d?e[f]g{h}i^j/bin/pw'
         expected = '"/nix/store/a\\"b\\\\c\\*d\\?e\\[f\\]g\\{h\\}i\\^j/bin/pw"'
-        for encoder in (OWNER.literal, nix_apparmor.literal):
+        for encoder in (APPARMOR.literal, nix_apparmor.literal):
             self.assertEqual(encoder(path), expected)
             for character in [*(chr(value) for value in range(32)), chr(127)]:
                 with self.subTest(character=ord(character)), self.assertRaises(ValueError):
@@ -131,4 +132,4 @@ class SelectedEngineAppArmorTests(unittest.TestCase):
                 env={'PATH': os.defpath, 'PYTHONPATH': str(grammar.parent)},
                 capture_output=True, text=True, timeout=10)
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual(result.stdout, 'abi <abi/4.0>,\n' + OWNER.profile(self.package) + '\n')
+            self.assertEqual(result.stdout, 'abi <abi/4.0>,\n' + APPARMOR.profile(self.package) + '\n')

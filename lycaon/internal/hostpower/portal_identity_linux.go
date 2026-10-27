@@ -5,54 +5,131 @@ package hostpower
 import (
 	"context"
 	"encoding/xml"
+	"fmt"
 	"os"
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/godbus/dbus/v5"
 	"github.com/godbus/dbus/v5/introspect"
 )
 
-const portalRegistry = "org.freedesktop.host.portal.Registry"
+const (
+	portalRegistry          = "org.freedesktop.host.portal.Registry"
+	systemdBusName          = "org.freedesktop.systemd1"
+	systemdObjectPath       = dbus.ObjectPath("/org/freedesktop/systemd1")
+	systemdManagerInterface = "org.freedesktop.systemd1.Manager"
+)
+
+// systemdProperty is one D-Bus property entry for StartTransientUnit.
+type systemdProperty struct {
+	Name  string
+	Value dbus.Variant
+}
+
+// systemdAuxUnit is one auxiliary unit entry for StartTransientUnit.
+type systemdAuxUnit struct {
+	Name       string
+	Properties []systemdProperty
+}
+
+// applicationScopeMu serializes placing this process into its systemd user
+// application scope when an older portal lacks the host registry.
+var applicationScopeMu sync.Mutex
 
 // attribute makes the portal attribute calls on bus to p.appID. Portal backends
 // refuse an unsandboxed caller without an application id. A portal with the
 // host registry takes the id from Register, which must precede every other
 // portal call on the connection and succeeds only for an installed desktop
 // entry. An older portal derives it from the caller's systemd application
-// unit, which a desktop-entry launch creates and the engine inherits.
-func (p portalProvider) attribute(ctx context.Context, bus *dbus.Conn) error {
+// unit, which a desktop-entry launch creates or which this process enters on
+// the user manager when started outside an application unit.
+func (p portalProvider) attribute(ctx context.Context, bus *dbus.Conn, owner string) error {
 	if p.appID == "" {
 		return unavailable(ReasonNoApplicationID, "no application id to present to the desktop portal")
 	}
-	registry, err := portalHasRegistry(ctx, bus)
+	registry, err := portalHasRegistry(ctx, bus, owner)
 	if err != nil {
 		return unavailable(ReasonQueryFailed, "inspect the desktop portal: %w", err)
 	}
 	if registry {
-		if err := bus.Object(portalName, portalPath).CallWithContext(ctx, portalRegistry+".Register", 0, p.appID, map[string]dbus.Variant{}).Err; err != nil {
+		if err := bus.Object(owner, portalPath).CallWithContext(ctx, portalRegistry+".Register", 0, p.appID, map[string]dbus.Variant{}).Err; err != nil {
 			return unavailable(ReasonNoApplicationID, "the desktop portal refused application id %s: %w", p.appID, err)
 		}
 		return nil
 	}
-	unit := ""
-	if p.unitAppID != nil {
-		unit = p.unitAppID()
-	}
+	unit := p.currentUnitAppID()
 	if unit == p.appID {
 		return nil
 	}
 	if unit == "" {
-		return unavailable(ReasonNoApplicationID, "the desktop portal cannot attribute this process to %s: it runs outside an application unit and the portal offers no host registry", p.appID)
+		unit = p.enterApplicationScope(ctx, bus)
+		if unit == p.appID {
+			return nil
+		}
+		if unit == "" {
+			return unavailable(ReasonNoApplicationID, "the desktop portal cannot attribute this process to %s: it runs outside an application unit and the portal offers no host registry", p.appID)
+		}
 	}
 	return unavailable(ReasonNoApplicationID, "the desktop portal would attribute this process to %s, not %s, and offers no host registry", unit, p.appID)
 }
 
+func (p portalProvider) currentUnitAppID() string {
+	if p.unitAppID == nil {
+		return ""
+	}
+	return p.unitAppID()
+}
+
+// enterApplicationScope asks the systemd user manager to place this process in
+// an app-paintedwolf-<appID>-<pid>.scope transient unit when it is unscoped.
+func (p portalProvider) enterApplicationScope(ctx context.Context, bus *dbus.Conn) string {
+	applicationScopeMu.Lock()
+	defer applicationScopeMu.Unlock()
+	if unit := p.currentUnitAppID(); unit != "" {
+		return unit
+	}
+	unitName := fmt.Sprintf("app-paintedwolf-%s-%d.scope", p.appID, os.Getpid())
+	properties := []systemdProperty{{
+		Name:  "PIDs",
+		Value: dbus.MakeVariant([]uint32{uint32(os.Getpid())}), // #nosec G115 -- Linux PIDs fit in uint32
+	}}
+	var job dbus.ObjectPath
+	err := bus.Object(systemdBusName, systemdObjectPath).CallWithContext(
+		ctx,
+		systemdManagerInterface+".StartTransientUnit",
+		0,
+		unitName,
+		"fail",
+		properties,
+		[]systemdAuxUnit(nil),
+	).Store(&job)
+	if err != nil {
+		return ""
+	}
+	deadline := time.Now().Add(busDeadline)
+	for {
+		if unit := p.currentUnitAppID(); unit != "" {
+			return unit
+		}
+		if time.Now().After(deadline) {
+			return ""
+		}
+		select {
+		case <-ctx.Done():
+			return p.currentUnitAppID()
+		case <-time.After(5 * time.Millisecond):
+		}
+	}
+}
+
 // portalHasRegistry reports whether the portal object implements the host registry.
-func portalHasRegistry(ctx context.Context, bus *dbus.Conn) (bool, error) {
+func portalHasRegistry(ctx context.Context, bus *dbus.Conn, owner string) (bool, error) {
 	var document string
-	if err := bus.Object(portalName, portalPath).CallWithContext(ctx, "org.freedesktop.DBus.Introspectable.Introspect", 0).Store(&document); err != nil {
+	if err := bus.Object(owner, portalPath).CallWithContext(ctx, "org.freedesktop.DBus.Introspectable.Introspect", 0).Store(&document); err != nil {
 		return false, err
 	}
 	var node introspect.Node

@@ -58,12 +58,24 @@ sys.exit(int(os.environ.get('NIX_FIXTURE_NONFLAKE_EXIT', '0')))
     def reports(self):
         return [json.loads(path.read_text()) for path in (self.root / "artifacts/nix").glob("*.json")]
 
+    def test_fixed_desktop_components_keep_normal_sandbox_and_native_system(self):
+        for component in ("desktop-settings-observer", "desktop-shell-check"):
+            with self.subTest(component=component), \
+                    patch.object(nix.platform, "system", return_value="Linux"), \
+                    patch.object(nix.platform, "machine", return_value="x86_64"):
+                command = nix.command("build", self.root, component)
+                self.assertIn(component, nix.COMPONENTS)
+                self.assertEqual(command[-1], "git+file://" + str(self.root) + "#packages.x86_64-linux." + component)
+                self.assertEqual(command[command.index("sandbox") + 1], "true")
+                self.assertIn("--no-write-lock-file", command)
+
     def test_evaluation_keeps_the_lock_and_cannot_receive_publication_credentials(self):
         before = (self.root / "flake.lock").read_bytes()
         self.assertEqual(self.invoke("check"), 0)
         self.assertEqual((self.root / "flake.lock").read_bytes(), before)
         call = json.loads(self.calls.read_text().splitlines()[0])
         self.assertIn("--no-build", call["args"])
+        self.assertIn("-L", call["args"])
         self.assertIn("--no-write-lock-file", call["args"])
         self.assertFalse(call["credentials"])
         report = self.reports()[0]
@@ -74,6 +86,7 @@ sys.exit(int(os.environ.get('NIX_FIXTURE_NONFLAKE_EXIT', '0')))
         self.assertEqual(self.invoke("build"), 0)
         calls = [json.loads(line) for line in self.calls.read_text().splitlines()]
         self.assertIn("--no-link", calls[0]["args"])
+        self.assertIn("-L", calls[0]["args"])
         self.assertIn("--recursive", calls[1]["args"])
         self.assertTrue(all(not call["credentials"] for call in calls))
         self.assertEqual(self.reports()[0]["builds"][0]["outputs"]["out"], "/nix/store/fixture")

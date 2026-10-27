@@ -59,13 +59,13 @@ func TestSourceRequestSurvivesDisconnectAndReturnsOriginalResult(t *testing.T) {
 	go func() { srv.ServeHTTP(response, request.WithContext(ctx)); close(returned) }()
 	select {
 	case <-started:
-	case <-time.After(10 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("trash did not start")
 	}
 	cancel()
 	select {
 	case <-returned:
-	case <-time.After(10 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("disconnected request did not return")
 	}
 	status := httptest.NewRecorder()
@@ -79,8 +79,6 @@ func TestSourceRequestSurvivesDisconnectAndReturnsOriginalResult(t *testing.T) {
 		t.Fatalf("commit phase=%+v", pending)
 	}
 	unblock()
-	deadline := time.NewTimer(10 * time.Second)
-	defer deadline.Stop()
 	tick := time.NewTicker(10 * time.Millisecond)
 	defer tick.Stop()
 	for {
@@ -93,7 +91,7 @@ func TestSourceRequestSurvivesDisconnectAndReturnsOriginalResult(t *testing.T) {
 			break
 		}
 		select {
-		case <-deadline.C:
+		case <-t.Context().Done():
 			t.Fatal("operation did not finish")
 		case <-tick.C:
 		}
@@ -161,8 +159,6 @@ func TestSourceRequestPublishesEveryPersistedState(t *testing.T) {
 
 	// The list endpoint is a seed; every later state reaches Den as an event.
 	states := map[string]bool{}
-	deadline := time.NewTimer(10 * time.Second)
-	defer deadline.Stop()
 	for !states["completed"] {
 		select {
 		case envelope := <-stream:
@@ -175,7 +171,7 @@ func TestSourceRequestPublishesEveryPersistedState(t *testing.T) {
 				t.Fatalf("event scope=%+v", event)
 			}
 			states[event.Operation.State] = true
-		case <-deadline.C:
+		case <-t.Context().Done():
 			t.Fatalf("states seen = %v", states)
 		}
 	}

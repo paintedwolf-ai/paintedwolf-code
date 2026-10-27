@@ -139,7 +139,7 @@ func (s *sequenceRun) startGroup(ctx context.Context, group StageGroup) error {
 	s.live, s.liveFiles = wired, files
 	s.mu.Unlock()
 
-	if err := startWiredStages(wired); err != nil {
+	if err := startWiredStages(wired, s.opts.Started); err != nil {
 		s.mu.Lock()
 		s.live, s.liveFiles = nil, nil
 		s.mu.Unlock()

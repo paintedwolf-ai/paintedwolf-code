@@ -14,7 +14,7 @@ import time
 import tempfile
 
 from ..artifact_paths import artifact_root
-from . import nix_archive, factory_source, nix_runner, nix_scanner_tools
+from . import nix_archive, factory_source, nix_runner, nix_scanner_tools, nix_progress
 
 ROOT = Path(__file__).resolve().parents[2]
 SYSTEMS = {"x86_64": "x86_64-linux", "aarch64": "aarch64-linux"}
@@ -22,7 +22,7 @@ NIX = ["nix", "--extra-experimental-features", "nix-command flakes"]
 CREDENTIALS = ("GH_TOKEN", "GITHUB_TOKEN", "LINUX_PACKAGE_SIGNING_KEY", "FEED_SIGNING_KEYS_JSON",
                "TAURI_SIGNING_PRIVATE_KEY", "TAURI_SIGNING_PRIVATE_KEY_PASSWORD")
 COMPONENTS = ("default", "bun-lock", "frontend", "shell", "engine", "bound-engine", "bialy", "document-core",
-              "resources", "browser", "gitengine", "ocr", "decision-resources", "scanner-original", "scanner-finalized", "notices", "notice-tools", "closure-notices",
+              "desktop-settings-observer", "desktop-shell-check", "resources", "browser", "gitengine", "ocr", "decision-resources", "scanner-original", "scanner-finalized", "notices", "notice-tools", "closure-notices",
               "scanner-host-tools", "nixos-module", "nixos-gnome-vm", "nixos-plasma-vm", "nix-workflow-fixture")
 
 
@@ -34,12 +34,12 @@ def credential_free_environment() -> dict:
 def command(operation: str, root: Path, component: str = "default", source: str | None = None) -> list[str]:
     source = source or "git+file://" + str(root)
     if operation == "check":
-        return NIX + ["flake", "check", "--no-build", "--all-systems", "--no-write-lock-file", source]
+        return NIX + ["flake", "check", "-L", "--no-build", "--all-systems", "--no-write-lock-file", source]
     if platform.system() != "Linux" or platform.machine() not in SYSTEMS:
         raise ValueError("native Nix package builds require Linux amd64 or arm64")
     system = SYSTEMS[platform.machine()]
     section = "checks" if component == "nixos-module" else "packages"
-    return NIX + ["build", "--json", "--no-link", "--no-write-lock-file",
+    return NIX + ["build", "-L", "--json", "--no-link", "--no-write-lock-file",
                   "--option", "sandbox", "true", "--max-jobs", "1", "--cores", "1",
                   source + "#" + section + "." + system + "." + component]
 
@@ -103,7 +103,7 @@ def execute(operation: str, root: Path = ROOT, component: str = "default",
     if component == "scanner-host-tools" and operation == "check":
         report["passed"] = True
         return retain_report(root, report, 0)
-    result = subprocess.run(invocation, cwd=root, env=environment, text=True, stdout=subprocess.PIPE)
+    result = nix_progress.run(invocation, cwd=root, env=environment)
     report["passed"] = result.returncode == 0
     if result.returncode == 0 and operation == "check" and role is None:
         result, report["nonflake"] = nonflake_identity(root, environment)
