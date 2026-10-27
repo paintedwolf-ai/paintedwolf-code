@@ -90,6 +90,11 @@ func (l *PromptLoop) Run(ctx context.Context, in PromptRunInput) (*PromptRunResu
 		return nil, err
 	}
 	result, err := l.runPreparedPromptLoop(ctx, in, setup)
+	if repair, repairErr := l.prepareCloseoutRepair(ctx, setup, err); repairErr != nil {
+		return nil, repairErr
+	} else if repair {
+		result, err = l.runPreparedPromptLoop(ctx, in, setup)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +113,7 @@ func (l *PromptLoop) runPreparedPromptLoop(ctx context.Context, in PromptRunInpu
 	var closeoutNudgeSent bool
 	var loopExit loopExitKind
 
-	firstModelTurn := true
+	firstModelTurn := st.turnsRanThisRun == 0
 loop:
 	for {
 		if sess.IsWorkerChild() {
