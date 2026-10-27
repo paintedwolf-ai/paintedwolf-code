@@ -101,22 +101,16 @@ func TestMigrationsDropReleasedNamesOnlyThroughTheHelper(t *testing.T) {
 	released := releasedNames(t)
 	sources, err := filepath.Glob("migrations/*")
 	testutil.FailErr(t, "list migration sources", err)
+	var checked []string
 	for _, source := range sources {
 		name := filepath.Base(source)
 		if name == "retire.go" || strings.HasSuffix(name, "_test.go") || (!strings.HasSuffix(name, ".go") && !strings.HasSuffix(name, ".sql")) {
 			continue
 		}
+		checked = append(checked, name)
 		raw, err := os.ReadFile(source)
 		testutil.FailErr(t, "read migration source", err)
-		text := string(raw)
-		var dropped []string
-		for _, match := range dropColumn.FindAllStringSubmatch(text, -1) {
-			dropped = append(dropped, match[1]+"."+match[2])
-		}
-		for _, match := range dropTable.FindAllStringSubmatch(text, -1) {
-			dropped = append(dropped, match[1])
-		}
-		for _, target := range dropped {
+		for _, target := range rawDropTargets(string(raw)) {
 			if !released[target] {
 				continue
 			}
@@ -125,6 +119,20 @@ func TestMigrationsDropReleasedNamesOnlyThroughTheHelper(t *testing.T) {
 			}
 		}
 	}
+	if len(checked) == 0 {
+		t.Fatal("no migration sources examined")
+	}
+}
+
+func rawDropTargets(text string) []string {
+	var dropped []string
+	for _, match := range dropColumn.FindAllStringSubmatch(text, -1) {
+		dropped = append(dropped, match[1]+"."+match[2])
+	}
+	for _, match := range dropTable.FindAllStringSubmatch(text, -1) {
+		dropped = append(dropped, match[1])
+	}
+	return dropped
 }
 
 // Every registered retirement is reproduced from the released corpus: some
