@@ -219,7 +219,7 @@ func TestSharedTurnRendersEachStudentAndExcludesReasoning(t *testing.T) {
 	Observe(ctx, &modelcall.Completion{Content: "answer", Reasoning: "private reasoning"}, false, "teacher", "model")
 	Settled(ctx, "output", api.Message{Content: "answer"})
 	if err := capture.Finish(); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "capture.Finish failed", err)
 	}
 	paths, err := filepath.Glob(filepath.Join(root, "*.json"))
 	if err != nil || len(paths) != 2 {
@@ -228,12 +228,10 @@ func TestSharedTurnRendersEachStudentAndExcludesReasoning(t *testing.T) {
 	students := map[string]bool{}
 	for _, path := range paths {
 		body, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatal(err)
-		}
+		testutil.FailErr(t, "read file", err)
 		var record Record
 		if err := json.Unmarshal(body, &record); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "unmarshal JSON document", err)
 		}
 		if record.Reason != "" || record.CallID != "shared" || strings.Contains(string(body), "private reasoning") {
 			t.Fatalf("unexpected capture: %s", body)
