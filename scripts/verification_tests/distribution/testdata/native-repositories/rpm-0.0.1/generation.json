@@ -1,0 +1,69 @@
+{
+  "channel": "preview",
+  "family": "rpm",
+  "format_version": 1,
+  "inventory_sha256": "e6643c2eb4b52e62d5f9670ab4b95a7d6aa7fafda1c4153739c2b35c85c44d8d",
+  "key_fingerprint": "39E50CFFA6F3583069BB7D2647800F99D2F031C5",
+  "objects": [
+    {
+      "path": "pool/61e8672c432c66a5068585afc8b4cc1f4e0be9328ad84f040ef33741e0be85e0/paintedwolf-repository-fixture-0.0.1-1.x86_64.rpm",
+      "sha256": "61e8672c432c66a5068585afc8b4cc1f4e0be9328ad84f040ef33741e0be85e0",
+      "size": 6320
+    },
+    {
+      "path": "repodata/00cde8487bf11be144c9387bacfa4b90979b6249563f4db19266b8609a89ef5e-primary.sqlite.bz2",
+      "sha256": "00cde8487bf11be144c9387bacfa4b90979b6249563f4db19266b8609a89ef5e",
+      "size": 1790
+    },
+    {
+      "path": "repodata/5d91d90041f130056676ef6adfcdfb6ceedde8205929f22ed0233bf7a7e6d818-filelists.xml.gz",
+      "sha256": "5d91d90041f130056676ef6adfcdfb6ceedde8205929f22ed0233bf7a7e6d818",
+      "size": 270
+    },
+    {
+      "path": "repodata/8b27d4bf08b910603f198dab23d222620f4ed49080bae327f64d2e03bc269e30-primary.xml.gz",
+      "sha256": "8b27d4bf08b910603f198dab23d222620f4ed49080bae327f64d2e03bc269e30",
+      "size": 632
+    },
+    {
+      "path": "repodata/a3bb78ea5dbc8e2675553b2401033898257bff5e8dde237441df923aa383faf5-other.xml.gz",
+      "sha256": "a3bb78ea5dbc8e2675553b2401033898257bff5e8dde237441df923aa383faf5",
+      "size": 245
+    },
+    {
+      "path": "repodata/b489a3cfa73c6cb547247f92099cd0b5927114af8b51a495ab39d61ca5d2f98a-other.sqlite.bz2",
+      "sha256": "b489a3cfa73c6cb547247f92099cd0b5927114af8b51a495ab39d61ca5d2f98a",
+      "size": 659
+    },
+    {
+      "path": "repodata/fc29c688efed7be5e40316e5cee980c9c488122924d461f698d07de321d7c782-filelists.sqlite.bz2",
+      "sha256": "fc29c688efed7be5e40316e5cee980c9c488122924d461f698d07de321d7c782",
+      "size": 772
+    },
+    {
+      "path": "repodata/repomd.xml",
+      "sha256": "8ca9a50155069e53baec82c4b9058308bd507f876c38a71c9b40d587e4756e1e",
+      "size": 3069
+    },
+    {
+      "path": "repodata/repomd.xml.asc",
+      "sha256": "6a03e52d71464fb8134270097e81c61fdfc9119e698ab6c12f28d536cb14eb1c",
+      "size": 659
+    }
+  ],
+  "packages": [
+    {
+      "architecture": "amd64",
+      "file": "pool/61e8672c432c66a5068585afc8b4cc1f4e0be9328ad84f040ef33741e0be85e0/paintedwolf-repository-fixture-0.0.1-1.x86_64.rpm",
+      "input_sha256": "2493700e4a75c72762f35b8db6d669adc2f19f2d63080b3639ba67562687d923",
+      "native_version": "0.0.1-1",
+      "sha256": "61e8672c432c66a5068585afc8b4cc1f4e0be9328ad84f040ef33741e0be85e0"
+    }
+  ],
+  "publication_order": "content-before-signed-metadata",
+  "reader_consistency": "dnf-versioned-baseurl-mirrorlist",
+  "rehearsal": true,
+  "signing_generation": 1,
+  "source_commit": "ffffffffffffffffffffffffffffffffffffffff",
+  "version": "0.0.1"
+}

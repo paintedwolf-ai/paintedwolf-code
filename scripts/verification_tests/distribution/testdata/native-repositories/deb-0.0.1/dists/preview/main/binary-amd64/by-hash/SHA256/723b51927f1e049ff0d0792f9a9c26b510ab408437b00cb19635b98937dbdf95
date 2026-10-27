@@ -1,0 +1,12 @@
+Package: paintedwolf-repository-fixture
+Architecture: amd64
+Version: 0.0.1-1
+Maintainer: Painted Wolf Code
+Filename: pool/960399af302e904fd6650f06da909222745872d5e13f17dacdfc472cf64f5e8a/paintedwolf-repository-fixture_0.0.1-1_amd64.deb
+Size: 586
+MD5sum: 8183db2a40490aafd0586ad0c3ebad59
+SHA1: 6a61d14dee95352868935b13a41d46b47a349e11
+SHA256: 960399af302e904fd6650f06da909222745872d5e13f17dacdfc472cf64f5e8a
+SHA512: 6d9b99026920191c475c261ea8fab4f85e2d8b48e5b872dfe0bb1a295f562e068885eec969dbec4af86e7a95a471714a9f51b235cd86979d6bbe23698657be65
+Description: Disposable repository fixture, not an application candidate
+
