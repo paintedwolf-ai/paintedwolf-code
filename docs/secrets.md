@@ -49,7 +49,7 @@ A package-only or Home Manager installation does not register a system custodian
 
 Native Linux package upgrades replace files while a running desktop may still hold the previous executable inode. Before starting another engine or vault-custody helper, the shell compares its open `/proc/self/exe` image with the current package manifest. A mismatch or unavailable manifest requests a full desktop restart and preserves a running engine before incompatible work is attempted. Quit through the app menu or the stop screen's **Quit app** action, finish the package operation, and open the installed desktop launcher again. The identity service still verifies each new chain; it accepts no old executable or deleted mapping as a restart workaround. Package-manager upgrades do not use the macOS application-managed activation lifecycle.
 On Artix/OpenRC the same verified identity server runs under `supervise-daemon`
-with a dedicated `paintedwolf-vault` account whose shell is `nologin`. Its
+with a dedicated `paintedwolf-vault` account whose shell is `nologin`. Admission requires consistent named and reciprocal numeric passwd/group lookups and successful NSS enumeration without observed UID or primary-GID aliases. Unsupported or failed enumeration refuses startup; accepted snapshots are limited to 16 MiB per database, 262144 records and 16 KiB per record. This checks the mappings configured NSS returns, not identities an administrator-controlled NSS conceals. Its
 protected state is `/var/lib/paintedwolf-vault-openrc`; its public socket keeps
 the same path and peer-credential checks. `setpriv` clears supplementary groups,
 sets no-new-privileges and grants only `CAP_SYS_PTRACE` in the bounding,
