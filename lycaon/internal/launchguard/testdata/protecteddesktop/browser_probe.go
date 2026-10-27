@@ -99,7 +99,7 @@ func browserEngineLossProbe(scratch string) (bool, string) {
 	var stderr bytes.Buffer
 	victim := osexec.Command(self, "--browser-engine-victim", cacheDir, fakeChrome, readyFile)
 	victim.Env = append(os.Environ(), exec.LaunchBrokerFDEnv+"=3")
-	victim.ExtraFiles = []*os.File{os.NewFile(6, "broker")}
+	victim.ExtraFiles = []*os.File{desktopBroker}
 	victim.Stderr = &stderr
 	if err := victim.Start(); err != nil {
 		return false, err.Error()
