@@ -25,6 +25,17 @@ class MergeGroupTests(unittest.TestCase):
         self.assertEqual(polls, [('https://github.example/owner/repo', QUEUE_REF)] * 4)
         self.assertEqual(sleeps, [merge_group.INTERVAL_SECONDS] * 4)
 
+    def test_cancellation_failure_keeps_watching_without_cancelling_a_live_branch(self):
+        from unittest.mock import Mock
+        cancel = Mock(side_effect=[subprocess.CalledProcessError(1, ['gh']), None])
+        exists = Mock(side_effect=[False, None, True, False])
+        sleeps = []
+        with patch('builtins.print'):
+            merge_group.watch(QUEUE_REF, 'https://example.test/repo', cancel,
+                              exists=exists, sleep=sleeps.append)
+        self.assertEqual(cancel.call_count, 2)
+        self.assertEqual(len(sleeps), 4)
+
     def test_only_a_missing_ref_reads_as_gone(self):
         for code, state in [(0, True), (2, False), (128, None), (1, None)]:
             with self.subTest(code=code), patch.object(merge_group.subprocess, 'run',
@@ -60,6 +71,38 @@ class MergeGroupTests(unittest.TestCase):
                 self.assertRaises(SystemExit):
             merge_group.main()
         watch.assert_not_called()
+
+    def test_queue_certification_validates_inputs_synthesizes_event_and_propagates_failure(self):
+        import json
+        from pathlib import Path
+        import runpy
+        from ci_policy import queue_certification as qc
+        sha = 'a' * 40
+        other = 'b' * 40
+        with self.assertRaisesRegex(ValueError, 'cannot combine pull_request'):
+            qc.event('owner/repo', QUEUE_REF, sha, '7')
+        for missing_ref, missing_sha in (('', sha), (QUEUE_REF, '')):
+            with self.assertRaisesRegex(ValueError, 'requires both queue_ref and queue_sha'):
+                qc.event('owner/repo', missing_ref, missing_sha)
+        with patch.object(qc, 'context', side_effect=ValueError('merge-queue ref no longer identifies this exact commit')):
+            with self.assertRaisesRegex(ValueError, 'exact commit'):
+                qc.run('owner/repo', QUEUE_REF, sha, 'checker.py')
+        captured = {}
+        def call(cmd, env=None):
+            captured['cmd'] = cmd
+            captured['event_name'] = env['GITHUB_EVENT_NAME']
+            captured['payload'] = json.loads(Path(env['GITHUB_EVENT_PATH']).read_text())
+            return 1
+        with patch('ci_policy.queue_dispatch.context', return_value=other), patch.object(qc, 'context', return_value=other), \
+                patch.object(qc.subprocess, 'call', side_effect=call), \
+                patch.dict('os.environ', {'GITHUB_REPOSITORY': 'owner/repo', 'QUEUE_REF': QUEUE_REF, 'QUEUE_SHA': sha, 'PULL_REQUEST': ''}, clear=False), \
+                patch('sys.argv', ['queue_certification.py', 'checker.py']), self.assertRaises(SystemExit) as exited:
+            runpy.run_module('ci_policy.queue_certification', run_name='__main__')
+        self.assertEqual(exited.exception.code, 1)
+        self.assertEqual(captured['cmd'][-1], 'checker.py')
+        self.assertEqual(captured['event_name'], 'merge_group')
+        self.assertEqual(captured['payload'], {'merge_group': {
+            'base_ref': 'refs/heads/main', 'head_ref': QUEUE_REF, 'base_sha': other, 'head_sha': sha}})
 
 
 if __name__ == '__main__':

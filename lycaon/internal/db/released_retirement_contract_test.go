@@ -23,11 +23,17 @@ var shippedRawDrops = map[string]map[string]string{
 		"managed_secret_reveals": "rebuilt under the same name with a widened CHECK; every row is copied first",
 		"vault_unlocks":          "rebuilt under the same name with a widened CHECK; every row is copied first",
 	},
+	"source_manifest_layout.sql": {
+		"source_manifest_staging": "rebuilt under the same name for the per-root manifest layout; staging rows are ephemeral build scratch",
+	},
 	"source_namespace_projection.sql": {
 		"rewind_operations.journal_path": "journals resolve from operation identity in the current installation's checkpoint tree",
 	},
 	"source_namespace.go": {
 		"source_checkpoint_entries": "write-only delta; checkpoints resolve through created_ordinal and the effect ledger",
+	},
+	"vault_unlock_away.sql": {
+		"vault_unlocks": "rebuilt under the same name with a widened end_reason CHECK; every row is copied first",
 	},
 }
 

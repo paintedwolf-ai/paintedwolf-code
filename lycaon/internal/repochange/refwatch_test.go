@@ -72,8 +72,7 @@ func TestRefWatchEmitsHeadMovedForOutsideCommit(t *testing.T) {
 	testutil.FailErr(t, "move branch", os.WriteFile(filepath.Join(gitDir, "refs", "heads", "main"),
 		[]byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n"), 0o644))
 
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) && headMoved.Load() == 0 {
+	for t.Context().Err() == nil && headMoved.Load() == 0 {
 		time.Sleep(20 * time.Millisecond)
 	}
 	if headMoved.Load() == 0 {
@@ -155,5 +154,5 @@ func TestRefWatchEmitsForLinkedWorktreeCommonDirectory(t *testing.T) {
 	repochange.EnsureRoot(t.Context(), root)
 	time.Sleep(50 * time.Millisecond)
 	testutil.FailErr(t, "move shared branch", os.WriteFile(branch, []byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n"), 0o644))
-	testutil.WaitFor(t, 2*time.Second, func() bool { return headMoved.Load() > 0 })
+	testutil.WaitFor(t, func() bool { return headMoved.Load() > 0 })
 }

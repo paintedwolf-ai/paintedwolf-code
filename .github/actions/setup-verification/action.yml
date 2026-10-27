@@ -5,9 +5,13 @@ inputs:
     description: >-
       What the lane builds: verification (shared toolchains), shell (also the Tauri
       shell and its staged engine), or harness (the Den Rust workspace and harness
-      stack, without the shell's packaging inputs)
+      stack, without the shell's packaging inputs), or frontend (Bun, Node, Rust,
+      ripgrep, and document-core dependencies)
     default: verification
     required: false
+  runtime-engines:
+    description: Provision Git and OCR engines used by host behavior checks
+    default: 'true'
   notices:
     description: Restore tools for the lane's explicit licenses:notices check
     default: 'false'
@@ -20,6 +24,11 @@ inputs:
   browser:
     description: Provision the pinned browser before an offline lane runs test:confine:linux
     default: 'false'
+  repository-tools:
+    description: Install the native apt, dnf and pacman tools the distribution fixture tests drive
+  nix:
+    description: Provision the pinned Nix toolchain and locked flake inputs before an offline Nix lane
+    default: 'false'
   save-caches:
     description: Save the toolchain and build caches (main's warm job only); every other run restores without saving
     default: 'false'
@@ -28,6 +37,9 @@ outputs:
   decide-cache-hit:
     description: Whether the decision engine's exact build cache was restored
     value: ${{ steps.decide.outputs.cache-hit }}
+  document-cache-hit:
+    description: Whether the document compiler cache was restored
+    value: ${{ steps.document.outputs.cache-hit }}
   artifact-root:
     description: Checkout artifact directory
     value: ${{ steps.paths.outputs.artifact-root }}
@@ -40,12 +52,16 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Set verification compiler profiles
+      shell: bash
+      run: printf 'CARGO_PROFILE_DEV_DEBUG=0\nCARGO_PROFILE_TEST_DEBUG=0\n' >> "${GITHUB_ENV}"
+
     - name: Resolve artifact directory
       id: paths
       shell: bash
       run: echo "artifact-root=$(python3 scripts/artifact_paths.py artifacts "$GITHUB_WORKSPACE")" >> "$GITHUB_OUTPUT"
 
-    - uses: actions/setup-go@5064d95ba18d4a9dda7c4cc67adeb03aea1a2a14 # v7.0.0
+    - uses: actions/setup-go@90ad2b35f69faf97585ad74d28fa006d2739b7af # v7.0.0
       with:
         go-version-file: lycaon/go.mod
         cache: false
@@ -53,9 +69,15 @@ runs:
     # Caches restore only what main saved: a run on any other ref cannot share
     # what it saves, and its entries would evict main's.
     - id: go
+      if: inputs.setup != 'frontend'
       uses: ./.github/actions/cache-go
       with:
         exact: ${{ inputs.save-caches }}
+
+    - name: Restore analysis tools
+      uses: ./.github/actions/cache-analysis-tools
+      with:
+        tools: ${{ inputs.analysis }}
 
     - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
       with:
@@ -70,45 +92,46 @@ runs:
       shell: bash
       run: rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal
 
-    - name: Allow Go test binaries to create user namespaces
+    - name: Allow verification engines to create user namespaces
       if: runner.os == 'Linux'
       shell: bash
       run: |
         if [[ "$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null)" == 1 ]]; then
-          sudo install -m 0644 "$GITHUB_ACTION_PATH/apparmor-go-test-userns" /etc/apparmor.d/paintedwolf-go-test
-          sudo apparmor_parser -r /etc/apparmor.d/paintedwolf-go-test
+          profile="$RUNNER_TEMP/paintedwolf-verification"
+          {
+            cat "$GITHUB_ACTION_PATH/apparmor-verification-userns"
+            printf '\nprofile paintedwolf-verification-sidecar "%s/lycaon-dev" flags=(unconfined) {\n  userns,\n}\n' \
+              "$(python3 scripts/artifact_paths.py build "$GITHUB_WORKSPACE")"
+          } > "$profile"
+          sudo install -m 0644 "$profile" /etc/apparmor.d/paintedwolf-verification
+          sudo apparmor_parser -r /etc/apparmor.d/paintedwolf-verification
         fi
 
-    - name: Install Tauri Linux build dependencies
+    - name: Provision Linux native test dependencies
       if: runner.os == 'Linux' && inputs.setup == 'shell'
-      shell: bash
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y --no-install-recommends \
-          libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev xvfb \
-          libjavascriptcoregtk-4.1-dev librsvg2-dev patchelf \
-          sway wl-clipboard wtype xclip
-
-    # Lavapipe gives the decision engine's Vulkan parity tests a device on GPU-less runners.
-    - name: Install Mesa's Vulkan drivers
-      if: runner.os == 'Linux' && inputs.setup == 'shell'
-      shell: bash
-      run: sudo apt-get install -y --no-install-recommends mesa-vulkan-drivers libvulkan1
-
-    - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
-      id: rust
-      if: inputs.setup != 'verification'
+      uses: ./.github/actions/setup-linux-native
       with:
-        workspaces: lycaon-den/src-tauri -> ../target
-        shared-key: den-shell
-        save-if: ${{ inputs.save-caches == 'true' && github.ref == 'refs/heads/main' }}
+        save: ${{ inputs.save-caches }}
+
+    - uses: ./.github/actions/cache-document-core
+      id: document
+
+    - uses: ./.github/actions/cache-rust
+      id: rust
+      if: inputs.setup == 'shell' || inputs.setup == 'harness'
 
     - name: Restore the decision engine build
       id: decide
       if: inputs.setup == 'shell'
       uses: ./.github/actions/cache-decide
 
+    - name: Provision pinned Go modules
+      if: inputs.setup != 'frontend'
+      shell: bash
+      run: ./task setup-dev -- --ci-inputs
+
     - name: Set up maintained OpenGrep
+      if: inputs.setup != 'frontend'
       uses: ./.github/actions/setup-opengrep
       with:
         save: ${{ inputs.save-caches }}
@@ -128,12 +151,13 @@ runs:
 
     # Git integration tests resolve the pinned engine from engine-root.
     - name: Fetch pinned git engine
+      if: inputs.setup != 'frontend' && inputs.runtime-engines == 'true'
       shell: bash
       run: ./task gitengine:fetch
 
     # Text recognition tests resolve the pinned engine from engine-root on Linux.
     - name: Fetch pinned text recognition engine
-      if: runner.os == 'Linux'
+      if: runner.os == 'Linux' && inputs.setup != 'frontend' && inputs.runtime-engines == 'true'
       shell: bash
       run: bash scripts/ocrengine-fetch.sh
 
@@ -143,9 +167,12 @@ runs:
         path: ~/.bun/install/cache
         key: bun-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.bun-version', 'lycaon-den/bun.lock') }}
 
-    - name: Provision pinned Go modules
+    - name: Provision frontend native test inputs
+      if: inputs.setup == 'frontend'
       shell: bash
-      run: ./task setup-dev -- --ci-inputs
+      run: |
+        ./task --version
+        cargo fetch --locked --manifest-path lycaon/internal/documentcore/native/Cargo.toml
 
     - name: Provision native dependencies
       if: inputs.setup == 'shell' || inputs.notices == 'true'
@@ -174,12 +201,6 @@ runs:
       shell: bash
       run: ./task setup-dev -- --notices-tools
 
-    - name: Restore analysis tools
-      if: inputs.analysis != 'none'
-      uses: ./.github/actions/cache-analysis-tools
-      with:
-        tools: ${{ inputs.analysis }}
-
     # Offline lanes cannot reach the module proxy, so a cache miss builds the analyzers here.
     - name: Provision analysis tools
       if: inputs.analysis != 'none'
@@ -196,10 +217,22 @@ runs:
       if: inputs.containers == 'true'
       uses: ./.github/actions/setup-webkit-atspi-images
 
+    - name: Install native repository tools
+      if: runner.os == 'Linux' && inputs.repository-tools == 'true'
+      shell: bash
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y --no-install-recommends apt-utils createrepo-c gnupg rpm
+
     - name: Provision pinned browser
       if: inputs.browser == 'true'
       shell: bash
       run: ./task test:confine:linux -- --prepare
+
+    - name: Provision pinned Nix and locked inputs
+      if: inputs.nix == 'true'
+      shell: bash
+      run: ./task nix:check -- --prepare
 
     - name: Save pinned frontend packages
       if: inputs.save-caches == 'true' && github.ref == 'refs/heads/main'

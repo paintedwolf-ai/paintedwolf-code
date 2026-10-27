@@ -3,6 +3,14 @@ name: Verification
 on:
   workflow_call:
     inputs:
+      source-sha:
+        description: Exact source commit; blank uses the calling workflow commit
+        type: string
+        default: ''
+      reuse-merge-proof:
+        description: Reuse complete merge-group lanes for the selected source tree
+        type: boolean
+        default: false
       profile:
         description: Catalog profile (fast, integration, check, nightly, or release)
         required: true
@@ -36,20 +44,29 @@ jobs:
       matrix: ${{ steps.plan.outputs.matrix }}
       max-parallel: ${{ steps.plan.outputs.max-parallel }}
       package-timings: ${{ steps.plan.outputs.package-timings }}
+      change-base: ${{ steps.plan.outputs.change-base }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.source-sha || github.sha }}
           fetch-depth: 0
       - name: Resolve verification jobs
         id: plan
         env:
           PROFILE: ${{ inputs.profile }}
+          REUSE: ${{ inputs.reuse-merge-proof }}
+          SOURCE_SHA: ${{ inputs.source-sha || github.sha }}
           SUITE: ${{ inputs.suite }}
           AFFECTED: ${{ inputs.affected }}
           PLATFORM: ${{ inputs.platform }}
           # Reads main's qualification receipts; without actions read access the plan uses lane budgets.
           GH_TOKEN: ${{ github.token }}
         run: |
+          if [[ "$PROFILE" == integration && "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
+            PW_CHANGE_BASE="$(PYTHONPATH=scripts python3 -m ci_policy.queue_dispatch)"
+            export PW_CHANGE_BASE
+            echo "change-base=$PW_CHANGE_BASE" >> "$GITHUB_OUTPUT"
+          fi
           args=()
           if [[ "$AFFECTED" == true ]]; then args+=(--affected); fi
           if [[ "$PLATFORM" == true ]]; then args+=(--platform); fi
@@ -60,8 +77,21 @@ jobs:
             echo "package-timings=$(jq -c '.packages // {}' "$RUNNER_TEMP/timings.json")" >> "$GITHUB_OUTPUT"
           fi
           matrix="$(python3 scripts/ci_verification.py matrix "$PROFILE" --suite "$SUITE" "${args[@]}")"
+          if [[ "$REUSE" == true ]]; then
+            [[ "$PROFILE" == check && "$AFFECTED" != true && "$PLATFORM" != true ]]
+            matrix="$(PYTHONPATH=scripts python3 -m ci_policy.proof_reuse --matrix "$matrix" --source "$SOURCE_SHA" --output "$RUNNER_TEMP/qualification-reuse.json")"
+          fi
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
           echo "max-parallel=$(python3 scripts/ci_verification.py max-parallel "$PROFILE")" >> "$GITHUB_OUTPUT"
+
+      - name: Retain qualification coverage sources
+        if: inputs.reuse-merge-proof
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: qualification-reuse-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/qualification-reuse.json
+          if-no-files-found: error
+          retention-days: 90
 
   verify:
     name: ${{ matrix.lane }}${{ matrix.shard != '' && format(' ({0})', matrix.shard) || '' }}
@@ -69,7 +99,7 @@ jobs:
     strategy:
       # A merge group stops at its first failure and frees its runners; every other run keeps
       # each lane's evidence.
-      fail-fast: ${{ github.event_name == 'merge_group' }}
+      fail-fast: ${{ github.event_name == 'merge_group' || startsWith(github.ref, 'refs/heads/gh-readonly-queue/main/') }}
       # The catalog's capacity table bounds how many runners each profile holds at once.
       max-parallel: ${{ fromJSON(needs.plan.outputs.max-parallel) }}
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
@@ -82,26 +112,49 @@ jobs:
       PW_TEST_HOST: dedicated
       SOAK: 10m
       PW_CI_AFFECTED: ${{ inputs.affected && '1' || '0' }}
+      PW_CHANGE_BASE: ${{ needs.plan.outputs.change-base }}
     steps:
+      - name: Record job start
+        run: python3 -c 'import os, time; open(os.environ["GITHUB_ENV"], "a").write(f"PW_CI_JOB_STARTED_AT={time.time()}\n")'
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.source-sha || github.sha }}
           fetch-depth: 0
 
       - uses: ./.github/actions/merge-group-watch
 
+      - uses: ./.github/actions/setup-analysis
+        if: matrix.setup == 'analysis'
+        with:
+          analysis: ${{ matrix.analysis }}
+
       - uses: ./.github/actions/setup-verification
+        if: matrix.setup != 'analysis'
         with:
           setup: ${{ matrix.setup }}
+          runtime-engines: ${{ matrix.runtime_engines }}
           notices: ${{ matrix.notices }}
           analysis: ${{ matrix.analysis }}
           # An admission lane runs offline, so it cannot fetch its container images; other lanes
           # build them from each distribution as it ships that day.
           containers: ${{ matrix.containers && (inputs.profile == 'fast' || inputs.profile == 'integration') }}
           browser: ${{ matrix.browser }}
+          repository-tools: ${{ matrix.repository_tools }}
+          nix: ${{ matrix.nix }}
 
       # Shell lanes stage the engine, including the decision engine heads.
       - uses: ./.github/actions/setup-bialy
         if: ${{ matrix.setup == 'shell' }}
+
+      # Python repository fixtures run in the limits lane before the offline gate.
+      - name: Install repository metadata tool
+        if: ${{ runner.os == 'Linux' && matrix.lane == 'limits' }}
+        run: |
+          if ! command -v createrepo_c >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends createrepo-c
+          fi
 
       - name: Run verification
         timeout-minutes: ${{ matrix.minutes }}
@@ -125,3 +178,18 @@ jobs:
         with:
           name: verification-${{ inputs.profile }}-${{ matrix.lane }}${{ matrix.shard != '' && format('-{0}', strategy.job-index) || '' }}-${{ github.run_attempt }}
           status: ${{ job.status }}
+
+      - name: Seal complete merge-group lane proof
+        if: success() && (github.event_name == 'merge_group' || startsWith(github.ref, 'refs/heads/gh-readonly-queue/main/'))
+        env:
+          PYTHONPATH: scripts
+        run: python3 -m ci_policy.lane_proof
+
+      - name: Retain complete merge-group lane proof
+        if: success() && (github.event_name == 'merge_group' || startsWith(github.ref, 'refs/heads/gh-readonly-queue/main/'))
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: lane-proof-${{ matrix.lane }}-${{ strategy.job-index }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/lane-proof.json
+          if-no-files-found: ignore
+          retention-days: 14
