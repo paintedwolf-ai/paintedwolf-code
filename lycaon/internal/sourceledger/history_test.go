@@ -377,7 +377,7 @@ func TestMaintenancePreservesReferencedVersionContent(t *testing.T) {
 			'automatic', 'complete', '{"line_count":1}', '[]', '[]', 0, '', ?, ?)
 	`, available.Before.SHA256, db.FormatTime(time.Now()), time.Now().UnixMilli())
 	testutil.FailErr(t, "insert version briefing", err)
-	testutil.FailErr(t, "maintain blobs", store.Retention.MaintainBlobs(ctx))
+	testutil.FailErr(t, "maintain blobs", store.Retention.SweepBlobs(ctx))
 	comparison, err := store.Comparisons.CompareEffect(ctx, "p1", effectID)
 	testutil.FailErr(t, "compare retained effect", err)
 	if comparison.Before.Availability != ContentAvailable || comparison.After.Availability != ContentAvailable {
@@ -417,7 +417,7 @@ func TestMaintenanceReclaimsObjectsNoHistoryNames(t *testing.T) {
 		GitOidSha1:     extraOIDs.SHA1, GitOidSha256: extraOIDs.SHA256,
 	}))
 
-	testutil.FailErr(t, "maintain blobs", store.Retention.MaintainBlobs(ctx))
+	testutil.FailErr(t, "maintain blobs", store.Retention.SweepBlobs(ctx))
 	entry, ok, err := store.Snapshots.Lookup(ctx, snapshot.ID, root, "main.go")
 	testutil.FailErr(t, "look up snapshot entry", err)
 	if !ok {
@@ -468,7 +468,7 @@ func TestMaintenanceReclaimsContentAfterProjectDeletion(t *testing.T) {
 	if queued != 1 {
 		t.Fatalf("deleted reclaim candidates = %d", queued)
 	}
-	testutil.FailErr(t, "maintain blobs", store.Retention.MaintainBlobs(ctx))
+	testutil.FailErr(t, "maintain blobs", store.Retention.SweepBlobs(ctx))
 	if _, err := store.queries.GetSourceBlobObject(ctx, sha); !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("deleted project object error = %v, want sql.ErrNoRows", err)
 	}

@@ -182,13 +182,11 @@ WHERE source_manifest_staging.build_id = sqlc.arg(build_id) AND source_manifest_
     LIMIT sqlc.arg(page_size)
 );
 
--- Builds of an earlier process never complete. This process's builds sort
--- between prefix || '-' and prefix || '.', since '.' follows '-'.
--- name: ListStaleSourceManifestBuilds :many
-SELECT DISTINCT build_id FROM source_manifest_staging
-WHERE build_id < CAST(sqlc.arg(prefix) AS TEXT) || '-'
-   OR build_id >= CAST(sqlc.arg(prefix) AS TEXT) || '.'
-LIMIT sqlc.arg(build_limit);
+-- name: ListSourceStagingSweepCandidates :many
+SELECT build_id, path FROM source_manifest_staging
+WHERE (build_id, path) > (sqlc.arg(after_build), sqlc.arg(after_path))
+ORDER BY build_id, path
+LIMIT sqlc.arg(batch_limit);
 
 -- name: DeleteExpiredSourceSnapshotHeads :execrows
 DELETE FROM source_snapshot_heads
@@ -199,30 +197,22 @@ WHERE roots_key IN (
     LIMIT sqlc.arg(batch_limit)
 );
 
--- name: DeleteUnreferencedSourceSnapshots :execrows
+-- Candidate pages bound examined rows, including retained snapshots.
+-- name: ListSourceSnapshotSweepCandidates :many
+SELECT id, created_ts FROM source_snapshots
+WHERE created_ts < sqlc.arg(created_before)
+  AND (created_ts, id) > (sqlc.arg(after_created), sqlc.arg(after_id))
+ORDER BY created_ts, id
+LIMIT sqlc.arg(batch_limit);
+
+-- name: DeleteUnreferencedSourceSnapshot :execrows
 DELETE FROM source_snapshots
-WHERE id IN (
-    SELECT snapshot.id FROM source_snapshots snapshot
-    WHERE NOT EXISTS (
-        SELECT 1 FROM source_snapshot_heads head
-        WHERE head.snapshot_id = snapshot.id
-    )
-      AND NOT EXISTS (
-        SELECT 1 FROM source_inventory_state inventory
-        WHERE inventory.snapshot_id = snapshot.id
-      )
-      AND NOT EXISTS (
-        SELECT 1 FROM code_scans scan
-        WHERE scan.source_snapshot_id = snapshot.id
-      )
-      AND NOT EXISTS (
-        SELECT 1 FROM scan_series series
-        WHERE series.last_covered_snapshot_id = snapshot.id
-      )
-      AND snapshot.created_ts < sqlc.arg(created_before)
-    ORDER BY snapshot.created_ts, snapshot.id
-    LIMIT sqlc.arg(batch_limit)
-);
+WHERE id = sqlc.arg(id)
+  AND created_ts < sqlc.arg(created_before)
+  AND NOT EXISTS (SELECT 1 FROM source_snapshot_heads WHERE snapshot_id = source_snapshots.id)
+  AND NOT EXISTS (SELECT 1 FROM source_inventory_state WHERE snapshot_id = source_snapshots.id)
+  AND NOT EXISTS (SELECT 1 FROM code_scans WHERE source_snapshot_id = source_snapshots.id)
+  AND NOT EXISTS (SELECT 1 FROM scan_series WHERE last_covered_snapshot_id = source_snapshots.id);
 
 -- Releases the snapshots of a roots key nothing attaches any more, without
 -- waiting out the age-based sweep.
@@ -254,10 +244,9 @@ WHERE id IN (
     LIMIT sqlc.arg(batch_limit)
 );
 
--- name: ListUnreferencedSourceManifests :many
+-- name: ListSourceManifestSweepCandidates :many
 SELECT m.id FROM source_manifests m
 WHERE m.id > sqlc.arg(after)
-  AND NOT EXISTS (SELECT 1 FROM source_snapshot_roots r WHERE r.manifest_id = m.id)
 ORDER BY m.id
 LIMIT sqlc.arg(batch_limit);
 
@@ -266,10 +255,9 @@ DELETE FROM source_manifests
 WHERE id = ?
   AND NOT EXISTS (SELECT 1 FROM source_snapshot_roots r WHERE r.manifest_id = source_manifests.id);
 
--- name: ListUnreferencedSourceManifestChunks :many
+-- name: ListSourceChunkSweepCandidates :many
 SELECT c.id, c.entry_count FROM source_manifest_chunks c
 WHERE c.id > sqlc.arg(after)
-  AND NOT EXISTS (SELECT 1 FROM source_manifest_layout l WHERE l.chunk_id = c.id)
 ORDER BY c.id
 LIMIT sqlc.arg(batch_limit);
 

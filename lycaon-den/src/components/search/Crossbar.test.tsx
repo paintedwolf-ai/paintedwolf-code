@@ -225,7 +225,7 @@ describe("Crossbar", () => {
   it("treats > as the Actions tab and leaves it when another tab is chosen", async () => {
     const search = vi.fn();
     vi.mocked(getLycaonClient).mockReturnValue(stubClient({ search }));
-    render(() => <Crossbar open originProjectId="p1" contributionCommands={crossbarCommands()}
+    render(() => <Crossbar open originProjectId="p1" contributionActions={crossbarCommands()}
       onClose={vi.fn()} onEscalate={vi.fn()} onNavigateHit={vi.fn()} />);
     const input = screen.getByTestId("crossbar-input") as HTMLInputElement;
     fireEvent.input(input, { target: { value: ">settings" } });
@@ -416,7 +416,7 @@ describe("Crossbar", () => {
       <Crossbar
         open
         originProjectId="p1"
-        contributionCommands={[activation]}
+        contributionActions={{ phase: "ready", commands: [activation] }}
         onClose={vi.fn()}
         onEscalate={vi.fn()}
         onNavigateHit={vi.fn()}
@@ -459,7 +459,7 @@ describe("Crossbar", () => {
       <Crossbar
         open
         originProjectId={null}
-        contributionCommands={crossbarCommands()}
+        contributionActions={crossbarCommands()}
         onClose={onClose}
         onEscalate={vi.fn()}
         onNavigateHit={vi.fn()}
@@ -492,7 +492,7 @@ describe("Crossbar", () => {
       <Crossbar
         open
         originProjectId={null}
-        contributionCommands={crossbarCommands()}
+        contributionActions={crossbarCommands()}
         onClose={onClose}
         onEscalate={vi.fn()}
         onNavigateHit={vi.fn()}
@@ -513,7 +513,7 @@ describe("Crossbar", () => {
       <Crossbar
         open
         originProjectId={null}
-        contributionCommands={crossbarCommands()}
+        contributionActions={crossbarCommands()}
         onClose={vi.fn()}
         onEscalate={vi.fn()}
         onNavigateHit={vi.fn()}
@@ -540,7 +540,7 @@ describe("Crossbar", () => {
       <Crossbar
         open
         originProjectId={null}
-        contributionCommands={crossbarCommands()}
+        contributionActions={crossbarCommands()}
         onClose={vi.fn()}
         onEscalate={vi.fn()}
         onNavigateHit={vi.fn()}
@@ -655,7 +655,7 @@ describe("Crossbar", () => {
       <Crossbar
         open
         originProjectId={null}
-        contributionCommands={crossbarCommands()}
+        contributionActions={crossbarCommands()}
         onClose={vi.fn()}
         onEscalate={vi.fn()}
         onNavigateHit={vi.fn()}
@@ -677,7 +677,7 @@ describe("Crossbar", () => {
       <Crossbar
         open
         originProjectId={null}
-        contributionCommands={crossbarCommands()}
+        contributionActions={crossbarCommands()}
         onClose={vi.fn()}
         onEscalate={vi.fn()}
         onNavigateHit={vi.fn()}
@@ -697,7 +697,7 @@ describe("Crossbar", () => {
       <Crossbar
         open
         originProjectId={null}
-        contributionCommands={crossbarCommands()}
+        contributionActions={crossbarCommands()}
         seed="needle"
         onClose={vi.fn()}
         onEscalate={vi.fn()}
@@ -716,7 +716,7 @@ describe("Crossbar", () => {
       <Crossbar
         open
         originProjectId={null}
-        contributionCommands={crossbarCommands()}
+        contributionActions={crossbarCommands()}
         gotoTargets={[
           {
             kind: "session",
@@ -754,7 +754,7 @@ describe("Crossbar", () => {
       <Crossbar
         open
         originProjectId={null}
-        contributionCommands={[]}
+        contributionActions={{ phase: "ready", commands: [] }}
         gotoTargets={[
           { kind: "project", projectId: "p1", label: "Target one" },
           { kind: "project", projectId: "p2", label: "Target two" },
@@ -816,7 +816,7 @@ describe("Crossbar", () => {
       <Crossbar
         open
         originProjectId={null}
-        contributionCommands={crossbarCommands()}
+        contributionActions={crossbarCommands()}
         onClose={onClose}
         onEscalate={onEscalate}
         onNavigateHit={onNavigateHit}
@@ -874,7 +874,7 @@ describe("Crossbar", () => {
       <Crossbar
         open
         originProjectId={null}
-        contributionCommands={crossbarCommands()}
+        contributionActions={crossbarCommands()}
         onClose={vi.fn()}
         onEscalate={vi.fn()}
         onNavigateHit={onNavigateHit}
@@ -921,7 +921,7 @@ describe("Crossbar", () => {
       <Crossbar
         open={open()}
         originProjectId={null}
-        contributionCommands={crossbarCommands()}
+        contributionActions={crossbarCommands()}
         onClose={() => setOpen(false)}
         onEscalate={vi.fn()}
         onNavigateHit={onNavigateHit}
@@ -966,7 +966,7 @@ describe("Crossbar", () => {
       <Crossbar
         open
         originProjectId="proj-1"
-        contributionCommands={crossbarCommands()}
+        contributionActions={crossbarCommands()}
         onClose={vi.fn()}
         onEscalate={vi.fn()}
         onNavigateHit={vi.fn()}
@@ -984,7 +984,7 @@ describe("Crossbar", () => {
       <Crossbar
         open
         originProjectId={null}
-        contributionCommands={crossbarCommands()}
+        contributionActions={crossbarCommands()}
         initialMode="evidence"
         onClose={vi.fn()}
         onEscalate={vi.fn()}
@@ -1042,7 +1042,7 @@ describe("source lane keyboard", () => {
       <Crossbar
         open
         originProjectId="p1"
-        contributionCommands={[activation]}
+        contributionActions={{ phase: "ready", commands: [activation] }}
         onClose={vi.fn()}
         onEscalate={onEscalate}
         onNavigateHit={vi.fn()}
@@ -1127,7 +1127,7 @@ describe("in-flight search invalidation", () => {
     vi.useFakeTimers();
     const search = vi.fn().mockResolvedValue({ hits: [], issues: [] });
     vi.mocked(getLycaonClient).mockReturnValue(stubClient({ search }));
-    render(() => <Crossbar open originProjectId="proj-a" contributionCommands={[]}
+    render(() => <Crossbar open originProjectId="proj-a" contributionActions={{ phase: "ready", commands: [] }}
       onClose={vi.fn()} onEscalate={vi.fn()} onNavigateHit={vi.fn()} />);
     fireEvent.input(screen.getByTestId("crossbar-input"), { target: { value: "needle" } });
     await vi.advanceTimersByTimeAsync(300);
@@ -1153,7 +1153,7 @@ describe("in-flight search invalidation", () => {
       <Crossbar
         open
         originProjectId={null}
-        contributionCommands={[]}
+        contributionActions={{ phase: "ready", commands: [] }}
         onClose={vi.fn()}
         onEscalate={vi.fn()}
         onNavigateHit={vi.fn()}
@@ -1193,7 +1193,7 @@ describe("selection identity across async rows", () => {
       <Crossbar
         open
         originProjectId={null}
-        contributionCommands={[]}
+        contributionActions={{ phase: "ready", commands: [] }}
         onClose={vi.fn()}
         onEscalate={onEscalate}
         onNavigateHit={onNavigateHit}
@@ -1239,7 +1239,7 @@ describe("selection identity across async rows", () => {
       <Crossbar
         open
         originProjectId={null}
-        contributionCommands={[]}
+        contributionActions={{ phase: "ready", commands: [] }}
         onClose={onClose}
         onEscalate={onEscalate}
         onNavigateHit={vi.fn()}

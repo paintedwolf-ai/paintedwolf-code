@@ -50,7 +50,7 @@ describe("crossbarCommands", () => {
   it("offers a command with no menu row", () => {
     seedContributionFrameForTest(frameWith([command("acme/kit:explain")]));
     setShellFactState(ALL_SHELL_FACTS);
-    expect(crossbarCommands().map((c) => c.id)).toEqual(["acme/kit:explain"]);
+    expect(crossbarCommands().commands.map((c) => c.id)).toEqual(["acme/kit:explain"]);
   });
 
   it("hides a command that sets palette: false", () => {
@@ -58,7 +58,7 @@ describe("crossbarCommands", () => {
       frameWith([command("acme/kit:modal", { palette: false })]),
     );
     setShellFactState(ALL_SHELL_FACTS);
-    expect(crossbarCommands()).toEqual([]);
+    expect(crossbarCommands().commands).toEqual([]);
   });
 
   it("hides a command whose when evaluates false", () => {
@@ -78,6 +78,6 @@ describe("crossbarCommands", () => {
         language: "typescript",
       },
     });
-    expect(crossbarCommands()).toEqual([]);
+    expect(crossbarCommands().commands).toEqual([]);
   });
 });

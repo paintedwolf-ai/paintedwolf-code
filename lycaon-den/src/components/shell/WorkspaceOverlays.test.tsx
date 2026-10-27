@@ -39,7 +39,7 @@ describe("workspace overlays", () => {
       projects={{ summaries: () => [], byId: () => ({ roots: [{ id: "root", path: "/garden", is_primary: true }] }) } as never}
       launcherOpen={() => true} helpOpen={() => true} search={{ crossbarOpen: () => true,
         crossbarArgs: () => ({ originProjectId: "project", seed: "needle", serial: 2 }), closeCrossbar, escalateCrossbarToSearch } as never}
-      crossbarGotoTargets={() => []} crossbarActions={() => []} recentChatEntries={() => []} focusedPeerViews={() => []}
+      crossbarGotoTargets={() => []} crossbarActions={() => ({ phase: "ready", commands: [] })} recentChatEntries={() => []} focusedPeerViews={() => []}
       recentSwitcherRef={vi.fn()} peerViewSwitcherRef={vi.fn()} navSlotWidthCss={() => "240px"} {...calls} />);
     expect(seams.crossbar.originSessionId).toBe("session"); expect(seams.crossbar.projectRoots).toHaveLength(1);
     expect(document.querySelector('[data-testid="find-bar-host"]')?.getAttribute("style")).toContain("240px");

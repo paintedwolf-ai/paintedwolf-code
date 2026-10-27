@@ -2,7 +2,7 @@ import type { LycaonClient } from "../api/client.ts";
 import { confirmAndOpenExternalLink } from "../platform/desktop/external-link.ts";
 import { noticeReporterFor } from "../platform/connection/app-connection.ts";
 import { APP_SCOPE, projectScope } from "../notices/notice-scope.ts";
-import { contributionFrame } from "./contribution-store.ts";
+import { contributionFrame, contributionFrameHydrating, contributionFrameState } from "./contribution-store.ts";
 import type {
   CommandInvokeContext,
   CommandUIEffect,
@@ -232,13 +232,21 @@ export function contributionCommands(): readonly ContributionCommand[] {
   return contributionFrame()?.commands ?? [];
 }
 
-export function crossbarCommands(): ContributionCommand[] {
-  const frame = contributionFrame();
-  if (!frame) return [];
+export type CrossbarCommandState =
+  | { phase: "loading" | "unavailable"; commands: readonly [] }
+  | { phase: "ready"; commands: readonly ContributionCommand[] };
+
+export function crossbarCommands(): CrossbarCommandState {
+  const state = contributionFrameState();
+  if (state.phase !== "ready") {
+    return { phase: contributionFrameHydrating() ? "loading" : "unavailable", commands: [] };
+  }
   const lookup = liveShellFactLookup();
-  if (!lookup) return [];
-  return frame.commands.filter(
-    (command) =>
-      command.palette !== false && evaluateCondition(command.when ?? null, lookup),
-  );
+  if (!lookup) return { phase: "unavailable", commands: [] };
+  return {
+    phase: "ready",
+    commands: state.frame.commands.filter(
+      (command) => command.palette !== false && evaluateCondition(command.when ?? null, lookup),
+    ),
+  };
 }

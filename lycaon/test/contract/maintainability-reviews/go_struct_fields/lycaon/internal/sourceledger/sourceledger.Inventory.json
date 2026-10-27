@@ -1,0 +1,14 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/sourceledger/sourceledger.Inventory",
+  "kind": "runtime_service",
+  "workstream": "source-maintenance",
+  "disposition": "retain",
+  "reason": "Retain inventory reconciliation, readiness, and operation admission as one lifecycle: 814 receiver lines, 27 methods, 15 fields, and a 393-line sequencing file. Blob retention runs independently; inventory readiness depends on publishing its observed state, not reclaiming unrelated objects.",
+  "reviewed_commit": "08755ea1cacb2cddd74715cbed460e26b0af8074",
+  "ceiling": 15,
+  "boundaries": {
+    "lycaon/internal/sourceledger/inventory_maintenance_test.go": "7356eb07195e58f245c4585cce6536aa9c2c9d6edcde16bc81cd240b9debaa68"
+  },
+  "reviewed_shape": "70570ab261658900284a6e6277c181b883985646e82116bb2b3ad0fedb2b514a"
+}

@@ -40,6 +40,8 @@ function setFrameStateSignal(state: ContributionFrameState): void {
 let clientThunk: ClientThunk | null = null;
 let reporterThunk: (() => NoticeReporter | null) | null = null;
 let inflight: Promise<void> | null = null;
+const [hydrating, setHydrating] = createSignal(false);
+export const contributionFrameHydrating = hydrating;
 let rerunQueued = false;
 let sleep: (ms: number) => Promise<void> = (ms) =>
   new Promise((resolve) => setTimeout(resolve, ms));
@@ -89,11 +91,14 @@ export function invalidateContributionFrame(): Promise<void> {
 }
 
 function startHydrate(): Promise<void> {
+  setHydrating(true);
   inflight = hydrateOnce().finally(() => {
     inflight = null;
     if (rerunQueued) {
       rerunQueued = false;
       void startHydrate();
+    } else {
+      setHydrating(false);
     }
   });
   return inflight;
@@ -148,6 +153,7 @@ export function resetContributionStoreForTest(): void {
   clientThunk = null;
   reporterThunk = null;
   inflight = null;
+  setHydrating(false);
   rerunQueued = false;
   clearContributionFrameCache();
   setFrameStateSignal({ phase: "unavailable", frame: null });

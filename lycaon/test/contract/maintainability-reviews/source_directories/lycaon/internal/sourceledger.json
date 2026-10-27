@@ -1,0 +1,14 @@
+{
+  "category": "source_directories",
+  "artifact": "lycaon/internal/sourceledger",
+  "kind": "module",
+  "workstream": "source-maintenance",
+  "disposition": "retain",
+  "reason": "Retain the 52 source files and 42 test files around the shared ledger transaction and inventory lifecycle. Retention already has its own receiver and admission; moving tests or forwarding interfaces into another package would obscure their shared database invariants. The maintenance contract verifies readiness before reclamation and preserves cleanup errors.",
+  "reviewed_commit": "08755ea1cacb2cddd74715cbed460e26b0af8074",
+  "ceiling": 52,
+  "boundaries": {
+    "lycaon/internal/sourceledger/inventory_maintenance_test.go": "7356eb07195e58f245c4585cce6536aa9c2c9d6edcde16bc81cd240b9debaa68"
+  },
+  "reviewed_shape": "1d932329455faca723cbdd4baf329038ed9449211cc5bdd9c4d515b69d21bfdf"
+}

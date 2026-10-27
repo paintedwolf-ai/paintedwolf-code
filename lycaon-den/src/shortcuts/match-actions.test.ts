@@ -20,7 +20,7 @@ const NAV_TOGGLE = stockId("nav-toggle");
 
 function idsFor(query: string, recentIds?: readonly string[]): string[] {
   return matchActions(query, {
-    candidates: crossbarCommands(),
+    candidates: crossbarCommands().commands,
     recentIds,
   }).map((c) => c.id);
 }
@@ -31,7 +31,7 @@ describe("matchActions over the stock frame", () => {
   beforeEach(() => seedStockFrame());
 
   it("draws only from the candidates it is handed", () => {
-    const candidates = crossbarCommands();
+    const candidates = crossbarCommands().commands;
     expect(candidates.length).toBeGreaterThan(0);
     for (const row of matchActions("session", { candidates })) {
       expect(candidates.some((c) => c.id === row.id)).toBe(true);
@@ -39,7 +39,7 @@ describe("matchActions over the stock frame", () => {
   });
 
   it("an empty or blank query returns every candidate", () => {
-    const all = crossbarCommands()
+    const all = crossbarCommands().commands
       .map((c) => c.id)
       .sort();
     expect(idsFor("").sort()).toEqual(all);
@@ -72,7 +72,7 @@ describe("matchActions over the stock frame", () => {
   });
 
   it("honors an explicit candidates list without treating it as the catalog", () => {
-    const only = crossbarCommands().filter((c) => c.id === NAV_TOGGLE);
+    const only = crossbarCommands().commands.filter((c) => c.id === NAV_TOGGLE);
     expect(matchActions("sidebar", { candidates: only }).map((c) => c.id)).toEqual([
       NAV_TOGGLE,
     ]);

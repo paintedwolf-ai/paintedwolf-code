@@ -44,7 +44,7 @@
   "components/scan/SecurityCoverage.tsx": 1,
   "components/scan/SecurityFindingsPane.tsx": 1,
   "components/search/ContributionCommandFlow.tsx": 3,
-  "components/search/Crossbar.tsx": 2,
+  "components/search/Crossbar.tsx": 3,
   "components/search/CrossbarResults.tsx": 1,
   "components/search/GlobalSearchView.tsx": 5,
   "components/search/SearchHitDetail.tsx": 1,

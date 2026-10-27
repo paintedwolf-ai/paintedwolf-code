@@ -130,7 +130,7 @@ describe("crossbar-model", () => {
       mode: "everything",
       hits: [],
       includeEscalate: false,
-      contributionCommands: crossbarCommands(),
+      contributionCommands: crossbarCommands().commands,
       symbolRows: [],
     });
     expect(
@@ -141,7 +141,7 @@ describe("crossbar-model", () => {
       mode: "everything",
       hits: [],
       includeEscalate: false,
-      contributionCommands: crossbarCommands(),
+      contributionCommands: crossbarCommands().commands,
       symbolRows: [
         {
           name: "nibble",
@@ -229,7 +229,7 @@ describe("crossbar-model", () => {
       mode: "everything",
       hits: crowded,
       includeEscalate: true,
-      contributionCommands: crossbarCommands(),
+      contributionCommands: crossbarCommands().commands,
     });
     const sections = rows.filter((r) => r.kind === "section" && r.id.startsWith("section-hits"));
     expect(sections.map((s) => (s.kind === "section" ? s.label : ""))).toEqual([
@@ -254,7 +254,7 @@ describe("crossbar-model", () => {
       mode: "files",
       hits: crowded,
       includeEscalate: true,
-      contributionCommands: crossbarCommands(),
+      contributionCommands: crossbarCommands().commands,
     });
     expect(filesOnly.some((r) => r.kind === "section")).toBe(false);
     expect(filesOnly.filter((r) => r.kind === "hit")).toHaveLength(CROSSBAR_HIT_CAP);
@@ -269,7 +269,7 @@ describe("crossbar-model", () => {
         hit({ hit_kind: "code", project_id: "p1", path: "a.ts", line: 1, hit_id: "c0" }),
       ],
       includeEscalate: true,
-      contributionCommands: crossbarCommands(),
+      contributionCommands: crossbarCommands().commands,
       inventoryFiles: [
         { rootId: "r", path: "README.md", basename: "README.md", dir: "", matchIndexes: [] },
       ],
@@ -286,7 +286,7 @@ describe("crossbar-model", () => {
       mode: "everything",
       hits: [],
       includeEscalate: canEscalateCrossbar("", 0),
-      contributionCommands: crossbarCommands(),
+      contributionCommands: crossbarCommands().commands,
     });
     const actions = actionableCrossbarRows(rows).filter((r) => r.kind === "action");
     expect(actions.length).toBeGreaterThan(0);
@@ -302,7 +302,7 @@ describe("crossbar-model", () => {
           mode: "actions",
           hits: [],
           includeEscalate: false,
-          contributionCommands: crossbarCommands(),
+          contributionCommands: crossbarCommands().commands,
         }),
       )
         .filter((r) => r.kind === "action")
@@ -324,7 +324,7 @@ describe("crossbar-model", () => {
           mode: "actions",
           hits: [],
           includeEscalate: false,
-          contributionCommands: crossbarCommands(),
+          contributionCommands: crossbarCommands().commands,
         }),
       ).some((r) => r.kind === "action" && r.command.id === stockId("session-stop"));
 
@@ -344,7 +344,7 @@ describe("crossbar-model", () => {
       mode: "everything",
       hits: manyHits,
       includeEscalate: true,
-      contributionCommands: crossbarCommands(),
+      contributionCommands: crossbarCommands().commands,
     });
     const actions = actionableCrossbarRows(rows).filter((r) => r.kind === "action");
     const hits = actionableCrossbarRows(rows).filter((r) => r.kind === "hit");
@@ -359,7 +359,7 @@ describe("crossbar-model", () => {
       mode: "everything",
       hits: [hit({ hit_kind: "code", project_id: "p" })],
       includeEscalate: true,
-      contributionCommands: crossbarCommands(),
+      contributionCommands: crossbarCommands().commands,
     });
     expect(
       actionableCrossbarRows(rows).some((r) => r.kind === "action"),
@@ -374,7 +374,7 @@ describe("crossbar-model", () => {
       mode: "everything",
       hits: [],
       includeEscalate: false,
-      contributionCommands: crossbarCommands(),
+      contributionCommands: crossbarCommands().commands,
       recentQueries: recents,
     });
     const recentRows = idle.filter((r) => r.kind === "recent");
@@ -387,7 +387,7 @@ describe("crossbar-model", () => {
       mode: "everything",
       hits: [],
       includeEscalate: true,
-      contributionCommands: crossbarCommands(),
+      contributionCommands: crossbarCommands().commands,
       recentQueries: recents,
     });
     expect(typed.some((r) => r.kind === "recent")).toBe(false);
@@ -398,7 +398,7 @@ describe("crossbar-model", () => {
       query: "",
       hits: [],
       includeEscalate: false,
-      contributionCommands: crossbarCommands(),
+      contributionCommands: crossbarCommands().commands,
       recentQueries: ["needle"],
     } as const;
     expect(
@@ -415,7 +415,7 @@ describe("crossbar-model", () => {
       mode: "everything",
       hits: [],
       includeEscalate: false,
-      contributionCommands: crossbarCommands(),
+      contributionCommands: crossbarCommands().commands,
       recentActionIds: [stockId("settings-open")],
     });
     const actions = actionableCrossbarRows(rows).filter((r) => r.kind === "action");
@@ -428,7 +428,7 @@ describe("crossbar-model", () => {
       mode: "everything",
       hits: [],
       includeEscalate: false,
-      contributionCommands: crossbarCommands(),
+      contributionCommands: crossbarCommands().commands,
       recentActionIds: ["not.a.command", stockId("settings-open")],
     });
     const actions = actionableCrossbarRows(rows).filter((r) => r.kind === "action");
@@ -471,7 +471,7 @@ describe("crossbar-model", () => {
       mode: "everything",
       hits: [],
       includeEscalate: false,
-      contributionCommands: crossbarCommands(),
+      contributionCommands: crossbarCommands().commands,
       gotoTargets: targets,
     });
     const idleGotos = idle.filter((r) => r.kind === "goto");
@@ -490,7 +490,7 @@ describe("crossbar-model", () => {
       mode: "everything",
       hits: [],
       includeEscalate: true,
-      contributionCommands: crossbarCommands(),
+      contributionCommands: crossbarCommands().commands,
       gotoTargets: targets,
     });
     const typedGotos = typed.filter((r) => r.kind === "goto");
@@ -512,7 +512,7 @@ describe("crossbar-model", () => {
         mode,
         hits: [],
         includeEscalate: false,
-        contributionCommands: crossbarCommands(),
+        contributionCommands: crossbarCommands().commands,
         gotoTargets: targets,
       });
       expect(rows.some((r) => r.kind === "goto"), mode).toBe(false);
@@ -522,7 +522,7 @@ describe("crossbar-model", () => {
       mode: "everything",
       hits: [],
       includeEscalate: true,
-      contributionCommands: crossbarCommands(),
+      contributionCommands: crossbarCommands().commands,
       gotoTargets: targets,
     });
     expect(dsl.some((r) => r.kind === "goto")).toBe(false);
@@ -549,7 +549,7 @@ describe("crossbar-model", () => {
       mode: "everything",
       hits: [],
       includeEscalate: true,
-      contributionCommands: crossbarCommands(),
+      contributionCommands: crossbarCommands().commands,
       gotoTargets: targets,
     });
     expect(rows.filter((r) => r.kind === "goto").length).toBe(CROSSBAR_GOTO_CAP);
@@ -561,7 +561,7 @@ describe("crossbar-model", () => {
       mode: "actions",
       hits: [hit({ hit_kind: "code", project_id: "p" })],
       includeEscalate: false,
-      contributionCommands: crossbarCommands(),
+      contributionCommands: crossbarCommands().commands,
     });
     expect(
       actionableCrossbarRows(rows).some(
@@ -578,7 +578,7 @@ describe("query arms", () => {
   const base = {
     hits: [],
     includeEscalate: true,
-    get contributionCommands() { return crossbarCommands(); },
+    get contributionCommands() { return crossbarCommands().commands; },
   };
 
   it("reads each prefix once", () => {

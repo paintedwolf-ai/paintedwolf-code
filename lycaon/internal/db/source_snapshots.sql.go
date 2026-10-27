@@ -129,39 +129,23 @@ func (q *Queries) DeleteUnreferencedSourceManifestChunk(ctx context.Context, id 
 	return result.RowsAffected()
 }
 
-const deleteUnreferencedSourceSnapshots = `-- name: DeleteUnreferencedSourceSnapshots :execrows
+const deleteUnreferencedSourceSnapshot = `-- name: DeleteUnreferencedSourceSnapshot :execrows
 DELETE FROM source_snapshots
-WHERE id IN (
-    SELECT snapshot.id FROM source_snapshots snapshot
-    WHERE NOT EXISTS (
-        SELECT 1 FROM source_snapshot_heads head
-        WHERE head.snapshot_id = snapshot.id
-    )
-      AND NOT EXISTS (
-        SELECT 1 FROM source_inventory_state inventory
-        WHERE inventory.snapshot_id = snapshot.id
-      )
-      AND NOT EXISTS (
-        SELECT 1 FROM code_scans scan
-        WHERE scan.source_snapshot_id = snapshot.id
-      )
-      AND NOT EXISTS (
-        SELECT 1 FROM scan_series series
-        WHERE series.last_covered_snapshot_id = snapshot.id
-      )
-      AND snapshot.created_ts < ?1
-    ORDER BY snapshot.created_ts, snapshot.id
-    LIMIT ?2
-)
+WHERE id = ?1
+  AND created_ts < ?2
+  AND NOT EXISTS (SELECT 1 FROM source_snapshot_heads WHERE snapshot_id = source_snapshots.id)
+  AND NOT EXISTS (SELECT 1 FROM source_inventory_state WHERE snapshot_id = source_snapshots.id)
+  AND NOT EXISTS (SELECT 1 FROM code_scans WHERE source_snapshot_id = source_snapshots.id)
+  AND NOT EXISTS (SELECT 1 FROM scan_series WHERE last_covered_snapshot_id = source_snapshots.id)
 `
 
-type DeleteUnreferencedSourceSnapshotsParams struct {
+type DeleteUnreferencedSourceSnapshotParams struct {
+	ID            string `json:"id"`
 	CreatedBefore string `json:"created_before"`
-	BatchLimit    int64  `json:"batch_limit"`
 }
 
-func (q *Queries) DeleteUnreferencedSourceSnapshots(ctx context.Context, arg DeleteUnreferencedSourceSnapshotsParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, deleteUnreferencedSourceSnapshots, arg.CreatedBefore, arg.BatchLimit)
+func (q *Queries) DeleteUnreferencedSourceSnapshot(ctx context.Context, arg DeleteUnreferencedSourceSnapshotParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteUnreferencedSourceSnapshot, arg.ID, arg.CreatedBefore)
 	if err != nil {
 		return 0, err
 	}
@@ -467,6 +451,46 @@ func (q *Queries) InsertSourceSnapshotRoot(ctx context.Context, arg InsertSource
 		arg.ManifestID,
 	)
 	return err
+}
+
+const listSourceChunkSweepCandidates = `-- name: ListSourceChunkSweepCandidates :many
+SELECT c.id, c.entry_count FROM source_manifest_chunks c
+WHERE c.id > ?1
+ORDER BY c.id
+LIMIT ?2
+`
+
+type ListSourceChunkSweepCandidatesParams struct {
+	After      string `json:"after"`
+	BatchLimit int64  `json:"batch_limit"`
+}
+
+type ListSourceChunkSweepCandidatesRow struct {
+	ID         string `json:"id"`
+	EntryCount int64  `json:"entry_count"`
+}
+
+func (q *Queries) ListSourceChunkSweepCandidates(ctx context.Context, arg ListSourceChunkSweepCandidatesParams) ([]ListSourceChunkSweepCandidatesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listSourceChunkSweepCandidates, arg.After, arg.BatchLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSourceChunkSweepCandidatesRow
+	for rows.Next() {
+		var i ListSourceChunkSweepCandidatesRow
+		if err := rows.Scan(&i.ID, &i.EntryCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listSourceManifestChunkEntries = `-- name: ListSourceManifestChunkEntries :many
@@ -816,6 +840,41 @@ func (q *Queries) ListSourceManifestStagingPathsBelow(ctx context.Context, arg L
 	return items, nil
 }
 
+const listSourceManifestSweepCandidates = `-- name: ListSourceManifestSweepCandidates :many
+SELECT m.id FROM source_manifests m
+WHERE m.id > ?1
+ORDER BY m.id
+LIMIT ?2
+`
+
+type ListSourceManifestSweepCandidatesParams struct {
+	After      string `json:"after"`
+	BatchLimit int64  `json:"batch_limit"`
+}
+
+func (q *Queries) ListSourceManifestSweepCandidates(ctx context.Context, arg ListSourceManifestSweepCandidatesParams) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listSourceManifestSweepCandidates, arg.After, arg.BatchLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSourceSnapshotBoundaries = `-- name: ListSourceSnapshotBoundaries :many
 SELECT root_path, path, reason, detail, entries
 FROM source_snapshot_boundaries
@@ -952,71 +1011,42 @@ func (q *Queries) ListSourceSnapshotRoots(ctx context.Context, snapshotID string
 	return items, nil
 }
 
-const listStaleSourceManifestBuilds = `-- name: ListStaleSourceManifestBuilds :many
-SELECT DISTINCT build_id FROM source_manifest_staging
-WHERE build_id < CAST(?1 AS TEXT) || '-'
-   OR build_id >= CAST(?1 AS TEXT) || '.'
-LIMIT ?2
+const listSourceSnapshotSweepCandidates = `-- name: ListSourceSnapshotSweepCandidates :many
+SELECT id, created_ts FROM source_snapshots
+WHERE created_ts < ?1
+  AND (created_ts, id) > (?2, ?3)
+ORDER BY created_ts, id
+LIMIT ?4
 `
 
-type ListStaleSourceManifestBuildsParams struct {
-	Prefix     string `json:"prefix"`
-	BuildLimit int64  `json:"build_limit"`
+type ListSourceSnapshotSweepCandidatesParams struct {
+	CreatedBefore string `json:"created_before"`
+	AfterCreated  string `json:"after_created"`
+	AfterID       string `json:"after_id"`
+	BatchLimit    int64  `json:"batch_limit"`
 }
 
-// Builds of an earlier process never complete. This process's builds sort
-// between prefix || '-' and prefix || '.', since '.' follows '-'.
-func (q *Queries) ListStaleSourceManifestBuilds(ctx context.Context, arg ListStaleSourceManifestBuildsParams) ([]string, error) {
-	rows, err := q.db.QueryContext(ctx, listStaleSourceManifestBuilds, arg.Prefix, arg.BuildLimit)
+type ListSourceSnapshotSweepCandidatesRow struct {
+	ID        string `json:"id"`
+	CreatedTs string `json:"created_ts"`
+}
+
+// Candidate pages bound examined rows, including retained snapshots.
+func (q *Queries) ListSourceSnapshotSweepCandidates(ctx context.Context, arg ListSourceSnapshotSweepCandidatesParams) ([]ListSourceSnapshotSweepCandidatesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listSourceSnapshotSweepCandidates,
+		arg.CreatedBefore,
+		arg.AfterCreated,
+		arg.AfterID,
+		arg.BatchLimit,
+	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []string
+	var items []ListSourceSnapshotSweepCandidatesRow
 	for rows.Next() {
-		var build_id string
-		if err := rows.Scan(&build_id); err != nil {
-			return nil, err
-		}
-		items = append(items, build_id)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listUnreferencedSourceManifestChunks = `-- name: ListUnreferencedSourceManifestChunks :many
-SELECT c.id, c.entry_count FROM source_manifest_chunks c
-WHERE c.id > ?1
-  AND NOT EXISTS (SELECT 1 FROM source_manifest_layout l WHERE l.chunk_id = c.id)
-ORDER BY c.id
-LIMIT ?2
-`
-
-type ListUnreferencedSourceManifestChunksParams struct {
-	After      string `json:"after"`
-	BatchLimit int64  `json:"batch_limit"`
-}
-
-type ListUnreferencedSourceManifestChunksRow struct {
-	ID         string `json:"id"`
-	EntryCount int64  `json:"entry_count"`
-}
-
-func (q *Queries) ListUnreferencedSourceManifestChunks(ctx context.Context, arg ListUnreferencedSourceManifestChunksParams) ([]ListUnreferencedSourceManifestChunksRow, error) {
-	rows, err := q.db.QueryContext(ctx, listUnreferencedSourceManifestChunks, arg.After, arg.BatchLimit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListUnreferencedSourceManifestChunksRow
-	for rows.Next() {
-		var i ListUnreferencedSourceManifestChunksRow
-		if err := rows.Scan(&i.ID, &i.EntryCount); err != nil {
+		var i ListSourceSnapshotSweepCandidatesRow
+		if err := rows.Scan(&i.ID, &i.CreatedTs); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1030,32 +1060,37 @@ func (q *Queries) ListUnreferencedSourceManifestChunks(ctx context.Context, arg 
 	return items, nil
 }
 
-const listUnreferencedSourceManifests = `-- name: ListUnreferencedSourceManifests :many
-SELECT m.id FROM source_manifests m
-WHERE m.id > ?1
-  AND NOT EXISTS (SELECT 1 FROM source_snapshot_roots r WHERE r.manifest_id = m.id)
-ORDER BY m.id
-LIMIT ?2
+const listSourceStagingSweepCandidates = `-- name: ListSourceStagingSweepCandidates :many
+SELECT build_id, path FROM source_manifest_staging
+WHERE (build_id, path) > (?1, ?2)
+ORDER BY build_id, path
+LIMIT ?3
 `
 
-type ListUnreferencedSourceManifestsParams struct {
-	After      string `json:"after"`
+type ListSourceStagingSweepCandidatesParams struct {
+	AfterBuild string `json:"after_build"`
+	AfterPath  string `json:"after_path"`
 	BatchLimit int64  `json:"batch_limit"`
 }
 
-func (q *Queries) ListUnreferencedSourceManifests(ctx context.Context, arg ListUnreferencedSourceManifestsParams) ([]string, error) {
-	rows, err := q.db.QueryContext(ctx, listUnreferencedSourceManifests, arg.After, arg.BatchLimit)
+type ListSourceStagingSweepCandidatesRow struct {
+	BuildID string `json:"build_id"`
+	Path    string `json:"path"`
+}
+
+func (q *Queries) ListSourceStagingSweepCandidates(ctx context.Context, arg ListSourceStagingSweepCandidatesParams) ([]ListSourceStagingSweepCandidatesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listSourceStagingSweepCandidates, arg.AfterBuild, arg.AfterPath, arg.BatchLimit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []string
+	var items []ListSourceStagingSweepCandidatesRow
 	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
+		var i ListSourceStagingSweepCandidatesRow
+		if err := rows.Scan(&i.BuildID, &i.Path); err != nil {
 			return nil, err
 		}
-		items = append(items, id)
+		items = append(items, i)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err

@@ -5,8 +5,40 @@ import type { ContributionCommand } from "../../api/types.ts";
 import { contributionFrame } from "../../contributions/contribution-store.ts";
 import { evaluateCondition } from "../../contributions/conditions.ts";
 import { liveShellFactLookup } from "../../contributions/shell-facts.ts";
-import { SearchKindIcon } from "./SearchIcons.tsx";
+import { ActionCommandIcon, SearchKindIcon } from "./SearchIcons.tsx";
 import { Scrollport } from "../primitives/Scrollport.tsx";
+import { contributionCommandEnabled, type CrossbarCommandState } from "../../contributions/dispatch.ts";
+import { displayBindingFor } from "../../shortcuts/display-binding-for.ts";
+import { crossbarArm, effectiveCrossbarMode } from "../../search/crossbar-model.ts";
+import type { CrossbarMode } from "../../search/crossbar-modes.ts";
+
+export function actionStatusLabel(state: CrossbarCommandState | undefined, query: string, mode: CrossbarMode): string | null {
+  const arm = crossbarArm(query).kind;
+  const effective = effectiveCrossbarMode(query, mode);
+  if ((arm !== "search" && arm !== "actions") || (effective !== "everything" && effective !== "actions")
+      || state?.phase === "ready") return null;
+  return state?.phase === "loading" ? "Actions are loading…" : "Actions unavailable";
+}
+
+export function CrossbarActionRow(props: {
+  command: ContributionCommand; active: boolean; onHover: () => void; onActivate: () => void;
+}) {
+  return <li>
+    <button type="button" class="den-crossbar__row"
+      classList={{ "den-crossbar__row--active": props.active }}
+      data-testid={`crossbar-action-${props.command.id}`}
+      aria-disabled={!contributionCommandEnabled(props.command)}
+      onMouseEnter={props.onHover} onClick={props.onActivate}>
+      <span class="den-crossbar__glyph" aria-hidden="true"><ActionCommandIcon icon={props.command.icon} /></span>
+      <span class="den-crossbar__primary">{props.command.title}</span>
+      <span class="den-crossbar__secondary">{props.command.category || "Other"} · {props.command.provider}</span>
+      <Show when={!contributionCommandEnabled(props.command)}>
+        <span class="den-crossbar__disabled-reason">{commandDisabledReason(props.command)}</span>
+      </Show>
+      <span class="den-crossbar__chord">{displayBindingFor(props.command.id)}</span>
+    </button>
+  </li>;
+}
 
 export function commandDisabledReason(command: ContributionCommand): string {
   const fact = firstBlockingConditionFact(command.enablement);

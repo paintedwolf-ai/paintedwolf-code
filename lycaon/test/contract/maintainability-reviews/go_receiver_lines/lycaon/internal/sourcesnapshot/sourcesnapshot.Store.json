@@ -2,15 +2,14 @@
   "category": "go_receiver_lines",
   "artifact": "lycaon/internal/sourcesnapshot/sourcesnapshot.Store",
   "kind": "runtime_service",
-  "workstream": "store-health",
+  "workstream": "source-maintenance",
   "disposition": "retain",
-  "reason": "Snapshot publication, pinned reads, and reclamation share one store lifecycle and database authority. Chunk construction already lives on manifestBuilder and candidate state on rootCandidate. Retain this API at its measured size; further growth requires reconsidering a read repository boundary without splitting pin custody.",
-  "reviewed_commit": "1715fadedd158a5e720a137d0e4c243e95685783",
-  "ceiling": 1434,
+  "reason": "Retain publication and pinned reads under one store authority at 1,320 receiver lines, 56 methods, and 15 fields. The transient snapshotCollector owns maintenance cursors and transactions while sharing the store pin set. Writer admission precedes pin freezing, and foreground publication does not invoke collection.",
+  "reviewed_commit": "08755ea1cacb2cddd74715cbed460e26b0af8074",
+  "ceiling": 1320,
   "boundaries": {
-    "lycaon/internal/sourcesnapshot/manifest_test.go": "a7f71ba0fbf38aa664e29b9c8608f6b61083b37bc6a04447aa862cccfb30f5e9",
-    "lycaon/internal/sourcesnapshot/read_consistency_test.go": "c57c60b1899ceea660787c12d3d2714384c127b9478a506c4081400104f6374f",
-    "lycaon/internal/sourcesnapshot/migration_test.go": "d59afa102fdb15335b12d14328335373e5db82041673c9be6412e6719e6e7267"
+    "lycaon/internal/sourcesnapshot/gc_admission_test.go": "068e9d1cdf11a7d0ec6867702f9ab3628ce30a180f484c975b088ca1d2e92a5f",
+    "lycaon/internal/sourcesnapshot/gc_publication_test.go": "d64d79067883874fa94142ac18e7c1b2f8f2e1b8a45b9d2f72863d4fe90c254c"
   },
-  "reviewed_shape": "9b5c8a34e182501acef582780d76ede7f75ee8f6038792fc231f6a0892a40173"
+  "reviewed_shape": "5176d14782ccad968a56077deef905b6d2f91c01c03dd60cfcafd39ecfdcfd17"
 }

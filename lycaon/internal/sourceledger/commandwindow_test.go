@@ -406,7 +406,7 @@ func TestCommandWindowReleasesItsStartRetentionWhenSettled(t *testing.T) {
 	if got := pins(); got != 0 {
 		t.Fatalf("retained objects after settle = %d, want 0", got)
 	}
-	testutil.FailErr(t, "maintain blobs", store.Retention.MaintainBlobs(ctx))
+	testutil.FailErr(t, "maintain blobs", store.Retention.SweepBlobs(ctx))
 
 	walk, err := store.Walk.QueryWalk(ctx, "p1", Baseline{Kind: BaselineTurn, SessionID: "s1", Turn: 3}, 50, 0, CommitLens{})
 	testutil.FailErr(t, "query walk", err)

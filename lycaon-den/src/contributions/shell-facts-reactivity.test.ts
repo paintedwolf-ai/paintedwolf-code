@@ -22,7 +22,7 @@ it("updates every command projection when selection, presentation or enablement 
     let projection: unknown;
     createComputed(() => {
       projection = {
-        palette: crossbarCommands().map((command) => command.id),
+        palette: crossbarCommands().commands.map((command) => command.id),
         menu: contributionContextMenuItems(["editor.context.analysis"]).map((item) => item.disabled),
         shortcut: contributionCommandAvailable(id),
       };
