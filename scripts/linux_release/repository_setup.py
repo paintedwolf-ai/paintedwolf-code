@@ -13,7 +13,7 @@ from .openpgp import selection
 from .repository_objects import encoded, immutable
 from .repository_operations import identity
 from .repository_setup_identity import PACKAGE, package_identity
-from .repository_publication import configuration
+from .repository_native import configuration
 from .repository_validation import admit
 from .signing import digest, sign, verify
 
