@@ -6,8 +6,8 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from linux_release import hosted_installed as runtime
-from linux_release import hosted_bootstrap as supervisor
+from linux_release.hosted import installed as runtime
+from linux_release.hosted import bootstrap as supervisor
 from linux_release import hosted_installed_plan as plan
 
 
@@ -37,7 +37,7 @@ class HostedSelectionTests(unittest.TestCase):
             plan.controller(Path('/controller'), selected())
         with patch.object(plan.subprocess, 'run', side_effect=clean()), self.assertRaisesRegex(ValueError, 'differs'):
             plan.controller(Path('/controller'), {**selected(), 'controller_tree': 'c' * 40})
-        dirty = [SimpleNamespace(stdout=' M scripts/linux_release/hosted_installed.py')]
+        dirty = [SimpleNamespace(stdout=' M scripts/linux_release/hosted/installed.py')]
         with patch.object(plan.subprocess, 'run', side_effect=dirty), self.assertRaisesRegex(ValueError, 'outside its immutable'):
             plan.observed_controller(Path('/controller'))
 
@@ -77,7 +77,7 @@ class HostedRuntimeEntryTests(unittest.TestCase):
                         self.assertEqual(runtime.main(self.arguments('retain-diagnostic', directory)), code)
 
     def test_desktop_preparation_runs_through_the_lane(self):
-        from linux_release import hosted_desktop
+        from linux_release.hosted import desktop as hosted_desktop
         with patch.object(hosted_desktop, 'prepare') as prepare:
             self.assertEqual(runtime.main(['desktop', '--checkout', '/controller', '--output', '/facts.json']), 0)
         prepare.assert_called_once_with(Path('/controller'), Path('/facts.json'), None)
