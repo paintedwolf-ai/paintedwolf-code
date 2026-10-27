@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -160,12 +159,22 @@ func (c *liveClient) createSession(ctx context.Context, request wire.CreateSessi
 	return decodeJSON[wire.Session](c.do(req)) //nolint:bodyclose // decodeJSON closes the body
 }
 
-func (c *liveClient) postPromptAndWait(ctx context.Context, sessionID, text string, timeout time.Duration) error {
+func (c *liveClient) postPromptAndWait(ctx context.Context, sessionID, text string, timeout time.Duration) (runErr error) {
 	ctx, cancel := taskContext(ctx, timeout)
 	defer cancel()
 	if err := c.waitSessionPrepared(ctx, sessionID); err != nil {
 		return err
 	}
+	ctx, stop, err := c.watchSessionFailure(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+	defer stop()
+	defer func() {
+		if runErr != nil && context.Cause(ctx) != nil {
+			runErr = context.Cause(ctx)
+		}
+	}()
 	body, err := json.Marshal(wire.PromptRequest{OperationID: uuid.NewString(), Text: text})
 	if err != nil {
 		return err
@@ -190,13 +199,18 @@ func (c *liveClient) postPromptAndWait(ctx context.Context, sessionID, text stri
 	if accepted.OperationID == "" || accepted.MessageID == "" {
 		return fmt.Errorf("prompt admission requires operation and message identities")
 	}
+	tail := &transcriptTail{}
 	return c.waitScenarioCompletion(ctx, sessionID, func(ctx context.Context) (bool, error) {
-		return c.promptSettled(ctx, sessionID, accepted)
+		return c.promptSettled(ctx, sessionID, accepted, tail)
 	})
 }
 
 func (c *liveClient) waitScenarioCompletion(ctx context.Context, sessionID string, settled func(context.Context) (bool, error)) error {
+	delay := 250 * time.Millisecond
 	for {
+		if ctx.Err() != nil {
+			return context.Cause(ctx)
+		}
 		if c.observeFailure != nil {
 			if err := c.observeFailure(ctx, sessionID); err != nil {
 				return err
@@ -221,15 +235,19 @@ func (c *liveClient) waitScenarioCompletion(ctx context.Context, sessionID strin
 		}
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(250 * time.Millisecond):
+			return context.Cause(ctx)
+		case <-time.After(delay):
 		}
+		delay = min(2*delay, 2*time.Second)
 	}
 }
 
-func (c *liveClient) promptSettled(ctx context.Context, sessionID string, accepted wire.PromptAcceptedResponse) (bool, error) {
+func (c *liveClient) promptSettled(ctx context.Context, sessionID string, accepted wire.PromptAcceptedResponse, tail *transcriptTail) (bool, error) {
 	if c.observeCompletion != nil {
 		return c.observeCompletion(ctx, sessionID, accepted.OperationID)
+	}
+	if err := c.unhandledInput(ctx, sessionID); err != nil {
+		return false, err
 	}
 	pre, err := c.getSession(ctx, sessionID)
 	if err != nil {
@@ -238,7 +256,7 @@ func (c *liveClient) promptSettled(ctx context.Context, sessionID string, accept
 	if pre.Status == wire.SessionStatusError {
 		return false, fmt.Errorf("session %s entered error state", sessionID)
 	}
-	messages, err := c.listMessages(ctx, sessionID)
+	messages, err := tail.read(ctx, c, sessionID)
 	if err != nil {
 		return false, err
 	}
@@ -276,30 +294,7 @@ func (c *liveClient) getSession(ctx context.Context, sessionID string) (wire.Ses
 }
 
 func (c *liveClient) listMessages(ctx context.Context, sessionID string) ([]wire.Message, error) {
-	var messages []wire.Message
-	var cursor string
-	for {
-		reqURL := fmt.Sprintf("/v1/sessions/%s/messages?from=oldest", sessionID)
-		if cursor != "" {
-			reqURL = fmt.Sprintf("/v1/sessions/%s/messages?after=%s", sessionID, url.QueryEscape(cursor))
-		}
-		req, err := c.newRequest(ctx, http.MethodGet, reqURL, nil)
-		if err != nil {
-			return nil, err
-		}
-		page, err := decodeJSON[wire.SessionTranscriptPage](c.do(req)) //nolint:bodyclose // decodeJSON closes the body
-		if err != nil {
-			return nil, err
-		}
-		messages = append(messages, page.Messages...)
-		if page.AfterCursor == "" {
-			return messages, nil
-		}
-		if page.AfterCursor == cursor {
-			return nil, fmt.Errorf("transcript page did not advance after cursor %q", cursor)
-		}
-		cursor = page.AfterCursor
-	}
+	return (&transcriptTail{}).read(ctx, c, sessionID)
 }
 
 func decodeJSON[T any](resp *http.Response, err error) (T, error) {

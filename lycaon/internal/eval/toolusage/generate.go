@@ -55,6 +55,7 @@ type ManifestEntry struct {
 	Status          string              `json:"status"`
 	Error           string              `json:"error,omitempty"`
 	DurationMS      int64               `json:"duration_ms"`
+	Failure         *ExecutionFailure   `json:"failure,omitempty"`
 	Responses       []AutomaticResponse `json:"automatic_responses,omitempty"`
 	Meta            json.RawMessage     `json:"meta,omitempty"`
 }
@@ -139,6 +140,10 @@ func (c *liveClient) generateOne(ctx context.Context, projectID string, task Gen
 			return ManifestEntry{}, ctx.Err()
 		}
 		entry.Status, entry.Error = generateStatus(runErr), runErr.Error()
+		var failure *ExecutionFailure
+		if errors.As(runErr, &failure) {
+			entry.Failure = failure
+		}
 		if abortErr := c.abortScenario(ctx, sess.ID); abortErr != nil {
 			return ManifestEntry{}, fmt.Errorf("%w; abort failed: %w", runErr, abortErr)
 		}
@@ -162,12 +167,22 @@ func (c *liveClient) runWorkflowTask(ctx context.Context, sessionID string, task
 	return nil
 }
 
-func (c *liveClient) startWorkflowRequest(ctx context.Context, sessionID string, task GenerateTask, timeout time.Duration) error {
+func (c *liveClient) startWorkflowRequest(ctx context.Context, sessionID string, task GenerateTask, timeout time.Duration) (runErr error) {
 	ctx, cancel := taskContext(ctx, timeout)
 	defer cancel()
 	if err := c.waitSessionPrepared(ctx, sessionID); err != nil {
 		return err
 	}
+	ctx, stop, err := c.watchSessionFailure(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+	defer stop()
+	defer func() {
+		if runErr != nil && context.Cause(ctx) != nil {
+			runErr = context.Cause(ctx)
+		}
+	}()
 	body, err := json.Marshal(wire.StartWorkflowRunRequest{OperationID: uuid.NewString(), WorkflowID: task.Workflow, WorkflowVersion: task.WorkflowVersion, Request: task.Prompt})
 	if err != nil {
 		return err
@@ -183,14 +198,18 @@ func (c *liveClient) startWorkflowRequest(ctx context.Context, sessionID string,
 	if run.SessionID != sessionID || run.WorkflowID != task.Workflow || run.WorkflowVersion != task.WorkflowVersion {
 		return fmt.Errorf("workflow %s@%s started as %s@%s on session %s", task.Workflow, task.WorkflowVersion, run.WorkflowID, run.WorkflowVersion, run.SessionID)
 	}
+	tail := &transcriptTail{}
 	return c.waitScenarioCompletion(ctx, sessionID, func(ctx context.Context) (bool, error) {
-		return c.requestTurnSettled(ctx, sessionID)
+		return c.requestTurnSettled(ctx, sessionID, tail)
 	})
 }
 
 // requestTurnSettled reports whether the session is idle after answering the request that
 // started its workflow: a user message followed by a final answer.
-func (c *liveClient) requestTurnSettled(ctx context.Context, sessionID string) (bool, error) {
+func (c *liveClient) requestTurnSettled(ctx context.Context, sessionID string, tail *transcriptTail) (bool, error) {
+	if err := c.unhandledInput(ctx, sessionID); err != nil {
+		return false, err
+	}
 	pre, err := c.getSession(ctx, sessionID)
 	if err != nil {
 		return false, err
@@ -198,7 +217,7 @@ func (c *liveClient) requestTurnSettled(ctx context.Context, sessionID string) (
 	if pre.Status == wire.SessionStatusError {
 		return false, fmt.Errorf("session %s entered error state", sessionID)
 	}
-	messages, err := c.listMessages(ctx, sessionID)
+	messages, err := tail.read(ctx, c, sessionID)
 	if err != nil {
 		return false, err
 	}

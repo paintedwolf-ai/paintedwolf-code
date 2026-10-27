@@ -3,6 +3,7 @@ package toolusage
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -31,6 +32,10 @@ type generateSidecar struct {
 }
 
 func (f *generateSidecar) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/v1/events" {
+		serveIdleEvents(w, r)
+		return
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	path := r.URL.Path
@@ -138,5 +143,47 @@ func TestRunGenerateRequiresATimeoutAndManifest(t *testing.T) {
 	}
 	if err := RunGenerate(t.Context(), GenerateOptions{Unattended: policy, Timeout: time.Second}); err == nil {
 		t.Fatal("a run without a manifest started")
+	}
+}
+
+func TestGenerateRecordsPublicFailedTurnCode(t *testing.T) {
+	fake := &generateSidecar{t: t}
+	failed := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/events" {
+			w.Header().Set("Content-Type", "text/event-stream")
+			_, _ = fmt.Fprint(w, ": connected\n\n")
+			w.(http.Flusher).Flush()
+			select {
+			case <-failed:
+			case <-r.Context().Done():
+				return
+			}
+			_, _ = fmt.Fprint(w, `data: {"topic":"session","scope":{"session_id":"s1"},"data":{"id":"s1","host_error":{"code":"provider_request_rejected"}}}`+"\n\n")
+			w.(http.Flusher).Flush()
+			<-r.Context().Done()
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/messages") {
+			_ = json.NewEncoder(w).Encode(wire.SessionTranscriptPage{})
+			return
+		}
+		fake.ServeHTTP(w, r)
+		if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/prompts") {
+			close(failed)
+		}
+	}))
+	defer server.Close()
+	var manifest bytes.Buffer
+	err := RunGenerate(t.Context(), GenerateOptions{
+		BaseURL: server.URL, Token: "fixture", ProjectDir: "/fixture", Timeout: 3 * time.Second,
+		Tasks: []GenerateTask{{CorpusTask: CorpusTask{ID: "failed", Prompt: "fail"}}}, Manifest: &manifest,
+		Unattended: UnattendedPolicy{ApprovalGuidance: "no", Answer: "yes", MaxInterventions: 1},
+	})
+	testutil.FailErr(t, "record failed generation", err)
+	var entry ManifestEntry
+	testutil.FailErr(t, "decode failed manifest", json.Unmarshal(bytes.TrimSpace(manifest.Bytes()), &entry))
+	if entry.Status != GenerateFailed || entry.Failure == nil || entry.Failure.Code != "provider_request_rejected" || len(fake.aborted) != 1 {
+		t.Fatalf("entry=%+v aborted=%v", entry, fake.aborted)
 	}
 }
