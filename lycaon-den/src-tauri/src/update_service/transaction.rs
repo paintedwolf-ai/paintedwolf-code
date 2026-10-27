@@ -31,8 +31,10 @@ fn require_direct_download() -> Result<(), UpdateError> {
     if let Some(error) = facts.error {
         return Err(error);
     }
-    if facts.source != super::InstallSource::DirectDownload {
-        return Err(Failure::PackageManaged.into());
+    match facts.source {
+        super::InstallSource::DirectDownload => {}
+        super::InstallSource::PackageOwnershipUnknown => return Err(Failure::PackageOwnershipUnknown.into()),
+        _ => return Err(Failure::PackageManaged.into()),
     }
     Ok(())
 }

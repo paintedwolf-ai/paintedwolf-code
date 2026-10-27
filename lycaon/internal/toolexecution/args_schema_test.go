@@ -138,7 +138,7 @@ func TestValidateToolArgsHTTPRequestRequiresStructuredJSON(t *testing.T) {
 	if err := tools.ValidateToolArgs(meta.ArgsSchema, args); err == nil {
 		t.Fatal("encoded JSON text must use body_text")
 	}
-	projected := tools.TrimCoordinatorToolMeta(tools.ToolMeta{
+	projected := tools.ProjectProviderToolMeta(tools.ToolMeta{
 		Name: meta.Name, Description: meta.Description, ArgsSchema: meta.ArgsSchema,
 	})
 	properties, ok := projected.ArgsSchema["properties"].(map[string]any)

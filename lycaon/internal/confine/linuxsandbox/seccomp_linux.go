@@ -47,14 +47,29 @@ var escapeSyscalls = []uint32{
 const namespaceCloneFlags = unix.CLONE_NEWUSER | unix.CLONE_NEWNS | unix.CLONE_NEWPID | unix.CLONE_NEWNET |
 	unix.CLONE_NEWUTS | unix.CLONE_NEWIPC | unix.CLONE_NEWCGROUP | unix.CLONE_NEWTIME
 
-// unixDatagramCreators create Unix-domain sockets. A datagram one, even a
-// connected end of a pair, sends wherever a later call names a path, which the
-// filter cannot read, so the filter refuses creating one.
-var unixDatagramCreators = []uint32{unix.SYS_SOCKET, unix.SYS_SOCKETPAIR}
+// socketCreators create sockets. A Unix-domain datagram one, even a connected
+// end of a pair, sends wherever a later call names a path, which the filter
+// cannot read, so the filter refuses creating one.
+var socketCreators = []uint32{unix.SYS_SOCKET, unix.SYS_SOCKETPAIR}
+
+// isolatedSocketFamilies are the address families the sandbox's namespaces
+// and supervisor bound. Other families, such as AF_VSOCK, which reaches the
+// hypervisor host from any network namespace, answer EAFNOSUPPORT, as on a
+// kernel without them.
+var isolatedSocketFamilies = []uint32{unix.AF_INET, unix.AF_INET6, unix.AF_NETLINK}
 
 // notifiedSyscalls go to the supervisor, which performs each one itself on its
 // own descriptor for the socket with its own copy of the address.
 var notifiedSyscalls = []uint32{unix.SYS_CONNECT, unix.SYS_BIND, unix.SYS_LISTEN}
+
+// pathCreators create, link, or move a name; the supervisor decides each one
+// against the protected names and performs it inside the sandbox. openat2
+// carries its flags in memory, so every call goes; openat and open go only
+// when they would create.
+var pathCreators = []uint32{
+	unix.SYS_OPENAT2, unix.SYS_MKDIRAT, unix.SYS_MKNODAT, unix.SYS_SYMLINKAT,
+	unix.SYS_LINKAT, unix.SYS_RENAMEAT, unix.SYS_RENAMEAT2,
+}
 
 // fastOpenSends are the send calls that could start a connection through
 // TCP Fast Open, by syscall number and the argument holding their flags.
@@ -70,8 +85,9 @@ func seccompArgLow(n uint32) uint32 { return seccompDataArg0 + 8*n }
 // and listen to the supervisor, since a network namespace does not isolate
 // path sockets and the filter cannot read an address; refuse creating a
 // Unix-domain datagram socket or pair, whose sends name a path the supervisor
-// never sees, and any
-// send that would open a connection by Fast Open; answer io_uring and clone3
+// never sees, or a socket of a family the namespaces do not isolate. Hand
+// every call that would create, link, or move a name to the supervisor; deny
+// Fast Open sends and answer io_uring and clone3
 // with ENOSYS so libraries fall back to calls the filter can read; allow
 // everything else.
 func seccompProgram() ([]bpf.RawInstruction, error) {
@@ -123,18 +139,48 @@ func seccompProgram() ([]bpf.RawInstruction, error) {
 	}
 	eacces := uint32(unix.SECCOMP_RET_ERRNO) | uint32(unix.EACCES)
 	insts = append(insts, bpf.RetConstant{Val: enosys})
-	for _, nr := range unixDatagramCreators {
-		// AF_UNIX treats SOCK_RAW as SOCK_DGRAM; deny both spellings.
-		// The domain and type are ints compared on their low halves.
-		insts = append(insts,
-			bpf.JumpIf{Cond: bpf.JumpEqual, Val: nr, SkipFalse: 8},
+	eafnosupport := uint32(unix.SECCOMP_RET_ERRNO) | uint32(unix.EAFNOSUPPORT)
+	families := len(isolatedSocketFamilies)
+	for _, nr := range socketCreators {
+		// The domain and type are ints compared on their low halves. AF_UNIX
+		// treats SOCK_RAW as SOCK_DGRAM; deny both spellings.
+		block := []bpf.Instruction{
 			bpf.LoadAbsolute{Off: seccompDataArg0, Size: 4},
-			bpf.JumpIf{Cond: bpf.JumpEqual, Val: unix.AF_UNIX, SkipFalse: 5},
+			bpf.JumpIf{Cond: bpf.JumpEqual, Val: unix.AF_UNIX, SkipTrue: uint8(families + 1)},
+		}
+		for i, family := range isolatedSocketFamilies {
+			// A match skips the remaining compares, the refusal, and the Unix
+			// type check to the allow.
+			block = append(block, bpf.JumpIf{Cond: bpf.JumpEqual, Val: family, SkipTrue: uint8(families - i + 5)})
+		}
+		block = append(block,
+			bpf.RetConstant{Val: eafnosupport},
 			bpf.LoadAbsolute{Off: seccompArgLow(1), Size: 4},
 			bpf.ALUOpConstant{Op: bpf.ALUOpAnd, Val: socketTypeMask},
 			bpf.JumpIf{Cond: bpf.JumpEqual, Val: unix.SOCK_DGRAM, SkipTrue: 1},
 			bpf.JumpIf{Cond: bpf.JumpEqual, Val: unix.SOCK_RAW, SkipFalse: 1},
 			bpf.RetConstant{Val: eacces},
+			bpf.RetConstant{Val: unix.SECCOMP_RET_ALLOW},
+		)
+		insts = append(insts, bpf.JumpIf{Cond: bpf.JumpEqual, Val: nr, SkipFalse: uint8(len(block))})
+		insts = append(insts, block...)
+	}
+	notify := uint32(unix.SECCOMP_RET_USER_NOTIF)
+	for _, nr := range append(append([]uint32(nil), pathCreators...), legacyPathCreators...) {
+		insts = append(insts,
+			bpf.JumpIf{Cond: bpf.JumpEqual, Val: nr, SkipFalse: 1},
+			bpf.RetConstant{Val: notify},
+		)
+	}
+	for _, open := range []struct{ nr, flagsArg uint32 }{{unix.SYS_OPENAT, 2}, {legacyOpen, 1}} {
+		if open.nr == 0 {
+			continue
+		}
+		insts = append(insts,
+			bpf.JumpIf{Cond: bpf.JumpEqual, Val: open.nr, SkipFalse: 4},
+			bpf.LoadAbsolute{Off: seccompArgLow(open.flagsArg), Size: 4},
+			bpf.JumpIf{Cond: bpf.JumpBitsSet, Val: unix.O_CREAT, SkipFalse: 1},
+			bpf.RetConstant{Val: notify},
 			bpf.RetConstant{Val: unix.SECCOMP_RET_ALLOW},
 		)
 	}

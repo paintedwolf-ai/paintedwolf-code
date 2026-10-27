@@ -100,5 +100,6 @@ def build_window(repository):
 
 
 def ejected(repository, number):
-    return any(event.get('event') == 'removed_from_merge_queue'
-               for event in pages(f'repos/{repository}/issues/{number}/timeline'))
+    events = [event for event in pages(f'repos/{repository}/issues/{number}/timeline')
+              if event.get('event') in {'removed_from_merge_queue', 'added_to_merge_queue'}]
+    return bool(events and events[-1]['event'] == 'removed_from_merge_queue')

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://paintedwolf.ai/schemas/linux-package-manifest.json",
   "title": "Painted Wolf Code Linux package manifest",
-  "description": "Complete app-managed native payload inventory and executable identities. Generation roots are selected and retained independently of mutable package staging.",
+  "description": "Complete app-managed native payload inventory and executable identities for native and immutable Nix applications. Installation identity and privileged trust are established separately.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -32,7 +32,15 @@
       ]
     },
     "install_root": {
-      "const": "/opt/painted-wolf-code"
+      "anyOf": [
+        {
+          "const": "/opt/painted-wolf-code"
+        },
+        {
+          "type": "string",
+          "pattern": "^/nix/store/[0-9abcdfghijklmnpqrsvwxyz]{32}-[A-Za-z0-9+._?=-]+/lib/painted-wolf-code$"
+        }
+      ]
     },
     "executables": {
       "type": "array",

@@ -5,7 +5,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -25,7 +24,7 @@ func TestHumanPlanStartLoopWakesCoordinator(t *testing.T) {
 		t.Fatalf("start run status = %d body = %s", w.Code, w.Body.String())
 	}
 
-	testutil.WaitFor(t, 5*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		h.Sessions.Manager.Runner.Coordinator.CoordinatorLoop().Nudges.DrainPending(t.Context(), sess.ID)
 		msgs, err := h.Store.GetMessages(t.Context(), sess.ID)
 		testutil.FailErr(t, "GetMessages", err)
