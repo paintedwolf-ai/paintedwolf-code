@@ -13,7 +13,7 @@ func FilesystemRootForPath(projectID string, roots, granted []string, sessionScr
 	if !filepath.IsAbs(path) {
 		return "", nil
 	}
-	allowed, err := validatedWriteRoots(projectID, roots, granted, sessionScratch)
+	allowed, err := WriteRootsForBoundary(projectID, roots, granted, sessionScratch)
 	if err != nil {
 		return "", err
 	}

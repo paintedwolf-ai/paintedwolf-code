@@ -24,6 +24,8 @@ var (
 	ErrSourcePathDenied = errors.New("source path denied")
 	// ErrSourceNotFound is a missing path or non-regular file under the jail.
 	ErrSourceNotFound = errors.New("source not found")
+	// ErrSourceIsDirectory is a directory path where a file is required.
+	ErrSourceIsDirectory = errors.New("source path is a directory")
 	// ErrSourceBinary rejects binary content where text is required.
 	ErrSourceBinary = errors.New("source binary denied")
 	// ErrSourceUnsupportedEncoding rejects undecodable text.
@@ -114,6 +116,7 @@ func resolveSourceReadTarget(p ProjectSource, pathQuery, rootID string) (sourceR
 		return sourceReadTarget{}, err
 	}
 	normalized := false
+	isDir := false
 	for _, base := range bases {
 		abs, path, ok := evidence.ResolveCitationAbs(base.Dir, pathQuery)
 		if !ok {
@@ -127,9 +130,16 @@ func resolveSourceReadTarget(p ProjectSource, pathQuery, rootID string) (sourceR
 			}
 			return sourceReadTarget{}, fmt.Errorf("stat source: %w", err)
 		}
+		if info.IsDir() {
+			isDir = true
+			continue
+		}
 		if info.Mode().IsRegular() {
 			return sourceReadTarget{abs: abs, path: path, rootID: base.RootID, info: info}, nil
 		}
+	}
+	if isDir {
+		return sourceReadTarget{}, ErrSourceIsDirectory
 	}
 	if normalized {
 		return sourceReadTarget{}, ErrSourceNotFound

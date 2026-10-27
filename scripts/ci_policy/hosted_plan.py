@@ -3,8 +3,9 @@ from collections import Counter
 from pathlib import Path
 import re
 
-from ci_policy.hosted_schedule import order, validate_sources
+from ci_policy.hosted_schedule import order, validate_sources, PRIORITIES
 from ci_policy.timings import row_key
+from ci_policy.native_admission import targets as native_targets
 from verification_plan import catalog, expand
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -12,7 +13,7 @@ PROFILES = {"fast", "check", "nightly", "release", "integration"}
 GATE = "check"
 FAST_GATE = "check-fast"
 SUITES = {"all", "behavior", "race", "coverage", "performance", "fuzz", "e2e"}
-SETUPS = {"verification", "shell", "harness", "frontend"}
+SETUPS = {"verification", "shell", "harness", "frontend", "analysis"}
 # A platform lane runs a check that only its platform can run, so the cross-platform check gate,
 # which every development host runs, leaves it out; the merge queue runs it beside that gate.
 # Each platform names the runners it may use: architecture-specific code needs each architecture.
@@ -21,6 +22,8 @@ PLATFORMS = {"linux": {"ubuntu-latest", "ubuntu-24.04-arm"}}
 CONTAINER_TARGET = "den:webkit:atspi"
 # Runs the pinned browser, which an offline lane must find already provisioned.
 BROWSER_TARGET = "test:confine:linux"
+# Drives the native repository tools against committed distribution fixtures.
+REPOSITORY_TOOLS_TARGET = "test:runner"
 
 
 def lanes():
@@ -32,11 +35,31 @@ def lanes():
     for name, lane in values.items():
         if not re.fullmatch(r"[a-z][a-z0-9-]*", name):
             raise ValueError(f"invalid CI lane: {name}")
-        if set(lane) - {"targets", "minutes", "profiles", "suite", "setup", "runner", "workers", "shards", "first",
-                        "platform", "preflight", "timing_source"}:
+        if set(lane) - {"targets", "minutes", "profiles", "suite", "setup", "runner", "workers", "shards", "priority",
+                        "platform", "arguments", "preflight", "timing_source", "early_targets", "contract_first", "compile_targets", "runtime_engines"}:
             raise ValueError(f"unknown CI lane fields: {name}")
-        if lane.get("first", True) is not True:
-            raise ValueError(f"CI lane {name} marks itself first or leaves the field out")
+        if "arguments" in lane and (len(lane["targets"]) != 1 or not lane["arguments"]
+                                    or not all(isinstance(value, str) and value for value in lane["arguments"])):
+            raise ValueError(f"CI lane {name} arguments belong to exactly one target")
+        if 'runtime_engines' in lane and (lane['runtime_engines'] is not False
+                or lane['targets'] != ['den:test:rust', 'decide:test']):
+            raise ValueError(f"CI lane {name} requires runtime engines for host checks")
+        compilation = lane.get('compile_targets', {})
+        if (name == 'ready' or 'compile_targets' in lane) and (name != 'ready' or not isinstance(compilation, dict)
+                or set(compilation) != {'den:test:rust', 'decide:test'}
+                or any(not isinstance(roots, list) or not roots
+                       or any(not isinstance(root, str) or not root.endswith('/') or '..' in root for root in roots)
+                       for roots in compilation.values())):
+            raise ValueError(f"CI lane {name} has invalid native compilation targets")
+        early = lane.get("early_targets", [])
+        if (not isinstance(early, list) or len(set(early)) != len(early)
+                or not set(early).issubset(lane["targets"])):
+            raise ValueError(f"CI lane {name} early targets must partition its declared targets")
+        if "contract_first" in lane and (lane["contract_first"] is not True or lane["targets"] != ["test:full"]):
+            raise ValueError(f"CI lane {name} contract ordering requires the complete Go recipe")
+
+        if lane.get("priority", "normal") not in PRIORITIES:
+            raise ValueError(f"CI lane {name} has an invalid scheduling priority")
         if not lane["targets"] or not set(lane["targets"]).issubset(targets):
             raise ValueError(f"CI lane {name} must name existing task targets")
         if type(lane["minutes"]) is not int or not 1 <= lane["minutes"] <= 300:
@@ -47,6 +70,9 @@ def lanes():
             raise ValueError(f"invalid CI setup or suite: {name}")
         if lane["setup"] == "frontend" and not set(lane["targets"]).issubset({"den:typecheck", "den:lint", "den:test"}):
             raise ValueError(f"CI lane {name} requires toolchains outside frontend setup")
+        if lane["setup"] == "analysis" and not set(lane["targets"]).issubset({
+                "lint:fast", "lint:full", "lint:vuln", "lint:vuln:fresh", "comments:check", "test:fail-messages:check"}):
+            raise ValueError(f"CI lane {name} requires inputs outside Go analysis setup")
         # Only a platform lane runs on its platform's other runners.
         if lane.get("runner", "macos-15") not in {"macos-15", "ubuntu-latest"} | PLATFORMS.get(lane.get("platform"), set()):
             raise ValueError(f"unsupported CI runner: {name}")
@@ -71,8 +97,10 @@ def lanes():
             if (lane["profiles"] != ["fast"] or lane.get("shards", 1) != 1
                     or not isinstance(command, list) or len(command) < 3
                     or command[:2] != ["test:contract", "--"]
-                    or any(not isinstance(package, str) or not re.fullmatch(r"\./test/contract/[a-z][a-z0-9_]*", package)
-                           or not (ROOT / "lycaon" / package).is_dir() for package in command[2:])
+                    or (command != ["test:contract", "--", "./test/contract/..."]
+                        and any(not isinstance(package, str)
+                                or not re.fullmatch(r"\./test/contract/[a-z][a-z0-9_]*", package)
+                                or not (ROOT / "lycaon" / package).is_dir() for package in command[2:]))
                     or len(set(command[2:])) != len(command[2:])):
                 raise ValueError(f"CI lane {name} requires scoped admission contracts")
     fast = Counter(stage["name"] for lane in values.values() if "fast" in lane["profiles"]
@@ -132,15 +160,20 @@ def matrix(profile, suite="all", scope=None, platform=False, timings=None):
                            "timing_row": row_key(lane.get("timing_source", name), f"{index}/{count}" if count > 1 else ""),
                            "shard": f"{index}/{count}" if count > 1 else "",
                            "minutes": lane["minutes"], "job_minutes": lane["minutes"] + 30,
-                           "setup": lane["setup"],
+                           "setup": "shell" if profile == "fast" and "den:test:rust" in native_targets(scope) else lane["setup"],
+                           "runtime_engines": lane.get("runtime_engines", True),
                            "notices": "licenses:notices" in lane["targets"],
                            "containers": CONTAINER_TARGET in lane["targets"],
-                           "browser": BROWSER_TARGET in lane["targets"],
+                           "browser": BROWSER_TARGET in lane["targets"]
+                           and "browser" in lane.get("arguments", ["browser"]),
+                           "repository_tools": REPOSITORY_TOOLS_TARGET in lane["targets"],
+                           "nix": any(target.startswith("nix:") for target in lane["targets"])
+                           or "nix" in lane.get("arguments", []),
                            "analysis": analysis_set(lane["targets"]),
                            "runner": lane.get("runner", "ubuntu-latest")})
     if not result:
         raise ValueError("CI selection contains no verification")
-    return {"include": order(result, values, timings)}
+    return {"include": order(result, values, timings, max_parallel(profile))}
 
 
 def invocation(targets):

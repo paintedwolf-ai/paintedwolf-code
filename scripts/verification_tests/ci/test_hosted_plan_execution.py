@@ -7,6 +7,15 @@ import verification_plan as planning
 
 
 class HostedPlanTests(unittest.TestCase):
+    def test_native_admission_cannot_omit_targets_or_accept_unsafe_roots(self):
+        for declaration in (None, {}, [], {'den:test:rust': ['lycaon-den/src-tauri/']},
+                {'den:test:rust': [], 'decide:test': ['lycaon/internal/decide/native/']},
+                {'den:test:rust': ['../outside/'], 'decide:test': ['lycaon/internal/decide/native/']}):
+            data = copy.deepcopy(planning.catalog())
+            data['ci']['ready']['compile_targets'] = declaration
+            with patch.object(ci, 'catalog', return_value=data), self.assertRaises(ValueError):
+                ci.matrix('fast')
+
     def test_tier_partitions_cover_every_local_gate_stage_once(self):
         lanes = ci.lanes()
         expected = sorted(stage["name"] for stage in planning.expand(["check"]))
@@ -23,21 +32,19 @@ class HostedPlanTests(unittest.TestCase):
         # Qualification runs the check gate, then release's platform lanes beside the platform gates.
         self.assertEqual({row["lane"] for row in ci.matrix("release", platform=True)["include"]}, release & platform)
 
-    def test_ready_tier_is_one_runner_with_full_lint_and_scoped_policy_contracts(self):
+    def test_ready_tier_is_one_runner_with_contracts_and_early_diagnostics(self):
         rows = ci.matrix("fast")["include"]
         self.assertEqual(len(rows), 1)
         self.assertEqual(ci.max_parallel("fast"), 1)
         stages = [stage["name"] for stage in planning.expand(ci.lanes()[rows[0]["lane"]]["targets"])]
         self.assertEqual(sorted(stages), sorted(set(stages)))
-        self.assertEqual(set(stages), {"build", "lint:full", "budgets", "den:typecheck", "den:lint", "den:test:fast"})
-        self.assertEqual(ci.lanes()["ready"]["preflight"], ["test:contract", "--",
-                         "./test/contract/hosted", "./test/contract/runner", "./test/contract/evidence",
-                         "./test/contract/host", "./test/contract/security"])
+        self.assertEqual(set(stages), {"build", "lint:full", "budgets", "den:typecheck", "den:lint", "den:test:fast",
+                                       "coverage:changes", "comments:check", "test:fail-messages:check", "docs:links"})
+        self.assertEqual(ci.lanes()["ready"]["preflight"], ["test:contract", "--", "./test/contract/..."])
         handoff = {stage["name"] for stage in planning.expand(["check-fast"])}
         self.assertLessEqual(set(stages) | {"test:contract"}, handoff)
-        # Full suites and changed coverage run on the landing commit.
-        self.assertFalse(set(stages) & {"test:short", "test:contract", "coverage:changes",
-                                         "den:coverage:changes"})
+        # Product suites remain in the integration gate.
+        self.assertFalse(set(stages) & {"test:short", "test:contract", "den:coverage:changes"})
         self.assertGreaterEqual(rows[0]["minutes"], ci.lanes()["lint"]["minutes"])
 
     def test_partition_drift_refuses_to_plan_before_any_tests_run(self):
@@ -60,7 +67,7 @@ class HostedPlanTests(unittest.TestCase):
                     ci.matrix("check")
 
     def test_admission_refuses_invalid_package_selection(self):
-        for mutation in ("missing", "target", "scope", "empty", "sharded", "selector", "traversal", "duplicate", "absent"):
+        for mutation in ("missing", "target", "scope", "empty", "sharded", "selector", "traversal", "duplicate", "mixed", "absent"):
             with self.subTest(mutation=mutation):
                 data = copy.deepcopy(planning.catalog())
                 lane = data["ci"]["ready"]
@@ -80,6 +87,8 @@ class HostedPlanTests(unittest.TestCase):
                     lane["preflight"][2] = "./test/contract/../internal"
                 elif mutation == "duplicate":
                     lane["preflight"].append(lane["preflight"][2])
+                elif mutation == "mixed":
+                    lane["preflight"].append("./test/contract/host")
                 else:
                     lane["preflight"][2] = "./test/contract/absent"
                 with patch.object(ci, "catalog", return_value=data), self.assertRaises(ValueError):
@@ -97,7 +106,7 @@ class HostedPlanTests(unittest.TestCase):
         self.assertEqual(nightly, {"test:full", "test:race", "test:fuzz", "test:stress", "check:coverage",
                                    "den:coverage-check", "den:test:transcript-scale", "lint:vuln:fresh",
                                    "perf:bench", "perf:sidecar", "perf:soak", "den:webkit:scroll",
-                                   "den:webkit:atspi", "test:confine:linux"})
+                                   "den:webkit:atspi", "test:confine:linux", "nix:check"})
         for suite in ci.SUITES - {"all"}:
             with self.subTest(suite=suite):
                 names = {row["lane"] for row in ci.matrix("nightly", suite)["include"]}
@@ -127,7 +136,7 @@ class HostedPlanTests(unittest.TestCase):
         # The WebKit harness builds without the shell, so the lane skips its packaging inputs.
         nightly = {row["lane"]: row["setup"] for row in ci.matrix("nightly", "e2e")["include"]}
         self.assertEqual(nightly["webkit"], "harness")
-        self.assertEqual({setup for lane, setup in setups.items() if lane not in {"native", "webkit", "frontend"}},
+        self.assertEqual({setup for lane, setup in setups.items() if lane not in {"native", "webkit", "frontend", "lint", "vulnerabilities"}},
                          {"verification"})
         for mutation in ("unknown", "missing", "boolean"):
             with self.subTest(mutation=mutation):
@@ -194,6 +203,40 @@ class HostedPlanTests(unittest.TestCase):
                     self.assertEqual(row["browser"], "test:confine:linux" in ci.lanes()[row["lane"]]["targets"])
         self.assertEqual([row["lane"] for row in ci.matrix("integration")["include"] if row["browser"]], ["confinement-arm64"])
 
+    def test_lanes_learn_whether_they_drive_the_native_repository_tools(self):
+        for profile in ci.PROFILES:
+            for row in ci.matrix(profile)["include"]:
+                with self.subTest(profile=profile, lane=row["lane"]):
+                    self.assertEqual(row["repository_tools"], "test:runner" in ci.lanes()[row["lane"]]["targets"])
+        self.assertEqual([row["lane"] for row in ci.matrix("check")["include"] if row["repository_tools"]], ["runner"])
+
+    def test_nix_lane_is_nightly_only_and_provisions_nix_before_running_offline(self):
+        # Nix verification informs; it never gates a merge or a release.
+        self.assertEqual(ci.lanes()["nix"]["profiles"], ["nightly"])
+        for profile in ("check", "integration", "release"):
+            with self.subTest(profile=profile):
+                self.assertNotIn("nix", {row["lane"] for row in ci.matrix(profile)["include"]})
+        rows = [row for row in ci.matrix("nightly")["include"] if row["lane"] == "nix"]
+        self.assertEqual([(row["nix"], row["browser"]) for row in rows], [(True, False)])
+
+    def test_lane_arguments_are_explicit(self):
+        for mutation in ("arguments-many-targets", "arguments-empty", "paths"):
+            with self.subTest(mutation=mutation):
+                data = copy.deepcopy(planning.catalog())
+                if mutation == "arguments-many-targets":
+                    data["ci"]["frontend"]["arguments"] = ["browser"]
+                elif mutation == "arguments-empty":
+                    data["ci"]["confinement-arm64"]["arguments"] = []
+                else:
+                    data["ci"]["nix"]["paths"] = ["packaging/nix/"]
+                with patch.object(ci, "catalog", return_value=data), self.assertRaises(ValueError):
+                    ci.matrix("nightly")
+        data = copy.deepcopy(planning.catalog())
+        data["ci"]["confinement-arm64"]["arguments"] = ["nix"]
+        with patch.object(ci, "catalog", return_value=data):
+            row = next(row for row in ci.matrix("nightly")["include"] if row["lane"] == "confinement-arm64")
+        self.assertEqual((row["nix"], row["browser"]), (True, False))
+
     def test_platform_selection_keeps_only_platform_lanes(self):
         for profile in ("integration", "nightly", "release"):
             with self.subTest(profile=profile):
@@ -229,11 +272,12 @@ class HostedPlanTests(unittest.TestCase):
         self.assertEqual({row["lane"] for row in rows[:2]}, {"limits", "lint"})
         self.assertEqual([row["lane"] for row in rows[2:4]], ["behavior", "behavior"])
         for profile in ci.PROFILES:
-            with self.subTest(profile=profile):
-                order = [(not lanes[row["lane"]].get("first"), -row["minutes"]) for row in ci.matrix(profile)["include"]]
-                self.assertEqual(order, sorted(order))
+            rows = ci.matrix(profile)['include']
+            ordinary = [row for row in rows if row['priority'] != 'compile']
+            order = [(ci.PRIORITIES[row['priority']], -row['minutes']) for row in ordinary]
+            self.assertEqual(order, sorted(order))
         data = copy.deepcopy(planning.catalog())
-        data["ci"]["limits"]["first"] = False
+        data["ci"]["limits"]["priority"] = "invalid"
         with patch.object(ci, "catalog", return_value=data), self.assertRaises(ValueError):
             ci.matrix("integration")
 

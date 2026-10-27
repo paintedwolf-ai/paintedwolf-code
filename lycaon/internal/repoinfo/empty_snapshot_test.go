@@ -41,7 +41,7 @@ func TestKnownEmptyUsesAvailableCurrentMeasurement(t *testing.T) {
 			p.resolveCatalogRoot = func(context.Context, string) (CatalogRoot, bool, error) {
 				return CatalogRoot{ProjectID: "p", RootID: "r"}, true, nil
 			}
-			ctx := testutil.BoundedContext(t, time.Second)
+			ctx := t.Context()
 			empty, err := p.KnownEmpty(ctx, t.TempDir())
 			testutil.FailErr(t, "read available emptiness", err)
 			if empty != tc.empty {

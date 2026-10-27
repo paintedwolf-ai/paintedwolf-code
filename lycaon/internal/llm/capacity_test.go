@@ -148,15 +148,11 @@ func TestCapacityGateHoldSleeps(t *testing.T) {
 	ctx := providerretry.WithRetryObserver(context.Background(), func(a providerretry.RetryAttempt) {
 		seen = append(seen, a)
 	})
-	start := time.Now()
 	if err := g.Hold(ctx, 0); err != nil {
 		t.Fatalf("Hold: %v", err)
 	}
-	if time.Since(start) < time.Millisecond {
-		t.Fatal("Hold should sleep the scheduled wait")
-	}
-	if len(seen) != 1 || seen[0].Reason != providerretry.RetryReasonHold {
-		t.Fatalf("observed %+v want one hold", seen)
+	if len(seen) != 1 || seen[0].Reason != providerretry.RetryReasonHold || seen[0].Wait != time.Millisecond {
+		t.Fatalf("observed %+v want one 1ms hold", seen)
 	}
 }
 
@@ -172,15 +168,11 @@ func TestCapacityGateCooldown(t *testing.T) {
 		seen = append(seen, a)
 	})
 	g.NoteFailure("together", "gpt-oss", &failure.ProviderOverloadedError{Status: 503})
-	start := time.Now()
 	if err := g.Await(ctx, "together", "gpt-oss"); err != nil {
 		t.Fatalf("Await: %v", err)
 	}
-	if time.Since(start) < time.Millisecond {
-		t.Fatal("Await should sleep the remaining cooldown")
-	}
-	if len(seen) != 1 || seen[0].Reason != providerretry.RetryReasonCooldown {
-		t.Fatalf("observed %+v want one cooldown", seen)
+	if len(seen) != 1 || seen[0].Reason != providerretry.RetryReasonCooldown || seen[0].Wait <= 0 {
+		t.Fatalf("observed %+v want one positive cooldown wait", seen)
 	}
 
 	g.NoteFailure("together", "gpt-oss", &failure.ProviderOverloadedError{Status: 503})

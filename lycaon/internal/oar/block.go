@@ -137,18 +137,14 @@ func (p *GuardPipeline) selectRulesForAnchor(rules *RuleSet, anchor string, gc *
 	if rules == nil {
 		return nil, nil
 	}
+	projection := selectorFacts{context: gc}
 	var out []*Rule
 	errs := map[*Rule]error{}
 	for _, r := range rules.OnAnchor(anchor) {
 		if enforcementOff(r) {
 			continue
 		}
-		if err := AssembleFacts(gc, r.Selector.Clauses()); err != nil {
-			out = append(out, r)
-			errs[r] = err
-			continue
-		}
-		matches, err := ruleSelectorMatches(r, gc)
+		matches, err := projection.match(r)
 		if err != nil {
 			out = append(out, r)
 			errs[r] = err
