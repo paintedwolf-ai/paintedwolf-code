@@ -203,6 +203,13 @@ class HostedPlanTests(unittest.TestCase):
                     self.assertEqual(row["browser"], "test:confine:linux" in ci.lanes()[row["lane"]]["targets"])
         self.assertEqual([row["lane"] for row in ci.matrix("integration")["include"] if row["browser"]], ["confinement-arm64"])
 
+    def test_lanes_learn_whether_they_drive_the_native_repository_tools(self):
+        for profile in ci.PROFILES:
+            for row in ci.matrix(profile)["include"]:
+                with self.subTest(profile=profile, lane=row["lane"]):
+                    self.assertEqual(row["repository_tools"], "test:runner" in ci.lanes()[row["lane"]]["targets"])
+        self.assertEqual([row["lane"] for row in ci.matrix("check")["include"] if row["repository_tools"]], ["runner"])
+
     def test_nix_lane_is_nightly_only_and_provisions_nix_before_running_offline(self):
         # Nix verification informs; it never gates a merge or a release.
         self.assertEqual(ci.lanes()["nix"]["profiles"], ["nightly"])
