@@ -1,6 +1,6 @@
 #![cfg(target_os = "linux")]
 use desktop_settings_observer::{read, Status};
-use glib::ToVariant;
+use glib::prelude::ToVariant;
 use std::{
     io::{BufRead, BufReader},
     process::{Child, Command, Stdio},
@@ -106,13 +106,13 @@ impl Service {
                     None::<&gio::DBusAuthObserver>,None::<&gio::Cancellable>).unwrap();
                 let xml="<node><interface name='org.freedesktop.portal.Settings'><method name='ReadAll'><arg type='as' direction='in'/><arg type='a{sa{sv}}' direction='out'/></method><signal name='SettingChanged'><arg type='s'/><arg type='s'/><arg type='v'/></signal></interface></node>";
                 let info=gio::DBusNodeInfo::for_xml(xml).unwrap().lookup_interface("org.freedesktop.portal.Settings").unwrap();
-                let _registration=connection.register_object("/org/freedesktop/portal/desktop",&info,
-                    move |_,_,_,_,method,args,invocation| {
+                let _registration=connection.register_object("/org/freedesktop/portal/desktop",&info)
+                    .method_call(move |_,_,_,_,method,args,invocation| {
                         assert_eq!(method,"ReadAll");
                         assert_eq!(args.get::<(Vec<String>,)>().unwrap().0,desktop_settings_observer::NAMESPACES);
                         if denied { invocation.return_dbus_error("org.freedesktop.DBus.Error.AccessDenied","fixture refusal"); }
                         else { let values=std::collections::BTreeMap::from([("org.freedesktop.appearance",std::collections::BTreeMap::from([("contrast",1u32.to_variant())]))]);invocation.return_value(Some(&(values,).to_variant())); }
-                    },|_,_,_,_,_|false.to_variant(),|_,_,_,_,_,_|false).unwrap();
+                    }).build().unwrap();
                 connection.call_sync(Some("org.freedesktop.DBus"),"/org/freedesktop/DBus","org.freedesktop.DBus","RequestName",
                     Some(&("org.freedesktop.portal.Desktop",0u32).to_variant()),None,gio::DBusCallFlags::NONE,1500,None::<&gio::Cancellable>).unwrap();
                 ready.send(connection.clone()).unwrap();
@@ -229,5 +229,42 @@ fn oversized_live_preference_fails_without_emitting_an_unbounded_snapshot() {
     let refused = read(&mut output, initial.sequence).unwrap().unwrap();
     assert_eq!(refused.status, Status::Failed);
     assert!(refused.settings.is_empty());
+    ended(&mut observer);
+}
+
+#[test]
+fn live_titlebar_click_action_reaches_the_shell() {
+    let bus = Bus::new();
+    let service = Service::new(&bus, false);
+    let mut observer = bus.observer();
+    let mut output = BufReader::new(observer.stdout.take().unwrap());
+    let initial = read(&mut output, 0).unwrap().unwrap();
+    service
+        .connection
+        .emit_signal(
+            None,
+            "/org/freedesktop/portal/desktop",
+            "org.freedesktop.portal.Settings",
+            "SettingChanged",
+            Some(
+                &(
+                    "org.gnome.desktop.wm.preferences",
+                    "action-double-click-titlebar",
+                    "minimize".to_variant(),
+                )
+                    .to_variant(),
+            ),
+        )
+        .unwrap();
+    service
+        .connection
+        .flush_sync(None::<&gio::Cancellable>)
+        .unwrap();
+    let changed = read(&mut output, initial.sequence).unwrap().unwrap();
+    assert_eq!(changed.status, Status::Ready);
+    assert!(changed
+        .settings
+        .contains(&desktop_settings_observer::Setting::TitlebarDoubleClick("minimize".into())));
+    drop(observer.stdin.take());
     ended(&mut observer);
 }

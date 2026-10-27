@@ -44,7 +44,7 @@ func StageArtifact(ctx context.Context, m *Manifest, root, goos, goarch string) 
 		return "", err
 	}
 	directory := EngineBundledDir(root, m.OpenGrep.Version)
-	files := append([]PayloadIdentity{}, m.identity.Payload...)
+	files := artifactPayloads(m)
 	files = append(files, PayloadIdentity{Name: filepath.Base(ArtifactPath(root, m.OpenGrep.Version, goos)), SHA256: art.SHA256, Bytes: art.BinaryBytes})
 	for _, part := range files {
 		if err := ctx.Err(); err != nil {

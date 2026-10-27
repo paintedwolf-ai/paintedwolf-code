@@ -1,0 +1,32 @@
+name: Dependent PR update
+# When a PR lands on main, PRs that were based on its branch are merged up to
+# main on GitHub's side and their checks dispatched. A conflict is labelled for
+# the PR's owner, and their next push clears the label.
+on:
+  pull_request_target:
+    types: [closed, synchronize]
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+concurrency:
+  group: dependent-update-${{ github.event.pull_request.number }}-${{ github.event.action }}
+  cancel-in-progress: false
+jobs:
+  update:
+    if: >-
+      (github.event.action == 'closed' && github.event.pull_request.merged && github.event.pull_request.base.ref == 'main') ||
+      (github.event.action == 'synchronize' && contains(github.event.pull_request.labels.*.name, 'update-conflict'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      # Only default-branch controller code executes with write credentials.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - name: Update dependents of the landed PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PYTHONPATH: scripts
+        run: python3 -m ci_policy.dependent_update
