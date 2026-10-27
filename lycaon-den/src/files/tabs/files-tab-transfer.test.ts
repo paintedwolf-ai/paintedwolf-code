@@ -54,10 +54,7 @@ vi.mock("../../chat/composer/chat-attachment-drag.ts", () => ({
 function deferred<T>() {
   let resolve: ((value: T) => void) | undefined;
   const promise = new Promise<T>((accept) => { resolve = accept; });
-  return { promise, resolve(value: T) {
-    if (!resolve) throw new Error("Deferred promise was not initialized");
-    resolve(value);
-  } };
+  return { promise, resolve(value: T) { required(resolve)(value); } };
 }
 
 const PROJECT = "handoff-project";
