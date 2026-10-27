@@ -80,6 +80,19 @@ func RunStage() error {
 	}
 	_ = mounted.Close()
 	mounted = viewed
+	originFile := os.NewFile(stageOriginFD, "original-user-namespace")
+	brokerFile := os.NewFile(stageBrokerFD, "desktop-broker")
+	lifetimeFile := os.NewFile(stageLifetimeFD, "generation-lifetime")
+	serverFile := os.NewFile(stageServerFD, "launch-broker")
+	defer func() {
+		runtime.KeepAlive(mounted)
+		runtime.KeepAlive(frame)
+		runtime.KeepAlive(originFile)
+		runtime.KeepAlive(brokerFile)
+		runtime.KeepAlive(lifetimeFile)
+		runtime.KeepAlive(entryImage)
+		runtime.KeepAlive(serverFile)
+	}()
 	entry := &exec.Cmd{
 		Path:   "/proc/self/fd/" + strconv.Itoa(entrySelfFD),
 		Args:   []string{"pw-launch-entry"},
@@ -89,9 +102,9 @@ func RunStage() error {
 		Stderr: os.Stderr,
 		ExtraFiles: []*os.File{
 			mounted, frame,
-			os.NewFile(stageOriginFD, "original-user-namespace"),
-			os.NewFile(stageBrokerFD, "desktop-broker"),
-			os.NewFile(stageLifetimeFD, "generation-lifetime"),
+			originFile,
+			brokerFile,
+			lifetimeFile,
 			entryImage,
 		},
 		SysProcAttr: attributes,
@@ -117,8 +130,8 @@ func RunStage() error {
 		Env:        []string{},
 		Stdin:      null,
 		Stdout:     null,
-		Stderr:     null,
-		ExtraFiles: []*os.File{frame, os.NewFile(stageServerFD, "launch-broker"), watchLifetime, entryImage},
+		Stderr:     os.Stderr,
+		ExtraFiles: []*os.File{frame, serverFile, watchLifetime, entryImage},
 		SysProcAttr: &syscall.SysProcAttr{
 			Setsid: true,
 		},

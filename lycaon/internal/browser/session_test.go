@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/browserengine"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/osprocess"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -104,6 +105,15 @@ func TestLaunchConfinedAcceptsUnconfinedPosture(t *testing.T) {
 	if _, _, err := launchConfined(ctx, l, "/nonexistent/chrome", nil); err == nil {
 		t.Fatal("launchConfined with missing binary succeeded")
 	}
+	earlyDir := t.TempDir()
+	earlyExit := filepath.Join(earlyDir, "early-exit.sh")
+	testutil.FailErr(t, "write early-exit browser script", os.WriteFile(earlyExit, []byte("#!/bin/sh\nexit 1\n"), 0o700))
+	testutil.FailErr(t, "write sibling icudtl.dat", os.WriteFile(filepath.Join(earlyDir, "icudtl.dat"), []byte("icu"), 0o600))
+	t.Setenv(browserengine.EnvBrowserBin, earlyExit)
+	if _, _, err := LaunchHeadless(context.Background(), LaunchOptions{CacheDir: t.TempDir(), DisableJS: true}); err == nil {
+		t.Fatal("LaunchHeadless with early-exit binary succeeded")
+	}
+	t.Setenv(browserengine.EnvBrowserBin, "")
 
 	dir := t.TempDir()
 	browserPIDFile := filepath.Join(dir, "browser.pid")
