@@ -1,0 +1,92 @@
+"""Publish verified native generations and atomically select retained configurations."""
+
+from __future__ import annotations
+
+import argparse
+import fcntl
+import json
+import os
+from pathlib import Path
+import shutil
+import tempfile
+from urllib.parse import urlsplit
+
+from . import repository_native
+from .repository_objects import encoded, immutable, replace
+from .repository_validation import admit
+from .openpgp import selection
+from .repository_operations import OPERATIONS, transition, retained, mark_withdrawal, archive_trust
+
+
+def publish(receipt: dict, directory: Path, store: Path, base_url: str, catalog: Path,
+            expected: str | None, rehearsal=False, operation="publish") -> dict:
+    """One lock owns immutable upload, compare-and-select, and recovery on a local origin."""
+    url = urlsplit(base_url)
+    if (url.scheme != "https" or not url.netloc or url.query or url.fragment
+            or url.username is not None):
+        raise ValueError("repository origin requires an HTTPS URL without credentials or query")
+    if receipt.get("family") not in ("deb", "rpm"):
+        raise ValueError("repository transaction requires a declared package family")
+    admit(receipt, directory, catalog, rehearsal)
+    key, public = selection(catalog, rehearsal)
+    family, channel = receipt["family"], receipt["channel"]
+    store.mkdir(parents=True, exist_ok=True)
+    if store.is_symlink():
+        raise ValueError("repository origin cannot be a symlink")
+    with (store / ".publication.lock").open("a+") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        pointer = store / "channels" / family / channel / "current.json"
+        current = json.loads(pointer.read_text()) if pointer.exists() else None
+        record = transition(receipt, current, expected, operation)
+        retained(store, receipt, operation)
+        identity = record["generation"]
+        generation = store / "generations" / identity
+        manifest = generation / "generation.json"
+        # Nothing references the generation until all bytes have been copied and re-admitted.
+        for row in receipt["objects"]:
+            immutable(generation / row["path"], (directory / row["path"]).read_bytes())
+        immutable(manifest, encoded(receipt))
+        archive_trust(generation, key, public, rehearsal)
+        # Re-admission excludes the separately distributed key from the format inventory.
+        with tempfile.TemporaryDirectory(prefix="paintedwolf-publication-readback-") as temporary:
+            readback = Path(temporary)
+            for row in receipt["objects"]:
+                target = readback / row["path"]
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(generation / row["path"], target)
+            admit(receipt, readback, catalog, rehearsal)
+        config = repository_native.configuration(receipt, base_url.rstrip("/") + f"/channels/{family}/{channel}", key["fingerprint"])
+        immutable(generation / "client.conf", config.encode())
+        record = {**record, "configuration": f"generations/{identity}/client.conf"}
+        mark_withdrawal(store, record)
+        # The package manager consumes one final authority object. All objects reached by
+        # an older authority remain available after promotion or recovery.
+        repository_native.activate(receipt, generation, pointer.parent, base_url)
+        replace(pointer, encoded(record))
+        parent = os.open(pointer.parent, os.O_RDONLY)
+        try:
+            os.fsync(parent)
+        finally:
+            os.close(parent)
+        return record
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    for name in ["directory", "store", "catalog"]:
+        parser.add_argument("--" + name, type=Path, required=True)
+    parser.add_argument("--base-url", required=True)
+    parser.add_argument("--expected-generation")
+    parser.add_argument("--rehearsal", action="store_true")
+    parser.add_argument("--operation", choices=sorted(OPERATIONS), default="publish")
+    args = parser.parse_args()
+    try:
+        receipt = json.loads((args.directory / "generation.json").read_text())
+        print(json.dumps(publish(receipt, args.directory, args.store, args.base_url, args.catalog,
+                                 args.expected_generation, args.rehearsal, args.operation), indent=2))
+    except (OSError, ValueError, KeyError) as exc:
+        parser.exit(1, f"Native repository publication failed: {exc}\n")
+
+
+if __name__ == "__main__":
+    main()

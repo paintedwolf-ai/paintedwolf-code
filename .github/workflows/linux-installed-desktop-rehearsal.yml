@@ -33,7 +33,7 @@ permissions:
   contents: read
   actions: read
 concurrency:
-  group: linux-installed-desktop-rehearsal-${{ inputs.architecture }}
+  group: maintenance
   cancel-in-progress: false
 jobs:
   observe:

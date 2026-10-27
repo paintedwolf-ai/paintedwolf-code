@@ -23,9 +23,6 @@ export type ClientNoticeKind =
   | "credential_vault_custodian_unavailable"
   | "credential_vault_identity_missing"
   | "credential_vault_launcher_refused"
-  | "credential_vault_locked"
-  | "credential_vault_uninitialized"
-  | "credential_vault_unlock_failed"
   | "den_version_skew"
   | "desktop_restart_required"
   | "engine_already_running"
@@ -34,9 +31,12 @@ export type ClientNoticeKind =
   | "engine_stopped"
   | "fetch_failure"
   | "host_incompatible"
+  | "installation_unverified"
   | "model_catalog_refresh_failed"
   | "offline"
+  | "package_update_listed"
   | "project_removal_incomplete"
+  | "project_removal_running"
   | "project_removal_unconfirmed"
   | "provider_check_unfinished"
   | "readiness_recheck_failed"
@@ -51,6 +51,9 @@ export type ClientNoticeKind =
   | "store_incompatible_schema"
   | "store_incompatible_schema_no_snapshot"
   | "store_incompatible_snapshot_incompatible"
+  | "store_insufficient_space"
+  | "store_storage_full"
+  | "store_storage_unavailable"
   | "transcript_row_gone"
   | "unexpected_client_error"
   | "update_available"
@@ -75,15 +78,15 @@ export const CLIENT_NOTICES: Readonly<Record<ClientNoticeKind, ClientNoticeCopy>
     scope: "app",
   },
   credential_vault_custodian_absent: {
-    title: "Vault identity service is gone",
-    message: "The vault identity service that held the key to your saved credentials is not installed, not running, or cannot serve this computer. If an administrator can reinstall or re-enable it, do that and try again. Otherwise reset the vault: the key the service held cannot be recovered, so saved credentials are removed; projects and conversation history are not deleted.",
-    suggestedAction: "The vault identity service is still unavailable. Reinstall or re-enable it and try again, or reset the vault.",
+    title: "Vault identity service is unavailable",
+    message: "Your encrypted credentials are preserved. The vault identity service is not installed, not running, or cannot serve this computer. Reinstall or re-enable the service, then try again from the installed Painted Wolf Code desktop app.",
+    suggestedAction: "Restore the vault identity service and try again.",
     scope: "app",
   },
   credential_vault_custodian_unavailable: {
     title: "Credential custodian is unavailable",
-    message: "Your encrypted credentials are preserved. Restore the Painted Wolf Code vault identity service, then try again from the installed desktop app. An app password can open this vault only after its key has been exported to password custody.",
-    suggestedAction: "The custodian is still unavailable. Restore the service and reopen the installed app.",
+    message: "Your encrypted credentials are preserved. Restore access to this device's protected credential storage, then try again from the installed desktop app.",
+    suggestedAction: "The custodian is still unavailable. Restore access and reopen the installed app.",
     scope: "app",
   },
   credential_vault_identity_missing: {
@@ -94,26 +97,8 @@ export const CLIENT_NOTICES: Readonly<Record<ClientNoticeKind, ClientNoticeCopy>
   },
   credential_vault_launcher_refused: {
     title: "Open the installed desktop app",
-    message: "The vault identity service refused this launcher. Your encrypted credentials are preserved. Quit this copy and open the installed Painted Wolf Code desktop app. Moving to an app password requires a verified connection to the service first.",
+    message: "The vault identity service refused this launcher. Your encrypted credentials are preserved. Quit this copy and open the installed Painted Wolf Code desktop app.",
     suggestedAction: "The launcher is still refused. Open the installed desktop app and try again.",
-    scope: "app",
-  },
-  credential_vault_locked: {
-    title: "Unlock credential vault",
-    message: "Your saved credentials are encrypted. Enter the app password you created on this device to finish opening the app.",
-    suggestedAction: "The credential vault is still locked. Check the password and try again.",
-    scope: "app",
-  },
-  credential_vault_uninitialized: {
-    title: "Protect saved credentials",
-    message: "Create an app password for the encrypted credential vault. You will enter it when opening the app on this device, and it cannot be recovered.",
-    suggestedAction: "The credential vault could not be created. Check the passwords and try again.",
-    scope: "app",
-  },
-  credential_vault_unlock_failed: {
-    title: "Could not unlock credential vault",
-    message: "That app password did not open the encrypted credential vault. Check it and try again.",
-    suggestedAction: "The credential vault is still locked. Try the password again or reset the vault.",
     scope: "app",
   },
   den_version_skew: {
@@ -161,6 +146,12 @@ export const CLIENT_NOTICES: Readonly<Record<ClientNoticeKind, ClientNoticeCopy>
     suggestedAction: "The versions still do not match. Update the app or the engine first.",
     scope: "app",
   },
+  installation_unverified: {
+    title: "Installation check unfinished",
+    message: "Painted Wolf Code could not confirm which package owns this installation, so it did not start the engine. Your saved credentials are preserved.",
+    suggestedAction: "Wait for any package operation to finish, then try again.",
+    scope: "app",
+  },
   model_catalog_refresh_failed: {
     title: "Could not refresh the model list",
     message: "The models you already saved for this provider are still listed and still work.",
@@ -172,9 +163,20 @@ export const CLIENT_NOTICES: Readonly<Record<ClientNoticeKind, ClientNoticeCopy>
     suggestedAction: "That did not work. Reopening the app is the next thing to try.",
     scope: "app",
   },
+  package_update_listed: {
+    title: "Newer package listed",
+    message: "Your configured package metadata lists a newer Painted Wolf Code package. This does not confirm that its repository is currently reachable.",
+    suggestedAction: "Open Settings → General → Updates to review the package source and update command.",
+    scope: "app",
+  },
   project_removal_incomplete: {
     title: "Project removal needs review",
     message: "Review the project and extension settings to confirm the removal outcome.",
+    scope: "app",
+  },
+  project_removal_running: {
+    title: "Deleting project",
+    message: "Project deletion is running. Large histories can take several minutes. You can keep using other projects.",
     scope: "app",
   },
   project_removal_unconfirmed: {
@@ -216,7 +218,7 @@ export const CLIENT_NOTICES: Readonly<Record<ClientNoticeKind, ClientNoticeCopy>
   },
   store_incompatible_integrity: {
     title: "Your data needs attention",
-    message: "Your conversation history did not pass its integrity check. Restoring the recovery snapshot from {time} is the safe way forward.",
+    message: "Your conversation history did not pass its integrity check. A recovery snapshot from {time} is available. We will verify it before restoring your data.",
     scope: "app",
   },
   store_incompatible_integrity_no_snapshot: {
@@ -237,7 +239,7 @@ export const CLIENT_NOTICES: Readonly<Record<ClientNoticeKind, ClientNoticeCopy>
   },
   store_incompatible_schema: {
     title: "This app can't open your data",
-    message: "Your conversation history uses a different data format. A recovery snapshot from {time} is available to restore.",
+    message: "Your conversation history uses a different data format. A recovery snapshot from {time} is available. We will verify it before restoring your data.",
     scope: "app",
   },
   store_incompatible_schema_no_snapshot: {
@@ -248,6 +250,24 @@ export const CLIENT_NOTICES: Readonly<Record<ClientNoticeKind, ClientNoticeCopy>
   store_incompatible_snapshot_incompatible: {
     title: "That snapshot cannot be restored",
     message: "The recovery snapshot uses a different data format. Restore a compatible backup instead.",
+    scope: "app",
+  },
+  store_insufficient_space: {
+    title: "Not enough free space to update",
+    message: "Updating your data safely needs about {needed} free on this disk, and {available} is free. Your data has not been changed. Free up space, then try again.",
+    suggestedAction: "There is still not enough free space. Free up more space, then try again.",
+    scope: "app",
+  },
+  store_storage_full: {
+    title: "Not enough free space",
+    message: "Painted Wolf Code could not finish writing its data because storage is full. Free up space on that disk, then try again.",
+    suggestedAction: "There is still not enough free space. Free up more space, then try again.",
+    scope: "app",
+  },
+  store_storage_unavailable: {
+    title: "Your data could not be opened",
+    message: "Painted Wolf Code cannot access its stored data. Check that its storage location is available and accessible, then try again.",
+    suggestedAction: "The storage location is still unavailable. Check access to it, then try again.",
     scope: "app",
   },
   transcript_row_gone: {

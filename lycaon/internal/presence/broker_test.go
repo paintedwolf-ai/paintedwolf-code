@@ -102,6 +102,36 @@ func TestBrokerChallengeOutlivesTheNativePrompt(t *testing.T) {
 	testutil.FailErr(t, "complete after a slow prompt", err)
 }
 
+func TestBrokerValidProofExpiresAtTheChallengeDeadline(t *testing.T) {
+	for _, purpose := range []Purpose{PurposeReveal, PurposeUnlock} {
+		for _, offset := range []time.Duration{-time.Nanosecond, 0, time.Nanosecond} {
+			t.Run(string(purpose)+"/"+offset.String(), func(t *testing.T) {
+				broker, key := configuredBroker(t)
+				started := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
+				broker.SetClock(func() time.Time { return started })
+				challenge, err := broker.Begin(Claim{Purpose: purpose, PersonID: "owner", WindowLabel: "main", Key: "deadline"})
+				testutil.FailErr(t, "begin challenge", err)
+				deadline, err := time.Parse(time.RFC3339Nano, challenge.ExpiresAt)
+				testutil.FailErr(t, "parse challenge deadline", err)
+				proof := sign(key, challenge, AuthenticatorLinux)
+				broker.SetClock(func() time.Time { return deadline.Add(offset) })
+				verified, err := broker.Complete(proof, purpose, "owner")
+				if offset < 0 {
+					testutil.FailErr(t, "complete just before deadline", err)
+					if verified.ChallengeID != challenge.ID {
+						t.Fatal("valid proof lost its challenge binding")
+					}
+				} else if !errors.Is(err, ErrChallengeNotFound) || verified.ChallengeID != "" {
+					t.Fatalf("expired valid proof produced authority: %v", err)
+				}
+				if _, err := broker.Complete(proof, purpose, "owner"); !errors.Is(err, ErrChallengeNotFound) {
+					t.Fatalf("reused deadline proof error = %v", err)
+				}
+			})
+		}
+	}
+}
+
 func TestBrokerPoolNeverDisplacesAnIssuedChallenge(t *testing.T) {
 	broker, privateKey := configuredBroker(t)
 	pending, err := broker.Begin(Claim{Purpose: PurposeReveal, PersonID: "owner", WindowLabel: "den-main", Key: "secret"})
@@ -129,6 +159,59 @@ func TestTrustedKeyNeedsAVerifiedLauncherOnlyForAnUnattendedVault(t *testing.T) 
 		t.Fatalf("verified launcher refused: %q %v", key, err)
 	}
 	if key, err := TrustedKey("key", false, refused); key != "key" || err != nil {
-		t.Fatalf("password vault consulted the launcher: %q %v", key, err)
+		t.Fatalf("isolated development vault consulted the launcher: %q %v", key, err)
+	}
+}
+
+func TestBrokerRefusesAppPasswordEvenWithATrustedSignature(t *testing.T) {
+	broker, privateKey := configuredBroker(t)
+	challenge, err := broker.Begin(Claim{Purpose: PurposeReveal, PersonID: "owner", WindowLabel: "main", Key: "secret"})
+	testutil.FailErr(t, "begin reveal", err)
+	if _, err := broker.Complete(sign(privateKey, challenge, "linux_app_password"), PurposeReveal, "owner"); !errors.Is(err, ErrDenied) {
+		t.Fatalf("app password authorized disclosure: %v", err)
+	}
+	_, err = broker.Complete(sign(privateKey, challenge, AuthenticatorLinux), PurposeReveal, "owner")
+	testutil.FailErr(t, "complete with native system authentication", err)
+}
+
+func TestNativeProofBindsAuthenticatorForRevealAndUnlock(t *testing.T) {
+	authenticators := []string{"macos_user_presence", "linux_user_presence", "windows_user_presence"}
+	for _, purpose := range []Purpose{PurposeReveal, PurposeUnlock} {
+		for _, signedAs := range authenticators {
+			t.Run(string(purpose)+"/"+signedAs, func(t *testing.T) {
+				broker, key := configuredBroker(t)
+				begin := func() Challenge {
+					challenge, err := broker.Begin(Claim{Purpose: purpose, PersonID: "owner", WindowLabel: "main", Key: "native-binding"})
+					testutil.FailErr(t, "begin native challenge", err)
+					return challenge
+				}
+				proof := func(challenge Challenge) Proof {
+					// Pin the native signing contract independently of SigningMessage.
+					message := "painted-wolf-presence-v1\n" + challenge.ProofPayload + "\nauthenticator=" + signedAs
+					signature := ed25519.Sign(key, []byte(message))
+					return Proof{ChallengeID: challenge.ID, Authenticator: signedAs, Signature: base64.RawURLEncoding.EncodeToString(signature)}
+				}
+				for _, claimedAs := range authenticators {
+					if claimedAs == signedAs {
+						continue
+					}
+					challenge := begin()
+					changed := proof(challenge)
+					changed.Authenticator = claimedAs
+					if _, err := broker.Complete(changed, purpose, "owner"); !errors.Is(err, ErrDenied) {
+						t.Fatalf("authenticator relabeling %s to %s: %v", signedAs, claimedAs, err)
+					}
+					if _, err := broker.Complete(proof(challenge), purpose, "owner"); !errors.Is(err, ErrChallengeNotFound) {
+						t.Fatalf("failed native attempt did not consume its challenge: %v", err)
+					}
+				}
+				fresh := begin()
+				verified, err := broker.Complete(proof(fresh), purpose, "owner")
+				testutil.FailErr(t, "complete fresh native proof after refusal", err)
+				if verified.Authenticator != signedAs || verified.Purpose != purpose || verified.ChallengeID != fresh.ID {
+					t.Fatal("fresh native proof lost its authenticator, purpose or challenge binding")
+				}
+			})
+		}
 	}
 }
