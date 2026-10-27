@@ -11,9 +11,6 @@ let
         nix.settings.experimental-features = [ "nix-command" "flakes" ];
         networking.hostName = "paintedwolf-${desktop}-qualification";
         services.painted-wolf-code.enable = true;
-        services.painted-wolf-code.extraRuntimePackages =
-          lib.optionals config.hardware.graphics.enable
-            ([ config.hardware.graphics.package ] ++ config.hardware.graphics.extraPackages);
         users.users.root.initialHashedPassword = "!";
         users.users.qualifier = {
           isNormalUser = true;

@@ -48,7 +48,7 @@ func TestPollerClaimsCommittedEnqueueWithoutWaitingForMaintenance(t *testing.T) 
 		ProjectID: testdbseed.DefaultProjectID, ExecutionTarget: api.ExecutionTargetLocal,
 	})
 	testutil.FailErr(t, "enqueue signaled worker", err)
-	testutil.WaitFor(t, time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		task, ok := queue.Get(id)
 		return ok && task.Status == api.WorkerStatusComplete
 	})
@@ -80,13 +80,13 @@ func TestPollerDrainsPendingWorkWhenCapacityReturns(t *testing.T) {
 	go func() { done <- poller.Run(ctx) }()
 	select {
 	case <-executor.starts:
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("first worker did not start")
 	}
 	executor.release <- struct{}{}
 	select {
 	case <-executor.starts:
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("second worker waited for maintenance after capacity returned")
 	}
 	executor.release <- struct{}{}
@@ -216,7 +216,7 @@ func TestPollerRecoversExecutorPanic(t *testing.T) {
 	defer cancel()
 	go poller.Run(pollCtx)
 
-	testutil.WaitFor(t, time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		got, ok := queue.Get(id)
 		return ok && got.Status == api.WorkerStatusFailed
 	})
@@ -319,7 +319,7 @@ func TestPollerDeliversTerminalOutcomeBeforeParentBecomesIdle(t *testing.T) {
 	}()
 	select {
 	case <-recorder.started:
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("terminal outcome delivery did not start")
 	}
 
@@ -329,16 +329,25 @@ func TestPollerDeliversTerminalOutcomeBeforeParentBecomesIdle(t *testing.T) {
 	go func() {
 		waitDone <- AwaitParentSessionWorkers(waitCtx, queue, waiter, testdbseed.DefaultProjectID, parent, settings.DefaultSessionLimits())
 	}()
+	for t.Context().Err() == nil {
+		waiter.mu.Lock()
+		n := len(waiter.waiters[parent])
+		waiter.mu.Unlock()
+		if n == 1 {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
 	select {
 	case err := <-waitDone:
 		t.Fatalf("parent became idle before terminal projection: %v", err)
-	case <-time.After(50 * time.Millisecond):
+	default:
 	}
 	close(recorder.release)
 	select {
 	case err := <-waitDone:
 		testutil.FailErr(t, "await delivered outcome", err)
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("parent did not resume after terminal outcome acknowledgement")
 	}
 	<-executeDone
@@ -410,7 +419,7 @@ func TestPollerKeepsRunningUntilDeferredOutcomeSucceeds(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() { done <- poller.Run(ctx) }()
-	testutil.WaitFor(t, time.Second, func() bool { return recorder.attempts.Load() >= 2 })
+	testutil.WaitFor(t, func() bool { return recorder.attempts.Load() >= 2 })
 	pending, err := queue.ListPendingOutcomes(t.Context())
 	testutil.FailErr(t, "list acknowledged outcomes", err)
 	if len(pending) != 0 {
@@ -422,7 +431,7 @@ func TestPollerKeepsRunningUntilDeferredOutcomeSucceeds(t *testing.T) {
 		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("poller stopped with %v", err)
 		}
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("poller did not stop")
 	}
 }
@@ -467,7 +476,7 @@ func TestPollerTransitionsToRetryWhenCompletionCommitFailsWithAttemptsRemaining(
 	done := make(chan error, 1)
 	go func() { done <- poller.Run(ctx) }()
 
-	testutil.WaitFor(t, 10*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		task, ok := queue.Get(id)
 		return ok && task.Attempt >= 2
 	})
@@ -495,7 +504,7 @@ func TestPollerTransitionsToFailureWhenCompletionCommitFailsExhausted(t *testing
 	done := make(chan error, 1)
 	go func() { done <- poller.Run(ctx) }()
 
-	testutil.WaitFor(t, 10*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		task, ok := queue.Get(id)
 		return ok && task.Status == api.WorkerStatusFailed
 	})

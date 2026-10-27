@@ -4,7 +4,6 @@ import (
 	"context"
 	"runtime"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/exec"
@@ -21,7 +20,7 @@ func TestOnExitFiresAfterProcessExits(t *testing.T) {
 	req := hostcmd.Request{
 		Launch:     exec.HostLaunch("on-exit test"),
 		ProjectDir: t.TempDir(),
-		Stages:     []exec.Stage{{Name: "sh", Args: []string{"-c", "sleep 0.2"}}},
+		Stages:     []exec.Stage{{Name: "sleep", Args: []string{"30"}}},
 	}
 	handle, err := startBackground(context.Background(), reg, "sess-1", "proj-1", req, runner)
 	if err != nil {
@@ -31,14 +30,24 @@ func TestOnExitFiresAfterProcessExits(t *testing.T) {
 	released := make(chan struct{})
 	reg.Lifecycle.OnExit("sess-1", handle, func() { close(released) })
 
-	select {
-	case <-released:
-		t.Fatal("released before the process exited")
-	case <-time.After(50 * time.Millisecond):
+	out, err := reg.Output.ReadOutput(t.Context(), "sess-1", handle)
+	if err != nil {
+		t.Fatalf("ReadOutput: %v", err)
+	}
+	if !out.Running {
+		t.Fatal("expected process to still be running")
 	}
 	select {
 	case <-released:
-	case <-time.After(10 * time.Second):
+		t.Fatal("released before the process exited")
+	default:
+	}
+	if _, err := reg.Lifecycle.Stop("sess-1", handle); err != nil {
+		t.Fatalf("Stop: %v", err)
+	}
+	select {
+	case <-released:
+	case <-t.Context().Done():
 		t.Fatal("never released after the process exited")
 	}
 }
@@ -50,7 +59,7 @@ func TestOnExitFiresImmediatelyForUnknownHandle(t *testing.T) {
 	reg.Lifecycle.OnExit("sess-1", "no-such-handle", func() { close(released) })
 	select {
 	case <-released:
-	case <-time.After(2 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("unknown handle must release immediately")
 	}
 }
