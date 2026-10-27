@@ -81,6 +81,12 @@ func TestServiceCustodyOpensTheVaultUnattended(t *testing.T) {
 	if c.mode != custodyService || c.launcherPID != 42 {
 		t.Fatalf("custody = %+v", c)
 	}
+	report, err := c.report("/cfg/credential-vault.age")
+	testutil.FailErr(t, "report service custody", err)
+	if report.Mode != CustodyIdentityService || !report.ServiceVerified {
+		t.Fatalf("service custody report = %+v", report)
+	}
+	testutil.FailErr(t, "verify service identity protection", c.verifyIdentityProtection())
 	p := c.provider("/cfg/credential-vault.age").(*itemsIdentityProvider)
 	created, err := p.LoadOrCreate(false)
 	testutil.FailErr(t, "create identity", err)
@@ -134,6 +140,9 @@ func TestAbsentOrUnavailableServiceCannotSelectAppPassword(t *testing.T) {
 	if absent.mode != custodyUnavailable || absent.launcherPID != 0 {
 		t.Fatalf("absent service custody = %+v", absent)
 	}
+	if err := absent.verifyIdentityProtection(); !errors.Is(err, ErrCustodianUnavailable) {
+		t.Fatalf("absent service protection verification: %v", err)
+	}
 	if _, err := absent.provider("/cfg/credential-vault.age").LoadOrCreate(false); !errors.Is(err, ErrCustodianAbsent) {
 		t.Fatalf("absent service must refuse password setup: %v", err)
 	}
@@ -148,6 +157,9 @@ func TestRefusedEngineCannotOpenTheVaultOnAnyPath(t *testing.T) {
 	c := probeCustody(client)
 	if c.mode != custodyRefused || c.launcherPID != 0 {
 		t.Fatalf("custody = %+v", c)
+	}
+	if err := c.verifyIdentityProtection(); !errors.Is(err, ErrLauncherRefused) {
+		t.Fatalf("refused protection verification: %v", err)
 	}
 	p := c.provider("/cfg/credential-vault.age")
 	if _, err := p.LoadOrCreate(false); !errors.Is(err, ErrLauncherRefused) || vaultidentity.StatusOf(errors.Unwrap(err)) == vaultidentity.StatusOK {

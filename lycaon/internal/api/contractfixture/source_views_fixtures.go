@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	hostapi "github.com/lycaon/lycaon/internal/api"
@@ -44,7 +43,7 @@ func ComparisonViewForTest(t *testing.T, server *hostapi.Server, projectID strin
 		response := httptest.NewRecorder()
 		server.ServeHTTP(response, NewAuthedRequest(http.MethodDelete, sourceapi.SourceViewURL(projectID, id), nil))
 	})
-	testutil.WaitFor(t, 10*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		response := httptest.NewRecorder()
 		server.ServeHTTP(response, NewAuthedRequest(http.MethodGet, sourceapi.SourceViewURL(projectID, id), nil))
 		state = ReadSourceViewResponse(t, response, http.StatusOK)

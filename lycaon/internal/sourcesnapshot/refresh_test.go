@@ -93,7 +93,7 @@ func TestPublicationPreservesResyncReceivedAfterItsPlan(t *testing.T) {
 	tracker.observe(context.Background(), repochange.Event{
 		ProjectDir: root, Kind: repochange.WorktreeChanged, Paths: []string{"../outside"},
 	})
-	tracker.coveredBy(root, "snapshot", "scope", planSequence, true)
+	tracker.coveredBy(root, "snapshot", nil, "scope", planSequence, true)
 	if !tracker.moved(root, deltaPlan{upTo: planSequence}) {
 		t.Fatal("publication erased a later resync")
 	}

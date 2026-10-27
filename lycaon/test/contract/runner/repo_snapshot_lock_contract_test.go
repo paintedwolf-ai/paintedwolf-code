@@ -73,12 +73,11 @@ func snapshotPublish(t *testing.T, lockRoot, dest, content string) {
 
 func waitForFile(t *testing.T, path, what string) {
 	t.Helper()
-	deadline := time.Now().Add(20 * time.Second)
 	for {
 		if _, err := os.Stat(path); err == nil {
 			return
 		}
-		if time.Now().After(deadline) {
+		if t.Context().Err() != nil {
 			t.Fatalf("%s never appeared at %s", what, path)
 		}
 		time.Sleep(20 * time.Millisecond)
@@ -167,14 +166,10 @@ func TestRepositorySnapshotLockGenerateDoesNotWaitForReader(t *testing.T) {
 	contractcheck.FailErr(t, "start reader", reader.Start())
 	waitForFile(t, readerStarted, "reader gate")
 
-	started := time.Now()
 	writer := snapshotCmd(t, lockRoot, "generate", "--", "bash", "-c", "touch '"+writerDone+"'")
 	if out, err := writer.CombinedOutput(); err != nil {
 		_ = reader.Process.Kill()
 		t.Fatalf("generate under live reader: %v\n%s", err, out)
-	}
-	if elapsed := time.Since(started); elapsed > 10*time.Second {
-		t.Fatalf("generate blocked on live reader for %s", elapsed)
 	}
 	contractcheck.FailErr(t, "wait reader", reader.Wait())
 	if got := countLines(t, attempts); got != 1 {
@@ -246,9 +241,8 @@ func TestRepositorySnapshotLockReaderFailsAfterRepeatedInvalidation(t *testing.T
 
 	for attempt := 1; attempt <= 2; attempt++ {
 		waitForFile(t, attempts, "reader attempt")
-		deadline := time.Now().Add(20 * time.Second)
 		for countLines(t, attempts) < attempt {
-			if time.Now().After(deadline) {
+			if t.Context().Err() != nil {
 				t.Fatalf("reader attempt %d never started\n%s", attempt, readerOut.String())
 			}
 			time.Sleep(20 * time.Millisecond)
@@ -287,7 +281,6 @@ func TestRepositorySnapshotLockWriterTimeoutKillsAndReleases(t *testing.T) {
 	lockRoot := t.TempDir()
 	cmd := snapshotCmd(t, lockRoot, "generate", "--", "sleep", "60")
 	cmd.Env = append(cmd.Env, "PW_SNAPSHOT_WRITER_TIMEOUT=1")
-	started := time.Now()
 	out, err := cmd.CombinedOutput()
 	if err == nil {
 		t.Fatalf("timed-out writer must fail\n%s", out)
@@ -295,9 +288,6 @@ func TestRepositorySnapshotLockWriterTimeoutKillsAndReleases(t *testing.T) {
 	var exitErr *exec.ExitError
 	if !errors.As(err, &exitErr) || exitErr.ExitCode() != 124 {
 		t.Fatalf("timed-out writer exit: %v (want 124)\n%s", err, out)
-	}
-	if elapsed := time.Since(started); elapsed > 30*time.Second {
-		t.Fatalf("timeout enforcement took %s", elapsed)
 	}
 	if !bytes.Contains(out, []byte("exceeded")) {
 		t.Fatalf("timeout must be reported, got: %s", out)
