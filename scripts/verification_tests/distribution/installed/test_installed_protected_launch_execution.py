@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from linux_release import installed_execution
+from linux_release.campaign import execution as installed_execution
 from linux_release.installed_cases import descendant_cleanup, process_tree, protected_launch, security
 
 INITIAL = {'user': [4, 1], 'mnt': [4, 2], 'pid': [4, 3], 'net': [4, 4]}
