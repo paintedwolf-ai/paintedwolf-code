@@ -2,7 +2,7 @@
 from pathlib import Path
 
 from .records import CaseUnavailable
-from ..installed_runtime import SETUID_LAUNCHER, elf
+from ..campaign.runtime import SETUID_LAUNCHER, elf
 
 
 def protected_launcher(binding):
