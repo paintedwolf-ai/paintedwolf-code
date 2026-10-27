@@ -97,7 +97,7 @@ class PresencePrerequisiteTests(unittest.TestCase):
 
     def test_normal_project_open_refusal_is_unverified_and_preserves_fresh_state(self):
         self.values['run'].return_value = {'exit_code': 1, 'timed_out': False, 'output_limit': False}
-        with self.assertRaises(CaseUnavailable) as refused:
+        with self.assertRaisesRegex(CaseUnavailable, 'refused the owned presence project') as refused:
             presence.unchallenged_presence({})
         self.values['await_session'].assert_not_called()
         self.values['prepare_secret'].assert_not_called()

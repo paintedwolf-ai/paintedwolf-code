@@ -78,7 +78,8 @@ def unchallenged_presence(binding):
         observations['failure_type'] = type(error).__name__
         observations['failure_detail'] = str(error)[:512]
         observations.setdefault('reason', str(error))
-        failure = CaseUnavailable('normal-presence-prerequisite-unverified') if isinstance(error, CaseUnavailable) else CaseFailed('normal-presence-prerequisite-failed')
+        # Typed case outcomes keep their own name; only foreign errors become a prerequisite failure.
+        failure = error if isinstance(error, (CaseFailed, CaseUnavailable)) else CaseFailed('normal-presence-prerequisite-failed')
         failure.observations = observations
         # The finally block adds partial launch, policy, and storage facts before propagation.
         failure.streams = streams
