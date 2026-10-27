@@ -5,6 +5,8 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"errors"
+	_ "modernc.org/sqlite"
 	"strings"
 	"testing"
 
@@ -73,5 +75,82 @@ func TestPlanBudgetsEverySkippedMigrationWithoutOverflow(t *testing.T) {
 	steps[1].ScratchBytes = ^uint64(0)
 	if _, err := New(third, []Baseline{first, second}, steps); err == nil {
 		t.Fatal("overflowed working-space budget accepted")
+	}
+}
+
+// A step that bounds its writes counts that bound; one that does not counts
+// the whole store.
+func TestPlanWriteBytesCountsUndeclaredStepsAsTheWholeStore(t *testing.T) {
+	first := Baseline{Revision: 1, Shape: strings.Repeat("a", 64)}
+	second := Baseline{Revision: 2, Shape: strings.Repeat("b", 64)}
+	third := Baseline{Revision: 3, Shape: strings.Repeat("c", 64)}
+	apply := func(context.Context, *sql.Tx) error { return nil }
+	source := []byte("SELECT 1")
+	sum := sha256.Sum256(source)
+	bounded := func(context.Context, DBTX, uint64) (uint64, error) { return 4096, nil }
+	steps := []Step{
+		{ID: "undeclared", Checksum: hex.EncodeToString(sum[:]), Source: source, From: first, To: second, Apply: apply},
+		{ID: "bounded", Checksum: hex.EncodeToString(sum[:]), Source: source, From: second, To: third, Apply: apply, Writes: bounded},
+	}
+	registry, err := New(third, []Baseline{first, second}, steps)
+	testutil.FailErr(t, "register route", err)
+	plan, err := registry.Plan(first)
+	testutil.FailErr(t, "plan route", err)
+	writes, err := plan.WriteBytes(t.Context(), nil, 1<<20)
+	testutil.FailErr(t, "estimate writes", err)
+	if writes != 1<<20+4096 {
+		t.Fatalf("writes = %d, want the whole store plus the declared bound", writes)
+	}
+	plan, err = registry.Plan(second)
+	testutil.FailErr(t, "plan bounded step", err)
+	if writes, err = plan.WriteBytes(t.Context(), nil, 1<<30); err != nil || writes != 4096 {
+		t.Fatalf("bounded writes = %d, %v", writes, err)
+	}
+}
+
+func TestExecuteChecksIntegrityBeforeCommit(t *testing.T) {
+	database, err := sql.Open("sqlite", ":memory:")
+	testutil.FailErr(t, "open migration fixture", err)
+	defer func() { _ = database.Close() }()
+	database.SetMaxOpenConns(1)
+	_, err = database.Exec(`CREATE TABLE history(body TEXT CHECK(body != 'invalid'));
+ INSERT INTO history VALUES('retained');
+ CREATE TABLE schema_migrations(id TEXT, checksum TEXT, from_revision INTEGER, to_revision INTEGER, applied_at TEXT);
+ PRAGMA user_version=1`)
+	testutil.FailErr(t, "seed migration fixture", err)
+	first := Baseline{Revision: 1, Shape: strings.Repeat("a", 64)}
+	second := Baseline{Revision: 2, Shape: strings.Repeat("b", 64)}
+	source := []byte("insert a constraint violation")
+	sum := sha256.Sum256(source)
+	step := Step{ID: "invalid-data", Source: source, Checksum: hex.EncodeToString(sum[:]), From: first, To: second,
+		Apply: func(ctx context.Context, tx *sql.Tx) error {
+			_, err := tx.ExecContext(ctx, `PRAGMA ignore_check_constraints=ON; INSERT INTO history VALUES('invalid'); PRAGMA ignore_check_constraints=OFF`)
+			return err
+		}}
+	registry, err := New(second, []Baseline{first}, []Step{step})
+	testutil.FailErr(t, "register migration fixture", err)
+	plan, err := registry.Plan(first)
+	testutil.FailErr(t, "plan migration fixture", err)
+	inspect := func(ctx context.Context, db DBTX) (Baseline, error) {
+		var version int
+		err := db.QueryRowContext(ctx, `PRAGMA user_version`).Scan(&version)
+		if version == 1 {
+			return first, err
+		}
+		return second, err
+	}
+	if err := registry.Execute(t.Context(), database, plan, inspect, nil); !errors.Is(err, ErrIntegrity) {
+		t.Fatalf("migration error = %v, want integrity refusal", err)
+	}
+	var count, version, ledger int
+	testutil.FailErr(t, "read retained rows", database.QueryRow(`SELECT count(*) FROM history WHERE body='retained'`).Scan(&count))
+	testutil.FailErr(t, "read rollback revision", database.QueryRow(`PRAGMA user_version`).Scan(&version))
+	testutil.FailErr(t, "read rollback ledger", database.QueryRow(`SELECT count(*) FROM schema_migrations`).Scan(&ledger))
+	if count != 1 || version != 1 || ledger != 0 {
+		t.Fatalf("rollback: retained=%d revision=%d ledger=%d", count, version, ledger)
+	}
+	testutil.FailErr(t, "read rolled-back insert", database.QueryRow(`SELECT count(*) FROM history WHERE body='invalid'`).Scan(&count))
+	if count != 0 {
+		t.Fatal("invalid migration data escaped rollback")
 	}
 }

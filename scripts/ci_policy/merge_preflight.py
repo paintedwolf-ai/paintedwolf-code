@@ -29,4 +29,5 @@ def commands(lane, targets, selected=None):
     remaining = [target for target in targets if target not in early]
     if lane.get("contract_first"):
         return [["./task", "test:full", "--", *part] for part in package_phases(selected)]
-    return [["./task", *part] for part in (early, remaining) if part]
+    arguments = ["--", *lane["arguments"]] if "arguments" in lane else []
+    return [["./task", *part, *arguments] for part in (early, remaining) if part]

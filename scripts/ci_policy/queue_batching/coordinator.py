@@ -65,6 +65,9 @@ def reconcile(repository, pull, record):
     except ValueError:
         dissolve(repository, pull, record)
         return False
+    if any(row.get('mergeQueueEntry') is not None for row in current):
+        dissolve(repository, pull, record)
+        return False
     held = any(github.blocked(api(f'repos/{repository}/pulls/{row["number"]}')) for row in record['sources'])
     if pull['head']['sha'] != record['batch_head'] or held or github.blocked(pull) or any(not unchanged(now, row) for now, row in zip(current, record['sources'])):
         dissolve(repository, pull, record, 'no_combine' if held or github.blocked(pull) else 'source_changed')
@@ -79,7 +82,7 @@ def reconcile(repository, pull, record):
         # source identities in another batch or suppressing required checks.
         dissolve(repository, pull, record)
         return False
-    if verdict == 'passed' and not pull.get('auto_merge'):
+    if verdict == 'passed' and not pull.get('auto_merge') and source(repository, pull['number']).get('mergeQueueEntry') is None:
         github.mutation('enablePullRequestAutoMerge', {'pullRequestId': pull['node_id'], 'mergeMethod': 'SQUASH'})
     return True
 
@@ -136,6 +139,8 @@ def build(repository, rows, entries):
 
 
 def run(repository, policy):
+    from ci_policy.queue_dispatch import recover
+    recover(repository)
     policy = {**policy, 'preserve_front': max(policy['preserve_front'], github.build_window(repository))}
     github.enforce_holds(repository)
     history = []

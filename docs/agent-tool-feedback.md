@@ -51,11 +51,18 @@ Successful native content, symbol, and range reads retain their structured resul
 for history and evidence. The shared transcript projection sends each source
 block as unescaped text, labeled as file contents with its path, line range,
 and evidence handle beside that block. The read receipt remains in explicitly
-labeled tool result metadata. Indentation and blank lines remain source bytes; display line labels
-are not part of an edit string. Evidence handles and source coordinates remain
-available for citations. `summarize` source windows follow the same
-presentation: each window's text follows the result metadata in window order,
-and its path, line range, and handle also identify the corresponding source block.
+labeled tool result metadata. Indentation and blank lines remain source bytes.
+
+Source lines carry no line labels, so any span copies directly into `edit`
+arguments. Line identity comes from the block label: the first source line is
+the range's start and each following line is the next number. A read whose
+`offset` is a known line number (from a stack trace, rejection, grep hit, or
+outline) returns a block that starts at that line, which gives `replace_lines`
+and citations exact coordinates without counting. `summarize` source windows
+follow the same presentation: each window's text follows the result metadata in
+window order, and its path, line range, and handle also identify the
+corresponding source block. `source_history` version reads do too, and their
+label also names the version.
 
 Projection accepts only complete host-written source blocks with consistent line
 coordinates. Unsupported or incomplete results keep their original presentation.
@@ -329,7 +336,13 @@ Matched results explain how to recover their public records when no body is pres
 checklist write result, not gate admission. An identical write adds no revision
 or progress event and does not reset tool-repetition tracking. Rewording an
 all-terminal checklist retains the same repetition identity until intervening
-work changes the state. Pending rows permit implementation. A successful worker
+work changes the state. Pending rows permit implementation. Each user request
+starts its own checklist; a completed checklist from an earlier request remains in
+the transcript as `progress_complete` and does not cover the follow-up request.
+When the stored document has no checklist rows for the current request,
+`update_progress` requires at least one open `- [ ]` deliverable row before
+progress-gated tools may run. If no work remains for the follow-up turn, the
+coordinator continues without establishing a checklist. A successful worker
 finish can latch reconciliation before further dispatch or editing; an unchanged
 checklist does not clear that latch. Closeout recovery keeps unfinished rows
 pending and directs the coordinator to continue with tools. Completed work is

@@ -158,6 +158,8 @@ func TestCloseoutToolRecoveryRetiresBeforeEveryOutcome(t *testing.T) {
 	}
 }
 
+// Citation and report-document repairs offer resuming work exactly when the
+// repair turn can call the closed turn's tools.
 func TestCloseoutRecoveryCopyUsesCallableTools(t *testing.T) {
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
 	reg, err := anchor.LoadRegistryFromConfigRoot()
@@ -165,43 +167,51 @@ func TestCloseoutRecoveryCopyUsesCallableTools(t *testing.T) {
 	release := anchor.SetAnchorsFor(func(context.Context, string) *anchor.Registry { return reg })
 	defer release()
 
-	for _, tc := range []struct {
-		name                  string
-		offered               []string
-		prose, document, want bool
+	for _, repair := range []struct {
+		code, contract string
 	}{
-		{name: "callable", offered: []string{"read"}, want: true},
-		{name: "unstamped"}, {name: "empty", offered: []string{}},
-		{name: "prose only", offered: []string{"read"}, prose: true},
-		{name: "document repair", offered: []string{"read"}, document: true},
+		{code: guidance.InvestHandleNotObservedCode, contract: "emit only the citations fence"},
+		{code: guidance.ReportFenceUnreadableCode, contract: "emit only the report fence"},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
-			engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
-			var rendered string
-			loop := NewPromptLoopForTest(PromptLoopDeps{Projection: ProjectionDeps{AppendMessages: func(context.Context, string, ...api.Message) error { return nil }}, Closeout: CloseoutDeps{
-				HintConfig: loadCoordinatorTestHintConfig(t),
-				CloseoutStallState: func(context.Context, string) guidance.RetainedCloseout {
-					if tc.document {
-						return guidance.RetainedCloseout{Active: true, ForcedBy: []string{guidance.ReportDocumentInvalidCode}}
-					}
-					return guidance.RetainedCloseout{}
-				},
-				RenderHostKick: func(ctx context.Context, id string, data map[string]any) (string, error) {
-					var err error
-					rendered, err = engine.RenderKick(ctx, id, data)
-					return rendered, err
-				},
-			}})
-			st := &promptLoopTurnState{proseFinish: tc.prose, offeredToolNames: tc.offered}
-			_, err := loop.Closeout.rejectCloseoutGrounding(t.Context(), "session", st, nil, "", &oar.Decision{Code: guidance.InvestHandleNotObservedCode, Copy: map[string]string{"what": "Citation is unobserved"}}, "Pinned report", nil)
-			testutil.FailErr(t, "render closeout rejection", err)
-			if got := strings.Contains(rendered, "use an offered tool"); got != tc.want {
-				t.Fatalf("offered guidance = %v, want %v: %s", got, tc.want, rendered)
-			}
-			if !strings.Contains(rendered, "Pinned body:") || !strings.Contains(rendered, "emit only the citations fence") {
-				t.Fatalf("metadata repair contract missing: %s", rendered)
-			}
-		})
+		for _, tc := range []struct {
+			name          string
+			offered       []string
+			prose, want   bool
+			priorDocument bool
+		}{
+			{name: "callable", offered: []string{"read", "request_tools"}, want: true},
+			{name: "unstamped"}, {name: "empty", offered: []string{}},
+			{name: "prose only", offered: []string{"read"}, prose: true},
+			{name: "after a document repair", offered: []string{"read"}, priorDocument: true, want: true},
+		} {
+			t.Run(repair.code+"/"+tc.name, func(t *testing.T) {
+				engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
+				var rendered string
+				loop := NewPromptLoopForTest(PromptLoopDeps{Projection: ProjectionDeps{AppendMessages: func(context.Context, string, ...api.Message) error { return nil }}, Closeout: CloseoutDeps{
+					HintConfig: loadCoordinatorTestHintConfig(t),
+					CloseoutStallState: func(context.Context, string) guidance.RetainedCloseout {
+						if tc.priorDocument {
+							return guidance.RetainedCloseout{Active: true, ForcedBy: []string{guidance.ReportDocumentInvalidCode}}
+						}
+						return guidance.RetainedCloseout{}
+					},
+					RenderHostKick: func(ctx context.Context, id string, data map[string]any) (string, error) {
+						var err error
+						rendered, err = engine.RenderKick(ctx, id, data)
+						return rendered, err
+					},
+				}})
+				st := &promptLoopTurnState{proseFinish: tc.prose, offeredToolNames: tc.offered}
+				_, err := loop.Closeout.rejectCloseoutGrounding(t.Context(), "session", st, nil, "", &oar.Decision{Code: repair.code, Copy: map[string]string{"what": "Closeout refused"}}, "Pinned report", nil)
+				testutil.FailErr(t, "render closeout rejection", err)
+				if got := strings.Contains(rendered, "use an offered tool"); got != tc.want {
+					t.Fatalf("offered guidance = %v, want %v: %s", got, tc.want, rendered)
+				}
+				if !strings.Contains(rendered, repair.contract) {
+					t.Fatalf("repair contract %q missing: %s", repair.contract, rendered)
+				}
+			})
+		}
 	}
 }
 
