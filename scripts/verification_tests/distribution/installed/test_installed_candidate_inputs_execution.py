@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
-from linux_release import installed_candidate_inputs as owner
+from linux_release.campaign import candidate_inputs as owner
 
 
 class CandidateInstalledInputsTests(unittest.TestCase):
