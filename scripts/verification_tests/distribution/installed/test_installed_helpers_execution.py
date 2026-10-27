@@ -10,7 +10,12 @@ import zipfile
 from scripts.linux_release.installed_cases.app_api import EngineAPI
 from scripts.linux_release.installed_campaign import command, verify_execution_receipt
 from scripts.linux_release.installed_cases.desktop import execute
-from scripts.linux_release.installed_cases.records import retain
+from scripts.linux_release.installed_cases.records import (
+    MAX_OBSERVATION_BYTES,
+    compact_physical_input,
+    expand_physical_transactions,
+    retain,
+)
 from scripts.linux_release.installed_execution import case_family, driver_family, execute_case
 from scripts.linux_release.installed_transfer import export, receive
 
@@ -120,3 +125,67 @@ class InstalledHelperTests(unittest.TestCase):
                 (root / "leaf/execution.json").write_text(json.dumps({**request, name: value}))
                 with self.assertRaises(ValueError):
                     verify_execution_receipt(root, target, "b" * 40, "c" * 40)
+
+    def test_retain_compacts_physical_input_into_linked_stream_without_mutating_caller(self):
+        binding = {"source_commit": "a" * 40, "artifact": {"installation": "deb"}}
+        lineage = [{"pid": 100 + index, "parent_pid": 99 + index, "start_time_ticks": 1000 + index,
+                    "comm": "painted-wolf", "cmdline": ["/opt/painted-wolf-code/painted-wolf-code"]}
+                   for index in range(6)]
+        focus = {"launch": lineage[0], "entry": lineage[-1], "frame": lineage[1],
+                 "frame_lineage": lineage, "entry_lineage": lineage,
+                 "accessible_chain": [{"bus_name": ":1.42", "path": f"/org/a11y/atspi/accessible/{index}",
+                                       "pid": 105, "role": "panel"} for index in range(8)],
+                 "entry_focused": True, "frame_active": True, "frame_visible": True}
+
+        def make_tx(tx_id: str, operation: str, count: int, completed: bool = True) -> dict:
+            events = [{"request": {"format_version": 1, "transaction_id": tx_id, "operation": operation,
+                                   "ordinal": ordinal, "focus": focus},
+                       "delivery": {"format_version": 1, "transaction_id": tx_id, "operation": operation,
+                                    "ordinal": ordinal, "qmp_ack": {"return": {}}},
+                       "focus_after": focus}
+                      for ordinal in range(count)]
+            return {"format_version": 1, "vm_id": "owned", "transaction_id": tx_id,
+                    "operation": operation, "completed": completed, "events": events, "text_readback": False}
+
+        tx1 = make_tx("1" * 32, "provider-name-v1", 35)
+        tx2 = make_tx("2" * 32, "provider-endpoint-v1-41234", 27)
+        tx3 = make_tx("3" * 32, "provider-fixture-credential-v1", 19)
+        tx4 = make_tx("4" * 32, "reply-fixture-prompt-v1", 55, completed=False)
+        tx5 = make_tx("5" * 32, "session-lock-v1", 2)
+        tx6 = make_tx("6" * 32, "editor-replace-save-v1", 10)
+        fixed_input = [tx1, tx2, tx3, tx4]
+        observations = {
+            "launch": {"fixed_input": fixed_input, "session": {"User": "30005"}},
+            "native_input": tx4,
+            "transitions": [tx5],
+            "lock_transition": tx5,
+            "editor_keyboard": {"physical_vm_keyboard": tx6},
+        }
+        inline_raw = (json.dumps({"format_version": 1, "source_commit": binding["source_commit"],
+                                  "artifact": binding["artifact"], "capability": "session",
+                                  "case": "inhibitor-lifetime", "status": "unverified",
+                                  "observations": observations}, indent=2, sort_keys=True) + "\n").encode()
+        self.assertGreater(len(inline_raw), MAX_OBSERVATION_BYTES)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            result = retain(binding, "session", "inhibitor-lifetime", root, "unverified", observations)
+            self.assertIn("events", fixed_input[0])
+            self.assertIn("events", observations["native_input"])
+            leaf = root / "session/inhibitor-lifetime/execution.json"
+            stream_path = root / "session/inhibitor-lifetime/physical-input.bin"
+            self.assertTrue(stream_path.is_file())
+            self.assertLess(leaf.stat().st_size, MAX_OBSERVATION_BYTES)
+            document = json.loads(leaf.read_text())
+            compacted_fixed = document["observations"]["launch"]["fixed_input"]
+            self.assertEqual(len(compacted_fixed), 4)
+            self.assertNotIn("events", compacted_fixed[0])
+            self.assertEqual(compacted_fixed[0]["event_count"], 35)
+            self.assertEqual(compacted_fixed[0]["physical_input_stream"], "physical-input.bin")
+            self.assertEqual(document["observations"]["native_input"], compacted_fixed[3])
+            stream_payload = json.loads(stream_path.read_bytes())
+            self.assertEqual(len(stream_payload["transactions"]), 6)
+            self.assertEqual(expand_physical_transactions(leaf, compacted_fixed), fixed_input)
+            self.assertEqual(expand_physical_transactions(leaf, document["observations"]["transitions"]), [tx5])
+            self.assertEqual(expand_physical_transactions(
+                leaf, [document["observations"]["editor_keyboard"]["physical_vm_keyboard"]]), [tx6])
+            self.assertEqual(result["evidence"][-1]["path"], "session/inhibitor-lifetime/execution.json")

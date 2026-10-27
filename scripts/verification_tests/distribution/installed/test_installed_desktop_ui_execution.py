@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 from linux_release.installed_cases import desktop_ui as ui
 from linux_release.installed_cases.records import CaseFailed, CaseUnavailable
 
-API = SimpleNamespace(ROLE_FRAME=1, ROLE_DIALOG=2, ROLE_PUSH_BUTTON=3, ROLE_ENTRY=4, ROLE_PASSWORD_TEXT=5,
+API = SimpleNamespace(ROLE_FRAME=1, ROLE_DIALOG=2, ROLE_PUSH_BUTTON=3, ROLE_ENTRY=4, ROLE_PASSWORD_TEXT=5, ROLE_PAGE_TAB=6,
                       STATE_DEFUNCT=10, STATE_SHOWING=11, STATE_SENSITIVE=12, STATE_ENABLED=13)
 IDENTITY = {'pid': 123, 'parent_pid': 100, 'start_time_ticks': 42}
 
@@ -42,6 +42,21 @@ def surface(children):
 
 
 class DesktopUIOwnershipTests(unittest.TestCase):
+    def test_page_tab_is_an_explicit_role_and_uses_the_same_unique_action(self):
+        tab = Node(API.ROLE_PAGE_TAB, 'Secrets')
+        button = Node(API.ROLE_PUSH_BUTTON, 'Secrets')
+        api, _ = surface([tab, button])
+        with ui.DesktopUI(self.app, api) as actor:
+            actor.click('Secrets', tab=True)
+            tab.action.doAction.assert_called_once_with(0)
+            button.action.doAction.assert_not_called()
+            with self.assertRaises(ValueError):
+                actor.click('Secrets', tab=1)
+            tab.action.nActions = 2
+            with self.assertRaises(CaseUnavailable):
+                actor.click('Secrets', tab=True)
+        self.assertEqual(tab.action.doAction.call_count, 1)
+
     def test_interactive_retry_requires_same_owned_identity_and_one_deadline(self):
         api, _ = surface([Node(API.ROLE_PUSH_BUTTON, 'Send')])
         witness = {'normal_actionable_control': True}
@@ -67,6 +82,24 @@ class DesktopUIOwnershipTests(unittest.TestCase):
         with self.assertRaises(ui._InventoryChanged):
             list(actor.descendants(node))
         node.action.doAction.assert_not_called()
+
+    def test_nullable_child_refuses_partial_inventory_without_authorizing_action(self):
+        button = Node(API.ROLE_PUSH_BUTTON, 'Send')
+        window = Node(API.ROLE_FRAME, children=[None, button])
+        actor = ui.DesktopUI(self.app, API)
+        with self.assertRaises(ui._InventoryChanged):
+            list(actor.descendants(window))
+        for replace in ('application', 'window'):
+            api, _ = surface([button])
+            desktop = api.Registry.getDesktop(0)
+            if replace == 'application':
+                desktop.children = [None]
+            else:
+                desktop[0].children = [None]
+            with patch.object(ui.time, 'monotonic', side_effect=range(100)), patch.object(ui.time, 'sleep'):
+                with self.assertRaises(CaseUnavailable):
+                    list(ui.DesktopUI(self.app, api).windows())
+        button.action.doAction.assert_not_called()
 
     def test_observer_bound_retains_exact_single_read_facts_without_authorizing_action(self):
         class Oversized(Node):
@@ -127,7 +160,7 @@ class DesktopUIOwnershipTests(unittest.TestCase):
         api, _ = surface([button])
         with patch.object(ui, 'process_identity', return_value={**IDENTITY, 'start_time_ticks': 43}), \
                 patch.object(ui.time, 'monotonic', side_effect=iter(range(100))), patch.object(ui.time, 'sleep'):
-            with ui.DesktopUI(self.app, api) as actor, self.assertRaises(CaseUnavailable):
+            with ui.DesktopUI(self.app, api) as actor, self.assertRaises(CaseFailed):
                 actor.click('Send')
         button.action.doAction.assert_not_called()
 
@@ -160,16 +193,46 @@ class DesktopUIOwnershipTests(unittest.TestCase):
         button = Node(API.ROLE_PUSH_BUTTON, 'Send')
         api, window = surface([button])
         self.app.observations = {'launch_identity': IDENTITY, 'session': {}}
+        self.assertFalse(ui.retry_inventory(self.app, AttributeError('bug')))
+        self.assertFalse(ui.retry_inventory(self.app, NotImplementedError('permanent')))
         with ui.DesktopUI(self.app, api) as actor, patch.object(ui.time, 'sleep'):
             with patch.object(actor, 'descendants', side_effect=[NativeRace('not retained'), iter([button])]):
                 actor.click('Send')
         button.action.doAction.assert_called_once_with(0)
         self.assertEqual(self.app.observations['desktop_inventory_retry']['domain'], 'atspi_error')
+        with ui.DesktopUI(self.app, api) as actor, patch.object(ui.time, 'sleep'):
+            with patch.object(button, 'queryAction', side_effect=[NotImplementedError('mounting'), button.action]):
+                actor.click('Send')
+        self.assertEqual(button.action.doAction.call_count, 2)
+        self.assertEqual(self.app.observations['desktop_inventory_retry']['exception_type'], 'NotImplementedError')
         with ui.DesktopUI(self.app, api) as actor:
             with patch.object(actor, 'descendants', side_effect=RuntimeError('not retained')):
                 with self.assertRaises(CaseUnavailable) as refusal:
                     actor.find(API.ROLE_PUSH_BUTTON, 'Send')
         self.assertNotIn('not retained', str(refusal.exception))
+
+    def test_click_never_replays_after_dispatch_and_refuses_permanent_unmounted_interface(self):
+        class NativeRace(Exception):
+            domain, code = 'atspi_error', 0
+        button = Node(API.ROLE_PUSH_BUTTON, 'Send')
+        api, _ = surface([button])
+        with ui.DesktopUI(self.app, api) as actor, patch.object(actor, 'find', return_value=button) as find_node, \
+                patch.object(ui.time, 'monotonic', side_effect=[0, 1, 16]), patch.object(ui.time, 'sleep'):
+            with patch.object(button, 'queryAction', side_effect=NotImplementedError('unmounted')):
+                with self.assertRaises(CaseUnavailable) as refusal:
+                    actor.click('Send')
+        self.assertEqual([call.kwargs for call in find_node.call_args_list], [{'deadline': 15}, {'deadline': 15}])
+        self.assertEqual(refusal.exception.observations['desktop_mutation'],
+                         {'phase': 'action-interface', 'exception_type': 'NotImplementedError'})
+        button.action.doAction.assert_not_called()
+        for post_error in (NativeRace('post-dispatch'), RuntimeError('post-dispatch')):
+            button.action.doAction.reset_mock()
+            button.action.doAction.side_effect = post_error
+            with ui.DesktopUI(self.app, api) as actor, self.assertRaises(CaseUnavailable) as refusal:
+                actor.click('Send')
+            button.action.doAction.assert_called_once_with(0)
+            self.assertEqual(refusal.exception.observations['desktop_mutation'],
+                             {'phase': 'do-action', 'exception_type': type(post_error).__name__})
 
     def test_toolkit_exception_cannot_copy_input_into_retained_error(self):
         entry = Node(API.ROLE_ENTRY, 'Message')
@@ -203,3 +266,53 @@ class DesktopUIOwnershipTests(unittest.TestCase):
             with self.assertRaises(CaseFailed) as failure:
                 ui.interactive_window(self.app)
             self.assertNotIsInstance(failure.exception, CaseUnavailable)
+
+
+class CompleteWindowSnapshotTests(unittest.TestCase):
+    setUp = DesktopUIOwnershipTests.setUp
+    def test_disappearing_second_window_does_not_publish_or_duplicate_first_window(self):
+        first, second = Node(API.ROLE_FRAME), Node(API.ROLE_DIALOG)
+        class ReplacedApplication(Node):
+            changed = False
+            def __getitem__(self, index):
+                if index == 1 and not self.changed:
+                    self.changed = True
+                    self.children = [first]
+                    raise IndexError('dialog disappeared')
+                return super().__getitem__(index)
+        app = ReplacedApplication(0, children=[first, second])
+        desktop = Node(0, children=[app])
+        api = SimpleNamespace(**vars(API), Registry=SimpleNamespace(getDesktop=lambda index: desktop))
+        with patch.object(ui.time, 'sleep'):
+            windows = list(ui.DesktopUI(self.app, api).windows())
+        self.assertEqual(windows, [(IDENTITY, first)])
+        first.action.doAction.assert_not_called()
+        second.action.doAction.assert_not_called()
+
+    def test_repeated_replacement_uses_one_deadline_and_publishes_nothing(self):
+        actor = ui.DesktopUI(self.app, API)
+        with patch.object(actor, '_window_snapshot', side_effect=IndexError('replaced')) as snapshot, \
+                patch.object(ui.time, 'monotonic', side_effect=[0, 1, 2, 4]), patch.object(ui.time, 'sleep'):
+            with self.assertRaises(CaseUnavailable):
+                list(actor.windows(deadline=3))
+        self.assertEqual(snapshot.call_count, 3)
+        self.assertTrue(all(call.args == (3,) for call in snapshot.call_args_list))
+
+    def test_programming_errors_and_replaced_launch_do_not_retry(self):
+        actor = ui.DesktopUI(self.app, API)
+        for error in (AttributeError('programming error'), TypeError('invalid type')):
+            with patch.object(actor, '_window_snapshot', side_effect=error) as snapshot:
+                with self.assertRaises(type(error)):
+                    list(actor.windows())
+            snapshot.assert_called_once()
+        with patch.object(actor, '_window_snapshot', side_effect=IndexError()), \
+                patch.object(ui, 'process_identity', return_value={**IDENTITY, 'start_time_ticks': 43}):
+            with self.assertRaises(CaseFailed):
+                list(actor.windows())
+
+    def test_completed_inventory_after_deadline_is_not_published(self):
+        actor = ui.DesktopUI(self.app, API)
+        with patch.object(actor, '_window_snapshot', return_value=[(IDENTITY, Node(API.ROLE_FRAME))]), \
+                patch.object(ui.time, 'monotonic', side_effect=[0, 4]):
+            with self.assertRaises(CaseUnavailable):
+                list(actor.windows(deadline=3))

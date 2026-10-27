@@ -7,11 +7,10 @@ import re
 
 from .installed_environment import DESKTOPS, query
 from .installed_cases.records import CaseUnavailable
+from .support_variants import variants
 
 
 def requirements(catalog: dict, environment_id: str, capability: str) -> list[dict]:
-    # The typed catalog owner lands independently before this execution consumer.
-    from .support_variants import variants
     environments = {item['id']: item for item in catalog['environments']}
     if environment_id not in environments:
         raise ValueError('qualification selected an undeclared environment')

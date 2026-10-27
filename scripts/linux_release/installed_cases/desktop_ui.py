@@ -3,20 +3,21 @@ from __future__ import annotations
 
 import time
 
-from .. import scripts_module
+from scripts.harness import atspi_client
+
+from ..installed_input import accessibility
 from .app import process_identity, session_environment
 from .records import CaseFailed, CaseUnavailable
 
-
-class _InventoryChanged(Exception):
-    pass
+_InventoryChanged = accessibility.InventoryChanged
 
 
-def retry_inventory(app, error) -> bool:
+def retry_inventory(app, error, *, interface_mounting=False) -> bool:
     domain, code = getattr(error, 'domain', None), getattr(error, 'code', None)
     native = (isinstance(domain, str) and domain in {'atspi_error', 'g-dbus-error-quark', 'g-io-error-quark'}
               and type(code) is int and 0 <= code < 1 << 31)
-    if not isinstance(error, (IndexError, _InventoryChanged)) and not native:
+    if not isinstance(error, (IndexError, _InventoryChanged)) and not native and not (
+            interface_mounting and isinstance(error, NotImplementedError)):
         return False
     expected = app.observations['launch_identity']
     try:
@@ -47,12 +48,12 @@ def owned_process(pid: int, app) -> bool:
 
 
 def accessibility_bus(session):
-    return scripts_module('harness.atspi_client').session_bus(session_environment(session))
+    return atspi_client.session_bus(session_environment(session))
 
 
 def load_api():
     try:
-        scripts_module('harness.atspi_client').load_atspi(1000, 5000)
+        atspi_client.load_atspi(1000, 5000)
         import pyatspi
         return pyatspi
     except (ImportError, AttributeError):
@@ -83,59 +84,76 @@ class DesktopUI:
 
     def windows(self, deadline=None):
         deadline = time.monotonic() + 15 if deadline is None else deadline
+        while time.monotonic() < deadline:
+            try:
+                snapshot = self._window_snapshot(deadline)
+                if time.monotonic() >= deadline:
+                    raise CaseUnavailable('normal-native-window-observation-deadline')
+                break
+            except (ValueError, TypeError):
+                raise
+            except Exception as error:
+                if not retry_inventory(self.app, error):
+                    raise
+                time.sleep(0.05)
+        else:
+            raise CaseUnavailable('normal-native-window-observation-deadline')
+        # Publish once, after the entire inventory and its owners were checked.
+        yield from snapshot
+
+    def _window_snapshot(self, deadline):
         desktop = self.api.Registry.getDesktop(0)
-        if not 0 <= desktop.childCount <= 256:
+        application_count = desktop.childCount
+        if type(application_count) is not int or not 0 <= application_count <= 256:
             raise ValueError('native accessibility application inventory exceeds its bound')
-        for index in range(desktop.childCount):
+        snapshot = []
+        for index in range(application_count):
             if time.monotonic() >= deadline:
                 raise CaseUnavailable('normal-native-window-observation-deadline')
             application = desktop[index]
+            if application is None:
+                raise _InventoryChanged()
             pid = application.get_process_id()
             if not owned_process(pid, self.app):
                 continue
             identity = process_identity(pid)
-            if not 0 <= application.childCount <= 64:
+            window_count = application.childCount
+            if type(window_count) is not int or not 0 <= window_count <= 64:
                 raise ValueError('installed window inventory exceeds its bound')
-            for offset in range(application.childCount):
+            for offset in range(window_count):
                 if time.monotonic() >= deadline:
                     raise CaseUnavailable('normal-native-window-observation-deadline')
                 window = application[offset]
+                if window is None:
+                    raise _InventoryChanged()
                 if window.getRole() in {self.api.ROLE_FRAME, self.api.ROLE_DIALOG} and self.visible(window):
-                    yield identity, window
+                    snapshot.append((identity, window))
             if process_identity(pid) != identity or not owned_process(pid, self.app):
                 raise ValueError('installed desktop owner changed during window observation')
-
-    def descendants(self, window, deadline=None):
-        deadline = time.monotonic() + 15 if deadline is None else deadline
-        pending, visited = [(window, 0)], 0
-        while pending:
-            if time.monotonic() >= deadline:
-                raise CaseUnavailable('normal-native-control-observation-deadline')
-            node, depth = pending.pop()
-            visited += 1
-            count = node.childCount
-            if type(count) is int and count == -1:
+            if application.childCount != window_count:
                 raise _InventoryChanged()
-            if type(count) is not int or visited > 4096 or depth > 64 or not 0 <= count <= 1024:
-                error = CaseUnavailable('installed accessible window exceeds its fixed observer traversal bound')
-                error.observations = {'desktop_inventory_bound': {'visited': visited, 'depth': depth,
-                    'child_count': count if type(count) is int else None,
-                    'limits': {'visited': 4096, 'depth': 64, 'child_count': 1024}}}
-                raise error
-            yield node
-            pending.extend((node[index], depth + 1) for index in range(count))
+        if desktop.childCount != application_count:
+            raise _InventoryChanged()
+        launch = self.app.observations['launch_identity']
+        if process_identity(launch['pid']) != launch:
+            raise CaseFailed('captured installed desktop identity changed during window observation')
+        return snapshot
 
-    def find(self, role: int, name: str):
+    def descendants(self, window, deadline=None, *, include=None):
+        return accessibility.descendants(window, deadline, include=include)
+
+    def find(self, role: int, name: str, deadline=None):
         if not isinstance(name, str) or not 0 < len(name) <= 256:
             raise ValueError('desktop action requires an exact bounded control name')
-        matches, observed_roles, deadline = [], set(), time.monotonic() + 15
+        deadline = time.monotonic() + 15 if deadline is None else deadline
+        matches, observed_roles = [], set()
         while self.app.process.poll() is None and time.monotonic() < deadline:
             matches = []
             try:
                 for identity, window in self.windows(deadline):
                     for node in self.descendants(window, deadline):
-                        node_role = node.getRole()
-                        if self.visible(node) and node.name == name:
+                        if node.name == name and self.visible(node):
+                            node_role = node.getRole()
                             observed_roles.add(int(node_role))
                             if node_role == role:
                                 matches.append((identity, node))
@@ -172,14 +190,37 @@ class DesktopUI:
             'observed_roles': sorted(observed_roles)}}
         raise error
 
-    def click(self, name: str):
-        node = self.find(self.api.ROLE_PUSH_BUTTON, name)
+    def click(self, name: str, *, tab=False):
+        if type(tab) is not bool:
+            raise ValueError('normal native action requires an explicit button or page tab')
+        role = self.api.ROLE_PAGE_TAB if tab else self.api.ROLE_PUSH_BUTTON
+        deadline = time.monotonic() + 15
+        while True:
+            node = self.find(role, name, deadline=deadline)
+            phase = 'action-interface'
+            try:
+                action = node.queryAction()
+                if action.nActions != 1:
+                    phase = 'action-count'
+                    raise ValueError('normal native button action is not unique')
+                break
+            except Exception as error:
+                if (phase == 'action-interface' and time.monotonic() < deadline
+                        and retry_inventory(self.app, error, interface_mounting=True)):
+                    time.sleep(0.05)
+                    continue
+                refusal = CaseUnavailable('normal-native-button-action-unavailable')
+                refusal.observations = {'desktop_mutation': {'phase': phase, 'exception_type': type(error).__name__}}
+                raise refusal from None
+        phase = 'do-action'
         try:
-            action = node.queryAction()
-            if action.nActions != 1 or action.doAction(0) is not True:
+            if action.doAction(0) is not True:
+                phase = 'do-action-refused'
                 raise ValueError('normal native button refused its action')
-        except Exception:
-            raise CaseUnavailable('normal-native-button-action-unavailable') from None
+        except Exception as error:
+            refusal = CaseUnavailable('normal-native-button-action-unavailable')
+            refusal.observations = {'desktop_mutation': {'phase': phase, 'exception_type': type(error).__name__}}
+            raise refusal from None
 
     def fill(self, role: int, name: str, value: str):
         node = self.find(role, name)

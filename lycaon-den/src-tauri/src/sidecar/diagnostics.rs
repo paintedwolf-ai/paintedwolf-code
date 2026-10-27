@@ -23,8 +23,9 @@ pub(super) fn startup_diagnostics_command(bin: &Path, config_dir: &Path) -> Comm
 
 pub fn export_startup_diagnostics() -> Result<Vec<u8>, String> {
     let bin = resolve_lycaon_binary()?;
+    let image = crate::linux_generation::capture_helper(&bin)?;
     let config_dir = crate::config_dir::host_config_dir()?;
-    let mut command = startup_diagnostics_command(&bin, &config_dir);
+    let mut command = startup_diagnostics_command(&image.path, &config_dir);
     let mut child = command
         .spawn()
         .map_err(|e| format!("run startup diagnostics: {e}"))?;

@@ -9,6 +9,7 @@ import stat
 from .package_payload import stable
 from ..installed_input import protocol
 from .provider import gui_endpoint
+from .records import expand_physical_transactions
 
 
 def load(binding):
@@ -34,11 +35,11 @@ def load(binding):
             raise ValueError('provider recovery execution changed during observation')
     if hashlib.sha256(raw).hexdigest() != selected['sha256']:
         raise ValueError('provider recovery execution digest differs')
-    witness = registered(json.loads(raw), binding, str(os.getuid()))
+    witness = registered(json.loads(raw), binding, str(os.getuid()), path)
     return {**witness, 'prior_execution_sha256': selected['sha256']}, raw
 
 
-def registered(document, binding, account):
+def registered(document, binding, account, leaf=None):
     if not isinstance(account, str) or not account.isdecimal() or int(account) <= 0:
         raise ValueError('provider recovery requires a real owned graphical UID')
     if (not isinstance(document, dict) or type(document.get('format_version')) is not int or document['format_version'] != 1
@@ -55,6 +56,7 @@ def registered(document, binding, account):
     records = launch.get('fixed_input', [])
     if not isinstance(records, list) or len(records) > 4:
         raise ValueError('provider recovery registration exceeds its transaction bound')
+    records = expand_physical_transactions(leaf, records)
     matches = [row for row in records if isinstance(row, dict) and isinstance(row.get('operation'), str)
                and re.fullmatch('provider-endpoint-v1-[0-9]{4,5}', row['operation'])]
     if len(matches) != 1:

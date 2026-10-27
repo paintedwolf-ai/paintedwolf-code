@@ -74,6 +74,11 @@ func Enter(plan Plan) error {
 		}
 	}
 	if plan.Attest.Omit != OmitSeccomp {
+		// The performer starts restricted and unfiltered, before the filter
+		// would hand its own calls back to the supervisor.
+		if err := startPerformer(plan.Filesystem); err != nil {
+			return err
+		}
 		listener, err := applySeccomp()
 		if err != nil {
 			return err

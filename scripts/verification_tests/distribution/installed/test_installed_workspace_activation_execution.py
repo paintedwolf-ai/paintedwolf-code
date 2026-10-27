@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from linux_release import installed_execution
-from linux_release.installed_cases import desktop_launch, workspace_activation as owner
+from linux_release.installed_cases import desktop_launch, profile_setup, workspace_activation as owner
 from linux_release.installed_input import controller, surface_wire
 
 
@@ -16,38 +16,128 @@ class WorkspaceTests(unittest.TestCase):
     def test_registry_and_active_session_require_exact_project_provider_and_busy_facts(self):
         self.assertEqual(installed_execution.case_family('windowing', 'workspace-activation-and-exit', 'deb'),
                          'workspace_activation')
+        self.assertIs(owner.active_session, profile_setup.active_session)
+        self.assertIs(owner.await_session, profile_setup.await_session)
+        self.assertIs(owner.require_active, profile_setup.require_active)
         session = {'id': 'session', 'status': 'busy', 'provider_id': None, 'model': None,
                    'parent_session_id': None}
-        with patch.object(owner, 'project_for_owned_root', return_value={'project_id': 'project'}), patch.object(
-                owner, 'fixture_selection', return_value={'model_policy_sha256': 'a' * 64}), patch.object(
-                owner, 'sessions_for_project', return_value=[session]) as observed:
-            active = owner.require_active(None, None, 'fixture')
+        with patch.object(profile_setup, 'project_for_owned_root', return_value={'project_id': 'project'}), patch.object(
+                profile_setup, 'fixture_selection', return_value={'model_policy_sha256': 'a' * 64}), patch.object(
+                profile_setup, 'renderer_session', return_value={'observer': 'owned-app-state-JSON', 'session_id': 'session', 'status': 'idle'}), patch.object(
+                profile_setup, 'sessions_for_project', return_value=[session]) as observed:
+            active = owner.require_active(None, None, 'fixture', owner.MODEL)
             self.assertEqual(active['id'], 'session')
             observed.return_value = [{**session, 'status': 'idle'}]
+            self.assertEqual(owner.active_session(None, None, 'fixture', owner.MODEL, status='idle')['id'], 'session')
             with self.assertRaises(owner.CaseUnavailable):
-                owner.require_active(None, None, 'fixture', active)
+                owner.require_active(None, None, 'fixture', owner.MODEL, active)
             observed.return_value = [{**session, 'id': 'replacement'}]
             with self.assertRaisesRegex(ValueError, 'replaced'):
-                owner.require_active(None, None, 'fixture', active)
+                owner.require_active(None, None, 'fixture', owner.MODEL, active)
             observed.return_value = [session, session]
             with self.assertRaisesRegex(ValueError, 'ambiguous'):
-                owner.active_session(None, None, 'fixture')
+                owner.active_session(None, None, 'fixture', owner.MODEL)
             for changed in ({'provider_id': 'foreign'}, {'provider_id': 'fixture'},
                             {'model': owner.MODEL}, {'parent_session_id': 'child'}):
                 observed.return_value = [{**session, **changed}]
                 with self.subTest(changed=changed), self.assertRaisesRegex(ValueError, 'selected root'):
-                    owner.active_session(None, None, 'fixture')
+                    owner.active_session(None, None, 'fixture', owner.MODEL)
             observed.return_value = [{**session, 'provider_id': 'fixture', 'model': owner.MODEL}]
-            self.assertEqual(owner.require_active(None, None, 'fixture')['id'], 'session')
+            self.assertEqual(owner.require_active(None, None, 'fixture', owner.MODEL)['id'], 'session')
 
     def test_busy_session_cannot_outlive_its_observed_model_selection(self):
         session = {'id': 'session', 'status': 'busy', 'provider_id': None, 'model': None,
                    'parent_session_id': None}
-        with patch.object(owner, 'project_for_owned_root', return_value={'project_id': 'project'}), patch.object(
-                owner, 'fixture_selection', side_effect=[{'policy': 'before'}, {'policy': 'after'}]), patch.object(
-                owner, 'sessions_for_project', return_value=[session]):
+        with patch.object(profile_setup, 'project_for_owned_root', return_value={'project_id': 'project'}), patch.object(
+                profile_setup, 'fixture_selection', side_effect=[{'policy': 'before'}, {'policy': 'after'}]), patch.object(
+                profile_setup, 'sessions_for_project', return_value=[session]):
             with self.assertRaisesRegex(ValueError, 'selection changed'):
-                owner.active_session(None, None, 'fixture')
+                owner.active_session(None, None, 'fixture', owner.MODEL)
+
+    def test_execute_awaits_opened_idle_session_before_submitting_project_turn(self):
+        events = []
+        app = Mock(observations={'session': {'id': 'session'}})
+        app.__enter__ = Mock(return_value=app)
+        app.__exit__ = Mock(return_value=False)
+        app.streams.return_value = {}
+        fixture = Mock(observations=[])
+        context = Mock()
+        context.__enter__ = Mock(return_value=fixture)
+        context.__exit__ = Mock(return_value=False)
+        def await_phase(current_app, project, provider, model, *, status='busy', reason=''):
+            events.append(('await', status, reason))
+            return {'id': 'opened', 'status': 'idle'}
+        def submit_turn(current_app):
+            events.append(('submit', None, None))
+            raise owner.CaseUnavailable('stop-after-submit')
+        with tempfile.TemporaryDirectory() as root, ExitStack() as stack:
+            stack.enter_context(patch.object(owner, 'protected_launcher', return_value={'path': '/bin/pw'}))
+            stack.enter_context(patch.object(owner, 'load_provider_recovery', return_value=None))
+            stack.enter_context(patch.object(owner.ProviderFixture, 'gui', return_value=context))
+            stack.enter_context(patch.object(owner, 'InstalledApp', return_value=app))
+            stack.enter_context(patch.object(owner, 'interactive_window', return_value={'id': 'window'}))
+            stack.enter_context(patch.object(owner, 'configure_provider', return_value={'provider_id': 'fixture'}))
+            stack.enter_context(patch.object(owner, 'run',
+                return_value={'exit_code': 0, 'timed_out': False, 'output_limit': False}))
+            stack.enter_context(patch.object(owner, 'await_session', side_effect=await_phase))
+            stack.enter_context(patch.object(owner, 'submit_project_turn', side_effect=submit_turn))
+            with self.assertRaisesRegex(owner.CaseUnavailable, 'stop-after-submit') as raised:
+                owner.execute({}, 'windowing', 'workspace-activation-and-exit', Path(root))
+        self.assertEqual(events, [
+            ('await', 'idle', 'workspace-activation-project-session-not-opened'),
+            ('submit', None, None),
+        ])
+        self.assertEqual(raised.exception.observations['opened_session'], {'id': 'opened', 'status': 'idle'})
+
+    def test_unexpected_cancel_observation_retains_partial_evidence_without_replaying(self):
+        app = Mock(observations={'launch_identity': {'pid': 123}})
+        app.__enter__ = Mock(return_value=app)
+        def stopped(*_):
+            app.observations.update(exit_code=0, capture_complete=True)
+        app.__exit__ = Mock(side_effect=stopped)
+        app.streams.return_value = {'app-stderr': b'owned desktop log'}
+        fixture = Mock(observations=[{'completed': False}])
+        fixture_context = Mock(__enter__=Mock(return_value=fixture), __exit__=Mock(return_value=False))
+        ui_context = Mock(__enter__=Mock(), __exit__=Mock(return_value=False))
+        frames = Mock(__enter__=Mock(), __exit__=Mock(return_value=False))
+        barrier = Mock()
+        barrier.snapshot.return_value = {'held': True}
+        def transition(*args):
+            operation = args[-1]
+            if operation == 'workspace-cancel-quit-v1':
+                error = IndexError('window removed during observation')
+                error.observations = {'native_input': {'operation': operation, 'completed': False}}
+                raise error
+            return {'operation': operation, 'completed': True}
+        with tempfile.TemporaryDirectory() as root, ExitStack() as stack:
+            replacements = {
+                'protected_launcher': {'path': '/bin/pw'}, 'load_provider_recovery': None,
+                'InstalledApp': app, 'interactive_window': {}, 'ResponseBarrier': barrier,
+                'configure_provider': {'provider_id': 'fixture'}, 'DesktopUI': ui_context,
+                'FrameObserver': frames, 'await_session': {'id': 'session'},
+                'require_active': {'id': 'session', 'status': 'busy'},
+                'run': {'exit_code': 0, 'timed_out': False, 'output_limit': False},
+                'reopen': {'observed': True}, 'submit_project_turn': None,
+            }
+            for name, value in replacements.items():
+                stack.enter_context(patch.object(owner, name, return_value=value))
+            stack.enter_context(patch.object(owner.ProviderFixture, 'gui', return_value=fixture_context))
+            performed = stack.enter_context(patch.object(owner, 'perform_transition', side_effect=transition))
+            with self.assertRaises(owner.CaseFailed) as raised:
+                owner.execute({'native_input': {'binding': {}, 'vm_id': 'owned'}},
+                              'windowing', 'workspace-activation-and-exit', Path(root))
+        retained = raised.exception.observations
+        self.assertEqual(retained['failure_type'], 'IndexError')
+        self.assertEqual(retained['native_input']['completed'], False)
+        self.assertEqual(retained['provider_response_control'], {'held': True})
+        self.assertEqual(retained['launch']['exit_code'], 0)
+        self.assertTrue(retained['launch']['capture_complete'])
+        self.assertEqual(raised.exception.streams, {'app-stderr': b'owned desktop log'})
+        self.assertEqual([call.args[-1] for call in performed.call_args_list], [
+            'workspace-open-peer-v1', 'workspace-hide-main-v1',
+            'workspace-request-quit-v1', 'workspace-cancel-quit-v1'])
+        self.assertEqual(len(retained['transitions']), 3)
+        app.__exit__.assert_called_once()
 
     def activation(self, *, changed_image=False, changed_session=False, timeout=False, identity_error=False):
         image = {'mode': 0o4755, 'sha256': 'a' * 64}

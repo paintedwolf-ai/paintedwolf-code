@@ -53,7 +53,8 @@ def main():
     elif args.command == "max-parallel":
         print(hosted_plan.max_parallel(args.profile))
     elif args.command == "run":
-        return hosted_execution.run_lane(args.lane, args.shard)
+        return hosted_execution.run_lane(args.lane, args.shard, (os.environ.get("GITHUB_EVENT_NAME") == "merge_group" or
+            os.environ.get("GITHUB_REF", "").startswith("refs/heads/gh-readonly-queue/main/")))
     elif args.command == "gate":
         verification_verdict.require_success(json.loads(os.environ["NEEDS_JSON"]), args.skipped, args.draft == "true")
     elif args.command == "verified":

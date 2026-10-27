@@ -1,12 +1,12 @@
 """Configure the fixed loopback provider through normal native desktop input."""
 import time
 
-from .desktop_ui import DesktopUI
+from .desktop_ui import DesktopUI, retry_inventory
 from .app import process_identity
 from .profile_providers import find_gui_provider
 from .profile_setup import state as setup_state
 from .provider import MODEL, GUI_LABEL
-from .records import CaseUnavailable
+from .records import CaseFailed, CaseUnavailable
 from ..installed_input.focus import EntryFocus
 from ..installed_input import accessibility, lineage
 from ..installed_input.guest import perform
@@ -49,21 +49,48 @@ def select_default_model(app, ui):
     root = app.observations['launch_identity']
     actions = app.observations.setdefault('provider_model_actions', [])
     for role, name, expected_action in controls:
-        node = ui.find(role, name)
-        frame, chain = accessibility.capture(node, list(ui.windows()))
-        control = process_identity(node.get_process_id())
-        surface = process_identity(frame.get_process_id())
-        entry_chain = lineage.capture(surface, control)
-        frame_chain = lineage.capture(root, surface)
-        action = node.queryAction()
-        if action.nActions != 1 or (expected_action is not None and action.getName(0) != expected_action):
-            raise CaseUnavailable('normal-model-picker-action-is-not-unique')
-        if (accessibility.capture(node, list(ui.windows()))[1] != chain
-                or lineage.capture(surface, control) != entry_chain
-                or lineage.capture(root, surface) != frame_chain):
-            raise ValueError('normal model picker identity changed before its action')
-        if action.doAction(0) is not True:
-            raise CaseUnavailable('normal-model-picker-action-refused')
+        deadline = time.monotonic() + 15
+        while True:
+            node = ui.find(role, name, deadline=deadline)
+            phase = 'inventory-ownership'
+            try:
+                frame, chain = accessibility.capture(node, list(ui.windows(deadline)))
+                control = process_identity(node.get_process_id())
+                surface = process_identity(frame.get_process_id())
+                entry_chain = lineage.capture(surface, control)
+                frame_chain = lineage.capture(root, surface)
+                phase = 'action-interface'
+                action = node.queryAction()
+                if action.nActions != 1 or (expected_action is not None and action.getName(0) != expected_action):
+                    phase = 'action-count'
+                    raise CaseUnavailable('normal-model-picker-action-is-not-unique')
+                phase = 'identity-recheck'
+                if (accessibility.capture(node, list(ui.windows(deadline)))[1] != chain
+                        or lineage.capture(surface, control) != entry_chain
+                        or lineage.capture(root, surface) != frame_chain):
+                    raise ValueError('normal model picker identity changed before its action')
+                break
+            except (ValueError, TypeError, CaseUnavailable, CaseFailed):
+                raise
+            except Exception as error:
+                if (time.monotonic() < deadline
+                        and retry_inventory(app, error, interface_mounting=(phase == 'action-interface'))):
+                    time.sleep(0.05)
+                    continue
+                refusal = CaseUnavailable('normal-model-picker-action-unavailable')
+                refusal.observations = {'model_picker_mutation': {'phase': phase, 'exception_type': type(error).__name__}}
+                raise refusal from None
+        phase = 'do-action'
+        try:
+            if action.doAction(0) is not True:
+                phase = 'do-action-refused'
+                raise CaseUnavailable('normal-model-picker-action-refused')
+        except (CaseUnavailable, CaseFailed):
+            raise
+        except Exception as error:
+            refusal = CaseUnavailable('normal-model-picker-action-unavailable')
+            refusal.observations = {'model_picker_mutation': {'phase': phase, 'exception_type': type(error).__name__}}
+            raise refusal from None
         # Selecting an option closes its popup; the captured native surface and launch must survive.
         if lineage.capture(root, surface) != frame_chain or lineage.capture(surface, control) != entry_chain:
             raise ValueError('normal model picker process identity changed after its action')
@@ -92,6 +119,8 @@ def configure_provider(app, fixture):
             physical_input(app, ui, 'API key Paste your API key…', 'provider-fixture-credential-v1', password=True)
             ui.click('Add AI provider')
         witness = await_discovery(app, fixture)
+        if existing is None:
+            ui.click('AI providers')
         select_default_model(app, ui)
         ui.click('Skip')
     return witness

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -42,7 +41,7 @@ func TestEvictOverByteBudgetStopsWhenDeletesCannotProgress(t *testing.T) {
 		if evictErr == nil {
 			t.Fatal("evictOverByteBudget returned nil; want a failure it can report")
 		}
-	case <-time.After(10 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("evictOverByteBudget did not return: the retention loop is unbounded")
 	}
 }
