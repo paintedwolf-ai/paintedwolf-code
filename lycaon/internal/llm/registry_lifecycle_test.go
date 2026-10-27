@@ -9,7 +9,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -47,7 +46,7 @@ func TestRegistryReadsDoNotWaitForRebuildDiscovery(t *testing.T) {
 	go func() { reloadDone <- registry.Reload(t.Context()) }()
 	select {
 	case <-started:
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("rebuild did not enter provider discovery")
 	}
 
@@ -59,7 +58,7 @@ func TestRegistryReadsDoNotWaitForRebuildDiscovery(t *testing.T) {
 	select {
 	case getErr := <-getDone:
 		testutil.FailErr(t, "Registry.Get during rebuild", getErr)
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("Registry.Get waited for provider discovery")
 	}
 

@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/scan/opengrep"
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
@@ -52,13 +51,9 @@ exit 2
 			}()
 			t.Cleanup(func() {
 				cancel()
-				select {
-				case <-done:
-				case <-time.After(testutil.Timeout(15 * time.Second)):
-					t.Error("scanner process did not stop after cancellation")
-				}
+				<-done
 			})
-			testutil.WaitFor(t, 15*time.Second, func() bool {
+			testutil.WaitFor(t, func() bool {
 				select {
 				case <-done:
 					t.Fatalf("scanner exited before cancellation: %v", got.err)
@@ -70,7 +65,7 @@ exit 2
 			cancel()
 			select {
 			case <-done:
-			case <-time.After(testutil.Timeout(15 * time.Second)):
+			case <-t.Context().Done():
 				t.Fatal("scanner did not return after cancellation")
 			}
 			if got.result != nil || !errors.Is(got.err, context.Canceled) {

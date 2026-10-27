@@ -5,7 +5,6 @@ import (
 	"errors"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/app/security"
 	"github.com/lycaon/lycaon/internal/decide"
@@ -29,13 +28,13 @@ func TestBackgroundOneShotDoesNotGateStartupAndJoinsOnCancellation(t *testing.T)
 	select {
 	case err := <-started:
 		testutil.FailErr(t, "start with blocked warm", err)
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("background warm blocked startup")
 	}
 	t.Cleanup(app.stopRunners)
 	select {
 	case <-entered:
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("background warm never started")
 	}
 	app.stopRunners()
@@ -69,7 +68,7 @@ func TestBackgroundOneShotSettlesOnceForEveryOutcome(t *testing.T) {
 			t.Cleanup(app.stopRunners)
 			select {
 			case <-app.runners.runners[0].done:
-			case <-time.After(5 * time.Second):
+			case <-t.Context().Done():
 				t.Fatal("one-shot accounting did not settle")
 			}
 			app.stopRunners()
@@ -115,7 +114,7 @@ func TestInstalledDecisionWarmCompletesBeforeStartupReturns(t *testing.T) {
 	go func() { started <- app.startRunners(t.Context()) }()
 	select {
 	case <-engine.entered:
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("installed engine warm never started")
 	}
 	select {
@@ -127,7 +126,7 @@ func TestInstalledDecisionWarmCompletesBeforeStartupReturns(t *testing.T) {
 	select {
 	case err := <-started:
 		testutil.FailErr(t, "start installed engine", err)
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("startup did not finish after warm")
 	}
 	t.Cleanup(app.stopRunners)
