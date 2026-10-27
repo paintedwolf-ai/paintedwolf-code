@@ -89,6 +89,7 @@ def delivery_records(directory, execution, vm_id):
                 selected = [*selected, partial]
             if len(selected) > input_limit:
                 raise ValueError('reply input exceeds its fixed transaction count')
+            selected = expand_physical_transactions(leaf, selected)
             order = ('provider-name-v1', None, 'provider-fixture-credential-v1', 'reply-fixture-prompt-v1')
             if recovery is not None:
                 from ..installed_cases.provider_recovery import registered
@@ -99,7 +100,7 @@ def delivery_records(directory, execution, vm_id):
                 binding = {'artifact': document['artifact'], 'source_commit': execution['source_commit'],
                            'native_input': {'binding': execution, 'vm_id': vm_id}}
                 account = observations.get(launch, {}).get('session', {}).get('User')
-                admitted = registered(json.loads(raw), binding, account, leaf=prior)
+                admitted = registered(json.loads(raw), binding, account, prior)
                 if recovery != {**admitted, 'prior_execution_sha256': hashlib.sha256(raw).hexdigest()} or len(selected) > 1:
                     raise ValueError('provider recovery differs from its retained registration and fixed input order')
                 order = ('reply-fixture-prompt-v1',)
@@ -123,6 +124,7 @@ def delivery_records(directory, execution, vm_id):
                     'workspace-request-quit-v1', 'workspace-focus-quit-v1', 'workspace-approve-quit-v1')
                 if len(transitions) > len(expected) or transitions and len(selected) != input_limit:
                     raise ValueError('workspace input exceeds or precedes its declared physical sequence')
+                transitions = expand_physical_transactions(leaf, transitions)
                 records.extend(transitions)
                 operations.extend(expected[:len(transitions)])
         else:
@@ -135,6 +137,7 @@ def delivery_records(directory, execution, vm_id):
                 selected.append(observations['native_input'])
             if len(selected) > 2:
                 raise ValueError('editor input exceeds its fixed transaction count')
+            selected = expand_physical_transactions(leaf, selected)
             records.extend(selected)
             operations.extend(('editor-replace-save-v1', 'editor-find-needle-v1')[:len(selected)])
         records[start:] = expand_physical_transactions(leaf, records[start:])

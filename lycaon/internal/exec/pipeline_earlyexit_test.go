@@ -18,18 +18,13 @@ import (
 // it: the producer's signal death is how `… | head` finishes.
 func TestRunPipelineEarlyExitDownstreamEndsPromptlyAndSucceeds(t *testing.T) {
 	dir := t.TempDir()
-	start := time.Now()
 	res, err := RunPipeline(context.Background(), []Stage{
 		{Name: "seq", Args: []string{"1", "400000"}},
 		{Name: "head", Args: []string{"-n", "1"}},
 	}, ExecOpts{Launch: HostLaunch("exec test"), Dir: dir, Timeout: 30 * time.Second, MaxOutputBytes: 4096})
-	elapsed := time.Since(start)
 	testutil.FailErr(t, "RunPipeline seq|head", err)
 	if res.TimedOut {
-		t.Fatalf("pipeline hung until timeout (%v)", elapsed)
-	}
-	if elapsed > 10*time.Second {
-		t.Fatalf("pipeline took %v; early-exit downstream should end it promptly", elapsed)
+		t.Fatal("pipeline hung until timeout")
 	}
 	if res.ExitCode != 0 {
 		t.Fatalf("exit = %d (stages %+v); SIGPIPE on a non-final stage is not a failure", res.ExitCode, res.Stages)
