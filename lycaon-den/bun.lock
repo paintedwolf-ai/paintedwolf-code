@@ -42,7 +42,7 @@
       },
       "devDependencies": {
         "@playwright/test": "^1.64.1",
-        "@redocly/cli": "2.65.0",
+        "@redocly/cli": "2.65.1",
         "@solidjs/testing-library": "^0.8.10",
         "@tailwindcss/vite": "^4.3.3",
         "@tauri-apps/cli": "^2",
@@ -62,7 +62,7 @@
         "tailwindcss": "^4.3.3",
         "typescript": "~6.0.3",
         "typescript-eslint": "^8.72.0",
-        "undici": "^8.11.2",
+        "undici": "^8.12.3",
         "vite": "^8.3.4",
         "vite-plugin-solid": "^2.11.14",
         "vitest": "^5.0.5",
@@ -274,7 +274,7 @@
 
     "@redocly/ajv": ["@redocly/ajv@8.11.2", "", { "dependencies": { "fast-deep-equal": "^3.1.1", "json-schema-traverse": "^1.0.0", "require-from-string": "^2.0.2", "uri-js-replace": "^1.0.1" } }, "sha512-io1JpnwtIcvojV7QKDUSIuMN/ikdOUd1ReEnUnMKGfDVridQZ31J0MmIuqwuRjWDZfmvr+Q0MqCcfHM2gTivOg=="],
 
-    "@redocly/cli": ["@redocly/cli@2.65.0", "", { "bin": { "openapi": "bin/cli.js", "redocly": "bin/cli.js" } }, "sha512-Psw1Bf/ErKG/hlprFxtYJgilxxXC+68wji5ZFixzhtDTi9bsn4SpKX7VksgPOoGl93fyVyx/zzvW6rk2j/SnLw=="],
+    "@redocly/cli": ["@redocly/cli@2.65.1", "", { "bin": { "openapi": "bin/cli.js", "redocly": "bin/cli.js" } }, "sha512-y+qBHCGOElfEOfSpgj2fJ4BSXBUX3xpwelY1x+ik8LgtjAy1EKw0CYCv5N8jT5A2QbmIrOmjbL0VrVgxC7ZxPA=="],
 
     "@redocly/config": ["@redocly/config@0.22.0", "", {}, "sha512-gAy93Ddo01Z3bHuVdPWfCwzgfaYgMdaZPcfL7JZ7hWJoK9V0lXDbigTWkhiPFAaLWzbOJ+kbUQG1+XwIm0KRGQ=="],
 
