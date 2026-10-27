@@ -234,6 +234,8 @@ func (s *Server) handle(caller connection, req vaultidentity.Request) vaultident
 		return vaultidentity.Response{Status: vaultidentity.StatusNotFound, LauncherPID: ok.LauncherPID}
 	case errors.Is(err, errExists):
 		return vaultidentity.Response{Status: vaultidentity.StatusExists, LauncherPID: ok.LauncherPID}
+	case errors.Is(err, errStoredIdentityCorrupt):
+		return vaultidentity.Response{Status: vaultidentity.StatusCorrupt, Message: "the stored identity is damaged"}
 	default:
 		s.Log.Error("vault identity store failed", "op", req.Op, "uid", caller.peer.UID, "error", err)
 		return vaultidentity.Response{Status: vaultidentity.StatusUnavailable, Code: "store", Message: "the identity store failed"}
