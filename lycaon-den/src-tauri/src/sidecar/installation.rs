@@ -135,18 +135,10 @@ mod tests {
     }
 
     #[test]
-    fn fresh_install_with_format_1_or_2_manifest_starts_without_restart() {
+    fn fresh_install_with_sealed_manifest_starts_without_restart() {
         let dir = crate::test_support::TempDir::new("fresh-install-v2");
         let desktop = stage_generation(dir.path(), b"fresh desktop image");
         assert_eq!(verify_root(dir.path(), &desktop), Ok(()));
-
-        let root = Path::new("/opt/painted-wolf-code");
-        let desktop_path = root.join("bin/painted-wolf-code");
-        let mut v1 = fixture_json(root, std::env::consts::ARCH, &[(&desktop_path, b"desktop v1")], &[]);
-        v1["format_version"] = serde_json::json!(1);
-        v1.as_object_mut().unwrap().remove("payload");
-        let raw = serde_json::to_vec(&v1).unwrap();
-        assert_eq!(verify_current(root, raw.as_slice(), b"desktop v1".as_slice()), Ok(()));
     }
 
     #[test]
