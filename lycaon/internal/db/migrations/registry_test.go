@@ -154,3 +154,31 @@ func TestExecuteChecksIntegrityBeforeCommit(t *testing.T) {
 		t.Fatal("invalid migration data escaped rollback")
 	}
 }
+
+func TestDropReleasedEnforcesRegisteredRetirements(t *testing.T) {
+	database, err := sql.Open("sqlite", ":memory:")
+	testutil.FailErr(t, "open retirement fixture", err)
+	defer func() { _ = database.Close() }()
+	database.SetMaxOpenConns(1)
+	_, err = database.Exec(`CREATE TABLE legacy(kept TEXT, obsolete TEXT)`)
+	testutil.FailErr(t, "seed retirement fixture", err)
+	colRetirement := Retirement{Table: "legacy", Column: "obsolete", Capture: "SELECT obsolete FROM legacy", Rebuild: "SELECT kept FROM legacy"}
+	tblRetirement := Retirement{Table: "legacy", Capture: "SELECT kept FROM legacy", Rebuild: "SELECT kept FROM legacy"}
+	retirements["retire-step"] = []Retirement{colRetirement, tblRetirement}
+	defer delete(retirements, "retire-step")
+
+	registered := RegisteredRetirements()
+	if len(registered["retire-step"]) != 2 {
+		t.Fatalf("registered retirements = %v", registered)
+	}
+
+	tx, err := database.BeginTx(t.Context(), nil)
+	testutil.FailErr(t, "begin retirement transaction", err)
+	defer func() { _ = tx.Rollback() }()
+	if err := DropReleased(t.Context(), tx, "retire-step", Retirement{Table: "unregistered"}); err == nil {
+		t.Fatal("unregistered retirement accepted")
+	}
+	testutil.FailErr(t, "drop registered column", DropReleased(t.Context(), tx, "retire-step", colRetirement))
+	testutil.FailErr(t, "drop registered table", DropReleased(t.Context(), tx, "retire-step", tblRetirement))
+	testutil.FailErr(t, "commit retirement transaction", tx.Commit())
+}
