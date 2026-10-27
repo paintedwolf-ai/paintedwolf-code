@@ -107,7 +107,7 @@ jobs:
           if-no-files-found: warn
 
   r2-pacman-repositories:
-    needs: r2-release-controls
+    needs: [r2-release-controls, r2-native-repositories]
     if: ${{ always() && !cancelled() && github.event_name == 'workflow_dispatch' && inputs.mode == 'pacman-repositories' }}
     runs-on: ubuntu-latest
     container:
