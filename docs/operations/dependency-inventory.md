@@ -67,7 +67,7 @@ An entry counts as high urgency when rated Critical or High, and as high frictio
 | **High urgency, high friction** | Planned precision updates. Watch upstream advisories continuously. Run each update as an isolated task with full cross-platform regression testing. | 7 |
 | **High urgency, low or moderate friction** | Fast-follow. The nightly `lint:vuln:fresh` run, Dependabot, and the behind-upstream list surface these; take patches promptly. | 43 |
 | **Low or moderate urgency, high friction** | Deliberate upgrades only. Do not chase releases. Upgrade when a defect, required feature, or security fix calls for it. | 15 |
-| **Low or moderate urgency, low or moderate friction** | Opportunistic maintenance during routine windows. | 62 |
+| **Low or moderate urgency, low or moderate friction** | Opportunistic maintenance during routine windows. | 63 |
 
 ---
 
@@ -109,12 +109,12 @@ Policy files retain every declared entry, package rating, rationale, and verific
 |---|---|---|---|
 | Languages, runtimes, and platform floor | 6 | [Policy](../../dependencies/sections/runtimes.yaml) | Declared pin sources in policy |
 | Bundled engines and hermetic binaries | 5 | [Policy](../../dependencies/sections/engines.yaml) | Declared pin sources in policy |
-| Development, build, and verification tools | 7 | [Policy](../../dependencies/sections/tools.yaml) | Declared pin sources in policy |
+| Development, build, and verification tools | 8 | [Policy](../../dependencies/sections/tools.yaml) | Declared pin sources in policy |
 | Vendored catalogs, datasets, and specifications | 5 | [Policy](../../dependencies/sections/vendored.yaml) | Declared pin sources in policy |
 | Frontend packages (`lycaon-den`) | 67 | [Policy](../../dependencies/sections/frontend.yaml) | [Manifest](../../lycaon-den/package.json) · [Lockfile](../../lycaon-den/bun.lock) |
 | Backend Go modules (`lycaon`) | 73 | [Policy](../../dependencies/sections/backend-go.yaml) | [Manifest](../../lycaon/go.mod) |
-| Tauri shell crates (`lycaon-den/src-tauri`) | 39 | [Policy](../../dependencies/sections/tauri.yaml) | [Manifest](../../lycaon-den/src-tauri/Cargo.toml) · [Lockfile](../../lycaon-den/src-tauri/Cargo.lock) |
-| Bialy decision engine crates (`lycaon/internal/decide/native`) | 9 | [Policy](../../dependencies/sections/decision-engine.yaml) | [Manifest](../../lycaon/internal/decide/native/Cargo.toml) · [Lockfile](../../lycaon/internal/decide/native/Cargo.lock) |
+| Tauri shell crates (`lycaon-den/src-tauri`) | 45 | [Policy](../../dependencies/sections/tauri.yaml) | [Manifest](../../lycaon-den/src-tauri/Cargo.toml) · [Lockfile](../../lycaon-den/src-tauri/Cargo.lock) |
+| Bialy decision engine crates (`lycaon/internal/decide/native`) | 10 | [Policy](../../dependencies/sections/decision-engine.yaml) | [Manifest](../../lycaon/internal/decide/native/Cargo.toml) · [Lockfile](../../lycaon/internal/decide/native/Cargo.lock) |
 | Document core crates (`lycaon/internal/documentcore/native`) | 4 | [Policy](../../dependencies/sections/document-core.yaml) | [Manifest](../../lycaon/internal/documentcore/native/Cargo.toml) · [Lockfile](../../lycaon/internal/documentcore/native/Cargo.lock) |
 | Comment linter module (`scripts/commentlint`) | 1 | [Policy](../../dependencies/sections/commentlint.yaml) | [Manifest](../../scripts/commentlint/go.mod) |
 
@@ -122,10 +122,11 @@ Policy files retain every declared entry, package rating, rationale, and verific
 
 ### Update automation
 
-`.github/dependabot.yml` is generated from the policy. Each manifest section becomes one weekly
-ecosystem block with the configured cooldown. Minor and patch version updates share a group;
-major updates remain individual PRs. Security updates remain independent of that group and
-the version-update cooldown. A 0.x minor update can still be breaking and needs review.
+`.github/dependabot.yml` is generated from the policy. Manifest sections sharing an ecosystem
+and group coalesce into one monthly ecosystem block with the configured cooldown. Minor and
+patch library updates share a group while major library updates remain individual PRs; GitHub
+Actions updates group all semver levels together. Security updates remain independent of that
+group and the version-update cooldown. A 0.x minor update can still be breaking and needs review.
 A package's `updates` value becomes an
 ignore rule: `hold` ignores every update, `no-major` ignores major releases, and `patch-only`
 ignores major and minor releases. Ignore rules also suppress Dependabot security updates for
@@ -188,9 +189,3 @@ successful upstream refresh. After Go bumps, refresh the vendored database befor
   each patch that upstream has absorbed.
 * **Charm v2, `ureq` 3, and TypeScript 7:** keep the current majors until the migration is
   scheduled as its own work.
-
-### Offline MLX source updates
-
-Apple silicon builds read `third_party/mlx/pin.json` and its compressed source archives through the repository's Cargo CMake toolchain setting. MLX 0.32.2 and its required Metal C++, fmt, JSON and gguflib sources occupy about 9 MiB compressed. Keeping the exact upstream archives in the existing third-party source tree makes a fresh checkout build offline; the archives retain upstream licence files, and shipped notices remain in `licensing/texts/mlx-compiled-notices.md`. The exact locked `mlx-sys` 0.6.0 crate adds about 1 MiB of source in the decision engine workspace at `lycaon/internal/decide/native/vendor/mlx-sys`. Its narrow build-script patch declares Cargo inputs and stages unchanged CMake source/toolchain files in persistent `OUT_DIR`; one shared CMake policy still validates the current pins and archives. Linux builds do not select these sources.
-
-When updating `mlx-rs` or `mlx-sys`, inspect the pinned crate's mlx-c CMake declarations and MLX's nested dependencies. Resolve each Git tag to its full commit, download its source archive, record its SHA-256 and archive root in `third_party/mlx/pin.json`, and update the crate version there. Replace the vendored crate from its checksum-verified upstream archive, retain its licences/provenance, and reapply or remove the recorded `mlx-sys.patch` as appropriate. Update the decision engine Cargo lockfile to the reviewed dependency resolution before running the locked packaging build. For Metal C++, retain the exact versioned Apple archive URL and checksum. Review licence and compiled-notice changes together. A missing archive, digest mismatch, changed crate version or requested MLX tag fails before FetchContent can download anything; `FETCHCONTENT_FULLY_DISCONNECTED` stays enabled. Run `./task test:runner`, then a cold `./task den:test:rust` on Apple silicon and another captured-source run to confirm native object reuse. A warmed build with a deliberately mismatched pin must still refuse before fetching.

@@ -16,7 +16,6 @@ import (
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/credentialstore"
 	execpkg "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/gitcredential"
 	"github.com/lycaon/lycaon/internal/hostlock"
@@ -187,11 +186,6 @@ func runServe(signals context.Context, dbPath string) error {
 	if err := readStartupAPIToken(os.Stdin, &cfg); err != nil {
 		return err
 	}
-	if strings.TrimSpace(os.Getenv(credentialstore.UnlockStdinEnv)) != "" {
-		if err := credentialstore.ReadUnlockFrame(os.Stdin); err != nil {
-			return err
-		}
-	}
 	if strings.TrimSpace(os.Getenv(startupprotocol.ControlStdinEnv)) != "" {
 		go func() {
 			_ = startupprotocol.ReadControlShutdown(os.Stdin)
@@ -202,7 +196,6 @@ func runServe(signals context.Context, dbPath string) error {
 		cfg.ConfigRoot = root
 	}
 	serveApp, err := app.Build(ctx, cfg)
-	credentialstore.ClearUnlockSecret()
 	if ctx.Err() != nil {
 		// Shutdown was requested during startup, which is not a startup failure.
 		if serveApp != nil {

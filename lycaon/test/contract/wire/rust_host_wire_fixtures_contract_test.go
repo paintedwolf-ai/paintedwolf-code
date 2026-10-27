@@ -51,7 +51,6 @@ func TestRustHostWireFixturesMatchGoTypes(t *testing.T) {
 		"startup_record":                 startupRecordFixture(t),
 		"native_proxy_response":          goTypeFixture(t, "internal/nativeproxy.Response", nativeproxy.Response{}),
 		"vault_custody_report":           goTypeFixture(t, "internal/credentialstore.CustodyReport", credentialstore.CustodyReport{}),
-		"vault_custody_outcome":          goTypeFixture(t, "internal/credentialstore.CustodyOutcome", credentialstore.CustodyOutcome{}),
 	}
 	phases := make([]string, 0, len(startupprotocol.Phases()))
 	for _, phase := range startupprotocol.Phases() {
