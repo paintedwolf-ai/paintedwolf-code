@@ -71,20 +71,20 @@ func TestCoordinatorWaitDeliverySurvivesOptionalWakeGates(t *testing.T) {
 					loop.Nudges.NudgeProcessFinished(t.Context(), id, "server", anchor.Envelope{})
 				}
 			}
-			testutil.WaitFor(t, time.Second, func() bool { _, ready := loop.Deliveries.waitWinner(id); return ready })
+			testutil.WaitFor(t, func() bool { _, ready := loop.Deliveries.waitWinner(id); return ready })
 			if deliveries.Load() != 0 {
 				t.Fatal("wait delivery overlapped active execution")
 			}
 			finish()
-			testutil.WaitFor(t, time.Second, func() bool { return deliveries.Load() == 1 })
-			loop.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, time.Second))
+			testutil.WaitFor(t, func() bool { return deliveries.Load() == 1 })
+			loop.Turns.WaitForAsyncTurns(t.Context())
 			pending, err := store.PendingAgentResumes(t.Context())
 			testutil.FailErr(t, "read pending waits", err)
 			if len(pending) != 0 {
 				t.Fatalf("delivered wait remains pending: %+v", pending)
 			}
 			testutil.FailErr(t, "recover acknowledged wait", RecoverWaitLeases(t.Context(), loop.Subscriptions, store))
-			loop.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, time.Second))
+			loop.Turns.WaitForAsyncTurns(t.Context())
 			if deliveries.Load() != 1 {
 				t.Fatalf("deliveries = %d", deliveries.Load())
 			}
@@ -112,8 +112,8 @@ func TestWaitDeliveryRetriesMissingAcknowledgement(t *testing.T) {
 		t.Fatal("undelivered result did not keep the turn open")
 	}
 	loop.Nudges.Nudge(t.Context(), id, anchor.WaitTimerFired, anchor.WaitTimerFired, "", anchor.Envelope{})
-	testutil.WaitFor(t, 3*time.Second, func() bool { return attempts.Load() == 2 && !loop.Nudges.HasPendingLoopWakes(id) })
-	loop.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, time.Second))
+	testutil.WaitFor(t, func() bool { return attempts.Load() == 2 && !loop.Nudges.HasPendingLoopWakes(id) })
+	loop.Turns.WaitForAsyncTurns(t.Context())
 	if attempts.Load() != 2 {
 		t.Fatalf("admission attempts = %d", attempts.Load())
 	}
@@ -174,7 +174,7 @@ func TestWaitDeliveryRetiresOnlyObservedWakeFacts(t *testing.T) {
 			queue.push(pendingLoopWake{wake: anchor.PhaseAdvanced, seq: loop.Nudges.nudgeSeq.Add(1)})
 			loop.Deliveries.rememberWaitWinner(id, "lease", awaitstore.Condition{Kind: "timer", Outcome: "timed_out"})
 			loop.Nudges.Nudge(t.Context(), id, anchor.WaitTimerFired, anchor.WaitTimerFired, "", anchor.Envelope{})
-			loop.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, time.Second))
+			loop.Turns.WaitForAsyncTurns(t.Context())
 			loop.Nudges.DrainPending(t.Context(), id)
 			wantPrompts := int32(1)
 			if observed {

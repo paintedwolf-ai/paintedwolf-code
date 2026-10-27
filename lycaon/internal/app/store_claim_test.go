@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/hostlock"
@@ -32,29 +33,30 @@ func replaceStoreFile(t *testing.T, dbPath string) {
 
 // The serve loop stops on this signal.
 func TestWatchStoreClaimDeliversTheLoss(t *testing.T) {
-	prev := storeClaimCheckInterval
-	storeClaimCheckInterval = time.Millisecond
-	t.Cleanup(func() { storeClaimCheckInterval = prev })
 	dbPath, claim := claimedTestStore(t)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	lost := (&ServeApp{storeClaim: claim}).watchStoreClaim(ctx)
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+		lost := (&ServeApp{storeClaim: claim}).watchStoreClaim(ctx)
 
-	select {
-	case err := <-lost:
-		t.Fatalf("an intact claim reported a loss: %v", err)
-	case <-time.After(20 * time.Millisecond):
-	}
-	replaceStoreFile(t, dbPath)
-	select {
-	case err := <-lost:
-		if !errors.Is(err, hostlock.ErrStoreClaimLost) {
-			t.Fatalf("watch delivered %v, want the claim loss", err)
+		time.Sleep(storeClaimCheckInterval * 2)
+		synctest.Wait()
+		select {
+		case err := <-lost:
+			t.Fatalf("an intact claim reported a loss: %v", err)
+		default:
 		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("a replaced store was never reported")
-	}
+		replaceStoreFile(t, dbPath)
+		select {
+		case err := <-lost:
+			if !errors.Is(err, hostlock.ErrStoreClaimLost) {
+				t.Fatalf("watch delivered %v, want the claim loss", err)
+			}
+		case <-t.Context().Done():
+			t.Fatal("a replaced store was never reported")
+		}
+	})
 }
 
 func TestWatchStoreClaimWithoutAClaimNeverFires(t *testing.T) {
