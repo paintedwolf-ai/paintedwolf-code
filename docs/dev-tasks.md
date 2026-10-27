@@ -26,6 +26,11 @@ After changing a frontend dependency patch, run `./task setup-dev -- --frontend`
 to refresh the pinned packages before verification. Captured test trees share
 the workspace's installed dependencies.
 
+In a fresh worktree, run `./task gitengine:fetch` before tests that create or
+inspect Git repositories. This downloads and verifies the pinned Git bundle.
+Verification copies the staged bundle into its captured tree; it does not
+provision a missing bundle.
+
 Hosted shell preparation uses `./task setup-dev -- --shell-resources` to write
 qualified notices into the build checkout. `licenses:notices` is the isolated
 verification check; its snapshot outputs do not prepare a subsequent invocation.
@@ -65,7 +70,7 @@ The repository ships no pre-commit hook. **Closeout:** a change pushed for a pul
 
 Every credential value lives in `{configdir}/credential-vault.age`, one age-encrypted document shared by provider keys, web-research keys, MCP OAuth tokens, the secret fingerprint key, and managed secrets. Development builds keep the matching age identity in `{configdir}/.credential-vault-development-identity` at `0600`; tests use the same isolated path and never touch Keychain or ask for a password.
 
-Release macOS builds store only the random age identity, device-only, in the data protection Keychain; the vault ciphertext stays in the config directory. Linux packaged installs keep the identity in the `pw-vault-identity` system service. Without that service, and on Windows, the identity is wrapped in `{configdir}/credential-vault-identity.age` with the app password, which the desktop sends to the engine over a private startup pipe, never argv or the environment. Custody details: [secrets](secrets.md).
+Release macOS builds store only the random age identity, device-only, in the data protection Keychain; the vault ciphertext stays in the config directory. Linux packaged installs keep the identity in the `pw-vault-identity` system service. Without that service, credential storage refuses to open. Other release platforms also refuse until a native custodian is implemented. Custody details: [secrets](secrets.md).
 
 ```bash
 LYCAON_DEV=1 "$BUILD_DIR/lycaon-dev" credentials where        # report the vault and identity provider
@@ -631,8 +636,8 @@ Gate composition lives in `scripts/verification-plan.json`.
 
 | Task | Composition |
 |------|-------------|
-| `check-fast` | Local handoff gate on one stable source snapshot: `build`, `lint:full`, `budgets`, `den:typecheck`, `den:lint`, `den:test:fast`, `den:coverage:changes`, `test:short`, `test:contract`, `coverage:changes`, `licenses:notices`, `comments:check`, `test:fail-messages:check`, and `docs:links`, each starting once its declared resources allow. CI's `fast` profile, the ready pull request tier, runs a subset of these stages |
-| `check` | Full local and qualification gate on one stable source snapshot, run exactly by CI's `check` profile: `build`, `build:cross`, `check:drift`, `openapi:lint`, `validate:workflows`, `oar:verify` (`test:oar` and `oar:conformance`), the runtime checks (`test:runner`, `test:full` including required bundled scanners, `den:typecheck`, `den:lint`, `den:test`, `den:test:rust`), `test:fail-messages:check`, `comments:check`, `lint:full`, `budgets`, `coverage:changes`, `den:coverage:changes`, and `lint:vuln`. Stages start as their declared resources allow, longest expected first, and the first failure ends the gate. Active fuzzing, transcript performance, stress, race, and coverage sweeps run separately in `nightly.yml` and the release workflow; ordinary Go tests still execute saved fuzz cases |
+| `check-fast` | Local handoff gate on one stable source snapshot: `build`, `lint:full`, `budgets`, `den:typecheck`, `den:lint`, `den:test:fast`, `den:coverage:changes`, `test:short`, `test:contract`, `coverage:changes`, `scripts:coverage:changes`, `licenses:notices`, `comments:check`, `test:fail-messages:check`, and `docs:links`, each starting once its declared resources allow. CI's `fast` profile, the ready pull request tier, runs a subset of these stages |
+| `check` | Full local and qualification gate on one stable source snapshot, run exactly by CI's `check` profile: `build`, `build:cross`, `check:drift`, `openapi:lint`, `validate:workflows`, `oar:verify` (`test:oar` and `oar:conformance`), the runtime checks (`test:runner`, `test:full` including required bundled scanners, `den:typecheck`, `den:lint`, `den:test`, `den:test:rust`), `test:fail-messages:check`, `comments:check`, `lint:full`, `budgets`, `coverage:changes`, `scripts:coverage:changes`, `den:coverage:changes`, and `lint:vuln`. Stages start as their declared resources allow, longest expected first, and the first failure ends the gate. Active fuzzing, transcript performance, stress, race, and coverage sweeps run separately in `nightly.yml` and the release workflow; ordinary Go tests still execute saved fuzz cases |
 | `check:drift` | Internal to `check`: every `codegen:*:check`, `openapi:bundle:check`, `db:sqlc:check`, `db:sqlc:vet`, the vendored-corpus checks (`oar:vendor:check`, `scan:rules:vendor:check`, `secret-mint:vendor:check`, `lint:vuln:vendor:check`), and `docs:links`. A stale generated surface fails here, not at compile time |
 | `check:digest` | Summarized local pass — build, `lint:fast`, unit/component Go tests, `den:test:fast`, and the harness canary. `FULL=1` delegates to `test:full`, including integration tags and required bundled scanners |
 | Contention controls | Up to eight batches overlap across checkouts; stages within a request and across requests overlap wherever resource locks and worker slots allow. Shared operations reserve slots within a global budget of three quarters of host CPUs, rounded down and bounded between one and eight workers; `PW_TEST_HOST=dedicated` (hosted CI) uses every CPU and lets shared operations reserve all of it. `PW_TEST_WORKERS` caps each invocation; runner-specific settings may reduce it. Scheduler-dependent waits and lint deadlines scale 1×–4× from host load, with `PW_TEST_TIMEOUT_SCALE` as an explicit override |
@@ -648,7 +653,7 @@ Gate composition lives in `scripts/verification-plan.json`.
 | `test:runner` | Bounded subprocess fixtures for batching, stage overlap, source snapshots, package outcomes and reuse, FIFO order and backfill, early failures, cancellation, crash recovery, nested admission, and worker limits |
 | `lint:fast` / `lint:full` | Both run vet and security checks. Interprocedural dead-code analysis belongs to `lint:full`. Arguments after `--` go to golangci-lint; `./task lint:full -- --timeout=40m` raises that analysis deadline |
 | `db:wipe` | Clears the store and every store-keyed host tree; preserves Den app preferences, device configuration, credentials, debug captures, and upgrade recovery archives. Refuses while any process holds the store open — stop the engine first |
-| `budgets` / `coverage:changes` / `den:coverage:changes` | Hold what a change touches to its limits and test the statements it adds; warnings arrive before the limit, and `PW_BUDGETS_INSPECT="<path>"` shows a file or directory's standing before editing it. See [Size budgets and changed coverage](test-strategy.md#size-budgets-and-changed-coverage) |
+| `budgets` / `coverage:changes` / `den:coverage:changes` / `scripts:coverage:changes` | Hold what a change touches to its limits and test the statements it adds; warnings arrive before the limit, and `PW_BUDGETS_INSPECT="<path>"` shows a file or directory's standing before editing it. `scripts:coverage:changes` shares the `runner` resource with `test:runner` and installs the pinned coverage.py once per interpreter under the [bin directory](#build-outputs-caches-and-locks); `./task setup-dev -- --ci-inputs` provisions it before an offline CI lane. See [Size budgets and changed coverage](test-strategy.md#size-budgets-and-changed-coverage) |
 | `check:coverage` / `check:coverage:packages` | `check:coverage` produces aggregate and package reports from one test run. Floors come from `scripts/coverage-policy.json`: `COVERAGE_MIN` overrides the aggregate floor; the per-package report is advisory until `COVERAGE_PKG_ENFORCE=1`, with `COVERAGE_PKG_MIN` overriding its floor and exemptions in `lycaon/coverage-exempt.txt`. Floors must be finite percentages from 0 through 100; fractional floors are compared without truncation. Go and Den coverage runs use the digest runners and retain failure diagnostics |
 | `build:decide` / `decide:test` | Build and test `bialy` with the host's features (`scripts/decide-features.sh`: `mlx` on Apple silicon, `vulkan` on Linux). On Linux, `decide:test` runs the Vulkan parity tests on the first GPU, or on Mesa's lavapipe (`mesa-vulkan-drivers`) without one. The first MLX build compiles the framework from source: several minutes, a network fetch, and Xcode's Metal toolchain (`xcodebuild -downloadComponent MetalToolchain` when the build cannot execute `metal`). Development builds stage heads installed under `$(python3 scripts/artifact_paths.py bin .)/decide-heads/`; the dev sidecar provisions the checkpoint at its first boot |
 | `build:document-core` | Builds `pw-document-core` for this host into the shared, content-addressed cache and prints its path. Go and Vitest digests, fuzz, and benchmark runs call it themselves and export `LYCAON_DOCUMENT_CORE_BINARY`, so editor tests always run the core built from the source they test; `build:lycaon-dev` stages a copy beside `lycaon-dev` |
@@ -765,6 +770,12 @@ Background submissions validate these flags before creating a job.
 
 ### Selection arguments
 
+`./task den:test:rust -- --compile-only` and
+`./task decide:test -- --compile-only` compile all normal test targets without
+executing them. They use the same resources and pinned features as the complete
+test targets; a compile-only pass does not establish runtime verification.
+No other native selection flags are accepted.
+
 Arguments after `--` reach a catalog target only when the catalog's `selection`
 section declares a grammar for it; anything else is refused before admission,
 because Task drops arguments a recipe does not reference and the whole target
@@ -802,8 +813,13 @@ and Linux, lost owner identity is `supervision_lost`; an OS-stopped owner is
 `supervisor_stopped`. Operations with ten minutes of continuously sampled unchanged
 descendant CPU counters, process trees, and captured output are `suspected_stall`;
 samples more than 90 seconds apart reset the inactivity window, and Go raw event
-files count as output even when the digest's console log is quiet. Queued
-reservations are not stalled operations. A healthy long-running command can
+files count as output even when the digest's console log is quiet. Targets whose
+work runs inside an external daemon (such as `nix-daemon` or container builds)
+declare `"progress": "log"` or `"progress": "heartbeat"` in their
+`scripts/verification-plan.json` resource recipe; the scheduler exports
+`PW_TEST_STAGE_PROGRESS` and samples that file's inode, size, and modification
+time alongside descendant processes and stage logs, without parsing output prose.
+Queued reservations are not stalled operations. A healthy long-running command can
 remain active indefinitely, and a quiet external wait may still trigger an
 advisory. These signals never kill processes, release leases, or change test
 results. Missing process identity or unsupported telemetry reports `unknown`;
@@ -994,6 +1010,21 @@ flowchart TD
     activate --> clients["Direct-download updater verifies signature;<br/>Homebrew installs get the notifier"]
 ```
 
+The Nix cache adapter is `python3 -m scripts.nix_cache.adapter`. It consumes explicit already-built application outputs and a release request with `schema_version: 1`, `mode: production`, the product `version`, full `application_commit`, `flake_lock_sha256`, native Linux `system`, `outputs`, and `cache_prefix: nix-cache`. Supply those using `--request`, a separately reviewed `--trust-policy` containing `schema_version: 1`, `mode: production`, and dedicated Nix `public_keys`, an owner-only `--signing-key-file` outside the store/cache, a new absolute `--cache` destination, and an external `--report` path. No production key is generated or trusted automatically. The protected controller supplies a fresh `release_admission.verify_release` selection through `scripts.nix_cache.release_authority.authorize`; it binds every selected architecture output, source, version, lock and actual NAR hash before transport credentials load. A saved accepted JSON receipt grants no publication authority.
+
+Nix constructs and verifies the standard signed file cache. Admission requires the entire runtime closure here, including dependencies available upstream. `scripts.nix_cache.publication.publish` rechecks signatures, actual NAR identities and local inventory, then uses the dedicated R2 transport to upload immutable NARs before metadata. It verifies each ordinary custom-domain URL before writing an immutable availability record. Public metadata must carry `no-store`, have no cache age or stale-hit status, and match exact admitted bytes. Configure the delivery domain to bypass caching, including negative caching, for `nix-cache-info` and `.narinfo`; a cached 404 or stale response refuses completion. No cache-busting URL can substitute for this check. NARs use immutable caching. Signature rotation can add signatures without changing their store identity or removing retained signatures, and appends a separate record while preserving the original release record.
+
+`scripts.nix_cache.observation.observe` performs read-only availability observation after fresh installed-release admission. Supply the local verified cache/report, the protected selection and trust policy, and a read-only view of the existing R2 transport (`public`, `read(name)`, `verify_public(name, record)`). It checks authenticated withdrawal controls before and after ordinary HTTPS reads of every admitted object and the exact retained availability record, then rechecks release admission. Both native architectures share the `nix-cache` object root; release records are separated by version and system. The returned canonical facts and admission digest describe that observation only. Local construction, an old publication receipt, or a public 404 alone never establishes current availability; the observer neither writes objects nor activates a cache.
+
+Publication, withdrawal and collection share a conditional R2 write lock. The lock never expires automatically: after a crashed publisher, the protected controller must explicitly authorize recovery of the exact recorded operation. A retry reuses identical objects and completes the availability record last. All writers for this prefix must use this owner. An immutable publication plan roots its objects before uploading begins; interrupted plans retain those bytes because a lost request may still commit. Withdrawal preserves every published `.narinfo`, release record and referenced NAR, including old pins. The retention operation only collects unreferenced upload debris older than an explicitly selected cutoff of at least one day; a missing retained object refuses collection. It never removes a published store path because an offer was withdrawn.
+
+Cache use remains an explicit choice. After a release publishes its dedicated Nix public key, an administrator can add `https://downloads.paintedwolf.dev/nix-cache` to `extra-substituters` and that exact key to `extra-trusted-public-keys`; do not add broad `trusted-users` permissions. Keep old and new keys during an announced overlap. Remove the optional cache and its key to opt out; source builds and other explicitly trusted caches remain available. During an outage, already installed paths remain usable, and a source build can proceed with this substituter omitted. Signature or object mismatch requires refusal, never disabling signature checks. This cache trust does not authorize unattended vault custody.
+
+`./task release:live-test -- --local-nix-cache` uses disposable keys, private stores and owned loopback HTTP to rehearse complete closure copying, cold import, wrong trust, altered NARs/metadata, missing dependencies, key overlap, interrupted upload retry, ordinary-URL cached misses, withdrawal and debris collection. It makes no R2 calls and changes no daemon trust. Cache layout/signing follow [Nix](https://nix.dev/manual/nix/2.35/protocols/binary-cache/index.html); conditional writes and custom-domain caching follow [R2](https://developers.cloudflare.com/r2/reference/consistency/). Actual production delivery and both architecture installed application substitution remain unperformed until the qualified release is selected.
+
+`./task release:live-test -- --r2-nix-cache` runs the signed two-path closure through an isolated real R2 prefix and the ordinary HTTPS download domain. It reads the private bucket-scoped configuration documented under [Release dry run](#release-dry-run), using the shared S3 rehearsal prerequisite. It exercises an interrupted metadata upload, retry, conditional publication lock and exact-operation recovery, cold substitution with explicit trust, wrong-key refusal, overlapping key rotation and withdrawal retention. Disposable signing keys remain outside the store and are removed with the private fixture. Cleanup deletes only the keys recorded by this run and verifies the isolated prefix is empty. This test needs native Linux, Nix and AWS CLI v2; it never activates the production cache or changes daemon trust. Production cache credentials and controller admission remain unchanged.
+The public artifact collector requires every catalog-public package, its checksum, and its scanner audit. Only platforms with a non-null `updater_extension` contribute signed updater archives and feed entries; package-managed platforms require no synthetic updater. Website confirmation compares the complete package link set for the selected catalog, including architecture and version, while preserving the signed receipt and uncached page checks. `release_distribution.py website --catalog PATH` and `release-validate-updater-manifest.sh --catalog PATH` allow verification against the release source's catalog. Candidate packages remain excluded. A recovery operation must select the catalog belonging to the restored release; current-source catalog changes do not establish historical distribution contents.
+
 ### Bump and tag (example `1.0.0-rc.1` → `1.0.0-rc.2`)
 
 1. Set `VERSION` to `1.0.0-rc.2` and increment `RELEASE_BUILD`.
@@ -1009,9 +1040,79 @@ flowchart TD
 
 Local release packaging uses `./task den:bundle`, which injects `VERSION` into the sidecar and syncs Den package/Tauri/Cargo versions. On macOS it requires the Developer ID identity and engine provisioning profile enforced by the [bundle build](../scripts/den-build-bundle.sh). Use `./task den:app -- --debug` for local development without provisioning.
 
+### Nix development and package builds
+
+The pinned [flake](../flake.nix) defines Linux amd64 and arm64 development
+shells from the repository's Rust toolchain, Go module and Bun version. Enter
+with `nix develop`, then use the existing root `./task` commands. The shell
+supplies GTK3/WebKitGTK4.1 development libraries and pkg-config inputs; ordinary
+application feature code still uses native capability facts.
+
+Hosts that restrict unprivileged user namespaces to profiled programs (Ubuntu
+24.04 and later) need an administrator to load the generation's engine grant
+before confinement is available. Each generation ships
+`share/painted-wolf-code/apparmor/paintedwolf-engine-<hash>`, which grants user
+namespaces to that generation's exact `pw` executable only: install it under
+`/etc/apparmor.d/` and load it with `apparmor_parser -r`. A new generation has
+a new path and needs its own grant; remove the previous one once nothing runs it.
+A source build on such a host also needs the scanner builder's grant: build the
+scanner tools first (`./task nix:build -- --component scanner-host-tools`), load
+the `paintedwolf-scanner-builder-<hash>` profile its output ships the same way,
+then build the application. Substituting the qualified closure needs neither.
+
+Outside NixOS the launchers select the closure's Mesa as the EGL, GBM and
+Vulkan driver unless those variables are already set: host-installed drivers
+are not part of the generation, so they would be foreign modules. NixOS uses
+the system's configured driver environment.
+
+Consumers without flakes use [default.nix](../default.nix): `nix-build` or
+`pkgs.callPackage <checkout> { }` evaluates the same flake graph with the
+inputs pinned in `flake.lock`; the caller's package set selects only the
+platform.
+
+`./task nix:check` evaluates all declared systems without building or updating
+the lock file, and requires `default.nix` to instantiate the flake's exact
+application derivation for each system. `./task nix:build` builds the host's native Linux package under
+normal exclusive admission with one Nix job/core and sandboxing enabled. Its
+report binds the source tree, flake lock, derivations, outputs and recursive
+closure. Missing Nix, missing outputs and incompatible inputs fail the target.
+For a focused package input build, use `./task nix:build -- --component bun-lock`;
+the declared component list is checked by the build driver. The generated Bun
+dependency expression is a build output to review and commit, never an
+evaluation-time download or an automatic lock-file mutation.
+These tasks do not publish a cache or authorize daemon access from an agent
+command. Nix build sandboxing and application command confinement are separate.
+The package closure and installed system integration remain under implementation
+in #927/#928/#929; evaluation does not establish installed support.
+
 ### Linux packages
 
-Linux ships as native packages only: a `.deb` for Debian and Ubuntu families and an `.rpm` for Fedora and RHEL-compatible families, for x86_64 and aarch64. `./task den:bundle` on Linux compiles the shell with `tauri build --no-bundle`, writes the package manifest, and stages the install tree with `tauri bundle --bundles deb`. `scripts/linux-package-assemble.py` then builds both families from that one tree with the distributions' tools: it seals the package manifest against the staged bytes (bundling patches the shell executable after the manifest is first written), builds the `.deb` with `dpkg-deb` (xz level 6 on every core; Tauri's control file with the release's Debian version, since Tauri writes the native app version and drops the prerelease), and builds the `.rpm` with `rpmbuild` (from the `rpm` package on Debian and Ubuntu) and a spec generated from the same dependency catalog, the `packaging/linux/rpm` scriptlets and the Tauri metadata. Tauri's own rpm target is not used: it holds the 1.7 GB payload in memory and compresses it on one thread, which did not finish within 30 minutes at zstd level 3; `rpmbuild` streams the payload through zstd level 19 on every core (`w19T0.zstdio`). Staging compares the two extracted trees file by file (type, mode, link target), apart from fragments only one family ships. The package is the installation identity: the installed layout is
+The native pacman adapter is available with `./task den:bundle -- --pacman` on
+an unprivileged Linux builder with `makepkg` and its packaging prerequisites.
+`./task den:bundle -- --pacman-container` instead prepares the pinned official Arch
+or Arch Linux ARM substrate on the matching native CPU, then runs makepkg offline
+as the invoking user. Docker is required; no QEMU or cross-CPU packaging is admitted.
+It consumes the same sealed application tree as deb/rpm, removes Debian-only
+policy fragments, validates required resources and the final executable manifest,
+and emits a `.pkg.tar.zst`, its payload archive, generated `PKGBUILD` and `.SRCINFO`
+under `bundle/pacman`. Package-time stripping/debug extraction is disabled so the
+launcher manifest continues to describe the final bytes. Checksums bind the
+recipe to its payload. This build path does not install packages or configure
+repositories; the native Arch/Artix owner/service and delivery work is #941/#942.
+`pacman-candidate.json` records the selected source, final package SHA-256/size,
+sealed payload hash, native CPU, official substrate identity and installed packaging
+toolchain. Staging checks native package identity, exact dependency declarations,
+safe archive contents and the same complete payload/ELF audits as deb/rpm. Retained
+`candidate-packages.json` binds all three families to exact source, architecture and
+final hashes. Native amd64 and Arch Linux ARM aarch64 installed qualification remains #943.
+
+Pacman uses the shared product version, mapping supported preview labels to
+`<core>pre.<label>` (for example `1.2.3-rc6` becomes `1.2.3pre.rc6`) and the shared
+`RELEASE_BUILD` as `pkgrel`. The full product version stays in the installed
+`release-version` and executable manifest. Unsupported prerelease labels fail
+construction rather than risk an incorrect package upgrade order.
+
+Linux ships native `.deb` packages for Debian/Ubuntu, `.rpm` packages for Fedora/RHEL-compatible families, and `.pkg.tar.zst` packages for Arch and Arch Linux ARM, for x86_64 and aarch64. `./task den:bundle` on Linux compiles the shell with `tauri build --no-bundle`, writes the package manifest, and stages the install tree with `tauri bundle --bundles deb`. `scripts/linux-package-assemble.py` then builds both families from that one tree with the distributions' tools: it seals the package manifest against the staged bytes (bundling patches the shell executable after the manifest is first written), builds the `.deb` with `dpkg-deb` (xz level 6 on every core; Tauri's control file with the release's Debian version, since Tauri writes the native app version and drops the prerelease), and builds the `.rpm` with `rpmbuild` (from the `rpm` package on Debian and Ubuntu) and a spec generated from the same dependency catalog, the `packaging/linux/rpm` scriptlets and the Tauri metadata. Tauri's own rpm target is not used: it holds the 1.7 GB payload in memory and compresses it on one thread, which did not finish within 30 minutes at zstd level 3; `rpmbuild` streams the payload through zstd level 19 on every core (`w19T0.zstdio`). Staging compares the two extracted trees file by file (type, mode, link target), apart from fragments only one family ships. The package is the installation identity: the installed layout is
 
 | Path | Contents |
 |------|----------|
@@ -1027,9 +1128,21 @@ Linux ships as native packages only: a `.deb` for Debian and Ubuntu families and
 
 Package transactions own the protected launch's generations. `postinst configure` and rpm `%post` run `pw-generations install --family deb|rpm`: it verifies the staged payload against its manifest, copies it to a new generation, resolves the catalog's WebKitGTK helper programs and library roots for the installing family and CPU (keeping the ones the system ships, each root-owned and not writable by others), atomically writes the policy selecting the generation, and reclaims every other generation no running launch holds. A failure fails the configure step (rpm reports the failed scriptlet) and writes no policy, so nothing launches unprotected. Removal (`prerm remove`, rpm `%preun` with `0`) withdraws the policy and reclaims unheld generations; purge (and rpm erase in `%postun`) removes the policy directory and reclaims what a launch still held at removal once its lifetime lock is free. A reinstall accepts an install root that holds only such generations. Upgrades keep a running app on its own generation until it exits.
 
-`lycaon-den/src-tauri/tauri.linux.conf.json` restricts the bundle target to the `.deb` stage, disables updater artifacts, and drops Tauri's `externalBin` and `resources` placement so nothing lands in `/usr/lib`; `scripts/linux-package-config.py` renders the `files` map and the dependency constraints from [`packaging/linux/dependencies.json`](../packaging/linux/dependencies.json) and the measured floor in `lycaon/internal/platformfloor/linux_floor.txt` (kernel 6.2, glibc 2.35, WebKitGTK 2.44, GTK 3.24.41 for Wayland activation). GTK, WebKitGTK, libsoup and the C library are distribution dependencies; staging refuses a package that bundles them. Optional fragments other subsystems ship are wired when present: `packaging/linux/polkit/*.policy`, `systemd/*.{service,socket}`, `apparmor/*` (deb only). Maintainer scripts in `packaging/linux/{deb,rpm}/` do exactly: enable `paintedwolf-vault-identity.socket` when it is packaged and restart its service on upgrade, refresh desktop and icon caches, load the AppArmor profile when shipped; on removal they stop the unit and remove empty package directories. They never touch user files or add repositories. No SELinux module ships, and packaging has no module-installation or removal path. The app runs as an ordinary user program, which the targeted policy leaves unconfined. The vault identity service runs under a systemd `DynamicUser` rather than an account the package creates. A Fedora install with SELinux enforcing showed no denials from the app or the service. Installed-package qualification keeps an enforcing Fedora run so a denial introduced by a later change fails release rather than reaching users ([#456](https://github.com/paintedwolf-ai/paintedwolf-code/issues/456)). Package versions follow each family's grammar through `release-metadata.py`'s `linux_package_version` (`1.0.2-rc.1` becomes `1.0.2~rc.1`).
+`lycaon-den/src-tauri/tauri.linux.conf.json` restricts the bundle target to the `.deb` stage, disables updater artifacts, and drops Tauri's `externalBin` and `resources` placement so nothing lands in `/usr/lib`; `scripts/linux-package-config.py` renders the `files` map and the dependency constraints from [`packaging/linux/dependencies.json`](../packaging/linux/dependencies.json) and the measured floor in `lycaon/internal/platformfloor/linux_floor.txt` (kernel 6.2, glibc 2.39, WebKitGTK 2.44, GTK 3.24.41 for Wayland activation). GTK, WebKitGTK, libsoup and the C library are distribution dependencies; staging refuses a package that bundles them. Optional fragments other subsystems ship are wired when present: `packaging/linux/polkit/*.policy`, `systemd/*.{service,socket}`, `apparmor/*` (deb only). Maintainer scripts in `packaging/linux/{deb,rpm}/` do exactly: enable `paintedwolf-vault-identity.socket` when it is packaged and restart its service on upgrade, refresh desktop and icon caches, load the AppArmor profile when shipped; on removal they stop the unit and remove empty package directories. They never touch user files or add repositories. No SELinux module ships, and packaging has no module-installation or removal path. The app runs as an ordinary user program, which the targeted policy leaves unconfined. The vault identity service runs under a systemd `DynamicUser` rather than an account the package creates. A Fedora install with SELinux enforcing showed no denials from the app or the service. Installed-package qualification keeps an enforcing Fedora run so a denial introduced by a later change fails release rather than reaching users ([#456](https://github.com/paintedwolf-ai/paintedwolf-code/issues/456)). Package versions follow each family's grammar through `release-metadata.py`'s `linux_package_version` (`1.0.2-rc.1` becomes `1.0.2~rc.1`).
 
 The staging script extracts both packages, verifies the manifest against the extracted bytes, checks every ELF payload is native, compares metadata and dependencies with the catalog, requires the maintainer scripts and that they enable every packaged socket, requires every packaged service to run a manifest-listed helper under `/opt/painted-wolf-code/bin/`, runs `lintian --fail-on error` and `rpmlint` when installed, and refuses anything other than exactly `deb,rpm`. The Linux updater adapter is check-only (see [Updates](#updates)).
+
+The ABI audit reads every ELF's loadable dynamic tables without executing it or
+requiring section headers. It checks imported `GLIBC`, `GLIBCXX` and `CXXABI`
+versions against `linux_floor.txt`, fails malformed objects and foreign
+architectures, and retains object hashes, `DT_NEEDED`, RPATH/RUNPATH and version
+requirements under the staged `linux-abi/` directory. The glibc 2.39 envelope
+matches Ubuntu 24.04 and RHEL 10; GCC 14's
+[ABI ceilings](https://gcc.gnu.org/onlinedocs/libstdc++/manual/abi.html) are
+GLIBCXX 3.4.33 and CXXABI 1.3.15. Kernel 6.2 remains the confinement baseline;
+the oldest supported Ubuntu installation uses its 6.8 GA kernel. These ceilings
+are admission limits, not claims that the full installed dependency closure or
+every distribution has been qualified. #731 retains that measurement work.
 
 #### Nix installations
 
@@ -1050,7 +1163,7 @@ Choose the configuration that already owns the installation. Do not create a sec
 
 | Owner | Install and update | Rollback and remove |
 |---|---|---|
-| NixOS system | Add a pinned `painted-wolf-code` flake input, import its `nixosModules.default` and enable `services.painted-wolf-code`. Review the input/lock change and switch through the system's existing rebuild procedure. A package-only `environment.systemPackages` entry does not register custody. | Select a retained system generation through the administrator's normal rollback procedure. Before disabling custody, move service-held identities to an app password, or restore the service later to access its retained state. Removing the module/package does not erase credentials. |
+| NixOS system | Add a pinned `painted-wolf-code` flake input, import its `nixosModules.default` and enable `services.painted-wolf-code`. Review the input/lock change and switch through the system's existing rebuild procedure. A package-only `environment.systemPackages` entry does not register custody. | Select a retained system generation through the administrator's normal rollback procedure. Disabling custody preserves service-held identities; restore the service to access them again. Removing the module/package does not erase credentials. |
 | Home Manager | Add the pinned input's `packages.${pkgs.stdenv.hostPlatform.system}.default` to `home.packages`, then use the existing Home Manager activation procedure. Update that input explicitly; do not replace its pin from the app. | Select the intended retained Home Manager generation or restore the prior input and activate. Remove the package from the same `home.packages`. System custody still needs an administrator's NixOS module; a standalone Home Manager activation does not install it. |
 | User profile | Choose the actual profile, inspect it with `nix profile list --profile "$PW_NIX_PROFILE"`, and add the selected source with `nix profile add --profile "$PW_NIX_PROFILE" "$PW_NIX_SOURCE#default"`. An exact commit remains pinned. To replace it, record `nix profile history`, remove the observed element name, then add the reviewed new source to that same profile. | Use `nix profile rollback` with that profile and the intended retained generation. Remove the observed element using `nix profile remove`; never guess an element name or profile path. |
 | Temporary build | Use `nix build --out-link "$PW_NIX_OUTPUT" "$PW_NIX_SOURCE#default"` with a chosen output link, then launch its `bin/painted-wolf-code`. A temporary build has no profile to upgrade. | Choose another exact source/output and relaunch when ready. Removing the chosen output link releases that root; Nix garbage collection owns unused outputs. |
@@ -1110,14 +1223,18 @@ install receipt, and the user can change that preference in Settings.
 |----------------|----------|
 | **Direct download** | Download and verify automatically; install at normal quit or startup. An explicit restart installs sooner. |
 | **Homebrew cask** | Notifier only — "vX available", run `brew upgrade --cask painted-wolf-code`. The cask writes an explicit device receipt, so custom Homebrew prefixes work and another user's installation cannot misclassify this app |
+| **Linux system package** (apt, dnf, pacman) | Notifier only. Settings shows the owning package, its version and the channel. A newer release is reported together with whether the configured package source offers it, from read-only APT, DNF or pacman cache queries; no upgrade command is presented and download or restart requests return `package_managed` |
+| **Unpackaged Linux build** | Reports `unpackaged`; no command, download or restart |
 
 **Staged rollout.** Automatic checks admit a release to a growing fraction of devices as the published manifest ages (10% in its first 24 h, 50% until 48 h, then everyone). Each install draws one random bucket, stored locally in `updates/preferences.json` and never transmitted — the check request stays identifier-free. A user-initiated **Check now** bypasses the ramp, and a release the user has already been shown never disappears behind it. The ramp is an operational stagger for catching a bad release early, not a security boundary.
 
-The Rust shell owns discovery, preferences, downloads, staging, and activation. The WebView receives separate discovery and installation states, a service instance and monotonic revision, and native action capabilities. Commands bind to a release identity covering version, channel, target, key generation, URL, and signature; they never accept a local artifact path. The feed and artifacts are fetched directly from `downloads.paintedwolf.dev` with no redirects and no system proxy, so the origin must serve them itself and proxy-only networks cannot update. Pointer reads are capped at 1 MiB and their signatures at 16 KiB; the check request times out after 30 s and a download after 30 min. Background preparation streams at most 2 GiB of artifact bytes and verifies the signed version. macOS expands at most 8 GiB with bounded archive entries and contained links; Linux downloads nothing. Disk checks reserve another 256 MiB. The scheduler checks 30 s after launch and every 6 h; after a failure it retries after 30 min, doubling to a 6 h cap with up to 255 s of jitter, and a check that stepped aside for in-flight work retries after 5 min. With automatic updates off it re-reads the preference hourly.
+The Rust shell owns discovery, preferences, downloads, staging, and activation. The WebView receives separate discovery and installation states, a service instance and monotonic revision, and native action capabilities. Commands bind to a release identity covering version, channel, target, key generation, URL, and signature; they never accept a local artifact path. The feed and artifacts come from `downloads.paintedwolf.dev` without redirects. Native Linux feed checks resolve each pointer and signature URL through the host's environment and desktop proxy policy, using a bounded private engine child from the running package generation. The shell retains and verifies its engine descriptor against the package manifest; a mismatched installation requires a restart. Proxy credentials stay in the child output pipe and the transport, and policy errors refuse the check instead of connecting directly. Automatic proxy scripts require manual configuration. Other native transports continue to connect directly. Pointer reads are capped at 1 MiB and their signatures at 16 KiB; the check request times out after 30 s and a download after 30 min. Background preparation streams at most 2 GiB of artifact bytes and verifies the signed version. macOS expands at most 8 GiB with bounded archive entries and contained links; Linux downloads nothing. Disk checks reserve another 256 MiB. The scheduler checks 30 s after launch and every 6 h; after a failure it retries after 30 min, doubling to a 6 h cap with up to 255 s of jitter, and a check that stepped aside for in-flight work retries after 5 min. With automatic updates off it re-reads the preference hourly.
 
 Native device files live under `updates/`: versioned preferences (`preferences.json`), the newest accepted pointer timestamp per feed (`feed-state.json`), and, per installed application path under `installations/<path-sha256>/`, the verified staging directory, `ready.json`, `rejected.json`, the activation journal `transaction.json` with its `receipts/`, and the private `records.lock` and `preparation.lock` files. `install-source.json` beside them is the Homebrew receipt. Unknown preference and journal formats are refused unchanged; an unreadable preference file disables automatic updating for that run and reports why. Unreadable ephemeral records (`ready.json`, `rejected.json`, `feed-state.json`) are moved aside as `*-quarantined-<uuid>.json` and rebuilt. Records written by other releases follow [Compatibility § Device configuration](compatibility.md#device-configuration).
 
-The public macOS adapter prepares a complete app beside the installation and uses an atomic directory exchange. Its helper is a private copy of the signed application executable invoked in native-only `--apply-update` mode; no WebView or engine is created in that mode. A committed journal and exclusive installation lease are required. Preparation records the executable hash and a complete file, symlink, and permission digest from the authenticated archive. Startup restores that small receipt without re-reading the archive before opening a window. Production code-signature checks require the same Developer ID team as the running signed executable. The helper reuses that exact bundle only after validating its complete digest and signed resource seal; missing or changed preparation is rebuilt from the verified archive. Executable hashes reconcile an exchange interrupted before the final journal write. The canonical parent directory inode is the admission gate, and the installed bundle directory inode carries the lifetime lease across accounts. The gate protects lease acquisition, exchange, and downgrade; it is released while waiting for other processes. Activation locks both bundle inodes during exchange and retains the new installed inode afterward. A coordination failure refuses launch. Concurrent ordinary launches share the lifetime lease without waiting for the first process to quit. A verified external reinstall retires the superseded transaction receipt. Recovery never deletes the old bundle before publishing the new one, never treats unexpected process death as a new installation request, and never automatically launches an old binary against a newly upgraded database. The Linux adapter is check-only. `src-tauri/src/linux_install.rs` asks the package database (`dpkg-query -S`, then `rpm -qf`) which package owns the running executable; a match reports `install_source: system_package` with the family, name, version, and the exact `apt` or `dnf` command, and anything else reports `unpackaged`. The feed check runs on the shared schedule and channel preference and reads the manifest version without a Linux artifact entry; the resulting candidate carries no artifact URL or signature, so download, restart, and automatic installation are never offered, and explicit requests return the structured `package_managed` refusal. Nothing under the install root is ever written by the app. Linux remains a candidate platform until installed-artifact qualification covers the supported matrix. Windows has no automatic activation adapter.
+The public macOS adapter prepares a complete app beside the installation and uses an atomic directory exchange. Its helper is a private copy of the signed application executable invoked in native-only `--apply-update` mode; no WebView or engine is created in that mode. A committed journal and exclusive installation lease are required. Preparation records the executable hash and a complete file, symlink, and permission digest from the authenticated archive. Startup restores that small receipt without re-reading the archive before opening a window. Production code-signature checks require the same Developer ID team as the running signed executable. The helper reuses that exact bundle only after validating its complete digest and signed resource seal; missing or changed preparation is rebuilt from the verified archive. Executable hashes reconcile an exchange interrupted before the final journal write. The canonical parent directory inode is the admission gate, and the installed bundle directory inode carries the lifetime lease across accounts. The gate protects lease acquisition, exchange, and downgrade; it is released while waiting for other processes. Activation locks both bundle inodes during exchange and retains the new installed inode afterward. A coordination failure refuses launch. Concurrent ordinary launches share the lifetime lease without waiting for the first process to quit. A verified external reinstall retires the superseded transaction receipt. Recovery never deletes the old bundle before publishing the new one, never treats unexpected process death as a new installation request, and never automatically launches an old binary against a newly upgraded database. The Linux adapter is check-only. `src-tauri/src/linux_install.rs` captures package ownership of the running executable through the native package database (`dpkg-query`, `rpm`, or `pacman`). That process identity stays distinct from the fresh database version observed during an update check. A general package-owner workflow is not an offer for the version in the upstream feed. The feed check runs on the shared schedule and channel preference and reads the manifest version without a Linux artifact entry; the resulting candidate carries no artifact URL or signature, so download, restart, and automatic installation are never offered, and explicit requests return the structured `package_managed` refusal. Nothing under the install root is ever written by the app. Linux remains a candidate platform until installed-artifact qualification covers the supported matrix. Windows has no automatic activation adapter.
+
+Linux source checks first re-read the native package database owner of the process-captured original executable path. A changed or ambiguous owner stops candidate claims; it never rewrites the captured running identity. They then use bounded, read-only cache interfaces under `linux_install/source`: python-apt selects the configured APT policy candidate, hold and trusted origin/suite; DNF5 uses cache-only JSON check-upgrade (DNF4 has a fixed query-format fallback); pacman uses a print-only full-system upgrade without refreshing its databases. The query has one eight-second deadline, a 64 KiB output cap per command and cancellation that terminates only its own child process group. A failed fresh query replaces earlier source facts. Raw package versions, configured source identifiers and suites are retained; an upstream stable/preview preference changes no repository configuration. DNF transaction/versionlock policy and unobserved pacman group holds remain explicitly unknown. Cached candidates establish neither remote freshness nor successful installation. Missing adapters, missing packages, holds, untrusted origins, ambiguous results and wrong architectures have structured outcomes; they never turn into an upgrade command. Nix source ownership remains unknown without a selected owner contract.
 
 A final channel recheck has a three-second total deadline. Expiry during replay-state admission is a local-state failure, not a transport failure. An offer the origin confirmed within the last 24 hours still installs when that recheck has a transient transport or server failure; rejected signatures, malformed responses, replay, and local-state failures never use the offline allowance. A rejected feed clears the staged confirmation until a valid check succeeds. Clock rollback also makes a confirmation ineligible; an older offer is deferred quietly by quit and launch and reported by an explicit restart. A withdrawn offer never installs. A committed handoff belongs to the installation: the helper polls for the exclusive lease for ten minutes, a surviving instance in the same account re-launches the helper when it quits, and the next launch in that account that wins the lease completes it. Other accounts share the bundle lease but never read that account’s private journal. A launch admitted alongside another instance skips startup installation and admits its engine, so a staged second copy stays usable while activation must wait. Settings explains that the originating copy may need to be reopened. Installation failure blocks further automatic activation of that release until explicit retry or a different release, preventing startup loops. Additional privileges are not requested by background work.
 
@@ -1195,6 +1312,163 @@ own `linux-signing-fixture` lock, apart from the credentialed `release:live-test
 R2 rehearsal. Repository activation, key rotation and CDN consistency
 are verified by the format-specific publication work.
 
+**Native apt/dnf repository rehearsals.**
+`./task release:rehearse:native-repositories -- --receipt /absolute/path/result.json`
+uses disposable keys and three tiny native package versions. It requires `apt-ftparchive`,
+`createrepo_c`, `dpkg-deb`, `rpmbuild`, and the signing tools above. Its receipt covers
+signed apt indexes, RPM signatures and metadata, inventory readback, retained generations,
+stale activation refusal and explicit recovery. It does not qualify the application,
+perform installed application upgrades, or publish to R2. Assembly, signed-index
+admission, publication, recovery/withdrawal, candidate retention and setup-package
+refusals are exercised directly by `./task test:runner` against committed signed
+fixtures under `scripts/verification_tests/distribution/testdata/`; on Linux those
+tests require the native tools and fail rather than skip when one is missing.
+
+A separate target retains repositories for actual application candidates:
+`./task release:rehearse:native-candidates -- --candidate-dir /absolute/path/packages --retain-repositories /absolute/path/new-output --source-commit <40-character-runtime-source> --version <product-version> --channel preview --release-build <selected-RELEASE_BUILD> --architecture amd64 --architecture arm64 --receipt /absolute/path/receipt.json`.
+The input directory contains exactly one DEB and RPM for each selected architecture.
+The output must be new and outside the input directory; the receipt must remain outside
+both. Native package names, versions and architectures must match the independent
+selection. This creates disposable test trust, retains the final signed RPM bytes,
+DEB and repository inventories, and a public-only trust catalog. Private keys are
+removed before retained objects are reverified. `candidate-repositories.json` records
+the runtime source, release build, package input and final hashes, generation identities,
+and relative retained paths. The separate receipt also records the publisher source
+revision and tree. Serve these retained directories only in an isolated qualification
+environment with their explicitly selected test trust. This mode performs no R2 request,
+installation, production signing or application qualification.
+
+`python3 -m scripts.linux_release.native_repositories` assembles selected native
+packages into a new generation. `python3 -m scripts.linux_release.repository_publication`
+accepts `--directory`, `--store`, `--base-url`, `--catalog`, and
+`--expected-generation` (omit only for a new channel). This publisher owns a local
+origin directory; it does not upload to R2. All referenced objects are copied and
+reverified before activation. Apt retains package objects and by-hash indexes and
+replaces `InRelease` last. Dnf replaces a mirrorlist containing an immutable generation
+URL, so metadata and its signature share a versioned base URL. Configure immutable
+caching for `generations/`, `pool/`, and `by-hash/`; channel metadata and mirrorlists
+require no-store caching and zero negative-cache TTL. The deployment must serialize
+publishers across hosts; a filesystem lock covers publishers sharing this origin.
+
+**Explicit repository setup packages.** The native repository owner can construct
+`painted-wolf-code-repo` DEB/RPM packages with
+`python3 -m scripts.linux_release.repository_setup --directory /absolute/path/generation --catalog /absolute/path/keys.json --destination /absolute/path/new-setup-output --base-url https://reviewed-origin.example --private /absolute/path/owner-only-signing-key.asc`.
+The generation must first pass its full inventory/signature admission. Use
+`--rehearsal` only with disposable test trust. The output includes the setup package,
+signed `SHA256SUMS`, public key and generation-bound `setup.json`; no private key is
+copied. Verify the published full key fingerprint through the separately trusted
+release channel, verify `SHA256SUMS.asc` with that key and check `sha256sum -c SHA256SUMS`
+before installation. The explicit one-step setup is `sudo apt install ./painted-wolf-code-repo_<native-version>_all.deb`
+or `sudo dnf install ./painted-wolf-code-repo-<native-version>-<generation>.<channel>.noarch.rpm`.
+
+Setup installs only the selected channel configuration and public key. It does not
+install or restart the application, refresh repositories, import global RPM trust,
+or run scripts. Dnf prompts for the configured key when its repository is first used;
+verify that fingerprint explicitly. The configuration is a package-managed conffile:
+review package-manager prompts or `.rpmnew` files when changing channels or keys.
+The setup native identity includes its selected signing generation and channel, so a
+same-application-version trust upgrade replaces the previous key through ordinary
+package upgrades. Only one setup package/channel is selected at a time; feed
+preferences do not change it. Switching to a lower setup version/channel requires an
+explicit reviewed downgrade (`apt install --allow-downgrades ./<setup.deb>` or
+`dnf downgrade ./<setup.rpm>`).
+Use `sudo apt purge painted-wolf-code-repo` or `sudo dnf remove painted-wolf-code-repo`
+to remove unmodified setup files. Locally modified configuration may remain for review;
+removing setup leaves the installed application and mutable user data intact. The
+local native rehearsal installs and removes both setup formats in isolated roots,
+checks exact owned bytes and preserves a mutable user-data sentinel.
+
+The protected controller admits this control/trust surface separately from application
+packages through `scripts.linux_release.repository_setup_admission.admit_setup`.
+It supplies independently selected source, version, channel, generation inventory,
+origin and signer facts after verifying retained server artifact provenance. The API
+freezes regular input files and trust, verifies the exact signed checksum and native
+RPM signature, then reads native identity, script/trigger declarations, conffiles,
+relationship headers and exact root-owned payload bytes without installing anything.
+A producer's `setup.json` or accepted receipt does not authorize publication. Source
+and generation binding remain the controller's independent responsibility; the setup
+package carries configuration and trust rather than an application artifact identity.
+
+Every generation retains `client.conf`, the selected public key, exact inventory,
+source commit, and version. The configuration is an explicit setup artifact; installing
+the application does not add repositories or trust. For apt, verify the full catalog
+fingerprint with `gpg --show-keys --with-colons package-key.asc`, install the reviewed
+public key as `/etc/apt/keyrings/painted-wolf-code.asc`, and install `client.conf` with a
+`.sources` extension in `/etc/apt/sources.list.d/`. For dnf, verify the same fingerprint,
+install the reviewed key as `/etc/pki/rpm-gpg/painted-wolf-code.asc`, import it explicitly
+with `sudo rpm --import /etc/pki/rpm-gpg/painted-wolf-code.asc`, and install the reviewed
+configuration with a `.repo` extension in `/etc/yum.repos.d/`. Keep `gpgcheck=1` and
+`repo_gpgcheck=1`. Run the package manager's normal refresh/upgrade after setup.
+Stable and Preview use separate configurations; changing an app preference does not
+change repository selection, holds, pinning, or priorities.
+
+For recovery, select a retained verified generation and pass `--operation recover` with the
+currently active generation identity. This restores offers only; it does not modify
+installed packages or mutable application data. A withdrawn offer is replaced by the
+retained last-good index. Keep every referenced object while any supported index may
+still be cached. Rotation requires explicit verification/import of the successor key;
+keep predecessor public keys and generations for skipped-release recovery. This local
+origin rehearsal does not establish custom-domain CDN convergence or both-architecture
+installed package qualification; the release controller must admit that evidence before
+production publication.
+
+The protected Python API requires a keyword-only `authorize` callback returning
+exact `True` before the first credentialed transport access and again after predecessor
+recheck, immediately before client authority activation. The callback receives the
+selected manifest, raw directory, protected catalog, namespace, origin, predecessor,
+operation and phase; accepted JSON is not authority. The CLI supplies no callback and
+keeps production closed.
+
+Repository R2 activation retains a per-channel `pending.json` before changing mutable
+client authority. The plan binds the exact generation, activation record, reviewed
+predecessor, operation, phase, origin and namespace. An interrupted plan permits only
+an exact retry; it has no time-based expiry. The publisher verifies authority and
+`current.json` readback before marking the plan complete. A different release or
+recovery must wait for that exact operation to converge, even when the client authority
+was already written before a crash. Protected workflow serialization remains required;
+this recovery record does not grant independent writers or replace predecessor checks.
+
+`python3 -m scripts.linux_release.repository_r2` uploads the same origin structure
+through the existing R2 immutable-object helper and serialized release owner. Its
+current entry point requires `--rehearsal` and a `release-system-tests/<run>/...`
+prefix; production use refuses until the final release controller supplies admission.
+It verifies public custom-domain bytes and object cache roles before replacing
+`InRelease` or a dnf mirrorlist, then verifies the authority and activation record.
+Interrupted uploads retain unreferenced objects and retries accept identical bytes.
+Reviewed expected-generation checks run before and after upload. Cross-host
+serialization belongs to the protected release workflow, not an R2 list-before-write
+check. `test:runner` covers ordering, interrupted upload/retry, stale plans, concurrent
+state changes, immutable collisions and fixture-prefix refusal against a real local
+generation and an in-memory object store. Those contracts do not replace a credentialed
+custom-domain rehearsal. Use only explicitly supplied test credentials; no credential
+lookup or automatic production fallback occurs. Repository manifests bind the exact
+source commit, final signed package hashes and a canonical `inventory_sha256` over
+their selected object rows for final-controller admission.
+
+Repository generation operations are explicit: `--operation publish` advances a
+version under its existing signing identity; `rotate` requires a distinct key and
+strictly newer signing generation; `recover` selects an exact retained healthy
+manifest; `withdraw` selects that retained replacement and permanently marks the
+previous generation and version as withdrawn. Reoffering either identity refuses.
+Operation receipts carry `operation`, `previous`, source, signer and final inventory
+facts; an ordinary release campaign cannot authorize another operation. Retained
+`key-catalog.json` contains only the selected public key facts, so private or unknown
+catalog fields never enter the origin. Existing installations and mutable data are
+outside this publication owner's mutation scope.
+
+The existing protected `release-system-live-test` workflow accepts the explicit dispatch
+mode `native-repositories`; the scheduled/default updater rehearsal remains
+`release:live-test`. Native mode runs `./task release:rehearse:native-repositories-r2`
+on amd64 and arm64 Ubuntu runners with only the existing `release-rehearsal` test
+environment. No secret values need to be loaded locally. The R2 target stages immutable objects,
+exercises a warmed missing authority, a deliberately corrupted test object and its
+restoration, retries, rotation, withdrawal and retained recovery under a unique
+`release-system-tests/` prefix. `--phase stage` supports interruption before activation;
+the exact source can resume with `--phase activate`. Public byte/cache-role readback
+precedes activation, and no cache purge is used. Test generation objects remain under
+the receipt's owned prefix for inspection and recovery; test private keys are removed.
+Receipts distinguish these format fixtures from a qualified application campaign.
+
 **Key generations preserve skipped-release updates.** [`packaging/update-keys.json`](../packaging/update-keys.json) is the public-key registry. It declares the key generation signing this release, the generation embedded for its next update, and every retained predecessor bridge. The native updater derives both channel URLs and both embedded keys from that same compiled generation. Artifact staging verifies signatures with the **signing** key, which differs from the embedded key for a bridge, and each platform fragment and immutable manifest bind both key fingerprints.
 
 To rotate, append the next generation with both of its public keys; set the source row's successor and stable bridge version; set `signing_generation` to the old generation and `embedded_generation` to the successor. The bridge version must exceed **both** source-channel pointers, including the highest Preview release. Publish the bridge with the old private key. Both old feeds now remain at that verifiable bridge; ordinary releases to a closed generation are refused. Then select the successor for both fields and sign later releases with its key. Retain every old key, bridge artifact, and generation-scoped feed indefinitely. A client missing two rotations follows both bridges across restarts. Never point an old feed at bytes signed only by its successor. For a compromised old key, use independent trust recovery/manual reinstallation; ordinary rotation does not repair a compromised trust anchor.
@@ -1203,16 +1477,19 @@ A withdrawn bridge requires a reviewed `./task release:halt -- --plan PATH` plan
 
 ### Linux candidate builds
 
-The [Linux package candidates workflow](../.github/workflows/linux-candidates.yml)
+The [Linux candidate requests workflow](../.github/workflows/linux-candidate-requests.yml)
 builds the native amd64 and arm64 deb/rpm packages through the production bundle
-and staging path. It runs independently on relevant packaging pull requests
-once ready, weekly, or by manual dispatch on the selected branch. The release
-workflow calls the same job with its exact selected source commit. Candidate
+and staging path. It runs weekly, on ready PRs that change packaging inputs,
+or by manual dispatch on the selected branch. Use `gh workflow run linux-candidate-requests.yml --ref <branch>` when a pull
+request needs package artifacts. The release workflow calls the reusable
+[package build](../.github/workflows/linux-candidates.yml) directly with its exact
+selected source commit, within the release runner budget. Candidate
 artifacts include checksums and the source commit and are retained for 90 days.
 The workflow has read-only repository access and no signing environment or
 publication credentials. Package signing rehearsals and installed-system
 qualification remain separate requirements; a candidate build alone does not
-qualify a release. Draft pull requests do not start candidate builds.
+qualify a release. Standalone requests share the maintenance runner budget;
+release calls use the release budget and cannot be replaced by maintenance.
 
 When a package stage fails after the build starts, the workflow runs
 `./task release:candidate:diagnostics -- --source CHECKOUT --controller SHA --output FRESH_DIR`
@@ -1274,6 +1551,31 @@ xattr -w com.apple.quarantine "0083;00000000;Chrome;|com.google.Chrome" ~/Downlo
 
 ### Tag gate
 
+Select a release source explicitly when main is moving:
+
+```bash
+gh workflow run qualification.yml --ref main -f source-sha=<full-main-commit-sha>
+```
+
+The request remains queued until the shared executor can run it. Main pushes
+cannot replace it. Its completed `qualification-source-<attempt>` artifact binds
+the selected source to the controller and workflow attempt; publication checks
+that evidence before accepting the source. A failed or canceled request supplies
+no qualification. Source selection does not publish or tag a release.
+
+The selected source and controller must have identical `.github/`, `scripts/`,
+`task`, and `Taskfile.yml` content. Admission refuses incompatible tooling before
+any candidate checks start. Select a newer main commit when those interfaces
+change; qualification never combines an old script API with a new workflow.
+
+Rollout requires a fresh qualified candidate after this policy lands. Existing
+successful runs without a source receipt do not qualify release sources. Finish
+any already selected release before adopting this gate, or select and qualify a
+main commit containing it before requesting a release. Receipts expire after
+90 days; requalify expired candidates within the tooling compatibility rule.
+Historical dispatch lookup searches that retention window and filters the source
+SHA in the run title before downloading and verifying the receipt.
+
 Both preview and stable publication run the controller's compatibility check
 against the newest published stable release confirmed by the signed updater feed or GitHub mirror. The controller pins that
 release's commit once and uses it for catalog and OpenAPI comparisons. An
@@ -1308,6 +1610,28 @@ credentials; `BENCHMARK=run -- --prepared DIR --allow-live` executes against tho
 retained artifacts. `--cadence major-minor` is an optional filter. `--mode release`
 selects the full measurement protocol; `--tier` and `--cases` narrow diagnostics.
 Target selection, repair, grading, and sampling: [Coordinator benchmark](coordinator-benchmark.md).
+
+Native pacman candidate packaging uses the shared sealed payload and matching native
+CPU. `packaging/linux/arch/substrates.json` pins the official Arch image and the
+Arch Linux ARM root filesystem. The ARM archive is authenticated by the pinned
+[Arch Linux ARM build key](https://archlinuxarm.org/about/package-signing) before
+container import; its SHA-256 is fixed independently of the mutable download URL.
+An upstream rootfs replacement fails until the reviewed pin is updated. A container
+package build establishes package construction only; installed Arch/Artix desktop
+and service qualification remains separate.
+
+Native package rehearsals are declared verification targets, each admitted under
+its own lock rather than through `release:live-test`.
+`./task release:rehearse:rpm-metadata -- --receipt PATH [--container]` builds and
+lints production RPM metadata around a tiny nonapplication payload with rpmlint
+2.5.0, and requires the historical spelling regression to fail.
+`./task release:rehearse:pacman-construction -- --receipt PATH` builds and admits a
+sealed tiny fixture with native makepkg in the pinned substrate.
+`./task release:rehearse:package-probe -- --tree DIR` runs the extracted-package
+engine diagnostic under the host's unchanged userns policy. Only an owned guest's
+root-owned marker and exact `--lease` admit an owned transient AppArmor userns
+profile; runner environment variables never do. The probe removes the exact
+profile it loaded and fails if the global userns restriction changes.
 
 ### Upgrade source evidence
 

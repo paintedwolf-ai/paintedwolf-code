@@ -41,7 +41,7 @@ func TestBrokerRequestsAreBoundedAndComplete(t *testing.T) {
 		if name == "oversized payload" {
 			null, err := os.Open("/dev/null")
 			testutil.FailErr(t, "open null", err)
-			defer null.Close()
+			t.Cleanup(func() { _ = null.Close() })
 			if _, err := launchbroker.Send(null, request, null, null, null); err == nil {
 				t.Fatalf("%s accepted", name)
 			}
@@ -122,7 +122,7 @@ func TestSendDeliversTheStreamsAndExtrasInOrder(t *testing.T) {
 	for i := range streams {
 		read, write, err := os.Pipe()
 		testutil.FailErr(t, "stream", err)
-		defer func() { _ = read.Close(); _ = write.Close() }()
+		t.Cleanup(func() { _ = read.Close(); _ = write.Close() })
 		streams[i] = write
 	}
 	channel, err := launchbroker.Send(client, launchbroker.Request{Argv: []string{"sh"}, Dir: "/"}, streams[0], streams[1], streams[2], streams[3], streams[4])

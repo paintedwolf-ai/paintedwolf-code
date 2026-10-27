@@ -70,6 +70,8 @@ pub(crate) fn setup_bundled_engine_layout(
         unprotected_engine_layout(app)
     })?;
     let _ = BUNDLED_ENGINE_LAYOUT.set(layout);
+    #[cfg(target_os = "linux")]
+    super::captured_engine::setup();
     Ok(())
 }
 
@@ -89,8 +91,13 @@ fn select_layout(
 }
 
 fn unprotected_engine_layout(app: &tauri::AppHandle) -> Option<BundledEngineLayout> {
-    if crate::linux_install::installed().is_some() {
-        linux_package_engine_layout(Path::new(crate::linux_install::INSTALL_ROOT))
+    if let Ok(Some(generation)) = crate::linux_generation::running() {
+        generation.engine_root().ok().and_then(|engine_root| {
+            generation.helper("pw").ok().map(|_| BundledEngineLayout {
+                binary: generation.root.join("bin/pw"),
+                engine_root,
+            })
+        })
     } else {
         std::env::current_exe()
             .ok()
@@ -106,11 +113,27 @@ fn unprotected_engine_layout(app: &tauri::AppHandle) -> Option<BundledEngineLayo
     }
 }
 
+/// Package ownership is resolved per use, so a database that has not answered yet
+/// selects no engine rather than falling back to the bundle-resource layout.
 pub(super) fn bundled_engine_layout() -> Option<BundledEngineLayout> {
-    BUNDLED_ENGINE_LAYOUT.get().cloned().flatten()
+    if matches!(crate::protected_launch::generation(), Ok(Some(_))) {
+        return BUNDLED_ENGINE_LAYOUT.get().cloned().flatten();
+    }
+    use crate::linux_install::{Ownership, PackageFamily};
+    match crate::linux_install::installed() {
+        Ownership::Package(package) if package.family != PackageFamily::Nix => {
+            linux_package_engine_layout(Path::new(crate::linux_install::INSTALL_ROOT))
+        }
+        Ownership::Package(_) | Ownership::Unpackaged => BUNDLED_ENGINE_LAYOUT.get().cloned().flatten(),
+        Ownership::Unknown(_) => None,
+    }
 }
 
 pub(super) fn resolve_lycaon_binary() -> Result<PathBuf, String> {
+    if let Some(generation) = crate::linux_generation::running()? {
+        generation.engine_root()?;
+        return Ok(generation.root.join("bin/pw"));
+    }
     if let Some(layout) = bundled_engine_layout() {
         return Ok(layout.binary);
     }

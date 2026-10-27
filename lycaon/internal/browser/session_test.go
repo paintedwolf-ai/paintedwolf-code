@@ -72,24 +72,28 @@ func TestLaunchConfinedAcceptsUnconfinedPosture(t *testing.T) {
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = fmt.Fprintf(w, `{"webSocketDebuggerUrl":"ws://%s/devtools/browser/test"}`, r.Host)
 		}))
-		defer srv.Close()
+		t.Cleanup(srv.Close)
 		browserPIDFile := filepath.Join(dir, "browser.pid")
 		helperPIDFile := filepath.Join(dir, "helper.pid")
 		script := filepath.Join(dir, "fake-chrome.sh")
 		body := fmt.Sprintf("#!/bin/sh\ntrap '' TERM\nsleep 60 &\necho $! > %s\necho $$ > %s\necho 'DevTools listening on ws://%s/devtools/browser/test' >&2\nexec sleep 60\n",
 			strconv.Quote(helperPIDFile), strconv.Quote(browserPIDFile), srv.Listener.Addr().String())
 		if err := os.WriteFile(script, []byte(body), 0o700); err != nil {
+			srv.Close()
 			os.Exit(1)
 		}
 		l := newHeadlessLauncher(context.Background(), script, dir, true, false)
 		if _, _, err := launchConfined(context.Background(), l, script, nil); err != nil {
 			_, _ = io.WriteString(os.Stderr, err.Error())
+			srv.Close()
 			os.Exit(1)
 		}
 		if err := os.WriteFile(filepath.Join(dir, "ready"), []byte("1"), 0o600); err != nil {
+			srv.Close()
 			os.Exit(1)
 		}
 		time.Sleep(90 * time.Second)
+		srv.Close()
 		os.Exit(0)
 	}
 

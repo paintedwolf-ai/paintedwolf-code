@@ -1,6 +1,7 @@
 package editordoc
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -92,5 +93,28 @@ func TestOpenObservedBinaryDoesNotCreateDocument(t *testing.T) {
 	testutil.FailErr(t, "open binary", err)
 	if opened.Document != nil || !opened.Source.Binary {
 		t.Fatalf("binary admission: %+v", opened)
+	}
+}
+
+func TestOpenRejectsDirectoryPath(t *testing.T) {
+	db := testdbfixture.Open(t, "store.db")
+	root := t.TempDir()
+	testutil.FailErr(t, "mkdir", os.Mkdir(filepath.Join(root, "src"), 0o755))
+	projectID, rootID := testdbseed.DefaultProjectID, uuid.NewString()
+	testdbseed.InsertProjectRootWithID(t, db, projectID, rootID, root)
+	p := &project.Project{ID: projectID, Roots: []project.Root{{ID: rootID, ProjectID: projectID, Path: root, IsPrimary: true}}}
+	sourceHistory := sourceledger.New(db, "")
+	service := New(NewStore(db), sourceHistory, sourceHistory.History, fixedRoots{p: p})
+	closeServiceAtCleanup(t, service)
+
+	for _, dirPath := range []string{".", "src"} {
+		_, err := service.Open(t.Context(), p, dirPath, rootID, "", "window", nil)
+		if !errors.Is(err, projectsource.ErrSourceIsDirectory) {
+			t.Fatalf("Open(%q) err = %v, want ErrSourceIsDirectory", dirPath, err)
+		}
+		_, ok, err := service.OpenText(t.Context(), projectID, "", rootID, dirPath)
+		if ok || !errors.Is(err, projectsource.ErrSourceIsDirectory) {
+			t.Fatalf("OpenText(%q) ok = %v, err = %v, want ok=false and ErrSourceIsDirectory", dirPath, ok, err)
+		}
 	}
 }

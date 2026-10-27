@@ -4,7 +4,6 @@ import (
 	"context"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/session/lifecycle"
@@ -40,7 +39,7 @@ func TestManualCompactionDoesNotHoldSessionStopAdmission(t *testing.T) {
 	go func() { _, err := mgr.Runner.History.ForceCompact(ctx, sess.ID); done <- err }()
 	select {
 	case <-started:
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("summarizer did not start")
 	}
 	stopEntered := make(chan *lifecycle.Flight, 1)
@@ -49,7 +48,7 @@ func TestManualCompactionDoesNotHoldSessionStopAdmission(t *testing.T) {
 	case flight := <-stopEntered:
 		mgr.Runner.History.Runner.CancelSession(sess.ID)
 		mgr.Chats.Gate.Finish(sess.ID, flight, nil)
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		cancel()
 		flight := <-stopEntered
 		mgr.Chats.Gate.Finish(sess.ID, flight, nil)

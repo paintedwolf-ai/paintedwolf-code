@@ -25,7 +25,11 @@ func main() {
 }
 
 func run(args []string, stderr io.Writer) int {
-	if len(args) == 2 && args[1] == launchguard.StageArgument {
+	if len(args) == 0 {
+		return 1
+	}
+	arguments := args[1:]
+	if len(arguments) == 1 && arguments[0] == launchguard.StageArgument {
 		if err := launchguard.RunStage(); err != nil {
 			if launchguard.DropPrivilegesForError() {
 				_, _ = fmt.Fprintf(stderr, "Painted Wolf Code: protected launch refused: %v\n", err)
@@ -34,7 +38,7 @@ func run(args []string, stderr io.Writer) int {
 		}
 		return 0
 	}
-	status, err := launchguard.RunBootstrap(args[1:])
+	status, err := launchguard.RunBootstrap(arguments)
 	if err != nil {
 		if launchguard.DropPrivilegesForError() {
 			_, _ = fmt.Fprintf(stderr, "Painted Wolf Code: protected launch refused: %v\n", err)

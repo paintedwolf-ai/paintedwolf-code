@@ -32,7 +32,7 @@ func TestExecutionRestrictionPreservesDataReparenting(t *testing.T) {
 		}
 		return
 	}
-	base, err := os.MkdirTemp("/opt", "pw-execution-test-")
+	base, err := os.MkdirTemp("/var/lib", "pw-execution-test-") //nolint:usetesting // The root-controlled execution closure must live outside writable temporary roots.
 	testutil.FailErr(t, "private execution fixture", err)
 	defer func() { testutil.FailErr(t, "remove execution fixture", os.RemoveAll(base)) }()
 	closure := filepath.Join(base, "closure")
