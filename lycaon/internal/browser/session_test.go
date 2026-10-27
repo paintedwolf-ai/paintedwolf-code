@@ -172,3 +172,32 @@ func readPIDFile(t *testing.T, path string) int {
 	testutil.FailErr(t, "parse pid", err)
 	return pid
 }
+
+func TestSessionAndPoolHelpers(t *testing.T) {
+	if got := profileParent(""); got == "" {
+		t.Fatal("expected fallback temp dir")
+	}
+	if got := trimBuf(strings.Repeat("x", 2500)); len(got) != 2000 {
+		t.Fatalf("expected truncated buffer of 2000 bytes, got %d", len(got))
+	}
+	var nilPool *Pool
+	nilPool.SetCaptureProjector(nil)
+	if nilPool.captureProjector() != nil {
+		t.Fatal("expected nil projector on nil pool")
+	}
+	if _, err := nilPool.Browser(context.Background()); err == nil {
+		t.Fatal("expected error from nil pool Browser")
+	}
+	nilPool.Close()
+
+	pool := NewPool(t.TempDir())
+	pool.SetCaptureProjector(nil)
+	_ = pool.captureProjector()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := pool.NewPage(ctx, 800, 600); err == nil {
+		t.Fatal("expected canceled context error from NewPage")
+	}
+	pool.Close()
+}
+
