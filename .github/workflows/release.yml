@@ -381,7 +381,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             libwebkit2gtk-4.1-dev librsvg2-dev xdg-utils \
-            rpm rpmlint lintian cpio
+            rpm rpmlint lintian cpio libarchive-tools
 
       - name: Import signing certificate and notary key
         if: ${{ matrix.goos == 'darwin' }}
@@ -447,6 +447,7 @@ jobs:
       - name: Build, sign, and notarize
         env:
           GOOS: ${{ matrix.goos }}
+          PACKAGE_EXTENSIONS: ${{ join(matrix.package_extensions, ',') }}
           APPLE_SIGNING_IDENTITY: ${{ matrix.goos == 'darwin' && secrets.APPLE_SIGNING_IDENTITY || '' }}
           APPLE_API_ISSUER: ${{ matrix.goos == 'darwin' && secrets.APPLE_API_ISSUER || '' }}
           APPLE_API_KEY: ${{ matrix.goos == 'darwin' && secrets.APPLE_API_KEY_ID || '' }}
@@ -478,7 +479,15 @@ jobs:
             export PW_STAPLE_LOG_DIR="${RUNNER_TEMP}/staple-evidence"
             export PATH="${GITHUB_WORKSPACE}/.release-controller/scripts/macos-notary-tools:${PATH}"
           fi
-          ./task den:bundle
+          if [[ "${GOOS}" == linux ]]; then
+            case "${PACKAGE_EXTENSIONS}" in
+              deb,rpm) ./task den:bundle ;;
+              deb,rpm,pkg.tar.zst) ./task den:bundle -- --pacman-container ;;
+              *) echo "Unsupported release package-family contract" >&2; exit 1 ;;
+            esac
+          else
+            ./task den:bundle
+          fi
           if [[ "${GOOS}" == darwin ]]; then
             python3 .release-controller/scripts/macos-notary-tools/notary.py --check "${PW_STAPLE_LOG_DIR}"
           fi
