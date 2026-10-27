@@ -9,7 +9,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from scripts.linux_release import installed_campaign as owner
+from scripts.linux_release.campaign import guests as owner
 
 SOURCE, TREE = 'b' * 40, 'c' * 40
 RUN_GUEST = owner.run_guest
