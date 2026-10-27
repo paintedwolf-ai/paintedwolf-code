@@ -7,6 +7,15 @@ import verification_plan as planning
 
 
 class HostedPlanTests(unittest.TestCase):
+    def test_native_admission_cannot_omit_targets_or_accept_unsafe_roots(self):
+        for declaration in (None, {}, [], {'den:test:rust': ['lycaon-den/src-tauri/']},
+                {'den:test:rust': [], 'decide:test': ['lycaon/internal/decide/native/']},
+                {'den:test:rust': ['../outside/'], 'decide:test': ['lycaon/internal/decide/native/']}):
+            data = copy.deepcopy(planning.catalog())
+            data['ci']['ready']['compile_targets'] = declaration
+            with patch.object(ci, 'catalog', return_value=data), self.assertRaises(ValueError):
+                ci.matrix('fast')
+
     def test_tier_partitions_cover_every_local_gate_stage_once(self):
         lanes = ci.lanes()
         expected = sorted(stage["name"] for stage in planning.expand(["check"]))
@@ -256,13 +265,12 @@ class HostedPlanTests(unittest.TestCase):
         self.assertEqual({row["lane"] for row in rows[:2]}, {"limits", "lint"})
         self.assertEqual([row["lane"] for row in rows[2:4]], ["behavior", "behavior"])
         for profile in ci.PROFILES:
-            with self.subTest(profile=profile):
-                order = [(0 if lanes[row["lane"]].get("first") else
-                          1 if lanes[row["lane"]].get("contract_first") else 2, -row["minutes"])
-                         for row in ci.matrix(profile)["include"]]
-                self.assertEqual(order, sorted(order))
+            rows = ci.matrix(profile)['include']
+            ordinary = [row for row in rows if row['priority'] != 'compile']
+            order = [(ci.PRIORITIES[row['priority']], -row['minutes']) for row in ordinary]
+            self.assertEqual(order, sorted(order))
         data = copy.deepcopy(planning.catalog())
-        data["ci"]["limits"]["first"] = False
+        data["ci"]["limits"]["priority"] = "invalid"
         with patch.object(ci, "catalog", return_value=data), self.assertRaises(ValueError):
             ci.matrix("integration")
 

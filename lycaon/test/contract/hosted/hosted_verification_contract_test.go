@@ -10,6 +10,7 @@ import (
 )
 
 type hostedStep struct {
+	Name     string
 	Uses     string
 	Run      string
 	If       string
@@ -288,6 +289,11 @@ func TestHostedProfilesAndSetupAreReachable(t *testing.T) {
 		for _, step := range hostedJobs(t, workflow)[job].Steps {
 			setup = setup || step.Uses == "./.github/actions/setup-verification"
 			if step.Run != "" && !setup {
+				// The timestamp records setup time without invoking a verification target.
+				const jobStart = `python3 -c 'import os, time; open(os.environ["GITHUB_ENV"], "a").write(f"PW_CI_JOB_STARTED_AT={time.time()}\n")'`
+				if workflow == "verification" && job == "verify" && step.Name == "Record job start" && step.Run == jobStart {
+					continue
+				}
 				t.Errorf("%s/%s must stage dependencies and notices before verification", workflow, job)
 			}
 		}

@@ -26,6 +26,11 @@ After changing a frontend dependency patch, run `./task setup-dev -- --frontend`
 to refresh the pinned packages before verification. Captured test trees share
 the workspace's installed dependencies.
 
+In a fresh worktree, run `./task gitengine:fetch` before tests that create or
+inspect Git repositories. This downloads and verifies the pinned Git bundle.
+Verification copies the staged bundle into its captured tree; it does not
+provision a missing bundle.
+
 Hosted shell preparation uses `./task setup-dev -- --shell-resources` to write
 qualified notices into the build checkout. `licenses:notices` is the isolated
 verification check; its snapshot outputs do not prepare a subsequent invocation.
@@ -723,6 +728,12 @@ Background submissions validate these flags before creating a job.
 
 ### Selection arguments
 
+`./task den:test:rust -- --compile-only` and
+`./task decide:test -- --compile-only` compile all normal test targets without
+executing them. They use the same resources and pinned features as the complete
+test targets; a compile-only pass does not establish runtime verification.
+No other native selection flags are accepted.
+
 Arguments after `--` reach a catalog target only when the catalog's `selection`
 section declares a grammar for it; anything else is refused before admission,
 because Task drops arguments a recipe does not reference and the whole target
@@ -1165,6 +1176,8 @@ install receipt, and the user can change that preference in Settings.
 |----------------|----------|
 | **Direct download** | Download and verify automatically; install at normal quit or startup. An explicit restart installs sooner. |
 | **Homebrew cask** | Notifier only — "vX available", run `brew upgrade --cask painted-wolf-code`. The cask writes an explicit device receipt, so custom Homebrew prefixes work and another user's installation cannot misclassify this app |
+| **Linux system package** (apt, dnf, pacman) | Notifier only. Settings shows the owning package, its version and the channel. A newer release is reported together with whether the configured package source offers it, from read-only APT, DNF or pacman cache queries; no upgrade command is presented and download or restart requests return `package_managed` |
+| **Unpackaged Linux build** | Reports `unpackaged`; no command, download or restart |
 
 **Staged rollout.** Automatic checks admit a release to a growing fraction of devices as the published manifest ages (10% in its first 24 h, 50% until 48 h, then everyone). Each install draws one random bucket, stored locally in `updates/preferences.json` and never transmitted — the check request stays identifier-free. A user-initiated **Check now** bypasses the ramp, and a release the user has already been shown never disappears behind it. The ramp is an operational stagger for catching a bad release early, not a security boundary.
 
