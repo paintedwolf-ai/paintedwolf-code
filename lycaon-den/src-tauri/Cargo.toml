@@ -136,7 +136,7 @@ gdkwayland-sys = "0.18"
 # client connection separate from GTK's.
 wayland-client = "0.31"
 wayland-protocols = { version = "0.32", features = ["client", "staging"] }
-x11rb = { version = "0.13", features = ["screensaver"] }
+x11rb = { version = "0.14", features = ["screensaver"] }
 
 # An in-test compositor serves the idle protocol to the step-away monitor.
 [target.'cfg(target_os = "linux")'.dev-dependencies]
