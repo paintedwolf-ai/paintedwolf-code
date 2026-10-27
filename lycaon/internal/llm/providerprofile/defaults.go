@@ -62,6 +62,7 @@ func Ollama() Profile {
 
 func Fireworks() Profile {
 	profile := OpenAI()
+	profile.ReasoningEffortOff = OpenAIReasoningEffortOff
 	profile.Discovery = DiscoveryFireworks
 	// Fireworks tool messages accept image parts.
 	profile.ToolResultImages = ToolResultImagesInline
