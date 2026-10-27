@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/events"
@@ -48,7 +47,6 @@ func TestAmbientStartPublishesTheEnrichedRun(t *testing.T) {
 	testutil.FailErr(t, "StartAmbient", err)
 
 	var event *api.WorkflowEvent
-	deadline := time.After(5 * time.Second)
 	for event == nil {
 		select {
 		case env, ok := <-ch:
@@ -63,7 +61,7 @@ func TestAmbientStartPublishesTheEnrichedRun(t *testing.T) {
 			if ev.WorkflowRunID == run.ID {
 				event = &ev
 			}
-		case <-deadline:
+		case <-t.Context().Done():
 			t.Fatalf("timeout waiting for the workflow event for run %s", run.ID)
 		}
 	}

@@ -74,3 +74,5 @@ class SupersessionTests(unittest.TestCase):
                 supersession.main()
             self.assertIn('"run_id": 42', summary.read_text())
             self.assertEqual(json.loads(output.call_args.args[0]), record)
+        workflow = (Path(__file__).resolve().parents[3] / ".github/workflows/qualification-supersession.yml").read_text()
+        self.assertIn("group: qualification-supersession-${{ github.sha }}", workflow)

@@ -38,8 +38,8 @@ function addResult(
     return { ok: false, reason: rejectMessageForCode("attachment_too_large") };
   }
   if (
-    attachment.kind === "image" &&
-    current.filter((candidate) => countsAsImage(candidate.kind)).length >=
+    countsAsImage(attachment) &&
+    current.filter((candidate) => countsAsImage(candidate)).length >=
       (composerAttachmentCapabilities()?.max_images ?? 0)
   ) {
     return { ok: false, reason: rejectMessageForCode("attachment_too_large") };

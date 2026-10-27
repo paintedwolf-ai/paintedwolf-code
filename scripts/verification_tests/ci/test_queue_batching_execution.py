@@ -89,6 +89,21 @@ class LifecycleTests(unittest.TestCase):
             self.assertTrue(c.reconcile('o/r', {**self.pull, 'draft': True}, self.record))
             gh.mutation.assert_not_called()
 
+    def test_readmitted_source_dissolves_batch_without_stealing_active_work(self):
+        with self.ports(), patch.object(c, 'source', return_value={**row(3), 'mergeQueueEntry': {'id': 'active'}}), \
+                patch.object(c, 'api', return_value={'labels': []}):
+            self.assertFalse(c.reconcile('o/r', self.pull, self.record))
+            gh.withdraw.assert_called_once_with('o/r', {'number': 10})
+            self.assertEqual(gh.restore.call_count, 2)
+
+    def test_queued_batch_with_null_auto_merge_is_not_enabled_again(self):
+        def source(repo, number):
+            return {**row(number), 'mergeQueueEntry': {'id': 'active'} if number == 10 else None}
+        with self.ports(), patch.object(c, 'source', side_effect=source), patch.object(c, 'api', return_value={'labels': []}):
+            gh.checks.return_value = 'passed'
+            self.assertTrue(c.reconcile('o/r', self.pull, self.record))
+            gh.mutation.assert_not_called()
+
     def test_merge_closes_only_unchanged_originals_and_keeps_later_heads(self):
         def api(path, method='GET', body=None):
             if method == 'PATCH':
@@ -116,12 +131,12 @@ class LifecycleTests(unittest.TestCase):
 
     def test_failed_group_is_excluded_and_an_active_batch_prevents_duplicate_creation(self):
         pull = {**self.pull, 'body': c.describe(self.record)}
-        with patch.object(gh, 'build_window', return_value=2), patch.object(gh, 'enforce_holds'), patch.object(gh, 'batches', return_value=[pull]), \
+        with patch('ci_policy.queue_dispatch.recover', return_value=[]), patch.object(gh, 'build_window', return_value=2), patch.object(gh, 'enforce_holds'), patch.object(gh, 'batches', return_value=[pull]), \
              patch.object(c, 'reconcile', return_value=True), patch.object(c, 'build') as build:
             self.assertEqual(c.run('o/r', POLICY)['state'], 'watching')
             build.assert_not_called()
         failed = {**self.record, 'settled': True, 'outcome': 'individual_fallback'}
-        with patch.object(gh, 'build_window', return_value=2), patch.object(gh, 'enforce_holds'), patch.object(gh, 'batches', return_value=[{**pull, 'body': c.describe(failed)}]), \
+        with patch('ci_policy.queue_dispatch.recover', return_value=[]), patch.object(gh, 'build_window', return_value=2), patch.object(gh, 'enforce_holds'), patch.object(gh, 'batches', return_value=[{**pull, 'body': c.describe(failed)}]), \
              patch.object(gh, 'queue', return_value=entries()), patch.object(c, 'pages', return_value=[]), patch.object(c, 'build') as build:
             self.assertEqual(c.run('o/r', POLICY)['state'], 'no_waiting_batch')
             build.assert_not_called()
@@ -291,3 +306,108 @@ class GitHubBoundaryTests(unittest.TestCase):
             self.assertEqual(gh.checks('o/r', SHA), 'pending')
         with patch.object(gh, 'pages', return_value=runs), patch.object(gh, 'api', return_value={'statuses': [{'context': 'DCO-owned', 'state': 'failure'}]}):
             self.assertEqual(gh.checks('o/r', SHA), 'failed')
+
+
+class QueueDispatchTests(unittest.TestCase):
+    def test_queue_inventory_refuses_graphql_errors_and_ignores_waiting_entries(self):
+        from ci_policy import queue_dispatch as q
+        rows = [{'state': 'QUEUED', 'headCommit': None}]
+        with patch.object(q, 'api', return_value={'data': {'repository': {'mergeQueue': {'entries': {'nodes': rows}}}}}):
+            self.assertEqual(q.entries('o/r'), rows)
+        with patch.object(q, 'api', return_value={'errors': ['refused']}), self.assertRaises(ValueError):
+            q.entries('o/r')
+        with patch.object(q, 'entries', return_value=rows), patch.object(q, 'api') as api:
+            self.assertEqual(q.recover('o/r'), [])
+            api.assert_not_called()
+
+    def test_missing_run_dispatches_only_the_live_exact_group(self):
+        from ci_policy import queue_dispatch as q
+        ref = {'ref': q.PREFIX + 'pr-3-base', 'object': {'sha': SHA}}
+        calls = []
+        def api(path, method='GET', body=None):
+            calls.append((path, method, body))
+            if 'matching-refs' in path:
+                return [ref]
+            if path.endswith('/status'):
+                return {'statuses': []}
+            if '/runs?' in path:
+                return {'workflow_runs': []}
+            return {}
+        with patch.object(q, 'entries', return_value=[{'state': 'AWAITING_CHECKS', 'headCommit': {'oid': SHA}}]), \
+                patch.object(q, 'context', return_value=OTHER) as context, patch.object(q, 'api', side_effect=api):
+            self.assertEqual(q.recover('o/r'), [{'ref': 'gh-readonly-queue/main/pr-3-base', 'sha': SHA}])
+        self.assertEqual(context.call_args_list, [unittest.mock.call('o/r', ref['ref'], SHA)] * 2)
+        dispatches = [(path, body) for path, method, body in calls if method == 'POST']
+        self.assertEqual(dispatches, [
+            ('repos/o/r/actions/workflows/dco.yml/dispatches',
+             {'ref': 'main', 'inputs': {'queue_ref': ref['ref'], 'queue_sha': SHA}}),
+            ('repos/o/r/actions/workflows/ci.yml/dispatches',
+             {'ref': 'gh-readonly-queue/main/pr-3-base', 'inputs': {'profile': 'integration'}}),
+        ])
+
+    def test_existing_failed_or_running_run_is_never_replaced(self):
+        from ci_policy import queue_dispatch as q
+        for status in ['failure', 'cancelled', 'in_progress', 'success']:
+            with self.subTest(status=status), \
+                    patch.object(q, 'entries', return_value=[{'state': 'AWAITING_CHECKS', 'headCommit': {'oid': SHA}}]), \
+                    patch.object(q, 'api', side_effect=[
+                        [{'ref': q.PREFIX + 'pr-3-base', 'object': {'sha': SHA}}],
+                        {'statuses': [{'context': 'DCO-owned', 'state': 'success'}]},
+                        {'workflow_runs': [{'conclusion': status}]}]) as api:
+                self.assertEqual(q.recover('o/r'), [])
+                self.assertTrue(all(call.args[1:] == () for call in api.call_args_list))
+
+    def test_missing_certification_recovers_with_existing_ci_and_stays_idempotent(self):
+        from ci_policy import queue_dispatch as q
+        ref = {'ref': q.PREFIX + 'pr-3-base', 'object': {'sha': SHA}}
+        calls = []
+        def api(path, method='GET', body=None):
+            calls.append((path, method, body))
+            if 'matching-refs' in path:
+                return [ref]
+            if path.endswith('/status'):
+                return {'statuses': [{'context': 'check', 'state': 'success'}]}
+            if 'dco.yml/runs?' in path:
+                return {'workflow_runs': [{'display_title': f'DCO queue {OTHER}'}]}
+            if 'ci.yml/runs?' in path:
+                return {'workflow_runs': [{'conclusion': 'success'}]}
+            return {}
+        with patch.object(q, 'entries', return_value=[{'state': 'AWAITING_CHECKS', 'headCommit': {'oid': SHA}}]), \
+                patch.object(q, 'context', return_value=OTHER) as context, patch.object(q, 'api', side_effect=api):
+            self.assertEqual(q.recover('o/r'), [])
+        context.assert_called_once_with('o/r', ref['ref'], SHA)
+        posts = [(path, body) for path, method, body in calls if method == 'POST']
+        self.assertEqual(posts, [('repos/o/r/actions/workflows/dco.yml/dispatches',
+                                  {'ref': 'main', 'inputs': {'queue_ref': ref['ref'], 'queue_sha': SHA}})])
+        for state in ('pending', 'success'):
+            with patch.object(q, 'api', return_value={'statuses': [{'context': 'DCO-owned', 'state': state}]}) as mocked:
+                q.certify('o/r', ref['ref'], SHA)
+                mocked.assert_called_once_with(f'repos/o/r/commits/{SHA}/status')
+        with patch.object(q, 'api', side_effect=[
+                {'statuses': []},
+                {'workflow_runs': [{'display_title': f'DCO queue {SHA}', 'status': 'in_progress'}]}]) as mocked:
+            q.certify('o/r', ref['ref'], SHA)
+            self.assertEqual(mocked.call_count, 2)
+
+    def test_dispatch_context_refuses_wrong_ref_changed_sha_and_removed_group(self):
+        from ci_policy import queue_dispatch as q
+        with self.assertRaises(ValueError):
+            q.context('o/r', 'refs/heads/main', SHA)
+        with patch.object(q, 'api', return_value={'object': {'sha': OTHER}}), self.assertRaises(ValueError):
+            q.context('o/r', q.PREFIX + 'pr-3-base', SHA)
+        with patch.object(q, 'api', return_value={'object': {'sha': SHA}}), \
+                patch.object(q, 'entries', return_value=[]), self.assertRaises(ValueError):
+            q.context('o/r', q.PREFIX + 'pr-3-base', SHA)
+        with patch.object(q, 'api', return_value={'object': {'sha': SHA}}), \
+                patch.object(q, 'entries', return_value=[{'state': 'AWAITING_CHECKS', 'headCommit': {'oid': SHA}, 'baseCommit': {'oid': OTHER}}]):
+            self.assertEqual(q.context('o/r', q.PREFIX + 'pr-3-base', SHA), OTHER)
+
+
+class QueueOwnershipTests(unittest.TestCase):
+    def test_reenqueued_batch_does_not_reuse_an_old_ejection(self):
+        events = [{'event': 'added_to_merge_queue'}, {'event': 'removed_from_merge_queue'},
+                  {'event': 'added_to_merge_queue'}]
+        with patch.object(gh, 'pages', return_value=events):
+            self.assertFalse(gh.ejected('o/r', 1))
+        with patch.object(gh, 'pages', return_value=events[:-1]):
+            self.assertTrue(gh.ejected('o/r', 1))

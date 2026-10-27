@@ -12,6 +12,18 @@ import { createSignal } from "solid-js";
 
 describe("Composer", () => {
 
+  it("shows a live external image path and sends its reference", async () => {
+    const onSend = vi.fn();
+    const view = render(() => <Composer sidecarStatus="connected" projectId="proj-1" sessionId="sess-1" visionSupport="unsupported" onSend={onSend} />);
+    await addToChat({ kind: "external-file", projectId: "proj-1", path: "/outside/photos/shot.png", name: "shot.png", mediaType: "image/png" }, { destination: { projectId: "proj-1", sessionId: "sess-1" } });
+    const chip = await view.findByTestId("composer-attachment-chip");
+    expect(chip.getAttribute("data-kind")).toBe("external-file");
+    expect(chip.textContent).toContain("/outside/photos/shot.png");
+    expect(view.getByTestId("composer-vision-hint")).toBeTruthy();
+    fireEvent.click(view.getByTestId("composer-send"));
+    expect(onSend).toHaveBeenCalledWith(expect.objectContaining({ references: [{ kind: "external-file", project_id: "proj-1", path: "/outside/photos/shot.png" }] }));
+  });
+
   it("shows an explicit non-vision notice when images are attached", async () => {
     const { getByTestId, queryByTestId, findByTestId } = render(() => (
       <Composer

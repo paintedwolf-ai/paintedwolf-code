@@ -39,11 +39,6 @@
   background: color-mix(in srgb, var(--den-danger) 8%, transparent);
   border-radius: var(--den-radius);
 }
-.den-critical-stop__vault-form {
-  display: grid;
-  gap: 12px;
-  width: min(360px, 100%);
-}
 /* Facts stay selectable for reporting. */
 .den-critical-stop__facts {
   margin: 0;
