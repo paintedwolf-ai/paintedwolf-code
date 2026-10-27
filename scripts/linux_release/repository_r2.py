@@ -10,7 +10,7 @@ import tempfile
 
 from .repository_pending import activation_plan, marker as activation_marker_record
 from .repository_objects import encoded
-from .repository_publication import publish
+from .repository_transaction import publish
 from .r2_objects import prefix, public_bytes, current, put
 from .repository_operations import OPERATIONS, transition, identity, withdrawal, version_marker
 
