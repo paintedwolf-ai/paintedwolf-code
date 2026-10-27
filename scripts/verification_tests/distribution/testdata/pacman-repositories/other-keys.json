@@ -1,0 +1,12 @@
+{
+  "format_version": 1,
+  "rehearsal": true,
+  "signing_generation": 1,
+  "generations": [
+    {
+      "generation": 1,
+      "fingerprint": "0869FE8BCEFF33EEB5145FCCCF26075800BEF394",
+      "public_key": "other-public.asc"
+    }
+  ]
+}

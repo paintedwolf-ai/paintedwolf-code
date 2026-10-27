@@ -26,6 +26,7 @@ inputs:
     default: 'false'
   repository-tools:
     description: Install the native apt, dnf and pacman tools the distribution fixture tests drive
+    default: 'false'
   nix:
     description: Provision the pinned Nix toolchain and locked flake inputs before an offline Nix lane
     default: 'false'
@@ -222,7 +223,7 @@ runs:
       shell: bash
       run: |
         sudo apt-get update -qq
-        sudo apt-get install -y --no-install-recommends apt-utils createrepo-c gnupg rpm
+        sudo apt-get install -y --no-install-recommends apt-utils createrepo-c gnupg libarchive-tools makepkg pacman-package-manager rpm
 
     - name: Provision pinned browser
       if: inputs.browser == 'true'
