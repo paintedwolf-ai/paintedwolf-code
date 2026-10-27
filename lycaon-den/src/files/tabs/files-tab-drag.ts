@@ -3,9 +3,7 @@ import { cancelPointerChatAttachmentDrag, finishPointerChatAttachmentDrag, updat
 import { clearFileTabDropTarget, commitFileTabTransfer, listenFileTabWindowDrag, returnFileTabTransfer, updateFileTabDropTarget, type FileTabWindowDrag, type FileTabWindowDragEvent, type ItemWindowDropPosition } from "../../platform/windows/item-windows.ts";
 import { createFilesTabTransfers } from "./files-tab-transfer.ts";
 import { isShellLayoutUnstable, onShellLayoutSettled } from "../../shell/shell-layout-busy.ts";
-import { publishEditorDocumentDraft } from "../documents/editor-document.ts";
 import { scheduleSessionFidelityPersist } from "../editor/editor-session-fidelity.ts";
-import { flushFilesDraftSyncFor } from "../documents/files-draft-sync.ts";
 import { scheduleFilesHotExitPersist } from "../documents/files-hot-exit.ts";
 import { isComposedBufferKind } from "../documents/project-files-buffer-kind.ts";
 import { moveFilesBuffer, openFilesBuffer, setFilesActiveBuffer } from "../documents/project-files-buffers.ts";
@@ -234,24 +232,12 @@ export function createFilesTabDrag({ projectId, state, filesRoots, tabsElement, 
       void pull.promise.then(
         async (label) => {
           try {
-            flushFilesDraftSyncFor(projectId(), key);
-            const buffer = projectFilesState(projectId()).byKey[key];
-            if (!buffer)
-              throw new Error("The dragged file tab is no longer open.");
-            if (
-              buffer.dirty &&
-              !(await publishEditorDocumentDraft(projectId(), buffer))
-            ) {
-              throw new Error("The latest file draft could not be handed off.");
-            }
+            await transfers.publishDraft(key);
             await pull.moving;
             if (!(await controller.finish(label, position))) {
               throw new Error("The native drag window could not be finalized.");
             }
-            const released = closeBuffer(key);
-            if (!released || (await released) === "restored") return;
-            scheduleSessionFidelityPersist();
-            void onFileTabMovedOut()?.(key);
+            await transfers.releaseCommittedSource(key);
           } catch (err) {
             void controller
               .cancel(label)
@@ -381,10 +367,7 @@ export function createFilesTabDrag({ projectId, state, filesRoots, tabsElement, 
         void Promise.resolve(openInNewWindow()?.(key, position)).then(
           async () => {
             // Pull-off moves the source tab.
-            const released = closeBuffer(key);
-            if (!released || (await released) === "restored") return;
-            scheduleSessionFidelityPersist();
-            void onFileTabMovedOut()?.(key);
+            await transfers.releaseCommittedSource(key);
           },
           (err) => console.debug("[item-window] move file failed", err),
         );

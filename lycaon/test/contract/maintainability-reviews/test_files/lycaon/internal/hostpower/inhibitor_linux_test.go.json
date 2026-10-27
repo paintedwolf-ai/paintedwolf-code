@@ -2,13 +2,15 @@
   "category": "test_files",
   "artifact": "lycaon/internal/hostpower/inhibitor_linux_test.go",
   "kind": "test_suite",
-  "workstream": "hostpower-fixture-readiness",
+  "workstream": "linux-native-service-capabilities",
   "disposition": "retain",
-  "reason": "The suite shares one isolated D-Bus fixture across logind and portal lease lifetime, denial, attribution, and disconnect contracts. Keep that fixture beside its consumers within a 525-line ceiling; readiness requires the same bounded authenticated connection used by each consumer.",
-  "reviewed_commit": "b6120abc30359d6ea98b6f32a3d10deed80066be",
+  "reason": "Retain the shared private-bus fixtures and three inhibition protocol contracts within the existing 525-line ceiling. Configurable portal Response bodies and withheld grants exercise the real provider without duplicating its service setup. Grant deadline, typed-response, cancellation cleanup, foreign-signal and owner-loss contracts live in a separate focused suite. Native hostpower qualification passes all 40 tests and subtests, including the existing owner-replacement controls.",
+  "reviewed_commit": "4e7d176cf0bc56aa8106a8ae1c7f9b0db002a0be",
   "ceiling": 525,
   "boundaries": {
-    "lycaon/internal/hostpower/inhibitor_linux_test.go": "231182d53287bf2435fb9cb03e8e045dee3c0b8dbe801d6dd287fa8ecd70fa54",
-    "lycaon/internal/linuxbus/connection_linux.go": "e9637bdc91c89c3a151930a080a4f9d70b680acd830e958e044e64843af36ae2"
+    "lycaon/internal/hostpower/inhibitor_linux_test.go": "9e59836e3b4a44b024e3644c639c91fbc607cab22b75013dfa2438ffdf7d98d0",
+    "lycaon/internal/hostpower/activation_linux_test.go": "9e590ddd7c429e897e5feb106dee190977a6d799d8a46dbf8d30967910bac403",
+    "lycaon/internal/linuxbus/connection_linux.go": "e9637bdc91c89c3a151930a080a4f9d70b680acd830e958e044e64843af36ae2",
+    "lycaon/internal/hostpower/portal_grant_owner_linux_test.go": "fa3f90ea2af1805c39dc2996c6b0033290fe14f407070d6fcf6761c2dacff8ca"
   }
 }

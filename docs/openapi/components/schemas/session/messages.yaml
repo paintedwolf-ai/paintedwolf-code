@@ -214,6 +214,8 @@ components:
       enum:
       - path_file
       - path_folder
+      - external_file
+      - external_folder
       - search_hit
     MessageContentPart:
       x-go-generate: true
@@ -239,6 +241,10 @@ components:
         media_type:
           type: string
           description: Optional MIME type for this text projection.
+        artifact_id:
+          type: string
+          format: uuid
+          description: Host-stamped visual derived from this attachment or path reference. Edit restoration keeps the original source part instead of relinking this derived image again.
         blob_id:
           type: string
           pattern: '^[0-9a-f]{64}$'

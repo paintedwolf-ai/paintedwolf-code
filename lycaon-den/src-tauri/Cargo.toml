@@ -78,7 +78,7 @@ objc2-web-kit = { version = "0.3", default-features = false, features = [
 
 [package]
 name = "painted-wolf-code"
-version = "1.0.2"
+version = "1.0.3"
 description = "Painted Wolf Code desktop shell"
 authors = ["Painted Wolf Code"]
 edition = "2021"
@@ -102,8 +102,8 @@ pkg-config = "0.3"
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 tauri-plugin-shell = "2"
-tokio = { version = "1", features = ["sync", "time", "fs", "io-util", "macros"] }
-reqwest = { version = "0.13", default-features = false, features = ["stream", "rustls-no-provider"] }
+tokio = { version = "1", features = ["sync", "time", "fs", "io-util", "macros", "process"] }
+reqwest = { version = "0.13", default-features = false, features = ["stream", "rustls-no-provider", "socks"] }
 rustls = { version = "0.23", default-features = false, features = ["ring"] }
 sha2 = "0.11"
 hex = "0.4"
@@ -131,8 +131,19 @@ wheel-glide = { path = "crates/wheel-glide" }
 [target.'cfg(target_os = "linux")'.dependencies]
 desktop-settings-observer = { path = "crates/desktop-settings-observer" }
 gtk = "0.18"
+webkit2gtk = "=2.0.2"
 gdkx11 = "0.18"
 gdkwayland-sys = "0.18"
+# Step-away coverage: the display server's own account of input idle, on a
+# client connection separate from GTK's.
+wayland-client = "0.31"
+wayland-protocols = { version = "0.32", features = ["client", "staging"] }
+x11rb = { version = "0.14", features = ["screensaver"] }
+
+# An in-test compositor serves the idle protocol to the step-away monitor.
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+wayland-server = "0.31"
+wayland-protocols = { version = "0.32", features = ["client", "server", "staging"] }
 
 # macOS and Windows use the OS pasteboard through arboard.
 [target.'cfg(not(target_os = "linux"))'.dependencies]

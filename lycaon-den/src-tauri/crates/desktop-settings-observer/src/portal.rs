@@ -1,6 +1,6 @@
 //! The executable reads only fixed desktop preference keys; it accepts no requests.
 use desktop_settings_observer::{Frame, Setting, Status, NAMESPACES};
-use glib::{ToVariant, Variant, VariantTy};
+use glib::{prelude::ToVariant, Variant, VariantTy};
 use std::{
     cell::{Cell, RefCell},
     io::{self, Read},
@@ -16,7 +16,7 @@ const PATH: &str = "/org/freedesktop/portal/desktop";
 const INTERFACE: &str = "org.freedesktop.portal.Settings";
 const TIMEOUT: Duration = Duration::from_millis(1500);
 
-// gio 0.18 exposes the stable GDBus error domain and codes through its FFI.
+// GIO exposes the stable GDBus error domain and codes through its FFI.
 #[derive(Clone, Copy)]
 struct DbCode(i32);
 impl glib::error::ErrorDomain for DbCode {
@@ -73,6 +73,15 @@ fn value(namespace: &str, key: &str, boxed: &Variant) -> Option<Setting> {
         ("org.kde.kdeglobals.General", "AccentColor") => Setting::KdeAccent(text(&v, 32)?),
         ("org.gnome.desktop.wm.preferences", "button-layout") => {
             Setting::ButtonLayout(text(&v, 256)?)
+        }
+        ("org.gnome.desktop.wm.preferences", "action-double-click-titlebar") => {
+            Setting::TitlebarDoubleClick(text(&v, 32)?)
+        }
+        ("org.gnome.desktop.wm.preferences", "action-middle-click-titlebar") => {
+            Setting::TitlebarMiddleClick(text(&v, 32)?)
+        }
+        ("org.gnome.desktop.wm.preferences", "action-right-click-titlebar") => {
+            Setting::TitlebarRightClick(text(&v, 32)?)
         }
         _ => return None,
     };
@@ -155,7 +164,13 @@ fn known(namespace: &str, key: &str) -> bool {
             | ("org.gnome.desktop.interface", "text-scaling-factor")
             | ("org.gnome.desktop.a11y.interface", "high-contrast")
             | ("org.kde.kdeglobals.General", "AccentColor")
-            | ("org.gnome.desktop.wm.preferences", "button-layout")
+            | (
+                "org.gnome.desktop.wm.preferences",
+                "button-layout"
+                    | "action-double-click-titlebar"
+                    | "action-middle-click-titlebar"
+                    | "action-right-click-titlebar"
+            )
     )
 }
 pub fn run() -> io::Result<()> {

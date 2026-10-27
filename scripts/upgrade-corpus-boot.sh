@@ -66,6 +66,9 @@ if [[ ! -x "${SIDECAR}" ]]; then
   exit 1
 fi
 
+mkdir -p "${PW_ARTIFACT_ROOT}/ci"
+EVIDENCE_DIR="$(mktemp -d "${PW_ARTIFACT_ROOT}/ci/upgrade-corpus.XXXXXX")"
+
 binary_schema_version() {
   jq -r '.schema_version' "${SCHEMA_LOCK}"
 }
@@ -173,6 +176,11 @@ boot_one() {
   finish() {
     local code=$1
     stop_sidecar || return 1
+    if (( code != 0 )); then
+      echo "fixture ${name}: sidecar log:" >&2
+      cat "${log}" >&2
+      cp "${log}" "${EVIDENCE_DIR}/${name}.log"
+    fi
     rm -rf "${tmp}"
     return "${code}"
   }

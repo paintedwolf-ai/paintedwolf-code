@@ -1,18 +1,15 @@
 package tools
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/santhosh-tekuri/jsonschema/v6"
-	"sync"
 
 	"github.com/lycaon/lycaon/internal/tools/argdiag"
 )
-
-var schemaCache sync.Map // string(cache key) -> *jsonschema.Schema
 
 // SchemaRequiresValidation reports whether ArgsSchema imposes constraints beyond a bare object type.
 func SchemaRequiresValidation(schema map[string]any) bool {
@@ -44,39 +41,11 @@ func ValidateToolArgs(schema map[string]any, args map[string]any) error {
 	if err != nil {
 		return fmt.Errorf("marshal schema: %w", err)
 	}
-	cacheKey := string(schemaBytes)
-	cached, ok := schemaCache.Load(cacheKey)
-	var sch *jsonschema.Schema
-	if ok {
-		sch = cached.(*jsonschema.Schema)
-	} else {
-		var doc any
-		if err := json.Unmarshal(schemaBytes, &doc); err != nil {
-			return fmt.Errorf("parse schema: %w", err)
-		}
-		const schemaURL = "lycaon://tool-args/schema.json"
-		compiler := jsonschema.NewCompiler()
-		if err := compiler.AddResource(schemaURL, doc); err != nil {
-			return fmt.Errorf("compile schema: %w", err)
-		}
-		sch, err = compiler.Compile(schemaURL)
-		if err != nil {
-			return fmt.Errorf("compile schema: %w", err)
-		}
-		schemaCache.Store(cacheKey, sch)
-	}
 	argsBytes, err := json.Marshal(args)
 	if err != nil {
 		return fmt.Errorf("marshal args: %w", err)
 	}
-	inst, err := jsonschema.UnmarshalJSON(bytes.NewReader(argsBytes))
-	if err != nil {
-		return fmt.Errorf("parse args: %w", err)
-	}
-	if err := sch.Validate(inst); err != nil {
-		return err
-	}
-	return nil
+	return toolcontract.ValidateArgumentInstance(schemaBytes, argsBytes)
 }
 
 // ValidateCallArguments checks transport integrity and argument shape before policy reads them.

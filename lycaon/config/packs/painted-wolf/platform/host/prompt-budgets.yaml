@@ -40,7 +40,7 @@ sizes:
 absolute_maximums:
     model: accounts/fireworks/models/kimi-k2p7-code
     model_context_window_tokens: 262144
-    reserved_session_tokens: 224000
+    reserved_session_tokens: 222000
 prompt_attachments:
     composer:
         auto_attach_paste_bytes: 16384
