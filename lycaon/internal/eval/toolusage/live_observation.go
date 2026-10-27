@@ -27,7 +27,7 @@ func (c *liveClient) watchSessionFailure(ctx context.Context, sessionID string) 
 	}
 	req.Header.Set("Accept", "text/event-stream")
 	// The ordinary transport buffers whole responses and cannot consume SSE.
-	resp, err := c.http.Do(req) // #nosec G704 -- The operator selects the evaluation sidecar.
+	resp, err := c.http.Do(req) //nolint:bodyclose,gosec // G704 — the operator selects the evaluation sidecar; the SSE reader goroutine closes the body.
 	if err != nil {
 		cancel(err)
 		return ctx, func() {}, err
