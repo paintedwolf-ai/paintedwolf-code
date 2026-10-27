@@ -43,6 +43,7 @@ var doorExemptions = map[string]string{
 	"lycaon/cmd/pw-vault-identity/store.go":               "O_EXCL staging file published with link(2), so a stored identity is never replaced",
 	"lycaon/internal/api/owner_only_posix.go":             "O_EXCL create so the 0600 mode is in force before any byte lands",
 	"lycaon/internal/api/owner_only_windows.go":           "owner-only ACL applied to a freshly created manifest",
+	"lycaon/internal/db/rebuild_copy.go":                  "O_EXCL staging database created with 0600 mode before SQLite populates and fseffect exchanges it",
 	"lycaon/internal/filelock/filelock.go":                "lock file opened for the flock it carries, not for its contents",
 	"lycaon/internal/packagegeneration/lifetime.go":       "lock file opened for the flock it carries, not for its contents",
 	"lycaon/internal/fileclone/clone_linux.go":            "O_EXCL destination for a reflink clone; the ioctl replaces the write",

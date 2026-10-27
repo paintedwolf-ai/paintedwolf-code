@@ -58,7 +58,7 @@ func TestParallelHTTPRequestWorkersShareOneCookieJarWithoutSerializingNetwork(t 
 	for range count {
 		select {
 		case <-arrived:
-		case <-time.After(5 * time.Second):
+		case <-t.Context().Done():
 			t.Fatal("requests did not overlap; a cookie lock spans network traffic")
 		}
 	}

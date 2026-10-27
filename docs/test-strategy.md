@@ -729,6 +729,17 @@ ninety-minute allowance plus the contracts and remaining checks. This is a
 conservative ceiling, not a measured duration; broad-change hosted timings are
 required before tightening it or claiming an admission latency improvement.
 
+Admission also compiles affected native test targets without running them. The
+`ready` lane's `compile_targets` maps native source roots to existing managed
+verification targets. A broad or unknown scope compiles both the Den workspace
+and decision engine; ordinary Go, frontend, and prose changes add no native
+compilation. The Den workspace includes operational binaries and examples, so
+an observer compilation failure is visible before enqueueing. Compilation uses
+`--compile-only` on the normal test targets, preserving locked dependencies,
+features, resources, and all test targets. The single admission job provisions
+shell inputs only when Den compilation is selected. This adds real compilation
+cost to affected PRs; it does not claim a full native build is inexpensive.
+
 The merge queue runs changed coverage and the complete affected integration
 selection. Its `limits` and `lint` lanes start first, and the group stops at its
 first failure. The PR's pass does not replace verification of the landing commit.
@@ -782,15 +793,26 @@ the whole selected matrix to budgets until qualification measures its rows.
 Partial receipts from a cancelled run cannot
 mix short measured times with large timeout fallbacks. Shards share their lane's
 longest estimate because package balancing changes which packages each shard runs.
-Fail-fast lanes retain their declared priority, and runner caps are unchanged.
+The catalog orders lanes by explicit priority: `reject` for limits and lint,
+`critical` for both behavior shards, and `normal` for remaining work. Native
+verification is a `compile` candidate: the planner moves it to the earliest
+position after rejection and critical lanes that does not increase the predicted
+whole-matrix duration at the profile's runner cap. The baseline orders remaining
+work longest first. With four slots, both behavior shards start beside rejection
+checks. Compilation promotion preserves that start and never removes a lane or
+changes its verification recipe. Timing estimates are advisory; the model is not
+a guarantee of hosted runtime.
 The catalog declares `integration-build` with `timing_source: build`: qualification
 measures build plus cross compilation, a conservative estimate for the smaller
 integration build. Timing sources must run in qualification, cover the receiving
 lane's stages, and use the same execution configuration.
 
 Lanes and shards are planned from measured durations. Each lane of main's
-qualification records its elapsed time beside its receipts in `ci/timings.json`;
-a sharded lane also records its packages' durations. The plan job reads the
+qualification records setup plus execution time beside its receipts in `ci/timings.json`;
+a sharded lane also records its packages' durations. A job-start marker precedes
+checkout and provisioning. Measurements without that timing basis supply package
+weights only; they cannot mix execution-only times with setup-inclusive estimates.
+Evidence-upload time is accounted for separately by queue health. The plan job reads the
 newest valid measurement for each row and package from check and release platform
 receipts in at most 20 completed qualifications, filling gaps from older runs.
 History stops once the rows qualification actually runs have measurements. The
@@ -833,6 +855,11 @@ pinned browser under confinement) runs on both. Platform qualification's
 sandbox, its helper, or the command supervisor's Linux files change. Setup
 provisions the pinned browser before the lane goes offline.
 
+The `nix` lane runs `nix:check` nightly. It informs and gates no merge or
+release. A lane's `arguments` reach its single target. Setup installs the pinned
+Nix release and fetches every locked input with `nix:check -- --prepare` before
+the lane goes offline.
+
 Drafts spend no verification runners and cannot pass `check`. Manual dispatch
 runs the complete check and platform tier, or with `profile: fast` the fast
 tier for a pull request whose events start no CI, such as the dependency
@@ -844,14 +871,13 @@ the `release` profile's platform lanes, then browser and desktop journeys on
 main. One qualification runs at a time. Its `queue: max` concurrency queue
 retains up to 100 pending requests and preserves explicit candidate runs.
 [`qualification-supersession.yml`](../.github/workflows/qualification-supersession.yml)
-uses the existing maintenance runner reservation to cancel queued or running
-background push qualifications superseded by newer main. It reads live main,
-requires the old source to be an ancestor, and rechecks each run before
-cancellation. Manual candidate requests are never canceled by this controller.
-If maintenance is busy or its pending request is replaced, cancellation can be
-delayed until a later push; selection still drops obsolete pushes at admission.
-Canceled runs produce no qualification evidence. The executor queue limit is a
-bound, not a reservation: GitHub cancels additional requests when it is full.
+runs per main push (`qualification-supersession-${{ github.sha }}`) to cancel
+queued or running background push qualifications superseded by newer main. It
+reads live main, requires the old source to be an ancestor, and rechecks each
+run before cancellation. Manual candidate requests are never canceled by this
+controller. Selection also drops obsolete pushes at admission. Canceled runs
+produce no qualification evidence. The executor queue limit is a bound, not a
+reservation: GitHub cancels additional requests when it is full.
 
 A manual request selects a full `source-sha` from main's history, or the dispatch
 commit when omitted. The main workflow remains the controller; each verification,
@@ -887,7 +913,11 @@ loopback. It runs as the normal runner account after namespace creation.
 Linux native setup resolves its APT dependency set before restoring exact package
 archives. The key includes package digests, the runner image version, and the
 architecture; no prefix restore mixes package sets. Native X11, Wayland, and
-Vulkan dependencies remain installed, including clipboard fixture peers. Only
+Vulkan dependencies remain installed, including clipboard fixture peers.
+Native-only verification omits the Git and OCR runtime engine downloads. Its
+minimal binary staging still provisions the scanner, native binaries, resource
+notices, and decision heads; host admission and behavior checks retain their
+runtime engines. Only
 main publishes archives, after successful installation. Package candidates still
 follow the runner's distribution repositories.
 
@@ -923,11 +953,35 @@ other pull requests back. When the queue invalidates a group, GitHub deletes its
 `gh-readonly-queue/...` branch but lets its run continue. Each verification job
 therefore starts [`merge-group-watch`](../.github/actions/merge-group-watch/action.yml),
 which polls its own branch with `git ls-remote` about once a minute, spending no
-REST API quota, and cancels the run with one API call once the branch is gone.
+REST API quota, and requests cancellation once the branch is gone. A failed cancellation request
+keeps the watcher alive; it rechecks the branch before retrying.
 Merge-group CI is the only CI granted `actions: write`, for that call; pull
 request CI, which runs unreviewed code, keeps a read-only token. Queue-to-merge
 time and lane durations are measured service objectives, not claims
 established by timeout settings.
+
+#### CI throughput accounting
+
+Queue health reports completed merge-group runs and their recovered dispatches.
+Job timestamps are charged only when a runner assignment or started step is
+observed; canceled matrix waiters can have timestamps without using a runner.
+The report separates setup, verification, completion, canceled runner time, and
+runner time in failed runs. Job creation-to-start includes dependency and matrix
+admission waits; it is not labeled as runner-only waiting. Missing timestamps,
+runner evidence, and lane receipts remain explicit gaps.
+
+Delivery counts deduplicate original PR numbers across ordinary merges and
+trusted automatic-batch manifests. Batch PRs are reported separately and malformed
+or untrusted batch records remain unresolved rather than inflating delivery.
+Runner minutes per original PR describe the observed window, including failed
+and canceled work; they are not a per-PR attribution or a throughput guarantee.
+
+Infrastructure retry requires one matching receipt for every failed executable
+job, bound to the run, attempt, source SHA, lane, and shard. Duplicate, missing,
+foreign, or source-failure receipts cannot authorize retry. A removed or replaced
+merge-group branch cannot retry, and an unreadable branch receives no automatic
+retry. The one-retry limit remains in force.
+
 
 #### Automatic queue batching
 
@@ -964,6 +1018,28 @@ history, preventing a retry loop. Conflicting combinations leave originals alone
 A human draft decision on the batch stops automatic promotion. On landing,
 originals close only if their heads still match the manifest. Later heads stay
 open. Agents do not manually assemble batches.
+
+#### Dependent PR updates
+
+CI runs only for PRs that target `main`, so a PR based on another PR's branch is
+untested until that base lands. When a PR lands on `main`, the `Dependent PR
+update` workflow finds the open PRs that targeted its branch, including those
+GitHub has already moved to `main`, and makes sure each targets `main`. It then
+asks GitHub to merge `main` into each branch, bound to the head it read, and no
+commit is rewritten. An owner's push in the meantime refuses that update; the
+workflow keeps the push and brings its new head current instead, and a branch
+that keeps moving fails the run. GitHub performs the merge, so `main`'s workflow
+changes do not block it. A retarget starts no CI, so once each merge appears, or
+when a branch is already current, it dispatches CI and original-commit
+certification for ready PRs; a ready PR with auto-merge enters the queue when
+it passes. GitHub holds the ordinary CI run
+for a bot's merge until someone approves it; the workflow deletes that held run,
+since the dispatched checks replace it. PRs already in the merge queue are left
+alone.
+
+A conflict is never resolved automatically: the PR gets the `update-conflict`
+label and a comment, and the owner's next push clears the label. A refusal the
+PR's state does not explain, or a merge that does not appear, fails the run.
 
 #### Throughput choices
 
@@ -1111,10 +1187,11 @@ remain a coverage gap; cancellation is reported separately from an attributed te
 ### Reusing completed source verification
 
 Qualification reuses complete source lanes from successful merge-group CI runs
+(including recovered `workflow_dispatch` runs on `gh-readonly-queue/main/`)
 whose Git tree exactly matches the selected landed source. Each compact proof
 binds repository, source commit and tree, workflow run and attempt, lane recipe,
 runner label, shard, and successful full-scope execution. The lookup considers
-up to twenty successful merge-group runs within fourteen days. PR-only results,
+up to forty recent successful CI runs within fourteen days. PR-only results,
 partial package selections, missing evidence, and failed runs grant no reuse.
 
 All shards of a lane must have matching proofs from one run attempt. Qualification

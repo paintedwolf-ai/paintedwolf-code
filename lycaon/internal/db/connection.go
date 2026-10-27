@@ -66,12 +66,19 @@ func Open(dbPath string) (*Store, error) {
 // The caller holds the installation lease throughout recovery, upgrading, and serving.
 func OpenWithOptions(ctx context.Context, dbPath string, hooks UpgradeHooks, opts StoreOptions) (*Store, error) {
 	dir := filepath.Dir(dbPath)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil { // #nosec G703 -- local SQLite store dir
 		return nil, fmt.Errorf("create db directory: %w", err)
+	}
+	if err := ResumeStoreUpgrade(dbPath); err != nil {
+		return nil, err
+	}
+
+	if err := CheckStoreHealth(dbPath); err != nil {
+		return nil, err
 	}
 
 	created := false
-	if info, err := os.Stat(dbPath); err != nil {
+	if info, err := os.Stat(dbPath); err != nil { // #nosec G703 -- local SQLite store path
 		if !os.IsNotExist(err) {
 			return nil, fmt.Errorf("inspect database: %w", err)
 		}
@@ -103,12 +110,11 @@ func OpenWithOptions(ctx context.Context, dbPath string, hooks UpgradeHooks, opt
 
 	auditDue := false
 	if !created {
-		clean, err := lastShutdownWasClean(ctx, writer)
+		auditDue, err = integrityAuditNeeded(ctx, writer)
 		if err != nil {
 			_ = writer.Close()
-			return nil, fmt.Errorf("read shutdown state: %w", err)
+			return nil, fmt.Errorf("read integrity audit obligation: %w", err)
 		}
-		auditDue = !clean
 		if err := prepareAuditState(ctx, writer, auditDue); err != nil {
 			_ = writer.Close()
 			return nil, ClassifyStoreFailure(err)
@@ -124,12 +130,12 @@ func OpenWithOptions(ctx context.Context, dbPath string, hooks UpgradeHooks, opt
 	}
 
 	if created {
-		if err := os.Chmod(dbPath, defaultDBFileMode); err != nil {
+		if err := os.Chmod(dbPath, defaultDBFileMode); err != nil { // #nosec G703 -- local SQLite store path
 			_ = writer.Close()
 			return nil, fmt.Errorf("chmod database: %w", err)
 		}
 	} else {
-		_ = os.Chmod(dbPath, defaultDBFileMode)
+		_ = os.Chmod(dbPath, defaultDBFileMode) // #nosec G703 -- local SQLite store path
 	}
 
 	reader, err := openReader(ctx, dbPath)
@@ -138,6 +144,11 @@ func OpenWithOptions(ctx context.Context, dbPath string, hooks UpgradeHooks, opt
 		return nil, ClassifyStoreFailure(err)
 	}
 	store := newStore(writer, reader)
+	if err := bindStoreHealth(store, dbPath); err != nil {
+		_ = reader.Close()
+		_ = writer.Close()
+		return nil, ClassifyStoreFailure(err)
+	}
 	if filepath.IsAbs(dbPath) {
 		store.dataDir = filepath.Dir(dbPath)
 	}
@@ -152,7 +163,7 @@ const UpgradeRecoveryDirName = "upgrade-recovery"
 // Recovery artifacts make a zero-byte store ambiguous.
 func emptyStoreHasRecoveryArtifacts(dbPath string) bool {
 	for _, artifact := range []string{dbPath + "-wal", dbPath + "-shm", filepath.Join(filepath.Dir(dbPath), UpgradeRecoveryDirName)} {
-		if _, err := os.Stat(artifact); err == nil || !os.IsNotExist(err) {
+		if _, err := os.Stat(artifact); err == nil || !os.IsNotExist(err) { // #nosec G703
 			return true
 		}
 	}
@@ -231,6 +242,12 @@ func openWriter(ctx context.Context, dbPath string, opts StoreOptions) (*sql.DB,
 	if _, err := sqlDB.ExecContext(ctx, `PRAGMA journal_mode=WAL`); err != nil {
 		_ = sqlDB.Close()
 		return nil, fmt.Errorf("configure wal journal: %w", err)
+	}
+	// A WAL that grew while a reader pinned it shrinks back to this size the
+	// next time a write restarts it after a complete checkpoint.
+	if _, err := sqlDB.ExecContext(ctx, fmt.Sprintf(`PRAGMA journal_size_limit=%d`, walSizeLimitBytes)); err != nil {
+		_ = sqlDB.Close()
+		return nil, fmt.Errorf("configure wal size limit: %w", err)
 	}
 	sqlDB.SetMaxOpenConns(writerOpenConns)
 	sqlDB.SetMaxIdleConns(writerOpenConns)

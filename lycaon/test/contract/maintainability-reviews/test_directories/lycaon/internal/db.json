@@ -4,13 +4,18 @@
   "kind": "test_suite",
   "workstream": "store-health",
   "disposition": "retain",
-  "reason": "Private schema and recovery seams require real SQLite fixtures in this package. The snapshot suite now verifies checkpointed WAL preservation, copy digests, cancellation and absent-source refusal without machine-speed assertions. Retain the existing 42-file membership beside upgrade and operational-failure contracts. Unsupported filesystem operations retain the existing operational-versus-damage boundary; deterministic classifier tests cover this addition.",
-  "reviewed_commit": "5077ef8c0266d5751d1cbf55dcf76aebc2f09d0d",
-  "ceiling": 42,
+  "reason": "Retain the 54-file private database suite beside the queries and lifecycle authority it verifies. The source sweep query-plan contract inspects generated SQL constants to require indexed candidate pages without full scans or temporary sorting; exposing those constants for a separate test package would create a needless API. Existing recovery, migration, and crash contracts retain their own fixtures.",
+  "reviewed_commit": "08755ea1cacb2cddd74715cbed460e26b0af8074",
+  "ceiling": 54,
   "boundaries": {
-    "lycaon/internal/db/upgrade_test.go": "7367c61132e25abac613ae98babf0135f22c2996f6c4629806d33bb51be3da4a",
-    "lycaon/internal/db/store_health_test.go": "5721d3d55ea6153c49b8a5e1f65aa500e13a128f9638dd36067b44cba35b319d",
-    "lycaon/internal/db/snapshot_clone_test.go": "31d05f2b18b5184a718f39beae7abb5f72e1efc3d2430c7f4c087f2cb6f004d1"
+    "lycaon/internal/db/integrity_audit_wal_test.go": "cac14114d7f1746d9a2d8112584371ad58e13beecc2000f94ffb2d8a17febe04",
+    "lycaon/internal/db/integrity_schedule_test.go": "e80a1de9f5ceadca290f48bc286f7d734113db78eb956bc9279e4a223a2828ca",
+    "lycaon/internal/db/rebuild_equivalence_test.go": "ad40b1e4101ac05338bf3b87ca593ae434a7ead5ceca01169859ec0642ac198e",
+    "lycaon/internal/db/rebuild_crash_test.go": "fc637d9935806c84c8fc8166211ab9049cdaf945a89cbad920082cdb9609dfab",
+    "lycaon/internal/db/rebuild_errors_test.go": "068ee8d208bd97d283e73e0afb5793f33d88767744451e3f01844805eb282765",
+    "lycaon/internal/db/rebuild_classification_test.go": "56711ac30d190a3012ed2475b52b56cac6b1d6f93c3bf1e0d57dd3dabddd490a",
+    "lycaon/internal/db/source_manifest_layout_upgrade_test.go": "3ca9c9f432d0bf53d1fa1bec1ad5c8f03c355c1e1b8c036cc71a9f6890e6feb6",
+    "lycaon/internal/db/source_sweep_query_test.go": "04826ae8e38e8a7355de77c81fe2acc39c3be6819ec4a89cf6ebbf6801fdb94e"
   },
-  "reviewed_shape": "a8a13e67cb1b6712db61fb8cd3ce8334e96987365f341edd72e57315359c6a22"
+  "reviewed_shape": "d2629fd7f0ed99396c1d92c155651e2a5331816fcf87c740ae2cd4401694c4d6"
 }

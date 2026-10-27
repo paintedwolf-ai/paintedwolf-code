@@ -3,9 +3,25 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+if [[ "${1:-}" == --r2-nix-cache && $# -eq 1 ]]; then
+  cd "${ROOT}"
+  exec python3 -m scripts.nix_cache.rehearsal_r2
+fi
+if [[ "${1:-}" == --local-nix-source && $# -eq 1 ]]; then
+  cd "${ROOT}"
+  exec python3 -m scripts.nix_cache.source_rehearsal
+fi
+if [[ "${1:-}" == --local-nix-cache && $# -eq 1 ]]; then
+  cd "${ROOT}"
+  exec python3 -m scripts.nix_cache.rehearsal
+fi
+[[ $# -eq 0 ]] || { echo "error: unsupported release rehearsal arguments" >&2; exit 2; }
 if [[ "${PW_R2_REHEARSAL_CONFIGURED:-}" != 1 ]]; then
   exec python3 "${ROOT}/scripts/release_storage/rehearsal.py" "$0" "$@"
 fi
+for need in bun curl jq python3 ruby; do
+  command -v "${need}" >/dev/null 2>&1 || { echo "error: ${need} is required for the R2 rehearsal" >&2; exit 1; }
+done
 # shellcheck source=release-r2-rest.sh
 source "${ROOT}/scripts/release-r2-rest.sh"
 [[ "${RELEASE_R2_TRANSPORT:-}" == s3 ]] || { echo 'error: rehearsal requires S3 credentials' >&2; exit 1; }
@@ -159,7 +175,7 @@ write_manifest() {
     --arg base "${DOWNLOAD_BASE_URL}" \
     --slurpfile catalog "${ROOT}/packaging/release-platforms.json" \
     '{version: $version, update_keys: $update_keys, notes: $notes, pub_date: $pub_date,
-      platforms: (reduce ($catalog[0].platforms[] | select(.publication == "public")) as $platform ({};
+      platforms: (reduce ($catalog[0].platforms[] | select(.publication == "public" and .updater_extension != null)) as $platform ({};
         .[$platform.updater_key] = {
           signature: $signature,
           url: ($base + "/releases/v" + $version + "/painted-wolf-code_v" +
@@ -226,7 +242,7 @@ for version in "${VERSIONS[@]}"; do
     immutable_put "${artifact_key}" "${artifact_file}" application/gzip
     public_equals "${artifact_rel}" "${artifact_file}" \
       "${WORKDIR}/public-artifact-${version}-${platform_artifact}"
-  done < <(jq -r '.platforms[] | select(.publication == "public") | [.updater_key, .updater_extension] | @tsv' \
+  done < <(jq -r '.platforms[] | select(.publication == "public" and .updater_extension != null) | [.updater_key, .updater_extension] | @tsv' \
     "${ROOT}/packaging/release-platforms.json")
   immutable_put "${manifest_key}" "${WORKDIR}/manifest-${version}.json" application/json
   public_equals "${manifest_rel}" "${WORKDIR}/manifest-${version}.json" \
