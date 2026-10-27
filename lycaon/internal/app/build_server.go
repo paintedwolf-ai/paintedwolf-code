@@ -110,9 +110,9 @@ func (b *serveBuilder) wireServer() error {
 				return nil
 			},
 			park: func(ctx context.Context, projectID string) error {
-				sourcefeed.StopProjectWatch(ctx, projectID)
+				err := sourcefeed.StopProjectWatch(ctx, projectID)
 				sourcecatalog.Process().Trees.SuspendProjectStores(projectID)
-				return nil
+				return err
 			},
 		},
 	})

@@ -282,7 +282,7 @@ func TestServiceExitsWhenIdle(t *testing.T) {
 	select {
 	case err := <-done:
 		testutil.FailErr(t, "idle serve", err)
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("the service did not exit when idle")
 	}
 }

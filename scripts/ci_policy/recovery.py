@@ -12,7 +12,7 @@ import subprocess
 import zipfile
 
 from .github import api, pages, repository
-from .evidence import retryable
+from .retry_evidence import permits_retry, current_group
 
 MAX_ARTIFACT_BYTES = 32 * 1024 * 1024
 
@@ -93,20 +93,17 @@ def propose_revert(run, failures):
 
 
 def recover(run):
+    if run.get('conclusion') != 'failure' or run.get('event') not in {'push', 'merge_group', 'workflow_dispatch'}:
+        return
     if run.get('path') not in {'.github/workflows/ci.yml', '.github/workflows/qualification.yml'}:
         return
-    if run.get('repository', {}).get('full_name', os.environ['GITHUB_REPOSITORY']) != os.environ['GITHUB_REPOSITORY']:
+    if (run.get('repository') or {}).get('full_name') != os.environ['GITHUB_REPOSITORY']:
         return
-    # Fork artifacts cannot authorize privileged recovery and need not be downloaded.
-    if run.get('event') == 'pull_request':
+    if (run.get('head_repository') or {}).get('full_name') != os.environ['GITHUB_REPOSITORY']:
         return
     records, failures = evidence(run)
-    if run.get('conclusion') != 'failure':
-        return
     jobs = list(pages(f"{repository()}/actions/runs/{run['id']}/attempts/{run['run_attempt']}/jobs", 'jobs'))
-    # Every failed executable lane must have evidence. Missing evidence cannot prove a runner fault.
-    failed_jobs = [j for j in jobs if j['conclusion'] in {'failure', 'timed_out'} and j['name'] not in {'check', 'qualification'}]
-    if len(failed_jobs) == len([r for r in records if r.get('classification') != 'passed']) and retryable(records, run['run_attempt']):
+    if permits_retry(run, records, jobs) and current_group(run):
         api(f"{repository()}/actions/runs/{run['id']}/rerun-failed-jobs", 'POST')
         return
     if run.get('path') == '.github/workflows/qualification.yml':

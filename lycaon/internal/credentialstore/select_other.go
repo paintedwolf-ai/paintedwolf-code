@@ -2,7 +2,9 @@
 
 package credentialstore
 
-// unattendedIdentity: the release identity is wrapped by the app password.
+import "errors"
+
+// unattendedIdentity is false until this platform has a native custodian.
 func unattendedIdentity() bool { return false }
 
 func verifiedLauncherPID() int { return 0 }
@@ -11,13 +13,9 @@ func selectIdentityProvider(path string, isolated, release bool) identityProvide
 	if isolated || !release {
 		return newDevelopmentIdentityProvider(path)
 	}
-	return newPassphraseIdentityProvider(path)
+	return unavailableIdentityProvider{refusal: errors.Join(ErrCustodianUnavailable, ErrCustodianUnsupported)}
 }
 
 func describeCustody(string) (CustodyReport, error) {
-	return CustodyReport{Mode: CustodyAppPassword}, nil
+	return CustodyReport{Mode: CustodyUnavailable}, nil
 }
-
-func moveToService(string) error { return ErrCustodyUnsupported }
-
-func moveToAppPassword(string) error { return ErrCustodyUnsupported }

@@ -78,6 +78,16 @@ describe("update settings", () => {
     expect(screen.queryByText("You’re using the latest version.")).toBeNull();
     expect(screen.getByText(/Package-source availability has not been checked/)).not.toBeNull();
   });
+  it("shows pacman package identity and leaves the AUR workflow explicit", async () => {
+    const state = packageFixture();
+    state.package = { ...state.package!, family: "pacman", update_command: "sudo pacman -Syu" };
+    render(() => <UpdatesSettingsPanel updateService={updateServiceFixture({ getState: async () => state })} />);
+    expect((await screen.findByTestId("updates-package-identity")).textContent).toContain("package (pacman)");
+    const upgrade = await screen.findByTestId("updates-package-upgrade");
+    expect(upgrade.querySelector("code")).toBeNull();
+    expect(screen.getByText(/For an AUR installation/).textContent).toContain("workflow you selected");
+    expect(screen.queryByTestId("updates-install")).toBeNull();
+  });
   it("explains an unpackaged Linux copy and its package-manager error", async () => {
     const capabilities = { can_check: true, can_download: false, can_restart_to_update: false, can_install_automatically: false, blocked_reason: "unpackaged_installation" };
     const state = updateFixture({ install_source: "unpackaged", candidate: null, discovery: "idle", capabilities, last_error: { code: "unpackaged_installation" } });
@@ -85,6 +95,16 @@ describe("update settings", () => {
     expect((await screen.findByTestId("updates-unpackaged")).textContent).toContain("Install the .deb or .rpm package");
     expect(screen.getByRole("alert").textContent).toContain("no update command is available");
     expect(screen.queryByTestId("updates-package-identity")).toBeNull();
+    expect(screen.queryByTestId("updates-install")).toBeNull();
+  });
+  it("reports unknown package ownership without claiming an unpackaged copy", async () => {
+    const capabilities = { can_check: true, can_download: false, can_restart_to_update: false, can_install_automatically: false, blocked_reason: "package_ownership_unknown" };
+    const state = updateFixture({ install_source: "package_ownership_unknown", candidate: null, discovery: "idle", capabilities });
+    render(() => <UpdatesSettingsPanel updateService={updateServiceFixture({ getState: async () => state })} />);
+    expect((await screen.findByTestId("updates-ownership-unknown")).textContent).toContain("could not confirm which package owns this installation");
+    expect(screen.queryByTestId("updates-unpackaged")).toBeNull();
+    expect(screen.queryByTestId("updates-package-identity")).toBeNull();
+    expect(screen.queryByTestId("updates-package-upgrade")).toBeNull();
     expect(screen.queryByTestId("updates-install")).toBeNull();
   });
   it("retains the existing preference control and changes its native authority", async () => {

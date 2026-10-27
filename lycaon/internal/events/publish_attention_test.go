@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -47,7 +46,7 @@ func TestAttentionReachesSubscriberOfAnotherProject(t *testing.T) {
 		if len(view.Rows) != 1 || view.Rows[0].ProjectID != "59fe5320-05b6-55f5-8365-760a4247b8c9" {
 			t.Fatalf("want the other project's row, got %+v", view.Rows)
 		}
-	case <-time.After(2 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("attention event never reached a subscriber of a different project")
 	}
 }
@@ -89,7 +88,7 @@ func TestCoalescedRebuildSurvivesTriggerContextCancel(t *testing.T) {
 		if env.Topic != api.EventTopicAttention {
 			t.Fatalf("want attention topic, got %q", env.Topic)
 		}
-	case <-time.After(2 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("rebuild scheduled before cancel never published")
 	}
 }
@@ -140,13 +139,14 @@ func TestPublishAttentionOrdersConcurrentBuildsByStartNotFinish(t *testing.T) {
 
 	// Release the stale build after the fresh revision publishes.
 	close(slow.release)
+	pub.SettleAttention(ctx)
 
 	select {
 	case env := <-ch:
 		var staleView api.AttentionView
 		testutil.FailErr(t, "unmarshal", json.Unmarshal(env.Data, &staleView))
 		t.Fatalf("stale late build must not publish, got %+v", staleView.Rows)
-	case <-time.After(200 * time.Millisecond):
+	default:
 		// The stale build is discarded.
 	}
 }

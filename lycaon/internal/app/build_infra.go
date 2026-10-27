@@ -59,7 +59,7 @@ func (b *serveBuilder) wireEvents() error {
 
 	project.SetDefaultOpenPolicy(project.DefaultOpenPolicy())
 
-	b.identity, err = deviceidentity.Load()
+	b.identity, err = deviceidentity.Load(b.startup.cfg.APIToken)
 	if err != nil {
 		return err
 	}
