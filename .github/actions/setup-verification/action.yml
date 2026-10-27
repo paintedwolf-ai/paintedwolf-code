@@ -223,7 +223,7 @@ runs:
       shell: bash
       run: |
         sudo apt-get update -qq
-        sudo apt-get install -y --no-install-recommends apt-utils createrepo-c gnupg libarchive-tools makepkg rpm
+        sudo apt-get install -y --no-install-recommends apt-utils createrepo-c gnupg libarchive-tools makepkg pacman-package-manager rpm
 
     - name: Provision pinned browser
       if: inputs.browser == 'true'
