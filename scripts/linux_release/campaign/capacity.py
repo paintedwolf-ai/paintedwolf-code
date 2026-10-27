@@ -1,9 +1,9 @@
 """Derive raw campaign retention capacity from independently selected catalog rows."""
 from __future__ import annotations
 
-from .installed_cases.records import MAX_STREAMS
-from .installed_variants import requirements
-from .support_matrix import expand
+from ..installed_cases.records import MAX_STREAMS
+from .variants import requirements
+from ..support_matrix import expand
 
 MAX_BYTES = 64 << 30
 MAX_FILE = 16 << 30

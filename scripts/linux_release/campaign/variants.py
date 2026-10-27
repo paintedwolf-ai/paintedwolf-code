@@ -5,9 +5,9 @@ import hashlib
 import json
 import re
 
-from .installed_environment import DESKTOPS, query
-from .installed_cases.records import CaseUnavailable
-from .support_variants import variants
+from .environment import DESKTOPS, query
+from ..installed_cases.records import CaseUnavailable
+from ..support_variants import variants
 
 
 def requirements(catalog: dict, environment_id: str, capability: str) -> list[dict]:
@@ -54,7 +54,7 @@ def observe(variant: dict, selected_snapshot: dict, observations: dict, binding:
     if observations['session']['Type'] != variant['display']['protocol']:
         raise ValueError('actual session protocol differs from the selected qualification variant')
     if selected_snapshot['kind'] == 'nixos-revision':
-        from .installed_cases.nix_factory import observe as observe_factory
+        from ..installed_cases.nix_factory import observe as observe_factory
         factory = observe_factory(binding, selected_snapshot)
     else:
         factory = None
@@ -65,7 +65,7 @@ def observe(variant: dict, selected_snapshot: dict, observations: dict, binding:
         raise CaseUnavailable('actual-xwayland-and-clipboard-absence-observer-required')
     session = observations['session']
     if session.get('Desktop', '').casefold() in DESKTOPS['Plasma']:
-        from .installed_plasma import observe as plasma_monitors
+        from .plasma import observe as plasma_monitors
         monitors = plasma_monitors(session)
     else:
         monitors = gnome_monitors(session)

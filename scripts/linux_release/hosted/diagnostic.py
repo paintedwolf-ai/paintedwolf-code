@@ -7,11 +7,11 @@ import secrets
 import shutil
 import stat
 
-from . import hosted_installed as runtime
-from .hosted_desktop import fresh
-from .installed_artifact_bundle import Limits, retain_tree
-from .installed_execution import read
-from .installed_runtime import file_identity
+from . import installed as runtime
+from .desktop import fresh
+from ..campaign.artifact_bundle import Limits, retain_tree
+from ..campaign.execution import read
+from ..campaign.runtime import file_identity
 
 
 def require_partial(selected):

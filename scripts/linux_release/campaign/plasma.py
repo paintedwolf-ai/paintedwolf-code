@@ -10,8 +10,8 @@ import socket
 import stat
 import struct
 
-from .installed_environment import query
-from .installed_cases.records import CaseUnavailable
+from .environment import query
+from ..installed_cases.records import CaseUnavailable
 
 
 def process(pid, names):

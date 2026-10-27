@@ -14,15 +14,15 @@ import subprocess
 import sys
 import tempfile
 
-from .installed_capacity import limits as campaign_limits
-from .installed_artifact_bundle import Limits, download, retain_tree
-from .installed_execution import current_tree, read, registry
-from .installed_campaign import validate_plan, verify_execution_receipt
-from .installed_provenance import local_controller_context, select_control, select_plan, verify_producer
-from .installed_results import admit
-from .support_matrix import CATALOG
+from .capacity import limits as campaign_limits
+from .artifact_bundle import Limits, download, retain_tree
+from .execution import current_tree, read, registry
+from .guests import validate_plan, verify_execution_receipt
+from .provenance import local_controller_context, select_control, select_plan, verify_producer
+from ..installed_results import admit
+from ..support_matrix import CATALOG
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 CONTROL_FILES = {"control-producer.json", "final-artifacts.json", "repositories.json"}
 CONTROL_DIRS = {"packages", "generations", "nix-cache", "repository-setup"}
 PLAN_FILES = {"plan-producer.json", "qualification-plan.json"}

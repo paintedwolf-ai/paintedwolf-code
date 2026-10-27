@@ -11,18 +11,18 @@ import shutil
 import stat
 import subprocess
 
-from .hosted_desktop import USER, fresh, validate_host
-from .hosted_installed_plan import controller, read as selection
-from .installed_artifact_bundle import Limits, retain_tree
-from .installed_campaign import verify_execution_receipt
-from .installed_capacity import limits
-from .installed_environment import release
-from .installed_evidence import artifacts
-from .installed_execution import read
-from .installed_results import admit
-from .installed_runtime import file_identity, stable
-from .installed_variants import requirements
-from .support_matrix import CATALOG
+from .desktop import USER, fresh, validate_host
+from .plan import controller, read as selection
+from ..campaign.artifact_bundle import Limits, retain_tree
+from ..campaign.guests import verify_execution_receipt
+from ..campaign.capacity import limits
+from ..campaign.environment import release
+from ..installed_evidence import artifacts
+from ..campaign.execution import read
+from ..installed_results import admit
+from ..campaign.runtime import file_identity, stable
+from ..campaign.variants import requirements
+from ..support_matrix import CATALOG
 
 ROOT = Path('/var/lib/paintedwolf-installed-rehearsal')
 INSTALL = Path('/opt/painted-wolf-code')
@@ -126,7 +126,7 @@ def prepare(selected: dict, checkout: Path, candidate: Path, facts: dict) -> dic
 
 def freeze(selected: dict, checkout: Path, facts: dict) -> dict:
     """Freeze preparation observations before the qualifying fresh-install leaf."""
-    from .installed_cases.native_bootstrap import verify
+    from ..installed_cases.native_bootstrap import verify
     if selected.get('partial') is not False:
         raise ValueError('complete hosted snapshot freeze refuses partial diagnostic packages')
     account = context(selected, checkout, facts)
@@ -143,12 +143,12 @@ def freeze(selected: dict, checkout: Path, facts: dict) -> dict:
             or info.st_uid != account.pw_uid or stat.S_IMODE(info.st_mode) != 0o700):
         raise ValueError('hosted bootstrap is not the fresh graphical user transaction')
     request, final = read(ROOT / 'execution-request.json'), read(ROOT / 'final-artifacts.json')
-    from .installed_input.protocol import binding as execution_binding
+    from ..installed_input.protocol import binding as execution_binding
     execution_binding(request)
     if (request['source_commit'] != selected['source_commit'] or request['driver_tree'] != selected['controller_tree']
             or any(request[key] != contract[key] for key in request)):
         raise ValueError('hosted bootstrap request differs from its selected preleaf execution')
-    from .hosted_bootstrap import verify as verify_supervision
+    from .bootstrap import verify as verify_supervision
     verify_supervision(ROOT, selected, account, request)
     artifact = artifacts(final, selected['source_commit'])[contract['artifact_id']]
     retained = ROOT / 'bootstrap'
@@ -208,7 +208,7 @@ def retain(selected: dict, checkout: Path, facts: dict, output: Path) -> dict:
 
 def main(arguments=None) -> int:
     if arguments and arguments[0] == 'desktop':
-        from .hosted_desktop import main as prepare_desktop
+        from .desktop import main as prepare_desktop
         return prepare_desktop(arguments[1:])
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('mode', choices=('prepare', 'bootstrap', 'freeze', 'retain', 'prepare-diagnostic', 'retain-diagnostic'))
@@ -221,7 +221,7 @@ def main(arguments=None) -> int:
     try:
         selected, facts = selection(args.selection), read(args.facts)
         if args.mode in {'prepare-diagnostic', 'retain-diagnostic'}:
-            from .hosted_installed_diagnostic import prepare as diagnostic_prepare, retain as diagnostic_retain
+            from .diagnostic import prepare as diagnostic_prepare, retain as diagnostic_retain
             if args.mode == 'prepare-diagnostic' and args.candidate is not None:
                 diagnostic_prepare(selected, args.checkout, args.candidate, facts)
             elif args.mode == 'retain-diagnostic' and args.output is not None:
@@ -236,7 +236,7 @@ def main(arguments=None) -> int:
         elif args.mode == 'bootstrap':
             if selected.get('partial') is not False:
                 raise ValueError('complete bootstrap refuses partial diagnostic packages')
-            from .hosted_bootstrap import supervise
+            from .bootstrap import supervise
             supervise(ROOT, selected, context(selected, args.checkout, facts))
         elif args.mode == 'freeze':
             freeze(selected, args.checkout, facts)

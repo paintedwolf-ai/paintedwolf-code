@@ -10,11 +10,11 @@ import selectors
 import time
 import subprocess
 
-from .hosted_desktop import fresh
-from .hosted_installed_plan import controller
-from .installed_execution import read
-from .installed_input.protocol import binding
-from .installed_runtime import file_identity, stable
+from .desktop import fresh
+from .plan import controller
+from ..campaign.execution import read
+from ..installed_input.protocol import binding
+from ..campaign.runtime import file_identity, stable
 
 
 def physical(path):

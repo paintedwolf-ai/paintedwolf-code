@@ -12,7 +12,7 @@ import stat
 import subprocess
 import time
 
-from .installed_environment import release
+from ..campaign.environment import release
 
 USER = 'paintedwolf-test'
 INSTALL_PARENT = Path('/opt')
@@ -129,7 +129,7 @@ def prepare(checkout: Path, output: Path, controller_commit: str | None = None) 
     validate_host(os.environ, os.getuid(), platform.machine(), release())
     selected = selected_controller(os.environ, controller_commit)
     checkout = checkout.resolve(strict=True)
-    if not (checkout / 'scripts/linux_release/installed_environment.py').is_file() or output.exists() or output.is_symlink():
+    if not (checkout / 'scripts/linux_release/campaign/environment.py').is_file() or output.exists() or output.is_symlink():
         raise ValueError('desktop preparation requires the checked-out controller and a fresh result path')
     revision = run(['git', '-c', 'safe.directory=' + str(checkout), '-C', str(checkout), 'rev-parse', 'HEAD'], timeout=10).decode().strip()
     if revision != selected:
@@ -186,7 +186,7 @@ def prepare(checkout: Path, output: Path, controller_commit: str | None = None) 
     with environment_file.open('a') as stream:
         stream.write('\nLIBGL_ALWAYS_SOFTWARE=1\n')
     run(['systemctl', 'restart', 'gdm3'])
-    probe = ('import json; from linux_release.installed_environment import graphical_session; '
+    probe = ('import json; from linux_release.campaign.environment import graphical_session; '
              'print(json.dumps(graphical_session()))')
     deadline, session = time.monotonic() + 180, None
     while time.monotonic() < deadline:

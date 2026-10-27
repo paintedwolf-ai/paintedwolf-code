@@ -12,14 +12,14 @@ import signal
 import subprocess
 import sys
 
-from . import installed_evidence as evidence
-from .installed_cases.products import require_owned_guest
-from .installed_cases.records import CaseFailed, CaseUnavailable, retain
-from .installed_environment import collect
-from .installed_runtime import bind
-from .support_matrix import CATALOG, expand
-from .installed_variants import requirements, observe, observed
-from .installed_monitors import prepare as prepare_monitors
+from .. import installed_evidence as evidence
+from ..installed_cases.products import require_owned_guest
+from ..installed_cases.records import CaseFailed, CaseUnavailable, retain
+from .environment import collect
+from .runtime import bind
+from ..support_matrix import CATALOG, expand
+from .variants import requirements, observe, observed
+from .monitors import prepare as prepare_monitors
 
 # Each case runs within its own time budget; a driver family may declare a
 # longer one as TIME_BUDGET_SECONDS. A case past its budget fails and the
@@ -95,7 +95,7 @@ def registry(catalog: dict, installation: str) -> dict:
 
 def execute_case(binding: dict, capability: str, case: str, root: Path) -> dict:
     family = case_family(capability, case, binding["artifact"]["installation"])
-    module_name = __package__ + ".installed_cases." + family if family else None
+    module_name = __package__.rpartition(".")[0] + ".installed_cases." + family if family else None
     if module_name is None or importlib.util.find_spec(module_name) is None:
         return retain(binding, capability, case, root, "unverified", {"reason": "native-case-driver-required"})
     module = importlib.import_module(module_name)
@@ -132,7 +132,7 @@ def execute(catalog: dict, final: dict, source: str, artifact_id: str, file_root
         raise ValueError("installed execution requires a declared qualification variant")
     variant = variants[variant_id]
     rows = [row for row in rows if variant_id in {item["id"] for item in requirements(catalog, environment_id, row["capability"])}]
-    root = Path(__file__).resolve().parents[2]
+    root = Path(__file__).resolve().parents[3]
     if current_tree(root) != evidence.source(driver_tree):
         raise ValueError("installed driver source differs from the independently selected tree")
     guest = require_owned_guest({"install_root": str(install_root), "artifact": artifact})
@@ -143,14 +143,14 @@ def execute(catalog: dict, final: dict, source: str, artifact_id: str, file_root
     output.mkdir(parents=True, mode=0o700, exist_ok=False)
     retained = output / "evidence"
     retained.mkdir()
-    from .installed_cases.native_workflows import prepare_install
+    from ..installed_cases.native_workflows import prepare_install
     transaction = prepare_install(final, source, artifact_id, file_root, install_root, case_inputs, retained)
     if transaction is not None and transaction["status"] != "passed":
         raise ValueError("fresh native installation failed; retained transaction requires recovery review")
     binding = bind(final, source, artifact_id, file_root, install_root, nix_program)
     binding['execution_nonce'] = execution_nonce
     if input_vm_id is not None:
-        from .installed_input.mailbox import Mailbox
+        from ..installed_input.mailbox import Mailbox
         execution_binding = {'format_version': 1, 'execution_nonce': execution_nonce, 'source_commit': source,
             'driver_tree': driver_tree, 'artifact_id': artifact_id, 'environment_id': environment_id,
             'variant_id': variant_id}
@@ -162,7 +162,7 @@ def execute(catalog: dict, final: dict, source: str, artifact_id: str, file_root
     if transaction is not None:
         binding["installation_transaction"] = transaction
         binding["execution_nonce"] = execution_nonce
-        from .installed_cases.desktop import prepare_first_launch
+        from ..installed_cases.desktop import prepare_first_launch
         binding["first_launch_transaction"] = prepare_first_launch(binding, retained)
     facts, observations = collect(environments[environment_id], binding, guest, variant["display"]["protocol"])
     if facts.keys() != set(catalog["recorded_environment_facts"]):

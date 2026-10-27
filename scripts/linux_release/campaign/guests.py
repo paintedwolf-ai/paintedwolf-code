@@ -14,14 +14,14 @@ import subprocess
 import sys
 from contextlib import nullcontext
 
-from . import installed_evidence as evidence
-from .installed_execution import read, registry
-from .installed_results import admit
-from .installed_transfer import receive
-from .support_matrix import CATALOG, expand
-from .installed_variants import requirements, snapshot, aggregate
-from .installed_capacity import limits
-from .installed_input.controller import Bridge, adapter, verify_deliveries, run_managed
+from .. import installed_evidence as evidence
+from .execution import read, registry
+from ..installed_results import admit
+from .transfer import receive
+from ..support_matrix import CATALOG, expand
+from .variants import requirements, snapshot, aggregate
+from .capacity import limits
+from ..installed_input.controller import Bridge, adapter, verify_deliveries, run_managed
 
 PLAN_FORMAT_VERSION = 3
 
@@ -85,7 +85,7 @@ def run_guest(target: dict, source: str, tree: str, output: Path) -> Path:
         raise ValueError("guest managed execution failed before retaining an installed campaign")
     archive = directory / "leaf.zip"
     with archive.open("xb") as stream, (directory / "transfer.log").open("xb") as log:
-        subprocess.run(command(target, ["python3", "-m", "scripts.linux_release.installed_transfer", "--export", target["output"]]),
+        subprocess.run(command(target, ["python3", "-m", "scripts.linux_release.campaign.transfer", "--export", target["output"]]),
                        stdout=stream, stderr=log, check=True)
     leaf = directory / "leaf"
     receive(archive, leaf)

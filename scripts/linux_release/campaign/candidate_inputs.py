@@ -8,10 +8,10 @@ import re
 import shutil
 import tempfile
 
-from .installed_artifact_bundle import download
-from .installed_provenance import artifact_for_run
-from .installed_runtime import file_identity
-from .release_source import facts
+from .artifact_bundle import download
+from .provenance import artifact_for_run
+from .runtime import file_identity
+from ..release_source import facts
 
 ARCHES = {"amd64":"x86_64", "arm64":"aarch64"}
 EXTENSIONS = {"deb":"deb", "rpm":"rpm", "pacman":"pkg.tar.zst"}

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 
-from .installed_provenance import verify_producer
+from .provenance import verify_producer
 
 PRODUCER = {"format_version", "repository_id", "run_id", "run_attempt", "controller_commit", "source_commit", "source_tree"}
 INPUTS = {"control_run_id", "control_artifact_id", "qualification_plan_run_id", "qualification_plan_artifact_id"}

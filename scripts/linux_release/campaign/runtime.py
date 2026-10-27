@@ -13,8 +13,13 @@ import struct
 import subprocess
 import tempfile
 
-from . import installed_evidence as evidence
-from .installed_cases.package_payload import SETUID_LAUNCHER as RELATIVE_SETUID_LAUNCHER, inspect, stable, verify
+from .. import installed_evidence as evidence
+from ..installed_cases.package_payload import (
+    SETUID_LAUNCHER as RELATIVE_SETUID_LAUNCHER,
+    inspect,
+    stable,
+    verify,
+)
 
 ARCHES = {"x86_64": ("amd64", 62), "aarch64": ("arm64", 183)}
 ROLES = {"painted-wolf-code", "pw", "pw-logs", "pw-vault-identity", "pw-document-core", "bialy"}

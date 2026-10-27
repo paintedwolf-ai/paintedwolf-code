@@ -3,10 +3,10 @@ from __future__ import annotations
 
 import os
 
-from .installed_cases.products import require_owned_guest
-from .installed_cases.records import CaseUnavailable
-from .installed_environment import query
-from .installed_variants import gnome_monitors
+from ..installed_cases.products import require_owned_guest
+from ..installed_cases.records import CaseUnavailable
+from .environment import query
+from .variants import gnome_monitors
 
 
 def configuration(state: dict, percentages: list[int]) -> list[str]:
