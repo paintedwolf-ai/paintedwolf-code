@@ -11,14 +11,10 @@ import (
 type custodyMode int
 
 const (
-	// custodyPassword: password custody was explicitly selected.
-	custodyPassword custodyMode = iota
-	// custodyService: the service verified this engine and holds the identity.
+	// The zero value cannot establish custody.
+	custodyUnavailable custodyMode = iota
 	custodyService
-	// custodyRefused: the service runs but refused this engine.
 	custodyRefused
-	// custodyUnavailable: service custody could not be established.
-	custodyUnavailable
 )
 
 // custody is the outcome of asking the identity service who this engine is.
@@ -48,7 +44,6 @@ func newServiceClient() *vaultidentity.Client {
 }
 
 // probeCustody preserves an unavailable custodian separately from a refusal.
-// Password operation requires an existing wrapper or a new vault.
 func probeCustody(client *vaultidentity.Client) custody {
 	resp, err := client.Do(vaultidentity.Request{Op: vaultidentity.OpProbe})
 	if err != nil {
@@ -74,24 +69,17 @@ func probeCustody(client *vaultidentity.Client) custody {
 func (c custody) provider(path string) identityProvider {
 	switch c.mode {
 	case custodyService:
-		return c.serviceHost(path)
+		return &itemsIdentityProvider{account: identityAccount(path),
+			description: "identity held by the Painted Wolf Code vault identity service",
+			items:       serviceItems{client: c.client}}
 	case custodyRefused:
 		return refusedIdentityProvider{refusal: c.refusal}
-	case custodyUnavailable:
-		if c.absent {
-			return &passphraseIdentityProvider{
-				path: identityPath(path), missingError: ErrCustodianAbsent,
-				missingGuidance: "; the vault identity service that held its key is not installed, not running, " +
-					"or cannot serve; reinstall or re-enable it to recover, or reset the vault",
-			}
-		}
-		return &passphraseIdentityProvider{
-			path: identityPath(path), missingError: ErrCustodianUnavailable, unreachableVault: path,
-			missingGuidance: "; restore the vault identity service and open the installed desktop app; " +
-				"an app password requires a previously exported identity",
-		}
 	default:
-		return newPassphraseIdentityProvider(path)
+		code := ErrCustodianUnavailable
+		if c.absent {
+			code = ErrCustodianAbsent
+		}
+		return unavailableIdentityProvider{refusal: fmt.Errorf("%w; restore the Painted Wolf Code vault identity service and reopen the installed app", errors.Join(code, c.refusal))}
 	}
 }
 
@@ -141,7 +129,7 @@ func (s serviceItems) remove(account string) error {
 }
 
 // refusedIdentityProvider fails every operation with guidance: the service
-// holds the identity, so no password could open the vault either.
+// holds the identity and must verify the installed launcher.
 type refusedIdentityProvider struct {
 	refusal error
 }
@@ -152,7 +140,7 @@ func (refusedIdentityProvider) Describe() string {
 
 func (p refusedIdentityProvider) LoadOrCreate(bool) (identityDocument, error) {
 	return identityDocument{}, fmt.Errorf("%w: %w; start Painted Wolf Code from the installed desktop app, "+
-		"then restore access to the vault identity service; moving to an app password requires a verified export first", ErrLauncherRefused, p.refusal)
+		"then restore access to the vault identity service", ErrLauncherRefused, p.refusal)
 }
 
 func (p refusedIdentityProvider) Purge() error {
