@@ -217,7 +217,7 @@ func runSealEntryChild(dir string) error {
 			<-checkExec
 			_, err := syscall.ForkExec("/bin/true", []string{"/bin/true"}, &syscall.ProcAttr{Files: []uintptr{0, 1, 2}})
 			if !errors.Is(err, unix.EACCES) {
-				execResults <- fmt.Errorf("worker tid %d ForkExec(/bin/true) = %v, want EACCES", unix.Gettid(), err)
+				execResults <- fmt.Errorf("worker tid %d ForkExec(/bin/true) = %w, want EACCES", unix.Gettid(), err)
 				return
 			}
 			execResults <- nil

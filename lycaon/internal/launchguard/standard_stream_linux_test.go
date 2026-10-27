@@ -124,9 +124,12 @@ func streamFixtureDisplay(t *testing.T) string {
 	testutil.FailErr(t, "start owned display", command.Start())
 	t.Cleanup(func() { _ = command.Process.Kill(); _ = command.Wait() })
 	_ = writer.Close()
-	testutil.FailErr(t, "bound display readiness", reader.SetReadDeadline(time.Now().Add(5*time.Second)))
+	testutil.FailErr(t, "bound display readiness", reader.SetReadDeadline(time.Now().Add(30*time.Second)))
 	text, err := bufio.NewReader(reader).ReadString('\n')
-	testutil.FailErr(t, "receive display number", err)
+	if err != nil {
+		diagnostic, readErr := os.ReadFile(log.Name())
+		t.Fatalf("receive display number: %v; Xvfb diagnostics (%v): %s", err, readErr, diagnostic)
+	}
 	number, err := strconv.ParseUint(strings.TrimSpace(text), 10, 16)
 	testutil.FailErr(t, "decode display number", err)
 	return fmt.Sprintf(":%d", number)

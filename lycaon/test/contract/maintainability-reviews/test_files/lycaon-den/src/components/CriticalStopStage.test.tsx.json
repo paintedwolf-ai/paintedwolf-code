@@ -1,0 +1,13 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon-den/src/components/CriticalStopStage.test.tsx",
+  "kind": "test_suite",
+  "workstream": "store-health",
+  "disposition": "retain",
+  "reason": "The suite exercises the complete critical-stop interaction with shared DOM and service fixtures. Operational failures extend the existing retry journey and verify destructive actions stay unavailable.",
+  "reviewed_commit": "fedf80ee7b88765c50c795dd50c8db432ae2c0d9",
+  "ceiling": 670,
+  "boundaries": {
+    "lycaon-den/src/components/CriticalStopStage.test.tsx": "50cfdf02c31ad14f7a7915a2dc24e7cb961c7ec75f914063982c1d32c36df18c"
+  }
+}

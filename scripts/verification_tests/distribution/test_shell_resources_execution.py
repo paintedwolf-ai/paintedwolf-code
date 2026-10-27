@@ -17,6 +17,7 @@ class ShellResourcesTests(unittest.TestCase):
             source = Path(__file__).resolve().parents[2]
             for name in ["setup-dev.sh", "warm-workspace-build.sh"]:
                 shutil.copyfile(source / name, scripts / name)
+            shutil.copytree(source / "ci_policy", scripts / "ci_policy")
             notices = native / "THIRD-PARTY-NOTICES.md"
             (scripts / "licenses-notices.sh").write_text(
                 '#!/bin/bash\nset -eu\n'
@@ -36,11 +37,13 @@ class ShellResourcesTests(unittest.TestCase):
             (scripts / "artifact-paths.sh").write_text(
                 'export PW_COMPILER_CACHE_DIR="' + str(root / "compiler") + '"\n')
             (scripts / "decide-features.sh").write_text("#!/bin/bash\necho cpu\n")
+            (scripts / "toolchain").mkdir(exist_ok=True)
+            (scripts / "toolchain/decide-test.sh").write_text("#!/bin/bash\nexit 0\n")
             (scripts / "build-decide.sh").write_text("#!/bin/bash\nexit 0\n")
             binary = root / "bin"
             binary.mkdir()
             cargo = binary / "cargo"
-            cargo.write_text('#!/bin/bash\nset -eu\ncase "$*" in *--manifest-path*) exit 0 ;; esac\ntest -s THIRD-PARTY-NOTICES.md\n')
+            cargo.write_text('#!/bin/bash\nset -eu\ncase "$*" in *metadata*) echo \'{"workspace_members":["shell"],"packages":[{"id":"shell","name":"shell"}]}\'; exit 0 ;; *--manifest-path*) exit 0 ;; esac\ntest -s THIRD-PARTY-NOTICES.md\n')
             cargo.chmod(0o755)
             env = dict(os.environ, PATH=f"{binary}{os.pathsep}{os.environ['PATH']}")
 

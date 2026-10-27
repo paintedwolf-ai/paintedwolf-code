@@ -42,6 +42,9 @@ func ReadNamespace(procRoot string, pid int) (NamespaceFacts, error) {
 	if err := unix.Fstat(int(file.Fd()), &stat); err != nil {
 		return NamespaceFacts{}, err
 	}
+	if owner < 0 || uint64(owner) > uint64(^uint32(0)) {
+		return NamespaceFacts{}, errors.New("namespace owner exceeds the kernel identity range")
+	}
 	facts := NamespaceFacts{Device: uint64(stat.Dev), Inode: stat.Ino, OwnerUID: uint32(owner)}
 	if pid == 0 {
 		return facts, nil

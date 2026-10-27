@@ -47,7 +47,7 @@ func TestBootstrapMountAndExecutionHelpersInProcess(t *testing.T) {
 	cwd, err := os.Getwd()
 	testutil.FailErr(t, "getwd", err)
 	t.Cleanup(func() {
-		_ = os.Chdir(cwd)
+		_ = os.Chdir(cwd) //nolint:usetesting // Restore the cwd mutated by sanitizeProcess, not a test-owned chdir.
 		_ = unix.Prctl(unix.PR_SET_DUMPABLE, 1, 0, 0, 0)
 	})
 	testutil.FailErr(t, "sanitizeProcess", sanitizeProcess())
@@ -151,7 +151,7 @@ func TestBootstrapMountAndExecutionHelpersInProcess(t *testing.T) {
 			runtime.LockOSThread()
 			done <- restrictExecution(GenerationPolicy{LogicalInstallRoot: base, SystemExecutables: []string{f1Path}}, exe)
 		}()
-		_ = <-done
+		<-done
 	}
 
 	attr := unix.LandlockRulesetAttr{Handled_access_fs: unix.LANDLOCK_ACCESS_FS_EXECUTE}

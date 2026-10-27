@@ -202,7 +202,8 @@ class MaintainerScripts(unittest.TestCase):
         script = (source.replace("PW_GENERATIONS=/opt/painted-wolf-code/bin/pw-generations", f"PW_GENERATIONS={self.installer}")
                   .replace("/opt/painted-wolf-code", str(self.install))
                   .replace("/etc/paintedwolf", str(self.policy))
-                  .replace("/run/paintedwolf", str(self.root / "run/paintedwolf")))
+                  .replace("/run/paintedwolf", str(self.root / "run/paintedwolf"))
+                  .replace("/var/lib/painted-wolf-code", str(self.root / "var/lib/painted-wolf-code")))
         path = self.root / f"{family}-{name}"
         path.write_text(script if script.startswith("#!") else "#!/bin/sh\n" + script)
         path.chmod(0o755)

@@ -9,6 +9,9 @@ inputs:
       ripgrep, and document-core dependencies)
     default: verification
     required: false
+  runtime-engines:
+    description: Provision Git and OCR engines used by host behavior checks
+    default: 'true'
   notices:
     description: Restore tools for the lane's explicit licenses:notices check
     default: 'false'
@@ -21,6 +24,15 @@ inputs:
   browser:
     description: Provision the pinned browser before an offline lane runs test:confine:linux
     default: 'false'
+  linux-launch:
+    description: Provision GTK and display dependencies for protected launch tests
+    default: 'false'
+  repository-tools:
+    description: Install the native apt, dnf and pacman tools the distribution fixture tests drive
+    default: 'false'
+  nix:
+    description: Provision the pinned Nix toolchain and locked flake inputs before an offline Nix lane
+    default: 'false'
   save-caches:
     description: Save the toolchain and build caches (main's warm job only); every other run restores without saving
     default: 'false'
@@ -29,6 +41,9 @@ outputs:
   decide-cache-hit:
     description: Whether the decision engine's exact build cache was restored
     value: ${{ steps.decide.outputs.cache-hit }}
+  document-cache-hit:
+    description: Whether the document compiler cache was restored
+    value: ${{ steps.document.outputs.cache-hit }}
   artifact-root:
     description: Checkout artifact directory
     value: ${{ steps.paths.outputs.artifact-root }}
@@ -41,6 +56,10 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Set verification compiler profiles
+      shell: bash
+      run: printf 'CARGO_PROFILE_DEV_DEBUG=0\nCARGO_PROFILE_TEST_DEBUG=0\n' >> "${GITHUB_ENV}"
+
     - name: Resolve artifact directory
       id: paths
       shell: bash
@@ -58,6 +77,11 @@ runs:
       uses: ./.github/actions/cache-go
       with:
         exact: ${{ inputs.save-caches }}
+
+    - name: Restore analysis tools
+      uses: ./.github/actions/cache-analysis-tools
+      with:
+        tools: ${{ inputs.analysis }}
 
     - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
       with:
@@ -88,23 +112,27 @@ runs:
         fi
 
     - name: Provision Linux native test dependencies
-      if: runner.os == 'Linux' && inputs.setup == 'shell'
+      if: runner.os == 'Linux' && (inputs.setup == 'shell' || inputs.linux-launch == 'true')
       uses: ./.github/actions/setup-linux-native
       with:
         save: ${{ inputs.save-caches }}
 
-    - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+    - uses: ./.github/actions/cache-document-core
+      id: document
+
+    - uses: ./.github/actions/cache-rust
       id: rust
       if: inputs.setup == 'shell' || inputs.setup == 'harness'
-      with:
-        workspaces: lycaon-den/src-tauri -> ../target
-        shared-key: den-shell
-        save-if: ${{ inputs.save-caches == 'true' && github.ref == 'refs/heads/main' }}
 
     - name: Restore the decision engine build
       id: decide
       if: inputs.setup == 'shell'
       uses: ./.github/actions/cache-decide
+
+    - name: Provision pinned Go modules
+      if: inputs.setup != 'frontend'
+      shell: bash
+      run: ./task setup-dev -- --ci-inputs
 
     - name: Set up maintained OpenGrep
       if: inputs.setup != 'frontend'
@@ -127,13 +155,13 @@ runs:
 
     # Git integration tests resolve the pinned engine from engine-root.
     - name: Fetch pinned git engine
-      if: inputs.setup != 'frontend'
+      if: inputs.setup != 'frontend' && inputs.runtime-engines == 'true'
       shell: bash
       run: ./task gitengine:fetch
 
     # Text recognition tests resolve the pinned engine from engine-root on Linux.
     - name: Fetch pinned text recognition engine
-      if: runner.os == 'Linux' && inputs.setup != 'frontend'
+      if: runner.os == 'Linux' && inputs.setup != 'frontend' && inputs.runtime-engines == 'true'
       shell: bash
       run: bash scripts/ocrengine-fetch.sh
 
@@ -142,11 +170,6 @@ runs:
       with:
         path: ~/.bun/install/cache
         key: bun-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.bun-version', 'lycaon-den/bun.lock') }}
-
-    - name: Provision pinned Go modules
-      if: inputs.setup != 'frontend'
-      shell: bash
-      run: ./task setup-dev -- --ci-inputs
 
     - name: Provision frontend native test inputs
       if: inputs.setup == 'frontend'
@@ -182,12 +205,6 @@ runs:
       shell: bash
       run: ./task setup-dev -- --notices-tools
 
-    - name: Restore analysis tools
-      if: inputs.analysis != 'none'
-      uses: ./.github/actions/cache-analysis-tools
-      with:
-        tools: ${{ inputs.analysis }}
-
     # Offline lanes cannot reach the module proxy, so a cache miss builds the analyzers here.
     - name: Provision analysis tools
       if: inputs.analysis != 'none'
@@ -204,10 +221,22 @@ runs:
       if: inputs.containers == 'true'
       uses: ./.github/actions/setup-webkit-atspi-images
 
+    - name: Install native repository tools
+      if: runner.os == 'Linux' && inputs.repository-tools == 'true'
+      shell: bash
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y --no-install-recommends apt-utils createrepo-c gnupg rpm
+
     - name: Provision pinned browser
       if: inputs.browser == 'true'
       shell: bash
       run: ./task test:confine:linux -- --prepare
+
+    - name: Provision pinned Nix and locked inputs
+      if: inputs.nix == 'true'
+      shell: bash
+      run: ./task nix:check -- --prepare
 
     - name: Save pinned frontend packages
       if: inputs.save-caches == 'true' && github.ref == 'refs/heads/main'

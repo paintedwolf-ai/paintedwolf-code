@@ -51,6 +51,10 @@ type EntrySpec struct {
 // login identity inside the protected namespace, with every selection already
 // made by the privileged stage, and seals itself before executing the desktop.
 func EnterDesktop() error {
+	// Reject unrelated runtime descriptors before taking ownership of the inherited frame.
+	if seals, err := unix.FcntlInt(entrySpecFD, unix.F_GET_SEALS, 0); err != nil || seals&entrySeals != entrySeals {
+		return errors.New("entry specification is not sealed")
+	}
 	runtime.LockOSThread()
 	return enterDesktop(
 		os.NewFile(entryImageFD, "selected-desktop-image"),
@@ -119,6 +123,7 @@ func enterDesktop(image, frame, origin *os.File, brokerFD int, lifetime, gate *o
 		return errors.New("guardian did not admit protected desktop")
 	}
 	args := append([]string{filepath.Join(spec.Generation.LogicalInstallRoot, "bin/painted-wolf-code")}, spec.Arguments...)
+	// #nosec G204 -- fd 3 is the verified generation image; arguments remain separate from the program.
 	return syscall.Exec("/proc/self/fd/3", args, env)
 }
 
@@ -145,7 +150,7 @@ func sameIdentity(spec EntrySpec) error {
 		return errors.New("entry supplementary groups differ from the original caller")
 	}
 	for i, group := range groups {
-		if uint32(group) != spec.Groups[i] {
+		if group < 0 || uint64(group) > uint64(^uint32(0)) || uint32(group) != spec.Groups[i] {
 			return errors.New("entry supplementary groups differ from the original caller")
 		}
 	}

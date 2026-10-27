@@ -1,5 +1,5 @@
-//! Private dbus-daemons and fixture services standing in for logind and the
-//! desktop's screen saver.
+//! Private dbus-daemons and fixture services standing in for logind, the
+//! desktop's screen saver and GNOME Shell's idle monitor.
 
 use super::*;
 
@@ -97,6 +97,8 @@ pub(super) struct Facts {
     pub(super) sleeping: bool,
     pub(super) screensaver: bool,
     pub(super) session_uid: u32,
+    pub(super) session_type: &'static str,
+    pub(super) mutter_idle_ms: u64,
 }
 
 impl Default for Facts {
@@ -107,6 +109,8 @@ impl Default for Facts {
             sleeping: false,
             screensaver: false,
             session_uid: uid(),
+            session_type: "wayland",
+            mutter_idle_ms: 0,
         }
     }
 }
@@ -146,16 +150,31 @@ pub(super) const SCREENSAVER_XML: &str = "<node><interface name='org.freedesktop
 <method name='GetActive'><arg type='b' direction='out'/></method>\
 <signal name='ActiveChanged'><arg type='b'/></signal></interface></node>";
 
+pub(super) const MUTTER_XML: &str = "<node><interface name='org.gnome.Mutter.IdleMonitor'>\
+<method name='GetIdletime'><arg type='t' direction='out'/></method></interface></node>";
+pub(super) const MUTTER: &str = "org.gnome.Mutter.IdleMonitor";
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Kind {
+    Logind,
+    ScreenSaver,
+    Mutter,
+}
+
 impl Service {
     pub(super) fn logind(daemon: &Daemon, facts: Arc<Mutex<Facts>>) -> Self {
-        Self::start(daemon.address(), facts, true)
+        Self::start(daemon.address(), facts, Kind::Logind)
     }
 
     pub(super) fn screensaver(daemon: &Daemon, facts: Arc<Mutex<Facts>>) -> Self {
-        Self::start(daemon.address(), facts, false)
+        Self::start(daemon.address(), facts, Kind::ScreenSaver)
     }
 
-    pub(super) fn start(address: String, facts: Arc<Mutex<Facts>>, logind: bool) -> Self {
+    pub(super) fn mutter(daemon: &Daemon, facts: Arc<Mutex<Facts>>) -> Self {
+        Self::start(daemon.address(), facts, Kind::Mutter)
+    }
+
+    pub(super) fn start(address: String, facts: Arc<Mutex<Facts>>, kind: Kind) -> Self {
         let stop = Arc::new(AtomicBool::new(false));
         let stopping = stop.clone();
         let (requests, incoming) = mpsc::channel::<Request>();
@@ -172,12 +191,13 @@ impl Service {
                         None::<&gio::Cancellable>,
                     )
                     .unwrap();
-                    let registrations = if logind {
-                        register_logind(&connection, &facts)
-                    } else {
-                        register_screensaver(&connection, &facts)
+                    let (registrations, name) = match kind {
+                        Kind::Logind => (register_logind(&connection, &facts), session::NAME),
+                        Kind::ScreenSaver => {
+                            (register_screensaver(&connection, &facts), SCREENSAVER)
+                        }
+                        Kind::Mutter => (register_mutter(&connection, &facts), MUTTER),
                     };
-                    let name = if logind { session::NAME } else { SCREENSAVER };
                     request_name(&connection, name);
                     ready.send(()).unwrap();
                     while !stopping.load(Ordering::Acquire) {
@@ -321,7 +341,7 @@ pub(super) fn register_logind(
                         match property {
                             "PreparingForSleep" => facts.sleeping.to_variant(),
                             "Id" => "fixture".to_variant(),
-                            "Type" => "wayland".to_variant(),
+                            "Type" => facts.session_type.to_variant(),
                             "Class" => "user".to_variant(),
                             "User" => (
                                 facts.session_uid,
@@ -361,6 +381,27 @@ pub(super) fn register_screensaver(
             move |_, _, _, _, _, _, invocation| {
                 let active = reads.lock().unwrap().screensaver;
                 invocation.return_value(Some(&(active,).to_variant()));
+            },
+            |_, _, _, _, _| false.to_variant(),
+            |_, _, _, _, _, _| false,
+        )
+        .unwrap()]
+}
+
+pub(super) fn register_mutter(
+    connection: &gio::DBusConnection,
+    facts: &Arc<Mutex<Facts>>,
+) -> Vec<gio::RegistrationId> {
+    let node = gio::DBusNodeInfo::for_xml(MUTTER_XML).unwrap();
+    let info = node.lookup_interface(MUTTER).unwrap();
+    let reads = facts.clone();
+    vec![connection
+        .register_object(
+            "/org/gnome/Mutter/IdleMonitor/Core",
+            &info,
+            move |_, _, _, _, _, _, invocation| {
+                let idle = reads.lock().unwrap().mutter_idle_ms;
+                invocation.return_value(Some(&(idle,).to_variant()));
             },
             |_, _, _, _, _| false.to_variant(),
             |_, _, _, _, _, _| false,
