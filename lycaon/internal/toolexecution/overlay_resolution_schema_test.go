@@ -82,7 +82,7 @@ func TestOverlayResolutionPublishedObjectsStayClosed(t *testing.T) {
 	if !ok {
 		t.Fatal("promote_overlay schema missing")
 	}
-	projected := tools.TrimCoordinatorToolMeta(tools.ToolMeta{Name: meta.Name, ArgsSchema: meta.ArgsSchema})
+	projected := tools.ProjectProviderToolMeta(tools.ToolMeta{Name: meta.Name, ArgsSchema: meta.ArgsSchema})
 	for name, schema := range map[string]map[string]any{"canonical": meta.ArgsSchema, "provider": projected.ArgsSchema} {
 		t.Run(name, func(t *testing.T) {
 			args := map[string]any{"overlay_id": "worker-1", "resolutions": []any{map[string]any{"path": "status.py", "hunks": []any{map[string]any{"start_line": 1, "content": "merged"}}}}}
