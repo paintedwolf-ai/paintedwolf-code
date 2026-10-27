@@ -6,7 +6,7 @@ import tempfile
 import unittest
 
 from verification_tests.distribution.manifest_fixture import ARCHITECTURES, FIXTURE, ROOT, PRODUCER, generate, relocate
-from verification_tests.distribution.test_nixos_apparmor_execution import OWNER as APPARMOR
+from verification_tests.distribution.test_nixos_apparmor_execution import APPARMOR
 
 
 class ProducerReaderContractTests(unittest.TestCase):
