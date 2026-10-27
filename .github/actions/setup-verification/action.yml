@@ -9,6 +9,9 @@ inputs:
       ripgrep, and document-core dependencies)
     default: verification
     required: false
+  runtime-engines:
+    description: Provision Git and OCR engines used by host behavior checks
+    default: 'true'
   notices:
     description: Restore tools for the lane's explicit licenses:notices check
     default: 'false'
@@ -21,6 +24,8 @@ inputs:
   browser:
     description: Provision the pinned browser before an offline lane runs test:confine:linux
     default: 'false'
+  repository-tools:
+    description: Install the native apt, dnf and pacman tools the distribution fixture tests drive
   nix:
     description: Provision the pinned Nix toolchain and locked flake inputs before an offline Nix lane
     default: 'false'
@@ -146,13 +151,13 @@ runs:
 
     # Git integration tests resolve the pinned engine from engine-root.
     - name: Fetch pinned git engine
-      if: inputs.setup != 'frontend'
+      if: inputs.setup != 'frontend' && inputs.runtime-engines == 'true'
       shell: bash
       run: ./task gitengine:fetch
 
     # Text recognition tests resolve the pinned engine from engine-root on Linux.
     - name: Fetch pinned text recognition engine
-      if: runner.os == 'Linux' && inputs.setup != 'frontend'
+      if: runner.os == 'Linux' && inputs.setup != 'frontend' && inputs.runtime-engines == 'true'
       shell: bash
       run: bash scripts/ocrengine-fetch.sh
 
@@ -211,6 +216,13 @@ runs:
     - name: Set up WebKitGTK accessibility images
       if: inputs.containers == 'true'
       uses: ./.github/actions/setup-webkit-atspi-images
+
+    - name: Install native repository tools
+      if: runner.os == 'Linux' && inputs.repository-tools == 'true'
+      shell: bash
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y --no-install-recommends apt-utils createrepo-c gnupg rpm
 
     - name: Provision pinned browser
       if: inputs.browser == 'true'

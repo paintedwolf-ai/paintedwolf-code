@@ -1,0 +1,14 @@
+{
+  "owner": "system_package_manager",
+  "pinned": null,
+  "checked_at": null,
+  "database_owner": null,
+  "cached_only": true,
+  "availability": "blocked",
+  "database_version": "1.0.2pre.rc.1-2",
+  "architecture": "x86_64",
+  "candidate": null,
+  "held": true,
+  "selection_priority": null,
+  "reason": "held"
+}

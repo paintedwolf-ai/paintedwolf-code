@@ -19,6 +19,13 @@ import (
 )
 
 func runHelperIfInvoked() {
+	if len(os.Args) == 2 && os.Args[1] == linuxsandbox.PerformerFlag {
+		if err := linuxsandbox.ServePerformer(); err != nil {
+			fmt.Fprint(os.Stderr, HelperStderrPrefix+err.Error()+"\n")
+			exitHelper(HelperFailureExit)
+		}
+		exitHelper(0)
+	}
 	if !IsHelperInvocation(os.Args) {
 		return
 	}

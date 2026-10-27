@@ -9,7 +9,9 @@ use std::time::Duration;
 use gtk::glib::prelude::*;
 use gtk::{gio, glib};
 
-use super::PresenceCommandError;
+use super::{ConfirmationChallenge, PresenceCommandError};
+
+mod attempt;
 use crate::linux_desktop::bus as linux_bus;
 
 pub(super) const AUTHENTICATOR_POLKIT: &str = "linux_user_presence";
@@ -119,15 +121,15 @@ pub(super) fn authorization_flags(reply: &glib::Variant) -> Option<(bool, bool)>
     ))
 }
 
-pub(super) fn confirm_with_polkit(identifier: &str) -> Result<(), PolkitRefusal> {
+pub(super) fn confirm_with_polkit(identifier: &str, binding: &ConfirmationChallenge<'_>) -> Result<(), PolkitRefusal> {
     let action = action_id(identifier);
     let context = glib::MainContext::new();
     context
-        .with_thread_default(|| confirm_on(&context, &action))
+        .with_thread_default(|| confirm_on(&context, &action, binding))
         .map_err(|_| PolkitRefusal::Failed("the bus context is in use".into()))?
 }
 
-fn confirm_on(context: &glib::MainContext, action: &str) -> Result<(), PolkitRefusal> {
+fn confirm_on(context: &glib::MainContext, action: &str, binding: &ConfirmationChallenge<'_>) -> Result<(), PolkitRefusal> {
     let bus = linux_bus::connect(context, linux_bus::SYSTEM_BUS_ADDRESS, BUS_CONNECT_TIMEOUT)
         .map_err(|error| {
             PolkitRefusal::Unavailable(
@@ -138,7 +140,7 @@ fn confirm_on(context: &glib::MainContext, action: &str) -> Result<(), PolkitRef
     let owner = authority_owner(context, &bus, action)?;
     let subject = own_subject()?;
     let probe_id = uuid::Uuid::new_v4().to_string();
-    let probe = linux_bus::call(
+    let probe = attempt::call(binding, &subject, action, &owner, &probe_id, attempt::Phase::Probe, &bus, || linux_bus::call(
         context,
         &bus,
         Some(&owner),
@@ -152,15 +154,15 @@ fn confirm_on(context: &glib::MainContext, action: &str) -> Result<(), PolkitRef
             &probe_id,
         )),
         BUS_CALL_TIMEOUT,
-    )
+    ))
     .map_err(|error| PolkitRefusal::Failed(format!("The authority refused the check: {error}")))?;
     let (authorized, challenge) = authorization_flags(&probe).ok_or_else(|| {
         PolkitRefusal::Failed("the authority answered in an unknown shape".into())
     })?;
     preflight(authorized, challenge)?;
     let cancellation_id = uuid::Uuid::new_v4().to_string();
-    let parameters = check_parameters(subject, action, ALLOW_USER_INTERACTION, &cancellation_id);
-    let reply = linux_bus::call(
+    let parameters = check_parameters(subject.clone(), action, ALLOW_USER_INTERACTION, &cancellation_id);
+    let reply = attempt::call(binding, &subject, action, &owner, &cancellation_id, attempt::Phase::Interactive, &bus, || linux_bus::call(
         context,
         &bus,
         Some(&owner),
@@ -169,7 +171,7 @@ fn confirm_on(context: &glib::MainContext, action: &str) -> Result<(), PolkitRef
         "CheckAuthorization",
         Some(&parameters),
         PROMPT_TIMEOUT + Duration::from_secs(5),
-    );
+    ));
     match reply {
         Ok(reply) => {
             let (authorized, challenge) = authorization_flags(&reply).ok_or_else(|| {

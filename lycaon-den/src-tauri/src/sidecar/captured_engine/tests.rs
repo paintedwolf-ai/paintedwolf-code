@@ -27,7 +27,7 @@ fn fixture() -> (crate::test_support::TempDir, std::path::PathBuf) {
 }
 
 #[test]
-fn accepts_format_1_and_2_and_refuses_unknown_or_mismatched_manifest_versions() {
+fn requires_sealed_format_2_and_refuses_other_manifest_versions() {
     let (root, desktop) = fixture();
     let manifest_path = root.join("manifest.json");
     let base: serde_json::Value =
@@ -36,7 +36,10 @@ fn accepts_format_1_and_2_and_refuses_unknown_or_mismatched_manifest_versions() 
     v1["format_version"] = serde_json::json!(1);
     v1.as_object_mut().unwrap().remove("payload");
     std::fs::write(&manifest_path, serde_json::to_vec(&v1).unwrap()).unwrap();
-    assert!(capture(&root, &desktop, false).is_ok());
+    assert!(matches!(
+        capture(&root, &desktop, false),
+        Err(AdmissionError::ManifestUnavailable)
+    ));
 
     for bad_version in [0, 1, 3, 99] {
         let mut manifest = base.clone();

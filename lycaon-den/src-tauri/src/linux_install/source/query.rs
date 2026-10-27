@@ -1,4 +1,4 @@
-use super::{command::{OsReader, package_name}, *};
+use super::{command::OsReader, *};
 use crate::linux_install::InstalledPackage;
 use std::{sync::{Arc, atomic::{AtomicBool, Ordering}}, time::{Duration, SystemTime, UNIX_EPOCH}};
 
@@ -52,7 +52,7 @@ pub(super) fn observe(family: PackageFamily, name: &str, reader: &mut impl comma
     let mut facts = PackageSourceFacts::for_family(family);
     facts.checked_at = SystemTime::now().duration_since(UNIX_EPOCH).ok().map(|t| t.as_secs());
     facts.cached_only = true;
-    if !package_name(name) { return facts.fail(QueryReason::InvalidResponse); }
+    if !valid_package_name(name) { return facts.fail(QueryReason::InvalidResponse); }
     let result = match family {
         PackageFamily::Deb => apt::observe(name, reader, &mut facts),
         PackageFamily::Rpm => dnf::observe(name, reader, &mut facts),

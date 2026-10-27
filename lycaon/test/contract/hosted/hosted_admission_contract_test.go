@@ -40,7 +40,7 @@ func TestReadyPullRequestsRunTheFastTierAndMergeGroupsTheGate(t *testing.T) {
 	jobs := workflow.Jobs
 	fast, integration, platform := jobs["fast"], jobs["integration"], jobs["platform"]
 	if fast.With["profile"] != "fast" ||
-		fast.If != "${{ github.event_name == 'pull_request' && !github.event.pull_request.draft || inputs.profile == 'fast' }}" {
+		fast.If != "${{ github.event_name == 'pull_request' && (!github.event.pull_request.draft || github.event.action == 'ready_for_review') || inputs.profile == 'fast' }}" {
 		t.Error("ready pull requests, and only they or a dispatch asking for it, run the fast tier")
 	}
 	if integration.With["profile"] != "${{ (github.event_name == 'merge_group' || inputs.profile == 'integration') && 'integration' || 'check' }}" ||
@@ -97,13 +97,13 @@ func TestDraftPullRequestsWaitForReadyForReview(t *testing.T) {
 	if !slices.Equal(types, []string{"opened", "ready_for_review", "reopened", "synchronize"}) {
 		t.Errorf("pull request CI must run when a ready pull request changes and when a draft becomes ready, got %v", pullRequest.Types)
 	}
-	if !strings.Contains(workflow.Jobs["fast"].If, "!github.event.pull_request.draft") {
-		t.Error("draft pull requests must not start verification")
+	if !strings.Contains(workflow.Jobs["fast"].If, "!github.event.pull_request.draft || github.event.action == 'ready_for_review'") {
+		t.Error("draft pull requests must wait unless the event marks them ready")
 	}
 	refused := false
 	for _, step := range workflow.Jobs["check"].Steps {
 		refused = refused || strings.HasPrefix(step.Run, ciGateStep) &&
-			step.Env["DRAFT"] == "${{ github.event.pull_request.draft == true }}" && strings.Contains(step.Run, `--draft "$DRAFT"`)
+			step.Env["DRAFT"] == "${{ github.event.pull_request.draft == true && github.event.action != 'ready_for_review' }}" && strings.Contains(step.Run, `--draft "$DRAFT"`)
 	}
 	if !refused {
 		t.Error("the required check must refuse a draft rather than pass on skipped verification")

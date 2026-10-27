@@ -12,7 +12,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/backgroundwork"
 	"github.com/lycaon/lycaon/internal/db"
@@ -222,9 +221,6 @@ admit:
 		s.mu.Unlock()
 	}()
 	job.snapshot, job.err = s.converge(ctx, req)
-	if job.err == nil {
-		job.err = s.Sweep(ctx, time.Now().UTC().Add(-Retention))
-	}
 	return job.snapshot, job.err
 }
 

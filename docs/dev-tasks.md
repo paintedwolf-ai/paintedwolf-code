@@ -26,6 +26,11 @@ After changing a frontend dependency patch, run `./task setup-dev -- --frontend`
 to refresh the pinned packages before verification. Captured test trees share
 the workspace's installed dependencies.
 
+In a fresh worktree, run `./task gitengine:fetch` before tests that create or
+inspect Git repositories. This downloads and verifies the pinned Git bundle.
+Verification copies the staged bundle into its captured tree; it does not
+provision a missing bundle.
+
 Hosted shell preparation uses `./task setup-dev -- --shell-resources` to write
 qualified notices into the build checkout. `licenses:notices` is the isolated
 verification check; its snapshot outputs do not prepare a subsequent invocation.
@@ -65,7 +70,7 @@ The repository ships no pre-commit hook. **Closeout:** a change pushed for a pul
 
 Every credential value lives in `{configdir}/credential-vault.age`, one age-encrypted document shared by provider keys, web-research keys, MCP OAuth tokens, the secret fingerprint key, and managed secrets. Development builds keep the matching age identity in `{configdir}/.credential-vault-development-identity` at `0600`; tests use the same isolated path and never touch Keychain or ask for a password.
 
-Release macOS builds store only the random age identity, device-only, in the data protection Keychain; the vault ciphertext stays in the config directory. Linux packaged installs keep the identity in the `pw-vault-identity` system service. Without that service, and on Windows, the identity is wrapped in `{configdir}/credential-vault-identity.age` with the app password, which the desktop sends to the engine over a private startup pipe, never argv or the environment. Custody details: [secrets](secrets.md).
+Release macOS builds store only the random age identity, device-only, in the data protection Keychain; the vault ciphertext stays in the config directory. Linux packaged installs keep the identity in the `pw-vault-identity` system service. Without that service, credential storage refuses to open. Other release platforms also refuse until a native custodian is implemented. Custody details: [secrets](secrets.md).
 
 ```bash
 LYCAON_DEV=1 "$BUILD_DIR/lycaon-dev" credentials where        # report the vault and identity provider
@@ -723,6 +728,12 @@ Background submissions validate these flags before creating a job.
 
 ### Selection arguments
 
+`./task den:test:rust -- --compile-only` and
+`./task decide:test -- --compile-only` compile all normal test targets without
+executing them. They use the same resources and pinned features as the complete
+test targets; a compile-only pass does not establish runtime verification.
+No other native selection flags are accepted.
+
 Arguments after `--` reach a catalog target only when the catalog's `selection`
 section declares a grammar for it; anything else is refused before admission,
 because Task drops arguments a recipe does not reference and the whole target
@@ -957,6 +968,19 @@ flowchart TD
     activate --> clients["Direct-download updater verifies signature;<br/>Homebrew installs get the notifier"]
 ```
 
+The Nix cache adapter is `python3 -m scripts.nix_cache.adapter`. It consumes explicit already-built application outputs and a release request with `schema_version: 1`, `mode: production`, the product `version`, full `application_commit`, `flake_lock_sha256`, native Linux `system`, `outputs`, and `cache_prefix: nix-cache`. Supply those using `--request`, a separately reviewed `--trust-policy` containing `schema_version: 1`, `mode: production`, and dedicated Nix `public_keys`, an owner-only `--signing-key-file` outside the store/cache, a new absolute `--cache` destination, and an external `--report` path. No production key is generated or trusted automatically. The protected controller supplies a fresh `release_admission.verify_release` selection through `scripts.nix_cache.release_authority.authorize`; it binds every selected architecture output, source, version, lock and actual NAR hash before transport credentials load. A saved accepted JSON receipt grants no publication authority.
+
+Nix constructs and verifies the standard signed file cache. Admission requires the entire runtime closure here, including dependencies available upstream. `scripts.nix_cache.publication.publish` rechecks signatures, actual NAR identities and local inventory, then uses the dedicated R2 transport to upload immutable NARs before metadata. It verifies each ordinary custom-domain URL before writing an immutable availability record. Public metadata must carry `no-store`, have no cache age or stale-hit status, and match exact admitted bytes. Configure the delivery domain to bypass caching, including negative caching, for `nix-cache-info` and `.narinfo`; a cached 404 or stale response refuses completion. No cache-busting URL can substitute for this check. NARs use immutable caching. Signature rotation can add signatures without changing their store identity or removing retained signatures, and appends a separate record while preserving the original release record.
+
+`scripts.nix_cache.observation.observe` performs read-only availability observation after fresh installed-release admission. Supply the local verified cache/report, the protected selection and trust policy, and a read-only view of the existing R2 transport (`public`, `read(name)`, `verify_public(name, record)`). It checks authenticated withdrawal controls before and after ordinary HTTPS reads of every admitted object and the exact retained availability record, then rechecks release admission. Both native architectures share the `nix-cache` object root; release records are separated by version and system. The returned canonical facts and admission digest describe that observation only. Local construction, an old publication receipt, or a public 404 alone never establishes current availability; the observer neither writes objects nor activates a cache.
+
+Publication, withdrawal and collection share a conditional R2 write lock. The lock never expires automatically: after a crashed publisher, the protected controller must explicitly authorize recovery of the exact recorded operation. A retry reuses identical objects and completes the availability record last. All writers for this prefix must use this owner. An immutable publication plan roots its objects before uploading begins; interrupted plans retain those bytes because a lost request may still commit. Withdrawal preserves every published `.narinfo`, release record and referenced NAR, including old pins. The retention operation only collects unreferenced upload debris older than an explicitly selected cutoff of at least one day; a missing retained object refuses collection. It never removes a published store path because an offer was withdrawn.
+
+Cache use remains an explicit choice. After a release publishes its dedicated Nix public key, an administrator can add `https://downloads.paintedwolf.dev/nix-cache` to `extra-substituters` and that exact key to `extra-trusted-public-keys`; do not add broad `trusted-users` permissions. Keep old and new keys during an announced overlap. Remove the optional cache and its key to opt out; source builds and other explicitly trusted caches remain available. During an outage, already installed paths remain usable, and a source build can proceed with this substituter omitted. Signature or object mismatch requires refusal, never disabling signature checks. This cache trust does not authorize unattended vault custody.
+
+`./task release:live-test -- --local-nix-cache` uses disposable keys, private stores and owned loopback HTTP to rehearse complete closure copying, cold import, wrong trust, altered NARs/metadata, missing dependencies, key overlap, interrupted upload retry, ordinary-URL cached misses, withdrawal and debris collection. It makes no R2 calls and changes no daemon trust. Cache layout/signing follow [Nix](https://nix.dev/manual/nix/2.35/protocols/binary-cache/index.html); conditional writes and custom-domain caching follow [R2](https://developers.cloudflare.com/r2/reference/consistency/). Actual production delivery and both architecture installed application substitution remain unperformed until the qualified release is selected.
+
+`./task release:live-test -- --r2-nix-cache` runs the signed two-path closure through an isolated real R2 prefix and the ordinary HTTPS download domain. It reads the private bucket-scoped configuration documented under [Release dry run](#release-dry-run), using the shared S3 rehearsal prerequisite. It exercises an interrupted metadata upload, retry, conditional publication lock and exact-operation recovery, cold substitution with explicit trust, wrong-key refusal, overlapping key rotation and withdrawal retention. Disposable signing keys remain outside the store and are removed with the private fixture. Cleanup deletes only the keys recorded by this run and verifies the isolated prefix is empty. This test needs native Linux, Nix and AWS CLI v2; it never activates the production cache or changes daemon trust. Production cache credentials and controller admission remain unchanged.
 The public artifact collector requires every catalog-public package, its checksum, and its scanner audit. Only platforms with a non-null `updater_extension` contribute signed updater archives and feed entries; package-managed platforms require no synthetic updater. Website confirmation compares the complete package link set for the selected catalog, including architecture and version, while preserving the signed receipt and uncached page checks. `release_distribution.py website --catalog PATH` and `release-validate-updater-manifest.sh --catalog PATH` allow verification against the release source's catalog. Candidate packages remain excluded. A recovery operation must select the catalog belonging to the restored release; current-source catalog changes do not establish historical distribution contents.
 
 ### Bump and tag (example `1.0.0-rc.1` → `1.0.0-rc.2`)
@@ -1092,7 +1116,7 @@ Choose the configuration that already owns the installation. Do not create a sec
 
 | Owner | Install and update | Rollback and remove |
 |---|---|---|
-| NixOS system | Add a pinned `painted-wolf-code` flake input, import its `nixosModules.default` and enable `services.painted-wolf-code`. Review the input/lock change and switch through the system's existing rebuild procedure. A package-only `environment.systemPackages` entry does not register custody. | Select a retained system generation through the administrator's normal rollback procedure. Before disabling custody, move service-held identities to an app password, or restore the service later to access its retained state. Removing the module/package does not erase credentials. |
+| NixOS system | Add a pinned `painted-wolf-code` flake input, import its `nixosModules.default` and enable `services.painted-wolf-code`. Review the input/lock change and switch through the system's existing rebuild procedure. A package-only `environment.systemPackages` entry does not register custody. | Select a retained system generation through the administrator's normal rollback procedure. Disabling custody preserves service-held identities; restore the service to access them again. Removing the module/package does not erase credentials. |
 | Home Manager | Add the pinned input's `packages.${pkgs.stdenv.hostPlatform.system}.default` to `home.packages`, then use the existing Home Manager activation procedure. Update that input explicitly; do not replace its pin from the app. | Select the intended retained Home Manager generation or restore the prior input and activate. Remove the package from the same `home.packages`. System custody still needs an administrator's NixOS module; a standalone Home Manager activation does not install it. |
 | User profile | Choose the actual profile, inspect it with `nix profile list --profile "$PW_NIX_PROFILE"`, and add the selected source with `nix profile add --profile "$PW_NIX_PROFILE" "$PW_NIX_SOURCE#default"`. An exact commit remains pinned. To replace it, record `nix profile history`, remove the observed element name, then add the reviewed new source to that same profile. | Use `nix profile rollback` with that profile and the intended retained generation. Remove the observed element using `nix profile remove`; never guess an element name or profile path. |
 | Temporary build | Use `nix build --out-link "$PW_NIX_OUTPUT" "$PW_NIX_SOURCE#default"` with a chosen output link, then launch its `bin/painted-wolf-code`. A temporary build has no profile to upgrade. | Choose another exact source/output and relaunch when ready. Removing the chosen output link releases that root; Nix garbage collection owns unused outputs. |
@@ -1152,6 +1176,8 @@ install receipt, and the user can change that preference in Settings.
 |----------------|----------|
 | **Direct download** | Download and verify automatically; install at normal quit or startup. An explicit restart installs sooner. |
 | **Homebrew cask** | Notifier only — "vX available", run `brew upgrade --cask painted-wolf-code`. The cask writes an explicit device receipt, so custom Homebrew prefixes work and another user's installation cannot misclassify this app |
+| **Linux system package** (apt, dnf, pacman) | Notifier only. Settings shows the owning package, its version and the channel. A newer release is reported together with whether the configured package source offers it, from read-only APT, DNF or pacman cache queries; no upgrade command is presented and download or restart requests return `package_managed` |
+| **Unpackaged Linux build** | Reports `unpackaged`; no command, download or restart |
 
 **Staged rollout.** Automatic checks admit a release to a growing fraction of devices as the published manifest ages (10% in its first 24 h, 50% until 48 h, then everyone). Each install draws one random bucket, stored locally in `updates/preferences.json` and never transmitted — the check request stays identifier-free. A user-initiated **Check now** bypasses the ramp, and a release the user has already been shown never disappears behind it. The ramp is an operational stagger for catching a bad release early, not a security boundary.
 
@@ -1238,6 +1264,163 @@ credential or R2 request is needed. The verification queue admits it under its
 own `linux-signing-fixture` lock, apart from the credentialed `release:live-test`
 R2 rehearsal. Repository activation, key rotation and CDN consistency
 are verified by the format-specific publication work.
+
+**Native apt/dnf repository rehearsals.**
+`./task release:rehearse:native-repositories -- --receipt /absolute/path/result.json`
+uses disposable keys and three tiny native package versions. It requires `apt-ftparchive`,
+`createrepo_c`, `dpkg-deb`, `rpmbuild`, and the signing tools above. Its receipt covers
+signed apt indexes, RPM signatures and metadata, inventory readback, retained generations,
+stale activation refusal and explicit recovery. It does not qualify the application,
+perform installed application upgrades, or publish to R2. Assembly, signed-index
+admission, publication, recovery/withdrawal, candidate retention and setup-package
+refusals are exercised directly by `./task test:runner` against committed signed
+fixtures under `scripts/verification_tests/distribution/testdata/`; on Linux those
+tests require the native tools and fail rather than skip when one is missing.
+
+A separate target retains repositories for actual application candidates:
+`./task release:rehearse:native-candidates -- --candidate-dir /absolute/path/packages --retain-repositories /absolute/path/new-output --source-commit <40-character-runtime-source> --version <product-version> --channel preview --release-build <selected-RELEASE_BUILD> --architecture amd64 --architecture arm64 --receipt /absolute/path/receipt.json`.
+The input directory contains exactly one DEB and RPM for each selected architecture.
+The output must be new and outside the input directory; the receipt must remain outside
+both. Native package names, versions and architectures must match the independent
+selection. This creates disposable test trust, retains the final signed RPM bytes,
+DEB and repository inventories, and a public-only trust catalog. Private keys are
+removed before retained objects are reverified. `candidate-repositories.json` records
+the runtime source, release build, package input and final hashes, generation identities,
+and relative retained paths. The separate receipt also records the publisher source
+revision and tree. Serve these retained directories only in an isolated qualification
+environment with their explicitly selected test trust. This mode performs no R2 request,
+installation, production signing or application qualification.
+
+`python3 -m scripts.linux_release.native_repositories` assembles selected native
+packages into a new generation. `python3 -m scripts.linux_release.repository_publication`
+accepts `--directory`, `--store`, `--base-url`, `--catalog`, and
+`--expected-generation` (omit only for a new channel). This publisher owns a local
+origin directory; it does not upload to R2. All referenced objects are copied and
+reverified before activation. Apt retains package objects and by-hash indexes and
+replaces `InRelease` last. Dnf replaces a mirrorlist containing an immutable generation
+URL, so metadata and its signature share a versioned base URL. Configure immutable
+caching for `generations/`, `pool/`, and `by-hash/`; channel metadata and mirrorlists
+require no-store caching and zero negative-cache TTL. The deployment must serialize
+publishers across hosts; a filesystem lock covers publishers sharing this origin.
+
+**Explicit repository setup packages.** The native repository owner can construct
+`painted-wolf-code-repo` DEB/RPM packages with
+`python3 -m scripts.linux_release.repository_setup --directory /absolute/path/generation --catalog /absolute/path/keys.json --destination /absolute/path/new-setup-output --base-url https://reviewed-origin.example --private /absolute/path/owner-only-signing-key.asc`.
+The generation must first pass its full inventory/signature admission. Use
+`--rehearsal` only with disposable test trust. The output includes the setup package,
+signed `SHA256SUMS`, public key and generation-bound `setup.json`; no private key is
+copied. Verify the published full key fingerprint through the separately trusted
+release channel, verify `SHA256SUMS.asc` with that key and check `sha256sum -c SHA256SUMS`
+before installation. The explicit one-step setup is `sudo apt install ./painted-wolf-code-repo_<native-version>_all.deb`
+or `sudo dnf install ./painted-wolf-code-repo-<native-version>-<generation>.<channel>.noarch.rpm`.
+
+Setup installs only the selected channel configuration and public key. It does not
+install or restart the application, refresh repositories, import global RPM trust,
+or run scripts. Dnf prompts for the configured key when its repository is first used;
+verify that fingerprint explicitly. The configuration is a package-managed conffile:
+review package-manager prompts or `.rpmnew` files when changing channels or keys.
+The setup native identity includes its selected signing generation and channel, so a
+same-application-version trust upgrade replaces the previous key through ordinary
+package upgrades. Only one setup package/channel is selected at a time; feed
+preferences do not change it. Switching to a lower setup version/channel requires an
+explicit reviewed downgrade (`apt install --allow-downgrades ./<setup.deb>` or
+`dnf downgrade ./<setup.rpm>`).
+Use `sudo apt purge painted-wolf-code-repo` or `sudo dnf remove painted-wolf-code-repo`
+to remove unmodified setup files. Locally modified configuration may remain for review;
+removing setup leaves the installed application and mutable user data intact. The
+local native rehearsal installs and removes both setup formats in isolated roots,
+checks exact owned bytes and preserves a mutable user-data sentinel.
+
+The protected controller admits this control/trust surface separately from application
+packages through `scripts.linux_release.repository_setup_admission.admit_setup`.
+It supplies independently selected source, version, channel, generation inventory,
+origin and signer facts after verifying retained server artifact provenance. The API
+freezes regular input files and trust, verifies the exact signed checksum and native
+RPM signature, then reads native identity, script/trigger declarations, conffiles,
+relationship headers and exact root-owned payload bytes without installing anything.
+A producer's `setup.json` or accepted receipt does not authorize publication. Source
+and generation binding remain the controller's independent responsibility; the setup
+package carries configuration and trust rather than an application artifact identity.
+
+Every generation retains `client.conf`, the selected public key, exact inventory,
+source commit, and version. The configuration is an explicit setup artifact; installing
+the application does not add repositories or trust. For apt, verify the full catalog
+fingerprint with `gpg --show-keys --with-colons package-key.asc`, install the reviewed
+public key as `/etc/apt/keyrings/painted-wolf-code.asc`, and install `client.conf` with a
+`.sources` extension in `/etc/apt/sources.list.d/`. For dnf, verify the same fingerprint,
+install the reviewed key as `/etc/pki/rpm-gpg/painted-wolf-code.asc`, import it explicitly
+with `sudo rpm --import /etc/pki/rpm-gpg/painted-wolf-code.asc`, and install the reviewed
+configuration with a `.repo` extension in `/etc/yum.repos.d/`. Keep `gpgcheck=1` and
+`repo_gpgcheck=1`. Run the package manager's normal refresh/upgrade after setup.
+Stable and Preview use separate configurations; changing an app preference does not
+change repository selection, holds, pinning, or priorities.
+
+For recovery, select a retained verified generation and pass `--operation recover` with the
+currently active generation identity. This restores offers only; it does not modify
+installed packages or mutable application data. A withdrawn offer is replaced by the
+retained last-good index. Keep every referenced object while any supported index may
+still be cached. Rotation requires explicit verification/import of the successor key;
+keep predecessor public keys and generations for skipped-release recovery. This local
+origin rehearsal does not establish custom-domain CDN convergence or both-architecture
+installed package qualification; the release controller must admit that evidence before
+production publication.
+
+The protected Python API requires a keyword-only `authorize` callback returning
+exact `True` before the first credentialed transport access and again after predecessor
+recheck, immediately before client authority activation. The callback receives the
+selected manifest, raw directory, protected catalog, namespace, origin, predecessor,
+operation and phase; accepted JSON is not authority. The CLI supplies no callback and
+keeps production closed.
+
+Repository R2 activation retains a per-channel `pending.json` before changing mutable
+client authority. The plan binds the exact generation, activation record, reviewed
+predecessor, operation, phase, origin and namespace. An interrupted plan permits only
+an exact retry; it has no time-based expiry. The publisher verifies authority and
+`current.json` readback before marking the plan complete. A different release or
+recovery must wait for that exact operation to converge, even when the client authority
+was already written before a crash. Protected workflow serialization remains required;
+this recovery record does not grant independent writers or replace predecessor checks.
+
+`python3 -m scripts.linux_release.repository_r2` uploads the same origin structure
+through the existing R2 immutable-object helper and serialized release owner. Its
+current entry point requires `--rehearsal` and a `release-system-tests/<run>/...`
+prefix; production use refuses until the final release controller supplies admission.
+It verifies public custom-domain bytes and object cache roles before replacing
+`InRelease` or a dnf mirrorlist, then verifies the authority and activation record.
+Interrupted uploads retain unreferenced objects and retries accept identical bytes.
+Reviewed expected-generation checks run before and after upload. Cross-host
+serialization belongs to the protected release workflow, not an R2 list-before-write
+check. `test:runner` covers ordering, interrupted upload/retry, stale plans, concurrent
+state changes, immutable collisions and fixture-prefix refusal against a real local
+generation and an in-memory object store. Those contracts do not replace a credentialed
+custom-domain rehearsal. Use only explicitly supplied test credentials; no credential
+lookup or automatic production fallback occurs. Repository manifests bind the exact
+source commit, final signed package hashes and a canonical `inventory_sha256` over
+their selected object rows for final-controller admission.
+
+Repository generation operations are explicit: `--operation publish` advances a
+version under its existing signing identity; `rotate` requires a distinct key and
+strictly newer signing generation; `recover` selects an exact retained healthy
+manifest; `withdraw` selects that retained replacement and permanently marks the
+previous generation and version as withdrawn. Reoffering either identity refuses.
+Operation receipts carry `operation`, `previous`, source, signer and final inventory
+facts; an ordinary release campaign cannot authorize another operation. Retained
+`key-catalog.json` contains only the selected public key facts, so private or unknown
+catalog fields never enter the origin. Existing installations and mutable data are
+outside this publication owner's mutation scope.
+
+The existing protected `release-system-live-test` workflow accepts the explicit dispatch
+mode `native-repositories`; the scheduled/default updater rehearsal remains
+`release:live-test`. Native mode runs `./task release:rehearse:native-repositories-r2`
+on amd64 and arm64 Ubuntu runners with only the existing `release-rehearsal` test
+environment. No secret values need to be loaded locally. The R2 target stages immutable objects,
+exercises a warmed missing authority, a deliberately corrupted test object and its
+restoration, retries, rotation, withdrawal and retained recovery under a unique
+`release-system-tests/` prefix. `--phase stage` supports interruption before activation;
+the exact source can resume with `--phase activate`. Public byte/cache-role readback
+precedes activation, and no cache purge is used. Test generation objects remain under
+the receipt's owned prefix for inspection and recovery; test private keys are removed.
+Receipts distinguish these format fixtures from a qualified application campaign.
 
 **Key generations preserve skipped-release updates.** [`packaging/update-keys.json`](../packaging/update-keys.json) is the public-key registry. It declares the key generation signing this release, the generation embedded for its next update, and every retained predecessor bridge. The native updater derives both channel URLs and both embedded keys from that same compiled generation. Artifact staging verifies signatures with the **signing** key, which differs from the embedded key for a bridge, and each platform fragment and immutable manifest bind both key fingerprints.
 
