@@ -11,7 +11,7 @@ import re
 import shutil
 import subprocess
 
-from .signing import CATALOG, digest, sign
+from .signing import CATALOG, digest, sign, verify
 from .openpgp import selection
 
 SAFE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9+._~-]*\Z")
@@ -37,6 +37,14 @@ def checked_input(row: dict, directory: Path, family: str, package: str) -> Path
     if actual != [package, row["native_version"], expected_arch]:
         raise ValueError("native package identity disagrees with its selected input receipt")
     return path
+
+
+def signed_rpm(path: Path, catalog: Path, rehearsal: bool) -> bool:
+    try:
+        verify("rpm", path, None, catalog, rehearsal)
+    except ValueError:
+        return False
+    return True
 
 
 def apt_indexes(destination: Path, channel: str, architectures: list[str], catalog: Path,
@@ -89,9 +97,10 @@ def assemble(family: str, manifest: dict, inputs: Path, destination: Path, chann
     for row, source in sources:
         stage = destination / ".signing" / source.name
         stage.parent.mkdir(exist_ok=True)
-        if family == "rpm":
+        if family == "rpm" and not signed_rpm(source, catalog, rehearsal):
             sign("rpm", source, stage, catalog, private, rehearsal)
         else:
+            # A release RPM already carries the selected signature; its published bytes stay identical.
             shutil.copyfile(source, stage)
         target = destination / "pool" / digest(stage) / source.name
         target.parent.mkdir(parents=True)

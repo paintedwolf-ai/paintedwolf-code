@@ -7,14 +7,11 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
-from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
 
 from scripts.linux_release.aur_delivery import FixturePublisher, plan, production_publish, protected_publisher
 from scripts.linux_release.aur_delivery_workflow import main, prepare, request, selected_directory, verify_provenance
 from scripts.linux_release.aur_release_authority import authorize
-from scripts.linux_release.repository_operations import identity
 from scripts.verification_tests.distribution.pacman_repository_fixtures import PACKAGE, TESTDATA, native_tools, trust
 
 SOURCE = "f" * 40
@@ -40,34 +37,25 @@ class AurAuthorityTests(unittest.TestCase):
         self.metadata = {**self.manifest, 'package': 'painted-wolf-code-bin'}
         self.artifacts = b'{"final":"selected"}\n'
         self.selected = plan(self.metadata, [self.manifest], self.root, hashlib.sha256(self.artifacts).hexdigest())
-        self.report = {'accepted': True, 'verified_repositories': [
-            {'family': 'pacman', 'generation': identity(self.manifest), 'inventory_sha256': 'b' * 64}]}
+        self.qualified = []
 
-    def admit(self, selected=None, report=None):
-        """The release admission owner lands separately; its verdict is the only injected boundary."""
-        calls = []
+    def admit(self, selected=None, generations=None):
+        """The shared exact-source Qualification lookup is the only injected boundary."""
+        return authorize(self.selected if selected is None else selected, self.root,
+                         artifacts_bytes=self.artifacts,
+                         generations=[self.manifest] if generations is None else generations,
+                         source_commit=SOURCE, version='1.0.0', channel='stable',
+                         qualified=self.qualified.append)
 
-        def verify(*args, **kwargs):
-            calls.append((args, kwargs))
-            return self.report if report is None else report
-        admission = SimpleNamespace(verify_release=verify)
-        with patch.dict('sys.modules', {'scripts.linux_release.release_admission': admission}):
-            result = authorize(self.selected if selected is None else selected, self.root,
-                               catalog={}, artifacts_bytes=self.artifacts, campaign={},
-                               evidence_root=self.root, file_root=self.root,
-                               repositories={'generations': [{'manifest': self.manifest}]},
-                               source_commit=SOURCE, version='1.0.0', channel='stable',
-                               signing_generation=1, key_fingerprint='A' * 40, release_build=14)
-        return result, calls
+    def test_qualification_is_reread_after_the_recipe_binding(self):
+        self.assertTrue(self.admit())
+        self.assertEqual(self.qualified, [SOURCE])
 
-    def test_fresh_campaign_reevaluation_precedes_recipe_authority(self):
-        result, calls = self.admit()
-        self.assertTrue(result['accepted'])
-        self.assertEqual(len(calls), 1)
-        self.assertEqual(calls[0][0][1], json.loads(self.artifacts))
-        self.assertEqual((calls[0][1]['signing_generation'], calls[0][1]['release_build']), (1, 14))
-        with self.assertRaisesRegex(ValueError, "freshly admitted"):
-            self.admit(report={'accepted': False})
+        def unqualified(_source):
+            raise ValueError("no passing exact-commit qualification")
+        with self.assertRaisesRegex(ValueError, "qualification"):
+            authorize(self.selected, self.root, artifacts_bytes=self.artifacts, generations=[self.manifest],
+                      source_commit=SOURCE, version='1.0.0', channel='stable', qualified=unqualified)
         with self.assertRaisesRegex(ValueError, "protected controller reevaluation"):
             production_publish({'accepted': True})
 
@@ -79,11 +67,15 @@ class AurAuthorityTests(unittest.TestCase):
         for field, value in [('signing_generation', True), ('architecture', 'aarch64')]:
             changed = copy.deepcopy(self.selected)
             changed['generations'][0][field] = value
-            with self.subTest(field=field), self.assertRaisesRegex(ValueError, "every independently admitted"):
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, "every published pacman"):
                 self.admit(changed)
+        for generations in [[], [{**self.manifest, 'rehearsal': True}], [{**self.manifest, 'version': '0.9.0'}]]:
+            with self.subTest(generations=generations), self.assertRaisesRegex(ValueError, "every published pacman"):
+                self.admit(generations=generations)
         (self.root / 'PKGBUILD').write_text('changed after review\n')
         with self.assertRaisesRegex(ValueError, "independently reviewed delivery plan"):
             self.admit()
+        self.assertEqual(self.qualified, [])
 
     def test_recipe_plan_refuses_wrong_source_and_symlink_declarations(self):
         with self.assertRaisesRegex(ValueError, "selected binary generations"):
