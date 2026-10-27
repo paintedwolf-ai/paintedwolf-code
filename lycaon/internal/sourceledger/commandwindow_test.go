@@ -84,7 +84,7 @@ func closeAndSettle(t *testing.T, ctx context.Context, window *OpenCommandWindow
 	testutil.FailErr(t, "close command window", window.Close(ctx))
 	select {
 	case <-window.Settled():
-	case <-time.After(10 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("command window did not settle")
 	}
 }
@@ -246,7 +246,7 @@ func TestWindowStillAttributesUntilItSettles(t *testing.T) {
 	testutil.FailErr(t, "late watcher pass", store.Inventory.EnsureInventory(ctx, req))
 	select {
 	case <-window.Settled():
-	case <-time.After(10 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("command window did not settle")
 	}
 	walk, err := store.Walk.QueryWalk(ctx, "p1", Baseline{Kind: BaselineTurn, SessionID: "s1", Turn: 3}, 50, 0, CommitLens{})
@@ -273,7 +273,7 @@ func TestRunningWindowOutranksASettlingOne(t *testing.T) {
 	testutil.FailErr(t, "pass while the first window settles", store.Inventory.EnsureInventory(ctx, req))
 	select {
 	case <-first.Settled():
-	case <-time.After(10 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("first window did not settle")
 	}
 	store.Commands.windowSettle = 0

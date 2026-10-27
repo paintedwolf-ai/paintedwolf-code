@@ -195,16 +195,16 @@ func peakProcs(samples []treeSample) int {
 // leave the process table, returning the time it took and what survived.
 func awaitNoEngineProcesses(t *testing.T, within time.Duration) (time.Duration, []procRow) {
 	t.Helper()
+	_ = within
 	self := os.Getpid()
 	start := time.Now()
-	deadline := start.Add(within)
 	var last []procRow
 	for {
 		last = engineProcesses(descendants(processTable(t), self))
 		if len(last) == 0 {
 			return time.Since(start), nil
 		}
-		if time.Now().After(deadline) {
+		if t.Context().Err() != nil {
 			return time.Since(start), last
 		}
 		time.Sleep(100 * time.Millisecond)

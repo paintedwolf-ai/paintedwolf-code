@@ -7,16 +7,25 @@ import (
 
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
+	"github.com/lycaon/lycaon/internal/sourcefeed"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestSourceReadEndpointsDoNotScheduleInventory(t *testing.T) {
 	_, _, withLedger := contractfixture.TestSourceLedger(t)
-	fake := &contractfixture.RecordingInventoryService{}
-	srv := contractfixture.NewTestServer(t, withLedger, func(d *hostapi.Dependencies) { d.Source.SourceInventory = fake })
+	setupInventory := &contractfixture.RecordingInventoryService{}
+	srv := contractfixture.NewTestServer(t, withLedger, func(d *hostapi.Dependencies) { d.Source.SourceInventory = setupInventory })
 	p := contractfixture.CreateProjectForTest(t, srv, t.TempDir())
-	// Root attach schedules its own inventory in the background.
+	// Root attach binds the source watch on the server background group; wait
+	// for that binding to finish before stopping the watch and draining any
+	// callback work it admitted.
 	contractfixture.DrainBackground(t, srv)
-	scheduled := len(fake.Snapshot())
+	testutil.FailErr(t, "stop project source watch", sourcefeed.StopProjectWatch(t.Context(), p.ID))
+	contractfixture.DrainBackground(t, srv)
+	// Already scheduled attachment work holds the setup service. Record only
+	// requests started by the reads, even if that work finishes later.
+	readInventory := &contractfixture.RecordingInventoryService{}
+	srv.Sources.Watch.SourceInventory = readInventory
 
 	for _, path := range []string{
 		"/v1/projects/" + p.ID + "/source/storage",
@@ -30,8 +39,8 @@ func TestSourceReadEndpointsDoNotScheduleInventory(t *testing.T) {
 		}
 	}
 	contractfixture.DrainBackground(t, srv)
-	if requests := fake.Snapshot(); len(requests) != scheduled {
-		t.Fatalf("read endpoints scheduled %d source inventories", len(requests)-scheduled)
+	if requests := readInventory.Snapshot(); len(requests) != 0 {
+		t.Fatalf("read endpoints scheduled %d source inventories", len(requests))
 	}
 }
 

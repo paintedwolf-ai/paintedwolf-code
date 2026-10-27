@@ -404,11 +404,29 @@
     "licenses:notices": [
       "licenses:notices"
     ],
+    "nix:check": [
+      "nix:check"
+    ],
+    "nix:build": [
+      "nix:build"
+    ],
     "test:linux:installed": [
       "test:linux:installed"
     ],
     "release:rehearse:linux-signing": [
       "release:rehearse:linux-signing"
+    ],
+    "release:live-test": [
+      "release:live-test"
+    ],
+    "release:rehearse:package-probe": [
+      "release:rehearse:package-probe"
+    ],
+    "release:rehearse:rpm-metadata": [
+      "release:rehearse:rpm-metadata"
+    ],
+    "release:rehearse:pacman-construction": [
+      "release:rehearse:pacman-construction"
     ]
   },
   "private": [
@@ -431,13 +449,21 @@
     "test:race": "go",
     "den:test:digest": "vitest",
     "den:harness:test": "playwright",
+    "den:test:rust": "passthrough",
+    "decide:test": "passthrough",
     "lint:fast": "passthrough",
     "lint:full": "passthrough",
     "oar:conformance": "passthrough",
     "den:webkit:atspi": "passthrough",
     "test:confine:linux": "passthrough",
+    "nix:build": "passthrough",
+    "nix:check": "passthrough",
     "release:rehearse:linux-signing": "passthrough",
-    "test:linux:installed": "passthrough"
+    "test:linux:installed": "passthrough",
+    "release:live-test": "passthrough",
+    "release:rehearse:package-probe": "passthrough",
+    "release:rehearse:rpm-metadata": "passthrough",
+    "release:rehearse:pacman-construction": "passthrough"
   },
   "resources": {
     "den:harness:test": {
@@ -764,6 +790,18 @@
       ],
       "workers": 1
     },
+    "nix:check": {
+      "locks": [
+        "nix"
+      ],
+      "workers": 1,
+      "progress": "log"
+    },
+    "nix:build": {
+      "locks": ["*"],
+      "workers": 1,
+      "progress": "log"
+    },
     "test:linux:installed": {
       "locks": [],
       "workers": 1
@@ -771,6 +809,30 @@
     "release:rehearse:linux-signing": {
       "locks": [
         "linux-signing-fixture"
+      ],
+      "workers": 1
+    },
+    "release:live-test": {
+      "locks": [
+        "*"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:package-probe": {
+      "locks": [
+        "linux-package-probe"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:rpm-metadata": {
+      "locks": [
+        "rpm-metadata-fixture"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:pacman-construction": {
+      "locks": [
+        "pacman-substrate"
       ],
       "workers": 1
     }
@@ -825,6 +887,10 @@
   },
   "ci": {
     "ready": {
+      "compile_targets": {
+        "den:test:rust": ["lycaon-den/src-tauri/"],
+        "decide:test": ["lycaon/internal/decide/native/"]
+      },
       "targets": [
         "build",
         "lint:full",
@@ -863,7 +929,7 @@
       ],
       "suite": "all",
       "setup": "verification",
-      "first": true
+      "priority": "reject"
     },
     "build": {
       "targets": [
@@ -908,7 +974,7 @@
       ],
       "suite": "all",
       "setup": "analysis",
-      "first": true,
+      "priority": "reject",
       "early_targets": [
         "comments:check",
         "test:fail-messages:check"
@@ -954,7 +1020,8 @@
       "setup": "verification",
       "workers": 3,
       "shards": 2,
-      "contract_first": true
+      "contract_first": true,
+      "priority": "critical"
     },
     "frontend": {
       "targets": [
@@ -983,7 +1050,9 @@
         "integration"
       ],
       "suite": "all",
-      "setup": "shell"
+      "setup": "shell",
+      "runtime_engines": false,
+      "priority": "compile"
     },
     "webkit": {
       "targets": [
@@ -1024,6 +1093,18 @@
       "suite": "behavior",
       "setup": "verification",
       "runner": "ubuntu-24.04-arm",
+      "platform": "linux"
+    },
+    "nix": {
+      "targets": [
+        "nix:check"
+      ],
+      "minutes": 45,
+      "profiles": [
+        "nightly"
+      ],
+      "suite": "behavior",
+      "setup": "verification",
       "platform": "linux"
     },
     "race": {
@@ -1182,7 +1263,8 @@
       "issue-intake.yml": 1,
       "maintainability-issues.yml": 1,
       "verification-recovery.yml": 1,
-      "dco.yml": 1
+      "dco.yml": 1,
+      "dependent-update.yml": 1
     }
   }
 }
