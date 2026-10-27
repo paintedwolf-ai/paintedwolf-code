@@ -118,7 +118,7 @@ func streamFixtureDisplay(t *testing.T) string {
 	log, err := os.Create(filepath.Join(t.TempDir(), "xvfb.log"))
 	testutil.FailErr(t, "create display log", err)
 	t.Cleanup(func() { _ = log.Close() })
-	command := exec.Command("Xvfb", "-displayfd", "3", "-screen", "0", "800x600x24", "-nolisten", "tcp")
+	command := exec.Command("Xvfb", "-noreset", "-displayfd", "3", "-screen", "0", "800x600x24", "-nolisten", "tcp")
 	command.ExtraFiles = []*os.File{writer}
 	command.Stdout, command.Stderr = log, log
 	testutil.FailErr(t, "start owned display", command.Start())
