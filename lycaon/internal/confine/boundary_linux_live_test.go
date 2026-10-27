@@ -895,7 +895,7 @@ func TestLinuxHelperRelaunchesFromOutsideTheEnginesNamespaces(t *testing.T) {
 	self := requireLinuxSandbox(t)
 	plan := linuxsandbox.Plan{
 		Version: linuxsandbox.PlanVersion,
-		Attest:  linuxsandbox.Attest{HostNamespaces: map[string]string{"user": "user:[0]", "mnt": "mnt:[0]", "pid": "pid:[0]", "net": "net:[0]"}},
+		Attest:  linuxsandbox.Attest{HostNamespaces: map[string]string{"user": "user:[0]", "mnt": "mnt:[0]", "pid": "pid:[0]", "net": "net:[0]", "ipc": "ipc:[0]"}},
 		Network: linuxsandbox.Network{Mode: linuxsandbox.NetworkDeny},
 	}
 	if status, stderr := rawHelper(t, self, plan, "/bin/true"); status.ExitStatus() != 0 {
