@@ -1058,7 +1058,7 @@ The dispatch-only `Linux installed desktop rehearsal` workflow exercises the sam
 
 The native-security rows also observe, as the guest's administrator, the applied boundary of every helper family, the protected launch, and descendant cleanup after a cancelled call or a closed terminal. The `helper-suite-and-typed-refusal` case builds the installed confinement suite (`lycaon/test/installed/confinement`, `installedhelper` tag) on the guest and runs it against the package's helper, once as installed and once under `RestrictNamespaces=yes`, where it must report the typed refusal. A case whose prerequisite is absent reports unverified with a typed reason: `protected-launch-attestation` when the candidate's manifest lists no `bin/pw-launch-entry` or `/etc/paintedwolf/launch.json` selects no generation, and the suite case when the checkout has no suite or the guest's runtime directories hold no Go toolchain.
 
-Release consumption of the retained campaign, architecture-specific performance limits (#455) and the full matrix (#456) remain tracked there; the campaign closes only after its required rows pass.
+Release consumption of the retained campaign, architecture-specific performance limits (#455) and the full matrix (#456) remain tracked there; the campaign closes only after its required rows pass. Local execution records do not carry protected workflow provenance. Release publication requires an authenticated handoff that binds the exact retained observations to the protected attempt; that handoff is not implemented. A local producer record or accepted report cannot substitute for it.
 
 ### Updates
 
