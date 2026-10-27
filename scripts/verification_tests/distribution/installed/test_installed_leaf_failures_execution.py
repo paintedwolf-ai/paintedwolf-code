@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from linux_release import installed_execution as leaf
+from linux_release.campaign import execution as leaf
 from linux_release.installed_cases.records import CaseFailed, retain
 
 SOURCE, TREE = 'b' * 40, 'a' * 40
