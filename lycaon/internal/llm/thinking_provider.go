@@ -60,7 +60,10 @@ func (p *thinkingPolicyProvider) prepare(ctx context.Context, req modelcall.Comp
 			return req, nil
 		}
 		// Offline rendering uses only the configured serving model and never discovery.
-		entry, found := modelinfo.Entry{}, false
+		var (
+			entry modelinfo.Entry
+			found bool
+		)
 		if declared != nil {
 			entry, found = *declared, declared.ID == model
 		} else {

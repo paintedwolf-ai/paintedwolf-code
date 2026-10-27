@@ -190,9 +190,10 @@ func Settled(ctx context.Context, output string, message api.Message) {
 		kind, rendered, err := t.policy.Render(ctx, student.Provider, student.Model, *source)
 		if err != nil {
 			record.Reason = "student_cannot_be_served"
+		} else if response, err := json.Marshal(settled); err != nil {
+			record.Reason = "unsupported_response"
 		} else {
-			record.StudentKind, record.StudentRequest = kind, rendered
-			record.Response, _ = json.Marshal(settled)
+			record.StudentKind, record.StudentRequest, record.Response = kind, rendered, response
 		}
 		t.records = append(t.records, record)
 	}
