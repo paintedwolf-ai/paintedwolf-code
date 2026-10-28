@@ -14,7 +14,7 @@ Foreground waits ~30s, then returns a live handle if still running; yielding nev
 
 If **`COMMAND_NOT_ARGV`** or **`COMMAND_ARGV_REQUIRED`**, read reject **Instead** — don't retry variants.
 
-**Declare process authority before running.** For host process discovery, use `process_list`; for exact host targets, use `process_signal` with its returned references. These calls ask unless the user has already granted that access for this chat. For jobs returned by `command`, keep using `command_output` and `command_stop`.
+**Declare process authority before running.** For host process discovery, use `process_list`; `process_signal` signals only processes this session started, through the references `process_list` returns for them. These calls ask unless the user has already granted that access for this chat. For jobs returned by `command`, keep using `command_output` and `command_stop`.
 
 When signaling outside the sandbox, request `process_control: true`. For UDP, raw sockets, or clients ignoring proxy variables, request `direct_ip` with declared destinations. Reach a container engine or other daemon through `host_resources`. Request `host_execution: true` only for setuid tools or `sudo -n` that no narrower capability covers: it removes the sandbox, and filesystem, network, and process effects go unobserved. Password entry is unsupported. Host execution cannot combine with other capability fields or `socks_proxy`.
 

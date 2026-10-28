@@ -42,6 +42,14 @@ const (
 	EnvironmentReduced   EnvironmentMode = "reduced"
 )
 
+// reduced reports whether the launch starts from process plumbing rather than
+// the engine's environment. An agent command always does: the engine inherits
+// whatever launched it, including another program's session credentials, and
+// none of that is the agent's to read.
+func (p LaunchPlan) reduced() bool {
+	return p.Environment == EnvironmentReduced || p.Kind == LaunchAgentCommand
+}
+
 // WithPathAuthority binds the current invocation's existing path authority.
 func (p LaunchPlan) WithPathAuthority(paths confine.LaunchPaths) LaunchPlan {
 	p.PathAuthority = paths
@@ -141,10 +149,10 @@ func (p LaunchPlan) validate() error {
 // AgentLaunchOptions are the directory and environment inputs of one confined
 // agent launch. Launches and launch lookups (which, type, command -v) build
 // their options here, so discovery selects exactly what a launch would run.
-// A program's exported NAME=value entries apply over the sanitized inherited
-// (or reduced) host environment; a key the host reserves refuses with
+// A program's exported NAME=value entries apply over the reduced environment
+// and the boundary's own entries; a key the host reserves refuses with
 // ErrBlockedEnvKey rather than being dropped.
-func AgentLaunchOptions(launch LaunchPlan, dir string, environment, pathExtra []string, reduced bool) (ExecOpts, error) {
+func AgentLaunchOptions(launch LaunchPlan, dir string, environment, pathExtra []string) (ExecOpts, error) {
 	launch = launch.WithReducedEnvironment()
 	opts := ExecOpts{Launch: launch, Dir: dir, PathExtra: append([]string(nil), pathExtra...), AppendEnv: []string{"GIT_PAGER=cat"}}
 	if len(environment) > 0 {

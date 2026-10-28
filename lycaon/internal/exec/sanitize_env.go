@@ -81,8 +81,7 @@ func InheritedEnviron() []string {
 func ReducedEnviron() []string {
 	allowed := map[string]struct{}{
 		"PATH": {},
-		"HOME": {}, "USER": {}, "LOGNAME": {},
-		"TMPDIR": {}, "TMP": {}, "TEMP": {},
+		"HOME": {}, "USER": {}, "LOGNAME": {}, "TMPDIR": {}, "TMP": {}, "TEMP": {},
 		"XDG_CACHE_HOME": {}, "XDG_CONFIG_HOME": {}, "XDG_DATA_HOME": {}, "XDG_STATE_HOME": {},
 		"LANG": {}, "LANGUAGE": {}, "NO_COLOR": {},
 	}
