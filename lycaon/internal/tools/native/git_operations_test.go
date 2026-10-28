@@ -80,3 +80,14 @@ func TestGitPartialOperationKeepsStateAndRaisesPolicyOccurrence(t *testing.T) {
 		t.Fatalf("recovery lacks observed state: %#v", reject.Data)
 	}
 }
+
+func TestGitMutationAdmitsRootBeforePathlessOrDotOperations(t *testing.T) {
+	for _, paths := range [][]string{nil, {"."}} {
+		tc := nativefixture.Context(t.TempDir())
+		tc.Source.Roots = nil
+		_, err := (GitMutations{Git: partialOperationGit{}, Boundary: nativefixture.Boundary(t)}).Operate(t.Context(), tc, git.OperationRequest{Kind: "merge", Paths: paths})
+		if rejection := toolrejection.AsToolReject(err); rejection == nil || rejection.Code != "PROJECT_HAS_NO_ROOTS" {
+			t.Fatalf("paths %v root admission = %v", paths, err)
+		}
+	}
+}
