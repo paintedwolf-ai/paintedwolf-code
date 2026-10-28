@@ -343,3 +343,21 @@ func TestBrowseProjectSourceRootAliasKeepsLogicalPathsAndRefusals(t *testing.T) 
 		t.Fatalf("root alias admitted an outside directory: %v", err)
 	}
 }
+
+func TestBrowseProjectSourceRelativeRootCannotHideSymlinkEscape(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "project")
+	testutil.FailErr(t, "create relative-root fixture", os.Mkdir(root, 0o700))
+	testutil.FailErr(t, "seed source directory", os.Mkdir(filepath.Join(root, "src"), 0o700))
+	testutil.FailErr(t, "alias outside relative root", os.Symlink(t.TempDir(), filepath.Join(root, "escape")))
+	t.Chdir(parent)
+	p := &Project{ID: "p1", Roots: []Root{{ID: "r1", Path: "project", IsPrimary: true}}}
+	listing, err := BrowseProjectSource(p, "", "src")
+	testutil.FailErr(t, "browse under relative configured root", err)
+	if listing.RootID != "r1" || listing.Dir != "src" {
+		t.Fatalf("relative root changed logical identity: %+v", listing)
+	}
+	if _, err := BrowseProjectSource(p, "", "escape"); !errors.Is(err, ErrSourcePathDenied) {
+		t.Fatalf("relative root concealed a symlink escape: %v", err)
+	}
+}

@@ -49,6 +49,10 @@ func resolveSourceBrowseRoot(p ProjectSource, rootID string) (sourceBrowseRoot, 
 	if rootPath == "" {
 		return sourceBrowseRoot{}, ErrSourceNoRoot
 	}
+	rootPath, err = filepath.Abs(rootPath)
+	if err != nil {
+		return sourceBrowseRoot{}, fmt.Errorf("resolve root path: %w", err)
+	}
 	info, err := os.Stat(rootPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
