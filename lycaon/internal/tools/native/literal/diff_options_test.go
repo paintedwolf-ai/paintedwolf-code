@@ -28,10 +28,9 @@ func TestDiffNewFileReportsAddedAndRemovedFilesAsFullHunks(t *testing.T) {
 		"diff -rN --strip-trailing-cr '--exclude=*.o' --exclude only a/added b/added\n--- a/added"+epochStamp+"\n+++ b/added"+fixtureStamp+"\n@@ -0,0 +1 @@\n+new\n"+
 			"diff -rN --strip-trailing-cr '--exclude=*.o' --exclude only a/newdir/g b/newdir/g\n--- a/newdir/g"+epochStamp+"\n+++ b/newdir/g"+fixtureStamp+"\n@@ -0,0 +1 @@\n+n\n"+
 			"diff -rN --strip-trailing-cr '--exclude=*.o' --exclude only a/removed b/removed\n--- a/removed"+fixtureStamp+"\n+++ b/removed"+epochStamp+"\n@@ -1 +0,0 @@\n-gone\n", "", 1)
-	h.exec("", "diff", "-N", "a", "b").expect(t, "diff -N without -r", "Common subdirectories: a/empty and b/empty\n"+
-		"diff -N a/added b/added\n--- a/added"+epochStamp+"\n+++ b/added"+fixtureStamp+"\n@@ -0,0 +1 @@\n+new\n"+
+	h.exec("", "diff", "-N", "a", "b").expect(t, "diff -N without -r", "diff -N a/added b/added\n--- a/added"+epochStamp+"\n+++ b/added"+fixtureStamp+"\n@@ -0,0 +1 @@\n+new\n"+
 		"diff -N a/crlf b/crlf\n--- a/crlf"+fixtureStamp+"\n+++ b/crlf"+fixtureStamp+"\n@@ -1,2 +1,2 @@\n-crlf\r\n-line\r\n+crlf\n+line\n"+
-		"Common subdirectories: a/newdir and b/newdir\nCommon subdirectories: a/only and b/only\n"+
+		"Common subdirectories: a/empty and b/empty\nCommon subdirectories: a/newdir and b/newdir\nCommon subdirectories: a/only and b/only\n"+
 		"diff -N a/removed b/removed\n--- a/removed"+fixtureStamp+"\n+++ b/removed"+epochStamp+"\n@@ -1 +0,0 @@\n-gone\n"+
 		"diff -N a/x.o b/x.o\n--- a/x.o"+fixtureStamp+"\n+++ b/x.o"+fixtureStamp+"\n@@ -1 +1 @@\n-o\n+p\n", "", 1)
 }
