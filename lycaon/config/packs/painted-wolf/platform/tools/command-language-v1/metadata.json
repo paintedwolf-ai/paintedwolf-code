@@ -834,6 +834,472 @@
         "diff-option-B-ignoreblanklines",
         "diff-option-r-recursive"
       ]
+    },
+    {
+      "name": "du",
+      "aliases": [],
+      "family": "metadata",
+      "owner": "filesystem",
+      "argv": "du [-sahkmcbxA] [-d N|--max-depth=N] [--apparent-size] [--] [PATH ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-s",
+            "--summarize"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "du-option-s-summarize",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-a",
+            "--all"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "du-option-a-all",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-h",
+            "--human-readable"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "du-option-h-humanreadable",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-k"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "du-option-k",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-m"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "du-option-m",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-c",
+            "--total"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "du-option-c-total",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-b",
+            "--bytes"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "du-option-b-bytes",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-x",
+            "--one-file-system"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "du-option-x-onefilesystem",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-d",
+            "--max-depth"
+          ],
+          "arity": 1,
+          "value_role": "depth",
+          "fixture_id": "du-option-d-maxdepth",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
+        },
+        {
+          "spellings": [
+            "--apparent-size",
+            "-A"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "du-option-apparentsize",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. du [-sahkmcbxA] [-d N|--max-depth=N] [--apparent-size] [--] [PATH ...]",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "du -b input",
+        "stdout": "10\tinput\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "GNU du over the held roots: each operand's tree is walked through the same bounded directory reads as ls -R, links are not followed, and hard-linked files count once. Directories print after their contents in unsigned byte order; -a adds files, -s prints operand totals only and -d N/--max-depth=N limits printed depth. Sizes are allocated blocks (512-byte units from the platform) in KiB rounded up; --apparent-size and BSD -A use byte sizes, -b is apparent bytes, -m MiB, -h powers of 1024 like ls -h, and the last unit option wins. -c adds a total line; -x stays on each operand's device. Walks over traversal_visits refuse; a capped walk never reports a short total. Allocation sizes need POSIX metadata.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/literal/du.go",
+        "tests": [
+          "lycaon/internal/tools/native/literal/du_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "du-operands-valid",
+        "du-rejection",
+        "du-option-s-summarize",
+        "du-option-a-all",
+        "du-option-h-humanreadable",
+        "du-option-k",
+        "du-option-m",
+        "du-option-c-total",
+        "du-option-b-bytes",
+        "du-option-x-onefilesystem",
+        "du-option-d-maxdepth",
+        "du-option-apparentsize"
+      ]
+    },
+    {
+      "name": "df",
+      "aliases": [],
+      "family": "metadata",
+      "owner": "filesystem",
+      "argv": "df [-hkPi] [--] [PATH ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-h",
+            "--human-readable"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "df-option-h-humanreadable",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-k"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "df-option-k",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-P",
+            "--portability"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "df-option-P-portability",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-i",
+            "--inodes"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "df-option-i-inodes",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. df [-hkPi] [--] [PATH ...]",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "df -k .",
+        "stdout": "Filesystem     1K-blocks  Used Available Use% Mounted on\n/dev/fixture        4000  2400      1200  67% /fixture\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "GNU df for the volumes holding the named paths, read-only. Without PATH it reports each attached folder's volume and session scratch once. Columns follow GNU: Filesystem, 1K-blocks (1024-blocks with -P), Used, Available, Use% (Capacity with -P) and Mounted on; -i reports Inodes, IUsed, IFree and IUse%; -h scales to powers of 1024. Percentages round up; an unknown ratio is -. Operands bind through the same read authority as every native path; a path outside it refuses.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/literal/df.go",
+        "tests": [
+          "lycaon/internal/tools/native/literal/df_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "df-operands-valid",
+        "df-rejection",
+        "df-option-h-humanreadable",
+        "df-option-k",
+        "df-option-P-portability",
+        "df-option-i-inodes"
+      ]
+    },
+    {
+      "name": "cmp",
+      "aliases": [],
+      "family": "metadata",
+      "owner": "filesystem",
+      "argv": "cmp [-s|-l] [-b] [-n LIMIT] [-i SKIP[:SKIP2]] [--] FILE1 [FILE2 [SKIP1 [SKIP2]]]",
+      "forms": [
+        {
+          "spellings": [
+            "-s",
+            "--quiet",
+            "--silent"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "cmp-option-s-quiet-silent",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-l",
+            "--verbose"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "cmp-option-l-verbose",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-b",
+            "--print-bytes"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "cmp-option-b-printbytes",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-n",
+            "--bytes"
+          ],
+          "arity": 1,
+          "value_role": "bytes",
+          "fixture_id": "cmp-option-n-bytes",
+          "consumption": "fixed",
+          "sample_values": [
+            "4"
+          ]
+        },
+        {
+          "spellings": [
+            "-i",
+            "--ignore-initial"
+          ],
+          "arity": 1,
+          "value_role": "offset",
+          "fixture_id": "cmp-option-i-ignoreinitial",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. cmp [-s|-l] [-b] [-n LIMIT] [-i SKIP[:SKIP2]] [--] FILE1 [FILE2 [SKIP1 [SKIP2]]]",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete equal comparison; publication eligible",
+        "1": "complete differences; publication eligible",
+        "2": "actual error/incomplete; publication ineligible"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "cmp input same-a",
+        "stdout": "input same-a differ: char 1, line 1\n",
+        "status": 1,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "GNU cmp over pinned inputs; - or a missing FILE2 is standard input. Status 0 same, 1 different, 2 trouble, like diff. Default prints the first difference as FILE1 FILE2 differ: char N, line L; -b adds both bytes in octal and caret notation; -l lists every differing offset (1-based) with octal bytes; -s prints nothing. A shorter input reports EOF on stderr. -n limits compared bytes; -i and SKIP operands skip leading bytes of each input; values take K, M, G (1024) and kB, MB, GB (1000) suffixes.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/literal/cmp.go",
+        "tests": [
+          "lycaon/internal/tools/native/literal/cmp_test.go"
+        ],
+        "extension": "Genuinely new host-controlled utility/adapter; reuse complete stream primitives. No existing native algorithm is claimed for this form.",
+        "evidence_kind": "new utility behavior; existing byte-stream infrastructure and argv fixtures only"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "cmp-operands-valid",
+        "cmp-rejection",
+        "cmp-option-s-quiet-silent",
+        "cmp-option-l-verbose",
+        "cmp-option-b-printbytes",
+        "cmp-option-n-bytes",
+        "cmp-option-i-ignoreinitial"
+      ]
     }
   ]
 }

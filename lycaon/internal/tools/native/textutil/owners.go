@@ -1,7 +1,7 @@
 // Package textutil is the command frontend for byte text transforms and
 // argument batching: echo, printf, seq, yes, sort, uniq, cut, tr, paste,
-// join, comm, column, fold, tac, rev, sed, awk and xargs. Every
-// utility binds argv through the catalog, streams exact bytes through
+// join, comm, column, fold, tac, rev, sed, awk, iconv, envsubst and xargs.
+// Every utility binds argv through the catalog, streams exact bytes through
 // commandprogram.Streams with no ambient locale, and charges working memory
 // to the program. xargs runs each batch as its own child through the
 // evaluator's nested-command port; input never becomes program text.
@@ -51,6 +51,7 @@ var utilities = map[string]utility{
 	"paste": runPaste, "join": runJoin, "comm": runComm, "column": runColumn,
 	"fold": runFold, "tac": runTac, "rev": runRev,
 	"xargs": runXargs, "sed": runSed, "awk": runAwk,
+	"iconv": runIconv, "envsubst": runEnvsubst,
 }
 
 // leadingOptions are utilities whose options are only the declared leading

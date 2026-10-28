@@ -1816,6 +1816,189 @@
         "find-option-true",
         "find-option-false"
       ]
+    },
+    {
+      "name": "tree",
+      "aliases": [],
+      "family": "search",
+      "owner": "filesystem",
+      "argv": "tree [-adfJ] [-L LEVEL] [-I PATTERN] [-P PATTERN] [--gitignore] [--noreport] [--] [DIRECTORY ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-L"
+          ],
+          "arity": 1,
+          "value_role": "depth",
+          "fixture_id": "tree-option-L",
+          "consumption": "fixed",
+          "sample_values": [
+            "2"
+          ]
+        },
+        {
+          "spellings": [
+            "-a"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "tree-option-a",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-d"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "tree-option-d",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-f"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "tree-option-f",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-I"
+          ],
+          "arity": 1,
+          "value_role": "pattern",
+          "fixture_id": "tree-option-I",
+          "consumption": "fixed",
+          "sample_values": [
+            "*.log"
+          ]
+        },
+        {
+          "spellings": [
+            "-P"
+          ],
+          "arity": 1,
+          "value_role": "pattern",
+          "fixture_id": "tree-option-P",
+          "consumption": "fixed",
+          "sample_values": [
+            "*.go"
+          ]
+        },
+        {
+          "spellings": [
+            "--gitignore"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "tree-option-gitignore",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--noreport"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "tree-option-noreport",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-J"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "tree-option-J",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. tree [-adfJ] [-L LEVEL] [-I PATTERN] [-P PATTERN] [--gitignore] [--noreport] [--] [DIRECTORY ...]",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "always"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "tree empty-dir",
+        "stdout": "empty-dir\n\n0 directories, 0 files\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "tree 2.x over the held roots through the search walk: entries in unsigned byte order with UTF-8 branches, links shown as NAME -> TARGET and not followed, hidden names only with -a. -L limits depth, -d lists directories only, -f prints paths from the operand, -I excludes and -P selects file names by wildcard patterns joined with |. --gitignore applies the project ignore owner, the same view rg and the source catalog use. The report counts listed directories (the operand when it lists anything) and files; --noreport omits it and -J prints tree's JSON. Entries the read boundary protects are never listed; walks over traversal_visits refuse.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/search/tree.go",
+        "tests": [
+          "lycaon/internal/tools/native/search/tree_test.go"
+        ],
+        "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
+        "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "tree-operands-valid",
+        "tree-rejection",
+        "tree-option-L",
+        "tree-option-a",
+        "tree-option-d",
+        "tree-option-f",
+        "tree-option-I",
+        "tree-option-P",
+        "tree-option-gitignore",
+        "tree-option-noreport",
+        "tree-option-J"
+      ]
     }
   ]
 }

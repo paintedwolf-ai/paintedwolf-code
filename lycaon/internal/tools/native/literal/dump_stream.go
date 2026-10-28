@@ -3,6 +3,9 @@ package literal
 import (
 	"errors"
 	"io"
+	"math/bits"
+	"strconv"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 )
@@ -73,4 +76,39 @@ func (s *operandSequence) Read(p []byte) (int, error) {
 		}
 		return n, err
 	}
+}
+
+// byteMultipliers are the size suffixes GNU od and cmp accept: b is a
+// 512-byte block, single letters and iB forms are powers of 1024, B forms
+// powers of 1000.
+var byteMultipliers = map[string]uint64{
+	"": 1, "b": 512, "k": 1 << 10, "K": 1 << 10, "KiB": 1 << 10, "kB": 1000, "KB": 1000,
+	"m": 1 << 20, "M": 1 << 20, "MiB": 1 << 20, "MB": 1000 * 1000,
+	"G": 1 << 30, "GiB": 1 << 30, "GB": 1000 * 1000 * 1000,
+	"T": 1 << 40, "TiB": 1 << 40, "TB": 1000 * 1000 * 1000 * 1000,
+}
+
+// byteCount parses a nonnegative count as GNU's xstrtoumax does: 0x
+// hexadecimal, leading-zero octal or decimal, then an optional multiplier.
+func byteCount(value string) (int64, bool) {
+	if strings.ContainsAny(value, "_oO") || strings.HasPrefix(value, "0b") || strings.HasPrefix(value, "0B") {
+		return 0, false
+	}
+	digits, multiplier := value, uint64(1)
+	n, err := strconv.ParseUint(digits, 0, 63)
+	if err != nil {
+		digits = strings.TrimRight(value, "bkKmMGTiB")
+		var ok bool
+		if multiplier, ok = byteMultipliers[value[len(digits):]]; !ok || digits == "" {
+			return 0, false
+		}
+		if n, err = strconv.ParseUint(digits, 0, 63); err != nil {
+			return 0, false
+		}
+	}
+	high, product := bits.Mul64(n, multiplier)
+	if high != 0 || product > 1<<63-1 {
+		return 0, false
+	}
+	return int64(product), true
 }

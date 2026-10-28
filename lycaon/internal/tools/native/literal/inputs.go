@@ -140,10 +140,10 @@ func (inv *invocation) ordinaryInput(operand string, err error) (*input, error) 
 	return nil, err
 }
 
-// failureStatus is the catalog's ordinary failure status: diff reserves 1
-// for differences, so its trouble is 2.
+// failureStatus is the catalog's ordinary failure status: diff and cmp
+// reserve 1 for differences, so their trouble is 2.
 func (inv *invocation) failureStatus() int {
-	if inv.name() == "diff" {
+	if inv.name() == "diff" || inv.name() == "cmp" {
 		return 2
 	}
 	return 1
