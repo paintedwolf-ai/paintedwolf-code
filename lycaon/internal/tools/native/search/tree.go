@@ -11,14 +11,20 @@ import (
 // read boundary, visit budget and (with --gitignore) the project ignore
 // owner applied to every directory it reads.
 type treeRun struct {
-	inv                 *invocation
-	walker              *walker
-	ignores             ignoreScopes
-	all, dirsOnly, full bool
-	gitignore, json     bool
-	level               int
-	exclude, include    []*regexp.Regexp
-	directories, files  int
+	inv                *invocation
+	walker             *walker
+	selection          treeSelection
+	full, json         bool
+	level              int
+	directories, files int
+}
+
+// treeSelection decides which walked entries tree lists: -a, -d, -I, -P
+// and --gitignore.
+type treeSelection struct {
+	all, dirsOnly, gitignore bool
+	exclude, include         []*regexp.Regexp
+	ignores                  ignoreScopes
 }
 
 // treeNode is one listed entry and, for a directory below -L, its listed
@@ -41,7 +47,8 @@ const (
 )
 
 func runTree(inv *invocation) error {
-	r := &treeRun{inv: inv, walker: newWalker(inv), ignores: ignoreScopes{}, all: inv.flag("-a"), dirsOnly: inv.flag("-d"), full: inv.flag("-f"), gitignore: inv.flag("--gitignore"), json: inv.flag("-J"), level: -1}
+	r := &treeRun{inv: inv, walker: newWalker(inv), full: inv.flag("-f"), json: inv.flag("-J"), level: -1,
+		selection: treeSelection{all: inv.flag("-a"), dirsOnly: inv.flag("-d"), gitignore: inv.flag("--gitignore"), ignores: ignoreScopes{}}}
 	defer r.walker.close()
 	if value, ok := inv.value("-L"); ok {
 		level, err := strconv.Atoi(value)
@@ -52,10 +59,10 @@ func runTree(inv *invocation) error {
 		r.level = level
 	}
 	var err error
-	if r.exclude, err = r.patterns("-I"); err != nil {
+	if r.selection.exclude, err = treePatterns(inv, "-I"); err != nil {
 		return err
 	}
-	if r.include, err = r.patterns("-P"); err != nil {
+	if r.selection.include, err = treePatterns(inv, "-P"); err != nil {
 		return err
 	}
 	operands := inv.argv.Operands().Values()
@@ -92,14 +99,14 @@ func runTree(inv *invocation) error {
 	return inv.out.text(text.String())
 }
 
-// patterns compiles -I or -P: wildcard patterns joined with |.
-func (r *treeRun) patterns(key string) ([]*regexp.Regexp, error) {
+// treePatterns compiles -I or -P: wildcard patterns joined with |.
+func treePatterns(inv *invocation, key string) ([]*regexp.Regexp, error) {
 	var out []*regexp.Regexp
-	for _, value := range r.inv.values(key) {
+	for _, value := range inv.values(key) {
 		for _, glob := range strings.Split(value, "|") {
 			re, err := globRegexp(glob, 0)
 			if err != nil {
-				return nil, r.inv.usage(value, "a wildcard pattern")
+				return nil, inv.usage(value, "a wildcard pattern")
 			}
 			out = append(out, re)
 		}
@@ -145,7 +152,7 @@ func (r *treeRun) list(dir entry, display string, depth int) ([]treeNode, bool, 
 	}
 	var out []treeNode
 	for _, child := range children {
-		if !r.admit(child) {
+		if !r.selection.admit(child) {
 			continue
 		}
 		node := treeNode{e: child, display: child.name}
@@ -170,19 +177,19 @@ func (r *treeRun) list(dir entry, display string, depth int) ([]treeNode, bool, 
 	return out, false, nil
 }
 
-// admit applies -a, -d, -I, -P and --gitignore to one walked entry.
-func (r *treeRun) admit(e entry) bool {
+// admit decides one walked entry.
+func (s treeSelection) admit(e entry) bool {
 	matches := func(re *regexp.Regexp) bool { return re.MatchString(e.name) }
 	switch {
-	case !r.all && strings.HasPrefix(e.name, "."):
+	case !s.all && strings.HasPrefix(e.name, "."):
 		return false
-	case r.dirsOnly && !e.dir():
+	case s.dirsOnly && !e.dir():
 		return false
-	case slices.ContainsFunc(r.exclude, matches):
+	case slices.ContainsFunc(s.exclude, matches):
 		return false
-	case len(r.include) > 0 && !e.dir() && !slices.ContainsFunc(r.include, matches):
+	case len(s.include) > 0 && !e.dir() && !slices.ContainsFunc(s.include, matches):
 		return false
-	case r.gitignore && !r.ignores.admit(e):
+	case s.gitignore && !s.ignores.admit(e):
 		return false
 	}
 	return true
@@ -196,12 +203,12 @@ func (r *treeRun) report() string {
 		return strconv.Itoa(n) + " " + many
 	}
 	if r.json {
-		if r.dirsOnly {
+		if r.selection.dirsOnly {
 			return `{"type":"report","directories":` + strconv.Itoa(r.directories) + "}"
 		}
 		return `{"type":"report","directories":` + strconv.Itoa(r.directories) + `,"files":` + strconv.Itoa(r.files) + "}"
 	}
-	if r.dirsOnly {
+	if r.selection.dirsOnly {
 		return plural(r.directories, "directory", "directories")
 	}
 	return plural(r.directories, "directory", "directories") + ", " + plural(r.files, "file", "files")
