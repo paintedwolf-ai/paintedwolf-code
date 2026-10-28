@@ -145,9 +145,12 @@ class JobSettlement:
                     continue
                 _require(source is not None and Path(source).resolve().is_relative_to(self.checkout),
                          'cached observation dependency is outside the reviewed checkout')
+                physical = self.checkout.joinpath(*name.split('.')) if name.startswith('scripts.') else namespace.joinpath(*name.split('.'))
+                native = physical / '__init__.py' if (physical / '__init__.py').is_file() else physical.with_suffix('.py')
+                _require(native.resolve(strict=True) == native and Path(source).resolve() == native,
+                         'cached observation dependency has the wrong concrete origin')
                 if name in expected:
-                    _require(Path(source).resolve() == (self.checkout / expected[name]).resolve(strict=True),
-                             'cached observation dependency has the wrong concrete origin')
+                    _require(native == self.checkout / expected[name], 'caller dependency has the wrong concrete origin')
         for name, relative in expected.items():
             source = self.checkout / relative
             _require(source.resolve(strict=True) == source, 'observation dependency is not physical')
