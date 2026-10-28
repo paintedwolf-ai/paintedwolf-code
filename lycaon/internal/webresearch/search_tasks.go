@@ -1,6 +1,9 @@
 package webresearch
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 type fanTask struct {
 	// direct marks the built-in Direct pipeline. Fan-out grace/budget/zero-hit
