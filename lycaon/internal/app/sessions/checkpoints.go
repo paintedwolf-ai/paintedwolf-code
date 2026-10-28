@@ -92,7 +92,12 @@ func (r *Runtime) WireCheckpoints(ctx context.Context, deps CheckpointDependenci
 		return err
 	}
 	if deps.Security.Harvest != nil {
-		r.Manager.ToolContext.SetCredentialFiles(newCredentialFiles(deps.Security.Harvest, deps.Security.Fingerprinter, deps.Database, deps.Security.Capabilities, deps.Sessions))
+		files := newCredentialFiles(deps.Security.Harvest, deps.Security.Fingerprinter, deps.Database, deps.Security.Capabilities, deps.Sessions)
+		if err := files.startCredentialIndex(ctx); err != nil {
+			return err
+		}
+		deps.Resources.Track("credential-file-index", 23, files.closeCredentialIndex)
+		r.Manager.ToolContext.CredentialFiles = files
 	}
 	wireCredentialObservations(r.Manager, deps.Security.Fingerprinter, deps.Security.Matcher, deps.Security.Harvest)
 	deps.Execution.Host.Executor.Secrets.SetSecretExposureSource(func(c context.Context, chatSessionID string) (bool, error) {

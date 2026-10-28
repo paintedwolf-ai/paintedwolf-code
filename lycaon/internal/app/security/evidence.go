@@ -61,6 +61,11 @@ func (b *Runtime) InstallEvidence(ctx context.Context, m *secretmatch.Matcher, f
 		switch {
 		case attribution.RootSessionID != "":
 			values = harvest.ValuesFor(attribution.RootSessionID)
+			if project := secretScreenProject(ctx); project != "" {
+				values = append(values, harvest.FileValues(project)...)
+			} else {
+				values = append(values, harvest.FileValuesForSession(attribution.RootSessionID)...)
+			}
 		case attribution.ProjectID != "":
 			values = harvest.ValuesForProject(attribution.ProjectID)
 		default:

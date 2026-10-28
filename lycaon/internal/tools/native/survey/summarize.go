@@ -244,6 +244,9 @@ func (t *SummarizeTool) Run(ctx context.Context, args map[string]any, tctx tools
 		return "", err
 	}
 
+	if err := deliverSummaryCredentials(ctx, reads, tctx, res); err != nil {
+		return "", err
+	}
 	res.NextActions = validateNextActions(ctx, t.Boundary, tctx, gatherer.sources.actionableSources(res.NextActions))
 	gatherer.stampWork(&res)
 	if t.Observe != nil {

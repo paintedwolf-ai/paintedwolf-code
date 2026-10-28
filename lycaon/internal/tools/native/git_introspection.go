@@ -42,6 +42,15 @@ func (t *GitShowTool) Run(ctx context.Context, args map[string]any, tctx tools.T
 	if err == nil && path != "" {
 		tctx.RecordSourcePath(path, api.NavigationEntryKindFile)
 	}
+	if err == nil && show != nil && !show.Stat {
+		if show.Kind == "blob" {
+			if deliveryErr := tctx.ObserveCredentialDelivery(ctx, filepath.Join(cwd, show.Path), show.Path, show.Content); deliveryErr != nil {
+				return "", deliveryErr
+			}
+		} else if deliveryErr := deliverGitPatchCredentials(ctx, tctx, show.Content); deliveryErr != nil {
+			return "", deliveryErr
+		}
+	}
 	return git.MarshalShowToolResponse(show, err)
 }
 
@@ -68,6 +77,16 @@ func (t *GitBlameTool) Run(ctx context.Context, args map[string]any, tctx tools.
 	})
 	if err == nil {
 		tctx.RecordSourcePath(path, api.NavigationEntryKindFile)
+	}
+	if err == nil {
+		var content strings.Builder
+		for _, line := range lines {
+			content.WriteString(line.Content)
+			content.WriteByte('\n')
+		}
+		if deliveryErr := tctx.ObserveCredentialDelivery(ctx, filepath.Join(tctx.ActiveRootPath(), path), path, content.String()); deliveryErr != nil {
+			return "", deliveryErr
+		}
 	}
 	return git.MarshalBlameToolResponse(lines, err)
 }

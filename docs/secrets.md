@@ -215,7 +215,11 @@ The bounded use history records resolution attempts, including refusals, with th
 
 ## Credential files
 
-A credential file (the `protectedpath` classes: `.env`, `.env.*`, keys, cloud and registry configuration) is presumed to hold secrets a person put there. When the agent reads one, the read tool first records the chat's secret exposure, and returns nothing if it cannot; it then hands the exact text it delivered, including an open editor draft, to the evidence base, which admits each `KEY=value` or structured binding as harvested exact-match evidence for the session tree. From then on those bytes are screened like any other credential, and the read result itself is screened before it is stored.
+A credential file (the `protectedpath` classes: `.env`, `.env.*`, keys, cloud and registry configuration) is presumed to hold secrets a person put there. The host parses attached roots at startup and attachment, then refreshes changed credential paths before publishing watcher changes. Bindings become exact-match evidence keyed by project, root, and path, independent of which tool later carries their bytes. Removed bindings leave the active path set and remain retired project evidence; other projects cannot use them.
+
+Every tool invocation waits for the index to admit newly attached roots and reconcile missed watcher generations. Discovery streams directories and seeds the shared watcher without following symlinks or entering private host trees. Credential files are bounded to 16 MiB for parsing; a failed capture prevents invocation until it can be reconciled.
+
+A shared delivery hook records the chat's exposure before `read`, `grep`, `diff`, `summarize`, or Git content reaches its result. It also contributes unsaved drafts, historical revisions, and external-file bindings to that chat's evidence. Command and terminal output use the project file evidence because their text has no reliable file attribution. Durable and provider copies are screened before they leave their respective boundaries.
 
 The harvest admits only bytes no stronger fact already accounts for:
 
@@ -452,7 +456,7 @@ New credentials should come from `secret_generate`; existing credentials should 
 - File-writing tools materialize a reference only at the screened save; internal-state tools never do. Every record of that write (review, receipt, recorded edit) names the value by its reference.
 - One byte string has one evidence identity, the strongest that holds it: a managed capability names its bytes wherever they appear, weaker evidence never replaces it, and no path mints a second capability for bytes a managed secret already protects.
 - A credential-file value a model wrote from its own arguments is not harvested back from that file: the model already holds it.
-- Harvested evidence belongs to its session tree; a project-attributed screen reads only that project's trees.
+- Credential-file evidence belongs to its project; delivery-specific and minted evidence belongs to its session tree. Project-attributed screens cannot read another project's evidence.
 - A reference token is never evidence: no detector, exact-match lens, or project scan reports one, and no redaction rewrites one. A tool that resolves references refuses a damaged token rather than passing it on as literal text.
 - A reference the host writes into a model or transcript copy is a recorded replacement, and a request carrying one says that the source still holds the value.
 - Durable redaction precedes truncation and every general persistence fan-out. The transcript store is that boundary: every insert and update screens there.

@@ -45,7 +45,9 @@ func (v Value) Secret() string { return v.secret }
 type Runtime struct {
 	mu sync.RWMutex
 	// Eviction would remove active screening evidence.
-	bySession map[string]map[string]Value // root session → secret → Value
+	byFile       map[fileIdentity]map[string]Value
+	retiredFiles map[string]map[string]Value
+	bySession    map[string]map[string]Value // root session → secret → Value
 	// projects caches each session tree's project; a tree never changes project.
 	projects  map[string]string
 	projectOf func(rootSessionID string) string
@@ -58,10 +60,12 @@ type Runtime struct {
 // NewRuntime returns an empty harvest store.
 func NewRuntime(fp *secretmatch.Fingerprinter) *Runtime {
 	return &Runtime{
-		bySession:  map[string]map[string]Value{},
-		projects:   map[string]string{},
-		generation: map[string]uint64{},
-		fp:         fp,
+		byFile:       map[fileIdentity]map[string]Value{},
+		retiredFiles: map[string]map[string]Value{},
+		bySession:    map[string]map[string]Value{},
+		projects:     map[string]string{},
+		generation:   map[string]uint64{},
+		fp:           fp,
 	}
 }
 
@@ -294,7 +298,7 @@ func (r *Runtime) ValuesForProject(projectID string) []Value {
 	for root, project := range resolved {
 		r.projects[root] = project
 	}
-	var out []Value
+	out := r.fileValuesLocked(projectID)
 	for root, sess := range r.bySession {
 		if r.projects[root] != projectID {
 			continue
@@ -313,7 +317,7 @@ func (r *Runtime) AllValues() []Value {
 	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	var out []Value
+	out := r.fileValuesLocked("")
 	for _, sess := range r.bySession {
 		for _, v := range sess {
 			out = append(out, v)
