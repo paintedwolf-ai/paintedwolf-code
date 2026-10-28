@@ -237,11 +237,8 @@ func TestCommandRoutineSurfaceNetSizeReduction(t *testing.T) {
 		return len(sysPrompt) + len(proc) + schemaBytesForTools(sortStrings, !mutating)
 	}
 
-	// Baseline measurements on main before retiring routine schemas from the floor and compacting command guidance:
-	// - implement_investigate: floor included read, grep, find, list_dir + 6,858B command.yaml + 4 native-*-tool.md units (57,652 chars)
-	// - observe_investigate: floor included read, grep, find, list_dir, jq + 5 native-*-tool.md units (45,158 chars)
-	// - implementer (implement): sticky included read, grep, find, list_dir, jq + 6,858B command.yaml + 5 native-*-tool.md units (100,704 chars)
-	// - path-explorer (explore_readonly): sticky included read, grep, find, list_dir, jq + 5 native-*-tool.md units (52,693 chars)
+	// Prompt sizes measured before command replaced the routine read, grep,
+	// find, list_dir and jq schemas and their tool units.
 	baselines := map[string]struct {
 		before int
 		after  int
