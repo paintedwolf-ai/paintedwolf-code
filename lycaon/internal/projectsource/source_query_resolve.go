@@ -34,10 +34,10 @@ func (s SourceIndexSnapshot) remoteFileQuery(ctx context.Context, remote SourceR
 			}
 		}
 		if split > 0 {
-			return style.normalize(root.path) + "/" + strings.ToLower(strings.Join(remote.Segments[split:], "/"))
+			return style.slashes(root.path) + "/" + strings.Join(remote.Segments[split:], "/")
 		}
 	}
-	return "/" + strings.ToLower(strings.Join(remote.Segments[1:], "/"))
+	return "/" + strings.Join(remote.Segments[1:], "/")
 }
 
 var sourceCommitID = regexp.MustCompile(`^[0-9a-fA-F]{7,64}$`)
