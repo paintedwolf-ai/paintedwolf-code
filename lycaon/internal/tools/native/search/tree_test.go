@@ -107,7 +107,8 @@ func TestTreeRefusesInvalidLevelsAndOverBudgetWalks(t *testing.T) {
 	for _, level := range []string{"0", "x", "-2"} {
 		h.exec("", "tree", "-L", level).expect(t, "tree -L "+level, "", "tree: Invalid level, must be greater than 0.\n", 1)
 	}
-	h.exec("", "tree", "-I", "[").expect(t, "tree -I [", "", "tree: [: a wildcard pattern\n", 2)
+	h.exec("", "tree", "-I", "[z-a]").expect(t, "tree -I [z-a]", "", "tree: [z-a]: a wildcard pattern\n", 2)
+	h.exec("", "tree", "-P", "ok|[[:nope:]]").expect(t, "tree -P class", "", "tree: ok|[[:nope:]]: a wildcard pattern\n", 2)
 	h.owners.overrides = map[string]int64{"traversal_visits": 4}
 	r := h.exec("", "tree")
 	r.refused(t, "tree over budget", "COMMAND_LIMIT_EXCEEDED")
