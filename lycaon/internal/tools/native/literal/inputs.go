@@ -165,3 +165,35 @@ func (inv *invocation) recordPin(revision toolcontract.ExecutionRevision) error 
 	}
 	return inv.owners.Pins.AppendRevisionPin(inv.ctx, execution, revision)
 }
+
+// admitPaths binds every PATH operand and its link target before the first is
+// opened, so a refused operand stops the comparison before anything is pinned.
+// Ordinary failures are left for the open to report.
+func (inv *invocation) admitPaths(fields []commandprogram.Field) error {
+	for _, field := range fields {
+		if field.Value == "-" || field.ProcessSubstitution() != nil {
+			continue
+		}
+		bound, err := inv.paths.Bind(inv.ctx, field.Value, false)
+		if err == nil && !bound.Null {
+			_, err = bound.Stat(true)
+		}
+		if err != nil {
+			if _, ok := ordinary(projectpaths.PathOperationError(field.Value, err)); !ok {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// openHeld acquires one streamed operand that stays open beside later ones,
+// as cmp reads two inputs in step. The invocation closes it when it ends.
+func (inv *invocation) openHeld(field commandprogram.Field) (*input, error) {
+	in, err := inv.openField(field, false)
+	if inv.currentStream != nil {
+		inv.closers = append(inv.closers, inv.currentStream)
+		inv.currentStream = nil
+	}
+	return in, err
+}
