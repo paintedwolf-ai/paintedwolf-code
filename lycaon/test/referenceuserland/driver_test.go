@@ -43,7 +43,7 @@ func TestDriverRunsEveryProgramInTheFixedEnvironment(t *testing.T) {
 	workspace, err := filepath.EvalSymlinks(filepath.Join(root, workspaceDir))
 	testutil.FailErr(t, "resolve workspace", err)
 	want := strings.Join([]string{
-		filepath.Join(root, homeDir), "C.UTF-8", "C.UTF-8", "reference", "/usr/local/bin:/usr/bin:/bin",
+		filepath.Join(root, homeDir), "C.UTF-8", "C.UTF-8", "reference", "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
 		filepath.Join(root, workspaceDir), "/bin/sh", filepath.Join(root, tmpDir), "UTC", "reference", workspace, "0022",
 	}, "\n") + "\n"
 	if result.Status != 0 || string(result.Stdout) != want || len(result.Stderr) != 0 {

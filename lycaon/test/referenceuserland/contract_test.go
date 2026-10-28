@@ -58,7 +58,7 @@ func TestEveryUserlandRunsProgramsInTheSameFixedEnvironment(t *testing.T) {
 	for _, id := range IDs {
 		shell := contractRunner(t).Manifest().Userlands[id].Shell
 		want := strings.Join([]string{"1000:1000:reference:reference", "reference", "/workspace", "/home/reference",
-			"/usr/local/bin:/usr/bin:/bin", "C.UTF-8", "C.UTF-8", "UTC", "/tmp", "reference", "reference", shell, "0022",
+			"/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin", "C.UTF-8", "C.UTF-8", "UTC", "/tmp", "reference", "reference", shell, "0022",
 			"[][]", "lo", "-rw-r--r-- 1 1000 1000 5 Jan 1 2025 seed.txt"}, "\n") + "\n"
 		got := runIn(t, id, Case{Program: program, Workspace: map[string]Entry{"seed.txt": {Data: []byte("seed\n")}}})[0]
 		if got.Status != 0 || string(got.Stdout) != want || len(got.Stderr) != 0 {
@@ -147,7 +147,7 @@ func describeFiles(files map[string]*Entry) string {
 func TestInventoryListsWhatEachUserlandProvides(t *testing.T) {
 	for id, expect := range map[ID]struct{ present, absent []string }{
 		GNU:     {present: []string{"bash", "gawk", "git", "jq", "ps", "sed", "tac", "yq"}, absent: []string{"bsdtar", "busybox"}},
-		BSD:     {present: []string{"bash", "bsdtar", "git", "jq", "sed", "sh", "yq"}, absent: []string{"gawk", "ps", "tac", "busybox"}},
+		BSD:     {present: []string{"bash", "bsdtar", "chown", "git", "jq", "sed", "sh", "yq"}, absent: []string{"gawk", "ps", "tac", "busybox"}},
 		BusyBox: {present: []string{"busybox", "sed", "sh", "tac"}, absent: []string{"bash", "git", "jq"}},
 	} {
 		inv, err := contractRunner(t).Inventory(t.Context(), id)

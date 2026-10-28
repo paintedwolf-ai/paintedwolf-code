@@ -20,8 +20,9 @@ const (
 	workspaceDir  = "/workspace"
 	homeDir       = "/home/reference"
 	tmpDir        = "/tmp"
-	searchPath    = "/usr/local/bin:/usr/bin:/bin"
-	locale        = "C.UTF-8"
+	// searchPath includes the sbin directories, where FreeBSD keeps chown.
+	searchPath = "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+	locale     = "C.UTF-8"
 )
 
 // Environment is the complete environment of a program run by shell.
