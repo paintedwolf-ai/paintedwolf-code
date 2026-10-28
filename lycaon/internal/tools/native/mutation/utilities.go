@@ -4,7 +4,6 @@ import (
 	"crypto/rand"
 	"errors"
 	"io"
-	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -232,50 +231,6 @@ func ancestorDisplay(dir, boundAbs, operand string) string {
 		shown = strings.TrimSuffix(path.Dir(shown), "/")
 	}
 	return shown
-}
-
-// directoriesUnder records which paths of a tree rm -v is about to remove
-// are directories, so its messages name them as GNU rm does.
-func (inv *invocation) directoriesUnder(abs string) (map[string]bool, error) {
-	if !inv.flag("-v") {
-		return nil, nil
-	}
-	directories := map[string]bool{}
-	maximum, seen := inv.owners.limit("recursive_mutation_files"), int64(0)
-	err := filepath.WalkDir(abs, func(walked string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			if errors.Is(err, fs.ErrNotExist) {
-				return nil
-			}
-			return err
-		}
-		if seen++; seen > maximum {
-			return limitRefusal("recursive_mutation_files", "files", maximum, seen)
-		}
-		if entry.IsDir() {
-			directories[walked] = true
-		}
-		return nil
-	})
-	return directories, err
-}
-
-// refuseLinks stops cp -a before copying a tree that holds a symbolic link:
-// this copy operation has not admitted link entries for recursive publication.
-func (inv *invocation) refuseLinks(operand, abs string) error {
-	maximum, seen := inv.owners.limit("recursive_mutation_files"), int64(0)
-	return filepath.WalkDir(abs, func(walked string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if seen++; seen > maximum {
-			return limitRefusal("recursive_mutation_files", "files", maximum, seen)
-		}
-		if entry.Type()&fs.ModeSymlink != 0 {
-			return inv.unsupportedForm(displayed(walked, abs, operand), "cp -a cannot preserve symbolic links here; use cp -R -p to copy the link targets or ln -s to recreate a link")
-		}
-		return nil
-	})
 }
 
 func runChmod(inv *invocation) error {
