@@ -159,10 +159,12 @@ def analysis_set(targets):
 
 
 def scripts_python_in_scope(scope):
-    """Whether changed-scripts coverage will run a Python suite: every suite under a broad scope, else only when scripts Python changed."""
-    if scope is None:
-        return False
-    return bool(scope["full"]) or any(path.startswith("scripts/") and path.endswith(".py") for path in scope["paths"])
+    """Whether changed-scripts coverage may run a Python suite: only when scripts Python changed under a bounded scope.
+
+    Without a scope the target resolves its own change base and may run every suite, so the plan provisions for all of them."""
+    if scope is None or scope["full"]:
+        return True
+    return any(path.startswith("scripts/") and path.endswith(".py") for path in scope["paths"])
 
 
 def matrix(profile, suite="all", scope=None, platform=False, timings=None):
