@@ -5,10 +5,10 @@ import (
 	"errors"
 	"net/netip"
 	"strings"
+	"testing"
 
 	"github.com/lycaon/lycaon/internal/lineage"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"testing"
 )
 
 type exactListenerFixture struct {
@@ -79,6 +79,11 @@ func TestDefaultListenerObservationUsesFreshNativeIdentity(t *testing.T) {
 	if _, ok := ObserveOwnedSessionListener(t.Context(), resolver, "session", endpoint); ok {
 		t.Fatal("another loopback address became the requested endpoint")
 	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, owned, err := resolver.ObserveSessionListener(ctx, "session", endpoint); owned || !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled observation = owned:%v err:%v", owned, err)
+	}
 	if calls != 2 {
 		t.Fatalf("invalid all-port evidence reached native observation: calls=%d", calls)
 	}
@@ -99,6 +104,10 @@ func TestDefaultListenerObservationCannotFallBackFromNativeRefusal(t *testing.T)
 		if _, ok := ObserveOwnedSessionListener(t.Context(), resolver, "session", endpoint); ok {
 			t.Fatal("incomplete native evidence bypassed ordinary approval")
 		}
+	}
+	var missingResolver *DefaultLoopbackProvenance
+	if _, owned, err := missingResolver.ObserveSessionListener(t.Context(), "session", endpoint); owned || !errors.Is(err, lineage.ErrObservationIncomplete) {
+		t.Fatalf("missing resolver = owned:%v err:%v", owned, err)
 	}
 	missingTable := &DefaultLoopbackProvenance{}
 	if _, owned, err := missingTable.ObserveSessionListener(t.Context(), "session", endpoint); owned || !errors.Is(err, lineage.ErrObservationIncomplete) {
