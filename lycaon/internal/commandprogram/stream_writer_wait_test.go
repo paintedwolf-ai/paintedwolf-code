@@ -1,6 +1,7 @@
 package commandprogram
 
 import (
+	"context"
 	"errors"
 	"io"
 	"testing"
@@ -52,5 +53,26 @@ func TestConcurrentPipeWritersExposeSerializationWait(t *testing.T) {
 	completion := pipe.Completion()
 	if completion.InputBytes != 5 || completion.EmittedBytes != 3 {
 		t.Fatalf("completion %+v", completion)
+	}
+}
+
+func TestCanceledPipeReadDoesNotPublishAWait(t *testing.T) {
+	_, root, observed := newWaitActivities(t)
+	restore := root.Deadline(root.Now().Add(time.Minute), "read -t 60")
+	defer restore()
+	budget, err := NewByteBudget("stream_bytes", 100)
+	testutil.FailErr(t, "pipe budget", err)
+	pipe, err := NewBytePipe(t.Context(), budget)
+	testutil.FailErr(t, "pipe", err)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	_, err = pipe.read(ctx, make([]byte, 1), root)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("read %v", err)
+	}
+	observed.mu.Lock()
+	defer observed.mu.Unlock()
+	if len(observed.states) != 0 {
+		t.Fatalf("canceled read published %+v", observed.states)
 	}
 }
