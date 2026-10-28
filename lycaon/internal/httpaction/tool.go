@@ -148,8 +148,7 @@ func Register(reg *tools.DefaultRegistry, deps Deps) error {
 		}
 		// A token is placed at its issuer the same way; anywhere else the
 		// screen decides the disclosure before the value touches the wire.
-		destinationID, _ := requestDestination(spec)
-		placements, reject := placedTokens(outbound, tokenJar, destinationID)
+		placements, reject := placedTokens(outbound, tokenJar, spec)
 		if reject != nil {
 			return "", reject
 		}
@@ -305,7 +304,7 @@ func send(
 		Redirects: outboundhttp.RedirectMode(spec.redirects), DiscardBody: spec.disposition.discard, AllowAddress: allowAddress,
 		UnixSocket:    spec.socket,
 		SocketBinding: spec.socketBinding,
-		HostHeader:    spec.hostHeader,
+		HostHeader:    outbound.hostHeader,
 		Resolve:       spec.resolve,
 	}
 	// A socket request reaches only the reviewed socket; its URL host names
