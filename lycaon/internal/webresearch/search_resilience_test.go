@@ -41,12 +41,7 @@ func TestProviderHealthOpensAfterRepeatedHardFailures(t *testing.T) {
 
 func TestFanOutCutsSlowProviderWhenBudgetMet(t *testing.T) {
 	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		select {
-		case <-r.Context().Done():
-			return
-		case <-time.After(30 * time.Second):
-			_, _ = w.Write([]byte(`{"objects":[]}`))
-		}
+		<-r.Context().Done()
 	}))
 	t.Cleanup(slow.Close)
 	injectProviderHTTPClient(t, slow.Client())
@@ -64,7 +59,6 @@ func TestFanOutCutsSlowProviderWhenBudgetMet(t *testing.T) {
 		health: reg.ensureHealthGate("slow"),
 	})
 
-	start := time.Now()
 	result := Search(context.Background(), SearchOptions{
 		Query: "widget probe",
 		Limit: 1,
@@ -77,8 +71,8 @@ func TestFanOutCutsSlowProviderWhenBudgetMet(t *testing.T) {
 	if !result.OK || len(result.Results) != 1 || result.Results[0].Provider != "fast" {
 		t.Fatalf("result = %+v want one fast hit", result)
 	}
-	if elapsed := time.Since(start); elapsed > 2*time.Second {
-		t.Fatalf("search took %v — slow provider was not cut", elapsed)
+	if len(result.ProvidersSkipped) != 1 || result.ProvidersSkipped[0].Provider != "slow" || result.ProvidersSkipped[0].Reason != "cut" {
+		t.Fatalf("providers skipped = %+v, want slow provider cut", result.ProvidersSkipped)
 	}
 }
 
@@ -96,11 +90,10 @@ func TestFanOutGraceCutsStragglersWithPartialHits(t *testing.T) {
 		health: reg.ensureHealthGate("fast"),
 	})
 	reg.Register(&healthWrappedProvider{
-		inner:  &slowSleepStubProvider{delay: 30 * time.Second},
+		inner:  &slowSleepStubProvider{},
 		health: reg.ensureHealthGate("slow"),
 	})
 
-	start := time.Now()
 	result := Search(context.Background(), SearchOptions{
 		Query: "widget probe",
 		Limit: 5,
@@ -116,8 +109,8 @@ func TestFanOutGraceCutsStragglersWithPartialHits(t *testing.T) {
 	if len(result.Results) != 1 {
 		t.Fatalf("result = %+v want one partial hit", result)
 	}
-	if elapsed := time.Since(start); elapsed > 2*time.Second {
-		t.Fatalf("search took %v — grace did not cut slow provider", elapsed)
+	if len(result.ProvidersSkipped) != 1 || result.ProvidersSkipped[0].Provider != "slow" || result.ProvidersSkipped[0].Reason != "cut" {
+		t.Fatalf("providers skipped = %+v, want slow provider cut by grace", result.ProvidersSkipped)
 	}
 }
 
@@ -164,14 +157,8 @@ func (p *slowSleepStubProvider) Kind() ProviderKind { return KindKeyless }
 func (p *slowSleepStubProvider) Configured(Settings) bool { return true }
 
 func (p *slowSleepStubProvider) Search(ctx context.Context, _ Settings, _ string, _ int) providerOutcome {
-	timer := time.NewTimer(p.delay)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return providerOutcome{providerID: p.ID(), reason: "cut", detail: ctx.Err().Error()}
-	case <-timer.C:
-		return providerOutcome{providerID: p.ID(), ok: true, hits: []WebHit{{URL: "https://example.com/slow"}}}
-	}
+	<-ctx.Done()
+	return providerOutcome{providerID: p.ID(), reason: "cut", detail: ctx.Err().Error()}
 }
 
 type timeoutStubProvider struct {

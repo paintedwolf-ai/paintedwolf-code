@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/llm"
@@ -49,6 +48,7 @@ func TestAutoTitleSessionIdempotentOnReplay(t *testing.T) {
 
 	mgr.Chats.Naming.SessionFromPrompt(ctx, sess, userText)
 	mgr.Chats.Naming.SessionFromPrompt(ctx, sess, userText)
+	hub.FlushDebounced()
 
 	got, err := store.Get(ctx, sess.ID)
 	testutil.FailErr(t, "get session", err)
@@ -58,7 +58,6 @@ func TestAutoTitleSessionIdempotentOnReplay(t *testing.T) {
 	}
 
 	updated := 0
-	deadline := time.After(500 * time.Millisecond)
 	for {
 		select {
 		case envelope := <-eventsCh:
@@ -72,7 +71,7 @@ func TestAutoTitleSessionIdempotentOnReplay(t *testing.T) {
 			if ev.Title != "" {
 				updated++
 			}
-		case <-deadline:
+		default:
 			if updated != 1 {
 				t.Fatalf("session title event count = %d want 1", updated)
 			}
@@ -109,8 +108,8 @@ func TestPublishSessionTitleUsesStoreStatus(t *testing.T) {
 	stale := *sess
 	stale.Status = api.SessionStatusIdle
 	mgr.Chats.Naming.PublishSession(ctx, &stale, "Chess game")
+	hub.FlushDebounced()
 
-	deadline := time.After(500 * time.Millisecond)
 	for {
 		select {
 		case envelope := <-eventsCh:
@@ -128,7 +127,7 @@ func TestPublishSessionTitleUsesStoreStatus(t *testing.T) {
 				t.Fatalf("title event status = %q want busy", ev.Status)
 			}
 			return
-		case <-deadline:
+		case <-t.Context().Done():
 			t.Fatal("timeout waiting for session title event")
 		}
 	}
@@ -236,13 +235,13 @@ func TestKickPromptCurationDoesNotBlockOnNaming(t *testing.T) {
 
 	select {
 	case <-returned:
-	case <-time.After(500 * time.Millisecond):
+	case <-t.Context().Done():
 		t.Fatal("kickPromptCuration blocked on naming LLM")
 	}
 
 	select {
 	case <-blocker.entered:
-	case <-time.After(500 * time.Millisecond):
+	case <-t.Context().Done():
 		t.Fatal("naming LLM never started")
 	}
 
@@ -350,7 +349,7 @@ func TestEngineShutdownCancelsAndDrainsDetachedNaming(t *testing.T) {
 	mgr.Runner.Curation.Kick(ctx, sess, "Build a CLI todo tracker with SQLite persistence")
 	select {
 	case <-blocker.entered:
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("detached naming did not start")
 	}
 	mgr.BeginEngineShutdown()

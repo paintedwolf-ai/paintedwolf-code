@@ -4,9 +4,10 @@ SOCKET_UNIT=paintedwolf-vault-identity.socket
 SERVICE_UNIT=paintedwolf-vault-identity.service
 if [ -f "/usr/lib/systemd/system/${SOCKET_UNIT}" ] && [ -d /run/systemd/system ]; then
   systemctl daemon-reload || :
-  systemctl enable --now "${SOCKET_UNIT}" || :
-  # An upgrade replaces the service binary; a running instance restarts on it.
-  if [ "$1" -ge 2 ]; then
+  if [ "$1" -eq 1 ]; then
+    systemctl enable --now "${SOCKET_UNIT}" || :
+  elif [ "$1" -ge 2 ]; then
+    # Restart an active instance without changing the administrator's enablement.
     systemctl try-restart "${SERVICE_UNIT}" || :
   fi
 fi

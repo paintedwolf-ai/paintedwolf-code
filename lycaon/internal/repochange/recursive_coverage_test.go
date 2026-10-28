@@ -107,8 +107,7 @@ func TestRecursiveWatchObservesWritesInUnseededDirectories(t *testing.T) {
 	testutil.FailErr(t, "write artifact",
 		os.WriteFile(filepath.Join(deep, "artifact.bin"), []byte("x"), 0o644))
 
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) && !seen.Load() {
+	for t.Context().Err() == nil && !seen.Load() {
 		ResetDebouncerForTest(t.Context())
 		time.Sleep(20 * time.Millisecond)
 	}

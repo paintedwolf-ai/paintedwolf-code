@@ -1,4 +1,5 @@
 import { Composer, pressComposerKey, typeDraft, sendDraft } from "../../test/composer-view-fixture.tsx";
+import * as caretReveal from "../../platform/scrolling/textarea-caret-reveal.ts";
 import { describe, expect, it, vi } from "vitest";
 import { render, fireEvent } from "@solidjs/testing-library";
 
@@ -55,7 +56,8 @@ describe("Composer", () => {
     expect(onSendLater).not.toHaveBeenCalled();
   });
 
-  it("Shift+Enter inserts a newline via composer.newline", () => {
+  it("Shift+Enter inserts a newline via composer.newline and reveals the caret", async () => {
+    const spy = vi.spyOn(caretReveal, "revealTextareaCaret");
     const onSend = vi.fn();
     const { getByTestId } = render(() => (
       <Composer sidecarStatus="connected" sessionId="sess-1" onSend={onSend} />
@@ -66,6 +68,8 @@ describe("Composer", () => {
     pressComposerKey(input, { key: "Enter", code: "Enter", shiftKey: true });
     expect(onSend).not.toHaveBeenCalled();
     expect(input.value).toBe("line\n");
+    await Promise.resolve();
+    expect(spy).toHaveBeenCalled();
   });
 
   it("↑ recalls the last sent prompt into an empty composer", async () => {

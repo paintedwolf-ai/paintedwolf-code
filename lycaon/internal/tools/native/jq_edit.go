@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	nativejq "github.com/lycaon/lycaon/internal/tools/native/jq"
 	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
@@ -107,6 +108,9 @@ func loadWriteBase(ctx context.Context, tctx tools.ToolContext, target projectpa
 		return sourceview.Text{}, nil, nil
 	}
 	if err != nil {
+		if toolrejection.AsToolReject(err) != nil {
+			return sourceview.Text{}, nil, err
+		}
 		return sourceview.Text{}, nil, fmt.Errorf("read failed: %w", err)
 	}
 	return st, &st.Content, nil

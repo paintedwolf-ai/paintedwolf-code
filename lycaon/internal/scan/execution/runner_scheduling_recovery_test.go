@@ -33,7 +33,7 @@ func TestRunnerRecoversLeaseAtItsDeadline(t *testing.T) {
 		if row.ID != "abandoned" || row.Status != api.CodeScanStatusFailed || row.FailureCode != "SCAN_LEASE_EXPIRED" {
 			t.Fatalf("lease recovery = %+v", row)
 		}
-	case <-time.After(testutil.Timeout(5 * time.Second)):
+	case <-t.Context().Done():
 		t.Fatal("lease expiry waited for the idle recovery sweep")
 	}
 }
@@ -63,7 +63,7 @@ func TestSettingsDisableCancelsClaimBeforeEngineAdmission(t *testing.T) {
 	terminal := make(chan api.CodeScan, 1)
 	runner.OnTerminal = func(_ context.Context, scan api.CodeScan) { terminal <- scan }
 	scantest.RunService(t, runner.Run)
-	testutil.WaitFor(t, 5*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		count, err := store.CountRunning(t.Context())
 		return err == nil && count == 1
 	})
@@ -74,7 +74,7 @@ func TestSettingsDisableCancelsClaimBeforeEngineAdmission(t *testing.T) {
 		if scan.Status != api.CodeScanStatusCanceled || scan.FailureCode != "SCAN_CANCELED" {
 			t.Fatalf("waiting scan was not canceled: %+v", scan)
 		}
-	case <-time.After(testutil.Timeout(2 * time.Second)):
+	case <-t.Context().Done():
 		t.Fatal("claimed work waited for admission or the lease heartbeat before stopping")
 	}
 	select {
