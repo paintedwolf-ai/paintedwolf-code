@@ -10,7 +10,7 @@ import stat
 import subprocess
 import threading
 
-from ..installed_runtime import unchanged, file_identity
+from ..campaign.runtime import unchanged, file_identity
 from .records import CaseUnavailable
 from scripts.harness.supervise import stop_stack
 

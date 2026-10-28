@@ -1,7 +1,7 @@
 """Monitor preparation uses only declared scales and actual compositor modes."""
 import copy
 import unittest
-from linux_release.installed_monitors import configuration
+from linux_release.campaign.monitors import configuration
 from linux_release.installed_cases.records import CaseUnavailable
 
 

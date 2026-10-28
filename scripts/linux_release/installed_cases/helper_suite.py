@@ -17,7 +17,7 @@ import shutil
 import subprocess
 import tempfile
 
-from ..installed_runtime import unchanged
+from ..campaign.runtime import unchanged
 
 ROOT = Path(__file__).resolve().parents[3]
 SUITE = ROOT / 'lycaon/test/installed/confinement'
