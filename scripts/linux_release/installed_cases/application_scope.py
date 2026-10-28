@@ -5,10 +5,10 @@ import re
 import subprocess
 import time
 
-from ..installed_runtime import file_identity
+from ..campaign.runtime import file_identity
 from ..installed_storage import Storage
 from .records import CaseUnavailable
-from .launch_owner import process_identity
+from ..installed_process import process_identity
 
 APP_SCOPE_RE = re.compile(r"^app-(?:[0-9A-Za-z]+-)?(.+?)(?:-[0-9A-Za-z]*)(?:\.scope|\.slice)$")
 

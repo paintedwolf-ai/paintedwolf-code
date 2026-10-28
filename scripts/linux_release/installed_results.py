@@ -129,25 +129,25 @@ def main() -> int:
         from .installed_cases.native_bootstrap import main as bootstrap_native
         return bootstrap_native(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "--run-cases":
-        from .installed_execution import main as execute
+        from .campaign.execution import main as execute
         return execute(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] in {"--prepare-qualification", "--retain-qualification"}:
-        from .installed_qualification_producer import main as qualification
+        from .campaign.qualification_producer import main as qualification
         return qualification(["prepare" if sys.argv[1] == "--prepare-qualification" else "retain", *sys.argv[2:]])
     if len(sys.argv) > 1 and sys.argv[1] == "--execute-plan":
-        from .installed_campaign import main as execute_plan
+        from .campaign.guests import main as execute_plan
         return execute_plan(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "--diagnose-first-launch":
         from .installed_cases.desktop import diagnostic_main
         return diagnostic_main(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "--prepare-candidate":
-        from .installed_candidate_inputs import main as prepare_candidate
+        from .campaign.candidate_inputs import main as prepare_candidate
         return prepare_candidate(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "--prepare-hosted-plan":
-        from .hosted_installed_plan import main as prepare_hosted_plan
+        from .hosted.plan import main as prepare_hosted_plan
         return prepare_hosted_plan(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "--hosted-runtime":
-        from .hosted_installed import main as hosted_runtime
+        from .hosted.installed import main as hosted_runtime
         return hosted_runtime(sys.argv[2:])
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--catalog", type=Path, default=CATALOG)

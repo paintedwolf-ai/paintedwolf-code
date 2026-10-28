@@ -2,7 +2,7 @@
 from __future__ import annotations
 import time
 
-from ..installed_cases.app import process_identity
+from ..installed_process import process_identity
 from ..installed_cases.desktop_ui import owned_process
 from ..installed_cases.records import CaseFailed, CaseUnavailable
 from .protocol import focus

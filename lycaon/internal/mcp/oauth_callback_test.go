@@ -15,7 +15,7 @@ func waitForCallback(t *testing.T, got <-chan callbackResult) callbackResult {
 	select {
 	case res := <-got:
 		return res
-	case <-time.After(5 * time.Second):
+	case <-t.Context().Done():
 		t.Fatal("callback listener never fired")
 		return callbackResult{}
 	}
@@ -95,7 +95,7 @@ func TestCallbackListenerSurfacesAuthorizationError(t *testing.T) {
 	select {
 	case res := <-got:
 		t.Fatalf("handler ran for an authorization error: %+v", res)
-	case <-time.After(200 * time.Millisecond):
+	default:
 	}
 }
 
@@ -111,8 +111,7 @@ func TestCallbackListenerStopsAfterFirstRedirect(t *testing.T) {
 	testutil.FailErr(t, "http.Get failed", err)
 	_ = resp.Body.Close()
 
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
+	for t.Context().Err() == nil {
 		resp2, err := http.Get(redirect + "?code=two&state=st")
 		if err != nil {
 			return // listener is down, which is the assertion

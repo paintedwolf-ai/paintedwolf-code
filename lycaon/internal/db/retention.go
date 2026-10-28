@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"os"
 	"strings"
 	"time"
@@ -41,30 +40,6 @@ func DefaultRetention() RetentionConfig {
 	}
 }
 
-// RunMaintenance performs bounded cleanup under write pressure.
-func RunMaintenance(ctx context.Context, sqlDB *Store, cfg RetentionConfig) error {
-	if sqlDB == nil || !cfg.Enabled {
-		return nil
-	}
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-sqlDB.maintenanceSignals():
-		}
-		for {
-			report, err := RunRetention(ctx, sqlDB, cfg)
-			if err != nil {
-				return err
-			}
-			if report.TotalDeleted() == 0 {
-				break
-			}
-			slog.InfoContext(ctx, "store maintenance batch complete", "deleted", report.TotalDeleted())
-		}
-	}
-}
-
 type RetentionReport struct {
 	// OperationJournals counts deleted receipts or compacted editor replay payloads per table.
 	OperationJournals map[string]int64
@@ -95,13 +70,17 @@ func RunRetention(ctx context.Context, sqlDB Handle, cfg RetentionConfig) (Reten
 	if sqlDB == nil || !cfg.Enabled {
 		return rep, nil
 	}
+	release, err := maintenanceTurn(ctx, sqlDB)
+	if err != nil {
+		return rep, err
+	}
+	defer release()
 	now := time.Now().UTC()
 	batchSize := cfg.BatchSize
 	if batchSize <= 0 {
 		batchSize = DefaultRetentionBatchSize
 	}
 
-	var err error
 	rep.OperationJournals, err = purgeOperationJournals(ctx, sqlDB, now, cfg.OperationJournals, batchSize)
 	if err != nil {
 		return rep, err
@@ -131,7 +110,8 @@ func RunRetention(ctx context.Context, sqlDB Handle, cfg RetentionConfig) (Reten
 	}
 	rep.BlobFindings = n
 
-	if rep.TotalDeleted() > 0 && cfg.IncrementalVacuumMinFreelistPages > 0 {
+	// Pages freed by any owner, retention or not, are returned to the file system.
+	if cfg.IncrementalVacuumMinFreelistPages > 0 {
 		vacuumed, err := runIncrementalVacuum(ctx, sqlDB, cfg.IncrementalVacuumMinFreelistPages)
 		if err != nil {
 			return rep, err
@@ -141,6 +121,13 @@ func RunRetention(ctx context.Context, sqlDB Handle, cfg RetentionConfig) (Reten
 	return rep, nil
 }
 
+// Each slice moves at most 128 pages before releasing the single writer.
+// The maintenance runner admits another pass only after foreground writes quiet.
+const (
+	vacuumSlicePages    = 128
+	vacuumSlicesPerPass = 16
+)
+
 func runIncrementalVacuum(ctx context.Context, sqlDB Handle, minFreelistPages int64) (bool, error) {
 	var mode int
 	if err := sqlDB.QueryRowContext(ctx, `PRAGMA auto_vacuum`).Scan(&mode); err != nil {
@@ -149,17 +136,28 @@ func runIncrementalVacuum(ctx context.Context, sqlDB Handle, minFreelistPages in
 	if mode != 2 { // SQLite INCREMENTAL mode.
 		return false, nil
 	}
-	var freePages int64
-	if err := sqlDB.QueryRowContext(ctx, `PRAGMA freelist_count`).Scan(&freePages); err != nil {
-		return false, fmt.Errorf("read freelist count: %w", err)
+	vacuumed := false
+	for range vacuumSlicesPerPass {
+		var freePages int64
+		if err := sqlDB.QueryRowContext(ctx, `PRAGMA freelist_count`).Scan(&freePages); err != nil {
+			return vacuumed, fmt.Errorf("read freelist count: %w", err)
+		}
+		if freePages < minFreelistPages {
+			return vacuumed, nil
+		}
+		if _, err := sqlDB.ExecContext(ctx, fmt.Sprintf(`PRAGMA incremental_vacuum(%d)`, vacuumSlicePages)); err != nil {
+			return vacuumed, fmt.Errorf("incremental vacuum store: %w", err)
+		}
+		var remaining int64
+		if err := sqlDB.QueryRowContext(ctx, `PRAGMA freelist_count`).Scan(&remaining); err != nil {
+			return vacuumed, fmt.Errorf("read remaining freelist: %w", err)
+		}
+		if remaining >= freePages {
+			return vacuumed, nil
+		}
+		vacuumed = true
 	}
-	if freePages < minFreelistPages {
-		return false, nil
-	}
-	if _, err := sqlDB.ExecContext(ctx, `PRAGMA incremental_vacuum(1024)`); err != nil {
-		return false, fmt.Errorf("incremental vacuum store: %w", err)
-	}
-	return true, nil
+	return vacuumed, nil
 }
 
 func retentionDisabledByEnv() bool {

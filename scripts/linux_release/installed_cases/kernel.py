@@ -16,7 +16,8 @@ import sys
 import tempfile
 import uuid
 
-from .app import InstalledApp, process_identity
+from .app import InstalledApp
+from ..installed_process import process_identity
 from .provider import ProviderFixture
 from .security_boundary import successful_invocation
 from .workflow import ToolTurn
