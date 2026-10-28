@@ -4,11 +4,11 @@
   "kind": "test_suite",
   "workstream": "linux-module-view-fixtures",
   "disposition": "retain",
-  "reason": "Retain the broker and module-view watcher contracts within 550 code-bearing lines. They verify one agent identity boundary: sealed dispatch, every thread\u2019s credentials and capabilities, readiness, and newly propagated mounts beneath an allowed library root. Keeping the shared process facts and these actor assertions together makes the initial and child user namespace controls directly comparable. The explicit GOCOVERDIR parent preserves final-identity write permissions and child counter collection; its narrow testing-lint exception changes no fixture contract.",
-  "reviewed_commit": "221283b380a88f5df199f474724abfbfed145239",
+  "reason": "Retain the broker and module-view watcher contracts within 550 code-bearing lines. They verify sealed dispatch, every thread's credentials and capabilities, exclusive mount-notification consumption, readiness, and newly propagated mounts beneath an allowed library root. Keep shared process facts and actor assertions together so initial and child user namespace controls remain directly comparable. Identity-writable child coverage directories preserve counter collection across the actor's credential transition.",
+  "reviewed_commit": "548fc04d1f00b83135c674c3ba1c8b35d0166945",
   "ceiling": 550,
   "boundaries": {
-    "lycaon/internal/launchguard/agent_linux_test.go": "78c7d263d369325ddd1771185f08b881c1e04b519f719096da296e9157527b9c",
-    "lycaon/internal/launchguard/protected_launch_fixture_linux_test.go": "0f24628dd729adfbde75af652dfc7e66fdceffe787540e65f1f9ad9b5ddf4643"
+    "lycaon/internal/launchguard/agent_linux_test.go": "13f93e3923da0f4bb827a5b4df9a00f7df0243afa37fcf8f1686ffe741761802",
+    "lycaon/internal/launchguard/protected_launch_fixture_linux_test.go": "7f71a8795b7149ccab1030d557e307c9c365de61e7c68fb6322ec8352e4e3f99"
   }
 }
