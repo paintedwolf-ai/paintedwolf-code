@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -58,9 +59,9 @@ func resolveSourceBrowseRoot(p ProjectSource, rootID string) (sourceBrowseRoot, 
 	if !info.IsDir() {
 		return sourceBrowseRoot{}, ErrSourceNotFound
 	}
-	resolved, err := filepath.EvalSymlinks(rootPath)
-	if err != nil {
-		return sourceBrowseRoot{}, fmt.Errorf("resolve root: %w", err)
+	resolved := fspath.CanonicalPath(rootPath)
+	if resolved == "" {
+		return sourceBrowseRoot{}, fmt.Errorf("resolve root: path identity unavailable")
 	}
 	return sourceBrowseRoot{root: root, path: rootPath, resolved: resolved}, nil
 }
@@ -163,9 +164,9 @@ func resolveSourceDir(rootPath, evalRoot, relDir string) (string, string, error)
 	if !info.IsDir() {
 		return "", "", ErrSourceNotFound
 	}
-	evalAbs, err := filepath.EvalSymlinks(abs)
-	if err != nil {
-		return "", "", fmt.Errorf("resolve browse dir: %w", err)
+	evalAbs := fspath.CanonicalPath(abs)
+	if evalAbs == "" {
+		return "", "", fmt.Errorf("resolve browse dir: path identity unavailable")
 	}
 	if !withinRoot(evalRoot, evalAbs) {
 		return "", "", ErrSourcePathDenied

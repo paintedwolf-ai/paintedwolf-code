@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 )
 
@@ -282,11 +283,6 @@ func (b *Boundary) resolveAbs(projectDir, relPath string, evalSymlinks bool) (st
 	if err != nil {
 		return "", fmt.Errorf("invalid project dir: %w", err)
 	}
-	if evalSymlinks {
-		if canonical, err := filepath.EvalSymlinks(root); err == nil {
-			root = canonical
-		}
-	}
 	rootInfo, err := os.Stat(root)
 	if err != nil {
 		return "", fmt.Errorf("project dir not accessible: %w", err)
@@ -294,25 +290,32 @@ func (b *Boundary) resolveAbs(projectDir, relPath string, evalSymlinks bool) (st
 	if !rootInfo.IsDir() {
 		return "", fmt.Errorf("project dir is not a directory")
 	}
+	if evalSymlinks {
+		canonical := fspath.CanonicalPath(root)
+		if canonical == "" {
+			return "", fmt.Errorf("project dir identity unavailable")
+		}
+		root = filepath.FromSlash(canonical)
+	}
 
 	clean := filepath.Clean(relPath)
 	if filepath.IsAbs(clean) {
-		if evalSymlinks {
-			if canDir, err := filepath.EvalSymlinks(filepath.Dir(clean)); err == nil {
-				clean = filepath.Join(canDir, filepath.Base(clean))
-			}
-		}
-		rel, err := filepath.Rel(root, clean)
-		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
-			return "", fmt.Errorf("%w: %q", ErrPathEscape, relPath)
-		}
 		full := clean
 		if evalSymlinks {
 			canonical, err := canonicalizeWithinRoot(root, full, relPath)
 			if err != nil {
 				return "", err
 			}
+			parent := fspath.CanonicalPath(filepath.Dir(clean))
+			if parent == "" {
+				return "", fmt.Errorf("path parent identity unavailable")
+			}
+			clean = filepath.Join(filepath.FromSlash(parent), filepath.Base(clean))
 			full = canonical
+		}
+		rel, err := filepath.Rel(root, clean)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+			return "", fmt.Errorf("%w: %q", ErrPathEscape, relPath)
 		}
 		return full, nil
 	}
@@ -339,12 +342,10 @@ func (b *Boundary) resolveAbs(projectDir, relPath string, evalSymlinks bool) (st
 	return full, nil
 }
 
-// canonicalizeWithinRoot resolves the deepest existing ancestor, appends the
-// missing tail, and verifies the result remains under root. This catches symlink
-// escapes when filepath.EvalSymlinks returns IsNotExist.
+// canonicalizeWithinRoot validates the existing ancestor before resolving the
+// complete identity, so a dangling link is not accepted as a missing tail.
 func canonicalizeWithinRoot(root, full, relPath string) (string, error) {
 	existing := full
-	tail := ""
 	for {
 		if _, err := os.Lstat(existing); err == nil {
 			break
@@ -352,20 +353,19 @@ func canonicalizeWithinRoot(root, full, relPath string) (string, error) {
 			return "", fmt.Errorf("symlink evaluation failed: %w", err)
 		}
 		parent := filepath.Dir(existing)
-		tail = filepath.Join(filepath.Base(existing), tail)
 		if parent == existing {
 			return "", fmt.Errorf("path %q has no accessible parent", relPath)
 		}
 		existing = parent
 	}
-	evaluated, err := filepath.EvalSymlinks(existing)
-	if err != nil {
+	if _, err := os.Stat(existing); err != nil {
 		return "", fmt.Errorf("symlink evaluation failed: %w", err)
 	}
-	resolved := evaluated
-	if tail != "" {
-		resolved = filepath.Join(evaluated, tail)
+	resolved := fspath.CanonicalPath(full)
+	if resolved == "" {
+		return "", fmt.Errorf("path identity unavailable: %q", relPath)
 	}
+	resolved = filepath.FromSlash(resolved)
 	rel, err := filepath.Rel(root, resolved)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
 		return "", fmt.Errorf("%w via symlink: %q", ErrPathEscape, relPath)
