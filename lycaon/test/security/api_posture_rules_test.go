@@ -73,7 +73,7 @@ func TestBuildPostureDisallowedAgentAfterImplementPhase(t *testing.T) {
 	h.SeedProgress(t, ctx, sess.ID)
 	accepted := acceptPromptHTTP(t, srv, sess.ID, "spawn task")
 
-	if !testutil.WaitForNoFatal(promptIdleBudget, func() bool {
+	testutil.WaitFor(t, func() bool {
 		submission, err := store.GetPromptSubmission(ctx, accepted.OperationID)
 		testutil.FailErr(t, "read posture prompt receipt", err)
 		if !submission.Status.Terminal() {
@@ -83,9 +83,7 @@ func TestBuildPostureDisallowedAgentAfterImplementPhase(t *testing.T) {
 			t.Fatalf("posture prompt status = %s: %s", submission.Status, submission.Error)
 		}
 		return true
-	}) {
-		t.Fatal("posture prompt did not finish")
-	}
+	})
 
 	msgs, err := store.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "store.GetMessages failed", err)
@@ -131,14 +129,10 @@ func TestBuildPostureAllowsDelegationWithPlanManifestRules(t *testing.T) {
 	// Pending workers keep the workflow active until a poller claims them.
 	h.SeedProgress(t, ctx, sess.ID)
 	acceptPromptHTTP(t, srv, sess.ID, "spawn delegate")
-	if !testutil.WaitForNoFatal(promptIdleBudget, func() bool {
+	testutil.WaitFor(t, func() bool {
 		tasks, err := h.Delegations.Queue.ListBySession(ctx, sess.ProjectID, sess.ID, wire.WorkerStatusPending)
 		return err == nil && len(tasks) == 1
-	}) {
-		messages, err := store.GetMessages(ctx, sess.ID)
-		testutil.FailErr(t, "load failed delegation transcript", err)
-		t.Fatalf("delegation was not enqueued: messages=%+v", messages)
-	}
+	})
 
 	msgs, err := store.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "store.GetMessages failed", err)

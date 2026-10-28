@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/app"
@@ -63,7 +62,7 @@ func TestAPIScanServePathSASTE2E(t *testing.T) {
 	t.Cleanup(cancel)
 
 	created := enqueueCodeScan(t, serveApp.Server, projectDir, []wire.ScanCategory{wire.ScanCategorySAST})
-	got := waitScanComplete(t, serveApp.Server, created.ProjectID, created.ID, 90*time.Second)
+	got := waitScanComplete(t, serveApp.Server, created.ProjectID, created.ID)
 	if got.ScannerID != "lycaon-sast" {
 		t.Fatalf("scanner_id = %q, want lycaon-sast", got.ScannerID)
 	}

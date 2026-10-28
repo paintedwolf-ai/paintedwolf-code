@@ -1,0 +1,140 @@
+#!/sbin/openrc-run
+
+description="Painted Wolf Code vault identity service"
+supervisor="supervise-daemon"
+command="/usr/bin/setpriv"
+command_args="--reuid=paintedwolf-vault --regid=paintedwolf-vault --clear-groups --bounding-set=-all,+sys_ptrace --inh-caps=-all,+sys_ptrace --ambient-caps=-all,+sys_ptrace --no-new-privs --reset-env -- /opt/painted-wolf-code/bin/pw-vault-identity --socket /run/painted-wolf-code/vault-identity.sock --state /var/lib/paintedwolf-vault-openrc --idle-exit=0 --require-dedicated-protection"
+pidfile="/run/paintedwolf-vault-identity.pid"
+umask="0077"
+respawn_delay=1
+respawn_max=5
+respawn_period=60
+retry="TERM/10/KILL/5"
+
+depend() {
+    need localmount
+    after bootmisc
+}
+
+private_directory() {
+    local path="$1" mode="$2" uid="$3" gid="$4"
+    if [ -e "$path" ] || [ -L "$path" ]; then
+        if [ -L "$path" ] || [ ! -d "$path" ] ||
+            [ "$(/usr/bin/stat -c %u "$path")" != "$uid" ] ||
+            [ "$(/usr/bin/stat -c %g "$path")" != "$gid" ]; then
+            eerror "Refusing to reassign existing custody state at $path. Preserve it and resolve its service ownership before starting."
+            return 1
+        fi
+        /usr/bin/chmod "$mode" "$path" || return 1
+    else
+        /usr/bin/install -d -m "$mode" -o "$uid" -g "$gid" "$path" || return 1
+    fi
+}
+
+numeric_identity() {
+    case "$1" in ''|*[!0-9]*) return 1 ;; esac
+    case "$1" in 0) return 0 ;; 0*) return 1 ;; esac
+}
+
+custody_identity() {
+    local passwd_rows group_rows row row_name row_password row_uid row_gid row_comment row_home row_shell row_members
+    local passwd_count=0 group_count=0 count=0 direct status LC_ALL=C
+    export LC_ALL
+    passwd_rows=$(/usr/bin/getent passwd) || return 1
+    group_rows=$(/usr/bin/getent group) || return 1
+    [ -n "$passwd_rows" ] && [ -n "$group_rows" ] &&
+        [ "${#passwd_rows}" -le 16777216 ] && [ "${#group_rows}" -le 16777216 ] || return 1
+    custody_passwd= custody_group= custody_uid= custody_gid=
+    while IFS= read -r row; do
+        count=$((count + 1))
+        [ "$count" -le 262144 ] && [ "${#row}" -le 16384 ] || return 1
+        IFS=: read -r row_name row_password row_uid row_gid row_comment row_home row_shell <<EOF
+$row
+EOF
+        [ -n "$row_name" ] && numeric_identity "$row_uid" && numeric_identity "$row_gid" || return 1
+        case "$row_shell" in *:*) return 1 ;; esac
+        if [ "$row_name" = paintedwolf-vault ]; then
+            passwd_count=$((passwd_count + 1))
+            custody_passwd="$row"
+            custody_uid="$row_uid"
+            custody_gid="$row_gid"
+            [ "$row_uid" != 0 ] && [ "$row_gid" != 0 ] &&
+                [ "$row_home" = /var/empty ] && [ "$row_shell" = /usr/bin/nologin ] || return 1
+        fi
+    done <<EOF
+$passwd_rows
+EOF
+    [ "$passwd_count" -le 1 ] || return 1
+    direct=$(/usr/bin/getent passwd paintedwolf-vault); status=$?
+    if [ "$passwd_count" = 0 ]; then
+        [ "$status" = 2 ] && [ -z "$direct" ] || return 1
+    else
+        [ "$status" = 0 ] && [ "$direct" = "$custody_passwd" ] || return 1
+        direct=$(/usr/bin/getent passwd "$custody_uid") || return 1
+        [ "$direct" = "$custody_passwd" ] || return 1
+    fi
+    count=0
+    while IFS= read -r row; do
+        count=$((count + 1))
+        [ "$count" -le 262144 ] && [ "${#row}" -le 16384 ] || return 1
+        IFS=: read -r row_name row_password row_gid row_members <<EOF
+$row
+EOF
+        [ -n "$row_name" ] && numeric_identity "$row_gid" || return 1
+        case "$row_members" in *:*) return 1 ;; esac
+        if [ "$row_name" = paintedwolf-vault ]; then
+            group_count=$((group_count + 1))
+            custody_group="$row"
+            [ "$row_gid" != 0 ] || return 1
+            [ -z "$custody_gid" ] || [ "$custody_gid" = "$row_gid" ] || return 1
+            custody_gid="$row_gid"
+        fi
+    done <<EOF
+$group_rows
+EOF
+    [ "$group_count" -le 1 ] || return 1
+    direct=$(/usr/bin/getent group paintedwolf-vault); status=$?
+    if [ "$group_count" = 0 ]; then
+        [ "$status" = 2 ] && [ -z "$direct" ] && [ "$passwd_count" = 0 ] || return 1
+    else
+        [ "$status" = 0 ] && [ "$direct" = "$custody_group" ] || return 1
+        direct=$(/usr/bin/getent group "$custody_gid") || return 1
+        [ "$direct" = "$custody_group" ] || return 1
+    fi
+    # Reverse lookup may choose the service first while another NSS record has
+    # the same numeric identity. Reject every conflicting mapping we observed.
+    while IFS=: read -r row_name row_password row_uid row_gid row_comment row_home row_shell; do
+        if [ "$row_name" != paintedwolf-vault ]; then
+            [ -z "$custody_uid" ] || [ "$row_uid" != "$custody_uid" ] || return 1
+            [ -z "$custody_gid" ] || [ "$row_gid" != "$custody_gid" ] || return 1
+        fi
+    done <<EOF
+$passwd_rows
+EOF
+    while IFS=: read -r row_name row_password row_gid row_members; do
+        [ "$row_name" = paintedwolf-vault ] || [ -z "$custody_gid" ] ||
+            [ "$row_gid" != "$custody_gid" ] || return 1
+    done <<EOF
+$group_rows
+EOF
+}
+
+start_pre() {
+    [ -x "$command" ] && [ -x /opt/painted-wolf-code/bin/pw-vault-identity ] || return 1
+    if ! custody_identity; then
+        eerror "The custody account must have a dedicated, consistent NSS user and group identity with no login shell."
+        return 1
+    fi
+    if [ -z "$custody_group" ]; then
+        /usr/bin/groupadd --system paintedwolf-vault || return 1
+    fi
+    if [ -z "$custody_passwd" ]; then
+        /usr/bin/useradd --system --gid paintedwolf-vault --home-dir /var/empty --shell /usr/bin/nologin --no-create-home paintedwolf-vault || return 1
+    fi
+    if ! custody_identity || [ -z "$custody_passwd" ] || [ -z "$custody_group" ]; then
+        eerror "The custody account's NSS identity could not be verified. Existing custody state was preserved."
+        return 1
+    fi
+    private_directory /var/lib/paintedwolf-vault-openrc 0700 "$custody_uid" "$custody_gid" || return 1
+    private_directory /run/painted-wolf-code 0755 "$custody_uid" "$custody_gid" || return 1
+}

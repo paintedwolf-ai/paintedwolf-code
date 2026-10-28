@@ -7,8 +7,8 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from linux_release.hosted_desktop import desktop_record, fresh, run, selected_controller, validate_host
-from linux_release import hosted_desktop as hosted
+from linux_release.hosted.desktop import desktop_record, fresh, run, selected_controller, validate_host
+from linux_release.hosted import desktop as hosted
 
 
 class HostedDesktopTests(unittest.TestCase):
@@ -44,7 +44,7 @@ class HostedDesktopTests(unittest.TestCase):
 
     def test_command_failure_never_echoes_password_input_or_stderr(self):
         result = SimpleNamespace(returncode=1, stdout=b'', stderr=b'sensitive-fixture')
-        with patch('linux_release.hosted_desktop.subprocess.run', return_value=result) as command:
+        with patch('linux_release.hosted.desktop.subprocess.run', return_value=result) as command:
             with self.assertRaises(OSError) as error:
                 run(['chpasswd'], input=b'private-input')
             self.assertNotIn('sensitive', str(error.exception))
