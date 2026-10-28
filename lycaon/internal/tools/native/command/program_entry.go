@@ -778,9 +778,7 @@ func programNodes(statements []commandsurface.Statement) []commandsurface.Syntax
 		case commandsurface.TrapCommand:
 			list(node.Statements)
 		case commandsurface.TimedCommand:
-			if node.Pipeline != nil {
-				statement(*node.Pipeline)
-			}
+			list(node.Pipeline)
 		}
 	}
 	list(statements)

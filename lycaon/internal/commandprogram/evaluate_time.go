@@ -9,21 +9,21 @@ import (
 	"github.com/lycaon/lycaon/internal/commandsurface"
 )
 
-// timed runs the pipeline after time and reports its real, user and system
+// runTimed runs the pipeline after time and reports its real, user and system
 // time on the frame's stderr, outside the pipeline's own redirects. Real
 // time is the clock's; user and system time are what external children
 // reported when reaped. Native operations have no processor time of their
 // own in the host process, so they count zero and the outcome says so.
-func (f *frame) timed(ctx context.Context, s commandsurface.Statement, c commandsurface.TimedCommand) (signal, error) {
+func runTimed(ctx context.Context, f *frame, s commandsurface.Statement, c commandsurface.TimedCommand) (signal, error) {
 	clock := f.e.clock()
 	account := &ProcessTimes{enclosing: f.times}
 	start := clock.Now()
 	var sig signal
 	var err error
-	if c.Pipeline != nil {
+	if len(c.Pipeline) > 0 {
 		inner := *f
 		inner.times = account
-		sig, err = inner.statement(ctx, *c.Pipeline)
+		sig, err = inner.statements(ctx, c.Pipeline)
 	} else {
 		err = f.builtinStatus(s.SyntaxLocation, "time", 0)
 	}
