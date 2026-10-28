@@ -12,6 +12,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hitl"
+	"github.com/lycaon/lycaon/internal/socketref"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -235,6 +236,10 @@ func TestConfineRequestForSpawnConsumesPermit(t *testing.T) {
 
 	g, err := confine.ResolveSocketRequest(sock)
 	testutil.FailErr(t, "ResolveSocketRequest", err)
+	ctx, scope := socketref.WithScope(t.Context())
+	defer scope.Close()
+	g, err = confine.CaptureSocketGrant(ctx, g)
+	testutil.FailErr(t, "capture reviewed socket", err)
 
 	rt := &memorySocketRuntime{}
 	digest := "action-digest"
@@ -247,14 +252,14 @@ func TestConfineRequestForSpawnConsumesPermit(t *testing.T) {
 			SocketActionDigest:      digest,
 			SocketCapabilityRuntime: rt},
 	}
-	req, reject := ConfineRequestForSpawn(t.Context(), tctx, []string{dir})
+	req, reject := ConfineRequestForSpawn(ctx, tctx, []string{dir})
 	if reject != nil {
 		t.Fatalf("unexpected reject: %+v", reject)
 	}
 	if len(req.SocketGrants) != 1 || req.SocketGrants[0].ResolvedPath != g.ResolvedPath {
 		t.Fatalf("SocketGrants = %#v, want %#v", req.SocketGrants, g)
 	}
-	_, reject = ConfineRequestForSpawn(t.Context(), tctx, []string{dir})
+	_, reject = ConfineRequestForSpawn(ctx, tctx, []string{dir})
 	if reject == nil {
 		t.Fatal("expected reject after permit consumption")
 	}

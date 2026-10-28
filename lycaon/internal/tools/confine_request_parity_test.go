@@ -1,7 +1,6 @@
 package tools_test
 
 import (
-	"context"
 	"net"
 	"os"
 	"path/filepath"
@@ -13,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/packageexec"
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/socketref"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 )
@@ -42,7 +42,10 @@ func TestGateContainedMatchesSpawnRequest(t *testing.T) {
 	t.Cleanup(func() { _ = ln.Close() })
 	resolved, err := filepath.EvalSymlinks(socketPath)
 	testutil.FailErr(t, "resolve socket", err)
-	grant := confine.SocketGrant{ApprovedPath: resolved, ResolvedPath: resolved}
+	ctx, scope := socketref.WithScope(t.Context())
+	defer scope.Close()
+	grant, err := confine.CaptureSocketGrant(ctx, confine.SocketGrant{ApprovedPath: resolved, ResolvedPath: resolved})
+	testutil.FailErr(t, "capture reviewed socket", err)
 
 	base := tools.ToolContext{
 		Identity: tools.InvocationIdentity{ProjectID: "proj-1",
@@ -81,7 +84,7 @@ func TestGateContainedMatchesSpawnRequest(t *testing.T) {
 				tc.mutate(&tctx)
 			}
 			gateReq := hitl.ActionConfineRequest(tools.ActionConfineInputsForContext(tctx, tc.overlay))
-			spawnReq, reject := tools.ConfineRequestForSpawn(context.Background(), tctx, tc.overlay)
+			spawnReq, reject := tools.ConfineRequestForSpawn(ctx, tctx, tc.overlay)
 			if reject != nil {
 				t.Fatalf("spawn request rejected: %+v", reject)
 			}
