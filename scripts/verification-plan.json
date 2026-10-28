@@ -385,7 +385,8 @@
     "test:confine:linux": "passthrough",
     "release:rehearse:linux-signing": "passthrough",
     "userlands:build": "passthrough",
-    "den:test:rust": "fixed:desktop-settings-observer"
+    "den:test:rust": "fixed:desktop-settings-observer",
+    "test:conformance:live": "passthrough"
   },
   "resources": {
     "den:harness:test": {

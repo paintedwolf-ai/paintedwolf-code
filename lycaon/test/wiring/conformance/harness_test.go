@@ -15,7 +15,6 @@ import (
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
-	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -49,8 +48,9 @@ func (o runtimeObservation) streams() commandconformance.Observation {
 }
 
 type conformanceRunner struct {
-	h    *wiring.Harness
-	seed commandconformance.GitSeed
+	h     *wiring.Harness
+	seed  commandconformance.GitSeed
+	model *caseModel
 }
 
 func loadGitSeed(t *testing.T) commandconformance.GitSeed {
@@ -60,26 +60,12 @@ func loadGitSeed(t *testing.T) commandconformance.GitSeed {
 	return seed
 }
 
-// newConformanceRunner serves every case's program to the mock model and runs it
-// under posture, answering approvals unless neverAsk.
-func newConformanceRunner(t *testing.T, cases []commandconformance.Case, posture gate.Posture, neverAsk bool) *conformanceRunner {
+// newConformanceRunner runs case programs through the assembled command entry.
+func newConformanceRunner(t *testing.T, posture gate.Posture, neverAsk bool) *conformanceRunner {
 	t.Helper()
-	entries := make([]llm.MockResponseEntry, 0, len(cases))
-	for _, c := range cases {
-		args := map[string]any{"command": c.Program}
-		if c.CapabilityRequest != "" {
-			var request map[string]any
-			testutil.FailErr(t, "decode capability request of "+c.ID, json.Unmarshal([]byte(c.CapabilityRequest), &request))
-			args["capability_request"] = request
-		}
-		entries = append(entries, llm.MockResponseEntry{
-			Pattern:      "run case " + c.ID,
-			ToolCalls:    []llm.MockToolCall{{ID: "call-" + c.ID, Name: "command", Args: args}},
-			FollowUpText: "Case finished.",
-		})
-	}
-	mock := llm.NewMockProvider(&llm.MockConfig{Responses: entries})
-	h := wiring.BuildForTest(t, wiring.WithLLMClient(mock))
+	model := &caseModel{}
+
+	h := wiring.BuildForTest(t, wiring.WithLLMClient(model))
 	testutil.FailErr(t, "set approval posture", h.Server.Admin.Settings.Service.Approvals.PutGlobal(settings.ApprovalConfig{
 		Posture:  posture,
 		NeverAsk: &neverAsk,
@@ -88,7 +74,7 @@ func newConformanceRunner(t *testing.T, cases []commandconformance.Case, posture
 	testutil.FailErr(t, "resolve implement manifest", err)
 	m.Controls.ContentReview = nil
 	h.RegisterManifest(m)
-	return &conformanceRunner{h: h, seed: loadGitSeed(t)}
+	return &conformanceRunner{h: h, seed: loadGitSeed(t), model: model}
 }
 
 // seedWorkspace writes the case's workspace the way the reference driver seeds
@@ -136,6 +122,7 @@ func (r *conformanceRunner) runCase(t *testing.T, c commandconformance.Case) run
 // option, as a person would, and fails unless exactly expectedCards appear.
 func (r *conformanceRunner) runCaseWithRecommendedApprovals(t *testing.T, c commandconformance.Case, expectedCards int) runtimeObservation {
 	t.Helper()
+	r.model.use(t, c)
 	dir := r.seedWorkspace(t, c)
 	projectID := uuid.NewString()
 	testdbseed.InsertProjectRoot(t, r.h.DB, projectID, dir)
