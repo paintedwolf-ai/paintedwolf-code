@@ -167,8 +167,11 @@ func TestCommandEntryTimeoutLeavesTheOuterBoundInCharge(t *testing.T) {
 	<-clock.scheduled
 	cancel()
 	got := <-done
-	if got.err != nil || got.outcome.Stdout != "" || got.outcome.State != "interrupted" {
-		t.Fatalf("outer bound outcome: %+v, %v; want an interrupted program, not status 124", got.outcome, got.err)
+	if !errors.Is(got.err, context.Canceled) || strings.Contains(got.outcome.Stdout, "124") {
+		t.Fatalf("outer bound outcome: %+v, %v; want the call interrupted, not status 124", got.outcome, got.err)
+	}
+	if programs := f.Programs(t); len(programs) != 1 || programs[0] != "interrupted" {
+		t.Fatalf("program receipts %v, want one interrupted program", programs)
 	}
 }
 
@@ -184,7 +187,7 @@ func TestCommandEntryTimeoutRunsTheChildUnderTheSameConfinement(t *testing.T) {
 		testutil.FailErr(t, "run confined child", err)
 		got := decodeProgramOutcome(t, raw)
 		results = append(results, got)
-		if executions := f.Executions(t); !strings.Contains(executions["external"], "completed") {
+		if executions := f.Executions(t); !strings.Contains(executions["command"], "completed") {
 			t.Fatalf("%q: no confined launch settled: %v", prefix, executions)
 		}
 		_ = os.Remove(filepath.Join(outside, "outside.txt"))
