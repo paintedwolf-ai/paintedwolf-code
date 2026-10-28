@@ -79,6 +79,40 @@ func TestPolicyWriteWithoutReviewCannotLand(t *testing.T) {
 	}
 }
 
+func TestReachedProgressAppliesOnlyToAttachedFileEdits(t *testing.T) {
+	project, scratch := t.TempDir(), t.TempDir()
+	tc := nativefixture.Context(project)
+	checks := 0
+	refused := errors.New("missing checklist")
+	tc.Effects.CheckMutationProgress = func(_ context.Context, rootID, path string) error {
+		checks++
+		if rootID != "r1" || path != filepath.Join(project, "created.txt") {
+			t.Fatalf("progress target = %s %s", rootID, path)
+		}
+		return refused
+	}
+	projectPath := filepath.Join(project, "created.txt")
+	if err := applyAgentFile(t.Context(), tc, testMutationTarget(projectPath), []byte("project"), nil, ""); !errors.Is(err, refused) {
+		t.Fatalf("project creation = %v, want progress refusal", err)
+	}
+	if checks != 1 {
+		t.Fatalf("progress checks = %d, want one before review", checks)
+	}
+	if _, err := os.Stat(projectPath); !os.IsNotExist(err) {
+		t.Fatalf("project file landed after refusal: %v", err)
+	}
+	scratchPath := filepath.Join(scratch, "temporary.txt")
+	testutil.FailErr(t, "scratch creation", applyAgentFile(t.Context(), tc, testMutationTarget(scratchPath), []byte("scratch"), nil, ""))
+	if checks != 1 {
+		t.Fatalf("scratch creation checked progress %d times", checks)
+	}
+	content, err := os.ReadFile(scratchPath)
+	testutil.FailErr(t, "scratch bytes", err)
+	if string(content) != "scratch" {
+		t.Fatalf("scratch content = %q", content)
+	}
+}
+
 func TestFileReviewRechecksConcurrentChanges(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "AGENTS.md")

@@ -84,9 +84,6 @@ func (c *programCompiler) validateNode(n syntax.Node) {
 			c.unsupported(n, "NAME() { ...; } with a non-reserved name")
 		}
 	case *syntax.Assign:
-		if v.Name != nil && v.Name.Value == "IFS" {
-			c.unsupported(n, "fixed space/tab/newline splitting")
-		}
 		if v.Name != nil && v.Name.Value == "PIPESTATUS" {
 			c.unsupported(n, "read-only PIPESTATUS")
 		}
@@ -195,7 +192,7 @@ func (c *programCompiler) validateCall(call *syntax.CallExpr) {
 		c.validateSet(call)
 	case "trap":
 		c.validateTrap(call)
-	case "eval", "shopt", "declare", "typeset", "local", "readonly", "let", "exec", ".":
+	case "shopt", "declare", "typeset", "local", "readonly", "let", "exec", ".":
 		c.unsupported(call.Args[0], "version 1 built-ins; source -- PATH for explicit scripts")
 	}
 }

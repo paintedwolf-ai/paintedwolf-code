@@ -1,7 +1,10 @@
 package invocation
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -83,7 +86,7 @@ func (r *ProgramOutputRetention) Attach(ctx context.Context, program string, out
 	if r.entries[claim] != nil {
 		return nil, fmt.Errorf("output retention claim is already owned")
 	}
-	release, err := r.resources.ReserveProgramState(ctx, 8192+int64(len(claim)+len(program)+len(output.Reference))*4)
+	release, err := r.resources.ReserveProgramState(ctx, 512+int64(len(claim)+len(program)+len(output.Reference))*2)
 	if err != nil {
 		return nil, err
 	}
@@ -131,12 +134,40 @@ func (r *ProgramOutputRetention) Open(ctx context.Context, session, program, ref
 	}
 	defer func() { _ = tx.Rollback() }()
 	const selection = ` FROM invocation_program_outputs o JOIN invocation_programs p ON p.id=o.program_id JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE o.program_id=? AND o.reference=? AND r.session_id=?`
-	var size int64
-	if err := tx.QueryRowContext(ctx, `SELECT length(CAST(o.retention_claim_id AS BLOB))`+selection, program, reference, session).Scan(&size); err != nil {
+	var size, inlineSize int64
+	if err = tx.QueryRowContext(ctx, `SELECT length(CAST(o.retention_claim_id AS BLOB)),COALESCE(length(o.inline_body),-1)`+selection, program, reference, session).Scan(&size, &inlineSize); err != nil {
 		return nil, err
 	}
 	if size < 0 || size > 1<<30 {
 		return nil, fmt.Errorf("output claim exceeds supported read bound")
+	}
+	if inlineSize >= 0 {
+		if inlineSize > maxInlineProgramInput {
+			return nil, fmt.Errorf("inline input exceeds supported read bound")
+		}
+		releaseBody, reserveErr := r.resources.Reserve(ctx, inlineSize+4096)
+		if reserveErr != nil {
+			return nil, reserveErr
+		}
+		if releaseBody == nil {
+			return nil, fmt.Errorf("inline input read admission returned no lease")
+		}
+		var body []byte
+		var digest string
+		if err = tx.QueryRowContext(ctx, `SELECT o.inline_body,o.inline_digest`+selection, program, reference, session).Scan(&body, &digest); err != nil {
+			releaseBody()
+			return nil, err
+		}
+		sum := sha256.Sum256(body)
+		if int64(len(body)) != inlineSize || hex.EncodeToString(sum[:]) != digest {
+			releaseBody()
+			return nil, fmt.Errorf("inline input body differs from its durable digest")
+		}
+		if err = tx.Commit(); err != nil {
+			releaseBody()
+			return nil, err
+		}
+		return &ProgramOutputRead{Reader: &inlineInputReader{Reader: bytes.NewReader(body), release: releaseBody}}, nil
 	}
 	release, err := r.resources.ReserveProgramState(ctx, 4096+size*4)
 	if err != nil {
@@ -262,7 +293,7 @@ func (r *ProgramOutputRetention) BeginProgram(ctx context.Context, in toolcontra
 	if r.entries[spill.RetentionClaimID()] != nil {
 		return fmt.Errorf("program source claim is already owned")
 	}
-	release, err := r.resources.ReserveProgramState(ctx, 8192+int64(len(spill.RetentionClaimID())+len(in.Version.ProgramID))*4)
+	release, err := r.resources.ReserveProgramState(ctx, 512+int64(len(spill.RetentionClaimID())+len(in.Version.ProgramID))*2)
 	if err != nil {
 		return err
 	}

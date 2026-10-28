@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"maps"
 	"strings"
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolexecution"
@@ -107,7 +107,7 @@ func (d *ProgramDispatcher) invokeHost(ctx context.Context, request commandprogr
 	arguments := map[string]any{"argv": request.Argv.Values(), "source_unit_id": request.Invocation.SourceUnitID, "source_start_byte": request.Invocation.Span.StartByte, "source_end_byte": request.Invocation.Span.EndByte}
 	child, err := d.prepareInvocation(ctx, definition, request.Invocation, spec.Name, arguments, nil)
 	if err != nil {
-		return ownerFailure(err), err
+		return prepareChildFailure(streams, spec.Name, request, err)
 	}
 	defer child.release()
 	tracker := &trackingWriter{w: nonNilWriter(streams.Error)}
@@ -126,7 +126,11 @@ func (d *ProgramDispatcher) invokeHost(ctx context.Context, request commandprogr
 	result, runErr := d.run.executor.InvokeNative(ctx, d.run.frame, d.run.surface, d.run.memory, d.run.progress, marker, effect, d.run.tc)
 	if reject := toolrejection.AsToolReject(runErr); reject != nil && (!result.OwnerInvoked || result.Producer.Terminal == toolcontract.ProducerRefused) {
 		if !tracker.wrote {
-			writeRejectRefusal(streams, spec.Name, request, reject)
+			if reject.Code == "COMMAND_LIMIT_EXCEEDED" {
+				writeLimitRefusal(streams, spec.Name, reject)
+			} else {
+				writeRejectRefusal(streams, spec.Name, runErr)
+			}
 		}
 		d.shared.mu.Lock()
 		if d.shared.rejected == nil {
@@ -167,17 +171,9 @@ func (d *ProgramDispatcher) reportRefusal(w io.Writer, report commandprogram.Ref
 	if reject == nil {
 		reject = &toolrejection.ToolReject{Code: report.Code}
 	}
-	if programResourceRefusal(reject) {
-		return
+	var policyCopy map[string]string
+	if refusal, ok := guidance.RefusalFromError(report.Cause); ok {
+		policyCopy = refusal.Copy
 	}
-	copy := *reject
-	copy.Data = maps.Clone(reject.Data)
-	if copy.Data == nil {
-		copy.Data = map[string]any{}
-	}
-	copy.Data["tool"], copy.Data["command"], copy.Data["path"] = "command", report.Operation, report.Operand
-	copy.Data["source_start_byte"], copy.Data["source_end_byte"], copy.Data["source_line"], copy.Data["source_column"] = report.Span.StartByte, report.Span.EndByte, report.Span.Line, report.Span.Column
-	if rendered := toolrejection.RenderReject(&copy, nil); rendered != nil {
-		_, _ = fmt.Fprintln(w, rendered)
-	}
+	writeShellRefusal(w, report.Operation, report.Operand, reject.Code, policyCopy, map[string]any{"expected_form": report.Expected})
 }

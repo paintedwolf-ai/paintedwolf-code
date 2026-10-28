@@ -12,6 +12,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 )
 
@@ -190,7 +191,7 @@ func TestMoveToolRejectsNotFound(t *testing.T) {
 	}
 }
 
-func TestMoveToolRejectsCrossRootRename(t *testing.T) {
+func TestMoveToolCopiesThenRemovesAcrossRoots(t *testing.T) {
 	primary := t.TempDir()
 	other := t.TempDir()
 	if err := os.WriteFile(filepath.Join(primary, "old.go"), []byte("package old"), 0o644); err != nil {
@@ -199,18 +200,75 @@ func TestMoveToolRejectsCrossRootRename(t *testing.T) {
 	tctx := nativefixture.Context(primary)
 	tctx.Source.Roots = append(tctx.Source.Roots, projectroot.RootRef{ID: "r2", Label: "other", Path: other})
 	tool := &MoveTool{Boundary: nativefixture.Boundary(t)}
-	_, err := tool.Run(context.Background(), map[string]any{
+	out, err := tool.Run(context.Background(), map[string]any{
 		"moves": []any{map[string]any{"from": "old.go", "to": "@other/new.go"}},
 	}, tctx)
-	var reject *toolrejection.ToolReject
-	if !errors.As(err, &reject) || reject.Code != "MOVE_CROSS_ROOT" {
-		t.Fatalf("err = %v want MOVE_CROSS_ROOT", err)
+	testutil.FailErr(t, "cross-root move", err)
+	if !strings.Contains(out, `"moved"`) {
+		t.Fatalf("out = %q", out)
 	}
-	if _, statErr := os.Stat(filepath.Join(primary, "old.go")); statErr != nil {
-		testutil.FailErr(t, "source changed after rejection", statErr)
+	if _, statErr := os.Stat(filepath.Join(primary, "old.go")); !os.IsNotExist(statErr) {
+		t.Fatalf("source remains after move: %v", statErr)
 	}
-	if _, statErr := os.Stat(filepath.Join(other, "new.go")); !os.IsNotExist(statErr) {
-		t.Fatalf("destination exists after rejection: %v", statErr)
+	data, err := os.ReadFile(filepath.Join(other, "new.go"))
+	testutil.FailErr(t, "read moved destination", err)
+	if string(data) != "package old" {
+		t.Fatalf("destination = %q", data)
+	}
+}
+
+func TestMoveAcrossRootsKeepsBothFilesWhenSourceRemovalIsDeclined(t *testing.T) {
+	primary, other := t.TempDir(), t.TempDir()
+	source := filepath.Join(primary, "AGENTS.md")
+	destination := filepath.Join(other, "copied.txt")
+	testutil.FailErr(t, "seed source", os.WriteFile(source, []byte("instructions"), 0o644))
+	tctx := nativefixture.Context(primary)
+	tctx.Source.Roots = append(tctx.Source.Roots, projectroot.RootRef{ID: "r2", Label: "other", Path: other})
+	declined := errors.New("source removal declined")
+	tctx.Files.FileChangeReview = func(_ context.Context, changes []tools.FileChange) error {
+		for _, change := range changes {
+			if change.Preview.Operation == "delete" && change.Path == source {
+				return declined
+			}
+		}
+		return nil
+	}
+	result, err := (&MoveTool{Boundary: nativefixture.Boundary(t)}).Move(t.Context(), MoveInput{
+		Pairs: []FilePair{{From: "AGENTS.md", To: "@other/copied.txt"}},
+	}, tctx)
+	if !errors.Is(err, declined) {
+		t.Fatalf("source removal = %v, want decline", err)
+	}
+	if len(result.Moved) != 0 || len(result.DestinationCopied) != 1 {
+		t.Fatalf("partial move result = %+v", result)
+	}
+	for _, path := range []string{source, destination} {
+		data, readErr := os.ReadFile(path)
+		testutil.FailErr(t, "read retained file", readErr)
+		if string(data) != "instructions" {
+			t.Fatalf("%s = %q", path, data)
+		}
+	}
+}
+
+func TestMoveAcrossRootsKeepsCopyByteLimit(t *testing.T) {
+	primary, other := t.TempDir(), t.TempDir()
+	source := filepath.Join(primary, "large.bin")
+	testutil.FailErr(t, "seed oversized source", os.WriteFile(source, []byte(strings.Repeat("x", int(defaultCopyMaxBytes)+1)), 0o644))
+	tctx := nativefixture.Context(primary)
+	tctx.Source.Roots = append(tctx.Source.Roots, projectroot.RootRef{ID: "r2", Label: "other", Path: other})
+	result, err := (&MoveTool{Boundary: nativefixture.Boundary(t)}).Move(t.Context(), MoveInput{
+		Pairs: []FilePair{{From: "large.bin", To: "@other/large.bin"}},
+	}, tctx)
+	reject := toolrejection.AsToolReject(err)
+	if reject == nil || reject.Code != "COPY_SIZE_EXCEEDED" || len(result.Moved)+len(result.DestinationCopied) != 0 {
+		t.Fatalf("oversized move result = %+v, err = %v", result, err)
+	}
+	if _, err := os.Stat(source); err != nil {
+		t.Fatalf("source was lost: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(other, "large.bin")); !os.IsNotExist(err) {
+		t.Fatalf("destination crossed byte limit: %v", err)
 	}
 }
 

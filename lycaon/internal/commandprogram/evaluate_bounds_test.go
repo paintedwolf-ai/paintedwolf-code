@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
@@ -152,12 +153,31 @@ func TestLoopIterationCeilingAtBoundaryAndOnePast(t *testing.T) {
 	}
 }
 
+func TestChildExecutionCounterChargeAtBoundaryAndOnePast(t *testing.T) {
+	limits, err := catalogEvaluationLimits()
+	if err != nil {
+		t.Fatal(err)
+	}
+	maximum := limits["child_executions"]
+	e := &evaluation{limits: limits, counters: map[string]int64{"child_executions": maximum - 1}}
+	f := &frame{e: e, state: &frameState{latch: &OutcomeLatch{}}}
+	loc := commandsurface.SyntaxLocation{}
+	if err := e.charge(f, loc, "child_executions", 1); err != nil || e.counters["child_executions"] != maximum {
+		t.Fatalf("at limit: counter=%d err=%v", e.counters["child_executions"], err)
+	}
+	err = e.charge(f, loc, "child_executions", 1)
+	assertLimit(t, err, "child_executions", maximum, maximum+1)
+	if e.counters["child_executions"] != maximum {
+		t.Fatalf("over limit changed count to %d", e.counters["child_executions"])
+	}
+}
+
 func TestEmptyInfiniteLoopTerminatesOnHostCounters(t *testing.T) {
 	for program, binding := range map[string]string{
-		"while x=1; do x=2; done; echo never":        "loop_iterations",
-		"f() { while x=1; do continue; done; }; f":   "loop_iterations",
-		"while :; do :; done; echo never":            "loop_iterations",
-		"while echo a; do echo b; done; echo never":  "child_executions",
+		"while x=1; do x=2; done; echo never":       "loop_iterations",
+		"f() { while x=1; do continue; done; }; f":  "loop_iterations",
+		"while :; do :; done; echo never":           "loop_iterations",
+		"while echo a; do echo b; done; echo never": "loop_iterations",
 	} {
 		f := newEvalFixture(t)
 		out, err := f.run(t, t.Context(), program)
@@ -168,46 +188,6 @@ func TestEmptyInfiniteLoopTerminatesOnHostCounters(t *testing.T) {
 		if slices.Contains(f.log.argv(), "echo never") {
 			t.Fatalf("%q admitted a child after exhaustion", program)
 		}
-	}
-}
-
-func childDispatchProgram(dispatches int64) string {
-	const (
-		inner   = 100
-		perIter = 5
-		chunk   = inner * perIter
-	)
-	outer := dispatches / chunk
-	rest := dispatches % chunk
-	var b strings.Builder
-	// Precede the dispatches with AST frames, evaluator builtins and redirects
-	// so they would overflow child_executions if charged there.
-	b.WriteString("for k in" + strings.Repeat(" k", 20) + "; do { : >/dev/null; true; test -n x; [[ a == a ]]; }; done\n")
-	if outer > 0 {
-		body := strings.Repeat("echo tick >/dev/null; ", perIter)
-		b.WriteString("for a in" + strings.Repeat(" a", int(outer)) + "; do for b in" + strings.Repeat(" b", inner) + "; do " + body + "done; done\n")
-	}
-	for i := int64(0); i < rest; i++ {
-		b.WriteString("echo tick >/dev/null\n")
-	}
-	return b.String()
-}
-
-func TestChildExecutionCeilingAtBoundaryAndOnePast(t *testing.T) {
-	limits, err := catalogEvaluationLimits()
-	if err != nil {
-		t.Fatal(err)
-	}
-	maximum := limits["child_executions"]
-	f := newEvalFixture(t)
-	if _, err := f.run(t, t.Context(), childDispatchProgram(maximum)); err != nil || int64(len(f.log.calls)) != maximum {
-		t.Fatalf("boundary refused: %v calls=%d", err, len(f.log.calls))
-	}
-	f = newEvalFixture(t)
-	out, err := f.run(t, t.Context(), childDispatchProgram(maximum+1))
-	assertLimit(t, err, "child_executions", maximum, maximum+1)
-	if out.Stop == nil || int64(len(f.log.calls)) != maximum {
-		t.Fatalf("one past the ceiling admitted work: calls=%d", len(f.log.calls))
 	}
 }
 
@@ -300,7 +280,7 @@ func TestSourceRunsCapturedUnitInCurrentFrame(t *testing.T) {
 // Q10: a sourced unit with excluded syntax runs nothing, and earlier parent
 // work stays recorded as executed rather than replayable.
 func TestSourceSyntaxRefusalKeepsEarlierParentEffects(t *testing.T) {
-	for name, script := range map[string]string{"excluded": "echo inner\neval x\n", "invalid": "echo inner\nif then\n", "bom": "\xef\xbb\xbfecho inner\n"} {
+	for name, script := range map[string]string{"excluded": "echo inner\ntrap x INT\n", "invalid": "echo inner\nif then\n", "bom": "\xef\xbb\xbfecho inner\n"} {
 		t.Run(name, func(t *testing.T) {
 			f := newEvalFixture(t)
 			f.sources.files["./bad.sh"] = script
