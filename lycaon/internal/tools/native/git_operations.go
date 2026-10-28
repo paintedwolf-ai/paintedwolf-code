@@ -68,6 +68,10 @@ func (m GitMutations) Operate(ctx context.Context, tc tools.ToolContext, req git
 	if tc.Identity.WorkerJobID != "" {
 		return git.OperationResult{}, &toolrejection.ToolReject{Code: "GIT_OPERATION_PRECONDITION", Data: map[string]any{"reason": "addressed_session_required", "git_addressed_session_required": true}}
 	}
+	root, err := projectpaths.ResolveGitStage(ctx, m.Boundary, tc, ".")
+	if err != nil {
+		return git.OperationResult{}, err
+	}
 	tool := "git_" + req.Kind
 	for _, path := range req.Paths {
 		if filepath.Clean(path) == "." {
@@ -87,7 +91,7 @@ func (m GitMutations) Operate(ctx context.Context, tc tools.ToolContext, req git
 	if historyErr != nil {
 		return git.OperationResult{}, historyErr
 	}
-	result, err := m.Git.Operate(ctx, tc.ActiveRootPath(), req)
+	result, err := m.Git.Operate(ctx, root.Abs, req)
 	if err != nil && !result.Attempted {
 		var precondition *git.OperationError
 		if errors.As(err, &precondition) {
