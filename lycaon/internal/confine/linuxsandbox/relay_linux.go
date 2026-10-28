@@ -22,6 +22,9 @@ import (
 // outer helper. The plan is on 3, the marker on 4, and the control socket on 6.
 const signalReportFD = 5
 
+// InheritedStartFD follows the four fixed namespace-relay descriptors.
+const InheritedStartFD = 7
+
 // reportReady is the report byte that says the inner helper has its signal
 // handlers; any other byte names the signal that killed the target.
 const reportReady = 0xff
@@ -34,7 +37,7 @@ const reportReady = 0xff
 // action, and reports each refused socket call to refusals when it is set. The
 // returned signal, when set, killed the target and should end this process
 // the same way.
-func Relaunch(self string, args []string, plan []byte, network Network, marker, refusals *os.File) (code int, sig syscall.Signal, err error) {
+func Relaunch(self string, args []string, plan []byte, network Network, marker, refusals *os.File, inherited []*os.File) (code int, sig syscall.Signal, err error) {
 	// The parent-death signal is tied to the thread that forks.
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
@@ -49,14 +52,13 @@ func Relaunch(self string, args []string, plan []byte, network Network, marker, 
 		return 0, 0, fmt.Errorf("signal report pipe: %w", err)
 	}
 	defer func() { _ = report.Close() }()
-	pair, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_SEQPACKET|unix.SOCK_CLOEXEC, 0)
+	control, controlChild, err := controlPair()
 	if err != nil {
 		_ = read.Close()
 		_ = write.Close()
 		_ = reportWrite.Close()
 		return 0, 0, fmt.Errorf("control socket: %w", err)
 	}
-	control, controlChild := os.NewFile(uintptr(pair[0]), "control"), os.NewFile(uintptr(pair[1]), "control-child")
 	// A nil *os.File stored in the interface would not read as no feed.
 	var lines io.Writer
 	if refusals != nil {
@@ -69,17 +71,20 @@ func Relaunch(self string, args []string, plan []byte, network Network, marker, 
 	// The standard descriptors are the command's streams, handed through as is.
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.NewFile(0, "stdin"), os.NewFile(1, "stdout"), os.NewFile(2, "stderr")
 	// A nil marker leaves its descriptor closed in the child.
-	cmd.ExtraFiles = []*os.File{read, marker, reportWrite, controlChild}
+	cmd.ExtraFiles = append([]*os.File{read, marker, reportWrite, controlChild}, inherited...)
 	cmd.SysProcAttr = namespaceAttr()
 	events := notifyForwarded()
 	defer signal.Stop(events)
 	err = cmd.Start()
+	for _, file := range inherited {
+		_ = file.Close()
+	}
 	_ = read.Close()
 	_ = reportWrite.Close()
 	_ = controlChild.Close()
 	if err != nil {
 		_ = write.Close()
-		return 0, 0, classifyLaunch(err)
+		return 0, 0, classifyLaunch(err, sysctlIs(appArmorUsernsSysctl, 1))
 	}
 	go sup.serve()
 	go func() {
@@ -167,7 +172,7 @@ func reportPipe() *os.File {
 // boundary, and ends the inner helper if this process dies.
 func namespaceAttr() *syscall.SysProcAttr {
 	return &syscall.SysProcAttr{
-		Cloneflags:                 unix.CLONE_NEWUSER | unix.CLONE_NEWNS | unix.CLONE_NEWPID | unix.CLONE_NEWNET,
+		Cloneflags:                 unix.CLONE_NEWUSER | unix.CLONE_NEWNS | unix.CLONE_NEWPID | unix.CLONE_NEWNET | unix.CLONE_NEWIPC,
 		UidMappings:                []syscall.SysProcIDMap{{ContainerID: os.Getuid(), HostID: os.Getuid(), Size: 1}},
 		GidMappings:                []syscall.SysProcIDMap{{ContainerID: os.Getgid(), HostID: os.Getgid(), Size: 1}},
 		GidMappingsEnableSetgroups: false,
@@ -181,7 +186,7 @@ func namespaceAttr() *syscall.SysProcAttr {
 // target leaves, and ends with the target's status. afterStart runs once the
 // target exists. The returned error is the raw exec failure, for the caller to
 // classify.
-func Supervise(path string, argv, env []string, afterStart func()) (code int, sig syscall.Signal, err error) {
+func Supervise(path string, argv, env []string, files []uintptr, afterStart func()) (code int, sig syscall.Signal, err error) {
 	// The target must not inherit the outer helper's report pipe or control socket.
 	syscall.CloseOnExec(signalReportFD)
 	syscall.CloseOnExec(controlFD)
@@ -194,7 +199,10 @@ func Supervise(path string, argv, env []string, afterStart func()) (code int, si
 	if err := unix.Prctl(unix.PR_SET_DUMPABLE, 0, 0, 0, 0); err != nil {
 		return 0, 0, fmt.Errorf("dumpable: %w", err)
 	}
-	pid, err := syscall.ForkExec(path, argv, &syscall.ProcAttr{Env: env, Files: []uintptr{0, 1, 2}})
+	if files == nil {
+		files = []uintptr{0, 1, 2}
+	}
+	pid, err := syscall.ForkExec(path, argv, &syscall.ProcAttr{Env: env, Files: files})
 	if err != nil {
 		return 0, 0, err
 	}
@@ -241,7 +249,24 @@ func (e *exitStatusError) Sys() any      { return e.status }
 func notifyForwarded() chan os.Signal {
 	events := make(chan os.Signal, 8)
 	signal.Notify(events, forwardedSignals()...)
+	if stdinIsTerminal() {
+		absorbTerminalSignals()
+	}
 	return events
+}
+
+// absorbTerminalSignals keeps the terminal's job-control signals from ending or
+// stopping a helper. The terminal delivers them to the target in the same
+// foreground group itself, and an interpreter that handles Ctrl-C must outlive
+// it. Handling rather than ignoring them leaves the target's dispositions at
+// their defaults across exec.
+func absorbTerminalSignals() {
+	absorbed := make(chan os.Signal, 8)
+	signal.Notify(absorbed, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGTSTP)
+	go func() {
+		for range absorbed {
+		}
+	}()
 }
 
 // relay forwards events to the child until wait returns, then maps the

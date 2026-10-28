@@ -49,20 +49,8 @@ type PipelineResult struct {
 	TimedOut bool
 }
 
-func buildExecCmd(ctx context.Context, name string, args []string, opts ExecOpts) (*exec.Cmd, func(), error) {
-	confinement := opts.Launch.Confinement
-	if confinement != nil && confine.Available() {
-		self, err := os.Executable()
-		if err != nil {
-			return nil, nil, fmt.Errorf("locate self for sandbox: %w", err)
-		}
-		confined, cleanup, err := confine.Command(ctx, self, name, args, *confinement)
-		if err != nil {
-			return nil, nil, fmt.Errorf("build sandboxed command: %w", err)
-		}
-		return confined, cleanup, nil
-	}
-	return exec.CommandContext(ctx, name, args...), func() {}, nil //nolint:gosec // G204 — validated argv stages, no shell
+func buildExecCmd(ctx context.Context, name string, args []string, opts ExecOpts, stageEnv map[string]string) (*exec.Cmd, func(), error) {
+	return prepareNativeCommand(ctx, name, args, opts, stageEnv, false)
 }
 
 func configureCmdEnv(cmd *exec.Cmd, opts ExecOpts) error {
@@ -131,11 +119,11 @@ func PrepareCommand(ctx context.Context, name string, args []string, opts ExecOp
 	if argv.ContainsShellMetacharacters(name) {
 		return nil, nil, fmt.Errorf("%w: command name", argv.ErrShellMetacharacters)
 	}
-	cmd, cleanup, err := buildExecCmd(ctx, name, args, opts)
+	cmd, cleanup, err := buildExecCmd(ctx, name, args, opts, nil)
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := configureCmdEnv(cmd, opts); err != nil {
+	if err := relayThroughBroker(cmd); err != nil {
 		cleanup()
 		return nil, nil, err
 	}
@@ -311,7 +299,7 @@ func wirePipelineStages(
 			releaseWired(wired[:i])
 			return nil, err
 		}
-		cmd, cleanup, err := buildExecCmd(runCtx, stage.Name, stage.Args, opts)
+		cmd, cleanup, err := buildExecCmd(runCtx, stage.Name, stage.Args, opts, stage.Env)
 		if err != nil {
 			guard.release()
 			releaseWired(wired[:i])
@@ -319,12 +307,6 @@ func wirePipelineStages(
 		}
 		cmd, cleanup, err = superviseCommand(cmd, cleanup, opts.ProcessPriority)
 		if err != nil {
-			guard.release()
-			releaseWired(wired[:i])
-			return nil, err
-		}
-		if err := configureStageCmdEnv(cmd, opts, stage.Env); err != nil {
-			cleanup()
 			guard.release()
 			releaseWired(wired[:i])
 			return nil, err
@@ -363,9 +345,13 @@ func stageSinkWriter(sink argv.Sink, pipe *os.File, call callStreams, files *sta
 	}
 }
 
-func startWiredStages(wired []wiredStage) error {
+func startWiredStages(wired []wiredStage, started func(pid int)) error {
 	for i := range wired {
-		if err := wired[i].cmd.Start(); err != nil {
+		err := confine.ValidateProcessInputs(wired[i].cmd)
+		if err == nil {
+			err = wired[i].cmd.Start()
+		}
+		if err != nil {
 			killWired(wired[:i])
 			reapWired(wired[:i])
 			releaseWired(wired[:i+1])
@@ -375,11 +361,18 @@ func startWiredStages(wired []wiredStage) error {
 			_ = wired[i].pipeWriter.Close()
 			wired[i].pipeWriter = nil
 		}
-		if err := wired[i].guard.onStarted(wired[i].cmd); err != nil {
+		err = wired[i].guard.onStarted(wired[i].cmd)
+		if err == nil {
+			err = confine.ConfirmProcessLaunch(wired[i].cmd)
+		}
+		if err != nil {
 			killWired(wired[:i+1])
 			reapWired(wired[:i+1])
 			releaseWired(wired[:i+1])
 			return err
+		}
+		if started != nil {
+			started(wired[i].cmd.Process.Pid)
 		}
 	}
 	// Parent pipe handles must close after every stage starts.

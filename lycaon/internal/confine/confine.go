@@ -2,18 +2,13 @@
 package confine
 
 import (
-	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"sort"
-	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/fspath"
@@ -102,7 +97,7 @@ func BoundaryOf(c *Confinement) Boundary {
 	if c == nil {
 		return Boundary{}
 	}
-	writeRoots, err := validatedWriteRoots(c.ProjectID, c.Roots, c.GrantedWriteRoots, c.SessionScratchRoot)
+	writeRoots, err := WriteRootsForBoundary(c.ProjectID, c.Roots, c.GrantedWriteRoots, c.SessionScratchRoot)
 	if err != nil {
 		return Boundary{}
 	}
@@ -187,42 +182,6 @@ type Confinement struct {
 	Browser bool
 }
 
-var (
-	autoConfineMu sync.RWMutex
-	autoConfine   bool
-)
-
-func autoConfineEnabled() bool {
-	autoConfineMu.RLock()
-	defer autoConfineMu.RUnlock()
-	return autoConfine
-}
-
-func setAutoConfine(on bool) {
-	autoConfineMu.Lock()
-	autoConfine = on
-	autoConfineMu.Unlock()
-}
-
-// EnableAutoConfine turns confinement on for this process.
-func EnableAutoConfine() { setAutoConfine(true) }
-
-// TestingSetAutoConfine turns confinement on for this test and restores it.
-func TestingSetAutoConfine(t interface {
-	Helper()
-	Cleanup(func())
-}) {
-	t.Helper()
-	prev := autoConfineEnabled()
-	setAutoConfine(true)
-	t.Cleanup(func() { setAutoConfine(prev) })
-}
-
-// BypassEnabled reports the explicit host-wide bypass.
-func BypassEnabled() bool {
-	return configdir.EnvTruthy(os.Getenv("LYCAON_BYPASS_APPROVALS"))
-}
-
 // DefaultConfinement builds the boundary for a valid rooted request.
 func DefaultConfinement(req Request) (*Confinement, bool) {
 	if req.HostExecution {
@@ -233,7 +192,7 @@ func DefaultConfinement(req Request) (*Confinement, bool) {
 		logConfinementPrepareError(err)
 		return nil, false
 	}
-	if !autoConfineEnabled() || BypassEnabled() || SandboxDisabled() || !Available() || len(prepared.Roots) == 0 {
+	if !confinementRequired() || !Available() || len(prepared.Roots) == 0 {
 		return nil, false
 	}
 	c := &Confinement{
@@ -296,90 +255,8 @@ func BrowserConfinement(req Request) (*Confinement, bool) {
 	return &out, true
 }
 
-// Enforcing reports whether the host applies confinement.
-func Enforcing() bool {
-	return autoConfineEnabled() && !BypassEnabled() && !SandboxDisabled() && Available()
-}
-
-// ErrNotConfined rejects a missing active boundary.
-var ErrNotConfined = errors.New("confine: refusing to run unconfined — sandbox is enabled " +
-	"but no confinement could be built for this action (no write-jail roots, or a rejected " +
-	"capability grant)")
-
 // ErrNestedHelper rejects wrapping from a process that is already the confine helper.
 var ErrNestedHelper = errors.New("confine: this process is already applying a sandbox profile")
-
-// RequireApplied rejects a missing boundary while enforcement is active.
-func RequireApplied(applied bool) error {
-	if applied || !Enforcing() {
-		return nil
-	}
-	return ErrNotConfined
-}
-
-// SandboxDisabled reports the explicit confinement off-switch.
-func SandboxDisabled() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("LYCAON_SANDBOX"))) {
-	case "off", "0", "false", "no", "disable", "disabled":
-		return true
-	}
-	return false
-}
-
-// Command builds the process for the selected confinement boundary.
-func Command(
-	ctx context.Context,
-	self, name string,
-	args []string,
-	c Confinement,
-) (*exec.Cmd, func(), error) {
-	if IsHelperInvocation(os.Args) {
-		return nil, func() {}, ErrNestedHelper
-	}
-	if c.HostExecution {
-		return exec.CommandContext(ctx, name, args...), func() {}, nil
-	}
-	profile, err := BuildProfile(c)
-	if err != nil {
-		return nil, func() {}, err
-	}
-	// An inherited pipe keeps the profile outside writable pathnames.
-	pr, pw, err := os.Pipe()
-	if err != nil {
-		return nil, func() {}, err
-	}
-	helperArgs := []string{helperFlag, profileFDFlag, strconv.Itoa(helperProfileFD)}
-	// ExtraFiles[0] lands on helperProfileFD in the child.
-	extra := []*os.File{pr}
-	if marker := c.lineage.ChildFile(); marker != nil {
-		helperArgs = append(helperArgs, lineageFDFlag, strconv.Itoa(helperLineageFD))
-		extra = append(extra, marker)
-	}
-	reports, closeReports := refusalReport(c)
-	if reports != nil {
-		// A nil entry leaves the marker's descriptor closed when there is none.
-		for len(extra) < helperRefusalFD-helperProfileFD {
-			extra = append(extra, nil)
-		}
-		extra = append(extra, reports)
-		helperArgs = append(helperArgs, refusalFDFlag, strconv.Itoa(helperRefusalFD))
-	}
-	helperArgs = append(append(helperArgs, "--", name), args...)
-	cmd := exec.CommandContext(ctx, self, helperArgs...)
-	cmd.ExtraFiles = extra
-	go func() {
-		defer func() { _ = pw.Close() }()
-		_, _ = io.WriteString(pw, profile)
-	}()
-	// Releasing the host's own end lets the marker report end-of-file once the
-	// last descendant exits.
-	cleanup := func() {
-		_ = pr.Close()
-		closeReports()
-		c.lineage.Started()
-	}
-	return cmd, cleanup, nil
-}
 
 // BuildProfile renders the boundary the helper applies on this platform: the
 // Seatbelt profile on macOS, the boundary plan on Linux.
@@ -503,7 +380,7 @@ func writeFilesystemRules(b *strings.Builder, c Confinement, deny string) error 
 // Later rules override earlier decisions.
 func filesystemRules(c Confinement) (FilesystemRules, error) {
 	rules := FilesystemRules{roots: append([]string(nil), c.Roots...)}
-	writeRoots, err := validatedWriteRoots(c.ProjectID, c.Roots, c.GrantedWriteRoots, c.SessionScratchRoot)
+	writeRoots, err := WriteRootsForBoundary(c.ProjectID, c.Roots, c.GrantedWriteRoots, c.SessionScratchRoot)
 	if err != nil {
 		return rules, err
 	}
@@ -613,7 +490,7 @@ func denySpecRule(specs []HardDenyWriteSpec, layers ...FloorLayer) fsRule {
 
 // workspaceAllowBacks re-allows validated control-plane workspaces.
 func workspaceAllowBacks(c Confinement) []string {
-	dir, err := configdir.UserConfigDir()
+	dir, err := configdir.Root()
 	if err != nil || strings.TrimSpace(dir) == "" {
 		return nil
 	}

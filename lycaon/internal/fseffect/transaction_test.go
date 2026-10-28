@@ -9,7 +9,6 @@ import (
 	"runtime"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -123,7 +122,7 @@ func TestReplaceCommitsAndVerifiesThroughHeldParent(t *testing.T) {
 		},
 	})
 	testutil.FailErr(t, "Replace", err)
-	if result.Bytes != int64(len("complete\n")) {
+	if result.Bytes != int64(len("complete\n")) || result.Publication != fseffect.PublicationVerified {
 		t.Fatalf("Replace bytes = %d", result.Bytes)
 	}
 	got, err := os.ReadFile(filepath.Join(root, "nested", "file.txt"))
@@ -245,11 +244,15 @@ func TestChownAppliesAndRefusesSymlinkTarget(t *testing.T) {
 	root := t.TempDir()
 	target := filepath.Join(root, "owned.txt")
 	testutil.FailErr(t, "seed target", os.WriteFile(target, []byte("x"), 0o644))
-	testutil.FailErr(t, "Chown", fseffect.Chown(fseffect.Location{Root: root, Rel: "owned.txt"}, os.Getuid(), os.Getgid()))
+	outcome, err := fseffect.ChangeOwnership(fseffect.OwnershipRequest{Location: fseffect.Location{Root: root, Rel: "owned.txt"}, UID: os.Getuid(), GID: os.Getgid()})
+	testutil.FailErr(t, "change ownership", err)
+	if !outcome.Applied || outcome.Capability != fseffect.MetadataAvailable {
+		t.Fatalf("ownership outcome = %+v", outcome)
+	}
 	outside := filepath.Join(t.TempDir(), "outside")
 	testutil.FailErr(t, "seed outside", os.WriteFile(outside, []byte("safe"), 0o600))
 	testutil.FailErr(t, "symlink target", os.Symlink(outside, filepath.Join(root, "out")))
-	if err := fseffect.Chown(fseffect.Location{Root: root, Rel: "out"}, os.Getuid(), os.Getgid()); !errors.Is(err, fseffect.ErrSymlink) {
+	if outcome, err := fseffect.ChangeOwnership(fseffect.OwnershipRequest{Location: fseffect.Location{Root: root, Rel: "out"}, UID: os.Getuid(), GID: os.Getgid()}); !errors.Is(err, fseffect.ErrSymlink) || outcome.Applied {
 		t.Fatalf("Chown symlink target error = %v, want ErrSymlink", err)
 	}
 }
@@ -352,12 +355,17 @@ func TestReplaceSerializesConcurrentReplacementsOfSameTarget(t *testing.T) {
 
 	<-entered // Writer A holds the target lock.
 
+	bStaged := make(chan struct{})
 	bDone := make(chan struct{})
 	go func() {
 		defer close(bDone)
 		_, err := fseffect.Replace(fseffect.ReplaceRequest{
 			Location: loc, Mode: 0o600,
 			Source: bytes.NewReader([]byte("from-B")),
+			ReviewStaged: func(fseffect.Target, fseffect.Result) error {
+				close(bStaged)
+				return nil
+			},
 			BeforeCommit: func(fseffect.Target, fseffect.Result) error {
 				if !atomic.CompareAndSwapInt32(&active, 0, 1) {
 					t.Error("writer B entered its critical section while writer A still held the target")
@@ -369,10 +377,12 @@ func TestReplaceSerializesConcurrentReplacementsOfSameTarget(t *testing.T) {
 		testutil.FailErr(t, "writer B replace", err)
 	}()
 
+	<-bStaged
+	runtime.Gosched()
 	select {
 	case <-bDone:
 		t.Fatal("writer B completed its Replace before writer A released the target")
-	case <-time.After(50 * time.Millisecond):
+	default:
 	}
 
 	close(release)
@@ -403,9 +413,11 @@ func TestUpdateModeSerializesWithReplacement(t *testing.T) {
 	}()
 	<-replaceEntered
 
+	modeStarted := make(chan struct{})
 	modeEntered := make(chan struct{})
 	modeDone := make(chan error, 1)
 	go func() {
+		close(modeStarted)
 		_, err := fseffect.UpdateMode(fseffect.ModeUpdateRequest{
 			Location: loc,
 			Update:   func(mode os.FileMode) os.FileMode { return mode | 0o044 },
@@ -417,10 +429,12 @@ func TestUpdateModeSerializesWithReplacement(t *testing.T) {
 		modeDone <- err
 	}()
 
+	<-modeStarted
+	runtime.Gosched()
 	select {
 	case <-modeEntered:
 		t.Fatal("UpdateMode entered before Replace released the target")
-	case <-time.After(50 * time.Millisecond):
+	default:
 	}
 	close(releaseReplace)
 	testutil.FailErr(t, "replace", <-replaceDone)

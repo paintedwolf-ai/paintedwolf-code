@@ -9,22 +9,13 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-// DeriveRevision5Fixture derives the known unshipped revision5 intermediate
-// from the fresh target. It adds no released baseline and does not weaken
-// production shape recognition.
-func DeriveRevision5Fixture(t *testing.T, source DBTX) {
-	t.Helper()
-	_, err := source.ExecContext(t.Context(), `DROP TABLE invocation_program_deliveries; DROP TABLE invocation_program_outputs; DROP TABLE invocation_program_executions; DROP TABLE invocation_program_definitions; DROP TABLE invocation_program_progress; DROP TABLE invocation_program_nodes; DROP TABLE invocation_program_sources; DROP TABLE invocation_programs; DROP INDEX idx_evidence_records_source_delivery; PRAGMA user_version=5;`)
-	testutil.FailErr(t, "derive actual known schema5 intermediate", err)
-}
-
 func TestProgramReceiptsUpgradeKnownIntermediateAndRestart(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "store.db")
-	source, err := Open(path)
-	testutil.FailErr(t, "open isolated source", err)
-	DeriveRevision5Fixture(t, source)
+	source := authorityRevision7Store(t, path)
+	var err error
 	_, err = source.ExecContext(t.Context(), `INSERT INTO projects(id,last_opened_at,created_at) VALUES('fixture-project','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z'); INSERT INTO sessions(id,project_id,owner_person_id,posture,created_at,activity_at,updated_at) VALUES('fixture-session','fixture-project',(SELECT id FROM people WHERE role='owner'),'build','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z');`)
 	testutil.FailErr(t, "seed retained actual session", err)
+	retained := seedNativeAuthorityMainData(t, source)
 	_, err = source.ExecContext(t.Context(), `INSERT INTO invocation_receipts(id,project_id,session_id,tool_call_id,tool_name,owner,lifecycle,reversibility,evidence_policy,recovery_policy,evidence_kind,contract_digest,args_digest,status,started_at) VALUES('fixture-parent','fixture-project','fixture-session','actual-model-call','command','processes','effect_attempt','irreversible','attempt','abandon','pending','contract','args','running','2026-01-01T00:00:00Z')`)
 	testutil.FailErr(t, "seed real parent receipt", err)
 	target, err := CurrentBaseline(t.Context())
@@ -44,6 +35,11 @@ func TestProgramReceiptsUpgradeKnownIntermediateAndRestart(t *testing.T) {
 	testutil.FailErr(t, "inspect upgraded shape", err)
 	if actual != target {
 		t.Fatalf("wrong upgraded target: %+v", actual)
+	}
+	for table, before := range retained {
+		if got := namespaceTableContents(t, upgraded, table); got != before {
+			t.Fatalf("receipt migration changed retained %s data", table)
+		}
 	}
 	var modelCall string
 	testutil.FailErr(t, "preserve actual parent identity", upgraded.QueryRow(`SELECT tool_call_id FROM invocation_receipts WHERE id='fixture-parent'`).Scan(&modelCall))

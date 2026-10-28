@@ -232,7 +232,7 @@ func runCommandBackground(
 	}
 	profile := tctx.ProfileID()
 	req := hostcmd.Request{
-		Launch:     agentCommandLaunch(tctx, toolName, confinement),
+		Launch:     agentCommandLaunch(tctx, toolName, confinement, egressLease, commandLine),
 		ProjectDir: cwd,
 		ProfileID:  profile,
 		Stages:     stages,
