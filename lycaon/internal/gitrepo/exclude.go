@@ -48,12 +48,14 @@ func ensureExcludePattern(excludeFile, pattern string) error {
 	}
 	out.WriteString(pattern)
 	out.WriteByte('\n')
+	if err := os.MkdirAll(filepath.Dir(excludeFile), 0o755); err != nil {
+		return err
+	}
 	_, err = fseffect.Replace(fseffect.ReplaceRequest{
 		Location:     fseffect.PathLocation(excludeFile),
 		Source:       strings.NewReader(out.String()),
 		Mode:         0o644,
 		PreserveMode: true,
-		DirMode:      0o755,
 	})
 	return err
 }
