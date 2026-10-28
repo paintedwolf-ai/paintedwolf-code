@@ -1,0 +1,13 @@
+{
+  "category": "test_files",
+  "artifact": "scripts/verification_tests/distribution/installed/test_installed_lock_monitor_execution.py",
+  "kind": "test_suite",
+  "workstream": "linux-session-observation",
+  "disposition": "retain",
+  "reason": "The existing lock-monitor suite covers the complete owned lock and presence lifecycle. Replacing its session fixture with the explicit observation result preserves those cases without adding an independent test owner.",
+  "reviewed_commit": "4211e2d670f16311eaf7214631db2be004d81217",
+  "ceiling": 410,
+  "boundaries": {
+    "scripts/linux_release/installed_cases/lock_monitor.py": "1adb09a2eb561bd63d89d413ef4b4f4f07445788167875b3822fa3c508fa89bc"
+  }
+}

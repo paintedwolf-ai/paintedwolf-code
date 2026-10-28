@@ -1,0 +1,13 @@
+{
+  "category": "source_files",
+  "artifact": "scripts/linux_release/installed_cases/lock_monitor.py",
+  "kind": "module",
+  "workstream": "linux-session-observation",
+  "disposition": "retain",
+  "reason": "One fixed case lifecycle owns its reservation, application, presence fixture and restoration. Projecting the observer result retains the same authority and cleanup boundary; extracting a forwarding helper would obscure that lifecycle.",
+  "reviewed_commit": "4211e2d670f16311eaf7214631db2be004d81217",
+  "ceiling": 340,
+  "boundaries": {
+    "scripts/verification_tests/distribution/installed/test_installed_lock_monitor_execution.py": "b379002ab848069c12abc8528a378f7731df128d12d163725a2fea2757d343d4"
+  }
+}
