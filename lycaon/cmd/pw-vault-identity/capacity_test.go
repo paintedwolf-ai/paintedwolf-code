@@ -66,9 +66,16 @@ func TestConnectionCapacityRejectsBeforeVerificationAndReclaimsSlots(t *testing.
 		t.Fatalf("replacement did not reach verification exactly once: calls=%d", got)
 	}
 	f.cancel()
-	deadline = time.Now().Add(2 * time.Second)
-	for f.server.active.Load() != 0 && time.Now().Before(deadline) {
-		time.Sleep(time.Millisecond)
+	// Cancellation starts shutdown; wait for Serve to finish closing the listener
+	// and draining callers before asserting that connections are unusable.
+	select {
+	case err := <-f.done:
+		f.done <- err // The fixture cleanup also observes the Serve result.
+		if err != nil {
+			t.Fatalf("shutdown service: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("service did not finish shutdown")
 	}
 	if got := f.server.active.Load(); got != 0 {
 		t.Fatalf("shutdown retained active callers: %d", got)

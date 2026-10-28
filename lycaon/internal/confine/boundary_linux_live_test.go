@@ -337,12 +337,13 @@ func TestLinuxDeniedReadsAreHidden(t *testing.T) {
 	self := requireLinuxSandbox(t)
 	proj := t.TempDir()
 	secret := filepath.Join(proj, "other-worker")
+	const secretContent = "PAINTED_WOLF_CONFINE_DENIED_READ_SECRET_CONTENT"
 	testutil.FailErr(t, "mkdir secret", os.Mkdir(secret, 0o755))
-	testutil.FailErr(t, "seed secret", os.WriteFile(filepath.Join(secret, "token"), []byte("s3"), 0o644))
+	testutil.FailErr(t, "seed secret", os.WriteFile(filepath.Join(secret, "token"), []byte(secretContent), 0o644))
 	c := denyConfinement(proj)
 	c.ReadDenyPaths = []string{secret}
 	status, out := linuxConfinedRun(t, self, c, nil, "/bin/sh", "-c", "ls "+secret+" && cat "+secret+"/token && echo LEAK")
-	if status.ExitStatus() == 0 || strings.Contains(out, "s3") || strings.Contains(out, "LEAK") {
+	if status.ExitStatus() == 0 || strings.Contains(out, secretContent) || strings.Contains(out, "LEAK") {
 		t.Fatalf("denied read exposed content: exit %d: %s", status.ExitStatus(), out)
 	}
 }
