@@ -5,6 +5,7 @@ package literal
 import (
 	"os"
 	"path/filepath"
+	"syscall"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -29,7 +30,11 @@ func TestStatVolumeReportsTheHoldingFileSystem(t *testing.T) {
 	if vol.target == "" || vol.target == "-" || vol.source == "" || vol.source == "-" {
 		t.Fatalf("volume names %q on %q", vol.source, vol.target)
 	}
-	if rel, err := filepath.Rel(vol.target, dir); err != nil || filepath.IsAbs(rel) || rel == ".." || len(rel) > 2 && rel[:3] == "../" {
-		t.Fatalf("mount point %q does not hold %q", vol.target, dir)
+	mount, err := os.Stat(vol.target)
+	testutil.FailErr(t, "stat mount point", err)
+	held, err := os.Stat(dir)
+	testutil.FailErr(t, "stat temp dir", err)
+	if mount.Sys().(*syscall.Stat_t).Dev != held.Sys().(*syscall.Stat_t).Dev {
+		t.Fatalf("mount point %q is not the device holding %q", vol.target, dir)
 	}
 }

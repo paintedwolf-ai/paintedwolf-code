@@ -307,11 +307,11 @@ unavailable, output remains delivered and a later edit needs a fresh read.
 ### Literal content and metadata commands
 
 `internal/tools/native/literal` is the command frontend for cat, head, tail, nl,
-wc, ls, stat, diff, file, xxd, hexdump, the checksum family, base64 and the
-outline, summarize and repo-map built-ins. Argv binds through the catalog
-binder; each command runs under its catalog operation identity (`read`, `wc`,
-`list_dir`, `stat`, `diff`, `summarize`, `survey_repo`) over the same typed
-operations as the structured tools. `ExecutionRevisions.CaptureBytes` captures
+wc, ls, stat, du, df, diff, cmp, file, xxd, hexdump, od, strings, the checksum
+family, base64 and the outline, summarize and repo-map built-ins. Argv binds
+through the catalog binder; each command runs under its catalog operation
+identity (`read`, `wc`, `list_dir`, `stat`, `diff`, `summarize`, `survey_repo`)
+over the same typed operations as the structured tools. `ExecutionRevisions.CaptureBytes` captures
 each file as exact published stream bytes before any output, retaining its
 encoding, BOM and newline policy. The pin names that exact representation. An input above the read budget,
 or output above the stream ceiling, refuses; nothing is truncated or summarized
@@ -326,11 +326,22 @@ long-ISO times after GNU's block total, and bare `stat` prints the catalog's
 GNU multi-line default. Ordinary operand failures (missing,
 directory, permission) go to stderr with the utility's status and later operands
 still run; authority, budget and platform refusals stop with their typed code.
-Only diff's complete status 1 is a publishable comparison. Literal windows and
-reversible numbering record exact source mappings when the output endpoint
-implements `commandprogram.SourceMappingRecorder`; notation, encodings and stdin
-record none. The command never delivers a conversational read; only exact mapped
+Only diff's and cmp's complete status 1 is a publishable comparison. du walks
+through the same bounded held-root directory reads as `ls -R` and refuses a walk
+over `traversal_visits` rather than print a short total; df reads statfs through
+each bound path, defaulting to the attached folders and session scratch.
+Literal windows, strings runs and reversible numbering record exact source
+mappings when the output endpoint implements
+`commandprogram.SourceMappingRecorder`; notation, encodings and stdin record
+none. The command never delivers a conversational read; only exact mapped
 output that the delivery owner later delivers can qualify an edit base.
+
+`tree` runs in the search frontend over the same walk as find and rg, so the
+read boundary and visit budget apply and `--gitignore` uses the project ignore
+owner. `iconv` and `envsubst` run with the text utilities: iconv converts
+through `golang.org/x/text/encoding` and stages `-o` like a redirect; envsubst
+reads the statement's exported environment, where a managed secret stays its
+reference token.
 
 ### Stream queries and format-aware edits
 

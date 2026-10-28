@@ -25,7 +25,7 @@ var duFiles = map[string]string{
 }
 
 // diskUsage sums an independent walk with GNU du's rules: every entry's
-// allocated 512-byte blocks (or byte size), hard links once.
+// allocated 512-byte blocks, or each file's byte size; hard links once.
 func diskUsage(t *testing.T, root string, apparent bool) int64 {
 	t.Helper()
 	var total int64
@@ -47,7 +47,9 @@ func diskUsage(t *testing.T, root string, apparent bool) int64 {
 			seen[key] = true
 		}
 		if apparent {
-			total += info.Size()
+			if !info.IsDir() {
+				total += info.Size()
+			}
 		} else {
 			total += int64(st.Blocks) * 512
 		}
@@ -142,8 +144,8 @@ func TestDuWalksPostOrderAndSelectsDepth(t *testing.T) {
 	if sizes["proj"] != diskUsage(t, filepath.Join(h.root, "proj"), true) {
 		t.Errorf("du -ab proj = %d, want the byte sum", sizes["proj"])
 	}
-	if sizes["proj/src"] <= sizes["proj/src/main.go"]+sizes["proj/src/lib"] {
-		t.Errorf("du -ab proj/src = %d does not include its own entry", sizes["proj/src"])
+	if sizes["proj/src"] != sizes["proj/src/main.go"]+sizes["proj/src/lib/util.go"] || sizes["proj/empty"] != 0 {
+		t.Errorf("du -ab directory sizes %v, want their files' bytes", sizes)
 	}
 }
 
@@ -160,9 +162,7 @@ func TestDuCountsHardLinksOnceAndNeverFollowsLinks(t *testing.T) {
 	if lines[1][0] != "3" {
 		t.Fatalf("link sized %s, want its own 3 bytes", lines[1][0])
 	}
-	dir, err := os.Lstat(filepath.Join(h.root, "d"))
-	testutil.FailErr(t, "stat d", err)
-	if want := strconv.FormatInt(dir.Size()+5000+3, 10); lines[2][0] != want {
+	if want := strconv.FormatInt(5000+3, 10); lines[2][0] != want {
 		t.Fatalf("du -ab d = %s, want %s with big counted once", lines[2][0], want)
 	}
 }

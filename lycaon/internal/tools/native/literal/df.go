@@ -81,8 +81,12 @@ func (inv *invocation) volumeOf(operand string) (volume, bool, error) {
 		st, err = bound.Stat(true)
 	}
 	var file *os.File
-	if err == nil {
-		file, err = bound.OpenLaunchMetadata(typeLetter(st.Mode) == 'd')
+	switch {
+	case err != nil:
+	case typeLetter(st.Mode) == 'd':
+		file, err = bound.OpenLaunchMetadata(true)
+	default:
+		file, err = bound.Open()
 	}
 	if err != nil {
 		err = projectpaths.PathOperationError(operand, err)
