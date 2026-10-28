@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/llm"
@@ -50,7 +49,6 @@ func TestSetTitleOverwritesAndPublishes(t *testing.T) {
 		t.Fatalf("stored title = %q", got.Title)
 	}
 
-	deadline := time.After(500 * time.Millisecond)
 	for {
 		select {
 		case envelope := <-eventsCh:
@@ -64,7 +62,7 @@ func TestSetTitleOverwritesAndPublishes(t *testing.T) {
 			if ev.ID == sess.ID && ev.Title == "Ship readiness checklist" {
 				return
 			}
-		case <-deadline:
+		case <-t.Context().Done():
 			t.Fatal("timed out waiting for SessionEvent title")
 		}
 	}

@@ -35,7 +35,7 @@ const checkpointCandidates = `SELECT c.session_id || ':' || c.anchor_id id, c.pr
  AND NOT EXISTS(SELECT 1 FROM source_versions v WHERE v.content_sha256 = b.sha256 AND v.capture_state = 'stored')
  AND NOT EXISTS(SELECT 1 FROM worker_baseline_objects w WHERE w.sha256 = b.sha256)
  AND NOT EXISTS(SELECT 1 FROM source_command_window_objects w WHERE w.sha256 = b.sha256)
- AND NOT EXISTS(SELECT 1 FROM source_manifest_entries e WHERE e.sha256 = b.sha256)),0) reclaimable_bytes
+ AND NOT EXISTS(SELECT 1 FROM source_manifest_entries e WHERE e.sha256 = b.sha256 AND e.sha256 != '')),0) reclaimable_bytes
  FROM checkpoint_anchors c WHERE c.pruned_at = ''`
 
 const revisionCandidates = `SELECT v.id, v.project_id, COALESCE(o.session_id,'') session_id, '' anchor_id, v.content_sha256 sha,
@@ -44,7 +44,7 @@ const revisionCandidates = `SELECT v.id, v.project_id, COALESCE(o.session_id,'')
  AND NOT EXISTS(SELECT 1 FROM checkpoint_object_refs r WHERE r.sha256 = v.content_sha256)
  AND NOT EXISTS(SELECT 1 FROM worker_baseline_objects w WHERE w.sha256 = v.content_sha256)
  AND NOT EXISTS(SELECT 1 FROM source_command_window_objects w WHERE w.sha256 = v.content_sha256)
- AND NOT EXISTS(SELECT 1 FROM source_manifest_entries e WHERE e.sha256 = v.content_sha256)
+ AND NOT EXISTS(SELECT 1 FROM source_manifest_entries e WHERE e.sha256 = v.content_sha256 AND e.sha256 != '')
  THEN b.stored_size ELSE 0 END reclaimable_bytes
  FROM source_versions v JOIN source_blob_objects b ON b.sha256 = v.content_sha256 LEFT JOIN source_operations o ON o.id = v.operation_id
  WHERE v.capture_state = 'stored' AND NOT EXISTS(SELECT 1 FROM source_branch_heads h WHERE h.version_id = v.id AND h.state != 'absent')`

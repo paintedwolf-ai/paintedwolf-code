@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
@@ -51,7 +50,7 @@ func TestCreateSessionReturnsBeforeInventoryAndDetachesCancellation(t *testing.T
 
 	select {
 	case <-done:
-	case <-time.After(500 * time.Millisecond):
+	case <-t.Context().Done():
 		t.Fatal("session creation waited for background source inventory")
 	}
 	if rec.Code != http.StatusAccepted {
@@ -67,7 +66,7 @@ func TestCreateSessionReturnsBeforeInventoryAndDetachesCancellation(t *testing.T
 
 	select {
 	case <-fake.Started:
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("source inventory was not scheduled")
 	}
 	cancel()
@@ -77,7 +76,7 @@ func TestCreateSessionReturnsBeforeInventoryAndDetachesCancellation(t *testing.T
 		if err != nil {
 			t.Fatalf("inventory inherited request cancellation: %v", err)
 		}
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("source inventory did not finish")
 	}
 	contractfixture.DrainBackground(t, srv)
