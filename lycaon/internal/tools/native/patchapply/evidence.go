@@ -1,6 +1,6 @@
 package patchapply
 
-import "encoding/json"
+import "github.com/lycaon/lycaon/internal/tools/surveyjson"
 
 // Failure names one hunk that did not apply.
 type Failure struct {
@@ -26,7 +26,7 @@ func EvidenceRef(failures []Failure) string {
 		More   int       `json:"more,omitempty"`
 	}
 	for kept := len(failures); kept >= 0; kept-- {
-		data, err := json.Marshal(record{Failed: append([]Failure{}, failures[:kept]...), More: len(failures) - kept})
+		data, err := surveyjson.Marshal(record{Failed: append([]Failure{}, failures[:kept]...), More: len(failures) - kept})
 		if err == nil && len(data) <= EvidenceBytes {
 			return string(data)
 		}
