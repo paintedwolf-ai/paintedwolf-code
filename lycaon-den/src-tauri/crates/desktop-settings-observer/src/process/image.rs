@@ -4,8 +4,8 @@ use std::{
     collections::BTreeSet,
     fs::{File, OpenOptions},
     io::{self, Read},
-    os::unix::{fs::{MetadataExt, OpenOptionsExt}, io::AsRawFd},
-    path::{Component, Path, PathBuf},
+    os::unix::fs::{MetadataExt, OpenOptionsExt},
+    path::{Component, Path},
 };
 const NAME: &str = "pw-desktop-settings";
 #[derive(Deserialize)]
@@ -168,8 +168,9 @@ impl Image {
         }
         Ok(Self { file })
     }
-    pub(super) fn executable(&self) -> PathBuf {
-        PathBuf::from(format!("/proc/self/fd/{}", self.file.as_raw_fd()))
+    /// The verified image, which the launcher executes by descriptor.
+    pub(super) fn file(&self) -> &File {
+        &self.file
     }
 }
 
@@ -177,7 +178,7 @@ impl Image {
 mod tests {
     use super::*;
     use serde_json::{json, Value};
-    use std::{fs::Permissions, os::unix::fs::PermissionsExt, sync::atomic::{AtomicU64, Ordering}};
+    use std::{fs::Permissions, os::unix::fs::PermissionsExt, path::PathBuf, sync::atomic::{AtomicU64, Ordering}};
 
     struct Fixture {
         base: PathBuf,
@@ -248,7 +249,7 @@ mod tests {
     #[test]
     fn format_2_manifest_and_payload_seal_are_verified() {
         let fixture = Fixture::new();
-        assert!(fixture.open().unwrap().executable().starts_with("/proc/self/fd/"));
+        assert!(fixture.open().unwrap().file().metadata().is_ok());
         for mutate in [
             |m: &mut Value| { m["format_version"] = json!(1); },
             |m: &mut Value| { m["format_version"] = json!(1); m.as_object_mut().unwrap().remove("payload"); },

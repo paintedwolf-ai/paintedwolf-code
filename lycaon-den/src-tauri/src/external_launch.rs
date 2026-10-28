@@ -113,7 +113,7 @@ fn protected_only(key: &str) -> bool {
 }
 
 #[cfg(target_os = "linux")]
-mod brokered {
+pub(crate) mod brokered {
     use super::Finished;
     use std::io::{self, Read};
     use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
@@ -126,6 +126,83 @@ mod brokered {
         argv: &'a [String],
         environment: &'a [String],
         dir: &'a str,
+        #[serde(skip_serializing_if = "is_zero")]
+        extra_files: usize,
+    }
+
+    fn is_zero(count: &usize) -> bool {
+        *count == 0
+    }
+
+    /// A program the broker runs for as long as the desktop keeps its call channel.
+    pub(crate) struct Call {
+        channel: OwnedFd,
+        exited: bool,
+    }
+
+    impl Call {
+        /// Whether the broker reported the program's exit or closed the call; never blocks.
+        pub(crate) fn exited(&mut self) -> io::Result<bool> {
+            let mut buffer = [0u8; 4096];
+            while !self.exited {
+                // SAFETY: recv writes at most the buffer's length into it.
+                let read = unsafe {
+                    libc::recv(self.channel.as_raw_fd(), buffer.as_mut_ptr().cast(), buffer.len(), libc::MSG_DONTWAIT)
+                };
+                if read < 0 {
+                    let error = io::Error::last_os_error();
+                    return match error.kind() {
+                        io::ErrorKind::WouldBlock => Ok(false),
+                        io::ErrorKind::Interrupted => continue,
+                        _ => Err(error),
+                    };
+                }
+                let event: Option<Event> = (read > 0).then(|| serde_json::from_slice(&buffer[..read as usize]).ok()).flatten();
+                self.exited = read == 0 || event.is_some_and(|event| event.exited || !event.error.is_empty());
+            }
+            Ok(true)
+        }
+
+        /// Closing the call channel makes the broker end the program's session.
+        pub(crate) fn end(self) {}
+    }
+
+    /// Starts a long-running program with the given standard streams and extra
+    /// descriptors (from 3), returning once the broker reports it started.
+    pub(crate) fn start(
+        broker: RawFd,
+        argv: &[String],
+        environment: &[String],
+        streams: [RawFd; 3],
+        extra: &[RawFd],
+    ) -> io::Result<Call> {
+        let (channel, remote) = pair()?;
+        let request = Request { version: 1, argv, environment, dir: "/", extra_files: extra.len() };
+        let payload = serde_json::to_vec(&request).map_err(io::Error::other)?;
+        let mut fds = vec![remote.as_raw_fd()];
+        fds.extend(streams);
+        fds.extend(extra);
+        send(broker, &payload, &fds)?;
+        drop(remote);
+        let mut buffer = vec![0u8; 4096];
+        loop {
+            // SAFETY: recv writes at most the buffer's length into it.
+            let read = unsafe { libc::recv(channel.as_raw_fd(), buffer.as_mut_ptr().cast(), buffer.len(), 0) };
+            if read < 0 && io::Error::last_os_error().kind() == io::ErrorKind::Interrupted {
+                continue;
+            }
+            if read <= 0 {
+                return Err(io::Error::other("the launch broker closed the call before the program started"));
+            }
+            let event: Event = serde_json::from_slice(&buffer[..read as usize])
+                .map_err(|error| io::Error::other(format!("the launch broker sent an invalid event: {error}")))?;
+            if !event.error.is_empty() {
+                return Err(io::Error::other(format!("the launch broker refused: {}", event.error)));
+            }
+            if event.started > 0 {
+                return Ok(Call { channel, exited: false });
+            }
+        }
     }
 
     #[derive(serde::Deserialize, Default)]
@@ -173,7 +250,7 @@ mod brokered {
         Ok(unsafe { (OwnedFd::from_raw_fd(fds[0]), OwnedFd::from_raw_fd(fds[1])) })
     }
 
-    fn pipe() -> io::Result<(OwnedFd, OwnedFd)> {
+    pub(crate) fn pipe() -> io::Result<(OwnedFd, OwnedFd)> {
         let mut fds = [0; 2];
         // SAFETY: pipe2 writes two new descriptors into the local array.
         if unsafe { libc::pipe2(fds.as_mut_ptr(), libc::O_CLOEXEC) } != 0 {
@@ -242,7 +319,7 @@ mod brokered {
         let null = std::fs::File::open("/dev/null")?;
         let output = if capture { Some(pipe()?) } else { None };
         let stdout = output.as_ref().map_or(null.as_raw_fd(), |(_, write)| write.as_raw_fd());
-        let request = Request { version: 1, argv, environment, dir: "/" };
+        let request = Request { version: 1, argv, environment, dir: "/", extra_files: 0 };
         let payload = serde_json::to_vec(&request).map_err(io::Error::other)?;
         // Standard error stays the desktop's own, so diagnostics reach its log.
         send(broker, &payload, &[remote.as_raw_fd(), null.as_raw_fd(), stdout, 2])?;

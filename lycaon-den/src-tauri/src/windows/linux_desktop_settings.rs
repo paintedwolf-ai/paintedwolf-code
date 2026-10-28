@@ -11,6 +11,7 @@ use super::linux_decorations::{layout_from_raw, DecorationLayout, TitlebarAction
 use super::system_appearance::{hex_color, SystemAppearancePayload};
 
 #[cfg(target_os = "linux")]
+mod launch;
 pub(crate) mod portal;
 #[cfg(test)]
 mod tests;
