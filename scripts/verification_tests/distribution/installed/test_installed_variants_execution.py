@@ -122,7 +122,7 @@ class InstalledPlanVariantTests(unittest.TestCase):
 
 class CatalogCapacityTests(unittest.TestCase):
     def test_transport_planning_covers_catalog_and_tightens_selected_artifacts(self):
-        from linux_release import installed_capacity as capacity
+        from linux_release.campaign import capacity
         rows = [{'installation': installation, 'architecture': 'amd64', 'environment': 'desktop',
                  'capability': 'windowing', 'cases': ['resize', 'move']} for installation in ('deb', 'rpm')]
         with patch.object(capacity, 'expand', return_value=rows), \
@@ -138,7 +138,7 @@ class CatalogCapacityTests(unittest.TestCase):
                 capacity.limits({}, {'artifacts': []})
 
     def test_native_preinstallation_journal_has_independent_transport_capacity(self):
-        from linux_release import installed_capacity as capacity
+        from linux_release.campaign import capacity
         row = {'installation': 'rpm', 'architecture': 'amd64', 'environment': 'desktop',
                'capability': 'windowing', 'cases': ['resize']}
         with patch.object(capacity, 'expand', return_value=[row]), \
