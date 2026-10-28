@@ -308,14 +308,14 @@ func startInProcessModuleWatcher(policy GenerationPolicy, viewNS *os.File) (func
 		runtime.LockOSThread()
 		_ = unix.Unshare(unix.CLONE_FS)
 		_ = unix.Setns(int(viewNS.Fd()), unix.CLONE_NEWNS)
-		mountinfo, err := os.Open("/proc/thread-self/mountinfo")
+		mountinfo, err := unix.Open("/proc/thread-self/mountinfo", unix.O_RDONLY|unix.O_CLOEXEC, 0)
 		if err != nil {
 			_ = readyW.Close()
 			done <- err
 			return
 		}
-		defer func() { _ = mountinfo.Close() }()
-		done <- watchModuleMounts(int(mountinfo.Fd()), int(watchR.Fd()), int(readyW.Fd()), policy.LogicalInstallRoot, roots)
+		defer func() { _ = unix.Close(mountinfo) }()
+		done <- watchModuleMounts(mountinfo, int(watchR.Fd()), int(readyW.Fd()), policy.LogicalInstallRoot, roots)
 	}()
 	var ack [1]byte
 	_, err = io.ReadFull(readyR, ack[:])
@@ -493,11 +493,11 @@ func copyTestExecutable(t *testing.T, destination string) {
 // With the logical installation root at "/" every mount is exempt, so the
 // test's own mount namespace is left untouched.
 func TestWatchModuleMountsArmsItsBaselineAndEndsWithItsLifetime(t *testing.T) {
-	mountinfo, err := os.Open("/proc/thread-self/mountinfo")
+	mountinfo, err := unix.Open("/proc/thread-self/mountinfo", unix.O_RDONLY|unix.O_CLOEXEC, 0)
 	if err != nil {
 		t.Fatalf("open mountinfo: %v", err)
 	}
-	defer func() { _ = mountinfo.Close() }()
+	defer func() { _ = unix.Close(mountinfo) }()
 	var lifetime, ready [2]int
 	if err := unix.Pipe2(lifetime[:], unix.O_CLOEXEC); err != nil {
 		t.Fatalf("lifetime pipe: %v", err)
@@ -511,7 +511,7 @@ func TestWatchModuleMountsArmsItsBaselineAndEndsWithItsLifetime(t *testing.T) {
 	defer func() { _ = unix.Close(ready[0]) }()
 	done := make(chan error, 1)
 	go func() {
-		done <- watchModuleMounts(int(mountinfo.Fd()), lifetime[0], ready[1], "/", nil)
+		done <- watchModuleMounts(mountinfo, lifetime[0], ready[1], "/", nil)
 	}()
 	var armed [1]byte
 	if n, err := unix.Read(ready[0], armed[:]); err != nil || n != 1 || armed[0] != 1 {

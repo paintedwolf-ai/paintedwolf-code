@@ -487,3 +487,35 @@ func runFixtureModuleStage() error {
 	defer func() { os.Stdout = previous }()
 	return RunStage()
 }
+
+func checkModuleWatcherPollAuthority(t *testing.T, pid int) {
+	t.Helper()
+	proc := filepath.Join("/proc", strconv.Itoa(pid))
+	descriptors, err := os.ReadDir(filepath.Join(proc, "fd"))
+	testutil.FailErr(t, "watcher descriptors", err)
+	mountinfo := map[string]bool{}
+	var epolls []string
+	for _, descriptor := range descriptors {
+		target, err := os.Readlink(filepath.Join(proc, "fd", descriptor.Name()))
+		testutil.FailErr(t, "watcher descriptor target", err)
+		if strings.HasPrefix(target, proc+"/task/") && filepath.Base(target) == "mountinfo" {
+			mountinfo[descriptor.Name()] = true
+		}
+		if target == "anon_inode:[eventpoll]" {
+			epolls = append(epolls, descriptor.Name())
+		}
+	}
+	if len(mountinfo) != 1 {
+		t.Fatalf("watcher mount notification descriptors = %v, want one", mountinfo)
+	}
+	for _, epoll := range epolls {
+		raw, err := os.ReadFile(filepath.Join(proc, "fdinfo", epoll))
+		testutil.FailErr(t, "watcher epoll registrations", err)
+		for line := range strings.SplitSeq(string(raw), "\n") {
+			fields := strings.Fields(line)
+			if len(fields) >= 2 && fields[0] == "tfd:" && mountinfo[fields[1]] {
+				t.Fatalf("mount notification descriptor %s also registered with epoll descriptor %s", fields[1], epoll)
+			}
+		}
+	}
+}

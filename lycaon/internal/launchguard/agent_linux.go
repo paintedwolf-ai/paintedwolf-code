@@ -139,15 +139,16 @@ func runModuleViewWatcher(spec EntrySpec) error {
 	if err != nil {
 		return err
 	}
-	mountinfo, err := os.Open("/proc/thread-self/mountinfo")
+	// Go's runtime epoll must not consume the mount notifications we poll below.
+	mountinfo, err := unix.Open("/proc/thread-self/mountinfo", unix.O_RDONLY|unix.O_CLOEXEC, 0)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = mountinfo.Close() }()
+	defer func() { _ = unix.Close(mountinfo) }()
 	if err := sealModuleWatcher(Identity{UID: spec.UID, GID: spec.GID, Groups: spec.Groups}); err != nil {
 		return err
 	}
-	return watchModuleMounts(int(mountinfo.Fd()), watcherLifetimeFD, watcherReadyFD, spec.Generation.LogicalInstallRoot, roots)
+	return watchModuleMounts(mountinfo, watcherLifetimeFD, watcherReadyFD, spec.Generation.LogicalInstallRoot, roots)
 }
 
 const watcherCapabilityMask = (uint32(1) << unix.CAP_SYS_ADMIN) | (uint32(1) << unix.CAP_DAC_READ_SEARCH)

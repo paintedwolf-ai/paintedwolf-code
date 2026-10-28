@@ -514,6 +514,7 @@ func checkInstrumentedModuleWatcher(t *testing.T, dir string, spec EntrySpec, fr
 	uid := fmt.Sprintf("%d %d %d %d", spec.UID, spec.UID, spec.UID, spec.UID)
 	gid := fmt.Sprintf("%d %d %d %d", spec.GID, spec.GID, spec.GID, spec.GID)
 	testutil.FailErr(t, "instrumented watcher thread seal", verifyWatcherThreads(cmd.Process.Pid, uid, gid, strconv.Itoa(int(spec.GID))))
+	checkModuleWatcherPollAuthority(t, cmd.Process.Pid)
 	parentNS, err := os.Open("/proc/thread-self/ns/mnt")
 	testutil.FailErr(t, "fixture parent mount namespace", err)
 	defer parentNS.Close()
