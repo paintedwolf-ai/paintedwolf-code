@@ -3,13 +3,14 @@ id: CHMOD_BULK_DENIED
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
   - chmod
 requires:
   profiles:
   - tool
   facts:
   - paintedwolf.rejection_code
+  - paintedwolf.operation
   - paintedwolf.max_paths
   - paintedwolf.requested
   - paintedwolf.bulk_denied
@@ -21,7 +22,7 @@ copy:
   why: Bounded batches keep permission changes reviewable.
   fix: Use at most {{ paintedwolf.max_paths }} explicit paths per call, and retain the intended scope when
     splitting the batch. Do not add targets simply to fill a batch.
-  instead: Branch on Code; reduce paths[] length
+  instead: Branch on Code; reduce the explicit target batch
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:chmod
 x-paintedwolf-message: chmod requested too many paths in one call

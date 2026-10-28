@@ -3,13 +3,14 @@ id: DELETE_PATH_DENIED
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
   - delete
 requires:
   profiles:
   - filesystem
   - tool
   facts:
+  - paintedwolf.operation
   - paintedwolf.rejection_code
   - paintedwolf.path
 when: paintedwolf.rejection_code == "DELETE_PATH_DENIED"
