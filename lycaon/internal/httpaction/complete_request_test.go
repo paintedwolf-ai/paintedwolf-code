@@ -20,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretmatch"
+	"github.com/lycaon/lycaon/internal/socketref"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -72,7 +73,9 @@ func runRequest(t *testing.T, deps Deps, args map[string]any, tctx tools.ToolCon
 	if err := Register(registry, deps); err != nil {
 		t.Fatalf("register http_request: %v", err)
 	}
-	out, err := registry.Run(t.Context(), "http_request", args, tctx)
+	ctx, scope := socketref.WithScope(t.Context())
+	defer scope.Close()
+	out, err := registry.Run(ctx, "http_request", args, tctx)
 	if err != nil {
 		return result{}, err
 	}

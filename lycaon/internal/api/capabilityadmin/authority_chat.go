@@ -20,6 +20,11 @@ func (s *Installation) installChatApprovalDelta(checkpointID string, delta hitl.
 		if _, root, exists := s.Sockets.FindByID(delta.Grant.ID); exists && root != chatSessionID {
 			return nil, fmt.Errorf("socket task authority id is already installed for another task")
 		}
+		for _, target := range delta.Sockets {
+			if err := confine.RevalidateSocketGrant(confine.SocketGrant{ApprovedPath: target.ApprovedPath, ResolvedPath: target.ResolvedPath, Binding: target.Binding}); err != nil {
+				return nil, err
+			}
+		}
 		already, live, withID := socketGrantSetByID(s.Sockets.ListChatGrants(chatSessionID), delta.Grant.ID, delta.Sockets)
 		if withID > 0 {
 			if already != len(delta.Sockets) || withID != already {
@@ -31,7 +36,7 @@ func (s *Installation) installChatApprovalDelta(checkpointID string, delta hitl.
 		}
 		created := false
 		for _, target := range delta.Sockets {
-			created = s.Sockets.GrantChat(chatSessionID, confine.SocketGrant{ApprovedPath: target.ApprovedPath, ResolvedPath: target.ResolvedPath}, delta.Grant.ID, checkpointID, delta.ActionDigest, chatExpiry(delta.TTLSeconds)) || created
+			created = s.Sockets.GrantChat(chatSessionID, confine.SocketGrant{ApprovedPath: target.ApprovedPath, ResolvedPath: target.ResolvedPath, Binding: target.Binding}, delta.Grant.ID, checkpointID, delta.ActionDigest, chatExpiry(delta.TTLSeconds)) || created
 		}
 		if !created {
 			return nil, nil
@@ -137,16 +142,16 @@ func (s *Installation) installChatApprovalDelta(checkpointID string, delta hitl.
 func socketGrantSetByID(existing []approvalstate.SocketChatGrant, id string, targets []hitl.ApprovalSocketTarget) (covered, live, withID int) {
 	pairs := make(map[string]struct{}, len(targets))
 	for _, target := range targets {
-		pairs[target.ApprovedPath+"\x00"+target.ResolvedPath] = struct{}{}
+		pairs[target.ApprovedPath+"\x00"+target.ResolvedPath+"\x00"+target.Binding.Key()] = struct{}{}
 	}
 	for _, grant := range existing {
 		if grant.ID != id {
 			continue
 		}
 		withID++
-		if _, ok := pairs[grant.ApprovedPath+"\x00"+grant.ResolvedPath]; ok {
+		if _, ok := pairs[grant.ApprovedPath+"\x00"+grant.ResolvedPath+"\x00"+grant.Binding.Key()]; ok {
 			covered++
-			if grant.ExpiresAt == nil || grant.ExpiresAt.After(time.Now().UTC()) {
+			if !grant.Unavailable && (grant.ExpiresAt == nil || grant.ExpiresAt.After(time.Now().UTC())) {
 				live++
 			}
 		}

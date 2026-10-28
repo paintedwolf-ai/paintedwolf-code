@@ -17,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/lineage"
+	"github.com/lycaon/lycaon/internal/socketref"
 )
 
 // helperFlag marks the confined re-exec path.
@@ -275,13 +276,22 @@ func Command(
 	if c.HostExecution {
 		return exec.CommandContext(ctx, name, args...), func() {}, nil
 	}
-	profile, err := BuildProfile(c)
+	c, err := validateProfileInputs(c)
+	if err != nil {
+		return nil, func() {}, err
+	}
+	profile, err := renderProfile(c)
+	if err != nil {
+		return nil, func() {}, err
+	}
+	socketFiles, closeSockets, err := socketCommandFiles(c.SocketGrants)
 	if err != nil {
 		return nil, func() {}, err
 	}
 	// An inherited pipe keeps the profile outside writable pathnames.
 	pr, pw, err := os.Pipe()
 	if err != nil {
+		closeSockets()
 		return nil, func() {}, err
 	}
 	helperArgs := []string{helperFlag, profileFDFlag, strconv.Itoa(helperProfileFD)}
@@ -300,6 +310,14 @@ func Command(
 		extra = append(extra, reports)
 		helperArgs = append(helperArgs, refusalFDFlag, strconv.Itoa(helperRefusalFD))
 	}
+	extra, err = appendSocketCommandFiles(extra, socketFiles)
+	if err != nil {
+		_ = pr.Close()
+		_ = pw.Close()
+		closeReports()
+		closeSockets()
+		return nil, func() {}, err
+	}
 	helperArgs = append(append(helperArgs, "--", name), args...)
 	cmd := exec.CommandContext(ctx, self, helperArgs...)
 	cmd.ExtraFiles = extra
@@ -310,6 +328,7 @@ func Command(
 	// Releasing the host's own end lets the marker report end-of-file once the
 	// last descendant exits.
 	cleanup := func() {
+		closeSockets()
 		_ = pr.Close()
 		closeReports()
 		c.lineage.Started()
@@ -362,6 +381,9 @@ func validateProfileInputs(c Confinement) (Confinement, error) {
 }
 
 func renderSeatbeltProfile(c Confinement) (string, error) {
+	if err := validateSocketRealization(c.SocketGrants, socketref.KernelPathname); err != nil {
+		return "", err
+	}
 	var b strings.Builder
 	deny := denyReport(c.refusalTag)
 	b.WriteString("(version 1)\n")

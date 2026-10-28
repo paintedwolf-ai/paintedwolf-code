@@ -61,7 +61,15 @@ func Relaunch(self string, args []string, plan []byte, network Network, marker, 
 	if refusals != nil {
 		lines = refusals
 	}
-	sup := newSupervisor(control, network, lines)
+	sup, err := newSupervisor(control, network, lines)
+	if err != nil {
+		_ = read.Close()
+		_ = write.Close()
+		_ = reportWrite.Close()
+		_ = control.Close()
+		_ = controlChild.Close()
+		return 0, 0, err
+	}
 	defer sup.close()
 	// The inner helper ends with this process, by its parent-death signal.
 	cmd := exec.CommandContext(context.Background(), self, args...)

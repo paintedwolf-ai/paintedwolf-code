@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/isolation"
+	"github.com/lycaon/lycaon/internal/socketref"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
@@ -96,8 +97,35 @@ func (e *Capabilities) preflightSocketCapability(
 	if reject != nil {
 		return nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Identity.Agent, args, reject)
 	}
-	// A saved grant authorizes use; the invocation still selects its boundary.
+	// Capture once before review. Repeated preflight in the same invocation
+	// retains that object rather than looking up a replacement pathname.
+	for i, grant := range requested {
+		if contract.SocketArg != "" {
+			grant.Binding.Enforcement = socketref.RetainedObject
+		}
+		bound, err := confine.CaptureSocketGrant(ctx, grant)
+		if err != nil {
+			return nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Identity.Agent, args, capabilityrequest.SocketResolveReject(err))
+		}
+		requested[i] = bound
+	}
+	// Existing authority can be reused only for the same retained object and
+	// enforcement contract. Pathname grants cannot mint native object authority.
 	saved := append(append([]confine.SocketGrant(nil), chatGrants...), durableGrants...)
+	for i, grant := range requested {
+		if grant.Binding.Mode() != socketref.RetainedObject {
+			continue
+		}
+		for _, prior := range saved {
+			if prior.ApprovedPath != grant.ApprovedPath || prior.ResolvedPath != grant.ResolvedPath || prior.Binding.Mode() != grant.Binding.Mode() {
+				continue
+			}
+			if socketref.ReuseForInvocation(ctx, grant.ApprovedPath, prior.Binding) {
+				requested[i].Binding = prior.Binding
+				break
+			}
+		}
+	}
 	overlay := mergeAuthorizedWithOverlay(nil, requested, saved)
 	e.recordCapabilityRequested(ctx, tc, tool, requested)
 	merged := requested
@@ -124,6 +152,12 @@ func (e *Capabilities) preflightSocketCapability(
 	action.Sockets.SocketGrantStates = append([]string(nil), observation.states...)
 	chatByPair := capabilitygrants.SocketGrantPairSet(overlay)
 	authSource := ""
+	if len(authorized) > 0 {
+		authSource = authzledger.AuthorizationSourceHuman
+	}
+	if len(overlay) == len(requested) {
+		authSource = authzledger.AuthorizationSourceLease
+	}
 	// Existing route authority suppresses only the socket card.
 	approvalSatisfied := false
 	missing := make([]confine.SocketGrant, 0, len(requested))
@@ -133,7 +167,7 @@ func (e *Capabilities) preflightSocketCapability(
 		}
 		if e.approvalsDisabled != nil && e.approvalsDisabled(tc.ActiveRootPath()) {
 			if e.socketRuntime != nil {
-				e.socketRuntime.IssuePermit(tc.Identity.SessionID, tc.Identity.ToolCallID, actionDigest, grant)
+				e.socketRuntime.IssuePermit(tc.ChatSessionID(), tc.Identity.SessionID, tc.Identity.ToolCallID, actionDigest, grant)
 			}
 			authSource = authzledger.AuthorizationSourceNeverAsk
 			e.recordCapabilityDecision(ctx, tc, tool, grant, true, authSource)
@@ -207,37 +241,37 @@ func socketCapabilityProposedAction(
 		contained = contained.WithDialedSockets(merged)
 	}
 	return hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: tool,
-Args: args,
-Files: filesFromArgs(tool, args),
-ResolvedFiles: ResolvedApprovalFiles(tool, args, tc),
-ActionID: tc.Identity.ToolCallID,
-},
-Presentation: hitl.ActionPresentation{
-Command: commandsurface.PrimaryCommandLine(args, nil),
-},
-Scope: hitl.ActionScope{
-ProjectID: tc.Identity.ProjectID,
-ProjectDir: tc.ActiveRootPath(),
-SessionID: tc.Identity.SessionID,
-RootSessionID: chatSession,
-SessionScratchRoot: tc.Host.SessionScratchDir,
-},
-Sockets: hitl.ActionSockets{
-SocketGrants: append([]confine.SocketGrant(nil), merged...),
-},
-Execution: hitl.ActionExecution{
-Contained: contained,
-},
-Egress: hitl.ActionEgress{
-Visibility: "unobserved",
-},
-Resources: hitl.ActionResources{
-HostResources: append([]string(nil), tc.Host.HostResources...),
-HostResourceFamilies: append([]string(nil), tc.Host.HostResourceFamilies...),
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool:          tool,
+			Args:          args,
+			Files:         filesFromArgs(tool, args),
+			ResolvedFiles: ResolvedApprovalFiles(tool, args, tc),
+			ActionID:      tc.Identity.ToolCallID,
+		},
+		Presentation: hitl.ActionPresentation{
+			Command: commandsurface.PrimaryCommandLine(args, nil),
+		},
+		Scope: hitl.ActionScope{
+			ProjectID:          tc.Identity.ProjectID,
+			ProjectDir:         tc.ActiveRootPath(),
+			SessionID:          tc.Identity.SessionID,
+			RootSessionID:      chatSession,
+			SessionScratchRoot: tc.Host.SessionScratchDir,
+		},
+		Sockets: hitl.ActionSockets{
+			SocketGrants: append([]confine.SocketGrant(nil), merged...),
+		},
+		Execution: hitl.ActionExecution{
+			Contained: contained,
+		},
+		Egress: hitl.ActionEgress{
+			Visibility: "unobserved",
+		},
+		Resources: hitl.ActionResources{
+			HostResources:        append([]string(nil), tc.Host.HostResources...),
+			HostResourceFamilies: append([]string(nil), tc.Host.HostResourceFamilies...),
+		},
+	}
 }
 
 // authorizeMissingSocketGrants reviews grants absent from the action digest.

@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/confine"
 	"sort"
 	"strings"
 
@@ -42,6 +43,9 @@ func GrantKey(action ProposedAction) string {
 		strings.Join(hostResources, "\x1f") + "\x00" +
 		strings.Join(families, "\x1f") + "\x00" + string(boundary) + "\x00" +
 		packageIdentity
+	if len(action.Sockets.SocketGrants) != 0 || action.Execution.Contained.SocketPathsDigest != "" {
+		identity += "\x00sockets:" + confine.SocketPathsDigest(action.Sockets.SocketGrants) + "\x00socket_boundary:" + action.Execution.Contained.SocketPathsDigest
+	}
 	if action.Execution.ProcessAccess != "" {
 		raw, err := json.Marshal(action.Execution.ProcessTargets)
 		if err != nil {

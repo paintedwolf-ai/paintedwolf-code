@@ -11,6 +11,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/isolation"
+	"github.com/lycaon/lycaon/internal/socketref"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 )
@@ -36,6 +37,11 @@ func reviewedSocket(t *testing.T, root, path string) tools.ToolContext {
 	t.Helper()
 	grant, err := confine.ResolveSocketRequest(path)
 	testutil.FailErr(t, "resolve socket", err)
+	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(filepath.Dir(path), "state"))
+	owner, err := socketref.Capture(grant.ApprovedPath)
+	testutil.FailErr(t, "retain reviewed socket", err)
+	t.Cleanup(owner.Close)
+	grant.Binding = owner.Binding()
 	tctx := sessionContext(root, "call-sock")
 	tctx.Socket.SocketGrants = []confine.SocketGrant{grant}
 	tctx.Socket.DurableSocketGrants = []confine.SocketGrant{grant}

@@ -271,6 +271,36 @@ Native update preferences are device configuration too. The unversioned `{checks
 
 Security-sensitive grants remain exact. A socket-path grant must not widen to its containing directory during evolution. Credentials stay outside backups and diagnostics regardless of format version.
 
+Socket grants separate saved intent from live authority. The optional
+`socket_binding` in device approval grants, and `binding` in the existing durable
+checkpoint plan's `ApprovalSocketTarget`, record an enforcement mode and an
+opaque instance ID. These are additive receipts in existing configuration and
+JSON plan records; no SQL schema changes or rewriting of old rows is involved.
+The retained descriptor or private socket alias and its ownership leases are
+ephemeral capabilities, never backup or restart recovery data. Loading an absent,
+unknown or released object binding preserves the grant record as unavailable and
+requires a fresh approval. Reading saved intent never recaptures a pathname.
+
+Existing macOS command grants retain their kernel pathname-at-connect contract;
+an absent mode means that contract on macOS. They cannot establish authority for
+host-native socket dials. Linux grants and host-native dials on both platforms
+require the retained-object mode and a live instance ID. Mode and instance enter
+permission keys, action digests and grant IDs, so a new approval after a service
+or engine restart cannot accidentally reuse an unexpired stale grant. Changing
+the realization never silently broadens the earlier approval.
+
+Native HTTP's local-service secret recipient and captured-token issuer identity
+include that same retained binding. Existing credential and token data stays
+intact; a different bound recipient cannot inherit a pathname-only release
+lease and uses the existing fresh-approval or service sign-in route.
+
+The private approval authority deltas are not the co-shipped API option shape:
+`wireApprovalPlan` projects presentation and decisions without their binding IDs
+or kernel handles. Public grant inventory keeps its existing unavailable state
+and fresh-approval route. Public schema descriptions of matching must reflect
+the host binding contract; any wire shape change still follows OpenAPI bundling
+and generation for all consumers.
+
 Native update `ready.json` format 2 records the exact prepared bundle path and a nullable offer confirmation. Its strict format-1 decoder retains the legacy prepared path and confirmation. `transaction.json` format 2 also names the prepared path; its strict format-1 conversion first saves the original record under `receipts/<id>-format-1.json`, then atomically publishes the converted journal. Unknown journals remain untouched. New preparation names include the account UID, so accounts sharing an application cannot remove each other's preparation. The installed bundle and its parent directory provide cross-account inode locks; private journals never cross account boundaries. The permanent profile-wide `feed-state.lock` serializes replay-state reads, quarantine, and writes. `records.lock` serializes ready, rejection, and journal mutations. Lock files are never replaced or removed during normal operation.
 
 Secret-release leases use `secret_recipients` and a witness bound to that exact recipient set; a destination-only lease cannot establish recipient authority. Startup refuses incompatible entries, including expired ones, and leaves the entire approvals file unchanged. Its error identifies the file and either the invalid YAML line or the invalid grant ID.

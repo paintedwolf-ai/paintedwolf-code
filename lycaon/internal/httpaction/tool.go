@@ -3,6 +3,7 @@ package httpaction
 
 import (
 	"github.com/lycaon/lycaon/internal/capabilityrequest"
+	"github.com/lycaon/lycaon/internal/socketref"
 
 	"context"
 	"errors"
@@ -13,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/confine"
@@ -84,9 +86,10 @@ type requestSpec struct {
 	redirects     string
 	disposition   responseDisposition
 	contest       string
-	// unixSocket is the argument as stated; socket is the reviewed path dialed.
+	// unixSocket is the argument; socket labels the retained destination in receipts.
 	unixSocket    string
 	socket        string
+	socketBinding socketref.Binding
 	hostHeader    string
 	resolve       []outboundhttp.ResolveMapping
 	tokenJar      string
@@ -128,6 +131,7 @@ func Register(reg *tools.DefaultRegistry, deps Deps) error {
 				return "", reject
 			}
 			spec.socket = grant.ResolvedPath
+			spec.socketBinding = grant.Binding
 		}
 		ctx = secretmatch.WithAskAttribution(ctx, secretmatch.AskAttribution{
 			SessionID: tctx.Identity.SessionID, RootSessionID: tctx.ChatSessionID(), ProjectID: tctx.Identity.ProjectID,
@@ -164,6 +168,9 @@ func Register(reg *tools.DefaultRegistry, deps Deps) error {
 		defer confine.ForgetEgressAction(tctx.Identity.SessionID, tctx.Identity.ToolCallID)
 		resp, landed, bufferedBody, err := send(ctx, deps, tctx, spec, outbound, jar, tokenJar, tokenJarReq, allowAddress, durationArg(args["timeout_ms"]))
 		if err != nil {
+			if spec.socket != "" && (errors.Is(err, socketref.ErrUnbound) || errors.Is(err, syscall.ECONNREFUSED)) {
+				return "", capabilityrequest.SocketResolveReject(&confine.SocketResolveError{Code: confine.SocketResolveChanged, Path: spec.unixSocket, Err: err})
+			}
 			return "", sendReject(ctx, deps, jarReq, jar, tokenJarReq, tokenJar, err)
 		}
 		if bufferedBody != nil {
@@ -296,9 +303,10 @@ func send(
 		Class:  egressclass.AgentHTTPRequest,
 		Method: spec.method, URL: outbound.url, OriginHeaders: outbound.headers, Body: outbound.body, Timeout: timeout,
 		Redirects: outboundhttp.RedirectMode(spec.redirects), DiscardBody: spec.disposition.discard, AllowAddress: allowAddress,
-		UnixSocket: spec.socket,
-		HostHeader: spec.hostHeader,
-		Resolve:    spec.resolve,
+		UnixSocket:    spec.socket,
+		SocketBinding: spec.socketBinding,
+		HostHeader:    spec.hostHeader,
+		Resolve:       spec.resolve,
 	}
 	// A socket request reaches only the reviewed socket; its URL host names
 	// no network destination for the egress gate to judge.

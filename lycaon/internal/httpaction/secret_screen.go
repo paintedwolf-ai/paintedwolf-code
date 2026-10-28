@@ -78,8 +78,7 @@ func redactField(ctx context.Context, matcher *secretmatch.Matcher, field reques
 // request travels over one, otherwise the URL origin.
 func requestDestination(spec requestSpec) (id, label string) {
 	if spec.socket != "" {
-		label = "unix:" + spec.socket
-		return secretmatch.DestinationKey(label, "unix", spec.socket), label
+		return secretmatch.UnixDestination(spec.socket, spec.socketBinding.Key())
 	}
 	return secretmatch.HTTPDestination(spec.target)
 }

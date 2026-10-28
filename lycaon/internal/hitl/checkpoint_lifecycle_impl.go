@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/authzledger"
+	"github.com/lycaon/lycaon/internal/socketref"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -40,6 +41,18 @@ func (m *Checkpoints) RestorePending(ctx context.Context) error {
 				continue
 			}
 			d = remaining
+		}
+		lost, err := pendingSocketAuthorityLost(row)
+		if err != nil {
+			return err
+		}
+		if lost {
+			if err := m.settlePending(ctx, row.ID, DecisionStatusCanceled,
+				DecisionResult{Approved: false, Comments: "The local-service reference ended. Request the action again for fresh approval."},
+				Resolution{By: authzledger.ResolvedByHostStop}); err != nil {
+				return err
+			}
+			continue
 		}
 		m.Authority.restoreToolApproval(row)
 		m.expiries.schedule(ctx, row.ID, d, m.expirePending)
@@ -95,6 +108,8 @@ func (m *Checkpoints) RequestCheckpoint(ctx context.Context, req CheckpointReque
 	}
 	now := time.Now().UTC()
 	id := uuid.NewString()
+	var socketOwners []*socketref.Lease
+	defer func() { closeApprovalSocketOwners(socketOwners) }()
 	row := StoredCheckpoint{
 		ID:          id,
 		SessionID:   req.SessionID,
@@ -123,6 +138,10 @@ func (m *Checkpoints) RequestCheckpoint(ctx context.Context, req CheckpointReque
 			return nil, fmt.Errorf("approval plan action does not match proposed action")
 		}
 		stored, err := storeApprovalPlan(plan)
+		if err != nil {
+			return nil, err
+		}
+		socketOwners, err = acquireApprovalSocketOwners(plan)
 		if err != nil {
 			return nil, err
 		}
@@ -157,7 +176,12 @@ func (m *Checkpoints) RequestCheckpoint(ctx context.Context, req CheckpointReque
 	default:
 		return nil, fmt.Errorf("unsupported checkpoint kind %q", req.Kind)
 	}
+	if err := m.socketOwners.put(id, socketOwners); err != nil {
+		return nil, err
+	}
+	socketOwners = nil
 	if err := m.Store.Insert(ctx, row); err != nil {
+		m.socketOwners.release(id)
 		return nil, err
 	}
 	m.publishEvent(ctx, row)

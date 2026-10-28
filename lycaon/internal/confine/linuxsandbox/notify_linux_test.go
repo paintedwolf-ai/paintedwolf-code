@@ -5,6 +5,7 @@ package linuxsandbox
 import (
 	"encoding/binary"
 	"errors"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,17 +20,31 @@ func TestRelativeSocketPathsResolveAgainstTheTargetDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("working directory: %v", err)
 	}
-	resolved, ok := resolveSocketPath("nested/relative.sock", &targetProcess{pid: os.Getpid()})
-	want := filepath.Join(cwd, "nested/relative.sock")
-	if real, err := filepath.EvalSymlinks(cwd); err == nil {
-		want = filepath.Join(real, "nested/relative.sock")
+	path := filepath.Join(t.TempDir(), "socket")
+	listener, err := net.Listen("unix", path)
+	if err != nil {
+		t.Fatal(err)
 	}
+	defer listener.Close()
+	relative, err := filepath.Rel(cwd, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolved, ok := resolveSocketPath(relative, &targetProcess{pid: os.Getpid()})
 	if !ok || resolved != want {
 		t.Fatalf("relative path: got %q %v, want %q", resolved, ok, want)
 	}
-	if resolved, ok := resolveSocketPath("/run/absolute.sock", &targetProcess{pid: -1}); !ok || resolved != "/run/absolute.sock" {
+	if resolved, ok := resolveSocketPath(path, &targetProcess{pid: -1}); !ok || resolved != want {
 		t.Fatalf("absolute path: got %q %v", resolved, ok)
 	}
+	if resolved, ok := resolveSocketPath(path+".missing", &targetProcess{pid: -1}); ok || resolved != "" {
+		t.Fatalf("missing path resolved: %q %v", resolved, ok)
+	}
+
 }
 
 func TestUnreadableWorkingDirectoryRefusesRelativeSocketPaths(t *testing.T) {

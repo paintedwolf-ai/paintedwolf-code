@@ -150,7 +150,7 @@ func TestNetworkPlanMirrorsBoundaryDerivations(t *testing.T) {
 	}
 	deny := networkPlan(Confinement{Network: NetworkDeny, LocalListen: true, LocalListenPorts: []uint16{8080},
 		SocketGrants: []SocketGrant{{ApprovedPath: "/run/a", ResolvedPath: "/run/a"}}})
-	if deny.LoopbackConnect || !deny.Listen || !reflect.DeepEqual(deny.ListenPorts, []uint16{8080}) || !reflect.DeepEqual(deny.SocketPaths, []string{"/run/a"}) {
+	if deny.LoopbackConnect || !deny.Listen || !reflect.DeepEqual(deny.ListenPorts, []uint16{8080}) || !reflect.DeepEqual(deny.SocketGrants, []linuxsandbox.SocketGrant{{Path: "/run/a", FD: linuxsandbox.SocketReferenceFD}}) {
 		t.Fatalf("deny plan: %+v", deny)
 	}
 }

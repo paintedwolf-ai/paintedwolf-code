@@ -42,7 +42,7 @@ func TestExceptionalCapabilitiesReleasePermitsAtRunEndAndGrantsAtChatDisposal(t 
 	if !runtime.Sockets.GrantChat("chat", socket, "socket-grant", "checkpoint", "digest", nil) {
 		t.Fatal("socket grant was not installed")
 	}
-	runtime.Sockets.IssuePermit("chat", "call", "digest", socket)
+	runtime.Sockets.IssuePermit("chat", "chat", "call", "digest", socket)
 	lease := hitl.DirectIPLease{ActionDigest: "action", RequestDigest: "request", ConfinementDigest: "roots", ChatConfinementDigest: "chat-roots"}
 	if !runtime.DirectIP.GrantChat("chat", lease, "ip-grant", "checkpoint", nil) {
 		t.Fatal("direct-IP grant was not installed")

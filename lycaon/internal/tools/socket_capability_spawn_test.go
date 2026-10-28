@@ -162,7 +162,7 @@ func (r *memorySocketRuntime) AppliedGrants(string) []confine.SocketGrant {
 func (r *memorySocketRuntime) AuthorizedGrants(_, sessionID, toolCallID, actionDigest string, requested []confine.SocketGrant) []confine.SocketGrant {
 	out := make([]confine.SocketGrant, 0, len(requested))
 	for _, g := range requested {
-		key := sessionID + "|" + toolCallID + "|" + actionDigest + "|" + g.ApprovedPath + "|" + g.ResolvedPath
+		key := sessionID + "|" + toolCallID + "|" + actionDigest + "|" + g.ApprovedPath + "|" + g.ResolvedPath + "|" + g.Binding.Key()
 		if r.used[key] {
 			continue
 		}
@@ -170,7 +170,7 @@ func (r *memorySocketRuntime) AuthorizedGrants(_, sessionID, toolCallID, actionD
 			out = append(out, g)
 		}
 		for _, tg := range r.task {
-			if tg.ApprovedPath == g.ApprovedPath && tg.ResolvedPath == g.ResolvedPath {
+			if tg.ApprovedPath == g.ApprovedPath && tg.ResolvedPath == g.ResolvedPath && tg.Binding.Key() == g.Binding.Key() {
 				out = append(out, g)
 			}
 		}
@@ -183,16 +183,16 @@ func (r *memorySocketRuntime) GrantChat(_ string, g confine.SocketGrant, _, _, _
 	return true
 }
 
-func (r *memorySocketRuntime) IssuePermit(sessionID, toolCallID, actionDigest string, g confine.SocketGrant) {
+func (r *memorySocketRuntime) IssuePermit(_ string, sessionID, toolCallID, actionDigest string, g confine.SocketGrant) {
 	if r.permits == nil {
 		r.permits = map[string]confine.SocketGrant{}
 	}
-	key := sessionID + "|" + toolCallID + "|" + actionDigest + "|" + g.ApprovedPath + "|" + g.ResolvedPath
+	key := sessionID + "|" + toolCallID + "|" + actionDigest + "|" + g.ApprovedPath + "|" + g.ResolvedPath + "|" + g.Binding.Key()
 	r.permits[key] = g
 }
 
 func (r *memorySocketRuntime) ConsumePermit(sessionID, toolCallID, actionDigest string, g confine.SocketGrant) (bool, error) {
-	key := sessionID + "|" + toolCallID + "|" + actionDigest + "|" + g.ApprovedPath + "|" + g.ResolvedPath
+	key := sessionID + "|" + toolCallID + "|" + actionDigest + "|" + g.ApprovedPath + "|" + g.ResolvedPath + "|" + g.Binding.Key()
 	if r.used == nil {
 		r.used = map[string]bool{}
 	}
@@ -238,7 +238,7 @@ func TestConfineRequestForSpawnConsumesPermit(t *testing.T) {
 
 	rt := &memorySocketRuntime{}
 	digest := "action-digest"
-	rt.IssuePermit("sess", "call-1", digest, g)
+	rt.IssuePermit("sess", "sess", "call-1", digest, g)
 
 	tctx := ToolContext{
 		Identity: InvocationIdentity{SessionID: "sess",

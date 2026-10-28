@@ -1,11 +1,13 @@
 package confine
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
 
 	"github.com/lycaon/lycaon/internal/fspath"
+	"github.com/lycaon/lycaon/internal/socketref"
 
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -78,6 +80,16 @@ func ResolveSocketRequest(path string) (SocketGrant, error) {
 
 // RevalidateSocketGrant re-resolves ApprovedPath and requires it still equal ResolvedPath.
 func RevalidateSocketGrant(g SocketGrant) error {
+	if g.Binding.Mode() != socketref.KernelPathname && g.Binding.Mode() != socketref.RetainedObject {
+		return &SocketResolveError{Code: SocketResolveChanged, Path: g.ApprovedPath, Err: socketref.ErrUnbound}
+	}
+	if g.Binding.Mode() == socketref.RetainedObject {
+		lease, err := g.Binding.Acquire()
+		if err != nil {
+			return &SocketResolveError{Code: SocketResolveChanged, Path: g.ApprovedPath, Err: err}
+		}
+		lease.Close()
+	}
 	// Canonicalization alone cannot prove the socket still exists.
 	now := fspath.CanonicalPath(g.ApprovedPath)
 	if now != g.ResolvedPath {
@@ -86,6 +98,39 @@ func RevalidateSocketGrant(g SocketGrant) error {
 	fi, err := os.Lstat(now)
 	if err != nil || fi.Mode()&os.ModeSocket == 0 {
 		return &SocketResolveError{Code: SocketResolveChanged, Path: g.ApprovedPath, Err: err}
+	}
+	if g.Binding.Mode() == socketref.RetainedObject && !g.Binding.MatchesPath(now) {
+		return &SocketResolveError{Code: SocketResolveChanged, Path: g.ApprovedPath, Err: socketref.ErrUnbound}
+	}
+	return nil
+}
+
+// CaptureSocketGrant retains the destination for an invocation before review.
+// Inspection alone, including settings reads, never creates a reference.
+func CaptureSocketGrant(ctx context.Context, g SocketGrant) (SocketGrant, error) {
+	if g.Binding.Mode() == socketref.KernelPathname {
+		return g, nil
+	}
+	if g.Binding.Mode() != socketref.RetainedObject {
+		return SocketGrant{}, &SocketResolveError{Code: SocketResolveRefused, Path: g.ApprovedPath, Err: socketref.ErrUnbound}
+	}
+	binding, err := socketref.CaptureForInvocation(ctx, g.ApprovedPath)
+	if err != nil {
+		return SocketGrant{}, &SocketResolveError{Code: SocketResolveRefused, Path: g.ApprovedPath, Err: err}
+	}
+	resolved, err := binding.Path()
+	if err != nil || resolved != g.ResolvedPath {
+		return SocketGrant{}, &SocketResolveError{Code: SocketResolveChanged, Path: g.ApprovedPath, Err: err}
+	}
+	g.Binding = binding
+	return g, nil
+}
+
+func validateSocketRealization(grants []SocketGrant, mode socketref.Enforcement) error {
+	for _, grant := range grants {
+		if grant.Binding.Mode() != mode {
+			return &SocketResolveError{Code: SocketResolveRefused, Path: grant.ApprovedPath, Err: socketref.ErrUnbound}
+		}
 	}
 	return nil
 }
