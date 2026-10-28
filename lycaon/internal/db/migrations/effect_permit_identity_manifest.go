@@ -1,10 +1,9 @@
 package migrations
 
-// Revision4 was the recorded-result data repair, with revision3's unchanged
-// SQL shape. It is a known intermediate, not a newly claimed released baseline.
-var effectPermitIdentitySource = Baseline{Revision: 4, Shape: "c0280798481d97c01e3ddf30812db8b6c28db69520cd8b33b88642ddb03d18a2"}
+// Revision6 is the main schema before portable native authority is added.
+var effectPermitIdentitySource = Baseline{Revision: 6, Shape: "2294cfc726b056f7117798fd62673e13d995275b97f47f5ac2b8153a4a0c72dd"}
 
 func EffectPermitIdentity(target Baseline) Step {
-	return Step{ID: "native-child-once-authority", Source: effectPermitIdentityStepSource,
-		Checksum: "5398f75fa3b311e22d0f95a235ce75b3538ecf721307c6a8a23f6923f8d1982d", From: effectPermitIdentitySource, To: target, Apply: migrateEffectPermitIdentity}
+	return Step{ID: "native-child-once-authority", Source: effectPermitIdentitySourceBytes,
+		Checksum: "3c3862c529179e69f83a21dbd3b6d6bdf89017b92ee37bf90aa09fa39e6b6d58", From: effectPermitIdentitySource, To: target, Apply: migrateEffectPermitIdentity}
 }

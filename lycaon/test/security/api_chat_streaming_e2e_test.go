@@ -43,7 +43,7 @@ func TestChatStreamingTwoChannelE2E(t *testing.T) {
 
 	// Resolve the replay URL after the turn settles.
 	acceptPromptOpenAPI(t, base, sess.ID, `{"text":"hello stream"}`)
-	messageID, streamURL := lastAssistantStreamURL(t, base, sess.ID, 10*time.Second)
+	messageID, streamURL := lastAssistantStreamURL(t, base, sess.ID)
 	if messageID == "" || streamURL == "" {
 		t.Fatal("assistant stream URL missing after prompt turn")
 	}
@@ -68,7 +68,7 @@ func TestChatStreamingTwoChannelE2E(t *testing.T) {
 	if hub := h.MemoryHub(); hub != nil {
 		hub.FlushDebounced()
 	}
-	collected := collectHubUntil(t, hubEvents, 5*time.Second, func(seen map[string]int) bool {
+	collected := collectHubUntil(t, hubEvents, func(seen map[string]int) bool {
 		return seen[string(wire.EventTopicSession)] >= 1
 	})
 	hubCancel()
@@ -257,12 +257,10 @@ func subscribeProjectEvents(t *testing.T, ctx context.Context, base, projectID s
 }
 
 // collectHubUntil groups envelopes until a predicate matches.
-func collectHubUntil(t *testing.T, ch <-chan wire.EventEnvelope, deadline time.Duration, satisfied func(map[string]int) bool) map[string][]wire.EventEnvelope {
+func collectHubUntil(t *testing.T, ch <-chan wire.EventEnvelope, satisfied func(map[string]int) bool) map[string][]wire.EventEnvelope {
 	t.Helper()
 	out := map[string][]wire.EventEnvelope{}
 	counts := map[string]int{}
-	timer := time.NewTimer(testutil.Timeout(deadline))
-	defer timer.Stop()
 	for {
 		select {
 		case env, ok := <-ch:
@@ -275,7 +273,7 @@ func collectHubUntil(t *testing.T, ch <-chan wire.EventEnvelope, deadline time.D
 			if satisfied(counts) {
 				return out
 			}
-		case <-timer.C:
+		case <-t.Context().Done():
 			return out
 		}
 	}

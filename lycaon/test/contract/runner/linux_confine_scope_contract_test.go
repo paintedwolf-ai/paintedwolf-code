@@ -48,6 +48,13 @@ func TestLinuxConfineScopeRunsFullAndNamesLiveTests(t *testing.T) {
 	if !whole {
 		violations = append(violations, "no scope runs ./internal/confine/... unfiltered")
 	}
+	launch := false
+	for _, scope := range linuxConfineScopes(t, root) {
+		launch = launch || scope.coversPackage("./internal/launchguard") && scope.Run == nil
+	}
+	if !launch {
+		violations = append(violations, "no scope runs the protected launch suite (./internal/launchguard/...) unfiltered")
+	}
 	contractcheck.FailViolations(t, linuxConfineScript+" scope is incomplete", violations)
 }
 
@@ -77,6 +84,73 @@ func TestLinuxConfineScopeCoversEverySupervisorTest(t *testing.T) {
 	}
 	slices.Sort(uncovered)
 	contractcheck.FailViolations(t, "command supervisor tests missing from the "+linuxConfineScript+" supervisor leg", uncovered)
+}
+
+func TestLinuxConfineScopeRequiresAppliedHelperAndBrowserAdmissionFixtures(t *testing.T) {
+	t.Parallel()
+	root := contractcheck.RepoRoot(t)
+	scopes := linuxConfineScopes(t, root)
+	var missing []string
+	for _, fixture := range []struct{ pkg, test string }{
+		{"./internal/mcp", "TestLinuxStdioMCPAppliedBoundary"},
+		{"./internal/scan/integration", "TestLinuxScannerBoundaryKeepsSourceReadOnlyAndOutputWritable"},
+		{"./internal/documentcore", "TestLinuxDocumentCoreAppliedBoundary"},
+		{"./internal/browser", "TestBrowserUnavailableLinuxBoundaryDoesNotLaunch"},
+		{"./internal/browser", "TestBrowserBoundaryRefusesWhenConfinementCannotBeBuilt"},
+		{"./internal/browser", "TestLaunchHeadlessRefusesUnsafeProjectRootBeforeProvisioning"},
+	} {
+		if !slices.ContainsFunc(scopes, func(scope goTestScope) bool { return scope.covers(fixture.pkg, fixture.test) }) {
+			missing = append(missing, fixture.pkg+" "+fixture.test)
+		}
+	}
+	contractcheck.FailViolations(t, "required applied Linux helper/browser fixtures missing from native qualification", missing)
+}
+
+// Every leg the script accepts runs by default except launch-desktop, which
+// requires an explicit staged desktop artifact and is verified by
+// TestRealDesktopSelectionRefusesMissingArtifactWithoutRunningTheGoLeg.
+func TestLinuxConfineScriptHasNoOptInLegs(t *testing.T) {
+	t.Parallel()
+	script := contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), linuxConfineScript)
+	defaults := map[string]bool{
+		"launch-desktop": true,
+	}
+	var legs []string
+	for _, line := range strings.Split(script, "\n") {
+		if names, ok := strings.CutPrefix(line, "LEGS=("); ok && !strings.HasPrefix(names, `"`) {
+			for _, name := range strings.Fields(strings.TrimSuffix(names, ")")) {
+				defaults[name] = true
+			}
+		}
+		if label, ok := strings.CutSuffix(strings.TrimSpace(line), ")"); ok && strings.HasPrefix(line, "    ") &&
+			!strings.HasPrefix(line, "     ") && label != "" && !strings.ContainsAny(label, " *\"$") {
+			legs = append(legs, label)
+		}
+	}
+	if len(defaults) == 0 || len(legs) == 0 {
+		t.Fatalf("%s: could not read its default legs or its leg cases", linuxConfineScript)
+	}
+	var optIn []string
+	for _, leg := range legs {
+		if !defaults[leg] {
+			optIn = append(optIn, leg)
+		}
+	}
+	contractcheck.FailViolations(t, linuxConfineScript+" runs legs outside its default set", optIn)
+}
+
+// HTTP journeys live in test/security; a suite that qualifies installed bytes
+// does not, so a security digest never selects it or skips around it.
+func TestInstalledHelperSuiteIsNotASecurityJourney(t *testing.T) {
+	t.Parallel()
+	var misplaced []string
+	walkTestFiles(t, contractcheck.RepoRoot(t), func(pkg string, _ *token.FileSet, _ *ast.File, src []byte) {
+		if strings.HasPrefix(pkg, "./test/security") && strings.Contains(string(src), "installedhelper") {
+			misplaced = append(misplaced, pkg)
+		}
+	})
+	slices.Sort(misplaced)
+	contractcheck.FailViolations(t, "installed helper qualification inside the HTTP journey layer", slices.Compact(misplaced))
 }
 
 // amd64 runs the target in platform qualification, and an arm64 lane runs the same target.
