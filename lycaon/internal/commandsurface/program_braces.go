@@ -146,6 +146,17 @@ func leadingZero(value string) bool {
 	return len(value) > 1 && value[0] == '0'
 }
 
+// nonEmptyParts drops the empty literals the splitter leaves around a brace.
+func nonEmptyParts(parts []syntax.WordPart) []syntax.WordPart {
+	out := make([]syntax.WordPart, 0, len(parts))
+	for _, part := range parts {
+		if lit, ok := part.(*syntax.Lit); !ok || lit.Value != "" {
+			out = append(out, part)
+		}
+	}
+	return out
+}
+
 // brace lowers one split brace expansion.
 func (c *programCompiler) brace(b *syntax.BraceExp, loc SyntaxLocation) BracePart {
 	out := BracePart{SyntaxLocation: loc}
@@ -156,7 +167,7 @@ func (c *programCompiler) brace(b *syntax.BraceExp, loc SyntaxLocation) BracePar
 	}
 	out.Alternatives = make([]DeferredWord, 0, len(b.Elems))
 	for _, elem := range b.Elems {
-		out.Alternatives = append(out.Alternatives, DeferredWord{SyntaxLocation: c.location(elem), Parts: c.parts(elem.Parts)})
+		out.Alternatives = append(out.Alternatives, DeferredWord{SyntaxLocation: c.location(elem), Parts: c.parts(nonEmptyParts(elem.Parts))})
 	}
 	return out
 }

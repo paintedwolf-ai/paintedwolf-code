@@ -29,7 +29,7 @@ func TestCommandEntryBraceExpansionReachesTheFilesystemOwner(t *testing.T) {
 			t.Fatalf("mkdir did not create %s: %v", name, statErr)
 		}
 	}
-	if executions := f.Executions(t); !strings.Contains(executions["mkdir"], "completed") {
+	if executions := f.Executions(t); executions["command-host:mkdir"] != "completed;" {
 		t.Fatalf("mkdir did not settle through its owner: %v", executions)
 	}
 }
@@ -84,7 +84,7 @@ func TestCommandEntryUntilExitsWhenAnotherJobCreatesTheFile(t *testing.T) {
 
 func TestCommandEntryUntilRespectsTheLoopBudget(t *testing.T) {
 	f := newPathsFixture(t)
-	out, err := f.Call(t, t.Context(), "until [ -f never ]; do :; done; echo unreachable")
+	out, err := f.Call(t, t.Context(), "until false; do :; done; echo unreachable")
 	testutil.FailErr(t, "run unbounded readiness loop", err)
 	got := decodeProgramOutcome(t, out)
 	if got.Refusal == nil || got.Refusal.Code != "COMMAND_LIMIT_EXCEEDED" || got.Refusal.Details["limit_id"] != "loop_iterations" || strings.Contains(got.Stdout, "unreachable") {

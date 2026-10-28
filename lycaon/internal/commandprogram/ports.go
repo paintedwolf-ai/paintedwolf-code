@@ -228,7 +228,8 @@ type OperationDispatcher interface {
 }
 
 // ExpansionScope is the evaluator-visible state expansion may read. The
-// evaluator owns and mutates it; expansion never assigns or records status.
+// evaluator owns and mutates it; expansion records no status and assigns only
+// through ${name=word}, ${name:=word} and (( )) arithmetic in the frame.
 // Variables is the invocation-local implementation.
 type ExpansionScope interface {
 	Variable(name string) (value string, set bool)

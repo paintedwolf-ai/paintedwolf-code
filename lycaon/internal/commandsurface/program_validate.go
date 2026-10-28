@@ -31,7 +31,7 @@ func (c *programCompiler) validate(file *syntax.File) {
 
 func (c *programCompiler) validateNode(n syntax.Node) {
 	switch v := n.(type) {
-	case *syntax.File, *syntax.Block, *syntax.Subshell, *syntax.IfClause, *syntax.Lit, *syntax.ArrayExpr, *syntax.ParenArithm, *syntax.UnaryArithm, *syntax.BinaryArithm:
+	case *syntax.File, *syntax.Block, *syntax.Subshell, *syntax.IfClause, *syntax.WhileClause, *syntax.Lit, *syntax.ArrayExpr, *syntax.ParenArithm, *syntax.UnaryArithm, *syntax.BinaryArithm:
 	case *syntax.WordIter:
 		c.markFieldWords(v.Items)
 	case *syntax.ArrayElem:
@@ -68,7 +68,6 @@ func (c *programCompiler) validateNode(n syntax.Node) {
 		if v.Op == syntax.Pipe {
 			c.limit(n, "pipeline_stages", int64(c.pipelineWidth(v)))
 		}
-	case *syntax.WhileClause:
 	case *syntax.ForClause:
 		if v.Select || v.Braces {
 			c.unsupported(n, "for NAME in WORDS; do ...; done")

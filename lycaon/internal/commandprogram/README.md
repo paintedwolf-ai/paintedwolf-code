@@ -42,7 +42,12 @@ unquoted field splitting and `read`; a command prefix applies only to that comma
 Quote removal uses the selected `expand.RemoveQuotes` walker. Parameters are
 `$name`, `${name}`, `${#name}` (Unicode scalars), `$0`, `$1`..`${10}`, `$#`, `$?`,
 `$!`, `$@` and `$*`; unset values expand empty. Quoted `"$@"` keeps each operand
-and expands to no field for no operands, `"$*"` joins with single spaces. Only
+and expands to no field for no operands, `"$*"` joins with single spaces.
+`${name=word}` and `${name:=word}` assign the expanded word in the frame when the
+parameter is unset (or empty) and expand to the value. Brace expansion runs first
+on command words, `for` items and array elements: each alternative or sequence
+value becomes its own word, with adjacent literal text joined, and then expands
+as written. Only
 `~` and `~/` expand, from `HOME`; without it the tilde stays literal. Unquoted
 expansion output splits on space, tab and LF; quoted output and literal text
 never split. Values are data: metacharacters, substitution syntax and secret
@@ -71,16 +76,18 @@ Scalars are bounded by `variable_value_bytes`, here-documents by
 memory and `expansion_memory_bytes` and released when the word completes.
 Every refusal is an `ExpansionError` with the catalog code and the word or part
 span. Here-documents with a quoted delimiter are literal; `<<-` strips leading
-tabs from body lines, not from expanded values.
+tabs from body lines, not from expanded values. A here-string expands its word
+as one value without splitting or globbing and appends LF; those bytes count
+against `here_document_bytes`.
 
 ## Evaluator
 
 `Evaluate(ctx, plan, EvaluationPorts)` is the host statement scheduler over a
 frozen `commandsurface.ProgramSnapshot`. It walks `;`, `&&`, `||`, `!`,
 pipelines, braces and isolated `( )` frames, `if`/`elif`/`else`, `for`,
-`while`, functions, `source -- PATH`, `test`/`[`/`[[`, `true`/`false`/`:`,
+`while`, `until`, functions, `source -- PATH`, `test`/`[`/`[[`, `true`/`false`/`:`,
 `exit`/`return`/`break`/`continue`, assignments, `export`/`unset`,
-redirections, here-documents and statement-trailing `&`. Every simple command
+redirections, here-documents, here-strings and statement-trailing `&`. Every simple command
 is expanded through `Expander` when reached and dispatched through `Dispatch`:
 catalog names bind first through `ArgvBinder` and `Invoke`; other programs and
 `external --` use `Launch`. Unsupported option spellings refuse with the

@@ -12,8 +12,8 @@ import (
 
 // WordExpander implements Expander for one program. It reads only the scope it
 // is given, dispatches substitutions through the evaluator's port and reads
-// directories through the logical-path view; it never assigns variables,
-// records statuses or reparses data. Glob matches and traversal visits are
+// directories through the logical-path view; it assigns variables only for
+// ${name=word} and ${name:=word}, and never records statuses or reparses data. Glob matches and traversal visits are
 // charged cumulatively to the program, and live intermediate buffers to
 // expansion_memory_bytes and the program's working memory.
 type WordExpander struct {

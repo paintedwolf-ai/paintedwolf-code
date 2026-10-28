@@ -58,11 +58,11 @@ func TestClassifyBracesMatchesSelectedExpansionWithoutMutation(t *testing.T) {
 
 func TestSplitBracesBoundedReturnsDetachedSplitAndRefusesMixedRanges(t *testing.T) {
 	for _, fixture := range []struct {
-		word  string
-		parts int
-		err   error
+		word   string
+		braces int
+		err    error
 	}{
-		{"x{a,b}", 2, nil}, {"{01..10..2}", 1, nil}, {"{a..z..0}", 1, nil},
+		{"x{a,b}{1,2}", 2, nil}, {"{01..10..2}", 1, nil}, {"{a..z..0}", 1, nil},
 		{"x{a", 0, nil}, {`"{a,b}"`, 0, nil}, {"x{1..2..3..4}", 0, nil},
 		{"x{1..a}", 0, syntax.ErrBraceMixedRange}, {"{a,{b..2}}", 0, syntax.ErrBraceMixedRange},
 	} {
@@ -84,14 +84,20 @@ func TestSplitBracesBoundedReturnsDetachedSplitAndRefusesMixedRanges(t *testing.
 		if len(word.Parts) != original {
 			t.Fatalf("split %q mutated the word", fixture.word)
 		}
-		if fixture.parts == 0 {
+		if fixture.braces == 0 {
 			if split != nil {
 				t.Fatalf("split %q = %d parts; want no expansion", fixture.word, len(split.Parts))
 			}
 			continue
 		}
-		if split == nil || len(split.Parts) != fixture.parts || pool.UsedBytes() <= before {
-			t.Fatalf("split %q = %+v; want %d charged parts", fixture.word, split, fixture.parts)
+		braces := 0
+		for _, part := range split.Parts {
+			if _, ok := part.(*syntax.BraceExp); ok {
+				braces++
+			}
+		}
+		if braces != fixture.braces || pool.UsedBytes() <= before {
+			t.Fatalf("split %q has %d brace parts; want %d charged", fixture.word, braces, fixture.braces)
 		}
 	}
 }
