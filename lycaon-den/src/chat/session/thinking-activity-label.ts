@@ -269,6 +269,7 @@ function userTurnStartIndex(messages: readonly Message[]): number {
 /** Latest in-flight tool in the current user turn (skips orientation-only tools). */
 export function findLatestRunningToolInTurn(
   messages: readonly Message[],
+  activities: readonly ActivityEvent[] = [],
 ): ToolPartView | undefined {
   const turnStart = userTurnStartIndex(messages);
   let latest: ToolPartView | undefined;
@@ -281,6 +282,11 @@ export function findLatestRunningToolInTurn(
       const toolName = call.name?.trim();
       if (!toolName) continue;
       if (isCoordinatorInternalTool(toolName)) continue;
+      if (activities.some((activity) =>
+        activity.status === "active" && activity.kind === "awaiting_wake" &&
+        activity.tool_call_id?.trim() === call.id.trim() &&
+        activity.tool_name?.trim().toLowerCase() === toolName.toLowerCase()
+      )) continue;
 
       const result = findToolResult(messages, msg.id, call.id);
       const part = toolPartFromCall(call, result, msg.id, undefined, {
@@ -300,12 +306,8 @@ function runningToolCandidate(
   messages: readonly Message[],
   activities: readonly ActivityEvent[] = [],
 ): ActivityLabelCandidate | undefined {
-  const part = findLatestRunningToolInTurn(messages);
+  const part = findLatestRunningToolInTurn(messages, activities);
   if (!part) return undefined;
-  if (activities.some((activity) =>
-    activity.status === "active" && activity.kind === "awaiting_wake" &&
-    activity.tool_call_id?.trim() === part.toolCallId.trim() && activity.tool_name?.trim().toLowerCase() === part.tool.toLowerCase()
-  )) return undefined;
   return {
     label: thinkingToolRunningLabel(part),
     weight: ACTIVITY_LABEL_WEIGHTS.runningTool,
