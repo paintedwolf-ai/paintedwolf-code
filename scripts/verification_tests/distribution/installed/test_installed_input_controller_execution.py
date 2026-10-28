@@ -140,7 +140,7 @@ class DeliveryVerificationTests(unittest.TestCase):
             observations = {'editor_keyboard': {'physical_vm_keyboard': edit},
                             'editor_search_keyboard': {'physical_vm_keyboard': search}, 'native_input': search}
             self.write(root, observations, self.rows([edit, search, search]))
-            with self.assertRaisesRegex(ValueError, 'unexpected fixed transactions'):
+            with self.assertRaisesRegex(ValueError, 'exceeds its fixed transaction count'):
                 controller.verify_deliveries(root, EXECUTION, SELECTED)
 
     def test_host_rows_must_match_the_guest_events_shape_and_focus(self):
