@@ -377,7 +377,7 @@ type ProgressAdmission interface {
 // session-scoped job identity that $! and wait/kill address.
 type ProgramSupervision interface {
 	RunProgram(context.Context, toolcontract.OperationInvocation, func(context.Context) (toolcontract.ProducerResult, error)) (toolcontract.ProducerResult, error)
-	StartJob(context.Context, toolcontract.OperationInvocation, func(context.Context, Streams) (toolcontract.ProducerResult, error)) (string, error)
+	StartJob(context.Context, toolcontract.OperationInvocation, func(context.Context, string, Streams) (toolcontract.ProducerResult, error)) (string, error)
 }
 
 // Dispatch reaches operation owners and confined launch from one directory

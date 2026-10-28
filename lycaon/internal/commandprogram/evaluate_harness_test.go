@@ -376,11 +376,14 @@ type fakeJobs struct {
 func (j *fakeJobs) RunProgram(ctx context.Context, _ toolcontract.OperationInvocation, run func(context.Context) (toolcontract.ProducerResult, error)) (toolcontract.ProducerResult, error) {
 	return run(ctx)
 }
-func (j *fakeJobs) StartJob(_ context.Context, _ toolcontract.OperationInvocation, run func(context.Context, Streams) (toolcontract.ProducerResult, error)) (string, error) {
+func (j *fakeJobs) StartJob(_ context.Context, _ toolcontract.OperationInvocation, run func(context.Context, string, Streams) (toolcontract.ProducerResult, error)) (string, error) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	j.runs = append(j.runs, run)
-	return fmt.Sprintf("job-%d", len(j.runs)), nil
+	handle := fmt.Sprintf("job-%d", len(j.runs)+1)
+	j.runs = append(j.runs, func(ctx context.Context, streams Streams) (toolcontract.ProducerResult, error) {
+		return run(ctx, handle, streams)
+	})
+	return handle, nil
 }
 
 type evalFixture struct {

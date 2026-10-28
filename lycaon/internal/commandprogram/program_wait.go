@@ -9,6 +9,7 @@ import (
 // blocked: a timer, exact job handles, or both. The evaluator derives it from
 // its own and supervision state, never from the program's text.
 type WaitState struct {
+	process bool
 	// Statement is the waiting statement's source text; it names the wait.
 	Statement string
 	// Until is the earliest timer wake. Zero means only jobs can wake it.

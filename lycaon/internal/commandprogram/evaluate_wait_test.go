@@ -175,7 +175,7 @@ func TestInheritedPipeEndpointUsesTheCurrentActivity(t *testing.T) {
 	testutil.FailErr(t, "pipe", err)
 	defer pipe.CloseConsumer()
 	inherited := Streams{Input: pipeConsumer{pipe: pipe, wait: parent}}
-	rebound := streamsForWait(inherited, child)
+	rebound := inherited.WithActivity(child)
 	got := make(chan error, 1)
 	go func() { _, err := rebound.Input.Read(make([]byte, 1)); got <- err }()
 	awaitPipeState(t, pipe.stream, func(p *pipeRendezvous) bool { return len(p.readers) == 1 })
@@ -260,5 +260,60 @@ func TestZeroTimeReadinessIncludesEOFAndDoesNotConsumeBytes(t *testing.T) {
 	testutil.FailErr(t, "finish pipe", pipe.CloseProducer(nil))
 	if string(got) != "ready" || !inputReady(input) {
 		t.Fatalf("data %q EOF ready %v", got, inputReady(input))
+	}
+}
+
+func TestExecutionWaitForkInheritsDeadlinesAndKeepsTheParentRunnable(t *testing.T) {
+	_, root, observed := newWaitActivities(t)
+	restore := root.Deadline(root.Now().Add(time.Minute), "timeout 60 xargs")
+	defer restore()
+	child, finish := root.Fork()
+	defer finish()
+	blocked := blockActivity(t, child, WaitState{})
+	defer blocked()
+	if observed.active {
+		t.Fatal("waiting child parked its runnable parent")
+	}
+	parentBlocked := blockActivity(t, root, WaitState{})
+	defer parentBlocked()
+	got := observed.states[len(observed.states)-1]
+	if got.Statement != "timeout 60 xargs" || !got.Until.Equal(root.Now().Add(time.Minute)) {
+		t.Fatalf("inherited deadline %+v", got)
+	}
+}
+
+func TestExecutionWaitProcessNeedsAnExplicitDeadlineOrAwaitedJob(t *testing.T) {
+	w, root, observed := newWaitActivities(t)
+	background, finish := root.Fork()
+	defer finish()
+	sleeping := blockActivity(t, background, WaitState{Statement: "sleep 120", Until: root.Now().Add(120 * time.Second)})
+	defer sleeping()
+	process, err := root.Process(t.Context())
+	testutil.FailErr(t, "observe foreground process", err)
+	if observed.active {
+		t.Fatal("ordinary process became waiting beside an unrelated timer")
+	}
+	process()
+	sleeping()
+	background.Job("exact-job")
+	waiting, err := background.Process(t.Context())
+	testutil.FailErr(t, "observe background process", err)
+	defer waiting()
+	awaited := blockActivity(t, root, WaitState{Statement: "wait %1", Jobs: []string{"exact-job"}})
+	defer awaited()
+	if !observed.active {
+		t.Fatal("exact supervised job wait did not publish")
+	}
+	got := observed.states[len(observed.states)-1]
+	if len(got.Jobs) != 1 || got.Jobs[0] != "exact-job" {
+		t.Fatalf("wait %+v", got)
+	}
+	child, release := background.Fork()
+	defer release()
+	w.mu.Lock()
+	job := child.job
+	w.mu.Unlock()
+	if job != "exact-job" {
+		t.Fatalf("nested activity job=%q", job)
 	}
 }

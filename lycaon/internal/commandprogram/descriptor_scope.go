@@ -39,7 +39,7 @@ func (d *descriptorFrame) setError(w io.Writer)     { d.setWriter(2, w) }
 func (d descriptorFrame) PrepareStreams(ctx context.Context) (Streams, error) {
 	streams := d.streams
 	if d.scope == nil {
-		return streamsForWait(streams, d.wait), nil
+		return streams.WithActivity(d.wait), nil
 	}
 	parent := d
 	parent.scope = d.scope.base.scope
@@ -53,7 +53,7 @@ func (d descriptorFrame) PrepareStreams(ctx context.Context) (Streams, error) {
 		needed = needed || changed && d.generations[fd] == d.scope.base.generations[fd]
 	}
 	if !needed {
-		return streamsForWait(streams, d.wait), nil
+		return streams.WithActivity(d.wait), nil
 	}
 	bound, err := d.scope.open(ctx)
 	if err != nil {
@@ -69,7 +69,7 @@ func (d descriptorFrame) PrepareStreams(ctx context.Context) (Streams, error) {
 			streams.SetWriter(fd, bound.Writer(fd))
 		}
 	}
-	return streamsForWait(streams, d.wait), nil
+	return streams.WithActivity(d.wait), nil
 }
 
 // pending reports descriptor work that must cross admission before local state

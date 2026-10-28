@@ -176,14 +176,9 @@ func jobBuiltins(jobs *SessionJobs, commands map[string]toolcontract.CommandSpec
 				}
 				exact[i] = handle
 			}
-			unblock, err := request.Wait.Block(ctx, commandprogram.WaitState{Statement: strings.Join(request.Argv.Values(), " "), Jobs: exact})
-			if err != nil {
-				return ownerFailure(err), err
-			}
-			defer unblock()
 			last := readResult(0)
 			for _, handle := range exact {
-				result, err := jobs.Wait(ctx, handle)
+				result, err := jobs.Wait(ctx, handle, request.Wait, strings.Join(request.Argv.Values(), " "))
 				if err != nil {
 					if reject := toolrejection.AsToolReject(err); reject != nil && reject.Data != nil {
 						reject.Data["command"] = "wait"
