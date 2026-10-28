@@ -236,7 +236,6 @@ translator's range checks use the actual normalized endpoints. The opt-in change
 is recorded in `mvdan-sh.patch`; POSIX parser instrumentation and this profile
 are recorded in `go-posix.patch`.
 
-
 ## MLX build inputs
 
 `mlx/` holds checksummed MLX C++ dependency archives. The complete locked
