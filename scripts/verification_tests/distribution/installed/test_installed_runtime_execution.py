@@ -10,8 +10,14 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from scripts.linux_release.installed_runtime import (
-    ROLES, SETUID_LAUNCHER, bind, elf, manifest, nix_command, unchanged,
+from scripts.linux_release.campaign.runtime import (
+    ROLES,
+    SETUID_LAUNCHER,
+    bind,
+    elf,
+    manifest,
+    nix_command,
+    unchanged,
 )
 
 
@@ -156,7 +162,7 @@ class InstalledRuntimeTests(unittest.TestCase):
                 patch.object(Path, "stat", return_value=root_setuid), \
                 patch.object(Path, "lstat", return_value=root_setuid), \
                 patch.object(Path, "read_text", return_value=raw_manifest), \
-                patch("scripts.linux_release.installed_runtime.file_identity", side_effect=fake_identity):
+                patch("scripts.linux_release.campaign.runtime.file_identity", side_effect=fake_identity):
             observed = manifest(root, "amd64")
             self.assertEqual(observed["images"][str(SETUID_LAUNCHER)]["mode"], 0o4755)
             nix_root = Path("/nix/store/00000000000000000000000000000000-app/lib/painted-wolf-code")
@@ -190,7 +196,7 @@ class InstalledRuntimeTests(unittest.TestCase):
             return SimpleNamespace(returncode=0, stdout=b"{}")
         with patch.dict(os.environ, {"NIX_CONFIG": "plugin-files=/attacker", "NIX_REMOTE": "ssh://foreign",
                                      "GH_TOKEN": "private", "AWS_SECRET_ACCESS_KEY": "private"}), patch(
-                "scripts.linux_release.installed_runtime.subprocess.run", side_effect=run):
+                "scripts.linux_release.campaign.runtime.subprocess.run", side_effect=run):
             self.assertEqual(nix_command(Path("/explicit/nix"), "path-info", "/nix/store/output"), b"{}")
 
     def test_native_launcher_is_the_exact_sealed_desktop_entry_image(self):
@@ -203,12 +209,12 @@ class InstalledRuntimeTests(unittest.TestCase):
         entries = {str((root / "bin" / role).relative_to("/")): {} for role in ROLES}
         entries[str((root / "manifest.json").relative_to("/"))] = {}
         images = {str(launcher): {"sha256": "sealed", "bytes": 64}}
-        with patch("scripts.linux_release.installed_runtime.platform.system", return_value="Linux"), patch(
-                "scripts.linux_release.installed_runtime.platform.machine", return_value="x86_64"), patch.object(
+        with patch("scripts.linux_release.campaign.runtime.platform.system", return_value="Linux"), patch(
+                "scripts.linux_release.campaign.runtime.platform.machine", return_value="x86_64"), patch.object(
                 Path, "resolve", lambda path, **kwargs: path), patch(
-                "scripts.linux_release.installed_runtime.inspect", return_value=entries), patch(
-                "scripts.linux_release.installed_runtime.verify", return_value={"status": "passed"}), patch(
-                "scripts.linux_release.installed_runtime.manifest", return_value={"version": "1.0.2", "images": images}):
+                "scripts.linux_release.campaign.runtime.inspect", return_value=entries), patch(
+                "scripts.linux_release.campaign.runtime.verify", return_value={"status": "passed"}), patch(
+                "scripts.linux_release.campaign.runtime.manifest", return_value={"version": "1.0.2", "images": images}):
             result = bind(final, source, artifact["id"], Path("/files"), root)
             self.assertEqual(result["launcher"], {"path": str(launcher), **images[str(launcher)]})
             images.clear()
@@ -227,12 +233,12 @@ class InstalledRuntimeTests(unittest.TestCase):
         package_images = {launcher: {'inode': 10}}
         runtime_images = {launcher: {'inode': 20}, str(SETUID_LAUNCHER): {'inode': 30, 'mode': 0o4755}}
         selected = {'root': str(root / 'generations' / ('c' * 64)), 'images': runtime_images}
-        with patch('scripts.linux_release.installed_runtime.platform.system', return_value='Linux'), \
-                patch('scripts.linux_release.installed_runtime.platform.machine', return_value='x86_64'), \
+        with patch('scripts.linux_release.campaign.runtime.platform.system', return_value='Linux'), \
+                patch('scripts.linux_release.campaign.runtime.platform.machine', return_value='x86_64'), \
                 patch.object(Path, 'resolve', lambda path, **kwargs: path), \
-                patch('scripts.linux_release.installed_runtime.inspect', return_value=entries), \
-                patch('scripts.linux_release.installed_runtime.verify', return_value={'status': 'passed'}), \
-                patch('scripts.linux_release.installed_runtime.manifest', return_value={'version': '1.0.2', 'images': package_images}), \
+                patch('scripts.linux_release.campaign.runtime.inspect', return_value=entries), \
+                patch('scripts.linux_release.campaign.runtime.verify', return_value={'status': 'passed'}), \
+                patch('scripts.linux_release.campaign.runtime.manifest', return_value={'version': '1.0.2', 'images': package_images}), \
                 patch('scripts.linux_release.installed_generation.bind', return_value=selected) as generation:
             result = bind(final, source, artifact['id'], Path('/files'), root)
         generation.assert_called_once_with(root, package_images, entries)
@@ -250,13 +256,13 @@ class InstalledRuntimeTests(unittest.TestCase):
         final = {"format_version": 1, "source_commit": source, "artifacts": [artifact]}
         root = Path(output) / "lib/painted-wolf-code"
         rows = {output: {"narHash": "sha256-" + "A" * 43 + "="}}
-        with patch("scripts.linux_release.installed_runtime.platform.system", return_value="Linux"), patch(
-                "scripts.linux_release.installed_runtime.platform.machine", return_value="x86_64"), patch.object(
+        with patch("scripts.linux_release.campaign.runtime.platform.system", return_value="Linux"), patch(
+                "scripts.linux_release.campaign.runtime.platform.machine", return_value="x86_64"), patch.object(
                 Path, "resolve", lambda path, **kwargs: path), patch(
-                "scripts.linux_release.installed_runtime.elf", return_value={"sha256": "client"}), patch(
-                "scripts.linux_release.installed_runtime.manifest", return_value={"version": "1.0.2", "images": {}}), patch(
-                "scripts.linux_release.installed_runtime.file_identity", return_value={"header": b"#!/bin/sh", "mode": 0o755}), patch(
-                "scripts.linux_release.installed_runtime.nix_command", side_effect=lambda *args: json.dumps(rows).encode()) as query:
+                "scripts.linux_release.campaign.runtime.elf", return_value={"sha256": "client"}), patch(
+                "scripts.linux_release.campaign.runtime.manifest", return_value={"version": "1.0.2", "images": {}}), patch(
+                "scripts.linux_release.campaign.runtime.file_identity", return_value={"header": b"#!/bin/sh", "mode": 0o755}), patch(
+                "scripts.linux_release.campaign.runtime.nix_command", side_effect=lambda *args: json.dumps(rows).encode()) as query:
             result = bind(final, source, "nix-amd64", Path("/files"), root, Path("/explicit/nix"))
             self.assertTrue(result["payload"]["content_verified"])
             self.assertFalse(result["payload"]["publisher_or_custody_authority"])

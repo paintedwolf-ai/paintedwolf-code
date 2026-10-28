@@ -2,7 +2,7 @@
 
 import unittest
 
-from linux_release.installed_provenance import local_controller_context
+from linux_release.campaign.provenance import local_controller_context
 
 
 class LocalControllerContextTests(unittest.TestCase):
@@ -27,14 +27,14 @@ class ProtectedControllerContextTests(unittest.TestCase):
                 "GITHUB_RUN_ID": "123", "GITHUB_RUN_ATTEMPT": "2"}
 
     def test_protected_attempt_has_no_local_host_authority(self):
-        from linux_release.installed_provenance import protected_controller_context
+        from linux_release.campaign.provenance import protected_controller_context
         self.assertEqual(protected_controller_context(self.environment()),
                          {"repository_id": 42, "run_id": 123, "run_attempt": 2, "controller_commit": "a" * 40})
         with self.assertRaises(ValueError):
             protected_controller_context(local_controller_context("a" * 40, 42, "host"))
 
     def test_nonmain_or_incomplete_producer_is_refused(self):
-        from linux_release.installed_provenance import protected_controller_context
+        from linux_release.campaign.provenance import protected_controller_context
         for field, value in (("GITHUB_REF", "refs/heads/feature"), ("GITHUB_EVENT_NAME", "pull_request"),
                 ("GITHUB_WORKFLOW_REF", "owner/repo/.github/workflows/other.yml@refs/heads/main"),
                 ("GITHUB_WORKFLOW_SHA", "b" * 40), ("GITHUB_RUN_ID", "0"),
@@ -43,7 +43,7 @@ class ProtectedControllerContextTests(unittest.TestCase):
                 protected_controller_context({**self.environment(), field: value})
 
     def test_missing_or_malformed_environment_cannot_establish_an_attempt(self):
-        from linux_release.installed_provenance import protected_controller_context
+        from linux_release.campaign.provenance import protected_controller_context
         environment = self.environment()
         for field in environment:
             for value in (None, True, ""):

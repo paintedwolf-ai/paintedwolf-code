@@ -33,7 +33,7 @@ from .lifecycle import SCRIPT, capture, cleanup
 from .provider import MODEL, ProviderFixture
 from .records import CaseUnavailable
 from .workflow import ToolTurn, accepted
-from ..installed_runtime import SETUID_LAUNCHER as BOOTSTRAP, file_identity
+from ..campaign.runtime import SETUID_LAUNCHER as BOOTSTRAP, file_identity
 
 POLICY = Path('/etc/paintedwolf/launch.json')
 ENTRY = 'bin/pw-launch-entry'

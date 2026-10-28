@@ -12,7 +12,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from scripts.linux_release import installed_generation as generation
-from scripts.linux_release.installed_runtime import file_identity
+from scripts.linux_release.campaign.runtime import file_identity
 from scripts.linux_release.installed_cases.package_payload import Entry, verify
 
 

@@ -1,7 +1,7 @@
 """Raw execution metadata cannot substitute another plan, package bundle or driver."""
 import unittest
 
-from linux_release.installed_qualification_binding import verify
+from linux_release.campaign.qualification_binding import verify
 
 
 class PublicationQualificationTests(unittest.TestCase):
