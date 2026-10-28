@@ -18,7 +18,10 @@ type WaitingProgram struct {
 	State func(now time.Time) commandprogram.WaitState
 	// Blocked closes once the program reported its wait.
 	Blocked chan struct{}
-	release chan struct{}
+	// IgnoresCancel keeps the program waiting through cancellation, as an
+	// owner that does not unwind would.
+	IgnoresCancel bool
+	release       chan struct{}
 }
 
 func NewWaitingProgram(clock *ManualClock, state func(time.Time) commandprogram.WaitState) *WaitingProgram {
@@ -44,11 +47,15 @@ func (p *WaitingProgram) Evaluate(ctx context.Context, _ commandsurface.ProgramS
 		return commandprogram.ProgramOutcome{Status: 1, Stop: &commandprogram.HostStop{Kind: commandprogram.StopOwner, Result: refused}}, err
 	}
 	defer unblock()
+	canceled := ctx.Done()
+	if p.IgnoresCancel {
+		canceled = nil
+	}
 	select {
 	case <-p.release:
 		_, _ = fmt.Fprint(ports.Streams.Output, "done\n")
 		return commandprogram.ProgramOutcome{}, nil
-	case <-ctx.Done():
+	case <-canceled:
 		return commandprogram.ProgramOutcome{Status: 130}, ctx.Err()
 	}
 }

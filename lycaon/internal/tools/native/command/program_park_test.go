@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -15,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // recordingParking stands in for the session's wait lease.
@@ -62,6 +64,25 @@ func (p *recordingParking) count() int {
 func (p *recordedPark) LeaseID() string { return "lease-" + p.park.ProgramID }
 func (p *recordedPark) Settle(_ context.Context, result string, err error) {
 	p.settled <- settledProgram{result: result, err: err}
+}
+
+type recordedRuns struct {
+	mu   sync.Mutex
+	runs []tools.SourceRunCapture
+}
+
+func (r *recordedRuns) RecordSourceRunEvidence(_ context.Context, _ string, _ *api.Session, tool string, run tools.SourceRunCapture) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if tool == "command" {
+		r.runs = append(r.runs, run)
+	}
+}
+
+func (r *recordedRuns) recorded() []tools.SourceRunCapture {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]tools.SourceRunCapture(nil), r.runs...)
 }
 
 type parkFixture struct {
@@ -172,6 +193,8 @@ func TestProgramParkSettlesWithTheCompleteResult(t *testing.T) {
 	clock := programtest.NewManualClock()
 	program := programtest.NewWaitingProgram(clock, programtest.SleepState(120*time.Second))
 	f := newParkFixture(t, program)
+	runs := &recordedRuns{}
+	f.Runtime.SourceRuns = runs
 	result := <-f.start(t, map[string]any{"command": "sleep 120; echo done"})
 	testutil.FailErr(t, "park waiting program", result.err)
 	var parked command.ParkedProgramResult
@@ -180,7 +203,7 @@ func TestProgramParkSettlesWithTheCompleteResult(t *testing.T) {
 	if parked.State != "parked" || parked.Reason != "sleep 120" || parked.LeaseID != recorded.LeaseID() || parked.WakeAt != clock.Now().Add(120*time.Second).Format(time.RFC3339) {
 		t.Fatalf("parked result %s", result.content)
 	}
-	if recorded.park.Reason != "sleep 120" || !recorded.park.WakeAt.Equal(clock.Now().Add(120*time.Second)) || recorded.park.ProgramID != parked.ProgramID {
+	if recorded.park.Reason != "sleep 120" || recorded.park.ProgramID != parked.ProgramID || recorded.park.Deadline.IsZero() {
 		t.Fatalf("park request %+v", recorded.park)
 	}
 	if programs := f.Programs(t); len(programs) != 1 || programs[0] != "running" {
@@ -201,6 +224,9 @@ func TestProgramParkSettlesWithTheCompleteResult(t *testing.T) {
 	}
 	if f.out.CommandProgram.State != "running" || f.out.SourceRun != nil {
 		t.Fatalf("a parked program's end reached the call's effects: %+v", f.out)
+	}
+	if recorded := runs.recorded(); len(recorded) != 1 || recorded[0].Command != "sleep 120; echo done" || recorded[0].ExitCode != 0 || recorded[0].Verdict != api.SourceVerdictPassed {
+		t.Fatalf("parked run evidence %+v", recorded)
 	}
 }
 
@@ -251,6 +277,39 @@ func TestProgramParkInterruptStopsAtTheWaitingStatement(t *testing.T) {
 	}
 	if f.Runtime.Supervisor.Interrupt(interrupted.ProgramID) {
 		t.Fatal("an ended program accepted a second interruption")
+	}
+}
+
+// A program that does not unwind is reported from its receipts once its
+// interruption is abandoned or its grace runs out on the program clock.
+func TestProgramParkInterruptReportsAProgramThatDoesNotUnwind(t *testing.T) {
+	clock := programtest.NewManualClock()
+	program := programtest.NewWaitingProgram(clock, programtest.SleepState(600*time.Second))
+	program.IgnoresCancel = true
+	f := newParkFixture(t, program)
+	result := <-f.start(t, map[string]any{"command": "sleep 600"})
+	testutil.FailErr(t, "park long wait", result.err)
+	recorded := <-f.parking.parked
+	defer func() {
+		program.EndWait()
+		<-recorded.settled
+	}()
+
+	canceled, cancel := context.WithCancel(t.Context())
+	cancel()
+	abandoned := decodeOutcome(t, recorded.park.Interrupt(canceled))
+	if abandoned.ProgramID != recorded.park.ProgramID || abandoned.State != "running" || abandoned.StopCode != toolrejection.ToolOwnerInterruptedCode {
+		t.Fatalf("abandoned interruption %+v", abandoned)
+	}
+
+	reported := make(chan string, 1)
+	go func() { reported <- recorded.park.Interrupt(t.Context()) }()
+	for clock.Pending() == 0 {
+		runtime.Gosched()
+	}
+	clock.Advance(time.Minute)
+	if expired := decodeOutcome(t, <-reported); expired.State != "running" || expired.Status != 130 {
+		t.Fatalf("expired interruption %+v", expired)
 	}
 }
 

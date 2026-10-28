@@ -84,7 +84,7 @@ func (f *parkFixture) park(t *testing.T, programID, result string) *parkedCall {
 		Effects:  tools.InvocationEffects{Out: call.out},
 	}
 	parked, err := ProgramParking{Subscriptions: f.loop.Subscriptions}.ParkProgram(t.Context(), tctx, tools.ProgramPark{
-		ProgramID: programID, Reason: "sleep 600", WakeAt: time.Now().Add(10 * time.Minute), Deadline: time.Now().Add(time.Hour),
+		ProgramID: programID, Reason: "sleep 600", Deadline: time.Now().Add(time.Hour),
 		Interrupt: func(context.Context) string {
 			call.interrupted <- struct{}{}
 			return result
