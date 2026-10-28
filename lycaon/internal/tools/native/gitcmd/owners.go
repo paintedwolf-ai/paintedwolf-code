@@ -27,7 +27,6 @@ import (
 type Backend interface {
 	git.GitManager
 	InitCommand(ctx context.Context, dir, target string, config, options []string, stdout io.Writer) ([]byte, int, error)
-	ReadCommand(ctx context.Context, dir string, args, config []string, stdout io.Writer) ([]byte, int, error)
 	NetworkCommand(ctx context.Context, dir string, args []string, stdout io.Writer) ([]byte, int, error)
 	RemoteURL(ctx context.Context, dir string, args []string) string
 	AddWorktree(ctx context.Context, toplevel, path, branch, baseRef string) error

@@ -42,7 +42,7 @@ func measureAgentRemoval(ctx context.Context, tc tools.ToolContext, target mutat
 
 func permanentRemovalNote(ctx context.Context, display string, mutation *agentMutation) (string, error) {
 	snapshot := mutation.RemovalSnapshot
-	return guidance.RenderGuidance(ctx, "source-remove-permanent", map[string]any{"path": display, "size": formatDeleteByteSize(snapshot.Bytes), "files": snapshot.Files, "content_bytes": snapshot.Bytes, "recovery_bytes": snapshot.RecoveryBytes, "recovery_size": formatDeleteByteSize(snapshot.RecoveryBytes), "recovery_known": snapshot.RecoverySizeKnown})
+	return guidance.RenderGuidance(ctx, "utility/source-remove-permanent", map[string]any{"path": display, "size": formatDeleteByteSize(snapshot.Bytes), "files": snapshot.Files, "content_bytes": snapshot.Bytes, "recovery_bytes": snapshot.RecoveryBytes, "recovery_size": formatDeleteByteSize(snapshot.RecoveryBytes), "recovery_known": snapshot.RecoverySizeKnown})
 }
 
 // A failed recovery capability is not consent to delete permanently. Recheck
