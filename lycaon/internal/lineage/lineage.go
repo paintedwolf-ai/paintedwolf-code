@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net/netip"
 	"os"
-	"slices"
 	"sync"
 	"time"
 )
@@ -412,47 +411,6 @@ func OfPeer(local, remote netip.AddrPort) (*Lineage, bool) {
 	}
 	return Of(pid)
 }
-
-// Protocol is a transport whose bound sockets the kernel tables report.
-type Protocol string
-
-const (
-	ProtocolTCP Protocol = "tcp"
-	ProtocolUDP Protocol = "udp"
-)
-
-// ListenerQuery narrows the host table before holders are resolved. No
-// protocols means TCP and UDP; port 0 means every port.
-type ListenerQuery struct {
-	Protocols []Protocol
-	Port      uint16
-}
-
-func (q ListenerQuery) protocols() []Protocol {
-	if len(q.Protocols) == 0 {
-		return []Protocol{ProtocolTCP, ProtocolUDP}
-	}
-	return q.Protocols
-}
-
-func (q ListenerQuery) wants(protocol Protocol, local netip.AddrPort) bool {
-	return slices.Contains(q.protocols(), protocol) && (q.Port == 0 || local.Port() == q.Port)
-}
-
-// Listener is one listening TCP socket or bound, unconnected UDP socket, the
-// user the kernel records as its owner, and the processes holding it. A holder
-// the host cannot inspect is absent from PIDs, so an empty list means unknown,
-// never unheld.
-type Listener struct {
-	Protocol Protocol
-	Addr     netip.AddrPort
-	UID      uint32
-	PIDs     []int
-}
-
-// Listeners reads the host's listening sockets from the kernel. Platforms
-// without a native socket table return ErrUnsupported.
-func Listeners(query ListenerQuery) ([]Listener, error) { return listeners(query) }
 
 // Supported reports whether this platform can observe descendants. A platform
 // that cannot must not offer mediated egress, because it cannot attribute one.
