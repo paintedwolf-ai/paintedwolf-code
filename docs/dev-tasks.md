@@ -1204,7 +1204,7 @@ The cache job skips while the Linux catalog rows are `candidate`. Once the rows 
 
 We generate the cache key offline and never commit private material.
 
-**Nix cache.** Run `nix-store --generate-binary-cache-key paintedwolf-cache-1 nix-cache.secret nix-cache.public`. Store the full contents of `nix-cache.secret` as the `NIX_CACHE_SIGNING_KEY` secret in the `release-publication` environment. The public half must match the committed key in `packaging/linux/nix-cache-trust.json`. Run the release secrets check to verify that binding.
+**Nix cache.** Store the existing private key corresponding to the committed `paintedwolf-cache-1` public identity as `NIX_CACHE_SIGNING_KEY` in the `release-publication` environment. Run the release secrets check to confirm that its public half matches `packaging/linux/nix-cache-trust.json`.
 
 
 ### Updates
