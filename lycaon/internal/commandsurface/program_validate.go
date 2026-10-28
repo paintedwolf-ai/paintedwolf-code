@@ -33,20 +33,18 @@ func (c *programCompiler) validateNode(n syntax.Node) {
 	switch v := n.(type) {
 	case *syntax.File, *syntax.Block, *syntax.Subshell, *syntax.IfClause, *syntax.WhileClause, *syntax.Lit, *syntax.ArrayExpr, *syntax.ParenArithm, *syntax.UnaryArithm, *syntax.BinaryArithm:
 	case *syntax.WordIter:
-		c.markFieldWords(v.Items)
+		c.markBraces(true, v.Items...)
 	case *syntax.ArrayElem:
 		if v.Index != nil {
 			c.unsupported(n, "unindexed array elements")
 		}
-		if v.Value != nil {
-			c.markFieldWords([]*syntax.Word{v.Value})
-		}
+		c.markBraces(true, v.Value)
 	case *syntax.Word:
 		c.validateTilde(v)
 		switch {
-		case c.fieldWords[v]:
+		case c.braces.fields[v]:
 			c.splitBraces(v)
-		case c.literalContext[v] || c.braceFree[v] || c.staticProof[v]:
+		case c.literalContext[v] || c.braces.literal[v] || c.staticProof[v]:
 		default:
 			expanded, err := syntax.ClassifyBraces(v, c.pool)
 			if err != nil {
@@ -73,13 +71,13 @@ func (c *programCompiler) validateNode(n syntax.Node) {
 			c.unsupported(n, "for NAME in WORDS; do ...; done")
 		}
 	case *syntax.CaseClause:
-		c.markBraceFree(v.Word)
+		c.markBraces(false, v.Word)
 		for _, item := range v.Items {
 			if item.Op != syntax.Break {
 				c.unsupported(item, "case items ending with ;;")
 			}
 			for _, pattern := range item.Patterns {
-				c.markBraceFree(pattern)
+				c.markBraces(false, pattern)
 			}
 		}
 	case *syntax.CaseItem:
@@ -180,9 +178,9 @@ func (c *programCompiler) pipelineWidth(n syntax.Node) int {
 }
 func (c *programCompiler) validateCall(call *syntax.CallExpr) {
 	for _, a := range call.Assigns {
-		c.markBraceFree(a.Value)
+		c.markBraces(false, a.Value)
 	}
-	c.markFieldWords(call.Args)
+	c.markBraces(true, call.Args...)
 	if len(call.Args) == 0 {
 		return
 	}
@@ -327,15 +325,14 @@ func (c *programCompiler) validateParameter(p *syntax.ParamExp) {
 		return
 	}
 	if p.Exp != nil {
-		c.markBraceFree(p.Exp.Word)
+		c.markBraces(false, p.Exp.Word)
 		if op := p.Exp.Op.String(); (op == "=" || op == ":=") && !assignableParameter(p) {
 			c.unsupported(p, "${name:=word} or ${name=word} assigning a variable or array element")
 			return
 		}
 	}
 	if p.Repl != nil {
-		c.markBraceFree(p.Repl.Orig)
-		c.markBraceFree(p.Repl.With)
+		c.markBraces(false, p.Repl.Orig, p.Repl.With)
 	}
 	name := p.Param.Value
 	if name == "-" || name == "$" {
@@ -393,7 +390,7 @@ func (c *programCompiler) validateRedirect(r *syntax.Redirect) {
 			c.limit(r, "here_document_bytes", int64(r.Hdoc.End().Offset()-r.Hdoc.Pos().Offset()))
 		}
 	case syntax.WordHdoc:
-		c.markBraceFree(r.Word)
+		c.markBraces(false, r.Word)
 	case syntax.DplOut, syntax.DplIn:
 		target, ok := c.literal(r.Word)
 		if !ok || !validRedirectDescriptor(target) {
@@ -426,6 +423,6 @@ func (c *programCompiler) validateTilde(w *syntax.Word) {
 // retain ordinary validation for their own command words.
 func (c *programCompiler) markTestWord(expr syntax.TestExpr) {
 	if word, ok := expr.(*syntax.Word); ok {
-		c.markBraceFree(word)
+		c.markBraces(false, word)
 	}
 }

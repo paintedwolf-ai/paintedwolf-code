@@ -25,7 +25,7 @@ func TestBraceWordsExpandBeforeOtherExpansionsInBashOrder(t *testing.T) {
 		{`: {01..03} {1..10..-3} {10..1..3} {-2..2}`, []string{"01", "02", "03", "1", "4", "7", "10", "10", "7", "4", "1", "-2", "-1", "0", "1", "2"}},
 		{`: {a..e} {z..a..12} {A..a..8}`, []string{"a", "b", "c", "d", "e", "z", "n", "b", "A", "I", "Q", "Y", "a"}},
 		{`: "{a,b}" '{a,b}' \{a,b\} {a} {1..$N}`, []string{"{a,b}", "{a,b}", "{a,b}", "{a}", "{1..5}"}},
-		{`: a{b{c,d},e}f {{a,b},c}`, []string{"abcf", "abdf", "aef", "a", "b", "c"}},
+		{`: a{b{c,d},e}f {{a,b},c} {x,{1..2}}`, []string{"abcf", "abdf", "aef", "a", "b", "c", "x", "1", "2"}},
 		{`: pre{,.bak} {,} x{,}y`, []string{"pre", "pre.bak", "xy", "xy"}},
 		{`: {a,b}"{c,d}" {1..2}"$SPACED"`, []string{"a{c,d}", "b{c,d}", "1a b", "2a b"}},
 		{`: ~/{a,b} {~,x}/y`, []string{"/home/u/a", "/home/u/b", "/home/u/y", "x/y"}},

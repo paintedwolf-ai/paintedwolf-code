@@ -140,7 +140,7 @@ func (c *programCompiler) word(w *syntax.Word) DeferredWord {
 		return DeferredWord{}
 	}
 	loc := c.location(w)
-	split := c.braces[w]
+	split := c.braces.split[w]
 	if split == nil {
 		return DeferredWord{SyntaxLocation: loc, Parts: c.parts(w.Parts)}
 	}
