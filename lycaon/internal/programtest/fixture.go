@@ -37,18 +37,14 @@ import (
 
 // Options select the fixture's session, process registry and native owners.
 type Options struct {
-	Session    string
-	Background *bgprocess.Registry
-	Natives    func(dir string) map[string]command.NativeOperation
-	// Context adjusts each call's tool context, for example its roots,
-	// scratch folder or root history.
-	Context func(dir string, tc *tools.ToolContext)
-	// Owners replaces the Natives-only owner set, for fixtures that compose
-	// real owners with the fixture's recorder and boundary.
-	Owners func(OwnerPorts) func(tools.ToolContext, *projectpaths.ProgramPaths, *toolcontract.ProgramMemory, tooloutput.SpillAdmission) (command.ProgramOwners, error)
-	// Tools are structured tool identities the owners name; each registers
-	// as an unexercised stub so operation definitions resolve.
-	Tools []string
+	Session     string
+	Background  *bgprocess.Registry
+	Natives     func(dir string) map[string]command.NativeOperation
+	Input       func(dir string) commandprogram.InputRedirection
+	Publication func(dir string) commandprogram.OutputPublication
+	Context     func(dir string, tc *tools.ToolContext)
+	Owners      func(OwnerPorts) func(tools.ToolContext, *projectpaths.ProgramPaths, *toolcontract.ProgramMemory, tooloutput.SpillAdmission) (command.ProgramOwners, error)
+	Tools       []string
 }
 
 // OwnerPorts are the fixture's shared dependencies for composed owners.
@@ -67,6 +63,7 @@ type Fixture struct {
 	Dir        string
 	ScratchDir string
 	OutputDir  string
+	progress   progress.Store
 	Background *bgprocess.Registry
 	Boundary   *sandbox.Boundary
 	Context    func(string, *tools.ToolContext)
@@ -144,15 +141,23 @@ func New(t testing.TB, options Options) *Fixture {
 	if options.Natives != nil {
 		natives = options.Natives(dir)
 	}
+	var input commandprogram.InputRedirection
+	if options.Input != nil {
+		input = options.Input(dir)
+	}
+	var publication commandprogram.OutputPublication
+	if options.Publication != nil {
+		publication = options.Publication(dir)
+	}
 	scratchDir := fspath.CanonicalPath(t.TempDir())
-	f := &Fixture{Recorder: recorder, Database: database, Session: session, Dir: dir, ScratchDir: scratchDir, OutputDir: t.TempDir(), Background: background, Boundary: boundary}
+	f := &Fixture{Recorder: recorder, Database: database, Session: session, Dir: dir, ScratchDir: scratchDir, OutputDir: t.TempDir(), Background: background, Boundary: boundary, progress: owner}
 	runtime := &command.ProgramRuntime{
 		Executor: executor, Registry: registry, Recorder: recorder, Blobs: blobstore.Store{Root: t.TempDir()},
 		Projector: captureprojection.New(secretmatch.NewInertMatcher(), nil), Boundary: boundary,
 		Progress: progressFacts{owner}, Supervisor: &command.ProgramSupervisor{Interrupter: recorder, Background: background}, Evaluate: commandprogram.Evaluate,
 		Sessions: sessions{fixture: f},
 		Owners: func(tools.ToolContext, *projectpaths.ProgramPaths, *toolcontract.ProgramMemory, tooloutput.SpillAdmission) (command.ProgramOwners, error) {
-			return command.ProgramOwners{Natives: natives}, nil
+			return command.ProgramOwners{Natives: natives, Input: input, Publication: func(tools.CommandOutputAdmission) commandprogram.OutputPublication { return publication }}, nil
 		},
 	}
 	if options.Owners != nil {
@@ -161,6 +166,9 @@ func New(t testing.TB, options Options) *Fixture {
 	f.Runtime, f.Context = runtime, options.Context
 	return f
 }
+
+// SetProgress changes the session checklist observed by reached command writes.
+func (f *Fixture) SetProgress(content string) error { return f.progress.Set(f.Session, content) }
 
 // Call opens a real model receipt for one command call and runs the entry.
 func (f *Fixture) Call(t testing.TB, ctx context.Context, source string) (string, error) {

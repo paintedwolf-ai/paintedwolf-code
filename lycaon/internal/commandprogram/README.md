@@ -35,8 +35,8 @@ entries; `Environment` applies one dispatch's `NAME=value` prefix without
 changing the frame, and `Clone` gives an isolated group or substitution unit its
 own copy. Entries are charged to `program_state_bytes` with old/new overlap and
 bounded by `variable_count`, `variable_value_bytes` and `environment_bytes`.
-Names follow the shell identifier grammar, NUL is refused and `IFS` cannot be
-assigned; an `IFS` inherited from the environment is inert data.
+Names follow the shell identifier grammar, and NUL is refused. `IFS` controls
+unquoted field splitting and `read`; a command prefix applies only to that command.
 
 `WordExpander` expands the detached plan's words, never upstream syntax objects.
 Quote removal uses the selected `expand.RemoveQuotes` walker. Parameters are

@@ -102,6 +102,9 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	if err != nil {
 		return result, err
 	}
+	tc.Effects.CheckMutationProgress = func(ctx context.Context, rootID, path string) error {
+		return checkReachedMutationProgress(ctx, progressFacts, definition, invocation, rootID, path)
+	}
 	if !facts.Contract.AdmitsSession(tc.Identity.ParentSessionID != "") {
 		return result, fmt.Errorf("native operation is outside its declared session scope")
 	}
@@ -144,7 +147,7 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 		return result, err
 	}
 	defer releaseObservation()
-	if err := checkLiveProgramProgress(ctx, progressFacts, definition, invocation); err != nil {
+	if err := checkLiveProgramProgress(ctx, progressFacts, bound); err != nil {
 		return result, err
 	}
 	if reject := capabilityrequest.ValidateCapabilityContract(facts.Contract, arguments.values); reject != nil {
@@ -223,10 +226,16 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	return result, err
 }
 
-func checkLiveProgramProgress(ctx context.Context, provider ProgramProgressFacts, definition toolcontract.OperationDefinition, invocation toolcontract.OperationInvocation) error {
+func checkLiveProgramProgress(ctx context.Context, provider ProgramProgressFacts, bound toolcontract.BoundOperation) error {
+	// Publication reaches the write door after its output is staged. Its
+	// destination, including scratch or output, decides the checklist gate.
+	if bound.Publication() != toolcontract.NoPublication {
+		return nil
+	}
 	if provider == nil {
 		return fmt.Errorf("native admission requires current progress facts")
 	}
+	definition, invocation := bound.Definition(), bound.Invocation()
 	state, err := provider.ProgramProgressState(ctx, invocation.SessionID)
 	if err != nil {
 		return err
@@ -329,7 +338,7 @@ func (e *Executor) recheckNativeOwnerAdmission(ctx context.Context, frame Progra
 	if err := frame.validateScope(invocation.Scope, tc); err != nil {
 		return err
 	}
-	return checkLiveProgramProgress(ctx, progressFacts, definition, invocation)
+	return checkLiveProgramProgress(ctx, progressFacts, bound)
 }
 
 // validateNativeArguments checks structured native tool values against their

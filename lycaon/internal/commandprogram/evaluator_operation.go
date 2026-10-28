@@ -86,6 +86,17 @@ func (o *evaluatorOperation) execute(ctx context.Context, f *frame) (signal, err
 		return signal{}, f.builtinStatus(s.SyntaxLocation, "assignment", 0)
 	}
 	name := fields[0].Value
+	if len(assigns) > 0 {
+		g := *f
+		g.prefix = make(map[string]string, len(f.prefix)+len(assigns))
+		for name, value := range f.prefix {
+			g.prefix[name] = value
+		}
+		for _, a := range assigns {
+			g.prefix[a.name] = a.value
+		}
+		f = &g
+	}
 	if controlBuiltins[name] {
 		return f.controlBuiltin(s, name, fields)
 	}
@@ -93,6 +104,8 @@ func (o *evaluatorOperation) execute(ctx context.Context, f *frame) (signal, err
 		return signal{}, f.call(ctx, s, decl, fields, assigns)
 	}
 	switch name {
+	case "eval":
+		return f.eval(ctx, s, fields)
 	case "source":
 		return signal{}, f.source(ctx, s, fields)
 	case "true", "false", ":":

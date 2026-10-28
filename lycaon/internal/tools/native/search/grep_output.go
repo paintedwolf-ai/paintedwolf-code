@@ -23,6 +23,21 @@ type nullTrackingReader struct {
 	firstNull *int
 }
 
+// binaryRecordReader treats NUL as a record boundary while selecting a binary
+// file. This bounds the regex input to actual binary records rather than the
+// entire LF-free file, without changing byte offsets or the binary notice.
+type binaryRecordReader struct{ r io.Reader }
+
+func (b binaryRecordReader) Read(p []byte) (int, error) {
+	n, err := b.r.Read(p)
+	for i := range p[:n] {
+		if p[i] == 0 {
+			p[i] = '\n'
+		}
+	}
+	return n, err
+}
+
 func (n *nullTrackingReader) Read(p []byte) (int, error) {
 	read, err := n.r.Read(p)
 	if read > 0 && *n.firstNull < 0 {
@@ -60,8 +75,8 @@ func (r *grepRun) searchNoMatch(label string, names bool) error {
 // searchStream selects records of one input and prints them in GNU form:
 // PATH:LINE:TEXT for selected lines, PATH-LINE-TEXT for context and "--"
 // between non-adjacent groups. A file holding NUL bytes is binary: its first
-// output line becomes one "grep: PATH: binary file matches" notice on stderr
-// (GNU 3.5 and later). A selected line with invalid UTF-8 is binary from that
+// output line becomes one binary-match notice on the utility's normal stream.
+// A selected line with invalid UTF-8 is binary from that
 // line on, as GNU grep does in a UTF-8 locale.
 func (r *grepRun) searchStream(label string, reader io.Reader, maxBytes int64, totalBytes int, firstNull int, pin *toolcontract.SourcePin, names bool) error {
 	inv := r.inv
@@ -77,8 +92,14 @@ func (r *grepRun) searchStream(label string, reader io.Reader, maxBytes int64, t
 		firstNull = -1
 	}
 	r.numberWidth = len(strconv.Itoa(totalBytes))
-	if !r.scan.NullData && firstNull < 0 {
-		reader = &nullTrackingReader{r: reader, firstNull: &firstNull}
+	if !r.scan.NullData && r.binaryMode != "text" {
+		if r.binaryMode == "without-match" && firstNull >= 0 {
+			reader, firstNull = bytes.NewReader(nil), -1
+		} else if firstNull < 0 {
+			reader = &nullTrackingReader{r: reader, firstNull: &firstNull}
+		} else {
+			reader = binaryRecordReader{r: reader}
+		}
 	}
 	listing := r.mode != modeLines
 	separator := false
@@ -111,7 +132,7 @@ func (r *grepRun) searchStream(label string, reader io.Reader, maxBytes int64, t
 			if line.Kind != textsearch.SelectedLine {
 				return nil
 			}
-			if err := r.binaryNotice(label, names, line, firstNull); err != nil {
+			if err := r.binaryNotice(label); err != nil {
 				return err
 			}
 			return errBinaryStop
@@ -134,6 +155,10 @@ func (r *grepRun) searchStream(label string, reader io.Reader, maxBytes int64, t
 		err = nil
 	}
 	if err != nil {
+		var budget *textsearch.BudgetError
+		if errors.As(err, &budget) {
+			inv.warn(false, "%s: search limit %s exceeded (maximum %d, observed %d)", label, budget.Resource, budget.Maximum, budget.Observed)
+		}
 		return err
 	}
 	switch r.mode {
@@ -159,20 +184,12 @@ func (r *grepRun) searchStream(label string, reader io.Reader, maxBytes int64, t
 	return nil
 }
 
-func (r *grepRun) binaryNotice(label string, names bool, line textsearch.Line, firstNull int) error {
+func (r *grepRun) binaryNotice(label string) error {
 	if !r.rg {
 		r.inv.warn(false, "%s: binary file matches", label)
 		return nil
 	}
-	offset := firstNull
-	if offset < 0 {
-		offset = line.Start
-	}
-	notice := fmt.Sprintf("binary file matches (found \"\\0\" byte around offset %d)\n", offset)
-	if names {
-		return r.inv.out.text(label, ": ", notice)
-	}
-	return r.inv.out.text(notice)
+	return r.inv.out.text(fmt.Sprintf("Binary file %s matches\n", label))
 }
 
 // printLine writes one selected or context record; with -o it writes each

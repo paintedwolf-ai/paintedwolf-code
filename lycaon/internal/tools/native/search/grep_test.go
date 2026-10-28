@@ -167,7 +167,7 @@ func TestRgFormsProduceExactBytes(t *testing.T) {
 		{name: "files", argv: []string{"rg", "--files", "sub"}, stdout: "sub/c.txt\nsub/deep/d.md\n"},
 		{name: "files without match", argv: []string{"rg", "--files-without-match", "alpha", "a.txt", "nope.txt"}, stdout: "nope.txt\n"},
 		{name: "binary skipped in recursion", argv: []string{"rg", "-l", "binary"}, status: 1},
-		{name: "binary searched when named", argv: []string{"rg", "alpha", "bin.dat"}, stdout: "binary file matches (found \"\\0\" byte around offset 5)\n"},
+		{name: "binary searched when named", argv: []string{"rg", "alpha", "bin.dat"}, stdout: "Binary file bin.dat matches\n"},
 		{name: "unrestricted thrice searches binary", argv: []string{"rg", "-uuu", "-l", "binary"}, stdout: "bin.dat\n"},
 		{name: "follow is accepted", argv: []string{"rg", "-L", "deep", "sub"}, stdout: "sub/deep/d.md:alpha deep\n"},
 		{name: "no messages", argv: []string{"rg", "--no-messages", "alpha", "missing"}, status: 2},

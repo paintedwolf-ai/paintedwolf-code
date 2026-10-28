@@ -38,13 +38,12 @@ type grepRun struct {
 	offsets, tabs, nullNames bool
 	numberWidth              int
 	// names is the forced -H/-h choice; nil decides per file.
-	names        *bool
-	quietErrors  bool
-	replace      *string
-	recursive    bool
-	follow       bool
-	selection    selection
-	searchBinary bool
+	names       *bool
+	quietErrors bool
+	replace     *string
+	recursive   bool
+	follow      bool
+	selection   selection
 	// binaryMode is binary (notice), text (-a) or without-match (-I).
 	binaryMode      string
 	skipDirectories bool
@@ -115,7 +114,6 @@ func runRg(inv *invocation) error {
 		r.replace = &replacement
 	}
 	r.selection = newSelection(inv, true)
-	r.searchBinary = r.selection.unrestricted >= 3
 	if err := r.selection.compileRg(); err != nil {
 		return err
 	}
@@ -496,7 +494,7 @@ func (r *grepRun) searchOperand(field commandprogram.Field, implicit, multiple b
 		if !r.selection.commandLineFile(operand) {
 			return nil
 		}
-		return r.searchFile(e, r.forcedNames(multiple))
+		return r.searchFile(e, r.forcedNames(multiple), false)
 	}
 	if !r.recursive {
 		if r.skipDirectories {
@@ -556,7 +554,7 @@ func (r *grepRun) walk(dir entry, ancestors map[[2]uint64]bool) error {
 				return err
 			}
 		case child.file():
-			if err := r.searchFile(child, r.forcedNames(true)); err != nil {
+			if err := r.searchFile(child, r.forcedNames(true), true); err != nil {
 				return err
 			}
 		}
@@ -573,10 +571,11 @@ func displayOr(display string) string {
 
 // searchFile pins and searches one regular file. rg's recursion skips binary
 // files unless -uuu asks for them.
-func (r *grepRun) searchFile(e entry, names bool) error {
+func (r *grepRun) searchFile(e entry, names, walked bool) error {
 	if r.mode == modeFileList {
 		return r.inv.out.text(e.display, "\n")
 	}
+	checkBinary := r.rg && walked && r.selection.unrestricted < 3 && r.binaryMode != "text"
 	if r.indexProvesNoMatch(e) {
 		r.pruned++
 		return r.searchNoMatch(e.display, names)
@@ -590,8 +589,10 @@ func (r *grepRun) searchFile(e entry, names bool) error {
 		return err
 	}
 	defer func() { _ = streamed.Reader.Close() }()
-	if r.rg && e.depth > 0 && !r.searchBinary && streamed.FirstNullOffset >= 0 {
-		return nil
+	if checkBinary {
+		if streamed.FirstNullOffset >= 0 {
+			return nil
+		}
 	}
 	return r.searchStream(e.display, streamed.Reader, 0, int(streamed.Revision.ContentBytes), streamed.FirstNullOffset, pin, names)
 }

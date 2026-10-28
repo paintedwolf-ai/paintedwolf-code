@@ -3,7 +3,6 @@ package commandprogram
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strconv"
 	"strings"
 	"sync"
@@ -17,7 +16,7 @@ import (
 // dispatch: control, status, test, variable and source built-ins.
 func EvaluatorBuiltin(name string) bool {
 	switch name {
-	case "true", "false", ":", "test", "[", "unset", "set", "source", "export", "read":
+	case "true", "false", ":", "test", "[", "unset", "set", "source", "export", "read", "eval":
 		return true
 	}
 	return controlBuiltins[name]
@@ -505,16 +504,7 @@ func (f *frame) nativeGap(ctx context.Context, spec toolcontract.CommandSpecific
 
 // hostRefusal writes a host refusal to the statement's stderr in shell voice.
 func (f *frame) hostRefusal(command, form, expected, code string) {
-	if f.io.streams.Error == nil {
-		return
+	if report := f.e.ports.Refusals; report != nil {
+		report(f.io.streams.Error, RefusalReport{Operation: command, Operand: form, Code: code, Expected: expected})
 	}
-	subject := command
-	if form != "" {
-		subject += ": " + form
-	}
-	if expected != "" {
-		_, _ = fmt.Fprintf(f.io.streams.Error, "%s: not supported here (expected %s) [%s]\n", subject, expected, code)
-		return
-	}
-	_, _ = fmt.Fprintf(f.io.streams.Error, "%s: not supported here [%s]\n", subject, code)
 }
