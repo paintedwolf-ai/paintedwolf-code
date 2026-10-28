@@ -1,10 +1,13 @@
 """Repository setup bytes enter the ordinary release only after independent admission."""
 
 import copy
+from contextlib import nullcontext, redirect_stderr, redirect_stdout
+import io
 import hashlib
 import json
 from pathlib import Path
 import tempfile
+import sys
 import unittest
 from unittest.mock import patch
 
@@ -145,3 +148,30 @@ class ReleaseRepositorySetupTests(unittest.TestCase):
         receipts = self.assemble(rehearsal=True)
         self.assertEqual({row["family"] for row in receipts}, {"deb", "rpm"})
         self.assertEqual(len(self.authorities), 2)
+
+    def test_release_cli_uses_selected_inputs_and_production_trust(self):
+        arguments = ["release_repository_setup", "--generations", str(self.generations),
+                     "--artifacts", str(self.artifacts), "--output", str(self.work / "output"),
+                     "--version", VERSION, "--source-commit", SOURCE, "--channel", "stable", "--base-url", ORIGIN]
+        output = io.StringIO()
+        with patch.object(sys, "argv", arguments), \
+             patch.object(setup, "private_key", return_value=nullcontext(self.work / "private")), \
+             patch.object(setup, "selection", return_value=(self.signer, self.public)), \
+             patch.object(setup.repository_setup, "build", side_effect=self.build), \
+             patch.object(setup.repository_setup_admission, "admit_setup", side_effect=self.admit), \
+             redirect_stdout(output):
+            setup.main()
+        self.assertEqual({row["family"] for row in json.loads(output.getvalue())}, {"deb", "rpm"})
+        self.assertTrue((self.work / "output/linux-package-key.asc").is_file())
+
+    def test_release_cli_refuses_without_public_linux_before_loading_key(self):
+        arguments = ["release_repository_setup", "--generations", str(self.generations),
+                     "--artifacts", str(self.artifacts), "--output", str(self.work / "output"),
+                     "--version", VERSION, "--source-commit", SOURCE, "--channel", "stable", "--base-url", ORIGIN]
+        with patch.object(sys, "argv", arguments), patch.object(setup, "public_linux", return_value=[]), \
+             patch.object(setup, "private_key") as key, redirect_stderr(io.StringIO()), \
+             self.assertRaises(SystemExit) as error:
+            setup.main()
+        self.assertEqual(error.exception.code, 1)
+        key.assert_not_called()
+        self.assertFalse((self.work / "output").exists())
