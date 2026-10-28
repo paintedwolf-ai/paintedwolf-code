@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -20,9 +21,9 @@ func dfRow(widths [4]int, cells ...string) string {
 // scratchVolume is a second volume with no inode accounting, for the
 // default listing and the unknown ratio.
 func scratchVolume(scratch string) volumeStats {
-	return func(file *os.File, path string) (volume, error) {
+	return func(file *os.File, path string) (fseffect.Volume, error) {
 		if strings.HasPrefix(path, scratch) {
-			return volume{source: "tmpfs", target: "/scratch", blockSize: 512, blocks: 2048, free: 2048, avail: 2048}, nil
+			return fseffect.Volume{Source: "tmpfs", Target: "/scratch", BlockSize: 512, Blocks: 2048, Free: 2048, Available: 2048}, nil
 		}
 		return fixtureVolume(file, path)
 	}
@@ -55,11 +56,11 @@ func TestDfLayoutProducesExactBytes(t *testing.T) {
 	}
 }
 
-func TestDfRefusesWithoutAStatisticsOwnerAndStopsOnItsFailure(t *testing.T) {
+func TestDfRefusesWhereThePlatformHasNoStatisticsAndStopsOnFailure(t *testing.T) {
 	h := newHarness(t, map[string]string{"input": "x"})
-	h.owners.volumes = nil
-	h.exec("", "df", ".").refused(t, "df without owner", "COMMAND_PLATFORM_UNAVAILABLE")
-	h.owners.volumes = func(*os.File, string) (volume, error) { return volume{}, errors.New("statfs failed") }
+	h.owners.volumes = func(*os.File, string) (fseffect.Volume, error) { return fseffect.Volume{}, fseffect.ErrUnsupported }
+	h.exec("", "df", ".").refused(t, "df without statistics", "COMMAND_PLATFORM_UNAVAILABLE")
+	h.owners.volumes = func(*os.File, string) (fseffect.Volume, error) { return fseffect.Volume{}, errors.New("statfs failed") }
 	if r := h.exec("", "df", "."); r.err == nil || r.result.Status == 0 {
 		t.Fatalf("df statistics failure %+v", r.result)
 	}
@@ -70,7 +71,7 @@ func TestDfRefusesWithoutAStatisticsOwnerAndStopsOnItsFailure(t *testing.T) {
 func TestDfRefusesPathsOutsideReadAuthority(t *testing.T) {
 	h := newHarness(t, map[string]string{"input": "x"})
 	reached := false
-	h.owners.volumes = func(file *os.File, path string) (volume, error) {
+	h.owners.volumes = func(file *os.File, path string) (fseffect.Volume, error) {
 		reached = true
 		return fixtureVolume(file, path)
 	}

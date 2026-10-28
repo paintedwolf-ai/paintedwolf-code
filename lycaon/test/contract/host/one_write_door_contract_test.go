@@ -17,7 +17,8 @@ import (
 // doorExemptions identifies writes with lifetimes outside replacement transactions.
 var doorExemptions = map[string]string{
 	// Content-addressed stores determine the destination after streaming.
-	"lycaon/internal/sourceblob/store.go": "stream-then-name: the object's destination is its digest",
+	"lycaon/internal/sourceblob/store.go":       "stream-then-name: the object's destination is its digest",
+	"lycaon/internal/sourceblob/publication.go": "stream-then-name: an O_EXCL temp beside the digest destination is renamed once complete",
 
 	// Directory transactions promote and roll back whole trees.
 	"lycaon/internal/detectionpack/import.go":         "directory promotion with rollback of the replaced pack tree",
