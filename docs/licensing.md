@@ -30,6 +30,25 @@ Painted Wolf LLC retains all rights in **Painted Wolf**, **Painted Wolf Code**, 
 
 The Go backend (`lycaon/`), desktop frontend (`lycaon-den/`), and other first-party application code are licensed under the Apache License, Version 2.0: the sidecar binary, API server, session/workflow/delegation logic, tool host, local scan stack, sandboxed execution, and UI shell. Root license text: [`LICENSE`](../LICENSE).
 
+## Native command compatibility
+
+Native utilities implement behaviour from specifications, documentation used to
+understand that behaviour, and observations from pinned reference environments.
+Do not consult, adapt, or reproduce another implementation's source code,
+including code recalled from memory. Published algorithms and standards may
+inform an original implementation.
+
+Write catalog, help, guidance, skill, and documentation text independently.
+Do not reuse sentences from another tool's manuals, help, or documentation.
+Compatibility tests may match short functional output, such as diagnostics,
+column layouts, and status lines, from observed reference output. Conformance
+snapshots exclude manuals, help, version banners, and info pages.
+
+Reference userland images are test infrastructure. Keep them in the repository's
+GitHub Actions cache; do not publish them to a public registry or include them
+in application distributions. Dependencies retain their upstream license,
+notices, and recorded provenance; vendored changes remain explicit patches.
+
 ## Bundled OSS engines (upstream licenses)
 
 Painted Wolf Code bundles or links these open-source components at build time. Each retains its own license; compliance obligations apply to the component, not to first-party rule YAML.
