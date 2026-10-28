@@ -1,8 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { secretClipboardLease } from "./secret-clipboard.ts";
 
+afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); });
+
 function deferred<T>() {
-  let resolve!: (value: T) => void;
+  let resolve: (value: T) => void = () => { throw new Error("deferred promise is not initialized"); };
   const promise = new Promise<T>((done) => { resolve = done; });
   return { promise, resolve };
 }
@@ -17,7 +19,7 @@ describe("secret clipboard ownership", () => {
     expect(adapter.clear.mock.calls).toEqual([[17]]);
   });
 
-  it("clears a native write that finishes after remasking", async () => {
+  it("clears a native write after explicit cancellation", async () => {
     const pending = deferred<number>();
     const adapter = { write: vi.fn(() => pending.promise), clear: vi.fn(async () => {}) };
     const lease = secretClipboardLease(adapter);
@@ -39,6 +41,17 @@ describe("secret clipboard ownership", () => {
     expect(adapter.clear.mock.calls).toEqual([[1]]);
     lease.clear();
     expect(adapter.clear.mock.calls).toEqual([[1], [2]]);
+  });
+
+  it("expires the current copy after the documented paste lifetime", async () => {
+    vi.useFakeTimers();
+    const adapter = { write: vi.fn(async () => 9), clear: vi.fn(async () => {}) };
+    const lease = secretClipboardLease(adapter);
+    await lease.write("private");
+    await vi.advanceTimersByTimeAsync(59_999);
+    expect(adapter.clear).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(adapter.clear).toHaveBeenCalledWith(9);
   });
 
   it("retains ownership when a later write fails", async () => {

@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LycaonClient } from "../../api/client.ts";
 import type { ManagedSecret } from "../../api/types.ts";
+import { textEditMenuItems } from "../text-edit-menu-items.ts";
 import { ManagedSecretsPanel, SECRETS_PAGE_SIZE } from "./ManagedSecretsPanel.tsx";
 
 const revealManagedSecret = vi.hoisted(() => vi.fn());
@@ -347,7 +348,7 @@ describe("ManagedSecretsPanel", () => {
 
   it("does not attribute an old clipboard completion to a newer reveal", async () => {
     revealResolves();
-    let finishCopy!: () => void;
+    let finishCopy: () => void = () => { throw new Error("copy promise is not initialized"); };
     clipboard.write.mockReturnValueOnce(new Promise<number>((resolve) => { finishCopy = () => resolve(1); }));
     await revealValue();
     fireEvent.click(screen.getByTestId("managed-secret-copy-value"));
@@ -373,7 +374,8 @@ describe("ManagedSecretsPanel", () => {
     );
   });
 
-  it("clears only its native copy when the value hides", async () => {
+  it("keeps a copy usable after remasking and expires only its receipt", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     revealResolves();
     await revealValue();
 
@@ -385,6 +387,8 @@ describe("ManagedSecretsPanel", () => {
     window.dispatchEvent(new Event("blur"));
 
     expect(clipboard.write).toHaveBeenCalledTimes(1);
+    expect(clipboard.clear).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(60_000);
     expect(clipboard.clear).toHaveBeenCalledWith(1);
     expect(clipboard.read).not.toHaveBeenCalled();
   });
@@ -433,6 +437,16 @@ describe("ManagedSecretsPanel", () => {
     } as unknown as Selection);
     fireEvent.copy(screen.getByTestId("managed-secret-revealed-value"));
 
+    expect(clipboard.write).toHaveBeenCalledWith("nat");
+    await waitFor(() => expect(screen.getByTestId("managed-secret-copy-value").textContent).toBe("Value copied"));
+  });
+
+  it("marks a revealed selection copied through the context menu", async () => {
+    revealResolves();
+    await revealValue();
+    const target = screen.getByTestId("managed-secret-revealed-value");
+    const action = textEditMenuItems({ kind: "selection", text: "nat", target }).find((item) => item.label === "Copy");
+    await action?.onSelect?.();
     expect(clipboard.write).toHaveBeenCalledWith("nat");
     await waitFor(() => expect(screen.getByTestId("managed-secret-copy-value").textContent).toBe("Value copied"));
   });

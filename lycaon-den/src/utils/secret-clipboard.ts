@@ -1,3 +1,4 @@
+import policy from "../../shared/secret-clipboard.json";
 import { isTauriRuntime } from "../platform/runtime.ts";
 
 /** Identifies one native clipboard generation without reading its contents. */
@@ -15,15 +16,17 @@ export async function clearSecretClipboardText(copy: SecretClipboardCopy): Promi
   await invoke("clear_secret_text", { copy });
 }
 
-/** A remasked reveal also clears a copy whose native write finishes late. */
+/** A copied value stays usable for paste while its reveal remasks. */
 export function secretClipboardLease(adapter = {
   write: writeSecretClipboardText,
   clear: clearSecretClipboardText,
 }) {
   let generation = 0;
   let owned: SecretClipboardCopy | undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   const clear = () => {
     generation++;
+    clearTimeout(timer);
     const copy = owned;
     owned = undefined;
     if (copy !== undefined) void adapter.clear(copy).catch(() => {});
@@ -36,6 +39,8 @@ export function secretClipboardLease(adapter = {
       return false;
     }
     owned = copy;
+    clearTimeout(timer);
+    timer = setTimeout(clear, policy.lifetime_ms);
     return true;
   };
   return { clear, write };

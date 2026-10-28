@@ -7,6 +7,8 @@ mod service;
 mod secret;
 #[cfg(target_os = "macos")]
 mod secret_macos;
+#[cfg(target_os = "windows")]
+mod secret_windows;
 #[cfg(target_os = "linux")]
 mod secret_linux;
 

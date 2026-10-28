@@ -24,3 +24,18 @@ impl ClipboardService<NativeClipboard> {
         .await
     }
 }
+
+#[derive(serde::Deserialize)]
+struct ClipboardPolicy {
+    lifetime_ms: u64,
+}
+
+pub(super) fn lifetime() -> std::time::Duration {
+    static POLICY: std::sync::LazyLock<std::time::Duration> = std::sync::LazyLock::new(|| {
+        let policy: ClipboardPolicy =
+            serde_json::from_str(include_str!("../../../shared/secret-clipboard.json"))
+                .expect("valid clipboard policy");
+        std::time::Duration::from_millis(policy.lifetime_ms)
+    });
+    *POLICY
+}

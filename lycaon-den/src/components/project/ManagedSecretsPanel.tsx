@@ -125,7 +125,6 @@ export function ManagedSecretsPanel(props: Props) {
 
   const secretClipboard = secretClipboardLease();
   const clearReveal = () => {
-    secretClipboard.clear();
     clearRevealTimer();
     setRevealed(undefined);
     setRevealSeconds(0);

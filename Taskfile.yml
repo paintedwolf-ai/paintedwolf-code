@@ -629,6 +629,7 @@ tasks:
       - 'src/update_service/fixtures/*.json'
       - ../../lycaon/internal/backup/archive-limits.json
       - ../shared/local-file-formats.json
+      - ../shared/secret-clipboard.json
       - Cargo.toml
       - Cargo.lock
     preconditions:

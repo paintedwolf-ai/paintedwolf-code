@@ -56,6 +56,10 @@ pub(super) fn write(clipboard: &gtk::Clipboard, text: String) -> Result<u64, Cli
         return Err(ClipboardError::Backend("Could not copy secret text".into()));
     }
     OWNED_COPY.with(|owned| owned.set(Some(copy)));
+    let board = clipboard.clone();
+    gtk::glib::timeout_add_local_once(super::secret::lifetime(), move || {
+        clear(&board, Some(copy));
+    });
     Ok(copy)
 }
 

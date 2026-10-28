@@ -57,9 +57,15 @@ fn on_main_thread<T: Send + 'static>(
 impl NativeClipboard {
     pub(super) fn write_secret_text(&mut self, main: &dyn MainThread, text: String) -> Reply<u64> {
         on_main_thread(main, move |reply| {
-            let _ = reply.send(
-                clipboard().and_then(|clipboard| super::secret_linux::write(&clipboard, text)),
-            );
+            if reply.is_closed() {
+                return;
+            }
+            let result = clipboard().and_then(|board| super::secret_linux::write(&board, text));
+            if let Err(Ok(copy)) = reply.send(result) {
+                if let Ok(board) = clipboard() {
+                    super::secret_linux::clear(&board, Some(copy));
+                }
+            }
         })
     }
 

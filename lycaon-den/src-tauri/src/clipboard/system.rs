@@ -35,7 +35,17 @@ impl NativeClipboard {
             }
             settled(result)
         }
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(target_os = "windows")]
+        {
+            let result = self
+                .board()
+                .and_then(|board| super::secret_windows::write(board, text));
+            if let Ok(copy) = result {
+                self.secret = Some(copy);
+            }
+            settled(result)
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
         {
             let _ = text;
             settled(Err(ClipboardError::Backend(
@@ -47,6 +57,10 @@ impl NativeClipboard {
     pub(super) fn clear_secret_text(&mut self, _main: &dyn MainThread, copy: u64) -> Reply<()> {
         #[cfg(target_os = "macos")]
         super::secret_macos::clear(copy);
+        #[cfg(target_os = "windows")]
+        if let Err(error) = super::secret_windows::clear(copy) {
+            return settled(Err(error));
+        }
         if self.secret == Some(copy) {
             self.secret = None;
         }
@@ -85,6 +99,10 @@ impl ClipboardAdapter for NativeClipboard {
         #[cfg(target_os = "macos")]
         if let Some(copy) = self.secret.take() {
             super::secret_macos::clear(copy);
+        }
+        #[cfg(target_os = "windows")]
+        if let Some(copy) = self.secret.take() {
+            let _ = super::secret_windows::clear(copy);
         }
         self.board.take();
     }

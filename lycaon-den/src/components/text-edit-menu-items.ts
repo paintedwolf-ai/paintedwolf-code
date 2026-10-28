@@ -1,3 +1,4 @@
+import { handleSelectionCopy } from "../utils/selection-copy.ts";
 import { contextAction, type ContextActionHandler } from "./context-actions.ts";
 /** Cut / Copy / Paste / Select all, plus Add to chat when a selection exists. */
 
@@ -75,7 +76,7 @@ export function textEditSystemMenuItems(
       includeMutators: !opts?.omitMutatorsWhenReadOnly,
       onCut: () => undefined,
       onCopy: () => {
-        return copySelectionText(ctx.text);
+        if (!handleSelectionCopy(ctx.target, ctx.text)) return copySelectionText(ctx.text);
       },
       onPaste: () => undefined,
       onSelectAll: () => {
