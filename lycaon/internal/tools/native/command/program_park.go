@@ -72,27 +72,32 @@ func (r *ProgramRuntime) newProgramCall(ctx context.Context, args map[string]any
 }
 
 // programPark is one call's watch over its program's waits. It refuses a wait
-// the bound cannot hold and signals, once, a wait that should park the call.
+// the bound cannot hold and signals each wait that should park the call. A
+// signal parks only through claim, which holds while that wait is still the
+// program's current one, so a wait that ended before its signal was taken
+// never parks the call.
 type programPark struct {
 	clock     commandprogram.Clock
 	started   time.Time
 	threshold time.Duration
 	bound     programBound
-	// parks carries the wait state that parks the call.
-	parks chan commandprogram.WaitState
+	// parks carries the latest wait that should park the call.
+	parks chan *blockedWait
 
 	mu        sync.Mutex
 	blocked   *blockedWait
-	decided   bool
+	parked    bool
+	settled   bool
 	stopTimer func() bool
 }
 
+// blockedWait is one reported wait; its identity is the claim token.
 type blockedWait struct{ state commandprogram.WaitState }
 
 var _ commandprogram.ProgramWaits = (*programPark)(nil)
 
 func newProgramPark(clock commandprogram.Clock, call *programCall, threshold time.Duration) *programPark {
-	return &programPark{clock: clock, started: call.started, threshold: threshold, bound: call.bound, parks: make(chan commandprogram.WaitState, 1)}
+	return &programPark{clock: clock, started: call.started, threshold: threshold, bound: call.bound, parks: make(chan *blockedWait, 1)}
 }
 
 func (p *programPark) Block(_ context.Context, state commandprogram.WaitState) (func(), error) {
@@ -114,11 +119,11 @@ func (p *programPark) Block(_ context.Context, state commandprogram.WaitState) (
 	}, nil
 }
 
-// considerLocked parks a wait that ends after the inline budget. A wait only
-// jobs can end has no known wake, so it parks if it still holds the program
+// considerLocked signals a wait that ends after the inline budget. A wait only
+// jobs can end has no known wake, so it signals if it still holds the program
 // when the budget runs out.
 func (p *programPark) considerLocked(blocked *blockedWait) {
-	if p.decided {
+	if p.parked || p.settled {
 		return
 	}
 	p.stopTimerLocked()
@@ -131,20 +136,43 @@ func (p *programPark) considerLocked(blocked *blockedWait) {
 			p.mu.Lock()
 			defer p.mu.Unlock()
 			if p.blocked == blocked {
-				p.parkLocked(blocked.state)
+				p.signalLocked(blocked)
 			}
 		})
 	default:
-		p.parkLocked(blocked.state)
+		p.signalLocked(blocked)
 	}
 }
 
-func (p *programPark) parkLocked(state commandprogram.WaitState) {
-	if p.decided {
+// signalLocked replaces any untaken signal with this wait's.
+func (p *programPark) signalLocked(blocked *blockedWait) {
+	if p.parked || p.settled {
 		return
 	}
-	p.decided = true
-	p.parks <- state
+	select {
+	case <-p.parks:
+	default:
+	}
+	p.parks <- blocked
+}
+
+// claim takes the park for a signaled wait that still holds the program.
+func (p *programPark) claim(blocked *blockedWait) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.parked || p.settled || p.blocked != blocked {
+		return false
+	}
+	p.parked = true
+	p.stopTimerLocked()
+	return true
+}
+
+// release returns a claim whose park did not happen; later waits signal again.
+func (p *programPark) release() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.parked = false
 }
 
 func (p *programPark) stopTimerLocked() {
@@ -158,6 +186,6 @@ func (p *programPark) stopTimerLocked() {
 func (p *programPark) settle() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.decided = true
+	p.settled = true
 	p.stopTimerLocked()
 }

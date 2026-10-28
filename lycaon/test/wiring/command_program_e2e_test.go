@@ -32,7 +32,16 @@ type commandProgramSession struct {
 	session string
 }
 
+// newCommandProgramSession starts a session with a progress checklist, so
+// project writes pass the progress rule.
 func newCommandProgramSession(t *testing.T, program, approvals string) *commandProgramSession {
+	t.Helper()
+	s := newCommandProgramSessionWithoutProgress(t, program, approvals)
+	s.h.SeedProgress(t, t.Context(), s.session)
+	return s
+}
+
+func newCommandProgramSessionWithoutProgress(t *testing.T, program, approvals string) *commandProgramSession {
 	t.Helper()
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{
 		Pattern:      "run the program",
@@ -367,7 +376,8 @@ func TestCommandProgramLiveRun2Regressions(t *testing.T) {
 			rs := newCommandProgramSession(t, c.program, "")
 			testutil.FailErr(t, "prompt", rs.prompt(t.Context()))
 			out := rs.result(t)
-			for _, want := range []string{c.code, c.cmd, c.word, `"completed_effects": 1`, `1:`} {
+			// The refusal keeps the earlier redirect's effect and locates the stopped statement.
+			for _, want := range []string{c.code, c.cmd, c.word, `"completed_effects": 1`, `"operation_source_line": 1`} {
 				if !strings.Contains(out, want) {
 					t.Fatalf("%s: missing %q in %s", c.name, want, out)
 				}
@@ -452,7 +462,7 @@ func TestCommandProgramTeeAndRedirectShareProgressRule(t *testing.T) {
 		{"tee", `printf 'via_tee\n' | tee teed.txt`, "teed.txt", "via_tee\n"},
 	} {
 		t.Run(tc.name+" without progress", func(t *testing.T) {
-			s := newCommandProgramSession(t, tc.program, "")
+			s := newCommandProgramSessionWithoutProgress(t, tc.program, "")
 			state, err := s.h.Sessions.Manager.Coordinator.Guards.ProgramProgressState(t.Context(), s.session)
 			testutil.FailErr(t, "progress state", err)
 			if !progress.PrerequisiteMissing(state.Content, state.WorkerChild, state.ReviewLoopActive) {
@@ -471,7 +481,6 @@ func TestCommandProgramTeeAndRedirectShareProgressRule(t *testing.T) {
 		})
 		t.Run(tc.name+" with progress", func(t *testing.T) {
 			s := newCommandProgramSession(t, tc.program, "")
-			testutil.FailErr(t, "seed progress", progress.NewSQLStore(s.h.DB).Set(s.session, "- [ ] Write the file"))
 			testutil.FailErr(t, "prompt", s.prompt(t.Context()))
 			if got := s.programState(t); got != "completed" {
 				t.Fatalf("program state = %q: %s", got, s.result(t))
