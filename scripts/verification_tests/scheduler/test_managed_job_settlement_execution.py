@@ -162,11 +162,51 @@ value.validate_checkout()
             with patch.object(module,'sys',state):
                 with self.assertRaises(ValueError):value.validate_checkout(declaration)
                 self.assertEqual(state.path,original)
+
             (caller/'module.py').unlink();(caller/'module.py').symlink_to(other)
             state=SimpleNamespace(modules={},path=list(original))
             with patch.object(module,'sys',state):
                 with self.assertRaises(ValueError):value.validate_checkout(declaration)
                 self.assertEqual(state.path,original)
+
+    def test_a_foreign_package_initializer_refuses_before_it_can_execute(self):
+        source=Path(__file__).resolve().parents[3]
+        script=r'''
+from pathlib import Path
+import sys
+source,checkout,marker=map(Path,sys.argv[1:])
+sys.path.insert(0,str(source/'scripts'))
+from managed_job_settlement import JobSettlement
+sys.path.pop(0)
+sys.path.insert(0,str(checkout))
+before=list(sys.path)
+value=JobSettlement(checkout=checkout,arguments=[],save=None,command=None)
+try:value.validate_checkout({'scripts.caller.module':'scripts/caller/module.py'})
+except ValueError:
+    assert sys.path==before and not marker.exists()
+else:
+    import scripts.caller.module
+    raise AssertionError('a foreign package initializer was admitted')
+'''
+        for alias in ('initializer','directory'):
+            with self.subTest(alias=alias),tempfile.TemporaryDirectory() as temporary:
+                root=Path(temporary).resolve();checkout=root/'checkout';namespace=checkout/'scripts'
+                (namespace/'verification_process').mkdir(parents=True)
+                for relative in ('artifact_paths.py','verification_process/__init__.py'):
+                    shutil.copyfile(source/'scripts'/relative,namespace/relative)
+                marker=root/'executed';foreign=root/'foreign';foreign.mkdir()
+                (foreign/'__init__.py').write_text('from pathlib import Path\nPath('+repr(str(marker))+').write_bytes(b"unexpected")\n')
+                (foreign/'module.py').write_text('pass\n')
+                if alias=='directory':
+                    (namespace/'caller').symlink_to(foreign,target_is_directory=True)
+                else:
+                    caller=namespace/'caller';caller.mkdir()
+                    (caller/'module.py').write_text('pass\n')
+                    (caller/'__init__.py').symlink_to(foreign/'__init__.py')
+                result=subprocess.run([sys.executable,'-I','-B','-c',script,str(source),str(checkout),str(marker)],
+                                      capture_output=True,text=True,timeout=15)
+                self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+                self.assertFalse(marker.exists())
 
     def test_completion_races_never_cancel_an_unrelated_invocation(self):
         for when in ('before-status','after-status','during-cancel'):
