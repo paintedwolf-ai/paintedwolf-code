@@ -162,8 +162,7 @@ is the reproduced one. After changing a pin, `./task userlands:record` rebuilds
 without any cache and records the new digest; record each architecture on a
 native host, because emulated builds are not dependable.
 
-The images are test-only: they live in the repository's GitHub Actions cache
-and are never pushed to a public registry or shipped.
+The images are built from their pins and cached for CI; they are not distributed.
 
 **One fixed environment.** A batch of programs runs in one new container with
 no network. Before each program the driver resets the workspace, home and
