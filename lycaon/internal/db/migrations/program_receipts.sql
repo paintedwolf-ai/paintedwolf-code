@@ -148,6 +148,7 @@ CREATE TABLE IF NOT EXISTS invocation_program_outputs (
     reference TEXT NOT NULL,
     retention_claim_id TEXT NOT NULL UNIQUE,
     initiating_claim_id TEXT NOT NULL,
+    blob_id TEXT NOT NULL CHECK (blob_id <> ''),
     blob_json TEXT NOT NULL CHECK (json_valid(blob_json)),
     complete INTEGER NOT NULL CHECK (complete IN (0,1)),
     redacted INTEGER NOT NULL CHECK (redacted IN (0,1)),
@@ -160,6 +161,8 @@ CREATE TABLE IF NOT EXISTS invocation_program_outputs (
 CREATE INDEX IF NOT EXISTS idx_invocation_program_outputs_program ON invocation_program_outputs(program_id, id);
 CREATE INDEX IF NOT EXISTS idx_invocation_program_outputs_execution ON invocation_program_outputs(execution_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_invocation_program_outputs_reference ON invocation_program_outputs(program_id,reference);
+CREATE INDEX IF NOT EXISTS idx_invocation_program_outputs_blob_id
+    ON invocation_program_outputs(blob_id);
 
 -- Only source-owner-confirmed delivered pages become observation records.
 CREATE TABLE IF NOT EXISTS invocation_program_deliveries (
