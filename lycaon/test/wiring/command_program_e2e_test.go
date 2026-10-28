@@ -445,24 +445,43 @@ func TestCommandProgramEnvMatchesExternalChildEnv(t *testing.T) {
 	}
 }
 
-func TestCommandProgramTeeAndRedirectConsistentWithoutProgress(t *testing.T) {
-	s := newCommandProgramSession(t, `echo via_redirect > redirected.txt && printf 'via_tee\n' | tee teed.txt`, "")
-	state, err := s.h.Sessions.Manager.Coordinator.Guards.ProgramProgressState(t.Context(), s.session)
-	testutil.FailErr(t, "progress state", err)
-	if !progress.PrerequisiteMissing(state.Content, state.WorkerChild, state.ReviewLoopActive) {
-		t.Fatal("expected root session to start without progress")
-	}
-	testutil.FailErr(t, "prompt", s.prompt(t.Context()))
-	result := s.result(t)
-	if strings.Contains(result, "PROGRESS_MISSING") {
-		t.Fatalf("unexpected PROGRESS_MISSING: %s", result)
-	}
-	redirected, err := os.ReadFile(filepath.Join(s.dir, "redirected.txt"))
-	testutil.FailErr(t, "read redirected.txt", err)
-	teed, err := os.ReadFile(filepath.Join(s.dir, "teed.txt"))
-	testutil.FailErr(t, "read teed.txt", err)
-	if string(redirected) != "via_redirect\n" || string(teed) != "via_tee\n" {
-		t.Fatalf("redirected=%q teed=%q", redirected, teed)
+// Redirects and tee create project files, so both share the checklist rule.
+func TestCommandProgramTeeAndRedirectShareProgressRule(t *testing.T) {
+	for _, tc := range []struct{ name, program, file, want string }{
+		{"redirect", `echo via_redirect > redirected.txt`, "redirected.txt", "via_redirect\n"},
+		{"tee", `printf 'via_tee\n' | tee teed.txt`, "teed.txt", "via_tee\n"},
+	} {
+		t.Run(tc.name+" without progress", func(t *testing.T) {
+			s := newCommandProgramSession(t, tc.program, "")
+			state, err := s.h.Sessions.Manager.Coordinator.Guards.ProgramProgressState(t.Context(), s.session)
+			testutil.FailErr(t, "progress state", err)
+			if !progress.PrerequisiteMissing(state.Content, state.WorkerChild, state.ReviewLoopActive) {
+				t.Fatal("expected root session to start without progress")
+			}
+			testutil.FailErr(t, "prompt", s.prompt(t.Context()))
+			var programState, stopCode string
+			testutil.FailErr(t, "read program", s.h.DB.QueryRowContext(t.Context(), `SELECT p.state, p.stop_code FROM invocation_programs p
+				JOIN invocation_receipts r ON r.id = p.parent_receipt_id WHERE r.session_id = ?`, s.session).Scan(&programState, &stopCode))
+			if programState != "rejected" || stopCode != "PROGRESS_MISSING" {
+				t.Fatalf("program state=%q stop=%q", programState, stopCode)
+			}
+			if _, err := os.Stat(filepath.Join(s.dir, tc.file)); !os.IsNotExist(err) {
+				t.Fatalf("refused write created %s: %v", tc.file, err)
+			}
+		})
+		t.Run(tc.name+" with progress", func(t *testing.T) {
+			s := newCommandProgramSession(t, tc.program, "")
+			testutil.FailErr(t, "seed progress", progress.NewSQLStore(s.h.DB).Set(s.session, "- [ ] Write the file"))
+			testutil.FailErr(t, "prompt", s.prompt(t.Context()))
+			if got := s.programState(t); got != "completed" {
+				t.Fatalf("program state = %q: %s", got, s.result(t))
+			}
+			data, err := os.ReadFile(filepath.Join(s.dir, tc.file))
+			testutil.FailErr(t, "read written file", err)
+			if string(data) != tc.want {
+				t.Fatalf("%s = %q", tc.file, data)
+			}
+		})
 	}
 }
 
