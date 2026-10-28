@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"strings"
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
@@ -34,7 +35,8 @@ func (r *programRun) controlDefinitions() (map[string]toolcontract.OperationDefi
 		}
 		r.control.definitions = map[string]toolcontract.OperationDefinition{}
 		for _, spec := range r.catalog.Commands {
-			if !r.control.available[spec.Name] && !commandprogram.EvaluatorBuiltin(spec.Name) && spec.Name != "[[" {
+			first, _, _ := strings.Cut(spec.Name, " ")
+			if !r.control.available[spec.Name] && !r.control.available[first] && !commandprogram.EvaluatorBuiltin(spec.Name) && spec.Name != "[[" {
 				continue
 			}
 			owned := contract
