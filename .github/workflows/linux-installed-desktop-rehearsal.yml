@@ -44,8 +44,10 @@ jobs:
     env:
       APPLICATION_COMMIT: ${{ inputs.source_commit }}
       APPLICATION_TREE: ${{ inputs.source_tree }}
-      SELECTION: ${{ runner.temp }}/installed-selection.json
     steps:
+      # The runner context is unavailable to job-level env.
+      - name: Name the selection file in the runner temp directory
+        run: echo "SELECTION=$RUNNER_TEMP/installed-selection.json" >> "$GITHUB_ENV"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
