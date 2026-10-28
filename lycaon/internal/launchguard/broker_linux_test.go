@@ -346,4 +346,3 @@ func TestBrokerAgentIdentityAndBootstrapHelpers(t *testing.T) {
 		t.Fatal("expected RunBrokerAgent to reject unsealed fd")
 	}
 }
-

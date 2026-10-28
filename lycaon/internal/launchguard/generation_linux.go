@@ -28,10 +28,10 @@ const PolicyPath = "/etc/paintedwolf/launch.json"
 // environment or argument selects them. Production builds anchor at "/" and
 // require uid 0 on every ancestor and object.
 var (
-	policyPath          = PolicyPath
-	lockDirectory       = GenerationLockDirectory
-	trustAnchor         = "/"
-	trustedOwner uint32 = 0
+	policyPath           = PolicyPath
+	lockDirectory        = GenerationLockDirectory
+	trustAnchor          = "/"
+	trustedOwner  uint32 = 0
 )
 
 // GenerationPolicy binds a physical immutable generation to its logical paths.
