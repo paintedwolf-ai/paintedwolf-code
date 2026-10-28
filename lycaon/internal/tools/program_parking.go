@@ -22,8 +22,6 @@ type ProgramPark struct {
 	ProgramID string
 	// Reason is the waiting statement, e.g. `sleep 30` or `wait %1`.
 	Reason string
-	// WakeAt is the program's earliest timer wake; zero when only jobs wake it.
-	WakeAt time.Time
 	// Deadline is the program's outer bound.
 	Deadline time.Time
 	// Interrupt stops the program at its waiting statement and returns its

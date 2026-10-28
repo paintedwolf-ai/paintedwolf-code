@@ -7,7 +7,6 @@ import (
 	"time"
 
 	awaitstore "github.com/lycaon/lycaon/internal/await"
-	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -37,7 +36,7 @@ func newEntryFixture(t *testing.T, program *programtest.WaitingProgram) *entryFi
 	f.Runtime.Parking = ProgramParking{Subscriptions: f.loop.Subscriptions}
 	f.Configure = func(tc *tools.ToolContext) {
 		f.out = &tools.ToolInvocationOut{}
-		tc.Identity.Agent, tc.Effects.Out = orchestration.ProfileCoordinator, f.out
+		tc.Effects.Out = f.out
 	}
 	return f
 }

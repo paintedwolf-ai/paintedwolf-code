@@ -99,10 +99,16 @@ func (r *ProgramRuntime) parkProgram(callCtx context.Context, e *programEvaluati
 	if r.Parking == nil || callCtx.Err() != nil {
 		return "", false
 	}
+	select {
+	case <-ending.done:
+		// The wait ended before the park; the result belongs to the call.
+		return "", false
+	default:
+	}
 	run := e.run
 	programID := run.root.Identity.ProgramID
 	parked, err := r.Parking.ParkProgram(callCtx, e.callTC, tools.ProgramPark{
-		ProgramID: programID, Reason: state.Statement, WakeAt: state.Until, Deadline: e.call.deadline,
+		ProgramID: programID, Reason: state.Statement, Deadline: e.call.deadline,
 		Interrupt: func(ctx context.Context) string { return r.interruptProgram(ctx, run, ending) },
 	})
 	if err != nil {
