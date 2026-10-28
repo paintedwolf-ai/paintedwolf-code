@@ -4,13 +4,13 @@ package linuxsandbox_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
 	"os"
 	"path/filepath"
 	"strconv"
-	"sync"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/api/capabilityadmin"
@@ -18,7 +18,6 @@ import (
 	"github.com/lycaon/lycaon/internal/authzcontext"
 	"github.com/lycaon/lycaon/internal/capabilitygrants"
 	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/confine/linuxsandbox"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
@@ -34,131 +33,125 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// TestLinuxRetainedSocketTarget is re-executed only inside the actual boundary.
-func TestLinuxRetainedSocketTarget(t *testing.T) {
-	if os.Getenv("PW_SOCKET_REFERENCE_TARGET") != "1" {
-		return
-	}
-	kind, err := strconv.Atoi(os.Getenv("PW_SOCKET_REFERENCE_KIND"))
-	testutil.FailErr(t, "target socket kind", err)
-	fd, err := unix.Socket(unix.AF_UNIX, kind|unix.SOCK_CLOEXEC, 0)
-	testutil.FailErr(t, "target creates socket", err)
-	defer unix.Close(fd)
-	testutil.FailErr(t, "target supervised connect", unix.Connect(fd, &unix.SockaddrUnix{Name: os.Getenv("PW_SOCKET_REFERENCE_PATH")}))
-	_, err = unix.Write(fd, []byte("approved-original"))
-	testutil.FailErr(t, "target sends marker", err)
-}
-
 func TestLinuxApprovedSocketSupervisorCannotReachSwappedListener(t *testing.T) {
 	for _, kind := range []int{unix.SOCK_STREAM, unix.SOCK_SEQPACKET} {
-		t.Run(fmt.Sprint(kind), func(t *testing.T) {
-			root, err := os.MkdirTemp("/tmp", "sv-") //nolint:usetesting // Kernel socket addresses are bounded.
-			testutil.FailErr(t, "supervisor fixture", err)
-			defer os.RemoveAll(root)
-			workspace := filepath.Join(root, "workspace")
-			testutil.FailErr(t, "supervisor workspace", os.Mkdir(workspace, 0700))
-			t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(root, "state"))
-			path := filepath.Join(root, "service")
-			network := "unix"
-			if kind == unix.SOCK_SEQPACKET {
-				network = "unixpacket"
-			}
-			original, err := net.ListenUnix(network, &net.UnixAddr{Name: path, Net: network})
-			testutil.FailErr(t, "original listener", err)
-			original.SetUnlinkOnClose(false)
-			defer original.Close()
-			ctx, scope := socketref.WithScope(t.Context())
-			defer scope.Close()
-			grant, runtime, actionDigest := approveSupervisorSocket(t, ctx, workspace, path)
-			tc := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "root-1", ToolCallID: "call"}, Socket: tools.InvocationSocket{SocketGrants: []confine.SocketGrant{grant}, SocketCapabilityRuntime: runtime, SocketActionDigest: actionDigest}}
-			finalized, reject := tools.FinalizeSocketGrantsForSpawn(ctx, tc)
-			if reject != nil {
-				t.Fatalf("real permit transfer: %v", reject)
-			}
-			c := confine.Confinement{Roots: []string{workspace}, Network: confine.NetworkDeny, EgressOff: confine.EgressOffOverride, SocketGrants: finalized}
-			self, err := os.Executable()
-			testutil.FailErr(t, "test executable", err)
-			command, cleanup, err := confine.Command(ctx, self, self, []string{"-test.run=^TestLinuxRetainedSocketTarget$"}, c)
-			testutil.FailErr(t, "real command descriptor handoff", err)
-			defer cleanup()
-			profile, err := confine.BuildProfile(c)
-			testutil.FailErr(t, "real boundary plan", err)
-			plan, err := linuxsandbox.DecodePlan([]byte(profile))
-			testutil.FailErr(t, "decode actual plan", err)
-			source := command.ExtraFiles[len(command.ExtraFiles)-1]
-			inherited, err := unix.FcntlInt(source.Fd(), unix.F_DUPFD_CLOEXEC, linuxsandbox.SocketReferenceFD)
-			testutil.FailErr(t, "outer source reference", err)
-			defer unix.Close(inherited)
-			outer := plan.Network
-			outer.SocketGrants[0].FD = inherited
-			paused, resume := make(chan struct{}), make(chan struct{})
-			var once sync.Once
-			defer once.Do(func() { close(resume) })
-			outer = linuxsandbox.WithSocketConnectPauseForTest(outer, func() { close(paused); <-resume })
-			t.Setenv("PW_SOCKET_REFERENCE_TARGET", "1")
-			t.Setenv("PW_SOCKET_REFERENCE_KIND", strconv.Itoa(kind))
-			t.Setenv("PW_SOCKET_REFERENCE_PATH", path)
-			completed := make(chan error, 1)
-			go func() {
-				code, signal, err := linuxsandbox.Relaunch(self, command.Args[1:], []byte(profile), outer, nil, nil)
-				if err == nil && (code != 0 || signal != 0) {
-					err = fmt.Errorf("helper exit %d, signal %v", code, signal)
+		for _, transition := range []string{"replacement", "unlink", "restart", "cancel"} {
+			t.Run(fmt.Sprintf("%d/%s", kind, transition), func(t *testing.T) {
+				root, err := os.MkdirTemp("/tmp", "sv-") //nolint:usetesting // Kernel socket addresses are bounded.
+				testutil.FailErr(t, "supervisor fixture", err)
+				defer os.RemoveAll(root)
+				workspace := filepath.Join(root, "workspace")
+				testutil.FailErr(t, "supervisor workspace", os.Mkdir(workspace, 0700))
+				t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(root, "state"))
+				path := filepath.Join(root, "service")
+				network := "unix"
+				if kind == unix.SOCK_SEQPACKET {
+					network = "unixpacket"
 				}
-				completed <- err
-			}()
-			joined := false
-			defer func() {
-				once.Do(func() { close(resume) })
-				if !joined {
-					<-completed
+				original, err := net.ListenUnix(network, &net.UnixAddr{Name: path, Net: network})
+				testutil.FailErr(t, "original listener", err)
+				original.SetUnlinkOnClose(false)
+				defer original.Close()
+				ctx, scope := socketref.WithScope(t.Context())
+				defer scope.Close()
+				grant, runtime, actionDigest := approveSupervisorSocket(t, ctx, workspace, path)
+				tc := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "root-1", ToolCallID: "call"}, Socket: tools.InvocationSocket{SocketGrants: []confine.SocketGrant{grant}, SocketCapabilityRuntime: runtime, SocketActionDigest: actionDigest}}
+				finalized, reject := tools.FinalizeSocketGrantsForSpawn(ctx, tc)
+				if reject != nil {
+					t.Fatalf("real permit transfer: %v", reject)
 				}
-			}()
-			select {
-			case <-paused:
-			case err := <-completed:
-				joined = true
-				t.Fatalf("real supervisor did not reach connect pause: %v", err)
-			case <-t.Context().Done():
-				t.Fatal("real supervisor canceled before pause")
-			}
-			testutil.FailErr(t, "swap final name after supervisor resolution", os.Rename(path, path+"-original"))
-			decoy, err := net.ListenUnix(network, &net.UnixAddr{Name: path, Net: network})
-			testutil.FailErr(t, "replacement listener", err)
-			defer decoy.Close()
-			once.Do(func() { close(resume) })
-			completionErr := <-completed
-			joined = true
-			testutil.FailErr(t, "real supervised command completion", completionErr)
-			originalRaw, err := original.SyscallConn()
-			testutil.FailErr(t, "original descriptor", err)
-			originalReady := 0
-			var originalPollErr error
-			testutil.FailErr(t, "inspect original readiness", originalRaw.Control(func(fd uintptr) {
-				originalReady, originalPollErr = unix.Poll([]unix.PollFd{{Fd: int32(fd), Events: unix.POLLIN}}, 0)
-			}))
-			testutil.FailErr(t, "original readiness", originalPollErr)
-			if originalReady != 1 {
-				t.Fatal("actual target did not queue a connection at the retained original")
-			}
-			accepted, err := original.AcceptUnix()
-			testutil.FailErr(t, "original accepts actual target", err)
-			marker := make([]byte, len("approved-original"))
-			_, err = io.ReadFull(accepted, marker)
-			_ = accepted.Close()
-			testutil.FailErr(t, "original receives target bytes", err)
-			if string(marker) != "approved-original" {
-				t.Fatalf("original marker=%q", marker)
-			}
-			raw, err := decoy.SyscallConn()
-			testutil.FailErr(t, "decoy descriptor", err)
-			var ready int
-			var pollErr error
-			testutil.FailErr(t, "inspect actual decoy", raw.Control(func(fd uintptr) { ready, pollErr = unix.Poll([]unix.PollFd{{Fd: int32(fd), Events: unix.POLLIN}}, 0) }))
-			testutil.FailErr(t, "decoy readiness", pollErr)
-			if ready != 0 {
-				t.Fatal("real supervisor connected to replacement listener")
-			}
-		})
+				c := confine.Confinement{Roots: []string{workspace}, Network: confine.NetworkDeny, EgressOff: confine.EgressOffOverride, SocketGrants: finalized}
+				self, err := os.Executable()
+				testutil.FailErr(t, "test executable", err)
+				python := "/usr/bin/python3"
+				client := "import socket,sys; s=socket.socket(socket.AF_UNIX,int(sys.argv[2])); s.connect(sys.argv[1]); s.sendall(b'approved-original')"
+				command, cleanup, err := confine.Command(ctx, self, python, []string{"-c", client, path, strconv.Itoa(kind)}, c)
+				testutil.FailErr(t, "real command descriptor handoff", err)
+				defer cleanup()
+				process := startSocketSupervisorProcess(t, command)
+				process.awaitPause(t)
+				if transition == "cancel" {
+					process.close()
+					assertSocketListenerEmpty(t, original)
+					cleanup()
+					runtime.Close()
+					scope.Close()
+					lease, err := grant.Binding.Acquire()
+					if lease != nil {
+						lease.Close()
+					}
+					if !errors.Is(err, socketref.ErrUnbound) {
+						t.Fatalf("canceled invocation retained authority: %v", err)
+					}
+					for _, file := range command.ExtraFiles {
+						if file != nil {
+							if _, err := file.Stat(); !errors.Is(err, os.ErrClosed) {
+								t.Fatalf("command cleanup retained inherited descriptor: %v", err)
+							}
+						}
+					}
+					return
+				}
+				testutil.FailErr(t, "swap final name after supervisor resolution", os.Rename(path, path+"-original"))
+				if transition == "unlink" {
+					testutil.FailErr(t, "unlink retained listener name", os.Remove(path+"-original"))
+				}
+				decoy, err := net.ListenUnix(network, &net.UnixAddr{Name: path, Net: network})
+				testutil.FailErr(t, "replacement listener", err)
+				defer decoy.Close()
+				if transition == "restart" {
+					testutil.FailErr(t, "stop approved listener", original.Close())
+					process.resumeAndWaitResult(t, false)
+					assertSocketListenerEmpty(t, decoy)
+					return
+				}
+				process.resumeAndWaitResult(t, true)
+				originalRaw, err := original.SyscallConn()
+				testutil.FailErr(t, "original descriptor", err)
+				originalReady := 0
+				var originalPollErr error
+				testutil.FailErr(t, "inspect original readiness", originalRaw.Control(func(fd uintptr) {
+					originalReady, originalPollErr = unix.Poll([]unix.PollFd{{Fd: int32(fd), Events: unix.POLLIN}}, 0)
+				}))
+				testutil.FailErr(t, "original readiness", originalPollErr)
+				if originalReady != 1 {
+					t.Fatal("actual target did not queue a connection at the retained original")
+				}
+				accepted, err := original.AcceptUnix()
+				testutil.FailErr(t, "original accepts actual target", err)
+				marker := make([]byte, len("approved-original"))
+				_, err = io.ReadFull(accepted, marker)
+				_ = accepted.Close()
+				testutil.FailErr(t, "original receives target bytes", err)
+				if string(marker) != "approved-original" {
+					t.Fatalf("original marker=%q", marker)
+				}
+				raw, err := decoy.SyscallConn()
+				testutil.FailErr(t, "decoy descriptor", err)
+				var ready int
+				var pollErr error
+				testutil.FailErr(t, "inspect actual decoy", raw.Control(func(fd uintptr) { ready, pollErr = unix.Poll([]unix.PollFd{{Fd: int32(fd), Events: unix.POLLIN}}, 0) }))
+				testutil.FailErr(t, "decoy readiness", pollErr)
+				if ready != 0 {
+					t.Fatal("real supervisor connected to replacement listener")
+				}
+			})
+		}
+	}
+}
+
+func assertSocketListenerEmpty(t *testing.T, listener *net.UnixListener) {
+	t.Helper()
+	raw, err := listener.SyscallConn()
+	testutil.FailErr(t, "listener descriptor", err)
+	var ready int
+	var pollErr error
+	testutil.FailErr(t, "inspect listener", raw.Control(func(fd uintptr) {
+		ready, pollErr = unix.Poll([]unix.PollFd{{Fd: int32(fd), Events: unix.POLLIN}}, 0)
+	}))
+	testutil.FailErr(t, "listener readiness", pollErr)
+	if ready != 0 {
+		t.Fatal("unexpected connection reached listener")
 	}
 }
 

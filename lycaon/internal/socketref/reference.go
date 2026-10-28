@@ -13,6 +13,9 @@ import (
 // ErrUnbound requires fresh approval of a service whose reference is unavailable.
 var ErrUnbound = errors.New("local service reference is unavailable; approve the current service again")
 
+// ErrUnsupported names a platform with no object-bound local-service realization.
+var ErrUnsupported = errors.New("this platform cannot retain a local-service recipient; use a separately approved service endpoint")
+
 // Reference holds one destination until all operations have released it.
 type Reference struct {
 	mu      sync.RWMutex

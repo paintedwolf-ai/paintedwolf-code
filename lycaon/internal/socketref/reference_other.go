@@ -4,9 +4,9 @@ package socketref
 
 import "os"
 
-const Required = false
+func Platform() Adapter { return Adapter{Command: NoRealization, Native: NoRealization} }
 
-func Open(string) (*Reference, error) { return nil, ErrUnbound }
+func Open(string) (*Reference, error) { return nil, ErrUnsupported }
 
 func descriptorPath(*os.File) string { return "" }
 

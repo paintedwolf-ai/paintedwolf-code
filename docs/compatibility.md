@@ -354,3 +354,5 @@ Internal packages that do not leak into a sticky surface can be reshaped directl
 - Rebuildable cache identity may outlive its evictable bytes; durable history keeps the bytes it names.
 - Version fields keep distinct meanings.
 - Breaking evolution is explicit, attributable, and recoverable.
+
+Native exact Unix-socket requests on a platform reporting no retained-object realization are refused with the existing structured socket-path refusal and an approved service-endpoint recovery route. This is the Windows socket contract and changes the previous native pathname-dial behavior. Existing saved socket intent and credential/token data remain; there is no pathname fallback, implicit rebinding or new durable wire shape. The unavailable realization and recovery are structured refusal facts rather than inferred error prose.

@@ -3,6 +3,7 @@
 package approvalstate
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -84,9 +85,7 @@ func TestSocketPermitOwnersReleaseAtRealRuntimeBoundaries(t *testing.T) {
 				runtime.Close()
 			}
 			for _, slot := range retained {
-				if _, err := slot.resource.Duplicate(); !errors.Is(err, socketref.ErrUnbound) {
-					t.Fatalf("terminal permit retained owner: %v", err)
-				}
+				assertClosedSocketLease(t, slot.resource)
 			}
 			assertSocketBinding(t, grant.Binding, false)
 			if len(runtime.permits.Snapshot()) != 0 {
@@ -106,16 +105,12 @@ func TestSocketPermitReplacementAndEvictionCloseOwners(t *testing.T) {
 	initial.Close()
 	first := runtime.permits.Snapshot()[socketPermitKey("child", "one", "digest", grant)]
 	runtime.IssuePermit("root", "child", "one", "digest", grant)
-	if _, err := first.resource.Duplicate(); !errors.Is(err, socketref.ErrUnbound) {
-		t.Fatalf("replaced lease remains live: %v", err)
-	}
+	assertClosedSocketLease(t, first.resource)
 	replaced := runtime.permits.Snapshot()[socketPermitKey("child", "one", "digest", grant)]
 	for i := range 2 {
 		runtime.IssuePermit("root", "child", fmt.Sprintf("next-%d", i), "digest", grant)
 	}
-	if _, err := replaced.resource.Duplicate(); !errors.Is(err, socketref.ErrUnbound) {
-		t.Fatalf("evicted lease remains live: %v", err)
-	}
+	assertClosedSocketLease(t, replaced.resource)
 	if runtime.permits.Len() != 2 {
 		t.Fatalf("permit capacity = %d", runtime.permits.Len())
 	}
@@ -143,9 +138,7 @@ func TestSocketChatExpiryAndReplacementPreserveIntent(t *testing.T) {
 		t.Fatal("reader changed authoritative expiry")
 	}
 	runtime.expireSocketOwners(deadline)
-	if _, err := row.resource.Duplicate(); !errors.Is(err, socketref.ErrUnbound) {
-		t.Fatalf("expiry retained lease: %v", err)
-	}
+	assertClosedSocketLease(t, row.resource)
 	assertSocketBinding(t, old.Binding, false)
 	if len(runtime.ListChatGrants("root")) != 1 {
 		t.Fatal("expiry discarded intent")
@@ -167,5 +160,43 @@ func TestSocketChatExpiryAndReplacementPreserveIntent(t *testing.T) {
 	}
 	if got := runtime.AppliedGrants("root"); len(got) != 1 || got[0].Binding != fresh.Binding {
 		t.Fatalf("applied grants = %+v", got)
+	}
+}
+
+func assertClosedSocketLease(t *testing.T, lease *socketref.Lease) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	connection, err := lease.DialContext(ctx)
+	if connection != nil {
+		_ = connection.Close()
+	}
+	if !errors.Is(err, socketref.ErrUnbound) {
+		t.Fatalf("retired owner remains usable: %v", err)
+	}
+}
+
+func TestSocketPermitCapacityBoundsDistinctLiveReferencesWithoutGC(t *testing.T) {
+	_, capture := ownedSocketFixture(t)
+	runtime := NewSocketCapabilityRuntime()
+	defer runtime.Close()
+	runtime.permits = *scopedstore.New[*socketPermitSlot](2)
+	var prior []socketref.Binding
+	for i := range 256 {
+		grant, owner := capture()
+		runtime.IssuePermit("root", "child", fmt.Sprint(i), "digest", grant)
+		owner.Close()
+		prior = append(prior, grant.Binding)
+		assertSocketBinding(t, grant.Binding, true)
+		if i >= 2 {
+			assertSocketBinding(t, prior[i-2], false)
+		}
+		if runtime.permits.Len() > 2 {
+			t.Fatal("permit references exceeded capacity")
+		}
+	}
+	runtime.Close()
+	for _, binding := range prior {
+		assertSocketBinding(t, binding, false)
 	}
 }

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/capabilitygrants"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/secretmatch"
+	"github.com/lycaon/lycaon/internal/socketref"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -136,12 +138,24 @@ func (s *HarnessControl) handleHarnessToolApprovalCheckpoint(w http.ResponseWrit
 	}
 	approved := strings.TrimSpace(req.ApprovedPath)
 	resolved := strings.TrimSpace(req.ResolvedPath)
-	applyHarnessSocketCapability(&cpReq, approved, resolved, band, code)
+	ctx, socketScope := socketref.WithScope(r.Context())
+	defer socketScope.Close()
+	grant, err := harnessSocketGrant(ctx, approved, resolved)
+	if err != nil {
+		var refused *confine.SocketResolveError
+		if errors.As(err, &refused) {
+			s.responses.FailDetails(w, refused.Code, map[string]any{"field": "approved_path"}, refused.Error())
+		} else {
+			s.responses.InternalError(w, r, err)
+		}
+		return
+	}
+	applyHarnessSocketCapability(&cpReq, grant, band, code)
 	applyHarnessDirectIPCapability(&cpReq, req, command, band, code)
 	applyHarnessDeclaredEndpoints(&cpReq, req)
 	applyHarnessSecretScreen(&cpReq, req, band, code)
 	applyHarnessFileChanges(&cpReq, req.FileChanges)
-	dec, err := s.checkpoints.RequestCheckpoint(r.Context(), cpReq)
+	dec, err := s.checkpoints.RequestCheckpoint(ctx, cpReq)
 	if err != nil {
 		s.responses.InternalError(w, r, err)
 		return
@@ -154,48 +168,6 @@ func (s *HarnessControl) handleHarnessToolApprovalCheckpoint(w http.ResponseWrit
 		"command":       command,
 		"note":          fmt.Sprintf("pending tool_approval for %q", command),
 	})
-}
-
-func applyHarnessSocketCapability(
-	cpReq *hitl.CheckpointRequest,
-	approved, resolved string,
-	band wire.ConsequenceBand,
-	code wire.ConsequenceCode,
-) {
-	if approved == "" || cpReq == nil {
-		return
-	}
-	if resolved == "" {
-		resolved = approved
-	}
-	if band == "" {
-		cpReq.ConsequenceBand = wire.ConsequenceBandHighRisk
-	}
-	if code == "" {
-		cpReq.ConsequenceCode = wire.ConsequenceCodeLocalSocket
-	}
-	cpReq.Explanation = &hitl.ApprovalExplanation{
-		What:      fmt.Sprintf(hitl.SocketWhatOne, approved),
-		Who:       hitl.WhoAgentCommand,
-		IfWrong:   hitl.SocketIfWrong,
-		AllowLine: "connections to " + approved,
-	}
-	cpReq.GrantOffers = capabilitygrants.SocketExecutionGrantOffers(
-		hitl.ProposedAction{
-			Invocation: hitl.ActionInvocation{
-				Tool: "command",
-			},
-			Scope: hitl.ActionScope{
-				SessionID: cpReq.SessionID,
-				ProjectID: cpReq.ProjectID,
-			},
-		},
-		[]confine.SocketGrant{{ApprovedPath: approved, ResolvedPath: resolved}},
-	)
-	cpReq.SocketCapability = &hitl.SocketCapability{
-		Targets:            []hitl.SocketCapabilityTarget{{ApprovedPath: approved, ResolvedPath: resolved}},
-		EffectiveAuthority: hitl.SocketAuthorityOutsideSandboxDaemon,
-	}
 }
 
 // applyHarnessDeclaredEndpoints seeds a provider destination set.

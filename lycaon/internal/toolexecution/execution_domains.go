@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/projectignore"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretmatch"
+	"github.com/lycaon/lycaon/internal/socketref"
 	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
@@ -87,6 +88,7 @@ type Capabilities struct {
 	Boundary            *Boundary
 	Rejections          *Rejections
 	Secrets             *Secrets
+	socketAdapter       *socketref.Adapter
 	socketRuntime       tools.SocketCapabilityRuntime
 	durableSockets      tools.DurableSocketSource
 	directIPRuntime     tools.DirectIPCapabilityRuntime

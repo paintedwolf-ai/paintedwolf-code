@@ -18,7 +18,9 @@ copy:
   fix: Resolve the reported host filesystem or service-access failure before retrying the intended socket. A blind
     retry does not repair a permission or I/O failure. On macOS, native local-service access requires a
     protected reference on the same filesystem and an address within the kernel limit; place the intended
-    service on a representable local filesystem or use a separately approved service endpoint.
+    service on a representable local filesystem or use a separately approved service endpoint. Windows builds
+    have no native socket realization; use a separately approved service endpoint. Saved intent and stored
+    credentials remain.
   instead: Branch on Code; correct structured args — never parse stderr
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:sandbox_socket

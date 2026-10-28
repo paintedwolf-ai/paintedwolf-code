@@ -21,7 +21,7 @@ func approvalSocketBindings(plan *ApprovalPlan) []socketref.Binding {
 	seen := make(map[string]bool)
 	var bindings []socketref.Binding
 	add := func(binding socketref.Binding) {
-		if binding.Mode() == socketref.KernelPathname || seen[binding.Key()] {
+		if binding.Mode() == socketref.KernelPathname && socketref.Platform().Command == socketref.KernelPathname || seen[binding.Key()] {
 			return
 		}
 		seen[binding.Key()] = true

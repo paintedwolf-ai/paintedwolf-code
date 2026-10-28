@@ -90,3 +90,38 @@ func TestSocketReferenceAliasCannotBeMutatedFromBroadWriteRoot(t *testing.T) {
 		})
 	}
 }
+
+func TestRetainedNativeGrantCannotBecomeSeatbeltPathnameAuthority(t *testing.T) {
+	root := shortTempDir(t)
+	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(root, "state"))
+	path := filepath.Join(root, "service")
+	listener, err := net.Listen("unix", path)
+	if err != nil {
+		t.Fatalf("native listener: %v", err)
+	}
+	defer listener.Close()
+	lease, err := socketref.Capture(path)
+	if err != nil {
+		t.Fatalf("native reference: %v", err)
+	}
+	defer lease.Close()
+	resolved, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		t.Fatalf("native resolved label: %v", err)
+	}
+	workspace := filepath.Join(root, "workspace")
+	if err := os.Mkdir(workspace, 0700); err != nil {
+		t.Fatalf("workspace: %v", err)
+	}
+	c := confine.Confinement{Roots: []string{workspace}, Network: confine.NetworkDeny, SocketGrants: []confine.SocketGrant{{ApprovedPath: path, ResolvedPath: resolved, Binding: lease.Binding()}}}
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatalf("executable: %v", err)
+	}
+	command, cleanup, err := confine.Command(t.Context(), self, "/usr/bin/true", nil, c)
+	defer cleanup()
+	var refused *confine.SocketResolveError
+	if command != nil || !errors.As(err, &refused) || refused.Code != confine.SocketResolveRefused {
+		t.Fatalf("native grant became pathname command: command=%v, err=%v", command, err)
+	}
+}

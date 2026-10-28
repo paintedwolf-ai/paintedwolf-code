@@ -10,8 +10,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// Required marks the adapter whose pathname grants require retained references.
-const Required = true
+func Platform() Adapter { return Adapter{Command: RetainedObject, Native: RetainedObject} }
 
 // Open captures the socket object before its grant is offered for approval.
 // O_PATH retains the final object even if any original name is later replaced.

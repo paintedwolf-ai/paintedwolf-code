@@ -8,9 +8,10 @@ import (
 	"github.com/lycaon/lycaon/internal/socketref"
 )
 
-// RestoreChatIntent records unavailable saved intent without acquiring authority.
+// RestoreChatIntent restores saved intent without acquiring an object reference.
+// A supported kernel pathname rule remains reusable when its name is valid.
 func (r *SocketCapabilityRuntime) RestoreChatIntent(rootSessionID string, record SocketChatGrant) bool {
-	if r == nil || record.Binding.Mode() != socketref.RetainedObject && record.Binding.Mode() != socketref.KernelPathname {
+	if r == nil || record.Binding.Mode() != socketref.RetainedObject && record.Binding.Mode() != socketref.KernelPathname && record.Binding.Mode() != socketref.NoRealization {
 		return false
 	}
 	record.ID = strings.TrimSpace(record.ID)
@@ -19,7 +20,7 @@ func (r *SocketCapabilityRuntime) RestoreChatIntent(rootSessionID string, record
 	}
 	record.ExpiresAt = cloneSocketExpiry(record.ExpiresAt)
 	record.resource = nil
-	record.Unavailable = true
+	record.Unavailable = record.Binding.Mode() != socketref.KernelPathname || socketref.Platform().Command != socketref.KernelPathname
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.closed {

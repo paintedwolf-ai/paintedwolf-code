@@ -22,19 +22,26 @@ type Binding struct {
 type Enforcement string
 
 const (
+	NoRealization  Enforcement = "none"
 	KernelPathname Enforcement = "kernel_pathname"
 	RetainedObject Enforcement = "retained_object"
 )
 
+// Adapter reports the realizations supplied by the platform implementation.
+type Adapter struct {
+	Command Enforcement
+	Native  Enforcement
+}
+
 // Mode preserves existing pathname grants only on adapters that realize them.
-func (b Binding) Mode() Enforcement {
+func (b Binding) Mode() Enforcement { return Platform().BindingMode(b) }
+
+// BindingMode preserves an explicit contract and otherwise uses this adapter.
+func (a Adapter) BindingMode(b Binding) Enforcement {
 	if b.Enforcement != "" {
 		return b.Enforcement
 	}
-	if Required {
-		return RetainedObject
-	}
-	return KernelPathname
+	return a.Command
 }
 
 // Key includes the enforcement contract as well as its object identity.
@@ -42,11 +49,11 @@ func (b Binding) Key() string { return string(b.Mode()) + "\x00" + b.ID }
 
 // ValidateShape refuses unknown saved interpretations without acquiring a lease.
 func (b Binding) ValidateShape() error {
-	if b.Enforcement != "" && b.Enforcement != KernelPathname && b.Enforcement != RetainedObject {
+	if b.Enforcement != "" && b.Enforcement != NoRealization && b.Enforcement != KernelPathname && b.Enforcement != RetainedObject {
 		return fmt.Errorf("unknown socket binding enforcement %q", b.Enforcement)
 	}
-	if b.Mode() == KernelPathname && b.ID != "" {
-		return fmt.Errorf("kernel pathname binding carries an object identity")
+	if b.Mode() != RetainedObject && b.ID != "" {
+		return fmt.Errorf("socket realization without retained objects carries an object identity")
 	}
 	return nil
 }

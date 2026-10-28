@@ -231,7 +231,7 @@ func TestSocketCapabilityRuntimeForgetSession(t *testing.T) {
 func socketRuntimeGrant(t *testing.T, approved, resolved string) confine.SocketGrant {
 	t.Helper()
 	g := confine.SocketGrant{ApprovedPath: approved, ResolvedPath: resolved}
-	if socketref.Required {
+	if socketref.Platform().Command == socketref.RetainedObject {
 		owner, err := socketref.Capture(approved)
 		testutil.FailErr(t, "capture socket", err)
 		t.Cleanup(func() { owner.Close() })

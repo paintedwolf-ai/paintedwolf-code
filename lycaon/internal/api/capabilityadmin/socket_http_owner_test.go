@@ -92,6 +92,16 @@ func (r *socketOwnerReview) RequestCheckpoint(ctx context.Context, req hitl.Chec
 }
 
 func TestUnixSocketNativeOwnerRetainsRecipientAcrossApprovalAndReplacement(t *testing.T) {
+	for _, tokens := range []bool{false, true} {
+		name := "credential"
+		if tokens {
+			name = "issued token"
+		}
+		t.Run(name, func(t *testing.T) { testUnixSocketRecipientLifetime(t, tokens) })
+	}
+}
+
+func testUnixSocketRecipientLifetime(t *testing.T, tokens bool) {
 	root, err := os.MkdirTemp("/tmp", "sh-") //nolint:usetesting // Kernel socket addresses are bounded.
 	testutil.FailErr(t, "socket owner fixture", err)
 	defer os.RemoveAll(root)
@@ -103,8 +113,14 @@ func TestUnixSocketNativeOwnerRetainsRecipientAcrossApprovalAndReplacement(t *te
 	testutil.FailErr(t, "original listener", err)
 	original.SetUnlinkOnClose(false)
 	var originalBytes atomic.Int64
+	var originalTokenRequests atomic.Int64
+	const issuedToken = "native-issued-token"
 	server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		originalBytes.Add(int64(len(req.Header.Get("Authorization"))))
+		if req.Header.Get("Authorization") == "Bearer "+issuedToken {
+			originalTokenRequests.Add(1)
+		}
+		w.Header().Set("X-Service-Token", issuedToken)
 		_, _ = io.WriteString(w, "original")
 	})}
 	go func() { _ = server.Serve(original) }()
@@ -165,7 +181,7 @@ func TestUnixSocketNativeOwnerRetainsRecipientAcrossApprovalAndReplacement(t *te
 		}
 		return executor.Secrets.AskSecretScreen(ctx, alert)
 	}}))
-	args := map[string]any{"url": "http://service.invalid/info", "unix_socket": path, "auth": map[string]any{"scheme": "bearer", "token": stored.Metadata.Reference}}
+	args := map[string]any{"url": "http://service.invalid/info", "unix_socket": path, "auth": map[string]any{"scheme": "bearer", "token": stored.Metadata.Reference}, "token_jar": "service-tokens", "capture_tokens": []any{map[string]any{"name": "api", "from": "header:X-Service-Token"}}}
 	tc := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "root-1", ProjectID: testdbseed.DefaultProjectID, ToolCallID: "first", Agent: "implement"}, Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: workspace, IsPrimary: true}}, ActiveRootID: "root"}}
 	_, err = executor.Invoke(ctx, "http_request", args, tc)
 	testutil.FailErr(t, "send to retained original", err)
@@ -185,6 +201,22 @@ func TestUnixSocketNativeOwnerRetainsRecipientAcrossApprovalAndReplacement(t *te
 	if review.secretCards != firstSecretCards {
 		t.Fatal("same live binding did not reuse recipient permission")
 	}
+	jarRequest := secretcap.TokenJarRequest{ProjectID: testdbseed.DefaultProjectID, ChatSessionID: "root-1", SessionID: "root-1", OperationID: "inspect", Name: "service-tokens"}
+	jar, err := service.OpenTokenJar(ctx, jarRequest)
+	testutil.FailErr(t, "read retained token jar", err)
+	originalToken := jar.Tokens["api"]
+	if originalToken.Value != issuedToken || originalToken.Origin == "" {
+		t.Fatal("original listener token was not captured with recipient identity")
+	}
+	if tokens {
+		args = map[string]any{"url": "http://service.invalid/info", "unix_socket": path, "token_jar": "service-tokens", "headers": []any{map[string]any{"name": "Authorization", "value": "Bearer {{token:api}}"}}}
+		tc.Identity.ToolCallID = "same-issuer-token"
+		_, err = executor.Invoke(ctx, "http_request", args, tc)
+		testutil.FailErr(t, "place token at same retained issuer", err)
+		if originalTokenRequests.Load() != 1 || review.secretCards != firstSecretCards {
+			t.Fatal("same retained issuer did not reuse its token without disclosure review")
+		}
+	}
 	testutil.FailErr(t, "stop original daemon", server.Close())
 	testutil.FailErr(t, "remove stopped listener name", os.Remove(path))
 	testutil.FailErr(t, "move decoy listener into approved name", os.Rename(path+"-unused", path))
@@ -201,8 +233,50 @@ func TestUnixSocketNativeOwnerRetainsRecipientAcrossApprovalAndReplacement(t *te
 	assertNoUnixAccept(t, decoy)
 	metadata, err := service.ListProject(ctx, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "preserve stored credential", err)
-	if len(metadata) != 1 || metadata[0].Reference != stored.Metadata.Reference {
+	preservedCredential := false
+	for _, meta := range metadata {
+		if meta.Reference == stored.Metadata.Reference {
+			preservedCredential = true
+		}
+	}
+	if !preservedCredential {
 		t.Fatal("recipient refusal discarded stored credential")
+	}
+	preserved, err := service.OpenTokenJar(ctx, jarRequest)
+	testutil.FailErr(t, "preserve original token jar", err)
+	if preserved.Tokens["api"] != originalToken {
+		t.Fatal("changed recipient rewrote or discarded token data")
+	}
+	if tokens {
+		runtime.Close()
+		testutil.FailErr(t, "stop old checkpoint owners", checkpoints.StopExpiryTimers(context.Background()))
+		restartedRuntime := approvalstate.NewSocketCapabilityRuntime()
+		defer restartedRuntime.Close()
+		restarted := hitl.NewCheckpoints(hitl.NewSQLStore(database), &events.Publisher{Hub: events.NewMemoryHub()}, authzcontext.SQLRecorder(database))
+		defer func() {
+			testutil.FailErr(t, "stop restarted token checkpoint owners", restarted.StopExpiryTimers(context.Background()))
+		}()
+		installer.Sockets = restartedRuntime
+		restarted.Authority.SetApprovalAuthorityInstaller(installer)
+		review.Checkpoints = restarted
+		executor.Capabilities.SetSocketCapabilityRuntime(restartedRuntime)
+		executor.Approvals.SetCheckpointManager(ctx, review, authority)
+		testutil.FailErr(t, "restore unavailable socket intent", restarted.Authority.RestoreChatGrants(ctx))
+		if len(restartedRuntime.ListChatGrants("root-1")) == 0 || len(restartedRuntime.AppliedGrants("root-1")) != 0 {
+			t.Fatal("restart lost socket intent or restored stale authority")
+		}
+		beforeRestartReview := review.secretCards
+		tc.Identity.ToolCallID = "token-after-engine-restart"
+		_, err = executor.Invoke(ctx, "http_request", args, tc)
+		if toolrejection.AsToolReject(err) == nil || review.secretCards <= beforeRestartReview {
+			t.Fatalf("restart reused stale token recipient authority: %v", err)
+		}
+		assertNoUnixAccept(t, decoy)
+		restored, err := service.OpenTokenJar(ctx, jarRequest)
+		testutil.FailErr(t, "token data survives restart", err)
+		if restored.Tokens["api"] != originalToken {
+			t.Fatal("engine restart discarded or rebound token data")
+		}
 	}
 }
 

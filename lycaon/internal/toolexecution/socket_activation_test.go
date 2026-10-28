@@ -25,7 +25,7 @@ func TestSavedSocketAuthorityRequiresInvocationDeclaration(t *testing.T) {
 	if reject != nil {
 		t.Fatalf("resolve fixture sockets: %v", reject)
 	}
-	if socketref.Required {
+	if socketref.Platform().Command == socketref.RetainedObject {
 		for i := range grants {
 			grants[i] = retainedTestSocket(t, grants[i])
 		}

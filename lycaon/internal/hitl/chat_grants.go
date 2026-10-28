@@ -186,9 +186,9 @@ func (m *ApprovalAuthority) RestoreChatGrants(ctx context.Context) error {
 		}
 		option := ApprovalOption{Authority: []ApprovalAuthorityDelta{delta}}
 		if delta.Kind == AuthoritySocketChat {
-			unavailable := false
+			unavailable := socketref.Platform().Command == socketref.NoRealization && socketref.Platform().Native == socketref.NoRealization
 			for _, target := range delta.Sockets {
-				if target.Binding.Mode() == socketref.RetainedObject && confine.RevalidateSocketGrant(confine.SocketGrant{ApprovedPath: target.ApprovedPath, ResolvedPath: target.ResolvedPath, Binding: target.Binding}) != nil {
+				if confine.RevalidateSocketGrant(confine.SocketGrant{ApprovedPath: target.ApprovedPath, ResolvedPath: target.ResolvedPath, Binding: target.Binding}) != nil {
 					unavailable = true
 				}
 			}

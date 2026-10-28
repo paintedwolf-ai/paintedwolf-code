@@ -100,6 +100,7 @@ func (r *recordingSocketRuntime) ConsumePermit(string, string, string, confine.S
 // A denied http_request socket card installs no authority: the handler never
 // runs, nothing is granted or saved, and the retry asks again.
 func TestHTTPRequestUnixSocketDenialRecordsNoGrantAndRetryAsksAgain(t *testing.T) {
+	setSocketReferenceState(t)
 	dir, err := os.MkdirTemp("/tmp", "lyc-deny-") //nolint:usetesting // Socket paths must stay short.
 	testutil.FailErr(t, "mkdir socket dir", err)
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })

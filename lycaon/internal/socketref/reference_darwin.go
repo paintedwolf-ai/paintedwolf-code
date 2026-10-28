@@ -12,8 +12,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// Required concerns confined commands. Native dials require a retained object.
-const Required = false
+func Platform() Adapter { return Adapter{Command: KernelPathname, Native: RetainedObject} }
 
 // Open retains a hard link behind the engine's terminal control-plane floor.
 // Cross-filesystem services cannot be represented and never fall back to path.

@@ -73,7 +73,9 @@ func (r *SocketCapabilityRuntime) AppliedGrants(rootSessionID string) []confine.
 			}
 			g := confine.SocketGrant{ApprovedPath: tg.ApprovedPath, ResolvedPath: tg.ResolvedPath, Binding: tg.Binding}
 			if err := confine.RevalidateSocketGrant(g); err != nil {
-				stale[tg.ID] = tg.Binding.Key()
+				if tg.Binding.Mode() == socketref.RetainedObject {
+					stale[tg.ID] = tg.Binding.Key()
+				}
 				continue
 			}
 			key := socketGrantPairKey(g)

@@ -99,3 +99,17 @@ func TestHTTPRequestUnixSocketRefusesRedirectToAnotherOrigin(t *testing.T) {
 		t.Fatalf("err = %v, want a refused cross-origin redirect", err)
 	}
 }
+
+func TestHTTPRequestKernelPathnameGrantCannotAuthorizeNativeDial(t *testing.T) {
+	path := serveUnixSocket(t, func(http.ResponseWriter, *http.Request) { t.Error("kernel-pathname grant reached a native listener") })
+	tc := reviewedSocket(t, t.TempDir(), path)
+	legacy := tc.Socket.SocketGrants[0]
+	legacy.Binding = socketref.Binding{Enforcement: socketref.KernelPathname}
+	tc.Socket.SocketGrants = []confine.SocketGrant{legacy}
+	tc.Socket.DurableSocketGrants = []confine.SocketGrant{legacy}
+	_, err := runRequest(t, Deps{Boundary: testBoundary()}, map[string]any{"url": "http://service.invalid/", "unix_socket": path}, tc)
+	reject := toolrejection.AsToolReject(err)
+	if reject == nil || reject.Code != isolation.CodeSocketPathChanged {
+		t.Fatalf("pathname native authority = %v", err)
+	}
+}

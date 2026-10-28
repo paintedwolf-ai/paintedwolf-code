@@ -87,6 +87,21 @@ func (e *Capabilities) preflightSocketCapability(
 	if tc.Files.PackageExecution != nil {
 		return nil, nil
 	}
+	adapter := socketref.Platform()
+	if e.socketAdapter != nil {
+		adapter = *e.socketAdapter
+	}
+	if contract.SocketArg != "" && adapter.Native != socketref.RetainedObject {
+		denied := make([]confine.SocketGrant, 0, len(socketPaths))
+		for _, path := range socketPaths {
+			denied = append(denied, confine.SocketGrant{ApprovedPath: path})
+		}
+		e.recordCapabilityRequested(ctx, tc, tool, denied)
+		for _, grant := range denied {
+			e.recordCapabilityDecision(ctx, tc, tool, grant, false, authzledger.AuthorizationSourcePolicy)
+		}
+		return nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Identity.Agent, args, &toolrejection.ToolReject{Code: isolation.CodeSocketPathRefused, Data: map[string]any{"path": socketPaths[0], "state": "socket_realization_unavailable", "enforcement": string(adapter.Native), "recovery": "use_approved_service_endpoint", "reason": socketref.ErrUnsupported.Error()}})
+	}
 	chatSession := tc.ChatSessionID()
 	chatGrants := []confine.SocketGrant{}
 	if e.socketRuntime != nil {

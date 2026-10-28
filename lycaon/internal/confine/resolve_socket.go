@@ -80,6 +80,10 @@ func ResolveSocketRequest(path string) (SocketGrant, error) {
 
 // RevalidateSocketGrant re-resolves ApprovedPath and requires it still equal ResolvedPath.
 func RevalidateSocketGrant(g SocketGrant) error {
+	adapter := socketref.Platform()
+	if g.Binding.Mode() == socketref.NoRealization || g.Binding.Mode() != adapter.Command && g.Binding.Mode() != adapter.Native {
+		return &SocketResolveError{Code: SocketResolveRefused, Path: g.ApprovedPath, Err: socketref.ErrUnsupported}
+	}
 	if g.Binding.Mode() != socketref.KernelPathname && g.Binding.Mode() != socketref.RetainedObject {
 		return &SocketResolveError{Code: SocketResolveChanged, Path: g.ApprovedPath, Err: socketref.ErrUnbound}
 	}
@@ -108,6 +112,9 @@ func RevalidateSocketGrant(g SocketGrant) error {
 // CaptureSocketGrant retains the destination for an invocation before review.
 // Inspection alone, including settings reads, never creates a reference.
 func CaptureSocketGrant(ctx context.Context, g SocketGrant) (SocketGrant, error) {
+	if g.Binding.Mode() == socketref.NoRealization {
+		return SocketGrant{}, &SocketResolveError{Code: SocketResolveRefused, Path: g.ApprovedPath, Err: socketref.ErrUnsupported}
+	}
 	if g.Binding.Mode() == socketref.KernelPathname {
 		return g, nil
 	}
