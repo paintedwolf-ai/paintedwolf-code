@@ -24,6 +24,9 @@ inputs:
   browser:
     description: Provision the pinned browser before an offline lane runs test:confine:linux
     default: 'false'
+  linux-launch:
+    description: Provision GTK and display dependencies for protected launch tests
+    default: 'false'
   repository-tools:
     description: Install the native apt, dnf and pacman tools the distribution fixture tests drive
     default: 'false'
@@ -109,7 +112,7 @@ runs:
         fi
 
     - name: Provision Linux native test dependencies
-      if: runner.os == 'Linux' && inputs.setup == 'shell'
+      if: runner.os == 'Linux' && (inputs.setup == 'shell' || inputs.linux-launch == 'true')
       uses: ./.github/actions/setup-linux-native
       with:
         save: ${{ inputs.save-caches }}
