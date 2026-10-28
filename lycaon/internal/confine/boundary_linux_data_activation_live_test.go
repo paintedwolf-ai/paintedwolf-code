@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -180,7 +181,7 @@ func TestLinuxDefaultDataCannotEscapeThroughDBusActivation(t *testing.T) {
 	testutil.FailErr(t, "create private activation directory", os.MkdirAll(filepath.Dir(service), 0o700))
 	content := "[D-BUS Service]\nName=" + dataActivationName + "\nExec=" + strconv.Quote(self) + " " + dataActivationFlag + "\n"
 	environment := append(os.Environ(), "PW_ACTIVATION_MARKER="+marker, "PW_ACTIVATION_SERVICE="+service, "PW_ACTIVATION_CONTENT="+content)
-	status, output := linuxConfinedRun(t, self, *box, append(environment, dataActivationMode+"=plant"), self, dataActivationFlag)
+	status, output := linuxConfinedRun(t, self, *box, append(slices.Clone(environment), dataActivationMode+"=plant"), self, dataActivationFlag)
 	var refused map[string]string
 	if status.ExitStatus() != 0 || json.Unmarshal([]byte(output), &refused) != nil ||
 		!dataWriteRefused(refused["marker"]) || !dataWriteRefused(refused["service"]) {
@@ -194,7 +195,7 @@ func TestLinuxDefaultDataCannotEscapeThroughDBusActivation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
 	defer cancel()
 	bus := exec.CommandContext(ctx, requireTool(t, "dbus-daemon"), "--session", "--nofork", "--nopidfile", "--print-address=1")
-	bus.Env = append(environment, dataActivationMode+"=activate")
+	bus.Env = append(slices.Clone(environment), dataActivationMode+"=activate")
 	stdout, err := bus.StdoutPipe()
 	testutil.FailErr(t, "open private bus address pipe", err)
 	testutil.FailErr(t, "start private activation bus", bus.Start())
