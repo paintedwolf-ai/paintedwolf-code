@@ -274,7 +274,15 @@ func TestBrokerAgentIdentityAndBootstrapHelpers(t *testing.T) {
 	t.Cleanup(func() {
 		_ = unix.Prctl(unix.PR_SET_DUMPABLE, 1, 0, 0, 0)
 	})
+	if os.Getuid() != 0 {
+		if _, err := openSelf(); err == nil {
+			t.Fatal("expected openSelf to reject non-root test binary before trust anchor override")
+		}
+	}
 	withTestTrustAnchor(t, t.TempDir())
+	if self, err := openSelf(); err == nil {
+		_ = self.Close()
+	}
 	testutil.FailErr(t, "initialUserNamespace", initialUserNamespace())
 	// The unprivileged test process is its own original caller.
 	groups, err := unix.Getgroups()
@@ -307,9 +315,6 @@ func TestBrokerAgentIdentityAndBootstrapHelpers(t *testing.T) {
 	}
 	if !DropPrivilegesForError() {
 		t.Fatal("expected DropPrivilegesForError to report unprivileged caller")
-	}
-	if _, err := openSelf(); err == nil {
-		t.Fatal("expected openSelf to reject non-root test binary")
 	}
 	if err := RunStage(); err == nil {
 		t.Fatal("expected RunStage to reject non-root caller")
