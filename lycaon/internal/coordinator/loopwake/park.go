@@ -101,13 +101,14 @@ type parkedProgram struct {
 	leaseID string
 }
 
-// ParkProgram arms the session's lease on the program's completion. A session
-// already holding a parked call, or a host without a durable wait store, keeps
-// the program in the foreground.
+// ParkProgram arms the session's lease on the program's completion once the
+// program's wait is claimed. A wait that already ended, a session already
+// holding a parked call, or a host without a durable wait store keeps the
+// program in the foreground.
 func (p ProgramParking) ParkProgram(ctx context.Context, tctx tools.ToolContext, park tools.ProgramPark) (tools.ParkedProgram, error) {
 	l := p.Subscriptions
 	sessionID := strings.TrimSpace(tctx.Identity.SessionID)
-	if l == nil || l.durableWaitStore() == nil || sessionID == "" || park.ProgramID == "" || park.Interrupt == nil {
+	if l == nil || l.durableWaitStore() == nil || sessionID == "" || park.ProgramID == "" || park.Claim == nil || park.Interrupt == nil {
 		return nil, tools.ErrParkUnavailable
 	}
 	parked := &parkedProgram{
@@ -118,6 +119,10 @@ func (p ProgramParking) ParkProgram(ctx context.Context, tctx tools.ToolContext,
 	defer parked.armed.Unlock()
 	if _, held := l.parkedPrograms.LoadOrStore(sessionID, parked); held {
 		return nil, tools.ErrParkUnavailable
+	}
+	if !park.Claim() {
+		l.parkedPrograms.CompareAndDelete(sessionID, parked)
+		return nil, tools.ErrWaitEnded
 	}
 	lease, err := l.park(ctx, tctx, parkRequest{
 		operation: "command", reason: park.Reason, until: park.Deadline.Add(parkedProgramGrace), untilComplete: true,
