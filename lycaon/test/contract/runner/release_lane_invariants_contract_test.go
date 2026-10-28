@@ -284,42 +284,61 @@ func TestReleaseHaltWithdrawsLinuxRepositories(t *testing.T) {
 	}
 }
 
-// Each Linux delivery credential reaches only the job that publishes with it, after the
-// shared gates, the Linux repositories it depends on and a fresh Qualification lookup.
+// Each Linux delivery credential reaches only the job that publishes with it. The delivery
+// workflow runs only from release.yml, after the shared gates and the Linux repositories, and
+// each publishing command rereads Qualification with the run's token.
 func TestLinuxDeliveryCredentialsReachOnlyTheirGatedPublisher(t *testing.T) {
 	t.Parallel()
-	workflow := parseLane(t, ".github/workflows/release.yml")
+	release := parseLane(t, ".github/workflows/release.yml")
+	caller := release.Jobs["linux-delivery"]
+	ancestors := release.ancestors("linux-delivery")
+	for _, gate := range []string{"ship-gates", "publish-immutable", "publish-linux-repositories"} {
+		if !ancestors[gate] {
+			t.Errorf("Linux delivery runs before %s", gate)
+		}
+	}
+	for _, condition := range []string{"needs.classify.outputs.publish == 'true'", "needs.classify.outputs.linux_public == 'true'",
+		"needs.publish-linux-repositories.result == 'success'"} {
+		if !strings.Contains(caller.If, condition) {
+			t.Errorf("Linux delivery must require %s", condition)
+		}
+	}
+	for _, name := range sortedJobs(release) {
+		for _, credential := range []string{"NIX_CACHE_SIGNING_KEY", "AUR_SSH_PRIVATE_KEY"} {
+			if strings.Contains(release.Jobs[name].text(), credential) {
+				t.Errorf("release.yml %s holds %s outside the delivery workflow", name, credential)
+			}
+		}
+	}
+	delivery := parseLane(t, ".github/workflows/release-linux-delivery.yml")
 	for credential, want := range map[string]struct{ job, environment, command string }{
 		"secrets.NIX_CACHE_SIGNING_KEY": {"publish-nix-cache", "release-publication", "scripts.nix_cache.release_lane publish"},
 		"secrets.AUR_SSH_PRIVATE_KEY":   {"publish-aur", "release-aur", "release:publish:aur-recipe -- publish"},
 	} {
 		var holders []string
-		for _, name := range sortedJobs(workflow) {
-			if strings.Contains(workflow.Jobs[name].text(), credential) {
+		for _, name := range sortedJobs(delivery) {
+			if strings.Contains(delivery.Jobs[name].text(), credential) {
 				holders = append(holders, name)
 			}
 		}
 		if !slices.Equal(holders, []string{want.job}) {
 			t.Fatalf("%s holders = %v, want only %s", credential, holders, want.job)
 		}
-		job := workflow.Jobs[want.job]
-		ancestors := workflow.ancestors(want.job)
-		for _, gate := range []string{"ship-gates", "publish-immutable", "publish-linux-repositories"} {
-			if !ancestors[gate] {
-				t.Errorf("%s publishes before %s", want.job, gate)
-			}
-		}
-		if job.Environment != want.environment || !strings.Contains(job.If, "needs.classify.outputs.publish == 'true'") ||
-			!strings.Contains(job.If, "needs.classify.outputs.linux_public == 'true'") {
-			t.Errorf("%s must run in %s only when publishing a public Linux release", want.job, want.environment)
-		}
-		// The publishing command rereads Qualification with the run's token.
+		job := delivery.Jobs[want.job]
 		var rechecks bool
 		for _, step := range job.Steps {
 			rechecks = rechecks || (strings.Contains(step.Run, want.command) && step.Env["GH_TOKEN"] == "${{ github.token }}")
 		}
-		if !rechecks {
-			t.Errorf("%s must publish through %q with the Qualification token", want.job, want.command)
+		if job.Environment != want.environment || !rechecks {
+			t.Errorf("%s must publish in %s through %q with the Qualification token", want.job, want.environment, want.command)
+		}
+	}
+	for _, name := range sortedJobs(delivery) {
+		job := delivery.Jobs[name]
+		for _, credential := range storageCredentials {
+			if strings.Contains(job.text(), credential) && job.Environment != "release-publication" {
+				t.Errorf("%s writes release storage outside release-publication", name)
+			}
 		}
 	}
 	checks := contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), ".github/workflows/release-secrets-check.yml")
