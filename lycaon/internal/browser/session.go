@@ -71,36 +71,10 @@ func LaunchHeadless(ctx context.Context, opts LaunchOptions) (*rod.Browser, func
 	}
 	l := newHeadlessLauncher(launchCtx, resolved.Path, profileDir, opts.DisableJS, confined)
 
-	var (
-		controlURL string
-		kill       func()
-		launchErr  error
-	)
 	if confined {
 		confine.LogApplied("browser", "", conf)
-		controlURL, kill, launchErr = launchConfined(launchCtx, l, resolved.Path, *conf)
-	} else {
-		// The launch context bounds discovery while the process survives the call.
-		l = l.Leakless(true).Context(context.WithoutCancel(launchCtx))
-		kill = l.Kill
-
-		type launched struct {
-			url string
-			err error
-		}
-		done := make(chan launched, 1)
-		go func() {
-			url, err := l.Launch()
-			done <- launched{url: url, err: err}
-		}()
-		select {
-		case res := <-done:
-			controlURL, launchErr = res.url, res.err
-		case <-launchCtx.Done():
-			l.Kill()
-			launchErr = launchCtx.Err()
-		}
 	}
+	controlURL, kill, launchErr := launchConfined(launchCtx, l, resolved.Path, conf)
 	if launchErr != nil {
 		_ = os.RemoveAll(profileDir)
 		reason := "launch_failed"
@@ -164,14 +138,14 @@ func newHeadlessLauncher(ctx context.Context, browserPath, profileDir string, di
 }
 
 // launchConfined starts a browser that outlives the discovery deadline.
-func launchConfined(ctx context.Context, l *launcher.Launcher, chromePath string, c confine.Confinement) (string, func(), error) {
+func launchConfined(ctx context.Context, l *launcher.Launcher, chromePath string, c *confine.Confinement) (string, func(), error) {
 	// The confinement helper replaces itself with the browser.
 	l = l.Delete(flags.Leakless)
 	args := l.FormatArgs()
 
 	// Keep context values while allowing the browser to outlive this call.
 	cmd, profileCleanup, err := execpkg.PrepareCommand(context.WithoutCancel(ctx), chromePath, args, execpkg.ExecOpts{
-		Launch: execpkg.AgentLaunch(execpkg.LaunchManagedBrowser, "chrome", &c).WithReducedEnvironment(),
+		Launch: execpkg.AgentLaunch(execpkg.LaunchManagedBrowser, "chrome", c).WithReducedEnvironment(),
 	})
 	if err != nil {
 		return "", nil, err
@@ -179,27 +153,22 @@ func launchConfined(ctx context.Context, l *launcher.Launcher, chromePath string
 	parser := launcher.NewURLParser().Context(ctx)
 	cmd.Stdout = parser
 	cmd.Stderr = parser
-	if err := cmd.Start(); err != nil {
+	killCmd, waitCmd, err := execpkg.StartInOwnGroup(cmd)
+	if err != nil {
 		profileCleanup()
 		return "", nil, err
 	}
-	// The browser stays in the engine's process group, so it is tracked alone;
-	// its helpers exit with it.
-	untrack := execpkg.TrackProcess(cmd.Process.Pid)
 
 	exit := make(chan struct{})
 	go func() {
-		_ = cmd.Wait()
-		untrack()
+		_ = waitCmd()
 		// Natural exits also close the confinement profile pipe.
 		profileCleanup()
 		close(exit)
 	}()
 
 	kill := func() {
-		if cmd.Process != nil {
-			_ = cmd.Process.Kill()
-		}
+		killCmd()
 		select {
 		case <-exit:
 		case <-time.After(2 * time.Second):

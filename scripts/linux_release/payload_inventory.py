@@ -3,7 +3,12 @@ import hashlib
 import os
 import posixpath
 from pathlib import Path, PurePosixPath
+import re
 import stat
+
+FORMAT_VERSION = 2
+HEX_DIGEST = re.compile(r"^[0-9a-f]{64}$")
+PAYLOAD_KEYS = {"path", "kind", "mode", "sha256", "size", "target"}
 
 
 def record(name: str, source: Path, canonical_modes: bool) -> dict:
@@ -81,3 +86,59 @@ def tree(root: Path) -> list[dict]:
     if root.is_symlink() or not root.is_dir():
         raise ValueError("payload root must be a physical directory")
     return collect({child.name: child for child in root.iterdir() if child.name != "manifest.json"})
+
+
+def validate_payload(payload: object, executables: list[dict], install_root: str) -> None:
+    if not isinstance(payload, list) or not payload:
+        raise ValueError("manifest payload must be a non-empty list")
+    entries: dict[str, dict] = {}
+    for row in payload:
+        if not isinstance(row, dict) or set(row) != PAYLOAD_KEYS:
+            raise ValueError(f"payload entry has unexpected keys: {row}")
+        name, kind, mode = row["path"], row["kind"], row["mode"]
+        if (not isinstance(name, str) or not name or name in {".", "manifest.json"}
+                or PurePosixPath(name).is_absolute() or PurePosixPath(name).as_posix() != name
+                or ".." in PurePosixPath(name).parts or name in entries):
+            raise ValueError(f"invalid or duplicate payload path: {name!r}")
+        if type(mode) is not int or mode < 0 or mode > 0o777 or (kind != "symlink" and mode & 0o022):
+            raise ValueError(f"unsafe payload mode for {name}")
+        sha, size, target = row["sha256"], row["size"], row["target"]
+        if kind == "file":
+            if (not isinstance(sha, str) or not HEX_DIGEST.match(sha)
+                    or type(size) is not int or size < 0 or target is not None):
+                raise ValueError(f"invalid file payload record for {name}")
+        elif kind == "directory":
+            if mode & 0o500 != 0o500 or sha is not None or size is not None or target is not None:
+                raise ValueError(f"invalid directory payload record for {name}")
+        elif kind == "symlink":
+            if (mode != 0o777 or sha is not None or size is not None
+                    or not isinstance(target, str) or not target or target.startswith("/")):
+                raise ValueError(f"invalid symlink payload record for {name}")
+        else:
+            raise ValueError(f"unknown payload kind for {name}: {kind!r}")
+        entries[name] = row
+    for name, row in entries.items():
+        for parent in PurePosixPath(name).parents:
+            if str(parent) != "." and entries.get(str(parent), {}).get("kind") != "directory":
+                raise ValueError(f"payload parent is not a physical directory: {parent}")
+        if row["kind"] != "symlink":
+            continue
+        selected, visited = name, set()
+        while entries[selected]["kind"] == "symlink":
+            if selected in visited:
+                raise ValueError(f"cyclic payload symlink: {name}")
+            visited.add(selected)
+            selected = posixpath.normpath(posixpath.join(posixpath.dirname(selected), entries[selected]["target"]))
+            if selected == ".":
+                break
+            if selected not in entries:
+                raise ValueError(f"escaping or dangling payload symlink: {name}")
+    prefix = install_root.rstrip("/") + "/"
+    for exe in executables:
+        if not exe["path"].startswith(prefix):
+            continue
+        rel = exe["path"][len(prefix):]
+        item = entries.get(rel)
+        if (item is None or item["kind"] != "file" or not (item["mode"] & 0o111)
+                or item["sha256"] != exe["sha256"] or item["size"] != exe["size"]):
+            raise ValueError(f"executable differs from payload inventory: {exe['path']}")

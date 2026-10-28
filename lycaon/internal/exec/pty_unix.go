@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"syscall"
 
 	"github.com/creack/pty"
 )
@@ -17,7 +18,18 @@ func resizePTY(main *os.File, size WinSize) error {
 
 // startWithPTY returns the controller for a child terminal session.
 func startWithPTY(cmd *exec.Cmd, size WinSize) (*os.File, error) {
-	main, err := pty.StartWithSize(cmd, &pty.Winsize{Cols: size.Cols, Rows: size.Rows})
+	winsize := &pty.Winsize{Cols: size.Cols, Rows: size.Rows}
+	if relayedCommand(cmd) {
+		// The supervisor the broker starts takes the terminal as its own
+		// session's; the relay standing in for it leads a session without
+		// one, so the terminal's signals reach only the program on it.
+		main, err := pty.StartWithAttrs(cmd, winsize, &syscall.SysProcAttr{Setsid: true})
+		if err != nil {
+			return nil, fmt.Errorf("start pty: %w", err)
+		}
+		return main, nil
+	}
+	main, err := pty.StartWithSize(cmd, winsize)
 	if err != nil {
 		return nil, fmt.Errorf("start pty: %w", err)
 	}

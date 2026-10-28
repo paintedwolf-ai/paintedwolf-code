@@ -201,6 +201,9 @@ class HostedPlanTests(unittest.TestCase):
             for row in ci.matrix(profile)["include"]:
                 with self.subTest(profile=profile, lane=row["lane"]):
                     self.assertEqual(row["browser"], "test:confine:linux" in ci.lanes()[row["lane"]]["targets"])
+                    targets = ci.lanes()[row["lane"]]["targets"]
+                    expected_launch = bool({"test:full", "test:confine:linux", "coverage:changes"} & set(targets))
+                    self.assertEqual(row["linux_launch"], expected_launch)
         self.assertEqual([row["lane"] for row in ci.matrix("integration")["include"] if row["browser"]], ["confinement-arm64"])
 
     def test_lanes_learn_whether_they_drive_the_native_repository_tools(self):

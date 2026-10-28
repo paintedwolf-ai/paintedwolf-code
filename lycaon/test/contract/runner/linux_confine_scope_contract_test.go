@@ -48,6 +48,13 @@ func TestLinuxConfineScopeRunsFullAndNamesLiveTests(t *testing.T) {
 	if !whole {
 		violations = append(violations, "no scope runs ./internal/confine/... unfiltered")
 	}
+	launch := false
+	for _, scope := range linuxConfineScopes(t, root) {
+		launch = launch || scope.coversPackage("./internal/launchguard") && scope.Run == nil
+	}
+	if !launch {
+		violations = append(violations, "no scope runs the protected launch suite (./internal/launchguard/...) unfiltered")
+	}
 	contractcheck.FailViolations(t, linuxConfineScript+" scope is incomplete", violations)
 }
 
