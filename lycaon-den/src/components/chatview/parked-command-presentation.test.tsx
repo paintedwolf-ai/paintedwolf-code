@@ -108,6 +108,14 @@ describe("parked command presentation", () => {
     expect(screen.getByRole("status").textContent).toBe("Reading · README.md...");
   });
 
+  it("keeps an earlier running call visible when the newer parked result has not arrived", () => {
+    mountActivity([
+      { ...call, id: "earlier", tool_calls: [{ id: "earlier-call", name: "read", args: { path: "README.md" } }] },
+      call,
+    ]);
+    expect(screen.getByRole("status").textContent).toBe("Reading · README.md...");
+  });
+
   it("returns to the ordinary command label when the host resumes work", () => {
     const store = mountActivity();
     store.actions.setActivity({ ...park, status: "done" });
