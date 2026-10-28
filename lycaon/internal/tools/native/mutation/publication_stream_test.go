@@ -12,50 +12,56 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/native"
 )
 
-func TestRedirectLargeExactStreamValidatesLengthAndPinnedBase(t *testing.T) {
-	payload := strings.Repeat("suffix\n", 800000)
-	for _, action := range []string{"replace", "append", "under", "over", "changed during review"} {
-		t.Run(action, func(t *testing.T) {
-			h := newHarness(t, map[string]string{"out": "original\n"})
-			target, err := h.owners.captureDestination(t.Context(), h.tc, h.invocation().Identity.ExecutionID, h.path("out"))
-			testutil.FailErr(t, "pin destination", err)
-			input := native.WriteInput{Path: target.abs, Exact: true, Source: strings.NewReader(payload), SourceBytes: int64(len(payload)),
-				Admission: native.WriteExecutionPinned, Destination: target.pin, Append: action == "append"}
-			if action == "under" {
-				input.SourceBytes--
-			}
-			if action == "over" {
-				input.SourceBytes++
-			}
-			if action == "changed during review" {
-				h.tc.Files.FileChangeReview = func(context.Context, []tools.FileChange) error {
-					return os.WriteFile(h.path("out"), []byte("human\n"), 0o644)
+func TestRedirectExactStreamValidatesLengthAndPinnedBase(t *testing.T) {
+	for _, size := range []string{"small", "large"} {
+		payload := "suffix\n"
+		if size == "large" {
+			payload = strings.Repeat(payload, 800000)
+		}
+		for _, action := range []string{"replace", "append", "under", "over", "changed during review"} {
+			t.Run(size+"/"+action, func(t *testing.T) {
+				h := newHarness(t, map[string]string{"out": "original\n"})
+				target, err := h.owners.captureDestination(t.Context(), h.tc, h.invocation().Identity.ExecutionID, h.path("out"))
+				testutil.FailErr(t, "pin destination", err)
+				input := native.WriteInput{Path: target.abs, Exact: true, Source: strings.NewReader(payload), SourceBytes: int64(len(payload)),
+					Admission: native.WriteExecutionPinned, Destination: target.pin, Append: action == "append"}
+				if action == "under" {
+					input.SourceBytes--
 				}
-			}
-			result, err := h.owners.Operations.Write.Apply(t.Context(), input, h.tc)
-			if action == "replace" || action == "append" {
-				testutil.FailErr(t, "publish exact stream", err)
-				want := payload
-				if input.Append {
-					want = "original\n" + payload
+				if action == "over" {
+					input.SourceBytes++
 				}
-				if h.read("out") != want || !result.Saved || result.PublishedSHA256 == "" || result.ResultBytes != len(want) {
-					t.Fatalf("stream settlement %+v", result)
-				}
-			} else {
-				if err == nil {
-					t.Fatal("invalid stream or changed pin published")
-				}
-				want := "original\n"
 				if action == "changed during review" {
-					want = "human\n"
+					h.tc.Files.FileChangeReview = func(context.Context, []tools.FileChange) error {
+						return os.WriteFile(h.path("out"), []byte("human\n"), 0o644)
+					}
 				}
-				if h.read("out") != want {
-					t.Fatal("refused stream replaced destination")
+				result, err := h.owners.Operations.Write.Apply(t.Context(), input, h.tc)
+				if action == "replace" || action == "append" {
+					testutil.FailErr(t, "publish exact stream", err)
+					want := payload
+					if input.Append {
+						want = "original\n" + payload
+					}
+					if h.read("out") != want || !result.Saved || result.PublishedSHA256 == "" || result.ResultBytes != len(want) {
+						t.Fatalf("stream settlement %+v", result)
+					}
+				} else {
+					if err == nil {
+						t.Fatal("invalid stream or changed pin published")
+					}
+					want := "original\n"
+					if action == "changed during review" {
+						want = "human\n"
+					}
+					if h.read("out") != want {
+						t.Fatal("refused stream replaced destination")
+					}
 				}
-			}
-		})
+			})
+		}
 	}
+
 }
 
 func TestExactWriteRejectsAmbiguousOrUnboundedStreamBeforeEffects(t *testing.T) {

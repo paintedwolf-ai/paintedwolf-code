@@ -94,3 +94,22 @@ func TestRedirectSpoolReleasesAdmissionOnSettlement(t *testing.T) {
 		})
 	}
 }
+
+func TestRedirectMetadataAdmissionRefusesBeforeStorage(t *testing.T) {
+	h := newHarness(t, map[string]string{"out": "original"})
+	memory, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: 64 << 20, State: 1})
+	testutil.FailErr(t, "program memory", err)
+	h.owners.Revisions.Memory = memory
+	staged, err := h.publication().Open(t.Context(), h.destination(">", "out"))
+	if staged != nil {
+		_ = staged.Abandon(t.Context())
+		t.Fatal("unadmitted metadata returned staging storage")
+	}
+	var limit *toolcontract.ProgramMemoryLimitError
+	if !errors.As(err, &limit) || limit.Account != "state" {
+		t.Fatalf("metadata admission = %v", err)
+	}
+	if h.quota.used != 0 || memory.InUse() != (toolcontract.ProgramMemoryUsage{}) || h.read("out") != "original" {
+		t.Fatal("refused metadata retained resources or changed destination")
+	}
+}
