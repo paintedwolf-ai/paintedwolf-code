@@ -140,6 +140,7 @@ func TestProgramReceiptsAppendRevisionPinsInCaptureOrder(t *testing.T) {
 		t.Fatal("capture appended without an execution")
 	}
 }
+
 // TestProgramReceiptsPinAWalkAtTheVisitLimit pins as many captures as one
 // execution may hold (every traversal visit plus every expanded operand),
 // in small appends as a walking owner records them. Full runs seal into
