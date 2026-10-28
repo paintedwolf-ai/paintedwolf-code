@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 import stat
 
-from .installed_runtime import SETUID_LAUNCHER, file_identity
+from .campaign.runtime import SETUID_LAUNCHER, file_identity
 from .installed_evidence import SHA256
 from .installed_cases.package_payload import verify
 

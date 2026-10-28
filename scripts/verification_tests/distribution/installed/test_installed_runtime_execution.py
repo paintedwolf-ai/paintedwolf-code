@@ -233,12 +233,12 @@ class InstalledRuntimeTests(unittest.TestCase):
         package_images = {launcher: {'inode': 10}}
         runtime_images = {launcher: {'inode': 20}, str(SETUID_LAUNCHER): {'inode': 30, 'mode': 0o4755}}
         selected = {'root': str(root / 'generations' / ('c' * 64)), 'images': runtime_images}
-        with patch('scripts.linux_release.installed_runtime.platform.system', return_value='Linux'), \
-                patch('scripts.linux_release.installed_runtime.platform.machine', return_value='x86_64'), \
+        with patch('scripts.linux_release.campaign.runtime.platform.system', return_value='Linux'), \
+                patch('scripts.linux_release.campaign.runtime.platform.machine', return_value='x86_64'), \
                 patch.object(Path, 'resolve', lambda path, **kwargs: path), \
-                patch('scripts.linux_release.installed_runtime.inspect', return_value=entries), \
-                patch('scripts.linux_release.installed_runtime.verify', return_value={'status': 'passed'}), \
-                patch('scripts.linux_release.installed_runtime.manifest', return_value={'version': '1.0.2', 'images': package_images}), \
+                patch('scripts.linux_release.campaign.runtime.inspect', return_value=entries), \
+                patch('scripts.linux_release.campaign.runtime.verify', return_value={'status': 'passed'}), \
+                patch('scripts.linux_release.campaign.runtime.manifest', return_value={'version': '1.0.2', 'images': package_images}), \
                 patch('scripts.linux_release.installed_generation.bind', return_value=selected) as generation:
             result = bind(final, source, artifact['id'], Path('/files'), root)
         generation.assert_called_once_with(root, package_images, entries)
