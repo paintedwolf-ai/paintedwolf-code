@@ -100,8 +100,8 @@ value.validate_checkout()
     def test_cached_namespace_or_concrete_module_origin_cannot_escape_exact_checkout(self):
         value,_=self.fixture();value.checkout=Path(__file__).resolve().parents[3]
         namespace=value.checkout/'scripts'
-        native=module.PathFinder.find_spec('scripts',[str(value.checkout)])
-        nested=module.PathFinder.find_spec('scripts.harness',[str(namespace)])
+        native=module.FileFinder(str(value.checkout),(module.SourceFileLoader,module.SOURCE_SUFFIXES)).find_spec('scripts')
+        nested=module.FileFinder(str(namespace),(module.SourceFileLoader,module.SOURCE_SUFFIXES)).find_spec('scripts.harness')
         candidates=[{'scripts':SimpleNamespace(__file__=None,__spec__=native,
                                               __path__=[str(namespace),'/foreign/scripts'])},
                     {'scripts':SimpleNamespace(__file__='/foreign/scripts/__init__.py')},
@@ -169,12 +169,13 @@ value.validate_checkout()
                 with self.assertRaises(ValueError):value.validate_checkout(declaration)
                 self.assertEqual(state.path,original)
 
-    def test_a_foreign_package_initializer_refuses_before_it_can_execute(self):
+    def test_import_ancestors_validate_before_any_import_effect(self):
         source=Path(__file__).resolve().parents[3]
         script=r'''
 from pathlib import Path
 import sys
-source,checkout,marker=map(Path,sys.argv[1:])
+source,checkout,marker=map(Path,sys.argv[1:4])
+alias=sys.argv[4]
 sys.path.insert(0,str(source/'scripts'))
 from managed_job_settlement import JobSettlement
 sys.path.pop(0)
@@ -183,12 +184,16 @@ before=list(sys.path)
 value=JobSettlement(checkout=checkout,arguments=[],save=None,command=None)
 try:value.validate_checkout({'scripts.caller.module':'scripts/caller/module.py'})
 except ValueError:
-    assert sys.path==before and not marker.exists()
+    assert alias!='namespace' and sys.path==before and not marker.exists()
 else:
+    if alias!='namespace':
+        import scripts.caller.module
+        raise AssertionError('a foreign package initializer was admitted')
+    assert not marker.exists()
     import scripts.caller.module
-    raise AssertionError('a foreign package initializer was admitted')
+    assert marker.read_bytes()==b'expected'
 '''
-        for alias in ('initializer','directory'):
+        for alias in ('initializer','directory','namespace'):
             with self.subTest(alias=alias),tempfile.TemporaryDirectory() as temporary:
                 root=Path(temporary).resolve();checkout=root/'checkout';namespace=checkout/'scripts'
                 (namespace/'verification_process').mkdir(parents=True)
@@ -201,12 +206,12 @@ else:
                     (namespace/'caller').symlink_to(foreign,target_is_directory=True)
                 else:
                     caller=namespace/'caller';caller.mkdir()
-                    (caller/'module.py').write_text('pass\n')
-                    (caller/'__init__.py').symlink_to(foreign/'__init__.py')
-                result=subprocess.run([sys.executable,'-I','-B','-c',script,str(source),str(checkout),str(marker)],
+                    (caller/'module.py').write_text('from pathlib import Path\nPath('+repr(str(marker))+').write_bytes(b"expected")\n' if alias=='namespace' else 'pass\n')
+                    if alias=='initializer':(caller/'__init__.py').symlink_to(foreign/'__init__.py')
+                result=subprocess.run([sys.executable,'-I','-B','-c',script,str(source),str(checkout),str(marker),alias],
                                       capture_output=True,text=True,timeout=15)
                 self.assertEqual(result.returncode,0,result.stdout+result.stderr)
-                self.assertFalse(marker.exists())
+                self.assertEqual(marker.exists(),alias=='namespace')
 
     def test_completion_races_never_cancel_an_unrelated_invocation(self):
         for when in ('before-status','after-status','during-cancel'):
