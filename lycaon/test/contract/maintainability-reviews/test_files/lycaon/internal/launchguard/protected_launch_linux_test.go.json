@@ -4,11 +4,11 @@
   "kind": "test_suite",
   "workstream": "linux-module-view-fixtures",
   "disposition": "retain",
-  "reason": "Retain the protected-launch scenario suite within 530 code-bearing lines. Its installed generation fixture supports the complete launch and broker journeys, and the module actor scenario adds independent coverage of the real privileged stage and watcher dispatch. Keep scenario outcomes here and reusable privileged construction in the existing fixture files; the namespace, mount and capability contracts remain explicit.",
-  "reviewed_commit": "f3e72a790c51e544bbb71bc9d4ec1e8f61aef2ba",
+  "reason": "Retain the protected-launch scenario suite within 530 code-bearing lines. Its installed generation fixture supports the complete launch and broker journeys, and the module actor scenario adds independent coverage of the real privileged stage and watcher dispatch. Keep scenario outcomes here and reusable privileged construction in the existing fixture files; the namespace, mount and capability contracts remain explicit. The explicit GOCOVERDIR parent preserves final-identity write permissions and child counter collection; its narrow testing-lint exception changes no fixture contract.",
+  "reviewed_commit": "221283b380a88f5df199f474724abfbfed145239",
   "ceiling": 530,
   "boundaries": {
     "lycaon/internal/launchguard/protected_launch_linux_test.go": "782916c07cbd1f3fb4009aa13fa6516c8da93686cd3d80dd59cbbed1e7ba2a01",
-    "lycaon/internal/launchguard/protected_launch_fixture_linux_test.go": "fce8ac212edf13640a1fdb6b86ad226c6c8090d0be621cdd05c95bc774af5ab7"
+    "lycaon/internal/launchguard/protected_launch_fixture_linux_test.go": "0f24628dd729adfbde75af652dfc7e66fdceffe787540e65f1f9ad9b5ddf4643"
   }
 }
