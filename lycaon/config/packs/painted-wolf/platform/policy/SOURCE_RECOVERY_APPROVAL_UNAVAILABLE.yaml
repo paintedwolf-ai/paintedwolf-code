@@ -3,10 +3,10 @@ id: SOURCE_RECOVERY_APPROVAL_UNAVAILABLE
 kind: schema
 anchor: tool.rejected
 selector:
-  tool: [command, delete]
+  paintedwolf.operation: [delete]
 requires:
   profiles: [tool]
-  facts: [paintedwolf.rejection_code, paintedwolf.path]
+  facts: [paintedwolf.operation, paintedwolf.rejection_code, paintedwolf.path]
 when: paintedwolf.rejection_code == "SOURCE_RECOVERY_APPROVAL_UNAVAILABLE"
 effect: block
 copy:
