@@ -23,9 +23,13 @@ import (
 type recordingParking struct {
 	mu          sync.Mutex
 	unavailable bool
-	parks       []tools.ProgramPark
-	parked      chan *recordedPark
-	refused     chan struct{}
+	// gate, when set, holds each park until the test opens it, then the park
+	// claims the wait as the host's park does.
+	gate    chan struct{}
+	parks   []tools.ProgramPark
+	claims  []bool
+	parked  chan *recordedPark
+	refused chan struct{}
 }
 
 type recordedPark struct {
@@ -39,16 +43,25 @@ type settledProgram struct {
 }
 
 func newRecordingParking() *recordingParking {
-	return &recordingParking{parked: make(chan *recordedPark, 1), refused: make(chan struct{}, 1)}
+	return &recordingParking{parked: make(chan *recordedPark, 1), refused: make(chan struct{}, 2)}
 }
 
 func (p *recordingParking) ParkProgram(_ context.Context, _ tools.ToolContext, park tools.ProgramPark) (tools.ParkedProgram, error) {
+	if p.gate != nil {
+		<-p.gate
+	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.parks = append(p.parks, park)
 	if p.unavailable {
 		p.refused <- struct{}{}
 		return nil, tools.ErrParkUnavailable
+	}
+	claimed := park.Claim()
+	p.claims = append(p.claims, claimed)
+	if !claimed {
+		p.refused <- struct{}{}
+		return nil, tools.ErrWaitEnded
 	}
 	parked := &recordedPark{park: park, settled: make(chan settledProgram, 1)}
 	p.parked <- parked

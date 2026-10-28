@@ -77,13 +77,15 @@ func (r *ProgramRuntime) attend(callCtx context.Context, e *programEvaluation) (
 		ending.result, ending.err = r.finish(e)
 		close(ending.done)
 	}()
-	select {
-	case <-ending.done:
-	case state := <-e.park.parks:
-		if parked, ok := r.parkProgram(callCtx, e, ending, state); ok {
-			return parked, nil
+	for waiting := true; waiting; {
+		select {
+		case <-ending.done:
+			waiting = false
+		case blocked := <-e.park.parks:
+			if parked, ok := r.parkProgram(callCtx, e, ending, blocked); ok {
+				return parked, nil
+			}
 		}
-		<-ending.done
 	}
 	e.call.detach()
 	if out := e.callTC.Effects.Out; out != nil {
@@ -93,9 +95,10 @@ func (r *ProgramRuntime) attend(callCtx context.Context, e *programEvaluation) (
 }
 
 // parkProgram ends the call's turn on the session's wait lease. The program
-// keeps running under supervision; its end settles the lease. A session that
-// cannot park keeps the program in the foreground.
-func (r *ProgramRuntime) parkProgram(callCtx context.Context, e *programEvaluation, ending *programEnding, state commandprogram.WaitState) (string, bool) {
+// keeps running under supervision; its end settles the lease. A wait that
+// ended before the park claimed it, or a session that cannot park, keeps the
+// program in the foreground.
+func (r *ProgramRuntime) parkProgram(callCtx context.Context, e *programEvaluation, ending *programEnding, blocked *blockedWait) (string, bool) {
 	if r.Parking == nil || callCtx.Err() != nil {
 		return "", false
 	}
@@ -105,14 +108,16 @@ func (r *ProgramRuntime) parkProgram(callCtx context.Context, e *programEvaluati
 		return "", false
 	default:
 	}
-	run := e.run
+	run, state := e.run, blocked.state
 	programID := run.root.Identity.ProgramID
 	parked, err := r.Parking.ParkProgram(callCtx, e.callTC, tools.ProgramPark{
 		ProgramID: programID, Reason: state.Statement, Deadline: e.call.deadline,
+		Claim:     func() bool { return e.park.claim(blocked) },
 		Interrupt: func(ctx context.Context) string { return r.interruptProgram(ctx, run, ending) },
 	})
 	if err != nil {
-		if !errors.Is(err, tools.ErrParkUnavailable) {
+		e.park.release()
+		if !errors.Is(err, tools.ErrParkUnavailable) && !errors.Is(err, tools.ErrWaitEnded) {
 			slog.WarnContext(callCtx, "command program stays in the foreground", "program_id", programID, "error", err)
 		}
 		return "", false
