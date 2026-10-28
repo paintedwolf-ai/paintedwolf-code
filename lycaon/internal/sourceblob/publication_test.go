@@ -139,3 +139,20 @@ func TestPublicationHonorsCancellation(t *testing.T) {
 		})
 	}
 }
+
+func TestPublicationCreatesAFreshPrivateStore(t *testing.T) {
+	store := New(filepath.Join(t.TempDir(), "objects", "nested"))
+	body := []byte("new source object\n")
+	rel, stored, oids, err := store.Put(t.Context(), ContentSHA(body), body)
+	testutil.FailErr(t, "publish fresh object", err)
+	info, err := os.Stat(filepath.Join(store.Root(), rel))
+	testutil.FailErr(t, "stat fresh object", err)
+	if info.Size() != stored || info.Mode().Perm()&0o222 != 0 || oids != ContentGitOIDs(body) {
+		t.Fatalf("fresh object size=%d mode=%o oids=%+v", info.Size(), info.Mode().Perm(), oids)
+	}
+	var retained bytes.Buffer
+	testutil.FailErr(t, "read fresh object", store.CopySHA(t.Context(), ContentSHA(body), &retained))
+	if !bytes.Equal(retained.Bytes(), body) {
+		t.Fatal("fresh object content differs")
+	}
+}
