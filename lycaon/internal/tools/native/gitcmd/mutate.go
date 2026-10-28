@@ -39,6 +39,8 @@ func invokeMutation(ctx context.Context, p Prepared, tc tools.ToolContext, strea
 			status, err := p.run(ctx, streams)
 			return settle(status, err, spec.Name)
 		}
+	case "git init":
+		return runInit(ctx, p, out, stderr)
 	case "git clone":
 		return runClone(ctx, p, tc, out, stderr)
 	}
@@ -144,7 +146,7 @@ func runCommit(ctx context.Context, p Prepared, tc tools.ToolContext, dir string
 			return settleMutationError(operandInvalid(p.command.spec, "--no-edit", "--amend or an active merge/sequence"), toolcontract.NoEffect)
 		}
 		var buf bytes.Buffer
-		if _, code, err := p.owners.Git.ReadCommand(ctx, repo.Root, []string{"log", "-1", "--format=%B", "HEAD"}, nil, &buf); err != nil || code != 0 {
+		if _, code, err := (git.CommandReader{}).ReadCommand(ctx, repo.Root, []string{"log", "-1", "--format=%B", "HEAD"}, nil, &buf); err != nil || code != 0 {
 			return settleGitError(fmt.Errorf("cannot read HEAD commit message"), stderr, toolcontract.NoEffect)
 		}
 		msg = strings.TrimSpace(buf.String())

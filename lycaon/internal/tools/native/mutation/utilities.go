@@ -2,9 +2,7 @@ package mutation
 
 import (
 	"crypto/rand"
-	"errors"
 	"io"
-	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -14,6 +12,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/fseffect"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools/native"
@@ -217,50 +216,6 @@ func ancestorDisplay(dir, boundAbs, operand string) string {
 		shown = strings.TrimSuffix(path.Dir(shown), "/")
 	}
 	return shown
-}
-
-// directoriesUnder records which paths of a tree rm -v is about to remove
-// are directories, so its messages name them as GNU rm does.
-func (inv *invocation) directoriesUnder(abs string) (map[string]bool, error) {
-	if !inv.flag("-v") {
-		return nil, nil
-	}
-	directories := map[string]bool{}
-	maximum, seen := inv.owners.limit("recursive_mutation_files"), int64(0)
-	err := filepath.WalkDir(abs, func(walked string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			if errors.Is(err, fs.ErrNotExist) {
-				return nil
-			}
-			return err
-		}
-		if seen++; seen > maximum {
-			return limitRefusal("recursive_mutation_files", "files", maximum, seen)
-		}
-		if entry.IsDir() {
-			directories[walked] = true
-		}
-		return nil
-	})
-	return directories, err
-}
-
-// refuseLinks stops cp -a before copying a tree that holds a symbolic link:
-// -a copies links as links, and no owner creates links.
-func (inv *invocation) refuseLinks(operand, abs string) error {
-	maximum, seen := inv.owners.limit("recursive_mutation_files"), int64(0)
-	return filepath.WalkDir(abs, func(walked string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if seen++; seen > maximum {
-			return limitRefusal("recursive_mutation_files", "files", maximum, seen)
-		}
-		if entry.Type()&fs.ModeSymlink != 0 {
-			return inv.unsupportedForm(displayed(walked, abs, operand), "cp -a preserves symbolic links as links; native link creation is unavailable, so use cp -R -p to copy the link targets")
-		}
-		return nil
-	})
 }
 
 func runChmod(inv *invocation) error {
@@ -557,7 +512,7 @@ func runEdit(inv *invocation) error {
 		return inv.usage(inv.name(), "--new-string TEXT")
 	}
 	if oldString == newString {
-		return &toolrejection.ToolReject{Code: "EDIT_ARGS_CONFLICT", Data: map[string]any{"reason": "old_string and new_string must differ"}}
+		return &toolrejection.ToolReject{Code: "EDIT_ARGS_CONFLICT", Data: map[string]any{"detail": "old_string and new_string must differ", "conflict": true}}
 	}
 	bound, err := inv.bind(path, true)
 	if err != nil {
@@ -692,20 +647,11 @@ func runCodeRewrite(inv *invocation) error {
 			return inv.usage(path, "a file path, or pass --recursive for a directory")
 		}
 		targets = nil
-		if walkErr := filepath.WalkDir(bound.Resolved.Abs, func(entry string, d os.DirEntry, walkErr error) error {
-			if walkErr != nil {
-				return walkErr
+		if walkErr := sandbox.SurveyWalk(inv.ctx, bound.Resolved.Abs, sandbox.SurveyOptions{}, func(entry sandbox.SurveyEntry) (sandbox.SurveyAction, error) {
+			if entry.DirEntry.Type().IsRegular() && native.SupportsRewriteLanguage(entry.Abs) {
+				targets = append(targets, entry.Abs)
 			}
-			if d.IsDir() {
-				if d.Name() == ".git" {
-					return filepath.SkipDir
-				}
-				return nil
-			}
-			if d.Type().IsRegular() && native.SupportsRewriteLanguage(entry) {
-				targets = append(targets, entry)
-			}
-			return nil
+			return sandbox.SurveyContinue, nil
 		}); walkErr != nil {
 			return walkErr
 		}

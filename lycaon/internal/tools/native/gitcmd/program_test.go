@@ -87,6 +87,15 @@ func TestProgramEntryRunsGitReadFormsThroughTheUmbrella(t *testing.T) {
 		t.Fatalf("child receipts %v", executions)
 	}
 
+	customPath, err := f.call(t, t.Context(), "PATH=/custom/bin git status -sb")
+	if !strings.Contains(customPath+fmt.Sprint(err), "COMMAND_OPERAND_INVALID") {
+		t.Fatalf("custom PATH ran: %s %v", customPath, err)
+	}
+	reservedEnv, err := f.call(t, t.Context(), "LD_PRELOAD=/tmp/inject.so git status -sb")
+	if !strings.Contains(reservedEnv+fmt.Sprint(err), "COMMAND_OPERAND_INVALID") {
+		t.Fatalf("host-reserved env ran: %s %v", reservedEnv, err)
+	}
+
 	t.Setenv("PATH", "")
 	refused, err := f.call(t, t.Context(), "git branch created")
 	if !strings.Contains(refused+fmt.Sprint(err), "COMMAND_OPERAND_INVALID") {
@@ -95,6 +104,38 @@ func TestProgramEntryRunsGitReadFormsThroughTheUmbrella(t *testing.T) {
 	unsupported, err := f.call(t, t.Context(), "git gc")
 	if !strings.Contains(unsupported+fmt.Sprint(err), "COMMAND_NATIVE_FORM_UNSUPPORTED") {
 		t.Fatalf("uncatalogued git ran: %s %v", unsupported, err)
+	}
+}
+
+func TestProgramEntryInitializesRepositoryAndCommits(t *testing.T) {
+	f := newProgramFixture(t)
+	testutil.FailErr(t, "seed", os.WriteFile(filepath.Join(f.dir, "a"), []byte("a\n"), 0o644))
+	owners, err := gitcmd.NewOwners(git.NewManager())
+	testutil.FailErr(t, "git owners", err)
+	f.runtime.Owners = func(tools.ToolContext, *projectpaths.ProgramPaths, *toolcontract.ProgramMemory, tooloutput.SpillAdmission) (command.ProgramOwners, error) {
+		return command.ProgramOwners{Natives: map[string]command.NativeOperation{"git": {Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
+			prepared, err := owners.PrepareGit(frame, request)
+			if err != nil {
+				return command.NativePrepared{}, err
+			}
+			return command.NativePrepared{Command: prepared.Command, Review: prepared.Review, Invoke: prepared.InvokeOwner}, nil
+		}}}}, nil
+	}
+	out, err := f.call(t, t.Context(), "git init -q && git add a && git commit -q -m first && git status --short")
+	testutil.FailErr(t, "first commit workflow", err)
+	var outcome struct {
+		Stdout string `json:"stdout"`
+		State  string `json:"state"`
+	}
+	testutil.FailErr(t, "decode outcome", json.Unmarshal([]byte(out), &outcome))
+	if outcome.Stdout != "" || outcome.State != "completed" {
+		t.Fatalf("program outcome %s", out)
+	}
+	if executions := f.executions(t); executions["git init"] != "completed;" || executions["git add"] != "completed;" || executions["git commit"] != "completed;" || executions["git status"] != "completed;" {
+		t.Fatalf("child receipts %v", executions)
+	}
+	if _, err := os.Stat(filepath.Join(f.dir, ".git", "HEAD")); err != nil {
+		t.Fatal(err)
 	}
 }
 
