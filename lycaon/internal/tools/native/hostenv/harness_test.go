@@ -33,6 +33,12 @@ type fixtureHost struct {
 
 func (h fixtureHost) System(context.Context) (SystemFacts, error)     { return h.system, h.err }
 func (h fixtureHost) Identity(context.Context) (IdentityFacts, error) { return h.identity, h.err }
+func (h fixtureHost) Processors(_ context.Context, all bool) (int, error) {
+	if all {
+		return 8, h.err
+	}
+	return 6, h.err
+}
 
 func defaultHost() fixtureHost {
 	return fixtureHost{
@@ -136,7 +142,7 @@ func (h *harness) run(source string) run {
 		},
 		OperationID: argv[0].Value, Statement: statement, Argv: argv, Environment: environment,
 	}
-	builtins := h.owners.Builtins(h.tc, h.nested)
+	builtins := h.owners.Builtins(h.tc, h.nested, catalogBindings{})
 	var stdout, stderr bytes.Buffer
 	result, err := builtins[argv[0].Value].Invoke(h.t.Context(), request, commandprogram.Streams{Output: &stdout, Error: &stderr})
 	if validation := result.Validate(); validation != nil {
@@ -168,3 +174,8 @@ func (r run) expectRefusal(t *testing.T, source, code string) *toolrejection.Too
 	}
 	return reject
 }
+
+// catalogBindings binds every catalog native, as a fully wired program does.
+type catalogBindings struct{}
+
+func (catalogBindings) NativeBound(string) bool { return true }

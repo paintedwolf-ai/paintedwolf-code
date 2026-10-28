@@ -750,6 +750,7 @@ type InvocationProgramExecutions struct {
 	ConflictPath                    string         `json:"conflict_path"`
 	ConflictExpectedRevision        string         `json:"conflict_expected_revision"`
 	ConflictObservedRevision        string         `json:"conflict_observed_revision"`
+	NativeGapJson                   string         `json:"native_gap_json"`
 	StartedAt                       string         `json:"started_at"`
 	SettledAt                       sql.NullString `json:"settled_at"`
 }
@@ -773,6 +774,7 @@ type InvocationProgramOutputs struct {
 	Reference         string         `json:"reference"`
 	RetentionClaimID  string         `json:"retention_claim_id"`
 	InitiatingClaimID string         `json:"initiating_claim_id"`
+	BlobID            string         `json:"blob_id"`
 	BlobJson          string         `json:"blob_json"`
 	Complete          int64          `json:"complete"`
 	Redacted          int64          `json:"redacted"`

@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
@@ -22,6 +23,8 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
+	"github.com/lycaon/lycaon/internal/tools/native/mutation"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
 // spillQuota is a counting SpillAdmission with an explicit ceiling.
@@ -49,14 +52,27 @@ func (q *spillQuota) ReserveSpill(_ context.Context, n int64) (func(), error) {
 // batchLog is the evaluator's nested-command port: every batch is recorded
 // with its own execution identity, and fixture commands write their argv.
 type batchLog struct {
+	mu      sync.Mutex
 	batches [][]string
 	status  map[string]int
 	stop    string
 }
 
+// sorted returns the batches in argv order, since parallel batches launch
+// concurrently.
+func (b *batchLog) sorted() [][]string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	out := slices.Clone(b.batches)
+	slices.SortStableFunc(out, func(x, y []string) int { return strings.Compare(strings.Join(x, "\x00"), strings.Join(y, "\x00")) })
+	return out
+}
+
 func (b *batchLog) RunNested(_ context.Context, _ commandprogram.OperationRequest, argv commandprogram.Fields, _ map[string]string, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 	values := argv.Values()
+	b.mu.Lock()
 	b.batches = append(b.batches, values)
+	b.mu.Unlock()
 	if b.stop != "" && values[len(values)-1] == b.stop {
 		return toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerRefused, StopCode: "PERMISSION_DENIED", EffectCertainty: toolcontract.NoEffect}, errors.New("refused batch")
 	}
@@ -65,41 +81,39 @@ func (b *batchLog) RunNested(_ context.Context, _ commandprogram.OperationReques
 	return toolcontract.ProducerResult{Status: status, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: status == 0, EffectCertainty: toolcontract.EffectAttempted}, err
 }
 
-// pinLog follows the receipt store's contract: each call resubmits the
-// execution's captures in order and may only append.
+// pinLog follows the receipt store's contract: each capture of an
+// execution, by any owner, appends at its next position.
 type pinLog struct {
 	executions map[string][]toolcontract.ExecutionRevision
 }
 
-func (l *pinLog) RecordRevisionPins(_ context.Context, execution string, pins []toolcontract.ExecutionRevision) error {
-	for _, pin := range pins {
-		if err := pin.Validate(); err != nil {
-			return err
-		}
+func (l *pinLog) AppendRevisionPin(_ context.Context, execution string, pin toolcontract.ExecutionRevision) error {
+	if err := pin.Validate(); err != nil {
+		return err
 	}
-	existing := l.executions[execution]
-	if len(pins) < len(existing) || !slices.Equal(existing, pins[:len(existing)]) {
+	if execution == "" {
 		return io.ErrUnexpectedEOF
 	}
 	if l.executions == nil {
 		l.executions = map[string][]toolcontract.ExecutionRevision{}
 	}
-	l.executions[execution] = slices.Clone(pins)
+	l.executions[execution] = append(l.executions[execution], pin)
 	return nil
 }
 
 type harness struct {
-	t      *testing.T
-	root   string
-	tc     tools.ToolContext
-	owners *Owners
-	pins   *pinLog
-	memory *toolcontract.ProgramMemory
-	spills string
-	quota  *spillQuota
-	nested commandprogram.NestedCommand
-	env    []string
-	runs   int
+	t           *testing.T
+	root        string
+	tc          tools.ToolContext
+	owners      *Owners
+	pins        *pinLog
+	memory      *toolcontract.ProgramMemory
+	spills      string
+	quota       *spillQuota
+	nested      commandprogram.NestedCommand
+	env         []string
+	runs        int
+	publication commandprogram.OutputPublication
 }
 
 type run struct {
@@ -114,16 +128,25 @@ func newHarness(t *testing.T) *harness {
 	t.Helper()
 	root := t.TempDir()
 	pins := &pinLog{}
-	owners, err := NewOwners(native.ExecutionRevisions{Boundary: nativefixture.Boundary(t)}, pins)
+	boundary := nativefixture.Boundary(t)
+	owners, err := NewOwners(native.ExecutionRevisions{Boundary: boundary}, pins)
 	testutil.FailErr(t, "owners", err)
 	limits, err := toolcontract.CatalogProgramMemoryLimits()
 	testutil.FailErr(t, "memory limits", err)
 	memory, err := toolcontract.NewProgramMemory(limits)
 	testutil.FailErr(t, "memory", err)
-	return &harness{t: t, root: root, tc: nativefixture.Context(root), owners: owners, pins: pins, memory: memory, spills: t.TempDir(), quota: &spillQuota{maximum: 1 << 30}}
+	tc := nativefixture.Context(root)
+	mutations, err := mutation.NewOwners(native.ExecutionRevisions{Boundary: boundary}, pins, mutation.Operations{Write: &native.WriteTool{Boundary: boundary}, Delete: &native.DeleteTool{Boundary: boundary},
+		Move: &native.MoveTool{Boundary: boundary}, Copy: &native.CopyTool{Boundary: boundary}, Mkdir: &native.MkdirTool{Boundary: boundary}, Chmod: &native.ChmodTool{Boundary: boundary},
+		Chown: &native.ChownTool{Boundary: boundary}, Times: &native.TimesTool{Boundary: boundary}, Extract: &native.ExtractArchiveTool{Boundary: boundary}})
+	testutil.FailErr(t, "mutation owners", err)
+	paths, err := projectpaths.NewProgramPaths(t.Context(), boundary, tc, "")
+	testutil.FailErr(t, "program paths", err)
+	publication := &mutation.Publication{Owners: mutations, Program: mutation.Program{Paths: paths, Barrier: &native.PublicationBarrier{}}, Tools: tc}
+	return &harness{t: t, root: root, tc: tc, owners: owners, pins: pins, memory: memory, spills: t.TempDir(), quota: &spillQuota{maximum: 1 << 30}, publication: publication}
 }
 
-func (h *harness) write(name, content string) {
+func (h *harness) seed(name, content string) {
 	h.t.Helper()
 	path := filepath.Join(h.root, name)
 	testutil.FailErr(h.t, "mkdir", os.MkdirAll(filepath.Dir(path), 0o755))
@@ -131,7 +154,14 @@ func (h *harness) write(name, content string) {
 }
 
 func (h *harness) ports() Ports {
-	return Ports{ToolContext: h.tc, Memory: h.memory, Spills: DirectorySpills{Dir: h.spills}, Admission: h.quota, Nested: h.nested}
+	return Ports{ToolContext: h.tc, Memory: h.memory, Spills: DirectorySpills{Dir: h.spills}, Admission: h.quota, Nested: h.nested, Publication: h.publication}
+}
+
+func (h *harness) read(name string) string {
+	h.t.Helper()
+	data, err := os.ReadFile(filepath.Join(h.root, name))
+	testutil.FailErr(h.t, "read "+name, err)
+	return string(data)
 }
 
 func (h *harness) run(source, stdin string) run {

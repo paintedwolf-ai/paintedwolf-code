@@ -72,6 +72,18 @@ type ProgramChildStart struct {
 	ArgumentsReference string
 	ExpandedInputs     ReviewedOperationInputs
 	Canonical          string
+	// NativeGap marks a native name launched as its installed program.
+	NativeGap *NativeGap
+}
+
+// NativeGap is a native command whose form had no native owner, launched as
+// the installed program instead. Each one is a native implementation task.
+type NativeGap struct {
+	Command string `json:"command"`
+	// Code is the typed refusal the native path would have returned.
+	Code string `json:"code"`
+	// Form is the unsupported option or word; empty when the name has no owner.
+	Form string `json:"form,omitempty"`
 }
 
 // Validate checks structure; the receipt owner also bounds encoded input size.

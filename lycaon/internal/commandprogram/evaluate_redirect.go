@@ -100,7 +100,8 @@ func (g *frame) bind(ctx context.Context, r commandsurface.ProgramRedirect) (*st
 	child.producer = false
 	field := Field{Value: target, Span: r.Target.Span}
 	if r.Operator == "<" {
-		input, err := g.e.ports.Input.OpenInput(ctx, InputDestination{Invocation: child.inv, Redirect: r, Target: field})
+		inputs, _ := g.redirections()
+		input, err := inputs.OpenInput(ctx, InputDestination{Invocation: child.inv, Redirect: r, Target: field})
 		if err != nil {
 			return nil, true, g.redirectFailure(child, err)
 		}
@@ -108,7 +109,8 @@ func (g *frame) bind(ctx context.Context, r commandsurface.ProgramRedirect) (*st
 		child.settle(ordinaryResult(0), nil)
 		return nil, false, nil
 	}
-	staged, err := g.e.ports.Publication.Open(ctx, OutputDestination{Invocation: child.inv, Redirect: r, Target: field})
+	_, outputs := g.redirections()
+	staged, err := outputs.Open(ctx, OutputDestination{Invocation: child.inv, Redirect: r, Target: field})
 	if err != nil {
 		return nil, true, g.redirectFailure(child, err)
 	}
@@ -171,6 +173,10 @@ func preflight(list []commandsurface.Statement, ports EvaluationPorts) error {
 				parts(p.Parts)
 			case commandsurface.SubstitutionPart:
 				statements(p.Statements)
+			case commandsurface.ParameterPart:
+				words(p.Words())
+			case commandsurface.ArithmeticPart:
+				words(p.Words())
 			}
 		}
 	}
@@ -244,6 +250,12 @@ func preflight(list []commandsurface.Statement, ports EvaluationPorts) error {
 		case commandsurface.ForLoop:
 			words(c.Items)
 			statements(c.Body)
+		case commandsurface.CaseStatement:
+			words([]commandsurface.DeferredWord{c.Word})
+			for _, item := range c.Items {
+				words(item.Patterns)
+				statements(item.Body)
+			}
 		case commandsurface.FunctionDeclaration:
 			if controlBuiltins[c.Name] || c.Name == "source" {
 				refuse(c.SyntaxLocation, "NAME() { ...; } with a non-reserved name")
@@ -287,4 +299,15 @@ func staticWord(w commandsurface.DeferredWord) string {
 		return ""
 	}
 	return b.String()
+}
+
+// redirections are the redirect owners for this frame: a directory frame that
+// binds its own targets supplies them, so cd moves redirect resolution too.
+func (g *frame) redirections() (InputRedirection, OutputPublication) {
+	if frame, ok := g.state.dispatch.(FrameRedirections); ok {
+		if input, output := frame.Redirections(); input != nil && output != nil {
+			return input, output
+		}
+	}
+	return g.e.ports.Input, g.e.ports.Publication
 }

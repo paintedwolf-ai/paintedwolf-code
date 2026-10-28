@@ -5,6 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
+	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
@@ -26,6 +29,8 @@ type SessionJobs struct {
 
 	mu      sync.Mutex
 	results map[string]jobOutcome
+	// order lists handles in start order; %N names order[N-1].
+	order []string
 }
 
 type jobOutcome struct {
@@ -74,6 +79,9 @@ func (j *SessionJobs) start(ctx context.Context, commandLine string, run func(co
 		return "", err
 	}
 	setStop(func() { _, _ = j.Registry.Lifecycle.Stop(j.SessionID, handle) })
+	j.mu.Lock()
+	j.order = append(j.order, handle)
+	j.mu.Unlock()
 	close(ready)
 	return handle, nil
 }
@@ -87,8 +95,46 @@ func (j *SessionJobs) record(handle string, result toolcontract.ProducerResult, 
 	j.results[handle] = jobOutcome{result: result, err: err}
 }
 
+// Resolve maps a job reference to its handle: %N (the Nth job this session
+// started), %% or %+ (the latest), %- (the one before) or a handle as $! and
+// jobs print it. Nothing outside this session's jobs is addressable.
+func (j *SessionJobs) Resolve(reference string) (string, error) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	index := -1
+	switch {
+	case reference == "%%" || reference == "%+" || reference == "%":
+		index = len(j.order) - 1
+	case reference == "%-":
+		index = len(j.order) - 2
+	case strings.HasPrefix(reference, "%"):
+		if n, err := strconv.Atoi(reference[1:]); err == nil && n > 0 {
+			index = n - 1
+		}
+	default:
+		if slices.Contains(j.order, reference) {
+			return reference, nil
+		}
+	}
+	if index < 0 || index >= len(j.order) {
+		return "", unknownJob(reference)
+	}
+	return j.order[index], nil
+}
+
+// Number is a handle's %N job number in this session, or 0.
+func (j *SessionJobs) Number(handle string) int {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	return slices.Index(j.order, handle) + 1
+}
+
 // Wait returns the job's own settled outcome; waiting does not stop it.
-func (j *SessionJobs) Wait(ctx context.Context, handle string) (toolcontract.ProducerResult, error) {
+func (j *SessionJobs) Wait(ctx context.Context, reference string) (toolcontract.ProducerResult, error) {
+	handle, err := j.Resolve(reference)
+	if err != nil {
+		return toolcontract.ProducerResult{}, err
+	}
 	if _, _, err := j.Registry.Lifecycle.Wait(ctx, j.SessionID, handle); err != nil {
 		return toolcontract.ProducerResult{}, jobLookupError(err, handle)
 	}
@@ -98,16 +144,24 @@ func (j *SessionJobs) Wait(ctx context.Context, handle string) (toolcontract.Pro
 	if !ok {
 		return toolcontract.ProducerResult{}, fmt.Errorf("job %s settled without an outcome", handle)
 	}
+	if outcome.result.Terminal == toolcontract.ProducerInterrupted && errors.Is(outcome.err, context.Canceled) {
+		// A stopped job's own cancellation is its status, not the waiter's failure.
+		return outcome.result, nil
+	}
 	return outcome.result, outcome.err
 }
 
 // Signal accepts the catalog's TERM/INT/KILL; every one requests the owned
 // job's stop. Acknowledgement is not proof of exit.
-func (j *SessionJobs) Signal(_ context.Context, handle, signal string) error {
+func (j *SessionJobs) Signal(_ context.Context, reference, signal string) error {
 	switch signal {
 	case "TERM", "INT", "KILL", "15", "2", "9":
 	default:
 		return toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"signal": signal, "expected": "TERM, INT or KILL"})
+	}
+	handle, err := j.Resolve(reference)
+	if err != nil {
+		return err
 	}
 	if _, err := j.Registry.Lifecycle.Stop(j.SessionID, handle); err != nil {
 		return jobLookupError(err, handle)
@@ -130,7 +184,13 @@ func (j *SessionJobs) List(context.Context) ([]jobStatus, error) {
 
 func jobLookupError(err error, handle string) error {
 	if errors.Is(err, bgprocess.ErrProcessNotFound) {
-		return toolrejection.RejectInvalidArguments("PROCESS_REFERENCE_STALE", map[string]any{"job": handle, "reason": "not a job of this session"})
+		return unknownJob(handle)
 	}
 	return err
+}
+
+// unknownJob refuses a reference that names no job of this session; kill,
+// wait and jobs never address host processes.
+func unknownJob(reference string) error {
+	return toolrejection.RejectInvalidArguments("COMMAND_JOB_UNKNOWN", map[string]any{"job": reference, "reason": "not a job of this session"})
 }

@@ -40,9 +40,24 @@ func (s *sessionOutputResources) ReserveSpill(ctx context.Context, n int64) (fun
 	}, nil
 }
 
-func (r *ProgramRuntime) sessionResources() *sessionOutputResources {
-	r.resourcesOnce.Do(func() { r.resources = newSessionOutputResources() })
-	return r.resources
+// sessionResources is one session's output-lifetime account; sessions never
+// share a quota, so one session's retained output cannot starve another.
+func (r *ProgramRuntime) sessionResources(sessionID string) *sessionOutputResources {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.sessionResourcesLocked(sessionID)
+}
+
+func (r *ProgramRuntime) sessionResourcesLocked(sessionID string) *sessionOutputResources {
+	if resources, ok := r.resources[sessionID]; ok {
+		return resources
+	}
+	if r.resources == nil {
+		r.resources = map[string]*sessionOutputResources{}
+	}
+	resources := newSessionOutputResources()
+	r.resources[sessionID] = resources
+	return resources
 }
 
 func newSessionOutputResources() *sessionOutputResources {
@@ -88,7 +103,7 @@ func jobBuiltins(jobs *SessionJobs, commands map[string]toolcontract.CommandSpec
 		}
 		var out strings.Builder
 		for _, job := range statuses {
-			out.WriteString(job.Handle + " running -\n")
+			fmt.Fprintf(&out, "[%d] %s running\n", jobs.Number(job.Handle), job.Handle)
 		}
 		if _, err := fmt.Fprint(nonNilWriter(streams.Output), out.String()); err != nil {
 			return ownerFailure(err), err
@@ -149,7 +164,7 @@ func readResult(status int) toolcontract.ProducerResult {
 // argvRejection projects a binder refusal with its exact word span.
 func argvRejection(spec toolcontract.CommandSpecification, cause error) error {
 	code := "COMMAND_OPERAND_INVALID"
-	data := map[string]any{"command": spec.Name}
+	data := map[string]any{"command": spec.Name, "expected_form": spec.Argv}
 	var argvErr *commandprogram.ArgvError
 	if errors.As(cause, &argvErr) {
 		code = argvErr.Code

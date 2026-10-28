@@ -31,7 +31,6 @@ type invocation struct {
 	errors   strings.Builder
 	status   int
 	releases []func()
-	pins     []toolcontract.ExecutionRevision
 }
 
 func newInvocation(ctx context.Context, p Prepared, ports Ports, streams commandprogram.Streams) *invocation {
@@ -127,7 +126,7 @@ func (inv *invocation) openInputs(operands commandprogram.Fields) ([]source, err
 				return nil, err
 			}
 		}
-		reader, err := inv.capture(paths, operand)
+		reader, _, err := inv.capture(paths, operand)
 		if err != nil {
 			if reason, ok := ordinary(err); ok {
 				inv.fail(1, operand.Value, reason)
@@ -143,35 +142,34 @@ func (inv *invocation) openInputs(operands commandprogram.Fields) ([]source, err
 
 // capture binds one operand under the invocation cwd, pins its accepted
 // revision and returns its captured bytes.
-func (inv *invocation) capture(paths *projectpaths.ProgramPaths, operand commandprogram.Field) (io.ReadCloser, error) {
+func (inv *invocation) capture(paths *projectpaths.ProgramPaths, operand commandprogram.Field) (io.ReadCloser, *toolcontract.ExecutionRevision, error) {
 	bound, err := paths.Bind(inv.ctx, operand.Value, false)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if bound.Null {
-		return io.NopCloser(strings.NewReader("")), nil
+		return io.NopCloser(strings.NewReader("")), nil, nil
 	}
 	tc := inv.ports.ToolContext
 	captured, err := inv.owners.Revisions.CaptureSource(inv.ctx, tc, bound.Resolved.Abs)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := inv.reserve(int64(len(captured.Content))); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	// A credential file's bytes reach no stream until their exposure is recorded.
 	if err := tc.ObserveCredentialRead(inv.ctx, bound.Resolved.Abs, captured.Path, captured.Content); err != nil {
-		return nil, fmt.Errorf("record credential file read: %w", err)
+		return nil, nil, fmt.Errorf("record credential file read: %w", err)
 	}
 	execution := inv.request.Invocation.Identity.ExecutionID
 	if execution == "" {
-		return nil, errors.New("file operands require a program execution identity")
+		return nil, nil, errors.New("file operands require a program execution identity")
 	}
-	inv.pins = append(inv.pins, captured.Revision)
-	if err := inv.owners.Pins.RecordRevisionPins(inv.ctx, execution, inv.pins); err != nil {
-		return nil, err
+	if err := inv.owners.Pins.AppendRevisionPin(inv.ctx, execution, captured.Revision); err != nil {
+		return nil, nil, err
 	}
-	return io.NopCloser(strings.NewReader(captured.Content)), nil
+	return io.NopCloser(strings.NewReader(captured.Content)), &captured.Revision, nil
 }
 
 // pathRejection projects a path owner's typed refusal with the operand span.
@@ -284,10 +282,10 @@ func (r *records) nextTerminated() ([]byte, bool, error) {
 }
 
 // writeRecord emits a record with its delimiter.
-func (inv *invocation) writeRecord(record []byte, delimiter byte) error {
-	if _, err := inv.out.Write(record); err != nil {
+func writeRecord(out io.Writer, record []byte, delimiter byte) error {
+	if _, err := out.Write(record); err != nil {
 		return err
 	}
-	_, err := inv.out.Write([]byte{delimiter})
+	_, err := out.Write([]byte{delimiter})
 	return err
 }

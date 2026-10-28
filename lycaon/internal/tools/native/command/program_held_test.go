@@ -173,20 +173,20 @@ func (d dirSources) Capture(_ context.Context, _ toolcontract.OperationInvocatio
 
 func TestProgramEntrySourcesScriptAndDeduplicatesProgramDefinitions(t *testing.T) {
 	f := newProgramFixture(t)
-	testutil.FailErr(t, "write sourced script", os.WriteFile(filepath.Join(f.dir, "lib.sh"), []byte("greet() { external -- /bin/echo \"$1\"; }\n"), 0o600))
+	testutil.FailErr(t, "write sourced script", os.WriteFile(filepath.Join(f.Dir, "lib.sh"), []byte("greet() { external -- /bin/echo \"$1\"; }\n"), 0o600))
 	out, err := f.call(t, t.Context(), "source -- lib.sh; greet first; greet second")
 	testutil.FailErr(t, "run sourced function calls", err)
 	if !strings.Contains(out, `"stdout":"first\nsecond\n"`) || !strings.Contains(out, `"state":"completed"`) {
 		t.Fatalf("sourced program outcome %s", out)
 	}
 	var programID string
-	testutil.FailErr(t, "read program id", f.database.QueryRowContext(t.Context(), `SELECT id FROM invocation_programs`).Scan(&programID))
+	testutil.FailErr(t, "read program id", f.Database.QueryRowContext(t.Context(), `SELECT id FROM invocation_programs`).Scan(&programID))
 	var sourceCount int
-	testutil.FailErr(t, "count program sources", f.database.QueryRowContext(t.Context(), `SELECT count(*) FROM invocation_program_sources WHERE program_id = ?`, programID).Scan(&sourceCount))
+	testutil.FailErr(t, "count program sources", f.Database.QueryRowContext(t.Context(), `SELECT count(*) FROM invocation_program_sources WHERE program_id = ?`, programID).Scan(&sourceCount))
 	if sourceCount != 2 {
 		t.Fatalf("sourceCount = %d, want 2 (root and sourced unit)", sourceCount)
 	}
-	page, err := f.recorder.ReadProgramPage(t.Context(), f.session, programID, "", 10)
+	page, err := f.Recorder.ReadProgramPage(t.Context(), f.Session, programID, "", 10)
 	testutil.FailErr(t, "read program page", err)
 	var externalExecs []api.CommandExecutionReceipt
 	for _, exec := range page.Executions {
@@ -198,7 +198,7 @@ func TestProgramEntrySourcesScriptAndDeduplicatesProgramDefinitions(t *testing.T
 		t.Fatalf("external executions = %+v (all = %+v)", externalExecs, page.Executions)
 	}
 	var defCount int
-	testutil.FailErr(t, "count deduplicated definitions", f.database.QueryRowContext(t.Context(),
+	testutil.FailErr(t, "count deduplicated definitions", f.Database.QueryRowContext(t.Context(),
 		`SELECT count(*) FROM invocation_program_definitions WHERE program_id = ? AND definition_digest = ?`,
 		programID, externalExecs[0].DefinitionDigest,
 	).Scan(&defCount))
@@ -206,7 +206,7 @@ func TestProgramEntrySourcesScriptAndDeduplicatesProgramDefinitions(t *testing.T
 		t.Fatalf("invocation_program_definitions rows for external digest = %d, want 1", defCount)
 	}
 	for _, exec := range externalExecs {
-		binding, err := f.recorder.ReadProgramExecutionBinding(t.Context(), f.session, exec.ID)
+		binding, err := f.Recorder.ReadProgramExecutionBinding(t.Context(), f.Session, exec.ID)
 		testutil.FailErr(t, "read child binding", err)
 		if binding.DefinitionDigest != exec.DefinitionDigest || binding.DefinitionJSON == "" || binding.Invocation.SourceUnitID != "lib.sh" {
 			t.Fatalf("binding %s = %+v", exec.ID, binding)

@@ -184,6 +184,31 @@ A source operation and the existing delivery boundary must still attribute the
 actual page before it qualifies as conversational evidence. These stream ports
 do not activate the later command-entry integration by themselves.
 
+### Search commands
+
+`grep`, `egrep`, `fgrep`, `rg` and `find` bind through the catalog and select
+records with `internal/textsearch`, the line-search operation the structured
+`grep` tool also scans with. grep's default BRE and `-E` ERE use POSIX
+leftmost-longest matching, with GNU back references, `\<`, `\>`, `\b`, `\w` and
+`\s` over fixed ASCII classes. `-P` is P01's bounded `pcre-common-v1` grammar
+on the bounded backtracking engine; it is never RE2. A construct outside a
+dialect refuses with `GREP_REGEX_UNSUPPORTED`, never a reinterpretation. rg's
+default dialect is RE2. Each record search is metered against the catalog
+regex ceilings, and an overrun refuses with `GREP_MATCH_BUDGET`.
+
+Traversal walks the invocation's held roots in unsigned byte order. Every
+listed name counts against `traversal_visits`, and every file read is pinned
+through execution revisions before it is searched. grep recursion visits
+hidden entries and applies no ignore file. rg skips hidden entries and applies
+the project ignore rules unless `-u` or `--hidden` say otherwise. find visits
+every entry and never follows a link. All of them skip entries the read
+boundary protects. A file holding NUL bytes prints GNU's
+`grep: PATH: binary file matches` once on stderr. A complete search without
+matches is status 1 and stays publication-eligible. An unreadable input, refusal or limit is status 2 or a
+typed stop, never a no-match. `find -exec` dispatches each child through the
+evaluator frame as an ordinary program child. `find -delete` removes entries
+only through the recoverable removal owner.
+
 ### Platform adapter evidence
 
 `fseffect.Replace` reports whether replacement, directory durability and byte

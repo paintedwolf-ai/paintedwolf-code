@@ -27,8 +27,8 @@ func TestAwkGolden(t *testing.T) {
 
 func TestAwkReadsPinnedFilesByName(t *testing.T) {
 	h := newHarness(t)
-	h.write("one", "a\nb\n")
-	h.write("two", "c\n")
+	h.seed("one", "a\nb\n")
+	h.seed("two", "c\n")
 	r := h.run(`awk '{print FILENAME ":" FNR ":" $0}' one ./two`, "")
 	r.expectOutput(t, "files", "one:1:a\none:2:b\n./two:1:c\n", 0)
 	if len(h.pins.executions[r.execution]) != 2 {

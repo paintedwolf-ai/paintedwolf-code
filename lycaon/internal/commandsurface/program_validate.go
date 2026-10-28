@@ -63,6 +63,17 @@ func (c *programCompiler) validateNode(n syntax.Node) {
 		if v.Select || v.Braces {
 			c.unsupported(n, "for NAME in WORDS; do ...; done")
 		}
+	case *syntax.CaseClause:
+		c.markPatternWord(v.Word)
+		for _, item := range v.Items {
+			if item.Op != syntax.Break {
+				c.unsupported(item, "case items ending with ;;")
+			}
+			for _, pattern := range item.Patterns {
+				c.markPatternWord(pattern)
+			}
+		}
+	case *syntax.CaseItem:
 	case *syntax.FuncDecl:
 		_, block := v.Body.Cmd.(*syntax.Block)
 		if v.RsrvWord || !v.Parens || v.Name == nil || !block || c.nativeName(v.Name.Value) {
@@ -91,6 +102,8 @@ func (c *programCompiler) validateNode(n syntax.Node) {
 		}
 	case *syntax.ParamExp:
 		c.validateParameter(v)
+	case *syntax.ArithmExp, *syntax.ParenArithm, *syntax.UnaryArithm, *syntax.BinaryArithm:
+		c.validateArithmetic(v)
 	case *syntax.DeclClause:
 		if v.Variant.Value != "export" {
 			c.unsupported(n, "export")
@@ -153,13 +166,63 @@ func (c *programCompiler) validateCall(call *syntax.CallExpr) {
 		return
 	}
 	switch name {
-	case "eval", "trap", "set", "shopt", "declare", "typeset", "local", "readonly", "let", "exec", ".":
+	case "set":
+		c.validateSet(call)
+	case "eval", "trap", "shopt", "declare", "typeset", "local", "readonly", "let", "exec", ".":
 		c.unsupported(call.Args[0], "version 1 built-ins; source -- PATH for explicit scripts")
 	}
 }
+
+// validateSet admits literal -e, -u, -o errexit, -o nounset, -o pipefail and
+// their + forms (except +o pipefail), combined as in set -euo pipefail.
+func (c *programCompiler) validateSet(call *syntax.CallExpr) {
+	const expected = "set with literal -e, -u or -o errexit/nounset/pipefail options"
+	args := call.Args[1:]
+	if len(args) == 0 {
+		c.unsupported(call, expected)
+	}
+	for i := 0; i < len(args); i++ {
+		value, ok := c.literal(args[i])
+		flags, enable := strings.CutPrefix(value, "-")
+		if !enable {
+			flags, _ = strings.CutPrefix(value, "+")
+		}
+		if !ok || flags == "" || flags == value {
+			c.unsupported(args[i], expected)
+			return
+		}
+		for _, flag := range flags {
+			switch flag {
+			case 'e', 'u':
+			case 'o':
+				if i+1 >= len(args) {
+					return
+				}
+				i++
+				name, ok := c.literal(args[i])
+				if !ok || (name != "errexit" && name != "nounset" && (name != "pipefail" || !enable)) {
+					c.unsupported(args[i], expected)
+					return
+				}
+			default:
+				c.unsupported(args[i], expected)
+				return
+			}
+		}
+	}
+}
+
 func (c *programCompiler) validateParameter(p *syntax.ParamExp) {
-	if p.Flags != nil || p.Excl || p.Width || p.IsSet || p.Split != syntax.OptUnset || p.GlobSubst != syntax.OptUnset || p.RcExpand != syntax.OptUnset || p.Param == nil || p.NestedParam != nil || p.Index != nil || len(p.Modifiers) > 0 || p.Slice != nil || p.Repl != nil || p.Names != 0 || p.Exp != nil {
-		c.unsupported(p, "$name, ${name}, ${#name} or supported positional/status parameters")
+	if p.Flags != nil || p.Excl || p.Width || p.IsSet || p.Split != syntax.OptUnset || p.GlobSubst != syntax.OptUnset || p.RcExpand != syntax.OptUnset || p.Param == nil || p.NestedParam != nil || p.Index != nil || len(p.Modifiers) > 0 || p.Slice != nil || p.Names != 0 || (p.Length && (p.Exp != nil || p.Repl != nil)) {
+		c.unsupported(p, parameterForms)
+		return
+	}
+	if p.Exp != nil && !supportedParameterOperators[p.Exp.Op.String()] {
+		c.unsupported(p, parameterForms)
+		return
+	}
+	if p.Exp != nil && !parameterNeedsWord(p.Exp.Op.String()) && p.Exp.Word != nil {
+		c.unsupported(p, "case conversion without a pattern")
 		return
 	}
 	name := p.Param.Value
@@ -167,6 +230,15 @@ func (c *programCompiler) validateParameter(p *syntax.ParamExp) {
 		c.unsupported(p, "invocation variables and supported positional/status parameters")
 	}
 }
+
+const parameterForms = "$name, ${name}, ${#name}, ${name:-word}, ${name:+word}, ${name:?word}, ${name#pattern}, ${name%pattern}, ${name/pattern/word}, ${name^^} or supported positional/status parameters"
+
+// supportedParameterOperators have fixed semantics that never assign state.
+var supportedParameterOperators = map[string]bool{
+	"-": true, ":-": true, "+": true, ":+": true, "?": true, ":?": true,
+	"#": true, "##": true, "%": true, "%%": true, "^": true, "^^": true, ",": true, ",,": true,
+}
+
 func (c *programCompiler) validateRedirect(r *syntax.Redirect) {
 	fd := ""
 	if r.N != nil {
