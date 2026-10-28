@@ -892,7 +892,7 @@
           }
         }
       },
-      "notes": "Expiry sends SIGNAL (TERM by default) to the external process the command started, through program supervision, and KILL after -k; a native operation is interrupted. Status is 124 unless --preserve-status, which keeps the command's own status (128 plus the signal when a signal ended it). The command envelope's timeout_ms stays the outer bound and always wins. --foreground is accepted; program streams are never a terminal.",
+      "notes": "Expiry sends SIGNAL (TERM by default) to the external process the command started, through program supervision, and KILL after -k; a native operation is interrupted. Status is 124 unless --preserve-status, which keeps the command's own status (128 plus the signal when a signal ended it). The command envelope's timeout_ms stays the outer bound and always wins. --foreground is accepted; program streams are never a terminal. Waiting for the supervised child or its deadline can park the command call; expiry returns status 124.",
       "reuse": {
         "implementation": "lycaon/internal/commandprogram/timeout.go",
         "tests": [

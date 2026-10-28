@@ -1926,7 +1926,7 @@
     },
     {
       "id": "predicate-ere-scalar-collation",
-      "program": "[[ é =~ [[.é.]] ]]",
+      "program": "[[ \u00e9 =~ [[.\u00e9.]] ]]",
       "setup": {
         "files": {},
         "host_facts": {},
@@ -2174,6 +2174,48 @@
           "start_byte": 26,
           "end_byte": 28
         },
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
+      },
+      "qualification": "normative definition; P04/P02 must execute against parser/native owners"
+    },
+    {
+      "id": "read-timer-zero-ready",
+      "program": "value=kept; read -t 0 value <<< ready; printf '%s:%s\\n' \"$?\" \"$value\"",
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
+      "expected": {
+        "stdout": "0:kept\n",
+        "stderr": "",
+        "status": 0,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
+      },
+      "qualification": "normative definition; P04/P02 must execute against parser/native owners"
+    },
+    {
+      "id": "read-timer-invalid",
+      "program": "read -t invalid value",
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
+      "expected": {
+        "stdout": "",
+        "stderr": "read: invalid: invalid timeout specification\n",
+        "status": 1,
         "semantic_effects": [],
         "receipts": {
           "zero_program_effects": false,

@@ -91,6 +91,10 @@ func timeoutBuiltin(spec toolcontract.CommandSpecification, nested commandprogra
 				_, _ = fmt.Fprintf(nonNilWriter(streams.Error), "timeout: sending signal %s to command '%s'\n", sig.Name, inner[0].Value)
 			}
 		}
+		if plan.Duration > 0 {
+			restore := request.Wait.Deadline(clock.Now().Add(plan.Duration), strings.Join(request.Argv.Values(), " "))
+			defer restore()
+		}
 		return commandprogram.RunTimeout(ctx, clock, plan, sent, func(ctx context.Context, relay *commandprogram.SignalRelay) (toolcontract.ProducerResult, error) {
 			parent := request
 			parent.Process.Signals = relay

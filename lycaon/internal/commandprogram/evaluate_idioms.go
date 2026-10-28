@@ -107,22 +107,27 @@ func (e *evaluation) ProcessSubstitute(ctx context.Context, scope ExpansionScope
 	run.producer = false
 	subCtx, cancel := context.WithCancel(ctx)
 	budget, err := NewByteBudget("stream_bytes", e.limits["stream_bytes"])
+	activity := e.waits.start()
 	var pipe *BytePipe
 	if err == nil {
 		pipe, err = NewBytePipe(subCtx, budget)
 	}
 	if err != nil {
 		cancel()
+		activity.finish()
 		run.close(ctx)
 		return nil, err
 	}
 	g, release, err := f.isolate(subCtx, nil)
 	if err != nil {
 		cancel()
+		activity.finish()
 		_ = pipe.CloseConsumer()
 		run.close(ctx)
 		return nil, f.expansionRefusal(part.SyntaxLocation, err)
 	}
+	g.wait = activity
+	g.io.wait = activity
 	fd, path := e.allocateProcSubstFD()
 	g.parent, g.loops, g.returnable = run.inv, 0, false
 	g.state.options.errexit = false
@@ -134,7 +139,7 @@ func (e *evaluation) ProcessSubstitute(ctx context.Context, scope ExpansionScope
 		g.io.setReader(0, NullInput())
 		g.io.setWriter(1, pipe)
 		subst = NewProcessSubstitution(path, op, func() (io.ReadCloser, bool) {
-			return pipe.ConsumerEnd(), true
+			return pipeConsumer{pipe: pipe, wait: f.wait}, true
 		}, nil)
 	} else {
 		g.io.setReader(0, pipe.ConsumerEnd())
@@ -158,6 +163,7 @@ func (e *evaluation) ProcessSubstitute(ctx context.Context, scope ExpansionScope
 	}
 	go func() {
 		defer close(entry.done)
+		defer g.wait.finish()
 		defer release()
 		defer cancel()
 		_, runErr := g.statements(subCtx, part.Statements)

@@ -45,6 +45,7 @@ type shellOptions struct{ errexit, nounset bool }
 // contexts; state, publication and the shared evaluation are pointers.
 type frame struct {
 	e          *evaluation
+	wait       *ExecutionWait
 	state      *frameState
 	parent     toolcontract.OperationInvocation
 	unit       string
@@ -125,7 +126,11 @@ func (e *evaluation) rootFrame(ctx context.Context) (*frame, func(), error) {
 			return nil, nil, err
 		}
 	}
-	return f, vars.Close, nil
+	activity := e.waits.start()
+	e.waits.foreground = activity
+	f.wait = activity
+	f.io.wait = activity
+	return f, func() { activity.finish(); vars.Close() }, nil
 }
 
 // isolate copies variables and functions into a new state with its own status
