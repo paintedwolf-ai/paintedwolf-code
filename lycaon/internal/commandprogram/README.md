@@ -139,6 +139,13 @@ partial fields and leaving the inherited descriptor usable. `-t 0` checks
 readiness without consuming bytes. Timer waits use the injected clock and keep
 their complete interval even when another activity becomes ready.
 
+A running external process remains runnable for wait aggregation. An explicit
+`timeout` deadline or a foreground wait on that process's exact supervised job
+permits completion waiting to park. Concurrent pipeline, substitution and parallel
+utility activities inherit the enclosing deadline and job identity. Readiness and
+completion transitions wake the waiting activity before delivering bytes or
+completion to its goroutine.
+
 ## Native predicates
 
 `BooleanBuiltin` implements `true`, `false` and `:` after ordinary scalar/argv
