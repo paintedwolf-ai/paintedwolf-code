@@ -66,6 +66,8 @@ func TestReleasedCorpusUpgradesWithoutChangingRetainedRows(t *testing.T) {
 		columns[table] = strings.Join(names, ",")
 		before[table] = retainedRows(t, rows)
 	}
+	released, err := inspectSchema(t.Context(), reader)
+	testutil.FailErr(t, "inspect released baseline", err)
 	testutil.FailErr(t, "close inspection", reader.Close())
 	testutil.FailErr(t, "upgrade copied corpus", UpgradeStaged(t.Context(), path))
 	testutil.FailErr(t, "reopen already upgraded corpus", UpgradeStaged(t.Context(), path))
@@ -88,8 +90,9 @@ func TestReleasedCorpusUpgradesWithoutChangingRetainedRows(t *testing.T) {
 	}
 	var applied int
 	testutil.FailErr(t, "read migration ledger", reader.QueryRowContext(t.Context(), "SELECT count(*) FROM schema_migrations").Scan(&applied))
-	if applied != 5 {
-		t.Fatalf("migration ledger has %d steps, want 5", applied)
+	// One ledger step per revision between the released corpus and this schema.
+	if want := SchemaVersion - released.Revision; applied != want {
+		t.Fatalf("migration ledger has %d steps, want %d", applied, want)
 	}
 }
 
