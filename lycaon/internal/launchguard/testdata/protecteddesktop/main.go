@@ -44,7 +44,7 @@ type Facts struct {
 	ProtectedLaunch string                      `json:"protected_launch"`
 	GenerationFrame json.RawMessage             `json:"generation_frame"`
 	LifetimeRegular bool                        `json:"lifetime_regular"`
-	OpenBeyond      []int                       `json:"open_beyond"`
+	OpenBeyond      []string                    `json:"open_beyond"`
 	InstallWrite    string                      `json:"install_write"`
 	Remount         string                      `json:"remount"`
 	ReadError       string                      `json:"read_error,omitempty"`
@@ -116,10 +116,15 @@ func main() {
 	facts.BrokerType, _ = unix.GetsockoptInt(6, unix.SOL_SOCKET, unix.SO_TYPE)
 	var lifetime unix.Stat_t
 	facts.LifetimeRegular = unix.Fstat(7, &lifetime) == nil && lifetime.Mode&unix.S_IFMT == unix.S_IFREG
+	// Descriptors beyond the handed-off set, named by their /proc link. The Go
+	// runtime opens its poller, wake eventfd and cgroup CPU limit file at startup
+	// on the lowest free numbers, which reach 8 once the frame holds 4.
 	for fd := 8; fd < 64; fd++ {
-		if _, err := unix.FcntlInt(uintptr(fd), unix.F_GETFD, 0); err == nil {
-			facts.OpenBeyond = append(facts.OpenBeyond, fd)
+		target, err := os.Readlink("/proc/self/fd/" + strconv.Itoa(fd))
+		if err != nil || runtimeDescriptor(target) {
+			continue
 		}
+		facts.OpenBeyond = append(facts.OpenBeyond, strconv.Itoa(fd)+" "+target)
 	}
 	install := filepath.Dir(filepath.Dir(facts.Executable))
 	facts.ExecOutside = startName("/bin/true")
@@ -288,4 +293,9 @@ func errnoName(err error) string {
 	default:
 		return err.Error()
 	}
+}
+
+// runtimeDescriptor reports a descriptor the Go runtime holds for itself.
+func runtimeDescriptor(target string) bool {
+	return target == "anon_inode:[eventpoll]" || target == "anon_inode:[eventfd]" || strings.HasPrefix(target, "/sys/fs/cgroup/")
 }

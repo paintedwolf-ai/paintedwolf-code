@@ -410,9 +410,6 @@
     "nix:build": [
       "nix:build"
     ],
-    "test:linux:installed": [
-      "test:linux:installed"
-    ],
     "release:rehearse:linux-signing": [
       "release:rehearse:linux-signing"
     ],
@@ -424,6 +421,15 @@
     ],
     "release:rehearse:native-candidates": [
       "release:rehearse:native-candidates"
+    ],
+    "release:rehearse:pacman-repositories": [
+      "release:rehearse:pacman-repositories"
+    ],
+    "release:rehearse:pacman-repositories-r2": [
+      "release:rehearse:pacman-repositories-r2"
+    ],
+    "release:rehearse:pacman-vm": [
+      "release:rehearse:pacman-vm"
     ],
     "release:live-test": [
       "release:live-test"
@@ -468,10 +474,12 @@
     "nix:build": "passthrough",
     "nix:check": "passthrough",
     "release:rehearse:linux-signing": "passthrough",
-    "test:linux:installed": "passthrough",
     "release:rehearse:native-repositories": "passthrough",
     "release:rehearse:native-repositories-r2": "passthrough",
     "release:rehearse:native-candidates": "passthrough",
+    "release:rehearse:pacman-repositories": "passthrough",
+    "release:rehearse:pacman-repositories-r2": "passthrough",
+    "release:rehearse:pacman-vm": "passthrough",
     "release:live-test": "passthrough",
     "release:rehearse:package-probe": "passthrough",
     "release:rehearse:rpm-metadata": "passthrough",
@@ -814,10 +822,6 @@
       "workers": 1,
       "progress": "log"
     },
-    "test:linux:installed": {
-      "locks": [],
-      "workers": 1
-    },
     "release:rehearse:linux-signing": {
       "locks": [
         "linux-signing-fixture"
@@ -840,6 +844,31 @@
     "release:rehearse:native-candidates": {
       "locks": [
         "native-candidates"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:pacman-repositories": {
+      "locks": [
+        "pacman-repository-roots"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:pacman-repositories-r2": {
+      "locks": [
+        "pacman-repository-roots",
+        "r2-rehearsal"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:pacman-vm": {
+      "locks": [
+        "pacman-vm"
+      ],
+      "workers": 1
+    },
+    "release:publish:aur-recipe": {
+      "locks": [
+        "aur-delivery"
       ],
       "workers": 1
     },
@@ -1280,6 +1309,7 @@
       "build-caches.yml": 1,
       "nightly.yml": 2,
       "release.yml": 2,
+      "release-aur-delivery.yml": 1,
       "linux-candidate-requests.yml": 1,
       "release-halt.yml": 1,
       "release-secrets-check.yml": 1,

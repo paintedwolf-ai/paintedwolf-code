@@ -57,7 +57,7 @@ type protectedFacts struct {
 	ProtectedLaunch string                      `json:"protected_launch"`
 	GenerationFrame json.RawMessage             `json:"generation_frame"`
 	LifetimeRegular bool                        `json:"lifetime_regular"`
-	OpenBeyond      []int                       `json:"open_beyond"`
+	OpenBeyond      []string                    `json:"open_beyond"`
 	InstallWrite    string                      `json:"install_write"`
 	Remount         string                      `json:"remount"`
 	ReadError       string                      `json:"read_error,omitempty"`
@@ -112,6 +112,7 @@ type runningLaunch struct {
 	stdin  io.WriteCloser
 	reader *bufio.Reader
 	facts  protectedFacts
+	stderr *strings.Builder
 }
 
 func startLaunch(t *testing.T, f launchFixture, env []string, args ...string) runningLaunch {
@@ -159,7 +160,7 @@ func startLaunch(t *testing.T, f launchFixture, env []string, args ...string) ru
 	if err := json.Unmarshal([]byte(line), &facts); err != nil {
 		t.Fatalf("decode desktop report %q: %v; bootstrap stderr: %s", line, err, stderr.String())
 	}
-	return runningLaunch{cmd: cmd, stdin: stdin, reader: reader, facts: facts}
+	return runningLaunch{cmd: cmd, stdin: stdin, reader: reader, facts: facts, stderr: &stderr}
 }
 
 func refusedLaunch(t *testing.T, cmd *exec.Cmd, want string) {
