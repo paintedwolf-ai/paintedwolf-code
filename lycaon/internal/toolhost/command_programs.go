@@ -85,8 +85,8 @@ func (t programOwnerTools) compose(services ProgramServices) (func(tools.ToolCon
 		return nil, err
 	}
 	return func(tc tools.ToolContext, paths *projectpaths.ProgramPaths, memory *toolcontract.ProgramMemory, admission tooloutput.SpillAdmission) (command.ProgramOwners, error) {
-		literalProgram, searchProgram, queryProgram, mutationProgram, textProgram := *literalOwners, *searchOwners, *queryOwners, *mutationOwners, *textOwners
-		literalProgram.Revisions.Memory = memory
+		literalProgram := literalOwners.ForProgram(memory)
+		searchProgram, queryProgram, mutationProgram, textProgram := *searchOwners, *queryOwners, *mutationOwners, *textOwners
 		searchProgram.Revisions.Memory = memory
 		searchProgram.Admission = admission
 		queryProgram.Revisions.Memory = memory
@@ -94,7 +94,7 @@ func (t programOwnerTools) compose(services ProgramServices) (func(tools.ToolCon
 		textProgram.Revisions.Memory = memory
 		curlProgram := *curlOwners
 		curlProgram.Mutations = &mutationProgram
-		literalOwners, searchOwners, queryOwners, mutationOwners, textOwners, curlOwners := &literalProgram, &searchProgram, &queryProgram, &mutationProgram, &textProgram, &curlProgram
+		literalOwners, searchOwners, queryOwners, mutationOwners, textOwners, curlOwners := literalProgram, &searchProgram, &queryProgram, &mutationProgram, &textProgram, &curlProgram
 		barrier := &native.PublicationBarrier{}
 		program := mutation.Program{Paths: paths, Barrier: barrier}
 		spills := &textutil.Spills{}
