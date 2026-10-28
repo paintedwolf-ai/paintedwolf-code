@@ -70,7 +70,7 @@ func TestScanToolsContractAllowlistAndRegistration(t *testing.T) {
 		assertScanSummarySelectors(t, summaryMeta.ArgsSchema)
 	})
 	t.Run("model-visible selectors", func(t *testing.T) {
-		assertScanSummarySelectors(t, tools.TrimCoordinatorToolMeta(summaryMeta).ArgsSchema)
+		assertScanSummarySelectors(t, tools.ProjectProviderToolMeta(summaryMeta).ArgsSchema)
 	})
 }
 

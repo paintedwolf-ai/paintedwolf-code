@@ -130,7 +130,7 @@ func projectVideo(ctx context.Context, p projection, out *IngestResult) error {
 	if err != nil {
 		return err
 	}
-	out.Images = append(out.Images, InlineImage{Mime: "image/png", Bytes: overview.Sheet})
+	out.Images = append(out.Images, InlineImage{PartIndex: len(out.Parts), Mime: "image/png", Bytes: overview.Sheet})
 	fence := FormatFence(p.blob.Name, p.detected.MIME, videoOverviewBody(overview), false,
 		fmt.Sprintf("bytes=%q", strconv.FormatInt(p.blob.Size, 10)),
 		fmt.Sprintf("duration_ms=%q", strconv.FormatFloat(overview.DurationMS, 'f', -1, 64)),

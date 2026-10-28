@@ -1,5 +1,5 @@
 import { updateFixture, stagedFixture } from "../settings/system/update-test-fixture.ts";
-import { fireEvent, findByTestId, render, waitFor } from "@solidjs/testing-library";
+import { findByTestId, render, waitFor } from "@solidjs/testing-library";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PreflightReport } from "../api/types.ts";
 import { LycaonApiError } from "../api/http.ts";
@@ -41,7 +41,6 @@ const runRestoreBackup = vi.fn();
 const confirmDestructive = vi.fn();
 const saveDiagnosticsBundle = vi.fn();
 const saveStartupDiagnosticsBundle = vi.fn();
-const provideCredentialVaultPassword = vi.fn();
 const resetCredentialVault = vi.fn();
 const quitDesktopForRestart = vi.fn();
 let startFailure: string | null = null;
@@ -69,8 +68,6 @@ vi.mock("../platform/connection/backend.ts", () => ({
   // Startup causes are covered by the model tests.
   lastSidecarStartFailure: () => startFailure,
   lastSidecarStartDetail: () => null,
-  provideCredentialVaultPassword: (...args: unknown[]) =>
-    provideCredentialVaultPassword(...args),
   resetCredentialVault: () => resetCredentialVault(),
   quitDesktopForRestart: () => quitDesktopForRestart(),
 }));
@@ -115,9 +112,7 @@ describe("createCriticalStop", () => {
     recoveryClient = null;
     saveDiagnosticsBundle.mockReset();
     saveStartupDiagnosticsBundle.mockReset();
-    provideCredentialVaultPassword.mockReset();
-    quitDesktopForRestart.mockReset();
-    quitDesktopForRestart.mockResolvedValue(undefined);
+    quitDesktopForRestart.mockReset().mockResolvedValue(undefined);
     resetCredentialVault.mockReset();
     resetCredentialVault.mockResolvedValue(undefined);
     startFailure = null;
@@ -206,113 +201,39 @@ describe("createCriticalStop", () => {
     ).toBeNull();
   });
 
+  it.each(["credential_vault_custodian_absent", "credential_vault_custodian_unavailable"])("keeps %s recovery non-destructive", async (failure) => {
+    startFailure = failure;
+    connectAppBackend.mockResolvedValue({});
+    const { appStore, rendered } = mount();
+    appStore.actions.setSidecarStatus("disconnected");
+    const root = rendered.baseElement as HTMLElement;
+    (await findByTestId(root, "critical-stop-primary")).click();
+    await waitFor(() => expect(connectAppBackend).toHaveBeenCalled());
+    expect(root.querySelector('input[type="password"]')).toBeNull();
+    expect(root.querySelector('[data-testid="critical-stop-secondary"]')?.textContent).not.toContain("Reset");
+    expect(resetCredentialVault).not.toHaveBeenCalled();
+  });
+
   it("quits through the native coordinator when the installed desktop changed", async () => {
     startFailure = "desktop_restart_required";
     const { appStore, rendered } = mount();
     appStore.actions.setSidecarStatus("disconnected");
     const root = rendered.baseElement as HTMLElement;
-    expect(root.querySelector('[data-testid="credential-vault-password"]')).toBeNull();
     (await findByTestId(root, "critical-stop-primary")).click();
     await waitFor(() => expect(quitDesktopForRestart).toHaveBeenCalledOnce());
     expect(connectAppBackend).not.toHaveBeenCalled();
     expect(resetCredentialVault).not.toHaveBeenCalled();
   });
 
-  it("unlocks the credential vault with an explicit app password", async () => {
-    startFailure = "credential_vault_locked";
-    connectAppBackend.mockResolvedValue({});
+  it("resets a corrupt credential vault only after confirmation", async () => {
+    startFailure = "credential_vault_corrupt";
+    connectAppBackend.mockRejectedValue(new Error("corrupt vault"));
     const { appStore, rendered } = mount();
     appStore.actions.setSidecarStatus("disconnected");
     const root = rendered.baseElement as HTMLElement;
 
-    const password = await findByTestId(root, "credential-vault-password");
-    fireEvent.input(password, { target: { value: "correct horse battery staple" } });
     (await findByTestId(root, "critical-stop-primary")).click();
-
-    await waitFor(() => {
-      expect(provideCredentialVaultPassword).toHaveBeenCalledWith(
-        "correct horse battery staple",
-      );
-      expect(connectAppBackend).toHaveBeenCalledWith(appStore, {
-        reportFailure: false,
-      });
-    });
-  });
-
-  it("requires matching passwords before creating a credential vault", async () => {
-    startFailure = "credential_vault_uninitialized";
-    const { appStore, rendered } = mount();
-    appStore.actions.setSidecarStatus("disconnected");
-    const root = rendered.baseElement as HTMLElement;
-
-    fireEvent.input(await findByTestId(root, "credential-vault-password"), {
-      target: { value: "correct horse battery staple" },
-    });
-    fireEvent.input(
-      await findByTestId(root, "credential-vault-password-confirmation"),
-      { target: { value: "different horse battery staple" } },
-    );
-    (await findByTestId(root, "critical-stop-primary")).click();
-
-    await waitFor(() => {
-      expect(root.querySelector(".den-critical-stop__message")?.textContent)
-        .toContain("The passwords do not match.");
-    });
-    expect(provideCredentialVaultPassword).not.toHaveBeenCalled();
-  });
-
-  it.each([
-    "credential_vault_custodian_unavailable",
-    "credential_vault_launcher_refused",
-  ] as const)("preserves credentials for %s and retries without a password", async (failure) => {
-    startFailure = failure;
-    connectAppBackend.mockResolvedValue({});
-    const { appStore, rendered } = mount();
-    appStore.actions.setSidecarStatus("disconnected");
-    const root = rendered.baseElement as HTMLElement;
-
-    expect(root.querySelector('[data-testid="credential-vault-password"]')).toBeNull();
-    // The way out is retry or a report bundle, never a reset.
-    expect(root.querySelector('[data-testid="critical-stop-secondary"]')?.textContent ?? "").not.toContain("Reset");
-    (await findByTestId(root, "critical-stop-primary")).click();
-    await waitFor(() => expect(connectAppBackend).toHaveBeenCalled());
-    expect(resetCredentialVault).not.toHaveBeenCalled();
-    expect(provideCredentialVaultPassword).not.toHaveBeenCalled();
-  });
-
-  it.each([
-    "credential_vault_identity_missing",
-    "credential_vault_custodian_absent",
-  ] as const)("offers a confirmed reset for %s, and retry first", async (failure) => {
-    startFailure = failure;
-    connectAppBackend.mockRejectedValue(new Error("key missing"));
-    const { appStore, rendered } = mount();
-    appStore.actions.setSidecarStatus("disconnected");
-    const root = rendered.baseElement as HTMLElement;
-
-    expect(root.querySelector('[data-testid="credential-vault-password"]')).toBeNull();
-    const primary = await findByTestId(root, "critical-stop-primary");
-    expect(primary.textContent).toContain("Try again");
-    const secondary = await findByTestId(root, "critical-stop-secondary");
-    expect(secondary.textContent).toContain("Reset vault…");
-    confirmDestructive.mockResolvedValueOnce(false);
-    secondary.click();
-    await waitFor(() => expect(confirmDestructive).toHaveBeenCalled());
-    expect(resetCredentialVault).not.toHaveBeenCalled();
-    confirmDestructive.mockResolvedValueOnce(true);
-    secondary.click();
-    await waitFor(() => expect(resetCredentialVault).toHaveBeenCalled());
-    expect(provideCredentialVaultPassword).not.toHaveBeenCalled();
-  });
-
-  it("resets a forgotten credential vault only after confirmation", async () => {
-    startFailure = "credential_vault_locked";
-    connectAppBackend.mockRejectedValue(new Error("password required"));
-    const { appStore, rendered } = mount();
-    appStore.actions.setSidecarStatus("disconnected");
-    const root = rendered.baseElement as HTMLElement;
-
-    (await findByTestId(root, "critical-stop-secondary")).click();
+    expect(root.querySelector('input[type="password"]')).toBeNull();
 
     await waitFor(() => expect(resetCredentialVault).toHaveBeenCalledOnce());
     expect(confirmDestructive).toHaveBeenCalledWith(
@@ -385,6 +306,31 @@ describe("createCriticalStop", () => {
       expect(root.querySelector(".den-critical-stop__message")?.textContent).toContain(
         CLIENT_NOTICES.readiness_recheck_failed.message,
       );
+    });
+  });
+
+  it.each(["insufficient_space", "storage_unavailable"] as const)("retries %s without offering a fresh start", async (reason) => {
+    noteHealthResponse({
+      ...recoveryHealth,
+      recovery_reason: reason,
+      recovery_space_needed_bytes: 3 * 1024 ** 3,
+      recovery_space_available_bytes: 1024 ** 3,
+    });
+    restartAppBackend.mockImplementation(async () => {
+      noteHealthResponse(readyHealth);
+    });
+    const { appStore, rendered } = mount();
+    appStore.actions.setSidecarStatus("connected");
+
+    const root = rendered.baseElement as HTMLElement;
+    const action = await findByTestId(root, "critical-stop-primary");
+    expect(action.textContent).toContain("Try again");
+    expect(root.querySelector('[data-testid="critical-stop-secondary"]')).toBeNull();
+    action.click();
+
+    await waitFor(() => {
+      expect(restartAppBackend).toHaveBeenCalledOnce();
+      expect(root.querySelector('[data-testid="critical-stop"]')).toBeNull();
     });
   });
 

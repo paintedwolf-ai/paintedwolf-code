@@ -33,9 +33,6 @@ const (
 	AuthenticatorMacOS   = "macos_user_presence"
 	AuthenticatorWindows = "windows_user_presence"
 	AuthenticatorLinux   = "linux_user_presence"
-	// AuthenticatorLinuxAppPassword: the shell's native dialog re-verified
-	// the app password because no polkit agent could confirm the person.
-	AuthenticatorLinuxAppPassword = "linux_app_password" // #nosec G101 -- an authenticator name, not a credential
 
 	protocol = "painted-wolf-presence-v1"
 
@@ -301,7 +298,7 @@ func randomNonce() (string, error) {
 // user-presence authenticator.
 func IsAuthenticator(value string) bool {
 	switch value {
-	case AuthenticatorMacOS, AuthenticatorWindows, AuthenticatorLinux, AuthenticatorLinuxAppPassword:
+	case AuthenticatorMacOS, AuthenticatorWindows, AuthenticatorLinux:
 		return true
 	}
 	return false
