@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -145,6 +146,15 @@ func TestPublicationCreatesAFreshPrivateStore(t *testing.T) {
 	body := []byte("new source object\n")
 	rel, stored, oids, err := store.Put(t.Context(), ContentSHA(body), body)
 	testutil.FailErr(t, "publish fresh object", err)
+	if runtime.GOOS != "windows" {
+		for _, path := range []string{store.Root(), filepath.Join(store.Root(), filepath.Dir(rel))} {
+			info, err := os.Stat(path)
+			testutil.FailErr(t, "stat private object directory", err)
+			if !info.IsDir() || info.Mode().Perm()&0o077 != 0 {
+				t.Fatalf("object directory is not private: mode=%o", info.Mode().Perm())
+			}
+		}
+	}
 	info, err := os.Stat(filepath.Join(store.Root(), rel))
 	testutil.FailErr(t, "stat fresh object", err)
 	if info.Size() != stored || info.Mode().Perm()&0o222 != 0 || oids != ContentGitOIDs(body) {
