@@ -23,6 +23,12 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
+// fixtureVolume is the file system every harness path reports to df, so
+// statistics are fixed; the platform reader has its own test.
+func fixtureVolume(*os.File, string) (volume, error) {
+	return volume{source: "/dev/fixture", target: "/fixture", blockSize: 4096, blocks: 1000, free: 400, avail: 300, files: 5000, freeFiles: 4000}, nil
+}
+
 // fixtureTime is the deterministic mtime every seeded entry carries.
 var fixtureTime = time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 
@@ -117,6 +123,7 @@ func newHarness(t *testing.T, files map[string]string) *harness {
 	pins := &pinLog{}
 	owners, err := NewOwners(native.ExecutionRevisions{Boundary: boundary}, pins, DomainOwners{})
 	testutil.FailErr(t, "build owners", err)
+	owners.volumes = fixtureVolume
 	return &harness{t: t, boundary: boundary, root: resolved, tc: nativefixture.Context(resolved), owners: owners, pins: pins, cwd: "."}
 }
 

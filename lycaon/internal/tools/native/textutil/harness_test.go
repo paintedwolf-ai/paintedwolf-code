@@ -210,6 +210,8 @@ func (h *harness) bind(source string) (commandprogram.OperationRequest, func()) 
 		testutil.FailErr(h.t, "expand", err)
 		argv = append(argv, fields...)
 	}
+	environment, releaseEnvironment, err := frame.Environment(h.t.Context(), nil)
+	testutil.FailErr(h.t, "environment", err)
 	h.runs++
 	execution := "child-" + strconv.Itoa(h.runs)
 	request := commandprogram.OperationRequest{
@@ -218,9 +220,12 @@ func (h *harness) bind(source string) (commandprogram.OperationRequest, func()) 
 			ActorID: "actor", SessionID: "session", Scope: toolcontract.OperationScope{Kind: toolcontract.ProjectOperationScope, ProjectID: "project"},
 			SourceUnitID: "inline", Span: statement.Span, CatalogDigest: toolcontract.LanguageCatalogDigest(),
 		},
-		OperationID: argv[0].Value, Statement: statement, Argv: argv,
+		OperationID: argv[0].Value, Statement: statement, Argv: argv, Environment: environment,
 	}
-	return request, frame.Close
+	return request, func() {
+		releaseEnvironment()
+		frame.Close()
+	}
 }
 
 type noSubstitution struct{}

@@ -36,7 +36,11 @@ type Owners struct {
 	// StreamBytes bounds one invocation's stdout; zero selects stream_bytes.
 	StreamBytes int64
 
+	// overrides replaces catalog limits in fixtures that cannot reach them.
+	overrides map[string]int64
+
 	accounts   accounts
+	volumes    volumeStats
 	catalog    toolcontract.LanguageCatalog
 	specs      map[string]toolcontract.CommandSpecification
 	ops        map[string]string
@@ -48,7 +52,8 @@ type utility func(*invocation) error
 var utilities = map[string]utility{
 	"cat": runCat, "nl": runNl, "head": runHead, "tail": runTail, "wc": runWc,
 	"ls": runLs, "stat": runStat, "diff": runDiff, "file": runFile,
-	"xxd": runXxd, "hexdump": runHexdump, "base64": runBase64,
+	"xxd": runXxd, "hexdump": runHexdump, "od": runOd, "strings": runStrings, "base64": runBase64,
+	"cmp": runCmp, "du": runDu, "df": runDf,
 	"shasum": runChecksum, "sha1sum": runChecksum, "sha256sum": runChecksum, "sha512sum": runChecksum, "md5sum": runChecksum,
 	"outline": runOutline, "summarize": runSummarize, "repo-map": runRepoMap,
 }
@@ -59,7 +64,7 @@ func NewOwners(revisions native.ExecutionRevisions, pins PinRecorder, domain Dom
 	if err != nil {
 		return nil, err
 	}
-	o := &Owners{Revisions: revisions, Pins: pins, Domain: domain, catalog: catalog, specs: map[string]toolcontract.CommandSpecification{}, ops: map[string]string{}}
+	o := &Owners{Revisions: revisions, Pins: pins, Domain: domain, volumes: statVolume, catalog: catalog, specs: map[string]toolcontract.CommandSpecification{}, ops: map[string]string{}}
 	if o.signatures, err = decodeSignatures(catalog.Contracts["signatures"]); err != nil {
 		return nil, err
 	}
@@ -92,7 +97,7 @@ func (o *Owners) ForProgram(memory *toolcontract.ProgramMemory) *Owners {
 	revisions.Memory = memory
 	return &Owners{
 		Revisions: revisions, Pins: o.Pins, Domain: o.Domain,
-		ReadBytes: o.ReadBytes, StreamBytes: o.StreamBytes,
+		ReadBytes: o.ReadBytes, StreamBytes: o.StreamBytes, volumes: o.volumes,
 		catalog: o.catalog, specs: o.specs, ops: o.ops, signatures: o.signatures,
 	}
 }
@@ -190,6 +195,9 @@ func (o *Owners) streamBytes() int64 {
 }
 
 func (o *Owners) limit(id string) int64 {
+	if value, ok := o.overrides[id]; ok {
+		return value
+	}
 	for _, limit := range o.catalog.Language.Limits {
 		if limit.ID == id {
 			return limit.Maximum

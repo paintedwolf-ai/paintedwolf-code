@@ -433,7 +433,8 @@
       ],
       "existing_rejection_code": "USE_NATIVE_TOOL",
       "command_forms": [
-        "diff"
+        "diff",
+        "cmp"
       ]
     },
     {
@@ -1183,7 +1184,8 @@
       ],
       "existing_rejection_code": "USE_LIST_DIR_NATIVE",
       "command_forms": [
-        "ls"
+        "ls",
+        "tree"
       ]
     },
     {
@@ -1640,7 +1642,9 @@
         "sha1sum",
         "sha512sum",
         "md5sum",
-        "base64"
+        "base64",
+        "od",
+        "strings"
       ]
     },
     {
@@ -2106,7 +2110,9 @@
       ],
       "existing_rejection_code": "USE_STAT_NATIVE",
       "command_forms": [
-        "stat"
+        "stat",
+        "du",
+        "df"
       ]
     },
     {
