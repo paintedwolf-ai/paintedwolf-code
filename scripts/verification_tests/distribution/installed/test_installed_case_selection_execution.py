@@ -1,7 +1,7 @@
 """A bounded native case selection cannot omit unknown or duplicate identifiers."""
 import unittest
 
-from linux_release.installed_case_selection import selected_cases
+from linux_release.campaign.selection import selected_cases
 
 ROWS = [{'capability': 'conversation', 'cases': ['restart-and-reconnect', 'provider-onboarding']}]
 

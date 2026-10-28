@@ -50,7 +50,7 @@ class ProfileObserverTests(unittest.TestCase):
                                    require_running=Mock(), require_engine=Mock())
         self.stack.enter_context(patch.object(Path, 'home', return_value=self.home))
         from linux_release.installed_cases.app import InstalledApp
-        from linux_release.installed_storage import resolve
+        from linux_release.installed_cases.storage import resolve
         from types import MethodType
         self.app.storage = resolve({'HOME': str(self.home)})
         self.app.observations['storage'] = self.app.storage.facts()

@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from linux_release import installed_storage
+from linux_release.installed_cases import storage as installed_storage
 from linux_release.installed_cases import fresh_profile
 
 

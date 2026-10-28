@@ -7,7 +7,7 @@ import json
 import os
 from pathlib import Path
 
-from ..installed_storage import resolve as storage_for_launch
+from .storage import resolve as storage_for_launch
 
 from ..campaign.environment import package_inventory, package_inventory_arguments
 from ..campaign.runtime import bind

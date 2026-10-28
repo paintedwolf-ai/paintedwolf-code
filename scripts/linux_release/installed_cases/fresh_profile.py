@@ -5,7 +5,7 @@ import os
 import stat
 import time
 
-from ..installed_storage import Storage, resolve
+from .storage import Storage, resolve
 from .products import require_owned_guest
 from .records import CaseUnavailable
 

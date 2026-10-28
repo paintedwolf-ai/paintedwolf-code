@@ -11,7 +11,7 @@ import stat
 
 from ..installed_evidence import artifacts
 from ..campaign.runtime import bind
-from ..installed_storage import resolve as storage_for_launch
+from .storage import resolve as storage_for_launch
 from .package_native import command, current_package, operations, owner_commands
 from .package_payload import MetadataMismatch, inspect
 from .products import require_owned_guest

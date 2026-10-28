@@ -20,7 +20,7 @@ from .runtime import bind
 from ..support_matrix import CATALOG, expand
 from .variants import requirements, observe, observed
 from .monitors import prepare as prepare_monitors
-from ..installed_case_selection import selected_cases
+from .selection import selected_cases
 
 # Each case runs within its own time budget; a driver family may declare a
 # longer one as TIME_BUDGET_SECONDS. A case past its budget fails and the

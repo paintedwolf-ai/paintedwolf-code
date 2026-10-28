@@ -11,7 +11,7 @@ import threading
 import time
 import urllib.parse
 
-from ..installed_storage import Storage, resolve as storage_for_launch
+from .storage import Storage, resolve as storage_for_launch
 from .app_api import EngineAPI
 from .products import require_owned_guest
 from .records import CaseUnavailable, CaseFailed
