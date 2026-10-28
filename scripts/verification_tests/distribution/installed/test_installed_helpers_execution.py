@@ -8,7 +8,7 @@ from unittest.mock import patch
 import zipfile
 
 from scripts.linux_release.installed_cases.app_api import EngineAPI
-from scripts.linux_release.installed_campaign import command, verify_execution_receipt
+from scripts.linux_release.campaign.guests import command, verify_execution_receipt
 from scripts.linux_release.installed_cases.desktop import execute
 from scripts.linux_release.installed_cases.records import (
     MAX_OBSERVATION_BYTES,

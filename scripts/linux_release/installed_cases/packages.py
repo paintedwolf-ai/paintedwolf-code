@@ -4,7 +4,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from ..installed_runtime import bind
+from ..campaign.runtime import bind
 from .package_payload import inspect
 from .package_native import command, current_package, operations, owner_commands
 from .products import require_owned_guest

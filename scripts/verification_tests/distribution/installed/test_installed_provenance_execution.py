@@ -3,7 +3,13 @@
 import copy
 import unittest
 
-from linux_release.installed_provenance import select_control, select_plan, select_final, select_qualification, verify_producer
+from linux_release.campaign.provenance import (
+    select_control,
+    select_plan,
+    select_final,
+    select_qualification,
+    verify_producer,
+)
 
 
 class PublicationProvenanceTests(unittest.TestCase):
@@ -97,7 +103,7 @@ class PublicationProvenanceTests(unittest.TestCase):
 
 class DomainArtifactSelectionTests(unittest.TestCase):
     def test_invalid_domain_binding_cannot_query_artifacts(self):
-        from linux_release.installed_provenance import artifact_for_run
+        from linux_release.campaign.provenance import artifact_for_run
         from unittest.mock import Mock
         api=Mock()
         for repository,repository_id,run_id,commit,name in [

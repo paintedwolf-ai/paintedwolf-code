@@ -7,7 +7,7 @@ from ..installed_environment import graphical_session
 from ..installed_runtime import file_identity
 
 from .records import CaseUnavailable
-from ..installed_runtime import SETUID_LAUNCHER, elf
+from ..campaign.runtime import SETUID_LAUNCHER, elf
 
 
 def protected_launcher(binding):
