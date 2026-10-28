@@ -81,6 +81,13 @@ func (c *programCompiler) command(cmd syntax.Command) CommandNode {
 		return TestExpression{SyntaxLocation: loc, Expression: c.test(v.X)}
 	case *syntax.ArithmCmd:
 		return ArithmeticCommand{SyntaxLocation: loc, Expression: c.arithmetic(v.X)}
+	case *syntax.TimeClause:
+		out := TimedCommand{SyntaxLocation: loc, POSIX: v.PosixFormat}
+		if v.Stmt != nil {
+			pipeline := c.statement(v.Stmt)
+			out.Pipeline = &pipeline
+		}
+		return out
 	}
 	c.unsupported(cmd, "supported command syntax")
 	return nil

@@ -124,6 +124,7 @@ func prepareNativeCommand(ctx context.Context, name string, args []string, opts 
 	if opts.Launch.Confinement != nil {
 		boundary = *opts.Launch.Confinement
 	}
+	boundary.Process = opts.Child
 	cmd, baseCleanup, err := confine.Command(ctx, self, name, args, boundary)
 	if err != nil {
 		cancel()

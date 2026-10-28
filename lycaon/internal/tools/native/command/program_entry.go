@@ -61,6 +61,8 @@ type ProgramRuntime struct {
 	// ExternalHidden refuses the explicit `external --` selector; native gap
 	// launches still run and are recorded.
 	ExternalHidden bool
+	// Clock times timeout expiry and time reports; nil is the system clock.
+	Clock commandprogram.Clock
 
 	mu        sync.Mutex
 	outputs   map[string]*invocation.ProgramOutputRetention
@@ -78,6 +80,13 @@ func (r *ProgramRuntime) SetDisabled(disabled bool) []string {
 		return nil
 	}
 	return r.Supervisor.StopAll()
+}
+
+func (r *ProgramRuntime) clock() commandprogram.Clock {
+	if r.Clock != nil {
+		return r.Clock
+	}
+	return commandprogram.SystemClock{}
 }
 
 // SessionOwners reads the session whose owner a program acts for.
@@ -134,7 +143,10 @@ type ProgramOutcome struct {
 	CompletedEffects int                              `json:"completed_effects"`
 	UncertainEffects int                              `json:"uncertain_effects"`
 	NativeGaps       int                              `json:"native_gaps,omitempty"`
-	ReplayAvailable  bool                             `json:"replay_available"`
+	// CPUTimeUnmeasured marks a time report whose user and sys count native
+	// operations as zero.
+	CPUTimeUnmeasured bool `json:"cpu_time_unmeasured,omitempty"`
+	ReplayAvailable   bool `json:"replay_available"`
 	// Refusal is the host decision that stopped the program; the output and
 	// status of every child that ran before it stay in this outcome.
 	Refusal *ProgramRefusal `json:"refusal,omitempty"`
@@ -267,6 +279,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 		Publication: publication, Input: owners.Input, Sources: sources,
 		Executions: dispatcher, Supervision: r.Supervisor, Predicates: commandprogram.PredicateRuntime{Patterns: commandprogram.NativePredicatePatterns{Memory: memory}},
 		Memory:      memory,
+		Clock:       r.clock(),
 		Environment: run.baseEnv,
 		ScratchDir:  tc.Host.SessionScratchDir,
 		Streams:     commandprogram.Streams{Input: commandprogram.NullInput(), Output: stdout, Error: stderr},
@@ -306,6 +319,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, args map[string]any, tc tools.
 	}
 	outcome.Stderr = documents.appendNotes(outcome.Stderr)
 	outcome.Refusal = refusal
+	outcome.CPUTimeUnmeasured = evaluated.CPUTimeUnmeasured
 	if settledNow {
 		stampProgramRun(tc, source, paths.Cwd(), outcome, verification)
 	}
@@ -400,6 +414,8 @@ func (r *ProgramRuntime) bindProgramSurface(ctx context.Context, run *programRun
 	builtins["lsof"] = lsofBuiltin(run.commands["lsof"], tc.Identity.SessionID, listeners)
 	builtins["sleep"] = sleepBuiltin()
 	dispatcher := &ProgramDispatcher{run: run, builtins: builtins, natives: owners.Natives, binder: commandprogram.CatalogBinder{}, paths: paths, shared: &dispatchShared{}, redirections: owners.Redirections}
+	builtins["timeout"] = timeoutBuiltin(run.commands["timeout"], dispatcher, r.clock())
+	builtins["nohup"] = nohupBuiltin(run.commands["nohup"], dispatcher)
 	var publication commandprogram.OutputPublication
 	if owners.Publication != nil {
 		publication = owners.Publication(dispatcher.beginOutput)
@@ -761,6 +777,10 @@ func programNodes(statements []commandsurface.Statement) []commandsurface.Syntax
 			words(node.Words())
 		case commandsurface.TrapCommand:
 			list(node.Statements)
+		case commandsurface.TimedCommand:
+			if node.Pipeline != nil {
+				statement(*node.Pipeline)
+			}
 		}
 	}
 	list(statements)

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
@@ -36,6 +37,11 @@ type EvaluationPorts struct {
 	Environment []string
 	// ScratchDir is the session scratch directory used for process-substitution files.
 	ScratchDir string
+	// Clock times time reports; nil is the system clock.
+	Clock Clock
+	// ResourceLimits reads the host's limit for a resource ulimit reports;
+	// nil reads this process's own.
+	ResourceLimits func(resource string) (confine.ResourceLimit, error)
 }
 
 // ProgramOutcome is the evaluated program's ordinary status plus the first host
@@ -48,6 +54,9 @@ type ProgramOutcome struct {
 	Children []ChildRecord
 	Sources  []SourceRecord
 	Jobs     []string
+	// CPUTimeUnmeasured reports a time report that counted native
+	// operations, whose processor time the host does not attribute, as zero.
+	CPUTimeUnmeasured bool
 }
 
 // ChildRecord is one dynamic execution: a dispatched operation, an in-process

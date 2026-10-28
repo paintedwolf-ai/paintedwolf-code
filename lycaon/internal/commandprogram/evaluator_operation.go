@@ -122,6 +122,8 @@ func (o *evaluatorOperation) execute(ctx context.Context, f *frame) (signal, err
 		return signal{}, f.setOptions(s, fields)
 	case "read":
 		return signal{}, f.readBuiltin(ctx, s, fields)
+	case "ulimit":
+		return signal{}, f.ulimit(ctx, s, fields)
 	}
 	return signal{}, f.dispatch(ctx, s, fields, assigns)
 }

@@ -31,7 +31,7 @@ func (c *programCompiler) validate(file *syntax.File) {
 
 func (c *programCompiler) validateNode(n syntax.Node) {
 	switch v := n.(type) {
-	case *syntax.File, *syntax.Block, *syntax.Subshell, *syntax.IfClause, *syntax.WhileClause, *syntax.Lit, *syntax.ArrayExpr, *syntax.ParenArithm, *syntax.UnaryArithm, *syntax.BinaryArithm:
+	case *syntax.File, *syntax.Block, *syntax.Subshell, *syntax.IfClause, *syntax.WhileClause, *syntax.TimeClause, *syntax.Lit, *syntax.ArrayExpr, *syntax.ParenArithm, *syntax.UnaryArithm, *syntax.BinaryArithm:
 	case *syntax.WordIter:
 		c.markBraces(true, v.Items...)
 	case *syntax.ArrayElem:

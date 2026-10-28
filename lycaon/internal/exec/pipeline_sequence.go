@@ -7,6 +7,7 @@ import (
 	"io"
 	osexec "os/exec"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/argv"
@@ -30,6 +31,8 @@ type sequenceRun struct {
 	commitErr error
 
 	waitErrs []error
+	// cpu is each waited stage's user and system processor time.
+	cpu      [][2]time.Duration
 	skipped  []bool
 	started  time.Time
 	timeout  *TimeoutError
@@ -58,6 +61,7 @@ func newSequenceRun(
 		stdin:     stdin,
 		waitDelay: waitDelay,
 		waitErrs:  make([]error, len(stages)),
+		cpu:       make([][2]time.Duration, len(stages)),
 		skipped:   skipped,
 	}
 }
@@ -199,6 +203,11 @@ func (s *sequenceRun) waitGroup(ctx context.Context, group StageGroup) {
 
 	timedOut, waitErrs := waitWiredStages(ctx, wired)
 	copy(s.waitErrs[group.Start:group.End], waitErrs)
+	for i, stage := range wired {
+		if state := stage.cmd.ProcessState; state != nil {
+			s.cpu[group.Start+i] = [2]time.Duration{state.UserTime(), state.SystemTime()}
+		}
+	}
 	if timedOut {
 		s.timeout = commandTimeout(ctx, s.started)
 	}
@@ -273,6 +282,28 @@ func (s *sequenceRun) stopped() bool {
 	return s.killed
 }
 
+// signal delivers sig to the running group's process trees without
+// terminating them; SIGKILL ends them at once. It reports whether a live
+// stage received it.
+func (s *sequenceRun) signal(sig syscall.Signal) bool {
+	s.mu.Lock()
+	wired := s.live
+	s.mu.Unlock()
+	delivered := false
+	for i := range wired {
+		if wired[i].guard == nil {
+			continue
+		}
+		if sig == syscall.SIGKILL {
+			wired[i].guard.kill(wired[i].cmd)
+			delivered = true
+			continue
+		}
+		delivered = wired[i].guard.relay(wired[i].cmd, sig) || delivered
+	}
+	return delivered
+}
+
 // terminate tears down the running group and prevents subsequent groups from starting.
 func (s *sequenceRun) terminate() {
 	s.mu.Lock()
@@ -307,6 +338,7 @@ func (s *sequenceRun) finalize(buf []byte, truncated bool, maxOut int) (*Pipelin
 					code = 0
 				}
 				stageRuns[i].ExitCode = &code
+				stageRuns[i].UserTime, stageRuns[i].SystemTime = s.cpu[i][0], s.cpu[i][1]
 				stageRuns[i].Failed = s.stageFailed(group, i)
 				stageRuns[i].expectedConsumerClosure = s.expectedConsumerClosure(group, i)
 			}
