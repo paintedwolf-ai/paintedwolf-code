@@ -136,6 +136,8 @@ pub fn ipc_clear_file_tab_drop_target(window: WebviewWindow) -> Result<(), Strin
     Ok(())
 }
 
+/// The window whose tab strip is under the screen point, and the point in that
+/// window's client coordinates.
 fn file_tab_drop_target_at(
     app: &AppHandle,
     initiator_label: &str,
@@ -143,7 +145,7 @@ fn file_tab_drop_target_at(
     project_id: &str,
     x: f64,
     y: f64,
-) -> Option<String> {
+) -> Option<(String, f64, f64)> {
     let targets = FILE_TAB_DROP_TARGETS.lock().ok()?.clone();
     targets.into_iter().find_map(|(label, target)| {
         if label == initiator_label || label == drag_label || target.project_id != project_id {
@@ -155,10 +157,12 @@ fn file_tab_drop_target_at(
             .inner_position()
             .ok()?
             .to_logical::<f64>(scale);
-        let left = origin.x + target.x;
-        let top = origin.y + target.y;
-        (x >= left && x <= left + target.width && y >= top && y <= top + target.height)
-            .then_some(label)
+        let (local_x, local_y) = (x - origin.x, y - origin.y);
+        (local_x >= target.x
+            && local_x <= target.x + target.width
+            && local_y >= target.y
+            && local_y <= target.y + target.height)
+            .then_some((label, local_x, local_y))
     })
 }
 
@@ -183,6 +187,7 @@ fn emit_file_tab_drag_event(
             title: view.title.clone(),
             position_x,
             position_y,
+            transfer: false,
         },
     )
     .map_err(|err| err.to_string())
@@ -232,7 +237,7 @@ pub fn ipc_move_item_window_drag(
         return Ok(false);
     };
     set_drag_window_position(&drag_window, position_x, position_y)?;
-    let target = file_tab_drop_target_at(
+    let hit = file_tab_drop_target_at(
         &app,
         window.label(),
         &label,
@@ -240,6 +245,8 @@ pub fn ipc_move_item_window_drag(
         position_x,
         position_y,
     );
+    let target = hit.as_ref().map(|(target, _, _)| target.clone());
+    let (local_x, local_y) = hit.as_ref().map_or((0.0, 0.0), |(_, x, y)| (*x, *y));
     let previous = set_pending_drag_hover(&window, &label, target.clone())?;
     if previous != target {
         if let Some(previous) = previous {
@@ -251,7 +258,7 @@ pub fn ipc_move_item_window_drag(
     if let Some(target) = target {
         let _ = drag_window.hide();
         let _ = emit_file_tab_drag_event(
-            &app, &target, "hover", &label, &view, position_x, position_y,
+            &app, &target, "hover", &label, &view, local_x, local_y,
         );
     } else {
         let _ = drag_window.show();
@@ -274,7 +281,7 @@ pub fn ipc_finish_item_window_drag(
         return Ok(false);
     };
     set_drag_window_position(&drag_window, position_x, position_y)?;
-    let target = file_tab_drop_target_at(
+    let hit = file_tab_drop_target_at(
         &app,
         window.label(),
         &label,
@@ -282,6 +289,8 @@ pub fn ipc_finish_item_window_drag(
         position_x,
         position_y,
     );
+    let target = hit.as_ref().map(|(target, _, _)| target.clone());
+    let (local_x, local_y) = hit.as_ref().map_or((0.0, 0.0), |(_, x, y)| (*x, *y));
     let previous = set_pending_drag_hover(&window, &label, target.clone())?;
     if previous != target {
         if let Some(previous) = previous {
@@ -291,7 +300,7 @@ pub fn ipc_finish_item_window_drag(
         }
     }
     if let Some(target) = target {
-        if emit_file_tab_drag_event(&app, &target, "drop", &label, &view, position_x, position_y)
+        if emit_file_tab_drag_event(&app, &target, "drop", &label, &view, local_x, local_y)
             .is_ok()
         {
             PENDING_ITEM_WINDOW_DRAGS

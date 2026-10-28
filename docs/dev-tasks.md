@@ -960,8 +960,8 @@ flowchart TD
     verify --> aggregate["aggregate-release:<br/>require every public platform build"]
     aggregate --> boundary["select only publication=public bytes"]
     boundary --> r2["Publish immutable R2 objects:<br/>public artifacts, corpus, manifest, cask"]
-    r2 --> cask["update-cask<br/>Homebrew tap"]
     r2 --> linux["publish-linux-repositories<br/>apt, dnf and pacman generations"]
+    linux --> cask["update-cask<br/>Homebrew tap"]
     linux --> www
     r2 --> mirror["publish-github-release<br/>(trailing mirror — gates nothing)"]
     r2 --> www["notify-website"]
@@ -1151,12 +1151,12 @@ When the two Linux rows in [`packaging/release-platforms.json`](../packaging/rel
 - **Admission.** `classify` requires the exact-source Qualification record for the release commit. Every Linux repository authorization reads that record again before credentials are used and again before client authority changes.
 - **Signing.** Each Linux `build-release` leg stages and audits its packages, then `scripts.linux_release.release_signing` signs them under `release-signing` with `LINUX_PACKAGE_SIGNING_KEY`: an embedded RPM signature (the audited identity and payload must be unchanged) and binary detached `.sig` files for the DEB and pacman packages. Checksums and the package inventory are rewritten over the final signed bytes before upload.
 - **Collection.** `aggregate-release` requires every public package, checksum, detached signature and scanner audit. The public artifacts are deposited by `publish-immutable` with the macOS artifacts and mirrored to the GitHub Release.
-- **Repositories.** `linux-repositories` (apt and dnf, both architectures) and `linux-pacman-repositories` (one generation per architecture, in the pinned Arch container) assemble signed generations from those same public artifacts under `release-signing`. A signed release RPM enters the dnf pool unchanged. After `publish-immutable`, `publish-linux-repositories` activates them under `downloads.paintedwolf.dev/linux` through `repository_r2` and `pacman_r2`. Its authorization binds each generation to the selected source, version, channel and the exact public package digests, and requires every catalog-public package to be offered. `notify-website` waits for it.
+- **Repositories.** `linux-repositories` (apt and dnf, both architectures) and `linux-pacman-repositories` (one generation per architecture, in the pinned Arch container) assemble signed generations from those same public artifacts under `release-signing`, in turn and before `publication-credentials`, so a failed assembly refuses the release before any publication credential is used. A signed release RPM enters the dnf pool unchanged. After `publish-immutable`, `publish-linux-repositories` activates them under `downloads.paintedwolf.dev/linux` through `repository_r2` and `pacman_r2`. Its authorization binds each generation to the selected source, version, channel and the exact public package digests, and requires every catalog-public package to be offered. `update-cask` and `notify-website` wait for it.
 - **Withdrawal generations.** Each assembled offer is paired with a signed empty generation for the same channel and architectures: valid apt, dnf and pacman metadata that offers no package. `publish-linux-repositories` retains it under `linux/generations/` and indexes it at `linux/withdrawal-generations/<family>/<channel>/<architecture or all>/<version>.json` before the offer activates, so a halt never needs the signing key.
 - **Withdrawal.** `release-halt` prepares `scripts.linux_release.repository_withdrawal` in every run. Every channel that offers the halted version gets the existing `withdraw` operation and its permanent markers. If an earlier Linux release exists and `last_good_version` names it, that retained generation is restored; any other named version refuses. A first Linux release, or a halt with no `last_good_version`, activates the halted release's empty generation instead. Installs and upgrades stop, and installed packages stay untouched. An empty generation offers no version, so the next release publishes over it normally.
 
-- **Nix cache.** `nix-closures` builds the application closure on both native runners without credentials. After the Linux repositories publish, `publish-nix-cache` imports both closures and signs them with `NIX_CACHE_SIGNING_KEY` (key name `paintedwolf-cache-1`). It publishes them to `downloads.paintedwolf.dev/nix-cache` through `scripts.nix_cache.release_lane`. Each system's publication rereads the Qualification record through `nix_cache.release_authority.authorize`. The job first checks [`nix-cache-trust.json`](../packaging/linux/nix-cache-trust.json) and refuses while its `public_keys` list is empty.
-- **AUR.** After the Linux repositories publish, `publish-aur` runs the same `release:publish:aur-recipe` collect and prepare steps that `release-aur-delivery` uses, in the pinned Arch container. It then delivers the recipe with `AUR_SSH_PRIVATE_KEY` and the committed [`aur-known-hosts`](../packaging/linux/aur-known-hosts). `aur_release_authority.authorize` binds the recipe to the final files and the published pacman generations, then rereads the Qualification record.
+- **Nix cache.** After Linux assembly and before `publication-credentials`, `nix-closures` builds the application closure on each native runner in turn, without credentials. A failed build refuses the release. After the release is announced and mirrored, `publish-nix-cache` imports both closures and signs them with `NIX_CACHE_SIGNING_KEY` (key name `paintedwolf-cache-1`). It publishes them to `downloads.paintedwolf.dev/nix-cache` through `scripts.nix_cache.release_lane`. Each system's publication rereads the Qualification record through `nix_cache.release_authority.authorize`. The job first checks [`nix-cache-trust.json`](../packaging/linux/nix-cache-trust.json) and refuses while its `public_keys` list is empty.
+- **AUR.** After `publish-nix-cache`, whatever its outcome, `publish-aur` runs the same `release:publish:aur-recipe` collect and prepare steps that `release-aur-delivery` uses, in the pinned Arch container. It then delivers the recipe with `AUR_SSH_PRIVATE_KEY` and the committed [`aur-known-hosts`](../packaging/linux/aur-known-hosts). `aur_release_authority.authorize` binds the recipe to the final files and the published pacman generations, then rereads the Qualification record.
 - **Halt.** `release-halt` also withdraws the halted release's Nix cache availability record. The closure, its NARs and old pins stay published. The AUR recipe has no withdrawal operation: a halt leaves the published recipe in place until the next release advances it.
 
 Both jobs skip while the Linux catalog rows are `candidate`. Once the rows are `public`, a missing secret or an empty trust policy fails the job. `release-secrets-check` validates both credentials and only warns while Linux is a candidate.
@@ -1515,6 +1515,24 @@ inventory and every published pacman generation and signer, then reads the exact
 Qualification record. A caller-provided accepted JSON receipt is insufficient. Only the release
 lane's `publish-aur` job pushes, through `release:publish:aur-recipe -- publish`; the
 `release-aur-delivery` dispatch and the fixture rehearsal never push to the AUR.
+
+A signed distribution document may advertise an AUR recipe only after a separate
+read-only `aur_observation.observe` operation. The protected caller selects the
+channel-specific package and exact Git commit; `ReadOnlyOrigin` accepts only its
+fixed HTTPS AUR origin. It fetches a bounded shallow snapshot, compares the publisher
+plan and every regular recipe blob, re-reads the branch, and repeats complete release
+admission. A saved publication or observation report cannot replace this callback.
+The observer never pushes, executes a PKGBUILD, changes a package source or installs
+trust. Fixture origins are explicitly nonproduction and cannot authorize public facts.
+
+In the AUR document fields, `source_sha256` hashes the canonical recipe-object
+inventory: rows sorted by path, each containing `path`, `sha256` and `size`, encoded
+as JSON with sorted keys, two-space indentation and a final newline.
+`package_sha256` hashes the exact complete `final-artifacts.json` bytes across both
+CPUs; it is not the hash of one package archive. Individual download links retain
+their own archive hashes. The exact Git commit independently pins the complete recipe.
+Stable and Preview select distinct maintained `-bin` and `-preview-bin` origins;
+preparing either recipe does not reserve a name or establish public availability.
 
 For explicit pacman trust setup, inspect the selected catalog's full fingerprint,
 then use `sudo pacman-key --add /path/to/package-key.asc`, inspect
