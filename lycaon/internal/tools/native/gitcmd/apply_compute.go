@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -89,15 +90,15 @@ func (r *applyRun) bind(s *applySection) error {
 func (r *applyRun) capture(s *applySection) (string, error) {
 	file := s.file
 	if !r.cached {
-		target, err := r.p.patches.CapturePatchTarget(r.ctx, r.tc, r.p.request.Invocation.Identity.ExecutionID, s.target.OldAbs, s.target.NewAbs)
+		target, err := r.p.patches.CapturePatchTarget(r.ctx, r.tc, r.p.execution, s.target.OldAbs, s.target.NewAbs)
 		if err != nil && !errors.Is(err, mutation.ErrPatchTargetMissing) {
 			return "", err
 		}
-		s.target, s.before, s.exists = target, target.Before, target.Exists
+		s.target, s.before = target, target.Before
 		switch {
 		case !file.IsNew && !target.Exists:
 			return "No such file or directory", nil
-		case file.IsNew && target.NewExists:
+		case (file.IsNew || file.IsRename || file.IsCopy) && target.NewExists:
 			return "already exists in working directory", nil
 		}
 	}
@@ -129,7 +130,7 @@ func (r *applyRun) capture(s *applySection) (string, error) {
 		return "", &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"limit_id": "stream_bytes", "resource_unit": "bytes", "path": rel}}
 	}
 	if r.cached {
-		s.before, s.exists = content, true
+		s.before = content
 		return "", nil
 	}
 	if !bytes.Equal(content, s.before) {
@@ -182,7 +183,7 @@ func (r *applyRun) direct(s *applySection) bool {
 						expected.WriteString(line.Line)
 					}
 				}
-				writeLine(r.stderr, "error: while searching for:\n"+expected.String())
+				_, _ = io.WriteString(r.stderr, "error: while searching for:\n"+expected.String()+"\n")
 			}
 			writeLine(r.stderr, fmt.Sprintf("error: patch failed: %s:%d", s.name, frag.OldPosition))
 			break

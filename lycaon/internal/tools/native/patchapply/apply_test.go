@@ -220,3 +220,31 @@ func TestEvidenceRefFitsAndCountsWhatItDrops(t *testing.T) {
 		t.Fatalf("evidence = %s", ref)
 	}
 }
+
+func TestModeAndSymlinkFacts(t *testing.T) {
+	cases := []struct {
+		diff    string
+		mode    string
+		symlink bool
+	}{
+		{"diff --git a/s.sh b/s.sh\nold mode 100644\nnew mode 100755\n", "755", false},
+		{"diff --git a/s.sh b/s.sh\nold mode 100755\nnew mode 100644\n", "644", false},
+		{"diff --git a/n.sh b/n.sh\nnew file mode 100755\nindex 0000000..1111111\n--- /dev/null\n+++ b/n.sh\n@@ -0,0 +1 @@\n+x\n", "755", false},
+		{"diff --git a/n.txt b/n.txt\nnew file mode 100644\nindex 0000000..1111111\n--- /dev/null\n+++ b/n.txt\n@@ -0,0 +1 @@\n+x\n", "", false},
+		{"diff --git a/l b/l\nnew file mode 120000\nindex 0000000..1111111\n--- /dev/null\n+++ b/l\n@@ -0,0 +1 @@\n+target\n\\ No newline at end of file\n", "", true},
+	}
+	for _, tc := range cases {
+		file := parseOne(t, tc.diff)
+		if file.ModeChange() != tc.mode || file.Symlink() != tc.symlink {
+			t.Fatalf("%q: mode=%q symlink=%v", tc.diff, file.ModeChange(), file.Symlink())
+		}
+	}
+}
+
+func TestParseLocatesErrorsInLaterSections(t *testing.T) {
+	diff := "diff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -1 +1 @@\n-a\n+b\n" + "diff --git a/c b/c\n--- a/c\n+++ b/c\n@@ -1,2 +1,2 @@\n-a\n"
+	_, err := Parse([]byte(diff))
+	if err == nil || !strings.HasPrefix(err.Error(), "in the section starting at line 7: ") {
+		t.Fatalf("error = %v", err)
+	}
+}

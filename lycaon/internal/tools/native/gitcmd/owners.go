@@ -145,6 +145,8 @@ type Prepared struct {
 	// patches is the program's staged publication, which git apply shares
 	// with patch for work tree files.
 	patches *mutation.Owners
+	// execution records the captures git apply pins.
+	execution string
 }
 
 // Prepare binds a reached Git command through the catalog grammar and its
@@ -182,6 +184,7 @@ func (o *Owners) Prepare(paths *projectpaths.ProgramPaths, patches *mutation.Own
 		owners:    o,
 		paths:     paths,
 		patches:   patches,
+		execution: request.Invocation.Identity.ExecutionID,
 	}, nil
 }
 
