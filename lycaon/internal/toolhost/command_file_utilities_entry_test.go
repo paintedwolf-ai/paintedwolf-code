@@ -30,7 +30,7 @@ func TestCommandFileUtilityGoldenProgramsRunThroughTheEntry(t *testing.T) {
 			ID      string `json:"id"`
 			Program string `json:"program"`
 			Setup   struct {
-				Files map[string]string `json:"files"`
+				Files map[string]json.RawMessage `json:"files"`
 			} `json:"setup"`
 			Expected struct {
 				Stdout          string `json:"stdout"`
@@ -51,7 +51,9 @@ func TestCommandFileUtilityGoldenProgramsRunThroughTheEntry(t *testing.T) {
 		ran++
 		t.Run(golden.ID, func(t *testing.T) {
 			env := newPipeSemanticsEnv(t)
-			for name, content := range golden.Setup.Files {
+			for name, raw := range golden.Setup.Files {
+				var content string
+				testutil.FailErr(t, "golden file "+name, json.Unmarshal(raw, &content))
 				path := filepath.Join(env.Dir, filepath.FromSlash(name))
 				testutil.FailErr(t, "mkdir "+name, os.MkdirAll(filepath.Dir(path), 0o755))
 				testutil.FailErr(t, "write "+name, os.WriteFile(path, []byte(content), 0o644))
@@ -161,11 +163,12 @@ func TestCommandDfReportsScratchInodes(t *testing.T) {
 	if errT != nil || errU != nil || errF != nil || total == 0 || used+free != total || !strings.HasSuffix(fields[4], "%") {
 		t.Fatalf("df -i row %q is not an inode total", lines[1])
 	}
-	mount := strings.Join(fields[5:], " ")
-	scratch, err := filepath.EvalSymlinks(env.scratchDir)
-	testutil.FailErr(t, "resolve scratch", err)
-	if mount != "/" && scratch != mount && !strings.HasPrefix(scratch, mount+"/") {
-		t.Fatalf("df mounted on %q does not hold scratch %q", mount, scratch)
+	mount, err := os.Stat(strings.Join(fields[5:], " "))
+	testutil.FailErr(t, "stat mount point", err)
+	scratch, err := os.Stat(env.scratchDir)
+	testutil.FailErr(t, "stat scratch", err)
+	if mount.Sys().(*syscall.Stat_t).Dev != scratch.Sys().(*syscall.Stat_t).Dev {
+		t.Fatalf("df mounted on %q is not the scratch volume", fields[5:])
 	}
 }
 
@@ -200,14 +203,14 @@ func TestCommandIconvRedirectPublishesWithCapturedRevisions(t *testing.T) {
 func TestCommandFileUtilitiesAreNativeAndRefuseUncataloguedForms(t *testing.T) {
 	env := newPipeSemanticsEnv(t)
 	names := []string{"du", "df", "cmp", "od", "strings", "tree", "iconv", "envsubst"}
-	out, err := env.Call(t, t.Context(), "which "+strings.Join(names, " "))
-	testutil.FailErr(t, "which", err)
+	out, err := env.Call(t, t.Context(), "type "+strings.Join(names, " "))
+	testutil.FailErr(t, "type", err)
 	var want strings.Builder
 	for _, name := range names {
-		want.WriteString(name + ": native\n")
+		want.WriteString(name + " is a native built-in\n")
 	}
 	if result := decodePipeOutcome(t, out); result.Stdout != want.String() || result.Status != 0 {
-		t.Fatalf("which %+v", result)
+		t.Fatalf("type %+v", result)
 	}
 	for _, program := range []string{"du --inodes .", "df -T .", "cmp --zero a b", "od -w8 a", "strings -d a", "tree -C", "iconv -s a", "envsubst --help-me"} {
 		out, err := env.Call(t, t.Context(), program)
