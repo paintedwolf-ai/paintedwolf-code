@@ -1,0 +1,15 @@
+{
+  "category": "go_receiver_methods",
+  "artifact": "lycaon/internal/app/security/security.Runtime",
+  "kind": "runtime_service",
+  "workstream": "unix-socket-grants",
+  "disposition": "retain",
+  "reason": "Security composition binds existing exceptional-capability runtimes to session run completion, child disposal and resource shutdown. Socket grants stay in their runtime; the security owner installs teardown hooks and does not become a second grant store. Freeze this reviewed shape at 16 methods; further growth requires renewed architectural review.",
+  "reviewed_commit": "df84f982a200c4a6b1dd80a55ef119b0465a2e55",
+  "ceiling": 16,
+  "boundaries": {
+    "lycaon/internal/app/security/exceptional_test.go": "2c6dde913657a90a8dae3b9b0807d77941b1f704f0e1829ded1001d3efbc47d8",
+    "lycaon/internal/session/approvalstate/socket_ownership_test.go": "eec9245bb3313966f1cbb81d1c945b8cf4c15b2fbba892bf75cd64b58d9a1597"
+  },
+  "reviewed_shape": "958f198dc5f937472ee94cf5f690676141ab8a1751f8aa0e6651e0088cf354bf"
+}

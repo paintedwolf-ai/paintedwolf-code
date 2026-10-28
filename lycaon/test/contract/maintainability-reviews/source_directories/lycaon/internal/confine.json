@@ -1,0 +1,16 @@
+{
+  "category": "source_directories",
+  "artifact": "lycaon/internal/confine",
+  "kind": "module",
+  "workstream": "unix-socket-grants",
+  "disposition": "retain",
+  "reason": "Confine remains the shared admission, rendering and launch boundary. Platform descriptor handoff stays here while the new socketref package owns the genuinely shared retained-object lifetime used by native and command consumers. Splitting remaining policy helpers would duplicate boundary authority. Freeze this reviewed shape at 61 files; further growth requires renewed architectural review.",
+  "reviewed_commit": "df84f982a200c4a6b1dd80a55ef119b0465a2e55",
+  "ceiling": 61,
+  "boundaries": {
+    "lycaon/internal/confine/socket_reference_darwin_test.go": "f2e56004fff513c948a301181581a0e9dab358b81dba985cfe307d75d326c6ce",
+    "lycaon/internal/confine/linuxsandbox/socket_supervisor_live_test.go": "14aceccb9e71a014c86f8f588184df3325675e5fbc40d50d1a44401f74384f60",
+    "lycaon/internal/confine/request_test.go": "caac5910d7626d36169b2ca23eb7e67691b6c2d8e6ca1abee9f4ecce690e373b"
+  },
+  "reviewed_shape": "e3712e9c3ee2057971c8e0e96c8b3fa7e15ced4659a86277e8f0cca17ae8aa71"
+}

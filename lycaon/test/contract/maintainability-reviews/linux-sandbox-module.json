@@ -2,14 +2,16 @@
   "category": "source_directories",
   "artifact": "lycaon/internal/confine/linuxsandbox",
   "kind": "module",
-  "workstream": "linux-confinement",
+  "workstream": "unix-socket-grants",
   "disposition": "retain",
-  "reason": "The 28 source files implement one Linux sandbox boundary. The control transport is a focused OS descriptor boundary beside namespace, seccomp, and network mediation; it does not introduce a second policy owner. Retain this package with the current member set and focused descriptor and socket-policy contracts.",
-  "reviewed_commit": "07355e29fbe8ad8af3f01c96ce46ed49a6259bbe",
-  "ceiling": 28,
-  "reviewed_shape": "b57e4213bfe260c82720d7db4cd81bb0295099512e710d7d4c89b188af9c066d",
+  "reason": "The Linux sandbox package owns one command boundary across namespace, seccomp, notification and descriptor mediation. Focused reference retirement and performed connects share the supervisor lifetime; no second policy owner or native relay subsystem is added. Freeze this reviewed shape at 37 files; further growth requires renewed architectural review.",
+  "reviewed_commit": "df84f982a200c4a6b1dd80a55ef119b0465a2e55",
+  "ceiling": 37,
   "boundaries": {
-    "lycaon/internal/confine/linuxsandbox/control_linux_test.go": "7f5441a76fd0614539a9ee94d826e74c039b6478965a054f0cbf8851b250941e",
-    "lycaon/internal/confine/linuxsandbox/socket_policy_test.go": "cc13d705fd92e394627944bf53e9e635fb4df2c9ec288c1e956779f55e998ab8"
-  }
+    "lycaon/internal/confine/linuxsandbox/control_linux_test.go": "60da39c003d211d5be4b674fa95dcc64fc96e19b65c5c64c791bbec5a2b437f9",
+    "lycaon/internal/confine/linuxsandbox/socket_policy_test.go": "f8fb3dc0f435878df4d23e020baf98d40e8c5aa57c741459cb230e23872c5c63",
+    "lycaon/internal/confine/linuxsandbox/socket_supervisor_live_test.go": "14aceccb9e71a014c86f8f588184df3325675e5fbc40d50d1a44401f74384f60",
+    "lycaon/internal/confine/linuxsandbox/socket_reference_linux_test.go": "ed52e4f0723a36228dbe8200552b7ac94c5e8180c3a2fcf8256b575bba55fa47"
+  },
+  "reviewed_shape": "c4881f5e29a08ac2ec74dfd0f61a704fb8d59af31d7eac85100a17a4a23b299c"
 }

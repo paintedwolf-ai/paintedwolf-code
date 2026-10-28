@@ -1,0 +1,14 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/internal/confine/boundary_linux_network_live_test.go",
+  "kind": "test_suite",
+  "workstream": "unix-socket-grants",
+  "disposition": "retain",
+  "reason": "The existing network suite exercises one actual Linux command supervisor across mediated endpoints, loopback/direct TCP and UDP, and exact Unix sockets. The socket fixture now captures real invocation authority; retain these effect and refusal tests beside the shared greeter and probe setup instead of exporting fixtures or splitting only to lower file size. Freeze this reviewed shape at 436 lines; further growth requires renewed architectural review.",
+  "reviewed_commit": "df84f982a200c4a6b1dd80a55ef119b0465a2e55",
+  "ceiling": 436,
+  "boundaries": {
+    "lycaon/internal/confine/boundary_linux_network_live_test.go": "5750f670208ce8807ff31f1f358b955e4571253d707018cb549b78d5c1501178",
+    "lycaon/internal/confine/linuxsandbox/socket_supervisor_live_test.go": "14aceccb9e71a014c86f8f588184df3325675e5fbc40d50d1a44401f74384f60"
+  }
+}
