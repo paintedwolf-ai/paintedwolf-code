@@ -149,7 +149,7 @@ func (p *pipeRendezvous) close(err error) {
 }
 
 // acquireWriter serializes ingress accounting and completion with byte delivery.
-func (p *pipeRendezvous) acquireWriter(activity *ExecutionWait) (func(), error) {
+func (p *pipeRendezvous) acquireWriter(activity *ExecutionWait) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	var waiter *rendezvousWaiter
@@ -164,15 +164,17 @@ func (p *pipeRendezvous) acquireWriter(activity *ExecutionWait) (func(), error) 
 			waiter = &rendezvousWaiter{activity: activity}
 		}
 		if err := p.wait(p.lifetime, waiter, p.writerQueue); err != nil {
-			return nil, err
+			return err
 		}
 	}
 	p.writerActive = true
-	return func() {
-		p.mu.Lock()
-		defer p.mu.Unlock()
-		wakeEndpoints(p.writerQueue)
-		p.writerActive = false
-		p.signal()
-	}, nil
+	return nil
+}
+
+func (p *pipeRendezvous) releaseWriter() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	wakeEndpoints(p.writerQueue)
+	p.writerActive = false
+	p.signal()
 }

@@ -93,11 +93,10 @@ func (p *BytePipe) pipeError(err error) error {
 func (p *BytePipe) Write(b []byte) (int, error) { return p.write(b, nil) }
 
 func (p *BytePipe) write(b []byte, activity *ExecutionWait) (int, error) {
-	release, err := p.stream.acquireWriter(activity)
-	if err != nil {
+	if err := p.stream.acquireWriter(activity); err != nil {
 		return 0, err
 	}
-	defer release()
+	defer p.stream.releaseWriter()
 	p.mu.Lock()
 	terminal, terminalErr := p.completion.Termination, p.terminalError
 	p.mu.Unlock()
@@ -129,11 +128,10 @@ func (p *BytePipe) write(b []byte, activity *ExecutionWait) (int, error) {
 // complete stream. Utility exit status and publication eligibility remain in
 // ProducerResult; neither is inferred from this close.
 func (p *BytePipe) CloseProducer(err error) error {
-	release, waitErr := p.stream.acquireWriter(nil)
-	if waitErr != nil {
+	if waitErr := p.stream.acquireWriter(nil); waitErr != nil {
 		return waitErr
 	}
-	defer release()
+	defer p.stream.releaseWriter()
 	if err != nil {
 		p.finish(StreamIncomplete, err)
 	} else {
