@@ -3,6 +3,8 @@ package curl
 import (
 	"io"
 	"net/url"
+	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -35,10 +37,23 @@ func (inv *invocation) requestArgs(cookieHeader string) (map[string]any, error) 
 	if cookieHeader != "" {
 		headers = append(headers, map[string]any{"name": "Cookie", "value": cookieHeader})
 	}
+	if o.byteRange != "" {
+		addDefault("Range", "bytes="+o.byteRange)
+	}
 	switch {
 	case o.head:
 		if method == "" {
 			method = "HEAD"
+		}
+	case o.upload != "":
+		body, err := inv.uploadBody()
+		if err != nil {
+			return nil, err
+		}
+		args["body_text"] = body
+		args["url"] = uploadURL(o.url, o.upload)
+		if method == "" {
+			method = "PUT"
 		}
 	case len(o.forms) > 0:
 		parts, err := inv.formParts()
@@ -128,6 +143,38 @@ func (inv *invocation) readFile(operand string) ([]byte, error) {
 		return nil, &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"limit_id": "stream_bytes", "maximum": maximum, "observed": int64(len(data))}}
 	}
 	return data, nil
+}
+
+// uploadBody is -T's file read through read authority, or stdin for "-",
+// as exact bytes.
+func (inv *invocation) uploadBody() (string, error) {
+	if inv.opts.upload != "-" {
+		data, err := inv.readFile(inv.opts.upload)
+		return string(data), err
+	}
+	maximum := inv.owners.limits["stream_bytes"]
+	data, err := io.ReadAll(io.LimitReader(inv.stdin, maximum+1))
+	if err != nil {
+		return "", err
+	}
+	if int64(len(data)) > maximum {
+		return "", &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"limit_id": "stream_bytes", "maximum": maximum, "observed": int64(len(data))}}
+	}
+	return string(data), nil
+}
+
+// uploadURL appends the uploaded file's name to a URL without a file part,
+// as curl does; stdin uploads keep the URL.
+func uploadURL(raw, upload string) string {
+	u, err := url.Parse(raw)
+	if err != nil || upload == "-" || u.Path != "" && !strings.HasSuffix(u.Path, "/") {
+		return raw
+	}
+	if u.Path == "" {
+		u.Path = "/"
+	}
+	u.Path += path.Base(filepath.ToSlash(upload))
+	return u.String()
 }
 
 // dataBody joins the data parts with '&'. -d @file drops CR and LF as curl

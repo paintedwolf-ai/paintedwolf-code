@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/outboundhttp"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 )
 
@@ -21,6 +22,23 @@ type dataPart struct {
 type writeToken struct {
 	literal  string
 	variable string
+}
+
+// failMode is -f/--fail or --fail-with-body: an HTTP status of 400 or more
+// exits 22, without or with the body.
+type failMode uint8
+
+const (
+	failNever failMode = iota
+	failQuiet
+	failWithBody
+)
+
+// tlsOptions name the request's added trust and client identity files.
+type tlsOptions struct {
+	cacert, capath string
+	cert, certPass string
+	key, pass      string
 }
 
 type options struct {
@@ -41,7 +59,8 @@ type options struct {
 	include        bool
 	head           bool
 	location       bool
-	fail           bool
+	fail           failMode
+	verbose        bool
 	maxTime        time.Duration
 	connectTimeout time.Duration
 	unixSocket     string
@@ -49,6 +68,10 @@ type options struct {
 	userAgent      string
 	get            bool
 	json           []string
+	upload         string
+	byteRange      string
+	tls            tlsOptions
+	dial           []outboundhttp.ResolveMapping
 }
 
 func usage(word, expected string) error {
@@ -59,6 +82,7 @@ func usage(word, expected string) error {
 // text, bodies and secret references are carried, never interpreted here.
 func parseOptions(bound commandprogram.BoundArgv) (options, error) {
 	var o options
+	var connectTo []outboundhttp.ResolveMapping
 	for _, item := range bound.Items {
 		option := item.Option
 		if option == nil {
@@ -79,8 +103,51 @@ func parseOptions(bound commandprogram.BoundArgv) (options, error) {
 			o.head = true
 		case "-L":
 			o.location = true
-		case "-f":
-			o.fail = true
+		case "-f", "--fail-with-body":
+			mode := failQuiet
+			if option.Key == "--fail-with-body" {
+				mode = failWithBody
+			}
+			if o.fail != failNever && o.fail != mode {
+				return options{}, usage(option.Spelling, "either --fail or --fail-with-body, not both")
+			}
+			o.fail = mode
+		case "-v":
+			o.verbose = true
+		case "--cacert":
+			o.tls.cacert = value
+		case "--capath":
+			o.tls.capath = value
+		case "-E":
+			o.tls.cert, o.tls.certPass = splitCertPassword(value)
+		case "--key":
+			o.tls.key = value
+		case "--pass":
+			o.tls.pass = value
+		case "--cert-type":
+			if !strings.EqualFold(value, "PEM") {
+				return options{}, &toolrejection.ToolReject{Code: "COMMAND_OPTION_UNSUPPORTED", Data: map[string]any{
+					"command": "curl", "word": value, "expected": "PEM; convert DER or PKCS#12 material to PEM first", "expected_form": "curl --cert-type PEM"}}
+			}
+		case "-T":
+			o.upload = value
+		case "-r":
+			if !validRange(value) {
+				return options{}, usage(value, "a byte range such as 0-99, 100- or -500, comma-separated")
+			}
+			o.byteRange = value
+		case "--resolve":
+			mapping, err := parseResolve(value)
+			if err != nil {
+				return options{}, err
+			}
+			o.dial = append(o.dial, mapping)
+		case "--connect-to":
+			mapping, err := parseConnectTo(value)
+			if err != nil {
+				return options{}, err
+			}
+			connectTo = append(connectTo, mapping)
 		case "-k":
 			return options{}, &toolrejection.ToolReject{Code: "COMMAND_TLS_VERIFICATION_REQUIRED", Data: map[string]any{"command": "curl", "option": option.Spelling}}
 		case "--compressed":
@@ -162,9 +229,16 @@ func parseOptions(bound commandprogram.BoundArgv) (options, error) {
 	if o.get && len(o.forms) > 0 {
 		return options{}, usage("-G", "query data from -d forms, not -F parts")
 	}
-	if o.head && (len(o.forms) > 0 || len(o.data) > 0) {
+	if o.head && (len(o.forms) > 0 || len(o.data) > 0 || o.upload != "") {
 		return options{}, usage("-I", "a HEAD request without a body")
 	}
+	if o.upload != "" && (len(o.forms) > 0 || len(o.data) > 0 || len(o.json) > 0) {
+		return options{}, usage("-T", "either -T or -d, -F and --json bodies, not both")
+	}
+	if o.upload != "" && o.get {
+		return options{}, usage("-G", "query data from -d forms, not an -T upload")
+	}
+	o.dial = composeDial(connectTo, o.dial)
 	return o, nil
 }
 
@@ -177,7 +251,13 @@ func seconds(value string) (time.Duration, error) {
 }
 
 // writeOutVariables are the catalog's -w variables.
-var writeOutVariables = map[string]bool{"http_code": true, "size_download": true, "url_effective": true, "time_total": true}
+var writeOutVariables = map[string]bool{
+	"http_code": true, "size_download": true, "url_effective": true, "time_total": true,
+	"time_namelookup": true, "time_connect": true, "time_appconnect": true, "time_starttransfer": true,
+	"remote_ip": true, "remote_port": true, "content_type": true, "http_version": true,
+	"num_redirects": true, "redirect_url": true, "size_upload": true, "size_header": true,
+	"speed_download": true, "exitcode": true,
+}
 
 // parseWriteOut accepts %{variable}, %% and the \n, \t, \r and \\ escapes.
 func parseWriteOut(format string) ([]writeToken, error) {
@@ -202,7 +282,7 @@ func parseWriteOut(format string) ([]writeToken, error) {
 			}
 			name := format[i+2 : i+end]
 			if !writeOutVariables[name] {
-				return nil, usage("%{"+name+"}", "one of %{http_code}, %{size_download}, %{url_effective} or %{time_total}")
+				return nil, usage("%{"+name+"}", "a supported variable such as %{http_code}, %{time_total}, %{remote_ip} or %{exitcode}")
 			}
 			flush()
 			tokens = append(tokens, writeToken{variable: name})

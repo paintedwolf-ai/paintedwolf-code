@@ -24,8 +24,7 @@ func sentHeaders(spec requestSpec, stated []outboundhttp.Header) []outboundhttp.
 	for i, h := range spec.headers {
 		switch spec.headerSources[i] {
 		case headerAuth:
-			scheme, _, _ := strings.Cut(h.Value, " ")
-			out[i] = outboundhttp.Header{Name: h.Name, Value: scheme}
+			out[i] = outboundhttp.Header{Name: h.Name, Value: AuthScheme(h.Value)}
 		case headerStated:
 			out[i] = outboundhttp.Header{Name: h.Name}
 			if i < len(stated) {
@@ -36,6 +35,18 @@ func sentHeaders(spec requestSpec, stated []outboundhttp.Header) []outboundhttp.
 		}
 	}
 	return out
+}
+
+// AuthScheme is the part of a credential header an echo may show: the
+// authentication scheme, never the credential.
+func AuthScheme(value string) string {
+	scheme, _, _ := strings.Cut(value, " ")
+	return scheme
+}
+
+// CredentialHeader reports a request field whose value is a credential.
+func CredentialHeader(name string) bool {
+	return strings.EqualFold(name, "Authorization") || strings.EqualFold(name, "Proxy-Authorization")
 }
 
 // statedHeaders are the headers argument before secret resolution. A redacted

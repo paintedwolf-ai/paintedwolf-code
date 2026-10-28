@@ -100,7 +100,9 @@ type Request struct {
 	ConnectTimeout time.Duration
 	// WireHeaders keeps complete response headers. Cleartext HTTP/1.x also
 	// retains the received block in Response.Wire; TLS headers are normalized.
-	WireHeaders  bool
+	WireHeaders bool
+	// TLS adds this request's trust and client identity to every TLS hop.
+	TLS          *ClientTLS
 	AllowAddress func(netip.Addr, uint16) bool
 	BeforeHop    func(context.Context, *url.URL) error
 }
@@ -116,9 +118,10 @@ type Hop struct {
 	// StatusLine and Headers describe the redirect response. Credential
 	// headers are withheld unless WireHeaders requests a complete command
 	// response; Wire then keeps observable cleartext bytes.
-	StatusLine string       `json:"-"`
-	Headers    []Header     `json:"-"`
-	Wire       *WireHeaders `json:"-"`
+	StatusLine string          `json:"-"`
+	Headers    []Header        `json:"-"`
+	Wire       *WireHeaders    `json:"-"`
+	Observed   *HopObservation `json:"-"`
 }
 
 type Response struct {
@@ -141,6 +144,10 @@ type Response struct {
 	// Wire is the final response's header block as received, when requested
 	// and observable.
 	Wire *WireHeaders `json:"-"`
+	// Observed is the final hop's request and connection; Elapsed runs from
+	// the exchange start through the end of the body.
+	Observed *HopObservation `json:"-"`
+	Elapsed  time.Duration   `json:"-"`
 }
 
 // WireHeaders is one received header block in wire order and spelling.
@@ -199,6 +206,7 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 	hopHeaders := prepared.HopHeaders
 	var hops []Hop
 	var ioElapsed time.Duration
+	begun := time.Now()
 	for hop := 0; ; hop++ {
 		if in.BeforeHop != nil {
 			if err := in.BeforeHop(ctx, current); err != nil {
@@ -217,6 +225,8 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 			ioCancel()
 			return Response{}, err
 		}
+		resolved := time.Now()
+		in.TLS.apply(transport)
 		boundConnect(transport, in.ConnectTimeout)
 		var wire *wireCapture
 		if in.WireHeaders && (current.Scheme == "http" || in.UnixSocket != "") {
@@ -254,8 +264,10 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 			return Response{}, err
 		}
 		hopTiming := tracer.timing(ioStarted, dnsElapsed)
+		observed := tracer.observation(begun, resolved, method, req.URL.RequestURI())
+		observed.TLS = extractTLSInfo(resp.TLS)
 		if !isRedirect(resp.StatusCode) || redirectMode == RedirectNone {
-			tlsInfo := extractTLSInfo(resp.TLS)
+			tlsInfo := observed.TLS
 			result, readErr := readResponse(resp, method, current.String(), hops, limit, in.DiscardBody, in.StreamBody, hopTiming)
 			ioElapsed += time.Since(ioStarted)
 			hopTiming.Total = time.Since(ioStarted).Milliseconds()
@@ -267,6 +279,7 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 			result.DurationMS = ioElapsed.Milliseconds()
 			result.Timing = hopTiming
 			result.TLS = tlsInfo
+			result.Observed, result.Elapsed = observed, time.Since(begun)
 			if wire != nil && readErr == nil {
 				result.Wire = wire.headers(resp.StatusCode)
 			}
@@ -282,6 +295,7 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 			return Response{}, err
 		}
 		adv.record.StatusLine, adv.record.Headers = statusLine(resp), responseHeaders(resp.Header, in.WireHeaders)
+		adv.record.Observed = observed
 		if wire != nil {
 			adv.record.Wire = wire.headers(resp.StatusCode)
 		}
@@ -290,76 +304,6 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 		current = adv.next
 		body = adv.body
 		originHeaders = adv.originHeaders
-	}
-}
-
-type hopTracer struct {
-	tcpStart, tcpDone time.Time
-	tlsStart, tlsDone time.Time
-	reqSent           time.Time
-	ttfbTime          time.Time
-}
-
-func newHopTracer() (*hopTracer, *httptrace.ClientTrace) {
-	t := &hopTracer{}
-	trace := &httptrace.ClientTrace{
-		ConnectStart: func(network, addr string) {
-			if t.tcpStart.IsZero() {
-				t.tcpStart = time.Now()
-			}
-		},
-		ConnectDone: func(network, addr string, err error) {
-			if t.tcpDone.IsZero() {
-				t.tcpDone = time.Now()
-			}
-		},
-		TLSHandshakeStart: func() {
-			if t.tlsStart.IsZero() {
-				t.tlsStart = time.Now()
-			}
-		},
-		TLSHandshakeDone: func(state tls.ConnectionState, err error) {
-			if t.tlsDone.IsZero() {
-				t.tlsDone = time.Now()
-			}
-		},
-		WroteRequest: func(info httptrace.WroteRequestInfo) {
-			if t.reqSent.IsZero() {
-				t.reqSent = time.Now()
-			}
-		},
-		GotFirstResponseByte: func() {
-			if t.ttfbTime.IsZero() {
-				t.ttfbTime = time.Now()
-			}
-		},
-	}
-	return t, trace
-}
-
-func (t *hopTracer) timing(ioStarted time.Time, dnsElapsed int64) *HopTiming {
-	var tcpConnect, tlsDuration, ttfb int64
-	if !t.tcpDone.IsZero() && !t.tcpStart.IsZero() {
-		tcpConnect = t.tcpDone.Sub(t.tcpStart).Milliseconds()
-	}
-	if !t.tlsDone.IsZero() && !t.tlsStart.IsZero() {
-		tlsDuration = t.tlsDone.Sub(t.tlsStart).Milliseconds()
-	}
-	if !t.ttfbTime.IsZero() {
-		if !t.reqSent.IsZero() {
-			ttfb = t.ttfbTime.Sub(t.reqSent).Milliseconds()
-		} else {
-			ttfb = t.ttfbTime.Sub(ioStarted).Milliseconds() - dnsElapsed - tcpConnect - tlsDuration
-			if ttfb < 0 {
-				ttfb = 0
-			}
-		}
-	}
-	return &HopTiming{
-		DNS:        dnsElapsed,
-		TCPConnect: tcpConnect,
-		TLS:        tlsDuration,
-		TTFB:       ttfb,
 	}
 }
 
@@ -443,28 +387,31 @@ func (in Request) transportForHop(ctx context.Context, target *url.URL) (*http.T
 	if err != nil {
 		return nil, 0, err
 	}
-	if addr, targetPort, mapped := MappedDial(in.Resolve, target.Hostname(), port); mapped {
-		if !egress.IPPublic(addr) {
-			if in.AllowAddress == nil || !in.AllowAddress(addr, targetPort) {
+	dialHost, dialPort := target.Hostname(), port
+	if dial, mapped := MappedDial(in.Resolve, target.Hostname(), port); mapped {
+		if dial.Address.IsValid() {
+			if !in.addressAllowed(dial.Address, dial.Port) {
 				return nil, 0, &egress.DestinationDeniedError{
-					Reason: fmt.Sprintf("blocked: %s:%d is not an allowed address", addr, targetPort),
+					Reason: fmt.Sprintf("blocked: %s:%d is not an allowed address", dial.Address, dial.Port),
 				}
 			}
+			return egress.PinnedTransport(target.Hostname(), []netip.Addr{dial.Address}, dial.Port), 0, nil
 		}
-		return egress.PinnedTransport(target.Hostname(), []netip.Addr{addr}, targetPort), 0, nil
+		dialHost, dialPort = dial.Host, dial.Port
 	}
 	dnsStart := time.Now()
-	ips, err := egress.ResolveIPsWithPolicy(ctx, target.Hostname(), func(ip netip.Addr) bool {
-		if egress.IPPublic(ip) {
-			return true
-		}
-		return in.AllowAddress != nil && in.AllowAddress(ip, port)
-	})
+	ips, err := egress.ResolveIPsWithPolicy(ctx, dialHost, func(ip netip.Addr) bool { return in.addressAllowed(ip, dialPort) })
 	dnsElapsed := time.Since(dnsStart).Milliseconds()
 	if err != nil {
 		return nil, dnsElapsed, err
 	}
-	return egress.PinnedTransport(target.Hostname(), ips, 0), dnsElapsed, nil
+	return egress.PinnedTransport(target.Hostname(), ips, dialPort), dnsElapsed, nil
+}
+
+// addressAllowed applies the destination policy to an address a hop dials:
+// public addresses pass; anything else needs the caller's local authority.
+func (in Request) addressAllowed(addr netip.Addr, port uint16) bool {
+	return egress.IPPublic(addr) || in.AllowAddress != nil && in.AllowAddress(addr, port)
 }
 
 func (in Request) clientForHop(remaining time.Duration, transport *http.Transport) *http.Client {
@@ -633,18 +580,31 @@ func EffectivePort(u *url.URL) (uint16, error) {
 	return DefaultPort(u.Scheme), nil
 }
 
-// MappedDial returns the address and port a hop to host:port dials when a
-// resolve mapping applies; the first mapping for the host and port wins.
-func MappedDial(mappings []ResolveMapping, host string, port uint16) (netip.Addr, uint16, bool) {
+// DialTarget is where a mapped hop connects: a fixed address, or a host name
+// resolved under the same destination policy as the URL's own host.
+type DialTarget struct {
+	Address netip.Addr
+	Host    string
+	Port    uint16
+}
+
+// MappedDial returns where a hop to host:port connects when a resolve or
+// connect-to mapping applies; the first matching mapping wins. An empty
+// mapping host or zero port matches any.
+func MappedDial(mappings []ResolveMapping, host string, port uint16) (DialTarget, bool) {
 	for _, m := range mappings {
-		if strings.EqualFold(m.Host, host) && (m.Port == 0 || m.Port == port) {
-			if m.TargetPort > 0 {
-				return m.Address, m.TargetPort, true
+		if (m.Host == "" || strings.EqualFold(m.Host, host)) && (m.Port == 0 || m.Port == port) {
+			dial := DialTarget{Address: m.Address, Host: m.TargetHost, Port: m.TargetPort}
+			if dial.Host == "" {
+				dial.Host = host
 			}
-			return m.Address, port, true
+			if dial.Port == 0 {
+				dial.Port = port
+			}
+			return dial, true
 		}
 	}
-	return netip.Addr{}, 0, false
+	return DialTarget{}, false
 }
 
 // DefaultPort is the port an http or https URL without one dials.
