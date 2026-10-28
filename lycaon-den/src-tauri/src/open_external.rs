@@ -3,7 +3,6 @@
 
 use crate::files::reveal_in_file_manager::path_under_roots;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 #[cfg(target_os = "linux")]
 mod linux_editor;
@@ -132,9 +131,7 @@ fn replace_tokens(mut input: &str, pairs: &[(&str, &str)]) -> String {
 }
 
 fn spawn_argv(program: &str, args: &[&str]) -> Result<(), String> {
-    let status = Command::new(program)
-        .args(args)
-        .status()
+    let status = crate::external_launch::External::new(program).args(args).status()
         .map_err(|e| e.to_string())?;
     if status.success() {
         Ok(())
@@ -245,8 +242,9 @@ fn spawn_system_browser(url: &str, window: &tauri::WebviewWindow) -> Result<(), 
     }
     #[cfg(target_os = "linux")]
     {
-        use crate::files::linux_desktop_open::{open_uri, ParentWindow};
-        open_uri(&ParentWindow::of(window), url).map(|_| ())
+        let _ = window;
+        use crate::files::linux_desktop_open::open_uri;
+        open_uri(url).map(|_| ())
     }
     #[cfg(target_os = "windows")]
     {

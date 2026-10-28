@@ -51,6 +51,8 @@ type Facts struct {
 	BrokerOutput    string                      `json:"broker_output,omitempty"`
 	BrokerExit      int                         `json:"broker_exit"`
 	BrokerError     string                      `json:"broker_error,omitempty"`
+	SupervisorState string                      `json:"supervisor_state,omitempty"`
+	BrokerAgents    int                         `json:"broker_agents"`
 	AbandonedEnded  bool                        `json:"abandoned_ended"`
 	DetachedPID     int                         `json:"detached_pid,omitempty"`
 	ExecOutside     string                      `json:"exec_outside"`
@@ -191,6 +193,10 @@ func runEngineVault(raw string) {
 // holding the supervisor or generation lock open.
 func brokerProbe(facts *Facts) {
 	broker := desktopBroker
+	// What the broker's peer and its agent look like when the first request
+	// goes out, so a refused request names the process that was missing.
+	facts.SupervisorState = processState(facts.BrokerPeerPID)
+	facts.BrokerAgents = brokerAgentCount()
 	null, err := os.Open("/dev/null")
 	if err != nil {
 		facts.BrokerError = err.Error()
@@ -208,7 +214,7 @@ func brokerProbe(facts *Facts) {
 	}, null, write, write)
 	_ = write.Close()
 	if err != nil {
-		facts.BrokerError = err.Error()
+		facts.BrokerError = "send: " + err.Error()
 		return
 	}
 	output, _ := io.ReadAll(read)
@@ -341,6 +347,39 @@ func brokeredUserProgram(broker, null *os.File) string {
 			return strings.TrimSpace(string(output))
 		}
 	}
+}
+
+// processState reports the kernel's State line for pid, or why it is unreadable.
+func processState(pid int) string {
+	raw, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/status")
+	if err != nil {
+		return err.Error()
+	}
+	for _, line := range strings.Split(string(raw), "\n") {
+		if state, ok := strings.CutPrefix(line, "State:"); ok {
+			return strings.TrimSpace(state)
+		}
+	}
+	return "unknown"
+}
+
+// brokerAgentCount counts the broker agent processes visible in /proc.
+func brokerAgentCount() int {
+	entries, err := os.ReadDir("/proc")
+	if err != nil {
+		return -1
+	}
+	count := 0
+	for _, entry := range entries {
+		if _, err := strconv.Atoi(entry.Name()); err != nil {
+			continue
+		}
+		raw, err := os.ReadFile("/proc/" + entry.Name() + "/cmdline")
+		if err == nil && strings.Contains(string(raw), "--broker-agent") {
+			count++
+		}
+	}
+	return count
 }
 
 // startName reports whether the kernel let this process execute path.
