@@ -16,4 +16,7 @@ cd "${ROOT}/lycaon-den/src-tauri"
 cargo test --locked --workspace --all-targets --no-run
 
 # Workspace outputs change with source; dependencies survive package-scoped cleanup.
-PYTHONPATH="${ROOT}/scripts" python3 -m ci_policy.cache_payload "${ROOT}/lycaon-den/src-tauri/Cargo.toml"
+PYTHONPATH="${ROOT}/scripts" python3 -m ci_policy.cache_payload workspace "${ROOT}/lycaon-den/src-tauri/Cargo.toml"
+
+CARGO_TARGET_DIR="$(python3 "${ROOT}/scripts/artifact_paths.py" compiler-cache "${ROOT}")/decide" \
+  PYTHONPATH="${ROOT}/scripts" python3 -m ci_policy.cache_payload workspace "${ROOT}/lycaon/internal/decide/native/Cargo.toml"
