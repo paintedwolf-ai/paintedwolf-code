@@ -29,14 +29,14 @@ Contained: hitl.Contained{
 	withSockets := base
 	withSockets.Execution.Contained.SocketPathsDigest = "digest-a"
 	withSockets.Execution.Contained.SocketCount = 1
-	if hitl.GrantKey(withSockets) != k0 {
-		t.Fatal("socket overlay changed GrantKey")
+	if hitl.GrantKey(withSockets) == k0 {
+		t.Fatal("socket boundary must change GrantKey")
 	}
 
 	otherSocket := withSockets
 	otherSocket.Execution.Contained.SocketPathsDigest = "digest-b"
-	if hitl.GrantKey(otherSocket) != hitl.GrantKey(withSockets) {
-		t.Fatal("socket overlay changed GrantKey")
+	if hitl.GrantKey(otherSocket) == hitl.GrantKey(withSockets) {
+		t.Fatal("a different socket boundary must change GrantKey")
 	}
 
 	direct := base
