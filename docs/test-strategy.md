@@ -162,6 +162,9 @@ is the reproduced one. After changing a pin, `./task userlands:record` rebuilds
 without any cache and records the new digest; record each architecture on a
 native host, because emulated builds are not dependable.
 
+The images are test-only: they live in the repository's GitHub Actions cache
+and are never pushed to a public registry or shipped.
+
 **One fixed environment.** A batch of programs runs in one new container with
 no network. Before each program the driver resets the workspace, home and
 temporary directories, seeds the workspace with fixed times and owner, and runs
@@ -223,6 +226,9 @@ fallback to an installed program, so none of them is compared. Programs whose
 result the command language defines itself, such as native built-ins, `external`,
 `native_path` and redirects that publish over their own input, are contract
 cases in `lycaon/test/wiring/conformance` with their expected results.
+
+Snapshots record behaviour only, never a tool's `--help`, `--version`, `info`
+or manual output; the corpus refuses a program that asks for them.
 
 `./task conformance:capture` runs the corpus in the verified images and stores
 every result in `testdata/snapshots.json`, with the digest of each case's input

@@ -157,12 +157,16 @@ func tarOf(t *testing.T, header *tar.Header) string {
 }
 
 func TestValidateRefusesAnIncomparableCorpus(t *testing.T) {
+	testutil.FailErr(t, "an ordinary program", Validate([]Case{{ID: "a", References: gnuUserland, Program: "printf 'information\\n' | grep -c info.txt"}}))
 	for name, cases := range map[string][]Case{
 		"duplicate":  {{ID: "a", References: gnuUserland}, {ID: "a", References: gnuUserland}},
 		"no id":      {{References: gnuUserland}},
 		"no refs":    {{ID: "a"}},
 		"unknown":    {{ID: "a", References: []referenceuserland.ID{"macos"}}},
 		"capability": {{ID: "a", References: gnuUserland, CapabilityRequest: "{"}},
+		"help":       {{ID: "a", References: gnuUserland, Program: "sed --help | head -n 1"}},
+		"version":    {{ID: "a", References: gnuUserland, Program: "grep -c x f; ls '--version'"}},
+		"manual":     {{ID: "a", References: gnuUserland, Program: "true && man sed"}},
 	} {
 		if err := Validate(cases); err == nil {
 			t.Errorf("%s corpus validated", name)

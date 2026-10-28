@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
 
 	"github.com/lycaon/lycaon/test/referenceuserland"
 )
@@ -43,6 +44,10 @@ var (
 	bsdUserland   = []referenceuserland.ID{referenceuserland.BSD}
 )
 
+// documentationWords ask a tool for its help, version or manual, which snapshots
+// never record.
+var documentationWords = []string{"--help", "--version", "info", "man"}
+
 // Cases returns the corpus in a fixed order.
 func Cases() []Case {
 	return slices.Concat(languageCases, naturalCases, utilityCases, gitCases, liveRunCases)
@@ -67,6 +72,11 @@ func Validate(cases []Case) error {
 		}
 		if c.CapabilityRequest != "" && !json.Valid([]byte(c.CapabilityRequest)) {
 			return fmt.Errorf("case %s: capability request is not JSON", c.ID)
+		}
+		for _, word := range strings.Fields(c.Program) {
+			if slices.Contains(documentationWords, strings.Trim(word, `'";|&()`)) {
+				return fmt.Errorf("case %s asks for documentation (%s); snapshots record behaviour only", c.ID, word)
+			}
 		}
 	}
 	return nil
