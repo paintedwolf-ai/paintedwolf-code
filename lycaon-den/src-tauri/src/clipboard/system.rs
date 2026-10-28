@@ -9,6 +9,7 @@ use super::service::{
 #[derive(Default)]
 pub(crate) struct NativeClipboard {
     board: Option<arboard::Clipboard>,
+    secret: Option<u64>,
 }
 
 pub(crate) fn startup_facts() -> Result<ClipboardFacts, ClipboardError> {
@@ -25,6 +26,33 @@ fn settled<T>(result: Result<T, ClipboardError>) -> Reply<T> {
 }
 
 impl NativeClipboard {
+    pub(super) fn write_secret_text(&mut self, _main: &dyn MainThread, text: String) -> Reply<u64> {
+        #[cfg(target_os = "macos")]
+        {
+            let result = super::secret_macos::write(text);
+            if let Ok(copy) = result {
+                self.secret = Some(copy);
+            }
+            settled(result)
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = text;
+            settled(Err(ClipboardError::Backend(
+                "Secret clipboard is unavailable on this platform".into(),
+            )))
+        }
+    }
+
+    pub(super) fn clear_secret_text(&mut self, _main: &dyn MainThread, copy: u64) -> Reply<()> {
+        #[cfg(target_os = "macos")]
+        super::secret_macos::clear(copy);
+        if self.secret == Some(copy) {
+            self.secret = None;
+        }
+        settled(Ok(()))
+    }
+
     fn board(&mut self) -> Result<&mut arboard::Clipboard, ClipboardError> {
         if self.board.is_none() {
             let board =
@@ -54,6 +82,10 @@ impl ClipboardAdapter for NativeClipboard {
     }
 
     fn release(&mut self, _main: &dyn MainThread) {
+        #[cfg(target_os = "macos")]
+        if let Some(copy) = self.secret.take() {
+            super::secret_macos::clear(copy);
+        }
         self.board.take();
     }
 }

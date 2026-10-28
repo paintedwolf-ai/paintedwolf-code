@@ -134,6 +134,7 @@ export function ManagedSecretDetail(props: ManagedSecretDetailProps) {
                   class="den-secret-reveal__code"
                   data-testid="managed-secret-revealed-value"
                   onCopy={(event) => {
+                    event.preventDefault();
                     // A partial selection copies only the selected text.
                     const selected =
                       event.currentTarget.ownerDocument.getSelection()?.toString() ?? "";

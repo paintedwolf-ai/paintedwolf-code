@@ -40,6 +40,8 @@ objc2-app-kit = { version = "0.3", default-features = false, features = [
   "NSEvent",
   "NSGraphics",
   "NSResponder",
+  "NSPasteboard",
+  "NSPasteboardItem",
   "NSRunningApplication",
   "NSScreen",
   "NSView",

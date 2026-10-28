@@ -24,7 +24,8 @@ import {
   PresenceError,
   revealManagedSecret,
 } from "../../platform/presence.ts";
-import { copyTextToClipboard, writeClipboardText } from "../../utils/clipboard.ts";
+import { secretClipboardLease } from "../../utils/secret-clipboard.ts";
+import { copyTextToClipboard } from "../../utils/clipboard.ts";
 import { paginateSlice } from "../../list/pagination.ts";
 import {
   MANAGED_SECRETS_COPY as C,
@@ -122,7 +123,9 @@ export function ManagedSecretsPanel(props: Props) {
     revealTimer = undefined;
   };
 
+  const secretClipboard = secretClipboardLease();
   const clearReveal = () => {
+    secretClipboard.clear();
     clearRevealTimer();
     setRevealed(undefined);
     setRevealSeconds(0);
@@ -365,15 +368,10 @@ export function ManagedSecretsPanel(props: Props) {
       return;
     }
     setRevealCopyFailed(false);
-    // A copy event already put the selection on the clipboard.
-    if (selection) {
-      setRevealCopied(true);
-      return;
-    }
     setRevealCopied(false);
-    void writeClipboardText(current.value).then(
-      () => {
-        if (alive && revealed() === current) {
+    void secretClipboard.write(selection ?? current.value).then(
+      (copied) => {
+        if (copied && alive && revealed() === current) {
           setRevealCopied(true);
         }
       },

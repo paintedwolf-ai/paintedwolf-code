@@ -148,7 +148,7 @@ export const MANAGED_SECRETS_COPY = {
   revealError: "This secret could not be revealed.",
   revealUnavailable: "There is no readable current value to reveal.",
   revealedHint: (seconds: number) =>
-    `Hides in ${seconds} second${seconds === 1 ? "" : "s"}. It also hides when this window loses focus. Anything you copy stays on the clipboard until you replace it.`,
+    `Hides in ${seconds} second${seconds === 1 ? "" : "s"}. It also hides when this window loses focus. Copies are marked as secret for clipboard history and cleared when the value hides, unless another copy has replaced them.`,
   copyValue: "Copy value",
   copiedValue: "Value copied",
   copyValueFailed: "Could not copy",
