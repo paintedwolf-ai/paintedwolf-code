@@ -80,8 +80,8 @@ func TestCompletionWaitTimerBackstopSettlesHungProcess(t *testing.T) {
 	})
 	testutil.FailErr(t, "arm completion wait with short deadline", err)
 	testutil.FailErr(t, "recover completion wait", RecoverWaitLeases(t.Context(), loop.Subscriptions, store))
-	testutil.WaitFor(t, time.Second, func() bool { return timedOut.Load() == 1 })
-	loop.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, time.Second))
+	testutil.WaitFor(t, func() bool { return timedOut.Load() == 1 })
+	loop.Turns.WaitForAsyncTurns(t.Context())
 	if loop.Waits.IsSleeping("s1") {
 		t.Fatal("timer backstop left hung completion wait sleeping")
 	}
@@ -316,13 +316,13 @@ func TestCompletionWaitDeliversTerminalOrLostProcessOnce(t *testing.T) {
 				loop.SetDeps(deps)
 				testutil.FailErr(t, "recover lost process wait", RecoverWaitLeases(t.Context(), loop.Subscriptions, store))
 			}
-			testutil.WaitFor(t, time.Second, func() bool { return deliveries.Load() == 1 })
-			loop.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, time.Second))
+			testutil.WaitFor(t, func() bool { return deliveries.Load() == 1 })
+			loop.Turns.WaitForAsyncTurns(t.Context())
 			if loop.Waits.IsSleeping("s1") {
 				t.Fatal("terminal process left agent sleeping")
 			}
 			testutil.FailErr(t, "recover delivered completion", RecoverWaitLeases(t.Context(), loop.Subscriptions, store))
-			loop.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, time.Second))
+			loop.Turns.WaitForAsyncTurns(t.Context())
 			if deliveries.Load() != 1 {
 				t.Fatalf("completion delivered %d times", deliveries.Load())
 			}

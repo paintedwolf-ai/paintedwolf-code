@@ -11,13 +11,16 @@ use tauri::AppHandle;
 use super::{lock_in_background, LockReason};
 use crate::linux_desktop::{bus, session};
 
+mod idle;
 mod signals;
 mod state;
+use idle::{DisplayTargets, IdleFacts, IdleUnavailable, Observer};
 use signals::{
-    name_owner, preparing_for_sleep, screensaver_active, subscribe_screensaver, subscribe_system,
+    preparing_for_sleep, screensaver_active, subscribe_screensaver, subscribe_system,
     watch_connection, watch_owner,
 };
 pub(crate) use state::LockSources;
+use state::StepAwayMode;
 
 #[cfg(test)]
 mod tests;
@@ -44,10 +47,6 @@ pub(crate) fn status() -> LockSources {
         .unwrap_or_default()
 }
 
-pub(crate) fn confirmation_allowed() -> bool {
-    status().confirmation_allowed()
-}
-
 /// Where the monitor reaches its two buses. Production uses the fixed system
 /// socket, never `DBUS_SYSTEM_BUS_ADDRESS`, and the person's session bus.
 pub(super) struct BusAddresses {
@@ -71,6 +70,7 @@ pub(super) fn setup_linux(app: AppHandle) -> Result<(), String> {
     }
     let monitor = Monitor::new(
         BusAddresses::native(),
+        DisplayTargets::native(),
         glib::MainContext::default(),
         Box::new(move |reason| lock_in_background(&app, reason)),
     );
@@ -85,8 +85,9 @@ pub(super) fn setup_linux(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// Observes logind and the desktop's screen saver on one glib context and
-/// asks its sink to lock when the person steps away. Main-context only.
+/// Observes logind, the desktop's screen saver and the display server's input
+/// idle on one glib context and asks its sink to lock when the person steps
+/// away. Main-context only.
 #[derive(Clone)]
 pub(super) struct Monitor {
     inner: Rc<Inner>,
@@ -94,6 +95,9 @@ pub(super) struct Monitor {
 
 struct Inner {
     addresses: BusAddresses,
+    displays: DisplayTargets,
+    /// The running input-idle observer and the session type it serves.
+    observer: RefCell<Option<(String, Box<dyn Observer>)>>,
     context: glib::MainContext,
     sink: Box<dyn Fn(LockReason)>,
     sources: Arc<Mutex<LockSources>>,
@@ -112,12 +116,15 @@ struct Buses {
 impl Monitor {
     pub(super) fn new(
         addresses: BusAddresses,
+        displays: DisplayTargets,
         context: glib::MainContext,
         sink: Box<dyn Fn(LockReason)>,
     ) -> Self {
         Self {
             inner: Rc::new(Inner {
                 addresses,
+                displays,
+                observer: RefCell::new(None),
                 context,
                 sink,
                 sources: Arc::new(Mutex::new(LockSources::default())),
@@ -151,6 +158,71 @@ impl Monitor {
         if reconnect || self.inner.refresh_requested.replace(false) {
             self.refresh();
         }
+        self.poll_idle();
+    }
+
+    /// Reads the idle observer; a lost one locks and is replaced on the next
+    /// tick.
+    fn poll_idle(&self) {
+        let inner = &self.inner;
+        let facts = {
+            let mut observer = inner.observer.borrow_mut();
+            let Some((_, running)) = observer.as_mut() else {
+                return;
+            };
+            let facts = running.facts(&inner.context);
+            if facts.error == Some(IdleUnavailable::Lost) {
+                *observer = None;
+            }
+            facts
+        };
+        let mut next = inner.current();
+        if next.idle == facts {
+            return;
+        }
+        let lost = facts.error == Some(IdleUnavailable::Lost);
+        let covering = next.step_away_mode() == StepAwayMode::IdleFallback;
+        next.idle = facts;
+        match (lost, covering) {
+            // The observer was the step-away signal: its loss locks.
+            (true, true) => inner.lose(next),
+            (true, false) => {
+                inner.apply(next, LockReason::ScreenLocked);
+                inner.refresh_requested.set(true);
+            }
+            (false, _) => inner.apply(next, LockReason::Away),
+        }
+    }
+
+    /// Keeps the observer that serves this session type, or starts the one
+    /// its display server offers.
+    fn observe_idle(
+        &self,
+        session_type: Option<&str>,
+        desktop: Option<&gio::DBusConnection>,
+    ) -> IdleFacts {
+        let inner = &self.inner;
+        let mut observer = inner.observer.borrow_mut();
+        let Some(kind) = session_type else {
+            // A session we could not read keeps the observer it had.
+            return match observer.as_mut() {
+                Some((_, running)) => running.facts(&inner.context),
+                None => IdleFacts::unavailable(IdleUnavailable::NoDisplaySession),
+            };
+        };
+        if observer.as_ref().is_none_or(|(served, _)| served != kind) {
+            *observer = None;
+            match idle::start(kind, &inner.displays, &inner.context, desktop) {
+                Ok(started) => *observer = Some((kind.to_owned(), started)),
+                Err(error) => return IdleFacts::unavailable(error),
+            }
+        }
+        let (_, running) = observer.as_mut().expect("observer started");
+        let facts = running.facts(&inner.context);
+        if facts.error == Some(IdleUnavailable::Lost) {
+            *observer = None;
+        }
+        facts
     }
 
     /// Rereads the initial facts and resubscribes.
@@ -199,7 +271,14 @@ impl Monitor {
             current.sleeping = preparing_for_sleep(context, &system).unwrap_or(false);
             match session::discover(context, &system) {
                 Ok(session) => {
-                    current.logind_owner = name_owner(context, &system, session::NAME);
+                    // A hint seen true stays proof for the same session.
+                    let previous = inner.current();
+                    current.locked_hint_seen = session.locked
+                        || (previous.locked_hint_seen
+                            && previous
+                                .session
+                                .as_ref()
+                                .is_some_and(|known| known.id == session.id));
                     current.session = Some(session);
                 }
                 Err(error) => current.session_error = Some(error),
@@ -214,7 +293,6 @@ impl Monitor {
             for (name, path) in SCREENSAVERS {
                 if let Some(active) = screensaver_active(context, &desktop, name, path) {
                     current.screensaver_locked = Some(active);
-                    current.screensaver_owner = name_owner(context, &desktop, name);
                     subscribe_screensaver(buses, &desktop, &weak, name, path);
                     break;
                 }
@@ -223,6 +301,11 @@ impl Monitor {
                 watch_owner(buses, &desktop, name, &weak);
             }
         }
+        let session_type = current
+            .session
+            .as_ref()
+            .map(|session| session.session_type.clone());
+        current.idle = self.observe_idle(session_type.as_deref(), buses.desktop.as_ref());
         current
     }
 }
@@ -234,11 +317,13 @@ impl Inner {
 
     /// Publishes new observations and locks when confirmation stopped being
     /// allowed or a lock was observed.
-    fn apply(&self, next: LockSources, reason: LockReason) {
+    fn apply(&self, mut next: LockSources, reason: LockReason) {
+        next.mode = next.step_away_mode();
         let mut sources = self.sources.lock().unwrap();
         let was_allowed = sources.confirmation_allowed();
         let now_allowed = next.confirmation_allowed();
-        let locked = next.observed_away();
+        // A source that keeps reporting the same away state asks once.
+        let locked = next.observed_away() && !sources.observed_away();
         *sources = next;
         eprintln!(
             "Step-away capability facts: {}",

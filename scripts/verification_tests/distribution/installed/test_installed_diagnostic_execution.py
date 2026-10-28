@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from linux_release import installed_execution, installed_runtime
+from linux_release.campaign import execution as installed_execution, runtime as installed_runtime
 from linux_release.installed_cases import desktop, native_workflows
 
 
