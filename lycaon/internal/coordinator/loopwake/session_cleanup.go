@@ -13,6 +13,7 @@ func (l *LoopEngine) ForgetSession(ctx context.Context, sessionID string) {
 	if sessionID == "" {
 		return
 	}
+	l.Subscriptions.interruptParkedProgram(ctx, sessionID, false)
 	l.Subscriptions.InterruptSession(ctx, sessionID)
 	l.Deliveries.ForgetSession(sessionID)
 	l.Turns.cancelAndDrainAsyncTurns(sessionID)
@@ -22,6 +23,7 @@ func (l *LoopEngine) ForgetSession(ctx context.Context, sessionID string) {
 	l.Admission.ForgetSession(sessionID)
 	l.Observations.ForgetSession(sessionID)
 	l.Deliveries.ForgetSession(sessionID)
+	l.Deliveries.TakeEndedWaits(sessionID)
 }
 func (l *WaitSubscriptions) InterruptSession(ctx context.Context, sessionID string) {
 	if store := l.durableWaitStore(); store != nil {

@@ -24,6 +24,8 @@ type EvaluationPorts struct {
 	Input       InputRedirection
 	Sources     SourceCapture
 	Supervision ProgramSupervision
+	// Waits receives the program's wait states; nil reports none.
+	Waits ProgramWaits
 	// Predicates supplies the filesystem and pattern ports for test, [ and [[.
 	// Expansion, scope and memory are bound per reached frame.
 	Predicates PredicateRuntime

@@ -12,21 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
-// Clock is the time source program supervision reads. Tests inject one and
-// fire its timers as observed events.
-type Clock interface {
-	Now() time.Time
-	AfterFunc(time.Duration, func()) (stop func() bool)
-}
-
-// SystemClock is the host's wall clock.
-type SystemClock struct{}
-
-func (SystemClock) Now() time.Time { return time.Now() }
-func (SystemClock) AfterFunc(d time.Duration, f func()) func() bool {
-	return time.AfterFunc(d, f).Stop
-}
-
 // ParseDuration reads a sleep or timeout interval: decimal seconds with an
 // optional s, m, h or d suffix.
 func ParseDuration(word string) (time.Duration, bool) {
