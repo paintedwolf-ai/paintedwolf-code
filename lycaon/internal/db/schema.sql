@@ -2039,6 +2039,10 @@ CREATE TABLE IF NOT EXISTS checkpoints (
     -- A person answers or stops a checkpoint; expiry, a host stop, and policy name nobody.
     resolved_by_person_id TEXT REFERENCES people(id),
     project_id TEXT NOT NULL CHECK (project_id <> ''),
+    -- Lossless native authority; the JSON columns hold only its screened display.
+    authority_format TEXT NOT NULL DEFAULT '' CHECK (authority_format IN ('', 'native_approval_authority_v1')),
+    authority_digest TEXT NOT NULL DEFAULT '' CHECK ((authority_format = '') = (authority_digest = '') AND (authority_digest = '' OR length(authority_digest) = 64)),
+    authority_body TEXT NOT NULL DEFAULT '' CHECK ((authority_format = '') = (authority_body = '') AND (authority_body = '' OR json_valid(authority_body))),
     CHECK (
         (resolved_by IS NULL AND resolved_by_person_id IS NULL)
         OR (resolved_by IN ('expiry', 'host_stop', 'policy') AND resolved_by_person_id IS NULL)
@@ -2100,7 +2104,11 @@ CREATE TABLE IF NOT EXISTS approval_operations (
     status TEXT NOT NULL CHECK (status IN ('prepared', 'committed', 'rolled_back')),
     created_at TEXT NOT NULL,
     committed_at TEXT,
-    rolled_back_at TEXT
+    rolled_back_at TEXT,
+    -- Lossless native authority; the JSON columns hold only its screened display.
+    authority_format TEXT NOT NULL DEFAULT '' CHECK (authority_format IN ('', 'native_approval_authority_v1')),
+    authority_digest TEXT NOT NULL DEFAULT '' CHECK ((authority_format = '') = (authority_digest = '') AND (authority_digest = '' OR length(authority_digest) = 64)),
+    authority_body TEXT NOT NULL DEFAULT '' CHECK ((authority_format = '') = (authority_body = '') AND (authority_body = '' OR json_valid(authority_body)))
 ) STRICT;
 
 -- Resolved checkpoint metadata awaiting its tool row.
@@ -2124,6 +2132,10 @@ CREATE TABLE IF NOT EXISTS chat_grants (
     delta_json TEXT NOT NULL CHECK (json_valid(delta_json)),
     created_at TEXT NOT NULL,
     expires_at TEXT,
+    -- Lossless native authority; the JSON columns hold only its screened display.
+    authority_format TEXT NOT NULL DEFAULT '' CHECK (authority_format IN ('', 'native_approval_authority_v1')),
+    authority_digest TEXT NOT NULL DEFAULT '' CHECK ((authority_format = '') = (authority_digest = '') AND (authority_digest = '' OR length(authority_digest) = 64)),
+    authority_body TEXT NOT NULL DEFAULT '' CHECK ((authority_format = '') = (authority_body = '') AND (authority_body = '' OR json_valid(authority_body))),
     PRIMARY KEY (chat_session_id, id)
 ) STRICT, WITHOUT ROWID;
 

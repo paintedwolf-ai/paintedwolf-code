@@ -23,13 +23,14 @@ type LocalNetworkAsk struct {
 
 // LocalNetworkResult is the combined local-network authority after optional HITL.
 type LocalNetworkResult struct {
-	SecretApproved bool
-	Raised         bool
-	Authorized     bool
-	Denied         bool
-	ListenPorts    []uint16
-	ConnectPorts   []uint16
-	UserGuidance   string
+	SecretApproved               bool
+	Raised                       bool
+	Authorized                   bool
+	ConnectRequiresOwnedListener bool
+	Denied                       bool
+	ListenPorts                  []uint16
+	ConnectPorts                 []uint16
+	UserGuidance                 string
 }
 
 // LocalNetworkGate reviews one invocation that widens both axes.

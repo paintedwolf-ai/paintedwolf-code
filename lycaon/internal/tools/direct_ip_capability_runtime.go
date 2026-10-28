@@ -8,9 +8,9 @@ import (
 
 // DirectIPCapabilityRuntime holds one-action permits and chat leases.
 type DirectIPCapabilityRuntime interface {
-	IssuePermit(sessionID, toolCallID, actionDigest, requestDigest, confinementDigest string)
-	ConsumePermit(sessionID, toolCallID, actionDigest, requestDigest, confinementDigest string) (bool, error)
-	Authorized(sessionID, toolCallID, actionDigest string) bool
+	IssuePermit(identity hitl.EffectPermitIdentity, actionDigest, requestDigest, confinementDigest string)
+	ConsumePermit(identity hitl.EffectPermitIdentity, actionDigest, requestDigest, confinementDigest string) (bool, error)
+	Authorized(identity hitl.EffectPermitIdentity, actionDigest string) bool
 	// LeaseCovers matches live exact-action authority.
 	LeaseCovers(chatSessionID string, lease hitl.DirectIPLease) bool
 	// GrantChat records an accepted exact-action lease.

@@ -14,6 +14,7 @@ type actionLaunchIdentity struct {
 
 func cloneEgressCommand(command EgressCommand) EgressCommand {
 	command.DeclaredHosts = slices.Clone(command.DeclaredHosts)
+	command.OwnedLoopbackPorts = slices.Clone(command.OwnedLoopbackPorts)
 	if command.UserRule != nil {
 		rule := *command.UserRule
 		command.UserRule = &rule

@@ -15,21 +15,32 @@ func TestCapabilityDenialRequiresExactInvocationIdentity(t *testing.T) {
 		Result: &hitl.DecisionResult{Comments: "Use the local fixture instead."},
 	}
 
-	executor.Rejections.rememberCapabilityDenial("session", "", denied)
-	executor.Rejections.rememberCapabilityDenial("", "call", denied)
-	if executor.Rejections.takeCapabilityDenial("session", "call") {
+	executor.Rejections.rememberCapabilityDenial("session", "", "", denied)
+	executor.Rejections.rememberCapabilityDenial("", "call", "", denied)
+	if executor.Rejections.takeCapabilityDenial("session", "call", "call") {
 		t.Fatal("denial recorded without an exact identity")
 	}
 
-	executor.Rejections.rememberCapabilityDenial("session", "call", denied)
-	if executor.Rejections.takeCapabilityDenial("session", "other") {
+	executor.Rejections.rememberCapabilityDenial("session", "call", "call", denied)
+	if executor.Rejections.takeCapabilityDenial("session", "other", "other") {
 		t.Fatal("denial crossed tool-call identity")
 	}
-	if !executor.Rejections.takeCapabilityDenial("session", "call") {
+	if !executor.Rejections.takeCapabilityDenial("session", "call", "call") {
 		t.Fatal("denial not reported for its own invocation")
 	}
-	if executor.Rejections.takeCapabilityDenial("session", "call") {
+	if executor.Rejections.takeCapabilityDenial("session", "call", "call") {
 		t.Fatal("denial was not consumed")
+	}
+}
+
+func TestCapabilityDenialCannotBeConsumedBySiblingChild(t *testing.T) {
+	executor := NewExecutor(nil, nil, "")
+	executor.Rejections.rememberCapabilityDenial("session", "model-call", "first-child", &hitl.CheckpointResponse{Status: hitl.DecisionStatusRejected})
+	if executor.Rejections.takeCapabilityDenial("session", "model-call", "second-child") || executor.Rejections.takeCapabilityDenial("session", "model-call", "") {
+		t.Fatal("denial crossed child execution identity")
+	}
+	if !executor.Rejections.takeCapabilityDenial("session", "model-call", "first-child") {
+		t.Fatal("actual child denial lost")
 	}
 }
 
@@ -42,9 +53,9 @@ func TestCapabilityDenialRecordsOnlyRejection(t *testing.T) {
 		{Status: hitl.DecisionStatusExpired, Result: &hitl.DecisionResult{Comments: "system expiry"}},
 		{Status: hitl.DecisionStatusCanceled},
 	} {
-		executor.Rejections.rememberCapabilityDenial("session", "call", response)
+		executor.Rejections.rememberCapabilityDenial("session", "call", "call", response)
 	}
-	if executor.Rejections.takeCapabilityDenial("session", "call") {
+	if executor.Rejections.takeCapabilityDenial("session", "call", "call") {
 		t.Fatal("a non-rejection was recorded as a denial")
 	}
 }
@@ -53,11 +64,11 @@ func TestCapabilityDenialRecordsOnlyRejection(t *testing.T) {
 // a run that kept going — so the record cannot depend on an error value.
 func TestCapabilityDenialRecordedWithoutGuidanceOrError(t *testing.T) {
 	executor := NewExecutor(nil, nil, "")
-	executor.Rejections.rememberCapabilityDenial("session", "call", &hitl.CheckpointResponse{
+	executor.Rejections.rememberCapabilityDenial("session", "call", "call", &hitl.CheckpointResponse{
 		Status: hitl.DecisionStatusRejected,
 		Result: &hitl.DecisionResult{Comments: "   "},
 	})
-	if !executor.Rejections.takeCapabilityDenial("session", "call") {
+	if !executor.Rejections.takeCapabilityDenial("session", "call", "call") {
 		t.Fatal("denial without attached direction was not recorded")
 	}
 }

@@ -174,7 +174,7 @@ func wireSessionToolSources(mgr *session.Host, host *toolhost.Runtime, hostResou
 			if view == nil {
 				return nil
 			}
-			return view.ToolProfiles
+			return mgr.Profiles.ConstrainCommandProfiles(ctx, sessionID, view.ToolProfiles)
 		})
 		if host.Executor != nil {
 			host.Executor.Metadata.SetToolSchemaSource(func(ctx context.Context, sessionID string) *toolschema.Config {

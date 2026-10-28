@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/config"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"gopkg.in/yaml.v3"
 )
 
@@ -22,6 +23,7 @@ type ToolProfile struct {
 	ReadGlobs      []string
 	WriteGlobs     []string
 	WaitConditions []string
+	CommandEffects toolcontract.CommandEffects
 }
 
 // ToolDeferred reports whether toolName loads on demand. Exact entries win
@@ -103,16 +105,17 @@ func (m *ToolMode) UnmarshalYAML(node *yaml.Node) error {
 }
 
 type toolProfileFile struct {
-	ID             string              `yaml:"id"`
-	Description    string              `yaml:"description"`
-	Tools          map[string]ToolMode `yaml:"tools"`
-	DenyTools      []string            `yaml:"deny_tools"`
-	MCPDeny        []string            `yaml:"mcp_deny"`
-	ReadScope      string              `yaml:"read_scope"`
-	WriteScope     string              `yaml:"write_scope"`
-	ReadScopes     []string            `yaml:"read_scopes"`
-	WriteScopes    []string            `yaml:"write_scopes"`
-	WaitConditions []string            `yaml:"wait_conditions"`
+	ID             string                            `yaml:"id"`
+	Description    string                            `yaml:"description"`
+	Tools          map[string]ToolMode               `yaml:"tools"`
+	DenyTools      []string                          `yaml:"deny_tools"`
+	MCPDeny        []string                          `yaml:"mcp_deny"`
+	ReadScope      string                            `yaml:"read_scope"`
+	WriteScope     string                            `yaml:"write_scope"`
+	ReadScopes     []string                          `yaml:"read_scopes"`
+	WriteScopes    []string                          `yaml:"write_scopes"`
+	WaitConditions []string                          `yaml:"wait_conditions"`
+	CommandEffects []toolcontract.CommandEffectClass `yaml:"command_effects"`
 }
 
 // ParseToolProfile parses profile YAML and resolves read_scope / write_scope via scopes.
@@ -123,6 +126,10 @@ func ParseToolProfile(data []byte, scopes PathScopeRegistry) (ToolProfile, error
 	}
 	if raw.ID == "" {
 		return ToolProfile{}, fmt.Errorf("tool profile missing id")
+	}
+	effects, err := toolcontract.NewCommandEffects(raw.CommandEffects...)
+	if err != nil {
+		return ToolProfile{}, fmt.Errorf("profile %q command effects: %w", raw.ID, err)
 	}
 	readGlobs, writeGlobs, err := resolveProfileScopes(raw, scopes)
 	if err != nil {
@@ -169,6 +176,7 @@ func ParseToolProfile(data []byte, scopes PathScopeRegistry) (ToolProfile, error
 		ReadGlobs:      readGlobs,
 		WriteGlobs:     writeGlobs,
 		WaitConditions: append([]string(nil), raw.WaitConditions...),
+		CommandEffects: effects,
 	}, nil
 }
 

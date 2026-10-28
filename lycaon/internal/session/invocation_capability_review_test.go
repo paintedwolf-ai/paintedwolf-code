@@ -84,7 +84,7 @@ func (c *capabilityReviewCheckpoints) install(delta hitl.ApprovalAuthorityDelta)
 		}
 	case hitl.AuthoritySocketPermit:
 		for _, socket := range delta.Sockets {
-			c.sockets.IssuePermit(delta.SessionID, delta.ToolCallID, delta.ActionDigest, confine.SocketGrant{ApprovedPath: socket.ApprovedPath, ResolvedPath: socket.ResolvedPath})
+			c.sockets.IssuePermit(delta.PermitIdentity(), delta.ActionDigest, confine.SocketGrant{ApprovedPath: socket.ApprovedPath, ResolvedPath: socket.ResolvedPath})
 		}
 	case hitl.AuthorityLocalListenChat:
 		c.listen.GrantSessionPorts(delta.ChatSession(), delta.ListenPorts)

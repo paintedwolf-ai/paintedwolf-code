@@ -38,10 +38,10 @@ func (p *loopbackPolicy) allow(addr netip.Addr) bool {
 	return egress.IPPublic(addr)
 }
 
-func defaultDialEndpoint(ctx context.Context, ep Endpoint, authorized func() bool, loopbackAuthorized bool) (net.Conn, error) {
+func defaultDialEndpoint(ctx context.Context, ep Endpoint, authorized func() bool, loopbackAuthorized bool, owned endpointOwnership, refused func()) (net.Conn, error) {
 	dialCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	policy := &loopbackPolicy{authorized: loopbackAuthorized}
+	policy := &loopbackPolicy{authorized: loopbackAuthorized || owned != nil}
 	ips, err := egress.ResolveIPsWithPolicy(dialCtx, ep.Host, policy.allow)
 	if err != nil {
 		if policy.refused {
@@ -61,12 +61,33 @@ func defaultDialEndpoint(ctx context.Context, ep Endpoint, authorized func() boo
 		if authorized != nil && !authorized() {
 			return nil, errCommandAuthorizationRevoked
 		}
+		endpoint := netip.AddrPortFrom(ip.Unmap(), ep.Port)
+		resourceID := ""
+		if endpoint.Addr().IsLoopback() && !loopbackAuthorized {
+			var observed bool
+			if owned != nil {
+				resourceID, observed = owned(ctx, endpoint)
+			}
+			if !observed || resourceID == "" {
+				return nil, ErrLoopbackNotAuthorized
+			}
+		}
+
 		conn, dialErr := hostproxy.DialPinned(dialCtx, target, "tcp", netip.AddrPortFrom(ip, ep.Port))
 		if dialErr == nil {
 			if authorized != nil && !authorized() {
 				_ = conn.Close()
 				return nil, errCommandAuthorizationRevoked
 			}
+			if resourceID != "" {
+				guarded := &ownedLoopbackConn{Conn: conn, ctx: ctx, endpoint: endpoint, resourceID: resourceID, observe: owned, refused: refused}
+				if !guarded.valid() {
+					_ = conn.Close()
+					return nil, ErrLoopbackNotAuthorized
+				}
+				return guarded, nil
+			}
+
 			return conn, nil
 		}
 		lastErr = dialErr

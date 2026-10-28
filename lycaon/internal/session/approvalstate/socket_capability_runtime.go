@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/scopedstore"
 )
 
@@ -175,7 +176,7 @@ func (r *SocketCapabilityRuntime) FindByID(id string) (SocketChatGrant, string, 
 }
 
 // IssuePermit mints an ephemeral current-call permit.
-func (r *SocketCapabilityRuntime) IssuePermit(sessionID, toolCallID, actionDigest string, g confine.SocketGrant) {
+func (r *SocketCapabilityRuntime) IssuePermit(identity hitl.EffectPermitIdentity, actionDigest string, g confine.SocketGrant) {
 	if r == nil {
 		return
 	}
@@ -183,44 +184,40 @@ func (r *SocketCapabilityRuntime) IssuePermit(sessionID, toolCallID, actionDiges
 	if g.ApprovedPath == "" || g.ResolvedPath == "" {
 		return
 	}
-	sessionID = strings.TrimSpace(sessionID)
-	toolCallID = strings.TrimSpace(toolCallID)
 	actionDigest = strings.TrimSpace(actionDigest)
-	if sessionID == "" || toolCallID == "" || actionDigest == "" {
+	if !identity.Valid() || actionDigest == "" {
 		return
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	slotKey := socketPermitKey(sessionID, toolCallID, actionDigest, g)
+	slotKey := socketPermitKey(identity, actionDigest, g)
 	r.permits.Store(slotKey, &socketPermitSlot{grant: g})
 }
 
 // RevokePermit removes an unconsumed permit. It is the rollback path for an
 // approval resolution that could not commit after authority installation.
-func (r *SocketCapabilityRuntime) RevokePermit(sessionID, toolCallID, actionDigest string, g confine.SocketGrant) {
-	if r == nil {
+func (r *SocketCapabilityRuntime) RevokePermit(identity hitl.EffectPermitIdentity, actionDigest string, g confine.SocketGrant) {
+	if r == nil || !identity.Valid() {
 		return
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.permits.Delete(socketPermitKey(strings.TrimSpace(sessionID), strings.TrimSpace(toolCallID), strings.TrimSpace(actionDigest), normalizeSocketGrant(g)))
+	r.permits.Delete(socketPermitKey(identity, strings.TrimSpace(actionDigest), normalizeSocketGrant(g)))
 }
 
 // ConsumePermit atomically consumes a current-call permit once for the invocation.
-func (r *SocketCapabilityRuntime) ConsumePermit(sessionID, toolCallID, actionDigest string, g confine.SocketGrant) (bool, error) {
+func (r *SocketCapabilityRuntime) ConsumePermit(identity hitl.EffectPermitIdentity, actionDigest string, g confine.SocketGrant) (bool, error) {
 	if r == nil {
 		return false, errSocketPermitMismatch
 	}
 	g = normalizeSocketGrant(g)
-	sessionID = strings.TrimSpace(sessionID)
-	toolCallID = strings.TrimSpace(toolCallID)
 	actionDigest = strings.TrimSpace(actionDigest)
-	if sessionID == "" || toolCallID == "" || actionDigest == "" || g.ApprovedPath == "" || g.ResolvedPath == "" {
+	if !identity.Valid() || actionDigest == "" || g.ApprovedPath == "" || g.ResolvedPath == "" {
 		return false, errSocketPermitMismatch
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	slotKey := socketPermitKey(sessionID, toolCallID, actionDigest, g)
+	slotKey := socketPermitKey(identity, actionDigest, g)
 	slot, ok := r.permits.LoadAndDelete(slotKey)
 	if !ok {
 		return false, nil
@@ -233,8 +230,8 @@ func (r *SocketCapabilityRuntime) ConsumePermit(sessionID, toolCallID, actionDig
 
 // AuthorizedGrants returns the subset of requested grants covered by chat overlay
 // or an unconsumed current-call permit for this invocation.
-func (r *SocketCapabilityRuntime) AuthorizedGrants(rootSessionID, sessionID, toolCallID, actionDigest string, requested []confine.SocketGrant) []confine.SocketGrant {
-	if r == nil || len(requested) == 0 {
+func (r *SocketCapabilityRuntime) AuthorizedGrants(rootSessionID string, identity hitl.EffectPermitIdentity, actionDigest string, requested []confine.SocketGrant) []confine.SocketGrant {
+	if r == nil || !identity.Valid() || len(requested) == 0 {
 		return nil
 	}
 	chatByPair := map[string]confine.SocketGrant{}
@@ -251,7 +248,7 @@ func (r *SocketCapabilityRuntime) AuthorizedGrants(rootSessionID, sessionID, too
 			out = append(out, tg)
 			continue
 		}
-		slotKey := socketPermitKey(strings.TrimSpace(sessionID), strings.TrimSpace(toolCallID), strings.TrimSpace(actionDigest), req)
+		slotKey := socketPermitKey(identity, strings.TrimSpace(actionDigest), req)
 		if slot, ok := r.permits.Load(slotKey); ok && socketGrantPairKey(slot.grant) == key {
 			out = append(out, req)
 		}
@@ -310,6 +307,6 @@ func socketGrantPairKey(g confine.SocketGrant) string {
 	return g.ApprovedPath + "\x00" + g.ResolvedPath
 }
 
-func socketPermitKey(sessionID, toolCallID, actionDigest string, g confine.SocketGrant) string {
-	return sessionID + "\x01" + toolCallID + "\x01" + actionDigest + "\x01" + socketGrantPairKey(g)
+func socketPermitKey(identity hitl.EffectPermitIdentity, actionDigest string, g confine.SocketGrant) string {
+	return identity.Key() + "\x01" + actionDigest + "\x01" + socketGrantPairKey(g)
 }
