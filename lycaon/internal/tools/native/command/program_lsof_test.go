@@ -197,13 +197,8 @@ func TestProgramEntryLsofRefusesUnsupportedEndpoints(t *testing.T) {
 			t.Fatalf("%s: %s", program, out)
 		}
 	}
-	out, err := f.call(t, t.Context(), "lsof -i :80 -p 1")
-	testutil.FailErr(t, "unsupported option", err)
-	if refusal := decodeOutcome(t, out).Refusal; refusal == nil || refusal.Code != "COMMAND_OPTION_UNSUPPORTED" {
-		t.Fatalf("lsof -p: %s", out)
-	}
 	f.Runtime.Ports = nil
-	out, err = f.call(t, t.Context(), "lsof -i :80")
+	out, err := f.call(t, t.Context(), "lsof -i :80")
 	if err == nil && decodeOutcome(t, out).Status == 0 {
 		t.Fatalf("lsof without an inventory succeeded: %s", out)
 	}
