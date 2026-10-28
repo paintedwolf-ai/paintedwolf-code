@@ -36,6 +36,7 @@ func defaultDataBoundary(t *testing.T, custom bool) (string, *confine.Confinemen
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, "cache"))
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "config"))
+	t.Setenv("XDG_DATA_DIRS", filepath.Join(home, "system-data"))
 	t.Setenv("XDG_DATA_HOME", "")
 	t.Setenv("XDG_STATE_HOME", "")
 	if custom {
