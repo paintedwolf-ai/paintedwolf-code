@@ -446,7 +446,7 @@ describe("ManagedSecretsPanel", () => {
     await revealValue();
     const target = screen.getByTestId("managed-secret-revealed-value");
     const action = textEditMenuItems({ kind: "selection", text: "nat", target }).find((item) => item.label === "Copy");
-    await action?.onSelect?.();
+    action?.onSelect?.();
     expect(clipboard.write).toHaveBeenCalledWith("nat");
     await waitFor(() => expect(screen.getByTestId("managed-secret-copy-value").textContent).toBe("Value copied"));
   });
