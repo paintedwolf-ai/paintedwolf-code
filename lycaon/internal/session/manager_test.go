@@ -25,13 +25,31 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
+// testMockConfig reads files through command, the coordinator floor's file
+// tool, ahead of the shared fixture's entries for the same prompts.
 func testMockConfig(t *testing.T) *llm.MockConfig {
 	t.Helper()
 	cfg, err := llm.LoadMockConfig()
 	if err != nil {
 		t.Fatalf("load mock config: %v", err)
 	}
+	floor := []llm.MockResponseEntry{
+		{Pattern: "read.*readme", ToolCalls: []llm.MockToolCall{{ID: "call_1", Name: "command", Args: map[string]any{"command": "cat README.md"}}}, FollowUpText: "I've read README.md."},
+		{Pattern: "infinite loop", AlwaysTool: true, ToolCalls: []llm.MockToolCall{{ID: "call_loop", Name: "command", Args: map[string]any{"command": "cat loop.txt"}}}},
+	}
+	cfg.Responses = append(floor, cfg.Responses...)
 	return cfg
+}
+
+// newStubCommandRegistry adds a command stub to the read and write stubs.
+func newStubCommandRegistry(t *testing.T) *tools.StubRegistry {
+	t.Helper()
+	registry := tools.NewStubRegistry()
+	testutil.FailErr(t, "register command stub", registry.Register("command", func(_ context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
+		program, _ := args["command"].(string)
+		return "ran " + program, nil
+	}))
+	return registry
 }
 
 func newTestManager(t *testing.T) (*Host, *store.Memory) {
@@ -42,7 +60,7 @@ func newTestManager(t *testing.T) (*Host, *store.Memory) {
 
 func newTestManagerWithStore(t *testing.T, persistence Store) *Host {
 	t.Helper()
-	registry := tools.NewStubRegistry()
+	registry := newStubCommandRegistry(t)
 	mgr := NewHost(persistence, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, registry)
 	oartest.InstallCloseoutPolicy(t, mgr)
 	mgr.Coordinator.Guards.SetToolMetadata(testtool.RegistryInvoker{Registry: registry})
@@ -225,8 +243,8 @@ func TestSessionHistoryAccumulation(t *testing.T) {
 
 func TestToolCallError(t *testing.T) {
 	store := store.NewMemory()
-	reg := tools.NewStubRegistry()
-	reg.SetFail("read", fmt.Errorf("read failed"))
+	reg := newStubCommandRegistry(t)
+	reg.SetFail("command", fmt.Errorf("command failed"))
 	mgr := NewHost(store, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, reg)
 	oartest.InstallCloseoutPolicy(t, mgr)
 	mgr.Coordinator.Guards.SetToolMetadata(testtool.RegistryInvoker{Registry: reg})
