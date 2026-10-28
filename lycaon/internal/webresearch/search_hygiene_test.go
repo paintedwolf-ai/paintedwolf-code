@@ -94,9 +94,9 @@ func TestEveryProviderHitPassesTheFanInSanitizer(t *testing.T) {
 	if !ok {
 		t.Fatal("runtime.Caller failed")
 	}
-	src, err := os.ReadFile(filepath.Join(filepath.Dir(thisFile), "search_fanout.go"))
+	src, err := os.ReadFile(filepath.Join(filepath.Dir(thisFile), "search.go"))
 	if err != nil {
-		t.Fatalf("read search_fanout.go: %v", err)
+		t.Fatalf("read search.go: %v", err)
 	}
 	if got := strings.Count(string(src), "sanitizeHits(out.hits)"); got != 2 {
 		t.Fatalf("runProviderTasks sanitizes %d of its 2 outcome paths — a provider can reach the model unsanitized", got)
