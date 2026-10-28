@@ -169,6 +169,35 @@ class LinuxWithdrawalTests(unittest.TestCase):
                 server.shutdown()
                 server.server_close()
 
+    def test_download_refuses_truncated_oversized_and_escaping_objects(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            work = Path(temporary)
+            row = {"replacement": identity(self.good), "receipt": self.good}
+            origin = work / "origin" / "linux/generations" / row["replacement"] / "pool/a"
+            origin.mkdir(parents=True)
+            server = ThreadingHTTPServer(("127.0.0.1", 0), partial(QuietHandler, directory=str(work / "origin")))
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                base = f"http://127.0.0.1:{server.server_port}"
+                for name, content in [("truncated", b"pack"), ("oversized", b"package and more")]:
+                    (origin / "package").write_bytes(content)
+                    with self.subTest(name=name), self.assertRaisesRegex(ValueError, "differs from its inventory"):
+                        download(base, row, work / name)
+                    self.assertFalse((work / name / "pool/a/package").exists())
+                (origin / "package").write_bytes(b"package")
+                for escaping in ["../package", "/pool/a/package", "pool/../a/package", "pool//a/package",
+                                 "./package", "generation.json", ""]:
+                    receipt = {**self.good, "objects": [{**self.good["objects"][0], "path": escaping}]}
+                    with self.subTest(path=escaping), self.assertRaisesRegex(ValueError, "unsupported object path"):
+                        download(base, {"replacement": identity(receipt), "receipt": receipt}, work / "escaping")
+                    self.assertFalse((work / "escaping").exists())
+                download(base, row, work / "retained")
+                self.assertEqual((work / "retained/pool/a/package").read_bytes(), b"package")
+            finally:
+                server.shutdown()
+                server.server_close()
+
 
 class LinuxReleaseCommandTests(unittest.TestCase):
     """The workflow entry points run the same functions with the protected key and qualification."""
