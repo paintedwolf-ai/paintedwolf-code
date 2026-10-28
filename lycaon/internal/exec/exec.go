@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/argv"
+	"github.com/lycaon/lycaon/internal/confine"
 )
 
 // ProcessPriority selects OS scheduling priority for a child process.
@@ -55,6 +56,8 @@ type ExecOpts struct {
 	ProcessPriority ProcessPriority
 	// Started observes the launched process before any waiter can reap it.
 	Started func(pid int)
+	// Child sets resource limits and signal dispositions each stage starts with.
+	Child confine.ProcessAttributes
 }
 
 // DefaultVerifyTimeout is the default verify subprocess timeout.

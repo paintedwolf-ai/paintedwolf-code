@@ -72,6 +72,12 @@ func cloneCommand(cmd CommandNode) CommandNode {
 	case TrapCommand:
 		v.Statements = cloneStatements(v.Statements)
 		return v
+	case TimedCommand:
+		if v.Pipeline != nil {
+			pipeline := cloneStatement(*v.Pipeline)
+			v.Pipeline = &pipeline
+		}
+		return v
 	default:
 		return nil
 	}

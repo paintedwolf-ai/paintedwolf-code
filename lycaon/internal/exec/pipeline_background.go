@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"syscall"
 )
 
 // AsyncPipeline runs a command plan without blocking the caller.
@@ -107,6 +108,15 @@ func (a *AsyncPipeline) Kill() {
 	if a.cancel != nil {
 		a.cancel()
 	}
+}
+
+// Signal delivers sig to the running tree without terminating it; SIGKILL
+// ends it at once. It reports whether a running stage received it.
+func (a *AsyncPipeline) Signal(sig syscall.Signal) bool {
+	if a == nil {
+		return false
+	}
+	return a.run.signal(sig)
 }
 
 // Wait blocks until the pipeline finishes and returns its result.

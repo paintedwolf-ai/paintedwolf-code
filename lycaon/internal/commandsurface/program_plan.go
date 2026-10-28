@@ -167,6 +167,16 @@ type TrapCommand struct {
 
 func (TrapCommand) commandNode() {}
 
+// TimedCommand is the time reserved word before a pipeline; Pipeline is nil
+// for a bare time. POSIX selects the -p report.
+type TimedCommand struct {
+	SyntaxLocation
+	POSIX    bool
+	Pipeline *Statement
+}
+
+func (TimedCommand) commandNode() {}
+
 // TestNode is a word, unary predicate, binary predicate or parenthesized test.
 type TestNode interface{ testNode() }
 
