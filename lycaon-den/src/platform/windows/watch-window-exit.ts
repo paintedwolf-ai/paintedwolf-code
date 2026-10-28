@@ -145,6 +145,17 @@ function installDOMListeners(): void {
   };
 }
 
+// The shell keeps a main workspace it can bring back, or holds it while the
+// application exit transaction runs; the document must not destroy it.
+async function shellRetainsWindow(): Promise<boolean> {
+  const { invoke } = await import("@tauri-apps/api/core");
+  const disposition = await invoke<unknown>("den_window_close_disposition");
+  if (disposition !== "retained" && disposition !== "destroy") {
+    throw new Error("The native window close disposition is unavailable");
+  }
+  return disposition === "retained";
+}
+
 function installTauriCloseListener(): void {
   if (!isTauriRuntime() || tauriListenerPending || disposeTauriListener) return;
   clearTimeout(listenerRetry);
@@ -161,8 +172,16 @@ function installTauriCloseListener(): void {
         const controller = new AbortController();
         closing = controller;
         const releaseInput = holdInput();
-        try { await preserveForExit(() => appWindow.destroy(), controller.signal); }
-        finally {
+        try {
+          if (await shellRetainsWindow()) {
+            await flushRegisteredState().catch((error: unknown) => console.error("failed to flush durable app state", error));
+            return;
+          }
+          await preserveForExit(() => appWindow.destroy(), controller.signal);
+        } catch (error) {
+          resumeResources();
+          console.error("failed to determine native window close disposition; keeping window open", error);
+        } finally {
           releaseInput();
           if (closing === controller) closing = undefined;
         }

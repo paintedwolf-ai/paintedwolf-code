@@ -16,7 +16,7 @@ import tempfile
 import urllib.parse
 import uuid
 
-from ..installed_runtime import nix_command
+from ..campaign.runtime import nix_command
 from .app import InstalledApp
 from .approval import approve_host_execution
 from .nix_fixture import derivation, load, path_presence, realized, store_file

@@ -7,7 +7,8 @@ import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
-from linux_release import installed_execution, installed_storage
+from linux_release import installed_storage
+from linux_release.campaign import execution as installed_execution
 from linux_release.installed_cases import (
     app as app_mod, desktop_launch, desktop_turn, desktop_ui,
     fixture_turn, fresh_profile, lock_monitor, native_session,

@@ -10,7 +10,7 @@ from unittest.mock import patch
 import warnings
 import zipfile
 
-from linux_release.installed_artifact_bundle import Limits, extract
+from linux_release.campaign.artifact_bundle import Limits, extract
 
 
 class PublicationBundleTests(unittest.TestCase):
@@ -63,7 +63,7 @@ class PublicationBundleTests(unittest.TestCase):
             archive, digest = self.archive(root, [("a", b"content")])
             with self.assertRaisesRegex(ValueError, "size bound"):
                 extract(archive, root / "out", digest,limits=Limits(max_bytes=1))
-            with patch("linux_release.installed_artifact_bundle.shutil.disk_usage") as usage:
+            with patch("linux_release.campaign.artifact_bundle.shutil.disk_usage") as usage:
                 usage.return_value.free = 1
                 with self.assertRaisesRegex(ValueError, "free disk"):
                     extract(archive, root / "out", digest)
@@ -72,7 +72,7 @@ class PublicationBundleTests(unittest.TestCase):
 
 class ControllerInputRetentionTests(unittest.TestCase):
     def test_retention_copies_exact_declared_roles_with_private_modes(self):
-        from linux_release.installed_artifact_bundle import retain_tree
+        from linux_release.campaign.artifact_bundle import retain_tree
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             source = root/"source"
@@ -85,7 +85,7 @@ class ControllerInputRetentionTests(unittest.TestCase):
             self.assertEqual((root/"retained/packages/app").stat().st_mode & 0o777,0o600)
 
     def test_unexpected_roles_links_and_resource_bounds_remove_owned_copy(self):
-        from linux_release.installed_artifact_bundle import retain_tree
+        from linux_release.campaign.artifact_bundle import retain_tree
         for mutation in ("unexpected","link","count","disk"):
             with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
@@ -97,7 +97,7 @@ class ControllerInputRetentionTests(unittest.TestCase):
                     (source/"receipt.json").write_bytes(b"receipt")
                 if mutation=="link":
                     (source/"packages/link").symlink_to("app")
-                target="linux_release.installed_artifact_bundle."
+                target="linux_release.campaign.artifact_bundle."
                 manager=nullcontext() if mutation=="count" else patch(target+"shutil.disk_usage",return_value=type("Disk",(),{"free":0 if mutation=="disk" else 1<<40})())
                 with manager,self.assertRaises((ValueError,OSError)):
                     retain_tree(source,root/"retained",root_files={"manifest.json"},root_dirs={"packages"},
