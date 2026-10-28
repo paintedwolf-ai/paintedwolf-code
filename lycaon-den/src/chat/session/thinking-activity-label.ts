@@ -298,9 +298,14 @@ export function findLatestRunningToolInTurn(
 
 function runningToolCandidate(
   messages: readonly Message[],
+  activities: readonly ActivityEvent[] = [],
 ): ActivityLabelCandidate | undefined {
   const part = findLatestRunningToolInTurn(messages);
   if (!part) return undefined;
+  if (activities.some((activity) =>
+    activity.status === "active" && activity.kind === "awaiting_wake" &&
+    activity.tool_call_id?.trim() === part.toolCallId.trim() && activity.tool_name?.trim().toLowerCase() === part.tool.toLowerCase()
+  )) return undefined;
   return {
     label: thinkingToolRunningLabel(part),
     weight: ACTIVITY_LABEL_WEIGHTS.runningTool,
@@ -325,7 +330,7 @@ function toolPartForActivity(
     ) ?? -1;
     const call = index >= 0 ? msg.tool_calls?.[index] : undefined;
     if (call) {
-      return toolPartFromCall(call, undefined, msg.id, undefined, {
+      return toolPartFromCall(call, findToolResult(messages, msg.id, call.id), msg.id, undefined, {
         message: msg,
         index,
       });
@@ -390,9 +395,12 @@ function hostActivityCandidate(
     };
   }
   if (activity.kind === "awaiting_wake") {
-    const named = waitConditionsLabel(activity.wait_triggers ?? []);
+    const command = activity.tool_name === "command" && activity.wait_triggers?.includes("program_done");
+    const part = command ? toolPartForActivity(activity, messages) : undefined;
+    const reason = part?.completion?.state === "parked" ? part.completion.reason?.trim() : undefined;
+    const named = command ? WAIT_CONDITION_LABELS.process_done : waitConditionsLabel(activity.wait_triggers ?? []);
     return {
-      label: named ?? WAIT_CONDITION_LABELS.timer,
+      label: reason ? `Waiting · ${reason}` : named ?? WAIT_CONDITION_LABELS.timer,
       weight: named
         ? ACTIVITY_LABEL_WEIGHTS.awaitingWake
         : ACTIVITY_LABEL_WEIGHTS.awaitingWakeUnnamed,
@@ -624,7 +632,7 @@ export function collectThinkingActivityCandidates(
   const activity = hostActivityCandidate(input.activities, messages);
   if (activity) candidates.push(activity);
 
-  const tool = runningToolCandidate(messages);
+  const tool = runningToolCandidate(messages, input.activities);
   if (tool) candidates.push(tool);
 
   const closeout = provisionalCloseoutCandidate(input);
