@@ -9,15 +9,13 @@ import json
 from pathlib import Path
 import tempfile
 import threading
-import types
-import sys
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 from scripts.nix_cache.admission import inventory
 from scripts.nix_cache.publication import encoded, publish, verified_report, withdraw
 from scripts.nix_cache.r2 import R2Transport, LOCK
-from scripts.nix_cache.release_authority import authorize, nar_sha256
+from scripts.nix_cache.release_authority import authorize
 from scripts.nix_cache.retention import collect, recover
 
 OUTPUT = "/nix/store/" + "0" * 32 + "-application"
@@ -201,37 +199,29 @@ class CachePublicationTests(unittest.TestCase):
             recover({}, "a" * 32, authorize=lambda *args: False, backend_factory=self.factory)
         self.factory.assert_not_called()
 
-    def test_fresh_release_admission_binds_every_selected_output_and_actual_nar(self):
-        artifact = {"architecture": "amd64", "identity": {"kind": "nix-closure", "store_path": OUTPUT,
-                     "lock_sha256": "b" * 64, "sha256": bytes(32).hex()}}
-        verify = Mock(return_value={"accepted": True})
-        evidence = Mock(return_value={"nix-amd64": artifact})
-        modules = {"scripts.linux_release.release_admission": types.SimpleNamespace(verify_release=verify),
-                   "scripts.linux_release.installed_evidence": types.SimpleNamespace(artifacts=evidence)}
-        selection = {"source_commit": "a" * 40, "version": "1.0.0", "artifacts": {}}
+    def test_each_authorization_rereads_qualification_and_binds_the_selected_release(self):
+        qualified = Mock()
+        selection = {"source_commit": "a" * 40, "version": "1.0.0"}
         request = self.report["request"]
         policy = {"schema_version": 1, "mode": "production", "public_keys": [PUBLIC]}
-        with patch.dict(sys.modules, modules):
-            self.assertTrue(authorize(selection, request, self.report, trust_policy=policy))
-            self.assertTrue(authorize(selection, request, self.report, trust_policy=policy))
-            self.assertEqual(verify.call_count, 2)
-            for changed in [{**request, "version": "1.0.1"}, {**request, "application_commit": "c" * 40},
-                            {**request, "flake_lock_sha256": "c" * 64}, {**request, "outputs": [OUTPUT + "-extra"]},
-                            {**request, "system": "aarch64-linux"}]:
-                with self.subTest(request=changed), self.assertRaises(ValueError):
-                    authorize(selection, changed, {**self.report, "request": changed}, trust_policy=policy)
-            wrong = copy.deepcopy(self.report)
-            wrong["closure"][OUTPUT]["nar_hash"] = "sha256-" + base64.b64encode(b"x" * 32).decode()
-            with self.assertRaises(ValueError):
-                authorize(selection, request, wrong, trust_policy=policy)
-            with self.assertRaises(ValueError):
-                authorize(selection, request, self.report, trust_policy={**policy, "public_keys": [PUBLIC.replace("cache-1", "cache-2")]})
-            verify.return_value = {"accepted": False}
-            with self.assertRaises(ValueError):
-                authorize(selection, request, self.report, trust_policy=policy)
-        for value in ["sha256:" + "0" * 64, "sha512-" + SRI[7:], "sha256-AA==", "sha256-" + SRI[7:] + "="]:
-            with self.subTest(hash=value), self.assertRaises(ValueError):
-                nar_sha256(value)
+        self.assertTrue(authorize(selection, request, self.report, trust_policy=policy, qualified=qualified))
+        self.assertTrue(authorize(selection, request, self.report, trust_policy=policy, qualified=qualified))
+        self.assertEqual(qualified.call_args_list, [call("a" * 40)] * 2)
+        for changed in [{**request, "version": "1.0.1"}, {**request, "application_commit": "c" * 40}]:
+            with self.subTest(request=changed), self.assertRaises(ValueError):
+                authorize(selection, changed, {**self.report, "request": changed}, trust_policy=policy, qualified=qualified)
+        with self.assertRaises(ValueError):
+            authorize(selection, request, {**self.report, "request": {**request, "outputs": [OUTPUT + "-extra"]}},
+                      trust_policy=policy, qualified=qualified)
+        with self.assertRaises(ValueError):
+            authorize(selection, request, {**self.report, "status": "failed"}, trust_policy=policy, qualified=qualified)
+        with self.assertRaises(ValueError):
+            authorize(selection, request, self.report, qualified=qualified,
+                      trust_policy={**policy, "public_keys": [PUBLIC.replace("cache-1", "cache-2")]})
+        self.assertEqual(qualified.call_count, 2)
+        qualified.side_effect = ValueError("no passing exact-commit qualification")
+        with self.assertRaisesRegex(ValueError, "qualification"):
+            authorize(selection, request, self.report, trust_policy=policy, qualified=qualified)
 
 
 class CachePublicHTTPTests(unittest.TestCase):
