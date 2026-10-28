@@ -189,7 +189,10 @@ def matrix(profile, suite="all", scope=None, platform=False, timings=None):
                            "browser": BROWSER_TARGET in lane["targets"]
                            and "browser" in lane.get("arguments", ["browser"]),
                            "linux_launch": any(runs_protected_launch(target) for target in lane["targets"]),
-                           "repository_tools": REPOSITORY_TOOLS_TARGET in lane["targets"],
+                           "repository_tools": REPOSITORY_TOOLS_TARGET in lane["targets"]
+                           or ("scripts:coverage:changes" in lane["targets"] and scope is not None
+                               and any(path.startswith("scripts/") and path.endswith(".py")
+                                       for path in scope["paths"])),
                            "nix": any(target.startswith("nix:") for target in lane["targets"])
                            or "nix" in lane.get("arguments", []),
                            "analysis": analysis_set(lane["targets"]),

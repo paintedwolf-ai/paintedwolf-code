@@ -233,6 +233,12 @@ class HostedPlanTests(unittest.TestCase):
                     self.assertEqual(row["repository_tools"], "test:runner" in ci.lanes()[row["lane"]]["targets"])
         self.assertEqual([row["lane"] for row in ci.matrix("check")["include"] if row["repository_tools"]], ["runner"])
 
+        scope = {"base": "base", "head": "head", "paths": ["scripts/ci_policy/hosted_plan.py"], "full": False}
+        self.assertEqual([row["lane"] for row in ci.matrix("fast", scope=scope)["include"]
+                          if row["repository_tools"]], ["ready"])
+        scope["paths"] = ["lycaon/internal/settings/settings.go"]
+        self.assertFalse(any(row["repository_tools"] for row in ci.matrix("fast", scope=scope)["include"]))
+
     def test_nix_lane_is_nightly_only_and_provisions_nix_before_running_offline(self):
         # Nix verification informs; it never gates a merge or a release.
         self.assertEqual(ci.lanes()["nix"]["profiles"], ["nightly"])
