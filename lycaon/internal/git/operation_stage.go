@@ -16,7 +16,7 @@ import (
 // The work tree is never touched.
 type IndexEntry struct {
 	Path string
-	// Mode is the index mode for written stages: "100644" or "100755".
+	// Mode is the index mode for written stages: "100644", "100755" or "120000".
 	Mode    string
 	Content []byte
 	Remove  bool
@@ -39,7 +39,7 @@ func (p *operationPlan) stageEntries() error {
 		if strings.ContainsRune(entry.Path, 0) {
 			return operationRefusal("invalid_repository_path", entry.Path)
 		}
-		if !entry.Remove && entry.Mode != "100644" && entry.Mode != "100755" {
+		if !entry.Remove && entry.Mode != "100644" && entry.Mode != "100755" && entry.Mode != "120000" {
 			return operationRefusal("invalid_index_mode", entry.Path)
 		}
 		paths = append(paths, entry.Path)

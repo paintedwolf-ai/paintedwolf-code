@@ -142,16 +142,15 @@ type Prepared struct {
 	command   *command
 	owners    *Owners
 	paths     *projectpaths.ProgramPaths
-	// patches is the program's staged publication, which git apply shares
-	// with patch for work tree files.
-	patches *mutation.Owners
-	// execution records the captures git apply pins.
+	// filesystem supplies the program's shared file effects and pinned inputs.
+	filesystem *mutation.Owners
+	// execution records the pinned file inputs.
 	execution string
 }
 
 // Prepare binds a reached Git command through the catalog grammar and its
 // operand rule. It reads and runs nothing.
-func (o *Owners) Prepare(paths *projectpaths.ProgramPaths, patches *mutation.Owners, request commandprogram.OperationRequest) (Prepared, error) {
+func (o *Owners) Prepare(paths *projectpaths.ProgramPaths, filesystem *mutation.Owners, request commandprogram.OperationRequest) (Prepared, error) {
 	if err := request.Validate(); err != nil {
 		return Prepared{}, err
 	}
@@ -175,16 +174,16 @@ func (o *Owners) Prepare(paths *projectpaths.ProgramPaths, patches *mutation.Own
 		reviewID = spec.Name
 	}
 	return Prepared{
-		Command:   spec.Name,
-		Operation: o.ops[spec.Name],
-		Mode:      effectMode(spec, parsed, bound),
-		Argv:      bound,
-		Review:    bound.Review(reviewID),
-		command:   parsed,
-		owners:    o,
-		paths:     paths,
-		patches:   patches,
-		execution: request.Invocation.Identity.ExecutionID,
+		Command:    spec.Name,
+		Operation:  o.ops[spec.Name],
+		Mode:       effectMode(spec, parsed, bound),
+		Argv:       bound,
+		Review:     bound.Review(reviewID),
+		command:    parsed,
+		owners:     o,
+		paths:      paths,
+		filesystem: filesystem,
+		execution:  request.Invocation.Identity.ExecutionID,
 	}, nil
 }
 

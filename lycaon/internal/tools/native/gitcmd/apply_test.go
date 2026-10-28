@@ -49,7 +49,7 @@ func newApplyHarness(t *testing.T) *harness {
 	testutil.FailErr(t, "memory limits", err)
 	owners.Revisions.Memory, err = toolcontract.NewProgramMemory(limits)
 	testutil.FailErr(t, "program memory", err)
-	h.patches = owners
+	h.filesystem = owners
 	return h
 }
 
@@ -196,7 +196,7 @@ func (h *harness) patch(stdin string, words ...string) run {
 		argv[i] = commandprogram.Field{Value: word, Span: inv.Span}
 	}
 	statement := commandsurface.Statement{SyntaxLocation: commandsurface.SyntaxLocation{ID: commandsurface.NodeID(inv.Identity.NodeID), Span: inv.Span}}
-	prepared, err := h.patches.Prepare(mutation.Program{Paths: h.paths}, commandprogram.OperationRequest{Invocation: inv, OperationID: "patch", Statement: statement, Argv: argv})
+	prepared, err := h.filesystem.Prepare(mutation.Program{Paths: h.paths}, commandprogram.OperationRequest{Invocation: inv, OperationID: "patch", Statement: statement, Argv: argv})
 	testutil.FailErr(h.t, "prepare patch", err)
 	var stdout, stderr bytes.Buffer
 	result, err := prepared.InvokeOwner(h.t.Context(), h.tc, commandprogram.Streams{Input: io.NopCloser(strings.NewReader(stdin)), Output: &stdout, Error: &stderr})
@@ -369,7 +369,7 @@ func TestApplyOptionsAndDiagnosticsFollowGit(t *testing.T) {
 		{name: "directory", stdin: "--- a/b.txt\n+++ b/b.txt\n@@ -1 +1 @@\n-bee\n+BEE\n", words: []string{"--directory=sub"}, file: "sub/b.txt", content: "BEE\n"},
 		{name: "strip zero", stdin: "--- sub/b.txt\n+++ sub/b.txt\n@@ -1 +1 @@\n-bee\n+BEE\n", words: []string{"-p0"}, file: "sub/b.txt", content: "BEE\n"},
 		{name: "verbose", stdin: "--- a/sub/b.txt\n+++ b/sub/b.txt\n@@ -1 +1 @@\n-bee\n+BEE\n", words: []string{"-v"}, stderr: "Checking patch sub/b.txt...\nApplied patch sub/b.txt cleanly.\n", file: "sub/b.txt", content: "BEE\n"},
-		{name: "no patch", stdin: "prose only\n", status: 128, stderr: "error: No valid patches in input (allow with \"--allow-empty\")\n"},
+		{name: "no patch", stdin: "prose only\n", status: 128, stderr: "error: No valid filesystem in input (allow with \"--allow-empty\")\n"},
 		{name: "missing file", stdin: "--- a/nope.txt\n+++ b/nope.txt\n@@ -1 +1 @@\n-a\n+b\n", status: 1, stderr: "error: nope.txt: No such file or directory\n"},
 		{name: "creation over an existing file", stdin: "--- /dev/null\n+++ b/a.txt\n@@ -0,0 +1 @@\n+x\n", status: 1, stderr: "error: a.txt: already exists in working directory\n"},
 		{name: "removal leaves content", stdin: "--- a/a.txt\n+++ /dev/null\n@@ -1 +0,0 @@\n-one\n", status: 1, stderr: "error: removal patch leaves file contents\nerror: a.txt: patch does not apply\n", file: "a.txt", content: "one\ntwo\nthree\n"},
@@ -396,7 +396,7 @@ func TestApplyOptionsAndDiagnosticsFollowGit(t *testing.T) {
 			t.Fatalf("%v accepted", words)
 		}
 	}
-	h.patches = nil
+	h.filesystem = nil
 	if reject := toolrejection.AsToolReject(h.apply(sample).err); reject == nil || reject.Code != "COMMAND_PLATFORM_UNAVAILABLE" {
 		t.Fatal("git apply ran without the staged publication")
 	}

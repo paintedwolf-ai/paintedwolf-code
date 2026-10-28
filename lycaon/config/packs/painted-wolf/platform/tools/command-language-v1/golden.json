@@ -1834,7 +1834,7 @@
     },
     {
       "id": "predicate-ere-scalar-collation",
-      "program": "[[ é =~ [[.é.]] ]]",
+      "program": "[[ \u00e9 =~ [[.\u00e9.]] ]]",
       "setup": {
         "files": {},
         "host_facts": {},
@@ -2063,6 +2063,48 @@
             "kind": "document-publication",
             "path": "input",
             "bytes": "ALPHA\nbeta\n"
+          }
+        ],
+        "receipts": {
+          "zero_program_effects": false,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
+      },
+      "qualification": "normative definition; P04/P02 must execute against parser/native owners"
+    },
+    {
+      "id": "git-tracked-move-and-remove",
+      "program": "git init -q; git add -- input; git mv -- input renamed; git rm -f -- renamed",
+      "setup": {
+        "files": {
+          "input": "alpha\nbeta\n"
+        },
+        "host_facts": {},
+        "helpers": {}
+      },
+      "expected": {
+        "stdout": "rm 'renamed'\n",
+        "stderr": "",
+        "status": 0,
+        "diagnostic": null,
+        "source_span": null,
+        "semantic_effects": [
+          {
+            "kind": "git-index-stage",
+            "paths": [
+              "input",
+              "renamed"
+            ]
+          },
+          {
+            "kind": "filesystem-move",
+            "from": "input",
+            "path": "renamed"
+          },
+          {
+            "kind": "filesystem-delete",
+            "path": "renamed"
           }
         ],
         "receipts": {

@@ -17,7 +17,7 @@ var readCommands = map[string]bool{
 	"status": true, "diff": true, "log": true, "show": true, "blame": true,
 	"branch": true, "tag": true, "rev-parse": true, "rev-list": true,
 	"merge-base": true, "remote": true, "config": true, "stash": true,
-	"worktree": true, "ls-files": true, "clean": true,
+	"worktree": true, "ls-files": true, "ls-tree": true, "clean": true,
 }
 
 // ReadCommandTimeout bounds one read command.
