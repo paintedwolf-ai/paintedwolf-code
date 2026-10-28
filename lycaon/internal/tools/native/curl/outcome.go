@@ -110,10 +110,19 @@ func isTimeout(err error) bool {
 // transport or --fail outcome is curl's ordinary exit status.
 func (inv *invocation) settle(err error) (toolcontract.ProducerResult, error) {
 	if err == nil {
-		return toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.EffectCompleted,
-			Evidence: inv.evidence()}, nil
+		if err = inv.writeOut(0); err == nil {
+			return toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.EffectCompleted,
+				Evidence: inv.evidence()}, nil
+		}
+		return inv.failure(err)
 	}
-	_ = inv.writeOut(0, 0, inv.opts.url)
+	result, err := inv.failure(err)
+	_ = inv.writeOut(result.Status)
+	return result, err
+}
+
+// failure settles an unsuccessful run as a host refusal or curl's exit.
+func (inv *invocation) failure(err error) (toolcontract.ProducerResult, error) {
 	if _, denied := egressgate.Denied(inv.ctx); denied || errors.Is(err, context.Canceled) && !inv.sent {
 		return inv.refused(err, 7)
 	}
@@ -166,11 +175,17 @@ func (inv *invocation) refused(err error, code int) (toolcontract.ProducerResult
 	return toolcontract.ProducerResult{Status: code, Terminal: toolcontract.ProducerRefused, StopCode: stop, EffectCertainty: toolcontract.NoEffect}, err
 }
 
-// evidence names the owner and the received and emitted body identities.
+// evidence names the owner and the sent, received and emitted body
+// identities.
 func (inv *invocation) evidence() toolcontract.OperationEvidence {
 	evidence := toolcontract.OperationEvidence{Owner: "outbound_http", Kind: "http_exchange"}
-	if inv.transfer.ReceivedSHA256 != "" {
-		evidence.EvidenceRef = "received:sha256:" + inv.transfer.ReceivedSHA256 + " emitted:sha256:" + inv.transfer.EmittedSHA256
+	var refs []string
+	if inv.transfer.SentBytes > 0 {
+		refs = append(refs, "sent:sha256:"+inv.transfer.SentSHA256)
 	}
+	if inv.transfer.ReceivedSHA256 != "" {
+		refs = append(refs, "received:sha256:"+inv.transfer.ReceivedSHA256, "emitted:sha256:"+inv.transfer.EmittedSHA256)
+	}
+	evidence.EvidenceRef = strings.Join(refs, " ")
 	return evidence
 }

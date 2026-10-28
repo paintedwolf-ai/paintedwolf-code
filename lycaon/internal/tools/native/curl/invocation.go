@@ -19,11 +19,14 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/native/mutation"
 )
 
-// Transfer is one completed exchange's identity: the bytes the server sent
-// and the response body handed downstream, after any requested decompression.
+// Transfer is one completed exchange's identity: the request body as sent,
+// the bytes the server sent and the response body handed downstream, after
+// any requested decompression.
 type Transfer struct {
 	Status         int
 	FinalURL       string
+	SentBytes      int64
+	SentSHA256     string
 	ReceivedBytes  int64
 	ReceivedSHA256 string
 	EmittedBytes   int64
@@ -39,16 +42,22 @@ type invocation struct {
 	program  mutation.Program
 	request  commandprogram.OperationRequest
 	opts     options
+	stdin    io.Reader
 	stdout   io.Writer
 	stderr   io.Writer
 	dests    *mutation.Destinations
 	started  time.Time
 	sent     bool
+	exchange *httpaction.Exchange
+	headers  string
 	transfer Transfer
 }
 
 func newInvocation(ctx context.Context, p Prepared, tc tools.ToolContext, streams commandprogram.Streams) *invocation {
-	inv := &invocation{ctx: ctx, owners: p.owners, tc: tc, program: p.program, request: p.request, opts: p.options, stdout: streams.Output, stderr: streams.Error}
+	inv := &invocation{ctx: ctx, owners: p.owners, tc: tc, program: p.program, request: p.request, opts: p.options, stdin: streams.Input, stdout: streams.Output, stderr: streams.Error}
+	if inv.stdin == nil {
+		inv.stdin = strings.NewReader("")
+	}
 	if inv.stdout == nil {
 		inv.stdout = io.Discard
 	}
@@ -93,7 +102,11 @@ func (inv *invocation) run() error {
 	if err != nil {
 		return err
 	}
-	limits := httpaction.ExchangeOptions{Jar: jar, MaxBodyBytes: inv.owners.limits["stream_bytes"], ConnectTimeout: inv.opts.connectTimeout, WireHeaders: true}
+	material, err := inv.clientTLS()
+	if err != nil {
+		return err
+	}
+	limits := httpaction.ExchangeOptions{Jar: jar, MaxBodyBytes: inv.owners.limits["stream_bytes"], ConnectTimeout: inv.opts.connectTimeout, WireHeaders: true, TLS: material, Dial: inv.opts.dial}
 	if inv.opts.location {
 		// curl follows up to 50 redirects; the owner's ceiling is lower.
 		limits.RedirectLimit = outboundhttp.MaxRedirectLimit
@@ -105,7 +118,8 @@ func (inv *invocation) run() error {
 		return err
 	}
 	resp := ex.Response
-	inv.transfer = Transfer{Status: resp.Status, FinalURL: ex.FinalURL, ReceivedBytes: resp.Bytes, ReceivedSHA256: resp.SHA256}
+	inv.exchange = &ex
+	inv.transfer = Transfer{Status: resp.Status, FinalURL: ex.FinalURL, SentBytes: ex.SentBodyBytes, SentSHA256: ex.SentBodySHA256, ReceivedBytes: resp.Bytes, ReceivedSHA256: resp.SHA256}
 	// curl writes every followed hop's header block, then the final one.
 	// Cleartext responses keep received order and spelling; TLS responses
 	// present the owner's normalized order.
@@ -115,6 +129,12 @@ func (inv *invocation) run() error {
 	}
 	blocks.WriteString(presentedBlock(resp.StatusLine, resp.Headers, resp.Wire))
 	headers := blocks.String()
+	inv.headers = headers
+	if inv.opts.verbose {
+		if _, err := io.WriteString(inv.stderr, verbose(ex)); err != nil {
+			return err
+		}
+	}
 	if inv.opts.dumpHeader == "-" {
 		if _, err := io.WriteString(inv.stdout, headers); err != nil {
 			return err
@@ -124,8 +144,9 @@ func (inv *invocation) run() error {
 			return err
 		}
 	}
-	if inv.opts.fail && resp.Status >= 400 {
-		return &curlFailure{code: 22, message: fmt.Sprintf("The requested URL returned error: %d", resp.Status), certainty: toolcontract.EffectCompleted}
+	failed := inv.opts.fail != failNever && resp.Status >= 400
+	if failed && inv.opts.fail == failQuiet {
+		return httpFailure(resp.Status)
 	}
 	received := resp.Body
 	if inv.opts.compressed {
@@ -152,31 +173,16 @@ func (inv *invocation) run() error {
 			return err
 		}
 	}
-	return inv.writeOut(resp.Status, resp.Bytes, ex.FinalURL)
+	if failed {
+		return httpFailure(resp.Status)
+	}
+	return nil
 }
 
-// writeOut renders -w after the transfer; a failed transfer reports 000.
-func (inv *invocation) writeOut(status int, size int64, finalURL string) error {
-	if !inv.opts.hasWriteOut {
-		return nil
-	}
-	var b strings.Builder
-	for _, token := range inv.opts.writeOut {
-		switch token.variable {
-		case "":
-			b.WriteString(token.literal)
-		case "http_code":
-			fmt.Fprintf(&b, "%03d", status)
-		case "size_download":
-			fmt.Fprintf(&b, "%d", size)
-		case "url_effective":
-			b.WriteString(finalURL)
-		case "time_total":
-			fmt.Fprintf(&b, "%.6f", time.Since(inv.started).Seconds())
-		}
-	}
-	_, err := io.WriteString(inv.stdout, b.String())
-	return err
+// httpFailure is --fail's exit for an HTTP error status; the exchange
+// completed.
+func httpFailure(status int) error {
+	return &curlFailure{code: 22, message: fmt.Sprintf("The requested URL returned error: %d", status), certainty: toolcontract.EffectCompleted}
 }
 
 func presentedBlock(statusLine string, headers []outboundhttp.Header, wire *outboundhttp.WireHeaders) string {
