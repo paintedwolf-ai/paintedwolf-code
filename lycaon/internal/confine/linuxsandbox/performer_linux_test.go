@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"sync"
 	"testing"
 	"unsafe"
 
@@ -321,6 +322,211 @@ func TestAnswerKernelRetriesInterruptedAddFDBeforeSendingResult(t *testing.T) {
 	if gotResp.ID != 44 || gotResp.Val != 0 || gotResp.Error != -int32(unix.EACCES) {
 		t.Fatalf("refusal resp = %+v, want -EACCES", gotResp)
 	}
+}
+
+func TestPerformerDisconnectRejectsListenerAndForwardedCalls(t *testing.T) {
+	for _, operation := range []string{"lend", "forward"} {
+		t.Run(operation, func(t *testing.T) {
+			pair, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_SEQPACKET|unix.SOCK_CLOEXEC, 0)
+			testutil.FailErr(t, "disconnected performer socket", err)
+			_ = unix.Close(pair[1])
+			client := newPerformerClient(pair[0])
+			defer client.Close()
+			if operation == "lend" {
+				err = client.lend(pair[0], func(pathResult) {})
+			} else {
+				client.forwarding, client.listener = true, -1
+				client.pending = make(map[uint64]struct{})
+				err = client.forward(pathCall{Op: callMkdir, Path: "created", Notification: 1}, nil)
+			}
+			if err == nil || !client.broken || len(client.pending) != 0 {
+				t.Fatalf("disconnected %s: error=%v broken=%v pending=%v", operation, err, client.broken, client.pending)
+			}
+		})
+	}
+}
+
+func TestForwardedCallsAreRefusedWhenThePerformerStops(t *testing.T) {
+	for _, end := range []string{"closed", "malformed"} {
+		t.Run(end, func(t *testing.T) {
+			client, peer, finish := forwardingTestClient(t, func(pathResult) {})
+			defer finish()
+			orig := seccompIoctl
+			t.Cleanup(func() { seccompIoctl = orig })
+			var mu sync.Mutex
+			var answered []seccompNotifResp
+			seccompIoctl = func(_ int, req uint, arg unsafe.Pointer) (uintptr, unix.Errno) {
+				mu.Lock()
+				defer mu.Unlock()
+				if req == unix.SECCOMP_IOCTL_NOTIF_ID_VALID {
+					if *(*uint64)(arg) == 3 {
+						return 0, unix.ENOENT
+					}
+					return 0, 0
+				}
+				if req == unix.SECCOMP_IOCTL_NOTIF_SEND {
+					answered = append(answered, *(*seccompNotifResp)(arg))
+					return 0, 0
+				}
+				return 0, unix.EINVAL
+			}
+			for id := uint64(1); id <= 3; id++ {
+				testutil.FailErr(t, "forward call", client.forward(pathCall{Op: callMkdir, Path: "created", Notification: id}, nil))
+				receiveForwardedCall(t, peer)
+			}
+			testutil.FailErr(t, "acknowledge completed call", unix.Sendmsg(peer, []byte(`{"notification":1}`), nil, nil, 0))
+			testutil.WaitFor(t, func() bool {
+				client.mu.Lock()
+				defer client.mu.Unlock()
+				_, pending := client.pending[1]
+				return !pending
+			})
+			if end == "closed" {
+				_ = unix.Shutdown(peer, unix.SHUT_RDWR)
+			} else {
+				testutil.FailErr(t, "malformed acknowledgment", unix.Sendmsg(peer, []byte(`{`), nil, nil, 0))
+			}
+			testutil.WaitFor(t, func() bool {
+				client.mu.Lock()
+				defer client.mu.Unlock()
+				return client.broken && len(client.pending) == 0
+			})
+			mu.Lock()
+			defer mu.Unlock()
+			if len(answered) != 1 || answered[0].ID != 2 || answered[0].Error != -int32(unix.EACCES) {
+				t.Fatalf("pending answers = %+v, want only live call 2 refused", answered)
+			}
+			if err := client.forward(pathCall{Op: callMkdir, Notification: 4}, nil); err == nil {
+				t.Fatal("forwarded another call to a stopped performer")
+			}
+		})
+	}
+}
+
+func TestForwardedAcknowledgmentsDrainWhileSending(t *testing.T) {
+	client, peer, finish := forwardingTestClient(t, func(pathResult) {})
+	defer finish()
+	testutil.FailErr(t, "bound request buffer", unix.SetsockoptInt(client.fd, unix.SOL_SOCKET, unix.SO_SNDBUF, 1024))
+	testutil.FailErr(t, "bound response buffer", unix.SetsockoptInt(peer, unix.SOL_SOCKET, unix.SO_SNDBUF, 1024))
+	const calls = 256
+	var senders sync.WaitGroup
+	errors := make(chan error, calls)
+	for id := uint64(1); id <= calls; id++ {
+		senders.Go(func() { errors <- client.forward(pathCall{Op: callMkdir, Path: "created", Notification: id}, nil) })
+	}
+	for range calls {
+		call := receiveForwardedCall(t, peer)
+		reply, err := json.Marshal(pathResult{Notification: call.Notification})
+		testutil.FailErr(t, "encode acknowledgment", err)
+		testutil.FailErr(t, "acknowledge call", unix.Sendmsg(peer, reply, nil, nil, 0))
+	}
+	senders.Wait()
+	close(errors)
+	for err := range errors {
+		testutil.FailErr(t, "forward call under backpressure", err)
+	}
+	testutil.WaitFor(t, func() bool {
+		client.mu.Lock()
+		defer client.mu.Unlock()
+		return len(client.pending) == 0
+	})
+}
+
+func TestPerformerCloseWaitsForRefusalReporting(t *testing.T) {
+	started, release, reported := make(chan struct{}, 1), make(chan struct{}), make(chan struct{})
+	var releaseOnce sync.Once
+	client, peer, finish := forwardingTestClient(t, func(pathResult) { started <- struct{}{}; <-release; close(reported) })
+	defer finish()
+	defer releaseOnce.Do(func() { close(release) })
+	testutil.FailErr(t, "forward refused call", client.forward(pathCall{Op: callMkdir, Notification: 1}, nil))
+	receiveForwardedCall(t, peer)
+	testutil.FailErr(t, "report refusal", unix.Sendmsg(peer, []byte(`{"notification":1,"refusal":{"unexamined":true}}`), nil, nil, 0))
+	testutil.Receive(t, "start refusal report", started)
+	closed := make(chan struct{}, 1)
+	go func() { finish(); closed <- struct{}{} }()
+	buf := make([]byte, 1)
+	n, _, _, _, err := unix.Recvmsg(peer, buf, nil, 0)
+	testutil.FailErr(t, "observe client shutdown", err)
+	if n != 0 {
+		t.Fatalf("shutdown returned %d bytes, want EOF", n)
+	}
+	select {
+	case <-closed:
+		t.Fatal("client closed while refusal reporting was blocked")
+	default:
+	}
+	releaseOnce.Do(func() { close(release) })
+	testutil.Receive(t, "join client close", closed)
+	select {
+	case <-reported:
+	default:
+		t.Fatal("client close returned before refusal reporting completed")
+	}
+}
+
+func TestPerformerCloseJoinsABlockedForward(t *testing.T) {
+	client, _, finish := forwardingTestClient(t, func(pathResult) {})
+	defer finish()
+	testutil.FailErr(t, "bound request buffer", unix.SetsockoptInt(client.fd, unix.SOL_SOCKET, unix.SO_SNDBUF, 1024))
+	raw, err := encodePathCall(pathCall{Op: callMkdir, Path: "queued"})
+	testutil.FailErr(t, "encode queued call", err)
+	for {
+		err = unix.Sendmsg(client.fd, raw, nil, nil, unix.MSG_DONTWAIT)
+		if errors.Is(err, unix.EAGAIN) {
+			break
+		}
+		testutil.FailErr(t, "fill request buffer", err)
+	}
+	forwarded := make(chan error, 1)
+	go func() { forwarded <- client.forward(pathCall{Op: callMkdir, Notification: 2}, nil) }()
+	testutil.WaitFor(t, func() bool {
+		client.mu.Lock()
+		defer client.mu.Unlock()
+		_, pending := client.pending[2]
+		return pending
+	})
+	finish()
+	if !client.sendMu.TryLock() {
+		t.Fatal("client closed while a forward still held its descriptor")
+	}
+	client.sendMu.Unlock()
+	if err := testutil.Receive(t, "join blocked forward", forwarded); err == nil {
+		t.Fatal("blocked forward succeeded after shutdown")
+	}
+	if len(client.pending) != 0 {
+		t.Fatalf("pending after close = %v", client.pending)
+	}
+}
+
+func forwardingTestClient(t *testing.T, report func(pathResult)) (*performerClient, int, func()) {
+	t.Helper()
+	pair, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_SEQPACKET|unix.SOCK_CLOEXEC, 0)
+	testutil.FailErr(t, "forwarding socket", err)
+	listener, err := unix.Eventfd(0, unix.EFD_CLOEXEC)
+	testutil.FailErr(t, "listener fixture", err)
+	client := newPerformerClient(pair[0])
+	testutil.FailErr(t, "lend listener", client.lend(listener, report))
+	receiveForwardedCall(t, pair[1])
+	var closeOnce sync.Once
+	finish := func() { closeOnce.Do(func() { testutil.FailErr(t, "close forwarding client", client.Close()) }) }
+	t.Cleanup(func() {
+		_ = unix.Close(pair[1])
+		_ = unix.Close(listener)
+	})
+	return client, pair[1], finish
+}
+
+func receiveForwardedCall(t *testing.T, fd int) pathCall {
+	t.Helper()
+	buf, oob := make([]byte, maxPathMessage), make([]byte, unix.CmsgSpace(4))
+	n, oobn, _, _, err := unix.Recvmsg(fd, buf, oob, unix.MSG_CMSG_CLOEXEC)
+	testutil.FailErr(t, "receive forwarded call", err)
+	for _, received := range receivedFDs(oob[:oobn]) {
+		_ = unix.Close(received)
+	}
+	call, err := decodePathCall(buf[:n])
+	testutil.FailErr(t, "decode forwarded call", err)
+	return call
 }
 
 // BenchmarkPerformerCreate measures one create through the performer's
