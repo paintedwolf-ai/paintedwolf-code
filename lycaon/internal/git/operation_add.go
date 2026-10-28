@@ -4,7 +4,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
+	"github.com/lycaon/lycaon/internal/gitexec"
 	"path/filepath"
+	"strconv"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/gitrepo"
 )
@@ -49,6 +53,20 @@ func (p *preparedOperation) copyNestedRepo(ctx context.Context, root, scratch, p
 }
 
 func (p *preparedOperation) indexContent(ctx context.Context, scratch, path string, entry operationIndexEntry) (RestoreContent, error) {
+	if p.request.metadataStage() && entry.oid != "" {
+		out, code, err := gitexec.Run(ctx, scratch, []string{"--no-replace-objects", "cat-file", "-s", entry.oid}, hermeticOpts(0))
+		if err != nil {
+			return RestoreContent{}, err
+		}
+		if code != 0 {
+			return RestoreContent{}, fmt.Errorf("read index object size: %s", out)
+		}
+		size, err := strconv.ParseInt(strings.TrimSpace(string(out)), 10, 64)
+		if err != nil || size < 0 {
+			return RestoreContent{}, fmt.Errorf("invalid index object size")
+		}
+		return RestoreContent{Exists: true, Mode: entry.mode, Size: size, ObjectID: entry.oid}, nil
+	}
 	if entry.mode.IsDir() {
 		if p.request.Kind != "add" {
 			return RestoreContent{}, operationRefusal("submodule_change_unsupported", path)

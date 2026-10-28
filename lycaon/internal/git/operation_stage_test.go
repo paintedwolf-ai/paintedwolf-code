@@ -135,3 +135,22 @@ func TestStagePreservesSymbolicLinkIndexMode(t *testing.T) {
 		t.Fatal("index operation created a saved link")
 	}
 }
+
+func TestStageReusesExistingObjectWithMetadataReview(t *testing.T) {
+	dir := stageFixture(t)
+	oid := strings.TrimSpace(gittest.Run(t, dir, "rev-parse", ":a.txt"))
+	var reviewed []RestoreFile
+	result, err := NewManager().Operate(t.Context(), dir, OperationRequest{Kind: "stage", Entries: []IndexEntry{{Path: "a.txt", Remove: true}, {Path: "renamed", Mode: "100644", ObjectID: oid}}, Review: func(_ context.Context, files []RestoreFile) error { reviewed = files; return nil }})
+	testutil.FailErr(t, "reuse existing index object", err)
+	if result.Status != "completed" || strings.TrimSpace(gittest.Run(t, dir, "rev-parse", ":renamed")) != oid {
+		t.Fatalf("stage %+v", result)
+	}
+	if len(reviewed) != 2 {
+		t.Fatalf("reviewed %d paths", len(reviewed))
+	}
+	for _, file := range reviewed {
+		if len(file.Before.Bytes) != 0 || len(file.After.Bytes) != 0 || file.Before.ObjectID == "" && file.After.ObjectID == "" {
+			t.Fatalf("review read blob bytes %+v", file)
+		}
+	}
+}

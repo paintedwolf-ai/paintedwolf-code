@@ -19,7 +19,9 @@ type IndexEntry struct {
 	// Mode is the index mode for written stages: "100644", "100755" or "120000".
 	Mode    string
 	Content []byte
-	Remove  bool
+	// ObjectID reuses an existing blob without reading or rewriting its bytes.
+	ObjectID string
+	Remove   bool
 	// Stages, when set, records a conflict: stages 1, 2 and 3 in order; a nil
 	// side is absent from that stage.
 	Stages *[3][]byte
@@ -42,6 +44,9 @@ func (p *operationPlan) stageEntries() error {
 		if !entry.Remove && entry.Mode != "100644" && entry.Mode != "100755" && entry.Mode != "120000" {
 			return operationRefusal("invalid_index_mode", entry.Path)
 		}
+		if entry.ObjectID != "" && (!validObjectID(entry.ObjectID) || entry.Content != nil || entry.Stages != nil || entry.Remove) {
+			return operationRefusal("invalid_index_object", entry.Path)
+		}
 		paths = append(paths, entry.Path)
 	}
 	if len(uniquePaths(paths)) != len(paths) {
@@ -61,6 +66,14 @@ func (p *operationPlan) runStage(ctx context.Context, dir string) ([]byte, int, 
 			removals = append(removals, entry.Path)
 		}
 		if entry.Remove {
+			continue
+		}
+		if entry.ObjectID != "" {
+			out, code, err := gitexec.Run(ctx, dir, []string{"--no-replace-objects", "cat-file", "-e", entry.ObjectID + "^{blob}"}, p.opts)
+			if err != nil || code != 0 {
+				return out, code, err
+			}
+			fmt.Fprintf(&info, "%s %s 0\t%s\x00", entry.Mode, entry.ObjectID, entry.Path)
 			continue
 		}
 		if entry.Stages == nil {
@@ -136,4 +149,22 @@ func MergeFile(ctx context.Context, ours, base, theirs []byte, labels [3]string)
 		return nil, 0, fmt.Errorf("merge-file failed: %s", bytes.TrimSpace(out))
 	}
 	return merged.Bytes(), code, nil
+}
+
+// metadataStage preserves blob identities while changing their index paths.
+func (r OperationRequest) metadataStage() bool {
+	if r.Kind != "stage" {
+		return false
+	}
+	reused := false
+	for _, entry := range r.Entries {
+		if entry.Remove {
+			continue
+		}
+		if entry.ObjectID == "" {
+			return false
+		}
+		reused = true
+	}
+	return reused
 }

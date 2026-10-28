@@ -25,9 +25,11 @@ type RestoreFile struct {
 }
 
 type RestoreContent struct {
-	Bytes  []byte
-	SHA256 string
-	Size   int64
+	// ObjectID identifies metadata-only index content whose bytes were not read.
+	ObjectID string
+	Bytes    []byte
+	SHA256   string
+	Size     int64
 	// Mode is a Git file mode; see gitFileMode.
 	Mode   os.FileMode
 	Exists bool
