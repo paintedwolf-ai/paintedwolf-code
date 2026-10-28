@@ -7,6 +7,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/git"
+	"github.com/lycaon/lycaon/internal/httpaction"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	reposurvey "github.com/lycaon/lycaon/internal/survey"
@@ -14,7 +15,6 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
-	"github.com/lycaon/lycaon/internal/tools/native/curl"
 	"github.com/lycaon/lycaon/internal/tools/native/gitcmd"
 	"github.com/lycaon/lycaon/internal/tools/native/hostenv"
 	"github.com/lycaon/lycaon/internal/tools/native/literal"
@@ -28,6 +28,7 @@ import (
 
 // programOwnerTools are the structured tools the command program owners share.
 type programOwnerTools struct {
+	http       httpaction.Deps
 	boundary   *sandbox.Boundary
 	summarize  *survey.SummarizeTool
 	repo       *reposurvey.RepoTool
@@ -75,16 +76,12 @@ func (t programOwnerTools) compose(services ProgramServices) (func(tools.ToolCon
 	if err != nil {
 		return nil, err
 	}
-	httpDeps := services.HTTP
-	if httpDeps.Boundary == nil {
-		httpDeps.Boundary = t.boundary
-	}
-	curlOwners, err := curl.NewOwners(httpDeps, mutationOwners)
-	if err != nil {
-		return nil, err
-	}
 	return func(tc tools.ToolContext, paths *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
 		barrier := &native.PublicationBarrier{}
+		httpNative, err := t.httpOperation(services.HTTP, mutationOwners, barrier)
+		if err != nil {
+			return command.ProgramOwners{}, err
+		}
 		program := mutation.Program{Paths: paths, Barrier: barrier}
 		owners := command.ProgramOwners{
 			Natives:     map[string]command.NativeOperation{},
@@ -160,18 +157,11 @@ func (t programOwnerTools) compose(services ProgramServices) (func(tools.ToolCon
 				return command.NativePrepared{Mode: prepared.Mode, Review: prepared.Review, Invoke: prepared.InvokeOwner}, nil
 			}}
 		}
+		if httpNative.Prepare != nil {
+			owners.Natives["curl"] = httpNative
+		}
 		if gitNative.Prepare != nil {
 			owners.Natives["git"] = gitNative
-		}
-		if curlOwners != nil {
-			tool := curlOwners.Operation()
-			owners.Natives["curl"] = command.NativeOperation{Tool: tool, Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
-				prepared, err := curlOwners.Prepare(mutation.Program{Paths: frame, Barrier: barrier}, request)
-				if err != nil {
-					return command.NativePrepared{}, err
-				}
-				return command.NativePrepared{Mode: prepared.Mode, Review: prepared.Review, Invoke: prepared.InvokeOwner}, nil
-			}}
 		}
 		return owners, nil
 	}, nil

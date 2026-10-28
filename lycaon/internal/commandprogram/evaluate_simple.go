@@ -83,8 +83,8 @@ func (f *frame) expandAssignments(ctx context.Context, items []commandsurface.As
 
 // expanding runs one command's expansion with the statuses of the
 // substitutions it reaches retained. A nonzero unit prevents the containing
-// command (P08 AdmitSubstitution) and becomes its status; prevented reports
-// that the command must not run. Expansion refusals latch at the word.
+// command and becomes its status; prevented reports that the command must not
+// run. Expansion refusals latch at the word.
 func (f *frame) expanding(loc commandsurface.SyntaxLocation, expand func(scope *frame) error) (prevented bool, err error) {
 	g := *f
 	tracker := &substitutionStatus{}

@@ -52,7 +52,7 @@ type options struct {
 }
 
 func usage(word, expected string) error {
-	return &toolrejection.ToolReject{Code: "COMMAND_OPERAND_INVALID", Data: map[string]any{"command": "curl", "word": word, "expected": expected, "expected_form": "curl [OPTIONS] URL"}}
+	return &toolrejection.ToolReject{Code: "COMMAND_OPERAND_INVALID", Data: map[string]any{"command": "curl", "word": word, "reason": expected, "expected": expected, "expected_form": "curl [OPTIONS] URL"}}
 }
 
 // parseOptions reads the bound forms in argv order. Values are data: header
