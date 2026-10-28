@@ -32,8 +32,8 @@ const (
 // option letter.
 var LimitResources = map[byte]string{'c': "core", 'f': "fsize", 'n': "nofile", 's': "stack", 't': "cpu", 'u': "nproc", 'v': "as"}
 
-// arguments renders the attributes as helper flags. Windows has no helper
-// re-exec; attributes there come from the platform launch itself.
+// arguments renders the attributes as helper flags. Windows launches without
+// the helper and has neither resource limits nor SIGHUP.
 func (a ProcessAttributes) arguments() []string {
 	if runtime.GOOS == "windows" {
 		return nil
