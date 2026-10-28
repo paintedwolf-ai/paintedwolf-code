@@ -10,7 +10,6 @@ use tauri::{Emitter, Manager};
 #[tauri::command(rename = "start_sidecar")]
 pub async fn ipc_start_sidecar(
     app: tauri::AppHandle,
-    password: Option<String>,
 ) -> Result<SidecarInfo, SidecarStartError> {
     let _admission = app
         .state::<crate::update_service::UpdateService>()
@@ -21,7 +20,7 @@ pub async fn ipc_start_sidecar(
         let _admission = _admission;
         let state = handle.state::<SidecarState>();
         let progress_handle = handle.clone();
-        start_sidecar_with_progress(&state, password, move |progress| {
+        start_sidecar_with_progress(&state, move |progress| {
             let _ = progress_handle.emit("sidecar-startup", &progress);
         })
     })

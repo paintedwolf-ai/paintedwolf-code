@@ -6,7 +6,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/guidance/ledgertest"
@@ -220,7 +219,7 @@ func TestExecuteCancellationStopsChildPrompt(t *testing.T) {
 		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("Execute error = %v", err)
 		}
-	case <-time.After(time.Second):
+	case <-t.Context().Done():
 		t.Fatal("Execute did not stop")
 	}
 	runner.mu.Lock()

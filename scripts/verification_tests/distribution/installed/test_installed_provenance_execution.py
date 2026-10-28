@@ -3,7 +3,13 @@
 import copy
 import unittest
 
-from linux_release.installed_provenance import select_control, select_plan, verify_producer
+from linux_release.campaign.provenance import (
+    select_control,
+    select_plan,
+    select_final,
+    select_qualification,
+    verify_producer,
+)
 
 
 class PublicationProvenanceTests(unittest.TestCase):
@@ -69,6 +75,19 @@ class PublicationProvenanceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "exactly one"):
             select_control(api, "owner/repo", 42, 123, 456)
 
+    def test_protected_final_and_raw_roles_keep_server_provenance(self):
+        run, original = self.fixture()
+        for selector, name in ((select_final, "linux-final-admission-inputs"),
+                               (select_qualification, "linux-installed-raw-campaign")):
+            artifact = {**original, "name": name}
+            def api(path):
+                return run if path.endswith("/runs/123") else {"artifacts": [artifact]}
+            self.assertEqual(selector(api, "owner/repo", 42, 123)["artifact_id"], 456)
+            run["head_branch"] = "feature"
+            with self.assertRaisesRegex(ValueError, "protected main"):
+                selector(api, "owner/repo", 42, 123)
+            run["head_branch"] = "main"
+
     def test_control_and_plan_roles_require_the_exact_server_artifact_ids(self):
         run, final = self.fixture()
         for selector, name in [(select_control, "linux-installed-control-inputs"),
@@ -84,7 +103,7 @@ class PublicationProvenanceTests(unittest.TestCase):
 
 class DomainArtifactSelectionTests(unittest.TestCase):
     def test_invalid_domain_binding_cannot_query_artifacts(self):
-        from linux_release.installed_provenance import artifact_for_run
+        from linux_release.campaign.provenance import artifact_for_run
         from unittest.mock import Mock
         api=Mock()
         for repository,repository_id,run_id,commit,name in [

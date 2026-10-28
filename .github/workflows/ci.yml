@@ -17,33 +17,35 @@ on:
         description: Catalog profile to run
         type: choice
         default: check
-        options: [check, fast]
+        options: [check, fast, integration]
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.event_name }}-${{ github.ref }}
+  group: ci-${{ startsWith(github.ref, 'refs/heads/gh-readonly-queue/') && 'merge_group' || github.event_name }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   fast:
-    if: ${{ github.event_name == 'pull_request' && !github.event.pull_request.draft || inputs.profile == 'fast' }}
+    if: ${{ github.event_name == 'pull_request' && (!github.event.pull_request.draft || github.event.action == 'ready_for_review') || inputs.profile == 'fast' }}
     uses: ./.github/workflows/verification.yml
     with:
       profile: fast
       affected: ${{ github.event_name == 'pull_request' }}
 
   integration:
-    if: ${{ github.event_name == 'merge_group' || inputs.profile == 'check' }}
+    if: ${{ github.event_name == 'merge_group' || inputs.profile == 'integration' || inputs.profile == 'check' }}
     # Its jobs cancel their own run once the merge queue removes the group.
     permissions:
       contents: read
       actions: write
+      # Validate the exact live queue entry before recovered integration dispatch.
+      pull-requests: read
     uses: ./.github/workflows/verification.yml
     with:
-      profile: ${{ github.event_name == 'merge_group' && 'integration' || 'check' }}
-      affected: ${{ github.event_name == 'merge_group' }}
+      profile: ${{ (github.event_name == 'merge_group' || inputs.profile == 'integration') && 'integration' || 'check' }}
+      affected: ${{ github.event_name == 'merge_group' || inputs.profile == 'integration' }}
 
   platform:
     if: inputs.profile == 'check'
@@ -51,7 +53,7 @@ jobs:
 
   check:
     # Judges failed and timed-out jobs, but a cancelled run must not wait for a runner to do so.
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && !(github.event_name == 'pull_request' && github.event.pull_request.draft) }}
     needs: [fast, integration, platform]
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -60,8 +62,8 @@ jobs:
       - name: Require this tier's verification
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
-          SKIPPED: ${{ inputs.profile == 'check' && 'fast' || format('{0},platform', github.event_name == 'merge_group' && 'fast' || 'integration') }}
-          DRAFT: ${{ github.event.pull_request.draft == true }}
+          SKIPPED: ${{ inputs.profile == 'check' && 'fast' || format('{0},platform', (github.event_name == 'merge_group' || inputs.profile == 'integration') && 'fast' || 'integration') }}
+          DRAFT: ${{ github.event.pull_request.draft == true && github.event.action != 'ready_for_review' }}
         run: python3 scripts/ci_verification.py gate --skipped "$SKIPPED" --draft "$DRAFT"
 
   dispatched-check:

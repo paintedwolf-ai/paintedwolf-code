@@ -35,11 +35,16 @@ def perform_transition(execution, vm_id, observer, operation, mailbox=None):
                 if acknowledgment is not None:
                     delivery = protocol.acknowledgment(acknowledgment, pending, vm_id)
                     break
-                observer.during(operation, initial)
+                observer.during(operation, initial, deadline)
                 if time.monotonic() >= deadline:
                     raise CaseUnavailable('fixed-VM-transition-input-acknowledgment-unavailable')
                 time.sleep(0.05)
-            after = observer.settle(operation, initial) if ordinal == len(sequence) - 1 else observer.observe()
+            try:
+                after = observer.settle(operation, initial) if ordinal == len(sequence) - 1 else observer.observe()
+            except BaseException as error:
+                events.append({'request': pending, 'delivery': delivery,
+                               'surface_after': getattr(error, 'observations', {}).get('surface_after')})
+                raise
             if ordinal == len(sequence) - 1:
                 if not wire.finished(operation, initial, after):
                     raise ValueError('physical input did not establish its declared native transition')

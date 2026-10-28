@@ -26,7 +26,7 @@ export type CriticalStopProps = {
   diagnostic?: string;
   /** Outcome of the last secondary action. */
   status?: string;
-  /** Condition-specific controls, such as a credential-vault password form. */
+  /** Condition-specific recovery controls. */
   children?: JSX.Element;
 };
 
