@@ -67,14 +67,26 @@ func (r *socketOwnerReview) RequestCheckpoint(ctx context.Context, req hitl.Chec
 	}
 	r.cards++
 	var chosen string
-	hasSecret := false
+	socketChoice := false
+	hasSecret := req.SecretScreen != nil
 	for _, option := range plan.Options {
 		for _, delta := range option.Authority {
 			if delta.Grant != nil && delta.Grant.Predicate.Category == hitl.ApprovalGrantCategorySecret {
 				hasSecret = true
 			}
 		}
-		if !option.Disabled && option.Rung == hitl.ApprovalRungChat && option.DecisionAction == hitl.ApprovalOptionApprove {
+		if option.Disabled || option.DecisionAction != hitl.ApprovalOptionApprove {
+			continue
+		}
+		if option.Rung == hitl.ApprovalRungChat && !socketChoice {
+			chosen = option.ID
+		}
+		for _, delta := range option.Authority {
+			if option.Rung == hitl.ApprovalRungChat && delta.Kind == hitl.AuthoritySocketChat {
+				chosen, socketChoice = option.ID, true
+			}
+		}
+		if chosen == "" && hasSecret && option.Rung == hitl.ApprovalRungUnchanged {
 			chosen = option.ID
 		}
 	}

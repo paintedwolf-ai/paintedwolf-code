@@ -3,6 +3,7 @@ package httpaction
 import (
 	"context"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"net/url"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/outboundhttp"
@@ -11,11 +12,12 @@ import (
 )
 
 type outboundRequest struct {
-	url        string
-	hostHeader string
-	headers    []outboundhttp.Header
-	body       []byte
-	protected  map[int][]string
+	beforeCookieHop func(context.Context, *url.URL) error
+	url             string
+	hostHeader      string
+	headers         []outboundhttp.Header
+	body            []byte
+	protected       map[int][]string
 	// redacted reports that the sent bytes differ everywhere the screen matched.
 	redacted bool
 	receipt  string
@@ -76,7 +78,6 @@ func screenField(ctx context.Context, matcher *secretmatch.Matcher, field reques
 func redactField(ctx context.Context, matcher *secretmatch.Matcher, field requestField) string {
 	return secretmatch.RedactEvidence(field.value, screenField(ctx, matcher, field))
 }
-
 
 // primaryMatch selects the card's highest-severity finding.
 func primaryMatch(matches []secretmatch.Match) secretmatch.Match {

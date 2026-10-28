@@ -417,6 +417,8 @@ Saved socket grants authorize declared use on each invocation. An invocation rec
 
 A native tool that dials a socket itself takes the same authority. The catalog's `socket_arg` names the argument (`http_request`'s `unix_socket`); the executor resolves it to a canonical path and reviews it as a socket subject, reusing live task and project socket bindings. A host-resource pathname alone cannot authorize this native object-bound dial. The handler revalidates the grant, retains the invocation’s authority before consuming a current-call permit, and dials the retained object. The canonical path is a diagnostic label rather than the native dial destination. Reading a socket's pathname is not a file read, so file read access never stands in for this authority. The daemon behind the socket is the destination: no egress decision is made for the request URL's host, and receipts and the outbound-secret recipient name the socket.
 
+Cookies issued by a local socket carry that retained object's issuer receipt in their protected jar. A replacement listener receives their bytes only after disclosure approval for that invocation. Denial withholds the cookies while the request continues; saved values remain intact, and only an actual response reissuing a cookie changes its issuer receipt. Cookie references follow the same rule.
+
 ### Task-local SSH host keys
 
 When an isolated task needs SSH, host-key state is task-local and explicit (`confine/ssh_known_hosts.go`). It does not modify the user's global SSH configuration or inherit ambient trust without declaration.

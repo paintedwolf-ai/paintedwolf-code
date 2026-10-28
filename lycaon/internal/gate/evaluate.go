@@ -65,6 +65,9 @@ func (d *Decision) Reuse() Reuse {
 	}
 	out := Reuse{Shape: ReusePredicate, Scope: ScopeDevice, DayCarrier: ScopeDevice}
 	for _, cited := range d.Cited {
+		if cited.Key == "secret.issuer_unverified" {
+			return Reuse{}
+		}
 		if cited.Key == "boundary.execution" {
 			out = Reuse{Shape: ReusePredicate, Scope: ScopeChat, DayCarrier: ScopeChat}
 		}
@@ -476,7 +479,7 @@ func secretOutbound(f Facts, p Posture) (bool, []Fact, string) {
 	if f.Payload == nil {
 		return false, nil, ""
 	}
-	if !f.Payload.Held {
+	if !f.Payload.Held && !f.Payload.IssuerUnverified {
 		if f.Payload.Source == SecretSourcePublicInbound && f.Payload.Surface != "visual_perception" {
 			return false, nil, ""
 		}
@@ -488,6 +491,9 @@ func secretOutbound(f Facts, p Posture) (bool, []Fact, string) {
 		fact("secret.rule", firstNonEmpty(f.Payload.RuleTitle, f.Payload.RuleID), "payload_lens"),
 		fact("secret.surface", f.Payload.Surface, "payload_lens"),
 		fact("secret.source", secretSourceValue(f.Payload.Source), "payload_provenance"),
+	}
+	if f.Payload.IssuerUnverified {
+		cited = append(cited, fact("secret.issuer_unverified", "true", "managed_response"))
 	}
 	if f.Payload.SourceKind != "" {
 		cited = append(cited, fact("secret.source_kind", f.Payload.SourceKind, "payload_provenance"))

@@ -298,6 +298,16 @@ include that same retained binding. Existing credential and token data stays
 intact; a different bound recipient cannot inherit a pathname-only release
 lease and uses the existing fresh-approval or service sign-in route.
 
+Managed cookie jars are `device-config` protected values. Their unversioned
+`cookies` JSON envelope gains the optional per-cookie `native_issuer` receipt,
+an opaque retained-binding identity written only by an actual response's
+Set-Cookie. Existing entries without it remain readable and retain all values
+and attributes; sending them to a retained socket requires invocation-only
+secret disclosure until that issuer reissues them. A receipt never restores a
+kernel capability, and loading or approving disclosure never rewrites it. The
+per-invocation delivery filter and issuer-review fact are ephemeral host facts;
+no SQL schema, public wire shape or generated consumer changes are involved.
+
 The private approval authority deltas are not the co-shipped API option shape:
 `wireApprovalPlan` projects presentation and decisions without their binding IDs
 or kernel handles. Public grant inventory keeps its existing unavailable state
