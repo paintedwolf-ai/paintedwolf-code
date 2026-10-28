@@ -206,9 +206,25 @@ class HostedPlanTests(unittest.TestCase):
                 with self.subTest(profile=profile, lane=row["lane"]):
                     self.assertEqual(row["browser"], "test:confine:linux" in ci.lanes()[row["lane"]]["targets"])
                     targets = ci.lanes()[row["lane"]]["targets"]
-                    expected_launch = bool({"test:full", "test:confine:linux", "coverage:changes"} & set(targets))
-                    self.assertEqual(row["linux_launch"], expected_launch)
+                    self.assertEqual(row["linux_launch"], any(ci.runs_protected_launch(target) for target in targets))
         self.assertEqual([row["lane"] for row in ci.matrix("integration")["include"] if row["browser"]], ["confinement-arm64"])
+
+    def test_lanes_that_reach_the_protected_launch_leg_provision_its_display(self):
+        # Catalog recipes over the whole tree reach internal/launchguard; scripted runs declare it.
+        for target in ("test:full", "test:race", "check:coverage", "coverage:changes", "test:confine:linux"):
+            with self.subTest(target=target):
+                self.assertTrue(ci.runs_protected_launch(target))
+        for target in ("test:stress", "test:fuzz", "perf:bench", "build", "lint:full"):
+            with self.subTest(target=target):
+                self.assertFalse(ci.runs_protected_launch(target))
+        nightly = {row["lane"] for row in ci.matrix("nightly")["include"] if row["linux_launch"]}
+        self.assertTrue({"go-coverage", "race"} <= nightly, nightly)
+        data = copy.deepcopy(planning.catalog())
+        data["go"]["test:race"]["packages"] = ["./internal/db/...", "./test/wiring"]
+        with patch.object(ci, "catalog", return_value=data):
+            self.assertFalse(ci.runs_protected_launch("test:race"))
+            data["go"]["test:race"]["packages"].append("./internal/launchguard")
+            self.assertTrue(ci.runs_protected_launch("test:race"))
 
     def test_lanes_learn_whether_they_drive_the_native_repository_tools(self):
         for profile in ci.PROFILES:
