@@ -51,7 +51,7 @@ func assertOutboundSecretSeams(t *testing.T, root string) {
 		want string
 	}
 	seams := []seam{
-		{"lycaon/internal/webresearch/rest_provider.go", "screenOutbound"},
+		{"lycaon/internal/webresearch/search.go", "screenOutbound"},
 		{"lycaon/internal/webresearch/tools.go", "screenOutbound"},
 		{"lycaon/internal/webresearch/ssrf.go", "screenOutbound"},
 		{"lycaon/internal/oar/secret_detector.go", "Screen"},

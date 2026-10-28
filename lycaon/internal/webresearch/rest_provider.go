@@ -9,8 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-
-	"github.com/lycaon/lycaon/internal/secretmatch"
 )
 
 // providerOutcome is one provider invocation result before fusion.
@@ -77,16 +75,6 @@ func (p *RESTSearchProvider) Search(ctx context.Context, s Settings, query strin
 			detail:     "provider not configured",
 		}
 	}
-	// The context’s fan-out destination covers all providers.
-	dest := screenDestination{
-		id:    secretmatch.DestinationKey(providerID, keylessEndpoint(s, providerID)),
-		label: providerID,
-	}
-	screenedQuery, err := screenOutbound(ctx, secretmatch.SurfaceWebSearch, dest, query)
-	if err != nil {
-		return providerOutcome{providerID: providerID, reason: "secret_denied", detail: err.Error()}
-	}
-	query = screenedQuery
 	url, err := p.spec.BuildURL(s, query, maxResults)
 	if err != nil {
 		return providerOutcome{providerID: providerID, reason: "parse_error", detail: err.Error()}
