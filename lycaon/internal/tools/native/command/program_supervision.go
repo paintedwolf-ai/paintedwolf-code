@@ -108,6 +108,10 @@ func (s *ProgramSupervisor) RunProgram(ctx context.Context, root toolcontract.Op
 		if stopped.EffectCertainty == "" {
 			stopped.EffectCertainty = toolcontract.EffectUnknown
 		}
+		if errors.Is(cause, ErrProgramInterrupted) {
+			// An interrupted wait is the program's typed stop; its result still reaches the turn.
+			return stopped, errors.Join(err, cause, toolrejection.RejectInvalidArguments(toolrejection.ToolOwnerInterruptedCode, map[string]any{"program_id": root.Identity.ProgramID}))
+		}
 		return stopped, errors.Join(err, cause)
 	}
 	return result, err

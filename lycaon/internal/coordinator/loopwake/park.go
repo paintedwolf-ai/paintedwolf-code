@@ -2,6 +2,7 @@ package loopwake
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -228,7 +229,9 @@ func (l *WaitSubscriptions) recoverParkedProgram(ctx context.Context, store *awa
 	if lost != nil {
 		var err error
 		if report, err = lost(ctx, lease.SessionID, programID); err != nil {
-			return err
+			// The lease still resolves, so the turn resumes without its receipts.
+			slog.WarnContext(ctx, "parked program receipts unavailable", "session_id", lease.SessionID, "program_id", programID, "error", err)
+			report = ""
 		}
 	}
 	_, err := l.resolveLease(ctx, store, lease, programWinner(programID, "interrupted", report))

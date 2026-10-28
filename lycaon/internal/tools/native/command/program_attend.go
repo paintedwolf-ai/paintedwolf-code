@@ -224,7 +224,12 @@ func (r *ProgramRuntime) finish(e *programEvaluation) (string, error) {
 	default:
 		// & jobs still run under supervision; the program settles when they end.
 	}
-	refusal, releaseFeedback, feedbackErr := r.feedback(ctx, run, e.dispatcher, e.stderr, evalErr)
+	feedbackCtx := ctx
+	if errors.Is(evalErr, ErrProgramInterrupted) {
+		// The interruption canceled the program; its refusal still renders.
+		feedbackCtx = context.WithoutCancel(ctx)
+	}
+	refusal, releaseFeedback, feedbackErr := r.feedback(feedbackCtx, run, e.dispatcher, e.stderr, evalErr)
 	defer releaseFeedback()
 	if feedbackErr != nil || settleErr != nil {
 		return "", errors.Join(feedbackErr, settleErr)
