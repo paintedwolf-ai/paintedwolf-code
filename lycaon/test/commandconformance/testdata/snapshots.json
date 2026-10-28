@@ -1209,26 +1209,6 @@
         "stderr": "/bin/bash: line 3: pw-missing-program-039: command not found\n"
       }
     },
-    "run3-early-stop-producers": {
-      "bsd": {
-        "input": "sha256:70fa479a686baa96370f57f9fc9c043466a2cb57fa0df0a5fc7f3529614ecefe",
-        "status": 141,
-        "stdout": "1\n2\n3\n5\n",
-        "stderr": ""
-      },
-      "busybox": {
-        "input": "sha256:aa98c2a08ebdb0088a8ba4a78bc7e0c4ce7737978fe432a85bdfbce7e65d9580",
-        "status": 141,
-        "stdout": "1\n2\n3\n5\n",
-        "stderr": ""
-      },
-      "gnu": {
-        "input": "sha256:70fa479a686baa96370f57f9fc9c043466a2cb57fa0df0a5fc7f3529614ecefe",
-        "status": 141,
-        "stdout": "1\n2\n3\n5\n",
-        "stderr": ""
-      }
-    },
     "run3-eval-admitted-program": {
       "bsd": {
         "input": "sha256:0da8def238d4ea43fcb2d5af149a4ca3cffd7c6a562995d0723ed22733f63f3d",

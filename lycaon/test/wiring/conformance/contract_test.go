@@ -66,6 +66,19 @@ var contractCases = []contractCase{
 		Files:  map[string]string{"config.json": "{\"enabled\":true,\"version\":1,\"items\":[\"a\",\"b\"]}\n"},
 	},
 	{
+		// Under the language's pipefail, a producer ended by SIGPIPE because its
+		// reader finished does not fail the pipeline; PIPESTATUS keeps its 141.
+		// bash with pipefail exits 141 here.
+		Case: commandconformance.Case{
+			ID:          "pipefail-reader-ends-producer",
+			Description: "A reader that stops early ends a long producer without failing the pipeline.",
+			Commands:    []string{"seq", "head", "grep", "printf"},
+			Forms:       []string{"head:-n", "grep:-m"},
+			Program:     `seq 1 100000000 | head -3; seq 1 100000 | grep -m1 5; printf 'status:%s pipe:%s\n' "$?" "${PIPESTATUS[*]}"`,
+		},
+		Stdout: "1\n2\n3\n5\nstatus:0 pipe:141 0\n",
+	},
+	{
 		Case: commandconformance.Case{
 			ID:          "inspect-domain-builtins",
 			Description: "The outline, repo-map, survey-repo and summarize built-ins return typed results.",

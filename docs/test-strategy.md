@@ -211,6 +211,12 @@ these deliberate differences are normalized:
 - The command entry writes a shell error as `bash: …`, without the line number
   a shell running `-c` adds.
 
+One deliberate difference is checked exactly rather than normalized: under the
+language's pipefail, a producer ended by SIGPIPE because its reader finished
+does not fail the pipeline, so `seq 1 100000000 | head -3` exits 0 where bash
+exits 141, while `PIPESTATUS` still reports 141. The contract case
+`pipefail-reader-ends-producer` holds those expectations.
+
 Host decisions, approvals, labels and receipts are structured results outside
 the output streams. A differential case must finish with no refusal and no
 fallback to an installed program, so none of them is compared. Programs whose

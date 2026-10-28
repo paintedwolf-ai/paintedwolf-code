@@ -13,6 +13,10 @@
 //   - The command entry reports a shell error as "bash: ", without the line
 //     number a reference shell running -c adds.
 //
+// One deliberate difference is a contract case rather than a normalization: a
+// producer ended by SIGPIPE because its reader finished does not fail a pipeline
+// under the language's pipefail, while PIPESTATUS still reports 141.
+//
 // Host decisions, approvals and receipts are structured results outside the
 // output streams. A differential case must finish with no refusal and no fallback
 // to an installed program, so none of them reaches a comparison.
