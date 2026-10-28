@@ -64,7 +64,7 @@ func TestProgramEntryRunsGitReadFormsThroughTheUmbrella(t *testing.T) {
 	owners, err := gitcmd.NewOwners(git.NewManager())
 	testutil.FailErr(t, "git owners", err)
 	natives := map[string]command.NativeOperation{"git": {Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
-		prepared, err := owners.PrepareGit(frame, request)
+		prepared, err := owners.PrepareGit(frame, nil, request)
 		if err != nil {
 			return command.NativePrepared{}, err
 		}
@@ -114,7 +114,7 @@ func TestProgramEntryInitializesRepositoryAndCommits(t *testing.T) {
 	testutil.FailErr(t, "git owners", err)
 	f.runtime.Owners = func(tools.ToolContext, *projectpaths.ProgramPaths, *toolcontract.ProgramMemory, tooloutput.SpillAdmission) (command.ProgramOwners, error) {
 		return command.ProgramOwners{Natives: map[string]command.NativeOperation{"git": {Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
-			prepared, err := owners.PrepareGit(frame, request)
+			prepared, err := owners.PrepareGit(frame, nil, request)
 			if err != nil {
 				return command.NativePrepared{}, err
 			}

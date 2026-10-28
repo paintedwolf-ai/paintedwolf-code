@@ -43,6 +43,8 @@ func invokeMutation(ctx context.Context, p Prepared, tc tools.ToolContext, strea
 		return runInit(ctx, p, out, stderr)
 	case "git clone":
 		return runClone(ctx, p, tc, out, stderr)
+	case "git apply":
+		return runApply(ctx, p, tc, streams, out, stderr)
 	}
 	write := spec.Name != "git ls-remote"
 	dir, repo, status, err := resolveCommandRepo(ctx, p, stderr, write)

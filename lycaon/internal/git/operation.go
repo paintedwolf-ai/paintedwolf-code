@@ -32,6 +32,8 @@ type OperationRequest struct {
 	ReinstateIndex   bool
 	// NoCommit stops a started merge before its commit, leaving it active.
 	NoCommit bool
+	// Entries are a "stage" operation's exact index changes.
+	Entries []IndexEntry
 	Review   func(context.Context, []RestoreFile) error
 }
 

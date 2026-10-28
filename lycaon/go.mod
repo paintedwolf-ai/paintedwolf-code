@@ -18,6 +18,7 @@ require (
 	github.com/aws/smithy-go v1.28.5
 	github.com/aymanbagabas/go-udiff v0.4.1
 	github.com/benhoyt/goawk v1.32.0
+	github.com/bluekeyes/go-gitdiff v0.9.0
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0

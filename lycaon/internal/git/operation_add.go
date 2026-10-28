@@ -10,7 +10,7 @@ import (
 )
 
 func (p *preparedOperation) addPaths() []string {
-	if p.request.Kind != "add" || len(p.request.Paths) == 0 {
+	if !p.request.indexOnly() || len(p.request.Paths) == 0 {
 		return nil
 	}
 	for _, path := range p.request.Paths {

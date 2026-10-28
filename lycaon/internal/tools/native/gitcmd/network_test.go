@@ -216,7 +216,7 @@ func (h *harness) execWithEnv(env []string, words ...string) run {
 	}
 	statement := commandsurface.Statement{SyntaxLocation: commandsurface.SyntaxLocation{ID: commandsurface.NodeID(inv.Identity.NodeID), Span: inv.Span}}
 	request := commandprogram.OperationRequest{Invocation: inv, OperationID: "git", Statement: statement, Argv: argv, Environment: env}
-	prepared, err := h.owners.PrepareGit(h.paths, request)
+	prepared, err := h.owners.PrepareGit(h.paths, h.patches, request)
 	if err != nil {
 		return run{err: err, result: toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerRefused, EffectCertainty: toolcontract.NoEffect}}
 	}

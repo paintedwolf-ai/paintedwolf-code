@@ -3027,6 +3027,317 @@
       ]
     },
     {
+      "name": "git apply",
+      "aliases": [],
+      "family": "git",
+      "owner": "git",
+      "argv": "git [-C DIR] [-c KEY=VALUE ...] apply [--check] [--stat] [--numstat] [--summary] [-p N] [-R] [--index|--cached] [-3] [--whitespace=ACTION] [--include=PATTERN] [--exclude=PATTERN] [--directory=ROOT] [-v] [PATCH ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-C"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git apply-option-C-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "./input"
+          ]
+        },
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "allowed-config",
+          "fixture_id": "git apply-option-c-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": [
+            "core.fsmonitor=false"
+          ]
+        },
+        {
+          "spellings": [
+            "--no-pager"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git apply-option-nopager-global",
+          "scope": "global",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--check"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git apply-option-check",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--stat"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git apply-option-stat",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--numstat"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git apply-option-numstat",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--summary"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git apply-option-summary",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-p"
+          ],
+          "arity": 1,
+          "value_role": "count",
+          "fixture_id": "git apply-option-p",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "1"
+          ]
+        },
+        {
+          "spellings": [
+            "-R",
+            "--reverse"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git apply-option-R-reverse",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--index"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git apply-option-index",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--cached"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git apply-option-cached",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-3",
+            "--3way"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git apply-option-3way",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "--whitespace"
+          ],
+          "arity": 1,
+          "value_role": "mode",
+          "fixture_id": "git apply-option-whitespace",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "nowarn"
+          ]
+        },
+        {
+          "spellings": [
+            "--include"
+          ],
+          "arity": 1,
+          "value_role": "glob",
+          "fixture_id": "git apply-option-include",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "*.txt"
+          ]
+        },
+        {
+          "spellings": [
+            "--exclude"
+          ],
+          "arity": 1,
+          "value_role": "glob",
+          "fixture_id": "git apply-option-exclude",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "*.txt"
+          ]
+        },
+        {
+          "spellings": [
+            "--directory"
+          ],
+          "arity": 1,
+          "value_role": "path",
+          "fixture_id": "git apply-option-directory",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": [
+            "sub"
+          ]
+        },
+        {
+          "spellings": [
+            "-v",
+            "--verbose"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "git apply-option-v-verbose",
+          "scope": "subcommand",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. git [-C DIR] [-c KEY=VALUE ...] apply [OPTION ...] [PATCH ...]; with no PATCH, or -, the patch is read from standard input.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "every section applied",
+        "1": "a section does not apply (nothing changed) or a --3way merge left conflicts",
+        "128": "no valid patch, a corrupt patch, or --whitespace=error found whitespace errors"
+      },
+      "effects": [
+        {
+          "requires": [
+            "read",
+            "write",
+            "review",
+            "revision",
+            "recovery"
+          ],
+          "mode": "mutation"
+        },
+        {
+          "requires": [
+            "read"
+          ],
+          "mode": "read-only"
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "git apply --stat ./fix.diff",
+        "stdout": " input |    2 +-\n 1 file changed, 1 insertion(+), 1 deletion(-)\n",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          },
+          "fix.diff": "--- a/input\n+++ b/input\n@@ -1,2 +1,2 @@\n-alpha\n+ALPHA\n beta\n\\ No newline at end of file\n"
+        }
+      },
+      "notes": "Applies unified and Git diffs, including Git binary patches (literal and delta), through the hunk applier patch uses; hunks may land at an offset but need exact context. Nothing changes unless every section applies. --check, --stat, --numstat and --summary only read. Work tree files are captured before anything is written and publish through the same pinned write door as patch; a file changed after capture refuses with COMMAND_REVISION_CONFLICT. --index requires the work tree to match the index and then stages exactly the patched paths; --cached changes only the index. Index changes are one reviewed Git operation with git add's review and session-staging rules, leaving unrelated staged work alone. --3way merges a section into the current content from the preimage blob the patch names, using Git's merge-file; conflicts leave markers in the work tree and stages 1-3 in the index and report U PATH with status 1. --whitespace=warn (default) reports added lines with trailing whitespace or a space before a tab, fix strips trailing whitespace from them, error stops with status 128.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/gitcmd/apply.go",
+        "tests": [
+          "lycaon/internal/tools/native/gitcmd/apply_test.go",
+          "lycaon/internal/git/operation_stage_test.go"
+        ],
+        "extension": "Shared hunk applier in internal/tools/native/patchapply; work tree publication through the mutation owners' pinned patch targets; index changes through the Git owner's reviewed stage operation.",
+        "evidence_kind": "owner tests over fixture repositories, compared with the bundled Git"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "git-apply-operands-valid",
+        "git-apply-rejection",
+        "git apply-option-C-global",
+        "git apply-option-c-global",
+        "git apply-option-nopager-global",
+        "git apply-option-check",
+        "git apply-option-stat",
+        "git apply-option-numstat",
+        "git apply-option-summary",
+        "git apply-option-p",
+        "git apply-option-R-reverse",
+        "git apply-option-index",
+        "git apply-option-cached",
+        "git apply-option-3way",
+        "git apply-option-whitespace",
+        "git apply-option-include",
+        "git apply-option-exclude",
+        "git apply-option-directory",
+        "git apply-option-v-verbose"
+      ]
+    },
+    {
       "name": "git add",
       "aliases": [],
       "family": "git",
