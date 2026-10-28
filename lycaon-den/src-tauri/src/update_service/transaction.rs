@@ -17,7 +17,6 @@ mod tests;
 
 pub use admission::{launch, run_helper, Launch, Lease};
 pub use confirmation::confirm_startup;
-use handoff::stage_helper;
 pub use handoff::Activation;
 use installer::{executable, hash};
 use journal::{read, write, Phase, Transaction};
@@ -32,8 +31,10 @@ fn require_direct_download() -> Result<(), UpdateError> {
     if let Some(error) = facts.error {
         return Err(error);
     }
-    if facts.source != super::InstallSource::DirectDownload {
-        return Err(Failure::PackageManaged.into());
+    match facts.source {
+        super::InstallSource::DirectDownload => {}
+        super::InstallSource::PackageOwnershipUnknown => return Err(Failure::PackageOwnershipUnknown.into()),
+        _ => return Err(Failure::PackageManaged.into()),
     }
     Ok(())
 }
@@ -176,8 +177,7 @@ pub async fn prepare_exit(
             recovery_relaunch_attempted: false,
             error: None,
         };
-        let helper = stage_helper(&candidate)?;
-        Ok::<_, UpdateError>((t, helper))
+        Ok::<_, UpdateError>(t)
     })
     .await
     .map_err(|e| UpdateError::new(Failure::InstallFailed, e))?;
@@ -188,7 +188,7 @@ pub async fn prepare_exit(
     {
         return Ok(None);
     }
-    let (t, helper) = match prepared_result {
+    let t = match prepared_result {
         Ok(result) => result,
         Err(error) => {
             let error = invalidate_preparation(&mut inner, &candidate, error);
@@ -210,7 +210,6 @@ pub async fn prepare_exit(
     emit(app, &mut inner.state);
     Ok(Some(Activation {
         transaction: t,
-        helper,
         _permit: permit,
     }))
 }
@@ -228,10 +227,6 @@ async fn resume_committed(
         t.relaunch = relaunch;
         write(&t)?;
     }
-    let candidate = t.candidate.clone();
-    let helper = tauri::async_runtime::spawn_blocking(move || stage_helper(&candidate))
-        .await
-        .map_err(|e| UpdateError::new(Failure::InstallFailed, e))??;
     let mut inner = service.inner.lock().await;
     service.cancel(&mut inner.state);
     inner.state.staged_release_id = Some(t.candidate.release_id.clone());
@@ -240,7 +235,6 @@ async fn resume_committed(
     emit(app, &mut inner.state);
     Ok(Activation {
         transaction: t,
-        helper,
         _permit: permit,
     })
 }

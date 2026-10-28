@@ -17,6 +17,7 @@ use crate::sidecar::SidecarState;
 
 #[cfg(target_os = "linux")]
 mod linux;
+mod observation;
 
 const HTTP_TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -116,12 +117,6 @@ impl PresenceCommandError {
             scope: Some("project".into()),
             resolution: None,
         }
-    }
-
-    fn stepped_away(message: impl Into<String>) -> Self {
-        let mut error = Self::denied(message);
-        error.resolution = Some("step_away".into());
-        error
     }
 
     fn failed(message: impl Into<String>) -> Self {
@@ -280,6 +275,15 @@ fn resolve_checkpoint_with_presence(
     }
 }
 
+/// Public correlation facts for this confirmation, never the proof payload.
+#[derive(Serialize)]
+struct ConfirmationChallenge<'a> {
+    challenge_id: &'a str,
+    purpose: &'a str,
+    window_label: &'a str,
+    step_away_generation: u64,
+}
+
 /// The app-started engine and a client bound to it.
 struct EngineClient {
     agent: ureq::Agent,
@@ -339,46 +343,36 @@ where
     let challenge: Challenge =
         send_json(engine.agent.post(begin_url), &engine.api_token, begin_body)?;
     check_payload(&challenge.proof_payload, window.label(), &expect)?;
-    record_challenge_started(
-        step_away,
-        &challenge.challenge_id,
-        expect.purpose,
-        window.label(),
-    );
-    let confirmation = verify_user_presence(window, &challenge.prompt);
-    eprintln!(
-        "Native presence confirmation: {}",
-        confirmation_observation(
-            step_away,
-            &challenge.challenge_id,
-            expect.purpose,
-            window.label(),
-            &confirmation,
-        )
-    );
-    let authenticator = confirmation?;
+    let binding = ConfirmationChallenge {
+        challenge_id: &challenge.challenge_id,
+        purpose: expect.purpose,
+        window_label: window.label(),
+        step_away_generation: step_away,
+    };
+    observation::challenge(&binding);
+    let authenticator = verify_user_presence(window, &challenge.prompt, &binding).map_err(|error| {
+        observation::refused(&binding, &error, false);
+        error
+    })?;
     // Closing the native prompt can delay focus returning to this window.
     let deadline = std::time::Instant::now() + Duration::from_millis(500);
     while !window.is_focused().unwrap_or(false) && std::time::Instant::now() < deadline {
         std::thread::sleep(Duration::from_millis(20));
     }
-    require_active_window(window)?;
-    require_challenge_confirmation(
-        step_away,
-        &challenge.challenge_id,
-        expect.purpose,
-        window.label(),
-    )?;
+    require_active_window(window).map_err(|error| {
+        observation::refused(&binding, &error, false);
+        error
+    })?;
+    require_challenge_confirmation(&binding).map_err(|error| {
+        observation::refused(&binding, &error, true);
+        error
+    })?;
+    observation::confirmed(&binding, authenticator);
     let signature = state.sign_presence(&challenge.proof_payload, authenticator);
     let (url, body) = complete(&challenge, authenticator, &signature);
     let result = send_json(engine.agent.post(&url), &engine.api_token, body)?;
     require_active_window(window)?;
-    require_challenge_confirmation(
-        step_away,
-        &challenge.challenge_id,
-        expect.purpose,
-        window.label(),
-    )?;
+    require_challenge_confirmation(&binding)?;
     Ok(result)
 }
 
@@ -410,88 +404,22 @@ fn require_current_confirmation(generation: u64) -> Result<(), PresenceCommandEr
     if crate::vault_lock::confirmation_unchanged(generation) {
         return Ok(());
     }
-    Err(PresenceCommandError::stepped_away(
+    Err(PresenceCommandError::denied(
         "The device locked or suspended during confirmation. Try again.",
     ))
 }
 
-/// Native confirmation is an observation, not evidence that the host accepted a reveal.
-fn confirmation_observation(
-    generation: u64,
-    challenge_id: &str,
-    purpose: &str,
-    window_label: &str,
-    result: &Result<&str, PresenceCommandError>,
-) -> serde_json::Value {
-    let (status, authenticator, code, resolution) = match result {
-        Ok(authenticator) => ("confirmed", Some(*authenticator), None, None),
-        Err(error) => (
-            "refused",
-            None,
-            Some(error.code.as_str()),
-            error.resolution.as_deref(),
-        ),
-    };
-    serde_json::json!({
-        "format_version": 1,
-        "challenge_id": challenge_id,
-        "purpose": purpose,
-        "window_label": window_label,
-        "generation": generation,
-        "status": status,
-        "authenticator": authenticator,
-        "code": code,
-        "resolution": resolution,
+fn require_challenge_confirmation(binding: &ConfirmationChallenge<'_>) -> Result<(), PresenceCommandError> {
+    require_current_confirmation(binding.step_away_generation).map_err(|error| {
+        observation::invalidated(binding, crate::vault_lock::confirmation_generation());
+        error
     })
-}
-
-fn record_challenge_started(
-    generation: u64,
-    challenge_id: &str,
-    purpose: &str,
-    window_label: &str,
-) {
-    eprintln!(
-        "Step-away presence challenge: {}",
-        serde_json::json!({
-            "challenge_id": challenge_id,
-            "purpose": purpose,
-            "window_label": window_label,
-            "generation": generation,
-        })
-    );
-}
-
-fn require_challenge_confirmation(
-    generation: u64,
-    challenge_id: &str,
-    purpose: &str,
-    window_label: &str,
-) -> Result<(), PresenceCommandError> {
-    match require_current_confirmation(generation) {
-        Ok(()) => Ok(()),
-        Err(error) => {
-            eprintln!(
-                "Step-away presence invalidation: {}",
-                serde_json::json!({
-                    "challenge_id": challenge_id,
-                    "purpose": purpose,
-                    "window_label": window_label,
-                    "generation_before": generation,
-                    "generation_after": crate::vault_lock::confirmation_generation(),
-                    "code": error.code,
-                    "resolution": error.resolution,
-                })
-            );
-            Err(error)
-        }
-    }
 }
 
 fn require_active_window(window: &tauri::Window) -> Result<(), PresenceCommandError> {
     #[cfg(target_os = "linux")]
-    if !crate::vault_lock::confirmation_allowed() {
-        return Err(PresenceCommandError::unavailable("The graphical session is locked, inactive, or its lock state is unavailable."));
+    if let Some(reason) = crate::vault_lock::confirmation_refusal() {
+        return Err(PresenceCommandError::unavailable(reason));
     }
     if window.is_visible().unwrap_or(false)
         && window.is_focused().unwrap_or(false)
@@ -563,6 +491,7 @@ fn send_json<T: for<'de> Deserialize<'de>>(
 fn verify_user_presence(
     _window: &tauri::Window,
     prompt: &str,
+    _binding: &ConfirmationChallenge<'_>,
 ) -> Result<&'static str, PresenceCommandError> {
     use std::sync::mpsc;
 
@@ -612,6 +541,7 @@ fn verify_user_presence(
 fn verify_user_presence(
     window: &tauri::Window,
     prompt: &str,
+    _binding: &ConfirmationChallenge<'_>,
 ) -> Result<&'static str, PresenceCommandError> {
     use windows::core::{factory, HSTRING};
     use windows::Foundation::IAsyncOperation;
@@ -653,30 +583,22 @@ fn verify_user_presence(
     }
 }
 
-/// polkit confirms the person through the desktop's agent. Without one, the
-/// native app-password dialog stands in only while the vault is on the
-/// app-password path; a click never does.
+/// The system authentication agent confirms the person independently of vault custody.
 #[cfg(target_os = "linux")]
 fn verify_user_presence(
     window: &tauri::Window,
-    prompt: &str,
+    _prompt: &str,
+    _binding: &ConfirmationChallenge<'_>,
 ) -> Result<&'static str, PresenceCommandError> {
     let identifier = window.app_handle().config().identifier.clone();
-    match linux::confirm_with_polkit(&identifier) {
-        Ok(()) => Ok(linux::AUTHENTICATOR_POLKIT),
-        Err(linux::PolkitRefusal::Denied(message)) => Err(PresenceCommandError::denied(message)),
-        Err(linux::PolkitRefusal::Failed(message)) => Err(PresenceCommandError::failed(message)),
-        Err(linux::PolkitRefusal::Unavailable(reason)) => {
-            linux::confirm_app_password(window, prompt, &reason)
-                .map(|()| linux::AUTHENTICATOR_APP_PASSWORD)
-        }
-    }
+    linux::confirmation_result(linux::confirm_with_polkit(&identifier, _binding))
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
 fn verify_user_presence(
     _window: &tauri::Window,
     _prompt: &str,
+    _binding: &ConfirmationChallenge<'_>,
 ) -> Result<&'static str, PresenceCommandError> {
     Err(
         PresenceCommandError::unavailable("This operating system cannot confirm you.")
@@ -772,47 +694,16 @@ mod tests {
         assert!(wire.get("actions").is_none());
     }
     #[test]
-    fn native_confirmation_observation_omits_messages_and_distinguishes_host_completion() {
-        let refused = confirmation_observation(
-            7,
-            "challenge",
-            "reveal",
-            "main",
-            &Err(PresenceCommandError::unavailable("private diagnostic message")),
-        );
-        assert_eq!(refused["code"], "presence_unavailable");
-        assert_eq!(refused["status"], "refused");
-        assert!(refused["authenticator"].is_null());
-        assert!(!refused.to_string().contains("private diagnostic message"));
-        let confirmed = confirmation_observation(
-            7,
-            "challenge",
-            "reveal",
-            "main",
-            &Ok("linux_user_presence"),
-        );
-        assert_eq!(confirmed["status"], "confirmed");
-        assert_eq!(confirmed["authenticator"], "linux_user_presence");
-        assert_eq!(confirmed["generation"], 7);
-        assert_eq!(confirmed["challenge_id"], refused["challenge_id"]);
-        assert!(confirmed["code"].is_null());
-        assert!(confirmed.get("host_completed").is_none());
-    }
-
-    #[test]
     fn stepping_away_during_confirmation_refuses_the_native_proof() {
         let generation = crate::vault_lock::confirmation_generation();
         let state = SidecarState::new();
         crate::vault_lock::lock_now(&state, crate::vault_lock::LockReason::Sleep);
-        let error = require_challenge_confirmation(
-            generation,
-            "00000000-0000-4000-8000-000000000001",
-            "reveal",
-            "main",
-        )
-        .expect_err("stale confirmation");
+        let binding = ConfirmationChallenge {
+            challenge_id: "10000000-0000-4000-8000-000000000001",
+            purpose: "reveal", window_label: "main", step_away_generation: generation,
+        };
+        let error = require_challenge_confirmation(&binding).expect_err("stale confirmation");
         assert_eq!(error.code, "presence_denied");
-        assert_eq!(error.resolution.as_deref(), Some("step_away"));
+        assert!(error.resolution.is_none());
     }
-
 }
