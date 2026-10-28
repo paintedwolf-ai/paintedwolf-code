@@ -253,7 +253,10 @@ one seed; repeat `--seed` to select more (at most 64), and `--programs` selects
 runs the recorded set beside the corpus. A mismatch is reduced by deleting
 fragments and simplifying values while retaining its structured difference type,
 status pair, refusal code or file path. The report includes both observations,
-the original and reduced programs, and the seed. A fixed point is minimal under
+the original and reduced programs, and the seed. Candidate references are batched
+per reduction step; each userland starts once for that batch. Top-level rejections
+without a typed identity retain the original program rather than changing causes.
+A fixed point is minimal under
 those reductions; a 128-trial bound reports explicitly when minimization remains
 incomplete. Production fixes go to their command component, and their regressions
 join the permanent corpus.

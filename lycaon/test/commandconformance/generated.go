@@ -149,6 +149,15 @@ func (p GeneratedProgram) ReductionCandidates() []GeneratedProgram {
 			candidates = append(candidates, c)
 		}
 	}
+	seen := map[string]bool{p.Case().Program: true}
+	candidates = slices.DeleteFunc(candidates, func(candidate GeneratedProgram) bool {
+		source := candidate.Case().Program
+		if seen[source] {
+			return true
+		}
+		seen[source] = true
+		return false
+	})
 	slices.SortStableFunc(candidates, func(a, b GeneratedProgram) int { return a.complexity() - b.complexity() })
 	return candidates
 }

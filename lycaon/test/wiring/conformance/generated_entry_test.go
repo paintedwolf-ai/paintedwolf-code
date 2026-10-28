@@ -36,8 +36,12 @@ func TestGeneratedShrinkerThroughCommandEntry(t *testing.T) {
 	if defect.Kind != "observation" || defect.References[referenceuserland.GNU].Kind != "stdout" {
 		t.Fatalf("injected reference defect %+v outcome %+v", defect, first.Outcome)
 	}
-	retains := func(_ context.Context, c commandconformance.Case) (bool, error) {
-		return reflect.DeepEqual(generatedMismatch(runner.runCase(t, c), refs), defect), nil
+	retains := func(_ context.Context, cases []commandconformance.Case) ([]bool, error) {
+		kept := make([]bool, len(cases))
+		for i, c := range cases {
+			kept[i] = reflect.DeepEqual(generatedMismatch(runner.runCase(t, c), refs), defect)
+		}
+		return kept, nil
 	}
 	result, err := commandconformance.Shrink(t.Context(), original, 32, retains)
 	testutil.FailErr(t, "reduce through command entry", err)
@@ -45,9 +49,9 @@ func TestGeneratedShrinkerThroughCommandEntry(t *testing.T) {
 		t.Fatalf("did not finish minimization %+v", result)
 	}
 	for _, candidate := range result.Program.ReductionCandidates() {
-		keep, err := retains(t.Context(), candidate.Case())
+		kept, err := retains(t.Context(), []commandconformance.Case{candidate.Case()})
 		testutil.FailErr(t, "check command entry fixed point", err)
-		if keep {
+		if kept[0] {
 			t.Fatal("command entry reproducer still reduces")
 		}
 	}

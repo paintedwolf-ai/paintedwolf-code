@@ -46,18 +46,31 @@ func TestLiveGeneratedDifferential(t *testing.T) {
 			}
 			mismatches++
 			lastObs, lastRefs := obs, live[c.ID]
-			result, err := commandconformance.Shrink(t.Context(), p, 128, func(ctx context.Context, trial commandconformance.Case) (bool, error) {
-				captured, err := commandconformance.Capture(ctx, references, []commandconformance.Case{trial}, runner.seed)
-				if err != nil {
-					return false, err
-				}
-				current := runner.runCase(t, trial)
-				if !reflect.DeepEqual(generatedMismatch(current, captured[trial.ID]), defect) {
-					return false, nil
-				}
-				lastObs, lastRefs = current, captured[trial.ID]
-				return true, nil
-			})
+			type trialObservation struct {
+				native     runtimeObservation
+				references map[referenceuserland.ID]commandconformance.Snapshot
+			}
+			observed := map[string]trialObservation{c.Program: {obs, live[c.ID]}}
+			result := commandconformance.ShrinkResult{Program: p}
+			if obs.TopLevelReject == "" {
+				result, err = commandconformance.Shrink(t.Context(), p, 128, func(ctx context.Context, trials []commandconformance.Case) ([]bool, error) {
+					captured, err := commandconformance.Capture(ctx, references, trials, runner.seed)
+					if err != nil {
+						return nil, err
+					}
+					kept := make([]bool, len(trials))
+					for i, trial := range trials {
+						current := runner.runCase(t, trial)
+						observed[trial.Program] = trialObservation{current, captured[trial.ID]}
+						kept[i] = reflect.DeepEqual(generatedMismatch(current, captured[trial.ID]), defect)
+					}
+					return kept, nil
+				})
+			}
+			if selected, ok := observed[result.Program.Case().Program]; ok {
+				lastObs, lastRefs = selected.native, selected.references
+			}
+
 			testutil.FailErr(t, "shrink generated mismatch", err)
 			report, err := json.MarshalIndent(struct {
 				Seed       uint64
@@ -68,8 +81,9 @@ func TestLiveGeneratedDifferential(t *testing.T) {
 				Minimal    bool
 				Defect     generatedDefect
 				Native     commandconformance.Observation
+				Rejection  string
 				References map[referenceuserland.ID]commandconformance.Snapshot
-			}{p.Seed, p.Ordinal, c.Program, result.Program.Case().Program, result.Trials, result.Minimal, defect, lastObs.streams(), lastRefs}, "", "  ")
+			}{p.Seed, p.Ordinal, c.Program, result.Program.Case().Program, result.Trials, result.Minimal, defect, lastObs.streams(), lastObs.TopLevelReject, lastRefs}, "", "  ")
 			testutil.FailErr(t, "encode minimized mismatch", err)
 			t.Errorf("generated mismatch:\n%s", report)
 		})

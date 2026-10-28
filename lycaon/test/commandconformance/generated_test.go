@@ -46,7 +46,7 @@ func TestGeneratedProgramsAreDeterministicAndBounded(t *testing.T) {
 			}
 			testutil.FailErr(t, "validate generated case", Validate([]Case{c}))
 			parsed, err := commandsurface.ParseProgram([]byte(c.Program), commandsurface.ParseOptions{SourceName: c.ID})
-			testutil.FailErr(t, "parse generated program", err)
+			testutil.FailErr(t, "parse generated program "+c.ID+" ("+c.Program+")", err)
 			testutil.FailErr(t, "close generated program", parsed.Close())
 			for _, reduced := range p.ReductionCandidates() {
 				if reduced.complexity() >= p.complexity() {
@@ -83,28 +83,40 @@ func TestShrinkFindsAFixedPoint(t *testing.T) {
 			break
 		}
 	}
-	retains := func(_ context.Context, c Case) (bool, error) { return strings.Contains(c.Program, "while"), nil }
+	retains := func(_ context.Context, cases []Case) ([]bool, error) {
+		kept := make([]bool, len(cases))
+		for i, c := range cases {
+			kept[i] = strings.Contains(c.Program, "while")
+		}
+		return kept, nil
+	}
 	result, err := Shrink(t.Context(), original, 256, retains)
 	testutil.FailErr(t, "shrink program", err)
 	if !result.Minimal || len(result.Program.fragments) != 1 || !strings.Contains(result.Program.Case().Program, `-lt 1`) {
 		t.Fatalf("incomplete reduction %+v", result)
 	}
 	for _, candidate := range result.Program.ReductionCandidates() {
-		keep, err := retains(t.Context(), candidate.Case())
+		kept, err := retains(t.Context(), []Case{candidate.Case()})
 		testutil.FailErr(t, "check reduction", err)
-		if keep {
+		if kept[0] {
 			t.Fatal("fixed point still reduces")
 		}
 	}
-	bounded, err := Shrink(t.Context(), original, 1, retains)
+	boundedOriginal := original
+	boundedOriginal.fragments = append([]generatedFragment{{kind: 0, text: "extra", number: 4}}, original.fragments...)
+	bounded, err := Shrink(t.Context(), boundedOriginal, 1, retains)
 	testutil.FailErr(t, "bounded reduction", err)
 	if bounded.Trials != 1 || bounded.Minimal {
 		t.Fatalf("ignored trial bound %+v", bounded)
 	}
 	sentinel := errors.New("comparison failed")
-	_, err = Shrink(t.Context(), original, 5, func(context.Context, Case) (bool, error) { return false, sentinel })
+	_, err = Shrink(t.Context(), original, 5, func(context.Context, []Case) ([]bool, error) { return nil, sentinel })
 	if !errors.Is(err, sentinel) {
 		t.Fatalf("comparison error %v", err)
+	}
+	_, err = Shrink(t.Context(), original, 5, func(context.Context, []Case) ([]bool, error) { return nil, nil })
+	if err == nil {
+		t.Fatal("accepted incomplete comparison batch")
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
