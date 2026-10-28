@@ -317,9 +317,9 @@ func (e *Executor) recheckNativeOwnerAdmission(ctx context.Context, frame Progra
 	return checkLiveProgramProgress(ctx, progressFacts, definition, invocation)
 }
 
-// validateNativeArguments checks a legacy structured value against its tool
-// schema. A catalog-bound form was already validated by the argv binder, so
-// its review record is not forced into that schema.
+// validateNativeArguments checks structured native tool values against their
+// schema. Catalog-bound argv is validated by its binder and carries a separate
+// review record.
 func validateNativeArguments(facts toolcontract.OperationFacts, argv *commandprogram.ArgvReview, values map[string]any, tc tools.ToolContext) error {
 	if argv != nil {
 		if argv.OperationID != facts.Identity {

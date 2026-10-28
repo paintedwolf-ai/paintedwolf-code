@@ -1076,6 +1076,7 @@
     "find",
     "fold",
     "git",
+    "git init",
     "git add",
     "git blame",
     "git branch",

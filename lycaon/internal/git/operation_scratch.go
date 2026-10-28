@@ -139,7 +139,10 @@ func (p *preparedOperation) copyFileFrom(sourceRoot, sourcePath, dest string) er
 // Rehearsal materializes complete trees. Bound their declared blob sizes before
 // checkout, rather than discovering an oversized repository after filling disk.
 func (p *preparedOperation) checkTreeBudget(ctx context.Context, dir string) error {
-	refs := []string{p.result.Before.Head}
+	refs := []string{}
+	if p.result.Before.Head != "" {
+		refs = append(refs, p.result.Before.Head)
+	}
 	for _, oid := range p.refs {
 		if oid != "" {
 			refs = append(refs, oid)
@@ -166,6 +169,7 @@ func (p *preparedOperation) checkTreeBudget(ctx context.Context, dir string) err
 	entries := 0
 	for _, ref := range uniquePaths(refs) {
 		err := gitexec.RunRecords(ctx, dir, []string{"ls-tree", "-r", "-l", "-z", ref}, p.opts, func(raw []byte) error {
+			recordOperationVisits(ctx, 1)
 			meta, _, ok := strings.Cut(string(raw), "\t")
 			fields := strings.Fields(meta)
 			if !ok || len(fields) != 4 {
