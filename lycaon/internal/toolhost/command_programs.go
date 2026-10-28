@@ -97,6 +97,7 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 		searchProgram.Admission = admission
 		queryProgram.Revisions.Memory = memory
 		mutationProgram.Revisions.Memory = memory
+		mutationProgram.Admission = admission
 		textProgram.Revisions.Memory = memory
 		literalOwners, searchOwners, queryOwners, mutationOwners, textOwners := &literalProgram, &searchProgram, &queryProgram, &mutationProgram, &textProgram
 		program := mutation.Program{Paths: paths}

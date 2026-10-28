@@ -159,6 +159,27 @@ func (t *WriteTool) applyPinnedBytes(ctx context.Context, input WriteInput, tctx
 		return WriteResult{}, err
 	}
 	defer releaseMetadata()
+	if input.Source != nil {
+		if input.SourceBytes < 0 {
+			return WriteResult{}, errors.New("exact write stream requires a nonnegative length")
+		}
+		if input.SourceBytes > readcaps.MaxMutationBytes {
+			return t.applyPinnedStream(ctx, input, tctx, resolved, revisions)
+		}
+		releaseBytes, err := revisions.reserveWorking(ctx, 2*input.SourceBytes)
+		if err != nil {
+			return WriteResult{}, err
+		}
+		defer releaseBytes()
+		input.Bytes = make([]byte, int(input.SourceBytes))
+		if _, err := io.ReadFull(input.Source, input.Bytes); err != nil {
+			return WriteResult{}, err
+		}
+		var extra [1]byte
+		if n, err := io.ReadFull(input.Source, extra[:]); n != 0 || err != io.EOF {
+			return WriteResult{}, errors.New("exact write stream length changed")
+		}
+	}
 	st, current, raw, releaseRaw, err := revisions.captureDestinationBytes(ctx, tctx, resolved, input.Append)
 	defer releaseRaw()
 	if err != nil {
@@ -192,7 +213,7 @@ func (t *WriteTool) applyPinnedBytes(ctx context.Context, input WriteInput, tctx
 		})
 	}
 	if input.Append && exists && (st.Disk == nil || int64(len(st.Content))+int64(len(input.Bytes)) > readcaps.MaxMutationBytes) {
-		result, err := landPinnedAppend(ctx, tctx, resolved, input.Destination, input.Bytes, admitSources)
+		result, err := landPinnedAppend(ctx, tctx, resolved, input.Destination, bytes.NewReader(input.Bytes), int64(len(input.Bytes)), admitSources)
 		if err != nil {
 			return WriteResult{}, err
 		}
