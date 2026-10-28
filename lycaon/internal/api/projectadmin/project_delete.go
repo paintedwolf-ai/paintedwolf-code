@@ -7,17 +7,26 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectremoval"
 	"github.com/lycaon/lycaon/internal/session/projectcontrol"
-	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/workspace"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Removal) deleteProject(ctx context.Context, id string, force bool) error {
+func (s *Removal) deleteProject(ctx context.Context, id string, force bool, report func(wire.ProjectRemovalProgress)) error {
 	release, waitForDrain, err := s.acquireProjectDeletion(ctx, id)
 	if err != nil {
 		return err
 	}
-	defer release()
+	var resumeWatch func()
+	deleted := false
+	defer func() {
+		if resumeWatch != nil {
+			resumeWatch()
+		}
+		release()
+		if resumeWatch != nil && !deleted {
+			s.sourceWatch.ScheduleSourceWatch(context.WithoutCancel(ctx), id)
+		}
+	}()
 	p, err := s.Registry.Get(ctx, id)
 	if err != nil {
 		return err
@@ -46,7 +55,13 @@ func (s *Removal) deleteProject(ctx context.Context, id string, force bool) erro
 	} else if !s.MutationGate.MutationDrained(id) {
 		return project.ErrProjectBusy
 	}
-	if err := s.Sessions.Chats.RetireForProjectDelete(ctx, id); err != nil {
+	resumeWatch, err = s.sourceWatch.SuspendProjectWatch(ctx, id)
+	if err != nil {
+		return err
+	}
+	if err := s.Sessions.Chats.RetireForProjectDelete(ctx, id, func(completed, total int) {
+		report(wire.ProjectRemovalProgress{Phase: "chats", Completed: completed, Total: total})
+	}); err != nil {
 		return err
 	}
 	mutationCtx := ctx
@@ -57,14 +72,17 @@ func (s *Removal) deleteProject(ctx context.Context, id string, force bool) erro
 	if err != nil {
 		return err
 	}
+	report(wire.ProjectRemovalProgress{Phase: "project_data"})
 	if err := s.Registry.Delete(mutationCtx, id); err != nil {
 		return err
 	}
+	deleted = true
 	if removeSecretValues != nil {
 		if err := removeSecretValues(); err != nil {
 			slog.WarnContext(ctx, "remove managed secrets after project delete", "project_id", id, "err", err)
 		}
 	}
+	report(wire.ProjectRemovalProgress{Phase: "files"})
 	s.finishProjectDeletion(ctx, p, dependents, removedRootPaths)
 	return nil
 }
@@ -74,7 +92,6 @@ func (s *Removal) finishProjectDeletion(ctx context.Context, p *project.Project,
 	s.Roots.forgetRemovedEditorDocuments(dependents)
 	s.sourceViews.InvalidateProjectSourceViews(id)
 	s.Roots.releaseUnattachedSourceRoots(ctx, removedRootPaths)
-	sourcefeed.StopProjectWatch(ctx, id)
 	// Project deletion removes only engine-managed storage.
 	if err := project.RemoveHostDataDir(s.DataDir, id); err != nil {
 		slog.WarnContext(ctx, "remove project host data", "project_id", id, "err", err)

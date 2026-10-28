@@ -23,7 +23,7 @@ func buildRecoveryApp(ctx context.Context, cfg configuration.Config, b *serveBui
 	if err != nil {
 		return nil, fmt.Errorf("listen address: %w", err)
 	}
-	token, generated, err := deviceidentity.ResolveToken()
+	token, generated, err := deviceidentity.ResolveToken(cfg.APIToken)
 	if err != nil {
 		return nil, fmt.Errorf("api token: %w", err)
 	}

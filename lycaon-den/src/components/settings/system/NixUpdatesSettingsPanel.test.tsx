@@ -1,12 +1,12 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { UpdatesSettingsPanel } from "./UpdatesSettingsPanel.tsx";
-import { packageFixture, updateServiceFixture } from "../../../settings/system/update-test-fixture.ts";
+import { packageFixture, packageSourceFixture, updateServiceFixture } from "../../../settings/system/update-test-fixture.ts";
 import type { NativeUpdateState } from "../../../settings/system/update-service.ts";
 
 afterEach(cleanup);
 const nix = (over: Partial<NativeUpdateState> = {}) => packageFixture({
-  package: { family: "nix", name: "painted-wolf-code", version: "1.0.2", update_command: "Review the owning Nix source.", source: { availability: "not_checked", owner: null, pinned: null } },
+  package: { family: "nix", name: "painted-wolf-code", version: "1.0.2", update_command: "Review the owning Nix source.", source: packageSourceFixture({ owner: null }) },
   ...over,
 });
 
@@ -39,14 +39,14 @@ describe("Nix update ownership", () => {
     expect(screen.getByTestId("updates-nix-pin").textContent).toContain("unknown");
   });
 
-  it("withdraws the notice without changing a declared pin or offering installation", async () => {
-    const state = nix(); state.package!.source.pinned = true;
+  it("withdraws the notice without claiming a pin or offering installation", async () => {
+    const state = nix();
     const check = async () => ({ ...state, candidate: null, discovery: "up_to_date" as const });
     render(() => <UpdatesSettingsPanel updateService={updateServiceFixture({ getState: async () => state, check })} />);
-    expect((await screen.findByTestId("updates-nix-pin")).textContent).toContain("does not change its pin");
+    expect((await screen.findByTestId("updates-nix-pin")).textContent).toContain("pinned is unknown");
     fireEvent.click(screen.getByRole("button", { name: "Check now" }));
     await waitFor(() => expect(screen.queryByTestId("updates-package-upgrade")).toBeNull());
-    expect(screen.getByTestId("updates-nix-pin").textContent).toContain("pinned");
+    expect(screen.getByTestId("updates-nix-pin").textContent).toContain("pinned is unknown");
     expect(screen.getByText(/Package-source availability has not been checked/)).not.toBeNull();
     expect(screen.queryByTestId("updates-install")).toBeNull();
   });

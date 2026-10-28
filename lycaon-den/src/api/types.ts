@@ -773,7 +773,7 @@ export interface paths {
         put?: never;
         /**
          * Lock every chat when the person steps away
-         * @description The desktop shell calls this when the screen locks, the computer sleeps, or the app quits. Locking can only take authority away, so any authenticated caller may request it.
+         * @description The desktop shell calls this when the screen locks, the computer sleeps, the app quits, or, on a Linux desktop whose screen lock cannot be observed, the person's input stays idle for the unlock idle period (`away`). Locking can only take authority away, so any authenticated caller may request it.
          */
         post: operations["lockVault"];
         delete?: never;
@@ -881,7 +881,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Delete a project and settle reviewed optional extension cleanup */
+        /** Accept project deletion and reviewed optional extension cleanup */
         post: operations["createProjectRemoval"];
         delete?: never;
         options?: never;
@@ -896,7 +896,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Read the recorded project removal outcome */
+        /** Read live progress or the recorded project removal outcome */
         get: operations["getProjectRemoval"];
         put?: never;
         post?: never;
@@ -5444,14 +5444,24 @@ export interface components {
             /** @description PRAGMA user_version read from the live store when status is recovery. Omitted on ordinary health. */
             store_schema_version?: number;
             /**
-             * @description Closed reason the store cannot be served. Present when status is recovery.
+             * @description Closed reason the store cannot be served. Present when status is recovery. insufficient_space reports a capacity refusal or exhausted storage; storage_unavailable reports an access or I/O failure. Neither implies database corruption.
              * @enum {string}
              */
-            recovery_reason?: "integrity_failed" | "schema_mismatch";
+            recovery_reason?: "integrity_failed" | "schema_mismatch" | "insufficient_space" | "storage_unavailable";
             /** @description Human-readable sentence matching the recovery reason. Present when status is recovery. */
             recovery_detail?: string;
             /** @description Whether a local recovery snapshot has valid metadata and a supported schema upgrade route. Restore verifies all payload hashes before use. Always false on ordinary health. */
             recovery_snapshot_available: boolean;
+            /**
+             * Format: int64
+             * @description Free bytes the upgrade and its recovery point need. Present when an insufficient_space preflight refusal has an estimate.
+             */
+            recovery_space_needed_bytes?: number;
+            /**
+             * Format: int64
+             * @description Free bytes the volume held when the upgrade was refused. Present when an insufficient_space preflight refusal has an estimate.
+             */
+            recovery_space_available_bytes?: number;
             /**
              * Format: date-time
              * @description RFC 3339 UTC creation time of the recovery snapshot when available. Omitted when recovery_snapshot_available is false.
@@ -7527,12 +7537,12 @@ export interface components {
          */
         AttachmentKind: "image" | "text" | "document" | "video";
         /**
-         * @description Attachment-reference family. Path kinds are jailed under an attached project root; artifact re-links an existing VisualArtifact; search-hit re-serves a stored evidence_index snippet. Never carries bytes or a server-opened absolute path.
+         * @description Attachment-reference family. Path kinds are jailed under an attached project root; external path kinds resolve absolute paths outside attached roots with host-authoritative confinement and explicit human grants; artifact re-links an existing VisualArtifact; search-hit re-serves a stored evidence_index snippet.
          * @enum {string}
          */
-        PromptReferenceKind: "path-file" | "path-folder" | "artifact" | "search-hit";
-        /** @description A pointer to something already on disk (under an attached project root), an existing visual artifact, or a stored search hit. Carries jailed coordinates only — never bytes and never an absolute filesystem path the server opens. The host fences path/folder refs so the agent reads them in place with its own jailed tools. */
-        PromptReferencePart: components["schemas"]["PromptReferencePathFile"] | components["schemas"]["PromptReferencePathFolder"] | components["schemas"]["PromptReferenceArtifact"] | components["schemas"]["PromptReferenceSearchHit"];
+        PromptReferenceKind: "path-file" | "path-folder" | "external-file" | "external-folder" | "artifact" | "search-hit";
+        /** @description A pointer to something already on disk (under an attached project root or an explicitly granted external path), an existing visual artifact, or a stored search hit. The host fences references and enforces confinement and explicit human grants so the agent reads and edits them with its own tools. */
+        PromptReferencePart: components["schemas"]["PromptReferencePathFile"] | components["schemas"]["PromptReferencePathFolder"] | components["schemas"]["PromptReferenceExternalFile"] | components["schemas"]["PromptReferenceExternalFolder"] | components["schemas"]["PromptReferenceArtifact"] | components["schemas"]["PromptReferenceSearchHit"];
         PromptAcceptedResponse: {
             /**
              * @description Durable submission state observed at admission or replay. queued means the turn is waiting for session execution; eligible text-only turns may also appear in the editable next-turn draft. canceled means the user removed a waiting draft item before it ran.
@@ -10172,7 +10182,7 @@ export interface components {
          * @description What a retrieval part points at, stamped from the reference variant the host ingested. Clients branch on this rather than on the hint prose the fence carries for the model.
          * @enum {string}
          */
-        MessageReferenceKind: "path_file" | "path_folder" | "search_hit";
+        MessageReferenceKind: "path_file" | "path_folder" | "external_file" | "external_folder" | "search_hit";
         MessageContentPart: {
             content: string;
             origin: components["schemas"]["MessageOrigin"];
@@ -10182,6 +10192,11 @@ export interface components {
             source?: string;
             /** @description Optional MIME type for this text projection. */
             media_type?: string;
+            /**
+             * Format: uuid
+             * @description Host-stamped visual derived from this attachment or path reference. Edit restoration keeps the original source part instead of relinking this derived image again.
+             */
+            artifact_id?: string;
             /** @description Stable blob ID for a payload attachment, used to restage Edit/rewind. */
             blob_id?: string;
             /** @description Host-stamped locator the agent can open. Payload attachments use a host-data-relative path (`prompt-attachments/{blob_id}/{name}`). path_file / path_folder retrieval parts use the path relative to `root_id`, qualified with `@label/` when that root is not primary. Absent when the part has no openable body (search_hit, user prose, host notices). */
@@ -11309,6 +11324,32 @@ export interface components {
             /** @description Project-relative folder path; never absolute; jailed under root_id. */
             path: string;
         };
+        PromptReferenceExternalFile: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "external-file";
+            /** Format: uuid */
+            project_id: string;
+            /** @description Absolute filesystem path outside attached roots, explicitly granted by human drop. */
+            path: string;
+            /** @description Inclusive 1-based start line for a selection range. */
+            start_line?: number;
+            /** @description Inclusive 1-based end line; defaults to start_line. */
+            end_line?: number;
+        };
+        PromptReferenceExternalFolder: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "external-folder";
+            /** Format: uuid */
+            project_id: string;
+            /** @description Absolute folder path outside attached roots, explicitly granted by human drop. */
+            path: string;
+        };
         PromptReferenceArtifact: {
             /**
              * @description discriminator enum property added by openapi-typescript
@@ -11484,10 +11525,10 @@ export interface components {
             checkpoints: components["schemas"]["CheckpointEvent"][];
         };
         /**
-         * @description User-presence verifier that confirmed the person before the shell signed: the operating system's own prompt, or on Linux without a polkit agent, the shell's native app-password dialog.
+         * @description User-presence verifier that confirmed the person before the shell signed after fresh authentication through the operating system's native prompt. Unavailable system authentication refuses the operation.
          * @enum {string}
          */
-        PresenceAuthenticator: "macos_user_presence" | "windows_user_presence" | "linux_user_presence" | "linux_app_password";
+        PresenceAuthenticator: "macos_user_presence" | "windows_user_presence" | "linux_user_presence";
         /** @description Challenge-bound native user-presence proof. The signature covers the challenge payload plus the authenticator identifier. */
         PresenceProof: {
             /** Format: uuid */
@@ -11533,7 +11574,7 @@ export interface components {
         };
         LockVaultRequest: {
             /** @enum {string} */
-            reason: "screen_locked" | "sleep" | "app_quit";
+            reason: "screen_locked" | "sleep" | "away" | "app_quit";
         };
         LockVaultResponse: {
             /** @description Chats whose unlock ended. */
@@ -11634,7 +11675,15 @@ export interface components {
             remove_extensions: string[];
             force: boolean;
         };
+        /** @description Live host-owned progress; absent once the recorded operation settles. */
+        ProjectRemovalProgress: {
+            /** @enum {string} */
+            phase: "preparing" | "chats" | "project_data" | "files" | "extensions";
+            completed: number;
+            total: number;
+        };
         ProjectRemovalResult: {
+            progress?: components["schemas"]["ProjectRemovalProgress"] | null;
             assessment?: components["schemas"]["ProjectRemovalAssessment"] | null;
             /** Format: uuid */
             operation_id: string;
@@ -18490,7 +18539,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Host-owned removal evidence or outcome */
+            /** @description Durably accepted operation with live progress, or its settled outcome */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -29875,6 +29924,8 @@ export type InvocationReceiptList = components["schemas"]["InvocationReceiptList
 export type PromptRecovery = components["schemas"]["PromptRecovery"];
 export type PromptReferencePathFile = components["schemas"]["PromptReferencePathFile"];
 export type PromptReferencePathFolder = components["schemas"]["PromptReferencePathFolder"];
+export type PromptReferenceExternalFile = components["schemas"]["PromptReferenceExternalFile"];
+export type PromptReferenceExternalFolder = components["schemas"]["PromptReferenceExternalFolder"];
 export type PromptReferenceArtifact = components["schemas"]["PromptReferenceArtifact"];
 export type PromptReferenceSearchHit = components["schemas"]["PromptReferenceSearchHit"];
 export type AbortSessionRequest = components["schemas"]["AbortSessionRequest"];
@@ -29910,6 +29961,7 @@ export type ProjectRemovalReason = components["schemas"]["ProjectRemovalReason"]
 export type ProjectRemovalExtension = components["schemas"]["ProjectRemovalExtension"];
 export type ProjectRemovalAssessment = components["schemas"]["ProjectRemovalAssessment"];
 export type ProjectRemovalRequest = components["schemas"]["ProjectRemovalRequest"];
+export type ProjectRemovalProgress = components["schemas"]["ProjectRemovalProgress"];
 export type ProjectRemovalResult = components["schemas"]["ProjectRemovalResult"];
 export type AgentContextInstruction = components["schemas"]["AgentContextInstruction"];
 export type AgentContextSkill = components["schemas"]["AgentContextSkill"];

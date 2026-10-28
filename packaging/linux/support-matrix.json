@@ -26,7 +26,7 @@
     {
       "id": "deb",
       "package_owner": "dpkg/apt",
-      "vault_mode": "system-service or app password",
+      "vault_mode": "new or reopened app sessions require a system service; stored credentials preserved",
       "issues": [
         758,
         759,
@@ -38,7 +38,7 @@
     {
       "id": "rpm",
       "package_owner": "rpm/dnf",
-      "vault_mode": "system-service or app password",
+      "vault_mode": "new or reopened app sessions require a system service; stored credentials preserved",
       "issues": [
         758,
         759,
@@ -50,7 +50,7 @@
     {
       "id": "pacman",
       "package_owner": "pacman, including packages built through AUR/yay",
-      "vault_mode": "system-service or app password",
+      "vault_mode": "new or reopened app sessions require a system service; stored credentials preserved",
       "issues": [
         940,
         941,
@@ -61,7 +61,7 @@
     {
       "id": "nixos-system",
       "package_owner": "administrator-selected NixOS generation",
-      "vault_mode": "generation-bound system-service or app password",
+      "vault_mode": "new or reopened app sessions require an administrator-selected generation-bound system service",
       "issues": [
         927,
         928,
@@ -73,7 +73,7 @@
     {
       "id": "nix-package",
       "package_owner": "package-only Nix installation",
-      "vault_mode": "app password unless administrator integration is independently configured",
+      "vault_mode": "new or reopened app sessions require an administrator-configured protected system service",
       "issues": [
         927,
         928,
@@ -84,7 +84,7 @@
     {
       "id": "nix-profile",
       "package_owner": "user-selected Nix profile generation",
-      "vault_mode": "app password unless administrator integration is independently configured",
+      "vault_mode": "new or reopened app sessions require an administrator-configured protected system service",
       "issues": [
         927,
         928,
@@ -95,7 +95,7 @@
     {
       "id": "home-manager",
       "package_owner": "Home Manager generation",
-      "vault_mode": "app password unless administrator integration is independently configured",
+      "vault_mode": "new or reopened app sessions require an administrator-configured protected system service",
       "issues": [
         927,
         928,
@@ -106,7 +106,7 @@
     {
       "id": "nix-run",
       "package_owner": "temporary pinned nix run invocation",
-      "vault_mode": "app password unless administrator integration is independently configured",
+      "vault_mode": "new or reopened app sessions require an administrator-configured protected system service",
       "issues": [
         927,
         928,
@@ -531,7 +531,6 @@
           ],
           "uniform_capabilities": [
             "installation",
-            "conversation",
             "git",
             "files",
             "external-files",
@@ -608,7 +607,6 @@
           ],
           "uniform_capabilities": [
             "installation",
-            "conversation",
             "git",
             "files",
             "external-files",
@@ -686,7 +684,6 @@
           ],
           "uniform_capabilities": [
             "installation",
-            "conversation",
             "git",
             "files",
             "external-files",
@@ -764,7 +761,6 @@
           ],
           "uniform_capabilities": [
             "installation",
-            "conversation",
             "git",
             "files",
             "external-files",
@@ -841,7 +837,6 @@
           ],
           "uniform_capabilities": [
             "installation",
-            "conversation",
             "git",
             "files",
             "external-files",
@@ -927,7 +922,6 @@
           ],
           "uniform_capabilities": [
             "installation",
-            "conversation",
             "git",
             "files",
             "external-files",
@@ -1007,7 +1001,6 @@
           ],
           "uniform_capabilities": [
             "installation",
-            "conversation",
             "git",
             "files",
             "external-files",
@@ -1083,7 +1076,6 @@
           ],
           "uniform_capabilities": [
             "installation",
-            "conversation",
             "git",
             "files",
             "external-files",
@@ -1159,7 +1151,6 @@
           ],
           "uniform_capabilities": [
             "installation",
-            "conversation",
             "git",
             "files",
             "external-files",
@@ -1236,7 +1227,6 @@
           ],
           "uniform_capabilities": [
             "installation",
-            "conversation",
             "git",
             "files",
             "external-files",
@@ -1313,7 +1303,6 @@
           ],
           "uniform_capabilities": [
             "installation",
-            "conversation",
             "git",
             "files",
             "external-files",
@@ -1391,7 +1380,6 @@
           ],
           "uniform_capabilities": [
             "installation",
-            "conversation",
             "git",
             "files",
             "external-files",
@@ -1469,7 +1457,6 @@
           ],
           "uniform_capabilities": [
             "installation",
-            "conversation",
             "git",
             "files",
             "external-files",
@@ -1547,7 +1534,6 @@
           ],
           "uniform_capabilities": [
             "installation",
-            "conversation",
             "git",
             "files",
             "external-files",
@@ -1625,7 +1611,6 @@
           ],
           "uniform_capabilities": [
             "installation",
-            "conversation",
             "git",
             "files",
             "external-files",
@@ -1703,7 +1688,6 @@
           ],
           "uniform_capabilities": [
             "installation",
-            "conversation",
             "git",
             "files",
             "external-files",
@@ -1782,7 +1766,6 @@
           ],
           "uniform_capabilities": [
             "installation",
-            "conversation",
             "git",
             "files",
             "external-files",
@@ -1861,7 +1844,6 @@
           ],
           "uniform_capabilities": [
             "installation",
-            "conversation",
             "git",
             "files",
             "external-files",
@@ -1940,7 +1922,6 @@
           ],
           "uniform_capabilities": [
             "installation",
-            "conversation",
             "git",
             "files",
             "external-files",
@@ -2017,7 +1998,6 @@
           ],
           "uniform_capabilities": [
             "installation",
-            "conversation",
             "git",
             "files",
             "external-files",
@@ -2094,7 +2074,6 @@
           ],
           "uniform_capabilities": [
             "installation",
-            "conversation",
             "git",
             "files",
             "external-files",
@@ -2171,7 +2150,6 @@
           ],
           "uniform_capabilities": [
             "installation",
-            "conversation",
             "git",
             "files",
             "external-files",
@@ -2248,7 +2226,6 @@
           ],
           "uniform_capabilities": [
             "installation",
-            "conversation",
             "git",
             "files",
             "external-files",
@@ -2325,7 +2302,6 @@
           ],
           "uniform_capabilities": [
             "installation",
-            "conversation",
             "git",
             "files",
             "external-files",
@@ -2402,7 +2378,6 @@
           ],
           "uniform_capabilities": [
             "installation",
-            "conversation",
             "git",
             "files",
             "external-files",
@@ -2479,7 +2454,6 @@
           ],
           "uniform_capabilities": [
             "installation",
-            "conversation",
             "git",
             "files",
             "external-files",
@@ -2556,7 +2530,6 @@
           ],
           "uniform_capabilities": [
             "installation",
-            "conversation",
             "git",
             "files",
             "external-files",

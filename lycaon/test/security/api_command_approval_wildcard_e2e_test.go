@@ -8,7 +8,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/hitl"
@@ -115,7 +114,7 @@ func TestCommandApprovalWildcardAskSSEMetadataE2E(t *testing.T) {
 	}()
 
 	var checkpointID string
-	testutil.WaitFor(t, 15*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		kind := wire.CheckpointKindToolApproval
 		pending, err := h.Sessions.Checkpoints.ListPending(ctx, sess.ID, &kind)
 		if err == nil && len(pending) == 1 {
@@ -126,7 +125,7 @@ func TestCommandApprovalWildcardAskSSEMetadataE2E(t *testing.T) {
 	})
 
 	var sawMatch bool
-	testutil.WaitFor(t, 3*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		select {
 		case envelope, ok := <-ch:
 			if !ok {

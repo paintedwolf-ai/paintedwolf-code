@@ -116,7 +116,7 @@ class ProfileSetupTests(unittest.TestCase):
             desktop.assert_not_called()
             discovery.assert_not_called()
 
-    def test_first_time_tips_and_renderer_session_validate_owned_slices(self):
+    def test_first_time_tips_enabled_defaults_true_and_validates_slice(self):
         tips = self.slices / owner.FIRST_TIME_TIPS
         self.assertIs(owner.first_time_tips_enabled(None), True)
         self.write(tips, {'key': 'firstTimeTips', 'value': {'enabled': False, 'dismissed': ['files-ai-editor']}})
@@ -126,6 +126,8 @@ class ProfileSetupTests(unittest.TestCase):
             self.write(tips, bad)
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 owner.first_time_tips_enabled(None)
+
+    def test_renderer_session_requires_matching_active_project_idle_session_and_armed_question(self):
         pid, sid, root = '10000000-0000-4000-8000-000000000001', '20000000-0000-4000-8000-000000000002', str(self.directory / 'w')
         active_file, snap_file = self.slices / owner.LAST_ACTIVE_PROJECT, self.slices / owner.LAST_SESSION_SNAPSHOT
         self.assertIsNone(owner.renderer_session(None, root, pid, sid))
@@ -136,7 +138,8 @@ class ProfileSetupTests(unittest.TestCase):
         for status in ('idle', 'preparing'):
             for snap in ({**valid, 'session': {**valid['session'], 'status': status}},
                          {**valid, 'session': {**valid['session'], 'status': status}, 'activeWorkflowRun': None,
-                          'workflowRuns': [{'project_id': pid, 'session_id': sid, 'workflow_id': 'implement', 'attach_policy': 'session_create', 'status': 'running'}]}):
+                          'workflowRuns': [{'project_id': pid, 'session_id': sid, 'workflow_id': 'implement',
+                                            'attach_policy': 'session_create', 'status': 'running'}]}):
                 self.write(snap_file, {'key': 'lastSessionSnapshot', 'value': snap})
                 self.assertEqual(owner.renderer_session(None, root, pid, sid), {
                     'observer': 'owned-app-state-JSON', 'project_id': pid, 'session_id': sid, 'status': status,
@@ -248,11 +251,11 @@ class ActiveSessionTests(unittest.TestCase):
     def test_await_session_polls_requested_phase_and_refuses_timeout(self):
         idle = {'id': 'session', 'status': 'idle'}
         with patch.object(owner, 'active_session', side_effect=[None, idle]) as active, patch.object(owner.time, 'sleep') as sleep:
-            self.assertEqual(owner.await_session(None, None, 'fixture', MODEL, status='idle', reason='keepawake-project-session-not-opened'), idle)
+            self.assertEqual(owner.await_session(None, None, 'fixture', MODEL, status='idle', reason='workspace-activation-project-session-not-opened'), idle)
             self.assertEqual((active.call_count, sleep.call_args.args), (2, (0.05,)))
         with patch.object(owner, 'active_session', return_value=None), patch.object(owner.time, 'monotonic', side_effect=[0.0, 30.0]), patch.object(owner.time, 'sleep'):
-            with self.assertRaisesRegex(owner.CaseUnavailable, 'keepawake-project-session-not-opened'):
-                owner.await_session(None, None, 'fixture', MODEL, status='idle', reason='keepawake-project-session-not-opened')
+            with self.assertRaisesRegex(CaseUnavailable, 'workspace-activation-project-session-not-opened'):
+                owner.await_session(None, None, 'fixture', MODEL, status='idle', reason='workspace-activation-project-session-not-opened')
 
 
 class ProjectConfigurationIdentityTests(unittest.TestCase):

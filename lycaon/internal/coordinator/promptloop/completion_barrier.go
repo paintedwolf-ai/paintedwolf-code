@@ -18,6 +18,9 @@ func (l *turnProjection) assertCoordinatorCompletion(ctx context.Context, sess *
 			reject = guidance.NewRefusal("", err.Error())
 		}
 		_, retractErr := l.Closeout.Tools.retractRejectedAssistantTurn(ctx, sessionID, history, msg.ID, "", reject)
+		if retractErr == nil && errors.Is(err, guidance.ErrCloseoutNeedsRepairTurn) {
+			return &closeoutRepairNeeded{refusal: reject, messageID: msg.ID}
+		}
 		return errors.Join(err, retractErr)
 	}
 	return nil

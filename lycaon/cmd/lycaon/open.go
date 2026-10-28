@@ -6,15 +6,12 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"text/tabwriter"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/clisocket"
-	"github.com/lycaon/lycaon/internal/version"
 )
 
 const (
@@ -168,38 +165,44 @@ func dialOrStart(ctx context.Context) (net.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
+	return dialOrStartAt(ctx, path, startApp, coldStartTimeout, coldStartPoll)
+}
+
+// appStart is what a cold start began. Exited reports a launched process that ended
+// before the app became reachable (nil when the launch is not owned here); Stop ends
+// only what this command started.
+type appStart interface {
+	Exited() <-chan error
+	Stop()
+}
+
+// dialOrStartAt waits for the started app's CLI socket. A launch that exits early,
+// a cancelled command and a readiness timeout each stop what this command started.
+func dialOrStartAt(ctx context.Context, path string, start func(context.Context) (appStart, error), timeout, poll time.Duration) (net.Conn, error) {
 	dialer := net.Dialer{}
 	if conn, err := dialer.DialContext(ctx, "unix", path); err == nil {
 		return conn, nil
 	}
-	if err := startApp(ctx); err != nil {
+	started, err := start(ctx)
+	if err != nil {
 		return nil, err
 	}
-	deadline := time.Now().Add(coldStartTimeout)
-	for time.Now().Before(deadline) {
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	for {
 		select {
 		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-time.After(coldStartPoll):
+			started.Stop()
+			return nil, fmt.Errorf("cancelled while Painted Wolf Code was starting: %w", ctx.Err())
+		case exit := <-started.Exited():
+			return nil, fmt.Errorf("the Painted Wolf Code app exited before it was ready: %w", exit)
+		case <-deadline.C:
+			started.Stop()
+			return nil, fmt.Errorf("the Painted Wolf Code app did not finish starting within %s; stopped the instance this command started", timeout)
+		case <-time.After(poll):
 		}
 		if conn, err := dialer.DialContext(ctx, "unix", path); err == nil {
 			return conn, nil
 		}
 	}
-	return nil, fmt.Errorf("app did not finish starting within %s", coldStartTimeout)
-}
-
-func startApp(ctx context.Context) error {
-	if runtime.GOOS != "darwin" {
-		return fmt.Errorf("app is not running")
-	}
-	out, err := exec.CommandContext(ctx, "open", "-b", version.BundleID).CombinedOutput() //nolint:gosec // G204 — fixed program and a compile-time constant bundle identifier
-	if err != nil {
-		detail := strings.TrimSpace(string(out))
-		if detail == "" {
-			detail = err.Error()
-		}
-		return fmt.Errorf("could not start Painted Wolf Code: %s", detail)
-	}
-	return nil
 }
