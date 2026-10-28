@@ -363,7 +363,7 @@ func moduleFixtureCommand(t *testing.T, mode string, caller Identity) *exec.Cmd 
 	args = append(args, "-test.timeout="+(time.Until(deadline)+time.Second).String())
 	env := []string{fixtureModeEnv + "=" + mode, fixtureDeadlineEnv + "=" + strconv.FormatInt(deadline.UnixNano(), 10)}
 	if parent := os.Getenv("GOCOVERDIR"); testing.CoverMode() != "" && parent != "" {
-		dir, err := os.MkdirTemp(parent, "module-actor-")
+		dir, err := os.MkdirTemp(parent, "module-actor-") //nolint:usetesting // Child counters must stay in GOCOVERDIR.
 		testutil.FailErr(t, "actor coverage directory", err)
 		testutil.FailErr(t, "actor coverage identity", os.Chown(dir, int(caller.UID), int(caller.GID)))
 		args = append(args, "-test.gocoverdir="+dir)
