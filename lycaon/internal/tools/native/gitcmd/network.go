@@ -167,7 +167,7 @@ func authorizeRemote(ctx context.Context, p Prepared, tc tools.ToolContext, dir,
 	}
 	if err := gitargv.ValidateCloneURL(rawURL); err != nil {
 		writeLine(stderr, fmt.Sprintf("fatal: %s: invalid remote '%s' [COMMAND_OPERAND_INVALID]", p.command.spec.Name, rawURL))
-		return &toolrejection.ToolReject{Code: "COMMAND_OPERAND_INVALID", Data: map[string]any{"command": p.command.spec.Name, "word": rawURL, "expected": "a safe remote URL"}}
+		return &toolrejection.ToolReject{Code: "COMMAND_OPERAND_INVALID", Data: map[string]any{"command": p.command.spec.Name, "word": rawURL, "reason": err.Error(), "expected": "a safe remote URL"}}
 	}
 	host := remoteNetworkHost(rawURL)
 	if host == "" {

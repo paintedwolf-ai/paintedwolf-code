@@ -31,7 +31,7 @@ func (r *SQLRecorder) attachProgressInput(ctx context.Context, identity toolcont
 			return err
 		}
 		defer func() { _ = tx.Rollback() }()
-		result, err := tx.ExecContext(ctx, `INSERT INTO invocation_program_outputs(id,program_id,execution_id,stream,reference,retention_claim_id,initiating_claim_id,blob_json,complete,redacted,mappings_json,created_at) SELECT ?,p.id,NULL,'arguments',?,?,?,?,1,?,'[]',? FROM invocation_programs p JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE p.id=? AND r.session_id=? AND r.status='running' AND p.state='running'`, uuid.NewString(), reference, body.RetentionClaimID, body.InitiatingClaimID, string(encoded), redacted, time.Now().UTC().Format(time.RFC3339Nano), identity.ProgramID, identity.SessionID)
+		result, err := tx.ExecContext(ctx, `INSERT INTO invocation_program_outputs(id,program_id,execution_id,stream,reference,retention_claim_id,initiating_claim_id,blob_id,blob_json,complete,redacted,mappings_json,created_at) SELECT ?,p.id,NULL,'arguments',?,?,?,?,?,1,?,'[]',? FROM invocation_programs p JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE p.id=? AND r.session_id=? AND r.status='running' AND p.state='running'`, uuid.NewString(), reference, body.RetentionClaimID, body.InitiatingClaimID, body.Blob.ID, string(encoded), redacted, time.Now().UTC().Format(time.RFC3339Nano), identity.ProgramID, identity.SessionID)
 		if err != nil {
 			return err
 		}

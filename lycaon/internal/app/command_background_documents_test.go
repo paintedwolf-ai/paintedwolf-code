@@ -13,6 +13,8 @@ import (
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/editordoc"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
@@ -40,8 +42,8 @@ func TestProgramBackgroundReadTransfersUndeliveredDraftNotice(t *testing.T) {
 			release := sync.OnceFunc(func() { close(gate) })
 			defer release()
 			original, calls := f.Runtime.Owners, 0
-			f.Runtime.Owners = func(tc tools.ToolContext, paths *projectpaths.ProgramPaths) (command.ProgramOwners, error) {
-				owners, err := original(tc, paths)
+			f.Runtime.Owners = func(tc tools.ToolContext, paths *projectpaths.ProgramPaths, memory *toolcontract.ProgramMemory, admission tooloutput.SpillAdmission) (command.ProgramOwners, error) {
+				owners, err := original(tc, paths, memory, admission)
 				cat := owners.Natives["cat"]
 				prepare := cat.Prepare
 				cat.Prepare = func(ctx context.Context, paths *projectpaths.ProgramPaths, dispatch commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
