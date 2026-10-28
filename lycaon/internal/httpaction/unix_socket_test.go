@@ -109,7 +109,11 @@ func TestHTTPRequestKernelPathnameGrantCannotAuthorizeNativeDial(t *testing.T) {
 	tc.Socket.DurableSocketGrants = []confine.SocketGrant{legacy}
 	_, err := runRequest(t, Deps{Boundary: testBoundary()}, map[string]any{"url": "http://service.invalid/", "unix_socket": path}, tc)
 	reject := toolrejection.AsToolReject(err)
-	if reject == nil || reject.Code != isolation.CodeSocketPathChanged {
+	want := isolation.CodeSocketPathChanged
+	if socketref.Platform().Command != socketref.KernelPathname {
+		want = isolation.CodeSocketPathRefused
+	}
+	if reject == nil || reject.Code != want {
 		t.Fatalf("pathname native authority = %v", err)
 	}
 }
