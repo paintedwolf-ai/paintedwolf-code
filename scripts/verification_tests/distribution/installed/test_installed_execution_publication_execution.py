@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from scripts.linux_release import installed_campaign as campaign
+from scripts.linux_release.campaign import guests as campaign
 from scripts.linux_release.installed_input import protocol
 
 

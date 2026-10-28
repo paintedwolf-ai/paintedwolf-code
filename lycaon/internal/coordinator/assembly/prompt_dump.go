@@ -95,12 +95,7 @@ func RenderPromptDump(
 			ExecutionModeEntered:  transition.ExecutionModeEntered,
 			ExecutionModeLeft:     transition.ExecutionModeLeft,
 		},
-		prompts.CoordinatorPromptGates{
-			PendingOverlayPromote: len(implState.PendingOverlayIDs) > 0,
-			ProgressMissing:       implState.ProgressMissing,
-			VerifyRequired:        frame.RequiresEvidence("verify"),
-			VerifyCommand:         implState.VerifyCommand,
-		},
+		implState.VerifyCommand,
 		base,
 	); err != nil {
 		return "", fmt.Errorf("merge coordinator prompt vars: %w", err)

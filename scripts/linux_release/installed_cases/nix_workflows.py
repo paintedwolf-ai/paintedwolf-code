@@ -16,7 +16,7 @@ import tempfile
 import time
 import uuid
 
-from ..installed_runtime import file_identity
+from ..campaign.runtime import file_identity
 from .app import InstalledApp
 from .approval import approve_host_execution
 from .provider import ProviderFixture
