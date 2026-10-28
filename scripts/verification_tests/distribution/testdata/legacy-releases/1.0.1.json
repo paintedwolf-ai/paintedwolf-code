@@ -1,0 +1,17 @@
+{
+  "notes": "### Fixed\n\n- Commands marked as verification now follow the session's network posture and\n  approvals. They no longer lose all outbound network access, which blocked\n  live checks against remote services with no way to approve them.",
+  "platforms": {
+    "darwin-aarch64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRU0lSTWlqYkpSQXhTVDVUc04xT2hqRUNQZTd1TThDVlArV2VEWUpLYlg0Q0M5M0ZxMUlLVU9aZG9JUUNtRUdlNXhGb3BWN1VacjRJTyt2WFVscWN3a2dMSWNLRTk2OHdvPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkwOTY4NzEyCWZpbGU6UGFpbnRlZCBXb2xmIENvZGUuYXBwLnRhci5negl2ZXJzaW9uOjEuMC4xCnI0Z3MxaHQzZDNobHd0N2VOalY5ODJkNWtXRkJPbTJqVnVtc1BnUFY1ZWdNMDhYa2Fsd0U1dUF3a3RNK0VlMkxYWGhKNjNEb0dWckUyNUxvdXYvT0FnPT0K",
+      "url": "https://downloads.paintedwolf.dev/releases/v1.0.1/painted-wolf-code_v1.0.1_darwin-aarch64.app.tar.gz"
+    }
+  },
+  "pub_date": "2026-10-02T11:50:13-07:00",
+  "update_keys": {
+    "embedded_generation": 1,
+    "embedded_key_fingerprint": "3d47cc097169daf61a8791b7446ebdcb32186caf80995b87daab982748a5fe5b",
+    "signing_generation": 1,
+    "signing_key_fingerprint": "3d47cc097169daf61a8791b7446ebdcb32186caf80995b87daab982748a5fe5b"
+  },
+  "version": "1.0.1"
+}

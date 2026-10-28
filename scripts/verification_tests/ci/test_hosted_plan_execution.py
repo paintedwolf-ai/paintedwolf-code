@@ -214,8 +214,9 @@ class HostedPlanTests(unittest.TestCase):
         for profile in ci.PROFILES:
             for row in ci.matrix(profile)["include"]:
                 with self.subTest(profile=profile, lane=row["lane"]):
-                    self.assertEqual(row["repository_tools"], "test:runner" in ci.lanes()[row["lane"]]["targets"])
-        self.assertEqual([row["lane"] for row in ci.matrix("check")["include"] if row["repository_tools"]], ["runner"])
+                    self.assertEqual(row["repository_tools"], bool({"test:runner", "scripts:coverage:changes"}
+                                     & set(ci.lanes()[row["lane"]]["targets"])))
+        self.assertEqual([row["lane"] for row in ci.matrix("check")["include"] if row["repository_tools"]], ["limits", "runner"])
 
     def test_nix_lane_is_nightly_only_and_provisions_nix_before_running_offline(self):
         # Nix verification informs; it never gates a merge or a release.

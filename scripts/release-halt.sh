@@ -28,6 +28,8 @@ Usage: release-halt.sh --bad VERSION [--last-good VERSION] [--dry-run]
 
 Withdraws BAD from all affected feeds. LAST_GOOD restores an older release;
 without it, affected feeds stop offering updates. Retries verify current state.
+This is the signed-feed and negative-ledger primitive. The protected release-halt
+workflow controls the complete native, Nix, package, website and feed withdrawal.
 EOF
   exit 2
 }

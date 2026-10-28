@@ -1,0 +1,17 @@
+{
+  "notes": "Third release candidate for 1.0.2, prepared for preview upgrade testing.\nIncludes the changes listed under 1.0.2-rc2, whose publication did not complete.\n\n### Added\n\n- Linux desktop integration: opening, revealing, trashing, and watching files\n  goes through the desktop services, notifications arrive through the session\n  bus, clipboard runs through the GTK display connection, and window chrome\n  follows GNOME conventions.\n- Linux commands run confined with namespaces, Landlock, and seccomp, with\n  desktop proxies, session providers, Git host services, and SSH agents\n  resolved from the native session.\n- Linux builds bundle a Tesseract OCR engine and OpenGrep engines for x86_64\n  and aarch64.\n- The rerank engine runs on any Vulkan GPU when Metal is unavailable.\n\n### Changed\n\n- Tool feedback presents exact source text and invocation outcomes more clearly.\n- Missing executable feedback names available catalog equivalents.\n- Coordinator guidance handles checklist instructions and completed document-read\n  prerequisites consistently.\n- Compacted history is enriched asynchronously without blocking chat and scales\n  its representations to the receiving context.\n- Transcript scrolling sizes its runway to the full session bounds and seeks\n  unloaded history on demand.\n- A single file-watch stream is shared across watched roots.\n- Power capability facts stay current while settings are open.\n- Source mutation receipts show accepted changes, and recorded checks show\n  whether they match current source.\n\n### Fixed\n\n- Release verification retains native notarization ticket validation errors to\n  diagnose signing failures without weakening release checks.\n- Unoffered, unparsed, and provider-dropped tool calls recover in-turn, with\n  parser grammars declared in the provider catalog.\n- Terminal empty responses recover with bounded feedback.\n- Provider request budgets match native dispatch, and complete provider frames\n  fit within receiver context.\n- Session history recovers through bounded recall pages, and recorded tool\n  results stay discoverable by their target path.\n- Event stream bursts end promptly so WebKitGTK delivers them.",
+  "platforms": {
+    "darwin-aarch64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRU0lSTWlqYkpSQTZuQnBDMmo5VjdrckN4WU04T2pMZ0FWZ0dnUkJ3UTA0QXJnQjdGV2tOTUtZMG1iR0RMVzlJMmtSbHI5VHFCeWhPdmtFMHBJanA2dXB2dXJWNWRPQlFVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyMjkzNTAyCWZpbGU6UGFpbnRlZCBXb2xmIENvZGUuYXBwLnRhci5negl2ZXJzaW9uOjEuMC4yLXJjMwp3RS9jcXMxNnU0bmJ4cUVldXFZWlJvUzV5SWRFTmRiOFJiT1lKVm5GdS9aY2Y5Z2VPaG5KVkJsTFN6WWtRam84TXhqbWZXOUg0UmNmYWRmckVlWmFEQT09Cg==",
+      "url": "https://downloads.paintedwolf.dev/releases/v1.0.2-rc3/painted-wolf-code_v1.0.2-rc3_darwin-aarch64.app.tar.gz"
+    }
+  },
+  "pub_date": "2026-10-18T00:36:49Z",
+  "update_keys": {
+    "embedded_generation": 1,
+    "embedded_key_fingerprint": "3d47cc097169daf61a8791b7446ebdcb32186caf80995b87daab982748a5fe5b",
+    "signing_generation": 1,
+    "signing_key_fingerprint": "3d47cc097169daf61a8791b7446ebdcb32186caf80995b87daab982748a5fe5b"
+  },
+  "version": "1.0.2-rc3"
+}

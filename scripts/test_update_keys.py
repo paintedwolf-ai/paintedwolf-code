@@ -146,12 +146,13 @@ class UpdateKeyRehearsal(unittest.TestCase):
         self.assertEqual(planner.distribution_plan(rows), {"bad_versions": ["2.0.0"], "channels": []})
         all_bad = copy.deepcopy(rows)
         all_bad[-1] = {"generation": 3, "channel": "preview", "bad": "3.1.0", "last_good": "3.0.1"}
-        self.assertEqual(planner.distribution_plan(all_bad)["channels"], [all_bad[-1]])
+        self.assertEqual(planner.distribution_plan(all_bad)["channels"], [
+            {key: all_bad[-1][key] for key in ("channel", "bad", "last_good")}])
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / "plan.json"
             with patch.object(planner, "load_registry", return_value=keys), patch.object(sys, "argv", ["halt", "--plan", str(path)]), patch.object(planner, "read_storage", side_effect=feeds.get), patch.object(planner, "prepare") as prepare, patch.object(planner, "validate_prepared", return_value={}) as validate, patch.object(planner, "apply") as apply:
                 calls = []
-                prepare.side_effect = lambda *args: calls.append("prepare")
+                prepare.side_effect = lambda *args, **kwargs: calls.append("prepare")
                 validate.side_effect = lambda *args: calls.append("validate") or {}
                 apply.side_effect = lambda *args: calls.append("apply")
                 path.write_text(json.dumps({"source_generation": 1, "feeds": rows[:-1]}))

@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -39,7 +40,7 @@ func TestRepositorySetupArtifactsFollowSharedReleaseAdmission(t *testing.T) {
 	if !assembled || !uploaded || !workflow.ancestors("publication-credentials")["linux-repositories"] {
 		t.Fatal("setup packages must be assembled and admitted before publication credentials")
 	}
-	for _, name := range []string{"publish-immutable", "publish-github-release"} {
+	for _, name := range []string{"publish-artifacts", "publish-github-release"} {
 		job := workflow.Jobs[name]
 		if !workflow.ancestors(name)["publication-credentials"] {
 			t.Errorf("%s bypasses shared publication admission", name)
@@ -51,7 +52,7 @@ func TestRepositorySetupArtifactsFollowSharedReleaseAdmission(t *testing.T) {
 			}
 		}
 		loops := 1
-		if name == "publish-immutable" {
+		if name == "publish-artifacts" {
 			loops = 2
 		}
 		if !downloaded || strings.Count(job.text(), "for artifact in release-artifacts/*; do") != loops {
@@ -60,6 +61,52 @@ func TestRepositorySetupArtifactsFollowSharedReleaseAdmission(t *testing.T) {
 	}
 	if !strings.Contains(workflow.Jobs["publish-github-release"].text(), `gh release create "v${VERSION}" release-artifacts/*`) {
 		t.Fatal("the trailing mirror must include every curated setup asset")
+	}
+}
+
+func TestReleaseDistributionDocumentFollowsObservedDeliveryBeforeAnnouncement(t *testing.T) {
+	t.Parallel()
+	workflow := parseLane(t, ".github/workflows/release.yml")
+	for _, completed := range []string{"ship-gates", "publish-artifacts", "publish-linux-repositories", "linux-delivery"} {
+		if !workflow.ancestors("publish-immutable")[completed] {
+			t.Errorf("distribution signing precedes completed %s", completed)
+		}
+	}
+	metadata := workflow.Jobs["publish-immutable"]
+	if metadata.Environment != "release-publication" || !strings.Contains(metadata.If, "needs.classify.outputs.publish == 'true'") {
+		t.Fatal("completed metadata publication must use the shared publication decision and custody")
+	}
+	for _, artifact := range []string{"release-public-artifacts", "linux-repository-setup", "release-metadata", "linux-repository-publication", "nix-cache-publication", "release-channel-plan"} {
+		if !slices.Contains(metadata.artifacts("download-artifact"), artifact) {
+			t.Errorf("completed document lacks selected %s", artifact)
+		}
+	}
+	text := metadata.text()
+	prepare := strings.Index(text, "scripts.release_distribution_contract.release_lane")
+	deposit := strings.Index(text, "bash scripts/release-r2-immutable-put.sh")
+	verify := strings.Index(text, "public_bytes")
+	if prepare < 0 || deposit <= prepare || verify <= deposit || !strings.Contains(text, "for name in distribution.v1.json distribution.v1.json.sig") {
+		t.Fatal("both signed document objects must be constructed, deposited and publicly verified in order")
+	}
+	for _, name := range []string{"update-cask", "notify-website", "activate-updater", "publish-github-release"} {
+		if !workflow.ancestors(name)["publish-immutable"] {
+			t.Errorf("%s bypasses the completed immutable document gate", name)
+		}
+	}
+	notice := workflow.Jobs["notify-website"].text()
+	for _, required := range []string{"signed-distribution/distribution.v1.json", `"distribution_sha256"`, "--distribution-sha256", "install -y minisign", `"publication_channels": plan["channels"]`, "--input"} {
+		if !strings.Contains(notice, required) {
+			t.Errorf("website confirmation lacks %s", required)
+		}
+	}
+	delivery := parseLane(t, ".github/workflows/release-linux-delivery.yml")
+	if !slices.Contains(delivery.Jobs["publish-nix-cache"].artifacts("upload-artifact"), "nix-cache-publication") ||
+		!slices.Contains(workflow.Jobs["publish-linux-repositories"].artifacts("upload-artifact"), "linux-repository-publication") {
+		t.Fatal("document facts must select actual current-run delivery receipts")
+	}
+	mirror := workflow.Jobs["publish-github-release"].text()
+	if !strings.Contains(mirror, "distribution.v1.json") || !strings.Contains(mirror, "distribution.v1.json.sig") {
+		t.Fatal("the trailing mirror must retain both signed document objects")
 	}
 }
 
@@ -209,5 +256,100 @@ func TestReleasePublicationCollectsEveryCurrentPublicPackage(t *testing.T) {
 	contractcheck.FailErr(t, "remove required Linux signature", os.Remove(filepath.Join(input, "painted-wolf-code_v1.2.3_linux-aarch64.deb.sig")))
 	if raw, err := command(filepath.Join(dir, "missing-linux-signature")); err == nil {
 		t.Fatalf("unsigned public Linux package accepted: %s", raw)
+	}
+}
+
+func TestReleaseChannelPlanFeedsEveryPublicationSurface(t *testing.T) {
+	t.Parallel()
+	workflow := parseLane(t, ".github/workflows/release.yml")
+	for _, name := range []string{"linux-repositories", "linux-pacman-repositories", "publish-artifacts", "publish-linux-repositories", "publish-immutable", "update-cask", "notify-website", "activate-updater"} {
+		job := workflow.Jobs[name]
+		if !workflow.ancestors(name)["select-release-channels"] || !slices.Contains(job.artifacts("download-artifact"), "release-channel-plan") ||
+			!strings.Contains(job.text(), "release-plan/channel-plan.json") {
+			t.Errorf("%s does not consume the one retained release channel plan", name)
+		}
+	}
+	deposit := workflow.Jobs["publish-artifacts"].text()
+	if !strings.Contains(deposit, "release-metadata/${VERSION}/channel-plan.json") || !strings.Contains(deposit, "channels check") {
+		t.Fatal("the original plan must be re-admitted and retained immutably before channel effects")
+	}
+	activation := workflow.Jobs["activate-updater"].text()
+	if !strings.Contains(activation, ".channels[]") || !strings.Contains(activation, "--advance-if-newer") {
+		t.Fatal("updater activation must consume the shared plan and keep its monotonic Preview guard")
+	}
+}
+
+func TestReleaseMirrorRefusesWithdrawnIntentBeforeProviderAccess(t *testing.T) {
+	root := contractcheck.RepoRoot(t)
+	job := parseLane(t, ".github/workflows/release.yml").Jobs["publish-github-release"]
+	var body string
+	var mirror laneStep
+	for _, step := range job.Steps {
+		if strings.Contains(step.Run, "gh release create") {
+			body, mirror = step.Run, step
+		}
+	}
+	if body == "" || job.Environment != "release-publication" {
+		t.Fatal("mirror must use its shared protected publication owner")
+	}
+	for _, name := range []string{"CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN", "R2_BUCKET"} {
+		if mirror.Env[name] != "${{ secrets."+name+" }}" {
+			t.Fatalf("mirror ledger read requires the existing protected %s credential", name)
+		}
+	}
+	work := t.TempDir()
+	setup := `import json,pathlib,sys
+from scripts.verification_tests.distribution.release_provider_fixtures import Providers
+from scripts.release_distribution_contract.channels import select
+from update_keys import load_registry
+root,source=map(pathlib.Path,sys.argv[1:])
+key=root/'unused-disposable.key';key.write_bytes(b'fixture-only')
+p=Providers(root,source,load_registry(),key)
+plan=select('stable','1.2.3',1,'a'*40,read=lambda key:{'version':'1.2.2'} if key.startswith('updates/') else None)
+(p.controller/'release-plan').mkdir()
+(p.controller/'release-plan/channel-plan.json').write_text(json.dumps(plan))
+for channel,value in plan['controls'].items():p.put('updates/'+channel+'/key-1/latest.json',json.dumps(value).encode())
+p.put('release-metadata/1.2.3/withdrawn.json',b'{"version":"1.2.3","withdrawn":true}')
+(p.controller/'CHANGELOG.md').write_text('## [1.2.3]\nFixture notes\n')
+gh=p.bin/'gh'
+gh.write_text('#!'+sys.executable+'\nimport json,pathlib,sys\np=pathlib.Path('+repr(str(root/'github-effects'))+')\nwith p.open("a") as out:out.write(json.dumps(sys.argv[1:])+"\\n")\nraise SystemExit(1 if "view" in sys.argv else 0)\n')
+gh.chmod(0o700)
+print(json.dumps(p.environment))`
+	command := exec.Command("python3", "-c", setup, work, root)
+	command.Dir = root
+	command.Env = append(os.Environ(), "PYTHONPATH="+filepath.Join(root, "scripts"))
+	raw, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("prepare isolated mirror providers: %v\n%s", err, raw)
+	}
+	var environment map[string]string
+	if err := json.Unmarshal(raw, &environment); err != nil {
+		t.Fatalf("decode isolated provider environment: %v\n%s", err, raw)
+	}
+	environment["VERSION"], environment["PRERELEASE"], environment["RUNNER_TEMP"] = "1.2.3", "false", work
+	run := func() ([]byte, error) {
+		command := exec.Command("bash", "-c", body)
+		command.Dir = filepath.Join(work, "controller")
+		for name, value := range environment {
+			command.Env = append(command.Env, name+"="+value)
+		}
+		return command.CombinedOutput()
+	}
+	output, err := run()
+	if err == nil || !strings.Contains(string(output), "withdrawn release cannot be published") {
+		t.Fatalf("withdrawn mirror rerun must refuse at the common ledger: %v\n%s", err, output)
+	}
+	if _, err := os.Stat(filepath.Join(work, "github-effects")); !os.IsNotExist(err) {
+		t.Fatal("withdrawn mirror rerun reached the GitHub provider")
+	}
+	if err := os.Remove(filepath.Join(work, "objects/release-metadata/1.2.3/withdrawn.json")); err != nil {
+		t.Fatal(err)
+	}
+	if output, err := run(); err != nil {
+		t.Fatalf("unwithdrawn mirror positive control: %v\n%s", err, output)
+	}
+	calls, err := os.ReadFile(filepath.Join(work, "github-effects"))
+	if err != nil || !strings.Contains(string(calls), `"create"`) {
+		t.Fatalf("positive control must reach the existing mirror mutation: %v\n%s", err, calls)
 	}
 }

@@ -250,7 +250,7 @@ func TestReleaseChannelsHaveIndependentPointersAndPackageTokens(t *testing.T) {
 	}
 	workflow := contractcheck.ReadRepoFile(t, root, ".github/workflows/release.yml")
 	if !strings.Contains(workflow, "painted-wolf-code@preview") ||
-		!strings.Contains(workflow, "--channel preview") ||
+		!strings.Contains(workflow, "--channel \"${selected}\"") ||
 		!strings.Contains(workflow, "--advance-if-newer") ||
 		!strings.Contains(extractYAMLJob(workflow, "update-cask"), `scripts/release_distribution.py casks --source release-metadata --tap tap --channel "${CHANNEL}"`) {
 		t.Fatal("stable publication must advance Preview without sharing its cask token")

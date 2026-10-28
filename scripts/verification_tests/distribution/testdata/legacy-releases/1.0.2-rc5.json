@@ -1,0 +1,17 @@
+{
+  "notes": "Fifth release candidate for 1.0.2, published on the preview channel to verify\nin-app upgrades from 1.0.2-rc4 and complete Linux candidate package verification.\n\n### Fixed\n\n- Debian package assembly records `/etc` paths in `DEBIAN/conffiles` and omits\n  them from `DEBIAN/md5sums` so `lintian` verification succeeds during release\n  staging.",
+  "platforms": {
+    "darwin-aarch64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRU0lSTWlqYkpSQXo1dkczb2lQMDhtWG1sUldieURMU2s0Q1lVTW41RlFHSGVzV0hHTFdHbVVMTVE2UGFLTGVMcnV6QlhLODJrOGp3LzNRQW1NL1Q5SUthVG4rSDlXVmdRPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyMzM4NDMxCWZpbGU6UGFpbnRlZCBXb2xmIENvZGUuYXBwLnRhci5negl2ZXJzaW9uOjEuMC4yLXJjNQpoL3NwMS9vVktvMlJoU21SdHViTGlFQXJaZnJJNml5ZHBCdmp0S1RlZlBVQ3RRSitBZzFLMmNUeDZxcDFacjVEdnp6SldCQlduWmRXdkw5Q3liVFdCUT09Cg==",
+      "url": "https://downloads.paintedwolf.dev/releases/v1.0.2-rc5/painted-wolf-code_v1.0.2-rc5_darwin-aarch64.app.tar.gz"
+    }
+  },
+  "pub_date": "2026-10-18T12:47:47Z",
+  "update_keys": {
+    "embedded_generation": 1,
+    "embedded_key_fingerprint": "3d47cc097169daf61a8791b7446ebdcb32186caf80995b87daab982748a5fe5b",
+    "signing_generation": 1,
+    "signing_key_fingerprint": "3d47cc097169daf61a8791b7446ebdcb32186caf80995b87daab982748a5fe5b"
+  },
+  "version": "1.0.2-rc5"
+}

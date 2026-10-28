@@ -766,6 +766,12 @@ Go and Vitest digest selections also reject unknown flags; explicitly supported
 Go profiling and repeat flags run outside a shared batch with the Go resource.
 Background submissions validate these flags before creating a job.
 
+The repository Python fixture suite (`test:runner` and `scripts:coverage:changes`)
+requires `minisign` for disposable signing and verification through the actual
+release owner. Install it locally with `brew install minisign` on macOS or the
+distribution's `minisign` package on Linux. Hosted verification provisions it
+through the shared `repository-tools` setup for both targets before going offline.
+
 ### Selection arguments
 
 `./task den:test:rust -- --compile-only` and
@@ -984,31 +990,36 @@ back from the signed file.
 | **HTTP API** | `/v1/` | Breaking wire only → `/v2/` (rare) |
 | **Workflow catalog** | `plan@1.0.0` | Manifest YAML; independent of host patch |
 
-**Primary distribution:** [`.github/workflows/release.yml`](../.github/workflows/release.yml) builds the platforms marked `publication: public` in [`packaging/release-platforms.json`](../packaging/release-platforms.json). The public set is the Apple Silicon macOS DMG and updater archive, plus Linux amd64 and arm64 DEB, RPM and pacman packages. They publish at `downloads.paintedwolf.dev`, Homebrew receives the matching cask, and the GitHub Release is a trailing mirror. Windows x86_64 remains a `candidate` outside the release matrix. Each catalog row lists its `package_extensions` (one build emits every family: `["deb", "rpm", "pkg.tar.zst"]` on Linux) and its `updater_extension`, which is `null` where the package manager owns updates. A public Linux platform uses the same lane and admission as macOS: `classify` requires the exact-source Qualification record, `build-release` signs its packages with the Linux package key, `aggregate-release` collects them, and publication follows `ship-gates` and `publish-immutable`; see [Linux in the next regular release](#linux-in-the-next-regular-release). The independent nonpublishing `linux-candidates` workflow retains development packages without release authority; regular releases use the public matrix once. The minimum supported macOS version is 14.0 (Sonoma), which clears the UI's WebKit requirement; the floor lives in [`lycaon/internal/platformfloor/macos_floor.txt`](../lycaon/internal/platformfloor/macos_floor.txt), and contract tests keep the catalog, Tauri, Homebrew, and compiled binary aligned.
+**Primary distribution:** [`.github/workflows/release.yml`](../.github/workflows/release.yml) builds the platforms marked `publication: public` in [`packaging/release-platforms.json`](../packaging/release-platforms.json). The public set is the Apple Silicon macOS DMG and updater archive, plus Linux amd64 and arm64 DEB, RPM and pacman packages. They publish at `downloads.paintedwolf.dev`, Homebrew receives the matching cask, and the GitHub Release is a trailing mirror. Windows x86_64 remains a `candidate` outside the release matrix. Each catalog row lists its `package_extensions` (one build emits every family: `["deb", "rpm", "pkg.tar.zst"]` on Linux) and its `updater_extension`, which is `null` where the package manager owns updates. A public Linux platform uses the same lane and admission as macOS: `classify` requires the exact-source Qualification record, `build-release` signs its packages with the Linux package key, `aggregate-release` collects them, and publication follows `ship-gates`, `publish-artifacts` and the completed `publish-immutable` metadata gate; see [Linux in the next regular release](#linux-in-the-next-regular-release). The independent nonpublishing `linux-candidates` workflow retains development packages without release authority; regular releases use the public matrix once. The minimum supported macOS version is 14.0 (Sonoma), which clears the UI's WebKit requirement; the floor lives in [`lycaon/internal/platformfloor/macos_floor.txt`](../lycaon/internal/platformfloor/macos_floor.txt), and contract tests keep the catalog, Tauri, Homebrew, and compiled binary aligned.
 
 ```mermaid
 flowchart TD
-    tag["Push tag v*<br/>(must equal v + VERSION)"] --> preflight["Classify source and validate release inputs"]
-    preflight --> checks["Independent catalog verification jobs"]
-    preflight --> desktop["Desktop end-to-end tests"]
-    preflight --> upgrade["Prior-release upgrade rehearsal"]
+    tag["Push tag v*<br/>(must equal v + VERSION)"] --> classify["Classify qualified source and release inputs"]
+    classify --> checks["Independent catalog verification jobs"]
+    classify --> desktop["Desktop end-to-end tests"]
+    classify --> upgrade["Prior-release upgrade rehearsal"]
     checks --> gates["ship-gates: require every result"]
     desktop --> gates
     upgrade --> gates
-    gates --> bundle["build-release public platform matrix<br/>Apple Silicon macOS"]
-    bundle --> verify["native structure and signature checks<br/>macOS notarization"]
-    verify --> aggregate["aggregate-release:<br/>require every public platform build"]
-    aggregate --> boundary["select only publication=public bytes"]
-    boundary --> r2["Publish immutable R2 objects:<br/>public artifacts, corpus, manifest, cask"]
-    r2 --> linux["publish-linux-repositories<br/>apt, dnf and pacman generations"]
-    linux --> cask["update-cask<br/>Homebrew tap"]
-    linux --> www
-    r2 --> mirror["publish-github-release<br/>(trailing mirror — gates nothing)"]
-    r2 --> www["notify-website"]
-    cask --> activate["activate-updater last<br/>publish channel latest.json pointer"]
-    www --> activate
-    activate --> clients["Direct-download updater verifies signature;<br/>Homebrew installs get the notifier"]
+    classify --> build["build-release public matrix<br/>Apple Silicon macOS and both Linux architectures"]
+    build --> verify["Native structure and signature checks<br/>macOS notarization"]
+    verify --> aggregate["aggregate-release<br/>Collect every public platform build"]
+    aggregate --> plan["Select one retained monotonic channel plan"]
+    gates --> plan
+    plan --> setup["Build signed native generations<br/>and repository setup packages"]
+    setup --> deposit["publish-artifacts<br/>Deposit and verify immutable package bytes"]
+    gates --> deposit
+    deposit --> native["Activate apt, dnf and pacman repositories"]
+    native --> nix["Publish and observe both Nix cache closures"]
+    nix --> document["publish-immutable<br/>Sign and verify completed distribution document"]
+    document --> cask["update-cask<br/>Homebrew tap"]
+    document --> website["notify-website<br/>Exact selected channel plan and digest"]
+    cask --> updater["activate-updater<br/>Publish selected signed feed pointers"]
+    website --> updater
+    updater --> mirror["publish-github-release<br/>Trailing mirror"]
+    updater --> clients["macOS updater verifies signatures<br/>Linux discovers versions through its package owner"]
 ```
+
 
 The Nix cache adapter is `python3 -m scripts.nix_cache.adapter`. It consumes explicit already-built application outputs and a release request with `schema_version: 1`, `mode: production`, the product `version`, full `application_commit`, `flake_lock_sha256`, native Linux `system`, `outputs`, and `cache_prefix: nix-cache`. Supply those using `--request`, a separately reviewed `--trust-policy` containing `schema_version: 1`, `mode: production`, and dedicated Nix `public_keys`, an owner-only `--signing-key-file` outside the store/cache, a new absolute `--cache` destination, and an external `--report` path. No production key is generated or trusted automatically. The release controller calls `scripts.nix_cache.release_authority.authorize` with the selected source and version; it binds the verified report, request and trust policy to that release and reads the exact-source Qualification record before transport credentials load. A saved accepted JSON receipt grants no publication authority.
 
@@ -1195,17 +1206,19 @@ The user provisions these additional secrets before the release. Private materia
 | `release-signing` | `LINUX_PACKAGE_SIGNING_KEY` | [`signing/keys.json`](../packaging/linux/signing/keys.json) |
 | `release-publication` | `NIX_CACHE_SIGNING_KEY` | Key name `paintedwolf-cache-1`, matching `nix-cache-trust.json` |
 
-The existing R2 and feed credentials remain in `release-publication`. `release-secrets-check` refuses missing delivery credentials or unmatched public trust.
+The existing R2 and feed credentials remain in `release-publication` (`CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `R2_BUCKET`, `FEED_SIGNING_KEYS_JSON`); its existing `WWW_DISPATCH_TOKEN` and `HOMEBREW_TAP_TOKEN` notify the website and update the tap. The trailing mirror rereads the same retained plan and negative ledger using the existing Cloudflare/R2 credentials before creating a GitHub Release. `DOWNLOAD_BASE_URL` and `HOMEBREW_TAP_REPO` remain environment variables. `release-secrets-check` refuses missing delivery credentials or unmatched public trust.
 
 | Channel | Regular release | Halt and recovery |
 |---|---|---|
-| apt and dnf | Signed packages and native repository generations for both architectures; signed `painted-wolf-code-repo` setup packages install the selected repository definition and public key | Restore the selected prior generation; the first release activates its pre-published signed empty generation. A higher recovery version advances normally |
+| apt and dnf | Signed packages and native repository generations for both architectures; signed `painted-wolf-code-repo` setup packages install the selected repository definition and public key | Restore the selected retained generation; a legacy macOS-only last-good release or no replacement activates the pre-published signed empty generation. A higher recovery version advances normally |
 | pacman | Signed packages and one repository generation per architecture | Same retained-generation or signed-empty withdrawal; no downgrade or epoch |
 | Nix cache | Build both native closures and publish signed cache objects plus availability records | Withdraw the availability record; retain closures, NARs and existing pins. A higher recovery version publishes a new availability record |
 
+A read-only selection step retains one structured monotonic channel plan before signing: stable advances Preview when no newer Preview exists; a newer Preview is preserved; a Preview release touches only Preview. Every native repository, setup package, cask, website and feed consumes that selected plan and refuses changed controls. Halts restore only channels actually offering the bad release. The shared per-channel halt plan selects the exact last-good version; default `--last-good` applies that replacement to every affected channel. Each effect prepares `withdraw` or `keep` from its actual published state, and the negative release ledger prepares separately even when feed pointers keep. The complete symmetric barrier admits all native, feed, ledger, Nix, package and website preparations before any mutation. A refusal blocks them all; retained `halt-effects.json` names every action or refusal.
+
 `linux-repositories` builds, signs and independently admits setup packages from the selected signed apt/dnf generations before publication credentials are used. Each setup's source, channel, signing key, repository generation, inventory and installed configuration are checked. Their native filenames and package-specific `.SHA256SUMS`, `.SHA256SUMS.asc` and `.setup.json` companions, plus `linux-package-key.asc`, join the ordinary immutable artifacts under `releases/v<version>/` and the trailing GitHub mirror. The package definition is opt-in; the app never changes repository trust.
 
-Every offered apt/dnf/pacman generation retains its signed empty withdrawal generation before activation, so halts need no signing key. [`release-linux-delivery.yml`](../.github/workflows/release-linux-delivery.yml) publishes the Nix cache through the existing channel owners after the shared release gates and repository activation. Each publication authorization rereads the exact-source Qualification record. Linux update discovery reports the owning package manager; installation and recovery stay with that owner.
+Every offered apt/dnf/pacman generation retains its signed empty withdrawal generation before activation, so native withdrawal needs no package signing key; affected updater feeds still require `FEED_SIGNING_KEYS_JSON`. [`release-linux-delivery.yml`](../.github/workflows/release-linux-delivery.yml) publishes the Nix cache through the existing channel owners after the shared release gates and repository activation. The shared lane deposits and publicly verifies packages first, activates repositories, and publishes the cache. It then freshly admits the exact source and constructs `distribution.v1.json` through the existing distribution owner from the collected bytes and actual current-run repository/cache effects. Both the document and `distribution.v1.json.sig` publish under `https://downloads.paintedwolf.dev/releases/v<version>/` with the same public byte verification as packages. Only then may the website, casks, updater and trailing mirror advance. The website notification carries `distribution_sha256`; confirmation checks that digest, the real signature and all seven download links. Halt carries last-good `distribution_sha256` and `bad_distribution_sha256`; the common halt plan carries explicit `last_good_legacy` and `bad_legacy` booleans from the sealed [pre-document release enumeration](../packaging/distribution-legacy-releases.json). The sealed updater bytes and DMG checksums were captured from the public immutable objects; the historical platform catalog is the exact macOS-only contract at `fb382708f34edc69118b3edd037198e34f96cc2d`. A selected legacy release restores its historical macOS-only downloads and the native signed empty projection; an unknown or malformed new document refuses. Publication also carries the exact `publication_channels` list, which every consumer uses without selecting targets again. Each publication authorization rereads the exact-source Qualification record. Linux update discovery reports the owning package manager; installation and recovery stay with that owner.
 
 After publication, check stable and preview separately: reconcile final public digests and signatures with the release artifacts; install each setup package and confirm its exact repository definition and key; refresh apt/dnf/pacman metadata and confirm the selected version on each supported architecture; cold-substitute both Nix closures with the committed public key; and verify the signed update pointer and installed package-source discovery. Run the shared post-publication smoke checks against the actual public bytes. Installed packages and user data remain untouched by withdrawal; application recovery uses a higher version and compatible store recovery through the existing release process.
 
@@ -1266,8 +1279,8 @@ standalone store, backup, semantic expectations, and checksums must agree.
 
 **Halt and recovery.** Run the protected `release-halt` workflow with the
 affected channel, signing generation, active bad version, and last-good version.
-It restores only that channel's pointer and matching cask; `dry_run` defaults to
-true. The local primitive is `./task release:halt -- --channel <stable|preview>
+It is the complete multi-surface withdrawal controller; `dry_run` defaults to
+true. The local signed-feed and negative-ledger primitive is `./task release:halt -- --channel <stable|preview>
 --generation <number> --bad <bad> --last-good <last-good>`.
 
 A halt prevents new installs and stops older clients discovering the bad version; it does not downgrade clients that already installed it. Build recovery from the last-good source plus any compatibility/security repair, bump to a version higher than the bad release, run `./task release:recovery:prepare -- --withdraws <bad> --restores-from <last-good>`, review and commit `.release/recovery.json`, and use the normal signed release workflow. This fix-forward preserves monotonic SemVer, current data compatibility, notarization, and the updater's trust model. Remove the recovery record for the following ordinary release.

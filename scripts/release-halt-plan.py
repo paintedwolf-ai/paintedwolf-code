@@ -33,7 +33,8 @@ def distribution_plan(rows: list[dict], bad: str | None = None, last_good: str |
         if channel not in latest or row["generation"] > latest[channel]["generation"]:
             latest[channel] = row
     return {"bad_versions": sorted({row["bad"] for row in rows if "bad" in row}),
-            "channels": [row for row in latest.values() if "bad" in row]}
+            "channels": [{key: row[key] for key in ("channel", "bad", "last_good")}
+                         for row in latest.values() if "bad" in row]}
 
 
 def plan_withdrawal(registry: dict, source: int, bad: str, last_good: str | None) -> dict:
@@ -50,7 +51,7 @@ def plan_withdrawal(registry: dict, source: int, bad: str, last_good: str | None
             validate_binding(registry, manifest, number)
             version = manifest["version"]
             row = {"generation": number, "channel": channel}
-            if version in {bad, last_good}:
+            if version == bad:
                 require_replacement(number, last_good)
                 row.update(bad=bad, last_good=last_good)
             else:
@@ -67,22 +68,50 @@ def main() -> None:
     parser.add_argument("--source-generation", type=int, default=1)
     parser.add_argument("--write-plan", type=Path)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--select-only", action="store_true")
     parser.add_argument("--distribution-output", type=Path)
     parser.add_argument("--prepare-output", type=Path)
     parser.add_argument("--apply-prepared", type=Path)
+    parser.add_argument("--ledger-plan", type=Path)
     args = parser.parse_args()
+    if args.select_only and (not args.write_plan or not args.distribution_output or args.prepare_output or args.apply_prepared):
+        raise ValueError("selection requires plan/distribution outputs without effect preparation")
     registry = load_registry()
     if bool(args.plan) == bool(args.bad):
         raise ValueError("supply either a reviewed plan or a version to withdraw")
     plan = json.loads(args.plan.read_text()) if args.plan else plan_withdrawal(registry, args.source_generation, args.bad, args.last_good)
+    rows, distribution = validate_selection(plan, registry)
+    plan = {**plan, "distribution": distribution}
     if args.write_plan:
         args.write_plan.write_text(json.dumps(plan, indent=2) + "\n")
-    if set(plan) not in ({"source_generation", "feeds"}, {"source_generation", "feeds", "distribution"}):
+    if args.distribution_output:
+        args.distribution_output.write_text(json.dumps(distribution))
+    if args.select_only:
+        return
+    if args.prepare_output and args.apply_prepared:
+        raise ValueError("choose prepare-output or apply-prepared")
+    with tempfile.TemporaryDirectory(prefix="prepared-halt-") as temporary:
+        directory = args.apply_prepared or args.prepare_output or Path(temporary)
+        if not args.apply_prepared:
+            prepare(rows, plan, distribution, directory,
+                    ledger_rows=json.loads(args.ledger_plan.read_bytes()) if args.ledger_plan else None)
+        prepared = validate_prepared(rows, plan, directory, registry)
+        if not args.dry_run:
+            apply(prepared, directory)
+
+
+def validate_selection(plan, registry):
+    if not isinstance(plan, dict) or set(plan) not in ({"source_generation", "feeds"}, {"source_generation", "feeds", "distribution"}):
         raise ValueError("halt plan requires source_generation, feeds, and optional distribution")
     source = plan["source_generation"]
+    if type(source) is not int or source < 1 or not isinstance(plan["feeds"], list):
+        raise ValueError("halt selection requires a typed source generation and explicit feed rows")
     generation(registry, source)
     rows = {}
     for row in plan["feeds"]:
+        if (not isinstance(row, dict) or type(row.get("generation")) is not int
+                or row["generation"] < 1 or row.get("channel") not in {"stable", "preview"}):
+            raise ValueError("halt feed requires a typed generation and channel")
         key = (row["generation"], row["channel"])
         if key in rows:
             raise ValueError("duplicate halt feed")
@@ -115,28 +144,25 @@ def main() -> None:
     for row in rows.values():
         if "keep_version" in row and (row["generation"], row["keep_version"]) in withdrawals:
             raise ValueError("a withdrawn bridge cannot remain offered on the other source channel")
-    distribution = plan.get("distribution", distribution_plan(list(rows.values())))
-    if args.distribution_output:
-        args.distribution_output.write_text(json.dumps(distribution))
-    if args.prepare_output and args.apply_prepared:
-        raise ValueError("choose prepare-output or apply-prepared")
-    with tempfile.TemporaryDirectory(prefix="prepared-halt-") as temporary:
-        directory = args.apply_prepared or args.prepare_output or Path(temporary)
-        if not args.apply_prepared:
-            prepare(rows, plan, distribution, directory)
-        prepared = validate_prepared(rows, plan, directory, registry)
-        if not args.dry_run:
-            apply(prepared, directory)
+    from release_distribution_contract.halt_plan import classify
+    distribution = classify(plan.get("distribution", distribution_plan(list(rows.values()))))
+    return rows, distribution
 
 
 def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def prepare(rows: dict, plan: dict, distribution: dict, directory: Path) -> None:
+def prepare(rows: dict, plan: dict, distribution: dict, directory: Path, *, ledger_rows=None) -> None:
+    from release_distribution_contract import ledger
+    ledger_rows = ledger.prepare(distribution["bad_versions"], read=read_storage) if ledger_rows is None else ledger_rows
+    ledger.validate(ledger_rows, distribution["bad_versions"], read=read_storage)
     directory.mkdir(parents=True, exist_ok=True)
     (directory / "prepared.json").unlink(missing_ok=True)
-    index = {"format_version": 1, "plan": plan, "distribution": distribution, "feeds": []}
+    index = {"format_version": 1, "plan": plan, "distribution": distribution, "ledger": ledger_rows, "actions": [
+        {"generation": number, "channel": channel, "action": "withdraw" if "bad" in row else "keep",
+         "version": row["bad"] if "bad" in row else row["keep_version"]}
+        for (number, channel), row in rows.items()], "feeds": []}
     script = Path(__file__).with_name("release-halt.sh")
     for (number, channel), row in rows.items():
         if "bad" not in row:
@@ -167,10 +193,17 @@ def validate_prepared(rows: dict, plan: dict, directory: Path, registry: dict) -
     from feed_signing import verify
     from update_keys import generation, validate_publication
     index = json.loads((directory / "prepared.json").read_text())
-    if set(index) != {"format_version", "plan", "distribution", "feeds"} or index["format_version"] != 1 or index["plan"] != plan:
+    if set(index) != {"format_version", "plan", "distribution", "feeds", "ledger", "actions"} or type(index["format_version"]) is not int or index["format_version"] != 1 or index["plan"] != plan:
         raise ValueError("prepared halt does not match the reviewed plan")
     if index["distribution"] != plan.get("distribution", distribution_plan(list(rows.values()))):
         raise ValueError("prepared distribution withdrawal differs from the reviewed plan")
+    from release_distribution_contract import ledger
+    ledger.validate(index["ledger"], index["distribution"]["bad_versions"], read=read_storage)
+    actions = [{"generation": number, "channel": channel, "action": "withdraw" if "bad" in row else "keep",
+                "version": row["bad"] if "bad" in row else row["keep_version"]}
+               for (number, channel), row in rows.items()]
+    if index["actions"] != actions:
+        raise ValueError("prepared feed actions differ from the selected plan")
     expected = {key for key, row in rows.items() if "bad" in row}
     seen = set()
     for item in index["feeds"]:
@@ -204,8 +237,10 @@ def validate_prepared(rows: dict, plan: dict, directory: Path, registry: dict) -
 def apply(index: dict, directory: Path) -> None:
     distribution = directory / "distribution.json"
     distribution.write_text(json.dumps(index["distribution"]))
+    ledger = directory / "ledger.json"
+    ledger.write_text(json.dumps(index["ledger"]))
     subprocess.run(["python3", str(Path(__file__).with_name("release_distribution.py")),
-                    "withdraw", "--file", str(distribution)], check=True)
+                    "withdraw", "--file", str(distribution), "--prepared", str(ledger)], check=True)
     receipts = []
     for item in index["feeds"]:
         number, channel = item["generation"], item["channel"]

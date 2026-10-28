@@ -1,0 +1,17 @@
+{
+  "notes": "Seventh release candidate for 1.0.2, published on the preview channel for\nin-app update testing from RC6 and incorporating coordinator, tool-recovery,\nand release-verification fixes.\n\n### Changed\n\n- Coordinator and execution-state guidance surface current checklist readiness,\n  workspace tools, user-visible updates, and observed tool outcomes more clearly.\n- Tool rejection and syntax recovery preserve bounded host diagnostics,\n  required-argument observations, and source-read prerequisites.\n\n### Fixed\n\n- macOS release staging validates stapled notarization tickets on both the\n  application bundle and disk image and retains native ticket diagnostics.\n- RPM package staging accepts domain vocabulary (`Agentic`, `toolchain`) during\n  `rpmlint` verification.\n- Hidden answers remain visible across `wait` transitions, terminal screen\n  results preserve exit status, and repository summaries refresh when the index\n  changes.\n- Browser static captures validate entry files, page approvals resolve mounted\n  directories, and scratch file discovery refreshes after writes.",
+  "platforms": {
+    "darwin-aarch64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRU0lSTWlqYkpSQTJBTFlvZnFXQjJYRzRZMUFiSmNTVVBJTk5UcGFNbDJkQjNNSmlPZUt1SlNlem93V1NTV0cvWVdZR2hHZDd3VHYwVTVsMkpiV2xiWmtyUnJCc3Z2R3dzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyNDM4MzMyCWZpbGU6UGFpbnRlZCBXb2xmIENvZGUuYXBwLnRhci5negl2ZXJzaW9uOjEuMC4yLXJjNwpTS0pRd1ZiSGtGbldZWEdwY1dZOTBmZ1JIRkt6ZHRBeVdQYmZTWHVnak9jTm1EZUEvN3lmS3ZuLzY0VnE0ZkxZZDEzNFVHLzVoOUEvUmJtem43M3lBUT09Cg==",
+      "url": "https://downloads.paintedwolf.dev/releases/v1.0.2-rc7/painted-wolf-code_v1.0.2-rc7_darwin-aarch64.app.tar.gz"
+    }
+  },
+  "pub_date": "2026-10-19T16:18:40Z",
+  "update_keys": {
+    "embedded_generation": 1,
+    "embedded_key_fingerprint": "3d47cc097169daf61a8791b7446ebdcb32186caf80995b87daab982748a5fe5b",
+    "signing_generation": 1,
+    "signing_key_fingerprint": "3d47cc097169daf61a8791b7446ebdcb32186caf80995b87daab982748a5fe5b"
+  },
+  "version": "1.0.2-rc7"
+}

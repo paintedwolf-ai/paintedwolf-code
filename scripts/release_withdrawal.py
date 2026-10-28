@@ -12,8 +12,11 @@ import time
 import urllib.error
 import urllib.request
 
-from release_distribution import PUBLIC_READ_HEADERS, cask_version, require_publishable, wait_for_website
+from release_distribution import PUBLIC_READ_HEADERS, cask_version, wait_for_website
+from release_distribution_contract.ledger import require_publishable
 from release_semver import parse
+from release_distribution_contract.withdrawal import identities
+from release_distribution_contract.halt_plan import FIELDS, FACTS
 
 
 def api(token: str, endpoint: str, method: str = "GET", body: dict | None = None) -> dict | None:
@@ -49,7 +52,28 @@ def token_for(channel: str) -> str:
     return "painted-wolf-code" + ("@preview" if channel == "preview" else "")
 
 
-def prepare(distribution: dict) -> dict:
+def website_receipt(channel):
+    from release_distribution import no_store, validate_website_receipt
+    request = urllib.request.Request(f"https://paintedwolf.ai/.well-known/releases/{channel}.json", headers=PUBLIC_READ_HEADERS)
+    with urllib.request.urlopen(request, timeout=30) as response:
+        no_store(response.headers)
+        raw = response.read(16385)
+    if len(raw) > 16384:
+        raise ValueError("website receipt exceeds its bound")
+    receipt = json.loads(raw)
+    expected = {"channel": channel, **{key: receipt.get(key) for key in ("version", "manifest_sha256", "withdrawn_version")}}
+    if receipt.get("schema_version") == 2:
+        expected["distribution_sha256"] = receipt.get("distribution_sha256")
+    validate_website_receipt(receipt, expected)
+    return receipt
+
+
+
+
+def prepare(distribution: dict, *, receipt=None, binding=None) -> dict:
+    from release_distribution_contract.halt_plan import validate
+    validate(distribution)
+    receipt, binding = receipt or website_receipt, binding or identities
     tap = os.environ["HOMEBREW_TAP_REPO"]
     tap_token, website_token = os.environ["HOMEBREW_TAP_TOKEN"], os.environ["WWW_DISPATCH_TOKEN"]
     if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", tap) or not tap_token or not website_token:
@@ -63,32 +87,45 @@ def prepare(distribution: dict) -> dict:
         token = token_for(channel)
         path = f"repos/{tap}/contents/Casks/{token}.rb"
         current = api(tap_token, path)
-        change_tap = False
+        tap_action = "keep"
         if current is not None:
             current_bytes = base64.b64decode(current["content"])
             current_version = cask_version(current_bytes)
             if current_version == bad:
                 if current_bytes != download(f"release-metadata/{bad}/{token}.rb"):
                     raise ValueError(f"{channel} cask differs from its immutable release record")
-                change_tap = True
+                tap_action = "withdraw"
+        advertised = receipt(channel)
+        website_action = "withdraw" if advertised["version"] == bad else "keep"
         replacement = None
-        manifest_digest = None
-        if good is not None:
+        manifest_digest = row["last_good_manifest_sha256"]
+        if good is not None and (tap_action == "withdraw" or website_action == "withdraw"):
             if good in distribution["bad_versions"]:
                 raise ValueError("a withdrawal cannot restore another version in the same plan")
             require_publishable(good)
             if channel == "stable" and parse(good).channel != "stable":
                 raise ValueError("Stable cannot restore a prerelease")
-            replacement = download(f"release-metadata/{good}/{token}.rb")
+            if tap_action == "withdraw":
+                replacement = download(f"release-metadata/{good}/{token}.rb")
             checksum = download(f"releases/v{good}/painted-wolf-code_v{good}_darwin-aarch64.dmg.sha256").decode().strip()
-            if not re.fullmatch(r"[0-9a-f]{64}", checksum) or f'version "{good}"'.encode() not in replacement or f'sha256 "{checksum}"'.encode() not in replacement:
+            if not re.fullmatch(r"[0-9a-f]{64}", checksum) or replacement is not None and (f'version "{good}"'.encode() not in replacement or f'sha256 "{checksum}"'.encode() not in replacement):
                 raise ValueError("last-good cask does not match the immutable package checksum")
-            manifest_digest = hashlib.sha256(download(f"updates/releases/{good}.json")).hexdigest()
-        rows.append({"channel": channel, "bad": bad, "last_good": good, "path": path,
-                     "sha": current["sha"] if change_tap else None, "change_tap": change_tap,
+            if hashlib.sha256(download(f"updates/releases/{good}.json")).hexdigest() != manifest_digest:
+                raise ValueError("last-good updater differs from the common halt plan")
+        document = binding(row, advertised) if website_action == "withdraw" else {
+            "distribution_sha256": row["distribution_sha256"], "bad_distribution_sha256": None,
+            "last_good_legacy": row["last_good_legacy"], "bad_legacy": row["bad_legacy"]}
+        rows.append({**row, **document, "tap_action": tap_action, "website_action": website_action, "advertised": advertised, "channel": channel, "bad": bad, "last_good": good, "path": path,
+                     "sha": current["sha"] if tap_action == "withdraw" else None,
                      "content": base64.b64encode(replacement).decode() if replacement is not None else None,
                      "manifest_sha256": manifest_digest})
-    return {"bad_versions": distribution["bad_versions"], "channels": rows}
+    mirrors = []
+    repository, token = os.environ["GITHUB_REPOSITORY"], os.environ["GH_TOKEN"]
+    for bad in distribution["bad_versions"]:
+        published = api(token, f"repos/{repository}/releases/tags/v{bad}")
+        mirrors.append({"version": bad, "action": "withdraw" if published is not None and not published.get("draft", False) else "keep",
+                        "release": published})
+    return {"bad_versions": distribution["bad_versions"], "channels": rows, "mirrors": mirrors}
 
 
 def wait_for_withdrawal(row: dict, seconds: int = 1800) -> None:
@@ -102,10 +139,14 @@ def wait_for_withdrawal(row: dict, seconds: int = 1800) -> None:
                 release = channel["release"]
                 if release is not None and release["version"] == row["bad"]:
                     raise ValueError("website still advertises the withdrawn version")
-                wait_for_website("https://paintedwolf.ai", {"channel": row["channel"],
-                    "version": release["version"] if release else None,
+                expected = {"channel": row["channel"], "version": release["version"] if release else None,
                     "manifest_sha256": release["manifest_sha256"] if release else None,
-                    "withdrawn_version": channel["withdrawn_version"]})
+                    "distribution_sha256": release.get("distribution_sha256") if release else None,
+                    "withdrawn_version": channel["withdrawn_version"]}
+                legacy = (release is not None and release["version"] == row["last_good"] and row["last_good_legacy"])
+                if release is not None and release.get("distribution_sha256") is None and not legacy:
+                    raise ValueError("website restored an unclassified legacy release")
+                wait_for_website("https://paintedwolf.ai", expected, legacy_catalog=legacy)
                 return
         if time.monotonic() >= deadline:
             raise ValueError("website has not recorded the withdrawal")
@@ -113,41 +154,53 @@ def wait_for_withdrawal(row: dict, seconds: int = 1800) -> None:
 
 
 def apply(prepared: dict) -> None:
+    for row in prepared["channels"]:
+        if row["website_action"] == "withdraw":
+            actual = identities({key: row[key] for key in FIELDS | FACTS}, row["advertised"])
+            if any(row.get(key) != value for key, value in actual.items()):
+                raise ValueError("halt distribution identities changed after preparation")
     errors = []
     for row in prepared["channels"]:
         try:
             body = {"message": f"withdraw {row['bad']} from {row['channel']}"}
             if row["sha"]:
                 body["sha"] = row["sha"]
-            if row["change_tap"] and row["content"] is not None:
+            if row["tap_action"] == "withdraw" and row["content"] is not None:
                 body["content"] = row["content"]
                 api(os.environ["HOMEBREW_TAP_TOKEN"], row["path"], "PUT", body)
-            elif row["change_tap"] and row["sha"]:
+            elif row["tap_action"] == "withdraw" and row["sha"]:
                 api(os.environ["HOMEBREW_TAP_TOKEN"], row["path"], "DELETE", body)
         except (OSError, ValueError) as error:
             errors.append(str(error))
+        if row["website_action"] == "keep":
+            continue
         try:
             payload = {"channel": row["channel"], "bad_version": row["bad"], "last_good_version": row["last_good"],
-                       "manifest_sha256": row["manifest_sha256"]}
+                       "manifest_sha256": row["manifest_sha256"],
+                       "distribution_sha256": row["distribution_sha256"],
+                       "bad_distribution_sha256": row["bad_distribution_sha256"],
+                       "last_good_legacy": row["last_good_legacy"], "bad_legacy": row["bad_legacy"]}
             api(os.environ["WWW_DISPATCH_TOKEN"], "repos/paintedwolf-ai/paintedwolf-www/dispatches", "POST",
                 {"event_type": "painted-wolf-release-halt", "client_payload": payload})
             wait_for_withdrawal(row)
         except (OSError, ValueError) as error:
             errors.append(str(error))
-    for bad in prepared["bad_versions"]:
+    for row in prepared["mirrors"]:
+        if row["action"] == "keep":
+            continue
         try:
-            repository = os.environ["GITHUB_REPOSITORY"]
-            token = os.environ["GH_TOKEN"]
-            release = api(token, f"repos/{repository}/releases/tags/v{bad}")
-            if release:
-                # Immutable releases retain their assets after withdrawal.
-                notice = "This release has been withdrawn. Use the current release from https://paintedwolf.ai.\n\n"
-                notes = release.get("body") or ""
-                body = {"make_latest": "false", "name": f"Withdrawn: Painted Wolf Code v{bad}",
-                        "body": notes if notes.startswith(notice) else notice + notes}
-                if not release.get("immutable", False):
-                    body["draft"] = True
-                api(token, f"repos/{repository}/releases/{release['id']}", "PATCH", body)
+            bad, release = row["version"], row["release"]
+            repository, token = os.environ["GITHUB_REPOSITORY"], os.environ["GH_TOKEN"]
+            current = api(token, f"repos/{repository}/releases/tags/v{bad}")
+            if current != release:
+                raise ValueError("package mirror changed after complete halt preparation")
+            notice = "This release has been withdrawn. Use the current release from https://paintedwolf.ai.\n\n"
+            notes = release.get("body") or ""
+            body = {"make_latest": "false", "name": f"Withdrawn: Painted Wolf Code v{bad}",
+                    "body": notes if notes.startswith(notice) else notice + notes}
+            if not release.get("immutable", False):
+                body["draft"] = True
+            api(token, f"repos/{repository}/releases/{release['id']}", "PATCH", body)
         except (OSError, ValueError) as error:
             errors.append(str(error))
     if errors:

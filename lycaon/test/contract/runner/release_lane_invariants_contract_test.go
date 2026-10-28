@@ -11,6 +11,7 @@ import (
 )
 
 type laneStep struct {
+	ID   string            `yaml:"id"`
 	Uses string            `yaml:"uses"`
 	Run  string            `yaml:"run"`
 	If   string            `yaml:"if"`
@@ -19,6 +20,7 @@ type laneStep struct {
 }
 
 type laneJob struct {
+	Uses        string            `yaml:"uses"`
 	Needs       yaml.Node         `yaml:"needs"`
 	If          string            `yaml:"if"`
 	RunsOn      yaml.Node         `yaml:"runs-on"`
@@ -113,7 +115,7 @@ var storageCredentials = []string{"secrets.CLOUDFLARE_API_TOKEN", "secrets.R2_BU
 func TestReleaseStorageWritesFollowTheSharedPublicationGate(t *testing.T) {
 	t.Parallel()
 	workflow := parseLane(t, ".github/workflows/release.yml")
-	gate := workflow.Jobs["publish-immutable"]
+	gate := workflow.Jobs["publish-artifacts"]
 	if !strings.Contains(gate.If, "needs.classify.outputs.publish == 'true'") || !slices.Contains(gate.needs(), "ship-gates") {
 		t.Fatal("immutable publication must follow ship-gates and the classified publication decision")
 	}
@@ -124,13 +126,21 @@ func TestReleaseStorageWritesFollowTheSharedPublicationGate(t *testing.T) {
 		for _, credential := range storageCredentials {
 			writes = writes || strings.Contains(job.text(), credential)
 		}
-		if !writes || name == "publish-immutable" {
+		if name == "select-release-channels" {
+			if !workflow.ancestors(name)["ship-gates"] || job.Environment != "release-publication" ||
+				!strings.Contains(job.text(), "scripts.release_distribution_contract.channels select") ||
+				strings.Contains(job.text(), "secrets.FEED_SIGNING_KEYS_JSON") || strings.Contains(job.text(), "immutable-put") {
+				t.Fatal("early channel selection must only read retained controls after shared admission")
+			}
+			continue
+		}
+		if !writes || name == "publish-artifacts" {
 			continue
 		}
 		writers++
 		ancestors := workflow.ancestors(name)
-		if !ancestors["publish-immutable"] || !ancestors["ship-gates"] || job.Environment != "release-publication" {
-			t.Errorf("%s writes release storage without the shared ship-gates/publish-immutable gate", name)
+		if !ancestors["publish-artifacts"] || !ancestors["ship-gates"] || job.Environment != "release-publication" {
+			t.Errorf("%s writes release storage without the shared ship-gates/publish-artifacts gate", name)
 		}
 	}
 	if writers == 0 || !strings.Contains(workflow.Jobs["publish-linux-repositories"].text(), "secrets.R2_BUCKET") {
@@ -177,7 +187,15 @@ func TestReleaseArtifactsFlowOnlyAlongJobDependencies(t *testing.T) {
 	workflow := parseLane(t, ".github/workflows/release.yml")
 	producers := map[string][]string{}
 	for _, name := range sortedJobs(workflow) {
-		for _, artifact := range workflow.Jobs[name].artifacts("upload-artifact") {
+		job := workflow.Jobs[name]
+		outputs := job.artifacts("upload-artifact")
+		if strings.HasPrefix(job.Uses, "./.github/workflows/") {
+			called := parseLane(t, strings.TrimPrefix(job.Uses, "./"))
+			for _, child := range sortedJobs(called) {
+				outputs = append(outputs, called.Jobs[child].artifacts("upload-artifact")...)
+			}
+		}
+		for _, artifact := range outputs {
 			producers[artifact] = append(producers[artifact], name)
 		}
 	}
@@ -289,7 +307,7 @@ func TestNixCacheCredentialReachesOnlyItsGatedPublisher(t *testing.T) {
 	release := parseLane(t, ".github/workflows/release.yml")
 	caller := release.Jobs["linux-delivery"]
 	ancestors := release.ancestors("linux-delivery")
-	for _, gate := range []string{"ship-gates", "publish-immutable", "publish-linux-repositories"} {
+	for _, gate := range []string{"ship-gates", "publish-artifacts", "publish-linux-repositories"} {
 		if !ancestors[gate] {
 			t.Errorf("Linux delivery runs before %s", gate)
 		}
@@ -351,4 +369,47 @@ func TestReleaseHaltWithdrawsNixCacheAvailability(t *testing.T) {
 		}
 	}
 	t.Fatal("release halt must withdraw the halted release's Nix cache availability")
+}
+
+func TestReleaseHaltRequiresCompleteSymmetricPreparationBeforeEveryMutation(t *testing.T) {
+	t.Parallel()
+	halt := parseLane(t, ".github/workflows/release-halt.yml").Jobs["halt"]
+	steps := map[string]laneStep{}
+	positions := map[string]int{}
+	for position, step := range halt.Steps {
+		if step.ID != "" {
+			steps[step.ID], positions[step.ID] = step, position
+		}
+	}
+	selection := steps["halt_selection"]
+	if !strings.Contains(selection.Run, "--select-only") || !strings.Contains(selection.Run, "--distribution-output") ||
+		strings.Contains(selection.Run, "--prepare-output") || halt.Env["FEED_SIGNING_KEYS_JSON"] != "" {
+		t.Fatal("typed halt selection must precede effect-specific signing and preparation")
+	}
+	barrier := steps["halt_barrier"]
+	for _, owner := range []string{"linux_plan", "ledger_plan", "feed_plan", "nix_plan", "distribution_plan"} {
+		step := steps[owner]
+		if positions[owner] <= positions["halt_selection"] || positions[owner] >= positions["halt_barrier"] ||
+			!strings.Contains(step.If, "!cancelled()") || !strings.Contains(barrier.Env["HALT_PREPARATION_OUTCOMES"], "steps."+owner+".outcome") {
+			t.Fatalf("%s must prepare independently and participate in the complete barrier", owner)
+		}
+	}
+	if !strings.Contains(barrier.Run, "release_distribution_contract.halt_effects") {
+		t.Fatal("the barrier must retain every owner's actions and refusals")
+	}
+	mutations := 0
+	for position, step := range halt.Steps {
+		if !strings.Contains(step.Run, "--apply-prepared") && !strings.Contains(step.Run, "repository_withdrawal apply") &&
+			!strings.Contains(step.Run, "nix_cache.release_lane withdraw") && !strings.Contains(step.Run, "release_withdrawal.py apply") {
+			continue
+		}
+		mutations++
+		if position <= positions["halt_barrier"] || !strings.Contains(step.If, "!inputs.dry_run") ||
+			!strings.Contains(step.If, "!cancelled()") || !strings.Contains(step.If, "steps.halt_barrier.outcome == 'success'") {
+			t.Fatal("any preparation refusal must block every halt mutation")
+		}
+	}
+	if mutations != 4 {
+		t.Fatalf("halt mutation owners = %d, want feed/ledger, native, Nix and package/website", mutations)
+	}
 }
