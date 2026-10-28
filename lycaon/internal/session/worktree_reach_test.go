@@ -21,6 +21,7 @@ import (
 	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/scratch"
 	sessionscope "github.com/lycaon/lycaon/internal/session/scope"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -69,6 +70,8 @@ func newReachFixture(t *testing.T, rootPath string) *reachFixture {
 	p, err := project.CreateWithRoot(t.Context(), reg, rootPath)
 	testutil.FailErr(t, "CreateWithRoot", err)
 	mgr.SetProjectRegistry(reg)
+	// Command programs publish output beneath the host's per-session folders.
+	mgr.SetScratchFolders(scratch.New(t.TempDir()))
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{
 		Posture:   api.SessionPostureBuild,
 		ProjectID: p.ID,
