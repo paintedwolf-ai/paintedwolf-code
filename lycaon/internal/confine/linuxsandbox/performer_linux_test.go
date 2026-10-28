@@ -263,6 +263,66 @@ func TestTargetFactsReadTheCallersProcess(t *testing.T) {
 	}
 }
 
+func TestAnswerKernelRetriesInterruptedAddFDBeforeSendingResult(t *testing.T) {
+	if _, err := seccompIoctl(-1, unix.SECCOMP_IOCTL_NOTIF_ID_VALID, nil); err == 0 {
+		t.Fatal("invalid listener descriptor succeeded")
+	}
+	orig := seccompIoctl
+	t.Cleanup(func() { seccompIoctl = orig })
+
+	var addCalls, sendCalls int
+	var gotAdd seccompNotifAddfd
+	var gotResp seccompNotifResp
+	seccompIoctl = func(_ int, req uint, arg unsafe.Pointer) (uintptr, unix.Errno) {
+		switch req {
+		case unix.SECCOMP_IOCTL_NOTIF_ADDFD:
+			addCalls++
+			gotAdd = *(*seccompNotifAddfd)(arg)
+			if addCalls == 1 {
+				return 0, unix.EINTR
+			}
+			return 17, 0
+		case unix.SECCOMP_IOCTL_NOTIF_SEND:
+			sendCalls++
+			gotResp = *(*seccompNotifResp)(arg)
+			if sendCalls == 1 {
+				return 0, unix.EINTR
+			}
+			return 0, 0
+		default:
+			return 0, unix.EINVAL
+		}
+	}
+
+	answerKernel(9, pathCall{Notification: 42, Flags: unix.O_WRONLY | unix.O_CREAT | unix.O_CLOEXEC}, pathResult{}, 5)
+	if addCalls != 2 || sendCalls != 2 {
+		t.Fatalf("ioctl calls: add=%d send=%d, want 2 and 2", addCalls, sendCalls)
+	}
+	if gotAdd.ID != 42 || gotAdd.Flags != 0 || gotAdd.SrcFD != 5 || gotAdd.NewFDFlags != unix.O_CLOEXEC {
+		t.Fatalf("addfd = %+v", gotAdd)
+	}
+	if gotResp.ID != 42 || gotResp.Val != 17 || gotResp.Error != 0 {
+		t.Fatalf("resp = %+v, want val 17 and error 0", gotResp)
+	}
+
+	seccompIoctl = func(_ int, req uint, arg unsafe.Pointer) (uintptr, unix.Errno) {
+		if req == unix.SECCOMP_IOCTL_NOTIF_ADDFD {
+			return 0, unix.EMFILE
+		}
+		gotResp = *(*seccompNotifResp)(arg)
+		return 0, unix.ENOENT
+	}
+	answerKernel(9, pathCall{Notification: 43}, pathResult{}, 6)
+	if gotResp.ID != 43 || gotResp.Val != 0 || gotResp.Error != -int32(unix.EMFILE) {
+		t.Fatalf("failed addfd resp = %+v, want -EMFILE", gotResp)
+	}
+
+	answerKernel(9, pathCall{Notification: 44}, pathResult{Errno: int(unix.EACCES)}, -1)
+	if gotResp.ID != 44 || gotResp.Val != 0 || gotResp.Error != -int32(unix.EACCES) {
+		t.Fatalf("refusal resp = %+v, want -EACCES", gotResp)
+	}
+}
+
 // BenchmarkPerformerCreate measures one create through the performer's
 // protocol, without the seccomp notification around it.
 func BenchmarkPerformerCreate(b *testing.B) {

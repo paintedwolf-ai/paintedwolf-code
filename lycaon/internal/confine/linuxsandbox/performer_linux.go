@@ -250,20 +250,23 @@ func sendPathReply(fd int, reply []byte, opened int) bool {
 }
 
 // answerKernel completes the pending call: an opened descriptor is installed
-// in the caller and returned in one step, anything else is the call's result.
-// A call that ended meanwhile is simply no longer pending.
+// in the caller before sending its number as the call's result, so a signal
+// interrupting the descriptor wait can retry without completing the call early
+// with descriptor zero. A call that ended meanwhile is simply no longer pending.
 func answerKernel(listener int, call pathCall, result pathResult, opened int) {
+	resp := seccompNotifResp{ID: call.Notification}
 	if opened >= 0 {
 		var newFlags uint32
 		if call.Flags&unix.O_CLOEXEC != 0 {
 			newFlags = unix.O_CLOEXEC
 		}
-		add := seccompNotifAddfd{ID: call.Notification, Flags: unix.SECCOMP_ADDFD_FLAG_SEND, SrcFD: uint32(opened), NewFDFlags: newFlags}
-		_ = ioctlPtr(listener, unix.SECCOMP_IOCTL_NOTIF_ADDFD, unsafe.Pointer(&add))
-		return
-	}
-	resp := seccompNotifResp{ID: call.Notification}
-	if result.Errno != 0 {
+		add := seccompNotifAddfd{ID: call.Notification, SrcFD: uint32(opened), NewFDFlags: newFlags}
+		if remoteFD, err := ioctlAddFD(listener, &add); err != nil {
+			resp.Error = -int32(errnoOf(err, unix.EACCES))
+		} else {
+			resp.Val = int64(remoteFD)
+		}
+	} else if result.Errno != 0 {
 		resp.Error = -int32(result.Errno)
 	}
 	_ = ioctlPtr(listener, unix.SECCOMP_IOCTL_NOTIF_SEND, unsafe.Pointer(&resp))
