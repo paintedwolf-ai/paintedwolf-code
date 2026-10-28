@@ -378,6 +378,24 @@ tasks:
     cmds:
       - bash {{.SCRIPTS_DIR}}/test-confine-linux.sh {{.CLI_ARGS}}
 
+  test:userlands:
+    desc: 'Reference userland runner contract in the verified GNU, BSD and busybox images (Docker)'
+    cmds:
+      - task: userlands:build
+      - bash {{.SCRIPTS_DIR}}/go-test-digest.sh --full --tags referenceuserland --name test:userlands -- ./test/referenceuserland/... -count=1
+
+  userlands:build:
+    desc: 'Build the missing pinned GNU, BSD and busybox reference userland images and verify every image by its recorded tree digest (Docker; optional userlands, e.g. -- bsd)'
+    dir: '{{.GO_DIR}}'
+    cmds:
+      - go run ./test/referenceuserland/cmd/userlands build {{.CLI_ARGS}}
+
+  userlands:record:
+    desc: 'Rebuild the reference userland images from their pins without cache and record each tree digest in userlands.json (Docker; optional -arch and userlands)'
+    dir: '{{.GO_DIR}}'
+    cmds:
+      - go run ./test/referenceuserland/cmd/userlands record {{.CLI_ARGS}}
+
   test:fuzz:
     desc: 'Run Go native fuzz targets briefly (FUZZTIME=20s default; e.g. task test:fuzz -- ./internal/parse/...)'
     dir: '{{.GO_DIR}}'
