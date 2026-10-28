@@ -201,7 +201,7 @@ func (r *applyRun) parse(inputs []applyInput) ([]*applySection, error) {
 		}
 		strip = n
 	}
-	root, _ := optionValue(r.p.Argv, "--directory")
+	prefix, _ := optionValue(r.p.Argv, "--directory")
 	var sections []*applySection
 	for _, input := range inputs {
 		parsed, err := patchapply.Parse(input.data)
@@ -232,10 +232,10 @@ func (r *applyRun) parse(inputs []applyInput) ([]*applySection, error) {
 			if err != nil {
 				return nil, operandInvalid(r.p.command.spec, file.NewName, "a name with enough components for -p")
 			}
-			if root != "" {
+			if prefix != "" {
 				for _, name := range []*string{&oldName, &newName} {
 					if *name != "" {
-						*name = path.Join(root, *name)
+						*name = path.Join(prefix, *name)
 					}
 				}
 			}

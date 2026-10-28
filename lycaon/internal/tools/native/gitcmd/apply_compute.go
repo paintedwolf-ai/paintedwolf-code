@@ -122,12 +122,17 @@ func (r *applyRun) capture(s *applySection) (string, error) {
 	case entry.oid == "":
 		return "does not exist in index", nil
 	}
-	content, ok, err := r.p.owners.Git.BlobContent(r.ctx, r.repo.Root, entry.oid, int(r.p.owners.limit("stream_bytes")))
+	maximum := r.p.owners.limit("stream_bytes")
+	content, ok, err := r.p.owners.Git.BlobContent(r.ctx, r.repo.Root, entry.oid, int(maximum))
 	if err != nil {
 		return "", err
 	}
 	if !ok {
-		return "", &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"limit_id": "stream_bytes", "resource_unit": "bytes", "path": rel}}
+		observed, err := r.p.owners.Git.BlobSize(r.ctx, r.repo.Root, entry.oid)
+		if err != nil {
+			return "", err
+		}
+		return "", &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"limit_id": "stream_bytes", "resource_unit": "bytes", "maximum": maximum, "observed": observed, "path": rel}}
 	}
 	if r.cached {
 		s.before = content

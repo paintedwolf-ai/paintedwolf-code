@@ -5,9 +5,9 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/gitexec"
 )
 
@@ -122,7 +122,7 @@ func MergeFile(ctx context.Context, ours, base, theirs []byte, labels [3]string)
 	defer func() { _ = os.RemoveAll(dir) }()
 	names := [3]string{"ours", "base", "theirs"}
 	for i, content := range [][]byte{ours, base, theirs} {
-		if err := os.WriteFile(filepath.Join(dir, names[i]), content, 0o600); err != nil { //nolint:forbidigo // Private scratch inputs for merge-file, not a governed tree.
+		if _, err := fseffect.Replace(fseffect.ReplaceRequest{Location: fseffect.Location{Root: dir, Rel: names[i]}, Source: bytes.NewReader(content), Mode: 0o600, DirMode: 0o700}); err != nil {
 			return nil, 0, err
 		}
 	}

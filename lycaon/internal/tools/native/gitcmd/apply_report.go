@@ -42,8 +42,8 @@ func lineCounts(f *gitdiff.File) (int, int) {
 	return added, deleted
 }
 
-// writeStat is apply.c's show_stats: names padded to the longest (at most
-// 50), bars scaled to fit 70 columns, and diff's summary line.
+// writeStat prints the diffstat: names padded to the longest (at most 50),
+// bars scaled to fit 70 columns, then the files-changed summary line.
 func writeStat(w io.Writer, sections []*applySection) {
 	maxLen, maxChange, adds, dels := 0, 0, 0, 0
 	for _, s := range sections {
@@ -97,7 +97,8 @@ func pluralWord(n int, one, many string) string {
 	return many
 }
 
-// writeSummary is apply.c's summary_patch_list for one section.
+// writeSummary prints one section's creation, deletion, rename, copy,
+// rewrite and mode-change lines.
 func writeSummary(w io.Writer, s *applySection) {
 	f := s.file
 	switch {
@@ -138,7 +139,8 @@ func writeModeChange(w io.Writer, f patchapply.File, name string) {
 	}
 }
 
-// quoteName is Git's quote_c_style for a path with special bytes.
+// quoteName C-quotes a path holding quotes, backslashes, control or
+// non-ASCII bytes, as git apply prints it.
 func quoteName(name string) string {
 	needs := false
 	for i := 0; i < len(name); i++ {
