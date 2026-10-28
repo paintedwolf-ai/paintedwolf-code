@@ -1946,6 +1946,121 @@
         }
       },
       "qualification": "normative definition; P08 fixture tests exercise predicate owners; connected parser/runtime execution remains required"
+    },
+    {
+      "id": "curl-insecure-beside-cacert",
+      "program": "curl -k --cacert ./ca.pem https://api.example.test/state",
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
+      "expected": {
+        "stdout": "",
+        "stderr": "",
+        "status": 2,
+        "diagnostic": "COMMAND_TLS_VERIFICATION_REQUIRED",
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": true,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
+      },
+      "qualification": "normative definition; executed against the native curl owner before any request"
+    },
+    {
+      "id": "curl-cert-type-der",
+      "program": "curl --cert-type DER --cert ./client.der https://api.example.test/state",
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
+      "expected": {
+        "stdout": "",
+        "stderr": "",
+        "status": 2,
+        "diagnostic": "COMMAND_OPTION_UNSUPPORTED",
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": true,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
+      },
+      "qualification": "normative definition; executed against the native curl owner before any request"
+    },
+    {
+      "id": "curl-proxy-unsupported",
+      "program": "curl -x http://proxy.example.test:3128 https://api.example.test/state",
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
+      "expected": {
+        "stdout": "",
+        "stderr": "",
+        "status": 2,
+        "diagnostic": "COMMAND_OPTION_UNSUPPORTED",
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": true,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
+      },
+      "qualification": "normative definition; executed against the native curl owner before any request"
+    },
+    {
+      "id": "curl-retry-unsupported",
+      "program": "curl --retry 3 https://api.example.test/state",
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
+      "expected": {
+        "stdout": "",
+        "stderr": "",
+        "status": 2,
+        "diagnostic": "COMMAND_OPTION_UNSUPPORTED",
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": true,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
+      },
+      "qualification": "normative definition; executed against the native curl owner before any request"
+    },
+    {
+      "id": "curl-fail-modes-exclusive",
+      "program": "curl --fail --fail-with-body https://api.example.test/state",
+      "setup": {
+        "files": {},
+        "host_facts": {},
+        "helpers": {}
+      },
+      "expected": {
+        "stdout": "",
+        "stderr": "",
+        "status": 2,
+        "diagnostic": "COMMAND_OPERAND_INVALID",
+        "source_span": null,
+        "semantic_effects": [],
+        "receipts": {
+          "zero_program_effects": true,
+          "required_completed_operations": [],
+          "effect_inventory": "semantic_effects lists mutations/launches; query/transform execution is represented by receipts, not inferred absent"
+        }
+      },
+      "qualification": "normative definition; executed against the native curl owner before any request"
     }
   ]
 }

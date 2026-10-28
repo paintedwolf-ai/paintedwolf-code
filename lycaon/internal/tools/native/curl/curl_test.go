@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"mime"
@@ -28,6 +29,16 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 )
+
+// closedURL names a loopback port nothing listens on.
+func closedURL(t *testing.T) string {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	testutil.FailErr(t, "reserve closed port", err)
+	closed := "http://" + listener.Addr().String() + "/"
+	_ = listener.Close()
+	return closed
+}
 
 // fixedServer answers deterministically so header bytes compare exactly.
 func fixedServer(t *testing.T, handler http.HandlerFunc) *httptest.Server {
@@ -68,7 +79,7 @@ func TestCurlBodyHeadersAndWriteOut(t *testing.T) {
 		{"dump headers to stdout", []string{"-s", "-D", "-", "-o", "/dev/null", server.URL + "/ok"}, headers, 0},
 		{"write-out", []string{"-s", "-o", "/dev/null", "-w", `%{http_code} %{size_download} %{url_effective}\n%%`, server.URL + "/ok"}, "200 11 " + server.URL + "/ok\n%", 0},
 		{"http error without --fail", []string{"-s", server.URL + "/missing"}, "not here\n", 0},
-		{"--fail suppresses the body", []string{"-s", "--fail", "-w", "%{http_code}", server.URL + "/missing"}, "000", 22},
+		{"--fail suppresses the body", []string{"-s", "--fail", "-w", "%{http_code}", server.URL + "/missing"}, "404", 22},
 		{"scheme defaults to http", []string{"-s", strings.TrimPrefix(server.URL, "http://") + "/ok"}, "hello body\n", 0},
 	}
 	for _, c := range cases {
@@ -84,9 +95,6 @@ func TestCurlBodyHeadersAndWriteOut(t *testing.T) {
 	}
 	if r := h.curl(t.Context(), "-S", "--fail", server.URL+"/missing"); !contains(r.stderr, "curl: (22)") {
 		t.Fatalf("--fail error not reported: %q", r.stderr)
-	}
-	if r := h.curl(t.Context(), "-w", "%{num_redirects}", server.URL); r.err == nil {
-		t.Fatal("unsupported -w variable accepted")
 	}
 	if r := h.curl(t.Context(), "--not-a-version-1-option", server.URL); r.err == nil {
 		t.Fatal("unsupported option bound")
@@ -237,10 +245,7 @@ func TestCurlExitStatusesAndUnknownOutcomes(t *testing.T) {
 			http.Redirect(w, r, "/loop", http.StatusFound)
 		}
 	})
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	testutil.FailErr(t, "reserve closed port", err)
-	closed := "http://" + listener.Addr().String() + "/"
-	_ = listener.Close()
+	closed := closedURL(t)
 	h := newHarness(t)
 	cases := []struct {
 		name      string
@@ -372,6 +377,16 @@ func TestCurlMatchesSystemCurlOnLoopback(t *testing.T) {
 			w.WriteHeader(http.StatusFound)
 			return
 		}
+		switch r.URL.Path {
+		case "/fail":
+			stamp(w, "text/plain")
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = io.WriteString(w, "failure detail\n")
+			return
+		case "/digits":
+			http.ServeContent(w, r, "digits.txt", time.Unix(0, 0), strings.NewReader("0123456789"))
+			return
+		}
 		if r.URL.Path == "/echo" {
 			body, _ := io.ReadAll(r.Body)
 			accept := r.Header.Get("Accept")
@@ -392,8 +407,18 @@ func TestCurlMatchesSystemCurlOnLoopback(t *testing.T) {
 		_, _ = io.WriteString(w, `{"ok":true}`+"\n")
 	})
 	h := newHarness(t)
+	h.write("upload.txt", "uploaded bytes\n")
+	facts := `%{http_code} %{http_version} %{num_redirects} %{redirect_url} %{content_type} %{remote_ip} %{remote_port} %{size_header} %{size_upload} %{exitcode}\n`
 	for _, args := range [][]string{
 		{"-s", "-D", "-", "-o", "/dev/null", "-w", `%{http_code} %{size_download} %{url_effective}\n`, server.URL + "/a"},
+		{"-s", "-o", "/dev/null", "-w", facts, server.URL + "/hop/1"},
+		{"-s", "-L", "-o", "/dev/null", "-w", facts, server.URL + "/hop/2"},
+		{"-s", "-A", "probe/1", "-T", "upload.txt", "-w", facts, server.URL + "/echo"},
+		{"-s", "-A", "probe/1", "-T", "upload.txt", "-X", "POST", server.URL + "/echo"},
+		{"-s", "--fail-with-body", "-w", facts, server.URL + "/fail"},
+		{"-s", "--fail", "-w", facts, server.URL + "/fail"},
+		{"-s", "-r", "3-5", "-w", " %{http_code}", server.URL + "/digits"},
+		{"-s", "-r", "40-", "-o", "/dev/null", "-w", "%{http_code}", server.URL + "/digits"},
 		{"-s", "-i", server.URL + "/b"},
 		{"-s", "-I", server.URL + "/c"},
 		{"-s", "-w", `[%{http_code}]\t%%\n`, server.URL + "/d"},
@@ -409,11 +434,18 @@ func TestCurlMatchesSystemCurlOnLoopback(t *testing.T) {
 	} {
 		cmd := exec.Command(system, append([]string{"--noproxy", "*"}, args...)...)
 		cmd.Env = append(os.Environ(), "NO_PROXY=*", "no_proxy=*", "CURL_HOME=/nonexistent")
+		cmd.Dir = h.root
 		want, err := cmd.Output()
-		testutil.FailErr(t, "run system curl", err)
+		status := 0
+		var exit *exec.ExitError
+		if errors.As(err, &exit) {
+			status = exit.ExitCode()
+		} else {
+			testutil.FailErr(t, "run system curl", err)
+		}
 		r := h.curl(t.Context(), args...)
-		if r.err != nil || r.stdout != string(want) {
-			t.Fatalf("%v differs from system curl:\n got %q\nwant %q (%v)", args, r.stdout, want, r.err)
+		if r.result.Status != status || r.stdout != string(want) {
+			t.Fatalf("%v differs from system curl:\n got %q (%d)\nwant %q (%d) %v", args, r.stdout, r.result.Status, want, status, r.err)
 		}
 	}
 }
