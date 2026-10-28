@@ -1772,6 +1772,12 @@
       "emit": "guard:coordinator_synthesis",
       "summary": "Synthesis used markdown image syntax with {{ paintedwolf.offender_count }} visual artifact id(s) as the URL. Bare UUIDs in markdown are not resolved — that renders as a broken image."
     },
+    "PROCESS_NOT_OWNED": {
+      "branch_instruction": "Branch on Code; do not retry with another reference, PID, name, or command for the same process. Ask the user to stop it themselves.",
+      "category": "policy",
+      "emit": "guard:host_process",
+      "summary": "The target process was not started by this session."
+    },
     "PROCESS_REFERENCE_STALE": {
       "branch_instruction": "Branch on Code; call process_list again and review the new exact target. Do not replace the reference with a PID or name.",
       "category": "recoverable",
@@ -1806,13 +1812,19 @@
       "branch_instruction": "Call **`update_progress`**, then retry the same rejected call",
       "category": "recoverable",
       "emit": "guard:coordinator",
-      "summary": "**`{{ tool }}`** did not run: this session has no progress checklist yet."
+      "summary": "**`{{ tool }}`** did not run: the current request has no progress checklist."
     },
     "PROGRESS_NESTED_LINE": {
       "branch_instruction": "Branch on Code; flatten to top-level lines and retry update_progress",
       "category": "recoverable",
       "emit": "guard:update_progress",
       "summary": "Checklist line \"{{ paintedwolf.line }}\" is indented — only top-level `- [ ]`/`- [x]`/`- [~]`/`- [\u003e]` rows are allowed."
+    },
+    "PROGRESS_NO_OPEN_STEP": {
+      "branch_instruction": "Branch on Code; include at least one open `- [ ]` step or continue without update_progress if no work remains",
+      "category": "recoverable",
+      "emit": "guard:update_progress",
+      "summary": "Initial progress checklist contains no open `- [ ]` steps."
     },
     "PROGRESS_OPEN_BEFORE_CLOSEOUT": {
       "branch_instruction": "Repeating the same pending checklist does not resolve this rejection. Do not close unfinished rows to clear it. For a concrete blocker or authorized scope change, mark only the work you will not pursue `- [~]` and report the limitation.",
@@ -2141,10 +2153,10 @@
       "summary": "The structured execution capability request was invalid{% if paintedwolf.rejection_reason %} — {{ paintedwolf.rejection_reason }}{% endif %}{% if paintedwolf.rejection_field %} (field {{ paintedwolf.rejection_field }}){% endif %}{% if paintedwolf.capability %} ({{ paintedwolf.capability }}){% endif %}."
     },
     "SANDBOX_CONTROL_PLANE_DENIED": {
-      "branch_instruction": "Branch on Code; do not retry access to the host control plane with this or any other tool or capability, including host_execution",
+      "branch_instruction": "Continue without this path. Ask the person to export needed content or change the app settings.",
       "category": "control-plane",
       "emit": "guard:sandbox_control_plane",
-      "summary": "{{ paintedwolf.path }} is part of the agent host's control plane."
+      "summary": "This operation would reach the app's own state through {{ paintedwolf.path }}."
     },
     "SANDBOX_DIRECT_IP_AUTHORIZATION_CHANGED": {
       "branch_instruction": "Branch on Code; re-request direct network access for this action",

@@ -5,7 +5,7 @@
     ],
     "check-fast": [
       "build",
-      "lint:fast",
+      "lint:full",
       "budgets",
       "den:typecheck",
       "den:lint",
@@ -14,7 +14,11 @@
       "test:short",
       "test:contract",
       "coverage:changes",
-      "licenses:notices"
+      "scripts:coverage:changes",
+      "licenses:notices",
+      "comments:check",
+      "test:fail-messages:check",
+      "docs:links"
     ],
     "oar:verify": [
       "test:oar",
@@ -34,6 +38,7 @@
       "budgets",
       "coverage:changes",
       "den:coverage:changes",
+      "scripts:coverage:changes",
       "lint:vuln",
       "licenses:notices"
     ],
@@ -71,6 +76,11 @@
       "db:sqlc:check",
       "db:sqlc:vet",
       "docs:links"
+    ],
+    "test:seatbelt": [
+      "seatbelt:confine",
+      "seatbelt:gated",
+      "seatbelt:scanstress"
     ]
   },
   "go": {
@@ -189,6 +199,49 @@
         "./..."
       ],
       "exclude": "/test/security$"
+    },
+    "seatbelt:confine": {
+      "options": [
+        "--full"
+      ],
+      "packages": [
+        "./internal/confine/..."
+      ]
+    },
+    "seatbelt:gated": {
+      "options": [
+        "--full",
+        "--tags",
+        "integration"
+      ],
+      "packages": [
+        "./cmd/opengrep-artifact",
+        "./internal/exec",
+        "./internal/hitl",
+        "./internal/mcp",
+        "./internal/scan/drivers/bundled",
+        "./internal/scan/drivers/external",
+        "./internal/scan/installed",
+        "./internal/scan/integration",
+        "./internal/toolexecution",
+        "./internal/webresearch",
+        "./test/contract/security"
+      ],
+      "flags": [
+        "-run=^(TestArtifactCLIRequiresConfinement|TestEngineLossFixtureProcess|TestLaunchPlanRefusesUnavailableLinuxBoundary|TestConfinementIntegrityCompositeChain|TestConfinementIntegrityConfigTokenUnreadable|TestConfinementIntegrityForeignVarFoldersWriteDenied|TestConfinementIntegrityLauncherUntamperable|TestConfinementIntegrityNoProfileStagingFile|TestNonHTTPContractContainedDerivesFromSameRequestAsProfile|TestNonHTTPContractProxyStartupFailureDeniesAndRollsBack|TestPrepareStdioCommandConfinedWhenAvailable|TestPrepareStdioCommandHandsTheServerNoCredential|TestPrepareStdioCommandRequiresRootsWhenAvailable|TestBundledScannerConfinementDeniesNetwork|TestExternalScannerWritesProjectTree|TestContainedCarriesDirectIPNarrowing|TestContainedProvenanceMatchesDefaultConfinement|TestContainedTaskOverlayStaysOutOfRoots|TestContainedWriteRootsCarryDurableGrants|TestExternalScannerLaunchIsValidWhileEnforcing|TestWebToolsUnaffectedByCommandProxyOnlyDefault|TestOpenGrepBundledAdapterFixture|TestIngesterBundledSASTProducesGuidance|TestOpenGrepScopesExcludesToProjectNotAncestorDirectories|TestOpenGrepEmbeddedSourceRecovery|TestExecutionCapabilityAsksBeforeSpawnAndConsumesOnce|TestConsumerFinalizationNativeScanner|TestInstalledScannerProductCases|TestSelectedScannerCannotQualifyAnEmptySuccessfulReport)$"
+      ],
+      "bundled": true
+    },
+    "seatbelt:scanstress": {
+      "options": [
+        "--full",
+        "--tags",
+        "scanstress"
+      ],
+      "packages": [
+        "./test/scanstress/..."
+      ],
+      "bundled": true
     }
   },
   "tasks": {
@@ -209,6 +262,9 @@
     ],
     "den:coverage:changes": [
       "den:coverage:changes"
+    ],
+    "scripts:coverage:changes": [
+      "scripts:coverage:changes"
     ],
     "codegen:approval-explanations:check": [
       "codegen:approval-explanations:check"
@@ -348,13 +404,55 @@
     "licenses:notices": [
       "licenses:notices"
     ],
+    "nix:check": [
+      "nix:check"
+    ],
+    "nix:build": [
+      "nix:build"
+    ],
+    "test:linux:installed": [
+      "test:linux:installed"
+    ],
     "release:rehearse:linux-signing": [
       "release:rehearse:linux-signing"
+    ],
+    "release:rehearse:native-repositories": [
+      "release:rehearse:native-repositories"
+    ],
+    "release:rehearse:native-repositories-r2": [
+      "release:rehearse:native-repositories-r2"
+    ],
+    "release:rehearse:native-candidates": [
+      "release:rehearse:native-candidates"
+    ],
+    "release:rehearse:pacman-repositories": [
+      "release:rehearse:pacman-repositories"
+    ],
+    "release:rehearse:pacman-repositories-r2": [
+      "release:rehearse:pacman-repositories-r2"
+    ],
+    "release:rehearse:pacman-vm": [
+      "release:rehearse:pacman-vm"
+    ],
+    "release:live-test": [
+      "release:live-test"
+    ],
+    "release:rehearse:package-probe": [
+      "release:rehearse:package-probe"
+    ],
+    "release:rehearse:rpm-metadata": [
+      "release:rehearse:rpm-metadata"
+    ],
+    "release:rehearse:pacman-construction": [
+      "release:rehearse:pacman-construction"
     ]
   },
   "private": [
     "check:tests",
-    "check:drift"
+    "check:drift",
+    "seatbelt:confine",
+    "seatbelt:gated",
+    "seatbelt:scanstress"
   ],
   "selection": {
     "test:digest": "go",
@@ -369,13 +467,27 @@
     "test:race": "go",
     "den:test:digest": "vitest",
     "den:harness:test": "playwright",
+    "den:test:rust": "passthrough",
+    "decide:test": "passthrough",
     "lint:fast": "passthrough",
     "lint:full": "passthrough",
     "oar:conformance": "passthrough",
     "den:webkit:atspi": "passthrough",
     "test:confine:linux": "passthrough",
+    "nix:build": "passthrough",
+    "nix:check": "passthrough",
     "release:rehearse:linux-signing": "passthrough",
-    "den:test:rust": "fixed:desktop-settings-observer"
+    "test:linux:installed": "passthrough",
+    "release:rehearse:native-repositories": "passthrough",
+    "release:rehearse:native-repositories-r2": "passthrough",
+    "release:rehearse:native-candidates": "passthrough",
+    "release:rehearse:pacman-repositories": "passthrough",
+    "release:rehearse:pacman-repositories-r2": "passthrough",
+    "release:rehearse:pacman-vm": "passthrough",
+    "release:live-test": "passthrough",
+    "release:rehearse:package-probe": "passthrough",
+    "release:rehearse:rpm-metadata": "passthrough",
+    "release:rehearse:pacman-construction": "passthrough"
   },
   "resources": {
     "den:harness:test": {
@@ -491,6 +603,12 @@
       "workers": "shared"
     },
     "test:runner": {
+      "locks": [
+        "runner"
+      ],
+      "workers": 1
+    },
+    "scripts:coverage:changes": {
       "locks": [
         "runner"
       ],
@@ -660,6 +778,7 @@
       "locks": [
         "harness"
       ],
+      "progress": "log",
       "workers": 1
     },
     "test:confine:linux": {
@@ -695,9 +814,93 @@
       ],
       "workers": 1
     },
+    "nix:check": {
+      "locks": [
+        "nix"
+      ],
+      "workers": 1,
+      "progress": "log"
+    },
+    "nix:build": {
+      "locks": ["*"],
+      "workers": 1,
+      "progress": "log"
+    },
+    "test:linux:installed": {
+      "locks": [],
+      "workers": 1
+    },
     "release:rehearse:linux-signing": {
       "locks": [
         "linux-signing-fixture"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:native-repositories": {
+      "locks": [
+        "native-repository-roots"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:native-repositories-r2": {
+      "locks": [
+        "native-repository-roots",
+        "r2-rehearsal"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:native-candidates": {
+      "locks": [
+        "native-candidates"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:pacman-repositories": {
+      "locks": [
+        "pacman-repository-roots"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:pacman-repositories-r2": {
+      "locks": [
+        "pacman-repository-roots",
+        "r2-rehearsal"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:pacman-vm": {
+      "locks": [
+        "pacman-vm"
+      ],
+      "workers": 1
+    },
+    "release:publish:aur-recipe": {
+      "locks": [
+        "aur-delivery"
+      ],
+      "workers": 1
+    },
+    "release:live-test": {
+      "locks": [
+        "*"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:package-probe": {
+      "locks": [
+        "linux-package-probe"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:rpm-metadata": {
+      "locks": [
+        "rpm-metadata-fixture"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:pacman-construction": {
+      "locks": [
+        "pacman-substrate"
       ],
       "workers": 1
     }
@@ -752,25 +955,42 @@
   },
   "ci": {
     "ready": {
+      "compile_targets": {
+        "den:test:rust": ["lycaon-den/src-tauri/"],
+        "decide:test": ["lycaon/internal/decide/native/"]
+      },
       "targets": [
         "build",
-        "lint:fast",
+        "lint:full",
         "budgets",
         "den:typecheck",
-        "den:lint"
+        "den:lint",
+        "coverage:changes",
+        "comments:check",
+        "test:fail-messages:check",
+        "docs:links",
+        "den:test:fast",
+        "den:coverage:changes",
+        "scripts:coverage:changes"
       ],
-      "minutes": 15,
+      "minutes": 120,
       "profiles": [
         "fast"
       ],
       "suite": "all",
-      "setup": "verification"
+      "setup": "verification",
+      "preflight": [
+        "test:contract",
+        "--",
+        "./test/contract/..."
+      ]
     },
     "limits": {
       "targets": [
         "budgets",
         "coverage:changes",
-        "den:coverage:changes"
+        "den:coverage:changes",
+        "scripts:coverage:changes"
       ],
       "minutes": 45,
       "profiles": [
@@ -779,7 +999,7 @@
       ],
       "suite": "all",
       "setup": "verification",
-      "first": true
+      "priority": "reject"
     },
     "build": {
       "targets": [
@@ -823,8 +1043,12 @@
         "integration"
       ],
       "suite": "all",
-      "setup": "verification",
-      "first": true
+      "setup": "analysis",
+      "priority": "reject",
+      "early_targets": [
+        "comments:check",
+        "test:fail-messages:check"
+      ]
     },
     "vulnerabilities": {
       "targets": [
@@ -837,7 +1061,7 @@
         "integration"
       ],
       "suite": "all",
-      "setup": "verification"
+      "setup": "analysis"
     },
     "runner": {
       "targets": [
@@ -865,7 +1089,9 @@
       "suite": "behavior",
       "setup": "verification",
       "workers": 3,
-      "shards": 2
+      "shards": 2,
+      "contract_first": true,
+      "priority": "critical"
     },
     "frontend": {
       "targets": [
@@ -880,7 +1106,7 @@
         "integration"
       ],
       "suite": "all",
-      "setup": "verification"
+      "setup": "frontend"
     },
     "native": {
       "targets": [
@@ -894,7 +1120,9 @@
         "integration"
       ],
       "suite": "all",
-      "setup": "shell"
+      "setup": "shell",
+      "runtime_engines": false,
+      "priority": "compile"
     },
     "webkit": {
       "targets": [
@@ -935,6 +1163,18 @@
       "suite": "behavior",
       "setup": "verification",
       "runner": "ubuntu-24.04-arm",
+      "platform": "linux"
+    },
+    "nix": {
+      "targets": [
+        "nix:check"
+      ],
+      "minutes": 45,
+      "profiles": [
+        "nightly"
+      ],
+      "suite": "behavior",
+      "setup": "verification",
       "platform": "linux"
     },
     "race": {
@@ -1013,7 +1253,7 @@
         "nightly"
       ],
       "suite": "all",
-      "setup": "verification"
+      "setup": "analysis"
     },
     "benchmarks": {
       "targets": [
@@ -1053,6 +1293,7 @@
         "build",
         "licenses:notices"
       ],
+      "timing_source": "build",
       "minutes": 120,
       "profiles": [
         "integration"
@@ -1074,9 +1315,14 @@
     "footprints": {
       "ci.yml": 1,
       "qualification.yml": 3,
+      "qualification-supersession.yml": 1,
       "build-caches.yml": 1,
       "nightly.yml": 2,
       "release.yml": 2,
+      "release-aur-delivery.yml": 1,
+      "linux-candidate-requests.yml": 1,
+      "linux-desktop-environment-rehearsal.yml": 1,
+      "linux-installed-desktop-rehearsal.yml": 1,
       "release-halt.yml": 1,
       "release-secrets-check.yml": 1,
       "release-staple-probe.yml": 1,
@@ -1084,12 +1330,14 @@
       "dependency-inventory.yml": 1,
       "release-system-live-test.yml": 1,
       "queue-health.yml": 1,
+      "queue-batching.yml": 1,
       "issue-stale.yml": 1,
       "issue-sweep.yml": 1,
       "issue-intake.yml": 1,
       "maintainability-issues.yml": 1,
       "verification-recovery.yml": 1,
-      "dco.yml": 1
+      "dco.yml": 1,
+      "dependent-update.yml": 1
     }
   }
 }

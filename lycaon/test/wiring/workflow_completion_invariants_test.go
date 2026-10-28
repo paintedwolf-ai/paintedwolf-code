@@ -109,7 +109,6 @@ func assertCatalogSettlement(t *testing.T, h *Harness, run *api.WorkflowRun, blo
 	if blocked {
 		want = api.SessionIdleDispositionTurnError
 	}
-	deadline := time.After(2 * time.Second)
 	for {
 		select {
 		case event := <-stream:
@@ -123,7 +122,7 @@ func assertCatalogSettlement(t *testing.T, h *Harness, run *api.WorkflowRun, blo
 				t.Fatalf("catalog settlement=%s, want %s", status.IdleDisposition, want)
 			}
 			return
-		case <-deadline:
+		case <-t.Context().Done():
 			t.Fatal("missing catalog settlement event")
 		}
 	}

@@ -11,7 +11,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
@@ -129,7 +128,7 @@ func TestPromptAskWriteApproveRunsTool(t *testing.T) {
 	}()
 
 	var decisionID string
-	testutil.WaitFor(t, 15*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		pending, err := hitlMgr.ListPending(ctx, sess.ID, nil)
 		if err == nil && len(pending) == 1 {
 			decisionID = pending[0].ID
@@ -250,7 +249,7 @@ func TestPromptAskWriteRejectSurfacesApprovalDenied(t *testing.T) {
 	}()
 
 	var decisionID string
-	testutil.WaitFor(t, 15*time.Second, func() bool {
+	testutil.WaitFor(t, func() bool {
 		pending, err := hitlMgr.ListPending(ctx, sess.ID, nil)
 		if err == nil && len(pending) == 1 {
 			decisionID = pending[0].ID

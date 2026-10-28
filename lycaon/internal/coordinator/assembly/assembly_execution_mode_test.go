@@ -29,7 +29,7 @@ func TestRenderTransitionShellExplicitEntry(t *testing.T) {
 			ExecutionMode:        surface.ExecutionModeFamilyWrapup,
 			ExecutionModeEntered: surface.ExecutionModeFamilyWrapup,
 		},
-		prompts.CoordinatorPromptGates{},
+		"",
 		vars,
 	)
 	testutil.FailErr(t, "merge coordinator prompt vars", err)
@@ -51,7 +51,7 @@ func TestEnteredInvestigateRequiresCurrentCatalogOnEntryAndReturn(t *testing.T) 
 		if err := prompts.MergeCoordinatorSurfacePathVars("implement_investigate", nil, vars, prompts.SurfaceTurn{}); err != nil {
 			t.Fatalf("path vars: %v", err)
 		}
-		err := prompts.MergeCoordinatorPromptVars("implement_investigate", transition, prompts.CoordinatorPromptGates{}, vars)
+		err := prompts.MergeCoordinatorPromptVars("implement_investigate", transition, "", vars)
 		testutil.FailErr(t, "merge coordinator prompt vars", err)
 		block, err := pe.Render(context.Background(), transitionShellTemplate, vars)
 		if err != nil {

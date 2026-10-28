@@ -29,6 +29,10 @@ func fixture(t *testing.T, mutate func(m map[string]any)) (manifestPath, exePath
 		"version":        "1.0.2",
 		"architecture":   "x86_64",
 		"install_root":   root,
+		"payload": []map[string]any{
+			{"path": "bin", "kind": "directory", "mode": 0755, "sha256": nil, "size": nil, "target": nil},
+			{"path": "bin/pw", "kind": "file", "mode": 0755, "sha256": hex.EncodeToString(sum[:]), "size": len(content), "target": nil},
+		},
 		"executables": []map[string]any{
 			{"path": exePath, "sha256": hex.EncodeToString(sum[:]), "size": len(content)},
 		},
@@ -94,11 +98,13 @@ func TestLoadRefusesTrailingDataAndMissingFiles(t *testing.T) {
 }
 
 func TestLoadReportsAForeignFormatVersion(t *testing.T) {
-	manifestPath, _ := fixture(t, func(m map[string]any) { m["format_version"] = 7 })
-	_, err := pkgmanifest.Load(manifestPath)
-	var unsupported *pkgmanifest.UnsupportedFormatError
-	if !errors.As(err, &unsupported) || unsupported.Found != 7 {
-		t.Fatalf("Load with format_version 7 = %v, want *UnsupportedFormatError{Found: 7}", err)
+	for _, version := range []int{0, 1, 7} {
+		manifestPath, _ := fixture(t, func(m map[string]any) { m["format_version"] = version })
+		_, err := pkgmanifest.Load(manifestPath)
+		var unsupported *pkgmanifest.UnsupportedFormatError
+		if !errors.As(err, &unsupported) || unsupported.Found != version {
+			t.Fatalf("Load with format_version %d = %v, want *UnsupportedFormatError{Found: %d}", version, err, version)
+		}
 	}
 }
 
@@ -160,7 +166,7 @@ func TestVerifyReportsTamperingAndUnlistedPaths(t *testing.T) {
 }
 
 func TestVerifyReportsWrongRecordedSize(t *testing.T) {
-	manifestPath, exePath := fixture(t, func(m map[string]any) { executables(m)[0]["size"] = 1 })
+	manifestPath, exePath := fixture(t, func(m map[string]any) { executables(m)[0]["size"] = 1; m["payload"].([]map[string]any)[1]["size"] = 1 })
 	m, err := pkgmanifest.Load(manifestPath)
 	testutil.FailErr(t, "load manifest", err)
 	var mismatch *pkgmanifest.SizeMismatchError
