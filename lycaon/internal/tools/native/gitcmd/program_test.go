@@ -197,6 +197,7 @@ func (f *programFixture) call(t *testing.T, ctx context.Context, source string) 
 	parent, err := f.recorder.Begin(t.Context(), invocation.Start{ProjectID: testdbseed.DefaultProjectID, SessionID: f.session, ToolCallID: callID, ToolName: "command", Args: args, Contract: contract})
 	testutil.FailErr(t, "begin model receipt", err)
 	tc := tools.ToolContext{Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: f.dir, IsPrimary: true}}, ActiveRootID: "r1", SourceWorkspaceKind: api.SourceWorkspaceKindProject}}
+	tc.Host.SessionOutputDir = t.TempDir()
 	tc.Identity.Agent, tc.Identity.ProjectID, tc.Identity.SessionID, tc.Identity.ToolCallID = "fixture", testdbseed.DefaultProjectID, f.session, callID
 	tc.Invocation.ID = parent.ID
 	return f.runtime.Run(ctx, args, tc)
