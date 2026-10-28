@@ -23,8 +23,8 @@ func (f *fakeImages) Manifest() *referenceuserland.Manifest { return f.manifest 
 func (f *fakeImages) Architecture() string                  { return "arm64" }
 func (f *fakeImages) Close() error                          { f.closed = true; return nil }
 
-// moduleRoot gives the test a module root holding the data files capture rewrites.
-func moduleRoot(t *testing.T, snapshots string) string {
+// captureFixtureRoot gives the test a module root holding the data files capture rewrites.
+func captureFixtureRoot(t *testing.T, snapshots string) string {
 	t.Helper()
 	root := t.TempDir()
 	testutil.FailErr(t, "create testdata", os.MkdirAll(filepath.Join(root, filepath.Dir(SnapshotsPath)), 0o755))
@@ -39,7 +39,7 @@ func TestCommandReportsUsageErrors(t *testing.T) {
 		t.Fatal("a usage error opened the runner")
 		return nil, nil
 	}
-	moduleRoot(t, "{}")
+	captureFixtureRoot(t, "{}")
 	for _, args := range [][]string{nil, {"record"}, {"capture", "-unknown"}, {"capture", "no-such-case"}} {
 		var stderr bytes.Buffer
 		if got := runCommand(t.Context(), args, &bytes.Buffer{}, &stderr, never); got != exitUsage || stderr.Len() == 0 {
@@ -54,7 +54,7 @@ func TestCommandReportsUsageErrors(t *testing.T) {
 }
 
 func TestCommandReportsAnUnavailableRunnerAsUnverified(t *testing.T) {
-	moduleRoot(t, "{}")
+	captureFixtureRoot(t, "{}")
 	var stderr bytes.Buffer
 	open := func(context.Context) (imageRunner, error) { return nil, errors.New("no Docker") }
 	if got := runCommand(t.Context(), []string{"capture"}, &bytes.Buffer{}, &stderr, open); got != exitUnverified || !strings.Contains(stderr.String(), "unverified: no Docker") {
@@ -65,7 +65,7 @@ func TestCommandReportsAnUnavailableRunnerAsUnverified(t *testing.T) {
 func TestCaptureStoresSnapshotsFromTheRunnersImages(t *testing.T) {
 	manifest, err := referenceuserland.LoadManifest()
 	testutil.FailErr(t, "load the manifest", err)
-	root := moduleRoot(t, `{"userlands": {}, "cases": {"retired": {"gnu": {"input": "x", "status": 0, "stdout": "", "stderr": ""}}}}`)
+	root := captureFixtureRoot(t, `{"userlands": {}, "cases": {"retired": {"gnu": {"input": "x", "status": 0, "stdout": "", "stderr": ""}}}}`)
 	images := &fakeImages{fakeReferences: fakeReferences{answer: echoProgram}, manifest: manifest}
 	open := func(context.Context) (imageRunner, error) { return images, nil }
 
