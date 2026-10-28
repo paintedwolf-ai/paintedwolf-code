@@ -21,7 +21,7 @@ func (r *fileMutation) remove() error {
 		matched := false
 		for _, entry := range r.index {
 			if entry.path == operand || matchesDirPrefix(entry.path, operand) || wildmatch(operand, entry.path) {
-				if entry.mode == "160000" || entry.unmerged != "" {
+				if entry.mode == "160000" {
 					return unsupportedFileForm(r.p, entry.path, "ordinary tracked files")
 				}
 				if entry.path != operand && matchesDirPrefix(entry.path, operand) && !has(r.p.Argv, "-r") {
@@ -132,6 +132,9 @@ func (r *fileMutation) remove() error {
 // --cached may discard the index when either the saved file or HEAD still
 // contains its content. A normal removal must preserve both comparisons.
 func (r *fileMutation) removable(entry trackedEntry) (string, error) {
+	if entry.unmerged != "" {
+		return "", nil
+	}
 	content, err := entryContent(r.ctx, r.p, r.repo.Root, entry)
 	if err != nil {
 		return "", err

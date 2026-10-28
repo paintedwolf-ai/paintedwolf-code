@@ -350,3 +350,46 @@ func TestIndexAttemptCertaintyUsesObservedState(t *testing.T) {
 		})
 	}
 }
+
+func TestMoveRefusesDestinationCreatedDuringReview(t *testing.T) {
+	h := newApplyHarness(t)
+	before := h.git("ls-files", "--stage")
+	h.tc.Files.FileChangeReview = func(_ context.Context, changes []tools.FileChange) error {
+		if len(changes) > 0 && changes[0].Preview.Target != "index" {
+			h.write("destination", "created during review\n")
+		}
+		return nil
+	}
+	got := h.exec("git", "mv", "--", "sub/b.txt", "destination")
+	if got.result.StopCode != "GIT_OPERATION_PRECONDITION" || got.result.EffectCertainty != toolcontract.NoEffect || h.read("sub/b.txt") != "bee\n" || h.read("destination") != "created during review\n" || h.git("ls-files", "--stage") != before {
+		t.Fatalf("concurrent destination %+v %v", got.result, got.err)
+	}
+}
+
+func TestMoveDirectoryVerboseAndDryRun(t *testing.T) {
+	for _, flag := range []string{"-v", "-n"} {
+		t.Run(flag, func(t *testing.T) {
+			h := newApplyHarness(t)
+			got := h.exec("git", "mv", flag, "--", "sub", "renamed")
+			testutil.FailErr(t, "directory move", got.err)
+			want := "Renaming sub to renamed\nRenaming sub/b.txt to renamed/b.txt\n"
+			if flag == "-n" {
+				want = "Checking rename of 'sub' to 'renamed'\nChecking rename of 'sub/b.txt' to 'renamed/b.txt'\n" + want
+			}
+			if got.result.Status != 0 || got.stdout != want {
+				t.Fatalf("directory move %+v %q %q", got.result, got.stdout, got.stderr)
+			}
+		})
+	}
+}
+
+func TestRemoveSelectedConflict(t *testing.T) {
+	h := newApplyHarness(t)
+	_, err := h.owners.Git.Operate(t.Context(), h.root, git.OperationRequest{Kind: "stage", Entries: []git.IndexEntry{{Path: "a.txt", Mode: "100644", Stages: &[3][]byte{[]byte("base\n"), []byte("ours\n"), []byte("theirs\n")}}}})
+	testutil.FailErr(t, "seed conflict", err)
+	got := h.exec("git", "rm", "--", "a.txt")
+	testutil.FailErr(t, "remove selected conflict", got.err)
+	if got.result.Status != 0 || !h.absent("a.txt") || h.git("ls-files", "--unmerged", "--", "a.txt") != "" || !strings.Contains(h.git("diff", "--cached", "--name-only"), "staged.txt") {
+		t.Fatalf("conflict removal %+v %q", got.result, got.stderr)
+	}
+}
