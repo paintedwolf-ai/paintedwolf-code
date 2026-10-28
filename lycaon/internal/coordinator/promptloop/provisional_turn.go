@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/trainingcapture"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -133,7 +134,11 @@ func (l *turnProjection) commitGuardedAssistantTurn(
 			msg.Kind = api.MessageKindDraft
 		}
 	}
-	return l.commitProvisionalAssistantTurn(ctx, sessionID, msg)
+	committed, err := l.commitProvisionalAssistantTurn(ctx, sessionID, msg)
+	if err == nil && len(committed.ToolCalls) == 0 && strings.TrimSpace(committed.Content) != "" {
+		trainingcapture.TurnCommitted(ctx, sessionID, committed.ID)
+	}
+	return committed, err
 }
 
 // commitProvisionalAssistantInHistory promotes the assistant row in loop history once guards pass.

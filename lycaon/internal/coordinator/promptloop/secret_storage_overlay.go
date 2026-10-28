@@ -18,6 +18,12 @@ type toolResultStorageProjection struct {
 	args    map[string]any
 }
 
+// storageChanges reports whether the durable transcript policy would change msg.
+func (l *turnProjection) storageChanges(ctx context.Context, msg api.Message) bool {
+	_, transient := l.storageSafeMessage(ctx, msg)
+	return transient != nil
+}
+
 func (l *turnProjection) storageSafeMessage(ctx context.Context, msg api.Message) (api.Message, *api.Message) {
 	if l == nil || l.Deps.RedactMessageForStorage == nil {
 		return msg, nil

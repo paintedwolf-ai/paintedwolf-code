@@ -142,7 +142,7 @@ func (p *Provider) completeWithGuards(ctx context.Context, req modelcall.Complet
 	if err != nil {
 		return nil, err
 	}
-	req.ControlCapture.Record(body)
+	req.ControlCapture.RecordDispatch(req, body)
 	resp, err := p.postChatCompletion(ctx, p.ResolveModel(req), body, p.promptCacheRequestHeaders(req))
 	if err != nil {
 		if retryOut, retryErr, ok := p.retryCompleteAfterProviderError(ctx, req, opts, err); ok {

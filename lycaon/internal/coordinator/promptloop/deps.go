@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/providerprofile"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/trainingcapture"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -37,6 +38,16 @@ func (l *modelTurn) sessionRoutingClient(sess *api.Session) modelcall.LLMClient 
 		client = l.Deps.LLMService.Preparation.Wrap(client)
 	}
 	return client
+}
+
+// trainingCapturePolicy gives an opted-in collection turn the durable
+// transcript policy and the provider registry's offline request rendering.
+func (l *modelTurn) trainingCapturePolicy(ctx context.Context) trainingcapture.Policy {
+	policy := trainingcapture.Policy{StorageChanges: func(msg api.Message) bool { return l.Projection.storageChanges(ctx, msg) }}
+	if l.Deps.LLMService != nil && l.Deps.LLMService.Registry != nil {
+		policy.Render = l.Deps.LLMService.Registry.RenderRequest
+	}
+	return policy
 }
 
 // providerProfile uses the default driver profile for unknown provider IDs.

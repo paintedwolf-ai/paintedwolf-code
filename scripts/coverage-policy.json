@@ -33,6 +33,11 @@
         "start": "scripts/coordinator-benchmark",
         "pattern": "test_*.py",
         "requirements": "scripts/coordinator-benchmark/requirements.txt"
+      },
+      "custom model training": {
+        "start": "scripts/bialy/custom_model",
+        "pattern": "test_*.py",
+        "requirements": "scripts/bialy/custom_model/requirements-test.txt"
       }
     }
   }

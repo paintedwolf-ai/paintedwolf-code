@@ -18,7 +18,7 @@ type thinkingPolicyProvider struct {
 }
 
 func (p *thinkingPolicyProvider) Complete(ctx context.Context, req modelcall.CompletionRequest) (*modelcall.Completion, error) {
-	req, err := p.prepare(ctx, req)
+	req, err := p.prepare(ctx, req, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -26,14 +26,14 @@ func (p *thinkingPolicyProvider) Complete(ctx context.Context, req modelcall.Com
 }
 
 func (p *thinkingPolicyProvider) Stream(ctx context.Context, req modelcall.CompletionRequest) (<-chan modelcall.StreamChunk, error) {
-	req, err := p.prepare(ctx, req)
+	req, err := p.prepare(ctx, req, nil)
 	if err != nil {
 		return nil, err
 	}
 	return p.Provider.Stream(ctx, req)
 }
 
-func (p *thinkingPolicyProvider) prepare(ctx context.Context, req modelcall.CompletionRequest) (modelcall.CompletionRequest, error) {
+func (p *thinkingPolicyProvider) prepare(ctx context.Context, req modelcall.CompletionRequest, declared *modelinfo.Entry) (modelcall.CompletionRequest, error) {
 	req.ThinkingOverride = nil
 	req.ThinkingOverrideStyle = ""
 	overrides, ok := thinkingPolicyFromContext(ctx)
@@ -59,7 +59,16 @@ func (p *thinkingPolicyProvider) prepare(ctx context.Context, req modelcall.Comp
 		if override.Mode == "application" {
 			return req, nil
 		}
-		entry, found := p.registry.thinkingModelEntry(ctx, p.ID(), model)
+		// Offline rendering uses only the configured serving model and never discovery.
+		var (
+			entry modelinfo.Entry
+			found bool
+		)
+		if declared != nil {
+			entry, found = *declared, declared.ID == model
+		} else {
+			entry, found = p.registry.thinkingModelEntry(ctx, p.ID(), model)
+		}
 		if !found {
 			return req, &ThinkingOverrideError{ProviderID: p.ID(), Model: model, Reason: "the configured model is unavailable"}
 		}

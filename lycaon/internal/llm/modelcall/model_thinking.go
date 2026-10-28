@@ -43,13 +43,18 @@ func ResolveModelThinking(profile providerprofile.Profile, entry modelinfo.Entry
 	if entry.ReasoningEffortLevels != (modelinfo.ReasoningEffortLevels{}) {
 		out.EffortLevels = entry.ReasoningEffortLevels
 	}
-	if out.EffortOff == "" && declared != nil && declared.CanDisable && out.Style == modelinfo.ThinkStyleEffortLevels {
+	if out.EffortLevels.Off != "" {
+		out.EffortOff = out.EffortLevels.Off
+	} else if out.EffortOff == "" && declared != nil && declared.CanDisable && out.Style == modelinfo.ThinkStyleEffortLevels && out.EffortLevels == (modelinfo.ReasoningEffortLevels{}) {
 		out.EffortOff = providerprofile.OpenAIReasoningEffortOff
 	}
 	return out
 }
 
 func (thinking ModelThinking) EffortString(level ThinkLevel) (string, bool) {
+	if level == ThinkOff && !thinking.AlwaysOn && thinking.EffortLevels.Off != "" {
+		return thinking.EffortLevels.Off, true
+	}
 	if thinking.EffortLevels == (modelinfo.ReasoningEffortLevels{}) {
 		return level.EffortString()
 	}

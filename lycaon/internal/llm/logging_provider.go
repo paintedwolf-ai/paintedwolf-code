@@ -29,14 +29,18 @@ func (p *loggingProvider) Models() []modelcall.ModelInfo { return p.inner.Models
 func (p *loggingProvider) Profile() providerprofile.Profile { return p.inner.Profile() }
 
 func (p *loggingProvider) Complete(ctx context.Context, req modelcall.CompletionRequest) (*modelcall.Completion, error) {
-	req.ControlCapture = &modelcall.RequestControlCapture{}
+	if req.ControlCapture == nil {
+		req.ControlCapture = &modelcall.RequestControlCapture{}
+	}
 	return captureLLMComplete(p.inner.ID(), p.inner.Profile(), req, func() (*modelcall.Completion, error) {
 		return p.inner.Complete(ctx, req)
 	})
 }
 
 func (p *loggingProvider) Stream(ctx context.Context, req modelcall.CompletionRequest) (<-chan modelcall.StreamChunk, error) {
-	req.ControlCapture = &modelcall.RequestControlCapture{}
+	if req.ControlCapture == nil {
+		req.ControlCapture = &modelcall.RequestControlCapture{}
+	}
 	return captureLLMStream(ctx, p.inner.ID(), p.inner.Profile(), req, func() (<-chan modelcall.StreamChunk, error) {
 		return p.inner.Stream(ctx, req)
 	})

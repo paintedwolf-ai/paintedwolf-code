@@ -10,8 +10,10 @@ Skills are ranked when the coordinator requests one through free text. The quest
 side is `lycaon/internal/decide` (engine client), `lycaon/internal/promptunit`
 (the unit catalog), and `lycaon/internal/coordinator/turnload` (the decision
 and the ledger). This directory holds the engine daemon and the offline
-tooling that trains and scores it. Everything here is a bespoke experiment:
-it runs outside the verification queue and never during automated tests.
+tooling that trains and scores it. Live training and collection are bespoke experiments outside the verification
+queue and never run during automated tests. Offline fixtures use no providers
+or pretrained downloads. The [custom coordinator pipeline](custom_model/README.md)
+adds exact-request capture, receipt admission, recoverable SFT/DPO, and export.
 
 ## What is decided, and what happens without an engine
 

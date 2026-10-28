@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/discovery"
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
+	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/internal/llm/providerretry"
 	"github.com/lycaon/lycaon/internal/llm/providers/openaicompat"
 	"github.com/lycaon/lycaon/internal/llm/transcript"
@@ -240,6 +241,42 @@ func (r *Registry) decorateProvider(snapshot *providerRegistrySnapshot, p modelc
 // Catalog exposes the underlying catalog.
 func (r *Registry) Catalog() *ProviderCatalog {
 	return r.catalog
+}
+
+// RenderRequest applies serving policy and serializes without contacting the provider.
+func (r *Registry) RenderRequest(ctx context.Context, providerID, model string, req modelcall.CompletionRequest) (string, []byte, error) {
+	if r == nil || r.catalog == nil {
+		return "", nil, fmt.Errorf("render request: no provider catalog")
+	}
+	entry, ok := r.catalog.Get(providerID)
+	if !ok {
+		return "", nil, fmt.Errorf("render request: provider %q is not configured", providerID)
+	}
+	driver, err := driverFactories.Build(ctx, entry.Kind, providerBuild{entry: entry, resolved: ResolveProvider(entry, "")})
+	if err != nil {
+		return entry.Kind, nil, fmt.Errorf("render request for %s: %w", entry.ID, err)
+	}
+	if err := configureReasoningWire(driver, entry.ReasoningWire); err != nil {
+		return entry.Kind, nil, fmt.Errorf("render request for %s: %w", entry.ID, err)
+	}
+	renderer, ok := driver.(modelcall.RequestRenderer)
+	if !ok {
+		return entry.Kind, nil, fmt.Errorf("render request: provider kind %q has no offline request serializer", entry.Kind)
+	}
+	req.Model, req.ControlCapture = model, nil
+	var declared modelinfo.Entry
+	for _, candidate := range entry.Models {
+		if candidate.ID == model {
+			declared = candidate
+			break
+		}
+	}
+	req, err = (&thinkingPolicyProvider{Provider: driver, registry: r}).prepare(ctx, req, &declared)
+	if err != nil {
+		return entry.Kind, nil, err
+	}
+	body, err := renderer.RenderRequest(ctx, req)
+	return entry.Kind, body, err
 }
 
 // StreamWithSelection streams from the configured provider.

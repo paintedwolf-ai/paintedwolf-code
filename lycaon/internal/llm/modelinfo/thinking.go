@@ -65,6 +65,7 @@ func (c *ThinkingCapabilities) Validate() error {
 
 // ReasoningEffortLevels translates host intent into a protocol's named levels.
 type ReasoningEffortLevels struct {
+	Off    string `yaml:"off,omitempty"`
 	Low    string `yaml:"low"`
 	Medium string `yaml:"medium"`
 	High   string `yaml:"high"`
@@ -73,6 +74,9 @@ type ReasoningEffortLevels struct {
 func (levels ReasoningEffortLevels) Validate() error {
 	if levels == (ReasoningEffortLevels{}) {
 		return nil
+	}
+	if levels.Off != "" && !ValidReasoningToken(levels.Off) {
+		return fmt.Errorf("reasoning effort off must be a protocol token")
 	}
 	for _, value := range []string{levels.Low, levels.Medium, levels.High} {
 		if !ValidReasoningToken(value) {

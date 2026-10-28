@@ -187,8 +187,49 @@ func estimatePromptTokens(messages []ollamaChatMessage, toolMetas []ollamaTool) 
 	return total
 }
 
-// Prepare validates context fit and assembles the native payload.
+// ollamaSizing is the context arithmetic behind an assembled payload.
+type ollamaSizing struct {
+	promptTokens, projectedPromptTokens, completionReserve, maxContext int
+}
+
+// Prepare validates context fit, assembles the native payload, and prefers the
+// context of a runner already loaded for the model.
 func (p *Provider) Prepare(ctx context.Context, req modelcall.CompletionRequest, stream bool) (Request, int, error) {
+	body, sizing, err := p.assemble(ctx, req, stream)
+	if err != nil {
+		return Request{}, sizing.promptTokens, err
+	}
+	resident := p.residentContext(ctx, body.Model)
+	body.Options.NumCtx = preferResidentContext(body.Options.NumCtx, contextNeed(sizing.projectedPromptTokens, sizing.completionReserve), resident, sizing.maxContext)
+	slog.DebugContext(ctx, "ollama request context sized",
+		"component", "ollama_provider",
+		"provider", p.id,
+		"model", body.Model,
+		"purpose", req.Debug.Purpose,
+		"prompt_tokens_estimated", sizing.promptTokens,
+		"prompt_tokens_projected", sizing.projectedPromptTokens,
+		"completion_tokens_reserved", sizing.completionReserve,
+		"num_ctx", body.Options.NumCtx,
+		"resident_ctx", resident,
+		"max_context", sizing.maxContext)
+	return body, sizing.promptTokens, nil
+}
+
+// RenderRequest serializes the payload this adapter would dispatch without
+// contacting the server. Its context is the bucket sized from the model's
+// declared window, before any loaded runner is preferred; a request the model
+// cannot be served is the same context error a dispatch returns.
+func (p *Provider) RenderRequest(ctx context.Context, req modelcall.CompletionRequest) ([]byte, error) {
+	body, _, err := p.assemble(ctx, req, true)
+	if err != nil {
+		return nil, err
+	}
+	return surveyjson.Marshal(body)
+}
+
+// assemble builds the native payload and validates context fit. It contacts
+// the server only when the model declares no context window.
+func (p *Provider) assemble(ctx context.Context, req modelcall.CompletionRequest, stream bool) (Request, ollamaSizing, error) {
 	model := p.ResolveModel(req)
 	entry, _ := p.ModelEntry(model)
 	vision := modelinfo.Supported(entry.EffectiveCapabilities().Vision)
@@ -214,9 +255,11 @@ func (p *Provider) Prepare(ctx context.Context, req modelcall.CompletionRequest,
 	if completionReserve <= 0 {
 		completionReserve = ollamaDefaultCompletionReserve
 	}
+	sizing := ollamaSizing{promptTokens: promptTokens, projectedPromptTokens: projectedPromptTokens,
+		completionReserve: completionReserve, maxContext: maxContext}
 	numCtx, fits := sizeNumCtx(projectedPromptTokens, completionReserve, maxContext)
 	if !fits {
-		return Request{}, promptTokens, &failure.ProviderContextTooSmallError{
+		return Request{}, sizing, &failure.ProviderContextTooSmallError{
 			ProviderID:        p.id,
 			Model:             model,
 			PromptTokens:      projectedPromptTokens,
@@ -224,19 +267,6 @@ func (p *Provider) Prepare(ctx context.Context, req modelcall.CompletionRequest,
 			MaxContext:        maxContext,
 		}
 	}
-	resident := p.residentContext(ctx, model)
-	numCtx = preferResidentContext(numCtx, contextNeed(projectedPromptTokens, completionReserve), resident, maxContext)
-	slog.DebugContext(ctx, "ollama request context sized",
-		"component", "ollama_provider",
-		"provider", p.id,
-		"model", model,
-		"purpose", req.Debug.Purpose,
-		"prompt_tokens_estimated", promptTokens,
-		"prompt_tokens_projected", projectedPromptTokens,
-		"completion_tokens_reserved", completionReserve,
-		"num_ctx", numCtx,
-		"resident_ctx", resident,
-		"max_context", maxContext)
 	body := Request{
 		Model:     model,
 		Messages:  messages,
@@ -251,7 +281,7 @@ func (p *Provider) Prepare(ctx context.Context, req modelcall.CompletionRequest,
 		Format: modelcall.ResponseFormatToOllama(req.ResponseFormat),
 	}
 	body.Think = p.resolveThink(req, model)
-	return body, promptTokens, nil
+	return body, sizing, nil
 }
 
 func (p *Provider) post(ctx context.Context, client *http.Client, payload Request) (*http.Response, error) {

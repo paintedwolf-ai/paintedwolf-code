@@ -61,7 +61,7 @@ func (r *Registry) RequestBudget(ctx context.Context, providerID string, req mod
 		provider := snapshot.providers[providerID]
 		if provider != nil {
 			policy := thinkingPolicyProvider{Provider: provider, registry: r}
-			if prepared, err := policy.prepare(ctx, req); err == nil {
+			if prepared, err := policy.prepare(ctx, req, nil); err == nil {
 				req = prepared
 			}
 		}

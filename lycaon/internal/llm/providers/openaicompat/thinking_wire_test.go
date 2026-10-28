@@ -77,3 +77,32 @@ func TestFixedEffortDoesNotRetryWithWeakerControl(t *testing.T) {
 		}
 	}
 }
+
+func TestModelDisableTokenKeepsFixedThinkingOff(t *testing.T) {
+	entry := modelinfo.Entry{ID: "student", ThinkStyle: "effort_levels",
+		ReasoningEffortLevels: modelinfo.ReasoningEffortLevels{Off: "none", Low: "low", Medium: "medium", High: "high"},
+		Thinking:              &modelinfo.ThinkingCapabilities{State: "supported", CanDisable: true}}
+	profile := providerprofile.LocalInference(providerprofile.OpenAI())
+	if !modelcall.ResolveThinkingCapabilities(profile, entry, entry.ID).CanDisable {
+		t.Fatal("explicit model disable token unavailable")
+	}
+	p := New("p", "https://example.invalid", "", []modelinfo.Entry{entry}).WithProfile(profile)
+	off := false
+	for _, req := range []modelcall.CompletionRequest{
+		{Think: modelcall.ThinkHigh},
+		{Composition: modelcall.CompositionHostUtility},
+		{Debug: modelcall.RequestDebug{ParentSessionID: "worker"}},
+	} {
+		req.Model = entry.ID
+		req.ThinkingOverride = &modelcall.ThinkingOverride{Mode: "fixed", Enabled: &off}
+		for _, opts := range []controlOpts{{}, {strictRetry: true}, {reasoning: reasoningFallbackOmit}} {
+			if got := p.resolveRequestControls(req, entry.ID, opts); got.ReasoningEffort != "none" {
+				t.Fatalf("disable token lost: %+v", got)
+			}
+		}
+	}
+	entry.ReasoningEffortLevels.Off = ""
+	if modelcall.ResolveThinkingCapabilities(profile, entry, entry.ID).CanDisable {
+		t.Fatal("generic transport invented a disable token")
+	}
+}
