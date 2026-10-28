@@ -264,10 +264,18 @@ func TestReleasePublicationBoundaryExcludesCandidateBytes(t *testing.T) {
 	}
 	candidate := "painted-wolf-code_v" + version + "_linux-aarch64.deb"
 	contractcheck.FailErr(t, "write candidate artifact", os.WriteFile(filepath.Join(input, candidate), []byte("candidate"), 0o644))
+	// The boundary is a property of the catalog row, not of which platforms ship today:
+	// a public row's bytes cross and a candidate row's never do.
+	catalog := filepath.Join(dir, "catalog.json")
+	raw, err := json.Marshal(map[string]any{"schema_version": 2, "platforms": []map[string]any{
+		{"updater_key": "darwin-aarch64", "goos": "darwin", "publication": "public", "package_extensions": []string{"dmg"}, "updater_extension": "app.tar.gz"},
+		{"updater_key": "linux-aarch64", "goos": "linux", "publication": "candidate", "package_extensions": []string{"deb", "rpm", "pkg.tar.zst"}, "updater_extension": nil},
+	}})
+	contractcheck.FailErr(t, "encode catalog", err)
+	contractcheck.FailErr(t, "write catalog", os.WriteFile(catalog, raw, 0o644))
 	cmd := exec.Command(
 		"python3", filepath.Join(root, "scripts", "release-collect-public-artifacts.py"),
-		"--catalog", filepath.Join(root, "packaging", "release-platforms.json"),
-		"--input", input, "--output", output, "--version", version,
+		"--catalog", catalog, "--input", input, "--output", output, "--version", version,
 	)
 	combined, err := cmd.CombinedOutput()
 	if err != nil {
@@ -286,7 +294,7 @@ func TestReleasePublicationBoundaryExcludesCandidateBytes(t *testing.T) {
 	}
 	contractcheck.FailErr(t, "remove required engine audit", os.Remove(audit))
 	missingOutput := filepath.Join(dir, "missing-audit")
-	missing := exec.Command("python3", filepath.Join(root, "scripts", "release-collect-public-artifacts.py"), "--catalog", filepath.Join(root, "packaging", "release-platforms.json"), "--input", input, "--output", missingOutput, "--version", version)
+	missing := exec.Command("python3", filepath.Join(root, "scripts", "release-collect-public-artifacts.py"), "--catalog", catalog, "--input", input, "--output", missingOutput, "--version", version)
 	if combined, err := missing.CombinedOutput(); err == nil {
 		t.Fatalf("missing engine audit accepted: %s", combined)
 	}
