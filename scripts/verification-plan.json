@@ -198,7 +198,7 @@
       "packages": [
         "./..."
       ],
-      "exclude": "/test/security$"
+      "exclude": "/test/security$|/internal/launchguard$"
     },
     "seatbelt:confine": {
       "options": [
