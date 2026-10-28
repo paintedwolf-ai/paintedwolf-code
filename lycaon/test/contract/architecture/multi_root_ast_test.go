@@ -48,7 +48,7 @@ func TestMultiRootDisclosureSingleRootWorkspaceGolden(t *testing.T) {
 	}, "/tmp/lycaon")
 	out, err := engine.Render(context.Background(), "partials/workspace-roots.md", vars)
 	contractcheck.FailErr(t, "render workspace-roots", err)
-	if !strings.Contains(out, "Workspace: /tmp/lycaon") {
+	if !strings.Contains(out, "Project folder: /tmp/lycaon") {
 		t.Fatalf("output = %q", out)
 	}
 	for _, banned := range []string{"@", "spans ", "root=", "folders"} {

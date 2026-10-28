@@ -19,3 +19,7 @@ x-paintedwolf-scenarios:
 - id: default
   vars:
     path: .paintedwolf/rules.md
+  expect_contains:
+  - 'Code: FILE_CHANGE_APPROVAL_UNAVAILABLE'
+  - 'File change approvals are unavailable.'
+  - '.paintedwolf/rules.md'
