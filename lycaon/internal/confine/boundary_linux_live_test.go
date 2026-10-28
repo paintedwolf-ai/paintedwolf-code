@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -262,6 +263,9 @@ func linuxConfinedRun(t *testing.T, self string, c confine.Confinement, env []st
 	cmd, cleanup, err := confine.Command(ctx, helperBinary(t, self), name, args, c)
 	testutil.FailErr(t, "confine.Command", err)
 	defer cleanup()
+	if dir := os.Getenv("GOCOVERDIR"); env != nil && dir != "" && !slices.ContainsFunc(env, func(kv string) bool { return strings.HasPrefix(kv, "GOCOVERDIR=") }) {
+		env = append(slices.Clone(env), "GOCOVERDIR="+dir) // Captured before the helper build, it lacks the directory.
+	}
 	if env != nil {
 		cmd.Env = env
 	}
