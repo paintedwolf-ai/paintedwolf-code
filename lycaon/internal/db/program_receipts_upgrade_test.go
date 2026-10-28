@@ -12,10 +12,10 @@ import (
 func TestProgramReceiptsUpgradeKnownIntermediateAndRestart(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "store.db")
 	source := authorityRevision7Store(t, path)
-	retained := seedNativeAuthorityMainData(t, source)
 	var err error
 	_, err = source.ExecContext(t.Context(), `INSERT INTO projects(id,last_opened_at,created_at) VALUES('fixture-project','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z'); INSERT INTO sessions(id,project_id,owner_person_id,posture,created_at,activity_at,updated_at) VALUES('fixture-session','fixture-project',(SELECT id FROM people WHERE role='owner'),'build','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z');`)
 	testutil.FailErr(t, "seed retained actual session", err)
+	retained := seedNativeAuthorityMainData(t, source)
 	_, err = source.ExecContext(t.Context(), `INSERT INTO invocation_receipts(id,project_id,session_id,tool_call_id,tool_name,owner,lifecycle,reversibility,evidence_policy,recovery_policy,evidence_kind,contract_digest,args_digest,status,started_at) VALUES('fixture-parent','fixture-project','fixture-session','actual-model-call','command','processes','effect_attempt','irreversible','attempt','abandon','pending','contract','args','running','2026-01-01T00:00:00Z')`)
 	testutil.FailErr(t, "seed real parent receipt", err)
 	target, err := CurrentBaseline(t.Context())
