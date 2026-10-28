@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/grantedpath"
 	"github.com/lycaon/lycaon/internal/hitl"
@@ -69,7 +70,11 @@ func TestNativeCommandFileInputsCarryBytesWithoutSourceMetadata(t *testing.T) {
 	self, err := os.Executable()
 	testutil.FailErr(t, "locate byte input process", err)
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true}, []sandbox.ToolProfile{{ID: "implement", Tools: map[string]bool{"read": true, "command": true}}})
-	tool := &command.CommandTool{Runner: hostcmd.NewRunner(), Boundary: boundary}
+	registry := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
+	t.Cleanup(func() {
+		testutil.FailErr(t, "close owned fixture registry", registry.Lifecycle.Close(context.Background()))
+	})
+	tool := &command.CommandTool{Runner: hostcmd.NewRunner(), Boundary: boundary, Background: registry}
 	for _, kind := range []string{"stdin_from", "stage input"} {
 		t.Run(kind, func(t *testing.T) {
 			tctx := tools.ToolContext{Identity: tools.InvocationIdentity{Agent: "implement", SessionID: "stream-fixture-" + kind}, Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "primary", Path: root, IsPrimary: true}}}, Files: tools.InvocationFiles{ReadRoots: []string{readRoot}, ApprovedFileAccess: []hitl.GrantedPathDelta{{Path: grantedpath.Normalize(source)}}}}
