@@ -98,17 +98,17 @@ func TestDescribeSystemProxyReportsTheHostDecision(t *testing.T) {
 	}
 	t.Setenv("HTTPS_PROXY", "http://alice:secret@proxy.example:3128")
 	var out bytes.Buffer
-	testutil.FailErr(t, "describe proxied target", describeSystemProxy("https://api.example/v1", &out))
+	testutil.FailErr(t, "describe proxied target", describeSystemProxy(t.Context(), "https://api.example/v1", &out))
 	if out.String() != "http://redacted@proxy.example:3128\n" {
 		t.Fatalf("proxied target = %q", out.String())
 	}
 	out.Reset()
-	testutil.FailErr(t, "describe loopback", describeSystemProxy("http://127.0.0.1:8787/health", &out))
+	testutil.FailErr(t, "describe loopback", describeSystemProxy(t.Context(), "http://127.0.0.1:8787/health", &out))
 	if out.String() != "direct\n" {
 		t.Fatalf("loopback = %q", out.String())
 	}
 	for _, raw := range []string{"", "api.example", "://x", "https://"} {
-		if err := describeSystemProxy(raw, &out); err == nil {
+		if err := describeSystemProxy(t.Context(), raw, &out); err == nil {
 			t.Fatalf("%q was accepted as a target", raw)
 		}
 	}

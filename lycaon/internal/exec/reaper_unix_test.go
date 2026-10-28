@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/osprocess"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -44,7 +45,7 @@ func TestReaperKillsTrackedGroupWhenEngineInputCloses(t *testing.T) {
 	leader, descendant := startGroup(t)
 	reapLines(fmt.Sprintf("+g%d\n", leader))
 	for _, pid := range []int{leader, descendant} {
-		if err := waitForProcessGone(pid, 5*time.Second); err != nil {
+		if err := waitForProcessGone(t.Context(), pid); err != nil {
 			testutil.FailErr(t, "tracked group outlived the engine", err)
 		}
 	}
@@ -53,10 +54,10 @@ func TestReaperKillsTrackedGroupWhenEngineInputCloses(t *testing.T) {
 func TestReaperKillsATrackedSingleProcessOnly(t *testing.T) {
 	leader, descendant := startGroup(t)
 	reapLines(fmt.Sprintf("+p%d\n", descendant))
-	if err := waitForProcessGone(descendant, 5*time.Second); err != nil {
+	if err := waitForProcessGone(t.Context(), descendant); err != nil {
 		testutil.FailErr(t, "tracked process outlived the engine", err)
 	}
-	if err := waitForProcessGone(leader, 200*time.Millisecond); err == nil {
+	if !osprocess.Alive(leader) {
 		t.Fatal("reaping one tracked process took its untracked group leader with it")
 	}
 }
@@ -65,7 +66,7 @@ func TestReaperSparesForgottenEntries(t *testing.T) {
 	leader, descendant := startGroup(t)
 	reapLines(fmt.Sprintf("+g%d\n", leader), fmt.Sprintf("-g%d\n", leader), "garbage\n", "+g-4\n")
 	for _, pid := range []int{leader, descendant} {
-		if err := waitForProcessGone(pid, 200*time.Millisecond); err == nil {
+		if !osprocess.Alive(pid) {
 			t.Fatalf("process %d was killed after the engine forgot its group", pid)
 		}
 	}
@@ -74,7 +75,7 @@ func TestReaperSparesForgottenEntries(t *testing.T) {
 func TestReaperHoldsAGroupTrackedTwiceUntilBothForgetIt(t *testing.T) {
 	leader, _ := startGroup(t)
 	reapLines(fmt.Sprintf("+g%d\n", leader), fmt.Sprintf("+g%d\n", leader), fmt.Sprintf("-g%d\n", leader))
-	if err := waitForProcessGone(leader, 5*time.Second); err != nil {
+	if err := waitForProcessGone(t.Context(), leader); err != nil {
 		testutil.FailErr(t, "group with one live registration survived", err)
 	}
 }
@@ -86,7 +87,7 @@ func TestReaperRemovesTrackedDirAfterKillingItsGroup(t *testing.T) {
 	testutil.FailErr(t, "write scratch file", os.WriteFile(filepath.Join(scratch, "nested", "report.json"), []byte("{}"), 0o600))
 	reapLines(fmt.Sprintf("+g%d\n", leader), "+d"+scratch+"\n")
 	for _, pid := range []int{leader, descendant} {
-		if err := waitForProcessGone(pid, 5*time.Second); err != nil {
+		if err := waitForProcessGone(t.Context(), pid); err != nil {
 			testutil.FailErr(t, "tracked group outlived the engine", err)
 		}
 	}
@@ -129,18 +130,17 @@ func TestEngineKilledOutrightTakesItsTrackedGroupsWithIt(t *testing.T) {
 	testutil.FailErr(t, "SIGKILL engine helper", engine.Process.Kill())
 	_ = engine.Wait()
 	for _, pid := range []int{leader, descendant} {
-		if err := waitForProcessGone(pid, 5*time.Second); err != nil {
+		if err := waitForProcessGone(t.Context(), pid); err != nil {
 			testutil.FailErr(t, "tracked group outlived a SIGKILLed engine", err)
 		}
 	}
 	scratch := filepath.Join(dir, "scratch")
-	deadline := time.Now().Add(10 * time.Second)
 	for {
 		_, err := os.Stat(scratch)
 		if errors.Is(err, os.ErrNotExist) {
 			break
 		}
-		if time.Now().After(deadline) {
+		if t.Context().Err() != nil {
 			t.Fatalf("tracked directory outlived a SIGKILLed engine: stat err=%v", err)
 		}
 		time.Sleep(20 * time.Millisecond)
@@ -202,5 +202,36 @@ func TestReaperDirPathStaysInsideTheTempRoot(t *testing.T) {
 		if got := reaperDirPath(path); got != want {
 			t.Errorf("reaperDirPath(%q) = %v, want %v", path, got, want)
 		}
+	}
+}
+
+func TestEnsureReaperStartsAndReplacesCompanion(t *testing.T) {
+	self, err := os.Executable()
+	testutil.FailErr(t, "locate test binary", err)
+	t.Cleanup(func() {
+		reaper.mu.Lock()
+		defer reaper.mu.Unlock()
+		if reaper.pipe != nil {
+			_ = reaper.pipe.Close()
+			if reaper.cmd != nil {
+				_ = reaper.cmd.Wait()
+			}
+			reaper.pipe = nil
+			reaper.cmd = nil
+		}
+	})
+	testutil.FailErr(t, "ensure reaper", ensureReaper())
+	testutil.FailErr(t, "ensure reaper idempotent", ensureReaper())
+	testutil.FailErr(t, "replace reaper", StartReaper(self, ReaperCommand))
+	if err := StartReaper("/nonexistent/reaper"); err == nil {
+		t.Fatal("StartReaper with missing binary succeeded")
+	}
+	reaper.mu.Lock()
+	if reaper.pipe != nil {
+		_ = reaper.pipe.Close()
+	}
+	reaper.mu.Unlock()
+	if sendReaper('+', reaperGroup, "1") {
+		t.Fatal("sendReaper succeeded on closed pipe")
 	}
 }

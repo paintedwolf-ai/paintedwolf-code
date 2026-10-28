@@ -15,11 +15,6 @@ on:
         description: Optional reviewed JSON plan for key-rotation recovery
         required: false
         type: string
-      distribution_documents:
-        description: Require signed distribution documents and independent good/bad document digests
-        required: true
-        type: boolean
-        default: false
       dry_run:
         description: Validate the complete withdrawal without changing distribution
         required: true
@@ -60,7 +55,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-go@5064d95ba18d4a9dda7c4cc67adeb03aea1a2a14 # v7.0.0
+      - uses: actions/setup-go@90ad2b35f69faf97585ad74d28fa006d2739b7af # v7.0.0
         with:
           go-version-file: lycaon/go.mod
           cache: false
@@ -71,8 +66,8 @@ jobs:
       - name: Install the pinned Tauri CLI for pointer signing
         run: bun install --frozen-lockfile
         working-directory: lycaon-den
-      - name: Install minisign for cryptographic feed verification
-        run: sudo apt-get update && sudo apt-get install -y minisign
+      - name: Install feed and repository verification tools
+        run: sudo apt-get update && sudo apt-get install -y minisign gnupg rpm apt-utils createrepo-c libarchive-tools zstd
       - name: Prove all retained feed signing credentials
         run: python3 scripts/feed_signing.py --check-credentials
       - name: Prepare and validate every affected updater feed
@@ -96,18 +91,26 @@ jobs:
             --distribution-output "${RUNNER_TEMP}/halt-distribution.json"
       - name: Prepare package and website withdrawal
         id: distribution_plan
-        env:
-          DISTRIBUTION_DOCUMENTS: ${{ inputs.distribution_documents }}
         run: |
-          set -euo pipefail
-          args=()
-          [[ "$DISTRIBUTION_DOCUMENTS" == false || "$DISTRIBUTION_DOCUMENTS" == true ]]
-          if [[ "$DISTRIBUTION_DOCUMENTS" == true ]]; then args+=(--distribution-documents); fi
           python3 scripts/release_withdrawal.py prepare --file "${RUNNER_TEMP}/halt-distribution.json" \
-            --output "${RUNNER_TEMP}/withdrawal.json" "${args[@]}"
+            --output "${RUNNER_TEMP}/withdrawal.json"
+      - name: Prepare Linux repository withdrawal
+        id: linux_plan
+        env:
+          BAD_VERSION: ${{ inputs.bad_version }}
+          LAST_GOOD_VERSION: ${{ inputs.last_good_version }}
+        run: |
+          PYTHONPATH=scripts python3 -m scripts.linux_release.repository_withdrawal prepare \
+            --file "${RUNNER_TEMP}/linux-withdrawal.json" --bad "${BAD_VERSION}" \
+            --last-good "${LAST_GOOD_VERSION}" --base-url "${DOWNLOAD_BASE_URL}"
       - name: Halt all affected updater feeds
         if: ${{ !cancelled() && !inputs.dry_run && steps.feed_plan.outcome == 'success' }}
         run: ./task release:halt -- --plan "${RUNNER_TEMP}/halt-plan.json" --apply-prepared "${RUNNER_TEMP}/prepared-halt"
+      - name: Restore the retained Linux repository generations
+        if: ${{ !cancelled() && !inputs.dry_run && steps.linux_plan.outcome == 'success' }}
+        run: |
+          PYTHONPATH=scripts python3 -m scripts.linux_release.repository_withdrawal apply \
+            --file "${RUNNER_TEMP}/linux-withdrawal.json" --base-url "${DOWNLOAD_BASE_URL}"
       - name: Withdraw package and website discovery
         if: ${{ !cancelled() && !inputs.dry_run && steps.distribution_plan.outcome == 'success' }}
         run: python3 scripts/release_withdrawal.py apply --file "${RUNNER_TEMP}/withdrawal.json"
@@ -120,6 +123,7 @@ jobs:
             ${{ runner.temp }}/halt-plan.json
             ${{ runner.temp }}/halt-distribution.json
             ${{ runner.temp }}/withdrawal.json
+            ${{ runner.temp }}/linux-withdrawal.json
             ${{ runner.temp }}/prepared-halt/
           retention-days: 90
           if-no-files-found: ignore

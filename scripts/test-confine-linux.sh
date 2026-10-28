@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Applied Linux confinement on this host's architecture: the confine live suites, the command
-# supervisor, and the pinned browser under confinement. Each leg runs even when an earlier one fails.
+# supervisor, pinned browser, and native helper boundaries. Each leg runs even when an earlier one fails.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -9,7 +9,8 @@ source "${ROOT}/scripts/artifact-paths.sh"
 # User-wide like the other pinned tools, so a lane can provision it before it goes offline.
 BROWSER_CACHE="${PW_BIN_DIR}/confine-browser"
 
-LEGS=(sandbox supervisor browser)
+LEGS=(sandbox supervisor launch browser helpers)
+AVAILABLE_LEGS=("${LEGS[@]}" launch-desktop)
 # --prepare provisions the pinned browser and runs nothing, for a lane that later runs offline.
 PREPARE=0
 if [[ "${1:-}" == "--prepare" ]]; then
@@ -18,7 +19,7 @@ if [[ "${1:-}" == "--prepare" ]]; then
 fi
 if (($#)); then
   for leg in "$@"; do
-    [[ " ${LEGS[*]} " == *" ${leg} "* ]] || { echo "error: unknown leg ${leg}; known: ${LEGS[*]}" >&2; exit 2; }
+    [[ " ${AVAILABLE_LEGS[*]} " == *" ${leg} "* ]] || { echo "error: unknown leg ${leg}; known: ${AVAILABLE_LEGS[*]}" >&2; exit 2; }
   done
   LEGS=("$@")
 fi
@@ -53,7 +54,20 @@ run_leg() {
       bash "${ROOT}/scripts/go-test-digest.sh" --full --name test:confine:linux-sandbox -- ./internal/confine/... -count=1
       ;;
     supervisor)
-      bash "${ROOT}/scripts/go-test-digest.sh" --full --name test:confine:linux-supervisor -- ./internal/exec -run '^(TestParseProcStatReadsParentAndStartAfterTheCommandName|TestCommandDescendantsFollowsTheWholeTreeOnly|TestSupervisionSettlesTheTree|TestSupervisorExitPreservesThePrimaryStatus|TestParseSupervisorTargetRequiresDescriptorCountAndCommand|TestSupervisorLaunchReportReachesTheParent|TestAwaitEngineLossFollowsTheLifetimePipe|TestStartSupervisorTargetAppliesTheRequestedPriority|TestSignalSupervisorRefusesAReplacedProcess|TestSupervisorCleansDoubleForkedNewSessionOnCommandCompletion|TestSupervisorCancellationSparesAnotherCommandsDetachedDaemon|TestSupervisorEngineLifetimeEOFRemovesDetachedDaemon|TestSupervisorCompanionRequestsOwnedTreeCleanup|TestGuardedPipelinePriorityReachesPrimary|TestSupervisedPTYInteractiveShellOwnsForeground|TestSupervisedCommandSeesOnlyItsIntendedDescriptors|TestTerminationBeforeSupervisorLaunchReportStopsLaunchedCommand|TestHeldTerminationKillsASupervisorThatNeverReportsLaunch)$' -count=1
+      bash "${ROOT}/scripts/go-test-digest.sh" --full --name test:confine:linux-supervisor -- ./internal/exec -run '^(TestCommandDescendantsFollowsTheWholeTreeOnly|TestSupervisionSettlesTheTree|TestSupervisorExitPreservesThePrimaryStatus|TestParseSupervisorTargetRequiresDescriptorCountAndCommand|TestSupervisorLaunchReportReachesTheParent|TestAwaitEngineLossFollowsTheLifetimePipe|TestStartSupervisorTargetAppliesTheRequestedPriority|TestSignalSupervisorRefusesAReplacedProcess|TestSupervisorCleansDoubleForkedNewSessionOnCommandCompletion|TestSupervisorCancellationSparesAnotherCommandsDetachedDaemon|TestEngineLossFixtureProcess|TestSupervisorEngineSIGKILLRemovesOnlyItsOwnCommands|TestSupervisorEngineLifetimeEOFRemovesDetachedDaemon|TestSupervisorCompanionRequestsOwnedTreeCleanup|TestGuardedPipelinePriorityReachesPrimary|TestSupervisedPTYInteractiveShellOwnsForeground|TestSupervisedPTYInterruptReachesOnlyTheProgram|TestSupervisedCommandSeesOnlyItsIntendedDescriptors|TestTerminationBeforeSupervisorLaunchReportStopsLaunchedCommand|TestHeldTerminationKillsASupervisorThatNeverReportsLaunch)$' -count=1
+      ;;
+    helpers)
+      bash "${ROOT}/scripts/go-test-digest.sh" --full --name test:confine:linux-helpers -- ./internal/mcp ./internal/scan/integration ./internal/documentcore -run '^(TestLinuxStdioMCPAppliedBoundary|TestLinuxScannerBoundaryKeepsSourceReadOnlyAndOutputWritable|TestLinuxDocumentCoreAppliedBoundary|TestPrepareStdioCommandConfinedWhenAvailable|TestPrepareStdioCommandHandsTheServerNoCredential|TestPrepareStdioCommandRequiresRootsWhenAvailable|TestRegisterStdioEgressAttributesTheServerLineage|TestBundledScannerConfinementDeniesNetwork)$' -count=1
+      ;;
+    launch)
+      bash "${ROOT}/scripts/go-test-digest.sh" --full --name test:confine:linux-launch -- ./internal/launchguard/... ./internal/launchverify/... ./cmd/pw-launch/... ./cmd/pw-launch-entry/... ./cmd/pw-vault-identity/... -count=1
+      ;;
+    launch-desktop)
+      if [[ -z "${PW_LAUNCH_DESKTOP_ARTIFACT:-}" || ! -f "${PW_LAUNCH_DESKTOP_ARTIFACT}" ]]; then
+        echo "test:confine:linux: unverified: launch-desktop requires PW_LAUNCH_DESKTOP_ARTIFACT evidence" >&2
+        return 2
+      fi
+      bash "${ROOT}/scripts/go-test-digest.sh" --full --name test:confine:linux-launch-desktop -- ./internal/launchguard/... -tags=protected_desktop_artifact -run '^TestProtectedLaunchActualDesktop$' -count=1
       ;;
     browser)
       if ! browser="$(browser_path)"; then
@@ -61,7 +75,7 @@ run_leg() {
         return 2
       fi
       # A browser is provisioned, so a skip would be a green leg covering nothing.
-      LYCAON_BROWSER_BIN="${browser}" LYCAON_BROWSER_REQUIRED=1 bash "${ROOT}/scripts/go-test-digest.sh" --full --name test:confine:linux-browser -- ./internal/browser -run '^(TestHeadlessLauncherPinsSubprocessPath|TestHeadlessLauncherKeepsItsSandboxWithoutTheBoundary|TestLaunchHeadlessUnderBrowserConfinement|TestProbeUsabilityUnderBrowserConfinement|TestPoolNewPageUnderBrowserConfinement|TestConfinedBrowserFloorReachesHostLoopback|TestConfinedBrowserCannotReadDeniedFiles|TestBrowserBoundaryRefusesWhenConfinementCannotBeBuilt|TestLaunchHeadlessRefusesUnsafeCacheDir)$' -count=1
+      LYCAON_BROWSER_BIN="${browser}" LYCAON_BROWSER_REQUIRED=1 bash "${ROOT}/scripts/go-test-digest.sh" --full --name test:confine:linux-browser -- ./internal/browser -run '^(TestHeadlessLauncherPinsSubprocessPath|TestHeadlessLauncherKeepsItsSandboxWithoutTheBoundary|TestLaunchHeadlessUnderBrowserConfinement|TestProbeUsabilityUnderBrowserConfinement|TestPoolNewPageUnderBrowserConfinement|TestConfinedBrowserFloorReachesHostLoopback|TestConfinedBrowserCannotReadDeniedFiles|TestBrowserBoundaryRefusesWhenConfinementCannotBeBuilt|TestBrowserBoundaryLaunchesWhenTheHostConfinesNothing|TestBrowserUnavailableLinuxBoundaryDoesNotLaunch|TestLaunchHeadlessRefusesUnsafeCacheDir|TestLaunchHeadlessRefusesUnsafeProjectRootBeforeProvisioning)$' -count=1
       ;;
   esac
 }
