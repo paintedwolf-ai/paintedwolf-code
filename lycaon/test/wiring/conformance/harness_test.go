@@ -1,8 +1,10 @@
 package conformance_test
 
 import (
-	"encoding/base64"
 	"encoding/json"
+	"errors"
+	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -11,7 +13,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/llm"
@@ -21,79 +22,55 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 	wire "github.com/lycaon/lycaon/pkg/api"
+	"github.com/lycaon/lycaon/test/commandconformance"
+	"github.com/lycaon/lycaon/test/referenceuserland"
 	"github.com/lycaon/lycaon/test/wiring"
 )
 
-type fixtureCorpus struct {
-	SchemaVersion   int               `json:"schema_version"`
-	SeedTextFiles   map[string]string `json:"seed_text_files"`
-	SeedBinaryFiles map[string]string `json:"seed_binary_files"`
-	SeedGitFiles    map[string]string `json:"seed_git_files"`
-	GNUEnvironment  string            `json:"gnu_environment"`
-	BSDEnvironment  string            `json:"bsd_environment"`
-	Cases           []fixtureCase     `json:"cases"`
-}
-
-type fixtureCase struct {
-	CapabilityRequest map[string]any    `json:"capability_request,omitempty"`
-	SeedBinaryFiles   map[string]string `json:"seed_binary_files,omitempty"`
-	ID                string            `json:"id"`
-	Category          string            `json:"category"`
-	Description       string            `json:"description"`
-	Commands          []string          `json:"commands"`
-	Forms             []string          `json:"forms"`
-	Program           string            `json:"program"`
-	TrackedFiles      []string          `json:"tracked_files"`
-	NeedsGit          bool              `json:"needs_git"`
-	GNU               fixtureSnapshot   `json:"gnu"`
-	BSD               fixtureSnapshot   `json:"bsd"`
-}
-
-type fixtureSnapshot struct {
-	Status int                `json:"status"`
-	Stdout string             `json:"stdout"`
-	Stderr string             `json:"stderr"`
-	Files  map[string]*string `json:"files"`
-}
-
+// runtimeObservation is everything one case left through the command entry.
 type runtimeObservation struct {
 	Outcome        command.ProgramOutcome
 	TopLevelReject string
-	Files          map[string]*string
+	Files          map[string]*commandconformance.File
 	ChildReceipts  []string
 	ApprovalPlans  []wire.ApprovalPlan
+	// Roots are the absolute spellings of the case's workspace.
+	Roots []string
+}
+
+// streams is the observation as the corpus compares it with a reference.
+func (o runtimeObservation) streams() commandconformance.Observation {
+	return commandconformance.Observation{
+		Status: o.Outcome.Status,
+		Stdout: []byte(o.Outcome.Stdout),
+		Stderr: []byte(o.Outcome.Stderr),
+		Files:  o.Files,
+	}.Normalize(o.Roots...)
 }
 
 type conformanceRunner struct {
-	h      *wiring.Harness
-	corpus fixtureCorpus
+	h    *wiring.Harness
+	seed commandconformance.GitSeed
 }
 
-func loadFixtureCorpus(t *testing.T) fixtureCorpus {
+func loadGitSeed(t *testing.T) commandconformance.GitSeed {
 	t.Helper()
-	path := filepath.Join(configlayout.FindModuleRoot(), "test", "wiring", "testdata", "command_conformance", "fixtures.json")
-	raw, err := os.ReadFile(path)
-	testutil.FailErr(t, "read conformance fixtures", err)
-	var corpus fixtureCorpus
-	testutil.FailErr(t, "decode conformance fixtures", json.Unmarshal(raw, &corpus))
-	if len(corpus.Cases) == 0 {
-		t.Fatal("conformance fixture corpus is empty")
-	}
-	return corpus
+	seed, err := commandconformance.LoadGitSeed()
+	testutil.FailErr(t, "load the Git seed", err)
+	return seed
 }
 
-func newConformanceRunner(t *testing.T) *conformanceRunner {
+// newConformanceRunner serves every case's program to the mock model and runs it
+// under posture, answering approvals unless neverAsk.
+func newConformanceRunner(t *testing.T, cases []commandconformance.Case, posture gate.Posture, neverAsk bool) *conformanceRunner {
 	t.Helper()
-	return newConformanceRunnerWithConfig(t, loadFixtureCorpus(t), gate.PostureLight, true)
-}
-
-func newConformanceRunnerWithConfig(t *testing.T, corpus fixtureCorpus, posture gate.Posture, neverAsk bool) *conformanceRunner {
-	t.Helper()
-	entries := make([]llm.MockResponseEntry, 0, len(corpus.Cases))
-	for _, c := range corpus.Cases {
+	entries := make([]llm.MockResponseEntry, 0, len(cases))
+	for _, c := range cases {
 		args := map[string]any{"command": c.Program}
-		if c.CapabilityRequest != nil {
-			args["capability_request"] = c.CapabilityRequest
+		if c.CapabilityRequest != "" {
+			var request map[string]any
+			testutil.FailErr(t, "decode capability request of "+c.ID, json.Unmarshal([]byte(c.CapabilityRequest), &request))
+			args["capability_request"] = request
 		}
 		entries = append(entries, llm.MockResponseEntry{
 			Pattern:      "run case " + c.ID,
@@ -103,7 +80,7 @@ func newConformanceRunnerWithConfig(t *testing.T, corpus fixtureCorpus, posture 
 	}
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: entries})
 	h := wiring.BuildForTest(t, wiring.WithLLMClient(mock))
-	testutil.FailErr(t, "enable never_ask", h.Server.Admin.Settings.Service.Approvals.PutGlobal(settings.ApprovalConfig{
+	testutil.FailErr(t, "set approval posture", h.Server.Admin.Settings.Service.Approvals.PutGlobal(settings.ApprovalConfig{
 		Posture:  posture,
 		NeverAsk: &neverAsk,
 	}))
@@ -111,50 +88,55 @@ func newConformanceRunnerWithConfig(t *testing.T, corpus fixtureCorpus, posture 
 	testutil.FailErr(t, "resolve implement manifest", err)
 	m.Controls.ContentReview = nil
 	h.RegisterManifest(m)
-	return &conformanceRunner{h: h, corpus: corpus}
+	return &conformanceRunner{h: h, seed: loadGitSeed(t)}
 }
 
-func (r *conformanceRunner) seedCaseWorkspace(t *testing.T, c fixtureCase) string {
+// seedWorkspace writes the case's workspace the way the reference driver seeds
+// it: the same entries and permissions, every entry last modified at the seed time.
+func (r *conformanceRunner) seedWorkspace(t *testing.T, c commandconformance.Case) string {
 	t.Helper()
 	dir := t.TempDir()
-	for rel, content := range r.corpus.SeedTextFiles {
-		target := filepath.Join(dir, filepath.FromSlash(rel))
-		testutil.FailErr(t, "mkdir seed text parent", os.MkdirAll(filepath.Dir(target), 0o755))
-		testutil.FailErr(t, "write seed text file", os.WriteFile(target, []byte(content), 0o644))
-	}
-	for rel, encoded := range r.corpus.SeedBinaryFiles {
-		decoded, err := base64.StdEncoding.DecodeString(encoded)
-		testutil.FailErr(t, "decode seed binary file", err)
-		target := filepath.Join(dir, filepath.FromSlash(rel))
-		testutil.FailErr(t, "mkdir seed binary parent", os.MkdirAll(filepath.Dir(target), 0o755))
-		testutil.FailErr(t, "write seed binary file", os.WriteFile(target, decoded, 0o644))
-	}
-	for rel, encoded := range c.SeedBinaryFiles {
-		decoded, err := base64.StdEncoding.DecodeString(encoded)
-		testutil.FailErr(t, "decode case binary file", err)
-		target := filepath.Join(dir, filepath.FromSlash(rel))
-		testutil.FailErr(t, "mkdir case binary parent", os.MkdirAll(filepath.Dir(target), 0o755))
-		testutil.FailErr(t, "write case binary file", os.WriteFile(target, decoded, 0o644))
-	}
-	if c.NeedsGit {
-		for rel, encoded := range r.corpus.SeedGitFiles {
-			decoded, err := base64.StdEncoding.DecodeString(encoded)
-			testutil.FailErr(t, "decode seed git file", err)
-			target := filepath.Join(dir, filepath.FromSlash(rel))
-			testutil.FailErr(t, "mkdir seed git parent", os.MkdirAll(filepath.Dir(target), 0o755))
-			testutil.FailErr(t, "write seed git file", os.WriteFile(target, decoded, 0o644))
+	entries := c.Workspace(r.seed)
+	for _, name := range slices.Sorted(maps.Keys(entries)) {
+		entry := entries[name]
+		target := filepath.Join(dir, filepath.FromSlash(name))
+		testutil.FailErr(t, "create parents of "+name, os.MkdirAll(filepath.Dir(target), 0o755))
+		var err error
+		switch entry.Mode.Type() {
+		case fs.ModeDir:
+			err = os.MkdirAll(target, permissions(entry.Mode, 0o755))
+		case fs.ModeSymlink:
+			err = os.Symlink(entry.Link, target)
+		default:
+			err = os.WriteFile(target, entry.Data, permissions(entry.Mode, 0o644))
 		}
+		testutil.FailErr(t, "seed "+name, err)
 	}
+	testutil.FailErr(t, "set seed times", filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.Type() == fs.ModeSymlink {
+			return err
+		}
+		return os.Chtimes(path, referenceuserland.SeedTime, referenceuserland.SeedTime)
+	}))
 	return dir
 }
 
-func (r *conformanceRunner) runCase(t *testing.T, c fixtureCase) runtimeObservation {
+func permissions(mode, fallback fs.FileMode) fs.FileMode {
+	if mode.Perm() == 0 {
+		return fallback
+	}
+	return mode.Perm()
+}
+
+func (r *conformanceRunner) runCase(t *testing.T, c commandconformance.Case) runtimeObservation {
 	return r.runCaseWithRecommendedApprovals(t, c, 0)
 }
 
-func (r *conformanceRunner) runCaseWithRecommendedApprovals(t *testing.T, c fixtureCase, expectedCards int) runtimeObservation {
+// runCaseWithRecommendedApprovals answers each approval card with its recommended
+// option, as a person would, and fails unless exactly expectedCards appear.
+func (r *conformanceRunner) runCaseWithRecommendedApprovals(t *testing.T, c commandconformance.Case, expectedCards int) runtimeObservation {
 	t.Helper()
-	dir := r.seedCaseWorkspace(t, c)
+	dir := r.seedWorkspace(t, c)
 	projectID := uuid.NewString()
 	testdbseed.InsertProjectRoot(t, r.h.DB, projectID, dir)
 	sess, err := r.h.Store.Create(t.Context(), wire.CreateSessionRequest{ProjectID: projectID}, projectID)
@@ -166,67 +148,18 @@ func (r *conformanceRunner) runCaseWithRecommendedApprovals(t *testing.T, c fixt
 		_, err = r.h.Sessions.Manager.Submissions.Prompt(t.Context(), sess.ID, "run case "+c.ID)
 		testutil.FailErr(t, "prompt conformance case", err)
 	} else {
-		done := make(chan error, 1)
-		go func() {
-			_, promptErr := r.h.Sessions.Manager.Submissions.Prompt(t.Context(), sess.ID, "run case "+c.ID)
-			done <- promptErr
-		}()
-		kind := wire.CheckpointKindToolApproval
-		var runErr error
-		testutil.WaitFor(t, 30*time.Second, func() bool {
-			select {
-			case runErr = <-done:
-				return true
-			default:
-			}
-			pending, listErr := r.h.Sessions.Checkpoints.ListPending(t.Context(), sess.ID, &kind)
-			if listErr != nil || len(pending) == 0 {
-				return false
-			}
-			for _, checkpoint := range pending {
-				if checkpoint.ToolApproval == nil || len(plans) >= expectedCards {
-					t.Fatalf("unexpected approval card: %+v", checkpoint)
-				}
-				plan := checkpoint.ToolApproval.Plan
-				if !slices.ContainsFunc(plan.Options, func(option wire.ApprovalOption) bool { return option.ID == plan.RecommendedOptionID }) {
-					t.Fatalf("recommended option missing from plan: %+v", plan)
-				}
-				plans = append(plans, plan)
-				_, resolveErr := r.h.Sessions.Checkpoints.(*hitl.Checkpoints).Authority.ResolveApprovalOption(r.h.OwnerCtx(t, t.Context()), sess.ID, checkpoint.ID, plan.RecommendedOptionID)
-				testutil.FailErr(t, "answer recommended approval", resolveErr)
-			}
-			return false
-		})
-		testutil.FailErr(t, "prompt conformance case", runErr)
-		if len(plans) != expectedCards {
-			t.Fatalf("approval cards = %d, want %d: %+v", len(plans), expectedCards, plans)
-		}
-	}
-
-	callID := "call-" + c.ID
-	msgs, err := r.h.Store.GetMessages(t.Context(), sess.ID)
-	testutil.FailErr(t, "read session messages", err)
-	var content string
-	for _, raw := range msgs {
-		msg := messageview.RedactMessage(raw)
-		if msg.Role != wire.MessageRoleTool || msg.ToolResult == nil || msg.ToolResult.ToolCallID != callID {
-			continue
-		}
-		content = msg.ToolResult.Content
-		break
-	}
-	if content == "" {
-		t.Fatalf("case %s produced no tool output in %d messages", c.ID, len(msgs))
+		plans = r.promptAnsweringApprovals(t, sess.ID, c.ID, expectedCards)
 	}
 
 	obs := runtimeObservation{
-		Files:         snapshotTrackedFiles(dir, c.TrackedFiles),
+		Files:         trackedFiles(t, dir, c.Tracked),
 		ChildReceipts: r.queryChildReceipts(t, sess.ID),
 		ApprovalPlans: plans,
+		Roots:         workspaceRoots(dir),
 	}
+	content := r.toolResult(t, sess.ID, "call-"+c.ID)
 	if strings.Contains(content, `"program_id"`) {
-		idx := strings.Index(content, "{")
-		dec := json.NewDecoder(strings.NewReader(content[idx:]))
+		dec := json.NewDecoder(strings.NewReader(content[strings.Index(content, "{"):]))
 		testutil.FailErr(t, "decode program outcome", dec.Decode(&obs.Outcome))
 	} else {
 		obs.TopLevelReject = content
@@ -234,17 +167,94 @@ func (r *conformanceRunner) runCaseWithRecommendedApprovals(t *testing.T, c fixt
 	return obs
 }
 
-func snapshotTrackedFiles(dir string, tracked []string) map[string]*string {
-	out := make(map[string]*string, len(tracked))
+func (r *conformanceRunner) promptAnsweringApprovals(t *testing.T, sessionID, caseID string, expectedCards int) []wire.ApprovalPlan {
+	t.Helper()
+	done := make(chan error, 1)
+	go func() {
+		_, promptErr := r.h.Sessions.Manager.Submissions.Prompt(t.Context(), sessionID, "run case "+caseID)
+		done <- promptErr
+	}()
+	kind := wire.CheckpointKindToolApproval
+	var plans []wire.ApprovalPlan
+	var runErr error
+	testutil.WaitFor(t, 30*time.Second, func() bool {
+		select {
+		case runErr = <-done:
+			return true
+		default:
+		}
+		pending, listErr := r.h.Sessions.Checkpoints.ListPending(t.Context(), sessionID, &kind)
+		if listErr != nil || len(pending) == 0 {
+			return false
+		}
+		for _, checkpoint := range pending {
+			if checkpoint.ToolApproval == nil || len(plans) >= expectedCards {
+				t.Fatalf("unexpected approval card: %+v", checkpoint)
+			}
+			plan := checkpoint.ToolApproval.Plan
+			if !slices.ContainsFunc(plan.Options, func(option wire.ApprovalOption) bool { return option.ID == plan.RecommendedOptionID }) {
+				t.Fatalf("recommended option missing from plan: %+v", plan)
+			}
+			plans = append(plans, plan)
+			_, resolveErr := r.h.Sessions.Checkpoints.(*hitl.Checkpoints).Authority.ResolveApprovalOption(r.h.OwnerCtx(t, t.Context()), sessionID, checkpoint.ID, plan.RecommendedOptionID)
+			testutil.FailErr(t, "answer recommended approval", resolveErr)
+		}
+		return false
+	})
+	testutil.FailErr(t, "prompt conformance case", runErr)
+	if len(plans) != expectedCards {
+		t.Fatalf("approval cards = %d, want %d: %+v", len(plans), expectedCards, plans)
+	}
+	return plans
+}
+
+func (r *conformanceRunner) toolResult(t *testing.T, sessionID, callID string) string {
+	t.Helper()
+	msgs, err := r.h.Store.GetMessages(t.Context(), sessionID)
+	testutil.FailErr(t, "read session messages", err)
+	for _, raw := range msgs {
+		msg := messageview.RedactMessage(raw)
+		if msg.Role == wire.MessageRoleTool && msg.ToolResult != nil && msg.ToolResult.ToolCallID == callID && msg.ToolResult.Content != "" {
+			return msg.ToolResult.Content
+		}
+	}
+	t.Fatalf("call %s produced no tool output in %d messages", callID, len(msgs))
+	return ""
+}
+
+// workspaceRoots are the spellings of dir a program can print: as created, and
+// with symbolic links resolved.
+func workspaceRoots(dir string) []string {
+	roots := []string{dir}
+	if resolved, err := filepath.EvalSymlinks(dir); err == nil && resolved != dir {
+		roots = append(roots, resolved)
+	}
+	return roots
+}
+
+func trackedFiles(t *testing.T, dir string, tracked []string) map[string]*commandconformance.File {
+	t.Helper()
+	if len(tracked) == 0 {
+		return nil
+	}
+	out := make(map[string]*commandconformance.File, len(tracked))
 	for _, rel := range tracked {
 		target := filepath.Join(dir, filepath.FromSlash(rel))
-		data, err := os.ReadFile(target)
-		if err != nil {
+		info, err := os.Lstat(target)
+		if errors.Is(err, fs.ErrNotExist) {
 			out[rel] = nil
 			continue
 		}
-		text := string(data)
-		out[rel] = &text
+		testutil.FailErr(t, "inspect "+rel, err)
+		f := &commandconformance.File{Mode: commandconformance.Mode(info.Mode() & (fs.ModeType | fs.ModePerm))}
+		switch {
+		case info.Mode().Type() == fs.ModeSymlink:
+			f.Link, err = os.Readlink(target)
+		case info.Mode().IsRegular():
+			f.Data, err = os.ReadFile(target)
+		}
+		testutil.FailErr(t, "read "+rel, err)
+		out[rel] = f
 	}
 	return out
 }

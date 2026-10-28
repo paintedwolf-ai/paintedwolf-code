@@ -11,6 +11,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/gate"
 	wire "github.com/lycaon/lycaon/pkg/api"
+	"github.com/lycaon/lycaon/test/commandconformance"
 )
 
 func TestRun3StrictForeignLoopbackUsesOneChatCard(t *testing.T) {
@@ -18,11 +19,11 @@ func TestRun3StrictForeignLoopbackUsesOneChatCard(t *testing.T) {
 		_, _ = io.WriteString(w, "local service\n")
 	}))
 	t.Cleanup(server.Close)
-	c := fixtureCase{
+	c := commandconformance.Case{
 		ID:      "run3-strict-foreign-loopback",
 		Program: "curl -s '" + server.URL + "'",
 	}
-	runner := newConformanceRunnerWithConfig(t, fixtureCorpus{Cases: []fixtureCase{c}}, gate.PostureStrict, false)
+	runner := newConformanceRunner(t, []commandconformance.Case{c}, gate.PostureStrict, false)
 	obs := runner.runCaseWithRecommendedApprovals(t, c, 1)
 	if obs.TopLevelReject != "" || obs.Outcome.Refusal != nil || obs.Outcome.State != "completed" || obs.Outcome.Status != 0 || obs.Outcome.Stdout != "local service\n" {
 		t.Fatalf("approved command = %+v", obs)
@@ -38,8 +39,8 @@ func TestRun3StrictForeignLoopbackUsesOneChatCard(t *testing.T) {
 }
 
 func TestRun3EvalSyntaxRefusalPreservesEarlierOutput(t *testing.T) {
-	c := fixtureCase{ID: "run3-eval-invalid-source", Program: "printf 'before\\n'; eval 'if'"}
-	runner := newConformanceRunnerWithConfig(t, fixtureCorpus{Cases: []fixtureCase{c}}, gate.PostureLight, true)
+	c := commandconformance.Case{ID: "run3-eval-invalid-source", Program: "printf 'before\\n'; eval 'if'"}
+	runner := newConformanceRunner(t, []commandconformance.Case{c}, gate.PostureLight, true)
 	obs := runner.runCase(t, c)
 	if obs.TopLevelReject != "" || obs.Outcome.Refusal == nil || obs.Outcome.Refusal.Code != "COMMAND_SYNTAX_UNSUPPORTED" {
 		t.Fatalf("eval source refusal = %+v", obs)
@@ -50,11 +51,11 @@ func TestRun3EvalSyntaxRefusalPreservesEarlierOutput(t *testing.T) {
 }
 
 func TestRun3NativeJobPIDAndPsAux(t *testing.T) {
-	c := fixtureCase{
+	c := commandconformance.Case{
 		ID:      "run3-native-job-inspection",
 		Program: `sleep 30 & pid=$!; printf 'pid:%s\n' "$pid"; jobs -l; ps aux | head -n 3; printf 'psstatus:%s\n' "$?"; ps -p "$pid" -o pid=; kill "$pid"; wait "$pid"; printf 'wait:%s\n' "$?"`,
 	}
-	runner := newConformanceRunnerWithConfig(t, fixtureCorpus{Cases: []fixtureCase{c}}, gate.PostureLight, true)
+	runner := newConformanceRunner(t, []commandconformance.Case{c}, gate.PostureLight, true)
 	obs := runner.runCase(t, c)
 	if obs.TopLevelReject != "" || obs.Outcome.Refusal != nil || obs.Outcome.Status != 0 {
 		t.Fatalf("native job inspection = %+v", obs)
